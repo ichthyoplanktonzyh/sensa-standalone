@@ -1,0 +1,238 @@
+# Sensa content production
+
+`content/` is the standalone authoring and immutable-release boundary for Sensa.
+Production is organized around an isolated `SensePackageBuild`, not a fixed Job 1–10
+sequence. The domain resource model is
+[`../docs/sensa/sense-learning-resource-model.md`](../docs/sensa/sense-learning-resource-model.md).
+
+## Architecture
+
+```text
+authoritative facts
+  -> Acquisition Profile
+  -> Grounding + Examples + conditional resources
+  -> deterministic text compilation
+  -> independent whole-package semantic review
+  -> approved-text compilation
+  -> content-addressed media
+  -> package validator
+  -> isolated release candidate
+```
+
+`data/senses.db` is the only authoritative local content store. It contains Sense facts,
+frozen dictionary evidence, verified Lexeme forms, mutable Build selections, immutable
+stage Attempts, append-only Build events and content-addressed media metadata. The package
+gate writes its JSON candidate only to a temporary directory.
+
+JSON is retained as a wire/export format: `pipeline.py release` materializes one isolated
+release root for validation and API/Postgres ingestion. That directory is derived,
+rebuildable and ignored by Git. YAML is not used by the production workflow.
+
+Selecting a replacement attempt invalidates only downstream stages. Approved upstream
+artifacts are not regenerated because an unrelated Example, review or TTS operation failed.
+
+## Concurrency boundary
+
+Package production supports bounded, single-host concurrency. Different Senses may advance
+in parallel, while a renewable SQLite lease allows only one active producer for a Sense
+across all of its Builds. `run`, `repair`, `retry` and `rebuild-text` acquire that lease
+before any external call. A heartbeat retains ownership during a long provider request;
+an expired owner can be recovered, but cannot commit an Attempt or Build revision after
+losing the lease.
+
+Concurrent non-forced `create` calls for the same Sense and fact digest resolve to one
+current Build. Build revisions still use optimistic compare-and-swap as a second protection.
+TTS uses a separate expiring claim per cache key, so concurrent packages share one synthesis
+and contenders consume the completed content-addressed result.
+
+These leases coordinate processes that share one local `senses.db`. They are not a
+distributed/cloud queue and must not be used across hosts or a network filesystem.
+
+## Current V2 delivery adapter
+
+The authoring model treats Examples as reusable resources with `study`, `cloze` and
+`transfer` usages. The current application/database still consumes the V2 role contract,
+so the compiler selects three distinct Study candidates and at least three distinct Cloze
+candidates and emits legacy `study | quiz` roles. This is a delivery adapter, not the
+domain definition of Example.
+
+No scene-domain or construction diversity quota is enforced. Those fields remain
+descriptive metadata required by the current V2 wire shape.
+
+## Layout
+
+```text
+pipeline/    Build model, store, fact loader, validation, stages, compiler and orchestrator
+tools/       operator CLI, provider adapters, inventory tools and no-cost validators
+prompts/     focused Profile, Grounding, Example, conditional-resource and review prompts
+schema/      inventory and dictionary-evidence source schemas
+data/        canonical senses.db, content-addressed MP3 objects and input wordlists
+```
+
+## Command flow
+
+All commands run from the repository root.
+
+Create an isolated Build and load immutable facts without an external call:
+
+```sh
+python3 content/tools/pipeline.py create --sense borrow-01
+python3 content/tools/pipeline.py plan --sense borrow-01
+python3 content/tools/pipeline.py inspect --sense borrow-01
+```
+
+Generate Profile and text candidates, stopping before independent review:
+
+```sh
+python3 content/tools/pipeline.py run \
+  --sense borrow-01 \
+  --until review_pending \
+  --allow-llm
+```
+
+Run the separately configured whole-package semantic reviewer:
+
+```sh
+python3 content/tools/pipeline.py run \
+  --sense borrow-01 \
+  --until text_approved \
+  --allow-review
+```
+
+Compile approved text, use/rebuild media, and run the package gate:
+
+```sh
+python3 content/tools/pipeline.py run \
+  --sense borrow-01 \
+  --until package_valid \
+  --allow-tts
+```
+
+`--allow-tts` authorizes only cache misses. Existing content-addressed audio is reused
+without a provider call.
+
+Advance an explicit set of Senses concurrently:
+
+```sh
+python3 content/tools/pipeline.py batch \
+  --sense borrow-01 \
+  --sense lend-01 \
+  --sense-file /absolute/path/to/additional-sense-ids.txt \
+  --until package_valid \
+  --concurrency 4 \
+  --llm-concurrency 2 \
+  --review-concurrency 1 \
+  --tts-concurrency 2 \
+  --allow-llm --allow-review --allow-tts
+```
+
+The batch command never discovers or processes all historical Senses implicitly. It
+deduplicates only the supplied IDs, preserves their input order in the JSON report and
+returns nonzero if any Sense is blocked, busy or failed. External-stage limits are
+independent, apply within that batch process, and may not exceed the overall worker
+concurrency. Run one batch coordinator when provider-wide rate limits must be enforced.
+
+Repair one resource without discarding approved upstream work:
+
+```sh
+python3 content/tools/pipeline.py repair \
+  --sense borrow-01 \
+  --stage examples \
+  --artifact-id example-abc123-01 \
+  --instruction 'Replace this example: its event expresses the sibling Sense.' \
+  --allow-llm
+```
+
+Profile, full Grounding, all Examples or all conditional resources can also be repaired by
+omitting `--artifact-id`. Grounding accepts `experience_sketch` or `l1_bridge` as targeted
+artifact IDs.
+
+Retry a transient reviewer, media-provider or deterministic-gate failure without
+discarding the selected authoring artifacts:
+
+```sh
+python3 content/tools/pipeline.py retry \
+  --sense borrow-01 \
+  --stage media \
+  --allow-tts
+```
+
+Semantic review retries require `--allow-review` and deliberately bypass a cached
+rejection. Package-gate retries are no-cost and are intended for rerunning the gate after
+compiler or validator fixes; semantic content failures should be repaired upstream.
+
+After a deterministic compiler/review-input contract change, preserve all authoring
+resources and invalidate only compilation and its downstream proof/media/gate:
+
+```sh
+python3 content/tools/pipeline.py rebuild-text --sense borrow-01
+```
+
+Export one or more package-valid Builds into an isolated release root and run the no-cost
+release validator:
+
+```sh
+python3 content/tools/pipeline.py release \
+  --build build-borrow-01-... \
+  --out /tmp/sensa-release-calibration-01
+```
+
+Repeat `--build` to assemble several packages. The command does not publish to Postgres,
+R2 or any cloud provider. The destination must not already exist. Export is assembled and
+validated in a unique sibling staging directory, then atomically renamed; concurrent
+exporters cannot overwrite the same release root.
+
+## External-call boundaries
+
+The CLI has three independent permissions:
+
+- `--allow-llm`: Profile and content generation through `SENSA_ACQUISITION_LLM_*`;
+- `--allow-review`: independent semantic review through `SENSA_REVIEW_LLM_*`;
+- `--allow-tts`: external TTS for media cache misses.
+
+No permission implies another. `plan`, `inspect`, deterministic compilation, package
+validation and release validation never call an external provider.
+
+Provider settings belong in ignored `content/.env`, copied from `.env.example`. Credentials
+must not be passed on the command line or stored in Build documents. Attempts retain only
+provider/model/request/prompt/digest provenance.
+
+## No-cost verification
+
+```sh
+python3 -m compileall -q content/pipeline content/tools
+python3 content/tools/pipeline.py --help
+python3 content/tools/smoke_pipeline.py
+python3 content/tools/smoke_pipeline_concurrency.py
+python3 content/tools/validate_release.py --help
+```
+
+The state smoke creates a temporary authoring database and isolated Build, compiles a
+complete fixture, runs the real TypeScript package validator, and proves downstream
+invalidation. The concurrency smoke covers idempotent create, Sense lease exclusion and
+recovery, lost-lease commit rejection, stale revisions, TTS single-flight and atomic
+release publication. Neither smoke calls LLM, reviewer or TTS providers.
+
+## Inventory and evidence
+
+Inventory remains a separate factual workflow. It precedes Package Builds and must not be
+silently modified by content generation:
+
+```sh
+python3 content/tools/inventory.py draft borrow --allow-external
+python3 content/tools/inventory.py validate borrow
+python3 content/tools/inventory.py mark-reviewed borrow
+python3 content/tools/inventory.py approve borrow
+```
+
+The Pipeline reads factual tables through query-only connections while Build state is
+transactionally written to other tables in the same `data/senses.db`. If Sense identity,
+source evidence or verified forms are incomplete, the Build is blocked and a new Build
+must be created after the factual source is repaired.
+
+## Release boundary
+
+A package-valid Build is not a published release. Publication still requires an immutable
+release root, shared Lexeme/Relation consistency, real media bytes, complete review proof,
+the public curriculum gate when applicable, and controlled API/database/media ingestion.
+Local tools never deploy AWS, Neon, R2 or Cloudflare resources.

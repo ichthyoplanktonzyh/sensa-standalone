@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dictionary-evidence.schema.json",
+  "title": "DictionaryEvidenceSnapshot",
+  "description": "起草整词 Sense Inventory 时实际使用的词典证据快照。用于避免 dictionary entry ID 随 Wiktionary 内容日后变化而被静默重新解释; sense-inventory.schema.json 的 source.evidence_digest 引用本文件内容的确定性摘要。不建立复杂来源本体, 只固定 tools/dictionary.py get_filtered_entries() 已有的字段形状。",
+  "type": "object",
+  "required": ["schema_version", "word", "language", "provider", "captured_at", "entries"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "word": { "type": "string", "minLength": 1 },
+    "language": {
+      "type": "string",
+      "pattern": "^[a-z]{2,3}$"
+    },
+    "provider": { "type": "string", "minLength": 1 },
+    "captured_at": {
+      "type": "string",
+      "minLength": 1,
+      "description": "抓取本快照时的 UTC 时间戳, 供人工追溯"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["entry_id", "pos", "gloss", "labels", "examples"],
+        "additionalProperties": false,
+        "properties": {
+          "entry_id": { "type": "string", "minLength": 1 },
+          "pos": { "type": "string", "minLength": 1 },
+          "gloss": { "type": "string" },
+          "labels": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "examples": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "name": "sensa-standalone",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sensa sense-first language learning service",
+  "workspaces": [
+    "apps/web",
+    "apps/api",
+    "packages/contracts",
+    "packages/learning-kernel",
+    "packages/content-validator"
+  ],
+  "scripts": {
+    "build": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/api && npm run build -w @sensa/web",
+    "typecheck": "tsc -b --pretty false && npm run typecheck -w @sensa/web",
+    "lint": "npm run typecheck",
+    "dev": "npm run dev -w @sensa/api",
+    "start": "npm run start -w @sensa/api",
+    "api:dev": "npm run dev -w @sensa/api",
+    "api:start": "npm run start -w @sensa/api",
+    "web:dev": "npm run dev -w @sensa/web",
+    "web:build": "npm run build -w @sensa/web",
+    "web:preview": "npm run preview -w @sensa/web",
+    "db:migrate": "tsx scripts/db-migrate.ts",
+    "sensa:first-user-import": "tsx scripts/sensaFirstUser/import.ts",
+    "sensa:restore-first-user-plan": "tsx scripts/sensaFirstUser/restorePlan.ts",
+    "sensa:repair-first-user-sync": "tsx scripts/sensaFirstUser/repairSync.ts",
+    "media:ingest": "node scripts/ingest-runtime-media.mjs",
+    "content:compile": "python3 -m compileall -q content/pipeline content/tools",
+    "content:help": "python3 content/tools/pipeline.py --help",
+    "content:smoke": "python3 content/tools/smoke_pipeline.py",
+    "content:smoke-concurrency": "python3 content/tools/smoke_pipeline_concurrency.py",
+    "sensa:runtime-smoke": "tsx scripts/sensaRuntimeSmoke.ts",
+    "sensa:policy-smoke": "tsx scripts/sensaSemanticPolicySmoke.ts",
+    "sensa:completion-policy-smoke": "tsx scripts/sensaCompletionPolicySmoke.ts",
+    "sensa:sync-protocol-smoke": "tsx scripts/sensaSyncProtocolSmoke.ts",
+    "sensa:capability-smoke": "tsx scripts/sensaCapabilitySmoke.ts",
+    "sensa:capability-db-smoke": "node --env-file-if-exists=apps/api/.env --import tsx scripts/sensaCapabilityDatabaseSmoke.ts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^7.0.0"
+  }
+}

@@ -1,0 +1,1223 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Sensa V1 · 高保真产品原型</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1f1d2b;
+      --ink-soft: #6c6878;
+      --ink-faint: #9d98aa;
+      --paper: #f8f6f4;
+      --paper-strong: #fffefd;
+      --line: rgba(45, 38, 67, .09);
+      --lavender: #d9d7f0;
+      --blush: #f2d6da;
+      --cream: #f4e6ca;
+      --orange: #f36f3f;
+      --orange-dark: #d9562b;
+      --teal: #1d9a83;
+      --teal-dark: #147663;
+      --navy: #151c35;
+      --error: #c64545;
+      --shadow-sm: 0 8px 24px rgba(43, 35, 66, .08);
+      --shadow-md: 0 18px 50px rgba(23, 18, 43, .16);
+      --radius-sm: 14px;
+      --radius-md: 22px;
+      --radius-lg: 30px;
+      --ease-out: cubic-bezier(.16, 1, .3, 1);
+      --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+      --s1: 4px;
+      --s2: 8px;
+      --s3: 12px;
+      --s4: 16px;
+      --s5: 20px;
+      --s6: 24px;
+      --s8: 32px;
+      --s10: 40px;
+      --s12: 48px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 15%, rgba(101, 85, 155, .22), transparent 28%),
+        radial-gradient(circle at 86% 80%, rgba(243, 111, 63, .13), transparent 26%),
+        #101022;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible {
+      outline: 3px solid rgba(243, 111, 63, .42);
+      outline-offset: 2px;
+    }
+    button:disabled { cursor: not-allowed; opacity: .45; }
+    svg { display: block; }
+
+    .prototype-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 414px minmax(420px, 520px);
+      justify-content: center;
+      align-items: center;
+      gap: 56px;
+      padding: 34px;
+    }
+    .phone-wrap { position: relative; }
+    .phone {
+      position: relative;
+      width: 390px;
+      height: 844px;
+      overflow: hidden;
+      border: 8px solid #080812;
+      border-radius: 48px;
+      background: var(--paper);
+      box-shadow: 0 36px 100px rgba(0, 0, 0, .48), inset 0 0 0 1px rgba(255,255,255,.2);
+      isolation: isolate;
+    }
+    .phone::after {
+      content: "";
+      position: absolute;
+      left: 50%; bottom: 6px;
+      width: 118px; height: 4px;
+      border-radius: 99px;
+      transform: translateX(-50%);
+      background: rgba(18, 17, 27, .56);
+      z-index: 80;
+      pointer-events: none;
+    }
+    .screen {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      animation: screen-in .34s var(--ease-out) both;
+    }
+    .screen.scroll { overflow-y: auto; scrollbar-width: none; }
+    .screen.scroll::-webkit-scrollbar { display: none; }
+    .statusbar {
+      height: 35px;
+      padding: 12px 18px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: .02em;
+      position: relative;
+      z-index: 20;
+    }
+    .status-icons { display: flex; gap: 5px; align-items: center; }
+    .status-icons i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: .74; }
+    .status-icons b { width: 18px; height: 9px; border: 1.5px solid currentColor; border-radius: 3px; display: block; opacity: .74; }
+
+    .icon {
+      width: 22px; height: 22px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.9;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+    .icon-button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      width: 42px; height: 42px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: background .16s ease, transform .16s ease;
+    }
+    .icon-button:hover { background: rgba(255,255,255,.42); }
+    .icon-button:active { transform: scale(.93); }
+    .icon-button.active { color: var(--orange); background: rgba(243,111,63,.1); }
+
+    .home-screen {
+      color: #23202d;
+      background:
+        radial-gradient(circle at 78% 14%, rgba(255, 238, 178, .82), transparent 20%),
+        radial-gradient(circle at 18% 38%, rgba(216, 211, 247, .95), transparent 31%),
+        linear-gradient(160deg, #f5dba8 0%, #dad8f0 42%, #f0d1d6 100%);
+    }
+    .home-screen::before, .study-screen::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: .48;
+      pointer-events: none;
+      background-image:
+        radial-gradient(circle, rgba(255,255,255,.85) 0 1px, transparent 2px),
+        radial-gradient(circle, rgba(255,246,183,.7) 0 1px, transparent 2px);
+      background-size: 92px 92px, 137px 137px;
+      background-position: 20px 30px, 44px 4px;
+      animation: drift 16s linear infinite alternate;
+    }
+    .home-body { position: relative; z-index: 2; height: calc(100% - 35px); padding: 14px 20px 24px; display: flex; flex-direction: column; }
+    .home-brand { display: flex; align-items: center; gap: 11px; }
+    .avatar {
+      width: 50px; height: 50px;
+      border: 0; border-radius: 50%;
+      color: white; cursor: pointer;
+      display: grid; place-items: center;
+      background: linear-gradient(145deg, #595875, #9a91a9);
+      box-shadow: 0 8px 20px rgba(45,39,72,.2), inset 0 0 0 2px rgba(255,255,255,.72);
+      font-weight: 850;
+    }
+    .brand-lockup { display: grid; gap: 1px; }
+    .brand-lockup strong { letter-spacing: .18em; font-size: 15px; }
+    .brand-lockup small { font-size: 10px; color: rgba(31,29,43,.56); }
+    .home-date { text-align: center; margin: 33px 0 0; font-size: 12px; color: rgba(31,29,43,.5); }
+    .home-focus {
+      margin: 25px auto 0;
+      width: 210px;
+      padding: 23px 18px 20px;
+      text-align: center;
+      border: 1px solid rgba(255,255,255,.44);
+      border-radius: 28px;
+      background: rgba(255,255,255,.36);
+      box-shadow: var(--shadow-sm), inset 0 1px rgba(255,255,255,.58);
+      backdrop-filter: blur(18px);
+    }
+    .home-focus .spark { font-size: 24px; display: block; margin-bottom: 11px; }
+    .home-focus strong { font-size: 20px; line-height: 1.28; display: block; }
+    .home-focus span { display: block; color: rgba(31,29,43,.56); font-size: 12px; margin-top: 8px; }
+    .home-copy { text-align: center; margin-top: 20px; }
+    .home-copy h1 { font-size: 24px; letter-spacing: -.03em; margin: 0; }
+    .home-copy p { margin: 7px 0 0; font-size: 12px; color: rgba(31,29,43,.58); }
+    .home-spacer { flex: 1; min-height: 54px; }
+    .today-summary {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      margin-bottom: 10px;
+    }
+    .summary-cell {
+      padding: 14px 15px;
+      background: rgba(255,255,255,.5);
+      border: 1px solid rgba(255,255,255,.5);
+      border-radius: 18px;
+      backdrop-filter: blur(16px);
+    }
+    .summary-cell strong { font-size: 25px; display: block; }
+    .summary-cell b { font-size: 13px; }
+    .summary-cell small { color: rgba(31,29,43,.54); display: block; margin-top: 2px; }
+    .primary-button, .secondary-button {
+      width: 100%; min-height: 50px;
+      border-radius: 16px;
+      border: 0;
+      padding: 12px 18px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+    }
+    .primary-button { color: white; background: linear-gradient(135deg, var(--orange), #f08451); box-shadow: 0 10px 24px rgba(216,86,43,.24); }
+    .primary-button:hover { box-shadow: 0 13px 28px rgba(216,86,43,.3); transform: translateY(-1px); }
+    .primary-button:active, .secondary-button:active { transform: scale(.985); }
+    .secondary-button { background: rgba(255,255,255,.7); border: 1px solid var(--line); }
+    .plan-note { text-align: center; font-size: 11px; color: rgba(31,29,43,.52); margin: 9px 0 14px; }
+    .home-nav { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+    .home-nav button {
+      border: 0; background: transparent; cursor: pointer;
+      min-height: 54px; border-radius: 16px;
+      display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700;
+    }
+    .home-nav button:hover { background: rgba(255,255,255,.35); }
+
+    .utility-screen { background: #f7f6f4; }
+    .utility-head {
+      position: sticky; top: 0; z-index: 20;
+      display: grid; grid-template-columns: 44px 1fr 44px;
+      align-items: center; min-height: 62px;
+      padding: 3px 12px 5px;
+      background: rgba(247,246,244,.9);
+      backdrop-filter: blur(18px);
+      border-bottom: 1px solid rgba(45,38,67,.04);
+    }
+    .utility-head h1 { margin: 0; text-align: center; font-size: 18px; }
+    .utility-body { padding: 12px 18px 42px; }
+    .section-title { display: flex; align-items: end; justify-content: space-between; margin: 22px 2px 11px; }
+    .section-title h2 { font-size: 18px; margin: 0; }
+    .section-title span { color: var(--ink-soft); font-size: 11px; }
+    .card {
+      border-radius: var(--radius-md);
+      background: var(--paper-strong);
+      border: 1px solid rgba(45,38,67,.045);
+      box-shadow: 0 8px 24px rgba(38,31,60,.045);
+    }
+    .book-hero { padding: 17px; display: grid; grid-template-columns: 76px 1fr; gap: 15px; }
+    .book-cover {
+      width: 76px; height: 100px; border-radius: 12px;
+      color: white; padding: 11px 9px; display: flex; flex-direction: column; justify-content: space-between;
+      background: linear-gradient(155deg, #15233e, #9c6c73 58%, #e59c69);
+      box-shadow: 0 8px 18px rgba(29,31,55,.2);
+    }
+    .book-cover b { font-size: 11px; letter-spacing: .13em; }
+    .book-cover span { font-family: Georgia, serif; font-size: 17px; line-height: 1.05; }
+    .book-meta h2 { margin: 4px 0 2px; font-size: 19px; }
+    .book-meta p { margin: 0; color: var(--ink-soft); font-size: 11px; line-height: 1.5; }
+    .big-number { display: flex; align-items: end; gap: 6px; margin-top: 12px; }
+    .big-number strong { font-size: 31px; line-height: 1; }
+    .big-number span { font-size: 10px; color: var(--ink-soft); padding-bottom: 2px; }
+    .progress-track { height: 5px; border-radius: 99px; background: #eeeae8; overflow: hidden; margin: 15px 17px 7px; }
+    .progress-track i { display: block; height: 100%; width: 34%; background: var(--orange); border-radius: inherit; }
+    .progress-copy { display: flex; justify-content: space-between; padding: 0 17px 14px; font-size: 10px; color: var(--ink-soft); }
+    .search-box { margin-top: 12px; position: relative; }
+    .search-box svg { position: absolute; left: 13px; top: 12px; color: var(--ink-faint); width: 18px; }
+    .search-box input { width: 100%; height: 42px; border: 1px solid var(--line); border-radius: 14px; padding: 0 12px 0 39px; background: white; }
+    .list-card { overflow: hidden; }
+    .sense-row, .content-row, .setting-row {
+      width: 100%; min-height: 65px; border: 0; border-bottom: 1px solid var(--line);
+      background: transparent; padding: 12px 14px; cursor: pointer;
+      display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; text-align: left;
+    }
+    .sense-row:last-child, .content-row:last-child, .setting-row:last-child { border-bottom: 0; }
+    .sense-row:hover, .content-row:hover, .setting-row:hover { background: rgba(222,218,236,.18); }
+    .sense-row strong, .content-row strong { display: block; font-size: 15px; }
+    .sense-row span, .content-row span { color: var(--ink-soft); display: block; font-size: 11px; margin-top: 3px; line-height: 1.4; }
+    .badge { display: inline-flex; align-items: center; justify-content: center; min-height: 26px; border-radius: 99px; padding: 4px 9px; font-style: normal; font-size: 10px; font-weight: 800; color: var(--orange-dark); background: #fff0e9; }
+    .badge.mastered { color: var(--teal-dark); background: #e9f7f3; }
+    .content-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .metric-card { padding: 15px; min-height: 100px; }
+    .metric-card strong { font-size: 26px; display: block; }
+    .metric-card b { font-size: 13px; }
+    .metric-card small { display: block; color: var(--ink-soft); margin-top: 5px; }
+    .empty-state { padding: 28px 18px; text-align: center; color: var(--ink-soft); }
+    .empty-state strong { color: var(--ink); display: block; margin-bottom: 5px; }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; background: #ebe9e7; border-radius: 99px; padding: 3px; margin: 2px 0 16px; }
+    .tabs button { border: 0; background: transparent; min-height: 38px; border-radius: 99px; cursor: pointer; color: var(--ink-soft); font-weight: 800; }
+    .tabs button.active { background: white; color: var(--ink); box-shadow: 0 3px 10px rgba(38,31,60,.08); }
+    .plan-card { padding: 18px; }
+    .plan-card small { color: var(--orange-dark); font-weight: 800; letter-spacing: .08em; }
+    .plan-card h2 { margin: 8px 0 4px; font-size: 22px; }
+    .plan-card p { margin: 0; color: var(--ink-soft); font-size: 12px; }
+    .plan-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-top: 17px; }
+    .plan-stats div { padding: 11px 8px; text-align: center; background: #f6f3f1; border-radius: 14px; }
+    .plan-stats b { display: block; font-size: 20px; }
+    .plan-stats span { color: var(--ink-soft); font-size: 9px; }
+    .calendar { padding: 15px; margin-top: 12px; }
+    .week { display: grid; grid-template-columns: repeat(7,1fr); text-align: center; gap: 4px; }
+    .week span { color: var(--ink-faint); font-size: 9px; padding: 5px 0; }
+    .week b { font-size: 11px; width: 28px; height: 28px; display: grid; place-items: center; margin: auto; border-radius: 50%; }
+    .week b.today { color: white; background: var(--orange); }
+    .setting-row { min-height: 58px; }
+    .setting-row b { font-size: 14px; }
+    .setting-row span { color: var(--ink-soft); font-size: 11px; }
+    .switch { width: 42px; height: 24px; padding: 3px; border-radius: 99px; background: #d8d5d3; transition: background .2s ease; }
+    .switch i { display: block; width: 18px; height: 18px; border-radius: 50%; background: white; box-shadow: 0 2px 5px rgba(0,0,0,.15); transition: transform .25s var(--ease-out); }
+    .switch.on { background: var(--orange); }
+    .switch.on i { transform: translateX(18px); }
+    .profile-hero { text-align: center; padding: 30px 18px 22px; }
+    .profile-avatar { width: 84px; height: 84px; margin: auto; border-radius: 50%; display: grid; place-items: center; color: white; font-size: 28px; font-weight: 850; background: linear-gradient(145deg,#545573,#aaa0b1); box-shadow: var(--shadow-md); }
+    .profile-hero h2 { margin: 15px 0 2px; }
+    .profile-hero p { margin: 0; color: var(--ink-soft); font-size: 12px; }
+
+    .study-screen {
+      background:
+        radial-gradient(circle at 85% 7%, rgba(246,225,180,.82), transparent 24%),
+        linear-gradient(170deg, #eee4cf 0%, #d9d7ee 46%, #edd2dc 100%);
+    }
+    .study-screen::before { opacity: .24; }
+    .study-body { position: relative; z-index: 2; height: calc(100% - 35px); display: flex; flex-direction: column; }
+    .study-toolbar { min-height: 55px; padding: 4px 10px; display: grid; grid-template-columns: 44px 1fr auto; align-items: center; }
+    .study-progress { text-align: center; font-size: 13px; font-weight: 850; }
+    .study-tools { display: flex; align-items: center; }
+    .master-button { width: 42px; height: 42px; border: 0; background: transparent; border-radius: 50%; cursor: pointer; font-size: 18px; font-weight: 900; }
+    .master-button:hover { background: rgba(255,255,255,.4); }
+    .study-main { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; padding: 13px 18px 118px; }
+    .study-main::-webkit-scrollbar { display: none; }
+    .study-footer { position: absolute; z-index: 12; left: 18px; right: 18px; bottom: 24px; }
+    .eyebrow { font-size: 10px; color: #736b83; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+    .study-title { margin: 8px 0 5px; font-size: 28px; line-height: 1.08; letter-spacing: -.035em; }
+    .study-guide { margin: 0; color: #716c7a; font-size: 12px; line-height: 1.55; }
+    .scene-card { margin-top: 22px; padding: 14px; border-radius: 24px; background: rgba(255,255,255,.55); box-shadow: var(--shadow-sm); border: 1px solid rgba(255,255,255,.5); backdrop-filter: blur(14px); }
+    .scene-art { height: 92px; border-radius: 17px; overflow: hidden; position: relative; background: linear-gradient(140deg, #f7e7c9, #d7d6ed); }
+    .scene-art::before { content: ""; position: absolute; width: 58px; height: 58px; border-radius: 50%; left: 27px; top: 16px; background: #f37b4b; box-shadow: 175px 18px 0 -13px #53aa93; opacity: .9; }
+    .scene-art::after { content: ""; position: absolute; left: 55px; right: 38px; top: 49px; height: 2px; background: #77728b; transform: rotate(-6deg); box-shadow: 0 17px 0 rgba(119,114,139,.52); }
+    .scene-card p { font-size: 15px; line-height: 1.72; margin: 14px 2px 4px; }
+    .scene-card small { color: var(--ink-soft); line-height: 1.5; display: block; }
+    .lexeme-head { padding-top: 3px; }
+    .lexeme-head h1 { font-size: 47px; line-height: 1; margin: 4px 0 9px; letter-spacing: -.055em; }
+    .pronunciation-row { display: flex; align-items: center; gap: 9px; color: #514d5d; }
+    .audio-pill { border: 0; min-height: 30px; border-radius: 99px; background: rgba(255,255,255,.52); padding: 5px 10px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; font-weight: 800; }
+    .audio-pill.playing { color: white; background: var(--orange); }
+    .audio-pill .icon { width: 15px; height: 15px; }
+    .ipa { font-family: Georgia, serif; font-size: 16px; }
+    .sense-focus { margin-top: 19px; }
+    .sense-label { display: inline-flex; background: rgba(255,255,255,.55); color: #6f687b; font-size: 10px; padding: 5px 8px; border-radius: 99px; font-weight: 800; }
+    .sense-focus h2 { margin: 8px 0 0; font-size: 23px; }
+    .bridge-card, .example-inline, .scene-recall, .repair-card { margin-top: 13px; padding: 15px; border-radius: 19px; background: rgba(255,255,255,.62); border: 1px solid rgba(255,255,255,.55); box-shadow: 0 6px 18px rgba(38,31,60,.055); }
+    .bridge-card b, .example-inline > b, .repair-card > b { display: block; font-size: 10px; color: var(--ink-soft); margin-bottom: 7px; }
+    .bridge-card p { margin: 0; font-size: 13px; line-height: 1.65; }
+    .example-inline { position: relative; padding-right: 52px; cursor: pointer; width: 100%; text-align: left; }
+    .example-inline p { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 16px; line-height: 1.5; }
+    .example-inline small { display: block; color: var(--ink-soft); line-height: 1.45; margin-top: 6px; }
+    mark { color: var(--orange-dark); background: transparent; font-weight: 800; }
+    .open-example { position: absolute; right: 12px; bottom: 12px; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: var(--orange-dark); background: #fff7f2; }
+    .scene-recall { padding: 0; overflow: hidden; }
+    .scene-recall button { width: 100%; border: 0; background: transparent; padding: 13px 15px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-size: 12px; font-weight: 800; }
+    .scene-recall p { margin: 0; padding: 0 15px 14px; color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+    .audio-note { margin: 10px 0 0; text-align: center; color: #777181; font-size: 10px; }
+    .audio-note.playing { color: var(--orange-dark); font-weight: 800; }
+    .choice-list { display: grid; gap: 11px; margin-top: 22px; }
+    .choice-button { width: 100%; border: 1px solid rgba(45,38,67,.07); background: rgba(255,255,255,.58); border-radius: 18px; padding: 15px; text-align: left; cursor: pointer; box-shadow: 0 7px 18px rgba(38,31,60,.045); }
+    .choice-button strong { display: block; font-size: 13px; }
+    .choice-button span { display: block; color: var(--ink-soft); font-size: 11px; margin-top: 6px; line-height: 1.45; }
+    .choice-button.selected { border-color: var(--orange); box-shadow: 0 0 0 2px rgba(243,111,63,.12); }
+    .choice-button.correct { border-color: var(--teal); background: rgba(232,248,244,.75); }
+    .choice-button.wrong { border-color: var(--error); background: rgba(255,238,238,.72); }
+    .feedback { margin-top: 13px; padding: 13px; border-radius: 15px; background: rgba(255,255,255,.58); font-size: 12px; line-height: 1.55; }
+    .feedback.good { color: var(--teal-dark); }
+    .feedback.bad { color: #8d3939; }
+    .cloze-card { margin-top: 22px; padding: 19px; border-radius: 22px; background: rgba(255,255,255,.58); box-shadow: var(--shadow-sm); }
+    .cloze-card p { margin: 0; font-family: Georgia, serif; font-size: 20px; line-height: 1.55; }
+    .cloze-card small { display: block; color: var(--ink-soft); line-height: 1.5; margin-top: 10px; }
+    .answer-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 15px; }
+    .answer-row input { min-width: 0; height: 48px; border-radius: 15px; border: 1px solid rgba(45,38,67,.1); padding: 0 14px; background: rgba(255,255,255,.7); }
+    .answer-row button { border: 0; border-radius: 15px; color: white; background: var(--orange); padding: 0 18px; font-weight: 800; cursor: pointer; }
+    .finish-screen { background: linear-gradient(160deg,#f2e6cb,#d9d7ed 50%,#eed2da); }
+    .finish-body { height: calc(100% - 35px); padding: 90px 26px 35px; text-align: center; display: flex; flex-direction: column; }
+    .finish-star { font-size: 54px; animation: pop .6s var(--ease-out) both; }
+    .finish-body h1 { margin: 18px 0 7px; font-size: 28px; }
+    .finish-body > p { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.6; }
+    .finish-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-top: 28px; }
+    .finish-stats div { background: rgba(255,255,255,.58); border-radius: 17px; padding: 15px 7px; }
+    .finish-stats strong { display: block; font-size: 23px; }
+    .finish-stats span { font-size: 9px; color: var(--ink-soft); }
+    .finish-actions { margin-top: auto; display: grid; gap: 9px; }
+
+    .example-screen { background: linear-gradient(170deg,#e8dfcb,#d8d5ec 50%,#edcfd9); }
+    .example-shell { height: calc(100% - 35px); padding: 12px 14px 24px; display: flex; flex-direction: column; }
+    .example-card { flex: 1; min-height: 0; overflow: hidden; border-radius: 27px; background: white; box-shadow: var(--shadow-md); display: flex; flex-direction: column; touch-action: pan-y; user-select: none; will-change: transform, opacity; }
+    .example-card.is-dragging { cursor: grabbing; transition: none; }
+    .example-card.from-next { animation: example-in-next .28s var(--ease-out) both; }
+    .example-card.from-previous { animation: example-in-previous .28s var(--ease-out) both; }
+    .example-visual { min-height: 53%; position: relative; padding: 22px 20px 19px; color: #f8f8fb; display: flex; flex-direction: column; background: linear-gradient(165deg,#283251,#12182c 68%,#202947); }
+    .example-visual::before { content: ""; position: absolute; inset: 0; opacity: .42; background: radial-gradient(circle at 80% 20%,#df8050 0 4%,transparent 5%), linear-gradient(125deg,transparent 0 44%,rgba(255,255,255,.08) 45% 46%,transparent 47%); }
+    .example-source { position: relative; z-index: 2; color: rgba(255,255,255,.66); font-size: 11px; letter-spacing: .04em; }
+    .example-close { position: absolute; top: 11px; right: 11px; z-index: 5; color: white; background: rgba(255,255,255,.08); }
+    .example-sentence { position: relative; z-index: 2; margin-top: auto; }
+    .example-sentence p { margin: 0; font-family: Georgia, serif; font-size: 23px; line-height: 1.35; }
+    .example-sentence small { display: block; margin-top: 12px; color: rgba(255,255,255,.68); line-height: 1.55; }
+    .example-sentence mark { color: #ff7d42; }
+    .example-tools { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; margin-top: 19px; }
+    .example-tools button { color: white; background: rgba(255,255,255,.08); }
+    .dots { display: flex; gap: 5px; }
+    .dots i { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,.25); transition: width .2s var(--ease-out), background .2s ease; }
+    .dots i.active { background: var(--orange); width: 14px; border-radius: 99px; }
+    .example-detail { flex: 1; min-height: 0; padding: 19px; overflow-y: auto; text-align: center; display: flex; flex-direction: column; align-items: stretch; }
+    .translation-toggle { margin: auto 0; min-height: 42px; border: 0; border-radius: 14px; color: var(--ink-soft); background: #f6f4f3; cursor: pointer; font-weight: 750; }
+    .translation-copy, .context-copy { text-align: left; margin: 0; padding: 14px; border-radius: 15px; background: #f7f5f3; font-size: 12px; line-height: 1.6; animation: reveal .3s var(--ease-out); }
+    .context-copy { margin-top: 9px; color: var(--ink-soft); }
+    .example-detail-actions { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .example-detail-actions button { border: 0; border-radius: 13px; min-height: 39px; background: #f4f1ef; cursor: pointer; font-size: 11px; font-weight: 800; }
+    .example-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 15px 5px 0; }
+    .example-bottom button { min-height: 44px; border: 0; background: transparent; cursor: pointer; font-weight: 850; font-size: 14px; }
+    .example-bottom button:first-child { color: var(--teal-dark); }
+    .example-bottom button:last-child { color: var(--orange-dark); }
+    .example-bottom button:disabled { color: var(--ink-faint); opacity: .55; }
+    .swipe-hint { padding-top: 8px; color: var(--ink-soft); font-size: 10px; text-align: center; letter-spacing: .02em; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+    .popover { position: absolute; z-index: 45; top: 80px; right: 14px; width: 190px; border-radius: 20px; background: white; box-shadow: var(--shadow-md); overflow: hidden; animation: popover-in .22s var(--ease-out) both; }
+    .popover button { width: 100%; min-height: 52px; border: 0; border-bottom: 1px solid var(--line); background: white; text-align: left; padding: 0 16px; cursor: pointer; font-weight: 750; }
+    .popover button:last-child { border-bottom: 0; }
+    .popover button:hover { background: #faf7f5; }
+    .scrim { position: absolute; inset: 0; z-index: 60; background: rgba(18,16,29,.34); backdrop-filter: blur(3px); animation: fade-in .2s ease both; }
+    .bottom-sheet { position: absolute; z-index: 61; left: 10px; right: 10px; bottom: 10px; border-radius: 28px; background: white; padding: 22px 20px 18px; box-shadow: var(--shadow-md); animation: sheet-in .34s var(--ease-out) both; }
+    .sheet-handle { width: 36px; height: 4px; border-radius: 99px; background: #dedadc; margin: -10px auto 17px; }
+    .bottom-sheet h2 { margin: 0 0 8px; font-size: 21px; }
+    .bottom-sheet .target { display: inline-flex; border-radius: 99px; padding: 7px 10px; background: #f5f2f1; font-weight: 800; font-size: 12px; }
+    .bottom-sheet p { margin: 12px 0 17px; color: var(--ink-soft); font-size: 12px; line-height: 1.65; }
+    .sheet-actions { display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px; }
+    .sheet-actions button { min-height: 46px; border-radius: 14px; border: 0; font-weight: 850; cursor: pointer; }
+    .sheet-actions .cancel { background: #f3f0ee; }
+    .sheet-actions .confirm { color: white; background: var(--teal); }
+    .toast { position: absolute; z-index: 75; left: 50%; bottom: 88px; max-width: 330px; transform: translateX(-50%); color: white; background: rgba(26,23,38,.88); border-radius: 99px; padding: 10px 14px; font-size: 11px; box-shadow: var(--shadow-md); animation: toast-in .35s var(--ease-out) both; text-align: center; }
+
+    .inspector { color: #eeeaf6; max-height: 844px; overflow-y: auto; scrollbar-width: thin; padding-right: 12px; }
+    .inspector h1 { margin: 0; font-size: 29px; letter-spacing: -.03em; }
+    .inspector > p { color: #9f99b4; line-height: 1.65; margin: 8px 0 24px; }
+    .inspector h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #918aa8; margin: 25px 0 10px; }
+    .jump-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+    .jump-grid button { min-height: 39px; border: 1px solid rgba(255,255,255,.1); border-radius: 12px; color: #e5e0ef; background: rgba(255,255,255,.055); cursor: pointer; font-size: 11px; }
+    .jump-grid button:hover { background: rgba(255,255,255,.1); }
+    .state-card { border: 1px solid rgba(255,255,255,.11); border-radius: 18px; background: rgba(255,255,255,.045); padding: 15px; }
+    .state-row { display: grid; grid-template-columns: 105px 1fr; gap: 12px; padding: 6px 0; font-size: 11px; }
+    .state-row span { color: #827b99; }
+    .state-row b { color: #ede8f5; font-weight: 650; word-break: break-word; }
+    .contract-note { border-left: 3px solid var(--orange); background: rgba(255,255,255,.035); border-radius: 0 12px 12px 0; padding: 12px 14px; color: #b9b2c9; font-size: 11px; line-height: 1.65; }
+    .contract-note strong { color: white; display: block; margin-bottom: 4px; }
+
+    @keyframes screen-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @keyframes sheet-in { from { opacity: 0; transform: translateY(34px); } to { opacity: 1; transform: none; } }
+    @keyframes popover-in { from { opacity: 0; transform: translateY(-8px) scale(.97); } to { opacity: 1; transform: none; } }
+    @keyframes example-in-next { from { opacity: .35; transform: translateX(48px) scale(.985); } to { opacity: 1; transform: none; } }
+    @keyframes example-in-previous { from { opacity: .35; transform: translateX(-48px) scale(.985); } to { opacity: 1; transform: none; } }
+    @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes reveal { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    @keyframes pop { 0% { opacity: 0; transform: scale(.5) rotate(-12deg); } 70% { transform: scale(1.08) rotate(3deg); } 100% { opacity: 1; transform: none; } }
+    @keyframes drift { from { transform: translate3d(0,0,0); } to { transform: translate3d(8px,-12px,0); } }
+
+    @media (max-width: 900px) {
+      body { background: var(--paper); }
+      .prototype-shell { display: block; padding: 0; min-height: 100dvh; }
+      .phone-wrap, .phone { width: 100vw; height: 100dvh; }
+      .phone { border: 0; border-radius: 0; box-shadow: none; }
+      .inspector { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="prototype-shell">
+    <section class="phone-wrap" aria-label="Sensa V1 手机原型">
+      <div class="phone" id="phone"></div>
+    </section>
+    <aside class="inspector" id="inspector" aria-label="原型审查面板"></aside>
+  </main>
+
+  <script>
+    const PACKAGES = [
+      {
+        senseId: "ability-02",
+        lexemeId: "lex-ability",
+        lemma: "ability",
+        ipa: "/əˈbɪləti/",
+        guide: "技能/才干",
+        definition: "Possession of the skills, knowledge, or innate mental faculty to perform a task well; competence or talent.",
+        releaseId: "rel-2026-v1-candidate",
+        releaseStatus: "draft",
+        packagePath: "prototype fixture: ability-02",
+        validationStatus: "satisfied",
+        pronunciationAudio: { id: "ast-audio-pron-ability", path: "media/b62cd6cb2a37859bc3679d8346c18aac5b05a6be115d25d8e05369f869733572.mp3", sha256: "b62cd6cb2a37859bc3679d8346c18aac5b05a6be115d25d8e05369f869733572", durationMs: 1776 },
+        boundaryDistractor: "Even a robot has the ability to produce these mechanical sounds.",
+        boundaryContrast: "Ability-02 强调熟练度和精湛水平，而能力对照项仅指客观具备的潜在机能或可能性。",
+        experience: "深夜的琴房里，手指在黑白键上如流水般飞舞。无数次枯燥的练习终于化作行云流水的乐章，那种游刃有余地把复杂技巧完美呈现的熟练与精湛。",
+        bridge: "中文常统称“能力”，但 ability 专指后天习得、精湛完成某项任务的熟练技巧与才干，区别于单纯的生理潜能。",
+        examples: [
+          {
+            id: "ast-ex-ability-02-01",
+            source: "AI 生成情境 · 已审核",
+            domain: "work_business",
+            role: "study",
+            audio: { id: "ast-audio-ability-02-study-01", path: "media/5421a654c214da41af9fa5454c992961c9577e42b2e5fb24b80e1a85f36c237c.mp3", sha256: "5421a654c214da41af9fa5454c992961c9577e42b2e5fb24b80e1a85f36c237c", durationMs: 6936 },
+            before: "The senior engineer demonstrated remarkable ",
+            target: "ability",
+            after: " in solving complex software bugs under tight deadlines.",
+            l1: "这位高级工程师在紧迫的期限内展现出了解决复杂软件漏洞的卓越才干。",
+            context: "Our team faced a critical system failure right before the product launch.",
+            contextL1: "我们的团队在产品发布前夕面临了一次严重的系统故障。"
+          },
+          {
+            id: "ast-ex-ability-02-02",
+            source: "AI 生成情境 · 已审核",
+            domain: "arts_leisure",
+            role: "study",
+            audio: { id: "ast-audio-ability-02-study-02", path: "media/3e60212918b05c2970ef85ca60b0f0f19cb062e72b8c7e26f4805fc2e2e7caaa.mp3", sha256: "3e60212918b05c2970ef85ca60b0f0f19cb062e72b8c7e26f4805fc2e2e7caaa", durationMs: 5496 },
+            before: "His musical ",
+            target: "ability",
+            after: " shone through as he effortlessly played the intricate piano concerto.",
+            l1: "当他毫不费力地弹奏那首复杂的钢琴协奏曲时，他的音乐才华展露无遗。",
+            context: "He spent over a decade practicing classical masterpieces every single day.",
+            contextL1: "他花了一个多世纪每天练习古典杰作。"
+          },
+          {
+            id: "ast-ex-ability-02-03",
+            source: "AI 生成情境 · 已审核",
+            domain: "study_school",
+            role: "study",
+            audio: { id: "ast-audio-ability-02-study-03", path: "media/8d56454bf889eaea938c1ab669b4988c4aac9fee491cdbb940f0a9eaa6f40456.mp3", sha256: "8d56454bf889eaea938c1ab669b4988c4aac9fee491cdbb940f0a9eaa6f40456", durationMs: 6000 },
+            before: "The professor assessed the students' ",
+            target: "ability",
+            after: " to translate classical literature into modern idioms.",
+            l1: "教授评估了学生们将古典文学翻译成现代习语的技能水平。",
+            context: "During the final semester examination, candidates were given unprecedented linguistic challenges.",
+            contextL1: "在最后学期的考试中，考生们面临着空前的语言挑战。"
+          }
+        ]
+      },
+      {
+        senseId: "ability-01",
+        lexemeId: "lex-ability",
+        lemma: "ability",
+        ipa: "/əˈbɪləti/",
+        guide: "能力/潜能",
+        definition: "The physical or inherent capacity to do or achieve something; the state of being able.",
+        releaseId: "rel-2026-v1-candidate",
+        releaseStatus: "draft",
+        packagePath: "prototype fixture: ability-01",
+        validationStatus: "satisfied",
+        pronunciationAudio: { id: "ast-audio-pron-ability", path: "media/b62cd6cb2a37859bc3679d8346c18aac5b05a6be115d25d8e05369f869733572.mp3", sha256: "b62cd6cb2a37859bc3679d8346c18aac5b05a6be115d25d8e05369f869733572", durationMs: 1776 },
+        boundaryDistractor: "With years of rigorous conservatory training, her ability on the piano is truly world-class.",
+        boundaryContrast: "ability-01 侧重天赋或潜在的客观能力（能做），而 ability-02 侧重通过训练达到的熟练程度或造诣（做得好）。",
+        experience: "一块刚砍伐的特殊木材在潮湿雨林中天然抗虫抗霉，或者智能手机在无外设下通过无线升级展现出的内在机能，这种存在实现某事的原始潜质。",
+        bridge: "对应“能力/潜能”。英语 ability 强调事物或系统本身固有的物理属性与内在机能，不同于后天习得的熟练技能或法律授权。",
+        examples: [
+          {
+            id: "ast-ex-ability-01-01",
+            source: "AI 生成情境 · 已审核",
+            domain: "tech_digital",
+            role: "study",
+            audio: { id: "ast-audio-ability-01-study-01", path: "media/3c11cda587d2e8212ab34a1c15a4c9c88db5c80f69a738cce5b4c8eb76f1c0d8.mp3", sha256: "3c11cda587d2e8212ab34a1c15a4c9c88db5c80f69a738cce5b4c8eb76f1c0d8", durationMs: 5784 },
+            before: "The new smartphone model has the ",
+            target: "ability",
+            after: " to receive wireless software updates automatically.",
+            l1: "这款新型智能手机具备自动接收无线软件更新的能力。",
+            context: "Engineers integrated advanced microchips to enhance the device's operational capacity.",
+            contextL1: "工程师们集成先进的微芯片以增强设备的运行容量。"
+          },
+          {
+            id: "ast-ex-ability-01-02",
+            source: "AI 生成情境 · 已审核",
+            domain: "nature_environment",
+            role: "study",
+            audio: { id: "ast-audio-ability-01-study-02", path: "media/15e52197f5bdeb82a2d28de051e9c809b6e98acbe7c8a4bdcdf10e175751347d.mp3", sha256: "15e52197f5bdeb82a2d28de051e9c809b6e98acbe7c8a4bdcdf10e175751347d", durationMs: 6000 },
+            before: "Certain species of tropical timber retain a natural ",
+            target: "ability",
+            after: " to resist termites and moisture.",
+            l1: "某些种类的热带木材保留了天然抵抗白蚁和潮湿的潜质。",
+            context: "Forestry researchers tested various indigenous woods for long-term structural durability.",
+            contextL1: "林业研究人员测试了各种本土木材的长期结构耐久性。"
+          },
+          {
+            id: "ast-ex-ability-01-03",
+            source: "AI 生成情境 · 已审核",
+            domain: "health_body",
+            role: "study",
+            audio: { id: "ast-audio-ability-01-study-03", path: "media/ca33d4c6d4490135b38dc7fb438bb4fd29b205a92b1bbb2e30c94603b294d267.mp3", sha256: "ca33d4c6d4490135b38dc7fb438bb4fd29b205a92b1bbb2e30c94603b294d267", durationMs: 6216 },
+            before: "Cellular regeneration is the biological ",
+            target: "ability",
+            after: " of tissues to repair damaged structures.",
+            l1: "细胞再生是组织修复受损结构的生物学机能。",
+            context: "Medical scientists are closely observing how human organs heal after severe injuries.",
+            contextL1: "医学科学家正在密切观察人体器官在严重受伤后是如何愈合的。"
+          }
+        ]
+      },
+      {
+        senseId: "ability-03",
+        lexemeId: "lex-ability",
+        lemma: "ability",
+        ipa: "/əˈbɪləti/",
+        guide: "法定能力",
+        definition: "The legal power, right, or wherewithal to act or perform a specific legal transaction.",
+        releaseId: "rel-2026-v1-candidate",
+        releaseStatus: "draft",
+        packagePath: "prototype fixture: ability-03",
+        validationStatus: "satisfied",
+        pronunciationAudio: { id: "ast-audio-pron-ability", path: "media/b62cd6cb2a37859bc3679d8346c18aac5b05a6be115d25d8e05369f869733572.mp3", sha256: "b62cd6cb2a37859bc3679d8346c18aac5b05a6be115d25d8e05369f869733572", durationMs: 1776 },
+        boundaryDistractor: "Although Maria never obtained a driver's license, she is still fully able to drive on public highways.",
+        boundaryContrast: "ability-03 指法律赋予的资格或许可——能否依法做某事；ability-01 指事实层面的身体或固有可能性。",
+        experience: "在法庭或签约桌前，当事人虽然有心做某事，但必须由法律条文或合同条款正式授权，才拥有合法签署和履行的资格。",
+        bridge: "ability对应中文“法定能力”，它专指法律或合同赋予的合法授权与资格，区别于纯粹的个人潜能或技能。",
+        examples: [
+          {
+            id: "ast-ex-ability-03-01",
+            source: "AI 生成情境 · 已审核",
+            domain: "work_business",
+            role: "study",
+            audio: { id: "ast-audio-ability-03-study-01", path: "media/c30d794c07250464ae1f450b4d0571eb49dc36b96754d74d2e051a31d9e08906.mp3", sha256: "c30d794c07250464ae1f450b4d0571eb49dc36b96754d74d2e051a31d9e08906", durationMs: 7392 },
+            before: "Under the partnership agreement, every partner has the ",
+            target: "ability",
+            after: " to bind the firm to contracts worth up to fifty thousand dollars.",
+            l1: "根据这份合伙协议，每位合伙人都有权让事务所受金额不超过五万美元的合同约束。",
+            context: "When the two architects opened their joint practice, their lawyer insisted on drafting a detailed operating agreement first.",
+            contextL1: "当这两位建筑师创办联合事务所时，他们的律师坚持先起草一份详细的运营协议。"
+          },
+          {
+            id: "ast-ex-ability-03-02",
+            source: "AI 生成情境 · 已审核",
+            domain: "study_school",
+            role: "study",
+            audio: { id: "ast-audio-ability-03-study-02", path: "media/5b41749201a61dc1a57f3f08a3b677632a812f8eeffb1bef38b9d08f59702ec9.mp3", sha256: "5b41749201a61dc1a57f3f08a3b677632a812f8eeffb1bef38b9d08f59702ec9", durationMs: 6504 },
+            before: "The ",
+            target: "ability",
+            after: " of minors to enter into enforceable contracts is sharply limited in most jurisdictions.",
+            l1: "在大多数司法管辖区，未成年人订立具有强制执行力合同的法律行为能力受到严格限制。",
+            context: "On the first day of her contracts course, the professor asked why a seventeen-year-old could simply walk away from a signed car deal.",
+            contextL1: "合同法课程的第一天，教授问大家，为什么一名十七岁的少年可以径直退出一场已签字的汽车交易。"
+          },
+          {
+            id: "ast-ex-ability-03-03",
+            source: "AI 生成情境 · 已审核",
+            domain: "health_body",
+            role: "study",
+            audio: { id: "ast-audio-ability-03-study-03", path: "media/60f56fb0961d9ab756e21cdd95bd8c76cbaaab937d1812448166303202411767.mp3", sha256: "60f56fb0961d9ab756e21cdd95bd8c76cbaaab937d1812448166303202411767", durationMs: 7920 },
+            before: "Before the notary would stamp the deed, she had to confirm that the elderly owner still possessed the ",
+            target: "ability",
+            after: " to understand the transaction.",
+            l1: "在公证人给这份地契盖印之前，她必须确认这位年迈的业主仍具备理解这笔交易的民事行为能力。",
+            context: "That morning the family delivered their grandfather's paperwork, worried that his new medication might cloud his judgment.",
+            contextL1: "那天早上，家人把祖父的文书送了过来，担心他新服用的药物可能会影响他的判断力。"
+          }
+        ]
+      }
+    ];
+
+    const state = {
+      surface: "home",
+      previousSurface: "home",
+      studyStage: "experience",
+      packageIndex: 0,
+      sessionCompleted: 1,
+      dailyTarget: 10,
+      newCount: 7,
+      dueCount: 3,
+      exampleIndex: 0,
+      exampleDirection: null,
+      translationVisible: false,
+      contextVisible: false,
+      sceneExpanded: false,
+      menuOpen: false,
+      sheet: null,
+      toast: null,
+      playing: null,
+      audioError: null,
+      boundaryChoice: null,
+      clozeResult: null,
+      repairUsed: false,
+      finishMode: "completed",
+      senseFavorites: new Set(["ability-03"]),
+      exampleFavorites: new Set(),
+      mastered: new Set(),
+      bookSearch: "",
+      learningTab: "plan",
+      autoPronunciation: true,
+      autoExample: false,
+      accent: "美式"
+    };
+
+    let activeAudio = null;
+
+    const paths = {
+      back: "M15 18l-6-6 6-6",
+      close: "M6 6l12 12M18 6L6 18",
+      book: "M4 5.5A2.5 2.5 0 016.5 3H11v16H6.5A2.5 2.5 0 004 21V5.5zM20 5.5A2.5 2.5 0 0017.5 3H13v16h4.5A2.5 2.5 0 0120 21V5.5z",
+      layers: "M12 3L3 8l9 5 9-5-9-5zM3 12l9 5 9-5M3 16l9 5 9-5",
+      chart: "M4 19V9M10 19V5M16 19v-7M22 19V3",
+      user: "M20 21a8 8 0 00-16 0M12 13a5 5 0 100-10 5 5 0 000 10z",
+      volume: "M11 5L6 9H3v6h3l5 4V5zM15 9a4 4 0 010 6M18 6a8 8 0 010 12",
+      star: "M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3z",
+      more: "M5 12h.01M12 12h.01M19 12h.01",
+      search: "M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.3-4.3",
+      arrow: "M9 18l6-6-6-6",
+      check: "M5 12l4 4L19 6",
+      settings: "M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M7 14v6",
+      play: "M8 5l11 7-11 7V5z",
+      pause: "M8 5v14M16 5v14",
+      expand: "M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5",
+      chevron: "M6 9l6 6 6-6",
+      heart: "M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z"
+    };
+
+    function icon(name, label = "") {
+      return `<svg class="icon" viewBox="0 0 24 24" ${label ? `aria-label="${label}" role="img"` : "aria-hidden=\"true\""}><path d="${paths[name] || paths.check}"></path></svg>`;
+    }
+
+    function statusbar() {
+      return `<div class="statusbar"><span>21:24</span><span class="status-icons" aria-hidden="true"><i></i><i></i><i></i><b></b></span></div>`;
+    }
+
+    function currentPackage() { return PACKAGES[state.packageIndex] || PACKAGES[0]; }
+    function currentExample() {
+      const examples = currentPackage().examples;
+      return examples[state.exampleIndex % examples.length];
+    }
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>'"]/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[char]));
+    }
+    function sentenceHtml(example) {
+      return `${escapeHtml(example.before)}<mark>${escapeHtml(example.target)}</mark>${escapeHtml(example.after)}`;
+    }
+    function iconButton(action, name, label, active = false) {
+      return `<button class="icon-button ${active ? "active" : ""}" type="button" data-action="${action}" aria-label="${label}">${icon(name)}</button>`;
+    }
+    function toastHtml() { return state.toast ? `<div class="toast" role="status">${escapeHtml(state.toast)}</div>` : ""; }
+    function shellOverlay() {
+      if (!state.sheet) return toastHtml();
+      const pkg = currentPackage();
+      return `
+        <div class="scrim" data-action="sheet-cancel" aria-hidden="true"></div>
+        <section class="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="master-title">
+          <div class="sheet-handle"></div>
+          <h2 id="master-title">这个意思你已经会了吗？</h2>
+          <span class="target">${escapeHtml(pkg.lemma)} · ${escapeHtml(pkg.guide)}</span>
+          <p>标记后，不再安排这个意思的新学或复习。${escapeHtml(pkg.lemma)} 的其他意思不受影响，之后可以在词书中恢复。</p>
+          <div class="sheet-actions">
+            <button class="cancel" type="button" data-action="sheet-cancel">取消</button>
+            <button class="confirm" type="button" data-action="master-confirm">标记为已会</button>
+          </div>
+        </section>${toastHtml()}`;
+    }
+
+    function homeScreen() {
+      return `<section class="screen home-screen" aria-label="首页">${statusbar()}
+        <div class="home-body">
+          <div class="home-brand">
+            <button class="avatar" type="button" data-action="nav-profile" aria-label="打开账号与数据">你</button>
+            <div class="brand-lockup"><strong>SENSA</strong><small>语境学习</small></div>
+          </div>
+          <p class="home-date">08/25 · 周二</p>
+          <div class="home-focus"><span class="spark">✦</span><strong>今天，从一个意思开始</strong><span>新学和复习由同一个计划安排</span></div>
+          <div class="home-copy"><h1>让词语回到它发生的地方</h1><p>先经历，再揭示；先理解，再记住。</p></div>
+          <div class="home-spacer"></div>
+          <div class="today-summary" aria-label="今日学习摘要">
+            <div class="summary-cell"><strong>${state.newCount}</strong><b>个新意思</b><small>今天仍可学习</small></div>
+            <div class="summary-cell"><strong>${state.dueCount}</strong><b>个待复习</b><small>按记忆再次出现</small></div>
+          </div>
+          <button class="primary-button" type="button" data-action="start-learning">开始今天的学习</button>
+          <p class="plan-note">Sensa 语境词书 · 每天 ${state.dailyTarget} 个新意思</p>
+          <nav class="home-nav" aria-label="主要导航">
+            <button type="button" data-action="nav-books">${icon("book")}<span>词书</span></button>
+            <button type="button" data-action="nav-content">${icon("layers")}<span>内容</span></button>
+            <button type="button" data-action="nav-learning">${icon("chart")}<span>学习</span></button>
+          </nav>
+        </div>${toastHtml()}</section>`;
+    }
+
+    function utilityHead(title, action = "") {
+      return `${statusbar()}<header class="utility-head">${iconButton("home", "chevron", "收起并返回首页")}<h1>${title}</h1>${action || "<span></span>"}</header>`;
+    }
+
+    function booksScreen() {
+      const query = state.bookSearch.trim().toLocaleLowerCase();
+      const visiblePackages = query ? PACKAGES.filter(pkg => `${pkg.lemma} ${pkg.guide}`.toLocaleLowerCase().includes(query)) : PACKAGES;
+      const rows = visiblePackages.map(pkg => {
+        const mastered = state.mastered.has(pkg.senseId);
+        return `<button class="sense-row" type="button" data-action="open-sense" data-id="${pkg.senseId}"><span><strong>${pkg.lemma}</strong><span>${pkg.guide} · 每个意思单独记录</span></span><em class="badge ${mastered ? "mastered" : ""}">${mastered ? "已会" : "学习"}</em></button>`;
+      }).join("") || `<div class="empty-state"><strong>没有找到匹配的意思</strong><span>可以试试英文词形或中文意思。</span></div>`;
+      return `<section class="screen scroll utility-screen" aria-label="词书">${utilityHead("在学词书")}
+        <div class="utility-body">
+          <div class="book-hero card"><div class="book-cover"><b>SENSA</b><span>Scenes<br>in use</span></div><div class="book-meta"><h2>Sensa 语境词书</h2><p>按单词查看，每个意思分别学习、分别安排复习。</p><div class="big-number"><strong>438</strong><span>个意思<br>249 个单词</span></div></div></div>
+          <div class="progress-track"><i></i></div><div class="progress-copy"><span>已完成 149 个意思</span><span>34%</span></div>
+          <div class="search-box">${icon("search")}<input id="book-search" aria-label="搜索单词或意思" placeholder="搜索单词或意思" value="${escapeHtml(state.bookSearch)}"></div>
+          <div class="section-title"><h2>学习范围</h2><span>示例内容</span></div>
+          <div class="card list-card">${rows}</div>
+          <p class="plan-note">列表按单词聚合，但每一行的状态都绑定一个具体意思。</p>
+        </div>${toastHtml()}</section>`;
+    }
+
+    function contentScreen() {
+      const mastered = PACKAGES.filter(pkg => state.mastered.has(pkg.senseId));
+      const favorites = PACKAGES.filter(pkg => state.senseFavorites.has(pkg.senseId));
+      const favoriteExamples = PACKAGES.flatMap(pkg => pkg.examples.map(example => ({ pkg, example }))).filter(({ example }) => state.exampleFavorites.has(example.id));
+      const masteryRows = mastered.length ? mastered.map(pkg => `<div class="content-row"><span><strong>${pkg.lemma}</strong><span>${pkg.guide} · 不再安排</span></span><button class="badge mastered" type="button" data-action="master-revoke" data-id="${pkg.senseId}">恢复安排</button></div>`).join("") : `<div class="empty-state"><strong>还没有标记为已会的意思</strong><span>学习时点击“熟”，会出现在这里。</span></div>`;
+      const favoriteRows = favorites.length ? favorites.map(pkg => `<button class="content-row" type="button" data-action="open-sense" data-id="${pkg.senseId}"><span><strong>${pkg.lemma}</strong><span>${pkg.guide}</span></span>${icon("arrow")}</button>`).join("") : `<div class="empty-state"><strong>还没有收藏的意思</strong><span>收藏契约完成后由多端同步。</span></div>`;
+      const favoriteExampleRows = favoriteExamples.length ? favoriteExamples.map(({ pkg, example }) => `<div class="content-row"><span><strong>${pkg.lemma} · ${pkg.guide}</strong><span>${escapeHtml(example.before + example.target + example.after)}</span></span><em class="badge">已收藏</em></div>`).join("") : `<div class="empty-state"><strong>还没有收藏的例句</strong><span>打开全屏例句卡即可收藏。</span></div>`;
+      return `<section class="screen scroll utility-screen" aria-label="我的内容">${utilityHead("我的内容")}
+        <div class="utility-body">
+          <div class="content-grid"><div class="metric-card card"><strong>12</strong><b>最近学过</b><small>按具体意思记录</small></div><div class="metric-card card"><strong>149</strong><b>全部已学</b><small>不等于全部稳定</small></div></div>
+          <div class="section-title"><h2>已会的意思</h2><span>${mastered.length} 个</span></div><div class="card list-card">${masteryRows}</div>
+          <div class="section-title"><h2>收藏的意思</h2><span>${favorites.length} 个</span></div><div class="card list-card">${favoriteRows}</div>
+          <div class="section-title"><h2>收藏的例句</h2><span>${favoriteExamples.length} 句</span></div><div class="card list-card">${favoriteExampleRows}</div>
+        </div>${toastHtml()}</section>`;
+    }
+
+    function learningScreen() {
+      const plan = state.learningTab === "plan";
+      return `<section class="screen scroll utility-screen" aria-label="我的学习">${utilityHead("我的学习")}
+        <div class="utility-body"><div class="tabs"><button class="${plan ? "active" : ""}" type="button" data-action="learning-plan">我的学习</button><button class="${!plan ? "active" : ""}" type="button" data-action="learning-preferences">学习偏好</button></div>
+        ${plan ? `<div class="plan-card card"><small>ACTIVE PLAN</small><h2>Sensa 语境词书</h2><p>统一安排新意思与到期复习。</p><div class="plan-stats"><div><b>${state.dailyTarget}</b><span>每日新学</span></div><div><b>149</b><span>已学意思</span></div><div><b>${state.dueCount}</b><span>待复习</span></div></div></div><div class="calendar card"><div class="section-title" style="margin-top:0"><h2>本周</h2><span>连续学习 4 天</span></div><div class="week">${["一","二","三","四","五","六","日"].map(day => `<span>${day}</span>`).join("")}</div><div class="week">${[19,20,21,22,23,24,25].map(day => `<b class="${day === 25 ? "today" : ""}">${day}</b>`).join("")}</div></div>` : preferencesHtml()}
+        </div>${toastHtml()}</section>`;
+    }
+
+    function preferencesHtml() {
+      return `<div class="card list-card"><button class="setting-row" type="button" data-action="cycle-accent"><b>单词发音</b><span>${state.accent}</span></button><button class="setting-row" type="button" data-action="toggle-pronunciation"><b>揭示后自动发音</b><span class="switch ${state.autoPronunciation ? "on" : ""}"><i></i></span></button><button class="setting-row" type="button" data-action="toggle-example-audio"><b>例句卡自动播放</b><span class="switch ${state.autoExample ? "on" : ""}"><i></i></span></button><button class="setting-row" type="button" data-action="pace"><b>每日新学意思</b><span>${state.dailyTarget} 个</span></button><button class="setting-row" type="button" data-action="appearance"><b>外观主题</b><span>晨雾</span></button></div><p class="plan-note">拼写、听写等偏好会在对应 Action contract 完成后出现。</p>`;
+    }
+
+    function profileScreen() {
+      return `<section class="screen scroll utility-screen" aria-label="账号与数据">${utilityHead("账号与数据")}
+        <div class="utility-body"><div class="profile-hero"><div class="profile-avatar">你</div><h2>Sensa 学习者</h2><p>learner@example.com</p></div><div class="card list-card"><button class="setting-row" type="button" data-action="sync"><b>学习数据</b><span>已同步</span></button><button class="setting-row" type="button" data-action="appearance"><b>外观</b><span>晨雾</span></button><button class="setting-row" type="button" data-action="feedback"><b>反馈与内容纠错</b>${icon("arrow")}</button><button class="setting-row" type="button" data-action="export"><b>导出与删除数据</b>${icon("arrow")}</button></div></div>${toastHtml()}</section>`;
+    }
+
+    function studyToolbar() {
+      const pkg = currentPackage();
+      return `<header class="study-toolbar">${iconButton("exit-study", "close", "退出本次学习")}<div class="study-progress">${Math.min(state.dailyTarget, state.sessionCompleted + 1)} / ${state.dailyTarget}</div><div class="study-tools">${iconButton("toggle-sense-favorite", "star", "收藏当前意思", state.senseFavorites.has(pkg.senseId))}<button class="master-button" type="button" data-action="master-open" aria-label="标记这个意思已经会了">熟</button>${iconButton("toggle-menu", "more", "更多学习操作", state.menuOpen)}</div></header>`;
+    }
+
+    function studyScreen() {
+      const stage = state.studyStage;
+      let content = "";
+      if (stage === "experience") content = experienceStage();
+      else if (stage === "reveal") content = revealStage();
+      else if (stage === "boundary") content = boundaryStage();
+      else if (stage === "repair") content = repairStage();
+      else if (stage === "cloze") content = clozeStage();
+      const popover = state.menuOpen ? `<div class="popover" role="menu"><button type="button" data-action="open-preferences">学习偏好</button><button type="button" data-action="feedback">内容纠错</button><button type="button" data-action="exit-study">退出本次学习</button></div>` : "";
+      return `<section class="screen study-screen" aria-label="学习">${statusbar()}<div class="study-body">${studyToolbar()}${content}${popover}</div>${shellOverlay()}</section>`;
+    }
+
+    function experienceStage() {
+      const pkg = currentPackage();
+      return `<main class="study-main"><span class="eyebrow">先经历，再揭示</span><h1 class="study-title">先回到这个场景</h1><p class="study-guide">暂时不要找英文词，只感受这段经历里最重要的共同点。</p><article class="scene-card"><div class="scene-art" aria-hidden="true"></div><p>${escapeHtml(pkg.experience)}</p><small>这个阶段不会显示词形、中文连接、目标例句或发音。</small></article></main><footer class="study-footer"><button class="primary-button" type="button" data-action="reveal">把场景和词连起来</button></footer>`;
+    }
+
+    function revealStage() {
+      const pkg = currentPackage();
+      const example = currentExample();
+      return `<main class="study-main"><div class="lexeme-head"><span class="eyebrow">这个意思的英文形式</span><h1>${escapeHtml(pkg.lemma)}</h1><div class="pronunciation-row"><button class="audio-pill ${state.playing === "pronunciation" ? "playing" : ""}" type="button" data-action="play-pronunciation" aria-label="${state.playing === "pronunciation" ? "暂停" : "播放"}单词发音">${icon(state.playing === "pronunciation" ? "pause" : "volume")}<span>${state.accent}</span></button><span class="ipa">${escapeHtml(pkg.ipa)}</span></div></div><section class="sense-focus"><span class="sense-label">当前学习的意思</span><h2>${escapeHtml(pkg.guide)}</h2></section><article class="bridge-card"><b>中文连接</b><p>${escapeHtml(pkg.bridge)}</p></article><button class="example-inline" type="button" data-action="open-example"><b>${escapeHtml(example.source)}</b><p>${sentenceHtml(example)}</p><small>${escapeHtml(example.l1)}</small><span class="open-example">${icon("expand")}</span></button><div class="scene-recall"><button type="button" data-action="toggle-scene"><span>回看刚才的场景</span>${icon("chevron")}</button>${state.sceneExpanded ? `<p>${escapeHtml(pkg.experience)}</p>` : ""}</div><p class="audio-note ${state.playing ? "playing" : ""}">${state.audioError ? escapeHtml(state.audioError) : state.playing ? "正在播放 V2 真实音频…" : "发音与例句音频来自当前 V2 学习包"}</p></main><footer class="study-footer"><button class="primary-button" type="button" data-action="continue-reveal">下一个意思</button></footer>`;
+    }
+
+    function boundaryStage() {
+      const pkg = currentPackage();
+      const example = currentExample();
+      const chosen = state.boundaryChoice;
+      const correct = chosen === "a";
+      const choiceClass = id => !chosen ? "" : id === chosen ? (id === "a" ? "correct" : "wrong") : id === "a" && chosen ? "correct" : "";
+      return `<main class="study-main"><span class="eyebrow">分清相近的意思</span><h1 class="study-title">哪一句表达“${escapeHtml(pkg.guide)}”？</h1><p class="study-guide">选择与当前意思最接近的一句。</p><div class="choice-list"><button class="choice-button ${choiceClass("a")}" type="button" data-action="boundary-choice" data-choice="a"><strong>A · 当前意思</strong><span>${escapeHtml(example.before + example.target + example.after)}</span></button><button class="choice-button ${choiceClass("b")}" type="button" data-action="boundary-choice" data-choice="b"><strong>B · 容易混淆</strong><span>${escapeHtml(pkg.boundaryDistractor)}</span></button></div>${chosen ? `<div class="feedback ${correct ? "good" : "bad"}"><b>${correct ? "分清了" : "这里容易混"}</b><br>${correct ? `${escapeHtml(pkg.lemma)} 在这里表达“${escapeHtml(pkg.guide)}”。` : escapeHtml(pkg.boundaryContrast)}</div>` : ""}</main><footer class="study-footer"><button class="primary-button" type="button" data-action="boundary-continue" ${chosen ? "" : "disabled"}>继续检索</button></footer>`;
+    }
+
+    function repairStage() {
+      const pkg = currentPackage();
+      const ex = currentExample();
+      return `<main class="study-main"><span class="eyebrow">换一种方式，再建立一次连接</span><h1 class="study-title">先把场景重新放回心里</h1><article class="repair-card"><b>刚才的场景</b><p>${escapeHtml(pkg.experience)}</p></article><article class="bridge-card"><b>关键区别</b><p>${escapeHtml(pkg.bridge)}</p></article><button class="example-inline" type="button" data-action="open-example"><b>再看一个动作里的用法</b><p>${sentenceHtml(ex)}</p><small>${escapeHtml(ex.l1)}</small><span class="open-example">${icon("expand")}</span></button></main><footer class="study-footer"><button class="primary-button" type="button" data-action="repair-continue">我准备好了，再试一次</button></footer>`;
+    }
+
+    function clozeStage() {
+      const pkg = currentPackage();
+      const example = currentExample();
+      const correct = state.clozeResult === "correct";
+      return `<main class="study-main"><span class="eyebrow">放进一个新场景</span><h1 class="study-title">把这个意思找回来</h1><p class="study-guide">输入最自然的英文词形。</p><article class="cloze-card"><p>${escapeHtml(example.before)}____${escapeHtml(example.after)}</p><small>${escapeHtml(example.l1)}</small></article>${correct ? `<div class="feedback good"><b>找回来了：${escapeHtml(pkg.lemma)}</b><br>词形和“${escapeHtml(pkg.guide)}”重新连在了一起。</div>` : `<div class="answer-row"><input id="cloze-answer" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="输入英文词"><button type="button" data-action="submit-cloze">确认</button></div><button class="secondary-button" type="button" data-action="cloze-giveup">不会，回到连接</button>`}</main>${correct ? `<footer class="study-footer"><button class="primary-button" type="button" data-action="complete-sense">完成这个意思</button></footer>` : ""}`;
+    }
+
+    function exampleScreen() {
+      const pkg = currentPackage();
+      const ex = currentExample();
+      const favorite = state.exampleFavorites.has(ex.id);
+      const atFirst = state.exampleIndex === 0;
+      const atLast = state.exampleIndex === pkg.examples.length - 1;
+      const directionClass = state.exampleDirection ? `from-${state.exampleDirection}` : "";
+      return `<section class="screen example-screen" aria-label="全屏例句卡">${statusbar()}<div class="example-shell"><article class="example-card ${directionClass}" data-example-swipe role="group" aria-roledescription="例句轮播" aria-label="第 ${state.exampleIndex + 1} 条例句，共 ${pkg.examples.length} 条"><div class="example-visual"><span class="example-source">${escapeHtml(ex.source)} · ${state.exampleIndex + 1}/${pkg.examples.length}</span><button class="icon-button example-close" type="button" data-action="close-example" aria-label="关闭例句卡">${icon("close")}</button><div class="example-sentence"><p>${sentenceHtml(ex)}</p>${state.translationVisible ? `<small>${escapeHtml(ex.l1)}</small>` : ""}</div><div class="example-tools">${iconButton("toggle-example-favorite", "star", "收藏例句", favorite)}<div class="dots" aria-hidden="true">${pkg.examples.map((_,index) => `<i class="${index === state.exampleIndex ? "active" : ""}"></i>`).join("")}</div>${iconButton("play-example", state.playing === "example" ? "pause" : "volume", state.playing === "example" ? "暂停例句音频" : "播放例句音频", state.playing === "example")}</div></div><div class="example-detail">${state.audioError ? `<p class="feedback bad">${escapeHtml(state.audioError)}</p>` : ""}${state.translationVisible ? `<p class="translation-copy">${escapeHtml(ex.l1)}</p>` : `<button class="translation-toggle" type="button" data-action="toggle-translation">查看中文连接</button>`}${state.contextVisible ? `<p class="context-copy"><b>完整上下文</b><br>${escapeHtml(ex.context)}${ex.contextL1 ? `<br><br>${escapeHtml(ex.contextL1)}` : ""}</p>` : ""}<div class="example-detail-actions"><button type="button" data-action="toggle-translation">${state.translationVisible ? "隐藏中文" : "显示中文"}</button><button type="button" data-action="toggle-context">${state.contextVisible ? "收起上下文" : "查看上下文"}</button></div></div></article><div class="swipe-hint">向左滑下一条 · 向右滑上一条</div><div class="example-bottom"><button type="button" data-action="previous-example" ${atFirst ? "disabled" : ""}>上一例句</button><button type="button" data-action="next-example" ${atLast ? "disabled" : ""}>下一例句</button></div><div class="sr-only" aria-live="polite">当前是第 ${state.exampleIndex + 1} 条例句，共 ${pkg.examples.length} 条</div></div>${toastHtml()}</section>`;
+    }
+
+    function senseDetailScreen() {
+      const pkg = currentPackage();
+      const ex = currentExample();
+      const mastered = state.mastered.has(pkg.senseId);
+      return `<section class="screen scroll utility-screen" aria-label="意思详情">${utilityHead(pkg.lemma)}<div class="utility-body"><div class="lexeme-head"><span class="eyebrow">意思详情 · 浏览不会计入学习</span><h1>${escapeHtml(pkg.lemma)}</h1><div class="pronunciation-row"><button class="audio-pill" type="button" data-action="play-pronunciation">${icon("volume")}${state.accent}</button><span class="ipa">${escapeHtml(pkg.ipa)}</span></div></div><section class="sense-focus"><span class="sense-label">这个意思</span><h2>${escapeHtml(pkg.guide)}</h2></section><article class="bridge-card"><b>中文连接</b><p>${escapeHtml(pkg.bridge)}</p></article><button class="example-inline" type="button" data-action="open-example"><b>${escapeHtml(ex.source)}</b><p>${sentenceHtml(ex)}</p><small>${escapeHtml(ex.l1)}</small><span class="open-example">${icon("expand")}</span></button><div style="margin-top:14px">${mastered ? `<button class="secondary-button" type="button" data-action="master-revoke" data-id="${pkg.senseId}">恢复安排这个意思</button>` : `<button class="secondary-button" type="button" data-action="master-open">标记这个意思已经会了</button>`}</div><p class="plan-note">同一个单词的其他意思拥有独立进度。</p></div>${shellOverlay()}</section>`;
+    }
+
+    function finishScreen() {
+      const needsSupport = state.finishMode === "needs-support";
+      return `<section class="screen finish-screen" aria-label="本次学习完成">${statusbar()}<div class="finish-body"><div class="finish-star">✦</div><h1>${needsSupport ? "这个意思之后还会回来" : "今天的连接建立好了"}</h1><p>${needsSupport ? "这次还没有稳定找回词形，系统会保留真实结果并安排后续巩固。" : "什么时候再出现，由你的记忆状态决定。你不需要管理算法。"}</p><div class="finish-stats"><div><strong>${needsSupport ? 0 : 1}</strong><span>本次完成</span></div><div><strong>${needsSupport ? 1 : 0}</strong><span>需要巩固</span></div><div><strong>${state.mastered.size}</strong><span>标记已会</span></div></div><div class="finish-actions"><button class="primary-button" type="button" data-action="home">回到首页</button><button class="secondary-button" type="button" data-action="start-learning">继续学习</button></div></div>${toastHtml()}</section>`;
+    }
+
+    function renderPhone() {
+      const phone = document.getElementById("phone");
+      if (state.surface === "home") phone.innerHTML = homeScreen();
+      else if (state.surface === "books") phone.innerHTML = booksScreen();
+      else if (state.surface === "content") phone.innerHTML = contentScreen();
+      else if (state.surface === "learning") phone.innerHTML = learningScreen();
+      else if (state.surface === "profile") phone.innerHTML = profileScreen();
+      else if (state.surface === "study") phone.innerHTML = studyScreen();
+      else if (state.surface === "example") phone.innerHTML = exampleScreen();
+      else if (state.surface === "sense") phone.innerHTML = senseDetailScreen();
+      else if (state.surface === "finish") phone.innerHTML = finishScreen();
+      renderInspector();
+      if (state.sheet) requestAnimationFrame(() => phone.querySelector(".bottom-sheet .confirm")?.focus());
+    }
+
+    function renderInspector() {
+      const pkg = currentPackage();
+      const example = currentExample();
+      const audioAsset = state.surface === "example" ? example.audio : pkg.pronunciationAudio;
+      document.getElementById("inspector").innerHTML = `<h1>Sensa V1 · Product Prototype</h1><p>不背单词式 Product Shell × Sensa Sense-first Learning Kernel。此原型验证 IA、视觉层级和状态转换，不写真实 Evidence。</p><h2>快速跳转</h2><div class="jump-grid"><button data-jump="home">首页</button><button data-jump="books">词书</button><button data-jump="content">我的内容</button><button data-jump="learning">我的学习</button><button data-jump="experience">经验态</button><button data-jump="reveal">揭示态</button><button data-jump="example">全屏例句</button><button data-jump="boundary">边界辨析</button><button data-jump="repair">修复</button><button data-jump="cloze">完形</button><button data-jump="master">“熟”确认</button><button data-jump="finish">完成页</button></div><h2>当前状态</h2><div class="state-card"><div class="state-row"><span>Surface</span><b>${state.surface}</b></div><div class="state-row"><span>Study stage</span><b>${state.studyStage}</b></div><div class="state-row"><span>Word / meaning</span><b>${pkg.lemma} · ${pkg.guide}</b></div><div class="state-row"><span>Package</span><b>${pkg.releaseId} · ${pkg.senseId} · ${pkg.validationStatus}</b></div><div class="state-row"><span>Example asset</span><b>${example.id}</b></div><div class="state-row"><span>Audio asset</span><b>${audioAsset.id} · ${audioAsset.durationMs}ms</b></div><div class="state-row"><span>Declared Mastery</span><b>${state.mastered.size ? [...state.mastered].join(", ") : "none"}</b></div><div class="state-row"><span>Visible assets</span><b>${state.studyStage === "experience" ? "experience_sketch only" : state.studyStage === "reveal" ? "action-referenced sketch + bridge + ordered study examples + audio" : "renderer-specific"}</b></div></div><h2>合同检查</h2><div class="contract-note"><strong>真实候选包，不冒充已发布</strong>内容逐字来自 ${pkg.packagePath}；release status 是 ${pkg.releaseStatus}，package validator 是 ${pkg.validationStatus}。</div><div class="contract-note" style="margin-top:9px"><strong>“熟”只针对当前意思</strong>确认后中断/取消这个 Sense 的非终态 Encounter，不产生 Attempt、Evidence 或 Memory Outcome；同词其他意思不受影响。</div><div class="contract-note" style="margin-top:9px"><strong>例句轮播资产边界</strong>原型假定当前 Action 显式按序引用这 3 条 study example；生产端不能从整个 Package 自行补齐。</div><div class="contract-note" style="margin-top:9px"><strong>真实音频</strong>直接读取与 package mediaSha256 对应的本地 MP3，不调用 TTS；生产端仍应通过授权媒体 URL / R2 交付。收藏展示目标体验，但 production 必须先完成 Bookmark schema、语言中立 contract、Sync 与本地 store。</div>`;
+    }
+
+    let toastTimer = null;
+    function showToast(message) {
+      state.toast = message;
+      clearTimeout(toastTimer);
+      renderPhone();
+      toastTimer = setTimeout(() => { state.toast = null; renderPhone(); }, 2300);
+    }
+    function selectPackage(id) {
+      const index = PACKAGES.findIndex(pkg => pkg.senseId === id);
+      if (index >= 0) state.packageIndex = index;
+      state.exampleIndex = 0;
+      state.exampleDirection = null;
+    }
+    function paginateExample(step) {
+      const nextIndex = state.exampleIndex + step;
+      const examples = currentPackage().examples;
+      if (nextIndex < 0 || nextIndex >= examples.length) return false;
+      stopAudio(false);
+      state.exampleDirection = step > 0 ? "next" : "previous";
+      state.exampleIndex = nextIndex;
+      state.translationVisible = false;
+      state.contextVisible = false;
+      state.playing = null;
+      state.audioError = null;
+      renderPhone();
+      setTimeout(() => { state.exampleDirection = null; }, 320);
+      return true;
+    }
+    function nextEligiblePackageIndex(afterIndex) {
+      for (let offset = 1; offset <= PACKAGES.length; offset += 1) {
+        const index = (afterIndex + offset + PACKAGES.length) % PACKAGES.length;
+        if (!state.mastered.has(PACKAGES[index].senseId)) return index;
+      }
+      return 0;
+    }
+    function go(surface) {
+      stopAudio(false);
+      state.previousSurface = state.surface;
+      state.surface = surface;
+      state.menuOpen = false;
+      state.sheet = null;
+      state.audioError = null;
+      renderPhone();
+    }
+    function stopAudio(shouldRender = true) {
+      if (activeAudio) {
+        activeAudio.pause();
+        activeAudio.removeAttribute("src");
+        activeAudio.load();
+        activeAudio = null;
+      }
+      state.playing = null;
+      if (shouldRender) renderPhone();
+    }
+    function play(kind) {
+      if (activeAudio && state.playing === kind) {
+        stopAudio();
+        return;
+      }
+      stopAudio(false);
+      const asset = kind === "pronunciation" ? currentPackage().pronunciationAudio : currentExample().audio;
+      if (!asset) {
+        state.audioError = "当前学习资产没有可用音频。";
+        renderPhone();
+        return;
+      }
+      const audio = new Audio(new URL(asset.path, location.href).href);
+      activeAudio = audio;
+      state.playing = kind;
+      state.audioError = null;
+      audio.preload = "auto";
+      const finish = errorMessage => {
+        if (activeAudio !== audio) return;
+        activeAudio = null;
+        state.playing = null;
+        state.audioError = errorMessage || null;
+        renderPhone();
+      };
+      audio.addEventListener("ended", () => finish(null), { once: true });
+      audio.addEventListener("error", () => finish("真实音频暂时无法读取，请检查本地媒体文件。"), { once: true });
+      renderPhone();
+      const started = audio.play();
+      if (started && typeof started.catch === "function") started.catch(() => finish("浏览器阻止了音频播放，请再次点击播放。"));
+    }
+    function failRetrieval() {
+      state.clozeResult = null;
+      if (state.repairUsed) {
+        state.finishMode = "needs-support";
+        go("finish");
+      } else {
+        state.repairUsed = true;
+        state.studyStage = "repair";
+        renderPhone();
+      }
+    }
+    function jumpTo(target) {
+      if (["home","books","content","learning","finish"].includes(target)) {
+        go(target);
+        return;
+      }
+      stopAudio(false);
+      state.audioError = null;
+      state.surface = "study";
+      state.studyStage = target === "master" ? "reveal" : target;
+      state.boundaryChoice = target === "repair" ? "b" : null;
+      state.clozeResult = null;
+      state.repairUsed = target === "repair";
+      state.sheet = target === "master" ? "mastery" : null;
+      if (target === "example") {
+        state.previousSurface = "study";
+        state.surface = "example";
+      }
+      renderPhone();
+    }
+
+    document.addEventListener("click", event => {
+      const jump = event.target.closest("[data-jump]");
+      if (jump) {
+        jumpTo(jump.dataset.jump);
+        return;
+      }
+      const control = event.target.closest("[data-action]");
+      if (!control) return;
+      const action = control.dataset.action;
+      if (action === "home") go("home");
+      else if (action === "nav-books") go("books");
+      else if (action === "nav-content") go("content");
+      else if (action === "nav-learning") go("learning");
+      else if (action === "nav-profile") go("profile");
+      else if (action === "start-learning") { state.packageIndex = nextEligiblePackageIndex(-1); state.studyStage = "experience"; state.boundaryChoice = null; state.clozeResult = null; state.repairUsed = false; go("study"); }
+      else if (action === "exit-study") { stopAudio(false); state.surface = "home"; state.menuOpen = false; state.sheet = null; state.audioError = null; showToast("已离开；当前意思没有被算作完成"); }
+      else if (action === "reveal") { state.studyStage = "reveal"; state.audioError = null; renderPhone(); if (state.autoPronunciation) play("pronunciation"); }
+      else if (action === "continue-reveal") { stopAudio(false); const pkg = currentPackage(); state.sessionCompleted += 1; state.packageIndex = nextEligiblePackageIndex(state.packageIndex); state.exampleIndex = 0; state.studyStage = "experience"; state.boundaryChoice = null; state.clozeResult = null; state.repairUsed = false; state.audioError = null; showToast(`已完成 ${pkg.lemma} · ${pkg.guide} 的连接`); }
+      else if (action === "toggle-scene") { state.sceneExpanded = !state.sceneExpanded; renderPhone(); }
+      else if (action === "play-pronunciation") play("pronunciation");
+      else if (action === "play-example") play("example");
+      else if (action === "open-example") { stopAudio(false); state.previousSurface = state.surface; state.surface = "example"; state.exampleDirection = null; state.translationVisible = false; state.contextVisible = false; state.audioError = null; renderPhone(); if (state.autoExample) play("example"); }
+      else if (action === "close-example") { stopAudio(false); state.surface = state.previousSurface === "sense" ? "sense" : "study"; state.exampleDirection = null; state.audioError = null; renderPhone(); }
+      else if (action === "toggle-translation") { state.translationVisible = !state.translationVisible; renderPhone(); }
+      else if (action === "toggle-context") { state.contextVisible = !state.contextVisible; renderPhone(); }
+      else if (action === "previous-example") paginateExample(-1);
+      else if (action === "next-example") paginateExample(1);
+      else if (action === "toggle-example-favorite") { const id = currentExample().id; state.exampleFavorites.has(id) ? state.exampleFavorites.delete(id) : state.exampleFavorites.add(id); showToast(state.exampleFavorites.has(id) ? "已收藏这条例句（原型状态）" : "已取消收藏"); }
+      else if (action === "toggle-sense-favorite") { const id = currentPackage().senseId; state.senseFavorites.has(id) ? state.senseFavorites.delete(id) : state.senseFavorites.add(id); showToast(state.senseFavorites.has(id) ? "已收藏这个意思（原型状态）" : "已取消收藏"); }
+      else if (action === "toggle-menu") { state.menuOpen = !state.menuOpen; renderPhone(); }
+      else if (action === "open-preferences") { state.learningTab = "preferences"; go("learning"); }
+      else if (action === "master-open") { state.sheet = "mastery"; state.menuOpen = false; renderPhone(); }
+      else if (action === "sheet-cancel") { state.sheet = null; renderPhone(); }
+      else if (action === "master-confirm") {
+        stopAudio(false);
+        const pkg = currentPackage();
+        const origin = state.surface;
+        state.mastered.add(pkg.senseId);
+        state.sheet = null;
+        if (origin === "study") {
+          state.packageIndex = nextEligiblePackageIndex(state.packageIndex);
+          state.exampleIndex = 0;
+          state.studyStage = "experience";
+          state.clozeResult = null;
+          state.repairUsed = false;
+          state.sessionCompleted += 1;
+        }
+        showToast(`已标记 ${pkg.lemma} · ${pkg.guide} 为已会`);
+      }
+      else if (action === "master-revoke") { const id = control.dataset.id; state.mastered.delete(id); showToast("已恢复安排这个意思"); }
+      else if (action === "boundary-choice") { state.boundaryChoice = control.dataset.choice; renderPhone(); }
+      else if (action === "boundary-continue") { state.studyStage = "cloze"; state.clozeResult = null; state.repairUsed = false; renderPhone(); }
+      else if (action === "repair-continue") { state.exampleIndex = (state.exampleIndex + 1) % currentPackage().examples.length; state.studyStage = "cloze"; state.clozeResult = null; state.repairUsed = true; renderPhone(); }
+      else if (action === "submit-cloze") { const input = document.getElementById("cloze-answer"); if (!input || !input.value.trim()) { showToast("先输入一个英文词，或选择“不会”"); } else if (input.value.trim().toLocaleLowerCase() === currentPackage().lemma.toLocaleLowerCase()) { state.clozeResult = "correct"; renderPhone(); } else { failRetrieval(); } }
+      else if (action === "cloze-giveup") failRetrieval();
+      else if (action === "complete-sense") { state.sessionCompleted += 1; state.finishMode = "completed"; go("finish"); }
+      else if (action === "open-sense") { selectPackage(control.dataset.id); go("sense"); }
+      else if (action === "learning-plan") { state.learningTab = "plan"; renderPhone(); }
+      else if (action === "learning-preferences") { state.learningTab = "preferences"; renderPhone(); }
+      else if (action === "toggle-pronunciation") { state.autoPronunciation = !state.autoPronunciation; renderPhone(); }
+      else if (action === "toggle-example-audio") { state.autoExample = !state.autoExample; renderPhone(); }
+      else if (action === "cycle-accent") { state.accent = state.accent === "美式" ? "英式" : "美式"; renderPhone(); }
+      else if (action === "pace") { state.dailyTarget = state.dailyTarget === 10 ? 15 : state.dailyTarget === 15 ? 20 : 10; showToast(`每日新学已调整为 ${state.dailyTarget} 个意思`); }
+      else if (action === "sync") showToast("学习数据已同步");
+      else if (["appearance","feedback","export"].includes(action)) showToast("这是 PRD 中的真实入口；原型不写外部数据");
+    });
+
+    document.addEventListener("input", event => {
+      if (event.target.id !== "book-search") return;
+      state.bookSearch = event.target.value;
+      renderPhone();
+      const input = document.getElementById("book-search");
+      if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+    });
+
+    let activeExampleSwipe = null;
+    document.addEventListener("pointerdown", event => {
+      if (state.surface !== "example" || event.target.closest("button")) return;
+      const card = event.target.closest("[data-example-swipe]");
+      if (!card) return;
+      activeExampleSwipe = {
+        pointerId: event.pointerId,
+        card,
+        startX: event.clientX,
+        startY: event.clientY,
+        startedAt: performance.now(),
+        axis: null
+      };
+      card.classList.add("is-dragging");
+      try { card.setPointerCapture(event.pointerId); } catch (_) {}
+    });
+
+    document.addEventListener("pointermove", event => {
+      const swipe = activeExampleSwipe;
+      if (!swipe || swipe.pointerId !== event.pointerId) return;
+      const dx = event.clientX - swipe.startX;
+      const dy = event.clientY - swipe.startY;
+      if (!swipe.axis && Math.max(Math.abs(dx), Math.abs(dy)) > 7) swipe.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      if (swipe.axis !== "x") return;
+      event.preventDefault();
+      const atStart = state.exampleIndex === 0 && dx > 0;
+      const atEnd = state.exampleIndex === currentPackage().examples.length - 1 && dx < 0;
+      const resistance = atStart || atEnd ? .24 : 1;
+      const translated = Math.max(-132, Math.min(132, dx * resistance));
+      swipe.card.style.transform = `translate3d(${translated}px,0,0) rotate(${translated * .012}deg)`;
+      swipe.card.style.opacity = String(Math.max(.68, 1 - Math.abs(translated) / 430));
+    }, { passive: false });
+
+    function finishExampleSwipe(event, cancelled = false) {
+      const swipe = activeExampleSwipe;
+      if (!swipe || swipe.pointerId !== event.pointerId) return;
+      const dx = event.clientX - swipe.startX;
+      const elapsed = Math.max(1, performance.now() - swipe.startedAt);
+      const speed = Math.abs(dx) / elapsed;
+      const step = dx < 0 ? 1 : -1;
+      const nextIndex = state.exampleIndex + step;
+      const inBounds = nextIndex >= 0 && nextIndex < currentPackage().examples.length;
+      const commit = !cancelled && swipe.axis === "x" && inBounds && (Math.abs(dx) >= 64 || speed >= .48);
+      swipe.card.classList.remove("is-dragging");
+      swipe.card.style.transition = "transform 170ms var(--ease-in-out), opacity 150ms ease";
+      if (commit) {
+        swipe.card.style.transform = `translate3d(${step > 0 ? -430 : 430}px,0,0)`;
+        swipe.card.style.opacity = ".2";
+        setTimeout(() => paginateExample(step), 145);
+      } else {
+        swipe.card.style.transform = "translate3d(0,0,0)";
+        swipe.card.style.opacity = "1";
+        setTimeout(() => {
+          swipe.card.style.removeProperty("transition");
+          swipe.card.style.removeProperty("transform");
+          swipe.card.style.removeProperty("opacity");
+        }, 190);
+      }
+      activeExampleSwipe = null;
+    }
+
+    document.addEventListener("pointerup", event => finishExampleSwipe(event));
+    document.addEventListener("pointercancel", event => finishExampleSwipe(event, true));
+
+    document.addEventListener("keydown", event => {
+      if (state.surface === "example" && event.key === "ArrowLeft") {
+        event.preventDefault();
+        paginateExample(-1);
+        return;
+      }
+      if (state.surface === "example" && event.key === "ArrowRight") {
+        event.preventDefault();
+        paginateExample(1);
+        return;
+      }
+      if (event.key !== "Escape") return;
+      if (state.sheet) {
+        state.sheet = null;
+        renderPhone();
+      } else if (state.surface === "example") {
+        stopAudio(false);
+        state.audioError = null;
+        state.surface = state.previousSurface === "sense" ? "sense" : "study";
+        renderPhone();
+      }
+    });
+
+    const initialJump = location.hash.slice(1);
+    if (["home","books","content","learning","experience","reveal","example","boundary","repair","cloze","master","finish"].includes(initialJump)) jumpTo(initialJump);
+    else renderPhone();
+  </script>
+</body>
+</html>

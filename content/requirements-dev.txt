@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=8.3,<9
+# 仅用于再生成 data/wordlists/ 高频词表 (数据 CC-BY-SA 4.0)
+wordfreq>=3.1,<4

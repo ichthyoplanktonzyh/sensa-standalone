@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.package.json",
+  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../../packages/content-validator" },
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/learning-kernel" }
+  ]
+}

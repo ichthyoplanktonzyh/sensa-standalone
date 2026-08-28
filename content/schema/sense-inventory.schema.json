@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sense-inventory.schema.json",
+  "title": "SenseInventory",
+  "description": "Sensa 整词级 Sense Inventory — 决定该词最终进入 Sensa 的稳定、可教学 sense 集合及其 ID 分配。Wiktionary 条目是 dictionary evidence, 不是最终 Sensa sense; 这份 inventory 才是。",
+  "type": "object",
+  "required": ["schema_version", "word", "language", "status", "inventory_version", "source", "senses", "deferred_entries", "relations"],
+  "additionalProperties": false,
+  "properties": {
+
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "word": {
+      "type": "string",
+      "minLength": 1
+    },
+    "language": {
+      "type": "string",
+      "pattern": "^[a-z]{2,3}$",
+      "description": "本 inventory 所属语言的 ISO 639 代码"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "reviewed", "approved", "deprecated"]
+    },
+    "inventory_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+
+    "source": {
+      "type": "object",
+      "required": ["provider", "entry_count", "evidence_digest"],
+      "additionalProperties": true,
+      "description": "允许未来增加 provenance 字段",
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "entry_count": { "type": "integer", "minimum": 0 },
+        "evidence_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "对本次实际使用的 SQLite dictionary evidence snapshot 计算的确定性摘要; 防止 entry ID 随词典内容变化静默漂移"
+        }
+      }
+    },
+
+    "senses": {
+      "type": "array",
+      "description": "最终候选 Sensa sense",
+      "items": { "$ref": "#/$defs/sense" }
+    },
+    "deferred_entries": {
+      "type": "array",
+      "description": "不进入当前可教学 inventory 的词典条目",
+      "items": { "$ref": "#/$defs/deferred_entry" }
+    },
+    "relations": {
+      "type": "array",
+      "description": "当前 inventory 内部的跨义项关系",
+      "items": { "$ref": "#/$defs/relation" }
+    }
+  },
+
+  "$defs": {
+    "sense": {
+      "type": "object",
+      "required": ["id", "lemma", "pos", "label_zh", "definition", "semantic_signature", "source_entries", "decision", "teaching_priority", "usage"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*-[0-9]{2}$",
+          "description": "整词统一分配的 sense ID; lemma 前缀必须与顶层 word 一致 (由 Python validator 检查, JSON Schema 无法表达跨字段约束)"
+        },
+        "lemma": { "type": "string", "minLength": 1 },
+        "pos": {
+          "type": "string",
+          "enum": ["noun", "verb", "adjective", "adverb", "preposition", "conjunction", "determiner", "pronoun", "interjection", "particle"],
+          "description": "与 word-sense.schema.json 的 pos 枚举保持一致"
+        },
+        "label_zh": { "type": "string", "minLength": 1 },
+        "definition": { "type": "string", "minLength": 1 },
+
+        "semantic_signature": {
+          "type": "object",
+          "required": ["semantic_type", "dimension", "change_of_state", "causative", "valency"],
+          "additionalProperties": false,
+          "description": "机器可比较的最小语义身份, 不追求建立完整语言学本体; semantic_type/dimension/valency 暂不设窄枚举, 避免过早固化本体",
+          "properties": {
+            "semantic_type": { "type": "string", "minLength": 1 },
+            "dimension": { "type": ["string", "null"] },
+            "change_of_state": { "type": "boolean" },
+            "causative": { "type": "boolean" },
+            "valency": { "type": "string", "minLength": 1 }
+          }
+        },
+
+        "source_entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "引用 tools/dictionary.py get_filtered_entries() 输出的稳定 dictionary entry ID"
+        },
+
+        "decision": {
+          "type": "object",
+          "required": ["type", "reason"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["keep", "merge", "split"],
+              "description": "keep: 一个或多个来源条目形成一个 sense; merge: 明确合并多个近似来源条目; split: 一个来源条目被拆到多个 Sensa senses"
+            },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        },
+
+        "teaching_priority": {
+          "type": "string",
+          "enum": ["core", "extended", "recognition"]
+        },
+
+        "usage": {
+          "type": "object",
+          "required": ["currency", "productivity", "register"],
+          "additionalProperties": false,
+          "properties": {
+            "currency": {
+              "type": "string",
+              "enum": ["current", "dated", "obsolete", "uncertain"]
+            },
+            "productivity": {
+              "type": "string",
+              "enum": ["productive", "limited", "nonproductive", "uncertain"]
+            },
+            "register": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+
+    "deferred_entry": {
+      "type": "object",
+      "required": ["source_entry", "decision", "reason", "required_evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "source_entry": { "type": "string", "minLength": 1 },
+        "decision": { "type": "string", "enum": ["defer", "reject"] },
+        "reason": { "type": "string", "minLength": 1 },
+        "required_evidence": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "可以为空数组"
+        }
+      }
+    },
+
+    "relation": {
+      "type": "object",
+      "required": ["source", "target", "relation", "distinction"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*-[0-9]{2}$",
+          "description": "必须引用当前 inventory 中真实存在的 sense id (由 Python validator 检查)"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*-[0-9]{2}$",
+          "description": "必须引用当前 inventory 中真实存在的 sense id (由 Python validator 检查)"
+        },
+        "relation": { "type": "string", "minLength": 1 },
+        "distinction": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

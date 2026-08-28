@@ -1,0 +1,18 @@
+{
+  "name": "@sensa/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./sensa": "./dist/sensa/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@sensa/learning-kernel": "file:../learning-kernel",
+    "zod": "^4.4.3"
+  }
+}
