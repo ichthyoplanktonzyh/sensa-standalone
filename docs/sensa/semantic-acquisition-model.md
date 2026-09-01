@@ -1,44 +1,66 @@
 # Sensa 语义获取模型
 
 > 状态：Canonical theory model  
-> 更新日期：2026-08-28  
+> 更新日期：2026-08-31
 > 证据级别：产品理论与可检验假设，尚无真实用户效果结论
 
-本文解释 Sensa 为什么按 Sense 组织学习、首次习得为什么独立于长期保持、Semantic Field 如何
-表达有限的意义邻域，以及 Acquisition Gates、五维状态、Lexical Reference 与自由练习通道分别
-表达什么。它不规定页面、数据库结构、资源数量或生产 Job。
+本文解释 Sensa 为什么按 Sense 组织学习，并完整定义高保证的 **Structured Acquisition Protocol**：
+它为何把首次习得与长期保持分开、Semantic Field 如何表达有限的意义邻域，以及 Acquisition Gates、
+五维状态、Lexical Reference 与自由练习通道分别表达什么。它不规定页面、数据库结构、资源数量
+或生产 Job，也不把 Structured Acquisition 规定为所有学习目标的唯一协议。
+
+内容供给、Lightweight Study、Learning Protocol 与 Scheduling Handoff 的上位关系由
+[`learning-connection-model.md`](learning-connection-model.md) 裁决。轻量协议可以在不声称通过本文
+Gates 的情况下进入长期调度；一旦产品声称 Structured Acquisition Graduation，就必须满足本文约束。
 
 ## 1. 核心学习对象
 
-Sensa 不把学习建模为 `词头 → 中文标签 → 固定题型`。目标是形成可在干扰后双向取回、并能
-迁移到新语境的连接：
+Sensa 不把学习建模为 `词头 → 中文标签 → 固定题型`，也不把 L2 形式直接绑定到一个 L1 词。
+目标是形成可在干扰后双向取回、并能迁移到新语境的连接：
 
 ```text
-经验或概念边界 ⇄ 一个具体 Sense ⇄ 可识别、可提取的 L2 词形与声音
+learner 已有或新构建的经验/概念结构
+                    ⇅
+   Personal Meaning / Anchor / familiar expression
+                    ⇅
+       一个已确认 Sense ⇄ 可识别、可提取的 L2 词形与声音
 ```
+
+这里的经验或概念结构不等于 L1 符号。L1 词、短语或自然语言说明只是学习者进入熟悉经验与概念
+边界的 access path；Personal Semantic Anchor 是 learner 自己建立的另一条 access path。它们都
+不能取代 confirmed stable Sense identity，也不能自动成为目标语言的正确边界。
+
+不同语言共同体可能以不同方式切分、凸显或组合相近经验，因此 L1 Bridge 必须允许表达“一词多义、
+多词近似、覆盖更宽、更窄、部分重合或没有自然一词对应”。习得目标是把 L2 形式连接到当前
+Sense 所固定的意义边界，而不是记住一个可逆的 L1/L2 等号。
 
 同一个 Lexeme 可以承载多个 Sense。学习者能理解其中一个意思，不能证明其他意思已经获得；
 能在熟悉例句里认出词形，也不能证明换一个语境仍能理解或主动取回。
 
 ## 2. 两个时间尺度
 
-### Acquisition：首次习得与重学
+### Structured Acquisition：首次高保证习得与结构化重学
 
-新 Sense 仅被揭示一次时，还没有形成足以交给长期调度的记忆。它先进入短期 Acquisition
-Cycle，在其他 Sense 的干扰之间完成不同方向的独立检验。长时遗忘后的 Relearning 使用同一
-模型，但只重新解决已经暴露的能力缺口。
+新 Retention Target 的 Sense 与目标表达仅被揭示一次时，还没有形成足以交给长期调度的记忆。
+它先进入短期 Acquisition Cycle，在其他 target 的干扰之间完成不同方向的独立检验。选择
+Structured Relearning Protocol 时，
+长时遗忘后的 Relearning 使用同一模型，但只重新解决已经暴露的能力缺口。领域还允许不创建
+Acquisition Cycle 的 Lightweight Relearning；因此“长期遗忘”不自动等于进入本文模型。
 
 ### Retention：长期保持
 
-只有 Acquisition Graduation 后，FSRS 才开始拥有 due time。FSRS 估计记忆何时需要再次被
-检验；它不决定当前检验语义识别、主动提取、迁移还是边界。
+在 Structured Acquisition Protocol 内，Acquisition Graduation 允许创建证据等级明确的 Scheduling
+Handoff，之后 FSRS 才开始拥有 due time。其他 Learning Protocol 也可以依其合同创建较弱 basis 的
+handoff；它们不能把 Study Completion 冒充本文定义的 Graduation。FSRS 估计一个 Retention
+Target 何时需要再次被检验；它不决定当前检验语义识别、主动提取、迁移还是边界。
 
 这一区分避免把“刚看过答案”误认为长期记忆，也避免让分钟级穿插和天/周级间隔共享一套
 含义模糊的状态。
 
 ## 3. Acquisition Profile 与 Required Capabilities
 
-Acquisition Profile 是一个 Sense 面向 target language 与 learner locale 的内容诊断。它描述：
+Acquisition Profile 是 Structured Acquisition Protocol 下，一个 Learning Target 面向 target language 与
+learner locale 的内容诊断。它固定 Sense 边界与 target expression，并描述：
 
 - minimum sufficient experience；
 - distinguishing features 与真实 confusion targets；
@@ -52,7 +74,8 @@ Executable Capability Resolver 再证明这些能力在某个 release/runtime �
 
 ## 4. Acquisition Gates
 
-Gate 是 learner-specific 的能力检查点，不是内容资源或固定页面。当前产品理论要求首次毕业
+Gate 是 learner-specific 的能力检查点，不是内容资源或固定页面。Structured Acquisition 的当前
+产品理论要求首次毕业
 至少覆盖三个互补方向：
 
 | Gate family | 核心方向 | 要排除的假阳性 |
@@ -81,7 +104,7 @@ Gate 只能由有效、可判定且不泄露答案的行为解决。揭示后的
 | Retrieval | 在没有直接答案提示时能够取回目标连接 | 阅读时认识，主动回忆失败 |
 | Transfer | 能在未见过的真实语境中识别或使用同一 Sense | 只会熟悉例句，换场景失效 |
 
-5D State 是全部历史 Evidence 的可重建诊断投影。它可以帮助 Semantic Policy 选择未来干预，
+5D State 是一个 Retention Target 内全部历史 Evidence 的可重建诊断投影。它可以帮助 Semantic Policy 选择未来干预，
 但不直接承担三种职责：
 
 - 不代替 Acquisition Gate progress；
@@ -91,20 +114,25 @@ Gate 只能由有效、可判定且不泄露答案的行为解决。揭示后的
 Gate 回答“当前短期毕业要求是否解决”，5D 回答“长期来看能力结构呈现什么缺口”，FSRS
 回答“何时再次检验”。
 
-## 6. 获取原则
+## 6. Structured Acquisition 原则
 
 1. **先建立语义，再要求独立提取。** Experience、bridge 和 reveal 可以教学，但不产生毕业证据；
-2. **提取必须经过干扰。** 同一 Sense 的正式检验之间应穿插其他 Sense，而不是答案揭示后原题重答；
+2. **提取必须经过干扰。** 同一 Retention Target 的正式检验之间应穿插其他 target，
+   而不是答案揭示后原题重答；
 3. **双向连接不可缺一。** 首次习得同时覆盖 Form-in-context → Sense 与 Sense → Form；
 4. **至少一次迁移。** 短期毕业前必须在未作为教学材料使用的语境中检验同一 Sense；
 5. **边界按需出现。** 没有真实混淆目标时，不为统一卡数制造对立；
-6. **词形事实共享，连接按 Sense 学习。** Lexeme 拥有形式，learner progress 属于 Sense；
-7. **形态错误不自动等于语义失败。** 规则应区分找错 Lexeme、找对 Lexeme 但合法屈折不合语境，
-   以及只回忆出相关派生 Lexeme；V1 默认保留前者的 retrieval 成功并单独反馈 form realization；
-8. **只从行为产生 Evidence。** 被动阅读、播放、停留时长和自报理解不构成 Gate pass；
-9. **失败触发针对性 repair。** 已发生的事实不清零，连续失败才升级为完整 re-binding；
-10. **毕业不是掌握。** Graduation 只表示可以交给长期 Retention 继续验证；
-11. **效果主张必须经真实数据验证。** Gate 数量、干扰间隔与题型选择都是可版本化假设。
+6. **词形事实共享，连接按 Retention Target 学习。** Lexeme 拥有形式；正式进度属于
+   learner-specific Sense–target-expression 连接，同一 Sense 的不同目标表达不共享 FSRS；
+7. **能力证据分开，调度默认共享。** Recognition、Recall、Transfer 与条件性 Sound 可分别
+   产生 Evidence/Gate/5D 投影，但不因题型或 Card 变化就拆分 Retention Target；
+8. **形态错误不自动等于语义失败。** 规则应区分找错 Lexeme、找对 Lexeme 但合法屈折不合语境，
+   以及只回忆出相关派生 Lexeme；首个 Structured delivery profile 候选默认保留前者的 retrieval
+   成功并单独反馈 form realization；
+9. **只从行为产生 Evidence。** 被动阅读、播放、停留时长和自报理解不构成 Gate pass；
+10. **失败触发针对性 repair。** 已发生的事实不清零，连续失败才升级为完整 re-binding；
+11. **毕业不是掌握。** Graduation 只表示可以交给长期 Retention 继续验证；
+12. **效果主张必须经真实数据验证。** Gate 数量、干扰间隔与题型选择都是可版本化假设。
 
 ## 7. Semantic Field 与个人语义投影
 
@@ -113,20 +141,71 @@ Gate 回答“当前短期毕业要求是否解决”，5D 回答“长期来看
 中由相关 Senses、Sense Relations 与必要的边界说明组成的局部意义邻域。一个 Sense 可以属于
 多个 Field；Field 不决定课程顺序，也不构成统一的人类概念 ontology。
 
-Learner Semantic Projection 把 learner 已有的 Sense progress、保存内容、Sense Notes、Personal
-Semantic Anchors、Collections 与 Practice Activity 覆盖到这些已发布 Field 上，用于回答“哪些
-意义正在形成、已经建立、需要巩固或仍待探索”。它是跨 Sense 的派生读取模型：
+Learner Semantic Projection 把 learner 主动建立的 Personal Semantic World、已有 Sense progress、
+保存内容、Collections 与 Practice Activity 与已发布 Field 组合，用于回答“哪些意义由我建立、
+哪些公共连接正在形成、已经建立、需要巩固或仍待探索”。它是跨 Sense 的派生读取模型：
 
 - 不能代替任何 Learner Sense Progress、Gate、5D 或 FSRS State；
 - 不能把模型距离、图布局或百分比冒充 learner 的真实心理结构；
 - 不能因浏览、收藏、写笔记或拖动节点而改变正式学习状态；
 - 可以作为语义探索、相邻边界查看和 Free Practice Scope 的入口。
 
-Personal Semantic Anchor 允许 learner 把一个 Sense 连接到自己的真实经历或场景，呼应理论中的
-Experience Repertoire，但它只表达 learner-authored association。系统不能据此推断该经历准确
-代表目标 Sense，也不能把它当作 Concept Prior、5D State 或成功 Evidence。只有 learner 明确允许
-时，Anchor 才能作为后续教学或 Free Practice 的 optional scaffold；它不能充当评分答案或 novel
-assessment material。
+Projection 的 learner-facing 表达应保留三种来源不同的层，而不是把其中任意一层冒充完整意义：
+
+1. reviewed Experience、Sense specification 与 Sense Relations 提供可审核的意义和边界依据；
+2. L1 Bridge 与 learner-authored Anchor/Note 提供进入该意义的熟悉通道，并保持 reviewed 与
+   personal provenance 可区分；
+3. pinned Lexeme forms、声音及其他 approved language resources 提供目标语言表达。
+
+产品可以把这种关系表现为“L2 符号锚定在意义/经验地表上”，但“地表”只是读取模型的表达隐喻，
+不是新的权威 aggregate、可直接存储的 learner 心理对象或第二份 progress。L1 文本不能成为节点
+identity，L2 lemma 也不能取代 Sense identity；一个 L1 标签可以通向多个 L2 Senses，一个 L2
+Sense 也可以需要多个 L1 片段或完整场景才能充分接近。
+
+第一版 Projection 可以只把 Lexeme 的 word form 作为主要 L2 符号，但领域模型不能把未来表达
+压平成一个通用字符串。word/inflected form 仍属于 Lexeme，短语或构式由 Usage Pattern 等 typed
+resources 表达，完整句子或 utterance 实现一个场景或命题，并通过 exact occurrence 连接具体
+Sense。句子不能仅因含有目标词就被建模为贴在该 Sense 上的同类标签。
+
+Personal Semantic Anchor 允许 learner 把 Personal Meaning 连接到自己的真实经历或场景，呼应
+理论中的 Experience Repertoire。Sense 确认后，这条个人来源仍通过 Personal Meaning Alignment
+连接目标 Sense，而不是被转换成 reviewed content。系统不能把 Anchor 当作 Concept Prior、5D State、
+成功 Evidence、评分答案或 novel assessment material。
+
+### 7.1 Learner-authored semantic construction
+
+Personal Semantic World 允许 learner 从自己的经验世界向目标语言主动建构，而不只回看系统已经
+教过的 Senses。只有 learner 明确创建的 Personal Meaning 才成为其成员；学习历史、浏览、推荐和
+模型推断都不能自动加入。
+
+Personal Meaning 是“我指的是这个”的稳定个人 identity。Meaning Focus 把一段可能很丰富的经验
+收敛到当前真正关心的侧面；Personal Semantic Anchors 用场景、图像、声音、叙述或动作让它可重新
+进入；Personal Expression Anchors 则保存不同语言中能够唤起或候选表达该意义的 typed forms。任何
+一层都不能单独冒充公共 Sense。
+
+创建路径可以从个人经验、一个熟悉语言表达或一个目标语言表达开始。LLM 通过 Sense Construction
+帮助 learner 提炼 Focus、识别同一场景的多个可能焦点、提出边界问题，并生成包含原型场景、包含/
+排除条件、相邻意义和自然目标语言表达的 Sense Proposal。该过程不是从封闭公共 Sense 库中选择
+唯一答案；现有 Sense 检索只是一种可选复用与治理手段。
+
+Sense Proposal 仍是 suggestion。只有 learner 明确确认后，系统才创建 stable Sense identity、初始
+Sense Version 与 Personal Meaning Alignment。确认保存原始 Personal Meaning 和全部 provenance；
+后续相似性发现只能建立 equivalence、overlap、broader/narrower 或对比关系，不能静默改写已经确认
+的语义边界。确认对话、模型置信度和接受按钮都不构成 Acquisition Evidence。
+
+同一个经验可以产生多个 Meaning Focus，例如一次借伞事件中的接收视角与给予视角。一个 L1 表达
+也可以通向多个目标语言 Senses，多个 L1 片段则可以共同接近一个 Sense。系统必须允许拆分、保留
+重叠和承认没有自然一词对应，不能生成 `L1 = L2` 的翻译等号。
+
+个人建构与正式学习保持显式边界：创建 Personal Meaning、编辑 Focus/Anchor、确认 Sense、确认
+Sense Expression Binding、准备学习内容和提交 Add-to-Learning Intent 是不同意图。前四者都不会
+创建 Learner Sense Progress、Learning Protocol Run、Evidence、5D 或 FSRS Memory State。只有目标已
+解析到 stable Sense、选定协议能够通过 published、on-demand 或 hybrid 路径解析出合法 Learning
+Materialization，并收到 learner 显式加入学习请求后，Unified Planner 才能把它纳入正式学习。
+
+完整对象、确认门、多语言边界和代表性旅程由
+[`personal-semantic-world-model.md`](personal-semantic-world-model.md) 裁决。首版固定中文为 familiar
+language、英语为 target language；这是交付边界，不是长期领域模型中的一对一翻译约束。
 
 Saved Sense、Saved Example、Sense Note 与 Personal Collection 只表达关注、创作与组织行为；它们
 既不证明 learner 已获得目标意义，也不证明目标仍然陌生。Add-to-Learning 必须是另一个显式意图。
@@ -191,9 +270,12 @@ root/affix、词源、词族关系与记忆辅助可以增加 elaboration，为�
 
 ## 10. 与资源和运行时的关系
 
-Acquisition Profile 指出需要什么能力；Resource Model 定义可供给这些能力的材料；Executable
-Capability Inventory 证明当前版本能执行什么；Runtime Model 定义 Planner 如何穿插 Encounter、
-Policy 如何选择 Action，以及 Evidence 如何更新 Gate 与 5D。
+Learning Connection Model 先决定目标、内容供给与协议目的；当选中 Structured Initial Learning 或
+Structured Relearning Protocol 时，Acquisition Profile 指出需要什么能力，Resource Model 定义可
+供给这些能力的材料，Executable Capability Inventory 证明当前版本能执行什么，Runtime Model 定义
+Protocol Step 如何组织材料、Planner 如何穿插 Encounter、Policy 如何选择 Action，以及 Evidence
+如何更新 Gate 与 5D。Card Presentation 只负责渲染当前 Step，不属于本文的 Gate、Cycle 或 learner
+progress identity。
 
 Learner/Device Preferences 可以降低呈现摩擦，例如选择口音、译文默认状态、autoplay 或动画，但它们
 不是学习理论变量：Preference 不能重新定义 Sense、Required Capability、Gate、Evidence rule、5D

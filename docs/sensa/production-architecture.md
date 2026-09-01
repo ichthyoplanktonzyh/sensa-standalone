@@ -1,12 +1,16 @@
 # Sensa 生产领域架构
 
 > 状态：Canonical domain model  
-> 更新日期：2026-08-28
+> 更新日期：2026-08-31
 
 本文是 Sensa 领域对象、聚合边界和全局不变量的主入口。术语定义以
 [`../../CONTEXT.md`](../../CONTEXT.md) 为准；资源细节和运行行为分别由
 [`sense-learning-resource-model.md`](sense-learning-resource-model.md) 与
-[`learning-runtime-model.md`](learning-runtime-model.md) 裁决。
+[`learning-runtime-model.md`](learning-runtime-model.md) 裁决；Personal Meaning、LLM Sense
+Construction 与确认门由
+[`personal-semantic-world-model.md`](personal-semantic-world-model.md) 裁决；内容供给、Learning
+Protocol、学习结果与 FSRS 交接由
+[`learning-connection-model.md`](learning-connection-model.md) 裁决。
 
 ## 1. 产品组成
 
@@ -14,8 +18,8 @@ Sensa 由三个职责独立的层组成：
 
 - **Product Shell**：用户看到的信息架构、Curriculum lifecycle、Session intent、Lexical Reference、
   Settings Surface、个人语义投影、自由练习、学习节奏和反馈；
-- **Learning Kernel**：Sense 内容能力、Acquisition Cycle、Semantic Policy、Evidence、
-  Gate progress 与 5D State；
+- **Learning Kernel**：Learning Target、内容物化、Learning Protocol Purpose、Protocol Step、协议运行、
+  Evidence、协议特定进度、Initial Learning Completion、Memory Outcome 与 Scheduling Handoff；
 - **Production Base**：身份、Postgres、离线副本、Sensa Sync、媒体授权和 FSRS。
 
 Product Shell 不定义学习证据或毕业条件。Learning Kernel 不拥有账号、网络同步或媒体字节。
@@ -24,12 +28,16 @@ Production Base 不决定一个 Sense 应当如何被理解或当前应当使用
 ## 2. 核心领域关系
 
 ```text
-Lexeme ──contains──▶ Sense ──versioned as──▶ Sense Version
-   │                                      │
-   └── Lexeme Version                     ├── Sense Learning Package
-                                          └── Sense Relation ──▶ Semantic Field Version
-                                                   │
-Book ──versioned as──▶ Book Version ──pins─────────┘
+Lexeme ──versioned as──▶ Lexeme Version
+                              ▲
+                              │ target form
+Sense ──Sense Expression Binding
+  │
+  ├──versioned as──▶ Sense Version
+  ├──Sense Relation──▶ another Sense
+  └──member of──▶ Semantic Field Version
+                         ▲
+Book ──versioned as──▶ Book Version ──pins──▶ Sense
                               │
                               ▼
                        Book Enrollment ──────┐
@@ -41,35 +49,80 @@ Learner ──configures──▶ Study Plan ─────────┤
                                   Study Scope Revision
                                             │
                                             ▼
-                                  Learner Sense Progress
-                    ├── Learning Phase
-                    ├── Acquisition Cycle ──▶ Acquisition Gates
-                    ├── 5D State
-                    ├── Declared Mastery
-                    └── FSRS Memory State (only after graduation)
+                                  Learner Sense Progress (roll-up)
+                                            │
+                                            └── Retention Target[]
+                                                ├── target Sense Expression Binding
+                                                ├── Learning Phase
+                                                ├── active Learning Protocol Run
+                                                │       ├── fixed Protocol Purpose
+                                                │       ├── Protocol Step Instance
+                                                │       └── optional Structured Acquisition Cycle
+                                                │                   ├── Acquisition Gates
+                                                │                   └── 5D State
+                                                ├── Declared Mastery
+                                                └── FSRS Memory State (after valid Handoff)
                               │
                               ▼
 Learning Session ──contains──▶ Sense Encounter
                                   │
+                                  ├── realizes ──▶ Protocol Step Instance
+                                  ├── renders ───▶ Card Presentation (transient)
                                   ├── Action ──▶ Attempt ──▶ Evidence
-                                  │                         ├── Gate projection
-                                  │                         └── 5D projection
+                                  │                         └── protocol projections
                                   └── Encounter Outcome
                                       ├── Acquisition Step Outcome
-                                      └── Memory Outcome ──▶ FSRS
+                                      ├── Lightweight Study Outcome
+                                      └── Memory Outcome ──▶ update FSRS once
+
+Learning Target ──resolved by──▶ Content Provisioning
+        │
+        └──resolves durable identity──▶ Retention Target
+                    ├── Published Learning Content
+                    ├── On-demand Learning Content
+                    └── Hybrid
+                              │
+                              ▼
+                    Learning Materialization
+                              ×
+                pinned Learning Protocol + purpose
+                              │
+                              ▼
+                     Learning Protocol Run
+                              │
+                              └── Protocol Step Instances
+                                      ├── Initial Learning Completion
+                                      │       └── Scheduling Handoff ──▶ initialize FSRS
+                                      ├── Memory Outcome ─────────────▶ update FSRS once
+                                      └── Relearning Completion ──────▶ retain existing FSRS
 ```
 
 正式学习以外的个人内容、语义探索与自由练习通过另一条链连接，但不反向改写正式进度：
 
 ```text
-Published Senses + Relations + Semantic Fields
-                     +
-Learner Sense Progress + Saved Senses/Examples + Sense Notes/Anchors/Collections
-                     +
-              Practice Activity
-                     │
-                     ▼
-        Learner Semantic Projection
+Learner ──explicitly creates──▶ Personal Meaning
+                                  ├── Meaning Focus
+                                  ├── Personal Semantic Anchor
+                                  └── Personal Expression Anchor
+                                              │
+                              learner + LLM Sense Construction
+                                              │
+                                              ▼
+                                      Sense Proposal
+                                              │ learner confirms
+                                              ▼
+                       Sense + Sense Version + Personal Meaning Alignment
+                                              │
+                     ┌────────────────────────┴───────────────────────┐
+                     ▼                                                ▼
+       Learning Target / Content                             Sense Expression Binding
+                     │                                                │
+                     └──────────────▶ Learner Semantic Projection ◀───┘
+
+Learner Sense Progress + Saved Senses/Examples + Personal Semantic World + Practice Activity
+                                             │
+                                             ▼
+                                Learner Semantic Projection
 
 Practice Scope ──▶ Free Practice Session ──▶ Practice Task
                                                 │
@@ -77,8 +130,10 @@ Practice Scope ──▶ Free Practice Session ──▶ Practice Task
                                                                           ╳ Gate / 5D / FSRS
 ```
 
-`Lexeme` 是共享词形聚合；`Sense` 是内容、课程、学习状态、声明和调度身份。同一 Lexeme
-的 sibling Senses 可以在产品中聚合呈现，但不能共享 Acquisition、Evidence 或 FSRS 状态。
+`Lexeme` 是共享词形聚合；`Sense` 是稳定、可寻址的共同体意义区别，并通过 Sense Expression
+Binding 连接一个或多个 typed expressions。正式内容与课程固定 Learning Target；learner-specific
+学习状态和调度则解析到 Retention Target。同一 Sense 的不同 target expressions、以及同一 Lexeme 的
+sibling Senses 都不能共享 Learning Protocol Run、Evidence 或 FSRS 状态。
 
 词典查询通过一条独立的 Reference 链与正式学习内容相接：
 
@@ -126,10 +181,20 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 
 ### Content
 
-- Lexeme/Sense 的稳定身份与不可变版本分离；
-- Sense Learning Package 固定同一 release 的 Sense Version、Lexeme Version、Profile 与资源；
-- Acquisition Profile 诊断该 Sense 的能力需求，并推导 Required Capability Set；
-- Required Asset Manifest 与 Executable Capability Inventory 证明发布内容能端到端支持这些能力；
+- Lexeme/Sense 的稳定身份与不可变版本分离，二者通过 versioned Sense Expression Binding 连接；
+- Sense 可以由编辑流程预先生产，也可以由 learner–LLM Sense Construction 按需提出并在 learner
+  确认后创建；“公共”表示语义契约可复现，不表示必须先存在穷尽式公共 Sense 库；
+- learner 确认只创建稳定 Sense identity 与初始 Sense Version。正式学习还需要独立的 Learning
+  Target、Content Provisioning decision、Learning Materialization 与 Learning Protocol；确认对话本身
+  不能冒充学习内容；
+- Published Learning Content 通过 Sense Learning Package 固定 release、Sense Version、target binding、
+  referenced form/profile 与资源；On-demand Learning Content 则针对已固定的 target 与 protocol 生成；
+- 无论来源是 published、on-demand 还是 hybrid，开始一次 protocol run 前都必须冻结为不可变的
+  Learning Materialization，并记录生成器/发布版本、输入 provenance 与校验结果；
+- 内容来源与 Learning Protocol 正交：同一 Published Package 可服务多个协议，同一协议也可消费
+  Published 或 On-demand 内容，具体可执行性由版本化合同决定；
+- Acquisition Profile、Required Capability Set、Required Asset Manifest 与 Executable Capability
+  Inventory 属于 Structured Acquisition Protocol 的高保证内容合同，不是所有学习方式的前置条件；
 - Sense Relation 是同一 release 中经过审核的两个 Sense 之间的语义事实；
 - Semantic Field Version 用有限、可审核的 Senses 与 Relations 表达局部意义邻域，不决定课程顺序；
 - Content Release、Package 与 Book Version 发布后不原位修改。
@@ -142,21 +207,23 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 - Book Enrollment 固定一个不可变 Book Version 与一个已解析 Book Range，mode 为
   `active | maintenance | paused`；同一 learner 最多有一个可以引入新 Sense 的 active Enrollment；
 - `active` 提供新 Sense 并继续既有学习，`maintenance` 不再引入新 Sense，但继续已开始的
-  Acquisition/Relearning 与 due Review，`paused` 完全退出 Planning 但不删除任何进度；
+  Protocol Run/Relearning 与 due Review，`paused` 完全退出 Planning 但不删除任何进度；
 - 切换词书默认把旧 Enrollment 转为 `maintenance`、把目标 Enrollment 转为 `active`。以后切回时
-  复用 learner × Sense 的原进度，不重开已完成 Cycle，也不重新初始化 FSRS；
+  复用各 Retention Target 的原进度，不重开已完成 Cycle，也不重新初始化 FSRS；
 - Book Range 只控制未来 Introduction；缩小范围不能删除已经发生的学习事实，已经通过该
   Enrollment 开始的 Sense 由 Enrollment mode 决定是否继续；
-- Supplemental Curriculum 是 learner-owned、ordered、Sense-only 的补充课程，不是 Book、Saved
-  list 或 Personal Collection；同一 Sense 可以有多个来源，但只进入一次有效 Study Scope；
+- Supplemental Curriculum 是 learner-owned、ordered 的 Learning Target 补充课程，不是 Book、
+  Saved list 或 Personal Collection；同一 Retention Target 可以有多个来源，但只进入一次有效
+  Study Scope；同一 Sense 的不同 target expressions 是不同成员；
 - 每次换词书、调整 Range、切换 Enrollment mode、接纳或移除 Supplemental Membership，都产生
   新的不可变 Study Scope Revision；正在进行的 Session 固定旧 revision，不被静默改队；
 - 默认课程策略可以错开同一 Lexeme 的多个新 Sense；只有明确的边界教学才应主动并置；
 - UI 可以展示 Lexeme 数与 Sense 数，但不能把 sibling Senses 合成一个课程成员；
 - Add-to-Learning Intent 是进入 Curriculum 的显式 learner request；Curriculum 决定如何接纳或拒绝，
   但不能修改已发布 Book Version，也不能把收藏本身解释成该 request。Intent 目标已在有效范围时
-  必须幂等返回 `already_in_scope`；缺少可执行 published Package 或存在 active Declared Mastery 时
-  必须诚实拒绝或要求独立恢复操作，不能制造幽灵 Membership 或静默撤销声明。
+  必须幂等返回 `already_in_scope`；若选定 protocol 无法通过 published、on-demand 或 hybrid 路径
+  解析出合法内容，必须返回 `content_unavailable`。active Declared Mastery 则要求独立恢复操作，
+  不能制造幽灵 Membership 或静默撤销声明。
 
 ### Lexical Reference
 
@@ -181,31 +248,55 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 
 ### Learner Sense Progress
 
-- Learner Sense Progress 是 learner × Sense 的权威进度聚合；
-- Learning Phase 为 `new | acquiring | retaining | relearning`，Declared Mastery 与之正交；
-- Acquisition Cycle 固定 cycle reason、policy version、Required Gate Set 与 Gate progress；
-- Gate progress 决定短期习得是否完成，5D State 提供长期诊断，两者不互相替代；
-- FSRS Memory State 只在 initial Acquisition Graduation 后存在，并保持 Sense 隔离；
-  Relearning Completion 不重新初始化它。
+- Learner Sense Progress 是 learner × Sense 的权威 roll-up，用于展示该 Sense 下多个表达连接，
+  但不直接拥有 phase、Protocol Run 或 FSRS State；
+- Retention Target 是 learner × Sense × target Sense Expression Binding 的权威长期学习身份；
+- 每个 Retention Target 独立记录 `new | acquiring | retaining | relearning` phase、Declared
+  Mastery、active Learning Protocol Run、固定 purpose、active Protocol Step Instance 与
+  protocol-specific projection；Acquisition Cycle、Gate progress 与 5D State 只在 Structured
+  Acquisition Protocol 下存在；
+- Initial Learning Completion 统一承载成功的首次学习完成；Study Completion 只证明一次 Lightweight
+  Study 按合同完成，Acquisition Graduation 才证明当前 Structured Gates 已解决，两者都不等于“掌握”；
+- 每个 Retention Target 最多一份 FSRS Memory State，且只在有效 Scheduling Handoff 后存在；
+  handoff 必须记录 protocol、basis 与 evidence level，Relearning Completion 不重新初始化既有状态；
+- Recognition、Recall、Transfer、Listening 等 capability 默认作为同一 Retention Target 内的
+  Evidence/Gate/diagnostic projection，不按 Card 或题型建立独立 schedule。只有显式且稳定的
+  独立长期能力合同才能扩展 Retention Target scope。
 
 ### Learning Runtime
 
 - Learning Session 是一次有边界的活动容器，并固定 `mixed | review_only` intent；
-- Sense Encounter 是一次对一个 Sense、一个主要学习目的的计划接触；
-- 同一 Acquisition Cycle 可以跨多个 Encounter 和 Session，多个 Sense 的 Encounter 可以穿插；
+- Protocol Step 定义材料角色、交互/判分、结果资格与 transition；Step Instance 保存一次可重放执行；
+- Sense Encounter 是一次对一个 Sense、一个 Step purpose 的计划接触；Card Presentation 只是该 Step
+  当前 prompt/support/response/reveal/feedback/detail 阶段的瞬时 renderer；
+- 同一 Learning Protocol Run 可以跨多个 Encounter 和 Session；Structured Acquisition Cycle 仍可
+  通过多个 Sense 的穿插完成干扰要求；
 - Action 是系统选择的干预，Attempt 是 learner 提交的追加事实；
-- Evidence、Gate progress 与 5D State 都由服务端固定规则派生；
-- Acquisition Encounter 产生 Acquisition Step Outcome，不直接评价 FSRS；
-- due Review Encounter 最多产生一个 Memory Outcome，并最多调用一次 FSRS。
+- Evidence 与协议投影都由服务端固定规则派生；Study Completion 或 learner rating 不能被升级为
+  Learning Evidence；
+- 成功的 Initial Learning Protocol 必须产生 Initial Learning Completion 与且仅一个 Scheduling Handoff；
+- due Retention Review Protocol 最多产生一个 Memory Outcome，并最多调用一次 FSRS；
+- Relearning Protocol 不创建 handoff、不重新初始化 FSRS、不改写或重复应用触发它的
+  Review Outcome；只有 Protocol Version 声明为 scheduler-eligible 的独立重学评价才可产生
+  自己的 Memory Outcome，Relearning Completion 本身不是 scheduler input。
 
 ### Personal Content
 
+- Personal Semantic World membership 只来自 learner 显式创建 Personal Meaning；浏览、历史、LLM
+  推断、收藏与推荐都不能静默创建成员；
+- Personal Meaning 是 learner-owned 稳定 identity，并拥有当前 Meaning Focus、零到多个 Personal
+  Semantic Anchors、Personal Expression Anchors 与 Personal Meaning Alignments；
+- Personal Semantic Anchor 可以承载受支持的文本、图片、音频、场景或其他个人经验。Personal
+  Expression Anchor 必须保存 expression type、language、familiar/target role、provenance 与
+  verification status；
+- Sense Proposal 属于可修改的 Sense Construction 过程，不是 Sense。只有 learner 明确确认才创建
+  stable Sense + Sense Version + Personal Meaning Alignment，且不得覆盖原始 Personal Meaning；
 - Saved Sense 指向稳定 Sense identity 并保留保存时 Sense Version provenance；Saved Example 指向
   exact immutable Example，不能在内容更新后静默替换；
 - 每个 learner × Sense 最多存在一份 current Sense Note；Note 具有独立 revision，与 Saved Sense
   生命周期解耦；
-- 一个 Sense 可以拥有零到多个 Personal Semantic Anchors；每个 Anchor 是 learner 自己的经验或
-  场景，只有 learner 明确允许时才能作为 optional scaffold 使用；
+- 一个 Personal Meaning 可以拥有零到多个 Personal Semantic Anchors；confirmed Alignment 允许这些
+  Anchor 在 learner 明确授权时作为目标 Sense 的 optional scaffold 使用；
 - Personal Collection 是 learner 命名、排序的组织对象；typed Membership 直接引用 stable Sense 或
   exact Example，不依赖 Saved record、不复制目标内容，也不创造语义关系；
 - 收藏、写笔记、创建 Anchor、加入/移出 Collection、开始 Free Practice 与提交 Add-to-Learning
@@ -216,11 +307,24 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 
 ### Learner Semantic Projection
 
-- Learner Semantic Projection 是跨 published Semantic Fields、Learner Sense Progress、Personal
-  Content 与 Practice Activity 的派生读取模型；
+- Learner Semantic Projection 是跨 Personal Semantic World、published Semantic Fields、Learner
+  Sense Progress、其他 Personal Content 与 Practice Activity 的派生读取模型；
 - 它可以表达有限区域中的“正在形成、已经建立、需要巩固、待探索”以及已审核 Sense Relations；
+- 它可以把 Personal Meaning/Meaning Focus 作为 learner-owned 起点，把 Personal Semantic Anchor、
+  Personal Expression Anchor、reviewed Experience、Sense specification、L1 Bridge 与 pinned L2
+  forms 作为 provenance 可区分的结构；
+- L1 Bridge、Personal Anchor、L2 lemma 与视觉节点都不能取代 stable Sense identity；word、Usage
+  Pattern 与完整 Example/utterance 必须保持各自 typed content identity，不能压成通用字符串；
 - 它不拥有 progress，不把图布局或推断距离宣称为 learner 的真实语义结构；
 - Projection 中选择的 Field、节点或集合可以成为 Practice Scope，但不能直接创建正式学习结果。
+- Personal Semantic Region 与 Personal Meaning 属于 learner-owned source records，可以被 Projection
+  展示，但不能自行修改 published Semantic Field、Sense Relation 或 progress；
+- Personal Meaning Alignment 必须显式保留 proposal/confirmation provenance。LLM suggestion 不能
+  静默升级为 learner confirmation，确认后的 Sense Expression Binding 也不能冒充 reviewed
+  Learning Package resource；
+- 未确认到 stable Sense 的 Meaning Focus 不能成为 Curriculum target。确认连接不得覆盖原始
+  Personal Meaning；只有独立的 Add-to-Learning Intent 加上可执行的 Content Provisioning 与 Learning
+  Protocol 才能进入正式学习规划。
 
 ### Free Practice
 
@@ -235,8 +339,9 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 
 ### Learner declaration
 
-Declared Mastery（界面可显示为“熟”）是 learner 对一个 Sense 的可逆声明。它只改变计划
-资格，不伪造 Gate pass、Acquisition Graduation、Attempt、Evidence、5D 或 FSRS 结果。
+Declared Mastery（界面可显示为“熟”）是 learner 对一个 Retention Target 的可逆声明。它只改变计划
+资格，不伪造 Gate pass、Acquisition Graduation、Attempt、Evidence、5D 或 FSRS 结果。Sense-level
+界面操作必须明示其覆盖的目标表达集；首版每个 Sense 只有一个 primary target。
 
 ### Account、Preferences 与 Data Control
 
@@ -262,9 +367,38 @@ Declared Mastery（界面可显示为“熟”）是 learner 对一个 Sense 的
 - Settings Surface 只是组合 Account、Preferences、Study Plan link、Sync Health 与 Data Control 的
   产品页面，不拥有第二份 account/profile/settings 状态。
 
-## 4. 两层学习循环
+## 4. Protocol-driven connection 与长期保持
 
-### Short-term Acquisition
+Learning Protocol 定义一次“如何建立、检查、加强或恢复 Sense ↔ L2 表达连接”的可复现过程。每个
+Protocol Run 固定 `initial_learning | retention_review | relearning` 中一个 purpose，并通过 Protocol
+Steps 组织材料角色、交互、结果资格与 transition。领域模型至少接受 Lightweight 与 Structured 两种
+协议 family；首版默认交付轻量路径，Structured Acquisition 作为高保证 Later 路径。协议和内容来源
+分别选择，不能把某个 Package 结构、固定卡片数或页面顺序硬编码成唯一学习方式。
+
+### Initial Learning
+
+```text
+fixed Learning Target
+        │
+        ▼
+Learning Materialization
+        │
+        ▼
+compact teaching / optional retrieval
+        │
+        ▼
+Study Completion
+        │
+        ▼
+Scheduling Handoff ──▶ FSRS
+```
+
+Study Completion 是 `protocol_completion`、`non_evidentiary` 级别的 Initial Learning Completion；
+成功时必须创建 Scheduling Handoff，但它不是 Learning Evidence、Acquisition Graduation 或 mastery
+claim。Structured Initial Learning 则以 Acquisition Graduation 作为 `behavioral` completion。导入
+完成若被系统接纳，也必须保留其独立 basis/evidence level，不能伪装成前两者。
+
+### Structured Initial Learning
 
 新 Sense 先进入分钟级或 Session 级的短期习得循环：
 
@@ -285,12 +419,24 @@ Acquisition Graduation
 展示、自动播放、acknowledgement 或揭示后的即时答案不能解决 Gate。失败只重新打开相应能力，
 必要时升级为完整 re-binding；历史 Evidence 不删除，已经解决的无关 Gate 不机械归零。
 
-### Long-term Retention
+### Retention Review
 
-Initial Acquisition Graduation 初始化 FSRS。之后 FSRS 只决定一个 retaining Sense 何时 due，Semantic
-Policy 决定 due 时检验哪种能力。独立 Review 失败产生一次失败 Memory Outcome，并打开
-Relearning Cycle；修复和重学不得把一次遗忘重复计为多次 FSRS review，Relearning Completion
-也不重新初始化 FSRS。
+有效 Scheduling Handoff 初始化 FSRS；Structured Acquisition Graduation 只是其中证据等级最高的
+一种 basis。之后 FSRS 只决定一个 retaining Retention Target 何时 due，Retention Review Protocol 或 Structured
+Semantic Policy 决定 due 时如何复习和评价。一次 due Review 最多产生一个 Memory Outcome 和一次
+FSRS 更新；reveal、detail 或即时重测不得形成第二个结果。
+
+### Relearning
+
+失败或明显变弱的 Memory Outcome 落账后，Relearning Protocol 恢复连接。它可以是轻量 re-binding，
+也可以是创建 Acquisition Cycle 的 Structured Relearning；后者只是子类型。Relearning Completion
+不覆盖原 Memory Outcome、不创建 Scheduling Handoff，也不重新初始化 FSRS。协议可以声明
+独立重学评价为 scheduler-eligible，但它必须产生一个 origin、evaluation identity 和幂等边界明确的
+新 Memory Outcome；它不得冒充原 Review 的第二个结果。
+
+Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Step 是协议结构，Card 只是瞬时
+呈现。一个 Step 可以用多个 Card 阶段，一个 Card renderer 也可以服务多个 Step；Card、Deck 或页面
+不能成为学习 identity、进度聚合或 scheduler owner。
 
 ## 5. 模块边界
 
@@ -308,30 +454,43 @@ Relearning Cycle；修复和重学不得把一次遗忘重复计为多次 FSRS r
 6. **Curriculum Module**：拥有 Study Plan、Book Enrollment/Range、Supplemental Curriculum、
    Add-to-Learning Intent 与 Study Scope Revision；它保证 source provenance、去重、切换和范围
    变更不修改 published Book membership 或 learner progress；
-7. **Personal Content Module**：拥有 Saved Sense、Saved Example、Sense Note、Personal Semantic
-   Anchor、Personal Collection 与 typed Membership 的 learner-scoped 事实及同步生命周期；
-8. **Learner Semantic Projection Module**：组合已发布 Field、learner progress 与 personal content，
-   只生成可重建读取模型；
-9. **Free Practice Module**：解析 Practice Scope，物化 mode-specific Task，保存 Practice Activity、
+7. **Personal Semantic World Module**：拥有 Personal Meaning、Meaning Focus、Personal Semantic
+   Anchor、Personal Expression Anchor、Personal Meaning Alignment，以及 Saved Sense/Example、Sense
+   Note、Personal Collection 与 typed Membership 的 learner-scoped 事实及同步生命周期；
+8. **Sense Construction Module**：编排 learner–LLM 语义访谈、Sense Proposal 与显式确认；它可以按需
+   请求创建 stable Sense/Version，但不能创建 Learning Evidence、Curriculum Membership 或绕过
+   后续内容物化与协议选择；
+9. **Learner Semantic Projection Module**：组合 Personal Semantic World、已发布 Field、learner
+   progress 与 personal content，只生成可重建读取模型；
+10. **Free Practice Module**：解析 Practice Scope，物化 mode-specific Task，保存 Practice Activity、
    Attempt 与 Result，不调用正式 Learning Kernel 的结算接口；
-10. **Executable Learning Capability Resolver**：求 Package、Required Capability Set、approved
-   resources 与 Runtime 能力的版本化交集，不读取 learner state；
-11. **Learner Progress Module**：拥有 Learning Phase、Acquisition Cycle、Gate progress、
-   Acquisition Graduation 与 Relearning Completion；
-12. **Unified Planning Module**：在 Study Plan、Session intent、Declared Mastery、cooldown、
-   Acquisition/Relearning readiness 与 due state 之间选择候选；
-13. **Semantic Policy Module**：从 Encounter purpose、capability inventory、Gate progress、
+11. **Content Provisioning Module**：将固定 Learning Target 通过 published、on-demand 或 hybrid
+   路径解析为通过合同校验的不可变 Learning Materialization；它编排独立的 Learning Content LLM
+   role，但不能改写 Sense 或 learner progress；
+12. **Learning Protocol Module**：选择并执行版本化协议，固定 Protocol Purpose，定义 Step、material
+   role binding 与 transition，创建 Protocol Run/Step Instance，接纳与 purpose 兼容的合法结果，并在
+   成功 Initial Learning Completion 的同一权威边界创建必需的 Scheduling Handoff；
+13. **Executable Learning Capability Resolver**：为 Structured Acquisition 求 Package、Required
+   Capability Set、approved resources 与 Runtime 能力的版本化交集，不读取 learner state；
+14. **Learner Progress Module**：拥有 Retention Target、其 Learning Phase、active protocol run、
+   protocol-specific projection、Memory State 以及 Sense-level roll-up，并记录 Initial Learning Completion、
+   Study Completion、Acquisition Graduation 与 Relearning Completion；
+15. **Unified Planning Module**：在 Study Plan、Session intent、Declared Mastery、cooldown、
+   protocol readiness、Relearning readiness 与 due state 之间选择候选；
+16. **Semantic Policy Module**：在 Structured Acquisition 内从 Step purpose、capability inventory、Gate progress、
    Evidence、5D 与历史中选择最小干预；
-14. **Encounter Module**：物化 Policy Decision，固定资源，接受 Attempt，派生 Evidence 并结算
-   Acquisition Step Outcome 或 Memory Outcome；
-15. **Evidence Projection Module**：从追加 Evidence 重建 Gate 与 5D 投影；
-16. **FsrsAdapter**：初始化毕业 Sense 的 Memory State，并且是 Memory Outcome 进入 FSRS 的唯一接口；
-17. **Sensa Sync Module**：拥有 learner-scoped operation、幂等、change feed、cursor 和 bootstrap；
-18. **Media Module**：验证不可变媒体引用并提供授权下载。
+17. **Encounter Module**：按 Protocol Step Instance 固定 Materialization/Action，物化瞬时 Card Presentation，
+   接受 Attempt，并按协议结算 Lightweight Study、Acquisition Step、Memory Outcome 或 Relearning result；
+18. **Evidence Projection Module**：从追加 Evidence 重建 Gate 与 5D 投影；
+19. **FsrsAdapter**：按 Retention Target 消费有效 Scheduling Handoff 与来自 Review 或合法
+   Relearning evaluation 的 Memory Outcome，是 FSRS 初始化和更新的唯一接口；
+20. **Sensa Sync Module**：拥有 learner-scoped operation、幂等、change feed、cursor 和 bootstrap；
+21. **Media Module**：验证不可变媒体引用并提供授权下载。
 
 ## 6. 全局不变量
 
-- Sense identity 不能退化成词头下没有稳定身份的一行中文释义；
+- Sense identity 不能退化成词头下没有稳定身份的一行中文释义，也不能只用一个 L2 字符串代替
+  可复现的意义边界；
 - Account 与 Learner 是不同身份；V1 一对一不允许把认证、Profile、Workspace 或登录 Session 混入
   Learner Sense Progress；
 - Settings Surface 不是聚合；每项写操作必须到达 Account、Preference、Curriculum、Device 或 Data
@@ -351,28 +510,60 @@ Relearning Cycle；修复和重学不得把一次遗忘重复计为多次 FSRS r
   5D、daily quota、Memory Outcome 或 FSRS；
 - active assessment 在 response/feedback 前不得从产品内部打开 Reference Lookup 或其他答案泄露路径；
 - assessment-only 与 learning-only 资源不得进入 Reference 详情；产品不建设“真题”内容或占位页；
-- Book membership、Acquisition、Evidence、Declared Mastery 和 FSRS 都按 Sense 隔离；
+- Book membership 固定 Sense 与 primary expression；Learning Protocol Run、Evidence、Declared Mastery
+  和 FSRS 按 Retention Target 隔离；
 - Study Plan 不等于 Book；Book Version 不因 learner 切换、范围选择或个人添加而被修改；
-- 同一 Sense 来自多个 Curriculum source 时只拥有一个 Learner Sense Progress、一个 active Cycle
-  和一个 FSRS Memory State；
+- 同一 Retention Target 来自多个 Curriculum source 时只拥有一个 active protocol run 和一个
+  FSRS Memory State；同一 Sense 的不同 target expressions 不得合并；
 - 换词书、缩小 Book Range、暂停 Enrollment 或移除 Supplemental Membership 都不能删除或重置
   Learner Sense Progress；它们只在新的 Study Scope Revision 中改变 Planning eligibility；
 - Study Scope 变更不能静默改变 active Session；Session/Encounter 必须保留用于计划它们的 Scope
   revision 与 Curriculum provenance；
 - Semantic Field 是有限、版本化的内容邻域，不是 Book、学习路径或通用人类 ontology；
+- Personal Semantic World 只接纳 learner 显式创建的 Personal Meaning；LLM 推断和学习历史都不能
+  静默增加 membership；
 - Learner Semantic Projection 只能从权威事实重建，不能成为第二份 progress 或“脑内掌握度”；
-- 发布内容不可变，修订通过新 version/release 完成；
+- Learner Semantic Projection 中的 L1/L2 呈现必须保留 reviewed、learner-authored 与 form-level
+  provenance；L1 标签和 L2 lemma 都不能被写回为 Sense 或 progress identity；
+- 创建或编辑 Personal Semantic Region、Personal Meaning、Meaning Focus、Personal Semantic Anchor
+  与 Personal Expression Anchor 只改变 Personal Content；它们不产生 Evidence、5D、Acquisition
+  Graduation 或 FSRS Memory State，也不能暗中提交 Add-to-Learning Intent；
+- Sense Proposal 不是 Sense；只有 learner 显式确认才能创建 stable Sense/Version 和 Personal Meaning
+  Alignment。确认仍不代表内容已发布、表达已学会或已经加入 Curriculum；
+- Sense Construction 不依赖穷尽式预建 Sense 库；已有 Sense 的相似检索、复用和关系发现是可选治理
+  步骤，不得覆盖 learner 已确认边界或阻塞无匹配项的新 Sense 创建；
+- Semantic LLM、Learning Content LLM 与未来 Grading LLM 是不同领域角色；它们分别受独立输入、
+  输出、权限、校验、provenance 与 fallback 合同约束，不能因使用同一 provider 而合并所有权；
+- 内容来源与 Learning Protocol 必须正交；Published Package 不是唯一合法来源，Structured
+  Acquisition 也不是唯一合法协议；
+- 每个 Learning Protocol Run 必须且只能固定一个 Protocol Purpose；Initial Learning、Retention Review
+  与 Relearning 的完成事实和 scheduler 权限不能互相冒充；
+- Protocol Step 拥有材料组织、交互/判分、结果资格与 transition；Card Presentation 只渲染当前 Step
+  阶段，不拥有 identity、curriculum membership、Evidence、progress 或 FSRS；
+- Published 内容不可变，修订通过新 version/release 完成；On-demand 内容在一次 run 开始前必须
+  冻结为 Learning Materialization，response 发生后不得重新生成并替换题目、答案或评分依据；
 - Attempt 与 Evidence 是追加事实，Gate、5D 与 FSRS 是服务端权威投影；
+- Study Completion、learner rating 与 Learning Evidence 是不同事实；每个成功 Initial Learning
+  Completion 必须且只能创建一个 Scheduling Handoff，但不得借此宣称通过未完成的 Gates、5D 能力
+  或已经掌握；
+- Retention Target 按 learner × Sense × target expression 隔离；Learner Sense Progress 只是
+  roll-up，不能把同一 Sense 的不同表达折叠成一份 FSRS State；
+- capability-specific Evidence/Projection 默认共享其 Retention Target 的调度；只有明确、
+  稳定且值得独立调度的长期能力合同才能扩展 target scope，卡片、例句和页面不行；
 - 被动展示、自动播放、继续按钮、自报理解和答案揭示后的立即重答不构成独立 Gate Evidence；
-- Baseline Acquisition 需要三次分别承担 contextual Recognition、Sense → Form Recall 与 novel
+- Structured Baseline Acquisition 需要三次分别承担 contextual Recognition、Sense → Form Recall 与 novel
   Context Transfer 的独立成功；它们不能折叠成一次 Attempt；
 - Boundary 只有在存在真实、重要且可执行的 confusion target 时才成为 required Gate；
 - 一个 Gate 失败不抹除其他 Gate 的历史事实；针对性 repair 后必须经过干扰再独立重测；
-- Initial Acquisition Graduation 表示可以进入长期保持，不表示永久掌握；
-- FSRS 在 initial Graduation 前没有 due ownership；之后只负责 due time，Relearning 不重建它；
-- Review 的第一次独立结果决定该次 Memory Outcome，后续 Relearning 不覆盖或重复评价它；
-- `review_only` 不能引入新 Sense、推进 initial Acquisition 或消耗 daily-new quota；
-- Free Practice 不满足 daily plan、不清除 due、不推进 Acquisition/Relearning，也不生成 Learning
+- Initial Acquisition Graduation 表示 Structured Protocol 可以交接长期保持，不表示永久掌握；
+- FSRS 只在有效 Scheduling Handoff 后拥有 due；handoff 必须记录 protocol、basis、evidence level
+  与 initializer version；Retention Review 只能通过 Memory Outcome 更新既有状态；
+- Review 的第一次协议有效评价决定该次唯一 Memory Outcome 与唯一 FSRS update；后续 Relearning
+  不覆盖或重复评价它，也不创建 handoff 或重新初始化 FSRS；
+- Protocol Version 可以将独立 Relearning evaluation 声明为 scheduler-eligible；该评价只能产生
+  自己的、可审计且幂等的 Memory Outcome，Relearning Completion 本身不是 scheduler input；
+- `review_only` 不能引入新 Sense、推进 initial Learning Protocol 或消耗 daily-new quota；
+- Free Practice 不满足 daily plan、不清除 due、不推进 Protocol Run/Relearning，也不生成 Learning
   Evidence、Encounter Outcome 或 FSRS update；
 - 听说读写只组织 Practice Mode；听写、跟读和朗读等跨通道任务必须如实声明其实际 target，
   不能仅凭表面动作宣称 Sense retrieval 或 transfer；
@@ -390,6 +581,7 @@ Relearning Cycle；修复和重学不得把一次遗忘重复计为多次 FSRS r
 
 本文不冻结 Gate 数量阈值、具体 Action/Practice Task payload、cooldown 间隔、Semantic Field
 可视化布局、词典供应商、Contextual Sense Resolution 阈值、identity provider、Account deletion
-恢复窗口、具体 Preference 字段、HTTP/SQL、Sync payload、例句数量或页面布局。它们属于版本化实现
+恢复窗口、LLM provider/prompt、Sense Proposal 展示数量、相似 Sense 检索阈值、具体 Preference
+字段、HTTP/SQL、Sync payload、例句数量或页面布局。它们属于版本化实现
 合同、delivery/practice/reference profile 与 PRD，但必须服从本文的学习、参考、账号、设置与数据
 控制边界和全局不变量。
