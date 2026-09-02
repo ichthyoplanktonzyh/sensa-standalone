@@ -5,7 +5,7 @@ import {
   type SearchSchemaInput,
 } from '@tanstack/react-router';
 import App from '../App';
-import { parseViewMode, type ShellFlow } from './shellLocation';
+import { parseShellParams, parseViewMode, type ShellFlow, type ShellParams } from './shellLocation';
 
 /**
  * App renders the whole shell -- every screen stays mounted and is shown or
@@ -17,15 +17,16 @@ import { parseViewMode, type ShellFlow } from './shellLocation';
  * pathnames are legal. `useShellNavigation` reads the location back out.
  */
 
-interface ShellSearch {
+interface ShellSearch extends ShellParams {
   readonly flow?: ShellFlow;
 }
 
 const rootRoute = createRootRoute({
   component: App,
   validateSearch: (search: Record<string, unknown> & SearchSchemaInput): ShellSearch => {
+    const params = parseShellParams(search);
     const viewMode = parseViewMode(search.flow);
-    return viewMode === 'main' ? {} : { flow: viewMode };
+    return viewMode === 'main' ? params : { ...params, flow: viewMode };
   },
 });
 

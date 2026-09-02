@@ -113,6 +113,74 @@ export const parseMainStack = (pathname: string): string[] => {
 /** A flow search param that is absent or unrecognised means the main shell. */
 export const parseViewMode = (rawFlow: unknown): ViewMode => (isFlow(rawFlow) ? rawFlow : 'main');
 
+/**
+ * Which screen a sheet is showing -- the drill-down target, not the data.
+ *
+ * These were `useState` holding whole objects (`selectedContentSense` kept an
+ * entire `PracticeSenseItem`), which is why a deep link could open the sheet
+ * but never its content: the object was gone on reload. Only the id belongs in
+ * the URL; the item is looked up from it.
+ */
+export interface ShellParams {
+  readonly senseId?: string;
+  readonly exampleId?: string;
+  readonly section?: string;
+  readonly coming?: string;
+  readonly meaningId?: string;
+  readonly focusId?: string;
+}
+
+export const SHELL_PARAM_KEYS = [
+  'senseId',
+  'exampleId',
+  'section',
+  'coming',
+  'meaningId',
+  'focusId',
+] as const satisfies readonly (keyof ShellParams)[];
+
+/**
+ * Each param belongs to the sheet that reads it. When that sheet leaves the
+ * stack the param is dropped, so the URL stays a description of what is on
+ * screen rather than accumulating every id the learner ever visited.
+ */
+const SHEET_PARAM_OWNERS: Readonly<Record<string, readonly (keyof ShellParams)[]>> = {
+  's-content-library': ['section'],
+  's-content-sense': ['senseId'],
+  's-content-example': ['exampleId'],
+  's-content-coming': ['coming'],
+  's-personal-meaning': ['meaningId', 'focusId'],
+  's-confirmed-sense': ['meaningId', 'focusId'],
+  's-expression-binding': ['meaningId', 'focusId'],
+};
+
+/** Read the navigation params a search object carries, ignoring anything else. */
+export const parseShellParams = (search: Record<string, unknown>): ShellParams => {
+  const params: Record<string, string> = {};
+  for (const key of SHELL_PARAM_KEYS) {
+    const value = search[key];
+    if (typeof value === 'string' && value.length > 0) params[key] = value;
+  }
+  return params as ShellParams;
+};
+
+/** Drop params whose owning sheet is no longer on the stack. */
+export const retainParamsForStack = (
+  params: ShellParams,
+  stack: readonly string[],
+): ShellParams => {
+  const live = new Set<string>();
+  for (const sheetId of stack) {
+    for (const key of SHEET_PARAM_OWNERS[sheetId] ?? []) live.add(key);
+  }
+  const kept: Record<string, string> = {};
+  for (const key of SHELL_PARAM_KEYS) {
+    const value = params[key];
+    if (value !== undefined && live.has(key)) kept[key] = value;
+  }
+  return kept as ShellParams;
+};
+
 /** Build the pathname for a sheet stack. Inverse of {@link parseMainStack}. */
 export const buildPathname = (stack: readonly string[]): string => {
   if (stack.length === 0) return '/';

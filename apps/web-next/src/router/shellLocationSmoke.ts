@@ -15,9 +15,12 @@
 import {
   KNOWN_SHEET_IDS,
   buildPathname,
-  parseMainStack,
-  parseViewMode,
   buildSearch,
+  parseMainStack,
+  parseShellParams,
+  parseViewMode,
+  retainParamsForStack,
+  type ShellParams,
 } from './shellLocation';
 
 const ids = [...KNOWN_SHEET_IDS];
@@ -94,6 +97,61 @@ for (const [raw, expected] of [
   const search = buildSearch(viewMode);
   const back = parseViewMode(search.flow);
   if (back !== viewMode) failures.push(`flow round-trip ${viewMode} -> ${back}`);
+}
+
+/** Params are read only from known keys, and only as non-empty strings. */
+const parsed = parseShellParams({
+  senseId: 'fragile.adj.physical-easily-broken',
+  exampleId: '',
+  section: 'saved-senses',
+  unrelated: 'ignored',
+  focusId: 42,
+});
+checked += 1;
+if (
+  parsed.senseId !== 'fragile.adj.physical-easily-broken'
+  || parsed.section !== 'saved-senses'
+  || 'exampleId' in parsed
+  || 'focusId' in parsed
+  || 'unrelated' in (parsed as Record<string, unknown>)
+) {
+  failures.push(`parseShellParams kept the wrong keys: ${JSON.stringify(parsed)}`);
+}
+
+/**
+ * A param survives exactly as long as a sheet that reads it is on the stack.
+ * Without this, leaving a sheet would strand its id in the URL and the next
+ * shared link would describe a screen the learner is no longer looking at.
+ */
+const everyParam: ShellParams = {
+  senseId: 'a',
+  exampleId: 'b',
+  section: 'notes',
+  coming: 'scenes',
+  meaningId: 'm',
+  focusId: 'f',
+};
+const retention: ReadonlyArray<readonly [readonly string[], readonly string[]]> = [
+  [[], []],
+  [['s-content'], []],
+  [['s-content', 's-content-sense'], ['senseId']],
+  [['s-content', 's-content-library'], ['section']],
+  [['s-content', 's-content-example'], ['exampleId']],
+  [['s-content', 's-content-coming'], ['coming']],
+  [['s-personal-meaning'], ['meaningId', 'focusId']],
+  [['s-confirmed-sense'], ['meaningId', 'focusId']],
+  [['s-expression-binding'], ['meaningId', 'focusId']],
+  [['s-content', 's-content-sense', 's-content-example'], ['senseId', 'exampleId']],
+];
+for (const [stack, expectedKeys] of retention) {
+  checked += 1;
+  const kept = Object.keys(retainParamsForStack(everyParam, stack)).sort();
+  const expected = [...expectedKeys].sort();
+  if (kept.join(',') !== expected.join(',')) {
+    failures.push(
+      `retain on [${stack.join(',')}] kept [${kept.join(',')}], expected [${expected.join(',')}]`,
+    );
+  }
 }
 
 console.log(`shell location smoke: ${checked} 项`);

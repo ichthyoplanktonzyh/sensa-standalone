@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type MouseEvent } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type MouseEvent } from 'react';
 import type {
   Word,
   FormalLearningStage,
@@ -75,6 +75,7 @@ import { SidePanel } from './components/SidePanel';
 import { DEFAULT_PRACTICE_SCOPE, type PracticeSenseItem } from './practiceData';
 import {
   contentSenseForId,
+  isContentSectionId,
   type ContentNoteItem,
   type ContentSectionId,
   type SavedExampleItem,
@@ -250,6 +251,7 @@ export default function App() {
   const {
     viewMode,
     mainStack,
+    params,
     setViewMode,
     goMain,
     backMain,
@@ -264,21 +266,33 @@ export default function App() {
   const [dictionaryPresentation, setDictionaryPresentation] = useState<DictionaryPresentation>('sensa');
 
   /* ---------- 我的内容读取投影与下钻目标 ---------- */
-  const [contentSection, setContentSection] = useState<ContentSectionId>('recent');
-  const [selectedContentSense, setSelectedContentSense] = useState<PracticeSenseItem | null>(null);
-  const [selectedContentExample, setSelectedContentExample] = useState<PracticeSenseItem | null>(null);
-  const [contentComingKind, setContentComingKind] = useState<'scenes' | 'collections'>('scenes');
-  const [personalMeaningId, setPersonalMeaningId] = useState<string | null>(null);
-  const [meaningFocusId, setMeaningFocusId] = useState<string | null>(null);
+  /**
+   * 下钻目标由 URL 描述，而不是 useState 持有的对象。此前
+   * selectedContentSense 存的是整个 PracticeSenseItem，深链接因此只能打开
+   * sheet、打不开内容——刷新后对象就没了。URL 里只放 id，条目由 id 查回。
+   */
+  const contentSection: ContentSectionId = isContentSectionId(params.section)
+    ? params.section
+    : 'recent';
+  const contentComingKind: 'scenes' | 'collections' =
+    params.coming === 'collections' ? 'collections' : 'scenes';
+  const personalMeaningId = params.meaningId ?? null;
+  const meaningFocusId = params.focusId ?? null;
+  const selectedContentSense = useMemo(
+    () => (params.senseId ? contentSenseForId(params.senseId) : null),
+    [params.senseId],
+  );
+  const selectedContentExample = useMemo(
+    () => (params.exampleId ? contentSenseForId(params.exampleId) : null),
+    [params.exampleId],
+  );
 
   const openContentSection = useCallback((section: ContentSectionId) => {
-    setContentSection(section);
-    goMain('s-content-library');
+    goMain('s-content-library', { section });
   }, [goMain]);
 
   const openContentSense = useCallback((item: PracticeSenseItem) => {
-    setSelectedContentSense(item);
-    goMain('s-content-sense');
+    goMain('s-content-sense', { senseId: item.senseId });
   }, [goMain]);
 
   const openSemanticWorldSense = useCallback((senseId: string) => {
@@ -290,15 +304,17 @@ export default function App() {
     nextPersonalMeaningId: string,
     nextMeaningFocusId?: string,
   ) => {
-    setPersonalMeaningId(nextPersonalMeaningId);
-    setMeaningFocusId(nextMeaningFocusId ?? null);
-    goMain('s-personal-meaning');
+    goMain('s-personal-meaning', {
+      meaningId: nextPersonalMeaningId,
+      focusId: nextMeaningFocusId,
+    });
   }, [goMain]);
 
   const openConfirmedSense = useCallback((nextPersonalMeaningId: string, nextMeaningFocusId: string) => {
-    setPersonalMeaningId(nextPersonalMeaningId);
-    setMeaningFocusId(nextMeaningFocusId);
-    goMain('s-confirmed-sense');
+    goMain('s-confirmed-sense', {
+      meaningId: nextPersonalMeaningId,
+      focusId: nextMeaningFocusId,
+    });
   }, [goMain]);
 
   const openExpressionBinding = useCallback(() => {
@@ -306,13 +322,11 @@ export default function App() {
   }, [goMain]);
 
   const openContentExample = useCallback((item: PracticeSenseItem) => {
-    setSelectedContentExample(item);
-    goMain('s-content-example');
+    goMain('s-content-example', { exampleId: item.senseId });
   }, [goMain]);
 
   const openContentComingSoon = useCallback((kind: 'scenes' | 'collections') => {
-    setContentComingKind(kind);
-    goMain('s-content-coming');
+    goMain('s-content-coming', { coming: kind });
   }, [goMain]);
 
   // 是否为首页纯净壁纸态（主页面且无弹层），决定状态栏与底条为浅色文字
@@ -2068,7 +2082,7 @@ export default function App() {
             item={selectedContentSense}
             onBack={backMain}
             onOpenExample={openContentExample}
-            onOpenSense={setSelectedContentSense}
+            onOpenSense={(item) => goMain('s-content-sense', { senseId: item.senseId })}
             onOpenDictionary={(item) => openDictModal(item.sourceWord)}
             onEditNote={(item) => openNoteEditor(item.sourceWord, item.senseId, item.meaning)}
             toast={toast}
@@ -2080,9 +2094,11 @@ export default function App() {
             item={selectedContentExample}
             onBack={backMain}
             onOpenSense={(item) => {
-              setSelectedContentSense(item);
-              if (mainStack.includes('s-content-sense')) backMain();
-              else setMainStack([...mainStack.slice(0, -1), 's-content-sense']);
+              // 例句详情跳义项详情：替换栈顶，义项已在栈中时退回到它。
+              const nextStack = mainStack.includes('s-content-sense')
+                ? mainStack.slice(0, -1)
+                : [...mainStack.slice(0, -1), 's-content-sense'];
+              setMainStack(nextStack, { senseId: item.senseId });
             }}
             toast={toast}
           />
