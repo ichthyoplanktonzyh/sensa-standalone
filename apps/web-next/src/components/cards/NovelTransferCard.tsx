@@ -19,7 +19,6 @@ export interface NovelTransferCardProps {
   content: PrototypeIntroductionPackage;
   /** Exact Transfer Assessment Resource selected by the current Action. */
   assessment: NovelTransferAssessmentResource;
-  presentation: NovelTransferPresentation;
   purpose?: 'acquisition' | 'retention';
   onComplete: (outcome: NovelTransferOutcome, responseId?: string | null) => void;
   onOpenDictionary: (word: string | QuickDictEntry) => void;
@@ -30,8 +29,6 @@ export interface NovelTransferCardProps {
   onViewChange: () => void;
   toast: (message: string) => void;
 }
-
-export type NovelTransferPresentation = 'sensa' | 'baseline';
 
 function visualFamilyForKind(visualKind: string): string {
   if (visualKind === 'living-material') return 'coral-growth';
@@ -89,7 +86,6 @@ function TransferSceneVisual({
 export function NovelTransferCard({
   content,
   assessment,
-  presentation,
   purpose = 'acquisition',
   onComplete,
   onOpenDictionary,
@@ -224,97 +220,75 @@ export function NovelTransferCard({
 
   return (
     <div
-      className={`transfer-page is-${presentation}`}
+      className="transfer-page is-sensa"
       data-assessment-task-key={assessment.taskKey}
     >
       <header className="transfer-heading">
         <span>
-          {presentation === 'sensa'
-            ? isRetention
+          {isRetention
               ? '长期复习 · 新语境迁移'
-              : submitted ? succeeded ? '迁移检验 · 已成立' : '迁移检验 · 需要修复' : '迁移检验 · 未见语境'
-            : '新语境迁移'}
+              : submitted ? succeeded ? '迁移检验 · 已成立' : '迁移检验 · 需要修复' : '迁移检验 · 未见语境'}
         </span>
         <h1>
-          {presentation === 'sensa'
-            ? isRetention
+          {isRetention
               ? '换个场景，还能认出它吗？'
-              : submitted ? feedbackTitle : '把这个意思带到陌生处'
-            : '换个场景试试看'}
+              : submitted ? feedbackTitle : '把这个意思带到陌生处'}
         </h1>
         <p>
-          {presentation === 'sensa'
-            ? isRetention
+          {isRetention
               ? '目标词保持隐藏；先用场景证明这层意思仍能迁移。'
-              : submitted ? feedbackBody : '先判断场景中的关系，目标词会在提交后出现。'
-            : assessment.instructionL1}
+              : submitted ? feedbackBody : '先判断场景中的关系，目标词会在提交后出现。'}
         </p>
       </header>
 
-      {(!submitted || presentation === 'baseline') && (
+      {!submitted && (
         <>
           <section className="transfer-scene-card" aria-label={scenario.sceneLabelL1}>
             <div className="transfer-scene-label">
               <span>{scenario.sceneLabelL1}</span>
               <i aria-hidden="true" />
-              {presentation === 'sensa' && <small>目标词暂隐</small>}
+              <small>目标词暂隐</small>
             </div>
-            {presentation === 'sensa' && (
-              <TransferSceneVisual visualKind={scenario.visualKind} alt={scenario.visualAltL1} />
-            )}
-            {presentation === 'sensa' ? (
-              <div className="transfer-scene-copy">
-                <div className="transfer-scene-l1">
-                  <span>中文场景</span>
-                  <p>{scenario.setupL1}</p>
-                </div>
-                <div className="transfer-scene-l2">
-                  <span>英文场景 <small>点词可查义</small></span>
-                  <div>
-                    {setupClauses.map((clause, clauseIndex) => (
-                      <span key={`${scenario.id}:clause:${clauseIndex}`}>
-                        <ClickableSentence
-                          sentenceHtml={clause}
-                          activeTokenIdx={null}
-                          onWordClick={(token, tokenIdx) => {
-                            openLookup({
-                              tokenIdx,
-                              displayWord: token.cleanWord,
-                              load: (signal) => lookupToken(
-                                token,
-                                {
-                                  exampleKey: `${scenario.id}:setup:${clauseIndex}`,
-                                  textL2: clause,
-                                },
-                                { signal },
-                              ),
-                            });
-                          }}
-                        />
-                      </span>
-                    ))}
-                  </div>
+            <TransferSceneVisual visualKind={scenario.visualKind} alt={scenario.visualAltL1} />
+            <div className="transfer-scene-copy">
+              <div className="transfer-scene-l1">
+                <span>中文场景</span>
+                <p>{scenario.setupL1}</p>
+              </div>
+              <div className="transfer-scene-l2">
+                <span>英文场景 <small>点词可查义</small></span>
+                <div>
+                  {setupClauses.map((clause, clauseIndex) => (
+                    <span key={`${scenario.id}:clause:${clauseIndex}`}>
+                      <ClickableSentence
+                        sentenceHtml={clause}
+                        activeTokenIdx={null}
+                        onWordClick={(token, tokenIdx) => {
+                          openLookup({
+                            tokenIdx,
+                            displayWord: token.cleanWord,
+                            load: (signal) => lookupToken(
+                              token,
+                              {
+                                exampleKey: `${scenario.id}:setup:${clauseIndex}`,
+                                textL2: clause,
+                              },
+                              { signal },
+                            ),
+                          });
+                        }}
+                      />
+                    </span>
+                  ))}
                 </div>
               </div>
-            ) : (
-              <>
-                <p className="transfer-setup-l2">{scenario.setupL2}</p>
-                <p className="transfer-setup-l1">{scenario.setupL1}</p>
-              </>
-            )}
-            {presentation === 'baseline' && (
-              <TransferSceneVisual visualKind={scenario.visualKind} alt={scenario.visualAltL1} />
-            )}
+            </div>
           </section>
 
-          {presentation === 'sensa' ? (
-            <div className="transfer-question-block">
-              <span>你的判断</span>
-              <h2 className="transfer-question">{scenario.questionL1}</h2>
-            </div>
-          ) : (
+          <div className="transfer-question-block">
+            <span>你的判断</span>
             <h2 className="transfer-question">{scenario.questionL1}</h2>
-          )}
+          </div>
 
           <div className="transfer-actions" role="radiogroup" aria-label={scenario.questionL1}>
             {scenario.options.map((option, index) => {
@@ -340,7 +314,7 @@ export function NovelTransferCard({
                   </span>
                   <span className="transfer-action-copy">
                     <strong>{option.labelL1}</strong>
-                    {(presentation === 'baseline' || (submitted && (selected || option.isCorrect))) && (
+                    {(submitted && (selected || option.isCorrect)) && (
                       <small>{option.detailL1}</small>
                     )}
                   </span>
@@ -359,37 +333,24 @@ export function NovelTransferCard({
 
       {submitted && (
         <section className={`transfer-feedback ${succeeded ? 'success' : 'repair'}`} aria-live="polite">
-          {presentation === 'baseline' && (
-            <>
-              <div className="transfer-feedback-status">
-                <span aria-hidden="true">{succeeded ? '✓' : '↗'}</span>
-                <strong>{succeeded ? '迁移成立' : '迁移修复'}</strong>
-              </div>
-              <h3>{feedbackTitle}</h3>
-              <p>{feedbackBody}</p>
-            </>
-          )}
-
-          {presentation === 'sensa' && (
-            <div className="transfer-sensa-connection" aria-label="意思迁移连接">
-              <div>
-                <small>熟悉对象</small>
-                <strong>{scenario.sourceObjectL1}</strong>
-              </div>
-              <span aria-hidden="true"><i />→<i /></span>
-              <div>
-                <small>陌生对象</small>
-                <strong>{scenario.targetObjectL1}</strong>
-              </div>
-              <p>对象变了，意思结构没有变</p>
-              <ol>
-                {scenario.invariantLabelsL1.map((label) => <li key={label}>{label}</li>)}
-              </ol>
+          <div className="transfer-sensa-connection" aria-label="意思迁移连接">
+            <div>
+              <small>熟悉对象</small>
+              <strong>{scenario.sourceObjectL1}</strong>
             </div>
-          )}
+            <span aria-hidden="true"><i />→<i /></span>
+            <div>
+              <small>陌生对象</small>
+              <strong>{scenario.targetObjectL1}</strong>
+            </div>
+            <p>对象变了，意思结构没有变</p>
+            <ol>
+              {scenario.invariantLabelsL1.map((label) => <li key={label}>{label}</li>)}
+            </ol>
+          </div>
 
           <div className="transfer-reveal-example">
-            <span>{presentation === 'sensa' ? '目标表达出现' : '放回英文表达'}</span>
+            <span>目标表达出现</span>
             <div className="transfer-reveal-sentence">
               <ClickableSentence
                 sentenceHtml={revealHtml}
@@ -408,34 +369,13 @@ export function NovelTransferCard({
               />
             </div>
             <p>{reveal.textL1}</p>
-            <small>{presentation === 'sensa' ? '点词可查看具体意思' : '点击句中单词可查义'}</small>
+            <small>点词可查看具体意思</small>
           </div>
 
-          {presentation === 'baseline' && (
-            <div className="transfer-connection" aria-label="意思迁移连接">
-              <div className="transfer-object-pair">
-                <span>{scenario.sourceObjectL1}</span>
-                <i aria-hidden="true">→</i>
-                <span>{scenario.targetObjectL1}</span>
-              </div>
-              <div className="transfer-invariant-label">没有改变的意思结构</div>
-              <div className="transfer-invariants">
-                {scenario.invariantLabelsL1.map((label, index) => (
-                  <span key={label}>
-                    {label}
-                    {index < scenario.invariantLabelsL1.length - 1 && <i aria-hidden="true">→</i>}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {presentation === 'baseline' ? supportActions : (
-            <details className="transfer-support-disclosure" open={!succeeded}>
-              <summary>{succeeded ? '需要回看或查词？' : '先修复这条连接'}</summary>
-              {supportActions}
-            </details>
-          )}
+          <details className="transfer-support-disclosure" open={!succeeded}>
+            <summary>{succeeded ? '需要回看或查词？' : '先修复这条连接'}</summary>
+            {supportActions}
+          </details>
         </section>
       )}
 
@@ -465,9 +405,7 @@ export function NovelTransferCard({
                 }
               }}
             >
-              {presentation === 'sensa'
-                ? isRetention ? '提交这次检验' : '提交判断'
-                : '确认处理方式'}
+              {isRetention ? '提交这次检验' : '提交判断'}
             </button>
             <button
               type="button"
@@ -484,16 +422,12 @@ export function NovelTransferCard({
                 }
               }}
             >
-              {presentation === 'sensa'
-                ? isRetention ? '还判断不了，进入修复' : '还判断不了'
-                : '不确定，看看应该怎么处理'}
+              {isRetention ? '还判断不了，进入修复' : '还判断不了'}
             </button>
           </div>
         ) : (
           <button type="button" className="fbtn green" onClick={() => onComplete(outcome, selectedOption?.id ?? null)}>
-            {presentation === 'sensa'
-              ? succeeded ? '完成本次检验' : '先修复，稍后再试'
-              : succeeded ? '完成这次学习' : '我知道了，稍后换个场景再试'}<i />
+            {succeeded ? '完成本次检验' : '先修复，稍后再试'}<i />
           </button>
         )}
       </div>

@@ -27,19 +27,29 @@ and lockfile for now.
 
 ## Runtime presentation vocabulary
 
-The imported prototype still contains `sensa` and `baseline` presentation
-switches. In this stage they do not mean two equivalent themes:
+The imported prototype originally contained `sensa` and `baseline` presentation
+switches for the learning lifecycle. The learning lifecycle `baseline`
+comparison has been removed — high-assurance initial and review now always use
+the current Sensa/compact implementation and no longer expose Reveal,
+Recognition, Recall, Transfer, Example or Review `baseline` switches. Outside
+the learning lifecycle, `baseline` comparisons remain intentionally (Semantic
+World, Academy/free practice, Portable Listening, YouGlish/real-world
+listening, Dictionary/QuickDict).
+
+In this stage `sensa` and `baseline` do not mean two equivalent themes:
 
 - `sensa` is the candidate UI/runtime family for Sensa's high-assurance
   Structured Learning Policy;
-- `baseline` is the earlier Bubei-style card reproduction kept only as a
-  comparison reference;
-- the new `lightweight` Learning Policy is a separate Sensa runtime and must
+- `baseline` outside learning is the earlier Bubei-style reproduction kept only
+  as a comparison reference;
+- the `lightweight` Learning Policy is a separate Sensa runtime and must
   not be identified with `baseline`.
 
 Future formal routing follows the Committed Learning Policy. A comparison
-switch may remain in prototype tooling, but it cannot redefine Protocol,
-Gate, Evidence or Graduation semantics.
+switch may remain in non-learning prototype tooling, but it cannot redefine
+Protocol, Gate, Evidence or Graduation semantics. The Side Panel no longer
+offers learning baseline switches, and the explanatory “可检查的学习状态”
+section has been removed.
 
 ## Imported files
 

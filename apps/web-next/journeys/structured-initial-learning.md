@@ -36,9 +36,10 @@ Learning Target ready
 | `lightweight` | 本阶段新建立的轻量学习策略 | 独立 Learning Policy，不等于 `baseline` |
 
 因此 `sensa / baseline` 不是两个可以在正式 Runtime 中随意切换的视觉主题，`baseline` 也不能因为
-代码上复用了相同回调就自动获得 Structured Gate、Evidence 或 Graduation 语义。现有 Side Panel 中的
-presentation switch 只属于原型比较工具；未来正式路径应由 Committed Learning Policy 选择 Protocol，
-其中高保证路径使用 `sensa`，轻量路径使用已经独立建立的轻量 Runtime，`baseline` 留在对照范围。
+代码上复用了相同回调就自动获得 Structured Gate、Evidence 或 Graduation 语义。当前 Side Panel 只在
+词义世界、自由练习、随身听和词典等非学习生命周期页面保留原型比较 switch；正式学习页面不再暴露
+baseline 分支。正式路径由 Committed Learning Policy 选择 Protocol，其中高保证路径使用 `sensa`，
+轻量路径使用已经独立建立的轻量 Runtime，`baseline` 留在非学习页面的对照范围。
 
 ## 2. 必须同时理解的两条叙事
 
@@ -78,9 +79,9 @@ Acquisition Profile 固定；Boundary 只有存在真实 confusion target 时才
 → Session 总结
 ```
 
-页面顶部应回答“当前在处理哪个 Target、为什么出现这个 Action、哪些 Gate 已通过”，而不是只显示
-一个缺乏语义的卡片序号。Target Graduation 与 Session 完成是两个不同事实：一个 Target 可以先毕业，
-Session 仍继续处理其他 Target。
+Runtime 必须能够回答“当前在处理哪个 Target、为什么出现这个 Action、哪些 Gate 已通过”，但首次学习页
+不再为这些信息增加一块独立的顶部状态文案；现有导航、正式卡片和 Session Summary 共同承担这层叙事。
+Target Graduation 与 Session 完成是两个不同事实：一个 Target 可以先毕业，Session 仍继续处理其他 Target。
 
 ## 3. Runtime 表面及其唯一职责
 
@@ -174,15 +175,16 @@ Acquisition Cycle completed
 ### 已经接入的生命周期事实
 
 1. `ready` 的高保证 Target 创建首次正式 Protocol Run 时，提交并锁定 `high_assurance` Policy；
-2. 正式高保证入口固定选择既有高保证 presentation：各 Gate 使用 `sensa`，Introduction 沿用当前
-   `compact` 命名，不再受之前选择的 baseline presentation 影响；
+2. 正式高保证入口固定使用当前高保证 presentation：各 Gate 使用 `sensa`，
+   Introduction 使用 `compact`。学习链路的 `baseline` 展示分支已移除，正式入口不再
+   提供 Reveal / Recognition / Recall / Transfer / Example / Review 的 baseline 切换；
 3. 既有 Structured Runtime 继续独立处理 Introduction、Required Gates、Repair 与 Graduation；
 4. 只有 `LearnQueue` 已确认毕业的 Sense 才产生 `structuredGraduationByTarget` 投影；
 5. Graduation 只执行一次本地 Scheduling Handoff，并读取同一 Sense 的 Memory State 得到下次复习安排；
 6. Graduation 后，首页新学 inventory、Target 库和 Target 详情统一把该 Target 投影为 `retaining`；
 7. 已知 Target 在 Graduation 前不会因为旧的本地 FSRS fixture 提前进入高保证 Review inventory；
-8. 本轮没有修改任何 `components/cards/*` 高保证卡片、卡片文案、学习材料或既有卡片样式选择器；
-   新增样式只服务于卡片外的 Runtime Shell 与 Session Summary。
+8. 本轮只移除了学习生命周期内的 baseline 卡片分支和对应死代码；高保证卡片的 DOM、卡片文案、学习
+   材料、交互和既有样式保持不变。保留的样式只服务于当前 Sensa 卡片和 Session Summary。
 
 ### Runtime 编排与只读投影
 
@@ -190,8 +192,8 @@ Acquisition Cycle completed
    repair 状态、Graduation 与 Declared Mastery；页面不再读取或复制调度器内部 Map；
 2. 今日 inventory 中同时存在多个 `ready + high_assurance` Target 时，一次 Structured Session 会把
    它们作为稳定快照共同交给现有穿插调度器，而不是为每个 Target 创建单独的单词流程；
-3. Runtime Shell 在卡片外投影当前 Target、Action purpose 与 Gate 进度；正式卡片的样式、交互和
-   文案均未修改；
+3. Runtime 的 Target、Action purpose 与 Gate 进度仍由 `LearnQueue` 提供，但首次学习页不再额外渲染
+   顶部状态文案；正式卡片的样式、交互和文案均未修改；
 4. Structured Session 结束后使用独立 Summary 区分 Acquisition Graduation 与 Declared Mastery，
    不再把两者合并进旧的“本组学习完成”；
 5. “熟”是贯穿 Grounding、Assessment、Repair 与长期 Review 的 Declared Mastery 入口。声明只把
@@ -211,8 +213,8 @@ Acquisition Cycle completed
    重新打开失败 Gate。
 3. **Transfer 成功文案可能过早宣布完成。** 若 Target 还有 required Boundary，Transfer 通过不等于
    Graduation。
-4. **比较工具仍保留 `sensa / baseline` presentation switch。** 正式高保证入口已经固定到 `sensa`，
-   但 Side Panel 仍保留旧原型对照能力；是否移除属于后续原型工具整理，不在本轮接线范围。
+4. **非学习页面仍保留 baseline 对照工具。** 正式高保证入口已经固定到 `sensa`，学习生命周期内的
+   baseline switch 与旧卡片分支已移除；词义世界、自由练习、随身听和词典的对照能力不属于本轮清理范围。
 
 第 2、3 项直接涉及正式学习卡片文案，依当前产品约束只登记，不在本轮修改。
 

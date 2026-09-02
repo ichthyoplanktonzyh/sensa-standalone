@@ -46,7 +46,7 @@ Review 回答“这次到期时连接是否仍可独立取回”，Relearning �
 
 - Target 库：显示“复习中 / 重学修复中 / 等待独立重测 / 保持中”，Policy 始终为已锁定；
 - Target 详情：为正在运行的 Review/Relearning 提供“继续复习/继续重学”入口；
-- Runtime Shell：在正式卡片外说明当前 Target、Action 和本轮长期阶段，不修改卡片；
+- 正式 Runtime：不再额外渲染顶部长期状态文案，当前任务由既有导航与正式卡片表达；
 - Retention Summary：区分直接返回保持、重学完成与 Declared Mastery；
 - 首页：只按已锁定 Policy 把 due Target 路由到相应 Runtime，不把高保证和轻量协议混在一起。
 
@@ -64,7 +64,8 @@ inventory 排除，不产生 learner response、Review Outcome、Relearning effe
   storage projection，未来由服务端 API 接替；
 - 同一前端会话内可以退出并从 Target 详情继续；跨刷新恢复仍待正式 Protocol Run 合同；
 - 单 Target 缺少真实 interference item 时仍使用调度器已有的显式 fallback，本轮不改写该策略；
-- 本轮没有修改 `components/cards/*`，也没有修改既有正式卡片的样式选择器、交互或文案。
+- 本轮只移除了学习生命周期内的 baseline Review 分支；既有正式 Sensa 卡片的样式选择器、交互和文案
+  保持不变。
 
 ## 6. 验收不变量
 
@@ -73,4 +74,4 @@ inventory 排除，不产生 learner response、Review Outcome、Relearning effe
 - Repair 与重测均不重复更新 FSRS；
 - 重测失败回到 repair，重测成功才返回 retaining；
 - Declared Mastery 不产生 Outcome，也不改变 Memory State；
-- Target 库、Target 详情、Runtime Shell 与 Summary 使用同一只读状态投影。
+- Target 库、Target 详情与 Summary 使用同一只读状态投影。

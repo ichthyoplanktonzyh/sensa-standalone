@@ -580,6 +580,19 @@ function checkReviewSettlement(): void {
   );
 }
 
+function checkPrototypeGraduationHandoff(): void {
+  const senseId = 'smoke.prototype-graduation-immediate-review';
+  const startedAt = Date.now();
+  const graduated = storageService.graduateSense(senseId, 0);
+
+  assertCondition(
+    graduated.due >= startedAt && graduated.due <= Date.now(),
+    'The local prototype must make the first high-assurance Review immediately due.',
+  );
+  assert.equal(graduated.scheduledDays, 0);
+  assert.deepEqual(storageService.getDueSenseIds([senseId]), [senseId]);
+}
+
 function checkReviewRelearningInterference(): void {
   const candidates = PROTOTYPE_LEARNING_PACKAGES.slice(0, 3).map((packageItem) => ({
     package: packageItem,
@@ -1093,6 +1106,7 @@ assert.deepEqual(firstOrder, secondOrder, 'Learn scheduling must be deterministi
 checkDirectionalFailure();
 checkDeclaredMastery();
 checkReviewDeclaredMasteryExclusion();
+checkPrototypeGraduationHandoff();
 checkReviewSettlement();
 checkReviewRelearningInterference();
 checkMissingMediaFailsClosed(runtimeRelease);
@@ -1111,6 +1125,7 @@ console.log(JSON.stringify({
   targetedFailure: true,
   declaredMasteryOrthogonal: true,
   reviewDeclaredMasteryExcludedWithoutOutcome: true,
+  prototypeGraduationImmediatelyDue: true,
   conditionalBoundary: true,
   boundaryDuePreserved: true,
   oneReviewOneOutcome: true,

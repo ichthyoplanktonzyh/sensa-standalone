@@ -399,7 +399,7 @@ function projectPackage(
     task.eligiblePurposes.includes('acquisition_gate'));
   const recallTask = pkg.assessmentInventory.meaningToFormRecall.find((task) =>
     task.eligiblePurposes.includes('acquisition_gate'));
-  if (!recognitionTask || !recallTask) throw new Error(`Package ${pkg.identity.packageKey} lacks baseline tasks.`);
+  if (!recognitionTask || !recallTask) throw new Error(`Package ${pkg.identity.packageKey} lacks required acquisition assessment tasks.`);
   const recognitionExample = pkg.examples.find((example) => example.exampleKey === recognitionTask.exampleKey);
   if (!recognitionExample) throw new Error(`Recognition task ${recognitionTask.taskKey} has no Example.`);
   const recognitionOptions = recognitionTask.options.map((option) => ({

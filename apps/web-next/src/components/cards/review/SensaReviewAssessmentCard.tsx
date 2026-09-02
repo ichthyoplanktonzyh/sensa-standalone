@@ -25,8 +25,6 @@ import { RecognitionCard } from '../RecognitionCard';
 import { RecallCard } from '../RecallCard';
 import { NovelTransferCard } from '../NovelTransferCard';
 
-export type ReviewPresentation = 'sensa' | 'baseline';
-
 export interface SensaReviewAssessmentCardProps {
   content: PrototypeIntroductionPackage;
   spec: ReviewAssessmentSpec;
@@ -223,7 +221,6 @@ export function SensaReviewAssessmentCard(props: SensaReviewAssessmentCardProps)
       <RecognitionCard
         content={content}
         assessment={assessmentResource as RecognitionAssessmentResource}
-        presentation="sensa"
         purpose={purpose}
         onComplete={(correct, responseId) => {
           onSubmit(reviewResult(spec, correct, responseId ?? null));
@@ -243,7 +240,6 @@ export function SensaReviewAssessmentCard(props: SensaReviewAssessmentCardProps)
       <RecallCard
         content={content}
         assessment={assessmentResource as MeaningToFormRecallAssessmentResource}
-        presentation="sensa"
         purpose={purpose}
         onComplete={(outcome, responseId) => {
           onSubmit(reviewResult(spec, outcome === 'independent', responseId ?? null));
@@ -263,7 +259,6 @@ export function SensaReviewAssessmentCard(props: SensaReviewAssessmentCardProps)
       <NovelTransferCard
         content={content}
         assessment={assessmentResource as NovelTransferAssessmentResource}
-        presentation="sensa"
         purpose={purpose}
         onComplete={(outcome, responseId) => {
           onSubmit(reviewResult(spec, outcome === 'success', responseId ?? null));

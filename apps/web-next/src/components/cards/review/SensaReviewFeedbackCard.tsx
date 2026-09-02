@@ -26,7 +26,6 @@ import { useImmediateDictionaryLookup } from '../../useImmediateDictionaryLookup
 import {
   IntroductionCard,
   type IntroductionPhase,
-  type RevealPresentation,
 } from '../IntroductionCard';
 
 interface SensaReviewFeedbackCardProps {
@@ -34,7 +33,6 @@ interface SensaReviewFeedbackCardProps {
   spec: ReviewAssessmentSpec;
   assessmentResource: AssessmentResource;
   result: ReviewAssessmentResult;
-  revealPresentation: RevealPresentation;
   onContinue: () => void;
   onOpenDictionary: (word: string | QuickDictEntry) => void;
   lookupDictionary: DictionaryLookup;
@@ -70,7 +68,6 @@ export function SensaReviewFeedbackCard({
   spec,
   assessmentResource,
   result,
-  revealPresentation,
   onContinue,
   onOpenDictionary,
   lookupDictionary,
@@ -179,7 +176,6 @@ export function SensaReviewFeedbackCard({
         phase={replayPhase}
         mode="repair_replay"
         repairPurpose="retention"
-        presentation={revealPresentation}
         onPhaseChange={(phase) => {
           clearLookup();
           onViewChange();

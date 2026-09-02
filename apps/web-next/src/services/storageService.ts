@@ -159,9 +159,22 @@ class StorageService {
     return item;
   }
 
-  /** Package/Sense-facing name for graduation; Word remains a legacy alias. */
+  /**
+   * Package/Sense-facing graduation for the local prototype.
+   *
+   * The first Scheduling Handoff is deliberately compressed to "due now" so
+   * the complete Acquisition -> Retention journey can be walked in one QA
+   * session. Later Review outcomes still use the normal scheduler.
+   */
   public graduateSense(senseId: string, mistakeCount: number = 0): FSRSItem {
-    return this.graduateWord(senseId, mistakeCount);
+    const item = initFSRSFromLearn(senseId, mistakeCount);
+    const immediatelyDueItem: FSRSItem = {
+      ...item,
+      due: Date.now(),
+      scheduledDays: 0,
+    };
+    this.saveFSRSItem(immediatelyDueItem);
+    return immediatelyDueItem;
   }
 
   /**

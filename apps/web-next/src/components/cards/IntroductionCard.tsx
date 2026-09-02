@@ -14,14 +14,12 @@ import { useImmediateDictionaryLookup } from '../useImmediateDictionaryLookup';
 import { ExperienceRenderer } from './ExperienceRenderer';
 
 export type IntroductionPhase = 'experience' | 'reveal';
-export type RevealPresentation = 'compact' | 'baseline';
 
 interface IntroductionCardProps {
   content: PrototypeIntroductionPackage;
   phase: IntroductionPhase;
   mode?: 'introduction' | 'repair_replay';
   repairPurpose?: 'acquisition' | 'retention';
-  presentation?: RevealPresentation;
   onPhaseChange: (phase: IntroductionPhase) => void;
   onComplete: () => void;
   onOpenExample: (sentenceIndex?: number) => void;
@@ -63,7 +61,6 @@ export function IntroductionCard({
   phase,
   mode = 'introduction',
   repairPurpose = 'retention',
-  presentation = 'compact',
   onPhaseChange,
   onComplete,
   onOpenExample,
@@ -88,11 +85,6 @@ export function IntroductionCard({
     : repairPurpose === 'acquisition'
     ? '完成修复，稍后再检验'
     : '返回复习结果';
-  const continuationBody = !isRepairReplay
-    ? '这次只建立连接；稍后会在新的语境中检验。'
-    : repairPurpose === 'acquisition'
-    ? '修复只恢复当前能力连接，不能代替下一次独立检验。'
-    : '回看只恢复连接，不会再次产生复习结果。';
   const lookupExampleToken = async (
     token: {
       text: string;
@@ -163,176 +155,14 @@ export function IntroductionCard({
       toast(`正在播放${isUk ? '英式' : '美式'}发音；下次为${nextIsUk ? '英式' : '美式'}`);
     };
 
-    if (presentation === 'compact') {
-      const activeIsUk = activePronunciation?.accentLocale === 'en-GB';
-      const nextPronunciation = content.pronunciations.length > 1
-        ? content.pronunciations[(pronunciationIndex + 1) % content.pronunciations.length]
-        : activePronunciation;
-      const nextIsUk = nextPronunciation?.accentLocale === 'en-GB';
-
-      return (
-        <div className={`intro-reveal-page is-compact${isRepairReplay ? ' is-review-replay' : ''}`}>
-          <div className="intro-reveal-field" aria-hidden="true">
-            <i /><i /><i />
-          </div>
-
-          {isRepairReplay && (
-            <div className="intro-review-replay-context" role="status">
-              <span aria-hidden="true">↺</span>
-              <p><strong>{repairContext.title}</strong>{repairContext.body}</p>
-            </div>
-          )}
-
-          <header className="intro-reveal-identity intro-reveal-identity-compact">
-            <div className="intro-reveal-form-row">
-              <h1 ref={revealHeadingRef} tabIndex={-1}>{content.lemma}</h1>
-              {activePronunciation && (
-                <div className="intro-reveal-pronunciations is-combined">
-                  <button
-                    type="button"
-                    onClick={() => playPronunciation(pronunciationIndex, true)}
-                    aria-label={`播放${activeIsUk ? '英式' : '美式'}发音 ${activePronunciation.ipa}${content.pronunciations.length > 1 ? `；播放后切换为${nextIsUk ? '英式' : '美式'}` : ''}`}
-                    title="点击播放；再次点击切换发音"
-                  >
-                    <span>{activeIsUk ? '英' : '美'}</span>
-                    <b>{activePronunciation.ipa}</b>
-                    <SoundIcon />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="intro-reveal-sense intro-reveal-sense-compact">
-              <div>
-                <span>{content.partOfSpeech}</span>
-                <h2>{content.guideLabelL1}</h2>
-              </div>
-              <button
-                type="button"
-                className="intro-compact-recap"
-                onClick={() => onPhaseChange('experience')}
-              >
-                <ReplayIcon />回看体验
-              </button>
-            </div>
-          </header>
-
-          <section className="intro-reveal-bridge intro-reveal-bridge-compact" aria-labelledby="intro-reveal-bridge-title">
-            <span className="intro-reveal-section-label" id="intro-reveal-bridge-title">核心意思</span>
-            <p>{content.l1Bridge}</p>
-          </section>
-
-          {primaryPattern?.usageRestriction && (
-            <section className="intro-compact-boundary" aria-label="这个义项的使用边界">
-              <span>边界</span>
-              <p>{primaryPattern.usageRestriction}</p>
-            </section>
-          )}
-
-          <section className="intro-reveal-example intro-reveal-example-compact" aria-labelledby="intro-reveal-example-title">
-            <div className="intro-reveal-example-head">
-              <span className="intro-reveal-section-label" id="intro-reveal-example-title">放进一句话</span>
-              <div>
-                {example.audioUrl && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void audioService.playPackagedAudioUrl(example.audioUrl!, example.textL2, 'us');
-                      toast('正在播放学习例句');
-                    }}
-                    aria-label="播放学习例句"
-                  >
-                    <SoundIcon />
-                  </button>
-                )}
-                <button type="button" onClick={() => onOpenExample(0)} aria-label="查看完整例句">
-                  <OpenIcon />
-                </button>
-              </div>
-            </div>
-            <div className="intro-reveal-example-l2">
-              <ClickableSentence
-                sentenceHtml={exampleHtml}
-                activeTokenIdx={activeLookup?.tokenIdx ?? null}
-                onWordClick={(token, tokenIdx) => {
-                  openLookup({
-                    tokenIdx,
-                    displayWord: token.cleanWord,
-                    load: (signal) => lookupExampleToken(
-                      token,
-                      example.exampleKey,
-                      example.textL2,
-                      { signal },
-                    ),
-                  });
-                }}
-              />
-            </div>
-            <p>{example.textL1}</p>
-          </section>
-
-          {primaryPattern && (
-            <details className="intro-compact-more">
-              <summary>更多用法</summary>
-              <div>
-                <p className="intro-compact-full-bridge">{content.l1Bridge}</p>
-                <strong>{primaryPattern.canonicalPattern}</strong>
-                {(primaryPattern.registerLabel || primaryPattern.domainLabel) && (
-                  <small>{primaryPattern.registerLabel ?? primaryPattern.domainLabel}</small>
-                )}
-                {visibleCollocations.length > 0 && (
-                  <div className="intro-reveal-collocations" aria-label="相关例句">
-                    {visibleCollocations.map((collocation) => collocation.exampleIndex >= 0 ? (
-                      <button
-                        type="button"
-                        key={collocation.text}
-                        onClick={() => onOpenExample(collocation.exampleIndex)}
-                      >
-                        {collocation.text}<ArrowIcon />
-                      </button>
-                    ) : (
-                      <span key={collocation.text}>{collocation.text}</span>
-                    ))}
-                  </div>
-                )}
-                {primaryPattern.usageRestriction && (
-                  <p className="intro-compact-more-boundary">{primaryPattern.usageRestriction}</p>
-                )}
-              </div>
-            </details>
-          )}
-
-          <PersonalConnectionActions
-            senseId={content.senseKey}
-            onOpenNote={onOpenNote}
-            onOpenScene={onOpenScene}
-            variant="compact"
-          />
-
-          <footer className="intro-reveal-footer intro-reveal-footer-compact">
-            <button type="button" className="intro-reveal-continue" onClick={onComplete}>
-              <span>{continuationLabel}</span>
-              <ArrowIcon />
-            </button>
-          </footer>
-
-          {activeLookup && (
-            <QuickDictPopup
-              entry={activeLookup.entry}
-              onClose={clearLookup}
-              toast={toast}
-              onViewDetail={(word, contextualEntry) => {
-                clearLookup();
-                onOpenDictionary(contextualEntry ?? word);
-              }}
-            />
-          )}
-        </div>
-      );
-    }
+    const activeIsUk = activePronunciation?.accentLocale === 'en-GB';
+    const nextPronunciation = content.pronunciations.length > 1
+      ? content.pronunciations[(pronunciationIndex + 1) % content.pronunciations.length]
+      : activePronunciation;
+    const nextIsUk = nextPronunciation?.accentLocale === 'en-GB';
 
     return (
-      <div className={`intro-reveal-page is-baseline${isRepairReplay ? ' is-review-replay' : ''}`}>
+      <div className={`intro-reveal-page is-compact${isRepairReplay ? ' is-review-replay' : ''}`}>
         <div className="intro-reveal-field" aria-hidden="true">
           <i /><i /><i />
         </div>
@@ -344,91 +174,53 @@ export function IntroductionCard({
           </div>
         )}
 
-        <header className="intro-reveal-identity">
-          <span className="intro-reveal-kicker">这个经验，在英文里是</span>
+        <header className="intro-reveal-identity intro-reveal-identity-compact">
           <div className="intro-reveal-form-row">
             <h1 ref={revealHeadingRef} tabIndex={-1}>{content.lemma}</h1>
-            <i aria-hidden="true" />
-          </div>
-
-          <div className="intro-reveal-pronunciations" aria-label={`${content.lemma} 的发音`}>
-            {content.pronunciations.map((pronunciation) => {
-              const isUk = pronunciation.accentLocale === 'en-GB';
-              return (
+            {activePronunciation && (
+              <div className="intro-reveal-pronunciations is-combined">
                 <button
                   type="button"
-                  key={pronunciation.pronunciationKey}
-                  onClick={() => playPronunciation(content.pronunciations.indexOf(pronunciation))}
-                  aria-label={`播放${isUk ? '英式' : '美式'}发音 ${pronunciation.ipa}`}
+                  onClick={() => playPronunciation(pronunciationIndex, true)}
+                  aria-label={`播放${activeIsUk ? '英式' : '美式'}发音 ${activePronunciation.ipa}${content.pronunciations.length > 1 ? `；播放后切换为${nextIsUk ? '英式' : '美式'}` : ''}`}
+                  title="点击播放；再次点击切换发音"
                 >
-                  <span>{isUk ? '英' : '美'}</span>
-                  <b>{pronunciation.ipa}</b>
+                  <span>{activeIsUk ? '英' : '美'}</span>
+                  <b>{activePronunciation.ipa}</b>
                   <SoundIcon />
                 </button>
-              );
-            })}
+              </div>
+            )}
           </div>
 
-          <div className="intro-reveal-sense">
-            <span>{content.partOfSpeech}</span>
-            <h2>{content.guideLabelL1}</h2>
+          <div className="intro-reveal-sense intro-reveal-sense-compact">
+            <div>
+              <span>{content.partOfSpeech}</span>
+              <h2>{content.guideLabelL1}</h2>
+            </div>
+            <button
+              type="button"
+              className="intro-compact-recap"
+              onClick={() => onPhaseChange('experience')}
+            >
+              <ReplayIcon />回看体验
+            </button>
           </div>
         </header>
 
-        <button
-          type="button"
-          className="intro-reveal-recap"
-          onClick={() => onPhaseChange('experience')}
-        >
-          <span className="intro-reveal-section-label">刚刚的经验</span>
-          <p>{content.experienceSketch.bodyL1}</p>
-          <span className="intro-reveal-recap-path" aria-hidden="true">
-            {content.experienceSketch.labelsL1.map((label, index) => (
-              <span key={label}>
-                {index > 0 && <i />}
-                <b>{label}</b>
-              </span>
-            ))}
-          </span>
-          <span className="intro-reveal-replay-label"><ReplayIcon />回看</span>
-        </button>
-
-        <section className="intro-reveal-bridge" aria-labelledby="intro-reveal-bridge-title">
-          <span className="intro-reveal-section-label" id="intro-reveal-bridge-title">意思连接</span>
+        <section className="intro-reveal-bridge intro-reveal-bridge-compact" aria-labelledby="intro-reveal-bridge-title">
+          <span className="intro-reveal-section-label" id="intro-reveal-bridge-title">核心意思</span>
           <p>{content.l1Bridge}</p>
         </section>
 
-        {primaryPattern && (
-          <section className="intro-reveal-usage" aria-labelledby="intro-reveal-usage-title">
-            <div className="intro-reveal-usage-head">
-              <span className="intro-reveal-section-label" id="intro-reveal-usage-title">
-                {primaryPattern.usageRestriction ? '这个意思的使用边界' : '这个意思常这样出现'}
-              </span>
-              {(primaryPattern.registerLabel || primaryPattern.domainLabel) && (
-                <small>{primaryPattern.registerLabel ?? primaryPattern.domainLabel}</small>
-              )}
-            </div>
-            <strong>{primaryPattern.canonicalPattern}</strong>
-            {visibleCollocations.length > 0 && (
-              <div className="intro-reveal-collocations" aria-label="相关例句">
-                {visibleCollocations.map((collocation) => collocation.exampleIndex >= 0 ? (
-                  <button
-                    type="button"
-                    key={collocation.text}
-                    onClick={() => onOpenExample(collocation.exampleIndex)}
-                  >
-                    {collocation.text}<ArrowIcon />
-                  </button>
-                ) : (
-                  <span key={collocation.text}>{collocation.text}</span>
-                ))}
-              </div>
-            )}
-            {primaryPattern.usageRestriction && <p>{primaryPattern.usageRestriction}</p>}
+        {primaryPattern?.usageRestriction && (
+          <section className="intro-compact-boundary" aria-label="这个义项的使用边界">
+            <span>边界</span>
+            <p>{primaryPattern.usageRestriction}</p>
           </section>
         )}
 
-        <section className="intro-reveal-example" aria-labelledby="intro-reveal-example-title">
+        <section className="intro-reveal-example intro-reveal-example-compact" aria-labelledby="intro-reveal-example-title">
           <div className="intro-reveal-example-head">
             <span className="intro-reveal-section-label" id="intro-reveal-example-title">放进一句话</span>
             <div>
@@ -452,35 +244,63 @@ export function IntroductionCard({
           <div className="intro-reveal-example-l2">
             <ClickableSentence
               sentenceHtml={exampleHtml}
-                activeTokenIdx={activeLookup?.tokenIdx ?? null}
-                onWordClick={(token, tokenIdx) => {
-                  openLookup({
-                    tokenIdx,
-                    displayWord: token.cleanWord,
-                    load: (signal) => lookupExampleToken(
-                      token,
-                      example.exampleKey,
-                      example.textL2,
-                      { signal },
-                    ),
-                  });
-                }}
+              activeTokenIdx={activeLookup?.tokenIdx ?? null}
+              onWordClick={(token, tokenIdx) => {
+                openLookup({
+                  tokenIdx,
+                  displayWord: token.cleanWord,
+                  load: (signal) => lookupExampleToken(
+                    token,
+                    example.exampleKey,
+                    example.textL2,
+                    { signal },
+                  ),
+                });
+              }}
             />
           </div>
           <p>{example.textL1}</p>
         </section>
 
+        {primaryPattern && (
+          <details className="intro-compact-more">
+            <summary>更多用法</summary>
+            <div>
+              <p className="intro-compact-full-bridge">{content.l1Bridge}</p>
+              <strong>{primaryPattern.canonicalPattern}</strong>
+              {(primaryPattern.registerLabel || primaryPattern.domainLabel) && (
+                <small>{primaryPattern.registerLabel ?? primaryPattern.domainLabel}</small>
+              )}
+              {visibleCollocations.length > 0 && (
+                <div className="intro-reveal-collocations" aria-label="相关例句">
+                  {visibleCollocations.map((collocation) => collocation.exampleIndex >= 0 ? (
+                    <button
+                      type="button"
+                      key={collocation.text}
+                      onClick={() => onOpenExample(collocation.exampleIndex)}
+                    >
+                      {collocation.text}<ArrowIcon />
+                    </button>
+                  ) : (
+                    <span key={collocation.text}>{collocation.text}</span>
+                  ))}
+                </div>
+              )}
+              {primaryPattern.usageRestriction && (
+                <p className="intro-compact-more-boundary">{primaryPattern.usageRestriction}</p>
+              )}
+            </div>
+          </details>
+        )}
+
         <PersonalConnectionActions
           senseId={content.senseKey}
           onOpenNote={onOpenNote}
           onOpenScene={onOpenScene}
-          variant="reveal"
+          variant="compact"
         />
 
-        <footer className="intro-reveal-footer">
-          <p>
-            {continuationBody}
-          </p>
+        <footer className="intro-reveal-footer intro-reveal-footer-compact">
           <button type="button" className="intro-reveal-continue" onClick={onComplete}>
             <span>{continuationLabel}</span>
             <ArrowIcon />
@@ -492,10 +312,10 @@ export function IntroductionCard({
             entry={activeLookup.entry}
             onClose={clearLookup}
             toast={toast}
-              onViewDetail={(word, contextualEntry) => {
-                clearLookup();
-                onOpenDictionary(contextualEntry ?? word);
-              }}
+            onViewDetail={(word, contextualEntry) => {
+              clearLookup();
+              onOpenDictionary(contextualEntry ?? word);
+            }}
           />
         )}
       </div>

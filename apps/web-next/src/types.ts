@@ -106,14 +106,6 @@ export type FormalLearningStage =
   | 'review_assessment'
   | 'review_feedback';
 
-/** Historical comparison stages kept only on the isolated demo surface. */
-export type LegacyLearningDemoStage =
-  | 'audio_choice'
-  | 'final_gate'
-  | 'detail';
-
-export type LearningStage = FormalLearningStage | LegacyLearningDemoStage;
-
 /**
  * 简明查词释义项 (词性 + 中文简释)
  */

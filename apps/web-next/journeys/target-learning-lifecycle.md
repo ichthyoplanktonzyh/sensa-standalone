@@ -124,7 +124,7 @@ Memory Outcome 与下一次 due time。
 - 高保证 Runtime 的“熟”入口在 Grounding、Assessment、Repair 与长期 Review 中保持可用；该动作
   只建立 Declared Mastery 并中断当前 Encounter。Target 详情负责显式撤销，撤销不会重置原 Protocol
   Run、Gate 或 Memory State。
-- 高保证长期 Runtime 已通过 `ReviewQueue` 的只读 projection 接入 Target 库、Target 详情、卡片外
-  Runtime Shell 与独立 Session Summary。页面只消费 `reviewing / relearning repair /
+- 高保证长期 Runtime 已通过 `ReviewQueue` 的只读 projection 接入 Target 库、Target 详情与独立
+  Session Summary；正式学习页不再增加顶部长期状态文案。页面只消费 `reviewing / relearning repair /
   relearning retest / retaining / declared mastery`，不读取调度器内部 Map。
 - 本文不授权客户端写 Evidence、Memory Outcome、FSRS 或其他服务端派生状态。

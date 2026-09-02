@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type MouseEvent } from 'react';
 import type {
   Word,
-  LearningStage,
   FormalLearningStage,
-  LegacyLearningDemoStage,
   QuickDictEntry,
 } from './types';
 import { useLearnQueue } from './engine/useLearnQueue';
@@ -53,13 +51,10 @@ import { LearningTargetLibraryScreen } from './components/learning/LearningTarge
 import { LightweightReviewRuntimeScreen } from './components/learning/LightweightReviewRuntimeScreen';
 import { LightweightRuntimeStartScreen } from './components/learning/LightweightRuntimeStartScreen';
 import { StructuredRuntimeSummaryScreen } from './components/learning/StructuredRuntimeSummaryScreen';
-import type { StructuredRuntimeStatusView } from './components/learning/StructuredRuntimeStatus';
 import { StructuredRetentionSummaryScreen } from './components/learning/StructuredRetentionSummaryScreen';
-import type { RetentionRuntimeStatusView } from './components/learning/RetentionRuntimeStatus';
 import { ProfileScreen } from './components/ProfileScreen';
 import { LearnScreen } from './components/LearnScreen';
-import { LegacyLearningDemoScreen } from './components/LegacyLearningDemoScreen';
-import { ExampleScreen, type ExamplePresentation } from './components/ExampleScreen';
+import { ExampleScreen } from './components/ExampleScreen';
 import { DictDetailModal } from './components/DictDetailModal';
 import { ReferenceDictionaryScreen } from './components/ReferenceDictionaryScreen';
 import {
@@ -77,11 +72,6 @@ import { WordListScreen } from './components/WordListScreen';
 import { FinishScreen } from './components/FinishScreen';
 import { StatsScreen } from './components/StatsScreen';
 import { SidePanel } from './components/SidePanel';
-import type { RevealPresentation } from './components/cards/IntroductionCard';
-import type { RecognitionPresentation } from './components/cards/RecognitionCard';
-import type { RecallPresentation } from './components/cards/RecallCard';
-import type { NovelTransferPresentation } from './components/cards/NovelTransferCard';
-import type { ReviewPresentation } from './components/cards/review/SensaReviewAssessmentCard';
 import { DEFAULT_PRACTICE_SCOPE, type PracticeSenseItem } from './practiceData';
 import {
   contentSenseForId,
@@ -118,7 +108,7 @@ import {
 
 type ViewMode = 'main' | 'study' | 'lightweight' | 'lightweightReview' | 'finish';
 type FlowType = 'learn' | 'review' | 'demo';
-type RuntimeLearningStage = FormalLearningStage | LegacyLearningDemoStage | 'review_repair';
+type RuntimeLearningStage = FormalLearningStage | 'review_repair';
 
 type RuntimePackage = (typeof PROTOTYPE_LEARNING_PACKAGES)[number];
 
@@ -191,21 +181,6 @@ const TARGET_ID_BY_RUNTIME_SENSE = new Map(
   }),
 );
 
-const STRUCTURED_ACTION_LABEL: Record<LearningCapability, string> = {
-  introduction: '经验落地与意思—表达绑定',
-  contextual_recognition: '在语境中识别这个意思',
-  meaning_to_form_recall: '从意思主动取回表达',
-  novel_context_transfer: '在新语境中迁移',
-  boundary_discrimination: '区分相邻意思边界',
-};
-
-const STRUCTURED_GATE_LABEL: Record<Exclude<LearningCapability, 'introduction'>, string> = {
-  contextual_recognition: '识别',
-  meaning_to_form_recall: '回想',
-  novel_context_transfer: '迁移',
-  boundary_discrimination: '边界',
-};
-
 function relativeReviewLabel(dueAt: number, now: number = Date.now()): string {
   const days = Math.max(0, Math.ceil((dueAt - now) / (24 * 60 * 60 * 1000)));
   if (days === 0) return '今天';
@@ -256,39 +231,9 @@ function reviewKindForCapability(capability: LearningCapability): ReviewAssessme
   }
 }
 
-function formalStageForScreen(stage: RuntimeLearningStage): FormalLearningStage | 'review_repair' {
-  switch (stage) {
-    case 'audio_choice':
-    case 'detail':
-    case 'final_gate':
-      // LearnScreen is inactive for these stages; keep its prop in the formal
-      // vocabulary while the legacy surface owns their actual rendering.
-      return 'introduction';
-    default:
-      return stage;
-  }
-}
-
-function legacyStageForScreen(stage: RuntimeLearningStage): LegacyLearningDemoStage {
-  switch (stage) {
-    case 'audio_choice':
-    case 'detail':
-    case 'final_gate':
-      return stage;
-    default:
-      return 'detail';
-  }
-}
-
 export default function App() {
   /* ---------- 顶层视图模式 (主页面体系 vs 独立全屏学习流 vs 结算) ---------- */
   const [viewMode, setViewMode] = useState<ViewMode>('main');
-  const [revealPresentation, setRevealPresentation] = useState<RevealPresentation>('compact');
-  const [examplePresentation, setExamplePresentation] = useState<ExamplePresentation>('sensa');
-  const [recognitionPresentation, setRecognitionPresentation] = useState<RecognitionPresentation>('sensa');
-  const [recallPresentation, setRecallPresentation] = useState<RecallPresentation>('sensa');
-  const [novelTransferPresentation, setNovelTransferPresentation] = useState<NovelTransferPresentation>('sensa');
-  const [reviewPresentation, setReviewPresentation] = useState<ReviewPresentation>('sensa');
   const [semanticWorldPresentation, setSemanticWorldPresentation] = useState<SemanticWorldPresentation>('sensa');
   const [practiceHomePresentation, setPracticeHomePresentation] = useState<PracticeHomePresentation>('sensa');
   const [portableListeningPresentation, setPortableListeningPresentation] = useState<PortableListeningPresentation>('sensa');
@@ -607,7 +552,7 @@ export default function App() {
 
   /* ---------- 流程模式与每日新学词数 ---------- */
   const [flowMode, setFlowType] = useState<FlowType>('learn');
-  const [demoStage, setDemoStage] = useState<LearningStage>('introduction');
+  const [demoStage, setDemoStage] = useState<FormalLearningStage>('introduction');
   const [demoWord, setDemoWord] = useState<Word | null>(null);
   const [demoPackage, setDemoPackage] = useState<RuntimePackage | null>(null);
   const [demoReviewKind, setDemoReviewKind] = useState<ReviewAssessmentKind | null>(null);
@@ -630,6 +575,46 @@ export default function App() {
       ...storageService.getRelearningSenseIds(),
     ]).size);
   }, []);
+
+  // Keep Targets graduated earlier in the same hot-reloaded prototype session
+  // aligned with the immediate first-Review handoff. Once a Review has been
+  // settled, its scheduler-owned next due time is never touched here.
+  useEffect(() => {
+    const dueAt = Date.now();
+    const targetIdsToAdvance = PROTOTYPE_LEARNING_TARGET_ORDER.filter((targetId) => {
+      const graduation = structuredGraduationByTarget[targetId];
+      const retention = structuredRetentionByTarget[targetId];
+      const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
+      if (!graduation || retention?.reviewCount || !senseId) return false;
+      if (declaredMasterySenseIds.has(senseId)) return false;
+      const memory = storageService.getFSRSItems()[senseId];
+      return memory !== undefined && memory.due > dueAt;
+    });
+    if (targetIdsToAdvance.length === 0) return;
+
+    targetIdsToAdvance.forEach((targetId) => {
+      const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId!;
+      const memory = storageService.getFSRSItems()[senseId]!;
+      storageService.saveFSRSItem({ ...memory, due: dueAt, scheduledDays: 0 });
+    });
+    setStructuredGraduationByTarget((current) => {
+      const next = { ...current };
+      targetIdsToAdvance.forEach((targetId) => {
+        next[targetId] = {
+          ...next[targetId]!,
+          nextReviewAt: new Date(dueAt).toISOString(),
+          nextReviewLabel: '现在可复习（原型）',
+        };
+      });
+      return next;
+    });
+    refreshReviewCount();
+  }, [
+    declaredMasterySenseIds,
+    refreshReviewCount,
+    structuredGraduationByTarget,
+    structuredRetentionByTarget,
+  ]);
 
   const handleDailyNewCountChange = useCallback((count: number) => {
     storageService.setDailyNewCount(count);
@@ -667,9 +652,7 @@ export default function App() {
     session: learnSession,
     stats: queueStats,
     isDone: queueDone,
-    projection: structuredAcquisitionProjection,
     start: startLearnQueue,
-    settle: settleLearnQueue,
     completeIntroduction: completeLearnIntroduction,
     completeRecognition: completeLearnRecognition,
     completeMeaningToFormRecall: completeLearnMeaningToFormRecall,
@@ -677,7 +660,6 @@ export default function App() {
     completeNovelTransfer: completeLearnNovelTransfer,
     next: nextLearnQueue,
     undo: undoLearnQueue,
-    markMistake: markMistakeLearnQueue,
     markKnown: markKnownLearnQueue,
     setDeclaredMastery: setLearnDeclaredMastery,
     getGraduatedSenseIds,
@@ -929,12 +911,6 @@ export default function App() {
     setActiveStructuredTargetIds(structuredTargetIds);
     setStructuredRuntimeSummary(null);
     setActiveLightweightRuntimeTargetId(null);
-    setRevealPresentation('compact');
-    setRecognitionPresentation('sensa');
-    setRecallPresentation('sensa');
-    setNovelTransferPresentation('sensa');
-    setReviewPresentation('sensa');
-    setExamplePresentation('sensa');
     setFlowType('learn');
     setViewMode('study');
     return true;
@@ -1209,30 +1185,6 @@ export default function App() {
         overrideDemoQueue(basePackage, 'novel_context_transfer', 4, 4);
         toast('已切换至：④ 新语境迁移');
         break;
-      case 5:
-        setDemoStage('audio_choice');
-        setDemoPresentation(2);
-        overrideDemoQueue(basePackage, 'contextual_recognition', 13, 20);
-        toast('已切换至：⑤ 第三次初遇见 (听音选义)');
-        break;
-      case 6:
-        setDemoStage('detail');
-        setDemoWord({ ...toWordPresentation(basePackage.content), level: 3, badge: '3', isMastered: false });
-        overrideDemoQueue(basePackage, 'meaning_to_form_recall', 13, 20);
-        toast('已切换至：⑥ 第三次答对');
-        break;
-      case 7:
-        setDemoStage('final_gate');
-        setDemoPresentation(3);
-        overrideDemoQueue(basePackage, 'novel_context_transfer', 18, 20);
-        toast('已切换至：⑦ 第4次遇见 (终极回想)');
-        break;
-      case 8:
-        setDemoStage('detail');
-        setDemoPresentation(4, true);
-        overrideDemoQueue(basePackage, 'novel_context_transfer', 19, 20);
-        toast('已切换至：⑧ 最后一次答对 (成功掌握)');
-        break;
       case 9:
         setDemoStage('review_assessment');
         setDemoPresentation(4, true);
@@ -1307,14 +1259,6 @@ export default function App() {
     }
   }, [closeMenus, overrideDemoQueue, toast]);
 
-  // 选择题作答完成
-  const handlePickOption = useCallback((ok: boolean) => {
-    settleLearnQueue(ok);
-    if (!ok) {
-      toast('选择错误：进度已清零，已重新排入队尾从第 1 关学起');
-    }
-  }, [settleLearnQueue, toast]);
-
   const handleCompleteIntroduction = useCallback(() => {
     if (flowMode === 'demo') {
       const pkg = learnSession?.package ?? PROTOTYPE_LEARNING_PACKAGES[0];
@@ -1382,12 +1326,6 @@ export default function App() {
     toast(correct ? '已认出这个意思，继续学习' : '这个区别稍后会换个语境再出现');
   }, [flowMode, learnSession, overrideDemoQueue, completeLearnRecognition, toast]);
 
-  // 看答案
-  const handleShowAnswer = useCallback(() => {
-    settleLearnQueue(false);
-    toast('看了答案：进度已清零，将重新从第 1 关学起');
-  }, [settleLearnQueue, toast]);
-
   const handleCompleteMeaningToFormRecall = useCallback((
     outcome: MeaningToFormRecallOutcome,
   ) => {
@@ -1430,7 +1368,7 @@ export default function App() {
     if (flowMode === 'demo') {
       const pkg = learnSession?.package ?? PROTOTYPE_LEARNING_PACKAGES[0];
       if (!pkg) return;
-      setDemoStage(succeeded ? 'detail' : 'transfer');
+      setDemoStage('transfer');
       setDemoWord({
         ...toWordPresentation(pkg.content),
         level: succeeded ? 4 : 3,
@@ -1486,26 +1424,6 @@ export default function App() {
         : '本次记录为提取失败，接下来只做定向修复',
     );
   }, [flowMode, learnSession, reviewSession, completeLearnBoundary, settleReviewQueue, toast]);
-
-  // 第4次学习：终极回想 认识 / 不认识
-  const handlePickFinalGate = useCallback((known: boolean) => {
-    settleLearnQueue(known);
-    if (known) {
-      toast('这个义项已完成当前原型流程，后续由系统安排再次出现');
-    } else {
-      toast('不认识：进度已清零，已重新排入队尾');
-    }
-  }, [settleLearnQueue, toast]);
-
-  // 记错了（误判纠错）
-  const handleMarkMistake = useCallback(() => {
-    if (flowMode === 'review') {
-      toast('长期复习由本次独立检验结算，不再用“记错了”重复打分');
-    } else {
-      markMistakeLearnQueue();
-      toast('已标记为「记错了」，掌握度已清零并重新排入队尾');
-    }
-  }, [flowMode, markMistakeLearnQueue, toast]);
 
   // 熟词标记
   const handleMarkKnown = useCallback(() => {
@@ -1745,13 +1663,6 @@ export default function App() {
       : stageForCapability(learnSession.action.capability)
     : 'introduction';
 
-  // The remaining baseline-only stages stay available from the side-panel
-  // comparison controls, but are rendered outside the formal LearnScreen.
-  const isLegacyLearningDemoStage = flowMode === 'demo'
-    && (currentStage === 'audio_choice'
-      || currentStage === 'detail'
-      || currentStage === 'final_gate');
-
   const currentIntroductionPosition = currentIntroductionContent
     ? PROTOTYPE_INTRODUCTION_PACKAGES.findIndex(
         (content) => content.packageKey === currentIntroductionContent.packageKey,
@@ -1782,78 +1693,6 @@ export default function App() {
     : flowMode === 'demo'
     ? demoReviewResult
     : null;
-
-  const currentStructuredTargetProjection = flowMode === 'learn'
-    ? structuredAcquisitionProjection.targets.find((target) =>
-        target.senseId === structuredAcquisitionProjection.currentAction?.senseId) ?? null
-    : null;
-  const currentStructuredTargetId = structuredAcquisitionProjection.currentAction
-    ? TARGET_ID_BY_RUNTIME_SENSE.get(structuredAcquisitionProjection.currentAction.senseId) ?? null
-    : null;
-  const currentStructuredTarget = currentStructuredTargetId
-    ? PROTOTYPE_LEARNING_TARGETS[currentStructuredTargetId]
-    : null;
-  const structuredRuntimeStatus: StructuredRuntimeStatusView | null =
-    flowMode === 'learn'
-    && structuredAcquisitionProjection.currentAction
-    && currentStructuredTargetProjection
-    && currentPackage
-      ? {
-          targetLabel: currentStructuredTarget?.expression ?? currentPackage.content.lemma,
-          targetMeaning: currentStructuredTarget?.meaning ?? currentPackage.content.guideLabelL1,
-          targetPosition: Math.max(
-            1,
-            currentStructuredTargetId
-              ? activeStructuredTargetIds.indexOf(currentStructuredTargetId) + 1
-              : structuredAcquisitionProjection.targets.findIndex((target) =>
-                  target.senseId === currentStructuredTargetProjection.senseId) + 1,
-          ),
-          targetCount: structuredAcquisitionProjection.targets.length,
-          graduatedCount: structuredAcquisitionProjection.targets.filter((target) => target.graduated).length,
-          actionLabel: STRUCTURED_ACTION_LABEL[structuredAcquisitionProjection.currentAction.capability],
-          actionMode: structuredAcquisitionProjection.currentAction.capability === 'introduction'
-            ? 'teaching'
-            : structuredAcquisitionProjection.currentAction.mode === 'repair'
-              ? 'repair'
-              : 'assessment',
-          gates: currentStructuredTargetProjection.gates.map((gate) => ({
-            id: gate.capability,
-            label: STRUCTURED_GATE_LABEL[gate.capability],
-            status: gate.status,
-            repairing: gate.repairing,
-          })),
-        }
-      : null;
-  const currentRetentionTargetProjection = flowMode === 'review'
-    ? retentionRuntimeProjection.targets.find((target) =>
-        target.senseId === retentionRuntimeProjection.currentAction?.senseId) ?? null
-    : null;
-  const currentRetentionTargetId = retentionRuntimeProjection.currentAction
-    ? TARGET_ID_BY_RUNTIME_SENSE.get(retentionRuntimeProjection.currentAction.senseId) ?? null
-    : null;
-  const currentRetentionTarget = currentRetentionTargetId
-    ? PROTOTYPE_LEARNING_TARGETS[currentRetentionTargetId]
-    : null;
-  const retentionRuntimeStatus: RetentionRuntimeStatusView | null =
-    flowMode === 'review'
-    && retentionRuntimeProjection.currentAction
-    && currentRetentionTargetProjection
-    && currentPackage
-      ? {
-          targetLabel: currentRetentionTarget?.expression ?? currentPackage.content.lemma,
-          targetMeaning: currentRetentionTarget?.meaning ?? currentPackage.content.guideLabelL1,
-          targetPosition: Math.max(
-            1,
-            retentionRuntimeProjection.targets.findIndex((target) =>
-              target.senseId === currentRetentionTargetProjection.senseId) + 1,
-          ),
-          targetCount: retentionRuntimeProjection.targets.length,
-          completedCount: retentionRuntimeProjection.targets.filter((target) =>
-            target.status === 'retaining' || target.status === 'declared_mastery').length,
-          actionLabel: STRUCTURED_ACTION_LABEL[retentionRuntimeProjection.currentAction.capability],
-          status: currentRetentionTargetProjection.status,
-        }
-      : null;
 
   const selectedPrototypeLearningTarget =
     PROTOTYPE_LEARNING_TARGETS[selectedLearningTargetId];
@@ -2280,10 +2119,10 @@ export default function App() {
           {/* ================= 独立学习流 (Study Flow) ================= */}
           {/* 6. 单词学习流程 */}
           <LearnScreen
-            active={viewMode === 'study' && !isLegacyLearningDemoStage}
+            active={viewMode === 'study'}
             isBehind={isExampleOpen}
             curWord={currentWord}
-            stage={formalStageForScreen(currentStage)}
+            stage={currentStage}
             step={currentStep}
             groupSize={totalTarget}
             introductionContent={rawIntroductionContent}
@@ -2292,14 +2131,7 @@ export default function App() {
               : null}
             introductionPosition={currentIntroductionPosition}
             introductionTotal={PROTOTYPE_INTRODUCTION_PACKAGES.length}
-            revealPresentation={revealPresentation}
-            recognitionPresentation={recognitionPresentation}
-            recallPresentation={recallPresentation}
-            novelTransferPresentation={novelTransferPresentation}
-            reviewPresentation={reviewPresentation}
             reviewAssessmentPurpose={flowMode === 'learn' ? 'acquisition' : 'retention'}
-            structuredRuntimeStatus={structuredRuntimeStatus}
-            retentionRuntimeStatus={retentionRuntimeStatus}
             onExit={exitLearn}
             onUndo={handleUndoWord}
             onMarkKnown={handleMarkKnown}
@@ -2333,40 +2165,10 @@ export default function App() {
             toast={toast}
           />
 
-          {/* 6.1 Legacy baseline-only learning demo (⑤～⑧). */}
-          <LegacyLearningDemoScreen
-            active={viewMode === 'study' && isLegacyLearningDemoStage}
-            isBehind={isExampleOpen}
-            curWord={currentWord}
-            stage={legacyStageForScreen(currentStage)}
-            step={currentStep}
-            groupSize={totalTarget}
-            onExit={exitLearn}
-            onUndo={handleUndoWord}
-            onMarkKnown={handleMarkKnown}
-            onOpenMenuMore={(e: MouseEvent, personalContent) => {
-              e.stopPropagation();
-              closeMenus();
-              setMenuPersonalContent(personalContent);
-              setMenuMoreOpen(true);
-            }}
-            onOpenExample={handleOpenExample}
-            onOpenDict={openDictModal}
-            onOpenNoteEditor={openNoteEditor}
-            onOpenSpelling={openSpelling}
-            onNextWord={handleNextWord}
-            onMarkMistake={handleMarkMistake}
-            onShowAnswer={handleShowAnswer}
-            onPickOption={handlePickOption}
-            onPickFinalGate={handlePickFinalGate}
-            toast={toast}
-          />
-
           {/* 7. 原声例句全屏卡 */}
           <ExampleScreen
             active={viewMode === 'study' && isExampleOpen}
             curWord={currentWord}
-            presentation={examplePresentation}
             initialSenseIdx={selectedSenseIdx}
             initialSentenceIdx={selectedSentenceIdx}
             onClose={handleCloseExample}
@@ -2585,18 +2387,6 @@ export default function App() {
 
       {/* 右侧说明与测试面板 */}
       <SidePanel
-        revealPresentation={revealPresentation}
-        onRevealPresentationChange={setRevealPresentation}
-        examplePresentation={examplePresentation}
-        onExamplePresentationChange={setExamplePresentation}
-        recognitionPresentation={recognitionPresentation}
-        onRecognitionPresentationChange={setRecognitionPresentation}
-        recallPresentation={recallPresentation}
-        onRecallPresentationChange={setRecallPresentation}
-        novelTransferPresentation={novelTransferPresentation}
-        onNovelTransferPresentationChange={setNovelTransferPresentation}
-        reviewPresentation={reviewPresentation}
-        onReviewPresentationChange={setReviewPresentation}
         semanticWorldPresentation={semanticWorldPresentation}
         onSemanticWorldPresentationChange={setSemanticWorldPresentation}
         practiceHomePresentation={practiceHomePresentation}
@@ -2634,7 +2424,7 @@ export default function App() {
           if (!pkg) return;
           setFlowType('demo');
           setDemoPackage(pkg);
-          setDemoStage('detail');
+          setDemoStage('recall');
           setDemoWord({ ...toWordPresentation(pkg.content), level: 1, badge: '', isMastered: false });
           overrideDemoQueue(pkg, 'meaning_to_form_recall', 7, 20);
           setSelectedSenseIdx(0);

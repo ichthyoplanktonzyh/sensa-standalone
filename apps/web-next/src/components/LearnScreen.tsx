@@ -1,21 +1,14 @@
 import { useState, useEffect, useMemo, useRef, type MouseEvent } from 'react';
 import type { Word, FormalLearningStage, QuickDictEntry, DictionaryLookup } from '../types';
-import { RecallCard, type RecallPresentation } from './cards/RecallCard';
+import { RecallCard } from './cards/RecallCard';
 import {
   IntroductionCard,
   type IntroductionPhase,
-  type RevealPresentation,
 } from './cards/IntroductionCard';
-import { RecognitionCard, type RecognitionPresentation } from './cards/RecognitionCard';
-import {
-  NovelTransferCard,
-  type NovelTransferPresentation,
-} from './cards/NovelTransferCard';
-import { ReviewAssessmentCard } from './cards/review/ReviewAssessmentCard';
-import { AdaptiveReviewFeedbackCard } from './cards/review/AdaptiveReviewFeedbackCard';
+import { RecognitionCard } from './cards/RecognitionCard';
+import { NovelTransferCard } from './cards/NovelTransferCard';
 import {
   SensaReviewAssessmentCard,
-  type ReviewPresentation,
 } from './cards/review/SensaReviewAssessmentCard';
 import { SensaReviewFeedbackCard } from './cards/review/SensaReviewFeedbackCard';
 import {
@@ -38,14 +31,6 @@ import type {
   ReviewAssessmentResult,
 } from '../review/types';
 import { personalContentService } from '../services/personalContentService';
-import {
-  StructuredRuntimeStatus,
-  type StructuredRuntimeStatusView,
-} from './learning/StructuredRuntimeStatus';
-import {
-  RetentionRuntimeStatus,
-  type RetentionRuntimeStatusView,
-} from './learning/RetentionRuntimeStatus';
 
 interface LearnScreenProps {
   active: boolean;
@@ -59,14 +44,7 @@ interface LearnScreenProps {
   repairContent: PrototypeIntroductionPackage | null;
   introductionPosition: number;
   introductionTotal: number;
-  revealPresentation: RevealPresentation;
-  recognitionPresentation: RecognitionPresentation;
-  recallPresentation: RecallPresentation;
-  novelTransferPresentation: NovelTransferPresentation;
-  reviewPresentation: ReviewPresentation;
   reviewAssessmentPurpose: 'acquisition' | 'retention';
-  structuredRuntimeStatus: StructuredRuntimeStatusView | null;
-  retentionRuntimeStatus: RetentionRuntimeStatusView | null;
   onExit: () => void;
   onUndo: () => void;
   onMarkKnown: () => void;
@@ -108,14 +86,7 @@ export const LearnScreen = ({
   repairContent: preparedRepairContent,
   introductionPosition,
   introductionTotal,
-  revealPresentation,
-  recognitionPresentation,
-  recallPresentation,
-  novelTransferPresentation,
-  reviewPresentation,
   reviewAssessmentPurpose,
-  structuredRuntimeStatus,
-  retentionRuntimeStatus,
   onExit,
   onUndo,
   onMarkKnown,
@@ -327,20 +298,12 @@ export const LearnScreen = ({
         </div>
       </div>
 
-      {structuredRuntimeStatus && (
-        <StructuredRuntimeStatus value={structuredRuntimeStatus} />
-      )}
-      {retentionRuntimeStatus && (
-        <RetentionRuntimeStatus value={retentionRuntimeStatus} />
-      )}
-
       {/* 核心卡片渲染视口 */}
       <div className="lscroll" id="lScroll" ref={scrollRef}>
         {isIntroduction && (
           <IntroductionCard
             content={introductionContent}
             phase={introductionPhase}
-            presentation={revealPresentation}
             onPhaseChange={setIntroductionPhase}
             onComplete={onCompleteIntroduction}
             onOpenExample={(sentenceIndex = 0) => onOpenExample(0, sentenceIndex)}
@@ -363,7 +326,6 @@ export const LearnScreen = ({
             phase={introductionPhase}
             mode="repair_replay"
             repairPurpose={reviewAssessmentPurpose}
-            presentation={revealPresentation}
             onPhaseChange={setIntroductionPhase}
             onComplete={onCompleteIntroduction}
             onOpenExample={(sentenceIndex = 0) => onOpenExample(0, sentenceIndex)}
@@ -384,7 +346,6 @@ export const LearnScreen = ({
             key={`${introductionContent.senseKey}:${assessmentResource.taskKey}:${step}`}
             content={introductionContent}
             assessment={assessmentResource}
-            presentation={recognitionPresentation}
             onComplete={onCompleteRecognition}
             onOpenDictionary={(word) => onOpenDict?.(word, '柯林斯')}
             onOpenNote={() => onOpenNoteEditor?.(
@@ -406,7 +367,6 @@ export const LearnScreen = ({
             key={`${introductionContent.senseKey}:${assessmentResource.taskKey}:${step}`}
             content={introductionContent}
             assessment={assessmentResource}
-            presentation={recallPresentation}
             onComplete={onCompleteMeaningToFormRecall}
             onOpenDictionary={(word) => onOpenDict?.(word, '柯林斯')}
             onOpenExample={() => onOpenExample(0, 0)}
@@ -428,7 +388,6 @@ export const LearnScreen = ({
             key={`${introductionContent.senseKey}:${assessmentResource.taskKey}:${step}`}
             content={introductionContent}
             assessment={assessmentResource}
-            presentation={novelTransferPresentation}
             onComplete={onCompleteNovelTransfer}
             onOpenDictionary={(word) => onOpenDict?.(word, '柯林斯')}
             onOpenExample={() => onOpenExample(0, 0)}
@@ -446,23 +405,7 @@ export const LearnScreen = ({
           />
         )}
 
-        {isReviewAssessment && reviewSpec && reviewPresentation === 'baseline' && (
-          <ReviewAssessmentCard
-            key={`${introductionContent.senseKey}:${reviewSpec.id}:${step}`}
-            content={introductionContent}
-            spec={reviewSpec}
-            assessmentResource={assessmentResource!}
-            onSubmit={onCompleteReviewAssessment}
-            onOpenDictionary={(word) => onOpenDict?.(word, '柯林斯')}
-            lookupDictionary={lookupDictionary}
-            onViewChange={() => {
-              if (scrollRef.current) scrollRef.current.scrollTop = 0;
-            }}
-            toast={toast}
-          />
-        )}
-
-        {isReviewAssessment && reviewSpec && reviewPresentation === 'sensa' && (
+        {isReviewAssessment && reviewSpec && (
           <SensaReviewAssessmentCard
             key={`${introductionContent.senseKey}:${reviewSpec.id}:${step}:sensa`}
             content={introductionContent}
@@ -486,39 +429,13 @@ export const LearnScreen = ({
           />
         )}
 
-        {isReviewFeedback && reviewSpec && reviewAssessmentResult && reviewPresentation === 'baseline' && (
-          <AdaptiveReviewFeedbackCard
-            key={`${introductionContent.senseKey}:${reviewSpec.id}:feedback:${step}`}
-            content={introductionContent}
-            spec={reviewSpec}
-            assessmentResource={assessmentResource!}
-            result={reviewAssessmentResult}
-            revealPresentation={revealPresentation}
-            onContinue={onContinueReviewFeedback}
-            onOpenDictionary={(word) => onOpenDict?.(word, '柯林斯')}
-            lookupDictionary={lookupDictionary}
-            onOpenExample={() => onOpenExample(0, 0)}
-            onOpenNote={() => onOpenNoteEditor?.(
-              introductionContent.lemma,
-              introductionContent.senseKey,
-              introductionContent.guideLabelL1,
-            )}
-            onOpenScene={(anchorId) => onOpenSceneEditor(introductionContent, anchorId)}
-            onViewChange={() => {
-              if (scrollRef.current) scrollRef.current.scrollTop = 0;
-            }}
-            toast={toast}
-          />
-        )}
-
-        {isReviewFeedback && reviewSpec && reviewAssessmentResult && reviewPresentation === 'sensa' && (
+        {isReviewFeedback && reviewSpec && reviewAssessmentResult && (
           <SensaReviewFeedbackCard
             key={`${introductionContent.senseKey}:${reviewSpec.id}:feedback:${step}:sensa`}
             content={introductionContent}
             spec={reviewSpec}
             assessmentResource={assessmentResource!}
             result={reviewAssessmentResult}
-            revealPresentation={revealPresentation}
             onContinue={onContinueReviewFeedback}
             onOpenDictionary={(word) => onOpenDict?.(word, '柯林斯')}
             lookupDictionary={lookupDictionary}
