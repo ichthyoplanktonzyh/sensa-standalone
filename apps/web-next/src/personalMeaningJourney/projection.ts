@@ -13,7 +13,6 @@ import type {
 import type { MeaningJourneyRecord, SenseRegistryState } from './store';
 import type {
   JourneyAlignmentView,
-  JourneyConstructionView,
   JourneyDetailView,
   JourneyExperienceAnchorView,
   JourneyMaterialBlockView,
@@ -32,7 +31,6 @@ import type {
 
 const PHASE_ORDER: PersonalMeaningJourneyPhase[] = [
   'unclarified',
-  'focus_suggested',
   'focus_pending_acceptance',
   'focus_accepted',
   'constructing',
@@ -251,9 +249,6 @@ export const derivePersonalMeaningPhase = (
 ): PersonalMeaningJourneyPhase => {
   const phases = record.focuses.map((focus) =>
     deriveFocusPhase(record, focus.meaningFocusId));
-  if ((record.mockState.focusSuggestions?.items.length ?? 0) > 0) {
-    phases.push('focus_suggested');
-  }
   return furthestPhase(phases.length > 0 ? phases : ['unclarified']);
 };
 
@@ -308,39 +303,6 @@ const buildAnchorViews = (record: MeaningJourneyRecord) => {
     }));
 
   return { familiar, experience, blocks };
-};
-
-const buildConstructionView = (
-  record: MeaningJourneyRecord,
-  senseConstructionId: string,
-): JourneyConstructionView | null => {
-  const construction = record.constructions.find(
-    (item) => item.senseConstructionId === senseConstructionId,
-  );
-  if (!construction) return null;
-  const turns = record.constructionTurns
-    .filter((turn) => turn.senseConstructionId === senseConstructionId)
-    .sort((left, right) => left.ordinal - right.ordinal)
-    .map((turn) => ({
-      turnId: turn.constructionTurnId,
-      actor: turn.actor,
-      body: turn.body,
-      occurredAt: turn.occurredAt,
-    }));
-  const hint = record.mockState.constructionHints[senseConstructionId];
-  const proposal = proposalForConstruction(record, senseConstructionId);
-  return {
-    senseConstructionId,
-    status: construction.status,
-    turns,
-    awaitingLearnerAnswer: hint !== undefined,
-    boundaryOptions: hint?.boundaryOptions ?? [],
-    readyForProposal:
-      construction.status === 'active'
-      && hint === undefined
-      && proposal?.status !== 'open'
-      && proposal?.status !== 'confirmed',
-  };
 };
 
 const buildProposalView = (
@@ -529,9 +491,6 @@ export const buildFocusView = (
       && focus.acceptedRevision === focus.currentRevision,
     acceptedRevision: focus.acceptedRevision,
     splitFromMeaningFocusId: focus.splitFromMeaningFocusId,
-    construction: currentConstruction
-      ? buildConstructionView(record, currentConstruction.senseConstructionId)
-      : null,
     proposal: currentConstruction
       ? buildProposalView(record, currentConstruction.senseConstructionId)
       : null,
@@ -547,34 +506,6 @@ export const buildDetailView = (
   const focuses = record.focuses
     .map((focus) => buildFocusView(record, registry, focus.meaningFocusId))
     .filter((view): view is JourneyFocusView => view !== null);
-  const acceptedStatements = new Set(
-    record.focusRevisions
-      .filter((revision) =>
-        record.focuses.some(
-          (focus) =>
-            focus.meaningFocusId === revision.meaningFocusId
-            && focus.currentRevision >= revision.revision,
-        ),
-      )
-      .map((revision) => revision.statement),
-  );
-  const acceptedAspects = new Set(
-    Object.entries(record.mockState.focusAspectLabels)
-      .filter(([focusId]) => record.focuses.some((focus) => focus.meaningFocusId === focusId))
-      .map(([, aspect]) => aspect),
-  );
-  const focusSuggestions = (record.mockState.focusSuggestions?.items ?? [])
-    .filter((suggestion) =>
-      !acceptedStatements.has(suggestion.statement)
-      && !acceptedAspects.has(suggestion.aspectLabel),
-    )
-    .map((suggestion) => ({
-      suggestionId: suggestion.suggestionId,
-      statement: suggestion.statement,
-      distinguishingNotes: [...suggestion.distinguishingNotes],
-      aspectLabel: suggestion.aspectLabel,
-      provenance: record.mockState.focusSuggestions!.provenance,
-    }));
   const meaningRevision = currentMeaningRevision(record);
   return {
     personalMeaningId: record.personalMeaning.personalMeaningId,
@@ -589,9 +520,6 @@ export const buildDetailView = (
     materialBlocks: anchors.blocks,
     startingPoint: record.mockState.startingPoint ?? null,
     focuses,
-    focusSuggestions,
-    focusSuggestionsAreMultipleAspects:
-      record.mockState.focusSuggestions?.multipleAspects ?? false,
     createdAt: record.personalMeaning.createdAt,
     updatedAt: record.personalMeaning.updatedAt,
   };
@@ -722,7 +650,6 @@ export const buildWorldItemView = (
 
 export const PHASE_LABELS: Record<PersonalMeaningJourneyPhase, string> = {
   unclarified: '待澄清',
-  focus_suggested: 'Focus 建议待加入',
   focus_pending_acceptance: 'Focus 待确认',
   focus_accepted: 'Focus 已接受',
   constructing: '澄清中',

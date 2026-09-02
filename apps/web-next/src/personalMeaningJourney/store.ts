@@ -39,24 +39,8 @@ import type { ClarificationStartingPoint } from './semanticAgent';
 export const JOURNEY_STORE_KEY = 'sensa_personal_meaning_journey_v2';
 export const JOURNEY_STORE_VERSION = 'sensa-personal-meaning-journey-store-v2';
 
-export interface MockFocusSuggestion {
-  suggestionId: string;
-  statement: string;
-  distinguishingNotes: string[];
-  aspectLabel: string;
-}
-
 /** Recoverable adapter state; none of these values are domain facts. */
 export interface JourneyMockState {
-  focusSuggestions: {
-    multipleAspects: boolean;
-    provenance: { provider: string; model: string; promptVersion: string };
-    items: MockFocusSuggestion[];
-  } | null;
-  /** UI-only boundary choices awaiting a learner answer. */
-  constructionHints: Record<string, { boundaryOptions: string[] }>;
-  /** Mock-only reuse key; the registry remains the authoritative Sense store. */
-  proposalSenseKeys: Record<string, string>;
   /** UI-only label for a Focus aspect; not a contract snapshot field. */
   focusAspectLabels: Record<string, string>;
   /**
@@ -127,14 +111,6 @@ export const emptyRegistry = (): SenseRegistryState => ({
   expressionVersions: [],
   bindings: [],
   bindingVersions: [],
-});
-
-const emptyMockState = (): JourneyMockState => ({
-  focusSuggestions: null,
-  constructionHints: {},
-  proposalSenseKeys: {},
-  focusAspectLabels: {},
-  startingPoint: null,
 });
 
 export const emptyJourneyState = (): JourneyState => ({
@@ -211,5 +187,3 @@ export const saveJourneyState = (storage: StoragePort, state: JourneyState): voi
     throw new StoreCorruptedError('无法保存本机的个人意义数据。', cause);
   }
 };
-
-export { emptyMockState };

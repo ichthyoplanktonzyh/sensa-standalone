@@ -11,28 +11,24 @@ import type {
   SensaExpressionType,
   SensaPersonalMeaningAlignmentSnapshot,
   SensaSemanticCoverage,
-  SensaSenseConstructionSnapshot,
   SensaSenseProposalSnapshot,
 } from '@sensa/contracts/sensa';
 import type {
   AgentExpressionCandidate,
-  AgentFocusCandidate,
   AgentSenseCandidate,
   ClarificationStartingPoint,
   MaterialBlockKind,
   SemanticAgentMessage,
 } from './semanticAgent';
-import type { SemanticLlmProvenance, SenseProposalDraft } from './semanticLlm';
+import type { SemanticLlmProvenance } from './semanticLlm';
 
 type SensaSenseProposalStatus = SensaSenseProposalSnapshot['status'];
-type SensaSenseConstructionStatus = SensaSenseConstructionSnapshot['status'];
 type SensaPersonalMeaningAlignmentStatus =
   SensaPersonalMeaningAlignmentSnapshot['status'];
 
 /** A derived UI phase. It is never persisted as an authoritative fact. */
 export type PersonalMeaningJourneyPhase =
   | 'unclarified'
-  | 'focus_suggested'
   | 'focus_pending_acceptance'
   | 'focus_accepted'
   | 'constructing'
@@ -78,22 +74,6 @@ export type JourneyExperienceAnchorView = Extract<
   JourneyAnchorView,
   { kind: 'experience' }
 >;
-
-export interface JourneyTurnView {
-  turnId: string;
-  actor: 'learner' | 'semantic_llm' | 'system';
-  body: string;
-  occurredAt: string;
-}
-
-export interface JourneyConstructionView {
-  senseConstructionId: string;
-  status: SensaSenseConstructionStatus;
-  turns: JourneyTurnView[];
-  awaitingLearnerAnswer: boolean;
-  boundaryOptions: string[];
-  readyForProposal: boolean;
-}
 
 export interface JourneyPrototypeSceneView {
   summary: string;
@@ -188,17 +168,8 @@ export interface JourneyFocusView {
   accepted: boolean;
   acceptedRevision: number | null;
   splitFromMeaningFocusId: string | null;
-  construction: JourneyConstructionView | null;
   proposal: JourneyProposalView | null;
   alignment: JourneyAlignmentView | null;
-}
-
-export interface JourneyFocusSuggestionView {
-  suggestionId: string;
-  statement: string;
-  distinguishingNotes: string[];
-  aspectLabel: string;
-  provenance: { provider: string; model: string; promptVersion: string };
 }
 
 export interface JourneyDetailView {
@@ -216,8 +187,6 @@ export interface JourneyDetailView {
   /** The learner's declared conversation stance; never a domain phase. */
   startingPoint: ClarificationStartingPoint | null;
   focuses: JourneyFocusView[];
-  focusSuggestions: JourneyFocusSuggestionView[];
-  focusSuggestionsAreMultipleAspects: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -324,98 +293,7 @@ export interface CreatePersonalMeaningResult {
   personalMeaningId: string;
   personalMeaningRevisionId: string;
   familiarExpressionAnchorId: string | null;
-  experienceAnchorId: string | null;
   replayed: boolean;
-}
-
-export interface AddAnchorInput {
-  operationId: string;
-  personalMeaningId: string;
-  kind: 'familiar_expression' | 'experience';
-  surfaceForm: string;
-  expressionType?: SensaExpressionType;
-}
-
-export interface EditAnchorInput {
-  operationId: string;
-  personalMeaningId: string;
-  anchorId: string;
-  kind: 'familiar_expression' | 'experience';
-  surfaceForm: string;
-  expressionType?: SensaExpressionType;
-}
-
-export interface RemoveAnchorInput {
-  operationId: string;
-  personalMeaningId: string;
-  anchorId: string;
-  kind: 'familiar_expression' | 'experience';
-}
-
-export interface GenerateFocusSuggestionsInput {
-  operationId: string;
-  personalMeaningId: string;
-}
-
-export interface CreateMeaningFocusInput {
-  operationId: string;
-  personalMeaningId: string;
-  suggestionId?: string;
-  statement?: string;
-  distinguishingNotes?: string[];
-  aspectLabel?: string;
-}
-
-export interface CreateMeaningFocusResult {
-  meaningFocusId: string;
-  meaningFocusRevisionId: string;
-  replayed: boolean;
-}
-
-export interface AcceptMeaningFocusRevisionInput {
-  operationId: string;
-  personalMeaningId: string;
-  meaningFocusId: string;
-  meaningFocusRevisionId: string;
-}
-
-export interface EditMeaningFocusInput {
-  operationId: string;
-  personalMeaningId: string;
-  meaningFocusId: string;
-  statement: string;
-  distinguishingNotes: string[];
-}
-
-export interface SplitMeaningFocusInput {
-  operationId: string;
-  personalMeaningId: string;
-  meaningFocusId: string;
-  statement: string;
-  distinguishingNotes: string[];
-  aspectLabel?: string;
-}
-
-export interface AnswerConstructionInput {
-  operationId: string;
-  personalMeaningId: string;
-  meaningFocusId: string;
-  answer: string;
-}
-
-export interface ConfirmSenseInput {
-  operationId: string;
-  personalMeaningId: string;
-  meaningFocusId: string;
-  senseProposalVersionId: string;
-}
-
-export interface ConfirmAgentSenseInput {
-  operationId: string;
-  personalMeaningId: string;
-  meaningFocusId: string;
-  proposal: SenseProposalDraft;
-  transcript: SemanticAgentMessage[];
 }
 
 /**
@@ -447,8 +325,6 @@ export interface ConfirmClarificationInput {
   transcript: SemanticAgentMessage[];
   provenance: SemanticLlmProvenance;
   semanticPolicyVersion: string;
-  /** Set when the thread continues an already accepted Focus. */
-  existingMeaningFocusId?: string;
 }
 
 export interface ConfirmClarificationResult {
@@ -460,8 +336,6 @@ export interface ConfirmClarificationResult {
   expressionConfirmed: boolean;
   replayed: boolean;
 }
-
-export type { AgentExpressionCandidate, AgentFocusCandidate, AgentSenseCandidate };
 
 export interface ConfirmExpressionBindingInput {
   operationId: string;
@@ -484,10 +358,4 @@ export interface ConfirmExpressionBindingResult {
   senseExpressionBindingId: string;
   bindingVersionId: string;
   replayed: boolean;
-}
-
-export interface FocusRefInput {
-  operationId: string;
-  personalMeaningId: string;
-  meaningFocusId: string;
 }
