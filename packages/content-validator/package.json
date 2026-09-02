@@ -4,13 +4,17 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./authoring": "./dist/authoringBundleValidator.js",
+    "./authoring-draft-v2": "./dist/authoringDraftV2Validator.js",
+    "./runtime": "./dist/runtimeLearningReleaseValidator.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@sensa/contracts": "file:../contracts",
     "@sensa/learning-kernel": "file:../learning-kernel"
   }
 }

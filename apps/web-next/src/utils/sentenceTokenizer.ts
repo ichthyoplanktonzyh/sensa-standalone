@@ -1,9 +1,9 @@
 import type { SentenceToken } from '../types';
-import { lemmatize } from '../services/quickDict';
 
 /**
  * 将可能包含 <b> 标签的例句 HTML 字符串解析为结构化 Token 列表
- * 保证保留原始空格、标点符号，同时支持词形还原与 TTS 字符偏移量对齐
+ * 保证保留原始空格、标点符号与 TTS/查词所需的字符偏移量。
+ * 词形还原必须读取完整句子，因此由 Reference 查词模块在点击后完成。
  */
 export function tokenizeSentence(sentenceHtml: string): {
   tokens: SentenceToken[];
@@ -44,7 +44,6 @@ export function tokenizeSentence(sentenceHtml: string): {
       const rawText = subMatch[0];
       const isWord = /^[a-zA-Z0-9]+(?:['’][a-zA-Z0-9]+)?$/.test(rawText);
       const cleanWord = isWord ? rawText.replace(/['’]/g, "'") : '';
-      const lemma = isWord ? lemmatize(cleanWord) : '';
 
       const charStart = currentPlainOffset;
       const charEnd = currentPlainOffset + rawText.length;
@@ -54,7 +53,6 @@ export function tokenizeSentence(sentenceHtml: string): {
         id: `tok_${tokenCounter++}`,
         text: rawText,
         cleanWord,
-        lemma,
         isWord,
         isTarget: seg.isTarget && isWord,
         charStart,

@@ -43,21 +43,27 @@ export const ClickableSentence = ({
           .filter(Boolean)
           .join(' ');
 
+        if (!onWordClick) {
+          return <span key={token.id} className={classNames}>{token.text}</span>;
+        }
+
         return (
-          <span
+          <button
+            type="button"
             key={token.id}
             className={classNames}
-            onPointerDown={(e: ReactPointerEvent) => {
+            onPointerDown={(e: ReactPointerEvent<HTMLButtonElement>) => {
               e.stopPropagation();
             }}
-            onClick={(e: MouseEvent) => {
+            onClick={(e: MouseEvent<HTMLButtonElement>) => {
               e.stopPropagation();
-              onWordClick?.(token, idx);
+              onWordClick(token, idx);
             }}
+            aria-label={`查词：${token.text}`}
             title="点击查词"
           >
             {token.text}
-          </span>
+          </button>
         );
       })}
     </div>

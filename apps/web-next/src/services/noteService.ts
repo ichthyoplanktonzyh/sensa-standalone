@@ -1,6 +1,7 @@
 type NoteListener = () => void;
 
 const STORAGE_KEY = 'bubie_user_notes';
+const SENSE_STORAGE_KEY = 'sensa_sense_notes_v1';
 
 // 初始预置示例笔记（保持和不背单词截图对齐，例如 folk 或其他体验词）
 const DEFAULT_NOTES: Record<string, string> = {
@@ -10,6 +11,7 @@ const DEFAULT_NOTES: Record<string, string> = {
 
 class NoteService {
   private notes: Record<string, string> = {};
+  private senseNotes: Record<string, string> = {};
   private listeners: Set<NoteListener> = new Set();
 
   constructor() {
@@ -19,14 +21,17 @@ class NoteService {
   private load() {
     try {
       const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+      const senseRaw = typeof window !== 'undefined' ? localStorage.getItem(SENSE_STORAGE_KEY) : null;
       if (raw) {
         this.notes = JSON.parse(raw);
       } else {
         this.notes = { ...DEFAULT_NOTES };
-        this.save();
       }
+      this.senseNotes = senseRaw ? JSON.parse(senseRaw) : {};
+      if (!raw) this.save();
     } catch {
       this.notes = { ...DEFAULT_NOTES };
+      this.senseNotes = {};
     }
   }
 
@@ -34,6 +39,7 @@ class NoteService {
     try {
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(this.notes));
+        localStorage.setItem(SENSE_STORAGE_KEY, JSON.stringify(this.senseNotes));
       }
     } catch {
       // ignore storage errors
@@ -62,6 +68,10 @@ class NoteService {
     return this.notes[key] || '';
   }
 
+  public getSenseNote(senseId: string): string {
+    return this.senseNotes[senseId] || '';
+  }
+
   public setNote(word: string, content: string): void {
     const key = word.toLowerCase().trim();
     const trimmed = content.trim();
@@ -69,6 +79,17 @@ class NoteService {
       delete this.notes[key];
     } else {
       this.notes[key] = trimmed;
+    }
+    this.save();
+    this.notify();
+  }
+
+  public setSenseNote(senseId: string, content: string): void {
+    const trimmed = content.trim();
+    if (!trimmed) {
+      delete this.senseNotes[senseId];
+    } else {
+      this.senseNotes[senseId] = trimmed;
     }
     this.save();
     this.notify();
@@ -87,8 +108,14 @@ class NoteService {
     return { ...this.notes };
   }
 
+  public getAllSenseNotes(): Record<string, string> {
+    return { ...this.senseNotes };
+  }
+
   public getNoteCount(): number {
-    return Object.keys(this.notes).filter((k) => !!this.notes[k].trim()).length;
+    const legacyCount = Object.keys(this.notes).filter((k) => !!this.notes[k].trim()).length;
+    const senseCount = Object.keys(this.senseNotes).filter((k) => !!this.senseNotes[k].trim()).length;
+    return legacyCount + senseCount;
   }
 }
 

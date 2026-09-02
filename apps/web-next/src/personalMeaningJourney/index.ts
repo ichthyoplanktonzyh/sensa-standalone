@@ -1,0 +1,53 @@
+/** Public surface of the Personal Meaning journey module. */
+
+export type {
+  PersonalMeaningJourneyGateway,
+  ConfirmSenseResult,
+  JourneyGatewayStatus,
+} from './gateway';
+export { createJourneyGateway, journeyGateway } from './gateway';
+export {
+  useJourneyGateway,
+  useJourneyStatus,
+  useJourneyList,
+  useJourneyWorld,
+  useJourneyDetail,
+} from './usePersonalMeaningJourney';
+export type { JourneyWorldResult } from './usePersonalMeaningJourney';
+export { PHASE_LABELS } from './projection';
+export type {
+  PersonalMeaningJourneyPhase,
+  JourneyDetailView,
+  JourneyListItemView,
+  JourneyWorldItemView,
+  SenseFormationPhase,
+  ExpressionBindingPhase,
+  JourneySenseFormationView,
+  JourneyExpressionBindingView,
+  JourneyFocusView,
+  JourneyProposalView,
+  JourneyAlignmentView,
+  JourneyConstructionView,
+  JourneyExpressionCandidateView,
+  JourneySemanticSpecView,
+  JourneyAnchorView,
+  JourneyFamiliarAnchorView,
+  JourneyExperienceAnchorView,
+  JourneyFocusSuggestionView,
+  AcceptMeaningFocusRevisionInput,
+  AddAnchorInput,
+  AnswerConstructionInput,
+  ConfirmExpressionBindingInput,
+  ConfirmSenseInput,
+  CreateMeaningFocusInput,
+  CreateMeaningFocusResult,
+  CreatePersonalMeaningInput,
+  ConfirmExpressionBindingResult,
+  CreatePersonalMeaningResult,
+  EditAnchorInput,
+  EditMeaningFocusInput,
+  FocusRefInput,
+  GenerateFocusSuggestionsInput,
+  RemoveAnchorInput,
+  SplitMeaningFocusInput,
+} from './types';

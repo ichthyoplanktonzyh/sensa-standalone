@@ -1,145 +1,122 @@
-import { useState, useEffect } from 'react';
-import { noteService } from '../services/noteService';
+import type { ContentSectionId } from '../contentProjection';
+import { useContentProjection } from '../useContentProjection';
 
 interface ContentScreenProps {
   active: boolean;
-  onGo?: (id: string) => void;
   onBack: () => void;
-  toast: (msg: string) => void;
+  onOpenSemanticWorld: () => void;
+  onOpenSection: (section: ContentSectionId) => void;
+  onOpenComingSoon: (kind: 'scenes' | 'collections') => void;
 }
 
-export const ContentScreen = ({ active, onGo, onBack, toast }: ContentScreenProps) => {
-  const [noteCount, setNoteCount] = useState(() => noteService.getNoteCount());
+interface ContentRowProps {
+  icon: string;
+  title: string;
+  description: string;
+  value: string;
+  tone: 'amber' | 'blue' | 'violet' | 'green';
+  onActivate: () => void;
+  unavailable?: boolean;
+}
 
-  useEffect(() => {
-    setNoteCount(noteService.getNoteCount());
-    const unsub = noteService.subscribe(() => {
-      setNoteCount(noteService.getNoteCount());
-    });
-    return unsub;
-  }, []);
+const ContentRow = ({
+  icon,
+  title,
+  description,
+  value,
+  tone,
+  onActivate,
+  unavailable = false,
+}: ContentRowProps) => (
+  <button className={`content-hub-row tone-${tone}${unavailable ? ' is-later' : ''}`} onClick={onActivate}>
+    <span className="content-hub-icon">
+      <svg className="icon"><use href={icon} /></svg>
+    </span>
+    <span className="content-hub-copy">
+      <b>{title}</b>
+      <small>{description}</small>
+    </span>
+    <span className="content-hub-value">{value}</span>
+    <svg className="chev"><use href="#i-chev-r" /></svg>
+  </button>
+);
+
+export const ContentScreen = ({
+  active,
+  onBack,
+  onOpenSemanticWorld,
+  onOpenSection,
+  onOpenComingSoon,
+}: ContentScreenProps) => {
+  const projection = useContentProjection();
+  const established = projection.semanticSenses.filter((item) => item.status === 'established').length;
+  const reinforce = projection.semanticSenses.filter((item) => item.status === 'reinforce').length;
+
   return (
-    <section className={`screen${active ? ' active' : ''}`} id="s-content" data-anim="sheet">
-      <div className="sheet-head">
-        <button className="down" onClick={onBack} aria-label="返回">
+    <section className={`screen content-hub-screen${active ? ' active' : ''}`} id="s-content" data-anim="sheet">
+      <header className="content-hub-header">
+        <button onClick={onBack} aria-label="返回首页">
           <svg className="icon"><use href="#i-chev-d" /></svg>
         </button>
-        <h2>我的内容</h2>
-        <button className="right" onClick={() => toast('小窍门：善用随身听，通勤时间也能刷词')}>
-          <svg className="icon"><use href="#i-bulb" /></svg>
+        <div>
+          <span>PERSONAL LIBRARY</span>
+          <h1>我的内容</h1>
+        </div>
+        <span className="content-hub-avatar">S</span>
+      </header>
+
+      <div className="content-hub-body">
+        <button className="semantic-entry-card" onClick={onOpenSemanticWorld}>
+          <span className="semantic-entry-glow glow-a" />
+          <span className="semantic-entry-glow glow-b" />
+          <span className="semantic-entry-label">我的个人语义空间</span>
+          <strong>我的词义世界</strong>
+          <p>看看哪些意思正在形成连接，哪些已经建立，哪些需要再遇见。</p>
+          <span className="semantic-entry-facts">
+            <span><b>{projection.semanticSenses.length}</b> 已进入世界</span>
+            <span><b>{established}</b> 已建立</span>
+            <span><b>{reinforce}</b> 待巩固</span>
+          </span>
+          <span className="semantic-entry-action">进入词义世界 <svg className="icon"><use href="#i-chev-r" /></svg></span>
+          <span className="semantic-entry-orbit" aria-hidden="true"><i /><i /><i /><i /></span>
         </button>
-      </div>
-      <div className="pad">
-        <div className="listen-wrap">
-          <div className="lcard a">
-            <div className="lc-head">
-              <span className="dot"><svg className="icon"><use href="#i-head" /></svg></span>
-              <span>随身听</span>
-            </div>
-            <div className="lc-inner">
-              <div className="lbox" onClick={() => toast('随身听 · 回顾：暂无可播放单词')}>
-                <div className="n">回顾</div>
-                <div className="c">0 词</div>
-                <span className="play"><svg className="icon"><use href="#i-play" /></svg></span>
-              </div>
-              <div className="lbox" onClick={() => toast('随身听 · 预习：开始播放 40 词')}>
-                <div className="n">预习</div>
-                <div className="c">40 词</div>
-                <span className="play"><svg className="icon"><use href="#i-play" /></svg></span>
-              </div>
-            </div>
-          </div>
-          <div className="lcard b">
-            <div className="lc-head">
-              <span className="dot"><svg className="icon"><use href="#i-write" /></svg></span>
-              <span>听写</span>
-            </div>
-            <div className="lc-inner">
-              <div className="lbox" onClick={() => toast('听写 · 随堂测：暂无待测单词')}>
-                <div className="n">随堂测</div>
-                <div className="c">0 词</div>
-                <span className="play"><svg className="icon"><use href="#i-play" /></svg></span>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        <div className="card group">
-          <div
-            className="row"
-            onClick={() => {
-              if (onGo) {
-                onGo('s-wordlist');
-              } else {
-                toast('打开「在学词书」单词表');
-              }
-            }}
-          >
-            <span className="sq" style={{ background: '#dff5ee', color: '#13a583' }}>
-              <svg className="icon"><use href="#i-bookopen" /></svg>
-            </span>
-            <span className="t">在学词书</span>
-            <span className="v">5585 词</span>
-            <svg className="chev"><use href="#i-chev-r" /></svg>
+        <section className="content-hub-section">
+          <div className="content-hub-section-title">
+            <span><em>01</em><b>我学过的</b></span>
+            <small>学习事实</small>
           </div>
-        </div>
+          <div className="content-hub-card">
+            <ContentRow icon="#i-calchk" title="最近学过" description="从刚刚形成的连接继续回看" value={`${projection.recent.length}`} tone="amber" onActivate={() => onOpenSection('recent')} />
+            <ContentRow icon="#i-chk" title="全部已学" description="浏览所有能定位到具体意思的记录" value={`${projection.learned.length}`} tone="amber" onActivate={() => onOpenSection('learned')} />
+            <ContentRow icon="#i-thumb" title="已会的意思" description="你明确声明已经会的具体意思" value={`${projection.known.length}`} tone="amber" onActivate={() => onOpenSection('known')} />
+          </div>
+        </section>
 
-        <div className="card group">
-          <div className="row" onClick={() => toast('近日已学：前天 1 词')}>
-            <span className="sq" style={{ background: '#fdf0d8', color: '#e9a020' }}>
-              <svg className="icon"><use href="#i-calchk" /></svg>
-            </span>
-            <span className="t">近日已学</span>
-            <span className="v">前天 1 词</span>
-            <svg className="chev"><use href="#i-chev-r" /></svg>
+        <section className="content-hub-section">
+          <div className="content-hub-section-title">
+            <span><em>02</em><b>我保存的</b></span>
+            <small>稍后回来</small>
           </div>
-          <div className="row" onClick={() => toast('全部已学：7234 词')}>
-            <span className="sq" style={{ background: '#fdf3dc', color: '#e8a72a' }}>
-              <svg className="icon"><use href="#i-chk" /></svg>
-            </span>
-            <span className="t">全部已学</span>
-            <span className="v">7234 词</span>
-            <svg className="chev"><use href="#i-chev-r" /></svg>
+          <div className="content-hub-card">
+            <ContentRow icon="#i-star" title="收藏的意思" description="保存具体意思，不自动加入学习" value={`${projection.savedSenses.length}`} tone="blue" onActivate={() => onOpenSection('saved-senses')} />
+            <ContentRow icon="#i-quote" title="收藏的例句" description="保留值得反复体会的语境" value={`${projection.savedExamples.length}`} tone="blue" onActivate={() => onOpenSection('saved-examples')} />
           </div>
-        </div>
+        </section>
 
-        <div className="card group">
-          <div className="row" onClick={() => toast('单词本：1 本')}>
-            <span className="sq" style={{ background: '#e6ecfd', color: '#4a76e8' }}>
-              <svg className="icon"><use href="#i-note" /></svg>
-            </span>
-            <span className="t">单词本</span>
-            <span className="v">1 本</span>
-            <svg className="chev"><use href="#i-chev-r" /></svg>
+        <section className="content-hub-section">
+          <div className="content-hub-section-title">
+            <span><em>03</em><b>我创建的</b></span>
+            <small>属于我的连接</small>
           </div>
-          <div className="row" onClick={() => toast('句库：还没有收藏例句')}>
-            <span className="sq" style={{ background: '#e6ecfd', color: '#4a76e8' }}>
-              <svg className="icon"><use href="#i-quote" /></svg>
-            </span>
-            <span className="t">句库</span>
-            <span className="v">0 句</span>
-            <svg className="chev"><use href="#i-chev-r" /></svg>
+          <div className="content-hub-card">
+            <ContentRow icon="#i-pen" title="我的笔记" description="自己的理解、联想与提醒" value={`${projection.notes.length}`} tone="violet" onActivate={() => onOpenSection('notes')} />
+            <ContentRow icon="#i-bulb" title="我的场景" description="把意思连接到真实个人经验" value="暂未开放" tone="green" onActivate={() => onOpenComingSoon('scenes')} unavailable />
+            <ContentRow icon="#i-note" title="自定义集合" description="按自己的目的整理意思与例句" value="暂未开放" tone="violet" onActivate={() => onOpenComingSoon('collections')} unavailable />
           </div>
-          <div
-            className="row"
-            onClick={() => {
-              const allNotes = noteService.getAllNotes();
-              const words = Object.keys(allNotes).filter((k) => !!allNotes[k].trim());
-              if (words.length === 0) {
-                toast('笔记：还没有写过笔记');
-              } else {
-                toast(`已为 ${words.join('、')} 记录了专属笔记`);
-              }
-            }}
-          >
-            <span className="sq" style={{ background: '#e9edff', color: '#5772ea' }}>
-              <svg className="icon"><use href="#i-pen" /></svg>
-            </span>
-            <span className="t">笔记</span>
-            <span className="v">{noteCount} 条</span>
-            <svg className="chev"><use href="#i-chev-r" /></svg>
-          </div>
-        </div>
+        </section>
+
+        <p className="content-hub-footnote">这里只整理你的内容。查一个新单词，请使用全局词典。</p>
       </div>
     </section>
   );

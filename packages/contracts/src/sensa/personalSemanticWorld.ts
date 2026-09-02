@@ -1,0 +1,483 @@
+import { z } from "zod";
+import {
+  sensaExpressionTypeSchema,
+  sensaSenseSemanticSpecSchema,
+} from "./semanticRegistry.js";
+
+export const sensaPersonalSemanticWorldContractVersion =
+  "sensa-personal-semantic-world-v1" as const;
+
+const uuid = z.string().uuid();
+const nonEmpty = z.string().trim().min(1);
+const positiveInteger = z.number().int().positive();
+const nonNegativeInteger = z.number().int().nonnegative();
+const timestamp = z.string().datetime({ offset: true });
+const digest = z.string().regex(/^[0-9a-f]{64}$/u);
+const jsonObject = z.record(z.string(), z.unknown());
+
+export const sensaPersonalRecordStatusSchema = z.enum(["active", "deleted"]);
+
+export const sensaPersonalProvenanceKindSchema = z.enum([
+  "learner_authored",
+  "llm_suggested",
+  "reviewed",
+  "imported",
+]);
+
+export const sensaLearnerLanguageRoleSchema = z.enum([
+  "familiar",
+  "target",
+]);
+
+export const sensaPersonalAnchorKindSchema = z.enum([
+  "text",
+  "image",
+  "audio",
+  "scene",
+  "action",
+  "feeling",
+  "other",
+]);
+
+export const sensaExpressionVerificationStatusSchema = z.enum([
+  "unverified",
+  "learner_confirmed",
+  "reviewed",
+  "rejected",
+]);
+
+export const sensaSenseConstructionStatusSchema = z.enum([
+  "active",
+  "paused",
+  "completed",
+  "abandoned",
+]);
+
+export const sensaSenseProposalStatusSchema = z.enum([
+  "open",
+  "superseded",
+  "confirmed",
+  "rejected",
+]);
+
+export const sensaPersonalMeaningAlignmentStatusSchema = z.enum([
+  "active",
+  "withdrawn",
+]);
+
+export const sensaPersonalProvenanceSchema = z
+  .object({
+    kind: sensaPersonalProvenanceKindSchema,
+    sourceReferenceIds: z.array(nonEmpty),
+    createdByOperationId: uuid,
+  })
+  .strict();
+
+export const sensaPersonalMeaningSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    personalMeaningId: uuid,
+    learnerUserId: nonEmpty,
+    currentRevision: positiveInteger,
+    status: sensaPersonalRecordStatusSchema,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: timestamp.nullable(),
+  })
+  .strict();
+
+export const sensaPersonalMeaningRevisionSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    personalMeaningRevisionId: uuid,
+    personalMeaningId: uuid,
+    revision: positiveInteger,
+    displayLabel: nonEmpty.nullable(),
+    learnerIntentNote: nonEmpty.nullable(),
+    provenance: sensaPersonalProvenanceSchema,
+    createdAt: timestamp,
+  })
+  .strict();
+
+export const sensaMeaningFocusSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    meaningFocusId: uuid,
+    personalMeaningId: uuid,
+    splitFromMeaningFocusId: uuid.nullable(),
+    currentRevision: positiveInteger,
+    acceptedRevision: positiveInteger.nullable(),
+    status: sensaPersonalRecordStatusSchema,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: timestamp.nullable(),
+  })
+  .strict();
+
+export const sensaMeaningFocusRevisionSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    meaningFocusRevisionId: uuid,
+    meaningFocusId: uuid,
+    revision: positiveInteger,
+    statement: nonEmpty,
+    distinguishingNotes: z.array(nonEmpty),
+    provenance: sensaPersonalProvenanceSchema,
+    createdAt: timestamp,
+  })
+  .strict();
+
+export const sensaMeaningFocusAcceptanceFactSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    meaningFocusAcceptanceId: uuid,
+    meaningFocusId: uuid,
+    meaningFocusRevisionId: uuid,
+    operationId: uuid,
+    acceptedAt: timestamp,
+  })
+  .strict();
+
+export const sensaPersonalMediaObjectSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    personalMediaObjectId: uuid,
+    learnerUserId: nonEmpty,
+    mediaKind: z.enum(["image", "audio"]),
+    mimeType: nonEmpty,
+    sizeBytes: nonNegativeInteger,
+    sha256: digest,
+    status: sensaPersonalRecordStatusSchema,
+    createdAt: timestamp,
+    deletedAt: timestamp.nullable(),
+  })
+  .strict();
+
+export const sensaPersonalSemanticAnchorSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    personalSemanticAnchorId: uuid,
+    personalMeaningId: uuid,
+    currentRevision: positiveInteger,
+    status: sensaPersonalRecordStatusSchema,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: timestamp.nullable(),
+  })
+  .strict();
+
+export const sensaPersonalSemanticAnchorRevisionSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    personalSemanticAnchorRevisionId: uuid,
+    personalSemanticAnchorId: uuid,
+    revision: positiveInteger,
+    anchorKind: sensaPersonalAnchorKindSchema,
+    languageTag: nonEmpty.nullable(),
+    bodyText: nonEmpty.nullable(),
+    personalMediaObjectId: uuid.nullable(),
+    structuredPayload: jsonObject,
+    provenance: sensaPersonalProvenanceSchema,
+    createdAt: timestamp,
+  })
+  .strict();
+
+export const sensaMeaningFocusSemanticAnchorLinkSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    focusAnchorLinkId: uuid,
+    meaningFocusId: uuid,
+    personalSemanticAnchorId: uuid,
+    currentRevision: positiveInteger,
+    status: sensaPersonalRecordStatusSchema,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: timestamp.nullable(),
+  })
+  .strict();
+
+export const sensaMeaningFocusSemanticAnchorLinkRevisionSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    focusAnchorLinkRevisionId: uuid,
+    focusAnchorLinkId: uuid,
+    revision: positiveInteger,
+    focusNote: nonEmpty,
+    provenance: sensaPersonalProvenanceSchema,
+    createdAt: timestamp,
+  })
+  .strict();
+
+export const sensaPersonalExpressionAnchorSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    personalExpressionAnchorId: uuid,
+    personalMeaningId: uuid,
+    currentRevision: positiveInteger,
+    status: sensaPersonalRecordStatusSchema,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: timestamp.nullable(),
+  })
+  .strict();
+
+export const sensaPersonalExpressionAnchorRevisionSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    personalExpressionAnchorRevisionId: uuid,
+    personalExpressionAnchorId: uuid,
+    revision: positiveInteger,
+    expressionType: sensaExpressionTypeSchema,
+    languageTag: nonEmpty,
+    learnerLanguageRole: sensaLearnerLanguageRoleSchema,
+    surfaceForm: nonEmpty,
+    normalizedForm: nonEmpty,
+    provenanceKind: sensaPersonalProvenanceKindSchema,
+    verificationStatus: sensaExpressionVerificationStatusSchema,
+    provenance: sensaPersonalProvenanceSchema,
+    createdAt: timestamp,
+  })
+  .strict();
+
+export const sensaMeaningFocusExpressionAnchorLinkSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    focusExpressionAnchorLinkId: uuid,
+    meaningFocusId: uuid,
+    personalExpressionAnchorId: uuid,
+    currentRevision: positiveInteger,
+    status: sensaPersonalRecordStatusSchema,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: timestamp.nullable(),
+  })
+  .strict();
+
+export const sensaMeaningFocusExpressionAnchorLinkRevisionSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    focusExpressionAnchorLinkRevisionId: uuid,
+    focusExpressionAnchorLinkId: uuid,
+    revision: positiveInteger,
+    focusNote: nonEmpty,
+    provenance: sensaPersonalProvenanceSchema,
+    createdAt: timestamp,
+  })
+  .strict();
+
+export const sensaSenseConstructionSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    senseConstructionId: uuid,
+    learnerUserId: nonEmpty,
+    personalMeaningId: uuid,
+    personalMeaningRevisionId: uuid,
+    meaningFocusId: uuid,
+    meaningFocusRevisionId: uuid,
+    familiarLanguageTag: nonEmpty,
+    targetLanguageTag: nonEmpty,
+    semanticPolicyVersion: nonEmpty,
+    status: sensaSenseConstructionStatusSchema,
+    revision: positiveInteger,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  })
+  .strict();
+
+export const sensaSenseConstructionTurnSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    constructionTurnId: uuid,
+    senseConstructionId: uuid,
+    ordinal: positiveInteger,
+    actor: z.enum(["learner", "semantic_llm", "system"]),
+    body: nonEmpty,
+    inputDigest: digest.nullable(),
+    outputDigest: digest,
+    modelProvenance: z
+      .object({
+        provider: nonEmpty,
+        model: nonEmpty,
+        promptVersion: nonEmpty,
+      })
+      .strict()
+      .nullable(),
+    occurredAt: timestamp,
+  })
+  .strict();
+
+export const sensaSenseProposalSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    senseProposalId: uuid,
+    senseConstructionId: uuid,
+    currentVersion: positiveInteger,
+    status: sensaSenseProposalStatusSchema,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  })
+  .strict();
+
+export const sensaSenseProposalVersionSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    senseProposalVersionId: uuid,
+    senseProposalId: uuid,
+    version: positiveInteger,
+    meaningFocusRevisionId: uuid,
+    semanticSpec: sensaSenseSemanticSpecSchema,
+    expressionCandidates: z.array(
+      z
+        .object({
+          candidateId: uuid,
+          personalExpressionAnchorRevisionId: uuid.nullable(),
+          expressionType: sensaExpressionTypeSchema,
+          languageTag: nonEmpty,
+          surfaceForm: nonEmpty,
+          rationale: nonEmpty,
+        })
+        .strict(),
+    ),
+    unresolvedQuestions: z.array(nonEmpty),
+    semanticPolicyVersion: nonEmpty,
+    generatorProvenance: z
+      .object({
+        provider: nonEmpty,
+        model: nonEmpty,
+        promptVersion: nonEmpty,
+        inputDigest: digest,
+        outputDigest: digest,
+      })
+      .strict(),
+    createdAt: timestamp,
+  })
+  .strict();
+
+export const sensaConfirmSenseProposalFactSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    senseProposalConfirmationId: uuid,
+    operationId: uuid,
+    learnerUserId: nonEmpty,
+    senseProposalVersionId: uuid,
+    meaningFocusRevisionId: uuid,
+    resolution: z.enum(["create_new", "reuse_existing"]),
+    senseId: uuid,
+    senseVersionId: uuid,
+    confirmedAt: timestamp,
+  })
+  .strict();
+
+export const sensaConfirmExpressionBindingFactSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    expressionBindingConfirmationId: uuid,
+    operationId: uuid,
+    learnerUserId: nonEmpty,
+    senseProposalVersionId: uuid.nullable(),
+    personalExpressionAnchorRevisionId: uuid,
+    senseVersionId: uuid,
+    expressionVersionId: uuid,
+    bindingVersionId: uuid,
+    confirmedAt: timestamp,
+  })
+  .strict();
+
+export const sensaPersonalMeaningAlignmentSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    personalMeaningAlignmentId: uuid,
+    learnerUserId: nonEmpty,
+    personalMeaningId: uuid,
+    personalMeaningRevisionId: uuid,
+    meaningFocusId: uuid,
+    meaningFocusRevisionId: uuid,
+    senseId: uuid,
+    senseVersionId: uuid,
+    senseProposalConfirmationId: uuid,
+    status: sensaPersonalMeaningAlignmentStatusSchema,
+    revision: positiveInteger,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  })
+  .strict();
+
+export const sensaPersonalMeaningAlignmentEventSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    personalMeaningAlignmentEventId: uuid,
+    personalMeaningAlignmentId: uuid,
+    ordinal: positiveInteger,
+    eventType: z.enum(["confirmed", "withdrawn", "restored"]),
+    operationId: uuid,
+    reason: nonEmpty.nullable(),
+    occurredAt: timestamp,
+  })
+  .strict();
+
+export type SensaPersonalMeaningSnapshot = z.infer<
+  typeof sensaPersonalMeaningSnapshotSchema
+>;
+export type SensaPersonalMeaningRevisionSnapshot = z.infer<
+  typeof sensaPersonalMeaningRevisionSnapshotSchema
+>;
+export type SensaMeaningFocusSnapshot = z.infer<
+  typeof sensaMeaningFocusSnapshotSchema
+>;
+export type SensaMeaningFocusRevisionSnapshot = z.infer<
+  typeof sensaMeaningFocusRevisionSnapshotSchema
+>;
+export type SensaMeaningFocusAcceptanceFact = z.infer<
+  typeof sensaMeaningFocusAcceptanceFactSchema
+>;
+export type SensaPersonalMediaObjectSnapshot = z.infer<
+  typeof sensaPersonalMediaObjectSnapshotSchema
+>;
+export type SensaPersonalSemanticAnchorSnapshot = z.infer<
+  typeof sensaPersonalSemanticAnchorSnapshotSchema
+>;
+export type SensaPersonalSemanticAnchorRevisionSnapshot = z.infer<
+  typeof sensaPersonalSemanticAnchorRevisionSnapshotSchema
+>;
+export type SensaMeaningFocusSemanticAnchorLinkSnapshot = z.infer<
+  typeof sensaMeaningFocusSemanticAnchorLinkSnapshotSchema
+>;
+export type SensaMeaningFocusSemanticAnchorLinkRevisionSnapshot = z.infer<
+  typeof sensaMeaningFocusSemanticAnchorLinkRevisionSnapshotSchema
+>;
+export type SensaPersonalExpressionAnchorSnapshot = z.infer<
+  typeof sensaPersonalExpressionAnchorSnapshotSchema
+>;
+export type SensaPersonalExpressionAnchorRevisionSnapshot = z.infer<
+  typeof sensaPersonalExpressionAnchorRevisionSnapshotSchema
+>;
+export type SensaMeaningFocusExpressionAnchorLinkSnapshot = z.infer<
+  typeof sensaMeaningFocusExpressionAnchorLinkSnapshotSchema
+>;
+export type SensaMeaningFocusExpressionAnchorLinkRevisionSnapshot = z.infer<
+  typeof sensaMeaningFocusExpressionAnchorLinkRevisionSnapshotSchema
+>;
+export type SensaSenseConstructionSnapshot = z.infer<
+  typeof sensaSenseConstructionSnapshotSchema
+>;
+export type SensaSenseConstructionTurn = z.infer<
+  typeof sensaSenseConstructionTurnSchema
+>;
+export type SensaSenseProposalSnapshot = z.infer<
+  typeof sensaSenseProposalSnapshotSchema
+>;
+export type SensaSenseProposalVersionSnapshot = z.infer<
+  typeof sensaSenseProposalVersionSnapshotSchema
+>;
+export type SensaConfirmSenseProposalFact = z.infer<
+  typeof sensaConfirmSenseProposalFactSchema
+>;
+export type SensaConfirmExpressionBindingFact = z.infer<
+  typeof sensaConfirmExpressionBindingFactSchema
+>;
+export type SensaPersonalMeaningAlignmentSnapshot = z.infer<
+  typeof sensaPersonalMeaningAlignmentSnapshotSchema
+>;
+export type SensaPersonalMeaningAlignmentEvent = z.infer<
+  typeof sensaPersonalMeaningAlignmentEventSchema
+>;

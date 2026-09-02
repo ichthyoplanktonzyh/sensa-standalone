@@ -1,7 +1,7 @@
 # Sensa 个人语义世界模型
 
 > 状态：Canonical domain model
-> 更新日期：2026-08-31
+> 更新日期：2026-09-01
 
 本文定义个人意义、经验与表达锚点、LLM 语义访谈、按需 Sense 构造和确认后的学习边界。
 统一术语以 [`../../CONTEXT.md`](../../CONTEXT.md) 为准；聚合所有权、资源发布和运行行为分别由
@@ -15,6 +15,10 @@
 Sensa 不把人的意义建模为词的附属定义。对 learner 而言，最先存在的是自己的意义/经验结构；
 L1 与 L2 中的词、短语、构式或句子都是进入、唤起或表达它的符号锚点。正式学习是让一个已经
 确认的意义区别与目标语言表达建立稳定连接的一种方式，而不是个人意义存在的前提或唯一用途。
+
+本文描述的是 personal-first semantic construction，不是全产品唯一学习入口。learner 可以从 Book、
+Catalog、搜索或 reviewed Contextual Lookup 中选择 existing stable Sense + target binding，直接进入
+Curriculum/Learning，而不创建 Personal Meaning。两类路径只在 Learning Target 处汇合。
 
 个人内部的完整意义结构不可被系统直接观察。Sensa 只保存 learner 主动外化的有限事实，并明确
 区分三种身份：
@@ -110,7 +114,9 @@ Sense Construction 不是普通的句中词义消歧，而是发现 learner 在�
 LLM 不能替 learner 决定他真正关心什么，不能把建议静默升级为确认，不能用模型置信度制造
 Learning Evidence，也不能在确认后原位改写已有 Sense Version。
 
-## 5. 确认门与生命周期
+## 5. 确认门与 personal-first bridge 生命周期
+
+下图只描述 Personal Semantic World 向 Learning 的可选桥接，不是所有正式学习必须经过的全局流程：
 
 ```text
 个人经验或表达
@@ -119,11 +125,14 @@ Personal Meaning
       ↓ learner 与 LLM 澄清
 Meaning Focus + Sense Proposal
       ↓ learner 明确确认
-Sense identity + Sense Version + Personal Meaning Alignment
-      ↓ 独立的 Learning Target / Content Provisioning
-Retention Target + Learning Materialization + Learning Protocol
+Sense identity + Sense Version + target Sense Expression Binding
+                    + Personal Meaning Alignment
       ↓ 独立的 Add-to-Learning Intent
-Curriculum / Initial Learning Protocol Run
+Learning Target + Retention Target + Curriculum Membership
+      ↓ Learning Policy Assignment / resolution
+Resolved Learning Plan(preparing | ready | blocked)
+      ↓ ready / Content Provisioning
+Learning Materialization + purpose-specific Learning Protocol Run
       ↓ successful Initial Learning Completion
 required Scheduling Handoff
 ```
@@ -135,8 +144,14 @@ required Scheduling Handoff
 - 确认 Sense Proposal 才创建稳定 Sense 与 Personal Meaning Alignment；
 - 确认 L2 表达只建立或接受 Sense Expression Binding；
 - 生成例句、对比、发音或练习资源不等于已发布，也不等于已经形成可执行 Materialization；
-- Add-to-Learning 才请求进入正式 Curriculum；
+- Add-to-Learning 才请求进入正式 Curriculum；接纳可以保留 preparing/blocked Membership，但只有
+  ready Resolved Learning Plan 才能开始正式 Protocol Run；
 - 上述任何对话、确认、播放或浏览都不产生 Learning Evidence。
+
+桥接后两个模块仍保持独立：删除、归档或重新组织 Personal Meaning 不删除已接纳的 Curriculum
+Membership、Retention Target、Protocol history、Evidence 或 FSRS；正式 Learning/Review history 也不
+反向创建 Personal Meaning。Personal Anchors 只有在 learner 明确授权时才可作为后续 Materialization
+的可选 scaffold，不成为 Runtime 前置依赖。
 
 Sense 确认是丰富流程的稳定起点。例句、搭配、边界辨析、Experience Sketch、Assessment、Repair、
 Lightweight Study、Structured Acquisition 与 Retention 都必须引用稳定 Sense Version，不能只引用
@@ -216,6 +231,10 @@ Personal Meaning 可以长期保持未确认 Sense 或没有自然的一词表�
 
 ## 10. 不变量
 
+- Personal Semantic World 是 optional personal-first source，不是 Book/direct learning 的前置条件；
+- Learning 不因 Book、Catalog、搜索或 Contextual Lookup 入口而创建 Personal Meaning；
+- personal-first bridge 必须经过显式 Add-to-Learning；桥接后的 Personal Content 与 formal learning
+  lifecycle 相互独立，任何一侧的删除/进度都不能暗中改写另一侧；
 - 只有 learner 的显式创建行为才能增加 Personal Semantic World membership；
 - Personal Meaning、Sense 与 Expression 保持不同 identity；
 - LLM 提议不是 learner 意图，learner 确认不是学习成功；

@@ -1,13 +1,13 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-08-31
+> Updated: 2026-09-01
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
-is one learner-specific Sense–target-expression connection, and a versioned
-Learning Protocol establishes or strengthens that connection before or during
-long-term retention.
+is one learner-specific Sense–target-expression connection. A versioned,
+learner-selectable Learning Policy coordinates purpose-specific Learning Protocols
+that establish, check, strengthen or restore that connection across long-term retention.
 
 ## Content language
 
@@ -46,7 +46,8 @@ Construction. It cannot create learner confirmation or learning content by side 
 
 **Learning Content LLM Role**:
 The constrained model role that generates candidate material for one fixed
-Learning Target and Protocol. It cannot change the Sense or write learner progress.
+Learning Target, Effective Learning Policy and purpose-specific Protocol. It cannot
+change the Sense, silently downgrade the Policy or write learner progress.
 
 **Grading LLM Role**:
 A future optional model role that evaluates an open response under a pinned
@@ -63,6 +64,53 @@ The fixed object of one formal learning intent: a stable Sense Version, target
 language expression binding, learner language/locale context and required scope.
 It says what connection is being learned, not where content comes from or how it
 will be taught.
+
+**Learning Entry Provenance**:
+The versioned origin through which a Learning Target enters Curriculum, such as
+Book membership, direct selection of an existing stable Sense, or a confirmed
+Personal Meaning Alignment. It never changes target identity or makes Personal
+Semantic World membership a prerequisite for learning.
+
+**Learning Policy Profile**:
+A versioned, auditable learning-method profile that coordinates purpose-specific
+Protocol selection with content-readiness, evidence and scheduling-policy references.
+It represents a mode such as lightweight or high-assurance, not target identity or a
+generic presentation preference.
+
+**Learning Policy Assignment**:
+A versioned learner or Curriculum choice that applies one Learning Policy Profile at
+learner-default, Curriculum-source or explicit target-override scope. It records its
+scope and provenance. Ordinary Assignment changes may re-plan an uncommitted target,
+but cannot replace a target's Committed Learning Policy or rewrite Protocol history.
+
+**Effective Learning Policy**:
+The deterministically resolved Learning Policy Assignment for one Learning Target.
+Resolution prefers an explicit target override, then its applicable Curriculum
+assignment, learner default and finally system default, while pinning profile version
+and decision provenance.
+
+**Committed Learning Policy**:
+The Effective Learning Policy frozen for one Retention Target when its first formal
+Protocol Run is created. It governs subsequent initial-learning, retention-review and
+relearning Protocol selection for that learning lineage; ordinary settings or
+Assignment changes cannot alter it.
+
+**Learning Policy Migration**:
+An explicit, auditable transition from one Committed Learning Policy to another at a
+safe Runtime boundary. It creates new Assignment, commitment and plan revisions while
+preserving prior Runs, outcomes, Evidence, Scheduling Handoffs and FSRS state; it is
+not an in-place edit or an automatic response to newly available content.
+
+**Resolved Learning Plan**:
+The versioned plan derived from one Learning Target, its Effective Learning Policy and
+currently available content/runtime capabilities. It resolves purpose-specific
+Protocols, provisioning requirements and readiness, not a precomputed Card sequence,
+Session queue or future review calendar.
+
+**Learning Plan Readiness**:
+The purpose-specific `preparing | ready | blocked` state of a Resolved Learning Plan.
+Only a `ready` purpose may enter formal Protocol planning; `blocked` preserves the
+learner's Curriculum membership and reports the real capability or content reason.
 
 **Retention Target**:
 The authoritative learner-specific learning identity for one stable Sense–target-
@@ -81,14 +129,16 @@ run, normally through a Sense Learning Package. Its producer may be human, LLM
 or mixed; publication timing and governance distinguish it from on-demand content.
 
 **On-demand Learning Content**:
-Material generated for one fixed learning target and Learning Protocol after the
-learner need is known. It must be validated and frozen before use and does not
-become published content merely because an LLM generated it successfully.
+Material generated for one fixed Learning Target, Effective Learning Policy and
+purpose-specific Learning Protocol after the learner need is known. It must be
+validated and frozen before use and does not become published content merely because
+an LLM generated it successfully.
 
 **Learning Materialization**:
 The immutable, protocol-ready content snapshot resolved from published,
-on-demand or hybrid sources for one learning run. Actions and outcomes cite this
-snapshot rather than mutable prompts or a live model response.
+on-demand or hybrid sources for one learning run. It pins the effective policy/plan
+and Protocol versions; Actions and outcomes cite this snapshot rather than mutable
+prompts or a live model response.
 
 **Learning Protocol**:
 A versioned method contract that declares required content roles, allowed
@@ -289,8 +339,8 @@ and do not imply one-to-one translation.
 
 **Study Plan**:  
 A learner's active formal-learning arrangement. It combines one active Book
-Enrollment, optional Supplemental Curriculum and a daily new-Sense limit, but
-does not select the current learning action.
+Enrollment, optional Supplemental Curriculum, formal Learning Policy Assignments
+and a daily new-Sense limit, but does not select the current learning action.
 
 **Book Enrollment**:  
 A learner's relationship to one immutable Book Version and a resolved Book
@@ -303,14 +353,16 @@ Changing it does not erase progress or silently stop already-started learning.
 
 **Supplemental Curriculum / Supplemental Membership**:  
 The learner-owned ordered curriculum of formal Learning Targets explicitly
-accepted through Add-to-Learning. It is neither a Book, a Personal Collection
-nor a Saved list.
+accepted through Add-to-Learning. A Membership may remain while its Resolved
+Learning Plan is preparing or blocked; it is neither a Book, a Personal Collection
+nor a Saved list and is not runtime-eligible until ready.
 
 **Study Scope / Study Scope Revision**:  
-The resolved, mode-aware set of Learning Targets currently eligible for formal
-Planning, de-duplicated by Retention Target and carrying source provenance in an
-immutable revision. A Session pins one revision so later curriculum changes
-cannot silently alter work already in progress.
+The resolved, mode-aware set of Learning Targets currently in formal Curriculum
+scope, de-duplicated by Retention Target and carrying source, Effective Learning
+Policy and plan-readiness provenance in an immutable revision. Only purpose-ready
+members are executable; a Session pins one revision so later changes cannot silently
+alter work already in progress.
 
 **Learner Sense Progress**:  
 The learner-by-Sense roll-up over all Retention Targets and explicitly Sense-
@@ -385,8 +437,9 @@ of the learner's mind.
 
 **Personal Semantic World（个人语义世界）**:
 The learner-owned set of Personal Meanings they explicitly create, together
-with their anchors and confirmed Sense relationships. System inference may
-suggest content but never adds membership without the learner's explicit act.
+with their anchors and confirmed Sense relationships. It can explicitly bridge a
+confirmed target into Curriculum, but is neither a learning prerequisite nor a
+progress owner; system inference never adds membership without the learner's act.
 
 **Personal Content**:  
 The learner-owned references, annotations and organization they intentionally
@@ -443,9 +496,10 @@ reference placing a target in it. It is independent of saving, Books and Semanti
 
 **Add-to-Learning Intent**:  
 An explicit learner request to admit a resolved Learning Target into formal
-Curriculum planning. Curriculum may accept it into Supplemental Curriculum,
-report its Retention Target already in scope or reject it; the Intent is distinct
-from saving, collection membership and Free Practice.
+Curriculum planning under an explicit or inherited Learning Policy. Curriculum may
+accept it into Supplemental Curriculum with a preparing, ready or blocked plan,
+report its Retention Target already in scope or reject an invalid/conflicting request;
+the Intent is distinct from saving, collection membership and Free Practice.
 
 ## Runtime language
 
@@ -613,6 +667,11 @@ are authorization and synchronization concepts, not product navigation.
 
 ## Boundary language
 
+**Independent learning entry**:
+Formal Learning may begin from Book membership, direct selection of an existing
+stable Sense or an explicit Personal Semantic World bridge. Every path remains
+Sense-first, but only the personal-first path owns Personal Meaning facts.
+
 **Shared Lexeme, independent Senses**:  
 Sibling Senses reuse Lexeme-level form facts but keep independent learning
 content/materializations, curriculum membership, Protocol Runs, Evidence,
@@ -620,14 +679,16 @@ declarations and schedules.
 
 **Reference breadth, learning selectivity**:  
 The Reference Lexicon may show every discoverable Reference Sense, while Sensa
-only learns selected Senses with an executable published, on-demand or hybrid
-content path for the selected protocol. Browsing a reference-only meaning does
-not make it eligible for Add-to-Learning.
+only admits stable Senses with a target expression and a valid Learning Policy
+Assignment. Formal Runtime still requires a ready Resolved Learning Plan and an
+executable published, on-demand or hybrid content path; browsing a reference-only
+meaning creates neither fact.
 
 **Preference scope, explicit ownership**:  
 Learner Preferences sync, Device Preferences remain local, and Curriculum owns
-daily limits, Books and ranges. Changing any preference never rewrites learning
-history or derived mastery state.
+daily limits, Books, ranges and Learning Policy Assignments. Changing any
+presentation preference or learning policy never rewrites learning history,
+active Protocol facts or derived mastery state.
 
 **Standalone Product Boundary**:  
 The Sensa product covers selected Sense content, Learning Protocols, retention,

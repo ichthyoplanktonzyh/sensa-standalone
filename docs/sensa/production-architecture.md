@@ -1,7 +1,7 @@
 # Sensa 生产领域架构
 
 > 状态：Canonical domain model  
-> 更新日期：2026-08-31
+> 更新日期：2026-09-01
 
 本文是 Sensa 领域对象、聚合边界和全局不变量的主入口。术语定义以
 [`../../CONTEXT.md`](../../CONTEXT.md) 为准；资源细节和运行行为分别由
@@ -42,16 +42,21 @@ Book ──versioned as──▶ Book Version ──pins──▶ Sense
                               ▼
                        Book Enrollment ──────┐
                                             │
-Saved Sense ──Add-to-Learning Intent──▶ Supplemental Curriculum
+Direct stable Sense selection ─┐            │
+Saved Sense / Contextual Lookup├─Add-to-Learning──▶ Supplemental Curriculum
+Confirmed Personal Alignment ──┘            │
                                             │
 Learner ──configures──▶ Study Plan ─────────┤
+             │                              │
+             └── Learning Policy Assignment─┤
                                             ▼
                                   Study Scope Revision
+                                            ├──▶ Resolved Learning Plan[]
+                                            │    (preparing | ready | blocked)
                                             │
-                                            ▼
-                                  Learner Sense Progress (roll-up)
-                                            │
-                                            └── Retention Target[]
+                                            └──▶ Learner Sense Progress (roll-up)
+                                                     │
+                                                     └── Retention Target[]
                                                 ├── target Sense Expression Binding
                                                 ├── Learning Phase
                                                 ├── active Learning Protocol Run
@@ -75,17 +80,24 @@ Learning Session ──contains──▶ Sense Encounter
                                       ├── Lightweight Study Outcome
                                       └── Memory Outcome ──▶ update FSRS once
 
-Learning Target ──resolved by──▶ Content Provisioning
+Learning Target ──resolves durable identity──▶ Retention Target
         │
-        └──resolves durable identity──▶ Retention Target
-                    ├── Published Learning Content
-                    ├── On-demand Learning Content
-                    └── Hybrid
-                              │
-                              ▼
-                    Learning Materialization
-                              ×
-                pinned Learning Protocol + purpose
+        ├── Effective Learning Policy
+        │
+        └── content/runtime capabilities
+                    │
+                    ▼
+           Resolved Learning Plan
+      (purpose Protocol + provisioning + readiness)
+                    │ ready
+                    ▼
+           Content Provisioning
+       Published / On-demand / Hybrid
+                    │
+                    ▼
+          Learning Materialization
+                    ×
+       pinned Learning Protocol + purpose
                               │
                               ▼
                      Learning Protocol Run
@@ -113,11 +125,18 @@ Learner ──explicitly creates──▶ Personal Meaning
                                               ▼
                        Sense + Sense Version + Personal Meaning Alignment
                                               │
-                     ┌────────────────────────┴───────────────────────┐
-                     ▼                                                ▼
-       Learning Target / Content                             Sense Expression Binding
-                     │                                                │
-                     └──────────────▶ Learner Semantic Projection ◀───┘
+                                              ▼
+                                  Sense Expression Binding
+                                              │
+                        explicit Add-to-Learning (optional bridge)
+                                              │
+                                              ▼
+                                      Learning Target
+                                              │
+                                              ▼
+                                    Content Provisioning
+
+Sense + Alignment + Binding ─────────▶ Learner Semantic Projection
 
 Learner Sense Progress + Saved Senses/Examples + Personal Semantic World + Practice Activity
                                              │
@@ -185,7 +204,8 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 - Sense 可以由编辑流程预先生产，也可以由 learner–LLM Sense Construction 按需提出并在 learner
   确认后创建；“公共”表示语义契约可复现，不表示必须先存在穷尽式公共 Sense 库；
 - learner 确认只创建稳定 Sense identity 与初始 Sense Version。正式学习还需要独立的 Learning
-  Target、Content Provisioning decision、Learning Materialization 与 Learning Protocol；确认对话本身
+  Target、Effective Learning Policy、Resolved Learning Plan、Content Provisioning decision、Learning
+  Materialization 与 Learning Protocol；确认对话本身
   不能冒充学习内容；
 - Published Learning Content 通过 Sense Learning Package 固定 release、Sense Version、target binding、
   referenced form/profile 与资源；On-demand Learning Content 则针对已固定的 target 与 protocol 生成；
@@ -193,6 +213,8 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
   Learning Materialization，并记录生成器/发布版本、输入 provenance 与校验结果；
 - 内容来源与 Learning Protocol 正交：同一 Published Package 可服务多个协议，同一协议也可消费
   Published 或 On-demand 内容，具体可执行性由版本化合同决定；
+- Learning Policy Profile 协调三个 purpose 的 Protocol family、内容保证、Evidence 与 Scheduling
+  Policy references，但不把 Content、Protocol、Evidence 或 FSRS 合并成一个对象；
 - Acquisition Profile、Required Capability Set、Required Asset Manifest 与 Executable Capability
   Inventory 属于 Structured Acquisition Protocol 的高保证内容合同，不是所有学习方式的前置条件；
 - Sense Relation 是同一 release 中经过审核的两个 Sense 之间的语义事实；
@@ -202,8 +224,13 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 ### Curriculum
 
 - Book Version 是经过筛选、排序的不可变 Sense 课程，不是词典全义项转储；
-- Study Plan 是 learner 的正式学习安排，组合 Book Enrollment、Supplemental Curriculum 与每日新
-  Sense 上限；它不再等同于一个 Book Version；
+- Formal Learning 是独立产品链，不以 Personal Semantic World membership 为入口条件。Book membership、
+  direct stable-Sense selection 与 confirmed Personal Meaning Alignment 都可以提供 Learning Entry
+  Provenance，并在同一 Learning Target/Retention Target 处汇合；
+- direct entry 仍必须固定 stable Sensa Sense/Version 与 target Sense Expression Binding；裸 Lexeme、
+  未对齐 Reference Sense 或任意 L2 字符串不能绕过 Sense-first target resolution；
+- Study Plan 是 learner 的正式学习安排，组合 Book Enrollment、Supplemental Curriculum、Learning
+  Policy Assignments 与每日新 Sense 上限；它不再等同于一个 Book Version；
 - Book Enrollment 固定一个不可变 Book Version 与一个已解析 Book Range，mode 为
   `active | maintenance | paused`；同一 learner 最多有一个可以引入新 Sense 的 active Enrollment；
 - `active` 提供新 Sense 并继续既有学习，`maintenance` 不再引入新 Sense，但继续已开始的
@@ -215,15 +242,25 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 - Supplemental Curriculum 是 learner-owned、ordered 的 Learning Target 补充课程，不是 Book、
   Saved list 或 Personal Collection；同一 Retention Target 可以有多个来源，但只进入一次有效
   Study Scope；同一 Sense 的不同 target expressions 是不同成员；
+- Learning Policy Assignment 可以位于 learner default、Curriculum source 或 Retention Target override；
+  Effective Learning Policy 按 `target > Curriculum > learner > system` 解析，并保存 Profile/version 与
+  decision provenance；
+- Resolved Learning Plan 把 target、Effective Learning Policy 与 content/runtime capabilities 解析为
+  purpose-specific Protocol、provisioning requirements 和 `preparing | ready | blocked` readiness；它不
+  预先固定未来 Encounter/Card 顺序或 FSRS due calendar；
 - 每次换词书、调整 Range、切换 Enrollment mode、接纳或移除 Supplemental Membership，都产生
   新的不可变 Study Scope Revision；正在进行的 Session 固定旧 revision，不被静默改队；
 - 默认课程策略可以错开同一 Lexeme 的多个新 Sense；只有明确的边界教学才应主动并置；
 - UI 可以展示 Lexeme 数与 Sense 数，但不能把 sibling Senses 合成一个课程成员；
 - Add-to-Learning Intent 是进入 Curriculum 的显式 learner request；Curriculum 决定如何接纳或拒绝，
   但不能修改已发布 Book Version，也不能把收藏本身解释成该 request。Intent 目标已在有效范围时
-  必须幂等返回 `already_in_scope`；若选定 protocol 无法通过 published、on-demand 或 hybrid 路径
-  解析出合法内容，必须返回 `content_unavailable`。active Declared Mastery 则要求独立恢复操作，
-  不能制造幽灵 Membership 或静默撤销声明。
+  必须幂等返回 `already_in_scope`；合法 target/policy 被接纳后立即创建 Supplemental Membership，
+  内容准备随后推进 plan readiness。若当前 Policy 无法通过 published、on-demand 或 hybrid 路径
+  解析出合法内容，Membership 保留而 plan 标记 `blocked(reason=content_unavailable)`；active Declared
+  Mastery 则要求独立恢复操作，不能静默撤销声明或伪造可运行进度。
+- Personal Semantic World 只通过显式 Add-to-Learning 提供可选 bridge；删除或修改 Personal Meaning、
+  Focus/Anchor/Alignment 不删除 Curriculum Membership、Retention Target、Protocol/Evidence history 或
+  FSRS，Learning/Review history 也不能反向创建 Personal Meaning；
 
 ### Lexical Reference
 
@@ -323,8 +360,9 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
   静默升级为 learner confirmation，确认后的 Sense Expression Binding 也不能冒充 reviewed
   Learning Package resource；
 - 未确认到 stable Sense 的 Meaning Focus 不能成为 Curriculum target。确认连接不得覆盖原始
-  Personal Meaning；只有独立的 Add-to-Learning Intent 加上可执行的 Content Provisioning 与 Learning
-  Protocol 才能进入正式学习规划。
+  Personal Meaning；独立的 Add-to-Learning Intent 可以先创建 Membership，但只有 Effective Learning
+  Policy 与可执行的 Content Provisioning/Learning Protocol 解析为 `ready` Resolved Learning Plan 后，
+  才能进入正式学习运行。
 
 ### Free Practice
 
@@ -355,8 +393,9 @@ Declared Mastery（界面可显示为“熟”）是 learner 对一个 Retention
   默认状态属于 learner-scoped preference；它们跨设备同步并只影响未来呈现或 approved asset choice；
 - Device Preference 属于具体 Device Installation。autoplay、theme、reduced-motion override、播放速度
   与音量等本机行为不进入 learner progress，也不要求跨设备一致；系统级无障碍设置优先；
-- 每日新 Sense 上限、Book、Range 与 Enrollment mode 属于 Study Plan/Curriculum；Settings Surface
-  可以导航过去，但不能把它们复制进 Preference；Notification Preference 是独立的 Later 能力；
+- 每日新 Sense 上限、Book、Range、Enrollment mode 与 Learning Policy Assignment 属于 Study
+  Plan/Curriculum；Settings Surface 可以导航过去，但不能把它们复制进普通 Preference；Notification
+  Preference 是独立的 Later 能力；
 - Sync Health 是 Replica/outbox、connectivity、installed content 与 convergence 的派生读取模型，
   不能由用户直接设置成“已同步”；
 - Data Export Request 固定 request time、learner data scope 与处理状态，输出同一逻辑快照；Account
@@ -372,8 +411,21 @@ Declared Mastery（界面可显示为“熟”）是 learner 对一个 Retention
 Learning Protocol 定义一次“如何建立、检查、加强或恢复 Sense ↔ L2 表达连接”的可复现过程。每个
 Protocol Run 固定 `initial_learning | retention_review | relearning` 中一个 purpose，并通过 Protocol
 Steps 组织材料角色、交互、结果资格与 transition。领域模型至少接受 Lightweight 与 Structured 两种
-协议 family；首版默认交付轻量路径，Structured Acquisition 作为高保证 Later 路径。协议和内容来源
-分别选择，不能把某个 Package 结构、固定卡片数或页面顺序硬编码成唯一学习方式。
+协议 family；具体可用性由当前 stage/PRD 决定，领域模型不把任一 family 固定为唯一入口。协议和
+内容来源分别选择，不能把某个 Package 结构、固定卡片数或页面顺序硬编码成唯一学习方式。
+
+Learning Policy Profile 是 learner-facing 学习方式背后的版本化合同。一个 Profile 为三种 purpose
+分别规定允许的 Protocol family，引用内容保证、Evidence Policy、Scheduling Policy 与 claim boundary；
+`lightweight` 和 `high_assurance` 是代表性 Profile，不是永久闭集。Learning Policy Assignment 是 Study
+Plan/Curriculum 的显式操作而不是普通 Settings 值，Resolved Learning Plan 再以
+`Learning Target × Effective Learning Policy × content/runtime capabilities` 解析当前是否可执行。
+
+Policy Profile 只协调正交对象，不把三种 purpose 合成一个跨月 Run，也不把 FSRS 变成学习方法。
+第一次正式 Protocol Run 创建时，Effective Learning Policy 冻结为 Retention Target 的 Committed
+Learning Policy，并约束后续三个 purpose。普通 Profile/Assignment/default/source change 只可在该
+Commitment 前重新规划；Commitment 后只能通过显式 Learning Policy Migration 在安全边界建立新
+revision，active/historical Protocol、Outcome、Handoff 与 FSRS State 保持原版本。高保证 Profile
+无法满足内容或 capability 要求时必须 blocked，不能静默降级。MVP 不提供该迁移入口。
 
 ### Initial Learning
 
@@ -381,7 +433,10 @@ Steps 组织材料角色、交互、结果资格与 transition。领域模型至
 fixed Learning Target
         │
         ▼
-Learning Materialization
+Effective Learning Policy + ready plan
+        │
+        ▼
+Learning Materialization × Initial Learning Protocol
         │
         ▼
 compact teaching / optional retrieval
@@ -452,11 +507,13 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
    Lexical Occurrence 与 Contextual Sense Resolution，并生成可重建搜索/详情读取模型；它不拥有
    learner progress，也不自由生成词典释义；
 6. **Curriculum Module**：拥有 Study Plan、Book Enrollment/Range、Supplemental Curriculum、
-   Add-to-Learning Intent 与 Study Scope Revision；它保证 source provenance、去重、切换和范围
-   变更不修改 published Book membership 或 learner progress；
+   Add-to-Learning Intent、Learning Entry Provenance、Learning Policy Assignment 与 Study Scope
+   Revision；它接纳 Book、direct stable-Sense 与 personal-first bridge，保证 source provenance、去重、
+   Policy scope/precedence、切换和范围变更不修改 published Book membership 或 learner progress；
 7. **Personal Semantic World Module**：拥有 Personal Meaning、Meaning Focus、Personal Semantic
    Anchor、Personal Expression Anchor、Personal Meaning Alignment，以及 Saved Sense/Example、Sense
-   Note、Personal Collection 与 typed Membership 的 learner-scoped 事实及同步生命周期；
+   Note、Personal Collection 与 typed Membership 的 learner-scoped 事实及同步生命周期；它可以提交
+   bridge Intent，但不是 Curriculum/Learning Runtime 的依赖；
 8. **Sense Construction Module**：编排 learner–LLM 语义访谈、Sense Proposal 与显式确认；它可以按需
    请求创建 stable Sense/Version，但不能创建 Learning Evidence、Curriculum Membership 或绕过
    后续内容物化与协议选择；
@@ -464,19 +521,22 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
    progress 与 personal content，只生成可重建读取模型；
 10. **Free Practice Module**：解析 Practice Scope，物化 mode-specific Task，保存 Practice Activity、
    Attempt 与 Result，不调用正式 Learning Kernel 的结算接口；
-11. **Content Provisioning Module**：将固定 Learning Target 通过 published、on-demand 或 hybrid
-   路径解析为通过合同校验的不可变 Learning Materialization；它编排独立的 Learning Content LLM
-   role，但不能改写 Sense 或 learner progress；
-12. **Learning Protocol Module**：选择并执行版本化协议，固定 Protocol Purpose，定义 Step、material
-   role binding 与 transition，创建 Protocol Run/Step Instance，接纳与 purpose 兼容的合法结果，并在
-   成功 Initial Learning Completion 的同一权威边界创建必需的 Scheduling Handoff；
+11. **Content Provisioning Module**：按 Resolved Learning Plan 将固定 Learning Target 通过 published、
+   on-demand 或 hybrid 路径解析为 capability/readiness result 和通过合同校验的不可变 Learning
+   Materialization；它编排独立的 Learning Content LLM role，但不能改写 Sense、Learning Policy 或
+   learner progress；
+12. **Learning Policy & Protocol Module**：拥有 versioned Learning Policy Profiles，结合 Curriculum
+   Assignment 解析 Effective Learning Policy 与 Resolved Learning Plan，选择并执行 purpose-specific
+   versioned Protocol，定义 Step、material role binding 与 transition，创建 Protocol Run/Step Instance，
+   接纳与 purpose 兼容的合法结果，并在成功 Initial Learning Completion 的同一权威边界创建必需的
+   Scheduling Handoff；
 13. **Executable Learning Capability Resolver**：为 Structured Acquisition 求 Package、Required
    Capability Set、approved resources 与 Runtime 能力的版本化交集，不读取 learner state；
 14. **Learner Progress Module**：拥有 Retention Target、其 Learning Phase、active protocol run、
    protocol-specific projection、Memory State 以及 Sense-level roll-up，并记录 Initial Learning Completion、
    Study Completion、Acquisition Graduation 与 Relearning Completion；
-15. **Unified Planning Module**：在 Study Plan、Session intent、Declared Mastery、cooldown、
-   protocol readiness、Relearning readiness 与 due state 之间选择候选；
+15. **Unified Planning Module**：只从 purpose-ready Resolved Learning Plans 中，在 Study Plan、Session
+   intent、Declared Mastery、cooldown、protocol readiness、Relearning readiness 与 due state 之间选择候选；
 16. **Semantic Policy Module**：在 Structured Acquisition 内从 Step purpose、capability inventory、Gate progress、
    Evidence、5D 与历史中选择最小干预；
 17. **Encounter Module**：按 Protocol Step Instance 固定 Materialization/Action，物化瞬时 Card Presentation，
@@ -497,8 +557,8 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
   Control 的真实 owner，不能维护第二份通用 settings state；
 - Learner Preference 必须 typed、versioned、跨设备收敛；Device Preference 只在本机生效。两者都
   不能回写 Action/Attempt/Evidence/Outcome、Gate、5D、FSRS 或历史资源引用；
-- 每日新 Sense 上限、Book、Range 与 Enrollment mode 不是 Preference；改变学习计划必须产生真实
-  Curriculum operation/revision；
+- 每日新 Sense 上限、Book、Range、Enrollment mode 与 Learning Policy Assignment 不是普通 Preference；
+  改变学习计划或学习方式必须产生真实 Curriculum operation/revision；
 - sign-out、Local Data Clearance、learning-history reset 与 Account deletion 不能互相替代；有 pending
   outbox 时不得静默清除本机数据，旧 Replica 也不得在 Account deletion 后复活数据；
 - Sync Health 只能从连接、outbox、content installation 与服务端 convergence 事实派生，不能由客户端
@@ -522,6 +582,12 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 - Semantic Field 是有限、版本化的内容邻域，不是 Book、学习路径或通用人类 ontology；
 - Personal Semantic World 只接纳 learner 显式创建的 Personal Meaning；LLM 推断和学习历史都不能
   静默增加 membership；
+- Formal Learning 不依赖 Personal Semantic World；Book、direct stable-Sense 与 personal-first entry 在
+  Learning Target 汇合，Learning Entry Provenance 不改变 Target/Retention identity；
+- direct learning 仍必须固定 stable Sense/Version 与 target binding；裸词或未对齐 Reference Sense 不能
+  成为正式学习 identity；
+- Personal Content 删除/组织与 Curriculum/Progress 生命周期独立；桥接后任一侧操作不得级联删除或
+  伪造另一侧事实，Personal Anchor 只可作为显式授权的可选 scaffold；
 - Learner Semantic Projection 只能从权威事实重建，不能成为第二份 progress 或“脑内掌握度”；
 - Learner Semantic Projection 中的 L1/L2 呈现必须保留 reviewed、learner-authored 与 form-level
   provenance；L1 标签和 L2 lemma 都不能被写回为 Sense 或 progress identity；
@@ -536,6 +602,18 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
   输出、权限、校验、provenance 与 fallback 合同约束，不能因使用同一 provider 而合并所有权；
 - 内容来源与 Learning Protocol 必须正交；Published Package 不是唯一合法来源，Structured
   Acquisition 也不是唯一合法协议；
+- Learning Policy Profile 必须显式、版本化、可审计，并协调而不合并 Protocol、Content、Evidence 与
+  Scheduling Policy；Assignment scope/precedence、Effective Policy 与 plan resolution provenance 必须
+  可重放；
+- Learning Entry Provenance 与 Learning Policy 保持正交；来源只可影响默认推荐和实际 readiness，
+  不能永久决定方法或静默降级 learner 已选择的保证级别；
+- Add-to-Learning 接纳可以先于内容物化；`preparing/blocked` Membership 保留 learner intent，但只有
+  `ready` Resolved Learning Plan 可以进入正式 Planner inventory。内容/capability 不足不能伪造进度，
+  高保证 Profile 也不能静默降级；
+- 第一次正式 Protocol Run 创建时必须冻结 Committed Learning Policy；此后普通 Assignment、默认方式、
+  新来源或新增内容不能改变该 target 的学习方式；未来切换必须走显式 Learning Policy Migration；
+- Policy change/migration 不改变 Learning/Retention Target、不重置 FSRS、不改写 active 或 historical
+  Protocol facts；已完成 Initial Learning 不因迁移而自动创建第二个 Handoff；
 - 每个 Learning Protocol Run 必须且只能固定一个 Protocol Purpose；Initial Learning、Retention Review
   与 Relearning 的完成事实和 scheduler 权限不能互相冒充；
 - Protocol Step 拥有材料组织、交互/判分、结果资格与 transition；Card Presentation 只渲染当前 Step

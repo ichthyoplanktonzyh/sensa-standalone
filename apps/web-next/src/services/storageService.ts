@@ -1,14 +1,60 @@
 import { FSRSItem, Rating, initFSRSFromLearn, reviewFSRS } from './fsrs';
 import type { Word } from '../types';
 import { WORDS } from '../data';
+import type { RelearningCycle } from '../engine/types';
+import type { ReviewRuntimeEffect } from '../engine/ReviewQueue';
+import type { ReviewMemoryOutcome } from '../review/types';
 
 const STORAGE_KEYS = {
   FSRS_ITEMS: 'bubei_fsrs_items_v1',
+  REVIEW_RUNTIME: 'sensa_review_runtime_v1',
   SETTINGS: 'bubei_user_settings_v1',
   STATS: 'bubei_user_stats_v1',
   STARRED: 'bubei_starred_words_v1',
   KNOWN: 'bubei_known_words_v1',
 };
+
+export interface StoredReviewOutcome {
+  outcomeKey: string;
+  packageId: string;
+  senseId: string;
+  actionKey: string;
+  memoryOutcome: ReviewMemoryOutcome;
+  appliedAt: number;
+  /** Immutable snapshot of the FSRS revision created by this outcome. */
+  memoryState: FSRSItem;
+  relearningCycleId: string | null;
+}
+
+export interface ReviewRuntimeStore {
+  version: 1;
+  settledOutcomes: Record<string, StoredReviewOutcome>;
+  relearningCycles: Record<string, RelearningCycle>;
+}
+
+export interface ReviewRetentionSettlement {
+  outcomeKey: string;
+  applied: boolean;
+  memoryState: FSRSItem;
+  relearningCycle: RelearningCycle | null;
+}
+
+export interface ReviewRetentionSettlementInput {
+  outcomeKey: string;
+  packageId: string;
+  senseId: string;
+  actionKey: string;
+  memoryOutcome: ReviewMemoryOutcome;
+  correct: boolean;
+  targetCapability: RelearningCycle['targetCapability'];
+  now?: number;
+}
+
+export interface RelearningProgressInput {
+  event: 'repair_completed' | 'retest_failed' | 'retest_passed';
+  senseId: string;
+  cycle: RelearningCycle;
+}
 
 export interface UserSettings {
   dailyNewCount: number; // 每日新学词数 (5, 10, 15, 20, 30)
@@ -36,6 +82,7 @@ const DEFAULT_SETTINGS: UserSettings = {
 
 class StorageService {
   private fsrsCache: Record<string, FSRSItem> | null = null;
+  private reviewRuntimeCache: ReviewRuntimeStore | null = null;
   private settingsCache: UserSettings | null = null;
   private starredCache: Set<string> | null = null;
   private knownCache: Set<string> | null = null;
@@ -61,32 +108,16 @@ class StorageService {
   }
 
   /**
-   * 初始化预置演示复习数据（初次使用时预置 8 个到期复习单词，便于开箱即用体验）
+   * Keep an empty local runtime store until the installed Learning Catalog
+   * supplies Sense identities. Legacy Word data is not an input to the
+   * formal Learn/Review flows.
    */
   private initDefaultFSRSIfEmpty() {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.FSRS_ITEMS);
       if (!raw) {
-        const initial: Record<string, FSRSItem> = {};
-        const now = Date.now();
-        // 预置前 8 个词作为已学完且今天已到期的复习词
-        const seedWords = WORDS.slice(0, Math.min(8, WORDS.length));
-        seedWords.forEach((w, idx) => {
-          const id = w.id || `w_${w.w}`;
-          initial[id] = {
-            wordId: id,
-            state: idx % 3 === 0 ? 'review' : 'review',
-            stability: 2.0 + idx * 0.5,
-            difficulty: 5.0,
-            reps: 1 + (idx % 3),
-            lapses: 0,
-            lastReview: now - 3 * 24 * 60 * 60 * 1000,
-            due: idx % 2 === 0 ? now - 1000 : now + 24 * 3600 * 1000,
-            scheduledDays: 2,
-          };
-        });
-        localStorage.setItem(STORAGE_KEYS.FSRS_ITEMS, JSON.stringify(initial));
-        this.fsrsCache = initial;
+        localStorage.setItem(STORAGE_KEYS.FSRS_ITEMS, JSON.stringify({}));
+        this.fsrsCache = {};
       }
     } catch {
       // 降级支持非浏览器/无 localStorage 环境
@@ -128,6 +159,43 @@ class StorageService {
     return item;
   }
 
+  /** Package/Sense-facing name for graduation; Word remains a legacy alias. */
+  public graduateSense(senseId: string, mistakeCount: number = 0): FSRSItem {
+    return this.graduateWord(senseId, mistakeCount);
+  }
+
+  /**
+   * Install deterministic demo FSRS records for the supplied runtime Sense
+   * identities. This is a local-first fixture convenience, not content
+   * authoring: the caller owns which Package identities are installed.
+   */
+  public ensureRuntimeSenseIds(senseIds: readonly string[]): void {
+    const items = this.getFSRSItems();
+    const missingIds = senseIds.filter((senseId) => !items[senseId]);
+    if (missingIds.length === 0) return;
+    const now = Date.now();
+    missingIds.forEach((senseId, index) => {
+      items[senseId] = {
+        wordId: senseId,
+        state: 'review',
+        stability: 2.0 + index * 0.5,
+        difficulty: 5.0,
+        reps: 1 + (index % 3),
+        lapses: 0,
+        lastReview: now - 3 * 24 * 60 * 60 * 1000,
+        due: index === 0 ? now - 1000 : now + 24 * 3600 * 1000,
+        scheduledDays: 2,
+      };
+    });
+    this.fsrsCache = items;
+    try {
+      localStorage.setItem(STORAGE_KEYS.FSRS_ITEMS, JSON.stringify(items));
+    } catch (e) {
+      console.warn('Failed to seed runtime Sense FSRS items', e);
+    }
+    this.notify();
+  }
+
   /**
    * 复习完成后更新 FSRS 记忆状态
    */
@@ -137,6 +205,236 @@ class StorageService {
     const updated = reviewFSRS(existing, rating);
     this.saveFSRSItem(updated);
     return updated;
+  }
+
+  /**
+   * Apply the one Review runtime effect seam. Memory projection and
+   * Relearning progress use separate storage records even though the MVP
+   * keeps both in localStorage.
+   */
+  public applyReviewRuntimeEffect<TContent>(effect: ReviewRuntimeEffect<TContent>): void {
+    if (effect.type === 'retention_outcome') {
+      if (!effect.result.evidenceEligible || effect.action.kind !== 'retention_review') return;
+      this.settleRetentionReview({
+        outcomeKey: effect.outcomeKey,
+        packageId: effect.candidate.package.packageId,
+        senseId: effect.candidate.package.senseId,
+        actionKey: effect.action.actionKey,
+        memoryOutcome: effect.result.memoryOutcome,
+        correct: effect.result.correct,
+        targetCapability: effect.action.capability === 'introduction'
+          ? 'contextual_recognition'
+          : effect.action.capability,
+      });
+      return;
+    }
+    this.applyRelearningProgress({
+      event: effect.event,
+      senseId: effect.candidate.package.senseId,
+      cycle: effect.cycle,
+    });
+  }
+
+  /**
+   * Settle one due retaining Review exactly once. The stable outcomeKey is
+   * persisted before the caller can reconstruct a queue, so undo/replay and a
+   * page reload cannot apply another FSRS revision for the same due Review.
+   */
+  public settleRetentionReview(
+    input: ReviewRetentionSettlementInput,
+  ): ReviewRetentionSettlement {
+    const runtime = this.getReviewRuntimeStore();
+    const existingOutcome = runtime.settledOutcomes[input.outcomeKey];
+    if (existingOutcome) {
+      const currentMemory = this.getFSRSItems()[input.senseId] ?? existingOutcome.memoryState;
+      return {
+        outcomeKey: input.outcomeKey,
+        applied: false,
+        memoryState: { ...currentMemory },
+        relearningCycle: runtime.relearningCycles[input.senseId]
+          ? { ...runtime.relearningCycles[input.senseId] }
+          : null,
+      };
+    }
+
+    const items = this.getFSRSItems();
+    const previous = items[input.senseId] ?? initFSRSFromLearn(input.senseId, 0);
+    const memoryState = reviewFSRS(
+      previous,
+      input.correct ? Rating.Good : Rating.Again,
+      input.now,
+    );
+    const relearningCycle: RelearningCycle | null = input.correct
+      ? null
+      : {
+          cycleId: input.outcomeKey,
+          packageId: input.packageId,
+          senseId: input.senseId,
+          targetCapability: input.targetCapability,
+          failedReviewOutcomeKey: input.outcomeKey,
+          failedReviewActionKey: input.actionKey,
+          stage: 'repair_pending',
+          repairCount: 0,
+          lastActionOrdinal: -1,
+        };
+
+    items[input.senseId] = memoryState;
+    this.fsrsCache = items;
+    this.persistFSRSItems(items);
+
+    runtime.settledOutcomes[input.outcomeKey] = {
+      outcomeKey: input.outcomeKey,
+      packageId: input.packageId,
+      senseId: input.senseId,
+      actionKey: input.actionKey,
+      memoryOutcome: input.memoryOutcome,
+      appliedAt: input.now ?? Date.now(),
+      memoryState: { ...memoryState },
+      relearningCycleId: relearningCycle?.cycleId ?? null,
+    };
+    if (relearningCycle) {
+      runtime.relearningCycles[input.senseId] = { ...relearningCycle };
+    }
+    this.persistReviewRuntime(runtime);
+    return {
+      outcomeKey: input.outcomeKey,
+      applied: true,
+      memoryState: { ...memoryState },
+      relearningCycle: relearningCycle ? { ...relearningCycle } : null,
+    };
+  }
+
+  /** Return a copy so callers cannot mutate persisted recovery progress. */
+  public getRelearningCycle(senseId: string): RelearningCycle | null {
+    const cycle = this.getReviewRuntimeStore().relearningCycles[senseId];
+    return cycle ? { ...cycle } : null;
+  }
+
+  public getRelearningSenseIds(): string[] {
+    const cycleSenseIds = Object.keys(this.getReviewRuntimeStore().relearningCycles);
+    // Before the separated Relearning projection existed, an Again review
+    // could leave only the FSRS state label behind. Keep that legacy local
+    // state recoverable: the Review queue will infer a targeted Package cycle
+    // and the first Relearning effect will materialize it durably.
+    const legacySenseIds = Object.values(this.getFSRSItems())
+      .filter((item) => item.state === 'relearning')
+      .map((item) => item.wordId);
+    return [...new Set([...cycleSenseIds, ...legacySenseIds])];
+  }
+
+  public getSettledReviewOutcome(outcomeKey: string): StoredReviewOutcome | null {
+    const outcome = this.getReviewRuntimeStore().settledOutcomes[outcomeKey];
+    return outcome
+      ? { ...outcome, memoryState: { ...outcome.memoryState } }
+      : null;
+  }
+
+  /**
+   * Persist repair/retest progress without touching the FSRS projection.
+   * Completion only changes the FSRS state label back to review; due, reps,
+   * lapses, stability, difficulty and scheduledDays remain byte-for-byte the
+   * values produced by the failed retention outcome.
+   */
+  public applyRelearningProgress(input: RelearningProgressInput): void {
+    const runtime = this.getReviewRuntimeStore();
+    let stored = runtime.relearningCycles[input.senseId];
+    if (!stored) {
+      // Compatibility bridge for records written by the pre-cycle MVP. Do
+      // not invent a cycle for a normal Review item: only an existing FSRS
+      // `relearning` state may be upgraded by a queued Relearning effect.
+      const current = this.getFSRSItems()[input.senseId];
+      if (!current || current.state !== 'relearning') return;
+      stored = {
+        ...input.cycle,
+        stage: 'repair_pending',
+        repairCount: 0,
+      };
+      runtime.relearningCycles[input.senseId] = stored;
+    }
+    if (stored.cycleId !== input.cycle.cycleId) return;
+
+    if (input.event === 'retest_passed') {
+      const items = this.getFSRSItems();
+      const current = items[input.senseId];
+      if (current && current.state === 'relearning') {
+        items[input.senseId] = { ...current, state: 'review' };
+        this.fsrsCache = items;
+        this.persistFSRSItems(items);
+      }
+      delete runtime.relearningCycles[input.senseId];
+      this.persistReviewRuntime(runtime);
+      return;
+    }
+
+    const nextStage = input.event === 'repair_completed'
+      ? 'retest_pending'
+      : 'repair_pending';
+    // Replaying a transition after undo is a no-op once the same stage has
+    // already been durably reached. This keeps the local effect seam idempotent.
+    if (
+      stored.stage === nextStage
+      && stored.repairCount === input.cycle.repairCount
+    ) return;
+    runtime.relearningCycles[input.senseId] = {
+      ...stored,
+      stage: nextStage,
+      repairCount: input.cycle.repairCount,
+      lastActionOrdinal: input.cycle.lastActionOrdinal,
+    };
+    this.persistReviewRuntime(runtime);
+  }
+
+  private getReviewRuntimeStore(): ReviewRuntimeStore {
+    if (this.reviewRuntimeCache) return this.reviewRuntimeCache;
+    const empty: ReviewRuntimeStore = {
+      version: 1,
+      settledOutcomes: {},
+      relearningCycles: {},
+    };
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.REVIEW_RUNTIME);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<ReviewRuntimeStore>;
+        if (
+          parsed.version === 1
+          && parsed.settledOutcomes
+          && typeof parsed.settledOutcomes === 'object'
+          && !Array.isArray(parsed.settledOutcomes)
+          && parsed.relearningCycles
+          && typeof parsed.relearningCycles === 'object'
+          && !Array.isArray(parsed.relearningCycles)
+        ) {
+          this.reviewRuntimeCache = {
+            version: 1,
+            settledOutcomes: parsed.settledOutcomes as Record<string, StoredReviewOutcome>,
+            relearningCycles: parsed.relearningCycles as Record<string, RelearningCycle>,
+          };
+          return this.reviewRuntimeCache;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load Review runtime state from localStorage', error);
+    }
+    this.reviewRuntimeCache = empty;
+    return empty;
+  }
+
+  private persistReviewRuntime(runtime: ReviewRuntimeStore): void {
+    this.reviewRuntimeCache = runtime;
+    try {
+      localStorage.setItem(STORAGE_KEYS.REVIEW_RUNTIME, JSON.stringify(runtime));
+    } catch (error) {
+      console.warn('Failed to save Review runtime state', error);
+    }
+    this.notify();
+  }
+
+  private persistFSRSItems(items: Record<string, FSRSItem>): void {
+    try {
+      localStorage.setItem(STORAGE_KEYS.FSRS_ITEMS, JSON.stringify(items));
+    } catch (error) {
+      console.warn('Failed to save FSRS items to localStorage', error);
+    }
   }
 
   /**
@@ -157,6 +455,19 @@ class StorageService {
       const id = w.id || `w_${w.w}`;
       return dueWordIds.has(id);
     });
+  }
+
+  /** Return due runtime Sense identities without requiring a Word registry. */
+  public getDueSenseIds(senseIds: readonly string[], now: number = Date.now()): string[] {
+    const items = this.getFSRSItems();
+    const endOfToday = new Date(now).setHours(23, 59, 59, 999);
+    const due = new Set(
+      Object.values(items)
+        .filter((item) => item.state === 'review' || item.state === 'relearning')
+        .filter((item) => item.due <= endOfToday)
+        .map((item) => item.wordId),
+    );
+    return senseIds.filter((senseId) => due.has(senseId));
   }
 
   /**
@@ -320,4 +631,3 @@ class StorageService {
 }
 
 export const storageService = new StorageService();
-

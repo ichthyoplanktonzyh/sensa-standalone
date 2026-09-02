@@ -1,80 +1,232 @@
-interface AcademyScreenProps {
+import type { KeyboardEvent, ReactNode } from 'react';
+import {
+  DEFAULT_PRACTICE_SCOPE,
+  type PracticeScope,
+  type PracticeSenseItem,
+} from '../practiceData';
+import { SensaFreePracticeScreen } from './SensaFreePracticeScreen';
+
+export type PracticeHomePresentation = 'sensa' | 'baseline';
+
+export interface AcademyScreenProps {
   active: boolean;
   onBack: () => void;
+  onOpenWordList: () => void;
+  onOpenListening: () => void;
+  onOpenRealWorldListening: () => void;
+  onOpenDictation: (item: PracticeSenseItem) => void;
+  onOpenQuickSpelling: (item: PracticeSenseItem) => void;
+  practiceScope?: PracticeScope;
   toast: (msg: string) => void;
+  presentation?: PracticeHomePresentation;
 }
 
-export const AcademyScreen = ({ active, onBack, toast }: AcademyScreenProps) => {
+interface PracticeEntryProps {
+  name: string;
+  description: string;
+  available: boolean;
+  onActivate: () => void;
+}
+
+interface ChannelCardProps {
+  tone: 'a' | 'b';
+  icon: string;
+  title: string;
+  children: ReactNode;
+}
+
+const activateOnKeyboard = (event: KeyboardEvent<HTMLDivElement>, action: () => void) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    action();
+  }
+};
+
+const PracticeEntry = ({
+  name,
+  description,
+  available,
+  onActivate,
+}: PracticeEntryProps) => (
+  <div
+    className="lbox"
+    role="button"
+    tabIndex={0}
+    onClick={onActivate}
+    onKeyDown={(event) => activateOnKeyboard(event, onActivate)}
+    aria-label={available ? name : `${name}，暂未开放`}
+  >
+    <div className="n">{name}</div>
+    <div className="c">{available ? description : '暂未开放'}</div>
+    <span className="play">
+      {available ? (
+        <svg className="icon"><use href="#i-play" /></svg>
+      ) : (
+        <span aria-hidden="true">…</span>
+      )}
+    </span>
+  </div>
+);
+
+const ChannelCard = ({ tone, icon, title, children }: ChannelCardProps) => (
+  <div className="listen-wrap">
+    <div className={`lcard ${tone}`}>
+      <div className="lc-head">
+        <span className="dot"><svg className="icon"><use href={icon} /></svg></span>
+        <span>{title}</span>
+      </div>
+      <div className="lc-inner">{children}</div>
+    </div>
+  </div>
+);
+
+const BaselineAcademyScreen = ({
+  active,
+  onBack,
+  onOpenWordList,
+  onOpenListening,
+  onOpenDictation,
+  onOpenQuickSpelling,
+  practiceScope = DEFAULT_PRACTICE_SCOPE,
+  toast,
+}: AcademyScreenProps) => {
+  const firstItem = practiceScope.items[0];
+
+  const requireFirstItem = (action: (item: PracticeSenseItem) => void) => {
+    if (!firstItem) {
+      toast('当前练习范围暂无可练意思');
+      return;
+    }
+    action(firstItem);
+  };
+
+  const unavailable = (name: string) => {
+    toast(`${name}暂未开放`);
+  };
+
   return (
     <section className={`screen${active ? ' active' : ''}`} id="s-academy" data-anim="sheet">
       <div className="sheet-head">
         <button className="down" onClick={onBack} aria-label="返回">
           <svg className="icon"><use href="#i-chev-d" /></svg>
         </button>
-        <h2>不背学堂</h2>
+        <h2>自由练习</h2>
       </div>
+
       <div className="pad">
-        <div className="banner" onClick={() => toast('打开课程：CET-6 六级听力 阶梯训练')}>
-          <svg className="wv" viewBox="0 0 360 126" preserveAspectRatio="none">
-            <path d="M-10 92 C 60 40, 120 118, 190 62 S 320 22, 380 66 L380 126 L-10 126Z" fill="rgba(255,255,255,.28)" />
-            <path d="M-10 74 C 70 26, 140 96, 210 46 S 330 8, 380 44" fill="none" stroke="rgba(255,168,120,.55)" strokeWidth="13" strokeLinecap="round" />
-            <path d="M-10 82 C 70 34, 140 104, 210 54 S 330 16, 380 52" fill="none" stroke="rgba(140,160,240,.45)" strokeWidth="9" strokeLinecap="round" />
-          </svg>
-          <span className="badge">全新上线</span>
-          <span className="cet">⼁ CET-6 ⼁</span>
-          <span className="bt">六级听力 阶梯训练</span>
-          <span className="sub">轻 松 练 真 题 👌</span>
-        </div>
-
-        <div className="two" style={{ marginBottom: 26 }}>
-          <div className="ccard" onClick={() => toast('进入「备考速刷」')}>
-            <b>备考速刷</b>
-            <p>考前快速 n 刷必备</p>
-            <span className="th" style={{ background: 'linear-gradient(150deg,#cfeaf7,#a9d8ef)' }}>🚀</span>
-          </div>
-          <div className="ccard" onClick={() => toast('进入「班级打卡」')}>
-            <b>班级打卡</b>
-            <p>全班一起学，刷词不掉队</p>
-            <span className="th" style={{ background: 'linear-gradient(150deg,#fadfe9,#f6c7dd)' }}>📒</span>
+        <div className="card group">
+          <div
+            className="row"
+            role="button"
+            tabIndex={0}
+            onClick={onOpenWordList}
+            onKeyDown={(event) => activateOnKeyboard(event, onOpenWordList)}
+            aria-label={`查看当前练习范围 ${practiceScope.bookTitle}`}
+          >
+            <span className="sq">
+              <svg className="icon"><use href="#i-bookopen" /></svg>
+            </span>
+            <span className="t">当前练习范围</span>
+            <span className="v">
+              <b>{practiceScope.bookTitle}</b>
+              <br />
+              {practiceScope.items.length} 个意思
+            </span>
+            <svg className="chev"><use href="#i-chev-r" /></svg>
           </div>
         </div>
 
-        <div className="sec-title" style={{ marginBottom: 12 }}>精品课程</div>
-        <div className="two">
-          <div className="ccard" onClick={() => toast('课程详情：六级听力 阶梯训练')}>
-            <b>六级听力 阶梯训练</b>
-            <p>轻松练真题</p>
-            <span className="th" style={{ background: 'linear-gradient(150deg,#e3d9f7,#cfc0ee)' }}>🎧</span>
-          </div>
-          <div className="ccard" onClick={() => toast('课程详情：四级听力 阶梯训练')}>
-            <b>四级听力 阶梯训练</b>
-            <p>轻松练真题</p>
-            <span className="th" style={{ background: 'linear-gradient(150deg,#d8f2c8,#b6e8a4)' }}>🎧</span>
-          </div>
-          <div className="ccard" onClick={() => toast('课程详情：考研写作炼句')}>
-            <b>考研写作炼句</b>
-            <p>快速炼制高分金句</p>
-            <span className="th" style={{ background: 'linear-gradient(150deg,#fde5cc,#fbd0ae)' }}>🖋️</span>
-          </div>
-          <div className="ccard" onClick={() => toast('课程详情：小野解词')}>
-            <b>小野解词</b>
-            <p>词根词缀，图记单词</p>
-            <span className="th" style={{ background: 'linear-gradient(150deg,#d5f4e6,#b5ead2)' }}>🧑‍🏫</span>
-          </div>
-          <div className="ccard" onClick={() => toast('课程详情：口语达人')}>
-            <b>口语达人</b>
-            <p>地道口语特训课</p>
-            <span className="th" style={{ background: 'linear-gradient(150deg,#ffe6c4,#ffd39a)' }}>🦜</span>
-          </div>
-        </div>
+        <div className="sec-title group">按通道选择练习</div>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 26 }}>
-          <div className="sec-title">快速上手</div>
-          <button className="pill" style={{ background: 'none', color: '#9a9aa2', padding: 0 }} onClick={() => toast('查看更多上手教程')}>
-            查看更多 ›
-          </button>
+        <ChannelCard tone="a" icon="#i-head" title="听">
+          <PracticeEntry
+            name="随身听"
+            description={`${practiceScope.items.length} 个意思`}
+            available
+            onActivate={onOpenListening}
+          />
+          <PracticeEntry
+            name="听音辨义"
+            description=""
+            available={false}
+            onActivate={() => unavailable('听音辨义')}
+          />
+        </ChannelCard>
+
+        <ChannelCard tone="b" icon="#i-vol" title="说">
+          <PracticeEntry name="跟读" description="" available={false} onActivate={() => unavailable('跟读')} />
+          <PracticeEntry
+            name="看义说词"
+            description=""
+            available={false}
+            onActivate={() => unavailable('看义说词')}
+          />
+          <PracticeEntry
+            name="例句朗读"
+            description=""
+            available={false}
+            onActivate={() => unavailable('例句朗读')}
+          />
+        </ChannelCard>
+
+        <ChannelCard tone="a" icon="#i-bookopen" title="读">
+          <PracticeEntry
+            name="沉浸刷词"
+            description="浏览意思与例句"
+            available
+            onActivate={onOpenWordList}
+          />
+          <PracticeEntry
+            name="语境辨义"
+            description=""
+            available={false}
+            onActivate={() => unavailable('语境辨义')}
+          />
+          <PracticeEntry
+            name="义项辨析"
+            description=""
+            available={false}
+            onActivate={() => unavailable('义项辨析')}
+          />
+        </ChannelCard>
+
+        <ChannelCard tone="b" icon="#i-write" title="写">
+          <PracticeEntry
+            name="随手拼写"
+            description="义 → 写"
+            available
+            onActivate={() => requireFirstItem(onOpenQuickSpelling)}
+          />
+          <PracticeEntry
+            name="听写"
+            description="听 → 写"
+            available
+            onActivate={() => requireFirstItem(onOpenDictation)}
+          />
+          <PracticeEntry
+            name="例句填空"
+            description=""
+            available={false}
+            onActivate={() => unavailable('例句填空')}
+          />
+        </ChannelCard>
+
+        <div className="card group">
+          <div className="row">
+            <span className="sq">
+              <svg className="icon"><use href="#i-bulb" /></svg>
+            </span>
+            <span className="t">自由练习</span>
+            <span className="v">不改变正式学习和复习进度</span>
+          </div>
         </div>
       </div>
     </section>
   );
 };
+
+export const AcademyScreen = (props: AcademyScreenProps) => (
+  props.presentation === 'baseline'
+    ? <BaselineAcademyScreen {...props} />
+    : <SensaFreePracticeScreen {...props} />
+);

@@ -1,30 +1,35 @@
 # Sensa V1 产品需求文档（PRD）
 
 > 状态：Accepted product baseline  
-> 决策日期：2026-08-28  
+> 决策日期：2026-08-31
 > 产品范围：移动形态 React Web；未来 Flutter iOS/Android 复用相同旅程与语言中立契约  
 > 交互原型：[`docs/reference/sensa-v1/product-prototype.html`](../reference/sensa-v1/product-prototype.html)
 
 本文冻结 Sensa V1 的信息架构、用户旅程、用户语言、屏幕职责和交互验收标准。
 里程碑与上线边界仍由 [current-stage.md](current-stage.md) 控制；运行时所有权由
-[production-architecture.md](production-architecture.md) 控制；学习材料完整性由
-[sense-learning-resource-model.md](sense-learning-resource-model.md) 控制。本文不能把
+[production-architecture.md](production-architecture.md) 控制；个人意义与 Sense 确认由
+[personal-semantic-world-model.md](personal-semantic-world-model.md) 控制；学习材料完整性由
+[sense-learning-resource-model.md](sense-learning-resource-model.md) 控制；内容供给、Learning Protocol
+与 FSRS 交接由 [learning-connection-model.md](learning-connection-model.md) 控制。本文不能把
 Product Shell 变成 Card/Deck 产品，也不能让客户端接管 Semantic Policy、Evidence、
 5D、Memory Outcome 或 FSRS。
 
 ## 1. 产品命题
 
-Sensa 帮助学习者学习一个英文词在真实语境中的**具体意思**，而不是背诵“英文词 =
-中文标签”。产品内部以 Sense 为课程、学习状态和调度身份；用户界面继续使用自然语言
-“单词”和“意思”。
+Sensa 帮助学习者把自己的意义/经验结构连接到语言共同体可复现的具体 Sense，并进一步稳定它与
+目标语言表达的连接，而不是背诵“英文词 = 中文标签”。Personal Semantic World 是个人建模起点；
+正式 Learning Protocol/Retention 是稳定 Sense–L2 连接的重要方式，但不是个人意义存在的前提或
+唯一用途。
 
 Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏例句体验，但学习内核改为：
 
 1. 先让学习者进入可感知的经验，再揭示英文词形、发音和中文连接；
-2. 让一个新 Sense 在其他 Sense 的干扰之间完成 Recognition、Recall 与 Transfer；
-3. 只有真实 confusion target 才增加 Boundary requirement；
-4. 用 Unified Planner 安排 new、Acquisition、Relearning 与 due Review；
-5. 短期 Acquisition Graduation 后才初始化 FSRS，并由 Semantic Policy 决定每次出现做什么。
+2. 把内容来源与学习方式分开：同一 target 可使用 published、on-demand 或 hybrid 内容，并选择
+   Lightweight Study 或更高保证的 Structured Acquisition；
+3. 首版默认用按需生成的紧凑内容完成一次 Lightweight Study，不把“看完/学完”说成掌握；
+4. 通过版本化 Scheduling Handoff 把学习结果交给 FSRS，并如实保留其依据与证据等级；
+5. Structured Acquisition 保留 Recognition、Recall、Transfer、条件性 Boundary、干扰与 Gates，作为
+   后续高保证协议，而不是首版所有 Sense 的强制路径。
 
 ## 2. V1 目标与非目标
 
@@ -36,6 +41,12 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
 - 学习界面始终聚焦一个 Sense、一个 Action 和一个主要操作；
 - 揭示阶段达到不背单词式的信息层级和沉浸感，同时严格遵守 Action 资产边界；
 - Book、Plan、学习历史、Declared Mastery、媒体、离线 outbox 和 Sync 都使用真实数据；
+- 用户可以明确创建 Personal Meaning，通过中文 LLM 语义访谈确认英语 Sense 与表达；只有用户
+  明确创建才进入“我的词义世界”，只有用户明确确认才创建 stable Sense；
+- confirmed Sense 可以通过独立的 Learning Content LLM 准备按需学习内容；内容在开始学习前冻结、
+  通过合同校验并保留生成 provenance，语义确认对话本身不冒充学习材料；
+- 首版可完成 Lightweight Study、产生诚实的 Study Completion/Scheduling Handoff，并由 FSRS 安排
+  后续复习；完成不自动产生 Learning Evidence 或 mastery claim；
 - Account、Learner/Device Preferences、Sync Health、导出与删除都显示真实 owner 和状态；
 - 用户永远不需要理解 Lexeme、Sense、Encounter、Action、Evidence、5D、FSRS、Replica 或 Workspace。
 
@@ -43,9 +54,12 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
 
 - 不提供商城、会员、虚拟货币、装备、课程、班级打卡、社区或成绩分享；
 - 不提供 Cards、Decks 或通用闪卡导入；
-- 不展示没有领域契约和持久化能力支撑的占位入口；
-- V1 P0 不要求交付独立 Free Practice、Semantic Field 可视化或 Sense Note；这些能力已有领域
-  边界，但在 persistence/API/Sync/renderer contract 就绪前不得显示占位入口；
+- 没有领域契约和持久化能力支撑的功能不得伪装成可用入口。自由练习首页可以展示已确认路线图中的
+  disabled 练习项，但必须直接标注“暂未开放”，点击只解释状态，不能创建 Session 或写入结果；
+- 完整产品 IA 保留独立 Free Practice，并以首批四种可执行练习方式作为已确认目标；当前生产 P0
+  仍由 `current-stage.md` 控制，不因需求确认原型出现入口而声称已经交付。正式产品只有在
+  content/persistence/API/renderer contract 就绪后才把相应练习变为可进入状态，不得用课程、班级或
+  考试内容充当占位；
 - V1 不交付影视剧、电视或 YouTube 原声例句、synced-media Example Render、词级媒体 timeline
   或外部媒体消歧/授权生产链，也不设置 Listening Gate；当前 pronunciation/example audio 只是
   已审核的静态呈现资源；
@@ -54,6 +68,8 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
   release provenance；
 - 不提供社交 Profile、公开昵称/头像体系、多个 Learner Profile、算法参数面板或“一键重置全部
   学习历史”；每日新学数和词书范围不能伪装成普通 Preference。
+- 首版只支持中文 familiar language（L1）与英语 target language（L2），不提供语言角色切换或一个
+  用户同时学习多个 L2；长期合同仍保留一对多、多对多及 typed expression 扩展能力。
 
 ## 3. 产品语言
 
@@ -68,9 +84,18 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
 | Supplemental Curriculum | 加入学习的意思（Later） | 不是收藏夹，也不修改原词书 |
 | Study Scope Revision | 当前学习范围版本 | 仅用于一致性与冲突说明，不直接显示技术名称 |
 | Learning Session | 今天的学习 / 本次学习 | 用户可离开，未完成 Encounter 不伪造学习结果 |
-| Acquisition Cycle | 正在学习这个意思 | 跨多次出现建立连接；不向用户显示 Gate 或 Cycle 技术名 |
+| Learning Protocol | 学习方式 | 首版默认轻量学习；不向用户显示 protocol 技术枚举 |
+| Protocol Purpose | 首次学习 / 复习 / 再学 | 内部固定 `initial_learning | retention_review | relearning`；界面只说自然语言 |
+| Protocol Step | 学习中的一步 | 组织本步内容、交互、结果与下一步；不显示技术名称或固定全局步数 |
+| Learning Materialization | 本次学习内容 | 开始后固定；生成更新不会悄悄替换正在学习的内容 |
+| Initial Learning Completion | 完成首次学习 | 成功后交给系统安排长期复习；不同学习方式保留不同依据 |
+| Study Completion | 完成这次学习 | 轻量首次学习的完成类型；不称为掌握、毕业或行为证据 |
+| Scheduling Handoff | 交给系统安排复习 | 不显示技术名；系统保留交接依据与证据等级 |
+| Relearning Completion | 完成再学 / 已重新连起来 | 不覆盖刚才的忘记结果，也不重新初始化复习计划；它不等于重学评价产生的调度结果 |
+| Acquisition Cycle | 深度建立这个意思（Later） | Structured 协议跨多次出现；不显示 Gate 或 Cycle 技术名 |
 | Sense Encounter | 这个意思的一次学习 | 不显示技术名称 |
-| Learning Action | 当前学习步骤 | 页面只显示自然任务语言，不显示 payload kind |
+| Learning Action | 当前操作 | 页面只显示自然任务语言，不显示 payload kind |
+| Card Presentation | 当前页面 / 当前卡片 | 只是某个 Step 的瞬时呈现，不是学习身份、进度或牌组 |
 | Declared Mastery | 已会声明；按钮为“熟” | 永远说“这个意思已经会了”，不能说整词已掌握 |
 | Memory State / FSRS | 待复习、暂时稳定、下次出现 | 不显示算法名或 rating |
 | Semantic Field | 相关意思 / 词义区域 | 不向用户宣称统一概念本体或 embedding 距离 |
@@ -78,10 +103,16 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
 | Reference Sense | 词典里的意思 | 与“当前学习的意思”区分；没有 Alignment 时不显示加入学习 |
 | Contextual Lookup | 点词查义 | 展示完整词典，并仅在可靠时标记“本句中”或“本句中可能是” |
 | Lexical Enrichment | 构词 / 词源 / 相关 | 只在真实内容存在时显示；记忆辅助不能冒充词源事实 |
-| Learner Semantic Projection | 我的词义世界 | 是有限内容上的个人投影，不称为“大脑掌握地图” |
+| Personal Semantic World | 我的词义世界 | 只有用户明确创建的 Personal Meaning 才是成员；不称为“大脑掌握地图” |
+| Personal Meaning | 我想表达的意思 / 我的意思 | 是个人稳定身份，不等于中文标题、英语词或公共 Sense |
+| Meaning Focus | 我真正在意的是 | 从一段经验中选出的当前侧面；同一场景可以产生多个 Focus |
+| Sense Proposal | 模型理解的这个意思 | 可继续对话和修改，用户确认前不是公共 Sense |
+| Personal Meaning Alignment | 已确认的意思连接 | 用户确认后把 Personal Meaning 连接到 stable Sense，不表示已经学会 |
+| Personal Expression Anchor | 我的表达 | 可为中文或英语的 typed expression，必须显示建议/确认来源 |
+| Learner Semantic Projection | 词义世界视图 | 组合个人意义、Sense 连接与学习状态的读取模型，不拥有进度 |
 | Saved Sense / Saved Example | 收藏的意思 / 收藏的例句 | 收藏不表示已会，也不自动加入学习 |
 | Sense Note | 我的笔记 | 每个意思一份当前笔记，不称为词典释义 |
-| Personal Semantic Anchor | 我的场景（Later） | 是用户自己的经验，不称为标准例句或正确答案 |
+| Personal Semantic Anchor | 我的场景 / 经验锚点 | 属于一个 Personal Meaning，不称为标准例句或正确答案 |
 | Personal Collection | 自定义集合（Later） | 是个人组织方式，不称为词书或词义区域 |
 | Add-to-Learning Intent | 加入学习（Later） | 必须显式触发，不与收藏或自由练习合并 |
 | Free Practice Session | 自由练习 | 听说读写入口不改变正式学习与复习进度 |
@@ -105,8 +136,9 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
 8. **离线行为诚实。** 本地操作立即生效；网络失败明确说明“已保存在本机，联网后同步”。
 9. **移动优先。** Web 桌面端保持 390–430px 的移动学习面板；不把 Study 拉伸成桌面表单。
 10. **可恢复。** 离开、同步冲突、内容缺失和已会撤销都有明确恢复路径。
-11. **经过干扰再检验。** 揭示或 repair 后的立即回答不计为独立成功；同一意思在其他意思间穿插。
-12. **毕业不等于掌握。** 完成短期习得只表示进入长期保持，不向用户承诺永久记住。
+11. **完成不等于掌握。** Lightweight Study Completion 只表示本次协议完成；不冒充行为证据。
+12. **高保证检验经过干扰。** Structured Acquisition 中，揭示或 repair 后的立即回答不计为独立
+    成功；Graduation 也只表示可以进入长期保持，不承诺永久记住。
 13. **额度不是债务。** 每日新学数是上限；未完成部分不滚入次日，也不制造断签或补课压力。
 14. **范围变更可恢复。** 换词书、缩小范围和暂停学习不删除 Sense 进度；恢复后从真实状态继续。
 15. **参考不制造进度。** 搜索、点词、展开构词词源与播放词典音频都不自动收藏、加入学习或
@@ -116,6 +148,8 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
     Curriculum 或 Data Control 的真实领域对象。
 18. **偏好不改历史。** 口音、译文默认状态、autoplay、主题和动画不能重写 Action、Evidence、Gate、
     FSRS 或已经固定的资源。
+19. **方法可换，进度不随卡片漂移。** 学习方式可以拥有不同 Step 数量、顺序与分支；页面或卡片只
+    呈现当前 Step，不能成为 Sense identity、课程成员、Evidence 或复习调度 owner。
 19. **破坏性操作分层。** 退出登录、清除本机数据、重置学习历史和删除账号必须使用不同文案、确认
     与结果；pending outbox 不得被静默清除。
 
@@ -123,27 +157,44 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
 
 ```text
 沉浸首页
-├── 开始今天的学习
-│   └── Mixed Learning Session
-├── 只复习（次要入口，有 due 时显示）
-│   └── Review-only Learning Session
 ├── 头像
 │   └── 账号与设置
-│       ├── 账号与安全
-│       ├── 外观与设备
-│       ├── 数据与同步
-│       ├── 导出与删除
-│       └── 关于与支持
+├── 签到卡
+│   └── 只完成当日签到并显示结果
+├── Learn
+│   └── Mixed Learning Session
+├── Review（次要入口）
+│   └── Review-only Learning Session
 └── 三个二级入口
-    ├── 词书
+    ├── 自由练习
+    │   ├── 沉浸刷词
+    │   ├── 随身听
+    │   ├── 听写
+    │   └── 随手拼写
     ├── 我的内容
     └── 我的学习
-        ├── 计划与进度
+        ├── 当前词书、学习范围与每日额度
+        ├── 事实概况与签到日历
         └── 学习偏好
 ```
 
 首页是默认落点，不作为第四个底部 Tab。二级页面通过底部三个带文字标签的入口打开，
 顶部返回/收起回到首页。活跃学习期间隐藏全部产品导航。
+
+### 5.1 第一轮首页 IA 确认（2026-08-28）
+
+- `Learn N` 是唯一主要学习入口，启动或继续 Mixed Session。`N` 表示此刻可由 Mixed Planner
+  处理的去重 Retention Target 数量，而不是单纯的“今日新词数”；同一 target 即使来自多个
+  inventory 也只计一次。首版一个 Sense 仅一个 primary target，因而 UI 仍以“意思数”呈现；
+- `Review N` 是次要的自主复习入口，启动或继续 Review-only Session。`N` 只表示当前到期的
+  Retention 与可由复习继续的 Relearning Sense，不包含 new 或 initial Protocol work。
+- 签到卡只承担签到：点击后写入/显示当日已签到与连续签到事实，不进入学习记录、学习统计或
+  Learning Session，也不产生 Attempt、Evidence、Memory Outcome 或学习额度变化。
+- `我的学习` 中的签到日历读取同一签到事实；首页签到状态与日历状态不得分别维护或出现冲突。
+- 头像进入账号与设置。词书选择、学习范围和每日额度归入 `我的学习`，不再占用独立底部入口。
+- 原型中的“不背学堂”正式更名为 `自由练习`。旧课程、班级、备考和真题内容不属于 Sensa IA，
+  只保留既有页面外壳，后续由 Sensa 的四类自由练习逐步替换。
+- 底部三个入口固定为 `自由练习 / 我的内容 / 我的学习`；首页本身不显示为底部入口。
 
 ## 6. 核心用户旅程
 
@@ -162,61 +213,71 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
 ```text
 打开产品 → 首页显示今日新学/待复习摘要 → 开始今天的学习
 → start/resume Mixed Session → Planner 从四类 inventory 选择下一个 Sense
-→ 打开一次 Encounter → 渲染一个主要任务 → Attempt/feedback/repair
-→ 更新 Acquisition Gate 或结算一次 due Review → 下一个 Sense
+→ 为固定 target 解析 Learning Materialization 与带 purpose 的 Protocol Run
+→ 执行当前 Protocol Step → 打开 Encounter 并渲染当前 Card Presentation
+→ 结算与 purpose 兼容的 Completion/Outcome → 下一 Step 或下一个 Sense
 → 无候选或用户结束 → 完成页 → 首页
 ```
 
 首页的新学与复习数字是摘要，不是客户端持有的固定队列。Mixed Planner 可以选择 due
-Retention、Review-originated Relearning、ready initial Acquisition 和 daily quota 允许的
-new Introduction。具体优先级由版本化 Planning Policy 控制，但 due backlog 和已经开始的
-Acquisition 都不能被持续引入新 Sense 饿死。
+Retention、Review-originated Relearning、ready Protocol work 和 daily quota 允许的
+new Protocol work。具体优先级由版本化 Planning Policy 控制，但 due backlog 和已经开始的
+Protocol Run 都不能被持续引入新 Sense 饿死。
 
 Mixed Session 固定开始时的 Study Scope Revision。用户后来换词书、调整范围或加入个人 Sense，
 只影响后续 Session，不能让当前学习队列在后台静默变形。
 
-### 6.3 新 Sense 的短期习得
+### 6.3 新 Sense 的首版轻量学习
 
 ```text
-Introduction：Experience → 主动揭示 Sense/Form/Audio/Bridge/Example
-→ 穿插其他 Sense
-→ Contextual Recognition
-→ 再次穿插
-→ Meaning-to-form Recall
-→ 再次穿插
-→ Novel-context Transfer
-→ required Boundary（可嵌入 Recognition/Transfer）
-→ Acquisition Graduation
+fixed Learning Target
+→ Published / On-demand / Hybrid Content Provisioning
+→ 冻结 Learning Materialization
+→ Experience/说明/例句等紧凑学习内容
+→ 可选的 Recall 或 learner rating
+→ Study Completion（Initial Learning Completion）
+→ 同一成功边界创建 Scheduling Handoff
 → 初始化 FSRS
 ```
 
-Introduction 与 reveal 只建立连接，不产生 Gate pass 或 FSRS due。正式检验必须在其他 Sense
-干扰后发生；同一 Cycle 可以跨 Session 恢复。一个 Gate 失败时，系统显示针对性 repair 并在
-后续 Encounter 重测该能力，不要求用户机械重做已经通过的无关 Gate。答案揭示后的立即重答
-不得算作独立成功。
+内容开始前必须固定 target、protocol version、内容角色、generator/policy provenance、校验结果与
+digest。模型失败时保留 Personal Meaning、confirmed Sense 与已保存 materialization；不得在 learner
+作答后重新生成并替换题面、答案或评分依据。
 
-Recognition、Recall 与 Transfer 都通过且所有 required Boundary 已解决时，产品把该意思标记
-为“已完成首次学习/待系统复习”，但不宣称“已经掌握”。此时才初始化 FSRS。
+Study Completion 后产品可以显示“完成这次学习/之后由系统安排复习”，但不显示“已经掌握”。成功
+完成首次学习时，Study Completion 与唯一 Scheduling Handoff 必须原子产生；中断、失败或内容不可用
+不能创建 completion 或初始化 FSRS。handoff 必须如实记录 `basis=protocol_completion` 与
+`evidenceLevel=non_evidentiary`；若协议另有合法自评输入，则其 evidence level 为 `self_report`。轻量
+学习不会因此产生 Acquisition Gate、5D 或行为 Evidence。
+
+完整的 Structured Acquisition Protocol 继续作为 canonical 高保证路径：它要求干扰后的 Recognition、
+Recall、Novel-context Transfer 与条件性 Boundary，只有全部 required Gates 解决才产生 Acquisition
+Graduation。该协议进入 Later，不是首版所有 Sense 的必经步骤。
 
 ### 6.4 只复习
 
 ```text
 首页 → 只复习 N 个
 → start/resume Review-only Session
-→ 只选择 due Retention 或 Review-originated Relearning
+→ due Sense 执行 Retention Review Protocol
+→ 失败/变弱结果落账后可执行 Lightweight Relearning
 → 无 due/relearning 候选 → 复习完成页 → 首页
 ```
 
-Review-only 不引入新 Sense、不推进 initial Acquisition、不移动课程新学位置，也不消耗 daily-new
+Review-only 不引入新 Sense、不推进 initial Learning Protocol、不移动课程新学位置，也不消耗 daily-new
 quota。没有到期内容时入口禁用或弱化；V1 不提供会提前改变 FSRS 的“自由刷题”。
 
-一次 due Review 的第一次有效独立结果最多产生一个 Memory Outcome 和一次 FSRS 更新。失败先
-记录真实遗忘，再进入 Relearning；当天之后的 repair/retest 不得覆盖失败或重复调用 FSRS。
+一次 due Review 最多产生一个 Memory Outcome 和一次 FSRS 更新。首版协议可以接纳 learner rating，
+但必须将其记录为 `evidenceLevel=self_report`，不能冒充独立行为 Evidence。若存在失败后的 repair/retest，它不得
+覆盖原 Outcome 或重复调用 FSRS。首版 Lightweight Relearning 产生独立 Relearning Completion；它不
+创建 Scheduling Handoff、不重新初始化 FSRS，也不再次更新刚才这次 Review。若未来协议启用
+scheduler-eligible relearning evaluation，它可另行产生 origin=`relearning` 的 Memory Outcome，但不能改写原 Review。Structured Relearning
+仍是 Later 选择，不是所有遗忘的默认模型。
 
 ### 6.5 浏览内容
 
 ```text
-首页 → 词书/我的内容 → 单词聚合列表 → 某个具体意思
+首页 → 我的内容，或我的学习中的当前词书 → 单词聚合列表 → 某个具体意思
 → 只读意思详情/完整例句 → 返回原列表
 ```
 
@@ -241,8 +302,9 @@ annotation 提供结果；`ambiguous` 只能显示
 不能只展示模型选中的一条，也不能运行时自由生成 definition。词根词缀、词源故事、词族和记忆辅助
 只在有真实、经过审核的数据时出现；“真题”永不进入详情结构。
 
-Reference-only meaning 可以浏览，但没有 reviewed Alignment 或 executable published Package 时不显示
-可成功的“加入学习”，Curriculum 返回 `content_unavailable`。查词本身不自动收藏、写笔记或加入
+Reference-only meaning 可以浏览，但没有 reviewed Alignment，或选定 protocol 没有可执行的
+published/on-demand/hybrid 内容路径时，不显示可成功的“加入学习”，Curriculum 返回
+`content_unavailable`。查词本身不自动收藏、写笔记或加入
 计划，也不产生 Attempt/Evidence/Practice Result。
 
 若当前 Reference Sense 已对齐 Sensa Sense，详情可以挂载该 Sense 的收藏状态与 current Sense Note；
@@ -251,19 +313,49 @@ Reference-only meaning 可以浏览，但没有 reviewed Alignment 或 executabl
 active assessment 在 learner 提交 primary response 并进入 feedback 前，不提供产品内点词/词典入口。
 Introduction reveal、内容浏览和 feedback 后允许查词；这是答案完整性边界，不是试图封锁外部词典。
 
-### 6.7 已会声明
+### 6.7 从个人意义到公共 Sense
+
+```text
+我的词义世界 → 创建“我想表达的意思”
+→ 用中文描述个人经验或添加场景/表达锚点
+→ LLM 用中文复述 Meaning Focus，并指出可能存在的多个关注方向
+→ learner 接受、修改或继续说明
+→ LLM 生成少量完整 Sense Proposals 与自然英语表达
+→ learner 查看“为什么匹配 / 可能不匹配 / 与相邻意思的区别”
+→ 就是这个 / 接近但不是 / 我在意另一个角度 / 都不是
+→ learner 明确确认 → 创建 stable senseId、Sense Version 与 Personal Meaning Alignment
+→ 后续 Content Provisioning；“加入学习”仍由独立 Intent 触发
+```
+
+LLM 不要求先从穷尽式公共 Sense 库命中已有条目。它应根据对话构造包含核心意义、原型场景、
+包含/排除边界、相邻意义和英语 expression candidates 的 Sense Proposal；只返回一个英语单词不算
+完成。模型可以查询相似 Senses 帮助解释或复用，但没有命中时仍允许 learner 确认并创建新 Sense。
+
+一个场景可以产生多个 Meaning Focus，例如同一次借伞经历可以拆出接收方向的 `borrow` 与给予方向
+的 `lend`。系统复用原始经验，不把中文“借”直接等同于其中任一英语 Sense。learner 选择“这些都
+不是”时继续澄清或保留未确认状态，不得为了结束对话强行生成确定答案。
+
+创建 Personal Meaning、确认 Sense、确认英语表达、生成并物化资源、加入学习和产生
+Study Completion/Learning Evidence 是六个不同事实。
+任何对话、确认、浏览、播放或自报理解都不产生 Learning Evidence。LLM 不可用或 learner 中途离开
+时，已明确创建的 Personal Meaning 与 Anchors 仍然保存，未确认 Proposal 不得被后台自动确认。
+
+首版固定中文 L1、英语 L2：对话与边界说明以自然中文为主，目标表达为英语 word/phrase 等 typed
+expression。首版不显示语言选择器，但数据与交互不得假设一个中文表达只对应一个英语 Sense。
+
+### 6.8 已会声明
 
 ```text
 活跃学习顶部“熟” → 确认“这个意思已经会了”
-→ 本地写入 learner_declared_mastery.set
-→ 同一 Sense 的所有 active Encounter interrupted；所有 planned Encounter cancelled
-→ 无 Attempt/Evidence/Memory Outcome → Planner 选择下一个 Sense
+→ 确认当前 primary target expression → 本地写入 learner_declared_mastery.set
+→ 该 Retention Target 的所有 active Encounter interrupted；所有 planned Encounter cancelled
+→ 无 Attempt/Evidence/Memory Outcome → Planner 选择下一个 target
 ```
 
-在词书或“我的内容 → 已会”中可以撤销；撤销只恢复该 Sense 的计划资格。同一 Lexeme
+在词书或“我的内容 → 已会”中可以撤销；撤销只恢复该 Retention Target 的计划资格。同一 Lexeme
 的 sibling Senses 不受影响。
 
-### 6.8 Curriculum lifecycle（完整模型，Later）
+### 6.9 Curriculum lifecycle（完整模型，Later）
 
 ```text
 当前词书 A（active）→ 选择词书 B
@@ -273,14 +365,14 @@ Introduction reveal、内容浏览和 feedback 后允许查词；这是答案完
 ```
 
 换词书不清零 A 的学习进度，也不重新初始化重叠 Sense 的 FSRS。用户可以进一步暂停 A；暂停只让
-它暂时不再进入正式学习，不等于标记已会。切回时从保留的 phase、Cycle 和 Memory State 继续。
+它暂时不再进入正式学习，不等于标记已会。切回时从保留的 phase、Protocol Run 和 Memory State 继续。
 
 Book Range 只控制未来可以开始的新 Sense。缩小范围不得删除已经开始或已经复习的事实；“改变
 新学范围”和“暂停既有内容”必须是两个明确操作。
 
 ```text
 收藏的意思 → 加入学习
-→ Curriculum 校验 published executable Package 与当前范围
+→ Curriculum 校验 target、provisioning path、protocol 与当前范围
 → 已接纳 / 已在学习范围 / 内容暂不可用 / 需先撤销已会
 ```
 
@@ -288,7 +380,7 @@ Book Range 只控制未来可以开始的新 Sense。缩小范围不得删除已
 移出补充学习也不取消收藏或删除进度。收藏例句上的入口必须写成“学习这个例句对应的意思”，
 不能把 Example 当作课程成员。
 
-### 6.9 设置与偏好
+### 6.10 设置与偏好
 
 ```text
 我的学习 → 学习偏好
@@ -306,7 +398,7 @@ Attempt eligibility、答案合同或 Evidence；当前 Action 没有授权译�
 asset boundary。每日新学意思数仍通过 Study Plan 入口修改并产生真实 Curriculum revision，不写入
 Preference。
 
-### 6.10 账号、同步与数据控制
+### 6.11 账号、同步与数据控制
 
 ```text
 头像 → 账号与设置
@@ -331,15 +423,183 @@ Preference。
 首页使用沉浸背景和低信息密度，只包含：
 
 - 头像；
-- 日期与一句产品主张；
-- 今日摘要：`7 个新意思 · 3 个待复习`；
-- 唯一主要按钮：`开始今天的学习`；
-- 有到期内容时显示低于主按钮层级的次要入口：`只复习 3 个`；
+- 当日日期与签到卡；
+- 唯一主要按钮：`Learn N`，表示当前 Mixed Session 可处理的去重意思数；
+- 低于主按钮层级的次要入口：`Review N`，表示当前到期复习数；无到期内容时禁用或弱化；
 - 当前词书与每日目标的轻量说明；
-- 底部 `词书 / 内容 / 学习` 三个入口；
+- 底部 `自由练习 / 我的内容 / 我的学习` 三个入口；
 - 必要时出现一行非阻塞同步状态。
 
-### 7.2 词书
+签到成功只在当前页面给出成功状态；签到卡不是学习记录入口。完整签到历史由
+`我的学习` 的签到日历承接。
+
+### 7.2 自由练习
+
+本节定义已经确认的目标 IA。`apps/web-next` 可以用真实静态原型数据验证页面需求，但当前生产
+P0 不因此获得 Free Practice 能力；上线可见性仍必须满足 `current-stage.md` 与运行合同。
+
+- 首页按 `听 / 说 / 读 / 写` 四个通道组织练习方式；通道只是导航分类，不显示能力分数、完成度或待办；
+- `沉浸刷词` 以 Reading/Recognition 为主，浏览结果不变成正式 Learning Evidence；
+- `随身听` 以 Listening 为主，使用已发布的发音与例句音频；
+- `听写` 组合 Listening 与 Writing，结果只进入 Practice Result；
+- `随手拼写` 以 Sense-to-form Writing 为主，不推进 Acquisition Gate 或 FSRS；
+- V1 只有上述四种练习显示为可进入；听音辨义、跟读、看义说词、例句朗读、语境辨义、义项辨析与
+  例句填空作为 disabled 路线图入口显示“暂未开放”，不得物化 Free Practice Session；
+- Speaking、发音评分和开放式输出留待后续 Profile；占位入口不代表已存在录音、grader 或能力结论；
+- 不展示课程、班级打卡、备考、真题、商城或任何原“不背学堂”内容。
+
+练习方式只归入一个主要通道，跨通道关系用简短方向标记表达：`听写` 放在“写”并标记“听 → 写”，
+`随手拼写` 放在“写”并标记“义 → 写”。同一 Task 不在多个通道重复出现。
+
+#### 7.2.1 第一版通道与入口确认（2026-08-28）
+
+| 通道 | V1 可进入练习 | 显示但暂未开放 |
+| --- | --- | --- |
+| 听 | 随身听 | 听音辨义 |
+| 说 | — | 跟读、看义说词、例句朗读 |
+| 读 | 沉浸刷词 | 语境辨义、义项辨析 |
+| 写 | 随手拼写、听写 | 例句填空 |
+
+页面先展示当前 Practice Scope，再按固定顺序展示“听、说、读、写”四个通道方块。每个通道方块
+复用“标题 + 内部练习小块”的视觉语法；小块显示练习名称和必要的方向/范围摘要，不显示通道得分、
+完成率、欠练数量或推荐处方。
+
+交互要求：
+
+- 点击 V1 可进入练习，进入对应 Mode，并以当前 Practice Scope 解析练习项；
+- 点击 disabled 小块只提示“暂未开放”，留在自由练习首页，不创建 Session、Task、Attempt、
+  Activity 或 Result；
+- `随身听` 与 `沉浸刷词` 使用 Scope 中可执行的 Sense/Example 资源；
+- `随手拼写` 先显示当前 Sense 提示，再要求写出 Lexeme form；
+- `听写` 先播放目标 form，再要求书写；Sense 提示只能作为主动请求的帮助出现；
+- 四种开放练习都不改变正式 Learn/Review 数量、Acquisition Gate、FSRS、每日额度或 Book cursor。
+
+每次自由练习必须显式选择或继承一个 Practice Scope，并与正式 Mixed/Review-only Session
+隔离；退出自由练习回到原二级页面或首页，不篡改正式学习队列。
+
+自由练习首页先呈现当前 Practice Scope，默认继承当前在学词书的可练 Book slice，并展示实际可
+执行的 Sense 数；不得把词书的 Lexeme 数冒充 Sense 数。学习者以后可以从已完成各自 contract 的
+范围来源中切换，但 Session 一旦开始就固定 Scope snapshot。
+
+`随身听` 使用逐 Sense 播放器，而不是按 Lexeme 合并所有意思：
+
+- 顶部显示当前 Sense 在 Scope snapshot 中的序号、标题、播放结束策略和收藏当前意思；
+- 主体显示词形、批准的发音、当前一个意思，以及与该 Sense 明确绑定的学习例句；
+- V1 不展示影视、电视、YouTube 或真题来源；普通 approved Example 只标作“学习例句”；
+- 底部提供范围/队列、上一项、播放/暂停、下一项和显示/隐藏译文；不默认自动播放；
+- 播放、暂停、跳过和跟随只形成 Practice Activity，不改变 Learn/Review 数量、Gate、FSRS 或每日额度；
+- 收藏以 Sense 为 target，不能沿用旧原型按整个词头收藏的身份。
+
+### 7.3 我的内容
+
+已经确认的页面 IA：
+
+- 顶部主要入口：我的词义世界，并提供明确的“创建一个我想表达的意思”；
+- 我学过的：最近学过、全部已学、已会的意思；
+- 我保存的：收藏的意思、收藏的例句；
+- 我创建的：我的笔记、自定义集合。
+
+“我的场景”不再是与词义世界平级的独立内容仓库。Personal Semantic Anchor 属于一个 Personal
+Meaning，并在其创建/详情流程中编辑；同一素材可以被多个 Meaning Focus 引用。自定义集合可以在
+contract 未完成时显示为“暂未开放”，但不能阻塞 Personal Meaning 与 Anchor 的核心创建流程。
+随身听与听写属于自由练习，在学词书与学习范围属于我的学习，三者都不出现在“我的内容”。
+
+#### 7.3.1 第一版页面确认（2026-08-31）
+
+```text
+我的内容
+├── 我的词义世界（顶部主要入口卡）
+│   ├── 创建一个我想表达的意思
+│   ├── 待澄清 / 待确认
+│   └── 已确认 Sense 的个人意义
+├── 我学过的
+│   ├── 最近学过
+│   ├── 全部已学
+│   └── 已会的意思
+├── 我保存的
+│   ├── 收藏的意思
+│   └── 收藏的例句
+└── 我创建的
+    ├── 我的笔记
+    └── 自定义集合（暂未开放）
+```
+
+“我的内容”是多个读取模型的产品聚合页，不把它们合并为同一领域对象：
+
+- “我的词义世界”的成员来自 learner 显式创建的 Personal Meanings；Learner Semantic Projection
+  叠加其 Sense Alignment 与学习状态，但不从学习历史自动增加成员；
+- “我学过的”读取 Learner Sense Progress roll-up、其 Retention Targets 与 Declared Mastery
+  投影，不是用户手工维护的单词本；
+- “我保存的”读取 Saved Sense / Saved Example；取消收藏不删除其他个人内容或学习事实；
+- Personal Semantic Anchor 在所属 Personal Meaning 内展示和编辑，不复制为独立场景条目；
+- “我创建的”读取 Sense Note 与 Personal Collection；它们和 Personal Meaning 生命周期独立；
+- 列表可以按 Lexeme 聚合显示，但计数、状态、收藏、笔记和加入学习仍以具体 Sense 为身份；
+- “我的内容”内的搜索只搜索 learner 自己的内容与事实投影；全局查词仍属于 Lexical Reference。
+
+#### 7.3.2 页面下钻与交互确认（2026-08-31）
+
+“我的内容”采用 Hub → World/List → Personal Meaning / Sense Detail 的结构：
+
+```text
+我的内容 Hub
+├── 我的词义世界
+│   ├── 创建 Personal Meaning → LLM Sense Construction → 确认
+│   ├── 世界视图 / 列表视图
+│   └── Personal Meaning 详情 → confirmed Sense 详情
+├── 我学过的 → 对应意思列表 → 具体意思详情
+├── 收藏的意思 → 意思列表 → 具体意思详情
+├── 收藏的例句 → 例句列表 → 例句详情 → 对应意思详情
+├── 我的笔记 → 笔记列表 → 编辑当前笔记
+└── 自定义集合 → 暂未开放说明页
+```
+
+- Hub 顶部使用“我的词义世界”主入口卡，以下按“我学过的 / 我保存的 / 我创建的”分组；每行显示
+  当前读取投影的事实数量，不显示目标、欠账、完成率或处方。
+- “我的词义世界”首屏必须同时提供已有 Personal Meanings 和主创建动作。空状态解释“记录一个你
+  真正想表达的意思”，不能把导入词书或自动生成节点当作创建；
+- 创建器允许从中文描述、个人经验、场景/受支持媒介或已有中英文表达开始。保存 Personal Meaning
+  与开始 LLM 对话是两个可恢复步骤；模型失败不丢失已保存内容；
+- LLM 对话内嵌 Sense Proposal cards，每张展示 Meaning Focus、典型场景、包含/排除边界、相邻意义、
+  推荐英语表达以及“为什么匹配 / 可能不匹配”；不能退化成只给一个翻译结果；
+- 确认操作固定使用“就是这个意思”；“接近但不是”“我在意另一个角度”“这些都不是”继续澄清或
+  拆分 Focus，不得静默确认；
+- 世界视图与列表视图读取同一 Personal Meaning/Alignment facts。节点位置不冒充语言学距离、
+  embedding 关系或完整能力地图；学习状态只作为 confirmed Sense connection 的 overlay；
+- 清单页允许在 learner 自己的内容范围内搜索，并提供空状态；搜索不越界调用全局词典。
+- Personal Meaning 详情展示 Meaning Focus、经验/表达 Anchors、Sense Construction 状态与 confirmed
+  Alignments；Sense 详情再展示词形、发音、当前一个意思、学习资源、相邻 Sense 和学习入口；
+- 首版界面固定中文 L1、英语 L2，不显示语言选择器；中文表达是 familiar access path，英语 word/
+  phrase 是 typed target expression，不显示 `中文 = 英文`；
+- 例句详情可显示/隐藏译文、播放批准的静态音频、收藏该 Example，并返回它所绑定的 Sense；V1 不在
+  此处模拟影视原声、YouTube、逐词时间轴或未经审核的真实出处。
+- Sense 确认后才可以启动后续资源准备；资源状态必须区分“尚未准备 / 正在生成 / 已物化可学习 /
+  生成或校验失败”。“加入学习”只有在选定 protocol 存在可执行 provisioning path 时才可成功，
+  不能因为已有 senseId 或一段模型回复伪造可学习状态；
+- 收藏、确认 Sense、加入学习、开始自由练习与声明已会仍是不同操作；
+- 兼容原型中的词头级历史状态只有在能够唯一定位一个 Sense 时才能进入 Sense 列表；多义词不得把
+  整词状态复制给全部 sibling Senses。旧笔记尚未唯一绑定 Sense 时，列表明确显示待迁移状态。
+
+完整产品模型可以在 Personal Meaning 上叠加 published Semantic Field、正在形成、已经建立、需要
+巩固和待探索的有限语义关系，并允许将明确选择结果作为 Free Practice Scope。地图视图与列表视图
+必须读取同一批权威事实；任何布局都不宣称是 learner 大脑的真实结构。
+
+完整 Personal Content 还包括每个 Sense 一份 current Note、Personal Collections 与 typed
+Sense/Example Membership。取消收藏不删除笔记/Anchor/集合成员，删除集合不删除收藏或正文，删除
+Anchor 不删除 Personal Meaning，任何 Personal Content 操作都不修改正式学习状态。
+
+Curriculum contract 就绪后，收藏的 Sense 可以显示独立的“加入学习”；已在有效 Study Scope 中时
+显示事实状态而不重复创建 Membership。Saved Example 只允许跳转到其 Sense 的加入学习操作。
+
+### 7.4 我的学习
+
+`我的学习` 与 `学习偏好` 使用顶部双页签。
+
+计划与进度只做事实性呈现，包括当前词书/范围、每日新学上限、今日完成、累计已学、待复习和
+签到日历。签到日历读取与首页签到卡相同的签到事实；缺席日期和未用额度不表现为断签、欠账或失败。
+该页面不生成维度待办、薄弱项诊断或 learner-facing Learning Insight，也不得显示 raw FSRS state、
+reps、Sense ID 或同步实现细节。
+
+当前词书区域：
 
 - 展示当前 Plan 绑定的词书、封面、单词数、意思数和完成进度；
 - 支持选择/更换词书、设置每日新学意思数；
@@ -351,40 +611,6 @@ Preference。
 完整 Curriculum lifecycle 上线后，词书页还应区分当前新学、只继续已学内容与已暂停的词书；
 换词书默认保留旧词书的维护学习，暂停是另一个明确选择。Book 完成状态只做事实呈现：可以显示
 “新内容已学完”或“首次学习已完成”，不能宣称长期复习永久完成。
-
-### 7.3 我的内容
-
-V1 信息组：
-
-- 最近学过；
-- 全部已学；
-- 已会的意思；
-- 收藏的意思；
-- 收藏的例句。
-
-Bookmark 功能必须先有服务端 schema、语言中立 contract、Sync operation 和本地 store，
-才能在产品中显示星标。笔记、随身听队列和听写不进入 V1。
-
-完整产品模型在这些事实之上生成“我的词义世界”：按 published Semantic Field 展示正在形成、
-已经建立、需要巩固和待探索的有限语义区域，并允许将 Field、列表或选择结果作为 Free Practice
-Scope。该投影和听说读写入口只有在对应 content/persistence/API/Sync contract 完成后才显示；
-地图视图与列表视图必须读取同一批权威事实。
-
-完整 Personal Content 还包括每个 Sense 一份 current Note、零到多个 Personal Semantic Anchors、
-Personal Collections 与 typed Sense/Example Membership。收藏、笔记、我的场景、集合、自由练习
-和“加入学习”必须是独立操作：取消收藏不删除笔记/场景/集合成员，删除集合不删除收藏或正文，
-任何 Personal Content 操作都不修改正式学习状态。
-
-Curriculum contract 就绪后，收藏的 Sense 可以显示独立的“加入学习”；已在有效 Study Scope 中时
-显示事实状态而不重复创建 Membership。Saved Example 只允许跳转到其 Sense 的加入学习操作。
-
-### 7.4 我的学习
-
-`我的学习` 与 `学习偏好` 使用顶部双页签。
-
-计划与进度只做事实性呈现，包括当前词书/范围、每日新学上限、今日完成、累计已学、待复习和
-学习日历。它不生成维度待办、薄弱项诊断或 learner-facing Learning Insight，也不得显示 raw
-FSRS state、reps、Sense ID 或同步实现细节。缺席日期和未用额度不表现为断签、欠账或失败。
 
 学习偏好首批包含：
 
@@ -410,6 +636,10 @@ FSRS state、reps、Sense ID 或同步实现细节。缺席日期和未用额度
 provider token。Sync Health 使用自然语言说明，不提供手工“标记已同步”。
 
 ## 8. 学习界面
+
+本节的页面、面板与“卡”都是 Card Presentation 候选，只负责渲染当前 Protocol Step。具体协议可以
+把一个 Step 分成多个呈现阶段，也可以在同一呈现中完成一个 Step；首版不把卡片数量、固定顺序或
+Deck identity 写入产品合同。服务端 Step/result contract 始终是状态与结算依据。
 
 ### 8.1 公共顶栏
 
@@ -484,7 +714,7 @@ learning-only/assessment-only assets，也不得因查询改变当前 Encounter�
   变成进度身份；
 - 不提供“真题”区块，不伪造柯林斯等未授权 provider 品牌。
 
-### 8.6 其他 Action renderer
+### 8.6 Structured Acquisition Action renderer（Later）
 
 | Action | 主要内容 | 主要操作 |
 | --- | --- | --- |
@@ -517,9 +747,9 @@ Encounter 不得在答案揭示后接受第二个“独立”assessment 结果�
 
 - 确认前不改变状态；
 - 确认后先写本地 outbox，再立即更新本地 UI；
-- operation 使用当前 Sense、Declared Mastery revision 和可选 Encounter context；
-- 同一 Sense 的所有 active Encounter 变为 interrupted，所有 planned Encounter 变为 cancelled；
-- active Acquisition/Relearning 保留真实进度但退出 Planning；不伪造 Graduation；
+- operation 使用当前 Retention Target、Declared Mastery revision 和可选 Encounter context；
+- 该 target 的所有 active Encounter 变为 interrupted，所有 planned Encounter 变为 cancelled；
+- active Protocol Run/Relearning 保留真实进度但退出 Planning；不伪造 Completion 或 Graduation；
 - 不写 Attempt、Evidence、Gate pass、Memory Outcome 或 FSRS rating；
 - 网络失败时声明仍在本机生效，并显示待同步状态；
 - 冲突时拉取服务端 authoritative snapshot，再给出可理解的重试/恢复操作；
@@ -571,14 +801,22 @@ Free Practice 上线后，播放、展开与跟随形成 Practice Activity，可
 
 ### P0：核心闭环
 
+- 中文 L1、英语 L2 的 Personal Semantic World：显式创建 Personal Meaning、经验/表达 Anchors、LLM
+  Sense Construction、learner confirmation、stable senseId/Version 与 Personal Meaning Alignment；
+- confirmed Sense 的资源准备状态必须真实；通过 published、on-demand 或 hybrid 路径冻结并校验
+  Learning Materialization，失败时不显示可成功的学习入口；
+- On-demand Learning Content LLM 与 Semantic LLM 角色分离，记录 generator/policy provenance；
+- 三种 Protocol Purpose、可版本化 Protocol Step/transition 与 Card Presentation renderer；
+- Lightweight Initial Learning、Initial Learning Completion/Study Completion、原子 Scheduling Handoff
+  与 FSRS 初始化；
+- Retention Target isolation、Retention Review 的 one-outcome/one-update，以及不改写原 Review 的
+  Lightweight Relearning；
 - 真实 Account、认证、当前 Account Session、退出登录与首次 Plan；
 - Mixed 主入口与 Review-only 次要入口；
-- Acquisition Cycle、Gate progress、interference pacing、Graduation 与 Relearning；
-- 全部 V1 Action renderer；
-- 揭示详情与全屏例句卡；
+- 首版紧凑内容 renderer、可选 Recall/learner rating、揭示详情与全屏例句卡；
 - 发音、例句音频与授权媒体；
 - Book、Sense 详情、进度；
-- Sense 级 Declared Mastery；
+- 首版 primary Retention Target 级 Declared Mastery（在单表达 Sense 界面中显示为“熟”）；
 - IndexedDB/outbox/Sync 与诚实错误状态；
 - Sync Health、本机 pending 状态与诚实的退出/清除保护；
 - Data Export、Account Deletion lifecycle 与旧 Replica resurrection barrier。
@@ -594,16 +832,19 @@ Free Practice 上线后，播放、展开与跟随形成 Practice Activity，可
 
 ### Later
 
+- Structured Acquisition Protocol：Acquisition Cycle、Gate progress、interference pacing、Recognition、
+  Recall、Novel-context Transfer、条件性 Boundary、Graduation 与 evidence-backed Relearning；
+- Structured Acquisition 所需的完整 Action renderer、protected assessment inventory、5D projection
+  与高保证 content validator；
 - 版本化 Reference Lexicon、全局查词、Example Lexical Occurrence annotation、Contextual Sense
   Resolution、Reference Sense ↔ Sensa Sense Alignment 与离线 Reference Release；
 - 真实的释义/例句/用法/构词词源/相关详情及 source/license attribution；明确不建设“真题”；
-- Semantic Field 浏览与 Learner Semantic Projection（“我的词义世界”）；
+- published Semantic Field 浏览，以及 Personal Semantic World 上更完整的跨 Field/多语言 Projection；
 - Initial Free Practice Profile：当前 Book slice/明确选择的 Senses，以及沉浸刷词、随身听、听写和
   随手拼写；它支持 Reading/Listening/Writing，但不把 Mode 当作 Gate；
 - 后续 Free Practice Profile 才考虑 Speaking、发音评分、开放式语境产出，以及 Field/收藏/历史等
   已完成各自 contract 的 Practice Scope；
 - 每个 Sense 一份 current Note；
-- Personal Semantic Anchor（“我的场景”）与 learner-controlled scaffold eligibility；
 - Personal Collection 与 typed Sense/Example Membership；
 - Book Enrollment/Range、`active | maintenance | paused` lifecycle、Supplemental Curriculum、
   Study Scope Revision 与完整 Add-to-Learning decision；
@@ -614,76 +855,98 @@ Free Practice 上线后，播放、展开与跟随形成 Practice Activity，可
 
 ## 14. 验收场景
 
-1. **新 Sense grounding**：目标词在主动揭示前完全不可见；揭示后只显示 Action 引用资产。
-2. **干扰后检验**：Introduction 完成后先出现其他 Sense；答案揭示或 repair 后不在同一
-   Encounter 将立即重答计为独立 Gate pass。
-3. **Baseline Gates**：一个 initial Cycle 必须用三次独立成功分别解决 Contextual Recognition、
-   Meaning-to-form Recall 与 Novel-context Transfer；仅浏览内容或一题多算不能毕业。
-4. **条件 Boundary**：有 required confusion target 的 Sense 必须通过 Relation-backed 检验；
-   没有真实 target 的 Sense 不出现为凑数而生成的 Boundary 卡。
-5. **局部失败**：Recall 失败只重新打开 Recall 并触发对应 repair；已经通过的无关 Gate 与
-   历史 Evidence 不被删除。
-6. **Acquisition/FSRS 分界**：Introduction 或单次 retrieval 后仍无 FSRS due；只有全部 required
-   Gates 通过并发生 Graduation 后才初始化 Memory State。
-7. **Review-only**：次要入口只返回 due Retention 与 Review-originated Relearning，不引入新
-   Sense、不推进 initial Acquisition、不消耗 daily-new quota。
-8. **一次 Review 一次 FSRS**：due Review 首次独立失败后记录一次失败 Outcome；当天 repair/
-   Relearning 不能覆盖它或重复推进 FSRS revision。
-9. **全屏例句**：中文、上下文、音频和收藏可独立操作；翻页和播放不产生 Gate Evidence。
-10. **Cloze 变体**：题面不泄露 target；找错 Lexeme 与正确词族但形态不合语境得到可区分结果。
-11. **熟**：确认后当前 Sense 退出所有 Planning inventory，Cycle 不伪造毕业，sibling Sense 不受影响。
-12. **撤销已会**：恢复后依据未改变的 phase、Cycle 与 FSRS State 重新取得正确候选资格。
-13. **离线学习**：Attempt 和声明立即影响本地 UI，联网后 `push → pull` 收敛到服务端投影。
-14. **桌面 Web**：学习面板不超过 430px，键盘和屏幕阅读器可完成主要流程。
-15. **术语审计**：界面不出现 Sense、Cycle、Gate、Encounter、Evidence、5D、FSRS、Replica、Workspace。
-16. **无伪功能**：不可用入口不出现在主产品 IA；媒体失败不展示播放成功。
+1. **Target 与内容分离**：confirmed Sense 先固定 Learning Target；published、on-demand 与 hybrid
+   只是内容来源，不会改变它的 senseId 或 Personal Meaning Alignment。
+2. **按需内容可重放**：开始学习前固定 materializationId、protocol/version、内容角色、generator/
+   policy provenance、validator result 与 digest；模型失败显示可恢复状态。
+3. **作答后不漂移**：learner 首次看到或回应某个内容后，模型不能重新生成并替换 prompt、answer、
+   grader 或反馈依据；更新必须创建新 materialization。
+4. **轻量完成不冒充证据**：完成首版学习产生 Study Completion/Lightweight Study Outcome，但不产生
+   Gate pass、5D 或 mastery claim；成功的 Initial Learning Completion 与唯一 Scheduling Handoff
+   必须原子落账，失败、中断或内容不可用时两者都不产生。
+5. **显式调度交接**：FSRS 只在收到版本化 Scheduling Handoff 后初始化；handoff 分别保留
+   `protocol_completion | acquisition_graduation | learner_rating | imported` basis 与
+   `non_evidentiary | self_report | behavioral | externally_attested` evidence level。
+6. **Review-only**：次要入口只返回 due Retention 与允许的 Relearning，不引入新 Sense、不推进
+   initial Learning Protocol、不消耗 daily-new quota。
+7. **自评诚实**：协议允许“认识/模糊/忘记”时可以产生 learner-rated Memory Outcome，但不能写成
+   独立 retrieval Evidence。
+8. **一次 Review 一次 FSRS**：一次 due Review 最多产生一个 Memory Outcome 与一次 FSRS revision；
+   后续 repair/retest 或 Lightweight Relearning 不能覆盖或重复推进原 Review；Relearning Completion
+   不创建 handoff、不重新初始化 FSRS，也不自动成为 scheduler input。只有协议声明的独立
+   relearning evaluation 可另产生幂等 Memory Outcome。
+9. **全屏例句**：中文、上下文、音频和收藏可独立操作；翻页和播放不产生 Learning Evidence。
+10. **熟**：确认后当前 primary Retention Target 退出所有 Planning inventory，active Protocol Run
+    不伪造完成，sibling
+    Sense 不受影响；撤销后依据保留的 phase/run/FSRS State 恢复。
+11. **离线学习**：合法 operation 立即影响本地 UI，联网后 `push → pull` 收敛到服务端投影。
+12. **桌面 Web**：学习面板不超过 430px，键盘和屏幕阅读器可完成主要流程。
+13. **术语与伪功能审计**：界面不出现 Sense、Protocol、Cycle、Gate、Encounter、Evidence、5D、
+    FSRS、Replica、Workspace；不可用入口不伪装成可用。改变 Card 数量、阶段拆分或 renderer 不创建
+    新学习 identity，也不改变 Protocol Step 的结果资格或 scheduler 语义。
+
+以下场景在 Structured Acquisition Protocol 进入交付范围时验收：
+
+14. **新 Sense grounding**：目标词在主动揭示前完全不可见；揭示后只显示 Action 引用资产。
+15. **干扰后检验**：Introduction 完成后先出现其他 Sense；答案揭示或 repair 后不在同一 Encounter
+    将立即重答计为独立 Gate pass。
+16. **Baseline Gates**：一个 initial Cycle 必须用三次独立成功分别解决 Contextual Recognition、
+    Meaning-to-form Recall 与 Novel-context Transfer；仅浏览内容或一题多算不能毕业。
+17. **条件 Boundary**：有 required confusion target 的 Sense 必须通过 Relation-backed 检验；没有
+    真实 target 的 Sense 不出现为凑数而生成的 Boundary 卡。
+18. **局部失败**：Recall 失败只重新打开 Recall 并触发对应 repair；已经通过的无关 Gate 与历史
+    Evidence 不被删除。
+19. **Graduation handoff**：只有全部 required Gates 通过才产生 Acquisition Graduation，并必须创建
+    `basis=acquisition_graduation`、`evidenceLevel=behavioral` 的 Scheduling Handoff。
 
 以下场景在完整 Curriculum lifecycle 对应功能进入交付范围时验收：
 
-17. **换词书**：A 从 active 转为 maintenance、B 转为 active；A 的未开始成员停止引入，已开始与
+20. **换词书**：A 从 active 转为 maintenance、B 转为 active；A 的未开始成员停止引入，已开始与
     due 内容继续，所有进度保持不变。
-18. **暂停与恢复**：暂停 A 后它不再产生正式候选；恢复后使用原 Cycle/FSRS State，不伪造已会或重置。
-19. **范围收缩**：缩小 Book Range 只减少未来 Introduction，已发生事实不删除；active Session 仍
+21. **暂停与恢复**：暂停 A 后它不再产生正式候选；恢复后使用原 Protocol Run/FSRS State，不伪造
+    已会或重置。
+22. **范围收缩**：缩小 Book Range 只减少未来 Introduction，已发生事实不删除；active Session 仍
     使用开始时固定的 Scope Revision。
-20. **收藏加入学习**：同一 Sense 重复提交幂等；已在 Book/补充范围、内容不可用与已会冲突得到
+23. **收藏加入学习**：同一 Sense 重复提交幂等；已在 Book/补充范围、内容不可用与已会冲突得到
     不同结果，unsave 不移出学习。
-21. **多来源去重**：一个 Sense 同时来自 Book 与 Supplemental Curriculum 时只有一份 Progress、
-    Cycle 和 FSRS State；移除一个来源不会错误移除另一个来源提供的资格。
+24. **多来源去重**：一个 Retention Target 同时来自 Book 与 Supplemental Curriculum 时只有
+    一份 active Protocol Run 和 FSRS State；移除一个来源不会错误移除另一个来源提供的资格；
+    同一 Sense 的不同 target expressions 不得被合并。
 
 以下场景在 Lexical Reference 对应功能进入交付范围时验收：
 
-22. **目标词确定解析**：点击 Example 的 authored target span，沿既有 Sense binding 确定 Sensa
+25. **目标词确定解析**：点击 Example 的 authored target span，沿既有 Sense binding 确定 Sensa
     Sense；存在 reviewed Alignment 时强调正确 Reference Sense，否则不调用模型重新猜测。
-23. **非目标词与词组**：点击普通 token 或 multiword span，优先返回最长 approved occurrence；
+26. **非目标词与词组**：点击普通 token 或 multiword span，优先返回最长 approved occurrence；
     完整词典义项仍可见，`model_confident/ambiguous/unresolved` 使用诚实文案。
-24. **Reference-only meaning**：可以搜索和浏览，但没有 aligned executable Sensa Package 时加入学习
-    返回 `content_unavailable`，不创建进度或幽灵课程。
-25. **无副作用**：搜索、点词、展开构词词源和播放音频不改变 Scope、quota、Gate、5D、due 或 FSRS，
+27. **Reference-only meaning**：可以搜索和浏览，但没有 alignment 或 executable provisioning path 时
+    加入学习返回 `content_unavailable`，不创建进度或幽灵课程。
+28. **无副作用**：搜索、点词、展开构词词源和播放音频不改变 Scope、quota、Gate、5D、due 或 FSRS，
     也不自动收藏、写笔记或加入学习。
-26. **答案保护**：active assessment 在提交/feedback 前没有应用内查词路径；Reference API 永不返回
+29. **答案保护**：active assessment 在提交/feedback 前没有应用内查词路径；Reference API 永不返回
     learning-only/assessment-only assets。
-27. **真实详情**：没有内容的区块不出现，词源故事/记忆辅助明确标注，未授权 provider 名称和
+30. **真实详情**：没有内容的区块不出现，词源故事/记忆辅助明确标注，未授权 provider 名称和
     “真题”均不出现。
 
 以下场景用于验收 Settings / Account：
 
-28. **Account/Learner 分离**：退出登录或撤销一个 Account Session 不删除 Learner 的 Plan、Progress、
+31. **Account/Learner 分离**：退出登录或撤销一个 Account Session 不删除 Learner 的 Plan、Progress、
     Personal Content 或历史事实；界面不出现 Workspace/LearnerScope。
-29. **Preference ownership**：口音和例句中文默认状态通过 Learner Preference 在设备间收敛；autoplay、
+32. **Preference ownership**：口音和例句中文默认状态通过 Learner Preference 在设备间收敛；autoplay、
     theme、reduced motion 与 playback behavior 留在当前设备。
-30. **Plan 不是设置值**：在 Settings 修改每日新学数实际执行 Study Plan/Curriculum operation，产生
+33. **Plan 不是设置值**：在 Settings 修改每日新学数实际执行 Study Plan/Curriculum operation，产生
     正确 revision，不创建同名 Preference。
-31. **Preference 不改历史**：切换口音不替换 active Action 的 pinned audio；任何展示偏好都不产生
+34. **Preference 不改历史**：切换口音不替换 active Action 的 pinned audio；任何展示偏好都不产生
     Attempt/Evidence、Gate/5D/FSRS update 或改变 novel status。
-32. **Pending sign-out**：有未同步操作时退出先尝试同步；失败时默认保留本机数据，只有明确确认才
+35. **Pending sign-out**：有未同步操作时退出先尝试同步；失败时默认保留本机数据，只有明确确认才
     丢弃所列 operations。
-33. **Local clearance**：清除本机内容不删除服务端数据；重新登录/安装后可以从 authoritative state
+36. **Local clearance**：清除本机内容不删除服务端数据；重新登录/安装后可以从 authoritative state
     bootstrap，且未处理 outbox 不被静默清除。
-34. **Data export**：同一 request identity 幂等；导出固定一个逻辑 snapshot，并如实显示 requested、
+37. **Data export**：同一 request identity 幂等；导出固定一个逻辑 snapshot，并如实显示 requested、
     processing、completed 或 failed。
-35. **Account deletion**：只允许在线重新确认；进入 deletion pending 后撤销 Account Sessions 与 Replica
+38. **Account deletion**：只允许在线重新确认；进入 deletion pending 后撤销 Account Sessions 与 Replica
     写入资格，旧离线 outbox 永远不能复活数据。
-36. **破坏性操作文案**：sign-out、清除本机数据和删除账号使用不同确认及结果；V1 不出现全量学习
+39. **破坏性操作文案**：sign-out、清除本机数据和删除账号使用不同确认及结果；V1 不出现全量学习
     历史 reset。
 
 ## 15. 原型边界
@@ -691,7 +954,8 @@ Free Practice 上线后，播放、展开与跟随形成 Practice Activity，可
 高保真原型用于验证 IA、视觉层级、文案和状态转换，不写真实服务端数据，不产生真实
 Evidence，也不代表 Bookmark contract 已完成。实现必须以本文和 canonical runtime/content
 models 为准，不能从原型 JavaScript 反推领域规则。现有原型早于 2026-08-27 Acquisition
-Cycle 决策，只能作为视觉参考，不能证明 Gate/interference/Graduation/Review-only 流程。现有
+Cycle 决策，也早于 2026-08-31 Learning Connection 决策，只能作为视觉参考，不能证明
+Materialization/Protocol/Handoff、Gate/interference/Graduation 或 Review-only 流程。现有
 不背复刻中的 token regex、静态 quick dictionary 和多 tab 占位内容也只证明交互形态，不能证明
 Contextual Sense Resolution、Reference Release、授权词典数据或 Lexical Enrichment 已实现。
 原型或当前 `/me` 中把 profile、Workspace compatibility 字段和单一动画开关放在一起，也不能证明
@@ -700,4 +964,5 @@ Contextual Sense Resolution、Reference Release、授权词典数据或 Lexical 
 `rel-2026-v1-candidate` 下 validation status 为 `satisfied` 的 V3 candidate package，并直接
 读取这些 Package 通过 `mediaSha256` 登记的本地发音与例句 MP3，不调用 TTS；这个本地文件
 路径只用于原型验收，生产端仍须通过授权媒体 URL / R2 交付。以上证明内容与媒体形状能和
-交互适配，不表示 candidate 已成为公开发布的 Content Release。
+交互适配，不表示 candidate 已成为公开发布的 Content Release，也不把 Published Structured
+Package 变成首版 On-demand Lightweight Study 的唯一来源。

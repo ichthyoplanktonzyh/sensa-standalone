@@ -84,7 +84,13 @@ class TTSResult:
         return doc
 
 
-async def _synthesize_edge_async(text: str, voice: str, rate: str, out_path: Path) -> TTSResult:
+async def _synthesize_edge_async(
+    text: str,
+    voice: str,
+    rate: str,
+    accent_locale: str,
+    out_path: Path,
+) -> TTSResult:
     communicate = edge_tts.Communicate(text, voice, rate=rate)
     await communicate.save(str(out_path))
 
@@ -98,6 +104,7 @@ async def _synthesize_edge_async(text: str, voice: str, rate: str, out_path: Pat
         duration_ms=duration_ms,
         size_bytes=size_bytes,
         voice=voice,
+        accent_locale=accent_locale,
         rate=rate,
     )
 
@@ -134,4 +141,4 @@ def synthesize(
             "External TTS is disabled by default; pass allow_external=True from an explicitly approved operator command"
         )
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    return asyncio.run(_synthesize_edge_async(text, voice, rate, out_path))
+    return asyncio.run(_synthesize_edge_async(text, voice, rate, accent_locale, out_path))

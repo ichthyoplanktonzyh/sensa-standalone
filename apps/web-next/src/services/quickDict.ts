@@ -1,5 +1,18 @@
-import type { QuickDictEntry, QuickDictSense } from '../types';
+import type {
+  DictionaryLookupInput,
+  DictionaryLookupOptions,
+  QuickDictEntry,
+  QuickDictSense,
+} from '../types';
 import { WORDS } from '../data';
+import {
+  lookupReferenceQuickEntry,
+  projectReferenceEntryToQuick,
+  type ReferenceLookupResult,
+} from '../reference/referenceDictionary';
+import {
+  lookupReference,
+} from '../reference/referenceLookup';
 
 /**
  * 离线微词典内置词库 (涵盖高频基础词与截图中的示例词)
@@ -278,153 +291,14 @@ const BUILTIN_DICT: Record<string, { ph: string; senses: QuickDictSense[] }> = {
   },
 };
 
-/**
- * 常见不规则词形映射表
- */
-const IRREGULAR_LEMMAS: Record<string, string> = {
-  // 缩写与代词
-  "we'll": 'we',
-  "i'm": 'i',
-  "you're": 'you',
-  "they're": 'they',
-  "it's": 'it',
-  "don't": 'do',
-  "didn't": 'do',
-  "doesn't": 'do',
-  "won't": 'will',
-  "can't": 'can',
-  "haven't": 'have',
-  "hasn't": 'have',
-  "hadn't": 'have',
-  "isn't": 'is',
-  "aren't": 'are',
-  "wasn't": 'was',
-  "weren't": 'were',
-
-  // 动词不规则过去式/分词
-  'was': 'be',
-  'were': 'be',
-  'been': 'be',
-  'am': 'be',
-  'are': 'be',
-  'is': 'be',
-  'had': 'have',
-  'has': 'have',
-  'did': 'do',
-  'does': 'do',
-  'went': 'go',
-  'gone': 'go',
-  'going': 'go',
-  'goes': 'go',
-  'ran': 'run',
-  'saw': 'see',
-  'seen': 'see',
-  'spoke': 'speak',
-  'spoken': 'speak',
-  'taken': 'take',
-  'took': 'take',
-  'made': 'make',
-  'got': 'get',
-  'gotten': 'get',
-  'found': 'find',
-  'told': 'tell',
-  'gave': 'give',
-  'given': 'give',
-  'known': 'know',
-  'knew': 'know',
-  'thought': 'think',
-  'came': 'come',
-  'bought': 'buy',
-  'brought': 'bring',
-  'felt': 'feel',
-  'left': 'leave',
-  'kept': 'keep',
-  'held': 'hold',
-  'written': 'write',
-  'wrote': 'write',
-  'stood': 'stand',
-  'understood': 'understand',
-
-  // 名词不规则复数
-  'children': 'child',
-  'men': 'man',
-  'women': 'woman',
-  'people': 'person',
-  'teeth': 'tooth',
-  'feet': 'foot',
-  'mice': 'mouse',
-};
-
-/**
- * 单词词形还原器 (Lemmatizer)
- */
-export function lemmatize(rawWord: string): string {
-  const clean = rawWord.toLowerCase().replace(/^[^a-z0-9']+|[^a-z0-9']+$/g, '');
-  if (!clean) return '';
-
-  // 1. 查不规则表
-  if (IRREGULAR_LEMMAS[clean]) {
-    return IRREGULAR_LEMMAS[clean];
-  }
-
-  // 2. 去除所有格 's / s'
-  if (clean.endsWith("'s")) {
-    return clean.slice(0, -2);
-  }
-
-  // 3. 处理复数与第三人称单数
-  if (clean.endsWith('ies') && clean.length > 4) {
-    return clean.slice(0, -3) + 'y';
-  }
-  if (clean.endsWith('es') && clean.length > 3) {
-    // 如 boxes -> box, principles 不走这里因为以 les 结尾
-    if (clean.endsWith('sses') || clean.endsWith('shes') || clean.endsWith('ches') || clean.endsWith('xes')) {
-      return clean.slice(0, -2);
-    }
-  }
-  if (clean.endsWith('s') && !clean.endsWith('ss') && clean.length > 3) {
-    return clean.slice(0, -1);
-  }
-
-  // 4. 处理进行时 -ing
-  if (clean.endsWith('ing') && clean.length > 4) {
-    const base = clean.slice(0, -3);
-    // double consonant: running -> run
-    if (base.length >= 3 && base[base.length - 1] === base[base.length - 2]) {
-      return base.slice(0, -1);
-    }
-    return base;
-  }
-
-  // 5. 处理过去式 -ed
-  if (clean.endsWith('ed') && clean.length > 4) {
-    const base = clean.slice(0, -2);
-    if (clean.endsWith('ied')) {
-      return clean.slice(0, -3) + 'y';
-    }
-    // doubled consonant: stopped -> stop
-    if (base.length >= 3 && base[base.length - 1] === base[base.length - 2]) {
-      return base.slice(0, -1);
-    }
-    return base;
-  }
-
-  return clean;
-}
-
-/**
- * 单词检索服务 (Quick Dictionary Lookup)
- */
-export function lookupWord(rawWord: string): QuickDictEntry {
+function lookupLegacyEntry(rawWord: string): QuickDictEntry | null {
   const clean = rawWord.trim().replace(/^[^a-zA-Z0-9']+|[^a-zA-Z0-9']+$/g, '');
   const lowerClean = clean.toLowerCase();
-  const lemma = lemmatize(lowerClean);
 
   // 1. 优先查主词库 WORDS
   const targetInWords = WORDS.find(
     (item) =>
       item.w.toLowerCase() === lowerClean ||
-      item.w.toLowerCase() === lemma ||
       item.syl.replace(/[·\s]/g, '').toLowerCase() === lowerClean
   );
 
@@ -445,7 +319,7 @@ export function lookupWord(rawWord: string): QuickDictEntry {
   }
 
   // 2. 查离线微词典 BUILTIN_DICT
-  const dictHitKey = BUILTIN_DICT[lowerClean] ? lowerClean : BUILTIN_DICT[lemma] ? lemma : null;
+  const dictHitKey = BUILTIN_DICT[lowerClean] ? lowerClean : null;
 
   if (dictHitKey) {
     const data = BUILTIN_DICT[dictHitKey];
@@ -458,7 +332,57 @@ export function lookupWord(rawWord: string): QuickDictEntry {
     };
   }
 
-  // 3. 通用兜底条目 (保证任何未知词点击都不会报错，且可发音与收藏)
+  return null;
+}
+
+/**
+ * Explicit online Reference lookup for formal learning cards. It never
+ * projects WORDS, the legacy micro-dictionary, a local Reference sample or a
+ * Sense Learning Package into a dictionary entry.
+ */
+export interface DictionaryLookupResponse {
+  input: DictionaryLookupInput;
+  referenceResult: ReferenceLookupResult | null;
+  entry: QuickDictEntry | null;
+}
+
+/**
+ * Provider-neutral lookup boundary used by the app. Providers are normalized
+ * before the UI sees them; contextual metadata stays attached to the same
+ * result that produced the quick projection.
+ */
+export async function lookupDictionary(
+  input: DictionaryLookupInput,
+  options: DictionaryLookupOptions = {},
+): Promise<DictionaryLookupResponse> {
+  const referenceResult = await lookupReference(input, { signal: options.signal });
+
+  return {
+    input,
+    referenceResult,
+    entry: referenceResult ? projectReferenceEntryToQuick(referenceResult) : null,
+  };
+}
+
+export async function lookupDictionaryEntry(
+  input: DictionaryLookupInput,
+  options: DictionaryLookupOptions = {},
+): Promise<QuickDictEntry | null> {
+  return (await lookupDictionary(input, options)).entry;
+}
+
+/**
+ * Legacy lookup adapter used by non-formal surfaces. It keeps the historical
+ * permissive placeholder behavior for old dictionary UI while formal cards
+ * receive lookupDictionaryEntry explicitly.
+ */
+export function lookupWord(rawWord: string): QuickDictEntry {
+  const knownEntry = lookupLegacyEntry(rawWord) ?? lookupReferenceQuickEntry(rawWord);
+  if (knownEntry) return knownEntry;
+
+  const clean = rawWord.trim().replace(/^[^a-zA-Z0-9']+|[^a-zA-Z0-9']+$/g, '');
+
+  // 3. 通用兜底条目 (legacy only)
   return {
     word: clean || rawWord,
     phonetic: `/${(clean || rawWord).toLowerCase()}/`,

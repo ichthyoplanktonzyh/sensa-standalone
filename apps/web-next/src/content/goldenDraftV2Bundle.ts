@@ -1,0 +1,3267 @@
+import type {
+  SensaAuthoringAssetProvenance,
+  SensaAuthoringLearningExampleV2,
+  SensaAuthoringReview,
+  SensaGoldenContentDraftV2Bundle,
+} from "@sensa/contracts/sensa";
+
+const deliveryProfile = "sensa-web-prototype-acquisition-v2-draft";
+
+const draftReview: SensaAuthoringReview = {
+  status: "draft",
+  reviewedBy: null,
+  reviewedAt: null,
+  note: "Awaiting independent content review for the Draft V2 contract probe.",
+};
+
+function provenance(
+  sourceRefs: string[],
+  promptVersion: string | null = null,
+): SensaAuthoringAssetProvenance {
+  return {
+    sourceRefs,
+    generator:
+      promptVersion === null
+        ? null
+        : {
+            provider: "OpenAI",
+            model: "gpt-5.6-luna",
+            promptVersion,
+          },
+    review: draftReview,
+  };
+}
+
+type TtsAudioAsset = Readonly<{
+  ownerKey: string;
+  mediaKey: string;
+  sha256: string;
+  sourceTextDigest: string;
+  durationMs: number;
+}>;
+
+const ttsAudioAssets = [
+  { ownerKey: "pron.fragile", mediaKey: "fragile.pronunciation.en-us.edge-tts.v2", sha256: "2c238e6fc8e7ef99ccb8a8e9da10831544b63631683890a9bfac02ba00cc6b09", sourceTextDigest: "eb8771659e9fb622424b7568035b69e06fc601caf96676aebf332ee0bd7c42c6", durationMs: 1776 },
+  { ownerKey: "pron.sustain", mediaKey: "sustain.pronunciation.en-us.edge-tts.v2", sha256: "67dc7123d113bbeadbed920d35cee0d2dbd25a18ea3c3149a00442a58bed5433", sourceTextDigest: "07f5b83f6cec99c2cf519f4dbcf1afd1955852f7a7404b0f57be189e42058924", durationMs: 1776 },
+  { ownerKey: "pron.borrow", mediaKey: "borrow.pronunciation.en-us.edge-tts.v2", sha256: "4f9b9f3554aa26b77e25f93d402af2288ea6faa72fbeac7182cad4f7a39ac562", sourceTextDigest: "d106ccb1fe638b61e4cfbeb00c96818ecf8245918cb478d6bdc249eac33fe353", durationMs: 1776 },
+  { ownerKey: "pron.lend", mediaKey: "lend.pronunciation.en-us.edge-tts.v2", sha256: "fae74eaee4017f306212e5c5996ba46619dd0e642d4ba30fe1d93de711bdf664", sourceTextDigest: "5d59b2b96755e2c6e7ecdf4e2a6b32fa9b7ad5af8329a77c4b01c3a56d62fe00", durationMs: 1776 },
+  { ownerKey: "pron.fragile.en-gb", mediaKey: "fragile.pronunciation.en-gb.edge-tts.v2", sha256: "dce291f71730c4ce27aa17de8b24de881a09a1fce62366583768abc1c0fb16f7", sourceTextDigest: "eb8771659e9fb622424b7568035b69e06fc601caf96676aebf332ee0bd7c42c6", durationMs: 1776 },
+  { ownerKey: "pron.sustain.en-gb", mediaKey: "sustain.pronunciation.en-gb.edge-tts.v2", sha256: "0806aa1b81ff9d3f9044cb9341a366a05cbeb08072a47bec2cf122b89766436e", sourceTextDigest: "07f5b83f6cec99c2cf519f4dbcf1afd1955852f7a7404b0f57be189e42058924", durationMs: 1776 },
+  { ownerKey: "pron.borrow.en-gb", mediaKey: "borrow.pronunciation.en-gb.edge-tts.v2", sha256: "f0657fe43860023063abf7276d1562f13f0042a434756b5c426b3f973f26f834", sourceTextDigest: "d106ccb1fe638b61e4cfbeb00c96818ecf8245918cb478d6bdc249eac33fe353", durationMs: 1776 },
+  { ownerKey: "pron.lend.en-gb", mediaKey: "lend.pronunciation.en-gb.edge-tts.v2", sha256: "2e3f11f8c538d7f1ec57284b0105510870a9f1f52dc8e7bac76843bdbec6f979", sourceTextDigest: "5d59b2b96755e2c6e7ecdf4e2a6b32fa9b7ad5af8329a77c4b01c3a56d62fe00", durationMs: 1776 },
+  { ownerKey: "fragile.example.study.vase.v2", mediaKey: "fragile.example.study.vase.audio.en-us.edge-tts.v2", sha256: "ce6af4677466753da166f4c6312d8283b511f73357587e40e4a2532b1918eb85", sourceTextDigest: "2a7b0ed5f339429fd0f2c4ff1e877cb21789b98bd3311ef0c1148efa4565adcb", durationMs: 3864 },
+  { ownerKey: "fragile.example.study.glass.v2", mediaKey: "fragile.example.study.glass.audio.en-us.edge-tts.v2", sha256: "17919b7b372afa3bc3ae43a0607633633d9cdcd71f8307777e2c4d1a4d15adf1", sourceTextDigest: "f98f8d15ab52e6f8356422305e2008accfcecaa20667337a7daf49706432eda0", durationMs: 3864 },
+  { ownerKey: "fragile.example.study.material.v2", mediaKey: "fragile.example.study.material.audio.en-us.edge-tts.v2", sha256: "984c3acf1b56f67521dbf13f2b1b2d29babefd70c4a011516f211bc8e2446731", sourceTextDigest: "3e311a952f2212ab48b4e0c95c42ab3fab1734f9fe417fcbb2d8e97ff4a3b3a6", durationMs: 4080 },
+  { ownerKey: "sustain.example.study.kitchen.v2", mediaKey: "sustain.example.study.kitchen.audio.en-us.edge-tts.v2", sha256: "907939357434619c483e0dd719e6ddeef7d60fc6c9bb4a4ac9f0def2ff8ce726", sourceTextDigest: "2e4b939b1dbaa281062397e5243a99b630a200a668f391cb90ae79aa8278c236", durationMs: 4248 },
+  { ownerKey: "sustain.example.study.interest.v2", mediaKey: "sustain.example.study.interest.audio.en-us.edge-tts.v2", sha256: "c7529b9b1363f4c24f4848825121a65346811bfce0a290f76d9d7861ef66e6f9", sourceTextDigest: "12c1c7d168a8273afc9f353e9ab82ef6f946515d772fe15b3a6a30227c857b1c", durationMs: 4296 },
+  { ownerKey: "sustain.example.study.seedlings.v2", mediaKey: "sustain.example.study.seedlings.audio.en-us.edge-tts.v2", sha256: "905d79e66b65da1b7b51e9523b999b359309ce6d240ef9fda3627fcb2a23aa50", sourceTextDigest: "38c2ce98633d17cd187ec1a277e58e5e6734054c4b69fb818abef70b9959b92b", durationMs: 3984 },
+  { ownerKey: "borrow.example.study.charger.v2", mediaKey: "borrow.example.study.charger.audio.en-us.edge-tts.v2", sha256: "30c824be70640c1b3c8ef01ce4f843228911fa4ff71ca7ff664c589604b69fa5", sourceTextDigest: "f02d71e4b924834e27a5e7da2393da82d31ae0ca914dc9d651ed1080a2aee6bb", durationMs: 3264 },
+  { ownerKey: "borrow.example.study.umbrella.v2", mediaKey: "borrow.example.study.umbrella.audio.en-us.edge-tts.v2", sha256: "dcaf7ae937ae766e3802e14308b0556b83112bd3758641fcd7855b5513a3ab87", sourceTextDigest: "f7a6c1afe9925a39383dd627913806c36d946cb718986fbc23a1c7e91d322eb1", durationMs: 3336 },
+  { ownerKey: "borrow.example.study.paintings.v2", mediaKey: "borrow.example.study.paintings.audio.en-us.edge-tts.v2", sha256: "039adddf273efcc143e26efb54abe10446bc58b8e2608af5864d8e75c2a4e89f", sourceTextDigest: "4ad60572e308c145bca3edc54c4f405d054eaf3033280a1c443232b53706149f", durationMs: 3912 },
+  { ownerKey: "lend.example.study.umbrella.v2", mediaKey: "lend.example.study.umbrella.audio.en-us.edge-tts.v2", sha256: "7aa6019c842966fe8c3c0a53680c9cf5e0a3cdf8ed3b195d230c2f4d52cf7d3d", sourceTextDigest: "f345b6b30a824b78db6b0cee34f3ec2e923f583d65d1fa4f985f13be5323820e", durationMs: 3000 },
+  { ownerKey: "lend.example.study.meter.v2", mediaKey: "lend.example.study.meter.audio.en-us.edge-tts.v2", sha256: "da6231365b36f779e5113f68d89be2394ce537ec1c5824652a5dd1041ba4ea20", sourceTextDigest: "df90c24fb0196bee99b5735b22304fe00bb0b7aa6d9776d5db54d926dbc669b1", durationMs: 3864 },
+  { ownerKey: "lend.example.study.table.v2", mediaKey: "lend.example.study.table.audio.en-us.edge-tts.v2", sha256: "774aac11fca3922b16dd5bbe5bc0dfde99cef7e74dc79b098322bc76bf254519", sourceTextDigest: "17d7003058e7b752f4f3a0fd082db8fce4de2a6d62be6dac134a49337464da22", durationMs: 3312 },
+] as const satisfies readonly TtsAudioAsset[];
+
+const ttsAudioByOwnerKey: ReadonlyMap<string, TtsAudioAsset> = new Map(
+  ttsAudioAssets.map((asset) => [asset.ownerKey, asset] as const),
+);
+
+const ttsProvenance: SensaAuthoringAssetProvenance = {
+  sourceRefs: ["sensa.generated.edge-tts.golden-draft-v2"],
+  generator: {
+    provider: "microsoft-edge-tts",
+    model: "neural-v1",
+    promptVersion: "en-US-JennyNeural.en-GB-SoniaNeural.+0.v1",
+  },
+  review: draftReview,
+};
+
+type ExampleInput = Omit<
+  SensaAuthoringLearningExampleV2,
+  "renders" | "provenance"
+> & {
+  provenance?: SensaAuthoringAssetProvenance;
+};
+
+function learningExample(input: ExampleInput): SensaAuthoringLearningExampleV2 {
+  const audio = ttsAudioByOwnerKey.get(input.exampleKey);
+  const renders: SensaAuthoringLearningExampleV2["renders"] = [
+    {
+      kind: "text",
+      renderKey: `${input.exampleKey}.render.text`,
+    },
+  ];
+  if (audio !== undefined) {
+    renders.push({
+      kind: "static_audio",
+      renderKey: `${input.exampleKey}.render.audio.en-us.edge-tts`,
+      mediaKey: audio.mediaKey,
+      accentLocale: "en-US",
+      sourceTextDigest: `sha256:${audio.sourceTextDigest}`,
+    });
+  }
+  return {
+    ...input,
+    renders,
+    provenance: input.provenance ?? editorialProvenance,
+  };
+}
+
+const fragileDictionaryProvenance = provenance([
+  "wiktionary.fragile.2026-08-21",
+]);
+const fragileEditorialProvenance = provenance(
+  ["wiktionary.fragile.2026-08-21", "sensa.editorial.fragile-physical.v2"],
+  "sensa-golden-fragile-physical-v2",
+);
+const sustainGeneratedProvenance = provenance(
+  ["sensa.generated.sustain-process.v2"],
+  "sensa-golden-sustain-process-v2",
+);
+const sustainEditorialProvenance = provenance(
+  ["sensa.generated.sustain-process.v2", "sensa.editorial.sustain-process.v2"],
+  "sensa-golden-sustain-process-v2",
+);
+const borrowGeneratedProvenance = provenance(
+  ["sensa.generated.borrow-receive.v2"],
+  "sensa-golden-borrow-receive-v2",
+);
+const borrowEditorialProvenance = provenance(
+  ["sensa.generated.borrow-receive.v2", "sensa.editorial.borrow-receive.v2"],
+  "sensa-golden-borrow-receive-v2",
+);
+const lendGeneratedProvenance = provenance(
+  ["sensa.generated.lend-give.v2"],
+  "sensa-golden-lend-give-v2",
+);
+const lendEditorialProvenance = provenance(
+  ["sensa.generated.lend-give.v2", "sensa.editorial.lend-give.v2"],
+  "sensa-golden-lend-give-v2",
+);
+
+const editorialProvenance = fragileEditorialProvenance;
+
+const fragileExamples: SensaAuthoringLearningExampleV2[] = [
+  learningExample({
+    exampleKey: "fragile.example.study.vase.v2",
+    textL2: "She wrapped the fragile vase in a towel before moving it.",
+    textL1: "搬动花瓶前，她先用毛巾把这只易碎的花瓶包好。",
+    target: { surface: "fragile", start: 16, end: 23 },
+    scenarioFamily: "household-object",
+    construction: "fragile + concrete noun",
+    roles: [
+      "study_binding",
+      "usage_illustration",
+      "retrieval_repair",
+      "free_practice",
+    ],
+    visibility: "learning_only",
+    provenance: fragileDictionaryProvenance,
+  }),
+  learningExample({
+    exampleKey: "fragile.example.study.glass.v2",
+    textL2: "The fragile glass was kept away from the edge of the shelf.",
+    textL1: "这件易碎的玻璃制品被放在远离架子边缘的地方。",
+    target: { surface: "fragile", start: 4, end: 11 },
+    scenarioFamily: "household-object",
+    construction: "fragile + material noun",
+    roles: ["usage_illustration", "retrieval_repair", "free_practice"],
+    visibility: "learning_only",
+    provenance: fragileEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "fragile.example.study.material.v2",
+    textL2: "This fragile material can crack under very little pressure.",
+    textL1: "这种易碎材料受到很小的压力就可能开裂。",
+    target: { surface: "fragile", start: 5, end: 12 },
+    scenarioFamily: "manufactured-material",
+    construction: "fragile + material noun + can crack",
+    roles: ["retrieval_repair", "free_practice"],
+    visibility: "learning_only",
+    provenance: fragileEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "fragile.example.recognition.panel.v2",
+    textL2: "The movers placed each fragile glass panel in a padded frame.",
+    textL1: "搬运工把每块易碎的玻璃板都放进了带衬垫的框架中。",
+    target: { surface: "fragile", start: 23, end: 30 },
+    scenarioFamily: "building-material",
+    construction: "fragile + glass panel",
+    roles: ["recognition_assessment"],
+    visibility: "assessment_only",
+    provenance: fragileEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "fragile.example.transfer.bones.v2",
+    textL2: "The archaeologist uncovered the fragile bones with a small brush.",
+    textL1: "考古学家用一把小刷子清理出那些易碎的骨骼。",
+    target: { surface: "fragile", start: 32, end: 39 },
+    scenarioFamily: "archaeological-remains",
+    construction: "fragile + plural concrete noun",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: fragileEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "fragile.example.transfer.coral.v2",
+    textL2:
+      "New coral growth is fragile and can be damaged by a careless touch.",
+    textL1: "新生的珊瑚很容易受损，随手一碰就可能被破坏。",
+    target: { surface: "fragile", start: 20, end: 27 },
+    scenarioFamily: "living-material",
+    construction: "subject + be + fragile",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: fragileEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "fragile.example.transfer.solar-cell.v2",
+    textL2: "The thin solar cells are fragile during installation.",
+    textL1: "这些薄型太阳能电池在安装时很容易破损。",
+    target: { surface: "fragile", start: 25, end: 32 },
+    scenarioFamily: "manufactured-component",
+    construction: "subject + be + fragile + during",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: fragileEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "fragile.example.transfer.fabric.v2",
+    textL2: "After years in the attic, the fragile fabric tore along the fold.",
+    textL1: "在阁楼放了多年后，那块易损布料沿着折痕裂开了。",
+    target: { surface: "fragile", start: 30, end: 37 },
+    scenarioFamily: "aged-material",
+    construction: "fragile + fabric + result event",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: fragileEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "fragile.example.transfer.sensor.v2",
+    textL2:
+      "Technicians placed the fragile sensor inside a shock-resistant case.",
+    textL1: "技术人员把易损传感器放进了防震外壳。",
+    target: { surface: "fragile", start: 23, end: 30 },
+    scenarioFamily: "precision-equipment",
+    construction: "fragile + precision equipment",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: fragileEditorialProvenance,
+  }),
+];
+
+const sustainExamples: SensaAuthoringLearningExampleV2[] = [
+  learningExample({
+    exampleKey: "sustain.example.study.kitchen.v2",
+    textL2:
+      "Regular donations sustain the community kitchen through the winter.",
+    textL1: "定期捐款让社区厨房得以维持到冬天。",
+    target: { surface: "sustain", start: 18, end: 25 },
+    scenarioFamily: "community-service",
+    construction: "sustain + activity + through time",
+    roles: [
+      "study_binding",
+      "usage_illustration",
+      "retrieval_repair",
+      "free_practice",
+    ],
+    visibility: "learning_only",
+    provenance: sustainGeneratedProvenance,
+  }),
+  learningExample({
+    exampleKey: "sustain.example.study.interest.v2",
+    textL2: "Weekly feedback sustained the apprentice's interest in the craft.",
+    textL1: "每周的反馈维持了学徒对这门手艺的兴趣。",
+    target: { surface: "sustained", start: 16, end: 25 },
+    scenarioFamily: "learning-motivation",
+    construction: "sustain + interest + in",
+    roles: ["usage_illustration", "retrieval_repair", "free_practice"],
+    visibility: "learning_only",
+    provenance: sustainEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "sustain.example.study.seedlings.v2",
+    textL2: "Fresh water sustains the seedlings during the dry season.",
+    textL1: "新鲜的水分让幼苗得以度过旱季。",
+    target: { surface: "sustains", start: 12, end: 20 },
+    scenarioFamily: "plant-growth",
+    construction: "sustain + living process + during",
+    roles: ["retrieval_repair", "free_practice"],
+    visibility: "learning_only",
+    provenance: sustainEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "sustain.example.recognition.bookstore.v2",
+    textL2: "A steady stream of customers sustained the small bookstore.",
+    textL1: "稳定的客流让那家小书店持续经营下去。",
+    target: { surface: "sustained", start: 29, end: 38 },
+    scenarioFamily: "small-business",
+    construction: "sustain + institution",
+    roles: ["recognition_assessment"],
+    visibility: "assessment_only",
+    provenance: sustainEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "sustain.example.transfer.battery.v2",
+    textL2: "A reserve battery sustains the monitoring station during outages.",
+    textL1: "备用电池在停电期间维持着监测站的运行。",
+    target: { surface: "sustains", start: 18, end: 26 },
+    scenarioFamily: "infrastructure",
+    construction: "sustain + system + during",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: sustainEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "sustain.example.transfer.garden.v2",
+    textL2: "Membership fees sustain the neighborhood garden all year.",
+    textL1: "会员费让社区花园全年维持下去。",
+    target: { surface: "sustain", start: 16, end: 23 },
+    scenarioFamily: "community-finance",
+    construction: "sustain + organization + all year",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: sustainEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "sustain.example.transfer.feedback.v2",
+    textL2:
+      "A mentor is sustaining the new designer's interest with weekly feedback.",
+    textL1: "导师通过每周反馈维持着新设计师的兴趣。",
+    target: { surface: "sustaining", start: 12, end: 22 },
+    scenarioFamily: "professional-learning",
+    construction: "be + sustaining + interest",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: sustainEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "sustain.example.transfer.rehearsal.v2",
+    textL2:
+      "The short break helped sustain the orchestra's concentration during rehearsal.",
+    textL1: "短暂休息帮助乐团在排练中保持注意力。",
+    target: { surface: "sustain", start: 23, end: 30 },
+    scenarioFamily: "performance-focus",
+    construction: "help + sustain + concentration",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: sustainEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "sustain.example.transfer.traffic.v2",
+    textL2: "Extra server capacity sustains the service throughout the launch.",
+    textL1: "额外服务器容量让服务在整个发布期间持续运行。",
+    target: { surface: "sustains", start: 22, end: 30 },
+    scenarioFamily: "software-service",
+    construction: "support input + sustain + service + through time",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: sustainEditorialProvenance,
+  }),
+];
+
+const borrowExamples: SensaAuthoringLearningExampleV2[] = [
+  learningExample({
+    exampleKey: "borrow.example.study.charger.v2",
+    textL2: "I borrowed a charger from Nina during the meeting.",
+    textL1: "开会时，我向 Nina 借了一个充电器。",
+    target: { surface: "borrowed", start: 2, end: 10 },
+    scenarioFamily: "personal-item",
+    construction: "borrow + object + from + person",
+    roles: [
+      "study_binding",
+      "usage_illustration",
+      "retrieval_repair",
+      "free_practice",
+    ],
+    visibility: "learning_only",
+    provenance: borrowGeneratedProvenance,
+  }),
+  learningExample({
+    exampleKey: "borrow.example.study.umbrella.v2",
+    textL2: "Could I borrow your umbrella until the rain stops?",
+    textL1: "雨停以前，我可以借用你的雨伞吗？",
+    target: { surface: "borrow", start: 8, end: 14 },
+    scenarioFamily: "personal-item",
+    construction: "could + borrow + possessive object + until",
+    roles: ["usage_illustration", "retrieval_repair", "free_practice"],
+    visibility: "learning_only",
+    provenance: borrowEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "borrow.example.study.paintings.v2",
+    textL2: "The museum borrowed two paintings from a private collection.",
+    textL1: "博物馆向私人收藏借用了两幅画。",
+    target: { surface: "borrowed", start: 11, end: 19 },
+    scenarioFamily: "cultural-institution",
+    construction: "borrow + object + from + institution",
+    roles: ["retrieval_repair", "free_practice"],
+    visibility: "learning_only",
+    provenance: borrowEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "borrow.example.recognition.meter.v2",
+    textL2: "Priya borrowed a spare meter from the lab for the afternoon.",
+    textL1: "Priya 向实验室借了一台备用仪表，用到下午。",
+    target: { surface: "borrowed", start: 6, end: 14 },
+    scenarioFamily: "laboratory-equipment",
+    construction: "borrow + object + from + duration",
+    roles: ["recognition_assessment"],
+    visibility: "assessment_only",
+    provenance: borrowEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "borrow.example.transfer.lanterns.v2",
+    textL2:
+      "The hiking club borrowed lanterns from the park office for the night walk.",
+    textL1: "徒步社向公园办公室借了几盏灯，用于夜间步行。",
+    target: { surface: "borrowed", start: 16, end: 24 },
+    scenarioFamily: "community-equipment",
+    construction: "borrow + plural equipment + from",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: borrowEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "borrow.example.transfer.wheelchair.v2",
+    textL2: "A patient borrowed a wheelchair from the clinic for the weekend.",
+    textL1: "一位病人向诊所借了一把轮椅，用到周末。",
+    target: { surface: "borrowed", start: 10, end: 18 },
+    scenarioFamily: "health-service",
+    construction: "borrow + mobility aid + duration",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: borrowEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "borrow.example.transfer.lens.v2",
+    textL2: "The studio borrowed a lens from another team for the shoot.",
+    textL1: "摄影棚向另一个团队借了一支镜头，用于拍摄。",
+    target: { surface: "borrowed", start: 11, end: 19 },
+    scenarioFamily: "work-equipment",
+    construction: "borrow + equipment + from + purpose",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: borrowEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "borrow.example.transfer.table.v2",
+    textL2: "We borrowed our neighbor's folding table for the party.",
+    textL1: "我们向邻居借了折叠桌来办聚会。",
+    target: { surface: "borrowed", start: 3, end: 11 },
+    scenarioFamily: "neighborhood-event",
+    construction: "borrow + possessive object + purpose",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: borrowEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "borrow.example.transfer.diary.v2",
+    textL2: "The archive borrowed a diary from the family for its exhibition.",
+    textL1: "档案馆向这个家庭借了一本日记用于展览。",
+    target: { surface: "borrowed", start: 12, end: 20 },
+    scenarioFamily: "archive-exhibition",
+    construction: "borrow + cultural object + from + purpose",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: borrowEditorialProvenance,
+  }),
+];
+
+const lendExamples: SensaAuthoringLearningExampleV2[] = [
+  learningExample({
+    exampleKey: "lend.example.study.umbrella.v2",
+    textL2: "Could you lend me your umbrella for the walk home?",
+    textL1: "你能把雨伞借给我，让我走回家吗？",
+    target: { surface: "lend", start: 10, end: 14 },
+    scenarioFamily: "personal-item",
+    construction: "lend + person + object + for",
+    roles: [
+      "study_binding",
+      "usage_illustration",
+      "retrieval_repair",
+      "free_practice",
+    ],
+    visibility: "learning_only",
+    provenance: lendGeneratedProvenance,
+  }),
+  learningExample({
+    exampleKey: "lend.example.study.meter.v2",
+    textL2: "The lab lent its spare meter to Priya for the afternoon.",
+    textL1: "实验室把备用仪表借给 Priya，用到下午。",
+    target: { surface: "lent", start: 8, end: 12 },
+    scenarioFamily: "laboratory-equipment",
+    construction: "lend + object + to + person + duration",
+    roles: ["usage_illustration", "retrieval_repair", "free_practice"],
+    visibility: "learning_only",
+    provenance: lendEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "lend.example.study.table.v2",
+    textL2: "Our neighbor lent us a folding table for the party.",
+    textL1: "邻居把一张折叠桌借给我们办聚会。",
+    target: { surface: "lent", start: 13, end: 17 },
+    scenarioFamily: "neighborhood-event",
+    construction: "lend + person + object + purpose",
+    roles: ["retrieval_repair", "free_practice"],
+    visibility: "learning_only",
+    provenance: lendEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "lend.example.recognition.lens.v2",
+    textL2: "The studio lent a lens to another team for the shoot.",
+    textL1: "摄影棚把一支镜头借给另一个团队用于拍摄。",
+    target: { surface: "lent", start: 11, end: 15 },
+    scenarioFamily: "work-equipment",
+    construction: "lend + object + to + team + purpose",
+    roles: ["recognition_assessment"],
+    visibility: "assessment_only",
+    provenance: lendEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "lend.example.boundary.meter.v2",
+    textL2: "The lab lent Priya a spare meter for the afternoon.",
+    textL1: "实验室把一台备用仪表借给 Priya，用到下午。",
+    target: { surface: "lent", start: 8, end: 12 },
+    scenarioFamily: "laboratory-equipment",
+    construction: "lend + recipient + object + duration",
+    roles: ["recognition_assessment"],
+    visibility: "assessment_only",
+    provenance: lendEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "lend.example.transfer.lanterns.v2",
+    textL2: "The park office lent the hiking club lanterns for the night walk.",
+    textL1: "公园办公室把几盏灯借给徒步社用于夜间步行。",
+    target: { surface: "lent", start: 16, end: 20 },
+    scenarioFamily: "community-equipment",
+    construction: "lend + organization + plural equipment + purpose",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: lendEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "lend.example.transfer.wheelchair.v2",
+    textL2: "The clinic lent a wheelchair to a patient for the weekend.",
+    textL1: "诊所把一把轮椅借给一位病人，用到周末。",
+    target: { surface: "lent", start: 11, end: 15 },
+    scenarioFamily: "health-service",
+    construction: "lend + object + to + recipient + duration",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: lendEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "lend.example.transfer.diary.v2",
+    textL2: "The family lent a diary to the archive for its exhibition.",
+    textL1: "这个家庭把一本日记借给档案馆用于展览。",
+    target: { surface: "lent", start: 11, end: 15 },
+    scenarioFamily: "archive-exhibition",
+    construction: "lend + cultural object + to + purpose",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: lendEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "lend.example.transfer.camera.v2",
+    textL2: "Maya lent her camera to the film club for the weekend.",
+    textL1: "Maya 把相机借给电影社使用到周末。",
+    target: { surface: "lent", start: 5, end: 9 },
+    scenarioFamily: "creative-club",
+    construction: "lend + possessive object + to + group",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: lendEditorialProvenance,
+  }),
+  learningExample({
+    exampleKey: "lend.example.transfer.lens.v2",
+    textL2: "The studio lent its spare lens to another team for the shoot.",
+    textL1: "摄影棚把备用镜头借给另一个团队用于拍摄。",
+    target: { surface: "lent", start: 11, end: 15 },
+    scenarioFamily: "work-equipment",
+    construction: "lend + possessive object + to + team + purpose",
+    roles: ["transfer_assessment"],
+    visibility: "assessment_only",
+    provenance: lendEditorialProvenance,
+  }),
+];
+
+const allPurposes = [
+  "acquisition_gate",
+  "retention_review",
+  "relearning_gate",
+] as const;
+
+type AssessmentOptionDraft = {
+  optionKey: string;
+  labelL1: string;
+  detailL1?: string;
+  isCorrect: boolean;
+  reasonCode: string;
+  feedbackTitleL1: string;
+  feedbackBodyL1: string;
+};
+
+function assessmentOptions<T extends readonly AssessmentOptionDraft[]>(
+  options: T,
+  contextL1?: string,
+) {
+  return options.map((option) => ({
+    ...option,
+    detailL1:
+      option.detailL1 ??
+      (contextL1 === undefined
+        ? option.labelL1
+        : `${contextL1}${option.labelL1}`),
+  }));
+}
+
+export const goldenDraftV2Bundle = {
+  schemaVersion: "sensa-golden-content-bundle-v2-draft",
+  release: {
+    releaseKey: "sensa.prototype.golden-diverse-v2",
+    version: 1,
+    targetLanguage: "en",
+    learnerLocale: "zh-CN",
+    deliveryProfileVersion: deliveryProfile,
+    status: "draft",
+  },
+  sources: [
+    {
+      sourceKey: "wiktionary.fragile.2026-08-21",
+      kind: "dictionary",
+      title: "Wiktionary fragile entry snapshot",
+      provider: "wiktionary",
+      locator: "fragile-dict-002",
+      sourceLicense: null,
+      sourceAttribution: null,
+      capturedAt: "2026-08-21T00:25:10Z",
+      evidenceDigest:
+        "sha256:5cbb0d94b7fa51ce1c0f2309a7567a30b8a402d3f77dbc90a8d0ced9278dd227",
+    },
+    {
+      sourceKey: "sensa.editorial.fragile-physical.v2",
+      kind: "editorial",
+      title: "Sensa editorial draft for physical fragility",
+      provider: "Sensa",
+      locator: null,
+      sourceLicense: null,
+      sourceAttribution: null,
+      capturedAt: null,
+      evidenceDigest: null,
+    },
+    {
+      sourceKey: "sensa.generated.sustain-process.v2",
+      kind: "generated",
+      title: "AI-generated Draft V2 probe for process continuation",
+      provider: "OpenAI Codex implementation worker",
+      locator: null,
+      sourceLicense: null,
+      sourceAttribution: null,
+      capturedAt: null,
+      evidenceDigest: null,
+    },
+    {
+      sourceKey: "sensa.editorial.sustain-process.v2",
+      kind: "editorial",
+      title: "Sensa editorial draft for process continuation",
+      provider: "Sensa",
+      locator: null,
+      sourceLicense: null,
+      sourceAttribution: null,
+      capturedAt: null,
+      evidenceDigest: null,
+    },
+    {
+      sourceKey: "sensa.generated.borrow-receive.v2",
+      kind: "generated",
+      title: "AI-generated Draft V2 probe for the receiver viewpoint",
+      provider: "OpenAI Codex implementation worker",
+      locator: null,
+      sourceLicense: null,
+      sourceAttribution: null,
+      capturedAt: null,
+      evidenceDigest: null,
+    },
+    {
+      sourceKey: "sensa.editorial.borrow-receive.v2",
+      kind: "editorial",
+      title: "Sensa editorial draft for receiver viewpoint",
+      provider: "Sensa",
+      locator: null,
+      sourceLicense: null,
+      sourceAttribution: null,
+      capturedAt: null,
+      evidenceDigest: null,
+    },
+    {
+      sourceKey: "sensa.generated.lend-give.v2",
+      kind: "generated",
+      title: "AI-generated Draft V2 probe for the provider viewpoint",
+      provider: "OpenAI Codex implementation worker",
+      locator: null,
+      sourceLicense: null,
+      sourceAttribution: null,
+      capturedAt: null,
+      evidenceDigest: null,
+    },
+    {
+      sourceKey: "sensa.editorial.lend-give.v2",
+      kind: "editorial",
+      title: "Sensa editorial draft for provider viewpoint",
+      provider: "Sensa",
+      locator: null,
+      sourceLicense: null,
+      sourceAttribution: null,
+      capturedAt: null,
+      evidenceDigest: null,
+    },
+    {
+      sourceKey: "sensa.generated.edge-tts.golden-draft-v2",
+      kind: "generated",
+      title: "Edge TTS audio generated for the Golden Draft V2 contract probe",
+      provider: "microsoft-edge-tts",
+      locator: "voices=en-US-JennyNeural,en-GB-SoniaNeural;rate=+0%",
+      sourceLicense: null,
+      sourceAttribution: null,
+      capturedAt: null,
+      evidenceDigest: null,
+    },
+  ],
+  media: ttsAudioAssets.map((asset) => ({
+    mediaKey: asset.mediaKey,
+    kind: "audio" as const,
+    uri: `content://sha256/${asset.sha256}`,
+    mimeType: "audio/mp3",
+    sha256: `sha256:${asset.sha256}`,
+    sourceTextDigest: `sha256:${asset.sourceTextDigest}`,
+    provenance: ttsProvenance,
+  })),
+  lexemes: [
+    {
+      lexemeKey: "fragile",
+      version: 1,
+      languageTag: "en",
+      lemma: "fragile",
+      forms: ["fragile"],
+      syllables: "frag·ile",
+      pronunciations: [
+        {
+          pronunciationKey: "fragile.en-us.v2",
+          accentLocale: "en-US",
+          ipa: "/ˈfrædʒəl/",
+          mediaKey: "fragile.pronunciation.en-us.edge-tts.v2",
+        },
+        {
+          pronunciationKey: "fragile.en-gb.v2",
+          accentLocale: "en-GB",
+          ipa: "/ˈfrædʒaɪl/",
+          mediaKey: "fragile.pronunciation.en-gb.edge-tts.v2",
+        },
+      ],
+      provenance: fragileDictionaryProvenance,
+    },
+    {
+      lexemeKey: "sustain",
+      version: 1,
+      languageTag: "en",
+      lemma: "sustain",
+      forms: ["sustain", "sustains", "sustained", "sustaining"],
+      syllables: "sus·tain",
+      pronunciations: [
+        {
+          pronunciationKey: "sustain.en-us.v1",
+          accentLocale: "en-US",
+          ipa: "/səˈsteɪn/",
+          mediaKey: "sustain.pronunciation.en-us.edge-tts.v2",
+        },
+        {
+          pronunciationKey: "sustain.en-gb.v1",
+          accentLocale: "en-GB",
+          ipa: "/səˈsteɪn/",
+          mediaKey: "sustain.pronunciation.en-gb.edge-tts.v2",
+        },
+      ],
+      provenance: sustainGeneratedProvenance,
+    },
+    {
+      lexemeKey: "borrow",
+      version: 1,
+      languageTag: "en",
+      lemma: "borrow",
+      forms: ["borrow", "borrows", "borrowed", "borrowing"],
+      syllables: "bor·row",
+      pronunciations: [
+        {
+          pronunciationKey: "borrow.en-us.v1",
+          accentLocale: "en-US",
+          ipa: "/ˈbɑːroʊ/",
+          mediaKey: "borrow.pronunciation.en-us.edge-tts.v2",
+        },
+        {
+          pronunciationKey: "borrow.en-gb.v1",
+          accentLocale: "en-GB",
+          ipa: "/ˈbɒrəʊ/",
+          mediaKey: "borrow.pronunciation.en-gb.edge-tts.v2",
+        },
+      ],
+      provenance: borrowGeneratedProvenance,
+    },
+    {
+      lexemeKey: "lend",
+      version: 1,
+      languageTag: "en",
+      lemma: "lend",
+      forms: ["lend", "lends", "lent", "lending"],
+      syllables: "lend",
+      pronunciations: [
+        {
+          pronunciationKey: "lend.en-us.v1",
+          accentLocale: "en-US",
+          ipa: "/lend/",
+          mediaKey: "lend.pronunciation.en-us.edge-tts.v2",
+        },
+        {
+          pronunciationKey: "lend.en-gb.v1",
+          accentLocale: "en-GB",
+          ipa: "/lend/",
+          mediaKey: "lend.pronunciation.en-gb.edge-tts.v2",
+        },
+      ],
+      provenance: lendGeneratedProvenance,
+    },
+  ],
+  relations: [
+    {
+      relationKey: "borrow-lend.viewpoint-temporary-transfer.v1",
+      sourceSenseKey: "borrow.verb.receive-temporarily",
+      targetSenseKey: "lend.verb.give-temporarily",
+      relationType: "viewpoint_contrast",
+      scope: "cross_word",
+      distinguishingFeature:
+        "borrow names the receiver temporarily taking and using an item; lend names the provider temporarily giving it with an expectation of return.",
+      provenance: provenance(
+        ["sensa.editorial.borrow-receive.v2", "sensa.editorial.lend-give.v2"],
+        "sensa-golden-borrow-lend-boundary-v1",
+      ),
+    },
+  ],
+  packages: [
+    {
+      schemaVersion: "sensa-sense-package-definition-v2-draft",
+      identity: {
+        packageKey: "fragile.adj.physical-easily-broken",
+        packageVersion: 1,
+        senseKey: "fragile.adj.physical-easily-broken",
+        senseVersion: 1,
+        lexemeKey: "fragile",
+        lexemeVersion: 1,
+        targetLanguage: "en",
+        learnerLocale: "zh-CN",
+      },
+      sense: {
+        partOfSpeech: "adj.",
+        senseRank: 1,
+        guideLabelL1: "易碎的",
+        definitionL2:
+          "Easily broken or damaged by a relatively small force; requiring careful handling.",
+        teachingPriority: "core",
+        coreFeatures: [
+          "Describes a physical object or material.",
+          "A relatively small force can cause breakage or material damage.",
+          "Careful handling is needed because the object lacks sturdiness.",
+        ],
+      },
+      acquisitionProfile: {
+        profileKey: "fragile.physical.acquisition.v2",
+        acquisitionNeeds: ["perceptual_grounding", "form_binding"],
+        minimumSufficientExperience:
+          "The learner anticipates damage from a small impact and handles the physical object carefully.",
+        distinguishingFeatures: [
+          "The referent is physical rather than an abstract situation.",
+          "A modest force can cause breakage, cracking, tearing, or similar damage.",
+          "The risk exists before the object is already damaged.",
+        ],
+        preferredPrimitives: ["causal_sequence"],
+        fallbackPrimitives: ["visual_grounding"],
+        requiredCapabilities: [
+          { kind: "contextual_recognition" },
+          {
+            kind: "meaning_to_form_recall",
+            gradingContract: "lexeme_identity_v1",
+          },
+          { kind: "novel_context_transfer" },
+        ],
+        optionalCapabilities: [],
+        requiredAssetCapabilities: [
+          "meaning_grounding",
+          "l1_mediation",
+          "usage_pattern",
+          "contextual_variation",
+          "causal_grounding",
+          "pronunciation",
+          "study_example_audio",
+        ],
+        optionalAssetCapabilities: ["visual_grounding"],
+        domainBound: false,
+        domainConstraints: [],
+        boundaryTargets: [],
+        provenance: fragileEditorialProvenance,
+      },
+      experience: {
+        sketch: {
+          sketchKey: "fragile.experience.sketch.physical.v2",
+          experienceGoal:
+            "Make the learner anticipate damage before any definition or target form is shown.",
+          focalStructure: [
+            "A thin glass cup is held in two hands.",
+            "A light bump against a table edge can crack it.",
+            "The holder slows down and uses extra care.",
+          ],
+          learnerInference:
+            "This physical object can be damaged by a small force, so it must be handled carefully.",
+          constraints: {
+            mustConvey: [
+              "physical vulnerability",
+              "low force threshold",
+              "careful handling",
+            ],
+            mustAvoid: [
+              "an already broken object",
+              "general emotional weakness",
+              "an abstract relationship or political situation",
+            ],
+            hideTargetForms: true,
+          },
+          provenance: fragileEditorialProvenance,
+        },
+        renders: [
+          {
+            kind: "interaction",
+            renderKey: "fragile.experience.render.impact-threshold.v2",
+            primitive: "causal_sequence",
+            supportedDeliveryProfiles: [deliveryProfile],
+            rendererKey: "state_change_v1",
+            payload: {
+              runtimePresentation: {
+                variant: "physical_threshold",
+                controlLabelL1: "作用力变化",
+                statusLabelsL1: [],
+                objectLabelL1: "薄玻璃杯 · 桌沿",
+                projectLabelL1: null,
+                supportLabelsL1: [],
+                viewpointLabelL1: null,
+                ownerLabelL1: null,
+                userLabelL1: null,
+              },
+              instructionL1:
+                "缓慢调高碰撞力度，观察薄玻璃杯从完好到受损的变化。",
+              subject: { kind: "thin_glass_cup", initialState: "intact" },
+              control: {
+                kind: "slider",
+                valueKey: "impactForce",
+                minimum: 0,
+                maximum: 3,
+                step: 1,
+              },
+              states: [
+                { value: 0, state: "intact", labelL1: "完好", feedbackL1: "杯子保持完好。" },
+                {
+                  value: 1,
+                  state: "hairline_crack",
+                  labelL1: "轻微碰撞",
+                  feedbackL1: "只是轻轻一碰，杯壁已经出现细小裂纹。",
+                },
+                {
+                  value: 2,
+                  state: "cracked",
+                  labelL1: "出现裂纹",
+                  feedbackL1: "裂纹继续扩展，杯子无法再安全使用。",
+                },
+                {
+                  value: 3,
+                  state: "broken",
+                  labelL1: "损坏",
+                  feedbackL1: "碰撞越强，损坏越明显。",
+                },
+              ],
+              resetLabelL1: "重新体验",
+              accessibility: {
+                keyboardStep: 1,
+                summaryL1: "这个杯子在很低的碰撞力度下就会受损。",
+              },
+            },
+            provenance: fragileEditorialProvenance,
+          },
+          {
+            kind: "text",
+            renderKey: "fragile.experience.render.text.v2",
+            primitive: "causal_sequence",
+            supportedDeliveryProfiles: [deliveryProfile],
+            sceneL1:
+              "想象你双手捧着一只很薄的玻璃杯。只要轻轻碰到桌角，它就可能裂开，所以你放下它时格外小心。",
+            provenance: fragileEditorialProvenance,
+          },
+        ],
+        renderPlan: {
+          strategyVersion: "sensa-experience-render-plan-v1",
+          selections: [
+            {
+              renderKey: "fragile.experience.render.impact-threshold.v2",
+              role: "preferred",
+              rank: 1,
+              reason:
+                "Direct manipulation makes the unusually low damage threshold perceptible.",
+            },
+            {
+              renderKey: "fragile.experience.render.text.v2",
+              role: "fallback",
+              rank: 1,
+              reason:
+                "Provides a complete text-only experience on every supported client.",
+            },
+          ],
+        },
+        recap: {
+          recapKey: "fragile.experience.recap.physical.v2",
+          titleL1: "回想那个需要小心处理的物品",
+          steps: [
+            {
+              stepKey: "fragile-recap-intact",
+              labelL1: "原本完好",
+              descriptionL1: "物品看起来完整，但材质经不起明显冲击。",
+            },
+            {
+              stepKey: "fragile-recap-impact",
+              labelL1: "轻碰就受损",
+              descriptionL1: "不大的外力也可能让它裂开、撕裂或损坏。",
+            },
+            {
+              stepKey: "fragile-recap-care",
+              labelL1: "需要小心",
+              descriptionL1: "拿取和放置时都要降低碰撞风险。",
+            },
+          ],
+          bodyL1:
+            "它原本完好，却可能因为不大的外力受损，所以需要小心处理。",
+          provenance: fragileEditorialProvenance,
+        },
+      },
+      l1Bridge: {
+        assetKey: "fragile.bridge.zh.physical.v2",
+        bodyL1:
+          "这里的意思不是泛泛地说“脆弱”，而是指实体物品受到不大的外力就容易破损，因此需要小心对待。",
+        provenance: fragileEditorialProvenance,
+      },
+      examples: fragileExamples,
+      usagePatterns: [
+        {
+          patternKey: "fragile.pattern.concrete-noun.v2",
+          canonicalPattern: "fragile + concrete noun",
+          registerLabel: "neutral",
+          domainLabel: "physical objects and materials",
+          usageRestriction:
+            "这里只学习描述实体物品或材料容易破损的义项，不包含情绪、关系或局势的抽象脆弱。",
+          collocations: [
+            {
+              collocationKey: "fragile.collocation.vase.v2",
+              displayTextL2: "fragile vase",
+              exampleBindings: [
+                {
+                  bindingKey: "fragile.binding.vase.v2",
+                  exampleKey: "fragile.example.study.vase.v2",
+                  start: 16,
+                  end: 28,
+                  role: "primary",
+                },
+              ],
+            },
+            {
+              collocationKey: "fragile.collocation.glass.v2",
+              displayTextL2: "fragile glass",
+              exampleBindings: [
+                {
+                  bindingKey: "fragile.binding.glass.v2",
+                  exampleKey: "fragile.example.study.glass.v2",
+                  start: 4,
+                  end: 17,
+                  role: "primary",
+                },
+              ],
+            },
+          ],
+          provenance: fragileEditorialProvenance,
+        },
+      ],
+      assessmentInventory: {
+        contextualRecognition: [
+          {
+            taskKey: "fragile.assessment.recognition.panel.v2",
+            kind: "contextual_recognition",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "读完语境后，判断这个词描述了物品的哪种状态。",
+            provenance: fragileEditorialProvenance,
+            exampleKey: "fragile.example.recognition.panel.v2",
+            questionL1: "搬运工为什么使用带衬垫的框架？",
+            options: assessmentOptions([
+              {
+                optionKey: "fragile-recognition-damage",
+                labelL1: "物品经不起不大的外力，容易受损。",
+                isCorrect: true,
+                reasonCode: "low-force-damage-risk",
+                feedbackTitleL1: "抓住了语境",
+                feedbackBodyL1: "带衬垫是在降低碰撞带来的破损风险。",
+              },
+              {
+                optionKey: "fragile-recognition-weight",
+                labelL1: "物品非常沉重，需要额外支撑。",
+                isCorrect: false,
+                reasonCode: "weight-not-stated",
+                feedbackTitleL1: "不是重量线索",
+                feedbackBodyL1: "语境强调的是受损风险，不是物品重量。",
+              },
+              {
+                optionKey: "fragile-recognition-age",
+                labelL1: "物品已经损坏，正在等待维修。",
+                isCorrect: false,
+                reasonCode: "not-already-damaged",
+                feedbackTitleL1: "时间关系相反",
+                feedbackBodyL1: "这里是在运输前保护它，并没有说它已经损坏。",
+              },
+            ]),
+            featureLabelsL1: ["实体物品", "低外力风险", "需要小心处理"],
+          },
+        ],
+        meaningToFormRecall: [
+          {
+            taskKey: "fragile.assessment.recall.v2",
+            kind: "meaning_to_form_recall",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "从刚才建立的经验中取回对应的英文词形。",
+            provenance: fragileEditorialProvenance,
+            cue: {
+              bodyL1: "想起那个轻轻一碰就可能受损、需要小心处理的实体物品。",
+              featureLabelsL1: ["实体", "低外力即可受损", "谨慎处理"],
+            },
+            gradingContract: "lexeme_identity_v1",
+            supportInventory: {
+              firstLetter: true,
+              formChoices: [
+                {
+                  optionKey: "fragile-choice-target",
+                  formL2: "fragile",
+                  isTargetLexeme: true,
+                  reasonCode: "target-lexeme",
+                },
+                {
+                  optionKey: "fragile-choice-flimsy",
+                  formL2: "flimsy",
+                  isTargetLexeme: false,
+                  reasonCode: "related-adjective",
+                },
+                {
+                  optionKey: "fragile-choice-breakable",
+                  formL2: "breakable",
+                  isTargetLexeme: false,
+                  reasonCode: "consequence-not-target",
+                },
+              ],
+            },
+            feedback: {
+              independentSuccessTitleL1: "独立取回成功",
+              independentSuccessBodyL1:
+                "你从实体受损风险的经验中取回了正确词形。",
+              supportedSuccessTitleL1: "在支架下取回",
+              supportedSuccessBodyL1: "词形提示帮助你重新连接到目标词。",
+              choiceSuccessTitleL1: "从选项中辨认",
+              choiceSuccessBodyL1: "你选中了与这段经验对应的词形。",
+              repairTitleL1: "回到经验重新连接",
+              repairBodyL1: "先回想低外力导致受损的变化，再尝试独立取回。",
+            },
+          },
+        ],
+        novelContextTransfer: [
+          {
+            taskKey: "fragile.assessment.transfer.bones.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "在没有直接定义的情况下，从新场景判断这个词指向的意义。",
+            provenance: fragileEditorialProvenance,
+            exampleKey: "fragile.example.transfer.bones.v2",
+            scene: {
+              sceneLabelL1: "考古现场",
+              setupL2:
+                "The archaeologist handled the bones with a small brush because a slight touch could damage them.",
+              setupL1: "考古学家用小刷子处理骨骼，因为轻轻一碰就可能损坏。",
+              visualKind: "careful-handling",
+              visualAltL1: "一把小刷子在易受损的骨骼旁缓慢移动。",
+            },
+            questionL1: "这个场景中的形容词强调什么？",
+            options: assessmentOptions(
+              [
+                {
+                  optionKey: "fragile-bones-damage",
+                  labelL1: "骨骼受到小力也可能损坏。",
+                  detailL1: "风险来自材料本身的脆弱性。",
+                  isCorrect: true,
+                  reasonCode: "small-force-damage",
+                  feedbackTitleL1: "迁移成功",
+                  feedbackBodyL1: "新场景仍保留了低外力导致实体受损的关系。",
+                },
+                {
+                  optionKey: "fragile-bones-weight",
+                  labelL1: "骨骼特别沉重。",
+                  detailL1: "语境没有提供重量线索。",
+                  isCorrect: false,
+                  reasonCode: "weight-not-stated",
+                  feedbackTitleL1: "不是重量",
+                  feedbackBodyL1: "小刷子和轻轻一碰指向的是受损风险。",
+                },
+                {
+                  optionKey: "fragile-bones-old",
+                  labelL1: "骨骼年代久远。",
+                  detailL1: "年代并不是该词的核心特征。",
+                  isCorrect: false,
+                  reasonCode: "age-not-core",
+                  feedbackTitleL1: "不是年代",
+                  feedbackBodyL1:
+                    "年代可能影响保存状态，但不是这里的核心意义。",
+                },
+              ],
+              "考古现场：",
+            ),
+            connectionSummary: {
+              fromLabelL1: "低外力",
+              toLabelL1: "实体受损风险",
+              invariantLabelsL1: ["物理对象", "容易破损", "需要谨慎处理"],
+            },
+            successTitleL1: "迁移连接成立",
+            successBodyL1: "你把熟悉的低外力受损关系迁移到了考古场景。",
+          },
+          {
+            taskKey: "fragile.assessment.transfer.coral.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "观察新场景中的因果关系，再判断目标意义。",
+            provenance: fragileEditorialProvenance,
+            exampleKey: "fragile.example.transfer.coral.v2",
+            scene: {
+              sceneLabelL1: "潮池里的新生珊瑚",
+              setupL2:
+                "New coral growth can be damaged by a careless touch, so visitors keep their hands away.",
+              setupL1: "新生珊瑚会被随手一碰损坏，所以游客不能伸手触碰。",
+              visualKind: "living-material",
+              visualAltL1: "游客的手停在新生珊瑚上方，没有碰到它。",
+            },
+            questionL1: "为什么游客需要避免触碰？",
+            options: assessmentOptions(
+              [
+                {
+                  optionKey: "fragile-coral-damage",
+                  labelL1: "它容易被很小的外力损坏。",
+                  isCorrect: true,
+                  reasonCode: "touch-damage",
+                  feedbackTitleL1: "关系保持",
+                  feedbackBodyL1: "生物材料也可以呈现低外力受损。",
+                },
+                {
+                  optionKey: "fragile-coral-dangerous",
+                  labelL1: "它会主动攻击游客。",
+                  isCorrect: false,
+                  reasonCode: "danger-direction-reversed",
+                  feedbackTitleL1: "方向相反",
+                  feedbackBodyL1: "需要保护的是珊瑚，不是游客。",
+                },
+                {
+                  optionKey: "fragile-coral-heavy",
+                  labelL1: "它太重，不能移动。",
+                  isCorrect: false,
+                  reasonCode: "weight-not-stated",
+                  feedbackTitleL1: "不是重量",
+                  feedbackBodyL1: "语境强调触碰造成的损坏风险。",
+                },
+              ],
+              "潮池珊瑚：",
+            ),
+            connectionSummary: {
+              fromLabelL1: "轻微触碰",
+              toLabelL1: "材料受损",
+              invariantLabelsL1: ["实体材料", "外力阈值低", "避免碰撞"],
+            },
+            successTitleL1: "场景判断正确",
+            successBodyL1: "你识别出活体材料也能拥有同样的物理脆弱性。",
+          },
+          {
+            taskKey: "fragile.assessment.transfer.solar-cell.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "判断安装动作需要注意的核心性质。",
+            provenance: fragileEditorialProvenance,
+            exampleKey: "fragile.example.transfer.solar-cell.v2",
+            scene: {
+              sceneLabelL1: "安装薄型太阳能电池",
+              setupL2:
+                "The thin solar cells need padded support during installation because pressure can damage them.",
+              setupL1: "安装薄型太阳能电池时需要衬垫支撑，因为压力会损坏它们。",
+              visualKind: "thin-component",
+              visualAltL1: "薄片状组件被衬垫托住，避免安装时受压。",
+            },
+            questionL1: "这里最需要防止什么？",
+            options: assessmentOptions(
+              [
+                {
+                  optionKey: "fragile-solar-pressure",
+                  labelL1: "不大的压力造成组件损坏。",
+                  isCorrect: true,
+                  reasonCode: "pressure-damage",
+                  feedbackTitleL1: "抓住核心",
+                  feedbackBodyL1: "薄型组件的材料经不起不大的压力。",
+                },
+                {
+                  optionKey: "fragile-solar-heat",
+                  labelL1: "组件因为高温融化。",
+                  isCorrect: false,
+                  reasonCode: "heat-not-stated",
+                  feedbackTitleL1: "不是温度",
+                  feedbackBodyL1: "语境中的风险来自压力。",
+                },
+                {
+                  optionKey: "fragile-solar-color",
+                  labelL1: "组件颜色发生变化。",
+                  isCorrect: false,
+                  reasonCode: "color-not-stated",
+                  feedbackTitleL1: "不是外观颜色",
+                  feedbackBodyL1: "需要衬垫是为了减少物理损坏。",
+                },
+              ],
+              "安装组件：",
+            ),
+            connectionSummary: {
+              fromLabelL1: "安装压力",
+              toLabelL1: "薄组件损坏",
+              invariantLabelsL1: ["制造材料", "小力也有风险", "需要保护"],
+            },
+            successTitleL1: "迁移成功",
+            successBodyL1: "你将低外力受损的关系迁移到了制造组件。",
+          },
+          {
+            taskKey: "fragile.assessment.transfer.fabric.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "从时间、材料和结果变化中判断这个词的意义。",
+            provenance: fragileEditorialProvenance,
+            exampleKey: "fragile.example.transfer.fabric.v2",
+            scene: {
+              sceneLabelL1: "阁楼里的旧布料",
+              setupL2:
+                "After years in the attic, the fabric tore along the fold when someone unfolded it.",
+              setupL1: "布料在阁楼放了多年，展开时沿折痕裂开了。",
+              visualKind: "aged-material",
+              visualAltL1: "旧布料沿着折痕出现裂口。",
+            },
+            questionL1: "布料为什么需要被轻拿轻放？",
+            options: assessmentOptions(
+              [
+                {
+                  optionKey: "fragile-fabric-tear",
+                  labelL1: "它的材料容易在轻微动作下撕裂。",
+                  isCorrect: true,
+                  reasonCode: "material-tear",
+                  feedbackTitleL1: "判断正确",
+                  feedbackBodyL1: "折痕处的轻微动作暴露出材料的易损性。",
+                },
+                {
+                  optionKey: "fragile-fabric-wet",
+                  labelL1: "它刚刚被水浸湿。",
+                  isCorrect: false,
+                  reasonCode: "water-not-stated",
+                  feedbackTitleL1: "不是湿度",
+                  feedbackBodyL1: "语境没有说布料被水浸湿。",
+                },
+                {
+                  optionKey: "fragile-fabric-heavy",
+                  labelL1: "它因为重量很大而难以移动。",
+                  isCorrect: false,
+                  reasonCode: "weight-not-stated",
+                  feedbackTitleL1: "不是重量",
+                  feedbackBodyL1: "风险是撕裂，不是移动困难。",
+                },
+              ],
+              "阁楼布料：",
+            ),
+            connectionSummary: {
+              fromLabelL1: "轻微展开动作",
+              toLabelL1: "布料撕裂",
+              invariantLabelsL1: ["实体材料", "容易受损", "动作需谨慎"],
+            },
+            successTitleL1: "关系保持",
+            successBodyL1:
+              "旧布料的具体材质改变了，但低外力受损的关系没有改变。",
+          },
+          {
+            taskKey: "fragile.assessment.transfer.sensor.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "在精密设备的新场景中识别需要的保护措施。",
+            provenance: fragileEditorialProvenance,
+            exampleKey: "fragile.example.transfer.sensor.v2",
+            scene: {
+              sceneLabelL1: "运输精密传感器",
+              setupL2:
+                "Technicians used a shock-resistant case for the sensor because a small impact could damage it.",
+              setupL1: "技术人员使用防震外壳，因为小碰撞就可能损坏传感器。",
+              visualKind: "precision-equipment",
+              visualAltL1: "传感器被固定在防震外壳内部。",
+            },
+            questionL1: "防震外壳在这里解决什么问题？",
+            options: assessmentOptions(
+              [
+                {
+                  optionKey: "fragile-sensor-impact",
+                  labelL1: "降低小碰撞导致设备损坏的风险。",
+                  isCorrect: true,
+                  reasonCode: "impact-protection",
+                  feedbackTitleL1: "迁移成功",
+                  feedbackBodyL1: "精密设备延续了低外力受损的核心关系。",
+                },
+                {
+                  optionKey: "fragile-sensor-signal",
+                  labelL1: "让信号变得更强。",
+                  isCorrect: false,
+                  reasonCode: "signal-not-stated",
+                  feedbackTitleL1: "不是信号",
+                  feedbackBodyL1: "外壳的作用是防碰撞，不是增强信号。",
+                },
+                {
+                  optionKey: "fragile-sensor-weight",
+                  labelL1: "防止设备因为太重而下沉。",
+                  isCorrect: false,
+                  reasonCode: "weight-not-stated",
+                  feedbackTitleL1: "不是重量",
+                  feedbackBodyL1: "语境强调的是碰撞造成的损坏。",
+                },
+              ],
+              "运输传感器：",
+            ),
+            connectionSummary: {
+              fromLabelL1: "小碰撞",
+              toLabelL1: "精密设备受损",
+              invariantLabelsL1: ["物理设备", "损坏阈值低", "防震保护"],
+            },
+            successTitleL1: "新场景判断正确",
+            successBodyL1: "你把材料脆弱性迁移到了精密设备。",
+          },
+        ],
+        boundaryContrast: [],
+      },
+      repairBindings: [],
+      practiceManifest: {
+        profileVersion: "sensa-initial-free-practice-v1",
+        grants: [
+          {
+            taskFamily: "immersive_browse",
+            resourceKeys: [
+              "fragile.experience.render.text.v2",
+              "fragile.bridge.zh.physical.v2",
+              "fragile.example.study.vase.v2",
+            ],
+          },
+          {
+            taskFamily: "quick_spelling",
+            resourceKeys: ["fragile.bridge.zh.physical.v2"],
+          },
+          {
+            taskFamily: "portable_listening",
+            resourceKeys: [
+              "fragile.example.study.vase.v2",
+              "fragile.example.study.glass.v2",
+              "fragile.example.study.material.v2",
+            ],
+          },
+        ],
+      },
+      provenance: fragileEditorialProvenance,
+    },
+    {
+      schemaVersion: "sensa-sense-package-definition-v2-draft",
+      identity: {
+        packageKey: "sustain.verb.process-continue",
+        packageVersion: 1,
+        senseKey: "sustain.verb.process-continue",
+        senseVersion: 1,
+        lexemeKey: "sustain",
+        lexemeVersion: 1,
+        targetLanguage: "en",
+        learnerLocale: "zh-CN",
+      },
+      sense: {
+        partOfSpeech: "v.",
+        senseRank: 1,
+        guideLabelL1: "使持续；维持",
+        definitionL2:
+          "To provide what is needed for an activity, state, or process to continue over time.",
+        teachingPriority: "core",
+        coreFeatures: [
+          "An activity or state is already underway.",
+          "It could weaken, stop, or run out without support.",
+          "Resources, energy, attention, or conditions allow it to continue.",
+        ],
+      },
+      acquisitionProfile: {
+        profileKey: "sustain.process.acquisition.v2",
+        acquisitionNeeds: ["abstraction_invariant", "form_binding"],
+        minimumSufficientExperience:
+          "The learner sees a weakening process continue because a steady source of support crosses time.",
+        distinguishingFeatures: [
+          "The target causes an activity, state, or process to continue.",
+          "The support is active or sustaining rather than passive endurance.",
+          "The object is a process, system, activity, or state, not an injury event.",
+        ],
+        preferredPrimitives: ["temporal_sequence"],
+        fallbackPrimitives: ["causal_sequence"],
+        requiredCapabilities: [
+          { kind: "contextual_recognition" },
+          {
+            kind: "meaning_to_form_recall",
+            gradingContract: "lexeme_identity_v1",
+          },
+          { kind: "novel_context_transfer" },
+        ],
+        optionalCapabilities: [],
+        requiredAssetCapabilities: [
+          "meaning_grounding",
+          "l1_mediation",
+          "usage_pattern",
+          "contextual_variation",
+          "temporal_grounding",
+          "pronunciation",
+          "study_example_audio",
+        ],
+        optionalAssetCapabilities: ["causal_grounding"],
+        domainBound: false,
+        domainConstraints: [],
+        boundaryTargets: [],
+        provenance: sustainEditorialProvenance,
+      },
+      experience: {
+        sketch: {
+          sketchKey: "sustain.experience.sketch.process.v2",
+          experienceGoal:
+            "Make a weakening process visibly continue because support arrives over time, without showing the target form.",
+          focalStructure: [
+            "A community activity is running but its resources are running low.",
+            "A regular stream of support arrives at several points in time.",
+            "The activity continues instead of stopping.",
+          ],
+          learnerInference:
+            "Ongoing support lets an activity or state continue across time.",
+          constraints: {
+            mustConvey: [
+              "a process already in motion",
+              "support crossing time",
+              "continuation rather than passive survival",
+            ],
+            mustAvoid: [
+              "suffering an injury",
+              "holding a physical object",
+              "a one-time rescue with no continuation",
+            ],
+            hideTargetForms: true,
+          },
+          provenance: sustainEditorialProvenance,
+        },
+        renders: [
+          {
+            kind: "interaction",
+            renderKey: "sustain.experience.render.support-timeline.v2",
+            primitive: "temporal_sequence",
+            supportedDeliveryProfiles: [deliveryProfile],
+            rendererKey: "state_change_v1",
+            payload: {
+              runtimePresentation: {
+                variant: "continuation_timeline",
+                controlLabelL1: "支持进程",
+                statusLabelsL1: ["资源逐渐减少", "支持正在到达"],
+                objectLabelL1: null,
+                projectLabelL1: "社区项目",
+                supportLabelsL1: ["资金", "时间", "注意力"],
+                viewpointLabelL1: null,
+                ownerLabelL1: null,
+                userLabelL1: null,
+              },
+              instructionL1: "逐段补充支持，观察社区项目能否跨过每个时间点。",
+              timeline: [
+                { labelL1: "项目开始", state: "running", feedbackL1: "社区项目已经启动，正在持续运行。" },
+                { labelL1: "资源减少", state: "weakening", feedbackL1: "资金和志愿者时间减少，项目开始变弱。" },
+                { labelL1: "补充支持", state: "supported", feedbackL1: "新的资金、时间和注意力持续进入项目。" },
+                { labelL1: "继续运行", state: "continuing", feedbackL1: "项目跨过接下来的时间点，没有停止。" },
+              ],
+              supportKindsL1: ["资金", "时间", "注意力"],
+            },
+            provenance: sustainEditorialProvenance,
+          },
+          {
+            kind: "text",
+            renderKey: "sustain.experience.render.text.v2",
+            primitive: "temporal_sequence",
+            supportedDeliveryProfiles: [deliveryProfile],
+            sceneL1:
+              "想象一个正在变弱的社区项目：当资金和志愿者时间持续补充进来，它就能跨过接下来的月份继续运行。",
+            provenance: sustainEditorialProvenance,
+          },
+        ],
+        renderPlan: {
+          strategyVersion: "sensa-experience-render-plan-v1",
+          selections: [
+            {
+              renderKey: "sustain.experience.render.support-timeline.v2",
+              role: "preferred",
+              rank: 1,
+              reason:
+                "A timeline makes continuation across multiple time points observable.",
+            },
+            {
+              renderKey: "sustain.experience.render.text.v2",
+              role: "fallback",
+              rank: 1,
+              reason:
+                "Explains the abstract process with a complete text-only experience.",
+            },
+          ],
+        },
+        recap: {
+          recapKey: "sustain.experience.recap.process.v2",
+          titleL1: "回想那个被持续支持的过程",
+          steps: [
+            {
+              stepKey: "sustain-recap-running",
+              labelL1: "过程在运行",
+              descriptionL1: "一个活动或状态已经开始，并且可能逐渐减弱。",
+            },
+            {
+              stepKey: "sustain-recap-support",
+              labelL1: "支持进入",
+              descriptionL1: "资源、能量、时间或注意力持续补充进来。",
+            },
+            {
+              stepKey: "sustain-recap-continuing",
+              labelL1: "跨过时间",
+              descriptionL1: "活动没有停止，而是继续维持下去。",
+            },
+          ],
+          bodyL1:
+            "一个可能减弱的过程因为持续获得支持而跨过时间继续运行。",
+          provenance: sustainEditorialProvenance,
+        },
+      },
+      l1Bridge: {
+        assetKey: "sustain.bridge.zh.process.v2",
+        bodyL1:
+          "这里不是被动地“撑住”或遭受某件事，而是主动提供资源、能量或条件，让正在运行的活动、状态或过程继续下去。",
+        provenance: sustainEditorialProvenance,
+      },
+      examples: sustainExamples,
+      usagePatterns: [
+        {
+          patternKey: "sustain.pattern.process-object.v2",
+          canonicalPattern: "sustain + process/state/activity",
+          registerLabel: "neutral",
+          domainLabel: "systems, activities, living processes",
+          usageRestriction:
+            "本包只学习“使活动、状态或过程持续”的义项，不包含遭受伤害或承受冲击的其他用法。",
+          collocations: [
+            {
+              collocationKey: "sustain.collocation.kitchen.v2",
+              displayTextL2: "sustain the community kitchen",
+              exampleBindings: [
+                {
+                  bindingKey: "sustain.binding.kitchen.v2",
+                  exampleKey: "sustain.example.study.kitchen.v2",
+                  start: 18,
+                  end: 47,
+                  role: "primary",
+                },
+              ],
+            },
+            {
+              collocationKey: "sustain.collocation.interest.v2",
+              displayTextL2: "sustained the apprentice's interest",
+              exampleBindings: [
+                {
+                  bindingKey: "sustain.binding.interest.v2",
+                  exampleKey: "sustain.example.study.interest.v2",
+                  start: 16,
+                  end: 51,
+                  role: "primary",
+                },
+              ],
+            },
+          ],
+          provenance: sustainEditorialProvenance,
+        },
+      ],
+      assessmentInventory: {
+        contextualRecognition: [
+          {
+            taskKey: "sustain.assessment.recognition.bookstore.v2",
+            kind: "contextual_recognition",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "根据语境判断这个动词描述了什么作用。",
+            provenance: sustainEditorialProvenance,
+            exampleKey: "sustain.example.recognition.bookstore.v2",
+            questionL1: "稳定客流对书店起了什么作用？",
+            options: assessmentOptions([
+              {
+                optionKey: "sustain-recognition-continuation",
+                labelL1: "让书店能够继续经营。",
+                isCorrect: true,
+                reasonCode: "support-continuation",
+                feedbackTitleL1: "理解正确",
+                feedbackBodyL1: "客流提供了让经营活动跨过时间继续的支持。",
+              },
+              {
+                optionKey: "sustain-recognition-injury",
+                labelL1: "让书店承受一次伤害。",
+                isCorrect: false,
+                reasonCode: "injury-sense-excluded",
+                feedbackTitleL1: "排除其他义项",
+                feedbackBodyL1: "这里不是遭受伤害，而是支持经营继续。",
+              },
+              {
+                optionKey: "sustain-recognition-stop",
+                labelL1: "让书店立即停止营业。",
+                isCorrect: false,
+                reasonCode: "continuation-reversed",
+                feedbackTitleL1: "方向相反",
+                feedbackBodyL1: "稳定客流支持的是继续经营。",
+              },
+            ]),
+            featureLabelsL1: ["过程已在运行", "持续支持", "跨时间继续"],
+          },
+        ],
+        meaningToFormRecall: [
+          {
+            taskKey: "sustain.assessment.recall.v2",
+            kind: "meaning_to_form_recall",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "从“让一个可能减弱的过程继续”的经验中取回英文词形。",
+            provenance: sustainEditorialProvenance,
+            cue: {
+              bodyL1:
+                "想起一个正在变弱的活动，因为持续获得资源、能量或注意力而继续运行。",
+              featureLabelsL1: ["过程或活动", "持续支持", "跨过时间"],
+            },
+            gradingContract: "lexeme_identity_v1",
+            supportInventory: {
+              firstLetter: true,
+              formChoices: [
+                {
+                  optionKey: "sustain-choice-target",
+                  formL2: "sustain",
+                  isTargetLexeme: true,
+                  reasonCode: "target-lexeme",
+                },
+                {
+                  optionKey: "sustain-choice-maintain",
+                  formL2: "maintain",
+                  isTargetLexeme: false,
+                  reasonCode: "near-synonym",
+                },
+                {
+                  optionKey: "sustain-choice-endure",
+                  formL2: "endure",
+                  isTargetLexeme: false,
+                  reasonCode: "passive-endurance",
+                },
+              ],
+            },
+            feedback: {
+              independentSuccessTitleL1: "独立取回成功",
+              independentSuccessBodyL1:
+                "你从持续支持过程的经验中取回了目标 Lexeme。",
+              supportedSuccessTitleL1: "在支架下取回",
+              supportedSuccessBodyL1: "提示帮助你重新连接了过程与词形。",
+              choiceSuccessTitleL1: "从选项中辨认",
+              choiceSuccessBodyL1: "你选中了表达“使过程继续”的词形。",
+              repairTitleL1: "回到过程重新连接",
+              repairBodyL1: "先回想资源进入、过程跨过时间的变化，再尝试取回。",
+            },
+          },
+        ],
+        novelContextTransfer: [
+          {
+            taskKey: "sustain.assessment.transfer.battery.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "在基础设施新场景中判断支持与继续之间的关系。",
+            provenance: sustainEditorialProvenance,
+            exampleKey: "sustain.example.transfer.battery.v2",
+            scene: {
+              sceneLabelL1: "停电期间的监测站",
+              setupL2:
+                "A reserve battery keeps the monitoring station operating during outages.",
+              setupL1: "备用电池让监测站在停电期间继续运行。",
+              visualKind: "power-continuity",
+              visualAltL1: "备用电池的电力让监测站跨过停电时段。",
+            },
+            questionL1: "备用电池完成了什么作用？",
+            options: assessmentOptions([
+              {
+                optionKey: "sustain-battery-continue",
+                labelL1: "让系统在一段时间内继续运行。",
+                isCorrect: true,
+                reasonCode: "system-continuation",
+                feedbackTitleL1: "迁移成功",
+                feedbackBodyL1: "电池提供了跨过停电时段的持续支持。",
+              },
+              {
+                optionKey: "sustain-battery-break",
+                labelL1: "让系统立即停止。",
+                isCorrect: false,
+                reasonCode: "stop-reversed",
+                feedbackTitleL1: "方向相反",
+                feedbackBodyL1: "电池的作用是保持运行，不是让系统停止。",
+              },
+              {
+                optionKey: "sustain-battery-injury",
+                labelL1: "让系统承受身体伤害。",
+                isCorrect: false,
+                reasonCode: "injury-not-system",
+                feedbackTitleL1: "不是伤害义项",
+                feedbackBodyL1: "这里描述的是系统运行的持续。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "持续电力",
+              toLabelL1: "系统继续运行",
+              invariantLabelsL1: ["已有过程", "支持输入", "跨时间"],
+            },
+            successTitleL1: "迁移连接成立",
+            successBodyL1: "你识别出备用电池让既有系统跨过中断风险。",
+          },
+          {
+            taskKey: "sustain.assessment.transfer.garden.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "把“持续支持”的关系迁移到社区组织。",
+            provenance: sustainEditorialProvenance,
+            exampleKey: "sustain.example.transfer.garden.v2",
+            scene: {
+              sceneLabelL1: "社区花园的年度运营",
+              setupL2:
+                "Membership fees keep the neighborhood garden operating all year.",
+              setupL1: "会员费让社区花园全年维持运营。",
+              visualKind: "community-continuity",
+              visualAltL1: "会员费沿时间支持花园的日常运营。",
+            },
+            questionL1: "会员费与花园之间是什么关系？",
+            options: assessmentOptions([
+              {
+                optionKey: "sustain-garden-continue",
+                labelL1: "会员费提供了让运营继续的资源。",
+                isCorrect: true,
+                reasonCode: "resource-continuation",
+                feedbackTitleL1: "判断正确",
+                feedbackBodyL1: "资金作为持续条件让活动跨过全年。",
+              },
+              {
+                optionKey: "sustain-garden-visit",
+                labelL1: "会员费只是一次参观。",
+                isCorrect: false,
+                reasonCode: "fee-is-support",
+                feedbackTitleL1: "不是一次活动",
+                feedbackBodyL1: "会员费承担的是持续运营支持。",
+              },
+              {
+                optionKey: "sustain-garden-injury",
+                labelL1: "会员费让花园承受伤害。",
+                isCorrect: false,
+                reasonCode: "injury-sense-excluded",
+                feedbackTitleL1: "不是伤害义项",
+                feedbackBodyL1: "这里没有遭受伤害的事件。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "定期资金",
+              toLabelL1: "组织持续运营",
+              invariantLabelsL1: ["活动已开始", "资源持续进入", "运营跨时间"],
+            },
+            successTitleL1: "场景判断正确",
+            successBodyL1: "你把资源支持过程继续的关系迁移到了社区花园。",
+          },
+          {
+            taskKey: "sustain.assessment.transfer.feedback.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "从学习支持的新场景中识别过程变化。",
+            provenance: sustainEditorialProvenance,
+            exampleKey: "sustain.example.transfer.feedback.v2",
+            scene: {
+              sceneLabelL1: "设计师的学习兴趣",
+              setupL2:
+                "A mentor gives the new designer weekly feedback so the designer's interest in the work does not fade.",
+              setupL1: "导师每周给新设计师反馈，让他对工作的兴趣不减退。",
+              visualKind: "interest-continuity",
+              visualAltL1: "反馈像稳定的输入，让兴趣没有逐渐消退。",
+            },
+            questionL1: "每周反馈在这里提供了什么？",
+            options: assessmentOptions([
+              {
+                optionKey: "sustain-feedback-interest",
+                labelL1: "维持正在形成的兴趣。",
+                isCorrect: true,
+                reasonCode: "interest-continuation",
+                feedbackTitleL1: "迁移成功",
+                feedbackBodyL1: "反馈让兴趣这个状态跨过时间继续。",
+              },
+              {
+                optionKey: "sustain-feedback-replace",
+                labelL1: "完全替换了设计师的兴趣。",
+                isCorrect: false,
+                reasonCode: "not-replacement",
+                feedbackTitleL1: "不是替换",
+                feedbackBodyL1: "原来的兴趣被维持，而不是被另一个兴趣替换。",
+              },
+              {
+                optionKey: "sustain-feedback-injury",
+                labelL1: "让设计师遭受身体伤害。",
+                isCorrect: false,
+                reasonCode: "injury-sense-excluded",
+                feedbackTitleL1: "不是伤害",
+                feedbackBodyL1: "语境描述的是兴趣的持续。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "规律反馈",
+              toLabelL1: "兴趣继续",
+              invariantLabelsL1: ["抽象状态", "持续支持", "不让其消退"],
+            },
+            successTitleL1: "迁移连接成立",
+            successBodyL1: "你识别出抽象兴趣也可以被持续支持。",
+          },
+          {
+            taskKey: "sustain.assessment.transfer.rehearsal.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "在排练的新场景中判断休息带来的作用。",
+            provenance: sustainEditorialProvenance,
+            exampleKey: "sustain.example.transfer.rehearsal.v2",
+            scene: {
+              sceneLabelL1: "长时间排练",
+              setupL2:
+                "A short break helped the orchestra keep its concentration during rehearsal.",
+              setupL1: "短暂休息帮助乐团在排练中保持注意力。",
+              visualKind: "attention-continuity",
+              visualAltL1: "休息补充状态，让注意力可以继续维持。",
+            },
+            questionL1: "短暂休息帮助了什么？",
+            options: assessmentOptions([
+              {
+                optionKey: "sustain-rehearsal-focus",
+                labelL1: "让注意力可以继续维持。",
+                isCorrect: true,
+                reasonCode: "attention-continuation",
+                feedbackTitleL1: "判断正确",
+                feedbackBodyL1: "休息提供了让注意力跨过排练时段的支持。",
+              },
+              {
+                optionKey: "sustain-rehearsal-stop",
+                labelL1: "让排练永久结束。",
+                isCorrect: false,
+                reasonCode: "stop-not-intended",
+                feedbackTitleL1: "不是结束",
+                feedbackBodyL1: "休息帮助后续排练继续，而非永久结束。",
+              },
+              {
+                optionKey: "sustain-rehearsal-injury",
+                labelL1: "让乐团承受一次伤害。",
+                isCorrect: false,
+                reasonCode: "injury-sense-excluded",
+                feedbackTitleL1: "不是伤害",
+                feedbackBodyL1: "这里关注的是注意力状态的持续。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "补充能量",
+              toLabelL1: "注意力继续",
+              invariantLabelsL1: ["已有活动", "状态支持", "跨时间"],
+            },
+            successTitleL1: "场景判断正确",
+            successBodyL1: "你把过程持续的关系迁移到了排练注意力。",
+          },
+          {
+            taskKey: "sustain.assessment.transfer.traffic.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "在软件服务场景中识别支持输入与持续运行的关系。",
+            provenance: sustainEditorialProvenance,
+            exampleKey: "sustain.example.transfer.traffic.v2",
+            scene: {
+              sceneLabelL1: "发布期间的服务容量",
+              setupL2:
+                "Extra server capacity keeps the service operating throughout the launch despite heavy traffic.",
+              setupL1: "额外服务器容量让服务在高流量的整个发布期间继续运行。",
+              visualKind: "service-load",
+              visualAltL1: "额外容量持续输入，让服务跨过高流量时段保持运行。",
+            },
+            questionL1: "额外服务器容量完成了什么作用？",
+            options: assessmentOptions([
+              {
+                optionKey: "sustain-traffic-operate",
+                labelL1: "为既有服务提供持续运行所需的支持。",
+                isCorrect: true,
+                reasonCode: "service-continuation",
+                feedbackTitleL1: "迁移成功",
+                feedbackBodyL1: "额外容量作为支持输入，让既有服务跨过高流量时段继续运作。",
+              },
+              {
+                optionKey: "sustain-traffic-start",
+                labelL1: "从零启动一个此前不存在的新服务。",
+                isCorrect: false,
+                reasonCode: "existing-process-not-new-start",
+                feedbackTitleL1: "过程已经在运行",
+                feedbackBodyL1: "这里的关键是帮助既有服务继续，并不是创建或首次启动服务。",
+              },
+              {
+                optionKey: "sustain-traffic-tolerate",
+                labelL1: "只说明系统能够承受负荷，不说明支持从何而来。",
+                isCorrect: false,
+                reasonCode: "tolerance-without-support",
+                feedbackTitleL1: "还缺少支持关系",
+                feedbackBodyL1: "本义项强调额外容量提供条件，使正在运行的服务得以继续。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "额外服务器容量",
+              toLabelL1: "服务继续运行",
+              invariantLabelsL1: ["已有过程", "支持输入", "跨越时间"],
+            },
+            successTitleL1: "关系保持",
+            successBodyL1: "你识别出额外资源如何让既有服务跨过高流量时段继续运行。",
+          },
+        ],
+        boundaryContrast: [],
+      },
+      repairBindings: [],
+      practiceManifest: {
+        profileVersion: "sensa-initial-free-practice-v1",
+        grants: [
+          {
+            taskFamily: "immersive_browse",
+            resourceKeys: [
+              "sustain.experience.render.text.v2",
+              "sustain.bridge.zh.process.v2",
+              "sustain.example.study.kitchen.v2",
+            ],
+          },
+          {
+            taskFamily: "quick_spelling",
+            resourceKeys: ["sustain.bridge.zh.process.v2"],
+          },
+          {
+            taskFamily: "portable_listening",
+            resourceKeys: [
+              "sustain.example.study.kitchen.v2",
+              "sustain.example.study.interest.v2",
+              "sustain.example.study.seedlings.v2",
+            ],
+          },
+        ],
+      },
+      provenance: sustainEditorialProvenance,
+    },
+    {
+      schemaVersion: "sensa-sense-package-definition-v2-draft",
+      identity: {
+        packageKey: "borrow.verb.receive-temporarily",
+        packageVersion: 1,
+        senseKey: "borrow.verb.receive-temporarily",
+        senseVersion: 1,
+        lexemeKey: "borrow",
+        lexemeVersion: 1,
+        targetLanguage: "en",
+        learnerLocale: "zh-CN",
+      },
+      sense: {
+        partOfSpeech: "v.",
+        senseRank: 1,
+        guideLabelL1: "借入；暂时取得并归还",
+        definitionL2:
+          "To receive and use something temporarily with the expectation of returning it.",
+        teachingPriority: "core",
+        coreFeatures: [
+          "The subject is the receiver or user of the item.",
+          "The item comes from another person or institution temporarily.",
+          "The receiver is expected to return it later.",
+        ],
+      },
+      acquisitionProfile: {
+        profileKey: "borrow.receive.acquisition.v2",
+        acquisitionNeeds: ["social_normative_calibration", "form_binding"],
+        minimumSufficientExperience:
+          "The learner tracks a receiver asking for an item, using it temporarily, and returning it to its owner.",
+        distinguishingFeatures: [
+          "The subject receives the item rather than gives it.",
+          "The transfer is temporary and return-oriented.",
+          "The item can come from a person, institution, or service.",
+        ],
+        preferredPrimitives: ["social_micro_scenario"],
+        fallbackPrimitives: ["contextual_variation"],
+        requiredCapabilities: [
+          { kind: "contextual_recognition" },
+          {
+            kind: "meaning_to_form_recall",
+            gradingContract: "lexeme_identity_v1",
+          },
+          { kind: "novel_context_transfer" },
+          {
+            kind: "boundary_discrimination",
+            relationKey: "borrow-lend.viewpoint-temporary-transfer.v1",
+          },
+        ],
+        optionalCapabilities: [],
+        requiredAssetCapabilities: [
+          "meaning_grounding",
+          "l1_mediation",
+          "usage_pattern",
+          "contextual_variation",
+          "pronunciation",
+          "study_example_audio",
+        ],
+        optionalAssetCapabilities: [],
+        domainBound: false,
+        domainConstraints: [],
+        boundaryTargets: [
+          {
+            relationKey: "borrow-lend.viewpoint-temporary-transfer.v1",
+            isRequired: true,
+          },
+        ],
+        provenance: borrowEditorialProvenance,
+      },
+      experience: {
+        sketch: {
+          sketchKey: "borrow.experience.sketch.receiver.v2",
+          experienceGoal:
+            "Make the learner feel the receiver viewpoint in a temporary object transfer before showing the target form.",
+          focalStructure: [
+            "A person asks a neighbor for an umbrella.",
+            "The person uses the umbrella while the neighbor remains its owner.",
+            "The person returns the umbrella after the rain.",
+          ],
+          learnerInference:
+            "The subject temporarily receives and uses someone else's item, then returns it.",
+          constraints: {
+            mustConvey: [
+              "receiver viewpoint",
+              "temporary use",
+              "return to owner",
+            ],
+            mustAvoid: [
+              "permanent gift",
+              "paid rental contract",
+              "provider viewpoint only",
+            ],
+            hideTargetForms: true,
+          },
+          provenance: borrowEditorialProvenance,
+        },
+        renders: [
+          {
+            kind: "text",
+            renderKey: "borrow.experience.render.text.v2",
+            primitive: "social_micro_scenario",
+            supportedDeliveryProfiles: [deliveryProfile],
+            sceneL1:
+              "想象你在下雨时向邻居请求一把雨伞：你暂时拿来使用，雨停后把它还回去，邻居始终是主人。",
+            provenance: borrowEditorialProvenance,
+          },
+        ],
+        renderPlan: {
+          strategyVersion: "sensa-experience-render-plan-v1",
+          selections: [
+            {
+              renderKey: "borrow.experience.render.text.v2",
+              role: "preferred",
+              rank: 1,
+              reason:
+                "A concrete first-person scene makes the receiver viewpoint and return obligation explicit without adding interaction overhead.",
+            },
+          ],
+        },
+        recap: {
+          recapKey: "borrow.experience.recap.receiver.v2",
+          titleL1: "回想暂时接收物品的视角",
+          steps: [
+            {
+              stepKey: "borrow-recap-request",
+              labelL1: "提出请求",
+              descriptionL1: "使用者向另一个主人请求暂时使用某件物品。",
+            },
+            {
+              stepKey: "borrow-recap-use",
+              labelL1: "拿来使用",
+              descriptionL1: "物品暂时在使用者手中，但主人没有改变。",
+            },
+            {
+              stepKey: "borrow-recap-return",
+              labelL1: "之后归还",
+              descriptionL1: "使用者把物品交还给原主人。",
+            },
+          ],
+          bodyL1:
+            "从接收者视角看：暂时拿来使用别人的物品，之后交还给原主人。",
+          provenance: borrowEditorialProvenance,
+        },
+      },
+      l1Bridge: {
+        assetKey: "borrow.bridge.zh.receiver.v2",
+        bodyL1:
+          "中文常说“借”，这里要站在接收者的视角：暂时从别人那里拿来使用，并且预期之后归还；不是永久得到，也不等于付费租赁。",
+        provenance: borrowEditorialProvenance,
+      },
+      examples: borrowExamples,
+      usagePatterns: [
+        {
+          patternKey: "borrow.pattern.from-frame.v2",
+          canonicalPattern: "borrow + object + from + source",
+          registerLabel: "neutral",
+          domainLabel: "temporary personal or institutional transfers",
+          usageRestriction:
+            "使用者是接收方，通常可以用 from 指出物品来自谁；不要把提供者视角与本 Sense 混在一起。",
+          collocations: [
+            {
+              collocationKey: "borrow.collocation.charger.v2",
+              displayTextL2: "borrowed a charger from Nina",
+              exampleBindings: [
+                {
+                  bindingKey: "borrow.binding.charger.v2",
+                  exampleKey: "borrow.example.study.charger.v2",
+                  start: 2,
+                  end: 30,
+                  role: "primary",
+                },
+              ],
+            },
+            {
+              collocationKey: "borrow.collocation.umbrella.v2",
+              displayTextL2: "borrow your umbrella",
+              exampleBindings: [
+                {
+                  bindingKey: "borrow.binding.umbrella.v2",
+                  exampleKey: "borrow.example.study.umbrella.v2",
+                  start: 8,
+                  end: 28,
+                  role: "primary",
+                },
+              ],
+            },
+          ],
+          provenance: borrowEditorialProvenance,
+        },
+      ],
+      assessmentInventory: {
+        contextualRecognition: [
+          {
+            taskKey: "borrow.assessment.recognition.meter.v2",
+            kind: "contextual_recognition",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "从动作方向判断这个词对应哪一方。",
+            provenance: borrowEditorialProvenance,
+            exampleKey: "borrow.example.recognition.meter.v2",
+            questionL1: "Priya 在这次临时转移中扮演什么角色？",
+            options: assessmentOptions([
+              {
+                optionKey: "borrow-recognition-receiver",
+                labelL1: "她暂时接收并使用仪表，之后归还。",
+                isCorrect: true,
+                reasonCode: "receiver-viewpoint",
+                feedbackTitleL1: "视角正确",
+                feedbackBodyL1: "Priya 是拿到并使用物品的一方。",
+              },
+              {
+                optionKey: "borrow-recognition-provider",
+                labelL1: "她把仪表暂时交给别人。",
+                isCorrect: false,
+                reasonCode: "provider-viewpoint",
+                feedbackTitleL1: "视角相反",
+                feedbackBodyL1: "把物品交出去的是实验室，不是 Priya。",
+              },
+              {
+                optionKey: "borrow-recognition-purchase",
+                labelL1: "她买下了这台仪表。",
+                isCorrect: false,
+                reasonCode: "not-permanent-purchase",
+                feedbackTitleL1: "不是购买",
+                feedbackBodyL1: "语境强调临时使用和归还。",
+              },
+            ]),
+            featureLabelsL1: ["接收者视角", "暂时使用", "之后归还"],
+          },
+        ],
+        meaningToFormRecall: [
+          {
+            taskKey: "borrow.assessment.recall.v2",
+            kind: "meaning_to_form_recall",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "从“暂时接收别人的物品并归还”的经验中取回英文词形。",
+            provenance: borrowEditorialProvenance,
+            cue: {
+              bodyL1: "想起一个人从别人或机构那里暂时拿到物品，使用后再交还。",
+              featureLabelsL1: ["接收者", "临时使用", "归还"],
+            },
+            gradingContract: "lexeme_identity_v1",
+            supportInventory: {
+              firstLetter: true,
+              formChoices: [
+                {
+                  optionKey: "borrow-choice-target",
+                  formL2: "borrow",
+                  isTargetLexeme: true,
+                  reasonCode: "target-lexeme",
+                },
+                {
+                  optionKey: "borrow-choice-lend",
+                  formL2: "lend",
+                  isTargetLexeme: false,
+                  reasonCode: "opposite-viewpoint",
+                },
+                {
+                  optionKey: "borrow-choice-rent",
+                  formL2: "rent",
+                  isTargetLexeme: false,
+                  reasonCode: "paid-rental-alternative",
+                },
+              ],
+            },
+            feedback: {
+              independentSuccessTitleL1: "独立取回成功",
+              independentSuccessBodyL1: "你从接收者视角取回了正确词形。",
+              supportedSuccessTitleL1: "在支架下取回",
+              supportedSuccessBodyL1: "视角提示帮助你重新连接到目标词形。",
+              choiceSuccessTitleL1: "从选项中辨认",
+              choiceSuccessBodyL1: "你选中了描述暂时接收的一方。",
+              repairTitleL1: "回到接收者视角",
+              repairBodyL1:
+                "先回想请求、暂时使用和归还的顺序，再尝试独立取回。",
+            },
+          },
+        ],
+        novelContextTransfer: [
+          {
+            taskKey: "borrow.assessment.transfer.lanterns.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "在社区设备场景中判断动作方向。",
+            provenance: borrowEditorialProvenance,
+            exampleKey: "borrow.example.transfer.lanterns.v2",
+            scene: {
+              sceneLabelL1: "夜间徒步的灯",
+              setupL2:
+                "The hiking club received lanterns from the park office for one night and will return them tomorrow.",
+              setupL1: "徒步社从公园办公室拿到几盏灯用一晚，明天归还。",
+              visualKind: "community-receiver",
+              visualAltL1: "徒步社暂时拿到公园办公室的灯。",
+            },
+            questionL1: "从徒步社视角，这是什么动作？",
+            options: assessmentOptions([
+              {
+                optionKey: "borrow-lanterns-receive",
+                labelL1: "暂时从公园办公室取得并使用。",
+                isCorrect: true,
+                reasonCode: "receiver-viewpoint",
+                feedbackTitleL1: "迁移成功",
+                feedbackBodyL1: "徒步社是接收和使用设备的一方。",
+              },
+              {
+                optionKey: "borrow-lanterns-give",
+                labelL1: "把灯暂时交给公园办公室。",
+                isCorrect: false,
+                reasonCode: "provider-viewpoint",
+                feedbackTitleL1: "方向相反",
+                feedbackBodyL1: "设备从办公室来到徒步社。",
+              },
+              {
+                optionKey: "borrow-lanterns-buy",
+                labelL1: "永久购买了这些灯。",
+                isCorrect: false,
+                reasonCode: "not-purchase",
+                feedbackTitleL1: "不是购买",
+                feedbackBodyL1: "语境明确说明明天会归还。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "接收设备",
+              toLabelL1: "暂时使用后归还",
+              invariantLabelsL1: ["接收者", "临时转移", "回到原主人"],
+            },
+            successTitleL1: "视角迁移成立",
+            successBodyL1: "你把接收者视角迁移到了社区设备。",
+          },
+          {
+            taskKey: "borrow.assessment.transfer.wheelchair.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "从服务使用者视角判断轮椅的临时转移。",
+            provenance: borrowEditorialProvenance,
+            exampleKey: "borrow.example.transfer.wheelchair.v2",
+            scene: {
+              sceneLabelL1: "周末使用的轮椅",
+              setupL2:
+                "A patient received a wheelchair from the clinic for the weekend and will bring it back on Monday.",
+              setupL1: "病人从诊所拿到轮椅使用到周末，周一带回去。",
+              visualKind: "health-service-receiver",
+              visualAltL1: "病人暂时使用诊所的轮椅。",
+            },
+            questionL1: "病人与轮椅的关系是什么？",
+            options: assessmentOptions([
+              {
+                optionKey: "borrow-wheelchair-receive",
+                labelL1: "病人暂时接收并使用诊所的轮椅。",
+                isCorrect: true,
+                reasonCode: "temporary-receiver",
+                feedbackTitleL1: "判断正确",
+                feedbackBodyL1: "病人是接收方，诊所仍然拥有物品。",
+              },
+              {
+                optionKey: "borrow-wheelchair-give",
+                labelL1: "病人把轮椅交给诊所。",
+                isCorrect: false,
+                reasonCode: "direction-reversed",
+                feedbackTitleL1: "方向相反",
+                feedbackBodyL1: "轮椅是从诊所来到病人手中。",
+              },
+              {
+                optionKey: "borrow-wheelchair-keep",
+                labelL1: "病人永久保留轮椅。",
+                isCorrect: false,
+                reasonCode: "return-required",
+                feedbackTitleL1: "不是永久保留",
+                feedbackBodyL1: "周一需要把轮椅带回去。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "服务方提供物品",
+              toLabelL1: "用户暂时使用",
+              invariantLabelsL1: ["接收视角", "使用期限", "预期归还"],
+            },
+            successTitleL1: "迁移成功",
+            successBodyL1: "你识别出服务借用中的接收者方向。",
+          },
+          {
+            taskKey: "borrow.assessment.transfer.lens.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "在工作设备场景中判断哪一方是接收者。",
+            provenance: borrowEditorialProvenance,
+            exampleKey: "borrow.example.transfer.lens.v2",
+            scene: {
+              sceneLabelL1: "拍摄用镜头",
+              setupL2:
+                "The studio received a lens from another team for the shoot and will return it after the work.",
+              setupL1: "摄影棚从另一个团队拿到镜头拍摄，工作结束后归还。",
+              visualKind: "work-receiver",
+              visualAltL1: "镜头暂时从一个团队转到另一个团队。",
+            },
+            questionL1: "摄影棚站在哪个视角？",
+            options: assessmentOptions([
+              {
+                optionKey: "borrow-lens-receiver",
+                labelL1: "摄影棚暂时接收并使用镜头。",
+                isCorrect: true,
+                reasonCode: "receiver-viewpoint",
+                feedbackTitleL1: "视角正确",
+                feedbackBodyL1: "摄影棚获得设备使用权，但之后需要归还。",
+              },
+              {
+                optionKey: "borrow-lens-provider",
+                labelL1: "摄影棚把镜头交给另一个团队。",
+                isCorrect: false,
+                reasonCode: "provider-viewpoint",
+                feedbackTitleL1: "视角相反",
+                feedbackBodyL1: "另一个团队是原来的提供方。",
+              },
+              {
+                optionKey: "borrow-lens-own",
+                labelL1: "摄影棚成为镜头的永久所有者。",
+                isCorrect: false,
+                reasonCode: "ownership-not-changed",
+                feedbackTitleL1: "所有权没有永久改变",
+                feedbackBodyL1: "临时使用不等于所有权转移。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "其他团队拥有",
+              toLabelL1: "摄影棚暂时使用",
+              invariantLabelsL1: ["接收者", "设备暂借", "之后归还"],
+            },
+            successTitleL1: "场景判断正确",
+            successBodyL1: "你把接收方视角迁移到了工作设备。",
+          },
+          {
+            taskKey: "borrow.assessment.transfer.table.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "在邻里活动场景中识别接收者的动作。",
+            provenance: borrowEditorialProvenance,
+            exampleKey: "borrow.example.transfer.table.v2",
+            scene: {
+              sceneLabelL1: "邻里聚会的折叠桌",
+              setupL2:
+                "We received our neighbor's folding table for the party and will return it afterward.",
+              setupL1: "我们从邻居那里拿到折叠桌办聚会，之后归还。",
+              visualKind: "neighborhood-receiver",
+              visualAltL1: "邻居的折叠桌暂时被拿来使用。",
+            },
+            questionL1: "“我们”在这次转移中做了什么？",
+            options: assessmentOptions([
+              {
+                optionKey: "borrow-table-receive",
+                labelL1: "暂时接收邻居的桌子来使用。",
+                isCorrect: true,
+                reasonCode: "receiver-viewpoint",
+                feedbackTitleL1: "判断正确",
+                feedbackBodyL1: "“我们”是使用和归还桌子的一方。",
+              },
+              {
+                optionKey: "borrow-table-give",
+                labelL1: "把桌子暂时交给邻居。",
+                isCorrect: false,
+                reasonCode: "provider-viewpoint",
+                feedbackTitleL1: "方向相反",
+                feedbackBodyL1: "桌子原本属于邻居。",
+              },
+              {
+                optionKey: "borrow-table-donate",
+                labelL1: "把桌子永久送给邻居。",
+                isCorrect: false,
+                reasonCode: "not-donation",
+                feedbackTitleL1: "不是赠送",
+                feedbackBodyL1: "语境明确说之后归还。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "邻居的物品",
+              toLabelL1: "我们暂时使用",
+              invariantLabelsL1: ["接收者", "物品所有权保留", "之后归还"],
+            },
+            successTitleL1: "迁移连接成立",
+            successBodyL1: "你把个人物品的接收者视角迁移到了邻里活动。",
+          },
+          {
+            taskKey: "borrow.assessment.transfer.diary.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "在展览借用场景中判断档案馆的角色。",
+            provenance: borrowEditorialProvenance,
+            exampleKey: "borrow.example.transfer.diary.v2",
+            scene: {
+              sceneLabelL1: "展览中的私人日记",
+              setupL2:
+                "The archive received a diary from a family for its exhibition and will send it back afterward.",
+              setupL1: "档案馆从一个家庭那里收到日记办展览，之后送回。",
+              visualKind: "archive-receiver",
+              visualAltL1: "档案馆暂时保管家庭提供的日记。",
+            },
+            questionL1: "档案馆是这次转移的哪一方？",
+            options: assessmentOptions([
+              {
+                optionKey: "borrow-diary-receiver",
+                labelL1: "档案馆暂时接收日记用于展览。",
+                isCorrect: true,
+                reasonCode: "institution-receiver",
+                feedbackTitleL1: "判断正确",
+                feedbackBodyL1: "档案馆获得了暂时使用权，家庭仍是原主人。",
+              },
+              {
+                optionKey: "borrow-diary-provider",
+                labelL1: "档案馆把日记交给家庭。",
+                isCorrect: false,
+                reasonCode: "direction-reversed",
+                feedbackTitleL1: "方向相反",
+                feedbackBodyL1: "日记是从家庭来到档案馆。",
+              },
+              {
+                optionKey: "borrow-diary-publish",
+                labelL1: "档案馆永久出版并拥有日记。",
+                isCorrect: false,
+                reasonCode: "not-permanent-ownership",
+                feedbackTitleL1: "不是永久拥有",
+                feedbackBodyL1: "展览结束后需要送回。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "家庭提供",
+              toLabelL1: "档案馆暂时使用",
+              invariantLabelsL1: ["机构接收", "暂时持有", "归还原主人"],
+            },
+            successTitleL1: "场景判断正确",
+            successBodyL1: "你识别出机构也可以站在接收者视角。",
+          },
+        ],
+        boundaryContrast: [
+          {
+            taskKey: "borrow.assessment.boundary.meter.v2",
+            kind: "boundary_contrast",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "判断临时转移中的动作方向。",
+            provenance: borrowEditorialProvenance,
+            relationKey: "borrow-lend.viewpoint-temporary-transfer.v1",
+            exampleKey: "borrow.example.recognition.meter.v2",
+            questionL1: "从 Priya 的视角，这个动作更符合哪一方？",
+            options: assessmentOptions([
+              {
+                optionKey: "borrow-boundary-receiver",
+                labelL1: "她暂时接收并使用仪表，之后归还。",
+                isCorrect: true,
+                reasonCode: "receiver-viewpoint",
+                feedbackTitleL1: "边界清楚",
+                feedbackBodyL1: "Priya 的视角是接收者。",
+              },
+              {
+                optionKey: "borrow-boundary-provider",
+                labelL1: "她把仪表暂时交给别人并等待归还。",
+                isCorrect: false,
+                reasonCode: "provider-viewpoint",
+                feedbackTitleL1: "这是另一视角",
+                feedbackBodyL1: "暂时交出物品的是实验室。",
+              },
+            ]),
+          },
+        ],
+      },
+      repairBindings: [
+        {
+          bindingKey: "borrow.repair.boundary.v2",
+          capability: "boundary_discrimination",
+          reasonCodes: ["borrow-lend-direction-confused"],
+          strategyKind: "boundary_clarification",
+          resourceRefs: [
+            {
+              kind: "sense_relation",
+              relationKey: "borrow-lend.viewpoint-temporary-transfer.v1",
+            },
+          ],
+          provenance: borrowEditorialProvenance,
+        },
+      ],
+      practiceManifest: {
+        profileVersion: "sensa-initial-free-practice-v1",
+        grants: [
+          {
+            taskFamily: "immersive_browse",
+            resourceKeys: [
+              "borrow.experience.render.text.v2",
+              "borrow.bridge.zh.receiver.v2",
+              "borrow.example.study.charger.v2",
+            ],
+          },
+          {
+            taskFamily: "quick_spelling",
+            resourceKeys: ["borrow.bridge.zh.receiver.v2"],
+          },
+          {
+            taskFamily: "portable_listening",
+            resourceKeys: [
+              "borrow.example.study.charger.v2",
+              "borrow.example.study.umbrella.v2",
+              "borrow.example.study.paintings.v2",
+            ],
+          },
+        ],
+      },
+      provenance: borrowEditorialProvenance,
+    },
+    {
+      schemaVersion: "sensa-sense-package-definition-v2-draft",
+      identity: {
+        packageKey: "lend.verb.give-temporarily",
+        packageVersion: 1,
+        senseKey: "lend.verb.give-temporarily",
+        senseVersion: 1,
+        lexemeKey: "lend",
+        lexemeVersion: 1,
+        targetLanguage: "en",
+        learnerLocale: "zh-CN",
+      },
+      sense: {
+        partOfSpeech: "v.",
+        senseRank: 1,
+        guideLabelL1: "借出；暂时交给他人",
+        definitionL2:
+          "To give someone use of something temporarily with the expectation that it will be returned.",
+        teachingPriority: "core",
+        coreFeatures: [
+          "The subject is the provider or owner of the item.",
+          "The item is given for temporary use by another person or group.",
+          "The provider expects the item to come back.",
+        ],
+      },
+      acquisitionProfile: {
+        profileKey: "lend.give.acquisition.v2",
+        acquisitionNeeds: ["social_normative_calibration", "form_binding"],
+        minimumSufficientExperience:
+          "The learner tracks an owner giving an item to another person for temporary use and expecting its return.",
+        distinguishingFeatures: [
+          "The subject gives the item rather than receives it.",
+          "The transfer is temporary and return-oriented.",
+          "The item remains connected to the provider after the temporary use.",
+        ],
+        preferredPrimitives: ["social_micro_scenario"],
+        fallbackPrimitives: ["causal_sequence"],
+        requiredCapabilities: [
+          { kind: "contextual_recognition" },
+          {
+            kind: "meaning_to_form_recall",
+            gradingContract: "lexeme_identity_v1",
+          },
+          { kind: "novel_context_transfer" },
+          {
+            kind: "boundary_discrimination",
+            relationKey: "borrow-lend.viewpoint-temporary-transfer.v1",
+          },
+        ],
+        optionalCapabilities: [],
+        requiredAssetCapabilities: [
+          "meaning_grounding",
+          "l1_mediation",
+          "usage_pattern",
+          "contextual_variation",
+          "pronunciation",
+          "study_example_audio",
+        ],
+        optionalAssetCapabilities: [],
+        domainBound: false,
+        domainConstraints: [],
+        boundaryTargets: [
+          {
+            relationKey: "borrow-lend.viewpoint-temporary-transfer.v1",
+            isRequired: true,
+          },
+        ],
+        provenance: lendEditorialProvenance,
+      },
+      experience: {
+        sketch: {
+          sketchKey: "lend.experience.sketch.provider.v2",
+          experienceGoal:
+            "Make the learner feel the provider viewpoint in a temporary object transfer before showing the target form.",
+          focalStructure: [
+            "An owner has a camera needed by another group.",
+            "The owner gives the camera for a limited activity while keeping ownership.",
+            "The group returns the camera after using it.",
+          ],
+          learnerInference:
+            "The subject temporarily gives someone else use of an owned item and expects it back.",
+          constraints: {
+            mustConvey: [
+              "provider viewpoint",
+              "temporary handover",
+              "return to provider",
+            ],
+            mustAvoid: [
+              "permanent gift",
+              "paid rental contract",
+              "receiver viewpoint only",
+            ],
+            hideTargetForms: true,
+          },
+          provenance: lendEditorialProvenance,
+        },
+        renders: [
+          {
+            kind: "text",
+            renderKey: "lend.experience.render.text.v2",
+            primitive: "social_micro_scenario",
+            supportedDeliveryProfiles: [deliveryProfile],
+            sceneL1:
+              "想象你把自己的相机交给电影社拍摄：他们暂时使用，周末结束后把相机还给你，你仍然是主人。",
+            provenance: lendEditorialProvenance,
+          },
+        ],
+        renderPlan: {
+          strategyVersion: "sensa-experience-render-plan-v1",
+          selections: [
+            {
+              renderKey: "lend.experience.render.text.v2",
+              role: "preferred",
+              rank: 1,
+              reason:
+                "A concrete first-person scene makes the provider viewpoint and expected return explicit without adding interaction overhead.",
+            },
+          ],
+        },
+        recap: {
+          recapKey: "lend.experience.recap.provider.v2",
+          titleL1: "回想暂时交出物品的视角",
+          steps: [
+            {
+              stepKey: "lend-recap-own",
+              labelL1: "自己拥有",
+              descriptionL1: "提供者原本拥有某件物品。",
+            },
+            {
+              stepKey: "lend-recap-give",
+              labelL1: "暂时交付",
+              descriptionL1: "提供者让别人拿去使用，但没有永久送出。",
+            },
+            {
+              stepKey: "lend-recap-return",
+              labelL1: "期待收回",
+              descriptionL1: "使用结束后，物品回到原提供者手中。",
+            },
+          ],
+          bodyL1:
+            "从提供者视角看：暂时把自己的物品交给别人使用，并期待之后收回。",
+          provenance: lendEditorialProvenance,
+        },
+      },
+      l1Bridge: {
+        assetKey: "lend.bridge.zh.provider.v2",
+        bodyL1:
+          "中文常说“借”，这里要站在提供者的视角：暂时把自己的物品交给别人使用，并且预期之后收回；不是永久赠送，也不等于出租。",
+        provenance: lendEditorialProvenance,
+      },
+      examples: lendExamples,
+      usagePatterns: [
+        {
+          patternKey: "lend.pattern.to-frame.v2",
+          canonicalPattern: "lend + object + to + recipient",
+          registerLabel: "neutral",
+          domainLabel: "temporary personal or institutional transfers",
+          usageRestriction:
+            "提供者是动作主体，通常可以用 to 指出物品交给谁；不要把接收者视角与本 Sense 混在一起。",
+          collocations: [
+            {
+              collocationKey: "lend.collocation.umbrella.v2",
+              displayTextL2: "lend me your umbrella",
+              exampleBindings: [
+                {
+                  bindingKey: "lend.binding.umbrella.v2",
+                  exampleKey: "lend.example.study.umbrella.v2",
+                  start: 10,
+                  end: 31,
+                  role: "primary",
+                },
+              ],
+            },
+            {
+              collocationKey: "lend.collocation.meter.v2",
+              displayTextL2: "lent its spare meter to Priya",
+              exampleBindings: [
+                {
+                  bindingKey: "lend.binding.meter.v2",
+                  exampleKey: "lend.example.study.meter.v2",
+                  start: 8,
+                  end: 37,
+                  role: "primary",
+                },
+              ],
+            },
+          ],
+          provenance: lendEditorialProvenance,
+        },
+      ],
+      assessmentInventory: {
+        contextualRecognition: [
+          {
+            taskKey: "lend.assessment.recognition.lens.v2",
+            kind: "contextual_recognition",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "从动作方向判断这个词对应哪一方。",
+            provenance: lendEditorialProvenance,
+            exampleKey: "lend.example.recognition.lens.v2",
+            questionL1: "摄影棚在这次临时转移中扮演什么角色？",
+            options: assessmentOptions([
+              {
+                optionKey: "lend-recognition-provider",
+                labelL1: "它把镜头暂时交给另一个团队使用。",
+                isCorrect: true,
+                reasonCode: "provider-viewpoint",
+                feedbackTitleL1: "视角正确",
+                feedbackBodyL1: "摄影棚是把设备交出去的一方。",
+              },
+              {
+                optionKey: "lend-recognition-receiver",
+                labelL1: "它从另一个团队暂时拿到镜头。",
+                isCorrect: false,
+                reasonCode: "receiver-viewpoint",
+                feedbackTitleL1: "视角相反",
+                feedbackBodyL1: "另一个团队才是暂时接收方。",
+              },
+              {
+                optionKey: "lend-recognition-donate",
+                labelL1: "它把镜头永久送给另一个团队。",
+                isCorrect: false,
+                reasonCode: "not-permanent-gift",
+                feedbackTitleL1: "不是赠送",
+                feedbackBodyL1: "语境中的使用是临时的，之后需要归还。",
+              },
+            ]),
+            featureLabelsL1: ["提供者视角", "暂时交付", "期待归还"],
+          },
+        ],
+        meaningToFormRecall: [
+          {
+            taskKey: "lend.assessment.recall.v2",
+            kind: "meaning_to_form_recall",
+            eligiblePurposes: [...allPurposes],
+            promptL1:
+              "从“暂时把自己的物品交给别人并收回”的经验中取回英文词形。",
+            provenance: lendEditorialProvenance,
+            cue: {
+              bodyL1:
+                "想起一个物品主人让别人暂时使用自己的物品，之后希望物品回到自己手中。",
+              featureLabelsL1: ["提供者", "临时交付", "收回"],
+            },
+            gradingContract: "lexeme_identity_v1",
+            supportInventory: {
+              firstLetter: true,
+              formChoices: [
+                {
+                  optionKey: "lend-choice-target",
+                  formL2: "lend",
+                  isTargetLexeme: true,
+                  reasonCode: "target-lexeme",
+                },
+                {
+                  optionKey: "lend-choice-borrow",
+                  formL2: "borrow",
+                  isTargetLexeme: false,
+                  reasonCode: "opposite-viewpoint",
+                },
+                {
+                  optionKey: "lend-choice-give",
+                  formL2: "give",
+                  isTargetLexeme: false,
+                  reasonCode: "permanent-giving-alternative",
+                },
+              ],
+            },
+            feedback: {
+              independentSuccessTitleL1: "独立取回成功",
+              independentSuccessBodyL1: "你从提供者视角取回了正确词形。",
+              supportedSuccessTitleL1: "在支架下取回",
+              supportedSuccessBodyL1: "视角提示帮助你重新连接到目标词形。",
+              choiceSuccessTitleL1: "从选项中辨认",
+              choiceSuccessBodyL1: "你选中了描述暂时交付的一方。",
+              repairTitleL1: "回到提供者视角",
+              repairBodyL1:
+                "先回想拥有、暂时交付和收回的顺序，再尝试独立取回。",
+            },
+          },
+        ],
+        novelContextTransfer: [
+          {
+            taskKey: "lend.assessment.transfer.lanterns.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "在社区设备场景中判断动作方向。",
+            provenance: lendEditorialProvenance,
+            exampleKey: "lend.example.transfer.lanterns.v2",
+            scene: {
+              sceneLabelL1: "公园办公室的灯",
+              setupL2:
+                "The park office gave lanterns to the hiking club for one night and expects them back tomorrow.",
+              setupL1: "公园办公室把灯交给徒步社使用一晚，期待明天收回。",
+              visualKind: "community-provider",
+              visualAltL1: "公园办公室暂时把灯交给徒步社。",
+            },
+            questionL1: "从公园办公室视角，这是什么动作？",
+            options: assessmentOptions([
+              {
+                optionKey: "lend-lanterns-provider",
+                labelL1: "暂时把灯交给徒步社使用。",
+                isCorrect: true,
+                reasonCode: "provider-viewpoint",
+                feedbackTitleL1: "迁移成功",
+                feedbackBodyL1: "公园办公室是设备的暂时提供方。",
+              },
+              {
+                optionKey: "lend-lanterns-receiver",
+                labelL1: "从徒步社那里暂时取得灯。",
+                isCorrect: false,
+                reasonCode: "receiver-viewpoint",
+                feedbackTitleL1: "方向相反",
+                feedbackBodyL1: "徒步社才是接收方。",
+              },
+              {
+                optionKey: "lend-lanterns-donate",
+                labelL1: "把灯永久赠送出去。",
+                isCorrect: false,
+                reasonCode: "not-donation",
+                feedbackTitleL1: "不是永久赠送",
+                feedbackBodyL1: "语境明确表示明天会收回。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "提供设备",
+              toLabelL1: "他人暂时使用",
+              invariantLabelsL1: ["提供者", "临时转移", "回到提供者"],
+            },
+            successTitleL1: "视角迁移成立",
+            successBodyL1: "你把提供者视角迁移到了社区设备。",
+          },
+          {
+            taskKey: "lend.assessment.transfer.wheelchair.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "从服务机构视角判断轮椅的临时转移。",
+            provenance: lendEditorialProvenance,
+            exampleKey: "lend.example.transfer.wheelchair.v2",
+            scene: {
+              sceneLabelL1: "诊所提供轮椅",
+              setupL2:
+                "The clinic gave a wheelchair to a patient for the weekend and expects it back on Monday.",
+              setupL1: "诊所把轮椅交给病人使用到周末，周一收回。",
+              visualKind: "health-service-provider",
+              visualAltL1: "诊所暂时把轮椅交给病人。",
+            },
+            questionL1: "诊所在这个场景中做了什么？",
+            options: assessmentOptions([
+              {
+                optionKey: "lend-wheelchair-provider",
+                labelL1: "暂时把轮椅交给病人使用。",
+                isCorrect: true,
+                reasonCode: "provider-viewpoint",
+                feedbackTitleL1: "判断正确",
+                feedbackBodyL1: "诊所是把设备交出去并等待归还的一方。",
+              },
+              {
+                optionKey: "lend-wheelchair-receiver",
+                labelL1: "从病人那里暂时取得轮椅。",
+                isCorrect: false,
+                reasonCode: "receiver-viewpoint",
+                feedbackTitleL1: "视角相反",
+                feedbackBodyL1: "病人才是暂时使用者。",
+              },
+              {
+                optionKey: "lend-wheelchair-donate",
+                labelL1: "把轮椅永久送给病人。",
+                isCorrect: false,
+                reasonCode: "not-donation",
+                feedbackTitleL1: "不是永久赠送",
+                feedbackBodyL1: "物品需要在周一回到诊所。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "服务机构拥有",
+              toLabelL1: "用户暂时使用",
+              invariantLabelsL1: ["提供者", "使用期限", "预期收回"],
+            },
+            successTitleL1: "迁移成功",
+            successBodyL1: "你识别出机构提供者的动作方向。",
+          },
+          {
+            taskKey: "lend.assessment.transfer.diary.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "在展览场景中判断原主人一方的动作。",
+            provenance: lendEditorialProvenance,
+            exampleKey: "lend.example.transfer.diary.v2",
+            scene: {
+              sceneLabelL1: "家庭提供私人日记",
+              setupL2:
+                "The family gave a diary to the archive for its exhibition and expects it back afterward.",
+              setupL1: "这个家庭把日记交给档案馆办展览，之后期待收回。",
+              visualKind: "archive-provider",
+              visualAltL1: "家庭暂时把日记交给档案馆。",
+            },
+            questionL1: "这个家庭站在哪个视角？",
+            options: assessmentOptions([
+              {
+                optionKey: "lend-diary-provider",
+                labelL1: "暂时把自己的日记交给档案馆使用。",
+                isCorrect: true,
+                reasonCode: "provider-viewpoint",
+                feedbackTitleL1: "迁移成功",
+                feedbackBodyL1: "家庭是原主人和提供者。",
+              },
+              {
+                optionKey: "lend-diary-receiver",
+                labelL1: "从档案馆那里暂时取得日记。",
+                isCorrect: false,
+                reasonCode: "receiver-viewpoint",
+                feedbackTitleL1: "视角相反",
+                feedbackBodyL1: "档案馆才是暂时接收方。",
+              },
+              {
+                optionKey: "lend-diary-publish",
+                labelL1: "把日记永久交给档案馆。",
+                isCorrect: false,
+                reasonCode: "not-permanent-transfer",
+                feedbackTitleL1: "不是永久转移",
+                feedbackBodyL1: "展览结束后日记会回到家庭。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "原主人提供",
+              toLabelL1: "机构暂时使用",
+              invariantLabelsL1: ["提供者", "文化物品", "之后收回"],
+            },
+            successTitleL1: "场景判断正确",
+            successBodyL1: "你把提供者视角迁移到了文化机构。",
+          },
+          {
+            taskKey: "lend.assessment.transfer.camera.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "在创意社团场景中判断相机所有者的动作。",
+            provenance: lendEditorialProvenance,
+            exampleKey: "lend.example.transfer.camera.v2",
+            scene: {
+              sceneLabelL1: "电影社借用相机",
+              setupL2:
+                "Maya gave her camera to the film club for the weekend and will take it back afterward.",
+              setupL1: "Maya 把相机交给电影社使用到周末，之后收回。",
+              visualKind: "creative-provider",
+              visualAltL1: "相机主人暂时把相机交给电影社。",
+            },
+            questionL1: "Maya 在这次转移中做了什么？",
+            options: assessmentOptions([
+              {
+                optionKey: "lend-camera-provider",
+                labelL1: "她暂时把自己的相机交给社团使用。",
+                isCorrect: true,
+                reasonCode: "provider-viewpoint",
+                feedbackTitleL1: "判断正确",
+                feedbackBodyL1: "Maya 是所有者和暂时提供方。",
+              },
+              {
+                optionKey: "lend-camera-receiver",
+                labelL1: "她从电影社那里拿到相机。",
+                isCorrect: false,
+                reasonCode: "receiver-viewpoint",
+                feedbackTitleL1: "视角相反",
+                feedbackBodyL1: "相机原本属于 Maya。",
+              },
+              {
+                optionKey: "lend-camera-donate",
+                labelL1: "她把相机永久送给社团。",
+                isCorrect: false,
+                reasonCode: "not-donation",
+                feedbackTitleL1: "不是赠送",
+                feedbackBodyL1: "周末后相机会回到 Maya 手中。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "自己拥有",
+              toLabelL1: "他人暂时使用",
+              invariantLabelsL1: ["提供者", "临时交付", "期待收回"],
+            },
+            successTitleL1: "迁移连接成立",
+            successBodyL1: "你识别出个人所有者的提供者视角。",
+          },
+          {
+            taskKey: "lend.assessment.transfer.lens.v2",
+            kind: "novel_context_transfer",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "在工作设备场景中判断原团队的动作方向。",
+            provenance: lendEditorialProvenance,
+            exampleKey: "lend.example.transfer.lens.v2",
+            scene: {
+              sceneLabelL1: "团队共享镜头",
+              setupL2:
+                "The studio gave a lens to another team for the shoot and expects it back after the work.",
+              setupL1: "摄影棚把镜头交给另一个团队拍摄，工作结束后收回。",
+              visualKind: "work-provider",
+              visualAltL1: "摄影棚暂时把镜头交给另一个团队。",
+            },
+            questionL1: "摄影棚在这里做了什么？",
+            options: assessmentOptions([
+              {
+                optionKey: "lend-lens-provider",
+                labelL1: "暂时把镜头交给另一个团队使用。",
+                isCorrect: true,
+                reasonCode: "provider-viewpoint",
+                feedbackTitleL1: "迁移成功",
+                feedbackBodyL1: "摄影棚是原设备拥有方，并期待之后收回。",
+              },
+              {
+                optionKey: "lend-lens-receiver",
+                labelL1: "从另一个团队那里暂时拿到镜头。",
+                isCorrect: false,
+                reasonCode: "receiver-viewpoint",
+                feedbackTitleL1: "方向相反",
+                feedbackBodyL1: "另一个团队才是接收使用者。",
+              },
+              {
+                optionKey: "lend-lens-sell",
+                labelL1: "把镜头卖给另一个团队。",
+                isCorrect: false,
+                reasonCode: "not-sale",
+                feedbackTitleL1: "不是出售",
+                feedbackBodyL1: "临时使用后会归还，不是出售。",
+              },
+            ]),
+            connectionSummary: {
+              fromLabelL1: "原团队拥有",
+              toLabelL1: "另一团队暂时使用",
+              invariantLabelsL1: ["提供者", "设备暂借", "之后归还"],
+            },
+            successTitleL1: "场景判断正确",
+            successBodyL1: "你把提供者视角迁移到了工作设备。",
+          },
+        ],
+        boundaryContrast: [
+          {
+            taskKey: "lend.assessment.boundary.meter.v2",
+            kind: "boundary_contrast",
+            eligiblePurposes: [...allPurposes],
+            promptL1: "判断临时转移中的动作方向。",
+            provenance: lendEditorialProvenance,
+            relationKey: "borrow-lend.viewpoint-temporary-transfer.v1",
+            exampleKey: "lend.example.boundary.meter.v2",
+            questionL1: "从实验室的视角，这个动作更符合哪一方？",
+            options: assessmentOptions([
+              {
+                optionKey: "lend-boundary-provider",
+                labelL1: "实验室把仪表暂时交给 Priya 并等待归还。",
+                isCorrect: true,
+                reasonCode: "provider-viewpoint",
+                feedbackTitleL1: "边界清楚",
+                feedbackBodyL1: "实验室是提供者。",
+              },
+              {
+                optionKey: "lend-boundary-receiver",
+                labelL1: "实验室从 Priya 那里暂时取得并使用仪表。",
+                isCorrect: false,
+                reasonCode: "receiver-viewpoint",
+                feedbackTitleL1: "这是另一视角",
+                feedbackBodyL1: "暂时接收仪表的是 Priya。",
+              },
+            ]),
+          },
+        ],
+      },
+      repairBindings: [],
+      practiceManifest: {
+        profileVersion: "sensa-initial-free-practice-v1",
+        grants: [
+          {
+            taskFamily: "immersive_browse",
+            resourceKeys: [
+              "lend.experience.render.text.v2",
+              "lend.bridge.zh.provider.v2",
+              "lend.example.study.umbrella.v2",
+            ],
+          },
+          {
+            taskFamily: "quick_spelling",
+            resourceKeys: ["lend.bridge.zh.provider.v2"],
+          },
+          {
+            taskFamily: "portable_listening",
+            resourceKeys: [
+              "lend.example.study.umbrella.v2",
+              "lend.example.study.meter.v2",
+              "lend.example.study.table.v2",
+            ],
+          },
+        ],
+      },
+      provenance: lendEditorialProvenance,
+    },
+  ],
+} satisfies SensaGoldenContentDraftV2Bundle;

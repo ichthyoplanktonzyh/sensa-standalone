@@ -1,32 +1,299 @@
 import { useState, useEffect, useCallback, useRef, type MouseEvent } from 'react';
-import { WORDS } from './data';
-import type { Word, LearningStage, QuickDictEntry } from './types';
+import type {
+  Word,
+  LearningStage,
+  FormalLearningStage,
+  LegacyLearningDemoStage,
+  QuickDictEntry,
+} from './types';
 import { useLearnQueue } from './engine/useLearnQueue';
 import { useReviewQueue } from './engine/useReviewQueue';
-import type { ReviewAnswerType } from './engine/ReviewQueue';
+import type {
+  RetentionRuntimeTargetStatus,
+  ReviewRuntimeEffect,
+} from './engine/ReviewQueue';
+import type {
+  ReviewAssessmentKind,
+  ReviewAssessmentResult,
+  ReviewMemoryOutcome,
+} from './review/types';
+import { resolveReviewMemoryOutcome } from './review/types';
 import { storageService } from './services/storageService';
+import { lookupDictionaryEntry } from './services/quickDict';
+import { personalContentService } from './services/personalContentService';
 import { IconSprite } from './components/IconSprite';
 import { HomeScreen } from './components/HomeScreen';
-import { AcademyScreen } from './components/AcademyScreen';
+import { AcademyScreen, type PracticeHomePresentation } from './components/AcademyScreen';
+import {
+  PortableListeningScreen,
+  type PortableListeningPresentation,
+} from './components/PortableListeningScreen';
+import {
+  RealWorldListeningScreen,
+  type RealWorldListeningPresentation,
+} from './components/RealWorldListeningScreen';
+import { YouGlishListeningScreen } from './components/YouGlishListeningScreen';
 import { ContentScreen } from './components/ContentScreen';
+import { ContentLibraryScreen } from './components/ContentLibraryScreen';
+import {
+  SemanticWorldScreen,
+  type SemanticWorldPresentation,
+} from './components/SemanticWorldScreen';
+import { PersonalMeaningDetailScreen } from './components/PersonalMeaningDetailScreen';
+import { ConfirmedSenseDetailScreen } from './components/ConfirmedSenseDetailScreen';
+import { ExpressionBindingScreen } from './components/ExpressionBindingScreen';
+import { ContentSenseDetailScreen } from './components/ContentSenseDetailScreen';
+import { ContentExampleDetailScreen } from './components/ContentExampleDetailScreen';
+import { ContentComingSoonScreen } from './components/ContentComingSoonScreen';
 import { StudyScreen } from './components/StudyScreen';
+import { LearningEntryScreen } from './components/learning/LearningEntryScreen';
+import { LearningPolicyScreen } from './components/learning/LearningPolicyScreen';
+import { LearningTargetDetailScreen } from './components/learning/LearningTargetDetailScreen';
+import { LearningTargetLibraryScreen } from './components/learning/LearningTargetLibraryScreen';
+import { LightweightReviewRuntimeScreen } from './components/learning/LightweightReviewRuntimeScreen';
+import { LightweightRuntimeStartScreen } from './components/learning/LightweightRuntimeStartScreen';
+import { StructuredRuntimeSummaryScreen } from './components/learning/StructuredRuntimeSummaryScreen';
+import type { StructuredRuntimeStatusView } from './components/learning/StructuredRuntimeStatus';
+import { StructuredRetentionSummaryScreen } from './components/learning/StructuredRetentionSummaryScreen';
+import type { RetentionRuntimeStatusView } from './components/learning/RetentionRuntimeStatus';
 import { ProfileScreen } from './components/ProfileScreen';
 import { LearnScreen } from './components/LearnScreen';
-import { ExampleScreen } from './components/ExampleScreen';
+import { LegacyLearningDemoScreen } from './components/LegacyLearningDemoScreen';
+import { ExampleScreen, type ExamplePresentation } from './components/ExampleScreen';
 import { DictDetailModal } from './components/DictDetailModal';
+import { ReferenceDictionaryScreen } from './components/ReferenceDictionaryScreen';
+import {
+  ReferenceExampleViewer,
+  type ReferenceExampleDeck,
+} from './components/ReferenceExampleViewer';
+import {
+  DictionaryPresentationProvider,
+  type DictionaryPresentation,
+} from './components/DictionaryPresentationContext';
 import { NoteEditorModal } from './components/NoteEditorModal';
-import { SpellingModal } from './components/SpellingModal';
+import { SceneEditorModal } from './components/SceneEditorModal';
+import { SpellingModal, type SpellingPracticeMode } from './components/SpellingModal';
 import { WordListScreen } from './components/WordListScreen';
 import { FinishScreen } from './components/FinishScreen';
 import { StatsScreen } from './components/StatsScreen';
 import { SidePanel } from './components/SidePanel';
+import type { RevealPresentation } from './components/cards/IntroductionCard';
+import type { RecognitionPresentation } from './components/cards/RecognitionCard';
+import type { RecallPresentation } from './components/cards/RecallCard';
+import type { NovelTransferPresentation } from './components/cards/NovelTransferCard';
+import type { ReviewPresentation } from './components/cards/review/SensaReviewAssessmentCard';
+import { DEFAULT_PRACTICE_SCOPE, type PracticeSenseItem } from './practiceData';
+import {
+  contentSenseForId,
+  type ContentNoteItem,
+  type ContentSectionId,
+  type SavedExampleItem,
+} from './contentProjection';
+import {
+  PROTOTYPE_INTRODUCTION_PACKAGES,
+  PROTOTYPE_LEARNING_PACKAGES,
+  PROTOTYPE_PACKAGE_BY_SENSE,
+  materializeReviewRepairContent,
+  toWordPresentation,
+} from './content/learningCatalog';
+import type { PrototypeIntroductionPackage } from './content/learningCatalog';
+import { materializeAssessmentResource } from './content/assessmentResources';
+import type {
+  LearningCapability,
+  MeaningToFormRecallOutcome,
+  NovelTransferOutcome,
+  ReviewCandidate,
+  RelearningCycleStage,
+} from './engine/types';
+import {
+  PROTOTYPE_LEARNING_TARGET_ORDER,
+  PROTOTYPE_LEARNING_TARGETS,
+  readinessForPolicy,
+  runtimePackageForTarget,
+  type PrototypeLearningPolicy,
+  type PrototypeLearningReadiness,
+  type PrototypeLearningTargetId,
+  type PrototypeLightweightRating,
+} from './learningJourney/prototypeLearning';
 
-type ViewMode = 'main' | 'study' | 'finish';
+type ViewMode = 'main' | 'study' | 'lightweight' | 'lightweightReview' | 'finish';
 type FlowType = 'learn' | 'review' | 'demo';
+type RuntimeLearningStage = FormalLearningStage | LegacyLearningDemoStage | 'review_repair';
+
+type RuntimePackage = (typeof PROTOTYPE_LEARNING_PACKAGES)[number];
+
+type LearningPolicyContext =
+  | { kind: 'default' }
+  | { kind: 'target'; targetId: PrototypeLearningTargetId };
+
+type TargetPolicyMap = Partial<Record<PrototypeLearningTargetId, PrototypeLearningPolicy>>;
+type TargetPreparationMap = Partial<Record<PrototypeLearningTargetId, PrototypeLearningReadiness>>;
+type LightweightCompletionMap = Partial<Record<
+  PrototypeLearningTargetId,
+  {
+    rating: Exclude<PrototypeLightweightRating, 'again'>;
+    completedAt: string;
+    nextReviewAt: string;
+    nextReviewLabel: string;
+    reviewCount: number;
+    lapseCount: number;
+    relearning: boolean;
+    lastReviewRating?: PrototypeLightweightRating;
+    lastReviewedAt?: string;
+  }
+>>;
+type StructuredGraduationMap = Partial<Record<
+  PrototypeLearningTargetId,
+  {
+    graduatedAt: string;
+    nextReviewAt: string;
+    nextReviewLabel: string;
+    schedulingHandoffBasis: 'acquisition_graduation';
+  }
+>>;
+type StructuredRuntimeSummary = {
+  graduatedTargetIds: readonly PrototypeLearningTargetId[];
+  declaredMasteryTargetIds: readonly PrototypeLearningTargetId[];
+};
+type StructuredRetentionMap = Partial<Record<
+  PrototypeLearningTargetId,
+  {
+    lastReviewedAt: string | null;
+    nextReviewAt: string;
+    nextReviewLabel: string;
+    reviewCount: number;
+    lapseCount: number;
+    lastOutcome: ReviewMemoryOutcome | null;
+    relearning: boolean;
+    relearningStage: RelearningCycleStage | null;
+    relearningCompletedAt: string | null;
+  }
+>>;
+type StructuredRetentionSummary = {
+  retainingTargetIds: readonly PrototypeLearningTargetId[];
+  relearningCompletedTargetIds: readonly PrototypeLearningTargetId[];
+  declaredMasteryTargetIds: readonly PrototypeLearningTargetId[];
+};
+
+const LIGHTWEIGHT_REVIEW_SCHEDULE: Record<
+  PrototypeLightweightRating,
+  { delayMs: number; nextReviewLabel: string }
+> = {
+  again: { delayMs: 10 * 60 * 1000, nextReviewLabel: '10 分钟后' },
+  hard: { delayMs: 24 * 60 * 60 * 1000, nextReviewLabel: '明天' },
+  good: { delayMs: 3 * 24 * 60 * 60 * 1000, nextReviewLabel: '3 天后' },
+};
+
+const TARGET_ID_BY_RUNTIME_SENSE = new Map(
+  PROTOTYPE_LEARNING_TARGET_ORDER.flatMap((targetId) => {
+    const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
+    return senseId ? [[senseId, targetId] as const] : [];
+  }),
+);
+
+const STRUCTURED_ACTION_LABEL: Record<LearningCapability, string> = {
+  introduction: '经验落地与意思—表达绑定',
+  contextual_recognition: '在语境中识别这个意思',
+  meaning_to_form_recall: '从意思主动取回表达',
+  novel_context_transfer: '在新语境中迁移',
+  boundary_discrimination: '区分相邻意思边界',
+};
+
+const STRUCTURED_GATE_LABEL: Record<Exclude<LearningCapability, 'introduction'>, string> = {
+  contextual_recognition: '识别',
+  meaning_to_form_recall: '回想',
+  novel_context_transfer: '迁移',
+  boundary_discrimination: '边界',
+};
+
+function relativeReviewLabel(dueAt: number, now: number = Date.now()): string {
+  const days = Math.max(0, Math.ceil((dueAt - now) / (24 * 60 * 60 * 1000)));
+  if (days === 0) return '今天';
+  if (days === 1) return '明天';
+  return `${days} 天后`;
+}
+
+function effectivePolicyForTarget(
+  targetId: PrototypeLearningTargetId,
+  defaultPolicy: PrototypeLearningPolicy,
+  addedTargetIds: ReadonlySet<PrototypeLearningTargetId>,
+  policyByTarget: TargetPolicyMap,
+  committedPolicyByTarget: TargetPolicyMap,
+): PrototypeLearningPolicy {
+  return committedPolicyByTarget[targetId]
+    ?? policyByTarget[targetId]
+    ?? (addedTargetIds.has(targetId)
+      ? PROTOTYPE_LEARNING_TARGETS[targetId].policy
+      : defaultPolicy);
+}
+
+function preparationForTarget(
+  targetId: PrototypeLearningTargetId,
+  policy: PrototypeLearningPolicy,
+  preparationByTarget: TargetPreparationMap,
+): PrototypeLearningReadiness {
+  return preparationByTarget[targetId]
+    ?? readinessForPolicy(PROTOTYPE_LEARNING_TARGETS[targetId], policy).status;
+}
+
+function stageForCapability(capability: LearningCapability): FormalLearningStage {
+  switch (capability) {
+    case 'introduction': return 'introduction';
+    case 'contextual_recognition': return 'recognition';
+    case 'meaning_to_form_recall': return 'recall';
+    case 'novel_context_transfer': return 'transfer';
+    case 'boundary_discrimination': return 'review_assessment';
+  }
+}
+
+function reviewKindForCapability(capability: LearningCapability): ReviewAssessmentKind | null {
+  switch (capability) {
+    case 'contextual_recognition': return 'context_recognition';
+    case 'meaning_to_form_recall': return 'meaning_to_form_recall';
+    case 'novel_context_transfer': return 'novel_context_transfer';
+    case 'boundary_discrimination': return 'boundary_contrast';
+    default: return null;
+  }
+}
+
+function formalStageForScreen(stage: RuntimeLearningStage): FormalLearningStage | 'review_repair' {
+  switch (stage) {
+    case 'audio_choice':
+    case 'detail':
+    case 'final_gate':
+      // LearnScreen is inactive for these stages; keep its prop in the formal
+      // vocabulary while the legacy surface owns their actual rendering.
+      return 'introduction';
+    default:
+      return stage;
+  }
+}
+
+function legacyStageForScreen(stage: RuntimeLearningStage): LegacyLearningDemoStage {
+  switch (stage) {
+    case 'audio_choice':
+    case 'detail':
+    case 'final_gate':
+      return stage;
+    default:
+      return 'detail';
+  }
+}
 
 export default function App() {
   /* ---------- 顶层视图模式 (主页面体系 vs 独立全屏学习流 vs 结算) ---------- */
   const [viewMode, setViewMode] = useState<ViewMode>('main');
+  const [revealPresentation, setRevealPresentation] = useState<RevealPresentation>('compact');
+  const [examplePresentation, setExamplePresentation] = useState<ExamplePresentation>('sensa');
+  const [recognitionPresentation, setRecognitionPresentation] = useState<RecognitionPresentation>('sensa');
+  const [recallPresentation, setRecallPresentation] = useState<RecallPresentation>('sensa');
+  const [novelTransferPresentation, setNovelTransferPresentation] = useState<NovelTransferPresentation>('sensa');
+  const [reviewPresentation, setReviewPresentation] = useState<ReviewPresentation>('sensa');
+  const [semanticWorldPresentation, setSemanticWorldPresentation] = useState<SemanticWorldPresentation>('sensa');
+  const [practiceHomePresentation, setPracticeHomePresentation] = useState<PracticeHomePresentation>('sensa');
+  const [portableListeningPresentation, setPortableListeningPresentation] = useState<PortableListeningPresentation>('sensa');
+  const [realWorldListeningPresentation, setRealWorldListeningPresentation] = useState<RealWorldListeningPresentation>('sensa');
+  const [dictionaryPresentation, setDictionaryPresentation] = useState<DictionaryPresentation>('sensa');
 
   /* ---------- 主页面 Sheet 路由栈 ---------- */
   const [mainStack, setMainStack] = useState<string[]>([]);
@@ -40,16 +307,70 @@ export default function App() {
     setMainStack([]);
   }, []);
 
+  /* ---------- 我的内容读取投影与下钻目标 ---------- */
+  const [contentSection, setContentSection] = useState<ContentSectionId>('recent');
+  const [selectedContentSense, setSelectedContentSense] = useState<PracticeSenseItem | null>(null);
+  const [selectedContentExample, setSelectedContentExample] = useState<PracticeSenseItem | null>(null);
+  const [contentComingKind, setContentComingKind] = useState<'scenes' | 'collections'>('scenes');
+  const [personalMeaningId, setPersonalMeaningId] = useState<string | null>(null);
+  const [meaningFocusId, setMeaningFocusId] = useState<string | null>(null);
+
+  const openContentSection = useCallback((section: ContentSectionId) => {
+    setContentSection(section);
+    goMain('s-content-library');
+  }, [goMain]);
+
+  const openContentSense = useCallback((item: PracticeSenseItem) => {
+    setSelectedContentSense(item);
+    goMain('s-content-sense');
+  }, [goMain]);
+
+  const openSemanticWorldSense = useCallback((senseId: string) => {
+    const item = contentSenseForId(senseId);
+    if (item) openContentSense(item);
+  }, [openContentSense]);
+
+  const openPersonalMeaning = useCallback((
+    nextPersonalMeaningId: string,
+    nextMeaningFocusId?: string,
+  ) => {
+    setPersonalMeaningId(nextPersonalMeaningId);
+    setMeaningFocusId(nextMeaningFocusId ?? null);
+    goMain('s-personal-meaning');
+  }, [goMain]);
+
+  const openConfirmedSense = useCallback((nextPersonalMeaningId: string, nextMeaningFocusId: string) => {
+    setPersonalMeaningId(nextPersonalMeaningId);
+    setMeaningFocusId(nextMeaningFocusId);
+    goMain('s-confirmed-sense');
+  }, [goMain]);
+
+  const openExpressionBinding = useCallback(() => {
+    goMain('s-expression-binding');
+  }, [goMain]);
+
+  const openContentExample = useCallback((item: PracticeSenseItem) => {
+    setSelectedContentExample(item);
+    goMain('s-content-example');
+  }, [goMain]);
+
+  const openContentComingSoon = useCallback((kind: 'scenes' | 'collections') => {
+    setContentComingKind(kind);
+    goMain('s-content-coming');
+  }, [goMain]);
+
   // 是否为首页纯净壁纸态（主页面且无弹层），决定状态栏与底条为浅色文字
   const isLight = viewMode === 'main' && mainStack.length === 0;
 
   /* ---------- 例句全屏卡独立状态 ---------- */
   const [isExampleOpen, setIsExampleOpen] = useState(false);
   const [selectedSenseIdx, setSelectedSenseIdx] = useState(0);
+  const [selectedSentenceIdx, setSelectedSentenceIdx] = useState(0);
 
-  /* ---------- 柯林斯多维词典大卡片独立状态 ---------- */
+  /* ---------- Lexical Reference 详情；原始柯林斯式实现保留为 baseline ---------- */
   const [dictModalWord, setDictModalWord] = useState<Word | QuickDictEntry | string | null>(null);
   const [dictModalTab, setDictModalTab] = useState<string>('柯林斯');
+  const [referenceExampleDeck, setReferenceExampleDeck] = useState<ReferenceExampleDeck | null>(null);
 
   const openDictModal = useCallback((word: Word | QuickDictEntry | string, tab = '柯林斯') => {
     setDictModalWord(word);
@@ -57,33 +378,59 @@ export default function App() {
   }, []);
 
   const closeDictModal = useCallback(() => {
+    setReferenceExampleDeck(null);
     setDictModalWord(null);
   }, []);
 
   /* ---------- 独立笔记编辑全屏弹窗状态 ---------- */
   const [noteModalWord, setNoteModalWord] = useState<Word | QuickDictEntry | string | null>(null);
+  const [noteModalSense, setNoteModalSense] = useState<{ senseId: string; meaning: string } | null>(null);
 
-  const openNoteEditor = useCallback((word?: Word | QuickDictEntry | string) => {
+  const openNoteEditor = useCallback((
+    word?: Word | QuickDictEntry | string,
+    senseId?: string,
+    meaning?: string
+  ) => {
     if (word) {
       setNoteModalWord(word);
+      setNoteModalSense(senseId ? { senseId, meaning: meaning || '' } : null);
     }
   }, []);
 
   const closeNoteEditor = useCallback(() => {
     setNoteModalWord(null);
+    setNoteModalSense(null);
   }, []);
+
+  /* ---------- 我的场景独立富媒体编辑状态 ---------- */
+  const [sceneEditorTarget, setSceneEditorTarget] = useState<{
+    content: PrototypeIntroductionPackage;
+    anchorId?: string;
+  } | null>(null);
+
+  const closeSceneEditor = useCallback(() => setSceneEditorTarget(null), []);
 
   /* ---------- 独立单词拼写练习弹窗状态 ---------- */
   const [spellingWord, setSpellingWord] = useState<Word | QuickDictEntry | string | null>(null);
+  const [spellingMode, setSpellingMode] = useState<SpellingPracticeMode>('legacy');
+  const [spellingCue, setSpellingCue] = useState('');
 
-  const openSpelling = useCallback((word?: Word | QuickDictEntry | string) => {
+  const openSpelling = useCallback((
+    word?: Word | QuickDictEntry | string,
+    mode: SpellingPracticeMode = 'legacy',
+    cueText = ''
+  ) => {
     if (word) {
+      setSpellingMode(mode);
+      setSpellingCue(cueText);
       setSpellingWord(word);
     }
   }, []);
 
   const closeSpelling = useCallback(() => {
     setSpellingWord(null);
+    setSpellingMode('legacy');
+    setSpellingCue('');
   }, []);
 
   /* ---------- 全局 Toast ---------- */
@@ -98,35 +445,190 @@ export default function App() {
   /* ---------- 全局弹窗菜单 ---------- */
   const [menuMoreOpen, setMenuMoreOpen] = useState(false);
   const [menuBookOpen, setMenuBookOpen] = useState(false);
+  const [menuPersonalContent, setMenuPersonalContent] = useState<PrototypeIntroductionPackage | null>(null);
   const closeMenus = useCallback(() => {
     setMenuMoreOpen(false);
     setMenuBookOpen(false);
+    setMenuPersonalContent(null);
   }, []);
+  const menuPersonalAnchors = menuPersonalContent
+    ? personalContentService.getSemanticAnchors(menuPersonalContent.senseKey)
+    : [];
 
   /* ---------- 业务状态（签到、资产、统计） ---------- */
   const [signed, setSigned] = useState(false);
-  const [coins, setCoins] = useState(2470);
+  const [coins] = useState(2470);
   const [streak, setStreak] = useState(0);
   const [studyTab, setStudyTab] = useState<'a' | 'b'>('a');
+  const [defaultLearningPolicy, setDefaultLearningPolicy] =
+    useState<PrototypeLearningPolicy>('lightweight');
+  const [selectedLearningTargetId, setSelectedLearningTargetId] =
+    useState<PrototypeLearningTargetId>('borrow-receive');
+  const [learningPolicyContext, setLearningPolicyContext] =
+    useState<LearningPolicyContext>({ kind: 'default' });
+  const [learningPolicyByTarget, setLearningPolicyByTarget] = useState<
+    TargetPolicyMap
+  >({});
+  const [addedLearningTargetIds, setAddedLearningTargetIds] = useState<
+    ReadonlySet<PrototypeLearningTargetId>
+  >(() => new Set<PrototypeLearningTargetId>(['tactful-expression', 'lend-give']));
+  const [preparationByTarget, setPreparationByTarget] = useState<TargetPreparationMap>({
+    'tactful-expression': 'preparing',
+  });
+  const [committedPolicyByTarget, setCommittedPolicyByTarget] = useState<TargetPolicyMap>({});
+  const [lightweightCompletionByTarget, setLightweightCompletionByTarget] =
+    useState<LightweightCompletionMap>({});
+  const [structuredGraduationByTarget, setStructuredGraduationByTarget] =
+    useState<StructuredGraduationMap>({});
+  const [declaredMasterySenseIds, setDeclaredMasterySenseIds] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+  const [activeStructuredTargetIds, setActiveStructuredTargetIds] =
+    useState<readonly PrototypeLearningTargetId[]>([]);
+  const [structuredRuntimeSummary, setStructuredRuntimeSummary] =
+    useState<StructuredRuntimeSummary | null>(null);
+  const [structuredRetentionByTarget, setStructuredRetentionByTarget] =
+    useState<StructuredRetentionMap>({});
+  const [structuredRetentionSummary, setStructuredRetentionSummary] =
+    useState<StructuredRetentionSummary | null>(null);
+  const [activeLightweightRuntimeTargetId, setActiveLightweightRuntimeTargetId] =
+    useState<PrototypeLearningTargetId | null>(null);
+  const [activeLightweightReviewTargetIds, setActiveLightweightReviewTargetIds] =
+    useState<readonly PrototypeLearningTargetId[]>([]);
+
+  const openLearningTarget = useCallback((targetId: PrototypeLearningTargetId) => {
+    setSelectedLearningTargetId(targetId);
+    goMain('s-learning-target');
+  }, [goMain]);
+
+  const openDefaultLearningPolicy = useCallback(() => {
+    setLearningPolicyContext({ kind: 'default' });
+    goMain('s-learning-policy');
+  }, [goMain]);
+
+  const openTargetLearningPolicy = useCallback(() => {
+    if (committedPolicyByTarget[selectedLearningTargetId]) {
+      toast('学习方式已在首次正式学习开始时锁定');
+      return;
+    }
+    setLearningPolicyContext({ kind: 'target', targetId: selectedLearningTargetId });
+    goMain('s-learning-policy');
+  }, [committedPolicyByTarget, goMain, selectedLearningTargetId, toast]);
+
+  const selectLearningPolicy = useCallback((policy: PrototypeLearningPolicy) => {
+    if (learningPolicyContext.kind === 'default') {
+      setDefaultLearningPolicy(policy);
+      return;
+    }
+    if (committedPolicyByTarget[learningPolicyContext.targetId]) {
+      toast('这条目标的学习方式已经锁定');
+      return;
+    }
+    setLearningPolicyByTarget((current) => ({
+      ...current,
+      [learningPolicyContext.targetId]: policy,
+    }));
+    setPreparationByTarget((current) => ({
+      ...current,
+      [learningPolicyContext.targetId]: readinessForPolicy(
+        PROTOTYPE_LEARNING_TARGETS[learningPolicyContext.targetId],
+        policy,
+      ).status,
+    }));
+  }, [committedPolicyByTarget, learningPolicyContext, toast]);
+
+  const addSelectedLearningTarget = useCallback(() => {
+    const selectedPolicy = learningPolicyByTarget[selectedLearningTargetId]
+      ?? defaultLearningPolicy;
+    setLearningPolicyByTarget((current) => ({
+      ...current,
+      [selectedLearningTargetId]: current[selectedLearningTargetId] ?? selectedPolicy,
+    }));
+    setPreparationByTarget((current) => ({
+      ...current,
+      [selectedLearningTargetId]: readinessForPolicy(
+        PROTOTYPE_LEARNING_TARGETS[selectedLearningTargetId],
+        selectedPolicy,
+      ).status,
+    }));
+    setAddedLearningTargetIds((current) => {
+      const next = new Set(current);
+      next.add(selectedLearningTargetId);
+      return next;
+    });
+    toast('已加入“我的学习”，内容会按所选方式准备');
+  }, [defaultLearningPolicy, learningPolicyByTarget, selectedLearningTargetId, toast]);
+
+  const refreshSelectedTargetPreparation = useCallback(() => {
+    const selectedPolicy = effectivePolicyForTarget(
+      selectedLearningTargetId,
+      defaultLearningPolicy,
+      addedLearningTargetIds,
+      learningPolicyByTarget,
+      committedPolicyByTarget,
+    );
+    const configured = readinessForPolicy(
+      PROTOTYPE_LEARNING_TARGETS[selectedLearningTargetId],
+      selectedPolicy,
+    ).status;
+    const nextPreparation = configured === 'preparing' ? 'ready' : configured;
+    setPreparationByTarget((current) => ({
+      ...current,
+      [selectedLearningTargetId]: nextPreparation,
+    }));
+    toast(nextPreparation === 'ready' ? '内容已准备好，可以进入今日学习' : '准备状态已更新');
+  }, [
+    addedLearningTargetIds,
+    committedPolicyByTarget,
+    defaultLearningPolicy,
+    learningPolicyByTarget,
+    selectedLearningTargetId,
+    toast,
+  ]);
+
+  const openLearningSource = useCallback(() => {
+    const target = PROTOTYPE_LEARNING_TARGETS[selectedLearningTargetId];
+    if (target.sourceKind === 'personal_semantic_world') {
+      setMainStack(['s-semantic-world']);
+      return;
+    }
+    setMainStack(['s-study', 's-learning-entry']);
+  }, [selectedLearningTargetId]);
 
   const doSign = useCallback(() => {
     if (signed) {
-      toast('今天已经签到过啦');
+      toast(`今天已签到　连续签到 ${Math.max(1, streak)} 天`);
       return;
     }
     setSigned(true);
-    setCoins((c) => c + 10);
     setStreak(1);
-    toast('签到成功　+10 酷币　连续签到 1 天');
-  }, [signed, toast]);
+    toast('签到成功　连续签到 1 天');
+  }, [signed, streak, toast]);
 
   /* ---------- 流程模式与每日新学词数 ---------- */
   const [flowMode, setFlowType] = useState<FlowType>('learn');
+  const [demoStage, setDemoStage] = useState<LearningStage>('introduction');
+  const [demoWord, setDemoWord] = useState<Word | null>(null);
+  const [demoPackage, setDemoPackage] = useState<RuntimePackage | null>(null);
+  const [demoReviewKind, setDemoReviewKind] = useState<ReviewAssessmentKind | null>(null);
+  const [demoReviewResult, setDemoReviewResult] = useState<ReviewAssessmentResult | null>(null);
   const [dailyNewCount, setDailyNewCount] = useState<number>(() => storageService.getDailyNewCount());
-  const [reviewN, setReviewN] = useState<number>(() => storageService.getDueWords(WORDS).length);
+  const [reviewN, setReviewN] = useState<number>(
+    () => {
+      const senseIds = PROTOTYPE_LEARNING_PACKAGES.map((item) => item.senseId);
+      return new Set([
+        ...storageService.getDueSenseIds(senseIds),
+        ...storageService.getRelearningSenseIds(),
+      ]).size;
+    },
+  );
 
   const refreshReviewCount = useCallback(() => {
-    setReviewN(storageService.getDueWords(WORDS).length);
+    const senseIds = PROTOTYPE_LEARNING_PACKAGES.map((item) => item.senseId);
+    setReviewN(new Set([
+      ...storageService.getDueSenseIds(senseIds),
+      ...storageService.getRelearningSenseIds(),
+    ]).size);
   }, []);
 
   const handleDailyNewCountChange = useCallback((count: number) => {
@@ -134,164 +636,672 @@ export default function App() {
     setDailyNewCount(count);
   }, []);
 
+  const visibleLearningTargetIds = PROTOTYPE_LEARNING_TARGET_ORDER.filter((targetId) =>
+    addedLearningTargetIds.has(targetId));
+  const readyInitialTargetIds = visibleLearningTargetIds.filter((targetId) => {
+    if (committedPolicyByTarget[targetId]) return false;
+    const runtimeSenseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
+    if (runtimeSenseId && declaredMasterySenseIds.has(runtimeSenseId)) return false;
+    const policy = effectivePolicyForTarget(
+      targetId,
+      defaultLearningPolicy,
+      addedLearningTargetIds,
+      learningPolicyByTarget,
+      committedPolicyByTarget,
+    );
+    return preparationForTarget(targetId, policy, preparationByTarget) === 'ready';
+  });
+  const todayInitialTargetIds = readyInitialTargetIds.slice(0, dailyNewCount);
+  const lightweightDueTargetIds = visibleLearningTargetIds.filter((targetId) => {
+    const completion = lightweightCompletionByTarget[targetId];
+    return committedPolicyByTarget[targetId] === 'lightweight'
+      && completion !== undefined
+      && (completion.relearning || Date.parse(completion.nextReviewAt) <= Date.now());
+  });
+  const lightweightRelearningTargetIds = visibleLearningTargetIds.filter(
+    (targetId) => lightweightCompletionByTarget[targetId]?.relearning,
+  );
+
   /* ---------- 穿插调度算法引擎 (新词学习流) ---------- */
   const {
     session: learnSession,
     stats: queueStats,
     isDone: queueDone,
+    projection: structuredAcquisitionProjection,
     start: startLearnQueue,
     settle: settleLearnQueue,
+    completeIntroduction: completeLearnIntroduction,
+    completeRecognition: completeLearnRecognition,
+    completeMeaningToFormRecall: completeLearnMeaningToFormRecall,
+    completeBoundary: completeLearnBoundary,
+    completeNovelTransfer: completeLearnNovelTransfer,
     next: nextLearnQueue,
     undo: undoLearnQueue,
     markMistake: markMistakeLearnQueue,
     markKnown: markKnownLearnQueue,
+    setDeclaredMastery: setLearnDeclaredMastery,
+    getGraduatedSenseIds,
     overrideDemo: overrideDemoQueue,
-  } = useLearnQueue(WORDS, { groupSize: dailyNewCount, minGap: 2 });
+  } = useLearnQueue(PROTOTYPE_LEARNING_PACKAGES, {
+    activeWindow: 3,
+    minGap: 2,
+  });
+
+  // Graduation is the only Learn -> FSRS handoff. Keep this idempotent because
+  // both the explicit "next" handler and the completion effect can observe the
+  // same settled queue during one render cycle.
+  const persistGraduatedSenses = useCallback(() => {
+    const fsrsItems = storageService.getFSRSItems();
+    const graduatedSenseIds = getGraduatedSenseIds();
+    graduatedSenseIds.forEach((senseId) => {
+      if (!fsrsItems[senseId]) {
+        storageService.graduateSense(senseId, 0);
+      }
+    });
+    const memoryItems = storageService.getFSRSItems();
+    const graduatedSenseIdSet = new Set(graduatedSenseIds);
+    const graduatedAt = new Date().toISOString();
+    if (activeStructuredTargetIds.length > 0) {
+      setStructuredRuntimeSummary({
+        graduatedTargetIds: activeStructuredTargetIds.filter((targetId) => {
+          const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
+          return senseId !== null && graduatedSenseIdSet.has(senseId);
+        }),
+        declaredMasteryTargetIds: activeStructuredTargetIds.filter((targetId) => {
+          const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
+          return senseId !== null && declaredMasterySenseIds.has(senseId);
+        }),
+      });
+    }
+    setStructuredGraduationByTarget((current) => {
+      let next = current;
+      PROTOTYPE_LEARNING_TARGET_ORDER.forEach((targetId) => {
+        const target = PROTOTYPE_LEARNING_TARGETS[targetId];
+        if (
+          current[targetId]
+          || committedPolicyByTarget[targetId] !== 'high_assurance'
+          || !target.runtimeSenseId
+          || !graduatedSenseIdSet.has(target.runtimeSenseId)
+        ) return;
+        const memory = memoryItems[target.runtimeSenseId]!;
+        next = {
+          ...next,
+          [targetId]: {
+            graduatedAt,
+            nextReviewAt: new Date(memory.due).toISOString(),
+            nextReviewLabel: relativeReviewLabel(memory.due),
+            schedulingHandoffBasis: 'acquisition_graduation',
+          },
+        };
+      });
+      return next;
+    });
+    refreshReviewCount();
+  }, [
+    activeStructuredTargetIds,
+    committedPolicyByTarget,
+    declaredMasterySenseIds,
+    getGraduatedSenseIds,
+    refreshReviewCount,
+  ]);
 
   /* ---------- 全量到期流式复习引擎 (FSRS 复习流) ---------- */
+  const onReviewEffect = useCallback((effect: ReviewRuntimeEffect<PrototypeIntroductionPackage>) => {
+    storageService.applyReviewRuntimeEffect(effect);
+    const senseId = effect.candidate.package.senseId;
+    const targetId = TARGET_ID_BY_RUNTIME_SENSE.get(senseId);
+    if (targetId) {
+      const memory = storageService.getFSRSItems()[senseId]!;
+      const cycle = storageService.getRelearningCycle(senseId);
+      const occurredAt = new Date().toISOString();
+      setStructuredRetentionByTarget((current) => {
+        const previous = current[targetId];
+        return {
+          ...current,
+          [targetId]: {
+            lastReviewedAt: effect.type === 'retention_outcome'
+              ? occurredAt
+              : previous?.lastReviewedAt ?? null,
+            nextReviewAt: new Date(memory.due).toISOString(),
+            nextReviewLabel: relativeReviewLabel(memory.due),
+            reviewCount: (previous?.reviewCount ?? 0)
+              + (effect.type === 'retention_outcome' ? 1 : 0),
+            lapseCount: memory.lapses,
+            lastOutcome: effect.type === 'retention_outcome'
+              ? effect.result.memoryOutcome
+              : previous?.lastOutcome ?? null,
+            relearning: cycle !== null,
+            relearningStage: cycle?.stage ?? null,
+            relearningCompletedAt: effect.type === 'relearning_progress'
+              && effect.event === 'retest_passed'
+              ? occurredAt
+              : previous?.relearningCompletedAt ?? null,
+          },
+        };
+      });
+    }
+    refreshReviewCount();
+  }, [refreshReviewCount]);
   const {
     session: reviewSession,
     stats: reviewStats,
     isDone: reviewDone,
+    projection: retentionRuntimeProjection,
     start: startReviewQueue,
     settle: settleReviewQueue,
+    completeRepair: completeReviewRepair,
+    excludeCurrentForDeclaredMastery: excludeCurrentReviewForDeclaredMastery,
     next: nextReviewQueue,
     undo: undoReviewQueue,
-    markMistake: markMistakeReviewQueue,
-    markMature: markMatureReviewQueue,
-  } = useReviewQueue();
+  } = useReviewQueue<PrototypeIntroductionPackage>(onReviewEffect, { minGap: 2 });
 
-  const [wordOffset, setWordOffset] = useState(0);
+  const pendingMixedTargetRef = useRef<PrototypeLearningTargetId[] | null>(null);
 
-  const getWordBatch = useCallback((offset: number, size = dailyNewCount) => {
-    const batch: Word[] = [];
-    for (let i = 0; i < size; i++) {
-      batch.push(WORDS[(offset + i) % WORDS.length]);
+  const getReviewCandidates = useCallback((): ReviewCandidate<PrototypeIntroductionPackage>[] => {
+    const senseIds = PROTOTYPE_LEARNING_PACKAGES.map((item) => item.senseId);
+    const reviewReadySenseIds = new Set([
+      ...storageService.getDueSenseIds(senseIds),
+      ...storageService.getRelearningSenseIds(),
+    ]);
+    return [...reviewReadySenseIds].flatMap((senseId) => {
+      if (declaredMasterySenseIds.has(senseId)) return [];
+      const targetId = TARGET_ID_BY_RUNTIME_SENSE.get(senseId);
+      if (!targetId) return [];
+      if (committedPolicyByTarget[targetId] !== 'high_assurance') return [];
+      if (!structuredGraduationByTarget[targetId]) return [];
+      const pkg = PROTOTYPE_PACKAGE_BY_SENSE.get(senseId);
+      const item = storageService.getFSRSItems()[senseId];
+      if (!pkg || !item) return [];
+      const relearning = storageService.getRelearningCycle(senseId);
+      return [{
+        package: pkg,
+        dueAt: item.due,
+        reps: item.reps,
+        lapses: item.lapses,
+        phase: relearning || item.state === 'relearning'
+          ? 'relearning' as const
+          : 'retaining' as const,
+        relearning,
+      }];
+    });
+  }, [committedPolicyByTarget, declaredMasterySenseIds, structuredGraduationByTarget]);
+
+  const highAssuranceReviewCandidates = getReviewCandidates();
+  const highAssuranceReviewSenseIds = new Set(
+    highAssuranceReviewCandidates.map((candidate) => candidate.package.senseId),
+  );
+  const structuredReviewDueTargetIds = visibleLearningTargetIds.filter((targetId) => {
+    const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
+    return structuredGraduationByTarget[targetId] !== undefined
+      && senseId !== null
+      && highAssuranceReviewSenseIds.has(senseId);
+  });
+  const structuredRelearningSenseIds = new Set(
+    highAssuranceReviewCandidates
+      .filter((candidate) => candidate.phase === 'relearning')
+      .map((candidate) => candidate.package.senseId),
+  );
+  const structuredRelearningTargetIds = structuredReviewDueTargetIds.filter((targetId) => {
+    const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
+    return senseId !== null && structuredRelearningSenseIds.has(senseId);
+  });
+  const targetIdsForRetentionStatuses = (
+    ...statuses: readonly RetentionRuntimeTargetStatus[]
+  ): PrototypeLearningTargetId[] => retentionRuntimeProjection.targets.flatMap((target) => {
+    const targetId = TARGET_ID_BY_RUNTIME_SENSE.get(target.senseId);
+    return targetId && statuses.includes(target.status) ? [targetId] : [];
+  });
+  const structuredReviewingTargetIds = targetIdsForRetentionStatuses('reviewing');
+  const structuredRelearningRepairTargetIds = targetIdsForRetentionStatuses('relearning_repair');
+  const structuredRelearningRetestTargetIds = targetIdsForRetentionStatuses('relearning_retest');
+  const highAssuranceReviewCount = Math.min(reviewN, highAssuranceReviewCandidates.length);
+  const totalReviewCount = highAssuranceReviewCount + lightweightDueTargetIds.length;
+
+  const beginInitialTargetRuntime = useCallback((targetId: PrototypeLearningTargetId) => {
+    if (!addedLearningTargetIds.has(targetId)) {
+      toast('请先把这条目标加入学习');
+      return false;
     }
-    return batch;
-  }, [dailyNewCount]);
+    if (committedPolicyByTarget[targetId]) {
+      toast('这条目标已经创建过首次学习运行');
+      return false;
+    }
 
-  // 开始学习当前组：即时初始化队列并切入独立学习流
-  const startLearn = useCallback((offset = wordOffset) => {
+    const policy = effectivePolicyForTarget(
+      targetId,
+      defaultLearningPolicy,
+      addedLearningTargetIds,
+      learningPolicyByTarget,
+      committedPolicyByTarget,
+    );
+    const preparation = preparationForTarget(targetId, policy, preparationByTarget);
+    if (preparation !== 'ready') {
+      toast(preparation === 'preparing' ? '学习内容仍在准备中' : '当前学习方式还不能开始');
+      return false;
+    }
+
     closeMenus();
     setIsExampleOpen(false);
+    setDemoWord(null);
+    setDemoPackage(null);
+    setDemoReviewKind(null);
+
+    if (policy === 'lightweight') {
+      setCommittedPolicyByTarget((current) => ({ ...current, [targetId]: policy }));
+      setActiveLightweightRuntimeTargetId(targetId);
+      setViewMode('lightweight');
+      return true;
+    }
+
+    const structuredTargetIds = [...new Set([targetId, ...todayInitialTargetIds])]
+      .filter((candidateId) => {
+        if (committedPolicyByTarget[candidateId]) return false;
+        const candidate = PROTOTYPE_LEARNING_TARGETS[candidateId];
+        const candidatePolicy = effectivePolicyForTarget(
+          candidateId,
+          defaultLearningPolicy,
+          addedLearningTargetIds,
+          learningPolicyByTarget,
+          committedPolicyByTarget,
+        );
+        return candidatePolicy === 'high_assurance'
+          && preparationForTarget(candidateId, candidatePolicy, preparationByTarget) === 'ready'
+          && runtimePackageForTarget(candidate) !== null;
+      });
+    const runtimePackages = structuredTargetIds.map((candidateId) =>
+      runtimePackageForTarget(PROTOTYPE_LEARNING_TARGETS[candidateId])!);
+    if (runtimePackages.length === 0) {
+      toast('高保证学习内容尚未完整接入');
+      return false;
+    }
+    const firstSession = startLearnQueue(runtimePackages);
+    if (!firstSession) {
+      toast('首次学习运行创建失败');
+      return false;
+    }
+    setCommittedPolicyByTarget((current) => {
+      const next = { ...current };
+      structuredTargetIds.forEach((candidateId) => {
+        next[candidateId] = 'high_assurance';
+      });
+      return next;
+    });
+    setActiveStructuredTargetIds(structuredTargetIds);
+    setStructuredRuntimeSummary(null);
+    setActiveLightweightRuntimeTargetId(null);
+    setRevealPresentation('compact');
+    setRecognitionPresentation('sensa');
+    setRecallPresentation('sensa');
+    setNovelTransferPresentation('sensa');
+    setReviewPresentation('sensa');
+    setExamplePresentation('sensa');
     setFlowType('learn');
-    const currentBatch = getWordBatch(offset, dailyNewCount);
-    startLearnQueue(currentBatch);
     setViewMode('study');
-  }, [wordOffset, dailyNewCount, getWordBatch, closeMenus, startLearnQueue]);
+    return true;
+  }, [
+    addedLearningTargetIds,
+    closeMenus,
+    committedPolicyByTarget,
+    defaultLearningPolicy,
+    learningPolicyByTarget,
+    preparationByTarget,
+    startLearnQueue,
+    todayInitialTargetIds,
+    toast,
+  ]);
+
+  const continueCommittedTargetRuntime = useCallback((targetId: PrototypeLearningTargetId) => {
+    const committedPolicy = committedPolicyByTarget[targetId];
+    if (!committedPolicy) return;
+    if (committedPolicy === 'lightweight') {
+      if (lightweightCompletionByTarget[targetId]) {
+        toast('首次学习已经完成，等待进入长期复习');
+        return;
+      }
+      setActiveLightweightRuntimeTargetId(targetId);
+      setViewMode('lightweight');
+      return;
+    }
+    const target = PROTOTYPE_LEARNING_TARGETS[targetId];
+    if (target.runtimeSenseId && declaredMasterySenseIds.has(target.runtimeSenseId)) {
+      toast('这条目标已声明为熟词，不再进入正式学习计划');
+      return;
+    }
+    if (structuredGraduationByTarget[targetId]) {
+      toast('高保证首次学习已经完成，当前处于长期保持阶段');
+      return;
+    }
+    if (activeStructuredTargetIds.includes(targetId) && !queueDone) {
+      setViewMode('study');
+      return;
+    }
+    toast('首次学习已结束，之后会按计划进入复习');
+  }, [
+    activeStructuredTargetIds,
+    committedPolicyByTarget,
+    declaredMasterySenseIds,
+    learnSession,
+    lightweightCompletionByTarget,
+    queueDone,
+    structuredGraduationByTarget,
+    toast,
+  ]);
+
+  // 开始第一个可运行的 Target；运行创建成功才会提交并锁定 Policy。
+  const startLearn = useCallback(() => {
+    pendingMixedTargetRef.current = null;
+    const nextTargetId = todayInitialTargetIds[0];
+    if (!nextTargetId) {
+      toast('当前没有准备完成的新学习目标');
+      return;
+    }
+    beginInitialTargetRuntime(nextTargetId);
+  }, [beginInitialTargetRuntime, todayInitialTargetIds, toast]);
 
   // 继续学习下一组
   const handleContinueNextGroup = useCallback(() => {
-    const nextOffset = (wordOffset + dailyNewCount) % WORDS.length;
-    setWordOffset(nextOffset);
-    startLearn(nextOffset);
-  }, [wordOffset, dailyNewCount, startLearn]);
+    startLearn();
+  }, [startLearn]);
 
   // 开始真实复习流程 (全量到期流式复习)
   const startReview = useCallback(() => {
+    pendingMixedTargetRef.current = null;
     closeMenus();
     setIsExampleOpen(false);
-    const dueWords = storageService.getDueWords(WORDS);
-    if (dueWords.length === 0) {
-      toast('今日暂无待复习单词，先去学新词吧');
+    setDemoWord(null);
+    setDemoPackage(null);
+    setDemoReviewKind(null);
+    if (lightweightDueTargetIds.length > 0) {
+      setActiveLightweightReviewTargetIds(lightweightDueTargetIds);
+      setViewMode('lightweightReview');
+      toast(`开始轻量复习：共 ${lightweightDueTargetIds.length} 个意思`);
+      return;
+    }
+    const dueCandidates = getReviewCandidates();
+    if (dueCandidates.length === 0) {
+      toast('今天没有到期的意思，可以开始今日学习');
       return;
     }
     setFlowType('review');
-    startReviewQueue(dueWords);
+    setStructuredRetentionSummary(null);
+    startReviewQueue(dueCandidates);
     setViewMode('study');
-    toast(`开始今日复习：共 ${dueWords.length} 词`);
-  }, [closeMenus, startReviewQueue, toast]);
+    toast(`开始今日复习：共 ${dueCandidates.length} 个意思`);
+  }, [closeMenus, getReviewCandidates, lightweightDueTargetIds, startReviewQueue, toast]);
+
+  // MVP Mixed intent uses the same two proven runtimes in sequence: due Review
+  // comes first, then ready Acquisition continues without returning home.
+  const startMixedLearning = useCallback(() => {
+    closeMenus();
+    setIsExampleOpen(false);
+    setDemoWord(null);
+    setDemoPackage(null);
+    setDemoReviewKind(null);
+
+    const dueCandidates = getReviewCandidates();
+    const newTargetIds = [...todayInitialTargetIds];
+
+    if (lightweightDueTargetIds.length > 0) {
+      pendingMixedTargetRef.current = newTargetIds.length > 0 ? newTargetIds : null;
+      setActiveLightweightReviewTargetIds(lightweightDueTargetIds);
+      setViewMode('lightweightReview');
+      toast(`进入今日学习流：先复习 ${lightweightDueTargetIds.length} 个意思`);
+      return;
+    }
+
+    if (dueCandidates.length > 0) {
+      pendingMixedTargetRef.current = newTargetIds.length > 0 ? newTargetIds : null;
+      setFlowType('review');
+      setStructuredRetentionSummary(null);
+      startReviewQueue(dueCandidates);
+      setViewMode('study');
+      toast(`进入今日学习流：先复习 ${dueCandidates.length} 个意思`);
+      return;
+    }
+
+    pendingMixedTargetRef.current = null;
+    if (newTargetIds[0]) {
+      beginInitialTargetRuntime(newTargetIds[0]);
+      return;
+    }
+
+    toast('今天的学习流已经完成，可以去自由练习');
+  }, [
+    beginInitialTargetRuntime,
+    closeMenus,
+    getReviewCandidates,
+    lightweightDueTargetIds,
+    startReviewQueue,
+    todayInitialTargetIds,
+    toast,
+  ]);
 
   // 退出学习回首页
   const exitLearn = useCallback(() => {
+    pendingMixedTargetRef.current = null;
     setIsExampleOpen(false);
     closeMenus();
+    setDemoPackage(null);
     setViewMode('main');
     resetMain();
     refreshReviewCount();
   }, [closeMenus, resetMain, refreshReviewCount]);
 
-  // 演示跳转 showStage (1~10 阶段)
+  const exitLightweightRuntime = useCallback(() => {
+    setViewMode('main');
+    setMainStack(['s-study', 's-learning-library', 's-learning-target']);
+  }, []);
+
+  const completeLightweightRuntime = useCallback((
+    rating: Exclude<PrototypeLightweightRating, 'again'>,
+  ) => {
+    if (!activeLightweightRuntimeTargetId) return;
+    const completedAt = new Date().toISOString();
+    setLightweightCompletionByTarget((current) => ({
+      ...current,
+      [activeLightweightRuntimeTargetId]: {
+        rating,
+        completedAt,
+        // Prototype time is compressed so the first Review can be walked immediately.
+        // Production gets this timestamp from the authoritative Scheduling Handoff.
+        nextReviewAt: completedAt,
+        nextReviewLabel: '现在可复习（原型）',
+        reviewCount: 0,
+        lapseCount: 0,
+        relearning: false,
+      },
+    }));
+  }, [activeLightweightRuntimeTargetId]);
+
+  const finishLightweightRuntime = useCallback(() => {
+    setActiveLightweightRuntimeTargetId(null);
+    setViewMode('main');
+    resetMain();
+    toast('首次学习已完成，之后会按计划进入复习');
+  }, [resetMain, toast]);
+
+  const exitLightweightReview = useCallback(() => {
+    setViewMode('main');
+    resetMain();
+  }, [resetMain]);
+
+  const completeLightweightReviewTarget = useCallback((
+    targetId: PrototypeLearningTargetId,
+    rating: PrototypeLightweightRating,
+  ) => {
+    const reviewedAt = new Date();
+    const schedule = LIGHTWEIGHT_REVIEW_SCHEDULE[rating];
+    setLightweightCompletionByTarget((current) => {
+      const completion = current[targetId]!;
+      return {
+        ...current,
+        [targetId]: {
+          ...completion,
+          lastReviewRating: rating,
+          lastReviewedAt: reviewedAt.toISOString(),
+          nextReviewAt: new Date(reviewedAt.getTime() + schedule.delayMs).toISOString(),
+          nextReviewLabel: schedule.nextReviewLabel,
+          reviewCount: completion.reviewCount + 1,
+          lapseCount: completion.lapseCount + (rating === 'again' ? 1 : 0),
+          relearning: rating === 'again',
+        },
+      };
+    });
+  }, []);
+
+  const completeLightweightReviewRepair = useCallback((
+    targetId: PrototypeLearningTargetId,
+  ) => {
+    setLightweightCompletionByTarget((current) => ({
+      ...current,
+      [targetId]: {
+        ...current[targetId]!,
+        relearning: false,
+      },
+    }));
+  }, []);
+
+  // 演示跳转：新学卡 + 长期 Review 评测目录
   const showStage = useCallback((stageNum: number) => {
     closeMenus();
     setIsExampleOpen(false);
     setViewMode('study');
     setFlowType('demo');
+    setDemoReviewResult(null);
 
-    const base = { ...WORDS[0] };
+    const basePackage = PROTOTYPE_LEARNING_PACKAGES[0];
+    if (!basePackage) return;
+    setDemoPackage(basePackage);
+    const setDemoPresentation = (level: number, isMastered = false) => {
+      setDemoWord({
+        ...toWordPresentation(basePackage.content),
+        level,
+        badge: '',
+        isMastered,
+      });
+    };
+    const boundaryPackage = PROTOTYPE_LEARNING_PACKAGES.find(
+      (pkg) => pkg.content.boundaryContrast !== null,
+    ) ?? basePackage;
 
     switch (stageNum) {
       case 1:
-        base.level = 0;
-        base.badge = '';
-        base.isMastered = false;
-        overrideDemoQueue(base, 'choice', 7, 20);
+        setDemoStage('introduction');
+        setDemoPresentation(0);
+        overrideDemoQueue(basePackage, 'introduction', 1, 4);
         toast('已切换至：① 第一次遇见');
         break;
       case 2:
-        base.level = 1;
-        base.badge = '';
-        base.isMastered = false;
-        overrideDemoQueue(base, 'detail', 7, 20);
-        toast('已切换至：② 第一次答对');
+        setDemoStage('recognition');
+        setDemoPresentation(1);
+        overrideDemoQueue(basePackage, 'contextual_recognition', 2, 4);
+        toast('已切换至：② 语境判断');
         break;
       case 3:
-        base.level = 1;
-        base.badge = '';
-        base.isMastered = false;
-        overrideDemoQueue(base, 'recall', 9, 20);
-        toast('已切换至：③ 第二次初遇见');
+        setDemoStage('recall');
+        setDemoPresentation(2);
+        overrideDemoQueue(basePackage, 'meaning_to_form_recall', 3, 4);
+        toast('已切换至：③ 从意思想起表达');
         break;
       case 4:
-        base.level = 2;
-        base.badge = '2';
-        base.isMastered = false;
-        overrideDemoQueue(base, 'detail', 9, 20);
-        toast('已切换至：④ 第二次答对');
+        setDemoStage('transfer');
+        setDemoPresentation(3);
+        overrideDemoQueue(basePackage, 'novel_context_transfer', 4, 4);
+        toast('已切换至：④ 新语境迁移');
         break;
       case 5:
-        base.level = 2;
-        base.badge = '';
-        base.isMastered = false;
-        overrideDemoQueue(base, 'audio_choice', 13, 20);
+        setDemoStage('audio_choice');
+        setDemoPresentation(2);
+        overrideDemoQueue(basePackage, 'contextual_recognition', 13, 20);
         toast('已切换至：⑤ 第三次初遇见 (听音选义)');
         break;
       case 6:
-        base.level = 3;
-        base.badge = '3';
-        base.isMastered = false;
-        overrideDemoQueue(base, 'detail', 13, 20);
+        setDemoStage('detail');
+        setDemoWord({ ...toWordPresentation(basePackage.content), level: 3, badge: '3', isMastered: false });
+        overrideDemoQueue(basePackage, 'meaning_to_form_recall', 13, 20);
         toast('已切换至：⑥ 第三次答对');
         break;
       case 7:
-        base.level = 3;
-        base.badge = '';
-        base.isMastered = false;
-        overrideDemoQueue(base, 'final_gate', 18, 20);
+        setDemoStage('final_gate');
+        setDemoPresentation(3);
+        overrideDemoQueue(basePackage, 'novel_context_transfer', 18, 20);
         toast('已切换至：⑦ 第4次遇见 (终极回想)');
         break;
       case 8:
-        base.level = 4;
-        base.isMastered = true;
-        base.badge = '';
-        overrideDemoQueue(base, 'detail', 19, 20);
+        setDemoStage('detail');
+        setDemoPresentation(4, true);
+        overrideDemoQueue(basePackage, 'novel_context_transfer', 19, 20);
         toast('已切换至：⑧ 最后一次答对 (成功掌握)');
         break;
       case 9:
-        base.level = undefined;
-        base.badge = '';
-        base.isMastered = false;
-        overrideDemoQueue(base, 'review_recall', 3, 15);
-        toast('已切换至：复习提问态 (图1)');
+        setDemoStage('review_assessment');
+        setDemoPresentation(4, true);
+        setDemoReviewKind('context_recognition');
+        overrideDemoQueue(basePackage, 'contextual_recognition', 1, 1);
+        toast('已切换至：Review · 语境判断');
         break;
       case 10:
-        base.level = 4;
-        base.badge = '';
-        base.isMastered = true;
-        overrideDemoQueue(base, 'detail', 4, 15);
-        toast('已切换至：复习答后详情态 (图2)');
+        setDemoStage('review_assessment');
+        setDemoPresentation(4, true);
+        setDemoReviewKind('meaning_to_form_recall');
+        overrideDemoQueue(basePackage, 'meaning_to_form_recall', 1, 1);
+        toast('已切换至：Review · 意思到表达');
         break;
+      case 11:
+        setDemoStage('review_assessment');
+        setDemoPresentation(4, true);
+        setDemoReviewKind('novel_context_transfer');
+        overrideDemoQueue(basePackage, 'novel_context_transfer', 1, 1);
+        toast('已切换至：Review · 新语境迁移');
+        break;
+      case 12:
+        setDemoStage('review_assessment');
+        setDemoPackage(boundaryPackage);
+        setDemoWord({ ...toWordPresentation(boundaryPackage.content), level: 4, badge: '', isMastered: true });
+        setDemoReviewKind('boundary_contrast');
+        overrideDemoQueue(boundaryPackage, 'boundary_discrimination', 1, 1);
+        toast('已切换至：Review · 真实边界对比');
+        break;
+      case 13: {
+        const recognitionAction = basePackage.actions.find((action) =>
+          action.capability === 'contextual_recognition' && action.taskKey,
+        );
+        if (!recognitionAction?.taskKey) {
+          throw new Error(`Package ${basePackage.packageId} has no Recognition demo resource.`);
+        }
+        const recognitionResource = materializeAssessmentResource({
+          packageIdentity: {
+            packageKey: basePackage.packageId,
+            senseKey: basePackage.senseId,
+          },
+          content: basePackage.content,
+          taskKey: recognitionAction.taskKey,
+          kind: 'context_recognition',
+          capability: 'contextual_recognition',
+        });
+        if (recognitionResource.kind !== 'context_recognition') {
+          throw new Error('Recognition demo must materialize a Recognition resource.');
+        }
+        const incorrectOption = recognitionResource.options.find((option) => !option.isCorrect);
+        if (!incorrectOption) {
+          throw new Error(`Recognition task ${recognitionResource.taskKey} has no incorrect demo option.`);
+        }
+        setDemoStage('review_feedback');
+        setDemoPresentation(4, true);
+        setDemoReviewKind('context_recognition');
+        setDemoReviewResult({
+          assessmentId: `${recognitionResource.taskKey}.action-assessment`,
+          kind: 'context_recognition',
+          focusDimension: '语境辨义',
+          correct: false,
+          responseId: incorrectOption.id,
+          memoryOutcome: 'retrieval_failed',
+          evidenceEligible: true,
+        });
+        overrideDemoQueue(basePackage, 'contextual_recognition', 1, 1);
+        toast('已切换至：统一 Adaptive Feedback / Repair');
+        break;
+      }
       default:
         break;
     }
@@ -305,53 +1315,183 @@ export default function App() {
     }
   }, [settleLearnQueue, toast]);
 
+  const handleCompleteIntroduction = useCallback(() => {
+    if (flowMode === 'demo') {
+      const pkg = learnSession?.package ?? PROTOTYPE_LEARNING_PACKAGES[0];
+      if (!pkg) return;
+      setDemoStage('recognition');
+      setDemoWord({ ...toWordPresentation(pkg.content), level: 1, badge: '', isMastered: false });
+      overrideDemoQueue(pkg, 'contextual_recognition', 2, 4);
+      toast('这个义项已建立初次连接，稍后会在新语境中再次出现');
+      return;
+    }
+    if (flowMode === 'review' && reviewSession?.action.mode === 'repair') {
+      completeReviewRepair();
+      return;
+    }
+    if (flowMode === 'learn' && learnSession?.action.mode === 'repair') {
+      switch (learnSession.action.capability) {
+        case 'contextual_recognition':
+          completeLearnRecognition(true);
+          break;
+        case 'meaning_to_form_recall':
+          completeLearnMeaningToFormRecall('independent');
+          break;
+        case 'novel_context_transfer':
+          completeLearnNovelTransfer('success');
+          break;
+        case 'boundary_discrimination':
+          completeLearnBoundary(true);
+          break;
+        case 'introduction':
+          throw new Error('An Introduction Action cannot be an acquisition repair.');
+      }
+      toast('定向修复已完成，稍后会再次独立检验');
+      return;
+    }
+    completeLearnIntroduction();
+  }, [
+    flowMode,
+    learnSession,
+    reviewSession,
+    overrideDemoQueue,
+    completeReviewRepair,
+    completeLearnRecognition,
+    completeLearnMeaningToFormRecall,
+    completeLearnNovelTransfer,
+    completeLearnBoundary,
+    completeLearnIntroduction,
+    toast,
+  ]);
+
+  const handleCompleteRecognition = useCallback((correct: boolean) => {
+    if (flowMode === 'demo') {
+      const pkg = learnSession?.package ?? PROTOTYPE_LEARNING_PACKAGES[0];
+      if (!pkg) return;
+      setDemoStage(correct ? 'recall' : 'recognition');
+      setDemoWord({ ...toWordPresentation(pkg.content), level: correct ? 2 : 1, badge: '', isMastered: false });
+      overrideDemoQueue(
+        pkg,
+        correct ? 'meaning_to_form_recall' : 'contextual_recognition',
+        (learnSession?.index ?? 2) + 1,
+        learnSession?.totalTarget ?? 4,
+      );
+    } else {
+      completeLearnRecognition(correct);
+    }
+    toast(correct ? '已认出这个意思，继续学习' : '这个区别稍后会换个语境再出现');
+  }, [flowMode, learnSession, overrideDemoQueue, completeLearnRecognition, toast]);
+
   // 看答案
   const handleShowAnswer = useCallback(() => {
     settleLearnQueue(false);
     toast('看了答案：进度已清零，将重新从第 1 关学起');
   }, [settleLearnQueue, toast]);
 
-  // 第二次学习：认识 / 不认识
-  const handlePickRecall = useCallback((known: boolean) => {
-    settleLearnQueue(known);
-    if (known) {
-      toast('👍 认识！掌握度提升至 2 级');
+  const handleCompleteMeaningToFormRecall = useCallback((
+    outcome: MeaningToFormRecallOutcome,
+  ) => {
+    const independentlyRecalled = outcome === 'independent';
+    if (flowMode === 'demo') {
+      const pkg = learnSession?.package ?? PROTOTYPE_LEARNING_PACKAGES[0];
+      if (!pkg) return;
+      setDemoStage(independentlyRecalled ? 'transfer' : 'recall');
+      setDemoWord({
+        ...toWordPresentation(pkg.content),
+        level: independentlyRecalled ? 3 : 2,
+        badge: '',
+        isMastered: false,
+      });
+      overrideDemoQueue(
+        pkg,
+        independentlyRecalled ? 'novel_context_transfer' : 'meaning_to_form_recall',
+        (learnSession?.index ?? 3) + 1,
+        learnSession?.totalTarget ?? 4,
+      );
     } else {
-      toast('不认识：进度已清零，已重新排入队尾');
+      completeLearnMeaningToFormRecall(outcome);
     }
-  }, [settleLearnQueue, toast]);
 
-  // 复习三向作答：认识 / 模糊 / 忘记了
-  const handlePickReviewRecall = useCallback(
-    (type: ReviewAnswerType) => {
-      if (flowMode === 'demo') {
-        const base = learnSession ? { ...learnSession.wordState.word } : { ...WORDS[0] };
-        base.level = 4;
-        base.badge = '';
-        base.isMastered = true;
-        overrideDemoQueue(base, 'detail', (learnSession?.index ?? 3) + 1, learnSession?.totalTarget ?? 15);
-        if (type === 'known') toast('👍 认识！巩固记忆成功');
-        else if (type === 'vague') toast('🤔 模糊：查看详细释义与例句强化巩固');
-        else toast('忘记了：已安排强化巩固，先复习完整释义');
-      } else {
-        settleReviewQueue(type);
-        if (type === 'known') {
-          toast('👍 认识！FSRS 记忆稳定性提升');
-        } else if (type === 'vague') {
-          toast('🤔 模糊：记忆稳定性适度微增');
-        } else {
-          toast('忘记了：已排入当场复习队尾重测');
-        }
-      }
-    },
-    [flowMode, learnSession, overrideDemoQueue, settleReviewQueue, toast]
-  );
+    toast(
+      independentlyRecalled
+        ? '已经独立想起这个表达，继续学习'
+        : '这个连接已修复，稍后会再试一次独立回想',
+    );
+  }, [
+    flowMode,
+    learnSession,
+    overrideDemoQueue,
+    completeLearnMeaningToFormRecall,
+    toast,
+  ]);
+
+  const handleCompleteNovelTransfer = useCallback((outcome: NovelTransferOutcome) => {
+    const succeeded = outcome === 'success';
+    if (flowMode === 'demo') {
+      const pkg = learnSession?.package ?? PROTOTYPE_LEARNING_PACKAGES[0];
+      if (!pkg) return;
+      setDemoStage(succeeded ? 'detail' : 'transfer');
+      setDemoWord({
+        ...toWordPresentation(pkg.content),
+        level: succeeded ? 4 : 3,
+        badge: '',
+        isMastered: succeeded,
+      });
+      overrideDemoQueue(
+        pkg,
+        'novel_context_transfer',
+        (learnSession?.index ?? 4) + 1,
+        learnSession?.totalTarget ?? 4,
+        succeeded ? 0 : (learnSession?.transferScenarioIndex ?? 0) + 1,
+      );
+    } else {
+      completeLearnNovelTransfer(outcome);
+    }
+
+    toast(
+      succeeded
+        ? '已完成这次新义项学习，后续进入长期记忆调度'
+        : '这个迁移已修复，稍后会换一个新场景再试',
+    );
+  }, [flowMode, learnSession, overrideDemoQueue, completeLearnNovelTransfer, toast]);
+
+  const handleCompleteReviewAssessment = useCallback((result: ReviewAssessmentResult) => {
+    const actionTaskKey = flowMode === 'review'
+      ? reviewSession?.action.taskKey
+      : learnSession?.action.taskKey;
+    if (actionTaskKey && result.assessmentId !== `${actionTaskKey}.action-assessment`) {
+      throw new Error('Submitted Review result does not match the current Action task.');
+    }
+    // The card may include a provisional memoryOutcome/evidence flag. Derive
+    // the user-facing branch from the closed kind + correctness contract; the
+    // ReviewQueue independently canonicalizes the persisted result as well.
+    const canonicalMemoryOutcome = resolveReviewMemoryOutcome(result.kind, result.correct);
+    if (flowMode === 'demo') {
+      const pkg = learnSession?.package ?? PROTOTYPE_LEARNING_PACKAGES[0];
+      if (!pkg) return;
+      setDemoReviewKind(result.kind);
+      setDemoReviewResult(result);
+      setDemoStage('review_feedback');
+      setDemoWord({ ...toWordPresentation(pkg.content), level: 4, badge: '', isMastered: true });
+    } else if (flowMode === 'learn' && learnSession?.action.capability === 'boundary_discrimination') {
+      completeLearnBoundary(result.correct);
+    } else {
+      settleReviewQueue(result);
+    }
+    toast(
+      result.correct
+        ? canonicalMemoryOutcome === 'transfer_confirmed'
+          ? '新语境迁移成立，本次复习已结算一次'
+          : '已独立提取，本次复习已结算一次'
+        : '本次记录为提取失败，接下来只做定向修复',
+    );
+  }, [flowMode, learnSession, reviewSession, completeLearnBoundary, settleReviewQueue, toast]);
 
   // 第4次学习：终极回想 认识 / 不认识
   const handlePickFinalGate = useCallback((known: boolean) => {
     settleLearnQueue(known);
     if (known) {
-      toast('🎉 该词已完成全部 4 次学习，成功掌握！');
+      toast('这个义项已完成当前原型流程，后续由系统安排再次出现');
     } else {
       toast('不认识：进度已清零，已重新排入队尾');
     }
@@ -360,25 +1500,55 @@ export default function App() {
   // 记错了（误判纠错）
   const handleMarkMistake = useCallback(() => {
     if (flowMode === 'review') {
-      markMistakeReviewQueue();
-      toast('已标记为「记错了」，已排入队尾重测');
+      toast('长期复习由本次独立检验结算，不再用“记错了”重复打分');
     } else {
       markMistakeLearnQueue();
       toast('已标记为「记错了」，掌握度已清零并重新排入队尾');
     }
-  }, [flowMode, markMistakeReviewQueue, markMistakeLearnQueue, toast]);
+  }, [flowMode, markMistakeLearnQueue, toast]);
 
   // 熟词标记
   const handleMarkKnown = useCallback(() => {
-    if (flowMode === 'review') {
-      markMatureReviewQueue();
-      toast('已标记为熟词并移出复习队列');
-      refreshReviewCount();
-    } else {
+    if (flowMode === 'demo') {
       markKnownLearnQueue();
       toast('已标记为熟词，本组内不再出现');
+      return;
     }
-  }, [flowMode, markMatureReviewQueue, markKnownLearnQueue, refreshReviewCount, toast]);
+    const senseId = flowMode === 'review'
+      ? reviewSession?.package.senseId
+      : learnSession?.package.senseId;
+    if (!senseId) return;
+    setDeclaredMasterySenseIds((current) => {
+      const next = new Set(current);
+      next.add(senseId);
+      return next;
+    });
+    if (flowMode === 'review') {
+      excludeCurrentReviewForDeclaredMastery();
+    } else {
+      markKnownLearnQueue();
+    }
+    toast('已标记为熟词，本组内不再出现');
+  }, [
+    excludeCurrentReviewForDeclaredMastery,
+    flowMode,
+    learnSession,
+    markKnownLearnQueue,
+    reviewSession,
+    toast,
+  ]);
+
+  const revokeDeclaredMastery = useCallback((targetId: PrototypeLearningTargetId) => {
+    const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
+    if (!senseId) return;
+    setDeclaredMasterySenseIds((current) => {
+      const next = new Set(current);
+      next.delete(senseId);
+      return next;
+    });
+    setLearnDeclaredMastery(senseId, false);
+    toast('已撤销熟词声明，这条目标会按原有进度恢复计划资格');
+  }, [setLearnDeclaredMastery, toast]);
 
   // 撤回上一词
   const handleUndoWord = useCallback(() => {
@@ -399,53 +1569,128 @@ export default function App() {
     }
   }, [flowMode, undoReviewQueue, undoLearnQueue, toast]);
 
+  const continueMixedAfterReview = useCallback(() => {
+    const pendingTargetIds = pendingMixedTargetRef.current;
+    if (!pendingTargetIds?.length) return false;
+
+    pendingMixedTargetRef.current = null;
+    setIsExampleOpen(false);
+    const started = beginInitialTargetRuntime(pendingTargetIds[0]);
+    if (started) toast('到期复习已完成，继续建立新的意思连接');
+    return started;
+  }, [beginInitialTargetRuntime, toast]);
+
+  const finishStructuredRetentionRuntime = useCallback(() => {
+    refreshReviewCount();
+    if (continueMixedAfterReview()) return;
+
+    setStructuredRetentionSummary({
+      retainingTargetIds: retentionRuntimeProjection.targets.flatMap((target) => {
+        const targetId = TARGET_ID_BY_RUNTIME_SENSE.get(target.senseId);
+        return targetId && target.status === 'retaining' && !target.relearningCompleted
+          ? [targetId]
+          : [];
+      }),
+      relearningCompletedTargetIds: retentionRuntimeProjection.targets.flatMap((target) => {
+        const targetId = TARGET_ID_BY_RUNTIME_SENSE.get(target.senseId);
+        return targetId && target.status === 'retaining' && target.relearningCompleted
+          ? [targetId]
+          : [];
+      }),
+      declaredMasteryTargetIds: retentionRuntimeProjection.targets.flatMap((target) => {
+        const targetId = TARGET_ID_BY_RUNTIME_SENSE.get(target.senseId);
+        return targetId && target.status === 'declared_mastery' ? [targetId] : [];
+      }),
+    });
+    setViewMode('finish');
+  }, [continueMixedAfterReview, refreshReviewCount, retentionRuntimeProjection]);
+
+  const finishLightweightReview = useCallback(() => {
+    setActiveLightweightReviewTargetIds([]);
+    const remainingHighAssuranceReviews = getReviewCandidates();
+    if (remainingHighAssuranceReviews.length > 0) {
+      setFlowType('review');
+      setStructuredRetentionSummary(null);
+      startReviewQueue(remainingHighAssuranceReviews);
+      setViewMode('study');
+      toast(`轻量复习已完成，继续处理 ${remainingHighAssuranceReviews.length} 个高保证复习`);
+      return;
+    }
+    if (continueMixedAfterReview()) return;
+    setViewMode('main');
+    resetMain();
+    toast('今天的到期复习已完成');
+  }, [continueMixedAfterReview, getReviewCandidates, resetMain, startReviewQueue, toast]);
+
   // 下一词
   const handleNextWord = useCallback(() => {
     if (flowMode === 'review') {
       if (reviewDone) {
         setIsExampleOpen(false);
-        refreshReviewCount();
-        setViewMode('finish');
+        finishStructuredRetentionRuntime();
         return;
       }
       nextReviewQueue();
     } else {
       if (queueDone) {
         setIsExampleOpen(false);
-        const currentBatch = getWordBatch(wordOffset, dailyNewCount);
-        currentBatch.forEach((w) => {
-          storageService.graduateWord(w.id || `w_${w.w}`, 0);
-        });
-        refreshReviewCount();
+        persistGraduatedSenses();
         setViewMode('finish');
         return;
       }
       nextLearnQueue();
     }
-  }, [flowMode, reviewDone, queueDone, nextReviewQueue, nextLearnQueue, getWordBatch, wordOffset, dailyNewCount, refreshReviewCount]);
+  }, [
+    flowMode,
+    reviewDone,
+    queueDone,
+    nextReviewQueue,
+    nextLearnQueue,
+    persistGraduatedSenses,
+    finishStructuredRetentionRuntime,
+  ]);
+
+  const handleContinueReviewFeedback = useCallback(() => {
+    if (flowMode === 'demo') {
+      const pkg = learnSession?.package ?? PROTOTYPE_LEARNING_PACKAGES[0];
+      if (!pkg) return;
+      setDemoReviewResult(null);
+      setDemoStage('review_assessment');
+      setDemoWord({ ...toWordPresentation(pkg.content), level: 4, badge: '', isMastered: true });
+      overrideDemoQueue(pkg, 'contextual_recognition', 1, 1);
+      toast('可从右侧 Review 目录继续查看其他评测卡');
+      return;
+    }
+    handleNextWord();
+  }, [flowMode, learnSession, overrideDemoQueue, handleNextWord, toast]);
 
   // 监听整组学习完成或复习完成自动切至结算页
   useEffect(() => {
     if (viewMode === 'study') {
       if (flowMode === 'learn' && queueDone && (!learnSession || learnSession.settled)) {
         setIsExampleOpen(false);
-        const currentBatch = getWordBatch(wordOffset, dailyNewCount);
-        currentBatch.forEach((w) => {
-          storageService.graduateWord(w.id || `w_${w.w}`, 0);
-        });
-        refreshReviewCount();
+        persistGraduatedSenses();
         setViewMode('finish');
       } else if (flowMode === 'review' && reviewDone && (!reviewSession || reviewSession.settled)) {
         setIsExampleOpen(false);
-        refreshReviewCount();
-        setViewMode('finish');
+        finishStructuredRetentionRuntime();
       }
     }
-  }, [queueDone, reviewDone, viewMode, flowMode, learnSession, reviewSession, getWordBatch, wordOffset, dailyNewCount, refreshReviewCount]);
+  }, [
+    queueDone,
+    reviewDone,
+    viewMode,
+    flowMode,
+    learnSession,
+    reviewSession,
+    persistGraduatedSenses,
+    finishStructuredRetentionRuntime,
+  ]);
 
   // 打开例句卡
-  const handleOpenExample = useCallback((senseIdx: number = 0) => {
+  const handleOpenExample = useCallback((senseIdx: number = 0, sentenceIdx: number = 0) => {
     setSelectedSenseIdx(senseIdx);
+    setSelectedSentenceIdx(sentenceIdx);
     setIsExampleOpen(true);
   }, []);
 
@@ -455,19 +1700,226 @@ export default function App() {
   }, []);
 
   // 当前用于渲染的词与阶段
-  const currentWord: Word =
-    flowMode === 'review' && reviewSession
-      ? reviewSession.word
-      : learnSession
-      ? learnSession.wordState.word
-      : WORDS[0];
+  const currentPackage: RuntimePackage | null = flowMode === 'demo' && demoPackage
+    ? demoPackage
+    : flowMode === 'review' && reviewSession
+    ? reviewSession.package as RuntimePackage
+    : learnSession
+    ? learnSession.package as RuntimePackage
+    : PROTOTYPE_LEARNING_PACKAGES[0] ?? null;
+  const rawIntroductionContent = currentPackage?.content ?? null;
+  const currentRepairAction = flowMode === 'review'
+    ? reviewSession?.action ?? null
+    : flowMode === 'learn'
+    ? learnSession?.action ?? null
+    : null;
+  const currentIntroductionContent = currentPackage
+    ? currentRepairAction?.mode === 'repair'
+      ? materializeReviewRepairContent(rawIntroductionContent!, currentRepairAction.repairResourceRef)
+      : currentPackage.content
+    : null;
+  const currentWord: Word = flowMode === 'demo' && demoWord
+    ? demoWord
+    : currentIntroductionContent ? toWordPresentation(currentIntroductionContent) : {
+      id: 'runtime-empty',
+      w: '',
+      syl: '',
+      ph: '',
+      total: 0,
+      def: '',
+      senses: [],
+      options: [],
+      sentences: [],
+      mnemo: {},
+    };
 
-  const currentStage: LearningStage =
-    flowMode === 'review' && reviewSession
-      ? reviewSession.stage
-      : learnSession
-      ? learnSession.stage
-      : 'choice';
+  const currentStage: RuntimeLearningStage = flowMode === 'demo'
+    ? demoStage
+    : flowMode === 'review' && reviewSession
+    ? reviewSession.action.mode === 'repair'
+      ? 'review_repair'
+      : reviewSession.stage
+    : learnSession
+    ? learnSession.action.mode === 'repair'
+      ? 'review_repair'
+      : stageForCapability(learnSession.action.capability)
+    : 'introduction';
+
+  // The remaining baseline-only stages stay available from the side-panel
+  // comparison controls, but are rendered outside the formal LearnScreen.
+  const isLegacyLearningDemoStage = flowMode === 'demo'
+    && (currentStage === 'audio_choice'
+      || currentStage === 'detail'
+      || currentStage === 'final_gate');
+
+  const currentIntroductionPosition = currentIntroductionContent
+    ? PROTOTYPE_INTRODUCTION_PACKAGES.findIndex(
+        (content) => content.packageKey === currentIntroductionContent.packageKey,
+      ) + 1
+    : 0;
+
+  const currentReviewAssessmentKind = flowMode === 'review'
+    ? reviewSession?.assessmentKind ?? null
+    : flowMode === 'demo'
+    ? demoReviewKind
+    : learnSession?.action.capability === 'boundary_discrimination'
+    ? reviewKindForCapability(learnSession.action.capability)
+    : null;
+
+  const currentReviewAssessmentTaskKey = flowMode === 'review'
+    ? reviewSession?.action.taskKey ?? null
+    : learnSession?.action.taskKey ?? null;
+
+  const currentAssessmentPackageIdentity = currentPackage
+    ? {
+        packageKey: currentPackage.packageId,
+        senseKey: currentPackage.senseId,
+      }
+    : null;
+
+  const currentReviewAssessmentResult = flowMode === 'review'
+    ? reviewSession?.result ?? null
+    : flowMode === 'demo'
+    ? demoReviewResult
+    : null;
+
+  const currentStructuredTargetProjection = flowMode === 'learn'
+    ? structuredAcquisitionProjection.targets.find((target) =>
+        target.senseId === structuredAcquisitionProjection.currentAction?.senseId) ?? null
+    : null;
+  const currentStructuredTargetId = structuredAcquisitionProjection.currentAction
+    ? TARGET_ID_BY_RUNTIME_SENSE.get(structuredAcquisitionProjection.currentAction.senseId) ?? null
+    : null;
+  const currentStructuredTarget = currentStructuredTargetId
+    ? PROTOTYPE_LEARNING_TARGETS[currentStructuredTargetId]
+    : null;
+  const structuredRuntimeStatus: StructuredRuntimeStatusView | null =
+    flowMode === 'learn'
+    && structuredAcquisitionProjection.currentAction
+    && currentStructuredTargetProjection
+    && currentPackage
+      ? {
+          targetLabel: currentStructuredTarget?.expression ?? currentPackage.content.lemma,
+          targetMeaning: currentStructuredTarget?.meaning ?? currentPackage.content.guideLabelL1,
+          targetPosition: Math.max(
+            1,
+            currentStructuredTargetId
+              ? activeStructuredTargetIds.indexOf(currentStructuredTargetId) + 1
+              : structuredAcquisitionProjection.targets.findIndex((target) =>
+                  target.senseId === currentStructuredTargetProjection.senseId) + 1,
+          ),
+          targetCount: structuredAcquisitionProjection.targets.length,
+          graduatedCount: structuredAcquisitionProjection.targets.filter((target) => target.graduated).length,
+          actionLabel: STRUCTURED_ACTION_LABEL[structuredAcquisitionProjection.currentAction.capability],
+          actionMode: structuredAcquisitionProjection.currentAction.capability === 'introduction'
+            ? 'teaching'
+            : structuredAcquisitionProjection.currentAction.mode === 'repair'
+              ? 'repair'
+              : 'assessment',
+          gates: currentStructuredTargetProjection.gates.map((gate) => ({
+            id: gate.capability,
+            label: STRUCTURED_GATE_LABEL[gate.capability],
+            status: gate.status,
+            repairing: gate.repairing,
+          })),
+        }
+      : null;
+  const currentRetentionTargetProjection = flowMode === 'review'
+    ? retentionRuntimeProjection.targets.find((target) =>
+        target.senseId === retentionRuntimeProjection.currentAction?.senseId) ?? null
+    : null;
+  const currentRetentionTargetId = retentionRuntimeProjection.currentAction
+    ? TARGET_ID_BY_RUNTIME_SENSE.get(retentionRuntimeProjection.currentAction.senseId) ?? null
+    : null;
+  const currentRetentionTarget = currentRetentionTargetId
+    ? PROTOTYPE_LEARNING_TARGETS[currentRetentionTargetId]
+    : null;
+  const retentionRuntimeStatus: RetentionRuntimeStatusView | null =
+    flowMode === 'review'
+    && retentionRuntimeProjection.currentAction
+    && currentRetentionTargetProjection
+    && currentPackage
+      ? {
+          targetLabel: currentRetentionTarget?.expression ?? currentPackage.content.lemma,
+          targetMeaning: currentRetentionTarget?.meaning ?? currentPackage.content.guideLabelL1,
+          targetPosition: Math.max(
+            1,
+            retentionRuntimeProjection.targets.findIndex((target) =>
+              target.senseId === currentRetentionTargetProjection.senseId) + 1,
+          ),
+          targetCount: retentionRuntimeProjection.targets.length,
+          completedCount: retentionRuntimeProjection.targets.filter((target) =>
+            target.status === 'retaining' || target.status === 'declared_mastery').length,
+          actionLabel: STRUCTURED_ACTION_LABEL[retentionRuntimeProjection.currentAction.capability],
+          status: currentRetentionTargetProjection.status,
+        }
+      : null;
+
+  const selectedPrototypeLearningTarget =
+    PROTOTYPE_LEARNING_TARGETS[selectedLearningTargetId];
+  const selectedPrototypeLearningPolicy =
+    effectivePolicyForTarget(
+      selectedLearningTargetId,
+      defaultLearningPolicy,
+      addedLearningTargetIds,
+      learningPolicyByTarget,
+      committedPolicyByTarget,
+    );
+  const selectedPrototypePreparation = preparationForTarget(
+    selectedLearningTargetId,
+    selectedPrototypeLearningPolicy,
+    preparationByTarget,
+  );
+  const selectedCommittedPolicy = committedPolicyByTarget[selectedLearningTargetId] ?? null;
+  const selectedLightweightCompletion = lightweightCompletionByTarget[selectedLearningTargetId];
+  const selectedStructuredGraduation = structuredGraduationByTarget[selectedLearningTargetId];
+  const selectedStructuredRetention = structuredRetentionByTarget[selectedLearningTargetId];
+  const selectedInitialCompletionKind = selectedLightweightCompletion
+    ? 'lightweight' as const
+    : selectedStructuredGraduation
+      ? 'structured' as const
+      : null;
+  const selectedReviewDue = selectedLightweightCompletion
+    ? selectedLightweightCompletion.relearning
+      || Date.parse(selectedLightweightCompletion.nextReviewAt) <= Date.now()
+    : structuredReviewDueTargetIds.includes(selectedLearningTargetId);
+  const selectedRetentionRuntimeState = retentionRuntimeProjection.targets.find((target) =>
+    target.senseId === selectedPrototypeLearningTarget.runtimeSenseId)?.status ?? null;
+  const selectedRelearning = selectedLightweightCompletion?.relearning
+    ?? (
+      structuredRelearningTargetIds.includes(selectedLearningTargetId)
+      || selectedRetentionRuntimeState === 'relearning_repair'
+      || selectedRetentionRuntimeState === 'relearning_retest'
+    );
+  const selectedNextReviewLabel = selectedLightweightCompletion?.nextReviewLabel
+    ?? selectedStructuredRetention?.nextReviewLabel
+    ?? selectedStructuredGraduation?.nextReviewLabel
+    ?? null;
+  const declaredMasteryTargetIds = new Set(
+    visibleLearningTargetIds.filter((targetId) => {
+      const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
+      return senseId !== null && declaredMasterySenseIds.has(senseId);
+    }),
+  );
+  const selectedDeclaredMastery = declaredMasteryTargetIds.has(selectedLearningTargetId);
+  const policyTarget = learningPolicyContext.kind === 'target'
+    ? PROTOTYPE_LEARNING_TARGETS[learningPolicyContext.targetId]
+    : null;
+  const selectedPolicyForPolicyScreen = learningPolicyContext.kind === 'target'
+    ? effectivePolicyForTarget(
+        learningPolicyContext.targetId,
+        defaultLearningPolicy,
+        addedLearningTargetIds,
+        learningPolicyByTarget,
+        committedPolicyByTarget,
+      )
+    : defaultLearningPolicy;
+  const activeLightweightRuntimeTarget = activeLightweightRuntimeTargetId
+    ? PROTOTYPE_LEARNING_TARGETS[activeLightweightRuntimeTargetId]
+    : null;
+  const activeLightweightRuntimePolicy = activeLightweightRuntimeTargetId
+    ? committedPolicyByTarget[activeLightweightRuntimeTargetId] ?? 'lightweight'
+    : 'lightweight';
 
   const currentStep =
     flowMode === 'review' && reviewSession
@@ -497,7 +1949,7 @@ export default function App() {
   }, []);
 
   return (
-    <>
+    <DictionaryPresentationProvider presentation={dictionaryPresentation}>
       <IconSprite />
 
       {/* 手机外壳 */}
@@ -520,40 +1972,166 @@ export default function App() {
           <HomeScreen
             active={viewMode === 'main'}
             onGo={goMain}
-            onStartLearn={() => startLearn()}
+            onStartMixed={startMixedLearning}
             onStartReview={startReview}
-            reviewN={reviewN}
+            reviewDueN={totalReviewCount}
             signed={signed}
             onSign={doSign}
-            learnN={Math.max(0, 4373 - queueStats.sessionsCompleted)}
-            toast={toast}
+            mixedReadyN={todayInitialTargetIds.length + totalReviewCount}
           />
 
-          {/* 2. 不背学堂 */}
+          {/* 2. 自由练习 */}
           <AcademyScreen
             active={viewMode === 'main' && mainStack.includes('s-academy')}
             onBack={backMain}
+            onOpenWordList={() => goMain('s-wordlist')}
+            onOpenListening={() => goMain('s-listening')}
+            onOpenRealWorldListening={() => goMain('s-real-world-listening')}
+            onOpenQuickSpelling={(item) => {
+              openSpelling(item.sourceWord, 'quick_spelling', `${item.pos} ${item.meaning}`);
+            }}
+            onOpenDictation={(item) => {
+              openSpelling(item.sourceWord, 'dictation', `${item.pos} ${item.meaning}`);
+            }}
+            practiceScope={DEFAULT_PRACTICE_SCOPE}
+            presentation={practiceHomePresentation}
             toast={toast}
           />
 
           {/* 3. 我的内容 */}
           <ContentScreen
             active={viewMode === 'main' && mainStack.includes('s-content')}
-            onGo={goMain}
+            onBack={backMain}
+            onOpenSemanticWorld={() => goMain('s-semantic-world')}
+            onOpenSection={openContentSection}
+            onOpenComingSoon={openContentComingSoon}
+          />
+
+          {/* 3.1 我的词义世界：Personal Meaning / Sense / Binding 事实投影 */}
+          <SemanticWorldScreen
+            active={viewMode === 'main' && mainStack.includes('s-semantic-world')}
+            onBack={backMain}
+            onOpenSense={openSemanticWorldSense}
+            onOpenPersonalMeaning={openPersonalMeaning}
+            onOpenConfirmedSense={openConfirmedSense}
+            toast={toast}
+            presentation={semanticWorldPresentation}
+          />
+
+          {/* 3.1.1 个人意义形成：Focus → 构造 → 提议 → 确认 Sense → Alignment */}
+          <PersonalMeaningDetailScreen
+            active={viewMode === 'main' && mainStack.includes('s-personal-meaning')}
+            personalMeaningId={personalMeaningId}
+            initialFocusId={meaningFocusId}
+            onBack={backMain}
+            onOpenConfirmedSense={openConfirmedSense}
+            toast={toast}
+          />
+
+          {/* 3.1.2 已确认 Sense：Meaning Formation 终点与 Binding 入口 */}
+          <ConfirmedSenseDetailScreen
+            active={viewMode === 'main' && mainStack.includes('s-confirmed-sense')}
+            personalMeaningId={personalMeaningId}
+            meaningFocusId={meaningFocusId}
+            onBack={backMain}
+            onOpenBinding={openExpressionBinding}
+          />
+
+          {/* 3.1.3 独立 Expression Binding：本轮停止在此，不进入学习链 */}
+          <ExpressionBindingScreen
+            active={viewMode === 'main' && mainStack.includes('s-expression-binding')}
+            personalMeaningId={personalMeaningId}
+            meaningFocusId={meaningFocusId}
             onBack={backMain}
             toast={toast}
           />
 
-          {/* 3.1 在学词书 (Word List / 单词表) */}
+          {/* 3.2 我的内容清单：学习、收藏与笔记读取投影 */}
+          <ContentLibraryScreen
+            active={viewMode === 'main' && mainStack.includes('s-content-library')}
+            section={contentSection}
+            onBack={backMain}
+            onOpenSense={openContentSense}
+            onOpenExample={(entry: SavedExampleItem) => openContentExample(entry.sense)}
+            onEditNote={(entry: ContentNoteItem) => {
+              if (entry.sense && !entry.isLegacy) {
+                openNoteEditor(entry.sense.sourceWord, entry.sense.senseId, entry.sense.meaning);
+              } else {
+                openNoteEditor(entry.word);
+              }
+            }}
+          />
+
+          {/* 3.3 具体意思只读详情 */}
+          <ContentSenseDetailScreen
+            active={viewMode === 'main' && mainStack.includes('s-content-sense')}
+            item={selectedContentSense}
+            onBack={backMain}
+            onOpenExample={openContentExample}
+            onOpenSense={setSelectedContentSense}
+            onOpenDictionary={(item) => openDictModal(item.sourceWord)}
+            onEditNote={(item) => openNoteEditor(item.sourceWord, item.senseId, item.meaning)}
+            toast={toast}
+          />
+
+          {/* 3.4 收藏例句与学习例句详情 */}
+          <ContentExampleDetailScreen
+            active={viewMode === 'main' && mainStack.includes('s-content-example')}
+            item={selectedContentExample}
+            onBack={backMain}
+            onOpenSense={(item) => {
+              setSelectedContentSense(item);
+              if (mainStack.includes('s-content-sense')) backMain();
+              else setMainStack((stack) => [...stack.slice(0, -1), 's-content-sense']);
+            }}
+            toast={toast}
+          />
+
+          {/* 3.5 Later 能力的说明性占位页 */}
+          <ContentComingSoonScreen
+            active={viewMode === 'main' && mainStack.includes('s-content-coming')}
+            kind={contentComingKind}
+            onBack={backMain}
+          />
+
+          {/* 3.6 在学词书 (Word List / 单词表) */}
           <WordListScreen
             active={viewMode === 'main' && mainStack.includes('s-wordlist')}
             bookTitle="COCA 20000 (上)"
             totalBookWords={5585}
             onBack={backMain}
+            onOpenListening={() => goMain('s-listening')}
             onOpenDict={openDictModal}
             onOpenSpelling={openSpelling}
             toast={toast}
           />
+
+          {/* 3.7 自由练习 / 随身听 (仅义项粒度的独立练习投影) */}
+          <PortableListeningScreen
+            active={viewMode === 'main' && mainStack.includes('s-listening')}
+            bookTitle={DEFAULT_PRACTICE_SCOPE.bookTitle}
+            items={DEFAULT_PRACTICE_SCOPE.items}
+            onBack={backMain}
+            toast={toast}
+            presentation={portableListeningPresentation}
+          />
+
+          {/* 3.8 真实语流：sensa 版是义项过滤的自定义原型，youglish 版是嵌入 widget 的 baseline */}
+          {realWorldListeningPresentation === 'youglish' ? (
+            <YouGlishListeningScreen
+              active={viewMode === 'main' && mainStack.includes('s-real-world-listening')}
+              items={DEFAULT_PRACTICE_SCOPE.items}
+              onBack={backMain}
+              toast={toast}
+            />
+          ) : (
+            <RealWorldListeningScreen
+              active={viewMode === 'main' && mainStack.includes('s-real-world-listening')}
+              items={DEFAULT_PRACTICE_SCOPE.items}
+              onBack={backMain}
+              toast={toast}
+            />
+          )}
 
           {/* 4. 我的学习 / 学习偏好 */}
           <StudyScreen
@@ -561,20 +2139,92 @@ export default function App() {
             tab={studyTab}
             onTabChange={setStudyTab}
             onBack={backMain}
-            onOpenBookMenu={(e: MouseEvent) => {
-              e.stopPropagation();
-              closeMenus();
-              setMenuBookOpen(true);
-            }}
-            onOpenStats={() => goMain('s-stats')}
-            toast={toast}
-            streak={streak}
-            totalLearned={queueStats.sessionsCompleted + reviewStats.completedWords}
+            onAddLearning={() => goMain('s-learning-entry')}
+            onOpenTargetLibrary={() => goMain('s-learning-library')}
+            onOpenDefaultPolicy={openDefaultLearningPolicy}
+            defaultPolicy={defaultLearningPolicy}
+            learningTargetCount={visibleLearningTargetIds.length}
+            readyInitialCount={todayInitialTargetIds.length}
+            reviewCount={totalReviewCount}
             dailyNewCount={dailyNewCount}
             onDailyNewCountChange={handleDailyNewCountChange}
           />
 
-          {/* 4.1 学习统计概览 (Overview / Stats Screen, 对应图1、图2) */}
+          {/* 4.1 Target 库：主页只保留入口，具体内容在此展开 */}
+          <LearningTargetLibraryScreen
+            active={viewMode === 'main' && mainStack.includes('s-learning-library')}
+            targetIds={visibleLearningTargetIds}
+            policyByTarget={learningPolicyByTarget}
+            preparationByTarget={preparationByTarget}
+            committedPolicyByTarget={committedPolicyByTarget}
+            completedTargetIds={new Set([
+              ...Object.keys(lightweightCompletionByTarget),
+              ...Object.keys(structuredGraduationByTarget),
+            ] as PrototypeLearningTargetId[])}
+            reviewDueTargetIds={new Set([
+              ...lightweightDueTargetIds,
+              ...structuredReviewDueTargetIds,
+            ])}
+            relearningTargetIds={new Set([
+              ...lightweightRelearningTargetIds,
+              ...structuredRelearningTargetIds,
+            ])}
+            reviewingTargetIds={new Set(structuredReviewingTargetIds)}
+            relearningRepairTargetIds={new Set(structuredRelearningRepairTargetIds)}
+            relearningRetestTargetIds={new Set(structuredRelearningRetestTargetIds)}
+            declaredMasteryTargetIds={declaredMasteryTargetIds}
+            onBack={backMain}
+            onAddLearning={() => goMain('s-learning-entry')}
+            onOpenTarget={openLearningTarget}
+          />
+
+          {/* 4.2 添加学习内容：三种来源汇入同一学习目标 */}
+          <LearningEntryScreen
+            active={viewMode === 'main' && mainStack.includes('s-learning-entry')}
+            onBack={backMain}
+            onOpenTarget={openLearningTarget}
+            onOpenPersonalSemanticWorld={() => setMainStack(['s-semantic-world'])}
+          />
+
+          {/* 4.3 学习目标详情：来源、方式和准备状态分开表达 */}
+          <LearningTargetDetailScreen
+            active={viewMode === 'main' && mainStack.includes('s-learning-target')}
+            target={selectedPrototypeLearningTarget}
+            selectedPolicy={selectedPrototypeLearningPolicy}
+            preparation={selectedPrototypePreparation}
+            committedPolicy={selectedCommittedPolicy}
+            initialCompletionKind={selectedInitialCompletionKind}
+            reviewDue={selectedReviewDue}
+            relearning={selectedRelearning}
+            retentionRuntimeState={selectedRetentionRuntimeState}
+            nextReviewLabel={selectedNextReviewLabel}
+            declaredMastery={selectedDeclaredMastery}
+            isAdded={addedLearningTargetIds.has(selectedLearningTargetId)}
+            onBack={backMain}
+            onAdd={addSelectedLearningTarget}
+            onOpenPolicy={openTargetLearningPolicy}
+            onOpenSource={openLearningSource}
+            onRefreshPreparation={refreshSelectedTargetPreparation}
+            onGoHome={resetMain}
+            onStartReview={startReview}
+            onContinueRetentionRuntime={() => {
+              setFlowType('review');
+              setViewMode('study');
+            }}
+            onContinueRuntime={() => continueCommittedTargetRuntime(selectedLearningTargetId)}
+            onRevokeDeclaredMastery={() => revokeDeclaredMastery(selectedLearningTargetId)}
+          />
+
+          {/* 4.4 学习方式选择：默认方式或单个目标覆盖 */}
+          <LearningPolicyScreen
+            active={viewMode === 'main' && mainStack.includes('s-learning-policy')}
+            target={policyTarget}
+            selectedPolicy={selectedPolicyForPolicyScreen}
+            onBack={backMain}
+            onSelect={selectLearningPolicy}
+          />
+
+          {/* 4.5 学习统计概览 (Overview / Stats Screen, 对应图1、图2) */}
           <StatsScreen
             active={viewMode === 'main' && mainStack.includes('s-stats')}
             onBack={backMain}
@@ -600,21 +2250,104 @@ export default function App() {
             coins={coins}
           />
 
+          {/* 5.1 轻量首次运行入口：创建运行即提交并锁定 Learning Policy。 */}
+          <LightweightRuntimeStartScreen
+            active={viewMode === 'lightweight'}
+            target={activeLightweightRuntimeTarget}
+            committedPolicy={activeLightweightRuntimePolicy}
+            onExit={exitLightweightRuntime}
+            onComplete={completeLightweightRuntime}
+            onFinish={finishLightweightRuntime}
+          />
+
+          {/* 5.2 轻量长期复习：一次 due Review 只记录一次结果，遗忘后单独完成修复。 */}
+          {activeLightweightReviewTargetIds.length > 0 && (
+            <LightweightReviewRuntimeScreen
+              active={viewMode === 'lightweightReview'}
+              targetIds={activeLightweightReviewTargetIds}
+              onExit={exitLightweightReview}
+              onRateTarget={completeLightweightReviewTarget}
+              onCompleteRepair={completeLightweightReviewRepair}
+              finishLabel={highAssuranceReviewCount > 0
+                ? '继续剩余复习'
+                : pendingMixedTargetRef.current?.length
+                  ? '继续今天的新学'
+                  : '完成并回到首页'}
+              onFinish={finishLightweightReview}
+            />
+          )}
+
           {/* ================= 独立学习流 (Study Flow) ================= */}
           {/* 6. 单词学习流程 */}
           <LearnScreen
-            active={viewMode === 'study'}
+            active={viewMode === 'study' && !isLegacyLearningDemoStage}
             isBehind={isExampleOpen}
             curWord={currentWord}
-            stage={currentStage}
+            stage={formalStageForScreen(currentStage)}
+            step={currentStep}
+            groupSize={totalTarget}
+            introductionContent={rawIntroductionContent}
+            repairContent={currentRepairAction?.mode === 'repair'
+              ? currentIntroductionContent
+              : null}
+            introductionPosition={currentIntroductionPosition}
+            introductionTotal={PROTOTYPE_INTRODUCTION_PACKAGES.length}
+            revealPresentation={revealPresentation}
+            recognitionPresentation={recognitionPresentation}
+            recallPresentation={recallPresentation}
+            novelTransferPresentation={novelTransferPresentation}
+            reviewPresentation={reviewPresentation}
+            reviewAssessmentPurpose={flowMode === 'learn' ? 'acquisition' : 'retention'}
+            structuredRuntimeStatus={structuredRuntimeStatus}
+            retentionRuntimeStatus={retentionRuntimeStatus}
+            onExit={exitLearn}
+            onUndo={handleUndoWord}
+            onMarkKnown={handleMarkKnown}
+            onOpenMenuMore={(e: MouseEvent, personalContent) => {
+              e.stopPropagation();
+              closeMenus();
+              setMenuPersonalContent(personalContent);
+              setMenuMoreOpen(true);
+            }}
+            onOpenExample={handleOpenExample}
+            onOpenDict={openDictModal}
+            onOpenNoteEditor={openNoteEditor}
+            onOpenSceneEditor={(content, anchorId) => {
+              setSceneEditorTarget({ content, anchorId });
+            }}
+            onOpenSpelling={openSpelling}
+            onCompleteMeaningToFormRecall={handleCompleteMeaningToFormRecall}
+            onCompleteNovelTransfer={handleCompleteNovelTransfer}
+            reviewAssessmentKind={currentReviewAssessmentKind}
+            reviewAssessmentTaskKey={currentReviewAssessmentTaskKey}
+            assessmentPackageIdentity={currentAssessmentPackageIdentity}
+            lookupDictionary={lookupDictionaryEntry}
+            reviewAssessmentResult={currentReviewAssessmentResult}
+            repairResourceRef={currentRepairAction?.mode === 'repair'
+              ? currentRepairAction.repairResourceRef ?? null
+              : null}
+            onCompleteReviewAssessment={handleCompleteReviewAssessment}
+            onContinueReviewFeedback={handleContinueReviewFeedback}
+            onCompleteIntroduction={handleCompleteIntroduction}
+            onCompleteRecognition={handleCompleteRecognition}
+            toast={toast}
+          />
+
+          {/* 6.1 Legacy baseline-only learning demo (⑤～⑧). */}
+          <LegacyLearningDemoScreen
+            active={viewMode === 'study' && isLegacyLearningDemoStage}
+            isBehind={isExampleOpen}
+            curWord={currentWord}
+            stage={legacyStageForScreen(currentStage)}
             step={currentStep}
             groupSize={totalTarget}
             onExit={exitLearn}
             onUndo={handleUndoWord}
             onMarkKnown={handleMarkKnown}
-            onOpenMenuMore={(e: MouseEvent) => {
+            onOpenMenuMore={(e: MouseEvent, personalContent) => {
               e.stopPropagation();
               closeMenus();
+              setMenuPersonalContent(personalContent);
               setMenuMoreOpen(true);
             }}
             onOpenExample={handleOpenExample}
@@ -625,9 +2358,7 @@ export default function App() {
             onMarkMistake={handleMarkMistake}
             onShowAnswer={handleShowAnswer}
             onPickOption={handlePickOption}
-            onPickRecall={handlePickRecall}
             onPickFinalGate={handlePickFinalGate}
-            onPickReviewRecall={handlePickReviewRecall}
             toast={toast}
           />
 
@@ -635,30 +2366,64 @@ export default function App() {
           <ExampleScreen
             active={viewMode === 'study' && isExampleOpen}
             curWord={currentWord}
+            presentation={examplePresentation}
             initialSenseIdx={selectedSenseIdx}
+            initialSentenceIdx={selectedSentenceIdx}
             onClose={handleCloseExample}
             onOpenDict={openDictModal}
             onNextWord={() => {
               handleCloseExample();
-              handleNextWord();
+              if (currentStage === 'introduction') {
+                handleCompleteIntroduction();
+              } else {
+                handleNextWord();
+              }
             }}
             toast={toast}
           />
 
-          {/* 8. 柯林斯多维词典全屏卡 (Dictionary Detail Modal) */}
-          <DictDetailModal
-            active={!!dictModalWord}
-            wordData={dictModalWord}
-            initialTab={dictModalTab}
-            onClose={closeDictModal}
-            toast={toast}
+          {/* 8. Lexical Reference；原始词义面板保留为 baseline */}
+          {dictionaryPresentation === 'baseline' ? (
+            <DictDetailModal
+              active={!!dictModalWord}
+              wordData={dictModalWord}
+              initialTab={dictModalTab}
+              onClose={closeDictModal}
+              toast={toast}
+            />
+          ) : (
+            <ReferenceDictionaryScreen
+              active={!!dictModalWord}
+              wordData={dictModalWord}
+              onClose={closeDictModal}
+              onOpenExamples={setReferenceExampleDeck}
+            />
+          )}
+
+          <ReferenceExampleViewer
+            active={dictionaryPresentation === 'sensa' && !!referenceExampleDeck}
+            deck={referenceExampleDeck}
+            onClose={() => setReferenceExampleDeck(null)}
           />
 
           {/* 9. 独立笔记编辑全屏弹窗 (Note Editor Modal) */}
           <NoteEditorModal
             active={!!noteModalWord}
             wordData={noteModalWord}
+            senseId={noteModalSense?.senseId}
+            senseMeaning={noteModalSense?.meaning}
             onClose={closeNoteEditor}
+            toast={toast}
+          />
+
+          {/* 9.1 我的场景富媒体编辑 */}
+          <SceneEditorModal
+            active={!!sceneEditorTarget}
+            senseId={sceneEditorTarget?.content.senseKey ?? null}
+            word={sceneEditorTarget?.content.lemma ?? ''}
+            senseMeaning={sceneEditorTarget?.content.guideLabelL1 ?? ''}
+            anchorId={sceneEditorTarget?.anchorId}
+            onClose={closeSceneEditor}
             toast={toast}
           />
 
@@ -666,14 +2431,42 @@ export default function App() {
           <SpellingModal
             active={!!spellingWord}
             wordData={spellingWord}
+            mode={spellingMode}
+            cueText={spellingCue}
             onClose={closeSpelling}
             toast={toast}
           />
 
           {/* ================= 本组结算页 (Finish Flow) ================= */}
-          {/* 11. 完成页 */}
+          {/* 11. Structured Graduation / Declared Mastery 总结不复用旧词组完成叙事。 */}
+          {structuredRuntimeSummary && (
+            <StructuredRuntimeSummaryScreen
+              active={viewMode === 'finish' && flowMode === 'learn'}
+              graduatedTargetIds={structuredRuntimeSummary.graduatedTargetIds}
+              declaredMasteryTargetIds={structuredRuntimeSummary.declaredMasteryTargetIds}
+              onExit={exitLearn}
+            />
+          )}
+
+          {structuredRetentionSummary && (
+            <StructuredRetentionSummaryScreen
+              active={viewMode === 'finish' && flowMode === 'review'}
+              retainingTargetIds={structuredRetentionSummary.retainingTargetIds}
+              relearningCompletedTargetIds={structuredRetentionSummary.relearningCompletedTargetIds}
+              declaredMasteryTargetIds={structuredRetentionSummary.declaredMasteryTargetIds}
+              onExit={exitLearn}
+            />
+          )}
+
+          {/* 11.1 既有完成页只保留给尚未接入统一总结的旧演示流。 */}
           <FinishScreen
-            active={viewMode === 'finish'}
+            active={viewMode === 'finish' && (
+              flowMode === 'learn'
+                ? !structuredRuntimeSummary
+                : flowMode === 'review'
+                  ? !structuredRetentionSummary
+                  : true
+            )}
             mode={flowMode === 'review' ? 'review' : 'learn'}
             wordCount={
               flowMode === 'review'
@@ -699,6 +2492,47 @@ export default function App() {
 
           {/* 学习页右上角菜单 */}
           <div className={`menu${menuMoreOpen ? ' on' : ''}`} id="menu-more">
+            {menuPersonalContent && (
+              <>
+                <div className="menu-personal-context">
+                  <span>当前义项</span>
+                  <strong>{menuPersonalContent.lemma}</strong>
+                  <small>{menuPersonalContent.guideLabelL1}</small>
+                </div>
+                <button
+                  onClick={() => {
+                    const content = menuPersonalContent;
+                    closeMenus();
+                    openNoteEditor(content.lemma, content.senseKey, content.guideLabelL1);
+                  }}
+                >
+                  <svg className="icon"><use href="#i-pen" /></svg>写／编辑笔记
+                </button>
+                <button
+                  onClick={() => {
+                    const content = menuPersonalContent;
+                    const anchorId = menuPersonalAnchors[0]?.anchorId;
+                    closeMenus();
+                    setSceneEditorTarget({ content, anchorId });
+                  }}
+                >
+                  <svg className="icon"><use href="#i-bulb" /></svg>
+                  {menuPersonalAnchors.length > 0 ? `我的场景 · ${menuPersonalAnchors.length}` : '建立我的场景'}
+                </button>
+                {menuPersonalAnchors.length > 0 && (
+                  <button
+                    onClick={() => {
+                      const content = menuPersonalContent;
+                      closeMenus();
+                      setSceneEditorTarget({ content });
+                    }}
+                  >
+                    <svg className="icon"><use href="#i-penplus" /></svg>再建立一个场景
+                  </button>
+                )}
+                <div className="menu-section-divider" />
+              </>
+            )}
             <button
               onClick={() => {
                 closeMenus();
@@ -751,11 +2585,43 @@ export default function App() {
 
       {/* 右侧说明与测试面板 */}
       <SidePanel
+        revealPresentation={revealPresentation}
+        onRevealPresentationChange={setRevealPresentation}
+        examplePresentation={examplePresentation}
+        onExamplePresentationChange={setExamplePresentation}
+        recognitionPresentation={recognitionPresentation}
+        onRecognitionPresentationChange={setRecognitionPresentation}
+        recallPresentation={recallPresentation}
+        onRecallPresentationChange={setRecallPresentation}
+        novelTransferPresentation={novelTransferPresentation}
+        onNovelTransferPresentationChange={setNovelTransferPresentation}
+        reviewPresentation={reviewPresentation}
+        onReviewPresentationChange={setReviewPresentation}
+        semanticWorldPresentation={semanticWorldPresentation}
+        onSemanticWorldPresentationChange={setSemanticWorldPresentation}
+        practiceHomePresentation={practiceHomePresentation}
+        onPracticeHomePresentationChange={setPracticeHomePresentation}
+        portableListeningPresentation={portableListeningPresentation}
+        onPortableListeningPresentationChange={setPortableListeningPresentation}
+        realWorldListeningPresentation={realWorldListeningPresentation}
+        onRealWorldListeningPresentationChange={setRealWorldListeningPresentation}
+        dictionaryPresentation={dictionaryPresentation}
+        onDictionaryPresentationChange={setDictionaryPresentation}
         onShowStage={showStage}
         onGoHome={exitLearn}
         onGoScreen={(screenId: string) => {
           exitLearn();
           goMain(screenId);
+        }}
+        onSeedSemanticWorld={() => {
+          const senseIds = PROTOTYPE_LEARNING_PACKAGES
+            .slice(0, 3)
+            .map((pkg) => pkg.senseId);
+          storageService.ensureRuntimeSenseIds(senseIds);
+          refreshReviewCount();
+          exitLearn();
+          goMain('s-semantic-world');
+          toast('已将 3 个义项放入长期复习，词义世界已更新');
         }}
         onGoStudyTab={(tab: 'a' | 'b') => {
           exitLearn();
@@ -764,14 +2630,19 @@ export default function App() {
         }}
         onOpenExampleDirect={() => {
           setViewMode('study');
-          const base = { ...WORDS[0], level: 1, badge: '', isMastered: false };
-          overrideDemoQueue(base, 'detail', 7, 20);
+          const pkg = PROTOTYPE_LEARNING_PACKAGES[0];
+          if (!pkg) return;
+          setFlowType('demo');
+          setDemoPackage(pkg);
+          setDemoStage('detail');
+          setDemoWord({ ...toWordPresentation(pkg.content), level: 1, badge: '', isMastered: false });
+          overrideDemoQueue(pkg, 'meaning_to_form_recall', 7, 20);
           setSelectedSenseIdx(0);
           setIsExampleOpen(true);
         }}
         onOpenNoteEditor={(w) => openNoteEditor(w || currentWord)}
         onOpenSpelling={(w) => openSpelling(w || currentWord)}
       />
-    </>
+    </DictionaryPresentationProvider>
   );
 }

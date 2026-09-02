@@ -7,6 +7,8 @@ import { noteService } from '../services/noteService';
 interface NoteEditorModalProps {
   active: boolean;
   wordData: Word | QuickDictEntry | string | null;
+  senseId?: string;
+  senseMeaning?: string;
   onClose: () => void;
   onSave?: (savedContent: string) => void;
   toast: (msg: string) => void;
@@ -15,6 +17,8 @@ interface NoteEditorModalProps {
 export const NoteEditorModal = ({
   active,
   wordData,
+  senseId,
+  senseMeaning,
   onClose,
   onSave,
   toast,
@@ -41,7 +45,9 @@ export const NoteEditorModal = ({
   const quickEntry = wordStr ? lookupWord(wordStr) : null;
 
   let briefDef = '';
-  if (fullWord) {
+  if (senseMeaning) {
+    briefDef = senseMeaning;
+  } else if (fullWord) {
     briefDef = fullWord.senses
       .map((s) => `${s.pos} ${s.items.join('；')}`)
       .join('  ');
@@ -54,23 +60,24 @@ export const NoteEditorModal = ({
   // 每次打开或单词变化时加载当前笔记内容
   useEffect(() => {
     if (active && wordStr) {
-      const existing = noteService.getNote(wordStr);
+      const existing = senseId ? noteService.getSenseNote(senseId) : noteService.getNote(wordStr);
       setNoteText(existing);
-      // 延时微任务聚焦
-      setTimeout(() => {
+      const focusTimer = window.setTimeout(() => {
         if (textareaRef.current) {
           textareaRef.current.focus();
           const len = textareaRef.current.value.length;
           textareaRef.current.setSelectionRange(len, len);
         }
-      }, 100);
+      }, 180);
+      return () => window.clearTimeout(focusTimer);
     }
-  }, [active, wordStr]);
+  }, [active, senseId, wordStr]);
 
   if (!active || !wordData) return null;
 
   const handleSave = () => {
-    noteService.setNote(wordStr, noteText);
+    if (senseId) noteService.setSenseNote(senseId, noteText);
+    else noteService.setNote(wordStr, noteText);
     toast('已保存笔记');
     if (onSave) {
       onSave(noteText);
@@ -78,76 +85,51 @@ export const NoteEditorModal = ({
     onClose();
   };
 
-  const handleUpgradeClick = () => {
-    toast('会员享受无限量云端笔记与跨端同步');
-  };
-
   return (
-    <div
-      className={`note-modal-backdrop${active ? ' active' : ''}`}
-      onClick={onClose}
-    >
+    <div className={`personal-note-backdrop${active ? ' active' : ''}`}>
       <div
-        className="note-modal-sheet"
-        onClick={(e) => e.stopPropagation()}
+        className="personal-note-sheet"
         role="dialog"
         aria-modal="true"
+        aria-label={`${wordStr} 的个人笔记`}
       >
-        {/* 顶部居中标题：如 "path 的笔记" */}
-        <div className="note-modal-header">
-          <h2 className="note-modal-title">{wordStr} 的笔记</h2>
+        <header className="personal-note-header">
+          <button type="button" onClick={onClose} aria-label="关闭笔记编辑">
+            <svg className="icon"><use href="#i-close" /></svg>
+          </button>
+          <div>
+            <span>PERSONAL SENSE NOTE</span>
+            <h2>我的笔记</h2>
+          </div>
+          <button type="button" onClick={handleSave} aria-label="保存笔记">
+            <svg className="icon"><use href="#i-chk-simple" /></svg>
+          </button>
+        </header>
+
+        <div className="personal-note-sense">
+          <strong>{wordStr}</strong>
+          {briefDef && <span>{briefDef}</span>}
         </div>
 
-        {/* 核心输入卡片 */}
-        <div className="note-card-box">
+        <main className="personal-note-canvas">
+          <label htmlFor="personal-sense-note">此刻，你想为这个意思留下什么？</label>
           <textarea
+            id="personal-sense-note"
             ref={textareaRef}
-            className="note-card-textarea"
-            placeholder="写下你的笔记..."
+            placeholder="写下自己的理解、提醒，或一句以后想再看到的话……"
             value={noteText}
             maxLength={1000}
             onChange={(e) => setNoteText(e.target.value)}
           />
+          <footer>
+            <span>只绑定当前具体意思</span>
+            <b>{noteText.length}/1000</b>
+          </footer>
+        </main>
 
-          {/* 卡片底部信息条：左侧药丸标签+释义，右侧字数 */}
-          <div className="note-card-bottom-bar">
-            <div className="note-word-info-left">
-              <span className="note-word-pill">{wordStr}</span>
-              {briefDef && <span className="note-def-text">{briefDef}</span>}
-            </div>
-            <div className="note-char-counter">{noteText.length}/1000</div>
-          </div>
-        </div>
-
-        {/* 卡片下方升级提示语 */}
-        <div className="note-quota-hint" onClick={handleUpgradeClick}>
-          <span>还可记 4 条笔记，点我升级 &gt;</span>
-        </div>
-
-        {/* 底部左右两个圆形悬浮操作按钮 */}
-        <div className="note-bottom-actions">
-          <button
-            className="note-circle-btn btn-cancel"
-            onClick={onClose}
-            aria-label="取消"
-            title="取消"
-          >
-            <svg className="icon">
-              <use href="#i-close" />
-            </svg>
-          </button>
-
-          <button
-            className="note-circle-btn btn-save"
-            onClick={handleSave}
-            aria-label="保存"
-            title="保存笔记"
-          >
-            <svg className="icon">
-              <use href="#i-chk-simple" />
-            </svg>
-          </button>
-        </div>
+        <p className="personal-note-privacy">
+          这条笔记只属于你；它不会被解析成标准释义、正确答案或学习证据。
+        </p>
       </div>
     </div>
   );

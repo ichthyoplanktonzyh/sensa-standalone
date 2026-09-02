@@ -1,6 +1,8 @@
 # Candidate Frontend Baseline
 
-This directory is a byte-for-byte candidate frontend baseline imported from:
+> Active stage workflow: [`FRONTEND_FIRST_WORKFLOW.md`](FRONTEND_FIRST_WORKFLOW.md)
+
+This directory began as a byte-for-byte candidate frontend baseline imported from:
 
 `/Users/shadow/Desktop/不背/learn-flow`
 
@@ -13,14 +15,31 @@ interaction reference for the Sensa frontend discussion. Its purpose is to
 let us confirm pages one by one and then derive the API requirements from the
 confirmed frontend needs.
 
-The copied baseline files are intentionally unchanged. Do not modify CSS,
-layout, animation, gestures, or existing interactions until the corresponding
-page has been explicitly confirmed by the user. Keep this baseline separate
+The copied baseline files were initially unchanged. During the active
+frontend-first workflow, modify only the journey or page currently being
+confirmed, and preserve already accepted CSS, layout, animation, gestures and
+interactions unless the user reopens that decision. Keep this app separate
 from the current production frontend while that review is in progress.
 
 This app is intentionally not registered in the repository root workspace.
 It is an independent candidate frontend and must keep its own dependencies
 and lockfile for now.
+
+## Runtime presentation vocabulary
+
+The imported prototype still contains `sensa` and `baseline` presentation
+switches. In this stage they do not mean two equivalent themes:
+
+- `sensa` is the candidate UI/runtime family for Sensa's high-assurance
+  Structured Learning Policy;
+- `baseline` is the earlier Bubei-style card reproduction kept only as a
+  comparison reference;
+- the new `lightweight` Learning Policy is a separate Sensa runtime and must
+  not be identified with `baseline`.
+
+Future formal routing follows the Committed Learning Policy. A comparison
+switch may remain in prototype tooling, but it cannot redefine Protocol,
+Gate, Evidence or Graduation semantics.
 
 ## Imported files
 

@@ -4,24 +4,35 @@ import { ClickableSentence } from './ClickableSentence';
 import { QuickDictPopup } from './QuickDictPopup';
 import { lookupWord } from '../services/quickDict';
 import { tokenizeSentence, findTokenIndexByCharOffset } from '../utils/sentenceTokenizer';
+import { audioService } from '../services/audioService';
+import { SensaExampleScreen } from './SensaExampleScreen';
 
-interface ExampleScreenProps {
+export type ExamplePresentation = 'sensa' | 'baseline';
+
+export interface ExampleScreenProps {
   active: boolean;
   curWord: Word;
+  presentation?: ExamplePresentation;
   initialSenseIdx?: number;
+  initialSentenceIdx?: number;
+  /** Only an Action-authorized ordered sequence may enable Example pagination. */
+  sentenceSequence?: number[];
   onClose: () => void;
   onOpenDict?: (word: Word | QuickDictEntry | string, tab?: string) => void;
   onNextWord: () => void;
+  nextLabel?: string;
   toast: (msg: string) => void;
 }
 
-export const ExampleScreen = ({
+const BaselineExampleScreen = ({
   active,
   curWord,
   initialSenseIdx = 0,
+  initialSentenceIdx = 0,
   onClose,
   onOpenDict,
   onNextWord,
+  nextLabel = '下一词',
   toast,
 }: ExampleScreenProps) => {
   // 1. 获取当前单词所有义项
@@ -42,7 +53,11 @@ export const ExampleScreen = ({
   const [senseIdx, setSenseIdx] = useState(initialSenseIdx);
 
   // 3. 每个义项内部的例句索引映射 (Sentence Carousel per Sense)
-  const [sentMap, setSentMap] = useState<number[]>(() => new Array(totalSenses).fill(0));
+  const [sentMap, setSentMap] = useState<number[]>(() => {
+    const initial = new Array<number>(totalSenses).fill(0);
+    initial[Math.min(initialSenseIdx, Math.max(0, totalSenses - 1))] = Math.max(0, initialSentenceIdx);
+    return initial;
+  });
 
   // 4. 每个义项的释义展开状态
   const [defRevealedMap, setDefRevealedMap] = useState<boolean[]>(() => new Array(totalSenses).fill(false));
@@ -79,25 +94,47 @@ export const ExampleScreen = ({
 
   // 同步外部 initialSenseIdx 或单词变更
   useEffect(() => {
-    setSenseIdx(Math.min(initialSenseIdx, totalSenses - 1));
-    setSentMap(new Array(totalSenses).fill(0));
+    const nextSenseIndex = Math.min(initialSenseIdx, totalSenses - 1);
+    const nextSentenceMap = new Array<number>(totalSenses).fill(0);
+    const availableSentences = senseDetails[nextSenseIndex]?.sentences || curWord.sentences;
+    nextSentenceMap[nextSenseIndex] = Math.min(
+      Math.max(0, initialSentenceIdx),
+      Math.max(0, availableSentences.length - 1),
+    );
+    setSenseIdx(nextSenseIndex);
+    setSentMap(nextSentenceMap);
     setDefRevealedMap(new Array(totalSenses).fill(false));
     setMenuOpen(false);
     setSenseDragOffset(0);
     setUpperDragOffset(0);
     setActiveLookup(null);
     setPlayingTokenIdx(null);
-  }, [initialSenseIdx, curWord, totalSenses]);
+  }, [initialSenseIdx, initialSentenceIdx, curWord, totalSenses]);
 
   // 发音播放：结合 Web Speech onboundary 实现词级时间轴逐词点亮
-  const handleSpeakSentence = (text: string) => {
+  const handleSpeakSentence = (sentence: Word['sentences'][number]) => {
+    const text = sentence.en;
+    const cleanText = text.replace(/<[^>]*>/g, '').trim();
+    if (sentence.audioUrl) {
+      setIsPlayingAudio(true);
+      setPlayingTokenIdx(null);
+      const playAudio = sentence.audioUrl.startsWith('/golden-audio/')
+        ? audioService.playPackagedAudioUrl(sentence.audioUrl, cleanText, 'us')
+        : audioService.playAudioUrl(sentence.audioUrl, cleanText, 'us');
+      void playAudio.finally(() => {
+        setIsPlayingAudio(false);
+      });
+      return;
+    }
+    // Runtime Package media is authoritative; a missing Package asset fails
+    // closed instead of silently turning into device/network speech.
+    if (curWord.id && !curWord.id.startsWith('w_')) return;
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       toast('当前环境不支持语音播放');
       return;
     }
     try {
       window.speechSynthesis.cancel();
-      const cleanText = text.replace(/<[^>]*>/g, '').trim();
       const { tokens } = tokenizeSentence(text);
       const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.lang = 'en-US';
@@ -460,7 +497,7 @@ export const ExampleScreen = ({
                             <div className="ex-hd">
                               <div
                                 className="src-wrap"
-                                onClick={() => handleSpeakSentence(sent.en)}
+                                onClick={() => handleSpeakSentence(sent)}
                                 title="点击朗读例句"
                               >
                                 <span className="src">{sent.src}</span>
@@ -487,7 +524,7 @@ export const ExampleScreen = ({
                             {/* 例句主体 */}
                             <div
                               className="ex-body"
-                              onClick={() => handleSpeakSentence(sent.en)}
+                              onClick={() => handleSpeakSentence(sent)}
                               title="点击朗读例句"
                             >
                               <div className="ex-en">
@@ -794,7 +831,7 @@ export const ExampleScreen = ({
             onNextWord();
           }}
         >
-          下一词<i />
+          {nextLabel}<i />
         </button>
         <button className="fbtn orange" onClick={onClose}>
           收起卡片<i />
@@ -820,3 +857,9 @@ export const ExampleScreen = ({
     </section>
   );
 };
+
+export const ExampleScreen = (props: ExampleScreenProps) => (
+  props.presentation === 'baseline'
+    ? <BaselineExampleScreen {...props} />
+    : <SensaExampleScreen {...props} />
+);

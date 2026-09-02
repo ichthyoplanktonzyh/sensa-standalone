@@ -9,6 +9,7 @@ interface WordListScreenProps {
   bookTitle?: string;
   totalBookWords?: number;
   onBack: () => void;
+  onOpenListening: () => void;
   onOpenDict: (word: Word | QuickDictEntry | string, tab?: string) => void;
   onOpenSpelling: (word?: Word | QuickDictEntry | string) => void;
   toast: (msg: string) => void;
@@ -29,6 +30,7 @@ export const WordListScreen = ({
   bookTitle = 'COCA 20000 (上)',
   totalBookWords = 5585,
   onBack,
+  onOpenListening,
   onOpenDict,
   onOpenSpelling,
   toast,
@@ -356,12 +358,7 @@ export const WordListScreen = ({
 
         <button
           className="wl-float-btn"
-          onClick={() => {
-            toast(`随身听已启动：正在按顺序连续播放本词书单词语音`);
-            if (currentActiveWord) {
-              audioService.playWord(currentActiveWord.w, 'us');
-            }
-          }}
+          onClick={onOpenListening}
         >
           <span className="wl-float-icon">
             <svg className="icon"><use href="#i-head" /></svg>

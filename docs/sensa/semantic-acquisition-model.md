@@ -1,7 +1,7 @@
 # Sensa 语义获取模型
 
 > 状态：Canonical theory model  
-> 更新日期：2026-08-31
+> 更新日期：2026-09-01
 > 证据级别：产品理论与可检验假设，尚无真实用户效果结论
 
 本文解释 Sensa 为什么按 Sense 组织学习，并完整定义高保证的 **Structured Acquisition Protocol**：
@@ -178,6 +178,10 @@ Personal Semantic World 允许 learner 从自己的经验世界向目标语言�
 教过的 Senses。只有 learner 明确创建的 Personal Meaning 才成为其成员；学习历史、浏览、推荐和
 模型推断都不能自动加入。
 
+这是 personal-first enrichment path，不是 Structured Acquisition、Lightweight Study 或长期 Retention
+的前置条件。Book/direct learning 可以从 existing stable Sense + target binding 进入相同 Learning Target，
+且不会因此创建 Personal Meaning。
+
 Personal Meaning 是“我指的是这个”的稳定个人 identity。Meaning Focus 把一段可能很丰富的经验
 收敛到当前真正关心的侧面；Personal Semantic Anchors 用场景、图像、声音、叙述或动作让它可重新
 进入；Personal Expression Anchors 则保存不同语言中能够唤起或候选表达该意义的 typed forms。任何
@@ -198,10 +202,11 @@ Sense Version 与 Personal Meaning Alignment。确认保存原始 Personal Meani
 重叠和承认没有自然一词对应，不能生成 `L1 = L2` 的翻译等号。
 
 个人建构与正式学习保持显式边界：创建 Personal Meaning、编辑 Focus/Anchor、确认 Sense、确认
-Sense Expression Binding、准备学习内容和提交 Add-to-Learning Intent 是不同意图。前四者都不会
-创建 Learner Sense Progress、Learning Protocol Run、Evidence、5D 或 FSRS Memory State。只有目标已
-解析到 stable Sense、选定协议能够通过 published、on-demand 或 hybrid 路径解析出合法 Learning
-Materialization，并收到 learner 显式加入学习请求后，Unified Planner 才能把它纳入正式学习。
+Sense Expression Binding、提交 Add-to-Learning Intent 和准备学习内容是不同意图。前四者都不会创建
+Curriculum Membership、Learner Sense Progress、Learning Protocol Run、Evidence、5D 或 FSRS Memory
+State。Add-to-Learning 可以先接纳 stable target 与合法 Learning Policy Assignment；只有后续 Resolved
+Learning Plan 为当前 purpose 解析出合法 Protocol、published/on-demand/hybrid provisioning path 与
+Learning Materialization，并达到 `ready` 后，Unified Planner 才能把它纳入正式学习运行。
 
 完整对象、确认门、多语言边界和代表性旅程由
 [`personal-semantic-world-model.md`](personal-semantic-world-model.md) 裁决。首版固定中文为 familiar
@@ -279,8 +284,15 @@ progress identity。
 
 Learner/Device Preferences 可以降低呈现摩擦，例如选择口音、译文默认状态、autoplay 或动画，但它们
 不是学习理论变量：Preference 不能重新定义 Sense、Required Capability、Gate、Evidence rule、5D
-或 FSRS，也不能把播放/展开变成学习成功。未来若允许 learner 选择会改变 assessment 或毕业要求的
-模式，必须发布显式、可审计的 learning policy/profile，而不能把它伪装成普通 Settings 开关。
+或 FSRS，也不能把播放/展开变成学习成功。learner 选择会改变 assessment 或毕业要求的模式时，必须
+使用显式、可审计的 Learning Policy Profile 与 Assignment；高保证 Profile 解析到 Structured
+Acquisition，轻量 Profile 解析到其他 purpose-specific Protocol，二者都不能伪装成普通 Settings 开关。
+
+Profile 切换不会修改已开始 Cycle 的 Required Gate Set，也不会把既有轻量 Study Completion 升级成
+Acquisition Graduation。若当前 target 的高保证资源或 runtime capability 不足，Resolved Learning Plan
+必须 blocked。第一次正式 Protocol Run 前，learner 只能通过显式 Policy Assignment revision 选择另一
+保证级别；Run 创建并形成 Committed Learning Policy 后，普通 Assignment 不再可改，未来只能通过
+Learning Connection Model 定义的显式 Learning Policy Migration 建立新版本。MVP 不提供该迁移。
 
 理论模型不能直接要求“固定三条例句”“所有词必须做听音题”“每个 Sense 必须完成听说读写”
 或“答错后全部四关归零”。这类选择只能进入明确版本化的 delivery profile、formal runtime

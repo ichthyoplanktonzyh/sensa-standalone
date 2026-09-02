@@ -3,132 +3,169 @@ import { useMemo } from 'react';
 interface HomeScreenProps {
   active: boolean;
   onGo: (id: string) => void;
-  onStartLearn: () => void;
+  onStartMixed: () => void;
   onStartReview?: () => void;
   signed: boolean;
   onSign: () => void;
-  learnN: number;
-  reviewN?: number;
-  toast: (msg: string) => void;
+  mixedReadyN: number;
+  reviewDueN?: number;
 }
 
-interface Spark {
-  left: number;
-  top: number;
-  size: number;
-  opacity: number;
-  delay: number;
-}
+const ArrowIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 12h13M14 7l5 5-5 5" />
+  </svg>
+);
+
+const PracticeIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 17.5V8.4L12 5l7 3.4v9.1" />
+    <path d="M8 15.2c2.2-1.7 5.8-1.7 8 0M12 9.2v2.9" />
+  </svg>
+);
+
+const ContentIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5.5 5.5h5.2c.7 0 1.3.6 1.3 1.3v12c0-1.2-1-2.2-2.2-2.2H5.5z" />
+    <path d="M18.5 5.5h-5.2c-.7 0-1.3.6-1.3 1.3v12c0-1.2 1-2.2 2.2-2.2h4.3z" />
+  </svg>
+);
+
+const ProgressIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 18V9M12 18V5M19 18v-6" />
+    <path d="M3.5 18.5h17" />
+  </svg>
+);
 
 export const HomeScreen = ({
   active,
   onGo,
-  onStartLearn,
+  onStartMixed,
   onStartReview,
   signed,
   onSign,
-  learnN,
-  reviewN,
-  toast,
+  mixedReadyN,
+  reviewDueN,
 }: HomeScreenProps) => {
-  const sparks = useMemo<Spark[]>(() => {
-    const list: Spark[] = [];
-    const put = (x: number, y: number, s: number, o: number, d: number) => {
-      list.push({ left: x, top: y, size: s, opacity: o, delay: d });
-    };
-    for (let i = 0; i < 170; i++) {
-      const p = Math.random();
-      const sp = p * 44;
-      put(
-        88 - p * 72 + (Math.random() - 0.5) * sp,
-        88 - p * 60 + (Math.random() - 0.5) * sp * 0.62,
-        Math.random() * 2.2 + 0.9,
-        (1 - p * 0.55) * (0.35 + Math.random() * 0.6),
-        Math.random() * 2.6
-      );
-    }
-    const clusters: [number, number, number][] = [
-      [83, 17, 15],
-      [30, 57, 9],
-      [62, 24, 7],
-    ];
-    clusters.forEach(([cx, cy, n]) => {
-      for (let i = 0; i < n * 4; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const r = Math.random() * 7;
-        put(
-          cx + Math.cos(a) * r,
-          cy + Math.sin(a) * r * 0.9,
-          Math.random() * 1.8 + 0.9,
-          0.5 + Math.random() * 0.5,
-          Math.random() * 2.6
-        );
-      }
-    });
-    return list;
+  const todayLabel = useMemo(() => {
+    return new Intl.DateTimeFormat('zh-CN', {
+      month: 'long',
+      day: 'numeric',
+      weekday: 'long',
+    }).format(new Date()).replace('星期', ' · 星期');
   }, []);
 
+  const reviewCount = reviewDueN ?? 0;
+  const newCount = Math.max(0, mixedReadyN - reviewCount);
+  const hasMixedWork = mixedReadyN > 0;
+
+  const flowDescription = reviewCount > 0 && newCount > 0
+    ? `先处理 ${reviewCount} 个到期复习，再开始 ${newCount} 个新意思。`
+    : reviewCount > 0
+      ? `今天有 ${reviewCount} 个意思需要复习。`
+      : newCount > 0
+        ? `今天可以开始 ${newCount} 个新意思。`
+        : '今天的学习流暂时安静，可以去自由练习或稍后再回来。';
+
   return (
-    <section className={`screen${active ? ' active' : ''}`} id="s-home" data-anim="fade">
-      <div className="wall">
-        <div className="band" />
-        <div className="hill" />
-        <div id="sparks">
-          {sparks.map((sp, idx) => (
-            <i
-              key={idx}
-              className="spark"
-              style={{
-                left: `${sp.left}%`,
-                top: `${sp.top}%`,
-                width: `${sp.size}px`,
-                height: `${sp.size}px`,
-                opacity: sp.opacity,
-                boxShadow: `0 0 ${sp.size * 2.4}px ${sp.size * 0.7}px rgba(255,214,150,${sp.opacity * 0.75})`,
-                animationDelay: `${sp.delay}s`,
-              }}
-            />
-          ))}
+    <section
+      className={`screen sensa-home${active ? ' active' : ''}`}
+      id="s-home"
+      data-anim="fade"
+    >
+      <div className="sensa-home-field" aria-hidden="true">
+        <i className="field-ring ring-one" />
+        <i className="field-ring ring-two" />
+        <i className="field-ring ring-three" />
+        <i className="field-seed seed-one" />
+        <i className="field-seed seed-two" />
+        <i className="field-seed seed-three" />
+      </div>
+
+      <header className="sensa-home-header">
+        <div className="sensa-home-brand" aria-label="Sensa">
+          <span className="sensa-home-mark" aria-hidden="true"><i /><i /><i /></span>
+          <strong>SENSA</strong>
         </div>
-      </div>
-
-      <button className="avatar-btn" onClick={() => onGo('s-profile')}>
-        <span className="avatar" />
-      </button>
-
-      <div className={`sign-card${signed ? ' done' : ''}`} id="signCard" onClick={onSign}>
-        <svg className="icon"><use href="#i-cal" /></svg>
-        <div className="st" id="signT">{signed ? '已签到' : '签到'}</div>
-        <div className="sd">08/12 Wed.</div>
-      </div>
-
-      <div className="home-actions">
-        <button className="act" onClick={onStartLearn}>
-          <b>Learn</b>
-          <span id="learnN">{learnN}</span>
-        </button>
         <button
-          className={`act${reviewN === 0 ? ' dim' : ''}`}
-          onClick={
-            reviewN === 0
-              ? () => toast('今日暂无待复习单词，先去学新词吧')
-              : onStartReview || onStartLearn
-          }
+          className="sensa-profile-entry"
+          onClick={() => onGo('s-profile')}
+          aria-label="打开个人中心"
         >
-          <b>Review</b>
-          <span>{reviewN ?? 15}</span>
+          <span aria-hidden="true">我</span>
         </button>
-      </div>
+      </header>
 
-      <nav className="tabbar">
-        <button onClick={() => onGo('s-academy')} aria-label="不背学堂">
-          <svg className="icon"><use href="#i-cap" /></svg>
+      <main className="sensa-home-main">
+        <div className="sensa-home-date-row">
+          <span>{todayLabel}</span>
+          <button className={signed ? 'is-signed' : ''} onClick={onSign}>
+            <i aria-hidden="true" />
+            {signed ? '今天已记录' : '记录今天'}
+          </button>
+        </div>
+
+        <section className="sensa-home-focus" aria-labelledby="sensa-home-title">
+          <div className="sensa-home-kicker">
+            <i aria-hidden="true" />
+            今日学习流
+          </div>
+          <h1 id="sensa-home-title">继续今天的学习</h1>
+          <p>{flowDescription}</p>
+
+          <div className="sensa-home-summary" aria-label="今日学习摘要">
+            <div>
+              <span>新学</span>
+              <strong>{newCount}</strong>
+            </div>
+            <i aria-hidden="true" />
+            <div>
+              <span>复习</span>
+              <strong>{reviewCount}</strong>
+            </div>
+          </div>
+
+          <button
+            className="sensa-home-primary"
+            onClick={onStartMixed}
+            disabled={!hasMixedWork}
+          >
+            <span>{hasMixedWork ? '开始今天的学习' : '今日已完成'}</span>
+            <ArrowIcon />
+          </button>
+        </section>
+
+        <section className="sensa-home-review" aria-labelledby="review-only-title">
+          <div>
+            <span>复习</span>
+            <h2 id="review-only-title">只复习</h2>
+            <p>不引入新义项，只处理到期与需要重学的意思。</p>
+          </div>
+          <button
+            onClick={onStartReview}
+            disabled={reviewCount === 0 || !onStartReview}
+            aria-label={reviewCount > 0 ? `只复习 ${reviewCount} 个意思` : '今天无需复习'}
+          >
+            <strong>{reviewCount > 0 ? reviewCount : '—'}</strong>
+            <span>{reviewCount > 0 ? '个待复习' : '今天无需复习'}</span>
+            {reviewCount > 0 && <ArrowIcon />}
+          </button>
+        </section>
+      </main>
+
+      <nav className="sensa-home-nav" aria-label="主要导航">
+        <button onClick={() => onGo('s-academy')}>
+          <PracticeIcon />
+          <span>自由练习</span>
         </button>
-        <button onClick={() => onGo('s-content')} aria-label="我的内容">
-          <svg className="icon"><use href="#i-desk" /></svg>
+        <button onClick={() => onGo('s-content')}>
+          <ContentIcon />
+          <span>我的内容</span>
         </button>
-        <button onClick={() => onGo('s-study')} aria-label="我的学习">
-          <svg className="icon"><use href="#i-gearpic" /></svg>
+        <button onClick={() => onGo('s-study')}>
+          <ProgressIcon />
+          <span>我的学习</span>
         </button>
       </nav>
     </section>

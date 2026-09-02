@@ -2,7 +2,7 @@
   "name": "learn-flow",
   "version": "1.0.0",
   "private": true,
-  "description": "不背单词 · 高保真交互原型 1:1 React 复刻",
+  "description": "Sensa 语义学习 Runtime 交互原型",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@sensa/contracts": "file:../../packages/contracts",
+    "compromise": "^14.16.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

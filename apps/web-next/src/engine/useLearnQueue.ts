@@ -1,122 +1,205 @@
-import { useState, useCallback, useRef } from 'react';
-import type { Word, LearningStage } from '../types';
+import { useCallback, useRef, useState } from 'react';
 import { LearnQueue } from './LearnQueue';
-import type { Session, QueueStats, QueueConfig } from './types';
+import type {
+  LearningCapability,
+  MeaningToFormRecallOutcome,
+  NovelTransferOutcome,
+  QueueConfig,
+  QueueStats,
+  SchedulablePackage,
+  Session,
+  StructuredAcquisitionProjection,
+} from './types';
 
-export function useLearnQueue(initialWords: Word[], config?: QueueConfig) {
-  const queueRef = useRef<LearnQueue | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+const EMPTY_PROJECTION: StructuredAcquisitionProjection = {
+  currentAction: null,
+  targets: [],
+};
+
+export function useLearnQueue<TContent>(
+  initialPackages: readonly SchedulablePackage<TContent>[],
+  config?: QueueConfig,
+) {
+  const queueRef = useRef<LearnQueue<TContent> | null>(null);
+  const [session, setSession] = useState<Session<TContent> | null>(null);
   const [stats, setStats] = useState<QueueStats>(() => ({
     sessionsCompleted: 0,
     totalAttempts: 0,
     correctAttempts: 0,
     accuracy: 100,
     masteredCount: 0,
-    totalWords: config?.groupSize ?? 5,
+    totalSenses: initialPackages.length,
+    totalWords: initialPackages.length,
     startTime: Date.now(),
   }));
   const [isDone, setIsDone] = useState(false);
+  const [projection, setProjection] = useState<StructuredAcquisitionProjection>(EMPTY_PROJECTION);
 
-  // 初始化或重新开始
-  const start = useCallback((wordsToLearn: Word[] = initialWords) => {
-    const q = new LearnQueue(wordsToLearn, config);
-    queueRef.current = q;
-    const firstSession = q.getCurrentSession();
-    setSession(firstSession ? { ...firstSession } : null);
-    setStats(q.getStats());
-    setIsDone(q.isDone());
-    return firstSession;
-  }, [initialWords, config]);
-
-  // 提交当前卡片作答
-  const settle = useCallback((ok: boolean) => {
-    const q = queueRef.current;
-    if (!q) return;
-    const settledSession = q.settle(ok);
-    if (settledSession) {
-      setSession({ ...settledSession });
-      setStats(q.getStats());
-    }
+  const sync = useCallback((queue: LearnQueue<TContent>) => {
+    const current = queue.getCurrentSession();
+    setSession(current ? { ...current, action: { ...current.action } } : null);
+    setStats(queue.getStats());
+    setIsDone(queue.isDone());
+    setProjection(queue.getProjection());
   }, []);
 
-  // 下一个会话（推进到下一张卡片）
+  const start = useCallback((packagesToLearn: readonly SchedulablePackage<TContent>[] = initialPackages) => {
+    const queue = new LearnQueue(packagesToLearn, config);
+    queueRef.current = queue;
+    sync(queue);
+    return queue.getCurrentSession();
+  }, [config, initialPackages, sync]);
+
+  const settle = useCallback((ok: boolean) => {
+    const queue = queueRef.current;
+    if (!queue) return;
+    const settledSession = queue.settle(ok);
+    if (settledSession) sync(queue);
+  }, [sync]);
+
+  const advance = useCallback(() => {
+    const queue = queueRef.current;
+    if (!queue) return;
+    queue.next();
+    sync(queue);
+  }, [sync]);
+
+  const completeIntroduction = useCallback(() => {
+    const queue = queueRef.current;
+    if (!queue) return;
+    queue.completeIntroduction();
+    advance();
+  }, [advance]);
+
+  const completeRecognition = useCallback((correct: boolean) => {
+    const queue = queueRef.current;
+    if (!queue) return;
+    queue.completeRecognition(correct);
+    advance();
+  }, [advance]);
+
+  const completeMeaningToFormRecall = useCallback((outcome: MeaningToFormRecallOutcome) => {
+    const queue = queueRef.current;
+    if (!queue) return;
+    queue.completeMeaningToFormRecall(outcome);
+    advance();
+  }, [advance]);
+
+  const completeBoundary = useCallback((correct: boolean) => {
+    const queue = queueRef.current;
+    if (!queue) return;
+    queue.completeBoundary(correct);
+    advance();
+  }, [advance]);
+
+  const completeNovelTransfer = useCallback((outcome: NovelTransferOutcome) => {
+    const queue = queueRef.current;
+    if (!queue) return;
+    queue.completeNovelTransfer(outcome);
+    advance();
+  }, [advance]);
+
   const next = useCallback(() => {
-    const q = queueRef.current;
-    if (!q) return;
-    if (q.isDone()) {
-      setIsDone(true);
-      setSession(null);
-      setStats(q.getStats());
+    const queue = queueRef.current;
+    if (!queue) return;
+    if (queue.isDone()) {
+      sync(queue);
       return;
     }
-    const nextSession = q.next();
-    setSession(nextSession ? { ...nextSession } : null);
-    setStats(q.getStats());
-    setIsDone(q.isDone());
-  }, []);
+    advance();
+  }, [advance, sync]);
 
-  // 撤回
   const undo = useCallback(() => {
-    const q = queueRef.current;
-    if (!q) return null;
-    const prevSession = q.undo();
-    if (prevSession) {
-      setSession({ ...prevSession });
-      setStats(q.getStats());
-      setIsDone(false);
-    }
-    return prevSession;
+    const queue = queueRef.current;
+    if (!queue) return null;
+    const previousSession = queue.undo();
+    sync(queue);
+    return previousSession;
+  }, [sync]);
+
+  const markMistake = useCallback(() => {
+    const queue = queueRef.current;
+    if (!queue) return;
+    queue.markMistake();
+    sync(queue);
+  }, [sync]);
+
+  const markKnown = useCallback(() => {
+    const queue = queueRef.current;
+    if (!queue) return;
+    queue.skipCurrent();
+    queue.next();
+    sync(queue);
+  }, [sync]);
+
+  const setDeclaredMastery = useCallback((packageOrSenseId: string, isMastered: boolean) => {
+    const queue = queueRef.current;
+    if (!queue) return false;
+    const updated = queue.setDeclaredMastery(packageOrSenseId, isMastered);
+    if (updated && (!queue.getCurrentSession() || queue.getCurrentSession()?.settled)) queue.next();
+    sync(queue);
+    return updated;
+  }, [sync]);
+
+  const getGraduatedSenseIds = useCallback(() => {
+    return queueRef.current?.getGraduatedSenseIds() ?? [];
   }, []);
 
-  // 标记记错了
-  const markMistake = useCallback(() => {
-    const q = queueRef.current;
-    if (!q || !session) return;
-    q.markMistake();
-    setSession({ ...session, result: false, wordState: { ...session.wordState, level: 0, isMastered: false, pass: 1 } });
-    setStats(q.getStats());
-  }, [session]);
-
-  // 标记熟词
-  const markKnown = useCallback(() => {
-    const q = queueRef.current;
-    if (!q) return;
-    q.skipCurrent();
-    setStats(q.getStats());
-    next();
-  }, [next]);
-
-  // 演示模式覆盖：用于右侧 SidePanel ①~⑧ 阶段快速直达预览
-  const overrideDemo = useCallback((demoWord: Word, demoStage: LearningStage, demoStep: number, total: number) => {
-    setSession({
+  /** Demo-only presentation override; it still carries a Package, never an ad-hoc content object. */
+  const overrideDemo = useCallback((
+    demoPackage: SchedulablePackage<TContent>,
+    capability: LearningCapability,
+    demoStep: number,
+    total: number,
+    transferScenarioIndex = 0,
+  ) => {
+    const definition = demoPackage.actions.find((action) => action.capability === capability)
+      ?? demoPackage.reviewActions.find((action) => action.capability === capability)
+      ?? demoPackage.actions[0];
+    if (!definition) return;
+    const demoSession: Session<TContent> = {
       index: demoStep,
       totalTarget: total,
-      wordState: {
-        word: { ...demoWord },
-        level: demoWord.level ?? 0,
-        pass: demoStage === 'choice' ? 1 : demoStage === 'recall' ? 2 : demoStage === 'audio_choice' ? 3 : 4,
-        isMastered: !!demoWord.isMastered,
-        lastSessionIndex: 0,
-        totalAttempts: 0,
-        totalCorrect: 0,
+      package: demoPackage,
+      action: {
+        ...definition,
+        mode: definition.mode ?? 'assessment',
+        kind: definition.kind === 'introduction' ? 'introduction' : definition.kind,
+        ordinal: demoStep,
+        totalTarget: total,
+        packageId: demoPackage.packageId,
+        senseId: demoPackage.senseId,
+        content: demoPackage.content,
+        reason: definition.kind === 'introduction' ? 'new' : 'acquisition_ready',
       },
-      stage: demoStage,
-      settled: demoStage === 'detail',
-      result: true,
-    });
+      settled: false,
+      result: null,
+      transferScenarioIndex,
+    };
+    if (capability === 'novel_context_transfer') demoSession.action = { ...demoSession.action, reason: 'acquisition_ready' };
+    setSession(demoSession);
     setIsDone(false);
+    setProjection(EMPTY_PROJECTION);
   }, []);
 
   return {
     session,
     stats,
     isDone,
+    projection,
     start,
     settle,
+    completeIntroduction,
+    completeRecognition,
+    completeMeaningToFormRecall,
+    completeBoundary,
+    completeNovelTransfer,
     next,
     undo,
     markMistake,
     markKnown,
+    setDeclaredMastery,
+    getGraduatedSenseIds,
     overrideDemo,
   };
 }

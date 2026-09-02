@@ -1,7 +1,7 @@
 # Sensa 学习连接模型
 
 > 状态：Canonical domain model
-> 更新日期：2026-08-31
+> 更新日期：2026-09-01
 
 本文定义一个 confirmed Sense 与目标语言表达的连接如何取得内容、选择学习方式、形成不同强度的
 结果并交给长期调度。个人意义与 Sense 确认由
@@ -14,18 +14,23 @@
 
 正式学习不创造 Personal Meaning，也不决定公共 Sense。它在 stable Sense、目标语言表达和 learner
 意图已经确定后，选择一种方法建立或恢复 meaning–form connection。学习是个人语义世界可以调用的
-一种服务，不是 Personal Meaning 存在的前提或唯一去向。
+一种服务，不是 Personal Meaning 存在的前提或唯一去向；反过来，Personal Semantic World 也不是
+正式学习的前置入口。
 
 ```text
-Personal Meaning
-      ↓ confirmed Personal Meaning Alignment
-Stable Sense + target Sense Expression Binding
-      ↓ Add-to-Learning / Book membership
-Learning Target
+Book membership ───────────────────────────────────────┐
+Direct stable Sense + target binding ── Add-to-Learning┼──▶ Learning Target
+Confirmed Personal Meaning Alignment + target binding ┘
       ↓
 Retention Target
       ↓
-Content Provisioning × Learning Protocol
+Learning Policy Assignment
+      ↓ resolve
+Effective Learning Policy
+      ↓
+Resolved Learning Plan(preparing | ready | blocked)
+      ↓ ready
+Content Provisioning × purpose-specific Learning Protocol
       ↓
 Learning Materialization + Protocol Run
       ↓
@@ -35,23 +40,32 @@ Protocol Outcome
       └── Relearning Completion ───────────────────────────────▶ retain existing FSRS
 ```
 
-Book-first learning 可以直接从已发布 Sense 建立 Learning Target，不自动创建 Personal Meaning；
-personal-first learning 则沿 confirmed Alignment 建立同一类目标。两条入口在 Learning Target 处汇合。
+Book-first learning 可以直接从已发布 Sense 建立 Learning Target；direct learning 可以从 Catalog、搜索、
+reviewed Alignment 后的 Contextual Lookup 或其他已存在的 stable Sense + target binding 显式加入；
+personal-first learning 则沿 confirmed Personal Meaning Alignment 建立同一类目标。三类入口在 Learning
+Target 处汇合，都保存 Learning Entry Provenance，但 provenance 不进入 target/retention identity。
 
-## 2. 五个正交问题
+直接学习仍然是 Sense-first：一个裸 Lexeme、L2 字符串或未对齐的 Reference Sense 不能成为 Learning
+Target。用户可以不创建 Personal Meaning，但系统仍必须解析并固定具体 stable Sense、Sense Version
+与 target Sense Expression Binding。
+
+## 2. 七个正交问题
 
 领域模型必须分别回答：
 
 1. **学习什么**：固定哪个 Sense Version 和哪个 target expression；
-2. **内容从哪里来**：published、on-demand 或 hybrid；
-3. **怎样建立连接**：使用哪个 versioned Learning Protocol；
-4. **哪个连接独立保持**：Learning Target 解析到哪个稳定 Retention Target；
-5. **怎样连接长期调度**：Initial Learning 如何 Handoff、Review 和合法 Relearning
+2. **希望采用哪种学习保证与方式**：解析哪个 learner-selected Learning Policy Profile；
+3. **内容从哪里来**：published、on-demand 或 hybrid；
+4. **当前阶段怎样执行**：为当前 Protocol Purpose 使用哪个 versioned Learning Protocol；
+5. **当前是否可执行**：target、policy、content 和 runtime capability 能否解析出 ready plan；
+6. **哪个连接独立保持**：Learning Target 解析到哪个稳定 Retention Target；
+7. **怎样连接长期调度**：Initial Learning 如何 Handoff、Review 和合法 Relearning
    evaluation 如何产生各自不可变的 Memory Outcome。
 
-Sense Learning Package、Learning Protocol、Learning Evidence 与 FSRS 不能再合并为一个概念。
+Learning Policy、Sense Learning Package、Learning Protocol、Learning Evidence 与 FSRS 不能再合并为一个概念。
 同一份 published content 可以服务多种 Protocol；同一种 Protocol 也可以由 published 或 on-demand
-content 支持。
+content 支持。Learning Policy 可以协调选择这些正交对象，但不能抹掉它们各自的 identity、版本和
+结果语义。
 
 | Learning Protocol | Published content | On-demand content | Hybrid |
 | --- | --- | --- | --- |
@@ -69,13 +83,35 @@ Learning Target 至少固定：
 - stable Sense identity 与 Sense Version；
 - target language；
 - primary target Sense Expression Binding 及所需 form version；
-- learner 与 Curriculum provenance。
+- learner、Curriculum provenance 与 Learning Entry Provenance。
 
 Learning Protocol 在创建 Protocol Run 时与 target 绑定；它不属于 target identity，因此切换学习方式
 不会悄悄创建另一个“要学的连接”。
 
 Personal Meaning 与 Personal Anchors 可以作为来源或 learner-authorized scaffold，但不成为 target
 identity。
+
+### 独立入口与 Personal Semantic World bridge
+
+Learning Runtime 只依赖 Curriculum 中已经解析的 Learning Target、Retention Target、Effective Learning
+Policy 与 ready plan，不读取 Personal Semantic World membership 来决定能否学习。入口边界必须满足：
+
+- Book/Catalog/direct stable-Sense entry 不创建 Personal Meaning、Meaning Focus、Alignment 或 Personal Anchor；
+- personal-first entry 只有在 learner 显式提交 Add-to-Learning 后才创建 Curriculum Membership；
+- 学习历史、Review、Relearning 或推荐不能反向推断并创建 Personal Meaning；
+- 删除、归档或重新组织 Personal Meaning 不删除 Supplemental Membership、Retention Target、Protocol
+  history、Evidence 或 FSRS State；
+- Personal Anchor 只在 learner 明确授权且当前 Materialization contract 允许时成为可选 scaffold；它
+  不是 direct learning 或 personal-first learning 的运行依赖；
+- 同一 learner × Sense × target binding 无论来自 Book、direct entry 或 personal-first bridge，都解析到
+  同一个 Retention Target，并按 Curriculum source provenance 去重。
+
+这是一条可选单向桥接，而不是模块绑定：
+
+```text
+Personal Semantic World ── explicit Add-to-Learning ──▶ Learning
+Learning ──╳──▶ implicit Personal Meaning creation
+```
 
 ### Retention Target：长期记忆身份
 
@@ -101,7 +137,118 @@ Learner Sense Progress 因此只是一个 Sense 下多个 Retention Targets 的 
 Sense 只选定一个 primary target binding，因而实际只产生一个 Retention Target；这是交付约束，
 不是把 learner × Sense 当成永久 scheduler identity 的理论结论。
 
-## 4. Content Provisioning
+## 4. Learning Policy 与 Resolved Learning Plan
+
+### Add-to-Learning 与准备边界
+
+Add-to-Learning 表达“把这条稳定连接纳入正式学习”，不是“内容已经准备完成”或“立即开始一次
+Protocol Run”。Curriculum 在 stable target、合法显式/继承 Policy Assignment、Declared Mastery conflict
+与 existing-scope 检查通过后接纳 Intent，创建 Supplemental Membership；随后才解析 Effective Learning
+Policy、Resolved Learning Plan 和实际 Content Provisioning。Book membership 作为另一个 Curriculum
+来源进入同一套 Policy/Plan resolution。
+
+因此，暂时缺少 content、grader、客户端或 protocol capability 是 plan readiness/blocked reason，
+不是删除已经接纳 learner intent 的理由。只有 invalid target、unsupported policy assignment、显式
+Declared Mastery conflict 或其他真正 admission conflict 才拒绝创建 Membership。
+
+### Learning Policy Profile
+
+Learning Policy Profile 是 learner 可以选择、系统可以版本化发布的学习方式合同。它不直接拥有
+Protocol Run、Materialization、Evidence 或 FSRS，而是协调一个 Learning Target 在完整生命周期中
+应如何选择这些对象。每个 Profile 至少固定或引用：
+
+- 对 `initial_learning | retention_review | relearning` 各 purpose 允许的 Protocol family 与选择规则；
+- 每类 Protocol 所需的内容能力、运行时 capability 与保证级别；
+- Evidence Policy、Scheduling Policy 与 learner-visible claim boundary；
+- provisioning fallback、blocked 条件和是否允许 learner 显式降级；
+- profile identity、version、适用语言/客户端能力与迁移规则。
+
+`lightweight` 与 `high_assurance` 是两个代表性 Profile，而不是全局固定枚举。轻量 Profile 可以把
+Lightweight Study、learner-rated Retention Review 与 Lightweight Rebinding 组合起来；高保证 Profile
+可以把 Structured Acquisition、evidence-oriented Retention Review 与 targeted/Structured Relearning
+组合起来。未来可以发布其他 Profile，但不能用 UI 名称或任意 Settings 值绕过版本化合同。
+
+Learning Entry Provenance 和 Learning Policy 保持正交。来源可以影响默认推荐、可用 content capability
+和初始 readiness，但不能永久决定方法：personal-first target 可以在资源满足时采用 high-assurance，
+Book/direct target 也可以选择 lightweight。若某 Profile 当前不可执行，Plan 必须诚实 preparing/blocked，
+不能根据来源静默改成另一个 Profile。
+
+Protocol 负责一次学习/复习过程“如何编排和结算”，Scheduling Policy/FSRS 负责“下一次何时 due”。
+Profile 可以同时引用二者以形成 learner 可理解的完整模式，但不能把步骤编排和时间调度合并为一个
+含义模糊的 Protocol 状态。
+
+### Learning Policy Assignment 与 Effective Learning Policy
+
+Learning Policy Assignment 是 learner 或 Curriculum 对 Profile 的显式、版本化选择。它可以位于
+learner default、Curriculum source 或 Retention Target override 三种 scope；解析优先级为：
+
+```text
+explicit target override
+      > applicable Curriculum assignment
+      > learner default
+      > system default
+```
+
+解析结果是一个固定 Profile/version 和 decision provenance 的 Effective Learning Policy。一个
+Retention Target 来自多个 Curriculum source 时，不得因为新增来源而静默切换已经生效的 Policy；
+冲突必须由确定性规则保留现有 assignment，或要求 learner 发出显式 policy-change operation。
+
+上述 precedence 和普通 policy-change 只负责尚未形成 Committed Learning Policy 的 target。只要目标
+仍处于 `preparing | blocked | ready` 且尚未创建第一次正式 Protocol Run，新的 Assignment revision
+就可以重新解析 Effective Learning Policy、内容准备和 Plan readiness；`ready` 或已进入 Planner
+inventory 本身不构成锁定。
+
+### Committed Learning Policy 与迁移边界
+
+当一个 Retention Target 创建第一次正式 Protocol Run 时，系统必须把当时的 Effective Learning Policy
+冻结为 Committed Learning Policy。这个边界表示学习方法已经开始产生可解释的步骤、完成条件和长期
+调度语义；此后普通 Settings、learner default、Curriculum assignment、新增来源或新增内容都不能原地
+改变该 target 的学习方式。后续 `initial_learning | retention_review | relearning` Run 都从这条
+Commitment 解析其 purpose-specific Protocol，直到发生显式 Learning Policy Migration。
+
+Learning Policy Migration 不是编辑原 Assignment，也不是“下一次 Run 自动采用新默认值”。它必须：
+
+- 由 learner 发出独立、显式意图，并固定 from/to Profile 与版本；
+- 在没有未结算 Encounter 的安全边界结束、中断或归档旧方法的 active work；
+- 创建新的 Assignment、Committed Learning Policy 与 Resolved Learning Plan revision；
+- 保留旧 Run、Outcome、Evidence、Completion、Scheduling Handoff 与 FSRS State，不重写其解释；
+- 重新执行目标方法所需的 content/capability readiness 检查，缺失时保持 `preparing/blocked`；
+- 不自动重开 Initial Learning、不重新初始化 FSRS，也不伪造第二次 Initial Handoff；若要取得新的
+  高保证资格，必须由独立 qualification/migration Protocol 明确规定。
+
+MVP 不提供 Learning Policy Migration：learner 在第一次正式 Protocol Run 前可以修改方式；一旦创建
+该 Run，目标页面只读展示 Committed Learning Policy，不再提供普通“修改学习方式”操作。领域模型
+保留未来显式迁移，但不允许客户端用删除后重加、修改默认方式或切换来源绕过锁定。
+
+### Resolved Learning Plan
+
+Resolved Learning Plan 是以下输入的版本化解析结果：
+
+```text
+Learning Target
+× Effective Learning Policy
+× available published/on-demand/hybrid content capabilities
+× executable runtime/client/grader capabilities
+```
+
+它固定 purpose-specific Protocol references、Content Provisioning requirements、当前 readiness、选择
+provenance 与 blocked reason。它不是未来 Encounter/Card 的固定序列，也不预计算长期 due calendar；
+Unified Planner 和 purpose-specific Protocol 仍在每次运行时决定下一项合法工作。
+
+每个适用 Protocol Purpose 的 readiness 使用闭集 `preparing | ready | blocked`；产品可按 Retention
+Target 当前 phase 投影一个 current readiness，但不能用一个全局布尔值覆盖三种 purpose：
+
+- `preparing`：target 与 Policy 已合法接纳，内容或 capability resolution 尚未完成；
+- `ready`：当前 purpose 已能解析合法 Protocol 与 provisioning path，可以进入正式 Planning；
+- `blocked`：缺少内容、协议、客户端、grader 或其他必需 capability，保存可解释 reason；
+- 任何非 `ready` 状态都不能创建 Protocol Run、Encounter、Completion、Evidence 或 FSRS 事实。
+
+选择高保证 Profile 但资源不足时必须保持 `blocked` 或继续 `preparing`，不能静默切换到轻量 Profile。
+learner 可以通过独立、显式的 policy-change operation 选择降级；该操作生成新的 Assignment、Effective
+Policy 与 Resolved Learning Plan revision，但只适用于尚未形成 Committed Learning Policy 的 target；
+已提交 Runtime 的 target 必须走 Learning Policy Migration。
+
+## 5. Content Provisioning
 
 ### Published Learning Content
 
@@ -118,8 +265,8 @@ Sense Learning Package 是这种路径的可复用 bundle。
 
 ### On-demand Learning Content
 
-On-demand content 在固定 Learning Target 与 Protocol 后，根据 learner 当前需要生成。生成可以读取
-confirmed Sense、target expression、中文 access path、Protocol requirements、允许的历史与 learner
+On-demand content 在固定 Learning Target、Effective Learning Policy 与当前 purpose Protocol 后，根据
+learner 当前需要生成。生成可以读取 confirmed Sense、target expression、中文 access path、Protocol requirements、允许的历史与 learner
 明确授权的 Personal Anchors，但不得重新解释或改变 Sense boundary。
 
 它适合：
@@ -138,11 +285,12 @@ Hybrid 可以用 published Sense facts、发音或 protected assessment，组合
 解释和练习。每个 material item 保留自己的 provenance、review status、visibility 与 Evidence
 eligibility，不能因同处一个界面而提升资格。
 
-## 5. Learning Materialization
+## 6. Learning Materialization
 
 Learning Materialization 是一次 Protocol Run 真正读取的不可变内容快照。无论来源为何，它至少固定：
 
 - Learning Target 与 Sense Version；
+- Effective Learning Policy Profile/version 与 plan revision；
 - Learning Protocol/version；
 - 每项内容的 role、source、generator/reviewer provenance 与 validation status；
 - Protocol Step 可引用的 material-role bindings；
@@ -156,11 +304,12 @@ Presentation 决定“当前如何显示”。Action、Attempt、Protocol Outcom
 learner 看到内容或提交响应后，系统不得
 重新调用模型改写题目、正确答案、Sense boundary 或评分基础；变化必须产生新的 materialization。
 
-生成失败、模型不可用或校验不通过时，Runtime 只能选择合法 fallback、改用 published content 或
-返回诚实 unavailable。它不能换一个 Sense、放宽 Protocol requirements 或展示未经校验的内容来
-伪造成功。
+生成失败、模型不可用或校验不通过时，Runtime 只能选择当前 Effective Learning Policy 允许的合法
+fallback、改用 published content，或把 Resolved Learning Plan 保持/转为带原因的 `blocked`。它不能
+换一个 Sense、放宽 Protocol requirements、静默降级 Learning Policy，或展示未经校验的内容来伪造成功；
+Membership 与 learner intent 仍保留，只有正式运行资格被阻止。
 
-## 6. Learning Protocol
+## 7. Learning Protocol
 
 Learning Protocol 是建立、检查、加强或恢复连接的方法合同，而不是页面模板。每个版本必须固定
 `purpose = initial_learning | retention_review | relearning`，并至少声明：
@@ -180,7 +329,11 @@ scheduler 权限不同：成功的 initial learning 必须 Handoff；retention r
 产生最多一个 Memory Outcome；relearning 不重新初始化也不重复评价原 Review，但版本化协议可以
 把指定的独立重学评价声明为 scheduler-eligible。
 
-## 7. Protocol Step 与 Card Presentation
+Learning Policy Profile 可以分别为三个 purpose 选择 Protocol family，但不会创建一个跨首次学习、
+数月 Review 与 Relearning 的巨大 Protocol Run。每个实际 Run 仍只固定一个 purpose，并引用解析它的
+Effective Learning Policy 与 Resolved Learning Plan revision。
+
+## 8. Protocol Step 与 Card Presentation
 
 Protocol Step 是 Protocol 的最小可恢复执行单位，不是固定页面。一个 Step definition 至少声明：
 
@@ -210,9 +363,9 @@ Card Presentation 是当前 Step/Action 的瞬时客户端表现。一个 Step �
 一个 Card 也不能反向拥有 Step、progress、Evidence、Curriculum membership 或 FSRS。Cards/Decks 仍不
 是 Sensa 的领域对象；卡片布局、动画和组件树属于 renderer/delivery contract。
 
-## 8. 三种 Protocol Purpose
+## 9. 三种 Protocol Purpose
 
-### 8.1 Initial Learning Protocol
+### 9.1 Initial Learning Protocol
 
 Initial Learning 负责在 `acquiring` 阶段首次正式建立 meaning–form connection。成功结束必须产生一种
 protocol-specific Initial Learning Completion，并在同一权威事务边界创建 Scheduling Handoff；中断、
@@ -220,7 +373,7 @@ protocol-specific Initial Learning Completion，并在同一权威事务边界�
 
 #### Lightweight Study Protocol
 
-这是首版默认的初始连接方式：
+这是轻量 Learning Policy 可选择的初始连接方式：
 
 ```text
 Learning Target
@@ -256,7 +409,7 @@ Learning Target
 只有该 Protocol 可以使用其 Gate/5D/Graduation 术语。其他 Protocol 不得伪造空 Gate、默认 pass 或
 虚构 Graduation 来复用同一状态机。
 
-### 8.2 Retention Review Protocol
+### 9.2 Retention Review Protocol
 
 Retention Review 只处理已经拥有 FSRS Memory State 且当前 due 的 target。一个 Review Protocol Run
 可以使用一个或多个 Steps，也可以由简单 learner rating 或独立 grader 产生结果，但一次 due Review
@@ -274,7 +427,7 @@ FSRS due
 Evidence。Review 中的 reveal、detail、repair 或当场重测不能为同一个 due identity 再产生第二个
 Memory Outcome。
 
-### 8.3 Relearning Protocol
+### 9.3 Relearning Protocol
 
 Review 暴露遗忘或修复需要后，系统可以在原 Memory Outcome 已结算的前提下打开 Relearning
 Protocol Run。Relearning 负责恢复连接，不负责重新评价那次 Review：
@@ -301,7 +454,7 @@ relearning evaluations 映射为各自的 Memory Outcome。每个 Outcome 必须
 Protocol Step/evaluation identity、basis 与 scheduler policy version，并且只能应用一次。Relearning
 Completion 本身不自动产生 Outcome，也不改变已经落账的 Review Outcome。
 
-## 9. Initial Learning Completion、Outcome 与 Evidence
+## 10. Initial Learning Completion、Outcome 与 Evidence
 
 Initial Learning Completion 是 Initial Learning Protocol 成功结束的上位语义：Lightweight Study
 产生 Study Completion，Structured Acquisition 产生 Acquisition Graduation，合法迁移可以产生
@@ -325,7 +478,7 @@ Protocol Outcome 说明一次方法运行发生了什么；Learning Evidence 说
 Protocol 明确允许时成为 completion 或 scheduling basis，但必须保留真实保证级别，不能污染 Gate、
 5D 或 independently verified cohort。
 
-## 10. Scheduling Handoff 与 FSRS
+## 11. Scheduling Handoff 与 FSRS
 
 FSRS 是 retention scheduler，不是学习方法或掌握证明。每个 Retention Target 默认最多拥有一份
 FSRS Memory State。它只通过 Initial Learning Completion 对应的合法 Scheduling Handoff 初始化；
@@ -348,7 +501,7 @@ Structured Acquisition 使用 `acquisition_graduation + behavioral`；Lightweigh
 `protocol_completion + non_evidentiary`。历史 initialization basis 不被后续 Review 或 Relearning
 覆盖。
 
-## 11. LLM 的不同职责
+## 12. LLM 的不同职责
 
 系统必须区分：
 
@@ -363,9 +516,9 @@ Semantic LLM 的确认结果不能顺带成为学习内容；Content LLM 不能�
 Personal Anchors 只有在 learner 明确授权后才可作为 on-demand generation input。生成的公共或共享
 内容不得泄露姓名、图片、录音、原始叙述或其他 private data。
 
-## 12. 中文 L1、英语 L2 的首版协议
+## 13. 中文 L1、英语 L2 的轻量 Policy 示例
 
-首版默认组合为：
+一个可选的轻量组合为：
 
 ```text
 confirmed English-oriented Sense
@@ -377,27 +530,33 @@ confirmed English-oriented Sense
 × FSRS Scheduling
 ```
 
-首版 Learning Materialization 至少提供：
+该轻量 Profile 的 Learning Materialization 至少提供：
 
-- 中文可理解的 Meaning Focus；
+- 中文可理解的 Sense focus/L1 access path；
 - 一个具体经验或场景；
 - primary English expression 与可用发音；
 - 少量自然、绑定同一 Sense 的例句；
 - 必要时一个重要相邻意义区别；
 - 一个简单主动回忆提示或等价的轻量连接动作。
 
-具体 Step 数量、顺序、Card Presentation 和 rating 操作由后续 delivery/runtime contract 确定。首版不要求 Gate、5D、
+具体 Step 数量、顺序、Card Presentation 和 rating 操作由后续 delivery/runtime contract 确定。该 Profile 不要求 Gate、5D、
 protected Transfer pool 或 Structured Acquisition Graduation；已有 published Package 可以作为内容源
 或 fallback，但不是 Personal Meaning 加入学习的前置条件。
 
-## 13. 代表性组合
+## 14. 代表性组合
 
 ### 公共课程中的高保证学习
 
 一个 Book Sense 使用 reviewed Package 与 Structured Acquisition。所有 required Gates 通过后形成
 evidence-backed handoff。这里保留现有完整 Acquisition 模型。
 
-### learner 新建 Sense 的首版学习
+### 不经过 Personal Semantic World 的直接学习
+
+learner 从 Catalog、Book 或 reviewed Contextual Lookup 选择一个 existing stable Sense 及 primary target
+binding，直接发起或继承 Curriculum membership。系统保存 direct/book provenance，解析相同的
+Learning Target、Policy 与 Retention Target；整个过程不创建 Personal Meaning 或 Personal Anchor。
+
+### learner 新建 Sense 的轻量学习
 
 learner 确认 `tactful` Sense 后，LLM 根据固定 Sense Version 生成中文场景、英语表达、例句、边界与
 简单 recall 内容，冻结后交给 Lightweight Study。完成后产品只显示“已安排复习”，FSRS 从
@@ -411,12 +570,30 @@ learner 确认 `tactful` Sense 后，LLM 根据固定 Sense Version 生成中文
 ### 简单 Review 后的轻量重学
 
 一个 due target 通过 Retention Review 得到 `learner_rated` 的 forgotten Outcome。系统先完成该 Review
-唯一的 FSRS 更新，再运行 Lightweight Rebinding Steps。若首版协议未将重测声明为 scheduler-eligible，
+唯一的 FSRS 更新，再运行 Lightweight Rebinding Steps。若该轻量协议未将重测声明为 scheduler-eligible，
 当场恢复只产生 Relearning Completion；若未来协议启用类 Anki 行为，独立重测可另行产生
 origin=`relearning` 的 Memory Outcome。两者都不覆盖 forgotten Outcome。
 
-## 14. 不变量
+## 15. 不变量
 
+- Formal Learning 可以由 Book、direct stable-Sense selection 或 personal-first bridge 独立进入；Personal
+  Semantic World 不是前置条件，Learning 也不反向创建 Personal Meaning；
+- 所有入口都必须固定 stable Sense/Version 与 target binding；裸词、未对齐 Reference Sense 或 Personal
+  Meaning 本身不能成为 Learning Target；
+- Learning Entry Provenance 只记录来源，不改变 Learning/Retention Target identity；同一连接跨来源去重；
+- Personal Content lifecycle 不删除或重写 Curriculum Membership、Protocol history、Evidence 或 FSRS；
+- Entry Provenance 与 Learning Policy 正交；来源可以影响推荐/readiness，但不得静默决定或降级 Policy；
+- Learning Policy Profile 是显式、版本化、可审计的学习方式合同，不是普通呈现 Preference；
+- 一个 Profile 协调三个 purpose 的 Protocol 选择，但每个 Protocol Run 仍只能固定一个 purpose；
+- Effective Learning Policy 的 scope、precedence、profile version 与 decision provenance 必须可重放；
+- 第一次正式 Protocol Run 创建时必须冻结 Committed Learning Policy；普通 Assignment、默认方式、
+  新来源或新内容此后不得改变该 target 的学习方式；
+- Resolved Learning Plan 只解析 Protocol/provisioning/readiness，不预写 Encounter、Card 或未来 due 日历；
+- Add-to-Learning 接纳可以先于内容物化；`preparing/blocked` Membership 保留 learner intent，但只有
+  `ready` plan 可以进入正式 Runtime；
+- 高保证 Profile 缺少资源时不得静默降级；未提交 Runtime 的 target 通过显式 policy-change revision
+  切换，已提交 Runtime 的 target 只能通过未来显式 Learning Policy Migration 切换；两者都不改变
+  Target、不重置 FSRS、不改写 active/historical Protocol facts；
 - Content Provisioning、Learning Protocol、Evidence Policy 与 Scheduling Policy 保持正交；
 - pre-generated 不等于人工，LLM-generated 也不等于 runtime/on-demand；
 - 所有学习内容在使用前固定 target、protocol、provenance、validation 与 immutable materialization；

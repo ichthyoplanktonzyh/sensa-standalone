@@ -1,3 +1,5 @@
+import type { ReferenceLookupResult } from './reference/referenceDictionary';
+
 /**
  * 4 选 1 干扰项定义
  */
@@ -18,11 +20,36 @@ export interface SenseGroup {
 /**
  * 原生语境例句定义
  */
+export type SyncedExampleMediaRender =
+  | {
+      kind: 'video';
+      provider: 'film' | 'television' | 'youtube' | 'podcast' | 'other';
+      providerLabel: string;
+      playbackUrl: string;
+      posterUrl?: string;
+      sourceUrl?: string;
+      rightsLabel?: string;
+    }
+  | {
+      kind: 'embed';
+      provider: 'youtube' | 'other';
+      providerLabel: string;
+      embedUrl: string;
+      sourceUrl?: string;
+      rightsLabel?: string;
+    };
+
 export interface Sentence {
-  src: string;      // 影视/报刊出处，如 "老友记 S01E02", "经济学人"
-  theme: string;    // 全屏卡渐变主题：'sky' | 'flag' | 'night' | 'city' | 'forest'
+  exampleId?: string; // 不可变 Learning Example identity
+  src: string;      // 已审核的真实来源标签，或诚实的普通学习例句标签
+  theme: string;    // Baseline 例句卡的旧渐变主题；Sensa viewer 不读取它
   en: string;       // 英文例句（包含 <b>word</b> 强调标签）
   zh: string;       // 对应中文译文
+  audioUrl?: string;// 学习包提供的已生成例句音频
+  sourceKind?: 'learning_example' | 'attested_usage';
+  contextL2?: string;
+  contextL1?: string;
+  syncedMedia?: SyncedExampleMediaRender;
 }
 
 /**
@@ -40,7 +67,7 @@ export interface SenseDetail {
   def: string;          // 该义项的完整双语词典释义 (用于全屏卡下半部分模糊与展开)
   pattern?: string;     // 句型/搭配结构框，如 "~ (between/with sb) (for sth)"
   tag?: string;         // 该义项的标签，如 "核心"、"常考"
-  sentences: Sentence[];// 该义项下的来自不同影视剧的原声例句列表 (用于全屏卡上半部分左右滑动)
+  sentences: Sentence[];// 该义项下的获准 Learning Examples
 }
 
 /**
@@ -70,7 +97,22 @@ export interface Word {
 /**
  * 学习卡片与视图阶段枚举
  */
-export type LearningStage = 'choice' | 'recall' | 'audio_choice' | 'final_gate' | 'detail' | 'review_recall';
+/** Stages owned by the formal Learn/Review runtime. */
+export type FormalLearningStage =
+  | 'introduction'
+  | 'recognition'
+  | 'recall'
+  | 'transfer'
+  | 'review_assessment'
+  | 'review_feedback';
+
+/** Historical comparison stages kept only on the isolated demo surface. */
+export type LegacyLearningDemoStage =
+  | 'audio_choice'
+  | 'final_gate'
+  | 'detail';
+
+export type LearningStage = FormalLearningStage | LegacyLearningDemoStage;
 
 /**
  * 简明查词释义项 (词性 + 中文简释)
@@ -78,6 +120,49 @@ export type LearningStage = 'choice' | 'recall' | 'audio_choice' | 'final_gate' 
 export interface QuickDictSense {
   pos: string;      // 词性，如 "conj.", "n.", "vi. vt.", "adj."
   text: string;     // 中文简明释义，如 "和，与，又；加上；然后；那么"
+  /** Stable identity from the normalized Reference entry, when available. */
+  referenceSenseId?: string;
+}
+
+/**
+ * The provider-neutral input for a contextual dictionary lookup. A plain
+ * string remains a supported input for ordinary, context-free lookup.
+ */
+export interface DictionaryLookupRequest {
+  /** The exact form the learner clicked, before lemmatization. */
+  rawClickedForm: string;
+  /** Immutable Example identity, never a list index or a generated UI id. */
+  exampleId: string;
+  /** Full, markup-free L2 text for the immutable Example. */
+  textL2: string;
+  /** Exact character span in textL2 occupied by the clicked surface. */
+  clickedStart: number;
+  clickedEnd: number;
+  clickedSurface: string;
+}
+
+export type DictionaryLookupInput = string | DictionaryLookupRequest;
+
+export type ContextualSenseResolutionStatus =
+  | 'authored_target'
+  | 'reviewed'
+  | 'model_confident'
+  | 'ambiguous'
+  | 'unresolved';
+
+/**
+ * Contextual resolution metadata. Any selected id must be one of the closed
+ * Reference Sense ids returned in the same lookup result.
+ */
+export interface ContextualSenseResolution {
+  status: ContextualSenseResolutionStatus;
+  referenceSenseId?: string;
+  candidateReferenceSenseIds?: readonly string[];
+  resolverVersion: string;
+  /** Optional resolver confidence. It never changes the provider-owned entry. */
+  confidence?: number;
+  /** Present only when a model actually produced the closed-set decision. */
+  modelId?: string;
 }
 
 /**
@@ -91,6 +176,25 @@ export interface QuickDictEntry {
   senses: QuickDictSense[];   // 简明释义列表
   hasFullDetail?: boolean;    // 是否在词库中有完整卡片，支持「查看详细释义 >」
   isStarred?: boolean;        // 是否加入生词本/收藏
+  /** Transient UI state used while an asynchronous Reference lookup settles. */
+  lookupState?: 'loading' | 'ready' | 'error';
+  lookupMessage?: string;
+  /** The exact normalized result that produced this quick projection. */
+  referenceLookup?: ReferenceLookupResult;
+}
+
+/**
+ * Explicit external dictionary support supplied to formal cards. A missing
+ * entry is represented by null; learning content must never be fabricated by
+ * the dictionary adapter.
+ */
+export type DictionaryLookup = (
+  input: DictionaryLookupInput,
+  options?: DictionaryLookupOptions,
+) => Promise<QuickDictEntry | null>;
+
+export interface DictionaryLookupOptions {
+  signal?: AbortSignal;
 }
 
 /**
@@ -100,10 +204,8 @@ export interface SentenceToken {
   id: string;                 // 唯一 key，如 "tok_0"
   text: string;               // 显示的原始文本 (包含相连的标点，如 "principles,")
   cleanWord: string;          // 纯单词 (剥离标点，如 "principles")
-  lemma: string;              // 词形还原后的原型 (如 "principle")
   isWord: boolean;            // 是否为有效英文单词 (空格/纯标点为 false)
   isTarget: boolean;          // 是否为当前学习卡片的主词 (来自 <b> 标签)
   charStart: number;          // 纯文本中的起始字符位置 (用于 TTS 朗读 onboundary 对齐)
   charEnd: number;            // 纯文本中的结束字符位置
 }
-

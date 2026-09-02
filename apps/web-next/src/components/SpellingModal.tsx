@@ -4,9 +4,13 @@ import { WORDS } from '../data';
 import { lookupWord } from '../services/quickDict';
 import { audioService } from '../services/audioService';
 
+export type SpellingPracticeMode = 'legacy' | 'quick_spelling' | 'dictation';
+
 interface SpellingModalProps {
   active: boolean;
   wordData: Word | QuickDictEntry | string | null;
+  mode?: SpellingPracticeMode;
+  cueText?: string;
   onClose: () => void;
   toast: (msg: string) => void;
 }
@@ -14,6 +18,8 @@ interface SpellingModalProps {
 export const SpellingModal = ({
   active,
   wordData,
+  mode = 'legacy',
+  cueText = '',
   onClose,
   toast,
 }: SpellingModalProps) => {
@@ -51,28 +57,36 @@ export const SpellingModal = ({
       .map((s) => `${s.pos} ${s.text}`)
       .join('  ');
   }
+  if (cueText.trim()) {
+    briefDef = cueText.trim();
+  }
 
-  // 打开弹窗时清空、自动聚焦并立即自动播放标准原声发音
+  // 听写使用声音提示；随手拼写直接显示当前 Sense 提示；旧入口保持原行为。
   useEffect(() => {
     if (active && targetWord) {
       setTypedText('');
       setStatus('normal');
-      setShowHint(false);
+      setShowHint(mode === 'quick_spelling');
 
-      // 自动播放高保真母语原声发音
-      const timer = setTimeout(() => {
-        audioService.playWord(targetWord, 'us');
-      }, 120);
+      const audioTimer = mode === 'quick_spelling'
+        ? undefined
+        : setTimeout(() => {
+            void audioService.playWord(targetWord, 'us');
+          }, 120);
 
-      setTimeout(() => {
+      const focusTimer = setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
         }
       }, 80);
 
-      return () => clearTimeout(timer);
+      return () => {
+        if (audioTimer) clearTimeout(audioTimer);
+        clearTimeout(focusTimer);
+        audioService.stop();
+      };
     }
-  }, [active, targetWord]);
+  }, [active, mode, targetWord]);
 
   // 发音朗读
   const speakWord = () => {
@@ -92,13 +106,13 @@ export const SpellingModal = ({
     if (cleanInput === cleanTarget) {
       setStatus('success');
       speakWord();
-      toast('🎉 拼写正确！');
+      toast(mode === 'dictation' ? '🎉 听写正确！' : '🎉 拼写正确！');
       setTimeout(() => {
         onClose();
       }, 700);
     } else {
       setStatus('error');
-      toast('拼写有误，再试一次吧~');
+      toast(mode === 'dictation' ? '听写有误，再试一次吧~' : '拼写有误，再试一次吧~');
       setTimeout(() => {
         setStatus('normal');
         if (inputRef.current) {
@@ -175,6 +189,7 @@ export const SpellingModal = ({
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-label={mode === 'dictation' ? '听写' : '随手拼写'}
       >
         {/* 顶部右上角工具按钮：收藏 + 设置 */}
         <div className="spelling-header">
@@ -236,7 +251,7 @@ export const SpellingModal = ({
           {/* 提示释义浮层 */}
           {showHint && briefDef && (
             <div className="spelling-hint-def">
-              <span className="hint-label">释义：</span>
+              <span className="hint-label">{mode === 'quick_spelling' ? '当前意思：' : '提示：'}</span>
               <span>{briefDef}</span>
             </div>
           )}

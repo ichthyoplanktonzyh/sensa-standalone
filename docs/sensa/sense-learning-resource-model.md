@@ -1,14 +1,14 @@
 # Sense Learning Resource Model
 
 > 状态：Canonical resource model  
-> 更新日期：2026-08-31
+> 更新日期：2026-09-01
 
 本文定义 Sensa 如何通过 Published、On-demand 或 Hybrid 路径为一个固定 Learning Target 提供学习
 资源，以及这些资源如何在一次 Learning Protocol Run 前冻结为 Learning Materialization。它同时
 定义 Sense Learning Package、Reference Lexicon、Lexical Enrichment 与 Semantic Field 如何引用已
 审核内容。资源不等于卡片：Protocol Step 按 material role 引用不可变内容并定义交互与结果资格，
 Card Presentation 只把当前 Step 阶段渲染给 learner。正式 Action 与 Practice Task 由版本化
-Protocol/Policy/Profile 从不可变资源中物化。
+Learning Policy Profile、purpose-specific Protocol 与其他适用 Policy/Profile 从不可变资源中物化。
 
 ## 1. Learning content sources 与 materialization
 
@@ -16,12 +16,18 @@ Protocol/Policy/Profile 从不可变资源中物化。
 
 - **Published Learning Content**：来自不可变 Content Release，通常由 Sense Learning Package 承载，
   适合复用、离线安装、审核和高保证 assessment；
-- **On-demand Learning Content**：在 stable Sense、target expression、learner locale 与 protocol 已固定
+- **On-demand Learning Content**：在 stable Sense、target expression、Effective Learning Policy、learner locale 与 protocol 已固定
   后按需生成，适合个人语义世界中的长尾目标与轻量学习；
 - **Hybrid**：复用 published 语义/词形/例句等基础事实，再为本次 target 补充按需生成的教学材料。
 
+Learning Entry Provenance 是第三个正交维度。Book、direct stable-Sense 与 personal-first entry 都可以
+使用 Published、On-demand 或 Hybrid；来源本身不决定 Learning Policy。personal-first/长尾目标通常
+更适合用 On-demand 内容快速满足 Lightweight requirements，而 Structured/high-assurance 只有在
+required assessment、novelty、grader 与 runtime capabilities 均真实可用时才可 ready。这是 readiness
+判断，不是把 Personal Semantic World 永久绑定到 Lightweight。
+
 无论来源为何，Runtime 都不能直接消费仍可变化的 draft。开始前必须建立不可变 Learning
-Materialization，至少固定 target、protocol/version、内容项与角色、答案/评分合同（如有）、source/
+Materialization，至少固定 target、Effective Learning Policy/plan revision、protocol/version、内容项与角色、答案/评分合同（如有）、source/
 generator/prompt-policy provenance、校验结果与 digest。learner 作答后不得重新生成并替换 prompt、
 答案或评分依据；内容更新只能创建新的 materialization。
 
@@ -33,6 +39,8 @@ Materialization 只回答“本次 run 有哪些固定内容以及它们可承�
 
 On-demand materialization 不会因为生成成功而自动成为 Published Package，也不因此获得 Structured
 Acquisition 的 Evidence eligibility。每个协议必须独立声明最低内容角色、验证强度与允许的结果。
+生成内容较少只能说明 Lightweight 更易准备，不能把 AI 输出自动提升为 high-assurance assessment
+inventory 或 Acquisition Graduation basis。
 
 ### 1.1 Published Package identity
 
@@ -107,9 +115,10 @@ alignmentRelation:
 
 Alignment 固定 Reference Release、Reference Sense、Sensa Sense/Sense Version provenance、reviewer、
 review status 与 reason。映射不要求一对一，也不允许仅凭释义文本相似自动建立。没有 Alignment 的
-Reference Sense 仍可浏览；只有对齐到 stable Sensa Sense，且选定 Learning Protocol 存在可执行的
-published、on-demand 或 hybrid 内容路径时，才可能通过 Curriculum 的 Add-to-Learning decision
-加入正式学习。
+Reference Sense 仍可浏览；只有对齐到 stable Sensa Sense 并拥有合法 target binding 时，才可能通过
+Curriculum 的 Add-to-Learning decision 被接纳。接纳后的 Effective Learning Policy 和可执行
+published、on-demand 或 hybrid 内容路径决定 Resolved Learning Plan readiness，而不是反向决定该
+learner intent 是否存在。
 
 ### Lexical Occurrence 与上下文解析
 
@@ -392,17 +401,22 @@ Semantic Field Version 只能引用同一 Content Release 中的 Sense Versions 
 距离或自动聚类冒充语义事实。Field 不是 Book，不携带 curriculum position、daily quota 或 learner
 state。
 
-Curriculum 只能接纳存在可执行 Content Provisioning path 的 target，不能把仍未物化、未校验的草稿
-当作可执行课程：
+Curriculum 可以先接纳 stable Learning Target 与合法 Learning Policy Assignment，再在独立准备阶段
+解析 Content Provisioning path；接纳不等于当前可执行，仍未物化、未校验的草稿不能被当作 ready
+课程或正式学习内容：
 
 - Book Version 固定其有序 Sense membership 与对应 Content Release；Book Range 只从该不可变
   membership 中解析稳定 selection；
-- Supplemental Membership 指向已解析 primary expression 的 Learning Target；每个 Study Scope
-  Revision 必须固定其 Retention Target 与选定 protocol，Session/Encounter 再将
+- Supplemental Membership 指向已解析 primary expression 的 Learning Target，并在内容准备期间保留
+  learner intent；每个 Study Scope Revision 必须固定其 Retention Target、Effective Learning Policy、
+  Resolved Learning Plan readiness 与当前 purpose protocol reference，Session/Encounter 再将
   published、on-demand 或 hybrid 来源解析为不可变 Learning
   Materialization；
-- 找不到合法 provisioning path 时 Add-to-Learning 必须返回 `content_unavailable`。词典释义、draft、
-  sibling Sense 或未通过协议校验的自由生成内容都不能拼出幽灵课程；
+- 找不到合法 provisioning path 时必须把 plan 标记为 `blocked(reason=content_unavailable)`，保留
+  Membership 并从正式 Planner inventory 排除。词典释义、draft、sibling Sense 或未通过协议校验的
+  自由生成内容都不能把 blocked target 冒充成 ready 学习；
+- 高保证 Learning Policy 缺少 required assessment/novelty/grader capability 时不得静默使用轻量内容；
+  只有 learner 显式改变 Policy Assignment 后，才能按新 Profile 重新解析 plan；
 - Content Release 更新不改变已经开始的 Session/Encounter；下一 Scope Revision 可以显式解析新
   Package 或创建新 materialization，但必须保留此前 Curriculum provenance 与学习事实。
 
@@ -559,8 +573,11 @@ scene domain、construction、disambiguating cue、collocations 和 variation no
   的 LLM-assisted Sense Construction。后者必须经过 learner 确认并创建 stable Sense Version，仍不能
   冒充 Reference Sense 或已发布 Package；
 - On-demand 内容必须在 learner 使用前冻结为带 digest 的 Learning Materialization，记录 target、
-  protocol、generator/policy provenance 与验证结果；任何 response 之后都不得重新生成并替换 prompt、
+  Effective Learning Policy/plan revision、protocol、generator/policy provenance 与验证结果；任何
+  response 之后都不得重新生成并替换 prompt、
   answer、grader 或反馈依据；
+- Content Provisioning failure 只改变 purpose-specific plan readiness/blocked reason，不删除已接纳的
+  Supplemental Membership，也不能静默切换 Learning Policy Profile 或制造 Runtime progress；
 - Protocol Step 只能绑定 Materialization 中具备对应 role、visibility、exposure 与 grader eligibility 的
   内容；Card Presentation 不得临时补造内容、替换评分依据或升级结果资格；
 - Semantic LLM、Learning Content LLM 与未来 Grading LLM 是不同领域角色；同一次模型调用不能因
