@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo, useRef, type MouseEvent } fr
 import type {
   Word,
   FormalLearningStage,
-  QuickDictEntry,
 } from './types';
 import { useLearnQueue } from './engine/useLearnQueue';
 import { useReviewQueue } from './engine/useReviewQueue';
@@ -54,14 +53,11 @@ import { LearnScreen } from './components/LearnScreen';
 import { ExampleScreen } from './components/ExampleScreen';
 import { DictDetailModal } from './components/DictDetailModal';
 import { ReferenceDictionaryScreen } from './components/ReferenceDictionaryScreen';
-import {
-  ReferenceExampleViewer,
-  type ReferenceExampleDeck,
-} from './components/ReferenceExampleViewer';
+import { ReferenceExampleViewer } from './components/ReferenceExampleViewer';
 import { DictionaryPresentationProvider } from './components/DictionaryPresentationContext';
 import { NoteEditorModal } from './components/NoteEditorModal';
 import { SceneEditorModal } from './components/SceneEditorModal';
-import { SpellingModal, type SpellingPracticeMode } from './components/SpellingModal';
+import { SpellingModal } from './components/SpellingModal';
 import { WordListScreen } from './components/WordListScreen';
 import { FinishScreen } from './components/FinishScreen';
 import { StatsScreen } from './components/StatsScreen';
@@ -107,6 +103,7 @@ import {
 import { learningRuntimeCoordinator } from './learningRuntime/runtimeCoordinator';
 import { useShellNavigation } from './router/useShellNavigation';
 import { usePresentationStore } from './stores/presentationStore';
+import { useOverlayStore } from './stores/overlayStore';
 
 type FlowType = 'learn' | 'review' | 'demo';
 type RuntimeLearningStage = FormalLearningStage | 'review_repair';
@@ -334,90 +331,41 @@ export default function App() {
   const [selectedSenseIdx, setSelectedSenseIdx] = useState(0);
   const [selectedSentenceIdx, setSelectedSentenceIdx] = useState(0);
 
-  /* ---------- Lexical Reference 详情；原始柯林斯式实现保留为 baseline ---------- */
-  const [dictModalWord, setDictModalWord] = useState<Word | QuickDictEntry | string | null>(null);
-  const [dictModalTab, setDictModalTab] = useState<string>('柯林斯');
-  const [referenceExampleDeck, setReferenceExampleDeck] = useState<ReferenceExampleDeck | null>(null);
+  /* ---------- 覆盖层：词典、笔记、场景、拼写、菜单、Toast ---------- */
+  // 这些原本是十六个 useState，其唯一职责是让深层屏幕唤起一个浮层，
+  // 因而每个 opener 都要作为 prop 一路传下去。改由 overlayStore 持有。
+  const dictModalWord = useOverlayStore((state) => state.dictModalWord);
+  const dictModalTab = useOverlayStore((state) => state.dictModalTab);
+  const referenceExampleDeck = useOverlayStore((state) => state.referenceExampleDeck);
+  const openDictModal = useOverlayStore((state) => state.openDictModal);
+  const closeDictModal = useOverlayStore((state) => state.closeDictModal);
+  const setReferenceExampleDeck = useOverlayStore((state) => state.setReferenceExampleDeck);
 
-  const openDictModal = useCallback((word: Word | QuickDictEntry | string, tab = '柯林斯') => {
-    setDictModalWord(word);
-    setDictModalTab(tab);
-  }, []);
+  const noteModalWord = useOverlayStore((state) => state.noteModalWord);
+  const noteModalSense = useOverlayStore((state) => state.noteModalSense);
+  const openNoteEditor = useOverlayStore((state) => state.openNoteEditor);
+  const closeNoteEditor = useOverlayStore((state) => state.closeNoteEditor);
 
-  const closeDictModal = useCallback(() => {
-    setReferenceExampleDeck(null);
-    setDictModalWord(null);
-  }, []);
+  const sceneEditorTarget = useOverlayStore((state) => state.sceneEditorTarget);
+  const setSceneEditorTarget = useOverlayStore((state) => state.openSceneEditor);
+  const closeSceneEditor = useOverlayStore((state) => state.closeSceneEditor);
 
-  /* ---------- 独立笔记编辑全屏弹窗状态 ---------- */
-  const [noteModalWord, setNoteModalWord] = useState<Word | QuickDictEntry | string | null>(null);
-  const [noteModalSense, setNoteModalSense] = useState<{ senseId: string; meaning: string } | null>(null);
+  const spellingWord = useOverlayStore((state) => state.spellingWord);
+  const spellingMode = useOverlayStore((state) => state.spellingMode);
+  const spellingCue = useOverlayStore((state) => state.spellingCue);
+  const openSpelling = useOverlayStore((state) => state.openSpelling);
+  const closeSpelling = useOverlayStore((state) => state.closeSpelling);
 
-  const openNoteEditor = useCallback((
-    word?: Word | QuickDictEntry | string,
-    senseId?: string,
-    meaning?: string
-  ) => {
-    if (word) {
-      setNoteModalWord(word);
-      setNoteModalSense(senseId ? { senseId, meaning: meaning || '' } : null);
-    }
-  }, []);
+  const toastMsg = useOverlayStore((state) => state.toastMsg);
+  const toast = useOverlayStore((state) => state.toast);
 
-  const closeNoteEditor = useCallback(() => {
-    setNoteModalWord(null);
-    setNoteModalSense(null);
-  }, []);
+  const menuMoreOpen = useOverlayStore((state) => state.menuMoreOpen);
+  const menuBookOpen = useOverlayStore((state) => state.menuBookOpen);
+  const menuPersonalContent = useOverlayStore((state) => state.menuPersonalContent);
+  const setMenuMoreOpen = useOverlayStore((state) => state.setMenuMoreOpen);
+  const setMenuPersonalContent = useOverlayStore((state) => state.setMenuPersonalContent);
+  const closeMenus = useOverlayStore((state) => state.closeMenus);
 
-  /* ---------- 我的场景独立富媒体编辑状态 ---------- */
-  const [sceneEditorTarget, setSceneEditorTarget] = useState<{
-    content: PrototypeIntroductionPackage;
-    anchorId?: string;
-  } | null>(null);
-
-  const closeSceneEditor = useCallback(() => setSceneEditorTarget(null), []);
-
-  /* ---------- 独立单词拼写练习弹窗状态 ---------- */
-  const [spellingWord, setSpellingWord] = useState<Word | QuickDictEntry | string | null>(null);
-  const [spellingMode, setSpellingMode] = useState<SpellingPracticeMode>('legacy');
-  const [spellingCue, setSpellingCue] = useState('');
-
-  const openSpelling = useCallback((
-    word?: Word | QuickDictEntry | string,
-    mode: SpellingPracticeMode = 'legacy',
-    cueText = ''
-  ) => {
-    if (word) {
-      setSpellingMode(mode);
-      setSpellingCue(cueText);
-      setSpellingWord(word);
-    }
-  }, []);
-
-  const closeSpelling = useCallback(() => {
-    setSpellingWord(null);
-    setSpellingMode('legacy');
-    setSpellingCue('');
-  }, []);
-
-  /* ---------- 全局 Toast ---------- */
-  const [toastMsg, setToastMsg] = useState('');
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const toast = useCallback((msg: string) => {
-    setToastMsg(msg);
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToastMsg(''), 1900);
-  }, []);
-
-  /* ---------- 全局弹窗菜单 ---------- */
-  const [menuMoreOpen, setMenuMoreOpen] = useState(false);
-  const [menuBookOpen, setMenuBookOpen] = useState(false);
-  const [menuPersonalContent, setMenuPersonalContent] = useState<PrototypeIntroductionPackage | null>(null);
-  const closeMenus = useCallback(() => {
-    setMenuMoreOpen(false);
-    setMenuBookOpen(false);
-    setMenuPersonalContent(null);
-  }, []);
   const menuPersonalAnchors = menuPersonalContent
     ? personalContentService.getSemanticAnchors(menuPersonalContent.senseKey)
     : [];
