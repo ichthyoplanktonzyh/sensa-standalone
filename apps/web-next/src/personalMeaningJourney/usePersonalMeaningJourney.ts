@@ -6,7 +6,8 @@
  * notifications when the v2 journey fact store changes.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
+import { createVersionStore } from '../services/createSnapshotStore';
 import {
   journeyGateway,
   type JourneyGatewayStatus,
@@ -20,15 +21,21 @@ import type {
 
 export const useJourneyGateway = (): PersonalMeaningJourneyGateway => journeyGateway;
 
+/**
+ * The gateway's getters build a fresh view model on every call, so components
+ * subscribe to its change count and derive their own view from it. This closes
+ * the window the previous `useState` + `useEffect` pairing left open, where a
+ * change landing between render and effect showed stale facts until the next
+ * notification.
+ */
+const gatewayVersionStore = createVersionStore((listener) => journeyGateway.subscribe(listener));
+
 const useGatewaySnapshot = <T,>(select: () => T): T => {
-  const [snapshot, setSnapshot] = useState<T>(select);
-  const refresh = useCallback(() => setSnapshot(select), [select]);
-  useEffect(() => {
-    const unsubscribe = journeyGateway.subscribe(refresh);
-    refresh();
-    return unsubscribe;
-  }, [refresh]);
-  return snapshot;
+  const version = useSyncExternalStore(
+    gatewayVersionStore.subscribe,
+    gatewayVersionStore.getSnapshot,
+  );
+  return useMemo(select, [select, version]);
 };
 
 export const useJourneyStatus = (): JourneyGatewayStatus =>

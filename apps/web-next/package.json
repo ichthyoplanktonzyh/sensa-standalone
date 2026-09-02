@@ -11,7 +11,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "smoke:router": "tsx src/router/shellLocationSmoke.ts"
+    "smoke:router": "tsx src/router/shellLocationSmoke.ts",
+    "smoke:stores": "tsx src/services/snapshotStoreSmoke.ts",
+    "smoke": "npm run smoke:router && npm run smoke:stores"
   },
   "dependencies": {
     "@sensa/contracts": "file:../../packages/contracts",
