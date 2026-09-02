@@ -1,8 +1,4 @@
-import type { SemanticWorldPresentation } from './SemanticWorldScreen';
-import type { PracticeHomePresentation } from './AcademyScreen';
-import type { PortableListeningPresentation } from './PortableListeningScreen';
-import type { RealWorldListeningPresentation } from './RealWorldListeningScreen';
-import type { DictionaryPresentation } from './DictionaryPresentationContext';
+import { usePresentationStore } from '../stores/presentationStore';
 
 interface SidePanelProps {
   onShowStage: (stageNum: number) => void;
@@ -13,16 +9,6 @@ interface SidePanelProps {
   onOpenExampleDirect: () => void;
   onOpenNoteEditor?: (word?: string) => void;
   onOpenSpelling?: (word?: string) => void;
-  semanticWorldPresentation: SemanticWorldPresentation;
-  onSemanticWorldPresentationChange: (presentation: SemanticWorldPresentation) => void;
-  practiceHomePresentation: PracticeHomePresentation;
-  onPracticeHomePresentationChange: (presentation: PracticeHomePresentation) => void;
-  portableListeningPresentation: PortableListeningPresentation;
-  onPortableListeningPresentationChange: (presentation: PortableListeningPresentation) => void;
-  realWorldListeningPresentation: RealWorldListeningPresentation;
-  onRealWorldListeningPresentationChange: (presentation: RealWorldListeningPresentation) => void;
-  dictionaryPresentation: DictionaryPresentation;
-  onDictionaryPresentationChange: (presentation: DictionaryPresentation) => void;
 }
 
 export const SidePanel = ({
@@ -34,17 +20,23 @@ export const SidePanel = ({
   onOpenExampleDirect,
   onOpenNoteEditor,
   onOpenSpelling,
-  semanticWorldPresentation,
-  onSemanticWorldPresentationChange,
-  practiceHomePresentation,
-  onPracticeHomePresentationChange,
-  portableListeningPresentation,
-  onPortableListeningPresentationChange,
-  realWorldListeningPresentation,
-  onRealWorldListeningPresentationChange,
-  dictionaryPresentation,
-  onDictionaryPresentationChange,
 }: SidePanelProps) => {
+  // 对照开关直接读写 store，不再经由 App 传十个 props。
+  const semanticWorldPresentation = usePresentationStore((state) => state.semanticWorld);
+  const practiceHomePresentation = usePresentationStore((state) => state.practiceHome);
+  const portableListeningPresentation = usePresentationStore((state) => state.portableListening);
+  const realWorldListeningPresentation = usePresentationStore((state) => state.realWorldListening);
+  const dictionaryPresentation = usePresentationStore((state) => state.dictionary);
+  const onSemanticWorldPresentationChange = usePresentationStore((state) => state.setSemanticWorld);
+  const onPracticeHomePresentationChange = usePresentationStore((state) => state.setPracticeHome);
+  const onPortableListeningPresentationChange = usePresentationStore(
+    (state) => state.setPortableListening,
+  );
+  const onRealWorldListeningPresentationChange = usePresentationStore(
+    (state) => state.setRealWorldListening,
+  );
+  const onDictionaryPresentationChange = usePresentationStore((state) => state.setDictionary);
+
   return (
     <aside className="panel">
       <h1>Sensa · 语义学习 Runtime 原型</h1>

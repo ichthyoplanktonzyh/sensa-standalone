@@ -21,21 +21,18 @@ import { lookupDictionaryEntry } from './services/quickDict';
 import { personalContentService } from './services/personalContentService';
 import { IconSprite } from './components/IconSprite';
 import { HomeScreen } from './components/HomeScreen';
-import { AcademyScreen, type PracticeHomePresentation } from './components/AcademyScreen';
+import { AcademyScreen } from './components/AcademyScreen';
 import {
   PortableListeningScreen,
-  type PortableListeningPresentation,
 } from './components/PortableListeningScreen';
 import {
   RealWorldListeningScreen,
-  type RealWorldListeningPresentation,
 } from './components/RealWorldListeningScreen';
 import { YouGlishListeningScreen } from './components/YouGlishListeningScreen';
 import { ContentScreen } from './components/ContentScreen';
 import { ContentLibraryScreen } from './components/ContentLibraryScreen';
 import {
   SemanticWorldScreen,
-  type SemanticWorldPresentation,
 } from './components/SemanticWorldScreen';
 import { PersonalMeaningDetailScreen } from './components/PersonalMeaningDetailScreen';
 import { ConfirmedSenseDetailScreen } from './components/ConfirmedSenseDetailScreen';
@@ -61,10 +58,7 @@ import {
   ReferenceExampleViewer,
   type ReferenceExampleDeck,
 } from './components/ReferenceExampleViewer';
-import {
-  DictionaryPresentationProvider,
-  type DictionaryPresentation,
-} from './components/DictionaryPresentationContext';
+import { DictionaryPresentationProvider } from './components/DictionaryPresentationContext';
 import { NoteEditorModal } from './components/NoteEditorModal';
 import { SceneEditorModal } from './components/SceneEditorModal';
 import { SpellingModal, type SpellingPracticeMode } from './components/SpellingModal';
@@ -112,6 +106,7 @@ import {
 } from './learningRuntime/policyProfiles';
 import { learningRuntimeCoordinator } from './learningRuntime/runtimeCoordinator';
 import { useShellNavigation } from './router/useShellNavigation';
+import { usePresentationStore } from './stores/presentationStore';
 
 type FlowType = 'learn' | 'review' | 'demo';
 type RuntimeLearningStage = FormalLearningStage | 'review_repair';
@@ -259,11 +254,13 @@ export default function App() {
     setMainStack,
   } = useShellNavigation();
 
-  const [semanticWorldPresentation, setSemanticWorldPresentation] = useState<SemanticWorldPresentation>('sensa');
-  const [practiceHomePresentation, setPracticeHomePresentation] = useState<PracticeHomePresentation>('sensa');
-  const [portableListeningPresentation, setPortableListeningPresentation] = useState<PortableListeningPresentation>('sensa');
-  const [realWorldListeningPresentation, setRealWorldListeningPresentation] = useState<RealWorldListeningPresentation>('sensa');
-  const [dictionaryPresentation, setDictionaryPresentation] = useState<DictionaryPresentation>('sensa');
+  // 展示版本对照开关由 presentationStore 持有：写在侧栏、读在各屏，
+  // 此前为此穿了十个 props 过 SidePanel。
+  const semanticWorldPresentation = usePresentationStore((state) => state.semanticWorld);
+  const practiceHomePresentation = usePresentationStore((state) => state.practiceHome);
+  const portableListeningPresentation = usePresentationStore((state) => state.portableListening);
+  const realWorldListeningPresentation = usePresentationStore((state) => state.realWorldListening);
+  const dictionaryPresentation = usePresentationStore((state) => state.dictionary);
 
   /* ---------- 我的内容读取投影与下钻目标 ---------- */
   /**
@@ -2563,16 +2560,6 @@ export default function App() {
 
       {/* 右侧说明与测试面板 */}
       <SidePanel
-        semanticWorldPresentation={semanticWorldPresentation}
-        onSemanticWorldPresentationChange={setSemanticWorldPresentation}
-        practiceHomePresentation={practiceHomePresentation}
-        onPracticeHomePresentationChange={setPracticeHomePresentation}
-        portableListeningPresentation={portableListeningPresentation}
-        onPortableListeningPresentationChange={setPortableListeningPresentation}
-        realWorldListeningPresentation={realWorldListeningPresentation}
-        onRealWorldListeningPresentationChange={setRealWorldListeningPresentation}
-        dictionaryPresentation={dictionaryPresentation}
-        onDictionaryPresentationChange={setDictionaryPresentation}
         onShowStage={showStage}
         onGoHome={exitLearn}
         onGoScreen={(screenId: string) => {
