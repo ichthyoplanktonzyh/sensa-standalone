@@ -110,8 +110,8 @@ import {
   type LearningProtocolPurpose,
 } from './learningRuntime/policyProfiles';
 import { learningRuntimeCoordinator } from './learningRuntime/runtimeCoordinator';
+import { useShellNavigation } from './router/useShellNavigation';
 
-type ViewMode = 'main' | 'study' | 'lightweight' | 'lightweightReview' | 'finish';
 type FlowType = 'learn' | 'review' | 'demo';
 type RuntimeLearningStage = FormalLearningStage | 'review_repair';
 
@@ -246,25 +246,22 @@ function reviewKindForCapability(capability: LearningCapability): ReviewAssessme
 }
 
 export default function App() {
-  /* ---------- 顶层视图模式 (主页面体系 vs 独立全屏学习流 vs 结算) ---------- */
-  const [viewMode, setViewMode] = useState<ViewMode>('main');
+  /* ---------- 顶层视图模式与 Sheet 栈：真相源是 URL ---------- */
+  const {
+    viewMode,
+    mainStack,
+    setViewMode,
+    goMain,
+    backMain,
+    resetMain,
+    setMainStack,
+  } = useShellNavigation();
+
   const [semanticWorldPresentation, setSemanticWorldPresentation] = useState<SemanticWorldPresentation>('sensa');
   const [practiceHomePresentation, setPracticeHomePresentation] = useState<PracticeHomePresentation>('sensa');
   const [portableListeningPresentation, setPortableListeningPresentation] = useState<PortableListeningPresentation>('sensa');
   const [realWorldListeningPresentation, setRealWorldListeningPresentation] = useState<RealWorldListeningPresentation>('sensa');
   const [dictionaryPresentation, setDictionaryPresentation] = useState<DictionaryPresentation>('sensa');
-
-  /* ---------- 主页面 Sheet 路由栈 ---------- */
-  const [mainStack, setMainStack] = useState<string[]>([]);
-  const goMain = useCallback((id: string) => {
-    setMainStack((s) => (s.includes(id) ? s : [...s, id]));
-  }, []);
-  const backMain = useCallback(() => {
-    setMainStack((s) => s.slice(0, -1));
-  }, []);
-  const resetMain = useCallback(() => {
-    setMainStack([]);
-  }, []);
 
   /* ---------- 我的内容读取投影与下钻目标 ---------- */
   const [contentSection, setContentSection] = useState<ContentSectionId>('recent');
@@ -2085,7 +2082,7 @@ export default function App() {
             onOpenSense={(item) => {
               setSelectedContentSense(item);
               if (mainStack.includes('s-content-sense')) backMain();
-              else setMainStack((stack) => [...stack.slice(0, -1), 's-content-sense']);
+              else setMainStack([...mainStack.slice(0, -1), 's-content-sense']);
             }}
             toast={toast}
           />
