@@ -1,0 +1,1858 @@
+/* ============================================================
+   11. 例句分词交互 & 简明查词浮层 (Quick Dict Popup)
+   ============================================================ */
+.clickable-sentence{display:inline;line-height:inherit}
+.tok-word{
+  display:inline-block;
+  cursor:pointer;
+  border:0;
+  border-radius:4px;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  line-height:inherit;
+  vertical-align:baseline;
+  padding:0 2px;
+  margin:0 -1px;
+  transition:background .15s ease,color .15s ease,transform .12s ease;
+  user-select:text;
+}
+.tok-word:hover{
+  background:rgba(255,255,255,.2);
+}
+.tok-word:focus-visible{
+  outline:2px solid currentColor;
+  outline-offset:2px;
+}
+.tok-sep{
+  user-select:none;
+}
+
+/* 全屏卡暗色背景下的重点词与高亮态 */
+.ex-en .tok-word.tok-target{
+  color:#f2701c;
+  font-weight:800;
+  text-shadow:0 0 10px rgba(242,112,28,.4);
+}
+.ex-en .tok-word.tok-selected{
+  background:#d05612 !important;
+  color:#ffffff !important;
+  font-weight:700;
+  border-radius:5px;
+  padding:1px 5px;
+  box-shadow:0 0 0 1.5px rgba(255,255,255,.3);
+  transform:scale(1.04);
+}
+.ex-en .tok-word.tok-playing{
+  color:#ffae42;
+  text-decoration:underline;
+  text-decoration-color:#f2701c;
+  text-underline-offset:4px;
+  text-shadow:0 0 8px rgba(255,174,66,.6);
+}
+
+/* 详情卡浅色背景下的重点词与高亮态 */
+.dcard .en .tok-word.tok-target{
+  font-weight:700;
+  color:#0f172a;
+}
+.dcard .en .tok-word.tok-selected{
+  background:#fbdac2 !important;
+  color:#be4a10 !important;
+  font-weight:700;
+  border-radius:5px;
+  padding:1px 5px;
+  box-shadow:0 0 0 1.5px rgba(240,118,29,.45);
+}
+.dcard .en .tok-word.tok-playing{
+  color:#d95d10;
+  text-decoration:underline;
+  text-decoration-color:#f2701c;
+  text-underline-offset:3px;
+}
+
+/* 查词浮层遮罩与弹窗 */
+.quick-dict-overlay{
+  position:absolute;
+  inset:0;
+  z-index:85;
+  background:rgba(18,18,24,.38);
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:20px 18px;
+  animation:popFadeIn .2s ease-out;
+}
+@keyframes popFadeIn{
+  from{opacity:0}
+  to{opacity:1}
+}
+
+.quick-dict-popup{
+  width:100%;
+  max-width:345px;
+  background:#ffffff;
+  border-radius:20px;
+  padding:22px 22px 18px;
+  box-shadow:0 20px 50px rgba(0,0,0,.28),0 2px 10px rgba(0,0,0,.08);
+  animation:popScaleIn .22s cubic-bezier(0.16,1,0.3,1);
+  color:#1e293b;
+  display:flex;
+  flex-direction:column;
+}
+@keyframes popScaleIn{
+  from{opacity:0;transform:scale(.92) translateY(10px)}
+  to{opacity:1;transform:scale(1) translateY(0)}
+}
+
+/* 弹窗顶部栏：橙色标题 + 收藏星标 */
+.dict-pop-hd{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.dict-pop-word{
+  font-size:28px;
+  font-weight:800;
+  color:#f2701c;
+  letter-spacing:-.4px;
+  line-height:1.1;
+}
+.dict-pop-star{
+  background:none;
+  border:0;
+  cursor:pointer;
+  padding:4px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:transform .15s ease;
+}
+.dict-pop-star:active{
+  transform:scale(1.25);
+}
+
+/* 音标行：美音小胶囊 + 国际音标 */
+.dict-pop-ph{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-top:8px;
+  margin-bottom:18px;
+  cursor:pointer;
+  align-self:flex-start;
+  padding:2px 0;
+}
+.dict-pop-accent-tag{
+  background:#f1f5f9;
+  color:#64748b;
+  font-size:12px;
+  font-weight:700;
+  padding:3px 8px;
+  border-radius:12px;
+  display:inline-flex;
+  align-items:center;
+  transition:all .18s ease;
+}
+.dict-pop-accent-tag.playing{
+  background:#fbd4a8;
+  color:#f0761d;
+}
+.dict-pop-phonetic{
+  font-size:15.5px;
+  color:#475569;
+  font-weight:500;
+  letter-spacing:.2px;
+}
+
+/* 简明释义列表 */
+.dict-pop-senses{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-bottom:20px;
+}
+.dict-pop-sense-row{
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  font-size:15.5px;
+  line-height:1.55;
+  color:#1e293b;
+}
+.dict-pop-pos{
+  font-weight:700;
+  color:#334155;
+  flex-shrink:0;
+  font-size:15px;
+}
+.dict-pop-def-text{
+  color:#1e293b;
+  font-size:15px;
+  font-weight:500;
+}
+
+/* 底部查看详细释义 */
+.dict-pop-footer{
+  display:flex;
+  align-items:center;
+  border-top:1px solid #f1f5f9;
+  padding-top:14px;
+}
+.dict-pop-more-btn{
+  background:none;
+  border:0;
+  color:#64748b;
+  font-size:14px;
+  font-weight:600;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  padding:2px 0;
+  transition:color .15s ease;
+  font-family:inherit;
+}
+.dict-pop-more-btn:hover{
+  color:#f2701c;
+}
+.dict-pop-more-btn:active{
+  opacity:.75;
+}
+
+/* ============================================================
+   11.1 Sensa Lexical Reference MVP
+   ============================================================ */
+.sensa-reference-quick-overlay{
+  background:rgba(24,42,37,.46);
+  backdrop-filter:blur(9px);
+  -webkit-backdrop-filter:blur(9px);
+}
+.sensa-reference-quick{
+  width:100%;
+  max-width:346px;
+  max-height:82%;
+  overflow-y:auto;
+  border:1px solid rgba(58,91,79,.14);
+  border-radius:27px;
+  padding:18px;
+  color:#203d35;
+  background:
+    radial-gradient(circle at 95% -8%,rgba(188,113,76,.16),transparent 34%),
+    #f3efe5;
+  box-shadow:0 28px 70px rgba(14,35,29,.3);
+  animation:popScaleIn .22s cubic-bezier(.16,1,.3,1);
+}
+.sensa-reference-quick-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+}
+.sensa-reference-quick-header>div{display:flex;flex-direction:column;gap:3px}
+.sensa-reference-quick-header span{
+  font-size:11px;
+  font-weight:780;
+  letter-spacing:.12em;
+  color:#a65d42;
+}
+.sensa-reference-quick-header small{font-size:10px;color:#718078}
+.sensa-reference-quick-header>button,
+.sensa-reference-header>button{
+  width:38px;
+  height:38px;
+  flex:0 0 auto;
+  border:1px solid rgba(52,83,72,.14);
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  color:#345348;
+  background:rgba(255,255,255,.42);
+  cursor:pointer;
+  transition:background .16s ease,transform .16s ease;
+}
+.sensa-reference-quick-header>button:active,
+.sensa-reference-header>button:active{transform:scale(.94);background:#fff}
+.sensa-reference-quick-header .icon,
+.sensa-reference-header .icon{width:18px;height:18px}
+.sensa-reference-quick-identity{padding:18px 2px 16px;border-bottom:1px solid rgba(52,83,72,.12)}
+.sensa-reference-quick-identity h2{
+  margin:0 0 9px;
+  font:600 33px/1 Georgia,"Times New Roman",serif;
+  letter-spacing:-.035em;
+  color:#24483e;
+}
+.sensa-reference-quick-identity>button{
+  min-height:34px;
+  border:0;
+  border-radius:18px;
+  padding:7px 11px;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  color:#526b62;
+  background:#e4e9df;
+  font-family:inherit;
+  font-size:12px;
+  font-weight:650;
+  line-height:1;
+  cursor:pointer;
+}
+.sensa-reference-quick-identity>button.is-playing{color:#a55238;background:#ead6c6}
+.sensa-reference-quick-identity .icon{width:15px;height:15px}
+.sensa-reference-quick-senses{display:flex;flex-direction:column;padding:8px 0 5px}
+.sensa-reference-quick-senses>div{
+  display:grid;
+  grid-template-columns:55px minmax(0,1fr);
+  gap:8px;
+  padding:12px 2px;
+  border-bottom:1px solid rgba(52,83,72,.09);
+}
+.sensa-reference-quick-senses>div:last-child{border-bottom:0}
+.sensa-reference-quick-senses span{
+  font:italic 600 12px/1.5 Georgia,"Times New Roman",serif;
+  color:#a65d42;
+}
+.sensa-reference-quick-senses p{font-size:14px;line-height:1.55;color:#29463e}
+.sensa-reference-quick-senses>.sensa-reference-quick-unavailable{
+  margin:0;
+  padding:15px 2px;
+  font-size:12px;
+  line-height:1.55;
+  color:#718078;
+}
+.sensa-reference-quick-footer{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:12px;
+  padding-top:12px;
+  border-top:1px solid rgba(52,83,72,.12);
+}
+.sensa-reference-quick-footer small{font-size:10px;line-height:1.45;color:#718078}
+.sensa-reference-quick-footer>button{
+  width:100%;
+  min-height:44px;
+  border:0;
+  border-radius:16px;
+  padding:0 14px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  background:#2f5a4d;
+  color:#fff;
+  font-family:inherit;
+  font-size:13px;
+  font-weight:720;
+  line-height:1;
+  cursor:pointer;
+}
+.sensa-reference-quick-footer .icon{width:16px;height:16px}
+
+.sensa-reference-backdrop{
+  position:absolute;
+  inset:0;
+  z-index:96;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  background:rgba(16,34,29,.52);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  animation:popFadeIn .2s ease-out;
+}
+.sensa-reference-sheet{
+  width:100%;
+  height:94%;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  border-radius:30px 30px 0 0;
+  color:#203d35;
+  background:
+    radial-gradient(circle at 96% 3%,rgba(184,105,72,.18),transparent 26%),
+    linear-gradient(180deg,#f3efe5 0%,#eee9de 100%);
+  box-shadow:0 -18px 55px rgba(10,29,24,.34);
+  animation:sensaReferenceEnter .3s cubic-bezier(.16,1,.3,1);
+}
+@keyframes sensaReferenceEnter{
+  from{opacity:.6;transform:translateY(35%)}
+  to{opacity:1;transform:none}
+}
+.sensa-reference-header{
+  flex:0 0 auto;
+  min-height:79px;
+  padding:19px 20px 14px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom:1px solid rgba(52,83,72,.12);
+}
+.sensa-reference-header-copy>span{
+  display:block;
+  margin-bottom:4px;
+  font:700 8px/1 Georgia,"Times New Roman",serif;
+  letter-spacing:.18em;
+  color:#a65d42;
+}
+.sensa-reference-header-copy h1{margin:0;font-size:19px;letter-spacing:-.02em;color:#24483e}
+.sensa-reference-scroll{
+  flex:1;
+  overflow-y:auto;
+  padding:20px 19px 42px;
+  scrollbar-width:none;
+}
+.sensa-reference-scroll::-webkit-scrollbar{display:none}
+.sensa-reference-identity{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:14px;
+  padding:3px 1px 19px;
+}
+.sensa-reference-identity small{display:block;margin-bottom:5px;font-size:10px;color:#718078}
+.sensa-reference-identity h2{
+  margin:0;
+  font:600 42px/.95 Georgia,"Times New Roman",serif;
+  letter-spacing:-.045em;
+  color:#294f43;
+}
+.sensa-reference-identity>button{
+  min-height:39px;
+  border:1px solid rgba(52,83,72,.12);
+  border-radius:20px;
+  padding:8px 12px;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  color:#49665c;
+  background:rgba(255,255,255,.38);
+  font-family:inherit;
+  font-size:12px;
+  font-weight:650;
+  line-height:1;
+  cursor:pointer;
+}
+.sensa-reference-identity>button.is-playing{color:#a55238;background:#ead6c6}
+.sensa-reference-identity .icon{width:15px;height:15px}
+.sensa-reference-release-card{
+  margin-bottom:25px;
+  padding:15px 15px 14px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:8px 12px;
+  border:1px solid rgba(52,83,72,.12);
+  border-left:3px solid #a65d42;
+  background:rgba(255,255,255,.34);
+}
+.sensa-reference-release-card>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.sensa-reference-release-card>div>span{font-size:9px;font-weight:760;letter-spacing:.08em;color:#a65d42}
+.sensa-reference-release-card strong{font-size:13px;color:#284b41}
+.sensa-reference-release-card small{font-size:10px;color:#718078}
+.sensa-reference-release-card>i{
+  align-self:start;
+  padding:4px 7px;
+  border:1px solid rgba(166,93,66,.22);
+  border-radius:10px;
+  font-size:8px;
+  font-style:normal;
+  font-weight:780;
+  letter-spacing:.08em;
+  color:#98543c;
+}
+.sensa-reference-release-card>p{
+  grid-column:1/-1;
+  margin:1px 0 0;
+  font-size:10px;
+  line-height:1.45;
+  color:#718078;
+}
+.sensa-reference-unavailable{
+  min-height:290px;
+  padding:45px 24px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  border-top:1px solid rgba(52,83,72,.12);
+  border-bottom:1px solid rgba(52,83,72,.12);
+}
+.sensa-reference-unavailable>span{font:400 44px/1 Georgia,serif;color:#a65d42}
+.sensa-reference-unavailable h2{margin:13px 0 8px;font-size:19px;color:#294b41}
+.sensa-reference-unavailable p{max-width:300px;margin:0;font-size:12px;line-height:1.65;color:#687a73}
+.sensa-reference-section{padding:24px 0;border-top:1px solid rgba(52,83,72,.13)}
+.sensa-reference-section-heading{display:flex;align-items:flex-start;gap:11px;margin-bottom:16px}
+.sensa-reference-section-heading>span{
+  width:29px;
+  height:29px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  background:#31594d;
+  color:#f4efe5;
+  font:600 9px/1 Georgia,serif;
+}
+.sensa-reference-section-heading small{display:block;margin:1px 0 4px;font:700 7px/1 Georgia,serif;letter-spacing:.14em;color:#a65d42}
+.sensa-reference-section-heading h2{margin:0;font-size:17px;color:#294b41}
+.sensa-reference-sense-list{display:flex;flex-direction:column;gap:9px}
+.sensa-reference-sense-list>article{
+  display:grid;
+  grid-template-columns:46px minmax(0,1fr);
+  gap:12px;
+  padding:15px 14px 14px;
+  border:1px solid rgba(52,83,72,.1);
+  background:rgba(255,255,255,.32);
+}
+.sensa-reference-sense-index{display:flex;flex-direction:column;gap:8px}
+.sensa-reference-sense-index>span{font:600 19px/1 Georgia,serif;color:#b16447}
+.sensa-reference-sense-index>i{font:italic 600 10px/1.3 Georgia,serif;color:#667970}
+.sensa-reference-sense-list h3{margin:0;font-size:14px;line-height:1.55;color:#28483f}
+.sensa-reference-sense-list p{margin:7px 0 0;font:400 13px/1.55 Georgia,"Times New Roman",serif;color:#62736d}
+.sensa-reference-labels{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.sensa-reference-labels span{padding:4px 7px;border-radius:10px;background:#e1e7dd;font-size:9px;color:#50675f}
+.sensa-reference-example-list,.sensa-reference-note-list{display:flex;flex-direction:column;gap:9px}
+.sensa-reference-example-list>article,.sensa-reference-note-list>article{
+  padding:15px 15px 13px;
+  border-left:2px solid #b16447;
+  background:rgba(255,255,255,.28);
+}
+.sensa-reference-example-list p:first-child{margin:0;font:500 15px/1.55 Georgia,"Times New Roman",serif;color:#28483f}
+.sensa-reference-example-list p:nth-child(2){margin:7px 0 0;font-size:12px;line-height:1.5;color:#62736d}
+.sensa-reference-example-list small,.sensa-reference-note-list small{display:block;margin-top:9px;font-size:9px;color:#829088}
+.sensa-reference-note-list h3{margin:0 0 7px;font-size:13px;color:#31594d}
+.sensa-reference-note-list p{margin:0;font-size:12px;line-height:1.6;color:#5c7068}
+.sensa-reference-related{display:flex;flex-wrap:wrap;gap:7px}
+.sensa-reference-related>span{
+  min-height:34px;
+  padding:8px 10px;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  border:1px solid rgba(52,83,72,.12);
+  border-radius:17px;
+  background:rgba(255,255,255,.3);
+  font:600 12px/1 Georgia,"Times New Roman",serif;
+  color:#31594d;
+}
+.sensa-reference-related small{font-family:inherit;font-size:8px;font-weight:600;line-height:1;color:#a65d42}
+.sensa-reference-provenance{padding:22px 0 8px;border-top:1px solid rgba(52,83,72,.14)}
+.sensa-reference-provenance>div{display:grid;grid-template-columns:92px minmax(0,1fr);gap:8px;margin-bottom:6px}
+.sensa-reference-provenance span{font-size:9px;color:#7c8a84}
+.sensa-reference-provenance code{min-width:0;overflow-wrap:anywhere;font:500 9px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:#49665c}
+.sensa-reference-provenance p{margin:15px 0 0;padding-top:13px;border-top:1px solid rgba(52,83,72,.09);font-size:10px;line-height:1.55;color:#74847d}
+
+/* Contextual Reference remains an optional annotation over the full entry. */
+.sensa-reference-search{margin:0 0 19px;padding:12px 13px 11px;border:1px solid rgba(52,83,72,.12);border-radius:16px;background:rgba(255,255,255,.3)}
+.sensa-reference-search>label{display:block;margin-bottom:7px;font-size:10px;font-weight:740;color:#31594d}
+.sensa-reference-search>div{display:flex;align-items:center;gap:7px}
+.sensa-reference-search input{min-width:0;flex:1;height:36px;border:1px solid rgba(52,83,72,.14);border-radius:11px;padding:0 10px;background:rgba(255,255,255,.74);color:#294b41;font:500 13px/1 inherit;outline:0}
+.sensa-reference-search input:focus{border-color:#a65d42;box-shadow:0 0 0 3px rgba(166,93,66,.12)}
+.sensa-reference-search button{width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:11px;background:#31594d;color:#f4efe5;cursor:pointer}
+.sensa-reference-search button:active{transform:scale(.96)}
+.sensa-reference-search button .icon{width:16px;height:16px}
+.sensa-reference-search>small{display:block;margin-top:7px;font-size:9px;line-height:1.4;color:#718078}
+.sensa-reference-section-intro{margin:-4px 0 15px;font-size:11px;line-height:1.55;color:#718078}
+.sensa-reference-sense-list>article.is-contextual-selected{border-color:rgba(166,93,66,.38);box-shadow:inset 3px 0 0 #a65d42;background:rgba(255,255,255,.58)}
+.sensa-reference-quick-senses>div.is-contextual-selected{margin-left:-2px;padding-left:4px;border-radius:9px;background:rgba(234,214,198,.64);box-shadow:inset 3px 0 0 #a65d42}
+.sensa-reference-quick-senses p{display:flex;align-items:baseline;gap:7px}
+.sensa-reference-quick-senses p em{font-style:normal;font-size:9px;font-weight:740;color:#a65d42}
+
+/* Baseline-led presentation: one content column, one accent, minimal surfaces. */
+.sensa-reference-quick,
+.sensa-reference-sheet{
+  --reference-ink:#1e293b;
+  --reference-muted:#64748b;
+  --reference-line:#e8edf2;
+  --reference-accent:#f2701c;
+  --reference-accent-soft:#fff5ed;
+  font-family:inherit;
+}
+
+.sensa-reference-quick-overlay{
+  background:rgba(18,18,24,.38);
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+}
+.sensa-reference-quick{
+  width:100%;
+  max-width:345px;
+  max-height:82%;
+  padding:22px 22px 18px;
+  overflow-y:auto;
+  border:0;
+  border-radius:20px;
+  background:#fff;
+  color:var(--reference-ink);
+  box-shadow:0 20px 50px rgba(0,0,0,.28),0 2px 10px rgba(0,0,0,.08);
+}
+.sensa-reference-quick-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+.sensa-reference-quick-header h2{
+  margin:0;
+  font:800 28px/1.1 inherit;
+  letter-spacing:-.4px;
+  color:var(--reference-accent);
+}
+.sensa-reference-quick-header>button,
+.sensa-reference-header-row>button{
+  width:44px;
+  height:44px;
+  margin:-8px -8px -8px 0;
+  flex:0 0 auto;
+  border:0;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  color:#718096;
+  background:transparent;
+  cursor:pointer;
+  transition:background .15s ease,transform .15s ease;
+}
+.sensa-reference-quick-header>button:hover,
+.sensa-reference-header-row>button:hover{background:#f6f7f9}
+.sensa-reference-quick-header>button:active,
+.sensa-reference-header-row>button:active{transform:scale(.94);background:#f1f3f5}
+.sensa-reference-quick-header .icon,
+.sensa-reference-header-row .icon{width:18px;height:18px}
+.sensa-reference-quick-identity{
+  padding:8px 0 16px;
+  border:0;
+}
+.sensa-reference-quick-identity>button{
+  min-height:30px;
+  padding:3px 0;
+  border:0;
+  border-radius:0;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  color:var(--reference-muted);
+  background:transparent;
+  font:600 14px/1 inherit;
+  cursor:pointer;
+}
+.sensa-reference-quick-identity>button.is-playing{color:var(--reference-accent);background:transparent}
+.sensa-reference-quick-identity .icon{width:15px;height:15px}
+.sensa-reference-quick-senses{
+  display:flex;
+  flex-direction:column;
+  padding:0 0 6px;
+}
+.sensa-reference-quick-senses>div{
+  display:grid;
+  grid-template-columns:48px minmax(0,1fr);
+  gap:8px;
+  padding:10px 0;
+  border-bottom:0;
+}
+.sensa-reference-quick-senses span{
+  font:700 14px/1.55 inherit;
+  color:#475569;
+}
+.sensa-reference-quick-senses p{
+  margin:0;
+  display:block;
+  font-size:15px;
+  font-weight:500;
+  line-height:1.55;
+  color:var(--reference-ink);
+}
+.sensa-reference-quick-senses p em{
+  margin-left:7px;
+  font-style:normal;
+  font-size:10px;
+  font-weight:700;
+  color:var(--reference-accent);
+}
+.sensa-reference-quick-senses>div.is-contextual-selected{
+  margin:0;
+  padding:10px 0;
+  border-radius:0;
+  box-shadow:none;
+  background:transparent;
+}
+.sensa-reference-quick-senses>div.is-contextual-selected p{
+  text-decoration-line:underline;
+  text-decoration-thickness:2px;
+  text-underline-offset:4px;
+  text-decoration-color:rgba(242,112,28,.62);
+  text-decoration-skip-ink:auto;
+}
+.sensa-reference-quick-senses>.sensa-reference-quick-unavailable{
+  margin:0;
+  padding:12px 0 16px;
+  font-size:13px;
+  line-height:1.55;
+  color:var(--reference-muted);
+}
+.sensa-reference-quick-footer{
+  display:flex;
+  padding-top:14px;
+  border-top:1px solid var(--reference-line);
+}
+.sensa-reference-quick-footer>button{
+  width:auto;
+  min-height:30px;
+  padding:2px 0;
+  border:0;
+  border-radius:0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:3px;
+  background:transparent;
+  color:var(--reference-muted);
+  font:600 14px/1 inherit;
+  cursor:pointer;
+}
+.sensa-reference-quick-footer>button:hover{color:var(--reference-accent)}
+.sensa-reference-quick-footer .icon{width:15px;height:15px}
+
+.sensa-reference-backdrop{
+  background:rgba(14,16,22,.48);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+}
+.sensa-reference-sheet{
+  width:100%;
+  height:94%;
+  border-radius:28px 28px 0 0;
+  background:#fff;
+  color:var(--reference-ink);
+  box-shadow:0 -12px 40px rgba(0,0,0,.26);
+}
+.sensa-reference-header{
+  min-height:76px;
+  padding:12px 20px 8px;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:flex-start;
+  gap:6px;
+  border-bottom:1px solid var(--reference-line);
+}
+.sensa-reference-handle{
+  width:40px;
+  height:4px;
+  margin:0 auto;
+  border-radius:2px;
+  background:#e2e8f0;
+}
+.sensa-reference-header-row{
+  min-height:44px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.sensa-reference-header-row h1{
+  margin:0;
+  font-size:17px;
+  font-weight:700;
+  color:var(--reference-ink);
+}
+.sensa-reference-scroll{
+  flex:1;
+  overflow-y:auto;
+  padding:16px 22px 48px;
+  scrollbar-width:none;
+}
+.sensa-reference-search{
+  margin:0 0 18px;
+  padding:0;
+  border:0;
+  border-radius:10px;
+  background:#f3f5f7;
+}
+.sensa-reference-search>div{
+  height:42px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding-left:12px;
+}
+.sensa-reference-search>div>.icon{width:17px;height:17px;flex:0 0 auto;color:#94a3b8}
+.sensa-reference-search input{
+  min-width:0;
+  height:42px;
+  flex:1;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:var(--reference-ink);
+  font:500 14px/1 inherit;
+  outline:0;
+}
+.sensa-reference-search:focus-within{box-shadow:0 0 0 2px rgba(242,112,28,.2)}
+.sensa-reference-search input:focus{border:0;box-shadow:none}
+.sensa-reference-search button{
+  width:auto;
+  min-width:50px;
+  height:42px;
+  padding:0 12px;
+  border:0;
+  border-radius:0 10px 10px 0;
+  background:transparent;
+  color:var(--reference-accent);
+  font:700 13px/1 inherit;
+  cursor:pointer;
+}
+.sensa-reference-search button:hover{background:#eaedf0}
+.sensa-reference-search button:active{transform:none;background:#e4e8ec}
+.sensa-reference-identity{
+  display:block;
+  padding:2px 0 14px;
+}
+.sensa-reference-identity h2{
+  margin:0;
+  font:800 34px/1.08 inherit;
+  letter-spacing:-.6px;
+  color:var(--reference-accent);
+}
+.sensa-reference-identity>div>button{
+  min-height:32px;
+  margin-top:7px;
+  padding:2px 0;
+  border:0;
+  border-radius:0;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  background:transparent;
+  color:var(--reference-muted);
+  font:600 13px/1 inherit;
+  cursor:pointer;
+}
+.sensa-reference-identity>div>button>span{
+  padding:3px 7px;
+  border-radius:12px;
+  background:#f1f5f9;
+  font-size:12px;
+}
+.sensa-reference-identity>div>button>i{font-style:normal;font-size:15px;font-weight:500;color:#475569}
+.sensa-reference-identity>div>button.is-playing,
+.sensa-reference-identity>div>button.is-playing i{color:var(--reference-accent)}
+.sensa-reference-identity .icon{width:13px;height:13px}
+.sensa-reference-release-card{
+  margin:0;
+  padding:0 0 14px;
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  border:0;
+  border-bottom:1px solid var(--reference-line);
+  background:transparent;
+}
+.sensa-reference-release-card>span{font-size:11px;font-weight:650;color:#475569}
+.sensa-reference-release-card>small{font-size:10px;line-height:1.45;color:#94a3b8}
+.sensa-reference-unavailable{
+  min-height:240px;
+  padding:48px 20px;
+  border:0;
+  border-bottom:1px solid var(--reference-line);
+}
+.sensa-reference-unavailable h2{margin:0 0 8px;font-size:18px;color:var(--reference-ink)}
+.sensa-reference-unavailable p{max-width:290px;margin:0;font-size:13px;line-height:1.65;color:var(--reference-muted)}
+.sensa-reference-section{
+  padding:20px 0;
+  border-top:0;
+  border-bottom:1px solid var(--reference-line);
+}
+.sensa-reference-section-heading{
+  display:block;
+  margin:0 0 12px;
+}
+.sensa-reference-section-heading h2{
+  margin:0;
+  font-size:17px;
+  font-weight:700;
+  color:var(--reference-ink);
+}
+.sensa-reference-section-intro{
+  margin:-4px 0 10px;
+  font-size:11px;
+  line-height:1.55;
+  color:#94a3b8;
+}
+.sensa-reference-sense-list{
+  display:flex;
+  flex-direction:column;
+  gap:0;
+}
+.sensa-reference-sense-list>article{
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr);
+  gap:8px;
+  padding:14px 0;
+  border:0;
+  border-bottom:1px solid #f0f3f6;
+  background:transparent;
+}
+.sensa-reference-sense-list>article:last-child{border-bottom:0}
+.sensa-reference-sense-index{display:flex;flex-direction:column;gap:6px}
+.sensa-reference-sense-index>span{font:600 15px/1.2 inherit;color:#94a3b8}
+.sensa-reference-sense-index>i{font:italic 600 10px/1.3 inherit;color:var(--reference-accent)}
+.sensa-reference-sense-list h3{margin:0;font-size:14px;font-weight:600;line-height:1.55;color:var(--reference-ink)}
+.sensa-reference-sense-list p{margin:5px 0 0;font:400 13px/1.55 inherit;color:var(--reference-muted)}
+.sensa-reference-labels{display:flex;flex-wrap:wrap;gap:8px;margin-top:7px}
+.sensa-reference-labels span{padding:0;border-radius:0;background:transparent;font-size:10px;color:#94a3b8}
+.sensa-reference-sense-list>article.is-contextual-selected{
+  margin:0;
+  padding:14px 0;
+  border-color:#f0f3f6;
+  border-radius:0;
+  box-shadow:none;
+  background:transparent;
+}
+.sensa-reference-sense-list>article.is-contextual-selected h3{
+  text-decoration-line:underline;
+  text-decoration-thickness:2px;
+  text-underline-offset:4px;
+  text-decoration-color:rgba(242,112,28,.62);
+  text-decoration-skip-ink:auto;
+}
+.sensa-reference-example-list,
+.sensa-reference-note-list{display:flex;flex-direction:column;gap:0}
+.sensa-reference-example-list>article,
+.sensa-reference-note-list>article{
+  padding:13px 0;
+  border:0;
+  border-bottom:1px solid #f0f3f6;
+  background:transparent;
+}
+.sensa-reference-example-list>article:last-child,
+.sensa-reference-note-list>article:last-child{border-bottom:0}
+.sensa-reference-example-list p:first-child{margin:0;font:500 15px/1.55 inherit;color:var(--reference-ink)}
+.sensa-reference-example-list p:nth-child(2){margin:6px 0 0;font-size:12px;line-height:1.5;color:var(--reference-muted)}
+.sensa-reference-example-list small,
+.sensa-reference-note-list small{display:block;margin-top:7px;font-size:10px;color:#94a3b8}
+.sensa-reference-note-list h3{margin:0 0 6px;font-size:14px;color:var(--reference-ink)}
+.sensa-reference-note-list p{margin:0;font-size:13px;line-height:1.6;color:var(--reference-muted)}
+.sensa-reference-related{display:flex;flex-wrap:wrap;gap:7px}
+.sensa-reference-related>span{
+  min-height:32px;
+  padding:7px 10px;
+  border:1px solid #e2e8f0;
+  border-radius:16px;
+  background:#fff;
+  font:600 12px/1 inherit;
+  color:#475569;
+}
+.sensa-reference-related small{font-size:9px;color:#94a3b8}
+.sensa-reference-provenance{
+  padding:16px 0 8px;
+  border-top:0;
+}
+.sensa-reference-provenance>p{
+  margin:0;
+  padding:0;
+  border:0;
+  font-size:10px;
+  line-height:1.55;
+  color:#94a3b8;
+}
+.sensa-reference-provenance>p+p{margin-top:4px}
+.sensa-reference-quick button:focus-visible,
+.sensa-reference-sheet button:focus-visible,
+.sensa-reference-sheet input:focus-visible{
+  outline:2px solid var(--reference-accent);
+  outline-offset:2px;
+}
+@media (prefers-reduced-motion:reduce){
+  .sensa-reference-quick,
+  .sensa-reference-sheet{animation:none}
+}
+
+/* ============================================================
+   11.2 Independent online dictionary and Reference examples
+   ============================================================ */
+#s-reference-dictionary{z-index:38}
+#s-reference-example{z-index:40}
+.reference-dictionary-screen,
+.reference-example-screen{
+  --reference-page-ink:#1e293b;
+  --reference-page-muted:#64748b;
+  --reference-page-line:#e8edf2;
+  --reference-page-accent:#f2701c;
+  background:#fff;
+  color:var(--reference-page-ink);
+  overflow:hidden;
+}
+.reference-dictionary-header,
+.reference-example-header{
+  min-height:96px;
+  padding:46px 18px 8px;
+  display:grid;
+  grid-template-columns:44px minmax(0,1fr) 44px;
+  align-items:center;
+  border-bottom:1px solid var(--reference-page-line);
+  background:rgba(255,255,255,.96);
+}
+.reference-dictionary-header>button,
+.reference-example-header>button{
+  width:44px;
+  height:44px;
+  margin-left:-10px;
+  border:0;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  background:transparent;
+  color:#475569;
+  cursor:pointer;
+}
+.reference-dictionary-header>button:active,
+.reference-example-header>button:active{background:#f1f5f9;transform:scale(.95)}
+.reference-dictionary-header .icon,
+.reference-example-header .icon{width:23px;height:23px}
+.reference-dictionary-header h1{
+  margin:0;
+  text-align:center;
+  font-size:18px;
+  font-weight:750;
+}
+.reference-dictionary-search{
+  height:58px;
+  margin:0;
+  padding:8px 18px;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  border-bottom:1px solid var(--reference-page-line);
+  background:rgba(255,255,255,.98);
+}
+.reference-dictionary-search>.icon{width:17px;height:17px;color:#94a3b8}
+.reference-dictionary-search input{
+  min-width:0;
+  height:40px;
+  flex:1;
+  padding:0 12px;
+  border:0;
+  border-radius:11px;
+  background:#f3f5f7;
+  color:var(--reference-page-ink);
+  font:500 14px/1 inherit;
+  outline:0;
+}
+.reference-dictionary-search input:focus{box-shadow:0 0 0 2px rgba(242,112,28,.2)}
+.reference-dictionary-search button{
+  height:40px;
+  padding:0 4px;
+  border:0;
+  background:transparent;
+  color:var(--reference-page-accent);
+  font:700 13px/1 inherit;
+  cursor:pointer;
+}
+.reference-dictionary-scroll{
+  height:calc(100% - 154px);
+  overflow-y:auto;
+  padding:0 20px 52px;
+  scrollbar-width:none;
+}
+.reference-dictionary-scroll::-webkit-scrollbar{display:none}
+.reference-dictionary-state{
+  min-height:280px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  text-align:center;
+  color:var(--reference-page-muted);
+}
+.reference-dictionary-state>i{
+  width:24px;
+  height:24px;
+  border:2px solid #e2e8f0;
+  border-top-color:var(--reference-page-accent);
+  border-radius:50%;
+  animation:spin .8s linear infinite;
+}
+.reference-dictionary-state strong{font-size:15px;color:#475569}
+.reference-dictionary-state p{margin:0;font-size:13px}
+.reference-dictionary-identity{
+  padding:23px 0 20px;
+  border-bottom:1px solid var(--reference-page-line);
+}
+.reference-dictionary-identity h2{
+  margin:0;
+  font-size:38px;
+  font-weight:820;
+  line-height:1.05;
+  letter-spacing:-.8px;
+  color:var(--reference-page-accent);
+}
+.reference-dictionary-lemma-relation{
+  margin:9px 0 0;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  color:#64748b;
+  font-size:12px;
+}
+.reference-dictionary-lemma-relation .icon{width:13px;height:13px}
+.reference-dictionary-lemma-relation strong{color:#475569}
+.reference-dictionary-pronunciations{
+  margin-top:14px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px 13px;
+}
+.reference-dictionary-pronunciations button,
+.reference-dictionary-pronunciations>div{
+  min-height:32px;
+  padding:3px 0;
+  border:0;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  background:transparent;
+  color:#64748b;
+  cursor:pointer;
+}
+.reference-dictionary-pronunciations>div{cursor:default}
+.reference-dictionary-pronunciations button>span,
+.reference-dictionary-pronunciations>div>span{
+  padding:3px 7px;
+  border-radius:10px;
+  background:#f1f5f9;
+  font-size:11px;
+  font-weight:700;
+}
+.reference-dictionary-pronunciations button>i,
+.reference-dictionary-pronunciations>div>i{font:500 14px/1 inherit;color:#475569}
+.reference-dictionary-pronunciations button>.icon{width:14px;height:14px}
+.reference-dictionary-pronunciations button.is-playing,
+.reference-dictionary-pronunciations button.is-playing>i{color:var(--reference-page-accent)}
+.reference-dictionary-section{
+  padding:22px 0;
+  border-bottom:1px solid var(--reference-page-line);
+}
+.reference-dictionary-section>h2{
+  margin:0 0 15px;
+  font-size:17px;
+  font-weight:760;
+}
+.reference-dictionary-section.is-current>h2{color:var(--reference-page-accent)}
+.reference-dictionary-groups{display:flex;flex-direction:column;gap:24px}
+.reference-dictionary-group{display:flex;flex-direction:column}
+.reference-dictionary-pos-heading{
+  min-height:27px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom:1px solid #f1f5f9;
+}
+.reference-dictionary-pos-heading>span{
+  color:var(--reference-page-accent);
+  font:italic 700 13px/1 inherit;
+}
+.reference-dictionary-pos-heading>small{font-size:10px;color:#94a3b8}
+.reference-dictionary-sense{
+  padding:15px 0 14px;
+  border-bottom:1px solid #f1f5f9;
+}
+.reference-dictionary-sense:last-child{border-bottom:0}
+.reference-dictionary-sense.is-contextual{
+  margin-top:10px;
+  padding:16px 15px;
+  border:1px solid rgba(242,112,28,.22);
+  border-radius:14px;
+  background:#fff8f2;
+  box-shadow:inset 3px 0 0 var(--reference-page-accent);
+}
+.reference-dictionary-current-label{
+  display:inline-block;
+  margin-bottom:7px;
+  color:var(--reference-page-accent);
+  font-size:10px;
+  font-weight:750;
+}
+.reference-dictionary-sense-copy>p{
+  margin:0;
+  color:var(--reference-page-ink);
+  font-size:15px;
+  font-weight:580;
+  line-height:1.58;
+}
+.reference-dictionary-sense-copy>small{
+  display:block;
+  margin-top:6px;
+  color:var(--reference-page-muted);
+  font-size:12px;
+  line-height:1.55;
+}
+.reference-dictionary-labels{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+.reference-dictionary-labels span{
+  padding:3px 7px;
+  border-radius:10px;
+  background:#f1f5f9;
+  color:#64748b;
+  font-size:9px;
+}
+.reference-dictionary-examples-button{
+  min-height:36px;
+  margin-top:9px;
+  padding:0;
+  border:0;
+  display:flex;
+  align-items:center;
+  gap:3px;
+  background:transparent;
+  color:#64748b;
+  font:650 12px/1 inherit;
+  cursor:pointer;
+}
+.reference-dictionary-examples-button .icon{width:14px;height:14px}
+.reference-dictionary-examples-button:hover{color:var(--reference-page-accent)}
+.reference-dictionary-forms>div{display:flex;flex-wrap:wrap;gap:7px}
+.reference-dictionary-forms>div>span{
+  padding:7px 11px;
+  border:1px solid #e2e8f0;
+  border-radius:16px;
+  color:#475569;
+  font-size:12px;
+  font-weight:650;
+}
+.reference-dictionary-notes details{padding:12px 0;border-bottom:1px solid #f1f5f9}
+.reference-dictionary-notes summary{color:#475569;font-size:13px;font-weight:700;cursor:pointer}
+.reference-dictionary-notes p{margin:9px 0 0;font-size:13px;line-height:1.6;color:#64748b}
+.reference-dictionary-notes small{display:block;margin-top:6px;font-size:10px;color:#94a3b8}
+.reference-dictionary-source{padding:20px 0 10px;color:#94a3b8}
+.reference-dictionary-source strong{font-size:11px;color:#64748b}
+.reference-dictionary-source p{margin:5px 0;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.reference-dictionary-source small{display:block;font-size:9px;line-height:1.5}
+
+.reference-example-header>div{text-align:center;min-width:0}
+.reference-example-header strong{display:block;font-size:17px;color:var(--reference-page-ink)}
+.reference-example-header span{display:block;margin-top:2px;font-size:10px;color:#94a3b8}
+.reference-example-body{
+  height:calc(100% - 162px);
+  overflow-y:auto;
+  padding:20px 18px 36px;
+  background:#f5f6f8;
+  scrollbar-width:none;
+}
+.reference-example-body::-webkit-scrollbar{display:none}
+.reference-example-carousel{min-height:430px}
+.reference-example-card{
+  overflow:hidden;
+  border:1px solid #e8edf2;
+  border-radius:20px;
+  background:#fff;
+  box-shadow:0 10px 30px rgba(15,23,42,.07);
+}
+.reference-example-source{
+  padding:15px 17px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  border-bottom:1px solid #f1f5f9;
+}
+.reference-example-source span{font-size:10px;font-weight:750;color:var(--reference-page-accent)}
+.reference-example-source strong{min-width:0;text-align:right;font-size:10px;font-weight:600;color:#94a3b8}
+.reference-example-sentence{padding:34px 22px 27px}
+.reference-example-sentence .clickable-sentence{
+  font:650 24px/1.55 inherit;
+  letter-spacing:-.25px;
+  color:var(--reference-page-ink);
+}
+.reference-example-sentence .tok-target{
+  color:var(--reference-page-accent);
+  text-decoration:underline;
+  text-decoration-thickness:2px;
+  text-underline-offset:4px;
+}
+.reference-example-sentence>p{margin:18px 0 0;font-size:14px;line-height:1.65;color:#64748b}
+.reference-example-sentence>button{
+  margin-top:13px;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:#64748b;
+  font:650 11px/1 inherit;
+  cursor:pointer;
+}
+.reference-example-sense{
+  padding:18px 20px 20px;
+  border-top:1px solid #f1f5f9;
+  background:#fafbfc;
+}
+.reference-example-sense>span{display:block;margin-bottom:7px;font-size:9px;color:#94a3b8}
+.reference-example-sense>strong{color:var(--reference-page-accent);font:italic 700 12px/1 inherit}
+.reference-example-sense>p{margin:7px 0 0;font-size:13px;line-height:1.55;color:#475569}
+.reference-example-body .sensa-example-pagination{margin-top:18px}
+.reference-example-footer{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  min-height:66px;
+  padding:9px 20px 12px;
+  border-top:1px solid var(--reference-page-line);
+  background:rgba(255,255,255,.96);
+  text-align:center;
+}
+.reference-example-footer button{
+  border:0;
+  background:transparent;
+  color:var(--reference-page-accent);
+  font:750 13px/1 inherit;
+  cursor:pointer;
+}
+.reference-example-footer p{margin:5px 0 0;font-size:9px;color:#94a3b8}
+.reference-dictionary-screen button:focus-visible,
+.reference-dictionary-screen input:focus-visible,
+.reference-example-screen button:focus-visible{
+  outline:2px solid var(--reference-page-accent);
+  outline-offset:2px;
+}
+
+/* ============================================================
+   12. 柯林斯多维词典全屏大卡片 (DictDetailModal)
+   ============================================================ */
+.dict-modal-backdrop{
+  position:absolute;
+  inset:0;
+  z-index:95;
+  background:rgba(14,16,22,.48);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .28s cubic-bezier(0.25,1,0.5,1);
+}
+.dict-modal-backdrop.active{
+  opacity:1;
+  pointer-events:auto;
+}
+
+.dict-modal-sheet{
+  width:100%;
+  height:94%;
+  background:#ffffff;
+  border-top-left-radius:28px;
+  border-top-right-radius:28px;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  transform:translateY(100%);
+  transition:transform .32s cubic-bezier(0.2,0.9,0.3,1);
+  box-shadow:0 -12px 40px rgba(0,0,0,.26);
+  position:relative;
+}
+.dict-modal-backdrop.active .dict-modal-sheet{
+  transform:translateY(0);
+}
+
+/* 顶部中央拖拽条与序号 */
+.dict-sheet-handle-bar{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:12px 20px 4px;
+  position:relative;
+  flex-shrink:0;
+}
+.dict-drag-pill{
+  width:40px;
+  height:4px;
+  border-radius:2px;
+  background:#e2e8f0;
+}
+.dict-pg-label{
+  position:absolute;
+  right:22px;
+  top:10px;
+  font-size:13.5px;
+  font-weight:600;
+  color:#94a3b8;
+}
+
+/* 单词主体 Header */
+.dict-sheet-head{
+  padding:6px 22px 14px;
+  flex-shrink:0;
+}
+.dict-head-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.dict-head-word{
+  font-size:34px;
+  font-weight:800;
+  color:#f2701c;
+  letter-spacing:-.6px;
+  line-height:1.05;
+}
+.dict-star-btn{
+  background:none;
+  border:0;
+  cursor:pointer;
+  padding:4px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:transform .15s ease;
+}
+.dict-star-btn:active{
+  transform:scale(1.25);
+}
+
+/* 音标行 */
+.dict-ph-row{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-top:8px;
+  cursor:pointer;
+}
+.dict-accent-pill{
+  background:#f1f5f9;
+  color:#64748b;
+  font-size:12px;
+  font-weight:700;
+  padding:3px 8.5px;
+  border-radius:12px;
+  display:inline-flex;
+  align-items:center;
+  transition:all .18s ease;
+}
+.dict-accent-pill.playing{
+  background:#fbd4a8;
+  color:#f0761d;
+}
+.dict-ph-text{
+  font-size:16px;
+  color:#475569;
+  font-weight:500;
+  letter-spacing:.2px;
+}
+.dict-brief-def{
+  font-size:15.5px;
+  color:#1e293b;
+  margin-top:10px;
+  line-height:1.5;
+  font-weight:500;
+}
+
+/* 多维横向 Tab 栏 */
+.dict-tab-bar-wrap{
+  border-bottom:1px solid #f1f5f9;
+  padding:0 18px;
+  flex-shrink:0;
+  overflow-x:auto;
+  scrollbar-width:none;
+}
+.dict-tab-bar-wrap::-webkit-scrollbar{
+  display:none;
+}
+.dict-tab-bar{
+  display:flex;
+  gap:22px;
+  min-width:max-content;
+}
+.dict-tab-item{
+  background:none;
+  border:0;
+  padding:12px 2px 10px;
+  font-family:inherit;
+  font-size:16px;
+  font-weight:500;
+  color:#64748b;
+  cursor:pointer;
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  transition:color .18s ease;
+}
+.dict-tab-item.on{
+  color:#1e293b;
+  font-weight:700;
+}
+.dict-tab-line{
+  position:absolute;
+  bottom:0;
+  left:0;
+  right:0;
+  height:3px;
+  background:#f2701c;
+  border-radius:2px;
+}
+
+/* Tab 滚动内容区域 */
+.dict-tab-content-body{
+  flex:1;
+  overflow-y:auto;
+  padding:20px 22px 100px;
+  scrollbar-width:none;
+}
+.dict-tab-content-body::-webkit-scrollbar{
+  display:none;
+}
+
+/* 1. 柯林斯 Tab 专属 1:1 还原布局 */
+.collins-auth-card{
+  display:flex;
+  align-items:center;
+  gap:16px;
+  margin-bottom:22px;
+}
+.collins-book-cover{
+  width:72px;
+  height:98px;
+  border-radius:6px;
+  background:linear-gradient(145deg,#b91c1c 0%,#881337 100%);
+  box-shadow:0 6px 16px rgba(185,28,28,.35);
+  padding:8px 6px;
+  color:#ffffff;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  flex-shrink:0;
+  position:relative;
+  overflow:hidden;
+}
+.collins-book-spine{
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:4px;
+  background:rgba(255,255,255,.2);
+}
+.collins-book-sub{
+  font-size:10.5px;
+  font-weight:800;
+  letter-spacing:.3px;
+  line-height:1;
+  text-align:left;
+  padding-left:4px;
+}
+.collins-book-mid{
+  font-size:6px;
+  letter-spacing:.2px;
+  opacity:.8;
+  padding-left:4px;
+  transform:scale(.85);
+  transform-origin:left center;
+}
+.collins-book-title{
+  font-size:11px;
+  font-weight:800;
+  line-height:1.2;
+  text-align:left;
+  padding-left:4px;
+  letter-spacing:.2px;
+}
+.collins-auth-info{
+  flex:1;
+}
+.collins-auth-title{
+  font-size:17.5px;
+  font-weight:700;
+  color:#1e293b;
+  line-height:1.35;
+}
+.collins-auth-desc{
+  font-size:13.5px;
+  color:#475569;
+  margin-top:6px;
+  line-height:1.45;
+}
+
+/* 柯林斯四大特色列表 */
+.collins-features-list{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  margin-bottom:28px;
+}
+.collins-feature-item{
+  display:flex;
+  align-items:flex-start;
+  gap:9px;
+  font-size:14.5px;
+  color:#334155;
+  line-height:1.45;
+}
+.feature-dot{
+  color:#94a3b8;
+  font-size:13px;
+  font-weight:700;
+  flex-shrink:0;
+  margin-top:1px;
+}
+
+/* 核心知识点全新呈现 标语 */
+.collins-promo-hero{
+  text-align:center;
+  margin:32px 0 22px;
+}
+.promo-title-orange{
+  font-size:23px;
+  font-weight:800;
+  color:#f2701c;
+  letter-spacing:.4px;
+  margin-bottom:4px;
+}
+.promo-title-black{
+  font-size:23px;
+  font-weight:800;
+  color:#1e293b;
+  letter-spacing:.4px;
+}
+
+/* 词典透析卡片 */
+.collins-entry-preview{
+  background:#ffffff;
+  border:1.5px solid #fed7aa;
+  border-radius:16px;
+  padding:16px 18px;
+  box-shadow:0 6px 20px rgba(242,112,28,.08);
+}
+.collins-preview-hd{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:10px;
+}
+.c-entry-word{
+  font-size:18px;
+  font-weight:700;
+  color:#ea580c;
+}
+.c-entry-meta{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.c-stars{
+  color:#f59e0b;
+  font-size:12px;
+  letter-spacing:1px;
+}
+.c-tag{
+  font-size:11px;
+  font-weight:700;
+  color:#64748b;
+  background:#f1f5f9;
+  padding:2px 6px;
+  border-radius:6px;
+}
+.collins-preview-def-box{
+  font-size:14.5px;
+  line-height:1.6;
+}
+.c-en-def{
+  color:#475569;
+  font-style:italic;
+  margin-bottom:6px;
+}
+.c-zh-def{
+  color:#1e293b;
+  font-weight:500;
+}
+
+/* 2. 例句与真题卡片 */
+.dict-sent-card{
+  background:#f8fafc;
+  border-radius:14px;
+  padding:15px 16px;
+  margin-bottom:12px;
+  border:1px solid #f1f5f9;
+}
+.dict-sent-src{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  font-size:13px;
+  font-weight:600;
+  color:#64748b;
+  margin-bottom:8px;
+}
+.dict-sent-audio-btn{
+  background:none;
+  border:0;
+  color:#f2701c;
+  cursor:pointer;
+  padding:2px;
+  display:flex;
+  align-items:center;
+}
+.dict-sent-en{
+  font-size:16px;
+  color:#1e293b;
+  line-height:1.45;
+  font-weight:500;
+}
+.dict-sent-en b{
+  color:#ea580c;
+  font-weight:700;
+}
+.dict-sent-zh{
+  font-size:14px;
+  color:#64748b;
+  margin-top:6px;
+  line-height:1.4;
+}
+
+/* 3. 助记类 Tab (派生/词根/近义) */
+.dict-mnemo-row{
+  display:flex;
+  align-items:baseline;
+  gap:12px;
+  padding:14px 4px;
+  border-bottom:1px solid #f1f5f9;
+}
+.dict-mnemo-row .m-key{
+  font-size:16px;
+  font-weight:700;
+  color:#1e293b;
+  min-width:110px;
+}
+.dict-mnemo-row .m-desc{
+  font-size:15px;
+  color:#475569;
+  line-height:1.45;
+}
+
+/* 4. 真题标头 */
+.dict-exam-tag-hd{
+  display:flex;
+  gap:8px;
+  margin-bottom:14px;
+}
+.exam-freq-pill{
+  background:#ffedd5;
+  color:#ea580c;
+  font-size:12.5px;
+  font-weight:700;
+  padding:4px 10px;
+  border-radius:12px;
+}
+.exam-type-pill{
+  background:#f1f5f9;
+  color:#475569;
+  font-size:12.5px;
+  font-weight:600;
+  padding:4px 10px;
+  border-radius:12px;
+}
+
+/* 5. 笔记 Tab */
+.dict-note-input-box{
+  background:#f8fafc;
+  border:1px solid #e2e8f0;
+  border-radius:14px;
+  padding:12px 14px;
+  margin-bottom:20px;
+}
+.dict-note-textarea{
+  width:100%;
+  border:0;
+  background:none;
+  font-family:inherit;
+  font-size:14.5px;
+  color:#1e293b;
+  resize:none;
+  outline:none;
+  line-height:1.5;
+}
+.dict-note-act{
+  display:flex;
+  justify-content:flex-end;
+  margin-top:6px;
+}
+.dict-note-submit-btn{
+  background:#f2701c;
+  color:#ffffff;
+  border:0;
+  font-family:inherit;
+  font-size:13.5px;
+  font-weight:600;
+  padding:6px 16px;
+  border-radius:14px;
+  cursor:pointer;
+  transition:all .15s ease;
+}
+.dict-note-submit-btn:active{
+  transform:scale(.95);
+}
+
+.dict-notes-list{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.dict-note-item{
+  background:#f8fafc;
+  border:1px solid #f1f5f9;
+  border-radius:14px;
+  padding:14px 16px;
+}
+.note-hd{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:6px;
+}
+.note-author{
+  font-size:13.5px;
+  font-weight:700;
+  color:#334155;
+}
+.note-time{
+  font-size:12px;
+  color:#94a3b8;
+}
+.note-badge{
+  background:#fed7aa;
+  color:#ea580c;
+  font-size:11px;
+  font-weight:700;
+  padding:2px 6px;
+  border-radius:6px;
+}
+.note-content{
+  font-size:14.5px;
+  color:#1e293b;
+  line-height:1.5;
+}
+
+/* 底部右下角悬浮关闭按钮 (FAB) */
+.dict-fab-close-btn{
+  position:absolute;
+  right:20px;
+  bottom:26px;
+  width:52px;
+  height:52px;
+  border-radius:50%;
+  background:#ffffff;
+  border:1px solid rgba(0,0,0,.08);
+  box-shadow:0 8px 24px rgba(0,0,0,.2);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  color:#1e293b;
+  z-index:20;
+  transition:transform .15s ease,background .15s;
+}
+.dict-fab-close-btn:active{
+  transform:scale(.92);
+  background:#f1f5f9;
+}
