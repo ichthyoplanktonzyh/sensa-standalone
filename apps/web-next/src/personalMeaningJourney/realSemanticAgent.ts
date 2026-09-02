@@ -4,6 +4,11 @@
  * Every field the model returns is validated here rather than trusted. A
  * malformed turn surfaces as a readable Chinese error the screen can retry,
  * never as a half-filled result panel that looks like the model understood.
+ *
+ * The turn arrives as an SSE stream: `delta` events feed the onDelta callback
+ * so the screen can type the reply out live, and the final `result` event
+ * goes through the same validation as the old one-shot response. A plain JSON
+ * response (streaming unsupported on either hop) still works unchanged.
  */
 
 import type {
@@ -20,6 +25,7 @@ import type {
   AgentExpressionCandidate,
   AgentFocusCandidate,
   AgentSenseCandidate,
+  SemanticAgentDeltaHandler,
   SemanticAgentPort,
   SemanticAgentTurnResult,
 } from './semanticAgent';
@@ -144,8 +150,100 @@ const parseEnvelope = (body: string, status: number): JsonObject => {
   }
 };
 
+const parseTurnResult = (envelope: JsonObject): SemanticAgentTurnResult => {
+  const provenance = asObject(envelope.provenance, '来源') as unknown as SemanticLlmProvenance;
+  const data = asObject(envelope.data, '对话结果');
+  const workingSet = asObject(data.workingSet, '候选面板');
+  const parsedExpressions: AgentExpressionCandidate[] = Array.isArray(workingSet.expressions)
+    ? workingSet.expressions
+        .map((item) => parseExpression(item))
+        .filter((item): item is AgentExpressionCandidate => item !== null)
+    : [];
+  const singleExpression = parseExpression(workingSet.expression);
+  if (singleExpression && !parsedExpressions.some((e) => e.surfaceForm === singleExpression.surfaceForm)) {
+    parsedExpressions.unshift(singleExpression);
+  }
+  return {
+    assistantMessage: asString(data.assistantMessage, '回复'),
+    workingSet: {
+      focus: parseFocus(workingSet.focus),
+      sense: parseSense(workingSet.sense),
+      expression: parsedExpressions[0] ?? singleExpression ?? null,
+      expressions: parsedExpressions,
+    },
+    readyToConfirm: data.readyToConfirm === true,
+    provenance,
+  };
+};
+
+/** One frame of our SSE protocol → the parsed `data` object and its `event` name. */
+const parseEventFrame = (frame: string): { event: string | null; data: JsonObject } => {
+  let event: string | null = null;
+  const dataLines: string[] = [];
+  for (const line of frame.split(/\r?\n/)) {
+    if (line.startsWith('event:')) event = line.slice(6).trim();
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
+  }
+  if (dataLines.length === 0) throw new Error('AI 服务的流式响应损坏了，请重试。');
+  try {
+    return { event, data: asObject(JSON.parse(dataLines.join('\n')) as unknown, '流式响应') };
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('模型返回')) throw error;
+    throw new Error('AI 服务的流式响应损坏了，请重试。');
+  }
+};
+
+/**
+ * Read the SSE stream: every `delta` grows the live reply, `result` is the
+ * authoritative turn, `error` throws. A stream that ends without `result`
+ * means the connection dropped mid-turn.
+ */
+const readSseTurn = async (
+  response: Response,
+  onDelta?: SemanticAgentDeltaHandler,
+): Promise<SemanticAgentTurnResult> => {
+  if (!response.body) throw new Error('AI 服务没有返回流式响应，请重试。');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: SemanticAgentTurnResult | null = null;
+
+  const consume = (frame: string) => {
+    const { event, data } = parseEventFrame(frame);
+    if (event === 'delta') {
+      if (typeof data.delta === 'string' && data.delta) onDelta?.(data.delta);
+    } else if (event === 'result') {
+      result = parseTurnResult(data);
+    } else if (event === 'error') {
+      throw new Error(typeof data.error === 'string' && data.error ? data.error : '语义模型暂时不可用。');
+    }
+  };
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      for (;;) {
+        const boundary = buffer.indexOf('\n\n');
+        if (boundary === -1) break;
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        consume(frame);
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) consume(buffer);
+  } finally {
+    if (!result) void reader.cancel().catch(() => undefined);
+  }
+
+  if (!result) throw new Error('AI 服务的连接中断了，请重试。');
+  return result;
+};
+
 export const createRealSemanticAgent = (): SemanticAgentPort => ({
-  async turn(input): Promise<SemanticAgentTurnResult> {
+  async turn(input, onDelta): Promise<SemanticAgentTurnResult> {
     const response = await fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -158,24 +256,16 @@ export const createRealSemanticAgent = (): SemanticAgentPort => ({
         workingSet: input.workingSet,
         learnerEditedTracks: input.learnerEditedTracks,
         focusLocked: input.focusLocked,
+        mode: input.mode,
       }),
     });
+    if ((response.headers.get('content-type') ?? '').includes('text/event-stream')) {
+      return readSseTurn(response, onDelta);
+    }
     const envelope = parseEnvelope(await response.text(), response.status);
     if (!response.ok) {
       throw new Error(typeof envelope.error === 'string' ? envelope.error : '语义模型暂时不可用。');
     }
-    const provenance = asObject(envelope.provenance, '来源') as unknown as SemanticLlmProvenance;
-    const data = asObject(envelope.data, '对话结果');
-    const workingSet = asObject(data.workingSet, '候选面板');
-    return {
-      assistantMessage: asString(data.assistantMessage, '回复'),
-      workingSet: {
-        focus: parseFocus(workingSet.focus),
-        sense: parseSense(workingSet.sense),
-        expression: parseExpression(workingSet.expression),
-      },
-      readyToConfirm: data.readyToConfirm === true,
-      provenance,
-    };
+    return parseTurnResult(envelope);
   },
 });

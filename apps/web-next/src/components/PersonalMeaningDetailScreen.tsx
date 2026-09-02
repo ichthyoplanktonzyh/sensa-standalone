@@ -6,6 +6,10 @@
  * — it is a basket, not a progress bar, and it never shows "已确认" while the
  * thread is still open.
  *
+ * The conversation runs as a simple loop: chat turns while the model listens
+ * and asks, then「整理一下」— one consolidation the learner requests when the
+ * model says it is ready — fills the panel, repeatable after corrections.
+ *
  * Two things are deliberately kept apart:
  *  - 「就聊这个」 locks the Focus so the model stops exploring. It writes no
  *    domain fact and is freely reversible.
@@ -42,6 +46,7 @@ import type {
   SemanticAgentMaterial,
   SemanticAgentMessage,
   SemanticAgentSession,
+  SemanticAgentTurnMode,
   WorkingSetTrack,
 } from '../personalMeaningJourney/semanticAgent';
 import type {
@@ -109,9 +114,6 @@ const materialFor = (detail: JourneyDetailView): SemanticAgentMaterial => ({
   startingPoint: detail.startingPoint,
 });
 
-const lines = (value: string): string[] =>
-  value.split('\n').map((line) => line.trim()).filter(Boolean);
-
 type TrackTone = 'idle' | 'candidate' | 'confirmed';
 
 const trackTone = (hasCandidate: boolean, confirmed: boolean): {
@@ -128,22 +130,16 @@ const trackTone = (hasCandidate: boolean, confirmed: boolean): {
 
 const FocusCard = ({
   focus,
-  locked,
   editing,
   onEdit,
   onChange,
   onDone,
-  onToggleLock,
-  disabled,
 }: {
   focus: AgentFocusCandidate;
-  locked: boolean;
   editing: boolean;
   onEdit: () => void;
   onChange: (next: AgentFocusCandidate) => void;
   onDone: () => void;
-  onToggleLock: () => void;
-  disabled: boolean;
 }) => (
   <article className="pmw-card">
     <header>
@@ -157,35 +153,14 @@ const FocusCard = ({
           rows={2}
           onChange={(event) => onChange({ ...focus, statement: event.target.value })}
         />
-        <label>
-          <span>区分说明，一行一条</span>
-          <textarea
-            value={focus.distinguishingNotes.join('\n')}
-            rows={3}
-            onChange={(event) => onChange({
-              ...focus,
-              distinguishingNotes: lines(event.target.value),
-            })}
-          />
-        </label>
         <button type="button" className="pmw-edit-done" onClick={onDone}>改好了</button>
       </div>
     ) : (
       <>
-        <b>{focus.statement}</b>
+        <b className="pmw-card-lead">{focus.statement}</b>
         {focus.distinguishingNotes.length > 0 && (
-          <ul>{focus.distinguishingNotes.map((note) => <li key={note}>{note}</li>)}</ul>
+          <p className="pmw-card-note">{focus.distinguishingNotes[0]}</p>
         )}
-        <p className="pmw-why">{focus.rationale}</p>
-        <button
-          type="button"
-          className={`pmw-lock${locked ? ' is-on' : ''}`}
-          onClick={onToggleLock}
-          disabled={disabled}
-          aria-pressed={locked}
-        >
-          {locked ? '✓ 正在聊这个' : '就聊这个'}
-        </button>
       </>
     )}
   </article>
@@ -213,139 +188,83 @@ const SenseCard = ({
       <div className="pmw-edit">
         <textarea
           value={sense.coreMeaningFocus}
-          rows={3}
+          rows={2}
           onChange={(event) => onChange({ ...sense, coreMeaningFocus: event.target.value })}
         />
-        <label>
-          <span>包含哪些情况，一行一条</span>
-          <textarea
-            value={sense.includedCases.join('\n')}
-            rows={3}
-            onChange={(event) => onChange({ ...sense, includedCases: lines(event.target.value) })}
-          />
-        </label>
-        <label>
-          <span>不包含哪些情况，一行一条</span>
-          <textarea
-            value={sense.excludedCases.join('\n')}
-            rows={3}
-            onChange={(event) => onChange({ ...sense, excludedCases: lines(event.target.value) })}
-          />
-        </label>
         <button type="button" className="pmw-edit-done" onClick={onDone}>改好了</button>
       </div>
     ) : (
       <>
-        <b>{sense.coreMeaningFocus}</b>
+        <b className="pmw-card-lead">{sense.coreMeaningFocus}</b>
         {sense.prototypeScenes[0] && (
-          <p className="pmw-scene">{sense.prototypeScenes[0].summary}</p>
-        )}
-        <div className="pmw-cases">
-          {sense.includedCases.length > 0 && (
-            <div className="is-include">
-              <small>包含</small>
-              <ul>{sense.includedCases.map((item) => <li key={item}>{item}</li>)}</ul>
-            </div>
-          )}
-          {sense.excludedCases.length > 0 && (
-            <div className="is-exclude">
-              <small>不包含</small>
-              <ul>{sense.excludedCases.map((item) => <li key={item}>{item}</li>)}</ul>
-            </div>
-          )}
-        </div>
-        {sense.neighborContrasts.length > 0 && (
-          <ul className="pmw-contrasts">
-            {sense.neighborContrasts.map((contrast) => (
-              <li key={contrast.label}><b>{contrast.label}</b><span>{contrast.distinction}</span></li>
-            ))}
-          </ul>
+          <p className="pmw-card-note">{sense.prototypeScenes[0].summary}</p>
         )}
       </>
     )}
   </article>
 );
 
-const ExpressionCard = ({
-  expression,
+const ExpressionsCard = ({
+  candidates,
+  selected,
+  onSelect,
   editing,
   onEdit,
   onChange,
   onDone,
 }: {
-  expression: AgentExpressionCandidate;
+  candidates: AgentExpressionCandidate[];
+  selected: AgentExpressionCandidate | null;
+  onSelect: (candidate: AgentExpressionCandidate) => void;
   editing: boolean;
   onEdit: () => void;
   onChange: (next: AgentExpressionCandidate) => void;
   onDone: () => void;
-}) => (
-  <article className="pmw-card">
-    <header>
-      <small>目标表达</small>
-      {!editing && <button type="button" onClick={onEdit}>改</button>}
-    </header>
-    {editing ? (
-      <div className="pmw-edit">
-        <input
-          value={expression.surfaceForm}
-          onChange={(event) => onChange({ ...expression, surfaceForm: event.target.value })}
-        />
-        <label>
-          <span>它是什么</span>
-          <select
-            value={expression.expressionType}
-            onChange={(event) => onChange({
-              ...expression,
-              expressionType: event.target.value as SensaExpressionType,
-            })}
-          >
-            {(Object.keys(expressionTypeLabels) as SensaExpressionType[]).map((type) => (
-              <option key={type} value={type}>{expressionTypeLabels[type]}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>它和这个意思是什么关系</span>
-          <select
-            value={expression.relation}
-            onChange={(event) => onChange({
-              ...expression,
-              relation: event.target.value as SensaExpressionBindingRelation,
-            })}
-          >
-            {(Object.keys(relationLabels) as SensaExpressionBindingRelation[]).map((value) => (
-              <option key={value} value={value}>{relationLabels[value]}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>覆盖范围</span>
-          <select
-            value={expression.semanticCoverage}
-            onChange={(event) => onChange({
-              ...expression,
-              semanticCoverage: event.target.value as SensaSemanticCoverage,
-            })}
-          >
-            {(Object.keys(coverageLabels) as SensaSemanticCoverage[]).map((value) => (
-              <option key={value} value={value}>{coverageLabels[value]}</option>
-            ))}
-          </select>
-        </label>
-        <button type="button" className="pmw-edit-done" onClick={onDone}>改好了</button>
-      </div>
-    ) : (
-      <>
-        <b className="pmw-surface">{expression.surfaceForm}</b>
-        <p className="pmw-meta">
-          {expressionTypeLabels[expression.expressionType]} ·{' '}
-          {relationLabels[expression.relation]} · {coverageLabels[expression.semanticCoverage]}
-        </p>
-        <p className="pmw-why">{expression.rationale}</p>
-      </>
-    )}
-  </article>
-);
+}) => {
+  const active = selected ?? candidates[0] ?? null;
+  if (!active && candidates.length === 0) return null;
+
+  return (
+    <article className="pmw-card">
+      <header>
+        <small>目标表达 {candidates.length > 1 ? `(${candidates.length} 个候选)` : ''}</small>
+        {!editing && active && <button type="button" onClick={onEdit}>改</button>}
+      </header>
+      {editing && active ? (
+        <div className="pmw-edit">
+          <input
+            value={active.surfaceForm}
+            onChange={(event) => onChange({ ...active, surfaceForm: event.target.value })}
+          />
+          <button type="button" className="pmw-edit-done" onClick={onDone}>改好了</button>
+        </div>
+      ) : (
+        <div className="pmw-expr-candidates">
+          {candidates.map((cand) => {
+            const isChosen = (selected?.surfaceForm ?? candidates[0]?.surfaceForm) === cand.surfaceForm;
+            return (
+              <button
+                key={cand.surfaceForm}
+                type="button"
+                className={`pmw-expr-pill${isChosen ? ' is-selected' : ''}`}
+                onClick={() => onSelect(cand)}
+              >
+                <span className="pmw-expr-radio" aria-hidden="true">{isChosen ? '✓' : ''}</span>
+                <div className="pmw-expr-info">
+                  <div className="pmw-expr-title">
+                    <b className="pmw-surface">{cand.surfaceForm}</b>
+                    <span className="pmw-expr-tag">{expressionTypeLabels[cand.expressionType]}</span>
+                  </div>
+                  {cand.rationale && <p className="pmw-expr-why">{cand.rationale}</p>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </article>
+  );
+};
 
 // -- screen -----------------------------------------------------------------
 
@@ -362,10 +281,18 @@ export const PersonalMeaningDetailScreen = ({
   const transcriptRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const openedThread = useRef<string | null>(null);
+  /** Deltas received but not yet typed out, plus the pacer that drips them. */
+  const pendingRef = useRef('');
+  const pacerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const drainRef = useRef<(() => void) | null>(null);
+  /** The mode of the turn in flight/last attempted, so retry repeats it. */
+  const lastModeRef = useRef<SemanticAgentTurnMode>('chat');
 
   const [session, setSession] = useState<SemanticAgentSession | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  /** The assistant reply as it streams in; blank again once the turn lands. */
+  const [streamingText, setStreamingText] = useState('');
   const [error, setError] = useState('');
   const [materialOpen, setMaterialOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -390,16 +317,63 @@ export const PersonalMeaningDetailScreen = ({
     setSession(next);
   }, []);
 
+  /** Stop the typewriter and drop whatever had not been typed out yet. */
+  const stopPacer = useCallback(() => {
+    if (pacerRef.current) clearInterval(pacerRef.current);
+    pacerRef.current = null;
+    drainRef.current = null;
+    pendingRef.current = '';
+  }, []);
+
+  /**
+   * The upstream typically generates the whole reply first and then hands it
+   * over in one late burst, so raw deltas would pop the text in almost at
+   * once. The pacer types it back out at a readable pace; a large backlog
+   * speeds up modestly so the bubble never trails far behind. Once the final
+   * result is in (drainRef set), the remaining tail finishes fast.
+   */
+  const pump = useCallback(() => {
+    const pending = pendingRef.current;
+    if (!pending) {
+      const done = drainRef.current;
+      if (pacerRef.current) clearInterval(pacerRef.current);
+      pacerRef.current = null;
+      drainRef.current = null;
+      done?.();
+      return;
+    }
+    const chars = Array.from(pending);
+    const take = drainRef.current
+      ? Math.max(2, Math.ceil(chars.length / 8))
+      : Math.min(5, Math.max(1, Math.round(chars.length / 100)));
+    pendingRef.current = chars.slice(take).join('');
+    setStreamingText((text) => text + chars.slice(0, take).join(''));
+  }, []);
+
+  const startPacer = useCallback(() => {
+    if (!pacerRef.current) pacerRef.current = setInterval(pump, 30);
+  }, [pump]);
+
+  // A turn still typing when the screen goes away must not leave a live timer.
+  useEffect(() => () => {
+    if (pacerRef.current) clearInterval(pacerRef.current);
+    pacerRef.current = null;
+    drainRef.current?.();
+    drainRef.current = null;
+  }, []);
+
   useEffect(() => {
     if (active) screenRef.current?.scrollTo({ top: 0 });
   }, [active, personalMeaningId]);
 
   useEffect(() => {
+    // While the reply streams in, follow it without smooth-scroll fighting
+    // every delta; finished messages still glide into place.
     transcriptRef.current?.scrollTo({
       top: transcriptRef.current.scrollHeight,
-      behavior: session?.messages.length ? 'smooth' : 'auto',
+      behavior: busy ? 'auto' : session?.messages.length ? 'smooth' : 'auto',
     });
-  }, [busy, session?.messages.length]);
+  }, [busy, session?.messages.length, streamingText]);
 
   /** The Focus this thread confirmed, if it already did. */
   const confirmedFocus: JourneyFocusView | null = useMemo(() => {
@@ -415,8 +389,10 @@ export const PersonalMeaningDetailScreen = ({
   const runTurn = useCallback(async (
     baseSession: SemanticAgentSession,
     learnerBody?: string,
+    mode: SemanticAgentTurnMode = 'chat',
   ) => {
     if (!detail) return;
+    lastModeRef.current = mode;
     const learnerMessage = learnerBody?.trim() ? message('learner', learnerBody.trim()) : null;
     const messages = learnerMessage
       ? [...baseSession.messages, learnerMessage]
@@ -425,35 +401,62 @@ export const PersonalMeaningDetailScreen = ({
     commit(waiting);
     setBusy(true);
     setError('');
+    stopPacer();
+    setStreamingText('');
     try {
-      const result = await semanticAgent.turn({
-        material: materialFor(detail),
-        messages,
-        workingSet: baseSession.workingSet,
-        learnerEditedTracks: baseSession.learnerEditedTracks,
-        focusLocked: baseSession.focusLocked,
-      });
+      const result = await semanticAgent.turn(
+        {
+          material: materialFor(detail),
+          messages,
+          workingSet: baseSession.workingSet,
+          learnerEditedTracks: baseSession.learnerEditedTracks,
+          focusLocked: baseSession.focusLocked,
+          mode,
+        },
+        (delta) => {
+          pendingRef.current += delta;
+          startPacer();
+        },
+      );
+      if (pendingRef.current) {
+        // The result is in; let the bubble finish typing before the final
+        // message takes its place, so the tail never snaps in.
+        await new Promise<void>((resolve) => {
+          drainRef.current = resolve;
+          startPacer();
+        });
+      }
+      setStreamingText('');
       commit({
         ...waiting,
         messages: [...messages, message('assistant', result.assistantMessage)],
-        workingSet: result.workingSet,
-        readyToConfirm: result.readyToConfirm,
-        provenance: result.provenance,
+        // Only a consolidation writes panel state; a chat turn is talk, and
+        // talking must never demote a promotion the panel already earned.
+        ...(mode === 'consolidate' ? {
+          workingSet: result.workingSet,
+          readyToConfirm: result.readyToConfirm,
+          provenance: result.provenance,
+        } : {}),
       });
     } catch (cause) {
+      stopPacer();
+      setStreamingText('');
       setError(cause instanceof Error ? cause.message : 'AI 暂时无法继续这轮对话。');
     } finally {
       setBusy(false);
     }
   }, [commit, detail]);
 
-  // Open the thread by having the model read the material first, so the panel
-  // is already partly filled when the learner arrives instead of starting empty.
+  // The first turn follows the declared starting point: a learner who already
+  // knows the sense (or has an expression to check) consolidates immediately;
+  // an uncertain one opens with a chat question.
   useEffect(() => {
     if (!active || !detail || !session) return;
     if (session.messages.length > 0 || openedThread.current === session.threadId) return;
     openedThread.current = session.threadId;
-    void runTurn(session);
+    const firstMode: SemanticAgentTurnMode = detail.startingPoint === 'from_sense'
+      || detail.startingPoint === 'from_expression' ? 'consolidate' : 'chat';
+    void runTurn(session, undefined, firstMode);
   }, [active, detail, runTurn, session]);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -461,7 +464,7 @@ export const PersonalMeaningDetailScreen = ({
     if (!session || !draft.trim() || busy) return;
     const body = draft.trim();
     setDraft('');
-    void runTurn(session, body);
+    void runTurn(session, body, 'chat');
   };
 
   const editTrack = <T,>(track: WorkingSetTrack, value: T) => {
@@ -473,11 +476,6 @@ export const PersonalMeaningDetailScreen = ({
         ? session.learnerEditedTracks
         : [...session.learnerEditedTracks, track],
     });
-  };
-
-  const toggleLock = () => {
-    if (!session) return;
-    commit({ ...session, focusLocked: !session.focusLocked });
   };
 
   const addImage = async (file: File | undefined) => {
@@ -532,6 +530,13 @@ export const PersonalMeaningDetailScreen = ({
               semanticCoverage: expression.semanticCoverage,
             }
           : null,
+        expressionCandidates: (session.workingSet.expressions ?? (expression ? [expression] : [])).map((item) => ({
+          surfaceForm: item.surfaceForm,
+          expressionType: item.expressionType,
+          languageTag: item.languageTag,
+          relation: item.relation,
+          semanticCoverage: item.semanticCoverage,
+        })),
         confirmExpression: Boolean(expression) && includeExpression,
         transcript: session.messages,
         provenance: session.provenance ?? {
@@ -598,7 +603,10 @@ export const PersonalMeaningDetailScreen = ({
     commit(newSemanticAgentSession(detail.personalMeaningId, newUuid()));
   };
 
-  const working = session?.workingSet ?? { focus: null, sense: null, expression: null };
+  const working = session?.workingSet ?? { focus: null, sense: null, expression: null, expressions: [] };
+  const candidatesList = (working.expressions && working.expressions.length > 0)
+    ? working.expressions
+    : (working.expression ? [working.expression] : []);
   const senseConfirmed = Boolean(alignment);
   const focusStatus = trackTone(Boolean(working.focus), senseConfirmed);
   const senseStatus = trackTone(Boolean(working.sense), senseConfirmed);
@@ -618,13 +626,13 @@ export const PersonalMeaningDetailScreen = ({
   ) : allConfirmed ? (
     <div className="pmw-done">
       <span className="pmw-done-mark" aria-hidden="true">✓</span>
-      <h2>这条线聊完了</h2>
-      <p>三个事实都已确认，它们已经进入你的词义世界。</p>
+      <h2>这个意思已确认</h2>
+      <p>已为你记入词义世界。</p>
       <div className="pmw-done-facts">
-        <article><small>表达侧面</small><b>{confirmedFocus?.statement}</b></article>
-        <article><small>稳定意思</small><b>{alignment?.coreMeaningFocus}</b></article>
+        <article><small>侧面</small><b>{confirmedFocus?.statement}</b></article>
+        <article><small>意思</small><b>{alignment?.coreMeaningFocus}</b></article>
         <article>
-          <small>目标表达</small>
+          <small>表达</small>
           <b>{boundExpression?.surfaceForm}</b>
           <span>
             {expressionTypeLabels[boundExpression!.expressionType]} ·{' '}
@@ -644,16 +652,15 @@ export const PersonalMeaningDetailScreen = ({
             confirmedFocus!.meaningFocusId,
           )}
         >
-          查看完整语义结果
+          查看已确认意思
         </button>
-        <button type="button" onClick={onBack}>回我的词义世界</button>
+        <button type="button" onClick={onBack}>回词义世界</button>
       </div>
     </div>
   ) : (
     <>
       {materialOpen && (
-        <section className="pmw-material" aria-label="本轮语义材料">
-          <p className="pmw-material-note">这段对话基于下面这份材料。可以补充，不能在这里改写。</p>
+        <section className="pmw-material" aria-label="本轮材料">
           {detail.materialBlocks.map((block) => (
             block.kind === 'image' ? (
               <img
@@ -694,9 +701,17 @@ export const PersonalMeaningDetailScreen = ({
           </div>
         ))}
         {busy && (
-          <div className="pmw-message is-assistant is-thinking">
+          <div
+            className={`pmw-message is-assistant${streamingText ? ' is-streaming' : ' is-thinking'}`}
+          >
             <span className="pmw-avatar" aria-hidden="true">✦</span>
-            <div><p><i /><i /><i /></p></div>
+            <div>
+              {streamingText ? (
+                <p>{streamingText}<i className="pmw-caret" aria-hidden="true" /></p>
+              ) : (
+                <p><i /><i /><i /></p>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -704,94 +719,76 @@ export const PersonalMeaningDetailScreen = ({
       {error && (
         <div className="pmw-inline-error" role="alert">
           <span>{error}</span>
-          <button type="button" disabled={busy} onClick={() => void runTurn(session)}>重试</button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void runTurn(session, undefined, lastModeRef.current)}
+          >
+            重试
+          </button>
         </div>
       )}
 
-      <section className={`pmw-panel${panelOpen ? ' is-open' : ''}`} aria-label="一起聊出来的三件事">
-        <button
-          type="button"
-          className="pmw-panel-handle"
-          onClick={() => setPanelOpen((value) => !value)}
-          aria-expanded={panelOpen}
-        >
-          <span className={`pmw-chip is-${focusStatus.tone}`}>
-            <small>侧面</small><b>{focusStatus.label}</b>
-          </span>
-          <span className={`pmw-chip is-${senseStatus.tone}`}>
-            <small>意思</small><b>{senseStatus.label}</b>
-          </span>
-          <span className={`pmw-chip is-${expressionStatus.tone}`}>
-            <small>表达</small><b>{expressionStatus.label}</b>
-          </span>
-          <span className="pmw-panel-caret" aria-hidden="true">{panelOpen ? '▾' : '▴'}</span>
-        </button>
+      <div className="pmw-dock-bar">
+        <div className="pmw-dock-chips">
+          <button
+            type="button"
+            className={`pmw-dock-chip is-${focusStatus.tone}`}
+            onClick={() => setPanelOpen(true)}
+            aria-label="查看侧面"
+          >
+            <small>侧面</small>
+            <b>{working.focus ? working.focus.statement : focusStatus.label}</b>
+          </button>
+          <button
+            type="button"
+            className={`pmw-dock-chip is-${senseStatus.tone}`}
+            onClick={() => setPanelOpen(true)}
+            aria-label="查看意思"
+          >
+            <small>意思</small>
+            <b>{working.sense ? working.sense.coreMeaningFocus : senseStatus.label}</b>
+          </button>
+          <button
+            type="button"
+            className={`pmw-dock-chip is-${expressionStatus.tone}`}
+            onClick={() => setPanelOpen(true)}
+            aria-label="查看表达"
+          >
+            <small>表达</small>
+            <b>
+              {working.expression
+                ? `${working.expression.surfaceForm}${candidatesList.length > 1 ? ` (+${candidatesList.length - 1})` : ''}`
+                : expressionStatus.label}
+            </b>
+          </button>
+        </div>
 
-        {panelOpen && (
-          <div className="pmw-panel-body">
-            {senseConfirmed && (
-              <p className="pmw-panel-note">
-                侧面和意思已经确认过了，改不了。还差最后一个事实：目标表达。
-              </p>
-            )}
-            {working.focus && !senseConfirmed && (
-              <FocusCard
-                focus={working.focus}
-                locked={session.focusLocked}
-                editing={editingTrack === 'focus'}
-                onEdit={() => setEditingTrack('focus')}
-                onDone={() => setEditingTrack(null)}
-                onChange={(next) => editTrack('focus', next)}
-                onToggleLock={toggleLock}
-                disabled={busy}
-              />
-            )}
-            {working.sense && !senseConfirmed && (
-              <SenseCard
-                sense={working.sense}
-                editing={editingTrack === 'sense'}
-                onEdit={() => setEditingTrack('sense')}
-                onDone={() => setEditingTrack(null)}
-                onChange={(next) => editTrack('sense', next)}
-              />
-            )}
-            {working.expression && (
-              <ExpressionCard
-                expression={working.expression}
-                editing={editingTrack === 'expression'}
-                onEdit={() => setEditingTrack('expression')}
-                onDone={() => setEditingTrack(null)}
-                onChange={(next) => editTrack('expression', next)}
-              />
-            )}
-            {!working.focus && !working.sense && !working.expression && (
-              <p className="pmw-panel-empty">还没聊出什么。继续说说你的场景。</p>
-            )}
-          </div>
-        )}
-
-        {senseConfirmed ? (
-          <div className="pmw-confirm-row">
-            {alignment!.expressionCandidates.length === 0 ? (
-              <p className="pmw-confirm-blocked">
-                这次确认时还没有表达候选，没法在这条线上绑定。可以为这段经历开一条新的澄清线。
-              </p>
-            ) : (
+        <div className="pmw-dock-actions">
+          <button
+            type="button"
+            className="pmw-dock-organize"
+            disabled={busy}
+            onClick={() => void runTurn(session, undefined, 'consolidate')}
+            title="让 AI 梳理提炼当前结论"
+          >
+            ✨ 整理一下
+          </button>
+          {senseConfirmed ? (
+            alignment!.expressionCandidates.length === 0 ? null : (
               <button
                 type="button"
-                className="pmw-confirm is-ready"
+                className="pmw-dock-confirm is-ready"
                 disabled={!canConfirmExpressionOnly}
                 onClick={() => void confirmExpressionOnly()}
               >
-                确认这个表达
+                确认表达
               </button>
-            )}
-          </div>
-        ) : (
-          <div className="pmw-confirm-row">
+            )
+          ) : (
             <button
               type="button"
-              className={`pmw-confirm${session.readyToConfirm ? ' is-ready' : ''}`}
+              className={`pmw-dock-confirm${session.readyToConfirm ? ' is-ready' : ''}`}
               disabled={!canConfirm}
               onClick={() => {
                 setIncludeExpression(Boolean(working.expression));
@@ -800,9 +797,9 @@ export const PersonalMeaningDetailScreen = ({
             >
               就确认成这样
             </button>
-          </div>
-        )}
-      </section>
+          )}
+        </div>
+      </div>
 
       <form className="pmw-composer" onSubmit={submit}>
         <textarea
@@ -823,6 +820,77 @@ export const PersonalMeaningDetailScreen = ({
         </button>
       </form>
 
+      {panelOpen && (
+        <div className="pmw-preview-layer" onMouseDown={() => setPanelOpen(false)}>
+          <section
+            className="pmw-preview-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="当前整理结果"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <h2>当前整理结果</h2>
+              <button type="button" onClick={() => setPanelOpen(false)} aria-label="关闭">×</button>
+            </header>
+            <div className="pmw-preview-body">
+              {senseConfirmed && (
+                <p className="pmw-panel-note">
+                  侧面与意思已确认，接下来可以确认目标表达。
+                </p>
+              )}
+              {working.focus && !senseConfirmed && (
+                <FocusCard
+                  focus={working.focus}
+                  editing={editingTrack === 'focus'}
+                  onEdit={() => setEditingTrack('focus')}
+                  onDone={() => setEditingTrack(null)}
+                  onChange={(next) => editTrack('focus', next)}
+                />
+              )}
+              {working.sense && !senseConfirmed && (
+                <SenseCard
+                  sense={working.sense}
+                  editing={editingTrack === 'sense'}
+                  onEdit={() => setEditingTrack('sense')}
+                  onDone={() => setEditingTrack(null)}
+                  onChange={(next) => editTrack('sense', next)}
+                />
+              )}
+              {candidatesList.length > 0 && (
+                <ExpressionsCard
+                  candidates={candidatesList}
+                  selected={working.expression}
+                  onSelect={(cand) => editTrack('expression', cand)}
+                  editing={editingTrack === 'expression'}
+                  onEdit={() => setEditingTrack('expression')}
+                  onDone={() => setEditingTrack(null)}
+                  onChange={(next) => editTrack('expression', next)}
+                />
+              )}
+              {!working.focus && !working.sense && candidatesList.length === 0 && (
+                <p className="pmw-panel-empty">继续聊聊你的场景或疑问。</p>
+              )}
+            </div>
+            <footer>
+              <button
+                type="button"
+                className="pmw-primary"
+                disabled={!canConfirm}
+                onClick={() => {
+                  setPanelOpen(false);
+                  setIncludeExpression(Boolean(working.expression));
+                  setReviewOpen(true);
+                }}
+              >
+                就确认成这样
+              </button>
+              <button type="button" onClick={() => setPanelOpen(false)}>继续聊</button>
+            </footer>
+          </section>
+        </div>
+      )}
+
       {reviewOpen && working.focus && working.sense && (
         <div className="pmw-review-layer" onMouseDown={() => setReviewOpen(false)}>
           <section
@@ -833,32 +901,24 @@ export const PersonalMeaningDetailScreen = ({
             onMouseDown={(event) => event.stopPropagation()}
           >
             <header>
-              <h2 id="pmw-review-title">你要确认这些</h2>
+              <h2 id="pmw-review-title">确认这些内容</h2>
               <button type="button" onClick={() => setReviewOpen(false)} aria-label="继续聊">×</button>
             </header>
 
             <div className="pmw-review-body">
               <article className="pmw-review-card">
-                <header><small>表达侧面</small><em>一起确认</em></header>
+                <header><small>侧面</small><em>一起确认</em></header>
                 <b>{working.focus.statement}</b>
-                {working.focus.distinguishingNotes.length > 0 && (
-                  <ul>
-                    {working.focus.distinguishingNotes.map((note) => <li key={note}>{note}</li>)}
-                  </ul>
-                )}
               </article>
 
               <article className="pmw-review-card">
-                <header><small>稳定意思</small><em>一起确认</em></header>
+                <header><small>意思</small><em>一起确认</em></header>
                 <b>{working.sense.coreMeaningFocus}</b>
-                {working.sense.prototypeScenes[0] && (
-                  <p>{working.sense.prototypeScenes[0].summary}</p>
-                )}
               </article>
 
               <article className={`pmw-review-card${includeExpression ? '' : ' is-deferred'}`}>
                 <header>
-                  <small>目标表达</small>
+                  <small>目标表达 {candidatesList.length > 1 ? `(${candidatesList.length} 个候选)` : ''}</small>
                   {working.expression ? (
                     <label className="pmw-review-toggle">
                       <input
@@ -871,14 +931,28 @@ export const PersonalMeaningDetailScreen = ({
                   ) : <em>暂无候选</em>}
                 </header>
                 {working.expression ? (
-                  <>
-                    <b className="pmw-surface">{working.expression.surfaceForm}</b>
-                    <p>
-                      {expressionTypeLabels[working.expression.expressionType]} ·{' '}
-                      {relationLabels[working.expression.relation]} ·{' '}
-                      {coverageLabels[working.expression.semanticCoverage]}
-                    </p>
-                  </>
+                  <div className="pmw-review-candidates">
+                    {candidatesList.map((cand) => {
+                      const isChosen = (working.expression?.surfaceForm ?? candidatesList[0]?.surfaceForm) === cand.surfaceForm;
+                      return (
+                        <button
+                          key={cand.surfaceForm}
+                          type="button"
+                          className={`pmw-review-cand-item${isChosen ? ' is-chosen' : ''}`}
+                          onClick={() => editTrack('expression', cand)}
+                        >
+                          <span className="pmw-review-radio" aria-hidden="true">{isChosen ? '✓' : ''}</span>
+                          <div className="pmw-review-cand-copy">
+                            <div>
+                              <b className="pmw-surface">{cand.surfaceForm}</b>
+                              <span className="pmw-expr-tag">{expressionTypeLabels[cand.expressionType]}</span>
+                            </div>
+                            {cand.rationale && <small>{cand.rationale}</small>}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 ) : (
                   <p>这次还没聊出合适的英语表达。确认前两个，之后可以接着聊。</p>
                 )}
@@ -887,9 +961,7 @@ export const PersonalMeaningDetailScreen = ({
 
             <footer>
               <p className="pmw-review-consequence">
-                确认后，这个意思会成为可复用的稳定语义
-                {working.expression && includeExpression ? '，表达连接会记进你的词义世界' : ''}
-                。{working.expression && includeExpression ? '' : '表达可以之后再确认。'}
+                确认后将保存到词义世界{working.expression && includeExpression ? '并连接表达' : '，表达可稍后绑定'}。
               </p>
               {error && <p className="pmw-review-error" role="alert">{error}</p>}
               <div className="pmw-review-actions">

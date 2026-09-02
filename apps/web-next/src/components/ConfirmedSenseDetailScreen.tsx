@@ -27,16 +27,16 @@ export interface ConfirmedSenseDetailScreenProps {
 }
 
 const relationLabels: Record<SensaExpressionBindingRelation, string> = {
-  realizes: '实现这个 Sense',
-  approximates: '接近这个 Sense',
-  evokes: '唤起这个 Sense',
+  realizes: '实现这个意思',
+  approximates: '接近这个意思',
+  evokes: '唤起这个意思',
 };
 
 const coverageLabels: Record<SensaSemanticCoverage, string> = {
-  exact: '覆盖范围相符',
-  broader: '表达范围更宽',
-  narrower: '表达范围更窄',
-  overlapping: '表达范围部分重叠',
+  exact: '完全覆盖',
+  broader: '范围更宽',
+  narrower: '范围更窄',
+  overlapping: '部分重叠',
 };
 
 const expressionTypeLabels = {
@@ -55,7 +55,7 @@ const shortId = (id: string): string => id.split('-')[0].toUpperCase();
 const unavailableCopy = (reason: string) => (
   <div className="csd-unavailable" role="alert">
     <span className="csd-unavailable-mark" aria-hidden="true">!</span>
-    <h2>暂时无法打开已确认 Sense</h2>
+    <h2>暂时无法打开</h2>
     <p>{reason}</p>
   </div>
 );
@@ -90,7 +90,7 @@ const SenseSpec = ({
   unresolvedQuestions: readonly string[];
 }) => (
   <details className="csd-section csd-spec-details is-standalone">
-      <summary>查看场景与语义边界 <span>Sense Version v{version ?? '—'}</span></summary>
+      <summary>场景与边界 <span>v{version ?? '1'}</span></summary>
       <div className="csd-spec-details-body">
         {spec.prototypeScenes.map((scene, index) => (
           <article className="csd-prototype-scene" key={`${scene.summary}-${index}`}>
@@ -210,41 +210,19 @@ export const ConfirmedSenseDetailScreen = ({
             <>
               <section className="csd-hero">
                 <span className="csd-confirm-mark" aria-hidden="true">✓</span>
-                <small>{alignment.confirmedBindings.length > 0 ? '三个事实已确认' : '已确认 2 / 3'}</small>
+                <small>{alignment.confirmedBindings.length > 0 ? '已连接表达' : '已确认意思'}</small>
                 <h2>{alignment.semanticSpec.coreMeaningFocus}</h2>
-                <p>来自你选择的侧面：{focus.statement}</p>
-              </section>
-
-              <section className="csd-stable-facts" aria-label="语义事实">
-                <article className="is-confirmed">
-                  <small>表达侧面</small><span>已确认</span><p>{focus.statement}</p>
-                </article>
-                <article className="is-confirmed">
-                  <small>稳定意思</small><span>已确认</span><p>{alignment.semanticSpec.coreMeaningFocus}</p>
-                </article>
-                <article className={alignment.confirmedBindings.length > 0 ? 'is-confirmed' : 'is-pending'}>
-                  <small>目标表达</small>
-                  <span>{alignment.confirmedBindings.length > 0 ? '已确认' : '待确认'}</span>
-                  <p>{alignment.confirmedBindings.map((binding) => binding.surfaceForm).join(' / ') || '从 AI 候选中选择并确认'}</p>
-                </article>
+                <p>来自侧面：{focus.statement}</p>
               </section>
 
               <section className="csd-next-step">
-                <small>下一步</small>
-                <h2>
-                  {alignment.expressionCandidates.length === 0
-                    ? '模型暂时没有找到合适表达'
-                    : alignment.confirmedBindings.length > 0
-                      ? '稳定语义结果已形成'
-                      : '还需确认最后一个事实'}
-                </h2>
                 <div className="csd-actions">
                   {alignment.expressionCandidates.length > 0 && (
                     <button type="button" className="csd-primary" onClick={onOpenBinding}>
-                      {alignment.confirmedBindings.length > 0 ? '打开目标表达' : '绑定目标表达'} <span aria-hidden="true">→</span>
+                      {alignment.confirmedBindings.length > 0 ? '查看/更改目标表达' : '绑定目标表达'} <span aria-hidden="true">→</span>
                     </button>
                   )}
-                  <button type="button" onClick={onBack}>返回我的词义世界</button>
+                  <button type="button" onClick={onBack}>返回词义世界</button>
                 </div>
               </section>
 
@@ -254,14 +232,13 @@ export const ConfirmedSenseDetailScreen = ({
                 unresolvedQuestions={alignment.unresolvedQuestions}
               />
               <details className="csd-identity-details">
-                <summary>身份与来源信息</summary>
+                <summary>来源与技术信息</summary>
                 <p>
-                  Sense {shortId(alignment.senseId)} · Sense Version v{alignment.senseVersionNumber ?? '—'} · Alignment {shortId(alignment.personalMeaningAlignmentId)}
+                  ID {shortId(alignment.senseId)} · v{alignment.senseVersionNumber ?? '1'}
                 </p>
                 <p>
-                  provenance：{alignment.origin} · review：{alignment.reviewStatus}
-                  {alignment.semanticPolicyVersion ? ` · semantic policy ${alignment.semanticPolicyVersion}` : ''}
-                  {alignment.generator ? ` · generator ${alignment.generator.provider} / ${alignment.generator.model}` : ''}
+                  来源：{alignment.origin}
+                  {alignment.generator ? ` · ${alignment.generator.provider} / ${alignment.generator.model}` : ''}
                 </p>
               </details>
               {alignment.confirmedBindings.length > 0 && <BindingSummary focus={focus} />}
@@ -279,7 +256,7 @@ export const ConfirmedSenseDetailScreen = ({
         <button type="button" className="content-nav-back" onClick={onBack} aria-label="返回上一页">
           <svg className="icon" aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
-        <h1>确认的意思</h1>
+        <h1>已确认意思</h1>
         <span />
       </header>
       <div className="content-page-body csd-body">{body}</div>

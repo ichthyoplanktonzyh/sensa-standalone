@@ -181,10 +181,9 @@ export const PersonalMeaningComposer = ({
         <div className="pmc-grip" aria-hidden="true" />
         <header className="pmc-head">
           <div>
-            <small>稳定材料区</small>
             <h2 id="pmc-title">你想弄明白什么？</h2>
           </div>
-          <button type="button" onClick={handleClose} aria-label="关闭材料编辑区">×</button>
+          <button type="button" onClick={handleClose} aria-label="关闭">×</button>
         </header>
 
         <div className="pmc-body">

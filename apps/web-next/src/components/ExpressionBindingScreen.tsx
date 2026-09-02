@@ -40,15 +40,15 @@ const expressionTypeLabels: Record<SensaExpressionType, string> = {
 };
 
 const relationLabels: Record<SensaExpressionBindingRelation, string> = {
-  realizes: '实现这个 Sense',
-  approximates: '接近这个 Sense',
-  evokes: '唤起这个 Sense',
+  realizes: '自然实现',
+  approximates: '相近表达',
+  evokes: '唤起联想',
 };
 
 const relationDescriptions: Record<SensaExpressionBindingRelation, string> = {
-  realizes: '这个表达是该意义在英语中的自然实现。',
-  approximates: '这个表达覆盖相近范围，但边界并不完全相同。',
-  evokes: '这个表达会唤起该意义，但不直接承担完整边界。',
+  realizes: '自然对应的英语说法',
+  approximates: '意思相近，但侧重或语境略有差异',
+  evokes: '能让人联想到该意思，但含义更宽泛',
 };
 
 const coverageLabels: Record<SensaSemanticCoverage, string> = {
@@ -59,10 +59,10 @@ const coverageLabels: Record<SensaSemanticCoverage, string> = {
 };
 
 const coverageDescriptions: Record<SensaSemanticCoverage, string> = {
-  exact: '表达与当前 Sense 的语义边界相符。',
-  broader: '表达可以覆盖当前 Sense，也包含更宽的范围。',
-  narrower: '表达只覆盖当前 Sense 的一部分范围。',
-  overlapping: '表达与当前 Sense 有重叠，但不能互相替代。',
+  exact: '表达与当前意思范围完全一致',
+  broader: '包含当前意思，也适用于更多场景',
+  narrower: '只覆盖当前意思的一部分范围',
+  overlapping: '有共同点，但在部分场景下不能互换',
 };
 
 const unavailable = (title: string, reason: string) => (
@@ -202,14 +202,13 @@ export const ExpressionBindingScreen = ({
     : !personalMeaningId || !meaningFocusId
       ? unavailable('无法进入表达绑定', '没有找到对应的经验与已确认意思。')
       : !detail || !focus || !alignment
-        ? unavailable('无法进入表达绑定', '只有已经确认 Sense 的 Focus 才能确认表达。')
+        ? unavailable('无法进入表达绑定', '需要先确认意思，才能绑定表达。')
         : candidates.length === 0
-          ? unavailable('暂时没有可确认的表达', '当前 Sense 没有可供确认的目标语言表达候选；不会为你生成一个无来源的表达。')
+          ? unavailable('暂时没有可确认的表达', '当前意思暂无候选表达。')
           : (
               <>
                 <section className="ebs-hero">
                   <span className="ebs-hero-mark" aria-hidden="true">↗</span>
-                  <small>最后一步</small>
                   <h2>你想用什么表达它？</h2>
                   <p>{alignment.semanticSpec?.coreMeaningFocus ?? focus.statement}</p>
                 </section>
@@ -226,7 +225,7 @@ export const ExpressionBindingScreen = ({
                 {bindingStep === 'candidate' && (
                   <section className="ebs-section" aria-labelledby="ebs-candidate-heading">
                     <header className="ebs-section-head">
-                      <div><small>模型建议</small><h2 id="ebs-candidate-heading">选择一个表达</h2></div>
+                      <div><h2 id="ebs-candidate-heading">选择一个表达</h2></div>
                       <span>{candidates.length} 个</span>
                     </header>
                     <ul className="ebs-candidates">
@@ -257,7 +256,7 @@ export const ExpressionBindingScreen = ({
                 <form className="ebs-form" onSubmit={submit}>
                   {bindingStep === 'form' && <section className="ebs-section" aria-labelledby="ebs-form-heading">
                     <header className="ebs-section-head">
-                      <div><small>你最终使用的形式</small><h2 id="ebs-form-heading">确认写法与类型</h2></div>
+                      <div><h2 id="ebs-form-heading">确认写法与类型</h2></div>
                     </header>
                     <label className="ebs-field">
                       <span>表达形式</span>
@@ -288,7 +287,7 @@ export const ExpressionBindingScreen = ({
 
                   {bindingStep === 'relation' && <section className="ebs-section" aria-labelledby="ebs-relation-heading">
                     <header className="ebs-section-head">
-                      <div><small>最后确认</small><h2 id="ebs-relation-heading">它怎样表达这个意思？</h2></div>
+                      <div><h2 id="ebs-relation-heading">它怎样表达这个意思？</h2></div>
                     </header>
                     <fieldset className="ebs-choice-set">
                       <legend>关系</legend>

@@ -767,7 +767,27 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       outputDigest: digestOf(input.sense),
     };
     const semanticSpec = this.buildSemanticSpec(input.sense);
-    const candidateId = expressionInput ? this.id() : null;
+    const candidatesList = (input.expressionCandidates && input.expressionCandidates.length > 0)
+      ? input.expressionCandidates
+      : expressionInput ? [expressionInput] : [];
+
+    let chosenCandidateId: string | null = null;
+    const proposalExpressionCandidates = candidatesList.map((item) => {
+      const id = this.id();
+      if (expressionInput && item.surfaceForm === expressionInput.surfaceForm && !chosenCandidateId) {
+        chosenCandidateId = id;
+      }
+      return {
+        candidateId: id,
+        personalExpressionAnchorRevisionId: null,
+        expressionType: item.expressionType,
+        languageTag: item.languageTag,
+        surfaceForm: item.surfaceForm,
+        rationale: '由澄清对话提议的候选表达',
+      };
+    });
+
+    const candidateId = chosenCandidateId ?? (expressionInput ? this.id() : null);
     record.proposals.push({
       contractVersion: PSW,
       senseProposalId,
@@ -784,16 +804,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       version: 1,
       meaningFocusRevisionId,
       semanticSpec,
-      expressionCandidates: expressionInput && candidateId
-        ? [{
-            candidateId,
-            personalExpressionAnchorRevisionId: null,
-            expressionType: expressionInput.expressionType,
-            languageTag: expressionInput.languageTag,
-            surfaceForm: expressionInput.surfaceForm,
-            rationale: '由澄清对话确认的候选表达',
-          }]
-        : [],
+      expressionCandidates: proposalExpressionCandidates,
       unresolvedQuestions: cleanNotes(input.sense.unresolvedQuestions),
       semanticPolicyVersion: input.semanticPolicyVersion,
       generatorProvenance: generator,

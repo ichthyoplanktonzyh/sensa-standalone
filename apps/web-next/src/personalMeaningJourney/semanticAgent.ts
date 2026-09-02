@@ -2,11 +2,13 @@
  * The AI clarification agent seam.
  *
  * One conversation produces one working set of three candidates — Focus, Sense
- * and target Expression. The agent only ever *proposes*: it fills and refines
- * the working set, and reports when it believes the three are clear enough to
- * be worth confirming. It can never confirm anything. Confirmation is a single
- * explicit learner intent handled by the journey gateway, which still records
- * three independent domain facts.
+ * and target Expression. The conversation runs as a simplified loop: plain
+ * `chat` turns while the model listens and asks (Phase 1), then a single
+ * `consolidate` extraction the learner requests when the model says it is
+ * ready (Phase 2), repeatable after corrections. The agent only ever
+ * *proposes*: it can never confirm anything. Confirmation is a single explicit
+ * learner intent handled by the journey gateway, which still records three
+ * independent domain facts.
  *
  * Two things are deliberately kept apart here:
  *  - `focusLocked` steers the model (it is a conversation-level hint, and
@@ -106,6 +108,7 @@ export interface SemanticAgentWorkingSet {
   focus: AgentFocusCandidate | null;
   sense: AgentSenseCandidate | null;
   expression: AgentExpressionCandidate | null;
+  expressions?: AgentExpressionCandidate[];
 }
 
 export type WorkingSetTrack = 'focus' | 'sense' | 'expression';
@@ -114,6 +117,7 @@ export const emptyWorkingSet = (): SemanticAgentWorkingSet => ({
   focus: null,
   sense: null,
   expression: null,
+  expressions: [],
 });
 
 export interface SemanticAgentTurnResult {
@@ -134,10 +138,29 @@ export interface SemanticAgentTurnInput {
   workingSet: SemanticAgentWorkingSet;
   learnerEditedTracks: WorkingSetTrack[];
   focusLocked: boolean;
+  /**
+   * The simplified agent loop. `chat` turns are plain conversation (Phase 1:
+   * listen and ask, no panel change); `consolidate` is one structured
+   * extraction that fills the panel (Phase 2). The learner decides when to
+   * consolidate — the model only says it is ready, in prose.
+   */
+  mode: SemanticAgentTurnMode;
 }
 
+export type SemanticAgentTurnMode = 'chat' | 'consolidate';
+
+/**
+ * Receives streaming text deltas of the assistant's reply as they arrive.
+ * Purely presentational: the final `SemanticAgentTurnResult` is always the
+ * authoritative turn, and a transport without streaming simply never calls it.
+ */
+export type SemanticAgentDeltaHandler = (delta: string) => void;
+
 export interface SemanticAgentPort {
-  turn(input: SemanticAgentTurnInput): Promise<SemanticAgentTurnResult>;
+  turn(
+    input: SemanticAgentTurnInput,
+    onDelta?: SemanticAgentDeltaHandler,
+  ): Promise<SemanticAgentTurnResult>;
 }
 
 /** What one finished clarification thread left behind, for the done state. */

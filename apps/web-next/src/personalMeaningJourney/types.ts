@@ -320,6 +320,8 @@ export interface ConfirmClarificationInput {
    * learner who stops at two facts can still bind it later.
    */
   expression: Omit<AgentExpressionCandidate, 'rationale'> | null;
+  /** All expression candidates proposed during clarification, to populate proposal version snapshot. */
+  expressionCandidates?: Array<Omit<AgentExpressionCandidate, 'rationale'>>;
   /** Whether this same intent also confirms the Expression Binding. */
   confirmExpression: boolean;
   transcript: SemanticAgentMessage[];
