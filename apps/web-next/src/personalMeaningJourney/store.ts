@@ -34,6 +34,7 @@ import type {
   SensaSenseVersionSnapshot,
 } from '@sensa/contracts/sensa';
 import { StorageUnavailableError, type StoragePort } from './ports';
+import type { ClarificationStartingPoint } from './semanticAgent';
 
 export const JOURNEY_STORE_KEY = 'sensa_personal_meaning_journey_v2';
 export const JOURNEY_STORE_VERSION = 'sensa-personal-meaning-journey-store-v2';
@@ -58,6 +59,12 @@ export interface JourneyMockState {
   proposalSenseKeys: Record<string, string>;
   /** UI-only label for a Focus aspect; not a contract snapshot field. */
   focusAspectLabels: Record<string, string>;
+  /**
+   * The learner's declared conversation stance for this material. It only
+   * decides how the agent opens its first turn, so it is adapter state, not a
+   * domain fact, and never a phase. Absent on records created before it existed.
+   */
+  startingPoint?: ClarificationStartingPoint | null;
 }
 
 /** All authoritative facts for one Personal Meaning. */
@@ -127,6 +134,7 @@ const emptyMockState = (): JourneyMockState => ({
   constructionHints: {},
   proposalSenseKeys: {},
   focusAspectLabels: {},
+  startingPoint: null,
 });
 
 export const emptyJourneyState = (): JourneyState => ({

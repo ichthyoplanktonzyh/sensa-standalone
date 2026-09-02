@@ -205,14 +205,14 @@ const run = async (): Promise<void> => {
   const storage = new MemoryStoragePort();
   const gateway = newGateway(storage);
   const umbrellaId = await createMeaning(gateway, {
-    familiarExpression: { surfaceForm: '借伞', expressionType: 'word', languageTag: 'zh-CN' },
-    experience: '下雨天同事把伞借给我，我用完后还给他',
+    familiarExpression: { surfaceForm: '借伞', languageTag: 'zh-CN' },
+    blocks: [{ kind: 'text', bodyText: '下雨天同事把伞借给我，我用完后还给他' }],
   }, 1);
   const experienceOnlyId = await createMeaning(gateway, {
-    experience: '下雨时朋友把伞递给我，之后我归还',
+    blocks: [{ kind: 'text', bodyText: '下雨时朋友把伞递给我，之后我归还' }],
   }, 10);
   const familiarOnlyId = await createMeaning(gateway, {
-    familiarExpression: { surfaceForm: '表达不同意见但不让人难堪', expressionType: 'phrase' },
+    familiarExpression: { surfaceForm: '表达不同意见但不让人难堪' },
   }, 20);
   assert(gateway.getDetail(experienceOnlyId)!.familiarAnchors.length === 0, 'experience-only create has no fake expression');
   assert(gateway.getDetail(familiarOnlyId)!.experienceAnchors.length === 0, 'familiar-only create has no fake experience');
@@ -526,7 +526,7 @@ const run = async (): Promise<void> => {
   assert(lendBinding.expressionId !== borrowBinding.expressionId, 'borrow and lend are distinct Expression identities');
 
   // === Reject + continue keeps one SenseProposal identity and increments version ===
-  const rejectId = await createMeaning(gateway, { experience: '表达不同意见，但不让对方难堪' }, 60);
+  const rejectId = await createMeaning(gateway, { blocks: [{ kind: 'text', bodyText: '表达不同意见，但不让对方难堪' }] }, 60);
   await generateFocus(gateway, rejectId, 61);
   const rejectFocus = await acceptSuggestion(gateway, rejectId, 0, 62);
   await gateway.startConstruction({ operationId: op(70), personalMeaningId: rejectId, meaningFocusId: rejectFocus.meaningFocusId, meaningFocusRevisionId: rejectFocus.currentRevisionId });
@@ -548,7 +548,7 @@ const run = async (): Promise<void> => {
   assert(secondProposal.version === firstProposal.version + 1, 'continue increments immutable proposal version');
 
   // === Reuse existing Sense and no generic fallback =======================
-  const reuseId = await createMeaning(gateway, { experience: '设身处地为别人着想，顾及对方感受' }, 80);
+  const reuseId = await createMeaning(gateway, { blocks: [{ kind: 'text', bodyText: '设身处地为别人着想，顾及对方感受' }] }, 80);
   await generateFocus(gateway, reuseId, 81);
   const reuseFocus = await acceptSuggestion(gateway, reuseId, 0, 82);
   await gateway.startConstruction({ operationId: op(87), personalMeaningId: reuseId, meaningFocusId: reuseFocus.meaningFocusId, meaningFocusRevisionId: reuseFocus.currentRevisionId });
@@ -559,7 +559,7 @@ const run = async (): Promise<void> => {
   const reuse = await gateway.confirmSense({ operationId: op(90), personalMeaningId: reuseId, meaningFocusId: reuseFocus.meaningFocusId, senseProposalVersionId: reuseProposal.senseProposalVersionId });
   assert(reuse.resolution === 'reuse_existing', 'seeded scenario reuses existing Sense');
 
-  const unavailableId = await createMeaning(gateway, { experience: '一个没有模拟场景的私人回忆' }, 100);
+  const unavailableId = await createMeaning(gateway, { blocks: [{ kind: 'text', bodyText: '一个没有模拟场景的私人回忆' }] }, 100);
   await expectFailure(
     () => gateway.generateFocusSuggestions({ operationId: op(101), personalMeaningId: unavailableId }),
     'unmatched mock scenario is explicitly unavailable',
@@ -587,6 +587,271 @@ const run = async (): Promise<void> => {
   assert(storage.read(JOURNEY_STORE_KEY) !== null, 'facts are persisted under v2 key');
   assert(storage.read(JOURNEY_STORE_KEY) === factsBeforeReload, 'v2 reload does not rewrite facts or IDs');
   validateFacts(storage);
+
+  // Construction is model-led and may need zero learner clarification turns.
+  const directStorage = new MemoryStoragePort();
+  const baseLlm = createMockSemanticLlm();
+  const directGateway = createJourneyGateway({
+    storage: directStorage,
+    clock: createSeededClock(),
+    ids: createSeededIdPort(900),
+    llm: {
+      ...baseLlm,
+      nextConstructionTurn: async (context) => {
+        const draft = await baseLlm.nextConstructionTurn(context);
+        return context.priorTurns.length === 0
+          ? { ...draft, body: '现有经验已经足够形成一个稳定理解。', boundaryOptions: [], readyForProposal: true }
+          : draft;
+      },
+    },
+  });
+  const directMeaningId = await createMeaning(
+    directGateway,
+    { blocks: [{ kind: 'text', bodyText: '下雨天我没带伞，同事把伞借给了我' }] },
+    200,
+  );
+  await generateFocus(directGateway, directMeaningId, 201);
+  const directFocus = await acceptSuggestion(directGateway, directMeaningId, 0, 202);
+  await directGateway.startConstruction({
+    operationId: op(204),
+    personalMeaningId: directMeaningId,
+    meaningFocusId: directFocus.meaningFocusId,
+    meaningFocusRevisionId: directFocus.currentRevisionId,
+  });
+  const directConstruction = directGateway.getDetail(directMeaningId)!.focuses
+    .find((focus) => focus.meaningFocusId === directFocus.meaningFocusId)!.construction!;
+  assert(!directConstruction.awaitingLearnerAnswer, 'model-ready Construction asks no mandatory learner question');
+  assert(directConstruction.readyForProposal, 'model-ready Construction can proceed directly to Proposal');
+  await directGateway.generateProposal({
+    operationId: op(205),
+    personalMeaningId: directMeaningId,
+    meaningFocusId: directFocus.meaningFocusId,
+  });
+  assert(
+    directGateway.getDetail(directMeaningId)!.focuses
+      .find((focus) => focus.meaningFocusId === directFocus.meaningFocusId)!.phase === 'proposal_ready',
+    'zero-turn model-led Construction produces a confirmable Proposal',
+  );
+  validateFacts(directStorage);
+
+  // The open-ended agent loop can materialize one confirmed Sense from its
+  // transcript without replaying the legacy three-operation LLM workflow.
+  const agentStorage = new MemoryStoragePort();
+  const agentGateway = newGateway(agentStorage);
+  const agentMeaningId = await createMeaning(
+    agentGateway,
+    { blocks: [{ kind: 'text', bodyText: '下雨天我没带伞，同事把伞借给了我' }] },
+    300,
+  );
+  await generateFocus(agentGateway, agentMeaningId, 301);
+  const agentFocus = await acceptSuggestion(agentGateway, agentMeaningId, 0, 302);
+  const agentProposal = await createMockSemanticLlm().generateSenseProposal({
+    familiarExpressions: [],
+    experienceAnchors: [{ bodyText: '下雨天我没带伞，同事把伞借给了我' }],
+    learnerIntentNote: null,
+    focusStatement: agentFocus.statement,
+    focusDistinguishingNotes: agentFocus.distinguishingNotes,
+    priorTurns: [
+      { actor: 'semantic_llm', body: '你想强调的是暂时取得别人的东西，并且之后会归还吗？' },
+      { actor: 'learner', body: '对，我关注的是拿来使用并预期归还。' },
+    ],
+  });
+  const agentInput = {
+    operationId: op(304),
+    personalMeaningId: agentMeaningId,
+    meaningFocusId: agentFocus.meaningFocusId,
+    proposal: agentProposal,
+    transcript: [
+      {
+        messageId: op(310),
+        role: 'assistant' as const,
+        body: '你想强调的是暂时取得别人的东西，并且之后会归还吗？',
+        occurredAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        messageId: op(311),
+        role: 'learner' as const,
+        body: '对，我关注的是拿来使用并预期归还。',
+        occurredAt: '2026-01-01T00:00:01.000Z',
+      },
+    ],
+  };
+  const agentResult = await agentGateway.confirmAgentSense(agentInput);
+  const agentReplay = await agentGateway.confirmAgentSense(agentInput);
+  const confirmedAgentFocus = agentGateway.getDetail(agentMeaningId)!.focuses
+    .find((focus) => focus.meaningFocusId === agentFocus.meaningFocusId)!;
+  assert(Boolean(confirmedAgentFocus.alignment), 'agent transcript materializes a confirmed Sense alignment');
+  assert(
+    (confirmedAgentFocus.alignment?.expressionCandidates.length ?? 0) > 0,
+    'agent Sense keeps expression candidates for the separate binding confirmation',
+  );
+  assert(agentReplay.replayed, 'agent Sense confirmation is idempotent');
+  assert(agentReplay.senseId === agentResult.senseId, 'agent Sense replay keeps exact identity');
+  validateFacts(agentStorage);
+
+  // === One learner confirmation, three independent facts, all or nothing ===
+  // This is the live AI clarification path: the screen never calls the legacy
+  // suggest → construct → answer → propose commands.
+  const clarifyStorage = new MemoryStoragePort();
+  const clarifyGateway = newGateway(clarifyStorage);
+  const clarifyId = await createMeaning(
+    clarifyGateway,
+    {
+      blocks: [
+        { kind: 'text', bodyText: '下雨天我没带伞，同事把伞借给了我' },
+        { kind: 'image', personalMediaObjectId: op(398) },
+      ],
+      familiarExpression: { surfaceForm: '借伞' },
+      startingPoint: 'from_experience',
+    },
+    400,
+  );
+  const clarifyDetail = clarifyGateway.getDetail(clarifyId)!;
+  assert(clarifyDetail.materialBlocks.length === 2, 'material keeps every block as its own Anchor');
+  assert(clarifyDetail.materialBlocks[1].kind === 'image', 'image blocks survive as image Anchors');
+  assert(
+    clarifyDetail.materialBlocks[1].personalMediaObjectId === op(398),
+    'an image Anchor references the media object, not inline bytes',
+  );
+  assert(clarifyDetail.experienceAnchors.length === 1, 'the text projection stays text-only');
+  assert(clarifyDetail.startingPoint === 'from_experience', 'the declared stance is readable back');
+  assert(clarifyDetail.focuses.length === 0, 'saving material creates no Focus');
+
+  const clarifySense = {
+    proposedSenseKey: 'borrow-temporary-use-return',
+    coreMeaningFocus: '暂时取得别人的东西使用，并预期归还',
+    prototypeScenes: [{
+      summary: '一方把自己的物品暂时交给另一方使用',
+      participantRoles: ['出借者', '借用者'],
+      states: ['物品暂时易手', '预期归还'],
+      directionOrCausality: '从所有者流向使用者',
+    }],
+    includedCases: ['借伞', '借书'],
+    excludedCases: ['收到礼物'],
+    neighborContrasts: [{ label: 'lend', distinction: '方向相反，是出借方视角' }],
+    openQuestions: [],
+    unresolvedQuestions: [],
+  };
+  const clarifyProvenance = { provider: 'test', model: 'test-model', promptVersion: 'test-v1' };
+
+  // A rejected step must leave nothing behind: an unusable expression type is
+  // caught after the Focus and the Sense would already have been written.
+  await expectFailure(
+    () => clarifyGateway.confirmClarification({
+      operationId: op(401),
+      personalMeaningId: clarifyId,
+      focus: { statement: '接收方向', distinguishingNotes: ['我是拿到伞的一方'], aspectLabel: '接收' },
+      sense: clarifySense,
+      expression: {
+        surfaceForm: '   ',
+        expressionType: 'word',
+        languageTag: 'en',
+        relation: 'realizes',
+        semanticCoverage: 'overlapping',
+      },
+      confirmExpression: true,
+      transcript: [{
+        messageId: op(410), role: 'learner' as const, body: '我要的是拿到伞那一方',
+        occurredAt: '2026-01-01T00:00:00.000Z',
+      }],
+      provenance: clarifyProvenance,
+      semanticPolicyVersion: 'test-policy-v1',
+    }),
+    'a blank expression rejects the whole confirmation',
+  );
+  const afterFailure = clarifyGateway.getDetail(clarifyId)!;
+  assert(afterFailure.focuses.length === 0, 'a rejected confirmation leaves no orphan Focus');
+  const failureState = loadJourneyState(clarifyStorage);
+  const failureRecord = failureState.meanings.find(
+    (record) => record.personalMeaning.personalMeaningId === clarifyId,
+  )!;
+  assert(
+    failureRecord.constructions.length === 0 && failureRecord.proposals.length === 0,
+    'a rejected confirmation leaves no orphan Construction or open Proposal on disk',
+  );
+
+  // Confirming only two facts is a legal resting state, not a failure.
+  const partialInput = {
+    operationId: op(402),
+    personalMeaningId: clarifyId,
+    focus: {
+      statement: '接收方向',
+      distinguishingNotes: ['我是拿到伞的一方'],
+      aspectLabel: '接收',
+    },
+    sense: clarifySense,
+    expression: null,
+    confirmExpression: false,
+    transcript: [{
+      messageId: op(411), role: 'learner' as const, body: '我要的是拿到伞那一方',
+      occurredAt: '2026-01-01T00:00:00.000Z',
+    }],
+    provenance: clarifyProvenance,
+    semanticPolicyVersion: 'test-policy-v1',
+  };
+  const partial = await clarifyGateway.confirmClarification(partialInput);
+  assert(!partial.expressionConfirmed, 'Sense confirmed with Expression pending is supported');
+  const partialReplay = await clarifyGateway.confirmClarification(partialInput);
+  assert(partialReplay.replayed, 'one clarification confirmation is idempotent');
+  assert(
+    partialReplay.meaningFocusId === partial.meaningFocusId,
+    'replaying a confirmation creates no parallel Focus identity',
+  );
+  const partialDetail = clarifyGateway.getDetail(clarifyId)!;
+  assert(partialDetail.focuses.length === 1, 'one confirmation creates exactly one Focus');
+  assert(partialDetail.focuses[0].accepted, 'the Focus acceptance fact is recorded independently');
+  assert(Boolean(partialDetail.focuses[0].alignment), 'the Sense confirmation creates an Alignment');
+  assert(
+    partialDetail.focuses[0].alignment!.confirmedBindings.length === 0,
+    'no Binding is invented when the learner deferred the expression',
+  );
+  assert(
+    partialDetail.expressionBinding.phase === 'pending',
+    'the world axis reads back as Sense confirmed / Binding pending',
+  );
+
+  // A second thread on the same material becomes a sibling Focus, all three facts.
+  const siblingConfirm = await clarifyGateway.confirmClarification({
+    operationId: op(403),
+    personalMeaningId: clarifyId,
+    focus: { statement: '出借方向', distinguishingNotes: ['同事是给出伞的一方'], aspectLabel: '出借' },
+    sense: {
+      ...clarifySense,
+      proposedSenseKey: 'lend-temporary-use-return',
+      coreMeaningFocus: '把自己的东西暂时给别人使用，并预期收回',
+    },
+    expression: {
+      surfaceForm: 'lend',
+      expressionType: 'word',
+      languageTag: 'en',
+      relation: 'realizes',
+      semanticCoverage: 'overlapping',
+    },
+    confirmExpression: true,
+    transcript: [{
+      messageId: op(412), role: 'learner' as const, body: '这次我说的是同事那一方',
+      occurredAt: '2026-01-01T00:01:00.000Z',
+    }],
+    provenance: clarifyProvenance,
+    semanticPolicyVersion: 'test-policy-v1',
+  });
+  assert(siblingConfirm.expressionConfirmed, 'all three facts can land in one confirmation');
+  assert(
+    siblingConfirm.meaningFocusId !== partial.meaningFocusId,
+    'a second thread on the same material keeps an independent Focus identity',
+  );
+  const siblingDetail = clarifyGateway.getDetail(clarifyId)!;
+  assert(siblingDetail.focuses.length === 2, 'sibling Focuses share one Personal Meaning');
+  assert(siblingDetail.materialBlocks.length === 2, 'confirming never rewrites the material');
+  const siblingFocus = siblingDetail.focuses
+    .find((focus) => focus.meaningFocusId === siblingConfirm.meaningFocusId)!;
+  const siblingBinding = siblingFocus.alignment!.confirmedBindings[0];
+  assert(siblingBinding.surfaceForm === 'lend', 'the confirmed Binding keeps the learner surface form');
+  assert(
+    siblingBinding.relation === 'realizes' && siblingBinding.semanticCoverage === 'overlapping',
+    'relation and coverage are confirmed values, never a translation-equality default',
+  );
+  validateFacts(clarifyStorage);
 
   console.log(`SMOKE OK — ${checks} checks passed.`);
 };

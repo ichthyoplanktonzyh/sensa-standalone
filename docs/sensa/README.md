@@ -60,6 +60,8 @@ profile，而不是 `Sense`、Lightweight Study 或全部 Learning Protocol 的�
 
 ## 操作文档和参考材料
 
+- [`../../apps/web-next/journeys/README.md`](../../apps/web-next/journeys/README.md)：当前阶段已冻结的两条
+  canonical frontend narrative；只裁决 `web-next` 页面叙事，不能覆盖本目录领域模型；
 - [`../../content/README.md`](../../content/README.md)：内容工具当前实际支持的命令与安全边界；
 - [`../../apps/web/README.md`](../../apps/web/README.md)：Web 本地运行说明；
 - [`../../infra/README.md`](../../infra/README.md)：基础设施边界；

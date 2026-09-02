@@ -16,6 +16,7 @@ import type {
   JourneyConstructionView,
   JourneyDetailView,
   JourneyExperienceAnchorView,
+  JourneyMaterialBlockView,
   JourneyFamiliarAnchorView,
   JourneyFocusView,
   JourneyListItemView,
@@ -276,7 +277,7 @@ const buildAnchorViews = (record: MeaningJourneyRecord) => {
         : [];
     });
 
-  const experience: JourneyExperienceAnchorView[] = record.personalSemanticAnchors
+  const blocks: JourneyMaterialBlockView[] = record.personalSemanticAnchors
     .filter((anchor) => anchor.status === 'active')
     .flatMap((anchor) => {
       const revision = record.personalSemanticAnchorRevisions.find(
@@ -284,18 +285,29 @@ const buildAnchorViews = (record: MeaningJourneyRecord) => {
           candidate.personalSemanticAnchorId === anchor.personalSemanticAnchorId
           && candidate.revision === anchor.currentRevision,
       );
-      return revision
-        ? [{
-            anchorId: anchor.personalSemanticAnchorId,
-            kind: 'experience' as const,
-            surfaceForm: revision.bodyText ?? '',
-            expressionType: null,
-            revision: revision.revision,
-          }]
-        : [];
+      if (!revision) return [];
+      return [{
+        anchorId: anchor.personalSemanticAnchorId,
+        kind: revision.anchorKind === 'image' ? ('image' as const) : ('text' as const),
+        bodyText: revision.bodyText,
+        personalMediaObjectId: revision.personalMediaObjectId,
+        revision: revision.revision,
+      }];
     });
 
-  return { familiar, experience };
+  // The legacy experience projection stays text-only: an image block has no
+  // surface form, and readers of this view render it as plain text.
+  const experience: JourneyExperienceAnchorView[] = blocks
+    .filter((block) => block.kind === 'text' && block.bodyText)
+    .map((block) => ({
+      anchorId: block.anchorId,
+      kind: 'experience' as const,
+      surfaceForm: block.bodyText!,
+      expressionType: null,
+      revision: block.revision,
+    }));
+
+  return { familiar, experience, blocks };
 };
 
 const buildConstructionView = (
@@ -317,7 +329,6 @@ const buildConstructionView = (
     }));
   const hint = record.mockState.constructionHints[senseConstructionId];
   const proposal = proposalForConstruction(record, senseConstructionId);
-  const hasLearnerTurn = turns.some((turn) => turn.actor === 'learner');
   return {
     senseConstructionId,
     status: construction.status,
@@ -327,7 +338,6 @@ const buildConstructionView = (
     readyForProposal:
       construction.status === 'active'
       && hint === undefined
-      && hasLearnerTurn
       && proposal?.status !== 'open'
       && proposal?.status !== 'confirmed',
   };
@@ -576,6 +586,8 @@ export const buildDetailView = (
     expressionBinding: buildExpressionBindingView(focuses),
     familiarAnchors: anchors.familiar,
     experienceAnchors: anchors.experience,
+    materialBlocks: anchors.blocks,
+    startingPoint: record.mockState.startingPoint ?? null,
     focuses,
     focusSuggestions,
     focusSuggestionsAreMultipleAspects:

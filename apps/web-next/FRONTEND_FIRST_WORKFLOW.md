@@ -3,6 +3,7 @@
 > 状态：当前阶段有效
 > 适用范围：`apps/web-next` 及其直接需要的共享契约
 > 生效日期：2026-09-01
+> Canonical frontend narratives：[`journeys/README.md`](journeys/README.md)
 > 退出条件：本文第 9 节所列条件满足后，由后续 API/后端集成工作方式替代
 
 ## 1. 目的
@@ -67,18 +68,17 @@ Command 表达用户意图，并返回权威结果、冲突或可恢复错误。
 
 ### 第一步：选择一条用户旅程
 
-每次只选择一条可从入口走到明确结果的旅程，例如：
+每次只选择一条可从入口走到明确结果的旅程或其中一个明确子段。当前主旅程只能来自
+`journeys/README.md`：
 
 ```text
-创建 Personal Meaning
-→ 澄清 Meaning Focus
-→ 确认 Sense Proposal
-→ 查看内容准备状态
-→ Add-to-Learning
-→ 完成 Lightweight Initial Learning
+Personal Semantic World → stable Sense–Expression connection
+
+Learning Target → Initial Learning → Retention/Relearning
 ```
 
-不得用“完成所有数据模型”“重写整个状态管理”一类横向任务代替用户旅程。
+子段可以单独实施和走查，但不能另建第三份“前端旅程基线”。不得用“完成所有数据模型”“重写整个
+状态管理”一类横向任务代替用户旅程。
 
 ### 第二步：建立页面状态矩阵
 
@@ -130,9 +130,10 @@ mock 可以模拟服务端权威结果，但不得借此宣称后端、Sync、FS
 
 ### 第六步：记录 API 需求，但暂不实现后端
 
-每条旅程完成时留下可由后端直接消费的 API demand：所需 Query、Command、Projection、错误、
-幂等和版本语义。当前阶段不因此自动开始 route、service、repository、production Sync handler、
-FSRS adapter 或部署实现。
+进入契约发现阶段后，依据已冻结旅程留下可由后端直接消费的 API demand：所需 Query、Command、
+Projection、错误、幂等和版本语义。API demand 不是前端叙事基线，不得放进 `journeys/` 或覆盖其中
+的入口、终点与用户意图。当前阶段不因此自动开始 route、service、repository、production Sync
+handler、FSRS adapter 或部署实现。
 
 ## 5. 每条旅程的最小交付物
 
@@ -140,7 +141,7 @@ FSRS adapter 或部署实现。
 - 页面状态矩阵和关键边界场景；
 - 确定性的 mock scenarios；
 - 隔离组件与数据来源的 frontend port；
-- 已被真实页面消费的 Query/Command 契约；
+- 契约发现启动后，已被真实页面证明需要的 Query/Command demand；
 - 尚未解决的领域问题和明确的 unavailable/fallback 行为；
 - 不依赖 production backend 的前端 smoke check。
 
@@ -171,16 +172,17 @@ CSS class、弹窗状态和临时 prototype payload 留在 `web-next`。
 - 不为了让原型成功而隐藏 content unavailable、conflict、offline 或 validation failure；
 - 不在未经 owner 明确决定时，以前端需求为理由开始正式后端或部署工作。
 
-## 8. 当前推荐旅程顺序
+## 8. 当前已冻结旅程
 
-1. Personal Semantic World 的创建、Focus、Anchors、Sense Construction 与 confirmation；
-2. confirmed Sense 的真实 content readiness 与 Add-to-Learning；
-3. Lightweight Initial Learning 与 completion；
-4. Retention Review、失败后的 Lightweight Relearning 与 completion；
-5. Home、Content、Personal Semantic World 与 Learner Progress 的只读 Projection；
-6. Account、Settings、Sync Health 与 Data Control 页面状态。
+当前只有两条 canonical frontend narrative：
 
-顺序可以随用户确认调整，但任何后续旅程都应执行同一工作循环。
+1. [`journeys/01-personal-semantic-world.md`](journeys/01-personal-semantic-world.md)：个人经验/熟悉表达
+   形成 stable Sense–Expression connection；
+2. [`journeys/02-independent-learning.md`](journeys/02-independent-learning.md)：独立 Learning Target
+   完成首次学习并进入长期 Review/Relearning。
+
+Home、Target 库、Policy 选择、Runtime 与 Summary 都是这两条旅程的页面或 projection，不自动构成
+新的主旅程。顺序或边界如需改变，必须先由 owner 重新打开对应 frozen baseline。
 
 ## 9. 退出这一工作方式的条件
 

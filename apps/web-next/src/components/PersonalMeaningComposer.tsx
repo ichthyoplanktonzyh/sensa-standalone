@@ -1,7 +1,25 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import type { SensaExpressionType } from '@sensa/contracts/sensa';
+/**
+ * The stable material editor.
+ *
+ * It asks for two things and nothing more: the material itself (free-form,
+ * multimodal, unclassified) and an optional starting stance. There is
+ * deliberately no Focus field, no Sense field and no target-expression field —
+ * those are our domain model, not the learner's, and a separate input for the
+ * target expression would quietly imply that filling it in confirms it.
+ *
+ * Saving here never calls the model. Entering clarification is a second,
+ * explicit intent.
+ */
+
+import { useEffect, useRef, useState } from 'react';
 import { newUuid } from '../personalMeaningJourney/ids';
 import { useJourneyGateway } from '../personalMeaningJourney';
+import type { MaterialBlockInput } from '../personalMeaningJourney';
+import {
+  startingPointLabels,
+  type ClarificationStartingPoint,
+} from '../personalMeaningJourney/semanticAgent';
+import { removeMedia, storeImageFile } from '../personalMeaningJourney/mediaStore';
 
 interface PersonalMeaningComposerProps {
   open: boolean;
@@ -10,16 +28,27 @@ interface PersonalMeaningComposerProps {
   onCreated?: (personalMeaningId: string) => void;
 }
 
-const expressionTypeOptions: Array<{
-  value: SensaExpressionType;
-  label: string;
-}> = [
-  { value: 'word', label: '一个词' },
-  { value: 'phrase', label: '短语' },
-  { value: 'construction', label: '构式' },
-  { value: 'sentence', label: '完整句子' },
-  { value: 'utterance_strategy', label: '表达方式' },
-];
+interface DraftBlock {
+  localId: string;
+  kind: 'text' | 'image';
+  bodyText: string;
+  mediaId: string | null;
+  previewUrl: string | null;
+}
+
+const startingPointHints: Record<ClarificationStartingPoint, string> = {
+  from_experience: '先一起找出你真正在意的那个侧面',
+  from_sense: '直接给出理解和表达，请你确认',
+  from_expression: '先看看你这个说法通常表示什么意思',
+};
+
+const textBlock = (): DraftBlock => ({
+  localId: newUuid(),
+  kind: 'text',
+  bodyText: '',
+  mediaId: null,
+  previewUrl: null,
+});
 
 export const PersonalMeaningComposer = ({
   open,
@@ -28,130 +57,233 @@ export const PersonalMeaningComposer = ({
   onCreated,
 }: PersonalMeaningComposerProps) => {
   const gateway = useJourneyGateway();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [blocks, setBlocks] = useState<DraftBlock[]>([textBlock()]);
   const [familiarExpression, setFamiliarExpression] = useState('');
-  const [familiarExpressionType, setFamiliarExpressionType] = useState<SensaExpressionType>('phrase');
-  const [experience, setExperience] = useState('');
+  const [startingPoint, setStartingPoint] = useState<ClarificationStartingPoint | null>(null);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const canSave = !!familiarExpression.trim() || !!experience.trim();
+  const filled = blocks.filter(
+    (block) => (block.kind === 'text' ? block.bodyText.trim() : block.mediaId),
+  );
+  const canSave = filled.length > 0 || Boolean(familiarExpression.trim());
 
   useEffect(() => {
     if (!open) return undefined;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') handleClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, onClose]);
+  });
 
   const reset = () => {
+    setBlocks([textBlock()]);
     setFamiliarExpression('');
-    setFamiliarExpressionType('phrase');
-    setExperience('');
+    setStartingPoint(null);
     setError('');
+    setBusy(false);
   };
 
   const handleClose = () => {
+    // Media picked but never saved would otherwise sit in the store forever.
+    blocks.forEach((block) => block.mediaId && removeMedia(block.mediaId));
     reset();
     onClose();
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const updateBlock = (localId: string, bodyText: string) => {
+    setBlocks((current) => current.map(
+      (block) => (block.localId === localId ? { ...block, bodyText } : block),
+    ));
+  };
+
+  const removeBlock = (localId: string) => {
+    setBlocks((current) => {
+      const target = current.find((block) => block.localId === localId);
+      if (target?.mediaId) removeMedia(target.mediaId);
+      const next = current.filter((block) => block.localId !== localId);
+      return next.length > 0 ? next : [textBlock()];
+    });
+  };
+
+  const pickImage = async (file: File | undefined) => {
+    if (!file) return;
     setError('');
     try {
+      const mediaId = newUuid();
+      const stored = await storeImageFile(mediaId, file, new Date().toISOString());
+      setBlocks((current) => [...current, {
+        localId: newUuid(),
+        kind: 'image',
+        bodyText: '',
+        mediaId,
+        previewUrl: stored.dataUrl,
+      }]);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '这张图片暂时无法加入。');
+    }
+  };
+
+  const save = async (): Promise<string | null> => {
+    setError('');
+    setBusy(true);
+    try {
+      const payload: MaterialBlockInput[] = filled.map((block) => (
+        block.kind === 'image'
+          ? { kind: 'image', personalMediaObjectId: block.mediaId! }
+          : { kind: 'text', bodyText: block.bodyText.trim() }
+      ));
       const result = await gateway.createPersonalMeaning({
         operationId: newUuid(),
+        blocks: payload,
         familiarExpression: familiarExpression.trim()
-          ? {
-              surfaceForm: familiarExpression.trim(),
-              expressionType: familiarExpressionType,
-              languageTag: 'zh-CN',
-            }
+          ? { surfaceForm: familiarExpression.trim(), languageTag: 'zh-CN' }
           : undefined,
-        experience: experience.trim() || undefined,
+        startingPoint,
       });
-      onCreated?.(result.personalMeaningId);
-      reset();
-      onSaved('个人意义已创建；下一步可以澄清你真正关注的侧面');
+      onSaved('材料已保存');
+      return result.personalMeaningId;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '暂时无法保存，请再试一次。');
+      return null;
+    } finally {
+      setBusy(false);
     }
+  };
+
+  const saveAndClarify = async () => {
+    const personalMeaningId = await save();
+    if (!personalMeaningId) return;
+    reset();
+    onCreated?.(personalMeaningId);
+  };
+
+  const saveOnly = async () => {
+    const personalMeaningId = await save();
+    if (!personalMeaningId) return;
+    reset();
+    onClose();
   };
 
   if (!open) return null;
 
   return (
-    <div className="personal-meaning-composer-layer" onMouseDown={handleClose}>
+    <div className="pmc-layer" onMouseDown={handleClose}>
       <section
-        className="personal-meaning-composer"
+        className="pmc"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="personal-meaning-composer-title"
+        aria-labelledby="pmc-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className="personal-meaning-composer-grip" aria-hidden="true" />
-        <header>
+        <div className="pmc-grip" aria-hidden="true" />
+        <header className="pmc-head">
           <div>
-            <span>PERSONAL CONSTRUCTION</span>
-            <h2 id="personal-meaning-composer-title">创建个人意义</h2>
+            <small>稳定材料区</small>
+            <h2 id="pmc-title">你想弄明白什么？</h2>
           </div>
-          <button type="button" onClick={handleClose} aria-label="关闭添加面板">×</button>
+          <button type="button" onClick={handleClose} aria-label="关闭材料编辑区">×</button>
         </header>
 
-        <form onSubmit={handleSubmit}>
-          <p className="personal-meaning-intro">
-            从一句你熟悉的表达，或一段你真正想保留的经验开始。现在不需要先找到英文对应。
-          </p>
-          <label className="personal-meaning-field">
-            <span>熟悉的表达 <em>与具体经验至少填写一项</em></span>
+        <div className="pmc-body">
+          <div className="pmc-blocks">
+            {blocks.map((block, index) => (
+              <div className={`pmc-block is-${block.kind}`} key={block.localId}>
+                {block.kind === 'text' ? (
+                  <textarea
+                    autoFocus={index === 0}
+                    value={block.bodyText}
+                    onChange={(event) => updateBlock(block.localId, event.target.value)}
+                    placeholder="可以是一段经历、一个场景、一句你想说但说不出来的话，或者你已经想到的英语表达…"
+                    rows={index === 0 ? 5 : 3}
+                  />
+                ) : (
+                  <img src={block.previewUrl ?? ''} alt="已加入的图片材料" />
+                )}
+                {blocks.length > 1 && (
+                  <button
+                    type="button"
+                    className="pmc-block-remove"
+                    onClick={() => removeBlock(block.localId)}
+                    aria-label="移除这块材料"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="pmc-add">
+            <button type="button" onClick={() => setBlocks((current) => [...current, textBlock()])}>
+              ＋文字
+            </button>
+            <button type="button" onClick={() => fileRef.current?.click()}>＋图片</button>
             <input
-              autoFocus
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(event) => {
+                void pickImage(event.target.files?.[0]);
+                event.target.value = '';
+              }}
+            />
+          </div>
+
+          <label className="pmc-field">
+            <span>有没有一个中文说法？<small>选填</small></span>
+            <input
               value={familiarExpression}
               onChange={(event) => setFamiliarExpression(event.target.value)}
-              placeholder="例如：表达不同意见，但不让对方难堪"
+              placeholder="例如：欲言又止"
               maxLength={100}
-            />
-            <small>它只是进入这个意义的熟悉语言锚点，不会被当作英文的等价翻译。</small>
-          </label>
-          {familiarExpression.trim() && (
-            <label className="personal-meaning-field">
-              <span>这个表达属于</span>
-              <select
-                value={familiarExpressionType}
-                onChange={(event) => setFamiliarExpressionType(
-                  event.target.value as SensaExpressionType,
-                )}
-              >
-                {expressionTypeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-          )}
-          <label className="personal-meaning-field">
-            <span>具体经验 <em>可选</em></span>
-            <textarea
-              value={experience}
-              onChange={(event) => setExperience(event.target.value)}
-              placeholder="写下一个你经历过或能够进入的具体场景，而不是词义解释。"
-              maxLength={320}
-              rows={4}
             />
           </label>
 
-          {error && <p className="personal-meaning-error" role="alert">{error}</p>}
-          <div className="personal-meaning-boundary">
-            <i aria-hidden="true">◇</i>
-            <span>
-              <b>创建后进入你的个人语义世界</b>
-              <small>不会自动确认 Sense、加入学习或产生掌握状态</small>
-            </span>
-          </div>
-          <button className="personal-meaning-save" type="submit" disabled={!canSave}>
-            创建个人意义
+          <fieldset className="pmc-stance">
+            <legend>你现在到哪一步了？<small>选填，帮 AI 决定怎么开口</small></legend>
+            {(Object.keys(startingPointLabels) as ClarificationStartingPoint[]).map((value) => (
+              <label key={value} className={startingPoint === value ? 'is-selected' : ''}>
+                <input
+                  type="radio"
+                  name="pmc-stance"
+                  checked={startingPoint === value}
+                  onChange={() => setStartingPoint(
+                    startingPoint === value ? null : value,
+                  )}
+                />
+                <span>
+                  <b>{startingPointLabels[value]}</b>
+                  <small>{startingPointHints[value]}</small>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+
+          {error && <p className="pmc-error" role="alert">{error}</p>}
+        </div>
+
+        <footer className="pmc-foot">
+          <button
+            type="button"
+            className="pmc-primary"
+            disabled={!canSave || busy}
+            onClick={() => void saveAndClarify()}
+          >
+            {busy ? '正在保存…' : '保存并澄清'}
           </button>
-        </form>
+          <button
+            type="button"
+            className="pmc-secondary"
+            disabled={!canSave || busy}
+            onClick={() => void saveOnly()}
+          >
+            先存着
+          </button>
+        </footer>
       </section>
     </div>
   );

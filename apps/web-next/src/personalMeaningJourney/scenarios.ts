@@ -441,4 +441,4 @@ export const pickScenarioFocus = (
 export const buildConstructionAcknowledgement = (
   _context: ConstructionTurnContext,
 ): string =>
-  '谢谢，这个区分很关键。我据此整理了一个可查看的 Sense 提议，你可以继续澄清、拒绝或确认。';
+  '谢谢，这个区分很关键。我已经整理出一个明确的理解，你可以查看并确认是否准确。';

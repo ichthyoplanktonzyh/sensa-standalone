@@ -5,7 +5,9 @@
   "description": "Sensa 语义学习 Runtime 交互原型",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node --env-file-if-exists=.env server/dev.mjs",
+    "dev:web": "vite --host localhost --port 5174 --strictPort",
+    "dev:agent": "node --env-file-if-exists=.env server/semantic-agent-server.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"

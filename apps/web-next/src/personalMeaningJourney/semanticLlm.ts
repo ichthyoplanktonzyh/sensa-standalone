@@ -4,8 +4,8 @@
  * `SemanticLlmPort` is the single boundary between the journey gateway and
  * whatever produces Meaning Focus suggestions, Sense Construction interview
  * turns and Sense Proposals. The deterministic `mockSemanticLlm` implements it
- * for the default (offline, reproducible, test-backed) path; the config-driven
- * `realSemanticLlm` implements it against opencode-go / muse-spark-1.2.
+ * for the deterministic, test-backed legacy construction commands. The live,
+ * open-ended clarification workspace uses the separate `SemanticAgentPort`.
  *
  * Domain invariant (personal-semantic-world-model.md §4, production-architecture
  * Module 8): the Semantic LLM only *proposes and clarifies*. It never accepts a
@@ -58,7 +58,7 @@ export interface ConstructionTurnContext extends SemanticLlmContext {
 }
 
 export interface ConstructionTurnDraft {
-  /** The semantic_llm message: a discriminating boundary question, not open chat. */
+  /** The model's current synthesis or, only when needed, one discriminating question. */
   body: string;
   /** Optional closed answer choices that make the boundary question concrete. */
   boundaryOptions: string[];

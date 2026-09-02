@@ -21,9 +21,8 @@ type MeaningPhase = SenseFormationPhase;
 type BindingPhase = ExpressionBindingPhase;
 type FocusState = 'clarifying' | 'proposal' | 'accepted';
 type WorldView = 'graph' | 'expanded' | 'list';
-type WorldFilter = 'all'
-  | `sense:${SenseFormationPhase}`
-  | `binding:${ExpressionBindingPhase}`;
+type WorldFilter = 'all' | 'continue' | 'binding' | 'complete';
+type WorldSection = 'home' | 'meanings' | 'expressions';
 type GraphNodeKind = 'meaning' | 'focus' | 'proposal' | 'sense' | 'expression';
 type GraphEdgeRelation = 'focus' | 'proposal' | 'alignment' | 'binding';
 
@@ -65,6 +64,19 @@ interface WorldMeaningView {
   experienceAnchors: JourneyWorldItemView['experienceAnchors'];
   focuses: readonly FocusWorldView[];
   note: string;
+}
+
+interface BoundExpressionView {
+  id: string;
+  personalMeaningId: string;
+  meaningFocusId: string;
+  surfaceForm: string;
+  expressionType: SensaExpressionType;
+  languageTag: string;
+  relation: SensaExpressionBindingRelation;
+  semanticCoverage: SensaSemanticCoverage;
+  sense: string;
+  source: string;
 }
 
 interface GraphNode {
@@ -240,6 +252,23 @@ const worldMeaningFor = (item: JourneyWorldItemView, index: number): WorldMeanin
   };
 };
 
+const expressionsFor = (meanings: readonly WorldMeaningView[]): BoundExpressionView[] =>
+  meanings.flatMap((meaning) => meaning.focuses.flatMap((focus) => {
+    if (!focus.alignment) return [];
+    return focus.alignment.bindings.map((binding) => ({
+      id: binding.bindingVersionId,
+      personalMeaningId: meaning.id,
+      meaningFocusId: focus.id,
+      surfaceForm: binding.surfaceForm,
+      expressionType: binding.expressionType,
+      languageTag: binding.languageTag,
+      relation: binding.relation,
+      semanticCoverage: binding.semanticCoverage,
+      sense: focus.alignment!.sense,
+      source: meaning.anchor,
+    }));
+  }));
+
 const searchableValuesFor = (meaning: WorldMeaningView): string[] => [
   meaning.anchor,
   ...meaning.familiarExpressions.map((anchor) => anchor.surfaceForm),
@@ -285,7 +314,7 @@ const meaningPrimaryAction = (meaning: WorldMeaningView): MeaningPrimaryAction =
   }
   if (meaning.senseFormation.phase === 'focus_pending_acceptance') {
     return {
-      label: '确认 Focus',
+      label: '确认这个侧面',
       meaningFocusId: meaning.senseFormation.nextFocusId ?? undefined,
       opensConfirmedSense: false,
     };
@@ -293,14 +322,14 @@ const meaningPrimaryAction = (meaning: WorldMeaningView): MeaningPrimaryAction =
   if (meaning.senseFormation.phase === 'clarifying') {
     const next = meaning.focuses.find((focus) => focus.id === meaning.senseFormation.nextFocusId);
     return {
-      label: next?.phase === 'focus_accepted' ? '开始 Sense 澄清' : '继续澄清',
+      label: next?.phase === 'focus_accepted' ? '让模型理解' : '继续和模型澄清',
       meaningFocusId: meaning.senseFormation.nextFocusId ?? undefined,
       opensConfirmedSense: false,
     };
   }
   if (meaning.senseFormation.phase === 'proposal_pending') {
     return {
-      label: '确认 Sense 提议',
+      label: '确认这个意思',
       meaningFocusId: meaning.senseFormation.nextFocusId ?? undefined,
       opensConfirmedSense: false,
     };
@@ -314,18 +343,18 @@ const meaningPrimaryAction = (meaning: WorldMeaningView): MeaningPrimaryAction =
       ? '绑定目标表达'
       : meaning.expressionBinding.phase === 'bound'
         ? '查看表达连接'
-        : '查看已确认 Sense',
+        : '查看已确认的意思',
     meaningFocusId: confirmedFocusId,
     opensConfirmedSense: true,
   };
 };
 
 const focusActionLabel = (focus: FocusWorldView): string => {
-  if (focus.alignment) return '查看已确认 Sense';
-  if (focus.phase === 'proposal_ready') return '确认 Sense 提议';
-  if (focus.phase === 'constructing') return '继续澄清';
-  if (focus.phase === 'focus_accepted') return '开始 Sense 澄清';
-  return '确认 Focus';
+  if (focus.alignment) return '查看已确认的意思';
+  if (focus.phase === 'proposal_ready') return '确认这个意思';
+  if (focus.phase === 'constructing') return '继续和模型澄清';
+  if (focus.phase === 'focus_accepted') return '让模型理解';
+  return '确认这个侧面';
 };
 
 const senseFormationIcon = (phase: MeaningPhase) => {
@@ -367,6 +396,21 @@ const StatusAxes = ({ meaning }: { meaning: WorldMeaningView }) => (
   </div>
 );
 
+const CompactStatus = ({ meaning }: { meaning: WorldMeaningView }) => (
+  <div className="personal-world-v2__compact-status" aria-label="当前进度">
+    <span className={`is-sense-${meaning.senseFormation.phase}`}>
+      <StatusMark phase={meaning.senseFormation.phase} />
+      {senseFormationLabels[meaning.senseFormation.phase]}
+    </span>
+    {meaning.expressionBinding.phase !== 'not_ready' && (
+      <span className={`is-binding-${meaning.expressionBinding.phase}`}>
+        <BindingStatusMark phase={meaning.expressionBinding.phase} />
+        {expressionBindingLabels[meaning.expressionBinding.phase]}
+      </span>
+    )}
+  </div>
+);
+
 const AnchorChips = ({ meaning }: { meaning: WorldMeaningView }) => (
   <div className="personal-world-v2__anchors" aria-label="Personal Meaning 的个人锚点">
     {meaning.experienceAnchors.map((anchor) => (
@@ -395,23 +439,6 @@ const ProposalBranch = ({ proposal }: { proposal: ProposalBranch }) => (
 
     {proposal.core && <p className="personal-world-v2__proposal-core">{proposal.core}</p>}
 
-    {(proposal.scenes.length > 0 || proposal.boundary.length > 0) && (
-      <dl className="personal-world-v2__proposal-facts">
-        {proposal.scenes.length > 0 && (
-          <div>
-            <dt>原型场景</dt>
-            <dd>{proposal.scenes.join('；')}</dd>
-          </div>
-        )}
-        {proposal.boundary.length > 0 && (
-          <div>
-            <dt>包含 / 排除边界</dt>
-            <dd>{proposal.boundary.join('；')}</dd>
-          </div>
-        )}
-      </dl>
-    )}
-
     {proposal.candidates.length > 0 && (
       <div className="personal-world-v2__candidate-row">
         <small>目标语言表达候选</small>
@@ -420,7 +447,6 @@ const ProposalBranch = ({ proposal }: { proposal: ProposalBranch }) => (
         </div>
       </div>
     )}
-    <p className="personal-world-v2__proposal-note">候选表达还不是确认结果；Sense 不等于其中任何一个表达。</p>
   </div>
 );
 
@@ -461,10 +487,6 @@ const AlignmentBranch = ({ alignment }: { alignment: AlignmentBranch }) => (
       </div>
     )}
 
-    <div className="personal-world-v2__learning-overlay">
-      <span aria-hidden="true">○</span>
-      <span><b>确认连接不等于开始学习</b><small>这里仅呈现已经确认的语义事实</small></span>
-    </div>
   </div>
 );
 
@@ -549,7 +571,6 @@ const MeaningConstellation = ({
       </div>
     )}
 
-    <p className="personal-world-v2__meaning-note">{meaning.note}</p>
     <button
       type="button"
       className="personal-world-v2__meaning-open"
@@ -664,7 +685,7 @@ const buildGraph = (meanings: readonly WorldMeaningView[]) => {
           state: 'proposal',
           personalMeaningId: meaning.id,
           meaningFocusId: focus.id,
-          actionLabel: '确认 Sense 提议',
+          actionLabel: '确认这个意思',
         });
         edges.push({
           id: `${focus.id}->proposal:${focus.proposal.senseProposalId}`,
@@ -980,10 +1001,6 @@ const ExpandedView = ({
   onOpenConfirmedSense: (personalMeaningId: string, meaningFocusId: string) => void;
 }) => (
   <div className="personal-world-v2__expanded-view" aria-label="Personal Meaning 展开视图">
-    <div className="personal-world-v2__world-caption">
-      <span className="personal-world-v2__caption-line" aria-hidden="true" />
-      <p>每一张卡都是你明确创建的 Personal Meaning；下面只展开它已经拥有的关系。</p>
-    </div>
     <div className="personal-world-v2__constellations">
       {meanings.length > 0
         ? meanings.map((meaning) => (
@@ -1002,24 +1019,30 @@ const ExpandedView = ({
 const ListView = ({
   meanings,
   emptyMode,
+  preferBinding,
   onCreate,
   onOpen,
   onOpenConfirmedSense,
 }: {
   meanings: readonly WorldMeaningView[];
   emptyMode: 'world' | 'filtered';
+  preferBinding: boolean;
   onCreate: () => void;
   onOpen: (personalMeaningId: string, meaningFocusId?: string) => void;
   onOpenConfirmedSense: (personalMeaningId: string, meaningFocusId: string) => void;
 }) => (
   <div className="personal-world-v2__list-view" aria-label="Personal Meaning 清单视图">
-    <div className="personal-world-v2__world-caption">
-      <span className="personal-world-v2__caption-line" aria-hidden="true" />
-      <p>同一批 Personal Meaning facts 的紧凑读取方式。</p>
-    </div>
     <div className="personal-world-v2__list-card">
       {meanings.length === 0 ? <EmptyWorldState mode={emptyMode} onCreate={onCreate} /> : meanings.map((meaning) => {
-        const primaryAction = meaningPrimaryAction(meaning);
+        const primaryAction = preferBinding && meaning.expressionBinding.nextFocusId
+          ? {
+            label: '绑定目标表达',
+            meaningFocusId: meaning.expressionBinding.nextFocusId,
+            opensConfirmedSense: true,
+          }
+          : meaningPrimaryAction(meaning);
+        const nextFocus = meaning.focuses.find((focus) => focus.id === primaryAction.meaningFocusId)
+          ?? meaning.focuses[0];
         return (
         <article className="personal-world-v2__list-item" key={meaning.id}>
           <header>
@@ -1028,38 +1051,13 @@ const ListView = ({
               <span>Personal Meaning · 我的意思</span>
               <h3>{meaning.anchor}</h3>
             </div>
-            <StatusAxes meaning={meaning} />
+            <CompactStatus meaning={meaning} />
           </header>
 
-          <div className="personal-world-v2__list-anchors"><AnchorChips meaning={meaning} /></div>
-          <div className="personal-world-v2__list-facts">
-            {meaning.focuses.length === 0 ? (
-              <span className="personal-world-v2__list-fact is-muted">尚未形成 Meaning Focus 事实</span>
-            ) : meaning.focuses.map((focus) => (
-              <div className="personal-world-v2__list-fact" key={focus.id}>
-                <span className={`personal-world-v2__fact-dot is-${focus.state}`} aria-hidden="true" />
-                <span>
-                  <small>我真正在意的是</small>
-                  <b>{focus.label}</b>
-                  {focus.proposal && <em>模型理解的这个意思 · 待确认</em>}
-                  {focus.alignment && (
-                    <em className="is-confirmed">
-                      已确认 Sense · {focus.alignment.bindings.length > 0 ? `${focus.alignment.bindings.length} 个表达` : '表达待确认'}
-                    </em>
-                  )}
-                  {!focus.proposal && !focus.alignment && <em>继续澄清</em>}
-                </span>
-                {focus.alignment && (
-                  <button
-                    type="button"
-                    className="personal-world-v2__list-sense-open"
-                    onClick={() => onOpenConfirmedSense(meaning.id, focus.id)}
-                  >
-                    查看 Sense
-                  </button>
-                )}
-              </div>
-            ))}
+          <div className="personal-world-v2__list-next">
+            <small>{nextFocus ? '当前方向' : '下一步'}</small>
+            <strong>{nextFocus?.label ?? '从这段经验中切出一个 Meaning Focus'}</strong>
+            {meaning.focuses.length > 1 && <span>另有 {meaning.focuses.length - 1} 个独立方向</span>}
           </div>
           <button
             type="button"
@@ -1082,6 +1080,198 @@ const ListView = ({
   </div>
 );
 
+const ExpressionRows = ({
+  expressions,
+  compact = false,
+  onOpen,
+}: {
+  expressions: readonly BoundExpressionView[];
+  compact?: boolean;
+  onOpen: (personalMeaningId: string, meaningFocusId: string) => void;
+}) => (
+  <div className={`personal-world-v2__expression-rows${compact ? ' is-compact' : ''}`}>
+    {expressions.map((expression) => (
+      <button
+        type="button"
+        className="personal-world-v2__expression-row"
+        key={expression.id}
+        onClick={() => onOpen(expression.personalMeaningId, expression.meaningFocusId)}
+      >
+        <span className="personal-world-v2__expression-word">{expression.surfaceForm}</span>
+        <span className="personal-world-v2__expression-meta">
+          {expressionTypeLabel(expression.expressionType)} · {languageLabel(expression.languageTag)}
+        </span>
+        {!compact && (
+          <span className="personal-world-v2__expression-sense">
+            <small>表达的意思</small>
+            <b>{expression.sense}</b>
+          </span>
+        )}
+        {!compact && (
+          <span className="personal-world-v2__expression-source">
+            来自：{expression.source}
+          </span>
+        )}
+        <span className="personal-world-v2__expression-foot">
+          <em>{compact ? '可加入学习' : `${relationLabel(expression.relation)} · ${coverageLabel(expression.semanticCoverage)}`}</em>
+          {!compact && <b>可加入学习</b>}
+          <i aria-hidden="true">→</i>
+        </span>
+      </button>
+    ))}
+  </div>
+);
+
+const WorldHome = ({
+  meanings,
+  expressions,
+  onCreate,
+  onBrowseMeanings,
+  onBrowseExpressions,
+  onOpen,
+  onOpenConfirmedSense,
+}: {
+  meanings: readonly WorldMeaningView[];
+  expressions: readonly BoundExpressionView[];
+  onCreate: () => void;
+  onBrowseMeanings: () => void;
+  onBrowseExpressions: () => void;
+  onOpen: (personalMeaningId: string, meaningFocusId?: string) => void;
+  onOpenConfirmedSense: (personalMeaningId: string, meaningFocusId: string) => void;
+}) => {
+  const activeMeanings = meanings.filter((meaning) =>
+    meaning.senseFormation.phase !== 'sense_confirmed'
+      || meaning.expressionBinding.phase === 'pending'
+      || meaning.expressionBinding.phase === 'partial',
+  );
+  const visibleActiveMeanings = activeMeanings.slice(0, 3);
+  const visibleExpressions = expressions.slice(0, 3);
+
+  return (
+    <>
+      <section className="personal-world-v2__intro is-home">
+        <div className="personal-world-v2__intro-copy">
+          <h2>从一个真实经验开始</h2>
+          <p>把场景里还说不清的意思，慢慢变成稳定的表达。</p>
+        </div>
+        <button type="button" className="personal-world-v2__create" onClick={onCreate}>
+          <span className="personal-world-v2__create-symbol" aria-hidden="true">＋</span>
+          <span><b>记录一个场景或经验</b><small>也可以从熟悉表达开始</small></span>
+          <span className="personal-world-v2__create-arrow" aria-hidden="true">→</span>
+        </button>
+      </section>
+
+      <section className="personal-world-v2__home-section">
+        <header className="personal-world-v2__home-heading">
+          <div>
+            <small>正在形成</small>
+            <h2>继续一个意思</h2>
+          </div>
+          {meanings.length > 0 && (
+            <button type="button" onClick={onBrowseMeanings}>查看全部 {meanings.length}</button>
+          )}
+        </header>
+        {visibleActiveMeanings.length > 0 ? (
+          <ListView
+            meanings={visibleActiveMeanings}
+            emptyMode="filtered"
+            preferBinding={false}
+            onCreate={onCreate}
+            onOpen={onOpen}
+            onOpenConfirmedSense={onOpenConfirmedSense}
+          />
+        ) : (
+          <div className="personal-world-v2__home-empty">
+            <span aria-hidden="true">✓</span>
+            <p>{meanings.length > 0 ? '当前没有需要继续形成的内容' : '记录第一个场景后，会从这里继续形成意思'}</p>
+          </div>
+        )}
+        {activeMeanings.length > visibleActiveMeanings.length && (
+          <button type="button" className="personal-world-v2__home-more" onClick={onBrowseMeanings}>
+            还有 {activeMeanings.length - visibleActiveMeanings.length} 个意思待继续 <span aria-hidden="true">→</span>
+          </button>
+        )}
+      </section>
+
+      <section className="personal-world-v2__home-section is-expressions">
+        <header className="personal-world-v2__home-heading">
+          <div>
+            <small>形成的结果</small>
+            <h2>我的表达</h2>
+          </div>
+          {expressions.length > 0 && (
+            <button type="button" onClick={onBrowseExpressions}>查看全部 {expressions.length}</button>
+          )}
+        </header>
+        {visibleExpressions.length > 0 ? (
+          <ExpressionRows
+            expressions={visibleExpressions}
+            compact
+            onOpen={onOpenConfirmedSense}
+          />
+        ) : (
+          <div className="personal-world-v2__home-empty is-expression">
+            <span aria-hidden="true">↗</span>
+            <p>完成 Sense 与表达绑定后，稳定表达会出现在这里</p>
+          </div>
+        )}
+      </section>
+    </>
+  );
+};
+
+const ExpressionLibrary = ({
+  expressions,
+  search,
+  onSearch,
+  onOpen,
+}: {
+  expressions: readonly BoundExpressionView[];
+  search: string;
+  onSearch: (value: string) => void;
+  onOpen: (personalMeaningId: string, meaningFocusId: string) => void;
+}) => {
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const visibleExpressions = expressions.filter((expression) => !normalizedSearch || [
+    expression.surfaceForm,
+    expression.sense,
+    expression.source,
+    expressionTypeLabel(expression.expressionType),
+  ].join(' ').toLocaleLowerCase().includes(normalizedSearch));
+
+  return (
+    <section className="personal-world-v2__expression-library">
+      <header className="personal-world-v2__library-heading">
+        <small>已确认 Expression Binding</small>
+        <h2>我的表达</h2>
+        <p>这些表达已经连接到稳定 Sense，可以作为之后加入学习的语义基础。</p>
+      </header>
+      <div className="personal-world-v2__search">
+        <span className="personal-world-v2__search-icon" aria-hidden="true">⌕</span>
+        <label htmlFor="personal-world-expression-search" className="personal-world-v2__visually-hidden">搜索我的表达</label>
+        <input
+          id="personal-world-expression-search"
+          type="search"
+          value={search}
+          onChange={(event) => onSearch(event.target.value)}
+          placeholder="搜索表达、Sense 或来源场景"
+        />
+        {search && (
+          <button type="button" className="personal-world-v2__search-clear" onClick={() => onSearch('')} aria-label="清除搜索">×</button>
+        )}
+      </div>
+      {visibleExpressions.length > 0 ? (
+        <ExpressionRows expressions={visibleExpressions} onOpen={onOpen} />
+      ) : (
+        <div className="personal-world-v2__home-empty is-expression">
+          <span aria-hidden="true">↗</span>
+          <p>{expressions.length > 0 ? '没有匹配的表达' : '还没有完成 Binding 的表达'}</p>
+        </div>
+      )}
+    </section>
+  );
+};
+
 export const SensaSemanticWorldScreen = ({
   active,
   onBack,
@@ -1089,39 +1279,37 @@ export const SensaSemanticWorldScreen = ({
   onOpenConfirmedSense,
   toast,
 }: SemanticWorldScreenProps) => {
-  const [view, setView] = useState<WorldView>('graph');
+  const [section, setSection] = useState<WorldSection>('home');
+  const [view, setView] = useState<WorldView>('list');
   const [filter, setFilter] = useState<WorldFilter>('all');
   const [search, setSearch] = useState('');
+  const [expressionSearch, setExpressionSearch] = useState('');
   const [composerOpen, setComposerOpen] = useState(false);
   const gateway = useJourneyGateway();
   const { items, status } = useJourneyWorld();
   const meanings = useMemo(() => items.map(worldMeaningFor), [items]);
+  const expressions = useMemo(() => expressionsFor(meanings), [meanings]);
 
   const visibleMeanings = useMemo(() => meanings.filter((meaning) => {
     const matchesFilter = filter === 'all'
-      || (filter.startsWith('sense:') && meaning.senseFormation.phase === filter.slice(6) as SenseFormationPhase)
-      || (filter.startsWith('binding:') && meaning.expressionBinding.phase === filter.slice(8) as BindingPhase);
+      || (filter === 'continue' && meaning.senseFormation.phase !== 'sense_confirmed')
+      || (filter === 'binding'
+        && (meaning.expressionBinding.phase === 'pending' || meaning.expressionBinding.phase === 'partial'))
+      || (filter === 'complete' && meaning.expressionBinding.phase === 'bound');
     return matchesFilter && meaningMatchesQuery(meaning, search);
   }), [filter, meanings, search]);
 
-  const countForSense = (phase: MeaningPhase): number =>
-    meanings.filter((meaning) => meaning.senseFormation.phase === phase).length;
-  const countForBinding = (phase: BindingPhase): number =>
-    meanings.filter((meaning) => meaning.expressionBinding.phase === phase).length;
   const emptyMode = meanings.length === 0 ? 'world' : 'filtered';
-  const confirmedSenseCount = meanings.reduce(
-    (total, meaning) => total + meaning.senseFormation.confirmedSenseCount,
-    0,
-  );
-  const confirmedBindingCount = meanings.reduce(
-    (total, meaning) => total + meaning.expressionBinding.confirmedBindingCount,
-    0,
-  );
   const openMeaning = (personalMeaningId: string, meaningFocusId?: string) =>
     onOpenPersonalMeaning(personalMeaningId, meaningFocusId);
   const handleCreated = (personalMeaningId: string) => {
     setComposerOpen(false);
     onOpenPersonalMeaning(personalMeaningId);
+  };
+  const returnFromSection = () => {
+    setSection('home');
+    setSearch('');
+    setExpressionSearch('');
   };
 
   return (
@@ -1131,153 +1319,110 @@ export const SensaSemanticWorldScreen = ({
       data-anim="slide"
     >
       <header className="personal-world-v2__nav">
-        <button type="button" className="personal-world-v2__back" onClick={onBack} aria-label="返回我的内容">
+        <button
+          type="button"
+          className="personal-world-v2__back"
+          onClick={section === 'home' ? onBack : returnFromSection}
+          aria-label={section === 'home' ? '返回我的内容' : '返回我的词义世界首页'}
+        >
           <svg className="icon" aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
         <div className="personal-world-v2__nav-title">
-          <span>MY MEANING WORLD</span>
-          <h1>我的词义世界</h1>
+          <h1>{section === 'home' ? '我的词义世界' : section === 'expressions' ? '我的表达' : '全部意思'}</h1>
         </div>
         <span className="personal-world-v2__nav-mark" aria-hidden="true">◌</span>
       </header>
 
       <div className="personal-world-v2__body">
-        <section className="personal-world-v2__intro">
-          <span className="personal-world-v2__eyebrow">PERSONAL SEMANTIC WORLD</span>
-          <h2>{meanings.length > 0 ? '从你真正想表达的意思开始' : '从第一个意思开始形成连接'}</h2>
-          <p>这里的每一项都来自你明确保存的 Personal Meaning。意义形成与表达连接是两条独立的进展轴。</p>
-          <button
-            type="button"
-            className="personal-world-v2__create"
-            onClick={() => setComposerOpen(true)}
-          >
-            <span className="personal-world-v2__create-symbol" aria-hidden="true">＋</span>
-            <span><b>创建一个我想表达的意思</b><small>从一段经验或熟悉表达开始</small></span>
-            <span className="personal-world-v2__create-arrow" aria-hidden="true">→</span>
-          </button>
-          <small id="personal-world-create-note" className="personal-world-v2__create-note">
-            {meanings.length > 0
-              ? `${meanings.length} 条 Personal Meaning · ${confirmedSenseCount} 条已确认 Sense · ${confirmedBindingCount} 条当前表达绑定`
-              : '创建后会立即出现在这个世界中'}
-          </small>
-          {meanings.length > 0 && (
-            <div className="personal-world-v2__axis-guide" aria-label="语义世界状态轴说明">
-              <div>
-                <small>意义形成</small>
-                <b>{confirmedSenseCount} 条已确认 Sense</b>
-                <span>从 Focus 到稳定 Sense</span>
-              </div>
-              <div>
-                <small>表达连接</small>
-                <b>{confirmedBindingCount} 条当前表达绑定</b>
-                <span>独立于 Sense 确认</span>
-              </div>
-            </div>
-          )}
-        </section>
-
-        <div className="personal-world-v2__search">
-          <span className="personal-world-v2__search-icon" aria-hidden="true">⌕</span>
-          <label htmlFor="personal-world-search" className="personal-world-v2__visually-hidden">搜索我的词义世界</label>
-          <input
-            id="personal-world-search"
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="搜索经验、Focus、表达或 Sense"
-          />
-          {search && (
-            <button type="button" className="personal-world-v2__search-clear" onClick={() => setSearch('')} aria-label="清除搜索">
-              ×
-            </button>
-          )}
-        </div>
-
-        <div className="personal-world-v2__controls">
-          <div className="personal-world-v2__view-tabs" role="tablist" aria-label="词义世界呈现方式">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === 'graph'}
-              className={view === 'graph' ? 'is-active' : ''}
-              onClick={() => setView('graph')}
-            >
-              图谱视图
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === 'expanded'}
-              className={view === 'expanded' ? 'is-active' : ''}
-              onClick={() => setView('expanded')}
-            >
-              展开视图
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === 'list'}
-              className={view === 'list' ? 'is-active' : ''}
-              onClick={() => setView('list')}
-            >
-              清单视图
-            </button>
-          </div>
-          <div className="personal-world-v2__filters" role="group" aria-label="按两条状态轴查看 Personal Meaning">
-            {([
-              { key: 'all' as const, label: '全部', count: meanings.length },
-              ...(['focus_missing', 'focus_pending_acceptance', 'clarifying', 'proposal_pending', 'sense_confirmed'] as const)
-                .map((phase) => ({ key: `sense:${phase}` as const, label: senseFormationLabels[phase], count: countForSense(phase) })),
-              ...(['not_ready', 'pending', 'partial', 'bound'] as const)
-                .map((phase) => ({ key: `binding:${phase}` as const, label: expressionBindingLabels[phase], count: countForBinding(phase) })),
-            ]).map((option) => {
-              return (
-                <button
-                  type="button"
-                  key={option.key}
-                  className={`personal-world-v2__filter is-${option.key.replace(':', '-')}${filter === option.key ? ' is-active' : ''}`}
-                  aria-pressed={filter === option.key}
-                  onClick={() => setFilter(option.key)}
-                >
-                  <span>{option.label}</span><small>{option.count}</small>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {!status.ok ? (
           <WorldErrorState error={status.error} onReload={() => gateway.reload()} />
-        ) : view === 'graph' ? (
-          <GraphView
-            meanings={visibleMeanings}
-            emptyMode={emptyMode}
+        ) : section === 'home' ? (
+          <WorldHome
+            meanings={meanings}
+            expressions={expressions}
             onCreate={() => setComposerOpen(true)}
+            onBrowseMeanings={() => setSection('meanings')}
+            onBrowseExpressions={() => setSection('expressions')}
             onOpen={openMeaning}
             onOpenConfirmedSense={onOpenConfirmedSense}
           />
-        ) : view === 'expanded' ? (
-          <ExpandedView
-            meanings={visibleMeanings}
-            emptyMode={emptyMode}
-            onCreate={() => setComposerOpen(true)}
-            onOpen={openMeaning}
-            onOpenConfirmedSense={onOpenConfirmedSense}
+        ) : section === 'expressions' ? (
+          <ExpressionLibrary
+            expressions={expressions}
+            search={expressionSearch}
+            onSearch={setExpressionSearch}
+            onOpen={onOpenConfirmedSense}
           />
         ) : (
-          <ListView
-            meanings={visibleMeanings}
-            emptyMode={emptyMode}
-            onCreate={() => setComposerOpen(true)}
-            onOpen={openMeaning}
-            onOpenConfirmedSense={onOpenConfirmedSense}
-          />
+          <>
+            <div className="personal-world-v2__search">
+              <span className="personal-world-v2__search-icon" aria-hidden="true">⌕</span>
+              <label htmlFor="personal-world-search" className="personal-world-v2__visually-hidden">搜索我的词义世界</label>
+              <input
+                id="personal-world-search"
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="搜索经验、Focus、表达或 Sense"
+              />
+              {search && (
+                <button type="button" className="personal-world-v2__search-clear" onClick={() => setSearch('')} aria-label="清除搜索">×</button>
+              )}
+            </div>
+            <div className="personal-world-v2__controls">
+              <div className="personal-world-v2__view-tabs" role="tablist" aria-label="词义世界呈现方式">
+                <button type="button" role="tab" aria-selected={view === 'list'} className={view === 'list' ? 'is-active' : ''} onClick={() => setView('list')}>清单</button>
+                <button type="button" role="tab" aria-selected={view === 'expanded'} className={view === 'expanded' ? 'is-active' : ''} onClick={() => setView('expanded')}>展开</button>
+                <button type="button" role="tab" aria-selected={view === 'graph'} className={view === 'graph' ? 'is-active' : ''} onClick={() => setView('graph')}>图谱</button>
+              </div>
+              <div className="personal-world-v2__filters" role="group" aria-label="按下一步筛选 Personal Meaning">
+                {([
+                  { key: 'all' as const, label: '全部', count: meanings.length },
+                  { key: 'continue' as const, label: '待继续', count: meanings.filter((meaning) => meaning.senseFormation.phase !== 'sense_confirmed').length },
+                  { key: 'binding' as const, label: '待绑定表达', count: meanings.filter((meaning) => meaning.expressionBinding.phase === 'pending' || meaning.expressionBinding.phase === 'partial').length },
+                  { key: 'complete' as const, label: '已连接', count: meanings.filter((meaning) => meaning.expressionBinding.phase === 'bound').length },
+                ]).map((option) => (
+                  <button
+                    type="button"
+                    key={option.key}
+                    className={`personal-world-v2__filter is-${option.key}${filter === option.key ? ' is-active' : ''}`}
+                    aria-pressed={filter === option.key}
+                    onClick={() => setFilter(option.key)}
+                  >
+                    <span>{option.label}</span><small>{option.count}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {view === 'graph' ? (
+              <GraphView
+                meanings={visibleMeanings}
+                emptyMode={emptyMode}
+                onCreate={() => setComposerOpen(true)}
+                onOpen={openMeaning}
+                onOpenConfirmedSense={onOpenConfirmedSense}
+              />
+            ) : view === 'expanded' ? (
+              <ExpandedView
+                meanings={visibleMeanings}
+                emptyMode={emptyMode}
+                onCreate={() => setComposerOpen(true)}
+                onOpen={openMeaning}
+                onOpenConfirmedSense={onOpenConfirmedSense}
+              />
+            ) : (
+              <ListView
+                meanings={visibleMeanings}
+                emptyMode={emptyMode}
+                preferBinding={filter === 'binding'}
+                onCreate={() => setComposerOpen(true)}
+                onOpen={openMeaning}
+                onOpenConfirmedSense={onOpenConfirmedSense}
+              />
+            )}
+          </>
         )}
 
-        <footer className="personal-world-v2__footer-note">
-          <span aria-hidden="true">◇</span>
-          <p>Personal Meaning、Sense 与 Expression 是不同的身份；确认连接不代表已经学会。</p>
-        </footer>
       </div>
 
       <PersonalMeaningComposer

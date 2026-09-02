@@ -105,6 +105,11 @@ import {
   type PrototypeLearningTargetId,
   type PrototypeLightweightRating,
 } from './learningJourney/prototypeLearning';
+import {
+  learningPolicyProfileRegistry,
+  type LearningProtocolPurpose,
+} from './learningRuntime/policyProfiles';
+import { learningRuntimeCoordinator } from './learningRuntime/runtimeCoordinator';
 
 type ViewMode = 'main' | 'study' | 'lightweight' | 'lightweightReview' | 'finish';
 type FlowType = 'learn' | 'review' | 'demo';
@@ -118,11 +123,9 @@ type LearningPolicyContext =
 
 type TargetPolicyMap = Partial<Record<PrototypeLearningTargetId, PrototypeLearningPolicy>>;
 type TargetPreparationMap = Partial<Record<PrototypeLearningTargetId, PrototypeLearningReadiness>>;
-type LightweightCompletionMap = Partial<Record<
+type LightweightRetentionMap = Partial<Record<
   PrototypeLearningTargetId,
   {
-    rating: Exclude<PrototypeLightweightRating, 'again'>;
-    completedAt: string;
     nextReviewAt: string;
     nextReviewLabel: string;
     reviewCount: number;
@@ -132,13 +135,15 @@ type LightweightCompletionMap = Partial<Record<
     lastReviewedAt?: string;
   }
 >>;
-type StructuredGraduationMap = Partial<Record<
+type InitialLearningCompletionMap = Partial<Record<
   PrototypeLearningTargetId,
   {
-    graduatedAt: string;
+    completionKind: 'lightweight' | 'structured';
+    completedAt: string;
     nextReviewAt: string;
     nextReviewLabel: string;
-    schedulingHandoffBasis: 'acquisition_graduation';
+    schedulingHandoffBasis: 'study_completion' | 'acquisition_graduation';
+    initialRating?: Exclude<PrototypeLightweightRating, 'again'>;
   }
 >>;
 type StructuredRuntimeSummary = {
@@ -180,6 +185,15 @@ const TARGET_ID_BY_RUNTIME_SENSE = new Map(
     return senseId ? [[senseId, targetId] as const] : [];
   }),
 );
+
+const DEFAULT_LEARNING_POLICY = learningPolicyProfileRegistry.list()[0]!.profileId;
+
+function runtimeSurfaceForPolicy(
+  policy: PrototypeLearningPolicy,
+  purpose: LearningProtocolPurpose,
+) {
+  return learningRuntimeCoordinator.surfaceFor(policy, purpose);
+}
 
 function relativeReviewLabel(dueAt: number, now: number = Date.now()): string {
   const days = Math.max(0, Math.ceil((dueAt - now) / (24 * 60 * 60 * 1000)));
@@ -406,7 +420,7 @@ export default function App() {
   const [streak, setStreak] = useState(0);
   const [studyTab, setStudyTab] = useState<'a' | 'b'>('a');
   const [defaultLearningPolicy, setDefaultLearningPolicy] =
-    useState<PrototypeLearningPolicy>('lightweight');
+    useState<PrototypeLearningPolicy>(DEFAULT_LEARNING_POLICY);
   const [selectedLearningTargetId, setSelectedLearningTargetId] =
     useState<PrototypeLearningTargetId>('borrow-receive');
   const [learningPolicyContext, setLearningPolicyContext] =
@@ -421,10 +435,10 @@ export default function App() {
     'tactful-expression': 'preparing',
   });
   const [committedPolicyByTarget, setCommittedPolicyByTarget] = useState<TargetPolicyMap>({});
-  const [lightweightCompletionByTarget, setLightweightCompletionByTarget] =
-    useState<LightweightCompletionMap>({});
-  const [structuredGraduationByTarget, setStructuredGraduationByTarget] =
-    useState<StructuredGraduationMap>({});
+  const [lightweightRetentionByTarget, setLightweightRetentionByTarget] =
+    useState<LightweightRetentionMap>({});
+  const [initialLearningCompletionByTarget, setInitialLearningCompletionByTarget] =
+    useState<InitialLearningCompletionMap>({});
   const [declaredMasterySenseIds, setDeclaredMasterySenseIds] = useState<ReadonlySet<string>>(
     () => new Set<string>(),
   );
@@ -576,16 +590,23 @@ export default function App() {
     ]).size);
   }, []);
 
-  // Keep Targets graduated earlier in the same hot-reloaded prototype session
+  // Keep structured-retention handoffs created earlier in the same hot-reloaded session
   // aligned with the immediate first-Review handoff. Once a Review has been
   // settled, its scheduler-owned next due time is never touched here.
   useEffect(() => {
     const dueAt = Date.now();
     const targetIdsToAdvance = PROTOTYPE_LEARNING_TARGET_ORDER.filter((targetId) => {
-      const graduation = structuredGraduationByTarget[targetId];
+      const graduation = initialLearningCompletionByTarget[targetId];
       const retention = structuredRetentionByTarget[targetId];
+      const policy = committedPolicyByTarget[targetId];
       const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
-      if (!graduation || retention?.reviewCount || !senseId) return false;
+      if (
+        !graduation
+        || !policy
+        || runtimeSurfaceForPolicy(policy, 'retention_review') !== 'structured_session'
+        || retention?.reviewCount
+        || !senseId
+      ) return false;
       if (declaredMasterySenseIds.has(senseId)) return false;
       const memory = storageService.getFSRSItems()[senseId];
       return memory !== undefined && memory.due > dueAt;
@@ -597,7 +618,7 @@ export default function App() {
       const memory = storageService.getFSRSItems()[senseId]!;
       storageService.saveFSRSItem({ ...memory, due: dueAt, scheduledDays: 0 });
     });
-    setStructuredGraduationByTarget((current) => {
+    setInitialLearningCompletionByTarget((current) => {
       const next = { ...current };
       targetIdsToAdvance.forEach((targetId) => {
         next[targetId] = {
@@ -611,8 +632,9 @@ export default function App() {
     refreshReviewCount();
   }, [
     declaredMasterySenseIds,
+    committedPolicyByTarget,
     refreshReviewCount,
-    structuredGraduationByTarget,
+    initialLearningCompletionByTarget,
     structuredRetentionByTarget,
   ]);
 
@@ -638,13 +660,20 @@ export default function App() {
   });
   const todayInitialTargetIds = readyInitialTargetIds.slice(0, dailyNewCount);
   const lightweightDueTargetIds = visibleLearningTargetIds.filter((targetId) => {
-    const completion = lightweightCompletionByTarget[targetId];
-    return committedPolicyByTarget[targetId] === 'lightweight'
+    const completion = lightweightRetentionByTarget[targetId];
+    const policy = committedPolicyByTarget[targetId];
+    return policy !== undefined
+      && runtimeSurfaceForPolicy(policy, 'retention_review') === 'lightweight_retention'
       && completion !== undefined
       && (completion.relearning || Date.parse(completion.nextReviewAt) <= Date.now());
   });
   const lightweightRelearningTargetIds = visibleLearningTargetIds.filter(
-    (targetId) => lightweightCompletionByTarget[targetId]?.relearning,
+    (targetId) => {
+      const policy = committedPolicyByTarget[targetId];
+      return policy !== undefined
+        && runtimeSurfaceForPolicy(policy, 'relearning') === 'lightweight_retention'
+        && lightweightRetentionByTarget[targetId]?.relearning;
+    },
   );
 
   /* ---------- 穿插调度算法引擎 (新词学习流) ---------- */
@@ -669,20 +698,26 @@ export default function App() {
     minGap: 2,
   });
 
-  // Graduation is the only Learn -> FSRS handoff. Keep this idempotent because
-  // both the explicit "next" handler and the completion effect can observe the
-  // same settled queue during one render cycle.
+  // Structured Graduation creates the common Initial Completion. The committed
+  // Profile then chooses which retention adapter receives the Scheduling Handoff.
+  // Keep this idempotent because two render paths can observe the same settled queue.
   const persistGraduatedSenses = useCallback(() => {
     const fsrsItems = storageService.getFSRSItems();
     const graduatedSenseIds = getGraduatedSenseIds();
     graduatedSenseIds.forEach((senseId) => {
-      if (!fsrsItems[senseId]) {
+      const targetId = TARGET_ID_BY_RUNTIME_SENSE.get(senseId);
+      const policy = targetId ? committedPolicyByTarget[targetId] : undefined;
+      if (
+        policy
+        && runtimeSurfaceForPolicy(policy, 'retention_review') === 'structured_session'
+        && !fsrsItems[senseId]
+      ) {
         storageService.graduateSense(senseId, 0);
       }
     });
     const memoryItems = storageService.getFSRSItems();
     const graduatedSenseIdSet = new Set(graduatedSenseIds);
-    const graduatedAt = new Date().toISOString();
+    const completedAt = new Date().toISOString();
     if (activeStructuredTargetIds.length > 0) {
       setStructuredRuntimeSummary({
         graduatedTargetIds: activeStructuredTargetIds.filter((targetId) => {
@@ -695,24 +730,61 @@ export default function App() {
         }),
       });
     }
-    setStructuredGraduationByTarget((current) => {
+    setInitialLearningCompletionByTarget((current) => {
       let next = current;
       PROTOTYPE_LEARNING_TARGET_ORDER.forEach((targetId) => {
         const target = PROTOTYPE_LEARNING_TARGETS[targetId];
+        const policy = committedPolicyByTarget[targetId];
         if (
           current[targetId]
-          || committedPolicyByTarget[targetId] !== 'high_assurance'
+          || !policy
+          || runtimeSurfaceForPolicy(policy, 'initial_learning') !== 'structured_session'
           || !target.runtimeSenseId
           || !graduatedSenseIdSet.has(target.runtimeSenseId)
         ) return;
-        const memory = memoryItems[target.runtimeSenseId]!;
+        const retentionSurface = runtimeSurfaceForPolicy(policy, 'retention_review');
+        const memory = retentionSurface === 'structured_session'
+          ? memoryItems[target.runtimeSenseId]
+          : null;
+        const nextReviewAt = memory
+          ? new Date(memory.due).toISOString()
+          : completedAt;
         next = {
           ...next,
           [targetId]: {
-            graduatedAt,
-            nextReviewAt: new Date(memory.due).toISOString(),
-            nextReviewLabel: relativeReviewLabel(memory.due),
+            completionKind: 'structured',
+            completedAt,
+            nextReviewAt,
+            nextReviewLabel: memory
+              ? relativeReviewLabel(memory.due)
+              : '现在可复习（原型）',
             schedulingHandoffBasis: 'acquisition_graduation',
+          },
+        };
+      });
+      return next;
+    });
+    setLightweightRetentionByTarget((current) => {
+      let next = current;
+      PROTOTYPE_LEARNING_TARGET_ORDER.forEach((targetId) => {
+        const target = PROTOTYPE_LEARNING_TARGETS[targetId];
+        const policy = committedPolicyByTarget[targetId];
+        if (
+          current[targetId]
+          || !policy
+          || runtimeSurfaceForPolicy(policy, 'initial_learning') !== 'structured_session'
+          || runtimeSurfaceForPolicy(policy, 'retention_review') !== 'lightweight_retention'
+          || !target.runtimeSenseId
+          || !graduatedSenseIdSet.has(target.runtimeSenseId)
+        ) return;
+        next = {
+          ...next,
+          [targetId]: {
+            nextReviewAt: completedAt,
+            nextReviewLabel: '现在可复习（原型）',
+            reviewCount: 0,
+            lapseCount: 0,
+            relearning: false,
           },
         };
       });
@@ -789,8 +861,9 @@ export default function App() {
       if (declaredMasterySenseIds.has(senseId)) return [];
       const targetId = TARGET_ID_BY_RUNTIME_SENSE.get(senseId);
       if (!targetId) return [];
-      if (committedPolicyByTarget[targetId] !== 'high_assurance') return [];
-      if (!structuredGraduationByTarget[targetId]) return [];
+      const policy = committedPolicyByTarget[targetId];
+      if (!policy || runtimeSurfaceForPolicy(policy, 'retention_review') !== 'structured_session') return [];
+      if (!initialLearningCompletionByTarget[targetId]) return [];
       const pkg = PROTOTYPE_PACKAGE_BY_SENSE.get(senseId);
       const item = storageService.getFSRSItems()[senseId];
       if (!pkg || !item) return [];
@@ -806,20 +879,20 @@ export default function App() {
         relearning,
       }];
     });
-  }, [committedPolicyByTarget, declaredMasterySenseIds, structuredGraduationByTarget]);
+  }, [committedPolicyByTarget, declaredMasterySenseIds, initialLearningCompletionByTarget]);
 
-  const highAssuranceReviewCandidates = getReviewCandidates();
-  const highAssuranceReviewSenseIds = new Set(
-    highAssuranceReviewCandidates.map((candidate) => candidate.package.senseId),
+  const structuredReviewCandidates = getReviewCandidates();
+  const structuredReviewSenseIds = new Set(
+    structuredReviewCandidates.map((candidate) => candidate.package.senseId),
   );
   const structuredReviewDueTargetIds = visibleLearningTargetIds.filter((targetId) => {
     const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
-    return structuredGraduationByTarget[targetId] !== undefined
+    return initialLearningCompletionByTarget[targetId] !== undefined
       && senseId !== null
-      && highAssuranceReviewSenseIds.has(senseId);
+      && structuredReviewSenseIds.has(senseId);
   });
   const structuredRelearningSenseIds = new Set(
-    highAssuranceReviewCandidates
+    structuredReviewCandidates
       .filter((candidate) => candidate.phase === 'relearning')
       .map((candidate) => candidate.package.senseId),
   );
@@ -836,8 +909,30 @@ export default function App() {
   const structuredReviewingTargetIds = targetIdsForRetentionStatuses('reviewing');
   const structuredRelearningRepairTargetIds = targetIdsForRetentionStatuses('relearning_repair');
   const structuredRelearningRetestTargetIds = targetIdsForRetentionStatuses('relearning_retest');
-  const highAssuranceReviewCount = Math.min(reviewN, highAssuranceReviewCandidates.length);
-  const totalReviewCount = highAssuranceReviewCount + lightweightDueTargetIds.length;
+  const retentionRuntimeLaunches = learningRuntimeCoordinator.planRetention([
+    ...lightweightDueTargetIds.map((targetId) => ({
+      targetId,
+      profileId: committedPolicyByTarget[targetId]!,
+      ready: true,
+      executable: true,
+    })),
+    ...structuredReviewDueTargetIds.map((targetId) => ({
+      targetId,
+      profileId: committedPolicyByTarget[targetId]!,
+      ready: true,
+      executable: true,
+    })),
+  ]);
+  const lightweightReviewCount = retentionRuntimeLaunches
+    .filter((launch) => launch.surface === 'lightweight_retention')
+    .reduce((count, launch) => count + launch.targetIds.length, 0);
+  const structuredReviewCount = Math.min(
+    reviewN,
+    retentionRuntimeLaunches
+      .filter((launch) => launch.surface === 'structured_session')
+      .reduce((count, launch) => count + launch.targetIds.length, 0),
+  );
+  const totalReviewCount = lightweightReviewCount + structuredReviewCount;
 
   const beginInitialTargetRuntime = useCallback((targetId: PrototypeLearningTargetId) => {
     if (!addedLearningTargetIds.has(targetId)) {
@@ -868,17 +963,9 @@ export default function App() {
     setDemoPackage(null);
     setDemoReviewKind(null);
 
-    if (policy === 'lightweight') {
-      setCommittedPolicyByTarget((current) => ({ ...current, [targetId]: policy }));
-      setActiveLightweightRuntimeTargetId(targetId);
-      setViewMode('lightweight');
-      return true;
-    }
-
-    const structuredTargetIds = [...new Set([targetId, ...todayInitialTargetIds])]
-      .filter((candidateId) => {
-        if (committedPolicyByTarget[candidateId]) return false;
-        const candidate = PROTOTYPE_LEARNING_TARGETS[candidateId];
+    const initialCandidates = [...new Set([targetId, ...todayInitialTargetIds])]
+      .filter((candidateId) => !committedPolicyByTarget[candidateId])
+      .map((candidateId) => {
         const candidatePolicy = effectivePolicyForTarget(
           candidateId,
           defaultLearningPolicy,
@@ -886,14 +973,39 @@ export default function App() {
           learningPolicyByTarget,
           committedPolicyByTarget,
         );
-        return candidatePolicy === 'high_assurance'
-          && preparationForTarget(candidateId, candidatePolicy, preparationByTarget) === 'ready'
-          && runtimePackageForTarget(candidate) !== null;
+        const runtimeSurface = runtimeSurfaceForPolicy(candidatePolicy, 'initial_learning');
+        return {
+          targetId: candidateId,
+          profileId: candidatePolicy,
+          ready: preparationForTarget(candidateId, candidatePolicy, preparationByTarget) === 'ready',
+          executable: runtimeSurface !== 'structured_session'
+            || runtimePackageForTarget(PROTOTYPE_LEARNING_TARGETS[candidateId]) !== null,
+        };
       });
+    const launch = learningRuntimeCoordinator.planInitial(targetId, initialCandidates);
+    if (!launch) {
+      toast('当前学习方式还不能创建首次学习运行');
+      return false;
+    }
+
+    if (launch.surface === 'lightweight_initial') {
+      const activeTargetId = launch.targetIds[0]!;
+      setCommittedPolicyByTarget((current) => ({
+        ...current,
+        [activeTargetId]: initialCandidates.find(
+          (candidate) => candidate.targetId === activeTargetId,
+        )!.profileId,
+      }));
+      setActiveLightweightRuntimeTargetId(activeTargetId);
+      setViewMode('lightweight');
+      return true;
+    }
+
+    const structuredTargetIds = launch.targetIds;
     const runtimePackages = structuredTargetIds.map((candidateId) =>
       runtimePackageForTarget(PROTOTYPE_LEARNING_TARGETS[candidateId])!);
     if (runtimePackages.length === 0) {
-      toast('高保证学习内容尚未完整接入');
+      toast('当前学习方式要求的内容尚未完整接入');
       return false;
     }
     const firstSession = startLearnQueue(runtimePackages);
@@ -904,7 +1016,9 @@ export default function App() {
     setCommittedPolicyByTarget((current) => {
       const next = { ...current };
       structuredTargetIds.forEach((candidateId) => {
-        next[candidateId] = 'high_assurance';
+        next[candidateId] = initialCandidates.find(
+          (candidate) => candidate.targetId === candidateId,
+        )!.profileId;
       });
       return next;
     });
@@ -929,8 +1043,12 @@ export default function App() {
   const continueCommittedTargetRuntime = useCallback((targetId: PrototypeLearningTargetId) => {
     const committedPolicy = committedPolicyByTarget[targetId];
     if (!committedPolicy) return;
-    if (committedPolicy === 'lightweight') {
-      if (lightweightCompletionByTarget[targetId]) {
+    const surface = learningRuntimeCoordinator.surfaceFor(
+      committedPolicy,
+      'initial_learning',
+    );
+    if (surface === 'lightweight_initial') {
+      if (initialLearningCompletionByTarget[targetId]) {
         toast('首次学习已经完成，等待进入长期复习');
         return;
       }
@@ -943,7 +1061,7 @@ export default function App() {
       toast('这条目标已声明为熟词，不再进入正式学习计划');
       return;
     }
-    if (structuredGraduationByTarget[targetId]) {
+    if (initialLearningCompletionByTarget[targetId]) {
       toast('高保证首次学习已经完成，当前处于长期保持阶段');
       return;
     }
@@ -957,9 +1075,8 @@ export default function App() {
     committedPolicyByTarget,
     declaredMasterySenseIds,
     learnSession,
-    lightweightCompletionByTarget,
+    initialLearningCompletionByTarget,
     queueDone,
-    structuredGraduationByTarget,
     toast,
   ]);
 
@@ -979,6 +1096,16 @@ export default function App() {
     startLearn();
   }, [startLearn]);
 
+  const getReviewCandidatesForTargets = useCallback((
+    targetIds: readonly PrototypeLearningTargetId[],
+  ) => {
+    const eligibleTargetIds = new Set(targetIds);
+    return getReviewCandidates().filter((candidate) => {
+      const targetId = TARGET_ID_BY_RUNTIME_SENSE.get(candidate.package.senseId);
+      return targetId !== undefined && eligibleTargetIds.has(targetId);
+    });
+  }, [getReviewCandidates]);
+
   // 开始真实复习流程 (全量到期流式复习)
   const startReview = useCallback(() => {
     pendingMixedTargetRef.current = null;
@@ -987,13 +1114,18 @@ export default function App() {
     setDemoWord(null);
     setDemoPackage(null);
     setDemoReviewKind(null);
-    if (lightweightDueTargetIds.length > 0) {
-      setActiveLightweightReviewTargetIds(lightweightDueTargetIds);
-      setViewMode('lightweightReview');
-      toast(`开始轻量复习：共 ${lightweightDueTargetIds.length} 个意思`);
+    const launch = retentionRuntimeLaunches[0];
+    if (!launch) {
+      toast('今天没有到期的意思，可以开始今日学习');
       return;
     }
-    const dueCandidates = getReviewCandidates();
+    if (launch.surface === 'lightweight_retention') {
+      setActiveLightweightReviewTargetIds(launch.targetIds);
+      setViewMode('lightweightReview');
+      toast(`开始今日复习：共 ${launch.targetIds.length} 个意思`);
+      return;
+    }
+    const dueCandidates = getReviewCandidatesForTargets(launch.targetIds);
     if (dueCandidates.length === 0) {
       toast('今天没有到期的意思，可以开始今日学习');
       return;
@@ -1003,7 +1135,7 @@ export default function App() {
     startReviewQueue(dueCandidates);
     setViewMode('study');
     toast(`开始今日复习：共 ${dueCandidates.length} 个意思`);
-  }, [closeMenus, getReviewCandidates, lightweightDueTargetIds, startReviewQueue, toast]);
+  }, [closeMenus, getReviewCandidatesForTargets, retentionRuntimeLaunches, startReviewQueue, toast]);
 
   // MVP Mixed intent uses the same two proven runtimes in sequence: due Review
   // comes first, then ready Acquisition continues without returning home.
@@ -1014,18 +1146,19 @@ export default function App() {
     setDemoPackage(null);
     setDemoReviewKind(null);
 
-    const dueCandidates = getReviewCandidates();
     const newTargetIds = [...todayInitialTargetIds];
+    const launch = retentionRuntimeLaunches[0];
 
-    if (lightweightDueTargetIds.length > 0) {
+    if (launch?.surface === 'lightweight_retention') {
       pendingMixedTargetRef.current = newTargetIds.length > 0 ? newTargetIds : null;
-      setActiveLightweightReviewTargetIds(lightweightDueTargetIds);
+      setActiveLightweightReviewTargetIds(launch.targetIds);
       setViewMode('lightweightReview');
-      toast(`进入今日学习流：先复习 ${lightweightDueTargetIds.length} 个意思`);
+      toast(`进入今日学习流：先复习 ${launch.targetIds.length} 个意思`);
       return;
     }
 
-    if (dueCandidates.length > 0) {
+    if (launch?.surface === 'structured_session') {
+      const dueCandidates = getReviewCandidatesForTargets(launch.targetIds);
       pendingMixedTargetRef.current = newTargetIds.length > 0 ? newTargetIds : null;
       setFlowType('review');
       setStructuredRetentionSummary(null);
@@ -1045,8 +1178,8 @@ export default function App() {
   }, [
     beginInitialTargetRuntime,
     closeMenus,
-    getReviewCandidates,
-    lightweightDueTargetIds,
+    getReviewCandidatesForTargets,
+    retentionRuntimeLaunches,
     startReviewQueue,
     todayInitialTargetIds,
     toast,
@@ -1072,22 +1205,47 @@ export default function App() {
     rating: Exclude<PrototypeLightweightRating, 'again'>,
   ) => {
     if (!activeLightweightRuntimeTargetId) return;
+    const targetId = activeLightweightRuntimeTargetId;
+    const target = PROTOTYPE_LEARNING_TARGETS[targetId];
+    const policy = committedPolicyByTarget[targetId];
+    if (!policy) return;
     const completedAt = new Date().toISOString();
-    setLightweightCompletionByTarget((current) => ({
+    const retentionSurface = runtimeSurfaceForPolicy(policy, 'retention_review');
+    let nextReviewAt = completedAt;
+    let nextReviewLabel = '现在可复习（原型）';
+
+    if (retentionSurface === 'structured_session' && target.runtimeSenseId) {
+      const existing = storageService.getFSRSItems()[target.runtimeSenseId];
+      const memory = existing ?? storageService.graduateSense(target.runtimeSenseId, 0);
+      nextReviewAt = new Date(memory.due).toISOString();
+      nextReviewLabel = relativeReviewLabel(memory.due);
+    }
+
+    setInitialLearningCompletionByTarget((current) => ({
       ...current,
-      [activeLightweightRuntimeTargetId]: {
-        rating,
+      [targetId]: {
+        completionKind: 'lightweight',
         completedAt,
-        // Prototype time is compressed so the first Review can be walked immediately.
-        // Production gets this timestamp from the authoritative Scheduling Handoff.
-        nextReviewAt: completedAt,
-        nextReviewLabel: '现在可复习（原型）',
-        reviewCount: 0,
-        lapseCount: 0,
-        relearning: false,
+        nextReviewAt,
+        nextReviewLabel,
+        schedulingHandoffBasis: 'study_completion',
+        initialRating: rating,
       },
     }));
-  }, [activeLightweightRuntimeTargetId]);
+    if (retentionSurface === 'lightweight_retention') {
+      setLightweightRetentionByTarget((current) => ({
+        ...current,
+        [targetId]: {
+          nextReviewAt: completedAt,
+          nextReviewLabel: '现在可复习（原型）',
+          reviewCount: 0,
+          lapseCount: 0,
+          relearning: false,
+        },
+      }));
+    }
+    refreshReviewCount();
+  }, [activeLightweightRuntimeTargetId, committedPolicyByTarget, refreshReviewCount]);
 
   const finishLightweightRuntime = useCallback(() => {
     setActiveLightweightRuntimeTargetId(null);
@@ -1107,7 +1265,7 @@ export default function App() {
   ) => {
     const reviewedAt = new Date();
     const schedule = LIGHTWEIGHT_REVIEW_SCHEDULE[rating];
-    setLightweightCompletionByTarget((current) => {
+    setLightweightRetentionByTarget((current) => {
       const completion = current[targetId]!;
       return {
         ...current,
@@ -1128,7 +1286,7 @@ export default function App() {
   const completeLightweightReviewRepair = useCallback((
     targetId: PrototypeLearningTargetId,
   ) => {
-    setLightweightCompletionByTarget((current) => ({
+    setLightweightRetentionByTarget((current) => ({
       ...current,
       [targetId]: {
         ...current[targetId]!,
@@ -1525,20 +1683,30 @@ export default function App() {
 
   const finishLightweightReview = useCallback(() => {
     setActiveLightweightReviewTargetIds([]);
-    const remainingHighAssuranceReviews = getReviewCandidates();
-    if (remainingHighAssuranceReviews.length > 0) {
+    const nextLaunch = retentionRuntimeLaunches.find(
+      (launch) => launch.surface === 'structured_session',
+    );
+    if (nextLaunch) {
+      const remainingStructuredReviews = getReviewCandidatesForTargets(nextLaunch.targetIds);
       setFlowType('review');
       setStructuredRetentionSummary(null);
-      startReviewQueue(remainingHighAssuranceReviews);
+      startReviewQueue(remainingStructuredReviews);
       setViewMode('study');
-      toast(`轻量复习已完成，继续处理 ${remainingHighAssuranceReviews.length} 个高保证复习`);
+      toast(`当前复习组已完成，继续处理 ${remainingStructuredReviews.length} 个复习`);
       return;
     }
     if (continueMixedAfterReview()) return;
     setViewMode('main');
     resetMain();
     toast('今天的到期复习已完成');
-  }, [continueMixedAfterReview, getReviewCandidates, resetMain, startReviewQueue, toast]);
+  }, [
+    continueMixedAfterReview,
+    getReviewCandidatesForTargets,
+    resetMain,
+    retentionRuntimeLaunches,
+    startReviewQueue,
+    toast,
+  ]);
 
   // 下一词
   const handleNextWord = useCallback(() => {
@@ -1710,29 +1878,26 @@ export default function App() {
     preparationByTarget,
   );
   const selectedCommittedPolicy = committedPolicyByTarget[selectedLearningTargetId] ?? null;
-  const selectedLightweightCompletion = lightweightCompletionByTarget[selectedLearningTargetId];
-  const selectedStructuredGraduation = structuredGraduationByTarget[selectedLearningTargetId];
+  const selectedLightweightRetention = lightweightRetentionByTarget[selectedLearningTargetId];
+  const selectedInitialLearningCompletion =
+    initialLearningCompletionByTarget[selectedLearningTargetId];
   const selectedStructuredRetention = structuredRetentionByTarget[selectedLearningTargetId];
-  const selectedInitialCompletionKind = selectedLightweightCompletion
-    ? 'lightweight' as const
-    : selectedStructuredGraduation
-      ? 'structured' as const
-      : null;
-  const selectedReviewDue = selectedLightweightCompletion
-    ? selectedLightweightCompletion.relearning
-      || Date.parse(selectedLightweightCompletion.nextReviewAt) <= Date.now()
+  const selectedInitialCompletionKind = selectedInitialLearningCompletion?.completionKind ?? null;
+  const selectedReviewDue = selectedLightweightRetention
+    ? selectedLightweightRetention.relearning
+      || Date.parse(selectedLightweightRetention.nextReviewAt) <= Date.now()
     : structuredReviewDueTargetIds.includes(selectedLearningTargetId);
   const selectedRetentionRuntimeState = retentionRuntimeProjection.targets.find((target) =>
     target.senseId === selectedPrototypeLearningTarget.runtimeSenseId)?.status ?? null;
-  const selectedRelearning = selectedLightweightCompletion?.relearning
+  const selectedRelearning = selectedLightweightRetention?.relearning
     ?? (
       structuredRelearningTargetIds.includes(selectedLearningTargetId)
       || selectedRetentionRuntimeState === 'relearning_repair'
       || selectedRetentionRuntimeState === 'relearning_retest'
     );
-  const selectedNextReviewLabel = selectedLightweightCompletion?.nextReviewLabel
+  const selectedNextReviewLabel = selectedLightweightRetention?.nextReviewLabel
     ?? selectedStructuredRetention?.nextReviewLabel
-    ?? selectedStructuredGraduation?.nextReviewLabel
+    ?? selectedInitialLearningCompletion?.nextReviewLabel
     ?? null;
   const declaredMasteryTargetIds = new Set(
     visibleLearningTargetIds.filter((targetId) => {
@@ -1757,8 +1922,8 @@ export default function App() {
     ? PROTOTYPE_LEARNING_TARGETS[activeLightweightRuntimeTargetId]
     : null;
   const activeLightweightRuntimePolicy = activeLightweightRuntimeTargetId
-    ? committedPolicyByTarget[activeLightweightRuntimeTargetId] ?? 'lightweight'
-    : 'lightweight';
+    ? committedPolicyByTarget[activeLightweightRuntimeTargetId] ?? defaultLearningPolicy
+    : defaultLearningPolicy;
 
   const currentStep =
     flowMode === 'review' && reviewSession
@@ -1857,11 +2022,10 @@ export default function App() {
             presentation={semanticWorldPresentation}
           />
 
-          {/* 3.1.1 个人意义形成：Focus → 构造 → 提议 → 确认 Sense → Alignment */}
+          {/* 3.1.1 AI 澄清：一段对话收敛 Focus / Sense / Expression，一次确认落三个事实 */}
           <PersonalMeaningDetailScreen
             active={viewMode === 'main' && mainStack.includes('s-personal-meaning')}
             personalMeaningId={personalMeaningId}
-            initialFocusId={meaningFocusId}
             onBack={backMain}
             onOpenConfirmedSense={openConfirmedSense}
             toast={toast}
@@ -1997,8 +2161,7 @@ export default function App() {
             preparationByTarget={preparationByTarget}
             committedPolicyByTarget={committedPolicyByTarget}
             completedTargetIds={new Set([
-              ...Object.keys(lightweightCompletionByTarget),
-              ...Object.keys(structuredGraduationByTarget),
+              ...Object.keys(initialLearningCompletionByTarget),
             ] as PrototypeLearningTargetId[])}
             reviewDueTargetIds={new Set([
               ...lightweightDueTargetIds,
@@ -2107,7 +2270,7 @@ export default function App() {
               onExit={exitLightweightReview}
               onRateTarget={completeLightweightReviewTarget}
               onCompleteRepair={completeLightweightReviewRepair}
-              finishLabel={highAssuranceReviewCount > 0
+              finishLabel={structuredReviewCount > 0
                 ? '继续剩余复习'
                 : pendingMixedTargetRef.current?.length
                   ? '继续今天的新学'

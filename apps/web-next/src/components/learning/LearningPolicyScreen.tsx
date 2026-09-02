@@ -4,6 +4,7 @@ import {
   type PrototypeLearningPolicy,
   type PrototypeLearningTargetView,
 } from '../../learningJourney/prototypeLearning';
+import { learningPolicyProfileRegistry } from '../../learningRuntime/policyProfiles';
 
 interface LearningPolicyScreenProps {
   active: boolean;
@@ -21,9 +22,10 @@ export const LearningPolicyScreen = ({
   onSelect,
 }: LearningPolicyScreenProps) => {
   const isTargetPolicy = target !== null;
-  const highAssuranceAvailable = target
-    ? isPolicyAvailableForTarget(target, 'high_assurance')
-    : true;
+  const profileOptions = learningPolicyProfileRegistry.list().map((profile) => ({
+    profile,
+    available: target ? isPolicyAvailableForTarget(target, profile.profileId) : true,
+  }));
 
   return (
     <section
@@ -57,52 +59,41 @@ export const LearningPolicyScreen = ({
         </section>
 
         <div className="learning-policy-options" role="radiogroup" aria-label="学习方式">
-          <button
-            type="button"
-            role="radio"
-            aria-checked={selectedPolicy === 'lightweight'}
-            className={`learning-policy-option${selectedPolicy === 'lightweight' ? ' is-selected' : ''}`}
-            onClick={() => onSelect('lightweight')}
-          >
-            <span className="learning-policy-radio" aria-hidden="true" />
-            <span className="learning-policy-copy">
-              <span className="learning-policy-title">
-                <strong>轻量学习</strong>
-                <em>更快开始</em>
-              </span>
-              <span className="learning-policy-description">
-                使用紧凑场景、目标表达、例句和简单回想，完成后交给系统安排长期复习。
-              </span>
-              <span className="learning-policy-path">首次轻量学习 · 简单复习 · 轻量再学</span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            role="radio"
-            aria-checked={selectedPolicy === 'high_assurance'}
-            aria-disabled={!highAssuranceAvailable}
-            disabled={!highAssuranceAvailable}
-            className={`learning-policy-option is-assurance${selectedPolicy === 'high_assurance' ? ' is-selected' : ''}`}
-            onClick={() => onSelect('high_assurance')}
-          >
-            <span className="learning-policy-radio" aria-hidden="true" />
-            <span className="learning-policy-copy">
-              <span className="learning-policy-title">
-                <strong>高保证学习</strong>
-                <em>{highAssuranceAvailable ? '可选择' : '当前不可用'}</em>
-              </span>
-              <span className="learning-policy-description">
-                通过识别、主动回想、新语境迁移和必要的边界辨析，更充分地检验连接。
-              </span>
-              <span className="learning-policy-path">深度首次学习 · 证据型复习 · 针对性再学</span>
-              {!highAssuranceAvailable && (
-                <span className="learning-policy-unavailable">
-                  当前目标缺少完整检验内容或运行能力，系统不会自动降级。
+          {profileOptions.map(({ profile, available }) => (
+            <button
+              key={profile.profileId}
+              type="button"
+              role="radio"
+              aria-checked={selectedPolicy === profile.profileId}
+              aria-disabled={!available}
+              disabled={!available}
+              className={[
+                'learning-policy-option',
+                profile.presentation.optionClassName,
+                selectedPolicy === profile.profileId ? 'is-selected' : '',
+              ].filter(Boolean).join(' ')}
+              onClick={() => onSelect(profile.profileId)}
+            >
+              <span className="learning-policy-radio" aria-hidden="true" />
+              <span className="learning-policy-copy">
+                <span className="learning-policy-title">
+                  <strong>{profile.presentation.label}</strong>
+                  <em>{available ? profile.presentation.shortBadge : '当前不可用'}</em>
                 </span>
-              )}
-            </span>
-          </button>
+                <span className="learning-policy-description">
+                  {profile.presentation.description}
+                </span>
+                <span className="learning-policy-path">
+                  {profile.presentation.lifecycleLabel}
+                </span>
+                {!available && (
+                  <span className="learning-policy-unavailable">
+                    当前目标缺少这种方式要求的内容或运行能力，系统不会自动降级。
+                  </span>
+                )}
+              </span>
+            </button>
+          ))}
         </div>
 
         <section className="learning-policy-confirmation">

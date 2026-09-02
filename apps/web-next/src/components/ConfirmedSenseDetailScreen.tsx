@@ -11,7 +11,6 @@ import { useEffect, useRef } from 'react';
 import {
   useJourneyDetail,
   type JourneyFocusView,
-  type JourneyExpressionCandidateView,
   type JourneySemanticSpecView,
 } from '../personalMeaningJourney';
 import type {
@@ -90,100 +89,58 @@ const SenseSpec = ({
   version: number | null;
   unresolvedQuestions: readonly string[];
 }) => (
-  <section className="csd-section csd-semantic-spec" aria-labelledby="csd-spec-heading">
-    <header className="csd-section-head">
-      <div>
-        <small>SEMANTIC SPECIFICATION · SENSE VERSION v{version ?? '—'}</small>
-        <h2 id="csd-spec-heading">这个 Sense 的边界</h2>
-      </div>
-      <span className="csd-fact-pill">已确认</span>
-    </header>
-
-    <p className="csd-core-meaning">{spec.coreMeaningFocus}</p>
-
-    {spec.prototypeScenes.map((scene, index) => (
-      <article className="csd-prototype-scene" key={`${scene.summary}-${index}`}>
-        <small>原型场景{spec.prototypeScenes.length > 1 ? ` ${index + 1}` : ''}</small>
-        <h3>{scene.summary}</h3>
-        <dl>
-          {scene.participantRoles.length > 0 && (
-            <div><dt>参与角色</dt><dd>{scene.participantRoles.join(' / ')}</dd></div>
-          )}
-          {scene.states.length > 0 && (
-            <div><dt>状态</dt><dd>{scene.states.join('；')}</dd></div>
-          )}
-          {scene.directionOrCausality && (
-            <div><dt>方向 / 因果</dt><dd>{scene.directionOrCausality}</dd></div>
-          )}
-        </dl>
-      </article>
-    ))}
-
-    <div className="csd-spec-columns">
-      <SpecList title="包含" items={spec.includedCases} tone="include" />
-      <SpecList title="排除" items={spec.excludedCases} tone="exclude" />
-    </div>
-
-    {spec.neighborContrasts.length > 0 && (
-      <section className="csd-neighbors">
-        <h3>与相邻意义的区别</h3>
-        <ul>
-          {spec.neighborContrasts.map((contrast) => (
-            <li key={contrast.label}>
-              <b>{contrast.label}</b>
-              <span>{contrast.distinction}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-    )}
-
-    {spec.openQuestions.length > 0 || unresolvedQuestions.length > 0 ? (
-      <section className="csd-open-questions">
-        <h3>确认时仍保留的问题</h3>
-        <ul>
-          {[...spec.openQuestions, ...unresolvedQuestions].map((question, index) => (
-            <li key={`${question}-${index}`}>{question}</li>
-          ))}
-        </ul>
-      </section>
-    ) : null}
-  </section>
-);
-
-const CandidateList = ({ candidates }: { candidates: readonly JourneyExpressionCandidateView[] }) => (
-  <section className="csd-section csd-candidates" aria-labelledby="csd-candidates-heading">
-    <header className="csd-section-head">
-      <div>
-        <small>EXPRESSION CANDIDATES · SUGGESTION ONLY</small>
-        <h2 id="csd-candidates-heading">可能的目标语言表达</h2>
-      </div>
-    </header>
-    <p className="csd-section-note">这些候选来自确认 Sense 时的提议，不是翻译等号；确认后的来源状态会单独标注。</p>
-    {candidates.length > 0 ? (
-      <ul>
-        {candidates.map((candidate) => (
-          <li
-            key={candidate.candidateId}
-            className={candidate.bindingStatus ? `is-${candidate.bindingStatus}` : ''}
-          >
-            <div>
-              <strong>{candidate.surfaceForm}</strong>
-              <span>{expressionTypeLabels[candidate.expressionType]} · {languageLabel(candidate.languageTag)}</span>
-              <p>{candidate.rationale}</p>
-            </div>
-            {candidate.bindingStatus === 'confirmed' && <em>已确认绑定</em>}
-            {candidate.bindingStatus === 'used' && <em>已用于绑定（表达形式已调整）</em>}
-          </li>
+  <details className="csd-section csd-spec-details is-standalone">
+      <summary>查看场景与语义边界 <span>Sense Version v{version ?? '—'}</span></summary>
+      <div className="csd-spec-details-body">
+        {spec.prototypeScenes.map((scene, index) => (
+          <article className="csd-prototype-scene" key={`${scene.summary}-${index}`}>
+            <small>原型场景{spec.prototypeScenes.length > 1 ? ` ${index + 1}` : ''}</small>
+            <h3>{scene.summary}</h3>
+            <dl>
+              {scene.participantRoles.length > 0 && (
+                <div><dt>参与角色</dt><dd>{scene.participantRoles.join(' / ')}</dd></div>
+              )}
+              {scene.states.length > 0 && (
+                <div><dt>状态</dt><dd>{scene.states.join('；')}</dd></div>
+              )}
+              {scene.directionOrCausality && (
+                <div><dt>方向 / 因果</dt><dd>{scene.directionOrCausality}</dd></div>
+              )}
+            </dl>
+          </article>
         ))}
-      </ul>
-    ) : (
-      <div className="csd-candidates-empty">
-        <b>当前没有可确认的目标语言表达</b>
-        <p>Sense 与 Alignment 仍然有效；之后出现合适表达时，可以再从这里进入 Binding。</p>
+
+        <div className="csd-spec-columns">
+          <SpecList title="包含" items={spec.includedCases} tone="include" />
+          <SpecList title="排除" items={spec.excludedCases} tone="exclude" />
+        </div>
+
+        {spec.neighborContrasts.length > 0 && (
+          <section className="csd-neighbors">
+            <h3>与相邻意义的区别</h3>
+            <ul>
+              {spec.neighborContrasts.map((contrast) => (
+                <li key={contrast.label}>
+                  <b>{contrast.label}</b>
+                  <span>{contrast.distinction}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {spec.openQuestions.length > 0 || unresolvedQuestions.length > 0 ? (
+          <section className="csd-open-questions">
+            <h3>确认时仍保留的问题</h3>
+            <ul>
+              {[...spec.openQuestions, ...unresolvedQuestions].map((question, index) => (
+                <li key={`${question}-${index}`}>{question}</li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </div>
-    )}
-  </section>
+  </details>
 );
 
 const BindingSummary = ({ focus }: { focus: JourneyFocusView }) => {
@@ -193,8 +150,8 @@ const BindingSummary = ({ focus }: { focus: JourneyFocusView }) => {
     <section className={`csd-section csd-binding-summary${hasBindings ? ' is-bound' : ''}`} aria-labelledby="csd-binding-heading">
       <header className="csd-section-head">
         <div>
-          <small>EXPRESSION BINDING · INDEPENDENT FACT</small>
-          <h2 id="csd-binding-heading">表达连接</h2>
+          <small>目标表达</small>
+          <h2 id="csd-binding-heading">已经绑定的表达</h2>
         </div>
         <span className="csd-fact-pill">{hasBindings ? '已绑定' : '待绑定'}</span>
       </header>
@@ -212,8 +169,7 @@ const BindingSummary = ({ focus }: { focus: JourneyFocusView }) => {
         </ul>
       ) : (
         <div className="csd-binding-empty">
-          <b>这个 Sense 还没有确认的目标语言表达</b>
-          <p>可以在下一步选择候选、修改表达形式，并明确它与 Sense 的关系和覆盖范围。</p>
+          <b>还没有确认目标表达</b>
         </div>
       )}
     </section>
@@ -245,7 +201,7 @@ export const ConfirmedSenseDetailScreen = ({
       </div>
     )
     : !personalMeaningId || !meaningFocusId
-      ? unavailableCopy('进入此页面需要精确的 Personal Meaning 与 Meaning Focus。')
+      ? unavailableCopy('没有找到对应的经验与已确认意思。')
       : !detail || !focus || !alignment
         ? unavailableCopy('只有已经确认 Sense 的 Focus 才能打开这个详情。')
         : !alignment.semanticSpec
@@ -254,23 +210,42 @@ export const ConfirmedSenseDetailScreen = ({
             <>
               <section className="csd-hero">
                 <span className="csd-confirm-mark" aria-hidden="true">✓</span>
-                <small>MEANING FORMATION COMPLETE</small>
-                <h2>Sense 已确认</h2>
-                <p>你已经把这个 Meaning Focus 连接到一个稳定、可复现的 Sense。Personal Meaning 与原始锚点仍然属于你。</p>
-                <div className="csd-id-row">
-                  <span>Sense {shortId(alignment.senseId)}</span>
-                  <span>Sense Version v{alignment.senseVersionNumber ?? '—'}</span>
-                  <span>Alignment {shortId(alignment.personalMeaningAlignmentId)}</span>
-                </div>
+                <small>{alignment.confirmedBindings.length > 0 ? '三个事实已确认' : '已确认 2 / 3'}</small>
+                <h2>{alignment.semanticSpec.coreMeaningFocus}</h2>
+                <p>来自你选择的侧面：{focus.statement}</p>
               </section>
 
-              <section className="csd-context-card" aria-label="Personal Meaning 与 Meaning Focus">
-                <small>来自 Personal Meaning · {detail.shortId}</small>
-                <h2>{detail.displayLabel ?? '我的个人意义'}</h2>
-                <p><b>我真正在意的是</b>{focus.statement}</p>
-                {focus.distinguishingNotes.length > 0 && (
-                  <ul>{focus.distinguishingNotes.map((note) => <li key={note}>{note}</li>)}</ul>
-                )}
+              <section className="csd-stable-facts" aria-label="语义事实">
+                <article className="is-confirmed">
+                  <small>表达侧面</small><span>已确认</span><p>{focus.statement}</p>
+                </article>
+                <article className="is-confirmed">
+                  <small>稳定意思</small><span>已确认</span><p>{alignment.semanticSpec.coreMeaningFocus}</p>
+                </article>
+                <article className={alignment.confirmedBindings.length > 0 ? 'is-confirmed' : 'is-pending'}>
+                  <small>目标表达</small>
+                  <span>{alignment.confirmedBindings.length > 0 ? '已确认' : '待确认'}</span>
+                  <p>{alignment.confirmedBindings.map((binding) => binding.surfaceForm).join(' / ') || '从 AI 候选中选择并确认'}</p>
+                </article>
+              </section>
+
+              <section className="csd-next-step">
+                <small>下一步</small>
+                <h2>
+                  {alignment.expressionCandidates.length === 0
+                    ? '模型暂时没有找到合适表达'
+                    : alignment.confirmedBindings.length > 0
+                      ? '稳定语义结果已形成'
+                      : '还需确认最后一个事实'}
+                </h2>
+                <div className="csd-actions">
+                  {alignment.expressionCandidates.length > 0 && (
+                    <button type="button" className="csd-primary" onClick={onOpenBinding}>
+                      {alignment.confirmedBindings.length > 0 ? '打开目标表达' : '绑定目标表达'} <span aria-hidden="true">→</span>
+                    </button>
+                  )}
+                  <button type="button" onClick={onBack}>返回我的词义世界</button>
+                </div>
               </section>
 
               <SenseSpec
@@ -278,43 +253,18 @@ export const ConfirmedSenseDetailScreen = ({
                 version={alignment.semanticSpecVersion}
                 unresolvedQuestions={alignment.unresolvedQuestions}
               />
-              <p className="csd-spec-provenance">
-                Sense Version provenance：{alignment.origin} · review：{alignment.reviewStatus}
-                {alignment.semanticPolicyVersion ? ` · semantic policy ${alignment.semanticPolicyVersion}` : ''}
-                {alignment.generator ? ` · generator ${alignment.generator.provider} / ${alignment.generator.model}` : ''}
-              </p>
-              <CandidateList candidates={alignment.expressionCandidates} />
-              <BindingSummary focus={focus} />
-
-              <section className="csd-next-step">
-                <small>下一条独立旅程</small>
-                <h2>
-                  {alignment.expressionCandidates.length === 0
-                    ? '这个 Sense 暂无合适表达'
-                    : alignment.confirmedBindings.length > 0
-                      ? '继续确认其他表达'
-                      : '为这个 Sense 确认表达'}
-                </h2>
+              <details className="csd-identity-details">
+                <summary>身份与来源信息</summary>
                 <p>
-                  {alignment.expressionCandidates.length === 0
-                    ? 'Sense 与 Alignment 仍然有效；当前没有带来源的候选可以进入表达绑定。'
-                    : 'Expression Binding 只记录表达如何实现、接近或唤起这个 Sense。确认它不会加入学习，也不会表示已经掌握。'}
+                  Sense {shortId(alignment.senseId)} · Sense Version v{alignment.senseVersionNumber ?? '—'} · Alignment {shortId(alignment.personalMeaningAlignmentId)}
                 </p>
-                <div className="csd-actions">
-                  {alignment.expressionCandidates.length > 0 && (
-                    <button type="button" className="csd-primary" onClick={onOpenBinding}>
-                      {alignment.confirmedBindings.length > 0 ? '打开表达连接' : '进入表达绑定'} <span aria-hidden="true">→</span>
-                    </button>
-                  )}
-                  <button type="button" onClick={onBack}>返回上一页</button>
-                </div>
-              </section>
-
-              <p className="csd-learning-boundary">
-                状态：Sense 已确认 · {alignment.expressionCandidates.length === 0
-                  ? '暂无合适表达'
-                  : alignment.confirmedBindings.length > 0 ? '表达已绑定' : '表达待绑定'} · 尚未加入学习
-              </p>
+                <p>
+                  provenance：{alignment.origin} · review：{alignment.reviewStatus}
+                  {alignment.semanticPolicyVersion ? ` · semantic policy ${alignment.semanticPolicyVersion}` : ''}
+                  {alignment.generator ? ` · generator ${alignment.generator.provider} / ${alignment.generator.model}` : ''}
+                </p>
+              </details>
+              {alignment.confirmedBindings.length > 0 && <BindingSummary focus={focus} />}
             </>
           );
 
@@ -329,8 +279,8 @@ export const ConfirmedSenseDetailScreen = ({
         <button type="button" className="content-nav-back" onClick={onBack} aria-label="返回上一页">
           <svg className="icon" aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
-        <h1>已确认 Sense</h1>
-        <span className="csd-nav-status">已确认</span>
+        <h1>确认的意思</h1>
+        <span />
       </header>
       <div className="content-page-body csd-body">{body}</div>
     </section>

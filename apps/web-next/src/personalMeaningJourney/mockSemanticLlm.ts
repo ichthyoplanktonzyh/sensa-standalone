@@ -2,7 +2,7 @@
  * Deterministic Semantic LLM adapter.
  *
  * It maps the learner's private material to a fixed scenario and replays
- * reproducible Meaning Focus suggestions, one discriminating boundary question,
+ * reproducible Meaning Focus suggestions, adaptive clarification turns,
  * and a full Sense Proposal. Given the same input it always returns the same
  * business result, so the acceptance scenarios, the smoke and refresh-recovery
  * all stay stable. It proposes only; it never confirms anything.

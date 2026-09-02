@@ -14,6 +14,15 @@ import type {
   SensaSenseConstructionSnapshot,
   SensaSenseProposalSnapshot,
 } from '@sensa/contracts/sensa';
+import type {
+  AgentExpressionCandidate,
+  AgentFocusCandidate,
+  AgentSenseCandidate,
+  ClarificationStartingPoint,
+  MaterialBlockKind,
+  SemanticAgentMessage,
+} from './semanticAgent';
+import type { SemanticLlmProvenance, SenseProposalDraft } from './semanticLlm';
 
 type SensaSenseProposalStatus = SensaSenseProposalSnapshot['status'];
 type SensaSenseConstructionStatus = SensaSenseConstructionSnapshot['status'];
@@ -46,6 +55,19 @@ export type JourneyAnchorView =
       expressionType: null;
       revision: number;
     };
+
+/**
+ * One block of the learner's material, in the order they laid it out. Text and
+ * image blocks are separate Semantic Anchors, so a block can be revised or
+ * removed without disturbing the others.
+ */
+export interface JourneyMaterialBlockView {
+  anchorId: string;
+  kind: MaterialBlockKind;
+  bodyText: string | null;
+  personalMediaObjectId: string | null;
+  revision: number;
+}
 
 export type JourneyFamiliarAnchorView = Extract<
   JourneyAnchorView,
@@ -189,6 +211,10 @@ export interface JourneyDetailView {
   expressionBinding: JourneyExpressionBindingView;
   familiarAnchors: JourneyFamiliarAnchorView[];
   experienceAnchors: JourneyExperienceAnchorView[];
+  /** Every material block in learner order, including image blocks. */
+  materialBlocks: JourneyMaterialBlockView[];
+  /** The learner's declared conversation stance; never a domain phase. */
+  startingPoint: ClarificationStartingPoint | null;
   focuses: JourneyFocusView[];
   focusSuggestions: JourneyFocusSuggestionView[];
   focusSuggestionsAreMultipleAspects: boolean;
@@ -259,14 +285,39 @@ export interface JourneyWorldItemView extends JourneyListItemView {
 // Command inputs / results
 // ---------------------------------------------------------------------------
 
+/** One block as submitted by the material editor. */
+export interface MaterialBlockInput {
+  kind: MaterialBlockKind;
+  /** Required for `text` blocks; ignored for `image` blocks. */
+  bodyText?: string;
+  /** Required for `image` blocks; the bytes live in the local media store. */
+  personalMediaObjectId?: string;
+}
+
 export interface CreatePersonalMeaningInput {
   operationId: string;
+  /**
+   * The learner's familiar (native-language) wording. No expression type is
+   * asked for: classifying "欲言又止" as phrase vs construction is domain work
+   * the model does better, and it is confirmed later, not here.
+   */
   familiarExpression?: {
     surfaceForm: string;
-    expressionType: SensaExpressionType;
     languageTag?: 'zh-CN';
   };
-  experience?: string;
+  blocks?: MaterialBlockInput[];
+  startingPoint?: ClarificationStartingPoint | null;
+}
+
+export interface AddMaterialBlockInput {
+  operationId: string;
+  personalMeaningId: string;
+  block: MaterialBlockInput;
+}
+
+export interface AddMaterialBlockResult {
+  anchorId: string;
+  replayed: boolean;
 }
 
 export interface CreatePersonalMeaningResult {
@@ -358,6 +409,59 @@ export interface ConfirmSenseInput {
   meaningFocusId: string;
   senseProposalVersionId: string;
 }
+
+export interface ConfirmAgentSenseInput {
+  operationId: string;
+  personalMeaningId: string;
+  meaningFocusId: string;
+  proposal: SenseProposalDraft;
+  transcript: SemanticAgentMessage[];
+}
+
+/**
+ * One learner confirmation at the end of a clarification thread.
+ *
+ * The learner clicks once, but this still records three independent domain
+ * facts in order — Focus acceptance, Sense confirmation + Alignment, and
+ * optionally the Expression Binding. `expression: null` is the legal, supported
+ * "已确认 2 / 3" outcome, not a failure. The gateway applies the whole thing or
+ * none of it: a rejected step leaves the store exactly as it was.
+ */
+export interface ConfirmClarificationInput {
+  operationId: string;
+  personalMeaningId: string;
+  focus: {
+    statement: string;
+    distinguishingNotes: string[];
+    aspectLabel: string;
+  };
+  sense: Omit<AgentSenseCandidate, 'rationale'>;
+  /**
+   * The expression candidate on the panel. It is recorded as a Sense Proposal
+   * candidate whenever present — that is provenance, not confirmation — so a
+   * learner who stops at two facts can still bind it later.
+   */
+  expression: Omit<AgentExpressionCandidate, 'rationale'> | null;
+  /** Whether this same intent also confirms the Expression Binding. */
+  confirmExpression: boolean;
+  transcript: SemanticAgentMessage[];
+  provenance: SemanticLlmProvenance;
+  semanticPolicyVersion: string;
+  /** Set when the thread continues an already accepted Focus. */
+  existingMeaningFocusId?: string;
+}
+
+export interface ConfirmClarificationResult {
+  meaningFocusId: string;
+  senseId: string;
+  senseVersionId: string;
+  personalMeaningAlignmentId: string;
+  resolution: 'create_new' | 'reuse_existing';
+  expressionConfirmed: boolean;
+  replayed: boolean;
+}
+
+export type { AgentExpressionCandidate, AgentFocusCandidate, AgentSenseCandidate };
 
 export interface ConfirmExpressionBindingInput {
   operationId: string;

@@ -34,6 +34,17 @@ import {
 } from '../apps/web-next/src/content/assessmentResources.ts';
 import { buildPrototypeReviewAssessment } from '../apps/web-next/src/content/prototypeReviewCards.ts';
 import { SensaReviewAssessmentCard } from '../apps/web-next/src/components/cards/review/SensaReviewAssessmentCard.tsx';
+import {
+  LearningPolicyProfileRegistry,
+  PROTOTYPE_LEARNING_POLICY_PROFILES,
+  learningPolicyProfileRegistry,
+  type LearningPolicyProfileDefinition,
+  type PrototypeLearningPolicy,
+} from '../apps/web-next/src/learningRuntime/policyProfiles.ts';
+import {
+  LearningRuntimeCoordinator,
+  learningRuntimeCoordinator,
+} from '../apps/web-next/src/learningRuntime/runtimeCoordinator.ts';
 
 const smokeLocalStorage = new Map<string, string>();
 Object.defineProperty(globalThis, 'localStorage', {
@@ -593,6 +604,132 @@ function checkPrototypeGraduationHandoff(): void {
   assert.deepEqual(storageService.getDueSenseIds([senseId]), [senseId]);
 }
 
+function checkPolicyProfileRuntimeSeam(): void {
+  const ready = {
+    status: 'ready' as const,
+    label: 'ready',
+    detail: 'runtime smoke',
+  };
+  const actualPlan = learningPolicyProfileRegistry.resolve('high_assurance', {
+    compact_learning_material: ready,
+    structured_learning_package: ready,
+  });
+  assert.equal(
+    actualPlan.purposes.initial_learning.binding.runtimeAdapterId,
+    'structured',
+  );
+  assert.equal(
+    learningRuntimeCoordinator.surfaceFor('lightweight', 'retention_review'),
+    'lightweight_retention',
+  );
+  assert.deepEqual(
+    learningRuntimeCoordinator.planInitial('structured-b', [
+      {
+        targetId: 'lightweight-a',
+        profileId: 'lightweight',
+        ready: true,
+        executable: true,
+      },
+      {
+        targetId: 'structured-a',
+        profileId: 'high_assurance',
+        ready: true,
+        executable: true,
+      },
+      {
+        targetId: 'structured-b',
+        profileId: 'high_assurance',
+        ready: true,
+        executable: true,
+      },
+    ]),
+    {
+      purpose: 'initial_learning',
+      protocol: PROTOTYPE_LEARNING_POLICY_PROFILES[1].protocols.initial_learning,
+      adapterId: 'structured',
+      surface: 'structured_session',
+      targetIds: ['structured-b', 'structured-a'],
+    },
+  );
+  assert.deepEqual(
+    learningRuntimeCoordinator.planRetention([
+      {
+        targetId: 'structured-a',
+        profileId: 'high_assurance',
+        ready: true,
+        executable: true,
+      },
+      {
+        targetId: 'lightweight-a',
+        profileId: 'lightweight',
+        ready: true,
+        executable: true,
+      },
+    ]).map((launch) => launch.surface),
+    ['lightweight_retention', 'structured_session'],
+  );
+
+  type ExtendedProfileId = PrototypeLearningPolicy | 'configuration_only_profile';
+  const lightweightProfile = PROTOTYPE_LEARNING_POLICY_PROFILES[0];
+  const highAssuranceProfile = PROTOTYPE_LEARNING_POLICY_PROFILES[1];
+  const configurationOnlyProfile = {
+    ...lightweightProfile,
+    profileId: 'configuration_only_profile',
+    profileVersion: 'configuration-only-profile-v1',
+    presentation: {
+      ...lightweightProfile.presentation,
+      label: 'Configuration-only profile',
+    },
+    protocols: {
+      initial_learning: lightweightProfile.protocols.initial_learning,
+      retention_review: highAssuranceProfile.protocols.retention_review,
+      relearning: highAssuranceProfile.protocols.relearning,
+    },
+  } as const satisfies LearningPolicyProfileDefinition<'configuration_only_profile'>;
+  const extendedProfiles: readonly LearningPolicyProfileDefinition<ExtendedProfileId>[] = [
+    ...PROTOTYPE_LEARNING_POLICY_PROFILES,
+    configurationOnlyProfile,
+  ];
+  const extendedRegistry = new LearningPolicyProfileRegistry<ExtendedProfileId>(extendedProfiles);
+  const extendedCoordinator = new LearningRuntimeCoordinator(extendedRegistry);
+  const plan = extendedRegistry.resolve('configuration_only_profile', {
+    compact_learning_material: ready,
+    structured_learning_package: ready,
+  });
+  assert.equal(plan.purposes.initial_learning.binding.protocolId, 'lightweight-study');
+  assert.equal(plan.purposes.retention_review.binding.runtimeAdapterId, 'structured');
+  assert.equal(plan.purposes.relearning.binding.runtimeAdapterId, 'structured');
+
+  const initialLaunch = extendedCoordinator.planInitial('target-a', [{
+    targetId: 'target-a',
+    profileId: 'configuration_only_profile',
+    ready: true,
+    executable: true,
+  }]);
+  assert.deepEqual(initialLaunch, {
+    purpose: 'initial_learning',
+    protocol: lightweightProfile.protocols.initial_learning,
+    adapterId: 'lightweight',
+    surface: 'lightweight_initial',
+    targetIds: ['target-a'],
+  });
+  assert.deepEqual(
+    extendedCoordinator.planRetention([{
+      targetId: 'target-a',
+      profileId: 'configuration_only_profile',
+      ready: true,
+      executable: true,
+    }]),
+    [{
+      purpose: 'retention_review',
+      protocol: highAssuranceProfile.protocols.retention_review,
+      adapterId: 'structured',
+      surface: 'structured_session',
+      targetIds: ['target-a'],
+    }],
+  );
+}
+
 function checkReviewRelearningInterference(): void {
   const candidates = PROTOTYPE_LEARNING_PACKAGES.slice(0, 3).map((packageItem) => ({
     package: packageItem,
@@ -1107,6 +1244,7 @@ checkDirectionalFailure();
 checkDeclaredMastery();
 checkReviewDeclaredMasteryExclusion();
 checkPrototypeGraduationHandoff();
+checkPolicyProfileRuntimeSeam();
 checkReviewSettlement();
 checkReviewRelearningInterference();
 checkMissingMediaFailsClosed(runtimeRelease);
@@ -1126,6 +1264,7 @@ console.log(JSON.stringify({
   declaredMasteryOrthogonal: true,
   reviewDeclaredMasteryExcludedWithoutOutcome: true,
   prototypeGraduationImmediatelyDue: true,
+  policyProfileRuntimeSeam: true,
   conditionalBoundary: true,
   boundaryDuePreserved: true,
   oneReviewOneOutcome: true,

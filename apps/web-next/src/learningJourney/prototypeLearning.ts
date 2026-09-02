@@ -3,10 +3,19 @@ import {
   type PrototypeExperience,
   type PrototypeSchedulablePackage,
 } from '../content/learningCatalog';
+import {
+  learningPolicyProfileRegistry,
+  type LearningCapabilityReadiness,
+  type PrototypeLearningPolicy,
+  type PrototypeLearningReadiness,
+  type PrototypeLearningReadinessView,
+} from '../learningRuntime/policyProfiles';
 
-export type PrototypeLearningPolicy = 'lightweight' | 'high_assurance';
-
-export type PrototypeLearningReadiness = 'ready' | 'preparing' | 'blocked';
+export type {
+  PrototypeLearningPolicy,
+  PrototypeLearningReadiness,
+  PrototypeLearningReadinessView,
+} from '../learningRuntime/policyProfiles';
 
 export type PrototypeLearningSourceKind = 'book' | 'direct' | 'personal_semantic_world';
 
@@ -22,12 +31,6 @@ export type PrototypeExperienceGroundingView = {
   featureLabels: readonly string[];
   packageExperience: PrototypeExperience | null;
 };
-
-export interface PrototypeLearningReadinessView {
-  status: PrototypeLearningReadiness;
-  label: string;
-  detail: string;
-}
 
 export interface PrototypeLearningTargetView {
   targetId: PrototypeLearningTargetId;
@@ -130,7 +133,7 @@ export const PROTOTYPE_LEARNING_TARGET_ORDER: readonly PrototypeLearningTargetId
 ];
 
 export const policyLabel = (policy: PrototypeLearningPolicy): string =>
-  policy === 'lightweight' ? '轻量学习' : '高保证学习';
+  learningPolicyProfileRegistry.get(policy).presentation.label;
 
 export const readinessTone = (
   readiness: PrototypeLearningReadiness,
@@ -140,8 +143,24 @@ export const readinessForPolicy = (
   target: PrototypeLearningTargetView,
   policy: PrototypeLearningPolicy,
 ): PrototypeLearningReadinessView => {
-  if (policy === 'lightweight') return target.lightweightReadiness;
-  return runtimePackageForTarget(target) ? HIGH_ASSURANCE_READY : HIGH_ASSURANCE_BLOCKED;
+  const plan = resolvedLearningPlanForTarget(target, policy);
+  const purposePlans = Object.values(plan.purposes);
+  return purposePlans.find((purpose) => purpose.readiness.status === 'blocked')?.readiness
+    ?? purposePlans.find((purpose) => purpose.readiness.status === 'preparing')?.readiness
+    ?? plan.purposes.initial_learning.readiness;
+};
+
+export const resolvedLearningPlanForTarget = (
+  target: PrototypeLearningTargetView,
+  policy: PrototypeLearningPolicy,
+) => {
+  const readiness: LearningCapabilityReadiness = {
+    compact_learning_material: target.lightweightReadiness,
+    structured_learning_package: runtimePackageForTarget(target)
+      ? HIGH_ASSURANCE_READY
+      : HIGH_ASSURANCE_BLOCKED,
+  };
+  return learningPolicyProfileRegistry.resolve(policy, readiness);
 };
 
 export const runtimePackageForTarget = (
