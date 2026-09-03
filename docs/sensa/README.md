@@ -46,6 +46,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | Canonical stage | [`current-stage.md`](current-stage.md) | 当前里程碑、证据级别和交付边界 |
 | Canonical product | [`product-requirements-v1.md`](product-requirements-v1.md) | V1 IA、用户旅程和交互验收 |
 | Active plan | [`production-migration-plan.md`](production-migration-plan.md) | 从本地纵切到公开 V1 的剩余工作 |
+| Active decomposition | [`learning-extensibility-architecture.md`](learning-extensibility-architecture.md) | `web-next` 学习扩展性的实现 seam；把领域已有的显式 retention scope 扩展规定落到实现层，不新增领域定义 |
 | Current implementation | [`content-kernel-contract.md`](content-kernel-contract.md) | 当前数据库与 V3 package validator 实现快照；尚未证明新 Gate capability coverage |
 | Pre-redesign contract | [`curriculum-runtime-contract.md`](curriculum-runtime-contract.md) | 当前 vertical slice 的 Curriculum/Runtime 持久化事实，等待 Acquisition Cycle 版本替换 |
 | Pre-redesign packet | [`runtime-rule-packet-v2.md`](runtime-rule-packet-v2.md) | 当前 Encounter 的可重放规则；首次 retrieval 即初始化 FSRS，不代表新 canonical runtime |
