@@ -148,7 +148,7 @@ purpose: relearning         → 编排插件 repair 入口 → 出口 Relearning
 | **Step intent 轴** | `intent: instruction \| practice \| assessment \| repair`，只有 assessment 取证 | ✅ 已落地：`engine/types.ts` 的 `LearningStepIntent` |
 | **Runtime Surface 登记表** | `surface → flow + 首学/继续/复习三个启动入口` | ✅ 已落地：`learningRuntime/runtimeSurfaces.ts` |
 | **Retention Store 登记表** | `storeId → 交接投影 + 状态归谁持有` | ✅ 已落地：`learningRuntime/retentionStores.ts` |
-| **Step renderer 注册表** | `stepKind → 组件` | 待做；需先统一三个 Screen 的 props 接口 |
+| **Step renderer 注册表** | `stepKind → 组件` | ✅ 已落地：`learningRuntime/stepRenderers.ts` + `smoke:renderers` 32 项 |
 
 ### 5.1 消除 surface 闭集
 
@@ -169,12 +169,24 @@ purpose: relearning         → 编排插件 repair 入口 → 出口 Relearning
 那条复习运行回答。
 
 `journeyState.ts` 里现在一处 surface 名字都没有。`App.tsx` 里只剩四处，都不是分派：
-三处是"哪块屏拿哪次运行"的派生（集中在一处，等 Step renderer 注册表），
+三处是"哪块屏拿哪次运行"的派生（集中在一处，等轻量两屏的 Step 化），
 一处是收尾时调用方自报跑完了哪条运行。
 
 终局形态仍是 Runtime 只认识 **Step**：编排插件产出 Step，注册表按 `stepKind` 查组件，
-`App.tsx` 退化为"当前有无 Step / 渲染它"的壳。这一步需要先统一三个 Screen 的 props
-接口（`LearnScreen` 目前有三十余个专有 prop），不在本次范围内。
+`App.tsx` 退化为"当前有无 Step / 渲染它"的壳。Step renderer 注册表
+（`learningRuntime/stepRenderers.ts`）已把 `stepKind → 组件` 这条 seam 落地：
+内置七种卡各是一条纯适配函数，把统一的 `StepRendererHost`（宿主能力合同）与
+`StepRendererProps`（渲染输入）接线成卡片自己的 props，闭合发生在注册表——
+查不到 renderer 直接抛错。`smoke:renderers` 32 项拿真实安装目录钉住三件事：
+闭合性、查表与落地前 `LearnScreen` 七个分支逐格等价、宿主接线与 remount key
+格式不走样。`LearnScreen` 随之从"七个 stage 分支 + 三十余个 prop"收敛为
+"工具栏 + 进度 + 查表渲染"，卡片相关的接线收进 App 提供的一份 host。
+
+剩下的一步是轻量两屏的 Step 化：`LightweightRuntimeStartScreen` 与
+`LightweightReviewRuntimeScreen` 仍是自包含的固定屏（相位机），不产出 Step；
+它们并入 Step 流之后，"哪块屏拿哪次运行"的最后三处派生才会退场，
+`App.tsx` 才真正成为壳。这需要先把轻量会话的相位表达成编排可产出的 Step，
+不在本次范围内。
 
 ### 5.2 内容需求改为集合
 
@@ -336,7 +348,10 @@ learner 可见界面**与当前完全一致**（轻量 / 高保证两个选项�
    （`LearningStepIntent` + `smoke:intent` 19 项），三处 `Exclude` 别名随之消失；
 5. ✅ 编排插件 seam 化为 `fresh` / `repair` 两入口（`stepOrchestration.ts` +
    `orchestrations.ts` + `smoke:orchestration` 30 项），首学交接依据随之改由
-   编排按 intent 声明，`journeyState.ts` 里的 surface 判断清零。
+   编排按 intent 声明，`journeyState.ts` 里的 surface 判断清零；
+6. ✅ Step renderer 注册表（`stepRenderers.tsx` + `smoke:renderers` 32 项），
+   `stepKind` 由编排盖章、查表渲染，`LearnScreen` 的卡片分支与十余个
+   卡片接线 prop 随之消失。
 
 首批**不做**：能力目标选择 UI、拼写/听写 scope、第三个 preset、
 "失败即全部重置"的 completion policy。

@@ -1,16 +1,6 @@
 import { useState, useEffect, useMemo, useRef, type MouseEvent } from 'react';
-import type { Word, QuickDictEntry, DictionaryLookup } from '../types';
-import { RecallCard } from './cards/RecallCard';
-import {
-  IntroductionCard,
-  type IntroductionPhase,
-} from './cards/IntroductionCard';
-import { RecognitionCard } from './cards/RecognitionCard';
-import { NovelTransferCard } from './cards/NovelTransferCard';
-import {
-  SensaReviewAssessmentCard,
-} from './cards/review/SensaReviewAssessmentCard';
-import { SensaReviewFeedbackCard } from './cards/review/SensaReviewFeedbackCard';
+import type { Word } from '../types';
+import type { IntroductionPhase } from './cards/IntroductionCard';
 import {
   materializeReviewRepairContent,
   type PrototypeIntroductionPackage,
@@ -21,28 +11,33 @@ import {
   type AssessmentResource,
 } from '../content/assessmentResources';
 import { buildPrototypeReviewAssessment } from '../content/prototypeReviewCards';
-import type {
-  LearningStepKind,
-  MeaningToFormRecallOutcome,
-  NovelTransferOutcome,
-  RepairResourceReference,
-} from '../engine/types';
-import type {
-  ReviewAssessmentKind,
-  ReviewAssessmentResult,
-} from '../review/types';
+import type { LearningStepKind, RepairResourceReference } from '../engine/types';
+import type { ReviewAssessmentKind, ReviewAssessmentResult } from '../review/types';
+import {
+  stepRendererRegistry,
+  type StepRendererHost,
+} from '../learningRuntime/stepRenderers';
 import { personalContentService } from '../services/personalContentService';
 
+/**
+ * 队列驱动 Step 的宿主屏：工具栏、进度与卡片视口。
+ *
+ * 落地前它同时回答两个问题——"这一步渲染哪张卡"（七个 `stage === '…'`
+ * 分支）和"渲染这张卡要什么"（三十余个 prop 里过半是给卡片的）。前者
+ * `stepKind` 轴落地后已归编排盖章，查表在 `learningRuntime/stepRenderers.tsx`；
+ * 后者收进 `StepRendererHost` 这一份合同。这屏自己剩下的接口只有工具栏
+ * 回调与步骤数据。
+ */
 interface LearnScreenProps {
   active: boolean;
   isBehind: boolean;
   curWord: Word;
-  /** 哪张卡：读编排盖的章（`OrchestratedStepDefinition.stepKind`），不由屏幕推。 */
+  /** 哪张卡：读编排盖的章（`OrchestratedStepDefinition.stepKind`）。 */
   stage: LearningStepKind;
   step: number;
   groupSize: number;
   introductionContent: PrototypeIntroductionPackage | null;
-  /** Optional catalog-materialized repair content prepared by the runtime. */
+  /** App 侧已物化的修复内容；为空时由讲解包按 resourceRef 现场物化。 */
   repairContent: PrototypeIntroductionPackage | null;
   introductionPosition: number;
   introductionTotal: number;
@@ -54,27 +49,14 @@ interface LearnScreenProps {
     e: MouseEvent,
     personalContent: PrototypeIntroductionPackage | null,
   ) => void;
-  onOpenExample: (idx: number, sentenceIdx?: number) => void;
-  onOpenDict?: (word: Word | QuickDictEntry | string, tab?: string) => void;
-  onOpenNoteEditor?: (word: Word | QuickDictEntry | string, senseId?: string, meaning?: string) => void;
-  onOpenSceneEditor: (
-    content: PrototypeIntroductionPackage,
-    anchorId?: string,
-  ) => void;
   onOpenSpelling?: (word: Word) => void;
-  onCompleteMeaningToFormRecall: (outcome: MeaningToFormRecallOutcome) => void;
-  onCompleteNovelTransfer: (outcome: NovelTransferOutcome) => void;
   reviewAssessmentKind: ReviewAssessmentKind | null;
   reviewAssessmentTaskKey: string | null;
   assessmentPackageIdentity: AssessmentPackageIdentity | null;
-  lookupDictionary: DictionaryLookup;
   reviewAssessmentResult: ReviewAssessmentResult | null;
   repairResourceRef: RepairResourceReference | null;
-  onCompleteReviewAssessment: (result: ReviewAssessmentResult) => void;
-  onContinueReviewFeedback: () => void;
-  onCompleteIntroduction: () => void;
-  onCompleteRecognition: (correct: boolean) => void;
-  toast: (msg: string) => void;
+  /** 卡片要的宿主能力与完成回调，合同见 learningRuntime/stepRenderers.tsx。 */
+  host: StepRendererHost;
 }
 
 export const LearnScreen = ({
@@ -93,24 +75,13 @@ export const LearnScreen = ({
   onUndo,
   onMarkKnown,
   onOpenMenuMore,
-  onOpenExample,
-  onOpenDict,
-  onOpenNoteEditor,
-  onOpenSceneEditor,
   onOpenSpelling,
-  onCompleteMeaningToFormRecall,
-  onCompleteNovelTransfer,
   reviewAssessmentKind,
   reviewAssessmentTaskKey,
   assessmentPackageIdentity,
-  lookupDictionary,
   reviewAssessmentResult,
   repairResourceRef,
-  onCompleteReviewAssessment,
-  onContinueReviewFeedback,
-  onCompleteIntroduction,
-  onCompleteRecognition,
-  toast,
+  host,
 }: LearnScreenProps) => {
   const [starred, setStarred] = useState(false);
   const [introductionPhase, setIntroductionPhase] = useState<IntroductionPhase>('experience');
@@ -219,6 +190,10 @@ export const LearnScreen = ({
     return personalContentService.subscribe(updateSavedState);
   }, [savedSenseId]);
 
+  const scrollToTop = () => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  };
+
   return (
     <section
       className={`screen${active ? ' active' : ''}${isBehind ? ' behind' : ''}${isIntroductionReveal ? ' is-intro-reveal' : ''}`}
@@ -253,7 +228,7 @@ export const LearnScreen = ({
                 className={starred ? 'on' : ''}
                 onClick={() => {
                   const next = personalContentService.toggleSense(savedSenseId);
-                  toast(next ? '已收藏这个义项' : '已取消收藏');
+                  host.toast(next ? '已收藏这个义项' : '已取消收藏');
                 }}
                 aria-label="收藏这个义项"
               >
@@ -274,7 +249,7 @@ export const LearnScreen = ({
                     if (onOpenSpelling) {
                       onOpenSpelling(curWord);
                     } else {
-                      toast(`开始拼写练习：${curWord.w}`);
+                      host.toast(`开始拼写练习：${curWord.w}`);
                     }
                   }}
                   aria-label="拼写练习"
@@ -300,161 +275,24 @@ export const LearnScreen = ({
         </div>
       </div>
 
-      {/* 核心卡片渲染视口 */}
+      {/* 核心卡片渲染视口：章是编排盖的，卡是注册表查的（stepRenderers.tsx）。 */}
       <div className="lscroll" id="lScroll" ref={scrollRef}>
-        {isIntroduction && (
-          <IntroductionCard
-            content={introductionContent}
-            phase={introductionPhase}
-            onPhaseChange={setIntroductionPhase}
-            onComplete={onCompleteIntroduction}
-            onOpenExample={(sentenceIndex = 0) => onOpenExample(0, sentenceIndex)}
-            onOpenDictionary={(word) => onOpenDict?.(word ?? curWord, '柯林斯')}
-            onOpenNote={() => onOpenNoteEditor?.(
-              introductionContent.lemma,
-              introductionContent.senseKey,
-              introductionContent.guideLabelL1,
-            )}
-            onOpenScene={(anchorId) => onOpenSceneEditor(introductionContent, anchorId)}
-            lookupDictionary={lookupDictionary}
-            toast={toast}
-          />
-        )}
-
-        {isRepair && (
-          <IntroductionCard
-            key={`${repairContent!.senseKey}:${repairResourceRef?.role}:${repairResourceRef?.key}`}
-            content={repairContent!}
-            phase={introductionPhase}
-            mode="repair_replay"
-            repairPurpose={reviewAssessmentPurpose}
-            onPhaseChange={setIntroductionPhase}
-            onComplete={onCompleteIntroduction}
-            onOpenExample={(sentenceIndex = 0) => onOpenExample(0, sentenceIndex)}
-            onOpenDictionary={(word) => onOpenDict?.(word ?? curWord, '柯林斯')}
-            onOpenNote={() => onOpenNoteEditor?.(
-              repairContent!.lemma,
-              repairContent!.senseKey,
-              repairContent!.guideLabelL1,
-            )}
-            onOpenScene={(anchorId) => onOpenSceneEditor(repairContent!, anchorId)}
-            lookupDictionary={lookupDictionary}
-            toast={toast}
-          />
-        )}
-
-        {isRecognition && assessmentResource?.kind === 'context_recognition' && (
-          <RecognitionCard
-            key={`${introductionContent.senseKey}:${assessmentResource.taskKey}:${step}`}
-            content={introductionContent}
-            assessment={assessmentResource}
-            onComplete={onCompleteRecognition}
-            onOpenDictionary={(word) => onOpenDict?.(word, '柯林斯')}
-            onOpenNote={() => onOpenNoteEditor?.(
-              introductionContent.lemma,
-              introductionContent.senseKey,
-              introductionContent.guideLabelL1,
-            )}
-            onOpenScene={(anchorId) => onOpenSceneEditor(introductionContent, anchorId)}
-            lookupDictionary={lookupDictionary}
-            onViewChange={() => {
-              if (scrollRef.current) scrollRef.current.scrollTop = 0;
-            }}
-            toast={toast}
-          />
-        )}
-
-        {isMeaningToFormRecall && assessmentResource?.kind === 'meaning_to_form_recall' && (
-          <RecallCard
-            key={`${introductionContent.senseKey}:${assessmentResource.taskKey}:${step}`}
-            content={introductionContent}
-            assessment={assessmentResource}
-            onComplete={onCompleteMeaningToFormRecall}
-            onOpenDictionary={(word) => onOpenDict?.(word, '柯林斯')}
-            onOpenExample={() => onOpenExample(0, 0)}
-            onOpenNote={() => onOpenNoteEditor?.(
-              introductionContent.lemma,
-              introductionContent.senseKey,
-              introductionContent.guideLabelL1,
-            )}
-            onOpenScene={(anchorId) => onOpenSceneEditor(introductionContent, anchorId)}
-            onViewChange={() => {
-              if (scrollRef.current) scrollRef.current.scrollTop = 0;
-            }}
-            toast={toast}
-          />
-        )}
-
-        {isNovelTransfer && assessmentResource?.kind === 'novel_context_transfer' && (
-          <NovelTransferCard
-            key={`${introductionContent.senseKey}:${assessmentResource.taskKey}:${step}`}
-            content={introductionContent}
-            assessment={assessmentResource}
-            onComplete={onCompleteNovelTransfer}
-            onOpenDictionary={(word) => onOpenDict?.(word, '柯林斯')}
-            onOpenExample={() => onOpenExample(0, 0)}
-            onOpenNote={() => onOpenNoteEditor?.(
-              introductionContent.lemma,
-              introductionContent.senseKey,
-              introductionContent.guideLabelL1,
-            )}
-            onOpenScene={(anchorId) => onOpenSceneEditor(introductionContent, anchorId)}
-            lookupDictionary={lookupDictionary}
-            onViewChange={() => {
-              if (scrollRef.current) scrollRef.current.scrollTop = 0;
-            }}
-            toast={toast}
-          />
-        )}
-
-        {isReviewAssessment && reviewSpec && (
-          <SensaReviewAssessmentCard
-            key={`${introductionContent.senseKey}:${reviewSpec.id}:${step}:sensa`}
-            content={introductionContent}
-            spec={reviewSpec}
-            assessmentResource={assessmentResource!}
-            purpose={reviewAssessmentPurpose}
-            onSubmit={onCompleteReviewAssessment}
-            onOpenDictionary={(word) => onOpenDict?.(word, '柯林斯')}
-            onOpenExample={() => onOpenExample(0, 0)}
-            onOpenNote={() => onOpenNoteEditor?.(
-              introductionContent.lemma,
-              introductionContent.senseKey,
-              introductionContent.guideLabelL1,
-            )}
-            onOpenScene={(anchorId) => onOpenSceneEditor(introductionContent, anchorId)}
-            lookupDictionary={lookupDictionary}
-            onViewChange={() => {
-              if (scrollRef.current) scrollRef.current.scrollTop = 0;
-            }}
-            toast={toast}
-          />
-        )}
-
-        {isReviewFeedback && reviewSpec && reviewAssessmentResult && (
-          <SensaReviewFeedbackCard
-            key={`${introductionContent.senseKey}:${reviewSpec.id}:feedback:${step}:sensa`}
-            content={introductionContent}
-            spec={reviewSpec}
-            assessmentResource={assessmentResource!}
-            result={reviewAssessmentResult}
-            onContinue={onContinueReviewFeedback}
-            onOpenDictionary={(word) => onOpenDict?.(word, '柯林斯')}
-            lookupDictionary={lookupDictionary}
-            onOpenExample={() => onOpenExample(0, 0)}
-            onOpenNote={() => onOpenNoteEditor?.(
-              introductionContent.lemma,
-              introductionContent.senseKey,
-              introductionContent.guideLabelL1,
-            )}
-            onOpenScene={(anchorId) => onOpenSceneEditor(introductionContent, anchorId)}
-            onViewChange={() => {
-              if (scrollRef.current) scrollRef.current.scrollTop = 0;
-            }}
-            toast={toast}
-          />
-        )}
-
+        {stepRendererRegistry.get(stage)({
+          stepKind: stage,
+          ordinal: step,
+          curWord,
+          content: introductionContent,
+          repairContent,
+          repairResourceRef,
+          phase: introductionPhase,
+          onPhaseChange: setIntroductionPhase,
+          assessmentResource,
+          reviewSpec,
+          reviewAssessmentResult,
+          purpose: reviewAssessmentPurpose,
+          onCardViewChange: scrollToTop,
+          host,
+        })}
       </div>
     </section>
   );

@@ -117,6 +117,7 @@ import {
   runtimeSurfaceRegistry,
   type RuntimeSurfaceContext,
 } from './learningRuntime/runtimeSurfaces';
+import type { StepRendererHost } from './learningRuntime/stepRenderers';
 import { useShellNavigation } from './router/useShellNavigation';
 import { usePresentationStore } from './stores/presentationStore';
 import { useOverlayStore } from './stores/overlayStore';
@@ -1524,6 +1525,40 @@ export default function App() {
       ? learnSession.totalTarget
       : dailyNewCount * 4;
 
+  /**
+   * 卡片的宿主能力面：App 提供一份，所有 stepKind 的卡共用，合同见
+   * learningRuntime/stepRenderers.tsx。落地前这些接线以十余个 prop 的形态
+   * 摊在 LearnScreen 上；现在收进一份，LearnScreen 只保留自己的工具栏回调。
+   */
+  const stepRendererHost = useMemo<StepRendererHost>(() => ({
+    toast,
+    openExample,
+    openDict: openDictModal,
+    openNoteEditor,
+    openSceneEditor: (content, anchorId) => {
+      setSceneEditorTarget({ content, anchorId });
+    },
+    lookupDictionary: lookupDictionaryEntry,
+    completeIntroduction: handleCompleteIntroduction,
+    completeRecognition: handleCompleteRecognition,
+    completeMeaningToFormRecall: handleCompleteMeaningToFormRecall,
+    completeNovelTransfer: handleCompleteNovelTransfer,
+    completeReviewAssessment: handleCompleteReviewAssessment,
+    continueReviewFeedback: handleContinueReviewFeedback,
+  }), [
+    toast,
+    openExample,
+    openDictModal,
+    openNoteEditor,
+    setSceneEditorTarget,
+    handleCompleteIntroduction,
+    handleCompleteRecognition,
+    handleCompleteMeaningToFormRecall,
+    handleCompleteNovelTransfer,
+    handleCompleteReviewAssessment,
+    handleContinueReviewFeedback,
+  ]);
+
   const time = useClock();
 
   return (
@@ -1878,28 +1913,15 @@ export default function App() {
               setMenuPersonalContent(personalContent);
               setMenuMoreOpen(true);
             }}
-            onOpenExample={openExample}
-            onOpenDict={openDictModal}
-            onOpenNoteEditor={openNoteEditor}
-            onOpenSceneEditor={(content, anchorId) => {
-              setSceneEditorTarget({ content, anchorId });
-            }}
             onOpenSpelling={openSpelling}
-            onCompleteMeaningToFormRecall={handleCompleteMeaningToFormRecall}
-            onCompleteNovelTransfer={handleCompleteNovelTransfer}
             reviewAssessmentKind={currentReviewAssessmentKind}
             reviewAssessmentTaskKey={currentReviewAssessmentTaskKey}
             assessmentPackageIdentity={currentAssessmentPackageIdentity}
-            lookupDictionary={lookupDictionaryEntry}
             reviewAssessmentResult={currentReviewAssessmentResult}
             repairResourceRef={currentRepairAction?.intent === 'repair'
               ? currentRepairAction.repairResourceRef ?? null
               : null}
-            onCompleteReviewAssessment={handleCompleteReviewAssessment}
-            onContinueReviewFeedback={handleContinueReviewFeedback}
-            onCompleteIntroduction={handleCompleteIntroduction}
-            onCompleteRecognition={handleCompleteRecognition}
-            toast={toast}
+            host={stepRendererHost}
           />
 
           {/* 7. 原声例句全屏卡 */}
