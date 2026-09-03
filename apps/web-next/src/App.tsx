@@ -1,8 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type MouseEvent } from 'react';
-import type {
-  Word,
-  FormalLearningStage,
-} from './types';
+import type { Word } from './types';
 import { useLearnQueue } from './engine/useLearnQueue';
 import { useReviewQueue } from './engine/useReviewQueue';
 import type {
@@ -79,6 +76,7 @@ import {
 import type { PrototypeIntroductionPackage } from './content/learningCatalog';
 import type {
   LearningCapability,
+  LearningStepKind,
   MeaningToFormRecallOutcome,
   NovelTransferOutcome,
   ReviewCandidate,
@@ -127,8 +125,6 @@ import { setDailyNewCount, useDailyNewCount, useDueReviewCount } from './stores/
 import { useLearningFlow } from './learningFlow/useLearningFlow';
 import { demoSceneForStage, demoWordFor } from './learningFlow/demoScenes';
 
-type RuntimeLearningStage = FormalLearningStage | 'review_repair';
-
 type RuntimePackage = (typeof PROTOTYPE_LEARNING_PACKAGES)[number];
 
 type LearningPolicyContext =
@@ -163,17 +159,6 @@ function retentionStoreForPolicy(
   purpose: LearningProtocolPurpose = 'retention_review',
 ) {
   return learningRuntimeCoordinator.retentionStoreFor(policy, purpose);
-}
-
-function stageForCapability(capability: LearningCapability | null): FormalLearningStage {
-  switch (capability) {
-    // 讲解步不练任何能力，所以没有 capability。
-    case null: return 'introduction';
-    case 'contextual_recognition': return 'recognition';
-    case 'meaning_to_form_recall': return 'recall';
-    case 'novel_context_transfer': return 'transfer';
-    case 'boundary_discrimination': return 'review_assessment';
-  }
 }
 
 function reviewKindForCapability(capability: LearningCapability): ReviewAssessmentKind | null {
@@ -1430,16 +1415,20 @@ export default function App() {
       mnemo: {},
     };
 
-  const currentStage: RuntimeLearningStage = demo
+  /**
+   * 这一步渲染哪张卡：读编排盖的章，不再由这里推。
+   *
+   * 落地前这里是三段公式：复习流读 `session.stage`，首学流拿 capability 过
+   * `stageForCapability`，外面再套一层 `intent === 'repair' → review_repair`。
+   * 三段现在都由 `stepKind` 回答——修复步的章本来就是 `review_repair`，
+   * 反馈相位由复习会话自己改章。
+   */
+  const currentStage: LearningStepKind = demo
     ? demo.stage
     : flowMode === 'review' && reviewSession
-    ? reviewSession.action.intent === 'repair'
-      ? 'review_repair'
-      : reviewSession.stage
+    ? reviewSession.stepKind
     : learnSession
-    ? learnSession.action.intent === 'repair'
-      ? 'review_repair'
-      : stageForCapability(learnSession.action.capability)
+    ? learnSession.action.stepKind
     : 'introduction';
 
   const currentIntroductionPosition = currentIntroductionContent

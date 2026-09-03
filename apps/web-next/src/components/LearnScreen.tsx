@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, type MouseEvent } from 'react';
-import type { Word, FormalLearningStage, QuickDictEntry, DictionaryLookup } from '../types';
+import type { Word, QuickDictEntry, DictionaryLookup } from '../types';
 import { RecallCard } from './cards/RecallCard';
 import {
   IntroductionCard,
@@ -22,6 +22,7 @@ import {
 } from '../content/assessmentResources';
 import { buildPrototypeReviewAssessment } from '../content/prototypeReviewCards';
 import type {
+  LearningStepKind,
   MeaningToFormRecallOutcome,
   NovelTransferOutcome,
   RepairResourceReference,
@@ -36,7 +37,8 @@ interface LearnScreenProps {
   active: boolean;
   isBehind: boolean;
   curWord: Word;
-  stage: FormalLearningStage | 'review_repair';
+  /** 哪张卡：读编排盖的章（`OrchestratedStepDefinition.stepKind`），不由屏幕推。 */
+  stage: LearningStepKind;
   step: number;
   groupSize: number;
   introductionContent: PrototypeIntroductionPackage | null;

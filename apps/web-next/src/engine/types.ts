@@ -56,6 +56,30 @@ export interface RepairResourceReference {
   fallbackReason?: 'repair_binding_not_exposed';
 }
 
+/**
+ * 这一步渲染哪张卡。见 learningRuntime/stepRenderers.tsx 的注册表。
+ *
+ * 与 `intent` 是两条轴，不能互相替代：`intent` 是领域闭集，回答"这一步算不算
+ * 取证"；`stepKind` 是插件自由的，回答"渲染哪张卡"。同一条能力在不同编排下
+ * 渲染成不同的卡——`contextual_recognition` 在首学是 `recognition`
+ * （RecognitionCard），在到期复习是 `review_assessment`
+ * （SensaReviewAssessmentCard）——所以它推不出来，只能由产出这一步的编排回答。
+ *
+ * 内置七种在联合里列出只为补全提示；类型本身对插件开放（`string & {}` 是
+ * TypeScript 里"已知值 + 任意字符串"的写法，直接写 `string` 会让字面量提示
+ * 全部消失）。真正的闭合发生在注册表：查不到就抛错。
+ */
+export type BuiltinLearningStepKind =
+  | 'introduction'
+  | 'recognition'
+  | 'recall'
+  | 'transfer'
+  | 'review_assessment'
+  | 'review_feedback'
+  | 'review_repair';
+
+export type LearningStepKind = BuiltinLearningStepKind | (string & {});
+
 export interface ScheduledActionDefinition {
   actionKey: string;
   /** 这一步练的是哪条能力。讲解步不练任何能力，所以是 null。 */
@@ -64,9 +88,26 @@ export interface ScheduledActionDefinition {
   kind: ScheduledActionKind;
   /** Content adapters default ordinary definitions to assessment. */
   intent?: LearningStepIntent;
+  /**
+   * 目录声明里没有这一项：卡片由编排决定，不由内容决定。产出这一步的编排
+   * 盖章之后，类型收窄为 `OrchestratedStepDefinition`。
+   */
+  stepKind?: LearningStepKind;
   /** Present only for a scheduler-created repair action. */
   repairForActionKey?: string;
   repairResourceRef?: RepairResourceReference;
+}
+
+/**
+ * 编排产出的一步：`intent` 与 `stepKind` 都已确定。
+ *
+ * 两个字段在 `ScheduledActionDefinition` 上是可选的，因为内容目录声明的是
+ * 「有哪些可选动作」，不是「这次出哪一步」。编排盖章之后它们才成立，于是
+ * 下游不必再为「万一没有」写回退。
+ */
+export interface OrchestratedStepDefinition extends ScheduledActionDefinition {
+  intent: LearningStepIntent;
+  stepKind: LearningStepKind;
 }
 
 export interface SchedulablePackage<TContent = unknown> {
@@ -80,14 +121,13 @@ export interface SchedulablePackage<TContent = unknown> {
   reviewActions: readonly ScheduledActionDefinition[];
 }
 
-export interface ScheduledAction<TContent = unknown> extends ScheduledActionDefinition {
+export interface ScheduledAction<TContent = unknown> extends OrchestratedStepDefinition {
   ordinal: number;
   totalTarget: number;
   packageId: string;
   senseId: string;
   content: TContent;
   reason: ScheduledActionReason;
-  intent: LearningStepIntent;
 }
 
 export type MeaningToFormRecallOutcome =

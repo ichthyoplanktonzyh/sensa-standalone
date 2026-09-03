@@ -34,6 +34,8 @@ import type {
   AcquisitionGateStatus,
   LearningCapability,
   LearningStepIntent,
+  LearningStepKind,
+  OrchestratedStepDefinition,
   RepairResourceRole,
   ReviewDiagnosticFacts,
   SchedulablePackage,
@@ -75,7 +77,7 @@ export interface OrchestrationCandidate<TBasis> {
 
 export interface OrchestratedStep<TCandidate> {
   readonly target: TCandidate;
-  readonly definition: ScheduledActionDefinition;
+  readonly definition: OrchestratedStepDefinition;
 }
 
 /** 插件作者要实现的全部内容。 */
@@ -94,7 +96,55 @@ export interface StepOrchestration<
     candidate: TCandidate,
     basis: TBasis,
     plan: StepPlan,
-  ) => ScheduledActionDefinition | null;
+  ) => OrchestratedStepDefinition | null;
+}
+
+/* ============================================================
+   盖章：编排产出的一步要说清楚渲染哪张卡
+   ============================================================ */
+
+/**
+ * 这一步用哪张卡。
+ *
+ * 落地前这个问题由渲染层回答，而且是两套互不相干的公式：首学那边
+ * `App.tsx` 拿 `capability` 过一遍 `stageForCapability`，复习那边
+ * `ReviewQueue` 在建会话时直接写 `session.stage`。两套公式对同一条能力给出
+ * 不同的答案——`contextual_recognition` 在首学是 RecognitionCard，在到期复习
+ * 是 SensaReviewAssessmentCard——这说明它本来就推不出来：知道答案的是产出这一步
+ * 的编排，不是拿到这一步的屏幕。
+ *
+ * 所以卡片由编排盖章，内容目录不声明（目录声明的是「有哪些可选动作」，
+ * 不是「这次出哪一步」）。
+ */
+export function stepKindFor(
+  orchestrationId: OrchestrationId,
+  definition: ScheduledActionDefinition,
+): LearningStepKind {
+  const intent = actionIntent(definition);
+  if (intent === 'repair') return 'review_repair';
+  if (intent === 'instruction') return 'introduction';
+  // 到期复习与重学检验共用一张评测卡，与练的是哪条能力无关。
+  if (orchestrationId === 'structured_retention') return 'review_assessment';
+  switch (definition.capability) {
+    case 'contextual_recognition': return 'recognition';
+    case 'meaning_to_form_recall': return 'recall';
+    case 'novel_context_transfer': return 'transfer';
+    // 边界辨析在首学里也走复习那张评测卡。
+    case 'boundary_discrimination': return 'review_assessment';
+    default: return 'review_assessment';
+  }
+}
+
+function stamp(
+  orchestrationId: OrchestrationId,
+  definition: ScheduledActionDefinition | null,
+): OrchestratedStepDefinition | null {
+  if (!definition) return null;
+  return {
+    ...definition,
+    intent: actionIntent(definition),
+    stepKind: stepKindFor(orchestrationId, definition),
+  };
 }
 
 /* ============================================================
@@ -323,12 +373,13 @@ export const acquisitionOrchestration: StepOrchestration<
 
     const chosen = chooseOldest(pool);
     if (!chosen) return null;
-    const definition = chosen.repairBasis
+    const definition = stamp('structured_acquisition', chosen.repairBasis
       ? acquisitionRepairStep(chosen, chosen.repairBasis)
-      : acquisitionNextStep(chosen);
+      : acquisitionNextStep(chosen));
     return definition ? { target: chosen, definition } : null;
   },
-  repair: (candidate, basis) => acquisitionRepairStep(candidate, basis),
+  repair: (candidate, basis) =>
+    stamp('structured_acquisition', acquisitionRepairStep(candidate, basis)),
 };
 
 /* ============================================================
@@ -433,10 +484,11 @@ export const retentionOrchestration: StepOrchestration<
     const pool = eligible.length > 0 ? eligible : candidates;
     const chosen = chooseOldest(pool);
     if (!chosen) return null;
-    const definition = chosen.repairBasis
+    const definition = stamp('structured_retention', chosen.repairBasis
       ? retentionRepairStep(chosen, chosen.repairBasis)
-      : retentionNextStep(chosen, plan);
+      : retentionNextStep(chosen, plan));
     return definition ? { target: chosen, definition } : null;
   },
-  repair: (candidate, basis) => retentionRepairStep(candidate, basis),
+  repair: (candidate, basis) =>
+    stamp('structured_retention', retentionRepairStep(candidate, basis)),
 };

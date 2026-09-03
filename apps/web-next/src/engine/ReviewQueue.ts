@@ -9,6 +9,7 @@ import {
 } from './stepOrchestration';
 import type {
   LearningCapability,
+  LearningStepKind,
   QueueConfig,
   RelearningCycle,
   ReviewCandidate,
@@ -33,8 +34,12 @@ export interface ReviewSession<TContent = unknown> {
   package: SchedulablePackage<TContent>;
   action: ScheduledAction<TContent>;
   assessmentKind: ReviewAssessmentKind;
-  /** Repair uses the existing IntroductionCard and never enters assessment feedback. */
-  stage: 'review_assessment' | 'review_feedback' | 'review_repair';
+  /**
+   * 这次复习当前渲染哪张卡。开局照抄编排盖的章；结算之后转到反馈卡——
+   * 反馈不是编排产出的新一步，是同一步结算后的相位，所以只有这里能写它。
+   * 修复步用讲解卡，永远不进反馈。
+   */
+  stepKind: LearningStepKind;
   settled: boolean;
   result: ReviewAssessmentResult | null;
 }
@@ -344,7 +349,7 @@ export class ReviewQueue<TContent = unknown> {
       package: candidate.package,
       action,
       assessmentKind,
-      stage: intent === 'repair' ? 'review_repair' : 'review_assessment',
+      stepKind: definition.stepKind,
       settled: false,
       result: null,
     };
@@ -399,7 +404,7 @@ export class ReviewQueue<TContent = unknown> {
     this.captureSnapshot();
     session.settled = true;
     session.result = settledResult;
-    session.stage = 'review_feedback';
+    session.stepKind = 'review_feedback';
     this.actionOrdinal = session.action.ordinal;
     this.lastActionOrdinalBySense.set(session.action.senseId, this.actionOrdinal);
     this.totalAttempts += 1;

@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { LearnQueue } from './LearnQueue';
+import { stepKindFor } from './stepOrchestration';
 import type {
   LearningCapability,
   MeaningToFormRecallOutcome,
@@ -164,6 +165,8 @@ export function useLearnQueue<TContent>(
       action: {
         ...definition,
         intent: definition.intent ?? 'assessment',
+        // 演示绕过队列，但绕不过「谁决定用哪张卡」：它照结构化首学那套编排问。
+        stepKind: stepKindFor('structured_acquisition', definition),
         kind: definition.kind,
         ordinal: demoStep,
         totalTarget: total,
