@@ -107,8 +107,15 @@ import {
 } from './learningJourney/journeyState';
 import { useJourneyState } from './learningJourney/useJourneyState';
 import type { LearningProtocolPurpose } from './learningRuntime/policyProfiles';
-import { learningRuntimeCoordinator } from './learningRuntime/runtimeCoordinator';
+import {
+  learningRuntimeCoordinator,
+  type PrototypeRuntimeSurface,
+} from './learningRuntime/runtimeCoordinator';
 import { useRuntimeSession } from './learningRuntime/useRuntimeSession';
+import {
+  runtimeSurfaceRegistry,
+  type RuntimeSurfaceContext,
+} from './learningRuntime/runtimeSurfaces';
 import { useShellNavigation } from './router/useShellNavigation';
 import { usePresentationStore } from './stores/presentationStore';
 import { useOverlayStore } from './stores/overlayStore';
@@ -678,6 +685,71 @@ export default function App() {
   );
   const totalReviewCount = lightweightReviewCount + structuredReviewCount;
 
+  const getReviewCandidatesForTargets = useCallback((
+    targetIds: readonly PrototypeLearningTargetId[],
+  ) => {
+    const eligibleTargetIds = new Set(targetIds);
+    return getReviewCandidates().filter((candidate) => {
+      const targetId = TARGET_ID_BY_RUNTIME_SENSE.get(candidate.package.senseId);
+      return targetId !== undefined && eligibleTargetIds.has(targetId);
+    });
+  }, [getReviewCandidates]);
+
+  /**
+   * 宿主提供给 Runtime Surface handler 的能力面。
+   *
+   * 这些方法此前是各入口 if/else 里的行内语句。收成一份合同后，surface 的
+   * 启动顺序、失败处理和文案归 `runtimeSurfaces.ts` 所有，App 只提供能力。
+   */
+  const runtimeSurfaceContext = useMemo<RuntimeSurfaceContext>(() => ({
+    toast,
+    showFlow: setViewMode,
+    enterReviewMode: enterReview,
+    commitPolicies: (targetIds) => {
+      dispatchJourney({
+        type: 'commitPolicies',
+        entries: targetIds.map((targetId) => ({
+          targetId,
+          policy: effectivePolicyFor(journey, targetId),
+        })),
+      });
+    },
+    beginLightweightInitial: startLightweightInitial,
+    beginStructuredInitial: (targetIds) => {
+      const runtimePackages = targetIds.map((targetId) =>
+        runtimePackageForTarget(PROTOTYPE_LEARNING_TARGETS[targetId])!);
+      if (runtimePackages.length === 0) {
+        toast('当前学习方式要求的内容尚未完整接入');
+        return false;
+      }
+      if (!startLearnQueue(runtimePackages)) {
+        toast('首次学习运行创建失败');
+        return false;
+      }
+      startStructuredInitial(targetIds);
+      return true;
+    },
+    beginLightweightReview: startLightweightReview,
+    countDueReviews: (targetIds) => getReviewCandidatesForTargets(targetIds).length,
+    beginStructuredReview: (targetIds) => {
+      clearRetentionSummary();
+      startReviewQueue(getReviewCandidatesForTargets(targetIds));
+    },
+  }), [
+    toast,
+    setViewMode,
+    enterReview,
+    dispatchJourney,
+    journey,
+    startLightweightInitial,
+    startLearnQueue,
+    startStructuredInitial,
+    startLightweightReview,
+    getReviewCandidatesForTargets,
+    clearRetentionSummary,
+    startReviewQueue,
+  ]);
+
   const beginInitialTargetRuntime = useCallback((targetId: PrototypeLearningTargetId) => {
     if (!journeyFor(journey, targetId).added) {
       toast('请先把这条目标加入学习');
@@ -717,96 +789,37 @@ export default function App() {
       return false;
     }
 
-    if (launch.surface === 'lightweight_initial') {
-      const activeTargetId = launch.targetIds[0]!;
-      dispatchJourney({
-        type: 'commitPolicies',
-        entries: [{
-          targetId: activeTargetId,
-          policy: initialCandidates.find(
-            (candidate) => candidate.targetId === activeTargetId,
-          )!.profileId,
-        }],
-      });
-      startLightweightInitial(activeTargetId);
-      setViewMode('lightweight');
-      return true;
-    }
-
-    const structuredTargetIds = launch.targetIds;
-    const runtimePackages = structuredTargetIds.map((candidateId) =>
-      runtimePackageForTarget(PROTOTYPE_LEARNING_TARGETS[candidateId])!);
-    if (runtimePackages.length === 0) {
-      toast('当前学习方式要求的内容尚未完整接入');
-      return false;
-    }
-    const firstSession = startLearnQueue(runtimePackages);
-    if (!firstSession) {
-      toast('首次学习运行创建失败');
-      return false;
-    }
-    dispatchJourney({
-      type: 'commitPolicies',
-      entries: structuredTargetIds.map((candidateId) => ({
-        targetId: candidateId,
-        policy: initialCandidates.find(
-          (candidate) => candidate.targetId === candidateId,
-        )!.profileId,
-      })),
-    });
-    startStructuredInitial(structuredTargetIds);
-    setViewMode('study');
-    return true;
+    return runtimeSurfaceRegistry
+      .get(launch.surface)
+      .startInitial(runtimeSurfaceContext, launch);
   }, [
     closeMenus,
-    dispatchJourney,
     enterLearn,
     journey,
-    startLearnQueue,
+    runtimeSurfaceContext,
     todayInitialTargetIds,
     toast,
-    startStructuredInitial,
-    startLightweightInitial,
     closeExample,
   ]);
 
   const continueCommittedTargetRuntime = useCallback((targetId: PrototypeLearningTargetId) => {
     const { committedPolicy, initialCompletion } = journeyFor(journey, targetId);
     if (!committedPolicy) return;
-    const surface = learningRuntimeCoordinator.surfaceFor(
-      committedPolicy,
-      'initial_learning',
-    );
-    if (surface === 'lightweight_initial') {
-      if (initialCompletion) {
-        toast('首次学习已经完成，等待进入长期复习');
-        return;
-      }
-      startLightweightInitial(targetId);
-      setViewMode('lightweight');
-      return;
-    }
     const target = PROTOTYPE_LEARNING_TARGETS[targetId];
-    if (target.runtimeSenseId && declaredMasterySenseIds.has(target.runtimeSenseId)) {
-      toast('这条目标已声明为熟词，不再进入正式学习计划');
-      return;
-    }
-    if (initialCompletion) {
-      toast('高保证首次学习已经完成，当前处于长期保持阶段');
-      return;
-    }
-    if (structuredInitialTargetIds.includes(targetId) && !queueDone) {
-      setViewMode('study');
-      return;
-    }
-    toast('首次学习已结束，之后会按计划进入复习');
+    runtimeSurfaceRegistry
+      .get(learningRuntimeCoordinator.surfaceFor(committedPolicy, 'initial_learning'))
+      .continueInitial(runtimeSurfaceContext, targetId, {
+        initialCompletion: initialCompletion !== null,
+        declaredMastery: target.runtimeSenseId !== null
+          && declaredMasterySenseIds.has(target.runtimeSenseId),
+        inActiveRun: structuredInitialTargetIds.includes(targetId) && !queueDone,
+      });
   }, [
     structuredInitialTargetIds,
     declaredMasterySenseIds,
     journey,
     queueDone,
-    toast,
-    startLightweightInitial,
+    runtimeSurfaceContext,
   ]);
 
   // 开始第一个可运行的 Target；运行创建成功才会提交并锁定 Policy。
@@ -825,16 +838,6 @@ export default function App() {
     startLearn();
   }, [startLearn]);
 
-  const getReviewCandidatesForTargets = useCallback((
-    targetIds: readonly PrototypeLearningTargetId[],
-  ) => {
-    const eligibleTargetIds = new Set(targetIds);
-    return getReviewCandidates().filter((candidate) => {
-      const targetId = TARGET_ID_BY_RUNTIME_SENSE.get(candidate.package.senseId);
-      return targetId !== undefined && eligibleTargetIds.has(targetId);
-    });
-  }, [getReviewCandidates]);
-
   // 开始真实复习流程 (全量到期流式复习)
   const startReview = useCallback(() => {
     pendingMixedTargetRef.current = null;
@@ -846,22 +849,16 @@ export default function App() {
       toast('今天没有到期的意思，可以开始今日学习');
       return;
     }
-    if (launch.surface === 'lightweight_retention') {
-      startLightweightReview(launch.targetIds);
-      setViewMode('lightweightReview');
-      toast(`开始今日复习：共 ${launch.targetIds.length} 个意思`);
-      return;
-    }
-    const dueCandidates = getReviewCandidatesForTargets(launch.targetIds);
-    if (dueCandidates.length === 0) {
-      toast('今天没有到期的意思，可以开始今日学习');
-      return;
-    }
-    clearRetentionSummary();
-    startReviewQueue(dueCandidates);
-    setViewMode('study');
-    toast(`开始今日复习：共 ${dueCandidates.length} 个意思`);
-  }, [closeMenus, getReviewCandidatesForTargets, retentionRuntimeLaunches, startReviewQueue, toast, startLightweightReview, clearRetentionSummary, closeExample]);
+    const started = runtimeSurfaceRegistry.get(launch.surface).startRetention(
+      runtimeSurfaceContext,
+      launch,
+      {
+        announce: (count) => `开始今日复习：共 ${count} 个意思`,
+        enterOnEmpty: false,
+      },
+    );
+    if (!started) toast('今天没有到期的意思，可以开始今日学习');
+  }, [closeMenus, enterReview, retentionRuntimeLaunches, runtimeSurfaceContext, toast, closeExample]);
 
   // MVP Mixed intent uses the same two proven runtimes in sequence: due Review
   // comes first, then ready Acquisition continues without returning home.
@@ -873,23 +870,18 @@ export default function App() {
     const newTargetIds = [...todayInitialTargetIds];
     const launch = retentionRuntimeLaunches[0];
 
-    if (launch?.surface === 'lightweight_retention') {
+    if (launch) {
       pendingMixedTargetRef.current = newTargetIds.length > 0 ? newTargetIds : null;
-      startLightweightReview(launch.targetIds);
-      setViewMode('lightweightReview');
-      toast(`进入今日学习流：先复习 ${launch.targetIds.length} 个意思`);
-      return;
-    }
-
-    if (launch?.surface === 'structured_session') {
-      const dueCandidates = getReviewCandidatesForTargets(launch.targetIds);
-      pendingMixedTargetRef.current = newTargetIds.length > 0 ? newTargetIds : null;
-      enterReview();
-      clearRetentionSummary();
-      startReviewQueue(dueCandidates);
-      setViewMode('study');
-      toast(`进入今日学习流：先复习 ${dueCandidates.length} 个意思`);
-      return;
+      const started = runtimeSurfaceRegistry.get(launch.surface).startRetention(
+        runtimeSurfaceContext,
+        launch,
+        {
+          announce: (count) => `进入今日学习流：先复习 ${count} 个意思`,
+          // 混合流照旧进入复习 Runtime，即使这一组已经没有到期项。
+          enterOnEmpty: true,
+        },
+      );
+      if (started) return;
     }
 
     pendingMixedTargetRef.current = null;
@@ -1269,33 +1261,50 @@ export default function App() {
     setViewMode('finish');
   }, [continueMixedAfterReview, retentionRuntimeProjection, showRetentionSummary]);
 
+  /**
+   * 跑完一组到期复习后，按 `planRetention` 的顺序接上下一组。
+   *
+   * 此前这里写的是"找那个 surface 是 structured_session 的 launch"，等于把
+   * 组间交接写死成"轻量之后一定是结构化"。改成顺序推进后，交接对 surface
+   * 的种类和数量都不敏感。
+   *
+   * `afterSurface` 是调用方对自己的声明，不是对下一组的判断——这处名字要等
+   * runtimeSession 泛化（按 launch 记录当前运行）之后才能一并去掉。
+   */
+  const startNextRetentionGroup = useCallback((
+    afterSurface: PrototypeRuntimeSurface,
+  ): boolean => {
+    const finishedIndex = retentionRuntimeLaunches.findIndex(
+      (launch) => launch.surface === afterSurface,
+    );
+    // 能跑完某组，说明它在本次 plan 里；找不到时不猜，交给调用方收尾。
+    const nextLaunch = finishedIndex < 0
+      ? undefined
+      : retentionRuntimeLaunches[finishedIndex + 1];
+    if (!nextLaunch) return false;
+    return runtimeSurfaceRegistry.get(nextLaunch.surface).startRetention(
+      runtimeSurfaceContext,
+      nextLaunch,
+      {
+        announce: (count) => `当前复习组已完成，继续处理 ${count} 个复习`,
+        enterOnEmpty: true,
+      },
+    );
+  }, [retentionRuntimeLaunches, runtimeSurfaceContext]);
+
   const finishLightweightReview = useCallback(() => {
     finishLightweightReviewSession();
-    const nextLaunch = retentionRuntimeLaunches.find(
-      (launch) => launch.surface === 'structured_session',
-    );
-    if (nextLaunch) {
-      const remainingStructuredReviews = getReviewCandidatesForTargets(nextLaunch.targetIds);
-      enterReview();
-      clearRetentionSummary();
-      startReviewQueue(remainingStructuredReviews);
-      setViewMode('study');
-      toast(`当前复习组已完成，继续处理 ${remainingStructuredReviews.length} 个复习`);
-      return;
-    }
+    if (startNextRetentionGroup('lightweight_retention')) return;
     if (continueMixedAfterReview()) return;
     setViewMode('main');
     resetMain();
     toast('今天的到期复习已完成');
   }, [
     continueMixedAfterReview,
-    getReviewCandidatesForTargets,
     resetMain,
-    retentionRuntimeLaunches,
-    startReviewQueue,
+    startNextRetentionGroup,
     toast,
     finishLightweightReviewSession,
-    clearRetentionSummary,
   ]);
 
   // 下一词
