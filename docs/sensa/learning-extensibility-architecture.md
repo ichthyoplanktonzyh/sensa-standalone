@@ -143,7 +143,7 @@ purpose: relearning         → 编排插件 repair 入口 → 出口 Relearning
 | --- | --- | --- |
 | **能力目标注册表** | 声明所需内容能力 + 准入依据 + `prerequisite?`（至多一层） | 新增；首批只注册既有默认 scope |
 | **内容供给插件** | `(Learning Target, 内容能力) → 校验 → 冻结 Learning Materialization` | 已有 Content Provisioning，需 seam 化 |
-| **编排插件** | `fresh(targets)` / `repair(target, 依据)` → 产出 Step 序列 | 现为 `LearnQueue` / `ReviewQueue` 硬编码 |
+| **编排插件** | `fresh(targets)` / `repair(target, 依据)` → 产出 Step 序列 | ✅ 已落地：`engine/stepOrchestration.ts` + `learningRuntime/orchestrations.ts` |
 | **内容能力集合** | `Protocol Binding → 内容能力集合`，readiness 是集合的合取 | ✅ 已落地：`learningRuntime/contentCapabilities.ts` |
 | **Step intent 轴** | `intent: instruction \| practice \| assessment \| repair`，只有 assessment 取证 | ✅ 已落地：`engine/types.ts` 的 `LearningStepIntent` |
 | **Runtime Surface 登记表** | `surface → flow + 首学/继续/复习三个启动入口` | ✅ 已落地：`learningRuntime/runtimeSurfaces.ts` |
@@ -161,16 +161,16 @@ purpose: relearning         → 编排插件 repair 入口 → 出口 Relearning
 | retention store 选择 | 7 | 这条 Target 的长期事实存 FSRS 还是存 journey reducer | ✅ 改问 store（§5.4） |
 | 计数分桶 | 2 | 首页把这个 launch 计入哪个复习桶 | ✅ 改按 store 分桶 |
 | executable 判断 | 1 | 这个 surface 要不要 runtime package | ✅ 改问内容供给（§5.2） |
+| 交接依据 | 1 | 首学产出的是不是 Acquisition Graduation | ✅ 改问编排（§5.5） |
 
 登记表落地后，"新增一种 Runtime 行为"在启动路径上的改动收敛为**注册一条 definition**；
 `App.tsx` 不再出现任何 surface 名字的分发判断。runtimeSession 泛化之后，
 `startNextRetentionGroup` 也不再要调用方自报家门——跑完的是哪一组，由会话状态里
 那条复习运行回答。
 
-`App.tsx` 与 `journeyState.ts` 里现在只剩五处 surface 名字，都不是分派：
+`journeyState.ts` 里现在一处 surface 名字都没有。`App.tsx` 里只剩四处，都不是分派：
 三处是"哪块屏拿哪次运行"的派生（集中在一处，等 Step renderer 注册表），
-一处是收尾时调用方自报跑完了哪条运行，加上 `journeyState` 里
-"首学产出的是不是 Acquisition Graduation"（等编排插件按 intent 声明证据种类）。
+一处是收尾时调用方自报跑完了哪条运行。
 
 终局形态仍是 Runtime 只认识 **Step**：编排插件产出 Step，注册表按 `stepKind` 查组件，
 `App.tsx` 退化为"当前有无 Step / 渲染它"的壳。这一步需要先统一三个 Screen 的 props
@@ -226,9 +226,10 @@ Step 的完整形状要等编排插件（§8 第 5 项）。先落的是 intent 
 都塌回 `LearningCapability`）。`mode: 'assessment' | 'repair'` 是这条轴的旧名字，
 只是它表达不了"讲解"，所以并成了 `intent`。
 
-今天只产出 `instruction` / `assessment` / `repair` 三种；`practice` 是给编排插件
-预留的第四种意图：练但不取证。取证边界只能从行为上钉，`smoke:intent` 19 项
-钉的就是这个——讲解与修复都不计入 attempts、不把 Gate 判成 passed。
+队列驱动的两套编排只产出 `instruction` / `assessment` / `repair` 三种；第四种
+`practice`（练但不取证）出现在轻量首学的"回想"那一步——学习者自评，评语只作为
+完成记录留档，既不进 Gate 也不改排期。取证边界只能从行为上钉，`smoke:intent`
+19 项钉的就是这个——讲解与修复都不计入 attempts、不把 Gate 判成 passed。
 
 ### 5.4 Retention Store
 
@@ -247,6 +248,40 @@ surface（例如拼写产出仍走调度器）时，这九处一处都不用改�
 到期投影"，宿主能力由 `RetentionStoreContext` 注入——App 传 `storageService`，
 reducer 传 action 里那份 `dueBySenseId`。同一份定义因而在命令式与纯函数两侧都成立，
 `smoke:retention` 直接钉住了这一点。
+
+### 5.5 编排插件
+
+落地前，"出哪一步"硬编码在两个队列类的四个方法里（`LearnQueue` /
+`ReviewQueue` 各一对 `nextDefinition` / `repairDefinition`）。四个方法说的其实是
+同一个二分：**有没有待修复的依据？没有 → 出下一步；有 → 出这一步的定向修复。**
+
+落地形状是 `StepOrchestration` 的两个入口，正是 §4 定的那两个。三件事刻意如此：
+
+- **`fresh` 收候选集而不是单条。**"先出谁"和"出哪一步"是同一个决定，交错与间隔
+  属于编排。选中的候选若带着依据，`fresh` 委派给 `repair`——两条路参与同一次
+  选择，带依据的 Target 不会因此插队，也不会被饿死。这正是落地前的顺序。
+- **候选视图里没有 content。** 两处产出逻辑从来只读 `actions` / `reviewActions` /
+  `repairActions` 与学习者本地状态，seam 因此不需要 `TContent` 泛型。
+- **修复依据由宿主给出，不由插件推断。**"哪个 Gate 失败了、失败在哪一步"是学习者
+  本地状态，属于 §6 的内核。插件出的只是 Step *定义*；Gate 结算、Evidence 计数、
+  Memory Outcome 与 FSRS 全部留在队列里。
+
+`§5.1` 表里最后一处 surface 判断也随之收掉。原来那行
+`surfaceFor(policy, 'initial_learning') !== 'structured_session'` 问的是**用哪块屏跑**，
+要的却是**这套编排取不取证**——两者今天一一对应，只因为恰好只有结构化首学会出
+assessment 步。现在编排在登记表里声明自己产出哪些 intent，出口依据从那一条规则推出：
+
+```text
+产出 assessment → Acquisition Graduation（取证毕业）
+不产出 assessment → Study Completion（学过了，但没取证）
+```
+
+声明不是注释：`smoke:orchestration` 30 项拿真实内容把两套队列驱动的编排完整跑一遍
+（含一次失败 → 修复 → 独立重测），收集实际产出的 intent 集合与声明逐条核对，并把
+新旧两个表达式在两条 Policy 上钉成同真同假。
+
+四套编排里两套由队列驱动，两套是固定屏（轻量首学与轻量复习）。它们同样在登记表里
+声明 intent——出口依据只认声明，不认它跑在哪块屏上。
 
 ## 6. 不可插内核
 
@@ -299,7 +334,9 @@ learner 可见界面**与当前完全一致**（轻量 / 高保证两个选项�
    `smoke:capabilities` 32 项），`executable` 随之改问内容供给；
 4. ✅ `LearningCapability` 中移出 `introduction`，降级为 `intent: instruction`
    （`LearningStepIntent` + `smoke:intent` 19 项），三处 `Exclude` 别名随之消失；
-5. 编排插件 seam 化为 `fresh` / `repair` 两入口。
+5. ✅ 编排插件 seam 化为 `fresh` / `repair` 两入口（`stepOrchestration.ts` +
+   `orchestrations.ts` + `smoke:orchestration` 30 项），首学交接依据随之改由
+   编排按 intent 声明，`journeyState.ts` 里的 surface 判断清零。
 
 首批**不做**：能力目标选择 UI、拼写/听写 scope、第三个 preset、
 "失败即全部重置"的 completion policy。

@@ -33,10 +33,12 @@ import {
   type PrototypeLearningTargetId,
   type PrototypeLightweightRating,
 } from './prototypeLearning';
+import { learningPolicyProfileRegistry } from '../learningRuntime/policyProfiles';
 import {
-  learningPolicyProfileRegistry,
-  type LearningProtocolPurpose,
-} from '../learningRuntime/policyProfiles';
+  initialHandoffBasisOf,
+  orchestrationRegistry,
+  type SchedulingHandoffBasis,
+} from '../learningRuntime/orchestrations';
 import { learningRuntimeCoordinator } from '../learningRuntime/runtimeCoordinator';
 import {
   retentionStoreRegistry,
@@ -55,7 +57,7 @@ export interface InitialLearningCompletion {
   readonly completedAt: string;
   readonly nextReviewAt: string;
   readonly nextReviewLabel: string;
-  readonly schedulingHandoffBasis: 'study_completion' | 'acquisition_graduation';
+  readonly schedulingHandoffBasis: SchedulingHandoffBasis;
   readonly initialRating?: Exclude<PrototypeLightweightRating, 'again'>;
 }
 
@@ -328,10 +330,17 @@ export type JourneyAction =
   | { readonly type: 'declareMastery'; readonly senseId: string }
   | { readonly type: 'revokeMastery'; readonly senseId: string };
 
-const surfaceFor = (
+/**
+ * 这条 Policy 的首学出口交出什么依据。见 learningRuntime/orchestrations.ts。
+ *
+ * 问的是编排取不取证，不是问用哪块屏跑：只有产出 assessment 的编排才有
+ * Evidence，才谈得上 Acquisition Graduation。
+ */
+const initialHandoffBasisFor = (
   policy: PrototypeLearningPolicy,
-  purpose: LearningProtocolPurpose,
-) => learningRuntimeCoordinator.surfaceFor(policy, purpose);
+): SchedulingHandoffBasis => initialHandoffBasisOf(orchestrationRegistry.get(
+  learningRuntimeCoordinator.orchestrationFor(policy, 'initial_learning'),
+));
 
 /** 这条 Policy 的长期保持事实存在哪。见 learningRuntime/retentionStores.ts。 */
 const retentionStoreFor = (policy: PrototypeLearningPolicy) =>
@@ -413,9 +422,9 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
           !policy
           || !senseId
           || !graduated.has(senseId)
-          // 这里问的不是"保持存在哪"，而是"首学产出的是不是 Acquisition
-          // Graduation"。等编排插件按 intent 声明证据种类后才能一并去掉。
-          || surfaceFor(policy, 'initial_learning') !== 'structured_session'
+          // 毕业是取证出口：产不出 assessment 的编排跑完也只是 Study
+          // Completion，不该在这里写交接。
+          || initialHandoffBasisFor(policy) !== 'acquisition_graduation'
         ) continue;
 
         const retentionStore = retentionStoreFor(policy);
@@ -435,7 +444,7 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
             completedAt: action.completedAt,
             nextReviewAt: handoff.nextReviewAt,
             nextReviewLabel: handoff.nextReviewLabel,
-            schedulingHandoffBasis: 'acquisition_graduation',
+            schedulingHandoffBasis: initialHandoffBasisFor(policy),
           };
         }
         if (retentionStore.opensJourneyLadder && !journey.lightweightRetention) {
@@ -455,13 +464,16 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
     }
 
     case 'completeLightweightInitial': {
+      const policy = journeyFor(state, action.targetId).committedPolicy ?? state.defaultPolicy;
       const changes: { -readonly [K in keyof TargetJourney]?: TargetJourney[K] } = {
         initialCompletion: {
           completionKind: 'lightweight',
           completedAt: action.completedAt,
           nextReviewAt: action.nextReviewAt,
           nextReviewLabel: action.nextReviewLabel,
-          schedulingHandoffBasis: 'study_completion',
+          // 同一处推导：轻量首学不出 assessment，所以它交出的是 Study
+          // Completion。写死常量会让这条依据脱离编排的声明。
+          schedulingHandoffBasis: initialHandoffBasisFor(policy),
           initialRating: action.rating,
         },
       };

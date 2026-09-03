@@ -7,6 +7,7 @@ import {
   type PrototypeLearningPolicy,
   type PrototypeRuntimeAdapterId,
 } from './policyProfiles';
+import type { OrchestrationId } from './orchestrations';
 import type { RetentionStoreId } from './retentionStores';
 
 export type PrototypeRuntimeSurface =
@@ -110,6 +111,19 @@ export class LearningRuntimeCoordinator<ProfileId extends string> {
     return this.adapterFor(profileId, purpose).retentionStoreId;
   }
 
+  /**
+   * 这条 Policy 在该用途下的 Step 由哪套编排产出。
+   *
+   * 调用点问编排而不是问 surface：出口交出什么依据、产不产 Evidence，是编排
+   * 的性质，与用哪块屏跑无关。见 orchestrations.ts。
+   */
+  public orchestrationFor(
+    profileId: ProfileId,
+    purpose: LearningProtocolPurpose,
+  ): OrchestrationId {
+    return this.#policyProfiles.get(profileId).protocols[purpose].orchestrationId;
+  }
+
   /** 同上，但从已经算好的 launch 出发（launch 带的是 adapterId，不是 profileId）。 */
   public retentionStoreOfAdapter(adapterId: PrototypeRuntimeAdapterId): RetentionStoreId {
     const adapter = this.#adapters.get(adapterId);
@@ -186,6 +200,7 @@ function sameProtocolBinding(
   return left.protocolId === right.protocolId
     && left.protocolVersion === right.protocolVersion
     && left.runtimeAdapterId === right.runtimeAdapterId
+    && left.orchestrationId === right.orchestrationId
     && sameContentCapabilitySet(left.contentRequirement, right.contentRequirement);
 }
 

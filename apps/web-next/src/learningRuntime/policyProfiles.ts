@@ -4,6 +4,7 @@ import {
   type ContentCapabilitySet,
   type PrototypeLearningReadinessView,
 } from './contentCapabilities';
+import type { OrchestrationId } from './orchestrations';
 
 export type {
   ContentCapabilityId,
@@ -28,6 +29,13 @@ export interface LearningProtocolBinding {
   protocolId: string;
   protocolVersion: string;
   runtimeAdapterId: PrototypeRuntimeAdapterId;
+  /**
+   * 这条 Binding 的 Step 由哪套编排产出。见 orchestrations.ts。
+   *
+   * `relearning` 与 `retention_review` 声明同一套：§4 裁定 relearning 复用
+   * 既有编排机制，插件作者只实现 `fresh` 与 `repair` 两个入口。
+   */
+  orchestrationId: OrchestrationId;
   /** 这条 Binding 需要的内容能力集合；readiness 是它们的合取。 */
   contentRequirement: ContentCapabilitySet;
 }
@@ -129,18 +137,21 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
         protocolId: 'lightweight-study',
         protocolVersion: 'v1',
         runtimeAdapterId: 'lightweight',
+        orchestrationId: 'lightweight_study',
         contentRequirement: ['compact_learning_material'],
       },
       retention_review: {
         protocolId: 'learner-rated-retention-review',
         protocolVersion: 'v1',
         runtimeAdapterId: 'lightweight',
+        orchestrationId: 'lightweight_retention',
         contentRequirement: ['compact_learning_material'],
       },
       relearning: {
         protocolId: 'lightweight-rebinding',
         protocolVersion: 'v1',
         runtimeAdapterId: 'lightweight',
+        orchestrationId: 'lightweight_retention',
         contentRequirement: ['compact_learning_material'],
       },
     },
@@ -160,18 +171,21 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
         protocolId: 'structured-acquisition',
         protocolVersion: 'v1',
         runtimeAdapterId: 'structured',
+        orchestrationId: 'structured_acquisition',
         contentRequirement: ['structured_learning_package'],
       },
       retention_review: {
         protocolId: 'evidence-oriented-retention-review',
         protocolVersion: 'v1',
         runtimeAdapterId: 'structured',
+        orchestrationId: 'structured_retention',
         contentRequirement: ['structured_learning_package'],
       },
       relearning: {
         protocolId: 'targeted-structured-relearning',
         protocolVersion: 'v1',
         runtimeAdapterId: 'structured',
+        orchestrationId: 'structured_retention',
         contentRequirement: ['structured_learning_package'],
       },
     },

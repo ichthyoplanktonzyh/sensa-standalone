@@ -1,15 +1,21 @@
+import {
+  acquisitionGateActions,
+  acquisitionOrchestration,
+  actionIntent,
+  isIntroduction,
+  requiredGatesOf,
+  type AcquisitionCandidate,
+  type AcquisitionRepairBasis,
+} from './stepOrchestration';
 import type {
   AcquisitionTargetProjection,
   AcquisitionGateStatus,
   LearningCapability,
-  LearningStepIntent,
   MeaningToFormRecallOutcome,
   NovelTransferOutcome,
   QueueConfig,
   QueueStats,
-  RepairResourceRole,
   SchedulablePackage,
-  ScheduledActionDefinition,
   Session,
   SenseAcquisitionState,
   StructuredAcquisitionProjection,
@@ -49,34 +55,6 @@ function cloneState(state: SenseAcquisitionState): SenseAcquisitionState {
     failureCounts: { ...state.failureCounts },
     lastAssessmentActionKey: { ...state.lastAssessmentActionKey },
   };
-}
-
-function actionIntent(definition: ScheduledActionDefinition): LearningStepIntent {
-  return definition.intent ?? 'assessment';
-}
-
-function isAssessment(definition: ScheduledActionDefinition): boolean {
-  return actionIntent(definition) === 'assessment';
-}
-
-/**
- * 讲解步。原先写作 `kind === 'introduction' && capability === 'introduction'
- * && isAssessment(action)`——最后一项是在排除 repair，可它同时也把讲解说成了
- * 一次测评。改问 intent 之后，这句话就只说它该说的那件事。
- */
-function isIntroduction(definition: ScheduledActionDefinition): boolean {
-  return definition.kind === 'introduction' && actionIntent(definition) === 'instruction';
-}
-
-function repairRoleFor(capability: LearningCapability): RepairResourceRole {
-  switch (capability) {
-    case 'meaning_to_form_recall':
-      return 'l1_bridge';
-    case 'contextual_recognition':
-    case 'novel_context_transfer':
-    case 'boundary_discrimination':
-      return 'experience_recap';
-  }
 }
 
 /**
@@ -201,11 +179,10 @@ export class LearnQueue<TContent = unknown> {
   }
 
   /**
-   * Select one eligible action. When the active window is not full, new
-   * Senses fill it first. Once full, the oldest eligible active Sense wins;
-   * this gives unfinished cycles fairness instead of repeatedly selecting the
-   * first Package in the release. A cooldown fallback is used only when no
-   * other Sense can satisfy minGap (for example, a one-Sense fixture).
+   * 推进一步。选谁、出哪一步都由编排插件回答（见 stepOrchestration.ts）：
+   * 这里只负责把学习者本地状态投影成候选，并把拿回来的 Step 定义装配成一次
+   * 会话。修复依据也在这里算——"哪个 Gate 失败了、失败在哪一步"是本地状态，
+   * 不该由插件推断。
    */
   public next(): Session<TContent> | null {
     if (this.currentSession && !this.currentSession.settled) {
@@ -223,42 +200,18 @@ export class LearnQueue<TContent = unknown> {
         && !state.skipped
         && !this.isPackageComplete(item, state);
     });
-    const active = pending.filter((item) => this.states.get(item.packageId)?.introduced === true);
-    const fresh = pending.filter((item) => this.states.get(item.packageId)?.introduced === false);
-    const eligibleActive = active.filter((item) =>
-      this.isEligible(this.states.get(item.packageId)!, ordinal));
-    const eligibleFresh = fresh.filter((item) =>
-      this.isEligible(this.states.get(item.packageId)!, ordinal));
-
-    let candidates: readonly SchedulablePackage<TContent>[];
-    if (active.length < this.activeWindow && eligibleFresh.length > 0) {
-      candidates = eligibleFresh;
-    } else if (eligibleActive.length > 0) {
-      candidates = eligibleActive;
-    } else if (active.length < this.activeWindow && fresh.length > 0) {
-      // Fresh Packages have no previous action and are normally always
-      // eligible. This branch makes the intent explicit if a future policy
-      // adds a fresh-Sense cooldown.
-      candidates = fresh;
-    } else if (active.length > 0) {
-      // No other Sense can satisfy minGap. This is an explicit equivalent
-      // cooldown fallback, not an assertion that the gap was met.
-      candidates = active;
-    } else {
-      candidates = fresh;
-    }
-
-    const chosenPackage = this.chooseOldest(candidates);
-    if (!chosenPackage) {
+    const selection = acquisitionOrchestration.fresh(
+      pending.map((item) => this.toCandidate(item)),
+      { ordinal, activeWindow: this.activeWindow, minGap: this.minGap },
+    );
+    if (!selection) {
       this.currentSession = null;
       return null;
     }
+    const chosenPackage = pending.find((item) =>
+      item.packageId === selection.target.targetKey)!;
     const state = this.states.get(chosenPackage.packageId)!;
-    const definition = this.nextDefinition(chosenPackage, state);
-    if (!definition) {
-      this.currentSession = null;
-      return null;
-    }
+    const definition = selection.definition;
     const intent = actionIntent(definition);
     const action: Session<TContent>['action'] = {
       ...definition,
@@ -504,99 +457,44 @@ export class LearnQueue<TContent = unknown> {
     return session;
   }
 
-  private nextDefinition(
-    item: SchedulablePackage<TContent>,
-    state: SenseAcquisitionState,
-  ): ScheduledActionDefinition | null {
-    if (!state.introduced) {
-      return item.actions.find(isIntroduction) ?? null;
-    }
-
-    const requiredGates = this.requiredGates(item);
-    if (state.pendingRepairCapability !== null) {
-      return this.repairDefinition(item, state, state.pendingRepairCapability);
-    }
-
-    // This branch keeps state recoverable if a persisted/compatibility state
-    // contains a failed Gate but predates pendingRepairCapability.
-    const failed = requiredGates.find((capability) => state.gateStatus[capability] === 'failed');
-    if (failed) return this.repairDefinition(item, state, failed);
-
-    const pending = requiredGates.find((capability) => state.gateStatus[capability] !== 'passed');
-    if (!pending) return null;
-    const actions = this.gateActions(item, pending);
-    if (actions.length === 0) return null;
-    if (pending === 'novel_context_transfer') {
-      return actions[state.transferScenarioIndex % actions.length] ?? actions[0];
-    }
-    const previousActionKey = state.lastAssessmentActionKey[pending];
-    if (previousActionKey && actions.length > 1) {
-      return actions.find((action) => action.actionKey !== previousActionKey) ?? actions[0];
-    }
-    return actions[0];
-  }
-
-  private repairDefinition(
-    item: SchedulablePackage<TContent>,
-    state: SenseAcquisitionState,
-    capability: LearningCapability,
-  ): ScheduledActionDefinition | null {
-    const actions = this.gateActions(item, capability);
-    const base = actions.find((action) =>
-      action.actionKey === state.pendingRepairForActionKey)
-      ?? actions[0];
-    if (!base) return null;
-    const repairNumber = state.repairCounts[capability] + 1;
-    const declaredRepair = item.repairActions?.find((action) =>
-      action.capability === capability && action.intent === 'repair');
-    if (declaredRepair) {
-      return {
-        ...declaredRepair,
-        actionKey: declaredRepair.actionKey === base.actionKey
-          ? `${base.actionKey}.repair.${repairNumber}`
-          : declaredRepair.actionKey,
-        taskKey: null,
-        kind: 'acquisition_gate',
-        intent: 'repair',
-        repairForActionKey: declaredRepair.repairForActionKey ?? base.actionKey,
-        repairResourceRef: declaredRepair.repairResourceRef ?? {
-          role: repairRoleFor(capability),
-          key: null,
-          source: 'scheduler_fallback',
-          fallbackReason: 'repair_binding_not_exposed',
-        },
-      };
-    }
+  /** 学习者本地状态 → 编排插件看得懂的一条候选。 */
+  private toCandidate(item: SchedulablePackage<TContent>): AcquisitionCandidate {
+    const state = this.states.get(item.packageId)!;
     return {
-      actionKey: `${base.actionKey}.repair.${repairNumber}`,
-      capability,
-      taskKey: null,
-      kind: 'acquisition_gate',
-      intent: 'repair',
-      repairForActionKey: base.actionKey,
-      repairResourceRef: {
-        role: repairRoleFor(capability),
-        key: null,
-        source: 'scheduler_fallback',
-        fallbackReason: 'repair_binding_not_exposed',
-      },
+      targetKey: item.packageId,
+      lastStepOrdinal: state.lastActionOrdinal,
+      repairBasis: this.repairBasisFor(item, state),
+      inventory: item,
+      introduced: state.introduced,
+      gateStatus: state.gateStatus,
+      lastAssessmentActionKey: state.lastAssessmentActionKey,
+      transferScenarioIndex: state.transferScenarioIndex,
     };
   }
 
-  private gateActions(
+  /**
+   * 这条 Target 有没有待修复的依据。
+   *
+   * 第二项回退让状态可恢复：某份持久化/兼容状态里可能有失败的 Gate，却早于
+   * `pendingRepairCapability` 这个字段。
+   */
+  private repairBasisFor(
     item: SchedulablePackage<TContent>,
-    capability: LearningCapability,
-  ): ScheduledActionDefinition[] {
-    return item.actions.filter((action) =>
-      action.capability === capability
-      && action.kind === 'acquisition_gate'
-      && isAssessment(action));
+    state: SenseAcquisitionState,
+  ): AcquisitionRepairBasis | null {
+    const capability = state.pendingRepairCapability
+      ?? requiredGatesOf(item).find((gate) => state.gateStatus[gate] === 'failed')
+      ?? null;
+    if (capability === null) return null;
+    return {
+      capability,
+      failedActionKey: state.pendingRepairForActionKey,
+      repairCount: state.repairCounts[capability],
+    };
   }
 
   private requiredGates(item: SchedulablePackage<TContent>): LearningCapability[] {
-    return item.requiredCapabilities.filter(
-      (capability, index, all) => all.indexOf(capability) === index,
-    );
+    return requiredGatesOf(item);
   }
 
   private isPackageComplete(
@@ -605,23 +503,6 @@ export class LearnQueue<TContent = unknown> {
   ): boolean {
     return state.introduced
       && this.requiredGates(item).every((capability) => state.gateStatus[capability] === 'passed');
-  }
-
-  /** minGap is the number of other Actions between two appearances. */
-  private isEligible(state: SenseAcquisitionState, ordinal: number): boolean {
-    return state.lastActionOrdinal < 0
-      || ordinal - state.lastActionOrdinal - 1 >= this.minGap;
-  }
-
-  private chooseOldest(
-    candidates: readonly SchedulablePackage<TContent>[],
-  ): SchedulablePackage<TContent> | null {
-    return [...candidates].sort((left, right) => {
-      const leftState = this.states.get(left.packageId)!;
-      const rightState = this.states.get(right.packageId)!;
-      return leftState.lastActionOrdinal - rightState.lastActionOrdinal
-        || left.packageId.localeCompare(right.packageId);
-    })[0] ?? null;
   }
 
   private assertPackageInventory(
@@ -638,7 +519,7 @@ export class LearnQueue<TContent = unknown> {
         throw new Error(`Package ${item.packageId} has no executable Introduction action.`);
       }
       item.requiredCapabilities.forEach((capability) => {
-        if (this.gateActions(item, capability).length === 0) {
+        if (acquisitionGateActions(item, capability).length === 0) {
           throw new Error(`Package ${item.packageId} has no executable action for ${capability}.`);
         }
       });

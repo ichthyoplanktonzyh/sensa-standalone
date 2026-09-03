@@ -16,12 +16,13 @@
     "smoke:flow": "tsx src/learningFlow/flowSmoke.ts",
     "smoke:runtime": "tsx src/learningRuntime/runtimeSessionSmoke.ts",
     "smoke:journey": "tsx src/learningJourney/journeySmoke.ts",
-    "smoke": "npm run smoke:router && npm run smoke:stores && npm run smoke:flow && npm run smoke:runtime && npm run smoke:surfaces && npm run smoke:intent && npm run smoke:capabilities && npm run smoke:retention && npm run smoke:journey && npm run smoke:styles",
+    "smoke": "npm run smoke:router && npm run smoke:stores && npm run smoke:flow && npm run smoke:runtime && npm run smoke:surfaces && npm run smoke:intent && npm run smoke:orchestration && npm run smoke:capabilities && npm run smoke:retention && npm run smoke:journey && npm run smoke:styles",
     "smoke:styles": "tsx src/styles/stylesheetSmoke.ts",
     "smoke:surfaces": "tsx src/learningRuntime/runtimeSurfacesSmoke.ts",
     "smoke:retention": "tsx src/learningRuntime/retentionStoresSmoke.ts",
     "smoke:capabilities": "tsx src/learningRuntime/contentCapabilitiesSmoke.ts",
-    "smoke:intent": "tsx src/engine/stepIntentSmoke.ts"
+    "smoke:intent": "tsx src/engine/stepIntentSmoke.ts",
+    "smoke:orchestration": "tsx src/engine/stepOrchestrationSmoke.ts"
   },
   "dependencies": {
     "@sensa/contracts": "file:../../packages/contracts",

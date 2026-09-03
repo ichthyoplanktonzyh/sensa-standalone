@@ -1,3 +1,12 @@
+import {
+  isPackageRepair,
+  isRelearningAssessment,
+  isRetentionAssessment,
+  retentionOrchestration,
+  reviewAssessmentKindFor,
+  type RetentionCandidate,
+  type RetentionRepairBasis,
+} from './stepOrchestration';
 import type {
   LearningCapability,
   QueueConfig,
@@ -5,7 +14,6 @@ import type {
   ReviewCandidate,
   SchedulablePackage,
   ScheduledAction,
-  ScheduledActionDefinition,
 } from './types';
 import { reviewOutcomeKey } from './types';
 import type {
@@ -111,16 +119,6 @@ interface ReviewSnapshot<TContent> {
   runtimeTargets: [string, RetentionRuntimeTargetProjection][];
 }
 
-function kindForCapability(capability: LearningCapability | null): ReviewAssessmentKind | null {
-  switch (capability) {
-    case 'contextual_recognition': return 'context_recognition';
-    case 'meaning_to_form_recall': return 'meaning_to_form_recall';
-    case 'novel_context_transfer': return 'novel_context_transfer';
-    case 'boundary_discrimination': return 'boundary_contrast';
-    default: return null;
-  }
-}
-
 function cloneCycle(cycle: RelearningCycle | null | undefined): RelearningCycle | null | undefined {
   return cycle ? { ...cycle } : cycle;
 }
@@ -165,28 +163,6 @@ function cloneRuntimeTarget(
   return { ...target };
 }
 
-function isRetentionAssessment(action: ScheduledActionDefinition): boolean {
-  const assessmentKind = kindForCapability(action.capability);
-  return action.kind === 'retention_review'
-    && action.intent !== 'repair'
-    && assessmentKind !== null
-    && canProduceReviewMemoryOutcome(assessmentKind);
-}
-
-function isRelearningAssessment(action: ScheduledActionDefinition): boolean {
-  return action.kind === 'relearning_gate'
-    && action.intent !== 'repair'
-    && kindForCapability(action.capability) !== null;
-}
-
-function isPackageRepair(action: ScheduledActionDefinition, capability: LearningCapability): boolean {
-  return action.kind === 'acquisition_gate'
-    && action.intent === 'repair'
-    && action.capability === capability
-    && action.repairResourceRef?.source === 'package_declared'
-    && Boolean(action.repairResourceRef.key);
-}
-
 function inferLegacyCycle<TContent>(candidate: ReviewCandidate<TContent>): RelearningCycle | null {
   const definition = candidate.package.reviewActions.find(isRelearningAssessment);
   if (!definition || definition.capability === null) return null;
@@ -223,28 +199,6 @@ function hasExecutableReviewAction<TContent>(candidate: ReviewCandidate<TContent
   }
   return candidate.package.reviewActions.some((action) =>
     isRelearningAssessment(action) && action.capability === cycle.targetCapability);
-}
-
-function chooseReviewAction<TContent>(
-  actions: readonly ScheduledActionDefinition[],
-  candidate: ReviewCandidate<TContent>,
-  position: number,
-): ScheduledActionDefinition | undefined {
-  const preferredCapabilities = candidate.diagnosticFacts?.preferredCapabilities ?? [];
-  for (const capability of preferredCapabilities) {
-    const preferred = actions.find((action) => action.capability === capability);
-    if (preferred) return preferred;
-  }
-
-  // FSRS reps/lapses are deliberately absent from this decision. They answer
-  // when a Sense is due; diagnostic facts or deterministic inventory rotation
-  // answer what the due Review should assess.
-  const lastCapability = candidate.diagnosticFacts?.lastCapability;
-  const alternatives = lastCapability
-    ? actions.filter((action) => action.capability !== lastCapability)
-    : actions;
-  const pool = alternatives.length > 0 ? alternatives : actions;
-  return pool.length > 0 ? pool[position % pool.length] : undefined;
 }
 
 /**
@@ -344,31 +298,26 @@ export class ReviewQueue<TContent = unknown> {
     }
 
     const ordinal = this.actionOrdinal + 1;
-    const eligible = this.pendingQueue.filter((candidate) =>
-      this.isEligible(candidate.package.senseId, ordinal));
-    // If no different Sense can satisfy minGap, this is an explicit safe
-    // fallback. The scheduler does not claim that the configured gap was met.
-    const candidates = eligible.length > 0 ? eligible : this.pendingQueue;
-    const chosenCandidate = this.chooseOldest(candidates);
-    if (!chosenCandidate) {
+    // 选谁、出哪一步都由编排插件回答（见 stepOrchestration.ts）；这里只把
+    // 到期队列投影成候选，并把拿回来的 Step 定义装配成一次复习会话。
+    const selection = retentionOrchestration.fresh(
+      this.pendingQueue.map((candidate) => this.toCandidate(candidate)),
+      { ordinal, activeWindow: this.pendingQueue.length, minGap: this.minGap },
+    );
+    if (!selection) {
       this.currentSession = null;
       return null;
     }
     const chosenIndex = this.pendingQueue.findIndex((candidate) =>
-      candidate.package.packageId === chosenCandidate.package.packageId);
+      candidate.package.packageId === selection.target.targetKey);
     const candidate = this.pendingQueue.splice(chosenIndex, 1)[0]!;
     const cycle = candidate.phase === 'relearning'
       ? candidate.relearning ?? inferLegacyCycle(candidate)
       : null;
     if (candidate.phase === 'relearning' && cycle) candidate.relearning = cycle;
-    const definition = this.nextDefinition(candidate, cycle, ordinal);
-    if (!definition) {
-      this.pendingQueue.unshift(candidate);
-      this.currentSession = null;
-      return null;
-    }
+    const definition = selection.definition;
     const intent = definition.intent ?? 'assessment';
-    const assessmentKind = kindForCapability(definition.capability);
+    const assessmentKind = reviewAssessmentKindFor(definition.capability);
     if (!assessmentKind) {
       this.pendingQueue.unshift(candidate);
       this.currentSession = null;
@@ -587,43 +536,33 @@ export class ReviewQueue<TContent = unknown> {
     };
   }
 
-  private nextDefinition(
-    candidate: ReviewCandidate<TContent>,
-    cycle: RelearningCycle | null,
-    ordinal: number,
-  ): ScheduledActionDefinition | null {
-    if (candidate.phase === 'retaining') {
-      const actions = candidate.package.reviewActions.filter(isRetentionAssessment);
-      return chooseReviewAction(actions, candidate, ordinal) ?? null;
-    }
-    if (!cycle) return null;
-    if (cycle.stage === 'repair_pending') {
-      return this.repairDefinition(candidate.package, cycle);
-    }
-    const actions = candidate.package.reviewActions.filter((action) =>
-      isRelearningAssessment(action) && action.capability === cycle.targetCapability);
-    return actions.length > 0
-      ? actions[cycle.repairCount % actions.length]
+  /**
+   * 一条到期候选 → 编排插件看得懂的候选。
+   *
+   * 三种去向互斥：retaining 出到期复习，`repairBasis` 出定向修复，`retest`
+   * 出修复后的独立重测。三者都不成立（重学但没有 cycle）时插件出不了步，
+   * 与落地前 `nextDefinition` 返回 null 一致。
+   */
+  private toCandidate(candidate: ReviewCandidate<TContent>): RetentionCandidate {
+    const cycle = candidate.phase === 'relearning'
+      ? candidate.relearning ?? inferLegacyCycle(candidate)
       : null;
-  }
-
-  private repairDefinition(
-    item: SchedulablePackage<TContent>,
-    cycle: RelearningCycle,
-  ): ScheduledActionDefinition | null {
-    // Relearning must consume an approved Package binding. There is no
-    // scheduler-generated content fallback in this queue.
-    const declaredRepair = item.repairActions?.find((action) =>
-      isPackageRepair(action, cycle.targetCapability));
-    if (!declaredRepair) return null;
     return {
-      ...declaredRepair,
-      actionKey: `${declaredRepair.actionKey}.relearning.${cycle.repairCount + 1}`,
-      taskKey: null,
-      kind: 'acquisition_gate',
-      intent: 'repair',
-      repairForActionKey: cycle.failedReviewActionKey,
-      repairResourceRef: { ...declaredRepair.repairResourceRef! },
+      targetKey: candidate.package.packageId,
+      lastStepOrdinal: this.lastActionOrdinalBySense.get(candidate.package.senseId) ?? -1,
+      repairBasis: cycle?.stage === 'repair_pending'
+        ? {
+            capability: cycle.targetCapability,
+            failedReviewActionKey: cycle.failedReviewActionKey,
+            repairCount: cycle.repairCount,
+          } satisfies RetentionRepairBasis
+        : null,
+      inventory: candidate.package,
+      retaining: candidate.phase === 'retaining',
+      retest: cycle?.stage === 'retest_pending'
+        ? { capability: cycle.targetCapability, repairCount: cycle.repairCount }
+        : null,
+      diagnosticFacts: candidate.diagnosticFacts,
     };
   }
 
@@ -681,22 +620,6 @@ export class ReviewQueue<TContent = unknown> {
       action: cloneAction(action),
       cycle: { ...cycle },
     });
-  }
-
-  private isEligible(senseId: string, ordinal: number): boolean {
-    const previous = this.lastActionOrdinalBySense.get(senseId) ?? -1;
-    return ordinal - previous - 1 >= this.minGap;
-  }
-
-  private chooseOldest(
-    candidates: readonly ReviewCandidate<TContent>[],
-  ): ReviewCandidate<TContent> | null {
-    return [...candidates].sort((left, right) => {
-      const leftOrdinal = this.lastActionOrdinalBySense.get(left.package.senseId) ?? -1;
-      const rightOrdinal = this.lastActionOrdinalBySense.get(right.package.senseId) ?? -1;
-      return leftOrdinal - rightOrdinal
-        || left.package.packageId.localeCompare(right.package.packageId);
-    })[0] ?? null;
   }
 
   private captureSnapshot(): void {
