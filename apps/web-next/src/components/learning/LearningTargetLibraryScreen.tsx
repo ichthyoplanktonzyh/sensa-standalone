@@ -1,7 +1,6 @@
 import {
   PROTOTYPE_LEARNING_TARGETS,
   policyLabel,
-  readinessForPolicy,
   type PrototypeLearningPolicy,
   type PrototypeLearningReadiness,
   type PrototypeLearningTargetId,
@@ -10,9 +9,10 @@ import {
 interface LearningTargetLibraryScreenProps {
   active: boolean;
   targetIds: readonly PrototypeLearningTargetId[];
-  policyByTarget: Partial<Record<PrototypeLearningTargetId, PrototypeLearningPolicy>>;
-  preparationByTarget: Partial<Record<PrototypeLearningTargetId, PrototypeLearningReadiness>>;
-  committedPolicyByTarget: Partial<Record<PrototypeLearningTargetId, PrototypeLearningPolicy>>;
+  /** 生效方式与准备状态由 journeyState 算好传入——优先级规则只应有一份。 */
+  policyByTarget: Readonly<Record<PrototypeLearningTargetId, PrototypeLearningPolicy>>;
+  preparationByTarget: Readonly<Record<PrototypeLearningTargetId, PrototypeLearningReadiness>>;
+  committedTargetIds: ReadonlySet<PrototypeLearningTargetId>;
   completedTargetIds: ReadonlySet<PrototypeLearningTargetId>;
   reviewDueTargetIds: ReadonlySet<PrototypeLearningTargetId>;
   relearningTargetIds: ReadonlySet<PrototypeLearningTargetId>;
@@ -36,7 +36,7 @@ export const LearningTargetLibraryScreen = ({
   targetIds,
   policyByTarget,
   preparationByTarget,
-  committedPolicyByTarget,
+  committedTargetIds,
   completedTargetIds,
   reviewDueTargetIds,
   relearningTargetIds,
@@ -75,11 +75,9 @@ export const LearningTargetLibraryScreen = ({
       <div className="learning-library-list" aria-label="学习目标列表">
         {targetIds.map((targetId) => {
           const target = PROTOTYPE_LEARNING_TARGETS[targetId];
-          const committedPolicy = committedPolicyByTarget[targetId];
-          const selectedPolicy = committedPolicy ?? policyByTarget[targetId] ?? target.policy;
-          const readiness = preparationByTarget[targetId]
-            ?? readinessForPolicy(target, selectedPolicy).status;
-          const isCommitted = committedPolicy !== undefined;
+          const selectedPolicy = policyByTarget[targetId];
+          const readiness = preparationByTarget[targetId];
+          const isCommitted = committedTargetIds.has(targetId);
           const isCompleted = completedTargetIds.has(targetId);
           const isReviewDue = reviewDueTargetIds.has(targetId);
           const isRelearning = relearningTargetIds.has(targetId);

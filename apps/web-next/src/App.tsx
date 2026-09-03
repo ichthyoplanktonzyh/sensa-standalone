@@ -12,7 +12,6 @@ import type {
 import type {
   ReviewAssessmentKind,
   ReviewAssessmentResult,
-  ReviewMemoryOutcome,
 } from './review/types';
 import { resolveReviewMemoryOutcome } from './review/types';
 import { storageService } from './services/storageService';
@@ -83,7 +82,6 @@ import type {
   MeaningToFormRecallOutcome,
   NovelTransferOutcome,
   ReviewCandidate,
-  RelearningCycleStage,
 } from './engine/types';
 import {
   PROTOTYPE_LEARNING_TARGET_ORDER,
@@ -92,14 +90,23 @@ import {
   readinessForPolicy,
   runtimePackageForTarget,
   type PrototypeLearningPolicy,
-  type PrototypeLearningReadiness,
   type PrototypeLearningTargetId,
   type PrototypeLightweightRating,
 } from './learningJourney/prototypeLearning';
 import {
-  learningPolicyProfileRegistry,
-  type LearningProtocolPurpose,
-} from './learningRuntime/policyProfiles';
+  addedTargetIds,
+  committedTargetIds,
+  completedTargetIds,
+  effectivePolicies,
+  effectivePolicyFor,
+  isDeclaredMastery,
+  journeyFor,
+  preparationFor,
+  preparations,
+  relativeReviewLabel,
+} from './learningJourney/journeyState';
+import { useJourneyState } from './learningJourney/useJourneyState';
+import type { LearningProtocolPurpose } from './learningRuntime/policyProfiles';
 import { learningRuntimeCoordinator } from './learningRuntime/runtimeCoordinator';
 import { useRuntimeSession } from './learningRuntime/useRuntimeSession';
 import { useShellNavigation } from './router/useShellNavigation';
@@ -117,45 +124,6 @@ type LearningPolicyContext =
   | { kind: 'default' }
   | { kind: 'target'; targetId: PrototypeLearningTargetId };
 
-type TargetPolicyMap = Partial<Record<PrototypeLearningTargetId, PrototypeLearningPolicy>>;
-type TargetPreparationMap = Partial<Record<PrototypeLearningTargetId, PrototypeLearningReadiness>>;
-type LightweightRetentionMap = Partial<Record<
-  PrototypeLearningTargetId,
-  {
-    nextReviewAt: string;
-    nextReviewLabel: string;
-    reviewCount: number;
-    lapseCount: number;
-    relearning: boolean;
-    lastReviewRating?: PrototypeLightweightRating;
-    lastReviewedAt?: string;
-  }
->>;
-type InitialLearningCompletionMap = Partial<Record<
-  PrototypeLearningTargetId,
-  {
-    completionKind: 'lightweight' | 'structured';
-    completedAt: string;
-    nextReviewAt: string;
-    nextReviewLabel: string;
-    schedulingHandoffBasis: 'study_completion' | 'acquisition_graduation';
-    initialRating?: Exclude<PrototypeLightweightRating, 'again'>;
-  }
->>;
-type StructuredRetentionMap = Partial<Record<
-  PrototypeLearningTargetId,
-  {
-    lastReviewedAt: string | null;
-    nextReviewAt: string;
-    nextReviewLabel: string;
-    reviewCount: number;
-    lapseCount: number;
-    lastOutcome: ReviewMemoryOutcome | null;
-    relearning: boolean;
-    relearningStage: RelearningCycleStage | null;
-    relearningCompletedAt: string | null;
-  }
->>;
 
 const LIGHTWEIGHT_REVIEW_SCHEDULE: Record<
   PrototypeLightweightRating,
@@ -173,43 +141,12 @@ const TARGET_ID_BY_RUNTIME_SENSE = new Map(
   }),
 );
 
-const DEFAULT_LEARNING_POLICY = learningPolicyProfileRegistry.list()[0]!.profileId;
 
 function runtimeSurfaceForPolicy(
   policy: PrototypeLearningPolicy,
   purpose: LearningProtocolPurpose,
 ) {
   return learningRuntimeCoordinator.surfaceFor(policy, purpose);
-}
-
-function relativeReviewLabel(dueAt: number, now: number = Date.now()): string {
-  const days = Math.max(0, Math.ceil((dueAt - now) / (24 * 60 * 60 * 1000)));
-  if (days === 0) return '今天';
-  if (days === 1) return '明天';
-  return `${days} 天后`;
-}
-
-function effectivePolicyForTarget(
-  targetId: PrototypeLearningTargetId,
-  defaultPolicy: PrototypeLearningPolicy,
-  addedTargetIds: ReadonlySet<PrototypeLearningTargetId>,
-  policyByTarget: TargetPolicyMap,
-  committedPolicyByTarget: TargetPolicyMap,
-): PrototypeLearningPolicy {
-  return committedPolicyByTarget[targetId]
-    ?? policyByTarget[targetId]
-    ?? (addedTargetIds.has(targetId)
-      ? PROTOTYPE_LEARNING_TARGETS[targetId].policy
-      : defaultPolicy);
-}
-
-function preparationForTarget(
-  targetId: PrototypeLearningTargetId,
-  policy: PrototypeLearningPolicy,
-  preparationByTarget: TargetPreparationMap,
-): PrototypeLearningReadiness {
-  return preparationByTarget[targetId]
-    ?? readinessForPolicy(PROTOTYPE_LEARNING_TARGETS[targetId], policy).status;
 }
 
 function stageForCapability(capability: LearningCapability): FormalLearningStage {
@@ -369,8 +306,6 @@ export default function App() {
   const [coins] = useState(2470);
   const [streak, setStreak] = useState(0);
   const [studyTab, setStudyTab] = useState<'a' | 'b'>('a');
-  const [defaultLearningPolicy, setDefaultLearningPolicy] =
-    useState<PrototypeLearningPolicy>(DEFAULT_LEARNING_POLICY);
   /**
    * 打开的是哪条 Target、正在编辑谁的学习方式——这两个都是"某个 sheet 正在
    * 展示什么"，和内容区的 senseId / meaningId 是同一类东西，所以同样由 URL 描述。
@@ -382,25 +317,13 @@ export default function App() {
     isPrototypeLearningTargetId(params.policyTarget)
       ? { kind: 'target', targetId: params.policyTarget }
       : { kind: 'default' };
-  const [learningPolicyByTarget, setLearningPolicyByTarget] = useState<
-    TargetPolicyMap
-  >({});
-  const [addedLearningTargetIds, setAddedLearningTargetIds] = useState<
-    ReadonlySet<PrototypeLearningTargetId>
-  >(() => new Set<PrototypeLearningTargetId>(['tactful-expression', 'lend-give']));
-  const [preparationByTarget, setPreparationByTarget] = useState<TargetPreparationMap>({
-    'tactful-expression': 'preparing',
-  });
-  const [committedPolicyByTarget, setCommittedPolicyByTarget] = useState<TargetPolicyMap>({});
-  const [lightweightRetentionByTarget, setLightweightRetentionByTarget] =
-    useState<LightweightRetentionMap>({});
-  const [initialLearningCompletionByTarget, setInitialLearningCompletionByTarget] =
-    useState<InitialLearningCompletionMap>({});
-  const [declaredMasterySenseIds, setDeclaredMasterySenseIds] = useState<ReadonlySet<string>>(
-    () => new Set<string>(),
-  );
-  const [structuredRetentionByTarget, setStructuredRetentionByTarget] =
-    useState<StructuredRetentionMap>({});
+  /**
+   * 每条 Target 走到哪一步了。原先是八个用同一个 key 索引的平行 map
+   * 加一个默认方式，规则见 learningJourney/journeyState.ts。
+   */
+  const { journey, dispatchJourney } = useJourneyState();
+  const defaultLearningPolicy = journey.defaultPolicy;
+  const declaredMasterySenseIds = journey.declaredMasterySenseIds;
   /**
    * "现在跑着什么、刚跑完什么"——五个原本各自为政的 useState，规则见
    * learningRuntime/runtimeSession.ts。
@@ -434,83 +357,48 @@ export default function App() {
   }, [goMain]);
 
   const openTargetLearningPolicy = useCallback(() => {
-    if (committedPolicyByTarget[selectedLearningTargetId]) {
+    if (journeyFor(journey, selectedLearningTargetId).committedPolicy) {
       toast('学习方式已在首次正式学习开始时锁定');
       return;
     }
     goMain('s-learning-policy', { policyTarget: selectedLearningTargetId });
-  }, [committedPolicyByTarget, goMain, selectedLearningTargetId, toast]);
+  }, [goMain, journey, selectedLearningTargetId, toast]);
 
   const selectLearningPolicy = useCallback((policy: PrototypeLearningPolicy) => {
     if (learningPolicyContext.kind === 'default') {
-      setDefaultLearningPolicy(policy);
+      dispatchJourney({ type: 'selectDefaultPolicy', policy });
       return;
     }
-    if (committedPolicyByTarget[learningPolicyContext.targetId]) {
+    if (journeyFor(journey, learningPolicyContext.targetId).committedPolicy) {
       toast('这条目标的学习方式已经锁定');
       return;
     }
-    setLearningPolicyByTarget((current) => ({
-      ...current,
-      [learningPolicyContext.targetId]: policy,
-    }));
-    setPreparationByTarget((current) => ({
-      ...current,
-      [learningPolicyContext.targetId]: readinessForPolicy(
-        PROTOTYPE_LEARNING_TARGETS[learningPolicyContext.targetId],
-        policy,
-      ).status,
-    }));
-  }, [committedPolicyByTarget, learningPolicyContext, toast]);
+    dispatchJourney({
+      type: 'selectTargetPolicy',
+      targetId: learningPolicyContext.targetId,
+      policy,
+    });
+  }, [dispatchJourney, journey, learningPolicyContext, toast]);
 
   const addSelectedLearningTarget = useCallback(() => {
-    const selectedPolicy = learningPolicyByTarget[selectedLearningTargetId]
-      ?? defaultLearningPolicy;
-    setLearningPolicyByTarget((current) => ({
-      ...current,
-      [selectedLearningTargetId]: current[selectedLearningTargetId] ?? selectedPolicy,
-    }));
-    setPreparationByTarget((current) => ({
-      ...current,
-      [selectedLearningTargetId]: readinessForPolicy(
-        PROTOTYPE_LEARNING_TARGETS[selectedLearningTargetId],
-        selectedPolicy,
-      ).status,
-    }));
-    setAddedLearningTargetIds((current) => {
-      const next = new Set(current);
-      next.add(selectedLearningTargetId);
-      return next;
-    });
+    dispatchJourney({ type: 'addTarget', targetId: selectedLearningTargetId });
     toast('已加入“我的学习”，内容会按所选方式准备');
-  }, [defaultLearningPolicy, learningPolicyByTarget, selectedLearningTargetId, toast]);
+  }, [dispatchJourney, selectedLearningTargetId, toast]);
 
   const refreshSelectedTargetPreparation = useCallback(() => {
-    const selectedPolicy = effectivePolicyForTarget(
-      selectedLearningTargetId,
-      defaultLearningPolicy,
-      addedLearningTargetIds,
-      learningPolicyByTarget,
-      committedPolicyByTarget,
-    );
     const configured = readinessForPolicy(
       PROTOTYPE_LEARNING_TARGETS[selectedLearningTargetId],
-      selectedPolicy,
+      effectivePolicyFor(journey, selectedLearningTargetId),
     ).status;
+    // 原型里"刷新准备状态"就是把 preparing 推成 ready，其余状态照原样落一次。
     const nextPreparation = configured === 'preparing' ? 'ready' : configured;
-    setPreparationByTarget((current) => ({
-      ...current,
-      [selectedLearningTargetId]: nextPreparation,
-    }));
+    dispatchJourney({
+      type: 'setPreparation',
+      targetId: selectedLearningTargetId,
+      preparation: nextPreparation,
+    });
     toast(nextPreparation === 'ready' ? '内容已准备好，可以进入今日学习' : '准备状态已更新');
-  }, [
-    addedLearningTargetIds,
-    committedPolicyByTarget,
-    defaultLearningPolicy,
-    learningPolicyByTarget,
-    selectedLearningTargetId,
-    toast,
-  ]);
+  }, [dispatchJourney, journey, selectedLearningTargetId, toast]);
 
   const openLearningSource = useCallback(() => {
     const target = PROTOTYPE_LEARNING_TARGETS[selectedLearningTargetId];
@@ -546,15 +434,14 @@ export default function App() {
   useEffect(() => {
     const dueAt = Date.now();
     const targetIdsToAdvance = PROTOTYPE_LEARNING_TARGET_ORDER.filter((targetId) => {
-      const graduation = initialLearningCompletionByTarget[targetId];
-      const retention = structuredRetentionByTarget[targetId];
-      const policy = committedPolicyByTarget[targetId];
+      const { initialCompletion, structuredRetention, committedPolicy } =
+        journeyFor(journey, targetId);
       const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
       if (
-        !graduation
-        || !policy
-        || runtimeSurfaceForPolicy(policy, 'retention_review') !== 'structured_session'
-        || retention?.reviewCount
+        !initialCompletion
+        || !committedPolicy
+        || runtimeSurfaceForPolicy(committedPolicy, 'retention_review') !== 'structured_session'
+        || structuredRetention?.reviewCount
         || !senseId
       ) return false;
       if (declaredMasterySenseIds.has(senseId)) return false;
@@ -568,57 +455,31 @@ export default function App() {
       const memory = storageService.getFSRSItems()[senseId]!;
       storageService.saveFSRSItem({ ...memory, due: dueAt, scheduledDays: 0 });
     });
-    setInitialLearningCompletionByTarget((current) => {
-      const next = { ...current };
-      targetIdsToAdvance.forEach((targetId) => {
-        next[targetId] = {
-          ...next[targetId]!,
-          nextReviewAt: new Date(dueAt).toISOString(),
-          nextReviewLabel: '现在可复习（原型）',
-        };
-      });
-      return next;
-    });
-  }, [
-    declaredMasterySenseIds,
-    committedPolicyByTarget,
-    initialLearningCompletionByTarget,
-    structuredRetentionByTarget,
-  ]);
+    dispatchJourney({ type: 'advanceStructuredHandoffs', targetIds: targetIdsToAdvance, dueAt });
+  }, [declaredMasterySenseIds, dispatchJourney, journey]);
 
 
-  const visibleLearningTargetIds = PROTOTYPE_LEARNING_TARGET_ORDER.filter((targetId) =>
-    addedLearningTargetIds.has(targetId));
+  const visibleLearningTargetIds = addedTargetIds(journey);
   const readyInitialTargetIds = visibleLearningTargetIds.filter((targetId) => {
-    if (committedPolicyByTarget[targetId]) return false;
-    const runtimeSenseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
-    if (runtimeSenseId && declaredMasterySenseIds.has(runtimeSenseId)) return false;
-    const policy = effectivePolicyForTarget(
-      targetId,
-      defaultLearningPolicy,
-      addedLearningTargetIds,
-      learningPolicyByTarget,
-      committedPolicyByTarget,
-    );
-    return preparationForTarget(targetId, policy, preparationByTarget) === 'ready';
+    if (journeyFor(journey, targetId).committedPolicy) return false;
+    if (isDeclaredMastery(journey, targetId)) return false;
+    return preparationFor(journey, targetId) === 'ready';
   });
   const todayInitialTargetIds = readyInitialTargetIds.slice(0, dailyNewCount);
   const lightweightDueTargetIds = visibleLearningTargetIds.filter((targetId) => {
-    const completion = lightweightRetentionByTarget[targetId];
-    const policy = committedPolicyByTarget[targetId];
-    return policy !== undefined
-      && runtimeSurfaceForPolicy(policy, 'retention_review') === 'lightweight_retention'
-      && completion !== undefined
-      && (completion.relearning || Date.parse(completion.nextReviewAt) <= Date.now());
+    const { lightweightRetention, committedPolicy } = journeyFor(journey, targetId);
+    return committedPolicy !== null
+      && runtimeSurfaceForPolicy(committedPolicy, 'retention_review') === 'lightweight_retention'
+      && lightweightRetention !== null
+      && (lightweightRetention.relearning
+        || Date.parse(lightweightRetention.nextReviewAt) <= Date.now());
   });
-  const lightweightRelearningTargetIds = visibleLearningTargetIds.filter(
-    (targetId) => {
-      const policy = committedPolicyByTarget[targetId];
-      return policy !== undefined
-        && runtimeSurfaceForPolicy(policy, 'relearning') === 'lightweight_retention'
-        && lightweightRetentionByTarget[targetId]?.relearning;
-    },
-  );
+  const lightweightRelearningTargetIds = visibleLearningTargetIds.filter((targetId) => {
+    const { lightweightRetention, committedPolicy } = journeyFor(journey, targetId);
+    return committedPolicy !== null
+      && runtimeSurfaceForPolicy(committedPolicy, 'relearning') === 'lightweight_retention'
+      && lightweightRetention?.relearning === true;
+  });
 
   /* ---------- 穿插调度算法引擎 (新词学习流) ---------- */
   const {
@@ -650,7 +511,7 @@ export default function App() {
     const graduatedSenseIds = getGraduatedSenseIds();
     graduatedSenseIds.forEach((senseId) => {
       const targetId = TARGET_ID_BY_RUNTIME_SENSE.get(senseId);
-      const policy = targetId ? committedPolicyByTarget[targetId] : undefined;
+      const policy = targetId ? journeyFor(journey, targetId).committedPolicy : null;
       if (
         policy
         && runtimeSurfaceForPolicy(policy, 'retention_review') === 'structured_session'
@@ -674,71 +535,22 @@ export default function App() {
         }),
       });
     }
-    setInitialLearningCompletionByTarget((current) => {
-      let next = current;
-      PROTOTYPE_LEARNING_TARGET_ORDER.forEach((targetId) => {
-        const target = PROTOTYPE_LEARNING_TARGETS[targetId];
-        const policy = committedPolicyByTarget[targetId];
-        if (
-          current[targetId]
-          || !policy
-          || runtimeSurfaceForPolicy(policy, 'initial_learning') !== 'structured_session'
-          || !target.runtimeSenseId
-          || !graduatedSenseIdSet.has(target.runtimeSenseId)
-        ) return;
-        const retentionSurface = runtimeSurfaceForPolicy(policy, 'retention_review');
-        const memory = retentionSurface === 'structured_session'
-          ? memoryItems[target.runtimeSenseId]
-          : null;
-        const nextReviewAt = memory
-          ? new Date(memory.due).toISOString()
-          : completedAt;
-        next = {
-          ...next,
-          [targetId]: {
-            completionKind: 'structured',
-            completedAt,
-            nextReviewAt,
-            nextReviewLabel: memory
-              ? relativeReviewLabel(memory.due)
-              : '现在可复习（原型）',
-            schedulingHandoffBasis: 'acquisition_graduation',
-          },
-        };
-      });
-      return next;
-    });
-    setLightweightRetentionByTarget((current) => {
-      let next = current;
-      PROTOTYPE_LEARNING_TARGET_ORDER.forEach((targetId) => {
-        const target = PROTOTYPE_LEARNING_TARGETS[targetId];
-        const policy = committedPolicyByTarget[targetId];
-        if (
-          current[targetId]
-          || !policy
-          || runtimeSurfaceForPolicy(policy, 'initial_learning') !== 'structured_session'
-          || runtimeSurfaceForPolicy(policy, 'retention_review') !== 'lightweight_retention'
-          || !target.runtimeSenseId
-          || !graduatedSenseIdSet.has(target.runtimeSenseId)
-        ) return;
-        next = {
-          ...next,
-          [targetId]: {
-            nextReviewAt: completedAt,
-            nextReviewLabel: '现在可复习（原型）',
-            reviewCount: 0,
-            lapseCount: 0,
-            relearning: false,
-          },
-        };
-      });
-      return next;
+    // 谁算毕业、交接写进哪一份，规则在 journeyReducer 里；这里只交出输入。
+    dispatchJourney({
+      type: 'recordStructuredGraduation',
+      graduatedSenseIds,
+      dueBySenseId: Object.fromEntries(
+        Object.values(memoryItems).map((item) => [item.wordId, item.due]),
+      ),
+      completedAt,
+      now: Date.now(),
     });
   }, [
     structuredInitialTargetIds,
-    committedPolicyByTarget,
     declaredMasterySenseIds,
+    dispatchJourney,
     getGraduatedSenseIds,
+    journey,
     showInitialSummary,
   ]);
 
@@ -751,33 +563,22 @@ export default function App() {
       const memory = storageService.getFSRSItems()[senseId]!;
       const cycle = storageService.getRelearningCycle(senseId);
       const occurredAt = new Date().toISOString();
-      setStructuredRetentionByTarget((current) => {
-        const previous = current[targetId];
-        return {
-          ...current,
-          [targetId]: {
-            lastReviewedAt: effect.type === 'retention_outcome'
-              ? occurredAt
-              : previous?.lastReviewedAt ?? null,
-            nextReviewAt: new Date(memory.due).toISOString(),
-            nextReviewLabel: relativeReviewLabel(memory.due),
-            reviewCount: (previous?.reviewCount ?? 0)
-              + (effect.type === 'retention_outcome' ? 1 : 0),
-            lapseCount: memory.lapses,
-            lastOutcome: effect.type === 'retention_outcome'
-              ? effect.result.memoryOutcome
-              : previous?.lastOutcome ?? null,
-            relearning: cycle !== null,
-            relearningStage: cycle?.stage ?? null,
-            relearningCompletedAt: effect.type === 'relearning_progress'
-              && effect.event === 'retest_passed'
-              ? occurredAt
-              : previous?.relearningCompletedAt ?? null,
-          },
-        };
+      // 只交出这次事件；累加与延续由 reducer 基于它持有的上一份算。
+      const counted = effect.type === 'retention_outcome';
+      dispatchJourney({
+        type: 'recordStructuredRetention',
+        targetId,
+        occurredAt,
+        counted,
+        outcome: counted ? effect.result.memoryOutcome : null,
+        dueAt: memory.due,
+        lapses: memory.lapses,
+        relearningStage: cycle?.stage ?? null,
+        retestPassed: effect.type === 'relearning_progress' && effect.event === 'retest_passed',
+        now: Date.now(),
       });
     }
-  }, []);
+  }, [dispatchJourney]);
   const {
     session: reviewSession,
     stats: reviewStats,
@@ -803,9 +604,12 @@ export default function App() {
       if (declaredMasterySenseIds.has(senseId)) return [];
       const targetId = TARGET_ID_BY_RUNTIME_SENSE.get(senseId);
       if (!targetId) return [];
-      const policy = committedPolicyByTarget[targetId];
-      if (!policy || runtimeSurfaceForPolicy(policy, 'retention_review') !== 'structured_session') return [];
-      if (!initialLearningCompletionByTarget[targetId]) return [];
+      const { committedPolicy, initialCompletion } = journeyFor(journey, targetId);
+      if (
+        !committedPolicy
+        || runtimeSurfaceForPolicy(committedPolicy, 'retention_review') !== 'structured_session'
+      ) return [];
+      if (!initialCompletion) return [];
       const pkg = PROTOTYPE_PACKAGE_BY_SENSE.get(senseId);
       const item = storageService.getFSRSItems()[senseId];
       if (!pkg || !item) return [];
@@ -821,7 +625,7 @@ export default function App() {
         relearning,
       }];
     });
-  }, [committedPolicyByTarget, declaredMasterySenseIds, initialLearningCompletionByTarget]);
+  }, [declaredMasterySenseIds, journey]);
 
   const structuredReviewCandidates = getReviewCandidates();
   const structuredReviewSenseIds = new Set(
@@ -829,7 +633,7 @@ export default function App() {
   );
   const structuredReviewDueTargetIds = visibleLearningTargetIds.filter((targetId) => {
     const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
-    return initialLearningCompletionByTarget[targetId] !== undefined
+    return journeyFor(journey, targetId).initialCompletion !== null
       && senseId !== null
       && structuredReviewSenseIds.has(senseId);
   });
@@ -852,15 +656,9 @@ export default function App() {
   const structuredRelearningRepairTargetIds = targetIdsForRetentionStatuses('relearning_repair');
   const structuredRelearningRetestTargetIds = targetIdsForRetentionStatuses('relearning_retest');
   const retentionRuntimeLaunches = learningRuntimeCoordinator.planRetention([
-    ...lightweightDueTargetIds.map((targetId) => ({
+    ...[...lightweightDueTargetIds, ...structuredReviewDueTargetIds].map((targetId) => ({
       targetId,
-      profileId: committedPolicyByTarget[targetId]!,
-      ready: true,
-      executable: true,
-    })),
-    ...structuredReviewDueTargetIds.map((targetId) => ({
-      targetId,
-      profileId: committedPolicyByTarget[targetId]!,
+      profileId: journeyFor(journey, targetId).committedPolicy!,
       ready: true,
       executable: true,
     })),
@@ -877,23 +675,16 @@ export default function App() {
   const totalReviewCount = lightweightReviewCount + structuredReviewCount;
 
   const beginInitialTargetRuntime = useCallback((targetId: PrototypeLearningTargetId) => {
-    if (!addedLearningTargetIds.has(targetId)) {
+    if (!journeyFor(journey, targetId).added) {
       toast('请先把这条目标加入学习');
       return false;
     }
-    if (committedPolicyByTarget[targetId]) {
+    if (journeyFor(journey, targetId).committedPolicy) {
       toast('这条目标已经创建过首次学习运行');
       return false;
     }
 
-    const policy = effectivePolicyForTarget(
-      targetId,
-      defaultLearningPolicy,
-      addedLearningTargetIds,
-      learningPolicyByTarget,
-      committedPolicyByTarget,
-    );
-    const preparation = preparationForTarget(targetId, policy, preparationByTarget);
+    const preparation = preparationFor(journey, targetId);
     if (preparation !== 'ready') {
       toast(preparation === 'preparing' ? '学习内容仍在准备中' : '当前学习方式还不能开始');
       return false;
@@ -904,20 +695,14 @@ export default function App() {
     enterLearn();
 
     const initialCandidates = [...new Set([targetId, ...todayInitialTargetIds])]
-      .filter((candidateId) => !committedPolicyByTarget[candidateId])
+      .filter((candidateId) => !journeyFor(journey, candidateId).committedPolicy)
       .map((candidateId) => {
-        const candidatePolicy = effectivePolicyForTarget(
-          candidateId,
-          defaultLearningPolicy,
-          addedLearningTargetIds,
-          learningPolicyByTarget,
-          committedPolicyByTarget,
-        );
+        const candidatePolicy = effectivePolicyFor(journey, candidateId);
         const runtimeSurface = runtimeSurfaceForPolicy(candidatePolicy, 'initial_learning');
         return {
           targetId: candidateId,
           profileId: candidatePolicy,
-          ready: preparationForTarget(candidateId, candidatePolicy, preparationByTarget) === 'ready',
+          ready: preparationFor(journey, candidateId, candidatePolicy) === 'ready',
           executable: runtimeSurface !== 'structured_session'
             || runtimePackageForTarget(PROTOTYPE_LEARNING_TARGETS[candidateId]) !== null,
         };
@@ -930,12 +715,15 @@ export default function App() {
 
     if (launch.surface === 'lightweight_initial') {
       const activeTargetId = launch.targetIds[0]!;
-      setCommittedPolicyByTarget((current) => ({
-        ...current,
-        [activeTargetId]: initialCandidates.find(
-          (candidate) => candidate.targetId === activeTargetId,
-        )!.profileId,
-      }));
+      dispatchJourney({
+        type: 'commitPolicies',
+        entries: [{
+          targetId: activeTargetId,
+          policy: initialCandidates.find(
+            (candidate) => candidate.targetId === activeTargetId,
+          )!.profileId,
+        }],
+      });
       startLightweightInitial(activeTargetId);
       setViewMode('lightweight');
       return true;
@@ -953,25 +741,23 @@ export default function App() {
       toast('首次学习运行创建失败');
       return false;
     }
-    setCommittedPolicyByTarget((current) => {
-      const next = { ...current };
-      structuredTargetIds.forEach((candidateId) => {
-        next[candidateId] = initialCandidates.find(
+    dispatchJourney({
+      type: 'commitPolicies',
+      entries: structuredTargetIds.map((candidateId) => ({
+        targetId: candidateId,
+        policy: initialCandidates.find(
           (candidate) => candidate.targetId === candidateId,
-        )!.profileId;
-      });
-      return next;
+        )!.profileId,
+      })),
     });
     startStructuredInitial(structuredTargetIds);
     setViewMode('study');
     return true;
   }, [
-    addedLearningTargetIds,
     closeMenus,
-    committedPolicyByTarget,
-    defaultLearningPolicy,
-    learningPolicyByTarget,
-    preparationByTarget,
+    dispatchJourney,
+    enterLearn,
+    journey,
     startLearnQueue,
     todayInitialTargetIds,
     toast,
@@ -980,14 +766,14 @@ export default function App() {
   ]);
 
   const continueCommittedTargetRuntime = useCallback((targetId: PrototypeLearningTargetId) => {
-    const committedPolicy = committedPolicyByTarget[targetId];
+    const { committedPolicy, initialCompletion } = journeyFor(journey, targetId);
     if (!committedPolicy) return;
     const surface = learningRuntimeCoordinator.surfaceFor(
       committedPolicy,
       'initial_learning',
     );
     if (surface === 'lightweight_initial') {
-      if (initialLearningCompletionByTarget[targetId]) {
+      if (initialCompletion) {
         toast('首次学习已经完成，等待进入长期复习');
         return;
       }
@@ -1000,7 +786,7 @@ export default function App() {
       toast('这条目标已声明为熟词，不再进入正式学习计划');
       return;
     }
-    if (initialLearningCompletionByTarget[targetId]) {
+    if (initialCompletion) {
       toast('高保证首次学习已经完成，当前处于长期保持阶段');
       return;
     }
@@ -1011,10 +797,8 @@ export default function App() {
     toast('首次学习已结束，之后会按计划进入复习');
   }, [
     structuredInitialTargetIds,
-    committedPolicyByTarget,
     declaredMasterySenseIds,
-    learnSession,
-    initialLearningCompletionByTarget,
+    journey,
     queueDone,
     toast,
     startLightweightInitial,
@@ -1145,7 +929,7 @@ export default function App() {
     if (!lightweightInitialTargetId) return;
     const targetId = lightweightInitialTargetId;
     const target = PROTOTYPE_LEARNING_TARGETS[targetId];
-    const policy = committedPolicyByTarget[targetId];
+    const policy = journeyFor(journey, targetId).committedPolicy;
     if (!policy) return;
     const completedAt = new Date().toISOString();
     const retentionSurface = runtimeSurfaceForPolicy(policy, 'retention_review');
@@ -1159,30 +943,16 @@ export default function App() {
       nextReviewLabel = relativeReviewLabel(memory.due);
     }
 
-    setInitialLearningCompletionByTarget((current) => ({
-      ...current,
-      [targetId]: {
-        completionKind: 'lightweight',
-        completedAt,
-        nextReviewAt,
-        nextReviewLabel,
-        schedulingHandoffBasis: 'study_completion',
-        initialRating: rating,
-      },
-    }));
-    if (retentionSurface === 'lightweight_retention') {
-      setLightweightRetentionByTarget((current) => ({
-        ...current,
-        [targetId]: {
-          nextReviewAt: completedAt,
-          nextReviewLabel: '现在可复习（原型）',
-          reviewCount: 0,
-          lapseCount: 0,
-          relearning: false,
-        },
-      }));
-    }
-  }, [lightweightInitialTargetId, committedPolicyByTarget]);
+    dispatchJourney({
+      type: 'completeLightweightInitial',
+      targetId,
+      rating,
+      completedAt,
+      nextReviewAt,
+      nextReviewLabel,
+      startLightweightRetention: retentionSurface === 'lightweight_retention',
+    });
+  }, [dispatchJourney, journey, lightweightInitialTargetId]);
 
   const finishLightweightRuntime = useCallback(() => {
     finishLightweightInitial();
@@ -1202,35 +972,21 @@ export default function App() {
   ) => {
     const reviewedAt = new Date();
     const schedule = LIGHTWEIGHT_REVIEW_SCHEDULE[rating];
-    setLightweightRetentionByTarget((current) => {
-      const completion = current[targetId]!;
-      return {
-        ...current,
-        [targetId]: {
-          ...completion,
-          lastReviewRating: rating,
-          lastReviewedAt: reviewedAt.toISOString(),
-          nextReviewAt: new Date(reviewedAt.getTime() + schedule.delayMs).toISOString(),
-          nextReviewLabel: schedule.nextReviewLabel,
-          reviewCount: completion.reviewCount + 1,
-          lapseCount: completion.lapseCount + (rating === 'again' ? 1 : 0),
-          relearning: rating === 'again',
-        },
-      };
+    dispatchJourney({
+      type: 'recordLightweightReview',
+      targetId,
+      rating,
+      reviewedAt: reviewedAt.toISOString(),
+      nextReviewAt: new Date(reviewedAt.getTime() + schedule.delayMs).toISOString(),
+      nextReviewLabel: schedule.nextReviewLabel,
     });
-  }, []);
+  }, [dispatchJourney]);
 
   const completeLightweightReviewRepair = useCallback((
     targetId: PrototypeLearningTargetId,
   ) => {
-    setLightweightRetentionByTarget((current) => ({
-      ...current,
-      [targetId]: {
-        ...current[targetId]!,
-        relearning: false,
-      },
-    }));
-  }, []);
+    dispatchJourney({ type: 'clearLightweightRelearning', targetId });
+  }, [dispatchJourney]);
 
   // 演示跳转：新学卡 + 长期 Review 评测目录。
   // 屏号到演示内容的映射是纯的，见 learningFlow/demoScenes.ts；这里只负责施加副作用。
@@ -1429,11 +1185,7 @@ export default function App() {
       ? reviewSession?.package.senseId
       : learnSession?.package.senseId;
     if (!senseId) return;
-    setDeclaredMasterySenseIds((current) => {
-      const next = new Set(current);
-      next.add(senseId);
-      return next;
-    });
+    dispatchJourney({ type: 'declareMastery', senseId });
     if (flowMode === 'review') {
       excludeCurrentReviewForDeclaredMastery();
     } else {
@@ -1452,11 +1204,7 @@ export default function App() {
   const revokeDeclaredMastery = useCallback((targetId: PrototypeLearningTargetId) => {
     const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
     if (!senseId) return;
-    setDeclaredMasterySenseIds((current) => {
-      const next = new Set(current);
-      next.delete(senseId);
-      return next;
-    });
+    dispatchJourney({ type: 'revokeMastery', senseId });
     setLearnDeclaredMastery(senseId, false);
     toast('已撤销熟词声明，这条目标会按原有进度恢复计划资格');
   }, [setLearnDeclaredMastery, toast]);
@@ -1700,26 +1448,20 @@ export default function App() {
     ? demo.reviewResult
     : null;
 
+  // 选中的这条 Target：一次查找，而不是从八个平行 map 里各取一次。
+  const selectedJourney = journeyFor(journey, selectedLearningTargetId);
   const selectedPrototypeLearningTarget =
     PROTOTYPE_LEARNING_TARGETS[selectedLearningTargetId];
-  const selectedPrototypeLearningPolicy =
-    effectivePolicyForTarget(
-      selectedLearningTargetId,
-      defaultLearningPolicy,
-      addedLearningTargetIds,
-      learningPolicyByTarget,
-      committedPolicyByTarget,
-    );
-  const selectedPrototypePreparation = preparationForTarget(
+  const selectedPrototypeLearningPolicy = effectivePolicyFor(journey, selectedLearningTargetId);
+  const selectedPrototypePreparation = preparationFor(
+    journey,
     selectedLearningTargetId,
     selectedPrototypeLearningPolicy,
-    preparationByTarget,
   );
-  const selectedCommittedPolicy = committedPolicyByTarget[selectedLearningTargetId] ?? null;
-  const selectedLightweightRetention = lightweightRetentionByTarget[selectedLearningTargetId];
-  const selectedInitialLearningCompletion =
-    initialLearningCompletionByTarget[selectedLearningTargetId];
-  const selectedStructuredRetention = structuredRetentionByTarget[selectedLearningTargetId];
+  const selectedCommittedPolicy = selectedJourney.committedPolicy;
+  const selectedLightweightRetention = selectedJourney.lightweightRetention;
+  const selectedInitialLearningCompletion = selectedJourney.initialCompletion;
+  const selectedStructuredRetention = selectedJourney.structuredRetention;
   const selectedInitialCompletionKind = selectedInitialLearningCompletion?.completionKind ?? null;
   const selectedReviewDue = selectedLightweightRetention
     ? selectedLightweightRetention.relearning
@@ -1738,29 +1480,20 @@ export default function App() {
     ?? selectedInitialLearningCompletion?.nextReviewLabel
     ?? null;
   const declaredMasteryTargetIds = new Set(
-    visibleLearningTargetIds.filter((targetId) => {
-      const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
-      return senseId !== null && declaredMasterySenseIds.has(senseId);
-    }),
+    visibleLearningTargetIds.filter((targetId) => isDeclaredMastery(journey, targetId)),
   );
   const selectedDeclaredMastery = declaredMasteryTargetIds.has(selectedLearningTargetId);
   const policyTarget = learningPolicyContext.kind === 'target'
     ? PROTOTYPE_LEARNING_TARGETS[learningPolicyContext.targetId]
     : null;
   const selectedPolicyForPolicyScreen = learningPolicyContext.kind === 'target'
-    ? effectivePolicyForTarget(
-        learningPolicyContext.targetId,
-        defaultLearningPolicy,
-        addedLearningTargetIds,
-        learningPolicyByTarget,
-        committedPolicyByTarget,
-      )
+    ? effectivePolicyFor(journey, learningPolicyContext.targetId)
     : defaultLearningPolicy;
   const activeLightweightRuntimeTarget = lightweightInitialTargetId
     ? PROTOTYPE_LEARNING_TARGETS[lightweightInitialTargetId]
     : null;
   const activeLightweightRuntimePolicy = lightweightInitialTargetId
-    ? committedPolicyByTarget[lightweightInitialTargetId] ?? defaultLearningPolicy
+    ? journeyFor(journey, lightweightInitialTargetId).committedPolicy ?? defaultLearningPolicy
     : defaultLearningPolicy;
 
   const currentStep =
@@ -1997,12 +1730,10 @@ export default function App() {
           <LearningTargetLibraryScreen
             active={viewMode === 'main' && mainStack.includes('s-learning-library')}
             targetIds={visibleLearningTargetIds}
-            policyByTarget={learningPolicyByTarget}
-            preparationByTarget={preparationByTarget}
-            committedPolicyByTarget={committedPolicyByTarget}
-            completedTargetIds={new Set([
-              ...Object.keys(initialLearningCompletionByTarget),
-            ] as PrototypeLearningTargetId[])}
+            policyByTarget={effectivePolicies(journey)}
+            preparationByTarget={preparations(journey)}
+            committedTargetIds={committedTargetIds(journey)}
+            completedTargetIds={completedTargetIds(journey)}
             reviewDueTargetIds={new Set([
               ...lightweightDueTargetIds,
               ...structuredReviewDueTargetIds,
@@ -2041,7 +1772,7 @@ export default function App() {
             retentionRuntimeState={selectedRetentionRuntimeState}
             nextReviewLabel={selectedNextReviewLabel}
             declaredMastery={selectedDeclaredMastery}
-            isAdded={addedLearningTargetIds.has(selectedLearningTargetId)}
+            isAdded={selectedJourney.added}
             onBack={backMain}
             onAdd={addSelectedLearningTarget}
             onOpenPolicy={openTargetLearningPolicy}
