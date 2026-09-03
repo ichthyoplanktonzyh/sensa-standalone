@@ -30,6 +30,7 @@ import {
 } from './prototypeLearning';
 import { learningRuntimeCoordinator } from '../learningRuntime/runtimeCoordinator';
 import { learningPolicyProfileRegistry } from '../learningRuntime/policyProfiles';
+import { FIXED_LADDER_FIRST_RUNG } from '../learningRuntime/retentionStores';
 
 const failures: string[] = [];
 let checks = 0;
@@ -157,6 +158,11 @@ if (!STRUCTURED_POLICY) {
     }));
     check('保持走固定档期时同时开一条轻量保持',
       journeyFor(lw, 'borrow-receive').lightweightRetention !== null);
+    check('轻量保持的第一档读 store 的交接投影（学习步 2：+10 分钟）',
+      journeyFor(lw, 'borrow-receive').lightweightRetention?.nextReviewAt
+        === new Date(now + FIXED_LADDER_FIRST_RUNG.delayMs).toISOString()
+      && journeyFor(lw, 'borrow-receive').lightweightRetention?.nextReviewLabel
+        === FIXED_LADDER_FIRST_RUNG.label);
   }
 }
 
@@ -177,6 +183,10 @@ check('轻量首学带上评分',
   journeyFor(lwDone, 'borrow-receive').initialCompletion?.initialRating === 'good');
 check('轻量首学开出轻量保持',
   journeyFor(lwDone, 'borrow-receive').lightweightRetention?.reviewCount === 0);
+check('轻量保持的档期读交接投影，不另写一份',
+  journeyFor(lwDone, 'borrow-receive').lightweightRetention?.nextReviewAt
+    === '2026-01-04T00:00:00.000Z'
+  && journeyFor(lwDone, 'borrow-receive').lightweightRetention?.nextReviewLabel === '3 天后');
 check('不需要轻量保持时不开', journeyFor(apply(added, {
   type: 'completeLightweightInitial',
   targetId: 'borrow-receive',

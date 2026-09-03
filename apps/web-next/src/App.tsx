@@ -137,6 +137,7 @@ const LIGHTWEIGHT_REVIEW_SCHEDULE: Record<
   PrototypeLightweightRating,
   { delayMs: number; nextReviewLabel: string }
 > = {
+  // 重学步，与第一档（学习步 2，FIXED_LADDER_FIRST_RUNG）同为 Anki 式短步长。
   again: { delayMs: 10 * 60 * 1000, nextReviewLabel: '10 分钟后' },
   hard: { delayMs: 24 * 60 * 60 * 1000, nextReviewLabel: '明天' },
   good: { delayMs: 3 * 24 * 60 * 60 * 1000, nextReviewLabel: '3 天后' },

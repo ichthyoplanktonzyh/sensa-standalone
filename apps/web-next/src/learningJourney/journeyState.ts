@@ -430,15 +430,15 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
         const retentionStore = retentionStoreFor(policy);
         const changes: { -readonly [K in keyof TargetJourney]?: TargetJourney[K] } = {};
 
+        // reducer 是纯的，所以这里注入的"调度记忆"就是调用点带来的那份到期表。
+        // 同一份 store 定义在 App 那边接的是 storageService。
+        const handoff = retentionStore.openHandoff({
+          completedAt: action.completedAt,
+          openSchedulerDue: () => action.dueBySenseId[senseId] ?? null,
+          reviewLabel: (dueAt) => relativeReviewLabel(dueAt, action.now),
+        });
         // 毕业只发生一次：已有交接的不覆盖。
         if (!journey.initialCompletion) {
-          // reducer 是纯的，所以这里注入的"调度记忆"就是调用点带来的那份到期表。
-          // 同一份 store 定义在 App 那边接的是 storageService。
-          const handoff = retentionStore.openHandoff({
-            completedAt: action.completedAt,
-            openSchedulerDue: () => action.dueBySenseId[senseId] ?? null,
-            reviewLabel: (dueAt) => relativeReviewLabel(dueAt, action.now),
-          });
           changes.initialCompletion = {
             completionKind: 'structured',
             completedAt: action.completedAt,
@@ -449,8 +449,9 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
         }
         if (retentionStore.opensJourneyLadder && !journey.lightweightRetention) {
           changes.lightweightRetention = {
-            nextReviewAt: action.completedAt,
-            nextReviewLabel: IMMEDIATE_REVIEW_LABEL,
+            // 档期读 store 的交接投影（第一档 = 学习步 2），不在这里另写一份。
+            nextReviewAt: handoff.nextReviewAt,
+            nextReviewLabel: handoff.nextReviewLabel,
             reviewCount: 0,
             lapseCount: 0,
             relearning: false,
@@ -479,8 +480,10 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
       };
       if (action.startLightweightRetention) {
         changes.lightweightRetention = {
-          nextReviewAt: action.completedAt,
-          nextReviewLabel: IMMEDIATE_REVIEW_LABEL,
+          // 档期读 App 算好的交接投影（第一档 = 学习步 2），与
+          // initialCompletion 那份同源，不在这里另写一份。
+          nextReviewAt: action.nextReviewAt,
+          nextReviewLabel: action.nextReviewLabel,
           reviewCount: 0,
           lapseCount: 0,
           relearning: false,

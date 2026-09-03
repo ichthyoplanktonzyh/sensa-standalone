@@ -12,9 +12,14 @@
  * 另外钉住 Adapter → store 的映射：它是这次改动里唯一的"谁归谁管"事实，
  * 改错了不会有类型错误，只会让长期状态写进另一份存储。
  *
+ * 另外，固定档期的第一档是学习步 2：交接后 10 分钟，不是"现在"——
+ * 轻量首学只是第一个学习步（grounding + 一次回想），第二个学习步由
+ * 首次到期复习承担，立刻可点的"复习"是回声测试，不是提取。
+ *
  * Run with `npm run smoke:retention`.
  */
 import {
+  FIXED_LADDER_FIRST_RUNG,
   IMMEDIATE_REVIEW_LABEL,
   RetentionStoreRegistry,
   retentionStoreRegistry,
@@ -73,10 +78,11 @@ check('每个 Policy Profile 的保持都能解析出 store',
 
 const ladder = retentionStoreRegistry.get('fixed_ladder');
 check('固定档期需要 reducer 自己开一条记录', ladder.opensJourneyLadder);
-check('固定档期从交接时刻起算', (() => {
+check('固定档期第一档是学习步 2：交接后 10 分钟，不是"现在"', (() => {
   const handoff = ladder.openHandoff(withDue(DUE_AT));
-  return handoff.nextReviewAt === COMPLETED_AT
-    && handoff.nextReviewLabel === IMMEDIATE_REVIEW_LABEL;
+  return handoff.nextReviewAt
+    === new Date(Date.parse(COMPLETED_AT) + FIXED_LADDER_FIRST_RUNG.delayMs).toISOString()
+    && handoff.nextReviewLabel === FIXED_LADDER_FIRST_RUNG.label;
 })());
 check('固定档期不看调度器给的到期时间', (() => {
   let asked = false;
