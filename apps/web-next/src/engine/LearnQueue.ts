@@ -2,6 +2,7 @@ import type {
   AcquisitionTargetProjection,
   AcquisitionGateStatus,
   LearningCapability,
+  LearningStepIntent,
   MeaningToFormRecallOutcome,
   NovelTransferOutcome,
   QueueConfig,
@@ -9,13 +10,10 @@ import type {
   RepairResourceRole,
   SchedulablePackage,
   ScheduledActionDefinition,
-  ScheduledActionMode,
   Session,
   SenseAcquisitionState,
   StructuredAcquisitionProjection,
 } from './types';
-
-type GateCapability = Exclude<LearningCapability, 'introduction'>;
 
 interface HistorySnapshot<TContent> {
   states: SenseAcquisitionState[];
@@ -25,7 +23,7 @@ interface HistorySnapshot<TContent> {
   totalCorrect: number;
 }
 
-function emptyGateStatus(): Record<GateCapability, AcquisitionGateStatus> {
+function emptyGateStatus(): Record<LearningCapability, AcquisitionGateStatus> {
   return {
     contextual_recognition: 'unresolved',
     meaning_to_form_recall: 'unresolved',
@@ -34,7 +32,7 @@ function emptyGateStatus(): Record<GateCapability, AcquisitionGateStatus> {
   };
 }
 
-function emptyCounts(): Record<GateCapability, number> {
+function emptyCounts(): Record<LearningCapability, number> {
   return {
     contextual_recognition: 0,
     meaning_to_form_recall: 0,
@@ -53,15 +51,24 @@ function cloneState(state: SenseAcquisitionState): SenseAcquisitionState {
   };
 }
 
-function actionMode(definition: ScheduledActionDefinition): ScheduledActionMode {
-  return definition.mode ?? 'assessment';
+function actionIntent(definition: ScheduledActionDefinition): LearningStepIntent {
+  return definition.intent ?? 'assessment';
 }
 
 function isAssessment(definition: ScheduledActionDefinition): boolean {
-  return actionMode(definition) === 'assessment';
+  return actionIntent(definition) === 'assessment';
 }
 
-function repairRoleFor(capability: GateCapability): RepairResourceRole {
+/**
+ * 讲解步。原先写作 `kind === 'introduction' && capability === 'introduction'
+ * && isAssessment(action)`——最后一项是在排除 repair，可它同时也把讲解说成了
+ * 一次测评。改问 intent 之后，这句话就只说它该说的那件事。
+ */
+function isIntroduction(definition: ScheduledActionDefinition): boolean {
+  return definition.kind === 'introduction' && actionIntent(definition) === 'instruction';
+}
+
+function repairRoleFor(capability: LearningCapability): RepairResourceRole {
   switch (capability) {
     case 'meaning_to_form_recall':
       return 'l1_bridge';
@@ -151,7 +158,7 @@ export class LearnQueue<TContent = unknown> {
             packageId: this.currentSession.action.packageId,
             senseId: this.currentSession.action.senseId,
             capability: this.currentSession.action.capability,
-            mode: this.currentSession.action.mode,
+            intent: this.currentSession.action.intent,
             reason: this.currentSession.action.reason,
           }
         : null,
@@ -252,16 +259,16 @@ export class LearnQueue<TContent = unknown> {
       this.currentSession = null;
       return null;
     }
-    const mode = actionMode(definition);
+    const intent = actionIntent(definition);
     const action: Session<TContent>['action'] = {
       ...definition,
-      mode,
+      intent,
       ordinal,
       totalTarget: this.progressTarget,
       packageId: chosenPackage.packageId,
       senseId: chosenPackage.senseId,
       content: chosenPackage.content,
-      reason: mode === 'repair'
+      reason: intent === 'repair'
         ? 'repair'
         : definition.kind === 'introduction'
         ? 'new'
@@ -280,7 +287,7 @@ export class LearnQueue<TContent = unknown> {
   }
 
   public completeIntroduction(): Session<TContent> | null {
-    const session = this.requireCapability('introduction');
+    const session = this.requireIntroduction();
     if (!session) return this.currentSession;
     this.captureSnapshot();
     const state = this.states.get(session.action.packageId)!;
@@ -311,7 +318,7 @@ export class LearnQueue<TContent = unknown> {
       outcome === 'success',
       (session, state) => {
         session.transferOutcome = outcome;
-        if (outcome === 'repair' && session.action.mode !== 'repair') {
+        if (outcome === 'repair' && session.action.intent !== 'repair') {
           state.transferScenarioIndex += 1;
         }
       },
@@ -324,10 +331,11 @@ export class LearnQueue<TContent = unknown> {
 
   /** Compatibility path for the frozen controls; state remains gate-scoped. */
   public settle(ok: boolean): Session<TContent> | null {
-    const capability = this.currentSession?.action.capability;
-    if (capability === 'introduction') {
+    const action = this.currentSession?.action;
+    if (action && isIntroduction(action)) {
       return ok ? this.completeIntroduction() : this.currentSession;
     }
+    const capability = action?.capability;
     if (capability === 'contextual_recognition') return this.completeRecognition(ok);
     if (capability === 'meaning_to_form_recall') return this.completeGate(capability, ok);
     if (capability === 'novel_context_transfer') return this.completeNovelTransfer(ok ? 'success' : 'repair');
@@ -341,13 +349,13 @@ export class LearnQueue<TContent = unknown> {
    */
   public markMistake(): void {
     const session = this.currentSession;
-    if (!session || session.action.capability === 'introduction' || session.action.mode === 'repair') {
+    const capability = session?.action.capability ?? null;
+    if (!session || capability === null || session.action.intent === 'repair') {
       return;
     }
     const state = this.states.get(session.action.packageId);
     if (!state) return;
     this.captureSnapshot();
-    const capability = session.action.capability as GateCapability;
     const wasSettled = session.settled;
     if (!wasSettled) {
       session.settled = true;
@@ -430,7 +438,7 @@ export class LearnQueue<TContent = unknown> {
   }
 
   private completeGate(
-    capability: GateCapability,
+    capability: LearningCapability,
     ok: boolean,
     decorate?: (session: Session<TContent>, state: SenseAcquisitionState) => void,
   ): Session<TContent> | null {
@@ -438,7 +446,7 @@ export class LearnQueue<TContent = unknown> {
     if (!session) return this.currentSession;
     const state = this.states.get(session.action.packageId)!;
     this.captureSnapshot();
-    if (session.action.mode === 'repair') {
+    if (session.action.intent === 'repair') {
       this.completeRepair(session, state, capability);
       return session;
     }
@@ -469,7 +477,7 @@ export class LearnQueue<TContent = unknown> {
   private completeRepair(
     session: Session<TContent>,
     state: SenseAcquisitionState,
-    capability: GateCapability,
+    capability: LearningCapability,
   ): void {
     state.pendingRepairCapability = null;
     state.pendingRepairForActionKey = null;
@@ -490,13 +498,18 @@ export class LearnQueue<TContent = unknown> {
     return session;
   }
 
+  private requireIntroduction(): Session<TContent> | null {
+    const session = this.currentSession;
+    if (!session || session.settled || !isIntroduction(session.action)) return null;
+    return session;
+  }
+
   private nextDefinition(
     item: SchedulablePackage<TContent>,
     state: SenseAcquisitionState,
   ): ScheduledActionDefinition | null {
     if (!state.introduced) {
-      return item.actions.find((action) =>
-        action.kind === 'introduction' && action.capability === 'introduction' && isAssessment(action)) ?? null;
+      return item.actions.find(isIntroduction) ?? null;
     }
 
     const requiredGates = this.requiredGates(item);
@@ -526,7 +539,7 @@ export class LearnQueue<TContent = unknown> {
   private repairDefinition(
     item: SchedulablePackage<TContent>,
     state: SenseAcquisitionState,
-    capability: GateCapability,
+    capability: LearningCapability,
   ): ScheduledActionDefinition | null {
     const actions = this.gateActions(item, capability);
     const base = actions.find((action) =>
@@ -535,7 +548,7 @@ export class LearnQueue<TContent = unknown> {
     if (!base) return null;
     const repairNumber = state.repairCounts[capability] + 1;
     const declaredRepair = item.repairActions?.find((action) =>
-      action.capability === capability && action.mode === 'repair');
+      action.capability === capability && action.intent === 'repair');
     if (declaredRepair) {
       return {
         ...declaredRepair,
@@ -544,7 +557,7 @@ export class LearnQueue<TContent = unknown> {
           : declaredRepair.actionKey,
         taskKey: null,
         kind: 'acquisition_gate',
-        mode: 'repair',
+        intent: 'repair',
         repairForActionKey: declaredRepair.repairForActionKey ?? base.actionKey,
         repairResourceRef: declaredRepair.repairResourceRef ?? {
           role: repairRoleFor(capability),
@@ -559,7 +572,7 @@ export class LearnQueue<TContent = unknown> {
       capability,
       taskKey: null,
       kind: 'acquisition_gate',
-      mode: 'repair',
+      intent: 'repair',
       repairForActionKey: base.actionKey,
       repairResourceRef: {
         role: repairRoleFor(capability),
@@ -572,7 +585,7 @@ export class LearnQueue<TContent = unknown> {
 
   private gateActions(
     item: SchedulablePackage<TContent>,
-    capability: GateCapability,
+    capability: LearningCapability,
   ): ScheduledActionDefinition[] {
     return item.actions.filter((action) =>
       action.capability === capability
@@ -580,11 +593,9 @@ export class LearnQueue<TContent = unknown> {
       && isAssessment(action));
   }
 
-  private requiredGates(item: SchedulablePackage<TContent>): GateCapability[] {
+  private requiredGates(item: SchedulablePackage<TContent>): LearningCapability[] {
     return item.requiredCapabilities.filter(
-      (capability, index, all): capability is GateCapability =>
-        capability !== 'introduction'
-        && all.indexOf(capability) === index,
+      (capability, index, all) => all.indexOf(capability) === index,
     );
   }
 
@@ -623,14 +634,10 @@ export class LearnQueue<TContent = unknown> {
       if (senseIds.has(item.senseId)) throw new Error(`Duplicate Sense identity: ${item.senseId}`);
       packageIds.add(item.packageId);
       senseIds.add(item.senseId);
-      if (!item.actions.some((action) =>
-        action.kind === 'introduction' && action.capability === 'introduction' && isAssessment(action))) {
+      if (!item.actions.some(isIntroduction)) {
         throw new Error(`Package ${item.packageId} has no executable Introduction action.`);
       }
-      const requiredGates = item.requiredCapabilities.filter(
-        (capability): capability is GateCapability => capability !== 'introduction',
-      );
-      requiredGates.forEach((capability) => {
+      item.requiredCapabilities.forEach((capability) => {
         if (this.gateActions(item, capability).length === 0) {
           throw new Error(`Package ${item.packageId} has no executable action for ${capability}.`);
         }

@@ -23,7 +23,7 @@ type RuntimePackage = (typeof PROTOTYPE_LEARNING_PACKAGES)[number];
 /** 队列覆盖参数，与 `useLearnQueue().overrideDemo` 的入参一一对应。 */
 export interface DemoQueueOverride {
   readonly pkg: RuntimePackage;
-  readonly capability: LearningCapability;
+  readonly capability: LearningCapability | null;
   readonly step: number;
   readonly total: number;
 }
@@ -123,7 +123,7 @@ export function demoSceneForStage(stageNum: number): DemoScene | null {
     case 1:
       return {
         presentation: presentationOf(basePackage, 'introduction', 0, false),
-        queue: { pkg: basePackage, capability: 'introduction', step: 1, total: 4 },
+        queue: { pkg: basePackage, capability: null, step: 1, total: 4 },
         toast: '已切换至：① 第一次遇见',
       };
     case 2:

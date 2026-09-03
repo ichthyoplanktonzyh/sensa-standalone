@@ -165,9 +165,10 @@ function retentionStoreForPolicy(
   return learningRuntimeCoordinator.retentionStoreFor(policy, purpose);
 }
 
-function stageForCapability(capability: LearningCapability): FormalLearningStage {
+function stageForCapability(capability: LearningCapability | null): FormalLearningStage {
   switch (capability) {
-    case 'introduction': return 'introduction';
+    // 讲解步不练任何能力，所以没有 capability。
+    case null: return 'introduction';
     case 'contextual_recognition': return 'recognition';
     case 'meaning_to_form_recall': return 'recall';
     case 'novel_context_transfer': return 'transfer';
@@ -1021,11 +1022,11 @@ export default function App() {
       toast('这个义项已建立初次连接，稍后会在新语境中再次出现');
       return;
     }
-    if (flowMode === 'review' && reviewSession?.action.mode === 'repair') {
+    if (flowMode === 'review' && reviewSession?.action.intent === 'repair') {
       completeReviewRepair();
       return;
     }
-    if (flowMode === 'learn' && learnSession?.action.mode === 'repair') {
+    if (flowMode === 'learn' && learnSession?.action.intent === 'repair') {
       switch (learnSession.action.capability) {
         case 'contextual_recognition':
           completeLearnRecognition(true);
@@ -1039,8 +1040,8 @@ export default function App() {
         case 'boundary_discrimination':
           completeLearnBoundary(true);
           break;
-        case 'introduction':
-          throw new Error('An Introduction Action cannot be an acquisition repair.');
+        case null:
+          throw new Error('An Introduction Step cannot be an acquisition repair.');
       }
       toast('定向修复已完成，稍后会再次独立检验');
       return;
@@ -1410,7 +1411,7 @@ export default function App() {
     ? learnSession?.action ?? null
     : null;
   const currentIntroductionContent = currentPackage
-    ? currentRepairAction?.mode === 'repair'
+    ? currentRepairAction?.intent === 'repair'
       ? materializeReviewRepairContent(rawIntroductionContent!, currentRepairAction.repairResourceRef)
       : currentPackage.content
     : null;
@@ -1432,11 +1433,11 @@ export default function App() {
   const currentStage: RuntimeLearningStage = demo
     ? demo.stage
     : flowMode === 'review' && reviewSession
-    ? reviewSession.action.mode === 'repair'
+    ? reviewSession.action.intent === 'repair'
       ? 'review_repair'
       : reviewSession.stage
     : learnSession
-    ? learnSession.action.mode === 'repair'
+    ? learnSession.action.intent === 'repair'
       ? 'review_repair'
       : stageForCapability(learnSession.action.capability)
     : 'introduction';
@@ -1873,7 +1874,7 @@ export default function App() {
             step={currentStep}
             groupSize={totalTarget}
             introductionContent={rawIntroductionContent}
-            repairContent={currentRepairAction?.mode === 'repair'
+            repairContent={currentRepairAction?.intent === 'repair'
               ? currentIntroductionContent
               : null}
             introductionPosition={currentIntroductionPosition}
@@ -1902,7 +1903,7 @@ export default function App() {
             assessmentPackageIdentity={currentAssessmentPackageIdentity}
             lookupDictionary={lookupDictionaryEntry}
             reviewAssessmentResult={currentReviewAssessmentResult}
-            repairResourceRef={currentRepairAction?.mode === 'repair'
+            repairResourceRef={currentRepairAction?.intent === 'repair'
               ? currentRepairAction.repairResourceRef ?? null
               : null}
             onCompleteReviewAssessment={handleCompleteReviewAssessment}

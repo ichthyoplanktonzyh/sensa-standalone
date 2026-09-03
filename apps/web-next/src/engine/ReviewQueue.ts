@@ -3,7 +3,6 @@ import type {
   QueueConfig,
   RelearningCycle,
   ReviewCandidate,
-  ReviewCapability,
   SchedulablePackage,
   ScheduledAction,
   ScheduledActionDefinition,
@@ -55,7 +54,7 @@ export interface RetentionRuntimeTargetProjection {
   packageId: string;
   senseId: string;
   status: RetentionRuntimeTargetStatus;
-  currentCapability: ReviewCapability | null;
+  currentCapability: LearningCapability | null;
   memoryOutcome: ReviewAssessmentResult['memoryOutcome'] | null;
   reviewSettled: boolean;
   relearningCompleted: boolean;
@@ -64,7 +63,7 @@ export interface RetentionRuntimeTargetProjection {
 export interface RetentionRuntimeProjection {
   currentAction: Readonly<Pick<
     ScheduledAction,
-    'packageId' | 'senseId' | 'capability' | 'mode' | 'reason'
+    'packageId' | 'senseId' | 'capability' | 'intent' | 'reason'
   >> | null;
   targets: readonly RetentionRuntimeTargetProjection[];
 }
@@ -112,7 +111,7 @@ interface ReviewSnapshot<TContent> {
   runtimeTargets: [string, RetentionRuntimeTargetProjection][];
 }
 
-function kindForCapability(capability: LearningCapability): ReviewAssessmentKind | null {
+function kindForCapability(capability: LearningCapability | null): ReviewAssessmentKind | null {
   switch (capability) {
     case 'contextual_recognition': return 'context_recognition';
     case 'meaning_to_form_recall': return 'meaning_to_form_recall';
@@ -169,20 +168,20 @@ function cloneRuntimeTarget(
 function isRetentionAssessment(action: ScheduledActionDefinition): boolean {
   const assessmentKind = kindForCapability(action.capability);
   return action.kind === 'retention_review'
-    && action.mode !== 'repair'
+    && action.intent !== 'repair'
     && assessmentKind !== null
     && canProduceReviewMemoryOutcome(assessmentKind);
 }
 
 function isRelearningAssessment(action: ScheduledActionDefinition): boolean {
   return action.kind === 'relearning_gate'
-    && action.mode !== 'repair'
+    && action.intent !== 'repair'
     && kindForCapability(action.capability) !== null;
 }
 
-function isPackageRepair(action: ScheduledActionDefinition, capability: ReviewCapability): boolean {
+function isPackageRepair(action: ScheduledActionDefinition, capability: LearningCapability): boolean {
   return action.kind === 'acquisition_gate'
-    && action.mode === 'repair'
+    && action.intent === 'repair'
     && action.capability === capability
     && action.repairResourceRef?.source === 'package_declared'
     && Boolean(action.repairResourceRef.key);
@@ -190,7 +189,7 @@ function isPackageRepair(action: ScheduledActionDefinition, capability: ReviewCa
 
 function inferLegacyCycle<TContent>(candidate: ReviewCandidate<TContent>): RelearningCycle | null {
   const definition = candidate.package.reviewActions.find(isRelearningAssessment);
-  if (!definition || definition.capability === 'introduction') return null;
+  if (!definition || definition.capability === null) return null;
   return {
     cycleId: `legacy-relearning:${candidate.package.packageId}:${candidate.dueAt}`,
     packageId: candidate.package.packageId,
@@ -327,7 +326,7 @@ export class ReviewQueue<TContent = unknown> {
             packageId: this.currentSession.action.packageId,
             senseId: this.currentSession.action.senseId,
             capability: this.currentSession.action.capability,
-            mode: this.currentSession.action.mode,
+            intent: this.currentSession.action.intent,
             reason: this.currentSession.action.reason,
           }
         : null,
@@ -368,7 +367,7 @@ export class ReviewQueue<TContent = unknown> {
       this.currentSession = null;
       return null;
     }
-    const mode = definition.mode ?? 'assessment';
+    const intent = definition.intent ?? 'assessment';
     const assessmentKind = kindForCapability(definition.capability);
     if (!assessmentKind) {
       this.pendingQueue.unshift(candidate);
@@ -377,13 +376,13 @@ export class ReviewQueue<TContent = unknown> {
     }
     const action: ScheduledAction<TContent> = {
       ...definition,
-      mode,
+      intent,
       ordinal,
       totalTarget: this.progressTarget,
       packageId: candidate.package.packageId,
       senseId: candidate.package.senseId,
       content: candidate.package.content,
-      reason: mode === 'repair'
+      reason: intent === 'repair'
         ? 'repair'
         : candidate.phase === 'relearning'
         ? 'relearning'
@@ -396,26 +395,24 @@ export class ReviewQueue<TContent = unknown> {
       package: candidate.package,
       action,
       assessmentKind,
-      stage: mode === 'repair' ? 'review_repair' : 'review_assessment',
+      stage: intent === 'repair' ? 'review_repair' : 'review_assessment',
       settled: false,
       result: null,
     };
     const runtimeTarget = this.runtimeTargets.get(candidate.package.senseId)!;
     runtimeTarget.status = candidate.phase === 'retaining'
       ? 'reviewing'
-      : mode === 'repair'
+      : intent === 'repair'
         ? 'relearning_repair'
         : 'relearning_retest';
-    runtimeTarget.currentCapability = definition.capability === 'introduction'
-      ? null
-      : definition.capability;
+    runtimeTarget.currentCapability = definition.capability;
     return this.currentSession;
   }
 
   public settle(result: ReviewAssessmentResult): ReviewSession<TContent> | null {
     const session = this.currentSession;
     if (!session || session.settled) return session;
-    if (session.action.mode === 'repair') {
+    if (session.action.intent === 'repair') {
       throw new Error('A repair Action must be completed through completeRepair().');
     }
     if (result.kind !== session.assessmentKind) {
@@ -476,9 +473,7 @@ export class ReviewQueue<TContent = unknown> {
       );
       const runtimeTarget = this.runtimeTargets.get(session.action.senseId)!;
       runtimeTarget.status = settledResult.correct ? 'retaining' : 'relearning_repair';
-      runtimeTarget.currentCapability = session.action.capability === 'introduction'
-        ? null
-        : session.action.capability;
+      runtimeTarget.currentCapability = session.action.capability;
       runtimeTarget.memoryOutcome = settledResult.memoryOutcome;
       runtimeTarget.reviewSettled = true;
     } else if (isRelearningRetest) {
@@ -501,9 +496,7 @@ export class ReviewQueue<TContent = unknown> {
       }
       const runtimeTarget = this.runtimeTargets.get(session.action.senseId)!;
       runtimeTarget.status = settledResult.correct ? 'retaining' : 'relearning_repair';
-      runtimeTarget.currentCapability = session.action.capability === 'introduction'
-        ? null
-        : session.action.capability;
+      runtimeTarget.currentCapability = session.action.capability;
       runtimeTarget.relearningCompleted = settledResult.correct;
     }
     return session;
@@ -516,7 +509,7 @@ export class ReviewQueue<TContent = unknown> {
    */
   public completeRepair(): ReviewSession<TContent> | null {
     const session = this.currentSession;
-    if (!session || session.settled || session.action.mode !== 'repair') return session;
+    if (!session || session.settled || session.action.intent !== 'repair') return session;
     const cycle = session.candidate.relearning;
     if (!cycle) return session;
     this.captureSnapshot();
@@ -628,7 +621,7 @@ export class ReviewQueue<TContent = unknown> {
       actionKey: `${declaredRepair.actionKey}.relearning.${cycle.repairCount + 1}`,
       taskKey: null,
       kind: 'acquisition_gate',
-      mode: 'repair',
+      intent: 'repair',
       repairForActionKey: cycle.failedReviewActionKey,
       repairResourceRef: { ...declaredRepair.repairResourceRef! },
     };
@@ -639,7 +632,7 @@ export class ReviewQueue<TContent = unknown> {
     outcomeKey: string,
   ): RelearningCycle | null {
     const capability = session.action.capability;
-    if (capability === 'introduction') return null;
+    if (capability === null) return null;
     return {
       cycleId: outcomeKey,
       packageId: session.candidate.package.packageId,

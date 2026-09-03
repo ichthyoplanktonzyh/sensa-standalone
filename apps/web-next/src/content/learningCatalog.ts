@@ -575,9 +575,11 @@ function capabilityForTaskKind(kind: string): LearningCapability | null {
 function schedulingActions(pkg: SensaRuntimeLearningPackage): ScheduledActionDefinition[] {
   const actions: ScheduledActionDefinition[] = [{
     actionKey: `${pkg.identity.packageKey}.introduction`,
-    capability: 'introduction',
+    // 讲解不练任何能力，所以没有 capability；它的含义由 intent 声明。
+    capability: null,
     taskKey: null,
     kind: 'introduction',
+    intent: 'instruction',
   }];
   const tasks = [
     ...pkg.assessmentInventory.contextualRecognition,
@@ -698,8 +700,7 @@ function repairActions(
 ): ScheduledActionDefinition[] {
   const capabilities = pkg.acquisitionProfile.requiredCapabilities
     .map((requirement) => capabilityForTaskKind(requirement.kind))
-    .filter((capability): capability is LearningCapability =>
-      capability !== null && capability !== 'introduction')
+    .filter((capability): capability is LearningCapability => capability !== null)
     .filter((capability, index, all) => all.indexOf(capability) === index);
   return capabilities.map((capability) => {
     const baseAction = actions.find((action) =>
@@ -709,7 +710,7 @@ function repairActions(
       capability,
       taskKey: null,
       kind: 'acquisition_gate',
-      mode: 'repair',
+      intent: 'repair',
       repairForActionKey: baseAction?.actionKey,
       repairResourceRef: repairResourceReference(pkg, capability),
     };

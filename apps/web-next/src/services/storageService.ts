@@ -235,9 +235,9 @@ class StorageService {
         actionKey: effect.action.actionKey,
         memoryOutcome: effect.result.memoryOutcome,
         correct: effect.result.correct,
-        targetCapability: effect.action.capability === 'introduction'
-          ? 'contextual_recognition'
-          : effect.action.capability,
+        // 讲解步没有能力可归属；这条记录只在 retention_review 上落，
+        // 走到这里的 null 一律按识别记，与交接前一致。
+        targetCapability: effect.action.capability ?? 'contextual_recognition',
       });
       return;
     }

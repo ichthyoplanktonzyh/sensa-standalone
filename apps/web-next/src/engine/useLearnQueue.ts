@@ -148,7 +148,7 @@ export function useLearnQueue<TContent>(
   /** Demo-only presentation override; it still carries a Package, never an ad-hoc content object. */
   const overrideDemo = useCallback((
     demoPackage: SchedulablePackage<TContent>,
-    capability: LearningCapability,
+    capability: LearningCapability | null,
     demoStep: number,
     total: number,
     transferScenarioIndex = 0,
@@ -163,8 +163,8 @@ export function useLearnQueue<TContent>(
       package: demoPackage,
       action: {
         ...definition,
-        mode: definition.mode ?? 'assessment',
-        kind: definition.kind === 'introduction' ? 'introduction' : definition.kind,
+        intent: definition.intent ?? 'assessment',
+        kind: definition.kind,
         ordinal: demoStep,
         totalTarget: total,
         packageId: demoPackage.packageId,

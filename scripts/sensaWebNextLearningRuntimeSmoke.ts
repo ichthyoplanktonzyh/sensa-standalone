@@ -73,7 +73,7 @@ function renderedText(markup: string): string {
     .trim();
 }
 
-function reviewKind(capability: LearningCapability): ReviewAssessmentKind {
+function reviewKind(capability: LearningCapability | null): ReviewAssessmentKind {
   switch (capability) {
     case 'contextual_recognition': return 'context_recognition';
     case 'meaning_to_form_recall': return 'meaning_to_form_recall';
@@ -94,7 +94,7 @@ function focusFor(kind: ReviewAssessmentKind): ReviewFocusDimension {
 
 function settleLearningAction<TContent>(queue: LearnQueue<TContent>, session: Session<TContent>): void {
   switch (session.action.capability) {
-    case 'introduction':
+    case null:
       queue.completeIntroduction();
       return;
     case 'contextual_recognition':
@@ -154,11 +154,11 @@ function checkDirectionalFailure(): void {
   const packages = PROTOTYPE_LEARNING_PACKAGES.slice(0, 3);
   const queue = new LearnQueue(packages, { activeWindow: 3, minGap: 2 });
   let session = queue.getCurrentSession();
-  assertCondition(session?.action.capability === 'introduction', 'A new Sense must start with Introduction.');
+  assertCondition(session?.action.capability === null, 'A new Sense must start with Introduction.');
 
   // Fill the active window before any Gate assessment.
   for (let index = 0; index < 3; index += 1) {
-    assertCondition(session?.action.capability === 'introduction', 'The active window must fill with Introductions first.');
+    assertCondition(session?.action.capability === null, 'The active window must fill with Introductions first.');
     queue.completeIntroduction();
     session = queue.next();
   }
@@ -182,7 +182,7 @@ function checkDirectionalFailure(): void {
   assertCondition(session, 'A failed Gate must remain schedulable.');
   assertCondition(session.action.senseId === failedSenseId, 'The failed Sense should return for repair.');
   assertCondition(otherActionsBeforeRepair >= 2, 'Repair must follow at least minGap other Sense Actions.');
-  assert.equal(session.action.mode, 'repair');
+  assert.equal(session.action.intent, 'repair');
   assert.notEqual(session.action.actionKey, failedActionKey, 'A repair must not reuse the failed assessment identity.');
   assert.equal(session.action.taskKey, null, 'A scheduler repair must not masquerade as the assessment task.');
   assert.equal(session.action.repairResourceRef?.source, 'package_declared');
@@ -202,7 +202,7 @@ function checkDirectionalFailure(): void {
     session
     && !(session.action.senseId === failedSenseId
       && session.action.capability === 'contextual_recognition'
-      && session.action.mode === 'assessment')
+      && session.action.intent === 'assessment')
     && otherActionsBeforeRetest < 30
   ) {
     if (session.action.senseId !== failedSenseId) otherActionsBeforeRetest += 1;
@@ -211,7 +211,7 @@ function checkDirectionalFailure(): void {
   }
   assertCondition(session, 'The failed Gate must receive an independent retest after repair.');
   assert.equal(session.action.senseId, failedSenseId);
-  assert.equal(session.action.mode, 'assessment');
+  assert.equal(session.action.intent, 'assessment');
   assert.notEqual(session.action.actionKey, session.action.repairForActionKey, 'Retest must not be the repair Action.');
   assertCondition(otherActionsBeforeRetest >= 2, 'Retest must follow repair interference spacing.');
 
@@ -243,7 +243,7 @@ function checkDeclaredMastery(): void {
   assert.equal(initialProjection.currentAction?.senseId, packageItem.senseId);
   assert.equal(
     initialProjection.targets[0]?.gates.length,
-    packageItem.requiredCapabilities.filter((capability) => capability !== 'introduction').length,
+    packageItem.requiredCapabilities.length,
   );
   queue.skipCurrent();
   const after = queue.getState(packageItem.packageId)!;
@@ -264,7 +264,7 @@ function checkDeclaredMastery(): void {
   assert.equal(restored.phase, before.phase);
   assert.deepEqual(restored.gateStatus, before.gateStatus);
   assert.equal(queue.isDone(), false, 'Revocation must restore the untouched acquisition run.');
-  assert.equal(queue.next()?.action.capability, 'introduction');
+  assert.equal(queue.next()?.action.capability, null);
 }
 
 function checkReviewDeclaredMasteryExclusion(): void {
@@ -423,7 +423,7 @@ function checkReviewSettlement(): void {
 
   let repair = queue.next();
   assertCondition(repair, 'A failed Review must schedule a repair Action.');
-  assert.equal(repair.action.mode, 'repair');
+  assert.equal(repair.action.intent, 'repair');
   assert.equal(repair.action.kind, 'acquisition_gate');
   assert.equal(repair.action.capability, cycle.targetCapability);
   assert.equal(repair.action.taskKey, null);
@@ -431,7 +431,7 @@ function checkReviewSettlement(): void {
   assert.equal(queue.getProjection().targets[0]?.status, 'relearning_repair');
   assertCondition(repair.action.repairResourceRef?.key, 'Repair must reference a Package resource.');
   const declaredRepair = packageItem.repairActions?.find((action) =>
-    action.capability === cycle.targetCapability && action.mode === 'repair');
+    action.capability === cycle.targetCapability && action.intent === 'repair');
   assertCondition(declaredRepair, 'The selected capability must have a declared Package repair.');
   assert.equal(
     repair.action.repairResourceRef?.key,
@@ -455,7 +455,7 @@ function checkReviewSettlement(): void {
   const retest = queue.next();
   assertCondition(retest, 'Repair must be followed by an independent relearning gate.');
   assert.equal(retest.action.kind, 'relearning_gate');
-  assert.equal(retest.action.mode, 'assessment');
+  assert.equal(retest.action.intent, 'assessment');
   assert.equal(retest.action.capability, cycle.targetCapability);
   assert.equal(queue.getProjection().targets[0]?.status, 'relearning_retest');
   const retestSettled = queue.settle(makeReviewResult(retest, true))!;
@@ -492,7 +492,7 @@ function checkReviewSettlement(): void {
   loopQueue.completeRepair();
   const loopRetest = loopQueue.next()!;
   loopQueue.settle(makeReviewResult(loopRetest, false));
-  assert.equal(loopQueue.next()?.action.mode, 'repair');
+  assert.equal(loopQueue.next()?.action.intent, 'repair');
   assert.equal(loopEffects.filter((effect) => effect.type === 'retention_outcome').length, 1);
   assert.equal(
     loopEffects.filter((effect) => effect.type === 'relearning_progress' && effect.event === 'retest_failed').length,
@@ -515,7 +515,7 @@ function checkReviewSettlement(): void {
   }]);
   const diagnosticSession = diagnosticQueue.getCurrentSession();
   assertCondition(diagnosticSession, 'A persisted Relearning cycle should resume with a Package repair.');
-  assert.equal(diagnosticSession.action.mode, 'repair');
+  assert.equal(diagnosticSession.action.intent, 'repair');
   assert.equal(diagnosticSession.action.capability, cycle.targetCapability);
 
   // Records written by the previous MVP may contain only FSRS.relearning.
@@ -535,7 +535,7 @@ function checkReviewSettlement(): void {
   });
   const legacyRepair = legacyQueue.getCurrentSession();
   assertCondition(legacyRepair, 'Legacy FSRS relearning must resume at Package repair.');
-  assert.equal(legacyRepair.action.mode, 'repair');
+  assert.equal(legacyRepair.action.intent, 'repair');
   const legacyMemoryBefore = { ...storageService.getFSRSItems()[senseId]! };
   legacyQueue.completeRepair();
   assert.equal(storageService.getRelearningCycle(senseId)?.stage, 'retest_pending');
@@ -755,7 +755,7 @@ function checkReviewRelearningInterference(): void {
   }
   assertCondition(session, 'The failed multi-Sense Review must remain schedulable.');
   assert.equal(session.action.senseId, targetSenseId);
-  assert.equal(session.action.mode, 'repair');
+  assert.equal(session.action.intent, 'repair');
   assertCondition(
     otherSensesBeforeRepair.length >= 2
       && new Set(otherSensesBeforeRepair.slice(0, 2)).size === 2,
@@ -768,7 +768,7 @@ function checkReviewRelearningInterference(): void {
   guard = 0;
   while (session && session.action.senseId !== targetSenseId && guard < 12) {
     otherSensesBeforeRetest.push(session.action.senseId);
-    if (session.action.mode === 'repair') {
+    if (session.action.intent === 'repair') {
       queue.completeRepair();
     } else {
       queue.settle(makeReviewResult(session, false));
@@ -779,7 +779,7 @@ function checkReviewRelearningInterference(): void {
   assertCondition(session, 'The repaired Sense must remain schedulable for an independent retest.');
   assert.equal(session.action.senseId, targetSenseId);
   assert.equal(session.action.kind, 'relearning_gate');
-  assert.equal(session.action.mode, 'assessment');
+  assert.equal(session.action.intent, 'assessment');
   assertCondition(
     otherSensesBeforeRetest.length >= 2
       && new Set(otherSensesBeforeRetest.slice(0, 2)).size === 2,
@@ -800,7 +800,7 @@ function checkReviewRelearningInterference(): void {
   const fallbackRepair = fallbackQueue.next();
   assertCondition(fallbackRepair, 'A single Sense must use the safe repair fallback instead of stalling.');
   assert.equal(fallbackRepair.action.senseId, singleCandidate.package.senseId);
-  assert.equal(fallbackRepair.action.mode, 'repair');
+  assert.equal(fallbackRepair.action.intent, 'repair');
   assert.equal(
     fallbackRepair.action.ordinal,
     fallbackReview.action.ordinal + 1,
@@ -850,11 +850,9 @@ function checkPackageHasNoLearnerState(release: SensaRuntimeLearningRelease): vo
 
 function checkPackageRepairInventory(): void {
   for (const packageItem of PROTOTYPE_LEARNING_PACKAGES) {
-    const requiredCapabilities = packageItem.requiredCapabilities.filter((capability) =>
-      capability !== 'introduction');
-    for (const capability of requiredCapabilities) {
+    for (const capability of packageItem.requiredCapabilities) {
       const repair = packageItem.repairActions?.find((action) =>
-        action.capability === capability && action.mode === 'repair');
+        action.capability === capability && action.intent === 'repair');
       assertCondition(repair, `${packageItem.packageId} needs a repair Action for ${capability}.`);
       assert.equal(repair.taskKey, null, 'A repair Action must not masquerade as an assessment task.');
       assert.equal(repair.repairResourceRef?.source, 'package_declared');
@@ -1040,7 +1038,7 @@ function checkLearningActionResourceBinding(): void {
   let guard = 0;
   while (!queue.isDone() && session && guard < 240) {
     const { action } = session;
-    if (action.capability !== 'introduction') {
+    if (action.capability !== null) {
       const kind = reviewKind(action.capability);
       const resource = materializeAssessmentResource({
         packageIdentity: {

@@ -4,11 +4,30 @@
  * ScheduledAction is the unit selected by planning.
  */
 export type LearningCapability =
-  | 'introduction'
   | 'contextual_recognition'
   | 'meaning_to_form_recall'
   | 'novel_context_transfer'
   | 'boundary_discrimination';
+
+/**
+ * 一个 Step 的意图。这是领域闭集：编排插件可以自由定义 Step 的形式，但必须用
+ * 这组词声明含义，因为**只有 `assessment` 能产生 Evidence 与 Memory Outcome**。
+ * 没有它，多个插件会各自解释"什么叫学会了"。
+ *
+ * `introduction` 原先是 LearningCapability 的一个取值，这让类型说了假话：讲解
+ * 不是一条能力——它不进 Gate、不产生 Evidence、也没有对应的 Assessment Resource。
+ * 代价是三处 `Exclude<LearningCapability, 'introduction'>` 别名，和十余处
+ * `capability === 'introduction'` 判断。现在它是 `intent: 'instruction'`，
+ * 讲解步的 `capability` 就是 null——它确实不练任何能力。
+ *
+ * 今天只产出 instruction / assessment / repair 三种；`practice` 是给编排插件
+ * 预留的第四种意图：练但不取证。
+ */
+export type LearningStepIntent =
+  | 'instruction'
+  | 'practice'
+  | 'assessment'
+  | 'repair';
 
 export type ScheduledActionKind =
   | 'introduction'
@@ -22,14 +41,6 @@ export type ScheduledActionReason =
   | 'repair'
   | 'due'
   | 'relearning';
-
-/**
- * A repair is a learning intervention, not an assessment.  Keeping this
- * distinction on the scheduled action lets the frozen presentation layer
- * reuse its existing capability card without letting the queue turn a
- * reveal/rebinding step into Evidence.
- */
-export type ScheduledActionMode = 'assessment' | 'repair';
 
 export type RepairResourceRole =
   | 'experience_recap'
@@ -47,11 +58,12 @@ export interface RepairResourceReference {
 
 export interface ScheduledActionDefinition {
   actionKey: string;
-  capability: LearningCapability;
+  /** 这一步练的是哪条能力。讲解步不练任何能力，所以是 null。 */
+  capability: LearningCapability | null;
   taskKey: string | null;
   kind: ScheduledActionKind;
   /** Content adapters default ordinary definitions to assessment. */
-  mode?: ScheduledActionMode;
+  intent?: LearningStepIntent;
   /** Present only for a scheduler-created repair action. */
   repairForActionKey?: string;
   repairResourceRef?: RepairResourceReference;
@@ -75,7 +87,7 @@ export interface ScheduledAction<TContent = unknown> extends ScheduledActionDefi
   senseId: string;
   content: TContent;
   reason: ScheduledActionReason;
-  mode: ScheduledActionMode;
+  intent: LearningStepIntent;
 }
 
 export type MeaningToFormRecallOutcome =
@@ -87,8 +99,6 @@ export type MeaningToFormRecallOutcome =
 export type NovelTransferOutcome = 'success' | 'repair';
 
 export type AcquisitionGateStatus = 'unresolved' | 'passed' | 'failed';
-
-export type ReviewCapability = Exclude<LearningCapability, 'introduction'>;
 
 export type RelearningCycleStage = 'repair_pending' | 'retest_pending';
 
@@ -102,7 +112,7 @@ export interface RelearningCycle {
   cycleId: string;
   packageId: string;
   senseId: string;
-  targetCapability: ReviewCapability;
+  targetCapability: LearningCapability;
   failedReviewOutcomeKey: string;
   failedReviewActionKey: string;
   stage: RelearningCycleStage;
@@ -125,8 +135,8 @@ export interface ReviewMemoryFacts {
  * state. They are intentionally separate from the FSRS due projection.
  */
 export interface ReviewDiagnosticFacts {
-  preferredCapabilities?: readonly ReviewCapability[];
-  lastCapability?: ReviewCapability;
+  preferredCapabilities?: readonly LearningCapability[];
+  lastCapability?: LearningCapability;
 }
 
 export interface SenseAcquisitionState {
@@ -135,13 +145,13 @@ export interface SenseAcquisitionState {
   phase: 'new' | 'acquiring' | 'retaining' | 'relearning';
   introduced: boolean;
   declaredMastery: boolean;
-  gateStatus: Record<ReviewCapability, AcquisitionGateStatus>;
+  gateStatus: Record<LearningCapability, AcquisitionGateStatus>;
   /** A failed gate must receive a repair before it can be independently retested. */
-  pendingRepairCapability: ReviewCapability | null;
+  pendingRepairCapability: LearningCapability | null;
   pendingRepairForActionKey: string | null;
-  repairCounts: Record<ReviewCapability, number>;
-  failureCounts: Record<ReviewCapability, number>;
-  lastAssessmentActionKey: Partial<Record<ReviewCapability, string>>;
+  repairCounts: Record<LearningCapability, number>;
+  failureCounts: Record<LearningCapability, number>;
+  lastAssessmentActionKey: Partial<Record<LearningCapability, string>>;
   lastActionOrdinal: number;
   totalAttempts: number;
   totalCorrect: number;
@@ -150,7 +160,7 @@ export interface SenseAcquisitionState {
 }
 
 export interface AcquisitionGateProjection {
-  capability: ReviewCapability;
+  capability: LearningCapability;
   status: AcquisitionGateStatus;
   repairing: boolean;
 }
@@ -173,7 +183,7 @@ export interface AcquisitionTargetProjection {
 export interface StructuredAcquisitionProjection {
   currentAction: Readonly<Pick<
     ScheduledAction,
-    'packageId' | 'senseId' | 'capability' | 'mode' | 'reason'
+    'packageId' | 'senseId' | 'capability' | 'intent' | 'reason'
   >> | null;
   targets: readonly AcquisitionTargetProjection[];
 }

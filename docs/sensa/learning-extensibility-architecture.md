@@ -145,6 +145,7 @@ purpose: relearning         → 编排插件 repair 入口 → 出口 Relearning
 | **内容供给插件** | `(Learning Target, 内容能力) → 校验 → 冻结 Learning Materialization` | 已有 Content Provisioning，需 seam 化 |
 | **编排插件** | `fresh(targets)` / `repair(target, 依据)` → 产出 Step 序列 | 现为 `LearnQueue` / `ReviewQueue` 硬编码 |
 | **内容能力集合** | `Protocol Binding → 内容能力集合`，readiness 是集合的合取 | ✅ 已落地：`learningRuntime/contentCapabilities.ts` |
+| **Step intent 轴** | `intent: instruction \| practice \| assessment \| repair`，只有 assessment 取证 | ✅ 已落地：`engine/types.ts` 的 `LearningStepIntent` |
 | **Runtime Surface 登记表** | `surface → flow + 首学/继续/复习三个启动入口` | ✅ 已落地：`learningRuntime/runtimeSurfaces.ts` |
 | **Retention Store 登记表** | `storeId → 交接投影 + 状态归谁持有` | ✅ 已落地：`learningRuntime/retentionStores.ts` |
 | **Step renderer 注册表** | `stepKind → 组件` | 待做；需先统一三个 Screen 的 props 接口 |
@@ -210,9 +211,24 @@ Step = { stepId, retentionTargetId, stepKind, materialRef, intent }
 intent: instruction | practice | assessment | repair
 ```
 
-只有 `assessment` 能产生 Evidence 与 Memory Outcome。`introduction` 从能力枚举中移出，
-降级为 `intent: instruction`。这条是插件自由度的边界：**没有它，多个插件会各自解释
-"什么叫学会了"。**
+只有 `assessment` 能产生 Evidence 与 Memory Outcome。这条是插件自由度的边界：
+**没有它，多个插件会各自解释"什么叫学会了"。**
+
+Step 的完整形状要等编排插件（§8 第 5 项）。先落的是 intent 轴，因为
+`introduction` 待在能力枚举里时，类型在说假话：讲解不进 Gate、不产生 Evidence、
+也没有对应的 Assessment Resource。代价是三处 `Exclude<LearningCapability,
+'introduction'>` 别名和十余处 `capability === 'introduction'` 判断——每一处都在
+用界面上看不见的方式绕开这个假成员。
+
+落地形状：`LearningStepIntent` 声明领域闭集，`ScheduledActionDefinition.capability`
+改为可空——**讲解步的 capability 就是 null，它确实不练任何能力**。三处 `Exclude`
+别名随之消失（`ReviewCapability` / `GateCapability` / `AssessmentResourceCapability`
+都塌回 `LearningCapability`）。`mode: 'assessment' | 'repair'` 是这条轴的旧名字，
+只是它表达不了"讲解"，所以并成了 `intent`。
+
+今天只产出 `instruction` / `assessment` / `repair` 三种；`practice` 是给编排插件
+预留的第四种意图：练但不取证。取证边界只能从行为上钉，`smoke:intent` 19 项
+钉的就是这个——讲解与修复都不计入 attempts、不把 Gate 判成 passed。
 
 ### 5.4 Retention Store
 
@@ -281,7 +297,8 @@ learner 可见界面**与当前完全一致**（轻量 / 高保证两个选项�
    （`retentionStores.ts` + `smoke:retention` 14 项）；
 3. ✅ `contentRequirement` → 能力集合 + readiness provider（`contentCapabilities.ts` +
    `smoke:capabilities` 32 项），`executable` 随之改问内容供给；
-4. `LearningCapability` 中移出 `introduction`；
+4. ✅ `LearningCapability` 中移出 `introduction`，降级为 `intent: instruction`
+   （`LearningStepIntent` + `smoke:intent` 19 项），三处 `Exclude` 别名随之消失；
 5. 编排插件 seam 化为 `fresh` / `repair` 两入口。
 
 首批**不做**：能力目标选择 UI、拼写/听写 scope、第三个 preset、
