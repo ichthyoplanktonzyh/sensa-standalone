@@ -69,7 +69,7 @@ const launchFor = (
     protocolId: 'smoke',
     protocolVersion: 'v1',
     runtimeAdapterId: surface === 'structured_session' ? 'structured' : 'lightweight',
-    contentRequirement: 'compact_learning_material',
+    contentRequirement: ['compact_learning_material'],
   },
   adapterId: surface === 'structured_session' ? 'structured' : 'lightweight',
   surface,

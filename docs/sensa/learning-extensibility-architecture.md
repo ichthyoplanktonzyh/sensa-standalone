@@ -144,6 +144,7 @@ purpose: relearning         → 编排插件 repair 入口 → 出口 Relearning
 | **能力目标注册表** | 声明所需内容能力 + 准入依据 + `prerequisite?`（至多一层） | 新增；首批只注册既有默认 scope |
 | **内容供给插件** | `(Learning Target, 内容能力) → 校验 → 冻结 Learning Materialization` | 已有 Content Provisioning，需 seam 化 |
 | **编排插件** | `fresh(targets)` / `repair(target, 依据)` → 产出 Step 序列 | 现为 `LearnQueue` / `ReviewQueue` 硬编码 |
+| **内容能力集合** | `Protocol Binding → 内容能力集合`，readiness 是集合的合取 | ✅ 已落地：`learningRuntime/contentCapabilities.ts` |
 | **Runtime Surface 登记表** | `surface → flow + 首学/继续/复习三个启动入口` | ✅ 已落地：`learningRuntime/runtimeSurfaces.ts` |
 | **Retention Store 登记表** | `storeId → 交接投影 + 状态归谁持有` | ✅ 已落地：`learningRuntime/retentionStores.ts` |
 | **Step renderer 注册表** | `stepKind → 组件` | 待做；需先统一三个 Screen 的 props 接口 |
@@ -158,16 +159,16 @@ purpose: relearning         → 编排插件 repair 入口 → 出口 Relearning
 | 启动分发 | 6 | 这个 surface 该调哪个 start、进哪个 flow | ✅ 已收进登记表 |
 | retention store 选择 | 7 | 这条 Target 的长期事实存 FSRS 还是存 journey reducer | ✅ 改问 store（§5.4） |
 | 计数分桶 | 2 | 首页把这个 launch 计入哪个复习桶 | ✅ 改按 store 分桶 |
-| executable 判断 | 1 | 这个 surface 要不要 runtime package | 随能力目标注册表处理 |
+| executable 判断 | 1 | 这个 surface 要不要 runtime package | ✅ 改问内容供给（§5.2） |
 
 登记表落地后，"新增一种 Runtime 行为"在启动路径上的改动收敛为**注册一条 definition**；
 `App.tsx` 不再出现任何 surface 名字的分发判断。runtimeSession 泛化之后，
 `startNextRetentionGroup` 也不再要调用方自报家门——跑完的是哪一组，由会话状态里
 那条复习运行回答。
 
-`App.tsx` 与 `journeyState.ts` 里现在只剩四处 surface 名字，都不是分派：
+`App.tsx` 与 `journeyState.ts` 里现在只剩五处 surface 名字，都不是分派：
 三处是"哪块屏拿哪次运行"的派生（集中在一处，等 Step renderer 注册表），
-一处是 `executable`（等能力目标注册表），加上 `journeyState` 里
+一处是收尾时调用方自报跑完了哪条运行，加上 `journeyState` 里
 "首学产出的是不是 Acquisition Graduation"（等编排插件按 intent 声明证据种类）。
 
 终局形态仍是 Runtime 只认识 **Step**：编排插件产出 Step，注册表按 `stepKind` 查组件，
@@ -176,11 +177,28 @@ purpose: relearning         → 编排插件 repair 入口 → 出口 Relearning
 
 ### 5.2 内容需求改为集合
 
-`contentRequirement` 现为二选一枚举。能力目标之间共享内容能力（听辨与听写都需要音频），
-因此改为 `readonly ContentCapability[]`，readiness 是这组能力的合取。
+`contentRequirement` 原为二选一枚举：一个 Binding 要么要"紧凑材料"，要么要"结构化学习包"。
+能力目标之间会**共享**内容能力（听辨与听写都需要音频），二选一表达不了"我要这两样"。
+落地形状是 `ContentCapabilitySet`，readiness 是这组能力的合取——报最坏那条**自己的** view，
+学习者才知道缺的是什么。集合在类型上就是非空的：不声明任何内容能力的 Binding 是建模错误，
+不是"永远就绪"。
 
 readiness 是 **Learning Target 级的事实、scope 级的投影**：内容属于 Target（音频是这个词的
-音频），每个 scope 只对自己需要的子集求合取。
+音频），所以供给方是按 Target 建的一个 provider，每个用途只对自己声明的那个子集求合取，
+而不是按 scope 各建一张表。
+
+同时分出了第二个字段，因为原先那处 `executable` 判断问的正是它：
+
+| 字段 | 是什么 | 谁能改 |
+| --- | --- | --- |
+| `view.status` | 声明的准备状态 | journey 的"刷新准备状态"能推进它 |
+| `provisioned` | 供给事实：有没有可执行的内容 | 只有内容供给能改 |
+
+二者必须允许不一致：紧凑材料按需生成，"还在准备"也照样跑得起来；结构化学习包没有就是没有，
+声明成 ready 也变不出来。排期只能信 `view`，启动只能信 `provisioned`。原来那行
+`surface !== 'structured_session' || 有包` 把这条事实编码成了界面名字，现在它就是
+首学那组能力的 `provisioned` 合取，`smoke:capabilities` 把三条 Target × 两种方式下
+新旧两个表达式逐个钉成相等。
 
 ### 5.3 Step 与 intent
 
@@ -261,7 +279,8 @@ learner 可见界面**与当前完全一致**（轻量 / 高保证两个选项�
 2. ✅ `runtimeSession` 的按策略命名字段 → 按运行泛化（`initialRuns` 按 surface
    并存 / `retentionRun` 单条），并在同一块地基上落 Retention Store
    （`retentionStores.ts` + `smoke:retention` 14 项）；
-3. `contentRequirement` → 能力集合 + readiness provider；
+3. ✅ `contentRequirement` → 能力集合 + readiness provider（`contentCapabilities.ts` +
+   `smoke:capabilities` 32 项），`executable` 随之改问内容供给；
 4. `LearningCapability` 中移出 `introduction`；
 5. 编排插件 seam 化为 `fresh` / `repair` 两入口。
 

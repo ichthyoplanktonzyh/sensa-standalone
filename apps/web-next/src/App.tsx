@@ -87,6 +87,7 @@ import {
   PROTOTYPE_LEARNING_TARGET_ORDER,
   PROTOTYPE_LEARNING_TARGETS,
   isPrototypeLearningTargetId,
+  provisionedForPolicy,
   readinessForPolicy,
   runtimePackageForTarget,
   type PrototypeLearningPolicy,
@@ -150,14 +151,6 @@ const TARGET_ID_BY_RUNTIME_SENSE = new Map(
     return senseId ? [[senseId, targetId] as const] : [];
   }),
 );
-
-
-function runtimeSurfaceForPolicy(
-  policy: PrototypeLearningPolicy,
-  purpose: LearningProtocolPurpose,
-) {
-  return learningRuntimeCoordinator.surfaceFor(policy, purpose);
-}
 
 /**
  * 这条 Policy 的长期保持事实存在哪。见 learningRuntime/retentionStores.ts。
@@ -790,13 +783,16 @@ export default function App() {
       .filter((candidateId) => !journeyFor(journey, candidateId).committedPolicy)
       .map((candidateId) => {
         const candidatePolicy = effectivePolicyFor(journey, candidateId);
-        const runtimeSurface = runtimeSurfaceForPolicy(candidatePolicy, 'initial_learning');
         return {
           targetId: candidateId,
           profileId: candidatePolicy,
           ready: preparationFor(journey, candidateId, candidatePolicy) === 'ready',
-          executable: runtimeSurface !== 'structured_session'
-            || runtimePackageForTarget(PROTOTYPE_LEARNING_TARGETS[candidateId]) !== null,
+          // 建不建得起来问的是内容供给，不是问哪块屏：`ready` 是可被"刷新准备状态"
+          // 推上去的声明状态，推不出一个不存在的学习包。
+          executable: provisionedForPolicy(
+            PROTOTYPE_LEARNING_TARGETS[candidateId],
+            candidatePolicy,
+          ),
         };
       });
     const launch = learningRuntimeCoordinator.planInitial(targetId, initialCandidates);

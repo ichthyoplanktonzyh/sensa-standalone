@@ -3,9 +3,11 @@ import {
   type PrototypeExperience,
   type PrototypeSchedulablePackage,
 } from '../content/learningCatalog';
+import { worseReadinessView } from '../learningRuntime/contentCapabilities';
 import {
   learningPolicyProfileRegistry,
-  type LearningCapabilityReadiness,
+  type ContentCapabilityReadinessProvider,
+  type LearningProtocolPurpose,
   type PrototypeLearningPolicy,
   type PrototypeLearningReadiness,
   type PrototypeLearningReadinessView,
@@ -150,29 +152,58 @@ export const readinessTone = (
   readiness: PrototypeLearningReadiness,
 ): 'ready' | 'preparing' | 'blocked' => readiness;
 
+/**
+ * 这条方式整体的准备状态：三个用途之间同样取合取，报最坏的那条。
+ * 并列时保留首学那条——它是学习者接下来要跑的那个。
+ */
 export const readinessForPolicy = (
   target: PrototypeLearningTargetView,
   policy: PrototypeLearningPolicy,
 ): PrototypeLearningReadinessView => {
   const plan = resolvedLearningPlanForTarget(target, policy);
-  const purposePlans = Object.values(plan.purposes);
-  return purposePlans.find((purpose) => purpose.readiness.status === 'blocked')?.readiness
-    ?? purposePlans.find((purpose) => purpose.readiness.status === 'preparing')?.readiness
-    ?? plan.purposes.initial_learning.readiness;
+  return Object.values(plan.purposes)
+    .map((purpose) => purpose.readiness)
+    .reduce(worseReadinessView, plan.purposes.initial_learning.readiness);
+};
+
+/**
+ * 这条 Target 在该方式 / 用途下的内容能力是不是都已供给。
+ *
+ * 与 readiness 分开问：journey 的"刷新准备状态"能把声明状态推成 ready，
+ * 但推不出一个不存在的学习包。要不要建这次运行，问的是这个。
+ */
+export const provisionedForPolicy = (
+  target: PrototypeLearningTargetView,
+  policy: PrototypeLearningPolicy,
+  purpose: LearningProtocolPurpose = 'initial_learning',
+): boolean => resolvedLearningPlanForTarget(target, policy).purposes[purpose].provisioned;
+
+/**
+ * 这条 Target 的内容供给方。内容属于 Target，所以 provider 按 Target 建；
+ * 每个用途只对自己声明的那个能力子集求合取。
+ */
+const contentReadinessForTarget = (
+  target: PrototypeLearningTargetView,
+): ContentCapabilityReadinessProvider => (capabilityId) => {
+  switch (capabilityId) {
+    case 'compact_learning_material':
+      // 紧凑材料按需生成：可以还在准备，但从来不缺可跑的东西。
+      // 这就是原先 `executable` 对非 structured surface 恒为 true 的那条事实。
+      return { view: target.lightweightReadiness, provisioned: true };
+    case 'structured_learning_package': {
+      const provisioned = runtimePackageForTarget(target) !== null;
+      return {
+        view: provisioned ? HIGH_ASSURANCE_READY : HIGH_ASSURANCE_BLOCKED,
+        provisioned,
+      };
+    }
+  }
 };
 
 export const resolvedLearningPlanForTarget = (
   target: PrototypeLearningTargetView,
   policy: PrototypeLearningPolicy,
-) => {
-  const readiness: LearningCapabilityReadiness = {
-    compact_learning_material: target.lightweightReadiness,
-    structured_learning_package: runtimePackageForTarget(target)
-      ? HIGH_ASSURANCE_READY
-      : HIGH_ASSURANCE_BLOCKED,
-  };
-  return learningPolicyProfileRegistry.resolve(policy, readiness);
-};
+) => learningPolicyProfileRegistry.resolve(policy, contentReadinessForTarget(target));
 
 export const runtimePackageForTarget = (
   target: PrototypeLearningTargetView,

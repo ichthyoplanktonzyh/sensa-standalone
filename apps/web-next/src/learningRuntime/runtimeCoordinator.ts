@@ -1,3 +1,4 @@
+import { sameContentCapabilitySet } from './contentCapabilities';
 import {
   learningPolicyProfileRegistry,
   type LearningPolicyProfileRegistry,
@@ -185,7 +186,7 @@ function sameProtocolBinding(
   return left.protocolId === right.protocolId
     && left.protocolVersion === right.protocolVersion
     && left.runtimeAdapterId === right.runtimeAdapterId
-    && left.contentRequirement === right.contentRequirement;
+    && sameContentCapabilitySet(left.contentRequirement, right.contentRequirement);
 }
 
 export const learningRuntimeCoordinator = new LearningRuntimeCoordinator<PrototypeLearningPolicy>(

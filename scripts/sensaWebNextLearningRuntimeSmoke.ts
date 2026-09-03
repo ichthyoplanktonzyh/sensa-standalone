@@ -606,14 +606,11 @@ function checkPrototypeGraduationHandoff(): void {
 
 function checkPolicyProfileRuntimeSeam(): void {
   const ready = {
-    status: 'ready' as const,
-    label: 'ready',
-    detail: 'runtime smoke',
+    view: { status: 'ready' as const, label: 'ready', detail: 'runtime smoke' },
+    provisioned: true,
   };
-  const actualPlan = learningPolicyProfileRegistry.resolve('high_assurance', {
-    compact_learning_material: ready,
-    structured_learning_package: ready,
-  });
+  const allReady = () => ready;
+  const actualPlan = learningPolicyProfileRegistry.resolve('high_assurance', allReady);
   assert.equal(
     actualPlan.purposes.initial_learning.binding.runtimeAdapterId,
     'structured',
@@ -692,10 +689,7 @@ function checkPolicyProfileRuntimeSeam(): void {
   ];
   const extendedRegistry = new LearningPolicyProfileRegistry<ExtendedProfileId>(extendedProfiles);
   const extendedCoordinator = new LearningRuntimeCoordinator(extendedRegistry);
-  const plan = extendedRegistry.resolve('configuration_only_profile', {
-    compact_learning_material: ready,
-    structured_learning_package: ready,
-  });
+  const plan = extendedRegistry.resolve('configuration_only_profile', allReady);
   assert.equal(plan.purposes.initial_learning.binding.protocolId, 'lightweight-study');
   assert.equal(plan.purposes.retention_review.binding.runtimeAdapterId, 'structured');
   assert.equal(plan.purposes.relearning.binding.runtimeAdapterId, 'structured');

@@ -1,3 +1,19 @@
+import {
+  conjoinContentCapabilities,
+  type ContentCapabilityReadinessProvider,
+  type ContentCapabilitySet,
+  type PrototypeLearningReadinessView,
+} from './contentCapabilities';
+
+export type {
+  ContentCapabilityId,
+  ContentCapabilityReadiness,
+  ContentCapabilityReadinessProvider,
+  ContentCapabilitySet,
+  PrototypeLearningReadiness,
+  PrototypeLearningReadinessView,
+} from './contentCapabilities';
+
 export const LEARNING_PROTOCOL_PURPOSES = [
   'initial_learning',
   'retention_review',
@@ -8,23 +24,12 @@ export type LearningProtocolPurpose = (typeof LEARNING_PROTOCOL_PURPOSES)[number
 
 export type PrototypeRuntimeAdapterId = 'lightweight' | 'structured';
 
-export type PrototypeContentRequirement =
-  | 'compact_learning_material'
-  | 'structured_learning_package';
-
-export type PrototypeLearningReadiness = 'ready' | 'preparing' | 'blocked';
-
-export interface PrototypeLearningReadinessView {
-  status: PrototypeLearningReadiness;
-  label: string;
-  detail: string;
-}
-
 export interface LearningProtocolBinding {
   protocolId: string;
   protocolVersion: string;
   runtimeAdapterId: PrototypeRuntimeAdapterId;
-  contentRequirement: PrototypeContentRequirement;
+  /** 这条 Binding 需要的内容能力集合；readiness 是它们的合取。 */
+  contentRequirement: ContentCapabilitySet;
 }
 
 export interface LearningPolicyPresentation {
@@ -45,7 +50,10 @@ export interface LearningPolicyProfileDefinition<ProfileId extends string = stri
 export interface ResolvedProtocolPlan {
   purpose: LearningProtocolPurpose;
   binding: LearningProtocolBinding;
+  /** 声明状态的合取：驱动界面与排期。 */
   readiness: PrototypeLearningReadinessView;
+  /** 供给事实的合取：决定这次运行建不建得起来，不受声明状态覆盖影响。 */
+  provisioned: boolean;
 }
 
 export interface ResolvedLearningPlan<ProfileId extends string = string> {
@@ -53,11 +61,6 @@ export interface ResolvedLearningPlan<ProfileId extends string = string> {
   profileVersion: string;
   purposes: Record<LearningProtocolPurpose, ResolvedProtocolPlan>;
 }
-
-export type LearningCapabilityReadiness = Record<
-  PrototypeContentRequirement,
-  PrototypeLearningReadinessView
->;
 
 export class LearningPolicyProfileRegistry<ProfileId extends string> {
   readonly #profiles: readonly LearningPolicyProfileDefinition<ProfileId>[];
@@ -78,18 +81,26 @@ export class LearningPolicyProfileRegistry<ProfileId extends string> {
     return profile;
   }
 
+  /**
+   * 按 Target 的内容供给方解析这条 Profile。
+   *
+   * 传进来的是 provider 而不是一张按需求枚举的表：readiness 是 Target 级的事实，
+   * 每个用途只对自己声明的那个子集求合取。
+   */
   public resolve(
     profileId: ProfileId,
-    readiness: LearningCapabilityReadiness,
+    contentReadiness: ContentCapabilityReadinessProvider,
   ): ResolvedLearningPlan<ProfileId> {
     const profile = this.get(profileId);
     const purposes = Object.fromEntries(
       LEARNING_PROTOCOL_PURPOSES.map((purpose) => {
         const binding = profile.protocols[purpose];
+        const conjoined = conjoinContentCapabilities(binding.contentRequirement, contentReadiness);
         return [purpose, {
           purpose,
           binding,
-          readiness: readiness[binding.contentRequirement],
+          readiness: conjoined.view,
+          provisioned: conjoined.provisioned,
         } satisfies ResolvedProtocolPlan];
       }),
     ) as unknown as Record<LearningProtocolPurpose, ResolvedProtocolPlan>;
@@ -118,19 +129,19 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
         protocolId: 'lightweight-study',
         protocolVersion: 'v1',
         runtimeAdapterId: 'lightweight',
-        contentRequirement: 'compact_learning_material',
+        contentRequirement: ['compact_learning_material'],
       },
       retention_review: {
         protocolId: 'learner-rated-retention-review',
         protocolVersion: 'v1',
         runtimeAdapterId: 'lightweight',
-        contentRequirement: 'compact_learning_material',
+        contentRequirement: ['compact_learning_material'],
       },
       relearning: {
         protocolId: 'lightweight-rebinding',
         protocolVersion: 'v1',
         runtimeAdapterId: 'lightweight',
-        contentRequirement: 'compact_learning_material',
+        contentRequirement: ['compact_learning_material'],
       },
     },
   },
@@ -149,19 +160,19 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
         protocolId: 'structured-acquisition',
         protocolVersion: 'v1',
         runtimeAdapterId: 'structured',
-        contentRequirement: 'structured_learning_package',
+        contentRequirement: ['structured_learning_package'],
       },
       retention_review: {
         protocolId: 'evidence-oriented-retention-review',
         protocolVersion: 'v1',
         runtimeAdapterId: 'structured',
-        contentRequirement: 'structured_learning_package',
+        contentRequirement: ['structured_learning_package'],
       },
       relearning: {
         protocolId: 'targeted-structured-relearning',
         protocolVersion: 'v1',
         runtimeAdapterId: 'structured',
-        contentRequirement: 'structured_learning_package',
+        contentRequirement: ['structured_learning_package'],
       },
     },
   },
