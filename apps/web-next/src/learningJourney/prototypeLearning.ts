@@ -132,6 +132,17 @@ export const PROTOTYPE_LEARNING_TARGET_ORDER: readonly PrototypeLearningTargetId
   'lend-give',
 ];
 
+/**
+ * Target ids reach the app from the URL, so they arrive as arbitrary strings.
+ * Narrowing them here keeps a hand-typed or stale link from indexing
+ * `PROTOTYPE_LEARNING_TARGETS` with something that isn't there.
+ */
+export const isPrototypeLearningTargetId = (
+  value: unknown,
+): value is PrototypeLearningTargetId =>
+  typeof value === 'string'
+  && (PROTOTYPE_LEARNING_TARGET_ORDER as readonly string[]).includes(value);
+
 export const policyLabel = (policy: PrototypeLearningPolicy): string =>
   learningPolicyProfileRegistry.get(policy).presentation.label;
 

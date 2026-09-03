@@ -128,6 +128,8 @@ export interface ShellParams {
   readonly coming?: string;
   readonly meaningId?: string;
   readonly focusId?: string;
+  readonly targetId?: string;
+  readonly policyTarget?: string;
 }
 
 export const SHELL_PARAM_KEYS = [
@@ -137,6 +139,8 @@ export const SHELL_PARAM_KEYS = [
   'coming',
   'meaningId',
   'focusId',
+  'targetId',
+  'policyTarget',
 ] as const satisfies readonly (keyof ShellParams)[];
 
 /**
@@ -152,6 +156,11 @@ const SHEET_PARAM_OWNERS: Readonly<Record<string, readonly (keyof ShellParams)[]
   's-personal-meaning': ['meaningId', 'focusId'],
   's-confirmed-sense': ['meaningId', 'focusId'],
   's-expression-binding': ['meaningId', 'focusId'],
+  's-learning-target': ['targetId'],
+  // The policy sheet is reached both from a single Target and from the study
+  // screen's default-policy entry. Its own param says which: present means
+  // "editing this Target's policy", absent means "editing the default".
+  's-learning-policy': ['policyTarget'],
 };
 
 /** Read the navigation params a search object carries, ignoring anything else. */

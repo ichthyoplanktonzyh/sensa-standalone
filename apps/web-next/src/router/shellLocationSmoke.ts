@@ -130,6 +130,8 @@ const everyParam: ShellParams = {
   coming: 'scenes',
   meaningId: 'm',
   focusId: 'f',
+  targetId: 'borrow-receive',
+  policyTarget: 'lend-give',
 };
 const retention: ReadonlyArray<readonly [readonly string[], readonly string[]]> = [
   [[], []],
@@ -142,6 +144,12 @@ const retention: ReadonlyArray<readonly [readonly string[], readonly string[]]> 
   [['s-confirmed-sense'], ['meaningId', 'focusId']],
   [['s-expression-binding'], ['meaningId', 'focusId']],
   [['s-content', 's-content-sense', 's-content-example'], ['senseId', 'exampleId']],
+  [['s-study', 's-learning-target'], ['targetId']],
+  [['s-study', 's-learning-policy'], ['policyTarget']],
+  // 从某个 Target 打开学习方式：两个 sheet 同时在栈上，两个 param 都活着。
+  [['s-study', 's-learning-target', 's-learning-policy'], ['targetId', 'policyTarget']],
+  // 从学习方式退回 Target 详情：policyTarget 随之消失，不会留在链接里。
+  [['s-study', 's-learning-library'], []],
 ];
 for (const [stack, expectedKeys] of retention) {
   checked += 1;

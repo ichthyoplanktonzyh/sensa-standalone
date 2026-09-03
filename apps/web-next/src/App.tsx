@@ -88,6 +88,7 @@ import type {
 import {
   PROTOTYPE_LEARNING_TARGET_ORDER,
   PROTOTYPE_LEARNING_TARGETS,
+  isPrototypeLearningTargetId,
   readinessForPolicy,
   runtimePackageForTarget,
   type PrototypeLearningPolicy,
@@ -378,10 +379,17 @@ export default function App() {
   const [studyTab, setStudyTab] = useState<'a' | 'b'>('a');
   const [defaultLearningPolicy, setDefaultLearningPolicy] =
     useState<PrototypeLearningPolicy>(DEFAULT_LEARNING_POLICY);
-  const [selectedLearningTargetId, setSelectedLearningTargetId] =
-    useState<PrototypeLearningTargetId>('borrow-receive');
-  const [learningPolicyContext, setLearningPolicyContext] =
-    useState<LearningPolicyContext>({ kind: 'default' });
+  /**
+   * 打开的是哪条 Target、正在编辑谁的学习方式——这两个都是"某个 sheet 正在
+   * 展示什么"，和内容区的 senseId / meaningId 是同一类东西，所以同样由 URL 描述。
+   * 换来的是这两屏也能被深链和分享，且离开时 param 随 sheet 一起消失。
+   */
+  const selectedLearningTargetId: PrototypeLearningTargetId =
+    isPrototypeLearningTargetId(params.targetId) ? params.targetId : 'borrow-receive';
+  const learningPolicyContext: LearningPolicyContext =
+    isPrototypeLearningTargetId(params.policyTarget)
+      ? { kind: 'target', targetId: params.policyTarget }
+      : { kind: 'default' };
   const [learningPolicyByTarget, setLearningPolicyByTarget] = useState<
     TargetPolicyMap
   >({});
@@ -413,13 +421,13 @@ export default function App() {
     useState<readonly PrototypeLearningTargetId[]>([]);
 
   const openLearningTarget = useCallback((targetId: PrototypeLearningTargetId) => {
-    setSelectedLearningTargetId(targetId);
-    goMain('s-learning-target');
+    goMain('s-learning-target', { targetId });
   }, [goMain]);
 
+  // 显式传 undefined 是在清 policyTarget：默认方式这一屏没有归属 Target，
+  // 不清的话会读到上一次从某条 Target 进来时留下的值。
   const openDefaultLearningPolicy = useCallback(() => {
-    setLearningPolicyContext({ kind: 'default' });
-    goMain('s-learning-policy');
+    goMain('s-learning-policy', { policyTarget: undefined });
   }, [goMain]);
 
   const openTargetLearningPolicy = useCallback(() => {
@@ -427,8 +435,7 @@ export default function App() {
       toast('学习方式已在首次正式学习开始时锁定');
       return;
     }
-    setLearningPolicyContext({ kind: 'target', targetId: selectedLearningTargetId });
-    goMain('s-learning-policy');
+    goMain('s-learning-policy', { policyTarget: selectedLearningTargetId });
   }, [committedPolicyByTarget, goMain, selectedLearningTargetId, toast]);
 
   const selectLearningPolicy = useCallback((policy: PrototypeLearningPolicy) => {
