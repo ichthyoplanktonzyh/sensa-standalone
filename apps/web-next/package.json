@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "smoke:router": "tsx src/router/shellLocationSmoke.ts",
     "smoke:stores": "tsx src/services/snapshotStoreSmoke.ts",
-    "smoke": "npm run smoke:router && npm run smoke:stores && npm run smoke:styles",
+    "smoke:flow": "tsx src/learningFlow/flowSmoke.ts",
+    "smoke": "npm run smoke:router && npm run smoke:stores && npm run smoke:flow && npm run smoke:styles",
     "smoke:styles": "tsx src/styles/stylesheetSmoke.ts"
   },
   "dependencies": {

@@ -78,7 +78,6 @@ import {
   toWordPresentation,
 } from './content/learningCatalog';
 import type { PrototypeIntroductionPackage } from './content/learningCatalog';
-import { materializeAssessmentResource } from './content/assessmentResources';
 import type {
   LearningCapability,
   MeaningToFormRecallOutcome,
@@ -105,8 +104,9 @@ import { useShellNavigation } from './router/useShellNavigation';
 import { usePresentationStore } from './stores/presentationStore';
 import { useOverlayStore } from './stores/overlayStore';
 import { setDailyNewCount, useDailyNewCount, useDueReviewCount } from './stores/dailyPlanStore';
+import { useLearningFlow } from './learningFlow/useLearningFlow';
+import { demoSceneForStage, demoWordFor } from './learningFlow/demoScenes';
 
-type FlowType = 'learn' | 'review' | 'demo';
 type RuntimeLearningStage = FormalLearningStage | 'review_repair';
 
 type RuntimePackage = (typeof PROTOTYPE_LEARNING_PACKAGES)[number];
@@ -522,12 +522,9 @@ export default function App() {
   }, [signed, streak, toast]);
 
   /* ---------- 流程模式与每日新学词数 ---------- */
-  const [flowMode, setFlowType] = useState<FlowType>('learn');
-  const [demoStage, setDemoStage] = useState<FormalLearningStage>('introduction');
-  const [demoWord, setDemoWord] = useState<Word | null>(null);
-  const [demoPackage, setDemoPackage] = useState<RuntimePackage | null>(null);
-  const [demoReviewKind, setDemoReviewKind] = useState<ReviewAssessmentKind | null>(null);
-  const [demoReviewResult, setDemoReviewResult] = useState<ReviewAssessmentResult | null>(null);
+  // 一台状态机，不是六个互相牵制的 useState：demo 的负载只挂在 demo 分支上，
+  // 切走即随之消失。见 learningFlow/flowState.ts。
+  const { flowMode, demo, enterLearn, enterReview, enterDemo, advanceDemo } = useLearningFlow();
   // 这两个都不是状态：一个是 settings 里的设置项，一个是 FSRS 的派生计数。
   // 它们随 storageService 的写入自动更新，所以没有 refreshReviewCount 了。
   const dailyNewCount = useDailyNewCount();
@@ -893,9 +890,7 @@ export default function App() {
 
     closeMenus();
     setIsExampleOpen(false);
-    setDemoWord(null);
-    setDemoPackage(null);
-    setDemoReviewKind(null);
+    enterLearn();
 
     const initialCandidates = [...new Set([targetId, ...todayInitialTargetIds])]
       .filter((candidateId) => !committedPolicyByTarget[candidateId])
@@ -959,7 +954,6 @@ export default function App() {
     setActiveStructuredTargetIds(structuredTargetIds);
     setStructuredRuntimeSummary(null);
     setActiveLightweightRuntimeTargetId(null);
-    setFlowType('learn');
     setViewMode('study');
     return true;
   }, [
@@ -1045,9 +1039,7 @@ export default function App() {
     pendingMixedTargetRef.current = null;
     closeMenus();
     setIsExampleOpen(false);
-    setDemoWord(null);
-    setDemoPackage(null);
-    setDemoReviewKind(null);
+    enterReview();
     const launch = retentionRuntimeLaunches[0];
     if (!launch) {
       toast('今天没有到期的意思，可以开始今日学习');
@@ -1064,7 +1056,6 @@ export default function App() {
       toast('今天没有到期的意思，可以开始今日学习');
       return;
     }
-    setFlowType('review');
     setStructuredRetentionSummary(null);
     startReviewQueue(dueCandidates);
     setViewMode('study');
@@ -1076,9 +1067,7 @@ export default function App() {
   const startMixedLearning = useCallback(() => {
     closeMenus();
     setIsExampleOpen(false);
-    setDemoWord(null);
-    setDemoPackage(null);
-    setDemoReviewKind(null);
+    enterLearn();
 
     const newTargetIds = [...todayInitialTargetIds];
     const launch = retentionRuntimeLaunches[0];
@@ -1094,7 +1083,7 @@ export default function App() {
     if (launch?.surface === 'structured_session') {
       const dueCandidates = getReviewCandidatesForTargets(launch.targetIds);
       pendingMixedTargetRef.current = newTargetIds.length > 0 ? newTargetIds : null;
-      setFlowType('review');
+      enterReview();
       setStructuredRetentionSummary(null);
       startReviewQueue(dueCandidates);
       setViewMode('study');
@@ -1124,10 +1113,12 @@ export default function App() {
     pendingMixedTargetRef.current = null;
     setIsExampleOpen(false);
     closeMenus();
-    setDemoPackage(null);
+    // 原来只清了 demoPackage，flowMode 仍停在 'demo'、demoStage/demoWord 仍在，
+    // 于是"演示 → 回首页 → 继续某个已提交的 Target"会带着上次演示的阶段进学习屏。
+    enterLearn();
     setViewMode('main');
     resetMain();
-  }, [closeMenus, resetMain]);
+  }, [closeMenus, enterLearn, resetMain]);
 
   const exitLightweightRuntime = useCallback(() => {
     setViewMode('main');
@@ -1227,134 +1218,24 @@ export default function App() {
     }));
   }, []);
 
-  // 演示跳转：新学卡 + 长期 Review 评测目录
+  // 演示跳转：新学卡 + 长期 Review 评测目录。
+  // 屏号到演示内容的映射是纯的，见 learningFlow/demoScenes.ts；这里只负责施加副作用。
   const showStage = useCallback((stageNum: number) => {
+    const scene = demoSceneForStage(stageNum);
+    if (!scene) return;
     closeMenus();
     setIsExampleOpen(false);
     setViewMode('study');
-    setFlowType('demo');
-    setDemoReviewResult(null);
-
-    const basePackage = PROTOTYPE_LEARNING_PACKAGES[0];
-    if (!basePackage) return;
-    setDemoPackage(basePackage);
-    const setDemoPresentation = (level: number, isMastered = false) => {
-      setDemoWord({
-        ...toWordPresentation(basePackage.content),
-        level,
-        badge: '',
-        isMastered,
-      });
-    };
-    const boundaryPackage = PROTOTYPE_LEARNING_PACKAGES.find(
-      (pkg) => pkg.content.boundaryContrast !== null,
-    ) ?? basePackage;
-
-    switch (stageNum) {
-      case 1:
-        setDemoStage('introduction');
-        setDemoPresentation(0);
-        overrideDemoQueue(basePackage, 'introduction', 1, 4);
-        toast('已切换至：① 第一次遇见');
-        break;
-      case 2:
-        setDemoStage('recognition');
-        setDemoPresentation(1);
-        overrideDemoQueue(basePackage, 'contextual_recognition', 2, 4);
-        toast('已切换至：② 语境判断');
-        break;
-      case 3:
-        setDemoStage('recall');
-        setDemoPresentation(2);
-        overrideDemoQueue(basePackage, 'meaning_to_form_recall', 3, 4);
-        toast('已切换至：③ 从意思想起表达');
-        break;
-      case 4:
-        setDemoStage('transfer');
-        setDemoPresentation(3);
-        overrideDemoQueue(basePackage, 'novel_context_transfer', 4, 4);
-        toast('已切换至：④ 新语境迁移');
-        break;
-      case 9:
-        setDemoStage('review_assessment');
-        setDemoPresentation(4, true);
-        setDemoReviewKind('context_recognition');
-        overrideDemoQueue(basePackage, 'contextual_recognition', 1, 1);
-        toast('已切换至：Review · 语境判断');
-        break;
-      case 10:
-        setDemoStage('review_assessment');
-        setDemoPresentation(4, true);
-        setDemoReviewKind('meaning_to_form_recall');
-        overrideDemoQueue(basePackage, 'meaning_to_form_recall', 1, 1);
-        toast('已切换至：Review · 意思到表达');
-        break;
-      case 11:
-        setDemoStage('review_assessment');
-        setDemoPresentation(4, true);
-        setDemoReviewKind('novel_context_transfer');
-        overrideDemoQueue(basePackage, 'novel_context_transfer', 1, 1);
-        toast('已切换至：Review · 新语境迁移');
-        break;
-      case 12:
-        setDemoStage('review_assessment');
-        setDemoPackage(boundaryPackage);
-        setDemoWord({ ...toWordPresentation(boundaryPackage.content), level: 4, badge: '', isMastered: true });
-        setDemoReviewKind('boundary_contrast');
-        overrideDemoQueue(boundaryPackage, 'boundary_discrimination', 1, 1);
-        toast('已切换至：Review · 真实边界对比');
-        break;
-      case 13: {
-        const recognitionAction = basePackage.actions.find((action) =>
-          action.capability === 'contextual_recognition' && action.taskKey,
-        );
-        if (!recognitionAction?.taskKey) {
-          throw new Error(`Package ${basePackage.packageId} has no Recognition demo resource.`);
-        }
-        const recognitionResource = materializeAssessmentResource({
-          packageIdentity: {
-            packageKey: basePackage.packageId,
-            senseKey: basePackage.senseId,
-          },
-          content: basePackage.content,
-          taskKey: recognitionAction.taskKey,
-          kind: 'context_recognition',
-          capability: 'contextual_recognition',
-        });
-        if (recognitionResource.kind !== 'context_recognition') {
-          throw new Error('Recognition demo must materialize a Recognition resource.');
-        }
-        const incorrectOption = recognitionResource.options.find((option) => !option.isCorrect);
-        if (!incorrectOption) {
-          throw new Error(`Recognition task ${recognitionResource.taskKey} has no incorrect demo option.`);
-        }
-        setDemoStage('review_feedback');
-        setDemoPresentation(4, true);
-        setDemoReviewKind('context_recognition');
-        setDemoReviewResult({
-          assessmentId: `${recognitionResource.taskKey}.action-assessment`,
-          kind: 'context_recognition',
-          focusDimension: '语境辨义',
-          correct: false,
-          responseId: incorrectOption.id,
-          memoryOutcome: 'retrieval_failed',
-          evidenceEligible: true,
-        });
-        overrideDemoQueue(basePackage, 'contextual_recognition', 1, 1);
-        toast('已切换至：统一 Adaptive Feedback / Repair');
-        break;
-      }
-      default:
-        break;
-    }
-  }, [closeMenus, overrideDemoQueue, toast]);
+    enterDemo(scene.presentation);
+    overrideDemoQueue(scene.queue.pkg, scene.queue.capability, scene.queue.step, scene.queue.total);
+    toast(scene.toast);
+  }, [closeMenus, enterDemo, overrideDemoQueue, toast]);
 
   const handleCompleteIntroduction = useCallback(() => {
     if (flowMode === 'demo') {
       const pkg = learnSession?.package ?? PROTOTYPE_LEARNING_PACKAGES[0];
       if (!pkg) return;
-      setDemoStage('recognition');
-      setDemoWord({ ...toWordPresentation(pkg.content), level: 1, badge: '', isMastered: false });
+      advanceDemo({ stage: 'recognition', word: demoWordFor(pkg, 1) });
       overrideDemoQueue(pkg, 'contextual_recognition', 2, 4);
       toast('这个义项已建立初次连接，稍后会在新语境中再次出现');
       return;
@@ -1388,6 +1269,7 @@ export default function App() {
     flowMode,
     learnSession,
     reviewSession,
+    advanceDemo,
     overrideDemoQueue,
     completeReviewRepair,
     completeLearnRecognition,
@@ -1402,8 +1284,10 @@ export default function App() {
     if (flowMode === 'demo') {
       const pkg = learnSession?.package ?? PROTOTYPE_LEARNING_PACKAGES[0];
       if (!pkg) return;
-      setDemoStage(correct ? 'recall' : 'recognition');
-      setDemoWord({ ...toWordPresentation(pkg.content), level: correct ? 2 : 1, badge: '', isMastered: false });
+      advanceDemo({
+        stage: correct ? 'recall' : 'recognition',
+        word: demoWordFor(pkg, correct ? 2 : 1),
+      });
       overrideDemoQueue(
         pkg,
         correct ? 'meaning_to_form_recall' : 'contextual_recognition',
@@ -1414,7 +1298,7 @@ export default function App() {
       completeLearnRecognition(correct);
     }
     toast(correct ? '已认出这个意思，继续学习' : '这个区别稍后会换个语境再出现');
-  }, [flowMode, learnSession, overrideDemoQueue, completeLearnRecognition, toast]);
+  }, [flowMode, learnSession, advanceDemo, overrideDemoQueue, completeLearnRecognition, toast]);
 
   const handleCompleteMeaningToFormRecall = useCallback((
     outcome: MeaningToFormRecallOutcome,
@@ -1423,12 +1307,9 @@ export default function App() {
     if (flowMode === 'demo') {
       const pkg = learnSession?.package ?? PROTOTYPE_LEARNING_PACKAGES[0];
       if (!pkg) return;
-      setDemoStage(independentlyRecalled ? 'transfer' : 'recall');
-      setDemoWord({
-        ...toWordPresentation(pkg.content),
-        level: independentlyRecalled ? 3 : 2,
-        badge: '',
-        isMastered: false,
+      advanceDemo({
+        stage: independentlyRecalled ? 'transfer' : 'recall',
+        word: demoWordFor(pkg, independentlyRecalled ? 3 : 2),
       });
       overrideDemoQueue(
         pkg,
@@ -1448,6 +1329,7 @@ export default function App() {
   }, [
     flowMode,
     learnSession,
+    advanceDemo,
     overrideDemoQueue,
     completeLearnMeaningToFormRecall,
     toast,
@@ -1458,12 +1340,9 @@ export default function App() {
     if (flowMode === 'demo') {
       const pkg = learnSession?.package ?? PROTOTYPE_LEARNING_PACKAGES[0];
       if (!pkg) return;
-      setDemoStage('transfer');
-      setDemoWord({
-        ...toWordPresentation(pkg.content),
-        level: succeeded ? 4 : 3,
-        badge: '',
-        isMastered: succeeded,
+      advanceDemo({
+        stage: 'transfer',
+        word: demoWordFor(pkg, succeeded ? 4 : 3, succeeded),
       });
       overrideDemoQueue(
         pkg,
@@ -1481,7 +1360,7 @@ export default function App() {
         ? '已完成这次新义项学习，后续进入长期记忆调度'
         : '这个迁移已修复，稍后会换一个新场景再试',
     );
-  }, [flowMode, learnSession, overrideDemoQueue, completeLearnNovelTransfer, toast]);
+  }, [flowMode, learnSession, advanceDemo, overrideDemoQueue, completeLearnNovelTransfer, toast]);
 
   const handleCompleteReviewAssessment = useCallback((result: ReviewAssessmentResult) => {
     const actionTaskKey = flowMode === 'review'
@@ -1497,10 +1376,12 @@ export default function App() {
     if (flowMode === 'demo') {
       const pkg = learnSession?.package ?? PROTOTYPE_LEARNING_PACKAGES[0];
       if (!pkg) return;
-      setDemoReviewKind(result.kind);
-      setDemoReviewResult(result);
-      setDemoStage('review_feedback');
-      setDemoWord({ ...toWordPresentation(pkg.content), level: 4, badge: '', isMastered: true });
+      advanceDemo({
+        stage: 'review_feedback',
+        word: demoWordFor(pkg, 4, true),
+        reviewKind: result.kind,
+        reviewResult: result,
+      });
     } else if (flowMode === 'learn' && learnSession?.action.capability === 'boundary_discrimination') {
       completeLearnBoundary(result.correct);
     } else {
@@ -1513,7 +1394,15 @@ export default function App() {
           : '已独立提取，本次复习已结算一次'
         : '本次记录为提取失败，接下来只做定向修复',
     );
-  }, [flowMode, learnSession, reviewSession, completeLearnBoundary, settleReviewQueue, toast]);
+  }, [
+    flowMode,
+    learnSession,
+    reviewSession,
+    advanceDemo,
+    completeLearnBoundary,
+    settleReviewQueue,
+    toast,
+  ]);
 
   // 熟词标记
   const handleMarkKnown = useCallback(() => {
@@ -1619,7 +1508,7 @@ export default function App() {
     );
     if (nextLaunch) {
       const remainingStructuredReviews = getReviewCandidatesForTargets(nextLaunch.targetIds);
-      setFlowType('review');
+      enterReview();
       setStructuredRetentionSummary(null);
       startReviewQueue(remainingStructuredReviews);
       setViewMode('study');
@@ -1671,15 +1560,17 @@ export default function App() {
     if (flowMode === 'demo') {
       const pkg = learnSession?.package ?? PROTOTYPE_LEARNING_PACKAGES[0];
       if (!pkg) return;
-      setDemoReviewResult(null);
-      setDemoStage('review_assessment');
-      setDemoWord({ ...toWordPresentation(pkg.content), level: 4, badge: '', isMastered: true });
+      advanceDemo({
+        stage: 'review_assessment',
+        word: demoWordFor(pkg, 4, true),
+        reviewResult: null,
+      });
       overrideDemoQueue(pkg, 'contextual_recognition', 1, 1);
       toast('可从右侧 Review 目录继续查看其他评测卡');
       return;
     }
     handleNextWord();
-  }, [flowMode, learnSession, overrideDemoQueue, handleNextWord, toast]);
+  }, [flowMode, learnSession, advanceDemo, overrideDemoQueue, handleNextWord, toast]);
 
   // 监听整组学习完成或复习完成自动切至结算页
   useEffect(() => {
@@ -1717,8 +1608,8 @@ export default function App() {
   }, []);
 
   // 当前用于渲染的词与阶段
-  const currentPackage: RuntimePackage | null = flowMode === 'demo' && demoPackage
-    ? demoPackage
+  const currentPackage: RuntimePackage | null = demo
+    ? demo.pkg
     : flowMode === 'review' && reviewSession
     ? reviewSession.package as RuntimePackage
     : learnSession
@@ -1735,8 +1626,8 @@ export default function App() {
       ? materializeReviewRepairContent(rawIntroductionContent!, currentRepairAction.repairResourceRef)
       : currentPackage.content
     : null;
-  const currentWord: Word = flowMode === 'demo' && demoWord
-    ? demoWord
+  const currentWord: Word = demo
+    ? demo.word
     : currentIntroductionContent ? toWordPresentation(currentIntroductionContent) : {
       id: 'runtime-empty',
       w: '',
@@ -1750,8 +1641,8 @@ export default function App() {
       mnemo: {},
     };
 
-  const currentStage: RuntimeLearningStage = flowMode === 'demo'
-    ? demoStage
+  const currentStage: RuntimeLearningStage = demo
+    ? demo.stage
     : flowMode === 'review' && reviewSession
     ? reviewSession.action.mode === 'repair'
       ? 'review_repair'
@@ -1770,8 +1661,8 @@ export default function App() {
 
   const currentReviewAssessmentKind = flowMode === 'review'
     ? reviewSession?.assessmentKind ?? null
-    : flowMode === 'demo'
-    ? demoReviewKind
+    : demo
+    ? demo.reviewKind
     : learnSession?.action.capability === 'boundary_discrimination'
     ? reviewKindForCapability(learnSession.action.capability)
     : null;
@@ -1789,8 +1680,8 @@ export default function App() {
 
   const currentReviewAssessmentResult = flowMode === 'review'
     ? reviewSession?.result ?? null
-    : flowMode === 'demo'
-    ? demoReviewResult
+    : demo
+    ? demo.reviewResult
     : null;
 
   const selectedPrototypeLearningTarget =
@@ -2143,7 +2034,7 @@ export default function App() {
             onGoHome={resetMain}
             onStartReview={startReview}
             onContinueRetentionRuntime={() => {
-              setFlowType('review');
+              enterReview();
               setViewMode('study');
             }}
             onContinueRuntime={() => continueCommittedTargetRuntime(selectedLearningTargetId)}
@@ -2507,10 +2398,13 @@ export default function App() {
           setViewMode('study');
           const pkg = PROTOTYPE_LEARNING_PACKAGES[0];
           if (!pkg) return;
-          setFlowType('demo');
-          setDemoPackage(pkg);
-          setDemoStage('recall');
-          setDemoWord({ ...toWordPresentation(pkg.content), level: 1, badge: '', isMastered: false });
+          enterDemo({
+            stage: 'recall',
+            pkg,
+            word: demoWordFor(pkg, 1),
+            reviewKind: null,
+            reviewResult: null,
+          });
           overrideDemoQueue(pkg, 'meaning_to_form_recall', 7, 20);
           setSelectedSenseIdx(0);
           setIsExampleOpen(true);
