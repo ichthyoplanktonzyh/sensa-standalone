@@ -104,6 +104,7 @@ import { learningRuntimeCoordinator } from './learningRuntime/runtimeCoordinator
 import { useShellNavigation } from './router/useShellNavigation';
 import { usePresentationStore } from './stores/presentationStore';
 import { useOverlayStore } from './stores/overlayStore';
+import { setDailyNewCount, useDailyNewCount, useDueReviewCount } from './stores/dailyPlanStore';
 
 type FlowType = 'learn' | 'review' | 'demo';
 type RuntimeLearningStage = FormalLearningStage | 'review_repair';
@@ -527,24 +528,10 @@ export default function App() {
   const [demoPackage, setDemoPackage] = useState<RuntimePackage | null>(null);
   const [demoReviewKind, setDemoReviewKind] = useState<ReviewAssessmentKind | null>(null);
   const [demoReviewResult, setDemoReviewResult] = useState<ReviewAssessmentResult | null>(null);
-  const [dailyNewCount, setDailyNewCount] = useState<number>(() => storageService.getDailyNewCount());
-  const [reviewN, setReviewN] = useState<number>(
-    () => {
-      const senseIds = PROTOTYPE_LEARNING_PACKAGES.map((item) => item.senseId);
-      return new Set([
-        ...storageService.getDueSenseIds(senseIds),
-        ...storageService.getRelearningSenseIds(),
-      ]).size;
-    },
-  );
-
-  const refreshReviewCount = useCallback(() => {
-    const senseIds = PROTOTYPE_LEARNING_PACKAGES.map((item) => item.senseId);
-    setReviewN(new Set([
-      ...storageService.getDueSenseIds(senseIds),
-      ...storageService.getRelearningSenseIds(),
-    ]).size);
-  }, []);
+  // 这两个都不是状态：一个是 settings 里的设置项，一个是 FSRS 的派生计数。
+  // 它们随 storageService 的写入自动更新，所以没有 refreshReviewCount 了。
+  const dailyNewCount = useDailyNewCount();
+  const reviewN = useDueReviewCount();
 
   // Keep structured-retention handoffs created earlier in the same hot-reloaded session
   // aligned with the immediate first-Review handoff. Once a Review has been
@@ -585,19 +572,13 @@ export default function App() {
       });
       return next;
     });
-    refreshReviewCount();
   }, [
     declaredMasterySenseIds,
     committedPolicyByTarget,
-    refreshReviewCount,
     initialLearningCompletionByTarget,
     structuredRetentionByTarget,
   ]);
 
-  const handleDailyNewCountChange = useCallback((count: number) => {
-    storageService.setDailyNewCount(count);
-    setDailyNewCount(count);
-  }, []);
 
   const visibleLearningTargetIds = PROTOTYPE_LEARNING_TARGET_ORDER.filter((targetId) =>
     addedLearningTargetIds.has(targetId));
@@ -746,13 +727,11 @@ export default function App() {
       });
       return next;
     });
-    refreshReviewCount();
   }, [
     activeStructuredTargetIds,
     committedPolicyByTarget,
     declaredMasterySenseIds,
     getGraduatedSenseIds,
-    refreshReviewCount,
   ]);
 
   /* ---------- 全量到期流式复习引擎 (FSRS 复习流) ---------- */
@@ -790,8 +769,7 @@ export default function App() {
         };
       });
     }
-    refreshReviewCount();
-  }, [refreshReviewCount]);
+  }, []);
   const {
     session: reviewSession,
     stats: reviewStats,
@@ -1149,8 +1127,7 @@ export default function App() {
     setDemoPackage(null);
     setViewMode('main');
     resetMain();
-    refreshReviewCount();
-  }, [closeMenus, resetMain, refreshReviewCount]);
+  }, [closeMenus, resetMain]);
 
   const exitLightweightRuntime = useCallback(() => {
     setViewMode('main');
@@ -1200,8 +1177,7 @@ export default function App() {
         },
       }));
     }
-    refreshReviewCount();
-  }, [activeLightweightRuntimeTargetId, committedPolicyByTarget, refreshReviewCount]);
+  }, [activeLightweightRuntimeTargetId, committedPolicyByTarget]);
 
   const finishLightweightRuntime = useCallback(() => {
     setActiveLightweightRuntimeTargetId(null);
@@ -1613,7 +1589,6 @@ export default function App() {
   }, [beginInitialTargetRuntime, toast]);
 
   const finishStructuredRetentionRuntime = useCallback(() => {
-    refreshReviewCount();
     if (continueMixedAfterReview()) return;
 
     setStructuredRetentionSummary({
@@ -1635,7 +1610,7 @@ export default function App() {
       }),
     });
     setViewMode('finish');
-  }, [continueMixedAfterReview, refreshReviewCount, retentionRuntimeProjection]);
+  }, [continueMixedAfterReview, retentionRuntimeProjection]);
 
   const finishLightweightReview = useCallback(() => {
     setActiveLightweightReviewTargetIds([]);
@@ -2108,7 +2083,7 @@ export default function App() {
             readyInitialCount={todayInitialTargetIds.length}
             reviewCount={totalReviewCount}
             dailyNewCount={dailyNewCount}
-            onDailyNewCountChange={handleDailyNewCountChange}
+            onDailyNewCountChange={setDailyNewCount}
           />
 
           {/* 4.1 Target 库：主页只保留入口，具体内容在此展开 */}
@@ -2519,7 +2494,6 @@ export default function App() {
             .slice(0, 3)
             .map((pkg) => pkg.senseId);
           storageService.ensureRuntimeSenseIds(senseIds);
-          refreshReviewCount();
           exitLearn();
           goMain('s-semantic-world');
           toast('已将 3 个义项放入长期复习，词义世界已更新');
