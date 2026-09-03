@@ -6,8 +6,12 @@
  * 顺序如何、失败时有没有留下半截写入。
  *
  * 尤其钉住两处容易被"顺手统一"的不对称：
- *  - `beginStructuredInitial` 失败时不能已经提交 Policy（原代码先建队再提交）；
+ *  - `openStructuredQueue` 失败时不能已经提交 Policy、也不能记下运行
+ *    （原代码先建队再提交）；
  *  - 空队列的处理三个入口本来就不同，`enterOnEmpty` 如实保留了这个差异。
+ *
+ * 另外钉住 handler 记运行时报的 surface：它决定复习组交接时"跑完的是哪一组"，
+ * 报错了不会有类型错误，只会让交接找错位置。
  *
  * Run with `npm run smoke:surfaces`.
  */
@@ -32,7 +36,7 @@ interface FakeHost {
 }
 
 const createHost = (options: {
-  structuredInitialOk?: boolean;
+  structuredQueueOk?: boolean;
   dueReviewCount?: number;
 } = {}): FakeHost => {
   const calls: string[] = [];
@@ -41,14 +45,17 @@ const createHost = (options: {
     showFlow: (flow) => calls.push(`showFlow:${flow}`),
     enterReviewMode: () => calls.push('enterReviewMode'),
     commitPolicies: (targetIds) => calls.push(`commitPolicies:${targetIds.join(',')}`),
-    beginLightweightInitial: (targetId) => calls.push(`beginLightweightInitial:${targetId}`),
-    beginStructuredInitial: (targetIds) => {
-      calls.push(`beginStructuredInitial:${targetIds.join(',')}`);
-      return options.structuredInitialOk ?? true;
+    beginInitialRun: (surface, targetIds) =>
+      calls.push(`beginInitialRun:${surface}:${targetIds.join(',')}`),
+    beginRetentionRun: (surface, targetIds) =>
+      calls.push(`beginRetentionRun:${surface}:${targetIds.join(',')}`),
+    openStructuredQueue: (targetIds) => {
+      calls.push(`openStructuredQueue:${targetIds.join(',')}`);
+      return options.structuredQueueOk ?? true;
     },
-    beginLightweightReview: (targetIds) => calls.push(`beginLightweightReview:${targetIds.join(',')}`),
     countDueReviews: () => options.dueReviewCount ?? 1,
-    beginStructuredReview: (targetIds) => calls.push(`beginStructuredReview:${targetIds.join(',')}`),
+    openStructuredReviewQueue: (targetIds) =>
+      calls.push(`openStructuredReviewQueue:${targetIds.join(',')}`),
   };
   return { calls, ctx };
 };
@@ -97,7 +104,7 @@ check('未知 surface 抛错而不是静默返回', (() => {
   check('轻量首学：提交 Policy → 开运行 → 进 flow', started
     && host.calls.join('|') === [
       'commitPolicies:borrow-receive',
-      'beginLightweightInitial:borrow-receive',
+      'beginInitialRun:lightweight_initial:borrow-receive',
       'showFlow:lightweight',
     ].join('|'));
 }
@@ -117,20 +124,22 @@ check('未知 surface 抛错而不是静默返回', (() => {
   const started = runtimeSurfaceRegistry
     .get('structured_session')
     .startInitial(host.ctx, launchFor('structured_session', ['lend-give', 'borrow-receive']));
-  check('结构化首学：建队成功才提交 Policy', started
+  check('结构化首学：建队成功才记运行、提交 Policy', started
     && host.calls.join('|') === [
-      'beginStructuredInitial:lend-give,borrow-receive',
+      'openStructuredQueue:lend-give,borrow-receive',
+      'beginInitialRun:structured_session:lend-give,borrow-receive',
       'commitPolicies:lend-give,borrow-receive',
       'showFlow:study',
     ].join('|'));
 }
 
 {
-  const host = createHost({ structuredInitialOk: false });
+  const host = createHost({ structuredQueueOk: false });
   const started = runtimeSurfaceRegistry
     .get('structured_session')
     .startInitial(host.ctx, launchFor('structured_session', ['lend-give']));
-  check('结构化首学：建队失败不提交 Policy、不进 flow', !started
+  check('结构化首学：建队失败不记运行、不提交 Policy、不进 flow', !started
+    && !host.calls.some((call) => call.startsWith('beginInitialRun'))
     && !host.calls.some((call) => call.startsWith('commitPolicies'))
     && !host.calls.some((call) => call.startsWith('showFlow')));
 }
@@ -156,7 +165,8 @@ check('未知 surface 抛错而不是静默返回', (() => {
     { initialCompletion: false, declaredMastery: true, inActiveRun: false },
   );
   check('轻量继续：不看 declaredMastery（保留原分支差异）',
-    host.calls.join('|') === 'beginLightweightInitial:borrow-receive|showFlow:lightweight');
+    host.calls.join('|')
+      === 'beginInitialRun:lightweight_initial:borrow-receive|showFlow:lightweight');
 }
 
 {
@@ -202,7 +212,7 @@ check('未知 surface 抛错而不是静默返回', (() => {
   );
   check('轻量复习：按 Target 数量提示', started
     && host.calls.join('|') === [
-      'beginLightweightReview:borrow-receive,tactful-expression',
+      'beginRetentionRun:lightweight_retention:borrow-receive,tactful-expression',
       'showFlow:lightweightReview',
       'toast:n=2',
     ].join('|'));
@@ -215,10 +225,11 @@ check('未知 surface 抛错而不是静默返回', (() => {
     launchFor('structured_session', ['lend-give']),
     { announce, enterOnEmpty: false },
   );
-  check('结构化复习：切 review 模式 → 建队 → 进 flow', started
+  check('结构化复习：切 review 模式 → 记运行 → 建队 → 进 flow', started
     && host.calls.join('|') === [
       'enterReviewMode',
-      'beginStructuredReview:lend-give',
+      'beginRetentionRun:structured_session:lend-give',
+      'openStructuredReviewQueue:lend-give',
       'showFlow:study',
       'toast:n=3',
     ].join('|'));
@@ -244,7 +255,8 @@ check('未知 surface 抛错而不是静默返回', (() => {
   check('结构化复习：混合流照旧进入空队列', started
     && host.calls.join('|') === [
       'enterReviewMode',
-      'beginStructuredReview:lend-give',
+      'beginRetentionRun:structured_session:lend-give',
+      'openStructuredReviewQueue:lend-give',
       'showFlow:study',
       'toast:n=0',
     ].join('|'));

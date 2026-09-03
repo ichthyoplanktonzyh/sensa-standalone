@@ -38,6 +38,10 @@ import {
   type LearningProtocolPurpose,
 } from '../learningRuntime/policyProfiles';
 import { learningRuntimeCoordinator } from '../learningRuntime/runtimeCoordinator';
+import {
+  retentionStoreRegistry,
+  IMMEDIATE_REVIEW_LABEL,
+} from '../learningRuntime/retentionStores';
 import type { RelearningCycleStage } from '../engine/types';
 import type { ReviewMemoryOutcome } from '../review/types';
 
@@ -329,6 +333,12 @@ const surfaceFor = (
   purpose: LearningProtocolPurpose,
 ) => learningRuntimeCoordinator.surfaceFor(policy, purpose);
 
+/** 这条 Policy 的长期保持事实存在哪。见 learningRuntime/retentionStores.ts。 */
+const retentionStoreFor = (policy: PrototypeLearningPolicy) =>
+  retentionStoreRegistry.get(
+    learningRuntimeCoordinator.retentionStoreFor(policy, 'retention_review'),
+  );
+
 /** 相对日期标签，与界面上其它"今天/明天/N 天后"保持一致。 */
 export const relativeReviewLabel = (dueAt: number, now: number = Date.now()): string => {
   const days = Math.max(0, Math.ceil((dueAt - now) / (24 * 60 * 60 * 1000)));
@@ -403,33 +413,35 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
           !policy
           || !senseId
           || !graduated.has(senseId)
+          // 这里问的不是"保持存在哪"，而是"首学产出的是不是 Acquisition
+          // Graduation"。等编排插件按 intent 声明证据种类后才能一并去掉。
           || surfaceFor(policy, 'initial_learning') !== 'structured_session'
         ) continue;
 
-        const retentionSurface = surfaceFor(policy, 'retention_review');
+        const retentionStore = retentionStoreFor(policy);
         const changes: { -readonly [K in keyof TargetJourney]?: TargetJourney[K] } = {};
 
         // 毕业只发生一次：已有交接的不覆盖。
         if (!journey.initialCompletion) {
-          const due = retentionSurface === 'structured_session'
-            ? action.dueBySenseId[senseId]
-            : undefined;
+          // reducer 是纯的，所以这里注入的"调度记忆"就是调用点带来的那份到期表。
+          // 同一份 store 定义在 App 那边接的是 storageService。
+          const handoff = retentionStore.openHandoff({
+            completedAt: action.completedAt,
+            openSchedulerDue: () => action.dueBySenseId[senseId] ?? null,
+            reviewLabel: (dueAt) => relativeReviewLabel(dueAt, action.now),
+          });
           changes.initialCompletion = {
             completionKind: 'structured',
             completedAt: action.completedAt,
-            nextReviewAt: due === undefined
-              ? action.completedAt
-              : new Date(due).toISOString(),
-            nextReviewLabel: due === undefined
-              ? '现在可复习（原型）'
-              : relativeReviewLabel(due, action.now),
+            nextReviewAt: handoff.nextReviewAt,
+            nextReviewLabel: handoff.nextReviewLabel,
             schedulingHandoffBasis: 'acquisition_graduation',
           };
         }
-        if (retentionSurface === 'lightweight_retention' && !journey.lightweightRetention) {
+        if (retentionStore.opensJourneyLadder && !journey.lightweightRetention) {
           changes.lightweightRetention = {
             nextReviewAt: action.completedAt,
-            nextReviewLabel: '现在可复习（原型）',
+            nextReviewLabel: IMMEDIATE_REVIEW_LABEL,
             reviewCount: 0,
             lapseCount: 0,
             relearning: false,
@@ -456,7 +468,7 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
       if (action.startLightweightRetention) {
         changes.lightweightRetention = {
           nextReviewAt: action.completedAt,
-          nextReviewLabel: '现在可复习（原型）',
+          nextReviewLabel: IMMEDIATE_REVIEW_LABEL,
           reviewCount: 0,
           lapseCount: 0,
           relearning: false,
@@ -520,7 +532,7 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
           initialCompletion: {
             ...completion,
             nextReviewAt: new Date(action.dueAt).toISOString(),
-            nextReviewLabel: '现在可复习（原型）',
+            nextReviewLabel: IMMEDIATE_REVIEW_LABEL,
           },
         };
       }

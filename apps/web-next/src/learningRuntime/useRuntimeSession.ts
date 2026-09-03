@@ -6,6 +6,7 @@
  */
 import { useCallback, useMemo, useReducer } from 'react';
 import type { PrototypeLearningTargetId } from '../learningJourney/prototypeLearning';
+import type { PrototypeRuntimeSurface } from './runtimeCoordinator';
 import {
   INITIAL_RUNTIME_SESSION,
   runtimeSessionReducer,
@@ -15,44 +16,43 @@ import {
 } from './runtimeSession';
 
 export interface RuntimeSession extends RuntimeSessionState {
-  readonly startStructuredInitial: (
+  readonly startInitialRun: (
+    surface: PrototypeRuntimeSurface,
     targetIds: readonly PrototypeLearningTargetId[],
   ) => void;
-  readonly startLightweightInitial: (targetId: PrototypeLearningTargetId) => void;
-  readonly finishLightweightInitial: () => void;
-  readonly startLightweightReview: (
+  readonly finishInitialRun: (surface: PrototypeRuntimeSurface) => void;
+  readonly startRetentionRun: (
+    surface: PrototypeRuntimeSurface,
     targetIds: readonly PrototypeLearningTargetId[],
   ) => void;
-  readonly finishLightweightReview: () => void;
+  readonly finishRetentionRun: () => void;
   readonly showInitialSummary: (summary: StructuredRuntimeSummary) => void;
   readonly showRetentionSummary: (summary: StructuredRetentionSummary) => void;
-  readonly clearRetentionSummary: () => void;
 }
 
 export function useRuntimeSession(): RuntimeSession {
   const [state, dispatch] = useReducer(runtimeSessionReducer, INITIAL_RUNTIME_SESSION);
 
-  const startStructuredInitial = useCallback(
-    (targetIds: readonly PrototypeLearningTargetId[]) =>
-      dispatch({ type: 'startStructuredInitial', targetIds }),
+  const startInitialRun = useCallback(
+    (
+      surface: PrototypeRuntimeSurface,
+      targetIds: readonly PrototypeLearningTargetId[],
+    ) => dispatch({ type: 'startInitialRun', surface, targetIds }),
     [],
   );
-  const startLightweightInitial = useCallback(
-    (targetId: PrototypeLearningTargetId) =>
-      dispatch({ type: 'startLightweightInitial', targetId }),
+  const finishInitialRun = useCallback(
+    (surface: PrototypeRuntimeSurface) => dispatch({ type: 'finishInitialRun', surface }),
     [],
   );
-  const finishLightweightInitial = useCallback(
-    () => dispatch({ type: 'finishLightweightInitial' }),
+  const startRetentionRun = useCallback(
+    (
+      surface: PrototypeRuntimeSurface,
+      targetIds: readonly PrototypeLearningTargetId[],
+    ) => dispatch({ type: 'startRetentionRun', surface, targetIds }),
     [],
   );
-  const startLightweightReview = useCallback(
-    (targetIds: readonly PrototypeLearningTargetId[]) =>
-      dispatch({ type: 'startLightweightReview', targetIds }),
-    [],
-  );
-  const finishLightweightReview = useCallback(
-    () => dispatch({ type: 'finishLightweightReview' }),
+  const finishRetentionRun = useCallback(
+    () => dispatch({ type: 'finishRetentionRun' }),
     [],
   );
   const showInitialSummary = useCallback(
@@ -63,33 +63,25 @@ export function useRuntimeSession(): RuntimeSession {
     (summary: StructuredRetentionSummary) => dispatch({ type: 'showRetentionSummary', summary }),
     [],
   );
-  const clearRetentionSummary = useCallback(
-    () => dispatch({ type: 'clearRetentionSummary' }),
-    [],
-  );
 
   return useMemo(
     (): RuntimeSession => ({
       ...state,
-      startStructuredInitial,
-      startLightweightInitial,
-      finishLightweightInitial,
-      startLightweightReview,
-      finishLightweightReview,
+      startInitialRun,
+      finishInitialRun,
+      startRetentionRun,
+      finishRetentionRun,
       showInitialSummary,
       showRetentionSummary,
-      clearRetentionSummary,
     }),
     [
       state,
-      startStructuredInitial,
-      startLightweightInitial,
-      finishLightweightInitial,
-      startLightweightReview,
-      finishLightweightReview,
+      startInitialRun,
+      finishInitialRun,
+      startRetentionRun,
+      finishRetentionRun,
       showInitialSummary,
       showRetentionSummary,
-      clearRetentionSummary,
     ],
   );
 }

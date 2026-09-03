@@ -145,6 +145,7 @@ purpose: relearning         → 编排插件 repair 入口 → 出口 Relearning
 | **内容供给插件** | `(Learning Target, 内容能力) → 校验 → 冻结 Learning Materialization` | 已有 Content Provisioning，需 seam 化 |
 | **编排插件** | `fresh(targets)` / `repair(target, 依据)` → 产出 Step 序列 | 现为 `LearnQueue` / `ReviewQueue` 硬编码 |
 | **Runtime Surface 登记表** | `surface → flow + 首学/继续/复习三个启动入口` | ✅ 已落地：`learningRuntime/runtimeSurfaces.ts` |
+| **Retention Store 登记表** | `storeId → 交接投影 + 状态归谁持有` | ✅ 已落地：`learningRuntime/retentionStores.ts` |
 | **Step renderer 注册表** | `stepKind → 组件` | 待做；需先统一三个 Screen 的 props 接口 |
 
 ### 5.1 消除 surface 闭集
@@ -155,14 +156,19 @@ purpose: relearning         → 编排插件 repair 入口 → 出口 Relearning
 | 类别 | 处数 | 在问什么 | 处置 |
 | --- | --- | --- | --- |
 | 启动分发 | 6 | 这个 surface 该调哪个 start、进哪个 flow | ✅ 已收进登记表 |
-| retention store 选择 | 7 | 这条 Target 的长期事实存 FSRS 还是存 journey reducer | 待做（见 §5.4） |
-| 计数分桶 | 2 | 首页把这个 launch 计入哪个复习桶 | 随 §5.4 一并处理 |
+| retention store 选择 | 7 | 这条 Target 的长期事实存 FSRS 还是存 journey reducer | ✅ 改问 store（§5.4） |
+| 计数分桶 | 2 | 首页把这个 launch 计入哪个复习桶 | ✅ 改按 store 分桶 |
 | executable 判断 | 1 | 这个 surface 要不要 runtime package | 随能力目标注册表处理 |
 
 登记表落地后，"新增一种 Runtime 行为"在启动路径上的改动收敛为**注册一条 definition**；
-`App.tsx` 不再出现任何 surface 名字的分发判断。仅剩一处 `startNextRetentionGroup(
-'lightweight_retention')` 是调用方对自己的声明，不是对其他 surface 的判断——它要等
-runtimeSession 泛化后才能去掉。
+`App.tsx` 不再出现任何 surface 名字的分发判断。runtimeSession 泛化之后，
+`startNextRetentionGroup` 也不再要调用方自报家门——跑完的是哪一组，由会话状态里
+那条复习运行回答。
+
+`App.tsx` 与 `journeyState.ts` 里现在只剩四处 surface 名字，都不是分派：
+三处是"哪块屏拿哪次运行"的派生（集中在一处，等 Step renderer 注册表），
+一处是 `executable`（等能力目标注册表），加上 `journeyState` 里
+"首学产出的是不是 Acquisition Graduation"（等编排插件按 intent 声明证据种类）。
 
 终局形态仍是 Runtime 只认识 **Step**：编排插件产出 Step，注册表按 `stepKind` 查组件，
 `App.tsx` 退化为"当前有无 Step / 渲染它"的壳。这一步需要先统一三个 Screen 的 props
@@ -190,16 +196,23 @@ intent: instruction | practice | assessment | repair
 降级为 `intent: instruction`。这条是插件自由度的边界：**没有它，多个插件会各自解释
 "什么叫学会了"。**
 
-### 5.4 下一刀：retention store 抽象
+### 5.4 Retention Store
 
 剩下的 surface 判断几乎都在问同一件事：**这条 Target 的长期保持事实存在哪。**
 `structured_session` 的 Memory State 由 `storageService` 的 FSRS items 持有；
 `lightweight_retention` 的存在 journey reducer 的 `lightweightRetention` 字段里。
 每个读写长期状态的地方都得先回答这个问题，判断因此散落在 `App.tsx` 与
-`journeyState.ts` 两处。
+`journeyState.ts` 两处，而且问错了对象——问的是界面，要的是持有者。
 
-正确形状是一个 retention store 接口、两个实现，调用点问 store 而不是问 surface 名字。
-这与 §8 第 2 项（runtimeSession 泛化）是同一块地基。
+落地形状是两个 store（`scheduler_memory` / `fixed_ladder`）由 retention 的
+Runtime Adapter 声明，调用点问 store 而不是问 surface。新增一个复用同一 store 的
+surface（例如拼写产出仍走调度器）时，这九处一处都不用改。
+
+两个实现的**写入路径不对称**，抽象没有掩盖它：调度记忆可以命令式写，固定档期
+只能由 reducer 自己落。因此 store 只声明"接收 Scheduling Handoff 时给出什么首次
+到期投影"，宿主能力由 `RetentionStoreContext` 注入——App 传 `storageService`，
+reducer 传 action 里那份 `dueBySenseId`。同一份定义因而在命令式与纯函数两侧都成立，
+`smoke:retention` 直接钉住了这一点。
 
 ## 6. 不可插内核
 
@@ -245,7 +258,9 @@ learner 可见界面**与当前完全一致**（轻量 / 高保证两个选项�
 
 1. ✅ `App.tsx` 的 surface 启动分支 → Runtime Surface 登记表（`runtimeSurfaces.ts` +
    `smoke:surfaces` 17 项回归）；
-2. `runtimeSession` 的按策略命名字段 → 按 launch 泛化；
+2. ✅ `runtimeSession` 的按策略命名字段 → 按运行泛化（`initialRuns` 按 surface
+   并存 / `retentionRun` 单条），并在同一块地基上落 Retention Store
+   （`retentionStores.ts` + `smoke:retention` 14 项）；
 3. `contentRequirement` → 能力集合 + readiness provider；
 4. `LearningCapability` 中移出 `introduction`；
 5. 编排插件 seam 化为 `fresh` / `repair` 两入口。

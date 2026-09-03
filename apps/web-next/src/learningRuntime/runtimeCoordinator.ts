@@ -6,6 +6,7 @@ import {
   type PrototypeLearningPolicy,
   type PrototypeRuntimeAdapterId,
 } from './policyProfiles';
+import type { RetentionStoreId } from './retentionStores';
 
 export type PrototypeRuntimeSurface =
   | 'lightweight_initial'
@@ -30,6 +31,8 @@ export interface RuntimeLaunch<TargetId> {
 export interface ProtocolRuntimeAdapter {
   adapterId: PrototypeRuntimeAdapterId;
   retentionPriority: number;
+  /** 本 Adapter 的长期保持事实存在哪。见 retentionStores.ts。 */
+  retentionStoreId: RetentionStoreId;
   surfaceFor(purpose: LearningProtocolPurpose): PrototypeRuntimeSurface;
   selectInitialTargets<TargetId>(
     requestedTargetId: TargetId,
@@ -40,6 +43,7 @@ export interface ProtocolRuntimeAdapter {
 const lightweightRuntimeAdapter: ProtocolRuntimeAdapter = {
   adapterId: 'lightweight',
   retentionPriority: 0,
+  retentionStoreId: 'fixed_ladder',
   surfaceFor: (purpose) => purpose === 'initial_learning'
     ? 'lightweight_initial'
     : 'lightweight_retention',
@@ -50,6 +54,7 @@ const lightweightRuntimeAdapter: ProtocolRuntimeAdapter = {
 const structuredRuntimeAdapter: ProtocolRuntimeAdapter = {
   adapterId: 'structured',
   retentionPriority: 1,
+  retentionStoreId: 'scheduler_memory',
   surfaceFor: () => 'structured_session',
   selectInitialTargets: (requestedTargetId, eligibleTargets) => {
     if (!eligibleTargets.includes(requestedTargetId)) return [];
@@ -89,6 +94,26 @@ export class LearningRuntimeCoordinator<ProfileId extends string> {
     purpose: LearningProtocolPurpose,
   ): PrototypeRuntimeSurface {
     return this.adapterFor(profileId, purpose).surfaceFor(purpose);
+  }
+
+  /**
+   * 这条 Policy 在该用途下的长期保持事实存在哪。
+   *
+   * 调用点问 store 而不是问 surface：新增一个复用同一 store 的 surface 时，
+   * 所有读写长期状态的地方都不用改。
+   */
+  public retentionStoreFor(
+    profileId: ProfileId,
+    purpose: LearningProtocolPurpose,
+  ): RetentionStoreId {
+    return this.adapterFor(profileId, purpose).retentionStoreId;
+  }
+
+  /** 同上，但从已经算好的 launch 出发（launch 带的是 adapterId，不是 profileId）。 */
+  public retentionStoreOfAdapter(adapterId: PrototypeRuntimeAdapterId): RetentionStoreId {
+    const adapter = this.#adapters.get(adapterId);
+    if (!adapter) throw new Error(`Unknown Protocol Runtime Adapter: ${adapterId}`);
+    return adapter.retentionStoreId;
   }
 
   public planInitial<TargetId>(

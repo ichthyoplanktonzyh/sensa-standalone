@@ -11,14 +11,14 @@
  * 入口各自怎么启动。`App.tsx` 只查表、调用，不认识任何 surface 名字。
  *
  * Handler 通过 `RuntimeSurfaceContext` 拿到宿主能力，这份 context 就是
- * surface 插件的合同面：它需要什么，接口上一目了然。目前它还偏大，因为
- * App 仍持有队列与 journey 的写入口；随着 runtimeSession 泛化与 engine
- * seam 化推进，这个面会收缩。
+ * surface 插件的合同面：它需要什么，接口上一目了然。runtimeSession 按运行
+ * 泛化之后，"记下这次运行"已经是一对通用能力（`beginInitialRun` /
+ * `beginRetentionRun`），不再按学习方式各给一个入口；剩下的
+ * `openStructuredQueue` / `openStructuredReviewQueue` 是编排引擎的入口，
+ * 要等编排插件 seam 化（`fresh` / `repair`）才会退场。
  *
- * 不在本表内的是"这条 Target 的 retention 事实存在哪"——structured 走
- * storageService 的 FSRS items，lightweight 走 journey reducer 的
- * lightweightRetention 记录。那是持久化后端的选择，散在 App/journeyState
- * 的另外十处 surface 判断里，属于下一刀（retention store 抽象）。
+ * 不在本表内的是"这条 Target 的 retention 事实存在哪"——那是 store 的选择，
+ * 见 retentionStores.ts。
  */
 import type { PrototypeLearningTargetId } from '../learningJourney/prototypeLearning';
 import type { ShellFlow } from '../router/shellLocation';
@@ -30,9 +30,9 @@ export type RuntimeLaunchForTargets = RuntimeLaunch<PrototypeLearningTargetId>;
  * 宿主提供给 surface handler 的能力面。
  *
  * 每个方法都是一次完整的领域操作，handler 负责组合顺序、失败处理与文案。
- * 返回值刻意区分"没做成"和"做成了但是空的"：`beginStructuredInitial`
- * 返回 false 表示内容不完整、未产生任何写入；`beginStructuredReview`
- * 返回 0 表示队列建立了但没有到期项。
+ * 返回值刻意区分"没做成"和"做成了但是空的"：`openStructuredQueue` 返回 false
+ * 表示内容不完整、未产生任何写入；`countDueReviews` 返回 0 表示队列可以建立
+ * 但没有到期项。
  */
 export interface RuntimeSurfaceContext {
   readonly toast: (message: string) => void;
@@ -42,19 +42,25 @@ export interface RuntimeSurfaceContext {
   readonly enterReviewMode: () => void;
   /** 提交并锁定这批 Target 的 Learning Policy。 */
   readonly commitPolicies: (targetIds: readonly PrototypeLearningTargetId[]) => void;
-  readonly beginLightweightInitial: (targetId: PrototypeLearningTargetId) => void;
-  /** 内容不完整时返回 false，且不产生任何状态写入。 */
-  readonly beginStructuredInitial: (
-    targetIds: readonly PrototypeLearningTargetId[],
-  ) => boolean;
-  readonly beginLightweightReview: (
+  /** 记下"这块 surface 上正在跑一次首学运行"。 */
+  readonly beginInitialRun: (
+    surface: PrototypeRuntimeSurface,
     targetIds: readonly PrototypeLearningTargetId[],
   ) => void;
+  /** 记下"这块 surface 上正在跑一段长期复习"，并作废上一次的复习结算。 */
+  readonly beginRetentionRun: (
+    surface: PrototypeRuntimeSurface,
+    targetIds: readonly PrototypeLearningTargetId[],
+  ) => void;
+  /** 建立结构化首学队列；内容不完整时返回 false，且不产生任何状态写入。 */
+  readonly openStructuredQueue: (
+    targetIds: readonly PrototypeLearningTargetId[],
+  ) => boolean;
   /** 只数不写：handler 要先知道数量才能决定空队列该不该进入。 */
   readonly countDueReviews: (
     targetIds: readonly PrototypeLearningTargetId[],
   ) => number;
-  readonly beginStructuredReview: (
+  readonly openStructuredReviewQueue: (
     targetIds: readonly PrototypeLearningTargetId[],
   ) => void;
 }
@@ -109,7 +115,7 @@ const lightweightInitialSurface: RuntimeSurfaceDefinition = {
     const targetId = launch.targetIds[0];
     if (!targetId) return false;
     ctx.commitPolicies([targetId]);
-    ctx.beginLightweightInitial(targetId);
+    ctx.beginInitialRun('lightweight_initial', [targetId]);
     ctx.showFlow('lightweight');
     return true;
   },
@@ -118,7 +124,7 @@ const lightweightInitialSurface: RuntimeSurfaceDefinition = {
       ctx.toast('首次学习已经完成，等待进入长期复习');
       return;
     }
-    ctx.beginLightweightInitial(targetId);
+    ctx.beginInitialRun('lightweight_initial', [targetId]);
     ctx.showFlow('lightweight');
   },
   // 轻量首学的 surface 不承担长期复习；它的 retention 由 lightweight_retention 运行。
@@ -131,7 +137,7 @@ const lightweightRetentionSurface: RuntimeSurfaceDefinition = {
   startInitial: () => false,
   continueInitial: () => {},
   startRetention: (ctx, launch, options) => {
-    ctx.beginLightweightReview(launch.targetIds);
+    ctx.beginRetentionRun('lightweight_retention', launch.targetIds);
     ctx.showFlow('lightweightReview');
     ctx.toast(options.announce(launch.targetIds.length));
     return true;
@@ -142,7 +148,9 @@ const structuredSessionSurface: RuntimeSurfaceDefinition = {
   surface: 'structured_session',
   flow: 'study',
   startInitial: (ctx, launch) => {
-    if (!ctx.beginStructuredInitial(launch.targetIds)) return false;
+    // 队列先建：建不起来就一处都不写，Policy 不锁、运行不记。
+    if (!ctx.openStructuredQueue(launch.targetIds)) return false;
+    ctx.beginInitialRun('structured_session', launch.targetIds);
     ctx.commitPolicies(launch.targetIds);
     ctx.showFlow('study');
     return true;
@@ -166,7 +174,8 @@ const structuredSessionSurface: RuntimeSurfaceDefinition = {
     const dueCount = ctx.countDueReviews(launch.targetIds);
     if (dueCount === 0 && !options.enterOnEmpty) return false;
     ctx.enterReviewMode();
-    ctx.beginStructuredReview(launch.targetIds);
+    ctx.beginRetentionRun('structured_session', launch.targetIds);
+    ctx.openStructuredReviewQueue(launch.targetIds);
     ctx.showFlow('study');
     ctx.toast(options.announce(dueCount));
     return true;

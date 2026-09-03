@@ -107,11 +107,13 @@ import {
 } from './learningJourney/journeyState';
 import { useJourneyState } from './learningJourney/useJourneyState';
 import type { LearningProtocolPurpose } from './learningRuntime/policyProfiles';
+import { learningRuntimeCoordinator } from './learningRuntime/runtimeCoordinator';
 import {
-  learningRuntimeCoordinator,
-  type PrototypeRuntimeSurface,
-} from './learningRuntime/runtimeCoordinator';
+  retentionStoreRegistry,
+  type RetentionStoreId,
+} from './learningRuntime/retentionStores';
 import { useRuntimeSession } from './learningRuntime/useRuntimeSession';
+import { initialRunOn, retentionRunOn } from './learningRuntime/runtimeSession';
 import {
   runtimeSurfaceRegistry,
   type RuntimeSurfaceContext,
@@ -155,6 +157,19 @@ function runtimeSurfaceForPolicy(
   purpose: LearningProtocolPurpose,
 ) {
   return learningRuntimeCoordinator.surfaceFor(policy, purpose);
+}
+
+/**
+ * 这条 Policy 的长期保持事实存在哪。见 learningRuntime/retentionStores.ts。
+ *
+ * 下面每一处读写长期状态的地方原本问的是 surface 名字。问 store 之后，
+ * 新增一个复用同一 store 的 surface 不会波及它们。
+ */
+function retentionStoreForPolicy(
+  policy: PrototypeLearningPolicy,
+  purpose: LearningProtocolPurpose = 'retention_review',
+) {
+  return learningRuntimeCoordinator.retentionStoreFor(policy, purpose);
 }
 
 function stageForCapability(capability: LearningCapability): FormalLearningStage {
@@ -340,23 +355,29 @@ export default function App() {
    * "现在跑着什么、刚跑完什么"——五个原本各自为政的 useState，规则见
    * learningRuntime/runtimeSession.ts。
    */
+  const runtimeSession = useRuntimeSession();
   const {
-    structuredInitialTargetIds,
-    lightweightInitialTargetId,
-    lightweightReviewTargetIds,
     initialSummary,
     retentionSummary,
-    startStructuredInitial,
-    startLightweightInitial,
-    finishLightweightInitial,
-    startLightweightReview,
-    // App 自己也有一个 finishLightweightReview（还要接着开下一段结构化复习），
+    startInitialRun,
+    finishInitialRun,
+    startRetentionRun,
+    // App 自己也有一个 finishLightweightReview（还要接着开下一段复习），
     // 这里只是会话状态那一半。
-    finishLightweightReview: finishLightweightReviewSession,
+    finishRetentionRun: finishRetentionRunSession,
     showInitialSummary,
     showRetentionSummary,
-    clearRetentionSummary,
-  } = useRuntimeSession();
+  } = runtimeSession;
+  /**
+   * 会话状态本身不再按学习方式起名，但屏幕仍然是按 surface 渲染的——在 Step
+   * renderer 注册表之前，"哪块屏拿哪次运行"只能在这里点名。三处派生集中在
+   * 一起，比散在下游各处好查。
+   */
+  const structuredInitialTargetIds = initialRunOn(runtimeSession, 'structured_session');
+  const lightweightInitialTargetId =
+    initialRunOn(runtimeSession, 'lightweight_initial')[0] ?? null;
+  const lightweightReviewTargetIds = retentionRunOn(runtimeSession, 'lightweight_retention');
+  const retentionRunSurface = runtimeSession.retentionRun?.surface ?? null;
 
   const openLearningTarget = useCallback((targetId: PrototypeLearningTargetId) => {
     goMain('s-learning-target', { targetId });
@@ -451,7 +472,7 @@ export default function App() {
       if (
         !initialCompletion
         || !committedPolicy
-        || runtimeSurfaceForPolicy(committedPolicy, 'retention_review') !== 'structured_session'
+        || retentionStoreForPolicy(committedPolicy) !== 'scheduler_memory'
         || structuredRetention?.reviewCount
         || !senseId
       ) return false;
@@ -480,7 +501,7 @@ export default function App() {
   const lightweightDueTargetIds = visibleLearningTargetIds.filter((targetId) => {
     const { lightweightRetention, committedPolicy } = journeyFor(journey, targetId);
     return committedPolicy !== null
-      && runtimeSurfaceForPolicy(committedPolicy, 'retention_review') === 'lightweight_retention'
+      && retentionStoreForPolicy(committedPolicy) === 'fixed_ladder'
       && lightweightRetention !== null
       && (lightweightRetention.relearning
         || Date.parse(lightweightRetention.nextReviewAt) <= Date.now());
@@ -488,7 +509,7 @@ export default function App() {
   const lightweightRelearningTargetIds = visibleLearningTargetIds.filter((targetId) => {
     const { lightweightRetention, committedPolicy } = journeyFor(journey, targetId);
     return committedPolicy !== null
-      && runtimeSurfaceForPolicy(committedPolicy, 'relearning') === 'lightweight_retention'
+      && retentionStoreForPolicy(committedPolicy, 'relearning') === 'fixed_ladder'
       && lightweightRetention?.relearning === true;
   });
 
@@ -525,7 +546,7 @@ export default function App() {
       const policy = targetId ? journeyFor(journey, targetId).committedPolicy : null;
       if (
         policy
-        && runtimeSurfaceForPolicy(policy, 'retention_review') === 'structured_session'
+        && retentionStoreForPolicy(policy) === 'scheduler_memory'
         && !fsrsItems[senseId]
       ) {
         storageService.graduateSense(senseId, 0);
@@ -618,7 +639,7 @@ export default function App() {
       const { committedPolicy, initialCompletion } = journeyFor(journey, targetId);
       if (
         !committedPolicy
-        || runtimeSurfaceForPolicy(committedPolicy, 'retention_review') !== 'structured_session'
+        || retentionStoreForPolicy(committedPolicy) !== 'scheduler_memory'
       ) return [];
       if (!initialCompletion) return [];
       const pkg = PROTOTYPE_PACKAGE_BY_SENSE.get(senseId);
@@ -674,16 +695,15 @@ export default function App() {
       executable: true,
     })),
   ]);
-  const lightweightReviewCount = retentionRuntimeLaunches
-    .filter((launch) => launch.surface === 'lightweight_retention')
+  // 首页的复习计数按 store 分桶：调度器那一桶还要受它自己的到期数封顶，
+  // 固定档期那一桶没有第二个数据源，投影里有几条就是几条。
+  const retentionCountForStore = (storeId: RetentionStoreId) => retentionRuntimeLaunches
+    .filter((launch) =>
+      learningRuntimeCoordinator.retentionStoreOfAdapter(launch.adapterId) === storeId)
     .reduce((count, launch) => count + launch.targetIds.length, 0);
-  const structuredReviewCount = Math.min(
-    reviewN,
-    retentionRuntimeLaunches
-      .filter((launch) => launch.surface === 'structured_session')
-      .reduce((count, launch) => count + launch.targetIds.length, 0),
-  );
-  const totalReviewCount = lightweightReviewCount + structuredReviewCount;
+  const ladderReviewCount = retentionCountForStore('fixed_ladder');
+  const schedulerReviewCount = Math.min(reviewN, retentionCountForStore('scheduler_memory'));
+  const totalReviewCount = ladderReviewCount + schedulerReviewCount;
 
   const getReviewCandidatesForTargets = useCallback((
     targetIds: readonly PrototypeLearningTargetId[],
@@ -714,8 +734,9 @@ export default function App() {
         })),
       });
     },
-    beginLightweightInitial: startLightweightInitial,
-    beginStructuredInitial: (targetIds) => {
+    beginInitialRun: startInitialRun,
+    beginRetentionRun: startRetentionRun,
+    openStructuredQueue: (targetIds) => {
       const runtimePackages = targetIds.map((targetId) =>
         runtimePackageForTarget(PROTOTYPE_LEARNING_TARGETS[targetId])!);
       if (runtimePackages.length === 0) {
@@ -726,13 +747,10 @@ export default function App() {
         toast('首次学习运行创建失败');
         return false;
       }
-      startStructuredInitial(targetIds);
       return true;
     },
-    beginLightweightReview: startLightweightReview,
     countDueReviews: (targetIds) => getReviewCandidatesForTargets(targetIds).length,
-    beginStructuredReview: (targetIds) => {
-      clearRetentionSummary();
+    openStructuredReviewQueue: (targetIds) => {
       startReviewQueue(getReviewCandidatesForTargets(targetIds));
     },
   }), [
@@ -741,12 +759,10 @@ export default function App() {
     enterReview,
     dispatchJourney,
     journey,
-    startLightweightInitial,
+    startInitialRun,
+    startRetentionRun,
     startLearnQueue,
-    startStructuredInitial,
-    startLightweightReview,
     getReviewCandidatesForTargets,
-    clearRetentionSummary,
     startReviewQueue,
   ]);
 
@@ -894,13 +910,11 @@ export default function App() {
   }, [
     beginInitialTargetRuntime,
     closeMenus,
-    getReviewCandidatesForTargets,
+    enterLearn,
     retentionRuntimeLaunches,
-    startReviewQueue,
+    runtimeSurfaceContext,
     todayInitialTargetIds,
     toast,
-    startLightweightReview,
-    clearRetentionSummary,
     closeExample,
   ]);
 
@@ -930,34 +944,37 @@ export default function App() {
     const policy = journeyFor(journey, targetId).committedPolicy;
     if (!policy) return;
     const completedAt = new Date().toISOString();
-    const retentionSurface = runtimeSurfaceForPolicy(policy, 'retention_review');
-    let nextReviewAt = completedAt;
-    let nextReviewLabel = '现在可复习（原型）';
-
-    if (retentionSurface === 'structured_session' && target.runtimeSenseId) {
-      const existing = storageService.getFSRSItems()[target.runtimeSenseId];
-      const memory = existing ?? storageService.graduateSense(target.runtimeSenseId, 0);
-      nextReviewAt = new Date(memory.due).toISOString();
-      nextReviewLabel = relativeReviewLabel(memory.due);
-    }
+    // 轻量首学的交接落点由 committed Policy 的 retention store 决定，不看这块界面
+    // 自己是什么：轻量首学 + 调度器保持是合法组合，交接就要开一条调度记忆。
+    const store = retentionStoreRegistry.get(retentionStoreForPolicy(policy));
+    const handoff = store.openHandoff({
+      completedAt,
+      openSchedulerDue: () => {
+        const senseId = target.runtimeSenseId;
+        if (!senseId) return null;
+        const existing = storageService.getFSRSItems()[senseId];
+        return (existing ?? storageService.graduateSense(senseId, 0)).due;
+      },
+      reviewLabel: relativeReviewLabel,
+    });
 
     dispatchJourney({
       type: 'completeLightweightInitial',
       targetId,
       rating,
       completedAt,
-      nextReviewAt,
-      nextReviewLabel,
-      startLightweightRetention: retentionSurface === 'lightweight_retention',
+      nextReviewAt: handoff.nextReviewAt,
+      nextReviewLabel: handoff.nextReviewLabel,
+      startLightweightRetention: store.opensJourneyLadder,
     });
   }, [dispatchJourney, journey, lightweightInitialTargetId]);
 
   const finishLightweightRuntime = useCallback(() => {
-    finishLightweightInitial();
+    finishInitialRun('lightweight_initial');
     setViewMode('main');
     resetMain();
     toast('首次学习已完成，之后会按计划进入复习');
-  }, [resetMain, toast, finishLightweightInitial]);
+  }, [resetMain, toast, finishInitialRun]);
 
   const exitLightweightReview = useCallback(() => {
     setViewMode('main');
@@ -1237,7 +1254,37 @@ export default function App() {
     return started;
   }, [beginInitialTargetRuntime, toast, closeExample]);
 
+  /**
+   * 跑完一组到期复习后，按 `planRetention` 的顺序接上下一组。
+   *
+   * 此前这里写的是"找那个 surface 是 structured_session 的 launch"，等于把
+   * 组间交接写死成"轻量之后一定是结构化"。改成顺序推进后，交接对 surface
+   * 的种类和数量都不敏感；跑完的是哪一组，由会话状态里那条复习运行回答，
+   * 不再要调用方自报家门。
+   */
+  const startNextRetentionGroup = useCallback((): boolean => {
+    const finishedIndex = retentionRuntimeLaunches.findIndex(
+      (launch) => launch.surface === retentionRunSurface,
+    );
+    // 能跑完某组，说明它在本次 plan 里；找不到时不猜，交给调用方收尾。
+    const nextLaunch = finishedIndex < 0
+      ? undefined
+      : retentionRuntimeLaunches[finishedIndex + 1];
+    if (!nextLaunch) return false;
+    return runtimeSurfaceRegistry.get(nextLaunch.surface).startRetention(
+      runtimeSurfaceContext,
+      nextLaunch,
+      {
+        announce: (count) => `当前复习组已完成，继续处理 ${count} 个复习`,
+        enterOnEmpty: true,
+      },
+    );
+  }, [retentionRuntimeLaunches, retentionRunSurface, runtimeSurfaceContext]);
+
   const finishStructuredRetentionRuntime = useCallback(() => {
+    // 与轻量复习的收尾同一条顺序：先交接下一组，再回混合流，最后才是结算。
+    if (startNextRetentionGroup()) return;
+    finishRetentionRunSession();
     if (continueMixedAfterReview()) return;
 
     showRetentionSummary({
@@ -1259,42 +1306,19 @@ export default function App() {
       }),
     });
     setViewMode('finish');
-  }, [continueMixedAfterReview, retentionRuntimeProjection, showRetentionSummary]);
+  }, [
+    continueMixedAfterReview,
+    finishRetentionRunSession,
+    retentionRuntimeProjection,
+    showRetentionSummary,
+    startNextRetentionGroup,
+  ]);
 
-  /**
-   * 跑完一组到期复习后，按 `planRetention` 的顺序接上下一组。
-   *
-   * 此前这里写的是"找那个 surface 是 structured_session 的 launch"，等于把
-   * 组间交接写死成"轻量之后一定是结构化"。改成顺序推进后，交接对 surface
-   * 的种类和数量都不敏感。
-   *
-   * `afterSurface` 是调用方对自己的声明，不是对下一组的判断——这处名字要等
-   * runtimeSession 泛化（按 launch 记录当前运行）之后才能一并去掉。
-   */
-  const startNextRetentionGroup = useCallback((
-    afterSurface: PrototypeRuntimeSurface,
-  ): boolean => {
-    const finishedIndex = retentionRuntimeLaunches.findIndex(
-      (launch) => launch.surface === afterSurface,
-    );
-    // 能跑完某组，说明它在本次 plan 里；找不到时不猜，交给调用方收尾。
-    const nextLaunch = finishedIndex < 0
-      ? undefined
-      : retentionRuntimeLaunches[finishedIndex + 1];
-    if (!nextLaunch) return false;
-    return runtimeSurfaceRegistry.get(nextLaunch.surface).startRetention(
-      runtimeSurfaceContext,
-      nextLaunch,
-      {
-        announce: (count) => `当前复习组已完成，继续处理 ${count} 个复习`,
-        enterOnEmpty: true,
-      },
-    );
-  }, [retentionRuntimeLaunches, runtimeSurfaceContext]);
 
   const finishLightweightReview = useCallback(() => {
-    finishLightweightReviewSession();
-    if (startNextRetentionGroup('lightweight_retention')) return;
+    // 先交接：下一组开起来会直接顶掉当前这条运行记录，没有下一组才收尾清空。
+    if (startNextRetentionGroup()) return;
+    finishRetentionRunSession();
     if (continueMixedAfterReview()) return;
     setViewMode('main');
     resetMain();
@@ -1304,7 +1328,7 @@ export default function App() {
     resetMain,
     startNextRetentionGroup,
     toast,
-    finishLightweightReviewSession,
+    finishRetentionRunSession,
   ]);
 
   // 下一词
@@ -1834,7 +1858,7 @@ export default function App() {
               onExit={exitLightweightReview}
               onRateTarget={completeLightweightReviewTarget}
               onCompleteRepair={completeLightweightReviewRepair}
-              finishLabel={structuredReviewCount > 0
+              finishLabel={schedulerReviewCount > 0
                 ? '继续剩余复习'
                 : pendingMixedTargetRef.current?.length
                   ? '继续今天的新学'

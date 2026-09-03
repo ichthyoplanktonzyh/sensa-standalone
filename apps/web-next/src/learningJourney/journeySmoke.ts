@@ -26,6 +26,7 @@ import {
 import {
   PROTOTYPE_LEARNING_TARGETS,
   PROTOTYPE_LEARNING_TARGET_ORDER,
+  type PrototypeLearningPolicy,
 } from './prototypeLearning';
 import { learningRuntimeCoordinator } from '../learningRuntime/runtimeCoordinator';
 import { learningPolicyProfileRegistry } from '../learningRuntime/policyProfiles';
@@ -44,10 +45,13 @@ const POLICIES = learningPolicyProfileRegistry.list().map((profile) => profile.p
 /** 首学与保持都走结构化的方式；毕业规则只对这一类生效。 */
 const STRUCTURED_POLICY = POLICIES.find((policy) =>
   learningRuntimeCoordinator.surfaceFor(policy, 'initial_learning') === 'structured_session');
-/** 首学结构化、保持轻量的方式；毕业时应开一条轻量保持。 */
-const STRUCTURED_TO_LIGHTWEIGHT = POLICIES.find((policy) =>
+/** 保持事实归谁持有。毕业时开什么、到期时间从哪来，都由它决定。 */
+const retentionStoreOf = (policy: PrototypeLearningPolicy) =>
+  learningRuntimeCoordinator.retentionStoreFor(policy, 'retention_review');
+/** 首学结构化、保持走固定档期的方式；毕业时应开一条轻量保持。 */
+const STRUCTURED_TO_LADDER = POLICIES.find((policy) =>
   learningRuntimeCoordinator.surfaceFor(policy, 'initial_learning') === 'structured_session'
-  && learningRuntimeCoordinator.surfaceFor(policy, 'retention_review') === 'lightweight_retention');
+  && retentionStoreOf(policy) === 'fixed_ladder');
 
 /* ---------- 初始状态 ---------- */
 
@@ -126,10 +130,8 @@ if (!STRUCTURED_POLICY) {
     completion?.completionKind === 'structured'
     && completion.schedulingHandoffBasis === 'acquisition_graduation');
 
-  const retentionSurface =
-    learningRuntimeCoordinator.surfaceFor(STRUCTURED_POLICY, 'retention_review');
-  if (retentionSurface === 'structured_session') {
-    check('结构化保持用 FSRS 到期时间',
+  if (retentionStoreOf(STRUCTURED_POLICY) === 'scheduler_memory') {
+    check('保持归调度器时用它给的到期时间',
       completion?.nextReviewAt === new Date(due).toISOString()
       && completion.nextReviewLabel === relativeReviewLabel(due, now));
   }
@@ -148,12 +150,12 @@ if (!STRUCTURED_POLICY) {
     || journeyFor(graduate(graduated), 'borrow-receive').initialCompletion === completion);
   check('毕业后进入已完成集合', completedTargetIds(graduated).has('borrow-receive'));
 
-  if (STRUCTURED_TO_LIGHTWEIGHT) {
+  if (STRUCTURED_TO_LADDER) {
     const lw = graduate(apply(added, {
       type: 'commitPolicies',
-      entries: [{ targetId: 'borrow-receive', policy: STRUCTURED_TO_LIGHTWEIGHT }],
+      entries: [{ targetId: 'borrow-receive', policy: STRUCTURED_TO_LADDER }],
     }));
-    check('保持为轻量时同时开一条轻量保持',
+    check('保持走固定档期时同时开一条轻量保持',
       journeyFor(lw, 'borrow-receive').lightweightRetention !== null);
   }
 }

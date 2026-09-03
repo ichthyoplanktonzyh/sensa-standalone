@@ -10,17 +10,30 @@
  *
  * 三行写在一处，全靠人记得。规则收进 reducer 之后，新增一个入口不会漏。
  *
- * 这里**不**做成判别联合，因为这五个的生命周期确实不一样，硬拧成一个 kind 会说谎：
+ * 收进 reducer 之后仍有一处说谎：字段按**当时恰好有的那两种学习方式**起名
+ * （`structuredInitialTargetIds` / `lightweightInitialTargetId` /
+ * `lightweightReviewTargetIds`）。加第三种 Runtime 行为就要加第三个字段，
+ * 而"跑着什么"本身与是哪种方式无关。所以这里改成按**运行**记录：一条运行就是
+ * "在哪块 surface 上、覆盖哪些 Target"，surface 是运行的属性，不是字段名。
  *
- *  - 两个 summary 会同时存在。混合流里先复习后新学，结算页靠 flowMode 决定
- *    显示哪一个，两份数据都得留着。
- *  - `structuredInitialTargetIds` 在运行结束后仍然有效——"继续这条 Target 的运行"
- *    要靠它判断本次运行是否覆盖了那条 Target；而两个轻量字段是"正在跑"，跑完即清。
+ * 两个槽位的形状不同，因为事实如此，不硬拧成一个：
  *
- * 把这层不对称写出来，比塞进一个假的联合类型更接近事实。将来接入数据层时，
- * 这里就是持久化落点：目前整份状态刷新即丢，是原型阶段的已知限制。
+ *  - `initialRuns` 是**多条**。离开一段结构化首学去开一段轻量首学，结构化那段
+ *    仍然活着——它的队列还在，回到那条 Target 要能接着跑。而且首学运行跑完
+ *    也不清：结算与"继续这条 Target"都要读它。
+ *  - `retentionRun` 只有**一条**。到期复习按 `planRetention` 的顺序一组一组跑，
+ *    跑完一组才交接下一组，因此新的一组直接顶掉上一组。
+ *
+ * 结算归产出它的那次运行所有：开一次运行就把同类结算作废，跑完再写新的。
+ *
+ * 两个 summary 会同时存在——混合流里先复习后新学，结算页靠 flowMode 决定显示
+ * 哪一个，两份数据都得留着。
+ *
+ * 将来接入数据层时，这里就是持久化落点：目前整份状态刷新即丢，是原型阶段的
+ * 已知限制。
  */
 import type { PrototypeLearningTargetId } from '../learningJourney/prototypeLearning';
+import type { PrototypeRuntimeSurface } from './runtimeCoordinator';
 
 /** 首次学习结算：本次运行里毕业的与被声明为熟词的 Target。 */
 export interface StructuredRuntimeSummary {
@@ -35,13 +48,21 @@ export interface StructuredRetentionSummary {
   readonly declaredMasteryTargetIds: readonly PrototypeLearningTargetId[];
 }
 
+/** 一次运行：跑在哪块 surface 上、覆盖哪些 Target。 */
+export interface RuntimeRun {
+  readonly surface: PrototypeRuntimeSurface;
+  readonly targetIds: readonly PrototypeLearningTargetId[];
+}
+
+export type InitialRuns = Readonly<
+  Partial<Record<PrototypeRuntimeSurface, readonly PrototypeLearningTargetId[]>>
+>;
+
 export interface RuntimeSessionState {
-  /** 本次结构化首学覆盖的 Target。运行结束后仍保留。 */
-  readonly structuredInitialTargetIds: readonly PrototypeLearningTargetId[];
-  /** 正在进行的轻量首学，结束即清空。 */
-  readonly lightweightInitialTargetId: PrototypeLearningTargetId | null;
-  /** 正在进行的轻量复习，结束即清空。 */
-  readonly lightweightReviewTargetIds: readonly PrototypeLearningTargetId[];
+  /** 各 surface 上的首学运行。跑完不清，由各自的完成路径显式收尾。 */
+  readonly initialRuns: InitialRuns;
+  /** 正在进行的长期复习运行；跑完或交接给下一组时替换。 */
+  readonly retentionRun: RuntimeRun | null;
   /** 首次学习结算数据；null 表示本次运行没有可展示的统一结算。 */
   readonly initialSummary: StructuredRuntimeSummary | null;
   /** 长期复习结算数据。 */
@@ -49,60 +70,74 @@ export interface RuntimeSessionState {
 }
 
 export const INITIAL_RUNTIME_SESSION: RuntimeSessionState = {
-  structuredInitialTargetIds: [],
-  lightweightInitialTargetId: null,
-  lightweightReviewTargetIds: [],
+  initialRuns: {},
+  retentionRun: null,
   initialSummary: null,
   retentionSummary: null,
 };
 
+/** 稳定的空数组：选择器每次返回同一个引用，免得下游 memo 白白失效。 */
+const NO_TARGETS: readonly PrototypeLearningTargetId[] = [];
+
+/** 这块 surface 上的首学运行覆盖了哪些 Target；没有运行时返回空。 */
+export const initialRunOn = (
+  state: RuntimeSessionState,
+  surface: PrototypeRuntimeSurface,
+): readonly PrototypeLearningTargetId[] => state.initialRuns[surface] ?? NO_TARGETS;
+
+/** 当前复习运行若跑在这块 surface 上，返回它的 Target；否则返回空。 */
+export const retentionRunOn = (
+  state: RuntimeSessionState,
+  surface: PrototypeRuntimeSurface,
+): readonly PrototypeLearningTargetId[] =>
+  state.retentionRun?.surface === surface ? state.retentionRun.targetIds : NO_TARGETS;
+
 export type RuntimeSessionAction =
-  /** 开一次结构化首学：上一次的结算与还挂着的轻量首学一并作废。 */
+  /** 开一次首学运行：本 surface 上的上一次运行与上一次首学结算一并作废。 */
   | {
-      readonly type: 'startStructuredInitial';
+      readonly type: 'startInitialRun';
+      readonly surface: PrototypeRuntimeSurface;
       readonly targetIds: readonly PrototypeLearningTargetId[];
     }
-  | { readonly type: 'startLightweightInitial'; readonly targetId: PrototypeLearningTargetId }
-  | { readonly type: 'finishLightweightInitial' }
+  | { readonly type: 'finishInitialRun'; readonly surface: PrototypeRuntimeSurface }
+  /** 开一段长期复习：顶掉上一组，上一次的复习结算一并作废。 */
   | {
-      readonly type: 'startLightweightReview';
+      readonly type: 'startRetentionRun';
+      readonly surface: PrototypeRuntimeSurface;
       readonly targetIds: readonly PrototypeLearningTargetId[];
     }
-  | { readonly type: 'finishLightweightReview' }
+  | { readonly type: 'finishRetentionRun' }
   | { readonly type: 'showInitialSummary'; readonly summary: StructuredRuntimeSummary }
-  | { readonly type: 'showRetentionSummary'; readonly summary: StructuredRetentionSummary }
-  /** 开一段结构化复习：上一次的复习结算作废，本次跑完再写新的。 */
-  | { readonly type: 'clearRetentionSummary' };
+  | { readonly type: 'showRetentionSummary'; readonly summary: StructuredRetentionSummary };
 
 export function runtimeSessionReducer(
   state: RuntimeSessionState,
   action: RuntimeSessionAction,
 ): RuntimeSessionState {
   switch (action.type) {
-    case 'startStructuredInitial':
+    case 'startInitialRun':
       return {
         ...state,
-        structuredInitialTargetIds: action.targetIds,
-        lightweightInitialTargetId: null,
+        initialRuns: { ...state.initialRuns, [action.surface]: action.targetIds },
         initialSummary: null,
       };
-    case 'startLightweightInitial':
-      return { ...state, lightweightInitialTargetId: action.targetId };
-    case 'finishLightweightInitial':
-      return state.lightweightInitialTargetId === null
-        ? state
-        : { ...state, lightweightInitialTargetId: null };
-    case 'startLightweightReview':
-      return { ...state, lightweightReviewTargetIds: action.targetIds };
-    case 'finishLightweightReview':
-      return state.lightweightReviewTargetIds.length === 0
-        ? state
-        : { ...state, lightweightReviewTargetIds: [] };
+    case 'finishInitialRun': {
+      if (state.initialRuns[action.surface] === undefined) return state;
+      const initialRuns = { ...state.initialRuns };
+      delete initialRuns[action.surface];
+      return { ...state, initialRuns };
+    }
+    case 'startRetentionRun':
+      return {
+        ...state,
+        retentionRun: { surface: action.surface, targetIds: action.targetIds },
+        retentionSummary: null,
+      };
+    case 'finishRetentionRun':
+      return state.retentionRun === null ? state : { ...state, retentionRun: null };
     case 'showInitialSummary':
       return { ...state, initialSummary: action.summary };
     case 'showRetentionSummary':
       return { ...state, retentionSummary: action.summary };
-    case 'clearRetentionSummary':
-      return state.retentionSummary === null ? state : { ...state, retentionSummary: null };
   }
 }
