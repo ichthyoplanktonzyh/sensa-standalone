@@ -14,7 +14,8 @@
     "smoke:router": "tsx src/router/shellLocationSmoke.ts",
     "smoke:stores": "tsx src/services/snapshotStoreSmoke.ts",
     "smoke:flow": "tsx src/learningFlow/flowSmoke.ts",
-    "smoke": "npm run smoke:router && npm run smoke:stores && npm run smoke:flow && npm run smoke:styles",
+    "smoke:runtime": "tsx src/learningRuntime/runtimeSessionSmoke.ts",
+    "smoke": "npm run smoke:router && npm run smoke:stores && npm run smoke:flow && npm run smoke:runtime && npm run smoke:styles",
     "smoke:styles": "tsx src/styles/stylesheetSmoke.ts"
   },
   "dependencies": {

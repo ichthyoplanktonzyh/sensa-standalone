@@ -101,6 +101,7 @@ import {
   type LearningProtocolPurpose,
 } from './learningRuntime/policyProfiles';
 import { learningRuntimeCoordinator } from './learningRuntime/runtimeCoordinator';
+import { useRuntimeSession } from './learningRuntime/useRuntimeSession';
 import { useShellNavigation } from './router/useShellNavigation';
 import { usePresentationStore } from './stores/presentationStore';
 import { useOverlayStore } from './stores/overlayStore';
@@ -141,10 +142,6 @@ type InitialLearningCompletionMap = Partial<Record<
     initialRating?: Exclude<PrototypeLightweightRating, 'again'>;
   }
 >>;
-type StructuredRuntimeSummary = {
-  graduatedTargetIds: readonly PrototypeLearningTargetId[];
-  declaredMasteryTargetIds: readonly PrototypeLearningTargetId[];
-};
 type StructuredRetentionMap = Partial<Record<
   PrototypeLearningTargetId,
   {
@@ -159,11 +156,6 @@ type StructuredRetentionMap = Partial<Record<
     relearningCompletedAt: string | null;
   }
 >>;
-type StructuredRetentionSummary = {
-  retainingTargetIds: readonly PrototypeLearningTargetId[];
-  relearningCompletedTargetIds: readonly PrototypeLearningTargetId[];
-  declaredMasteryTargetIds: readonly PrototypeLearningTargetId[];
-};
 
 const LIGHTWEIGHT_REVIEW_SCHEDULE: Record<
   PrototypeLightweightRating,
@@ -407,18 +399,29 @@ export default function App() {
   const [declaredMasterySenseIds, setDeclaredMasterySenseIds] = useState<ReadonlySet<string>>(
     () => new Set<string>(),
   );
-  const [activeStructuredTargetIds, setActiveStructuredTargetIds] =
-    useState<readonly PrototypeLearningTargetId[]>([]);
-  const [structuredRuntimeSummary, setStructuredRuntimeSummary] =
-    useState<StructuredRuntimeSummary | null>(null);
   const [structuredRetentionByTarget, setStructuredRetentionByTarget] =
     useState<StructuredRetentionMap>({});
-  const [structuredRetentionSummary, setStructuredRetentionSummary] =
-    useState<StructuredRetentionSummary | null>(null);
-  const [activeLightweightRuntimeTargetId, setActiveLightweightRuntimeTargetId] =
-    useState<PrototypeLearningTargetId | null>(null);
-  const [activeLightweightReviewTargetIds, setActiveLightweightReviewTargetIds] =
-    useState<readonly PrototypeLearningTargetId[]>([]);
+  /**
+   * "现在跑着什么、刚跑完什么"——五个原本各自为政的 useState，规则见
+   * learningRuntime/runtimeSession.ts。
+   */
+  const {
+    structuredInitialTargetIds,
+    lightweightInitialTargetId,
+    lightweightReviewTargetIds,
+    initialSummary,
+    retentionSummary,
+    startStructuredInitial,
+    startLightweightInitial,
+    finishLightweightInitial,
+    startLightweightReview,
+    // App 自己也有一个 finishLightweightReview（还要接着开下一段结构化复习），
+    // 这里只是会话状态那一半。
+    finishLightweightReview: finishLightweightReviewSession,
+    showInitialSummary,
+    showRetentionSummary,
+    clearRetentionSummary,
+  } = useRuntimeSession();
 
   const openLearningTarget = useCallback((targetId: PrototypeLearningTargetId) => {
     goMain('s-learning-target', { targetId });
@@ -659,13 +662,13 @@ export default function App() {
     const memoryItems = storageService.getFSRSItems();
     const graduatedSenseIdSet = new Set(graduatedSenseIds);
     const completedAt = new Date().toISOString();
-    if (activeStructuredTargetIds.length > 0) {
-      setStructuredRuntimeSummary({
-        graduatedTargetIds: activeStructuredTargetIds.filter((targetId) => {
+    if (structuredInitialTargetIds.length > 0) {
+      showInitialSummary({
+        graduatedTargetIds: structuredInitialTargetIds.filter((targetId) => {
           const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
           return senseId !== null && graduatedSenseIdSet.has(senseId);
         }),
-        declaredMasteryTargetIds: activeStructuredTargetIds.filter((targetId) => {
+        declaredMasteryTargetIds: structuredInitialTargetIds.filter((targetId) => {
           const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
           return senseId !== null && declaredMasterySenseIds.has(senseId);
         }),
@@ -732,10 +735,11 @@ export default function App() {
       return next;
     });
   }, [
-    activeStructuredTargetIds,
+    structuredInitialTargetIds,
     committedPolicyByTarget,
     declaredMasterySenseIds,
     getGraduatedSenseIds,
+    showInitialSummary,
   ]);
 
   /* ---------- 全量到期流式复习引擎 (FSRS 复习流) ---------- */
@@ -932,7 +936,7 @@ export default function App() {
           (candidate) => candidate.targetId === activeTargetId,
         )!.profileId,
       }));
-      setActiveLightweightRuntimeTargetId(activeTargetId);
+      startLightweightInitial(activeTargetId);
       setViewMode('lightweight');
       return true;
     }
@@ -958,9 +962,7 @@ export default function App() {
       });
       return next;
     });
-    setActiveStructuredTargetIds(structuredTargetIds);
-    setStructuredRuntimeSummary(null);
-    setActiveLightweightRuntimeTargetId(null);
+    startStructuredInitial(structuredTargetIds);
     setViewMode('study');
     return true;
   }, [
@@ -973,6 +975,8 @@ export default function App() {
     startLearnQueue,
     todayInitialTargetIds,
     toast,
+    startStructuredInitial,
+    startLightweightInitial,
   ]);
 
   const continueCommittedTargetRuntime = useCallback((targetId: PrototypeLearningTargetId) => {
@@ -987,7 +991,7 @@ export default function App() {
         toast('首次学习已经完成，等待进入长期复习');
         return;
       }
-      setActiveLightweightRuntimeTargetId(targetId);
+      startLightweightInitial(targetId);
       setViewMode('lightweight');
       return;
     }
@@ -1000,19 +1004,20 @@ export default function App() {
       toast('高保证首次学习已经完成，当前处于长期保持阶段');
       return;
     }
-    if (activeStructuredTargetIds.includes(targetId) && !queueDone) {
+    if (structuredInitialTargetIds.includes(targetId) && !queueDone) {
       setViewMode('study');
       return;
     }
     toast('首次学习已结束，之后会按计划进入复习');
   }, [
-    activeStructuredTargetIds,
+    structuredInitialTargetIds,
     committedPolicyByTarget,
     declaredMasterySenseIds,
     learnSession,
     initialLearningCompletionByTarget,
     queueDone,
     toast,
+    startLightweightInitial,
   ]);
 
   // 开始第一个可运行的 Target；运行创建成功才会提交并锁定 Policy。
@@ -1053,7 +1058,7 @@ export default function App() {
       return;
     }
     if (launch.surface === 'lightweight_retention') {
-      setActiveLightweightReviewTargetIds(launch.targetIds);
+      startLightweightReview(launch.targetIds);
       setViewMode('lightweightReview');
       toast(`开始今日复习：共 ${launch.targetIds.length} 个意思`);
       return;
@@ -1063,11 +1068,11 @@ export default function App() {
       toast('今天没有到期的意思，可以开始今日学习');
       return;
     }
-    setStructuredRetentionSummary(null);
+    clearRetentionSummary();
     startReviewQueue(dueCandidates);
     setViewMode('study');
     toast(`开始今日复习：共 ${dueCandidates.length} 个意思`);
-  }, [closeMenus, getReviewCandidatesForTargets, retentionRuntimeLaunches, startReviewQueue, toast]);
+  }, [closeMenus, getReviewCandidatesForTargets, retentionRuntimeLaunches, startReviewQueue, toast, startLightweightReview, clearRetentionSummary]);
 
   // MVP Mixed intent uses the same two proven runtimes in sequence: due Review
   // comes first, then ready Acquisition continues without returning home.
@@ -1081,7 +1086,7 @@ export default function App() {
 
     if (launch?.surface === 'lightweight_retention') {
       pendingMixedTargetRef.current = newTargetIds.length > 0 ? newTargetIds : null;
-      setActiveLightweightReviewTargetIds(launch.targetIds);
+      startLightweightReview(launch.targetIds);
       setViewMode('lightweightReview');
       toast(`进入今日学习流：先复习 ${launch.targetIds.length} 个意思`);
       return;
@@ -1091,7 +1096,7 @@ export default function App() {
       const dueCandidates = getReviewCandidatesForTargets(launch.targetIds);
       pendingMixedTargetRef.current = newTargetIds.length > 0 ? newTargetIds : null;
       enterReview();
-      setStructuredRetentionSummary(null);
+      clearRetentionSummary();
       startReviewQueue(dueCandidates);
       setViewMode('study');
       toast(`进入今日学习流：先复习 ${dueCandidates.length} 个意思`);
@@ -1113,6 +1118,8 @@ export default function App() {
     startReviewQueue,
     todayInitialTargetIds,
     toast,
+    startLightweightReview,
+    clearRetentionSummary,
   ]);
 
   // 退出学习回首页
@@ -1135,8 +1142,8 @@ export default function App() {
   const completeLightweightRuntime = useCallback((
     rating: Exclude<PrototypeLightweightRating, 'again'>,
   ) => {
-    if (!activeLightweightRuntimeTargetId) return;
-    const targetId = activeLightweightRuntimeTargetId;
+    if (!lightweightInitialTargetId) return;
+    const targetId = lightweightInitialTargetId;
     const target = PROTOTYPE_LEARNING_TARGETS[targetId];
     const policy = committedPolicyByTarget[targetId];
     if (!policy) return;
@@ -1175,14 +1182,14 @@ export default function App() {
         },
       }));
     }
-  }, [activeLightweightRuntimeTargetId, committedPolicyByTarget]);
+  }, [lightweightInitialTargetId, committedPolicyByTarget]);
 
   const finishLightweightRuntime = useCallback(() => {
-    setActiveLightweightRuntimeTargetId(null);
+    finishLightweightInitial();
     setViewMode('main');
     resetMain();
     toast('首次学习已完成，之后会按计划进入复习');
-  }, [resetMain, toast]);
+  }, [resetMain, toast, finishLightweightInitial]);
 
   const exitLightweightReview = useCallback(() => {
     setViewMode('main');
@@ -1487,7 +1494,7 @@ export default function App() {
   const finishStructuredRetentionRuntime = useCallback(() => {
     if (continueMixedAfterReview()) return;
 
-    setStructuredRetentionSummary({
+    showRetentionSummary({
       retainingTargetIds: retentionRuntimeProjection.targets.flatMap((target) => {
         const targetId = TARGET_ID_BY_RUNTIME_SENSE.get(target.senseId);
         return targetId && target.status === 'retaining' && !target.relearningCompleted
@@ -1506,17 +1513,17 @@ export default function App() {
       }),
     });
     setViewMode('finish');
-  }, [continueMixedAfterReview, retentionRuntimeProjection]);
+  }, [continueMixedAfterReview, retentionRuntimeProjection, showRetentionSummary]);
 
   const finishLightweightReview = useCallback(() => {
-    setActiveLightweightReviewTargetIds([]);
+    finishLightweightReviewSession();
     const nextLaunch = retentionRuntimeLaunches.find(
       (launch) => launch.surface === 'structured_session',
     );
     if (nextLaunch) {
       const remainingStructuredReviews = getReviewCandidatesForTargets(nextLaunch.targetIds);
       enterReview();
-      setStructuredRetentionSummary(null);
+      clearRetentionSummary();
       startReviewQueue(remainingStructuredReviews);
       setViewMode('study');
       toast(`当前复习组已完成，继续处理 ${remainingStructuredReviews.length} 个复习`);
@@ -1533,6 +1540,8 @@ export default function App() {
     retentionRuntimeLaunches,
     startReviewQueue,
     toast,
+    finishLightweightReviewSession,
+    clearRetentionSummary,
   ]);
 
   // 下一词
@@ -1747,11 +1756,11 @@ export default function App() {
         committedPolicyByTarget,
       )
     : defaultLearningPolicy;
-  const activeLightweightRuntimeTarget = activeLightweightRuntimeTargetId
-    ? PROTOTYPE_LEARNING_TARGETS[activeLightweightRuntimeTargetId]
+  const activeLightweightRuntimeTarget = lightweightInitialTargetId
+    ? PROTOTYPE_LEARNING_TARGETS[lightweightInitialTargetId]
     : null;
-  const activeLightweightRuntimePolicy = activeLightweightRuntimeTargetId
-    ? committedPolicyByTarget[activeLightweightRuntimeTargetId] ?? defaultLearningPolicy
+  const activeLightweightRuntimePolicy = lightweightInitialTargetId
+    ? committedPolicyByTarget[lightweightInitialTargetId] ?? defaultLearningPolicy
     : defaultLearningPolicy;
 
   const currentStep =
@@ -2094,10 +2103,10 @@ export default function App() {
           />
 
           {/* 5.2 轻量长期复习：一次 due Review 只记录一次结果，遗忘后单独完成修复。 */}
-          {activeLightweightReviewTargetIds.length > 0 && (
+          {lightweightReviewTargetIds.length > 0 && (
             <LightweightReviewRuntimeScreen
               active={viewMode === 'lightweightReview'}
-              targetIds={activeLightweightReviewTargetIds}
+              targetIds={lightweightReviewTargetIds}
               onExit={exitLightweightReview}
               onRateTarget={completeLightweightReviewTarget}
               onCompleteRepair={completeLightweightReviewRepair}
@@ -2235,21 +2244,21 @@ export default function App() {
 
           {/* ================= 本组结算页 (Finish Flow) ================= */}
           {/* 11. Structured Graduation / Declared Mastery 总结不复用旧词组完成叙事。 */}
-          {structuredRuntimeSummary && (
+          {initialSummary && (
             <StructuredRuntimeSummaryScreen
               active={viewMode === 'finish' && flowMode === 'learn'}
-              graduatedTargetIds={structuredRuntimeSummary.graduatedTargetIds}
-              declaredMasteryTargetIds={structuredRuntimeSummary.declaredMasteryTargetIds}
+              graduatedTargetIds={initialSummary.graduatedTargetIds}
+              declaredMasteryTargetIds={initialSummary.declaredMasteryTargetIds}
               onExit={exitLearn}
             />
           )}
 
-          {structuredRetentionSummary && (
+          {retentionSummary && (
             <StructuredRetentionSummaryScreen
               active={viewMode === 'finish' && flowMode === 'review'}
-              retainingTargetIds={structuredRetentionSummary.retainingTargetIds}
-              relearningCompletedTargetIds={structuredRetentionSummary.relearningCompletedTargetIds}
-              declaredMasteryTargetIds={structuredRetentionSummary.declaredMasteryTargetIds}
+              retainingTargetIds={retentionSummary.retainingTargetIds}
+              relearningCompletedTargetIds={retentionSummary.relearningCompletedTargetIds}
+              declaredMasteryTargetIds={retentionSummary.declaredMasteryTargetIds}
               onExit={exitLearn}
             />
           )}
@@ -2258,9 +2267,9 @@ export default function App() {
           <FinishScreen
             active={viewMode === 'finish' && (
               flowMode === 'learn'
-                ? !structuredRuntimeSummary
+                ? !initialSummary
                 : flowMode === 'review'
-                  ? !structuredRetentionSummary
+                  ? !retentionSummary
                   : true
             )}
             mode={flowMode === 'review' ? 'review' : 'learn'}
