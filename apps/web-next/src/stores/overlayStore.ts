@@ -23,6 +23,11 @@ import type { QuickDictEntry, Word } from '../types';
  */
 export type DictSubject = Word | QuickDictEntry | string;
 
+export interface ExampleSheet {
+  readonly senseIdx: number;
+  readonly sentenceIdx: number;
+}
+
 export interface SceneEditorTarget {
   readonly content: PrototypeIntroductionPackage;
   readonly anchorId?: string;
@@ -63,6 +68,14 @@ export interface OverlayState {
   setMenuBookOpen: (open: boolean) => void;
   setMenuPersonalContent: (content: PrototypeIntroductionPackage | null) => void;
   closeMenus: () => void;
+
+  /**
+   * 学习卡上的例句卡。开着的时候它是一份"看第几个义项、第几句"，
+   * 关着的时候什么都不是——所以是一个可空对象，而不是一个布尔加两个游离的下标。
+   */
+  readonly exampleSheet: ExampleSheet | null;
+  openExample: (senseIdx?: number, sentenceIdx?: number) => void;
+  closeExample: () => void;
 
   /** 全局 Toast。 */
   readonly toastMsg: string;
@@ -117,6 +130,10 @@ export const useOverlayStore = create<OverlayState>((set) => ({
   setMenuBookOpen: (menuBookOpen) => set({ menuBookOpen }),
   setMenuPersonalContent: (menuPersonalContent) => set({ menuPersonalContent }),
   closeMenus: () => set({ menuMoreOpen: false, menuBookOpen: false, menuPersonalContent: null }),
+
+  exampleSheet: null,
+  openExample: (senseIdx = 0, sentenceIdx = 0) => set({ exampleSheet: { senseIdx, sentenceIdx } }),
+  closeExample: () => set({ exampleSheet: null }),
 
   toastMsg: '',
   toast: (message) => {

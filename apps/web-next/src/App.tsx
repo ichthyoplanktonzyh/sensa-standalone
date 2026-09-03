@@ -112,6 +112,7 @@ import { useRuntimeSession } from './learningRuntime/useRuntimeSession';
 import { useShellNavigation } from './router/useShellNavigation';
 import { usePresentationStore } from './stores/presentationStore';
 import { useOverlayStore } from './stores/overlayStore';
+import { useClock } from './useClock';
 import { setDailyNewCount, useDailyNewCount, useDueReviewCount } from './stores/dailyPlanStore';
 import { useLearningFlow } from './learningFlow/useLearningFlow';
 import { demoSceneForStage, demoWordFor } from './learningFlow/demoScenes';
@@ -257,11 +258,6 @@ export default function App() {
   // 是否为首页纯净壁纸态（主页面且无弹层），决定状态栏与底条为浅色文字
   const isLight = viewMode === 'main' && mainStack.length === 0;
 
-  /* ---------- 例句全屏卡独立状态 ---------- */
-  const [isExampleOpen, setIsExampleOpen] = useState(false);
-  const [selectedSenseIdx, setSelectedSenseIdx] = useState(0);
-  const [selectedSentenceIdx, setSelectedSentenceIdx] = useState(0);
-
   /* ---------- 覆盖层：词典、笔记、场景、拼写、菜单、Toast ---------- */
   // 这些原本是十六个 useState，其唯一职责是让深层屏幕唤起一个浮层，
   // 因而每个 opener 都要作为 prop 一路传下去。改由 overlayStore 持有。
@@ -287,6 +283,11 @@ export default function App() {
   const openSpelling = useOverlayStore((state) => state.openSpelling);
   const closeSpelling = useOverlayStore((state) => state.closeSpelling);
 
+  // 例句卡：开着时是"看第几个义项、第几句"，关着时为 null。
+  const exampleSheet = useOverlayStore((state) => state.exampleSheet);
+  const openExample = useOverlayStore((state) => state.openExample);
+  const closeExample = useOverlayStore((state) => state.closeExample);
+
   const toastMsg = useOverlayStore((state) => state.toastMsg);
   const toast = useOverlayStore((state) => state.toast);
 
@@ -302,9 +303,13 @@ export default function App() {
     : [];
 
   /* ---------- 业务状态（签到、资产、统计） ---------- */
-  const [signed, setSigned] = useState(false);
-  const [coins] = useState(2470);
+  // 连续签到天数就是签到状态本身：0 天即未签到。原先是 signed 与 streak 两个
+  // useState 编码同一件事，于是 toast 里要写 `Math.max(1, streak)` 防着
+  // "已签到但天数为 0"——那种状态现在无法表示。
   const [streak, setStreak] = useState(0);
+  const signed = streak > 0;
+  // 原型里的固定展示值，从来没有 setter——不是状态。
+  const coins = 2470;
   const [studyTab, setStudyTab] = useState<'a' | 'b'>('a');
   /**
    * 打开的是哪条 Target、正在编辑谁的学习方式——这两个都是"某个 sheet 正在
@@ -410,14 +415,13 @@ export default function App() {
   }, [selectedLearningTargetId]);
 
   const doSign = useCallback(() => {
-    if (signed) {
-      toast(`今天已签到　连续签到 ${Math.max(1, streak)} 天`);
+    if (streak > 0) {
+      toast(`今天已签到　连续签到 ${streak} 天`);
       return;
     }
-    setSigned(true);
     setStreak(1);
     toast('签到成功　连续签到 1 天');
-  }, [signed, streak, toast]);
+  }, [streak, toast]);
 
   /* ---------- 流程模式与每日新学词数 ---------- */
   // 一台状态机，不是六个互相牵制的 useState：demo 的负载只挂在 demo 分支上，
@@ -691,7 +695,7 @@ export default function App() {
     }
 
     closeMenus();
-    setIsExampleOpen(false);
+    closeExample();
     enterLearn();
 
     const initialCandidates = [...new Set([targetId, ...todayInitialTargetIds])]
@@ -763,6 +767,7 @@ export default function App() {
     toast,
     startStructuredInitial,
     startLightweightInitial,
+    closeExample,
   ]);
 
   const continueCommittedTargetRuntime = useCallback((targetId: PrototypeLearningTargetId) => {
@@ -834,7 +839,7 @@ export default function App() {
   const startReview = useCallback(() => {
     pendingMixedTargetRef.current = null;
     closeMenus();
-    setIsExampleOpen(false);
+    closeExample();
     enterReview();
     const launch = retentionRuntimeLaunches[0];
     if (!launch) {
@@ -856,13 +861,13 @@ export default function App() {
     startReviewQueue(dueCandidates);
     setViewMode('study');
     toast(`开始今日复习：共 ${dueCandidates.length} 个意思`);
-  }, [closeMenus, getReviewCandidatesForTargets, retentionRuntimeLaunches, startReviewQueue, toast, startLightweightReview, clearRetentionSummary]);
+  }, [closeMenus, getReviewCandidatesForTargets, retentionRuntimeLaunches, startReviewQueue, toast, startLightweightReview, clearRetentionSummary, closeExample]);
 
   // MVP Mixed intent uses the same two proven runtimes in sequence: due Review
   // comes first, then ready Acquisition continues without returning home.
   const startMixedLearning = useCallback(() => {
     closeMenus();
-    setIsExampleOpen(false);
+    closeExample();
     enterLearn();
 
     const newTargetIds = [...todayInitialTargetIds];
@@ -904,19 +909,20 @@ export default function App() {
     toast,
     startLightweightReview,
     clearRetentionSummary,
+    closeExample,
   ]);
 
   // 退出学习回首页
   const exitLearn = useCallback(() => {
     pendingMixedTargetRef.current = null;
-    setIsExampleOpen(false);
+    closeExample();
     closeMenus();
     // 原来只清了 demoPackage，flowMode 仍停在 'demo'、demoStage/demoWord 仍在，
     // 于是"演示 → 回首页 → 继续某个已提交的 Target"会带着上次演示的阶段进学习屏。
     enterLearn();
     setViewMode('main');
     resetMain();
-  }, [closeMenus, enterLearn, resetMain]);
+  }, [closeMenus, enterLearn, resetMain, closeExample]);
 
   const exitLightweightRuntime = useCallback(() => {
     setViewMode('main');
@@ -994,12 +1000,12 @@ export default function App() {
     const scene = demoSceneForStage(stageNum);
     if (!scene) return;
     closeMenus();
-    setIsExampleOpen(false);
+    closeExample();
     setViewMode('study');
     enterDemo(scene.presentation);
     overrideDemoQueue(scene.queue.pkg, scene.queue.capability, scene.queue.step, scene.queue.total);
     toast(scene.toast);
-  }, [closeMenus, enterDemo, overrideDemoQueue, toast]);
+  }, [closeMenus, enterDemo, overrideDemoQueue, toast, closeExample]);
 
   const handleCompleteIntroduction = useCallback(() => {
     if (flowMode === 'demo') {
@@ -1233,11 +1239,11 @@ export default function App() {
     if (!pendingTargetIds?.length) return false;
 
     pendingMixedTargetRef.current = null;
-    setIsExampleOpen(false);
+    closeExample();
     const started = beginInitialTargetRuntime(pendingTargetIds[0]);
     if (started) toast('到期复习已完成，继续建立新的意思连接');
     return started;
-  }, [beginInitialTargetRuntime, toast]);
+  }, [beginInitialTargetRuntime, toast, closeExample]);
 
   const finishStructuredRetentionRuntime = useCallback(() => {
     if (continueMixedAfterReview()) return;
@@ -1296,14 +1302,14 @@ export default function App() {
   const handleNextWord = useCallback(() => {
     if (flowMode === 'review') {
       if (reviewDone) {
-        setIsExampleOpen(false);
+        closeExample();
         finishStructuredRetentionRuntime();
         return;
       }
       nextReviewQueue();
     } else {
       if (queueDone) {
-        setIsExampleOpen(false);
+        closeExample();
         persistGraduatedSenses();
         setViewMode('finish');
         return;
@@ -1318,6 +1324,7 @@ export default function App() {
     nextLearnQueue,
     persistGraduatedSenses,
     finishStructuredRetentionRuntime,
+    closeExample,
   ]);
 
   const handleContinueReviewFeedback = useCallback(() => {
@@ -1340,11 +1347,11 @@ export default function App() {
   useEffect(() => {
     if (viewMode === 'study') {
       if (flowMode === 'learn' && queueDone && (!learnSession || learnSession.settled)) {
-        setIsExampleOpen(false);
+        closeExample();
         persistGraduatedSenses();
         setViewMode('finish');
       } else if (flowMode === 'review' && reviewDone && (!reviewSession || reviewSession.settled)) {
-        setIsExampleOpen(false);
+        closeExample();
         finishStructuredRetentionRuntime();
       }
     }
@@ -1358,18 +1365,6 @@ export default function App() {
     persistGraduatedSenses,
     finishStructuredRetentionRuntime,
   ]);
-
-  // 打开例句卡
-  const handleOpenExample = useCallback((senseIdx: number = 0, sentenceIdx: number = 0) => {
-    setSelectedSenseIdx(senseIdx);
-    setSelectedSentenceIdx(sentenceIdx);
-    setIsExampleOpen(true);
-  }, []);
-
-  // 关闭例句卡
-  const handleCloseExample = useCallback(() => {
-    setIsExampleOpen(false);
-  }, []);
 
   // 当前用于渲染的词与阶段
   const currentPackage: RuntimePackage | null = demo
@@ -1510,18 +1505,7 @@ export default function App() {
       ? learnSession.totalTarget
       : dailyNewCount * 4;
 
-  // 时钟更新
-  const [time, setTime] = useState(() => {
-    const d = new Date();
-    return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
-  });
-  useEffect(() => {
-    const t = setInterval(() => {
-      const d = new Date();
-      setTime(d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'));
-    }, 20000);
-    return () => clearInterval(t);
-  }, []);
+  const time = useClock();
 
   return (
     <DictionaryPresentationProvider presentation={dictionaryPresentation}>
@@ -1854,7 +1838,7 @@ export default function App() {
           {/* 6. 单词学习流程 */}
           <LearnScreen
             active={viewMode === 'study'}
-            isBehind={isExampleOpen}
+            isBehind={exampleSheet !== null}
             curWord={currentWord}
             stage={currentStage}
             step={currentStep}
@@ -1875,7 +1859,7 @@ export default function App() {
               setMenuPersonalContent(personalContent);
               setMenuMoreOpen(true);
             }}
-            onOpenExample={handleOpenExample}
+            onOpenExample={openExample}
             onOpenDict={openDictModal}
             onOpenNoteEditor={openNoteEditor}
             onOpenSceneEditor={(content, anchorId) => {
@@ -1901,14 +1885,14 @@ export default function App() {
 
           {/* 7. 原声例句全屏卡 */}
           <ExampleScreen
-            active={viewMode === 'study' && isExampleOpen}
+            active={viewMode === 'study' && exampleSheet !== null}
             curWord={currentWord}
-            initialSenseIdx={selectedSenseIdx}
-            initialSentenceIdx={selectedSentenceIdx}
-            onClose={handleCloseExample}
+            initialSenseIdx={exampleSheet?.senseIdx ?? 0}
+            initialSentenceIdx={exampleSheet?.sentenceIdx ?? 0}
+            onClose={closeExample}
             onOpenDict={openDictModal}
             onNextWord={() => {
-              handleCloseExample();
+              closeExample();
               if (currentStage === 'introduction') {
                 handleCompleteIntroduction();
               } else {
@@ -2153,8 +2137,7 @@ export default function App() {
             reviewResult: null,
           });
           overrideDemoQueue(pkg, 'meaning_to_form_recall', 7, 20);
-          setSelectedSenseIdx(0);
-          setIsExampleOpen(true);
+          openExample();
         }}
         onOpenNoteEditor={(w) => openNoteEditor(w || currentWord)}
         onOpenSpelling={(w) => openSpelling(w || currentWord)}
