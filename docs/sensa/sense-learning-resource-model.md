@@ -1,7 +1,7 @@
 # Sense Learning Resource Model
 
 > 状态：Canonical resource model  
-> 更新日期：2026-09-04
+> 更新日期：2026-09-05
 
 本文定义 Sensa 如何通过 Published、On-demand 或 Hybrid 路径为一个固定 Learning Target 提供学习
 资源，以及这些资源如何在一次 Learning Protocol Run 前冻结为 Learning Materialization。它同时
@@ -556,14 +556,14 @@ Portable Listening 和 Dictation 不建立 Listening Gate。前者只记录播�
 目标 Sense。Quick Spelling 可以复用 Lexeme-identity Recall grading，但其 Result 仍不解决 Recall
 Gate、不进入 5D/FSRS，也不改变正式学习或复习安排。
 
-## 8. Learner-authored personal content
+## 8. Learner-owned personal content
 
 Personal Content 不进入 Content Release，也不成为 Sense Learning Package resource：
 
-- Personal Meaning、Meaning Focus、Personal Semantic Anchor 与 Personal Expression Anchor 保留
-  learner provenance；Sense Construction 中的原始对话与 Sense Proposal 也不能直接成为 reviewed
-  Package resource；
-- learner 确认 Sense Proposal 后创建的 Sense Version 是后续内容生产的 semantic source identity，
+- Personal Meaning、optional Meaning Focus、Personal Semantic Anchor 与 Personal Expression Anchor
+  保留 direct/delegated acceptance 和来源 provenance；Sense Construction 中的原始对话与 Sense
+  Proposal 也不能直接成为 reviewed Package resource；
+- 有效 Semantic Acceptance 后创建的 Sense Version 是后续内容生产的 semantic source identity，
   但确认本身不证明 Experience、Example、Usage、Assessment 或 Repair assets 已完成审核；
 - Personal Meaning Alignment 保存个人意义与 stable Sense 的关系。Package 可以在 learner 明确允许
   时引用其 Personal Semantic Anchor 作为 optional scaffold，但不能把该 Anchor 复制成公共资源；
@@ -595,8 +595,8 @@ Evidence。Note 默认只供 learner 阅读，不能被 Runtime 当作语言学�
 - Reference Release、Reference candidate inventory、Sense Alignment、Lexical Occurrence annotation、
   Contextual Sense Resolution 与 resolver/reviewer provenance。
 
-按需 Sense Construction 不要求预先维护穷尽式 Sense 库。learner 确认后创建的 Sense 必须先固定
-Sense Version，内容供给再以该版本和 Learning Target 为输入：可以生产 Published Package，也可以
+按需 Sense Construction 不要求预先维护穷尽式 Sense 库。有效 Semantic Acceptance 后创建的 Sense
+必须先固定 Sense Version，内容供给再以该版本和 Learning Target 为输入：可以生产 Published Package，也可以
 为选定协议生成一次性 On-demand Learning Materialization。LLM 可以协助两种路径，但内容角色、
 provenance、冻结时点和 Validator 由各自合同决定；按需内容不能自行获得 Published 或 Evidence
 eligible 身份。
@@ -646,7 +646,8 @@ scene domain、construction、disambiguating cue、collocations 和 variation no
 - Contextual Sense Resolution 只能从 pinned Reference Release 的 closed candidates 中选择；不确定时
   必须保留 ambiguous/unresolved，不得自由生成一个“看起来合理”的义项；
 - 上一条只约束 Reference Lookup 对既有词典条目的上下文解析；它不禁止 Personal Semantic World 中
-  的 LLM-assisted Sense Construction。后者必须经过 learner 确认并创建 stable Sense Version，仍不能
+  的 LLM-assisted Sense Construction。后者必须经过有效 direct/delegated Semantic Acceptance 并创建
+  stable Sense Version，仍不能
   冒充 Reference Sense 或已发布 Package；
 - On-demand 内容必须在 learner 使用前冻结为带 digest 的 Learning Materialization，记录 target、
   Effective Learning Policy/plan revision、protocol、generator/policy provenance 与验证结果；任何

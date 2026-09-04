@@ -1,7 +1,7 @@
 # Sensa 学习连接模型
 
 > 状态：Canonical domain model
-> 更新日期：2026-09-04
+> 更新日期：2026-09-05
 
 本文定义一个 confirmed Sense 与目标语言表达的连接如何取得内容、选择学习方式、形成不同强度的
 结果并交给长期调度。个人意义与 Sense 确认由
@@ -20,7 +20,7 @@
 ```text
 Book membership ───────────────────────────────────────┐
 Direct stable Sense + target binding ── Add-to-Learning┼──▶ Learning Target
-Confirmed Personal Meaning Alignment + target binding ┘
+Accepted complete Personal Meaning + target binding ───┘
       ↓
 Retention Target
       ↓
@@ -42,8 +42,9 @@ Protocol Outcome
 
 Book-first learning 可以直接从已发布 Sense 建立 Learning Target；direct learning 可以从 Catalog、搜索、
 reviewed Alignment 后的 Contextual Lookup 或其他已存在的 stable Sense + target binding 显式加入；
-personal-first learning 则沿 confirmed Personal Meaning Alignment 建立同一类目标。三类入口在 Learning
-Target 处汇合，都保存 Learning Entry Provenance，但 provenance 不进入 target/retention identity。
+personal-first learning 则沿完整 Context–Expression–Sense Personal Meaning 及其 active Alignment 建立
+同一类目标。Meaning Focus 可以不存在。三类入口在 Learning Target 处汇合，都保存 Learning Entry
+Provenance，但 provenance 不进入 target/retention identity。
 
 直接学习仍然是 Sense-first：一个裸 Lexeme、L2 字符串或未对齐的 Reference Sense 不能成为 Learning
 Target。用户可以不创建 Personal Meaning，但系统仍必须解析并固定具体 stable Sense、Sense Version
@@ -105,7 +106,12 @@ Learning Runtime 只依赖 Curriculum 中已经解析的 Learning Target、Reten
 Policy 与 ready plan，不读取 Personal Semantic World membership 来决定能否学习。入口边界必须满足：
 
 - Book/Catalog/direct stable-Sense entry 不创建 Personal Meaning、Meaning Focus、Alignment 或 Personal Anchor；
-- personal-first entry 只有在 learner 显式提交 Add-to-Learning 后才创建 Curriculum Membership；
+- personal-first entry 只消费已经由 direct 或 delegated Semantic Acceptance 提交的完整 Personal Meaning；
+  未完成的 Intake Inbox Item、Context、Expression candidate、Meaning Focus 或 Personal Meaning 本身都不
+  能代替 stable Sense Version + target binding；
+- personal-first entry 只有在独立的 Add-to-Learning Intent 被 learner 直接提交，或由持有对应独立
+  grant 的 Agent 委托提交后，才创建 Curriculum Membership；委托 semantic-world commit 权限不自动
+  包含 Add-to-Learning 权限；
 - 学习历史、Review、Relearning 或推荐不能反向推断并创建 Personal Meaning；
 - 删除、归档或重新组织 Personal Meaning 不删除 Supplemental Membership、Retention Target、Protocol
   history、Evidence 或 FSRS State；
@@ -795,6 +801,10 @@ origin=`relearning` 的 Memory Outcome。两者都不覆盖 forgotten Outcome。
   Semantic World 不是前置条件，Learning 也不反向创建 Personal Meaning；
 - 所有入口都必须固定 stable Sense/Version 与 target binding；裸词、未对齐 Reference Sense 或 Personal
   Meaning 本身不能成为 Learning Target；
+- personal-first bridge 可以来自 direct 或 delegated Semantic Acceptance，但只接受已经闭合的
+  Context–Expression–Sense Personal Meaning；Meaning Focus 不是 bridge 或 target identity；
+- Personal Semantic World commit 与 Add-to-Learning 是不同意图和权限，即使一个获授权 Agent 在一次
+  用户请求中连续执行二者，也必须留下两个独立、幂等、可审计事实；
 - Learning Entry Provenance 只记录来源，不改变 Learning/Retention Target identity；同一连接跨来源去重；
 - Personal Content lifecycle 不删除或重写 Curriculum Membership、Protocol history、Evidence 或 FSRS；
 - Entry Provenance 与 Learning Policy 正交；来源可以影响推荐/readiness，但不得静默决定或降级 Policy；

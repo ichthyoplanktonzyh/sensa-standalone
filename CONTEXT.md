@@ -1,7 +1,7 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-09-04
+> Updated: 2026-09-05
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
@@ -32,17 +32,21 @@ never asserts a reversible translation equality.
 
 **Sense Proposal**:
 An LLM-generated, revisable semantic specification offered during Sense
-Construction. It becomes a stable Sense identity only after explicit learner
-confirmation; confirmation alone does not make it reviewed or learning-ready.
+Construction. It becomes a stable Sense identity only after valid direct or
+learner-delegated Semantic Acceptance; acceptance alone does not make it reviewed
+or learning-ready.
 
 **Sense Construction**:
 The learner–LLM dialogue that turns a personal meaning focus into a reproducible
-Sense Proposal and, on explicit learner confirmation, a stable Sense. It creates
-semantic identity, not Learning Evidence or automatic curriculum membership.
+Sense Proposal and, on valid Semantic Acceptance, a stable Sense. A Meaning Focus
+is used only when Context does not already determine a teaching-sufficient Sense.
+Construction creates semantic identity, not Learning Evidence or automatic
+curriculum membership.
 
 **Semantic LLM Role**:
 The constrained model role that proposes and clarifies a Sense during Sense
-Construction. It cannot create learner confirmation or learning content by side effect.
+Construction. Model output alone cannot create Semantic Acceptance or learning
+content; a separate commit operation may act under an explicit learner delegation.
 
 **Learning Content LLM Role**:
 The constrained model role that generates candidate material for one fixed
@@ -74,7 +78,7 @@ valuable objective with separate scheduling value extends Retention Target scope
 **Learning Entry Provenance**:
 The versioned origin through which a Learning Target enters Curriculum, such as
 Book membership, direct selection of an existing stable Sense, or a confirmed
-Personal Meaning Alignment. It never changes target identity or makes Personal
+complete Personal Meaning Alignment. It never changes target identity or makes Personal
 Semantic World membership a prerequisite for learning.
 
 **Learning Policy Profile**:
@@ -498,11 +502,32 @@ together with the Personal Semantic World, learner progress and practice
 activity. It is neither an authoritative progress aggregate nor a literal model
 of the learner's mind.
 
+**Semantic Intake**:
+A port-neutral capture of a real context together with any Expression and Sense
+information currently available. Text selection, image/audio capture, first-party
+extensions and learner-authorized Agents all submit through this boundary. An Intake
+may be incomplete and does not become Personal Semantic World membership by itself.
+
+**Intake Inbox Item**:
+A learner-owned unresolved Semantic Intake awaiting an Expression selection, a
+teaching-sufficient Sense resolution, valid acceptance authority or an explicit
+decision to discard it. The Inbox is the receiving area of the Personal Semantic
+World surface, not part of its stable semantic inventory.
+
+**Semantic Acceptance**:
+The auditable authority by which a complete Context–Expression–Sense resolution is
+committed to the Personal Semantic World. Acceptance may be performed directly by
+the learner or by an Agent acting under an explicit learner delegation; provenance
+must distinguish the two, but delegated acceptance does not require a second
+first-party confirmation. Acceptance is not content review, Add-to-Learning or
+Learning Evidence.
+
 **Personal Semantic World（个人语义世界）**:
-The learner-owned set of Personal Meanings they explicitly create, together
-with their anchors and confirmed Sense relationships. It can explicitly bridge a
-confirmed target into Curriculum, but is neither a learning prerequisite nor a
-progress owner; system inference never adds membership without the learner's act.
+The learner-owned set of complete Personal Meanings committed through valid direct
+or delegated Semantic Acceptance. Each member preserves a real Context, a located
+Expression and its stable Sense relationship; an optional Meaning Focus may explain
+how an ambiguous Context was resolved. It can explicitly bridge a confirmed target
+into Curriculum, but is neither a learning prerequisite nor a progress owner.
 
 **Personal Content**:  
 The learner-owned references, annotations and organization they intentionally
@@ -517,9 +542,10 @@ The learner's single current free-form note for one Sense. It persists independe
 of saving and is neither published linguistic truth nor Learning Evidence.
 
 **Personal Semantic Anchor**:  
-A learner-authored text, image, audio, scene or other experience connected to a
-Personal Meaning. It may remain useful after Sense confirmation but is a private
-optional scaffold, not reviewed content, learner progress or Evidence.
+A provenance-bearing text, image, audio, scene or other real Context intentionally
+committed for a Personal Meaning by the learner or an authorized delegate. It may
+remain useful after Sense confirmation but is a private optional learning scaffold,
+not reviewed content, learner progress or Evidence.
 
 **Personal Semantic Region**:
 
@@ -530,15 +556,19 @@ curriculum order or inferred mental structure.
 
 **Personal Meaning（个人意义）**:
 
-A stable learner-owned identity for something the learner explicitly chooses to
-preserve from their meaning or experience structure. It can exist before Sense
-confirmation and is never replaced by a word, a Sense or an LLM summary.
+A stable learner-owned identity for one accepted contextual meaning the learner
+chooses to preserve. A complete member fixes at least one Personal Semantic Anchor,
+one located Personal Expression Anchor and one active relation to a stable Sense
+Version and compatible Sense Expression Binding. It is never replaced by a word, a
+Sense or an LLM summary.
 
 **Meaning Focus**:
 
-The learner-approved aspect of a Personal Meaning currently being made explicit,
-such as the receiving rather than giving perspective in one borrowing event. One
-experience may support multiple Meaning Focuses without being duplicated.
+An optional, learner-accepted statement used when Context alone does not make the
+intended Sense clear, such as the receiving rather than giving perspective in one
+borrowing event. It is a resolution bridge, not a required field of Personal Meaning
+or Personal Meaning Alignment, and must not be synthesized from a Sense definition
+merely to satisfy storage shape.
 
 **Personal Expression Anchor**:
 
@@ -549,9 +579,10 @@ identity or proof of learning.
 
 **Personal Meaning Alignment**:
 
-The explicit relation from one Meaning Focus to one stable Sense, with proposal
-and confirmation provenance. Confirmation preserves the Personal Meaning and
-does not by itself add the Sense to formal learning.
+The explicit relation from one Personal Meaning to one stable Sense Version, grounded
+in its Context and located Expression and optionally qualified by a Meaning Focus.
+It preserves resolution and direct/delegated acceptance provenance. Acceptance
+preserves the Personal Meaning and does not by itself add the Sense to formal learning.
 
 **Personal Collection / Collection Membership**:  
 A learner-named ordered organization of Sense and Example targets, plus one typed

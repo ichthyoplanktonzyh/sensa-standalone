@@ -1,7 +1,7 @@
 # Sensa 文档索引
 
 > 状态：Active index  
-> 更新日期：2026-09-04
+> 更新日期：2026-09-05
 
 本目录不再把所有设计记录都当作“领域模型”。文档按职责分层；下层文档不能覆盖
 上层文档的定义。
@@ -14,7 +14,7 @@
 | --- | --- |
 | [`../../CONTEXT.md`](../../CONTEXT.md) | 统一语言与产品边界 |
 | [`production-architecture.md`](production-architecture.md) | 领域总图、聚合、Account/Settings/Data Control、Curriculum/Personal Content 生命周期、Lexical Reference、语义投影、自由练习、模块边界和全局不变量 |
-| [`personal-semantic-world-model.md`](personal-semantic-world-model.md) | 个人意义、经验/表达锚点、LLM 语义访谈、按需 Sense 构造、确认门与中英首版边界 |
+| [`personal-semantic-world-model.md`](personal-semantic-world-model.md) | 泛在 Semantic Intake 快慢轨、完整 Context–Expression–Sense Personal Meaning、optional Focus、直接/委托 Semantic Acceptance、Sense 构造与学习交接边界 |
 | [`learning-connection-model.md`](learning-connection-model.md) | 独立 Book/direct/personal-first learning entries 与 Learning Entry Provenance、Learning Target/Capability Objective/Retention Target、learner-selectable Learning Policy、Resolved Learning Plan、published/on-demand/hybrid 内容供给、三种 Protocol Purpose、Protocol Step/Checkpoint/Card 边界、Profile 策略组合、学习结果、graded Memory Outcome、Relearning scheduler 资格与 FSRS Scheduling Handoff |
 | [`semantic-acquisition-model.md`](semantic-acquisition-model.md) | Structured Acquisition Protocol 的 Gates、五维诊断、Semantic Field、Lexical Reference 支架与四种练习通道理论 |
 | [`sense-learning-resource-model.md`](sense-learning-resource-model.md) | Published/On-demand 学习内容、Materialization、教学/检验/练习资源、Reference Lexicon 与发布语义 |

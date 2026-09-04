@@ -1,7 +1,7 @@
 # Sensa Learning Runtime Model
 
 > 状态：Canonical runtime domain model  
-> 更新日期：2026-09-04
+> 更新日期：2026-09-05
 
 本文定义 Content Provisioning、Learning Protocol Run、Protocol Step Instance、Unified Planning、Session、
 Encounter、Card Presentation、Observation/Evidence/Transition、Scheduling Handoff、FSRS、Lexical Reference、Preferences 与 Account/Data Control 的运行
@@ -295,7 +295,7 @@ provisioning/protocol references；只有 `ready` plan 可以进入正式 Planni
 实际 Learning Materialization，内容更新不能在进行中静默替换资源。
 
 Add-to-Learning 可以由 direct Catalog/search selection、Saved Sense、reviewed Alignment 后的 Contextual
-Lookup，或 confirmed Personal Meaning Alignment 发起；Book Enrollment 则通过 Book membership 提供
+Lookup，或 accepted complete Personal Meaning Alignment 发起；Book Enrollment 则通过 Book membership 提供
 另一类 Curriculum source。所有来源都固定 Learning Entry Provenance，并在相同 Learning Target/
 Retention Target 处去重。Runtime 不要求、也不检查是否存在 Personal Meaning 才接纳 direct/Book entry。
 
@@ -540,38 +540,44 @@ Reference Release 与 occurrence annotations 是可下载的不可变内容，�
 
 ## 7. Personal Content lifecycle
 
-Personal Content 保存 learner 主动创建的事实，不从浏览、学习结果或统计自动推断：
+Personal Content 保存 learner 直接或通过明确授权委托创建的事实，不从浏览、学习结果或统计自动推断：
 
-- Personal Semantic World membership 由 `CreatePersonalMeaning` 一类显式 learner operation 创建；
-  推荐、浏览、模型提取和学习历史只能生成建议，不能替 learner 提交该 operation；
-- Personal Meaning 拥有独立 identity 与 revision。Meaning Focus、Personal Semantic Anchor、Personal
-  Expression Anchor 分别修改，不以节点标题或一段富文本充当整个 aggregate；
-- Personal Semantic Anchor 绑定 Personal Meaning 而不是直接冒充 Sense 内容。同一经验素材可以被
-  多个 Meaning Focus 引用，但每个引用保留自己的焦点和 provenance；
+- Semantic Intake operation 至少固定真实 Context；缺少 Expression、teaching-sufficient Sense 或有效
+  acceptance 的捕获保存为 Inbox Item。只有完整提交 operation 才创建 Personal Semantic World
+  membership；
+- 完整提交可以由 learner 直接执行，也可以由 Agent 在 learner grant 下委托执行；二者必须保存不同
+  actor/authority provenance，但 delegated commit 不需要二次确认。任意 payload 布尔字段不构成权限；
+- Personal Meaning 拥有独立 identity 与 revision，并至少固定一个 Context Anchor、一个 located
+  Expression Anchor 与一个 active stable Sense Alignment。Meaning Focus 为可选独立事实，不以节点
+  标题或一段富文本充当整个 aggregate；
+- Personal Semantic Anchor 绑定 Personal Meaning 而不是直接冒充 Sense 内容。同一经验素材可以直接
+  支撑 Context–Expression–Sense resolution，也可以在必要时被多个 Meaning Focus 引用；
 - Personal Expression Anchor 固定 language、expression type、learner-relative familiar/target role、
   provenance 与 verification status；
-- Sense Construction Session 固定 Personal Meaning revision、当前 Meaning Focus、模型/policy
-  provenance 与提议历史。原始聊天可以用于继续对话和审计，但只有 learner 接受的 Focus、Sense
-  Proposal 与确认 operation 进入权威领域状态；
-- `ConfirmSenseProposal` 必须由 learner 显式触发，并对同一 proposal 幂等。成功时创建或引用 stable
-  Sense/Sense Version，并创建 Personal Meaning Alignment；重放不得制造重复 Sense 或 Alignment；
+- Sense Construction Session 只在普通 Contextual Sense Resolution 不足时固定 Intake/Meaning draft、
+  optional Meaning Focus、模型/policy provenance 与提议历史。原始聊天可以用于继续对话和审计，
+  但只有被有效 Semantic Acceptance 接受的 Focus/Sense Proposal 才进入权威领域状态；
+- Sense acceptance operation 可以由 learner 直接触发，也可以由 Agent 在相应 grant 下委托触发，并
+  对同一 proposal/resolution 幂等。成功时创建或引用 stable Sense/Sense Version，并创建 Personal
+  Meaning Alignment；重放不得制造重复 Sense 或 Alignment；
 - Personal Meaning 在 Sense 确认后继续存在。修改它不会静默修改已确认 Sense；若边界发生变化，
   必须开启新的 proposal/version、split 或显式 relation 流程；
 - Saved Sense 在 learner × stable Sense 上唯一、可逆，并保存创建时 Sense Version provenance；
 - Saved Example 在 learner × exact immutable Example 上唯一、可逆，不能随 release 更新换成另一条；
 - 每个 learner × Sense 最多有一份 current Sense Note；更新与删除使用 revision，离线冲突不能
   静默覆盖另一设备已经提交的正文；
-- 每个 Personal Semantic Anchor 有独立 identity 与 revision；同一 Personal Meaning 可以有多个
+- 每个 Personal Semantic Anchor 有独立 identity 与 revision；同一 Personal Meaning 至少一个且可以有多个
   Anchor，learner 可分别修改、删除或撤销其 scaffold eligibility；
 - Personal Collection 有独立 identity、name、description、ordering 与 revision；Collection
   Membership 是指向 stable Sense 或 exact Example 的 typed、ordered reference，同一 target 在
   同一 Collection 中不能重复；
 - Add-to-Learning Intent 从 stable Sense 与选定 target expression 解析 Learning Target，并交给
-  Curriculum 接纳或拒绝；Personal Content 不得
+  Curriculum 接纳或拒绝；它与 semantic-world commit 使用独立 authority，即使同一 Agent 连续提交也
+  必须形成两个幂等事实；Personal Content 不得
   直接修改 published Book、Supplemental Membership、Study Scope、Learning Phase 或 Planner
   inventory；接纳语义由第 4 节 Curriculum lifecycle 定义。
 - direct/Book learning 不创建 Personal Meaning、Focus、Anchor 或 Alignment；Learning/Review/Relearning
-  history 也不能作为隐式 `CreatePersonalMeaning` operation；
+  history 也不能作为隐式 semantic-world commit operation；
 
 这些操作保持正交：
 

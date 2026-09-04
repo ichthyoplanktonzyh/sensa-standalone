@@ -1,7 +1,7 @@
 # Sensa 语义获取模型
 
 > 状态：Canonical theory model  
-> 更新日期：2026-09-04
+> 更新日期：2026-09-05
 > 证据级别：产品理论与可检验假设，尚无真实用户效果结论
 
 本文解释 Sensa 为什么按 Sense 组织学习，并完整定义高保证的 **Structured Acquisition Protocol**：
@@ -184,38 +184,42 @@ Personal Semantic Anchor 允许 learner 把 Personal Meaning 连接到自己的�
 连接目标 Sense，而不是被转换成 reviewed content。系统不能把 Anchor 当作 Concept Prior、5D State、
 成功 Evidence、评分答案或 novel assessment material。
 
-### 7.1 Learner-authored semantic construction
+### 7.1 Learner-owned semantic construction
 
 Personal Semantic World 允许 learner 从自己的经验世界向目标语言主动建构，而不只回看系统已经
-教过的 Senses。只有 learner 明确创建的 Personal Meaning 才成为其成员；学习历史、浏览、推荐和
-模型推断都不能自动加入。
+教过的 Senses。只有具备 Context、located Expression、teaching-sufficient stable Sense/Binding 并由
+learner 直接接受或其获授权 Agent 委托接受的完整 Personal Meaning 才成为成员；未闭合捕获留在
+Intake Inbox，学习历史、浏览、推荐和无权限模型推断都不能自动加入。
 
 这是 personal-first enrichment path，不是 Structured Acquisition、Lightweight Study 或长期 Retention
 的前置条件。Book/direct learning 可以从 existing stable Sense + target binding 进入相同 Learning Target，
 且不会因此创建 Personal Meaning。
 
-Personal Meaning 是“我指的是这个”的稳定个人 identity。Meaning Focus 把一段可能很丰富的经验
-收敛到当前真正关心的侧面；Personal Semantic Anchors 用场景、图像、声音、叙述或动作让它可重新
-进入；Personal Expression Anchors 则保存不同语言中能够唤起或候选表达该意义的 typed forms。任何
-一层都不能单独冒充公共 Sense。
+Personal Meaning 是“我在这个 Context 中指的是这个 Expression 的这个 Sense”的稳定个人 identity。
+Personal Semantic Anchors 用场景、图像、声音、叙述或动作让它可重新进入；Personal Expression
+Anchors 保存其中被定位的 typed forms。Meaning Focus 只在 Context 仍有多个可能 intended Sense 时
+把丰富经验收敛到当前关心侧面，可以完全不存在。任何一层都不能单独冒充公共 Sense。
 
-创建路径可以从个人经验、一个熟悉语言表达或一个目标语言表达开始。LLM 通过 Sense Construction
-帮助 learner 提炼 Focus、识别同一场景的多个可能焦点、提出边界问题，并生成包含原型场景、包含/
-排除条件、相邻意义和自然目标语言表达的 Sense Proposal。该过程不是从封闭公共 Sense 库中选择
-唯一答案；现有 Sense 检索只是一种可选复用与治理手段。
+创建路径可以从个人经验、一个熟悉语言表达或一个目标语言表达开始。普通 Contextual Sense
+Resolution 足以确定教学所需 Sense 时直接走快轨；只有它不足时，LLM 才通过 Sense Construction
+帮助 learner 提炼 optional Focus、识别同一场景的多个可能焦点、提出边界问题，并生成 Sense
+Proposal。该过程不是从封闭公共 Sense 库中选择唯一答案；现有 Sense 检索只是一种可选复用与治理
+手段。
 
-Sense Proposal 仍是 suggestion。只有 learner 明确确认后，系统才创建 stable Sense identity、初始
-Sense Version 与 Personal Meaning Alignment。确认保存原始 Personal Meaning 和全部 provenance；
-后续相似性发现只能建立 equivalence、overlap、broader/narrower 或对比关系，不能静默改写已经确认
+Sense Proposal 仍是 suggestion。只有有效 direct/delegated Semantic Acceptance 后，系统才创建
+stable Sense identity、初始 Sense Version 与 Personal Meaning Alignment。Acceptance 保存原始 Context、
+Expression、grant/actor 和全部 provenance；后续相似性发现只能建立 equivalence、overlap、
+broader/narrower 或对比关系，不能静默改写已经确认
 的语义边界。确认对话、模型置信度和接受按钮都不构成 Acquisition Evidence。
 
 同一个经验可以产生多个 Meaning Focus，例如一次借伞事件中的接收视角与给予视角。一个 L1 表达
 也可以通向多个目标语言 Senses，多个 L1 片段则可以共同接近一个 Sense。系统必须允许拆分、保留
 重叠和承认没有自然一词对应，不能生成 `L1 = L2` 的翻译等号。
 
-个人建构与正式学习保持显式边界：创建 Personal Meaning、编辑 Focus/Anchor、确认 Sense、确认
-Sense Expression Binding、提交 Add-to-Learning Intent 和准备学习内容是不同意图。前四者都不会创建
-Curriculum Membership、Learner Sense Progress、Learning Protocol Run、Evidence、5D 或 FSRS Memory
+个人建构与正式学习保持显式边界：提交完整 Personal Meaning、编辑 optional Focus/Anchor、接受
+Sense resolution、确认 Sense Expression Binding、提交 Add-to-Learning Intent 和准备学习内容是不同
+意图。前四者都不会创建 Curriculum Membership、Learner Sense Progress、Learning Protocol Run、
+Evidence、5D 或 FSRS Memory
 State。Add-to-Learning 可以先接纳 stable target 与合法 Learning Policy Assignment；只有后续 Resolved
 Learning Plan 为当前 purpose 解析出合法 Protocol、published/on-demand/hybrid provisioning path 与
 Learning Materialization，并达到 `ready` 后，Unified Planner 才能把它纳入正式学习运行。
