@@ -58,9 +58,14 @@ function responseOptions(spec: ReviewAssessmentSpec): ReviewChoiceOption[] {
 }
 
 function outcomeLabel(result: ReviewAssessmentResult): string {
-  if (result.memoryOutcome === 'transfer_confirmed') return '新语境中仍能认出';
-  if (result.memoryOutcome === 'independent_retrieval') return '独立取回成功';
-  return '独立取回失败';
+  if (result.memoryOutcome?.basis === 'transfer_confirmed') return '新语境中仍能认出';
+  if (result.memoryOutcome?.basis === 'independent_retrieval') return '独立取回成功';
+  if (result.memoryOutcome?.basis === 'retrieval_failed') return '独立取回失败';
+  if (result.memoryOutcome?.grade === 'hard') return '想起但比较费力';
+  if (result.memoryOutcome?.grade === 'easy') return '非常轻松地想起';
+  if (result.memoryOutcome?.grade === 'good') return '本次回想完成';
+  if (result.memoryOutcome?.grade === 'again') return '本次未能想起';
+  return '本次只记录反馈，不改变长期调度';
 }
 
 export function SensaReviewFeedbackCard({

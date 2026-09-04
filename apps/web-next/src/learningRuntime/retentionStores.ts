@@ -22,19 +22,29 @@
  *
  * 因此 store 只声明**接收 Scheduling Handoff 时给出什么首次到期投影**，
  * 落库动作留在各自宿主里。宿主能力由 `RetentionStoreContext` 注入：App 传
- * storageService，reducer 传 action 里那份 `dueBySenseId`——同一份 store 定义
+ * storageService，reducer 传 action 里那份 `dueByRetentionTargetId`——同一份 store 定义
  * 因此在命令式与纯函数两边都能用，这也是它能被 smoke 逐条断言的原因。
  */
 
 /** 长期保持事实的持有者。由 retention 的 Runtime Adapter 声明。 */
-export type RetentionStoreId =
-  /** 调度器（FSRS）持有 Memory State，到期时间由它算。 */
-  | 'scheduler_memory'
-  /** journey 记录持有一条固定档期，不进调度器。 */
-  | 'fixed_ladder';
+/** 对扩展开放；可用 store 由 RetentionStoreRegistry 在 composition root 闭合。 */
+export type RetentionStoreId = string & {};
 
-/** 还没有真实到期时间时的占位文案。原型阶段"立即可复习"就是这个意思。 */
+/** 拿不到真实到期时间时的占位文案（调度器保持的回退路径用）。 */
 export const IMMEDIATE_REVIEW_LABEL = '现在可复习（原型）';
+
+/**
+ * 固定档期的第一档：学习步 2。
+ *
+ * 轻量首学 = grounding + 一次回想，只是 Anki 学习阶段的第一个学习步；
+ * 第二个学习步由交接后的首次到期复习承担，所以第一档不是"现在"，而是
+ * 一个真实的短间隔——与 again 档（重学步）同为 10 分钟，对应 Anki 的
+ * 学习步/重学步步长。立刻可点的"复习"是回声测试，不是提取。
+ */
+export const FIXED_LADDER_FIRST_RUNG = {
+  delayMs: 10 * 60 * 1000,
+  label: '10 分钟后',
+} as const;
 
 /** 首次到期在界面上的投影。Handoff 的产物，不是 store 的内部状态。 */
 export interface RetentionHandoffProjection {
@@ -78,8 +88,13 @@ const immediateHandoff = (ctx: RetentionStoreContext): RetentionHandoffProjectio
 const fixedLadderStore: RetentionStoreDefinition = {
   storeId: 'fixed_ladder',
   opensJourneyLadder: true,
-  // 固定档期从"现在"起算，不问调度器。
-  openHandoff: immediateHandoff,
+  // 第一档是学习步 2（见 FIXED_LADDER_FIRST_RUNG），不问调度器。
+  openHandoff: (ctx) => ({
+    nextReviewAt: new Date(
+      Date.parse(ctx.completedAt) + FIXED_LADDER_FIRST_RUNG.delayMs,
+    ).toISOString(),
+    nextReviewLabel: FIXED_LADDER_FIRST_RUNG.label,
+  }),
 };
 
 const schedulerMemoryStore: RetentionStoreDefinition = {
@@ -106,7 +121,18 @@ export class RetentionStoreRegistry {
   public constructor(
     definitions: readonly RetentionStoreDefinition[] = RETENTION_STORE_DEFINITIONS,
   ) {
+    const storeIds = new Set<RetentionStoreId>();
+    for (const definition of definitions) {
+      if (storeIds.has(definition.storeId)) {
+        throw new Error(`Duplicate Retention Store identity: ${definition.storeId}`);
+      }
+      storeIds.add(definition.storeId);
+    }
     this.#definitions = new Map(definitions.map((definition) => [definition.storeId, definition]));
+  }
+
+  public list(): readonly RetentionStoreDefinition[] {
+    return [...this.#definitions.values()];
   }
 
   public get(storeId: RetentionStoreId): RetentionStoreDefinition {

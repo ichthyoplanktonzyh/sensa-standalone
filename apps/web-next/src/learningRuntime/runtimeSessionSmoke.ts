@@ -75,6 +75,32 @@ check('开结构化首学清掉上一次结算', restarted.initialSummary === nu
 
 check('开一条首学不动另一块 surface 上的首学',
   initialRunOn(restarted, 'lightweight_initial').join() === 'tactful-expression');
+check('串行呈现完成一条 Target 只移出这一条，不结束整次运行', (() => {
+  const serial = apply(INITIAL_RUNTIME_SESSION, {
+    type: 'startInitialRun',
+    surface: 'lightweight_initial',
+    targetIds: ['borrow-receive', 'tactful-expression'],
+  });
+  const advanced = apply(serial, {
+    type: 'finishInitialTarget',
+    surface: 'lightweight_initial',
+    targetId: 'borrow-receive',
+  });
+  return initialRunOn(advanced, 'lightweight_initial').join() === 'tactful-expression';
+})());
+check('串行呈现完成最后一条 Target 后结束该 surface 的运行', (() => {
+  const serial = apply(INITIAL_RUNTIME_SESSION, {
+    type: 'startInitialRun',
+    surface: 'lightweight_initial',
+    targetIds: ['borrow-receive'],
+  });
+  const done = apply(serial, {
+    type: 'finishInitialTarget',
+    surface: 'lightweight_initial',
+    targetId: 'borrow-receive',
+  });
+  return initialRunOn(done, 'lightweight_initial').length === 0;
+})());
 check('收尾只清自己那条', (() => {
   const done = apply(restarted, { type: 'finishInitialRun', surface: 'lightweight_initial' });
   return initialRunOn(done, 'lightweight_initial').length === 0

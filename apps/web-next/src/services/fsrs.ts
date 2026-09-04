@@ -10,11 +10,12 @@ export enum Rating {
   Easy = 4,  // 熟词 / 极其简单
 }
 
-export type CardState = 'new' | 'learning' | 'review' | 'relearning';
+export type FSRSState = 'new' | 'learning' | 'review' | 'relearning';
 
 export interface FSRSItem {
-  wordId: string;           // 单词唯一标识
-  state: CardState;         // 当前记忆状态
+  /** The scheduler-owned identity. In Sensa Runtime this is a Retention Target id. */
+  memoryKey: string;
+  state: FSRSState;         // 当前记忆状态
   stability: number;        // S: 记忆稳定性 (单位: 天，表示 90% 留存率对应的天数)
   difficulty: number;       // D: 难度 (1.0 ~ 10.0)
   reps: number;             // 累计复习次数
@@ -25,9 +26,9 @@ export interface FSRSItem {
 }
 
 export interface ReviewLog {
-  wordId: string;
+  memoryKey: string;
   rating: Rating;
-  state: CardState;
+  state: FSRSState;
   due: number;
   stability: number;
   difficulty: number;
@@ -48,11 +49,11 @@ export function calculateRetrievability(item: FSRSItem, now: number = Date.now()
 }
 
 /**
- * 新词完成 4 Pass 学习后的初始毕业参数
- * @param wordId 单词标识
- * @param mistakeCount 在 4 Pass 学习过程中的失误次数
+ * 接收 Scheduling Handoff 后创建初始 FSRS Memory State
+ * @param memoryKey 调度记忆标识；Sensa Runtime 传 Retention Target id
+ * @param mistakeCount 首次学习协议允许交给 initializer 的错误计数
  */
-export function initFSRSFromLearn(wordId: string, mistakeCount: number = 0): FSRSItem {
+export function initFSRSFromLearn(memoryKey: string, mistakeCount: number = 0): FSRSItem {
   // 零失误初始难度较低、稳定性较高；失误越多初始难度越高、稳定性越低
   let initD = 5.0;
   let initS = 2.5; // 默认首次复习在 2~3 天后
@@ -73,7 +74,7 @@ export function initFSRSFromLearn(wordId: string, mistakeCount: number = 0): FSR
   const due = now + scheduledDays * MS_PER_DAY;
 
   return {
-    wordId,
+    memoryKey,
     state: 'review',
     stability: initS,
     difficulty: initD,
@@ -100,7 +101,7 @@ export function reviewFSRS(
 
   let newD = prev.difficulty;
   let newS = prev.stability;
-  let nextState: CardState = prev.state;
+  let nextState: FSRSState = prev.state;
   let lapses = prev.lapses;
 
   // 1. 更新难度 D (Difficulty: 1 ~ 10)
@@ -134,7 +135,7 @@ export function reviewFSRS(
   const due = now + scheduledDays * MS_PER_DAY;
 
   return {
-    wordId: prev.wordId,
+    memoryKey: prev.memoryKey,
     state: nextState,
     stability: Number(newS.toFixed(2)),
     difficulty: Number(newD.toFixed(2)),

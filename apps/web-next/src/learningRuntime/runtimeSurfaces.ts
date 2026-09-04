@@ -112,16 +112,19 @@ const lightweightInitialSurface: RuntimeSurfaceDefinition = {
   surface: 'lightweight_initial',
   flow: 'lightweight',
   startInitial: (ctx, launch) => {
-    const targetId = launch.targetIds[0];
-    if (!targetId) return false;
-    ctx.commitPolicies([targetId]);
-    ctx.beginInitialRun('lightweight_initial', [targetId]);
+    if (launch.targetIds.length === 0) return false;
+    ctx.commitPolicies(launch.targetIds);
+    ctx.beginInitialRun('lightweight_initial', launch.targetIds);
     ctx.showFlow('lightweight');
     return true;
   },
   continueInitial: (ctx, targetId, state) => {
     if (state.initialCompletion) {
       ctx.toast('首次学习已经完成，等待进入长期复习');
+      return;
+    }
+    if (state.inActiveRun) {
+      ctx.showFlow('lightweight');
       return;
     }
     ctx.beginInitialRun('lightweight_initial', [targetId]);
@@ -182,10 +185,54 @@ const structuredSessionSurface: RuntimeSurfaceDefinition = {
   },
 };
 
+const interleavedFourStageSurface: RuntimeSurfaceDefinition = {
+  surface: 'interleaved_four_stage',
+  flow: 'fourStage',
+  startInitial: (ctx, launch) => {
+    if (launch.targetIds.length === 0) return false;
+    ctx.beginInitialRun('interleaved_four_stage', launch.targetIds);
+    ctx.commitPolicies(launch.targetIds);
+    ctx.showFlow('fourStage');
+    return true;
+  },
+  continueInitial: (ctx, _targetId, state) => {
+    if (state.declaredMastery) {
+      ctx.toast('这条目标已声明为熟词，不再进入正式学习计划');
+      return;
+    }
+    if (state.initialCompletion) {
+      ctx.toast('四阶段首次学习已经完成，当前处于长期保持阶段');
+      return;
+    }
+    if (state.inActiveRun) {
+      ctx.showFlow('fourStage');
+      return;
+    }
+    ctx.toast('这次四阶段运行已结束');
+  },
+  startRetention: () => false,
+};
+
+const interleavedFourStageReviewSurface: RuntimeSurfaceDefinition = {
+  surface: 'interleaved_four_stage_review',
+  flow: 'fourStageReview',
+  startInitial: () => false,
+  continueInitial: () => {},
+  startRetention: (ctx, launch, options) => {
+    if (launch.targetIds.length === 0 && !options.enterOnEmpty) return false;
+    ctx.beginRetentionRun('interleaved_four_stage_review', launch.targetIds);
+    ctx.showFlow('fourStageReview');
+    ctx.toast(options.announce(launch.targetIds.length));
+    return true;
+  },
+};
+
 export const RUNTIME_SURFACE_DEFINITIONS = [
   lightweightInitialSurface,
   lightweightRetentionSurface,
   structuredSessionSurface,
+  interleavedFourStageSurface,
+  interleavedFourStageReviewSurface,
 ] as const satisfies readonly RuntimeSurfaceDefinition[];
 
 export class RuntimeSurfaceRegistry {
@@ -194,7 +241,18 @@ export class RuntimeSurfaceRegistry {
   public constructor(
     definitions: readonly RuntimeSurfaceDefinition[] = RUNTIME_SURFACE_DEFINITIONS,
   ) {
+    const surfaces = new Set<PrototypeRuntimeSurface>();
+    for (const definition of definitions) {
+      if (surfaces.has(definition.surface)) {
+        throw new Error(`Duplicate Runtime Surface identity: ${definition.surface}`);
+      }
+      surfaces.add(definition.surface);
+    }
     this.#definitions = new Map(definitions.map((definition) => [definition.surface, definition]));
+  }
+
+  public list(): readonly RuntimeSurfaceDefinition[] {
+    return [...this.#definitions.values()];
   }
 
   public get(surface: PrototypeRuntimeSurface): RuntimeSurfaceDefinition {

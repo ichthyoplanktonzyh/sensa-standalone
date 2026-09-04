@@ -84,6 +84,8 @@ for (const [raw, expected] of [
   ['study', 'study'],
   ['lightweight', 'lightweight'],
   ['lightweightReview', 'lightweightReview'],
+  ['fourStage', 'fourStage'],
+  ['fourStageReview', 'fourStageReview'],
   ['finish', 'finish'],
   ['nonsense', 'main'],
   [undefined, 'main'],

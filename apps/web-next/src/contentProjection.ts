@@ -213,7 +213,7 @@ export const buildContentProjection = (): ContentProjectionSnapshot => {
 
   const learnedWithState = Object.values(fsrsItems)
     .map((state) => {
-      const item = unambiguousSense(state.wordId);
+      const item = unambiguousSense(state.memoryKey);
       return item ? { item, state } : undefined;
     })
     .filter((entry): entry is { item: PracticeSenseItem; state: FSRSItem } => !!entry)
@@ -222,7 +222,7 @@ export const buildContentProjection = (): ContentProjectionSnapshot => {
   const learned = learnedWithState.map((entry) => entry.item);
   const semanticSenses = Object.values(fsrsItems)
     .flatMap((state) => {
-      const pkg = PROTOTYPE_PACKAGE_BY_SENSE.get(state.wordId);
+      const pkg = PROTOTYPE_PACKAGE_BY_SENSE.get(state.memoryKey);
       return pkg ? [projectSemanticSense(pkg.content, state, now)] : [];
     })
     .sort((left, right) => right.lastReview - left.lastReview);

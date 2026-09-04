@@ -21,7 +21,13 @@
  * it, so a path segment is the bare sheet name.
  */
 
-export type ShellFlow = 'study' | 'lightweight' | 'lightweightReview' | 'finish';
+export type ShellFlow =
+  | 'study'
+  | 'lightweight'
+  | 'lightweightReview'
+  | 'fourStage'
+  | 'fourStageReview'
+  | 'finish';
 
 /** `viewMode` as App has always spelled it: 'main' plus the four flows. */
 export type ViewMode = 'main' | ShellFlow;
@@ -89,7 +95,14 @@ const toSheetId = (segment: string, parentSheetId: string | undefined): string |
   return KNOWN_SHEET_ID_SET.has(standalone) ? standalone : undefined;
 };
 
-const FLOWS: readonly ShellFlow[] = ['study', 'lightweight', 'lightweightReview', 'finish'];
+const FLOWS: readonly ShellFlow[] = [
+  'study',
+  'lightweight',
+  'lightweightReview',
+  'fourStage',
+  'fourStageReview',
+  'finish',
+];
 
 const isFlow = (value: unknown): value is ShellFlow =>
   typeof value === 'string' && (FLOWS as readonly string[]).includes(value);

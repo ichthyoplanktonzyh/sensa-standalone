@@ -3,12 +3,35 @@
  * presentation model: a Sense Package is the content identity and a
  * ScheduledAction is the unit selected by planning.
  */
+import type { ProtocolProgressState } from '@sensa/learning-kernel';
+
 export type LearningCapability =
-  | 'introduction'
   | 'contextual_recognition'
   | 'meaning_to_form_recall'
   | 'novel_context_transfer'
   | 'boundary_discrimination';
+
+/**
+ * 一个 Step 的意图。这是领域闭集：编排插件可以自由定义 Step 的形式，但必须用
+ * 这组词声明含义，因为**只有 `assessment` 能产生 Evidence 与 Memory Outcome**。
+ * 没有它，多个插件会各自解释"什么叫学会了"。
+ *
+ * `introduction` 原先是 LearningCapability 的一个取值，这让类型说了假话：讲解
+ * 不是一条能力——它不进 Gate、不产生 Evidence、也没有对应的 Assessment Resource。
+ * 代价是三处 `Exclude<LearningCapability, 'introduction'>` 别名，和十余处
+ * `capability === 'introduction'` 判断。现在它是 `intent: 'instruction'`，
+ * 讲解步的 `capability` 就是 null——它确实不练任何能力。
+ *
+ * 当前队列只产出 instruction / assessment / repair 三种；`practice`（练但
+ * 不取证）由轻量首学使用，`feedback` 则为独立反馈 Step 保留。二者都不能
+ * 自行产生 Evidence。
+ */
+export type LearningStepIntent =
+  | 'instruction'
+  | 'practice'
+  | 'assessment'
+  | 'feedback'
+  | 'repair';
 
 export type ScheduledActionKind =
   | 'introduction'
@@ -22,14 +45,6 @@ export type ScheduledActionReason =
   | 'repair'
   | 'due'
   | 'relearning';
-
-/**
- * A repair is a learning intervention, not an assessment.  Keeping this
- * distinction on the scheduled action lets the frozen presentation layer
- * reuse its existing capability card without letting the queue turn a
- * reveal/rebinding step into Evidence.
- */
-export type ScheduledActionMode = 'assessment' | 'repair';
 
 export type RepairResourceRole =
   | 'experience_recap'
@@ -45,19 +60,64 @@ export interface RepairResourceReference {
   fallbackReason?: 'repair_binding_not_exposed';
 }
 
+/**
+ * 这一步渲染哪张卡。见 learningRuntime/stepRenderers.tsx 的注册表。
+ *
+ * 与 `intent` 是两条轴，不能互相替代：`intent` 是领域闭集，回答"这一步算不算
+ * 取证"；`stepKind` 是插件自由的，回答"渲染哪张卡"。同一条能力在不同编排下
+ * 渲染成不同的卡——`contextual_recognition` 在首学是 `recognition`
+ * （RecognitionCard），在到期复习是 `review_assessment`
+ * （SensaReviewAssessmentCard）——所以它推不出来，只能由产出这一步的编排回答。
+ *
+ * 内置九种在联合里列出只为补全提示；类型本身对插件开放（`string & {}` 是
+ * TypeScript 里"已知值 + 任意字符串"的写法，直接写 `string` 会让字面量提示
+ * 全部消失）。真正的闭合发生在注册表：查不到就抛错。
+ */
+export type BuiltinLearningStepKind =
+  | 'introduction'
+  | 'recognition'
+  | 'recall'
+  | 'transfer'
+  | 'review_assessment'
+  | 'review_feedback'
+  | 'review_repair'
+  | 'lightweight_experience_recall'
+  | 'lightweight_expression_reveal';
+
+export type LearningStepKind = BuiltinLearningStepKind | (string & {});
+
 export interface ScheduledActionDefinition {
   actionKey: string;
-  capability: LearningCapability;
+  /** 这一步练的是哪条能力。讲解步不练任何能力，所以是 null。 */
+  capability: LearningCapability | null;
   taskKey: string | null;
   kind: ScheduledActionKind;
   /** Content adapters default ordinary definitions to assessment. */
-  mode?: ScheduledActionMode;
+  intent?: LearningStepIntent;
+  /**
+   * 目录声明里没有这一项：卡片由编排决定，不由内容决定。产出这一步的编排
+   * 盖章之后，类型收窄为 `OrchestratedStepDefinition`。
+   */
+  stepKind?: LearningStepKind;
   /** Present only for a scheduler-created repair action. */
   repairForActionKey?: string;
   repairResourceRef?: RepairResourceReference;
 }
 
-export interface SchedulablePackage<TContent = unknown> {
+/**
+ * 编排产出的一步：`intent` 与 `stepKind` 都已确定。
+ *
+ * 两个字段在 `ScheduledActionDefinition` 上是可选的，因为内容目录声明的是
+ * 「有哪些可选动作」，不是「这次出哪一步」。编排盖章之后它们才成立，于是
+ * 下游不必再为「万一没有」写回退。
+ */
+export interface OrchestratedStepDefinition extends ScheduledActionDefinition {
+  intent: LearningStepIntent;
+  stepKind: LearningStepKind;
+}
+
+/** Reusable, learner-neutral content and action inventory. */
+export interface LearningPackage<TContent = unknown> {
   packageId: string;
   senseId: string;
   content: TContent;
@@ -68,14 +128,33 @@ export interface SchedulablePackage<TContent = unknown> {
   reviewActions: readonly ScheduledActionDefinition[];
 }
 
-export interface ScheduledAction<TContent = unknown> extends ScheduledActionDefinition {
+/** A reusable Package bound to exactly one learner-specific scheduling identity. */
+export interface SchedulablePackage<TContent = unknown> extends LearningPackage<TContent> {
+  retentionTargetId: string;
+}
+
+export const bindPackageToRetentionTarget = <TContent>(
+  packageTemplate: LearningPackage<TContent>,
+  retentionTargetId: string,
+): SchedulablePackage<TContent> => {
+  if (retentionTargetId.trim().length === 0) {
+    throw new Error(`Package ${packageTemplate.packageId} cannot bind an empty Retention Target.`);
+  }
+  return Object.freeze({ ...packageTemplate, retentionTargetId });
+};
+
+export const retentionTargetIdOf = (
+  packageItem: Pick<SchedulablePackage, 'retentionTargetId'>,
+): string => packageItem.retentionTargetId;
+
+export interface ScheduledAction<TContent = unknown> extends OrchestratedStepDefinition {
   ordinal: number;
   totalTarget: number;
   packageId: string;
   senseId: string;
+  retentionTargetId: string;
   content: TContent;
   reason: ScheduledActionReason;
-  mode: ScheduledActionMode;
 }
 
 export type MeaningToFormRecallOutcome =
@@ -88,21 +167,25 @@ export type NovelTransferOutcome = 'success' | 'repair';
 
 export type AcquisitionGateStatus = 'unresolved' | 'passed' | 'failed';
 
-export type ReviewCapability = Exclude<LearningCapability, 'introduction'>;
-
 export type RelearningCycleStage = 'repair_pending' | 'retest_pending';
+
+export type RelearningRepairTarget =
+  | Readonly<{ kind: 'capability'; capability: LearningCapability }>
+  | Readonly<{ kind: 'protocol_checkpoint'; checkpointId: string }>;
 
 /**
  * Learner-local recovery progress. This is deliberately separate from the
- * FSRS memory projection: a Relearning Cycle describes which capability needs
- * repair and retest, while FSRS continues to describe only the long-term
- * schedule produced by the failed Review.
+ * FSRS memory projection: a Relearning Cycle describes which protocol-local
+ * target needs repair and retest, while FSRS continues to describe only the
+ * long-term schedule produced by the failed Review. Structured protocols use
+ * a Capability; other protocols keep their own Checkpoint identity.
  */
 export interface RelearningCycle {
   cycleId: string;
   packageId: string;
   senseId: string;
-  targetCapability: ReviewCapability;
+  retentionTargetId: string;
+  repairTarget: RelearningRepairTarget;
   failedReviewOutcomeKey: string;
   failedReviewActionKey: string;
   stage: RelearningCycleStage;
@@ -125,23 +208,22 @@ export interface ReviewMemoryFacts {
  * state. They are intentionally separate from the FSRS due projection.
  */
 export interface ReviewDiagnosticFacts {
-  preferredCapabilities?: readonly ReviewCapability[];
-  lastCapability?: ReviewCapability;
+  preferredCapabilities?: readonly LearningCapability[];
+  lastCapability?: LearningCapability;
 }
 
-export interface SenseAcquisitionState {
+export interface AcquisitionTargetState {
   packageId: string;
   senseId: string;
+  retentionTargetId: string;
   phase: 'new' | 'acquiring' | 'retaining' | 'relearning';
   introduced: boolean;
   declaredMastery: boolean;
-  gateStatus: Record<ReviewCapability, AcquisitionGateStatus>;
-  /** A failed gate must receive a repair before it can be independently retested. */
-  pendingRepairCapability: ReviewCapability | null;
-  pendingRepairForActionKey: string | null;
-  repairCounts: Record<ReviewCapability, number>;
-  failureCounts: Record<ReviewCapability, number>;
-  lastAssessmentActionKey: Partial<Record<ReviewCapability, string>>;
+  /** Protocol-local Checkpoint credit; capability and Card identities are projections. */
+  protocolProgress: ProtocolProgressState;
+  repairCounts: Record<LearningCapability, number>;
+  failureCounts: Record<LearningCapability, number>;
+  lastAssessmentActionKey: Partial<Record<LearningCapability, string>>;
   lastActionOrdinal: number;
   totalAttempts: number;
   totalCorrect: number;
@@ -150,7 +232,7 @@ export interface SenseAcquisitionState {
 }
 
 export interface AcquisitionGateProjection {
-  capability: ReviewCapability;
+  capability: LearningCapability;
   status: AcquisitionGateStatus;
   repairing: boolean;
 }
@@ -158,7 +240,8 @@ export interface AcquisitionGateProjection {
 export interface AcquisitionTargetProjection {
   packageId: string;
   senseId: string;
-  phase: SenseAcquisitionState['phase'];
+  retentionTargetId: string;
+  phase: AcquisitionTargetState['phase'];
   introduced: boolean;
   declaredMastery: boolean;
   graduated: boolean;
@@ -173,7 +256,7 @@ export interface AcquisitionTargetProjection {
 export interface StructuredAcquisitionProjection {
   currentAction: Readonly<Pick<
     ScheduledAction,
-    'packageId' | 'senseId' | 'capability' | 'mode' | 'reason'
+    'packageId' | 'senseId' | 'retentionTargetId' | 'capability' | 'intent' | 'reason'
   >> | null;
   targets: readonly AcquisitionTargetProjection[];
 }
@@ -195,17 +278,13 @@ export interface QueueStats {
   totalAttempts: number;
   correctAttempts: number;
   accuracy: number;
-  masteredCount: number;
-  totalSenses: number;
-  /** Compatibility alias used by the frozen progress surface. */
-  totalWords: number;
+  masteredTargetCount: number;
+  totalTargets: number;
   startTime: number;
 }
 
 export interface QueueConfig {
-  /** Maximum number of concurrently acquiring Senses. */
-  activeWindow?: number;
-  /** Number of other Actions that must occur before another Sense appears. */
+  /** Number of other Actions required before the same Retention Target reappears. */
   minGap?: number;
   /** Optional display estimate. Scheduling completion never depends on it. */
   progressTarget?: number;
@@ -238,9 +317,8 @@ export function reviewOutcomeKey(
 ): string {
   void _action;
   return [
-    'sensa-review-v1',
-    candidate.package.packageId,
-    candidate.package.senseId,
+    'sensa-review-v2',
+    retentionTargetIdOf(candidate.package),
     String(candidate.dueAt),
   ].map((part) => encodeURIComponent(part)).join(':');
 }

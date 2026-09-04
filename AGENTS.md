@@ -23,8 +23,12 @@ deprecated prototype reports as implementation input.
   handoff. Clients never write derived state directly.
 - Keep `LearnerScope` as the application seam while the compatibility schema is
   being reduced. Do not expose Workspace as a product feature.
-- Web remains React. Mobile is one Flutter client for iOS and Android; it uses
-  SQLite, local outbox and the same language-neutral API contracts.
+- Web remains React. Mobile and desktop are one Flutter client for iOS,
+  Android and desktop; it uses SQLite, local outbox and the same
+  language-neutral API contracts. `apps/web-next` is a mobile-form behavior
+  prototype: its UI is not promised to migrate to any production client;
+  the cross-client assets are the domain docs, the seam shapes and the
+  smoke suites.
 
 ## Validation and delivery
 

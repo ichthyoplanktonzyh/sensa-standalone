@@ -1,7 +1,7 @@
 # Sense Learning Resource Model
 
 > 状态：Canonical resource model  
-> 更新日期：2026-09-01
+> 更新日期：2026-09-05
 
 本文定义 Sensa 如何通过 Published、On-demand 或 Hybrid 路径为一个固定 Learning Target 提供学习
 资源，以及这些资源如何在一次 Learning Protocol Run 前冻结为 Learning Materialization。它同时
@@ -37,12 +37,88 @@ Materialization 只回答“本次 run 有哪些固定内容以及它们可承�
 合同允许时被不同 Step 绑定为 teaching、cue、assessment、feedback 或 repair role，但每次绑定必须
 保留 role、exposure/novelty 与 grader eligibility。
 
+Card Presentation 的版本化 Slot contract 位于 material role 与 renderer 之间。Slot 只声明稳定区域、
+允许的 role、cardinality、顺序、disclosure 和 fallback；Assembly Policy 负责把已验证资源装配进去。
+模型只生成 Material Candidate，不直接选择区域、CSS 或组件。由此，同一 Expression Reveal 可以对
+单词显示可用 pronunciation/lexical facts，对多词表达显示结构与重音，对完整 utterance 显示整句音频
+与语调；这些差异不改变 Protocol Step identity，缺少可选区域也不会阻塞运行。
+
 On-demand materialization 不会因为生成成功而自动成为 Published Package，也不因此获得 Structured
 Acquisition 的 Evidence eligibility。每个协议必须独立声明最低内容角色、验证强度与允许的结果。
 生成内容较少只能说明 Lightweight 更易准备，不能把 AI 输出自动提升为 high-assurance assessment
 inventory 或 Acquisition Graduation basis。
 
-### 1.1 Published Package identity
+### 1.1 Content Demand 与 Candidate admission
+
+Protocol 需求内容时引用版本化 Content Demand。Demand 以开放的 material role identity 声明
+schema、cardinality、合法用途、Evidence eligibility、provisioning/validator policy 与外部派生；
+它不指定 Card 名称、界面阶段或当日顺序。同一 material role 可以被 Protocol Step 绑定到
+prompt、reveal、feedback 或 detail，因此新增 Reveal Card 不要求修改资源 identity 或 Learning Kernel。
+
+Content Provisioning 先为固定 target/Sense/Protocol/Demand 建立 Content Provisioning Task。每次生产
+尝试使用独立、幂等的 Content Generation Request，把这些固定身份、初始已授权 Content Context
+Artifacts、允许的工具合同与预算一并交给 adapter。adapter 可以复用 Published resource、调用生成
+模型或运行获准工具；新取得的事实先冻结为 Context Artifact，生成或派生的内容先成为 Material
+Candidate。Candidate 只有通过该 role 全部 required validators，并且整个 Demand 的 cardinality
+完整，才可进入 Materialization assembly。
+
+字典、语料与发音索引返回的是 authoritative Content Context Artifact；Personal Meaning 中的原始
+场景是必须带 use grant 的 Personal Anchor artifact；TTS 是从已接受文本或发音事实产生媒体
+Candidate 的 Content Derivation。这三类输入/操作不能被压成一段不可审计的模型 prompt。
+
+首版 Lightweight Initial 使用一个具体的 `lightweight-initial-content@v1` Demand。它把
+`experience_recall_cue`、`target_expression`、`sense_confirmation` 声明为 required roles，把
+`recall_support`、`pronunciation`、`language_structure`、`usage_guidance`、`scene_bridge` 声明为
+bounded optional roles。请求必须携带 expression snapshot 与 Sense snapshot；原始经历和词典、语料、
+发音等 reference facts 是可选 context。Personal Anchor 仍必须携带 use grant。
+
+该 Demand 明确把来源责任分开：expression/Sense 只做 authoritative passthrough；教学性内容只先成为
+Candidate，并通过 schema、Sense alignment 与适用的 pre-reveal non-disclosure；pronunciation 只接受
+source-bound objective derivation。任一 required role 缺失时 materialization 仍是 incomplete；任一
+Candidate 的 schema、绑定、policy/version 或 validator/version 不匹配时整体 invalid，Runtime 不得读取。
+word、phrase、construction、utterance 共用这一组 role identity，缺少不适用的可选资源不会改变 Protocol。
+
+### 1.2 Agentic material production
+
+复杂的 On-demand 供给可以由 Content Agent Attempt 编排，但 Agent 不是资源 authority 或 admission
+boundary。一次 Attempt 只能处理一个 Content Provisioning Task，并固定以下输入：
+
+- Learning Target、Sense Version、target Expression Binding 与 locale；
+- Effective Learning Policy、purpose-specific Protocol 与 exact Content Demand；
+- 初始 Content Context Artifacts，包括获得明确 use grant 的原始文字或图片场景；
+- closed tool catalog、每个工具的版本/权限、调用与成本预算、超时和终止条件；
+- provider/model/prompt policy 与 Attempt identity。
+
+原始多模态场景首先是 context，不会自动成为 learner-visible material。每个文字、图片、音频或其
+提取结果必须固定 identity、digest、media type、source、rights/use grant 与允许用途；个人原图、原始
+叙述和录音只有在某个 material role 明确允许且通过隐私/泄露校验时才能进入 Candidate。OCR、vision
+或解析模型的结果必须记录 producer/tool provenance，不能因“来自图片”而获得权威事实资格。
+
+Agent 使用的工具必须是 typed、versioned 的封闭集合。工具结果按领域角色接纳，而不是统一塞回
+prompt：authoritative lookup 或解析结果成为 Content Context Artifact；TTS、转码、媒体合成等版本化
+转换成为 Content Derivation 及其 Material Candidate；validator 工具在 Agent 内给出的结果只作为
+advisory preflight。最终 admission 必须由 Agent 结束后的独立 validator 重新执行或验证其可重放结果。
+
+Attempt 的成功出口只能是一个不可变 Material Candidate Bundle。Bundle 至少固定：
+
+- Task/Attempt/Generation Request identity 与输入 snapshot digest；
+- Attempt 中新取得并冻结的 supporting Content Context Artifacts；
+- 按 Demand role 标识的 Candidates、schema/version、source artifacts 与 content digest；
+- required/optional role coverage，以及每个未提供 optional role 的显式 omission reason；
+- 持久化所需的 tool name/version、调用 input/output digest、source/rights 与 derivation provenance；
+- provider/model/prompt policy、预算消耗、终止原因和提交时间。
+
+无需保存或信任模型的隐藏思维过程；可审计对象是固定输入、工具调用事实、supporting artifacts、
+Candidates、omissions 与终止事实。Bundle 仍是 untrusted proposal，不是 Learning Materialization。
+独立 validation/admission 必须只依赖 Task 的固定输入和 Bundle 内的可重放事实；接受整个 Demand 后，
+system-owned assembly 才能产生不可变 Materialization。若拒绝，旧 Attempt 与 Bundle 保持终态，重试
+必须创建新 Attempt。
+
+Provisioning Batch 仅引用多个独立 Task，并提供 dispatch、预算分配和进度汇总。共享缓存或 provider
+batch 必须以 artifact/content digest 保持确定性隔离；一个 Task 的素材、失败或 retry 不得污染、阻塞
+或回滚其他 Task，也不得把一批 Expression 合并为一个 Agent context。
+
+### 1.3 Published Package identity
 
 Sense Learning Package 固定：
 
@@ -56,7 +132,7 @@ Sense Learning Package 固定：
 Release 发布后不可原位修改。语言事实、源文本、媒体或 Required Capability 发生语义变化时，
 必须产生新 version/release。
 
-### 1.2 Package 的概念组成
+### 1.4 Package 的概念组成
 
 一个可发布 Package 在领域上组合六类事实，但不要求数据库或传输合同把它们内嵌在一条记录中：
 
@@ -480,14 +556,14 @@ Portable Listening 和 Dictation 不建立 Listening Gate。前者只记录播�
 目标 Sense。Quick Spelling 可以复用 Lexeme-identity Recall grading，但其 Result 仍不解决 Recall
 Gate、不进入 5D/FSRS，也不改变正式学习或复习安排。
 
-## 8. Learner-authored personal content
+## 8. Learner-owned personal content
 
 Personal Content 不进入 Content Release，也不成为 Sense Learning Package resource：
 
-- Personal Meaning、Meaning Focus、Personal Semantic Anchor 与 Personal Expression Anchor 保留
-  learner provenance；Sense Construction 中的原始对话与 Sense Proposal 也不能直接成为 reviewed
-  Package resource；
-- learner 确认 Sense Proposal 后创建的 Sense Version 是后续内容生产的 semantic source identity，
+- Personal Meaning、optional Meaning Focus、Personal Semantic Anchor 与 Personal Expression Anchor
+  保留 direct/delegated acceptance 和来源 provenance；Sense Construction 中的原始对话与 Sense
+  Proposal 也不能直接成为 reviewed Package resource；
+- 有效 Semantic Acceptance 后创建的 Sense Version 是后续内容生产的 semantic source identity，
   但确认本身不证明 Experience、Example、Usage、Assessment 或 Repair assets 已完成审核；
 - Personal Meaning Alignment 保存个人意义与 stable Sense 的关系。Package 可以在 learner 明确允许
   时引用其 Personal Semantic Anchor 作为 optional scaffold，但不能把该 Anchor 复制成公共资源；
@@ -519,8 +595,8 @@ Evidence。Note 默认只供 learner 阅读，不能被 Runtime 当作语言学�
 - Reference Release、Reference candidate inventory、Sense Alignment、Lexical Occurrence annotation、
   Contextual Sense Resolution 与 resolver/reviewer provenance。
 
-按需 Sense Construction 不要求预先维护穷尽式 Sense 库。learner 确认后创建的 Sense 必须先固定
-Sense Version，内容供给再以该版本和 Learning Target 为输入：可以生产 Published Package，也可以
+按需 Sense Construction 不要求预先维护穷尽式 Sense 库。有效 Semantic Acceptance 后创建的 Sense
+必须先固定 Sense Version，内容供给再以该版本和 Learning Target 为输入：可以生产 Published Package，也可以
 为选定协议生成一次性 On-demand Learning Materialization。LLM 可以协助两种路径，但内容角色、
 provenance、冻结时点和 Validator 由各自合同决定；按需内容不能自行获得 Published 或 Evidence
 eligible 身份。
@@ -570,16 +646,27 @@ scene domain、construction、disambiguating cue、collocations 和 variation no
 - Contextual Sense Resolution 只能从 pinned Reference Release 的 closed candidates 中选择；不确定时
   必须保留 ambiguous/unresolved，不得自由生成一个“看起来合理”的义项；
 - 上一条只约束 Reference Lookup 对既有词典条目的上下文解析；它不禁止 Personal Semantic World 中
-  的 LLM-assisted Sense Construction。后者必须经过 learner 确认并创建 stable Sense Version，仍不能
+  的 LLM-assisted Sense Construction。后者必须经过有效 direct/delegated Semantic Acceptance 并创建
+  stable Sense Version，仍不能
   冒充 Reference Sense 或已发布 Package；
 - On-demand 内容必须在 learner 使用前冻结为带 digest 的 Learning Materialization，记录 target、
   Effective Learning Policy/plan revision、protocol、generator/policy provenance 与验证结果；任何
   response 之后都不得重新生成并替换 prompt、
   answer、grader 或反馈依据；
+- 原始多模态场景及其解析结果必须固定 identity、digest、media type、source、rights/use grant 与用途；
+  原始个人媒体不能因被 Agent 看见而自动成为 learner-visible material；
+- Content Agent Attempt 只能处理一个固定 Content Provisioning Task 并调用其 closed tool catalog；
+  tool result 必须按 Context Artifact、Content Derivation 或 Material Candidate 的真实角色保存；
+- Material Candidate Bundle 是 Agent 终止时提交的未受信提案，不是 Learning Materialization；Agent
+  preflight 不能替代 system-owned validation/admission，拒绝后的重试必须创建新 Attempt；
+- Provisioning Batch 中每个 Task 的 context、Candidate、失败与 retry 必须隔离；batch 不提供跨 target
+  内容身份，也不具有整体成功或回滚语义；
 - Content Provisioning failure 只改变 purpose-specific plan readiness/blocked reason，不删除已接纳的
   Supplemental Membership，也不能静默切换 Learning Policy Profile 或制造 Runtime progress；
 - Protocol Step 只能绑定 Materialization 中具备对应 role、visibility、exposure 与 grader eligibility 的
   内容；Card Presentation 不得临时补造内容、替换评分依据或升级结果资格；
+- Presentation Slot 只能接收其合同允许的 material role；模型输出的布局指令一律不进入
+  Materialization。Experience Recall 的全部 Slot 必须通过 target-expression non-disclosure 校验；
 - Semantic LLM、Learning Content LLM 与未来 Grading LLM 是不同领域角色；同一次模型调用不能因
   “模型很懂语言”而绕过各角色独立的权限、输入最小化、校验与审计合同；
 - Reference Sense 与 Sensa Sense 只能通过 reviewed/versioned Alignment 连接，词典条目本身不能成为

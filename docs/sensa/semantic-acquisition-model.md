@@ -1,7 +1,7 @@
 # Sensa 语义获取模型
 
 > 状态：Canonical theory model  
-> 更新日期：2026-09-01
+> 更新日期：2026-09-05
 > 证据级别：产品理论与可检验假设，尚无真实用户效果结论
 
 本文解释 Sensa 为什么按 Sense 组织学习，并完整定义高保证的 **Structured Acquisition Protocol**：
@@ -47,6 +47,11 @@ Structured Relearning Protocol 时，
 长时遗忘后的 Relearning 使用同一模型，但只重新解决已经暴露的能力缺口。领域还允许不创建
 Acquisition Cycle 的 Lightweight Relearning；因此“长期遗忘”不自动等于进入本文模型。
 
+这里的两个时间尺度与三个 Protocol Purpose 是正交的：`initial_learning` 主要处于短期获取，
+`retention_review` 处于长期保持，`relearning` 是长期保持中由遗忘触发的恢复 purpose，而不是第三种
+记忆时间尺度。Structured Relearning 可以在恢复 Run 内复用短期 Acquisition Cycle，但不创建新的
+Retention Target 或 Scheduling Handoff。
+
 ### Retention：长期保持
 
 在 Structured Acquisition Protocol 内，Acquisition Graduation 允许创建证据等级明确的 Scheduling
@@ -74,7 +79,8 @@ Executable Capability Resolver 再证明这些能力在某个 release/runtime �
 
 ## 4. Acquisition Gates
 
-Gate 是 learner-specific 的能力检查点，不是内容资源或固定页面。Structured Acquisition 的当前
+Gate 是 Structured Acquisition 中一种 learner-specific Protocol Checkpoint，不是 Learning Capability
+Objective、内容资源或固定页面。Structured Acquisition 的当前
 产品理论要求首次毕业
 至少覆盖三个互补方向：
 
@@ -93,6 +99,11 @@ Recognition 或 Transfer，例如一条带真实 `borrow/lend` 干扰项的语�
 Gate 只能由有效、可判定且不泄露答案的行为解决。揭示后的即时理解检查可以促进加工，但不
 算独立成功；repair 后也必须经过其他 Sense 干扰再重测。一个 Gate 的失败只重新打开相关能力，
 不删除其他 Gate 或历史 Evidence。
+
+“只重新打开相关 Gate”是当前 Structured Acquisition 的 Progression Policy，而不是 Learning Kernel
+对一切 Protocol 的失败语义。其他 Protocol 可以使用自己的 Protocol-local Checkpoints，并声明重置
+某个 Checkpoint、一个集合或整个 Run 的当前 credit；任何 Progress Reset 都只改变当前有效进度，
+不能删除已经发生的 Attempt、Observation、Evidence 或 Transition history。
 
 ## 5. 五个诊断维度
 
@@ -130,7 +141,8 @@ Gate 回答“当前短期毕业要求是否解决”，5D 回答“长期来看
    以及只回忆出相关派生 Lexeme；首个 Structured delivery profile 候选默认保留前者的 retrieval
    成功并单独反馈 form realization；
 9. **只从行为产生 Evidence。** 被动阅读、播放、停留时长和自报理解不构成 Gate pass；
-10. **失败触发针对性 repair。** 已发生的事实不清零，连续失败才升级为完整 re-binding；
+10. **本 Protocol 的失败触发针对性 repair。** 当前 Gate credit 可以失效，已发生的事实不删除，
+    连续失败才升级为完整 re-binding；
 11. **毕业不是掌握。** Graduation 只表示可以交给长期 Retention 继续验证；
 12. **效果主张必须经真实数据验证。** Gate 数量、干扰间隔与题型选择都是可版本化假设。
 
@@ -172,38 +184,42 @@ Personal Semantic Anchor 允许 learner 把 Personal Meaning 连接到自己的�
 连接目标 Sense，而不是被转换成 reviewed content。系统不能把 Anchor 当作 Concept Prior、5D State、
 成功 Evidence、评分答案或 novel assessment material。
 
-### 7.1 Learner-authored semantic construction
+### 7.1 Learner-owned semantic construction
 
 Personal Semantic World 允许 learner 从自己的经验世界向目标语言主动建构，而不只回看系统已经
-教过的 Senses。只有 learner 明确创建的 Personal Meaning 才成为其成员；学习历史、浏览、推荐和
-模型推断都不能自动加入。
+教过的 Senses。只有具备 Context、located Expression、teaching-sufficient stable Sense/Binding 并由
+learner 直接接受或其获授权 Agent 委托接受的完整 Personal Meaning 才成为成员；未闭合捕获留在
+Intake Inbox，学习历史、浏览、推荐和无权限模型推断都不能自动加入。
 
 这是 personal-first enrichment path，不是 Structured Acquisition、Lightweight Study 或长期 Retention
 的前置条件。Book/direct learning 可以从 existing stable Sense + target binding 进入相同 Learning Target，
 且不会因此创建 Personal Meaning。
 
-Personal Meaning 是“我指的是这个”的稳定个人 identity。Meaning Focus 把一段可能很丰富的经验
-收敛到当前真正关心的侧面；Personal Semantic Anchors 用场景、图像、声音、叙述或动作让它可重新
-进入；Personal Expression Anchors 则保存不同语言中能够唤起或候选表达该意义的 typed forms。任何
-一层都不能单独冒充公共 Sense。
+Personal Meaning 是“我在这个 Context 中指的是这个 Expression 的这个 Sense”的稳定个人 identity。
+Personal Semantic Anchors 用场景、图像、声音、叙述或动作让它可重新进入；Personal Expression
+Anchors 保存其中被定位的 typed forms。Meaning Focus 只在 Context 仍有多个可能 intended Sense 时
+把丰富经验收敛到当前关心侧面，可以完全不存在。任何一层都不能单独冒充公共 Sense。
 
-创建路径可以从个人经验、一个熟悉语言表达或一个目标语言表达开始。LLM 通过 Sense Construction
-帮助 learner 提炼 Focus、识别同一场景的多个可能焦点、提出边界问题，并生成包含原型场景、包含/
-排除条件、相邻意义和自然目标语言表达的 Sense Proposal。该过程不是从封闭公共 Sense 库中选择
-唯一答案；现有 Sense 检索只是一种可选复用与治理手段。
+创建路径可以从个人经验、一个熟悉语言表达或一个目标语言表达开始。普通 Contextual Sense
+Resolution 足以确定教学所需 Sense 时直接走快轨；只有它不足时，LLM 才通过 Sense Construction
+帮助 learner 提炼 optional Focus、识别同一场景的多个可能焦点、提出边界问题，并生成 Sense
+Proposal。该过程不是从封闭公共 Sense 库中选择唯一答案；现有 Sense 检索只是一种可选复用与治理
+手段。
 
-Sense Proposal 仍是 suggestion。只有 learner 明确确认后，系统才创建 stable Sense identity、初始
-Sense Version 与 Personal Meaning Alignment。确认保存原始 Personal Meaning 和全部 provenance；
-后续相似性发现只能建立 equivalence、overlap、broader/narrower 或对比关系，不能静默改写已经确认
+Sense Proposal 仍是 suggestion。只有有效 direct/delegated Semantic Acceptance 后，系统才创建
+stable Sense identity、初始 Sense Version 与 Personal Meaning Alignment。Acceptance 保存原始 Context、
+Expression、grant/actor 和全部 provenance；后续相似性发现只能建立 equivalence、overlap、
+broader/narrower 或对比关系，不能静默改写已经确认
 的语义边界。确认对话、模型置信度和接受按钮都不构成 Acquisition Evidence。
 
 同一个经验可以产生多个 Meaning Focus，例如一次借伞事件中的接收视角与给予视角。一个 L1 表达
 也可以通向多个目标语言 Senses，多个 L1 片段则可以共同接近一个 Sense。系统必须允许拆分、保留
 重叠和承认没有自然一词对应，不能生成 `L1 = L2` 的翻译等号。
 
-个人建构与正式学习保持显式边界：创建 Personal Meaning、编辑 Focus/Anchor、确认 Sense、确认
-Sense Expression Binding、提交 Add-to-Learning Intent 和准备学习内容是不同意图。前四者都不会创建
-Curriculum Membership、Learner Sense Progress、Learning Protocol Run、Evidence、5D 或 FSRS Memory
+个人建构与正式学习保持显式边界：提交完整 Personal Meaning、编辑 optional Focus/Anchor、接受
+Sense resolution、确认 Sense Expression Binding、提交 Add-to-Learning Intent 和准备学习内容是不同
+意图。前四者都不会创建 Curriculum Membership、Learner Sense Progress、Learning Protocol Run、
+Evidence、5D 或 FSRS Memory
 State。Add-to-Learning 可以先接纳 stable target 与合法 Learning Policy Assignment；只有后续 Resolved
 Learning Plan 为当前 purpose 解析出合法 Protocol、published/on-demand/hybrid provisioning path 与
 Learning Materialization，并达到 `ready` 后，Unified Planner 才能把它纳入正式学习运行。

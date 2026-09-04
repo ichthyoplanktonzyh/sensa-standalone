@@ -8,8 +8,8 @@ import {
 import type { Word } from '../types';
 import type {
   LearningCapability,
+  LearningPackage,
   RepairResourceReference,
-  SchedulablePackage,
   ScheduledActionDefinition,
 } from '../engine/types';
 import runtimeRelease from './releases/golden-learning-release-v1.json';
@@ -219,20 +219,21 @@ export interface PrototypeIntroductionPackage {
   practiceManifest?: NonNullable<SensaRuntimeLearningPackage['practiceManifest']>;
 }
 
-export interface PrototypeSchedulablePackage extends SchedulablePackage<PrototypeIntroductionPackage> {
+export interface PrototypeLearningPackage extends LearningPackage<PrototypeIntroductionPackage> {
   content: PrototypeIntroductionPackage;
 }
 
 /**
  * The only content seam consumed by the application.  The implementation
  * hides JSON parsing, indexes, resource resolution and presentation
- * projection; scheduler identity remains package/sense based.
+ * projection. Learner-specific scheduler identity is attached only at the
+ * Runtime boundary, never stored in this reusable catalog.
  */
 export interface LearningCatalog {
   readonly release: SensaRuntimeLearningRelease;
-  readonly packages: readonly PrototypeSchedulablePackage[];
-  getPackage(packageId: string): PrototypeSchedulablePackage | null;
-  getPackageBySense(senseId: string): PrototypeSchedulablePackage | null;
+  readonly packages: readonly PrototypeLearningPackage[];
+  getPackage(packageId: string): PrototypeLearningPackage | null;
+  getPackageBySense(senseId: string): PrototypeLearningPackage | null;
   resolveMediaUrl(mediaKey: string | null | undefined): string | null;
   resolvePronunciationAudioUrl(lemma: string, accentLocale?: string): string | null;
   resolveExampleAudioUrl(textL2: string, accentLocale?: string): string | null;
@@ -575,9 +576,11 @@ function capabilityForTaskKind(kind: string): LearningCapability | null {
 function schedulingActions(pkg: SensaRuntimeLearningPackage): ScheduledActionDefinition[] {
   const actions: ScheduledActionDefinition[] = [{
     actionKey: `${pkg.identity.packageKey}.introduction`,
-    capability: 'introduction',
+    // 讲解不练任何能力，所以没有 capability；它的含义由 intent 声明。
+    capability: null,
     taskKey: null,
     kind: 'introduction',
+    intent: 'instruction',
   }];
   const tasks = [
     ...pkg.assessmentInventory.contextualRecognition,
@@ -698,8 +701,7 @@ function repairActions(
 ): ScheduledActionDefinition[] {
   const capabilities = pkg.acquisitionProfile.requiredCapabilities
     .map((requirement) => capabilityForTaskKind(requirement.kind))
-    .filter((capability): capability is LearningCapability =>
-      capability !== null && capability !== 'introduction')
+    .filter((capability): capability is LearningCapability => capability !== null)
     .filter((capability, index, all) => all.indexOf(capability) === index);
   return capabilities.map((capability) => {
     const baseAction = actions.find((action) =>
@@ -709,7 +711,7 @@ function repairActions(
       capability,
       taskKey: null,
       kind: 'acquisition_gate',
-      mode: 'repair',
+      intent: 'repair',
       repairForActionKey: baseAction?.actionKey,
       repairResourceRef: repairResourceReference(pkg, capability),
     };
@@ -731,7 +733,7 @@ export function installLearningRelease(input: unknown): LearningCatalog {
       actions,
       repairActions: repairActions(pkg, actions),
       reviewActions: reviewActions(pkg),
-    } satisfies PrototypeSchedulablePackage;
+    } satisfies PrototypeLearningPackage;
   });
   const packageById = new Map(packages.map((pkg) => [pkg.packageId, pkg] as const));
   const packageBySense = new Map(packages.map((pkg) => [pkg.senseId, pkg] as const));
@@ -777,7 +779,7 @@ export const learningCatalog = installedLearningCatalog;
 export const runtimeLearningRelease: SensaRuntimeLearningRelease = installedLearningCatalog.release;
 export const PROTOTYPE_INTRODUCTION_PACKAGES: readonly PrototypeIntroductionPackage[] =
   installedLearningCatalog.packages.map((pkg) => pkg.content);
-export const PROTOTYPE_LEARNING_PACKAGES: readonly PrototypeSchedulablePackage[] =
+export const PROTOTYPE_LEARNING_PACKAGES: readonly PrototypeLearningPackage[] =
   installedLearningCatalog.packages;
 
 /**
@@ -842,7 +844,7 @@ export function materializeReviewRepairContent(
   }
 }
 
-export const PROTOTYPE_PACKAGE_BY_SENSE: ReadonlyMap<string, PrototypeSchedulablePackage> = new Map(
+export const PROTOTYPE_PACKAGE_BY_SENSE: ReadonlyMap<string, PrototypeLearningPackage> = new Map(
   PROTOTYPE_LEARNING_PACKAGES.map((pkg) => [pkg.senseId, pkg] as const),
 );
 
@@ -894,6 +896,6 @@ export function toWordPresentation(content: PrototypeIntroductionPackage): Word 
   };
 }
 
-export function packageBySense(senseId: string): PrototypeSchedulablePackage | null {
+export function packageBySense(senseId: string): PrototypeLearningPackage | null {
   return installedLearningCatalog.getPackageBySense(senseId);
 }

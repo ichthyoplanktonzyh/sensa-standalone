@@ -67,7 +67,8 @@ check('第 13 屏的错误选项来自真实评测资源', (() => {
   return result !== null && result !== undefined
     && result.correct === false
     && (result.responseId?.length ?? 0) > 0
-    && result.memoryOutcome === 'retrieval_failed';
+    && result.memoryOutcome?.basis === 'retrieval_failed'
+    && result.memoryOutcome.grade === 'again';
 })());
 
 for (const unknown of [0, 5, 8, 14, -1]) {

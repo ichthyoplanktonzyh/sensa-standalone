@@ -8,6 +8,12 @@ import {
 } from './ReviewQueue';
 import type { ReviewAssessmentResult } from '../review/types';
 import type { QueueConfig, ReviewCandidate } from './types';
+import {
+  retentionOrchestration,
+  type RetentionCandidate,
+  type RetentionRepairBasis,
+  type StepOrchestration,
+} from './stepOrchestration';
 
 const EMPTY_RETENTION_PROJECTION: RetentionRuntimeProjection = {
   currentAction: null,
@@ -23,15 +29,16 @@ const EMPTY_RETENTION_PROJECTION: RetentionRuntimeProjection = {
 export function useReviewQueue<TContent = unknown>(
   onEffect?: ReviewQueueDependencies<TContent>['onEffect'],
   config?: QueueConfig,
+  orchestration: StepOrchestration<RetentionCandidate, RetentionRepairBasis>
+    = retentionOrchestration,
 ) {
   const queueRef = useRef<ReviewQueue<TContent> | null>(null);
   const effectHandlerRef = useRef(onEffect);
   effectHandlerRef.current = onEffect;
   const [session, setSession] = useState<ReviewSession<TContent> | null>(null);
   const [stats, setStats] = useState<ReviewStats>(() => ({
-    totalWords: 0,
-    totalSenses: 0,
-    completedWords: 0,
+    totalTargets: 0,
+    completedTargets: 0,
     totalAttempts: 0,
     correctAttempts: 0,
     accuracy: 100,
@@ -54,11 +61,11 @@ export function useReviewQueue<TContent = unknown>(
     const dependencies: ReviewQueueDependencies<TContent> = {
       onEffect: (effect) => effectHandlerRef.current?.(effect),
     };
-    const queue = new ReviewQueue(candidates, dependencies, config);
+    const queue = new ReviewQueue(candidates, dependencies, config, orchestration);
     queueRef.current = queue;
     sync(queue);
     return queue.getCurrentSession();
-  }, [config, sync]);
+  }, [config, orchestration, sync]);
 
   const completeRepair = useCallback(() => {
     const queue = queueRef.current;

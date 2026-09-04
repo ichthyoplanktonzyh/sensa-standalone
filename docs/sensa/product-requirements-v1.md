@@ -2,7 +2,9 @@
 
 > 状态：Accepted product baseline  
 > 决策日期：2026-08-31
-> 产品范围：移动形态 React Web；未来 Flutter iOS/Android 复用相同旅程与语言中立契约  
+> 产品范围：`web-next` 为移动端形态的 React 行为原型（UI 不承诺向任何正式客户端迁移）；
+> 正式移动端与桌面端均为 Flutter，复用相同旅程与语言中立契约；正式 Web 端继续 React，
+> 按自身平台特点另行设计  
 > 交互原型：[`docs/reference/sensa-v1/product-prototype.html`](../reference/sensa-v1/product-prototype.html)
 
 本文冻结 Sensa V1 的信息架构、用户旅程、用户语言、屏幕职责和交互验收标准。
@@ -139,7 +141,9 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
 11. **完成不等于掌握。** Lightweight Study Completion 只表示本次协议完成；不冒充行为证据。
 12. **高保证检验经过干扰。** Structured Acquisition 中，揭示或 repair 后的立即回答不计为独立
     成功；Graduation 也只表示可以进入长期保持，不承诺永久记住。
-13. **额度不是债务。** 每日新学数是上限；未完成部分不滚入次日，也不制造断签或补课压力。
+13. **额度不是债务，也是唯一数量设置。** learner 只设置每日新学数这一项；它是上限，
+    由 Study Plan / Unified Planner 统一执行。preset 不得另设组大小、批次或“同时学习窗口”；
+    未完成部分不滚入次日，也不制造断签或补课压力。
 14. **范围变更可恢复。** 换词书、缩小范围和暂停学习不删除 Sense 进度；恢复后从真实状态继续。
 15. **参考不制造进度。** 搜索、点词、展开构词词源与播放词典音频都不自动收藏、加入学习或
     改变正式进度。

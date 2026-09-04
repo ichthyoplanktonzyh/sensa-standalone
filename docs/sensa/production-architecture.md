@@ -1,7 +1,7 @@
 # Sensa 生产领域架构
 
 > 状态：Canonical domain model  
-> 更新日期：2026-09-01
+> 更新日期：2026-09-05
 
 本文是 Sensa 领域对象、聚合边界和全局不变量的主入口。术语定义以
 [`../../CONTEXT.md`](../../CONTEXT.md) 为准；资源细节和运行行为分别由
@@ -17,13 +17,20 @@ Protocol、学习结果与 FSRS 交接由
 Sensa 由三个职责独立的层组成：
 
 - **Product Shell**：用户看到的信息架构、Curriculum lifecycle、Session intent、Lexical Reference、
-  Settings Surface、个人语义投影、自由练习、学习节奏和反馈；
-- **Learning Kernel**：Learning Target、内容物化、Learning Protocol Purpose、Protocol Step、协议运行、
-  Evidence、协议特定进度、Initial Learning Completion、Memory Outcome 与 Scheduling Handoff；
+  Settings Surface、作为读取/治理/交接控制面的 Personal Semantic World Surface、个人语义投影、
+  自由练习、学习节奏和反馈；
+- **Learning Kernel**：Learning Target/Capability Objective、内容物化、Learning Protocol Purpose、
+  Protocol Step/Checkpoint、Attempt→Observation→Evidence→Transition、协议特定进度、Initial Learning
+  Completion、graded Memory Outcome、Scheduling Decision 与 Scheduling Handoff；
 - **Production Base**：身份、Postgres、离线副本、Sensa Sync、媒体授权和 FSRS。
 
 Product Shell 不定义学习证据或毕业条件。Learning Kernel 不拥有账号、网络同步或媒体字节。
 Production Base 不决定一个 Sense 应当如何被理解或当前应当使用哪种学习干预。
+
+Personal Semantic World Surface 不等于 Personal Semantic World Module。前者主要组合 Intake Inbox、
+stable personal meanings、provenance、learning readiness/progress projections 与显式操作；后者才拥有
+learner-scoped semantic facts。大多数 Intake 可以发生在浏览器、移动系统、桌面工具或 Agent 中，
+领域写入不得依赖 learner 打开主应用页面。
 
 ## 2. 核心领域关系
 
@@ -94,6 +101,11 @@ Learning Target ──resolves durable identity──▶ Retention Target
            Content Provisioning
        Published / On-demand / Hybrid
                     │
+                    ├── On-demand: Content Provisioning Task
+                    │       └── Content Agent Attempt + approved tools
+                    │               └── Material Candidate Bundle
+                    │                       └── independent validation/admission
+                    │
                     ▼
           Learning Materialization
                     ×
@@ -112,29 +124,33 @@ Learning Target ──resolves durable identity──▶ Retention Target
 正式学习以外的个人内容、语义探索与自由练习通过另一条链连接，但不反向改写正式进度：
 
 ```text
-Learner ──explicitly creates──▶ Personal Meaning
-                                  ├── Meaning Focus
-                                  ├── Personal Semantic Anchor
-                                  └── Personal Expression Anchor
-                                              │
-                              learner + LLM Sense Construction
-                                              │
-                                              ▼
-                                      Sense Proposal
-                                              │ learner confirms
-                                              ▼
-                       Sense + Sense Version + Personal Meaning Alignment
-                                              │
-                                              ▼
-                                  Sense Expression Binding
-                                              │
+Browser / Mobile / Desktop / authorized Agent Intake Ports
+                              │
+                              ▼
+                       Semantic Intake
+                              │
+          ┌── incomplete / unresolved / deferred ──▶ Intake Inbox
+          │                                           │ resolve
+          └── complete Context + Expression + Sense ◀─┘
+                              │
+               direct or delegated Semantic Acceptance
+                              │
+                              ▼
+                       Personal Meaning
+                          ├── Personal Semantic Anchor (Context)
+                          ├── Personal Expression Anchor (located Expression)
+                          ├── optional Meaning Focus
+                          └── Personal Meaning Alignment
+                                      │
+                         stable Sense Version + Sense Expression Binding
+                                      │
                         explicit Add-to-Learning (optional bridge)
-                                              │
-                                              ▼
-                                      Learning Target
-                                              │
-                                              ▼
-                                    Content Provisioning
+                                      │
+                                      ▼
+                              Learning Target
+                                      │
+                                      ▼
+                            Content Provisioning
 
 Sense + Alignment + Binding ─────────▶ Learner Semantic Projection
 
@@ -203,7 +219,7 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 - Lexeme/Sense 的稳定身份与不可变版本分离，二者通过 versioned Sense Expression Binding 连接；
 - Sense 可以由编辑流程预先生产，也可以由 learner–LLM Sense Construction 按需提出并在 learner
   确认后创建；“公共”表示语义契约可复现，不表示必须先存在穷尽式公共 Sense 库；
-- learner 确认只创建稳定 Sense identity 与初始 Sense Version。正式学习还需要独立的 Learning
+- Semantic Acceptance 只创建稳定 Sense identity 与初始 Sense Version。正式学习还需要独立的 Learning
   Target、Effective Learning Policy、Resolved Learning Plan、Content Provisioning decision、Learning
   Materialization 与 Learning Protocol；确认对话本身
   不能冒充学习内容；
@@ -213,8 +229,8 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
   Learning Materialization，并记录生成器/发布版本、输入 provenance 与校验结果；
 - 内容来源与 Learning Protocol 正交：同一 Published Package 可服务多个协议，同一协议也可消费
   Published 或 On-demand 内容，具体可执行性由版本化合同决定；
-- Learning Policy Profile 协调三个 purpose 的 Protocol family、内容保证、Evidence 与 Scheduling
-  Policy references，但不把 Content、Protocol、Evidence 或 FSRS 合并成一个对象；
+- Learning Policy Profile 是 Protocol、Content Requirements、Evaluation/Evidence、Progression/Completion、
+  Repair、Scheduling 与 Claim Policy 的命名组合，但不把这些对象合并成一个聚合，也不拥有每日数量；
 - Acquisition Profile、Required Capability Set、Required Asset Manifest 与 Executable Capability
   Inventory 属于 Structured Acquisition Protocol 的高保证内容合同，不是所有学习方式的前置条件；
 - Sense Relation 是同一 release 中经过审核的两个 Sense 之间的语义事实；
@@ -225,7 +241,7 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 
 - Book Version 是经过筛选、排序的不可变 Sense 课程，不是词典全义项转储；
 - Formal Learning 是独立产品链，不以 Personal Semantic World membership 为入口条件。Book membership、
-  direct stable-Sense selection 与 confirmed Personal Meaning Alignment 都可以提供 Learning Entry
+  direct stable-Sense selection 与 accepted complete Personal Meaning Alignment 都可以提供 Learning Entry
   Provenance，并在同一 Learning Target/Retention Target 处汇合；
 - direct entry 仍必须固定 stable Sensa Sense/Version 与 target Sense Expression Binding；裸 Lexeme、
   未对齐 Reference Sense 或任意 L2 字符串不能绕过 Sense-first target resolution；
@@ -304,35 +320,52 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 
 - Learning Session 是一次有边界的活动容器，并固定 `mixed | review_only` intent；
 - Protocol Step 定义材料角色、交互/判分、结果资格与 transition；Step Instance 保存一次可重放执行；
+- Learning Action Intent 以 `instruction | practice | assessment | feedback | repair` 区分当前实施目的，
+  与 Run 的 Protocol Purpose 正交；
 - Sense Encounter 是一次对一个 Sense、一个 Step purpose 的计划接触；Card Presentation 只是该 Step
   当前 prompt/support/response/reveal/feedback/detail 阶段的瞬时 renderer；
 - 同一 Learning Protocol Run 可以跨多个 Encounter 和 Session；Structured Acquisition Cycle 仍可
   通过多个 Sense 的穿插完成干扰要求；
-- Action 是系统选择的干预，Attempt 是 learner 提交的追加事实；
-- Evidence 与协议投影都由服务端固定规则派生；Study Completion 或 learner rating 不能被升级为
-  Learning Evidence；
+- Action 是系统选择的干预，Attempt 是 learner 提交的追加事实；固定 grader 先形成 Observation，
+  Evidence Rule 再派生 Evidence，Progression Policy 最后产生 Transition Decision；
+- Protocol Checkpoint 是可选的 protocol-local 评价里程碑，Acquisition Gate 是其中的高保证子类；
+  Capability Objective、Checkpoint、Step 和 Card 不能互相替代；
+- Study Completion 或 learner rating 不能被升级为 Learning Evidence；reset 只使显式 scope 内当前
+  checkpoint credit 失效，不删除 Attempt、Observation、Evidence 或历史 Transition；
 - 成功的 Initial Learning Protocol 必须产生 Initial Learning Completion 与且仅一个 Scheduling Handoff；
-- due Retention Review Protocol 最多产生一个 Memory Outcome，并最多调用一次 FSRS；
+- due Retention Review Protocol 最多产生一个带规范 grade 的 Memory Outcome，并最多产生一次
+  Scheduling Decision、调用一次 FSRS；
 - Relearning Protocol 不创建 handoff、不重新初始化 FSRS、不改写或重复应用触发它的
   Review Outcome；只有 Protocol Version 声明为 scheduler-eligible 的独立重学评价才可产生
   自己的 Memory Outcome，Relearning Completion 本身不是 scheduler input。
 
 ### Personal Content
 
-- Personal Semantic World membership 只来自 learner 显式创建 Personal Meaning；浏览、历史、LLM
-  推断、收藏与推荐都不能静默创建成员；
-- Personal Meaning 是 learner-owned 稳定 identity，并拥有当前 Meaning Focus、零到多个 Personal
-  Semantic Anchors、Personal Expression Anchors 与 Personal Meaning Alignments；
+- “我的词义世界”页面是读取、治理与 Add-to-Learning 交接控制面，不是 Personal Semantic World 的
+  第二个 store 或唯一 command source；应用内手动创建只是一个普通 Semantic Intake Port；
+- Personal Semantic World membership 只来自 learner 的直接 Semantic Acceptance 或其明确授权的
+  delegated acceptance；浏览、历史、无写入授权的 LLM 推断、收藏与推荐都不能静默创建成员；
+- Semantic Intake 至少携带真实 Context；Expression、Sense 或 acceptance 不完整时留在 Intake Inbox。
+  Inbox 是接收/处理状态，不是正式 Personal Semantic World membership；
+- Personal Meaning 是 learner-owned 稳定 identity，并至少拥有一个 Context Anchor、一个在 Context
+  中可定位的 Expression Anchor，以及一个指向 teaching-sufficient stable Sense Version 与兼容 Binding
+  的 active Alignment；Meaning Focus 为零到多个的可选解析桥梁；
 - Personal Semantic Anchor 可以承载受支持的文本、图片、音频、场景或其他个人经验。Personal
   Expression Anchor 必须保存 expression type、language、familiar/target role、provenance 与
-  verification status；
-- Sense Proposal 属于可修改的 Sense Construction 过程，不是 Sense。只有 learner 明确确认才创建
-  stable Sense + Sense Version + Personal Meaning Alignment，且不得覆盖原始 Personal Meaning；
+  verification status；由 Intake 产生时还必须保存字符 span、媒体区域或等价 occurrence locator；
+- Personal Meaning Alignment 可以直接由 Context + located Expression 的可靠解析支撑，只在必要时
+  引用 Meaning Focus。不得从 Sense definition 合成 Focus，也不得为快轨伪造未发生的 Sense
+  Construction、Proposal 或对话；
+- Sense Proposal 属于可修改的 Sense Construction 过程，不是 Sense。只有有效 direct/delegated
+  Semantic Acceptance 才可复用或创建 stable Sense + Sense Version + Personal Meaning Alignment，且
+  不得覆盖原始 Context 与 acceptance provenance；
+- Agent 在明确 learner grant 下调用正式 commit operation 可以直接产生 delegated acceptance，无需
+  第二次第一方确认；actor、grant、resolver 与提交内容必须可审计，payload 自报布尔值不构成 authority；
 - Saved Sense 指向稳定 Sense identity 并保留保存时 Sense Version provenance；Saved Example 指向
   exact immutable Example，不能在内容更新后静默替换；
 - 每个 learner × Sense 最多存在一份 current Sense Note；Note 具有独立 revision，与 Saved Sense
   生命周期解耦；
-- 一个 Personal Meaning 可以拥有零到多个 Personal Semantic Anchors；confirmed Alignment 允许这些
+- 一个 Personal Meaning 必须拥有至少一个 Personal Semantic Anchor；confirmed Alignment 允许这些
   Anchor 在 learner 明确授权时作为目标 Sense 的 optional scaffold 使用；
 - Personal Collection 是 learner 命名、排序的组织对象；typed Membership 直接引用 stable Sense 或
   exact Example，不依赖 Saved record、不复制目标内容，也不创造语义关系；
@@ -356,11 +389,12 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 - Projection 中选择的 Field、节点或集合可以成为 Practice Scope，但不能直接创建正式学习结果。
 - Personal Semantic Region 与 Personal Meaning 属于 learner-owned source records，可以被 Projection
   展示，但不能自行修改 published Semantic Field、Sense Relation 或 progress；
-- Personal Meaning Alignment 必须显式保留 proposal/confirmation provenance。LLM suggestion 不能
-  静默升级为 learner confirmation，确认后的 Sense Expression Binding 也不能冒充 reviewed
+- Personal Meaning Alignment 必须显式保留 resolution/acceptance provenance。模型输出本身不能
+  静默升级为 acceptance；只有独立 direct operation 或持有 learner grant 的 delegated commit 才能
+  产生该事实。确认后的 Sense Expression Binding 也不能冒充 reviewed
   Learning Package resource；
-- 未确认到 stable Sense 的 Meaning Focus 不能成为 Curriculum target。确认连接不得覆盖原始
-  Personal Meaning；独立的 Add-to-Learning Intent 可以先创建 Membership，但只有 Effective Learning
+- 未闭合到 stable Sense + target binding 的 Intake/Construction draft 或 Meaning Focus 不能成为
+  Curriculum target。确认连接不得覆盖原始 Personal Meaning；独立的 Add-to-Learning Intent 可以先创建 Membership，但只有 Effective Learning
   Policy 与可执行的 Content Provisioning/Learning Protocol 解析为 `ready` Resolved Learning Plan 后，
   才能进入正式学习运行。
 
@@ -415,12 +449,15 @@ Steps 组织材料角色、交互、结果资格与 transition。领域模型至
 内容来源分别选择，不能把某个 Package 结构、固定卡片数或页面顺序硬编码成唯一学习方式。
 
 Learning Policy Profile 是 learner-facing 学习方式背后的版本化合同。一个 Profile 为三种 purpose
-分别规定允许的 Protocol family，引用内容保证、Evidence Policy、Scheduling Policy 与 claim boundary；
+分别规定允许的 Protocol family，并组合 Content Requirements、Evaluation/Evidence、Progression/
+Completion、Repair、Scheduling 与 claim boundary；
 `lightweight` 和 `high_assurance` 是代表性 Profile，不是永久闭集。Learning Policy Assignment 是 Study
 Plan/Curriculum 的显式操作而不是普通 Settings 值，Resolved Learning Plan 再以
 `Learning Target × Effective Learning Policy × content/runtime capabilities` 解析当前是否可执行。
 
 Policy Profile 只协调正交对象，不把三种 purpose 合成一个跨月 Run，也不把 FSRS 变成学习方法。
+它不拥有每日新学数量，也不成为另一份 learner progress；Study Plan/Unified Planner 选出 Target，
+Profile 只决定获选 Target 采用哪组实施与评价合同。
 第一次正式 Protocol Run 创建时，Effective Learning Policy 冻结为 Retention Target 的 Committed
 Learning Policy，并约束后续三个 purpose。普通 Profile/Assignment/default/source change 只可在该
 Commitment 前重新规划；Commitment 后只能通过显式 Learning Policy Migration 在安全边界建立新
@@ -453,6 +490,10 @@ Study Completion 是 `protocol_completion`、`non_evidentiary` 级别的 Initial
 claim。Structured Initial Learning 则以 Acquisition Graduation 作为 `behavioral` completion。导入
 完成若被系统接纳，也必须保留其独立 basis/evidence level，不能伪装成前两者。
 
+Lightweight Initial Learning 可以没有评价性 Protocol Checkpoint：grounding/instruction、recall/practice、
+reveal/feedback 与 learner rating/self-report 由 Completion Policy 结算为 Study Completion，不为接入
+公共 Runtime 而伪造 Gate 或 behavioral Evidence。
+
 ### Structured Initial Learning
 
 新 Sense 先进入分钟级或 Session 级的短期习得循环：
@@ -471,15 +512,19 @@ interference-spaced Acquisition Gates
 Acquisition Graduation
 ```
 
-展示、自动播放、acknowledgement 或揭示后的即时答案不能解决 Gate。失败只重新打开相应能力，
-必要时升级为完整 re-binding；历史 Evidence 不删除，已经解决的无关 Gate 不机械归零。
+展示、自动播放、acknowledgement 或揭示后的即时答案不能解决 Gate。当前 Structured Profile 的
+Progression Policy 在失败时只重新打开相应 Gate，必要时升级为完整 re-binding；这是该 Profile 的
+选择，不是内核对所有 Protocol 的硬编码。其他 Protocol 可以重置声明的 Checkpoint 集合或整个 Run
+的当前 credit，但任何 reset 都不删除历史 Attempt、Observation、Evidence 或 Transition。
 
 ### Retention Review
 
 有效 Scheduling Handoff 初始化 FSRS；Structured Acquisition Graduation 只是其中证据等级最高的
 一种 basis。之后 FSRS 只决定一个 retaining Retention Target 何时 due，Retention Review Protocol 或 Structured
 Semantic Policy 决定 due 时如何复习和评价。一次 due Review 最多产生一个 Memory Outcome 和一次
-FSRS 更新；reveal、detail 或即时重测不得形成第二个结果。
+FSRS 更新；reveal、detail 或即时重测不得形成第二个结果。Memory Outcome 必须分开保存规范
+`again | hard | good | easy` grade、basis 与 evidence level；`correct` 只能作为 Observation/evaluator
+输入，不能让 adapter 丢失“模糊/费力”后再猜测 grade。
 
 ### Relearning
 
@@ -510,42 +555,53 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
    Add-to-Learning Intent、Learning Entry Provenance、Learning Policy Assignment 与 Study Scope
    Revision；它接纳 Book、direct stable-Sense 与 personal-first bridge，保证 source provenance、去重、
    Policy scope/precedence、切换和范围变更不修改 published Book membership 或 learner progress；
-7. **Personal Semantic World Module**：拥有 Personal Meaning、Meaning Focus、Personal Semantic
+7. **Semantic Intake Module**：接收浏览器、移动端、桌面端与 authorized Agent 的 port-neutral Context
+   捕获，拥有 Intake Inbox、完整性分流、幂等 ingest 与 direct/delegated acceptance authority audit；
+   它只把完整且获有效授权的 Context–Expression–Sense resolution 提交给 Personal Semantic World，
+   不创建 Curriculum Membership、Learning Target 或 learner progress，也不依赖任何主应用页面状态；
+8. **Personal Semantic World Module**：拥有 Personal Meaning、optional Meaning Focus、Personal Semantic
    Anchor、Personal Expression Anchor、Personal Meaning Alignment，以及 Saved Sense/Example、Sense
    Note、Personal Collection 与 typed Membership 的 learner-scoped 事实及同步生命周期；它可以提交
-   bridge Intent，但不是 Curriculum/Learning Runtime 的依赖；
-8. **Sense Construction Module**：编排 learner–LLM 语义访谈、Sense Proposal 与显式确认；它可以按需
+   bridge Intent，但不是 Curriculum/Learning Runtime 的依赖；同名 Product Surface 只能通过本模块与
+   Semantic Intake 的正式 operations 读写，不能另存一份页面 state；
+9. **Sense Construction Module**：只在普通 Contextual Sense Resolution 不足时编排 learner–LLM 语义
+   访谈、optional Meaning Focus、Sense Proposal 与 Semantic Acceptance；它可以按需
    请求创建 stable Sense/Version，但不能创建 Learning Evidence、Curriculum Membership 或绕过
    后续内容物化与协议选择；
-9. **Learner Semantic Projection Module**：组合 Personal Semantic World、已发布 Field、learner
+10. **Learner Semantic Projection Module**：组合 Personal Semantic World、已发布 Field、learner
    progress 与 personal content，只生成可重建读取模型；
-10. **Free Practice Module**：解析 Practice Scope，物化 mode-specific Task，保存 Practice Activity、
+11. **Free Practice Module**：解析 Practice Scope，物化 mode-specific Task，保存 Practice Activity、
    Attempt 与 Result，不调用正式 Learning Kernel 的结算接口；
-11. **Content Provisioning Module**：按 Resolved Learning Plan 将固定 Learning Target 通过 published、
+12. **Content Provisioning Module**：按 Resolved Learning Plan 将固定 Learning Target 通过 published、
    on-demand 或 hybrid 路径解析为 capability/readiness result 和通过合同校验的不可变 Learning
-   Materialization；它编排独立的 Learning Content LLM role，但不能改写 Sense、Learning Policy 或
-   learner progress；
-12. **Learning Policy & Protocol Module**：拥有 versioned Learning Policy Profiles，结合 Curriculum
+   Materialization；它拥有 Provisioning Batch、Content Provisioning Task、Content Agent Attempt、
+   Material Candidate Bundle、独立 validation/admission 与 assembly。Learning Content LLM 及其获准工具
+   只在单 Task Attempt 内生产未受信候选，不能改写 Sense、Learning Policy、Protocol 或 learner progress，
+   也不能批准自身输出；
+13. **Learning Policy & Protocol Module**：拥有 versioned Learning Policy Profiles，结合 Curriculum
    Assignment 解析 Effective Learning Policy 与 Resolved Learning Plan，选择并执行 purpose-specific
-   versioned Protocol，定义 Step、material role binding 与 transition，创建 Protocol Run/Step Instance，
-   接纳与 purpose 兼容的合法结果，并在成功 Initial Learning Completion 的同一权威边界创建必需的
-   Scheduling Handoff；
-13. **Executable Learning Capability Resolver**：为 Structured Acquisition 求 Package、Required
+   versioned Protocol，定义 Step/Checkpoint、material role binding、Evaluation/Progression/Completion
+   Policy 与合法 Transition effects，创建 Protocol Run/Step Instance，接纳与 purpose 兼容的合法结果，
+   并在成功 Initial Learning Completion 的同一权威边界创建必需的 Scheduling Handoff；
+14. **Executable Learning Capability Resolver**：为 Structured Acquisition 求 Package、Required
    Capability Set、approved resources 与 Runtime 能力的版本化交集，不读取 learner state；
-14. **Learner Progress Module**：拥有 Retention Target、其 Learning Phase、active protocol run、
-   protocol-specific projection、Memory State 以及 Sense-level roll-up，并记录 Initial Learning Completion、
-   Study Completion、Acquisition Graduation 与 Relearning Completion；
-15. **Unified Planning Module**：只从 purpose-ready Resolved Learning Plans 中，在 Study Plan、Session
+15. **Learner Progress Module**：拥有 Retention Target、其 Learning Phase、active protocol run、
+   protocol-specific Checkpoint credit/progress epoch、Memory State 以及 Sense-level roll-up，并记录
+   Initial Learning Completion、Study Completion、Acquisition Graduation 与 Relearning Completion；
+16. **Unified Planning Module**：只从 purpose-ready Resolved Learning Plans 中，在 Study Plan、Session
    intent、Declared Mastery、cooldown、protocol readiness、Relearning readiness 与 due state 之间选择候选；
-16. **Semantic Policy Module**：在 Structured Acquisition 内从 Step purpose、capability inventory、Gate progress、
+17. **Semantic Policy Module**：在 Structured Acquisition 内从 Step purpose、capability inventory、Gate progress、
    Evidence、5D 与历史中选择最小干预；
-17. **Encounter Module**：按 Protocol Step Instance 固定 Materialization/Action，物化瞬时 Card Presentation，
-   接受 Attempt，并按协议结算 Lightweight Study、Acquisition Step、Memory Outcome 或 Relearning result；
-18. **Evidence Projection Module**：从追加 Evidence 重建 Gate 与 5D 投影；
-19. **FsrsAdapter**：按 Retention Target 消费有效 Scheduling Handoff 与来自 Review 或合法
-   Relearning evaluation 的 Memory Outcome，是 FSRS 初始化和更新的唯一接口；
-20. **Sensa Sync Module**：拥有 learner-scoped operation、幂等、change feed、cursor 和 bootstrap；
-21. **Media Module**：验证不可变媒体引用并提供授权下载。
+18. **Encounter Module**：按 Protocol Step Instance 固定 Materialization/Action，物化瞬时 Card Presentation，
+   接受 Attempt，并用 pinned interaction/grader contract 形成 Observation；
+19. **Evaluation & Evidence Module**：从 Observation 按固定 Evidence Rule 派生追加 Evidence，应用
+   versioned Progression/Completion Policy 产生原子、幂等 Transition Decision，并重建 Checkpoint、Gate
+   与 5D 投影；
+20. **FsrsAdapter**：按 Retention Target 消费有效 Scheduling Handoff 与来自 Review 或合法
+   Relearning evaluation 的 graded Memory Outcome，产生 Scheduling Decision，是 FSRS Memory State
+   与 next due 初始化和更新的唯一接口；
+21. **Sensa Sync Module**：拥有 learner-scoped operation、幂等、change feed、cursor 和 bootstrap；
+22. **Media Module**：验证不可变媒体引用并提供授权下载。
 
 ## 6. 全局不变量
 
@@ -580,8 +636,16 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 - Study Scope 变更不能静默改变 active Session；Session/Encounter 必须保留用于计划它们的 Scope
   revision 与 Curriculum provenance；
 - Semantic Field 是有限、版本化的内容邻域，不是 Book、学习路径或通用人类 ontology；
-- Personal Semantic World 只接纳 learner 显式创建的 Personal Meaning；LLM 推断和学习历史都不能
-  静默增加 membership；
+- Personal Semantic World 只接纳具备真实 Context、located Expression、teaching-sufficient stable Sense/
+  Binding 与有效 Semantic Acceptance 的完整 Personal Meaning；未闭合 Intake 留在 Inbox；
+- 创建 Personal Meaning 不得依赖 learner 打开主应用或 Personal Semantic World Surface；第一方页面、
+  浏览器/移动/桌面扩展与 authorized Agent 都通过同一幂等 Intake/commit authority 收敛；
+- Personal Semantic World Surface 只能组合权威 facts 与可重建 projections，并发出显式 commands；它
+  不是 aggregate、第二份 semantic store 或外部端口的必经网关；
+- Semantic Acceptance 可以由 learner 直接执行，也可以由 Agent 在明确 learner grant 下委托执行；
+  二者 membership 效力相同而 provenance 不同，委托调用无需二次确认；
+- Meaning Focus 是可选的 Context→Sense 解析桥梁，不是 Personal Meaning、Alignment 或快轨不变量；
+  不得从 Sense definition 合成伪 Focus，或为完整摄取伪造未发生的 Construction/Proposal 链；
 - Formal Learning 不依赖 Personal Semantic World；Book、direct stable-Sense 与 personal-first entry 在
   Learning Target 汇合，Learning Entry Provenance 不改变 Target/Retention identity；
 - direct learning 仍必须固定 stable Sense/Version 与 target binding；裸词或未对齐 Reference Sense 不能
@@ -594,17 +658,26 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 - 创建或编辑 Personal Semantic Region、Personal Meaning、Meaning Focus、Personal Semantic Anchor
   与 Personal Expression Anchor 只改变 Personal Content；它们不产生 Evidence、5D、Acquisition
   Graduation 或 FSRS Memory State，也不能暗中提交 Add-to-Learning Intent；
-- Sense Proposal 不是 Sense；只有 learner 显式确认才能创建 stable Sense/Version 和 Personal Meaning
-  Alignment。确认仍不代表内容已发布、表达已学会或已经加入 Curriculum；
+- Sense Proposal 不是 Sense；只有有效 direct/delegated Semantic Acceptance 才能创建 stable
+  Sense/Version 和 Personal Meaning Alignment。Acceptance 仍不代表内容已发布、表达已学会或已经
+  加入 Curriculum；
 - Sense Construction 不依赖穷尽式预建 Sense 库；已有 Sense 的相似检索、复用和关系发现是可选治理
   步骤，不得覆盖 learner 已确认边界或阻塞无匹配项的新 Sense 创建；
 - Semantic LLM、Learning Content LLM 与未来 Grading LLM 是不同领域角色；它们分别受独立输入、
   输出、权限、校验、provenance 与 fallback 合同约束，不能因使用同一 provider 而合并所有权；
 - 内容来源与 Learning Protocol 必须正交；Published Package 不是唯一合法来源，Structured
   Acquisition 也不是唯一合法协议；
-- Learning Policy Profile 必须显式、版本化、可审计，并协调而不合并 Protocol、Content、Evidence 与
-  Scheduling Policy；Assignment scope/precedence、Effective Policy 与 plan resolution provenance 必须
-  可重放；
+- 每个 Content Provisioning Task 必须固定单一 Learning Target、purpose-specific Protocol 与 exact
+  Content Demand；Content Agent Attempt 只能在该边界内调用 closed、typed、versioned tools，并在
+  提交 Material Candidate Bundle 后终止；
+- Agent output 与 Agent-side preflight 都不是 authority。只有 system-owned independent validation/
+  admission 和 assembly 可以产生 Learning Materialization；Bundle 被拒绝后的重试必须创建新 Attempt；
+- Provisioning Batch 只是独立 Task 的非原子调度/观测容器；不得共享 target context、传播单项失败、
+  产生 Runtime progress 或定义 learner 每日新学数量；
+- Learning Policy Profile 必须显式、版本化、可审计，并作为 Protocol、Content Requirements、Evaluation/
+  Evidence、Progression/Completion、Repair、Scheduling 与 Claim Policy 的命名组合；它不合并这些对象、
+  不拥有 progress 或每日数量。Assignment scope/precedence、Effective Policy 与 plan resolution
+  provenance 必须可重放；
 - Learning Entry Provenance 与 Learning Policy 保持正交；来源只可影响默认推荐和实际 readiness，
   不能永久决定方法或静默降级 learner 已选择的保证级别；
 - Add-to-Learning 接纳可以先于内容物化；`preparing/blocked` Membership 保留 learner intent，但只有
@@ -618,9 +691,18 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
   与 Relearning 的完成事实和 scheduler 权限不能互相冒充；
 - Protocol Step 拥有材料组织、交互/判分、结果资格与 transition；Card Presentation 只渲染当前 Step
   阶段，不拥有 identity、curriculum membership、Evidence、progress 或 FSRS；
+- Learning Capability Objective、Protocol Checkpoint、Step/Action 与 Card 必须保持不同 identity；
+  Checkpoint 可选，Acquisition Gate 只是 Structured Acquisition 的高保证子类；
+- Learning Action Intent 与 Protocol Purpose 正交；只有合法 `assessment` Action 能进入正式评价，
+  instruction、practice、feedback、repair 或视觉位置不能自行产生 Evidence；
 - Published 内容不可变，修订通过新 version/release 完成；On-demand 内容在一次 run 开始前必须
   冻结为 Learning Materialization，response 发生后不得重新生成并替换题目、答案或评分依据；
-- Attempt 与 Evidence 是追加事实，Gate、5D 与 FSRS 是服务端权威投影；
+- Attempt、Observation 与 Evidence 是追加事实；正式评价沿 `Attempt → Observation → Evidence（若合格）
+  → Transition Decision` 推进，Gate、Checkpoint credit、5D 与 FSRS 是服务端权威投影；
+- Progression Policy 只能产生内核声明的受约束 effects；Progress Reset 只使显式 scope 内当前 credit
+  失效，不删除 Attempt、Observation、Evidence 或历史 Transition；
+- Completion 只能由版本化 Completion Policy 基于当前有效状态推导，不能由 Card、队列为空或客户端
+  flow state 推导；
 - Study Completion、learner rating 与 Learning Evidence 是不同事实；每个成功 Initial Learning
   Completion 必须且只能创建一个 Scheduling Handoff，但不得借此宣称通过未完成的 Gates、5D 能力
   或已经掌握；
@@ -635,8 +717,10 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 - 一个 Gate 失败不抹除其他 Gate 的历史事实；针对性 repair 后必须经过干扰再独立重测；
 - Initial Acquisition Graduation 表示 Structured Protocol 可以交接长期保持，不表示永久掌握；
 - FSRS 只在有效 Scheduling Handoff 后拥有 due；handoff 必须记录 protocol、basis、evidence level
-  与 initializer version；Retention Review 只能通过 Memory Outcome 更新既有状态；
-- Review 的第一次协议有效评价决定该次唯一 Memory Outcome 与唯一 FSRS update；后续 Relearning
+  与 initializer version；Retention Review 只能通过 Memory Outcome 更新既有状态，且只有 Scheduler/
+  FsrsAdapter 可以产生新 Memory State 与 next due；Protocol、preset、Card 与客户端不能直接写入；
+- Review 的第一次协议有效评价决定该次唯一 graded Memory Outcome 与唯一 Scheduling Decision；
+  grade 使用 `again | hard | good | easy` 并与 basis/evidence level 分离，`correct` 不能替代它；后续 Relearning
   不覆盖或重复评价它，也不创建 handoff 或重新初始化 FSRS；
 - Protocol Version 可以将独立 Relearning evaluation 声明为 scheduler-eligible；该评价只能产生
   自己的、可审计且幂等的 Memory Outcome，Relearning Completion 本身不是 scheduler input；
@@ -653,6 +737,7 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
   assessment asset 或 Learning Evidence；
 - Content Release 更新不能静默替换 Saved Example，也不能删除稳定 Sense 上的 Note/Anchor；
 - 客户端可以离线先写原始操作，但不能把派生进度声明为服务端事实；
+- Progression、Completion、Handoff、Memory Outcome 与 Scheduling transition 必须原子、幂等；
 - Cards、Decks、generic flashcard sync、Workspace 产品入口和历史实验不属于 Sensa 领域。
 
 ## 7. 文档边界

@@ -3,6 +3,7 @@ import {
   sensaConfirmExpressionBindingFactSchema,
   sensaConfirmSenseProposalFactSchema,
   sensaLearningMaterializationSnapshotSchema,
+  sensaLearningConnectionContractVersion,
   sensaLearningTargetPersonalSourceSchema,
   sensaMeaningFocusAcceptanceFactSchema,
   sensaPersonalMeaningRevisionSnapshotSchema,
@@ -174,7 +175,7 @@ const secondRetentionKey = sensaRetentionTargetKeySchema.parse({
 assert.notDeepEqual(firstRetentionKey, secondRetentionKey);
 
 sensaLearningTargetPersonalSourceSchema.parse({
-  contractVersion: "sensa-learning-connection-v1",
+  contractVersion: sensaLearningConnectionContractVersion,
   learningTargetPersonalSourceId: ids.learningTargetSource,
   learningTargetId: ids.learningTarget,
   personalMeaningAlignmentId: ids.alignment,
@@ -182,7 +183,7 @@ sensaLearningTargetPersonalSourceSchema.parse({
 });
 
 sensaLearningMaterializationSnapshotSchema.parse({
-  contractVersion: "sensa-learning-connection-v1",
+  contractVersion: sensaLearningConnectionContractVersion,
   learningMaterializationId: ids.materialization,
   learnerUserId: "learner-1",
   learningTargetId: ids.learningTarget,

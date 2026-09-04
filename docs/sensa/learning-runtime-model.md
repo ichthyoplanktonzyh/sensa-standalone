@@ -1,10 +1,10 @@
 # Sensa Learning Runtime Model
 
 > 状态：Canonical runtime domain model  
-> 更新日期：2026-09-01
+> 更新日期：2026-09-05
 
 本文定义 Content Provisioning、Learning Protocol Run、Protocol Step Instance、Unified Planning、Session、
-Encounter、Card Presentation、Evidence、Scheduling Handoff、FSRS、Lexical Reference、Preferences 与 Account/Data Control 的运行
+Encounter、Card Presentation、Observation/Evidence/Transition、Scheduling Handoff、FSRS、Lexical Reference、Preferences 与 Account/Data Control 的运行
 关系。Structured Acquisition Cycle 是其中一种高保证协议，不是所有学习的唯一运行方式。具体
 Gate 阈值、Action/Practice Task payload、context resolver 阈值、cooldown、HTTP、SQL 和 Sync wire
 format 属于后续版本化实现合同。
@@ -26,6 +26,9 @@ Session intent ──────────┤
           └──────────────┼────────────────┘
                          ▼
                 fixed Learning Target
+                         │
+                         ▼
+         Learning Capability Objectives
                          │
                          ▼
                    Retention Target
@@ -153,12 +156,24 @@ Protocol 定义一个或多个 Protocol Steps 及其 transition rules。Step 可
 interaction/grader、结果资格以及后继条件。Run 为实际执行创建 Protocol Step Instance，保存固定资源
 绑定、当前状态、结果与重放依据。Step 数量、顺序和视觉形态属于具体协议版本，不是全局领域常量。
 
+Learning Policy Profile/preset 是多个合同的命名组合，而不是另一种 Run 或进度状态。它为各 purpose
+协调 Protocol、Content Requirements、Evaluation/Evidence、Progression/Completion、Repair、Scheduling
+与 Claim Policy；Learning Target 和 Capability Objectives 决定学什么，Profile 决定采用哪组方法，
+Unified Planner 决定哪些 Target 进入本次运行。
+
 ### Lightweight Initial Learning Protocol
 
 Lightweight Study 允许使用紧凑教学内容、示例和可选 retrieval 建立或加强 Sense ↔ L2 表达连接。
 当首次学习合同步骤成功完成时产生 Study Completion 与 Lightweight Study Outcome，并在同一成功
 边界显式创建 `basis=protocol_completion` 的 Scheduling Handoff。它不创建 Gate pass、5D projection 或
 Acquisition Graduation，也不向 learner 宣称已经掌握。
+
+Lightweight Run 可以完全没有评价性 Protocol Checkpoint。首版只有两个正式 Step：Experience Recall
+把 grounding 与内部回想合成一个 `practice`，在同一张 Card Presentation 中展示经验/Sense cue、
+隐藏 target expression 并等待 learner 请求揭晓；Expression Reveal 是 `instruction`，显示 expression
+与 Sense binding，并在同一张 Card 上接受 learner rating。`again` 回到 Experience Recall，`hard | good`
+允许 Completion Policy 产生 Study Completion。rating 是 self-report Observation，不是 behavioral
+Evidence；完成状态不是第三个 Step。
 
 ### Structured Initial Learning / Relearning Protocol family
 
@@ -198,6 +213,11 @@ Attempt 解决。Initial Cycle 的 Recognition、Recall 与 Transfer 各自需�
 - repair/reveal 后的即时检查可以确认理解，但不能把 failed Gate 改为 passed；
 - 重新解决 Gate 必须在后续独立 Encounter 中进行，并满足版本化 interference rule。
 
+以上是当前 Structured family 的 Progression Policy，不是 Learning Kernel 对所有 Protocol 的失败
+硬编码。其他 Protocol 可以声明重置一个 Checkpoint、一个显式 Checkpoint 集合或整个 Run 的当前
+credit；内核只负责校验并原子执行 `ResetProgress(scope)`。任何 reset 都不得删除既有 Attempt、
+Observation、Evidence、失败历史或旧 Transition，要求“连续通过”时以新的 progress epoch 表达。
+
 所有 required Gates 变为 passed 时完成 Cycle。`initial` Cycle 产生 Acquisition Graduation，并必须
 创建 `basis=acquisition_graduation`、`evidenceLevel=behavioral` 的 Scheduling Handoff；FsrsAdapter
 只消费 handoff，不直接猜测 Cycle 状态。`relearning` Cycle 产生 Relearning Completion，将 phase
@@ -210,6 +230,9 @@ scheduler-eligible evaluation，该 Cycle 内的合法独立重测还可各自�
 Retention Review 只在已有 FSRS Memory State 上运行。它可以用一个或多个 Step 组织回忆、自评、揭示、
 反馈或补充检查，但每个 due Review 最多形成一个 Memory Outcome，并最多更新一次 FSRS。第一次满足
 协议结果条件的评价固定该 Outcome；后续 reveal、detail、即时重测或再学不能生成第二个 Outcome。
+Outcome 必须携带 scheduler-stable grade `again | hard | good | easy`，并与 basis/evidence level 分离。
+二元 assessment 可以只产生 `good/again` 子集，但协议已经区分出的“模糊/费力”必须保留为 `hard`，
+不能先压成 `correct: boolean` 再交给 scheduler 猜测。
 
 ### Relearning Protocol
 
@@ -272,7 +295,7 @@ provisioning/protocol references；只有 `ready` plan 可以进入正式 Planni
 实际 Learning Materialization，内容更新不能在进行中静默替换资源。
 
 Add-to-Learning 可以由 direct Catalog/search selection、Saved Sense、reviewed Alignment 后的 Contextual
-Lookup，或 confirmed Personal Meaning Alignment 发起；Book Enrollment 则通过 Book membership 提供
+Lookup，或 accepted complete Personal Meaning Alignment 发起；Book Enrollment 则通过 Book membership 提供
 另一类 Curriculum source。所有来源都固定 Learning Entry Provenance，并在相同 Learning Target/
 Retention Target 处去重。Runtime 不要求、也不检查是否存在 Personal Meaning 才接纳 direct/Book entry。
 
@@ -328,6 +351,46 @@ unsave、不删除 Note/Anchor/Collection Membership、Retention Target 或 Lear
 其他 active/maintenance source 覆盖，它继续在有效 Study Scope 中；若已无任何有效 source，它从
 后续 Session 的正式候选中退出，但保留 phase、Protocol Run、Evidence 与 FSRS，重新加入时从原状态恢复。
 
+### On-demand Content Provisioning lifecycle
+
+需要动态材料的 Resolved Learning Plan 通过 Content Provisioning Task 管理准备状态。Task 是
+system-owned 的 durable lifecycle，不是 Agent session，也不进入 formal Protocol Runtime。它固定一个
+Learning Target、一个 purpose-specific Protocol、exact Content Demand 和 plan revision；其状态闭集为：
+
+```text
+queued | preparing | submitted | validating | ready | blocked | cancelled
+```
+
+- `queued`：任务已创建但尚未开始生产；
+- `preparing`：系统正在复用资源、运行 Content Agent Attempt 或执行派生；
+- `submitted`：一个不可变 Material Candidate Bundle 已提交，产生它的 Agent Attempt 已结束；
+- `validating`：system-owned validator/admission 正在检查 Bundle 与 Demand；
+- `ready`：独立校验和 assembly 已完成，并已产生可引用的 Learning Materialization；
+- `blocked`：当前合法路径、重试预算或必需能力无法满足 Demand，保留可审计原因；
+- `cancelled`：该 preparation intent 被显式终止；它不删除已接纳 Curriculum membership 或历史 Attempt。
+
+`submitted`/`validating` 被拒绝或 `preparing` 失败时，Task 可以按固定 retry policy 回到 `preparing` 并
+创建新 Attempt；不能恢复或改写旧 Attempt。Content Agent Attempt 自己只有：
+
+```text
+running → submitted | failed | timed_out | cancelled
+```
+
+Attempt 的 `submitted` 只说明 Bundle 已冻结，不代表 Task `ready`。Bundle 的独立 validation result 为
+`accepted | rejected`；`accepted` 后仍由 system-owned assembly 创建 Materialization，`rejected` 保存
+validator/version、reason codes 与被检对象 digest，再由 Task 决定重试或 `blocked`。Agent 可执行的
+preflight 不产生这个 authoritative result。
+
+Resolved Learning Plan readiness 只投影上述事实：尚在 `queued/preparing/submitted/validating` 的
+purpose 为 `preparing`，有效 Materialization 产生后才为 `ready`，Task `blocked` 时为 `blocked`。
+`cancelled` Task 不再贡献 readiness；系统从其他合法 provisioning path 重新解析，没有可用路径时以
+`preparation_cancelled` 原因保持 plan `blocked`。正式 Planner、Session 与 Protocol Run 永远不读取
+Agent state、tool transcript 或 Candidate Bundle，只读取 plan-pinned immutable Learning Materialization。
+
+Provisioning Batch 是多个 Task 的非原子调度/观测容器。一个 Task 的 failure、timeout、cancel 或 retry
+不改变其他 Task；batch completion 只是成员状态汇总，不产生 Learning Completion、daily-new quota 消耗
+或 Runtime transition。每日学习数量仍只由 learner 的 Study Plan 与 Unified Planner 决定。
+
 ### Study Scope Revision 与每日额度
 
 Study Scope 是 mode-aware、source-aware、policy-resolved 的去重 scope snapshot：active Enrollment 提供
@@ -350,11 +413,18 @@ Sense Construction Session。personal-first provenance 只说明目标来源，�
 Daily-new quota 是每日新 Sense Introduction 的上限，不是 learner 必须完成的债务，只在 Introduction
 被权威接受时消耗：
 
+- learner 只设置 Study Plan 上的一个每日新学数量；Unified Planner 是这个数量的唯一解释者；
+- Learning Policy Profile、Protocol、Runtime Adapter 与队列不得再定义每日数量、分组大小、批次大小或
+  active window，也不得截断 Planner 已选出的 Target 集合；
+- Protocol 可以决定 Planner 所选集合内部的 Step 顺序、穿插和间隔，但不能借编排改变今天获准首学的数量；
 - ready Protocol work、Relearning 与 due Review 不消耗 daily-new quota；
 - Book 与 Supplemental 的新 Sense 共用同一额度，不能制造隐藏的额外任务；
 - 退出 Session 不撤销已经发生的 Introduction，未用额度不滚存为次日欠账；
 - 同一 Lexeme 的 sibling Sense 是否错开由版本化 Curriculum/Planning policy 决定；
 - Plan 不保存手工累计的“已学数量”或维度待办，所有事实摘要来自权威投影。
+
+实现可以为渲染或存储做不可观察的分页，但这种分页不能进入学习领域合同、learner 设置或改变
+Target 的准入与调度语义；对 learner 不存在第二个“同时放多少条进窗口”的概念。
 
 Book/Range completion 同样是事实投影：`新内容已学完` 表示没有 NewEligible member，`首次学习已完成`
 表示范围成员都已通过当前协议创建 Scheduling Handoff，或存在 active Declared Mastery。长期
@@ -470,38 +540,44 @@ Reference Release 与 occurrence annotations 是可下载的不可变内容，�
 
 ## 7. Personal Content lifecycle
 
-Personal Content 保存 learner 主动创建的事实，不从浏览、学习结果或统计自动推断：
+Personal Content 保存 learner 直接或通过明确授权委托创建的事实，不从浏览、学习结果或统计自动推断：
 
-- Personal Semantic World membership 由 `CreatePersonalMeaning` 一类显式 learner operation 创建；
-  推荐、浏览、模型提取和学习历史只能生成建议，不能替 learner 提交该 operation；
-- Personal Meaning 拥有独立 identity 与 revision。Meaning Focus、Personal Semantic Anchor、Personal
-  Expression Anchor 分别修改，不以节点标题或一段富文本充当整个 aggregate；
-- Personal Semantic Anchor 绑定 Personal Meaning 而不是直接冒充 Sense 内容。同一经验素材可以被
-  多个 Meaning Focus 引用，但每个引用保留自己的焦点和 provenance；
+- Semantic Intake operation 至少固定真实 Context；缺少 Expression、teaching-sufficient Sense 或有效
+  acceptance 的捕获保存为 Inbox Item。只有完整提交 operation 才创建 Personal Semantic World
+  membership；
+- 完整提交可以由 learner 直接执行，也可以由 Agent 在 learner grant 下委托执行；二者必须保存不同
+  actor/authority provenance，但 delegated commit 不需要二次确认。任意 payload 布尔字段不构成权限；
+- Personal Meaning 拥有独立 identity 与 revision，并至少固定一个 Context Anchor、一个 located
+  Expression Anchor 与一个 active stable Sense Alignment。Meaning Focus 为可选独立事实，不以节点
+  标题或一段富文本充当整个 aggregate；
+- Personal Semantic Anchor 绑定 Personal Meaning 而不是直接冒充 Sense 内容。同一经验素材可以直接
+  支撑 Context–Expression–Sense resolution，也可以在必要时被多个 Meaning Focus 引用；
 - Personal Expression Anchor 固定 language、expression type、learner-relative familiar/target role、
   provenance 与 verification status；
-- Sense Construction Session 固定 Personal Meaning revision、当前 Meaning Focus、模型/policy
-  provenance 与提议历史。原始聊天可以用于继续对话和审计，但只有 learner 接受的 Focus、Sense
-  Proposal 与确认 operation 进入权威领域状态；
-- `ConfirmSenseProposal` 必须由 learner 显式触发，并对同一 proposal 幂等。成功时创建或引用 stable
-  Sense/Sense Version，并创建 Personal Meaning Alignment；重放不得制造重复 Sense 或 Alignment；
+- Sense Construction Session 只在普通 Contextual Sense Resolution 不足时固定 Intake/Meaning draft、
+  optional Meaning Focus、模型/policy provenance 与提议历史。原始聊天可以用于继续对话和审计，
+  但只有被有效 Semantic Acceptance 接受的 Focus/Sense Proposal 才进入权威领域状态；
+- Sense acceptance operation 可以由 learner 直接触发，也可以由 Agent 在相应 grant 下委托触发，并
+  对同一 proposal/resolution 幂等。成功时创建或引用 stable Sense/Sense Version，并创建 Personal
+  Meaning Alignment；重放不得制造重复 Sense 或 Alignment；
 - Personal Meaning 在 Sense 确认后继续存在。修改它不会静默修改已确认 Sense；若边界发生变化，
   必须开启新的 proposal/version、split 或显式 relation 流程；
 - Saved Sense 在 learner × stable Sense 上唯一、可逆，并保存创建时 Sense Version provenance；
 - Saved Example 在 learner × exact immutable Example 上唯一、可逆，不能随 release 更新换成另一条；
 - 每个 learner × Sense 最多有一份 current Sense Note；更新与删除使用 revision，离线冲突不能
   静默覆盖另一设备已经提交的正文；
-- 每个 Personal Semantic Anchor 有独立 identity 与 revision；同一 Personal Meaning 可以有多个
+- 每个 Personal Semantic Anchor 有独立 identity 与 revision；同一 Personal Meaning 至少一个且可以有多个
   Anchor，learner 可分别修改、删除或撤销其 scaffold eligibility；
 - Personal Collection 有独立 identity、name、description、ordering 与 revision；Collection
   Membership 是指向 stable Sense 或 exact Example 的 typed、ordered reference，同一 target 在
   同一 Collection 中不能重复；
 - Add-to-Learning Intent 从 stable Sense 与选定 target expression 解析 Learning Target，并交给
-  Curriculum 接纳或拒绝；Personal Content 不得
+  Curriculum 接纳或拒绝；它与 semantic-world commit 使用独立 authority，即使同一 Agent 连续提交也
+  必须形成两个幂等事实；Personal Content 不得
   直接修改 published Book、Supplemental Membership、Study Scope、Learning Phase 或 Planner
   inventory；接纳语义由第 4 节 Curriculum lifecycle 定义。
 - direct/Book learning 不创建 Personal Meaning、Focus、Anchor 或 Alignment；Learning/Review/Relearning
-  history 也不能作为隐式 `CreatePersonalMeaning` operation；
+  history 也不能作为隐式 semantic-world commit operation；
 
 这些操作保持正交：
 
@@ -685,6 +761,16 @@ relearning_gate
 retention_review
 ```
 
+每个 Step/Action 还必须声明与 purpose 正交的 Learning Action Intent：
+
+```text
+instruction | practice | assessment | feedback | repair
+```
+
+Purpose 决定 Run 可以产生哪类 completion/scheduler transition；intent 决定当前动作是否在教学、练习、
+评价、反馈或修复。只有 `assessment` 且固定了合法 response/grader/independence contract 的 Action
+才可能进入正式评价；Card 外观、按钮名称和 Step 在序列中的位置不能推断 intent。
+
 一个 Encounter 可以包含：
 
 ```text
@@ -703,7 +789,13 @@ presentation/support Action
 学习身份、课程成员、状态、Evidence、进度或调度。多个 Card Presentation 可以服务于同一个 Step，
 同一种 Card 也可以渲染不同协议的 Step；Cards 与 Decks 不成为领域聚合。
 
-## 11. Action、Attempt 与 Evidence
+Card Presentation 可以进一步声明稳定 Slot。每个 Slot 固定允许的 material roles、数量、顺序、
+disclosure 与缺失/溢出处理；Assembly Policy 把 Materialization 中已验证的资源放入 Slot，renderer
+只按结果显示。生成模型不能输出布局指令，缺少可选资源时 Slot 折叠，缺少必要资源时 Step 不可执行。
+Experience Recall 的任何 Slot 都不得包含 target expression；Expression Reveal 则始终具有 expression
+主区与 Sense 确认区，其余发音、语言结构、用法和场景回扣区域均可选。
+
+## 11. Action、Attempt、Observation、Evidence 与 Transition
 
 ### Learning Action
 
@@ -720,14 +812,46 @@ Attempt 是 learner 对当前 Action 的追加事实。重复 identity + 相同 
 Learning Attempt 与 Practice Attempt 是不同事实类型。即使两者保存相同的文字或语音响应，
 Practice handler 也不能调用 Learning Evidence rule，Encounter handler 也不能接收 Practice identity。
 
+### Learning Observation
+
+固定 interaction/grader contract 对 Attempt 作出不可变 Observation。Observation 可以记录 canonical
+response、correctness、latency、使用的 support/reveal、learner rating、grader provenance 与有效性；
+它回答“发生并观察到了什么”，不自行回答“证明了什么”或“下一步怎么走”。无效 Attempt 可以留下
+审计事实，但不能制造结果资格。
+
 ### Learning Evidence
 
-服务端根据有效 Attempt 与固定 Evidence Rule 派生 Evidence。Evidence 只陈述行为，不等于 Gate、
+服务端根据有效 Observation 与固定 Evidence Rule 派生 Evidence。Evidence 只陈述行为，不等于 Gate、
 5D level 或 FSRS rating。被动展示、播放、acknowledgement、停留时长、无效响应、自报理解与
 Product Event 不产生学习 Evidence。
 
 同一个 Attempt 可以影响多个维度或 Gate，但每个 `(attempt, target, rule version, basis)` 只能
 派生一次。重放不得重复推进任何投影。
+
+### Protocol Checkpoint 与 Transition Decision
+
+Protocol Checkpoint 是可选的 Protocol-local 评价里程碑。它引用一个或多个 Learning Capability
+Objectives，并在 Run 内拥有当前 credit；它不是 Capability Objective、Retention Target、Card 或
+通用 mastery dimension。Acquisition Gate 是 Structured Acquisition 使用的一类特殊 Checkpoint，
+Lightweight Protocol 不需要为了接入同一 Runtime 而创建空 Gate。
+
+Evaluation/Progression Policy 基于 Observation、合法 Evidence 与当前 Run state 产生不可变 Protocol
+Transition Decision。允许的 effect 由 Learning Kernel 定义并校验，至少可以表达：
+
+```text
+CreditCheckpoint
+InvalidateCheckpoint
+ScheduleRepair
+RequireReassessment
+ResetProgress(current | declared_set | run)
+Advance
+Complete
+```
+
+Decision 与 effects 在同一事务中原子、幂等应用。Progress Reset 只使显式 scope 内当前 credit 失效，
+不删除 Attempt、Observation、Evidence 或历史 Decision；全关重新连续通过等要求通过新的 progress
+epoch 表达。Completion 只能由版本化 Completion Policy 基于当前有效状态产生，不能从 Card、队列为空
+或客户端 flow state 推断。
 
 ## 12. Encounter Outcome 与 Protocol Completion
 
@@ -775,12 +899,21 @@ retrieval_failed
 learner_rated
 ```
 
+每个 Outcome 还必须保存规范 grade `again | hard | good | easy`。grade 回答 scheduler 应怎样解释
+本次表现，basis/evidence level 回答该判断来自什么以及能支持多强的声明；它们不能合并。某个二元
+Protocol 可以合法只映射出 `good/again`，但 `correct` 只是 Observation 或 evaluator 输入，不是
+Memory Outcome。learner-rated Protocol 必须把“模糊/费力”保留为 `hard`，不能丢成布尔值。
+
 Outcome 还必须保存 `origin=retention_review | relearning`、Protocol Run/Step/evaluation identity、
 target memory-state revision 和幂等 key，再由 FsrsAdapter 映射为版本化 scheduler input。Review 失败后即使 learner
 当天完成 repair/relearning，也不能把原失败 Outcome 改写成成功，或为同一次 due Review 重复
 调用 FSRS。`认识/模糊/忘记` 一类自评在允许它的 protocol 下可以产生 `learner_rated` Memory
 Outcome 并驱动调度，但 evidence level 必须保持 `self_report`；它不能制造独立行为 Evidence、Gate
 pass、5D 成功或 Structured Acquisition claim。
+
+FsrsAdapter 消费一个合法 Memory Outcome 后产生 Scheduling Decision，其中包含新 Memory State revision
+与 next due。只有 scheduler 可以产生该 Decision；Protocol、Progression Policy、preset、Card 和客户端
+都不能直接写 stability、difficulty 或 due time。
 
 ### Relearning Completion
 
@@ -801,7 +934,10 @@ Gate/5D。两者都不改写触发它们的 Memory Outcome，不创建新的 Sch
 - 之后 FSRS 决定 retaining Retention Target 的 due time；
 - 后续 protocol 可以使用 learner rating；Structured Semantic Policy 可以轮换 Recognition、Recall、
   Transfer、Boundary 或 Sound assessment；
-- due Review 的 Memory Outcome 最多推进一次 FSRS revision；
+- due Review 的 Memory Outcome 必须保留 grade、basis 与 evidence level，并最多产生一次 Scheduling
+  Decision、推进一次 FSRS revision；
+- FSRS/Scheduling Policy 是 Memory State 与 next due 的唯一写入者；Protocol 与客户端只能提交合法
+  Handoff 或 Memory Outcome；
 - `retrieval_failed` 在记录一次长期遗忘后开启协议选择的 Relearning Protocol Run；只有 Structured
   Relearning 创建 Acquisition Cycle；
 - Relearning 可以恢复连接并在 Structured 路径更新 Gate/5D，但不把一次遗忘重复记入、不创建
@@ -825,7 +961,7 @@ planned ──▶ active ──▶ completed
 - completed Encounter 恰好保存一个与 purpose 兼容的 Encounter Outcome；
 - interrupted/cancelled Encounter 不伪造 Gate pass、Graduation 或 Memory Outcome；
 - 同一 learner/Retention Target 的并发 Encounter、Protocol Run 与 projection 更新必须使用一致事务边界；
-- 版本化重放必须得到同一 Action、Evidence 与 Outcome。
+- 版本化重放必须得到同一 Action、Observation、Evidence、Transition Decision 与 Outcome。
 
 ## 15. Declared Mastery
 
@@ -962,6 +1098,7 @@ retry。这些合同是现有事实与历史重放输入，不能覆盖本文新
 contract version，迁移或丢弃当前 first-user 测试进度，并验证 Learning Materialization、Protocol
 Purpose、Learning Entry Provenance、Learning Policy Profile/Assignment、Effective Learning Policy、Resolved Learning Plan readiness、
 Protocol Step Instance、Initial Learning Completion、Scheduling Handoff、Relearning Completion、
+Learning Observation、Protocol Checkpoint、Progress Reset、graded Memory Outcome、Scheduling Decision、
 Retention Target isolation、one-review-one-FSRS-update 与 auditable relearning-outcome 不变量。
 Structured Acquisition 启用时再额外验证
 Acquisition Cycle、Gate、Evidence 与 Graduation 不变量。

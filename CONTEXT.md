@@ -1,7 +1,7 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-09-01
+> Updated: 2026-09-05
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
@@ -32,22 +32,27 @@ never asserts a reversible translation equality.
 
 **Sense Proposal**:
 An LLM-generated, revisable semantic specification offered during Sense
-Construction. It becomes a stable Sense identity only after explicit learner
-confirmation; confirmation alone does not make it reviewed or learning-ready.
+Construction. It becomes a stable Sense identity only after valid direct or
+learner-delegated Semantic Acceptance; acceptance alone does not make it reviewed
+or learning-ready.
 
 **Sense Construction**:
 The learner–LLM dialogue that turns a personal meaning focus into a reproducible
-Sense Proposal and, on explicit learner confirmation, a stable Sense. It creates
-semantic identity, not Learning Evidence or automatic curriculum membership.
+Sense Proposal and, on valid Semantic Acceptance, a stable Sense. A Meaning Focus
+is used only when Context does not already determine a teaching-sufficient Sense.
+Construction creates semantic identity, not Learning Evidence or automatic
+curriculum membership.
 
 **Semantic LLM Role**:
 The constrained model role that proposes and clarifies a Sense during Sense
-Construction. It cannot create learner confirmation or learning content by side effect.
+Construction. Model output alone cannot create Semantic Acceptance or learning
+content; a separate commit operation may act under an explicit learner delegation.
 
 **Learning Content LLM Role**:
 The constrained model role that generates candidate material for one fixed
 Learning Target, Effective Learning Policy and purpose-specific Protocol. It cannot
-change the Sense, silently downgrade the Policy or write learner progress.
+change the Sense, silently downgrade the Policy, approve its own output or write
+learner progress.
 
 **Grading LLM Role**:
 A future optional model role that evaluates an open response under a pinned
@@ -65,17 +70,22 @@ language expression binding, learner language/locale context and required scope.
 It says what connection is being learned, not where content comes from or how it
 will be taught.
 
+**Learning Capability Objective（能力目标）**:
+A versioned statement of the observable performance sought for one Learning Target.
+It informs content, Protocol and evaluation; only an explicit, stable, independently
+valuable objective with separate scheduling value extends Retention Target scope.
+
 **Learning Entry Provenance**:
 The versioned origin through which a Learning Target enters Curriculum, such as
 Book membership, direct selection of an existing stable Sense, or a confirmed
-Personal Meaning Alignment. It never changes target identity or makes Personal
+complete Personal Meaning Alignment. It never changes target identity or makes Personal
 Semantic World membership a prerequisite for learning.
 
 **Learning Policy Profile**:
-A versioned, auditable learning-method profile that coordinates purpose-specific
-Protocol selection with content-readiness, evidence and scheduling-policy references.
-It represents a mode such as lightweight or high-assurance, not target identity or a
-generic presentation preference.
+A versioned, auditable named composition of purpose-specific Protocol, content,
+evaluation, progression, completion, repair, scheduling and claim policies. It
+represents a mode such as lightweight or high-assurance, not target identity, daily
+quantity or a generic presentation preference.
 
 **Learning Policy Assignment**:
 A versioned learner or Curriculum choice that applies one Learning Policy Profile at
@@ -102,10 +112,10 @@ preserving prior Runs, outcomes, Evidence, Scheduling Handoffs and FSRS state; i
 not an in-place edit or an automatic response to newly available content.
 
 **Resolved Learning Plan**:
-The versioned plan derived from one Learning Target, its Effective Learning Policy and
-currently available content/runtime capabilities. It resolves purpose-specific
-Protocols, provisioning requirements and readiness, not a precomputed Card sequence,
-Session queue or future review calendar.
+The versioned plan derived from one Learning Target, its Learning Capability Objectives,
+Effective Learning Policy and currently available content/runtime capabilities. It
+resolves purpose-specific Protocols, provisioning requirements and readiness, not a
+precomputed Card sequence, Session queue or future review calendar.
 
 **Learning Plan Readiness**:
 The purpose-specific `preparing | ready | blocked` state of a Resolved Learning Plan.
@@ -120,8 +130,62 @@ prompt, Card and ordinary capability variation do not create another target.
 
 **Content Provisioning**:
 The versioned decision that resolves a Learning Target through published,
-on-demand or hybrid content into one immutable Learning Materialization. It does
-not choose the Learning Protocol or modify learner progress.
+on-demand or hybrid content, under a fixed Content Demand, into one immutable
+Learning Materialization. It does not choose the Learning Protocol or modify
+learner progress.
+
+**Content Provisioning Task**:
+The durable preparation objective for one fixed Learning Target, purpose-specific
+Learning Protocol and exact Content Demand. It owns provisioning status and may
+use multiple Content Agent Attempts, but never owns learner progress or Runtime state.
+
+**Provisioning Batch**:
+A non-atomic operational grouping of independent Content Provisioning Tasks for
+dispatch, budgets and progress reporting. It does not share agent context, content
+identity or failure fate, and it does not define daily learning quantity.
+
+**Content Agent Attempt**:
+One bounded, auditable execution of the Learning Content LLM Role and its approved
+tools for a single Content Provisioning Task. It ends when it submits one Material
+Candidate Bundle or fails, and has no authority after termination.
+
+_Avoid_: Agent thread, generation chat
+
+**Content Demand**:
+A source-neutral, versioned and machine-readable declaration of the material
+roles and input context a Learning Protocol requires, including their schemas,
+cardinality, permitted sources/uses, validation policies and declared external
+derivations. It says what must be available, not whether a catalog, model or tool
+supplies it, and it does not prescribe Cards or session order.
+
+**Content Context Artifact**:
+One immutable, provenance-bearing input supplied to Content Provisioning, such
+as the fixed target expression, confirmed Sense, an authorized Personal Anchor
+or a source-backed lexical fact. It may be supplied initially or frozen from an
+approved tool result; a model's unsupported observation never becomes authority.
+
+**Content Generation Request**:
+A standalone, idempotent request that combines one fixed Learning Target,
+Effective Learning Policy, purpose-specific Learning Protocol, exact Content
+Demand, initial authorized Content Context Artifacts and approved tool/budget
+constraints for one production attempt.
+
+**Material Candidate**:
+One untrusted proposed item for a declared material role, whether generated,
+reused or derived by an external tool. It cannot enter a Protocol Run until its
+schema, provenance, required validators and Content Demand coverage are accepted
+and it is assembled into a Learning Materialization.
+
+**Material Candidate Bundle**:
+The immutable submission of supporting Content Context Artifacts, role-indexed
+Material Candidates, provenance and explicit optional-role omissions from one
+Content Agent Attempt. It is untrusted input to independent validation, not a
+Learning Materialization.
+
+**Content Derivation**:
+A versioned transformation from accepted source material into another declared
+material role, such as media synthesis. It is performed under a pinned producer
+policy and is not additional model context or a learner-progress transition.
 
 **Published Learning Content**:
 Reusable, versioned learning material prepared and approved before a learner
@@ -142,8 +206,9 @@ prompts or a live model response.
 
 **Learning Protocol**:
 A versioned method contract that declares required content roles, allowed
-actions, completion semantics, evidence claims and Scheduling Handoff rules for
-establishing, checking, strengthening or restoring one meaning–form connection.
+actions, Checkpoints, evaluation and transition rules, completion semantics, evidence
+claims and Scheduling Handoff rules for establishing, checking, strengthening or
+restoring one meaning–form connection.
 
 **Protocol Purpose**:
 The closed purpose of a Learning Protocol: `initial_learning`,
@@ -371,8 +436,9 @@ different target expressions into one phase, Protocol Run or FSRS Memory State.
 
 **Learning Phase**:  
 The Retention-Target planning phase `new`, `acquiring`, `retaining` or
-`relearning`. `acquiring` can host any initial Learning Protocol; it does not
-imply that a Structured Acquisition Cycle exists.
+`relearning`. It is a planning state, not a third time scale: `acquiring` belongs to
+short-term acquisition, while `retaining` and recovery-oriented `relearning` belong
+to long-term retention.
 
 **Acquisition Cycle**:  
 The Structured Acquisition Protocol run through which a new or forgotten
@@ -380,9 +446,10 @@ Retention Target resolves its required Acquisition Gates. It can span multiple
 Encounters and Sessions but is not created by other protocols.
 
 **Acquisition Gate**:  
-A required capability checkpoint with an unresolved, passed or failed state.
-Baseline gate families cover contextual Sense recognition, Sense-to-form recall
-and novel-context transfer; Boundary is required only for a real confusion target.
+A Structured Acquisition Protocol Checkpoint that represents a required capability
+criterion with an unresolved, passed or failed state. Baseline families cover contextual
+Sense recognition, Sense-to-form recall and novel-context transfer; Boundary is required
+only for a real confusion target.
 
 **Acquisition Graduation**:  
 The transition that occurs when every required Gate in an initial Acquisition
@@ -435,11 +502,32 @@ together with the Personal Semantic World, learner progress and practice
 activity. It is neither an authoritative progress aggregate nor a literal model
 of the learner's mind.
 
+**Semantic Intake**:
+A port-neutral capture of a real context together with any Expression and Sense
+information currently available. Text selection, image/audio capture, first-party
+extensions and learner-authorized Agents all submit through this boundary. An Intake
+may be incomplete and does not become Personal Semantic World membership by itself.
+
+**Intake Inbox Item**:
+A learner-owned unresolved Semantic Intake awaiting an Expression selection, a
+teaching-sufficient Sense resolution, valid acceptance authority or an explicit
+decision to discard it. The Inbox is the receiving area of the Personal Semantic
+World surface, not part of its stable semantic inventory.
+
+**Semantic Acceptance**:
+The auditable authority by which a complete Context–Expression–Sense resolution is
+committed to the Personal Semantic World. Acceptance may be performed directly by
+the learner or by an Agent acting under an explicit learner delegation; provenance
+must distinguish the two, but delegated acceptance does not require a second
+first-party confirmation. Acceptance is not content review, Add-to-Learning or
+Learning Evidence.
+
 **Personal Semantic World（个人语义世界）**:
-The learner-owned set of Personal Meanings they explicitly create, together
-with their anchors and confirmed Sense relationships. It can explicitly bridge a
-confirmed target into Curriculum, but is neither a learning prerequisite nor a
-progress owner; system inference never adds membership without the learner's act.
+The learner-owned set of complete Personal Meanings committed through valid direct
+or delegated Semantic Acceptance. Each member preserves a real Context, a located
+Expression and its stable Sense relationship; an optional Meaning Focus may explain
+how an ambiguous Context was resolved. It can explicitly bridge a confirmed target
+into Curriculum, but is neither a learning prerequisite nor a progress owner.
 
 **Personal Content**:  
 The learner-owned references, annotations and organization they intentionally
@@ -454,9 +542,10 @@ The learner's single current free-form note for one Sense. It persists independe
 of saving and is neither published linguistic truth nor Learning Evidence.
 
 **Personal Semantic Anchor**:  
-A learner-authored text, image, audio, scene or other experience connected to a
-Personal Meaning. It may remain useful after Sense confirmation but is a private
-optional scaffold, not reviewed content, learner progress or Evidence.
+A provenance-bearing text, image, audio, scene or other real Context intentionally
+committed for a Personal Meaning by the learner or an authorized delegate. It may
+remain useful after Sense confirmation but is a private optional learning scaffold,
+not reviewed content, learner progress or Evidence.
 
 **Personal Semantic Region**:
 
@@ -467,15 +556,19 @@ curriculum order or inferred mental structure.
 
 **Personal Meaning（个人意义）**:
 
-A stable learner-owned identity for something the learner explicitly chooses to
-preserve from their meaning or experience structure. It can exist before Sense
-confirmation and is never replaced by a word, a Sense or an LLM summary.
+A stable learner-owned identity for one accepted contextual meaning the learner
+chooses to preserve. A complete member fixes at least one Personal Semantic Anchor,
+one located Personal Expression Anchor and one active relation to a stable Sense
+Version and compatible Sense Expression Binding. It is never replaced by a word, a
+Sense or an LLM summary.
 
 **Meaning Focus**:
 
-The learner-approved aspect of a Personal Meaning currently being made explicit,
-such as the receiving rather than giving perspective in one borrowing event. One
-experience may support multiple Meaning Focuses without being duplicated.
+An optional, learner-accepted statement used when Context alone does not make the
+intended Sense clear, such as the receiving rather than giving perspective in one
+borrowing event. It is a resolution bridge, not a required field of Personal Meaning
+or Personal Meaning Alignment, and must not be synthesized from a Sense definition
+merely to satisfy storage shape.
 
 **Personal Expression Anchor**:
 
@@ -486,9 +579,10 @@ identity or proof of learning.
 
 **Personal Meaning Alignment**:
 
-The explicit relation from one Meaning Focus to one stable Sense, with proposal
-and confirmation provenance. Confirmation preserves the Personal Meaning and
-does not by itself add the Sense to formal learning.
+The explicit relation from one Personal Meaning to one stable Sense Version, grounded
+in its Context and located Expression and optionally qualified by a Meaning Focus.
+It preserves resolution and direct/delegated acceptance provenance. Acceptance
+preserves the Personal Meaning and does not by itself add the Sense to formal learning.
 
 **Personal Collection / Collection Membership**:  
 A learner-named ordered organization of Sense and Example targets, plus one typed
@@ -530,6 +624,20 @@ One versioned unit in a Learning Protocol's ordered, branching or cyclic
 transition model. It declares purpose, required material roles, interaction,
 result eligibility and next-step rules without prescribing a visual component.
 
+**Experience Recall Step**:
+The non-evidentiary practice Step in Lightweight Study that presents an
+experience-and-Sense cue while withholding the target expression and invites the
+learner to retrieve that expression before requesting a reveal.
+
+**Expression Reveal Step**:
+The instructional Step in Lightweight Study that discloses the target expression,
+confirms its Sense binding and records a learner rating without creating behavioral
+Evidence.
+
+**Learning Action Intent**:
+The semantic purpose of one Protocol Action: instruction, practice, assessment,
+feedback or repair. Intent determines result eligibility; visual form does not.
+
 **Protocol Step Instance**:
 The learner-specific execution of one Protocol Step inside a Protocol Run. It
 records pinned material bindings, state and transition result for replay/resume.
@@ -543,13 +651,38 @@ A transient client rendering of the current Protocol Step/Action, possibly with
 prompt, reveal, feedback or detail phases. It owns no learning identity,
 curriculum membership, Evidence or schedule.
 
+**Card Presentation Slot**:
+A named region in a versioned Card Presentation contract that admits declared
+material roles under cardinality, order, disclosure, missing-resource and
+overflow rules. It owns neither content identity nor learning progress.
+
 **Learning Attempt**:  
 The learner's immutable raw response to the current Action.
 
+**Learning Observation**:
+The immutable interpretation of one Attempt and its response conditions under a pinned
+interaction/grader contract, including correctness, latency, support use or learner rating.
+It is input to evaluation, not itself Evidence, progress or a scheduler result.
+
 **Learning Evidence**:  
-The server-derived behavioral observation from a valid Attempt. Exposure,
-audio playback, acknowledgement and self-reported understanding are not Evidence;
-a lawful protocol may still use them as non-evidentiary completion or scheduling basis.
+The server-derived evidentiary statement from a valid Learning Observation under a
+pinned Evidence Rule. Exposure, audio playback, acknowledgement and self-reported
+understanding are not Evidence; a lawful protocol may still use them as non-evidentiary
+completion or scheduling basis.
+
+**Protocol Checkpoint**:
+A protocol-local evaluative milestone that references one or more Learning Capability
+Objectives and owns current credit within a Protocol Run. It is optional, is not a
+Capability Objective or Retention Target, and never derives identity from a Card.
+
+**Protocol Transition Decision**:
+The immutable, versioned decision that maps an Observation and any admissible Evidence
+to Checkpoint credit, repair, reassessment, progress reset, advancement or completion.
+
+**Progress Reset**:
+A Protocol Transition effect that invalidates current Checkpoint credit for an explicit
+scope—one Checkpoint, a declared set or the Run—without deleting Attempt, Observation,
+Evidence or prior transition history.
 
 **Encounter Outcome**:  
 The immutable semantic completion result of one Encounter under its pinned
@@ -569,7 +702,17 @@ optional recall attempted or Study Completion. It does not create Gate or 5D fac
 An immutable scheduler-facing result from one protocol-declared evaluation of an
 existing Retention Target. A due Review produces at most one; a scheduler-eligible
 Relearning evaluation may produce a separate result. Every result records its
-origin and basis, is applied to FSRS at most once and never rewrites an earlier one.
+origin, grade and basis, is applied to FSRS at most once and never rewrites an earlier one.
+
+**Memory Outcome Grade**:
+The scheduler-stable ordinal result `again | hard | good | easy`. Protocol-specific
+responses and labels map to a grade without collapsing meaningful uncertainty into a
+Boolean; grade remains separate from evidence basis and claim strength.
+
+**Scheduling Decision**:
+The immutable scheduler result obtained from one Memory State revision and one valid
+Memory Outcome. It produces the next Memory State and due time; Protocols and clients
+cannot write either directly.
 
 **Relearning Completion**:
 The successful end of a Relearning Protocol Run. It returns the Retention Target

@@ -1,5 +1,11 @@
 import { useCallback, useRef, useState } from 'react';
 import { LearnQueue } from './LearnQueue';
+import {
+  acquisitionOrchestration,
+  type AcquisitionCandidate,
+  type AcquisitionRepairBasis,
+  type StepOrchestration,
+} from './stepOrchestration';
 import type {
   LearningCapability,
   MeaningToFormRecallOutcome,
@@ -10,6 +16,7 @@ import type {
   Session,
   StructuredAcquisitionProjection,
 } from './types';
+import { retentionTargetIdOf } from './types';
 
 const EMPTY_PROJECTION: StructuredAcquisitionProjection = {
   currentAction: null,
@@ -19,6 +26,8 @@ const EMPTY_PROJECTION: StructuredAcquisitionProjection = {
 export function useLearnQueue<TContent>(
   initialPackages: readonly SchedulablePackage<TContent>[],
   config?: QueueConfig,
+  orchestration: StepOrchestration<AcquisitionCandidate, AcquisitionRepairBasis>
+    = acquisitionOrchestration,
 ) {
   const queueRef = useRef<LearnQueue<TContent> | null>(null);
   const [session, setSession] = useState<Session<TContent> | null>(null);
@@ -27,9 +36,8 @@ export function useLearnQueue<TContent>(
     totalAttempts: 0,
     correctAttempts: 0,
     accuracy: 100,
-    masteredCount: 0,
-    totalSenses: initialPackages.length,
-    totalWords: initialPackages.length,
+    masteredTargetCount: 0,
+    totalTargets: initialPackages.length,
     startTime: Date.now(),
   }));
   const [isDone, setIsDone] = useState(false);
@@ -44,11 +52,11 @@ export function useLearnQueue<TContent>(
   }, []);
 
   const start = useCallback((packagesToLearn: readonly SchedulablePackage<TContent>[] = initialPackages) => {
-    const queue = new LearnQueue(packagesToLearn, config);
+    const queue = new LearnQueue(packagesToLearn, config, orchestration);
     queueRef.current = queue;
     sync(queue);
     return queue.getCurrentSession();
-  }, [config, initialPackages, sync]);
+  }, [config, initialPackages, orchestration, sync]);
 
   const settle = useCallback((ok: boolean) => {
     const queue = queueRef.current;
@@ -132,23 +140,23 @@ export function useLearnQueue<TContent>(
     sync(queue);
   }, [sync]);
 
-  const setDeclaredMastery = useCallback((packageOrSenseId: string, isMastered: boolean) => {
+  const setDeclaredMastery = useCallback((retentionTargetId: string, isMastered: boolean) => {
     const queue = queueRef.current;
     if (!queue) return false;
-    const updated = queue.setDeclaredMastery(packageOrSenseId, isMastered);
+    const updated = queue.setDeclaredMastery(retentionTargetId, isMastered);
     if (updated && (!queue.getCurrentSession() || queue.getCurrentSession()?.settled)) queue.next();
     sync(queue);
     return updated;
   }, [sync]);
 
-  const getGraduatedSenseIds = useCallback(() => {
-    return queueRef.current?.getGraduatedSenseIds() ?? [];
+  const getGraduatedRetentionTargetIds = useCallback(() => {
+    return queueRef.current?.getGraduatedRetentionTargetIds() ?? [];
   }, []);
 
   /** Demo-only presentation override; it still carries a Package, never an ad-hoc content object. */
   const overrideDemo = useCallback((
     demoPackage: SchedulablePackage<TContent>,
-    capability: LearningCapability,
+    capability: LearningCapability | null,
     demoStep: number,
     total: number,
     transferScenarioIndex = 0,
@@ -163,12 +171,15 @@ export function useLearnQueue<TContent>(
       package: demoPackage,
       action: {
         ...definition,
-        mode: definition.mode ?? 'assessment',
-        kind: definition.kind === 'introduction' ? 'introduction' : definition.kind,
+        intent: definition.intent ?? 'assessment',
+        // 演示绕过队列，但绕不过「谁决定用哪张卡」：它照结构化首学那套编排问。
+        stepKind: acquisitionOrchestration.stepKindFor(definition),
+        kind: definition.kind,
         ordinal: demoStep,
         totalTarget: total,
         packageId: demoPackage.packageId,
         senseId: demoPackage.senseId,
+        retentionTargetId: retentionTargetIdOf(demoPackage),
         content: demoPackage.content,
         reason: definition.kind === 'introduction' ? 'new' : 'acquisition_ready',
       },
@@ -199,7 +210,7 @@ export function useLearnQueue<TContent>(
     markMistake,
     markKnown,
     setDeclaredMastery,
-    getGraduatedSenseIds,
+    getGraduatedRetentionTargetIds,
     overrideDemo,
   };
 }

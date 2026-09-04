@@ -61,16 +61,28 @@ const providerOf = (
 ): ContentCapabilityReadinessProvider => (capabilityId) => table[capabilityId];
 
 const BOTH_READY = providerOf({
-  compact_learning_material: { view: COMPACT_READY, provisioned: true },
-  structured_learning_package: { view: PACKAGE_READY, provisioned: true },
+  compact_learning_material: {
+    view: COMPACT_READY, provisioned: true, materializationId: 'compact-v1',
+  },
+  structured_learning_package: {
+    view: PACKAGE_READY, provisioned: true, materializationId: 'package-v1',
+  },
 });
 const PACKAGE_MISSING = providerOf({
-  compact_learning_material: { view: COMPACT_READY, provisioned: true },
-  structured_learning_package: { view: PACKAGE_BLOCKED, provisioned: false },
+  compact_learning_material: {
+    view: COMPACT_READY, provisioned: true, materializationId: 'compact-v1',
+  },
+  structured_learning_package: {
+    view: PACKAGE_BLOCKED, provisioned: false, materializationId: null,
+  },
 });
 const COMPACT_NOT_YET = providerOf({
-  compact_learning_material: { view: COMPACT_PREPARING, provisioned: true },
-  structured_learning_package: { view: PACKAGE_READY, provisioned: true },
+  compact_learning_material: {
+    view: COMPACT_PREPARING, provisioned: true, materializationId: 'compact-v1',
+  },
+  structured_learning_package: {
+    view: PACKAGE_READY, provisioned: true, materializationId: 'package-v1',
+  },
 });
 
 /* ---------- 合取 ---------- */
@@ -172,18 +184,18 @@ for (const targetId of PROTOTYPE_LEARNING_TARGET_ORDER) {
 
   for (const policy of POLICIES) {
     // 改动前：整条方式的 readiness 就是它那个唯一需求在这条 Target 上的 view。
-    const legacyStatus: PrototypeLearningReadiness = policy === 'lightweight'
+    const previousStatus: PrototypeLearningReadiness = policy === 'lightweight'
       ? target.lightweightReadiness.status
       : (hasPackage ? 'ready' : 'blocked');
     check(`${targetId} / ${policy} 的准备状态未变`,
-      readinessForPolicy(target, policy).status === legacyStatus);
+      readinessForPolicy(target, policy).status === previousStatus);
 
     // 改动前 App.tsx 里那一行：非 structured 恒为 true，structured 看有没有包。
-    const legacyExecutable =
+    const previousExecutable =
       learningRuntimeCoordinator.surfaceFor(policy, 'initial_learning') !== 'structured_session'
       || hasPackage;
     check(`${targetId} / ${policy} 的可执行判断与旧表达式一致`,
-      provisionedForPolicy(target, policy) === legacyExecutable);
+      provisionedForPolicy(target, policy) === previousExecutable);
   }
 
   check(`${targetId} 的轻量准备状态原样透传，没被合取吞掉`,

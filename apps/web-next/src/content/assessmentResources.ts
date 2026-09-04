@@ -30,7 +30,7 @@ export interface AssessmentResourceRequest {
   taskKey: string | null | undefined;
   kind: AssessmentResourceKind;
   /** Optional scheduler capability; when supplied it must agree with kind. */
-  capability?: AssessmentResourceCapability;
+  capability?: LearningCapability;
 }
 
 interface AssessmentResourceBase {
@@ -82,11 +82,8 @@ export type AssessmentResource =
   | NovelTransferAssessmentResource
   | BoundaryContrastAssessmentResource;
 
-/** Capabilities that can be materialised as Assessment Resources. */
-export type AssessmentResourceCapability = Exclude<LearningCapability, 'introduction'>;
-
 export function assessmentKindForCapability(
-  capability: AssessmentResourceCapability,
+  capability: LearningCapability,
 ): AssessmentResourceKind {
   switch (capability) {
     case 'contextual_recognition': return 'context_recognition';
@@ -372,7 +369,7 @@ export function materializeAssessmentResource(
 
 /** Keep the compiler honest when a caller stores a capability next to a kind. */
 export function assertAssessmentCapabilityMatchesKind(
-  capability: AssessmentResourceCapability,
+  capability: LearningCapability,
   kind: AssessmentResourceKind,
 ): void {
   if (assessmentKindForCapability(capability) !== kind) {

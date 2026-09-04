@@ -1,40 +1,92 @@
+import {
+  createProtocolProgressState,
+  decideAndApplyProtocolTransition,
+  type LearningObservation,
+  type ProtocolProgressDefinition,
+} from '@sensa/learning-kernel';
+import { protocolPolicyRegistry } from '../learningRuntime/protocolPolicies';
+import {
+  acquisitionGateActions,
+  acquisitionOrchestration,
+  actionIntent,
+  isIntroduction,
+  requiredGatesOf,
+  type AcquisitionCandidate,
+  type AcquisitionRepairBasis,
+  type StepOrchestration,
+} from './stepOrchestration';
+import { retentionTargetIdOf } from './types';
 import type {
   AcquisitionTargetProjection,
-  AcquisitionGateStatus,
   LearningCapability,
   MeaningToFormRecallOutcome,
   NovelTransferOutcome,
   QueueConfig,
   QueueStats,
-  RepairResourceRole,
   SchedulablePackage,
-  ScheduledActionDefinition,
-  ScheduledActionMode,
   Session,
-  SenseAcquisitionState,
+  AcquisitionTargetState,
   StructuredAcquisitionProjection,
 } from './types';
 
-type GateCapability = Exclude<LearningCapability, 'introduction'>;
-
 interface HistorySnapshot<TContent> {
-  states: SenseAcquisitionState[];
+  states: AcquisitionTargetState[];
   sessions: Session<TContent>[];
   currentSession: Session<TContent> | null;
   totalAttempts: number;
   totalCorrect: number;
 }
 
-function emptyGateStatus(): Record<GateCapability, AcquisitionGateStatus> {
-  return {
-    contextual_recognition: 'unresolved',
-    meaning_to_form_recall: 'unresolved',
-    novel_context_transfer: 'unresolved',
-    boundary_discrimination: 'unresolved',
-  };
-}
+const STRUCTURED_CHECKPOINT_PREFIX = 'structured-acquisition:';
+const structuredProgressionPolicy = protocolPolicyRegistry.getProgression(
+  'structured-current-checkpoint-reset-v1',
+);
+const structuredCompletionPolicy = protocolPolicyRegistry.getCompletion(
+  'all-required-current-epoch-v1',
+);
 
-function emptyCounts(): Record<GateCapability, number> {
+const checkpointIdFor = (capability: LearningCapability): string =>
+  `${STRUCTURED_CHECKPOINT_PREFIX}${capability}`;
+
+const capabilityForCheckpoint = (checkpointId: string): LearningCapability => {
+  const capability = checkpointId.startsWith(STRUCTURED_CHECKPOINT_PREFIX)
+    ? checkpointId.slice(STRUCTURED_CHECKPOINT_PREFIX.length)
+    : '';
+  switch (capability) {
+    case 'contextual_recognition':
+    case 'meaning_to_form_recall':
+    case 'novel_context_transfer':
+    case 'boundary_discrimination':
+      return capability;
+    default:
+      throw new Error(`Unknown Structured Acquisition Checkpoint: ${checkpointId}`);
+  }
+};
+
+const progressDefinitionFor = (
+  item: SchedulablePackage<unknown>,
+): ProtocolProgressDefinition => ({
+  protocolId: 'structured-acquisition',
+  protocolVersion: 'v1',
+  checkpoints: requiredGatesOf(item).map((capability) => ({
+    checkpointId: checkpointIdFor(capability),
+    capabilityObjectiveIds: [capability],
+    requiredForCompletion: true,
+  })),
+  completionPolicy: structuredCompletionPolicy,
+});
+
+const gateStatusFor = (
+  state: AcquisitionTargetState,
+  capability: LearningCapability,
+) => {
+  const status = state.protocolProgress.checkpointCredits[checkpointIdFor(capability)]?.status;
+  if (status === 'credited') return 'passed' as const;
+  if (status === 'failed') return 'failed' as const;
+  return 'unresolved' as const;
+};
+
+function emptyCounts(): Record<LearningCapability, number> {
   return {
     contextual_recognition: 0,
     meaning_to_form_recall: 0,
@@ -43,33 +95,13 @@ function emptyCounts(): Record<GateCapability, number> {
   };
 }
 
-function cloneState(state: SenseAcquisitionState): SenseAcquisitionState {
+function cloneState(state: AcquisitionTargetState): AcquisitionTargetState {
   return {
     ...state,
-    gateStatus: { ...state.gateStatus },
     repairCounts: { ...state.repairCounts },
     failureCounts: { ...state.failureCounts },
     lastAssessmentActionKey: { ...state.lastAssessmentActionKey },
   };
-}
-
-function actionMode(definition: ScheduledActionDefinition): ScheduledActionMode {
-  return definition.mode ?? 'assessment';
-}
-
-function isAssessment(definition: ScheduledActionDefinition): boolean {
-  return actionMode(definition) === 'assessment';
-}
-
-function repairRoleFor(capability: GateCapability): RepairResourceRole {
-  switch (capability) {
-    case 'meaning_to_form_recall':
-      return 'l1_bridge';
-    case 'contextual_recognition':
-    case 'novel_context_transfer':
-    case 'boundary_discrimination':
-      return 'experience_recap';
-  }
 }
 
 /**
@@ -85,10 +117,10 @@ function repairRoleFor(capability: GateCapability): RepairResourceRole {
  */
 export class LearnQueue<TContent = unknown> {
   private readonly packages: readonly SchedulablePackage<TContent>[];
-  private readonly states: Map<string, SenseAcquisitionState>;
-  private readonly activeWindow: number;
+  private readonly states: Map<string, AcquisitionTargetState>;
   private readonly minGap: number;
   private readonly progressTarget: number;
+  private readonly orchestration: StepOrchestration<AcquisitionCandidate, AcquisitionRepairBasis>;
   private currentSession: Session<TContent> | null = null;
   private sessionHistory: Session<TContent>[] = [];
   private historySnapshots: HistorySnapshot<TContent>[] = [];
@@ -99,25 +131,26 @@ export class LearnQueue<TContent = unknown> {
   constructor(
     packages: readonly SchedulablePackage<TContent>[],
     config?: QueueConfig,
+    orchestration: StepOrchestration<AcquisitionCandidate, AcquisitionRepairBasis>
+      = acquisitionOrchestration,
   ) {
     this.assertPackageInventory(packages);
     this.packages = packages;
-    this.activeWindow = Math.max(
-      1,
-      Math.min(config?.activeWindow ?? 3, Math.max(1, packages.length)),
-    );
     this.minGap = Math.max(0, config?.minGap ?? 2);
     this.progressTarget = config?.progressTarget
       ?? packages.reduce((total, item) => total + 1 + item.requiredCapabilities.length, 0);
-    this.states = new Map(packages.map((item) => [item.packageId, {
+    this.orchestration = orchestration;
+    this.states = new Map(packages.map((item) => [retentionTargetIdOf(item), {
       packageId: item.packageId,
       senseId: item.senseId,
+      retentionTargetId: retentionTargetIdOf(item),
       phase: 'new',
       introduced: false,
       declaredMastery: false,
-      gateStatus: emptyGateStatus(),
-      pendingRepairCapability: null,
-      pendingRepairForActionKey: null,
+      protocolProgress: createProtocolProgressState(
+        `prototype:${retentionTargetIdOf(item)}:structured-acquisition:v1`,
+        progressDefinitionFor(item),
+      ),
       repairCounts: emptyCounts(),
       failureCounts: emptyCounts(),
       lastAssessmentActionKey: {},
@@ -135,12 +168,8 @@ export class LearnQueue<TContent = unknown> {
     return this.currentSession;
   }
 
-  public getState(packageOrSenseId: string): SenseAcquisitionState | null {
-    const packageItem = this.packages.find((item) =>
-      item.packageId === packageOrSenseId || item.senseId === packageOrSenseId);
-    const state = packageItem
-      ? this.states.get(packageItem.packageId)
-      : this.states.get(packageOrSenseId);
+  public getState(retentionTargetId: string): AcquisitionTargetState | null {
+    const state = this.states.get(retentionTargetId);
     return state ? cloneState(state) : null;
   }
 
@@ -150,55 +179,55 @@ export class LearnQueue<TContent = unknown> {
         ? {
             packageId: this.currentSession.action.packageId,
             senseId: this.currentSession.action.senseId,
+            retentionTargetId: this.currentSession.action.retentionTargetId,
             capability: this.currentSession.action.capability,
-            mode: this.currentSession.action.mode,
+            intent: this.currentSession.action.intent,
             reason: this.currentSession.action.reason,
           }
         : null,
       targets: this.packages.map((item): AcquisitionTargetProjection => {
-        const state = this.states.get(item.packageId)!;
+        const state = this.states.get(retentionTargetIdOf(item))!;
         return {
           packageId: item.packageId,
           senseId: item.senseId,
+          retentionTargetId: retentionTargetIdOf(item),
           phase: state.phase,
           introduced: state.introduced,
           declaredMastery: state.declaredMastery,
-          graduated: this.isPackageComplete(item, state),
+          graduated: this.isPackageComplete(state),
           gates: this.requiredGates(item).map((capability) => ({
             capability,
-            status: state.gateStatus[capability],
-            repairing: state.pendingRepairCapability === capability,
+            status: gateStatusFor(state, capability),
+            repairing: state.protocolProgress.pendingRepairs[checkpointIdFor(capability)] !== undefined,
           })),
         };
       }),
     };
   }
 
-  /** Initial Acquisition Graduation is distinct from a declared-mastery skip. */
-  public getGraduatedSenseIds(): string[] {
+  public getGraduatedRetentionTargetIds(): string[] {
     return this.packages
       .filter((item) => {
-        const state = this.states.get(item.packageId);
-        return state !== undefined && this.isPackageComplete(item, state);
+        const state = this.states.get(retentionTargetIdOf(item));
+        return state !== undefined && this.isPackageComplete(state);
       })
-      .map((item) => item.senseId);
+      .map(retentionTargetIdOf);
   }
 
   public isDone(): boolean {
     return this.packages.every((item) => {
-      const state = this.states.get(item.packageId);
+      const state = this.states.get(retentionTargetIdOf(item));
       return state === undefined
         || state.skipped
-        || this.isPackageComplete(item, state);
+        || this.isPackageComplete(state);
     });
   }
 
   /**
-   * Select one eligible action. When the active window is not full, new
-   * Senses fill it first. Once full, the oldest eligible active Sense wins;
-   * this gives unfinished cycles fairness instead of repeatedly selecting the
-   * first Package in the release. A cooldown fallback is used only when no
-   * other Sense can satisfy minGap (for example, a one-Sense fixture).
+   * 推进一步。选谁、出哪一步都由编排插件回答（见 stepOrchestration.ts）：
+   * 这里只负责把学习者本地状态投影成候选，并把拿回来的 Step 定义装配成一次
+   * 会话。修复依据也在这里算——"哪个 Gate 失败了、失败在哪一步"是本地状态，
+   * 不该由插件推断。
    */
   public next(): Session<TContent> | null {
     if (this.currentSession && !this.currentSession.settled) {
@@ -211,57 +240,34 @@ export class LearnQueue<TContent = unknown> {
 
     const ordinal = this.sessionHistory.length + 1;
     const pending = this.packages.filter((item) => {
-      const state = this.states.get(item.packageId);
+      const state = this.states.get(retentionTargetIdOf(item));
       return state !== undefined
         && !state.skipped
-        && !this.isPackageComplete(item, state);
+        && !this.isPackageComplete(state);
     });
-    const active = pending.filter((item) => this.states.get(item.packageId)?.introduced === true);
-    const fresh = pending.filter((item) => this.states.get(item.packageId)?.introduced === false);
-    const eligibleActive = active.filter((item) =>
-      this.isEligible(this.states.get(item.packageId)!, ordinal));
-    const eligibleFresh = fresh.filter((item) =>
-      this.isEligible(this.states.get(item.packageId)!, ordinal));
-
-    let candidates: readonly SchedulablePackage<TContent>[];
-    if (active.length < this.activeWindow && eligibleFresh.length > 0) {
-      candidates = eligibleFresh;
-    } else if (eligibleActive.length > 0) {
-      candidates = eligibleActive;
-    } else if (active.length < this.activeWindow && fresh.length > 0) {
-      // Fresh Packages have no previous action and are normally always
-      // eligible. This branch makes the intent explicit if a future policy
-      // adds a fresh-Sense cooldown.
-      candidates = fresh;
-    } else if (active.length > 0) {
-      // No other Sense can satisfy minGap. This is an explicit equivalent
-      // cooldown fallback, not an assertion that the gap was met.
-      candidates = active;
-    } else {
-      candidates = fresh;
-    }
-
-    const chosenPackage = this.chooseOldest(candidates);
-    if (!chosenPackage) {
+    const selection = this.orchestration.fresh(
+      pending.map((item) => this.toCandidate(item)),
+      { ordinal, minGap: this.minGap },
+    );
+    if (!selection) {
       this.currentSession = null;
       return null;
     }
-    const state = this.states.get(chosenPackage.packageId)!;
-    const definition = this.nextDefinition(chosenPackage, state);
-    if (!definition) {
-      this.currentSession = null;
-      return null;
-    }
-    const mode = actionMode(definition);
+    const chosenPackage = pending.find((item) =>
+      retentionTargetIdOf(item) === selection.target.targetKey)!;
+    const state = this.states.get(retentionTargetIdOf(chosenPackage))!;
+    const definition = selection.definition;
+    const intent = actionIntent(definition);
     const action: Session<TContent>['action'] = {
       ...definition,
-      mode,
+      intent,
       ordinal,
       totalTarget: this.progressTarget,
       packageId: chosenPackage.packageId,
       senseId: chosenPackage.senseId,
+      retentionTargetId: retentionTargetIdOf(chosenPackage),
       content: chosenPackage.content,
-      reason: mode === 'repair'
+      reason: intent === 'repair'
         ? 'repair'
         : definition.kind === 'introduction'
         ? 'new'
@@ -280,10 +286,10 @@ export class LearnQueue<TContent = unknown> {
   }
 
   public completeIntroduction(): Session<TContent> | null {
-    const session = this.requireCapability('introduction');
+    const session = this.requireIntroduction();
     if (!session) return this.currentSession;
     this.captureSnapshot();
-    const state = this.states.get(session.action.packageId)!;
+    const state = this.states.get(session.action.retentionTargetId)!;
     state.introduced = true;
     state.phase = 'acquiring';
     state.lastActionOrdinal = session.index;
@@ -311,7 +317,7 @@ export class LearnQueue<TContent = unknown> {
       outcome === 'success',
       (session, state) => {
         session.transferOutcome = outcome;
-        if (outcome === 'repair' && session.action.mode !== 'repair') {
+        if (outcome === 'repair' && session.action.intent !== 'repair') {
           state.transferScenarioIndex += 1;
         }
       },
@@ -322,12 +328,13 @@ export class LearnQueue<TContent = unknown> {
     return this.completeGate('boundary_discrimination', correct);
   }
 
-  /** Compatibility path for the frozen controls; state remains gate-scoped. */
+  /** Boolean-result convenience used by generic controls; state remains gate-scoped. */
   public settle(ok: boolean): Session<TContent> | null {
-    const capability = this.currentSession?.action.capability;
-    if (capability === 'introduction') {
+    const action = this.currentSession?.action;
+    if (action && isIntroduction(action)) {
       return ok ? this.completeIntroduction() : this.currentSession;
     }
+    const capability = action?.capability;
     if (capability === 'contextual_recognition') return this.completeRecognition(ok);
     if (capability === 'meaning_to_form_recall') return this.completeGate(capability, ok);
     if (capability === 'novel_context_transfer') return this.completeNovelTransfer(ok ? 'success' : 'repair');
@@ -341,22 +348,27 @@ export class LearnQueue<TContent = unknown> {
    */
   public markMistake(): void {
     const session = this.currentSession;
-    if (!session || session.action.capability === 'introduction' || session.action.mode === 'repair') {
+    const capability = session?.action.capability ?? null;
+    if (!session || capability === null || session.action.intent === 'repair') {
       return;
     }
-    const state = this.states.get(session.action.packageId);
+    const state = this.states.get(session.action.retentionTargetId);
     if (!state) return;
     this.captureSnapshot();
-    const capability = session.action.capability as GateCapability;
     const wasSettled = session.settled;
     if (!wasSettled) {
       session.settled = true;
       this.totalAttempts += 1;
       state.totalAttempts += 1;
     }
-    state.gateStatus[capability] = 'failed';
-    state.pendingRepairCapability = capability;
-    state.pendingRepairForActionKey = session.action.actionKey;
+    this.applyObservation(
+      session.package,
+      state,
+      session,
+      'checkpoint_not_satisfied',
+      capability,
+      'learner-correction',
+    );
     state.lastAssessmentActionKey[capability] = session.action.actionKey;
     state.failureCounts[capability] += 1;
     state.skipped = false;
@@ -371,15 +383,15 @@ export class LearnQueue<TContent = unknown> {
    * must not mutate phase, Gate status, Evidence history or FSRS eligibility.
    */
   public skipCurrent(): void {
-    const packageId = this.currentSession?.action.packageId;
-    if (packageId) this.setDeclaredMastery(packageId, true);
+    const retentionTargetId = this.currentSession?.action.retentionTargetId;
+    if (retentionTargetId) this.setDeclaredMastery(retentionTargetId, true);
   }
 
-  public setDeclaredMastery(packageOrSenseId: string, isMastered: boolean): boolean {
+  public setDeclaredMastery(retentionTargetId: string, isMastered: boolean): boolean {
     const packageItem = this.packages.find((item) =>
-      item.packageId === packageOrSenseId || item.senseId === packageOrSenseId);
+      retentionTargetIdOf(item) === retentionTargetId);
     if (!packageItem) return false;
-    const state = this.states.get(packageItem.packageId)!;
+    const state = this.states.get(retentionTargetIdOf(packageItem))!;
     if (state.declaredMastery === isMastered) return true;
     this.captureSnapshot();
     state.declaredMastery = isMastered;
@@ -387,7 +399,11 @@ export class LearnQueue<TContent = unknown> {
     // Intentionally preserve state.phase. In particular, a new or acquiring
     // Sense is not made retaining and never appears in graduation output.
     const session = this.currentSession;
-    if (isMastered && session?.action.packageId === packageItem.packageId && !session.settled) {
+    if (
+      isMastered
+      && session?.action.retentionTargetId === retentionTargetIdOf(packageItem)
+      && !session.settled
+    ) {
       session.settled = true;
       session.result = null;
       this.pushCompletedSession(session);
@@ -400,7 +416,7 @@ export class LearnQueue<TContent = unknown> {
     const snapshot = this.historySnapshots.pop();
     if (!snapshot) return null;
     this.states.clear();
-    snapshot.states.forEach((state) => this.states.set(state.packageId, cloneState(state)));
+    snapshot.states.forEach((state) => this.states.set(state.retentionTargetId, cloneState(state)));
     this.sessionHistory = snapshot.sessions.map((session) => this.copySession(session));
     this.currentSession = snapshot.currentSession
       ? this.copySession(snapshot.currentSession)
@@ -411,9 +427,9 @@ export class LearnQueue<TContent = unknown> {
   }
 
   public getStats(): QueueStats {
-    const masteredCount = this.packages.filter((item) => {
-      const state = this.states.get(item.packageId);
-      return state?.skipped || (state !== undefined && this.isPackageComplete(item, state));
+    const masteredTargetCount = this.packages.filter((item) => {
+      const state = this.states.get(retentionTargetIdOf(item));
+      return state?.skipped || (state !== undefined && this.isPackageComplete(state));
     }).length;
     return {
       sessionsCompleted: this.sessionHistory.length,
@@ -422,23 +438,22 @@ export class LearnQueue<TContent = unknown> {
       accuracy: this.totalAttempts > 0
         ? Math.round((this.totalCorrect / this.totalAttempts) * 100)
         : 100,
-      masteredCount,
-      totalSenses: this.packages.length,
-      totalWords: this.packages.length,
+      masteredTargetCount,
+      totalTargets: this.packages.length,
       startTime: this.startTime,
     };
   }
 
   private completeGate(
-    capability: GateCapability,
+    capability: LearningCapability,
     ok: boolean,
-    decorate?: (session: Session<TContent>, state: SenseAcquisitionState) => void,
+    decorate?: (session: Session<TContent>, state: AcquisitionTargetState) => void,
   ): Session<TContent> | null {
     const session = this.requireCapability(capability);
     if (!session) return this.currentSession;
-    const state = this.states.get(session.action.packageId)!;
+    const state = this.states.get(session.action.retentionTargetId)!;
     this.captureSnapshot();
-    if (session.action.mode === 'repair') {
+    if (session.action.intent === 'repair') {
       this.completeRepair(session, state, capability);
       return session;
     }
@@ -449,33 +464,48 @@ export class LearnQueue<TContent = unknown> {
     state.totalAttempts += 1;
     state.lastAssessmentActionKey[capability] = session.action.actionKey;
     if (ok) {
-      state.gateStatus[capability] = 'passed';
-      state.pendingRepairCapability = null;
-      state.pendingRepairForActionKey = null;
+      this.applyObservation(
+        session.package,
+        state,
+        session,
+        'checkpoint_satisfied',
+        capability,
+        'assessment',
+      );
       state.totalCorrect += 1;
       this.totalCorrect += 1;
     } else {
-      state.gateStatus[capability] = 'failed';
-      state.pendingRepairCapability = capability;
-      state.pendingRepairForActionKey = session.action.actionKey;
+      this.applyObservation(
+        session.package,
+        state,
+        session,
+        'checkpoint_not_satisfied',
+        capability,
+        'assessment',
+      );
       state.failureCounts[capability] += 1;
     }
     state.lastActionOrdinal = session.index;
-    state.phase = this.isPackageComplete(session.package, state) ? 'retaining' : 'acquiring';
+    state.phase = this.isPackageComplete(state) ? 'retaining' : 'acquiring';
     this.pushCompletedSession(session);
     return session;
   }
 
   private completeRepair(
     session: Session<TContent>,
-    state: SenseAcquisitionState,
-    capability: GateCapability,
+    state: AcquisitionTargetState,
+    capability: LearningCapability,
   ): void {
-    state.pendingRepairCapability = null;
-    state.pendingRepairForActionKey = null;
-    // A repair confirms that support was shown, not that the Gate was solved.
-    // The next independently assessed action must retest the unresolved Gate.
-    state.gateStatus[capability] = 'unresolved';
+    // A repair confirms that support was shown, not that the Checkpoint was
+    // satisfied. The kernel records the independent reassessment requirement.
+    this.applyObservation(
+      session.package,
+      state,
+      session,
+      'repair_completed',
+      capability,
+      'repair',
+    );
     state.repairCounts[capability] += 1;
     state.lastActionOrdinal = session.index;
     state.phase = 'acquiring';
@@ -490,148 +520,105 @@ export class LearnQueue<TContent = unknown> {
     return session;
   }
 
-  private nextDefinition(
-    item: SchedulablePackage<TContent>,
-    state: SenseAcquisitionState,
-  ): ScheduledActionDefinition | null {
-    if (!state.introduced) {
-      return item.actions.find((action) =>
-        action.kind === 'introduction' && action.capability === 'introduction' && isAssessment(action)) ?? null;
-    }
-
-    const requiredGates = this.requiredGates(item);
-    if (state.pendingRepairCapability !== null) {
-      return this.repairDefinition(item, state, state.pendingRepairCapability);
-    }
-
-    // This branch keeps state recoverable if a persisted/compatibility state
-    // contains a failed Gate but predates pendingRepairCapability.
-    const failed = requiredGates.find((capability) => state.gateStatus[capability] === 'failed');
-    if (failed) return this.repairDefinition(item, state, failed);
-
-    const pending = requiredGates.find((capability) => state.gateStatus[capability] !== 'passed');
-    if (!pending) return null;
-    const actions = this.gateActions(item, pending);
-    if (actions.length === 0) return null;
-    if (pending === 'novel_context_transfer') {
-      return actions[state.transferScenarioIndex % actions.length] ?? actions[0];
-    }
-    const previousActionKey = state.lastAssessmentActionKey[pending];
-    if (previousActionKey && actions.length > 1) {
-      return actions.find((action) => action.actionKey !== previousActionKey) ?? actions[0];
-    }
-    return actions[0];
+  private requireIntroduction(): Session<TContent> | null {
+    const session = this.currentSession;
+    if (!session || session.settled || !isIntroduction(session.action)) return null;
+    return session;
   }
 
-  private repairDefinition(
-    item: SchedulablePackage<TContent>,
-    state: SenseAcquisitionState,
-    capability: GateCapability,
-  ): ScheduledActionDefinition | null {
-    const actions = this.gateActions(item, capability);
-    const base = actions.find((action) =>
-      action.actionKey === state.pendingRepairForActionKey)
-      ?? actions[0];
-    if (!base) return null;
-    const repairNumber = state.repairCounts[capability] + 1;
-    const declaredRepair = item.repairActions?.find((action) =>
-      action.capability === capability && action.mode === 'repair');
-    if (declaredRepair) {
-      return {
-        ...declaredRepair,
-        actionKey: declaredRepair.actionKey === base.actionKey
-          ? `${base.actionKey}.repair.${repairNumber}`
-          : declaredRepair.actionKey,
-        taskKey: null,
-        kind: 'acquisition_gate',
-        mode: 'repair',
-        repairForActionKey: declaredRepair.repairForActionKey ?? base.actionKey,
-        repairResourceRef: declaredRepair.repairResourceRef ?? {
-          role: repairRoleFor(capability),
-          key: null,
-          source: 'scheduler_fallback',
-          fallbackReason: 'repair_binding_not_exposed',
-        },
-      };
-    }
+  /** 学习者本地状态 → 编排插件看得懂的一条候选。 */
+  private toCandidate(item: SchedulablePackage<TContent>): AcquisitionCandidate {
+    const state = this.states.get(retentionTargetIdOf(item))!;
     return {
-      actionKey: `${base.actionKey}.repair.${repairNumber}`,
-      capability,
-      taskKey: null,
-      kind: 'acquisition_gate',
-      mode: 'repair',
-      repairForActionKey: base.actionKey,
-      repairResourceRef: {
-        role: repairRoleFor(capability),
-        key: null,
-        source: 'scheduler_fallback',
-        fallbackReason: 'repair_binding_not_exposed',
+      targetKey: retentionTargetIdOf(item),
+      lastStepOrdinal: state.lastActionOrdinal,
+      repairBasis: this.repairBasisFor(state),
+      inventory: item,
+      introduced: state.introduced,
+      gateStatus: {
+        contextual_recognition: gateStatusFor(state, 'contextual_recognition'),
+        meaning_to_form_recall: gateStatusFor(state, 'meaning_to_form_recall'),
+        novel_context_transfer: gateStatusFor(state, 'novel_context_transfer'),
+        boundary_discrimination: gateStatusFor(state, 'boundary_discrimination'),
       },
+      lastAssessmentActionKey: state.lastAssessmentActionKey,
+      transferScenarioIndex: state.transferScenarioIndex,
     };
   }
 
-  private gateActions(
+  /** 这条 Target 有没有一份完整、可挂回真实失败的修复依据。 */
+  private repairBasisFor(
+    state: AcquisitionTargetState,
+  ): AcquisitionRepairBasis | null {
+    const pendingRepair = Object.values(state.protocolProgress.pendingRepairs)[0];
+    if (!pendingRepair) return null;
+    const capability = capabilityForCheckpoint(pendingRepair.checkpointId);
+    return {
+      capability,
+      failedActionKey: pendingRepair.failedActionId,
+      repairCount: state.repairCounts[capability],
+    };
+  }
+
+  private requiredGates(item: SchedulablePackage<TContent>): LearningCapability[] {
+    return requiredGatesOf(item);
+  }
+
+  private isPackageComplete(state: AcquisitionTargetState): boolean {
+    return state.introduced && state.protocolProgress.completed;
+  }
+
+  private applyObservation(
     item: SchedulablePackage<TContent>,
-    capability: GateCapability,
-  ): ScheduledActionDefinition[] {
-    return item.actions.filter((action) =>
-      action.capability === capability
-      && action.kind === 'acquisition_gate'
-      && isAssessment(action));
-  }
-
-  private requiredGates(item: SchedulablePackage<TContent>): GateCapability[] {
-    return item.requiredCapabilities.filter(
-      (capability, index, all): capability is GateCapability =>
-        capability !== 'introduction'
-        && all.indexOf(capability) === index,
-    );
-  }
-
-  private isPackageComplete(
-    item: SchedulablePackage<TContent>,
-    state: SenseAcquisitionState,
-  ): boolean {
-    return state.introduced
-      && this.requiredGates(item).every((capability) => state.gateStatus[capability] === 'passed');
-  }
-
-  /** minGap is the number of other Actions between two appearances. */
-  private isEligible(state: SenseAcquisitionState, ordinal: number): boolean {
-    return state.lastActionOrdinal < 0
-      || ordinal - state.lastActionOrdinal - 1 >= this.minGap;
-  }
-
-  private chooseOldest(
-    candidates: readonly SchedulablePackage<TContent>[],
-  ): SchedulablePackage<TContent> | null {
-    return [...candidates].sort((left, right) => {
-      const leftState = this.states.get(left.packageId)!;
-      const rightState = this.states.get(right.packageId)!;
-      return leftState.lastActionOrdinal - rightState.lastActionOrdinal
-        || left.packageId.localeCompare(right.packageId);
-    })[0] ?? null;
+    state: AcquisitionTargetState,
+    session: Session<TContent>,
+    kind: LearningObservation['kind'],
+    capability: LearningCapability,
+    identitySuffix: string,
+  ): void {
+    const identityBase = [
+      state.protocolProgress.protocolRunId,
+      session.index,
+      session.action.actionKey,
+      identitySuffix,
+    ].join(':');
+    const result = decideAndApplyProtocolTransition({
+      definition: progressDefinitionFor(item),
+      policy: structuredProgressionPolicy,
+      state: state.protocolProgress,
+      observation: {
+        observationId: `${identityBase}:observation`,
+        attemptId: `${identityBase}:attempt`,
+        actionId: session.action.actionKey,
+        kind,
+        checkpointId: checkpointIdFor(capability),
+        evidenceIds: kind === 'checkpoint_satisfied'
+          ? [`${identityBase}:evidence`]
+          : [],
+      },
+      decisionId: `${identityBase}:decision`,
+    });
+    state.protocolProgress = result.state;
   }
 
   private assertPackageInventory(
     packages: readonly SchedulablePackage<TContent>[],
   ): void {
-    const packageIds = new Set<string>();
-    const senseIds = new Set<string>();
+    const retentionTargetIds = new Set<string>();
     packages.forEach((item) => {
-      if (packageIds.has(item.packageId)) throw new Error(`Duplicate Package identity: ${item.packageId}`);
-      if (senseIds.has(item.senseId)) throw new Error(`Duplicate Sense identity: ${item.senseId}`);
-      packageIds.add(item.packageId);
-      senseIds.add(item.senseId);
-      if (!item.actions.some((action) =>
-        action.kind === 'introduction' && action.capability === 'introduction' && isAssessment(action))) {
+      const retentionTargetId = retentionTargetIdOf(item);
+      if (retentionTargetId.trim().length === 0) {
+        throw new Error(`Package ${item.packageId} has an empty Retention Target identity.`);
+      }
+      if (retentionTargetIds.has(retentionTargetId)) {
+        throw new Error(`Duplicate Retention Target identity: ${retentionTargetId}`);
+      }
+      retentionTargetIds.add(retentionTargetId);
+      if (!item.actions.some(isIntroduction)) {
         throw new Error(`Package ${item.packageId} has no executable Introduction action.`);
       }
-      const requiredGates = item.requiredCapabilities.filter(
-        (capability): capability is GateCapability => capability !== 'introduction',
-      );
-      requiredGates.forEach((capability) => {
-        if (this.gateActions(item, capability).length === 0) {
+      item.requiredCapabilities.forEach((capability) => {
+        if (acquisitionGateActions(item, capability).length === 0) {
           throw new Error(`Package ${item.packageId} has no executable action for ${capability}.`);
         }
       });

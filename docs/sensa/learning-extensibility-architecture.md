@@ -1,7 +1,7 @@
-# web-next 学习扩展性架构分解：目标 / 内容 / 实施
+# web-next 学习扩展性架构分解：目标 / 内容 / 实施 / 评价
 
 > 状态：Active implementation decomposition
-> 日期：2026-09-03
+> 日期：2026-09-04
 > Owner 决定：2026-09-03 开放讨论后由 owner 裁决，记录见 §7
 
 ## 0. 层级声明
@@ -16,6 +16,8 @@ seam，并声明扩展点。与领域模型冲突时，一律以领域模型为�
 目标   学习目标（学什么）+ 能力目标（练什么能力，learner 可选）
 内容   由目标推导；可预生产，也可按需生成
 实施   短期阶段 + 长期阶段，编排方式随能力目标变化
+评价   Observation / Evidence / Checkpoint / Transition 决定短期推进，
+       graded Memory Outcome 连接长期调度
 ```
 
 目标是让「新增一种学习模式」的成本收敛为**配置 + 插件**，而不是改动既有 lightweight /
@@ -42,7 +44,7 @@ structured 流程。
 所以本文不需要推翻任何冻结决定，需要做的是：**在 web-next 实现层打开这个既有扩展点，
 并把四条准入变成可检查的清单。**
 
-## 2. 三层分解到既有领域对象
+## 2. 四部分解到既有领域对象
 
 | Owner 的分层 | 既有领域对象 | 本文新增 |
 | --- | --- | --- |
@@ -51,6 +53,8 @@ structured 流程。
 | 内容 | Content Provisioning → Learning Materialization | `contentRequirement` 改为能力集合 |
 | 实施 · 短期 | Initial Learning Protocol | 编排插件 seam |
 | 实施 · 长期 | Retention Review / Relearning Protocol | 编排插件 seam |
+| 评价 · 短期 | Observation / Evidence / Protocol Checkpoint / Transition Decision | Progression Kernel + 正交 policy 注册表 |
+| 评价 · 长期 | graded Memory Outcome / Scheduling Decision | 分级 Outcome 合同 + scheduler adapter |
 | 卡片 | Protocol Step / Card Presentation | Step renderer 注册表 |
 
 领域层零新增；新增全部在实现 seam。
@@ -137,21 +141,41 @@ purpose: relearning         → 编排插件 repair 入口 → 出口 Relearning
 
 **新增一种模式时，插件作者只实现两个入口，而不必回答"我的 relearning 协议是什么"。**
 
+### 4.1 数量属于 Study Plan，不属于 preset
+
+learner-facing 的数量控制只有一个：Study Plan 上的每日新学数量。Unified Planner 按它选出
+当天允许 Introduction 的 Target；Runtime 接收的是已经选好的集合。preset/Profile、Protocol、
+Runtime Adapter 和队列都不得再定义每日数量、组大小、批次上限或 active window。
+
+编排插件仍然可以决定这个集合内部“先出谁、怎样穿插、间隔多少个 Step”，但不能用编排规则
+隐藏一部分 Target，或把另一个数量参数伪装成窗口。不同 Protocol Binding 需要分成多个 launch 时，
+每个 launch 也必须完整接收 Planner 分给该 Binding 的子集。due Review 与 Relearning 不消耗、也不受
+每日新学数量限制。实现层为了渲染或 I/O 做的分页必须不可观察，不能改变上述语义。
+
 ## 5. 实现 seam
 
 | seam | 合同 | 现状 |
 | --- | --- | --- |
-| **能力目标注册表** | 声明所需内容能力 + 准入依据 + `prerequisite?`（至多一层） | 新增；首批只注册既有默认 scope |
-| **内容供给插件** | `(Learning Target, 内容能力) → 校验 → 冻结 Learning Materialization` | 已有 Content Provisioning，需 seam 化 |
-| **编排插件** | `fresh(targets)` / `repair(target, 依据)` → 产出 Step 序列 | 现为 `LearnQueue` / `ReviewQueue` 硬编码 |
+| **能力目标注册表** | 声明所需内容能力 + 四项准入依据 + `prerequisite?`（至多一层） | ✅ 已落地：`retentionScopes.ts`；默认只启用核心连接 scope |
+| **内容供给插件** | `(Learning Target, 内容能力) → 校验 → 冻结 Learning Materialization` | ✅ 已落地：Lightweight Initial 贯通 context freeze → Candidate producer → validator → coverage/admission → Materialization；Plan 保留 identity |
+| **Agentic 内容生产** | `Task → bounded Attempt + closed tools → Candidate Bundle → independent admission` | ✅ v3 合同与 `contentAgentProvisioning.ts` 已落地；模型只能提交候选草稿，系统拥有 identity/policy/provenance/状态，DeepSeek adapter 只用于显式 live smoke |
+| **编排插件** | `fresh(targets)` / `repair(target, 依据)` → 产出 Step 序列 | ✅ 已落地：`engine/stepOrchestration.ts` + `learningRuntime/orchestrations.ts` |
 | **内容能力集合** | `Protocol Binding → 内容能力集合`，readiness 是集合的合取 | ✅ 已落地：`learningRuntime/contentCapabilities.ts` |
+| **Step intent 轴** | `intent: instruction \| practice \| assessment \| feedback \| repair`，只有 assessment 取证 | ✅ 已落地：`engine/types.ts` 的 `LearningStepIntent` |
 | **Runtime Surface 登记表** | `surface → flow + 首学/继续/复习三个启动入口` | ✅ 已落地：`learningRuntime/runtimeSurfaces.ts` |
 | **Retention Store 登记表** | `storeId → 交接投影 + 状态归谁持有` | ✅ 已落地：`learningRuntime/retentionStores.ts` |
-| **Step renderer 注册表** | `stepKind → 组件` | 待做；需先统一三个 Screen 的 props 接口 |
+| **Step renderer 注册表** | `stepKind → 组件` | ✅ 已落地：Structured 七种 + Lightweight Initial 两种 renderer |
+| **Presentation Slot 合同** | `presentation → slots(role/cardinality/order/disclosure/missing/overflow)`；AI 不控制布局 | ✅ 共享 schema + Lightweight Initial 两张版本化 Card 定义已落地 |
+| **数量归属** | `Study Plan → Unified Planner → 完整 RuntimeLaunch`；preset 只编排，不二次选量 | ✅ 已移除 `activeWindow` 与 Adapter 的 target-selection hook |
+| **Progression Kernel** | 验证并原子应用 credit / invalidate / repair / reassess / reset / complete effects | ✅ 已落地：`packages/learning-kernel/src/runtime/protocolProgression.ts` |
+| **Protocol Policy 注册表** | Evaluation / Progression / Completion / Repair / Memory Outcome 五条正交轴按 identity 组合 | ✅ 已落地：`learningRuntime/protocolPolicies.ts`；composition 阶段 fail closed |
+| **分级长期结果** | `again \| hard \| good \| easy` + basis + evidence level；一次 due Review 至多一个 | ✅ 已落地：Learning Kernel、ReviewQueue 与 storage 共用同一 Outcome |
+| **Content Demand 合同** | 版本化 role/schema/cardinality/use/validator/derivation；生成 request 自包含冻结上下文 | ✅ 通用合同 + `lightweight-initial-content@v1` 已落地；供给与 validator policy/version 均钉死 |
 
 ### 5.1 消除 surface 闭集
 
-`PrototypeRuntimeSurface` 是三值闭集。落地前 `App.tsx` 里有 17 处按它分派的判断，
+`PrototypeRuntimeSurface` 原先是三值闭集。现在 identity 已对扩展开放，由 composition
+root 的注册表重新闭合。落地前 `App.tsx` 里有 17 处按它分派的判断，
 它们并不是同一类东西：
 
 | 类别 | 处数 | 在问什么 | 处置 |
@@ -160,20 +184,32 @@ purpose: relearning         → 编排插件 repair 入口 → 出口 Relearning
 | retention store 选择 | 7 | 这条 Target 的长期事实存 FSRS 还是存 journey reducer | ✅ 改问 store（§5.4） |
 | 计数分桶 | 2 | 首页把这个 launch 计入哪个复习桶 | ✅ 改按 store 分桶 |
 | executable 判断 | 1 | 这个 surface 要不要 runtime package | ✅ 改问内容供给（§5.2） |
+| 交接依据 | 1 | 首学产出的是不是 Acquisition Graduation | ✅ 改问编排（§5.5） |
 
 登记表落地后，"新增一种 Runtime 行为"在启动路径上的改动收敛为**注册一条 definition**；
 `App.tsx` 不再出现任何 surface 名字的分发判断。runtimeSession 泛化之后，
 `startNextRetentionGroup` 也不再要调用方自报家门——跑完的是哪一组，由会话状态里
 那条复习运行回答。
 
-`App.tsx` 与 `journeyState.ts` 里现在只剩五处 surface 名字，都不是分派：
-三处是"哪块屏拿哪次运行"的派生（集中在一处，等 Step renderer 注册表），
-一处是收尾时调用方自报跑完了哪条运行，加上 `journeyState` 里
-"首学产出的是不是 Acquisition Graduation"（等编排插件按 intent 声明证据种类）。
+`journeyState.ts` 里现在一处 surface 名字都没有。`App.tsx` 里只剩四处，都不是分派：
+三处是"哪块屏拿哪次运行"的派生（集中在一处，等轻量两屏的 Step 化），
+一处是收尾时调用方自报跑完了哪条运行。
 
 终局形态仍是 Runtime 只认识 **Step**：编排插件产出 Step，注册表按 `stepKind` 查组件，
-`App.tsx` 退化为"当前有无 Step / 渲染它"的壳。这一步需要先统一三个 Screen 的 props
-接口（`LearnScreen` 目前有三十余个专有 prop），不在本次范围内。
+`App.tsx` 退化为"当前有无 Step / 渲染它"的壳。Step renderer 注册表
+（`learningRuntime/stepRenderers.ts`）已把 `stepKind → 组件` 这条 seam 落地：
+Structured 内置七种卡各是一条纯适配函数，把统一的 `StepRendererHost`（宿主能力合同）与
+`StepRendererProps`（渲染输入）接线成卡片自己的 props，闭合发生在注册表——
+查不到 renderer 直接抛错。`smoke:renderers` 拿真实安装目录钉住三件事：
+闭合性、查表与落地前 `LearnScreen` 七个分支逐格等价、宿主接线与 remount key
+格式不走样。`LearnScreen` 随之从"七个 stage 分支 + 三十余个 prop"收敛为
+"工具栏 + 进度 + 查表渲染"，卡片相关的接线收进 App 提供的一份 host。
+
+Lightweight Initial 已收敛为 Experience Recall 与 Expression Reveal 两个正式 Step：前者把 grounding
+与内部回想合并为 `practice`，后者以 `instruction` 揭示 expression 并接受 rating；`again` 循环，
+`hard | good` 显式触发 completion-only Progression。React 屏幕不再持有这段相位机，只负责 Runtime
+Shell、查 renderer 与显示非 Card 的完成状态。Lightweight Retention 仍是自包含固定屏，等其 Step 化
+后，"哪块屏拿哪次运行"的剩余派生才能继续退场。
 
 ### 5.2 内容需求改为集合
 
@@ -207,12 +243,28 @@ readiness 是 **Learning Target 级的事实、scope 级的投影**：内容属�
 ```text
 Step = { stepId, retentionTargetId, stepKind, materialRef, intent }
                                      ↑ 插件自由      ↑ 领域闭集
-intent: instruction | practice | assessment | repair
+intent: instruction | practice | assessment | feedback | repair
 ```
 
-只有 `assessment` 能产生 Evidence 与 Memory Outcome。`introduction` 从能力枚举中移出，
-降级为 `intent: instruction`。这条是插件自由度的边界：**没有它，多个插件会各自解释
-"什么叫学会了"。**
+只有 `assessment` 能产生 Evidence 与 Memory Outcome。这条是插件自由度的边界：
+**没有它，多个插件会各自解释"什么叫学会了"。**
+
+Step 的完整形状要等编排插件（§8 第 5 项）。先落的是 intent 轴，因为
+`introduction` 待在能力枚举里时，类型在说假话：讲解不进 Gate、不产生 Evidence、
+也没有对应的 Assessment Resource。代价是三处 `Exclude<LearningCapability,
+'introduction'>` 别名和十余处 `capability === 'introduction'` 判断——每一处都在
+用界面上看不见的方式绕开这个假成员。
+
+落地形状：`LearningStepIntent` 声明领域闭集，`ScheduledActionDefinition.capability`
+改为可空——**讲解步的 capability 就是 null，它确实不练任何能力**。三处 `Exclude`
+别名随之消失（`ReviewCapability` / `GateCapability` / `AssessmentResourceCapability`
+都塌回 `LearningCapability`）。`mode: 'assessment' | 'repair'` 是这条轴的旧名字，
+只是它表达不了"讲解"，所以并成了 `intent`。
+
+队列驱动的两套编排只产出 `instruction` / `assessment` / `repair` 三种；
+`practice`（练但不取证）出现在轻量首学的“回想”那一步，`feedback` 为可独立编排的
+反馈 Step 保留。二者都不能自行进入 Evidence；取证边界只能从行为上钉，`smoke:intent`
+19 项钉的就是这个——讲解与修复都不计入 attempts、不把 Gate 判成 passed。
 
 ### 5.4 Retention Store
 
@@ -229,21 +281,66 @@ surface（例如拼写产出仍走调度器）时，这九处一处都不用改�
 两个实现的**写入路径不对称**，抽象没有掩盖它：调度记忆可以命令式写，固定档期
 只能由 reducer 自己落。因此 store 只声明"接收 Scheduling Handoff 时给出什么首次
 到期投影"，宿主能力由 `RetentionStoreContext` 注入——App 传 `storageService`，
-reducer 传 action 里那份 `dueBySenseId`。同一份定义因而在命令式与纯函数两侧都成立，
+reducer 传 action 里那份 `dueByRetentionTargetId`。同一份定义因而在命令式与纯函数两侧都成立，
 `smoke:retention` 直接钉住了这一点。
+
+### 5.5 编排插件
+
+落地前，"出哪一步"硬编码在两个队列类的四个方法里（`LearnQueue` /
+`ReviewQueue` 各一对 `nextDefinition` / `repairDefinition`）。四个方法说的其实是
+同一个二分：**有没有待修复的依据？没有 → 出下一步；有 → 出这一步的定向修复。**
+
+落地形状是 `StepOrchestration` 的两个入口，正是 §4 定的那两个。三件事刻意如此：
+
+- **`fresh` 收候选集而不是单条。**"先出谁"和"出哪一步"是同一个决定，交错与间隔
+  属于编排。选中的候选若带着依据，`fresh` 委派给 `repair`——两条路参与同一次
+  选择，带依据的 Target 不会因此插队，也不会被饿死。这正是落地前的顺序。
+- **候选集的数量已经由 Planner 决定。** Runtime Adapter 没有 target-selection hook，
+  `StepPlan` 也没有 active-window 参数；编排必须消费同一 Protocol Binding 下的完整 launch，
+  只能改变顺序与间隔，不能再做一轮数量裁决。
+- **候选视图里没有 content。** 两处产出逻辑从来只读 `actions` / `reviewActions` /
+  `repairActions` 与学习者本地状态，seam 因此不需要 `TContent` 泛型。
+- **修复依据由宿主给出，不由插件推断。**"哪个 Gate 失败了、失败在哪一步"是学习者
+  本地状态，属于 §6 的内核。插件出的只是 Step *定义*；Gate 结算、Evidence 计数、
+  Memory Outcome 与 FSRS 全部留在队列里。
+
+`§5.1` 表里最后一处 surface 判断也随之收掉。原来那行
+`surfaceFor(policy, 'initial_learning') !== 'structured_session'` 问的是**用哪块屏跑**，
+要的却是**这套编排完成了什么、以什么依据交接、证据等级是什么**。这三条轴不能从
+surface 推断，也不能从是否出现 assessment 推断。现在每套首学编排显式声明完整出口合同：
+
+```text
+Lightweight Study → Study Completion + protocol_completion + non_evidentiary
+Structured Acquisition → Acquisition Graduation + acquisition_graduation + behavioral
+```
+
+声明不是注释：`smoke:orchestration` 拿真实内容把两套队列驱动的编排完整跑一遍
+（含一次失败 → 修复 → 独立重测），收集实际产出的 intent 集合与声明逐条核对；同时
+用“含 assessment 但只产出 Study Completion”的测试编排钉住**出口不是 intent 推断**。
+
+四套编排里两套由队列驱动，两套是固定屏（轻量首学与轻量复习）。它们同样在登记表里
+声明 intent 与 completion contract——出口只认显式合同，不认它跑在哪块屏上。队列接收
+`StepOrchestration` 实例，`stepKind` 也由该实例决定；中央 Runtime 不再按 orchestration id
+写 switch。
 
 ## 6. 不可插内核
 
-以下四条不接受插件覆盖：
+以下七条不接受插件覆盖：
 
 1. **Learning Target identity** —— 来源与能力目标数量都不改变对象身份；
 2. **Scheduling Handoff** —— 每个 Retention Target 一生一次；
 3. **Memory Outcome** —— 一次 due Review 至多一个；FSRS 调度归领域所有；
 4. **Provisioning 生命周期** —— `preparing → 校验 → 冻结 → ready`；`blocked` 不静默降级。
+5. **每日新学数量** —— learner 只在 Study Plan 设置一次，Unified Planner 唯一裁定；preset
+   不能通过分组、批次或窗口覆盖它。
+6. **评价事实链** —— Attempt 追加，Observation 不可变，Evidence 只陈述合法行为；
+   只有 Transition Decision 能推进 Protocol Progress。
+7. **Progression 事务** —— 内核限定 effect 词汇并原子、幂等应用；reset 只失效
+   当前 credit，不删除 Attempt、Observation、Evidence 或历史 Decision。
 
 插件决定**练什么、怎么练、用什么卡**；不决定**这次算不算数、下次什么时候来**。
 
-## 7. Owner 裁决记录（2026-09-03）
+## 7. Owner 裁决记录（2026-09-03—2026-09-04）
 
 | # | 问题 | 裁决 | 实现后果 |
 | --- | --- | --- | --- |
@@ -252,7 +349,9 @@ reducer 传 action 里那份 `dueBySenseId`。同一份定义因而在命令式�
 | 3 | Declared Mastery 作用域 | **默认 Learning Target 级**，可设置为 scope 级 | 事实存 scope 级，Target 级操作是批量写；新增 scope 不继承 mastery |
 | 4 | 能力目标前置关系 | 采用 `prerequisite`，**至多一层** | 同时表达 Gate 内顺序与跨 scope 准入 |
 | 5 | 按需内容的生成时机 | **生成后冻结**（生成时机不限，Runtime 只消费冻结材料） | 与 `On-demand Learning Content` 既有定义一致 |
-| 6 | 首批模式范围 | **只有 lightweight 与 structured**；不做能力目标选择 UI | learner 可见界面不变 |
+| 6 | 首批模式范围 | **只有 lightweight 与 structured**；不做能力目标选择 UI | 这是第一增量的历史范围；第三 preset 的后续裁决见 #8 |
+| 7 | 每日新学数量归谁 | **只属于 learner 的 Study Plan，由 Unified Planner 统一执行** | preset/Protocol/Adapter 不得另设组大小或窗口；Runtime 消费 Planner 已选集合 |
+| 8 | 如何验证架构真的可扩展 | 在 `web-next` 新增第三个 `interleaved_four_stage` 验证 preset | 四个 Protocol-local Checkpoint、组内穿插、任一失败整个 Run reset、三向 Review 和 relearning 必须只通过通用 seam 接入；不新增数量设置 |
 
 ### 7.1 关于第 5 条
 
@@ -270,9 +369,9 @@ frozen before use"。理由是失败必须可归因：材料每次现生成，�
 不调用 FSRS（`semantic-acquisition-model.md` §8）。Declared Mastery 只排除正式 Planning，
 不阻止 learner 自由练习该 Sense。
 
-## 8. 首批实施范围
+## 8. 实施范围与验证进度
 
-learner 可见界面**与当前完全一致**（轻量 / 高保证两个选项）。全部工作在实现层：
+第一增量先保持轻量 / 高保证两个选项，用下列工作打开 seam：
 
 1. ✅ `App.tsx` 的 surface 启动分支 → Runtime Surface 登记表（`runtimeSurfaces.ts` +
    `smoke:surfaces` 17 项回归）；
@@ -281,13 +380,69 @@ learner 可见界面**与当前完全一致**（轻量 / 高保证两个选项�
    （`retentionStores.ts` + `smoke:retention` 14 项）；
 3. ✅ `contentRequirement` → 能力集合 + readiness provider（`contentCapabilities.ts` +
    `smoke:capabilities` 32 项），`executable` 随之改问内容供给；
-4. `LearningCapability` 中移出 `introduction`；
-5. 编排插件 seam 化为 `fresh` / `repair` 两入口。
+4. ✅ `LearningCapability` 中移出 `introduction`，降级为 `intent: instruction`
+   （`LearningStepIntent` + `smoke:intent` 19 项），三处 `Exclude` 别名随之消失；
+5. ✅ 编排插件 seam 化为 `fresh` / `repair` 两入口（`stepOrchestration.ts` +
+   `orchestrations.ts` + `smoke:orchestration`），首学 Completion / Handoff / Evidence
+   改由编排显式声明，`stepKind` 由插件实例决定，`journeyState.ts` 里的 surface
+   判断清零；
+6. ✅ Step renderer 注册表（`stepRenderers.tsx` + `smoke:renderers` 32 项），
+   `stepKind` 由编排盖章、查表渲染，`LearnScreen` 的卡片分支与十余个
+   卡片接线 prop 随之消失；
+7. ✅ 能力目标注册表（`retentionScopes.ts` + `smoke:scopes`），四项独立 scope
+   准入条件与一层 prerequisite 在注册时校验；scope definition 升级不改变
+   Retention Target identity；
+8. ✅ 调度身份从 `senseId` 改为必填 `retentionTargetId`：首学/复习队列去重、运行投影、
+   Review Outcome 幂等键、本地 FSRS 与 Relearning store 都以 Retention Target 为主键；
+   可复用 Catalog Package 不携带 learner identity，只有进入 Runtime 时才显式绑定
+   Retention Target；不保留 sense-keyed 兼容路径或伪造的 Catalog target；
+9. ✅ 内容供给注册表与 composition root（`contentProvisioning.ts` /
+   `runtimeComposition.ts`）：开放 identity 在应用启动时重新闭合，悬空 adapter、
+   orchestration、surface、store、renderer 或 content capability 直接失败；根级
+   build/typecheck 已纳入 `apps/web-next`；
+10. ✅ 语言无关合同补齐 Retention Scope、Learning Policy Profile、Protocol Run、
+    Initial Learning Completion 与 Scheduling Handoff
+    （`packages/contracts/src/sensa/learningConnection.ts`）；合同直接升级为 v2，移除
+    Learning Target 内嵌的单一 Retention Target，并由 Retention Target 显式引用父 Target，
+    Web 原型不再是这些边界的唯一解释者。
+11. ✅ 每日新学数量收回 Study Plan / Unified Planner：删除公开 `activeWindow` 与 Adapter 的
+    target-selection hook；structured 编排完整接收 Planner 所选集合，lightweight 也把完整集合
+    放入同一次运行并逐条呈现；smoke 钉住 preset 不再拥有第二个数量参数。
+12. ✅ 通用 Progression Kernel：Protocol 可声明检查点、当前检查点重置或整个 Run
+    reset；内核先校验全部 effect 再原子应用，repair 不授予 credit，replay 幂等。
+13. ✅ Protocol Binding 补齐 Evaluation / Progression / Completion / Repair / Memory Outcome
+    五条 policy identity；composition root 对所有引用 fail closed，Runtime 不按 profile 名称分支。
+14. ✅ Memory Outcome 保留 `again | hard | good | easy`，`vague → hard` 不再被布尔化；
+    Relearning repair target 支持 Capability 或 Protocol-local Checkpoint，完成重学不重复结算 FSRS。
+15. ✅ `interleaved_four_stage` 作为第三个架构验证 preset 接入：Planner 选中的全部
+    Target 进入同一运行，`minGap=2` 只表达接触间隔；四个当前 epoch Checkpoint
+    全通过才完成，任一失败开启新 epoch；Review 保留 known / vague / forgotten 三向结果，
+    forgotten 开启当日 relearning。
+16. ✅ 新增 source-neutral Content Demand / Generation Request / Material Candidate 合同与
+    coverage admission：生成 adapter 获取 exact Demand 和冻结 artifacts，输出必须通过 role 的
+    schema、validator 与 cardinality 覆盖检查。该增量只固定通用 seam，不裁决 lightweight
+    需要哪些 role 或 Card。
+17. ✅ Lightweight Initial 两卡合同：Experience Recall / Expression Reveal 作为正式 Protocol Step，
+    rating 不是第三张 Card，Completion 不是 Step；共享 Presentation Slot contract 固定必要/可选区域与
+    pre-reveal non-disclosure，运行状态机移出 React renderer 并通过 completion-only kernel 执行。
+18. ✅ Lightweight Initial Content Demand v1 纵切：expression/Sense 权威直通，教学 Candidate 与客观
+    pronunciation derivation 分离；无成本 deterministic adapter 贯通 request、validation、coverage 与
+    immutable Materialization。Step Instance 固定 material-role/resource binding，Presentation 只消费
+    Materialization；optional resource 缺失、word/phrase/utterance 共用合同与 pre-reveal 泄露均有 smoke。
+19. ✅ Agentic Content Provisioning 纵切：Content Contract v3 固定 Task/Attempt/Bundle、approved tool
+    catalog、model/tool budget、tool-call provenance、supporting artifacts 与显式 optional-role omission；
+    `contentAgentProvisioning.ts` 执行有界 ReAct loop，`lightweightAgenticProvisioning.ts` 在 Agent 终止后
+    独立 validation/admission 并物化。无成本 smoke 覆盖工具调用、成功物化、pre-reveal 泄露拒绝与
+    未授权工具阻断；DeepSeek Chat Completions adapter 另有 mock-transport smoke。真实
+    `deepseek-v4-flash` 验收只能由 `npm run sensa:content-agent-live-smoke` 显式触发，缺少
+    `DEEPSEEK_API_KEY` 时不会发起请求，也不成普通 build/smoke 的一部分。
 
-首批**不做**：能力目标选择 UI、拼写/听写 scope、第三个 preset、
-"失败即全部重置"的 completion policy。
+当前**仍不做**：能力目标选择 UI、拼写/听写 scope、第三 preset 的生产 API/
+跨端持久化，以及复刻应用的非核心宿主层功能（拼写弹窗、全屏例句、点词查询等）。
 
-验收标准：lightweight 与 structured 的可观察行为零变化。
+当前验收标准：日计划集合只由 Unified Planner 决定；三个 preset 通过正交 policy
+轴组合；新 preset 能表达整体 reset 与分级 Review Outcome，同时 lightweight 与
+high_assurance 的原有行为回归不变。
 
 ## 9. 与 canonical journey 02 的关系
 
@@ -295,7 +450,7 @@ learner 可见界面**与当前完全一致**（轻量 / 高保证两个选项�
 
 | journey 02 条目 | 需要的补充 |
 | --- | --- |
-| §3「MVP 提供两个 Profile」 | 保持；补充 Profile 是 preset（scope 集合 + 编排选择）的说明 |
+| §3「MVP 提供两个 Profile」 | 生产 MVP 裁决仍由 `current-stage.md` 控制；`web-next` 的第三 Profile 是架构验证 preset，不自动构成生产承诺 |
 | §6「Initial Completion 只产生一次 Scheduling Handoff」 | 主语精确化为 Retention Target（含显式 scope），"只一次"不变 |
 | §10 扩展边界 | 用 §5 的四个 seam 替换 surface/adapter 表述 |
 | §11「到期 Review 最多产生一个 Memory Outcome」 | 主语精确化为 Retention Target，规则不变 |
@@ -313,5 +468,6 @@ learner 可见界面**与当前完全一致**（轻量 / 高保证两个选项�
 
 ## 11. 不属于本文
 
-API demand、wire contract、数据库 schema、Sync 版本、FSRS 参数、内容生成 prompt、
-页面视觉与文案。本文只声明 `web-next` 的实现 seam 与既有领域规定的落点。
+生产 API demand、数据库 schema、Sync 版本、FSRS 参数、内容生成 prompt、页面视觉与文案。
+`packages/contracts` 中的语言无关 schema 只固定跨客户端所需形状；它们尚未构成生产 API、
+权威持久化或 Sync 实现。本文主要声明 `web-next` 的实现 seam 与既有领域规定的落点。

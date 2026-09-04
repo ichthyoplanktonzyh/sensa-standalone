@@ -25,10 +25,12 @@ import type {
   ReviewFocusDimension,
 } from '../apps/web-next/src/review/types.ts';
 import {
-  PROTOTYPE_LEARNING_PACKAGES,
   materializeReviewRepairContent,
   runtimeLearningRelease,
 } from '../apps/web-next/src/content/learningCatalog.ts';
+import {
+  PROTOTYPE_RUNTIME_PACKAGES as PROTOTYPE_LEARNING_PACKAGES,
+} from '../apps/web-next/src/learningRuntime/prototypeRuntimeFixtures.ts';
 import {
   materializeAssessmentResource,
 } from '../apps/web-next/src/content/assessmentResources.ts';
@@ -73,7 +75,7 @@ function renderedText(markup: string): string {
     .trim();
 }
 
-function reviewKind(capability: LearningCapability): ReviewAssessmentKind {
+function reviewKind(capability: LearningCapability | null): ReviewAssessmentKind {
   switch (capability) {
     case 'contextual_recognition': return 'context_recognition';
     case 'meaning_to_form_recall': return 'meaning_to_form_recall';
@@ -94,7 +96,7 @@ function focusFor(kind: ReviewAssessmentKind): ReviewFocusDimension {
 
 function settleLearningAction<TContent>(queue: LearnQueue<TContent>, session: Session<TContent>): void {
   switch (session.action.capability) {
-    case 'introduction':
+    case null:
       queue.completeIntroduction();
       return;
     case 'contextual_recognition':
@@ -112,8 +114,19 @@ function settleLearningAction<TContent>(queue: LearnQueue<TContent>, session: Se
   }
 }
 
+function projectedGateStatus<TContent>(
+  queue: LearnQueue<TContent>,
+  retentionTargetId: string,
+  capability: LearningCapability,
+) {
+  return queue.getProjection().targets
+    .find((target) => target.retentionTargetId === retentionTargetId)
+    ?.gates.find((gate) => gate.capability === capability)
+    ?.status;
+}
+
 function collectInterleavedOrder(): string[] {
-  const queue = new LearnQueue(PROTOTYPE_LEARNING_PACKAGES, { activeWindow: 3, minGap: 2 });
+  const queue = new LearnQueue(PROTOTYPE_LEARNING_PACKAGES, { minGap: 2 });
   const order: string[] = [];
   let session = queue.getCurrentSession();
   let guard = 0;
@@ -125,13 +138,19 @@ function collectInterleavedOrder(): string[] {
   }
   assertCondition(queue.isDone(), 'Learn Queue should finish all Package Gates in the smoke fixture.');
   assertCondition(order.length > 0, 'Learn Queue should emit at least one action.');
-  assertCondition(new Set(order.slice(0, 3)).size === 3, 'The first active window must contain three different Senses.');
+  assertCondition(
+    new Set(order.slice(0, PROTOTYPE_LEARNING_PACKAGES.length)).size
+      === PROTOTYPE_LEARNING_PACKAGES.length,
+    'Every Target selected by the Planner must receive an Introduction before Gate work starts.',
+  );
 
-  // The fourth Package must not be permanently hidden behind the initial
-  // three. It should be introduced as soon as a window slot is available.
+  // No second quantity limit may hide a Target already selected by the Planner.
   const fourthSense = PROTOTYPE_LEARNING_PACKAGES[3]?.senseId;
   assertCondition(fourthSense && order.includes(fourthSense), 'The scheduler must eventually introduce every Package.');
-  assertCondition(order.indexOf(fourthSense) < 16, 'A later Package must not starve behind the first active window.');
+  assertCondition(
+    order.indexOf(fourthSense) < PROTOTYPE_LEARNING_PACKAGES.length,
+    'A later Package must be introduced in the first pass over planned Targets.',
+  );
 
   // Check the portion where at least three active Senses are available. The
   // configured minGap means two other Actions must be between appearances.
@@ -152,13 +171,13 @@ function collectInterleavedOrder(): string[] {
 
 function checkDirectionalFailure(): void {
   const packages = PROTOTYPE_LEARNING_PACKAGES.slice(0, 3);
-  const queue = new LearnQueue(packages, { activeWindow: 3, minGap: 2 });
+  const queue = new LearnQueue(packages, { minGap: 2 });
   let session = queue.getCurrentSession();
-  assertCondition(session?.action.capability === 'introduction', 'A new Sense must start with Introduction.');
+  assertCondition(session?.action.capability === null, 'A new Sense must start with Introduction.');
 
-  // Fill the active window before any Gate assessment.
+  // Every Target selected by the Planner receives its Introduction before Gate work.
   for (let index = 0; index < 3; index += 1) {
-    assertCondition(session?.action.capability === 'introduction', 'The active window must fill with Introductions first.');
+    assertCondition(session?.action.capability === null, 'Planned Targets must receive Introductions first.');
     queue.completeIntroduction();
     session = queue.next();
   }
@@ -166,9 +185,15 @@ function checkDirectionalFailure(): void {
   const failedSenseId = session!.action.senseId;
   const failedActionKey = session!.action.actionKey;
   queue.completeRecognition(false);
-  const failedState = queue.getState(session!.action.packageId);
-  assert.equal(failedState?.gateStatus.contextual_recognition, 'failed');
-  assert.equal(failedState?.gateStatus.meaning_to_form_recall, 'unresolved');
+  const failedRetentionTargetId = session!.action.retentionTargetId;
+  assert.equal(
+    projectedGateStatus(queue, failedRetentionTargetId, 'contextual_recognition'),
+    'failed',
+  );
+  assert.equal(
+    projectedGateStatus(queue, failedRetentionTargetId, 'meaning_to_form_recall'),
+    'unresolved',
+  );
 
   // The failure is not immediately repeated. We must first see at least two
   // other Sense Actions, then a distinct scheduler-created repair Action.
@@ -182,7 +207,7 @@ function checkDirectionalFailure(): void {
   assertCondition(session, 'A failed Gate must remain schedulable.');
   assertCondition(session.action.senseId === failedSenseId, 'The failed Sense should return for repair.');
   assertCondition(otherActionsBeforeRepair >= 2, 'Repair must follow at least minGap other Sense Actions.');
-  assert.equal(session.action.mode, 'repair');
+  assert.equal(session.action.intent, 'repair');
   assert.notEqual(session.action.actionKey, failedActionKey, 'A repair must not reuse the failed assessment identity.');
   assert.equal(session.action.taskKey, null, 'A scheduler repair must not masquerade as the assessment task.');
   assert.equal(session.action.repairResourceRef?.source, 'package_declared');
@@ -190,8 +215,11 @@ function checkDirectionalFailure(): void {
   assert.notEqual(session.action.repairResourceRef?.source, 'scheduler_fallback');
 
   queue.completeRecognition(true);
-  const afterRepair = queue.getState(failedSenseId)!;
-  assert.equal(afterRepair.gateStatus.contextual_recognition, 'unresolved');
+  const afterRepair = queue.getState(session!.action.retentionTargetId)!;
+  assert.equal(
+    projectedGateStatus(queue, session!.action.retentionTargetId, 'contextual_recognition'),
+    'unresolved',
+  );
   assert.equal(afterRepair.repairCounts.contextual_recognition, 1);
 
   // Repair itself is not Evidence. The independent retest also has to wait
@@ -202,7 +230,7 @@ function checkDirectionalFailure(): void {
     session
     && !(session.action.senseId === failedSenseId
       && session.action.capability === 'contextual_recognition'
-      && session.action.mode === 'assessment')
+      && session.action.intent === 'assessment')
     && otherActionsBeforeRetest < 30
   ) {
     if (session.action.senseId !== failedSenseId) otherActionsBeforeRetest += 1;
@@ -211,12 +239,12 @@ function checkDirectionalFailure(): void {
   }
   assertCondition(session, 'The failed Gate must receive an independent retest after repair.');
   assert.equal(session.action.senseId, failedSenseId);
-  assert.equal(session.action.mode, 'assessment');
+  assert.equal(session.action.intent, 'assessment');
   assert.notEqual(session.action.actionKey, session.action.repairForActionKey, 'Retest must not be the repair Action.');
   assertCondition(otherActionsBeforeRetest >= 2, 'Retest must follow repair interference spacing.');
 
   // A targeted failure does not erase unrelated Gates.
-  const singleQueue = new LearnQueue([packages[0]!], { activeWindow: 1, minGap: 0 });
+  const singleQueue = new LearnQueue([packages[0]!], { minGap: 0 });
   let single = singleQueue.getCurrentSession();
   singleQueue.completeIntroduction();
   single = singleQueue.next();
@@ -228,43 +256,56 @@ function checkDirectionalFailure(): void {
   single = singleQueue.next();
   assert.equal(single?.action.capability, 'novel_context_transfer');
   singleQueue.completeNovelTransfer('repair');
-  const targetedState = singleQueue.getState(packages[0]!.packageId)!;
-  assert.equal(targetedState.gateStatus.contextual_recognition, 'passed');
-  assert.equal(targetedState.gateStatus.meaning_to_form_recall, 'passed');
-  assert.equal(targetedState.gateStatus.novel_context_transfer, 'failed');
+  const targetedRetentionTargetId = packages[0]!.retentionTargetId;
+  assert.equal(
+    projectedGateStatus(singleQueue, targetedRetentionTargetId, 'contextual_recognition'),
+    'passed',
+  );
+  assert.equal(
+    projectedGateStatus(singleQueue, targetedRetentionTargetId, 'meaning_to_form_recall'),
+    'passed',
+  );
+  assert.equal(
+    projectedGateStatus(singleQueue, targetedRetentionTargetId, 'novel_context_transfer'),
+    'failed',
+  );
 }
 
 function checkDeclaredMastery(): void {
   const packageItem = PROTOTYPE_LEARNING_PACKAGES[0];
   assertCondition(packageItem, 'Declared Mastery needs a Package.');
   const queue = new LearnQueue([packageItem]);
-  const before = queue.getState(packageItem.packageId)!;
+  const before = queue.getState(packageItem.retentionTargetId)!;
   const initialProjection = queue.getProjection();
   assert.equal(initialProjection.currentAction?.senseId, packageItem.senseId);
   assert.equal(
     initialProjection.targets[0]?.gates.length,
-    packageItem.requiredCapabilities.filter((capability) => capability !== 'introduction').length,
+    packageItem.requiredCapabilities.length,
   );
   queue.skipCurrent();
-  const after = queue.getState(packageItem.packageId)!;
+  const after = queue.getState(packageItem.retentionTargetId)!;
   assert.equal(after.phase, before.phase, 'Declared Mastery must not force retaining phase.');
   assert.equal(after.declaredMastery, true);
   assert.equal(after.skipped, true);
-  assert.deepEqual(queue.getGraduatedSenseIds(), [], 'Declared Mastery must not count as Acquisition Graduation.');
+  assert.deepEqual(
+    queue.getGraduatedRetentionTargetIds(),
+    [],
+    'Declared Mastery must not count as Acquisition Graduation.',
+  );
   assert.equal(queue.isDone(), true, 'Declared Mastery should exclude the Sense from this planning run.');
   const excludedProjection = queue.getProjection().targets[0]!;
   assert.equal(excludedProjection.declaredMastery, true);
   assert.equal(excludedProjection.graduated, false);
   assert.deepEqual(excludedProjection.gates, initialProjection.targets[0]?.gates);
 
-  assert.equal(queue.setDeclaredMastery(packageItem.senseId, false), true);
-  const restored = queue.getState(packageItem.packageId)!;
+  assert.equal(queue.setDeclaredMastery(packageItem.retentionTargetId, false), true);
+  const restored = queue.getState(packageItem.retentionTargetId)!;
   assert.equal(restored.declaredMastery, false);
   assert.equal(restored.skipped, false);
   assert.equal(restored.phase, before.phase);
-  assert.deepEqual(restored.gateStatus, before.gateStatus);
+  assert.deepEqual(restored.protocolProgress, before.protocolProgress);
   assert.equal(queue.isDone(), false, 'Revocation must restore the untouched acquisition run.');
-  assert.equal(queue.next()?.action.capability, 'introduction');
+  assert.equal(queue.next()?.action.capability, null);
 }
 
 function checkReviewDeclaredMasteryExclusion(): void {
@@ -287,7 +328,7 @@ function checkReviewDeclaredMasteryExclusion(): void {
   assert.equal(interrupted?.action.senseId, current.action.senseId);
   assert.equal(effects.length, 0, 'Declared Mastery must not emit a Review or Relearning effect.');
   assert.equal(queue.getStats().totalAttempts, 0);
-  assert.equal(queue.getStats().completedWords, 0);
+  assert.equal(queue.getStats().completedTargets, 0);
   assert.equal(queue.isDone(), true, 'The declared Target must leave the current Planning inventory.');
   const excludedProjection = queue.getProjection();
   assert.equal(excludedProjection.currentAction, null);
@@ -308,7 +349,19 @@ function makeReviewResult(
     focusDimension: '义项边界',
     correct,
     responseId: 'smoke',
-    memoryOutcome: correct ? 'retrieval_failed' : 'transfer_confirmed',
+    memoryOutcome: correct
+      ? {
+          basis: 'retrieval_failed',
+          grade: 'again',
+          evidenceLevel: 'behavioral',
+          evidenceIds: [],
+        }
+      : {
+          basis: 'transfer_confirmed',
+          grade: 'good',
+          evidenceLevel: 'behavioral',
+          evidenceIds: [],
+        },
     evidenceEligible: false,
   };
 }
@@ -316,10 +369,10 @@ function makeReviewResult(
 function checkReviewSettlement(): void {
   const packageItem = PROTOTYPE_LEARNING_PACKAGES[0];
   assertCondition(packageItem, 'A Review Package is required.');
-  const senseId = packageItem.senseId;
+  const retentionTargetId = packageItem.retentionTargetId;
   const now = Date.now();
   storageService.saveFSRSItem({
-    wordId: senseId,
+    memoryKey: retentionTargetId,
     state: 'review',
     stability: 12,
     difficulty: 5,
@@ -344,8 +397,104 @@ function checkReviewSettlement(): void {
   const successfulProjection = successfulQueue.getProjection().targets[0]!;
   assert.equal(successfulProjection.status, 'retaining');
   assert.equal(successfulProjection.reviewSettled, true);
-  assert.equal(successfulProjection.memoryOutcome, 'independent_retrieval');
+  assert.equal(successfulProjection.memoryOutcome?.basis, 'independent_retrieval');
+  assert.equal(successfulProjection.memoryOutcome?.grade, 'good');
   assert.equal(successfulProjection.relearningCompleted, false);
+
+  const hardRetentionTargetId = `${retentionTargetId}:hard-grade`;
+  storageService.saveFSRSItem({
+    memoryKey: hardRetentionTargetId,
+    state: 'review',
+    stability: 8,
+    difficulty: 4,
+    reps: 3,
+    lapses: 0,
+    lastReview: now - 2 * 24 * 60 * 60 * 1000,
+    due: 0,
+    scheduledDays: 2,
+  });
+  const hardSettlement = storageService.settleRetentionReview({
+    outcomeKey: `${hardRetentionTargetId}:outcome`,
+    packageId: packageItem.packageId,
+    senseId: packageItem.senseId,
+    retentionTargetId: hardRetentionTargetId,
+    actionKey: 'learner-rated-hard-action',
+    memoryOutcome: {
+      basis: 'learner_rated',
+      grade: 'hard',
+      evidenceLevel: 'self_report',
+      evidenceIds: [],
+    },
+    repairTarget: { kind: 'capability', capability: 'meaning_to_form_recall' },
+    now,
+  });
+  assert.equal(hardSettlement.memoryState.state, 'review');
+  assert.equal(hardSettlement.memoryState.reps, 4);
+  assert.equal(hardSettlement.memoryState.lapses, 0);
+  assert.equal(hardSettlement.relearningCycle, null);
+
+  // A protocol that does not use the high-assurance Capability vocabulary
+  // keeps its own Checkpoint identity through durable Relearning. Completing
+  // that cycle must not create a second scheduler revision.
+  const checkpointRetentionTargetId = `${retentionTargetId}:checkpoint-relearning`;
+  storageService.saveFSRSItem({
+    memoryKey: checkpointRetentionTargetId,
+    state: 'review',
+    stability: 6,
+    difficulty: 5,
+    reps: 2,
+    lapses: 0,
+    lastReview: now - 3 * 24 * 60 * 60 * 1000,
+    due: 0,
+    scheduledDays: 3,
+  });
+  const checkpointOutcomeKey = `${checkpointRetentionTargetId}:outcome`;
+  const checkpointSettlement = storageService.settleRetentionReview({
+    outcomeKey: checkpointOutcomeKey,
+    packageId: packageItem.packageId,
+    senseId: packageItem.senseId,
+    retentionTargetId: checkpointRetentionTargetId,
+    actionKey: 'four-stage-forgotten-action',
+    memoryOutcome: {
+      basis: 'learner_rated',
+      grade: 'again',
+      evidenceLevel: 'self_report',
+      evidenceIds: [],
+    },
+    repairTarget: {
+      kind: 'protocol_checkpoint',
+      checkpointId: 'four-stage:final-recall',
+    },
+    now,
+  });
+  assert.equal(checkpointSettlement.applied, true);
+  assert.deepEqual(checkpointSettlement.relearningCycle?.repairTarget, {
+    kind: 'protocol_checkpoint',
+    checkpointId: 'four-stage:final-recall',
+  });
+  const checkpointMemoryAfterOutcome = { ...checkpointSettlement.memoryState };
+  const durableCheckpointCycle = storageService.getRelearningCycle(
+    checkpointRetentionTargetId,
+  );
+  assertCondition(
+    durableCheckpointCycle,
+    'A forgotten protocol-local Checkpoint must persist its Relearning Cycle.',
+  );
+  storageService.applyRelearningProgress({
+    event: 'retest_passed',
+    retentionTargetId: checkpointRetentionTargetId,
+    cycle: durableCheckpointCycle,
+  });
+  assert.equal(storageService.getRelearningCycle(checkpointRetentionTargetId), null);
+  assert.deepEqual(
+    storageService.getFSRSItems()[checkpointRetentionTargetId],
+    { ...checkpointMemoryAfterOutcome, state: 'review' },
+    'Relearning completion must only close the cycle, not schedule a second Memory Outcome.',
+  );
+  assert.equal(
+    storageService.getSettledReviewOutcome(checkpointOutcomeKey)?.memoryOutcome.grade,
+    'again',
+  );
 
   const effects: ReviewRuntimeEffect<typeof packageItem.content>[] = [];
   const queue = new ReviewQueue([candidate], {
@@ -366,22 +515,27 @@ function checkReviewSettlement(): void {
   const result = makeReviewResult(session, true);
   const failedResult = makeReviewResult(session, false);
   const failed = queue.settle(failedResult)!;
-  assert.equal(failed.stage, 'review_feedback');
+  assert.equal(failed.stepKind, 'review_feedback');
   assert.equal(failed.assessmentKind, session.assessmentKind);
-  assert.equal(failed.result?.memoryOutcome, 'retrieval_failed');
+  assert.equal(failed.result?.memoryOutcome?.basis, 'retrieval_failed');
+  assert.equal(failed.result?.memoryOutcome?.grade, 'again');
   assert.equal(failed.result?.focusDimension, focusFor(session.assessmentKind));
   assert.equal(failed.result?.evidenceEligible, true);
   const failedProjection = queue.getProjection().targets[0]!;
   assert.equal(failedProjection.status, 'relearning_repair');
   assert.equal(failedProjection.reviewSettled, true);
-  assert.equal(failedProjection.memoryOutcome, 'retrieval_failed');
+  assert.equal(failedProjection.memoryOutcome?.basis, 'retrieval_failed');
+  assert.equal(failedProjection.memoryOutcome?.grade, 'again');
   assert.equal(effects.filter((effect) => effect.type === 'retention_outcome').length, 1);
-  const failedMemory = { ...storageService.getFSRSItems()[senseId]! };
+  const failedMemory = { ...storageService.getFSRSItems()[retentionTargetId]! };
   assert.equal(failedMemory.state, 'relearning');
   assert.equal(failedMemory.reps, 8);
-  const cycle = storageService.getRelearningCycle(senseId);
+  const cycle = storageService.getRelearningCycle(retentionTargetId);
   assertCondition(cycle, 'A failed retention outcome must open a targeted Relearning Cycle.');
-  assert.equal(cycle.targetCapability, session.action.capability);
+  assert.deepEqual(cycle.repairTarget, {
+    kind: 'capability',
+    capability: session.action.capability,
+  });
   assert.equal(cycle.stage, 'repair_pending');
   assert.equal(cycle.repairCount, 0);
 
@@ -394,7 +548,8 @@ function checkReviewSettlement(): void {
   // Even a changed answer on replay cannot replace the already emitted
   // Memory Outcome for this stable due Review identity.
   const replayed = queue.settle(result)!;
-  assert.equal(replayed.result?.memoryOutcome, 'retrieval_failed');
+  assert.equal(replayed.result?.memoryOutcome?.basis, 'retrieval_failed');
+  assert.equal(replayed.result?.memoryOutcome?.grade, 'again');
   assert.equal(effects.filter((effect) => effect.type === 'retention_outcome').length, 1);
   assert.equal(queue.getStats().totalAttempts, 1);
   const outcomeKey = reviewOutcomeKey(candidate, session.action);
@@ -416,22 +571,27 @@ function checkReviewSettlement(): void {
     'A rebuilt queue may emit an effect, but the persisted guard must prevent a second settlement.',
   );
   assert.deepEqual(
-    storageService.getFSRSItems()[senseId],
+    storageService.getFSRSItems()[retentionTargetId],
     failedMemory,
     'Rebuilding the queue must not advance FSRS a second time.',
   );
 
   let repair = queue.next();
   assertCondition(repair, 'A failed Review must schedule a repair Action.');
-  assert.equal(repair.action.mode, 'repair');
+  assert.equal(repair.action.intent, 'repair');
   assert.equal(repair.action.kind, 'acquisition_gate');
-  assert.equal(repair.action.capability, cycle.targetCapability);
+  assert.equal(
+    repair.action.capability,
+    cycle.repairTarget.kind === 'capability' ? cycle.repairTarget.capability : null,
+  );
   assert.equal(repair.action.taskKey, null);
   assert.equal(repair.action.repairResourceRef?.source, 'package_declared');
   assert.equal(queue.getProjection().targets[0]?.status, 'relearning_repair');
   assertCondition(repair.action.repairResourceRef?.key, 'Repair must reference a Package resource.');
   const declaredRepair = packageItem.repairActions?.find((action) =>
-    action.capability === cycle.targetCapability && action.mode === 'repair');
+    action.capability === (
+      cycle.repairTarget.kind === 'capability' ? cycle.repairTarget.capability : null
+    ) && action.intent === 'repair');
   assertCondition(declaredRepair, 'The selected capability must have a declared Package repair.');
   assert.equal(
     repair.action.repairResourceRef?.key,
@@ -443,20 +603,27 @@ function checkReviewSettlement(): void {
     declaredRepair.repairResourceRef?.role,
     'Review repair must preserve the declared Package resource role.',
   );
-  const repairBefore = { ...storageService.getFSRSItems()[senseId]! };
+  const repairBefore = { ...storageService.getFSRSItems()[retentionTargetId]! };
   queue.completeRepair();
   assert.equal(queue.getProjection().targets[0]?.status, 'relearning_retest');
   assert.equal(effects.filter((effect) => effect.type === 'relearning_progress').length, 1);
-  const afterRepair = storageService.getRelearningCycle(senseId)!;
+  const afterRepair = storageService.getRelearningCycle(retentionTargetId)!;
   assert.equal(afterRepair.stage, 'retest_pending');
   assert.equal(afterRepair.repairCount, 1);
-  assert.deepEqual(storageService.getFSRSItems()[senseId], repairBefore, 'Repair must not update FSRS.');
+  assert.deepEqual(
+    storageService.getFSRSItems()[retentionTargetId],
+    repairBefore,
+    'Repair must not update FSRS.',
+  );
 
   const retest = queue.next();
   assertCondition(retest, 'Repair must be followed by an independent relearning gate.');
   assert.equal(retest.action.kind, 'relearning_gate');
-  assert.equal(retest.action.mode, 'assessment');
-  assert.equal(retest.action.capability, cycle.targetCapability);
+  assert.equal(retest.action.intent, 'assessment');
+  assert.equal(
+    retest.action.capability,
+    cycle.repairTarget.kind === 'capability' ? cycle.repairTarget.capability : null,
+  );
   assert.equal(queue.getProjection().targets[0]?.status, 'relearning_retest');
   const retestSettled = queue.settle(makeReviewResult(retest, true))!;
   assert.equal(retestSettled.result?.evidenceEligible, false);
@@ -465,18 +632,18 @@ function checkReviewSettlement(): void {
     effects.filter((effect) => effect.type === 'relearning_progress' && effect.event === 'retest_passed').length,
     1,
   );
-  const completedMemory = storageService.getFSRSItems()[senseId]!;
+  const completedMemory = storageService.getFSRSItems()[retentionTargetId]!;
   assert.equal(completedMemory.state, 'review');
   assert.deepEqual(
     { ...completedMemory, state: failedMemory.state },
     failedMemory,
     'Relearning completion must preserve every failed-Review memory field except state.'
   );
-  assert.equal(storageService.getRelearningCycle(senseId), null);
+  assert.equal(storageService.getRelearningCycle(retentionTargetId), null);
   const completedProjection = queue.getProjection().targets[0]!;
   assert.equal(completedProjection.status, 'retaining');
   assert.equal(completedProjection.relearningCompleted, true);
-  assert.equal(completedProjection.memoryOutcome, 'retrieval_failed');
+  assert.equal(completedProjection.memoryOutcome?.basis, 'retrieval_failed');
   assert.equal(queue.next(), null);
   assert.equal(queue.isDone(), true);
 
@@ -492,17 +659,21 @@ function checkReviewSettlement(): void {
   loopQueue.completeRepair();
   const loopRetest = loopQueue.next()!;
   loopQueue.settle(makeReviewResult(loopRetest, false));
-  assert.equal(loopQueue.next()?.action.mode, 'repair');
+  assert.equal(loopQueue.next()?.action.intent, 'repair');
   assert.equal(loopEffects.filter((effect) => effect.type === 'retention_outcome').length, 1);
   assert.equal(
     loopEffects.filter((effect) => effect.type === 'relearning_progress' && effect.event === 'retest_failed').length,
     1,
   );
-  assert.equal(loopEffects.filter((effect) => effect.type === 'retention_outcome')[0]?.result.memoryOutcome, 'retrieval_failed');
+  assert.equal(
+    loopEffects.filter((effect) => effect.type === 'retention_outcome')[0]
+      ?.result.memoryOutcome?.basis,
+    'retrieval_failed',
+  );
 
   // Reconstructing a queue from the persisted Cycle resumes at repair rather
   // than waiting for the conservative FSRS due time.
-  const restoredCycle = storageService.getRelearningCycle(senseId);
+  const restoredCycle = storageService.getRelearningCycle(retentionTargetId);
   assert.equal(restoredCycle, null, 'The completed cycle should not be restorable.');
   const diagnosticQueue = new ReviewQueue([{
     ...candidate,
@@ -515,43 +686,11 @@ function checkReviewSettlement(): void {
   }]);
   const diagnosticSession = diagnosticQueue.getCurrentSession();
   assertCondition(diagnosticSession, 'A persisted Relearning cycle should resume with a Package repair.');
-  assert.equal(diagnosticSession.action.mode, 'repair');
-  assert.equal(diagnosticSession.action.capability, cycle.targetCapability);
-
-  // Records written by the previous MVP may contain only FSRS.relearning.
-  // The separated runtime projection must be able to upgrade that state on
-  // the first repair effect, without changing any memory fields.
-  storageService.saveFSRSItem({ ...completedMemory, state: 'relearning' });
-  const legacyEffects: ReviewRuntimeEffect<typeof packageItem.content>[] = [];
-  const legacyQueue = new ReviewQueue([{
-    ...candidate,
-    phase: 'relearning',
-    relearning: null,
-  }], {
-    onEffect: (effect) => {
-      legacyEffects.push(effect);
-      storageService.applyReviewRuntimeEffect(effect);
-    },
-  });
-  const legacyRepair = legacyQueue.getCurrentSession();
-  assertCondition(legacyRepair, 'Legacy FSRS relearning must resume at Package repair.');
-  assert.equal(legacyRepair.action.mode, 'repair');
-  const legacyMemoryBefore = { ...storageService.getFSRSItems()[senseId]! };
-  legacyQueue.completeRepair();
-  assert.equal(storageService.getRelearningCycle(senseId)?.stage, 'retest_pending');
-  assert.deepEqual(
-    storageService.getFSRSItems()[senseId],
-    legacyMemoryBefore,
-    'Upgrading legacy Relearning must not revise FSRS during repair.',
-  );
+  assert.equal(diagnosticSession.action.intent, 'repair');
   assert.equal(
-    legacyEffects.filter((effect) => effect.type === 'relearning_progress' && effect.event === 'repair_completed').length,
-    1,
+    diagnosticSession.action.capability,
+    cycle.repairTarget.kind === 'capability' ? cycle.repairTarget.capability : null,
   );
-  const legacyRetest = legacyQueue.next();
-  assertCondition(legacyRetest, 'Upgraded legacy Relearning must expose its independent retest.');
-  legacyQueue.settle(makeReviewResult(legacyRetest, true));
-  assert.equal(storageService.getRelearningCycle(senseId), null);
 
   // Boundary-only due work is not silently consumed. A Package with a normal
   // task still chooses the normal task and leaves the boundary as a separate
@@ -564,7 +703,7 @@ function checkReviewSettlement(): void {
     reviewActions: boundaryPackage.reviewActions.filter((action) =>
       action.capability === 'boundary_discrimination'),
   };
-  const boundaryMemoryBefore = { ...storageService.getFSRSItems()[senseId]! };
+  const boundaryMemoryBefore = { ...storageService.getFSRSItems()[retentionTargetId]! };
   const boundaryQueue = new ReviewQueue([{
     ...candidate,
     package: boundaryOnlyPackage,
@@ -572,7 +711,7 @@ function checkReviewSettlement(): void {
   assert.equal(boundaryQueue.getCurrentSession(), null, 'Boundary-only due work must not become a completed Review.');
   assert.equal(boundaryQueue.isDone(), true);
   assert.deepEqual(
-    storageService.getFSRSItems()[senseId],
+    storageService.getFSRSItems()[retentionTargetId],
     boundaryMemoryBefore,
     'Boundary-only due work must preserve the existing Memory projection.',
   );
@@ -592,22 +731,26 @@ function checkReviewSettlement(): void {
 }
 
 function checkPrototypeGraduationHandoff(): void {
-  const senseId = 'smoke.prototype-graduation-immediate-review';
+  const retentionTargetId = 'smoke.prototype-graduation-immediate-review';
   const startedAt = Date.now();
-  const graduated = storageService.graduateSense(senseId, 0);
+  const graduated = storageService.graduateRetentionTarget(retentionTargetId, 0);
 
   assertCondition(
     graduated.due >= startedAt && graduated.due <= Date.now(),
     'The local prototype must make the first high-assurance Review immediately due.',
   );
   assert.equal(graduated.scheduledDays, 0);
-  assert.deepEqual(storageService.getDueSenseIds([senseId]), [senseId]);
+  assert.deepEqual(
+    storageService.getDueRetentionTargetIds([retentionTargetId]),
+    [retentionTargetId],
+  );
 }
 
 function checkPolicyProfileRuntimeSeam(): void {
   const ready = {
     view: { status: 'ready' as const, label: 'ready', detail: 'runtime smoke' },
     provisioned: true,
+    materializationId: 'runtime-smoke-materialization',
   };
   const allReady = () => ready;
   const actualPlan = learningPolicyProfileRegistry.resolve('high_assurance', allReady);
@@ -645,8 +788,26 @@ function checkPolicyProfileRuntimeSeam(): void {
       protocol: PROTOTYPE_LEARNING_POLICY_PROFILES[1].protocols.initial_learning,
       adapterId: 'structured',
       surface: 'structured_session',
-      targetIds: ['structured-b', 'structured-a'],
+      targetIds: ['structured-a', 'structured-b'],
     },
+  );
+  assert.deepEqual(
+    learningRuntimeCoordinator.planInitial('lightweight-b', [
+      {
+        targetId: 'lightweight-b',
+        profileId: 'lightweight',
+        ready: true,
+        executable: true,
+      },
+      {
+        targetId: 'lightweight-a',
+        profileId: 'lightweight',
+        ready: true,
+        executable: true,
+      },
+    ])?.targetIds,
+    ['lightweight-b', 'lightweight-a'],
+    'A lightweight Adapter must not reduce the Target set already selected by the Planner.',
   );
   assert.deepEqual(
     learningRuntimeCoordinator.planRetention([
@@ -755,7 +916,7 @@ function checkReviewRelearningInterference(): void {
   }
   assertCondition(session, 'The failed multi-Sense Review must remain schedulable.');
   assert.equal(session.action.senseId, targetSenseId);
-  assert.equal(session.action.mode, 'repair');
+  assert.equal(session.action.intent, 'repair');
   assertCondition(
     otherSensesBeforeRepair.length >= 2
       && new Set(otherSensesBeforeRepair.slice(0, 2)).size === 2,
@@ -768,7 +929,7 @@ function checkReviewRelearningInterference(): void {
   guard = 0;
   while (session && session.action.senseId !== targetSenseId && guard < 12) {
     otherSensesBeforeRetest.push(session.action.senseId);
-    if (session.action.mode === 'repair') {
+    if (session.action.intent === 'repair') {
       queue.completeRepair();
     } else {
       queue.settle(makeReviewResult(session, false));
@@ -779,7 +940,7 @@ function checkReviewRelearningInterference(): void {
   assertCondition(session, 'The repaired Sense must remain schedulable for an independent retest.');
   assert.equal(session.action.senseId, targetSenseId);
   assert.equal(session.action.kind, 'relearning_gate');
-  assert.equal(session.action.mode, 'assessment');
+  assert.equal(session.action.intent, 'assessment');
   assertCondition(
     otherSensesBeforeRetest.length >= 2
       && new Set(otherSensesBeforeRetest.slice(0, 2)).size === 2,
@@ -800,7 +961,7 @@ function checkReviewRelearningInterference(): void {
   const fallbackRepair = fallbackQueue.next();
   assertCondition(fallbackRepair, 'A single Sense must use the safe repair fallback instead of stalling.');
   assert.equal(fallbackRepair.action.senseId, singleCandidate.package.senseId);
-  assert.equal(fallbackRepair.action.mode, 'repair');
+  assert.equal(fallbackRepair.action.intent, 'repair');
   assert.equal(
     fallbackRepair.action.ordinal,
     fallbackReview.action.ordinal + 1,
@@ -850,11 +1011,9 @@ function checkPackageHasNoLearnerState(release: SensaRuntimeLearningRelease): vo
 
 function checkPackageRepairInventory(): void {
   for (const packageItem of PROTOTYPE_LEARNING_PACKAGES) {
-    const requiredCapabilities = packageItem.requiredCapabilities.filter((capability) =>
-      capability !== 'introduction');
-    for (const capability of requiredCapabilities) {
+    for (const capability of packageItem.requiredCapabilities) {
       const repair = packageItem.repairActions?.find((action) =>
-        action.capability === capability && action.mode === 'repair');
+        action.capability === capability && action.intent === 'repair');
       assertCondition(repair, `${packageItem.packageId} needs a repair Action for ${capability}.`);
       assert.equal(repair.taskKey, null, 'A repair Action must not masquerade as an assessment task.');
       assert.equal(repair.repairResourceRef?.source, 'package_declared');
@@ -1035,12 +1194,12 @@ function checkReviewActionResourceBinding(): void {
 }
 
 function checkLearningActionResourceBinding(): void {
-  const queue = new LearnQueue(PROTOTYPE_LEARNING_PACKAGES, { activeWindow: 3, minGap: 2 });
+  const queue = new LearnQueue(PROTOTYPE_LEARNING_PACKAGES, { minGap: 2 });
   let session = queue.getCurrentSession();
   let guard = 0;
   while (!queue.isDone() && session && guard < 240) {
     const { action } = session;
-    if (action.capability !== 'introduction') {
+    if (action.capability !== null) {
       const kind = reviewKind(action.capability);
       const resource = materializeAssessmentResource({
         packageIdentity: {
@@ -1264,6 +1423,7 @@ console.log(JSON.stringify({
   oneReviewOneOutcome: true,
   inconsistentOutcomeCanonicalized: true,
   relearningNoFsrsReplay: true,
+  protocolCheckpointRelearning: true,
   reviewRelearningInterference: true,
   reviewFeedbackWired: true,
   reviewActionResourceBound: true,

@@ -11,9 +11,9 @@
  * `npm run smoke:flow` 会遍历九个屏号，检查每一条都自洽。
  */
 import {
-  PROTOTYPE_LEARNING_PACKAGES,
   toWordPresentation,
 } from '../content/learningCatalog';
+import { PROTOTYPE_RUNTIME_PACKAGES as PROTOTYPE_LEARNING_PACKAGES } from '../learningRuntime/prototypeRuntimeFixtures';
 import { materializeAssessmentResource } from '../content/assessmentResources';
 import type { LearningCapability } from '../engine/types';
 import type { DemoPresentation } from './flowState';
@@ -23,7 +23,7 @@ type RuntimePackage = (typeof PROTOTYPE_LEARNING_PACKAGES)[number];
 /** 队列覆盖参数，与 `useLearnQueue().overrideDemo` 的入参一一对应。 */
 export interface DemoQueueOverride {
   readonly pkg: RuntimePackage;
-  readonly capability: LearningCapability;
+  readonly capability: LearningCapability | null;
   readonly step: number;
   readonly total: number;
 }
@@ -103,7 +103,12 @@ const buildRepairFeedbackScene = (basePackage: RuntimePackage): DemoScene => {
       focusDimension: '语境辨义',
       correct: false,
       responseId: incorrectOption.id,
-      memoryOutcome: 'retrieval_failed',
+      memoryOutcome: {
+        basis: 'retrieval_failed',
+        grade: 'again',
+        evidenceLevel: 'behavioral',
+        evidenceIds: [],
+      },
       evidenceEligible: true,
     }),
     queue: { pkg: basePackage, capability: 'contextual_recognition', step: 1, total: 1 },
@@ -123,7 +128,7 @@ export function demoSceneForStage(stageNum: number): DemoScene | null {
     case 1:
       return {
         presentation: presentationOf(basePackage, 'introduction', 0, false),
-        queue: { pkg: basePackage, capability: 'introduction', step: 1, total: 4 },
+        queue: { pkg: basePackage, capability: null, step: 1, total: 4 },
         toast: '已切换至：① 第一次遇见',
       };
     case 2:

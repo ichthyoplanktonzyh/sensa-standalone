@@ -1,3 +1,11 @@
+import type {
+  GradedMemoryOutcome,
+  MemoryOutcomeBasis,
+  MemoryOutcomeGrade,
+} from '@sensa/learning-kernel';
+
+export type { MemoryOutcomeBasis, MemoryOutcomeGrade } from '@sensa/learning-kernel';
+
 export type ReviewAssessmentKind =
   | 'context_recognition'
   | 'meaning_to_form_recall'
@@ -17,10 +25,21 @@ export type ReviewFocusDimension =
   | '新语境迁移'
   | '义项边界';
 
-export type ReviewMemoryOutcome =
+export type ReviewMemoryOutcomeBasis = Extract<MemoryOutcomeBasis,
   | 'independent_retrieval'
   | 'transfer_confirmed'
-  | 'retrieval_failed';
+  | 'retrieval_failed'>;
+
+export type ReviewMemoryOutcome = GradedMemoryOutcome & Readonly<{
+  basis: ReviewMemoryOutcomeBasis;
+}>;
+
+export type LearnerRatedMemoryOutcome<Grade extends MemoryOutcomeGrade = MemoryOutcomeGrade> =
+  GradedMemoryOutcome & Readonly<{
+    basis: 'learner_rated';
+    grade: Grade;
+    evidenceLevel: 'self_report';
+  }>;
 
 export interface ReviewAssessmentResult {
   assessmentId: string;
@@ -28,7 +47,7 @@ export interface ReviewAssessmentResult {
   focusDimension: ReviewFocusDimension;
   correct: boolean;
   responseId: string | null;
-  memoryOutcome: ReviewMemoryOutcome;
+  memoryOutcome: ReviewMemoryOutcome | null;
   /** Boundary previews never enter Evidence or update FSRS. */
   evidenceEligible: boolean;
 }
@@ -155,9 +174,29 @@ export type ReviewAssessmentSpec =
 export function resolveReviewMemoryOutcome(
   kind: ReviewAssessmentKind,
   correct: boolean,
-): ReviewMemoryOutcome {
-  if (!correct) return 'retrieval_failed';
-  return kind === 'novel_context_transfer'
-    ? 'transfer_confirmed'
-    : 'independent_retrieval';
+): ReviewMemoryOutcome | null {
+  if (!canProduceReviewMemoryOutcome(kind)) return null;
+  const basis: ReviewMemoryOutcomeBasis = !correct
+    ? 'retrieval_failed'
+    : kind === 'novel_context_transfer'
+      ? 'transfer_confirmed'
+      : 'independent_retrieval';
+  return {
+    basis,
+    grade: correct ? 'good' : 'again',
+    evidenceLevel: 'behavioral',
+    evidenceIds: [],
+  };
+}
+
+/** Learner-rated protocols retain the middle "hard" grade instead of booleanizing it. */
+export function resolveLearnerRatedMemoryOutcome<Grade extends MemoryOutcomeGrade>(
+  grade: Grade,
+): LearnerRatedMemoryOutcome<Grade> {
+  return {
+    basis: 'learner_rated',
+    grade,
+    evidenceLevel: 'self_report',
+    evidenceIds: [],
+  };
 }

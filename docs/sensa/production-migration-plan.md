@@ -22,6 +22,11 @@ V1 的剩余事项。
   已在 standalone 内闭合，日常命令默认不依赖外部仓库；
 - canonical domain glossary、architecture、personal semantic world、learning connection、resource/runtime
   models 与本文件。
+- learning extensibility 的 v2 语言无关合同与 Web behavior vertical slice：Retention Scope/Profile/
+  Protocol Run/Initial Completion/Handoff schemas，scope/content/orchestration/renderer/store registries，
+  可复用 Catalog Package 与 learner-specific Runtime binding 的分离，以及以 `retentionTargetId`
+  为唯一调度键的本地队列、FSRS 与 Relearning smoke。Postgres/API/Sync
+  的权威持久化迁移仍属于下方 gate 1。
 
 ## Remaining launch gates
 
@@ -65,9 +70,12 @@ V1 的剩余事项。
    no-review-rewrite 与 relearning-outcome idempotency、media range、pending sign-out、local
    clearance/rebootstrap、Account deletion barrier、备份恢复和
    公网 smoke；没有 orphan/state corruption 或 deleted-account resurrection。
-10. **Flutter**：Web/API contracts 稳定后，在 `apps/mobile` 建 Flutter 单一 iOS/Android
-   client。SQLite 是本地事实源，outbox 遵循 push→pull；Flutter 只做 Action renderer、
-   local state、音频/安全存储/通知适配，不复制 Semantic Policy 或 FSRS。
+10. **Flutter**：Web/API contracts 稳定后，在 `apps/mobile` 建 Flutter 单一 iOS/
+   Android/桌面 client。SQLite 是本地事实源，outbox 遵循 push→pull；Flutter 只做
+   Action renderer、local state、音频/安全存储/通知适配，不复制 Semantic Policy 或
+   FSRS。移动端与桌面端共用这一个 Flutter client；正式 Web 端继续 React，按 Web
+   平台特点另行设计，不承诺复用 `web-next` 原型 UI——跨端资产是领域文档、实现
+   seam 形状与 smoke 规格。
 
 ## Contracted post-core extensions
 
