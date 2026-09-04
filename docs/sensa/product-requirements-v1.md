@@ -2,7 +2,9 @@
 
 > 状态：Accepted product baseline  
 > 决策日期：2026-08-31
-> 产品范围：移动形态 React Web；未来 Flutter iOS/Android 复用相同旅程与语言中立契约  
+> 产品范围：`web-next` 为移动端形态的 React 行为原型（UI 不承诺向任何正式客户端迁移）；
+> 正式移动端与桌面端均为 Flutter，复用相同旅程与语言中立契约；正式 Web 端继续 React，
+> 按自身平台特点另行设计  
 > 交互原型：[`docs/reference/sensa-v1/product-prototype.html`](../reference/sensa-v1/product-prototype.html)
 
 本文冻结 Sensa V1 的信息架构、用户旅程、用户语言、屏幕职责和交互验收标准。

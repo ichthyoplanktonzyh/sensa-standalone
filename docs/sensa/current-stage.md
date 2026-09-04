@@ -25,7 +25,9 @@ Handoff 初始化 FSRS；统一 Planner 支持 `mixed | review_only`，Review �
 runtime：它只消费由 Draft V2 authoring Bundle 编译并验证得到的版本化学习包 JSON，通过 Learning
 Catalog 向 Learn、Review 与 Practice 投影资源；该原型用于验证学习包边界、跨 Sense 穿插、一次
 Review 一次 Outcome，以及失败 Review 后由 Package 声明资源驱动的 repair、间隔重测与
-Relearning Completion；它不代表 production persistence、sync 或 planner 已完成。
+Relearning Completion；它不代表 production persistence、sync 或 planner 已完成。该原型完全
+为移动端形态设计：其 UI 不承诺向任何正式客户端迁移，跨端资产是领域文档、实现层 seam
+形状与 smoke 规格，正式客户端以各自平台特点另行设计。
 
 同日接受的完整产品领域边界还包括 Curriculum lifecycle、Lexical Reference、Settings/Account、
 published Semantic Field、Learner Semantic Projection、Personal Content 与 Free Practice。Curriculum lifecycle 将 Study Plan 与
@@ -167,7 +169,9 @@ Policy Profiles、Assignment/Effective Policy、Resolved Learning Plan readiness
 Structured Acquisition 模型也只落地到该 MVP runtime 与确定性 smoke，尚未落地到
 production Runtime、Postgres 或 Sync；MVP validator 也不是 production release validator。本地构建
 尚未等同公网部署。真实 Cognito、Neon、R2、Cloudflare、CI/CD、监控/telemetry 和公网
-数据删除/恢复仍是上线工作；Flutter iOS/Android 在 Web/API 契约稳定后实施。Sensa 尚未有
+数据删除/恢复仍是上线工作；Flutter iOS/Android/桌面端在 Web/API 契约稳定后实施，
+正式移动端与桌面端共用同一 Flutter client，正式 Web 端继续 React 并按 Web 平台
+特点另行设计。Sensa 尚未有
 真实效果证据。Personal Semantic World 的 Personal Meaning/Focus/Anchors、Sense Construction
 Session/Proposal/confirmation、按需 Sense identity/version 与 Alignment 同样尚无 production
 persistence/API/Sync/LLM policy/validator 或真实体验证据；`web-next` 当前页面只能视为交互原型。
