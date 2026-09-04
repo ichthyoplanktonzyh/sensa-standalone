@@ -49,18 +49,13 @@ import { canProduceReviewMemoryOutcome } from '../review/types';
  * （`LightweightRuntimeStartScreen` / `LightweightReviewRuntimeScreen`）。
  * 它们同样要在登记表里声明自己产出哪些 intent——出口依据由此推出。
  */
-export type OrchestrationId =
-  | 'lightweight_study'
-  | 'lightweight_retention'
-  | 'structured_acquisition'
-  | 'structured_retention';
+/** 对扩展开放；可用编排由 OrchestrationRegistry 在 composition root 闭合。 */
+export type OrchestrationId = string & {};
 
 /** 出这一步时的排布参数。插件可以只用其中一部分。 */
 export interface StepPlan {
   /** 这一步的序号，从 1 起。间隔与轮换都以它为基准。 */
   readonly ordinal: number;
-  /** 同时在学的 Target 上限；只有首学编排用得到。 */
-  readonly activeWindow: number;
   /** 同一条 Target 两次出现之间至少隔几步。 */
   readonly minGap: number;
 }
@@ -86,6 +81,8 @@ export interface StepOrchestration<
   TBasis,
 > {
   readonly orchestrationId: OrchestrationId;
+  /** 插件自己决定 Step 形式；中央 Runtime 不认识 orchestration identity。 */
+  readonly stepKindFor: (definition: ScheduledActionDefinition) => LearningStepKind;
   /** 推进一步：候选集进，选中的候选与它的下一步出。null = 这一轮出不了步。 */
   readonly fresh: (
     candidates: readonly TCandidate[],
@@ -116,15 +113,12 @@ export interface StepOrchestration<
  * 所以卡片由编排盖章，内容目录不声明（目录声明的是「有哪些可选动作」，
  * 不是「这次出哪一步」）。
  */
-export function stepKindFor(
-  orchestrationId: OrchestrationId,
+function acquisitionStepKindFor(
   definition: ScheduledActionDefinition,
 ): LearningStepKind {
   const intent = actionIntent(definition);
   if (intent === 'repair') return 'review_repair';
   if (intent === 'instruction') return 'introduction';
-  // 到期复习与重学检验共用一张评测卡，与练的是哪条能力无关。
-  if (orchestrationId === 'structured_retention') return 'review_assessment';
   switch (definition.capability) {
     case 'contextual_recognition': return 'recognition';
     case 'meaning_to_form_recall': return 'recall';
@@ -135,15 +129,19 @@ export function stepKindFor(
   }
 }
 
+function retentionStepKindFor(definition: ScheduledActionDefinition): LearningStepKind {
+  return actionIntent(definition) === 'repair' ? 'review_repair' : 'review_assessment';
+}
+
 function stamp(
-  orchestrationId: OrchestrationId,
+  resolveStepKind: (definition: ScheduledActionDefinition) => LearningStepKind,
   definition: ScheduledActionDefinition | null,
 ): OrchestratedStepDefinition | null {
   if (!definition) return null;
   return {
     ...definition,
     intent: actionIntent(definition),
-    stepKind: stepKindFor(orchestrationId, definition),
+    stepKind: resolveStepKind(definition),
   };
 }
 
@@ -251,8 +249,8 @@ function chooseOldest<TCandidate extends OrchestrationCandidate<unknown>>(
 
 export interface AcquisitionRepairBasis {
   readonly capability: LearningCapability;
-  /** 失败在哪一步；null 表示状态里没有记（兼容更早的持久化状态）。 */
-  readonly failedActionKey: string | null;
+  /** 失败在哪一步；修复必须挂回一次真实失败。 */
+  readonly failedActionKey: string;
   /** 这条能力已经修过几次，决定修复步的 actionKey 后缀。 */
   readonly repairCount: number;
 }
@@ -340,46 +338,29 @@ function acquisitionRepairStep(
 /**
  * 结构化首学的编排。
  *
- * 选择规则：窗口没满时新 Target 优先填窗口；满了就轮到最久没出的活跃 Target，
- * 让没跑完的循环获得公平，而不是反复挑发布顺序里的第一个。最后两条是显式的
- * 冷却回退——没有别的 Target 能满足 minGap 时（比如只有一条的 fixture），
- * 它不假装间隔已经满足。
+ * Planner 交进来的全部 Target 属于同一次学习计划，没有第二个“活跃窗口”。编排把
+ * 未开始与进行中的 Target 放进同一个候选池，优先选择满足间隔且最久没出现的那条；
+ * 未出过步的 Target 以 -1 排在最前，所以每条计划内 Target 都会先获得 Introduction。
+ * 没有候选满足 minGap 时（比如只有一条的 fixture）才显式回退到完整候选池。
  */
 export const acquisitionOrchestration: StepOrchestration<
   AcquisitionCandidate,
   AcquisitionRepairBasis
 > = {
   orchestrationId: 'structured_acquisition',
+  stepKindFor: acquisitionStepKindFor,
   fresh: (candidates, plan) => {
-    const active = candidates.filter((candidate) => candidate.introduced);
-    const unstarted = candidates.filter((candidate) => !candidate.introduced);
-    const eligibleActive = active.filter((candidate) => acquisitionEligible(candidate, plan));
-    const eligibleUnstarted = unstarted.filter((candidate) => acquisitionEligible(candidate, plan));
-
-    let pool: readonly AcquisitionCandidate[];
-    if (active.length < plan.activeWindow && eligibleUnstarted.length > 0) {
-      pool = eligibleUnstarted;
-    } else if (eligibleActive.length > 0) {
-      pool = eligibleActive;
-    } else if (active.length < plan.activeWindow && unstarted.length > 0) {
-      // 还没出过步的 Target 一定合格，这条分支只是把意图写明：将来若加入
-      // "新 Target 也要冷却"的策略，改动落在这里。
-      pool = unstarted;
-    } else if (active.length > 0) {
-      pool = active;
-    } else {
-      pool = unstarted;
-    }
-
+    const eligible = candidates.filter((candidate) => acquisitionEligible(candidate, plan));
+    const pool = eligible.length > 0 ? eligible : candidates;
     const chosen = chooseOldest(pool);
     if (!chosen) return null;
-    const definition = stamp('structured_acquisition', chosen.repairBasis
+    const definition = stamp(acquisitionStepKindFor, chosen.repairBasis
       ? acquisitionRepairStep(chosen, chosen.repairBasis)
       : acquisitionNextStep(chosen));
     return definition ? { target: chosen, definition } : null;
   },
   repair: (candidate, basis) =>
-    stamp('structured_acquisition', acquisitionRepairStep(candidate, basis)),
+    stamp(acquisitionStepKindFor, acquisitionRepairStep(candidate, basis)),
 };
 
 /* ============================================================
@@ -478,17 +459,18 @@ export const retentionOrchestration: StepOrchestration<
   RetentionRepairBasis
 > = {
   orchestrationId: 'structured_retention',
+  stepKindFor: retentionStepKindFor,
   fresh: (candidates, plan) => {
     const eligible = candidates.filter((candidate) =>
       plan.ordinal - candidate.lastStepOrdinal - 1 >= plan.minGap);
     const pool = eligible.length > 0 ? eligible : candidates;
     const chosen = chooseOldest(pool);
     if (!chosen) return null;
-    const definition = stamp('structured_retention', chosen.repairBasis
+    const definition = stamp(retentionStepKindFor, chosen.repairBasis
       ? retentionRepairStep(chosen, chosen.repairBasis)
       : retentionNextStep(chosen, plan));
     return definition ? { target: chosen, definition } : null;
   },
   repair: (candidate, basis) =>
-    stamp('structured_retention', retentionRepairStep(candidate, basis)),
+    stamp(retentionStepKindFor, retentionRepairStep(candidate, basis)),
 };

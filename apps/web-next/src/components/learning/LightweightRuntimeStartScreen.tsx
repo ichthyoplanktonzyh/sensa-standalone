@@ -14,6 +14,7 @@ interface LightweightRuntimeStartScreenProps {
   active: boolean;
   target: PrototypeLearningTargetView | null;
   committedPolicy: PrototypeLearningPolicy;
+  hasNextTarget: boolean;
   onExit: () => void;
   onComplete: (rating: Exclude<PrototypeLightweightRating, 'again'>) => void;
   onFinish: () => void;
@@ -36,6 +37,7 @@ export const LightweightRuntimeStartScreen = ({
   active,
   target,
   committedPolicy,
+  hasNextTarget,
   onExit,
   onComplete,
   onFinish,
@@ -161,7 +163,9 @@ export const LightweightRuntimeStartScreen = ({
               <span>学习方式已锁定</span>
               <span>等待首次复习</span>
             </div>
-            <button type="button" onClick={onFinish}>完成并回到首页</button>
+            <button type="button" onClick={onFinish}>
+              {hasNextTarget ? '继续下一条' : '完成并回到首页'}
+            </button>
           </section>
         )}
       </main>

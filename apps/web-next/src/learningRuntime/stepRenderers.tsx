@@ -27,7 +27,6 @@
 import type { ReactNode } from 'react';
 import type {
   LearningStepKind,
-  BuiltinLearningStepKind,
   MeaningToFormRecallOutcome,
   NovelTransferOutcome,
   RepairResourceReference,
@@ -108,7 +107,7 @@ export interface StepRendererProps {
 export type StepRenderer = (props: StepRendererProps) => ReactNode;
 
 export interface StepRendererDefinition {
-  readonly stepKind: BuiltinLearningStepKind;
+  readonly stepKind: LearningStepKind;
   readonly render: StepRenderer;
 }
 
@@ -338,6 +337,14 @@ export class StepRendererRegistry {
       throw new Error(`Unknown step kind, no renderer registered: ${stepKind}`);
     }
     return render;
+  }
+
+  public has(stepKind: LearningStepKind): boolean {
+    return this.#renderers.has(stepKind);
+  }
+
+  public listStepKinds(): readonly string[] {
+    return [...this.#renderers.keys()];
   }
 }
 

@@ -118,11 +118,11 @@ const imperativeCtx: RetentionStoreContext = {
   openSchedulerDue: () => ({ due: DUE_AT }).due,
   reviewLabel: (dueAt) => `到期 ${dueAt}`,
 };
-// reducer 侧：ctx 背后是 action 里那份 dueBySenseId。
-const dueBySenseId: Record<string, number> = { 'sense-1': DUE_AT };
+// reducer 侧：ctx 背后是 action 里那份 dueByRetentionTargetId。
+const dueByRetentionTargetId: Record<string, number> = { 'retention-target-1': DUE_AT };
 const pureCtx: RetentionStoreContext = {
   completedAt: COMPLETED_AT,
-  openSchedulerDue: () => dueBySenseId['sense-1'] ?? null,
+  openSchedulerDue: () => dueByRetentionTargetId['retention-target-1'] ?? null,
   reviewLabel: (dueAt) => `到期 ${dueAt}`,
 };
 check('命令式与纯函数两侧的交接投影一致', (() => {
@@ -131,7 +131,7 @@ check('命令式与纯函数两侧的交接投影一致', (() => {
   return left.nextReviewAt === right.nextReviewAt
     && left.nextReviewLabel === right.nextReviewLabel;
 })());
-check('reducer 侧缺 senseId 时与 App 侧缺 Sense 时同样退回', (() => {
+check('两种宿主都拿不到 Retention Target 到期时间时采用同一回退投影', (() => {
   const missing: RetentionStoreContext = { ...pureCtx, openSchedulerDue: () => null };
   return scheduler.openHandoff(missing).nextReviewLabel === IMMEDIATE_REVIEW_LABEL;
 })());

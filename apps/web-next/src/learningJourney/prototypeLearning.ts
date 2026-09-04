@@ -1,9 +1,18 @@
 import {
   PROTOTYPE_PACKAGE_BY_SENSE,
   type PrototypeExperience,
-  type PrototypeSchedulablePackage,
+  type PrototypeIntroductionPackage,
 } from '../content/learningCatalog';
+import {
+  bindPackageToRetentionTarget,
+  type SchedulablePackage,
+} from '../engine/types';
 import { worseReadinessView } from '../learningRuntime/contentCapabilities';
+import {
+  ContentProvisioningRegistry,
+  type ContentProvisioningAdapter,
+} from '../learningRuntime/contentProvisioning';
+import { retentionScopeRegistry } from '../learningRuntime/retentionScopes';
 import {
   learningPolicyProfileRegistry,
   type ContentCapabilityReadinessProvider,
@@ -182,34 +191,93 @@ export const provisionedForPolicy = (
  * 这条 Target 的内容供给方。内容属于 Target，所以 provider 按 Target 建；
  * 每个用途只对自己声明的那个能力子集求合取。
  */
-const contentReadinessForTarget = (
-  target: PrototypeLearningTargetView,
-): ContentCapabilityReadinessProvider => (capabilityId) => {
-  switch (capabilityId) {
-    case 'compact_learning_material':
-      // 紧凑材料按需生成：可以还在准备，但从来不缺可跑的东西。
-      // 这就是原先 `executable` 对非 structured surface 恒为 true 的那条事实。
-      return { view: target.lightweightReadiness, provisioned: true };
-    case 'structured_learning_package': {
-      const provisioned = runtimePackageForTarget(target) !== null;
-      return {
-        view: provisioned ? HIGH_ASSURANCE_READY : HIGH_ASSURANCE_BLOCKED,
-        provisioned,
-      };
-    }
+const requireMaterializationIdentity = (materializationId: string, capabilityId: string): void => {
+  if (materializationId.trim().length === 0) {
+    throw new Error(`${capabilityId} produced an empty Materialization identity.`);
   }
 };
+
+/** Catalog Package + learner Retention Target binding, still owned by the provisioner. */
+const boundPackageDraftForTarget = (
+  target: PrototypeLearningTargetView,
+): SchedulablePackage<PrototypeIntroductionPackage> | null => {
+  const packageTemplate = target.runtimeSenseId
+    ? PROTOTYPE_PACKAGE_BY_SENSE.get(target.runtimeSenseId) ?? null
+    : null;
+  return packageTemplate
+    ? bindPackageToRetentionTarget(packageTemplate, defaultRetentionTargetIdFor(target))
+    : null;
+};
+
+const compactContentProvisioner: ContentProvisioningAdapter<PrototypeLearningTargetView> = {
+  capabilityId: 'compact_learning_material',
+  readinessFor: (target) => target.lightweightReadiness,
+  // 紧凑材料按需生成：可以还在准备，但从来不缺可跑的东西。
+  prepare: (target) => ({
+    materializationId: `prototype-compact:${target.targetId}:v1`,
+    materializationVersion: 'v1',
+    content: {
+      expression: target.expression,
+      meaning: target.meaning,
+      example: target.example,
+    },
+  }),
+  validate: (_target, draft) =>
+    requireMaterializationIdentity(draft.materializationId, 'compact_learning_material'),
+};
+
+const structuredPackageProvisioner: ContentProvisioningAdapter<PrototypeLearningTargetView> = {
+  capabilityId: 'structured_learning_package',
+  readinessFor: (target) => boundPackageDraftForTarget(target)
+    ? HIGH_ASSURANCE_READY
+    : HIGH_ASSURANCE_BLOCKED,
+  prepare: (target) => {
+    const runtimePackage = boundPackageDraftForTarget(target);
+    return runtimePackage
+      ? {
+          materializationId: `prototype-package:${runtimePackage.packageId}`,
+          materializationVersion: 'v1',
+          content: runtimePackage,
+        }
+      : null;
+  },
+  validate: (target, draft) => {
+    requireMaterializationIdentity(draft.materializationId, 'structured_learning_package');
+    if (!target.runtimeSenseId) {
+      throw new Error(`Structured package for ${target.targetId} lacks a stable Sense identity.`);
+    }
+  },
+};
+
+export const prototypeContentProvisioning = new ContentProvisioningRegistry([
+  compactContentProvisioner,
+  structuredPackageProvisioner,
+]);
+
+const contentReadinessForTarget = (
+  target: PrototypeLearningTargetView,
+): ContentCapabilityReadinessProvider => prototypeContentProvisioning.readinessProvider(target);
 
 export const resolvedLearningPlanForTarget = (
   target: PrototypeLearningTargetView,
   policy: PrototypeLearningPolicy,
 ) => learningPolicyProfileRegistry.resolve(policy, contentReadinessForTarget(target));
 
+export const defaultRetentionTargetIdFor = (
+  target: PrototypeLearningTargetView,
+): string => retentionScopeRegistry.resolveTargets(target.targetId)[0]!.retentionTargetId;
+
 export const runtimePackageForTarget = (
   target: PrototypeLearningTargetView,
-): PrototypeSchedulablePackage | null => target.runtimeSenseId
-  ? PROTOTYPE_PACKAGE_BY_SENSE.get(target.runtimeSenseId) ?? null
-  : null;
+): SchedulablePackage<PrototypeIntroductionPackage> | null => {
+  const result = prototypeContentProvisioning.resolve(
+    target,
+    'structured_learning_package',
+  );
+  return result.materialization
+    ? result.materialization.content as SchedulablePackage<PrototypeIntroductionPackage>
+    : null;
+};
 
 export const experienceGroundingForTarget = (
   target: PrototypeLearningTargetView,

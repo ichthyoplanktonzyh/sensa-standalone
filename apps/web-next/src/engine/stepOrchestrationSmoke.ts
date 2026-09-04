@@ -3,15 +3,12 @@
  *
  * 这一层要同时钉住两件事：
  *
- *  1. **声明不是注释。** 每套编排在登记表里声明自己产出哪些 intent，首学出口
- *     的交接依据由此推出。如果声明与实际产出脱节，`initialHandoffBasisOf`
- *     就会给出错误的依据——而 Scheduling Handoff 一生只发生一次，写错改不回来。
+ *  1. **声明不是推断。** 每套首学编排显式声明 Completion、Scheduling Handoff
+ *     basis 与 Evidence level。intent 只用来校验明显矛盾，不能反向猜出口语义。
  *     所以这里拿真实内容把两套队列驱动的编排完整跑一遍，收集实际产出的 intent
  *     集合，与声明逐条核对。
- *  2. **抽出来的产出逻辑与落地前等价。** 新旧表达式的等价直接钉：
- *     `initialHandoffBasisFor(policy) === 'acquisition_graduation'` 必须与旧的
- *     `surfaceFor(policy, 'initial_learning') === 'structured_session'` 同真同假。
- *     整段队列行为的等价由既有的 `smoke:intent` / `smoke:flow` /
+ *  2. **抽出来的产出逻辑与落地前等价。** 整段队列行为的等价由既有的
+ *     `smoke:intent` / `smoke:flow` /
  *     `sensa:runtime-learning-smoke` 覆盖——它们跑的就是这两个队列。
  *
  * 另外钉住三条 seam 的设计前提：`fresh` 收候选集（带修复依据的 Target 不退出
@@ -20,7 +17,7 @@
  *
  * Run with `npm run smoke:orchestration`.
  */
-import { PROTOTYPE_LEARNING_PACKAGES } from '../content/learningCatalog';
+import { PROTOTYPE_RUNTIME_PACKAGES as PROTOTYPE_LEARNING_PACKAGES } from '../learningRuntime/prototypeRuntimeFixtures';
 import {
   LEARNING_PROTOCOL_PURPOSES,
   PROTOTYPE_LEARNING_POLICY_PROFILES,
@@ -29,7 +26,7 @@ import {
 import {
   ORCHESTRATION_DEFINITIONS,
   OrchestrationRegistry,
-  initialHandoffBasisOf,
+  initialCompletionContractOf,
   orchestrationRegistry,
   type OrchestrationDefinition,
 } from '../learningRuntime/orchestrations';
@@ -67,8 +64,6 @@ const sameSet = (
   return leftSet.size === rightSet.size && [...leftSet].every((item) => rightSet.has(item));
 };
 
-const POLICIES: readonly PrototypeLearningPolicy[] = ['lightweight', 'high_assurance'];
-
 /* ============================================================
    A. 登记表与出口依据
    ============================================================ */
@@ -93,41 +88,53 @@ check('登记表里没有重复的编排身份',
   new Set(ORCHESTRATION_DEFINITIONS.map((definition) => definition.orchestrationId)).size
     === ORCHESTRATION_DEFINITIONS.length);
 
-// 出口依据只有一条规则，且直接从 intent 轴推出。
-check('产出 assessment 的编排才交出 Acquisition Graduation',
-  initialHandoffBasisOf({
-    orchestrationId: 'structured_acquisition',
-    stepIntents: ['instruction', 'assessment'],
-  } satisfies OrchestrationDefinition) === 'acquisition_graduation');
-
-check('不产出 assessment 的编排只交出 Study Completion',
-  initialHandoffBasisOf({
-    orchestrationId: 'lightweight_study',
-    stepIntents: ['instruction', 'practice', 'repair'],
-  } satisfies OrchestrationDefinition) === 'study_completion');
-
-check('practice 不取证——练但不产生 Evidence',
-  initialHandoffBasisOf({
-    orchestrationId: 'lightweight_study',
-    stepIntents: ['practice'],
-  } satisfies OrchestrationDefinition) === 'study_completion');
-
-const basisFor = (policy: PrototypeLearningPolicy) => initialHandoffBasisOf(
+const completionFor = (policy: PrototypeLearningPolicy) => initialCompletionContractOf(
   orchestrationRegistry.get(
     learningRuntimeCoordinator.orchestrationFor(policy, 'initial_learning'),
   ),
 );
 
-check('轻量首学交出 Study Completion', basisFor('lightweight') === 'study_completion');
+check('轻量首学显式交出 Study Completion + protocol completion + 非证据',
+  completionFor('lightweight').completionKind === 'study_completion'
+  && completionFor('lightweight').handoffBasis === 'protocol_completion'
+  && completionFor('lightweight').evidenceLevel === 'non_evidentiary');
 check('高保证首学交出 Acquisition Graduation',
-  basisFor('high_assurance') === 'acquisition_graduation');
+  completionFor('high_assurance').completionKind === 'acquisition_graduation'
+  && completionFor('high_assurance').handoffBasis === 'acquisition_graduation'
+  && completionFor('high_assurance').evidenceLevel === 'behavioral');
 
-// 落地前这条依据是靠 surface 名字回答的；两个表达式必须同真同假。
-check('新旧表达式等价：取证毕业 ⟺ 旧的 structured_session 判断',
-  POLICIES.every((policy) =>
-    (basisFor(policy) === 'acquisition_graduation')
-      === (learningRuntimeCoordinator.surfaceFor(policy, 'initial_learning')
-        === 'structured_session')));
+check('相同 intent 可以声明不同的合法出口，证明出口不是从 assessment 推断', (() => {
+  const studyWithAssessment: OrchestrationDefinition = {
+    orchestrationId: 'study_with_diagnostic_assessment',
+    stepIntents: ['instruction', 'assessment'],
+    requiredStepKinds: [],
+    initialCompletion: {
+      completionKind: 'study_completion',
+      protocolOutcome: 'study_completed',
+      handoffBasis: 'protocol_completion',
+      evidenceLevel: 'non_evidentiary',
+      learnerVisibleClaim: '只声称学过。',
+    },
+  };
+  return initialCompletionContractOf(studyWithAssessment).completionKind === 'study_completion';
+})());
+
+check('长期编排没有首学出口，查询时直接抛', (() => {
+  try {
+    initialCompletionContractOf(orchestrationRegistry.get('structured_retention'));
+    return false;
+  } catch { return true; }
+})());
+
+check('重复编排身份在注册时直接抛', (() => {
+  try {
+    new OrchestrationRegistry([
+      ORCHESTRATION_DEFINITIONS[0],
+      ORCHESTRATION_DEFINITIONS[0],
+    ]);
+    return false;
+  } catch { return true; }
+})());
 
 // §4：relearning 复用既有编排机制，插件作者只实现两个入口。
 check('relearning 与 retention_review 声明同一套编排',
@@ -143,7 +150,7 @@ const firstPackage = PROTOTYPE_LEARNING_PACKAGES[0]!;
 
 const acquisitionIntents = (() => {
   const produced = new Set<LearningStepIntent>();
-  const queue = new LearnQueue([firstPackage], { activeWindow: 1, minGap: 0 });
+  const queue = new LearnQueue([firstPackage], { minGap: 0 });
   let session = queue.getCurrentSession();
   let failedOnce = false;
   // 30 步足够跑完一个 Package 外加一次失败/修复/重测；死循环时会因为
@@ -196,7 +203,12 @@ const retentionIntents = (() => {
         focusDimension: '义项边界',
         correct,
         responseId: 'smoke',
-        memoryOutcome: 'retrieval_failed',
+        memoryOutcome: {
+          basis: 'retrieval_failed',
+          grade: 'again',
+          evidenceLevel: 'behavioral',
+          evidenceIds: [],
+        },
         evidenceEligible: false,
       });
     }
@@ -211,6 +223,38 @@ check('结构化复习实际产出的 intent 集合等于登记表的声明',
     retentionIntents.produced,
     orchestrationRegistry.get('structured_retention').stepIntents,
   ));
+
+let acquisitionPluginCalls = 0;
+const acquisitionPlugin = {
+  ...acquisitionOrchestration,
+  orchestrationId: 'smoke_acquisition_plugin',
+  fresh: (...args: Parameters<typeof acquisitionOrchestration.fresh>) => {
+    acquisitionPluginCalls += 1;
+    return acquisitionOrchestration.fresh(...args);
+  },
+};
+new LearnQueue([firstPackage], { minGap: 0 }, acquisitionPlugin);
+check('LearnQueue 从构造边界调用注入的编排，不再硬连 concrete 实现',
+  acquisitionPluginCalls === 1);
+
+let retentionPluginCalls = 0;
+const retentionPlugin = {
+  ...retentionOrchestration,
+  orchestrationId: 'smoke_retention_plugin',
+  fresh: (...args: Parameters<typeof retentionOrchestration.fresh>) => {
+    retentionPluginCalls += 1;
+    return retentionOrchestration.fresh(...args);
+  },
+};
+new ReviewQueue([{
+  package: firstPackage,
+  dueAt: 0,
+  reps: 1,
+  lapses: 0,
+  phase: 'retaining' as const,
+}], {}, {}, retentionPlugin);
+check('ReviewQueue 从构造边界调用注入的编排，不再硬连 concrete 实现',
+  retentionPluginCalls === 1);
 
 check('队列驱动的两套编排都不产出 practice——它是留给插件的第四种意图',
   [...acquisitionIntents.produced, ...retentionIntents.produced]
@@ -255,7 +299,6 @@ const candidate = (
 
 const plan = (overrides: Partial<StepPlan> = {}): StepPlan => ({
   ordinal: 7,
-  activeWindow: 3,
   minGap: 0,
   ...overrides,
 });
@@ -323,19 +366,19 @@ check('还没讲解过的候选，第一步是讲解', (() => {
 
 /* ---------- 选择规则 ---------- */
 
-check('窗口已满时轮到活跃的那条，新 Target 不再进入', (() => {
+check('未开始的 Target 不会被隐藏在第二个数量限制之后', (() => {
   const step = acquisitionOrchestration.fresh([
     candidate({ targetKey: 'a', introduced: false }),
     candidate({ targetKey: 'b', introduced: true }),
-  ], plan({ activeWindow: 1 }));
-  return step?.target.targetKey === 'b';
+  ], plan());
+  return step?.target.targetKey === 'a';
 })());
 
-check('窗口没满时新 Target 先填窗口', (() => {
+check('全部 Target 已开始后仍按最久未出现优先', (() => {
   const step = acquisitionOrchestration.fresh([
-    candidate({ targetKey: 'a', introduced: false }),
-    candidate({ targetKey: 'b', introduced: true }),
-  ], plan({ activeWindow: 2 }));
+    candidate({ targetKey: 'a', introduced: true, lastStepOrdinal: 1 }),
+    candidate({ targetKey: 'b', introduced: true, lastStepOrdinal: 4 }),
+  ], plan());
   return step?.target.targetKey === 'a';
 })());
 

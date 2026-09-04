@@ -1,13 +1,18 @@
+import type { GradedMemoryOutcome } from '@sensa/learning-kernel';
 import { FSRSItem, Rating, initFSRSFromLearn, reviewFSRS } from './fsrs';
 import type { Word } from '../types';
 import { WORDS } from '../data';
-import type { RelearningCycle } from '../engine/types';
+import {
+  retentionTargetIdOf,
+  type RelearningCycle,
+  type RelearningRepairTarget,
+} from '../engine/types';
 import type { ReviewRuntimeEffect } from '../engine/ReviewQueue';
-import type { ReviewMemoryOutcome } from '../review/types';
+import type { MemoryOutcomeGrade } from '../review/types';
 
 const STORAGE_KEYS = {
-  FSRS_ITEMS: 'bubei_fsrs_items_v1',
-  REVIEW_RUNTIME: 'sensa_review_runtime_v1',
+  FSRS_ITEMS: 'sensa_retention_memory_v1',
+  REVIEW_RUNTIME: 'sensa_review_runtime_v3',
   SETTINGS: 'bubei_user_settings_v1',
   STATS: 'bubei_user_stats_v1',
   STARRED: 'bubei_starred_words_v1',
@@ -18,8 +23,9 @@ export interface StoredReviewOutcome {
   outcomeKey: string;
   packageId: string;
   senseId: string;
+  retentionTargetId: string;
   actionKey: string;
-  memoryOutcome: ReviewMemoryOutcome;
+  memoryOutcome: GradedMemoryOutcome;
   appliedAt: number;
   /** Immutable snapshot of the FSRS revision created by this outcome. */
   memoryState: FSRSItem;
@@ -27,7 +33,7 @@ export interface StoredReviewOutcome {
 }
 
 export interface ReviewRuntimeStore {
-  version: 1;
+  version: 3;
   settledOutcomes: Record<string, StoredReviewOutcome>;
   relearningCycles: Record<string, RelearningCycle>;
 }
@@ -43,16 +49,45 @@ export interface ReviewRetentionSettlementInput {
   outcomeKey: string;
   packageId: string;
   senseId: string;
+  retentionTargetId: string;
   actionKey: string;
-  memoryOutcome: ReviewMemoryOutcome;
-  correct: boolean;
-  targetCapability: RelearningCycle['targetCapability'];
+  memoryOutcome: GradedMemoryOutcome;
+  repairTarget: RelearningRepairTarget;
   now?: number;
 }
 
+const schedulerRatingFor = (grade: MemoryOutcomeGrade): Rating => {
+  switch (grade) {
+    case 'again': return Rating.Again;
+    case 'hard': return Rating.Hard;
+    case 'good': return Rating.Good;
+    case 'easy': return Rating.Easy;
+  }
+};
+
+const cloneMemoryOutcome = (outcome: GradedMemoryOutcome): GradedMemoryOutcome => ({
+  ...outcome,
+  evidenceIds: [...outcome.evidenceIds],
+});
+
+const cloneRepairTarget = (target: RelearningRepairTarget): RelearningRepairTarget => ({
+  ...target,
+});
+
+const cloneRelearningCycle = (cycle: RelearningCycle): RelearningCycle => ({
+  ...cycle,
+  repairTarget: cloneRepairTarget(cycle.repairTarget),
+});
+
+const cloneStoredReviewOutcome = (outcome: StoredReviewOutcome): StoredReviewOutcome => ({
+  ...outcome,
+  memoryOutcome: cloneMemoryOutcome(outcome.memoryOutcome),
+  memoryState: { ...outcome.memoryState },
+});
+
 export interface RelearningProgressInput {
   event: 'repair_completed' | 'retest_failed' | 'retest_passed';
-  senseId: string;
+  retentionTargetId: string;
   cycle: RelearningCycle;
 }
 
@@ -61,8 +96,6 @@ export interface UserSettings {
   pronType: string;      // '美式' | '英式'
   autoPron: string;      // '单词、例句卡片' | '仅单词' | '关闭'
   spellMode: string;     // '全部开启' | '仅新词' | '全部关闭'
-  learnPace: string;     // '20 词/组'
-  reviewPace: string;    // '20 词/组'
   swAudioChoice: boolean;
   swSplitMnemo: boolean;
   swConfuse: boolean;
@@ -73,8 +106,6 @@ const DEFAULT_SETTINGS: UserSettings = {
   pronType: '美式',
   autoPron: '单词、例句卡片',
   spellMode: '全部开启',
-  learnPace: '5 词/组',
-  reviewPace: '20 词/组',
   swAudioChoice: true,
   swSplitMnemo: true,
   swConfuse: false,
@@ -109,8 +140,7 @@ class StorageService {
 
   /**
    * Keep an empty local runtime store until the installed Learning Catalog
-   * supplies Sense identities. Legacy Word data is not an input to the
-   * formal Learn/Review flows.
+   * supplies learner-specific Retention Target identities.
    */
   private initDefaultFSRSIfEmpty() {
     try {
@@ -140,7 +170,7 @@ class StorageService {
 
   public saveFSRSItem(item: FSRSItem) {
     const items = this.getFSRSItems();
-    items[item.wordId] = item;
+    items[item.memoryKey] = item;
     this.fsrsCache = items;
     try {
       localStorage.setItem(STORAGE_KEYS.FSRS_ITEMS, JSON.stringify(items));
@@ -160,14 +190,17 @@ class StorageService {
   }
 
   /**
-   * Package/Sense-facing graduation for the local prototype.
+   * Retention Target graduation for the local prototype.
    *
    * The first Scheduling Handoff is deliberately compressed to "due now" so
    * the complete Acquisition -> Retention journey can be walked in one QA
    * session. Later Review outcomes still use the normal scheduler.
    */
-  public graduateSense(senseId: string, mistakeCount: number = 0): FSRSItem {
-    const item = initFSRSFromLearn(senseId, mistakeCount);
+  public graduateRetentionTarget(
+    retentionTargetId: string,
+    mistakeCount: number = 0,
+  ): FSRSItem {
+    const item = initFSRSFromLearn(retentionTargetId, mistakeCount);
     const immediatelyDueItem: FSRSItem = {
       ...item,
       due: Date.now(),
@@ -177,19 +210,17 @@ class StorageService {
     return immediatelyDueItem;
   }
 
-  /**
-   * Install deterministic demo FSRS records for the supplied runtime Sense
-   * identities. This is a local-first fixture convenience, not content
-   * authoring: the caller owns which Package identities are installed.
-   */
-  public ensureRuntimeSenseIds(senseIds: readonly string[]): void {
+  /** Install deterministic demo records for learner-specific Retention Targets. */
+  public ensureRuntimeRetentionTargets(
+    retentionTargetIds: readonly string[],
+  ): void {
     const items = this.getFSRSItems();
-    const missingIds = senseIds.filter((senseId) => !items[senseId]);
-    if (missingIds.length === 0) return;
+    const missing = retentionTargetIds.filter((retentionTargetId) => !items[retentionTargetId]);
+    if (missing.length === 0) return;
     const now = Date.now();
-    missingIds.forEach((senseId, index) => {
-      items[senseId] = {
-        wordId: senseId,
+    missing.forEach((retentionTargetId, index) => {
+      items[retentionTargetId] = {
+        memoryKey: retentionTargetId,
         state: 'review',
         stability: 2.0 + index * 0.5,
         difficulty: 5.0,
@@ -201,11 +232,7 @@ class StorageService {
       };
     });
     this.fsrsCache = items;
-    try {
-      localStorage.setItem(STORAGE_KEYS.FSRS_ITEMS, JSON.stringify(items));
-    } catch (e) {
-      console.warn('Failed to seed runtime Sense FSRS items', e);
-    }
+    this.persistFSRSItems(items);
     this.notify();
   }
 
@@ -227,23 +254,30 @@ class StorageService {
    */
   public applyReviewRuntimeEffect<TContent>(effect: ReviewRuntimeEffect<TContent>): void {
     if (effect.type === 'retention_outcome') {
-      if (!effect.result.evidenceEligible || effect.action.kind !== 'retention_review') return;
+      if (
+        !effect.result.evidenceEligible
+        || effect.action.kind !== 'retention_review'
+        || effect.result.memoryOutcome === null
+      ) return;
       this.settleRetentionReview({
         outcomeKey: effect.outcomeKey,
         packageId: effect.candidate.package.packageId,
         senseId: effect.candidate.package.senseId,
+        retentionTargetId: retentionTargetIdOf(effect.candidate.package),
         actionKey: effect.action.actionKey,
         memoryOutcome: effect.result.memoryOutcome,
-        correct: effect.result.correct,
         // 讲解步没有能力可归属；这条记录只在 retention_review 上落，
         // 走到这里的 null 一律按识别记，与交接前一致。
-        targetCapability: effect.action.capability ?? 'contextual_recognition',
+        repairTarget: {
+          kind: 'capability',
+          capability: effect.action.capability ?? 'contextual_recognition',
+        },
       });
       return;
     }
     this.applyRelearningProgress({
       event: effect.event,
-      senseId: effect.candidate.package.senseId,
+      retentionTargetId: retentionTargetIdOf(effect.candidate.package),
       cycle: effect.cycle,
     });
   }
@@ -259,39 +293,42 @@ class StorageService {
     const runtime = this.getReviewRuntimeStore();
     const existingOutcome = runtime.settledOutcomes[input.outcomeKey];
     if (existingOutcome) {
-      const currentMemory = this.getFSRSItems()[input.senseId] ?? existingOutcome.memoryState;
+      const currentMemory = this.getFSRSItems()[input.retentionTargetId]
+        ?? existingOutcome.memoryState;
       return {
         outcomeKey: input.outcomeKey,
         applied: false,
         memoryState: { ...currentMemory },
-        relearningCycle: runtime.relearningCycles[input.senseId]
-          ? { ...runtime.relearningCycles[input.senseId] }
+        relearningCycle: runtime.relearningCycles[input.retentionTargetId]
+          ? cloneRelearningCycle(runtime.relearningCycles[input.retentionTargetId])
           : null,
       };
     }
 
     const items = this.getFSRSItems();
-    const previous = items[input.senseId] ?? initFSRSFromLearn(input.senseId, 0);
+    const previous = items[input.retentionTargetId]
+      ?? initFSRSFromLearn(input.retentionTargetId, 0);
     const memoryState = reviewFSRS(
       previous,
-      input.correct ? Rating.Good : Rating.Again,
+      schedulerRatingFor(input.memoryOutcome.grade),
       input.now,
     );
-    const relearningCycle: RelearningCycle | null = input.correct
-      ? null
-      : {
+    const relearningCycle: RelearningCycle | null = input.memoryOutcome.grade === 'again'
+      ? {
           cycleId: input.outcomeKey,
           packageId: input.packageId,
           senseId: input.senseId,
-          targetCapability: input.targetCapability,
+          retentionTargetId: input.retentionTargetId,
+          repairTarget: cloneRepairTarget(input.repairTarget),
           failedReviewOutcomeKey: input.outcomeKey,
           failedReviewActionKey: input.actionKey,
           stage: 'repair_pending',
           repairCount: 0,
           lastActionOrdinal: -1,
-        };
+        }
+      : null;
 
-    items[input.senseId] = memoryState;
+    items[input.retentionTargetId] = memoryState;
     this.fsrsCache = items;
     this.persistFSRSItems(items);
 
@@ -299,47 +336,38 @@ class StorageService {
       outcomeKey: input.outcomeKey,
       packageId: input.packageId,
       senseId: input.senseId,
+      retentionTargetId: input.retentionTargetId,
       actionKey: input.actionKey,
-      memoryOutcome: input.memoryOutcome,
+      memoryOutcome: cloneMemoryOutcome(input.memoryOutcome),
       appliedAt: input.now ?? Date.now(),
       memoryState: { ...memoryState },
       relearningCycleId: relearningCycle?.cycleId ?? null,
     };
     if (relearningCycle) {
-      runtime.relearningCycles[input.senseId] = { ...relearningCycle };
+      runtime.relearningCycles[input.retentionTargetId] = cloneRelearningCycle(relearningCycle);
     }
     this.persistReviewRuntime(runtime);
     return {
       outcomeKey: input.outcomeKey,
       applied: true,
       memoryState: { ...memoryState },
-      relearningCycle: relearningCycle ? { ...relearningCycle } : null,
+      relearningCycle: relearningCycle ? cloneRelearningCycle(relearningCycle) : null,
     };
   }
 
   /** Return a copy so callers cannot mutate persisted recovery progress. */
-  public getRelearningCycle(senseId: string): RelearningCycle | null {
-    const cycle = this.getReviewRuntimeStore().relearningCycles[senseId];
-    return cycle ? { ...cycle } : null;
+  public getRelearningCycle(retentionTargetId: string): RelearningCycle | null {
+    const cycle = this.getReviewRuntimeStore().relearningCycles[retentionTargetId];
+    return cycle ? cloneRelearningCycle(cycle) : null;
   }
 
-  public getRelearningSenseIds(): string[] {
-    const cycleSenseIds = Object.keys(this.getReviewRuntimeStore().relearningCycles);
-    // Before the separated Relearning projection existed, an Again review
-    // could leave only the FSRS state label behind. Keep that legacy local
-    // state recoverable: the Review queue will infer a targeted Package cycle
-    // and the first Relearning effect will materialize it durably.
-    const legacySenseIds = Object.values(this.getFSRSItems())
-      .filter((item) => item.state === 'relearning')
-      .map((item) => item.wordId);
-    return [...new Set([...cycleSenseIds, ...legacySenseIds])];
+  public getRelearningRetentionTargetIds(): string[] {
+    return Object.keys(this.getReviewRuntimeStore().relearningCycles);
   }
 
   public getSettledReviewOutcome(outcomeKey: string): StoredReviewOutcome | null {
     const outcome = this.getReviewRuntimeStore().settledOutcomes[outcomeKey];
-    return outcome
-      ? { ...outcome, memoryState: { ...outcome.memoryState } }
-      : null;
+    return outcome ? cloneStoredReviewOutcome(outcome) : null;
   }
 
   /**
@@ -349,32 +377,23 @@ class StorageService {
    * values produced by the failed retention outcome.
    */
   public applyRelearningProgress(input: RelearningProgressInput): void {
-    const runtime = this.getReviewRuntimeStore();
-    let stored = runtime.relearningCycles[input.senseId];
-    if (!stored) {
-      // Compatibility bridge for records written by the pre-cycle MVP. Do
-      // not invent a cycle for a normal Review item: only an existing FSRS
-      // `relearning` state may be upgraded by a queued Relearning effect.
-      const current = this.getFSRSItems()[input.senseId];
-      if (!current || current.state !== 'relearning') return;
-      stored = {
-        ...input.cycle,
-        stage: 'repair_pending',
-        repairCount: 0,
-      };
-      runtime.relearningCycles[input.senseId] = stored;
+    if (input.cycle.retentionTargetId !== input.retentionTargetId) {
+      throw new Error('Relearning progress targets a different Retention Target than its Cycle.');
     }
+    const runtime = this.getReviewRuntimeStore();
+    const stored = runtime.relearningCycles[input.retentionTargetId];
+    if (!stored) return;
     if (stored.cycleId !== input.cycle.cycleId) return;
 
     if (input.event === 'retest_passed') {
       const items = this.getFSRSItems();
-      const current = items[input.senseId];
+      const current = items[input.retentionTargetId];
       if (current && current.state === 'relearning') {
-        items[input.senseId] = { ...current, state: 'review' };
+        items[input.retentionTargetId] = { ...current, state: 'review' };
         this.fsrsCache = items;
         this.persistFSRSItems(items);
       }
-      delete runtime.relearningCycles[input.senseId];
+      delete runtime.relearningCycles[input.retentionTargetId];
       this.persistReviewRuntime(runtime);
       return;
     }
@@ -388,7 +407,7 @@ class StorageService {
       stored.stage === nextStage
       && stored.repairCount === input.cycle.repairCount
     ) return;
-    runtime.relearningCycles[input.senseId] = {
+    runtime.relearningCycles[input.retentionTargetId] = {
       ...stored,
       stage: nextStage,
       repairCount: input.cycle.repairCount,
@@ -400,7 +419,7 @@ class StorageService {
   private getReviewRuntimeStore(): ReviewRuntimeStore {
     if (this.reviewRuntimeCache) return this.reviewRuntimeCache;
     const empty: ReviewRuntimeStore = {
-      version: 1,
+      version: 3,
       settledOutcomes: {},
       relearningCycles: {},
     };
@@ -409,7 +428,7 @@ class StorageService {
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<ReviewRuntimeStore>;
         if (
-          parsed.version === 1
+          parsed.version === 3
           && parsed.settledOutcomes
           && typeof parsed.settledOutcomes === 'object'
           && !Array.isArray(parsed.settledOutcomes)
@@ -418,7 +437,7 @@ class StorageService {
           && !Array.isArray(parsed.relearningCycles)
         ) {
           this.reviewRuntimeCache = {
-            version: 1,
+            version: 3,
             settledOutcomes: parsed.settledOutcomes as Record<string, StoredReviewOutcome>,
             relearningCycles: parsed.relearningCycles as Record<string, RelearningCycle>,
           };
@@ -461,7 +480,7 @@ class StorageService {
       Object.values(items)
         .filter((item) => item.state === 'review' || item.state === 'relearning')
         .filter((item) => item.due <= endOfToday)
-        .map((item) => item.wordId)
+        .map((item) => item.memoryKey)
     );
 
     return allWords.filter((w) => {
@@ -470,17 +489,19 @@ class StorageService {
     });
   }
 
-  /** Return due runtime Sense identities without requiring a Word registry. */
-  public getDueSenseIds(senseIds: readonly string[], now: number = Date.now()): string[] {
+  public getDueRetentionTargetIds(
+    retentionTargetIds: readonly string[],
+    now: number = Date.now(),
+  ): string[] {
     const items = this.getFSRSItems();
     const endOfToday = new Date(now).setHours(23, 59, 59, 999);
     const due = new Set(
       Object.values(items)
         .filter((item) => item.state === 'review' || item.state === 'relearning')
         .filter((item) => item.due <= endOfToday)
-        .map((item) => item.wordId),
+        .map((item) => item.memoryKey),
     );
-    return senseIds.filter((senseId) => due.has(senseId));
+    return retentionTargetIds.filter((retentionTargetId) => due.has(retentionTargetId));
   }
 
   /**
@@ -636,10 +657,7 @@ class StorageService {
   }
 
   public setDailyNewCount(count: number): void {
-    this.saveSettings({
-      dailyNewCount: count,
-      learnPace: `${count} 词/组`,
-    });
+    this.saveSettings({ dailyNewCount: count });
   }
 }
 

@@ -1,7 +1,7 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-09-01
+> Updated: 2026-09-04
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
@@ -65,6 +65,11 @@ language expression binding, learner language/locale context and required scope.
 It says what connection is being learned, not where content comes from or how it
 will be taught.
 
+**Learning Capability Objective（能力目标）**:
+A versioned statement of the observable performance sought for one Learning Target.
+It informs content, Protocol and evaluation; only an explicit, stable, independently
+valuable objective with separate scheduling value extends Retention Target scope.
+
 **Learning Entry Provenance**:
 The versioned origin through which a Learning Target enters Curriculum, such as
 Book membership, direct selection of an existing stable Sense, or a confirmed
@@ -72,10 +77,10 @@ Personal Meaning Alignment. It never changes target identity or makes Personal
 Semantic World membership a prerequisite for learning.
 
 **Learning Policy Profile**:
-A versioned, auditable learning-method profile that coordinates purpose-specific
-Protocol selection with content-readiness, evidence and scheduling-policy references.
-It represents a mode such as lightweight or high-assurance, not target identity or a
-generic presentation preference.
+A versioned, auditable named composition of purpose-specific Protocol, content,
+evaluation, progression, completion, repair, scheduling and claim policies. It
+represents a mode such as lightweight or high-assurance, not target identity, daily
+quantity or a generic presentation preference.
 
 **Learning Policy Assignment**:
 A versioned learner or Curriculum choice that applies one Learning Policy Profile at
@@ -102,10 +107,10 @@ preserving prior Runs, outcomes, Evidence, Scheduling Handoffs and FSRS state; i
 not an in-place edit or an automatic response to newly available content.
 
 **Resolved Learning Plan**:
-The versioned plan derived from one Learning Target, its Effective Learning Policy and
-currently available content/runtime capabilities. It resolves purpose-specific
-Protocols, provisioning requirements and readiness, not a precomputed Card sequence,
-Session queue or future review calendar.
+The versioned plan derived from one Learning Target, its Learning Capability Objectives,
+Effective Learning Policy and currently available content/runtime capabilities. It
+resolves purpose-specific Protocols, provisioning requirements and readiness, not a
+precomputed Card sequence, Session queue or future review calendar.
 
 **Learning Plan Readiness**:
 The purpose-specific `preparing | ready | blocked` state of a Resolved Learning Plan.
@@ -142,8 +147,9 @@ prompts or a live model response.
 
 **Learning Protocol**:
 A versioned method contract that declares required content roles, allowed
-actions, completion semantics, evidence claims and Scheduling Handoff rules for
-establishing, checking, strengthening or restoring one meaning–form connection.
+actions, Checkpoints, evaluation and transition rules, completion semantics, evidence
+claims and Scheduling Handoff rules for establishing, checking, strengthening or
+restoring one meaning–form connection.
 
 **Protocol Purpose**:
 The closed purpose of a Learning Protocol: `initial_learning`,
@@ -371,8 +377,9 @@ different target expressions into one phase, Protocol Run or FSRS Memory State.
 
 **Learning Phase**:  
 The Retention-Target planning phase `new`, `acquiring`, `retaining` or
-`relearning`. `acquiring` can host any initial Learning Protocol; it does not
-imply that a Structured Acquisition Cycle exists.
+`relearning`. It is a planning state, not a third time scale: `acquiring` belongs to
+short-term acquisition, while `retaining` and recovery-oriented `relearning` belong
+to long-term retention.
 
 **Acquisition Cycle**:  
 The Structured Acquisition Protocol run through which a new or forgotten
@@ -380,9 +387,10 @@ Retention Target resolves its required Acquisition Gates. It can span multiple
 Encounters and Sessions but is not created by other protocols.
 
 **Acquisition Gate**:  
-A required capability checkpoint with an unresolved, passed or failed state.
-Baseline gate families cover contextual Sense recognition, Sense-to-form recall
-and novel-context transfer; Boundary is required only for a real confusion target.
+A Structured Acquisition Protocol Checkpoint that represents a required capability
+criterion with an unresolved, passed or failed state. Baseline families cover contextual
+Sense recognition, Sense-to-form recall and novel-context transfer; Boundary is required
+only for a real confusion target.
 
 **Acquisition Graduation**:  
 The transition that occurs when every required Gate in an initial Acquisition
@@ -530,6 +538,10 @@ One versioned unit in a Learning Protocol's ordered, branching or cyclic
 transition model. It declares purpose, required material roles, interaction,
 result eligibility and next-step rules without prescribing a visual component.
 
+**Learning Action Intent**:
+The semantic purpose of one Protocol Action: instruction, practice, assessment,
+feedback or repair. Intent determines result eligibility; visual form does not.
+
 **Protocol Step Instance**:
 The learner-specific execution of one Protocol Step inside a Protocol Run. It
 records pinned material bindings, state and transition result for replay/resume.
@@ -546,10 +558,30 @@ curriculum membership, Evidence or schedule.
 **Learning Attempt**:  
 The learner's immutable raw response to the current Action.
 
+**Learning Observation**:
+The immutable interpretation of one Attempt and its response conditions under a pinned
+interaction/grader contract, including correctness, latency, support use or learner rating.
+It is input to evaluation, not itself Evidence, progress or a scheduler result.
+
 **Learning Evidence**:  
-The server-derived behavioral observation from a valid Attempt. Exposure,
-audio playback, acknowledgement and self-reported understanding are not Evidence;
-a lawful protocol may still use them as non-evidentiary completion or scheduling basis.
+The server-derived evidentiary statement from a valid Learning Observation under a
+pinned Evidence Rule. Exposure, audio playback, acknowledgement and self-reported
+understanding are not Evidence; a lawful protocol may still use them as non-evidentiary
+completion or scheduling basis.
+
+**Protocol Checkpoint**:
+A protocol-local evaluative milestone that references one or more Learning Capability
+Objectives and owns current credit within a Protocol Run. It is optional, is not a
+Capability Objective or Retention Target, and never derives identity from a Card.
+
+**Protocol Transition Decision**:
+The immutable, versioned decision that maps an Observation and any admissible Evidence
+to Checkpoint credit, repair, reassessment, progress reset, advancement or completion.
+
+**Progress Reset**:
+A Protocol Transition effect that invalidates current Checkpoint credit for an explicit
+scope—one Checkpoint, a declared set or the Run—without deleting Attempt, Observation,
+Evidence or prior transition history.
 
 **Encounter Outcome**:  
 The immutable semantic completion result of one Encounter under its pinned
@@ -569,7 +601,17 @@ optional recall attempted or Study Completion. It does not create Gate or 5D fac
 An immutable scheduler-facing result from one protocol-declared evaluation of an
 existing Retention Target. A due Review produces at most one; a scheduler-eligible
 Relearning evaluation may produce a separate result. Every result records its
-origin and basis, is applied to FSRS at most once and never rewrites an earlier one.
+origin, grade and basis, is applied to FSRS at most once and never rewrites an earlier one.
+
+**Memory Outcome Grade**:
+The scheduler-stable ordinal result `again | hard | good | easy`. Protocol-specific
+responses and labels map to a grade without collapsing meaningful uncertainty into a
+Boolean; grade remains separate from evidence basis and claim strength.
+
+**Scheduling Decision**:
+The immutable scheduler result obtained from one Memory State revision and one valid
+Memory Outcome. It produces the next Memory State and due time; Protocols and clients
+cannot write either directly.
 
 **Relearning Completion**:
 The successful end of a Relearning Protocol Run. It returns the Retention Target

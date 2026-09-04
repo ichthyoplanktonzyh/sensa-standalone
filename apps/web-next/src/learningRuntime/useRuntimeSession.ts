@@ -20,6 +20,10 @@ export interface RuntimeSession extends RuntimeSessionState {
     surface: PrototypeRuntimeSurface,
     targetIds: readonly PrototypeLearningTargetId[],
   ) => void;
+  readonly finishInitialTarget: (
+    surface: PrototypeRuntimeSurface,
+    targetId: PrototypeLearningTargetId,
+  ) => void;
   readonly finishInitialRun: (surface: PrototypeRuntimeSurface) => void;
   readonly startRetentionRun: (
     surface: PrototypeRuntimeSurface,
@@ -42,6 +46,11 @@ export function useRuntimeSession(): RuntimeSession {
   );
   const finishInitialRun = useCallback(
     (surface: PrototypeRuntimeSurface) => dispatch({ type: 'finishInitialRun', surface }),
+    [],
+  );
+  const finishInitialTarget = useCallback(
+    (surface: PrototypeRuntimeSurface, targetId: PrototypeLearningTargetId) =>
+      dispatch({ type: 'finishInitialTarget', surface, targetId }),
     [],
   );
   const startRetentionRun = useCallback(
@@ -68,6 +77,7 @@ export function useRuntimeSession(): RuntimeSession {
     (): RuntimeSession => ({
       ...state,
       startInitialRun,
+      finishInitialTarget,
       finishInitialRun,
       startRetentionRun,
       finishRetentionRun,
@@ -77,6 +87,7 @@ export function useRuntimeSession(): RuntimeSession {
     [
       state,
       startInitialRun,
+      finishInitialTarget,
       finishInitialRun,
       startRetentionRun,
       finishRetentionRun,

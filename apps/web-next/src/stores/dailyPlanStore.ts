@@ -18,7 +18,12 @@
  * 会偏旧，直到下一次写入。这与改动前一致（改前更差：不显式刷新就永远不变）。
  */
 import { useSyncExternalStore } from 'react';
-import { PROTOTYPE_LEARNING_PACKAGES } from '../content/learningCatalog';
+import { retentionTargetIdOf } from '../engine/types';
+import {
+  PROTOTYPE_LEARNING_TARGET_ORDER,
+  PROTOTYPE_LEARNING_TARGETS,
+  runtimePackageForTarget,
+} from '../learningJourney/prototypeLearning';
 import { createSnapshotStore } from '../services/createSnapshotStore';
 import { storageService } from '../services/storageService';
 
@@ -31,10 +36,13 @@ const dailyNewCountStore = createSnapshotStore(
 
 const dueReviewCountStore = createSnapshotStore(
   () => {
-    const senseIds = PROTOTYPE_LEARNING_PACKAGES.map((item) => item.senseId);
+    const retentionTargetIds = PROTOTYPE_LEARNING_TARGET_ORDER.flatMap((targetId) => {
+      const packageItem = runtimePackageForTarget(PROTOTYPE_LEARNING_TARGETS[targetId]);
+      return packageItem ? [retentionTargetIdOf(packageItem)] : [];
+    });
     return new Set([
-      ...storageService.getDueSenseIds(senseIds),
-      ...storageService.getRelearningSenseIds(),
+      ...storageService.getDueRetentionTargetIds(retentionTargetIds),
+      ...storageService.getRelearningRetentionTargetIds(),
     ]).size;
   },
   subscribeToStorage,

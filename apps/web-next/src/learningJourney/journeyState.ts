@@ -28,6 +28,7 @@ import {
   PROTOTYPE_LEARNING_TARGETS,
   PROTOTYPE_LEARNING_TARGET_ORDER,
   readinessForPolicy,
+  defaultRetentionTargetIdFor,
   type PrototypeLearningPolicy,
   type PrototypeLearningReadiness,
   type PrototypeLearningTargetId,
@@ -35,8 +36,10 @@ import {
 } from './prototypeLearning';
 import { learningPolicyProfileRegistry } from '../learningRuntime/policyProfiles';
 import {
-  initialHandoffBasisOf,
+  initialCompletionContractOf,
   orchestrationRegistry,
+  type InitialLearningCompletionKind,
+  type LearningEvidenceLevel,
   type SchedulingHandoffBasis,
 } from '../learningRuntime/orchestrations';
 import { learningRuntimeCoordinator } from '../learningRuntime/runtimeCoordinator';
@@ -45,7 +48,10 @@ import {
   IMMEDIATE_REVIEW_LABEL,
 } from '../learningRuntime/retentionStores';
 import type { RelearningCycleStage } from '../engine/types';
-import type { ReviewMemoryOutcome } from '../review/types';
+import type {
+  LearnerRatedMemoryOutcome,
+} from '../review/types';
+import type { MemoryOutcomeBasis } from '@sensa/learning-kernel';
 
 /* ============================================================
    每条 Target 的记录
@@ -53,11 +59,14 @@ import type { ReviewMemoryOutcome } from '../review/types';
 
 /** 首次学习的完成交接：完成方式、完成时间、以及交给谁安排下一次。 */
 export interface InitialLearningCompletion {
-  readonly completionKind: 'lightweight' | 'structured';
+  readonly completionKind: InitialLearningCompletionKind;
+  readonly protocolOutcome: string;
   readonly completedAt: string;
   readonly nextReviewAt: string;
   readonly nextReviewLabel: string;
   readonly schedulingHandoffBasis: SchedulingHandoffBasis;
+  readonly evidenceLevel: LearningEvidenceLevel;
+  readonly learnerVisibleClaim: string;
   readonly initialRating?: Exclude<PrototypeLightweightRating, 'again'>;
 }
 
@@ -69,6 +78,7 @@ export interface LightweightRetention {
   readonly lapseCount: number;
   readonly relearning: boolean;
   readonly lastReviewRating?: PrototypeLightweightRating;
+  readonly lastMemoryOutcome?: LearnerRatedMemoryOutcome<PrototypeLightweightRating>;
   readonly lastReviewedAt?: string;
 }
 
@@ -79,7 +89,7 @@ export interface StructuredRetention {
   readonly nextReviewLabel: string;
   readonly reviewCount: number;
   readonly lapseCount: number;
-  readonly lastOutcome: ReviewMemoryOutcome | null;
+  readonly lastOutcome: MemoryOutcomeBasis | null;
   readonly relearning: boolean;
   readonly relearningStage: RelearningCycleStage | null;
   readonly relearningCompletedAt: string | null;
@@ -94,6 +104,14 @@ export interface TargetJourney {
   readonly preparation: PrototypeLearningReadiness | null;
   /** 首次正式学习开始时锁定的方式。一旦有值，方式不再可改。 */
   readonly committedPolicy: PrototypeLearningPolicy | null;
+  /**
+   * Unified Planner 首次把这条 Target 纳入某个本地学习日的时间。
+   *
+   * 它是 Study Plan 配额已经被占用的事实，不是 Protocol 窗口或 preset
+   * 批量大小。即使 Target 随后开始、完成或暂时变得不可运行，这个事实也不
+   * 回退，因而完成一条 Target 不会让当天的配额自动补进下一条。
+   */
+  readonly initialPlannedAt: string | null;
   readonly initialCompletion: InitialLearningCompletion | null;
   readonly lightweightRetention: LightweightRetention | null;
   readonly structuredRetention: StructuredRetention | null;
@@ -104,6 +122,7 @@ const EMPTY_JOURNEY: TargetJourney = {
   policy: null,
   preparation: null,
   committedPolicy: null,
+  initialPlannedAt: null,
   initialCompletion: null,
   lightweightRetention: null,
   structuredRetention: null,
@@ -114,10 +133,10 @@ export interface JourneyState {
   /** 每条 Target 都有记录，字段可以为 null——不存在"这条 Target 不在表里"。 */
   readonly byTarget: Readonly<Record<PrototypeLearningTargetId, TargetJourney>>;
   /**
-   * 被声明为熟词的 Sense。按 senseId 而非 targetId 索引：熟词声明发生在
-   * 具体义项上，一条 Target 未必有 runtime Sense。
+   * Declared Mastery 事实落在 Retention Target。Target 级操作批量写入当时已有的
+   * scopes，因此以后新增的 scope 不会继承旧声明。
    */
-  readonly declaredMasterySenseIds: ReadonlySet<string>;
+  readonly declaredMasteryRetentionTargetIds: ReadonlySet<string>;
 }
 
 /* ============================================================
@@ -196,14 +215,13 @@ export const completedTargetIds = (
     (targetId) => state.byTarget[targetId].initialCompletion !== null,
   ));
 
-/** 这条 Target 的 runtime Sense 是否已被声明为熟词。 */
+/** 当前只有 default scope；Target 级投影读取它对应的 Retention Target 事实。 */
 export const isDeclaredMastery = (
   state: JourneyState,
   targetId: PrototypeLearningTargetId,
-): boolean => {
-  const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
-  return senseId !== null && state.declaredMasterySenseIds.has(senseId);
-};
+): boolean => state.declaredMasteryRetentionTargetIds.has(
+  defaultRetentionTargetIdFor(PROTOTYPE_LEARNING_TARGETS[targetId]),
+);
 
 /* ============================================================
    初始状态
@@ -231,7 +249,7 @@ export const DEFAULT_LEARNING_POLICY: PrototypeLearningPolicy =
 export const INITIAL_JOURNEY: JourneyState = {
   defaultPolicy: DEFAULT_LEARNING_POLICY,
   byTarget: buildInitialByTarget(),
-  declaredMasterySenseIds: new Set<string>(),
+  declaredMasteryRetentionTargetIds: new Set<string>(),
 };
 
 /* ============================================================
@@ -255,6 +273,11 @@ export type JourneyAction =
     }
   /** 首次正式学习开始，锁定方式。 */
   | {
+      readonly type: 'planInitialTargets';
+      readonly targetIds: readonly PrototypeLearningTargetId[];
+      readonly plannedAt: string;
+    }
+  | {
       readonly type: 'commitPolicies';
       readonly entries: ReadonlyArray<{
         readonly targetId: PrototypeLearningTargetId;
@@ -262,23 +285,23 @@ export type JourneyAction =
       }>;
     }
   /**
-   * 结构化首学毕业。规则在 reducer 里：只有"锁定为结构化首学、且这次确实毕业"
-   * 的 Target 才写交接；写进哪一份取决于它的保持方式是结构化还是轻量。
-   * 已有交接的不覆盖——毕业只发生一次。
+   * Queue 型 Protocol 的首学完成。只有已锁定方式、且这次确实完成的
+   * Target 才写交接；完成声称和保持落点由该 Profile 的 Orchestration /
+   * Retention Store 决定。已有交接的不覆盖。
    */
   | {
-      readonly type: 'recordStructuredGraduation';
-      readonly graduatedSenseIds: readonly string[];
-      /** senseId → FSRS 到期时间戳。只有结构化保持才用得到。 */
-      readonly dueBySenseId: Readonly<Record<string, number>>;
+      readonly type: 'recordQueueInitialCompletions';
+      readonly completedRetentionTargetIds: readonly string[];
+      /** retentionTargetId → FSRS 到期时间戳。只有 scheduler store 才用得到。 */
+      readonly dueByRetentionTargetId: Readonly<Record<string, number>>;
       readonly completedAt: string;
       readonly now: number;
     }
-  /** 轻量首学完成。 */
+  /** 非命令式 Queue 的 Protocol 首学完成；出口语义仍由 Orchestration 声明。 */
   | {
-      readonly type: 'completeLightweightInitial';
+      readonly type: 'completeProtocolInitial';
       readonly targetId: PrototypeLearningTargetId;
-      readonly rating: Exclude<PrototypeLightweightRating, 'again'>;
+      readonly rating?: Exclude<PrototypeLightweightRating, 'again'>;
       readonly completedAt: string;
       readonly nextReviewAt: string;
       readonly nextReviewLabel: string;
@@ -289,7 +312,7 @@ export type JourneyAction =
   | {
       readonly type: 'recordLightweightReview';
       readonly targetId: PrototypeLearningTargetId;
-      readonly rating: PrototypeLightweightRating;
+      readonly outcome: LearnerRatedMemoryOutcome<PrototypeLightweightRating>;
       readonly reviewedAt: string;
       readonly nextReviewAt: string;
       readonly nextReviewLabel: string;
@@ -308,7 +331,7 @@ export type JourneyAction =
       readonly occurredAt: string;
       /** 这次是否算作一次复习结算（relearning 过程事件不算）。 */
       readonly counted: boolean;
-      readonly outcome: ReviewMemoryOutcome | null;
+      readonly outcome: MemoryOutcomeBasis | null;
       /** FSRS 给出的下次到期时间与累计遗忘次数。 */
       readonly dueAt: number;
       readonly lapses: number;
@@ -327,8 +350,8 @@ export type JourneyAction =
       readonly targetIds: readonly PrototypeLearningTargetId[];
       readonly dueAt: number;
     }
-  | { readonly type: 'declareMastery'; readonly senseId: string }
-  | { readonly type: 'revokeMastery'; readonly senseId: string };
+  | { readonly type: 'declareMastery'; readonly retentionTargetIds: readonly string[] }
+  | { readonly type: 'revokeMastery'; readonly retentionTargetIds: readonly string[] };
 
 /**
  * 这条 Policy 的首学出口交出什么依据。见 learningRuntime/orchestrations.ts。
@@ -336,9 +359,9 @@ export type JourneyAction =
  * 问的是编排取不取证，不是问用哪块屏跑：只有产出 assessment 的编排才有
  * Evidence，才谈得上 Acquisition Graduation。
  */
-const initialHandoffBasisFor = (
+const initialCompletionContractFor = (
   policy: PrototypeLearningPolicy,
-): SchedulingHandoffBasis => initialHandoffBasisOf(orchestrationRegistry.get(
+ ) => initialCompletionContractOf(orchestrationRegistry.get(
   learningRuntimeCoordinator.orchestrationFor(policy, 'initial_learning'),
 ));
 
@@ -401,6 +424,19 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
     case 'setPreparation':
       return patch(state, action.targetId, { preparation: action.preparation });
 
+    case 'planInitialTargets': {
+      if (action.targetIds.length === 0) return state;
+      const byTarget = { ...state.byTarget };
+      let changed = false;
+      for (const targetId of new Set(action.targetIds)) {
+        const journey = byTarget[targetId];
+        if (!journey.added || journey.initialPlannedAt !== null) continue;
+        byTarget[targetId] = { ...journey, initialPlannedAt: action.plannedAt };
+        changed = true;
+      }
+      return changed ? { ...state, byTarget } : state;
+    }
+
     case 'commitPolicies': {
       if (action.entries.length === 0) return state;
       const byTarget = { ...state.byTarget };
@@ -410,21 +446,19 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
       return { ...state, byTarget };
     }
 
-    case 'recordStructuredGraduation': {
-      const graduated = new Set(action.graduatedSenseIds);
+    case 'recordQueueInitialCompletions': {
+      const completed = new Set(action.completedRetentionTargetIds);
       const byTarget = { ...state.byTarget };
       let changed = false;
       for (const targetId of PROTOTYPE_LEARNING_TARGET_ORDER) {
         const journey = byTarget[targetId];
         const policy = journey.committedPolicy;
-        const senseId = PROTOTYPE_LEARNING_TARGETS[targetId].runtimeSenseId;
+        const retentionTargetId = defaultRetentionTargetIdFor(
+          PROTOTYPE_LEARNING_TARGETS[targetId],
+        );
         if (
           !policy
-          || !senseId
-          || !graduated.has(senseId)
-          // 毕业是取证出口：产不出 assessment 的编排跑完也只是 Study
-          // Completion，不该在这里写交接。
-          || initialHandoffBasisFor(policy) !== 'acquisition_graduation'
+          || !completed.has(retentionTargetId)
         ) continue;
 
         const retentionStore = retentionStoreFor(policy);
@@ -434,17 +468,22 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
         // 同一份 store 定义在 App 那边接的是 storageService。
         const handoff = retentionStore.openHandoff({
           completedAt: action.completedAt,
-          openSchedulerDue: () => action.dueBySenseId[senseId] ?? null,
+          openSchedulerDue: () =>
+            action.dueByRetentionTargetId[retentionTargetId] ?? null,
           reviewLabel: (dueAt) => relativeReviewLabel(dueAt, action.now),
         });
         // 毕业只发生一次：已有交接的不覆盖。
         if (!journey.initialCompletion) {
+          const completion = initialCompletionContractFor(policy);
           changes.initialCompletion = {
-            completionKind: 'structured',
+            completionKind: completion.completionKind,
+            protocolOutcome: completion.protocolOutcome,
             completedAt: action.completedAt,
             nextReviewAt: handoff.nextReviewAt,
             nextReviewLabel: handoff.nextReviewLabel,
-            schedulingHandoffBasis: initialHandoffBasisFor(policy),
+            schedulingHandoffBasis: completion.handoffBasis,
+            evidenceLevel: completion.evidenceLevel,
+            learnerVisibleClaim: completion.learnerVisibleClaim,
           };
         }
         if (retentionStore.opensJourneyLadder && !journey.lightweightRetention) {
@@ -464,18 +503,27 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
       return changed ? { ...state, byTarget } : state;
     }
 
-    case 'completeLightweightInitial': {
-      const policy = journeyFor(state, action.targetId).committedPolicy ?? state.defaultPolicy;
+    case 'completeProtocolInitial': {
+      const currentJourney = journeyFor(state, action.targetId);
+      // Initial Completion is a one-time fact about a concrete, version-pinned
+      // Protocol Run. An uncommitted policy has no such Run, and replay must
+      // not rewrite the original Scheduling Handoff.
+      if (!currentJourney.committedPolicy || currentJourney.initialCompletion) return state;
+      const policy = currentJourney.committedPolicy;
+      const completion = initialCompletionContractFor(policy);
       const changes: { -readonly [K in keyof TargetJourney]?: TargetJourney[K] } = {
         initialCompletion: {
-          completionKind: 'lightweight',
+          completionKind: completion.completionKind,
+          protocolOutcome: completion.protocolOutcome,
           completedAt: action.completedAt,
           nextReviewAt: action.nextReviewAt,
           nextReviewLabel: action.nextReviewLabel,
           // 同一处推导：轻量首学不出 assessment，所以它交出的是 Study
           // Completion。写死常量会让这条依据脱离编排的声明。
-          schedulingHandoffBasis: initialHandoffBasisFor(policy),
-          initialRating: action.rating,
+          schedulingHandoffBasis: completion.handoffBasis,
+          evidenceLevel: completion.evidenceLevel,
+          learnerVisibleClaim: completion.learnerVisibleClaim,
+          ...(action.rating ? { initialRating: action.rating } : {}),
         },
       };
       if (action.startLightweightRetention) {
@@ -495,16 +543,18 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
     case 'recordLightweightReview': {
       const current = state.byTarget[action.targetId].lightweightRetention;
       if (!current) return state;
+      const rating = action.outcome.grade;
       return patch(state, action.targetId, {
         lightweightRetention: {
           ...current,
-          lastReviewRating: action.rating,
+          lastReviewRating: rating,
+          lastMemoryOutcome: action.outcome,
           lastReviewedAt: action.reviewedAt,
           nextReviewAt: action.nextReviewAt,
           nextReviewLabel: action.nextReviewLabel,
           reviewCount: current.reviewCount + 1,
-          lapseCount: current.lapseCount + (action.rating === 'again' ? 1 : 0),
-          relearning: action.rating === 'again',
+          lapseCount: current.lapseCount + (rating === 'again' ? 1 : 0),
+          relearning: rating === 'again',
         },
       });
     }
@@ -555,17 +605,19 @@ export function journeyReducer(state: JourneyState, action: JourneyAction): Jour
     }
 
     case 'declareMastery': {
-      if (state.declaredMasterySenseIds.has(action.senseId)) return state;
-      const next = new Set(state.declaredMasterySenseIds);
-      next.add(action.senseId);
-      return { ...state, declaredMasterySenseIds: next };
+      const next = new Set(state.declaredMasteryRetentionTargetIds);
+      action.retentionTargetIds.forEach((retentionTargetId) => {
+        if (retentionTargetId.trim().length > 0) next.add(retentionTargetId);
+      });
+      if (next.size === state.declaredMasteryRetentionTargetIds.size) return state;
+      return { ...state, declaredMasteryRetentionTargetIds: next };
     }
 
     case 'revokeMastery': {
-      if (!state.declaredMasterySenseIds.has(action.senseId)) return state;
-      const next = new Set(state.declaredMasterySenseIds);
-      next.delete(action.senseId);
-      return { ...state, declaredMasterySenseIds: next };
+      const next = new Set(state.declaredMasteryRetentionTargetIds);
+      action.retentionTargetIds.forEach((retentionTargetId) => next.delete(retentionTargetId));
+      if (next.size === state.declaredMasteryRetentionTargetIds.size) return state;
+      return { ...state, declaredMasteryRetentionTargetIds: next };
     }
   }
 }

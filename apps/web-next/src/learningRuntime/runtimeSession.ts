@@ -19,8 +19,9 @@
  * 两个槽位的形状不同，因为事实如此，不硬拧成一个：
  *
  *  - `initialRuns` 是**多条**。离开一段结构化首学去开一段轻量首学，结构化那段
- *    仍然活着——它的队列还在，回到那条 Target 要能接着跑。而且首学运行跑完
- *    也不清：结算与"继续这条 Target"都要读它。
+ *    仍然活着——它的队列还在，回到那条 Target 要能接着跑。每块 surface 自己
+ *    显式收尾：串行 surface 可以逐条移出已完成 Target，结构化 surface 可以保留
+ *    整组直到结算完成。
  *  - `retentionRun` 只有**一条**。到期复习按 `planRetention` 的顺序一组一组跑，
  *    跑完一组才交接下一组，因此新的一组直接顶掉上一组。
  *
@@ -59,7 +60,7 @@ export type InitialRuns = Readonly<
 >;
 
 export interface RuntimeSessionState {
-  /** 各 surface 上的首学运行。跑完不清，由各自的完成路径显式收尾。 */
+  /** 各 surface 上的首学运行；由各自的完成路径逐条或整组显式收尾。 */
   readonly initialRuns: InitialRuns;
   /** 正在进行的长期复习运行；跑完或交接给下一组时替换。 */
   readonly retentionRun: RuntimeRun | null;
@@ -99,6 +100,12 @@ export type RuntimeSessionAction =
       readonly surface: PrototypeRuntimeSurface;
       readonly targetIds: readonly PrototypeLearningTargetId[];
     }
+  | {
+      /** 完成并移出一条串行呈现的 Target；其余 Target 仍属于同一次运行。 */
+      readonly type: 'finishInitialTarget';
+      readonly surface: PrototypeRuntimeSurface;
+      readonly targetId: PrototypeLearningTargetId;
+    }
   | { readonly type: 'finishInitialRun'; readonly surface: PrototypeRuntimeSurface }
   /** 开一段长期复习：顶掉上一组，上一次的复习结算一并作废。 */
   | {
@@ -121,6 +128,15 @@ export function runtimeSessionReducer(
         initialRuns: { ...state.initialRuns, [action.surface]: action.targetIds },
         initialSummary: null,
       };
+    case 'finishInitialTarget': {
+      const current = state.initialRuns[action.surface];
+      if (!current?.includes(action.targetId)) return state;
+      const remaining = current.filter((targetId) => targetId !== action.targetId);
+      const initialRuns = { ...state.initialRuns };
+      if (remaining.length === 0) delete initialRuns[action.surface];
+      else initialRuns[action.surface] = remaining;
+      return { ...state, initialRuns };
+    }
     case 'finishInitialRun': {
       if (state.initialRuns[action.surface] === undefined) return state;
       const initialRuns = { ...state.initialRuns };

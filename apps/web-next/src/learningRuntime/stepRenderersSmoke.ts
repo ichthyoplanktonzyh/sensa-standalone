@@ -32,14 +32,16 @@ import {
   type AssessmentResource,
 } from '../content/assessmentResources';
 import { buildPrototypeReviewAssessment } from '../content/prototypeReviewCards';
-import { stepKindFor } from '../engine/stepOrchestration';
+import {
+  acquisitionOrchestration,
+  retentionOrchestration,
+} from '../engine/stepOrchestration';
 import type {
   BuiltinLearningStepKind,
   LearningCapability,
   RepairResourceReference,
   ScheduledActionDefinition,
 } from '../engine/types';
-import type { OrchestrationId } from './orchestrations';
 import { IntroductionCard } from '../components/cards/IntroductionCard';
 import { RecognitionCard } from '../components/cards/RecognitionCard';
 import { RecallCard } from '../components/cards/RecallCard';
@@ -154,7 +156,12 @@ const feedbackResult = (kind: ReviewAssessmentKind): ReviewAssessmentResult => (
   focusDimension: '语境辨义',
   correct: true,
   responseId: null,
-  memoryOutcome: 'independent_retrieval',
+  memoryOutcome: {
+    basis: 'independent_retrieval',
+    grade: 'good',
+    evidenceLevel: 'behavioral',
+    evidenceIds: [],
+  },
   evidenceEligible: true,
 });
 
@@ -225,12 +232,10 @@ check('重复登记直接抛', (() => {
 })());
 
 /** 编排盖得出的每一种章都有卡可查——含讲解步、四条能力与修复步。 */
-const ALL_ORCHESTRATIONS: readonly OrchestrationId[] = [
-  'structured_acquisition',
-  'structured_retention',
-  'lightweight_study',
-  'lightweight_retention',
-];
+const QUEUE_ORCHESTRATIONS = [
+  acquisitionOrchestration,
+  retentionOrchestration,
+] as const;
 const CAPABILITIES: readonly LearningCapability[] = [
   'contextual_recognition',
   'meaning_to_form_recall',
@@ -238,14 +243,14 @@ const CAPABILITIES: readonly LearningCapability[] = [
   'boundary_discrimination',
 ];
 const stampedKinds = new Set<string>();
-for (const orchestrationId of ALL_ORCHESTRATIONS) {
+for (const orchestration of QUEUE_ORCHESTRATIONS) {
   for (const pkg of PROTOTYPE_LEARNING_PACKAGES) {
     for (const action of [...pkg.actions, ...pkg.reviewActions]) {
-      stampedKinds.add(stepKindFor(orchestrationId, action));
+      stampedKinds.add(orchestration.stepKindFor(action));
     }
   }
   for (const capability of CAPABILITIES) {
-    stampedKinds.add(stepKindFor(orchestrationId, {
+    stampedKinds.add(orchestration.stepKindFor({
       actionKey: 'smoke-repair',
       capability,
       taskKey: null,
@@ -254,7 +259,7 @@ for (const orchestrationId of ALL_ORCHESTRATIONS) {
     }));
   }
 }
-check('四套编排对真实目录能盖出的每一种章都已登记',
+check('两套队列编排对真实目录能盖出的每一种章都已登记',
   [...stampedKinds].every((kind) => {
     try {
       return stepRendererRegistry.get(kind as never) !== undefined;

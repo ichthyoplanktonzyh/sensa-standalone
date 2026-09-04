@@ -28,9 +28,8 @@ export interface PrototypeLearningReadinessView {
   detail: string;
 }
 
-export type ContentCapabilityId =
-  | 'compact_learning_material'
-  | 'structured_learning_package';
+/** 对扩展开放；可用能力由 Content Provisioning Registry 在 composition root 闭合。 */
+export type ContentCapabilityId = string & {};
 
 /**
  * 一个 Protocol Binding 声明的内容能力集合。
@@ -45,6 +44,15 @@ export interface ContentCapabilityReadiness {
   readonly view: PrototypeLearningReadinessView;
   /** 供给事实。声明状态改不了它，用来决定这次运行建不建得起来。 */
   readonly provisioned: boolean;
+  /** 有供给时必须记录实际冻结的内容身份；未供给时必须为 null。 */
+  readonly materializationId: string | null;
+}
+
+export interface ContentCapabilityResolution {
+  readonly view: PrototypeLearningReadinessView;
+  readonly provisioned: boolean;
+  /** 按 Binding 声明顺序排列；用于 Protocol Run 固定实际内容 provenance。 */
+  readonly materializationIds: readonly string[];
 }
 
 /** 按 Learning Target 建好的供给方：问它某条能力在这条 Target 上的状况。 */
@@ -71,13 +79,20 @@ export const worseReadinessView = (
 export const conjoinContentCapabilities = (
   capabilities: ContentCapabilitySet,
   provider: ContentCapabilityReadinessProvider,
-): ContentCapabilityReadiness => {
+): ContentCapabilityResolution => {
   const readinesses = capabilities.map(provider);
+  for (const readiness of readinesses) {
+    if (readiness.provisioned !== (readiness.materializationId !== null)) {
+      throw new Error('Content provisioning fact and Materialization identity disagree.');
+    }
+  }
   return {
     view: readinesses
       .map((readiness) => readiness.view)
       .reduce(worseReadinessView),
     provisioned: readinesses.every((readiness) => readiness.provisioned),
+    materializationIds: readinesses.flatMap((readiness) =>
+      readiness.materializationId !== null ? [readiness.materializationId] : []),
   };
 };
 

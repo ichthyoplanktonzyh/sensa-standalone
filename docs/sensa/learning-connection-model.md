@@ -1,7 +1,7 @@
 # Sensa 学习连接模型
 
 > 状态：Canonical domain model
-> 更新日期：2026-09-01
+> 更新日期：2026-09-04
 
 本文定义一个 confirmed Sense 与目标语言表达的连接如何取得内容、选择学习方式、形成不同强度的
 结果并交给长期调度。个人意义与 Sense 确认由
@@ -49,17 +49,25 @@ Target 处汇合，都保存 Learning Entry Provenance，但 provenance 不进�
 Target。用户可以不创建 Personal Meaning，但系统仍必须解析并固定具体 stable Sense、Sense Version
 与 target Sense Expression Binding。
 
-## 2. 七个正交问题
+## 2. 九个正交问题
+
+一个 Target 的 learner-specific “课程”由 Resolved Learning Plan 表达，而不是把 Target 本身变成课程。
+该 Plan 必须保持四个方面可独立演化：**目标**（Learning Target + Capability Objectives）、**内容**
+（Materialization）、**实施**（Protocol/Step/Action）和**评价**（Observation/Evidence/Checkpoint/
+Transition/Outcome）。实施与评价再跨两个时间尺度运行：短期 Acquisition 建立连接，长期 Retention
+持续检验和恢复；Relearning 是 Retention 中的恢复 purpose，不是第三种记忆时间尺度。
 
 领域模型必须分别回答：
 
 1. **学习什么**：固定哪个 Sense Version 和哪个 target expression；
-2. **希望采用哪种学习保证与方式**：解析哪个 learner-selected Learning Policy Profile；
-3. **内容从哪里来**：published、on-demand 或 hybrid；
-4. **当前阶段怎样执行**：为当前 Protocol Purpose 使用哪个 versioned Learning Protocol；
-5. **当前是否可执行**：target、policy、content 和 runtime capability 能否解析出 ready plan；
-6. **哪个连接独立保持**：Learning Target 解析到哪个稳定 Retention Target；
-7. **怎样连接长期调度**：Initial Learning 如何 Handoff、Review 和合法 Relearning
+2. **希望形成什么能力**：固定哪些 Learning Capability Objectives，以及哪些确有独立长期调度价值；
+3. **希望采用哪种学习保证与方式**：解析哪个 learner-selected Learning Policy Profile；
+4. **内容从哪里来**：published、on-demand 或 hybrid；
+5. **当前阶段怎样执行**：为当前 Protocol Purpose 使用哪个 versioned Learning Protocol；
+6. **怎样评价并推进**：Observation 如何成为 Evidence，Checkpoint 如何结算，失败如何 repair/reset；
+7. **当前是否可执行**：target、objectives、policy、content 和 runtime capability 能否解析出 ready plan；
+8. **哪个连接独立保持**：Learning Target 解析到哪个稳定 Retention Target；
+9. **怎样连接长期调度**：Initial Learning 如何 Handoff、Review 和合法 Relearning
    evaluation 如何产生各自不可变的 Memory Outcome。
 
 Learning Policy、Sense Learning Package、Learning Protocol、Learning Evidence 与 FSRS 不能再合并为一个概念。
@@ -133,6 +141,10 @@ FSRS 状态。只有当产品显式定义了一项需要独立长期保持的能
 响应合同、可持续分离的表现和有实际价值的独立调度时，才能为同一 Sense–expression 创建显式
 独立的 retention scope；这是一个新 Retention Target，不是新 Card。
 
+Learning Capability Objective 说明 learner 希望形成的可观察表现，并作为内容、Protocol 与评价的
+共同输入。普通 Protocol Checkpoint、Acquisition Gate、诊断维度或题型变化不自动成为新的能力目标；
+只有 learner-valued、合同稳定、表现可持续分离且有独立调度价值的目标才扩展 retention scope。
+
 Learner Sense Progress 因此只是一个 Sense 下多个 Retention Targets 的 roll-up。首版每个英语
 Sense 只选定一个 primary target binding，因而实际只产生一个 Retention Target；这是交付约束，
 不是把 learner × Sense 当成永久 scheduler identity 的理论结论。
@@ -159,14 +171,31 @@ Protocol Run、Materialization、Evidence 或 FSRS，而是协调一个 Learning
 
 - 对 `initial_learning | retention_review | relearning` 各 purpose 允许的 Protocol family 与选择规则；
 - 每类 Protocol 所需的内容能力、运行时 capability 与保证级别；
-- Evidence Policy、Scheduling Policy 与 learner-visible claim boundary；
+- Evaluation/Evidence Policy、Progression/Completion Policy、Repair Policy、Scheduling Policy 与
+  learner-visible claim boundary；
 - provisioning fallback、blocked 条件和是否允许 learner 显式降级；
 - profile identity、version、适用语言/客户端能力与迁移规则。
+
+Profile 不拥有学习数量。learner 只在 Study Plan 设置一个每日新学数量，由 Unified Planner
+统一选出当天可以 Introduction 的 Target；Profile、Protocol 与 Runtime Adapter 只能编排获选集合，
+不能另设组大小、批次上限或 active window。due Review 与 Relearning 也不受这项新学额度截断。
 
 `lightweight` 与 `high_assurance` 是两个代表性 Profile，而不是全局固定枚举。轻量 Profile 可以把
 Lightweight Study、learner-rated Retention Review 与 Lightweight Rebinding 组合起来；高保证 Profile
 可以把 Structured Acquisition、evidence-oriented Retention Review 与 targeted/Structured Relearning
 组合起来。未来可以发布其他 Profile，但不能用 UI 名称或任意 Settings 值绕过版本化合同。
+
+因此 Profile/preset 是一组策略的**命名组合**，不是新的进度聚合：
+
+```text
+Learning Policy Profile
+├── Acquisition Protocol + Evaluation + Progression + Completion
+├── Retention Protocol + Memory Outcome mapping
+├── Relearning / Repair Policy
+├── Content Requirements
+├── Scheduling Policy
+└── Claim Policy
+```
 
 Learning Entry Provenance 和 Learning Policy 保持正交。来源可以影响默认推荐、可用 content capability
 和初始 readiness，但不能永久决定方法：personal-first target 可以在资源满足时采用 high-assurance，
@@ -226,6 +255,7 @@ Resolved Learning Plan 是以下输入的版本化解析结果：
 
 ```text
 Learning Target
+× Learning Capability Objectives
 × Effective Learning Policy
 × available published/on-demand/hybrid content capabilities
 × executable runtime/client/grader capabilities
@@ -317,9 +347,10 @@ Learning Protocol 是建立、检查、加强或恢复连接的方法合同，�
 - 允许进入的 target/content/runtime readiness；
 - required 与 optional material roles；
 - Protocol Step definitions 与 transition model；
+- optional Protocol Checkpoints，以及它们引用的 Learning Capability Objectives；
 - 可以物化的 Action/Encounter families；
-- completion、failure、repair 与 interruption semantics；
-- 哪些行为可以形成 Learning Evidence；
+- pinned interaction/grader、Observation 与 Evidence rules；
+- versioned Progression/Completion Policy，以及 failure、repair、reset 与 interruption semantics；
 - 可以产生哪些 Protocol Outcomes；
 - 与 Scheduling Handoff、Memory Outcome 和 FSRS 的合法关系；
 - 与客户端、grader、offline 和 model capability 的兼容要求。
@@ -337,7 +368,7 @@ Effective Learning Policy 与 Resolved Learning Plan revision。
 
 Protocol Step 是 Protocol 的最小可恢复执行单位，不是固定页面。一个 Step definition 至少声明：
 
-- step purpose 与 required material roles；
+- step purpose、Action intent 与 required material roles；
 - prompt、support、response、reveal/feedback 所需合同；
 - interaction 与 grading requirement；
 - Activity、Attempt、Evidence、Outcome 的 eligibility；
@@ -362,6 +393,61 @@ Learning Protocol + Learning Materialization
 Card Presentation 是当前 Step/Action 的瞬时客户端表现。一个 Step 可以经历多个 presentation phases，
 一个 Card 也不能反向拥有 Step、progress、Evidence、Curriculum membership 或 FSRS。Cards/Decks 仍不
 是 Sensa 的领域对象；卡片布局、动画和组件树属于 renderer/delivery contract。
+
+### 8.1 实施意图与评价管线
+
+实施和评价使用两条正交轴。Protocol Purpose 区分一次 Run 的 scheduler 权限；Learning Action Intent
+区分当前动作是在 `instruction | practice | assessment | feedback | repair`。同一个 Purpose 可以包含
+多种 intent，但只有协议声明为 assessment、具备固定 response/grader contract 且尚未泄露答案的动作
+才有资格进入正式评价。
+
+正式评价固定为以下管线：
+
+```text
+Learning Attempt
+      ↓ pinned interaction / grader contract
+Learning Observation
+      ↓ Evidence Rule（若满足行为证据条件）
+Learning Evidence
+      ↓ Evaluation / Progression Policy
+Protocol Transition Decision
+      ↓ atomic effects
+Checkpoint credit / Repair / Reassessment / Progress Reset / Completion
+```
+
+Attempt 是 learner 的原始追加事实；Observation 记录 correctness、latency、support/reveal 使用、learner
+rating 等被固定合同解释后的事实；Evidence 只陈述合法行为支持了什么；Transition Decision 才决定
+当前协议如何推进。`correct: boolean`、Card 点击或 learner-facing 文案都不能跨过这条管线直接写进度
+或调度。
+
+### 8.2 Protocol Checkpoint 与能力目标
+
+Protocol Checkpoint 是 Protocol-local 的评价里程碑，可以引用一个或多个 Learning Capability
+Objectives，但两者不是同一身份。多个 Checkpoint 可以从不同条件检验同一能力，一个 Checkpoint
+也可以合取多个能力；Checkpoint 数量、顺序和名称都属于 Protocol Version，不产生 Retention Target。
+Acquisition Gate 是 Structured Acquisition 中具有明确能力与独立行为要求的一类特殊 Checkpoint，
+不是所有 Protocol 都必须伪造的通用进度格。
+
+Checkpoint 是可选的。Lightweight Protocol 可以只要求规定的教学/练习动作完成，并产生诚实的
+Study Completion；没有评价性 Checkpoint 时不得制造 Gate、behavioral Evidence 或 Graduation。
+
+### 8.3 Progression、Reset 与 Completion
+
+Progression Policy 把评价结果解释为受约束的 Transition effects，例如：
+
+```text
+CreditCheckpoint(checkpoint)
+InvalidateCheckpoint(checkpoint)
+ScheduleRepair(checkpoint)
+RequireReassessment(checkpoint)
+ResetProgress(current | declared_set | run)
+CompleteInitialLearning
+```
+
+Protocol Version 选择失败时使用哪种 effect；Learning Kernel 验证并原子应用它们。Progress Reset
+只让显式 scope 内的当前 credit 失效，必要时开始新的 progress epoch，不删除 Attempt、Observation、
+Evidence、失败历史或旧 Transition。Completion 只能由版本化 Completion Policy 基于当前有效状态
+推导，不能由“最后一张 Card 已显示”或“队列暂时为空”推导。
 
 ## 9. 三种 Protocol Purpose
 
@@ -419,13 +505,18 @@ Retention Review 只处理已经拥有 FSRS Memory State 且当前 due 的 targe
 FSRS due
 → Review Protocol Run
 → protocol-defined prompt / response / reveal
-→ one Memory Outcome
+→ one Memory Outcome(grade + basis)
 → one FSRS update
 ```
 
 `learner_rated` 是合法 scheduler input，但 evidence level 必须是 `self_report`；它不能冒充独立行为
 Evidence。Review 中的 reveal、detail、repair 或当场重测不能为同一个 due identity 再产生第二个
 Memory Outcome。
+
+Memory Outcome 使用 scheduler-stable grade `again | hard | good | easy`，并把 grade 与 basis、evidence
+level 分开保存。某个 Protocol 可以只产生其中一部分 grade，例如二元行为评测把独立成功映射为
+`good`、失败映射为 `again`；但只要它区分“模糊/费力”，就必须保留为 `hard`，不能先压成 Boolean
+再由 scheduler 猜测。learner-facing 的“认识/模糊/忘记了”只是输入文案，由版本化 evaluator 映射。
 
 ### 9.3 Relearning Protocol
 
@@ -453,6 +544,24 @@ Completion，不提供新调度输入；一个类 Anki/FSRS 协议也可将一�
 relearning evaluations 映射为各自的 Memory Outcome。每个 Outcome 必须固定 origin=`relearning`、
 Protocol Step/evaluation identity、basis 与 scheduler policy version，并且只能应用一次。Relearning
 Completion 本身不自动产生 Outcome，也不改变已经落账的 Review Outcome。
+
+### 9.4 两个代表性 Profile 如何组合这些原语
+
+| 合同轴 | `lightweight` | `high_assurance` |
+| --- | --- | --- |
+| Initial Protocol | compact instruction + optional retrieval/practice | Structured Acquisition |
+| Checkpoint | 可以没有评价性 Checkpoint | required Acquisition Gates |
+| Acquisition evaluation | learner rating 或 non-evidentiary observation | independent behavioral assessment |
+| Failure progression | 当前 recall/practice 重试 | 当前 Gate 失效、定向 repair、干扰后独立重测 |
+| Completion | required learning acts → Study Completion | all required Gates → Acquisition Graduation |
+| Handoff | `protocol_completion + non_evidentiary/self_report` | `acquisition_graduation + behavioral` |
+| Retention evaluation | learner-rated graded Memory Outcome | evidence-oriented graded Memory Outcome |
+| Relearning | lightweight re-binding/repair | targeted or Structured Relearning |
+| Scheduling | 可使用固定阶梯等轻量策略 | 可使用 FSRS 等记忆调度策略 |
+
+两者共享 Attempt、Observation、Evidence、Transition、Completion、Handoff 与 Memory Outcome 内核；
+差异来自 Profile 组合的 Protocol 与 Policy。Lightweight 不为复用内核而伪造 Gate，High Assurance
+当前采用“只重开失败 Gate”的 Progression Policy，但这不是所有 Protocol 的内核不变量。
 
 ## 10. Initial Learning Completion、Outcome 与 Evidence
 
@@ -583,7 +692,8 @@ origin=`relearning` 的 Memory Outcome。两者都不覆盖 forgotten Outcome。
 - Learning Entry Provenance 只记录来源，不改变 Learning/Retention Target identity；同一连接跨来源去重；
 - Personal Content lifecycle 不删除或重写 Curriculum Membership、Protocol history、Evidence 或 FSRS；
 - Entry Provenance 与 Learning Policy 正交；来源可以影响推荐/readiness，但不得静默决定或降级 Policy；
-- Learning Policy Profile 是显式、版本化、可审计的学习方式合同，不是普通呈现 Preference；
+- Learning Policy Profile 是显式、版本化、可审计的 Protocol/Policy 命名组合，不是普通呈现
+  Preference、进度聚合或每日数量 owner；
 - 一个 Profile 协调三个 purpose 的 Protocol 选择，但每个 Protocol Run 仍只能固定一个 purpose；
 - Effective Learning Policy 的 scope、precedence、profile version 与 decision provenance 必须可重放；
 - 第一次正式 Protocol Run 创建时必须冻结 Committed Learning Policy；普通 Assignment、默认方式、
@@ -600,6 +710,14 @@ origin=`relearning` 的 Memory Outcome。两者都不覆盖 forgotten Outcome。
 - 每个 Protocol 固定 `initial_learning | retention_review | relearning` purpose；
 - 成功的 Initial Learning 必须产生 Initial Learning Completion 与 Scheduling Handoff；
 - Protocol Step 拥有组织和 transition 语义，Card Presentation 只负责瞬时呈现；
+- Learning Capability Objective、Protocol Checkpoint、Step/Action 与 Card 保持不同 identity；
+  Checkpoint 是可选的 Protocol-local 里程碑，Acquisition Gate 只是其中一个高保证子类；
+- 正式评价必须沿 `Attempt → Observation → Evidence（若合格）→ Transition Decision` 推进；
+  correctness、learner rating 或 UI 事件不能绕过 evaluator 直接写进度或调度；
+- failure/reset 由版本化 Progression Policy 产生受约束 effect，并由内核原子应用；Reset 只使显式
+  scope 内当前 credit 失效，不删除 Attempt、Observation、Evidence 或历史 Transition；
+- Initial Learning Completion 只由版本化 Completion Policy 推导，不能由最后一张 Card、当前队列为空
+  或某个 renderer 状态推导；
 - Cards/Decks 不成为学习、课程、同步或调度 identity；
 - Retention Target 按 learner × Sense × target expression 隔离；能力维度默认只分开记录，
   不分开调度；
@@ -609,9 +727,13 @@ origin=`relearning` 的 Memory Outcome。两者都不覆盖 forgotten Outcome。
 - Lightweight Study 不创建 Gate、5D 或 Acquisition Graduation；
 - Structured Acquisition 是高保证 Protocol，不是所有 Sense 的唯一入口；
 - FSRS 只负责调度，并保留 Scheduling Handoff basis/evidence level；
-- 一次 due Review 最多产生一个 Memory Outcome 并推进一次 FSRS revision；
+- 一次 due Review 最多产生一个带规范 `again | hard | good | easy` grade 的 Memory Outcome 并推进
+  一次 FSRS revision；grade、basis 与 evidence level 必须分离，不能先压成 Boolean 再猜测；
+- Memory State 与 next due 只能由 scheduler 根据有效 Handoff/Memory Outcome 更新；Protocol、preset、
+  Card 与客户端不能直接写入；
 - Relearning Completion 不重评原 Review、不重新初始化 FSRS，也不自动构成 scheduler input；
 - 只有 Protocol Version 显式声明的独立 Relearning evaluation 才能产生新 Memory Outcome，
   且不得改写或重复应用触发它的 Review Outcome；
 - generated content 不能泄露未授权 Personal Anchors；
+- 所有 Progression、Completion、Handoff、Memory Outcome 与 Scheduling transition 必须原子且幂等；
 - 没有合法 Materialization 或 Protocol capability 时返回 unavailable，不伪造内容或进度。

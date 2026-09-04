@@ -61,20 +61,69 @@ const createHost = (options: {
 };
 
 const launchFor = (
-  surface: 'lightweight_initial' | 'lightweight_retention' | 'structured_session',
+  surface:
+    | 'lightweight_initial'
+    | 'lightweight_retention'
+    | 'structured_session'
+    | 'interleaved_four_stage'
+    | 'interleaved_four_stage_review',
   targetIds: readonly PrototypeLearningTargetId[],
 ): RuntimeLaunch<PrototypeLearningTargetId> => ({
-  purpose: surface === 'lightweight_initial' ? 'initial_learning' : 'retention_review',
+  purpose: surface === 'lightweight_initial' || surface === 'interleaved_four_stage'
+    ? 'initial_learning'
+    : 'retention_review',
   protocol: {
     protocolId: 'smoke',
     protocolVersion: 'v1',
-    runtimeAdapterId: surface === 'structured_session' ? 'structured' : 'lightweight',
-    orchestrationId: surface === 'structured_session'
-      ? 'structured_acquisition'
-      : 'lightweight_study',
+    runtimeAdapterId: surface.startsWith('interleaved_')
+      ? 'interleaved_four_stage'
+      : surface === 'structured_session' ? 'structured' : 'lightweight',
+    orchestrationId: surface === 'interleaved_four_stage'
+      ? 'interleaved_four_stage_acquisition'
+      : surface === 'interleaved_four_stage_review'
+        ? 'interleaved_four_stage_retention'
+        : surface === 'structured_session'
+          ? 'structured_acquisition'
+          : 'lightweight_study',
+    evaluationPolicyId: surface === 'interleaved_four_stage'
+      ? 'four-stage-mixed-evaluation-v1'
+      : surface === 'interleaved_four_stage_review'
+        ? 'learner-rating-v1'
+        : surface === 'structured_session'
+          ? 'structured-behavioral-v1'
+          : 'lightweight-practice-observation-v1',
+    progressionPolicyId: surface === 'interleaved_four_stage'
+      ? 'run-reset-v1'
+      : surface === 'structured_session'
+        ? 'structured-current-checkpoint-reset-v1'
+        : 'completion-only-v1',
+    completionPolicyId: surface === 'interleaved_four_stage'
+      ? 'all-required-current-epoch-v1'
+      : surface === 'interleaved_four_stage_review'
+        ? 'one-review-one-outcome-v1'
+        : surface === 'structured_session'
+          ? 'all-required-current-epoch-v1'
+          : 'study-completion-v1',
+    repairPolicyId: surface === 'interleaved_four_stage'
+      ? 'four-stage-detail-repair-v1'
+      : surface === 'interleaved_four_stage_review'
+        ? 'four-stage-rebinding-v1'
+        : surface === 'structured_session'
+          ? 'structured-targeted-repair-v1'
+          : 'lightweight-retry-v1',
+    memoryOutcomePolicyId: surface === 'interleaved_four_stage_review'
+      ? 'learner-rated-graded-v1'
+      : null,
+    checkpointDefinitionIds: surface === 'interleaved_four_stage'
+      ? ['four-stage:meaning-choice']
+      : surface === 'structured_session'
+        ? ['structured-acquisition:contextual_recognition']
+        : [],
     contentRequirement: ['compact_learning_material'],
   },
-  adapterId: surface === 'structured_session' ? 'structured' : 'lightweight',
+  adapterId: surface.startsWith('interleaved_')
+    ? 'interleaved_four_stage'
+    : surface === 'structured_session' ? 'structured' : 'lightweight',
   surface,
   targetIds,
 });
@@ -86,7 +135,9 @@ const announce = (count: number): string => `n=${count}`;
 check('每个 surface 都登记了 flow',
   runtimeSurfaceRegistry.flowFor('lightweight_initial') === 'lightweight'
   && runtimeSurfaceRegistry.flowFor('lightweight_retention') === 'lightweightReview'
-  && runtimeSurfaceRegistry.flowFor('structured_session') === 'study');
+  && runtimeSurfaceRegistry.flowFor('structured_session') === 'study'
+  && runtimeSurfaceRegistry.flowFor('interleaved_four_stage') === 'fourStage'
+  && runtimeSurfaceRegistry.flowFor('interleaved_four_stage_review') === 'fourStageReview');
 
 check('未知 surface 抛错而不是静默返回', (() => {
   try {
@@ -103,11 +154,14 @@ check('未知 surface 抛错而不是静默返回', (() => {
   const host = createHost();
   const started = runtimeSurfaceRegistry
     .get('lightweight_initial')
-    .startInitial(host.ctx, launchFor('lightweight_initial', ['borrow-receive']));
-  check('轻量首学：提交 Policy → 开运行 → 进 flow', started
+    .startInitial(host.ctx, launchFor('lightweight_initial', [
+      'borrow-receive',
+      'tactful-expression',
+    ]));
+  check('轻量首学：Planner 选中的全部 Target 一起提交 Policy、进入同一运行', started
     && host.calls.join('|') === [
-      'commitPolicies:borrow-receive',
-      'beginInitialRun:lightweight_initial:borrow-receive',
+      'commitPolicies:borrow-receive,tactful-expression',
+      'beginInitialRun:lightweight_initial:borrow-receive,tactful-expression',
       'showFlow:lightweight',
     ].join('|'));
 }
@@ -147,7 +201,53 @@ check('未知 surface 抛错而不是静默返回', (() => {
     && !host.calls.some((call) => call.startsWith('showFlow')));
 }
 
+/* ---------- 第三种 Profile：独立协议 surface ---------- */
+
+{
+  const host = createHost();
+  const started = runtimeSurfaceRegistry
+    .get('interleaved_four_stage')
+    .startInitial(host.ctx, launchFor('interleaved_four_stage', [
+      'borrow-receive',
+      'lend-give',
+    ]));
+  check('四阶段首学：消费 Planner 选出的整个 cohort，不自行切批', started
+    && host.calls.join('|') === [
+      'beginInitialRun:interleaved_four_stage:borrow-receive,lend-give',
+      'commitPolicies:borrow-receive,lend-give',
+      'showFlow:fourStage',
+    ].join('|'));
+}
+
+{
+  const host = createHost();
+  const started = runtimeSurfaceRegistry
+    .get('interleaved_four_stage_review')
+    .startRetention(
+      host.ctx,
+      launchFor('interleaved_four_stage_review', ['borrow-receive']),
+      { announce, enterOnEmpty: false },
+    );
+  check('四阶段复习：使用自己的 surface，不调用结构化 ReviewQueue', started
+    && host.calls.join('|') === [
+      'beginRetentionRun:interleaved_four_stage_review:borrow-receive',
+      'showFlow:fourStageReview',
+      'toast:n=1',
+    ].join('|'));
+}
+
 /* ---------- 继续已提交的 Target ---------- */
+
+{
+  const host = createHost();
+  runtimeSurfaceRegistry.get('lightweight_initial').continueInitial(
+    host.ctx,
+    'borrow-receive',
+    { initialCompletion: false, declaredMastery: false, inActiveRun: true },
+  );
+  check('轻量继续：Target 已在当天运行中时只恢复 flow，不重建或缩减运行',
+    host.calls.join('|') === 'showFlow:lightweight');
+}
 
 {
   const host = createHost();

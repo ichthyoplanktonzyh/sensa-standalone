@@ -10,63 +10,137 @@
  * 但确实取证的编排（或者反过来），它立刻说谎——而说谎的后果是一次
  * Scheduling Handoff 记错依据，且 Handoff 一生只发生一次，改不回来。
  *
- * 领域上这条依据只有一个来源：**只有 `assessment` 能产生 Evidence 与
- * Memory Outcome**（见 `engine/types.ts` 的 `LearningStepIntent`）。所以编排
- * 自己声明会产出哪些 intent，出口依据由此推出，而不是各写一个常量：
- *
- *     产出 assessment → Acquisition Graduation（取证毕业）
- *     不产出 assessment → Study Completion（学过了，但没取证）
+ * 领域上 Completion、Scheduling Handoff basis 与 Evidence level 是三条独立轴。
+ * `assessment` 只是编排可能取证的必要条件，不能反向推出本次运行已经满足哪一种
+ * completion。每套首学编排因此必须显式声明完整出口合同；Registry 只校验明显矛盾，
+ * 不替协议猜语义。
  *
  * 声明不是注释：`smoke:orchestration` 拿真实内容跑一遍队列驱动的两套编排，
  * 收集实际产出的 intent，逐条核对它等于这里写的。
  */
 import type { LearningStepIntent } from '../engine/types';
+import type { LearningStepKind } from '../engine/types';
 import type { OrchestrationId } from '../engine/stepOrchestration';
 
 export type { OrchestrationId } from '../engine/stepOrchestration';
 
-/** 首次学习完成时交给长期调度的依据。 */
-export type SchedulingHandoffBasis = 'study_completion' | 'acquisition_graduation';
+export type InitialLearningCompletionKind =
+  | 'study_completion'
+  | 'acquisition_graduation'
+  | 'imported_completion';
+
+/** 首批允许初始化长期调度的依据闭集。 */
+export type SchedulingHandoffBasis =
+  | 'protocol_completion'
+  | 'acquisition_graduation'
+  | 'learner_rating'
+  | 'imported';
+
+export type LearningEvidenceLevel =
+  | 'non_evidentiary'
+  | 'self_report'
+  | 'behavioral'
+  | 'externally_attested';
+
+export interface InitialCompletionContract {
+  readonly completionKind: InitialLearningCompletionKind;
+  readonly protocolOutcome: string;
+  readonly handoffBasis: SchedulingHandoffBasis;
+  readonly evidenceLevel: LearningEvidenceLevel;
+  readonly learnerVisibleClaim: string;
+}
 
 export interface OrchestrationDefinition {
   readonly orchestrationId: OrchestrationId;
   /** 这套编排会产出哪些 intent 的 Step。领域闭集，见 `LearningStepIntent`。 */
   readonly stepIntents: readonly LearningStepIntent[];
+  /** 本编排运行时可能要求宿主渲染的 Step 形式（含结算后 feedback 相位）。 */
+  readonly requiredStepKinds: readonly LearningStepKind[];
+  /** 仅首学编排非空；完成、交接和证据不能从 step/surface 名字推断。 */
+  readonly initialCompletion: InitialCompletionContract | null;
 }
 
-/**
- * 这套编排的首学出口交出什么依据。
- *
- * 规则只有一条，且直接从 intent 轴推出：没有 assessment 就没有 Evidence，
- * 没有 Evidence 就没有 Acquisition Graduation。
- */
-export const initialHandoffBasisOf = (
+export const initialCompletionContractOf = (
   definition: OrchestrationDefinition,
-): SchedulingHandoffBasis => definition.stepIntents.includes('assessment')
-  ? 'acquisition_graduation'
-  : 'study_completion';
+): InitialCompletionContract => {
+  if (!definition.initialCompletion) {
+    throw new Error(`Orchestration ${definition.orchestrationId} is not an initial-learning protocol.`);
+  }
+  return definition.initialCompletion;
+};
 
 const lightweightStudy: OrchestrationDefinition = {
   orchestrationId: 'lightweight_study',
   // 场景 → 回想 → 揭晓。回想那一步是 practice：学习者自评，评语只作为
   // 完成记录留档，既不进 Gate 也不改排期——练，但不取证。
   stepIntents: ['instruction', 'practice'],
+  requiredStepKinds: [],
+  initialCompletion: {
+    completionKind: 'study_completion',
+    protocolOutcome: 'study_completed',
+    handoffBasis: 'protocol_completion',
+    evidenceLevel: 'non_evidentiary',
+    learnerVisibleClaim: '已完成首次学习并进入长期复习；不表示已经独立回忆或掌握。',
+  },
 };
 
 const lightweightRetention: OrchestrationDefinition = {
   orchestrationId: 'lightweight_retention',
   // 自评一次到期复习（落在固定档期上），失败时再出一次不取证的定向修复。
   stepIntents: ['assessment', 'repair'],
+  requiredStepKinds: [],
+  initialCompletion: null,
 };
 
 const structuredAcquisition: OrchestrationDefinition = {
   orchestrationId: 'structured_acquisition',
   stepIntents: ['instruction', 'assessment', 'repair'],
+  requiredStepKinds: [
+    'introduction',
+    'recognition',
+    'recall',
+    'transfer',
+    'review_assessment',
+    'review_repair',
+  ],
+  initialCompletion: {
+    completionKind: 'acquisition_graduation',
+    protocolOutcome: 'independently_verified',
+    handoffBasis: 'acquisition_graduation',
+    evidenceLevel: 'behavioral',
+    learnerVisibleClaim: '已满足当前首次学习协议的独立行为要求；不表示永久掌握。',
+  },
 };
 
 const structuredRetention: OrchestrationDefinition = {
   orchestrationId: 'structured_retention',
   stepIntents: ['assessment', 'repair'],
+  requiredStepKinds: ['review_assessment', 'review_feedback', 'review_repair'],
+  initialCompletion: null,
+};
+
+const interleavedFourStageAcquisition: OrchestrationDefinition = {
+  orchestrationId: 'interleaved_four_stage_acquisition',
+  // Detail is the feedback phase of the settled assessment; a failed detail
+  // completes repair instruction but never grants Checkpoint credit.
+  stepIntents: ['assessment', 'repair'],
+  requiredStepKinds: [],
+  initialCompletion: {
+    completionKind: 'study_completion',
+    protocolOutcome: 'four_stage_run_completed',
+    handoffBasis: 'protocol_completion',
+    // Two stages are learner self-report, so this Profile must not borrow the
+    // behavioral assurance claim of Structured Acquisition.
+    evidenceLevel: 'self_report',
+    learnerVisibleClaim: '已连续完成四阶段学习并进入长期复习；不等同于高保证能力验证。',
+  },
+};
+
+const interleavedFourStageRetention: OrchestrationDefinition = {
+  orchestrationId: 'interleaved_four_stage_retention',
+  stepIntents: ['assessment', 'repair'],
+  requiredStepKinds: [],
+  initialCompletion: null,
 };
 
 export const ORCHESTRATION_DEFINITIONS = [
@@ -74,6 +148,8 @@ export const ORCHESTRATION_DEFINITIONS = [
   lightweightRetention,
   structuredAcquisition,
   structuredRetention,
+  interleavedFourStageAcquisition,
+  interleavedFourStageRetention,
 ] as const satisfies readonly OrchestrationDefinition[];
 
 export class OrchestrationRegistry {
@@ -82,6 +158,30 @@ export class OrchestrationRegistry {
   public constructor(
     definitions: readonly OrchestrationDefinition[] = ORCHESTRATION_DEFINITIONS,
   ) {
+    const orchestrationIds = new Set<OrchestrationId>();
+    for (const definition of definitions) {
+      if (orchestrationIds.has(definition.orchestrationId)) {
+        throw new Error(`Duplicate Orchestration identity: ${definition.orchestrationId}`);
+      }
+      orchestrationIds.add(definition.orchestrationId);
+      const completion = definition.initialCompletion;
+      if (
+        completion?.evidenceLevel === 'behavioral'
+        && !definition.stepIntents.includes('assessment')
+      ) {
+        throw new Error(
+          `Orchestration ${definition.orchestrationId} claims behavioral evidence without assessment.`,
+        );
+      }
+      if (
+        completion?.completionKind === 'acquisition_graduation'
+        && completion.handoffBasis !== 'acquisition_graduation'
+      ) {
+        throw new Error(
+          `Orchestration ${definition.orchestrationId} has an invalid Acquisition Graduation handoff.`,
+        );
+      }
+    }
     this.#definitions = new Map(definitions.map((definition) => [
       definition.orchestrationId,
       definition,
@@ -92,6 +192,10 @@ export class OrchestrationRegistry {
     const definition = this.#definitions.get(orchestrationId);
     if (!definition) throw new Error(`Unknown Orchestration: ${orchestrationId}`);
     return definition;
+  }
+
+  public list(): readonly OrchestrationDefinition[] {
+    return [...this.#definitions.values()];
   }
 }
 

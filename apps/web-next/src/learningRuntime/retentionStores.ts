@@ -22,16 +22,13 @@
  *
  * 因此 store 只声明**接收 Scheduling Handoff 时给出什么首次到期投影**，
  * 落库动作留在各自宿主里。宿主能力由 `RetentionStoreContext` 注入：App 传
- * storageService，reducer 传 action 里那份 `dueBySenseId`——同一份 store 定义
+ * storageService，reducer 传 action 里那份 `dueByRetentionTargetId`——同一份 store 定义
  * 因此在命令式与纯函数两边都能用，这也是它能被 smoke 逐条断言的原因。
  */
 
 /** 长期保持事实的持有者。由 retention 的 Runtime Adapter 声明。 */
-export type RetentionStoreId =
-  /** 调度器（FSRS）持有 Memory State，到期时间由它算。 */
-  | 'scheduler_memory'
-  /** journey 记录持有一条固定档期，不进调度器。 */
-  | 'fixed_ladder';
+/** 对扩展开放；可用 store 由 RetentionStoreRegistry 在 composition root 闭合。 */
+export type RetentionStoreId = string & {};
 
 /** 拿不到真实到期时间时的占位文案（调度器保持的回退路径用）。 */
 export const IMMEDIATE_REVIEW_LABEL = '现在可复习（原型）';
@@ -124,7 +121,18 @@ export class RetentionStoreRegistry {
   public constructor(
     definitions: readonly RetentionStoreDefinition[] = RETENTION_STORE_DEFINITIONS,
   ) {
+    const storeIds = new Set<RetentionStoreId>();
+    for (const definition of definitions) {
+      if (storeIds.has(definition.storeId)) {
+        throw new Error(`Duplicate Retention Store identity: ${definition.storeId}`);
+      }
+      storeIds.add(definition.storeId);
+    }
     this.#definitions = new Map(definitions.map((definition) => [definition.storeId, definition]));
+  }
+
+  public list(): readonly RetentionStoreDefinition[] {
+    return [...this.#definitions.values()];
   }
 
   public get(storeId: RetentionStoreId): RetentionStoreDefinition {

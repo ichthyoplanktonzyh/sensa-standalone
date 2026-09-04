@@ -26,11 +26,14 @@ import {
 import {
   PROTOTYPE_LEARNING_TARGETS,
   PROTOTYPE_LEARNING_TARGET_ORDER,
+  defaultRetentionTargetIdFor,
   type PrototypeLearningPolicy,
 } from './prototypeLearning';
 import { learningRuntimeCoordinator } from '../learningRuntime/runtimeCoordinator';
 import { learningPolicyProfileRegistry } from '../learningRuntime/policyProfiles';
 import { FIXED_LADDER_FIRST_RUNG } from '../learningRuntime/retentionStores';
+import { retentionTargetIdFor } from '../learningRuntime/retentionScopes';
+import { resolveLearnerRatedMemoryOutcome } from '../review/types';
 
 const failures: string[] = [];
 let checks = 0;
@@ -46,6 +49,8 @@ const POLICIES = learningPolicyProfileRegistry.list().map((profile) => profile.p
 /** 首学与保持都走结构化的方式；毕业规则只对这一类生效。 */
 const STRUCTURED_POLICY = POLICIES.find((policy) =>
   learningRuntimeCoordinator.surfaceFor(policy, 'initial_learning') === 'structured_session');
+const LIGHTWEIGHT_POLICY = POLICIES.find((policy) =>
+  learningRuntimeCoordinator.surfaceFor(policy, 'initial_learning') === 'lightweight_initial');
 /** 保持事实归谁持有。毕业时开什么、到期时间从哪来，都由它决定。 */
 const retentionStoreOf = (policy: PrototypeLearningPolicy) =>
   learningRuntimeCoordinator.retentionStoreFor(policy, 'retention_review');
@@ -104,22 +109,53 @@ check('已单独选过方式则加入时不覆盖', (() => {
   return journeyFor(picked, 'borrow-receive').policy === other;
 })());
 
+/* ---------- Unified Planner：每日配额只占用一次 ---------- */
+
+const plannedAt = '2026-09-04T09:00:00+08:00';
+const planned = apply(added, {
+  type: 'planInitialTargets',
+  targetIds: ['lend-give', 'borrow-receive', 'borrow-receive'],
+  plannedAt,
+});
+check('Planner 为已加入 Target 记录首次计划时间',
+  journeyFor(planned, 'lend-give').initialPlannedAt === plannedAt
+  && journeyFor(planned, 'borrow-receive').initialPlannedAt === plannedAt);
+check('Planner 不为未加入 Target 占用配额', (() => {
+  const attempted = apply(INITIAL_JOURNEY, {
+    type: 'planInitialTargets',
+    targetIds: ['borrow-receive'],
+    plannedAt,
+  });
+  return journeyFor(attempted, 'borrow-receive').initialPlannedAt === null;
+})());
+check('重复计划不改写原始学习日', (() => {
+  const replayed = apply(planned, {
+    type: 'planInitialTargets',
+    targetIds: ['lend-give'],
+    plannedAt: '2026-09-05T09:00:00+08:00',
+  });
+  return journeyFor(replayed, 'lend-give').initialPlannedAt === plannedAt;
+})());
+
 /* ---------- 结构化毕业 ---------- */
 
 if (!STRUCTURED_POLICY) {
   failures.push('注册表里没有结构化首学的方式，毕业规则无法验证');
   checks += 1;
 } else {
-  const senseId = PROTOTYPE_LEARNING_TARGETS['borrow-receive'].runtimeSenseId!;
   const committed = apply(added, {
     type: 'commitPolicies', entries: [{ targetId: 'borrow-receive', policy: STRUCTURED_POLICY }],
   });
   const now = Date.UTC(2026, 0, 1);
   const due = now + 3 * 24 * 3600 * 1000;
   const graduate = (state: JourneyState) => apply(state, {
-    type: 'recordStructuredGraduation',
-    graduatedSenseIds: [senseId],
-    dueBySenseId: { [senseId]: due },
+    type: 'recordQueueInitialCompletions',
+    completedRetentionTargetIds: [
+      defaultRetentionTargetIdFor(PROTOTYPE_LEARNING_TARGETS['borrow-receive']),
+    ],
+    dueByRetentionTargetId: {
+      [defaultRetentionTargetIdFor(PROTOTYPE_LEARNING_TARGETS['borrow-receive'])]: due,
+    },
     completedAt: new Date(now).toISOString(),
     now,
   });
@@ -128,8 +164,9 @@ if (!STRUCTURED_POLICY) {
   const completion = journeyFor(graduated, 'borrow-receive').initialCompletion;
   check('毕业写下交接', completion !== null);
   check('交接标记为结构化毕业',
-    completion?.completionKind === 'structured'
-    && completion.schedulingHandoffBasis === 'acquisition_graduation');
+    completion?.completionKind === 'acquisition_graduation'
+    && completion.schedulingHandoffBasis === 'acquisition_graduation'
+    && completion.evidenceLevel === 'behavioral');
 
   if (retentionStoreOf(STRUCTURED_POLICY) === 'scheduler_memory') {
     check('保持归调度器时用它给的到期时间',
@@ -140,9 +177,9 @@ if (!STRUCTURED_POLICY) {
   check('未锁定方式的 Target 不写交接',
     journeyFor(graduate(added), 'borrow-receive').initialCompletion === null);
   check('没毕业的 Sense 不写交接', journeyFor(apply(committed, {
-    type: 'recordStructuredGraduation',
-    graduatedSenseIds: [],
-    dueBySenseId: {},
+    type: 'recordQueueInitialCompletions',
+    completedRetentionTargetIds: [],
+    dueByRetentionTargetId: {},
     completedAt: new Date(now).toISOString(),
     now,
   }), 'borrow-receive').initialCompletion === null);
@@ -150,6 +187,23 @@ if (!STRUCTURED_POLICY) {
     graduate(graduated).byTarget === graduated.byTarget
     || journeyFor(graduate(graduated), 'borrow-receive').initialCompletion === completion);
   check('毕业后进入已完成集合', completedTargetIds(graduated).has('borrow-receive'));
+
+  const targetWithoutRuntimeSense = 'tactful-expression';
+  const targetWithoutRuntimeSenseRetentionId = defaultRetentionTargetIdFor(
+    PROTOTYPE_LEARNING_TARGETS[targetWithoutRuntimeSense],
+  );
+  const completedWithoutRuntimeSense = apply(apply(INITIAL_JOURNEY, {
+    type: 'commitPolicies',
+    entries: [{ targetId: targetWithoutRuntimeSense, policy: STRUCTURED_POLICY }],
+  }), {
+    type: 'recordQueueInitialCompletions',
+    completedRetentionTargetIds: [targetWithoutRuntimeSenseRetentionId],
+    dueByRetentionTargetId: { [targetWithoutRuntimeSenseRetentionId]: due },
+    completedAt: new Date(now).toISOString(),
+    now,
+  });
+  check('Initial Completion 只依赖 Retention Target，不依赖内容层 sense identity',
+    journeyFor(completedWithoutRuntimeSense, targetWithoutRuntimeSense).initialCompletion !== null);
 
   if (STRUCTURED_TO_LADDER) {
     const lw = graduate(apply(added, {
@@ -168,8 +222,13 @@ if (!STRUCTURED_POLICY) {
 
 /* ---------- 轻量首学与轻量复习 ---------- */
 
-const lwDone = apply(added, {
-  type: 'completeLightweightInitial',
+if (!LIGHTWEIGHT_POLICY) throw new Error('注册表里没有轻量首学方式。');
+const lightweightCommitted = apply(added, {
+  type: 'commitPolicies',
+  entries: [{ targetId: 'borrow-receive', policy: LIGHTWEIGHT_POLICY }],
+});
+const lwDone = apply(lightweightCommitted, {
+  type: 'completeProtocolInitial',
   targetId: 'borrow-receive',
   rating: 'good',
   completedAt: '2026-01-01T00:00:00.000Z',
@@ -178,7 +237,11 @@ const lwDone = apply(added, {
   startLightweightRetention: true,
 });
 check('轻量首学写下交接',
-  journeyFor(lwDone, 'borrow-receive').initialCompletion?.completionKind === 'lightweight');
+  journeyFor(lwDone, 'borrow-receive').initialCompletion?.completionKind === 'study_completion'
+  && journeyFor(lwDone, 'borrow-receive').initialCompletion?.schedulingHandoffBasis
+    === 'protocol_completion'
+  && journeyFor(lwDone, 'borrow-receive').initialCompletion?.evidenceLevel
+    === 'non_evidentiary');
 check('轻量首学带上评分',
   journeyFor(lwDone, 'borrow-receive').initialCompletion?.initialRating === 'good');
 check('轻量首学开出轻量保持',
@@ -187,8 +250,8 @@ check('轻量保持的档期读交接投影，不另写一份',
   journeyFor(lwDone, 'borrow-receive').lightweightRetention?.nextReviewAt
     === '2026-01-04T00:00:00.000Z'
   && journeyFor(lwDone, 'borrow-receive').lightweightRetention?.nextReviewLabel === '3 天后');
-check('不需要轻量保持时不开', journeyFor(apply(added, {
-  type: 'completeLightweightInitial',
+check('不需要轻量保持时不开', journeyFor(apply(lightweightCommitted, {
+  type: 'completeProtocolInitial',
   targetId: 'borrow-receive',
   rating: 'good',
   completedAt: '2026-01-01T00:00:00.000Z',
@@ -196,19 +259,41 @@ check('不需要轻量保持时不开', journeyFor(apply(added, {
   nextReviewLabel: '3 天后',
   startLightweightRetention: false,
 }), 'borrow-receive').lightweightRetention === null);
+check('未锁定 Protocol 不能伪造 Initial Completion', journeyFor(apply(added, {
+  type: 'completeProtocolInitial',
+  targetId: 'borrow-receive',
+  rating: 'good',
+  completedAt: '2026-01-01T00:00:00.000Z',
+  nextReviewAt: '2026-01-04T00:00:00.000Z',
+  nextReviewLabel: '3 天后',
+  startLightweightRetention: true,
+}), 'borrow-receive').initialCompletion === null);
+check('Initial Completion 重放不改写原始 Scheduling Handoff', apply(lwDone, {
+  type: 'completeProtocolInitial',
+  targetId: 'borrow-receive',
+  rating: 'hard',
+  completedAt: '2026-01-02T00:00:00.000Z',
+  nextReviewAt: '2026-01-05T00:00:00.000Z',
+  nextReviewLabel: '4 天后',
+  startLightweightRetention: true,
+}) === lwDone);
 
 const reviewed = apply(lwDone, {
   type: 'recordLightweightReview',
   targetId: 'borrow-receive',
-  rating: 'again',
+  outcome: resolveLearnerRatedMemoryOutcome('again'),
   reviewedAt: '2026-01-04T00:00:00.000Z',
   nextReviewAt: '2026-01-04T00:10:00.000Z',
   nextReviewLabel: '10 分钟后',
 });
 const lwRetention = journeyFor(reviewed, 'borrow-receive').lightweightRetention;
 check('轻量复习累加次数', lwRetention?.reviewCount === 1);
-check('again 计一次遗忘并进入重学',
-  lwRetention?.lapseCount === 1 && lwRetention.relearning === true);
+check('again 计一次 learner-rated 遗忘并进入重学',
+  lwRetention?.lapseCount === 1
+  && lwRetention.relearning === true
+  && lwRetention.lastMemoryOutcome?.basis === 'learner_rated'
+  && lwRetention.lastMemoryOutcome.grade === 'again'
+  && lwRetention.lastMemoryOutcome.evidenceLevel === 'self_report');
 check('修复完成后退出重学',
   journeyFor(apply(reviewed, {
     type: 'clearLightweightRelearning', targetId: 'borrow-receive',
@@ -217,7 +302,7 @@ check('没有轻量保持时复习是空操作',
   apply(INITIAL_JOURNEY, {
     type: 'recordLightweightReview',
     targetId: 'lend-give',
-    rating: 'good',
+    outcome: resolveLearnerRatedMemoryOutcome('good'),
     reviewedAt: '2026-01-04T00:00:00.000Z',
     nextReviewAt: '2026-01-07T00:00:00.000Z',
     nextReviewLabel: '3 天后',
@@ -280,17 +365,39 @@ check('没有交接的 Target 不被凭空造出',
 
 /* ---------- 熟词声明 ---------- */
 
-const senseId = PROTOTYPE_LEARNING_TARGETS['lend-give'].runtimeSenseId;
-if (senseId) {
-  const declared = apply(INITIAL_JOURNEY, { type: 'declareMastery', senseId });
-  check('声明熟词', isDeclaredMastery(declared, 'lend-give'));
-  check('重复声明返回同一对象',
-    journeyReducer(declared, { type: 'declareMastery', senseId }) === declared);
-  check('撤销熟词',
-    !isDeclaredMastery(apply(declared, { type: 'revokeMastery', senseId }), 'lend-give'));
-  check('撤销未声明的返回同一对象',
-    journeyReducer(INITIAL_JOURNEY, { type: 'revokeMastery', senseId }) === INITIAL_JOURNEY);
-}
+const masteryTargetId = 'lend-give';
+const masteryRetentionTargetId = defaultRetentionTargetIdFor(
+  PROTOTYPE_LEARNING_TARGETS[masteryTargetId],
+);
+const declared = apply(INITIAL_JOURNEY, {
+  type: 'declareMastery',
+  retentionTargetIds: [masteryRetentionTargetId],
+});
+check('声明熟词只作用于指定 Learning Target',
+  isDeclaredMastery(declared, masteryTargetId)
+  && !isDeclaredMastery(declared, 'borrow-receive'));
+check('以后追加的独立 scope 不继承旧的 Target 级熟词声明',
+  !declared.declaredMasteryRetentionTargetIds.has(
+    retentionTargetIdFor(masteryTargetId, 'spelling_production'),
+  ));
+check('重复声明返回同一对象',
+  journeyReducer(declared, {
+    type: 'declareMastery',
+    retentionTargetIds: [masteryRetentionTargetId],
+  }) === declared);
+check('撤销熟词',
+  !isDeclaredMastery(
+    apply(declared, {
+      type: 'revokeMastery',
+      retentionTargetIds: [masteryRetentionTargetId],
+    }),
+    masteryTargetId,
+  ));
+check('撤销未声明的返回同一对象',
+  journeyReducer(INITIAL_JOURNEY, {
+    type: 'revokeMastery',
+    retentionTargetIds: [masteryRetentionTargetId],
+  }) === INITIAL_JOURNEY);
 
 /* ---------- 整表选择器与逐条选择器一致 ---------- */
 
@@ -311,6 +418,10 @@ check('重复选同一个默认方式返回同一对象',
   }) === INITIAL_JOURNEY);
 check('空的锁定列表返回同一对象',
   journeyReducer(INITIAL_JOURNEY, { type: 'commitPolicies', entries: [] }) === INITIAL_JOURNEY);
+check('空的计划列表返回同一对象',
+  journeyReducer(INITIAL_JOURNEY, {
+    type: 'planInitialTargets', targetIds: [], plannedAt: new Date().toISOString(),
+  }) === INITIAL_JOURNEY);
 check('空的交接提前返回同一对象',
   journeyReducer(INITIAL_JOURNEY, {
     type: 'advanceStructuredHandoffs', targetIds: [], dueAt: Date.now(),

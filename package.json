@@ -11,8 +11,8 @@
     "packages/content-validator"
   ],
   "scripts": {
-    "build": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/api && npm run build -w @sensa/web",
-    "typecheck": "tsc -b --pretty false && npm run typecheck -w @sensa/web",
+    "build": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/api && npm run build -w @sensa/web && npm --prefix apps/web-next run build",
+    "typecheck": "tsc -b --pretty false && npm run typecheck -w @sensa/web && npm --prefix apps/web-next run typecheck",
     "lint": "npm run typecheck",
     "dev": "npm run dev -w @sensa/api",
     "start": "npm run start -w @sensa/api",
@@ -38,6 +38,10 @@
     "sensa:golden-content-draft-v2-smoke": "tsx scripts/sensaGoldenContentDraftV2Smoke.ts",
     "sensa:compile-learning-release": "tsx scripts/compileWebNextLearningRelease.ts",
     "sensa:runtime-learning-smoke": "tsx --tsconfig apps/web-next/tsconfig.json scripts/sensaWebNextLearningRuntimeSmoke.ts",
+    "sensa:web-next-smoke": "npm --prefix apps/web-next run smoke",
+    "sensa:extensibility-contract-smoke": "tsx scripts/sensaLearningExtensibilityContractSmoke.ts",
+    "sensa:protocol-progression-smoke": "tsx scripts/sensaProtocolProgressionKernelSmoke.ts",
+    "sensa:four-stage-preset-smoke": "npm --prefix apps/web-next run smoke:four-stage",
     "sensa:sync-protocol-smoke": "tsx scripts/sensaSyncProtocolSmoke.ts",
     "sensa:capability-smoke": "tsx scripts/sensaCapabilitySmoke.ts",
     "sensa:capability-db-smoke": "node --env-file-if-exists=apps/api/.env --import tsx scripts/sensaCapabilityDatabaseSmoke.ts"

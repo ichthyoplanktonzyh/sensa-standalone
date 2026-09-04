@@ -25,9 +25,9 @@
  */
 import type { FormalLearningStage, Word } from '../types';
 import type { ReviewAssessmentKind, ReviewAssessmentResult } from '../review/types';
-import type { PROTOTYPE_LEARNING_PACKAGES } from '../content/learningCatalog';
+import type { PROTOTYPE_RUNTIME_PACKAGES } from '../learningRuntime/prototypeRuntimeFixtures';
 
-type RuntimePackage = (typeof PROTOTYPE_LEARNING_PACKAGES)[number];
+type RuntimePackage = (typeof PROTOTYPE_RUNTIME_PACKAGES)[number];
 
 /** demo 模式下直接驱动界面的一份手工演示，绕过真实队列。 */
 export interface DemoPresentation {

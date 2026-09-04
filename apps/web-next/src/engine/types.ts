@@ -3,6 +3,8 @@
  * presentation model: a Sense Package is the content identity and a
  * ScheduledAction is the unit selected by planning.
  */
+import type { ProtocolProgressState } from '@sensa/learning-kernel';
+
 export type LearningCapability =
   | 'contextual_recognition'
   | 'meaning_to_form_recall'
@@ -110,7 +112,8 @@ export interface OrchestratedStepDefinition extends ScheduledActionDefinition {
   stepKind: LearningStepKind;
 }
 
-export interface SchedulablePackage<TContent = unknown> {
+/** Reusable, learner-neutral content and action inventory. */
+export interface LearningPackage<TContent = unknown> {
   packageId: string;
   senseId: string;
   content: TContent;
@@ -121,11 +124,31 @@ export interface SchedulablePackage<TContent = unknown> {
   reviewActions: readonly ScheduledActionDefinition[];
 }
 
+/** A reusable Package bound to exactly one learner-specific scheduling identity. */
+export interface SchedulablePackage<TContent = unknown> extends LearningPackage<TContent> {
+  retentionTargetId: string;
+}
+
+export const bindPackageToRetentionTarget = <TContent>(
+  packageTemplate: LearningPackage<TContent>,
+  retentionTargetId: string,
+): SchedulablePackage<TContent> => {
+  if (retentionTargetId.trim().length === 0) {
+    throw new Error(`Package ${packageTemplate.packageId} cannot bind an empty Retention Target.`);
+  }
+  return Object.freeze({ ...packageTemplate, retentionTargetId });
+};
+
+export const retentionTargetIdOf = (
+  packageItem: Pick<SchedulablePackage, 'retentionTargetId'>,
+): string => packageItem.retentionTargetId;
+
 export interface ScheduledAction<TContent = unknown> extends OrchestratedStepDefinition {
   ordinal: number;
   totalTarget: number;
   packageId: string;
   senseId: string;
+  retentionTargetId: string;
   content: TContent;
   reason: ScheduledActionReason;
 }
@@ -142,17 +165,23 @@ export type AcquisitionGateStatus = 'unresolved' | 'passed' | 'failed';
 
 export type RelearningCycleStage = 'repair_pending' | 'retest_pending';
 
+export type RelearningRepairTarget =
+  | Readonly<{ kind: 'capability'; capability: LearningCapability }>
+  | Readonly<{ kind: 'protocol_checkpoint'; checkpointId: string }>;
+
 /**
  * Learner-local recovery progress. This is deliberately separate from the
- * FSRS memory projection: a Relearning Cycle describes which capability needs
- * repair and retest, while FSRS continues to describe only the long-term
- * schedule produced by the failed Review.
+ * FSRS memory projection: a Relearning Cycle describes which protocol-local
+ * target needs repair and retest, while FSRS continues to describe only the
+ * long-term schedule produced by the failed Review. Structured protocols use
+ * a Capability; other protocols keep their own Checkpoint identity.
  */
 export interface RelearningCycle {
   cycleId: string;
   packageId: string;
   senseId: string;
-  targetCapability: LearningCapability;
+  retentionTargetId: string;
+  repairTarget: RelearningRepairTarget;
   failedReviewOutcomeKey: string;
   failedReviewActionKey: string;
   stage: RelearningCycleStage;
@@ -179,16 +208,15 @@ export interface ReviewDiagnosticFacts {
   lastCapability?: LearningCapability;
 }
 
-export interface SenseAcquisitionState {
+export interface AcquisitionTargetState {
   packageId: string;
   senseId: string;
+  retentionTargetId: string;
   phase: 'new' | 'acquiring' | 'retaining' | 'relearning';
   introduced: boolean;
   declaredMastery: boolean;
-  gateStatus: Record<LearningCapability, AcquisitionGateStatus>;
-  /** A failed gate must receive a repair before it can be independently retested. */
-  pendingRepairCapability: LearningCapability | null;
-  pendingRepairForActionKey: string | null;
+  /** Protocol-local Checkpoint credit; capability and Card identities are projections. */
+  protocolProgress: ProtocolProgressState;
   repairCounts: Record<LearningCapability, number>;
   failureCounts: Record<LearningCapability, number>;
   lastAssessmentActionKey: Partial<Record<LearningCapability, string>>;
@@ -208,7 +236,8 @@ export interface AcquisitionGateProjection {
 export interface AcquisitionTargetProjection {
   packageId: string;
   senseId: string;
-  phase: SenseAcquisitionState['phase'];
+  retentionTargetId: string;
+  phase: AcquisitionTargetState['phase'];
   introduced: boolean;
   declaredMastery: boolean;
   graduated: boolean;
@@ -223,7 +252,7 @@ export interface AcquisitionTargetProjection {
 export interface StructuredAcquisitionProjection {
   currentAction: Readonly<Pick<
     ScheduledAction,
-    'packageId' | 'senseId' | 'capability' | 'intent' | 'reason'
+    'packageId' | 'senseId' | 'retentionTargetId' | 'capability' | 'intent' | 'reason'
   >> | null;
   targets: readonly AcquisitionTargetProjection[];
 }
@@ -245,17 +274,13 @@ export interface QueueStats {
   totalAttempts: number;
   correctAttempts: number;
   accuracy: number;
-  masteredCount: number;
-  totalSenses: number;
-  /** Compatibility alias used by the frozen progress surface. */
-  totalWords: number;
+  masteredTargetCount: number;
+  totalTargets: number;
   startTime: number;
 }
 
 export interface QueueConfig {
-  /** Maximum number of concurrently acquiring Senses. */
-  activeWindow?: number;
-  /** Number of other Actions that must occur before another Sense appears. */
+  /** Number of other Actions required before the same Retention Target reappears. */
   minGap?: number;
   /** Optional display estimate. Scheduling completion never depends on it. */
   progressTarget?: number;
@@ -288,9 +313,8 @@ export function reviewOutcomeKey(
 ): string {
   void _action;
   return [
-    'sensa-review-v1',
-    candidate.package.packageId,
-    candidate.package.senseId,
+    'sensa-review-v2',
+    retentionTargetIdOf(candidate.package),
     String(candidate.dueAt),
   ].map((part) => encodeURIComponent(part)).join(':');
 }

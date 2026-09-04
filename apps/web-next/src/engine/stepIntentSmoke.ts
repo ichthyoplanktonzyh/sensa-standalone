@@ -14,7 +14,7 @@
  *
  * Run with `npm run smoke:intent`.
  */
-import { PROTOTYPE_LEARNING_PACKAGES } from '../content/learningCatalog';
+import { PROTOTYPE_RUNTIME_PACKAGES as PROTOTYPE_LEARNING_PACKAGES } from '../learningRuntime/prototypeRuntimeFixtures';
 import { LearnQueue } from './LearnQueue';
 import type { LearningCapability, LearningStepIntent, ScheduledActionDefinition } from './types';
 
@@ -78,7 +78,7 @@ check('Gate 与 Review 步的意图默认是 assessment',
 /* ---------- 行为：只有 assessment 取证 ---------- */
 
 const firstPackage = PROTOTYPE_LEARNING_PACKAGES[0]!;
-const queue = new LearnQueue([firstPackage], { activeWindow: 1, minGap: 0 });
+const queue = new LearnQueue([firstPackage], { minGap: 0 });
 
 const opening = queue.getCurrentSession();
 check('新 Package 的第一步是讲解',
@@ -89,16 +89,16 @@ check('新 Package 的第一步是讲解',
 
 check('讲解期间 markMistake 是空操作——没有 Gate 可重开', (() => {
   queue.markMistake();
-  const state = queue.getState(firstPackage.packageId)!;
-  return state.pendingRepairCapability === null
+  const state = queue.getState(firstPackage.retentionTargetId)!;
+  return Object.keys(state.protocolProgress.pendingRepairs).length === 0
     && CAPABILITIES.every((capability) => state.repairCounts[capability] === 0);
 })());
 
-// 兼容路径：settle(true) 在讲解步上要落到 completeIntroduction。原先这条判断
+// 通用布尔结果入口：settle(true) 在讲解步上要落到 completeIntroduction。原先这条判断
 // 问的是 `capability === 'introduction'`，现在问的是这一步的 kind 与 intent。
 check('settle 在讲解步上走完成讲解，而不是判分', (() => {
   const settled = queue.settle(true);
-  const state = queue.getState(firstPackage.packageId)!;
+  const state = queue.getState(firstPackage.retentionTargetId)!;
   return settled?.action.intent === 'instruction'
     && state.introduced
     && settled.result === null;
@@ -116,8 +116,10 @@ check('讲解之后是一步 assessment，并且练的是一条真实能力',
 const gateCapability = firstGate!.action.capability!;
 check('assessment 取证：判错让 Gate 落到 failed 并计入 attempts', (() => {
   queue.settle(false);
-  const state = queue.getState(firstPackage.packageId)!;
-  return state.gateStatus[gateCapability] === 'failed'
+  const gate = queue.getProjection().targets[0]?.gates.find(
+    (candidate) => candidate.capability === gateCapability,
+  );
+  return gate?.status === 'failed'
     && queue.getStats().totalAttempts === 1;
 })());
 
@@ -130,8 +132,11 @@ check('失败之后排到的是一步 repair，针对同一条能力',
 check('修复不取证：Gate 回到 unresolved 而不是 passed，attempts 不变', (() => {
   const before = queue.getStats().totalAttempts;
   queue.settle(true);
-  const state = queue.getState(firstPackage.packageId)!;
-  return state.gateStatus[gateCapability] === 'unresolved'
+  const state = queue.getState(firstPackage.retentionTargetId)!;
+  const gate = queue.getProjection().targets[0]?.gates.find(
+    (candidate) => candidate.capability === gateCapability,
+  );
+  return gate?.status === 'unresolved'
     && state.repairCounts[gateCapability] === 1
     && queue.getStats().totalAttempts === before;
 })());
@@ -146,8 +151,10 @@ check('修复之后是独立重测，意图回到 assessment',
 check('重测判对才算取证：Gate passed 且 attempts 增加', (() => {
   const before = queue.getStats().totalAttempts;
   queue.settle(true);
-  const state = queue.getState(firstPackage.packageId)!;
-  return state.gateStatus[gateCapability] === 'passed'
+  const gate = queue.getProjection().targets[0]?.gates.find(
+    (candidate) => candidate.capability === gateCapability,
+  );
+  return gate?.status === 'passed'
     && queue.getStats().totalAttempts === before + 1;
 })());
 
@@ -159,7 +166,7 @@ check('没有讲解步的 Package 直接抛，不静默跑起来', (() => {
     actions: firstPackage.actions.filter((action) => action.kind !== 'introduction'),
   };
   try {
-    new LearnQueue([withoutIntroduction], { activeWindow: 1, minGap: 0 });
+    new LearnQueue([withoutIntroduction], { minGap: 0 });
     return false;
   } catch { return true; }
 })());
@@ -172,7 +179,7 @@ check('讲解步被标成 repair 就不再算讲解', (() => {
       : action),
   };
   try {
-    new LearnQueue([introductionAsRepair], { activeWindow: 1, minGap: 0 });
+    new LearnQueue([introductionAsRepair], { minGap: 0 });
     return false;
   } catch { return true; }
 })());

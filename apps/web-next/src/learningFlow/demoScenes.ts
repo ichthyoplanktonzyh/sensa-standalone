@@ -11,9 +11,9 @@
  * `npm run smoke:flow` 会遍历九个屏号，检查每一条都自洽。
  */
 import {
-  PROTOTYPE_LEARNING_PACKAGES,
   toWordPresentation,
 } from '../content/learningCatalog';
+import { PROTOTYPE_RUNTIME_PACKAGES as PROTOTYPE_LEARNING_PACKAGES } from '../learningRuntime/prototypeRuntimeFixtures';
 import { materializeAssessmentResource } from '../content/assessmentResources';
 import type { LearningCapability } from '../engine/types';
 import type { DemoPresentation } from './flowState';
@@ -103,7 +103,12 @@ const buildRepairFeedbackScene = (basePackage: RuntimePackage): DemoScene => {
       focusDimension: '语境辨义',
       correct: false,
       responseId: incorrectOption.id,
-      memoryOutcome: 'retrieval_failed',
+      memoryOutcome: {
+        basis: 'retrieval_failed',
+        grade: 'again',
+        evidenceLevel: 'behavioral',
+        evidenceIds: [],
+      },
       evidenceEligible: true,
     }),
     queue: { pkg: basePackage, capability: 'contextual_recognition', step: 1, total: 1 },

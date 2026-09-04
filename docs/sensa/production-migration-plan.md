@@ -22,6 +22,11 @@ V1 的剩余事项。
   已在 standalone 内闭合，日常命令默认不依赖外部仓库；
 - canonical domain glossary、architecture、personal semantic world、learning connection、resource/runtime
   models 与本文件。
+- learning extensibility 的 v2 语言无关合同与 Web behavior vertical slice：Retention Scope/Profile/
+  Protocol Run/Initial Completion/Handoff schemas，scope/content/orchestration/renderer/store registries，
+  可复用 Catalog Package 与 learner-specific Runtime binding 的分离，以及以 `retentionTargetId`
+  为唯一调度键的本地队列、FSRS 与 Relearning smoke。Postgres/API/Sync
+  的权威持久化迁移仍属于下方 gate 1。
 
 ## Remaining launch gates
 

@@ -7,6 +7,7 @@ import {
   type PrototypeLearningTargetView,
 } from '../../learningJourney/prototypeLearning';
 import type { RetentionRuntimeTargetStatus } from '../../engine/ReviewQueue';
+import type { InitialLearningCompletionKind } from '../../learningRuntime/orchestrations';
 
 interface LearningTargetDetailScreenProps {
   active: boolean;
@@ -14,7 +15,7 @@ interface LearningTargetDetailScreenProps {
   selectedPolicy: PrototypeLearningPolicy;
   preparation: PrototypeLearningReadiness;
   committedPolicy: PrototypeLearningPolicy | null;
-  initialCompletionKind: 'lightweight' | 'structured' | null;
+  initialCompletionKind: InitialLearningCompletionKind | null;
   reviewDue: boolean;
   relearning: boolean;
   retentionRuntimeState: RetentionRuntimeTargetStatus | null;
@@ -77,7 +78,7 @@ export const LearningTargetDetailScreen = ({
   const effectiveReady = tone === 'ready';
   const isCommitted = committedPolicy !== null;
   const initialLearningCompleted = initialCompletionKind !== null;
-  const isStructuredGraduation = initialCompletionKind === 'structured';
+  const isStructuredGraduation = initialCompletionKind === 'acquisition_graduation';
   const isActiveRetentionRuntime = retentionRuntimeState === 'reviewing'
     || retentionRuntimeState === 'relearning_repair'
     || retentionRuntimeState === 'relearning_retest';
