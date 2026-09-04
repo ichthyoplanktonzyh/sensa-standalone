@@ -12,6 +12,13 @@ import {
   ContentProvisioningRegistry,
   type ContentProvisioningAdapter,
 } from '../learningRuntime/contentProvisioning';
+import {
+  provisionLightweightInitialContent,
+  type LightweightInitialContentInput,
+  type LightweightInitialLearningMaterialization,
+} from '../learningRuntime/lightweightInitialContent';
+import { LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION } from '@sensa/contracts/sensa';
+import { stableUuid } from '@sensa/learning-kernel';
 import { retentionScopeRegistry } from '../learningRuntime/retentionScopes';
 import {
   learningPolicyProfileRegistry,
@@ -209,21 +216,106 @@ const boundPackageDraftForTarget = (
     : null;
 };
 
+const expressionKindFor = (
+  target: PrototypeLearningTargetView,
+): LightweightInitialContentInput['expression']['expressionKind'] => {
+  if (target.expressionTypeLabel === '单词') return 'word';
+  if (target.expressionTypeLabel === '短语') return 'phrase';
+  if (target.expressionTypeLabel === '构式') return 'construction';
+  if (target.expressionTypeLabel === '句子') return 'utterance';
+  return 'unspecified';
+};
+
+export const lightweightContentInputForTarget = (
+  target: PrototypeLearningTargetView,
+): LightweightInitialContentInput => {
+  const grounding = experienceGroundingForTarget(target);
+  const hasAuthoritativeGrounding = grounding.source !== 'generated';
+  return {
+    learnerUserId: 'prototype-learner',
+    learningTargetId: stableUuid(`prototype:learning-target:${target.targetId}`),
+    senseId: stableUuid(`prototype:sense:${target.targetId}`),
+    senseVersionId: stableUuid(`prototype:sense-version:${target.targetId}:v1`),
+    senseExpressionBindingId: stableUuid(`prototype:sense-expression-binding:${target.targetId}`),
+    resolvedLearningPlanRevisionId: `prototype-plan:${target.targetId}:v1`,
+    expressionSourceVersion: 'prototype-expression-v1',
+    senseSourceVersion: 'prototype-sense-v1',
+    expression: {
+      surface: target.expression,
+      languageTag: 'en',
+      expressionKind: expressionKindFor(target),
+    },
+    sense: {
+      meaning: target.meaning,
+      familiarLanguageTag: 'zh-CN',
+    },
+    originExperience: hasAuthoritativeGrounding
+      ? {
+          source: grounding.source === 'personal_semantic_world'
+            ? 'personal_anchor'
+            : 'other_authoritative_source',
+          sourceVersion: grounding.source === 'personal_semantic_world'
+            ? 'prototype-personal-anchor-v1'
+            : 'prototype-learning-package-v1',
+          personalAnchorUseGrantId: grounding.source === 'personal_semantic_world'
+            ? stableUuid(`prototype:personal-anchor-use-grant:${target.targetId}`)
+            : null,
+          experience: {
+            scene: grounding.scene,
+            senseFocus: grounding.focus,
+            featureLabels: [...grounding.featureLabels].slice(0, 4),
+          },
+        }
+      : null,
+    referenceFacts: [
+      ...(target.expressionTypeLabel.trim() || target.partOfSpeech.trim()
+        ? [{
+            source: 'other_authoritative_source' as const,
+            sourceVersion: 'prototype-target-metadata-v1',
+            fact: {
+              factKind: 'language_structure' as const,
+              expressionTypeLabel: target.expressionTypeLabel.trim() || null,
+              partOfSpeech: target.partOfSpeech.trim() || null,
+            },
+          }]
+        : []),
+      ...(target.example.trim()
+        ? [{
+            source: 'other_authoritative_source' as const,
+            sourceVersion: 'prototype-target-example-v1',
+            fact: {
+              factKind: 'usage_example' as const,
+              example: target.example,
+            },
+          }]
+        : []),
+    ],
+    requestedAt: '2026-09-04T00:00:00.000Z',
+  };
+};
+
 const compactContentProvisioner: ContentProvisioningAdapter<PrototypeLearningTargetView> = {
   capabilityId: 'compact_learning_material',
   readinessFor: (target) => target.lightweightReadiness,
-  // 紧凑材料按需生成：可以还在准备，但从来不缺可跑的东西。
-  prepare: (target) => ({
-    materializationId: `prototype-compact:${target.targetId}:v1`,
-    materializationVersion: 'v1',
-    content: {
-      expression: target.expression,
-      meaning: target.meaning,
-      example: target.example,
-    },
-  }),
-  validate: (_target, draft) =>
-    requireMaterializationIdentity(draft.materializationId, 'compact_learning_material'),
+  prepare: (target) => {
+    const result = provisionLightweightInitialContent(lightweightContentInputForTarget(target));
+    if (result.status !== 'ready') return null;
+    return {
+      materializationId: result.materialization.snapshot.learningMaterializationId,
+      materializationVersion: LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION,
+      content: result.materialization,
+    };
+  },
+  validate: (target, draft) => {
+    requireMaterializationIdentity(draft.materializationId, 'compact_learning_material');
+    const materialization = draft.content as LightweightInitialLearningMaterialization;
+    if (
+      materialization.snapshot.learningTargetId
+      !== stableUuid(`prototype:learning-target:${target.targetId}`)
+    ) {
+      throw new Error(`Compact Materialization is bound to another Target: ${target.targetId}`);
+    }
+  },
 };
 
 const structuredPackageProvisioner: ContentProvisioningAdapter<PrototypeLearningTargetView> = {
@@ -253,6 +345,15 @@ export const prototypeContentProvisioning = new ContentProvisioningRegistry([
   compactContentProvisioner,
   structuredPackageProvisioner,
 ]);
+
+export const lightweightInitialMaterializationForTarget = (
+  target: PrototypeLearningTargetView,
+): LightweightInitialLearningMaterialization | null => {
+  const result = prototypeContentProvisioning.resolve(target, 'compact_learning_material');
+  return result.materialization
+    ? result.materialization.content as LightweightInitialLearningMaterialization
+    : null;
+};
 
 const contentReadinessForTarget = (
   target: PrototypeLearningTargetView,

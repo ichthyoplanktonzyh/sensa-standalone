@@ -8,7 +8,7 @@ import {
 } from "./learningConnection.js";
 
 export const sensaLearningContentContractVersion =
-  "sensa-learning-content-v1" as const;
+  "sensa-learning-content-v3" as const;
 
 const uuid = z.string().uuid();
 const nonEmpty = z.string().trim().min(1);
@@ -17,6 +17,7 @@ const positiveInteger = z.number().int().positive();
 const timestamp = z.string().datetime({ offset: true });
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const jsonObject = z.record(z.string(), z.unknown());
+const agentToolName = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/u);
 
 const addDuplicateIssues = (
   values: readonly string[],
@@ -43,13 +44,22 @@ export const sensaContentEvidenceEligibilitySchema = z.enum([
   "behavioral",
 ]);
 
+export const sensaValidatorPolicyReferenceSchema = z
+  .object({
+    validatorPolicyId: nonEmpty,
+    validatorVersion: nonEmpty,
+  })
+  .strict();
+
 export const sensaContentContextSourceSchema = z.enum([
   "target_expression",
   "confirmed_sense",
   "personal_anchor",
+  "authorized_media",
   "dictionary",
   "corpus",
   "pronunciation_lexicon",
+  "tool_observation",
   "other_authoritative_source",
 ]);
 
@@ -107,7 +117,8 @@ export const sensaMaterialRoleRequirementSchema = z
     eligibleStepIntents: z.array(sensaLearningStepIntentSchema).min(1),
     evidenceEligibility: sensaContentEvidenceEligibilitySchema,
     provisioningPolicyId: nonEmpty,
-    validatorPolicyIds: z.array(nonEmpty).min(1),
+    provisioningPolicyVersion: nonEmpty,
+    validatorPolicies: z.array(sensaValidatorPolicyReferenceSchema).min(1),
   })
   .strict()
   .superRefine((role, context) => {
@@ -139,9 +150,9 @@ export const sensaMaterialRoleRequirementSchema = z
       context,
     );
     addDuplicateIssues(
-      role.validatorPolicyIds,
+      role.validatorPolicies.map((policy) => policy.validatorPolicyId),
       "validator Policy",
-      ["validatorPolicyIds"],
+      ["validatorPolicies"],
       context,
     );
   });
@@ -255,10 +266,20 @@ export const sensaContentContextArtifactSchema = z
     payload: jsonObject,
     contentDigest: digest,
     personalAnchorUseGrantId: uuid.nullable(),
+    producerToolCallId: nonEmpty.nullable(),
+    mediaReference: z.object({
+      mediaObjectId: nonEmpty,
+      mediaKind: z.enum(["image", "audio"]),
+      mimeType: nonEmpty,
+      sizeBytes: nonNegativeInteger,
+      sha256: digest,
+      accessCapability: nonEmpty,
+    }).strict().nullable(),
   })
   .strict()
   .superRefine((artifact, context) => {
-    const isPersonal = artifact.source === "personal_anchor";
+    const isPersonal = artifact.source === "personal_anchor"
+      || artifact.source === "authorized_media";
     if (isPersonal !== (artifact.personalAnchorUseGrantId !== null)) {
       context.addIssue({
         code: "custom",
@@ -266,16 +287,78 @@ export const sensaContentContextArtifactSchema = z
         message: "Personal context requires an explicit use grant; non-personal context cannot carry one.",
       });
     }
+    if (
+      artifact.source === "tool_observation"
+      && artifact.producerToolCallId === null
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["producerToolCallId"],
+        message: "A tool observation must identify its producing tool call.",
+      });
+    }
+    if (artifact.source === "authorized_media" && artifact.mediaReference === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["mediaReference"],
+        message: "Authorized media context must carry an immutable media reference.",
+      });
+    }
   });
+
+export const sensaContentAgentToolDefinitionSchema = z
+  .object({
+    toolKey: agentToolName,
+    toolVersion: nonEmpty,
+    description: nonEmpty,
+    inputSchemaId: nonEmpty,
+    inputSchemaVersion: nonEmpty,
+    inputJsonSchema: jsonObject,
+    outputContextKinds: z.array(nonEmpty),
+    outputMaterialRoleKeys: z.array(nonEmpty),
+    maxCalls: positiveInteger,
+  })
+  .strict()
+  .superRefine((tool, context) => {
+    addDuplicateIssues(
+      tool.outputContextKinds,
+      "tool output context kind",
+      ["outputContextKinds"],
+      context,
+    );
+    addDuplicateIssues(
+      tool.outputMaterialRoleKeys,
+      "tool output material role",
+      ["outputMaterialRoleKeys"],
+      context,
+    );
+    if (tool.outputContextKinds.length === 0 && tool.outputMaterialRoleKeys.length === 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["outputContextKinds"],
+        message: "An approved content tool must produce an auditable artifact or Candidate.",
+      });
+    }
+  });
+
+export const sensaContentAgentAttemptBudgetSchema = z
+  .object({
+    maxModelTurns: positiveInteger.max(32),
+    maxToolCalls: nonNegativeInteger.max(128),
+    timeoutMs: positiveInteger.max(600_000),
+  })
+  .strict();
 
 /**
  * Standalone request handed to a content-producing adapter. It embeds the
- * exact demand definition and frozen artifacts so the adapter need not read
- * application code, query authority or infer the current Protocol.
+ * exact demand definition, initial frozen artifacts and approved tool/budget
+ * constraints so the adapter need not read application code or infer Protocol.
  */
 export const sensaContentGenerationRequestSchema = z
   .object({
     contractVersion: z.literal(sensaLearningContentContractVersion),
+    contentProvisioningTaskId: uuid,
+    contentAgentAttemptId: uuid,
     contentGenerationRequestId: uuid,
     idempotencyKey: nonEmpty,
     learnerUserId: nonEmpty,
@@ -283,6 +366,7 @@ export const sensaContentGenerationRequestSchema = z
     senseId: uuid,
     senseVersionId: uuid,
     senseExpressionBindingId: uuid,
+    resolvedLearningPlanRevisionId: nonEmpty,
     profileId: nonEmpty,
     profileVersion: nonEmpty,
     protocolPurpose: sensaLearningProtocolPurposeSchema,
@@ -292,6 +376,8 @@ export const sensaContentGenerationRequestSchema = z
     demandReference: sensaContentDemandReferenceSchema,
     demand: sensaContentDemandDefinitionSchema,
     contextArtifacts: z.array(sensaContentContextArtifactSchema).min(2),
+    approvedTools: z.array(sensaContentAgentToolDefinitionSchema),
+    attemptBudget: sensaContentAgentAttemptBudgetSchema,
     generatorPolicyId: nonEmpty,
     generatorPolicyVersion: nonEmpty,
     requestedAt: timestamp,
@@ -326,6 +412,12 @@ export const sensaContentGenerationRequestSchema = z
       request.contextArtifacts.map((artifact) => artifact.artifactId),
       "context artifact identity",
       ["contextArtifacts"],
+      context,
+    );
+    addDuplicateIssues(
+      request.approvedTools.map((tool) => tool.toolKey),
+      "approved content tool",
+      ["approvedTools"],
       context,
     );
     const contextRequirements = new Map(request.demand.contextRequirements.map(
@@ -363,13 +455,6 @@ export const sensaContentGenerationRequestSchema = z
     });
     request.demand.contextRequirements.forEach((requirement) => {
       const count = countByContext.get(requirement.contextKind) ?? 0;
-      if (count < requirement.minItems) {
-        context.addIssue({
-          code: "custom",
-          path: ["contextArtifacts"],
-          message: `Required generation context is underfilled: ${requirement.contextKind}`,
-        });
-      }
       if (requirement.maxItems !== null && count > requirement.maxItems) {
         context.addIssue({
           code: "custom",
@@ -378,12 +463,183 @@ export const sensaContentGenerationRequestSchema = z
         });
       }
     });
+    const contextKinds = new Set(request.demand.contextRequirements.map(
+      (requirement) => requirement.contextKind,
+    ));
+    const materialRoleKeys = new Set(request.demand.materialRoles.map(
+      (role) => role.materialRoleKey,
+    ));
+    request.approvedTools.forEach((tool, index) => {
+      tool.outputContextKinds.forEach((contextKind) => {
+        if (!contextKinds.has(contextKind)) {
+          context.addIssue({
+            code: "custom",
+            path: ["approvedTools", index, "outputContextKinds"],
+            message: `Approved tool produces undeclared context: ${contextKind}`,
+          });
+        }
+      });
+      tool.outputMaterialRoleKeys.forEach((materialRoleKey) => {
+        if (!materialRoleKeys.has(materialRoleKey)) {
+          context.addIssue({
+            code: "custom",
+            path: ["approvedTools", index, "outputMaterialRoleKeys"],
+            message: `Approved tool produces undeclared material role: ${materialRoleKey}`,
+          });
+        }
+      });
+    });
     const sources = new Set(request.contextArtifacts.map((artifact) => artifact.source));
     if (!sources.has("target_expression") || !sources.has("confirmed_sense")) {
       context.addIssue({
         code: "custom",
         path: ["contextArtifacts"],
         message: "Generation requires frozen target-expression and confirmed-Sense artifacts.",
+      });
+    }
+  });
+
+export const sensaContentProvisioningTaskStatusSchema = z.enum([
+  "queued",
+  "preparing",
+  "submitted",
+  "validating",
+  "ready",
+  "blocked",
+  "cancelled",
+]);
+
+export const sensaContentProvisioningTaskSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaLearningContentContractVersion),
+    contentProvisioningTaskId: uuid,
+    learnerUserId: nonEmpty,
+    learningTargetId: uuid,
+    resolvedLearningPlanRevisionId: nonEmpty,
+    protocolPurpose: sensaLearningProtocolPurposeSchema,
+    protocolId: nonEmpty,
+    protocolVersion: nonEmpty,
+    demandReference: sensaContentDemandReferenceSchema,
+    status: sensaContentProvisioningTaskStatusSchema,
+    attemptIds: z.array(uuid),
+    activeAttemptId: uuid.nullable(),
+    submittedBundleId: uuid.nullable(),
+    learningMaterializationId: uuid.nullable(),
+    blockedReasonCode: nonEmpty.nullable(),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  })
+  .strict()
+  .superRefine((task, context) => {
+    addDuplicateIssues(task.attemptIds, "Content Agent Attempt", ["attemptIds"], context);
+    if (task.activeAttemptId !== null && !task.attemptIds.includes(task.activeAttemptId)) {
+      context.addIssue({
+        code: "custom",
+        path: ["activeAttemptId"],
+        message: "The active Attempt must belong to the Content Provisioning Task.",
+      });
+    }
+    if (["submitted", "validating"].includes(task.status) && task.submittedBundleId === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["submittedBundleId"],
+        message: `${task.status} requires a submitted Material Candidate Bundle.`,
+      });
+    }
+    if ((task.status === "ready") !== (task.learningMaterializationId !== null)) {
+      context.addIssue({
+        code: "custom",
+        path: ["learningMaterializationId"],
+        message: "A Task has a Learning Materialization exactly when it is ready.",
+      });
+    }
+    if ((task.status === "blocked") !== (task.blockedReasonCode !== null)) {
+      context.addIssue({
+        code: "custom",
+        path: ["blockedReasonCode"],
+        message: "A blocked Task must carry one reason; other states cannot.",
+      });
+    }
+    if (["submitted", "validating", "ready", "blocked", "cancelled"].includes(task.status)
+      && task.activeAttemptId !== null) {
+      context.addIssue({
+        code: "custom",
+        path: ["activeAttemptId"],
+        message: "A non-preparing Task cannot retain an active Agent Attempt.",
+      });
+    }
+  });
+
+export const sensaContentAgentAttemptStatusSchema = z.enum([
+  "running",
+  "submitted",
+  "failed",
+  "timed_out",
+  "cancelled",
+]);
+
+export const sensaContentAgentBudgetUsageSchema = z
+  .object({
+    modelTurns: nonNegativeInteger,
+    toolCalls: nonNegativeInteger,
+    inputTokens: nonNegativeInteger.nullable(),
+    outputTokens: nonNegativeInteger.nullable(),
+  })
+  .strict();
+
+export const sensaContentAgentAttemptSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaLearningContentContractVersion),
+    contentAgentAttemptId: uuid,
+    contentProvisioningTaskId: uuid,
+    contentGenerationRequestId: uuid,
+    sequence: positiveInteger,
+    status: sensaContentAgentAttemptStatusSchema,
+    provider: nonEmpty,
+    model: nonEmpty,
+    promptPolicyId: nonEmpty,
+    promptPolicyVersion: nonEmpty,
+    inputSnapshotDigest: digest,
+    budget: sensaContentAgentAttemptBudgetSchema,
+    usage: sensaContentAgentBudgetUsageSchema,
+    submittedBundleId: uuid.nullable(),
+    failureCode: nonEmpty.nullable(),
+    startedAt: timestamp,
+    endedAt: timestamp.nullable(),
+  })
+  .strict()
+  .superRefine((attempt, context) => {
+    const terminal = attempt.status !== "running";
+    if (terminal !== (attempt.endedAt !== null)) {
+      context.addIssue({
+        code: "custom",
+        path: ["endedAt"],
+        message: "Only a terminal Content Agent Attempt has an end timestamp.",
+      });
+    }
+    if ((attempt.status === "submitted") !== (attempt.submittedBundleId !== null)) {
+      context.addIssue({
+        code: "custom",
+        path: ["submittedBundleId"],
+        message: "Only a submitted Attempt owns a submitted Bundle identity.",
+      });
+    }
+    const failed = ["failed", "timed_out", "cancelled"].includes(attempt.status);
+    if (failed !== (attempt.failureCode !== null)) {
+      context.addIssue({
+        code: "custom",
+        path: ["failureCode"],
+        message: "An unsuccessful terminal Attempt must carry one failure code.",
+      });
+    }
+    if (
+      attempt.usage.modelTurns > attempt.budget.maxModelTurns
+      || attempt.usage.toolCalls > attempt.budget.maxToolCalls
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["usage"],
+        message: "Attempt usage cannot exceed its pinned budget.",
       });
     }
   });
@@ -442,6 +698,136 @@ export const sensaMaterialCandidateSchema = z
     }
   });
 
+export const sensaContentAgentToolCallStatusSchema = z.enum([
+  "succeeded",
+  "failed",
+]);
+
+export const sensaContentAgentToolCallRecordSchema = z
+  .object({
+    contractVersion: z.literal(sensaLearningContentContractVersion),
+    toolCallId: nonEmpty,
+    contentAgentAttemptId: uuid,
+    ordinal: nonNegativeInteger,
+    toolKey: agentToolName,
+    toolVersion: nonEmpty,
+    inputPayload: jsonObject,
+    inputDigest: digest,
+    status: sensaContentAgentToolCallStatusSchema,
+    outputDigest: digest.nullable(),
+    supportingArtifactIds: z.array(nonEmpty),
+    materialCandidateIds: z.array(uuid),
+    failureCode: nonEmpty.nullable(),
+    startedAt: timestamp,
+    completedAt: timestamp,
+  })
+  .strict()
+  .superRefine((call, context) => {
+    addDuplicateIssues(
+      call.supportingArtifactIds,
+      "tool supporting artifact",
+      ["supportingArtifactIds"],
+      context,
+    );
+    addDuplicateIssues(
+      call.materialCandidateIds,
+      "tool Material Candidate",
+      ["materialCandidateIds"],
+      context,
+    );
+    if ((call.status === "succeeded") !== (call.outputDigest !== null)) {
+      context.addIssue({
+        code: "custom",
+        path: ["outputDigest"],
+        message: "A successful tool call must record an output digest; a failed call cannot.",
+      });
+    }
+    if ((call.status === "failed") !== (call.failureCode !== null)) {
+      context.addIssue({
+        code: "custom",
+        path: ["failureCode"],
+        message: "A failed tool call must carry one failure code; a successful call cannot.",
+      });
+    }
+  });
+
+export const sensaMaterialRoleOmissionSchema = z
+  .object({
+    materialRoleKey: nonEmpty,
+    reasonCode: nonEmpty,
+    rationale: nonEmpty,
+  })
+  .strict();
+
+/**
+ * Immutable, untrusted output of one ended Content Agent Attempt. Independent
+ * validation consumes this Bundle; Runtime never does.
+ */
+export const sensaMaterialCandidateBundleSchema = z
+  .object({
+    contractVersion: z.literal(sensaLearningContentContractVersion),
+    materialCandidateBundleId: uuid,
+    contentProvisioningTaskId: uuid,
+    contentAgentAttemptId: uuid,
+    contentGenerationRequestId: uuid,
+    inputSnapshotDigest: digest,
+    supportingContextArtifacts: z.array(sensaContentContextArtifactSchema),
+    candidates: z.array(sensaMaterialCandidateSchema).min(1),
+    omissions: z.array(sensaMaterialRoleOmissionSchema),
+    toolCalls: z.array(sensaContentAgentToolCallRecordSchema),
+    provider: nonEmpty,
+    model: nonEmpty,
+    promptPolicyId: nonEmpty,
+    promptPolicyVersion: nonEmpty,
+    usage: sensaContentAgentBudgetUsageSchema,
+    submittedAt: timestamp,
+  })
+  .strict()
+  .superRefine((bundle, context) => {
+    addDuplicateIssues(
+      bundle.supportingContextArtifacts.map((artifact) => artifact.artifactId),
+      "supporting context artifact",
+      ["supportingContextArtifacts"],
+      context,
+    );
+    addDuplicateIssues(
+      bundle.candidates.map((candidate) => candidate.materialCandidateId),
+      "Material Candidate",
+      ["candidates"],
+      context,
+    );
+    addDuplicateIssues(
+      bundle.omissions.map((omission) => omission.materialRoleKey),
+      "material role omission",
+      ["omissions"],
+      context,
+    );
+    addDuplicateIssues(
+      bundle.toolCalls.map((call) => call.toolCallId),
+      "Content Agent tool call",
+      ["toolCalls"],
+      context,
+    );
+    bundle.candidates.forEach((candidate, index) => {
+      if (candidate.contentGenerationRequestId !== bundle.contentGenerationRequestId) {
+        context.addIssue({
+          code: "custom",
+          path: ["candidates", index, "contentGenerationRequestId"],
+          message: "A bundled Candidate must belong to the Bundle Generation Request.",
+        });
+      }
+    });
+    bundle.toolCalls.forEach((call, index) => {
+      if (call.contentAgentAttemptId !== bundle.contentAgentAttemptId) {
+        context.addIssue({
+          code: "custom",
+          path: ["toolCalls", index, "contentAgentAttemptId"],
+          message: "A bundled tool call must belong to the Bundle Agent Attempt.",
+        });
+      }
+    });
+  });
+
 const sensaMaterialValidatorResultSchema = z
   .object({
     validatorPolicyId: nonEmpty,
@@ -496,11 +882,18 @@ export const sensaMaterialCandidateValidationSchema = z
 
 export type ContentDemandCoverageIssue = Readonly<{
   code:
+    | "supporting_artifact_identity_duplicate"
+    | "context_kind_unknown"
+    | "context_schema_mismatch"
+    | "context_source_not_accepted"
+    | "context_underfilled"
+    | "context_overfilled"
     | "candidate_identity_duplicate"
     | "candidate_ordinal_duplicate"
     | "candidate_request_mismatch"
     | "material_role_unknown"
     | "material_schema_mismatch"
+    | "provisioning_policy_mismatch"
     | "source_artifact_unknown"
     | "source_material_candidate_unknown"
     | "validation_identity_duplicate"
@@ -509,9 +902,12 @@ export type ContentDemandCoverageIssue = Readonly<{
     | "candidate_validation_missing"
     | "candidate_rejected"
     | "validator_policy_missing"
+    | "validator_version_mismatch"
     | "derivation_output_missing"
     | "derivation_policy_mismatch"
     | "derivation_input_missing"
+    | "material_role_omission_missing"
+    | "material_role_omission_invalid"
     | "material_role_underfilled"
     | "material_role_overfilled";
   materialRoleKey: string | null;
@@ -525,6 +921,7 @@ export type ContentDemandCoverage = Readonly<{
 
 export type ContentDemandCoverageInput = Readonly<{
   request: SensaContentGenerationRequest;
+  supportingContextArtifacts: readonly SensaContentContextArtifact[];
   candidates: readonly SensaMaterialCandidate[];
   validations: readonly SensaMaterialCandidateValidation[];
 }>;
@@ -538,13 +935,82 @@ export function assessContentDemandCoverage(
   input: ContentDemandCoverageInput,
 ): ContentDemandCoverage {
   const request = sensaContentGenerationRequestSchema.parse(input.request);
+  const supportingContextArtifacts = input.supportingContextArtifacts.map((artifact) =>
+    sensaContentContextArtifactSchema.parse(artifact));
   const candidates = input.candidates.map((candidate) =>
     sensaMaterialCandidateSchema.parse(candidate));
   const validations = input.validations.map((validation) =>
     sensaMaterialCandidateValidationSchema.parse(validation));
   const issues: ContentDemandCoverageIssue[] = [];
   const roles = new Map(request.demand.materialRoles.map((role) => [role.materialRoleKey, role]));
+  const contextRequirements = new Map(request.demand.contextRequirements.map(
+    (requirement) => [requirement.contextKind, requirement],
+  ));
   const artifacts = new Set(request.contextArtifacts.map((artifact) => artifact.artifactId));
+  const countByContext = new Map<string, number>();
+  for (const artifact of request.contextArtifacts) {
+    countByContext.set(
+      artifact.contextKind,
+      (countByContext.get(artifact.contextKind) ?? 0) + 1,
+    );
+  }
+  for (const artifact of supportingContextArtifacts) {
+    if (artifacts.has(artifact.artifactId)) {
+      issues.push({
+        code: "supporting_artifact_identity_duplicate",
+        materialRoleKey: null,
+        materialCandidateId: null,
+      });
+    }
+    artifacts.add(artifact.artifactId);
+    const requirement = contextRequirements.get(artifact.contextKind);
+    if (!requirement) {
+      issues.push({
+        code: "context_kind_unknown",
+        materialRoleKey: null,
+        materialCandidateId: null,
+      });
+      continue;
+    }
+    countByContext.set(
+      artifact.contextKind,
+      (countByContext.get(artifact.contextKind) ?? 0) + 1,
+    );
+    if (
+      artifact.contentSchemaId !== requirement.contentSchemaId
+      || artifact.contentSchemaVersion !== requirement.contentSchemaVersion
+    ) {
+      issues.push({
+        code: "context_schema_mismatch",
+        materialRoleKey: null,
+        materialCandidateId: null,
+      });
+    }
+    if (!requirement.acceptedSources.includes(artifact.source)) {
+      issues.push({
+        code: "context_source_not_accepted",
+        materialRoleKey: null,
+        materialCandidateId: null,
+      });
+    }
+  }
+  for (const requirement of request.demand.contextRequirements) {
+    const count = countByContext.get(requirement.contextKind) ?? 0;
+    if (count < requirement.minItems) {
+      issues.push({
+        code: "context_underfilled",
+        materialRoleKey: null,
+        materialCandidateId: null,
+      });
+    }
+    if (requirement.maxItems !== null && count > requirement.maxItems) {
+      issues.push({
+        code: "context_overfilled",
+        materialRoleKey: null,
+        materialCandidateId: null,
+      });
+    }
+  }
   const validationByCandidate = new Map<string, SensaMaterialCandidateValidation>();
   const validationIds = new Set<string>();
   const candidateIds = new Set<string>();
@@ -627,6 +1093,16 @@ export function assessContentDemandCoverage(
         materialCandidateId: candidate.materialCandidateId,
       });
     }
+    if (
+      candidate.producerPolicyId !== role.provisioningPolicyId
+      || candidate.producerPolicyVersion !== role.provisioningPolicyVersion
+    ) {
+      issues.push({
+        code: "provisioning_policy_mismatch",
+        materialRoleKey: candidate.materialRoleKey,
+        materialCandidateId: candidate.materialCandidateId,
+      });
+    }
     if (candidate.sourceArtifactIds.some((artifactId) => !artifacts.has(artifactId))) {
       issues.push({
         code: "source_artifact_unknown",
@@ -657,15 +1133,24 @@ export function assessContentDemandCoverage(
         materialCandidateId: candidate.materialCandidateId,
       });
     }
-    const passedValidators = new Set(validation.validatorResults
+    const passedValidators = new Map(validation.validatorResults
       .filter((result) => result.status === "passed")
-      .map((result) => result.validatorPolicyId));
-    if (role.validatorPolicyIds.some((policyId) => !passedValidators.has(policyId))) {
-      issues.push({
-        code: "validator_policy_missing",
-        materialRoleKey: candidate.materialRoleKey,
-        materialCandidateId: candidate.materialCandidateId,
-      });
+      .map((result) => [result.validatorPolicyId, result.validatorVersion]));
+    for (const requiredValidator of role.validatorPolicies) {
+      const actualVersion = passedValidators.get(requiredValidator.validatorPolicyId);
+      if (actualVersion === undefined) {
+        issues.push({
+          code: "validator_policy_missing",
+          materialRoleKey: candidate.materialRoleKey,
+          materialCandidateId: candidate.materialCandidateId,
+        });
+      } else if (actualVersion !== requiredValidator.validatorVersion) {
+        issues.push({
+          code: "validator_version_mismatch",
+          materialRoleKey: candidate.materialRoleKey,
+          materialCandidateId: candidate.materialCandidateId,
+        });
+      }
     }
   }
 
@@ -724,7 +1209,8 @@ export function assessContentDemandCoverage(
   }
 
   const incompleteOnly = issues.length > 0
-    && issues.every((issue) => issue.code === "material_role_underfilled"
+    && issues.every((issue) => issue.code === "context_underfilled"
+      || issue.code === "material_role_underfilled"
       || issue.code === "derivation_output_missing");
   return Object.freeze({
     status: issues.length === 0 ? "satisfied" : incompleteOnly ? "incomplete" : "invalid",
@@ -732,8 +1218,137 @@ export function assessContentDemandCoverage(
   });
 }
 
+export const sensaMaterializedResourceSchema = z
+  .object({
+    resourceKey: nonEmpty,
+    materialRoleKey: nonEmpty,
+    ordinal: nonNegativeInteger,
+    materialCandidateId: uuid,
+    contentSchemaId: nonEmpty,
+    contentSchemaVersion: nonEmpty,
+    contentPayload: jsonObject,
+    contentDigest: digest,
+    sourceArtifactIds: z.array(nonEmpty),
+    sourceMaterialCandidateIds: z.array(uuid),
+    productionMethod: sensaContentProductionMethodSchema,
+    producerProvider: nonEmpty,
+    producerModel: nonEmpty.nullable(),
+    producerPolicyId: nonEmpty,
+    producerPolicyVersion: nonEmpty,
+  })
+  .strict();
+
+/** Role-indexed immutable payload stored inside a Learning Materialization snapshot. */
+export const sensaLearningMaterializationContentSchema = z
+  .object({
+    contentDemandKey: nonEmpty,
+    definitionVersion: nonEmpty,
+    contentGenerationRequestId: uuid,
+    resources: z.array(sensaMaterializedResourceSchema).min(1),
+  })
+  .strict()
+  .superRefine((content, context) => {
+    addDuplicateIssues(
+      content.resources.map((resource) => resource.resourceKey),
+      "materialized resource key",
+      ["resources"],
+      context,
+    );
+    addDuplicateIssues(
+      content.resources.map((resource) => resource.materialCandidateId),
+      "materialized Candidate",
+      ["resources"],
+      context,
+    );
+    addDuplicateIssues(
+      content.resources.map((resource) => `${resource.materialRoleKey}:${resource.ordinal}`),
+      "materialized role ordinal",
+      ["resources"],
+      context,
+    );
+  });
+
+export type ContentDemandMaterializationAssembly =
+  | Readonly<{
+      status: "satisfied";
+      issues: readonly [];
+      content: SensaLearningMaterializationContent;
+    }>
+  | Readonly<{
+      status: "incomplete" | "invalid";
+      issues: readonly ContentDemandCoverageIssue[];
+      content: null;
+    }>;
+
+const freezeMaterializedValue = <T>(value: T, seen = new WeakSet<object>()): T => {
+  if (value === null || typeof value !== "object") return value;
+  const objectValue = value as object;
+  if (seen.has(objectValue)) return value;
+  seen.add(objectValue);
+  for (const child of Object.values(objectValue)) freezeMaterializedValue(child, seen);
+  return Object.freeze(value);
+};
+
+/**
+ * The generic admission-and-assembly seam. Callers never select accepted
+ * Candidates themselves: only a fully satisfied Demand becomes Runtime content.
+ */
+export function assembleContentDemandMaterialization(
+  input: ContentDemandCoverageInput,
+): ContentDemandMaterializationAssembly {
+  const coverage = assessContentDemandCoverage(input);
+  if (coverage.status !== "satisfied") {
+    return Object.freeze({
+      status: coverage.status,
+      issues: coverage.issues,
+      content: null,
+    });
+  }
+  const request = sensaContentGenerationRequestSchema.parse(input.request);
+  const roleOrder = new Map(request.demand.materialRoles.map((role, index) => [
+    role.materialRoleKey,
+    index,
+  ]));
+  const candidates = input.candidates
+    .map((candidate) => sensaMaterialCandidateSchema.parse(candidate))
+    .sort((left, right) =>
+      (roleOrder.get(left.materialRoleKey) ?? Number.MAX_SAFE_INTEGER)
+        - (roleOrder.get(right.materialRoleKey) ?? Number.MAX_SAFE_INTEGER)
+      || left.ordinal - right.ordinal);
+  const content = sensaLearningMaterializationContentSchema.parse({
+    contentDemandKey: request.demand.contentDemandKey,
+    definitionVersion: request.demand.definitionVersion,
+    contentGenerationRequestId: request.contentGenerationRequestId,
+    resources: candidates.map((candidate) => ({
+      resourceKey: `${candidate.materialRoleKey}:${candidate.ordinal}`,
+      materialRoleKey: candidate.materialRoleKey,
+      ordinal: candidate.ordinal,
+      materialCandidateId: candidate.materialCandidateId,
+      contentSchemaId: candidate.contentSchemaId,
+      contentSchemaVersion: candidate.contentSchemaVersion,
+      contentPayload: candidate.contentPayload,
+      contentDigest: candidate.contentDigest,
+      sourceArtifactIds: candidate.sourceArtifactIds,
+      sourceMaterialCandidateIds: candidate.sourceMaterialCandidateIds,
+      productionMethod: candidate.productionMethod,
+      producerProvider: candidate.producerProvider,
+      producerModel: candidate.producerModel,
+      producerPolicyId: candidate.producerPolicyId,
+      producerPolicyVersion: candidate.producerPolicyVersion,
+    })),
+  });
+  return Object.freeze({
+    status: "satisfied",
+    issues: Object.freeze([] as const),
+    content: freezeMaterializedValue(content),
+  });
+}
+
 export type SensaMaterialRoleRequirement = z.infer<
   typeof sensaMaterialRoleRequirementSchema
+>;
+export type SensaValidatorPolicyReference = z.infer<
+  typeof sensaValidatorPolicyReferenceSchema
 >;
 export type SensaContentContextRequirement = z.infer<
   typeof sensaContentContextRequirementSchema
@@ -750,10 +1365,52 @@ export type SensaContentDemandDefinition = z.infer<
 export type SensaContentContextArtifact = z.infer<
   typeof sensaContentContextArtifactSchema
 >;
+export type SensaContentAgentToolDefinition = z.infer<
+  typeof sensaContentAgentToolDefinitionSchema
+>;
+export type SensaContentAgentAttemptBudget = z.infer<
+  typeof sensaContentAgentAttemptBudgetSchema
+>;
 export type SensaContentGenerationRequest = z.infer<
   typeof sensaContentGenerationRequestSchema
 >;
+export type SensaContentProvisioningTaskStatus = z.infer<
+  typeof sensaContentProvisioningTaskStatusSchema
+>;
+export type SensaContentProvisioningTaskSnapshot = z.infer<
+  typeof sensaContentProvisioningTaskSnapshotSchema
+>;
+export type SensaContentAgentAttemptStatus = z.infer<
+  typeof sensaContentAgentAttemptStatusSchema
+>;
+export type SensaContentAgentBudgetUsage = z.infer<
+  typeof sensaContentAgentBudgetUsageSchema
+>;
+export type SensaContentAgentAttemptSnapshot = z.infer<
+  typeof sensaContentAgentAttemptSnapshotSchema
+>;
+export type SensaContentProductionMethod = z.infer<
+  typeof sensaContentProductionMethodSchema
+>;
 export type SensaMaterialCandidate = z.infer<typeof sensaMaterialCandidateSchema>;
+export type SensaContentAgentToolCallStatus = z.infer<
+  typeof sensaContentAgentToolCallStatusSchema
+>;
+export type SensaContentAgentToolCallRecord = z.infer<
+  typeof sensaContentAgentToolCallRecordSchema
+>;
+export type SensaMaterialRoleOmission = z.infer<
+  typeof sensaMaterialRoleOmissionSchema
+>;
+export type SensaMaterialCandidateBundle = z.infer<
+  typeof sensaMaterialCandidateBundleSchema
+>;
 export type SensaMaterialCandidateValidation = z.infer<
   typeof sensaMaterialCandidateValidationSchema
+>;
+export type SensaMaterializedResource = z.infer<
+  typeof sensaMaterializedResourceSchema
+>;
+export type SensaLearningMaterializationContent = z.infer<
+  typeof sensaLearningMaterializationContentSchema
 >;

@@ -7,25 +7,38 @@ import {
   type LightweightInitialProtocolRunState,
   type LightweightInitialTransitionResult,
 } from './lightweightInitialProtocol';
+import type { LightweightInitialLearningMaterialization } from './lightweightInitialContent';
 
-const createRun = (retentionTargetId: string): LightweightInitialProtocolRunState =>
+const createRun = (
+  retentionTargetId: string,
+  materialization: LightweightInitialLearningMaterialization,
+): LightweightInitialProtocolRunState =>
   createLightweightInitialProtocolRun({
     protocolRunId: `prototype:${retentionTargetId}:lightweight-study:v2`,
     retentionTargetId,
+    learningMaterializationId: materialization.snapshot.learningMaterializationId,
+    materialResources: materialization.content.resources,
   });
 
 /** React adapter around the pure protocol runner. */
-export const useLightweightInitialProtocol = (retentionTargetId: string | null) => {
+export const useLightweightInitialProtocol = (
+  retentionTargetId: string | null,
+  materialization: LightweightInitialLearningMaterialization | null,
+) => {
   const [state, setState] = useState<LightweightInitialProtocolRunState | null>(
-    () => retentionTargetId ? createRun(retentionTargetId) : null,
+    () => retentionTargetId && materialization
+      ? createRun(retentionTargetId, materialization)
+      : null,
   );
   const stateRef = useRef(state);
 
   useEffect(() => {
-    const next = retentionTargetId ? createRun(retentionTargetId) : null;
+    const next = retentionTargetId && materialization
+      ? createRun(retentionTargetId, materialization)
+      : null;
     stateRef.current = next;
     setState(next);
-  }, [retentionTargetId]);
+  }, [retentionTargetId, materialization]);
 
   const applyOutcome = useCallback((
     outcomeKey: LightweightInitialOutcomeKey,
@@ -34,15 +47,20 @@ export const useLightweightInitialProtocol = (retentionTargetId: string | null) 
     if (
       !current
       || current.retentionTargetId !== retentionTargetId
+      || current.learningMaterializationId
+        !== materialization?.snapshot.learningMaterializationId
       || current.progress.completed
     ) return null;
     const result = transitionLightweightInitialProtocol(current, outcomeKey);
     stateRef.current = result.state;
     setState(result.state);
     return result;
-  }, [retentionTargetId]);
+  }, [retentionTargetId, materialization]);
 
-  const activeState = state?.retentionTargetId === retentionTargetId ? state : null;
+  const activeState = state?.retentionTargetId === retentionTargetId
+    && state.learningMaterializationId === materialization?.snapshot.learningMaterializationId
+    ? state
+    : null;
 
   return {
     state: activeState,

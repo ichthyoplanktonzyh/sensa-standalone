@@ -3,6 +3,9 @@ import type { PrototypeLearningTargetView } from '../../learningJourney/prototyp
 import {
   assembleLightweightInitialPresentation,
 } from '../../learningRuntime/lightweightInitialPresentation';
+import type {
+  LightweightInitialLearningMaterialization,
+} from '../../learningRuntime/lightweightInitialContent';
 import {
   LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
   type LightweightInitialRating,
@@ -16,6 +19,7 @@ import {
 interface LightweightRuntimeStartScreenProps {
   readonly active: boolean;
   readonly target: PrototypeLearningTargetView | null;
+  readonly materialization: LightweightInitialLearningMaterialization | null;
   readonly step: LightweightProtocolStepInstance | null;
   readonly completed: boolean;
   readonly hasNextTarget: boolean;
@@ -33,6 +37,7 @@ interface LightweightRuntimeStartScreenProps {
 export const LightweightRuntimeStartScreen = ({
   active,
   target,
+  materialization,
   step,
   completed,
   hasNextTarget,
@@ -42,8 +47,10 @@ export const LightweightRuntimeStartScreen = ({
   onFinish,
 }: LightweightRuntimeStartScreenProps) => {
   const presentation = useMemo(
-    () => step && target ? assembleLightweightInitialPresentation(step, target) : null,
-    [step, target],
+    () => step && materialization
+      ? assembleLightweightInitialPresentation(step, materialization)
+      : null,
+    [step, materialization],
   );
   const renderedStep = step && presentation
     ? stepRendererRegistry.get<LightweightInitialStepRendererProps>(step.definition.stepKind)({

@@ -12,6 +12,11 @@ import type {
   ProgressionPolicyId,
   RepairPolicyId,
 } from './protocolPolicies';
+import {
+  LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_KEY,
+  LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_VERSION,
+  type SensaContentDemandReference,
+} from '@sensa/contracts/sensa';
 
 export type {
   ContentCapabilityId,
@@ -58,6 +63,8 @@ export interface LearningProtocolBinding {
   checkpointDefinitionIds: readonly string[];
   /** 这条 Binding 需要的内容能力集合；readiness 是它们的合取。 */
   contentRequirement: ContentCapabilitySet;
+  /** 这条 purpose-specific Protocol 已经正式迁移并钉住的机器可读内容合同。 */
+  contentDemands: readonly SensaContentDemandReference[];
 }
 
 export interface LearningPolicyPresentation {
@@ -194,6 +201,10 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
         memoryOutcomePolicyId: null,
         checkpointDefinitionIds: [],
         contentRequirement: ['compact_learning_material'],
+        contentDemands: [{
+          contentDemandKey: LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_KEY,
+          definitionVersion: LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_VERSION,
+        }],
       },
       retention_review: {
         protocolId: 'learner-rated-retention-review',
@@ -207,6 +218,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
         memoryOutcomePolicyId: 'learner-rated-graded-v1',
         checkpointDefinitionIds: [],
         contentRequirement: ['compact_learning_material'],
+        contentDemands: [],
       },
       relearning: {
         protocolId: 'lightweight-rebinding',
@@ -220,6 +232,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
         memoryOutcomePolicyId: null,
         checkpointDefinitionIds: [],
         contentRequirement: ['compact_learning_material'],
+        contentDemands: [],
       },
     },
   },
@@ -261,6 +274,10 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
           'structured-acquisition:boundary_discrimination',
         ],
         contentRequirement: ['structured_learning_package'],
+        contentDemands: [{
+          contentDemandKey: 'structured-learning-package',
+          definitionVersion: 'v1',
+        }],
       },
       retention_review: {
         protocolId: 'evidence-oriented-retention-review',
@@ -274,6 +291,10 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
         memoryOutcomePolicyId: 'behavioral-binary-graded-v1',
         checkpointDefinitionIds: [],
         contentRequirement: ['structured_learning_package'],
+        contentDemands: [{
+          contentDemandKey: 'structured-learning-package',
+          definitionVersion: 'v1',
+        }],
       },
       relearning: {
         protocolId: 'targeted-structured-relearning',
@@ -287,6 +308,10 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
         memoryOutcomePolicyId: null,
         checkpointDefinitionIds: [],
         contentRequirement: ['structured_learning_package'],
+        contentDemands: [{
+          contentDemandKey: 'structured-learning-package',
+          definitionVersion: 'v1',
+        }],
       },
     },
   },
@@ -325,6 +350,10 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
           'four-stage:final-recall',
         ],
         contentRequirement: ['structured_learning_package'],
+        contentDemands: [{
+          contentDemandKey: 'structured-learning-package',
+          definitionVersion: 'v1',
+        }],
       },
       retention_review: {
         protocolId: 'interleaved-four-stage-retention',
@@ -338,6 +367,10 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
         memoryOutcomePolicyId: 'learner-rated-graded-v1',
         checkpointDefinitionIds: [],
         contentRequirement: ['structured_learning_package'],
+        contentDemands: [{
+          contentDemandKey: 'structured-learning-package',
+          definitionVersion: 'v1',
+        }],
       },
       relearning: {
         protocolId: 'interleaved-four-stage-relearning',
@@ -351,6 +384,10 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
         memoryOutcomePolicyId: null,
         checkpointDefinitionIds: [],
         contentRequirement: ['structured_learning_package'],
+        contentDemands: [{
+          contentDemandKey: 'structured-learning-package',
+          definitionVersion: 'v1',
+        }],
       },
     },
   },

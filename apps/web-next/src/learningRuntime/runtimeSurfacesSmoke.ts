@@ -120,6 +120,7 @@ const launchFor = (
         ? ['structured-acquisition:contextual_recognition']
         : [],
     contentRequirement: ['compact_learning_material'],
+    contentDemands: [{ contentDemandKey: 'smoke-content', definitionVersion: 'v1' }],
   },
   adapterId: surface.startsWith('interleaved_')
     ? 'interleaved_four_stage'

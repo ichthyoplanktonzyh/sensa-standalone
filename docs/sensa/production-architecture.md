@@ -95,6 +95,11 @@ Learning Target ──resolves durable identity──▶ Retention Target
            Content Provisioning
        Published / On-demand / Hybrid
                     │
+                    ├── On-demand: Content Provisioning Task
+                    │       └── Content Agent Attempt + approved tools
+                    │               └── Material Candidate Bundle
+                    │                       └── independent validation/admission
+                    │
                     ▼
           Learning Materialization
                     ×
@@ -541,8 +546,10 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
    Attempt 与 Result，不调用正式 Learning Kernel 的结算接口；
 11. **Content Provisioning Module**：按 Resolved Learning Plan 将固定 Learning Target 通过 published、
    on-demand 或 hybrid 路径解析为 capability/readiness result 和通过合同校验的不可变 Learning
-   Materialization；它编排独立的 Learning Content LLM role，但不能改写 Sense、Learning Policy 或
-   learner progress；
+   Materialization；它拥有 Provisioning Batch、Content Provisioning Task、Content Agent Attempt、
+   Material Candidate Bundle、独立 validation/admission 与 assembly。Learning Content LLM 及其获准工具
+   只在单 Task Attempt 内生产未受信候选，不能改写 Sense、Learning Policy、Protocol 或 learner progress，
+   也不能批准自身输出；
 12. **Learning Policy & Protocol Module**：拥有 versioned Learning Policy Profiles，结合 Curriculum
    Assignment 解析 Effective Learning Policy 与 Resolved Learning Plan，选择并执行 purpose-specific
    versioned Protocol，定义 Step/Checkpoint、material role binding、Evaluation/Progression/Completion
@@ -623,6 +630,13 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
   输出、权限、校验、provenance 与 fallback 合同约束，不能因使用同一 provider 而合并所有权；
 - 内容来源与 Learning Protocol 必须正交；Published Package 不是唯一合法来源，Structured
   Acquisition 也不是唯一合法协议；
+- 每个 Content Provisioning Task 必须固定单一 Learning Target、purpose-specific Protocol 与 exact
+  Content Demand；Content Agent Attempt 只能在该边界内调用 closed、typed、versioned tools，并在
+  提交 Material Candidate Bundle 后终止；
+- Agent output 与 Agent-side preflight 都不是 authority。只有 system-owned independent validation/
+  admission 和 assembly 可以产生 Learning Materialization；Bundle 被拒绝后的重试必须创建新 Attempt；
+- Provisioning Batch 只是独立 Task 的非原子调度/观测容器；不得共享 target context、传播单项失败、
+  产生 Runtime progress 或定义 learner 每日新学数量；
 - Learning Policy Profile 必须显式、版本化、可审计，并作为 Protocol、Content Requirements、Evaluation/
   Evidence、Progression/Completion、Repair、Scheduling 与 Claim Policy 的命名组合；它不合并这些对象、
   不拥有 progress 或每日数量。Assignment scope/precedence、Effective Policy 与 plan resolution

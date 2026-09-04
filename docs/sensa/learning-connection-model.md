@@ -329,8 +329,9 @@ Progression/Completion Policy，不因“多一张卡”修改 Learning Kernel�
 Content Generation Request 是交给某个供给 adapter 的独立请求。它必须嵌入 exact Content
 Demand，固定 Learning Target / Sense Version / expression binding / Policy / purpose Protocol，
 并携带已冻结的 Content Context Artifacts。target expression、confirmed Sense、经授权的原始场景与
-词典/语料/发音事实都是有 provenance 的 artifact；模型不得自己查找、改写或补齐权威事实。
-Personal Anchor artifact 必须引用有效 use grant。
+词典/语料/发音事实都是有 provenance 的 artifact；模型不得把自身猜测当成权威事实，也不得改写
+固定语义事实。模型通过获准工具取得的结果，必须先冻结为带来源的 Content Context Artifact 或
+Material Candidate，才可参与后续决策。Personal Anchor artifact 必须引用有效 use grant。
 
 模型、Published source 或外部工具的输出先是 Material Candidate。Candidate 必须引用所属 request、
 material role、schema/version、source artifacts、producer/policy provenance 与 digest。只有所有 required
@@ -340,6 +341,55 @@ policy 冻结为 Learning Materialization。“模型返回了 JSON”不是 rea
 TTS 等媒体生成属于 Content Derivation，不是额外交给内容模型的自由上下文。它在源文本/
 发音事实通过适用校验后，按固定 provider/model/voice/accent policy 产出另一个受校验的
 Candidate，不由 LLM 伪造 audio URL 或 media provenance。
+
+### Agentic On-demand Provisioning
+
+当原始场景、Expression 类型和可用客观事实不能预先穷举时，On-demand 路径可以使用一个有界的
+tool-calling agent loop。它只是 Content Provisioning 内部的生产方式，不是 Learning Protocol Step、
+Card、grader 或 Runtime actor。一次 Content Provisioning Task 的身份固定为：
+
+```text
+one Learning Target
+× one purpose-specific Learning Protocol
+× one exact Content Demand
+```
+
+任务边界不是裸 Expression。相同表面形式的不同 Sense 必须进入不同任务；同一 Sense 的不同 target
+expression binding 也必须进入不同任务。任务输入固定 target/Sense/expression、Effective Learning
+Policy、Protocol/Demand、已授权的多模态场景与既有 artifacts，并同时固定允许使用的 tool catalog、
+调用预算和终止条件。
+
+每个 Content Agent Attempt 只能在一个任务内分析并调用封闭、typed、versioned 的工具。任意网络、
+文件或模型能力都不会因为“Agent 需要”而自动获得许可。工具输出按语义进入两类边界：
+
+- 字典、语料、发音索引、OCR/vision 等查证或解析结果，冻结为带 tool/version、input/output digest、
+  source/rights 与授权信息的 Content Context Artifact；
+- TTS、媒体合成或其他内容派生，按 Content Derivation 产生 Material Candidate，而不是被当作无来源
+  的隐藏 prompt context。
+
+Agent 可以在提交前运行 advisory preflight，但不能批准自己的输出。它的唯一成功产物是一个不可变
+Material Candidate Bundle：冻结工具取得的 supporting Context Artifacts，并按 role 列出 Candidates、
+provenance、显式 optional-role omission 与生产记录。Bundle 提交后该 Attempt 终止；后续独立
+validator/admission 只根据 Task 的固定输入与该 Bundle 校验 schema、target、language、safety、rights、
+semantic consistency、renderer support 与 cardinality，并由系统 assembly 产生 Learning Materialization：
+
+```text
+Content Provisioning Task
+→ Content Agent Attempt + approved tools
+→ Material Candidate Bundle     (Agent stops)
+→ independent validation/admission
+→ Learning Materialization
+→ formal Protocol Run
+```
+
+校验拒绝 Bundle 时，系统不得恢复已经结束的 Agent，也不得让它在看过最终判定后修改同一提交物。
+若 retry policy 与预算允许，任务创建新的 Content Agent Attempt，并显式提供可公开的 rejection facts；
+否则任务进入 blocked。所有重试共享固定 Task identity，但各自拥有独立输入快照、调用记录与 Bundle。
+
+批量生成只是 Provisioning Batch 对多个独立 Task 的调度分组。每个 Task 仍拥有独立 Agent context、
+budget、结果、失败和重试；单项失败不得使其他项回滚。基础设施可以共享缓存或使用 provider batch
+以降本，但不得混合 target context 或候选身份。Provisioning Batch 不定义 learner 每日新学数量，
+也不是一个必须整体成功的领域事务。
 
 ### Hybrid
 
@@ -693,10 +743,17 @@ confirmed English-oriented Sense
 × FSRS Scheduling
 ```
 
-该轻量 Profile 的 Learning Materialization 必须足以提供 Experience Recall 的经验/Sense cue，以及
-Expression Reveal 的 target expression/Sense binding。发音、词法或结构信息、用法、例句、边界与
-场景回扣是否成为具体 material role，由后续 Content Demand 裁决；它们不是两张 Card 的通用必填
-字段。该 Profile 不要求 Gate、5D、protected Transfer pool 或 Structured Acquisition Graduation；
+该轻量 Profile 的 `lightweight-initial-content@v1` Content Demand 要求三类材料：Experience Recall
+的 `experience_recall_cue`、Expression Reveal 的 `target_expression` 与 `sense_confirmation`。
+`recall_support`、`pronunciation`、`language_structure`、`usage_guidance` 与 `scene_bridge` 均为有上限的
+可选 role；缺失时对应 Presentation Slot 折叠，不阻塞运行。该集合对 word、phrase、construction 与
+utterance 使用同一个合同，具体可选资源由表达类型与已取得的合法材料决定，而不是把词法字段假定为
+所有 Expression 的必填属性。
+
+其中 target expression 与 confirmed Sense 是权威直通材料，生成模型不得改写；经验 cue、回想支持、
+结构说明、用法提示与场景回扣可以由教学内容供给方提出 Candidate；发音/TTS 只能由有来源的发音事实
+或版本化外部工具派生，不得由 LLM 伪造。Experience Recall 使用的所有 pre-reveal Candidate 必须通过
+不泄露 target expression 的验证。该 Profile 不要求 Gate、5D、protected Transfer pool 或 Structured Acquisition Graduation；
 已有 published Package 可以作为内容源或 fallback，但不是 Personal Meaning 加入学习的前置条件。
 
 ## 14. 代表性组合
@@ -714,8 +771,10 @@ Learning Target、Policy 与 Retention Target；整个过程不创建 Personal M
 
 ### learner 新建 Sense 的轻量学习
 
-learner 确认 `tactful` Sense 后，LLM 根据固定 Sense Version 生成中文场景、英语表达、例句、边界与
-简单 recall 内容，冻结后交给 Lightweight Study。完成后产品只显示“已安排复习”，FSRS 从
+learner 确认 `tactful` Sense 后，系统为固定 Sense Version、target binding 与 Lightweight Content
+Demand 创建 Content Provisioning Task。一个有界 Content Agent Attempt 可以根据经授权场景并调用
+获准工具提出 Material Candidate Bundle；它提交后退出，系统独立校验并冻结 Learning
+Materialization，才交给 Lightweight Study。完成后产品只显示“已安排复习”，FSRS 从
 `protocol_completion + non_evidentiary` basis 开始。
 
 ### Hybrid repair
@@ -753,6 +812,16 @@ origin=`relearning` 的 Memory Outcome。两者都不覆盖 forgotten Outcome。
   Target、不重置 FSRS、不改写 active/historical Protocol facts；
 - Content Provisioning、Learning Protocol、Evidence Policy 与 Scheduling Policy 保持正交；
 - pre-generated 不等于人工，LLM-generated 也不等于 runtime/on-demand；
+- Content Provisioning Task 必须固定单一 Learning Target、purpose Protocol 与 exact Content Demand；
+  裸 Expression 不是任务边界，Agent context 不得跨 Task 混合；
+- Content Agent Attempt 只能调用任务获准的 typed/versioned tools；所有可持久采用的 tool result 必须
+  成为有 provenance 的 Content Context Artifact、Content Derivation 或 Material Candidate；
+- Agent 的权限止于提交未受信的 Material Candidate Bundle；它不能批准自身输出、创建 Learning
+  Materialization、改变 Plan/Protocol/Card、写 learner progress 或在终止后继续参与；
+- Bundle 被拒绝后的修复必须创建新的 Content Agent Attempt；Provisioning Task 拥有生命周期与重试，
+  Agent Attempt 不拥有任务状态；
+- Provisioning Batch 只聚合独立 Task 的调度与观测，不共享 target context 或失败事务，也不拥有
+  learner 的 daily-new quota；
 - 所有学习内容在使用前固定 target、protocol、provenance、validation 与 immutable materialization；
 - 每个 Protocol 固定 `initial_learning | retention_review | relearning` purpose；
 - 成功的 Initial Learning 必须产生 Initial Learning Completion 与 Scheduling Handoff；

@@ -5,14 +5,26 @@
  * resources may appear; the producing model never chooses layout or CSS.
  */
 import {
+  LIGHTWEIGHT_INITIAL_MATERIAL_ROLES,
   sensaCardPresentationDefinitionSchema,
   sensaLearningConnectionContractVersion,
+  sensaLightweightExperienceRecallCueSchema,
+  sensaLightweightLanguageStructureMaterialSchema,
+  sensaLightweightPronunciationMaterialSchema,
+  sensaLightweightRecallSupportSchema,
+  sensaLightweightSceneBridgeMaterialSchema,
+  sensaLightweightSenseConfirmationMaterialSchema,
+  sensaLightweightTargetExpressionMaterialSchema,
+  sensaLightweightUsageGuidanceMaterialSchema,
   type SensaCardPresentationDefinition,
+  type SensaLightweightInitialMaterialRole,
+  type SensaMaterializedResource,
 } from '@sensa/contracts/sensa';
 import {
-  experienceGroundingForTarget,
-  type PrototypeLearningTargetView,
-} from '../learningJourney/prototypeLearning';
+  lightweightMaterializedResourcesForRole,
+  validateLightweightInitialMaterialization,
+  type LightweightInitialLearningMaterialization,
+} from './lightweightInitialContent';
 import {
   LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
   LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND,
@@ -20,19 +32,8 @@ import {
   type LightweightProtocolStepInstance,
 } from './lightweightInitialProtocol';
 
-export const LIGHTWEIGHT_INITIAL_MATERIAL_ROLES = Object.freeze([
-  'experience_recall_cue',
-  'recall_support',
-  'target_expression',
-  'sense_confirmation',
-  'pronunciation',
-  'language_structure',
-  'usage_guidance',
-  'scene_bridge',
-] as const);
-
-export type LightweightInitialMaterialRole =
-  typeof LIGHTWEIGHT_INITIAL_MATERIAL_ROLES[number];
+export { LIGHTWEIGHT_INITIAL_MATERIAL_ROLES };
+export type LightweightInitialMaterialRole = SensaLightweightInitialMaterialRole;
 
 const parsePresentation = (definition: unknown): SensaCardPresentationDefinition =>
   Object.freeze(sensaCardPresentationDefinitionSchema.parse(definition));
@@ -268,27 +269,6 @@ export type LightweightInitialCardPresentation =
   | ExperienceRecallCardPresentation
   | ExpressionRevealCardPresentation;
 
-const containsExpression = (text: string, expression: string): boolean => {
-  const normalize = (value: string): string => value
-    .normalize('NFKC')
-    .trim()
-    .replace(/\s+/gu, ' ')
-    .toLocaleLowerCase();
-  const normalizedExpression = normalize(expression);
-  return normalizedExpression.length > 0 && normalize(text).includes(normalizedExpression);
-};
-
-const assertNoTargetExpressionDisclosure = (
-  target: PrototypeLearningTargetView,
-  values: readonly string[],
-): void => {
-  if (values.some((value) => containsExpression(value, target.expression))) {
-    throw new Error(
-      `Experience Recall material for ${target.targetId} discloses the target expression.`,
-    );
-  }
-};
-
 const requirePresentationMatch = (
   step: LightweightProtocolStepInstance,
   contract: SensaCardPresentationDefinition,
@@ -305,51 +285,140 @@ const requirePresentationMatch = (
   }
 };
 
+const boundResourcesForRole = (
+  step: LightweightProtocolStepInstance,
+  materialization: LightweightInitialLearningMaterialization,
+  role: LightweightInitialMaterialRole,
+): readonly SensaMaterializedResource[] => {
+  const materializationId = materialization.snapshot.learningMaterializationId;
+  const bindings = step.materialBindings.filter((binding) =>
+    binding.materialRoleKey === role);
+  if (bindings.some((binding) => binding.learningMaterializationId !== materializationId)) {
+    throw new Error(`Step ${step.protocolStepInstanceId} mixes Learning Materializations.`);
+  }
+  const available = new Map(lightweightMaterializedResourcesForRole(
+    materialization,
+    role,
+  ).map((resource) => [resource.resourceKey, resource]));
+  return Object.freeze(bindings.map((binding) => {
+    const resource = available.get(binding.resourceKey);
+    if (!resource) {
+      throw new Error(
+        `Step ${step.protocolStepInstanceId} binds missing resource ${binding.resourceKey}.`,
+      );
+    }
+    return resource;
+  }));
+};
+
+const requiredResourceForRole = (
+  step: LightweightProtocolStepInstance,
+  materialization: LightweightInitialLearningMaterialization,
+  role: LightweightInitialMaterialRole,
+): SensaMaterializedResource => {
+  const resources = boundResourcesForRole(step, materialization, role);
+  if (resources.length !== 1) {
+    throw new Error(
+      `Step ${step.protocolStepInstanceId} requires exactly one bound ${role} resource.`,
+    );
+  }
+  return resources[0]!;
+};
+
 export const assembleLightweightInitialPresentation = (
   step: LightweightProtocolStepInstance,
-  target: PrototypeLearningTargetView,
+  materialization: LightweightInitialLearningMaterialization,
 ): LightweightInitialCardPresentation => {
+  validateLightweightInitialMaterialization(materialization);
   if (step.definition.stepKind === LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND) {
     requirePresentationMatch(step, LIGHTWEIGHT_EXPERIENCE_RECALL_PRESENTATION);
-    const grounding = experienceGroundingForTarget(target);
-    assertNoTargetExpressionDisclosure(target, [
-      grounding.scene,
-      grounding.focus,
-      ...grounding.featureLabels,
-    ]);
+    const cue = sensaLightweightExperienceRecallCueSchema.parse(
+      requiredResourceForRole(
+        step,
+        materialization,
+        'experience_recall_cue',
+      ).contentPayload,
+    );
+    const auxiliaryCues = boundResourcesForRole(step, materialization, 'recall_support')
+      .map((resource) => sensaLightweightRecallSupportSchema.parse(
+        resource.contentPayload,
+      ).text);
     return Object.freeze({
       kind: 'experience_recall',
       presentationKey: 'lightweight-experience-recall-card',
       presentationVersion: 'v1',
       slots: Object.freeze({
         experienceSketch: Object.freeze({
-          scene: grounding.scene,
-          senseFocus: grounding.focus,
+          scene: cue.scene,
+          senseFocus: cue.senseFocus,
         }),
-        auxiliaryCues: Object.freeze([...grounding.featureLabels].slice(0, 4)),
+        auxiliaryCues: Object.freeze(auxiliaryCues),
       }),
     });
   }
 
   if (step.definition.stepKind === LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND) {
     requirePresentationMatch(step, LIGHTWEIGHT_EXPRESSION_REVEAL_PRESENTATION);
-    const expressionTypeLabel = target.expressionTypeLabel.trim() || null;
-    const partOfSpeech = target.partOfSpeech.trim() || null;
+    const expression = sensaLightweightTargetExpressionMaterialSchema.parse(
+      requiredResourceForRole(step, materialization, 'target_expression').contentPayload,
+    );
+    const sense = sensaLightweightSenseConfirmationMaterialSchema.parse(
+      requiredResourceForRole(step, materialization, 'sense_confirmation').contentPayload,
+    );
+    const pronunciationResource = boundResourcesForRole(
+      step,
+      materialization,
+      'pronunciation',
+    )[0] ?? null;
+    const structureResource = boundResourcesForRole(
+      step,
+      materialization,
+      'language_structure',
+    )[0] ?? null;
+    const usageResource = boundResourcesForRole(
+      step,
+      materialization,
+      'usage_guidance',
+    )[0] ?? null;
+    const sceneBridgeResource = boundResourcesForRole(
+      step,
+      materialization,
+      'scene_bridge',
+    )[0] ?? null;
+    const pronunciation = pronunciationResource
+      ? sensaLightweightPronunciationMaterialSchema.parse(pronunciationResource.contentPayload)
+      : null;
+    const structure = structureResource
+      ? sensaLightweightLanguageStructureMaterialSchema.parse(structureResource.contentPayload)
+      : null;
+    const usage = usageResource
+      ? sensaLightweightUsageGuidanceMaterialSchema.parse(usageResource.contentPayload)
+      : null;
+    const sceneBridge = sceneBridgeResource
+      ? sensaLightweightSceneBridgeMaterialSchema.parse(sceneBridgeResource.contentPayload)
+      : null;
     return Object.freeze({
       kind: 'expression_reveal',
       presentationKey: 'lightweight-expression-reveal-card',
       presentationVersion: 'v1',
       slots: Object.freeze({
-        expressionPrimary: Object.freeze({ surface: target.expression }),
-        senseConfirmation: Object.freeze({ meaning: target.meaning }),
-        pronunciation: null,
-        languageStructure: expressionTypeLabel || partOfSpeech
-          ? Object.freeze({ expressionTypeLabel, partOfSpeech })
+        expressionPrimary: Object.freeze({ surface: expression.surface }),
+        senseConfirmation: Object.freeze({ meaning: sense.meaning }),
+        pronunciation: pronunciation
+          ? Object.freeze(pronunciation)
           : null,
-        usageGuidance: target.example.trim()
-          ? Object.freeze({ example: target.example })
+        languageStructure: structure
+          ? Object.freeze({
+              expressionTypeLabel: structure.expressionTypeLabel,
+              partOfSpeech: structure.partOfSpeech,
+            })
           : null,
-        sceneBridge: null,
+        usageGuidance: usage
+          ? Object.freeze({ example: usage.example })
+          : null,
+        sceneBridge: sceneBridge
+          ? Object.freeze({ text: sceneBridge.text })
+          : null,
       }),
     });
   }

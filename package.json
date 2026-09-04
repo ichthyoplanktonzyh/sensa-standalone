@@ -41,6 +41,8 @@
     "sensa:web-next-smoke": "npm --prefix apps/web-next run smoke",
     "sensa:extensibility-contract-smoke": "tsx scripts/sensaLearningExtensibilityContractSmoke.ts",
     "sensa:learning-content-contract-smoke": "tsx scripts/sensaLearningContentContractSmoke.ts",
+    "sensa:content-agent-live-smoke": "node --env-file-if-exists=.env --import tsx scripts/sensaDeepSeekContentAgentLiveSmoke.ts",
+    "sensa:deepseek-content-agent-adapter-smoke": "tsx scripts/sensaDeepSeekContentAgentAdapterSmoke.ts",
     "sensa:protocol-progression-smoke": "tsx scripts/sensaProtocolProgressionKernelSmoke.ts",
     "sensa:four-stage-preset-smoke": "npm --prefix apps/web-next run smoke:four-stage",
     "sensa:sync-protocol-smoke": "tsx scripts/sensaSyncProtocolSmoke.ts",

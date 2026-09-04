@@ -1,7 +1,7 @@
 # web-next 学习扩展性架构分解：目标 / 内容 / 实施 / 评价
 
 > 状态：Active implementation decomposition
-> 日期：2026-09-03
+> 日期：2026-09-04
 > Owner 决定：2026-09-03 开放讨论后由 owner 裁决，记录见 §7
 
 ## 0. 层级声明
@@ -157,7 +157,8 @@ Runtime Adapter 和队列都不得再定义每日数量、组大小、批次上�
 | seam | 合同 | 现状 |
 | --- | --- | --- |
 | **能力目标注册表** | 声明所需内容能力 + 四项准入依据 + `prerequisite?`（至多一层） | ✅ 已落地：`retentionScopes.ts`；默认只启用核心连接 scope |
-| **内容供给插件** | `(Learning Target, 内容能力) → 校验 → 冻结 Learning Materialization` | ✅ 已落地：`contentProvisioning.ts`；Plan 保留 Materialization identity |
+| **内容供给插件** | `(Learning Target, 内容能力) → 校验 → 冻结 Learning Materialization` | ✅ 已落地：Lightweight Initial 贯通 context freeze → Candidate producer → validator → coverage/admission → Materialization；Plan 保留 identity |
+| **Agentic 内容生产** | `Task → bounded Attempt + closed tools → Candidate Bundle → independent admission` | ✅ v3 合同与 `contentAgentProvisioning.ts` 已落地；模型只能提交候选草稿，系统拥有 identity/policy/provenance/状态，DeepSeek adapter 只用于显式 live smoke |
 | **编排插件** | `fresh(targets)` / `repair(target, 依据)` → 产出 Step 序列 | ✅ 已落地：`engine/stepOrchestration.ts` + `learningRuntime/orchestrations.ts` |
 | **内容能力集合** | `Protocol Binding → 内容能力集合`，readiness 是集合的合取 | ✅ 已落地：`learningRuntime/contentCapabilities.ts` |
 | **Step intent 轴** | `intent: instruction \| practice \| assessment \| feedback \| repair`，只有 assessment 取证 | ✅ 已落地：`engine/types.ts` 的 `LearningStepIntent` |
@@ -169,7 +170,7 @@ Runtime Adapter 和队列都不得再定义每日数量、组大小、批次上�
 | **Progression Kernel** | 验证并原子应用 credit / invalidate / repair / reassess / reset / complete effects | ✅ 已落地：`packages/learning-kernel/src/runtime/protocolProgression.ts` |
 | **Protocol Policy 注册表** | Evaluation / Progression / Completion / Repair / Memory Outcome 五条正交轴按 identity 组合 | ✅ 已落地：`learningRuntime/protocolPolicies.ts`；composition 阶段 fail closed |
 | **分级长期结果** | `again \| hard \| good \| easy` + basis + evidence level；一次 due Review 至多一个 | ✅ 已落地：Learning Kernel、ReviewQueue 与 storage 共用同一 Outcome |
-| **Content Demand 合同** | 版本化 role/schema/cardinality/use/validator/derivation；生成 request 自包含冻结上下文 | ✅ 通用语言无关合同已落地；尚未声明具体 lightweight Demand |
+| **Content Demand 合同** | 版本化 role/schema/cardinality/use/validator/derivation；生成 request 自包含冻结上下文 | ✅ 通用合同 + `lightweight-initial-content@v1` 已落地；供给与 validator policy/version 均钉死 |
 
 ### 5.1 消除 surface 闭集
 
@@ -424,6 +425,17 @@ frozen before use"。理由是失败必须可归因：材料每次现生成，�
 17. ✅ Lightweight Initial 两卡合同：Experience Recall / Expression Reveal 作为正式 Protocol Step，
     rating 不是第三张 Card，Completion 不是 Step；共享 Presentation Slot contract 固定必要/可选区域与
     pre-reveal non-disclosure，运行状态机移出 React renderer 并通过 completion-only kernel 执行。
+18. ✅ Lightweight Initial Content Demand v1 纵切：expression/Sense 权威直通，教学 Candidate 与客观
+    pronunciation derivation 分离；无成本 deterministic adapter 贯通 request、validation、coverage 与
+    immutable Materialization。Step Instance 固定 material-role/resource binding，Presentation 只消费
+    Materialization；optional resource 缺失、word/phrase/utterance 共用合同与 pre-reveal 泄露均有 smoke。
+19. ✅ Agentic Content Provisioning 纵切：Content Contract v3 固定 Task/Attempt/Bundle、approved tool
+    catalog、model/tool budget、tool-call provenance、supporting artifacts 与显式 optional-role omission；
+    `contentAgentProvisioning.ts` 执行有界 ReAct loop，`lightweightAgenticProvisioning.ts` 在 Agent 终止后
+    独立 validation/admission 并物化。无成本 smoke 覆盖工具调用、成功物化、pre-reveal 泄露拒绝与
+    未授权工具阻断；DeepSeek Chat Completions adapter 另有 mock-transport smoke。真实
+    `deepseek-v4-flash` 验收只能由 `npm run sensa:content-agent-live-smoke` 显式触发，缺少
+    `DEEPSEEK_API_KEY` 时不会发起请求，也不成普通 build/smoke 的一部分。
 
 当前**仍不做**：能力目标选择 UI、拼写/听写 scope、第三 preset 的生产 API/
 跨端持久化，以及复刻应用的非核心宿主层功能（拼写弹窗、全屏例句、点词查询等）。

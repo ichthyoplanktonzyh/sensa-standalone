@@ -217,6 +217,12 @@ function sameProtocolBinding(
     && left.repairPolicyId === right.repairPolicyId
     && left.memoryOutcomePolicyId === right.memoryOutcomePolicyId
     && sameOrderedIdentities(left.checkpointDefinitionIds, right.checkpointDefinitionIds)
+    && sameOrderedIdentities(
+      left.contentDemands.map((demand) =>
+        `${demand.contentDemandKey}@${demand.definitionVersion}`),
+      right.contentDemands.map((demand) =>
+        `${demand.contentDemandKey}@${demand.definitionVersion}`),
+    )
     && sameContentCapabilitySet(left.contentRequirement, right.contentRequirement);
 }
 

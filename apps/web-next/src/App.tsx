@@ -96,6 +96,7 @@ import {
   PROTOTYPE_LEARNING_TARGETS,
   defaultRetentionTargetIdFor,
   isPrototypeLearningTargetId,
+  lightweightInitialMaterializationForTarget,
   provisionedForPolicy,
   readinessForPolicy,
   runtimePackageForTarget,
@@ -381,12 +382,23 @@ export default function App() {
   const lightweightInitialRetentionTargetId = lightweightInitialTargetId
     ? defaultRetentionTargetIdFor(PROTOTYPE_LEARNING_TARGETS[lightweightInitialTargetId])
     : null;
+  const lightweightInitialMaterialization = useMemo(
+    () => lightweightInitialTargetId
+      ? lightweightInitialMaterializationForTarget(
+          PROTOTYPE_LEARNING_TARGETS[lightweightInitialTargetId],
+        )
+      : null,
+    [lightweightInitialTargetId],
+  );
   const {
     state: lightweightInitialProtocolState,
     step: lightweightInitialProtocolStep,
     reveal: revealLightweightExpression,
     rate: rateLightweightInitial,
-  } = useLightweightInitialProtocol(lightweightInitialRetentionTargetId);
+  } = useLightweightInitialProtocol(
+    lightweightInitialRetentionTargetId,
+    lightweightInitialMaterialization,
+  );
   const lightweightReviewTargetIds = retentionRunOn(runtimeSession, 'lightweight_retention');
   const fourStageInitialTargetIds = initialRunOn(runtimeSession, 'interleaved_four_stage');
   const fourStageReviewTargetIds = retentionRunOn(
@@ -2075,6 +2087,7 @@ export default function App() {
           <LightweightRuntimeStartScreen
             active={viewMode === 'lightweight'}
             target={activeLightweightRuntimeTarget}
+            materialization={lightweightInitialMaterialization}
             step={lightweightInitialProtocolStep}
             completed={lightweightInitialProtocolState?.progress.completed ?? false}
             hasNextTarget={lightweightInitialTargetIds.length > 1}

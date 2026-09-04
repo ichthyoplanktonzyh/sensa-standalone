@@ -8,6 +8,7 @@
 import {
   sensaLearningConnectionContractVersion,
   sensaProtocolStepDefinitionSchema,
+  type SensaProtocolStepMaterialBinding,
   type SensaProtocolStepDefinition,
   type SensaProtocolStepTransitionRule,
 } from '@sensa/contracts/sensa';
@@ -147,6 +148,7 @@ export interface LightweightProtocolStepInstance {
   readonly retentionTargetId: string;
   readonly ordinal: number;
   readonly definition: SensaProtocolStepDefinition;
+  readonly materialBindings: readonly SensaProtocolStepMaterialBinding[];
 }
 
 export interface LightweightCompletedStep {
@@ -159,6 +161,8 @@ export interface LightweightCompletedStep {
 export interface LightweightInitialProtocolRunState {
   readonly protocolRunId: string;
   readonly retentionTargetId: string;
+  readonly learningMaterializationId: string;
+  readonly materialBindings: readonly SensaProtocolStepMaterialBinding[];
   readonly currentStepDefinitionId: string | null;
   readonly currentStepOrdinal: number;
   readonly eventOrdinal: number;
@@ -222,12 +226,46 @@ validateLightweightInitialProtocol();
 export const createLightweightInitialProtocolRun = (input: Readonly<{
   protocolRunId: string;
   retentionTargetId: string;
+  learningMaterializationId: string;
+  materialResources: readonly Readonly<{
+    materialRoleKey: string;
+    resourceKey: string;
+  }>[];
 }>): LightweightInitialProtocolRunState => {
   if (input.protocolRunId.trim().length === 0) throw new Error('Protocol Run identity is required.');
   if (input.retentionTargetId.trim().length === 0) throw new Error('Retention Target identity is required.');
+  if (input.learningMaterializationId.trim().length === 0) {
+    throw new Error('Learning Materialization identity is required.');
+  }
+  const bindingKeys = new Set<string>();
+  const materialBindings = input.materialResources.map((resource) => {
+    const bindingKey = `${resource.materialRoleKey}:${resource.resourceKey}`;
+    if (bindingKeys.has(bindingKey)) {
+      throw new Error(`Duplicate Lightweight material binding: ${bindingKey}`);
+    }
+    bindingKeys.add(bindingKey);
+    return Object.freeze({
+      materialRoleKey: resource.materialRoleKey,
+      learningMaterializationId: input.learningMaterializationId,
+      resourceKey: resource.resourceKey,
+    });
+  });
+  for (const definition of LIGHTWEIGHT_INITIAL_STEP_DEFINITIONS) {
+    for (const requirement of definition.materialRequirements.filter((candidate) =>
+      candidate.required)) {
+      if (!materialBindings.some((binding) =>
+        binding.materialRoleKey === requirement.materialRoleKey)) {
+        throw new Error(
+          `Learning Materialization lacks required role ${requirement.materialRoleKey} for ${definition.protocolStepDefinitionId}.`,
+        );
+      }
+    }
+  }
   return Object.freeze({
     protocolRunId: input.protocolRunId,
     retentionTargetId: input.retentionTargetId,
+    learningMaterializationId: input.learningMaterializationId,
+    materialBindings: Object.freeze(materialBindings),
     currentStepDefinitionId: LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_ID,
     currentStepOrdinal: 1,
     eventOrdinal: 0,
@@ -243,12 +281,16 @@ export const currentLightweightInitialStep = (
 ): LightweightProtocolStepInstance | null => {
   if (state.currentStepDefinitionId === null) return null;
   const definition = definitionFor(state.currentStepDefinitionId);
+  const admittedRoles = new Set(definition.materialRequirements.map((requirement) =>
+    requirement.materialRoleKey));
   return Object.freeze({
     protocolStepInstanceId: `${state.protocolRunId}:step:${state.currentStepOrdinal}`,
     protocolRunId: state.protocolRunId,
     retentionTargetId: state.retentionTargetId,
     ordinal: state.currentStepOrdinal,
     definition,
+    materialBindings: Object.freeze(state.materialBindings.filter((binding) =>
+      admittedRoles.has(binding.materialRoleKey))),
   });
 };
 
@@ -307,4 +349,3 @@ export const transitionLightweightInitialProtocol = (
   });
   return Object.freeze({ state: nextState, completedStep });
 };
-

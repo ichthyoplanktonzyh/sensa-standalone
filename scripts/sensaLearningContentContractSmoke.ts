@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  assembleContentDemandMaterialization,
   assessContentDemandCoverage,
   sensaContentDemandDefinitionSchema,
   sensaContentGenerationRequestSchema,
@@ -60,7 +61,11 @@ const demand = sensaContentDemandDefinitionSchema.parse({
       eligibleStepIntents: ["instruction", "practice"],
       evidenceEligibility: "none",
       provisioningPolicyId: "smoke.generate-or-reuse-v1",
-      validatorPolicyIds: ["schema-v1", "semantic-alignment-v1"],
+      provisioningPolicyVersion: "v1",
+      validatorPolicies: [
+        { validatorPolicyId: "schema-v1", validatorVersion: "v1" },
+        { validatorPolicyId: "semantic-alignment-v1", validatorVersion: "v1" },
+      ],
     },
     {
       materialRoleKey: "derived_material",
@@ -71,8 +76,12 @@ const demand = sensaContentDemandDefinitionSchema.parse({
       contentSchemaVersion: "v1",
       eligibleStepIntents: ["instruction"],
       evidenceEligibility: "none",
-      provisioningPolicyId: "smoke.external-tool-v1",
-      validatorPolicyIds: ["schema-v1", "source-binding-v1"],
+      provisioningPolicyId: "smoke.media-producer",
+      provisioningPolicyVersion: "v1",
+      validatorPolicies: [
+        { validatorPolicyId: "schema-v1", validatorVersion: "v1" },
+        { validatorPolicyId: "source-binding-v1", validatorVersion: "v1" },
+      ],
     },
   ],
   derivations: [{
@@ -90,6 +99,8 @@ const demand = sensaContentDemandDefinitionSchema.parse({
 
 const request = sensaContentGenerationRequestSchema.parse({
   contractVersion: sensaLearningContentContractVersion,
+  contentProvisioningTaskId: id("30"),
+  contentAgentAttemptId: id("31"),
   contentGenerationRequestId: id("1"),
   idempotencyKey: "smoke-request-1",
   learnerUserId: "learner-1",
@@ -97,6 +108,7 @@ const request = sensaContentGenerationRequestSchema.parse({
   senseId: id("3"),
   senseVersionId: id("4"),
   senseExpressionBindingId: id("5"),
+  resolvedLearningPlanRevisionId: "smoke-plan-v1",
   profileId: "smoke-profile",
   profileVersion: "v1",
   protocolPurpose: "initial_learning",
@@ -119,6 +131,8 @@ const request = sensaContentGenerationRequestSchema.parse({
       payload: { expression: "example" },
       contentDigest: digest("1"),
       personalAnchorUseGrantId: null,
+      producerToolCallId: null,
+      mediaReference: null,
     },
     {
       artifactId: "confirmed-sense-artifact",
@@ -130,6 +144,8 @@ const request = sensaContentGenerationRequestSchema.parse({
       payload: { sense: "fixed meaning" },
       contentDigest: digest("2"),
       personalAnchorUseGrantId: null,
+      producerToolCallId: null,
+      mediaReference: null,
     },
     {
       artifactId: "reference-fact-artifact",
@@ -141,8 +157,16 @@ const request = sensaContentGenerationRequestSchema.parse({
       payload: { definition: "source-backed fact" },
       contentDigest: digest("3"),
       personalAnchorUseGrantId: null,
+      producerToolCallId: null,
+      mediaReference: null,
     },
   ],
+  approvedTools: [],
+  attemptBudget: {
+    maxModelTurns: 1,
+    maxToolCalls: 0,
+    timeoutMs: 30_000,
+  },
   generatorPolicyId: "smoke-content-generator",
   generatorPolicyVersion: "v1",
   requestedAt: now,
@@ -167,7 +191,7 @@ const primaryCandidate = sensaMaterialCandidateSchema.parse({
   productionMethod: "model_generation",
   producerProvider: "smoke-provider",
   producerModel: "smoke-model",
-  producerPolicyId: "smoke-content-generator",
+  producerPolicyId: "smoke.generate-or-reuse-v1",
   producerPolicyVersion: "v1",
   producedAt: now,
 });
@@ -224,15 +248,33 @@ const derivedValidation = validation(
 assert.deepEqual(
   assessContentDemandCoverage({
     request,
+    supportingContextArtifacts: [],
     candidates: [primaryCandidate, derivedCandidate],
     validations: [primaryValidation, derivedValidation],
   }),
   { status: "satisfied", issues: [] },
 );
 
+const assembled = assembleContentDemandMaterialization({
+  request,
+  supportingContextArtifacts: [],
+  candidates: [derivedCandidate, primaryCandidate],
+  validations: [primaryValidation, derivedValidation],
+});
+assert.equal(assembled.status, "satisfied");
+assert.ok(assembled.content);
+assert.deepEqual(
+  assembled.content.resources.map((resource) => resource.resourceKey),
+  ["primary_material:0", "derived_material:0"],
+  "Assembly follows Demand role order rather than producer completion order.",
+);
+assert.equal(Object.isFrozen(assembled.content), true);
+assert.equal(Object.isFrozen(assembled.content.resources), true);
+
 assert.equal(
   assessContentDemandCoverage({
     request,
+    supportingContextArtifacts: [],
     candidates: [primaryCandidate],
     validations: [primaryValidation],
   }).status,
@@ -247,6 +289,7 @@ const wrongSchema = {
 assert.equal(
   assessContentDemandCoverage({
     request,
+    supportingContextArtifacts: [],
     candidates: [primaryCandidate, wrongSchema],
     validations: [primaryValidation, derivedValidation],
   }).status,
@@ -262,6 +305,7 @@ const incompleteValidation = validation(
 assert.equal(
   assessContentDemandCoverage({
     request,
+    supportingContextArtifacts: [],
     candidates: [primaryCandidate, derivedCandidate],
     validations: [incompleteValidation, derivedValidation],
   }).status,
@@ -269,9 +313,43 @@ assert.equal(
   "A Candidate cannot omit a validator required by its material role.",
 );
 
+const wrongValidatorVersion = sensaMaterialCandidateValidationSchema.parse({
+  ...primaryValidation,
+  materialCandidateValidationId: id("23"),
+  validatorResults: primaryValidation.validatorResults.map((result) =>
+    result.validatorPolicyId === "semantic-alignment-v1"
+      ? { ...result, validatorVersion: "wrong-version" }
+      : result),
+});
 assert.equal(
   assessContentDemandCoverage({
     request,
+    supportingContextArtifacts: [],
+    candidates: [primaryCandidate, derivedCandidate],
+    validations: [wrongValidatorVersion, derivedValidation],
+  }).status,
+  "invalid",
+  "A Candidate cannot satisfy a pinned validator with another validator version.",
+);
+
+assert.equal(
+  assessContentDemandCoverage({
+    request,
+    supportingContextArtifacts: [],
+    candidates: [{
+      ...primaryCandidate,
+      producerPolicyId: "another-provisioning-policy",
+    }, derivedCandidate],
+    validations: [primaryValidation, derivedValidation],
+  }).status,
+  "invalid",
+  "A Candidate must use the provisioning policy pinned by its material role.",
+);
+
+assert.equal(
+  assessContentDemandCoverage({
+    request,
+    supportingContextArtifacts: [],
     candidates: [primaryCandidate, {
       ...derivedCandidate,
       producerPolicyVersion: "wrong-version",
@@ -282,11 +360,20 @@ assert.equal(
   "External derivations must use the producer policy pinned by the Content Demand.",
 );
 
-assert.equal(sensaContentGenerationRequestSchema.safeParse({
+const requestAwaitingRequiredToolContext = sensaContentGenerationRequestSchema.parse({
   ...request,
   contextArtifacts: request.contextArtifacts.filter((artifact) =>
     artifact.contextKind !== "reference_facts"),
-}).success, false, "The request must be standalone and contain every demanded context kind.");
+});
+assert.equal(assessContentDemandCoverage({
+  request: requestAwaitingRequiredToolContext,
+  supportingContextArtifacts: [],
+  candidates: [{
+    ...primaryCandidate,
+    sourceArtifactIds: ["target-expression-artifact", "confirmed-sense-artifact"],
+  }, derivedCandidate],
+  validations: [primaryValidation, derivedValidation],
+}).status, "incomplete", "An Attempt may acquire demanded context through tools, but admission remains incomplete until it does.");
 
 assert.equal(sensaContentGenerationRequestSchema.safeParse({
   ...request,
@@ -302,6 +389,8 @@ assert.equal(sensaContentGenerationRequestSchema.safeParse({
       payload: { scene: "private" },
       contentDigest: digest("6"),
       personalAnchorUseGrantId: null,
+      producerToolCallId: null,
+      mediaReference: null,
     },
   ],
 }).success, false, "Personal context without an explicit use grant must be rejected.");

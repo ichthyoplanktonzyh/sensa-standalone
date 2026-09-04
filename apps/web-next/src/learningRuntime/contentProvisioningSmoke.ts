@@ -8,6 +8,7 @@ import {
   ContentProvisioningRegistry,
   type ContentProvisioningAdapter,
 } from './contentProvisioning';
+import type { LightweightInitialLearningMaterialization } from './lightweightInitialContent';
 
 const failures: string[] = [];
 let checks = 0;
@@ -20,14 +21,23 @@ const check = (label: string, ok: boolean): void => {
 const borrow = PROTOTYPE_LEARNING_TARGETS['borrow-receive'];
 const tactful = PROTOTYPE_LEARNING_TARGETS['tactful-expression'];
 const compact = prototypeContentProvisioning.resolve(borrow, 'compact_learning_material');
+const compactAgain = prototypeContentProvisioning.resolve(borrow, 'compact_learning_material');
 const structured = prototypeContentProvisioning.resolve(borrow, 'structured_learning_package');
 const missing = prototypeContentProvisioning.resolve(tactful, 'structured_learning_package');
 
+const compactContent = compact.materialization?.content as
+  | LightweightInitialLearningMaterialization
+  | undefined;
 check('紧凑内容经过 provider 形成有稳定 identity 的冻结 Materialization',
   compact.provisioned
-  && compact.materialization?.materializationId === 'prototype-compact:borrow-receive:v1'
+  && compact.materialization !== null
+  && compact.materialization?.materializationId
+    === compactContent?.snapshot.learningMaterializationId
+  && compact.materialization?.materializationId
+    === compactAgain.materialization?.materializationId
   && Object.isFrozen(compact.materialization)
-  && Object.isFrozen(compact.materialization.content));
+  && Object.isFrozen(compact.materialization.content)
+  && Object.isFrozen(compactContent?.content.resources));
 check('结构化包经过同一 seam 形成 Materialization',
   structured.provisioned
   && structured.materialization?.capabilityId === 'structured_learning_package');

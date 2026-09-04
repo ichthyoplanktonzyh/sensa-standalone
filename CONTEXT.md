@@ -47,7 +47,8 @@ Construction. It cannot create learner confirmation or learning content by side 
 **Learning Content LLM Role**:
 The constrained model role that generates candidate material for one fixed
 Learning Target, Effective Learning Policy and purpose-specific Protocol. It cannot
-change the Sense, silently downgrade the Policy or write learner progress.
+change the Sense, silently downgrade the Policy, approve its own output or write
+learner progress.
 
 **Grading LLM Role**:
 A future optional model role that evaluates an open response under a pinned
@@ -129,6 +130,23 @@ on-demand or hybrid content, under a fixed Content Demand, into one immutable
 Learning Materialization. It does not choose the Learning Protocol or modify
 learner progress.
 
+**Content Provisioning Task**:
+The durable preparation objective for one fixed Learning Target, purpose-specific
+Learning Protocol and exact Content Demand. It owns provisioning status and may
+use multiple Content Agent Attempts, but never owns learner progress or Runtime state.
+
+**Provisioning Batch**:
+A non-atomic operational grouping of independent Content Provisioning Tasks for
+dispatch, budgets and progress reporting. It does not share agent context, content
+identity or failure fate, and it does not define daily learning quantity.
+
+**Content Agent Attempt**:
+One bounded, auditable execution of the Learning Content LLM Role and its approved
+tools for a single Content Provisioning Task. It ends when it submits one Material
+Candidate Bundle or fails, and has no authority after termination.
+
+_Avoid_: Agent thread, generation chat
+
 **Content Demand**:
 A source-neutral, versioned and machine-readable declaration of the material
 roles and input context a Learning Protocol requires, including their schemas,
@@ -139,19 +157,26 @@ supplies it, and it does not prescribe Cards or session order.
 **Content Context Artifact**:
 One immutable, provenance-bearing input supplied to Content Provisioning, such
 as the fixed target expression, confirmed Sense, an authorized Personal Anchor
-or a source-backed lexical fact. A producing model consumes these artifacts; it
-does not fetch, invent or replace their authority.
+or a source-backed lexical fact. It may be supplied initially or frozen from an
+approved tool result; a model's unsupported observation never becomes authority.
 
 **Content Generation Request**:
 A standalone, idempotent request that combines one fixed Learning Target,
 Effective Learning Policy, purpose-specific Learning Protocol, exact Content
-Demand and the authorized Content Context Artifacts needed to satisfy it.
+Demand, initial authorized Content Context Artifacts and approved tool/budget
+constraints for one production attempt.
 
 **Material Candidate**:
 One untrusted proposed item for a declared material role, whether generated,
 reused or derived by an external tool. It cannot enter a Protocol Run until its
 schema, provenance, required validators and Content Demand coverage are accepted
 and it is assembled into a Learning Materialization.
+
+**Material Candidate Bundle**:
+The immutable submission of supporting Content Context Artifacts, role-indexed
+Material Candidates, provenance and explicit optional-role omissions from one
+Content Agent Attempt. It is untrusted input to independent validation, not a
+Learning Materialization.
 
 **Content Derivation**:
 A versioned transformation from accepted source material into another declared

@@ -10,3 +10,4 @@ export * from "./semanticRegistry.js";
 export * from "./personalSemanticWorld.js";
 export * from "./learningConnection.js";
 export * from "./learningContent.js";
+export * from "./lightweightLearningContent.js";

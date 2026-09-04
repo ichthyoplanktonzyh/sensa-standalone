@@ -351,6 +351,46 @@ unsave、不删除 Note/Anchor/Collection Membership、Retention Target 或 Lear
 其他 active/maintenance source 覆盖，它继续在有效 Study Scope 中；若已无任何有效 source，它从
 后续 Session 的正式候选中退出，但保留 phase、Protocol Run、Evidence 与 FSRS，重新加入时从原状态恢复。
 
+### On-demand Content Provisioning lifecycle
+
+需要动态材料的 Resolved Learning Plan 通过 Content Provisioning Task 管理准备状态。Task 是
+system-owned 的 durable lifecycle，不是 Agent session，也不进入 formal Protocol Runtime。它固定一个
+Learning Target、一个 purpose-specific Protocol、exact Content Demand 和 plan revision；其状态闭集为：
+
+```text
+queued | preparing | submitted | validating | ready | blocked | cancelled
+```
+
+- `queued`：任务已创建但尚未开始生产；
+- `preparing`：系统正在复用资源、运行 Content Agent Attempt 或执行派生；
+- `submitted`：一个不可变 Material Candidate Bundle 已提交，产生它的 Agent Attempt 已结束；
+- `validating`：system-owned validator/admission 正在检查 Bundle 与 Demand；
+- `ready`：独立校验和 assembly 已完成，并已产生可引用的 Learning Materialization；
+- `blocked`：当前合法路径、重试预算或必需能力无法满足 Demand，保留可审计原因；
+- `cancelled`：该 preparation intent 被显式终止；它不删除已接纳 Curriculum membership 或历史 Attempt。
+
+`submitted`/`validating` 被拒绝或 `preparing` 失败时，Task 可以按固定 retry policy 回到 `preparing` 并
+创建新 Attempt；不能恢复或改写旧 Attempt。Content Agent Attempt 自己只有：
+
+```text
+running → submitted | failed | timed_out | cancelled
+```
+
+Attempt 的 `submitted` 只说明 Bundle 已冻结，不代表 Task `ready`。Bundle 的独立 validation result 为
+`accepted | rejected`；`accepted` 后仍由 system-owned assembly 创建 Materialization，`rejected` 保存
+validator/version、reason codes 与被检对象 digest，再由 Task 决定重试或 `blocked`。Agent 可执行的
+preflight 不产生这个 authoritative result。
+
+Resolved Learning Plan readiness 只投影上述事实：尚在 `queued/preparing/submitted/validating` 的
+purpose 为 `preparing`，有效 Materialization 产生后才为 `ready`，Task `blocked` 时为 `blocked`。
+`cancelled` Task 不再贡献 readiness；系统从其他合法 provisioning path 重新解析，没有可用路径时以
+`preparation_cancelled` 原因保持 plan `blocked`。正式 Planner、Session 与 Protocol Run 永远不读取
+Agent state、tool transcript 或 Candidate Bundle，只读取 plan-pinned immutable Learning Materialization。
+
+Provisioning Batch 是多个 Task 的非原子调度/观测容器。一个 Task 的 failure、timeout、cancel 或 retry
+不改变其他 Task；batch completion 只是成员状态汇总，不产生 Learning Completion、daily-new quota 消耗
+或 Runtime transition。每日学习数量仍只由 learner 的 Study Plan 与 Unified Planner 决定。
+
 ### Study Scope Revision 与每日额度
 
 Study Scope 是 mode-aware、source-aware、policy-resolved 的去重 scope snapshot：active Enrollment 提供
