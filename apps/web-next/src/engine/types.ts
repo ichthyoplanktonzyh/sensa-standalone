@@ -22,13 +22,15 @@ export type LearningCapability =
  * `capability === 'introduction'` 判断。现在它是 `intent: 'instruction'`，
  * 讲解步的 `capability` 就是 null——它确实不练任何能力。
  *
- * 今天只产出 instruction / assessment / repair 三种；`practice` 是给编排插件
- * 预留的第四种意图：练但不取证。
+ * 当前队列只产出 instruction / assessment / repair 三种；`practice`（练但
+ * 不取证）由轻量首学使用，`feedback` 则为独立反馈 Step 保留。二者都不能
+ * 自行产生 Evidence。
  */
 export type LearningStepIntent =
   | 'instruction'
   | 'practice'
   | 'assessment'
+  | 'feedback'
   | 'repair';
 
 export type ScheduledActionKind =
@@ -67,7 +69,7 @@ export interface RepairResourceReference {
  * （RecognitionCard），在到期复习是 `review_assessment`
  * （SensaReviewAssessmentCard）——所以它推不出来，只能由产出这一步的编排回答。
  *
- * 内置七种在联合里列出只为补全提示；类型本身对插件开放（`string & {}` 是
+ * 内置九种在联合里列出只为补全提示；类型本身对插件开放（`string & {}` 是
  * TypeScript 里"已知值 + 任意字符串"的写法，直接写 `string` 会让字面量提示
  * 全部消失）。真正的闭合发生在注册表：查不到就抛错。
  */
@@ -78,7 +80,9 @@ export type BuiltinLearningStepKind =
   | 'transfer'
   | 'review_assessment'
   | 'review_feedback'
-  | 'review_repair';
+  | 'review_repair'
+  | 'lightweight_experience_recall'
+  | 'lightweight_expression_reveal';
 
 export type LearningStepKind = BuiltinLearningStepKind | (string & {});
 

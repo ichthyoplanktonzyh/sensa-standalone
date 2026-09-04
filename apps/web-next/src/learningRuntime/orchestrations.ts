@@ -71,10 +71,13 @@ export const initialCompletionContractOf = (
 
 const lightweightStudy: OrchestrationDefinition = {
   orchestrationId: 'lightweight_study',
-  // 场景 → 回想 → 揭晓。回想那一步是 practice：学习者自评，评语只作为
-  // 完成记录留档，既不进 Gate 也不改排期——练，但不取证。
+  // Experience Recall → Expression Reveal。前者是 practice，后者是
+  // instruction；rating 只控制 repeat/complete，不进 Gate、不形成 Evidence。
   stepIntents: ['instruction', 'practice'],
-  requiredStepKinds: [],
+  requiredStepKinds: [
+    'lightweight_experience_recall',
+    'lightweight_expression_reveal',
+  ],
   initialCompletion: {
     completionKind: 'study_completion',
     protocolOutcome: 'study_completed',

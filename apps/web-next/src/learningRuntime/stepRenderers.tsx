@@ -14,15 +14,14 @@
  *    差异（讲解卡带 `sentenceIndex`、评测卡固定 `(0, 0)`）这类事实，落地前
  *    散在七个分支里，现在由每个适配函数自己声明。
  *
- * `StepRendererHost` 是宿主能力面，与 `RuntimeSurfaceContext` 同一角色：
+ * `StepRendererHost` 是结构化卡片的宿主能力面，与 `RuntimeSurfaceContext` 同一角色：
  * App 提供一份、所有卡共用。`LearnScreen` 落地前的三十余个 prop 里凡是
  * 卡片要的，都收进这份合同；屏幕自己的工具栏回调（退出/撤回/声明已会/
  * 更多/拼写）不进合同——那是屏的接口，不是卡的。
  *
- * 不在本表内的是"哪块屏拿哪次运行"：轻量首学与轻量复习仍是自包含的固定
- * 屏（相位机），不产出 Step。它们的 Step 化与"App.tsx 退化为『当前有无
- * Step / 渲染它』的壳"是同一步后续工作，见
- * `docs/sensa/learning-extensibility-architecture.md` §5.1。
+ * Lightweight Initial 也从同一注册表查两个 renderer，但使用自己更小的 props
+ * interface；注册表擦除不同 renderer 的具体 props，而每个调用方在 get 时恢复
+ * 自己的类型。Lightweight Retention 仍是待迁移的固定相位屏。
  */
 import type { ReactNode } from 'react';
 import type {
@@ -40,6 +39,15 @@ import { RecallCard } from '../components/cards/RecallCard';
 import { NovelTransferCard } from '../components/cards/NovelTransferCard';
 import { SensaReviewAssessmentCard } from '../components/cards/review/SensaReviewAssessmentCard';
 import { SensaReviewFeedbackCard } from '../components/cards/review/SensaReviewFeedbackCard';
+import { ExperienceRecallCard } from '../components/cards/lightweight/ExperienceRecallCard';
+import { ExpressionRevealCard } from '../components/cards/lightweight/ExpressionRevealCard';
+import type {
+  LightweightInitialCardPresentation,
+} from './lightweightInitialPresentation';
+import type {
+  LightweightInitialRating,
+  LightweightProtocolStepInstance,
+} from './lightweightInitialProtocol';
 import type {
   ReviewAssessmentResult,
   ReviewAssessmentSpec,
@@ -104,11 +112,19 @@ export interface StepRendererProps {
   readonly host: StepRendererHost;
 }
 
-export type StepRenderer = (props: StepRendererProps) => ReactNode;
+export interface LightweightInitialStepRendererProps {
+  readonly step: LightweightProtocolStepInstance;
+  readonly presentation: LightweightInitialCardPresentation;
+  readonly onReveal: () => void;
+  readonly onRate: (rating: LightweightInitialRating) => void;
+}
+
+export type StepRenderer<TProps = StepRendererProps> = (props: TProps) => ReactNode;
 
 export interface StepRendererDefinition {
   readonly stepKind: LearningStepKind;
-  readonly render: StepRenderer;
+  /** Concrete props are recovered by the registered caller through get<TProps>. */
+  readonly render: StepRenderer<never>;
 }
 
 /* ============================================================
@@ -303,6 +319,36 @@ const renderReviewFeedback = (props: StepRendererProps): ReactNode => {
   );
 };
 
+const renderLightweightExperienceRecall = (
+  props: LightweightInitialStepRendererProps,
+): ReactNode => {
+  if (props.presentation.kind !== 'experience_recall') {
+    throw new Error(`Experience Recall renderer received ${props.presentation.kind}.`);
+  }
+  return (
+    <ExperienceRecallCard
+      key={props.step.protocolStepInstanceId}
+      presentation={props.presentation}
+      onReveal={props.onReveal}
+    />
+  );
+};
+
+const renderLightweightExpressionReveal = (
+  props: LightweightInitialStepRendererProps,
+): ReactNode => {
+  if (props.presentation.kind !== 'expression_reveal') {
+    throw new Error(`Expression Reveal renderer received ${props.presentation.kind}.`);
+  }
+  return (
+    <ExpressionRevealCard
+      key={props.step.protocolStepInstanceId}
+      presentation={props.presentation}
+      onRate={props.onRate}
+    />
+  );
+};
+
 export const BUILTIN_STEP_RENDERERS: readonly StepRendererDefinition[] = [
   { stepKind: 'introduction', render: renderIntroduction },
   { stepKind: 'recognition', render: renderRecognition },
@@ -311,6 +357,8 @@ export const BUILTIN_STEP_RENDERERS: readonly StepRendererDefinition[] = [
   { stepKind: 'review_assessment', render: renderReviewAssessment },
   { stepKind: 'review_feedback', render: renderReviewFeedback },
   { stepKind: 'review_repair', render: renderReviewRepair },
+  { stepKind: 'lightweight_experience_recall', render: renderLightweightExperienceRecall },
+  { stepKind: 'lightweight_expression_reveal', render: renderLightweightExpressionReveal },
 ];
 
 /**
@@ -318,7 +366,7 @@ export const BUILTIN_STEP_RENDERERS: readonly StepRendererDefinition[] = [
  * renderer 的章，是建模错误，渲染成空白只会把问题藏到测试之外。
  */
 export class StepRendererRegistry {
-  readonly #renderers: ReadonlyMap<string, StepRenderer>;
+  readonly #renderers: ReadonlyMap<string, StepRenderer<never>>;
 
   public constructor(definitions: readonly StepRendererDefinition[]) {
     const seen = new Set<string>();
@@ -331,12 +379,12 @@ export class StepRendererRegistry {
     this.#renderers = new Map(definitions.map((definition) => [definition.stepKind, definition.render]));
   }
 
-  public get(stepKind: LearningStepKind): StepRenderer {
+  public get<TProps = StepRendererProps>(stepKind: LearningStepKind): StepRenderer<TProps> {
     const render = this.#renderers.get(stepKind);
     if (!render) {
       throw new Error(`Unknown step kind, no renderer registered: ${stepKind}`);
     }
-    return render;
+    return render as unknown as StepRenderer<TProps>;
   }
 
   public has(stepKind: LearningStepKind): boolean {

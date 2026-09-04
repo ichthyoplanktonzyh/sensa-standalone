@@ -125,8 +125,38 @@ prompt, Card and ordinary capability variation do not create another target.
 
 **Content Provisioning**:
 The versioned decision that resolves a Learning Target through published,
-on-demand or hybrid content into one immutable Learning Materialization. It does
-not choose the Learning Protocol or modify learner progress.
+on-demand or hybrid content, under a fixed Content Demand, into one immutable
+Learning Materialization. It does not choose the Learning Protocol or modify
+learner progress.
+
+**Content Demand**:
+A source-neutral, versioned and machine-readable declaration of the material
+roles and input context a Learning Protocol requires, including their schemas,
+cardinality, permitted sources/uses, validation policies and declared external
+derivations. It says what must be available, not whether a catalog, model or tool
+supplies it, and it does not prescribe Cards or session order.
+
+**Content Context Artifact**:
+One immutable, provenance-bearing input supplied to Content Provisioning, such
+as the fixed target expression, confirmed Sense, an authorized Personal Anchor
+or a source-backed lexical fact. A producing model consumes these artifacts; it
+does not fetch, invent or replace their authority.
+
+**Content Generation Request**:
+A standalone, idempotent request that combines one fixed Learning Target,
+Effective Learning Policy, purpose-specific Learning Protocol, exact Content
+Demand and the authorized Content Context Artifacts needed to satisfy it.
+
+**Material Candidate**:
+One untrusted proposed item for a declared material role, whether generated,
+reused or derived by an external tool. It cannot enter a Protocol Run until its
+schema, provenance, required validators and Content Demand coverage are accepted
+and it is assembled into a Learning Materialization.
+
+**Content Derivation**:
+A versioned transformation from accepted source material into another declared
+material role, such as media synthesis. It is performed under a pinned producer
+policy and is not additional model context or a learner-progress transition.
 
 **Published Learning Content**:
 Reusable, versioned learning material prepared and approved before a learner
@@ -538,6 +568,16 @@ One versioned unit in a Learning Protocol's ordered, branching or cyclic
 transition model. It declares purpose, required material roles, interaction,
 result eligibility and next-step rules without prescribing a visual component.
 
+**Experience Recall Step**:
+The non-evidentiary practice Step in Lightweight Study that presents an
+experience-and-Sense cue while withholding the target expression and invites the
+learner to retrieve that expression before requesting a reveal.
+
+**Expression Reveal Step**:
+The instructional Step in Lightweight Study that discloses the target expression,
+confirms its Sense binding and records a learner rating without creating behavioral
+Evidence.
+
 **Learning Action Intent**:
 The semantic purpose of one Protocol Action: instruction, practice, assessment,
 feedback or repair. Intent determines result eligibility; visual form does not.
@@ -554,6 +594,11 @@ render it as a card, but Card is not a domain identity.
 A transient client rendering of the current Protocol Step/Action, possibly with
 prompt, reveal, feedback or detail phases. It owns no learning identity,
 curriculum membership, Evidence or schedule.
+
+**Card Presentation Slot**:
+A named region in a versioned Card Presentation contract that admits declared
+material roles under cardinality, order, disclosure, missing-resource and
+overflow rules. It owns neither content identity nor learning progress.
 
 **Learning Attempt**:  
 The learner's immutable raw response to the current Action.

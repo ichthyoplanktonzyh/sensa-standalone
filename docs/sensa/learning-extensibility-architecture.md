@@ -160,14 +160,16 @@ Runtime Adapter 和队列都不得再定义每日数量、组大小、批次上�
 | **内容供给插件** | `(Learning Target, 内容能力) → 校验 → 冻结 Learning Materialization` | ✅ 已落地：`contentProvisioning.ts`；Plan 保留 Materialization identity |
 | **编排插件** | `fresh(targets)` / `repair(target, 依据)` → 产出 Step 序列 | ✅ 已落地：`engine/stepOrchestration.ts` + `learningRuntime/orchestrations.ts` |
 | **内容能力集合** | `Protocol Binding → 内容能力集合`，readiness 是集合的合取 | ✅ 已落地：`learningRuntime/contentCapabilities.ts` |
-| **Step intent 轴** | `intent: instruction \| practice \| assessment \| repair`，只有 assessment 取证 | ✅ 已落地：`engine/types.ts` 的 `LearningStepIntent` |
+| **Step intent 轴** | `intent: instruction \| practice \| assessment \| feedback \| repair`，只有 assessment 取证 | ✅ 已落地：`engine/types.ts` 的 `LearningStepIntent` |
 | **Runtime Surface 登记表** | `surface → flow + 首学/继续/复习三个启动入口` | ✅ 已落地：`learningRuntime/runtimeSurfaces.ts` |
 | **Retention Store 登记表** | `storeId → 交接投影 + 状态归谁持有` | ✅ 已落地：`learningRuntime/retentionStores.ts` |
-| **Step renderer 注册表** | `stepKind → 组件` | ✅ 已落地：`learningRuntime/stepRenderers.ts` + `smoke:renderers` 32 项 |
+| **Step renderer 注册表** | `stepKind → 组件` | ✅ 已落地：Structured 七种 + Lightweight Initial 两种 renderer |
+| **Presentation Slot 合同** | `presentation → slots(role/cardinality/order/disclosure/missing/overflow)`；AI 不控制布局 | ✅ 共享 schema + Lightweight Initial 两张版本化 Card 定义已落地 |
 | **数量归属** | `Study Plan → Unified Planner → 完整 RuntimeLaunch`；preset 只编排，不二次选量 | ✅ 已移除 `activeWindow` 与 Adapter 的 target-selection hook |
 | **Progression Kernel** | 验证并原子应用 credit / invalidate / repair / reassess / reset / complete effects | ✅ 已落地：`packages/learning-kernel/src/runtime/protocolProgression.ts` |
 | **Protocol Policy 注册表** | Evaluation / Progression / Completion / Repair / Memory Outcome 五条正交轴按 identity 组合 | ✅ 已落地：`learningRuntime/protocolPolicies.ts`；composition 阶段 fail closed |
 | **分级长期结果** | `again \| hard \| good \| easy` + basis + evidence level；一次 due Review 至多一个 | ✅ 已落地：Learning Kernel、ReviewQueue 与 storage 共用同一 Outcome |
+| **Content Demand 合同** | 版本化 role/schema/cardinality/use/validator/derivation；生成 request 自包含冻结上下文 | ✅ 通用语言无关合同已落地；尚未声明具体 lightweight Demand |
 
 ### 5.1 消除 surface 闭集
 
@@ -195,18 +197,18 @@ root 的注册表重新闭合。落地前 `App.tsx` 里有 17 处按它分派的
 终局形态仍是 Runtime 只认识 **Step**：编排插件产出 Step，注册表按 `stepKind` 查组件，
 `App.tsx` 退化为"当前有无 Step / 渲染它"的壳。Step renderer 注册表
 （`learningRuntime/stepRenderers.ts`）已把 `stepKind → 组件` 这条 seam 落地：
-内置七种卡各是一条纯适配函数，把统一的 `StepRendererHost`（宿主能力合同）与
+Structured 内置七种卡各是一条纯适配函数，把统一的 `StepRendererHost`（宿主能力合同）与
 `StepRendererProps`（渲染输入）接线成卡片自己的 props，闭合发生在注册表——
-查不到 renderer 直接抛错。`smoke:renderers` 32 项拿真实安装目录钉住三件事：
+查不到 renderer 直接抛错。`smoke:renderers` 拿真实安装目录钉住三件事：
 闭合性、查表与落地前 `LearnScreen` 七个分支逐格等价、宿主接线与 remount key
 格式不走样。`LearnScreen` 随之从"七个 stage 分支 + 三十余个 prop"收敛为
 "工具栏 + 进度 + 查表渲染"，卡片相关的接线收进 App 提供的一份 host。
 
-剩下的一步是轻量两屏的 Step 化：`LightweightRuntimeStartScreen` 与
-`LightweightReviewRuntimeScreen` 仍是自包含的固定屏（相位机），不产出 Step；
-它们并入 Step 流之后，"哪块屏拿哪次运行"的最后三处派生才会退场，
-`App.tsx` 才真正成为壳。这需要先把轻量会话的相位表达成编排可产出的 Step，
-不在本次范围内。
+Lightweight Initial 已收敛为 Experience Recall 与 Expression Reveal 两个正式 Step：前者把 grounding
+与内部回想合并为 `practice`，后者以 `instruction` 揭示 expression 并接受 rating；`again` 循环，
+`hard | good` 显式触发 completion-only Progression。React 屏幕不再持有这段相位机，只负责 Runtime
+Shell、查 renderer 与显示非 Card 的完成状态。Lightweight Retention 仍是自包含固定屏，等其 Step 化
+后，"哪块屏拿哪次运行"的剩余派生才能继续退场。
 
 ### 5.2 内容需求改为集合
 
@@ -240,7 +242,7 @@ readiness 是 **Learning Target 级的事实、scope 级的投影**：内容属�
 ```text
 Step = { stepId, retentionTargetId, stepKind, materialRef, intent }
                                      ↑ 插件自由      ↑ 领域闭集
-intent: instruction | practice | assessment | repair
+intent: instruction | practice | assessment | feedback | repair
 ```
 
 只有 `assessment` 能产生 Evidence 与 Memory Outcome。这条是插件自由度的边界：
@@ -258,9 +260,9 @@ Step 的完整形状要等编排插件（§8 第 5 项）。先落的是 intent 
 都塌回 `LearningCapability`）。`mode: 'assessment' | 'repair'` 是这条轴的旧名字，
 只是它表达不了"讲解"，所以并成了 `intent`。
 
-队列驱动的两套编排只产出 `instruction` / `assessment` / `repair` 三种；第四种
-`practice`（练但不取证）出现在轻量首学的"回想"那一步——学习者自评，评语只作为
-完成记录留档，既不进 Gate 也不改排期。取证边界只能从行为上钉，`smoke:intent`
+队列驱动的两套编排只产出 `instruction` / `assessment` / `repair` 三种；
+`practice`（练但不取证）出现在轻量首学的“回想”那一步，`feedback` 为可独立编排的
+反馈 Step 保留。二者都不能自行进入 Evidence；取证边界只能从行为上钉，`smoke:intent`
 19 项钉的就是这个——讲解与修复都不计入 attempts、不把 Gate 判成 passed。
 
 ### 5.4 Retention Store
@@ -415,6 +417,13 @@ frozen before use"。理由是失败必须可归因：材料每次现生成，�
     Target 进入同一运行，`minGap=2` 只表达接触间隔；四个当前 epoch Checkpoint
     全通过才完成，任一失败开启新 epoch；Review 保留 known / vague / forgotten 三向结果，
     forgotten 开启当日 relearning。
+16. ✅ 新增 source-neutral Content Demand / Generation Request / Material Candidate 合同与
+    coverage admission：生成 adapter 获取 exact Demand 和冻结 artifacts，输出必须通过 role 的
+    schema、validator 与 cardinality 覆盖检查。该增量只固定通用 seam，不裁决 lightweight
+    需要哪些 role 或 Card。
+17. ✅ Lightweight Initial 两卡合同：Experience Recall / Expression Reveal 作为正式 Protocol Step，
+    rating 不是第三张 Card，Completion 不是 Step；共享 Presentation Slot contract 固定必要/可选区域与
+    pre-reveal non-disclosure，运行状态机移出 React renderer 并通过 completion-only kernel 执行。
 
 当前**仍不做**：能力目标选择 UI、拼写/听写 scope、第三 preset 的生产 API/
 跨端持久化，以及复刻应用的非核心宿主层功能（拼写弹窗、全屏例句、点词查询等）。

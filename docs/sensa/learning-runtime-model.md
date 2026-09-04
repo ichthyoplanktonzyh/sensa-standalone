@@ -168,10 +168,12 @@ Lightweight Study 允许使用紧凑教学内容、示例和可选 retrieval 建
 边界显式创建 `basis=protocol_completion` 的 Scheduling Handoff。它不创建 Gate pass、5D projection 或
 Acquisition Graduation，也不向 learner 宣称已经掌握。
 
-Lightweight Run 可以完全没有评价性 Protocol Checkpoint。其 grounding 属于 instruction，主动回想
-属于 practice，reveal 属于 feedback，learner rating 属于 self-report Observation；“没想起”可以由
-Progression Policy 重复当前 practice，而规定动作完成后由 Completion Policy 产生 Study Completion。
-这些事实不能被提升为 behavioral Evidence。
+Lightweight Run 可以完全没有评价性 Protocol Checkpoint。首版只有两个正式 Step：Experience Recall
+把 grounding 与内部回想合成一个 `practice`，在同一张 Card Presentation 中展示经验/Sense cue、
+隐藏 target expression 并等待 learner 请求揭晓；Expression Reveal 是 `instruction`，显示 expression
+与 Sense binding，并在同一张 Card 上接受 learner rating。`again` 回到 Experience Recall，`hard | good`
+允许 Completion Policy 产生 Study Completion。rating 是 self-report Observation，不是 behavioral
+Evidence；完成状态不是第三个 Step。
 
 ### Structured Initial Learning / Relearning Protocol family
 
@@ -740,6 +742,12 @@ presentation/support Action
 可以把一个 Step 呈现为 prompt、support、response、reveal、feedback 或 detail 等阶段；Card 不拥有
 学习身份、课程成员、状态、Evidence、进度或调度。多个 Card Presentation 可以服务于同一个 Step，
 同一种 Card 也可以渲染不同协议的 Step；Cards 与 Decks 不成为领域聚合。
+
+Card Presentation 可以进一步声明稳定 Slot。每个 Slot 固定允许的 material roles、数量、顺序、
+disclosure 与缺失/溢出处理；Assembly Policy 把 Materialization 中已验证的资源放入 Slot，renderer
+只按结果显示。生成模型不能输出布局指令，缺少可选资源时 Slot 折叠，缺少必要资源时 Step 不可执行。
+Experience Recall 的任何 Slot 都不得包含 target expression；Expression Reveal 则始终具有 expression
+主区与 Sense 确认区，其余发音、语言结构、用法和场景回扣区域均可选。
 
 ## 11. Action、Attempt、Observation、Evidence 与 Transition
 

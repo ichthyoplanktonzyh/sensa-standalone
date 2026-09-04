@@ -1,0 +1,310 @@
+/**
+ * Executable Lightweight Initial Learning protocol.
+ *
+ * The protocol owns the two-Step graph and uses the shared progression kernel.
+ * React renderers receive the current Step Instance but do not own its phase or
+ * decide whether the run repeats or completes.
+ */
+import {
+  sensaLearningConnectionContractVersion,
+  sensaProtocolStepDefinitionSchema,
+  type SensaProtocolStepDefinition,
+  type SensaProtocolStepTransitionRule,
+} from '@sensa/contracts/sensa';
+import {
+  createProtocolProgressState,
+  decideAndApplyProtocolTransition,
+  type LearningObservation,
+  type ProtocolProgressDefinition,
+  type ProtocolProgressState,
+  type ProtocolTransitionDecision,
+} from '@sensa/learning-kernel';
+import { protocolPolicyRegistry } from './protocolPolicies';
+
+export const LIGHTWEIGHT_STUDY_PROTOCOL_ID = 'lightweight-study' as const;
+export const LIGHTWEIGHT_STUDY_PROTOCOL_VERSION = 'v2' as const;
+
+export const LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_ID =
+  'lightweight-study.experience-recall' as const;
+export const LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_ID =
+  'lightweight-study.expression-reveal' as const;
+
+export const LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND =
+  'lightweight_experience_recall' as const;
+export const LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND =
+  'lightweight_expression_reveal' as const;
+
+export type LightweightInitialRating = 'again' | 'hard' | 'good';
+export type LightweightInitialOutcomeKey = 'reveal_requested' | LightweightInitialRating;
+
+const parseStep = (definition: unknown): SensaProtocolStepDefinition =>
+  Object.freeze(sensaProtocolStepDefinitionSchema.parse(definition));
+
+export const LIGHTWEIGHT_EXPERIENCE_RECALL_STEP = parseStep({
+  contractVersion: sensaLearningConnectionContractVersion,
+  protocolStepDefinitionId: LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_ID,
+  protocolId: LIGHTWEIGHT_STUDY_PROTOCOL_ID,
+  protocolVersion: LIGHTWEIGHT_STUDY_PROTOCOL_VERSION,
+  purpose: 'initial_learning',
+  intent: 'practice',
+  stepKind: LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
+  materialRequirements: [
+    { materialRoleKey: 'experience_recall_cue', use: 'prompt', required: true },
+    { materialRoleKey: 'recall_support', use: 'support', required: false },
+  ],
+  presentation: {
+    presentationKey: 'lightweight-experience-recall-card',
+    presentationVersion: 'v1',
+  },
+  interactionContractId: 'request-expression-reveal',
+  interactionContractVersion: 'v1',
+  resultEligibility: {
+    attempt: true,
+    observation: true,
+    evidence: false,
+    memoryOutcome: false,
+  },
+  transitions: [{
+    outcomeKey: 'reveal_requested',
+    observationKind: 'practice_completed',
+    effect: 'advance',
+    nextProtocolStepDefinitionId: LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_ID,
+  }],
+});
+
+export const LIGHTWEIGHT_EXPRESSION_REVEAL_STEP = parseStep({
+  contractVersion: sensaLearningConnectionContractVersion,
+  protocolStepDefinitionId: LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_ID,
+  protocolId: LIGHTWEIGHT_STUDY_PROTOCOL_ID,
+  protocolVersion: LIGHTWEIGHT_STUDY_PROTOCOL_VERSION,
+  purpose: 'initial_learning',
+  intent: 'instruction',
+  stepKind: LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND,
+  materialRequirements: [
+    { materialRoleKey: 'target_expression', use: 'reveal', required: true },
+    { materialRoleKey: 'sense_confirmation', use: 'feedback', required: true },
+    { materialRoleKey: 'pronunciation', use: 'support', required: false },
+    { materialRoleKey: 'language_structure', use: 'support', required: false },
+    { materialRoleKey: 'usage_guidance', use: 'support', required: false },
+    { materialRoleKey: 'scene_bridge', use: 'support', required: false },
+  ],
+  presentation: {
+    presentationKey: 'lightweight-expression-reveal-card',
+    presentationVersion: 'v1',
+  },
+  interactionContractId: 'lightweight-initial-rating',
+  interactionContractVersion: 'v1',
+  resultEligibility: {
+    attempt: true,
+    observation: true,
+    evidence: false,
+    memoryOutcome: false,
+  },
+  transitions: [
+    {
+      outcomeKey: 'again',
+      observationKind: 'practice_completed',
+      effect: 'repeat',
+      nextProtocolStepDefinitionId: LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_ID,
+    },
+    {
+      outcomeKey: 'hard',
+      observationKind: 'protocol_completed',
+      effect: 'complete',
+      nextProtocolStepDefinitionId: null,
+    },
+    {
+      outcomeKey: 'good',
+      observationKind: 'protocol_completed',
+      effect: 'complete',
+      nextProtocolStepDefinitionId: null,
+    },
+  ],
+});
+
+export const LIGHTWEIGHT_INITIAL_STEP_DEFINITIONS = Object.freeze([
+  LIGHTWEIGHT_EXPERIENCE_RECALL_STEP,
+  LIGHTWEIGHT_EXPRESSION_REVEAL_STEP,
+]);
+
+const stepById = new Map(LIGHTWEIGHT_INITIAL_STEP_DEFINITIONS.map((step) => [
+  step.protocolStepDefinitionId,
+  step,
+]));
+
+const LIGHTWEIGHT_PROGRESS_DEFINITION: ProtocolProgressDefinition = Object.freeze({
+  protocolId: LIGHTWEIGHT_STUDY_PROTOCOL_ID,
+  protocolVersion: LIGHTWEIGHT_STUDY_PROTOCOL_VERSION,
+  checkpoints: Object.freeze([]),
+  completionPolicy: protocolPolicyRegistry.getCompletion('study-completion-v1'),
+});
+
+const progressionPolicy = protocolPolicyRegistry.getProgression('completion-only-v1');
+
+export interface LightweightProtocolStepInstance {
+  readonly protocolStepInstanceId: string;
+  readonly protocolRunId: string;
+  readonly retentionTargetId: string;
+  readonly ordinal: number;
+  readonly definition: SensaProtocolStepDefinition;
+}
+
+export interface LightweightCompletedStep {
+  readonly instance: LightweightProtocolStepInstance;
+  readonly outcomeKey: LightweightInitialOutcomeKey;
+  readonly observation: LearningObservation;
+  readonly transitionDecision: ProtocolTransitionDecision;
+}
+
+export interface LightweightInitialProtocolRunState {
+  readonly protocolRunId: string;
+  readonly retentionTargetId: string;
+  readonly currentStepDefinitionId: string | null;
+  readonly currentStepOrdinal: number;
+  readonly eventOrdinal: number;
+  readonly retryCount: number;
+  readonly completionRating: Exclude<LightweightInitialRating, 'again'> | null;
+  readonly progress: ProtocolProgressState;
+  readonly completedSteps: readonly LightweightCompletedStep[];
+}
+
+export interface LightweightInitialTransitionResult {
+  readonly state: LightweightInitialProtocolRunState;
+  readonly completedStep: LightweightCompletedStep;
+}
+
+const definitionFor = (definitionId: string): SensaProtocolStepDefinition => {
+  const definition = stepById.get(definitionId);
+  if (!definition) throw new Error(`Unknown Lightweight Initial Step: ${definitionId}`);
+  return definition;
+};
+
+const transitionFor = (
+  definition: SensaProtocolStepDefinition,
+  outcomeKey: LightweightInitialOutcomeKey,
+): SensaProtocolStepTransitionRule => {
+  const transition = definition.transitions.find((candidate) => candidate.outcomeKey === outcomeKey);
+  if (!transition) {
+    throw new Error(
+      `Step ${definition.protocolStepDefinitionId} does not accept outcome ${outcomeKey}.`,
+    );
+  }
+  return transition;
+};
+
+export const validateLightweightInitialProtocol = (): void => {
+  if (stepById.size !== LIGHTWEIGHT_INITIAL_STEP_DEFINITIONS.length) {
+    throw new Error('Duplicate Lightweight Initial Step definition identity.');
+  }
+  for (const definition of LIGHTWEIGHT_INITIAL_STEP_DEFINITIONS) {
+    if (
+      definition.protocolId !== LIGHTWEIGHT_STUDY_PROTOCOL_ID
+      || definition.protocolVersion !== LIGHTWEIGHT_STUDY_PROTOCOL_VERSION
+      || definition.purpose !== 'initial_learning'
+    ) {
+      throw new Error(`Step ${definition.protocolStepDefinitionId} is pinned to another Protocol.`);
+    }
+    for (const transition of definition.transitions) {
+      if (
+        transition.nextProtocolStepDefinitionId !== null
+        && !stepById.has(transition.nextProtocolStepDefinitionId)
+      ) {
+        throw new Error(
+          `Step ${definition.protocolStepDefinitionId} references unknown next Step ${transition.nextProtocolStepDefinitionId}.`,
+        );
+      }
+    }
+  }
+};
+
+validateLightweightInitialProtocol();
+
+export const createLightweightInitialProtocolRun = (input: Readonly<{
+  protocolRunId: string;
+  retentionTargetId: string;
+}>): LightweightInitialProtocolRunState => {
+  if (input.protocolRunId.trim().length === 0) throw new Error('Protocol Run identity is required.');
+  if (input.retentionTargetId.trim().length === 0) throw new Error('Retention Target identity is required.');
+  return Object.freeze({
+    protocolRunId: input.protocolRunId,
+    retentionTargetId: input.retentionTargetId,
+    currentStepDefinitionId: LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_ID,
+    currentStepOrdinal: 1,
+    eventOrdinal: 0,
+    retryCount: 0,
+    completionRating: null,
+    progress: createProtocolProgressState(input.protocolRunId, LIGHTWEIGHT_PROGRESS_DEFINITION),
+    completedSteps: Object.freeze([]),
+  });
+};
+
+export const currentLightweightInitialStep = (
+  state: LightweightInitialProtocolRunState,
+): LightweightProtocolStepInstance | null => {
+  if (state.currentStepDefinitionId === null) return null;
+  const definition = definitionFor(state.currentStepDefinitionId);
+  return Object.freeze({
+    protocolStepInstanceId: `${state.protocolRunId}:step:${state.currentStepOrdinal}`,
+    protocolRunId: state.protocolRunId,
+    retentionTargetId: state.retentionTargetId,
+    ordinal: state.currentStepOrdinal,
+    definition,
+  });
+};
+
+export const transitionLightweightInitialProtocol = (
+  state: LightweightInitialProtocolRunState,
+  outcomeKey: LightweightInitialOutcomeKey,
+): LightweightInitialTransitionResult => {
+  if (state.progress.completed || state.currentStepDefinitionId === null) {
+    throw new Error(`Lightweight Initial Run ${state.protocolRunId} is already complete.`);
+  }
+  const instance = currentLightweightInitialStep(state)!;
+  const transition = transitionFor(instance.definition, outcomeKey);
+  const eventOrdinal = state.eventOrdinal + 1;
+  const observation: LearningObservation = Object.freeze({
+    observationId: `${state.protocolRunId}:observation:${eventOrdinal}`,
+    attemptId: `${state.protocolRunId}:attempt:${eventOrdinal}`,
+    actionId: instance.protocolStepInstanceId,
+    kind: transition.observationKind,
+    checkpointId: null,
+    evidenceIds: Object.freeze([]),
+  });
+  const transitionResult = decideAndApplyProtocolTransition({
+    definition: LIGHTWEIGHT_PROGRESS_DEFINITION,
+    policy: progressionPolicy,
+    state: state.progress,
+    observation,
+    decisionId: `${state.protocolRunId}:decision:${eventOrdinal}`,
+  });
+  const completes = transitionResult.decision.effects.some((effect) => effect.kind === 'complete');
+  const advances = transitionResult.decision.effects.some((effect) => effect.kind === 'advance');
+  if ((transition.effect === 'complete') !== completes) {
+    throw new Error(`Progression Policy disagrees with ${transition.effect} transition ${outcomeKey}.`);
+  }
+  if (transition.effect !== 'complete' && (!advances || completes)) {
+    throw new Error(`Progression Policy cannot advance transition ${outcomeKey}.`);
+  }
+
+  const completedStep: LightweightCompletedStep = Object.freeze({
+    instance,
+    outcomeKey,
+    observation,
+    transitionDecision: transitionResult.decision,
+  });
+  const completionRating = outcomeKey === 'hard' || outcomeKey === 'good'
+    ? outcomeKey
+    : state.completionRating;
+  const nextState: LightweightInitialProtocolRunState = Object.freeze({
+    ...state,
+    currentStepDefinitionId: transition.nextProtocolStepDefinitionId,
+    currentStepOrdinal: state.currentStepOrdinal + 1,
+    eventOrdinal,
+    retryCount: transition.effect === 'repeat' ? state.retryCount + 1 : state.retryCount,
+    completionRating,
+    progress: transitionResult.state,
+    completedSteps: Object.freeze([...state.completedSteps, completedStep]),
+  });
+  return Object.freeze({ state: nextState, completedStep });
+};
+

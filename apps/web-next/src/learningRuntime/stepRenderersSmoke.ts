@@ -3,7 +3,8 @@
  *
  * 这里钉的是 `stepKind → 组件` 这条 seam 的三件事：
  *
- *  1. **闭合发生在注册表。** 内置七种全部登记；查不到直接抛，不静默渲染
+ *  1. **闭合发生在注册表。** Structured 既有七种与 Lightweight Initial
+ *     两种全部登记；查不到直接抛，不静默渲染
  *     空白；编排能盖出的每一种章（真实目录动作 × 四套编排过 `stepKindFor`）
  *     都有卡可查。
  *  2. **查表与落地前的七个分支等价。** LearnScreen 落地前的分支守卫逐字搬来
@@ -202,9 +203,13 @@ const recordingHost: StepRendererHost = {
    A. 闭合
    ============================================================ */
 
-check('内置七种 stepKind 全部登记',
-  new Set(BUILTIN_STEP_RENDERERS.map((definition) => definition.stepKind)).size === 7
-    && ALL_STAGES.every((stage) =>
+check('Structured 七种与 Lightweight Initial 两种 stepKind 全部登记',
+  new Set(BUILTIN_STEP_RENDERERS.map((definition) => definition.stepKind)).size === 9
+    && [
+      ...ALL_STAGES,
+      'lightweight_experience_recall',
+      'lightweight_expression_reveal',
+    ].every((stage) =>
       BUILTIN_STEP_RENDERERS.some((definition) => definition.stepKind === stage)));
 
 check('未登记的 stepKind 直接抛，不静默渲染空白', (() => {

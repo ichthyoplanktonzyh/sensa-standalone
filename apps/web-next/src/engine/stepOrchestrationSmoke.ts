@@ -256,9 +256,9 @@ new ReviewQueue([{
 check('ReviewQueue 从构造边界调用注入的编排，不再硬连 concrete 实现',
   retentionPluginCalls === 1);
 
-check('队列驱动的两套编排都不产出 practice——它是留给插件的第四种意图',
+check('队列驱动的两套编排不冒充 practice 或 feedback Step',
   [...acquisitionIntents.produced, ...retentionIntents.produced]
-    .every((intent) => intent !== 'practice'));
+    .every((intent) => intent !== 'practice' && intent !== 'feedback'));
 
 check('轻量首学声明里没有 assessment，所以它取不了证',
   !orchestrationRegistry.get('lightweight_study').stepIntents.includes('assessment'));

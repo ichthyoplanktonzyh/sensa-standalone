@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import {
+  sensaCardPresentationDefinitionSchema,
   sensaInitialLearningCompletionSchema,
   sensaLearningConnectionContractVersion,
   sensaLearningPolicyProfileSchema,
   sensaLearningObservationSchema,
   sensaMemoryOutcomeSnapshotSchema,
   sensaProtocolProgressSnapshotSchema,
+  sensaProtocolStepDefinitionSchema,
+  sensaProtocolStepInstanceSnapshotSchema,
   sensaProtocolTransitionDecisionSchema,
   sensaSchedulingDecisionSchema,
   sensaLearningTargetSnapshotSchema,
@@ -91,7 +94,10 @@ const binding = {
   repairPolicyId: "structured-targeted-repair-v1",
   memoryOutcomePolicyId: null,
   checkpointDefinitionIds: ["recognition", "recall", "transfer"],
-  contentRequirement: ["structured_learning_package"],
+  contentDemands: [{
+    contentDemandKey: "structured-learning-package",
+    definitionVersion: "v1",
+  }],
 };
 assert.equal(sensaLearningPolicyProfileSchema.safeParse({
   contractVersion: sensaLearningConnectionContractVersion,
@@ -163,6 +169,169 @@ assert.equal(sensaLearningObservationSchema.safeParse({
   ...observation,
   checkpointId: null,
 }).success, false);
+
+const experienceRecallStep = sensaProtocolStepDefinitionSchema.parse({
+  contractVersion: sensaLearningConnectionContractVersion,
+  protocolStepDefinitionId: "lightweight-study.experience-recall",
+  protocolId: "lightweight-study",
+  protocolVersion: "v2",
+  purpose: "initial_learning",
+  intent: "practice",
+  stepKind: "lightweight_experience_recall",
+  materialRequirements: [
+    { materialRoleKey: "experience_recall_cue", use: "prompt", required: true },
+    { materialRoleKey: "recall_support", use: "support", required: false },
+  ],
+  presentation: {
+    presentationKey: "lightweight-experience-recall-card",
+    presentationVersion: "v1",
+  },
+  interactionContractId: "request-expression-reveal",
+  interactionContractVersion: "v1",
+  resultEligibility: {
+    attempt: true,
+    observation: true,
+    evidence: false,
+    memoryOutcome: false,
+  },
+  transitions: [{
+    outcomeKey: "reveal_requested",
+    observationKind: "practice_completed",
+    effect: "advance",
+    nextProtocolStepDefinitionId: "lightweight-study.expression-reveal",
+  }],
+});
+assert.equal(experienceRecallStep.intent, "practice");
+
+const experienceRecallPresentation = sensaCardPresentationDefinitionSchema.parse({
+  contractVersion: sensaLearningConnectionContractVersion,
+  presentationKey: "lightweight-experience-recall-card",
+  presentationVersion: "v1",
+  stepKinds: [experienceRecallStep.stepKind],
+  slots: [
+    {
+      slotId: "experience_sketch",
+      displayOrder: 0,
+      required: true,
+      acceptedMaterialRoleKeys: ["experience_recall_cue"],
+      minItems: 1,
+      maxItems: 1,
+      disclosurePhase: "pre_reveal",
+      missingBehavior: "block_step",
+      overflowBehavior: "reject",
+    },
+    {
+      slotId: "auxiliary_cues",
+      displayOrder: 1,
+      required: false,
+      acceptedMaterialRoleKeys: ["recall_support"],
+      minItems: 0,
+      maxItems: 4,
+      disclosurePhase: "pre_reveal",
+      missingBehavior: "collapse_slot",
+      overflowBehavior: "truncate",
+    },
+  ],
+});
+assert.equal(experienceRecallPresentation.slots.length, 2);
+assert.equal(sensaCardPresentationDefinitionSchema.safeParse({
+  ...experienceRecallPresentation,
+  slots: experienceRecallPresentation.slots.map((slot) => ({
+    ...slot,
+    displayOrder: 0,
+  })),
+}).success, false, "Presentation Slot order is stable and unique.");
+assert.equal(sensaCardPresentationDefinitionSchema.safeParse({
+  ...experienceRecallPresentation,
+  slots: [{
+    ...experienceRecallPresentation.slots[1],
+    required: true,
+  }],
+}).success, false, "Required Slots cannot collapse when missing.");
+
+const expressionRevealStep = sensaProtocolStepDefinitionSchema.parse({
+  contractVersion: sensaLearningConnectionContractVersion,
+  protocolStepDefinitionId: "lightweight-study.expression-reveal",
+  protocolId: "lightweight-study",
+  protocolVersion: "v2",
+  purpose: "initial_learning",
+  intent: "instruction",
+  stepKind: "lightweight_expression_reveal",
+  materialRequirements: [
+    { materialRoleKey: "target_expression", use: "reveal", required: true },
+    { materialRoleKey: "sense_confirmation", use: "feedback", required: true },
+  ],
+  presentation: {
+    presentationKey: "lightweight-expression-reveal-card",
+    presentationVersion: "v1",
+  },
+  interactionContractId: "lightweight-initial-rating",
+  interactionContractVersion: "v1",
+  resultEligibility: {
+    attempt: true,
+    observation: true,
+    evidence: false,
+    memoryOutcome: false,
+  },
+  transitions: [
+    {
+      outcomeKey: "again",
+      observationKind: "practice_completed",
+      effect: "repeat",
+      nextProtocolStepDefinitionId: experienceRecallStep.protocolStepDefinitionId,
+    },
+    {
+      outcomeKey: "hard",
+      observationKind: "protocol_completed",
+      effect: "complete",
+      nextProtocolStepDefinitionId: null,
+    },
+    {
+      outcomeKey: "good",
+      observationKind: "protocol_completed",
+      effect: "complete",
+      nextProtocolStepDefinitionId: null,
+    },
+  ],
+});
+assert.equal(expressionRevealStep.resultEligibility.evidence, false);
+assert.equal(sensaProtocolStepDefinitionSchema.safeParse({
+  ...expressionRevealStep,
+  resultEligibility: { ...expressionRevealStep.resultEligibility, evidence: true },
+}).success, false, "A non-assessment Reveal cannot claim Evidence eligibility.");
+assert.equal(sensaProtocolStepDefinitionSchema.safeParse({
+  ...expressionRevealStep,
+  transitions: [
+    ...expressionRevealStep.transitions,
+    expressionRevealStep.transitions[0],
+  ],
+}).success, false, "Step outcome keys are unique.");
+
+const stepInstance = sensaProtocolStepInstanceSnapshotSchema.parse({
+  contractVersion: sensaLearningConnectionContractVersion,
+  protocolStepInstanceId: id("47"),
+  protocolRunId: id("4"),
+  retentionTargetId: id("3"),
+  protocolStepDefinitionId: experienceRecallStep.protocolStepDefinitionId,
+  stepKind: experienceRecallStep.stepKind,
+  intent: experienceRecallStep.intent,
+  ordinal: 1,
+  materialBindings: [{
+    materialRoleKey: "experience_recall_cue",
+    learningMaterializationId: id("48"),
+    resourceKey: "experience-recall-cue-1",
+  }],
+  presentation: experienceRecallStep.presentation,
+  status: "active",
+  transitionDecisionId: null,
+  startedAt: now,
+  completedAt: null,
+});
+assert.equal(stepInstance.status, "active");
+assert.equal(sensaProtocolStepInstanceSnapshotSchema.safeParse({
+  ...stepInstance,
+  status: "completed",
+}).success, false, "Completed Step instances require completion facts.");
 
 const transition = sensaProtocolTransitionDecisionSchema.parse({
   contractVersion: sensaLearningConnectionContractVersion,

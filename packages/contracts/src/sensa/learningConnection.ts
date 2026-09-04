@@ -27,6 +27,7 @@ export const sensaLearningStepIntentSchema = z.enum([
   "instruction",
   "practice",
   "assessment",
+  "feedback",
   "repair",
 ]);
 
@@ -65,6 +66,276 @@ export const sensaProtocolObservationKindSchema = z.enum([
   "repair_completed",
   "protocol_completed",
 ]);
+
+export const sensaProtocolStepMaterialUseSchema = z.enum([
+  "prompt",
+  "support",
+  "response",
+  "reveal",
+  "feedback",
+  "detail",
+]);
+
+export const sensaProtocolStepMaterialRequirementSchema = z
+  .object({
+    materialRoleKey: nonEmpty,
+    use: sensaProtocolStepMaterialUseSchema,
+    required: z.boolean(),
+  })
+  .strict();
+
+export const sensaCardPresentationReferenceSchema = z
+  .object({
+    presentationKey: nonEmpty,
+    presentationVersion: nonEmpty,
+  })
+  .strict();
+
+export const sensaCardPresentationSlotSchema = z
+  .object({
+    slotId: nonEmpty,
+    displayOrder: nonNegativeInteger,
+    required: z.boolean(),
+    acceptedMaterialRoleKeys: z.array(nonEmpty).min(1),
+    minItems: nonNegativeInteger,
+    maxItems: positiveInteger,
+    disclosurePhase: nonEmpty,
+    missingBehavior: z.enum(["block_step", "collapse_slot"]),
+    overflowBehavior: z.enum(["reject", "truncate"]),
+  })
+  .strict()
+  .superRefine((slot, context) => {
+    if (slot.maxItems < slot.minItems) {
+      context.addIssue({
+        code: "custom",
+        path: ["maxItems"],
+        message: "A Presentation Slot maxItems must be at least minItems.",
+      });
+    }
+    if (slot.required !== (slot.minItems > 0)) {
+      context.addIssue({
+        code: "custom",
+        path: ["minItems"],
+        message: "A required Presentation Slot must require items; an optional Slot must not.",
+      });
+    }
+    if (slot.required !== (slot.missingBehavior === "block_step")) {
+      context.addIssue({
+        code: "custom",
+        path: ["missingBehavior"],
+        message: "Required Slots block the Step; optional Slots collapse when absent.",
+      });
+    }
+    const roles = new Set(slot.acceptedMaterialRoleKeys);
+    if (roles.size !== slot.acceptedMaterialRoleKeys.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["acceptedMaterialRoleKeys"],
+        message: "A Presentation Slot cannot repeat a material role.",
+      });
+    }
+  });
+
+export const sensaCardPresentationDefinitionSchema = z
+  .object({
+    contractVersion: z.literal(sensaLearningConnectionContractVersion),
+    presentationKey: nonEmpty,
+    presentationVersion: nonEmpty,
+    stepKinds: z.array(nonEmpty).min(1),
+    slots: z.array(sensaCardPresentationSlotSchema).min(1),
+  })
+  .strict()
+  .superRefine((presentation, context) => {
+    const stepKinds = new Set(presentation.stepKinds);
+    if (stepKinds.size !== presentation.stepKinds.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["stepKinds"],
+        message: "A Card Presentation cannot repeat a Step kind.",
+      });
+    }
+    const slotIds = new Set<string>();
+    const displayOrders = new Set<number>();
+    presentation.slots.forEach((slot, index) => {
+      if (slotIds.has(slot.slotId)) {
+        context.addIssue({
+          code: "custom",
+          path: ["slots", index, "slotId"],
+          message: `Duplicate Card Presentation Slot: ${slot.slotId}`,
+        });
+      }
+      slotIds.add(slot.slotId);
+      if (displayOrders.has(slot.displayOrder)) {
+        context.addIssue({
+          code: "custom",
+          path: ["slots", index, "displayOrder"],
+          message: `Duplicate Card Presentation display order: ${slot.displayOrder}`,
+        });
+      }
+      displayOrders.add(slot.displayOrder);
+    });
+  });
+
+export const sensaProtocolStepTransitionRuleSchema = z
+  .object({
+    outcomeKey: nonEmpty,
+    observationKind: sensaProtocolObservationKindSchema,
+    effect: z.enum(["advance", "repeat", "complete"]),
+    nextProtocolStepDefinitionId: nonEmpty.nullable(),
+  })
+  .strict()
+  .superRefine((rule, context) => {
+    const requiresNext = rule.effect === "advance" || rule.effect === "repeat";
+    if (requiresNext !== (rule.nextProtocolStepDefinitionId !== null)) {
+      context.addIssue({
+        code: "custom",
+        path: ["nextProtocolStepDefinitionId"],
+        message: "Advance/repeat transitions require a next Step; complete transitions forbid one.",
+      });
+    }
+    if (rule.effect === "complete" && rule.observationKind !== "protocol_completed") {
+      context.addIssue({
+        code: "custom",
+        path: ["observationKind"],
+        message: "A complete transition must produce an explicit protocol_completed Observation.",
+      });
+    }
+  });
+
+/**
+ * Source-neutral executable Step definition. Card layout remains behind the
+ * versioned presentation reference; material requirements name roles, never UI fields.
+ */
+export const sensaProtocolStepDefinitionSchema = z
+  .object({
+    contractVersion: z.literal(sensaLearningConnectionContractVersion),
+    protocolStepDefinitionId: nonEmpty,
+    protocolId: nonEmpty,
+    protocolVersion: nonEmpty,
+    purpose: sensaLearningProtocolPurposeSchema,
+    intent: sensaLearningStepIntentSchema,
+    stepKind: nonEmpty,
+    materialRequirements: z.array(sensaProtocolStepMaterialRequirementSchema),
+    presentation: sensaCardPresentationReferenceSchema,
+    interactionContractId: nonEmpty,
+    interactionContractVersion: nonEmpty,
+    resultEligibility: z
+      .object({
+        attempt: z.boolean(),
+        observation: z.boolean(),
+        evidence: z.boolean(),
+        memoryOutcome: z.boolean(),
+      })
+      .strict(),
+    transitions: z.array(sensaProtocolStepTransitionRuleSchema).min(1),
+  })
+  .strict()
+  .superRefine((definition, context) => {
+    const materialUses = new Set<string>();
+    definition.materialRequirements.forEach((requirement, index) => {
+      const identity = `${requirement.materialRoleKey}:${requirement.use}`;
+      if (materialUses.has(identity)) {
+        context.addIssue({
+          code: "custom",
+          path: ["materialRequirements", index],
+          message: `Duplicate Step material requirement: ${identity}`,
+        });
+      }
+      materialUses.add(identity);
+    });
+
+    const outcomes = new Set<string>();
+    definition.transitions.forEach((transition, index) => {
+      if (outcomes.has(transition.outcomeKey)) {
+        context.addIssue({
+          code: "custom",
+          path: ["transitions", index, "outcomeKey"],
+          message: `Duplicate Step transition outcome: ${transition.outcomeKey}`,
+        });
+      }
+      outcomes.add(transition.outcomeKey);
+    });
+
+    if (definition.resultEligibility.evidence && definition.intent !== "assessment") {
+      context.addIssue({
+        code: "custom",
+        path: ["resultEligibility", "evidence"],
+        message: "Only an assessment Step may be eligible to produce Evidence.",
+      });
+    }
+    if (definition.resultEligibility.memoryOutcome && definition.intent !== "assessment") {
+      context.addIssue({
+        code: "custom",
+        path: ["resultEligibility", "memoryOutcome"],
+        message: "Only an assessment Step may be eligible to produce a Memory Outcome.",
+      });
+    }
+    if (definition.resultEligibility.evidence && !definition.resultEligibility.observation) {
+      context.addIssue({
+        code: "custom",
+        path: ["resultEligibility", "observation"],
+        message: "Evidence eligibility requires Observation eligibility.",
+      });
+    }
+    if (definition.resultEligibility.memoryOutcome && !definition.resultEligibility.observation) {
+      context.addIssue({
+        code: "custom",
+        path: ["resultEligibility", "observation"],
+        message: "Memory Outcome eligibility requires Observation eligibility.",
+      });
+    }
+  });
+
+export const sensaProtocolStepMaterialBindingSchema = z
+  .object({
+    materialRoleKey: nonEmpty,
+    learningMaterializationId: uuid,
+    resourceKey: nonEmpty,
+  })
+  .strict();
+
+/** Immutable learner-specific execution of one Protocol Step. */
+export const sensaProtocolStepInstanceSnapshotSchema = z
+  .object({
+    contractVersion: z.literal(sensaLearningConnectionContractVersion),
+    protocolStepInstanceId: uuid,
+    protocolRunId: uuid,
+    retentionTargetId: uuid,
+    protocolStepDefinitionId: nonEmpty,
+    stepKind: nonEmpty,
+    intent: sensaLearningStepIntentSchema,
+    ordinal: positiveInteger,
+    materialBindings: z.array(sensaProtocolStepMaterialBindingSchema),
+    presentation: sensaCardPresentationReferenceSchema,
+    status: z.enum(["planned", "active", "completed", "interrupted"]),
+    transitionDecisionId: uuid.nullable(),
+    startedAt: timestamp.nullable(),
+    completedAt: timestamp.nullable(),
+  })
+  .strict()
+  .superRefine((instance, context) => {
+    if (instance.status === "active" && instance.startedAt === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["startedAt"],
+        message: "An active Protocol Step Instance requires startedAt.",
+      });
+    }
+    if ((instance.status === "completed") !== (instance.completedAt !== null)) {
+      context.addIssue({
+        code: "custom",
+        path: ["completedAt"],
+        message: "Only a completed Protocol Step Instance carries completedAt.",
+      });
+    }
+    if ((instance.status === "completed") !== (instance.transitionDecisionId !== null)) {
+      context.addIssue({
+        code: "custom",
+        path: ["transitionDecisionId"],
+        message: "A completed Protocol Step Instance requires its Transition Decision.",
+      });
+    }
+  });
 
 export const sensaProtocolCheckpointDefinitionSchema = z
   .object({
@@ -331,6 +602,14 @@ export const sensaRetentionScopeDefinitionSchema = z
     }
   });
 
+/** Version-pinned Content Demand selected by a purpose-specific Protocol. */
+export const sensaContentDemandReferenceSchema = z
+  .object({
+    contentDemandKey: nonEmpty,
+    definitionVersion: nonEmpty,
+  })
+  .strict();
+
 const learningProtocolBindingSchema = z
   .object({
     protocolId: nonEmpty,
@@ -343,7 +622,7 @@ const learningProtocolBindingSchema = z
     repairPolicyId: nonEmpty,
     memoryOutcomePolicyId: nonEmpty.nullable(),
     checkpointDefinitionIds: z.array(nonEmpty),
-    contentRequirement: z.array(nonEmpty).min(1),
+    contentDemands: z.array(sensaContentDemandReferenceSchema).min(1),
   })
   .strict();
 
@@ -508,6 +787,33 @@ export type SensaMemoryOutcomeGrade = z.infer<
 export type SensaProtocolObservationKind = z.infer<
   typeof sensaProtocolObservationKindSchema
 >;
+export type SensaProtocolStepMaterialUse = z.infer<
+  typeof sensaProtocolStepMaterialUseSchema
+>;
+export type SensaProtocolStepMaterialRequirement = z.infer<
+  typeof sensaProtocolStepMaterialRequirementSchema
+>;
+export type SensaCardPresentationReference = z.infer<
+  typeof sensaCardPresentationReferenceSchema
+>;
+export type SensaCardPresentationSlot = z.infer<
+  typeof sensaCardPresentationSlotSchema
+>;
+export type SensaCardPresentationDefinition = z.infer<
+  typeof sensaCardPresentationDefinitionSchema
+>;
+export type SensaProtocolStepTransitionRule = z.infer<
+  typeof sensaProtocolStepTransitionRuleSchema
+>;
+export type SensaProtocolStepDefinition = z.infer<
+  typeof sensaProtocolStepDefinitionSchema
+>;
+export type SensaProtocolStepMaterialBinding = z.infer<
+  typeof sensaProtocolStepMaterialBindingSchema
+>;
+export type SensaProtocolStepInstanceSnapshot = z.infer<
+  typeof sensaProtocolStepInstanceSnapshotSchema
+>;
 export type SensaProtocolCheckpointDefinition = z.infer<
   typeof sensaProtocolCheckpointDefinitionSchema
 >;
@@ -552,6 +858,9 @@ export type SensaRetentionTargetKey = z.infer<
 >;
 export type SensaRetentionScopeDefinition = z.infer<
   typeof sensaRetentionScopeDefinitionSchema
+>;
+export type SensaContentDemandReference = z.infer<
+  typeof sensaContentDemandReferenceSchema
 >;
 export type SensaLearningPolicyProfile = z.infer<
   typeof sensaLearningPolicyProfileSchema

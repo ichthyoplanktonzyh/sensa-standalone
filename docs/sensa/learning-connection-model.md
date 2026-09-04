@@ -309,6 +309,38 @@ learner 当前需要生成。生成可以读取 confirmed Sense、target express
 生成成功不等于发布。On-demand output 在进入一次学习前必须完成适用于当前角色的 schema、target、
 language、safety、semantic-consistency 与 renderer validation，并冻结为 Learning Materialization。
 
+### Content Demand 与生成交接
+
+Learning Protocol 不应把对内容的需求压成一段 prompt，也不应要求生成模型读取客户端
+代码才能知道“要产生什么”。Content Demand 是 source-neutral 的版本化合同，至少声明：
+
+- material role identity、必选/可选与数量范围；
+- 每个 role 的 content schema/version、合法 Step intent 与 Evidence eligibility；
+- provisioning policy 与必须通过的 validator policies；
+- 哪些冻结 context kind 是供给方必须看到的，以及它们的 schema、数量和允许来源；
+- 由外部工具从已接受材料派生新 role 的版本化 Content Derivation。
+
+Content Demand 只说明一次 Protocol Run 必须拥有哪些内容能力，不指定内容来自
+Published、On-demand 还是 Hybrid，也不把 Card Presentation 或 Session 顺序写入资源。
+增加 prompt / reveal / feedback / detail 呈现可以只调整 Protocol Step 与 material-role binding；
+只有它同时改变 Completion、Checkpoint credit 或 reset 语义时，才需要改动相应的版本化
+Progression/Completion Policy，不因“多一张卡”修改 Learning Kernel。
+
+Content Generation Request 是交给某个供给 adapter 的独立请求。它必须嵌入 exact Content
+Demand，固定 Learning Target / Sense Version / expression binding / Policy / purpose Protocol，
+并携带已冻结的 Content Context Artifacts。target expression、confirmed Sense、经授权的原始场景与
+词典/语料/发音事实都是有 provenance 的 artifact；模型不得自己查找、改写或补齐权威事实。
+Personal Anchor artifact 必须引用有效 use grant。
+
+模型、Published source 或外部工具的输出先是 Material Candidate。Candidate 必须引用所属 request、
+material role、schema/version、source artifacts、producer/policy provenance 与 digest。只有所有 required
+role 的 cardinality 满足、每个 Candidate 通过该 role 声明的 validators，才可按 assembly
+policy 冻结为 Learning Materialization。“模型返回了 JSON”不是 ready。
+
+TTS 等媒体生成属于 Content Derivation，不是额外交给内容模型的自由上下文。它在源文本/
+发音事实通过适用校验后，按固定 provider/model/voice/accent policy 产出另一个受校验的
+Candidate，不由 LLM 伪造 audio URL 或 media provenance。
+
 ### Hybrid
 
 Hybrid 可以用 published Sense facts、发音或 protected assessment，组合 on-demand 的个人化场景、
@@ -475,6 +507,28 @@ Study Completion 只证明规定的 Steps 已完成。它不解决 Acquisition G
 independent Recall/Transfer，也不允许产品声称“已经掌握”。一次简单主动回忆可以保存 Attempt 或
 protocol-local observation；只有明确的 Evidence Rule 才能把合法行为派生为 Learning Evidence。
 
+首版 Lightweight Study 固定为两个 Step，而不是三张传统单词卡：
+
+```text
+Experience Recall（practice，隐藏 target expression）
+        ↓ learner 主动请求 reveal
+Expression Reveal（instruction，显示 expression + Sense binding）
+        ├─ again → Experience Recall
+        ├─ hard  → Study Completion
+        └─ good  → Study Completion
+```
+
+Experience Recall 同时承担 grounding 与内部回想：必要呈现是经验速写与 Sense 线索，可选辅助资源
+只能进入声明过的 Presentation Slot，并且在 Reveal 前不得以任何形式泄露 target expression。
+Expression Reveal 的必要呈现是 expression surface 与确切 Sense binding；发音、音标、词法信息、
+多词结构、语调、用法、示例或场景回扣均是按实际已验证资源填充的可选 Slot。协议和 renderer
+都不得假定 Expression 必然是单词。rating 是 Reveal 上的交互，不是第三个 Step；完成页是 Run
+结果，也不是 Card 或 Step。
+
+Card Presentation Slot 是版本化 delivery contract，不是 Content Demand 或资源 identity。Content
+Demand 声明教学上需要什么 material role，Step 声明何时使用它，Assembly Policy 才把已验证的 role
+放入允许的 Slot；生成模型不得直接指定布局或在运行时临场决定 UI。
+
 #### Structured Acquisition Protocol
 
 Recognition、Recall、Novel Transfer、conditional Boundary、interference、Gate、5D 与 repair 共同
@@ -639,18 +693,11 @@ confirmed English-oriented Sense
 × FSRS Scheduling
 ```
 
-该轻量 Profile 的 Learning Materialization 至少提供：
-
-- 中文可理解的 Sense focus/L1 access path；
-- 一个具体经验或场景；
-- primary English expression 与可用发音；
-- 少量自然、绑定同一 Sense 的例句；
-- 必要时一个重要相邻意义区别；
-- 一个简单主动回忆提示或等价的轻量连接动作。
-
-具体 Step 数量、顺序、Card Presentation 和 rating 操作由后续 delivery/runtime contract 确定。该 Profile 不要求 Gate、5D、
-protected Transfer pool 或 Structured Acquisition Graduation；已有 published Package 可以作为内容源
-或 fallback，但不是 Personal Meaning 加入学习的前置条件。
+该轻量 Profile 的 Learning Materialization 必须足以提供 Experience Recall 的经验/Sense cue，以及
+Expression Reveal 的 target expression/Sense binding。发音、词法或结构信息、用法、例句、边界与
+场景回扣是否成为具体 material role，由后续 Content Demand 裁决；它们不是两张 Card 的通用必填
+字段。该 Profile 不要求 Gate、5D、protected Transfer pool 或 Structured Acquisition Graduation；
+已有 published Package 可以作为内容源或 fallback，但不是 Personal Meaning 加入学习的前置条件。
 
 ## 14. 代表性组合
 

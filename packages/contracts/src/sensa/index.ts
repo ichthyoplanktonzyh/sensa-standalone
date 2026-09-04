@@ -9,3 +9,4 @@ export * from "./runtimeLearningRelease.js";
 export * from "./semanticRegistry.js";
 export * from "./personalSemanticWorld.js";
 export * from "./learningConnection.js";
+export * from "./learningContent.js";

@@ -37,12 +37,35 @@ Materialization 只回答“本次 run 有哪些固定内容以及它们可承�
 合同允许时被不同 Step 绑定为 teaching、cue、assessment、feedback 或 repair role，但每次绑定必须
 保留 role、exposure/novelty 与 grader eligibility。
 
+Card Presentation 的版本化 Slot contract 位于 material role 与 renderer 之间。Slot 只声明稳定区域、
+允许的 role、cardinality、顺序、disclosure 和 fallback；Assembly Policy 负责把已验证资源装配进去。
+模型只生成 Material Candidate，不直接选择区域、CSS 或组件。由此，同一 Expression Reveal 可以对
+单词显示可用 pronunciation/lexical facts，对多词表达显示结构与重音，对完整 utterance 显示整句音频
+与语调；这些差异不改变 Protocol Step identity，缺少可选区域也不会阻塞运行。
+
 On-demand materialization 不会因为生成成功而自动成为 Published Package，也不因此获得 Structured
 Acquisition 的 Evidence eligibility。每个协议必须独立声明最低内容角色、验证强度与允许的结果。
 生成内容较少只能说明 Lightweight 更易准备，不能把 AI 输出自动提升为 high-assurance assessment
 inventory 或 Acquisition Graduation basis。
 
-### 1.1 Published Package identity
+### 1.1 Content Demand 与 Candidate admission
+
+Protocol 需求内容时引用版本化 Content Demand。Demand 以开放的 material role identity 声明
+schema、cardinality、合法用途、Evidence eligibility、provisioning/validator policy 与外部派生；
+它不指定 Card 名称、界面阶段或当日顺序。同一 material role 可以被 Protocol Step 绑定到
+prompt、reveal、feedback 或 detail，因此新增 Reveal Card 不要求修改资源 identity 或 Learning Kernel。
+
+Content Provisioning 先建立幂等 Content Generation Request，把固定 target/Sense/Protocol 与所有
+已授权、已冻结的 Content Context Artifacts 一次性交给 adapter。adapter 可以复用 Published
+resource、调用生成模型或运行外部工具，但它的每个输出都只是 Material Candidate。Candidate
+只有通过该 role 全部 required validators，并且整个 Demand 的 cardinality 完整，才可进入
+Materialization assembly。
+
+字典、语料与发音索引返回的是 authoritative Content Context Artifact；Personal Meaning 中的原始
+场景是必须带 use grant 的 Personal Anchor artifact；TTS 是从已接受文本或发音事实产生媒体
+Candidate 的 Content Derivation。这三类输入/操作不能被压成一段不可审计的模型 prompt。
+
+### 1.2 Published Package identity
 
 Sense Learning Package 固定：
 
@@ -56,7 +79,7 @@ Sense Learning Package 固定：
 Release 发布后不可原位修改。语言事实、源文本、媒体或 Required Capability 发生语义变化时，
 必须产生新 version/release。
 
-### 1.2 Package 的概念组成
+### 1.3 Package 的概念组成
 
 一个可发布 Package 在领域上组合六类事实，但不要求数据库或传输合同把它们内嵌在一条记录中：
 
@@ -580,6 +603,8 @@ scene domain、construction、disambiguating cue、collocations 和 variation no
   Supplemental Membership，也不能静默切换 Learning Policy Profile 或制造 Runtime progress；
 - Protocol Step 只能绑定 Materialization 中具备对应 role、visibility、exposure 与 grader eligibility 的
   内容；Card Presentation 不得临时补造内容、替换评分依据或升级结果资格；
+- Presentation Slot 只能接收其合同允许的 material role；模型输出的布局指令一律不进入
+  Materialization。Experience Recall 的全部 Slot 必须通过 target-expression non-disclosure 校验；
 - Semantic LLM、Learning Content LLM 与未来 Grading LLM 是不同领域角色；同一次模型调用不能因
   “模型很懂语言”而绕过各角色独立的权限、输入最小化、校验与审计合同；
 - Reference Sense 与 Sensa Sense 只能通过 reviewed/versioned Alignment 连接，词典条目本身不能成为

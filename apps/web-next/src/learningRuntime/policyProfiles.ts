@@ -166,7 +166,7 @@ export class LearningPolicyProfileRegistry<ProfileId extends string> {
 export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
   {
     profileId: 'lightweight',
-    profileVersion: 'lightweight-profile-v1',
+    profileVersion: 'lightweight-profile-v2',
     presentation: {
       label: '轻量学习',
       shortBadge: '更快开始',
@@ -184,7 +184,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
     protocols: {
       initial_learning: {
         protocolId: 'lightweight-study',
-        protocolVersion: 'v1',
+        protocolVersion: 'v2',
         runtimeAdapterId: 'lightweight',
         orchestrationId: 'lightweight_study',
         evaluationPolicyId: 'lightweight-practice-observation-v1',

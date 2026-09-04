@@ -129,6 +129,7 @@ import {
   type RuntimeSurfaceContext,
 } from './learningRuntime/runtimeSurfaces';
 import type { StepRendererHost } from './learningRuntime/stepRenderers';
+import { useLightweightInitialProtocol } from './learningRuntime/useLightweightInitialProtocol';
 import { useShellNavigation } from './router/useShellNavigation';
 import { usePresentationStore } from './stores/presentationStore';
 import { useOverlayStore } from './stores/overlayStore';
@@ -377,6 +378,15 @@ export default function App() {
   const structuredInitialTargetIds = initialRunOn(runtimeSession, 'structured_session');
   const lightweightInitialTargetIds = initialRunOn(runtimeSession, 'lightweight_initial');
   const lightweightInitialTargetId = lightweightInitialTargetIds[0] ?? null;
+  const lightweightInitialRetentionTargetId = lightweightInitialTargetId
+    ? defaultRetentionTargetIdFor(PROTOTYPE_LEARNING_TARGETS[lightweightInitialTargetId])
+    : null;
+  const {
+    state: lightweightInitialProtocolState,
+    step: lightweightInitialProtocolStep,
+    reveal: revealLightweightExpression,
+    rate: rateLightweightInitial,
+  } = useLightweightInitialProtocol(lightweightInitialRetentionTargetId);
   const lightweightReviewTargetIds = retentionRunOn(runtimeSession, 'lightweight_retention');
   const fourStageInitialTargetIds = initialRunOn(runtimeSession, 'interleaved_four_stage');
   const fourStageReviewTargetIds = retentionRunOn(
@@ -1017,6 +1027,15 @@ export default function App() {
       startLightweightRetention: store.opensJourneyLadder,
     });
   }, [dispatchJourney, journey, lightweightInitialTargetId]);
+
+  const handleLightweightInitialRating = useCallback((rating: PrototypeLightweightRating) => {
+    const result = rateLightweightInitial(rating);
+    if (!result || rating === 'again') return;
+    if (!result.state.progress.completed) {
+      throw new Error(`Lightweight rating ${rating} did not complete the Protocol Run.`);
+    }
+    completeLightweightRuntime(rating);
+  }, [completeLightweightRuntime, rateLightweightInitial]);
 
   const finishLightweightRuntime = useCallback(() => {
     if (!lightweightInitialTargetId) return;
@@ -1702,10 +1721,6 @@ export default function App() {
   const activeLightweightRuntimeTarget = lightweightInitialTargetId
     ? PROTOTYPE_LEARNING_TARGETS[lightweightInitialTargetId]
     : null;
-  const activeLightweightRuntimePolicy = lightweightInitialTargetId
-    ? journeyFor(journey, lightweightInitialTargetId).committedPolicy ?? defaultLearningPolicy
-    : defaultLearningPolicy;
-
   const currentStep =
     flowMode === 'review' && reviewSession
       ? reviewSession.index
@@ -2060,10 +2075,12 @@ export default function App() {
           <LightweightRuntimeStartScreen
             active={viewMode === 'lightweight'}
             target={activeLightweightRuntimeTarget}
-            committedPolicy={activeLightweightRuntimePolicy}
+            step={lightweightInitialProtocolStep}
+            completed={lightweightInitialProtocolState?.progress.completed ?? false}
             hasNextTarget={lightweightInitialTargetIds.length > 1}
             onExit={exitLightweightRuntime}
-            onComplete={completeLightweightRuntime}
+            onReveal={() => { revealLightweightExpression(); }}
+            onRate={handleLightweightInitialRating}
             onFinish={finishLightweightRuntime}
           />
 
