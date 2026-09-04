@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
 import type { SemanticWorldScreenProps } from './SemanticWorldScreen';
 import { PersonalMeaningComposer } from './PersonalMeaningComposer';
+import { IntakeInboxDrawer } from './IntakeInboxDrawer';
+import { IntakeSimulatorModal } from './IntakeSimulatorModal';
 import {
   useJourneyGateway,
+  useJourneyInbox,
   useJourneyWorld,
   type JourneyAlignmentView,
   type JourneyFocusView,
@@ -1099,17 +1102,21 @@ const ExpressionRows = ({
 const WorldHome = ({
   meanings,
   expressions,
+  inboxCount,
   onCreate,
   onBrowseMeanings,
   onBrowseExpressions,
+  onOpenInbox,
   onOpen,
   onOpenConfirmedSense,
 }: {
   meanings: readonly WorldMeaningView[];
   expressions: readonly BoundExpressionView[];
+  inboxCount: number;
   onCreate: () => void;
   onBrowseMeanings: () => void;
   onBrowseExpressions: () => void;
+  onOpenInbox: () => void;
   onOpen: (personalMeaningId: string, meaningFocusId?: string) => void;
   onOpenConfirmedSense: (personalMeaningId: string, meaningFocusId: string) => void;
 }) => {
@@ -1123,6 +1130,15 @@ const WorldHome = ({
 
   return (
     <>
+      {inboxCount > 0 && (
+        <button type="button" className="personal-world-v2__inbox-entry" onClick={onOpenInbox}>
+          <span className="personal-world-v2__inbox-copy">
+            <b>待处理材料</b>
+            <small>你有 {inboxCount} 条生活与阅读中捕获的表达</small>
+          </span>
+          <span className="personal-world-v2__inbox-count" aria-hidden="true">{inboxCount}</span>
+        </button>
+      )}
       <section className="personal-world-v2__intro is-home">
         <div className="personal-world-v2__intro-copy">
           <h2>从一个真实经验开始</h2>
@@ -1258,8 +1274,11 @@ export const SensaSemanticWorldScreen = ({
   const [search, setSearch] = useState('');
   const [expressionSearch, setExpressionSearch] = useState('');
   const [composerOpen, setComposerOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
   const gateway = useJourneyGateway();
   const { items, status } = useJourneyWorld();
+  const inboxItems = useJourneyInbox();
   const meanings = useMemo(() => items.map(worldMeaningFor), [items]);
   const expressions = useMemo(() => expressionsFor(meanings), [meanings]);
 
@@ -1303,7 +1322,26 @@ export const SensaSemanticWorldScreen = ({
         <div className="personal-world-v2__nav-title">
           <h1>{section === 'home' ? '我的词义世界' : section === 'expressions' ? '我的表达' : '全部意思'}</h1>
         </div>
-        <span className="personal-world-v2__nav-mark" aria-hidden="true">◌</span>
+        <div className="personal-world-v2__nav-actions">
+          <button
+            type="button"
+            className={`personal-world-v2__nav-intake${inboxItems.length > 0 ? ' has-items' : ''}`}
+            onClick={() => setInboxOpen(true)}
+            aria-label={`待处理材料盒，${inboxItems.length} 条待处理`}
+          >
+            <svg className="icon" aria-hidden="true"><use href="#i-mail" /></svg>
+            {inboxItems.length > 0 && <span className="personal-world-v2__nav-intake-badge">{inboxItems.length}</span>}
+          </button>
+          <button
+            type="button"
+            className="personal-world-v2__nav-simulate"
+            onClick={() => setSimulatorOpen(true)}
+            aria-label="打开多模态摄取模拟器"
+          >
+            <svg className="icon" aria-hidden="true"><use href="#i-penplus" /></svg>
+          </button>
+          <span className="personal-world-v2__nav-mark" aria-hidden="true">◌</span>
+        </div>
       </header>
 
       <div className="personal-world-v2__body">
@@ -1313,6 +1351,8 @@ export const SensaSemanticWorldScreen = ({
           <WorldHome
             meanings={meanings}
             expressions={expressions}
+            inboxCount={inboxItems.length}
+            onOpenInbox={() => setInboxOpen(true)}
             onCreate={() => setComposerOpen(true)}
             onBrowseMeanings={() => setSection('meanings')}
             onBrowseExpressions={() => setSection('expressions')}
@@ -1403,6 +1443,25 @@ export const SensaSemanticWorldScreen = ({
         onClose={() => setComposerOpen(false)}
         onCreated={handleCreated}
         onSaved={toast}
+      />
+      <IntakeInboxDrawer
+        open={inboxOpen}
+        items={inboxItems}
+        onClose={() => setInboxOpen(false)}
+        onSummoned={(personalMeaningId) => {
+          setInboxOpen(false);
+          onOpenPersonalMeaning(personalMeaningId);
+        }}
+        toast={toast}
+      />
+      <IntakeSimulatorModal
+        open={simulatorOpen}
+        onClose={() => setSimulatorOpen(false)}
+        onFastTracked={(personalMeaningId) => {
+          setSimulatorOpen(false);
+          onOpenPersonalMeaning(personalMeaningId);
+        }}
+        toast={toast}
       />
     </section>
   );

@@ -32,6 +32,7 @@ import type {
   SensaSenseProposalVersionSnapshot,
   SensaSenseSnapshot,
   SensaSenseVersionSnapshot,
+  SensaIntakeItem,
 } from '@sensa/contracts/sensa';
 import { StorageUnavailableError, type StoragePort } from './ports';
 import type { ClarificationStartingPoint } from './semanticAgent';
@@ -94,6 +95,8 @@ export interface JourneyState {
   version: typeof JOURNEY_STORE_VERSION;
   meanings: MeaningJourneyRecord[];
   registry: SenseRegistryState;
+  /** Slow-track draft materials waiting for learner confirmation. */
+  inboxItems: SensaIntakeItem[];
   commandReceipts: CommandReceipt[];
 }
 
@@ -117,6 +120,7 @@ export const emptyJourneyState = (): JourneyState => ({
   version: JOURNEY_STORE_VERSION,
   meanings: [],
   registry: emptyRegistry(),
+  inboxItems: [],
   commandReceipts: [],
 });
 
@@ -144,6 +148,7 @@ const asJourneyState = (parsed: unknown): JourneyState => {
     );
   }
   requireArray(parsed, 'meanings');
+  requireArray(parsed, 'inboxItems');
   requireArray(parsed, 'commandReceipts');
   if (!isRecord(parsed.registry)) {
     throw new StoreCorruptedError('本机的语义注册表数据结构损坏。');

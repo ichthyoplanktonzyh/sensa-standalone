@@ -11,6 +11,7 @@ export {
   useJourneyList,
   useJourneyWorld,
   useJourneyDetail,
+  useJourneyInbox,
 } from './usePersonalMeaningJourney';
 export type { JourneyWorldResult } from './usePersonalMeaningJourney';
 export { PHASE_LABELS } from './projection';

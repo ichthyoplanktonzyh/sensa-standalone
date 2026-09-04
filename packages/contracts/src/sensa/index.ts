@@ -8,4 +8,5 @@ export * from "./authoringDraftV2.js";
 export * from "./runtimeLearningRelease.js";
 export * from "./semanticRegistry.js";
 export * from "./personalSemanticWorld.js";
+export * from "./intake.js";
 export * from "./learningConnection.js";

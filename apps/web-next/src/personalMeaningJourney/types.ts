@@ -7,8 +7,10 @@
  */
 
 import type {
+  IngestResult,
   SensaExpressionBindingRelation,
   SensaExpressionType,
+  SensaIntakeSense,
   SensaPersonalMeaningAlignmentSnapshot,
   SensaSemanticCoverage,
   SensaSenseProposalSnapshot,
@@ -361,3 +363,22 @@ export interface ConfirmExpressionBindingResult {
   bindingVersionId: string;
   replayed: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Ubiquitous multimodal intake
+// ---------------------------------------------------------------------------
+
+/**
+ * The learner's decision on one Inbox draft. Quick disambiguation passes the
+ * confirmed sense; the gateway then promotes the draft through the same
+ * atomic fast-track materialization as a direct capture.
+ */
+export interface InboxResolutionInput {
+  sense: SensaIntakeSense;
+}
+
+/**
+ * Gateway result for the intake commands. The contract union stays pure;
+ * the gateway adds the shared `replayed` flag like every other command.
+ */
+export type IngestCommandResult = IngestResult & { replayed: boolean };

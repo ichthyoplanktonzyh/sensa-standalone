@@ -14,12 +14,15 @@
  */
 
 import type {
+  IngestResult,
   SensaConfirmExpressionBindingFact,
   SensaConfirmSenseProposalFact,
   SensaExpressionBindingRelation,
   SensaExpressionSnapshot,
   SensaExpressionType,
   SensaExpressionVersionSnapshot,
+  SensaIntakeItem,
+  SensaIntakePayload,
   SensaMeaningFocusAcceptanceFact,
   SensaPersonalExpressionAnchorRevisionSnapshot,
   SensaPersonalExpressionAnchorSnapshot,
@@ -33,6 +36,15 @@ import type {
   SensaSenseSemanticSpec,
   SensaSenseVersionSnapshot,
 } from '@sensa/contracts/sensa';
+import { sensaIntakePayloadSchema, sensaIntakeSenseSchema } from '@sensa/contracts/sensa';
+import {
+  createInboxItem,
+  dismissInboxItem,
+  evaluateIntakeRoute,
+  executeFastTrack,
+  resolveInboxItemWithSense,
+  type IntakeEnginePorts,
+} from './intakeEngine';
 import { digestOf } from './digest';
 import { cryptoRandomIdPort, isUuid, type RandomIdPort } from './ids';
 import {
@@ -64,6 +76,8 @@ import type {
   ConfirmExpressionBindingResult,
   CreatePersonalMeaningInput,
   CreatePersonalMeaningResult,
+  IngestCommandResult,
+  InboxResolutionInput,
   JourneyDetailView,
   JourneyListItemView,
   JourneyWorldItemView,
@@ -113,6 +127,25 @@ export interface PersonalMeaningJourneyGateway {
   confirmExpressionBinding(
     input: ConfirmExpressionBindingInput,
   ): Promise<ConfirmExpressionBindingResult>;
+
+  /** Ubiquitous intake: route one capture payload onto the fast track, the Inbox, or rejection. */
+  ingest(
+    operationId: string,
+    payload: SensaIntakePayload,
+  ): Promise<IngestCommandResult>;
+
+  /** Slow-track draft materials waiting for learner confirmation. */
+  getInboxItems(): SensaIntakeItem[];
+
+  /** Promote one Inbox draft by confirming its sense (same materialization as the fast track). */
+  resolveInboxItem(
+    operationId: string,
+    intakeId: string,
+    resolution: InboxResolutionInput,
+  ): Promise<IngestCommandResult>;
+
+  /** Drop one Inbox draft. */
+  dismissInboxItem(operationId: string, intakeId: string): Promise<void>;
 }
 
 export interface JourneyGatewayDeps {
@@ -313,12 +346,6 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   private activeFamiliarAnchors(record: MeaningJourneyRecord) {
     return this.activeExpressionAnchors(record).filter((anchor) =>
       this.currentExpressionAnchorRevision(record, anchor)?.learnerLanguageRole === 'familiar',
-    );
-  }
-
-  private activeTargetExpressionAnchors(record: MeaningJourneyRecord) {
-    return this.activeExpressionAnchors(record).filter((anchor) =>
-      this.currentExpressionAnchorRevision(record, anchor)?.learnerLanguageRole === 'target',
     );
   }
 
@@ -1147,7 +1174,10 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     let anchorRevision: SensaPersonalExpressionAnchorRevisionSnapshot | null = null;
     let anchor: SensaPersonalExpressionAnchorSnapshot | undefined;
     let createdTargetAnchor = false;
-    for (const candidateAnchor of this.activeTargetExpressionAnchors(record)) {
+    // The intake fast track pre-creates the captured expression anchor with
+    // this candidate id in its provenance (either language role), so match
+    // any active anchor before creating a duplicate.
+    for (const candidateAnchor of this.activeExpressionAnchors(record)) {
       const current = this.expressionAnchorRevisionFor(
         record,
         candidateAnchor.personalExpressionAnchorId,
@@ -1288,6 +1318,114 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     this.recordReceipt(input.operationId, 'ConfirmExpressionBinding', result);
     this.persist();
     return { ...result, replayed: false };
+  }
+
+  // -- ubiquitous multimodal intake -----------------------------------------
+
+  /** The engine never touches storage or receipts; ids/clock come from the gateway. */
+  private enginePorts(): IntakeEnginePorts {
+    return { newId: () => this.id(), nowIso: () => this.now() };
+  }
+
+  getInboxItems(): SensaIntakeItem[] {
+    if (!this.state) return [];
+    return [...this.state.inboxItems];
+  }
+
+  async ingest(
+    operationId: string,
+    payload: SensaIntakePayload,
+  ): Promise<IngestCommandResult> {
+    const replay = this.replay<IngestCommandResult>(operationId, 'Ingest');
+    if (replay) return replay;
+    const state = this.requireState();
+    // Boundary validation: the capture payload must satisfy the intake
+    // contract before the engine sees it, and the transport idempotency key
+    // must be the command's receipt key.
+    const parsed = sensaIntakePayloadSchema.parse(payload);
+    if (parsed.intakeOperationId !== operationId) {
+      throw new Error('ingest 的 operationId 必须与载荷的 intakeOperationId 一致。');
+    }
+    const decision = evaluateIntakeRoute(parsed);
+    if (decision.route === 'rejected') {
+      const result: IngestResult = { route: 'rejected', reason: decision.reason };
+      this.recordReceipt(operationId, 'Ingest', result);
+      this.persist();
+      return { ...result, replayed: false };
+    }
+    if (decision.route === 'inbox') {
+      const item = createInboxItem(parsed, this.id(), this.now());
+      state.inboxItems.push(item);
+      const result: IngestResult = { route: 'inbox', intakeId: item.intakeId };
+      this.recordReceipt(operationId, 'Ingest', result);
+      this.persist();
+      return { ...result, replayed: false };
+    }
+    // Fast track: the engine materializes the whole Personal Meaning record
+    // atomically; the shared binding core then settles the registry
+    // Expression/Binding and the confirmation fact in the same command.
+    const outcome = executeFastTrack(
+      state,
+      { payload: parsed, operationId },
+      this.enginePorts(),
+    );
+    this.state = outcome.nextState;
+    this.settleExpressionBinding(
+      outcome.record,
+      outcome.alignment,
+      outcome.bindingCandidate,
+      { operationId, ...outcome.bindingInput },
+      outcome.senseProposalVersionId,
+    );
+    const result: IngestResult = {
+      route: 'fast_track',
+      personalMeaningId: outcome.personalMeaningId,
+    };
+    this.recordReceipt(operationId, 'Ingest', result);
+    this.persist();
+    return { ...result, replayed: false };
+  }
+
+  async resolveInboxItem(
+    operationId: string,
+    intakeId: string,
+    resolution: InboxResolutionInput,
+  ): Promise<IngestCommandResult> {
+    const replay = this.replay<IngestCommandResult>(operationId, 'ResolveInboxItem');
+    if (replay) return replay;
+    const state = this.requireState();
+    // Boundary validation for the learner-confirmed sense before any write.
+    const sense = sensaIntakeSenseSchema.parse(resolution.sense);
+    const outcome = resolveInboxItemWithSense(
+      state,
+      { intakeId, sense, operationId },
+      this.enginePorts(),
+    );
+    this.state = outcome.nextState;
+    this.settleExpressionBinding(
+      outcome.record,
+      outcome.alignment,
+      outcome.bindingCandidate,
+      { operationId, ...outcome.bindingInput },
+      outcome.senseProposalVersionId,
+    );
+    const result: IngestResult = {
+      route: 'fast_track',
+      personalMeaningId: outcome.personalMeaningId,
+    };
+    this.recordReceipt(operationId, 'ResolveInboxItem', result);
+    this.persist();
+    return { ...result, replayed: false };
+  }
+
+  async dismissInboxItem(operationId: string, intakeId: string): Promise<void> {
+    const found = this.receipt(operationId, 'DismissInboxItem');
+    if (found) return;
+    const state = this.requireState();
+    // Pure removal; throws when the item is unknown, before any write.
+    this.state = dismissInboxItem(state, intakeId);
+    this.recordReceipt(operationId, 'DismissInboxItem', { intakeId });
+    this.persist();
   }
 }
 
