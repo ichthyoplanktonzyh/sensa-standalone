@@ -1,16 +1,27 @@
 # web-next 阶段性前端先行工作方式
 
-> 状态：当前阶段有效
+> 状态：原型与需求发现补充规范；按已确认用例逐项移交生产
 > 适用范围：`apps/web-next` 及其直接需要的共享契约
 > 生效日期：2026-09-01
+> 过渡更新：2026-09-05
 > Canonical frontend narratives：[`journeys/README.md`](journeys/README.md)
-> 退出条件：本文第 9 节所列条件满足后，由后续 API/后端集成工作方式替代
+> 生产路线图：[`production-migration-plan.md`](../../docs/sensa/production-migration-plan.md)
+> 全局工作方式：[`development-workflow.md`](../../docs/sensa/development-workflow.md)，可根据实际开发反馈调整
+> 退出条件：本文第 9 节按用例验收；首批对应路线图 M0 → M1
 
 ## 1. 目的
 
 当前阶段先通过 `web-next` 确认 Sensa V1 的真实用户旅程、页面状态与用户意图，再从已经确认的
 前端需求中提炼 Query、Command、结果、错误和同步契约。后端正式业务实现、最终持久化映射与
 production Sync 接入在这些消费契约稳定后开始。
+
+2026-09-05 已接受向生产化推进的路线图。本文继续用于 M0 及后续尚未确认用例的状态和合同
+发现，不再要求所有 P0 页面同时结束原型工作后才开始后端。某个用例通过第 9 节验收后，其
+正式 Web/API/DB/Sync 按路线图实施；本次文档更新不代表任何用例已经通过该验收。
+
+全项目的当前协作方式由开发工作约定管理，本文只补充 web-next 的场景、mock port 和消费
+需求发现。Owner 与指定 supervisor/worker 先确认具体用例的前端体验，再进入正式合同和
+实现。原型移交生产后，这个确认顺序继续适用，不随 mock-first 阶段结束而取消。
 
 这不是“让 UI 定义领域”。它是用可操作的前端旅程发现领域模型中尚未被证明需要的部分，避免先按
 想象设计完整后端，再迫使前端迁就错误边界。
@@ -23,7 +34,7 @@ production Sync 接入在这些消费契约稳定后开始。
    生命周期和不变量；
 2. `docs/sensa/current-stage.md` 定义当前里程碑，`docs/sensa/product-requirements-v1.md` 定义 V1 IA、
    用户旅程和验收；
-3. 本文定义当前阶段的开发顺序和交付物；
+3. `docs/sensa/development-workflow.md` 定义当前可调整的协作方式，本文补充原型开发与需求发现；
 4. `web-next` 现有组件、类型、fixture 和交互只提供原型证据，不是领域事实来源；
 5. 旧 production contracts、旧数据库和旧客户端实现只能作为迁移输入，不能覆盖新领域文档。
 
@@ -100,6 +111,9 @@ Learning Target → Initial Learning → Retention/Relearning
 mock 可以模拟服务端权威结果，但不得借此宣称后端、Sync、FSRS、LLM policy 或持久化已经完成。
 页面必须能诚实呈现 unavailable、pending、conflict 和 offline，而不是让 mock 永远成功。
 
+随后与 owner 确认当前界面、功能、操作结果和相关异常/恢复状态，记录对应产物与确认范围。
+既有确认可以在同一范围内复用；只有该用例的体验确认后，才正式细化生产消费契约并移交实现。
+
 ### 第四步：提炼消费者驱动契约
 
 只有前端旅程证明存在真实需求后，才提炼共享契约：
@@ -128,12 +142,15 @@ mock 可以模拟服务端权威结果，但不得借此宣称后端、Sync、FS
 只有答案确实改变领域语言或不变量时，才同步更新 canonical domain documents。纯 UI 布局、组件
 形态、动画和页面顺序不进入领域文档。
 
-### 第六步：记录 API 需求，但暂不实现后端
+### 第六步：记录 API 需求，验收后移交生产集成
 
 进入契约发现阶段后，依据已冻结旅程留下可由后端直接消费的 API demand：所需 Query、Command、
 Projection、错误、幂等和版本语义。API demand 不是前端叙事基线，不得放进 `journeys/` 或覆盖其中
 的入口、终点与用户意图。当前阶段不因此自动开始 route、service、repository、production Sync
 handler、FSRS adapter 或部署实现。
+
+达到第 9 节条件的用例按生产路线图进入实现；后续未确认用例仍先完成本流程。API demand、
+生产消费合同和验收证据需可追溯，但不另建平行的前端叙事基线。
 
 ## 5. 每条旅程的最小交付物
 
@@ -170,7 +187,8 @@ CSS class、弹窗状态和临时 prototype payload 留在 `web-next`。
 - 不用一个含义模糊的 `isLearned`、`isReady` 或通用 `status` 合并不同领域事实；
 - 不把 frontend route、tab、modal 或 component hierarchy 固化为 API identity；
 - 不为了让原型成功而隐藏 content unavailable、conflict、offline 或 validation failure；
-- 不在未经 owner 明确决定时，以前端需求为理由开始正式后端或部署工作。
+- 正式后端工作须处于已接受路线图范围，并通过对应消费契约验收；不得仅凭新原型入口扩大
+  范围。部署始终遵守仓库 CI/CD 约定。
 
 ## 8. 当前已冻结旅程
 
@@ -186,9 +204,11 @@ Home、Target 库、Policy 选择、Runtime 与 Summary 都是这两条旅程的
 
 ## 9. 退出这一工作方式的条件
 
-只有同时满足以下条件，才进入正式 API/后端集成阶段：
+按本次移交的生产用例逐项检查，首批是路线图 M1 的独立轻量学习闭环。只有同时满足以下条件，
+该用例才进入正式 API/后端集成：
 
-- 当前 V1 P0 旅程已经在 `web-next` 中逐条确认；
+- 该用例的行为旅程已有原型与确认记录，正式 Web 的页面职责和首批 UI 规格已经明确；
+- owner 已确认本轮前端体验及其功能、操作结果和相关状态，确认对象可追溯到实际产物；
 - 主状态、失败状态、离线状态和恢复语义稳定；
 - 前端不再依靠未命名的 mock 副作用维持流程；
 - 所需 Query、Command、Projection、错误和幂等契约已经明确；
@@ -196,5 +216,7 @@ Home、Target 库、Policy 选择、Runtime 与 Summary 都是这两条旅程的
 - 后端可以仅依据领域文档和消费契约实现，而不需要猜测页面意图；
 - Web 与未来 Flutter 可以共享业务契约，而不共享组件或 presentation state。
 
-届时本文应标记为 `Superseded`，并链接新的 API/后端集成工作约定；不能把阶段性的 mock-first 方式
-继续当作长期 production 架构。
+通过验收时，在路线图记录用例、消费合同、产物与证据；该用例由路线图的生产集成和交付
+检查点接管。未移交的用例仍适用本文，不阻塞已验收用例实施。首轮用例全部移交后，将本文
+标记为 `Superseded` 并保留路线图与开发工作约定链接；mock-first 方式不作为长期 production
+架构，按用例由前端体验驱动的确认与实现流程仍继续执行。

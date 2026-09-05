@@ -45,13 +45,20 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | --- | --- | --- |
 | Canonical stage | [`current-stage.md`](current-stage.md) | 当前里程碑、证据级别和交付边界 |
 | Canonical product | [`product-requirements-v1.md`](product-requirements-v1.md) | V1 IA、用户旅程和交互验收 |
-| Active plan | [`production-migration-plan.md`](production-migration-plan.md) | 从本地纵切到公开 V1 的剩余工作 |
+| Accepted first-round scope | [`first-round-product-baseline.md`](first-round-product-baseline.md) | M0-1 首轮九个能力区、浏览器采集插件边界及产品/插件/通用状态矩阵；不替代领域与 API 合同 |
+| Active roadmap | [`production-migration-plan.md`](production-migration-plan.md) | M0–M5 生产化路线图：正式产品与消费契约、生产闭环、恢复与数据控制、受邀发布和用户验证；含依赖、验收门与当前待办 |
+| Current working agreement | [`development-workflow.md`](development-workflow.md) | 可调整的开发方式：全局结构蓝图、owner 参与前端确认、消费契约、worker 纵向实现与端到端验收；不替代领域或路线图 |
 | Active decomposition | [`learning-extensibility-architecture.md`](learning-extensibility-architecture.md) | `web-next` 学习扩展性的实现 seam；把领域已有的显式 retention scope 扩展规定落到实现层，不新增领域定义 |
-| Current implementation | [`content-kernel-contract.md`](content-kernel-contract.md) | 当前数据库与 V3 package validator 实现快照；尚未证明新 Gate capability coverage |
-| Pre-redesign contract | [`curriculum-runtime-contract.md`](curriculum-runtime-contract.md) | 当前 vertical slice 的 Curriculum/Runtime 持久化事实，等待 Acquisition Cycle 版本替换 |
-| Pre-redesign packet | [`runtime-rule-packet-v2.md`](runtime-rule-packet-v2.md) | 当前 Encounter 的可重放规则；首次 retrieval 即初始化 FSRS，不代表新 canonical runtime |
-| Frozen legacy | [`runtime-rule-packet-v1.md`](runtime-rule-packet-v1.md) | 历史 V1 Encounter 的可重放规则 |
-| Pre-redesign contract | [`sensa-sync-contract.md`](sensa-sync-contract.md) | 当前 Sync v1/v2 wire facts；新 Cycle/Gate/Session intent 需要新版本 |
+
+当前路线图 M0 进行中，M0-1 基线已记录，近期里程碑是 React Web + 浏览器采集插件的小规模
+受邀测试版。领域能力、原型中已经验证的能力和首轮生产交付范围分别管理，不能从原型菜单
+或完整领域目录推导上线清单。
+
+原先的 `content-kernel-contract.md`、`curriculum-runtime-contract.md`、`runtime-rule-packet-v1.md`、
+`runtime-rule-packet-v2.md` 与 `sensa-sync-contract.md` 已移除，不再列为当前可执行文档；旧事实
+可从 Git 历史追溯。当前实现依据仓库内的 [共享合同](../../packages/contracts/src/sensa/index.ts)、
+[数据库迁移](../../db/migrations/)及 API/客户端代码核查。新生产用例合同按路线图随用例交付并在
+本索引登记，不恢复旧文档来替代新合同。
 
 实现合同描述当前代码或历史事实，不自动成为永久领域规律。2026-08-27 接受的 Acquisition Cycle
 仍是 Structured Acquisition Protocol 的 canonical 模型，但不再是所有学习目标的唯一协议；新实现

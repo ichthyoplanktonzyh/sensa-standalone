@@ -1,209 +1,164 @@
 # Sensa 当前阶段与交付边界
 
-> 状态日期：2026-09-05
-> 当前里程碑：Sensa V1 Production Launch
+> 状态日期：2026-09-05\
+> 当前阶段：领域与行为原型验证后期，生产应用建设前期\
+> 下一里程碑：React Web + 浏览器采集插件的小规模受邀测试版\
+> 当前执行位置：M0 进行中；M0-1 产品基线已记录，下一项为 M0-2 UI/交互规格\
+> 执行路线图：[production-migration-plan.md](production-migration-plan.md)
 
-本文是阶段、证据级别和交付边界的唯一事实来源。
+本文是项目阶段、证据级别和近期交付范围的唯一事实来源。[文档索引](README.md)列出的七份
+领域文档裁决身份、所有权和不变量；[PRD](product-requirements-v1.md) 裁决产品 IA 与用户语言；
+路线图负责工作顺序、依赖和验收门。阶段变化不重定义领域对象，原型能力不自动成为生产承诺。
+具体协作方式遵守 [开发工作约定](development-workflow.md)：全局结构先规划，每条用例先与
+owner 确认前端体验，再细化合同并纵向实现；该方式可根据实际开发反馈调整。
 
-## 当前结论
+## 1. 当前判断
 
-Sensa 已从 flashcard 仓库抽出为独立 monorepo，并完成了 pre-redesign 本地 first-user
-vertical slice：独立 Postgres baseline、真实内容 Release/Book/Study Plan、Catalog、Planning、
-Encounter、5D/FSRS 交接、Sync v2、React Web 外壳、Sensa IndexedDB/outbox 和本地受保护媒体
-读取均已接通。
+Sensa 已具备开始生产化的领域、行为和工程基础。当前最主要的工作，是让最新领域模型、正式
+客户端、服务端持久化与同步成为同一条真实闭环。正式 UI 需要按平台设计，消费契约、数据库
+映射、服务端业务执行及运行保障仍需建立或迁移。
 
-2026-08-27 已接受 Structured Acquisition 的 canonical theory：它要求新 Sense 完成跨 Encounter 的
-Acquisition Cycle（Recognition、Recall、Transfer 与条件性 Boundary），Graduation 后通过 Scheduling
-Handoff 初始化 FSRS；统一 Planner 支持 `mixed | review_only`，Review 失败产生一次 Memory Outcome
-后进入 Relearning。2026-08-31 的 Learning Connection 决策进一步确认它是高保证协议，而不是所有
-学习的唯一入口；Relearning 也不必然创建 Acquisition Cycle，只有 Structured Relearning 才创建。
-同日通过 Anki/FSRS 覆盖测试进一步确认：长期记忆身份是 learner × Sense × target expression
-的 Retention Target，不是 Card 或笼统的 Sense；能力证据默认分开、FSRS 调度默认共享。Relearning
-不得改写原 Review，但协议声明的独立重学评价可以产生新的、可审计 Memory Outcome。
-当前 production Runtime/DB/Sync contracts 尚未实现该模型，因此已有 vertical slice 是
-迁移基础，不再等同于最终 V1 核心闭环。`web-next` 已新增一个不连接 production backend 的 MVP
-runtime：它只消费由 Draft V2 authoring Bundle 编译并验证得到的版本化学习包 JSON，通过 Learning
-Catalog 向 Learn、Review 与 Practice 投影资源；该原型用于验证学习包边界、跨 Sense 穿插、一次
-Review 一次 Outcome，以及失败 Review 后由 Package 声明资源驱动的 repair、间隔重测与
-Relearning Completion；它不代表 production persistence、sync 或 planner 已完成。该原型完全
-为移动端形态设计：其 UI 不承诺向任何正式客户端迁移，跨端资产是领域文档、实现层 seam
-形状与 smoke 规格，正式客户端以各自平台特点另行设计。
+当前仓库存在两套进度不同的实现：
 
-同日接受的完整产品领域边界还包括 Curriculum lifecycle、Lexical Reference、Settings/Account、
-published Semantic Field、Learner Semantic Projection、Personal Content 与 Free Practice。Curriculum lifecycle 将 Study Plan 与
-单一 Book 解耦，以 `active | maintenance | paused` Book Enrollment、稳定 Book Range、Supplemental
-Curriculum 和不可变 Study Scope Revision 处理换词书、学习范围与收藏显式加入学习；换范围不删除
-Retention Target 进度，同一 target 的多个来源必须去重。Personal Content 明确包含 Saved
-Sense/Example、每个 Sense 一份 current Note、零到多个 Personal Semantic Anchors、Personal
-Collection/typed Membership 与显式 Add-to-Learning Intent；这些操作彼此独立。听、说、读、写只
-组织 Practice Area，具体 Activity Definition 固定 primary Area、stimulus/response channels、typed
-target、资源、支架、交互、反馈与 session policy。
-Lexical Reference 使用独立 Reference Release/Reference Sense，并通过 reviewed Sense Alignment 与
-精选的 Sensa Sense 连接；Example 点词固定 exact Lexical Occurrence span，目标词沿 authored binding
-确定 Sensa Sense，并仅在存在 Alignment 时强调 Reference Sense；其他词只在 reviewed/model-confident
-时强调上下文义项。词根词缀、词源、词族和明确标记的
-记忆辅助属于可选 Lexical Enrichment；查词不产生学习进度，assessment-only asset 不可暴露，产品
-明确不建设“真题”。
+- apps/web + apps/api：较早模型下的真实本地 first-user vertical slice，已接通 Postgres、
+  Catalog、Book/Study Plan、Planning、Encounter、5D/FSRS 交接、Sync v2、IndexedDB/outbox
+  和受保护的本地媒体读取。这是可复用的工程基础，需要按最新领域模型逐项复核。
+- apps/web-next：移动端形态的 React 行为原型，更贴近当前领域模型，已实现两条核心旅程及
+  多种学习策略、内容供给和 Runtime 行为。主要学习与个人语义状态仍由本地原型存储维护，
+  尚未接通正式 API/Postgres/Sync。其 UI 不承诺迁入任何正式客户端。
 
-Settings/Account 模型将 Account 与 Learner 分离，V1 保持一对一；Settings Surface 只是组合 Account、
-typed Learner Preference、Device Preference、Study Plan link、Sync Health 与 Data Control 的页面，不
-拥有通用 settings aggregate。口音和例句译文默认状态随 Learner 同步，autoplay/theme/playback 属于
-Device；每日新学数仍属于 Study Plan。sign-out、Local Data Clearance、learning reset 与 Account
-deletion 是不同意图；V1 不提供全量学习历史 reset，删除账号必须阻止旧离线 Replica 复活数据。
+不能按页面数量估计上线完成度，也不能将两套实现的功能简单相加。当前尚未进入真实用户
+测试版的稳定性收尾阶段；接下来需要完成首条生产闭环，再验证持续使用与恢复能力。
 
-2026-08-28 接受的 Package 资源模型把 modality-independent Experience Sketch 与 text/image/
-animation/interaction Experience Render 分离，并把 Learning Example 与其 text/static-audio/
-synced-media Render 分离。Recall 的 V1 默认结果是正确 Lexeme identity：合法屈折不抹除 retrieval
-成功，派生词不自动接受，句法要求的精确 form 单独反馈。standard Package 的下一版 Structured
-Acquisition delivery profile 候选以至少 5 条、目标 6 条 protected novel-Transfer contexts 支持首次检验、失败后新语境重测
-和长期 revalidation；MVP 已用独立 runtime JSON validator 验证这条发布投影，但 production
-validator/runtime contract 仍未落地。
+## 2. 已有资产及证据边界
 
-2026-09-05 接受的 Free Practice 模型把它确定为独立语言使用空间，而不是宽松版 Learning Protocol。
-听、说、读、写是四个 Practice Area，Activity Definition 才是扩展单元；Practice Turn 可以形成
-Observation、Feedback 与 optional Artifact，但 Free Practice 永不产生 Learning Evidence 或改变正式
-进度/调度。Initial Free Practice Profile 仍属于 P0 之后的 Later delivery，不新增当前 launch blocker；
-首期每个 Area 只开放一个 Activity：真实语流泛化、情境口语排演、语境推义和情境书面表达。Practice
-Profile、Package/provider resource availability 与 Runtime/client capability 的交集决定可见入口，缺少
-自由练习资源不阻止正式 Package 发布。
+| 层面 | 已有资产 | 当前证据边界 |
+| --- | --- | --- |
+| 领域模型 | 七份领域文档定义语义身份、学习连接、内容资源、Runtime、Account 与数据控制 | 核心模型基本稳定；不代表所有生产用例合同和事务边界已落实 |
+| IA 与旅程 | PRD 已定义导航、页面职责和状态要求；web-next/journeys 冻结两条主旅程 | 原型叙事可复用；正式 Web 布局、组件、失败与恢复体验仍须设计和验收 |
+| 行为原型 | Personal Semantic World/Intake、独立学习、轻量与高保证路径、Review/Relearning、学习记录及练习入口 | 证明原型行为与确定性场景；不证明生产状态、真实练习服务或学习效果 |
+| 共享合同与内核 | Learning Connection v2、Content Demand/Task/Attempt/Bundle、Protocol、Completion/Handoff、Progression Kernel 与扩展 seam | 已有可执行 schema 和 smoke；生产 API、DB 与 Sync 需要逐项对齐 |
+| 数据库 | 独立 baseline；0008–0010 已加入语义注册、个人语义世界、Learning/Retention Target 和 Materialization 等迁移 | 新表结构存在于仓库；本次未验证实际数据库应用状态，新 Runtime 尚未接通 |
+| API 与同步 | 旧模型的 Catalog/Planning/Encounter/Media/Sync routes，React Web IndexedDB/outbox | 旧本地纵切基础；不能直接承载新模型全部事实 |
+| 内容与 LLM | 内容编译/校验工具、版本化原型学习包、Semantic Agent 开发代理、Content Agent 与模型适配 seam | 开发接入和无成本校验已存在；持久任务、生产质量、预算与恢复闭环待实现 |
+| 运行环境 | Cognito、Neon、R2、Cloudflare 的部署方向和授权边界 | Cognito 适配器仍返回未配置；仓库尚无完整云端部署流水线及上线运行证据 |
 
-2026-08-31 接受的 Personal Semantic World 模型把 learner 明确创建的 Personal Meaning 确认为
-personal-first 语义建构链的建模起点，而不是 Formal Learning 的全局入口。Personal Meaning 由
-Meaning Focus、Personal Semantic Anchors 与 Personal Expression
-Anchors 外化；LLM 通过中文语义访谈按需生成 Sense Proposal，而不是要求先从穷尽式公共 Sense 库
-命中已有条目。只有 learner 明确确认才创建 stable senseId、Sense Version 与 Personal Meaning
-Alignment；确认 Sense、准备学习内容、Add-to-Learning 和实际产生 Evidence 保持为不同步骤。
-首版固定中文 familiar language（L1）与英语 target language（L2），长期模型保留任意 L1/L2 及一对多、
-多对多表达关系。该能力现在进入 V1 P0 产品边界。
+需要特别处理的实现差异：
 
-2026-09-01 完成的 Learning Connection/Policy 修订把七个问题正式分开：学习目标、learner 选择的
-Learning Policy、内容来源、purpose-specific Protocol、plan readiness、Retention Target identity 与
-长期 Scheduling Handoff。Learning Policy Profile、Assignment、Effective Policy 与 Resolved Learning
-Plan 都是显式版本化事实；内容、Protocol、Evidence Policy 与 Scheduling Policy 保持正交。所有来源
-在使用前都必须冻结为不可变 Learning Materialization。Protocol Step 负责材料角色、交互、结果资格
-与转移，Card Presentation 只负责当前呈现，不是 identity、进度或 Deck。每个成功 Initial Learning
-Completion 必须且只能通过记录 basis/evidence level 的 Scheduling Handoff 初始化 FSRS；每个 Retention
-Target 默认最多一份 FSRS State。Review 只通过当次唯一 Memory Outcome 更新一次；Relearning 不
-重新初始化、不改写原 Review，只有协议声明的独立评价可另产生 Memory Outcome。
+- [Learning Connection 合同](../../packages/contracts/src/sensa/learningConnection.ts)已为 v2，
+  而 [0010 迁移](../../db/migrations/0010_sensa_learning_connection_v1.sql)仍是较早的 v1
+  持久化形状。例如 Target 间的引用方向尚未对齐，必须在新用例合同下设计迁移，不能把已有
+  SQL 当作最终 schema。
+- 正式 API 的 Memory State/Outcome 路径仍使用旧 Sense 相关模型；新的 Retention Target、
+  Protocol Run/Step、Completion/Handoff 尚未形成权威持久化闭环。
+- web-next 的 localStorage、fixture target 和「毕业后立即到期」等走查安排必须在生产接入时
+  明确替换。真实调度时间、Evidence、Outcome 和 FSRS 由服务端决定。
 
-MVP 提供两个 Learning Policy Profile：内部可描述为 Anki-like 的 `lightweight`，以及 Sensa 自有的
-`high_assurance`。前者组合 Lightweight Initial Learning、learner-rated/simple Retention Review、
-Lightweight Relearning 与 FSRS；后者组合 Structured Acquisition、evidence-oriented Retention Review、
-targeted/Structured Relearning 与 FSRS。Study Completion 不能冒充 Gate、5D、Learning Evidence 或
-mastery；Acquisition Graduation 也不表示永久掌握。Semantic LLM、Learning Content LLM 与未来
-Grading LLM 仍是不同角色。
+既有本地内容纵切曾记录 438 个 Sense、249 个 Lexeme，其中 424 个 Package 通过当时的
+可执行性检查，14 个 legacy Package 未满足 boundary 能力要求。这是历史迁移库存记录，本次
+未重新核对数量；不能据此宣称符合新高保证发布标准，也不作为个人语义轻量路径的上线配额。
+可重建内容源与媒体继续按 [content/README.md](../../content/README.md) 管理，生成数据与运行
+媒体保持在 Git 之外。
 
-MVP 同时固定 target-level Policy 的提交边界：Add-to-Learning 后、第一次正式 Protocol Run 创建前，
-learner 可以为每个 target 独立修改学习方式并重新解析 readiness；首次 Run 创建时形成 Committed
-Learning Policy，此后目标页面只读展示该方式。MVP 不提供 Learning Policy Migration，也不能通过
-修改默认方式、新增来源、删除后重加或新增内容静默改变已经进入 Runtime 的 target；未来迁移必须
-显式建立新 Assignment/Commitment/Plan revisions 并保留所有历史 Runtime 与 FSRS 事实。
+## 3. 下一里程碑的交付范围
 
-Formal Learning 同时确认为独立产品链：Book membership、Catalog/search/direct stable-Sense selection、
-reviewed Alignment 后的 Contextual Lookup，以及 confirmed Personal Meaning Alignment 都可以提供入口，
-并在 Learning Target 处汇合。用户无需先创建 Personal Semantic World；direct/Book learning 不创建
-Personal Meaning，personal-first 也只有显式 Add-to-Learning 才进入 Curriculum。入口来源只保存
-Learning Entry Provenance，不改变 Retention Target identity 或 Learning Policy。
+2026-09-05 的生产化规划采用以下交付顺序：先以 React Web 和轻量学习完成受邀测试闭环，
+随后依据稳定性与用户证据扩展。该顺序解决此前「V1 必须保留高保证」与 PRD Later 分类的冲突；
+高保证仍属于产品与领域模型，当前受邀测试版不要求交付它。
 
-MVP 的 personal-first/开放长尾路径默认使用 `lightweight`：以中文 L1、英语 L2 和按需 AI 生成的紧凑
-内容快速形成可执行 Materialization，因为它需要的资源最少。该默认不是永久领域绑定；只有当前
-target 已具备 Structured required assessment、protected novelty、grader 与 runtime capabilities 时，
-`high_assurance` 才可显示为 ready。否则必须 unavailable/blocked，不得静默降级。Published Package
-与资源完备的 Book/direct target 可以同时支持两个 Profile。
+同轮产品讨论明确将浏览器采集插件列为必交特色功能，其余已确认清单按当前建议推进。
+完整产品清单、插件边界与状态矩阵见
+[首轮产品基线](first-round-product-baseline.md)。浏览器支持及安装更新方式在详细设计中核实，
+实施默认先以桌面 Chrome 为目标；其他系统采集端口继续后置。
 
-当前 MVP availability baseline：
+### 必须交付
 
-| Learning Entry | `lightweight` | `high_assurance` | 主要内容路径 |
-| --- | --- | --- | --- |
-| Published Book/Package | compact roles 可执行时 ready | Structured inventory 完整时 ready | Published 或 Hybrid |
-| Direct existing stable Sense | Published/On-demand 可满足时 ready | 仅完整 Structured capability ready | Published、On-demand 或 Hybrid |
-| Confirmed Personal Meaning Alignment | 默认选择；按需生成后 ready | 默认不提供；只有完整 Structured capability 才 ready | On-demand AI 优先，可 Hybrid |
-| 未对齐 Reference Sense / 裸表达 | 不是合法 Learning Target | 不是合法 Learning Target | 必须先解析 stable Sensa Sense + binding |
+| 能力 | 受邀测试版要求 |
+| --- | --- |
+| 客户端与语言 | 正式 React Web，适配桌面与手机浏览器；中文 familiar language、英语 target language |
+| 账号 | 真实 Cognito 认证、Account ↔ Learner 1:1、当前 Account Session、受邀访问边界与安全退出 |
+| 独立学习入口 | 从最小可用的已发布 Book/Catalog 选择 stable Sense 与 expression binding；不要求先创建 Personal Meaning |
+| 个人语义入口 | 先保存 Intake/收件箱材料，按需澄清；完整 Context–Expression–Sense 经合法 Semantic Acceptance 后形成 Personal Meaning 与 Alignment，再显式加入学习 |
+| 浏览器采集插件 | 用户主动选取网页文字与上下文，预览固定来源和 occurrence；可在原位解析/确认完整意义或存入收件箱，在同账号 Web 继续并显式加入学习 |
+| 学习目标与策略 | Learning Target/Retention Target、入口 provenance、lightweight Policy Assignment/Effective Policy、readiness，以及首次 Run 的 Policy commitment |
+| 内容供给 | 可用 Published 路径及个人语义所需 On-demand 路径；固定 Demand，校验后冻结 Materialization，保留来源、版本和 digest；Hybrid 按真实需求接入 |
+| 正式学习 | Mixed/Review-only、每日新学额度、轻量 Initial Learning、Study Completion、原子 Scheduling Handoff、到期 Review 与 Lightweight Relearning |
+| 学习事实 | 服务端权威进度与最小学习记录、下一次复习信息；primary Retention Target 的 Declared Mastery 与复习结果保持独立 |
+| 媒体与设置 | 可用的发音/例句静态音频及授权读取；已开放的 Learner Preference 版本化同步，Device Preference 留在本机，缺少可选资源时诚实呈现 |
+| 离线与恢复 | Sensa IndexedDB/outbox、新对象 Sync、Sync Health、刷新/重试/断网恢复及第二设备收敛 |
+| 数据控制 | 幂等导出、账号删除、pending-safe 退出/本机清除、Session/Replica 撤销，以及阻止旧离线 outbox 复活已删除数据 |
+| 上线保障 | CI/CD、云端授权配置、错误与使用漏斗监控、内容生成预算、备份恢复、回滚及受邀测试操作说明 |
 
-其余上述扩展已经完成 canonical modeling，但尚未改变当前 V1 P0 launch scope。
+个人语义确认、加入学习、内容准备和正式 Runtime 保持不同事实。快轨或受委托确认仍须满足
+领域规定的明确授权；模型输出本身没有提交语义身份、Curriculum 或学习进度的权力。
+Book/direct/personal 来源汇合到同一 Target 边界，同一学习连接不因重复提交或多来源建立重复调度。
 
-当前独立本地 Book 选择了 **438 个 Sense、249 个 Lexeme**。pre-redesign Executable Learning
-Capability Resolver 实测其中 **424 个 Package 可执行**；另有 14 个仅持有 V1
-Manifest 的 legacy Package 声明了 `boundary_formation`，却没有 required boundary target
-或可判分的 Contrast/Counterexample，因此按当前门禁不可执行。这些数据是迁移和首位用户
-验证库存，不是首版 Personal Semantic World → On-demand Lightweight Study 的内容门槛；若作为
-Structured Acquisition 内容发布，仍须由下一版 validator 证明 Recognition、Recall、novel Transfer
-与 required Boundary 的完整 Gate capability coverage。
+首轮只开放真实具备资源、服务端合同和客户端支持的能力。M0-1 已记录页面职责、操作清单及
+基准状态，M0-2/M0-3 继续具体设计。首次使用不强制选词书；未交付主入口隐藏；签到与连续
+天数暂不交付；仅开放轻量学习时不显示无实际选择的 Policy 选择器。
 
-## 证据级别
+### 后续交付，不阻塞当前受邀测试版
 
-- 已有真实本地 first-user vertical slice 与真实 Postgres/浏览器 smoke；
-- 自动化检查只证明契约和实现可以运行；
-- 尚无足够的真实用户、多 session、留存或学习效果证据；
-- 不把历史实验中的比例、时长和阈值当作实证结果。
+- high_assurance/Structured Acquisition、Gate/5D 诊断、完整 protected assessment inventory
+  与高保证 validator；第三个架构验证 preset 不构成生产承诺。
+- Free Practice 四个 Area 及其 Activity、provider、录音/ASR/反馈链；练习资源缺失不阻止正式
+  学习内容发布，练习不能写正式 Evidence、进度或调度。
+- 宽覆盖 Reference Lexicon、Contextual Lookup、Sense Alignment、Lexical Enrichment、
+  Semantic Field 与更完整的语义投影。
+- 完整 Book Enrollment/Range/Scope lifecycle、个人 Collection、Bookmark/Note 管理及扩展历史
+  体验；首轮仍须实现独立入口和 personal-first 加入学习所必需的最小 Curriculum 事实。
+- Flutter iOS/Android/桌面单一客户端；在 Web/API 合同稳定后实施，不作为 Web 测试版前置条件。
+- Learning Policy Migration、通知提醒、高级主题、设备会话列表，以及浏览器文字插件之外的
+  图片/语音、移动分享、桌面全局采集和更多浏览器覆盖。
 
-## V1 必须保留
+当前不建设 Cards/Decks、generic flashcard sync、Workspace 产品导航、通用 AI/MCP、社区、
+commerce、admin 或考试「真题」。影视/电视/YouTube 原声例句、词级媒体 timeline、动态生成
+交互 UI、Listening Gate 和全量学习历史 reset 均不属于当前交付范围。
 
-中文 L1/英语 L2 的 Personal Semantic World、显式 Personal Meaning 创建、LLM Sense Construction、
-learner confirmation、stable Sense/Version 与 Personal Meaning Alignment；Learning Target/Retention Target、Published/
-On-demand/Hybrid Content Provisioning、不可变 Learning Materialization、独立 Learning Content LLM
-角色；不依赖 Personal Semantic World 的 Book/Catalog/search/aligned-lookup direct learning entry、显式
-personal-first bridge 与 Learning Entry Provenance；`lightweight | high_assurance` 两个 MVP Learning Policy
-Profiles、Assignment/Effective Policy/Resolved Learning Plan 与 purpose-specific readiness；三种 Protocol
-Purpose、Protocol Step/transition、Card Presentation renderer、Lightweight Initial Learning、Structured
-Acquisition、Initial Learning Completion/Study Completion/Acquisition Graduation、原子 Scheduling Handoff
-与 basis/evidence-level provenance、轻量/高保证 Retention Review、Lightweight/Structured Relearning 与
-Relearning Completion；真实
-认证、持久化、Books/Study Plans、Learner Sense Progress roll-up、Mixed 与 Review-only Session、
-protocol-aware Unified Planning、due Review 的 one-outcome/one-FSRS-update 与可审计 Relearning Outcome、真实
-Account/Account Session、typed Learner/Device Preferences、Sync Health、
-Data Export/Account Deletion、离线 resurrection barrier、Sync、媒体、部署、监控和可解释错误。
+## 4. 架构与迁移约束
 
-首发可以暂不提供动画、视频和生成视觉媒体。V1 明确不交付影视剧、电视或 YouTube 原声
-Attested Usage、synced-media Example Render、词级媒体 timeline 及相应外部媒体消歧/授权生产链；
-这些对象不进入 V1 Required Asset Manifest 或验收承诺。V1 同样不设置 Listening Gate，现有
-pronunciation/example static audio 只作为呈现资源，不产生听觉毕业 Evidence。Published Book 若进入
-首发，仍必须使用真正可学、经过质检的 Sense 内容，不能用词头、短释义或空 Sense 凑数；但既有
-Package 数量与 1,000 Lexeme 库存目标不再是 Personal Semantic World 首版闭环的前置门槛。
+- Postgres 是服务器权威存储。客户端持久化用户意图与只读投影，local-first 写入经 outbox
+  push → pull 收敛；客户端不权威写入 Evidence、5D、Outcome、进度或 FSRS。
+- 保留 LearnerScope 作为授权与同步 seam。生产身份与数据隔离不得依赖原型 learner 或本地
+  auth；Workspace 不成为用户功能。
+- Semantic LLM 与 Learning Content LLM 分别固定输入、工具、policy、预算、输出和审计。
+  Runtime 消费不可变 Materialization，不在作答后重新生成题目、答案或评分依据。
+- 浏览器插件与 Web 共用账号和 Semantic Intake authority；采集队列绑定原账号，处理幂等、
+  pending、重启恢复、撤销和删除屏障。插件不构建独立词义库存，也不持有模型密钥或学习调度权威。
+- 每个 Retention Target 默认最多一份 FSRS State；Initial Completion/Handoff 原子且幂等，
+  一个 due Review 最多一次 Memory Outcome/FSRS 更新。Relearning 不重新初始化或改写原 Review。
+  协议声明的独立重学评价若进入实施范围，必须有独立、可审计、幂等的 Outcome。
+- 正式 Web 保持 React；Flutter 共享语言无关合同与场景规格，不复制服务端策略或调度权威。
+  apps/web 作为现有正式 Web 工程起点，按用例改造；web-next 保留为行为参考与回归来源。
+- 原型与 first-user 学习记录是可丢弃测试数据。迁移/重建须有明确方案，不静默重解释旧事实；
+  受邀用户开始产生真实数据后，升级必须保护其历史与待同步操作。
+- AWS/Cognito、Neon、R2、Cloudflare 的资源与部署变更通过 CI/CD 交付，不从本地 shell 部署。
 
-## 当前不声称完成
+## 5. 验证记录与完成标准
 
-新的 Learning Connection/Retention 模型尚未落地到 production Runtime、Postgres 或 Sync；现有
-`web-next` 简化 MVP runtime 主要模拟 Structured Package 流程，尚未实现正式 On-demand
-Materialization、Protocol Purpose/Step、Lightweight Initial/Review/Relearning Protocol、Initial Learning
-Completion、Scheduling Handoff 或基于 evidence level 的 FSRS 初始化与更新，也尚未实现两个 Learning
-Policy Profiles、Assignment/Effective Policy、Resolved Learning Plan readiness、Learning Entry Provenance
-或独立于 Personal Semantic World 的完整 direct-learning intake。
-Structured Acquisition 模型也只落地到该 MVP runtime 与确定性 smoke，尚未落地到
-production Runtime、Postgres 或 Sync；MVP validator 也不是 production release validator。本地构建
-尚未等同公网部署。真实 Cognito、Neon、R2、Cloudflare、CI/CD、监控/telemetry 和公网
-数据删除/恢复仍是上线工作；Flutter iOS/Android/桌面端在 Web/API 契约稳定后实施，
-正式移动端与桌面端共用同一 Flutter client，正式 Web 端继续 React 并按 Web 平台
-特点另行设计。Sensa 尚未有
-真实效果证据。Personal Semantic World 的 Personal Meaning/Focus/Anchors、Sense Construction
-Session/Proposal/confirmation、按需 Sense identity/version 与 Alignment 同样尚无 production
-persistence/API/Sync/LLM policy/validator 或真实体验证据；`web-next` 当前页面只能视为交互原型。
-完整 Book Enrollment/Range、Supplemental Curriculum、Study Scope Revision、Semantic Field、
-Personal Collection、Add-to-Learning、Learner Semantic Projection enrichment 与 Free Practice 同样
-尚无 production persistence/API/Sync/validator 或真实体验证据，
-Reference Release/Reference Sense、Sense Alignment、全句 Lexical Occurrence annotation、Contextual
-Sense Resolution、Lexical Enrichment 与 Contextual Lookup API 同样尚未实现。当前内容生产使用的
-冻结词典 evidence 只是筛选 Sensa Sense 的 authoring input；现有 Example 只保证 target span，不能从
-不背复刻中的 token regex、静态词表或多 tab UI 推断为真实上下文词典。
+2026-09-05 基于提交 af5522cd 的仓库评估实际通过：
 
-Experience Render capability、protected Transfer pool 新门禁、Lexeme-identity Recall grading 与
-对应 repair/retest contracts 同样尚未实现。影视/电视/YouTube Attested Usage、词级媒体 timeline
-与 synced-media Example Render 属于 V1 之后的候选能力，不应出现在 launch blocker、V1 素材配额
-或完成度声明中。
+- 根级 npm run typecheck、npm run build、npm run lint；其中 lint 当前复用类型检查。
+- npm run sensa:web-next-smoke 的全部 23 个子任务，以及 sensa:runtime-learning-smoke。
+- Personal Semantic World、Learning Extensibility、Learning Content、DeepSeek mock transport、
+  Protocol Progression 和 Sync Protocol 的专项 smoke。
+- Python 内容工具编译与无成本 pipeline smoke。
 
-动态 Interaction Render 的方向已经确定为 Sensa-owned、A2UI-inspired 的声明式合同：预先作者化
-与未来实时 AI synthesis 共用同一 Contract、closed Interaction Catalog、Validator 和客户端
-renderer，并按 provenance、review status 与 Evidence eligibility 分级。该动态交互方向目前只保留为
-设计决策，不进入当前 V1 实施范围。V1 的 On-demand Learning Content 可以生成普通文本、静态场景
-和紧凑练习，但不建设流式动态 UI、capability negotiation 或动态交互协议。未经审核的 runtime
-Render 默认不能产生 Gate pass 或 Learning Evidence。
+构建仍提示 web-next 主 JS chunk 较大；正式 Web 应有自身性能预算。上述验证没有执行数据库
+迁移、真实多设备浏览器闭环、公网部署或付费 LLM/TTS 调用，不能将 schema/smoke 通过写成
+生产集成完成。历史本地 Postgres/浏览器纵切证据也不替代新模型验收。
 
-Initial Free Practice Profile 同样尚无 production Profile/Manifest/provider capability/Inventory、
-Session/Activity persistence、API、Sync、YouGlish integration、voice capture、ASR、AI feedback、renderer
-或真实体验证据；其四种 Activity Definition 是已接受的未来首发范围，不是已实现功能或当前 P0 验收项。
+下一里程碑只有在以下结果均有证据时才算完成：真实受邀用户可创建或选择目标并完成学习；
+浏览器插件可安装、采集并将同一意义或收件箱材料交接到 Web；
+离开后再次登录、跨日或换设备可继续；记录与调度正确；内容、网络或同步失败可恢复；账号
+退出、导出和删除有效；服务可观测、可回滚并完成备份恢复演练。完整门槛见路线图 M1–M4。
 
-Settings/Account 的完整 production contract 同样尚未完成：当前 `/me` 仍混合 profile、
-`selectedWorkspaceId` compatibility seam 与单一 `reviewReactionAnimationsEnabled`，没有 Account
-lifecycle/Session management、typed Learner Preference revision、明确的 Device Preference、Sync
-Health、Local Data Clearance、Data Control Request 或 deletion barrier。真实 Cognito 与数据导出/删除
-仍是 launch work，不能用本地 auth、清空 IndexedDB 或一个 profile response 冒充完成。
+当前没有足够的真实用户、多 session、留存或学习效果证据。受邀测试首先验证可用性、可靠性、
+内容质量与持续使用，不能把 Study Completion、签到、点击量或测试通过率解释为学习效果。
+
+## 6. 阶段维护
+
+M0-1 产品范围与基准状态已按本轮确认记录，浏览器插件的详细交互和支持条件仍待设计验证。
+下一项是 M0-2 正式 Web/插件 UI 规格，随后完成 M0-3 消费契约；M0 整体尚未验收。
+每次里程碑验收后，同步更新本文的执行位置与证据，以及路线图状态。
+具体任务、验收记录和未解决问题由路线图追踪；本文不再累积逐日原型功能日志。

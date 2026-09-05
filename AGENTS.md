@@ -3,11 +3,27 @@
 ## Product boundary
 
 This is the Sensa repository. Read `CONTEXT.md` and the document map in
-`docs/sensa/README.md` before changing domain code. The five documents listed
+`docs/sensa/README.md` before changing domain code. The seven documents listed
 there form the domain model. `current-stage.md` controls the milestone;
 `product-requirements-v1.md` controls product IA;
-`production-migration-plan.md` controls launch work. Versioned implementation
+`production-migration-plan.md` controls the production roadmap, milestone gates,
+and launch work. Versioned implementation
 contracts cannot override the domain model.
+
+## Development workflow
+
+Follow [`docs/sensa/development-workflow.md`](docs/sensa/development-workflow.md)
+as the current, adjustable working agreement. The supervisor owns the global
+module/directory blueprint, data ownership, dependencies, shared types and
+contracts; workers own internal implementation details within those boundaries.
+For each user-facing use case, the owner and a designated supervisor or worker
+first confirm the frontend experience, functions and relevant states. Refine
+consumer contracts and persistence from that confirmed experience, then implement
+and verify an end-to-end vertical slice. Existing backend shapes do not dictate
+the product workflow. Reuse confirmation already given for the same scope.
+Default to one implementation writer; parallel work requires explicit independent
+ownership. Adjust the process using actual delivery feedback instead of freezing
+every file and helper function in advance.
 
 Do not reintroduce Cards, Decks, generic flashcard sync, AI/MCP, community,
 commerce, admin or unrelated old-client surfaces. Do not use

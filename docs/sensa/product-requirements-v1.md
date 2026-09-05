@@ -17,6 +17,13 @@
 Product Shell 变成 Card/Deck 产品，也不能让客户端接管 Semantic Policy、Evidence、
 5D、Memory Outcome 或 FSRS。
 
+当前交付目标是 React Web + 浏览器采集插件的小规模受邀测试版，推进顺序见
+[生产化路线图](production-migration-plan.md)。本文保留完整 V1 IA 与后续能力定义；首轮按
+`current-stage.md` 开放轻量生产闭环，高保证等 Later 能力不因原型已提供入口而成为发布门槛。
+首轮已确认的能力清单和状态矩阵见
+[first-round-product-baseline.md](first-round-product-baseline.md)。浏览器插件是外部 Semantic
+Intake 入口，与 Web 共享领域 authority；它是首轮必交能力，不是后续系统采集的占位项。
+
 ## 1. 产品命题
 
 Sensa 帮助学习者把自己的意义/经验结构连接到语言共同体可复现的具体 Sense，并进一步稳定它与
@@ -44,8 +51,9 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
 - 学习界面始终聚焦一个 Sense、一个 Action 和一个主要操作；
 - 揭示阶段达到不背单词式的信息层级和沉浸感，同时严格遵守 Action 资产边界；
 - Book、Plan、学习历史、Declared Mastery、媒体、离线 outbox 和 Sync 都使用真实数据；
-- 用户可以明确创建 Personal Meaning，通过中文 LLM 语义访谈确认英语 Sense 与表达；只有用户
-  明确创建才进入“我的词义世界”，只有用户明确确认才创建 stable Sense；
+- 用户可从浏览器插件或 Web 主动保存 Context/Expression；未闭合材料进入收件箱，完整关系
+  经有效 Semantic Acceptance 后才形成 Personal Meaning。信息充分时可原位确认，必要时再进入
+  中文澄清对话；模型建议本身不产生接受事实；
 - confirmed Sense 可以通过独立的 Learning Content LLM 准备按需学习内容；内容在开始学习前冻结、
   通过合同校验并保留生成 provenance，语义确认对话本身不冒充学习材料；
 - 首版可完成 Lightweight Study、产生诚实的 Study Completion/Scheduling Handoff，并由 FSRS 安排
@@ -57,8 +65,8 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
 
 - 不提供商城、会员、虚拟货币、装备、课程、班级打卡、社区或成绩分享；
 - 不提供 Cards、Decks 或通用闪卡导入；
-- 没有领域契约和持久化能力支撑的功能不得伪装成可用入口。自由练习首页可以展示已确认路线图中的
-  disabled 练习项，但必须直接标注“暂未开放”，点击只解释状态，不能创建 Session 或写入结果；
+- 没有领域契约和持久化能力支撑的功能不得伪装成可用入口。首轮隐藏未交付的主入口，包括
+  Free Practice；后续进入交付范围后才按真实能力开放，原型中的展示不构成生产承诺；
 - 完整产品 IA 保留独立 Free Practice，并以首批四种可执行练习方式作为已确认目标；当前生产 P0
   仍由 `current-stage.md` 控制，不因需求确认原型出现入口而声称已经交付。正式产品只有在
   content/persistence/API/renderer contract 就绪后才把相应练习变为可进入状态，不得用课程、班级或
@@ -161,33 +169,31 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
 
 ## 5. 信息架构
 
+以下为 2026-09-05 首轮受邀测试范围的页面职责。正式桌面/手机布局与导航形态在 M0-2 设计，
+不要求复用原型的固定底部 Tab 或窄屏外壳。
+
 ```text
-沉浸首页
-├── 头像
-│   └── 账号与设置
-├── 签到卡
-│   └── 只完成当日签到并显示结果
-├── Learn
-│   └── Mixed Learning Session
-├── Review（次要入口）
-│   └── Review-only Learning Session
-└── 三个二级入口
-    ├── 自由练习
-    │   ├── 听：真实语流泛化
-    │   ├── 说：情境口语排演
-    │   ├── 读：语境推义
-    │   └── 写：情境书面表达
-    ├── 我的内容
-    └── 我的学习
-        ├── 当前词书、学习范围与每日额度
-        ├── 事实概况与签到日历
-        └── 学习偏好
+Web
+├── 首页：开始/继续今天的学习；只复习；无目标时提供两类开始入口
+├── 我的内容
+│   ├── 现有 Book/Catalog 与具体意思详情
+│   └── 我的词义世界：收件箱、已确认意义、来源与显式加入学习
+├── 我的学习：目标、准备/运行状态、每日额度、实际学习记录与基本偏好
+└── 账号与设置：登录状态、同步、本机数据、导出与删除
+
+浏览器插件（外部入口）
+└── 选取网页文字 → 预览上下文/来源
+    ├── 保存待处理 → 同账号收件箱 → Web 继续
+    └── 解析完整关系 → 原位确认 → 我的词义世界 → 显式加入学习
 ```
 
-首页是默认落点，不作为第四个底部 Tab。二级页面通过底部三个带文字标签的入口打开，
-顶部返回/收起回到首页。活跃学习期间隐藏全部产品导航。
+首页是默认落点；插件只承担采集、确认与交接，不是另一套学习客户端。活跃学习期间隐藏
+产品导航。首轮不显示签到、连续天数、Free Practice 主入口或无实际选择的 Policy 选择器。
 
-### 5.1 第一轮首页 IA 确认（2026-08-28）
+### 5.1 原型首页 IA 记录（2026-08-28）
+
+以下保留原型设计来源；其中固定三个底部入口、签到卡与日历不再是当前首轮生产交付要求。
+学习入口的 Mixed/Review-only 语义继续适用，正式可见范围以本节首轮 IA 和 M0-1 基线为准。
 
 - `Learn N` 是唯一主要学习入口，启动或继续 Mixed Session。`N` 表示此刻可由 Mixed Planner
   处理的去重 Retention Target 数量，而不是单纯的“今日新词数”；同一 target 即使来自多个
@@ -207,12 +213,15 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
 ### 6.1 首次使用
 
 ```text
-登录 → 选择词书与首个 Book Range → 设置每日新学意思数
-→ 建立 Study Plan 与 active Book Enrollment
-→ 下载/同步当前 Book Version → 首页可开始
+登录 → 完成最小首次设置（每日新学数量可使用清晰的默认值）
+├── 从现有内容开始 → 选择 Book/具体意思 → 加入学习
+└── 记录我想表达的意思／继续插件采集 → 收件箱或完整意义 → 显式加入学习
+→ 解析 Study Plan、Target 与 readiness → 内容就绪后可开始学习
 ```
 
-没有可用 Plan 时，首页主要按钮改为“选择一本词书”，不得进入空学习流程。
+选词书不是使用个人语义入口的前提；未选择 Book 仍可保存材料、确认意义并通过合法的最小
+Curriculum 进入学习。首页没有目标时呈现两类开始入口，不强制“选择一本词书”，也不进入空
+学习流程。插件发起登录后应可回到原采集，已有材料不因认证跳转无提示丢失。
 
 ### 6.2 每日学习
 
@@ -322,16 +331,16 @@ Introduction reveal、内容浏览和 feedback 后允许查词；这是答案完
 ### 6.7 从个人意义到公共 Sense
 
 ```text
-我的词义世界 → 创建“我想表达的意思”
-→ 用中文描述个人经验或添加场景/表达锚点
-→ LLM 用中文复述 Meaning Focus，并指出可能存在的多个关注方向
-→ learner 接受、修改或继续说明
-→ LLM 生成少量完整 Sense Proposals 与自然英语表达
-→ learner 查看“为什么匹配 / 可能不匹配 / 与相邻意思的区别”
-→ 就是这个 / 接近但不是 / 我在意另一个角度 / 都不是
-→ learner 明确确认 → 创建 stable senseId、Sense Version 与 Personal Meaning Alignment
-→ 后续 Content Provisioning；“加入学习”仍由独立 Intent 触发
+浏览器插件或 Web → 主动捕获 Context 与已有 Expression → Semantic Intake
+├── 未闭合／稍后处理 → 收件箱 → 圈定表达、选义或必要的中文澄清
+└── 信息充分 → 直接呈现当前 Context–Expression–Sense 关系
+→ 有效 Semantic Acceptance → 固定 stable Sense/Version/Binding
+→ 完整 Personal Meaning 与 Alignment → 显式加入学习
+→ Content Provisioning 与 readiness → 正式学习
 ```
+
+插件可在原位完成快轨确认，不能强制回 Web 再确认一次。复杂多轮澄清首轮由 Web 承接；
+Meaning Focus 是存在真实信息缺口时的可选桥梁，不是每条采集的必经步骤。
 
 LLM 不要求先从穷尽式公共 Sense 库命中已有条目。它应根据对话构造包含核心意义、原型场景、
 包含/排除边界、相邻意义和英语 expression candidates 的 Sense Proposal；只返回一个英语单词不算
@@ -341,13 +350,25 @@ LLM 不要求先从穷尽式公共 Sense 库命中已有条目。它应根据对
 的 `lend`。系统复用原始经验，不把中文“借”直接等同于其中任一英语 Sense。learner 选择“这些都
 不是”时继续澄清或保留未确认状态，不得为了结束对话强行生成确定答案。
 
-创建 Personal Meaning、确认 Sense、确认英语表达、生成并物化资源、加入学习和产生
-Study Completion/Learning Evidence 是六个不同事实。
+捕获材料、接受语义/表达、提交完整 Personal Meaning、生成并物化资源、加入学习和产生
+Study Completion/Learning Evidence 保持不同事实。
 任何对话、确认、浏览、播放或自报理解都不产生 Learning Evidence。LLM 不可用或 learner 中途离开
-时，已明确创建的 Personal Meaning 与 Anchors 仍然保存，未确认 Proposal 不得被后台自动确认。
+时，已保存的 Inbox/Construction 草稿与已接受的 Personal Meaning 分别保留，未确认 Proposal
+不得被后台自动确认；只有完整且被有效接受的关系才成为稳定世界成员。
 
 首版固定中文 L1、英语 L2：对话与边界说明以自然中文为主，目标表达为英语 word/phrase 等 typed
 expression。首版不显示语言选择器，但数据与交互不得假设一个中文表达只对应一个英语 Sense。
+
+#### 6.7.1 浏览器插件首轮要求
+
+支持用户主动选取网页文字、预览并修正必要上下文、保存来源与固定 occurrence、请求解析、
+原位确认完整意义或存入收件箱。保存成功须区分“本机待同步”“服务器收件箱已接纳”和
+“完整意义已保存”；只有明确的 Add-to-Learning 才进入学习，不自动生成进度。
+
+浏览器支持范围和分发方式在 M0-2 核实，实施默认先桌面 Chrome；页面受限、无选区、上下文
+不足、断网、认证过期、重复提交、插件重启/更新和账号切换均须有状态与恢复路径。
+详见 [首轮产品基线](first-round-product-baseline.md)。插件不后台扫描浏览历史、不持有模型
+密钥，未明确支持的浏览器/页面不能伪装成兼容。
 
 ### 6.8 已会声明
 
@@ -429,15 +450,15 @@ Preference。
 首页使用沉浸背景和低信息密度，只包含：
 
 - 头像；
-- 当日日期与签到卡；
+- 当日日期与必要的学习摘要；
 - 唯一主要按钮：`Learn N`，表示当前 Mixed Session 可处理的去重意思数；
 - 低于主按钮层级的次要入口：`Review N`，表示当前到期复习数；无到期内容时禁用或弱化；
-- 当前词书与每日目标的轻量说明；
-- 底部 `自由练习 / 我的内容 / 我的学习` 三个入口；
+- 当前学习来源与每日目标的轻量说明；个人语义入口不要求已有词书；
+- 我的内容、我的学习和账号入口；具体导航布局在 M0-2 定义；
 - 必要时出现一行非阻塞同步状态。
 
-签到成功只在当前页面给出成功状态；签到卡不是学习记录入口。完整签到历史由
-`我的学习` 的签到日历承接。
+首轮隐藏签到卡、连续天数与未交付主入口，学习记录由“我的学习”承接。无目标时提供从现有
+内容开始或记录自己想表达的意思两类入口；正式学习仍以真实 ready 状态为准。
 
 ### 7.2 自由练习
 
@@ -504,7 +525,11 @@ AI feedback 支持 learner 修订、重试或继续，但不能显示“已掌�
 
 ### 7.3 我的内容
 
-已经确认的页面 IA：
+本节保留完整产品及原型的内容组织方向。首轮只开放现有内容、收件箱、已确认词义世界及
+必要的学习交接；完整收藏、笔记和集合入口隐藏。未确认材料留在 Inbox/Construction draft，
+不能因为它在同一产品页面展示就视为稳定 Personal Meaning。
+
+完整产品的页面 IA：
 
 - 顶部主要入口：我的词义世界，并提供明确的“创建一个我想表达的意思”；
 - 我学过的：最近学过、全部已学、已会的意思；
@@ -513,7 +538,7 @@ AI feedback 支持 learner 修订、重试或继续，但不能显示“已掌�
 
 “我的场景”不再是与词义世界平级的独立内容仓库。Personal Semantic Anchor 属于一个 Personal
 Meaning，并在其创建/详情流程中编辑；同一素材可以被多个 Meaning Focus 引用。自定义集合可以在
-contract 未完成时显示为“暂未开放”，但不能阻塞 Personal Meaning 与 Anchor 的核心创建流程。
+后续进入交付时按真实 contract 开放；首轮隐藏入口，也不能阻塞材料捕获与完整意义接纳。
 四个 Free Practice Activity Definition 属于自由练习，在学词书与学习范围属于我的学习，两者都不出现在“我的内容”。
 
 #### 7.3.1 第一版页面确认（2026-08-31）
@@ -604,10 +629,11 @@ Curriculum contract 就绪后，收藏的 Sense 可以显示独立的“加入�
 
 ### 7.4 我的学习
 
-`我的学习` 与 `学习偏好` 使用顶部双页签。
+原型中 `我的学习` 与 `学习偏好` 使用顶部双页签；正式布局在 M0-2 确定。
 
-计划与进度只做事实性呈现，包括当前词书/范围、每日新学上限、今日完成、累计已学、待复习和
-签到日历。签到日历读取与首页签到卡相同的签到事实；缺席日期和未用额度不表现为断签、欠账或失败。
+计划与进度只做事实性呈现，首轮包括真实目标/来源、每日新学上限、实际学习记录与待复习信息。
+词书未选择时仍允许个人语义路径；完整词书范围、统计与签到日历后续交付。若后续交付签到，
+日历与首页须读取同一事实，缺席日期和未用额度不表现为断签、欠账或失败。
 该页面不生成维度待办、薄弱项诊断或 learner-facing Learning Insight，也不得显示 raw FSRS state、
 reps、Sense ID 或同步实现细节。
 
@@ -770,6 +796,9 @@ Encounter 不得在答案揭示后接受第二个“独立”assessment 结果�
 
 ## 10. 响应式、视觉与无障碍
 
+下列窄屏尺寸与面板宽度保留为原型参考；正式 Web 适配桌面与手机浏览器，具体布局、组件与
+性能预算在 M0-2 定义，不要求在桌面上复用移动端原型外壳。可访问性要求继续适用。
+
 - 设计基准为 390×844；触控目标至少 44×44px；
 - 桌面端居中显示最大 430px 产品面板，背景只承担氛围，不承载学习内容；
 - 使用 8px spacing grid、有限的字号与字重、语义色 token；
@@ -814,8 +843,10 @@ Evidence 混入正式进度。
 
 ### P0：核心闭环
 
-- 中文 L1、英语 L2 的 Personal Semantic World：显式创建 Personal Meaning、经验/表达 Anchors、LLM
-  Sense Construction、learner confirmation、stable senseId/Version 与 Personal Meaning Alignment；
+- 浏览器采集插件：主动选区、Context/来源快照、原位解析与确认、收件箱慢轨、Web 交接、
+  真实身份/幂等/恢复，以及受邀用户可执行的安装更新路径；
+- 中文 L1、英语 L2 的 Personal Semantic World：Intake/收件箱、按需 Sense Construction、
+  合法 Semantic Acceptance、完整 Context–Expression–Sense、Personal Meaning 与 Alignment；
 - confirmed Sense 的资源准备状态必须真实；通过 published、on-demand 或 hybrid 路径冻结并校验
   Learning Materialization，失败时不显示可成功的学习入口；
 - On-demand Learning Content LLM 与 Semantic LLM 角色分离，记录 generator/policy provenance；
@@ -862,6 +893,7 @@ Evidence 混入正式进度。
 - Book Enrollment/Range、`active | maintenance | paused` lifecycle、Supplemental Curriculum、
   Study Scope Revision 与完整 Add-to-Learning decision；
 - 通知提醒；
+- 签到激励与连续天数；浏览器文字插件之外的图片/语音、移动分享、桌面全局采集与更多浏览器；
 - 多套高级主题；
 - 多设备 Account Session 列表、逐设备远程撤销和完整安全活动历史；
 - 事实型学习历史与概况的扩展；暂不建设 learner-facing 维度诊断、处方式 Insight 或学习债务面板。

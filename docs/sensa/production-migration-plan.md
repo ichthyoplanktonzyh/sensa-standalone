@@ -1,138 +1,269 @@
-# Sensa standalone 剩余迁移与上线计划
+# Sensa 生产化路线图
 
-> Status: active launch plan. Date: 2026-09-05.
+> 状态：Active roadmap\
+> 更新日期：2026-09-05\
+> 近期目标：React Web + 浏览器采集插件的小规模受邀测试版\
+> 当前工作：M0 进行中；M0-1 基线已记录，M0 整体验收待完成\
+> 阶段与范围：[current-stage.md](current-stage.md)
 
-这不是旧 flashcard 仓库的迁移编号计划。独立仓库已经有干净 `0001_sensa_baseline.sql`、
-Sensa API/Web、内容校验器、Sync v2 和首位用户本地纵切；下列工作是从本地纵切到公网
-V1 的剩余事项。
+## 1. 路线图职责与交付原则
 
-## 已完成 extraction
+本文件接替原先的剩余迁移事项清单，统一管理从领域/行为原型到生产闭环、受邀测试和后续
+扩展的推进顺序。领域文档裁决身份与不变量，PRD 裁决产品 IA，current-stage.md 裁决当前
+范围；本文件裁决阶段依赖、交付物与退出条件。不另建并行的生产路线图。
+设计、前端确认、蓝图精度、worker 分工与流程调整遵守
+[开发工作约定](development-workflow.md)。工作方式可以根据实际交付反馈修订。
 
-- Sensa domain contracts、pure Learning Kernel、FSRS adapter seam 和 package validator；
-- Catalog/Planning/Encounter/Media/Sensa Sync v1/v2 API；
-- clean standalone Postgres baseline，内部暂保 LearnerScope compatibility seam；
-- React Web 与 Sensa-only IndexedDB/outbox；不背单词式首页、我的内容、词书、义项详情、
-  例句卡和学习 Encounter；
-- local first-user content import、sync-repair/restore tools 和仅复制已导入音频的
-  gitignored `runtime-media`；
-- 完整 production content snapshot 已交接到 `content/data`：30,034 个文件、
-  552,857,219 bytes；`content/data/MANIFEST.sha256` 完成源/目标逐文件 SHA-256
-  比对（manifest 文件 SHA-256：
-  `c95ed73906d0b8f6d65a43973f8351bbbeb18a1851944bce5ad156d53373344d`）。生产-only prompts、schemas、Profile/text/review/TTS/package/release tools
-  已在 standalone 内闭合，日常命令默认不依赖外部仓库；
-- canonical domain glossary、architecture、personal semantic world、learning connection、resource/runtime
-  models 与本文件。
-- learning extensibility 的 v2 语言无关合同与 Web behavior vertical slice：Retention Scope/Profile/
-  Protocol Run/Initial Completion/Handoff schemas，scope/content/orchestration/renderer/store registries，
-  可复用 Catalog Package 与 learner-specific Runtime binding 的分离，以及以 `retentionTargetId`
-  为唯一调度键的本地队列、FSRS 与 Relearning smoke。Postgres/API/Sync
-  的权威持久化迁移仍属于下方 gate 1。
+当前复用基础包括旧 React Web/API/Postgres/Sync 本地纵切、最新 web-next 行为原型、共享
+schema/Kernel、内容工具与 smoke。每项资产在接入生产前均须按当前模型审查；已有文件、页面、
+表或适配器只计为基础，不能直接计为生产完成。
 
-## Remaining launch gates
+- 每次推进一条可验证的用户用例，同时处理它需要的正式 UI、消费契约、服务端、存储与同步。
+  不先铺完所有页面或全部数据库，再开始集成。
+- 每个具体用例由 owner 与指定 supervisor/worker 先确认前端布局、功能及关键状态，再细化
+  消费契约并开始正式实现；已有后端和旧 schema 不决定产品工作流。
+- 首轮 React Web 优先，以 lightweight 建立生产学习链。浏览器采集插件、个人语义与按需
+  内容都是受邀测试必交能力；高保证、自由练习、宽覆盖词典和 Flutter 按后续范围推进。
+- 在真实用户数据进入前，可以按明确方案重建原型/first-user 测试数据。进入受邀测试后，
+  不得以该例外删除用户历史或待同步工作。
+- 阶段验收以可重现结果和证据为准，不使用按文件数推算的百分比。未确定人员投入前不承诺
+  日历日期；在任务拆分与依赖明确后补估时。
 
-1. **Learning connection migration**：用新版本合同实现 Learning Target、按 learner × Sense ×
-   target expression 隔离的 Retention Target、Published/On-demand/Hybrid
-   Content Provisioning、不可变 Learning Materialization、三种 Protocol Purpose、Protocol Step/Instance
-   与 transition、Card Presentation renderer、Lightweight Initial Learning/Retention Review/Relearning、
-   Initial Learning Completion/Study Completion、原子 Scheduling Handoff 与 Relearning Completion、
-   `mixed | review_only` Session intent、protocol-aware Planner inventory，以及带 basis/evidence level 的
-   FSRS initialization、one-review-one-update，以及协议声明的 scheduler-eligible Relearning
-   Memory Outcome。发布新的 Runtime Rule Packet、
-   Curriculum/Runtime persistence contract 与 Sync contract；pre-redesign first-user 进度可丢弃，历史
-   Packet 保留只读重放，不得静默改义。
-2. **Personal Semantic World 与 LLM roles**：实现 Personal Meaning/Focus/Anchors、中文 Sense
-   Construction 对话、learner confirmation、stable Sense/Version/Alignment、显式 Add-to-Learning，
-   并将 Semantic LLM 与 Learning Content LLM 的 policy、输入、输出、审计和失败恢复分开。模型建议
-   不得自动创建个人成员、Learning Evidence 或 Curriculum Membership。
-3. **Content**：为 On-demand Lightweight Study 建立最小内容角色、生成 policy、冻结时点、确定性
-   schema/validator、provenance/digest 与 post-response immutability；Published Package 继续作为
-   可复用/fallback 路径。从 `content/data` 保留可重建 release source，外部 snapshot 只允许通过显式
-   operator seam 导入。当前 438 Senses / 249 Lexemes、424 个可执行 Package 是迁移与内部验证库存，
-   不是首版个人语义闭环的数量门槛；它们只有在进入 Structured Acquisition 时才需要完整 Gate
-   capability validator。
-4. **Identity**：实现 Cognito email/OTP、Account ↔ Learner 1:1 binding、Account Session 与
-   `active | deletion_pending | deleted` lifecycle；保留 LearnerScope adapter 作为授权 seam，移除
-   `AUTH_MODE=none` 的公网可能性，并且不向产品暴露 Workspace。
-5. **Settings/Data Control**：实现 typed/versioned Learner Preference、明确的本机 Device Preference、
-   派生 Sync Health、pending-outbox-safe sign-out/Local Data Clearance，以及幂等 Data Export/Account
-   Deletion Request。删除需在线重新授权、撤销 Sessions/Replicas、阻止旧离线 outbox resurrection，
-   并按策略完成 learner-owned data 删除或匿名化；V1 不提供全量 learning-history reset。
-6. **Data/Media**：将 Postgres 迁移到 Neon，将 immutable release media 迁入 R2，保留
-   digest、license、cache headers 和授权下载检查。
-7. **Hosting**：Cloudflare 承载 Web/API edge；建立 secrets、TLS、CORS、rate limit、
-   migration/rollback 和 CI/CD。AWS/Cloudflare/Neon/R2 不在本地执行部署。
-8. **Telemetry**：记录可解释的同步失败、operation replay/conflict、Encounter funnel、
-   content/media misses、Preference conflict 和 Data Control status；不把 Product Event 当作 Learning
-   Evidence，也不记录 credential secret。
-9. **Reliability**：真实多 session、多设备 Sync、cursor expiry/bootstrap/replay、Materialization
-   replay、Protocol Run/Step Instance resume、Initial Completion/Handoff atomicity、Scheduling Handoff
-   idempotency、Retention Target isolation、one-review-one-FSRS-update、Relearning no-reinitialize/
-   no-review-rewrite 与 relearning-outcome idempotency、media range、pending sign-out、local
-   clearance/rebootstrap、Account deletion barrier、备份恢复和
-   公网 smoke；没有 orphan/state corruption 或 deleted-account resurrection。
-10. **Flutter**：Web/API contracts 稳定后，在 `apps/mobile` 建 Flutter 单一 iOS/
-   Android/桌面 client。SQLite 是本地事实源，outbox 遵循 push→pull；Flutter 只做
-   Action renderer、local state、音频/安全存储/通知适配，不复制 Semantic Policy 或
-   FSRS。移动端与桌面端共用这一个 Flutter client；正式 Web 端继续 React，按 Web
-   平台特点另行设计，不承诺复用 `web-next` 原型 UI——跨端资产是领域文档、实现
-   seam 形状与 smoke 规格。
+## 2. 里程碑总表
 
-## Contracted post-core extensions
+| 阶段 | 结果 | 前置条件 | 当前状态 |
+| --- | --- | --- | --- |
+| M0 生产交付基线 | 首发页面/状态、插件交接、迁移边界与第一条消费契约可直接指导实现 | 当前评估与路线图 | 进行中；M0-1 已记录 |
+| M1 首条生产学习闭环 | 真实账号选择已发布目标，完成轻量首学并进入 Review/Relearning | M0 验收 | 待执行 |
+| M2 采集、个人语义与按需内容 | 浏览器/Web 捕获经确认、加入学习和内容准备进入同一生产学习链 | M1 的 Target/Runtime seam 稳定 | 待执行 |
+| M3 连续使用与数据控制 | 跨日、跨设备、断网/失败恢复和导出/删除均有验收证据 | M1、M2 接通 | 待执行 |
+| M4 受邀测试发布 | CI/CD 环境、真实云端依赖、监控、恢复与公网 smoke 达标 | M3 + 云端准备完成 | 待执行 |
+| M5 用户验证与迭代 | 用真实使用、内容质量、可靠性和成本决定下一轮投入 | M4 验收后招募测试用户 | 待执行 |
 
-这些能力已经进入 canonical domain model，但不是当前 P0 launch gate；实现时仍必须先完成
-language-neutral persistence/API/Sync contract，不能直接把原型本地状态接入生产：
+M1 可以先通过 CI 建立开发/内部集成环境；资源、secrets、迁移流水线和 telemetry 从 M1 起
+随用例建设，不能全部拖到 M4。M4 是完整上线验收门。M2 的交互与合同发现、云端运行准备可以
+在相关 seam 明确后交错推进，但不得跳过前序验收或让未完成分支进入受邀发布。
 
-- 实现 Structured Initial Learning/Relearning Protocol 的 Acquisition Cycle、baseline/conditional Gates、
-  interference pacing、behavioral Evidence、5D projection、Graduation handoff 与 structured
-  Review-originated Relearning，以及
-  protected assessment inventory 和高保证 Package validator；它不能反向成为 Lightweight Study 的
-  普遍前置条件；
-- 发布与校验 Semantic Field Version、Field membership 和同 release Sense Relations；
-- 实现 Study Plan 下的 Book Enrollment/Range、`active | maintenance | paused` lifecycle、
-  Supplemental Curriculum/Membership 与不可变 Study Scope Revision；换词书默认保留旧 Enrollment
-  的 maintenance，Scope 变更不得重置 Retention Target progress 或静默改变 active Session；
-- 让 Add-to-Learning decision 区分 `accepted`、`already_in_scope`、`content_unavailable` 与
-  `declared_mastery_conflict`，Supplemental Membership 在 Scope Revision 中解析到固定 Learning
-  Target、Retention Target、Content Provisioning path 与 Learning Protocol，并对 Book/Supplemental
-  多来源 Retention Target 去重；
-- 实现 Saved Sense/Example、每 Sense current Note、Personal Semantic Anchor、Personal Collection/
-  typed Membership、显式 Add-to-Learning Intent 与可重建 Learner Semantic Projection；
-- 保证 unsave、Note/Anchor deletion、Collection membership/deletion、Practice 与 Add-to-Learning
-  operations 相互独立，并对文本、顺序、revision、tombstone 与冲突提供跨设备收敛；
-- 验证 Book switch、Range/mode change、Supplemental add/remove 的 revision、幂等、并发冲突与
-  `push → pull` 收敛；同一 learner 不得出现两个 active Enrollment 或两份当前 Study Scope；
-- 实现 Practice Brief、稳定 Practice Scope snapshot、四个 Practice Area、versioned Activity
-  Definition、Free Practice Session，以及 Practice Turn/Observation/Feedback/optional Artifact；
-- 首个 Profile 每个 Area 只交付一个 Activity：YouGlish 真实语流泛化、情境口语排演、语境推义与
-  情境书面表达；其中 form-level YouGlish occurrence 不得冒充已完成 contextual Sense disambiguation；
-- 让每个 Activity 固定 primary Area、stimulus/response channels、typed target、resources、support、
-  interaction、feedback 与 session policy，并对 provider/AI/ASR provenance 与 unavailable state 做验证；
-- 保护 reserved novel-assessment assets，并验证任何 Practice Turn、Observation、Feedback、score 或
-  Artifact 都不能产生 Learning Evidence，或改变 Gate、5D、phase、due、daily quota 与 FSRS；
-- 建立带 provider/edition/locale/license/digest 的不可变 Reference Release，以及 Reference Lexical
-  Unit/Reference Sense 的稳定身份；不要把宽覆盖词典全部强行迁入当前 Sensa Lexeme/Sense 表；
-- 建立 reviewed/versioned Sense Alignment，支持 `equivalent`、`reference_broader`、
-  `reference_narrower`、`overlaps` 与无映射状态；只有 aligned stable Sensa Sense + executable
-  provisioning path 可以加入学习；
-- 为 immutable Example 生产 exact single/multi-token Lexical Occurrence annotation：target occurrence
-  沿 authored Sense binding 确定解析，其他 occurrence 通过 closed candidate WSD 保存
-  `reviewed | model_confident | ambiguous | unresolved` 与 resolver provenance；
-- 实现全局 lookup/search 与 `Example + exact span` Contextual Lookup read API、可重建 search index、
-  Reference detail、离线 release/index 安装及版本固定；运行时 fallback 按 example/span/release/resolver
-  缓存，不能自由生成 definition；
-- 生产并校验 source-backed root/affix、etymology 与 lexical-family enrichment；Etymology Story 与
-  Mnemonic Aid 保留 source/editorial provenance，并与语言事实分层；
-- 为资源建立 `reference_visible | learning_only | assessment_only` 边界，验证 active assessment
-  提交前无应用内查词泄露，lookup 不改变 Progress/Gate/5D/FSRS/Scope/quota；
-- Reference 详情只呈现真实存在的释义、例句、用法、构词词源和相关区块；仅对齐 Sensa Sense 时
-  挂载现有 Personal Content Note，不为 reference-only meaning 伪造通用笔记；不引入“真题”、
-  考试语料或虚假 provider 品牌/占位数据。
-- 后续可提供多设备 Account Session 列表、逐设备远程撤销、安全活动历史与独立 Notification
-  Preference；在明确建模前不把通知权限、提醒时间或学习历史 reset 塞进通用 settings bag。
+## 3. M0：生产交付基线与首条消费契约
 
-## Compatibility and retirement
+**目标**：工程可以按明确的页面意图和领域规则实施首条生产闭环，不需要从 mock 副作用猜业务。
 
-没有旧 flashcard 用户数据需要迁入独立 Sensa。当前 first-user 学习记录是可丢弃测试数据；
-生产上线前重新导入/重建即可。旧仓库、旧通用 IndexedDB、Cards/Decks、generic sync、
-generic AI/MCP product surfaces、AWS CDK 与历史实验不属于 standalone runtime，不能作为 fallback；
-受领域合同约束的 Semantic/Content LLM 角色不属于该排除项。
+交付物：
+
+1. 首轮功能/入口清单：将 current-stage.md 的受邀测试范围逐项映射到页面、操作、资源条件与
+   unavailable 状态。保留两条独立主旅程；确认首轮开放项及后续项的隐藏/禁用规则。
+2. 正式 React Web IA 与首条旅程设计：以 PRD 和已冻结行为为输入，明确首页、选目标、学习、
+   完成/复习及账号/同步入口；适配桌面和手机浏览器。形成首批设计 token、组件及交互状态规格，
+   后续用例再逐步扩展。不把原型 CSS、组件树或导航直接固化为生产合同。
+3. 页面状态矩阵：覆盖 loading/empty/preparing/ready/blocked/pending/offline/conflict/retry，
+   以及刷新、离开、取消和恢复。区分本机呈现状态、可乐观预览的意图与服务端权威事实。
+4. 首条用例消费合同：明确 Query/Command、Projection、operation identity、expected revision、
+   accepted/replayed/conflict/unavailable/error，以及版本、授权、幂等和恢复规则。合同按用例命名，
+   不照抄数据库 CRUD；先完整覆盖 M1，M2/M3 在各自开工前补齐。
+5. 迁移裁决清单：逐项决定 apps/web、API、Kernel、contracts、0008–0010、旧 Sync 与
+   web-next 行为的保留/修改/替换方式；解决 Learning Target/Retention Target v2 与旧 SQL 的
+   关系差异，明确新 Runtime/Sync 版本和测试数据重建方案。
+6. 可实施的结构蓝图：全局模块/目标目录、依赖方向与数据所有权，以及首条已确认用例的
+   实际文件职责、共享类型/接口和关键状态、事务及验收规则。普通内部函数由 worker 决定，
+   不将全系统最终函数清单作为开工前提。
+
+**退出条件**：owner 已确认首条旅程的界面、功能、关键状态和操作结果，并有对应产物记录；
+当前消费合同及结构蓝图足以指导实施；没有未解释的 mock
+副作用；合同能供 Web、API 和未来 Flutter 独立实现；首批 UI 规格和迁移选择有可审阅产物。
+产品导航或冻结旅程若有实质变化，在同一交付中记录裁决并更新对应基线。
+
+M0 验收后，首条已确认用例进入 M1 的生产集成方式；未确认的后续用例继续按同一状态/合同门
+发现需求。无需等完整领域的所有页面设计结束，也不能把本路线图当作消费合同已经完成。
+
+M0-1 的已确认产物是 [首轮产品清单与状态矩阵](first-round-product-baseline.md)，包括九个
+能力区及 Web/插件状态。M0-2 同时细化插件捕获、原位确认、收件箱交接及安装更新体验；
+M0-3 记录插件身份、Intake、幂等和数据控制需求，完整插件提交合同在 M2 开工前验收。
+
+## 4. M1：首条生产学习闭环
+
+**目标用例**：真实账号登录 → 建立最小 Study Plan → 从已发布 Book/Catalog 选择 stable
+Sense + expression binding → 解析轻量计划与材料 → 首次学习 → Scheduling Handoff → 到期
+Review → 必要时 Relearning → 再次进入仍可继续。
+
+先用少量已审核内容验证这条链，减少模型生成不确定性。它是工程切片，不删除 M2 的个人语义
+首发要求，不将 Published Package 变成所有学习目标的前置条件。
+
+交付物：
+
+- Cognito 认证、Account/Learner 绑定、LearnerScope 授权、当前 Account Session 与访问隔离。
+  本地 auth 仅用于受限开发，不计入真实身份验收。
+- 新版本 Target、Entry Provenance、Policy Assignment/Effective/Committed Policy、Resolved
+  Learning Plan/readiness、Materialization、Protocol Run/Step Instance、Observation/Transition、
+  Completion/Handoff 与 Memory Outcome/Scheduling 持久化和服务端用例。
+- 按最新合同迁移数据库与 Sync；用数据库事务和唯一约束保护身份、版本、Completion/Handoff
+  和调度幂等。schema、运行合同、迁移与回滚/重建说明随代码一起交付。
+- 服务端 Unified Planner 拥有每日新学数量、去重和 mixed/review_only inventory。Review-only
+  不引入新目标或推进首学；重复来源不重复建调度；Policy 在首次 Run 创建时提交。
+- 正式 Web 首批页面、renderer、Sensa IndexedDB/outbox 和新合同 push→pull；页面提交意图与
+  原始响应，服务端产生权威结果。界面显示真实记录、进度、下一次到期和待同步状态。
+- 最小 Book/Sense 内容与 primary Target Declared Mastery；授权静态媒体 seam、缺失资源反馈，
+  以及已开放设置的 Learner/Device 所有权分离。
+- 基础 CI 构建、迁移验证与内部环境交付路径；request/operation/run 关联标识和结构化错误。
+
+**退出条件**：
+
+- 真实浏览器经新 API 写入 Postgres 并恢复投影；刷新和进程重启后仍可继续，而非恢复 fixture。
+- 不同账号数据隔离；相同 target 的重复请求或来源保持同一合法学习身份与调度。
+- Initial Completion 与首次 Handoff/Memory State 原子且幂等；一次 due Review 只更新一次
+  FSRS；失败后 Relearning 不重新初始化、不改写该 Review。
+- 受控时间测试证明未来到期与跨日行为正确，生产不保留原型「立即到期」捷径。
+- Mixed/Review-only、Declared Mastery、ready/blocked、重复提交及基本 resume 的数据库与
+  浏览器 smoke 通过；派生结果由服务端产生，轻量完成不伪装成 Gate、5D 或行为 Evidence。
+
+## 5. M2：浏览器采集、个人语义与按需内容生产化
+
+**目标用例**：浏览器插件或 Web 捕获 Context/Expression → 原位解析或收件箱继续 →
+必要时澄清 → 合法 Semantic Acceptance →
+stable Sense/Version/Binding 与 Alignment → 显式加入学习 → 内容准备 → 同一 M1 学习链。
+
+交付物：
+
+- 浏览器采集插件：按 M0-2 核定的浏览器/分发范围交付，默认桌面 Chrome。支持主动选区、
+  Context/来源预览与固定快照、Expression occurrence、原位确认快轨和收件箱慢轨；同账号
+  Web 可继续，不要求对有效确认重复接受。只保存材料不自动加入学习。
+- 插件与 Web 的统一认证授权、幂等 Intake/commit 和原账号待提交队列；关闭、重启、断网、
+  账号切换和权限撤销可恢复。插件不直接访问模型凭据、写派生进度或后台采集浏览历史。
+- 按该用例补齐正式页面、消费合同、持久化和 Sync；Personal Meaning/Anchors、可选 Focus、
+  Construction/Proposal/Acceptance/Alignment 各自保存真实身份、版本、授权与操作结果。
+- 保留 direct/Book 独立入口；个人意义保存、语义确认、加入学习相互独立。快轨、委托或重试
+  也不能越过领域确认门，未形成合法 Target 的裸表达不直接开始学习。
+- Semantic LLM 与 Learning Content LLM 分离，分别固定 policy、输入、工具权限、上下文
+  provenance 和输出校验；开发代理迁入有身份隔离的生产执行边界。
+- Durable Content Provisioning Task/Attempt/Bundle、有限工具与模型预算、超时/重试/取消及
+  重启恢复；取消与迟到结果的接受规则明确，避免重复生成和重复收费。
+- 固定 Learning Target、Demand 与授权 Context Artifacts；独立验证 schema、角色覆盖、语义
+  一致性和 reveal 前资源边界，冻结 Materialization/digest 后才能 ready。作答后不可替换内容。
+- 受授权 Personal Anchor 使用、撤销/删除后的后续使用限制和材料处置；公开语义与私人上下文
+  分层。日志不默认收录私人全文或凭据。
+- 按当前内容合同生成/解析静态音频，可选资源失败与必需资源失败分别处理。Published/Hybrid
+  fallback 仅在同一 Target/Policy/Demand 可满足时使用，不静默换学习方法。
+
+**退出条件**：personal-first 与 direct 路径汇合于相同 Target/Runtime seam；重复确认和加入
+学习幂等；准备中、校验失败、provider 不可用、权限撤销及恢复均可解释；模型不能提交正式进度。
+持久任务经服务重启仍可恢复，冻结材料可重放，并有独立内容质量抽查记录。
+必须通过真实浏览器插件 → Intake/语义接纳 → Web → 加入学习的 smoke；包含保存待处理和
+完整意义原位确认两条路径。只有 Web 中的采集模拟器不满足本阶段验收。
+
+日常自动验证使用无成本 deterministic/mock adapter。真实 provider、内容质量、延迟与成本
+验收单列，使用事先明确授权的预算执行并记录结果；mock 通过不能代替该上线证据，常规
+build/smoke 不得调用付费 LLM/TTS。
+
+## 6. M3：连续使用、恢复与数据控制
+
+**目标**：一个账号能够连续多日使用或换设备继续，失败不丢工作、不重复结算，删除后数据不复活。
+
+交付物与验收矩阵：
+
+| 场景 | 必须证明的结果 |
+| --- | --- |
+| 双设备/双标签页与版本冲突 | 相同操作可重放，冲突结果明确；Target、当前 Run 和调度收敛，不双写派生状态 |
+| 断网、刷新、客户端/服务端重启 | outbox 不丢失，Protocol Step 与固定材料可恢复；尚未确认的结果诚实显示 pending |
+| Cursor expiry、bootstrap、旧客户端 | 可重新 bootstrap 并处理待提交工作；版本不兼容有明确升级路径，不静默解释旧 payload |
+| Completion/Handoff 中途失败 | 故障注入后无半完成状态，重试不产生第二份 Memory State 或重复调度 |
+| Review/Relearning 重复和乱序 | 一次 Review 一次更新；重学不改原结果，独立 scheduler-eligible Outcome 若开放也必须独立幂等 |
+| 内容生成/媒体失败 | 超时、校验拒绝、缺失、授权过期均可诊断和重试；不让缺少必需材料的计划进入 Runtime |
+| 偏好、退出、本机清除 | Learner Preference 收敛，Device Preference 本机保存；pending 未解决时不无提示丢弃，重新 bootstrap 可用 |
+| 数据导出 | 请求幂等、可查看处理状态，产物可用且仅本人授权访问，固定导出范围与版本 |
+| 账号删除与离线旧设备 | 在线重新授权，撤销 Sessions/Replicas，处理 learner-owned 数据；旧凭据/outbox 不能复活数据 |
+| 插件离线/重启/更新与账号切换 | 待采集材料和未知提交结果可恢复；不重复接纳、不串号；旧版本和权限失效有明确恢复路径，账号删除后插件停止写入 |
+| 备份与恢复 | 实际恢复演练可核对账号、目标、固定材料、运行事实及调度一致性；明确可接受的数据损失和恢复时间 |
+
+**退出条件**：上述场景有数据库集成和真实浏览器/两个独立设备上下文证据；跨日使用通过，
+未解决的数据丢失、串号、重复调度、孤立状态或删除屏障问题为零。自动时间测试不能替代后续
+真实用户持续使用，但可以覆盖等待时间和故障边界。
+
+## 7. M4：受邀测试环境与发布验收
+
+**目标**：通过可重复的 CI/CD 发布，使已完成的生产闭环可被受邀用户安全、持续地使用。
+
+交付物：
+
+- Cloudflare Web/API 运行适配与 Neon Postgres、R2 私有媒体、Cognito 真实接入；在部署前
+  验证现有 Node/Hono/pg 执行方式与目标环境的适配、连接和限制，不能只部署本地构建产物。
+- CI/CD 完成构建、检查、迁移、部署和 smoke；dev/test 与受邀环境隔离，secrets 不进入仓库。
+  配置 TLS、CORS、受邀准入、rate limit、provider 预算、媒体授权/digest/license/cache/range。
+- 监控错误、同步积压/冲突、内容准备失败/耗时、媒体缺失、学习入口到完成漏斗及 Data Control
+  状态；Product Event 与 Learning Evidence 分开。定义告警阈值、处理责任和关闭入口的方法。
+- 发布、数据迁移、回滚、备份恢复、provider 不可用与费用异常的操作说明。给受邀用户提供
+  简短的测试说明、已知限制与反馈方式，不需要为此建设完整后台产品。
+- 插件可重复构建与版本化产物、普通受邀用户可执行的安装/更新/卸载说明、权限说明和兼容
+  页面清单。具体分发方式在 M0-2 确定，发布日程纳入该渠道实际需要的准备时间。
+- 在邀请用户前确定观察周期、使用场景、内容抽查方式、可靠性/成本阈值和暂停扩招条件；
+  阈值依据内部环境结果设置，不引用历史原型中的经验数字作为实证。
+
+**发布门**：M1–M3 全部验收；真实环境登录、独立学习、个人语义/生成、音频、跨设备、退出、
+导出和删除的公网 smoke 通过；部署可重现、回滚和恢复已演练，错误可定位，费用受约束。
+插件安装、真实网页采集、原位确认/收件箱交接、重启重试、账号撤销及升级保护同样通过；
+浏览器插件未交付时不能声明首轮受邀测试版完成。
+尚未支持的功能没有虚假可执行入口，正式 Web 的性能和可访问性达到 M0 定义的预算与标准。
+
+只有这些条件通过后，才记录版本、环境、证据和已知限制并开始受邀测试。此门不等于公开
+V1 发布完成。AWS/Neon/R2/Cloudflare 资源与部署变更一律走 CI/CD，不从本地 shell 部署。
+
+## 8. M5：真实用户验证与后续版本
+
+先让少量受邀用户连续使用，按 M4 预定场景观察能否自主完成两条旅程、回来复习、理解材料
+和恢复错误，同时记录内容质量、等待时间、运行成本与可靠性。测试期先修阻断和数据问题，
+再处理理解障碍与高频体验摩擦。每次修复补充对应回归场景，避免扩张为无边界测试工程。
+
+**退出条件**：完成预定观察周期，有实际用户反馈、使用/故障/成本数据和内容抽查记录；阻断
+问题关闭，未解决项有处置决定；据此决定继续邀请、调整核心体验或启动下一组能力。小样本
+的点击、完成、留存和自评不证明长期学习效果；效果研究需要另行设计。
+
+受邀版之后的工作按依赖分组，具体优先级由 M5 证据决定：
+
+| 后续工作 | 开始条件与必须保留的边界 |
+| --- | --- |
+| Flutter iOS/Android/桌面单一客户端 | Web/API/Sync 与核心恢复场景稳定；SQLite/outbox push→pull，共享语言无关合同和 smoke 规格，独立设计平台 UI，不复制服务端策略/FSRS 权威 |
+| 高保证学习 | Structured Protocol、Recognition/Recall/novel Transfer/条件 Boundary、interference、Evidence/5D、Graduation 和完整资源 validator 成套验收；不能成为轻量学习前置条件 |
+| Curriculum 与个人内容扩展 | Enrollment/Range/Scope Revision、Supplemental 多来源去重、Collection/Bookmark/Note 的版本与同步；换范围或删除来源不抹除 Target 历史，不静默更改 Committed Policy |
+| Reference 与语义投影 | 有 license/provenance 的 Reference Release、reviewed Sense Alignment、exact occurrence 与可信 resolution；查词不改变学习事实，assessment-only 资源不泄露 |
+| Free Practice | 四个 Area 的 Activity 合同、资源/provider 与客户端能力交集可执行；首组包括真实语流泛化、情境口语排演、语境推义和情境书面表达；Turn/Observation/Feedback/Artifact 不进入正式证据与调度 |
+| 其他扩展 | 通知、浏览器文字插件之外的图片/语音/移动分享/桌面全局采集、更多浏览器、更多偏好/会话管理与 Policy Migration 按明确用例推进 |
+
+更广泛的公开 V1 发布要依据受邀测试结果单独验收内容供给能力、运行成本与容量、支持和数据
+生命周期；不因 Web 上线或 Flutter 构建成功自动获得公开发布结论。
+
+## 9. 任务执行与证据维护
+
+每个实施任务必须写明：所属里程碑、具体用户用例、仓库与文件所有权、合同/领域约束、前置
+依赖、交付物、验收方法和不包含项。按仓库约定由 supervisor 拆分/审查，实质实现交给默认
+implementation worker；同一文件默认只有一个实施 writer。
+完整协作方式见 [开发工作约定](development-workflow.md)。一个 worker 可以跨模块贯通用例，
+但须遵守各模块的边界；任务应引用已确认的前端产物与本轮施工蓝图。
+
+交付使用统一检查点：
+
+1. **用例就绪**：owner 已确认本次前端体验；蓝图和消费合同足以指导实现，领域边界无未裁决
+   冲突。相同范围的既有确认可以复用，不因实施换人重复确认。
+2. **实现完成**：正式 UI、权威服务端、存储/迁移与同步按该用例接通，mock 不伪装为生产结果。
+3. **验证完成**：根级 typecheck/build/lint 和相关集成/浏览器 smoke 通过；Python 变更至少
+   编译和无成本 validator smoke。不得在日常验证中调用付费 LLM/TTS。
+4. **交付记录**：写入提交/产物、环境、运行命令、结果、已知限制和下一依赖；真实 provider
+   验收与部署证据分别记录，不能由静态检查代替。
+
+阶段状态使用「待执行 / 进行中 / 待验收 / 已验收」。只有退出条件满足并有证据，才更新为
+已验收，并同步 current-stage.md。实现受阻时记录具体缺口与可继续的独立任务，不跳过
+验收门。范围变化需同步 stage/PRD/相关合同，不在任务里悄悄扩大首发。
+
+### 当前待办队列
+
+- [x] **M0-1：首轮产品清单与状态矩阵。** Owner 确认八个能力区与通用状态，并加入浏览器
+  插件；已写入 [产品基线](first-round-product-baseline.md) 并同步 PRD。插件支持范围和交互
+  细节作为实施默认进入 M0-2 走查，不计为已完成的浏览器验证。
+- [ ] **M0-2：首条生产旅程的正式 UI 规格。** 确定桌面/手机布局、基础组件、可访问性和性能
+  预算；覆盖 M1 的登录、选择目标、学习、完成及再次进入，并明确插件采集/确认/交接与分发体验。
+  与 owner 确认相关功能、主要/异常状态与恢复行为，保存对应界面产物和确认范围。
+- [ ] **M0-3：M1 消费契约与迁移方案。** 完成 Query/Command/Projection/error/revision/Sync
+  合同，逐项处理 v2 Target 与旧 SQL/API 的差异，记录插件身份/Intake 消费需求，形成可交给
+  implementation worker 的任务；交付全局模块/目录与依赖蓝图，并细化首条已确认用例的
+  文件职责、接口、关键数据规则与端到端验收依据。
+- [ ] **M0 验收与 M1 开工。** 附上前述产物与检查证据，再进入首条生产集成。
+
+此队列只列下一批具体任务。M1 以后按退出条件拆分，不预先生成脱离已确认用例的完整横向
+任务库。M0-1 产品基线已记录；M0 整体与 M1–M5 均尚未验收。
