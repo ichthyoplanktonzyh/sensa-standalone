@@ -355,7 +355,7 @@
   height:112px;
   padding:51px 17px 14px;
   display:grid;
-  grid-template-columns:44px 1fr 44px;
+  grid-template-columns:44px minmax(0,1fr) auto;
   align-items:center;
   gap:9px;
   background:rgba(244,239,231,.94);
@@ -783,3 +783,16 @@
 .ebs-candidate.is-used{background:#fbf5e9;border-color:rgba(162,115,55,.22)}.ebs-candidate.is-used .ebs-candidate-state{color:#89652e;background:#f0dfbe}
 .pmj-meaning-axes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:15px}.pmj-meaning-axis{display:flex;flex-direction:column;gap:4px;min-width:0;padding:10px;border:1px solid rgba(62,79,69,.12);border-radius:11px;background:rgba(255,253,249,.74)}.pmj-meaning-axis small{color:#89958d;font-size:7.5px;font-weight:850;letter-spacing:.35px}.pmj-meaning-axis strong{color:#4d6257;font-size:10px;line-height:1.3}.pmj-meaning-axis span{color:#87938b;font-size:8px;line-height:1.35}.pmj-meaning-axis.is-sense-focus_missing{border-color:rgba(115,87,115,.2);background:#f4edf4}.pmj-meaning-axis.is-sense-focus_missing strong{color:#735773}.pmj-meaning-axis.is-sense-focus_pending_acceptance,.pmj-meaning-axis.is-sense-clarifying,.pmj-meaning-axis.is-sense-proposal_pending{border-color:rgba(162,115,55,.22);background:#faf3e6}.pmj-meaning-axis.is-sense-focus_pending_acceptance strong,.pmj-meaning-axis.is-sense-clarifying strong,.pmj-meaning-axis.is-sense-proposal_pending strong{color:#8b642b}.pmj-meaning-axis.is-sense-sense_confirmed,.pmj-meaning-axis.is-binding-bound{border-color:rgba(47,106,86,.2);background:#eef6f0}.pmj-meaning-axis.is-sense-sense_confirmed strong,.pmj-meaning-axis.is-binding-bound strong{color:#2f6a56}.pmj-meaning-axis.is-binding-pending,.pmj-meaning-axis.is-binding-partial{border-color:rgba(162,115,55,.2);background:#faf3e6}.pmj-meaning-axis.is-binding-pending strong,.pmj-meaning-axis.is-binding-partial strong{color:#8b642b}
 .ebs-selection-hint{margin-top:9px;color:#8b642b;font-size:8.5px;line-height:1.4}.ebs-form-error{margin:0;padding:10px 11px;border:1px solid rgba(157,83,67,.24);border-radius:10px;color:#934c40;background:#fbefec;font-size:9px;line-height:1.5}
+
+/* === Intake: nav capture actions + Inbox entry ========================== */
+.personal-world-v2__nav-actions{display:flex;align-items:center;gap:3px;justify-self:end}
+.personal-world-v2__nav-intake,.personal-world-v2__nav-simulate{position:relative;width:32px;height:32px;border:0;border-radius:50%;display:grid;place-items:center;color:var(--pworld-ink);background:rgba(255,253,249,.86);box-shadow:0 1px 0 rgba(44,56,49,.08);cursor:pointer}
+.personal-world-v2__nav-intake .icon,.personal-world-v2__nav-simulate .icon{width:16px;height:16px}
+.personal-world-v2__nav-intake.has-items{color:#2f6a56;background:#e1eee5}
+.personal-world-v2__nav-intake-badge{position:absolute;top:-3px;right:-4px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;display:grid;place-items:center;color:#fff;background:#c25e3f;font-size:8.5px;font-weight:800}
+.personal-world-v2__nav-actions .personal-world-v2__nav-mark{width:auto;height:auto;margin-left:2px}
+.personal-world-v2__inbox-entry{display:flex;align-items:center;gap:11px;width:100%;margin-bottom:10px;padding:12px 13px;border:1px solid rgba(162,115,55,.26);border-radius:16px;color:inherit;background:#faf3e6;text-align:left;cursor:pointer;box-shadow:0 10px 20px -18px rgba(12,35,25,.5)}
+.personal-world-v2__inbox-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
+.personal-world-v2__inbox-copy b{color:#6d573b;font-size:12px;line-height:1.35}
+.personal-world-v2__inbox-copy small{color:#877a69;font-size:9px;line-height:1.45}
+.personal-world-v2__inbox-count{margin-left:auto;flex:none;min-width:22px;height:22px;padding:0 6px;border-radius:11px;display:grid;place-items:center;color:#fff;background:#c25e3f;font-size:10px;font-weight:800}

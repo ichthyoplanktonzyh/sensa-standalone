@@ -6,8 +6,11 @@ import {
   sensaLearningConnectionContractVersion,
   sensaLearningTargetPersonalSourceSchema,
   sensaMeaningFocusAcceptanceFactSchema,
+  sensaPersonalMeaningAlignmentSnapshotSchema,
   sensaPersonalMeaningRevisionSnapshotSchema,
+  sensaPersonalSemanticWorldContractVersion,
   sensaRetentionTargetKeySchema,
+  sensaSemanticAcceptanceFactSchema,
   sensaSenseProposalVersionSnapshotSchema,
   sensaSenseVersionSnapshotSchema,
 } from "@sensa/contracts/sensa";
@@ -36,6 +39,8 @@ const ids = {
   alignment: "00000000-0000-4000-8000-000000000021",
   learningTargetSource: "00000000-0000-4000-8000-000000000022",
   materialization: "00000000-0000-4000-8000-000000000023",
+  semanticAnchorRevision: "00000000-0000-4000-8000-000000000024",
+  semanticAcceptance: "00000000-0000-4000-8000-000000000025",
 } as const;
 
 const occurredAt = "2026-09-01T08:00:00.000+00:00";
@@ -81,7 +86,7 @@ sensaSenseVersionSnapshotSchema.parse({
 });
 
 const personalMeaningRevision = {
-  contractVersion: "sensa-personal-semantic-world-v1" as const,
+  contractVersion: sensaPersonalSemanticWorldContractVersion,
   personalMeaningRevisionId: ids.personalMeaningRevision,
   personalMeaningId: ids.personalMeaning,
   revision: 1,
@@ -101,7 +106,7 @@ assert.equal(sensaPersonalMeaningRevisionSnapshotSchema.safeParse({
 }).success, false, "Personal Meaning must not become a giant nested JSON aggregate");
 
 sensaMeaningFocusAcceptanceFactSchema.parse({
-  contractVersion: "sensa-personal-semantic-world-v1",
+  contractVersion: sensaPersonalSemanticWorldContractVersion,
   meaningFocusAcceptanceId: ids.focusAcceptance,
   meaningFocusId: ids.focus,
   meaningFocusRevisionId: ids.focusRevision,
@@ -110,7 +115,7 @@ sensaMeaningFocusAcceptanceFactSchema.parse({
 });
 
 sensaSenseProposalVersionSnapshotSchema.parse({
-  contractVersion: "sensa-personal-semantic-world-v1",
+  contractVersion: sensaPersonalSemanticWorldContractVersion,
   senseProposalVersionId: ids.proposalVersion,
   senseProposalId: ids.proposal,
   version: 1,
@@ -137,7 +142,7 @@ sensaSenseProposalVersionSnapshotSchema.parse({
 });
 
 sensaConfirmSenseProposalFactSchema.parse({
-  contractVersion: "sensa-personal-semantic-world-v1",
+  contractVersion: sensaPersonalSemanticWorldContractVersion,
   senseProposalConfirmationId: ids.senseConfirmation,
   operationId: ids.operation,
   learnerUserId: "learner-1",
@@ -150,7 +155,7 @@ sensaConfirmSenseProposalFactSchema.parse({
 });
 
 sensaConfirmExpressionBindingFactSchema.parse({
-  contractVersion: "sensa-personal-semantic-world-v1",
+  contractVersion: sensaPersonalSemanticWorldContractVersion,
   expressionBindingConfirmationId: ids.bindingConfirmation,
   operationId: ids.operation,
   learnerUserId: "learner-1",
@@ -160,6 +165,46 @@ sensaConfirmExpressionBindingFactSchema.parse({
   expressionVersionId: ids.expressionVersion,
   bindingVersionId: ids.bindingVersion,
   confirmedAt: occurredAt,
+});
+
+sensaSemanticAcceptanceFactSchema.parse({
+  contractVersion: sensaPersonalSemanticWorldContractVersion,
+  semanticAcceptanceId: ids.semanticAcceptance,
+  operationId: ids.operation,
+  learnerUserId: "learner-1",
+  authority: { mode: "learner_direct", actorId: "learner-1" },
+  personalSemanticAnchorRevisionId: ids.semanticAnchorRevision,
+  personalExpressionAnchorRevisionId: ids.expressionAnchorRevision,
+  expressionOccurrence: { kind: "text_span", start: 7, end: 13 },
+  resolution: "reuse_existing",
+  senseId: ids.sense,
+  senseVersionId: ids.senseVersion,
+  resolutionProvenance: {
+    resolverKind: "external_tool",
+    provider: "browser-extension",
+    model: null,
+    policyVersion: "contextual-resolution-v1",
+    sourceReferenceIds: [ids.operation],
+  },
+  acceptedAt: occurredAt,
+});
+
+sensaPersonalMeaningAlignmentSnapshotSchema.parse({
+  contractVersion: sensaPersonalSemanticWorldContractVersion,
+  personalMeaningAlignmentId: ids.alignment,
+  learnerUserId: "learner-1",
+  personalMeaningId: ids.personalMeaning,
+  personalMeaningRevisionId: ids.personalMeaningRevision,
+  basis: {
+    kind: "contextual_resolution",
+    semanticAcceptanceId: ids.semanticAcceptance,
+  },
+  senseId: ids.sense,
+  senseVersionId: ids.senseVersion,
+  status: "active",
+  revision: 1,
+  createdAt: occurredAt,
+  updatedAt: occurredAt,
 });
 
 const firstRetentionKey = sensaRetentionTargetKeySchema.parse({

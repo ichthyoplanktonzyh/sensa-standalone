@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
 import type { SemanticWorldScreenProps } from './SemanticWorldScreen';
 import { PersonalMeaningComposer } from './PersonalMeaningComposer';
+import { IntakeInboxDrawer } from './IntakeInboxDrawer';
+import { IntakeSimulatorModal } from './IntakeSimulatorModal';
 import {
   useJourneyGateway,
+  useJourneyInbox,
   useJourneyWorld,
   type JourneyAlignmentView,
   type JourneyFocusView,
@@ -53,6 +56,12 @@ interface FocusWorldView {
   alignment: AlignmentBranch | null;
 }
 
+interface DirectAlignmentWorldView {
+  id: string;
+  label: string;
+  alignment: AlignmentBranch;
+}
+
 interface WorldMeaningView {
   id: string;
   number: string;
@@ -63,6 +72,7 @@ interface WorldMeaningView {
   familiarExpressions: JourneyWorldItemView['familiarAnchors'];
   experienceAnchors: JourneyWorldItemView['experienceAnchors'];
   focuses: readonly FocusWorldView[];
+  directAlignments: readonly DirectAlignmentWorldView[];
   note: string;
 }
 
@@ -235,6 +245,11 @@ const worldMeaningFor = (item: JourneyWorldItemView, index: number): WorldMeanin
     proposal: proposalViewFor(focus.proposal),
     alignment: alignmentViewFor(focus.alignment),
   }));
+  const directAlignments = detail.directAlignments.map((alignment) => ({
+    id: alignment.personalMeaningAlignmentId,
+    label: alignment.coreMeaningFocus || alignment.senseShortId,
+    alignment: alignmentViewFor(alignment)!,
+  }));
 
   return {
     id: item.personalMeaningId,
@@ -246,26 +261,42 @@ const worldMeaningFor = (item: JourneyWorldItemView, index: number): WorldMeanin
     familiarExpressions: detail.familiarAnchors,
     experienceAnchors: detail.experienceAnchors,
     focuses,
+    directAlignments,
     note: '',
   };
 };
 
 const expressionsFor = (meanings: readonly WorldMeaningView[]): BoundExpressionView[] =>
-  meanings.flatMap((meaning) => meaning.focuses.flatMap((focus) => {
-    if (!focus.alignment) return [];
-    return focus.alignment.bindings.map((binding) => ({
-      id: binding.bindingVersionId,
-      personalMeaningId: meaning.id,
-      meaningFocusId: focus.id,
-      surfaceForm: binding.surfaceForm,
-      expressionType: binding.expressionType,
-      languageTag: binding.languageTag,
-      relation: binding.relation,
-      semanticCoverage: binding.semanticCoverage,
-      sense: focus.alignment!.sense,
-      source: meaning.anchor,
-    }));
-  }));
+  meanings.flatMap((meaning) => [
+    ...meaning.focuses.flatMap((focus) => {
+      if (!focus.alignment) return [];
+      return focus.alignment.bindings.map((binding) => ({
+        id: binding.bindingVersionId,
+        personalMeaningId: meaning.id,
+        meaningFocusId: focus.id,
+        surfaceForm: binding.surfaceForm,
+        expressionType: binding.expressionType,
+        languageTag: binding.languageTag,
+        relation: binding.relation,
+        semanticCoverage: binding.semanticCoverage,
+        sense: focus.alignment!.sense,
+        source: meaning.anchor,
+      }));
+    }),
+    ...meaning.directAlignments.flatMap((direct) =>
+      direct.alignment.bindings.map((binding) => ({
+        id: binding.bindingVersionId,
+        personalMeaningId: meaning.id,
+        meaningFocusId: direct.id,
+        surfaceForm: binding.surfaceForm,
+        expressionType: binding.expressionType,
+        languageTag: binding.languageTag,
+        relation: binding.relation,
+        semanticCoverage: binding.semanticCoverage,
+        sense: direct.alignment.sense,
+        source: meaning.anchor,
+      }))),
+  ]);
 
 const searchableValuesFor = (meaning: WorldMeaningView): string[] => [
   meaning.anchor,
@@ -287,6 +318,11 @@ const searchableValuesFor = (meaning: WorldMeaningView): string[] => [
       binding.relation,
       binding.semanticCoverage,
     ]) ?? []),
+  ]),
+  ...meaning.directAlignments.flatMap((direct) => [
+    direct.label,
+    direct.alignment.sense,
+    ...direct.alignment.bindings.map((binding) => binding.surfaceForm),
   ]),
   meaning.note,
 ].filter((value): value is string => Boolean(value));
@@ -335,7 +371,8 @@ const meaningPrimaryAction = (meaning: WorldMeaningView): MeaningPrimaryAction =
 
   const pendingBindingFocusId = meaning.expressionBinding.nextFocusId;
   const confirmedFocusId = pendingBindingFocusId
-    ?? meaning.focuses.find((focus) => focus.alignment)?.id;
+    ?? meaning.focuses.find((focus) => focus.alignment)?.id
+    ?? meaning.directAlignments[0]?.id;
   return {
     label: pendingBindingFocusId
       ? '绑定目标表达'
@@ -551,6 +588,28 @@ const MeaningConstellation = ({
           </div>
         ))}
       </div>
+    ) : meaning.directAlignments.length > 0 ? (
+      <div className="personal-world-v2__focuses" aria-label="语境中已解析的意思">
+        {meaning.directAlignments.map((direct) => (
+          <div key={direct.id}>
+            <article className="personal-world-v2__focus is-accepted">
+              <header className="personal-world-v2__focus-header">
+                <span className="personal-world-v2__focus-marker" aria-hidden="true" />
+                <span><b>由当前语境直接确定</b></span>
+                <em>无需 Focus</em>
+              </header>
+              <AlignmentBranch alignment={direct.alignment} />
+            </article>
+            <button
+              type="button"
+              className="personal-world-v2__focus-open-sense"
+              onClick={() => onOpenConfirmedSense(direct.id)}
+            >
+              查看已确认意思 <span aria-hidden="true">→</span>
+            </button>
+          </div>
+        ))}
+      </div>
     ) : (
       <div className="personal-world-v2__unclarified">
         <span className="personal-world-v2__unclarified-orbit" aria-hidden="true"><i /><i /><i /></span>
@@ -627,9 +686,63 @@ const buildGraph = (meanings: readonly WorldMeaningView[]) => {
       actionLabel: primaryAction.label,
     });
 
-    if (meaning.focuses.length === 0) {
+    if (meaning.focuses.length === 0 && meaning.directAlignments.length === 0) {
       band.rows.push({ focusNodeId: null, semanticNodeIds: [], expressionNodeIds: [] });
     }
+
+    meaning.directAlignments.forEach((direct) => {
+      const rowCount = Math.max(1, direct.alignment.bindings.length);
+      const rows = Array.from({ length: rowCount }, () => ({
+        focusNodeId: null as string | null,
+        semanticNodeIds: [] as string[],
+        expressionNodeIds: [] as string[],
+      }));
+      const senseId = senseNodeId(meaning.id, direct.id, direct.alignment.senseVersionId);
+      rows[0].semanticNodeIds.push(senseId);
+      nodes.push({
+        id: senseId,
+        kind: 'sense',
+        label: direct.alignment.sense,
+        subtitle: `${graphNodeKindLabels.sense} · ${direct.alignment.senseVersionLabel}`,
+        detail: '由 Context + located Expression 直接解析并接纳',
+        state: 'confirmed',
+        personalMeaningId: meaning.id,
+        meaningFocusId: direct.id,
+        opensConfirmedSense: true,
+        actionLabel: '查看已确认 Sense',
+      });
+      edges.push({
+        id: `${meaning.id}->sense:${direct.alignment.senseVersionId}`,
+        from: meaningNodeId(meaning.id),
+        to: senseId,
+        relation: 'alignment',
+        label: '语境直接解析',
+      });
+      direct.alignment.bindings.forEach((binding, bindingIndex) => {
+        const expressionId = expressionNodeId(meaning.id, direct.id, binding.bindingVersionId);
+        rows[bindingIndex].expressionNodeIds.push(expressionId);
+        nodes.push({
+          id: expressionId,
+          kind: 'expression',
+          label: binding.surfaceForm,
+          subtitle: `${graphNodeKindLabels.expression} · ${expressionTypeLabel(binding.expressionType)}`,
+          detail: `${languageLabel(binding.languageTag)} · ${relationLabel(binding.relation)} · ${coverageLabel(binding.semanticCoverage)}`,
+          state: 'confirmed',
+          personalMeaningId: meaning.id,
+          meaningFocusId: direct.id,
+          opensConfirmedSense: true,
+          actionLabel: '查看已确认 Sense',
+        });
+        edges.push({
+          id: `${binding.bindingVersionId}->expression`,
+          from: senseId,
+          to: expressionId,
+          relation: 'binding',
+          label: '表达绑定',
+        });
+      });
+      band.rows.push(...rows);
+    });
 
     meaning.focuses.forEach((focus) => {
       const focusId = focusNodeId(meaning.id, focus.id);
@@ -1019,6 +1132,9 @@ const ListView = ({
           : meaningPrimaryAction(meaning);
         const nextFocus = meaning.focuses.find((focus) => focus.id === primaryAction.meaningFocusId)
           ?? meaning.focuses[0];
+        const directAlignment = meaning.directAlignments.find(
+          (alignment) => alignment.id === primaryAction.meaningFocusId,
+        ) ?? meaning.directAlignments[0];
         return (
         <article className="personal-world-v2__list-item" key={meaning.id}>
           <header>
@@ -1030,8 +1146,8 @@ const ListView = ({
           </header>
 
           <div className="personal-world-v2__list-next">
-            <small>{nextFocus ? '当前侧面' : '下一步'}</small>
-            <strong>{nextFocus?.label ?? '从这段经验中选择一个侧面开始'}</strong>
+            <small>{nextFocus ? '当前侧面' : directAlignment ? '语境中已确定' : '下一步'}</small>
+            <strong>{nextFocus?.label ?? directAlignment?.label ?? '从这段经验中选择一个侧面开始'}</strong>
             {meaning.focuses.length > 1 && <span>另有 {meaning.focuses.length - 1} 个侧面</span>}
           </div>
           <button
@@ -1099,17 +1215,21 @@ const ExpressionRows = ({
 const WorldHome = ({
   meanings,
   expressions,
+  inboxCount,
   onCreate,
   onBrowseMeanings,
   onBrowseExpressions,
+  onOpenInbox,
   onOpen,
   onOpenConfirmedSense,
 }: {
   meanings: readonly WorldMeaningView[];
   expressions: readonly BoundExpressionView[];
+  inboxCount: number;
   onCreate: () => void;
   onBrowseMeanings: () => void;
   onBrowseExpressions: () => void;
+  onOpenInbox: () => void;
   onOpen: (personalMeaningId: string, meaningFocusId?: string) => void;
   onOpenConfirmedSense: (personalMeaningId: string, meaningFocusId: string) => void;
 }) => {
@@ -1123,6 +1243,15 @@ const WorldHome = ({
 
   return (
     <>
+      {inboxCount > 0 && (
+        <button type="button" className="personal-world-v2__inbox-entry" onClick={onOpenInbox}>
+          <span className="personal-world-v2__inbox-copy">
+            <b>待处理材料</b>
+            <small>你有 {inboxCount} 条生活与阅读中捕获的表达</small>
+          </span>
+          <span className="personal-world-v2__inbox-count" aria-hidden="true">{inboxCount}</span>
+        </button>
+      )}
       <section className="personal-world-v2__intro is-home">
         <div className="personal-world-v2__intro-copy">
           <h2>从一个真实经验开始</h2>
@@ -1258,8 +1387,11 @@ export const SensaSemanticWorldScreen = ({
   const [search, setSearch] = useState('');
   const [expressionSearch, setExpressionSearch] = useState('');
   const [composerOpen, setComposerOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
   const gateway = useJourneyGateway();
   const { items, status } = useJourneyWorld();
+  const inboxItems = useJourneyInbox();
   const meanings = useMemo(() => items.map(worldMeaningFor), [items]);
   const expressions = useMemo(() => expressionsFor(meanings), [meanings]);
 
@@ -1303,7 +1435,26 @@ export const SensaSemanticWorldScreen = ({
         <div className="personal-world-v2__nav-title">
           <h1>{section === 'home' ? '我的词义世界' : section === 'expressions' ? '我的表达' : '全部意思'}</h1>
         </div>
-        <span className="personal-world-v2__nav-mark" aria-hidden="true">◌</span>
+        <div className="personal-world-v2__nav-actions">
+          <button
+            type="button"
+            className={`personal-world-v2__nav-intake${inboxItems.length > 0 ? ' has-items' : ''}`}
+            onClick={() => setInboxOpen(true)}
+            aria-label={`待处理材料盒，${inboxItems.length} 条待处理`}
+          >
+            <svg className="icon" aria-hidden="true"><use href="#i-mail" /></svg>
+            {inboxItems.length > 0 && <span className="personal-world-v2__nav-intake-badge">{inboxItems.length}</span>}
+          </button>
+          <button
+            type="button"
+            className="personal-world-v2__nav-simulate"
+            onClick={() => setSimulatorOpen(true)}
+            aria-label="打开多模态摄取模拟器"
+          >
+            <svg className="icon" aria-hidden="true"><use href="#i-penplus" /></svg>
+          </button>
+          <span className="personal-world-v2__nav-mark" aria-hidden="true">◌</span>
+        </div>
       </header>
 
       <div className="personal-world-v2__body">
@@ -1313,6 +1464,8 @@ export const SensaSemanticWorldScreen = ({
           <WorldHome
             meanings={meanings}
             expressions={expressions}
+            inboxCount={inboxItems.length}
+            onOpenInbox={() => setInboxOpen(true)}
             onCreate={() => setComposerOpen(true)}
             onBrowseMeanings={() => setSection('meanings')}
             onBrowseExpressions={() => setSection('expressions')}
@@ -1403,6 +1556,25 @@ export const SensaSemanticWorldScreen = ({
         onClose={() => setComposerOpen(false)}
         onCreated={handleCreated}
         onSaved={toast}
+      />
+      <IntakeInboxDrawer
+        open={inboxOpen}
+        items={inboxItems}
+        onClose={() => setInboxOpen(false)}
+        onSummoned={(personalMeaningId) => {
+          setInboxOpen(false);
+          onOpenPersonalMeaning(personalMeaningId);
+        }}
+        toast={toast}
+      />
+      <IntakeSimulatorModal
+        open={simulatorOpen}
+        onClose={() => setSimulatorOpen(false)}
+        onFastTracked={(personalMeaningId) => {
+          setSimulatorOpen(false);
+          onOpenPersonalMeaning(personalMeaningId);
+        }}
+        toast={toast}
       />
     </section>
   );

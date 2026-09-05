@@ -1,9 +1,9 @@
 /**
  * Versioned local fact store for the Personal Meaning journey.
  *
- * The v2 key is intentionally independent from the old prototype key. There
- * is no migration or fallback: a v1 blob is not a second identity source and
- * must never be interpreted as a v2 Personal Meaning. Every authoritative
+ * The v3 key is intentionally independent from earlier prototype keys. There
+ * is no migration or fallback: an older blob is not a second identity source
+ * and must never be interpreted as a current Personal Meaning. Every authoritative
  * Personal Meaning, revision, Anchor, Focus, Construction, Proposal,
  * confirmation and Alignment is owned by this aggregate.
  */
@@ -32,12 +32,14 @@ import type {
   SensaSenseProposalVersionSnapshot,
   SensaSenseSnapshot,
   SensaSenseVersionSnapshot,
+  SensaIntakeItem,
+  SensaSemanticAcceptanceFact,
 } from '@sensa/contracts/sensa';
 import { StorageUnavailableError, type StoragePort } from './ports';
 import type { ClarificationStartingPoint } from './semanticAgent';
 
-export const JOURNEY_STORE_KEY = 'sensa_personal_meaning_journey_v2';
-export const JOURNEY_STORE_VERSION = 'sensa-personal-meaning-journey-store-v2';
+export const JOURNEY_STORE_KEY = 'sensa_personal_meaning_journey_v3';
+export const JOURNEY_STORE_VERSION = 'sensa-personal-meaning-journey-store-v3';
 
 /** Recoverable adapter state; none of these values are domain facts. */
 export interface JourneyMockState {
@@ -67,6 +69,7 @@ export interface MeaningJourneyRecord {
   proposals: SensaSenseProposalSnapshot[];
   proposalVersions: SensaSenseProposalVersionSnapshot[];
   senseConfirmations: SensaConfirmSenseProposalFact[];
+  semanticAcceptances: SensaSemanticAcceptanceFact[];
   alignments: SensaPersonalMeaningAlignmentSnapshot[];
   alignmentEvents: SensaPersonalMeaningAlignmentEvent[];
   bindingConfirmations: SensaConfirmExpressionBindingFact[];
@@ -94,6 +97,8 @@ export interface JourneyState {
   version: typeof JOURNEY_STORE_VERSION;
   meanings: MeaningJourneyRecord[];
   registry: SenseRegistryState;
+  /** Slow-track draft materials waiting for learner confirmation. */
+  inboxItems: SensaIntakeItem[];
   commandReceipts: CommandReceipt[];
 }
 
@@ -117,6 +122,7 @@ export const emptyJourneyState = (): JourneyState => ({
   version: JOURNEY_STORE_VERSION,
   meanings: [],
   registry: emptyRegistry(),
+  inboxItems: [],
   commandReceipts: [],
 });
 
@@ -144,6 +150,7 @@ const asJourneyState = (parsed: unknown): JourneyState => {
     );
   }
   requireArray(parsed, 'meanings');
+  requireArray(parsed, 'inboxItems');
   requireArray(parsed, 'commandReceipts');
   if (!isRecord(parsed.registry)) {
     throw new StoreCorruptedError('本机的语义注册表数据结构损坏。');

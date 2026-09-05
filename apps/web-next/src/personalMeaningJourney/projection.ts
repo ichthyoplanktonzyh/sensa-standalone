@@ -7,6 +7,7 @@
  */
 
 import type {
+  SensaPersonalMeaningAlignmentSnapshot,
   SensaSenseExpressionBindingVersionSnapshot,
   SensaSenseVersionSnapshot,
 } from '@sensa/contracts/sensa';
@@ -67,7 +68,9 @@ const currentFocusRevision = (record: MeaningJourneyRecord, focusId: string) => 
 const activeAlignmentForFocus = (record: MeaningJourneyRecord, focusId: string) =>
   record.alignments.find(
     (alignment) =>
-      alignment.meaningFocusId === focusId && alignment.status === 'active',
+      alignment.basis.kind === 'sense_construction'
+      && alignment.basis.meaningFocusId === focusId
+      && alignment.status === 'active',
   ) ?? null;
 
 const latestConstructionForFocus = (record: MeaningJourneyRecord, focusId: string) =>
@@ -153,23 +156,42 @@ const focusIdForBinding = (
   )?.meaningFocusId ?? null;
 };
 
+const bindingBelongsToAlignment = (
+  record: MeaningJourneyRecord,
+  alignment: SensaPersonalMeaningAlignmentSnapshot,
+  binding: MeaningJourneyRecord['bindingConfirmations'][number],
+): boolean => {
+  if (binding.senseVersionId !== alignment.senseVersionId) return false;
+  if (alignment.basis.kind === 'sense_construction') {
+    return focusIdForBinding(record, binding) === alignment.basis.meaningFocusId;
+  }
+  const semanticAcceptanceId = alignment.basis.semanticAcceptanceId;
+  const acceptance = record.semanticAcceptances.find(
+    (fact) => fact.semanticAcceptanceId === semanticAcceptanceId,
+  );
+  return acceptance != null
+    && binding.senseProposalVersionId === null
+    && binding.personalExpressionAnchorRevisionId
+      === acceptance.personalExpressionAnchorRevisionId;
+};
+
 /**
  * Read only the current version of each Binding identity for one confirmed
  * Focus. Older confirmation facts remain in the store for audit/replay, but
  * they are not current edges in the world or Sense detail projection.
  */
-const currentBindingFactsForFocus = (
+const currentBindingFactsForAlignment = (
   record: MeaningJourneyRecord,
   registry: SenseRegistryState,
   senseId: string,
   senseVersionId: string,
-  focusId: string,
+  alignment: SensaPersonalMeaningAlignmentSnapshot,
 ) => {
   const seenBindingIds = new Set<string>();
   return record.bindingConfirmations
     .filter((confirmation) =>
       confirmation.senseVersionId === senseVersionId
-      && focusIdForBinding(record, confirmation) === focusId,
+      && bindingBelongsToAlignment(record, alignment, confirmation),
     )
     .flatMap((confirmation) => {
       const bindingVersion = bindingVersionById(registry, confirmation.bindingVersionId);
@@ -216,9 +238,7 @@ export const deriveFocusPhase = (
   const alignment = activeAlignmentForFocus(record, focusId);
   if (alignment) {
     const hasBinding = record.bindingConfirmations.some(
-      (binding) =>
-        binding.senseVersionId === alignment.senseVersionId
-        && focusIdForBinding(record, binding) === focusId,
+      (binding) => bindingBelongsToAlignment(record, alignment, binding),
     );
     return hasBinding ? 'aligned' : 'sense_confirmed_expression_pending';
   }
@@ -249,6 +269,14 @@ export const derivePersonalMeaningPhase = (
 ): PersonalMeaningJourneyPhase => {
   const phases = record.focuses.map((focus) =>
     deriveFocusPhase(record, focus.meaningFocusId));
+  for (const alignment of record.alignments) {
+    if (alignment.status !== 'active' || alignment.basis.kind !== 'contextual_resolution') {
+      continue;
+    }
+    phases.push(record.bindingConfirmations.some(
+      (binding) => bindingBelongsToAlignment(record, alignment, binding),
+    ) ? 'aligned' : 'sense_confirmed_expression_pending');
+  }
   return furthestPhase(phases.length > 0 ? phases : ['unclarified']);
 };
 
@@ -356,14 +384,18 @@ const buildProposalView = (
 const buildAlignmentView = (
   record: MeaningJourneyRecord,
   registry: SenseRegistryState,
-  focusId: string,
+  alignment: SensaPersonalMeaningAlignmentSnapshot,
 ): JourneyAlignmentView | null => {
-  const alignment = activeAlignmentForFocus(record, focusId);
-  if (!alignment) return null;
+  if (alignment.status !== 'active') return null;
   const senseVersion = senseVersionById(registry, alignment.senseVersionId);
   const confirmation = record.senseConfirmations.find(
     (fact) =>
-      fact.senseProposalConfirmationId === alignment.senseProposalConfirmationId,
+      alignment.basis.kind === 'sense_construction'
+      && fact.senseProposalConfirmationId === alignment.basis.senseProposalConfirmationId,
+  );
+  const contextualAcceptance = record.semanticAcceptances.find(
+    (fact) => alignment.basis.kind === 'contextual_resolution'
+      && fact.semanticAcceptanceId === alignment.basis.semanticAcceptanceId,
   );
   const confirmedProposalVersion = confirmation
     ? record.proposalVersions.find(
@@ -388,12 +420,12 @@ const buildAlignmentView = (
         openQuestions: [...senseVersion.semanticSpec.openQuestions],
       }
     : null;
-  const currentBindingFacts = currentBindingFactsForFocus(
+  const currentBindingFacts = currentBindingFactsForAlignment(
     record,
     registry,
     alignment.senseId,
     alignment.senseVersionId,
-    focusId,
+    alignment,
   );
   const candidateBindingStatus = (candidate: {
     candidateId: string;
@@ -437,6 +469,7 @@ const buildAlignmentView = (
 
   return {
     personalMeaningAlignmentId: alignment.personalMeaningAlignmentId,
+    basisKind: alignment.basis.kind,
     status: alignment.status,
     senseId: alignment.senseId,
     senseVersionId: alignment.senseVersionId,
@@ -445,7 +478,7 @@ const buildAlignmentView = (
     senseVersionNumber: senseVersion?.versionNumber ?? null,
     origin: senseVersion?.origin ?? 'learner_confirmed',
     reviewStatus: senseVersion?.reviewStatus ?? 'learner_confirmed',
-    resolution: confirmation?.resolution ?? 'create_new',
+    resolution: confirmation?.resolution ?? contextualAcceptance?.resolution ?? 'create_new',
     coreMeaningFocus: senseVersion?.semanticSpec.coreMeaningFocus ?? '',
     semanticSpec,
     semanticSpecVersion: senseVersion?.versionNumber ?? null,
@@ -494,7 +527,10 @@ export const buildFocusView = (
     proposal: currentConstruction
       ? buildProposalView(record, currentConstruction.senseConstructionId)
       : null,
-    alignment: buildAlignmentView(record, registry, focusId),
+    alignment: (() => {
+      const alignment = activeAlignmentForFocus(record, focusId);
+      return alignment ? buildAlignmentView(record, registry, alignment) : null;
+    })(),
   };
 };
 
@@ -506,6 +542,10 @@ export const buildDetailView = (
   const focuses = record.focuses
     .map((focus) => buildFocusView(record, registry, focus.meaningFocusId))
     .filter((view): view is JourneyFocusView => view !== null);
+  const directAlignments = record.alignments
+    .filter((alignment) => alignment.basis.kind === 'contextual_resolution')
+    .map((alignment) => buildAlignmentView(record, registry, alignment))
+    .filter((view): view is JourneyAlignmentView => view !== null);
   const meaningRevision = currentMeaningRevision(record);
   return {
     personalMeaningId: record.personalMeaning.personalMeaningId,
@@ -513,13 +553,14 @@ export const buildDetailView = (
     displayLabel: meaningRevision?.displayLabel ?? null,
     learnerIntentNote: meaningRevision?.learnerIntentNote ?? null,
     phase: derivePersonalMeaningPhase(record),
-    senseFormation: buildSenseFormationView(focuses),
-    expressionBinding: buildExpressionBindingView(focuses),
+    senseFormation: buildSenseFormationView(focuses, directAlignments),
+    expressionBinding: buildExpressionBindingView(focuses, directAlignments),
     familiarAnchors: anchors.familiar,
     experienceAnchors: anchors.experience,
     materialBlocks: anchors.blocks,
     startingPoint: record.mockState.startingPoint ?? null,
     focuses,
+    directAlignments,
     createdAt: record.personalMeaning.createdAt,
     updatedAt: record.personalMeaning.updatedAt,
   };
@@ -558,6 +599,7 @@ export const buildListItemView = (
  */
 export const buildSenseFormationView = (
   focuses: readonly JourneyFocusView[],
+  directAlignments: readonly JourneyAlignmentView[] = [],
 ): JourneySenseFormationView => {
   const pendingFocuses = focuses.filter((focus) => focus.phase === 'focus_pending_acceptance');
   const proposalPendingFocuses = focuses.filter((focus) => focus.phase === 'proposal_ready');
@@ -569,7 +611,7 @@ export const buildSenseFormationView = (
   // Focus projections have only the actionable cases above or an active
   // Alignment; the final branch is therefore the explicit completed case.
   const phase: SenseFormationPhase = focuses.length === 0
-    ? 'focus_missing'
+    ? directAlignments.length > 0 ? 'sense_confirmed' : 'focus_missing'
     : proposalPendingFocuses.length > 0
       ? 'proposal_pending'
       : clarifyingFocuses.length > 0
@@ -591,7 +633,7 @@ export const buildSenseFormationView = (
     pendingFocusCount: pendingFocuses.length,
     clarifyingFocusCount: clarifyingFocuses.length,
     proposalPendingCount: proposalPendingFocuses.length,
-    confirmedSenseCount: confirmedSenseFocuses.length,
+    confirmedSenseCount: confirmedSenseFocuses.length + directAlignments.length,
     nextFocusId: nextFocus?.meaningFocusId ?? null,
   };
 };
@@ -603,34 +645,38 @@ export const buildSenseFormationView = (
  */
 export const buildExpressionBindingView = (
   focuses: readonly JourneyFocusView[],
+  directAlignments: readonly JourneyAlignmentView[] = [],
 ): JourneyExpressionBindingView => {
-  const alignedFocuses = focuses.filter((focus) => focus.alignment !== null);
-  const boundFocuses = alignedFocuses.filter(
-    (focus) => (focus.alignment?.confirmedBindings.length ?? 0) > 0,
+  const focusAlignments = focuses.flatMap((focus) => focus.alignment ? [focus.alignment] : []);
+  const alignments = [...focusAlignments, ...directAlignments];
+  const boundAlignments = alignments.filter(
+    (alignment) => alignment.confirmedBindings.length > 0,
   );
-  const pendingFocuses = alignedFocuses.filter(
-    (focus) => (focus.alignment?.confirmedBindings.length ?? 0) === 0,
+  const pendingAlignments = alignments.filter(
+    (alignment) => alignment.confirmedBindings.length === 0,
   );
-  const confirmedBindingCount = alignedFocuses.reduce(
-    (total, focus) => total + (focus.alignment?.confirmedBindings.length ?? 0),
+  const confirmedBindingCount = alignments.reduce(
+    (total, alignment) => total + alignment.confirmedBindings.length,
     0,
   );
 
-  const phase: ExpressionBindingPhase = alignedFocuses.length === 0
+  const phase: ExpressionBindingPhase = alignments.length === 0
     ? 'not_ready'
-    : pendingFocuses.length === alignedFocuses.length
+    : pendingAlignments.length === alignments.length
       ? 'pending'
-      : pendingFocuses.length > 0
+      : pendingAlignments.length > 0
         ? 'partial'
         : 'bound';
 
   return {
     phase,
-    confirmedSenseCount: alignedFocuses.length,
-    boundSenseCount: boundFocuses.length,
+    confirmedSenseCount: alignments.length,
+    boundSenseCount: boundAlignments.length,
     confirmedBindingCount,
-    pendingBindingCount: pendingFocuses.length,
-    nextFocusId: pendingFocuses[0]?.meaningFocusId ?? null,
+    pendingBindingCount: pendingAlignments.length,
+    nextFocusId: focuses.find(
+      (focus) => focus.alignment && focus.alignment.confirmedBindings.length === 0,
+    )?.meaningFocusId ?? null,
   };
 };
 
