@@ -116,6 +116,7 @@ import {
   preparations,
   relativeReviewLabel,
 } from './learningJourney/journeyState';
+import { projectLearningHistory } from './learningJourney/learningHistory';
 import { useJourneyState } from './learningJourney/useJourneyState';
 import type { LearningProtocolPurpose } from './learningRuntime/policyProfiles';
 import { learningRuntimeCoordinator } from './learningRuntime/runtimeCoordinator';
@@ -330,14 +331,12 @@ export default function App() {
     ? personalContentService.getSemanticAnchors(menuPersonalContent.senseKey)
     : [];
 
-  /* ---------- 业务状态（签到、资产、统计） ---------- */
+  /* ---------- 业务状态（签到、统计） ---------- */
   // 连续签到天数就是签到状态本身：0 天即未签到。原先是 signed 与 streak 两个
   // useState 编码同一件事，于是 toast 里要写 `Math.max(1, streak)` 防着
   // "已签到但天数为 0"——那种状态现在无法表示。
   const [streak, setStreak] = useState(0);
   const signed = streak > 0;
-  // 原型里的固定展示值，从来没有 setter——不是状态。
-  const coins = 2470;
   const [studyTab, setStudyTab] = useState<'a' | 'b'>('a');
   /**
    * 打开的是哪条 Target、正在编辑谁的学习方式——这两个都是"某个 sheet 正在
@@ -356,6 +355,7 @@ export default function App() {
    */
   const { journey, dispatchJourney } = useJourneyState();
   const defaultLearningPolicy = journey.defaultPolicy;
+  const learningRecords = useMemo(() => projectLearningHistory(journey), [journey]);
   const declaredMasteryRetentionTargetIds = journey.declaredMasteryRetentionTargetIds;
   /**
    * "现在跑着什么、刚跑完什么"——五个原本各自为政的 useState，规则见
@@ -1974,11 +1974,16 @@ export default function App() {
             onAddLearning={() => goMain('s-learning-entry')}
             onOpenTargetLibrary={() => goMain('s-learning-library')}
             onOpenDefaultPolicy={openDefaultLearningPolicy}
+            onOpenStats={() => goMain('s-stats')}
+            onSign={doSign}
+            signed={signed}
+            streak={streak}
             defaultPolicy={defaultLearningPolicy}
             learningTargetCount={visibleLearningTargetIds.length}
             readyInitialCount={plannedInitialTargetIds.length}
             reviewCount={totalReviewCount}
             dailyNewCount={dailyNewCount}
+            learningRecords={learningRecords}
             onDailyNewCountChange={setDailyNewCount}
           />
 
@@ -2068,7 +2073,14 @@ export default function App() {
           <ProfileScreen
             active={viewMode === 'main' && mainStack.includes('s-profile')}
             onBack={backMain}
-            onGoStudyPref={() => {
+            onGoStudyPlan={() => {
+              backMain();
+              setTimeout(() => {
+                goMain('s-study');
+                setStudyTab('a');
+              }, 260);
+            }}
+            onGoStudySettings={() => {
               backMain();
               setTimeout(() => {
                 goMain('s-study');
@@ -2076,7 +2088,6 @@ export default function App() {
               }, 260);
             }}
             toast={toast}
-            coins={coins}
           />
 
           {/* 5.1 轻量首次运行入口：创建运行即提交并锁定 Learning Policy。 */}
