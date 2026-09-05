@@ -47,7 +47,8 @@
     "sensa:four-stage-preset-smoke": "npm --prefix apps/web-next run smoke:four-stage",
     "sensa:sync-protocol-smoke": "tsx scripts/sensaSyncProtocolSmoke.ts",
     "sensa:capability-smoke": "tsx scripts/sensaCapabilitySmoke.ts",
-    "sensa:capability-db-smoke": "node --env-file-if-exists=apps/api/.env --import tsx scripts/sensaCapabilityDatabaseSmoke.ts"
+    "sensa:capability-db-smoke": "node --env-file-if-exists=apps/api/.env --import tsx scripts/sensaCapabilityDatabaseSmoke.ts",
+    "sensa:web-ui-smoke": "tsx scripts/sensaWebUiSmoke.ts"
   },
   "engines": {
     "node": ">=24"

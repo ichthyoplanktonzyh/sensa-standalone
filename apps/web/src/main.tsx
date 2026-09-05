@@ -1,14 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "./App";
+import { RouterProvider } from "@tanstack/react-router";
+import { router } from "./experience/router/router";
+import "./theme.css";
 
-const root = document.getElementById("root");
-if (root === null) {
-  throw new Error("Sensa Web root element is missing.");
-}
-
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+createRoot(document.getElementById("root")!).render(<StrictMode><RouterProvider router={router} /></StrictMode>);
