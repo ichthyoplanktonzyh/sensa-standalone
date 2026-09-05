@@ -22,12 +22,10 @@ import { personalContentService } from './services/personalContentService';
 import { IconSprite } from './components/IconSprite';
 import { HomeScreen } from './components/HomeScreen';
 import { AcademyScreen } from './components/AcademyScreen';
+import { PracticeScopeScreen } from './components/PracticeScopeScreen';
 import {
   PortableListeningScreen,
 } from './components/PortableListeningScreen';
-import {
-  RealWorldListeningScreen,
-} from './components/RealWorldListeningScreen';
 import { YouGlishListeningScreen } from './components/YouGlishListeningScreen';
 import { ContentScreen } from './components/ContentScreen';
 import { ContentLibraryScreen } from './components/ContentLibraryScreen';
@@ -68,7 +66,9 @@ import { WordListScreen } from './components/WordListScreen';
 import { FinishScreen } from './components/FinishScreen';
 import { StatsScreen } from './components/StatsScreen';
 import { SidePanel } from './components/SidePanel';
-import { DEFAULT_PRACTICE_SCOPE, type PracticeSenseItem } from './practiceData';
+import { PRACTICE_SENSES, type PracticeSenseItem } from './practiceData';
+import { usePracticeScope } from './usePracticeScope';
+import type { ResolvedPracticeScope } from './practiceScope';
 import {
   contentSenseForId,
   isContentSectionId,
@@ -207,12 +207,20 @@ export default function App() {
     setMainStack,
   } = useShellNavigation();
 
-  // 展示版本对照开关由 presentationStore 持有：写在侧栏、读在各屏，
-  // 此前为此穿了十个 props 过 SidePanel。
+  /* ---------- 自由练习范围：typed sources → learner selection → resolved scope ---------- */
+  const { catalog: practiceScopeCatalog, selectScope } = usePracticeScope();
+  const [activePracticeScope, setActivePracticeScope] = useState<ResolvedPracticeScope | null>(null);
+  const openRealWorldListening = useCallback(() => {
+    const current = practiceScopeCatalog.currentScope;
+    // Pin the resolved target list for this activity run. Later source changes
+    // only affect the next run, never the one already on screen.
+    setActivePracticeScope({ ...current, targets: [...current.targets] });
+    goMain('s-real-world-listening');
+  }, [goMain, practiceScopeCatalog.currentScope]);
+
+  // 剩余展示版本对照开关由 presentationStore 持有：写在侧栏、读在各屏。
   const semanticWorldPresentation = usePresentationStore((state) => state.semanticWorld);
-  const practiceHomePresentation = usePresentationStore((state) => state.practiceHome);
   const portableListeningPresentation = usePresentationStore((state) => state.portableListening);
-  const realWorldListeningPresentation = usePresentationStore((state) => state.realWorldListening);
   const dictionaryPresentation = usePresentationStore((state) => state.dictionary);
 
   /* ---------- 我的内容读取投影与下钻目标 ---------- */
@@ -1819,18 +1827,17 @@ export default function App() {
           <AcademyScreen
             active={viewMode === 'main' && mainStack.includes('s-academy')}
             onBack={backMain}
-            onOpenWordList={() => goMain('s-wordlist')}
-            onOpenListening={() => goMain('s-listening')}
-            onOpenRealWorldListening={() => goMain('s-real-world-listening')}
-            onOpenQuickSpelling={(item) => {
-              openSpelling(item.sourceWord, 'quick_spelling', `${item.pos} ${item.meaning}`);
-            }}
-            onOpenDictation={(item) => {
-              openSpelling(item.sourceWord, 'dictation', `${item.pos} ${item.meaning}`);
-            }}
-            practiceScope={DEFAULT_PRACTICE_SCOPE}
-            presentation={practiceHomePresentation}
-            toast={toast}
+            onOpenPracticeScope={() => goMain('s-practice-scope')}
+            onOpenRealWorldListening={openRealWorldListening}
+            practiceScope={practiceScopeCatalog.currentScope}
+          />
+
+          {/* 2.1 自由练习范围：来源选择与 Personal Meaning target 选择 */}
+          <PracticeScopeScreen
+            active={viewMode === 'main' && mainStack.includes('s-practice-scope')}
+            catalog={practiceScopeCatalog}
+            onBack={backMain}
+            onSelectScope={selectScope}
           />
 
           {/* 3. 我的内容 */}
@@ -1945,29 +1952,20 @@ export default function App() {
           {/* 3.7 自由练习 / 随身听 (仅义项粒度的独立练习投影) */}
           <PortableListeningScreen
             active={viewMode === 'main' && mainStack.includes('s-listening')}
-            bookTitle={DEFAULT_PRACTICE_SCOPE.bookTitle}
-            items={DEFAULT_PRACTICE_SCOPE.items}
+            bookTitle="COCA 20000 (上)"
+            items={PRACTICE_SENSES}
             onBack={backMain}
             toast={toast}
             presentation={portableListeningPresentation}
           />
 
-          {/* 3.8 真实语流：sensa 版是义项过滤的自定义原型，youglish 版是嵌入 widget 的 baseline */}
-          {realWorldListeningPresentation === 'youglish' ? (
-            <YouGlishListeningScreen
-              active={viewMode === 'main' && mainStack.includes('s-real-world-listening')}
-              items={DEFAULT_PRACTICE_SCOPE.items}
-              onBack={backMain}
-              toast={toast}
-            />
-          ) : (
-            <RealWorldListeningScreen
-              active={viewMode === 'main' && mainStack.includes('s-real-world-listening')}
-              items={DEFAULT_PRACTICE_SCOPE.items}
-              onBack={backMain}
-              toast={toast}
-            />
-          )}
+          {/* 3.8 自由练习 / 真实语流泛化（YouGlish，按 Expression form 检索） */}
+          <YouGlishListeningScreen
+            active={viewMode === 'main' && mainStack.includes('s-real-world-listening')}
+            targets={(activePracticeScope ?? practiceScopeCatalog.currentScope).targets}
+            onBack={backMain}
+            toast={toast}
+          />
 
           {/* 4. 我的学习 / 学习偏好 */}
           <StudyScreen

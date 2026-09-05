@@ -18,7 +18,7 @@
     "smoke:journey": "tsx src/learningJourney/journeySmoke.ts",
     "smoke:meaning": "tsx src/personalMeaningJourney/journeySmoke.ts",
     "smoke:intake": "tsx src/personalMeaningJourney/intakeSmoke.ts",
-    "smoke": "npm run smoke:router && npm run smoke:stores && npm run smoke:flow && npm run smoke:runtime && npm run smoke:surfaces && npm run smoke:intent && npm run smoke:orchestration && npm run smoke:renderers && npm run smoke:lightweight-initial && npm run smoke:agentic-provisioning && npm run smoke:capabilities && npm run smoke:provisioning && npm run smoke:retention && npm run smoke:scopes && npm run smoke:composition && npm run smoke:four-stage && npm run smoke:daily-plan && npm run smoke:journey && npm run smoke:meaning && npm run smoke:intake && npm run smoke:styles",
+    "smoke": "npm run smoke:router && npm run smoke:stores && npm run smoke:flow && npm run smoke:runtime && npm run smoke:surfaces && npm run smoke:intent && npm run smoke:orchestration && npm run smoke:renderers && npm run smoke:lightweight-initial && npm run smoke:agentic-provisioning && npm run smoke:capabilities && npm run smoke:provisioning && npm run smoke:retention && npm run smoke:scopes && npm run smoke:composition && npm run smoke:four-stage && npm run smoke:daily-plan && npm run smoke:journey && npm run smoke:meaning && npm run smoke:intake && npm run smoke:practice && npm run smoke:styles",
     "smoke:styles": "tsx src/styles/stylesheetSmoke.ts",
     "smoke:surfaces": "tsx src/learningRuntime/runtimeSurfacesSmoke.ts",
     "smoke:retention": "tsx src/learningRuntime/retentionStoresSmoke.ts",
@@ -32,7 +32,8 @@
     "smoke:scopes": "tsx src/learningRuntime/retentionScopesSmoke.ts",
     "smoke:composition": "tsx src/learningRuntime/runtimeCompositionSmoke.ts",
     "smoke:daily-plan": "tsx src/planning/dailyInitialPlannerSmoke.ts",
-    "smoke:four-stage": "tsx src/learningRuntime/interleavedFourStageProtocolSmoke.ts"
+    "smoke:four-stage": "tsx src/learningRuntime/interleavedFourStageProtocolSmoke.ts",
+    "smoke:practice": "tsx src/practiceInventorySmoke.ts"
   },
   "dependencies": {
     "@sensa/contracts": "file:../../packages/contracts",

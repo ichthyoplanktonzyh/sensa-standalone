@@ -23,17 +23,11 @@ export const SidePanel = ({
 }: SidePanelProps) => {
   // 对照开关直接读写 store，不再经由 App 传十个 props。
   const semanticWorldPresentation = usePresentationStore((state) => state.semanticWorld);
-  const practiceHomePresentation = usePresentationStore((state) => state.practiceHome);
   const portableListeningPresentation = usePresentationStore((state) => state.portableListening);
-  const realWorldListeningPresentation = usePresentationStore((state) => state.realWorldListening);
   const dictionaryPresentation = usePresentationStore((state) => state.dictionary);
   const onSemanticWorldPresentationChange = usePresentationStore((state) => state.setSemanticWorld);
-  const onPracticeHomePresentationChange = usePresentationStore((state) => state.setPracticeHome);
   const onPortableListeningPresentationChange = usePresentationStore(
     (state) => state.setPortableListening,
-  );
-  const onRealWorldListeningPresentationChange = usePresentationStore(
-    (state) => state.setRealWorldListening,
   );
   const onDictionaryPresentationChange = usePresentationStore((state) => state.setDictionary);
 
@@ -106,27 +100,6 @@ export const SidePanel = ({
           </button>
         </div>
       </div>
-      <div className="prototype-presentation-switch" aria-label="自由练习首页展示版本">
-        <span>自由练习</span>
-        <div role="group" aria-label="选择自由练习首页展示版本">
-          <button
-            type="button"
-            className={practiceHomePresentation === 'sensa' ? 'active' : ''}
-            aria-pressed={practiceHomePresentation === 'sensa'}
-            onClick={() => onPracticeHomePresentationChange('sensa')}
-          >
-            Sensa
-          </button>
-          <button
-            type="button"
-            className={practiceHomePresentation === 'baseline' ? 'active' : ''}
-            aria-pressed={practiceHomePresentation === 'baseline'}
-            onClick={() => onPracticeHomePresentationChange('baseline')}
-          >
-            Baseline
-          </button>
-        </div>
-      </div>
       <div className="prototype-presentation-switch" aria-label="随身听展示版本">
         <span>随身听</span>
         <div role="group" aria-label="选择随身听展示版本">
@@ -145,27 +118,6 @@ export const SidePanel = ({
             onClick={() => onPortableListeningPresentationChange('baseline')}
           >
             Baseline
-          </button>
-        </div>
-      </div>
-      <div className="prototype-presentation-switch" aria-label="真实语流展示版本">
-        <span>真实语流</span>
-        <div role="group" aria-label="选择真实语流展示版本">
-          <button
-            type="button"
-            className={realWorldListeningPresentation === 'sensa' ? 'active' : ''}
-            aria-pressed={realWorldListeningPresentation === 'sensa'}
-            onClick={() => onRealWorldListeningPresentationChange('sensa')}
-          >
-            Sensa
-          </button>
-          <button
-            type="button"
-            className={realWorldListeningPresentation === 'youglish' ? 'active' : ''}
-            aria-pressed={realWorldListeningPresentation === 'youglish'}
-            onClick={() => onRealWorldListeningPresentationChange('youglish')}
-          >
-            YouGlish
           </button>
         </div>
       </div>

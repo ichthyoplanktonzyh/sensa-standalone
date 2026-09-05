@@ -1,8 +1,6 @@
 import { create } from 'zustand';
-import type { PracticeHomePresentation } from '../components/AcademyScreen';
 import type { DictionaryPresentation } from '../components/DictionaryPresentationContext';
 import type { PortableListeningPresentation } from '../components/PortableListeningScreen';
-import type { RealWorldListeningPresentation } from '../components/RealWorldListeningScreen';
 import type { SemanticWorldPresentation } from '../components/SemanticWorldScreen';
 
 /**
@@ -10,8 +8,8 @@ import type { SemanticWorldPresentation } from '../components/SemanticWorldScree
  * it is being compared with.
  *
  * These are a genuine cross-cutting UI preference: written in one place (the
- * side panel) and read in another (each screen). Held in App they cost five
- * `useState`s and ten props threaded through `SidePanel` purely to reach it.
+ * side panel) and read in another (each screen). Keeping the remaining visual
+ * comparisons here avoids threading presentation-only props through App.
  *
  * They are also all that is left needing a store once routing owns navigation
  * and the URL owns drill-down targets -- which is the point: the answer to
@@ -24,26 +22,18 @@ import type { SemanticWorldPresentation } from '../components/SemanticWorldScree
  */
 export interface PresentationState {
   readonly semanticWorld: SemanticWorldPresentation;
-  readonly practiceHome: PracticeHomePresentation;
   readonly portableListening: PortableListeningPresentation;
-  readonly realWorldListening: RealWorldListeningPresentation;
   readonly dictionary: DictionaryPresentation;
   setSemanticWorld: (presentation: SemanticWorldPresentation) => void;
-  setPracticeHome: (presentation: PracticeHomePresentation) => void;
   setPortableListening: (presentation: PortableListeningPresentation) => void;
-  setRealWorldListening: (presentation: RealWorldListeningPresentation) => void;
   setDictionary: (presentation: DictionaryPresentation) => void;
 }
 
 export const usePresentationStore = create<PresentationState>((set) => ({
   semanticWorld: 'sensa',
-  practiceHome: 'sensa',
   portableListening: 'sensa',
-  realWorldListening: 'sensa',
   dictionary: 'sensa',
   setSemanticWorld: (semanticWorld) => set({ semanticWorld }),
-  setPracticeHome: (practiceHome) => set({ practiceHome }),
   setPortableListening: (portableListening) => set({ portableListening }),
-  setRealWorldListening: (realWorldListening) => set({ realWorldListening }),
   setDictionary: (dictionary) => set({ dictionary }),
 }));

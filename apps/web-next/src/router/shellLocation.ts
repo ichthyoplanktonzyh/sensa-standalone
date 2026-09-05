@@ -54,6 +54,7 @@ export const KNOWN_SHEET_IDS = [
   's-learning-target',
   's-listening',
   's-personal-meaning',
+  's-practice-scope',
   's-profile',
   's-real-world-listening',
   's-semantic-world',

@@ -1,25 +1,17 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { PRACTICE_SENSES, type PracticeSenseItem } from '../practiceData';
+import type { PracticeScopeTarget } from '../practiceScope';
 import { useYouglishWidget } from '../useYouglishWidget';
 
 /**
- * Real-world listening — YouGlish baseline.
+ * Real-world Speech Variation through YouGlish.
  *
- * This is the YouGlish half of the sensa|youglish toggle. It hands the current
- * Sense's *word* to an embedded YouGlish widget and lets it stream real spoken
- * occurrences from across YouTube. The point is raw volume of the word's sound
- * with almost no pipeline of our own.
- *
- * One honesty boundary defines the screen: YouGlish searches by surface string,
- * so it cannot filter to a Sense. What plays here is the word in *any* meaning.
- * The screen therefore says so plainly and never dresses a clip up as belonging
- * to the current Sense — that separation is the job of the Sensa variant. Like
- * all free practice it grades nothing and touches no formal progress.
+ * YouGlish searches the Expression form rather than a contextual Sense. The UI
+ * keeps that boundary visible without turning it into an explanatory screen.
  */
 
 export interface YouGlishListeningScreenProps {
   active: boolean;
-  items?: readonly PracticeSenseItem[];
+  targets: readonly PracticeScopeTarget[];
   onBack: () => void;
   toast: (message: string) => void;
 }
@@ -48,13 +40,19 @@ const renderCaption = (raw: string) =>
 
 export const YouGlishListeningScreen = ({
   active,
-  items = PRACTICE_SENSES,
+  targets,
   onBack,
   toast,
 }: YouGlishListeningScreenProps) => {
-  // Every English word has spoken occurrences on YouGlish, so the whole scope is
-  // listenable here — unlike the Sensa variant there is no indexed subset.
-  const listenable = items;
+  const listenable = useMemo(() => {
+    const seen = new Set<string>();
+    return targets.filter((target) => {
+      const expression = target.expression.surfaceForm.trim().toLocaleLowerCase('en');
+      if (!expression || seen.has(expression)) return false;
+      seen.add(expression);
+      return true;
+    });
+  }, [targets]);
 
   const [senseIndex, setSenseIndex] = useState(0);
   const [accent, setAccent] = useState<string | undefined>(undefined);
@@ -68,7 +66,7 @@ export const YouGlishListeningScreen = ({
 
   const widget = useYouglishWidget({
     mountRef,
-    query: currentSense?.word,
+    query: currentSense?.expression.surfaceForm,
     accent,
     active,
   });
@@ -80,7 +78,7 @@ export const YouGlishListeningScreen = ({
 
   const openPicker = useCallback(() => {
     if (listenable.length === 0) {
-      toast('当前练习范围没有可听的词');
+      toast('当前范围没有可听的表达');
       return;
     }
     setPickerOpen(true);
@@ -123,23 +121,22 @@ export const YouGlishListeningScreen = ({
           aria-expanded={pickerOpen}
           aria-label={
             currentSense
-              ? `当前在听 ${currentSense.word}，点击更换要听的词`
-              : '选择要听的词'
+              ? `当前在听 ${currentSense.expression.surfaceForm}，点击更换表达`
+              : '选择要听的表达'
           }
         >
           {currentSense ? (
             <>
               <span className="rwl-nav-word">
-                <b>{currentSense.word}</b>
+                <b>{currentSense.expression.surfaceForm}</b>
                 <svg className="icon"><use href="#i-chev-d" /></svg>
               </span>
               <span className="rwl-nav-meaning">
-                <i>{currentSense.pos}</i>
-                {currentSense.meaning}
+                {currentSense.expression.pronunciationVariant?.ipa || 'Expression'}
               </span>
             </>
           ) : (
-            <span className="rwl-nav-word"><b>真实语流</b></span>
+            <span className="rwl-nav-word"><b>真实语流泛化</b></span>
           )}
         </button>
 
@@ -151,15 +148,12 @@ export const YouGlishListeningScreen = ({
       {!currentSense ? (
         <div className="rwl-body">
           <div className="rwl-empty">
-            <h3>当前范围没有可听的词</h3>
-            <p>换一个练习范围，或稍后再来。</p>
+            <h3>当前范围没有可听的表达</h3>
           </div>
         </div>
       ) : (
         <div className="rwl-body">
-          <p className="ygl-note">
-            YouGlish 按词搜索真实语流，<b>不区分义项</b>——这里播放的是「{currentSense.word}」在各种意思下的读音，用于建立对这个词声音的泛化。义项过滤由 Sensa 版负责。
-          </p>
+          <p className="ygl-note">按表达形式检索 · 片段可能包含其他词义</p>
 
           <div className="ygl-accents" role="group" aria-label="口音筛选">
             {ACCENTS.map(({ code, label }) => (
@@ -184,11 +178,11 @@ export const YouGlishListeningScreen = ({
             {widget.status !== 'ready' && (
               <div className="ygl-state" role="status">
                 {widget.status === 'loading' || widget.status === 'idle' ? (
-                  <p>正在从 YouGlish 拉取「{currentSense.word}」的真实语流…</p>
+                  <p>正在加载「{currentSense.expression.surfaceForm}」…</p>
                 ) : widget.status === 'empty' ? (
-                  <p>YouGlish 没有找到「{currentSense.word}」的语流，换个词或口音试试。</p>
+                  <p>没有找到片段，换个口音试试。</p>
                 ) : (
-                  <p>加载失败。可能是网络受限或该视频不可用，稍后再试。</p>
+                  <p>加载失败，请稍后再试。</p>
                 )}
               </div>
             )}
@@ -264,10 +258,6 @@ export const YouGlishListeningScreen = ({
             ))}
           </div>
 
-          <p className="ygl-boundary">
-            自由练习不改变学习与复习进度、每日额度或到期时间。
-          </p>
-
           <a
             className="ygl-attrib"
             href="https://youglish.com"
@@ -287,37 +277,32 @@ export const YouGlishListeningScreen = ({
             onClick={() => setPickerOpen(false)}
             aria-label="关闭选择"
           />
-          <div className="rwl-picker" role="dialog" aria-modal="true" aria-label="选择要听的词">
+          <div className="rwl-picker" role="dialog" aria-modal="true" aria-label="选择要听的表达">
             <header>
               <div>
                 <span>当前练习范围</span>
-                <h2>听哪个词</h2>
+                <h2>听哪个表达</h2>
               </div>
               <button type="button" onClick={() => setPickerOpen(false)}>关闭</button>
             </header>
 
             <ul>
               {listenable.map((item, index) => (
-                <li key={item.senseId}>
+                <li key={item.targetId}>
                   <button
                     type="button"
                     className={index === safeSenseIndex ? 'is-on' : ''}
                     aria-current={index === safeSenseIndex}
                     onClick={() => pickSense(index)}
                   >
-                    <span className="rwl-picker-word">{item.word}</span>
+                    <span className="rwl-picker-word">{item.expression.surfaceForm}</span>
                     <span className="rwl-picker-meaning">
-                      <i>{item.pos}</i>
-                      {item.meaning}
+                      {item.expression.pronunciationVariant?.ipa || item.sense.label}
                     </span>
                   </button>
                 </li>
               ))}
             </ul>
-
-            <p className="rwl-picker-note">
-              YouGlish 按词搜索，切换词会重新拉取该词的真实语流。
-            </p>
           </div>
         </div>
       )}

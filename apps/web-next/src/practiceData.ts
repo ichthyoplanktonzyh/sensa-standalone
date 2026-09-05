@@ -31,11 +31,6 @@ export interface PracticeSenseItem {
   sourceWord: Word;
 }
 
-export interface PracticeScope {
-  bookTitle: string;
-  items: PracticeSenseItem[];
-}
-
 const escapeSequenceEntities: Record<string, string> = {
   '&nbsp;': ' ',
   '&amp;': '&',
@@ -200,10 +195,5 @@ export const RUNTIME_PRACTICE_SENSES: PracticeSenseItem[] = PROTOTYPE_LEARNING_P
   }];
 });
 
-/** Formal/default practice is Package-only; the legacy projection is isolated. */
+/** Formal/default practice inventory is Package-only; the legacy projection is isolated. */
 export const PRACTICE_SENSES: PracticeSenseItem[] = RUNTIME_PRACTICE_SENSES;
-
-export const DEFAULT_PRACTICE_SCOPE: PracticeScope = {
-  bookTitle: 'COCA 20000 (上)',
-  items: PRACTICE_SENSES,
-};
