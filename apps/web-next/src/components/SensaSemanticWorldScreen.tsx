@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { SemanticWorldScreenProps } from './SemanticWorldScreen';
 import { PersonalMeaningComposer } from './PersonalMeaningComposer';
 import { IntakeInboxDrawer } from './IntakeInboxDrawer';
@@ -1376,6 +1376,7 @@ const ExpressionLibrary = ({
 
 export const SensaSemanticWorldScreen = ({
   active,
+  initialAction,
   onBack,
   onOpenPersonalMeaning,
   onOpenConfirmedSense,
@@ -1394,6 +1395,12 @@ export const SensaSemanticWorldScreen = ({
   const inboxItems = useJourneyInbox();
   const meanings = useMemo(() => items.map(worldMeaningFor), [items]);
   const expressions = useMemo(() => expressionsFor(meanings), [meanings]);
+
+  useEffect(() => {
+    if (!active || initialAction !== 'create') return;
+    setSection('home');
+    setComposerOpen(true);
+  }, [active, initialAction]);
 
   const visibleMeanings = useMemo(() => meanings.filter((meaning) => {
     const matchesFilter = filter === 'all'

@@ -283,10 +283,6 @@ export default function App() {
     goMain('s-content-example', { exampleId: item.senseId });
   }, [goMain]);
 
-  const openContentComingSoon = useCallback((kind: 'scenes' | 'collections') => {
-    goMain('s-content-coming', { coming: kind });
-  }, [goMain]);
-
   // 是否为首页纯净壁纸态（主页面且无弹层），决定状态栏与底条为浅色文字
   const isLight = viewMode === 'main' && mainStack.length === 0;
 
@@ -1844,14 +1840,16 @@ export default function App() {
           <ContentScreen
             active={viewMode === 'main' && mainStack.includes('s-content')}
             onBack={backMain}
-            onOpenSemanticWorld={() => goMain('s-semantic-world')}
+            onCreatePersonalMeaning={() => goMain('s-semantic-world', { worldAction: 'create' })}
+            onOpenPersonalMeaning={openPersonalMeaning}
+            onOpenSense={openSemanticWorldSense}
             onOpenSection={openContentSection}
-            onOpenComingSoon={openContentComingSoon}
           />
 
-          {/* 3.1 我的词义世界：Personal Meaning / Sense / Binding 事实投影 */}
+          {/* 3.1 我的语义世界：Personal Meaning / Sense / Binding 事实投影 */}
           <SemanticWorldScreen
             active={viewMode === 'main' && mainStack.includes('s-semantic-world')}
+            initialAction={params.worldAction === 'create' ? 'create' : undefined}
             onBack={backMain}
             onOpenSense={openSemanticWorldSense}
             onOpenPersonalMeaning={openPersonalMeaning}

@@ -72,6 +72,7 @@ export interface PersonalSemanticRegionItem {
 
 export interface PersonalMeaningItem {
   personalMeaningId: string;
+  primaryLabel: string;
   regionId: string | null;
   regionName: string | null;
   /**
@@ -89,6 +90,8 @@ export interface PersonalMeaningItem {
     anchorKind: 'scene';
     bodyText: string;
   }>;
+  confirmedSenseCount: number;
+  confirmedExpressionCount: number;
   updatedAt: number;
 }
 
@@ -235,6 +238,7 @@ export const buildContentProjection = (): ContentProjectionSnapshot => {
   // two Personal Meaning identities into the world/map projection.
   const personalMeaningItems = journeyGateway.getListItems().map((item) => ({
     personalMeaningId: item.personalMeaningId,
+    primaryLabel: item.primaryLabel,
     regionId: null,
     regionName: null,
     phase: item.phase,
@@ -248,6 +252,8 @@ export const buildContentProjection = (): ContentProjectionSnapshot => {
       anchorKind: 'scene' as const,
       bodyText: anchor.surfaceForm,
     })),
+    confirmedSenseCount: item.confirmedSenseCount,
+    confirmedExpressionCount: item.confirmedExpressionCount,
     updatedAt: Date.parse(item.updatedAt),
   }));
   const knownWords = storageService.getKnownWords();

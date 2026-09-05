@@ -134,10 +134,13 @@ const everyParam: ShellParams = {
   focusId: 'f',
   targetId: 'borrow-receive',
   policyTarget: 'lend-give',
+  worldAction: 'create',
 };
 const retention: ReadonlyArray<readonly [readonly string[], readonly string[]]> = [
   [[], []],
   [['s-content'], []],
+  [['s-semantic-world'], ['worldAction']],
+  [['s-content', 's-semantic-world'], ['worldAction']],
   [['s-content', 's-content-sense'], ['senseId']],
   [['s-content', 's-content-library'], ['section']],
   [['s-content', 's-content-example'], ['exampleId']],

@@ -11,6 +11,7 @@ export type SemanticWorldPresentation = 'sensa' | 'baseline';
 
 export interface SemanticWorldScreenProps {
   active: boolean;
+  initialAction?: 'create';
   onBack: () => void;
   onOpenSense: (senseId: string) => void;
   /** Open a Personal Meaning's clarification journey by its canonical id. */
@@ -152,7 +153,7 @@ const BaselineSemanticWorldScreen = ({ active, onBack, onOpenSense }: SemanticWo
 };
 
 export const SemanticWorldScreen = (props: SemanticWorldScreenProps) => (
-  props.presentation === 'baseline'
+  props.presentation === 'baseline' && props.initialAction !== 'create'
     ? <BaselineSemanticWorldScreen {...props} />
     : <SensaSemanticWorldScreen {...props} />
 );

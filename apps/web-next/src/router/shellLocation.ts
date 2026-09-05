@@ -144,6 +144,7 @@ export interface ShellParams {
   readonly focusId?: string;
   readonly targetId?: string;
   readonly policyTarget?: string;
+  readonly worldAction?: string;
 }
 
 export const SHELL_PARAM_KEYS = [
@@ -155,6 +156,7 @@ export const SHELL_PARAM_KEYS = [
   'focusId',
   'targetId',
   'policyTarget',
+  'worldAction',
 ] as const satisfies readonly (keyof ShellParams)[];
 
 /**
@@ -171,6 +173,7 @@ const SHEET_PARAM_OWNERS: Readonly<Record<string, readonly (keyof ShellParams)[]
   's-confirmed-sense': ['meaningId', 'focusId'],
   's-expression-binding': ['meaningId', 'focusId'],
   's-learning-target': ['targetId'],
+  's-semantic-world': ['worldAction'],
   // The policy sheet is reached both from a single Target and from the study
   // screen's default-policy entry. Its own param says which: present means
   // "editing this Target's policy", absent means "editing the default".
