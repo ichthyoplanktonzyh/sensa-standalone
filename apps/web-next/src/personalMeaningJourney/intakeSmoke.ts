@@ -35,13 +35,17 @@ import {
   sensaSenseProposalVersionSnapshotSchema,
   sensaSenseSnapshotSchema,
   sensaSenseVersionSnapshotSchema,
+  sensaSemanticAcceptanceFactSchema,
   type SensaIntakePayload,
 } from '@sensa/contracts/sensa';
 import { createJourneyGateway } from './gateway';
 import { createSeededIdPort } from './ids';
 import { MemoryStoragePort, createSeededClock } from './ports';
 import { loadJourneyState, JOURNEY_STORE_KEY } from './store';
-import type { PersonalMeaningJourneyGateway } from './gateway';
+import type {
+  PersonalMeaningJourneyGateway,
+  SemanticAcceptanceAuthorityPort,
+} from './gateway';
 import type { IngestCommandResult } from './types';
 
 let checks = 0;
@@ -66,11 +70,15 @@ const expectFailure = async (
   throw new Error(`SMOKE FAILED: ${message}`);
 };
 
-const newGateway = (storage: MemoryStoragePort): PersonalMeaningJourneyGateway =>
+const newGateway = (
+  storage: MemoryStoragePort,
+  semanticAcceptanceAuthority?: SemanticAcceptanceAuthorityPort,
+): PersonalMeaningJourneyGateway =>
   createJourneyGateway({
     storage,
     clock: createSeededClock(),
     ids: createSeededIdPort(1),
+    semanticAcceptanceAuthority,
   });
 
 const assertFastTrack = (result: IngestCommandResult, message: string): string => {
@@ -108,6 +116,7 @@ const validateFacts = (storage: MemoryStoragePort): void => {
     record.proposals.forEach((fact) => sensaSenseProposalSnapshotSchema.parse(fact));
     record.proposalVersions.forEach((fact) => sensaSenseProposalVersionSnapshotSchema.parse(fact));
     record.senseConfirmations.forEach((fact) => sensaConfirmSenseProposalFactSchema.parse(fact));
+    record.semanticAcceptances.forEach((fact) => sensaSemanticAcceptanceFactSchema.parse(fact));
     record.alignments.forEach((fact) => sensaPersonalMeaningAlignmentSnapshotSchema.parse(fact));
     record.alignmentEvents.forEach((fact) => sensaPersonalMeaningAlignmentEventSchema.parse(fact));
     record.bindingConfirmations.forEach((fact) => sensaConfirmExpressionBindingFactSchema.parse(fact));
@@ -129,7 +138,7 @@ const LOAN_TEXT = 'The library will loan the atlas to students for one week.';
 
 const loanSense = {
   senseKey: 'loan-temporary-give-use-return',
-  confirmationStatus: 'user_confirmed' as const,
+  resolutionStatus: 'resolved' as const,
   definitionSummary: '把自己的东西暂时交给别人使用，并预期收回',
   wordingSource: 'learner_authored' as const,
   candidates: [{ senseKey: null, definitionSummary: '借出' }],
@@ -139,7 +148,7 @@ const fastTrackPayload = (
   intakeOperationId: string,
   overrides: Partial<SensaIntakePayload> = {},
 ): SensaIntakePayload => ({
-  contractVersion: 'sensa-intake-v1',
+  contractVersion: 'sensa-intake-v2',
   intakeOperationId,
   capturedAt: CAPTURED_AT,
   context: {
@@ -151,10 +160,11 @@ const fastTrackPayload = (
   expression: {
     surfaceForm: 'loan',
     languageRole: 'target',
-    characterSpan: { start: 17, end: 21 },
+    occurrence: { kind: 'text_span', start: 17, end: 21 },
     expressionTypeHint: 'word',
   },
   sense: loanSense,
+  acceptanceRequest: { mode: 'learner_direct' },
   ...overrides,
 });
 
@@ -190,19 +200,19 @@ const run = async (): Promise<void> => {
   const meaningId = assertFastTrack(fast, 'a complete capture materializes through the fast track');
   assert(meaningId.length === 36, 'the fast track returns one bare Personal Meaning id');
   const detail = gateway.getDetail(meaningId)!;
-  assert(detail.focuses.length === 1, 'the fast track creates exactly one Focus');
-  const focus = detail.focuses[0]!;
-  assert(focus.accepted, 'the Meaning Focus is born accepted');
-  assert(focus.phase === 'aligned', 'the fast track lands all three facts at once');
-  assert(focus.alignment!.resolution === 'create_new', 'a fresh sense key registers a new Sense');
+  assert(detail.focuses.length === 0, 'the fast track does not invent a Meaning Focus');
+  assert(detail.directAlignments.length === 1, 'the fast track creates one contextual Alignment');
+  const alignment = detail.directAlignments[0]!;
+  assert(detail.phase === 'aligned', 'the fast track lands the accepted tuple and Binding at once');
+  assert(alignment.resolution === 'create_new', 'a fresh sense key registers a new Sense');
   assert(
-    focus.alignment!.coreMeaningFocus === loanSense.definitionSummary,
+    alignment.coreMeaningFocus === loanSense.definitionSummary,
     'the confirmed statement becomes the core meaning focus',
   );
-  assert(focus.alignment!.confirmedBindings.length === 1, 'the Binding settles in the same command');
+  assert(alignment.confirmedBindings.length === 1, 'the Binding settles in the same command');
   assert(
-    focus.alignment!.confirmedBindings[0]!.surfaceForm === 'loan'
-      && focus.alignment!.confirmedBindings[0]!.languageTag === 'en',
+    alignment.confirmedBindings[0]!.surfaceForm === 'loan'
+      && alignment.confirmedBindings[0]!.languageTag === 'en',
     'a target-role capture binds its word in English',
   );
   assert(detail.materialBlocks.length === 1, 'the captured sentence becomes the one material block');
@@ -216,15 +226,36 @@ const run = async (): Promise<void> => {
   assert(world.senseFormation.phase === 'sense_confirmed', 'the world Sense Formation axis is confirmed immediately');
   assert(world.expressionBinding.phase === 'bound', 'the world Binding axis is bound immediately');
   let record = loadJourneyState(storage).meanings[0]!;
+  assert(
+    record.focuses.length === 0
+      && record.constructions.length === 0
+      && record.proposals.length === 0
+      && record.senseConfirmations.length === 0,
+    'the contextual fast track invents no Focus, Construction, Proposal or proposal confirmation',
+  );
+  assert(
+    record.semanticAcceptances.length === 1
+      && record.semanticAcceptances[0]!.authority.mode === 'learner_direct',
+    'the complete tuple is admitted by an explicit direct Semantic Acceptance fact',
+  );
+  assert(
+    record.alignments[0]!.basis.kind === 'contextual_resolution',
+    'the Alignment records its contextual-resolution basis',
+  );
   assert(record.bindingConfirmations.length === 1, 'the shared binding core records the confirmation fact');
   assert(
-    record.bindingConfirmations[0]!.senseVersionId === focus.alignment!.senseVersionId,
+    record.bindingConfirmations[0]!.senseProposalVersionId === null,
+    'the contextual Binding does not pretend to come from a Sense Proposal',
+  );
+  assert(
+    record.bindingConfirmations[0]!.senseVersionId === alignment.senseVersionId,
     'the confirmation fact references the same Sense Version as the Alignment',
   );
   assert(
     record.personalExpressionAnchorRevisions.length === 1
-      && record.personalExpressionAnchorRevisions[0]!.learnerLanguageRole === 'target',
-    'the engine-prepared expression anchor is reused, not duplicated',
+      && record.personalExpressionAnchorRevisions[0]!.learnerLanguageRole === 'target'
+      && record.personalExpressionAnchorRevisions[0]!.occurrence?.kind === 'text_span',
+    'the engine-prepared expression anchor is reused with its Context locator',
   );
   const stateAfterFast = loadJourneyState(storage);
   assert(stateAfterFast.registry.senses.length === 1, 'the fast track registers exactly one Sense');
@@ -239,6 +270,60 @@ const run = async (): Promise<void> => {
     'an ingest replay keeps the exact Personal Meaning id',
   );
   assert(loadJourneyState(storage).meanings.length === 1, 'an ingest replay creates no second meaning');
+
+  // A request is not authority by itself. The default local boundary admits
+  // authenticated learner actions but rejects unverified delegated grants.
+  const delegatedRequest = fastTrackPayload(op(30), {
+    acceptanceRequest: {
+      mode: 'delegated_agent',
+      actorId: 'reading-agent',
+      authorizationGrantId: op(31),
+    },
+  });
+  await expectFailure(
+    () => gateway.ingest(op(30), delegatedRequest),
+    'an unverified delegated acceptance request cannot mutate the world',
+  );
+  assert(loadJourneyState(storage).meanings.length === 1, 'rejected delegated authority writes nothing');
+
+  const delegatedStorage = new MemoryStoragePort();
+  const delegatedGateway = newGateway(delegatedStorage, {
+    verify(request) {
+      if (
+        request.mode !== 'delegated_agent'
+        || request.authorizationGrantId !== op(31)
+      ) {
+        throw new Error('delegation rejected');
+      }
+      return request;
+    },
+  });
+  assertFastTrack(
+    await delegatedGateway.ingest(op(30), delegatedRequest),
+    'a verified delegated grant has the same membership effect',
+  );
+  const delegatedAcceptance = loadJourneyState(delegatedStorage)
+    .meanings[0]!.semanticAcceptances[0]!;
+  assert(
+    delegatedAcceptance.authority.mode === 'delegated_agent'
+      && delegatedAcceptance.authority.authorizationGrantId === op(31),
+    'delegated acceptance preserves actor and grant provenance without a second confirmation',
+  );
+  validateFacts(delegatedStorage);
+
+  const noAcceptanceStorage = new MemoryStoragePort();
+  const noAcceptanceGateway = newGateway(noAcceptanceStorage);
+  const noAcceptance = fastTrackPayload(op(32), { acceptanceRequest: null });
+  const noAcceptanceId = assertInboxRoute(
+    await noAcceptanceGateway.ingest(op(32), noAcceptance),
+    'a complete resolution without acceptance remains in the Inbox',
+  );
+  assert(
+    noAcceptanceGateway.getInboxItems().find((item) => item.intakeId === noAcceptanceId)?.status
+      === 'pending_acceptance',
+    'the Inbox distinguishes missing acceptance from missing Sense',
+  );
+  assert(loadJourneyState(noAcceptanceStorage).meanings.length === 0, 'missing acceptance creates no world member');
 
   await expectFailure(
     () => gateway.ingest(op(2), fastTrackPayload(op(3))),
@@ -269,6 +354,12 @@ const run = async (): Promise<void> => {
         paragraphContext: 'Banks loan money, but friends loan trust.',
       },
     },
+    expression: {
+      surfaceForm: 'loan',
+      languageRole: 'target',
+      occurrence: { kind: 'text_span', start: 6, end: 10 },
+      expressionTypeHint: 'word',
+    },
     sense: { ...loanSense, wordingSource: 'llm_suggested' },
   });
   const secondId = assertFastTrack(
@@ -293,11 +384,11 @@ const run = async (): Promise<void> => {
     'LLM wording is never disguised as learner-authored',
   );
   assert(
-    secondDetail.focuses[0]!.alignment!.resolution === 'reuse_existing',
+    secondDetail.directAlignments[0]!.resolution === 'reuse_existing',
     'the same sense key reuses the registered Sense',
   );
   assert(
-    secondDetail.focuses[0]!.alignment!.senseVersionId === focus.alignment!.senseVersionId,
+    secondDetail.directAlignments[0]!.senseVersionId === alignment.senseVersionId,
     'reuse keeps the exact Sense Version identity',
   );
   assert(record.bindingConfirmations.length === 1, 'the reused binding still records its confirmation fact');
@@ -312,14 +403,14 @@ const run = async (): Promise<void> => {
   const familiarPayload = fastTrackPayload(op(5), {
     context: {
       modality: 'text',
-      textSegment: '他把旧相机借给了表弟。',
+      textSegment: '他把旧相机借出去了。',
       mediaReferenceIds: [],
       source: null,
     },
     expression: {
       surfaceForm: '借出',
       languageRole: 'familiar',
-      characterSpan: { start: 3, end: 5 },
+      occurrence: { kind: 'text_span', start: 5, end: 7 },
       expressionTypeHint: 'word',
     },
   });
@@ -345,12 +436,57 @@ const run = async (): Promise<void> => {
   assert(stateAfterFamiliar.registry.bindings.length === 2, 'a new sense-expression edge registers its own Binding');
   validateFacts(storage);
 
+  const resolvedImagePayload = fastTrackPayload(op(6), {
+    context: {
+      modality: 'image',
+      textSegment: null,
+      mediaReferenceIds: ['media-loan-sign'],
+      source: {
+        client: 'mobile-share',
+        url: null,
+        title: '图书馆借出告示',
+        domSelector: null,
+        paragraphContext: null,
+      },
+    },
+    expression: {
+      surfaceForm: 'loan',
+      languageRole: 'target',
+      occurrence: {
+        kind: 'media_region',
+        mediaReferenceId: 'media-loan-sign',
+        x: 0.2,
+        y: 0.3,
+        width: 0.25,
+        height: 0.1,
+      },
+      expressionTypeHint: 'word',
+    },
+  });
+  const resolvedImageId = assertFastTrack(
+    await gateway.ingest(op(6), resolvedImagePayload),
+    'a located expression in an image can use the same complete fast track',
+  );
+  const resolvedImageDetail = gateway.getDetail(resolvedImageId)!;
+  assert(
+    resolvedImageDetail.materialBlocks[0]?.kind === 'image'
+      && resolvedImageDetail.directAlignments.length === 1,
+    'a resolved image keeps its media Context without inventing a Focus',
+  );
+  validateFacts(storage);
+
   // === Slow track: triage into the Inbox ==================================
   const inboxStorage = new MemoryStoragePort();
   const inboxGateway = newGateway(inboxStorage);
   const longText = 'The negotiation stalled because neither side would move on the timeline.';
   const pendingSensePayload = fastTrackPayload(op(10), {
     context: { modality: 'text', textSegment: longText, mediaReferenceIds: [], source: null },
+    expression: {
+      surfaceForm: 'move',
+      languageRole: 'target',
+      occurrence: { kind: 'text_span', start: 51, end: 55 },
+      expressionTypeHint: 'word',
+    },
     sense: null,
   });
   const pendingSenseId = assertInboxRoute(
@@ -443,11 +579,13 @@ const run = async (): Promise<void> => {
   assert(inboxGateway.getInboxItems().length === 3, 'a promoted draft leaves the Inbox');
   const promotedDetail = inboxGateway.getDetail(promotedId)!;
   assert(
-    promotedDetail.focuses.length === 1 && promotedDetail.focuses[0]!.phase === 'aligned',
+    promotedDetail.focuses.length === 0
+      && promotedDetail.directAlignments.length === 1
+      && promotedDetail.phase === 'aligned',
     'the promoted meaning is indistinguishable from a direct fast track',
   );
   assert(
-    promotedDetail.focuses[0]!.alignment!.coreMeaningFocus === loanSense.definitionSummary,
+    promotedDetail.directAlignments[0]!.coreMeaningFocus === loanSense.definitionSummary,
     'the promoted meaning keeps the confirmed statement',
   );
   assert(promotedDetail.materialBlocks.length === 1, 'the promoted meaning keeps the original context');

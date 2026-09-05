@@ -8,15 +8,14 @@
  * the returned state, records the CommandReceipt and persists.
  *
  * Dual-track routing:
- * - Fast track: context + expression + a learner-confirmed sense materialize
- *   into a complete PersonalMeaning (Anchor + Expression + Focus + Sense
- *   Alignment + Binding) in one atomic step, with no AI interview.
- * - Slow track: anything missing goes to the Inbox as a draft item, either
- *   `pending_sense` or `pending_expression`.
+ * - Fast track: context + located expression + a teaching-sufficient sense +
+ *   verified acceptance materialize into a complete PersonalMeaning (Anchor
+ *   + Expression + direct Sense Alignment + Binding) in one atomic step.
+ * - Slow track: anything missing goes to the Inbox as a draft item waiting for
+ *   an expression occurrence, a resolved Sense or Semantic Acceptance.
  */
 
 import type {
-  SensaConfirmSenseProposalFact,
   SensaExpressionType,
   SensaIntakeItem,
   SensaIntakeItemStatus,
@@ -26,6 +25,8 @@ import type {
   SensaPersonalMeaningAlignmentEvent,
   SensaPersonalMeaningAlignmentSnapshot,
   SensaPersonalMeaningRevisionSnapshot,
+  SensaSemanticAcceptanceAuthority,
+  SensaSemanticAcceptanceFact,
   SensaSenseSemanticSpec,
 } from '@sensa/contracts/sensa';
 import { digestOf } from './digest';
@@ -33,15 +34,12 @@ import type { JourneyState, MeaningJourneyRecord } from './store';
 
 export const LOCAL_SEMANTIC_POLICY_VERSION = 'sensa-semantic-policy-local-v1';
 
-const PSW = 'sensa-personal-semantic-world-v1' as const;
+const PSW = 'sensa-personal-semantic-world-v2' as const;
 const REG = 'sensa-semantic-registry-v1' as const;
 const SPEC_SCHEMA = 'sensa-sense-semantic-spec-v1' as const;
 const LEARNER_USER_ID = 'sensa-local-learner';
 const FAMILIAR_LANG = 'zh-CN';
 const TARGET_LANG = 'en';
-const INTAKE_GENERATOR_PROVIDER = 'local';
-const INTAKE_GENERATOR_MODEL = 'sensa-intake-fast-track';
-const INTAKE_GENERATOR_PROMPT_VERSION = 'sensa-intake-fast-track-v1';
 
 type PersonalProvenanceKind =
   SensaPersonalMeaningRevisionSnapshot['provenance']['kind'];
@@ -61,12 +59,12 @@ export interface FastTrackOutcome {
   record: MeaningJourneyRecord;
   personalMeaningId: string;
   alignment: SensaPersonalMeaningAlignmentSnapshot;
-  senseProposalVersionId: string;
   bindingCandidate: {
     candidateId: string;
     expressionType: SensaExpressionType;
     languageTag: string;
     surfaceForm: string;
+    provenanceKind: PersonalProvenanceKind;
   };
   bindingInput: {
     senseVersionId: string;
@@ -84,10 +82,23 @@ const truncateWithEllipsis = (text: string, max: number): string =>
 const normalizedForm = (surfaceForm: string): string =>
   surfaceForm.trim().toLocaleLowerCase();
 
+const hasLocatedExpression = (payload: SensaIntakePayload): boolean => {
+  const expression = payload.expression;
+  const occurrence = expression?.occurrence;
+  if (!expression || !occurrence) return false;
+  if (occurrence.kind === 'media_region') {
+    return payload.context.mediaReferenceIds.includes(occurrence.mediaReferenceId);
+  }
+  const text = payload.context.textSegment;
+  if (!text || occurrence.end > text.length) return false;
+  return normalizedForm(text.slice(occurrence.start, occurrence.end))
+    === normalizedForm(expression.surfaceForm);
+};
+
 /**
  * Mechanical route decision. Fast track needs all three elements with an
- * explicitly learner-confirmed sense and a text context (the captured sentence
- * becomes the display label and the only prototype scene). Pure-audio payloads
+ * resolved sense and a verified acceptance request. The captured text or
+ * referenced media becomes the prototype scene. Pure-audio payloads
  * are rejected for this milestone: the contract keeps the enum, the local
  * media store has no audio support yet.
  */
@@ -101,22 +112,19 @@ export const evaluateIntakeRoute = (
   if (!text && payload.context.mediaReferenceIds.length === 0) {
     return { route: 'rejected', reason: '摄取材料缺少可用的上下文内容。' };
   }
-  const hasText = text.length > 0;
-  const hasExpression =
-    payload.expression != null
-    && payload.expression.surfaceForm.trim().length > 0;
-  const hasConfirmedSense =
+  const hasExpression = hasLocatedExpression(payload);
+  const hasResolvedSense =
     payload.sense != null
-    && payload.sense.confirmationStatus === 'user_confirmed'
+    && payload.sense.resolutionStatus === 'resolved'
     && payload.sense.definitionSummary.trim().length > 0;
-  if (hasText && hasExpression && hasConfirmedSense) {
+  if (hasExpression && hasResolvedSense && payload.acceptanceRequest) {
     return { route: 'fast_track' };
   }
-  // Missing the target word is the shallower gap for triage: the learner can
-  // pick a word later more easily than they can reconstruct a meaning.
+  if (!hasExpression) return { route: 'inbox', status: 'pending_expression' };
+  if (!hasResolvedSense) return { route: 'inbox', status: 'pending_sense' };
   return {
     route: 'inbox',
-    status: hasExpression ? 'pending_sense' : 'pending_expression',
+    status: 'pending_acceptance',
   };
 };
 
@@ -139,7 +147,7 @@ export const createInboxItem = (
     throw new Error('这条摄取材料不应该进入待处理材料盒。');
   }
   return {
-    contractVersion: 'sensa-intake-v1',
+    contractVersion: 'sensa-intake-v2',
     intakeId,
     status: decision.status,
     summaryView: summarizeIntakeContext(payload),
@@ -172,6 +180,7 @@ export const resolveInboxItemWithSense = (
     intakeId: string;
     sense: SensaIntakeSense;
     operationId: string;
+    authority: SensaSemanticAcceptanceAuthority;
   },
   ports: IntakeEnginePorts,
 ): FastTrackOutcome => {
@@ -181,11 +190,12 @@ export const resolveInboxItemWithSense = (
   if (!item) throw new Error('找不到这条待处理材料。');
   const payload: SensaIntakePayload = {
     ...item.payload,
-    sense: { ...input.sense, confirmationStatus: 'user_confirmed' },
+    sense: { ...input.sense, resolutionStatus: 'resolved' },
+    acceptanceRequest: { mode: 'learner_direct' },
   };
   const outcome = executeFastTrack(
     state,
-    { payload, operationId: input.operationId },
+    { payload, operationId: input.operationId, authority: input.authority },
     ports,
   );
   return {
@@ -210,6 +220,7 @@ export const executeFastTrack = (
   input: {
     payload: SensaIntakePayload;
     operationId: string;
+    authority: SensaSemanticAcceptanceAuthority;
   },
   ports: IntakeEnginePorts,
 ): FastTrackOutcome => {
@@ -217,10 +228,13 @@ export const executeFastTrack = (
   if (decision.route !== 'fast_track') {
     throw new Error('这条摄取材料不满足快轨条件。');
   }
-  const { payload, operationId } = input;
+  const { payload, operationId, authority } = input;
   const sense = payload.sense!;
   const expression = payload.expression!;
-  const textSegment = payload.context.textSegment!.trim();
+  const textSegment = payload.context.textSegment?.trim() ?? '';
+  const contextSummary = textSegment
+    || payload.context.source?.title
+    || '图像材料';
   const now = ports.nowIso();
 
   // Provenance mapping is mechanical: the wording source travels unchanged
@@ -247,22 +261,10 @@ export const executeFastTrack = (
   const expressionType: SensaExpressionType = expression.expressionTypeHint ?? 'word';
   const expressionAnchorId = ports.newId();
   const expressionAnchorRevisionId = ports.newId();
-  const bindingCandidateId = ports.newId();
 
-  // 3) Meaning Focus, born accepted: the learner confirmed this statement.
-  const meaningFocusId = ports.newId();
-  const meaningFocusRevisionId = ports.newId();
-  const meaningFocusAcceptanceId = ports.newId();
-
-  // 4) Construction + Proposal bookkeeping. The fast track involves no AI
-  //    interview; the minimal completed chain exists so the Sense confirmation
-  //    fact can reference a proposal version, and its generator provenance
-  //    honestly names the local intake engine.
-  const senseConstructionId = ports.newId();
-  const senseProposalId = ports.newId();
-  const senseProposalVersionId = ports.newId();
-  const generatorInputDigest = digestOf(payload);
-  const generatorOutputDigest = digestOf(sense.definitionSummary);
+  // 3) The acceptance fact is the audit root for this direct contextual
+  //    resolution. No Focus, Construction or Proposal is invented.
+  const semanticAcceptanceId = ports.newId();
 
   const buildSemanticSpec = (): SensaSenseSemanticSpec => ({
     schemaVersion: SPEC_SCHEMA,
@@ -270,19 +272,19 @@ export const executeFastTrack = (
     // The captured context sentence becomes the single prototype scene.
     prototypeScenes: [
       {
-        summary: textSegment,
+        summary: contextSummary,
         participantRoles: [],
         states: [],
         directionOrCausality: null,
       },
     ],
-    includedCases: [textSegment],
+    includedCases: [contextSummary],
     excludedCases: [],
     neighborContrasts: [],
     openQuestions: [],
   });
 
-  // 5) Sense resolution: reuse an existing registry Sense by key first; only
+  // 4) Sense resolution: reuse an existing registry Sense by key first; only
   //    register a new learner-confirmed SenseVersion when nothing matches.
   const senseKey =
     sense.senseKey?.trim()
@@ -292,7 +294,7 @@ export const executeFastTrack = (
   );
   let senseId: string;
   let senseVersionId: string;
-  let resolution: SensaConfirmSenseProposalFact['resolution'];
+  let resolution: SensaSemanticAcceptanceFact['resolution'];
   let registry = state.registry;
   if (existingSense) {
     senseId = existingSense.senseId;
@@ -327,15 +329,8 @@ export const executeFastTrack = (
           semanticSpec: buildSemanticSpec(),
           provenance: {
             sourceKind: 'learner_confirmed',
-            sourceReferenceIds: [senseProposalVersionId],
-            generator: {
-              provider: INTAKE_GENERATOR_PROVIDER,
-              model: INTAKE_GENERATOR_MODEL,
-              promptVersion: INTAKE_GENERATOR_PROMPT_VERSION,
-              policyVersion: LOCAL_SEMANTIC_POLICY_VERSION,
-              inputDigest: generatorInputDigest,
-              outputDigest: generatorOutputDigest,
-            },
+            sourceReferenceIds: [semanticAcceptanceId],
+            generator: null,
           },
           reviewStatus: 'learner_confirmed',
           contentReleaseId: null,
@@ -345,8 +340,7 @@ export const executeFastTrack = (
     };
   }
 
-  // 6) Sense confirmation + Alignment facts.
-  const senseProposalConfirmationId = ports.newId();
+  // 5) Semantic Acceptance + Alignment facts.
   const personalMeaningAlignmentId = ports.newId();
   const personalMeaningAlignmentEventId = ports.newId();
 
@@ -360,12 +354,14 @@ export const executeFastTrack = (
     learnerLanguageRole: isTargetRole ? 'target' : 'familiar',
     surfaceForm: expression.surfaceForm.trim(),
     normalizedForm: normalizedForm(expression.surfaceForm),
+    contextAnchorRevisionId: semanticAnchorRevisionId,
+    occurrence: expression.occurrence,
     provenanceKind,
-    // The learner explicitly confirmed this word + sense pairing on capture.
+    // The accepted tuple is tracked by the Semantic Acceptance fact.
     verificationStatus: 'learner_confirmed',
     provenance: {
       kind: provenanceKind,
-      sourceReferenceIds: [bindingCandidateId],
+      sourceReferenceIds: [semanticAcceptanceId],
       createdByOperationId: operationId,
     },
     createdAt: now,
@@ -390,7 +386,7 @@ export const executeFastTrack = (
         revision: 1,
         // No familiar anchor exists on the fast track; the label falls back
         // to the captured context sentence.
-        displayLabel: truncateWithEllipsis(textSegment, 24),
+        displayLabel: truncateWithEllipsis(contextSummary, 24),
         learnerIntentNote: null,
         provenance: {
           kind: provenanceKind,
@@ -418,9 +414,9 @@ export const executeFastTrack = (
         personalSemanticAnchorRevisionId: semanticAnchorRevisionId,
         personalSemanticAnchorId: semanticAnchorId,
         revision: 1,
-        anchorKind: 'text',
+        anchorKind: textSegment ? 'text' : 'image',
         languageTag: null,
-        bodyText: textSegment,
+        bodyText: textSegment || null,
         personalMediaObjectId: null,
         structuredPayload,
         provenance: {
@@ -444,119 +440,39 @@ export const executeFastTrack = (
       },
     ],
     personalExpressionAnchorRevisions: [expressionAnchorRevision],
-    focuses: [
-      {
-        contractVersion: PSW,
-        meaningFocusId,
-        personalMeaningId,
-        splitFromMeaningFocusId: null,
-        currentRevision: 1,
-        acceptedRevision: 1,
-        status: 'active',
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-      },
-    ],
-    focusRevisions: [
-      {
-        contractVersion: PSW,
-        meaningFocusRevisionId,
-        meaningFocusId,
-        revision: 1,
-        statement: sense.definitionSummary.trim(),
-        distinguishingNotes: [],
-        provenance: {
-          kind: provenanceKind,
-          sourceReferenceIds: [personalMeaningId],
-          createdByOperationId: operationId,
-        },
-        createdAt: now,
-      },
-    ],
-    focusAcceptances: [
-      {
-        contractVersion: PSW,
-        meaningFocusAcceptanceId,
-        meaningFocusId,
-        meaningFocusRevisionId,
-        operationId,
-        acceptedAt: now,
-      },
-    ],
-    constructions: [
-      {
-        contractVersion: PSW,
-        senseConstructionId,
-        learnerUserId: LEARNER_USER_ID,
-        personalMeaningId,
-        personalMeaningRevisionId,
-        meaningFocusId,
-        meaningFocusRevisionId,
-        familiarLanguageTag: FAMILIAR_LANG,
-        targetLanguageTag: TARGET_LANG,
-        semanticPolicyVersion: LOCAL_SEMANTIC_POLICY_VERSION,
-        status: 'completed',
-        revision: 1,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
-    // No interview happened; the construction carries zero turns.
+    focuses: [],
+    focusRevisions: [],
+    focusAcceptances: [],
+    constructions: [],
     constructionTurns: [],
-    proposals: [
+    proposals: [],
+    proposalVersions: [],
+    senseConfirmations: [],
+    semanticAcceptances: [
       {
         contractVersion: PSW,
-        senseProposalId,
-        senseConstructionId,
-        currentVersion: 1,
-        status: 'confirmed',
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
-    proposalVersions: [
-      {
-        contractVersion: PSW,
-        senseProposalVersionId,
-        senseProposalId,
-        version: 1,
-        meaningFocusRevisionId,
-        semanticSpec: buildSemanticSpec(),
-        expressionCandidates: [
-          {
-            candidateId: bindingCandidateId,
-            personalExpressionAnchorRevisionId: expressionAnchorRevisionId,
-            expressionType,
-            languageTag,
-            surfaceForm: expression.surfaceForm.trim(),
-            rationale: '来自摄取材料的表达',
-          },
-        ],
-        unresolvedQuestions: [],
-        semanticPolicyVersion: LOCAL_SEMANTIC_POLICY_VERSION,
-        generatorProvenance: {
-          provider: INTAKE_GENERATOR_PROVIDER,
-          model: INTAKE_GENERATOR_MODEL,
-          promptVersion: INTAKE_GENERATOR_PROMPT_VERSION,
-          inputDigest: generatorInputDigest,
-          outputDigest: generatorOutputDigest,
-        },
-        createdAt: now,
-      },
-    ],
-    senseConfirmations: [
-      {
-        contractVersion: PSW,
-        senseProposalConfirmationId,
+        semanticAcceptanceId,
         operationId,
         learnerUserId: LEARNER_USER_ID,
-        senseProposalVersionId,
-        meaningFocusRevisionId,
+        authority,
+        personalSemanticAnchorRevisionId: semanticAnchorRevisionId,
+        personalExpressionAnchorRevisionId: expressionAnchorRevisionId,
+        expressionOccurrence: expression.occurrence!,
         resolution,
         senseId,
         senseVersionId,
-        confirmedAt: now,
+        resolutionProvenance: {
+          resolverKind: sense.wordingSource === 'learner_authored'
+            ? 'learner'
+            : sense.wordingSource === 'llm_suggested'
+              ? 'language_model'
+              : 'external_tool',
+          provider: payload.context.source?.client ?? 'sensa-local-intake',
+          model: null,
+          policyVersion: LOCAL_SEMANTIC_POLICY_VERSION,
+          sourceReferenceIds: [payload.intakeOperationId],
+        },
+        acceptedAt: now,
       },
     ],
     alignments: [
@@ -566,11 +482,12 @@ export const executeFastTrack = (
         learnerUserId: LEARNER_USER_ID,
         personalMeaningId,
         personalMeaningRevisionId,
-        meaningFocusId,
-        meaningFocusRevisionId,
+        basis: {
+          kind: 'contextual_resolution',
+          semanticAcceptanceId,
+        },
         senseId,
         senseVersionId,
-        senseProposalConfirmationId,
         status: 'active',
         revision: 1,
         createdAt: now,
@@ -607,12 +524,12 @@ export const executeFastTrack = (
     record,
     personalMeaningId,
     alignment: record.alignments[0]!,
-    senseProposalVersionId,
     bindingCandidate: {
-      candidateId: bindingCandidateId,
+      candidateId: semanticAcceptanceId,
       expressionType,
       languageTag,
       surfaceForm: expression.surfaceForm.trim(),
+      provenanceKind,
     },
     bindingInput: {
       senseVersionId,

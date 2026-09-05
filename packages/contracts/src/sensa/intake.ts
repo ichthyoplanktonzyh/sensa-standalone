@@ -1,13 +1,13 @@
 import { z } from "zod";
 
 import { sensaExpressionTypeSchema } from "./semanticRegistry.js";
+import { sensaExpressionOccurrenceLocatorSchema } from "./personalSemanticWorld.js";
 
-export const sensaIntakeContractVersion = "sensa-intake-v1" as const;
+export const sensaIntakeContractVersion = "sensa-intake-v2" as const;
 
 const uuid = z.string().uuid();
 const nonEmpty = z.string().trim().min(1);
 const timestamp = z.string().datetime({ offset: true });
-const nonNegativeInteger = z.number().int().nonnegative();
 
 export const sensaIntakeModalitySchema = z.enum([
   "text",
@@ -22,17 +22,31 @@ export const sensaIntakeWordingSourceSchema = z.enum([
   "imported",
 ]);
 
-export const sensaIntakeConfirmationStatusSchema = z.enum([
-  "user_confirmed",
-  "model_inferred",
+export const sensaIntakeSenseResolutionStatusSchema = z.enum([
+  "resolved",
   "candidate_only",
 ]);
+
+export const sensaIntakeAcceptanceRequestSchema = z.discriminatedUnion(
+  "mode",
+  [
+    z.object({ mode: z.literal("learner_direct") }).strict(),
+    z
+      .object({
+        mode: z.literal("delegated_agent"),
+        actorId: nonEmpty,
+        authorizationGrantId: uuid,
+      })
+      .strict(),
+  ],
+);
 
 export const sensaIntakeLanguageRoleSchema = z.enum(["target", "familiar"]);
 
 export const sensaIntakeItemStatusSchema = z.enum([
   "pending_sense",
   "pending_expression",
+  "pending_acceptance",
 ]);
 
 export const sensaIntakeSourceMetaSchema = z
@@ -58,13 +72,7 @@ export const sensaIntakeExpressionSchema = z
   .object({
     surfaceForm: nonEmpty,
     languageRole: sensaIntakeLanguageRoleSchema,
-    characterSpan: z
-      .object({
-        start: nonNegativeInteger,
-        end: nonNegativeInteger,
-      })
-      .strict()
-      .nullable(),
+    occurrence: sensaExpressionOccurrenceLocatorSchema.nullable(),
     expressionTypeHint: sensaExpressionTypeSchema.nullable(),
   })
   .strict();
@@ -79,7 +87,7 @@ export const sensaIntakeSenseCandidateSchema = z
 export const sensaIntakeSenseSchema = z
   .object({
     senseKey: nonEmpty.nullable(),
-    confirmationStatus: sensaIntakeConfirmationStatusSchema,
+    resolutionStatus: sensaIntakeSenseResolutionStatusSchema,
     definitionSummary: nonEmpty,
     wordingSource: sensaIntakeWordingSourceSchema,
     candidates: z.array(sensaIntakeSenseCandidateSchema),
@@ -94,6 +102,7 @@ export const sensaIntakePayloadSchema = z
     context: sensaIntakeContextSchema,
     expression: sensaIntakeExpressionSchema.nullable(),
     sense: sensaIntakeSenseSchema.nullable(),
+    acceptanceRequest: sensaIntakeAcceptanceRequestSchema.nullable(),
   })
   .strict();
 
@@ -139,8 +148,11 @@ export type SensaIntakeModality = z.infer<typeof sensaIntakeModalitySchema>;
 export type SensaIntakeWordingSource = z.infer<
   typeof sensaIntakeWordingSourceSchema
 >;
-export type SensaIntakeConfirmationStatus = z.infer<
-  typeof sensaIntakeConfirmationStatusSchema
+export type SensaIntakeSenseResolutionStatus = z.infer<
+  typeof sensaIntakeSenseResolutionStatusSchema
+>;
+export type SensaIntakeAcceptanceRequest = z.infer<
+  typeof sensaIntakeAcceptanceRequestSchema
 >;
 export type SensaIntakeLanguageRole = z.infer<
   typeof sensaIntakeLanguageRoleSchema

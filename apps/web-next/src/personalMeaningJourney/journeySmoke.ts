@@ -1,5 +1,5 @@
 /**
- * Deterministic v2 Personal Meaning journey smoke.
+ * Deterministic Personal Meaning journey smoke.
  *
  * No test framework, network, paid LLM or browser is involved. The smoke
  * drives the same gateway seam the React clarification workspace uses —
@@ -32,6 +32,7 @@ import {
   sensaSenseProposalVersionSnapshotSchema,
   sensaSenseSnapshotSchema,
   sensaSenseVersionSnapshotSchema,
+  sensaSemanticAcceptanceFactSchema,
 } from '@sensa/contracts/sensa';
 import { createJourneyGateway } from './gateway';
 import { createSeededIdPort } from './ids';
@@ -175,6 +176,7 @@ const validateFacts = (storage: MemoryStoragePort): void => {
     record.proposals.forEach((fact) => sensaSenseProposalSnapshotSchema.parse(fact));
     record.proposalVersions.forEach((fact) => sensaSenseProposalVersionSnapshotSchema.parse(fact));
     record.senseConfirmations.forEach((fact) => sensaConfirmSenseProposalFactSchema.parse(fact));
+    record.semanticAcceptances.forEach((fact) => sensaSemanticAcceptanceFactSchema.parse(fact));
     record.alignments.forEach((fact) => sensaPersonalMeaningAlignmentSnapshotSchema.parse(fact));
     record.alignmentEvents.forEach((fact) => sensaPersonalMeaningAlignmentEventSchema.parse(fact));
     record.bindingConfirmations.forEach((fact) => sensaConfirmExpressionBindingFactSchema.parse(fact));

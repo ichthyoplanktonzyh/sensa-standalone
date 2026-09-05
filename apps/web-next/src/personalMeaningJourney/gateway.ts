@@ -21,6 +21,7 @@ import type {
   SensaExpressionSnapshot,
   SensaExpressionType,
   SensaExpressionVersionSnapshot,
+  SensaIntakeAcceptanceRequest,
   SensaIntakeItem,
   SensaIntakePayload,
   SensaMeaningFocusAcceptanceFact,
@@ -29,6 +30,7 @@ import type {
   SensaPersonalMeaningAlignmentEvent,
   SensaPersonalMeaningAlignmentSnapshot,
   SensaPersonalMeaningRevisionSnapshot,
+  SensaSemanticAcceptanceAuthority,
   SensaSemanticCoverage,
   SensaSenseExpressionBindingSnapshot,
   SensaSenseExpressionBindingVersionSnapshot,
@@ -84,7 +86,7 @@ import type {
   MaterialBlockInput,
 } from './types';
 
-const PSW = 'sensa-personal-semantic-world-v1' as const;
+const PSW = 'sensa-personal-semantic-world-v2' as const;
 const REG = 'sensa-semantic-registry-v1' as const;
 const SPEC_SCHEMA = 'sensa-sense-semantic-spec-v1' as const;
 const LEARNER_USER_ID = 'sensa-local-learner';
@@ -152,7 +154,26 @@ export interface JourneyGatewayDeps {
   storage: StoragePort;
   clock: ClockPort;
   ids: RandomIdPort;
+  semanticAcceptanceAuthority: SemanticAcceptanceAuthorityPort;
 }
+
+/**
+ * Verifies that an intake acceptance request is backed by an authenticated
+ * learner action or a real delegated grant. Payload data alone is never
+ * authority to mutate the Personal Semantic World.
+ */
+export interface SemanticAcceptanceAuthorityPort {
+  verify(request: SensaIntakeAcceptanceRequest): SensaSemanticAcceptanceAuthority;
+}
+
+const localSemanticAcceptanceAuthority: SemanticAcceptanceAuthorityPort = {
+  verify(request) {
+    if (request.mode === 'learner_direct') {
+      return { mode: 'learner_direct', actorId: LEARNER_USER_ID };
+    }
+    throw new Error('当前本地端口没有可验证的 Agent 委托授权。');
+  },
+};
 
 const last = <T>(items: T[]): T | undefined => items[items.length - 1];
 
@@ -553,6 +574,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       proposals: [],
       proposalVersions: [],
       senseConfirmations: [],
+      semanticAcceptances: [],
       alignments: [],
       alignmentEvents: [],
       bindingConfirmations: [],
@@ -585,6 +607,8 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
         learnerLanguageRole: 'familiar',
         surfaceForm: familiarSurface,
         normalizedForm: normalizedForm(familiarSurface),
+        contextAnchorRevisionId: null,
+        occurrence: null,
         provenanceKind: 'learner_authored',
         verificationStatus: 'unverified',
         provenance: {
@@ -909,11 +933,14 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       learnerUserId: LEARNER_USER_ID,
       personalMeaningId: input.personalMeaningId,
       personalMeaningRevisionId: personalMeaningRevision.personalMeaningRevisionId,
-      meaningFocusId,
-      meaningFocusRevisionId,
+      basis: {
+        kind: 'sense_construction',
+        meaningFocusId,
+        meaningFocusRevisionId,
+        senseProposalConfirmationId,
+      },
       senseId,
       senseVersionId,
-      senseProposalConfirmationId,
       status: 'active',
       revision: 1,
       createdAt: now,
@@ -998,6 +1025,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       expressionType: SensaExpressionType;
       languageTag: string;
       surfaceForm: string;
+      provenanceKind?: PersonalProvenanceKind;
     },
     input: {
       operationId: string;
@@ -1023,7 +1051,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       && input.expressionType === candidate.expressionType
       && input.surfaceForm === candidate.surfaceForm;
     const provenanceKind: PersonalProvenanceKind = unchangedCandidate
-      ? 'llm_suggested'
+      ? candidate.provenanceKind ?? 'llm_suggested'
       : 'learner_authored';
     const form = normalizedForm(input.surfaceForm);
     const existingExpression = state.registry.expressions.find((expression) =>
@@ -1218,6 +1246,8 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
         learnerLanguageRole: 'target',
         surfaceForm: input.surfaceForm,
         normalizedForm: form,
+        contextAnchorRevisionId: null,
+        occurrence: null,
         provenanceKind,
         verificationStatus: 'learner_confirmed' as PersonalExpressionVerificationStatus,
         provenance: {
@@ -1271,7 +1301,8 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     const record = this.requireRecord(input.personalMeaningId);
     const alignment = record.alignments.find(
       (candidate) =>
-        candidate.meaningFocusId === input.meaningFocusId
+        candidate.basis.kind === 'sense_construction'
+        && candidate.basis.meaningFocusId === input.meaningFocusId
         && candidate.status === 'active',
     );
     if (!alignment) throw new Error('需要先确认 Sense 才能确认表达。');
@@ -1279,7 +1310,11 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       throw new Error('表达绑定必须引用当前已确认的 Sense Version。');
     }
     const senseConfirmation = record.senseConfirmations.find(
-      (candidate) => candidate.senseProposalConfirmationId === alignment.senseProposalConfirmationId,
+      (candidate) => candidate.senseProposalConfirmationId === (
+        alignment.basis.kind === 'sense_construction'
+          ? alignment.basis.senseProposalConfirmationId
+          : ''
+      ),
     );
     const proposalVersion = senseConfirmation
       ? record.proposalVersions.find(
@@ -1361,12 +1396,15 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       this.persist();
       return { ...result, replayed: false };
     }
+    const authority = this.deps.semanticAcceptanceAuthority.verify(
+      parsed.acceptanceRequest!,
+    );
     // Fast track: the engine materializes the whole Personal Meaning record
     // atomically; the shared binding core then settles the registry
     // Expression/Binding and the confirmation fact in the same command.
     const outcome = executeFastTrack(
       state,
-      { payload: parsed, operationId },
+      { payload: parsed, operationId, authority: authority! },
       this.enginePorts(),
     );
     this.state = outcome.nextState;
@@ -1375,7 +1413,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       outcome.alignment,
       outcome.bindingCandidate,
       { operationId, ...outcome.bindingInput },
-      outcome.senseProposalVersionId,
+      null,
     );
     const result: IngestResult = {
       route: 'fast_track',
@@ -1396,9 +1434,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     const state = this.requireState();
     // Boundary validation for the learner-confirmed sense before any write.
     const sense = sensaIntakeSenseSchema.parse(resolution.sense);
+    const authority = this.deps.semanticAcceptanceAuthority.verify({
+      mode: 'learner_direct',
+    });
     const outcome = resolveInboxItemWithSense(
       state,
-      { intakeId, sense, operationId },
+      { intakeId, sense, operationId, authority },
       this.enginePorts(),
     );
     this.state = outcome.nextState;
@@ -1407,7 +1448,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       outcome.alignment,
       outcome.bindingCandidate,
       { operationId, ...outcome.bindingInput },
-      outcome.senseProposalVersionId,
+      null,
     );
     const result: IngestResult = {
       route: 'fast_track',
@@ -1436,6 +1477,8 @@ export const createJourneyGateway = (
     storage: deps.storage ?? new LocalStoragePort(),
     clock: deps.clock ?? systemClock,
     ids: deps.ids ?? cryptoRandomIdPort,
+    semanticAcceptanceAuthority:
+      deps.semanticAcceptanceAuthority ?? localSemanticAcceptanceAuthority,
   });
 
 /** Shared browser gateway singleton. */

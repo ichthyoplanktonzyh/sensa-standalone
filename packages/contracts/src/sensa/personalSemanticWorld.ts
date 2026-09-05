@@ -5,7 +5,7 @@ import {
 } from "./semanticRegistry.js";
 
 export const sensaPersonalSemanticWorldContractVersion =
-  "sensa-personal-semantic-world-v1" as const;
+  "sensa-personal-semantic-world-v2" as const;
 
 const uuid = z.string().uuid();
 const nonEmpty = z.string().trim().min(1);
@@ -64,6 +64,67 @@ export const sensaPersonalMeaningAlignmentStatusSchema = z.enum([
   "active",
   "withdrawn",
 ]);
+
+export const sensaExpressionOccurrenceLocatorSchema = z.discriminatedUnion(
+  "kind",
+  [
+    z
+      .object({
+        kind: z.literal("text_span"),
+        start: nonNegativeInteger,
+        end: nonNegativeInteger,
+      })
+      .strict()
+      .refine((value) => value.end > value.start, {
+        message: "text span end must be greater than start",
+      }),
+    z
+      .object({
+        kind: z.literal("media_region"),
+        mediaReferenceId: nonEmpty,
+        x: z.number().min(0).max(1),
+        y: z.number().min(0).max(1),
+        width: z.number().positive().max(1),
+        height: z.number().positive().max(1),
+      })
+      .strict()
+      .refine((value) => value.x + value.width <= 1, {
+        message: "media region exceeds horizontal bounds",
+      })
+      .refine((value) => value.y + value.height <= 1, {
+        message: "media region exceeds vertical bounds",
+      }),
+  ],
+);
+
+export const sensaSemanticAcceptanceAuthoritySchema = z.discriminatedUnion(
+  "mode",
+  [
+    z
+      .object({
+        mode: z.literal("learner_direct"),
+        actorId: nonEmpty,
+      })
+      .strict(),
+    z
+      .object({
+        mode: z.literal("delegated_agent"),
+        actorId: nonEmpty,
+        authorizationGrantId: uuid,
+      })
+      .strict(),
+  ],
+);
+
+export const sensaSemanticResolutionProvenanceSchema = z
+  .object({
+    resolverKind: z.enum(["learner", "external_tool", "language_model"]),
+    provider: nonEmpty,
+    model: nonEmpty.nullable(),
+    policyVersion: nonEmpty.nullable(),
+    sourceReferenceIds: z.array(nonEmpty),
+  })
+  .strict();
 
 export const sensaPersonalProvenanceSchema = z
   .object({
@@ -232,12 +293,22 @@ export const sensaPersonalExpressionAnchorRevisionSnapshotSchema = z
     learnerLanguageRole: sensaLearnerLanguageRoleSchema,
     surfaceForm: nonEmpty,
     normalizedForm: nonEmpty,
+    contextAnchorRevisionId: uuid.nullable(),
+    occurrence: sensaExpressionOccurrenceLocatorSchema.nullable(),
     provenanceKind: sensaPersonalProvenanceKindSchema,
     verificationStatus: sensaExpressionVerificationStatusSchema,
     provenance: sensaPersonalProvenanceSchema,
     createdAt: timestamp,
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if ((value.contextAnchorRevisionId === null) !== (value.occurrence === null)) {
+      context.addIssue({
+        code: "custom",
+        message: "context anchor revision and occurrence locator must be present together",
+      });
+    }
+  });
 
 export const sensaMeaningFocusExpressionAnchorLinkSnapshotSchema = z
   .object({
@@ -383,6 +454,42 @@ export const sensaConfirmExpressionBindingFactSchema = z
   })
   .strict();
 
+export const sensaSemanticAcceptanceFactSchema = z
+  .object({
+    contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
+    semanticAcceptanceId: uuid,
+    operationId: uuid,
+    learnerUserId: nonEmpty,
+    authority: sensaSemanticAcceptanceAuthoritySchema,
+    personalSemanticAnchorRevisionId: uuid,
+    personalExpressionAnchorRevisionId: uuid,
+    expressionOccurrence: sensaExpressionOccurrenceLocatorSchema,
+    resolution: z.enum(["create_new", "reuse_existing"]),
+    senseId: uuid,
+    senseVersionId: uuid,
+    resolutionProvenance: sensaSemanticResolutionProvenanceSchema,
+    acceptedAt: timestamp,
+  })
+  .strict();
+
+export const sensaPersonalMeaningAlignmentBasisSchema =
+  z.discriminatedUnion("kind", [
+    z
+      .object({
+        kind: z.literal("sense_construction"),
+        meaningFocusId: uuid,
+        meaningFocusRevisionId: uuid,
+        senseProposalConfirmationId: uuid,
+      })
+      .strict(),
+    z
+      .object({
+        kind: z.literal("contextual_resolution"),
+        semanticAcceptanceId: uuid,
+      })
+      .strict(),
+  ]);
+
 export const sensaPersonalMeaningAlignmentSnapshotSchema = z
   .object({
     contractVersion: z.literal(sensaPersonalSemanticWorldContractVersion),
@@ -390,11 +497,9 @@ export const sensaPersonalMeaningAlignmentSnapshotSchema = z
     learnerUserId: nonEmpty,
     personalMeaningId: uuid,
     personalMeaningRevisionId: uuid,
-    meaningFocusId: uuid,
-    meaningFocusRevisionId: uuid,
+    basis: sensaPersonalMeaningAlignmentBasisSchema,
     senseId: uuid,
     senseVersionId: uuid,
-    senseProposalConfirmationId: uuid,
     status: sensaPersonalMeaningAlignmentStatusSchema,
     revision: positiveInteger,
     createdAt: timestamp,
@@ -477,6 +582,21 @@ export type SensaConfirmExpressionBindingFact = z.infer<
 >;
 export type SensaPersonalMeaningAlignmentSnapshot = z.infer<
   typeof sensaPersonalMeaningAlignmentSnapshotSchema
+>;
+export type SensaExpressionOccurrenceLocator = z.infer<
+  typeof sensaExpressionOccurrenceLocatorSchema
+>;
+export type SensaSemanticAcceptanceAuthority = z.infer<
+  typeof sensaSemanticAcceptanceAuthoritySchema
+>;
+export type SensaSemanticResolutionProvenance = z.infer<
+  typeof sensaSemanticResolutionProvenanceSchema
+>;
+export type SensaSemanticAcceptanceFact = z.infer<
+  typeof sensaSemanticAcceptanceFactSchema
+>;
+export type SensaPersonalMeaningAlignmentBasis = z.infer<
+  typeof sensaPersonalMeaningAlignmentBasisSchema
 >;
 export type SensaPersonalMeaningAlignmentEvent = z.infer<
   typeof sensaPersonalMeaningAlignmentEventSchema

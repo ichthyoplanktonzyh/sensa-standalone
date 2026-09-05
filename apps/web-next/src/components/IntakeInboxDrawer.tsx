@@ -24,6 +24,7 @@ interface IntakeInboxDrawerProps {
 const statusLabels: Record<SensaIntakeItem['status'], string> = {
   pending_sense: '待确认词义',
   pending_expression: '待圈定表达',
+  pending_acceptance: '待接纳',
 };
 
 interface DisambiguationOption {
@@ -37,7 +38,7 @@ interface DisambiguationOption {
  * Only `pending_sense` items have an expression, so only they can resolve.
  */
 const disambiguationOptions = (item: SensaIntakeItem): DisambiguationOption[] => {
-  if (item.status !== 'pending_sense') return [];
+  if (item.status !== 'pending_sense' && item.status !== 'pending_acceptance') return [];
   const sense = item.payload.sense;
   if (!sense) return [];
   const options: DisambiguationOption[] = [
@@ -78,7 +79,7 @@ export const IntakeInboxDrawer = ({
     try {
       const sense: SensaIntakeSense = {
         senseKey: option.senseKey,
-        confirmationStatus: 'user_confirmed',
+        resolutionStatus: 'resolved',
         definitionSummary: option.definitionSummary,
         wordingSource: item.payload.sense?.wordingSource ?? 'learner_authored',
         candidates: [],
@@ -104,7 +105,7 @@ export const IntakeInboxDrawer = ({
       const created = await gateway.createPersonalMeaning({
         operationId: newUuid(),
         blocks: [{ kind: 'text', bodyText: text }],
-        startingPoint: item.status === 'pending_sense' ? 'from_expression' : 'from_experience',
+        startingPoint: item.status === 'pending_expression' ? 'from_experience' : 'from_expression',
       });
       await gateway.dismissInboxItem(newUuid(), item.intakeId);
       onSummoned(created.personalMeaningId);

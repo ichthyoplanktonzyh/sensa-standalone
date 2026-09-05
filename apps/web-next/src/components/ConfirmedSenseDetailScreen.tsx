@@ -2,7 +2,7 @@
  * Read-only endpoint for Meaning Formation.
  *
  * This is intentionally separate from the content Sense detail. It reads the
- * exact Personal Meaning → Focus → Alignment projection and is the only place
+ * exact Personal Meaning → optional Focus → Alignment projection and is the only place
  * from which the independent Expression Binding journey begins. It never
  * creates a Learning Target or enters the learning runtime.
  */
@@ -10,7 +10,7 @@
 import { useEffect, useRef } from 'react';
 import {
   useJourneyDetail,
-  type JourneyFocusView,
+  type JourneyAlignmentView,
   type JourneySemanticSpecView,
 } from '../personalMeaningJourney';
 import type {
@@ -143,8 +143,7 @@ const SenseSpec = ({
   </details>
 );
 
-const BindingSummary = ({ focus }: { focus: JourneyFocusView }) => {
-  const alignment = focus.alignment!;
+const BindingSummary = ({ alignment }: { alignment: JourneyAlignmentView }) => {
   const hasBindings = alignment.confirmedBindings.length > 0;
   return (
     <section className={`csd-section csd-binding-summary${hasBindings ? ' is-bound' : ''}`} aria-labelledby="csd-binding-heading">
@@ -186,7 +185,10 @@ export const ConfirmedSenseDetailScreen = ({
   const screenRef = useRef<HTMLElement>(null);
   const { detail, status } = useJourneyDetail(personalMeaningId);
   const focus = detail?.focuses.find((item) => item.meaningFocusId === meaningFocusId) ?? null;
-  const alignment = focus?.alignment ?? null;
+  const directAlignment = detail?.directAlignments.find(
+    (item) => item.personalMeaningAlignmentId === meaningFocusId,
+  ) ?? null;
+  const alignment = focus?.alignment ?? directAlignment;
 
   useEffect(() => {
     if (active) screenRef.current?.scrollTo({ top: 0 });
@@ -202,22 +204,22 @@ export const ConfirmedSenseDetailScreen = ({
     )
     : !personalMeaningId || !meaningFocusId
       ? unavailableCopy('没有找到对应的经验与已确认意思。')
-      : !detail || !focus || !alignment
-        ? unavailableCopy('只有已经确认 Sense 的 Focus 才能打开这个详情。')
+      : !detail || !alignment
+        ? unavailableCopy('没有找到对应的已确认 Sense。')
         : !alignment.semanticSpec
-          ? unavailableCopy('这个 Focus 缺少已确认的 Sense 语义规格，暂时不能安全展示。')
+          ? unavailableCopy('这个已确认意思缺少 Sense 语义规格，暂时不能安全展示。')
           : (
             <>
               <section className="csd-hero">
                 <span className="csd-confirm-mark" aria-hidden="true">✓</span>
                 <small>{alignment.confirmedBindings.length > 0 ? '已连接表达' : '已确认意思'}</small>
                 <h2>{alignment.semanticSpec.coreMeaningFocus}</h2>
-                <p>来自侧面：{focus.statement}</p>
+                <p>{focus ? `来自侧面：${focus.statement}` : '由当前 Context 中定位的 Expression 直接解析'}</p>
               </section>
 
               <section className="csd-next-step">
                 <div className="csd-actions">
-                  {alignment.expressionCandidates.length > 0 && (
+                  {focus && alignment.expressionCandidates.length > 0 && (
                     <button type="button" className="csd-primary" onClick={onOpenBinding}>
                       {alignment.confirmedBindings.length > 0 ? '查看/更改目标表达' : '绑定目标表达'} <span aria-hidden="true">→</span>
                     </button>
@@ -241,7 +243,7 @@ export const ConfirmedSenseDetailScreen = ({
                   {alignment.generator ? ` · ${alignment.generator.provider} / ${alignment.generator.model}` : ''}
                 </p>
               </details>
-              {alignment.confirmedBindings.length > 0 && <BindingSummary focus={focus} />}
+              {alignment.confirmedBindings.length > 0 && <BindingSummary alignment={alignment} />}
             </>
           );
 

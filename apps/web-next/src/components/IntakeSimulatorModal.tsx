@@ -127,7 +127,7 @@ export const IntakeSimulatorModal = ({
     expression: SensaIntakePayload['expression'];
     sense: SensaIntakePayload['sense'];
   }): SensaIntakePayload => ({
-    contractVersion: 'sensa-intake-v1',
+    contractVersion: 'sensa-intake-v2',
     intakeOperationId: newUuid(),
     capturedAt: new Date().toISOString(),
     context: {
@@ -138,6 +138,9 @@ export const IntakeSimulatorModal = ({
     },
     expression: input.expression,
     sense: input.sense,
+    acceptanceRequest: input.sense?.resolutionStatus === 'resolved'
+      ? { mode: 'learner_direct' }
+      : null,
   });
 
   const run = async (payload: SensaIntakePayload) => {
@@ -182,15 +185,15 @@ export const IntakeSimulatorModal = ({
       expression: {
         surfaceForm,
         languageRole: 'target',
-        characterSpan: spanStart >= 0
-          ? { start: spanStart, end: spanStart + surfaceForm.length }
+        occurrence: spanStart >= 0
+          ? { kind: 'text_span', start: spanStart, end: spanStart + surfaceForm.length }
           : null,
         expressionTypeHint: 'word',
       },
       sense: sense
         ? {
           senseKey: sense.senseKey,
-          confirmationStatus: 'user_confirmed',
+          resolutionStatus: 'resolved',
           definitionSummary: sense.definitionSummary,
           wordingSource: 'learner_authored',
           candidates: [],

@@ -138,6 +138,7 @@ export interface JourneyConfirmedBindingView {
 
 export interface JourneyAlignmentView {
   personalMeaningAlignmentId: string;
+  basisKind: 'sense_construction' | 'contextual_resolution';
   status: SensaPersonalMeaningAlignmentStatus;
   senseId: string;
   senseVersionId: string;
@@ -189,6 +190,8 @@ export interface JourneyDetailView {
   /** The learner's declared conversation stance; never a domain phase. */
   startingPoint: ClarificationStartingPoint | null;
   focuses: JourneyFocusView[];
+  /** Active contextual Sense resolutions that never needed a Meaning Focus. */
+  directAlignments: JourneyAlignmentView[];
   createdAt: string;
   updatedAt: string;
 }
