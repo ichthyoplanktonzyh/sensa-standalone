@@ -1,6 +1,6 @@
 # Sensa 当前阶段与交付边界
 
-> 状态日期：2026-09-01
+> 状态日期：2026-09-05
 > 当前里程碑：Sensa V1 Production Launch
 
 本文是阶段、证据级别和交付边界的唯一事实来源。
@@ -36,7 +36,8 @@ Curriculum 和不可变 Study Scope Revision 处理换词书、学习范围与�
 Retention Target 进度，同一 target 的多个来源必须去重。Personal Content 明确包含 Saved
 Sense/Example、每个 Sense 一份 current Note、零到多个 Personal Semantic Anchors、Personal
 Collection/typed Membership 与显式 Add-to-Learning Intent；这些操作彼此独立。听、说、读、写只
-组织 Practice Mode，具体 Task 由提示通道、响应通道、target capability 与 support level 定义。
+组织 Practice Area，具体 Activity Definition 固定 primary Area、stimulus/response channels、typed
+target、资源、支架、交互、反馈与 session policy。
 Lexical Reference 使用独立 Reference Release/Reference Sense，并通过 reviewed Sense Alignment 与
 精选的 Sensa Sense 连接；Example 点词固定 exact Lexical Occurrence span，目标词沿 authored binding
 确定 Sensa Sense，并仅在存在 Alignment 时强调 Reference Sense；其他词只在 reviewed/model-confident
@@ -58,11 +59,13 @@ Acquisition delivery profile 候选以至少 5 条、目标 6 条 protected nove
 和长期 revalidation；MVP 已用独立 runtime JSON validator 验证这条发布投影，但 production
 validator/runtime contract 仍未落地。
 
-同日接受的 Initial Free Practice Profile 属于 P0 之后的 Later delivery，不新增当前 launch blocker。
-它首次只承诺沉浸刷词、随身听、听写和随手拼写；支持 Reading/Listening/Writing，不提供 Speaking、
-发音评分、开放造句、AI 对话、自动薄弱项处方、novel Transfer/Boundary assessment 或影视/YouTube
-原声。Practice Profile、Package Practice Manifest 与 Runtime/client capability 的交集决定可见入口，
-缺少自由练习资源不阻止正式 Package 发布。
+2026-09-05 接受的 Free Practice 模型把它确定为独立语言使用空间，而不是宽松版 Learning Protocol。
+听、说、读、写是四个 Practice Area，Activity Definition 才是扩展单元；Practice Turn 可以形成
+Observation、Feedback 与 optional Artifact，但 Free Practice 永不产生 Learning Evidence 或改变正式
+进度/调度。Initial Free Practice Profile 仍属于 P0 之后的 Later delivery，不新增当前 launch blocker；
+首期每个 Area 只开放一个 Activity：真实语流泛化、情境口语排演、语境推义和情境书面表达。Practice
+Profile、Package/provider resource availability 与 Runtime/client capability 的交集决定可见入口，缺少
+自由练习资源不阻止正式 Package 发布。
 
 2026-08-31 接受的 Personal Semantic World 模型把 learner 明确创建的 Personal Meaning 确认为
 personal-first 语义建构链的建模起点，而不是 Formal Learning 的全局入口。Personal Meaning 由
@@ -195,9 +198,9 @@ renderer，并按 provenance、review status 与 Evidence eligibility 分级。�
 和紧凑练习，但不建设流式动态 UI、capability negotiation 或动态交互协议。未经审核的 runtime
 Render 默认不能产生 Gate pass 或 Learning Evidence。
 
-Initial Free Practice Profile 同样尚无 production Profile/Manifest/Inventory、Session/Task persistence、
-API、Sync、renderer、grader 或真实体验证据；其四种 Task family 是已接受的未来首发范围，不是已
-实现功能或当前 P0 验收项。
+Initial Free Practice Profile 同样尚无 production Profile/Manifest/provider capability/Inventory、
+Session/Activity persistence、API、Sync、YouGlish integration、voice capture、ASR、AI feedback、renderer
+或真实体验证据；其四种 Activity Definition 是已接受的未来首发范围，不是已实现功能或当前 P0 验收项。
 
 Settings/Account 的完整 production contract 同样尚未完成：当前 `/me` 仍混合 profile、
 `selectedWorkspaceId` compatibility seam 与单一 `reviewReactionAnimationsEnabled`，没有 Account

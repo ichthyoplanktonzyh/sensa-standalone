@@ -724,43 +724,62 @@ The Structured Acquisition policy that selects the smallest current intervention
 Protocol Step purpose, executable capabilities, Gate progress, Evidence and 5D State.
 
 **Free Practice Profile**:  
-A versioned delivery contract declaring permitted Practice Task families and
-their target, channel, resource, renderer and grader requirements. It is not an
+A versioned delivery contract declaring permitted Practice Activity Definitions and
+their target, channel, resource, interaction, feedback and session-policy requirements. It is not an
 Acquisition Profile, learner preference or progress state.
 
 **Package Practice Manifest**:  
 The approved practice roles and resources one Package can offer under a Free
-Practice Profile. Its absence never makes an acquisition-ready Package unpublishable.
+Practice Profile. External provider resources remain separately provenance-bound;
+the absence of either never makes an acquisition-ready Package unpublishable.
 
 **Executable Practice Capability Inventory**:  
-The versioned intersection of a Free Practice Profile, Package Practice
-Manifests and current runtime/client support. It determines which Task families
-can honestly be offered, not what the learner has mastered.
+The versioned intersection of a Free Practice Profile, available approved Package
+or provider resources and current runtime/client support. It determines which
+Activity Definitions can honestly be offered, not what the learner has mastered.
 
-**Free Practice Session**:  
-A learner-initiated activity over an explicitly chosen Practice Scope. It is
-separate from Learning Session and does not settle formal Acquisition or Review.
+**Practice Area**:
+The stable learner-facing organization of Free Practice into listening, speaking,
+reading and writing. An Area is not an engine, mastery dimension, score or Gate;
+every activity has one primary Area even when it crosses multiple channels.
 
-**Practice Scope**:  
-The resolved set of Sense, Lexeme-form or Example targets selected for one Free
-Practice Session, with provenance such as a Book slice, saved items or history.
+**Practice Brief**:
+The learner's local direction for Free Practice: an intent or communicative goal,
+a scenario, optional scope and support level. It guides a Session without becoming
+a curriculum objective, graduation criterion or assessment contract.
 
-**Practice Mode**:  
-The learner-facing receptive or productive channel grouping—listening,
-speaking, reading or writing. It is not a mastery dimension or graduation gate.
+**Free Practice Session**:
+A learner-initiated activity that pins one Practice Brief, primary Practice Area,
+Activity Definition and Practice Scope. It is separate from Learning Session and
+does not settle formal Acquisition or Review.
 
-**Practice Task**:  
-One practice item defined by its prompt channel, response channel, target
-capability and support level. Its target can be Sense-, Lexeme-form- or
-Example-specific.
+**Practice Scope**:
+The resolved set of typed Context, Expression, Sense, binding or Learning Target
+references selected for one Free Practice Session, with source provenance.
 
-**Practice Activity**:  
-A practice-local record of passive or non-graded interaction such as browsing,
-playback or following along. It is neither a Practice Result nor Learning Evidence.
+**Practice Activity Definition**:
+A versioned Free Practice interaction contract with one primary Area, explicit
+stimulus and response channels, typed targets, resource needs, support, feedback
+and session behavior. It defines an activity family, not a formal Protocol Step.
 
-**Practice Attempt / Practice Result**:  
-A learner response inside Free Practice and its practice-local evaluation. They
-do not become Learning Evidence, an Encounter Outcome or an FSRS input.
+**Practice Turn**:
+One delivered stimulus and optional learner response inside a Free Practice
+Session. Playback, text, speech and writing are all Turn data, not Learning Attempts.
+
+**Practice Observation**:
+A practice-local interpretation of a Practice Turn used for immediate adaptation,
+history or feedback. It is not a Learning Observation and can never become Learning
+Evidence, an Encounter Outcome, learner progress or an FSRS input.
+
+**Practice Feedback**:
+Immediate guidance returned inside Free Practice, including an optional correctness
+judgment or score. Its authority ends at the practice boundary and it cannot modify
+formal learning state.
+
+**Practice Artifact**:
+An optional learner-owned transcript, recording or text created in Free Practice.
+Persisting an Artifact does not turn it into Evidence or automatically create a
+Personal Meaning, Semantic Intake or Add-to-Learning Intent.
 
 ## Account and settings language
 

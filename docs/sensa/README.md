@@ -16,9 +16,9 @@
 | [`production-architecture.md`](production-architecture.md) | 领域总图、聚合、Account/Settings/Data Control、Curriculum/Personal Content 生命周期、Lexical Reference、语义投影、自由练习、模块边界和全局不变量 |
 | [`personal-semantic-world-model.md`](personal-semantic-world-model.md) | 泛在 Semantic Intake 快慢轨、完整 Context–Expression–Sense Personal Meaning、optional Focus、直接/委托 Semantic Acceptance、Sense 构造与学习交接边界 |
 | [`learning-connection-model.md`](learning-connection-model.md) | 独立 Book/direct/personal-first learning entries 与 Learning Entry Provenance、Learning Target/Capability Objective/Retention Target、learner-selectable Learning Policy、Resolved Learning Plan、published/on-demand/hybrid 内容供给、三种 Protocol Purpose、Protocol Step/Checkpoint/Card 边界、Profile 策略组合、学习结果、graded Memory Outcome、Relearning scheduler 资格与 FSRS Scheduling Handoff |
-| [`semantic-acquisition-model.md`](semantic-acquisition-model.md) | Structured Acquisition Protocol 的 Gates、五维诊断、Semantic Field、Lexical Reference 支架与四种练习通道理论 |
+| [`semantic-acquisition-model.md`](semantic-acquisition-model.md) | Structured Acquisition Protocol 的 Gates、五维诊断、Semantic Field、Lexical Reference 支架与四个 Practice Area 的理论边界 |
 | [`sense-learning-resource-model.md`](sense-learning-resource-model.md) | Published/On-demand 学习内容、Materialization、教学/检验/练习资源、Reference Lexicon 与发布语义 |
-| [`learning-runtime-model.md`](learning-runtime-model.md) | Account/Preferences/Data Control、Curriculum/Personal Content lifecycle、Learning Policy Assignment/plan readiness、Contextual Lookup、Unified Planning、Protocol Run/Step、Attempt→Observation→Evidence→Transition、Checkpoint/Progress Reset、正式 Session/Encounter/Outcome、Free Practice 与 FSRS 的运行关系 |
+| [`learning-runtime-model.md`](learning-runtime-model.md) | Account/Preferences/Data Control、Curriculum/Personal Content lifecycle、Learning Policy Assignment/plan readiness、Contextual Lookup、Unified Planning、Protocol Run/Step、Attempt→Observation→Evidence→Transition、Checkpoint/Progress Reset、正式 Session/Encounter/Outcome、Free Practice Area/Activity 与 FSRS 的隔离关系 |
 
 发生冲突时，先用 `CONTEXT.md` 确认术语，再由
 `production-architecture.md` 确认对象边界；个人语义建构与 Sense 确认由

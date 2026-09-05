@@ -2,6 +2,7 @@
 
 > 状态：Accepted product baseline  
 > 决策日期：2026-08-31
+> 更新日期：2026-09-05
 > 产品范围：`web-next` 为移动端形态的 React 行为原型（UI 不承诺向任何正式客户端迁移）；
 > 正式移动端与桌面端均为 Flutter，复用相同旅程与语言中立契约；正式 Web 端继续 React，
 > 按自身平台特点另行设计  
@@ -118,7 +119,8 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
 | Personal Collection | 自定义集合（Later） | 是个人组织方式，不称为词书或词义区域 |
 | Add-to-Learning Intent | 加入学习（Later） | 必须显式触发，不与收藏或自由练习合并 |
 | Free Practice Session | 自由练习 | 听说读写入口不改变正式学习与复习进度 |
-| Practice Result | 本次练习结果 | 不称为掌握、毕业或复习完成 |
+| Practice Area | 听 / 说 / 读 / 写 | 只组织活动入口，不称为能力维度、得分或待办 |
+| Practice Feedback | 本次练习反馈 | 可含判断或分数，但不称为证据、掌握、毕业或复习完成 |
 | Sync / outbox | 已保存在本机、同步中、已同步 | 不显示 Replica、cursor 或 operation 名称 |
 | Account / Learner | 账号 / 我的学习数据 | V1 一对一；账号管访问，学习数据不并入登录状态 |
 | Learner Preference | 学习偏好 | 跨设备同步，只影响未来呈现或已批准资源选择 |
@@ -171,10 +173,10 @@ Sensa 借鉴不背单词的沉浸首页、移动节奏、渐进披露和全屏�
 │   └── Review-only Learning Session
 └── 三个二级入口
     ├── 自由练习
-    │   ├── 沉浸刷词
-    │   ├── 随身听
-    │   ├── 听写
-    │   └── 随手拼写
+    │   ├── 听：真实语流泛化
+    │   ├── 说：情境口语排演
+    │   ├── 读：语境推义
+    │   └── 写：情境书面表达
     ├── 我的内容
     └── 我的学习
         ├── 当前词书、学习范围与每日额度
@@ -309,7 +311,7 @@ annotation 提供结果；`ambiguous` 只能显示
 Reference-only meaning 可以浏览，但没有 reviewed Alignment，或选定 protocol 没有可执行的
 published/on-demand/hybrid 内容路径时，不显示可成功的“加入学习”，Curriculum 返回
 `content_unavailable`。查词本身不自动收藏、写笔记或加入
-计划，也不产生 Attempt/Evidence/Practice Result。
+计划，也不产生 Learning Attempt/Evidence 或正式进度。
 
 若当前 Reference Sense 已对齐 Sensa Sense，详情可以挂载该 Sense 的收藏状态与 current Sense Note；
 这仍是 Personal Content，不是词典内容。Reference-only meaning 暂无通用收藏或笔记模型。
@@ -442,57 +444,63 @@ Preference。
 本节定义已经确认的目标 IA。`apps/web-next` 可以用真实静态原型数据验证页面需求，但当前生产
 P0 不因此获得 Free Practice 能力；上线可见性仍必须满足 `current-stage.md` 与运行合同。
 
-- 首页按 `听 / 说 / 读 / 写` 四个通道组织练习方式；通道只是导航分类，不显示能力分数、完成度或待办；
-- `沉浸刷词` 以 Reading/Recognition 为主，浏览结果不变成正式 Learning Evidence；
-- `随身听` 以 Listening 为主，使用已发布的发音与例句音频；
-- `听写` 组合 Listening 与 Writing，结果只进入 Practice Result；
-- `随手拼写` 以 Sense-to-form Writing 为主，不推进 Acquisition Gate 或 FSRS；
-- V1 只有上述四种练习显示为可进入；听音辨义、跟读、看义说词、例句朗读、语境辨义、义项辨析与
-  例句填空作为 disabled 路线图入口显示“暂未开放”，不得物化 Free Practice Session；
-- Speaking、发音评分和开放式输出留待后续 Profile；占位入口不代表已存在录音、grader 或能力结论；
+- 首页按 `听 / 说 / 读 / 写` 四个 Practice Area 组织活动；Area 只是稳定导航，不显示能力分数、
+  完成度、欠练数量或待办；
+- 每个 Activity 只出现在一个 primary Area；跨通道只用简短方向或输入方式说明，不在多个 Area 重复；
+- learner 进入活动前可以选择或继承 Practice Scope，并通过简短 Practice Brief 明确意图、场景与支架；
+- Session 开始后固定 Brief、Scope、Activity Definition 与资源解析版本，退出后不篡改正式学习队列；
+- Activity 可以给即时判断、建议和分数，但这些都只是 Practice Feedback，永不成为 Learning Evidence；
+- 练习中发现的新 Context–Expression–Sense 只能通过显式“保存到我的词义世界”发起独立 Semantic
+  Intake；加入学习也必须是另一个明确操作；
 - 不展示课程、班级打卡、备考、真题、商城或任何原“不背学堂”内容。
 
-练习方式只归入一个主要通道，跨通道关系用简短方向标记表达：`听写` 放在“写”并标记“听 → 写”，
-`随手拼写` 放在“写”并标记“义 → 写”。同一 Task 不在多个通道重复出现。
+#### 7.2.1 第一阶段 Area 与 Activity（2026-09-05）
 
-#### 7.2.1 第一版通道与入口确认（2026-08-28）
+第一阶段每个 Area 只开放一个 Activity，不用 disabled 占位项把未来路线图伪装成当前能力：
 
-| 通道 | V1 可进入练习 | 显示但暂未开放 |
-| --- | --- | --- |
-| 听 | 随身听 | 听音辨义 |
-| 说 | — | 跟读、看义说词、例句朗读 |
-| 读 | 沉浸刷词 | 语境辨义、义项辨析 |
-| 写 | 随手拼写、听写 | 例句填空 |
+| Practice Area | 可进入 Activity | learner 的主要行为 | 首期边界 |
+| --- | --- | --- | --- |
+| 听 | 真实语流泛化 | 在 YouGlish 的不同真实片段中反复听同一 Expression | 按 Expression form 检索，不做 contextual Sense 消歧；必须提示片段可能包含其他词义 |
+| 说 | 情境口语排演 | 面对一个 Sense-grounded 情境录音作答，查看 transcript 与 AI feedback 后重试或继续 | 不提供 phoneme-accurate 发音分，不把 AI 反馈当正式评价 |
+| 读 | 语境推义 | 阅读 Sense-controlled 短语境，先形成理解，再 reveal 当前 Sense 与关键线索 | 不要求选择题，不把 reveal 或继续点击当作正确证据 |
+| 写 | 情境书面表达 | 根据 Sense-grounded 情境写一句或短回复，按 AI feedback 修订 | 不设置唯一标准答案，反馈只讨论意义贴合、自然度与可选表达 |
 
 页面先展示当前 Practice Scope，再按固定顺序展示“听、说、读、写”四个通道方块。每个通道方块
-复用“标题 + 内部练习小块”的视觉语法；小块显示练习名称和必要的方向/范围摘要，不显示通道得分、
-完成率、欠练数量或推荐处方。
+复用“标题 + 当前 Activity”的视觉语法；小块显示练习名称和必要的目标/范围摘要，不显示 Area 得分、
+完成率、欠练数量或推荐处方。Oral Scenario Rehearsal 与 Written Scenario Response 可以共享
+Scenario Response 的 Brief、feedback 与 retry 体验，但分别保留 voice/text interaction 与 primary Area。
 
 交互要求：
 
-- 点击 V1 可进入练习，进入对应 Mode，并以当前 Practice Scope 解析练习项；
-- 点击 disabled 小块只提示“暂未开放”，留在自由练习首页，不创建 Session、Task、Attempt、
-  Activity 或 Result；
-- `随身听` 与 `沉浸刷词` 使用 Scope 中可执行的 Sense/Example 资源；
-- `随手拼写` 先显示当前 Sense 提示，再要求写出 Lexeme form；
-- `听写` 先播放目标 form，再要求书写；Sense 提示只能作为主动请求的帮助出现；
-- 四种开放练习都不改变正式 Learn/Review 数量、Acquisition Gate、FSRS、每日额度或 Book cursor。
+- 点击 Activity 时，以当前 Practice Brief、Scope 与 Executable Practice Capability Inventory 创建 Session；
+- Activity 缺少所需 provider、resource、capture、ASR、AI feedback 或 renderer capability 时，显示诚实
+  unavailable state，不创建不可执行 Session；
+- reveal、重听、查看 transcript、请求提示和重试是 Activity 内 interaction，不拆成额外 Activity；
+- 每个 Turn 可以保存 response、Practice Observation、Feedback 与 learner 主动保留的 Artifact；
+- 四种 Activity 都不改变正式 Learn/Review 数量、Acquisition Gate、5D、FSRS、每日额度或 Book cursor。
 
 每次自由练习必须显式选择或继承一个 Practice Scope，并与正式 Mixed/Review-only Session
 隔离；退出自由练习回到原二级页面或首页，不篡改正式学习队列。
 
-自由练习首页先呈现当前 Practice Scope，默认继承当前在学词书的可练 Book slice，并展示实际可
-执行的 Sense 数；不得把词书的 Lexeme 数冒充 Sense 数。学习者以后可以从已完成各自 contract 的
-范围来源中切换，但 Session 一旦开始就固定 Scope snapshot。
+自由练习首页先呈现当前 Practice Scope，优先支持 learner 明确选择的 Personal Meaning、Sense/
+Expression 或当前在学 Book slice，并展示实际可执行的 typed targets。不得把 Expression 数、Lexeme 数
+或 provider 命中数冒充 Sense 数；Session 一旦开始就固定 Scope snapshot。
 
-`随身听` 使用逐 Sense 播放器，而不是按 Lexeme 合并所有意思：
+`真实语流泛化` 使用逐 Expression 的真实媒体 occurrence 播放器：
 
-- 顶部显示当前 Sense 在 Scope snapshot 中的序号、标题、播放结束策略和收藏当前意思；
-- 主体显示词形、批准的发音、当前一个意思，以及与该 Sense 明确绑定的学习例句；
-- V1 不展示影视、电视、YouTube 或真题来源；普通 approved Example 只标作“学习例句”；
-- 底部提供范围/队列、上一项、播放/暂停、下一项和显示/隐藏译文；不默认自动播放；
-- 播放、暂停、跳过和跟随只形成 Practice Activity，不改变 Learn/Review 数量、Gate、FSRS 或每日额度；
-- 收藏以 Sense 为 target，不能沿用旧原型按整个词头收藏的身份。
+- 顶部显示 Expression、可用时的 Pronunciation Variant、当前 occurrence 序号，以及“按表达形式检索，
+  片段可能包含其他词义”的固定说明；
+- 主体通过 YouGlish provider 展示带来源 provenance 的真实片段，支持播放/暂停、重听、上一段与下一段；
+- 不把 provider occurrence 保存为 reviewed Learning Example，也不把播放或跟随解释为理解了目标 Sense；
+- 相同拼写存在多种发音而又无法可靠约束目标 Pronunciation Variant 时，该 occurrence 不进入队列；
+- 播放、暂停、重听和跳过只形成 Practice Turn/Observation，不改变正式学习状态。
+
+`情境口语排演` 与 `情境书面表达` 都先显示 communicative goal 与 scenario，并允许 Activity policy
+决定目标 Expression 是显示、提示还是隐藏。口语保存录音与 ASR transcript，书面表达保存 text；
+AI feedback 支持 learner 修订、重试或继续，但不能显示“已掌握”或更改正式进度。
+
+`语境推义` 必须使用与目标 Sense 对齐的受控短语境并精确定位 Expression occurrence。learner 先阅读
+和形成理解，再主动 reveal Sense 与关键 contextual cues；首期不通过 4 选 1 把理解活动改造成测试。
 
 ### 7.3 我的内容
 
@@ -506,7 +514,7 @@ P0 不因此获得 Free Practice 能力；上线可见性仍必须满足 `curren
 “我的场景”不再是与词义世界平级的独立内容仓库。Personal Semantic Anchor 属于一个 Personal
 Meaning，并在其创建/详情流程中编辑；同一素材可以被多个 Meaning Focus 引用。自定义集合可以在
 contract 未完成时显示为“暂未开放”，但不能阻塞 Personal Meaning 与 Anchor 的核心创建流程。
-随身听与听写属于自由练习，在学词书与学习范围属于我的学习，三者都不出现在“我的内容”。
+四个 Free Practice Activity Definition 属于自由练习，在学词书与学习范围属于我的学习，两者都不出现在“我的内容”。
 
 #### 7.3.1 第一版页面确认（2026-08-31）
 
@@ -798,8 +806,9 @@ Encounter 不得在答案揭示后接受第二个“独立”assessment 结果�
 失败、同步等待、已会确认/撤销和 Encounter funnel。Product Events 不得成为 Learning
 Evidence；只有服务端根据版本化 Action、Attempt 和 evidence rule 推导 Evidence。
 
-Free Practice 上线后，播放、展开与跟随形成 Practice Activity，可判分响应形成 Practice Result；
-两者可以进入练习统计，但仍不得作为 Product Event 或 Learning Evidence 混入正式进度。
+Free Practice 上线后，交互与 response 保存为 Practice Turn，并可形成 Practice Observation、Feedback
+与 optional Artifact；它们可以进入独立练习历史或统计，但仍不得作为 Product Event 或 Learning
+Evidence 混入正式进度。
 
 ## 13. V1 功能优先级
 
@@ -844,10 +853,10 @@ Free Practice 上线后，播放、展开与跟随形成 Practice Activity，可
   Resolution、Reference Sense ↔ Sensa Sense Alignment 与离线 Reference Release；
 - 真实的释义/例句/用法/构词词源/相关详情及 source/license attribution；明确不建设“真题”；
 - published Semantic Field 浏览，以及 Personal Semantic World 上更完整的跨 Field/多语言 Projection；
-- Initial Free Practice Profile：当前 Book slice/明确选择的 Senses，以及沉浸刷词、随身听、听写和
-  随手拼写；它支持 Reading/Listening/Writing，但不把 Mode 当作 Gate；
-- 后续 Free Practice Profile 才考虑 Speaking、发音评分、开放式语境产出，以及 Field/收藏/历史等
-  已完成各自 contract 的 Practice Scope；
+- Initial Free Practice Profile：明确选择的 Personal Meanings/Senses/Expressions 与当前 Book slice，
+  以及真实语流泛化、情境口语排演、语境推义和情境书面表达；它覆盖四个 Practice Area，但不把
+  Area、Practice Observation 或 Feedback 当作 Gate/Evidence；
+- 后续 Free Practice Profile 才扩展更多 Activity family、Practice Scope 来源与 provider capability；
 - 每个 Sense 一份 current Note；
 - Personal Collection 与 typed Sense/Example Membership；
 - Book Enrollment/Range、`active | maintenance | paused` lifecycle、Supplemental Curriculum、

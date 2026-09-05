@@ -154,7 +154,7 @@ Gate 回答“当前短期毕业要求是否解决”，5D 回答“长期来看
 多个 Field；Field 不决定课程顺序，也不构成统一的人类概念 ontology。
 
 Learner Semantic Projection 把 learner 主动建立的 Personal Semantic World、已有 Sense progress、
-保存内容、Collections 与 Practice Activity 与已发布 Field 组合，用于回答“哪些意义由我建立、
+保存内容、Collections 与 Practice history 与已发布 Field 组合，用于回答“哪些意义由我建立、
 哪些公共连接正在形成、已经建立、需要巩固或仍待探索”。它是跨 Sense 的派生读取模型：
 
 - 不能代替任何 Learner Sense Progress、Gate、5D 或 FSRS State；
@@ -234,7 +234,7 @@ Saved Sense、Saved Example、Sense Note 与 Personal Collection 只表达关注
 5D 描述一个 Sense 内部的诊断结构；Learner Semantic Projection 描述多个 Senses 之间的已审核
 关系及 learner 对这些有限区域的覆盖。两者职责正交。
 
-## 8. 输入、输出与四种练习通道
+## 8. 输入、输出与四个 Practice Area
 
 对于一个具体 Sense，接收与产出的双向连接可以按声音和文字通道展开：
 
@@ -243,20 +243,22 @@ Saved Sense、Saved Example、Sense Note 与 Personal Collection 只表达关注
 | Receptive：Form/Context → Sense | Listening | Reading |
 | Productive：Sense/Experience → Form | Speaking | Writing |
 
-听、说、读、写适合作为 Free Practice 的 learner-facing modes，但不是四个新的 mastery dimensions
-或统一毕业关卡。Grounding、Boundary、Form Mapping、Retrieval 与 Transfer 可以分别通过多种通道
-表现；产品也不要求每个 Sense 机械完成四种模式。
+听、说、读、写是 Free Practice 的四个 learner-facing **Practice Area**，不是四个引擎、mastery
+dimensions、分数或统一毕业关卡。Grounding、Boundary、Form Mapping、Retrieval 与 Transfer 可以
+通过多种通道表现；产品也不要求每个 Sense 机械完成四个 Area。跨通道活动只选择一个主要 Area，
+并另外声明实际 stimulus/response channels，避免同一个活动在导航中重复出现。
 
-练习动作本身不能证明其语义目标。例如听写通常是 `spoken form → written form`，跟读是
-`spoken form → spoken form`，朗读是 `written form → spoken form`；它们可以训练词形或发音，
-却不自动证明 learner 已从 Sense 主动提取表达。只有同时固定 prompt channel、response channel、
-target capability 与 support level，系统才能准确说明一次 Practice Task 实际练习了什么。
+Practice Area 只组织入口，真正可扩展的教学单元是 Practice Activity Definition。它必须诚实固定
+主要 Area、stimulus/response channels、typed target、practice purpose、所需资源、支架、交互、
+反馈与 session policy。听写、跟读或朗读之类的表面动作并不能自行证明语义目标：它们可以训练形式、
+声音或 articulation，却不自动证明 learner 已从 Sense 主动提取表达。
 
-Free Practice 允许 learner 自主选择范围、顺序与支架，因此当前模型把 Practice Attempt/Result
-与正式 Learning Attempt/Evidence 隔离。浏览、随身听和跟读可以形成 Activity；可判分的听辨、
-口头提取、阅读辨义或书写可以形成 Practice Result，但都不自行解决 Gate、完成 due Review、
-修改 5D/phase、消耗 daily-new quota 或调用 FSRS。未来若某类 assessment-grade practice 要进入
-正式证据链，必须另行发布显式、可审计的 Policy 与合同，不能静默提升既有 Practice Result。
+Free Practice 的目的是真实使用、泛化、尝试与即时反馈，而不是证明课程目标已经达成。Practice
+Turn 可以形成 Practice Observation、Feedback 与 learner-owned Artifact，其中也可以包含正确性判断
+或分数；这些事实的权威边界始终停留在 Free Practice 内，不能解决 Gate、完成 due Review、修改
+5D/phase、消耗 daily-new quota、创建 Memory Outcome 或调用 FSRS。Free Practice **永不产生 Learning
+Evidence**；如果未来需要把某种行为用于正式评价，应建立独立的 Learning Protocol/assessment
+operation，而不是升级、回填或重解释既有 Practice 事实。
 
 ## 9. Lexical Reference 与理解记忆支架
 

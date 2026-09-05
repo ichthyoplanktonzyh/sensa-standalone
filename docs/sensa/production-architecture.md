@@ -154,15 +154,18 @@ Browser / Mobile / Desktop / authorized Agent Intake Ports
 
 Sense + Alignment + Binding ─────────▶ Learner Semantic Projection
 
-Learner Sense Progress + Saved Senses/Examples + Personal Semantic World + Practice Activity
+Learner Sense Progress + Saved Senses/Examples + Personal Semantic World + Practice history
                                              │
                                              ▼
                                 Learner Semantic Projection
 
-Practice Scope ──▶ Free Practice Session ──▶ Practice Task
-                                                │
-                                                └── Practice Attempt ──▶ Practice Result
-                                                                          ╳ Gate / 5D / FSRS
+Practice Brief + Scope ──▶ Free Practice Session ──▶ Activity Definition
+                                                         │
+                                                         ▼
+                                                    Practice Turn
+                                                         ├──▶ Observation / Feedback
+                                                         └──▶ optional Artifact
+                                                               ╳ Evidence / Gate / 5D / FSRS
 ```
 
 `Lexeme` 是共享词形聚合；`Sense` 是稳定、可寻址的共同体意义区别，并通过 Sense Expression
@@ -378,7 +381,7 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 ### Learner Semantic Projection
 
 - Learner Semantic Projection 是跨 Personal Semantic World、published Semantic Fields、Learner
-  Sense Progress、其他 Personal Content 与 Practice Activity 的派生读取模型；
+  Sense Progress、其他 Personal Content 与 Practice history 的派生读取模型；
 - 它可以表达有限区域中的“正在形成、已经建立、需要巩固、待探索”以及已审核 Sense Relations；
 - 它可以把 Personal Meaning/Meaning Focus 作为 learner-owned 起点，把 Personal Semantic Anchor、
   Personal Expression Anchor、reviewed Experience、Sense specification、L1 Bridge 与 pinned L2
@@ -400,14 +403,21 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 
 ### Free Practice
 
-- Free Practice Session 由 learner 主动开启并固定 Practice Scope 与 learner-facing Practice Mode；
-- Free Practice Profile 定义一个交付版本允许的 Task families 及其 resource/renderer/grader requirements；
-- Package Practice Manifest 声明某个 Package 实际获准提供的 practice roles/resources；Runtime 只从
-  Profile、Manifest 与当前 client support 的交集发布 Executable Practice Capability Inventory；
-- 听、说、读、写是 receptive/productive × sound/written 的入口，不是四个毕业 Gate；
-- 每个 Practice Task 明确 prompt channel、response channel、target capability 与 support level；
-- 被动活动只记录 Practice Activity；可判分响应产生 Practice Attempt/Result；
-- Free Practice 不经过 Unified Planner，不结算 Encounter Outcome，也不改写 Gate、5D、phase 或 FSRS。
+- Free Practice 是独立的语言使用空间，不是宽松版 Learning Protocol 或第三种 Learning Session intent；
+- 听、说、读、写是稳定的 learner-facing Practice Area，不是四个引擎、能力分数或毕业 Gate；跨通道
+  Activity 仍只指定一个 primary Area，并如实声明 stimulus/response channels；
+- Practice Brief 记录 learner 当前意图、交际目标、场景、optional Scope 与支架级别；它不是课程目标
+  或 graduation standard；
+- Free Practice Profile 定义一个交付版本允许的 Practice Activity Definitions 及其 target、channel、
+  resource、interaction、feedback 与 session-policy requirements；
+- Package Practice Manifest 与获准的 external provider availability 声明当前可用 practice resources；
+  Runtime 只从 Profile、资源可用性与 client support 的交集发布 Executable Practice Capability Inventory；
+- Free Practice Session 固定 Brief、Scope、primary Area、Activity Definition 与解析版本；Practice Turn
+  可以产生 Practice Observation、Feedback 与 optional learner-owned Artifact；
+- Free Practice 不经过 Unified Planner，不结算 Encounter Outcome，也不生成 Learning Evidence、
+  Memory Outcome 或改写 Gate、5D、phase、daily plan 与 FSRS；这个边界不因 feedback 含判断或分数而改变；
+- 从练习中另存新的 Context–Expression–Sense 必须提交独立 Semantic Intake；加入正式学习必须提交
+  独立 Add-to-Learning Intent，两者都不能由 Practice completion 自动触发。
 
 ### Learner declaration
 
@@ -570,8 +580,9 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
    后续内容物化与协议选择；
 10. **Learner Semantic Projection Module**：组合 Personal Semantic World、已发布 Field、learner
    progress 与 personal content，只生成可重建读取模型；
-11. **Free Practice Module**：解析 Practice Scope，物化 mode-specific Task，保存 Practice Activity、
-   Attempt 与 Result，不调用正式 Learning Kernel 的结算接口；
+11. **Free Practice Module**：解析 Practice Brief、Scope、primary Area 与 Activity Definition，保存
+   Practice Turn、Observation、Feedback 与 optional Artifact；它可以读取 Learning Target、Personal
+   Semantic World 与获准资源，但不调用正式 Learning Kernel 的证据、结算或调度接口；
 12. **Content Provisioning Module**：按 Resolved Learning Plan 将固定 Learning Target 通过 published、
    on-demand 或 hybrid 路径解析为 capability/readiness result 和通过合同校验的不可变 Learning
    Materialization；它拥有 Provisioning Batch、Content Provisioning Task、Content Agent Attempt、
@@ -726,10 +737,11 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
   自己的、可审计且幂等的 Memory Outcome，Relearning Completion 本身不是 scheduler input；
 - `review_only` 不能引入新 Sense、推进 initial Learning Protocol 或消耗 daily-new quota；
 - Free Practice 不满足 daily plan、不清除 due、不推进 Protocol Run/Relearning，也不生成 Learning
-  Evidence、Encounter Outcome 或 FSRS update；
-- 听说读写只组织 Practice Mode；听写、跟读和朗读等跨通道任务必须如实声明其实际 target，
+  Evidence、Encounter Outcome、Memory Outcome 或 FSRS update；即使保存 Practice Observation、
+  Feedback、score 或 Artifact，该边界也不改变；
+- 听说读写只组织 Practice Area；跨通道 Activity 必须固定一个 primary Area 并如实声明实际 target，
   不能仅凭表面动作宣称 Sense retrieval 或 transfer；
-- 收藏、笔记与 Practice Result 不自动把 Sense 加入 Study Plan；只有被 Curriculum 接纳的
+- 收藏、笔记与 Practice facts 不自动把 Sense 加入 Study Plan；只有被 Curriculum 接纳的
   Add-to-Learning Intent 才能创建 Supplemental Membership；
 - Personal Content 的保存、注释、Anchor、Collection、Practice 和 Add-to-Learning operations 彼此
   独立；重复提交保持幂等，删除一个对象不能级联伪造其他 learner intent；
@@ -742,7 +754,7 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 
 ## 7. 文档边界
 
-本文不冻结 Gate 数量阈值、具体 Action/Practice Task payload、cooldown 间隔、Semantic Field
+本文不冻结 Gate 数量阈值、具体 Action/Practice Activity Definition 或 Turn payload、cooldown 间隔、Semantic Field
 可视化布局、词典供应商、Contextual Sense Resolution 阈值、identity provider、Account deletion
 恢复窗口、LLM provider/prompt、Sense Proposal 展示数量、相似 Sense 检索阈值、具体 Preference
 字段、HTTP/SQL、Sync payload、例句数量或页面布局。它们属于版本化实现

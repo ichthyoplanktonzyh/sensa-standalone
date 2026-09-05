@@ -6,7 +6,7 @@
 本文定义 Content Provisioning、Learning Protocol Run、Protocol Step Instance、Unified Planning、Session、
 Encounter、Card Presentation、Observation/Evidence/Transition、Scheduling Handoff、FSRS、Lexical Reference、Preferences 与 Account/Data Control 的运行
 关系。Structured Acquisition Cycle 是其中一种高保证协议，不是所有学习的唯一运行方式。具体
-Gate 阈值、Action/Practice Task payload、context resolver 阈值、cooldown、HTTP、SQL 和 Sync wire
+Gate 阈值、Action/Practice Activity Definition 或 Turn payload、context resolver 阈值、cooldown、HTTP、SQL 和 Sync wire
 format 属于后续版本化实现合同。
 
 ## 1. 运行链
@@ -79,19 +79,20 @@ Relearning Completion。FSRS 只在有效 handoff 后拥有长期 due time。
 Free Practice 使用平行但隔离的运行链：
 
 ```text
-Practice Scope + Practice Mode
-              │
-              ▼
-     Free Practice Session
-              │
-              ▼
-        Practice Task
-              │
-              ├── passive interaction ──▶ Practice Activity
-              └── response ──▶ Practice Attempt ──▶ Practice Result
-                                                     ╳ Learning Evidence
-                                                     ╳ Encounter Outcome
-                                                     ╳ Gate / 5D / FSRS
+Practice Brief + Scope + primary Area
+                  │
+                  ▼
+         Free Practice Session
+                  │
+                  ▼
+       Practice Activity Definition
+                  │
+                  ▼
+             Practice Turn
+                  ├──▶ Practice Observation / Feedback
+                  └──▶ optional Practice Artifact
+                         ╳ Learning Evidence / Encounter Outcome
+                         ╳ Gate / 5D / Memory Outcome / FSRS
 ```
 
 ## 2. Retention Target 与 Learner Sense Progress
@@ -515,7 +516,7 @@ Reference detail 可以按真实数据条件性显示释义、例句、用法、
 切换、播放或展开这些区块：
 
 - 不创建 Learner Sense Progress、Study Scope Membership 或 daily-new consumption；
-- 不创建 Learning/Practice Attempt、Evidence、Encounter Outcome、Gate/5D/FSRS update；
+- 不创建 Learning Attempt、Practice Turn、Evidence、Encounter Outcome、Gate/5D/FSRS update；
 - 不自动保存、不自动创建 Note，也不自动提交 Add-to-Learning Intent；
 - 只读取 `reference_visible` 内容，永不返回 `learning_only` 或 `assessment_only` asset；
 - 不提供“真题”或考试来源聚合区块，也不为空区块生成占位数据。
@@ -614,13 +615,33 @@ Proposal 不能被后台任务自动确认。已有 Sense 的相似检索是 con
 
 ## 8. Free Practice
 
-Free Practice Session 是 learner 主动选择练习方式与范围后开启的活动容器，不是第三种 Learning
-Session intent。它至少固定：
+Free Practice 是独立的语言使用与泛化运行时，不是宽松版 Learning Protocol，也不是第三种 Learning
+Session intent。它可以读取 Learning Target、Personal Semantic World 中完整的 Context–Expression–Sense、
+Practice Scope 与获准资源，但不能写入正式学习的证据、进度或调度状态。
+
+听、说、读、写是稳定的 learner-facing **Practice Area**。它们来自 receptive/productive ×
+sound/written 的组织矩阵，但不是四个运行引擎、mastery dimensions、分数或 Gate：
+
+| 方向 | 声音通道 | 文字通道 |
+| --- | --- | --- |
+| Receptive：Form/Context → Sense | listening | reading |
+| Productive：Sense/Experience → Form | speaking | writing |
+
+每个 Activity Definition 只指定一个 `primaryArea`，即使实际交互跨多个通道。分类依据 learner 的主要
+练习目的，而不是素材形式；stimulus/response channels 另行声明。
+
+Practice Brief 给一次练习提供局部方向，至少可以表达 learner intent 或 communicative goal、scenario、
+optional Scope 与 support level。它不是 Learning Objective、Protocol、graduation standard 或评分合同。
+
+Free Practice Session 由 learner 主动开启并至少固定：
 
 ```text
-practiceMode: listening | speaking | reading | writing
+practiceBriefSnapshot
+primaryArea: listening | speaking | reading | writing
+activityDefinitionVersion
 practiceScopeSnapshot
 practiceProfileVersion
+executableInventoryVersion
 status: active | completed | abandoned
 ```
 
@@ -628,89 +649,90 @@ Session 创建前，Practice Runtime 必须解析：
 
 ```text
 Free Practice Profile
-        × Package Practice Manifest
+        × approved Package / provider resource availability
         × Runtime / Client capability
         ↓
 Executable Practice Capability Inventory
 ```
 
-Profile 固定版本允许的 Task families 与 resource/renderer/grader requirements；Package Practice
-Manifest 只声明已审核 practice roles/resources；Inventory 是当前可以诚实执行的交集。它既不读取
-learner mastery 来伪造 capability，也不借用 Acquisition Required Asset Manifest 推断四种 Mode
-全部可用。Session 固定 profile 与 resolved inventory version，运行中能力变化只能在下个 Session
-生效。
+Profile 固定允许的 Practice Activity Definitions 及其 target、channel、resource、interaction、feedback
+与 session-policy requirements；Package Practice Manifest 声明 Package 内获准复用的 practice
+roles/resources，外部 provider 则必须保留自己的来源、授权与可用性事实。Inventory 是上述能力与
+当前 client support 的交集。它既不读取 learner mastery 来伪造 capability，也不借用 Acquisition
+Required Asset Manifest 推断四个 Area 全部可用。Session 固定 profile 与 resolved inventory version，
+运行中能力变化只能在下个 Session 生效。
 
-Practice Scope 可以来自 Book slice、最近学习、已完成首次习得、Saved Senses、Declared Mastery
-或 learner 明确选择的 targets。Scope 在 Session 开始时解析成稳定 snapshot；后续收藏、Book 或
-progress 变化不能静默改变正在进行的队列。Declared Mastery 只排除正式 Planning，不阻止 learner
-自由练习该 Sense。
+Practice Scope 可以来自 learner 明确选择的 Personal Meanings/Senses/Expressions、Book slice、最近
+学习、已完成首次习得、Saved items 或其他已交付的 typed source。Scope 在 Session 开始时解析成稳定
+snapshot，并保留 Context、Expression、Sense、binding 或 Learning Target 的实际身份与 provenance；
+后续收藏、Book 或 progress 变化不能静默改变正在进行的活动。Declared Mastery 只排除正式 Planning，
+不阻止 learner 自由练习。
 
-Practice Mode 是面向 learner 的四种入口，其基础矩阵为：
-
-| 方向 | 声音通道 | 文字通道 |
-| --- | --- | --- |
-| Receptive：Form/Context → Sense | listening | reading |
-| Productive：Sense/Experience → Form | speaking | writing |
-
-每个 Practice Task 仍须单独固定：
+Practice Activity Definition 是扩展的主要单元，至少固定：
 
 ```text
-promptChannel
-responseChannel
-targetCapability
-targetIdentity: Sense | Lexeme form | Example
-supportLevel: passive | guided | independent
-resourceReferences
-gradingContractVersion: optional
+primaryArea
+stimulusChannels[]
+responseChannels[]
+targetIdentity: Context | Expression | Sense | Sense Expression Binding | Learning Target
+practicePurpose
+requiredResourceRoles[]
+supportPolicy
+interactionPolicy
+feedbackPolicy
+sessionPolicy
 ```
 
-四种 Mode 不能代替这些语义。Dictation 可以是 `spoken form → written form`，shadowing 可以是
-`spoken form → spoken form`，read-aloud 可以是 `written form → spoken form`；这些任务训练词形、
-声音或 articulation 时，不能仅因 learner 写了或说了就宣称 Sense retrieval。Speaking/Writing
-若要检验 Sense-to-form，prompt 必须定位目标 Sense 而不泄露答案；开放语境产出若没有可靠
-grader，只能保存 response/activity，不能伪造正确结果。
+一次交互保存为 Practice Turn；Runtime 可以从 Turn 得到 Practice Observation，返回 Practice Feedback，
+并按 activity policy 保存 optional Practice Artifact。Observation 可以在当前 Session 内选择下一段素材、
+调整支架或决定是否建议重试；Feedback 可以包含判断、建议或分数。但这些都不是 Learning Attempt、
+Learning Observation、Learning Evidence 或 learner progress，不能被 Unified Planner 或 Scheduler 消费。
 
 ### Initial Free Practice Profile
 
 Initial Profile 是 P0 之后首个 Free Practice delivery contract，不是当前 Sensa V1 launch
-requirement。它只允许：
+requirement。首期每个 Area 只开放一个 Activity：
 
-| Task family | Runtime 行为 |
-| --- | --- |
-| Immersive Browse | 从明确 Scope 顺序呈现 approved Sense/Example resources，记录浏览、展开和播放 Activity |
-| Portable Listening | 连续播放 approved pronunciation/static-example audio；字幕、译文和播放行为由 Preferences 控制 |
-| Dictation | 固定 spoken-form prompt、written-form response、Lexeme/context-form target 与 deterministic grader |
-| Quick Spelling | 固定不泄露答案的 Sense/Experience cue、written response 与 Lexeme-identity Recall grader |
+| Primary Area | Activity Definition | 主要交互 | Target 与诚实边界 |
+| --- | --- | --- | --- |
+| Listening | Real-world Speech Variation（真实语流泛化） | 通过 YouGlish 播放同一 Expression 在不同 speaker、accent、速度与连读环境中的真实片段 | target 是 Expression form 与可用时的 Pronunciation Variant；首期不做 contextual Sense disambiguation，不能宣称每个片段都表达 Scope 中的目标 Sense |
+| Speaking | Oral Scenario Rehearsal（情境口语排演） | 给出 Sense-grounded communicative brief，learner 录音作答，ASR transcript 与 AI 提供即时反馈，可重试或继续 | target 是当前 Sense–Expression connection 的情境化使用；首期不提供 phoneme-accurate pronunciation score |
+| Reading | Contextual Meaning Inference（语境推义） | 阅读包含目标 Expression 的 Sense-controlled 短语境，先形成理解，再 reveal 当前 Sense 与关键 context cues | target 是该 Context 中的 Sense 理解；首期不要求选择题或把 reveal 后行为当评价 |
+| Writing | Written Scenario Response（情境书面表达） | 根据 Sense-grounded scenario 写一句或短回复，AI 给出自然度、意义贴合与修订反馈，并可给 alternative expression | target 是情境化书面表达；不存在唯一标准答案，AI 判断只形成 Practice Feedback |
 
-初始 Scope 仅从当前 Book slice 或 learner 明确选择的 Senses 解析。Saved、Field、Collection 与 history
-来源在各自 contract 就绪前不可显示为可用入口。自由练习首页可以把已确认的后续 Task family 显示为
-明确标注“暂未开放”的 disabled 路线图项，但它们不能解析 Inventory、创建 Session/Task 或接受响应。
-Initial Profile 不物化 Speaking、发音评分、开放式
-造句、AI 对话、自动薄弱项处方、novel Transfer/Boundary assessment、影视/电视/YouTube 原声或运行时
-生成题目；只有 Executable Practice Capability Inventory 中存在的 Task family 才能成为可进入入口。
+Oral Scenario Rehearsal 与 Written Scenario Response 可以共享 `Scenario Response` activity family 的
+brief、feedback 与 retry 机制，再分别使用 voice/text channel adapter；它们仍是两个 primary Area
+下的独立 Activity Definition。Reveal、重听、重试、查看 transcript 等是 interaction/response mode，
+不是为了凑数量而建立的新 Activity family。
 
-Practice Runtime 只能读取显式拥有 `free_practice` role 且对当前用途可见的资源，永不选择
-`assessment_only` 或 protected Transfer inventory。Portable Listening 只产生 Activity；Dictation
-只证明声音到 form 的 practice-local 表现；Quick Spelling 即使复用正式 Recall grader，也只能产生
-Practice Result，不能解决 Recall Gate。
+Real-world Speech Variation 的检索是 form-level：YouGlish occurrence 必须保留 provider provenance，
+UI 也必须明确这些片段按 Expression 检索、可能覆盖其他 Sense。若某个相同拼写具有不同发音，只有
+能够可靠约束 Pronunciation Variant 的 occurrence 才能用于对应声音泛化；首期省略语义 WSD 不等于
+允许错误发音污染活动。
 
-不需要 response 的浏览、播放、跟随与展开记录 Practice Activity；可判分响应保存 Practice
-Attempt，并通过 pinned grading contract 产生 Practice Result。两者都与正式学习严格隔离：
+Initial Profile 只发布 Inventory 中确实具备资源、provider、renderer 与 feedback capability 的 Activity。
+缺少任一活动不阻止正式 Learning Package 发布，也不能用占位内容伪装可进入。Practice Runtime 只能
+读取获准用于 `free_practice` 的资源，永不选择 `assessment_only` 或 protected Transfer inventory。
+
+所有 Practice Turn、Observation、Feedback 与 Artifact 都与正式学习严格隔离：
 
 - 不消耗 daily-new quota，不移动 Book introduction cursor；
 - 不改变 `new | acquiring | retaining | relearning` phase；
 - 不解决或重开 Acquisition Gate，不完成 Relearning；
 - 不产生 Learning Evidence、Encounter Outcome 或 Memory Outcome；
 - 不完成、提前或清除一次 due Review，也不调用 FSRS；
-- 不自动把 Saved Sense 加入 Study Plan；
-- 可以进入 Practice history、Learner Semantic Projection 和面向 learner 的练习统计。
+- 不自动创建 Personal Meaning、Semantic Intake、Supplemental Membership 或 Add-to-Learning Intent；
+- 可以进入独立 Practice history、Learner Semantic Projection 和面向 learner 的练习统计，但不得冒充
+  正式能力、掌握度或待复习状态。
 
-如果 Scope 包含尚未正式学习的 Sense，展示只形成可审计 Practice Activity/exposure，不等于
+如果 Scope 包含尚未正式学习的内容，展示只形成可审计 Practice Turn/exposure，不等于
 Introduction，也不消耗 quota。Practice Runtime 不得选择 reserved novel-assessment assets；后续
 正式 Policy 必须依据资源 exposure role 保持 Transfer 检验的新颖性。
 
-未来只有通过新的、显式版本化的 assessment-grade bridge，某类 Practice Attempt 才可能被正式
-Learning Kernel 接纳；既有 Practice Result 永远不能在事后静默升级成 Gate/5D/FSRS 事实。
+learner 若要保存练习中发现的新 Context–Expression–Sense，必须显式发起独立 Semantic Intake；若要
+进入课程，还需独立 Add-to-Learning。Free Practice 永不产生 Learning Evidence；未来需要正式评价时，
+只能新建 Learning Protocol/assessment operation，不能把 Practice fact 通过 bridge 升级、回填或重解释
+为 Gate、5D、Memory Outcome 或 FSRS 事实。
 
 ## 9. Unified Planning
 
@@ -809,8 +831,8 @@ assessment independence 与有序 asset references。
 Attempt 是 learner 对当前 Action 的追加事实。重复 identity + 相同 canonical fact 是幂等重放；
 相同 identity + 不同内容是 immutable conflict。
 
-Learning Attempt 与 Practice Attempt 是不同事实类型。即使两者保存相同的文字或语音响应，
-Practice handler 也不能调用 Learning Evidence rule，Encounter handler 也不能接收 Practice identity。
+Learning Attempt 与 Practice Turn 是不同事实类型。即使两者保存相同的文字或语音响应，Practice
+handler 也不能调用 Learning Evidence rule，Encounter handler 也不能接收 Practice identity。
 
 ### Learning Observation
 
@@ -974,7 +996,7 @@ Sense-level 操作一致：
 - active Protocol Run/Relearning 保留事实但暂停计划资格，不被伪造成 completed/graduated；
 - declaration/revocation 不插入 Attempt、Evidence、Outcome，不修改 Gate、5D 或 FSRS；
 - revocation 后依据未篡改的 phase/Protocol Run/Memory State 恢复资格；
-- declaration 为 active 时 learner 仍可将其 Sense 放入 Practice Scope；Practice Result 不撤销声明。
+- declaration 为 active 时 learner 仍可将其 Sense 放入 Practice Scope；任何 Practice fact 都不撤销声明。
 
 ## 16. Account、Preferences 与 Data Control lifecycle
 
@@ -1106,13 +1128,14 @@ Acquisition Cycle、Gate、Evidence 与 Graduation 不变量。
 现有合同同样没有 Book Enrollment/Range mode、Supplemental Curriculum/Membership、Study Scope
 Revision、Learning Entry Provenance、Learning Policy Profile/Assignment、Effective Learning Policy、Resolved Learning Plan readiness、
 Semantic Field、Saved Sense/Example、Sense Note、Personal Semantic Anchor、Personal
-Collection/Membership、完整 Add-to-Learning decision、Free Practice Session/Task/Attempt/Result 或
+Collection/Membership、完整 Add-to-Learning decision、Free Practice Session/Activity/Turn/Observation/
+Feedback/Artifact 或
 Learner Semantic Projection，也没有 Reference Release/Reference Sense、Sense Alignment、全句 Lexical
 Occurrence annotation、Contextual Sense Resolution 或 Contextual Lookup API 的 production 语义。在对应
 新合同完成前，当前 `/me` 中混合 profile、`selectedWorkspaceId` 与单一
 `reviewReactionAnimationsEnabled` 的形状只能作为 compatibility bootstrap read model，不能定义最终
 Account 或 Preference aggregate；
-客户端不得把原型的换词书、局部范围、星标加入学习、笔记、集合、随身听、听写、拼写或语义图
+客户端不得把原型的换词书、局部范围、星标加入学习、笔记、集合、旧版随身听/听写/拼写或语义图
 状态当作真实产品事实，也不得把基于 token regex 与静态词表的弹窗称为上下文词典。
 
 现有合同同样没有 Account lifecycle/Session management、typed Learner Preference revision、明确的

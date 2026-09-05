@@ -1,6 +1,6 @@
 # Sensa standalone 剩余迁移与上线计划
 
-> Status: active launch plan. Date: 2026-08-31.
+> Status: active launch plan. Date: 2026-09-05.
 
 这不是旧 flashcard 仓库的迁移编号计划。独立仓库已经有干净 `0001_sensa_baseline.sql`、
 Sensa API/Web、内容校验器、Sync v2 和首位用户本地纵切；下列工作是从本地纵切到公网
@@ -101,11 +101,14 @@ language-neutral persistence/API/Sync contract，不能直接把原型本地状�
   operations 相互独立，并对文本、顺序、revision、tombstone 与冲突提供跨设备收敛；
 - 验证 Book switch、Range/mode change、Supplemental add/remove 的 revision、幂等、并发冲突与
   `push → pull` 收敛；同一 learner 不得出现两个 active Enrollment 或两份当前 Study Scope；
-- 实现 Free Practice Session、稳定 Practice Scope snapshot、Practice Activity/Attempt/Result；
-- 按 receptive/productive × sound/written 提供听、说、读、写入口，同时让每个 Task 固定实际
-  prompt channel、response channel、target identity/capability、support 与 grading contract；
-- 保护 reserved novel-assessment assets，并验证任何 Practice 操作都不能改变 Gate、5D、phase、
-  due、daily quota 或 FSRS；
+- 实现 Practice Brief、稳定 Practice Scope snapshot、四个 Practice Area、versioned Activity
+  Definition、Free Practice Session，以及 Practice Turn/Observation/Feedback/optional Artifact；
+- 首个 Profile 每个 Area 只交付一个 Activity：YouGlish 真实语流泛化、情境口语排演、语境推义与
+  情境书面表达；其中 form-level YouGlish occurrence 不得冒充已完成 contextual Sense disambiguation；
+- 让每个 Activity 固定 primary Area、stimulus/response channels、typed target、resources、support、
+  interaction、feedback 与 session policy，并对 provider/AI/ASR provenance 与 unavailable state 做验证；
+- 保护 reserved novel-assessment assets，并验证任何 Practice Turn、Observation、Feedback、score 或
+  Artifact 都不能产生 Learning Evidence，或改变 Gate、5D、phase、due、daily quota 与 FSRS；
 - 建立带 provider/edition/locale/license/digest 的不可变 Reference Release，以及 Reference Lexical
   Unit/Reference Sense 的稳定身份；不要把宽覆盖词典全部强行迁入当前 Sensa Lexeme/Sense 表；
 - 建立 reviewed/versioned Sense Alignment，支持 `equivalent`、`reference_broader`、

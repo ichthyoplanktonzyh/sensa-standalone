@@ -7,7 +7,7 @@
 资源，以及这些资源如何在一次 Learning Protocol Run 前冻结为 Learning Materialization。它同时
 定义 Sense Learning Package、Reference Lexicon、Lexical Enrichment 与 Semantic Field 如何引用已
 审核内容。资源不等于卡片：Protocol Step 按 material role 引用不可变内容并定义交互与结果资格，
-Card Presentation 只把当前 Step 阶段渲染给 learner。正式 Action 与 Practice Task 由版本化
+Card Presentation 只把当前 Step 阶段渲染给 learner。正式 Action 与 Practice Activity Definition 由版本化
 Learning Policy Profile、purpose-specific Protocol 与其他适用 Policy/Profile 从不可变资源中物化。
 
 ## 1. Learning content sources 与 materialization
@@ -496,21 +496,23 @@ Curriculum 可以先接纳 stable Learning Target 与合法 Learning Policy Assi
 - Content Release 更新不改变已经开始的 Session/Encounter；下一 Scope Revision 可以显式解析新
   Package 或创建新 materialization，但必须保留此前 Curriculum provenance 与学习事实。
 
-Free Practice 可以复用 Lexeme form/pronunciation、Sense display facts、Experience、Study Example、
-Usage Pattern、Sense Relation 与已获准的媒体，但 Practice Task 必须固定资源版本、asset role 和
-实际 target：
+Free Practice 可以复用 Expression form/pronunciation、Sense display facts、Experience、Study Example、
+Usage Pattern、Sense Relation、Personal Semantic Anchor 与已获准媒体，也可以通过获准 provider 在
+Session 前后解析外部资源。但 Practice Activity Definition 必须固定实际 target、resource roles、
+stimulus/response channels、support/feedback policy，并在 Turn 上保留精确资源版本或 provider
+provenance。外部资源可用性不能被伪装成 Package 内已审核内容。
 
-- Listening/Reading 的 Sense 练习需要能从声音或文字语境判断目标 Sense；
-- Speaking/Writing 的 Sense 练习需要不泄露目标表达的 Sense/experience cue；
-- dictation、shadowing 与 read-aloud 可以只训练 Lexeme form 或 pronunciation，不能伪装成
-  Sense retrieval；
-- contextual production 必须有版本化、可审计的 grading contract；无法可靠判分时只能保存
-  activity 或 learner response，不能宣称成功；
-- 为 Novel-context Transfer 保留的 assessment-only assets 不得通过浏览、随身听或自由练习暴露。
+- Listening/Reading 若声称练习特定 Sense，所用语境必须具有足够的 contextual Sense control；
+- form-level listening 可以按 Expression/Pronunciation Variant 检索而不做语义消歧，但产品必须明确
+  它不保证 occurrence 对应当前 Sense；
+- Speaking/Writing 的 Sense-grounded scenario 必须定位意图，而不把目标表达变成唯一标准答案；
+- AI/ASR feedback 可以评议意义贴合、自然度或可理解性，但它只形成 Practice Feedback，不是
+  reviewed linguistic truth、grading key 或 Learning Evidence；
+- 为 Novel-context Transfer 保留的 assessment-only assets 不得通过 Free Practice 暴露。
 
-一个 Package 不因缺少四种 Practice Mode 就无法支持正式 Acquisition。可提供哪些练习由独立的
-versioned practice profile/capability inventory 如实报告；缺少 speaking、audio 或 production
-grader 时应省略相应模式，而不是生成不可判分的占位任务。
+一个 Package 不因缺少四个 Practice Area 中的任何 Activity 就无法支持正式 Acquisition。可提供哪些
+练习由独立的 versioned practice profile/capability inventory 如实报告；缺少 external provider、audio、
+ASR、AI feedback 或 renderer capability 时应省略相应 Activity，而不是生成不可执行的占位内容。
 
 ### Initial Free Practice Profile
 
@@ -520,41 +522,43 @@ Manifest。它定义的资源解析关系是：
 
 ```text
 Free Practice Profile
-        × Package Practice Manifest
+        × approved Package / provider resource availability
         × Runtime / Client capability
         ↓
 Executable Practice Capability Inventory
 ```
 
-- Free Practice Profile 固定允许的 Task families、target/channel/support 组合，以及 renderer、grader、
-  fallback 和 resource-role requirements；
+- Free Practice Profile 固定允许的 Activity Definitions、target/channel/support 组合，以及 renderer、
+  interaction、feedback、fallback 和 resource-role requirements；
 - Package Practice Manifest 声明某个 Package 实际具有哪些 approved practice resources；
+- external provider capability 独立声明可解析的媒体或服务、provenance、授权与失败边界；
 - Executable Practice Capability Inventory 是两者与当前 Runtime/client support 的版本化交集；
-- 缺少 Practice Manifest 或任何 Practice Mode 不能阻止 otherwise acquisition-ready Package 发布。
+- 缺少 Practice Manifest、provider 或任何 Practice Area 不能阻止 otherwise acquisition-ready Package 发布。
 
-Initial Profile 只承诺四种边界明确、可诚实实现的 Task family：
+Initial Profile 每个 Practice Area 只承诺一个边界明确的 Activity Definition：
 
-| Task family | Practice Mode / channel | 实际 target | 结果语义 | 资源要求 |
+| Activity Definition | Primary Area | 实际 target | 反馈语义 | 资源要求 |
 | --- | --- | --- | --- | --- |
-| Immersive Browse（沉浸刷词） | Reading | Sense / Example | Practice Activity | 获准的 Sense facts、Experience Render、Learning Example 与可选 enrichment |
-| Portable Listening（随身听） | Listening | Lexeme / Example | Practice Activity | pronunciation 或 reviewed static example audio；可选文字/译文 |
-| Dictation（听写） | Listening → Writing | Lexeme form 或 approved context form | Practice Attempt/Result | 稳定 audio、精确 target form 与 deterministic form grader |
-| Quick Spelling（随手拼写） | Writing | Sense → Lexeme retrieval | Practice Attempt/Result | 不泄露 form 的 Sense/Experience cue 与 pinned Recall grading |
+| Real-world Speech Variation（真实语流泛化） | Listening | Expression form；可用时固定 Pronunciation Variant | 只记录 exposure/navigation，不声称目标 Sense 命中 | YouGlish provider occurrence、来源链接/时间位置及可靠的 pronunciation constraint；不做 contextual WSD |
+| Oral Scenario Rehearsal（情境口语排演） | Speaking | Sense-grounded contextual expression | ASR/AI 的即时 Practice Feedback；不提供 phoneme-accurate score | communicative brief、voice capture、ASR transcript、AI feedback capability |
+| Contextual Meaning Inference（语境推义） | Reading | controlled Context 中的目标 Sense | reveal 当前 Sense 与 context cues，不把 reveal 后行为当评价 | Sense-controlled short Context、精确 Expression occurrence、Sense reveal/cue binding |
+| Written Scenario Response（情境书面表达） | Writing | Sense-grounded contextual expression | AI 提供自然度、意义贴合、修订与 alternative；无唯一标准答案 | communicative brief、written response、AI feedback capability |
 
-Initial Profile 的 Practice Scope 首先支持当前 Book slice 与 learner 明确选择的一组 Senses。Saved
-Sense/Example、Semantic Field、Personal Collection 或 history-based Scope 只有在对应
-content/persistence/API/Sync contract 已交付时才可加入 inventory；Profile 不根据“薄弱维度”自动
-创建强制任务或学习债务。
+Initial Profile 的 Practice Scope 首先支持 learner 明确选择的完整 Personal Meanings、Senses/
+Expressions 与当前 Book slice 中可执行的 targets。Saved item、Semantic Field、Personal Collection
+或 history-based Scope 只有在对应 content/persistence/API/Sync contract 已交付时才可加入 inventory；
+Profile 不根据“薄弱维度”自动创建强制任务或学习债务。
 
-Initial Profile 明确不提供 Speaking、发音评分、开放式造句评分、AI 对话、运行时自由生成题目、
-novel Transfer/Boundary 正式检验、影视/电视/YouTube 原声媒体或 assessment-grade bridge。只有显式
-拥有 `free_practice` role 且未被 `assessment_only` 隔离的资源可以进入 Practice Manifest；protected
-Transfer inventory 永远 fail closed。
+YouGlish 片段属于 form-level provider resource，不成为 Learning Example，也不因为 Scope 中存在 Sense
+就获得 contextual Sense assignment。相同拼写存在多种发音时，resolver 必须约束正确 Pronunciation
+Variant；无法可靠约束就省略该 occurrence。Sense-controlled Reading Context 与 Speaking/Writing brief
+可以来自已获准的不可变资源或受版本化 policy 约束的 runtime generation；来源与生成版本必须保留，
+但 AI 输出仍不是 reviewed content 或正式 grading basis。
 
-Portable Listening 和 Dictation 不建立 Listening Gate。前者只记录播放、跟随和展开 Activity；后者
-只对声音到 Lexeme/context form 的确定性响应产生 Practice Result，不能仅因写对形式而宣称理解了
-目标 Sense。Quick Spelling 可以复用 Lexeme-identity Recall grading，但其 Result 仍不解决 Recall
-Gate、不进入 5D/FSRS，也不改变正式学习或复习安排。
+只有显式拥有 `free_practice` role 且未被 `assessment_only` 隔离的 Package resource 可以进入 Practice
+Manifest；protected Transfer inventory 永远 fail closed。Practice Turn、Observation、Feedback 与
+Artifact 都不是 Learning Evidence。Free Practice 需要正式评价能力时必须转为独立 Learning Protocol/
+assessment operation，不能复用 Activity 名义绕过 evidence policy。
 
 ## 8. Learner-owned personal content
 
@@ -618,10 +622,10 @@ scene domain、construction、disambiguating cue、collocations 和 variation no
 - masked text、答案位置、选项顺序和本次 distractor 组合；
 - Example 对该 learner 是 study-seen、assessment-seen 还是 novel；
 - cooldown、组内穿插位置与 Session intent；
-- Practice Scope snapshot、Practice Task 顺序、scaffold 与本次 mode-specific response contract；
+- Practice Brief/Scope snapshot、Activity 顺序、scaffold 与本次 channel-specific interaction contract；
 - Learner Semantic Projection 中的 learner status overlay、布局与可视化聚类；
 - Attempt、Evidence、Gate progress、5D State、Acquisition Graduation、Memory Outcome 与 FSRS；
-- Practice Activity、Practice Attempt 与 Practice Result；
+- Practice Turn、Practice Observation、Practice Feedback 与 Practice Artifact；
 - Declared Mastery；
 - Reference search ranking、lookup presentation grouping 与未预计算 occurrence 的临时 candidate order；
 - Learner/Device Preference resolution、autoplay、theme、translation default visibility 与 playback behavior。
@@ -689,7 +693,7 @@ scene domain、construction、disambiguating cue、collocations 和 variation no
 - Boundary 必须指向真实 Relation、target 与 distinguishing feature；
 - Semantic Field membership 与 Relation 必须可追溯到同一 release 的稳定 Sense identity；
 - Structured Acquisition Package 必须能支持 Required Capability Set，而不只是满足资源数量；
-- Practice Task 必须区分 Sense target、Lexeme-form target 与 Example target；
+- Practice Activity Definition 必须区分 Context、Expression、Sense、binding 与 Learning Target；
 - free-practice resources 不能泄露 reserved novel-assessment inventory；
 - learner-authored Note/Anchor 不能通过 content validator 冒充 reviewed Package asset；
 - Sense Proposal 或确认对话不能直接成为 Package asset；资源生产必须固定 confirmed Sense Version，
