@@ -193,7 +193,7 @@ export const SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND =
     contentDemandKey: LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_KEY,
     definitionVersion: LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_VERSION,
     applicablePurposes: ["initial_learning"],
-    acceptedProvisioningPaths: ["on_demand", "hybrid"],
+    acceptedProvisioningPaths: ["published", "on_demand", "hybrid"],
     contextRequirements: [
       {
         contextKind: "expression_snapshot",

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {mkdir,writeFile} from "node:fs/promises";
 
 import { stableUuid } from "@sensa/learning-kernel";
 
@@ -157,6 +158,10 @@ const revealPresentation = assembleLightweightInitialPresentation(
 assert.equal(revealPresentation.kind, "expression_reveal");
 assert.equal(revealPresentation.slots.expressionPrimary.surface, "tactful");
 
+  if(process.env.SENSA_SAVE_CONTENT_TRIAL==='1'){
+    const directory='content/data/consumer-generations';await mkdir(directory,{recursive:true});
+    await writeFile(directory+'/tactful-trial.json',JSON.stringify({content:result.materialization.content,provider:result.attempt.provider,model:result.attempt.model,usage:result.attempt.usage,generatedAt:new Date().toISOString()},null,2));
+  }
   console.log(JSON.stringify({
     status: result.status,
     provider: result.attempt.provider,

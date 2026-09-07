@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { targetOperationSchema, targetViewSchema } from './target.js';
 
 export const consumerVersion = 'sensa-consumer-v1' as const;
 export const consumerWireVersion = 'sensa-sync-v3' as const;
@@ -35,9 +36,11 @@ export const quantityOperationSchema = z.discriminatedUnion('kind', [
     planId: id, expectedRevision: revisionSchema, dailyNewLimit: quantitySchema,
   }).strict() }).strict(),
 ]);
+export const consumerOperationSchema=z.union([quantityOperationSchema,targetOperationSchema]);
+export type ConsumerOperation=z.infer<typeof consumerOperationSchema>;
 export const consumerPushSchema = z.object({
   wireVersion: z.literal(consumerWireVersion), canonicalizerVersion: z.literal(consumerCanonicalizerVersion),
-  scopeEpoch: revisionSchema, replicaId: id, operations: z.array(quantityOperationSchema).max(50),
+  scopeEpoch: revisionSchema, replicaId: id, operations: z.array(consumerOperationSchema).max(50),
 }).strict();
 export const consumerBootstrapSchema = z.object({
   wireVersion: z.literal(consumerWireVersion), installationId: id, replicaId: id.nullable(),
@@ -50,7 +53,7 @@ export const failureSchema = z.object({
   code: z.string(), retryable: z.boolean(), retryAfterMs: z.number().nullable(),
   latest: z.object({ id, revision: revisionSchema }).nullable(), field: z.string().nullable(), messageKey: z.string(),
 }).strict();
-const valueSchema = z.object({ plan: planViewSchema }).strict();
+const valueSchema = z.union([z.object({plan:planViewSchema}).strict(),z.object({plan:planViewSchema,target:targetViewSchema,disposition:z.enum(['accepted','already_in_scope']).optional()}).strict()]);
 export const quantityResultSchema = z.discriminatedUnion('status', [
   z.object({ operationId: id, status: z.literal('accepted'), value: valueSchema }).strict(),
   z.object({ operationId: id, status: z.literal('replayed'), original: z.enum(['accepted','conflict','rejected']), value: valueSchema.nullable(), error: failureSchema.nullable() }).strict(),

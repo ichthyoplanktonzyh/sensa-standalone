@@ -170,7 +170,9 @@ M0-3 [消费合同](m0-3-consumer-contract.md)、[迁移蓝图](m0-3-migration-b
 [施工验收](m0-3-delivery-plan.md)已完成设计审阅，M0 设计门已验收。M1-A 登录、数量与空首页已完成本地纵切，
 SQL 迁移、数量 Sync v3、Node/Deno 与 Chromium 测试已有证据，详见
 [交付记录](m1-a-account-handoff.md)。真实 Supabase 邮件登录、托管 Edge 与公网验证待执行，
-M1-A 尚未完成生产验收，M1-B–E 尚未实施。
+M1-A 尚未完成生产验收；M1-B 目标加入/准备、私有材料与已会声明已完成本地纵切，
+包括已授权的 DeepSeek/edge-tts 小样本，见 [M1-B 记录](m1-b-target-handoff.md)。
+M1-B 的生产发布/Storage 仍待验收，下一条为 M1-C，C–E 尚未实施。
 每次里程碑验收后，同步更新本文的执行位置与证据，以及路线图状态。
 具体任务、验收记录和未解决问题由路线图追踪；本文不再累积逐日原型功能日志。
 

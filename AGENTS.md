@@ -67,3 +67,6 @@ working tree and use CI/CD for cloud deployments.
 
 After each completed and validated vertical use-case slice, create a Git checkpoint commit.
 This is owner-authorized; do not push or deploy without the applicable delivery authorization.
+
+Owner additionally authorized bounded DeepSeek API material-generation trials and edge-tts audio
+generation (2026-09-07). Keep these opt-in and separate from routine no-cost/CI validation.

@@ -55,7 +55,8 @@
     "sensa:assurance-runtime-smoke": "TSX_TSCONFIG_PATH=apps/web/tsconfig.json node --import tsx scripts/sensaAssuranceRuntimeSmoke.tsx",
     "sensa:consumer-account-smoke": "node --import tsx scripts/sensaConsumerAccountSmoke.mts",
     "sensa:consumer-browser-smoke": "node --import tsx scripts/sensaConsumerBrowserSmoke.mts",
-    "sensa:edge-check": "deno check --config supabase/functions/sensa-api/deno.json supabase/functions/sensa-api/index.ts"
+    "sensa:edge-check": "deno check --config supabase/functions/sensa-api/deno.json supabase/functions/sensa-api/index.ts",
+    "sensa:consumer-target-smoke": "node --import tsx scripts/sensaConsumerAccountSmoke.mts --targets"
   },
   "engines": {
     "node": ">=24"

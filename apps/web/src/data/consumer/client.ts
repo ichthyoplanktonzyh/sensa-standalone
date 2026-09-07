@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { accountContextSchema, consumerVersion, consumerWireVersion, consumerCanonicalizerVersion, planViewSchema, quantityResultSchema, revisionSchema } from '@sensa/contracts/sensa';
+import { accountContextSchema, consumerVersion, consumerWireVersion, consumerCanonicalizerVersion, planViewSchema, quantityResultSchema, revisionSchema, targetViewSchema, catalogTargetSchema, sensaLightweightInitialMaterializationContentSchema } from '@sensa/contracts/sensa';
 import type { AccountContext, PlanView } from '@sensa/contracts/sensa';
-import { applyQuantityResults,changeAccountReplica,loadAccountReplica } from '../replica/accountStore';
+import { applyQuantityResults,changeAccountReplica,loadAccountReplica,mergeTargets } from '../replica/accountStore';
 
 const projectUrl=import.meta.env.VITE_SUPABASE_URL as string|undefined;
 const publicKey=import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string|undefined;
@@ -27,9 +27,9 @@ export async function initializeAccount(subject:string) {
 export function cachedAccount(subject:string):AccountContext|null {
   try {const raw=localStorage.getItem(`sensa:account:v3:${subject}`);return raw?accountContextSchema.parse(JSON.parse(raw)):null;}catch{return null;}
 }
-const bootstrapSchema=z.object({scopeEpoch:revisionSchema,replicaId:z.string().uuid(),syncCursor:z.string(),plan:planViewSchema.nullable()}).passthrough();
+const bootstrapSchema=z.object({scopeEpoch:revisionSchema,replicaId:z.string().uuid(),syncCursor:z.string(),plan:planViewSchema.nullable(),targets:z.array(targetViewSchema)}).passthrough();
 const resultSchema=z.object({results:z.array(quantityResultSchema)}).passthrough();
-const pullSchema=z.object({scopeEpoch:revisionSchema,changes:z.array(z.object({entityType:z.literal('plan'),snapshot:planViewSchema}).passthrough()),nextCursor:z.string(),hasMore:z.boolean()}).passthrough();
+const pullSchema=z.object({scopeEpoch:revisionSchema,changes:z.array(z.discriminatedUnion('entityType',[z.object({entityType:z.literal('plan'),snapshot:planViewSchema}).passthrough(),z.object({entityType:z.literal('target'),snapshot:targetViewSchema}).passthrough()])),nextCursor:z.string(),hasMore:z.boolean()}).passthrough();
 const flights=new Map<string,Promise<Awaited<ReturnType<typeof loadAccountReplica>>>>();
 export function syncAccount(account:AccountContext) {
   const running=flights.get(account.accountId);if(running)return running;
@@ -42,7 +42,7 @@ async function drain(account:AccountContext) {
   let state=await loadAccountReplica(account);
   async function bootstrap() {
     const value=bootstrapSchema.parse(await request('/sensa/sync/bootstrap',{wireVersion:consumerWireVersion,installationId:state.installationId,replicaId:state.replicaId}));
-    state=await changeAccountReplica(account,current=>({...current,scopeEpoch:value.scopeEpoch,replicaId:value.replicaId,cursor:value.syncCursor,plan:current.scopeEpoch===value.scopeEpoch?newestPlan(current.plan,value.plan):value.plan}));
+    state=await changeAccountReplica(account,current=>({...current,scopeEpoch:value.scopeEpoch,replicaId:value.replicaId,cursor:value.syncCursor,targets:mergeTargets(current.scopeEpoch===value.scopeEpoch?current.targets:{},value.targets),plan:current.scopeEpoch===value.scopeEpoch?newestPlan(current.plan,value.plan):value.plan}));
   }
   if(!state.replicaId||!state.cursor)await bootstrap();
   const pending=state.outbox.filter(x=>x.state==='pending').slice(0,50);
@@ -57,15 +57,37 @@ async function drain(account:AccountContext) {
   while(more){
     try {
       const pulled=pullSchema.parse(await request('/sensa/sync/pull',{wireVersion:consumerWireVersion,scopeEpoch:state.scopeEpoch,replicaId:state.replicaId,cursor:state.cursor,limit:100}));
-      state=await changeAccountReplica(account,current=>({...current,plan:newestPlan(current.plan,pulled.changes.at(-1)?.snapshot??null),cursor:pulled.nextCursor,scopeEpoch:pulled.scopeEpoch}));more=pulled.hasMore;
+      state=await changeAccountReplica(account,current=>({...current,plan:newestPlan(current.plan,pulled.changes.filter(x=>x.entityType==='plan').at(-1)?.snapshot??null),targets:mergeTargets(current.targets,pulled.changes.filter(x=>x.entityType==='target').map(x=>x.snapshot)),cursor:pulled.nextCursor,scopeEpoch:pulled.scopeEpoch}));more=pulled.hasMore;
     } catch(e){if(e instanceof ConsumerClientError&&e.code==='bootstrap_required'){await bootstrap();more=false;}else throw e;}
   }
-  const home=z.object({contractVersion:z.literal(consumerVersion),data:z.object({plan:planViewSchema.nullable(),emptyReason:z.enum(['no_targets','onboarding_required'])}).passthrough()}).passthrough().parse(await request('/sensa/home'));
-  state=await changeAccountReplica(account,current=>({...current,plan:newestPlan(current.plan,home.data.plan)}));
+  const home=z.object({contractVersion:z.literal(consumerVersion),data:z.object({plan:planViewSchema.nullable(),targets:z.array(targetViewSchema),emptyReason:z.enum(['no_targets','onboarding_required','preparing','blocked']).nullable()}).passthrough()}).passthrough().parse(await request('/sensa/home'));
+  state=await changeAccountReplica(account,current=>({...current,plan:newestPlan(current.plan,home.data.plan),targets:mergeTargets(current.targets,home.data.targets)}));
   return state;
 }
 export async function revokeSession(){
   try {await request('/sensa/account/session/revoke',{operationId:crypto.randomUUID()});}
   catch(e){if(!(e instanceof ConsumerClientError && (e.status===401||e.status===403)))throw e;}
   const result=await auth?.signOut({scope:'local'});if(result?.error)throw result.error;
+}
+
+export async function readCatalog(account:AccountContext,q='',cursor?:string){
+  const params=new URLSearchParams({q,limit:'30'});if(cursor)params.set('cursor',cursor);
+  const value=z.object({data:z.object({items:z.array(catalogTargetSchema),nextCursor:z.string().nullable()})}).passthrough().parse(await request('/sensa/catalog/targets?'+params));
+  await changeAccountReplica(account,state=>({...state,catalog:value.data.items}));return value.data;
+}
+export async function readTarget(account:AccountContext,id:string,byCandidate=false){
+  const value=z.object({data:targetViewSchema}).passthrough().parse(await request((byCandidate?'/sensa/catalog/targets/':'/sensa/learning-targets/')+id));
+  await changeAccountReplica(account,state=>({...state,targets:mergeTargets(state.targets,[value.data])}));return value.data;
+}
+export async function checkMaterial(id:string){
+  return z.object({data:z.object({id:z.string().uuid(),digest:z.string(),content:sensaLightweightInitialMaterializationContentSchema})}).passthrough().parse(await request('/sensa/materializations/'+id)).data;
+}
+
+export async function readMaterialAudio(materialId:string,digest:string){
+ if(!auth)throw new ConsumerClientError('auth_not_configured',503);
+ const {data}=await auth.getSession();if(!data.session)throw new ConsumerClientError('authentication_required',401);
+ const response=await fetch(base+'/sensa/materializations/'+encodeURIComponent(materialId)+'/media/'+digest,{headers:{authorization:'Bearer '+data.session.access_token}});
+ if(!response.ok)throw new ConsumerClientError('media_unavailable',response.status);
+ const bytes=await response.arrayBuffer();const actual=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
+ if(actual!==digest)throw new Error('Audio digest mismatch');return new Blob([bytes],{type:'audio/mpeg'});
 }

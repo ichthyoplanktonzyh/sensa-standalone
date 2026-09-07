@@ -31,10 +31,10 @@ try {
  await page.getByRole('button',{name:'确认数量并继续'}).click();
  await expect(page.getByText(/项设置已保存在本机/)).toBeVisible();
  await page.reload();
- await expect(page.getByText(/项设置待同步/)).toBeVisible();
+ await expect(page.getByText(/项请求待同步/)).toBeVisible();
  await context.unroute('http://127.0.0.1:4319/sensa/**');
  await page.getByRole('button',{name:'检查本次结果'}).click();
- await expect(page.getByText(/项设置待同步/)).toHaveCount(0);
+ await expect(page.getByText(/项请求待同步/)).toHaveCount(0);
  await page.getByRole('button',{name:'修改数量'}).click();
  await page.getByRole('radio',{name:'5',exact:true}).check();
  let finishLostResponse!:()=>void;
@@ -48,9 +48,36 @@ try {
  await Promise.race([lostResponse,new Promise((_,reject)=>setTimeout(()=>reject(new Error('No committed response intercepted')),15000))]);
  await page.unroute('http://127.0.0.1:4319/sensa/sync/push');
  await page.reload();await expect(page.getByRole('heading',{name:'今天的学习'})).toBeVisible();
- await expect(page.getByText(/项设置待同步/)).toHaveCount(0);
+ await expect(page.getByText(/项请求待同步/)).toHaveCount(0);
  await page.setViewportSize({width:1280,height:800});await page.screenshot({path:output+'/home-desktop.png',fullPage:true});
+ if(process.env.SENSA_TEST_CURRICULUM==='1'){
+  await page.getByRole('button',{name:'选择学习内容',exact:true}).click();
+  await page.getByRole('button',{name:/tactful/}).first().click();
+  await expect(page.getByRole('button',{name:'加入学习',exact:true})).toBeVisible();
+  await context.route('http://127.0.0.1:4319/sensa/**',route=>route.abort('failed'));
+  await page.getByRole('button',{name:'加入学习',exact:true}).click();
+  await expect(page.getByText('加入请求已保存在本机，等待确认。')).toBeVisible();
+  await page.reload();await expect(page.getByText(/项请求待同步/)).toBeVisible();
+  await context.unroute('http://127.0.0.1:4319/sensa/**');
+  await page.getByRole('button',{name:'检查本次结果'}).click();
+  await expect(page.getByText('学习内容已准备好',{exact:true})).toBeVisible();
+  await expect(page.getByText(/项请求待同步/)).toHaveCount(0);
+  await page.getByRole('button',{name:'选择学习内容',exact:true}).click();
+  await page.getByRole('button',{name:/tactful/}).first().click();
+  await expect(page.getByText('已在学习中',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'检查学习材料'}).click();
+  await expect(page.getByText('学习材料已读取，可以返回首页。')).toBeVisible();
+  if(process.env.SENSA_TEST_AUDIO==='1'){await expect(page.getByLabel('目标表达发音')).toBeVisible();await expect.poll(()=>page.getByLabel('目标表达发音').evaluate((node:HTMLAudioElement)=>node.readyState)).toBeGreaterThan(0);}
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:output+'/target-ready-mobile.png',fullPage:true});
+  await page.getByRole('button',{name:'标记为已会',exact:true}).click();
+  await expect(page.getByRole('button',{name:'撤销已会声明',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'撤销已会声明',exact:true}).click();
+  await expect(page.getByRole('button',{name:'标记为已会',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'回首页',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'今天的学习'})).toBeVisible();
+ }
  await page.getByRole('button',{name:'退出登录',exact:true}).click();await expect(page.getByRole('heading',{name:'欢迎来到 Sensa'})).toBeVisible();
- expect(errors).toEqual([]);console.log('M1-A Chromium smoke passed: OTP failure/success, explicit quantity, reload, offline outbox/reconnect, failed-network reload, lost accepted response/replay, logout; screenshots '+output);
+ expect(errors).toEqual([]);if(process.env.SENSA_TEST_CURRICULUM==='1')console.log('M1-B Chromium smoke passed: catalog/detail, offline add/reload, ready target, private material/audio, mastery/revoke, return home.');console.log('M1-A Chromium smoke passed: OTP failure/success, explicit quantity, reload, offline outbox/reconnect, failed-network reload, lost accepted response/replay, logout; screenshots '+output);
 } catch(error){await page.screenshot({path:output+'/failure.png',fullPage:true});console.log((await page.locator('body').innerText()).slice(0,1700));throw error;}
 finally{await browser.close();}

@@ -52,11 +52,12 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | Accepted M0-3 blueprint | [`m0-3-migration-blueprint.md`](m0-3-migration-blueprint.md) | 代码/SQL差异、目标目录、所有权、增量迁移和Supabase适配检查点 |
 | M1 execution input | [`m0-3-delivery-plan.md`](m0-3-delivery-plan.md) | M1纵向任务所有权、20个验收向量、预算与M0-3设计验收记录 |
 | M1-A local implementation | [`m1-a-account-handoff.md`](m1-a-account-handoff.md) | 登录、数量、空首页纵切的实现范围、本地测试、运行步骤与托管验收缺口 |
+| M1-B local implementation | [`m1-b-target-handoff.md`](m1-b-target-handoff.md) | 目录、加入、准备、私有材料与已会声明的本地纵切；DeepSeek/edge-tts 实际小样本与待验收边界 |
 | Active roadmap | [`production-migration-plan.md`](production-migration-plan.md) | M0–M5 生产化路线图：正式产品与消费契约、生产闭环、恢复与数据控制、受邀发布和用户验证；含依赖、验收门与当前待办 |
 | Current working agreement | [`development-workflow.md`](development-workflow.md) | 可调整的开发方式：全局结构蓝图、owner 参与前端确认、消费契约、主代理直接实现与端到端验收；不替代领域或路线图 |
 | Active decomposition | [`learning-extensibility-architecture.md`](learning-extensibility-architecture.md) | `web-next` 学习扩展性的实现 seam；把领域已有的显式 retention scope 扩展规定落到实现层，不新增领域定义 |
 
-当前路线图 M0 设计已验收，M0-1/2/3 产物齐备，M1-A 本地纵切已验证、托管验收待执行，近期里程碑是 React Web + 浏览器采集插件的小规模
+当前路线图 M0 设计已验收，M0-1/2/3 产物齐备，M1-A/B 本地纵切已验证、托管验收待执行，近期里程碑是 React Web + 浏览器采集插件的小规模
 受邀测试版。领域能力、原型中已经验证的能力和首轮生产交付范围分别管理，不能从原型菜单
 或完整领域目录推导上线清单。
 

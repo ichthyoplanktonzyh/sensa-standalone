@@ -1,6 +1,6 @@
 # M0-3：M1 施工任务与合同验收
 
-> 日期：2026-09-07；状态：设计交付；M1-A 本地实施与验证见 [交付记录](m1-a-account-handoff.md)
+> 日期：2026-09-07；状态：设计交付；M1-A/B 本地实施见 [A 记录](m1-a-account-handoff.md)、[B 记录](m1-b-target-handoff.md)
 > [消费合同](m0-3-consumer-contract.md)固定接口行为；[迁移蓝图](m0-3-migration-blueprint.md)固定所有权。
 > 本表细化现有[路线图](production-migration-plan.md)的M1，不新增平行里程碑。
 

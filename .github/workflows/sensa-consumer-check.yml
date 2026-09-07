@@ -43,10 +43,14 @@ jobs:
           await client.query("CREATE ROLE sensa_ci_test LOGIN PASSWORD 'local-test-only'; GRANT backend_app TO sensa_ci_test; GRANT INSERT, UPDATE ON sensa_consumer.invitations TO sensa_ci_test;");
           await client.end();
           JS
-      - run: npm run sensa:consumer-account-smoke
+      - name: Seed isolated curriculum fixtures
+        run: |
+          node --import tsx scripts/support/consumerTargetFixture.mts --write
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/sensa-m1b-fixture.sql
+      - run: npm run sensa:consumer-target-smoke
         env:
           SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci
       - run: npm run sensa:edge-check
-      - run: deno run --allow-env --allow-net --allow-read --allow-sys --config supabase/functions/sensa-api/deno.json scripts/sensaConsumerAccountSmoke.mts
+      - run: deno run --allow-env --allow-net --allow-read --allow-sys --config supabase/functions/sensa-api/deno.json scripts/sensaConsumerAccountSmoke.mts --targets
         env:
           SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci
