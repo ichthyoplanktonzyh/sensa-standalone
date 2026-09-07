@@ -351,3 +351,10 @@ operation_id_reuse；合法后续调整应使用C02、新operationId及最新pla
 JSON payload整数、UUID、版本、timezone以及Operation字段均由严格schema验证；未知字段、
 不存在kind、非法依赖环和超过批量/体积限制在执行前拒绝。batch中的replicaId必须等于信封，
 installation必须属于该replica。partial accepted不重发新ID，按每条result收敛。
+
+
+## M1-C 可执行合同记录（2026-09-07）
+
+首学子集已按本合同落地，具体 schema、统一 runtime 结果外形和新增时钟字段见
+[M1-C 交付记录](m1-c-initial-handoff.md)。其可执行版本为 `consumer-initial-v1`；
+Review/Relearning/Check-in 仍按后续切片实现，不从首学成功推断这些操作已支持。

@@ -20,6 +20,10 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       VITE_SENSA_MODE: production
+      # Compile the authenticated UI too; these are synthetic loopback test values.
+      VITE_SUPABASE_URL: http://127.0.0.1:4319
+      VITE_SUPABASE_PUBLISHABLE_KEY: local-browser-test-key
+      VITE_SENSA_API_URL: http://127.0.0.1:4319
       DATABASE_URL: postgresql://postgres:local-ci-only@127.0.0.1:5432/sensa_m1a_ci
     steps:
       - uses: actions/checkout@v4
@@ -47,10 +51,10 @@ jobs:
         run: |
           node --import tsx scripts/support/consumerTargetFixture.mts --write
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/sensa-m1b-fixture.sql
-      - run: npm run sensa:consumer-target-smoke
+      - run: npm run sensa:consumer-initial-smoke
         env:
           SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci
       - run: npm run sensa:edge-check
-      - run: deno run --allow-env --allow-net --allow-read --allow-sys --config supabase/functions/sensa-api/deno.json scripts/sensaConsumerAccountSmoke.mts --targets
+      - run: deno run --allow-env --allow-net --allow-read --allow-sys --config supabase/functions/sensa-api/deno.json scripts/sensaConsumerAccountSmoke.mts --targets --initial
         env:
           SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci

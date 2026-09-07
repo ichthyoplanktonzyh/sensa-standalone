@@ -1,9 +1,11 @@
+import {InitialLearning} from './InitialLearning';
+import {queueRuntimeCommand,queueRunAction,useLatestRunProgress} from '../data/replica/initialRuntime';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TargetLibrary } from './TargetLibrary';
 import type { AccountContext } from '@sensa/contracts/sensa';
 import { WebShell } from '../experience/ui/WebShell';
 import { LearningSetupFrame, setupButton, setupPrimary } from '../experience/components/learning/LearningSetupFrame';
-import { auth,cachedAccount,ConsumerClientError,initializeAccount,revokeSession,syncAccount } from '../data/consumer/client';
+import { auth,cachedAccount,ConsumerClientError,initializeAccount,revokeSession,syncAccount,cacheRunMaterial } from '../data/consumer/client';
 import { loadAccountReplica,queueQuantity,queueTarget,queueMastery } from '../data/replica/accountStore';
 import type { AccountReplica } from '../data/replica/accountStore';
 
@@ -14,6 +16,7 @@ const message=(error:unknown)=> {
     if(error.code==='auth_not_configured')return '登录服务暂时不可用，请稍后重试。';
     if(error.status===401)return '登录已过期，请重新登录。你的本机记录仍然保留。';
   }
+  if(error instanceof Error&&/[\u4e00-\u9fff]/u.test(error.message))return error.message;
   return navigator.onLine?'暂时无法完成，请重试。已保存的本机记录仍然保留。':'当前离线，已保存在本机的记录会在联网后同步。';
 };
 
@@ -24,6 +27,7 @@ export default function AccountRoot(){
   const [email,setEmail]=useState('');const [code,setCode]=useState('');const [sent,setSent]=useState(false);
   const [retryAt,setRetryAt]=useState(0);const [now,setNow]=useState(Date.now());
   const [quantity,setQuantity]=useState<(typeof choices)[number]>(5);const [settings,setSettings]=useState(false);
+  const [runId,setRunId]=useState<string|null>(null);
   const [current,setCurrent]=useState('s-home');const generation=useRef(0);
   const recover=useCallback(async()=>{
     if(!auth){setBoot(false);return;}
@@ -70,6 +74,28 @@ export default function AccountRoot(){
     try{const synced=await syncAccount(account);setReplica(synced);setSettings(false);setNotice(synced.outbox.some(x=>x.state==='retained')?'数量已在另一处更新。已保留你的选择，请查看最新设置后重新确认。':'');}
     catch(e){setNotice(message(e));}
   }
+  async function startLearning(next=false){
+    if(!account)return;
+    let state=await loadAccountReplica(account);
+    if(!navigator.onLine){const active=Object.values(state.runs).find(r=>r.status==='active');if(!active)throw new Error('请联网开始学习');setReplica(state);setRunId(active.id);return;}
+    state=await syncAccount(account);setReplica(state);
+    if(state.outbox.some(x=>x.state==='pending')){setNotice('请先检查本次结果。');return;}
+    state=await queueRuntimeCommand(account,next?'activity.next':'activity.start_or_resume');setReplica(state);
+    state=await syncAccount(account);setReplica(state);
+    const run=state.activity?.runId?state.runs[state.activity.runId]:null;
+    if(run){setRunId(run.id);if(!state.materials[run.materializationId]){state=await cacheRunMaterial(account,run);setReplica(state);}}
+    else {setRunId(null);setNotice(state.plan?.newRemaining===0?'今天的新学数量已达到上限。':'目前没有可开始的新内容。可以选择其他学习目标。');}
+  }
+  async function pauseLearning(){
+    if(!account)return;setReplica(await queueRuntimeCommand(account,'activity.pause'));setRunId(null);
+    try{setReplica(await syncAccount(account));}catch(e){setNotice(message(e));}
+  }
+  async function checkLearning(){
+    if(!account)return;const state=await syncAccount(account);setReplica(state);
+    const run=runId?state.runs[runId]:null;if(run?.completion)return;
+    if(runId)setReplica(await useLatestRunProgress(account,runId));
+    await startLearning();
+  }
   const pending=replica?.outbox.filter(x=>x.state==='pending').length??0;
   const retained=replica?.outbox.filter(x=>x.state==='retained').length??0;
   const alert=notice?<p role="status" className="my-4 rounded-xl bg-[#edf0f7] p-4 text-sm leading-6">{notice}</p>:null;
@@ -95,15 +121,17 @@ export default function AccountRoot(){
       {(pending>0||!replica?.replicaId)&&<button className={setupButton} onClick={()=>void perform(recover)}>检查同步结果</button>}
     </div>
   </LearningSetupFrame>;
+  if(runId&&replica.runs[runId])return <InitialLearning replica={replica} run={replica.runs[runId]!} busy={busy} notice={notice} onAction={action=>void perform(async()=>{const saved=await queueRunAction(account,runId,action);setReplica(saved);setBusy(false);try{setReplica(await syncAccount(account));}catch(e){setNotice(message(e));}})} onPause={()=>void perform(pauseLearning)} onCheck={()=>void perform(checkLearning)} onNext={()=>void perform(()=>startLearning(true))} onHome={()=>{setRunId(null);setCurrent('s-home');}}/>;
   return <WebShell current={current} focused={false} onNavigate={setCurrent} availableSections={['s-home','s-content','s-study']}>
     <section id={current} className="screen active absolute inset-0 overflow-y-auto p-6 sm:p-10">
       <div className="mx-auto max-w-3xl space-y-6"><h1 className="text-3xl font-semibold">{current==='s-home'?'今天的学习':current==='s-study'?'我的学习':current==='s-content'?'我的内容':current==='s-profile'?'账号与设置':'自由练习'}</h1>
         {alert}{pending>0&&<div role="status" className="rounded-2xl bg-[#edf0f7] p-5">有 {pending} 项请求待同步。<button className={setupButton} onClick={()=>void perform(recover)}>检查本次结果</button></div>}
-        {retained>0&&<details><summary className="cursor-pointer py-3">有 {retained} 项未接受的请求，查看原选择</summary><ul>{replica.outbox.filter(x=>x.state==='retained').map(x=><li key={x.operation.operationId} className="py-2 text-sm">{'dailyNewLimit' in x.operation.payload?`每日 ${x.operation.payload.dailyNewLimit} 个`:'目标加入或准备请求'}：未被接受。请查看最新状态后重新确认。</li>)}</ul></details>}
+        {retained>0&&<details><summary className="cursor-pointer py-3">有 {retained} 项未接受的请求，查看原选择</summary><ul>{replica.outbox.filter(x=>x.state==='retained').map(x=><li key={x.operation.operationId} className="py-2 text-sm">{'dailyNewLimit' in x.operation.payload?`每日 ${x.operation.payload.dailyNewLimit} 个`:x.operation.kind==='run.record_action'?`学习回答：${x.operation.payload.action.kind==='reveal'?'查看表达':x.operation.payload.action.rating==='again'?'没想起':x.operation.payload.action.rating==='hard'?'有点困难':'想起来了'}`:'学习或目标请求'}：未被接受。请查看最新状态后重新确认。</li>)}</ul></details>}
+        {current==='s-home'&&<div className="rounded-2xl border p-6 space-y-4"><p>今天已开始 {replica.plan?.newStartedToday??0} 个新目标</p><button className={setupPrimary} disabled={busy} onClick={()=>void perform(()=>startLearning())}>{Object.values(replica.runs).some(r=>r.status==='active')?'继续本次学习':'开始学习'}</button></div>}
         {current==='s-content'?<TargetLibrary account={account} replica={replica} onMastery={async(target)=>{setReplica(await queueMastery(account,target));setReplica(await syncAccount(account));}} onHome={()=>setCurrent('s-home')} onSubmit={async(candidate,retry)=>{const saved=await queueTarget(account,candidate,retry);setReplica(saved);try{setReplica(await syncAccount(account));}catch(e){setNotice(message(e));}}}/>:<>
         <div className="rounded-2xl border border-[#e2e6ef] bg-white p-6"><p className="text-sm text-[#68748d]">每日新学上限</p><p className="my-3 text-4xl font-semibold">{replica.plan!.dailyNewLimit}<span className="ml-2 text-base font-normal">个</span></p><button className={setupButton} onClick={()=>setSettings(true)}>修改数量</button></div>
         <div className="rounded-2xl border border-[#e2e6ef] p-6 space-y-4"><h2 className="text-xl">{Object.keys(replica.targets).length?'你的学习目标':'还没有学习目标'}</h2>
-          {Object.values(replica.targets).map(target=><div key={target.learningTarget!.learningTargetId} className="border-b py-3"><p className="font-semibold">{target.candidate.expression}</p><p className="my-2 text-[#68748d]">{target.candidate.meaning}</p><p className="text-sm">{target.declaredMastery.active?'已声明会用':target.plan?.readiness==='ready'?'学习内容已准备好':target.plan?.readiness==='preparing'?'学习内容准备中':'暂时无法准备，目标已保留'}</p></div>)}
+          {Object.values(replica.targets).map(target=><div key={target.learningTarget!.learningTargetId} className="border-b py-3"><p className="font-semibold">{target.candidate.expression}</p><p className="my-2 text-[#68748d]">{target.candidate.meaning}</p><p className="text-sm">{target.declaredMastery.active?'已声明会用':target.phase==='retaining'?'已完成首次学习，等待复习':target.phase==='acquiring'?'首次学习进行中':target.plan?.readiness==='ready'?'学习内容已准备好':target.plan?.readiness==='preparing'?'学习内容准备中':'暂时无法准备，目标已保留'}</p></div>)}
           <button className={setupPrimary} onClick={()=>setCurrent('s-content')}>选择学习内容</button>
         </div></>}
         <button className={setupButton} disabled={busy||pending>0} onClick={()=>void perform(async()=>{await revokeSession();setAccount(null);setReplica(null);setSent(false);setCode('');})}>退出登录</button>

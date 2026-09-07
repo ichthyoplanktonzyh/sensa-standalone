@@ -590,6 +590,9 @@ function buildShortTermSchedule(
   intervalSeed: string,
 ): ReviewSchedule {
   const grade = mapRatingToFsrsGrade(rating);
+  if (getStepsForState(settings, card.fsrsCardState).length === 0) {
+    return buildGraduatedReviewSchedule(nextMemoryState, now, reps, lapses, settings, elapsedDays, intervalSeed);
+  }
   const learningStep = getLearningStepResult(settings, card, grade);
   if (learningStep.scheduledMinutes === null) {
     return buildGraduatedReviewSchedule(

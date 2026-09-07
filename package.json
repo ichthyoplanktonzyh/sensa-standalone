@@ -56,6 +56,7 @@
     "sensa:consumer-account-smoke": "node --import tsx scripts/sensaConsumerAccountSmoke.mts",
     "sensa:consumer-browser-smoke": "node --import tsx scripts/sensaConsumerBrowserSmoke.mts",
     "sensa:edge-check": "deno check --config supabase/functions/sensa-api/deno.json supabase/functions/sensa-api/index.ts",
+    "sensa:consumer-initial-smoke": "node --import tsx scripts/sensaConsumerAccountSmoke.mts --targets --initial",
     "sensa:consumer-target-smoke": "node --import tsx scripts/sensaConsumerAccountSmoke.mts --targets"
   },
   "engines": {

@@ -22,7 +22,7 @@ export async function fixtureSql(){
  }
  sensaLightweightInitialMaterializationContentSchema.parse(content);
  const commands=['BEGIN;',mediaSql];
- for(const n of [1,2]){
+ for(const n of [1,2,3,4,5,6,7]){
   commands.push(`INSERT INTO sensa.senses(sense_id,sense_key) VALUES(${quote(id(100+n))},${quote('m1b.synthetic.tactful.'+n)}) ON CONFLICT DO NOTHING;`);
   commands.push(`INSERT INTO sensa.sense_versions(sense_version_id,sense_id,version_number,version_origin,semantic_policy_version,semantic_spec,semantic_provenance,semantic_review_status) VALUES(${quote(id(110+n))},${quote(id(100+n))},1,'editorial','synthetic-v1',${quote({coreMeaningFocus:'表达真实意见时照顾对方感受，避免让对方难堪。'})},'{}','reviewed') ON CONFLICT DO NOTHING;`);
   commands.push(`INSERT INTO sensa.expressions(expression_id,expression_type,language_tag) VALUES(${quote(id(120+n))},'word','en') ON CONFLICT DO NOTHING;`);
@@ -30,8 +30,8 @@ export async function fixtureSql(){
   commands.push(`INSERT INTO sensa.sense_expression_bindings(sense_expression_binding_id,sense_id,expression_id,relation) VALUES(${quote(id(140+n))},${quote(id(100+n))},${quote(id(120+n))},'realizes') ON CONFLICT DO NOTHING;`);
   commands.push(`INSERT INTO sensa.sense_expression_binding_versions(binding_version_id,sense_expression_binding_id,version_number,sense_version_id,expression_version_id,semantic_coverage,semantic_provenance,semantic_review_status) VALUES(${quote(id(150+n))},${quote(id(140+n))},1,${quote(id(110+n))},${quote(id(130+n))},'exact','{}','reviewed') ON CONFLICT DO NOTHING;`);
  }
- for(let n=1;n<=5;n++){
-  const v=n===3?2:1;const payload=n===3?{}:content;
+ for(let n=1;n<=10;n++){
+  const v=n>=6?n-3:n===3?2:1;const payload=n===3?{}:content;
   const source={kind:n===2?'book':'catalog',id:n===2?'synthetic-book':'synthetic-catalog',version:'v1'};
   commands.push(`INSERT INTO sensa_consumer.catalog_candidates(id,sense_id,sense_version_id,binding_id,binding_version_id,expression,meaning,target_language,familiar_language,learner_locale,source,admission,content,content_digest,review_reference) VALUES(${[id(n),id(100+v),id(110+v),id(140+v),id(n===4?152:150+v),'tactful','表达真实意见时照顾对方感受，避免让对方难堪。','en','zh-CN','zh-CN',source,n===5?'reference_only':'available',payload,hash(payload),'synthetic-test-only-not-production-review'].map(quote).join(',')}) ON CONFLICT DO NOTHING;`);
  }

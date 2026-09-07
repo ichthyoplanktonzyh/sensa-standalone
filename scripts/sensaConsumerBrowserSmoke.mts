@@ -77,6 +77,45 @@ try {
   await page.getByRole('button',{name:'回首页',exact:true}).click();
   await expect(page.getByRole('heading',{name:'今天的学习'})).toBeVisible();
  }
+ if(process.env.SENSA_TEST_INITIAL==='1'){
+  await page.getByRole('button',{name:'开始学习',exact:true}).click();
+  await expect(page.getByRole('button',{name:'查看表达',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'tactful',exact:true})).toHaveCount(0);
+  await page.evaluate(()=>{const original=IDBDatabase.prototype.transaction;IDBDatabase.prototype.transaction=function(...args:Parameters<IDBDatabase['transaction']>){IDBDatabase.prototype.transaction=original;throw new DOMException('Injected no space','QuotaExceededError');};});
+  await page.getByRole('button',{name:'查看表达',exact:true}).click();
+  await expect(page.getByRole('button',{name:'查看表达',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'想起来了',exact:true})).toHaveCount(0);
+  let releasePush!:()=>void,handledPush!:()=>void;const heldPush=new Promise<void>(resolve=>{releasePush=resolve;}),pushHandled=new Promise<void>(resolve=>{handledPush=resolve;});
+  await page.route('http://127.0.0.1:4319/sensa/sync/push',async route=>{await heldPush;await route.abort('failed');handledPush();});
+  await page.getByRole('button',{name:'查看表达',exact:true}).click();await expect(page.getByRole('heading',{name:'tactful',exact:true})).toBeVisible();
+  // The network is deliberately unresolved: local durability alone permits pause.
+  await page.getByRole('button',{name:'暂停并回首页',exact:true}).click();await expect(page.getByRole('heading',{name:'今天的学习'})).toBeVisible();
+  releasePush();await pushHandled;await page.unroute('http://127.0.0.1:4319/sensa/sync/push');await context.setOffline(true);
+  await page.getByRole('button',{name:'继续本次学习',exact:true}).click();await expect(page.getByRole('button',{name:'没想起',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'没想起',exact:true}).click();await expect(page.getByRole('button',{name:'查看表达',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'查看表达',exact:true}).click();await expect(page.getByRole('button',{name:'想起来了',exact:true})).toBeVisible();
+  await page.screenshot({path:output+'/initial-offline-reveal.png',fullPage:true});
+  await page.getByRole('button',{name:'暂停并回首页',exact:true}).click();await expect(page.getByRole('heading',{name:'今天的学习'})).toBeVisible();
+  await page.getByRole('button',{name:'继续本次学习',exact:true}).click();await expect(page.getByRole('button',{name:'想起来了',exact:true})).toBeVisible();
+  await context.route('http://127.0.0.1:4319/sensa/**',route=>route.abort('failed'));
+  await context.setOffline(false);await page.reload();await expect(page.getByRole('heading',{name:'今天的学习'})).toBeVisible();
+  await context.setOffline(true);await page.getByRole('button',{name:'继续本次学习',exact:true}).click();await expect(page.getByRole('heading',{name:'请联网恢复学习'})).toBeVisible();
+  await context.unroute('http://127.0.0.1:4319/sensa/**');await context.setOffline(false);
+  await page.getByRole('button',{name:'联网恢复',exact:true}).click();await expect(page.getByRole('button',{name:'想起来了',exact:true})).toBeVisible();
+  if(process.env.SENSA_TEST_AUDIO==='1'){await expect(page.getByLabel('学习表达发音')).toBeVisible();await expect.poll(()=>page.getByLabel('学习表达发音').evaluate((node:HTMLAudioElement)=>node.readyState)).toBeGreaterThan(0);}
+  await page.evaluate(()=>{(window as any).__sensaOriginalNow=Date.now;Date.now=()=> (window as any).__sensaOriginalNow()-600000;});
+  await page.getByRole('button',{name:'想起来了',exact:true}).click();await expect(page.getByRole('heading',{name:'请联网恢复学习'})).toBeVisible();await expect(page.getByRole('button',{name:'联网恢复',exact:true})).toBeEnabled();
+  await page.evaluate(()=>{Date.now=(window as any).__sensaOriginalNow;delete (window as any).__sensaOriginalNow;});
+  await page.getByRole('button',{name:'联网恢复',exact:true}).click();await expect(page.getByRole('button',{name:'想起来了',exact:true})).toBeVisible();
+  await page.route('http://127.0.0.1:4319/sensa/sync/push',async route=>{const response=await route.fetch();expect(response.ok()).toBe(true);await route.abort('failed');});
+  await page.getByRole('button',{name:'想起来了',exact:true}).click();await expect(page.getByRole('heading',{name:'回答已保存在本机'})).toBeVisible();await expect(page.getByRole('heading',{name:'已完成首次学习'})).toHaveCount(0);
+  await page.screenshot({path:output+'/initial-pending-result.png',fullPage:true});
+  await page.unroute('http://127.0.0.1:4319/sensa/sync/push');await page.getByRole('button',{name:'检查本次结果',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'已完成首次学习'})).toBeVisible();await expect(page.getByText(/下次复习：/)).toBeVisible();
+  await page.screenshot({path:output+'/initial-completed.png',fullPage:true});
+  await page.getByRole('button',{name:'回首页',exact:true}).click();await expect(page.getByText('今天已开始 1 个新目标')).toBeVisible();
+  await page.reload();await expect(page.getByText('已完成首次学习，等待复习')).toBeVisible();await expect(page.getByText(/项请求待同步/)).toHaveCount(0);
+  console.log('M1-C Chromium passed: no answer leak, IDB failure does not advance, offline multi-step/pause/resume, reload clock guard, audio, lost completion response/replay, authoritative due time.');
+ }
  await page.getByRole('button',{name:'退出登录',exact:true}).click();await expect(page.getByRole('heading',{name:'欢迎来到 Sensa'})).toBeVisible();
  expect(errors).toEqual([]);if(process.env.SENSA_TEST_CURRICULUM==='1')console.log('M1-B Chromium smoke passed: catalog/detail, offline add/reload, ready target, private material/audio, mastery/revoke, return home.');console.log('M1-A Chromium smoke passed: OTP failure/success, explicit quantity, reload, offline outbox/reconnect, failed-network reload, lost accepted response/replay, logout; screenshots '+output);
 } catch(error){await page.screenshot({path:output+'/failure.png',fullPage:true});console.log((await page.locator('body').innerText()).slice(0,1700));throw error;}

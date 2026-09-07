@@ -26,7 +26,7 @@ export function TargetLibrary({account,replica,onSubmit,onHome,onMastery}:{accou
   {status}{audio&&<audio aria-label="目标表达发音" controls src={audio} className="max-w-full"/>}{pending&&<p role="status">加入请求已保存在本机，等待确认。</p>}
   {view.membership?<div className="rounded-2xl border p-5 space-y-4"><p>已在学习中</p>
    {view.declaredMastery.active&&<p>你已将此目标标记为已会。可以撤销声明，恢复学习安排。</p>}
-   <button className={setupButton} disabled={busy||pending} onClick={()=>{setBusy(true);void onMastery(view).catch(()=>setNotice('声明尚未确认，请检查同步结果。')).finally(()=>setBusy(false));}}>{view.declaredMastery.active?'撤销已会声明':'标记为已会'}</button>
+   <button className={setupButton} disabled={busy||pending||view.phase==='acquiring'} onClick={()=>{setBusy(true);void onMastery(view).catch(()=>setNotice('声明尚未确认，请检查同步结果。')).finally(()=>setBusy(false));}}>{view.declaredMastery.active?'撤销已会声明':'标记为已会'}</button>
    <h3 className="text-xl">{view.plan?.readiness==='ready'?'学习内容已准备好':view.plan?.readiness==='preparing'?'学习内容准备中':'这项内容暂时无法用于轻量学习'}</h3>
    {view.plan?.readiness==='blocked'&&<p>{view.plan.reason==='media_missing'?'还需要可用的音频材料。目标已保留。':'材料尚未通过校验。目标已保留，可先选择其他内容。'}</p>}
    {view.plan?.retryAllowed&&<button className={setupButton} disabled={busy||pending} onClick={()=>void submit(true)}>重试准备</button>}
