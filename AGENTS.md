@@ -53,7 +53,7 @@ blanket unit-test suites. Run `npm run typecheck`, `npm run build` and
 `npm run lint` before handoff. Python content tools must at least compile and
 run a no-cost validator smoke. Never call paid LLM/TTS during validation.
 
-AWS/Neon/R2/Cloudflare deployment is CI/CD work. Do not deploy from a local
+All provider deployment is CI/CD work. Do not deploy from a local
 shell. Keep `.env`, generated content data and runtime media out of Git. Public
-production must replace local auth and local media with Cognito/R2 and add
+production must replace local auth and local media with Supabase Auth/Storage and add
 monitoring/telemetry before launch.

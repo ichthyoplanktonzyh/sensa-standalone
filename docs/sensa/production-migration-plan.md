@@ -3,7 +3,7 @@
 > 状态：Active roadmap\
 > 更新日期：2026-09-07\
 > 近期目标：React Web + 浏览器采集插件的小规模受邀测试版\
-> 当前工作：M0 进行中；M0-1 基线已记录，M0 整体验收待完成\
+> 当前工作：M0 设计已验收；M0-1/2/3 已完成，下一步 M1-A\
 > 阶段与范围：[current-stage.md](current-stage.md)
 
 ## 1. 路线图职责与交付原则
@@ -80,7 +80,7 @@ M0 验收后，首条已确认用例进入 M1 的生产集成方式；未确认�
 M0-1 的已确认产物是 [首轮产品清单与状态矩阵](first-round-product-baseline.md)，包括九个
 能力区及 Web/插件状态；9 月 7 日已同步四类首发允许项，允许开放不等于已生产验收。
 [首条登录/学习状态规格](m0-2-first-learning-state-spec.md)是 M0-2 评审产物，
-新增交互待 owner 确认，不是 M0-3 合同或 M1 真实接入。M0-2 同时细化插件捕获、原位确认、收件箱交接及安装更新体验；
+体验规格已确认完成，不是 M0-3 合同或 M1 真实接入。M0-2 同时细化插件捕获、原位确认、收件箱交接及安装更新体验；
 M0-3 记录插件身份、Intake、幂等和数据控制需求，完整插件提交合同在 M2 开工前验收。
 
 ## 4. M1：首条生产学习闭环
@@ -94,7 +94,7 @@ Review → 必要时 Relearning → 再次进入仍可继续。
 
 交付物：
 
-- Cognito 认证、Account/Learner 绑定、LearnerScope 授权、当前 Account Session 与访问隔离。
+- Supabase Auth 认证、Account/Learner 绑定、LearnerScope 授权、当前 Account Session 与访问隔离。
   本地 auth 仅用于受限开发，不计入真实身份验收。
 - 新版本 Target、Entry Provenance、Policy Assignment/Effective/Committed Policy、Resolved
   Learning Plan/readiness、Materialization、Protocol Run/Step Instance、Observation/Transition、
@@ -181,13 +181,36 @@ build/smoke 不得调用付费 LLM/TTS。
 未解决的数据丢失、串号、重复调度、孤立状态或删除屏障问题为零。自动时间测试不能替代后续
 真实用户持续使用，但可以覆盖等待时间和故障边界。
 
+### 首版服务商选型（2026-09-07 owner 已确认）
+
+首版以简单、低成本、小规模受邀用户为优先：统一采用 Supabase Postgres、Auth 和 Storage；
+Web 前端采用 Cloudflare 静态托管，验证码邮件通过 Resend SMTP 发送。AWS/Cognito、Neon
+和 R2 不再是首版部署前提。此前适配器和基础设施文件属于实现现状，不代表新选型已接通。
+
+业务 API 优先验证 Supabase Edge Functions：检查现有 Node/Hono/pg、共享包、事务与连接池、
+执行时限和后台任务的兼容性；验证失败时评估独立 API 托管并记录理由，不能为了集中服务商
+跳过学习与同步合同。Postgres 权威存储、LearnerScope、客户端本地 outbox、服务端派生事实及
+FSRS 所有权保持不变；Supabase 自动数据 API/Realtime 不替代 Sensa sync 协议。
+
+开发和有限验证可使用 Free；正式受邀环境按 Pro 基础档每月 25 美元起规划。额外项目、升级
+计算资源、超额用量、邮件、域名及 AI/TTS 另计，采购时复核价格。设置预算监控、调用限额及
+重复请求去重；套餐认证用户额度不是业务并发容量承诺。环境隔离不得为节省项目费而取消。
+
+增长时先按监控与负载证据优化查询、连接池和计算配置；媒体流量或任务执行成为实际瓶颈后
+再评估拆分存储或任务服务，不预先建设多云架构。上线前验证目标用户地区的可达性、邮件
+送达、备份恢复及权限隔离。选型确认不构成开通、迁移或生产验收证据。
+
+参考：[Supabase 价格](https://supabase.com/pricing)、
+[Edge Functions 限制](https://supabase.com/docs/guides/functions/limits)、
+[Resend SMTP](https://resend.com/docs/send-with-supabase-smtp)。
+
 ## 7. M4：受邀测试环境与发布验收
 
 **目标**：通过可重复的 CI/CD 发布，使已完成的生产闭环可被受邀用户安全、持续地使用。
 
 交付物：
 
-- Cloudflare Web/API 运行适配与 Neon Postgres、R2 私有媒体、Cognito 真实接入；在部署前
+- Cloudflare Web 托管与 Supabase Postgres/Auth/Storage、Resend SMTP 真实接入；在部署前
   验证现有 Node/Hono/pg 执行方式与目标环境的适配、连接和限制，不能只部署本地构建产物。
 - CI/CD 完成构建、检查、迁移、部署和 smoke；dev/test 与受邀环境隔离，secrets 不进入仓库。
   配置 TLS、CORS、受邀准入、rate limit、provider 预算、媒体授权/digest/license/cache/range。
@@ -209,7 +232,7 @@ build/smoke 不得调用付费 LLM/TTS。
 开放与生产验收分列记录。正式 Web 性能和可访问性须达到 M0 确认后的预算与标准。
 
 只有这些条件通过后，才记录版本、环境、证据和已知限制并开始受邀测试。此门不等于公开
-V1 发布完成。AWS/Neon/R2/Cloudflare 资源与部署变更一律走 CI/CD，不从本地 shell 部署。
+V1 发布完成。所有服务商的资源与部署变更一律走 CI/CD，不从本地 shell 部署。
 
 ## 8. M5：真实用户验证与后续版本
 
@@ -262,17 +285,24 @@ implementation worker；同一文件默认只有一个实施 writer。
 - [x] **M0-1：首轮产品清单与状态矩阵。** Owner 确认八个能力区与通用状态，并加入浏览器
   插件；已写入 [产品基线](first-round-product-baseline.md) 并同步 PRD。插件支持范围和交互
   细节作为实施默认进入 M0-2 走查，不计为已完成的浏览器验证。
-- [ ] **M0-2：首条生产旅程的正式 UI 规格（进行中）。**
-  已整理 [登录与首条轻量学习状态规格](m0-2-first-learning-state-spec.md)，基于原工作树当前
-  apps/web 重构，复用已确认 UI；Q2 首次确认数量、Q3 回首页开始、Q5 离线继续已授权且已下载材料的学习（不离线新建）已确认，其余问题与子项待 owner 裁决，插件捕获/原位确认/Web 交接/安装更新
-  规格仍待完成。本稿不计为 M0-2 整体通过。继续确认基础组件、可访问性和性能
-  预算；覆盖 M1 的登录、选择目标、学习、完成及再次进入，并明确插件采集/确认/交接与分发体验。
-  与 owner 确认相关功能、主要/异常状态与恢复行为，保存对应界面产物和确认范围。
-- [ ] **M0-3：M1 消费契约与迁移方案。** 完成 Query/Command/Projection/error/revision/Sync
-  合同，逐项处理 v2 Target 与旧 SQL/API 的差异，记录插件身份/Intake 消费需求，形成可交给
-  implementation worker 的任务；交付全局模块/目录与依赖蓝图，并细化首条已确认用例的
-  文件职责、接口、关键数据规则与端到端验收依据。
-- [ ] **M0 验收与 M1 开工。** 附上前述产物与检查证据，再进入首条生产集成。
+- [x] **M0-2：首条生产旅程与插件正式 UI 状态规格（已验收：规格）。**
+  产品选择全部确认；[首条规格](m0-2-first-learning-state-spec.md)覆盖登录/数量/准备/首学/
+  复习/重学/汇总/签到和通用恢复，[插件规格](m0-2-browser-capture-state-spec.md)覆盖浮层/
+  快慢轨/账号交接/权限/安装更新。已补齐失败动作、汇总计数、状态结构示意、组件和初始
+  工程预算；复用当前 Web 界面，已同步 stage/PRD/baseline/index。
+  文档验收不代表界面新增状态已实现或浏览器、Supabase、同步和性能实测通过。
+- [x] **M0-3：M1 消费契约与迁移方案（已验收：设计合同）。**
+  [消费合同](m0-3-consumer-contract.md)固定Query/Command/Projection/error/revision/Sync v3，
+  [迁移蓝图](m0-3-migration-blueprint.md)记录v2 Target/旧SQL差异、历史保留、目标目录与
+  Supabase适配；[施工验收](m0-3-delivery-plan.md)给出单writer纵切及20个关键向量。
+  根级检查和既有合同/Sync smoke通过；这些证据不表示新合同已实现。
+- [x] **M0 设计验收。** 产品范围、体验状态、消费合同与结构迁移产物齐备，没有未裁决的
+  M1产品流程问题。新wire schema、数据库迁移与运行验证在M1依序实施。
+- [ ] **M1-A：受邀登录与数量确认。** 按施工表先验证Edge适配，再接通真实账号、
+  LearnerScope、首次明确数量与空首页；仍走CI/CD部署，无付费内容生成验证。
 
 此队列只列下一批具体任务。M1 以后按退出条件拆分，不预先生成脱离已确认用例的完整横向
-任务库。M0-1 产品基线已记录；M0 整体与 M1–M5 均尚未验收。
+任务库。M0-1 产品基线已记录；M0 设计已验收；M1–M5 均尚未验收。
+
+M0-2 后续确认记录：Q1 登录体验与 Q8 签到规则已确认，详见首条规格第 12 节；真实 Supabase Auth
+验证码配置仍需核实。开始正式学习自动签到与学习结果严格分离，合同/持久化尚未接入。

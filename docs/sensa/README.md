@@ -46,12 +46,16 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | Canonical stage | [`current-stage.md`](current-stage.md) | 当前里程碑、证据级别和交付边界 |
 | Canonical product | [`product-requirements-v1.md`](product-requirements-v1.md) | V1 IA、用户旅程和交互验收 |
 | Accepted first-round scope | [`first-round-product-baseline.md`](first-round-product-baseline.md) | M0-1 首轮九个能力区、浏览器采集插件边界及产品/插件/通用状态矩阵；不替代领域与 API 合同 |
-| Draft UI/state specification | [`m0-2-first-learning-state-spec.md`](m0-2-first-learning-state-spec.md) | M0-2 登录、首次使用与轻量首学/复习/重学状态、恢复与确认清单；新增交互待 owner 确认，不替代路线图或 M0-3 合同 |
+| Completed M0-2 specification | [`m0-2-first-learning-state-spec.md`](m0-2-first-learning-state-spec.md) | M0-2 登录、首次使用与轻量首学/复习/重学状态、恢复与确认清单；体验已确认，实施待验收，不替代路线图或 M0-3 合同 |
+| Completed M0-2 plugin specification | [`m0-2-browser-capture-state-spec.md`](m0-2-browser-capture-state-spec.md) | M0-2 捕获、原位确认、Web 交接、安装更新与账号恢复状态；交互形态/渠道已确认，实际运行待验收 |
+| Accepted M0-3 consumer contract | [`m0-3-consumer-contract.md`](m0-3-consumer-contract.md) | M1 Query/Command/Projection、Sync v3、身份/版本/结果/离线/调度合同；新接口设计，尚未实现 |
+| Accepted M0-3 blueprint | [`m0-3-migration-blueprint.md`](m0-3-migration-blueprint.md) | 代码/SQL差异、目标目录、所有权、增量迁移和Supabase适配检查点 |
+| M1 execution input | [`m0-3-delivery-plan.md`](m0-3-delivery-plan.md) | M1纵向任务所有权、20个验收向量、预算与M0-3设计验收记录 |
 | Active roadmap | [`production-migration-plan.md`](production-migration-plan.md) | M0–M5 生产化路线图：正式产品与消费契约、生产闭环、恢复与数据控制、受邀发布和用户验证；含依赖、验收门与当前待办 |
 | Current working agreement | [`development-workflow.md`](development-workflow.md) | 可调整的开发方式：全局结构蓝图、owner 参与前端确认、消费契约、worker 纵向实现与端到端验收；不替代领域或路线图 |
 | Active decomposition | [`learning-extensibility-architecture.md`](learning-extensibility-architecture.md) | `web-next` 学习扩展性的实现 seam；把领域已有的显式 retention scope 扩展规定落到实现层，不新增领域定义 |
 
-当前路线图 M0 进行中，M0-1 基线已记录，近期里程碑是 React Web + 浏览器采集插件的小规模
+当前路线图 M0 设计已验收，M0-1/2/3 产物齐备，下一步 M1-A，近期里程碑是 React Web + 浏览器采集插件的小规模
 受邀测试版。领域能力、原型中已经验证的能力和首轮生产交付范围分别管理，不能从原型菜单
 或完整领域目录推导上线清单。
 

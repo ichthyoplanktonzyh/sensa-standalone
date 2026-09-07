@@ -3,7 +3,7 @@
 > 状态日期：2026-09-07\
 > 当前阶段：领域与行为原型验证后期，生产应用建设前期\
 > 下一里程碑：React Web + 浏览器采集插件的小规模受邀测试版\
-> 当前执行位置：M0 进行中；M0-1 产品基线已记录，M0-2 首条状态规格已形成评审稿，新增交互待确认\
+> 当前执行位置：M0 设计已验收；M0-1/2/3 已完成，下一步 M1-A 受邀登录与数量确认\
 > 执行路线图：[production-migration-plan.md](production-migration-plan.md)
 
 本文是项目阶段、证据级别和近期交付范围的唯一事实来源。[文档索引](README.md)列出的七份
@@ -18,7 +18,7 @@ Sensa 已具备开始生产化的领域、行为和工程基础。当前最主�
 客户端、服务端持久化与同步成为同一条真实闭环。正式 UI 需要按平台设计，消费契约、数据库
 映射、服务端业务执行及运行保障仍需建立或迁移。
 
-2026-09-07 原工作树的 apps/web 已有未提交的桌面/手机 UI 重构，
+2026-09-07 原工作树的 apps/web 桌面/手机 UI 重构已存入本地 checkpoint `5fee636e`，
 具体范围与代码观察见 [M0-2 基线说明](m0-2-first-learning-state-spec.md)。下述旧纵切仍是工程基础，
 新 UI 的 previewStorage/checkpoint 不能冒充生产 API/Sync 接入。
 
@@ -45,7 +45,7 @@ Sensa 已具备开始生产化的领域、行为和工程基础。当前最主�
 | 数据库 | 独立 baseline；0008–0010 已加入语义注册、个人语义世界、Learning/Retention Target 和 Materialization 等迁移 | 新表结构存在于仓库；本次未验证实际数据库应用状态，新 Runtime 尚未接通 |
 | API 与同步 | 旧模型的 Catalog/Planning/Encounter/Media/Sync routes，React Web IndexedDB/outbox | 旧本地纵切基础；不能直接承载新模型全部事实 |
 | 内容与 LLM | 内容编译/校验工具、版本化原型学习包、Semantic Agent 开发代理、Content Agent 与模型适配 seam | 开发接入和无成本校验已存在；持久任务、生产质量、预算与恢复闭环待实现 |
-| 运行环境 | Cognito、Neon、R2、Cloudflare 的部署方向和授权边界 | Cognito 适配器仍返回未配置；仓库尚无完整云端部署流水线及上线运行证据 |
+| 运行环境 | Supabase Postgres/Auth/Storage 为主，Cloudflare 前端托管和 Resend 邮件的已确认选型 | Cognito 适配器仍返回未配置；仓库尚无完整云端部署流水线及上线运行证据 |
 
 需要特别处理的实现差异：
 
@@ -80,7 +80,7 @@ Sensa 已具备开始生产化的领域、行为和工程基础。当前最主�
 | 能力 | 受邀测试版要求 |
 | --- | --- |
 | 客户端与语言 | 正式 React Web，适配桌面与手机浏览器；中文 familiar language、英语 target language |
-| 账号 | 真实 Cognito 认证、Account ↔ Learner 1:1、当前 Account Session、受邀访问边界与安全退出 |
+| 账号 | 真实 Supabase Auth 认证、Account ↔ Learner 1:1、当前 Account Session、受邀访问边界与安全退出 |
 | 独立学习入口 | 从最小可用的已发布 Book/Catalog 选择 stable Sense 与 expression binding；不要求先创建 Personal Meaning |
 | 个人语义入口 | 先保存 Intake/收件箱材料，按需澄清；完整 Context–Expression–Sense 经合法 Semantic Acceptance 后形成 Personal Meaning 与 Alignment，再显式加入学习 |
 | 浏览器采集插件 | 用户主动选取网页文字与上下文，预览固定来源和 occurrence；可在原位解析/确认完整意义或存入收件箱，在同账号 Web 继续并显式加入学习 |
@@ -100,7 +100,7 @@ Book/direct/personal 来源汇合到同一 Target 边界，同一学习连接不
 2026-09-07 owner 明确：首发允许开放自由练习、词典、统计和签到；允许开放不等于已生产验收，
 不自动扩展到全部 Activity、词典资源、复杂诊断或激励。保留现有笔记与场景编辑体验。
 首轮只开放真实具备资源、服务端合同和客户端支持的能力。M0-1 已记录页面职责、操作清单及
-基准状态，M0-2/M0-3 继续具体设计。首次使用不强制选词书；首次须明确确认每日新学数量后才能开始，目标就绪后回首页开始（9 月 7 日确认）；未交付主入口隐藏；签到的入口与日界/连续天数规则仍须细化，签到和练习不产生正式 Evidence、进度或调度；仅开放轻量学习时不显示无实际选择的 Policy 选择器。
+基准状态，M0-2 已补齐体验规格，M0-3 已固定消费合同设计。首次使用不强制选词书；首次须明确确认每日新学数量后才能开始，目标就绪后回首页开始（9 月 7 日确认）；未交付主入口隐藏；签到沿用我的学习按钮/日历，手动或开始正式学习触发，按账号时区去重；首版无连续天数、奖励或补签，签到和练习不产生正式 Evidence、进度或调度；仅开放轻量学习时不显示无实际选择的 Policy 选择器。
 
 ### 后续交付，不阻塞当前受邀测试版
 
@@ -137,7 +137,7 @@ commerce、admin 或考试「真题」。真实语流 YouGlish 保留在自由�
   apps/web 作为现有正式 Web 工程起点，按用例改造；web-next 保留为行为参考与回归来源。
 - 原型与 first-user 学习记录是可丢弃测试数据。迁移/重建须有明确方案，不静默重解释旧事实；
   受邀用户开始产生真实数据后，升级必须保护其历史与待同步操作。
-- AWS/Cognito、Neon、R2、Cloudflare 的资源与部署变更通过 CI/CD 交付，不从本地 shell 部署。
+- 所有服务商的资源与部署变更通过 CI/CD 交付，不从本地 shell 部署。
 
 ## 5. 验证记录与完成标准
 
@@ -163,12 +163,14 @@ commerce、admin 或考试「真题」。真实语流 YouGlish 保留在自由�
 
 ## 6. 阶段维护
 
-M0-1 产品范围与基准状态已按本轮确认记录，浏览器插件的详细交互和支持条件仍待设计验证。
-M0-2 [登录与首条轻量学习状态规格](m0-2-first-learning-state-spec.md)已形成评审稿；
-新增交互与插件捕获/原位确认/Web 交接/安装更新规格仍待收口。随后完成 M0-3 消费契约；
-M0 整体尚未验收，M1 真实接入未因本稿完成。
+M0-1 产品范围已记录；M0-2 [登录与首条轻量学习状态规格](m0-2-first-learning-state-spec.md)
+及 [插件规格](m0-2-browser-capture-state-spec.md)已完成规格验收。当前没有待 owner 裁决的
+产品范围问题；组件、异常、恢复和工程验收要求已落文档，真实浏览器/服务验证仍在后续阶段。
+M0-3 [消费合同](m0-3-consumer-contract.md)、[迁移蓝图](m0-3-migration-blueprint.md)与
+[施工验收](m0-3-delivery-plan.md)已完成设计审阅，M0 设计门已验收。下一步M1-A，
+真实Supabase/Edge、SQL迁移、Sync v3与公网验证尚未执行。
 每次里程碑验收后，同步更新本文的执行位置与证据，以及路线图状态。
 具体任务、验收记录和未解决问题由路线图追踪；本文不再累积逐日原型功能日志。
 
 2026-09-07 首条旅程离线范围确认：可继续已授权且材料已下载的学习，不离线新建学习；
-本机回答与服务端确认结果分开呈现，具体授权/版本/恢复合同在 M0-3 固定。
+本机回答与服务端确认结果分开呈现，具体授权/版本/恢复合同已在 M0-3 固定，实施待 M1。
