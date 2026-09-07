@@ -1,3 +1,4 @@
+import {runCheckInChecks} from './support/consumerCheckInChecks.mts';
 import {runRetentionChecks} from './support/consumerRetentionChecks.mts';
 import {computeReviewSchedule,createEmptyReviewableCardScheduleState,defaultWorkspaceSchedulerConfig,consumerInitialStepId} from '@sensa/learning-kernel';
 import assert from 'node:assert/strict';
@@ -18,12 +19,13 @@ if(!url || !['127.0.0.1','localhost'].includes(new URL(url).hostname) || !new UR
 const pool=new pg.Pool({connectionString:url,max:4});
 const issuer='http://127.0.0.1:4319/auth/v1';
 const keys=await generateKeyPair('ES256');const jwk=await exportJWK(keys.publicKey);jwk.kid='local-smoke';jwk.alg='ES256';
-let injectDecisionFailure=false;let injectFailure=false;let hideMedia=false;let testNow=new Date();
+let injectCheckInFailure=false;let injectDecisionFailure=false;let injectFailure=false;let hideMedia=false;let testNow=new Date();
 async function transaction<T>(work:(db:DatabaseExecutor)=>Promise<T>):Promise<T> {
   const client=await pool.connect();await client.query('BEGIN');
   try {
     const result=await work({query:async(text,params)=>{
       if(hideMedia&&text.startsWith('SELECT source_text_digest FROM sensa_consumer.published_media'))return client.query('SELECT source_text_digest FROM sensa_consumer.published_media WHERE false');
+      if(injectCheckInFailure&&text.startsWith('INSERT INTO sensa_consumer.checkins'))throw new Error('Injected check-in failure');
       if(injectDecisionFailure&&text.startsWith('INSERT INTO sensa_consumer.scheduling_decisions'))throw new Error('Injected decision failure');
       if(injectFailure&&text.startsWith('INSERT INTO sensa_consumer.operations'))throw new Error('Injected ledger failure');
       return client.query(text,params as unknown[]);
@@ -45,7 +47,7 @@ async function request(path:string,body?:unknown,bearerToken=bearer){
   return {status:response.status,body:await response.json() as any};
 }
 async function bootstrap(installationId=install,bearerToken=bearer){return (await request('/sensa/sync/bootstrap',{wireVersion:'sensa-sync-v3',installationId,replicaId:null},bearerToken)).body;}
-async function initialize(installationId=install,bearerToken=bearer){return request('/sensa/account/session',{installationId,platform:'web',timeZone:'Asia/Shanghai'},bearerToken);}
+async function initialize(installationId=install,bearerToken=bearer,clockSessionId=crypto.randomUUID()){return request('/sensa/account/session',{installationId,clockSessionId,platform:'web',timeZone:'Asia/Shanghai'},bearerToken);}
 function operation(replicaId:string,revision:string|null,quantity:number,planId?:string,installationId=install){return {
   operationId:crypto.randomUUID(),occurredAt:'2026-09-07T08:00:00.000Z',installationId,replicaId,dependsOn:[] as string[],
   kind:planId?'plan.set_quantity':'plan.confirm_quantity',payload:planId?{planId,expectedRevision:revision,dailyNewLimit:quantity}:{expectedRevision:revision,dailyNewLimit:quantity,timeZone:'Asia/Shanghai'},
@@ -207,6 +209,7 @@ if(process.argv.includes('--initial')){
  console.log('M1-C initial runtime passed: grant/clock/scope, local action protocol, fresh steps, atomic settlement, completion/handoff uniqueness, quota concurrency, next-day continuation, late upload, pause/end, private feed.');
 }
 if(process.argv.includes('--retention'))await runRetentionChecks({pool,issuer,token,initialize,bootstrap,request,push,now:()=>testNow,setNow:(at:Date)=>{testNow=at;},failDecision:(yes:boolean)=>{injectDecisionFailure=yes;}});
+if(process.argv.includes('--checkin'))await runCheckInChecks({pool,issuer,token,initialize,bootstrap,request,push,now:()=>testNow,setNow:(at:Date)=>{testNow=at;},failCheckIn:(yes:boolean)=>{injectCheckInFailure=yes;}});
 assert.equal((await request('/sensa/account/session/revoke',{operationId:crypto.randomUUID()})).status,200);
 assert.equal((await request('/sensa/account/session/revoke',{operationId:crypto.randomUUID()})).status,200);
 assert.equal((await request('/sensa/home')).status,401);
@@ -221,12 +224,15 @@ if(process.argv.includes('--serve')) {
   browserApp.route('',createConsumerRoutes({verify:createConsumerVerifier(issuer,createLocalJWKSet({keys:[jwk]})),transaction,mediaReader,clock:()=>new Date(Date.now()+browserClockOffset)}));
   // Synthetic Auth API only in this explicitly launched loopback test harness.
   // This is NOT real Supabase mail delivery and is never imported by production.
-  const browserSubject=crypto.randomUUID();await pool.query('INSERT INTO sensa_consumer.invitations(issuer,subject) VALUES($1,$2)',[issuer,browserSubject]);
-  async function session(){const sessionId=crypto.randomUUID();return {access_token:await token(browserSubject,sessionId),refresh_token:'local-only-test',token_type:'bearer',expires_in:3600,user:{id:browserSubject,aud:'authenticated',role:'authenticated',email:'test@sensa.invalid',email_confirmed_at:new Date().toISOString(),app_metadata:{provider:'email'},user_metadata:{},created_at:new Date().toISOString()}};}
+  const browserUsers=new Map([['test@sensa.invalid',crypto.randomUUID()],['second@sensa.invalid',crypto.randomUUID()]]);
+  for(const subject of browserUsers.values())await pool.query('INSERT INTO sensa_consumer.invitations(issuer,subject) VALUES($1,$2)',[issuer,subject]);
+  async function session(email='test@sensa.invalid'){const subject=browserUsers.get(email)!,sessionId=crypto.randomUUID();return {access_token:await token(subject,sessionId),refresh_token:'local-only-test:'+email,token_type:'bearer',expires_in:3600,user:{id:subject,aud:'authenticated',role:'authenticated',email,email_confirmed_at:new Date().toISOString(),app_metadata:{provider:'email'},user_metadata:{},created_at:new Date().toISOString()}};}
+  browserApp.post('/__test/revoke-session',async c=>{const {email}=await c.req.json();const subject=browserUsers.get(email);if(!subject)return c.json({},400);await pool.query('UPDATE sensa_consumer.sessions SET revoked=true WHERE account_id IN (SELECT account_id FROM sensa_consumer.accounts WHERE issuer=$1 AND subject=$2)',[issuer,subject]);return c.json({revoked:true});});
+  browserApp.post('/__test/checkin-failure',async c=>{const {enabled}=await c.req.json();injectCheckInFailure=enabled===true;return c.json({enabled:injectCheckInFailure});});
   browserApp.post('/__test/advance',async c=>{const input=await c.req.json();if(!Number.isSafeInteger(input.ms)||input.ms<0||input.ms>7*86400000)return c.json({error:'invalid'},400);browserClockOffset+=input.ms;return c.json({now:new Date(Date.now()+browserClockOffset).toISOString()});});
-  browserApp.post('/auth/v1/otp',async c=>{const input=await c.req.json();return input.email==='test@sensa.invalid'?c.json({}):c.json({msg:'Not invited'},403);});
-  browserApp.post('/auth/v1/verify',async c=>{const input=await c.req.json();return input.token==='123456'&&input.email==='test@sensa.invalid'?c.json(await session()):c.json({msg:'Invalid OTP'},400);});
-  browserApp.post('/auth/v1/token',async c=>c.json(await session()));
+  browserApp.post('/auth/v1/otp',async c=>{const input=await c.req.json();return browserUsers.has(input.email)?c.json({}):c.json({msg:'Not invited'},403);});
+  browserApp.post('/auth/v1/verify',async c=>{const input=await c.req.json();return input.token==='123456'&&browserUsers.has(input.email)?c.json(await session(input.email)):c.json({msg:'Invalid OTP'},400);});
+  browserApp.post('/auth/v1/token',async c=>{const input=await c.req.json();const email=String(input.refresh_token).replace('local-only-test:','');return browserUsers.has(email)?c.json(await session(email)):c.json({msg:'Invalid token'},401);});
   browserApp.post('/auth/v1/logout',c=>c.json({}));
   serve({fetch:browserApp.fetch,hostname:'127.0.0.1',port:4319});console.log('Synthetic browser harness: 127.0.0.1:4319; test@sensa.invalid / 123456. Local PostgreSQL only.');
 } else await pool.end();

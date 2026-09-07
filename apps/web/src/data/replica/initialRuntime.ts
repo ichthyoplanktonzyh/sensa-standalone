@@ -3,18 +3,13 @@ import type {AccountContext,ConsumerRun,ConsumerAction,RuntimeOperation} from '@
 import {consumerRunStepId,transitionConsumerRun} from '@sensa/learning-kernel';
 import {changeAccountReplica} from './accountStore';
 import type {AccountReplica} from './accountStore';
-// Deliberately ephemeral: a reload must obtain a fresh server clock before new input.
-export const clockSessionId=crypto.randomUUID();
-const untrustedGrants=new Set<string>();
-const calibrations=new Map<string,{received:number;offset:number;wall:number}>();
-export function calibrateRun(run:ConsumerRun,serverTime:string){const g=run.offlineGrant;if(g?.clockSessionId===clockSessionId&&!untrustedGrants.has(g.id)&&!calibrations.has(g.id))calibrations.set(g.id,{received:performance.now(),wall:Date.now(),offset:Math.max(0,Date.parse(serverTime)-Date.parse(g.issuedAt))});}
-function elapsed(grantId:string){const c=calibrations.get(grantId);if(!c)return null;const delta=performance.now()-c.received;if(Math.abs(Date.now()-c.wall-delta)>300000){untrustedGrants.add(grantId);calibrations.delete(grantId);return null;}return Math.max(0,Math.floor(c.offset+delta));}
-export function canContinueRun(run:ConsumerRun){const g=run.offlineGrant,age=g?elapsed(g.id):null;return !!g&&age!==null&&Date.parse(g.issuedAt)+age<=Date.parse(g.expiresAt);}
+import {clockSessionId,canContinueRun,clockSample} from './clock';
+export {clockSessionId,canContinueRun,calibrateRun} from './clock';
 export function runProgress(state:AccountReplica,run:ConsumerRun){return state.localRuns[run.id]??{revision:run.revision,ordinal:run.currentStep?.ordinal??0,phase:run.currentStep?.phase??'pending_result'};}
 export function queueRuntimeCommand(account:AccountContext,kind:'activity.start_or_resume'|'activity.next'|'activity.pause'|'activity.end',options:{mode?:'mixed'|'review_only';early?:boolean}={}){
  return changeAccountReplica(account,state=>{
   if(!state.plan||!state.replicaId)throw new Error('请先联网完成设置');
-  const previous=state.outbox.filter(x=>x.state==='pending').at(-1)?.operation;
+  const previous=state.outbox.filter(x=>x.state==='pending'&&x.operation.kind!=='check_in.record').at(-1)?.operation;
   const act=state.activity;
   if(kind==='activity.pause'&&state.outbox.some(x=>x.state==='pending'&&x.operation.kind===kind&&x.operation.payload.activityId===act?.id))return state;
   if(kind==='activity.start_or_resume'||kind==='activity.next'){
@@ -36,7 +31,7 @@ export function queueRunAction(account:AccountContext,runId:string,action:Consum
   const progress=runProgress(state,run);if(progress.phase==='pending_result'||!run.currentStep&&run.nextEligibleAt)throw new Error('回答已保存，请检查本次结果');
   const phase=transitionConsumerRun(run.protocol.version,progress.phase,action),ordinal=phase==='completed'?progress.ordinal:progress.ordinal+1;
   const previous=state.outbox.filter(x=>x.state==='pending'&&x.operation.kind==='run.record_action'&&x.operation.payload.runId===runId).at(-1)?.operation;
-  const elapsedMs=elapsed(g.id)!;
+  const sample=clockSample(g);if(!sample)throw new Error('请联网核对时间后继续');const elapsedMs=sample.clock.elapsedMs;
   const operation=runtimeOperationSchema.parse({operationId:crypto.randomUUID(),occurredAt:new Date(Date.parse(g.issuedAt)+elapsedMs).toISOString(),installationId:state.installationId,replicaId:state.replicaId,dependsOn:previous?[previous.operationId]:[],kind:'run.record_action',payload:{runId,expectedRevision:progress.revision,stepId:consumerRunStepId(runId,progress.ordinal,progress.phase,run.protocol.version),ordinal:progress.ordinal,materialDigest:run.materialDigest,grantId:g.id,clock:{sessionId:clockSessionId,elapsedMs},action}});
   return {...state,outbox:[...state.outbox,{operation,state:'pending',error:null}],localRuns:{...state.localRuns,[runId]:{revision:String(BigInt(progress.revision)+1n),ordinal,phase:phase==='completed'||phase==='waiting'?'pending_result':phase}}};
  });

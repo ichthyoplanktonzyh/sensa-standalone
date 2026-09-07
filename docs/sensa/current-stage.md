@@ -1,9 +1,9 @@
 # Sensa 当前阶段与交付边界
 
-> 状态日期：2026-09-07\
+> 状态日期：2026-09-08\
 > 当前阶段：领域与行为原型验证后期，生产应用建设前期\
 > 下一里程碑：React Web + 浏览器采集插件的小规模受邀测试版\
-> 当前执行位置：M0 设计已验收；M1-A/B/C/D 本地纵切已验证，下一步 M1-E 签到与恢复验收\
+> 当前执行位置：M0 设计已验收；M1-A/B/C/D/E 本地纵切已验证；托管验收待执行，下一产品施工阶段为 M2\
 > 执行路线图：[production-migration-plan.md](production-migration-plan.md)
 
 本文是项目阶段、证据级别和近期交付范围的唯一事实来源。[文档索引](README.md)列出的七份
@@ -24,9 +24,9 @@ Sensa 已具备开始生产化的领域、行为和工程基础。当前最主�
 
 当前仓库存在两套进度不同的实现：
 
-- apps/web + apps/api：较早模型下的真实本地 first-user vertical slice，已接通 Postgres、
-  Catalog、Book/Study Plan、Planning、Encounter、5D/FSRS 交接、Sync v2、IndexedDB/outbox
-  和受保护的本地媒体读取。这是可复用的工程基础，需要按最新领域模型逐项复核。
+- apps/web + apps/api：保留较早 first-user 纵切；正式 production 入口已完成 M1-A–E 的
+  consumer-v1/Sync v3、Postgres、账号独立 IndexedDB/outbox、目标准备、首学、复习、
+  重学与签到本地闭环。旧 preview 和 Sync v2 路径不能代替该入口的验收；真实托管仍待验证。
 - apps/web-next：移动端形态的 React 行为原型，更贴近当前领域模型，已实现两条核心旅程及
   多种学习策略、内容供给和 Runtime 行为。主要学习与个人语义状态仍由本地原型存储维护，
   尚未接通正式 API/Postgres/Sync。其 UI 不承诺迁入任何正式客户端。
@@ -42,10 +42,10 @@ Sensa 已具备开始生产化的领域、行为和工程基础。当前最主�
 | IA 与旅程 | PRD 已定义导航、页面职责和状态要求；web-next/journeys 冻结两条主旅程 | 原型叙事可复用；正式 Web 布局、组件、失败与恢复体验仍须设计和验收 |
 | 行为原型 | Personal Semantic World/Intake、独立学习、轻量与高保证路径、Review/Relearning、学习记录及练习入口 | 证明原型行为与确定性场景；不证明生产状态、真实练习服务或学习效果 |
 | 共享合同与内核 | Learning Connection v2、Content Demand/Task/Attempt/Bundle、Protocol、Completion/Handoff、Progression Kernel 与扩展 seam | 已有可执行 schema 和 smoke；生产 API、DB 与 Sync 需要逐项对齐 |
-| 数据库 | 独立 baseline；0008–0010 已加入语义注册、个人语义世界、Learning/Retention Target 和 Materialization 等迁移 | 新表结构存在于仓库；本次未验证实际数据库应用状态，新 Runtime 尚未接通 |
-| API 与同步 | 旧模型的 Catalog/Planning/Encounter/Media/Sync routes，React Web IndexedDB/outbox | 旧本地纵切基础；不能直接承载新模型全部事实 |
+| 数据库 | baseline、0008–0010 领域结构及 0011–0015 consumer 账号/目标/Runtime/签到迁移 | 0001–0015 已在全新隔离 Postgres 应用并完成 A–E 事务验证；托管数据库待验收 |
+| API 与同步 | M1 consumer API、私有材料、正式 React Web 账号独立 IndexedDB/outbox 与 Sync v3，旧路径并存 | A–E 本地浏览器与 Node/Deno 闭环通过；M2/M3 全部事实及真实托管尚未验收 |
 | 内容与 LLM | 内容编译/校验工具、版本化原型学习包、Semantic Agent 开发代理、Content Agent 与模型适配 seam | 开发接入和无成本校验已存在；持久任务、生产质量、预算与恢复闭环待实现 |
-| 运行环境 | Supabase Postgres/Auth/Storage 为主，Cloudflare 前端托管和 Resend 邮件的已确认选型 | Cognito 适配器仍返回未配置；仓库尚无完整云端部署流水线及上线运行证据 |
+| 运行环境 | Supabase Postgres/Auth/Storage 为主，Cloudflare 前端托管和 Resend 邮件的已确认选型；Edge 入口与本地 CI 检查已提供 | 真实云端配置、部署、邮件和 Storage 验收仍缺证据；本地合成认证不等于托管认证通过 |
 
 需要特别处理的实现差异：
 
@@ -53,8 +53,8 @@ Sensa 已具备开始生产化的领域、行为和工程基础。当前最主�
   而 [0010 迁移](../../db/migrations/0010_sensa_learning_connection_v1.sql)仍是较早的 v1
   持久化形状。例如 Target 间的引用方向尚未对齐，必须在新用例合同下设计迁移，不能把已有
   SQL 当作最终 schema。
-- 正式 API 的 Memory State/Outcome 路径仍使用旧 Sense 相关模型；新的 Retention Target、
-  Protocol Run/Step、Completion/Handoff 尚未形成权威持久化闭环。
+- M1 consumer 的 Retention Target、Protocol Run/Step、Completion/Handoff、Memory State/Outcome
+  已形成独立权威持久化闭环；旧 Sense/Encounter API 仍是兼容基础，不参与正式新入口结算。
 - web-next 的 localStorage、fixture target 和「毕业后立即到期」等走查安排必须在生产接入时
   明确替换。真实调度时间、Evidence、Outcome 和 FSRS 由服务端决定。
 
@@ -173,7 +173,7 @@ SQL 迁移、数量 Sync v3、Node/Deno 与 Chromium 测试已有证据，详见
 M1-A 尚未完成生产验收；M1-B 目标加入/准备、私有材料与已会声明已完成本地纵切，
 包括已授权的 DeepSeek/edge-tts 小样本，见 [M1-B 记录](m1-b-target-handoff.md)。
 M1-B 的生产发布/Storage 仍待验收；M1-C 首学与结果确认本地纵切已完成，见
-[首学交付记录](m1-c-initial-handoff.md)。M1-D 到期复习与重学已完成本地纵切，见[交付记录](m1-d-retention-handoff.md)。下一条为 M1-E 签到与恢复验收。
+[首学交付记录](m1-c-initial-handoff.md)。M1-D 到期复习与重学已完成本地纵切，见[交付记录](m1-d-retention-handoff.md)。M1-E 签到与恢复验收也已完成本地纵切，见[交付记录](m1-e-checkin-handoff.md)。A–E 本地施工齐备，真实托管验收仍待执行，下一产品施工阶段为 M2。
 每次里程碑验收后，同步更新本文的执行位置与证据，以及路线图状态。
 具体任务、验收记录和未解决问题由路线图追踪；本文不再累积逐日原型功能日志。
 

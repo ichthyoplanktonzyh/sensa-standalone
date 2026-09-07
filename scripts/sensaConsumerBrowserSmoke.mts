@@ -81,6 +81,7 @@ try {
   await page.getByRole('button',{name:'开始学习',exact:true}).click();
   await expect(page.getByRole('button',{name:'查看表达',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'tactful',exact:true})).toHaveCount(0);
+  if(process.env.SENSA_TEST_CHECKIN==='1')await expect(page.getByText('今日已签到',{exact:true})).toBeVisible();
   await page.evaluate(()=>{const original=IDBDatabase.prototype.transaction;IDBDatabase.prototype.transaction=function(...args:Parameters<IDBDatabase['transaction']>){IDBDatabase.prototype.transaction=original;throw new DOMException('Injected no space','QuotaExceededError');};});
   await page.getByRole('button',{name:'查看表达',exact:true}).click();
   await expect(page.getByRole('button',{name:'查看表达',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'想起来了',exact:true})).toHaveCount(0);
@@ -135,6 +136,27 @@ try {
   await expect(page.getByText(/原复习评价与复习时间保持原样/)).toBeVisible();await page.getByRole('button',{name:'继续其他内容',exact:true}).click();await expect(page.getByText('重学已恢复 1 个 · 仍需回想 0 个')).toBeVisible();
   await page.screenshot({path:output+'/retention-restored.png',fullPage:true});await page.getByRole('button',{name:'回首页',exact:true}).click();
   console.log('M1-D Chromium passed: due review, recorded again, wait/end/reenter, explicit early recall, repeated wait retained on reload, timed continuation, restored summary.');
+ }
+ if(process.env.SENSA_TEST_CHECKIN==='1'){
+  const testing=async(path:string,data:unknown)=>{const r=await page.request.post('http://127.0.0.1:4319/__test/'+path,{data});expect(r.ok()).toBe(true);};
+  const study=async()=>{await page.getByRole('button',{name:'我的学习',exact:true}).click();await expect(page.getByRole('heading',{name:'签到日历'})).toBeVisible();};
+  const login=async(email:string)=>{await page.getByLabel('邮箱',{exact:true}).fill(email);await page.getByRole('button',{name:'发送验证码',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续'}).click();};
+  await page.reload();await expect(page.getByRole('heading',{name:'今天的学习'})).toBeVisible();await study();await expect(page.getByRole('button',{name:'今日已签到',exact:true})).toBeDisabled();
+  await testing('advance',{ms:86400000});await page.reload();await expect(page.getByRole('heading',{name:'今天的学习'})).toBeVisible();await study();
+  await context.route('http://127.0.0.1:4319/sensa/**',route=>route.abort('failed'));await page.getByRole('button',{name:'签到',exact:true}).click();await expect(page.getByRole('button',{name:'签到待同步',exact:true})).toBeVisible();
+  const pendingLabel=await page.getByRole('gridcell',{name:/待同步/}).getAttribute('aria-label');
+  await context.unroute('http://127.0.0.1:4319/sensa/**');await testing('advance',{ms:86400000});await page.reload();await expect(page.getByRole('heading',{name:'今天的学习'})).toBeVisible();await study();await expect(page.getByRole('gridcell',{name:pendingLabel!.replace('待同步','已签到'),exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'签到',exact:true})).toBeEnabled();
+  await page.screenshot({path:output+'/checkin-original-date.png',fullPage:true});
+  await context.route('http://127.0.0.1:4319/sensa/**',route=>route.abort('failed'));await page.getByRole('button',{name:'签到',exact:true}).click();await expect(page.getByRole('button',{name:'签到待同步',exact:true})).toBeVisible();
+  await testing('revoke-session',{email:'test@sensa.invalid'});await context.unroute('http://127.0.0.1:4319/sensa/**');await page.reload();await expect(page.getByRole('heading',{name:'欢迎来到 Sensa'})).toBeVisible();
+  await login('second@sensa.invalid');await expect(page.getByRole('heading',{name:'每天想新学多少个？'})).toBeVisible();await page.getByRole('button',{name:'确认数量并继续'}).click();await expect(page.getByText('还没有学习目标',{exact:true})).toBeVisible();await study();await expect(page.getByRole('gridcell',{name:/已签到/})).toHaveCount(0);
+  await testing('checkin-failure',{enabled:true});await page.getByRole('button',{name:'签到',exact:true}).click();await expect(page.getByRole('button',{name:'签到待同步',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'选择学习内容',exact:true}).click();await page.getByRole('button',{name:/tactful/}).first().click();await page.getByRole('button',{name:'加入学习',exact:true}).click();await expect(page.getByText('学习内容已准备好',{exact:true})).toBeVisible();await page.getByRole('button',{name:'回首页',exact:true}).click();
+  await page.getByRole('button',{name:'开始学习',exact:true}).click();await expect(page.getByRole('button',{name:'查看表达',exact:true})).toBeVisible();await expect(page.getByText('签到待同步',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'查看表达',exact:true}).click();await page.getByRole('button',{name:'想起来了',exact:true}).click();await expect(page.getByRole('heading',{name:'已完成首次学习'})).toBeVisible();
+  await testing('checkin-failure',{enabled:false});await page.getByRole('button',{name:'回首页',exact:true}).click();await page.getByRole('button',{name:'检查本次结果',exact:true}).click();await expect(page.getByText(/项请求待同步/)).toHaveCount(0);await study();await expect(page.getByRole('button',{name:'今日已签到',exact:true})).toBeDisabled();
+  await page.getByRole('button',{name:'退出登录',exact:true}).click();await expect(page.getByRole('heading',{name:'欢迎来到 Sensa'})).toBeVisible();await login('test@sensa.invalid');await expect(page.getByRole('heading',{name:'今天的学习'})).toBeVisible();await expect(page.getByText(/项请求待同步/)).toHaveCount(0);await study();await expect(page.getByRole('button',{name:'今日已签到',exact:true})).toBeDisabled();
+  console.log('M1-E Chromium passed: automatic entry, calendar, offline original-date upload, revoked-session guard, account A/B isolation and restoration, failed check-in does not block learning.');
  }
  await page.getByRole('button',{name:'退出登录',exact:true}).click();await expect(page.getByRole('heading',{name:'欢迎来到 Sensa'})).toBeVisible();
  expect(errors).toEqual([]);if(process.env.SENSA_TEST_CURRICULUM==='1')console.log('M1-B Chromium smoke passed: catalog/detail, offline add/reload, ready target, private material/audio, mastery/revoke, return home.');console.log('M1-A Chromium smoke passed: OTP failure/success, explicit quantity, reload, offline outbox/reconnect, failed-network reload, lost accepted response/replay, logout; screenshots '+output);

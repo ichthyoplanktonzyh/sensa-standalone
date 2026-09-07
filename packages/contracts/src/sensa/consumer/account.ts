@@ -1,3 +1,4 @@
+import {accountClockGrantSchema,checkInOperationSchema,checkInViewSchema} from './checkin.js';
 import { z } from 'zod';
 import {runtimeOperationSchema,consumerRuntimeValueSchema} from './runtime.js';
 import { targetOperationSchema, targetViewSchema } from './target.js';
@@ -12,7 +13,7 @@ export const timeZoneSchema = z.string().max(100).refine(value => {
   try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; } catch { return false; }
 }, 'Invalid IANA time zone');
 export const installationInputSchema = z.object({
-  installationId: id, platform: z.enum(['web', 'extension', 'flutter']), timeZone: timeZoneSchema,
+  installationId: id, clockSessionId:id.optional(), platform: z.enum(['web', 'extension', 'flutter']), timeZone: timeZoneSchema,
 }).strict();
 export const planViewSchema = z.object({
   id, revision: revisionSchema, scopeRevision: revisionSchema, quantityConfirmed: z.literal(true),
@@ -22,7 +23,7 @@ export const planViewSchema = z.object({
 export const accountContextSchema = z.object({
   accountId: id, learnerUserId: z.string().min(1), accountSessionId: id, installationId: id,
   accessStatus: z.literal('invited'), timeZone: timeZoneSchema, timeZoneRevision: revisionSchema,
-  quantityConfirmed: z.boolean(), plan: planViewSchema.nullable(),
+  quantityConfirmed: z.boolean(), plan: planViewSchema.nullable(),clockGrant:accountClockGrantSchema.nullable().default(null),
   supportedWireVersions: z.array(z.string()), minClientVersion: z.string(),
 }).strict();
 const common = {
@@ -37,7 +38,7 @@ export const quantityOperationSchema = z.discriminatedUnion('kind', [
     planId: id, expectedRevision: revisionSchema, dailyNewLimit: quantitySchema,
   }).strict() }).strict(),
 ]);
-export const consumerOperationSchema=z.union([quantityOperationSchema,targetOperationSchema,runtimeOperationSchema]);
+export const consumerOperationSchema=z.union([quantityOperationSchema,targetOperationSchema,runtimeOperationSchema,checkInOperationSchema]);
 export type ConsumerOperation=z.infer<typeof consumerOperationSchema>;
 export const consumerPushSchema = z.object({
   wireVersion: z.literal(consumerWireVersion), canonicalizerVersion: z.literal(consumerCanonicalizerVersion),
@@ -54,7 +55,7 @@ export const failureSchema = z.object({
   code: z.string(), retryable: z.boolean(), retryAfterMs: z.number().nullable(),
   latest: z.object({ id, revision: revisionSchema }).nullable(), field: z.string().nullable(), messageKey: z.string(),
 }).strict();
-const valueSchema = z.union([z.object({plan:planViewSchema,runtime:consumerRuntimeValueSchema}).strict(),z.object({plan:planViewSchema}).strict(),z.object({plan:planViewSchema,target:targetViewSchema,disposition:z.enum(['accepted','already_in_scope']).optional()}).strict()]);
+const valueSchema = z.union([z.object({plan:planViewSchema,checkin:checkInViewSchema,alreadyRecorded:z.boolean()}).strict(),z.object({plan:planViewSchema,runtime:consumerRuntimeValueSchema}).strict(),z.object({plan:planViewSchema}).strict(),z.object({plan:planViewSchema,target:targetViewSchema,disposition:z.enum(['accepted','already_in_scope']).optional()}).strict()]);
 export const quantityResultSchema = z.discriminatedUnion('status', [
   z.object({ operationId: id, status: z.literal('accepted'), value: valueSchema }).strict(),
   z.object({ operationId: id, status: z.literal('replayed'), original: z.enum(['accepted','conflict','rejected']), value: valueSchema.nullable(), error: failureSchema.nullable() }).strict(),

@@ -1,3 +1,5 @@
+import {CheckInCalendar} from './CheckInCalendar';
+import {queueCheckIn} from '../data/replica/checkin';
 import {LearningActivitySummary} from './LearningActivitySummary';
 import {InitialLearning} from './InitialLearning';
 import {queueRuntimeCommand,queueRunAction,useLatestRunProgress} from '../data/replica/initialRuntime';
@@ -23,7 +25,9 @@ const message=(error:unknown)=> {
 
 export default function AccountRoot(){
   const [account,setAccount]=useState<AccountContext|null>(null);
-  const [replica,setReplica]=useState<AccountReplica|null>(null);
+  const [replica,setReplicaState]=useState<AccountReplica|null>(null);
+  const accountScope=useRef<string|null>(null);
+  const setReplica=(value:AccountReplica|null)=>{if(!value||value.accountId===accountScope.current)setReplicaState(value);};
   const [boot,setBoot]=useState(true);const [busy,setBusy]=useState(false);const [notice,setNotice]=useState('');
   const [email,setEmail]=useState('');const [code,setCode]=useState('');const [sent,setSent]=useState(false);
   const [retryAt,setRetryAt]=useState(0);const [now,setNow]=useState(Date.now());
@@ -41,11 +45,12 @@ export default function AccountRoot(){
     catch(e){
       // An explicit denial must never fall back to cached authorization.
       const cached=!(e instanceof ConsumerClientError)&&cachedAccount(data.session.user.id);
-      if(!cached){if(own===generation.current){setNotice(message(e));setAccount(null);setBoot(false);}return;}
+      if(!cached){if(own===generation.current){setNotice(message(e));setAccount(null);setReplica(null);setBoot(false);}return;}
       next=cached;
     }
     if(own!==generation.current)return;
-    setAccount(next);
+    if(accountScope.current!==next.accountId){setReplica(null);setRunId(null);setShowSummary(false);setSettings(false);setCurrent('s-home');}
+    accountScope.current=next.accountId;setAccount(next);
     try {
       const local=await loadAccountReplica(next);if(own!==generation.current)return;setReplica(local);setQuantity(local.plan?.dailyNewLimit??5);
       const synced=await syncAccount(next);if(own!==generation.current)return;
@@ -81,7 +86,7 @@ export default function AccountRoot(){
     let state=await loadAccountReplica(account);
     if(!navigator.onLine){const active=Object.values(state.runs).find(r=>r.status==='active'&&r.currentStep&&(mode==='mixed'||r.purpose!=='initial_learning'));if(!active)throw new Error('请联网开始学习');setReplica(state);setRunId(active.id);return;}
     state=await syncAccount(account);setReplica(state);
-    if(state.outbox.some(x=>x.state==='pending')){setNotice('请先检查本次结果。');return;}
+    if(state.outbox.some(x=>x.state==='pending'&&x.operation.kind!=='check_in.record')){setNotice('请先检查本次结果。');return;}
     state=await queueRuntimeCommand(account,next?'activity.next':'activity.start_or_resume',{mode,early});setReplica(state);
     state=await syncAccount(account);setReplica(state);
     const run=state.activity?.runId?state.runs[state.activity.runId]:null;
@@ -89,6 +94,11 @@ export default function AccountRoot(){
     else {setRunId(null);setShowSummary(true);}
   }
   async function endLearning(){if(!account)return;setReplica(await queueRuntimeCommand(account,'activity.end'));setRunId(null);setShowSummary(true);setReplica(await syncAccount(account));}
+  async function checkIn(automatic=false){
+    if(!account)return;
+    try{const saved=await queueCheckIn(account,automatic&&runId?replica?.runs[runId]:undefined);setReplica(saved);if(!automatic)setNotice('签到已保存在本机，等待确认。');setReplica(await syncAccount(account));if(!automatic)setNotice('');}
+    catch(e){setNotice(automatic?'学习可以继续，签到暂未确认。已保存的签到会在联网后重试。':message(e));}
+  }
   async function pauseLearning(){
     if(!account)return;setReplica(await queueRuntimeCommand(account,'activity.pause'));setRunId(null);
     try{setReplica(await syncAccount(account));}catch(e){setNotice(message(e));}
@@ -125,13 +135,14 @@ export default function AccountRoot(){
     </div>
   </LearningSetupFrame>;
   if(showSummary)return <LearningActivitySummary replica={replica} busy={busy} notice={notice} onNext={()=>void perform(()=>startLearning(replica.summary?.status!=='ended'))} onEarly={()=>void perform(()=>startLearning(true,replica.activity?.mode??'mixed',true))} onEnd={()=>void perform(endLearning)} onHome={()=>{setShowSummary(false);setCurrent('s-home');}}/>;
-  if(runId&&replica.runs[runId])return <InitialLearning replica={replica} run={replica.runs[runId]!} busy={busy} notice={notice} onAction={action=>void perform(async()=>{const saved=await queueRunAction(account,runId,action);setReplica(saved);setBusy(false);try{setReplica(await syncAccount(account));}catch(e){setNotice(message(e));}})} onPause={()=>void perform(pauseLearning)} onCheck={()=>void perform(checkLearning)} onNext={()=>void perform(()=>startLearning(true))} onHome={()=>{setRunId(null);setCurrent('s-home');}}/>;
+  if(runId&&replica.runs[runId])return <InitialLearning replica={replica} run={replica.runs[runId]!} busy={busy} notice={notice} onAction={action=>void perform(async()=>{const saved=await queueRunAction(account,runId,action);setReplica(saved);setBusy(false);try{setReplica(await syncAccount(account));}catch(e){setNotice(message(e));}})} onPause={()=>void perform(pauseLearning)} onCheck={()=>void perform(checkLearning)} onNext={()=>void perform(()=>startLearning(true))} onHome={()=>{setRunId(null);setCurrent('s-home');}} onEntered={()=>void checkIn(true)}/>;
   return <WebShell current={current} focused={false} onNavigate={setCurrent} availableSections={['s-home','s-content','s-study']}>
     <section id={current} className="screen active absolute inset-0 overflow-y-auto p-6 sm:p-10">
       <div className="mx-auto max-w-3xl space-y-6"><h1 className="text-3xl font-semibold">{current==='s-home'?'今天的学习':current==='s-study'?'我的学习':current==='s-content'?'我的内容':current==='s-profile'?'账号与设置':'自由练习'}</h1>
         {alert}{pending>0&&<div role="status" className="rounded-2xl bg-[#edf0f7] p-5">有 {pending} 项请求待同步。<button className={setupButton} onClick={()=>void perform(recover)}>检查本次结果</button></div>}
-        {retained>0&&<details><summary className="cursor-pointer py-3">有 {retained} 项未接受的请求，查看原选择</summary><ul>{replica.outbox.filter(x=>x.state==='retained').map(x=><li key={x.operation.operationId} className="py-2 text-sm">{'dailyNewLimit' in x.operation.payload?`每日 ${x.operation.payload.dailyNewLimit} 个`:x.operation.kind==='run.record_action'?`学习回答：${x.operation.payload.action.kind==='reveal'?'查看表达':x.operation.payload.action.rating==='again'?'没想起':x.operation.payload.action.rating==='hard'?'有点困难':'想起来了'}`:'学习或目标请求'}：未被接受。请查看最新状态后重新确认。</li>)}</ul></details>}
+        {retained>0&&<details><summary className="cursor-pointer py-3">有 {retained} 项未接受的请求，查看原选择</summary><ul>{replica.outbox.filter(x=>x.state==='retained').map(x=><li key={x.operation.operationId} className="py-2 text-sm">{'dailyNewLimit' in x.operation.payload?`每日 ${x.operation.payload.dailyNewLimit} 个`:x.operation.kind==='run.record_action'?`学习回答：${x.operation.payload.action.kind==='reveal'?'查看表达':x.operation.payload.action.rating==='again'?'没想起':x.operation.payload.action.rating==='hard'?'有点困难':'想起来了'}`:x.operation.kind==='check_in.record'?`签到：${x.operation.occurredAt}`:'学习或目标请求'}：未被接受。请查看最新状态后重新确认。</li>)}</ul></details>}
         {current==='s-home'&&<div className="rounded-2xl border p-6 space-y-4"><p>今天已开始 {replica.plan?.newStartedToday??0} 个新目标</p><button className={setupPrimary} disabled={busy} onClick={()=>void perform(()=>startLearning(false,'mixed'))}>{Object.values(replica.runs).some(r=>r.status==='active')?'继续本次学习':'开始学习'}</button><button className={setupButton} disabled={busy} onClick={()=>void perform(()=>startLearning(false,'review_only'))}>只复习</button>{replica.homeCounts&&<p className="text-sm text-[#68748d]">到期复习 {replica.homeCounts.dueReviews} 个 · 可再次回想 {replica.homeCounts.relearningReady} 个 · 等待再回想 {replica.homeCounts.relearningWaiting} 个</p>}</div>}
+        {current==='s-study'&&<CheckInCalendar account={account} replica={replica} busy={busy} onCheckIn={()=>void perform(()=>checkIn())}/>}
         {current==='s-content'?<TargetLibrary account={account} replica={replica} onMastery={async(target)=>{setReplica(await queueMastery(account,target));setReplica(await syncAccount(account));}} onHome={()=>setCurrent('s-home')} onSubmit={async(candidate,retry)=>{const saved=await queueTarget(account,candidate,retry);setReplica(saved);try{setReplica(await syncAccount(account));}catch(e){setNotice(message(e));}}}/>:<>
         <div className="rounded-2xl border border-[#e2e6ef] bg-white p-6"><p className="text-sm text-[#68748d]">每日新学上限</p><p className="my-3 text-4xl font-semibold">{replica.plan!.dailyNewLimit}<span className="ml-2 text-base font-normal">个</span></p><button className={setupButton} onClick={()=>setSettings(true)}>修改数量</button></div>
         <div className="rounded-2xl border border-[#e2e6ef] p-6 space-y-4"><h2 className="text-xl">{Object.keys(replica.targets).length?'你的学习目标':'还没有学习目标'}</h2>

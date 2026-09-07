@@ -15,3 +15,5 @@ export * from "./lightweightLearningContent.js";
 export * from './consumer/account.js';
 export * from './consumer/target.js';
 export * from './consumer/runtime.js';
+
+export * from './consumer/checkin.js';

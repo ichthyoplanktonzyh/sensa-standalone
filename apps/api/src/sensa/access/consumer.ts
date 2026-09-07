@@ -1,3 +1,4 @@
+import {issueAccountClock,listCheckIns,recordCheckIn} from '../activity/checkin.js';
 import {retentionAvailability} from '../runtime/retention.js';
 import {applyRuntime,listRuns,runView,currentActivity,initialAvailability,accountDate,startedToday,activitySummary} from '../runtime/initial.js';
 import { Hono } from 'hono';
@@ -51,13 +52,13 @@ async function plan(db: DatabaseExecutor, a: Account): Promise<PlanView|null> {
     quantityConfirmed:true,dailyNewLimit:row.daily_new_limit,timeZone:a.time_zone,accountDate:date,newStartedToday:started,newRemaining:Math.max(0,row.daily_new_limit-started) });
 }
 function query(a: Account, data: unknown) { return { contractVersion:consumerVersion,serverTime:a.now.toISOString(),scopeEpoch:String(a.epoch),projectionRevision:String(a.feed_head),data }; }
-async function context(db: DatabaseExecutor, a: Account, installationId: string) {
+async function context(db: DatabaseExecutor, a: Account, installationId: string,clockSessionId?:string) {
   const found = (await db.query('SELECT id FROM sensa_consumer.installations WHERE id=$1 AND account_id=$2', [installationId,a.account_id])).rows[0];
   if (!found) throw new ConsumerError(403,'installation_scope_mismatch');
   const current = await plan(db,a);
   return accountContextSchema.parse({ accountId:a.account_id,learnerUserId:a.learner_user_id,accountSessionId:a.session_id,
     installationId,accessStatus:'invited',timeZone:a.time_zone,timeZoneRevision:'1',quantityConfirmed:current!==null,plan:current,
-    supportedWireVersions:[consumerWireVersion],minClientVersion:'0.1.0' });
+    clockGrant:await issueAccountClock(db,a,installationId,clockSessionId),supportedWireVersions:[consumerWireVersion],minClientVersion:'0.1.0' });
 }
 async function replica(db: DatabaseExecutor, a: Account, replicaId: string, installationId?: string) {
   const row = (await db.query('SELECT * FROM sensa_consumer.installations WHERE replica_id=$1 AND account_id=$2', [replicaId,a.account_id])).rows[0];
@@ -83,6 +84,11 @@ async function execute(db: DatabaseExecutor, a: Account, op: ConsumerOperation):
     const prior=(await db.query('SELECT result FROM sensa_consumer.operations WHERE learner_user_id=$1 AND operation_id=$2',[a.learner_user_id,dependency])).rows[0];
     if(!prior) return {operationId:op.operationId,status:'retryable',error:{...fail('missing_dependency'),retryable:true}};
     if(prior.result.status!=='accepted') return store({operationId:op.operationId,status:'rejected',error:fail('blocked_by_prior_operation')});
+  }
+  if(op.kind==='check_in.record'){
+    await db.query('SAVEPOINT domain_operation');
+    try{const current=await plan(db,a);if(!current)throw new ConsumerError(409,'onboarding_required');const value=await recordCheckIn(db,a,op);if(!value.alreadyRecorded)await publish(db,a,'check_in',value.checkin);await db.query('RELEASE SAVEPOINT domain_operation');return store({operationId:op.operationId,status:'accepted',value:{...value,plan:current}});}
+    catch(error){if(!(error instanceof ConsumerError)||error.status===503)throw error;await db.query('ROLLBACK TO SAVEPOINT domain_operation');return store({operationId:op.operationId,status:'rejected',error:fail(error.code)});}
   }
   if(op.kind==='activity.start_or_resume'||op.kind==='activity.next'||op.kind==='activity.pause'||op.kind==='activity.end'||op.kind==='run.record_action'){
     await db.query('SAVEPOINT domain_operation');
@@ -151,7 +157,7 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
   });
   app.post('/sensa/account/session',async c=> {
     const identity=await verify(c.req.raw);const input=installationInputSchema.parse(await c.req.json());
-    return c.json(await transaction(async db=>{const a=await account(db,identity,input,false,clock());return query(a,await context(db,a,input.installationId));}));
+    return c.json(await transaction(async db=>{const a=await account(db,identity,input,false,clock());return query(a,await context(db,a,input.installationId,input.clockSessionId));}));
   });
   app.get('/sensa/account/session',async c=>{
     const identity=await verify(c.req.raw);const installationId=uuid.parse(c.req.header('x-installation-id'));
@@ -168,7 +174,7 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
       const install=(await db.query('SELECT * FROM sensa_consumer.installations WHERE id=$1 AND account_id=$2',[input.installationId,a.account_id])).rows[0];
       if(!install || (input.replicaId && install.replica_id!==input.replicaId))throw new ConsumerError(403,'replica_scope_mismatch');
       return {wireVersion:consumerWireVersion,scopeEpoch:String(a.epoch),replicaId:install.replica_id,
-        snapshotId:crypto.randomUUID(),pageCursor:null,syncCursor:cursor(a,install.replica_id,String(a.feed_head)),plan:await plan(db,a),targets:await listTargets(db,a),runs:await listRuns(db,a),activity:await currentActivity(db,a)};
+        snapshotId:crypto.randomUUID(),pageCursor:null,syncCursor:cursor(a,install.replica_id,String(a.feed_head)),plan:await plan(db,a),targets:await listTargets(db,a),runs:await listRuns(db,a),activity:await currentActivity(db,a),checkins:await listCheckIns(db,a)};
     }));
   });
   app.post('/sensa/sync/push',async c=>{
@@ -179,17 +185,17 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
       const a=await account(db,identity,undefined,false,clock());if(String(a.epoch)!==envelope.scopeEpoch)throw new ConsumerError(409,'bootstrap_required');
       await replica(db,a,envelope.replicaId);
     });
-    if(envelope.operations.some(op=>op && typeof op==='object' && 'kind' in op && !['plan.confirm_quantity','plan.set_quantity','curriculum.add_target','learning.retry_preparation','declared_mastery.set','activity.start_or_resume','activity.next','activity.pause','activity.end','run.record_action'].includes(String(op.kind))))throw new ConsumerError(400,'unsupported_operation');
+    if(envelope.operations.some(op=>op && typeof op==='object' && 'kind' in op && !['plan.confirm_quantity','plan.set_quantity','curriculum.add_target','learning.retry_preparation','declared_mastery.set','activity.start_or_resume','activity.next','activity.pause','activity.end','run.record_action','check_in.record'].includes(String(op.kind))))throw new ConsumerError(400,'unsupported_operation');
     const input:ConsumerPush=consumerPushSchema.parse(body);
     if(new Set(input.operations.map(o=>o.operationId)).size!==input.operations.length)throw new ConsumerError(400,'duplicate_operation');
     const pending=[...input.operations], ordered:ConsumerOperation[]=[];
     while(pending.length){const i=pending.findIndex(o=>!o.dependsOn.some(d=>pending.some(x=>x.operationId===d)));if(i<0)throw new ConsumerError(400,'dependency_cycle');ordered.push(...pending.splice(i,1));}
     const results:QuantityResult[]=[];
-    for(const op of ordered) results.push(await transaction(async db=>{
+    for(const op of ordered) {try{results.push(await transaction(async db=>{
       const a=await account(db,identity,undefined,false,clock());if(String(a.epoch)!==input.scopeEpoch)throw new ConsumerError(409,'bootstrap_required');
       if(op.replicaId!==input.replicaId)throw new ConsumerError(403,'replica_scope_mismatch');
       await replica(db,a,input.replicaId,op.installationId);return execute(db,a,op);
-    }));
+    }));}catch(error){if(op.kind!=='check_in.record'||(error instanceof ConsumerError&&error.status!==503))throw error;results.push({operationId:op.operationId,status:'retryable',error:{...fail('temporarily_unavailable'),retryable:true}});}}
     return c.json({wireVersion:consumerWireVersion,results,serverTime:clock().toISOString()});
   });
   app.post('/sensa/sync/pull',async c=>{
@@ -212,9 +218,10 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
       const ready=retention.needs.filter(n=>n.next_eligible_at<=a.now),waiting=retention.needs.filter(n=>n.next_eligible_at>a.now);
       const distinct=new Set([...active.map(r=>r.retentionTargetId),...retention.due.map(r=>r.retention_target_id),...ready.map(r=>r.retention_target_id)]);
       const act=await currentActivity(db,a),summary=act?await activitySummary(db,a,act):null;
-      return query(a,{plan:current,targets,runs,activity:act,summary,counts:{newAvailable:available,initialContinuations:active.filter(r=>r.purpose==='initial_learning').length,dueReviews:retention.due.length+active.filter(r=>r.purpose==='retention_review').length,relearningReady:ready.length,relearningWaiting:waiting.length,distinctExecutableTargets:available+distinct.size},resumeItems:active,emptyReason:!current?'onboarding_required':!targets.length?'no_targets':available||distinct.size?null:waiting.length?'waiting_relearning':targets.some(t=>t.plan?.readiness==='preparing')?'preparing':targets.every(t=>t.plan?.readiness==='blocked')?'blocked':current.newRemaining===0?'daily_limit':'none_due'});
+      return query(a,{plan:current,targets,runs,activity:act,summary,checkins:await listCheckIns(db,a),counts:{newAvailable:available,initialContinuations:active.filter(r=>r.purpose==='initial_learning').length,dueReviews:retention.due.length+active.filter(r=>r.purpose==='retention_review').length,relearningReady:ready.length,relearningWaiting:waiting.length,distinctExecutableTargets:available+distinct.size},resumeItems:active,emptyReason:!current?'onboarding_required':!targets.length?'no_targets':available||distinct.size?null:waiting.length?'waiting_relearning':targets.some(t=>t.plan?.readiness==='preparing')?'preparing':targets.every(t=>t.plan?.readiness==='blocked')?'blocked':current.newRemaining===0?'daily_limit':'none_due'});
     }));
   });
+  app.get('/sensa/check-ins',async c=>{const identity=await verify(c.req.raw);return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());return query(a,await listCheckIns(db,a));}));});
   app.get('/sensa/activities/:id',async c=>{
     const identity=await verify(c.req.raw),id=uuid.parse(c.req.param('id'));
     return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());const row=(await db.query('SELECT id,revision,mode,status,current_run_id FROM sensa_consumer.activities WHERE id=$1 AND learner_user_id=$2',[id,a.learner_user_id])).rows[0];if(!row)throw new ConsumerError(404,'activity_not_found');return query(a,await activitySummary(db,a,{id:row.id,mode:row.mode,status:row.status,revision:String(row.revision),runId:row.current_run_id}));}));

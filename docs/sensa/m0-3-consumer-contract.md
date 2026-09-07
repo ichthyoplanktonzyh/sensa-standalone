@@ -357,4 +357,16 @@ installation必须属于该replica。partial accepted不重发新ID，按每条r
 
 首学子集已按本合同落地，具体 schema、统一 runtime 结果外形和新增时钟字段见
 [M1-C 交付记录](m1-c-initial-handoff.md)。其可执行版本为 `consumer-initial-v1`；
-Review/Relearning/Check-in 仍按后续切片实现，不从首学成功推断这些操作已支持。
+该记录描述 C 完成时的范围；后续 D/E 的实现记录见下。
+
+
+## M1-D/E 可执行合同记录（2026-09-08）
+
+D 已提供 consumer-review-v1 / consumer-relearning-v1、一次 due Outcome 与独立重学结算，
+见 [D 交付记录](m1-d-retention-handoff.md)。E 已提供独立 check_in.record 与账号日投影，
+见 [E 交付记录](m1-e-checkin-handoff.md)。C11 增加 clock 校准引用，形式为
+`{grantId,sessionId,elapsedMs}|null`；null 原请求可保留但不能被接受，结果外形为
+`{plan,checkin,alreadyRecorded}`。formal 仍必须引用接受的实际进入操作与对应 Run grant。
+Q08 的 M1 子集返回最新最多 366 条 CheckInView，日历展示当前及前 11 个月，尚未实现任意
+月份查询；账号时区、日期、发生时间及来源均由该 view 携带。其余不变量沿用正文，实际字段
+以共享 schema 与该纵切记录为准。A–E 的本地验证不替代真实托管验收。
