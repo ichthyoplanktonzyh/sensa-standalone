@@ -1,22 +1,20 @@
-import { uiClass } from '../ui/classes';
+import { StudyCalendar } from './StudyCalendar';
+import { useState } from 'react';
+import { ArrowRight, BookOpen, Plus, SlidersHorizontal } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { LearningRecordKind, LearningRecordView } from '../learningJourney/learningHistory';
-import {
-  policyLabel,
-  type PrototypeLearningPolicy,
-} from '../learningJourney/prototypeLearning';
+import { PROTOTYPE_LEARNING_TARGETS, type PrototypeLearningPolicy, type PrototypeLearningTargetId } from '../learningJourney/prototypeLearning';
+import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
 
 interface StudyScreenProps {
   active: boolean;
   tab: 'a' | 'b';
   onTabChange: (tab: 'a' | 'b') => void;
-  onBack: () => void;
   onAddLearning: () => void;
   onOpenTargetLibrary: () => void;
-  onOpenDefaultPolicy: () => void;
   onOpenStats: () => void;
-  onSign: () => void;
-  signed: boolean;
-  streak: number;
+  onOpenTarget: (id: PrototypeLearningTargetId) => void;
+  onPolicyChange: (policy: PrototypeLearningPolicy) => void;
   defaultPolicy: PrototypeLearningPolicy;
   learningTargetCount: number;
   readyInitialCount: number;
@@ -25,309 +23,61 @@ interface StudyScreenProps {
   learningRecords: readonly LearningRecordView[];
   onDailyNewCountChange: (count: number) => void;
 }
-
-interface WeekDayView {
-  key: string;
-  weekday: string;
-  day: number;
-  isToday: boolean;
-  isFuture: boolean;
-  isRecorded: boolean;
-}
-
-const PACE_OPTIONS = [5, 10, 15, 20, 30] as const;
-const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'] as const;
-
-const localDateKey = (date: Date): string => [
-  date.getFullYear(),
-  String(date.getMonth() + 1).padStart(2, '0'),
-  String(date.getDate()).padStart(2, '0'),
-].join('-');
-
-const addLocalDays = (date: Date, amount: number): Date => {
-  const next = new Date(date);
-  next.setHours(12, 0, 0, 0);
-  next.setDate(next.getDate() + amount);
-  return next;
-};
-
-const weekFor = (today: Date, signed: boolean, streak: number): readonly WeekDayView[] => {
-  const todayKey = localDateKey(today);
-  const mondayOffset = (today.getDay() + 6) % 7;
-  const monday = addLocalDays(today, -mondayOffset);
-  const recordedKeys = new Set<string>();
-
-  if (signed) {
-    for (let offset = 0; offset < streak; offset += 1) {
-      recordedKeys.add(localDateKey(addLocalDays(today, -offset)));
-    }
-  }
-
-  return WEEKDAY_LABELS.map((weekday, index) => {
-    const date = addLocalDays(monday, index);
-    const key = localDateKey(date);
-    return {
-      key,
-      weekday,
-      day: date.getDate(),
-      isToday: key === todayKey,
-      isFuture: date.getTime() > addLocalDays(today, 0).getTime(),
-      isRecorded: recordedKeys.has(key),
-    };
-  });
-};
-
-const recordDateLabel = (occurredAt: string, today: Date): string => {
-  const date = new Date(occurredAt);
-  const dateKey = localDateKey(date);
-  const yesterdayKey = localDateKey(addLocalDays(today, -1));
-  const dayLabel = dateKey === localDateKey(today)
-    ? '今天'
-    : dateKey === yesterdayKey
-      ? '昨天'
-      : `${date.getMonth() + 1}月${date.getDate()}日`;
-  const timeLabel = new Intl.DateTimeFormat('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date);
-  return `${dayLabel} ${timeLabel}`;
-};
-
-const RecordIcon = ({ kind }: { kind: LearningRecordKind }) => {
-  if (kind === 'initial_learning') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M6 5.5h5.2c.7 0 1.3.6 1.3 1.3v11.7c0-1.2-1-2.2-2.2-2.2H6z" />
-        <path d="M18 5.5h-4.2c-.7 0-1.3.6-1.3 1.3v11.7c0-1.2 1-2.2 2.2-2.2H18z" />
-      </svg>
-    );
-  }
-  if (kind === 'relearning') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M7.2 8.2H4.5V5.5" /><path d="M5 8a8 8 0 1 1-.7 6.8" />
-        <path d="m9 12 2 2 4-4" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 5a7 7 0 1 1-6.3 4" /><path d="M4 5v4h4" />
-      <path d="M12 8v4l2.6 1.7" />
-    </svg>
-  );
-};
-
-export const StudyScreen = ({
-  active,
-  tab,
-  onTabChange,
-  onBack,
-  onAddLearning,
-  onOpenTargetLibrary,
-  onOpenDefaultPolicy,
-  onOpenStats,
-  onSign,
-  signed,
-  streak,
-  defaultPolicy,
-  learningTargetCount,
-  readyInitialCount,
-  reviewCount,
-  dailyNewCount,
-  learningRecords,
-  onDailyNewCountChange,
-}: StudyScreenProps) => {
-  const today = new Date();
-  const todayKey = localDateKey(today);
-  const currentWeek = weekFor(today, signed, streak);
-  const todayRecords = learningRecords.filter(
-    (record) => localDateKey(new Date(record.occurredAt)) === todayKey,
-  );
-  const todayInitialCount = todayRecords.filter(
-    (record) => record.kind === 'initial_learning',
-  ).length;
-  const todayRetentionCount = todayRecords.length - todayInitialCount;
-  const remainingCount = readyInitialCount + reviewCount;
-
-  const cycleDailyNewCount = () => {
-    const currentIndex = PACE_OPTIONS.indexOf(dailyNewCount as (typeof PACE_OPTIONS)[number]);
-    const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % PACE_OPTIONS.length;
-    onDailyNewCountChange(PACE_OPTIONS[nextIndex]);
+export const studyButton = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5268a9]';
+export const StudyScreen = (props: StudyScreenProps) => {
+  const {t,i18n}=useTranslation();
+  const [filter,setFilter]=useState<'all'|LearningRecordKind>('all');
+  const [limit,setLimit]=useState(10);
+  const records=props.learningRecords.filter(record=>filter==='all'||record.kind===filter);
+  const closePreferences=()=>{
+    props.onTabChange('a');
+    requestAnimationFrame(()=>document.getElementById('study-preferences-button')?.focus());
   };
-
-  return (
-    <section
-      className={uiClass(`screen learning-surface my-learning-screen${active ? ' active' : ''}`, "#s-study")}
-      id="s-study"
-      data-anim="sheet"
-    >
-      <header className={uiClass("learning-page-nav has-tabs")}>
-        <button type="button" onClick={onBack} aria-label="返回首页">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6" /></svg>
-        </button>
-        <div className={uiClass("learning-page-tabs")} role="tablist" aria-label="我的学习页面">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'a'}
-            className={uiClass(tab === 'a' ? 'is-active' : '')}
-            onClick={() => onTabChange('a')}
-          >
-            我的学习
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'b'}
-            className={uiClass(tab === 'b' ? 'is-active' : '')}
-            onClick={() => onTabChange('b')}
-          >
-            学习设置
-          </button>
-        </div>
+  return <section id="s-study" className={`screen absolute inset-0 z-10 overflow-y-auto bg-[#fbfbfa] text-[#222631] ${props.active?'active':'invisible pointer-events-none'}`}>
+    <main className="mx-auto max-w-[1280px] px-6 py-8 sm:px-10 lg:px-14 lg:py-14">
+      <header className="mb-10 flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-3xl font-medium tracking-tight lg:text-4xl">{t('study.title')}</h1>
+        <button id="study-preferences-button" className={`${studyButton} border border-[#e3e5ea] bg-white`} onClick={()=>props.onTabChange('b')}><SlidersHorizontal size={17}/>{t('study.preferences')}</button>
       </header>
-
-      {tab === 'a' ? (
-        <main className={uiClass("learning-page-body my-learning-body")} role="tabpanel">
-          <section className={uiClass("my-learning-overview")} aria-labelledby="my-learning-today-title">
-            <div>
-              <small>今日学习</small>
-              <h1 id="my-learning-today-title">
-                {remainingCount > 0 ? `还有 ${remainingCount} 个意思待处理` : '今天的计划已处理完'}
-              </h1>
-              <p>
-                {todayRecords.length > 0
-                  ? `已完成 ${todayInitialCount} 个首次学习、${todayRetentionCount} 个复习或巩固。`
-                  : '完成的首次学习与复习会自动记在这里。'}
-              </p>
-            </div>
-            <div className={uiClass("my-learning-today")} aria-label="今日待处理学习摘要">
-              <span><small>待新学</small><strong>{readyInitialCount}</strong></span>
-              <i aria-hidden="true" />
-              <span><small>待复习</small><strong>{reviewCount}</strong></span>
-            </div>
-          </section>
-
-          <section className={uiClass("my-learning-plan")} aria-labelledby="my-learning-plan-title">
-            <div className={uiClass("my-learning-section-heading")}>
-              <div>
-                <small>范围与额度</small>
-                <h2 id="my-learning-plan-title">学习计划</h2>
-              </div>
-              <button type="button" onClick={onAddLearning}>添加内容</button>
-            </div>
-
-            <button
-              type="button"
-              className={uiClass("my-learning-plan-card")}
-              onClick={onOpenTargetLibrary}
-              aria-label="打开日常英语核心意思的学习内容"
-            >
-              <span className={uiClass("my-learning-book-mark")} aria-hidden="true">S</span>
-              <span className={uiClass("my-learning-plan-copy")}>
-                <small>当前词书</small>
-                <strong>日常英语核心意思</strong>
-                <em>当前范围 · 86 个意思</em>
-              </span>
-              <span className={uiClass("my-learning-plan-arrow")} aria-hidden="true">›</span>
-              <span className={uiClass("my-learning-plan-meta")}>
-                <span><small>已加入</small><strong>{learningTargetCount} 个目标</strong></span>
-                <i aria-hidden="true" />
-                <span><small>每日新学</small><strong>{dailyNewCount} 个意思</strong></span>
-              </span>
-            </button>
-          </section>
-
-          <section className={uiClass("my-learning-checkin")} aria-labelledby="my-learning-checkin-title">
-            <div className={uiClass("my-learning-section-heading")}>
-              <div>
-                <small>本周</small>
-                <h2 id="my-learning-checkin-title">每日签到</h2>
-              </div>
-              <button
-                type="button"
-                className={uiClass(signed ? 'is-complete' : '')}
-                onClick={onSign}
-                aria-pressed={signed}
-              >
-                {signed ? '今天已记录' : '记录今天'}
-              </button>
-            </div>
-
-            <div className={uiClass("my-learning-streak")}>
-              <span aria-hidden="true"><i /></span>
-              <p><strong>连续 {streak} 天</strong><small>签到只记录到访，不改变学习进度</small></p>
-            </div>
-
-            <ol className={uiClass("my-learning-week")} aria-label="本周签到日历">
-              {currentWeek.map((day) => (
-                <li
-                  key={day.key}
-                  className={uiClass(`${day.isToday ? 'is-today' : ''}${day.isFuture ? ' is-future' : ''}${day.isRecorded ? ' is-recorded' : ''}`)}
-                  aria-label={`星期${day.weekday}，${day.day}日${day.isRecorded ? '，已签到' : ''}`}
-                >
-                  <small>周{day.weekday}</small>
-                  <span>{day.isRecorded ? '✓' : day.day}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
-
-          <section className={uiClass("my-learning-history")} aria-labelledby="my-learning-history-title">
-            <div className={uiClass("my-learning-section-heading")}>
-              <div>
-                <small>最近发生</small>
-                <h2 id="my-learning-history-title">学习记录</h2>
-              </div>
-              <button type="button" onClick={onOpenStats}>完整概览</button>
-            </div>
-
-            {learningRecords.length === 0 ? (
-              <div className={uiClass("my-learning-history-empty")}>
-                <span aria-hidden="true"><i /><i /><i /></span>
-                <div>
-                  <strong>还没有完成记录</strong>
-                  <p>完成一个意思的首次学习、复习或巩固后，会按时间出现在这里。</p>
-                </div>
-              </div>
-            ) : (
-              <ol className={uiClass("my-learning-history-list")}>
-                {learningRecords.slice(0, 4).map((record) => (
-                  <li key={record.recordId}>
-                    <span className={uiClass(`my-learning-record-icon is-${record.kind}`)}>
-                      <RecordIcon kind={record.kind} />
-                    </span>
-                    <span className={uiClass("my-learning-record-copy")}>
-                      <span><strong>{record.expression}</strong><em>{record.label}</em></span>
-                      <small>{record.detail}</small>
-                    </span>
-                    <time dateTime={record.occurredAt}>{recordDateLabel(record.occurredAt, today)}</time>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </section>
-        </main>
-      ) : (
-        <main className={uiClass("learning-page-body my-learning-settings")} role="tabpanel">
-          <section className={uiClass("learning-section my-learning-settings-list")} aria-label="学习设置">
-            <button type="button" className={uiClass("my-learning-setting-row")} onClick={onOpenDefaultPolicy}>
-              <strong>默认学习方式</strong>
-              <em>{policyLabel(defaultPolicy)}</em>
-            </button>
-            <button type="button" className={uiClass("my-learning-setting-row")} onClick={cycleDailyNewCount}>
-              <strong>每日新学</strong>
-              <em>{dailyNewCount} 个意思</em>
-            </button>
-            <div className={uiClass("my-learning-setting-row is-static")}>
-              <strong>复习安排</strong>
-              <em>自动</em>
-            </div>
-          </section>
-        </main>
-      )}
-    </section>
-  );
+      <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+        <section className="flex flex-col rounded-3xl bg-[#edf0f7] p-6 sm:p-8">
+          <div className="flex items-center gap-2 text-sm text-[#68748d]"><BookOpen size={18}/>{t('study.scope')}</div>
+          <h2 className="mt-5 text-3xl font-medium tracking-tight">{props.learningTargetCount?t('study.count',{count:props.learningTargetCount}):t('study.empty')}</h2>
+          {!props.learningTargetCount&&<p className="mt-3 text-sm text-[#68748d]">{t('study.emptyHint')}</p>}
+          <dl className="my-7 grid grid-cols-2 divide-x divide-[#d8dfea]">
+            {([['ready',props.readyInitialCount],['review',props.reviewCount]] as const).map(([key,value])=><div key={key} className="last:pl-6"><dt className="text-sm text-[#68748d]">{t('study.'+key)}</dt><dd className="mt-2 text-2xl tabular-nums">{value.toLocaleString(i18n.language)}</dd></div>)}
+          </dl>
+          <div className="mt-auto flex flex-wrap gap-2">
+            {props.learningTargetCount>0&&<button className={`${studyButton} bg-[#2f3b70] text-white hover:bg-[#25305c]`} onClick={props.onOpenTargetLibrary}>{t('study.browse')}<ArrowRight size={16}/></button>}
+            <button className={`${studyButton} border border-[#cfd7e6] hover:bg-white`} onClick={props.onAddLearning}><Plus size={16}/>{t('study.add')}</button>
+          </div>
+        </section>
+        <section className="rounded-3xl border border-[#e3e5ea] bg-white p-6 sm:p-8">
+          <h2 className="text-lg font-medium">{t('study.plan')}</h2>
+          <button className="mt-7 block w-full rounded-xl text-left focus-visible:outline-2 focus-visible:outline-[#5268a9]" onClick={()=>props.onTabChange('b')}>
+            <span className="text-sm text-[#68748d]">{t('study.daily')}</span><span className="mt-2 flex items-center justify-between gap-3 text-2xl">{t('study.count',{count:props.dailyNewCount})}<ArrowRight size={18}/></span>
+          </button>
+          <div className="mt-7 border-t border-[#e3e5ea] pt-6"><p className="text-sm text-[#68748d]">{t('study.method')}</p><p className="mt-2 font-medium">{t('learningPreferences.policies.'+props.defaultPolicy)}</p></div>
+        </section>
+      </div>
+      <StudyCalendar/>
+      <section className="mt-12" aria-labelledby="study-history-title">
+        <div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-4"><h2 id="study-history-title" className="text-xl font-medium">{t('study.history')}</h2><button type="button" className={studyButton+' text-[#5268a9] hover:bg-[#edf0f7]'} onClick={props.onOpenStats}>{t('statistics.title')}<ArrowRight size={16}/></button></div>
+          <div className="flex flex-wrap gap-1" aria-label={t('study.history')}>
+            {(['all','initial_learning','retention_review','relearning'] as const).map(kind=><button key={kind} aria-pressed={filter===kind} className={`${studyButton} ${filter===kind?'bg-[#edf0f7] text-[#303f76]':'text-[#68748d] hover:bg-[#f0f2f5]'}`} onClick={()=>{setFilter(kind);setLimit(10);}}>{t('study.'+kind)}</button>)}
+          </div>
+        </div>
+        <p className="mt-3 text-xs leading-6 text-[#788398]">{t('study.historyNote')}</p>
+        {records.length===0?<div className="py-16 text-center"><p className="font-medium">{t(props.learningRecords.length?'study.noMatches':'study.noRecords')}</p>{!props.learningRecords.length&&<p className="mt-2 text-sm text-[#788398]">{t('study.noRecordsHint')}</p>}</div>:<ol className="mt-5 divide-y divide-[#e3e5ea]">
+          {records.slice(0,limit).map(record=><li key={record.recordId}><button className="flex w-full flex-wrap items-center gap-4 rounded-lg py-5 text-left hover:bg-[#f2f4f8] focus-visible:outline-2 focus-visible:outline-[#5268a9] sm:flex-nowrap" onClick={()=>props.onOpenTarget(record.targetId)}>
+            <span className="min-w-0 flex-1"><strong className="font-medium">{record.expression}</strong><span className="mt-1 block text-sm text-[#68748d]">{PROTOTYPE_LEARNING_TARGETS[record.targetId].meaning}</span></span>
+            <span className="rounded-md bg-[#edf0f7] px-2 py-1 text-xs text-[#546582]">{t('study.'+record.kind)}</span>
+            <time className="w-full text-xs tabular-nums text-[#788398] sm:w-auto" dateTime={record.occurredAt}>{new Intl.DateTimeFormat(i18n.language,{dateStyle:'medium',timeStyle:'short'}).format(new Date(record.occurredAt))}</time><ArrowRight className="hidden shrink-0 text-[#788398] sm:block" size={16}/>
+          </button></li>)}
+        </ol>}
+        {records.length>limit&&<button className={`${studyButton} mt-4 border border-[#e3e5ea]`} onClick={()=>setLimit(value=>value+10)}>{t('study.more')}</button>}
+      </section>
+    </main>
+    {props.active&&props.tab==='b'&&<LearningPreferencesPanel defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('study.done')}/>}
+  </section>;
 };

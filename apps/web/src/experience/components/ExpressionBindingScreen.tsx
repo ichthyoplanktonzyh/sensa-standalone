@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { uiText } from '../../i18n/uiText';
 import { uiClass } from '../ui/classes';
 /**
  * Independent Sense → target-expression binding journey.
@@ -33,37 +35,37 @@ const opId = newUuid;
 type BindingStep = 'candidate' | 'form' | 'relation';
 
 const expressionTypeLabels: Record<SensaExpressionType, string> = {
-  word: '单词',
-  phrase: '短语',
-  construction: '构式',
-  sentence: '完整句子',
-  utterance_strategy: '表达方式',
+  get word() { return uiText('word'); },
+  get phrase() { return uiText('phrase'); },
+  get construction() { return uiText('construction'); },
+  get sentence() { return uiText('sentence'); },
+  get utterance_strategy() { return uiText('expressionStrategy'); },
 };
 
 const relationLabels: Record<SensaExpressionBindingRelation, string> = {
-  realizes: '自然实现',
-  approximates: '相近表达',
-  evokes: '唤起联想',
+  get realizes() { return uiText('naturalExpression'); },
+  get approximates() { return uiText('approximateExpression'); },
+  get evokes() { return uiText('evokesAnAssociation'); },
 };
 
 const relationDescriptions: Record<SensaExpressionBindingRelation, string> = {
-  realizes: '自然对应的英语说法',
-  approximates: '意思相近，但侧重或语境略有差异',
-  evokes: '能让人联想到该意思，但含义更宽泛',
+  get realizes() { return uiText('aNaturalEnglishExpressionForThisMeaning'); },
+  get approximates() { return uiText('similarMeaningWithADifferentEmphasisOr'); },
+  get evokes() { return uiText('evokesThisMeaningButHasABroader'); },
 };
 
 const coverageLabels: Record<SensaSemanticCoverage, string> = {
-  exact: '完全覆盖',
-  broader: '范围更宽',
-  narrower: '范围更窄',
-  overlapping: '部分重叠',
+  get exact() { return uiText('exactCoverage'); },
+  get broader() { return uiText('broaderScope'); },
+  get narrower() { return uiText('narrowerScope'); },
+  get overlapping() { return uiText('partialOverlap'); },
 };
 
 const coverageDescriptions: Record<SensaSemanticCoverage, string> = {
-  exact: '表达与当前意思范围完全一致',
-  broader: '包含当前意思，也适用于更多场景',
-  narrower: '只覆盖当前意思的一部分范围',
-  overlapping: '有共同点，但在部分场景下不能互换',
+  get exact() { return uiText('theExpressionMatchesTheMeaningSScope'); },
+  get broader() { return uiText('includesThisMeaningAndAppliesToMore'); },
+  get narrower() { return uiText('coversOnlyPartOfThisMeaning'); },
+  get overlapping() { return uiText('overlapsButIsNotInterchangeableInEvery'); },
 };
 
 const unavailable = (title: string, reason: string) => (
@@ -95,8 +97,8 @@ const CandidateRow = ({
         <small>{expressionTypeLabels[candidate.expressionType]} · {candidate.languageTag}</small>
         <em>{candidate.rationale}</em>
       </span>
-      {candidate.bindingStatus === 'confirmed' && <span className={uiClass("ebs-candidate-state")}>已确认绑定</span>}
-      {candidate.bindingStatus === 'used' && <span className={uiClass("ebs-candidate-state")}>已用于绑定</span>}
+      {candidate.bindingStatus === 'confirmed' && <span className={uiClass("ebs-candidate-state")}>{uiText('connectionConfirmed')}</span>}
+      {candidate.bindingStatus === 'used' && <span className={uiClass("ebs-candidate-state")}>{uiText('alreadyConnected')}</span>}
     </button>
   </li>
 );
@@ -108,6 +110,7 @@ export const ExpressionBindingScreen = ({
   onBack,
   toast,
 }: ExpressionBindingScreenProps) => {
+  useTranslation();
   const screenRef = useRef<HTMLElement>(null);
   const gateway = useJourneyGateway();
   const { detail, status } = useJourneyDetail(personalMeaningId);
@@ -181,10 +184,10 @@ export const ExpressionBindingScreen = ({
         relation,
         semanticCoverage,
       });
-      toast('已确认这个目标表达');
+      toast(uiText('targetExpressionConfirmed2'));
       onBack();
     } catch (error) {
-      const message = error instanceof Error ? error.message : '无法确认表达连接';
+      const message = error instanceof Error ? error.message : uiText('unableToConfirmThisConnection');
       setFormError(message);
       toast(message);
     } finally {
@@ -195,30 +198,30 @@ export const ExpressionBindingScreen = ({
   const body = !status.ok
     ? (
       <div className={uiClass("ebs-error")} role="alert">
-        <b>个人意义数据无法读取</b>
-        <p>{status.error ?? '本机个人意义数据不可用。'}</p>
-        <button type="button" onClick={onBack}>返回</button>
+        <b>{uiText('unableToLoadYourMeanings')}</b>
+        <p>{status.error ?? uiText('localMeaningDataIsUnavailable')}</p>
+        <button type="button" onClick={onBack}>{uiText('back')}</button>
       </div>
     )
     : !personalMeaningId || !meaningFocusId
-      ? unavailable('无法进入表达绑定', '没有找到对应的经验与已确认意思。')
+      ? unavailable(uiText('unableToConnectAnExpression'), uiText('theContextAndConfirmedMeaningWereNot'))
       : !detail || !focus || !alignment
-        ? unavailable('无法进入表达绑定', '需要先确认意思，才能绑定表达。')
+        ? unavailable(uiText('unableToConnectAnExpression'), uiText('confirmTheMeaningBeforeConnectingAnExpression'))
         : candidates.length === 0
-          ? unavailable('暂时没有可确认的表达', '当前意思暂无候选表达。')
+          ? unavailable(uiText('noExpressionToConfirmYet'), uiText('thisMeaningHasNoCandidateExpressionsYet'))
           : (
               <>
                 <section className={uiClass("ebs-hero")}>
                   <span className={uiClass("ebs-hero-mark")} aria-hidden="true">↗</span>
-                  <h2>你想用什么表达它？</h2>
+                  <h2>{uiText('howWouldYouExpressIt')}</h2>
                   <p>{alignment.semanticSpec?.coreMeaningFocus ?? focus.statement}</p>
                 </section>
 
-                <ol className={uiClass("ebs-stepper")} aria-label="绑定表达进度">
+                <ol className={uiClass("ebs-stepper")} aria-label={uiText('expressionConnectionSteps')}>
                   {(['candidate', 'form', 'relation'] as const).map((step, index) => (
                     <li key={step} className={uiClass(bindingStep === step ? 'is-current' : '')}>
                       <span>{index + 1}</span>
-                      <small>{index === 0 ? '选择表达' : index === 1 ? '确认形式' : '确认关系'}</small>
+                      <small>{index === 0 ? uiText('chooseExpression') : index === 1 ? uiText('confirmForm') : uiText('confirmRelation')}</small>
                     </li>
                   ))}
                 </ol>
@@ -226,8 +229,8 @@ export const ExpressionBindingScreen = ({
                 {bindingStep === 'candidate' && (
                   <section className={uiClass("ebs-section")} aria-labelledby="ebs-candidate-heading">
                     <header className={uiClass("ebs-section-head")}>
-                      <div><h2 id="ebs-candidate-heading">选择一个表达</h2></div>
-                      <span>{candidates.length} 个</span>
+                      <div><h2 id="ebs-candidate-heading">{uiText('chooseAnExpression')}</h2></div>
+                      <span>{candidates.length} {uiText('items')}</span>
                     </header>
                     <ul className={uiClass("ebs-candidates")}>
                       {candidates.map((candidate) => (
@@ -248,7 +251,7 @@ export const ExpressionBindingScreen = ({
                     </ul>
                     <div className={uiClass("ebs-actions")}>
                       <button type="button" className={uiClass("ebs-primary")} disabled={!selectedCandidate} onClick={() => setBindingStep('form')}>
-                        继续 <span aria-hidden="true">→</span>
+                        {uiText('continue')}<span aria-hidden="true">→</span>
                       </button>
                     </div>
                   </section>
@@ -257,19 +260,19 @@ export const ExpressionBindingScreen = ({
                 <form className={uiClass("ebs-form")} onSubmit={submit}>
                   {bindingStep === 'form' && <section className={uiClass("ebs-section")} aria-labelledby="ebs-form-heading">
                     <header className={uiClass("ebs-section-head")}>
-                      <div><h2 id="ebs-form-heading">确认写法与类型</h2></div>
+                      <div><h2 id="ebs-form-heading">{uiText('confirmSpellingAndType')}</h2></div>
                     </header>
                     <label className={uiClass("ebs-field")}>
-                      <span>表达形式</span>
+                      <span>{uiText('expressionForm')}</span>
                       <input
                         required
                         value={surfaceForm}
                         onChange={(event) => setSurfaceForm(event.target.value)}
-                        placeholder="输入你要确认的英语表达"
+                        placeholder={uiText('enterTheEnglishExpressionToConfirm')}
                       />
                     </label>
                     <label className={uiClass("ebs-field")}>
-                      <span>表达类型</span>
+                      <span>{uiText('expressionType')}</span>
                       <select value={expressionType} onChange={(event) => setExpressionType(event.target.value as SensaExpressionType)}>
                         {(Object.keys(expressionTypeLabels) as SensaExpressionType[]).map((type) => (
                           <option key={type} value={type}>{expressionTypeLabels[type]}</option>
@@ -278,9 +281,9 @@ export const ExpressionBindingScreen = ({
                     </label>
                     <div className={uiClass("ebs-actions")}>
                       <button type="button" className={uiClass("ebs-primary")} disabled={!surfaceForm.trim()} onClick={() => setBindingStep('relation')}>
-                        继续 <span aria-hidden="true">→</span>
+                        {uiText('continue')}<span aria-hidden="true">→</span>
                       </button>
-                      <button type="button" onClick={() => setBindingStep('candidate')}>返回选择表达</button>
+                      <button type="button" onClick={() => setBindingStep('candidate')}>{uiText('backToExpressions')}</button>
                     </div>
                   </section>}
 
@@ -288,10 +291,10 @@ export const ExpressionBindingScreen = ({
 
                   {bindingStep === 'relation' && <section className={uiClass("ebs-section")} aria-labelledby="ebs-relation-heading">
                     <header className={uiClass("ebs-section-head")}>
-                      <div><h2 id="ebs-relation-heading">它怎样表达这个意思？</h2></div>
+                      <div><h2 id="ebs-relation-heading">{uiText('howDoesItExpressThisMeaning')}</h2></div>
                     </header>
                     <fieldset className={uiClass("ebs-choice-set")}>
-                      <legend>关系</legend>
+                      <legend>{uiText('relation')}</legend>
                       {(Object.keys(relationLabels) as SensaExpressionBindingRelation[]).map((value) => (
                         <label key={value} className={uiClass(relation === value ? 'is-selected' : '')}>
                           <input
@@ -306,7 +309,7 @@ export const ExpressionBindingScreen = ({
                       ))}
                     </fieldset>
                     <fieldset className={uiClass("ebs-choice-set")}>
-                      <legend>语义覆盖</legend>
+                      <legend>{uiText('semanticCoverage')}</legend>
                       {(Object.keys(coverageLabels) as SensaSemanticCoverage[]).map((value) => (
                         <label key={value} className={uiClass(semanticCoverage === value ? 'is-selected' : '')}>
                           <input
@@ -321,7 +324,7 @@ export const ExpressionBindingScreen = ({
                       ))}
                     </fieldset>
                     {(!relation || !semanticCoverage) && (
-                      <p className={uiClass("ebs-selection-hint")}>请分别选择关系和语义覆盖范围后再确认。</p>
+                      <p className={uiClass("ebs-selection-hint")}>{uiText('selectBothARelationAndACoverage')}</p>
                     )}
                     <div className={uiClass("ebs-actions")}>
                       <button
@@ -329,9 +332,9 @@ export const ExpressionBindingScreen = ({
                         className={uiClass("ebs-primary")}
                         disabled={busy || !selectedCandidate || !surfaceForm.trim() || !relation || !semanticCoverage}
                       >
-                        {busy ? '正在确认…' : '确认这个表达'} <span aria-hidden="true">→</span>
+                        {busy ? uiText('confirming') : uiText('confirmThisExpression')} <span aria-hidden="true">→</span>
                       </button>
-                      <button type="button" disabled={busy} onClick={() => setBindingStep('form')}>返回确认形式</button>
+                      <button type="button" disabled={busy} onClick={() => setBindingStep('form')}>{uiText('backToForm')}</button>
                     </div>
                   </section>}
                 </form>
@@ -346,10 +349,10 @@ export const ExpressionBindingScreen = ({
       data-anim="slide"
     >
       <header className={uiClass("content-nav ebs-nav")}>
-        <button type="button" className={uiClass("content-nav-back")} onClick={onBack} aria-label="返回已确认 Sense">
+        <button type="button" className={uiClass("content-nav-back")} onClick={onBack} aria-label={uiText('backToConfirmedMeaning')}>
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
-        <h1>绑定目标表达</h1>
+        <h1>{uiText('connectAnExpression')}</h1>
         <span />
       </header>
       <div className={uiClass("content-page-body ebs-body")}>{body}</div>

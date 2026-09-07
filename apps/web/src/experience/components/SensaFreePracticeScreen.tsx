@@ -1,127 +1,27 @@
-import { uiClass } from '../ui/classes';
-import { useMemo } from 'react';
-import {
-  resolvePracticeActivities,
-  type ResolvedPracticeActivity,
-} from '../practiceInventory';
+import { ArrowRight, Headphones, Mic, BookOpen, PenLine } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { resolvePracticeActivities } from '../practiceInventory';
 import type { AcademyScreenProps } from './AcademyScreen';
-
-const activityStatusLabel = (activity: ResolvedPracticeActivity): string => {
-  switch (activity.status) {
-    case 'available':
-      return '开始练习';
-    case 'unavailable_in_scope':
-      return '范围为空';
-    case 'not_yet_delivered':
-      return '待接入';
-  }
-};
-
-const PracticeActivityCard = ({
-  activity,
-  onEnter,
-}: {
-  activity: ResolvedPracticeActivity;
-  onEnter: () => void;
-}) => {
-  const available = activity.status === 'available';
-
-  return (
-    <button
-      type="button"
-      className={uiClass(`sensa-practice-activity area-${activity.primaryArea} is-${activity.status}`)}
-      disabled={!available}
-      onClick={onEnter}
-      aria-label={`${activity.areaLabel}，${activity.name}，${activityStatusLabel(activity)}`}
-    >
-      <span className={uiClass("sensa-practice-activity-top")}>
-        <span className={uiClass("sensa-practice-activity-icon")} aria-hidden="true">
-          <svg className={uiClass("icon")}><use href={activity.iconHref} /></svg>
-        </span>
-        <span className={uiClass("sensa-practice-area-label")}>
-          {activity.areaLabel}
-          {!available && <em>{activityStatusLabel(activity)}</em>}
-        </span>
-      </span>
-
-      <span className={uiClass("sensa-practice-activity-name")}>{activity.name}</span>
-      <span className={uiClass("sensa-practice-activity-cue")}>{activity.cue}</span>
-
-      {available && (
-        <span className={uiClass("sensa-practice-activity-arrow")} aria-hidden="true">
-          <svg className={uiClass("icon")}><use href="#i-chev-r" /></svg>
-        </span>
-      )}
-    </button>
-  );
-};
-
-export const SensaFreePracticeScreen = ({
-  active,
-  onBack,
-  onOpenPracticeScope,
-  onOpenRealWorldListening,
-  practiceScope,
-}: AcademyScreenProps) => {
-  const activities = useMemo(
-    () => resolvePracticeActivities(practiceScope),
-    [practiceScope],
-  );
-  const scopePreview = useMemo(() => {
-    const forms = [...new Set(
-      practiceScope.targets.map((target) => target.expression.surfaceForm.trim()).filter(Boolean),
-    )];
-    if (forms.length === 0) return '当前没有可练目标';
-    const visible = forms.slice(0, 4).join(' · ');
-    return forms.length > 4 ? `${visible} · +${forms.length - 4}` : visible;
-  }, [practiceScope.targets]);
-
-  const enter = (activity: ResolvedPracticeActivity) => {
-    if (activity.id === 'real_world_speech_variation') {
-      onOpenRealWorldListening();
-    }
-  };
-
-  return (
-    <section
-      className={uiClass(`screen sensa-practice${active ? ' active' : ''}`, "#s-academy")}
-      id="s-academy"
-      data-anim="sheet"
-    >
-      <header className={uiClass("sensa-practice-nav")}>
-        <button className={uiClass("sensa-practice-back")} onClick={onBack} aria-label="返回首页">
-          <svg className={uiClass("icon")}><use href="#i-chev-d" /></svg>
-        </button>
-        <h1>自由练习</h1>
-      </header>
-
-      <div className={uiClass("sensa-practice-body")}>
-        <button
-          type="button"
-          className={uiClass("sensa-practice-scope")}
-          onClick={onOpenPracticeScope}
-          aria-label={`当前练习范围，${practiceScope.title}，${practiceScope.targets.length} 个目标`}
-        >
-          <span className={uiClass("sensa-practice-scope-copy")}>
-            <span>练习范围 · {practiceScope.title}</span>
-            <strong>{scopePreview}</strong>
-          </span>
-          <span className={uiClass("sensa-practice-scope-meta")}>
-            {practiceScope.targets.length} 个目标
-            <svg className={uiClass("icon")}><use href="#i-chev-r" /></svg>
-          </span>
-        </button>
-
-        <div className={uiClass("sensa-practice-activities")} aria-label="练习活动">
-          {activities.map((activity) => (
-            <PracticeActivityCard
-              key={activity.id}
-              activity={activity}
-              onEnter={() => enter(activity)}
-            />
-          ))}
-        </div>
-      </div>
-    </section>
-  );
+export const practiceButton='inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm focus-visible:outline-2 focus-visible:outline-[#5268a9] disabled:opacity-40';
+export const practiceSurface=(active:boolean)=>`screen absolute inset-0 z-20 overflow-y-auto bg-[#fbfbfa] text-[#222631] ${active?'active':'invisible pointer-events-none'}`;
+export const practiceBody='mx-auto max-w-[1280px] px-6 py-8 sm:px-10 lg:px-14 lg:py-14';
+export const SensaFreePracticeScreen=({active,onOpenPracticeScope,onOpenRealWorldListening,practiceScope}:AcademyScreenProps)=>{
+ const {t}=useTranslation();
+ const icons={listening:Headphones,speaking:Mic,reading:BookOpen,writing:PenLine};
+ const forms=[...new Set(practiceScope.targets.map(target=>target.expression.surfaceForm))];
+ return <section id="s-academy" className={practiceSurface(active)}><main className={practiceBody}>
+  <h1 className="text-3xl font-medium tracking-tight lg:text-4xl">{t('practice.title')}</h1><p className="mt-3 text-sm text-[#788398]">{t('practice.note')}</p>
+  <button onClick={onOpenPracticeScope} className="my-9 flex w-full flex-wrap items-center gap-5 rounded-3xl bg-[#edf0f7] p-6 text-left sm:p-8">
+   <span className="min-w-0 flex-1"><span className="text-xs text-[#68748d]">{t('practice.scope')} · {t('practice.sources.'+practiceScope.sourceId)}</span><strong className="mt-3 block text-xl font-medium">{forms.slice(0,4).join(' · ')||t('practice.empty')}{forms.length>4?' …':''}</strong></span>
+   <span className="flex items-center gap-3 text-sm text-[#546582]">{t('practice.count',{count:practiceScope.targets.length})}<ArrowRight size={18}/></span>
+  </button>
+  <div className="grid gap-5 md:grid-cols-2">{resolvePracticeActivities(practiceScope).map(activity=>{
+   const Icon=icons[activity.primaryArea],available=activity.status==='available';
+   return <button key={activity.id} disabled={!available} onClick={onOpenRealWorldListening} className={`flex min-h-60 flex-col items-start rounded-3xl border p-7 text-left ${available?'border-[#cdd6e9] bg-white hover:border-[#5268a9]':'border-[#e3e5ea] bg-[#f5f5f3] text-[#788398]'}`}>
+    <span className="flex w-full items-center justify-between"><Icon size={24}/><span className="text-xs">{t('practice.areas.'+activity.primaryArea)}</span></span>
+    <h2 className="mt-6 text-xl font-medium">{t('practice.names.'+activity.primaryArea)}</h2><p className="mt-2 text-sm text-[#788398]">{t('practice.cues.'+activity.primaryArea)}</p>
+    <span className="mt-6 flex items-center gap-2 text-xs">{t('practice.status.'+activity.status)}{available&&<ArrowRight size={15}/>}</span>
+   </button>;
+  })}</div>
+ </main></section>;
 };

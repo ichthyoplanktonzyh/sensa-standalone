@@ -1,0 +1,52 @@
+/* Scoped to the learning viewer: Reference, notes and scene editors keep their presentation. */
+#s-example[data-learning-example] { position:absolute; inset:0; z-index:34; display:flex; flex-direction:column; overflow:hidden; background:#fbfbfa; color:#242a38; }
+#s-example[data-learning-example]:not(.active) { visibility:hidden; pointer-events:none; }
+#s-example[data-learning-example] button { cursor:pointer; }
+#s-example[data-learning-example] button:disabled { opacity:.45; cursor:not-allowed; }
+#s-example[data-learning-example] :is(button, summary, a):focus-visible { outline:2px solid #5268a9; outline-offset:3px; }
+#s-example .sensa-example-topbar { display:grid; grid-template-columns:44px minmax(0,1fr) 44px; gap:16px; align-items:center; flex-shrink:0; padding:16px 24px; border-bottom:1px solid #e1e5ed; }
+#s-example .sensa-example-topbar>div { text-align:center; min-width:0; }
+#s-example .sensa-example-topbar strong { display:block; font-size:20px; font-weight:600; overflow-wrap:anywhere; }
+#s-example .sensa-example-topbar span { display:block; margin-top:4px; font-size:14px; color:#68748d; }
+#s-example .sensa-example-topbar button { display:grid; place-items:center; width:44px; height:44px; border:0; border-radius:12px; background:transparent; color:#5268a9; }
+#s-example .sensa-example-topbar button:hover, #s-example .is-saved { background:#edf0f7; }
+#s-example .is-saved svg { fill:currentColor; }
+#s-example .icon { width:22px; height:22px; }
+#s-example .sensa-example-scroll { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:24px; }
+#s-example .example-card-carousel, #s-example .sensa-example-pagination, #s-example .sensa-example-unavailable { max-width:768px; margin-inline:auto; }
+#s-example .sensa-example-viewer { overflow:hidden; border:1px solid #e1e5ed; border-radius:24px; background:white; }
+#s-example .sensa-example-source { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; padding:20px 24px; border-bottom:1px solid #e1e5ed; color:#68748d; font-size:12px; }
+#s-example .sensa-example-source strong { display:block; margin-top:4px; font-weight:500; }
+#s-example .sensa-example-sentence { padding:24px; }
+#s-example .example-lookup-hint { margin:0 0 16px; font-size:12px; color:#68748d; }
+#s-example .sensa-example-play { display:grid; place-items:center; width:48px; height:48px; margin-bottom:24px; border:0; border-radius:16px; color:#303f76; background:#edf0f7; }
+#s-example .sensa-example-play.is-playing { background:#303f76; color:white; }
+#s-example .sensa-example-l2 { font-size:clamp(24px,3vw,32px); line-height:1.7; overflow-wrap:anywhere; }
+#s-example .sensa-example-l2 .tok-word { min-height:44px; border-radius:6px; }
+#s-example .sensa-example-l2 .tok-target { color:#303f76; font-weight:600; }
+#s-example .sensa-example-l2 .tok-selected, #s-example .sensa-example-l2 .tok-word:hover { background:#edf0f7; }
+#s-example .sensa-example-l1 { margin-top:24px; padding-left:16px; border-left:2px solid #dce2f0; font-size:16px; line-height:1.7; color:#68748d; }
+#s-example .sensa-example-translation { min-height:44px; margin-top:12px; border:0; background:transparent; color:#5268a9; font-size:14px; }
+#s-example .sensa-example-sense-anchor { margin:0 24px 24px; padding:24px; border-radius:16px; background:#edf0f7; color:#303f76; }
+#s-example .sensa-example-sense-anchor>span { display:block; font-size:12px; }
+#s-example .sensa-example-sense-anchor>strong { display:block; margin-top:8px; font-size:18px; font-weight:600; }
+#s-example .sensa-example-sense-anchor details { margin-top:12px; font-size:14px; line-height:1.7; }
+#s-example .sensa-example-sense-anchor summary { min-height:44px; padding-block:12px; cursor:pointer; }
+#s-example .sensa-example-context { margin:0 24px 24px; border-top:1px solid #e1e5ed; font-size:14px; line-height:1.7; }
+#s-example .sensa-example-context button { display:flex; width:100%; min-height:48px; align-items:center; justify-content:space-between; border:0; background:transparent; color:#5268a9; }
+#s-example .sensa-example-context small { display:block; margin-top:12px; color:#68748d; }
+#s-example .sensa-example-media { margin:24px; overflow:hidden; border-radius:16px; background:#edf0f7; }
+#s-example .sensa-example-media :is(video,iframe) { display:block; width:100%; aspect-ratio:16/9; border:0; }
+#s-example .sensa-example-media footer { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px; font-size:12px; }
+#s-example .sensa-example-media a { display:inline-flex; align-items:center; min-height:44px; color:#303f76; text-decoration:underline; }
+#s-example .sensa-example-pagination { margin-top:24px; }
+#s-example .sensa-example-pagination>div { flex-wrap:wrap; }
+#s-example .sensa-example-pagination>div>button { width:44px; height:44px; border-radius:12px; background:radial-gradient(circle,#aab5d0 3px,transparent 4px); }
+#s-example .sensa-example-pagination>div>button.active { transform:none; background:radial-gradient(circle,#303f76 4px,transparent 5px); }
+#s-example .sensa-example-footer { flex-shrink:0; padding:16px 24px max(16px,env(safe-area-inset-bottom)); border-top:1px solid #e1e5ed; text-align:center; }
+#s-example .sensa-example-footer button { width:100%; max-width:768px; min-height:48px; border:0; border-radius:12px; background:#303f76; color:white; font-size:14px; }
+#s-example .sensa-example-footer p { margin-top:12px; font-size:12px; color:#68748d; }
+#s-example .sensa-example-unavailable { padding:32px; text-align:center; border:1px dashed #dce2f0; border-radius:24px; }
+#s-example .sensa-example-unavailable p { margin-top:12px; color:#68748d; }
+@media (min-width:640px) { #s-example .sensa-example-scroll { padding:40px; } #s-example .sensa-example-sentence { padding:32px; } }
+@media (prefers-reduced-motion:reduce) { #s-example .example-card-carousel { transition:none !important; } }

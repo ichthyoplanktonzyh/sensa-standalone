@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import type { DictionaryPresentation } from '../components/DictionaryPresentationContext';
-import type { PortableListeningPresentation } from '../components/PortableListeningScreen';
 import type { SemanticWorldPresentation } from '../components/SemanticWorldScreen';
 
 /**
@@ -22,18 +21,14 @@ import type { SemanticWorldPresentation } from '../components/SemanticWorldScree
  */
 export interface PresentationState {
   readonly semanticWorld: SemanticWorldPresentation;
-  readonly portableListening: PortableListeningPresentation;
   readonly dictionary: DictionaryPresentation;
   setSemanticWorld: (presentation: SemanticWorldPresentation) => void;
-  setPortableListening: (presentation: PortableListeningPresentation) => void;
   setDictionary: (presentation: DictionaryPresentation) => void;
 }
 
 export const usePresentationStore = create<PresentationState>((set) => ({
   semanticWorld: 'sensa',
-  portableListening: 'sensa',
   dictionary: 'sensa',
   setSemanticWorld: (semanticWorld) => set({ semanticWorld }),
-  setPortableListening: (portableListening) => set({ portableListening }),
   setDictionary: (dictionary) => set({ dictionary }),
 }));

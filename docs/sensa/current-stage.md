@@ -1,9 +1,9 @@
 # Sensa 当前阶段与交付边界
 
-> 状态日期：2026-09-05\
+> 状态日期：2026-09-07\
 > 当前阶段：领域与行为原型验证后期，生产应用建设前期\
 > 下一里程碑：React Web + 浏览器采集插件的小规模受邀测试版\
-> 当前执行位置：M0 进行中；M0-1 产品基线已记录，下一项为 M0-2 UI/交互规格\
+> 当前执行位置：M0 进行中；M0-1 产品基线已记录，M0-2 首条状态规格已形成评审稿，新增交互待确认\
 > 执行路线图：[production-migration-plan.md](production-migration-plan.md)
 
 本文是项目阶段、证据级别和近期交付范围的唯一事实来源。[文档索引](README.md)列出的七份
@@ -17,6 +17,10 @@ owner 确认前端体验，再细化合同并纵向实现；该方式可根据�
 Sensa 已具备开始生产化的领域、行为和工程基础。当前最主要的工作，是让最新领域模型、正式
 客户端、服务端持久化与同步成为同一条真实闭环。正式 UI 需要按平台设计，消费契约、数据库
 映射、服务端业务执行及运行保障仍需建立或迁移。
+
+2026-09-07 原工作树的 apps/web 已有未提交的桌面/手机 UI 重构，
+具体范围与代码观察见 [M0-2 基线说明](m0-2-first-learning-state-spec.md)。下述旧纵切仍是工程基础，
+新 UI 的 previewStorage/checkpoint 不能冒充生产 API/Sync 接入。
 
 当前仓库存在两套进度不同的实现：
 
@@ -93,17 +97,18 @@ Sensa 已具备开始生产化的领域、行为和工程基础。当前最主�
 领域规定的明确授权；模型输出本身没有提交语义身份、Curriculum 或学习进度的权力。
 Book/direct/personal 来源汇合到同一 Target 边界，同一学习连接不因重复提交或多来源建立重复调度。
 
+2026-09-07 owner 明确：首发允许开放自由练习、词典、统计和签到；允许开放不等于已生产验收，
+不自动扩展到全部 Activity、词典资源、复杂诊断或激励。保留现有笔记与场景编辑体验。
 首轮只开放真实具备资源、服务端合同和客户端支持的能力。M0-1 已记录页面职责、操作清单及
-基准状态，M0-2/M0-3 继续具体设计。首次使用不强制选词书；未交付主入口隐藏；签到与连续
-天数暂不交付；仅开放轻量学习时不显示无实际选择的 Policy 选择器。
+基准状态，M0-2/M0-3 继续具体设计。首次使用不强制选词书；首次须明确确认每日新学数量后才能开始，目标就绪后回首页开始（9 月 7 日确认）；未交付主入口隐藏；签到的入口与日界/连续天数规则仍须细化，签到和练习不产生正式 Evidence、进度或调度；仅开放轻量学习时不显示无实际选择的 Policy 选择器。
 
 ### 后续交付，不阻塞当前受邀测试版
 
 - high_assurance/Structured Acquisition、Gate/5D 诊断、完整 protected assessment inventory
   与高保证 validator；第三个架构验证 preset 不构成生产承诺。
-- Free Practice 四个 Area 及其 Activity、provider、录音/ASR/反馈链；练习资源缺失不阻止正式
+- Free Practice 尚未具备执行条件的 Activity、provider、录音/ASR/反馈链扩展；练习资源缺失不阻止正式
   学习内容发布，练习不能写正式 Evidence、进度或调度。
-- 宽覆盖 Reference Lexicon、Contextual Lookup、Sense Alignment、Lexical Enrichment、
+- 词典已允许首发开放；宽覆盖资源、完整离线 Release、Sense Alignment、Lexical Enrichment、
   Semantic Field 与更完整的语义投影。
 - 完整 Book Enrollment/Range/Scope lifecycle、个人 Collection、Bookmark/Note 管理及扩展历史
   体验；首轮仍须实现独立入口和 personal-first 加入学习所必需的最小 Curriculum 事实。
@@ -112,7 +117,7 @@ Book/direct/personal 来源汇合到同一 Target 边界，同一学习连接不
   图片/语音、移动分享、桌面全局采集和更多浏览器覆盖。
 
 当前不建设 Cards/Decks、generic flashcard sync、Workspace 产品导航、通用 AI/MCP、社区、
-commerce、admin 或考试「真题」。影视/电视/YouTube 原声例句、词级媒体 timeline、动态生成
+commerce、admin 或考试「真题」。真实语流 YouGlish 保留在自由练习；正式学习的影视/电视/YouTube 原声例句生产链、词级媒体 timeline、动态生成
 交互 UI、Listening Gate 和全量学习历史 reset 均不属于当前交付范围。
 
 ## 4. 架构与迁移约束
@@ -159,6 +164,11 @@ commerce、admin 或考试「真题」。影视/电视/YouTube 原声例句、�
 ## 6. 阶段维护
 
 M0-1 产品范围与基准状态已按本轮确认记录，浏览器插件的详细交互和支持条件仍待设计验证。
-下一项是 M0-2 正式 Web/插件 UI 规格，随后完成 M0-3 消费契约；M0 整体尚未验收。
+M0-2 [登录与首条轻量学习状态规格](m0-2-first-learning-state-spec.md)已形成评审稿；
+新增交互与插件捕获/原位确认/Web 交接/安装更新规格仍待收口。随后完成 M0-3 消费契约；
+M0 整体尚未验收，M1 真实接入未因本稿完成。
 每次里程碑验收后，同步更新本文的执行位置与证据，以及路线图状态。
 具体任务、验收记录和未解决问题由路线图追踪；本文不再累积逐日原型功能日志。
+
+2026-09-07 首条旅程离线范围确认：可继续已授权且材料已下载的学习，不离线新建学习；
+本机回答与服务端确认结果分开呈现，具体授权/版本/恢复合同在 M0-3 固定。

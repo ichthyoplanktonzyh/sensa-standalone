@@ -1,347 +1,499 @@
-import { uiClass } from '../ui/classes';
-import { useMemo, useState } from 'react';
+import { MeaningGraphView } from "./MeaningGraphView";
+import { useEffect, useMemo, useState } from "react";
 import {
-  type ContentSectionId,
-  type PersonalMeaningItem,
-  type SemanticSenseItem,
-} from '../contentProjection';
-import { useContentProjection } from '../useContentProjection';
+  ArrowRight,
+  ArrowUpRight,
+  BookOpen,
+  Bookmark,
+  Inbox,
+  List,
+  MessageSquareText,
+  Network,
+  Plus,
+  Search,
+  StickyNote,
+  X,
+} from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { ContentSectionId } from "../contentProjection";
+import { useContentProjection } from "../useContentProjection";
+import {
+  useJourneyGateway,
+  useJourneyInbox,
+  useJourneyWorld,
+  type JourneyWorldItemView,
+} from "../personalMeaningJourney";
+import { PersonalMeaningComposer } from "./PersonalMeaningComposer";
+import { IntakeInboxDrawer } from "./IntakeInboxDrawer";
 
 interface ContentScreenProps {
   active: boolean;
-  onBack: () => void;
-  onCreatePersonalMeaning: () => void;
-  onOpenPersonalMeaning: (personalMeaningId: string) => void;
-  onOpenSense: (senseId: string) => void;
+  screenId?: string;
+  initialAction?: "create";
+  onBrowseExisting: () => void;
+  onOpenPersonalMeaning: (id: string, focusId?: string) => void;
+  onOpenConfirmedSense: (id: string, focusId: string) => void;
+  onOpenSense: (id: string) => void;
   onOpenSection: (section: ContentSectionId) => void;
+  toast: (message: string) => void;
 }
+type Category = "personal" | "learning" | "markers";
+type Filter = "all" | "continue" | "binding" | "complete";
+const button =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3c51ad] disabled:opacity-50";
+const labelFor = (item: JourneyWorldItemView) =>
+  item.experienceAnchors[0]?.surfaceForm ||
+  item.familiarAnchors[0]?.surfaceForm ||
+  item.primaryLabel;
+const alignmentBranches = (item: JourneyWorldItemView) => [
+  ...item.detail.focuses.map((focus) => ({
+    id: focus.meaningFocusId,
+    focusId: focus.meaningFocusId,
+    label: focus.statement,
+    alignment: focus.alignment,
+  })),
+  ...item.detail.directAlignments.map((alignment) => ({
+    id: alignment.personalMeaningAlignmentId,
+    focusId: alignment.personalMeaningAlignmentId,
+    label: alignment.coreMeaningFocus || alignment.senseShortId,
+    alignment,
+  })),
+];
+const searchText = (item: JourneyWorldItemView) =>
+  [
+    labelFor(item),
+    ...item.familiarAnchors.map((a) => a.surfaceForm),
+    ...alignmentBranches(item).flatMap((b) => [
+      b.label,
+      ...(b.alignment?.confirmedBindings.map((e) => e.surfaceForm) ?? []),
+    ]),
+  ]
+    .join(" ")
+    .toLocaleLowerCase();
 
-type WorldLayer = 'all' | 'personal' | 'learning' | 'markers';
-
-const phaseCopy: Record<PersonalMeaningItem['phase'], { label: string; action: string }> = {
-  unclarified: { label: '待澄清', action: '开始澄清' },
-  focus_pending_acceptance: { label: '待确认关注点', action: '继续确认' },
-  focus_accepted: { label: '正在理解', action: '继续形成' },
-  constructing: { label: '正在澄清', action: '继续澄清' },
-  proposal_ready: { label: '待确认意思', action: '确认这个意思' },
-  sense_confirmed_expression_pending: { label: '待连接表达', action: '连接表达' },
-  aligned: { label: '已形成连接', action: '查看个人意义' },
-};
-
-const personalMeaningLabel = (item: PersonalMeaningItem): string =>
-  item.semanticAnchors[0]?.bodyText
-  || item.familiarExpressions[0]?.surfaceForm
-  || item.primaryLabel;
-
-const personalMeaningSearchText = (item: PersonalMeaningItem): string => [
-  item.primaryLabel,
-  ...item.semanticAnchors.map((anchor) => anchor.bodyText),
-  ...item.familiarExpressions.map((expression) => expression.surfaceForm),
-].join(' ').toLocaleLowerCase();
-
-const learningSenseSearchText = (item: SemanticSenseItem): string => [
-  item.expression.formL2,
-  item.expression.partOfSpeech,
-  item.ground.labelL1,
-  item.ground.bridgeL1,
-  item.ground.experienceL1,
-  ...item.ground.featureLabelsL1,
-].join(' ').toLocaleLowerCase();
-
-const PersonalMeaningRow = ({
-  item,
-  onOpen,
-}: {
-  item: PersonalMeaningItem;
-  onOpen: () => void;
-}) => {
-  const familiar = item.familiarExpressions[0]?.surfaceForm ?? null;
-  const label = personalMeaningLabel(item);
-  return (
-    <button type="button" className={uiClass("content-world-entry is-personal")} onClick={onOpen}>
-      <span className={uiClass("content-world-entry-mark")} aria-hidden="true"><i /></span>
-      <span className={uiClass("content-world-entry-copy")}>
-        <small>由我建立 · {phaseCopy[item.phase].label}</small>
-        <b>{label}</b>
-        {familiar && familiar !== label && <span>{familiar}</span>}
-      </span>
-      <span className={uiClass("content-world-entry-meta")}>
-        {item.confirmedExpressionCount > 0 && <em>{item.confirmedExpressionCount} 个表达</em>}
-        <svg className={uiClass("chev")} aria-hidden="true"><use href="#i-chev-r" /></svg>
-      </span>
-    </button>
-  );
-};
-
-const LearningSenseRow = ({
-  item,
-  saved,
-  noted,
-  onOpen,
-}: {
-  item: SemanticSenseItem;
-  saved: boolean;
-  noted: boolean;
-  onOpen: () => void;
-}) => (
-  <button type="button" className={uiClass("content-world-entry is-learning")} onClick={onOpen}>
-    <span className={uiClass("content-world-entry-mark")} aria-hidden="true"><i /></span>
-    <span className={uiClass("content-world-entry-copy")}>
-      <small>学习中浮现</small>
-      <b className={uiClass("is-expression")}>{item.expression.formL2}<em>{item.expression.partOfSpeech}</em></b>
-      <span>{item.ground.labelL1}</span>
-    </span>
-    <span className={uiClass("content-world-entry-meta")}>
-      {(saved || noted) && (
-        <span className={uiClass("content-world-entry-flags")} aria-label={[saved ? '已收藏' : '', noted ? '有笔记' : ''].filter(Boolean).join('，')}>
-          {saved && <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-star" /></svg>}
-          {noted && <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-pen" /></svg>}
-        </span>
-      )}
-      <svg className={uiClass("chev")} aria-hidden="true"><use href="#i-chev-r" /></svg>
-    </span>
-  </button>
-);
-
-const EmptyWorld = ({
-  mode,
-  onCreate,
-}: {
-  mode: 'world' | 'search' | 'layer';
-  onCreate: () => void;
-}) => {
-  const copy = mode === 'search'
-    ? { title: '没有匹配的内容', body: '换一个关键词，或切换到其他图层继续查看。' }
-    : mode === 'layer'
-      ? { title: '这个图层还没有内容', body: '切换到全部，看看已经出现在语义世界里的其他内容。' }
-      : { title: '从一个真正想表达的意思开始', body: '记录一段真实经验或熟悉表达，再慢慢澄清它对应的意思。' };
-  return (
-    <div className={uiClass("content-world-empty")} role="status">
-      <span className={uiClass("content-world-empty-orbit")} aria-hidden="true"><i /><i /><i /></span>
-      <h3>{copy.title}</h3>
-      <p>{copy.body}</p>
-      {mode === 'world' && <button type="button" onClick={onCreate}>记录第一个意思</button>}
-    </div>
-  );
-};
-
-export const ContentScreen = ({
+export function ContentScreen({
   active,
-  onBack,
-  onCreatePersonalMeaning,
+  screenId = "s-content",
+  initialAction,
+  onBrowseExisting,
   onOpenPersonalMeaning,
+  onOpenConfirmedSense,
   onOpenSense,
   onOpenSection,
-}: ContentScreenProps) => {
+  toast,
+}: ContentScreenProps) {
+  const { t, i18n } = useTranslation();
+  const { items, status } = useJourneyWorld();
+  const gateway = useJourneyGateway();
+  const inbox = useJourneyInbox();
   const projection = useContentProjection();
-  const [layer, setLayer] = useState<WorldLayer>('all');
-  const [query, setQuery] = useState('');
-
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const personalMeanings = useMemo(
-    () => projection.personalMeanings
-      .filter((item) => !normalizedQuery || personalMeaningSearchText(item).includes(normalizedQuery))
-      .sort((left, right) => right.updatedAt - left.updatedAt),
-    [normalizedQuery, projection.personalMeanings],
+  const [category, setCategory] = useState<Category>("personal");
+  const [view, setView] = useState<"list" | "world">("list");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+  const fmt = (n: number) =>
+    new Intl.NumberFormat(i18n.resolvedLanguage).format(n);
+  useEffect(() => {
+    if (active && initialAction === "create") setComposerOpen(true);
+  }, [active, initialAction]);
+  useEffect(() => {
+    if (!adding) return;
+    const close = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAdding(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [adding]);
+  const matchesFilter = (item: JourneyWorldItemView) =>
+    filter === "all" ||
+    (filter === "continue" &&
+      item.senseFormation.phase !== "sense_confirmed") ||
+    (filter === "binding" &&
+      ["pending", "partial"].includes(item.expressionBinding.phase)) ||
+    (filter === "complete" && item.expressionBinding.phase === "bound");
+  const visible = useMemo(
+    () =>
+      items
+        .filter((item) =>
+          searchText(item).includes(query.trim().toLocaleLowerCase()),
+        )
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    [items, query],
+  ).filter(matchesFilter);
+  const learning = projection.semanticSenses.filter((item) =>
+    `${item.expression.formL2} ${item.ground.labelL1} ${item.ground.experienceL1}`
+      .toLocaleLowerCase()
+      .includes(query.trim().toLocaleLowerCase()),
   );
-  const learningSenses = useMemo(
-    () => projection.semanticSenses.filter(
-      (item) => !normalizedQuery || learningSenseSearchText(item).includes(normalizedQuery),
-    ),
-    [normalizedQuery, projection.semanticSenses],
-  );
-
-  const pendingMeanings = projection.personalMeanings
-    .filter((item) => item.phase !== 'aligned')
-    .sort((left, right) => right.updatedAt - left.updatedAt);
-  const nextMeaning = pendingMeanings[0] ?? null;
-  const confirmedMeanings = projection.personalMeanings.filter(
-    (item) => item.confirmedSenseCount > 0,
-  ).length;
-  const savedSenseIds = new Set(projection.savedSenses.map((item) => item.senseId));
-  const notedSenseIds = new Set(
-    projection.notes.flatMap((item) => item.sense && !item.isLegacy ? [item.sense.senseId] : []),
-  );
-  const markerCount = projection.savedSenses.length
-    + projection.savedExamples.length
-    + projection.notes.length;
-  const hasProjectedItems = personalMeanings.length > 0 || learningSenses.length > 0;
-
-  const layers: Array<{ id: WorldLayer; label: string; count?: number }> = [
-    { id: 'all', label: '全部' },
-    { id: 'personal', label: '我建立的', count: projection.personalMeanings.length },
-    { id: 'learning', label: '学习连接', count: projection.semanticSenses.length },
-    { id: 'markers', label: '我的标记', count: markerCount },
-  ];
-
-  return (
-    <section className={uiClass(`screen content-hub-screen content-world-screen${active ? ' active' : ''}`, "#s-content")} id="s-content" data-anim="sheet">
-      <header className={uiClass("content-world-header")}>
-        <button type="button" onClick={onBack} aria-label="返回首页">
-          <svg className={uiClass("icon")}><use href="#i-chev-d" /></svg>
+  const drafts = items
+    .filter(
+      (item) =>
+        item.senseFormation.phase !== "sense_confirmed" ||
+        item.expressionBinding.phase !== "bound",
+    )
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const next = drafts[0];
+  const open = (id: string, focusId?: string) => {
+    setSelected(id);
+    const item = items.find((item) => item.personalMeaningId === id);
+    if (
+      !focusId &&
+      item &&
+      !item.detail.focuses.length &&
+      item.detail.directAlignments[0]
+    )
+      onOpenConfirmedSense(
+        id,
+        item.detail.directAlignments[0].personalMeaningAlignmentId,
+      );
+    else onOpenPersonalMeaning(id, focusId);
+  };
+  const empty = (
+    <div className="py-20 text-center" role="status">
+      <MessageSquareText
+        className="mx-auto mb-5 text-[#9299ac]"
+        size={28}
+        strokeWidth={1.3}
+      />
+      <p className="text-sm text-[#6d7380]">
+        {t(query ? "content.noResults" : "content.empty")}
+      </p>
+      {!query && category === "personal" && (
+        <button
+          className={`${button} mt-5 text-[#34477d]`}
+          onClick={() => setComposerOpen(true)}
+        >
+          <Plus size={16} />
+          {t("content.record")}
         </button>
-        <div>
-          <small>我的内容</small>
-          <h1>我的语义世界</h1>
-        </div>
-        <span className={uiClass("content-world-mark")} aria-hidden="true"><i /><i /><i /></span>
-      </header>
-
-      <main className={uiClass("content-world-body")}>
-        <section className={uiClass("content-world-intro")}>
-          <span className={uiClass("content-world-intro-contour")} aria-hidden="true" />
-          <small>从我的经验出发</small>
-          <h2>
-            {projection.personalMeanings.length > 0
-              ? '让每一个意思，慢慢长出清晰的表达'
-              : '把真正想表达的意思，留在这里'}
-          </h2>
-          <p>这里呈现你建立的个人意义，以及学习中逐渐浮现的词义连接。</p>
-          <div className={uiClass("content-world-facts")} aria-label="语义世界事实概况">
-            <span><b>{projection.personalMeanings.length}</b><small>个人意义</small></span>
-            <span><b>{confirmedMeanings}</b><small>已确认意思</small></span>
-            <span><b>{projection.semanticSenses.length}</b><small>学习连接</small></span>
-          </div>
-        </section>
-
-        {nextMeaning && (
-          <button
-            type="button"
-            className={uiClass("content-world-continue")}
-            onClick={() => onOpenPersonalMeaning(nextMeaning.personalMeaningId)}
-          >
-            <span className={uiClass("content-world-continue-pulse")} aria-hidden="true" />
-            <span>
-              <small>待继续 · {phaseCopy[nextMeaning.phase].label}</small>
-              <b>{personalMeaningLabel(nextMeaning)}</b>
-            </span>
-            <em>{phaseCopy[nextMeaning.phase].action}</em>
-            <svg className={uiClass("chev")} aria-hidden="true"><use href="#i-chev-r" /></svg>
-          </button>
-        )}
-
-        {layer !== 'markers' && (
-          <label className={uiClass("content-world-search")}>
-            <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-search" /></svg>
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索我的经验、意思或表达"
-              aria-label="搜索我的语义世界"
-            />
-            {query && (
-              <button type="button" onClick={() => setQuery('')} aria-label="清空搜索">×</button>
-            )}
-          </label>
-        )}
-
-        <div className={uiClass("content-world-layers")} role="group" aria-label="语义世界图层">
-          {layers.map((item) => (
+      )}
+    </div>
+  );
+  return (
+    <section
+      id={screenId}
+      className={`screen absolute inset-0 z-10 overflow-y-auto bg-[#fbfbfa] text-[#222631] ${active ? "active" : "invisible pointer-events-none"}`}
+    >
+      <main className="mx-auto max-w-[1280px] px-6 py-8 sm:px-10 lg:px-14 lg:py-14">
+        <header className="mb-9 flex flex-wrap items-center justify-between gap-5">
+          <h1 className="text-3xl font-medium tracking-tight lg:text-4xl">
+            {t("content.title")}
+          </h1>
+          <div className="flex gap-2">
             <button
-              type="button"
-              aria-pressed={layer === item.id}
-              className={uiClass(layer === item.id ? 'is-active' : '')}
-              key={item.id}
-              onClick={() => setLayer(item.id)}
+              className={`${button} border border-[#e3e5ea] bg-white`}
+              onClick={() => setInboxOpen(true)}
             >
-              <span>{item.label}</span>
-              {item.count !== undefined && <small>{item.count}</small>}
+              <Inbox size={17} />
+              {t("content.inbox")}
+              {inbox.length + drafts.length > 0 && (
+                <span className="rounded bg-[#edf0f7] px-1.5 text-xs">
+                  {fmt(inbox.length + drafts.length)}
+                </span>
+              )}
+            </button>
+            <button
+              className={`${button} bg-[#2f3b70] text-white hover:bg-[#25305c]`}
+              onClick={() => setAdding(true)}
+            >
+              <Plus size={17} />
+              {t("content.add")}
+            </button>
+          </div>
+        </header>
+        <nav
+          aria-label={t("content.categories")}
+          className="mb-7 flex gap-6 overflow-x-auto border-b border-[#e1e4eb]"
+        >
+          {(["personal", "learning", "markers"] as const).map((id) => (
+            <button
+              key={id}
+              aria-current={category === id ? "page" : undefined}
+              onClick={() => setCategory(id)}
+              className={`min-h-12 shrink-0 border-b-2 px-1 text-sm ${category === id ? "border-[#3d4f89] font-medium text-[#303e73]" : "border-transparent text-[#757b88]"}`}
+            >
+              {t(`content.${id}`)}
             </button>
           ))}
-        </div>
-
-        <section className={uiClass("content-world-surface")}>
-          {layer === 'markers' ? (
-            <>
-              <header className={uiClass("content-world-section-heading")}>
-                <span><small>个人内容</small><b>我的标记</b></span>
-                <em>不改变学习状态</em>
-              </header>
-              <div className={uiClass("content-world-marker-list")}>
-                <button type="button" onClick={() => onOpenSection('saved-senses')}>
-                  <span className={uiClass("is-saved")}><svg className={uiClass("icon")} aria-hidden="true"><use href="#i-star" /></svg></span>
-                  <b>收藏的意思</b><small>{projection.savedSenses.length}</small>
-                  <svg className={uiClass("chev")} aria-hidden="true"><use href="#i-chev-r" /></svg>
+        </nav>
+        {category === "personal" && next && (
+          <button
+            onClick={() => open(next.personalMeaningId)}
+            className="mb-6 flex w-full items-center gap-4 rounded-xl bg-[#eef0f6] px-5 py-4 text-left text-sm"
+          >
+            <span className="shrink-0 text-[#59678f]">
+              {t("content.continue")}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{labelFor(next)}</span>
+            <ArrowRight size={16} />
+          </button>
+        )}
+        {category !== "markers" && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+            <label className="flex min-h-11 w-full items-center gap-3 rounded-lg border border-[#e1e4eb] bg-white px-3 sm:max-w-sm">
+              <Search size={17} className="shrink-0 text-[#8a91a0]" />
+              <input
+                aria-label={t("content.search")}
+                placeholder={t("content.search")}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"
+              />
+              {query && (
+                <button
+                  aria-label={t("content.clear")}
+                  onClick={() => setQuery("")}
+                >
+                  <X size={15} />
                 </button>
-                <button type="button" onClick={() => onOpenSection('saved-examples')}>
-                  <span className={uiClass("is-example")}><svg className={uiClass("icon")} aria-hidden="true"><use href="#i-quote" /></svg></span>
-                  <b>收藏的例句</b><small>{projection.savedExamples.length}</small>
-                  <svg className={uiClass("chev")} aria-hidden="true"><use href="#i-chev-r" /></svg>
-                </button>
-                <button type="button" onClick={() => onOpenSection('notes')}>
-                  <span className={uiClass("is-note")}><svg className={uiClass("icon")} aria-hidden="true"><use href="#i-pen" /></svg></span>
-                  <b>我的笔记</b><small>{projection.notes.length}</small>
-                  <svg className={uiClass("chev")} aria-hidden="true"><use href="#i-chev-r" /></svg>
-                </button>
+              )}
+            </label>
+            {category === "personal" && (
+              <div
+                className="flex rounded-lg border border-[#e1e4eb] bg-white p-1"
+                role="group"
+                aria-label={t("content.view")}
+              >
+                {(["list", "world"] as const).map((id) => (
+                  <button
+                    className={`${button} min-h-9 ${view === id ? "bg-[#edf0f7] text-[#34477d]" : "text-[#757b88]"}`}
+                    aria-pressed={view === id}
+                    key={id}
+                    onClick={() => setView(id)}
+                  >
+                    {id === "list" ? <List size={16} /> : <Network size={16} />}{" "}
+                    {t(`content.${id}`)}
+                  </button>
+                ))}
               </div>
-              {markerCount === 0 && (
-                <p className={uiClass("content-world-marker-note")}>收藏和笔记会叠加在对应意思上，不会自动加入学习。</p>
-              )}
-            </>
-          ) : !hasProjectedItems || (
-            layer === 'personal' && personalMeanings.length === 0
-          ) || (
-            layer === 'learning' && learningSenses.length === 0
-          ) ? (
-            <EmptyWorld
-              mode={normalizedQuery ? 'search' : layer === 'all' ? 'world' : 'layer'}
-              onCreate={onCreatePersonalMeaning}
-            />
+            )}
+          </div>
+        )}
+        {category === "personal" && (
+          <div
+            className="mb-6 flex flex-wrap gap-2"
+            role="group"
+            aria-label={t("content.filter")}
+          >
+            {(["all", "continue", "binding", "complete"] as const).map((id) => (
+              <button
+                key={id}
+                aria-pressed={filter === id}
+                onClick={() => setFilter(id)}
+                className={`rounded-full px-3 py-2 text-xs ${filter === id ? "bg-[#e7ebf5] text-[#34477d]" : "text-[#737b8b] hover:bg-[#f0f1f4]"}`}
+              >
+                {t(`content.${id}`)}
+              </button>
+            ))}
+          </div>
+        )}
+        {category === "personal" &&
+          (!status.ok ? (
+            <div role="alert" className="rounded-xl border border-red-200 p-6">
+              <p>{t("content.loadError")}</p>
+              <button className={button} onClick={() => gateway.reload()}>
+                {t("content.retry")}
+              </button>
+            </div>
+          ) : !visible.length ? (
+            empty
+          ) : view === "list" ? (
+            <div className="divide-y divide-[#e7e9ef] border-y border-[#e7e9ef]">
+              {visible.map((item) => (
+                <button
+                  key={item.personalMeaningId}
+                  onClick={() => open(item.personalMeaningId)}
+                  className={`flex w-full items-center gap-5 px-2 py-6 text-left hover:bg-[#f3f4f7] ${selected === item.personalMeaningId ? "bg-[#f0f2f8]" : ""}`}
+                >
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-[#e1e4eb] bg-white text-[#697494]">
+                    <MessageSquareText size={18} strokeWidth={1.5} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <strong className="block truncate text-sm font-medium">
+                      {labelFor(item)}
+                    </strong>
+                    <span className="mt-2 block text-xs text-[#798191]">
+                      {t(`content.phase.${item.senseFormation.phase}`)} ·{" "}
+                      {t(`content.expression.${item.expressionBinding.phase}`)}
+                    </span>
+                  </span>
+                  <ArrowUpRight size={16} className="shrink-0 text-[#7c8597]" />
+                </button>
+              ))}
+            </div>
           ) : (
-            <>
-              {(layer === 'all' || layer === 'personal') && personalMeanings.length > 0 && (
-                <section className={uiClass("content-world-source-layer is-personal")}>
-                  <header className={uiClass("content-world-section-heading")}>
-                    <span><small>个人意义</small><b>由我建立</b></span>
-                    <em>{personalMeanings.length} 个个人意义</em>
-                  </header>
-                  <div className={uiClass("content-world-entry-list")}>
-                    {personalMeanings.map((item) => (
-                      <PersonalMeaningRow
-                        key={item.personalMeaningId}
-                        item={item}
-                        onOpen={() => onOpenPersonalMeaning(item.personalMeaningId)}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {(layer === 'all' || layer === 'learning') && learningSenses.length > 0 && (
-                <section className={uiClass("content-world-source-layer is-learning")}>
-                  <header className={uiClass("content-world-section-heading")}>
-                    <span><small>学习事实</small><b>学习中浮现</b></span>
-                    <em>{learningSenses.length} 个意思</em>
-                  </header>
-                  <div className={uiClass("content-world-entry-list")}>
-                    {learningSenses.map((item) => (
-                      <LearningSenseRow
-                        key={item.senseId}
-                        item={item}
-                        saved={savedSenseIds.has(item.senseId)}
-                        noted={notedSenseIds.has(item.senseId)}
-                        onOpen={() => onOpenSense(item.senseId)}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-            </>
-          )}
-        </section>
-
-        <p className={uiClass("content-world-boundary")}>
-          不同来源在这里共同呈现，但个人意义、学习事实、收藏与笔记仍保持各自身份。
-        </p>
+            <MeaningGraphView
+              items={visible}
+              selectedMeaningId={selected}
+              onSelectMeaning={setSelected}
+              onOpenMeaning={open}
+              onOpenConfirmedSense={onOpenConfirmedSense}
+            />
+          ))}
+        {category === "learning" &&
+          (learning.length ? (
+            <div className="divide-y divide-[#e7e9ef] border-y border-[#e7e9ef]">
+              {learning.map((item) => (
+                <button
+                  key={item.senseId}
+                  onClick={() => onOpenSense(item.senseId)}
+                  className="flex w-full items-center gap-5 py-6 text-left hover:bg-[#f3f4f7]"
+                >
+                  <BookOpen size={20} className="text-[#74809d]" />
+                  <span className="flex-1">
+                    <strong className="text-lg font-medium">
+                      {item.expression.formL2}
+                    </strong>
+                    <span className="mt-1 block text-sm text-[#7b8291]">
+                      {item.ground.labelL1}
+                    </span>
+                  </span>
+                  <span className="text-xs text-[#65718d]">
+                    {t(`content.learningStatus.${item.status}`)}
+                  </span>
+                  <ArrowUpRight size={16} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            empty
+          ))}
+        {category === "markers" && (
+          <div className="grid gap-4 sm:grid-cols-3">
+            {(
+              [
+                {
+                  id: "saved-senses",
+                  label: "savedSenses",
+                  count: projection.savedSenses.length,
+                  icon: Bookmark,
+                },
+                {
+                  id: "saved-examples",
+                  label: "savedExamples",
+                  count: projection.savedExamples.length,
+                  icon: MessageSquareText,
+                },
+                {
+                  id: "notes",
+                  label: "notes",
+                  count: projection.notes.length,
+                  icon: StickyNote,
+                },
+              ] as const
+            ).map(({ id, label, count, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => onOpenSection(id)}
+                className="rounded-xl border border-[#e1e5ed] bg-white p-6 text-left hover:border-[#aeb9d2]"
+              >
+                <Icon
+                  size={22}
+                  strokeWidth={1.5}
+                  className="mb-6 text-[#637294]"
+                />
+                <span className="block text-sm">{t(`content.${label}`)}</span>
+                <strong className="mt-3 block text-3xl font-normal text-[#68748e]">
+                  {fmt(count)}
+                </strong>
+              </button>
+            ))}
+          </div>
+        )}
       </main>
-
-      <footer className={uiClass("content-world-create-bar")}>
-        <button type="button" onClick={onCreatePersonalMeaning}>
-          <span aria-hidden="true">＋</span>
-          记录一个想表达的意思
-        </button>
-      </footer>
+      {adding && (
+        <div
+          className="fixed inset-0 z-[100] flex justify-end bg-[#1f2937]/20"
+          onMouseDown={() => setAdding(false)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-content-title"
+            onMouseDown={(e) => e.stopPropagation()}
+            className="h-full w-full bg-[#fbfbfa] p-6 shadow-xl sm:max-w-lg sm:p-9"
+          >
+            <header className="mb-10 flex items-center justify-between">
+              <h2 id="add-content-title" className="text-xl font-medium">
+                {t("content.add")}
+              </h2>
+              <button
+                className={button}
+                aria-label={t("content.close")}
+                onClick={() => setAdding(false)}
+              >
+                <X size={20} />
+              </button>
+            </header>
+            {[
+              {
+                title: "record",
+                hint: "recordHint",
+                icon: MessageSquareText,
+                action: () => setComposerOpen(true),
+              },
+              {
+                title: "existing",
+                hint: "existingHint",
+                icon: BookOpen,
+                action: onBrowseExisting,
+              },
+            ].map(({ title, hint, icon: Icon, action }) => (
+              <button
+                key={title}
+                onClick={() => {
+                  setAdding(false);
+                  action();
+                }}
+                className="mb-4 flex w-full items-center gap-5 rounded-xl border border-[#e1e5ed] bg-white p-6 text-left hover:border-[#aab5d1]"
+              >
+                <Icon
+                  size={23}
+                  strokeWidth={1.4}
+                  className="shrink-0 text-[#5c6b92]"
+                />
+                <span className="flex-1">
+                  <strong className="text-sm font-medium">
+                    {t(`content.${title}`)}
+                  </strong>
+                  <span className="mt-2 block text-xs leading-5 text-[#788194]">
+                    {t(`content.${hint}`)}
+                  </span>
+                </span>
+                <ArrowRight size={16} />
+              </button>
+            ))}
+          </section>
+        </div>
+      )}
+      <PersonalMeaningComposer
+        open={composerOpen}
+        onClose={() => setComposerOpen(false)}
+        onSaved={toast}
+        onCreated={(id) => {
+          setComposerOpen(false);
+          open(id);
+        }}
+      />
+      <IntakeInboxDrawer
+        drafts={drafts}
+        onOpenDraft={(id) => {
+          setInboxOpen(false);
+          open(id);
+        }}
+        open={inboxOpen}
+        items={inbox}
+        onClose={() => setInboxOpen(false)}
+        onSummoned={(id) => {
+          setInboxOpen(false);
+          open(id);
+        }}
+        toast={toast}
+      />
     </section>
   );
-};
+}

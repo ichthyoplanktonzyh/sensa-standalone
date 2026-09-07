@@ -1,24 +1,33 @@
-import { uiClass } from '../ui/classes';
-import { useState, useEffect, useMemo, useRef, type MouseEvent } from 'react';
-import type { Word } from '../types';
-import type { IntroductionPhase } from './cards/IntroductionCard';
+import { useTranslation } from "react-i18next";
+import { Star, Undo2, MoreHorizontal } from "lucide-react";
+import { RuntimeFrame } from "./learning/RuntimeFrame";
+import { uiClass } from "../ui/classes";
+import { useState, useEffect, useMemo, useRef, type MouseEvent } from "react";
+import type { Word } from "../types";
+import type { IntroductionPhase } from "./cards/IntroductionCard";
 import {
   materializeReviewRepairContent,
   type PrototypeIntroductionPackage,
-} from '../content/learningCatalog';
+} from "../content/learningCatalog";
 import {
   materializeAssessmentResource,
   type AssessmentPackageIdentity,
   type AssessmentResource,
-} from '../content/assessmentResources';
-import { buildPrototypeReviewAssessment } from '../content/prototypeReviewCards';
-import type { LearningStepKind, RepairResourceReference } from '../engine/types';
-import type { ReviewAssessmentKind, ReviewAssessmentResult } from '../review/types';
+} from "../content/assessmentResources";
+import { buildPrototypeReviewAssessment } from "../content/prototypeReviewCards";
+import type {
+  LearningStepKind,
+  RepairResourceReference,
+} from "../engine/types";
+import type {
+  ReviewAssessmentKind,
+  ReviewAssessmentResult,
+} from "../review/types";
 import {
   stepRendererRegistry,
   type StepRendererHost,
-} from '../learningRuntime/stepRenderers';
-import { personalContentService } from '../services/personalContentService';
+} from "../learningRuntime/stepRenderers";
+import { personalContentService } from "../services/personalContentService";
 
 /**
  * 队列驱动 Step 的宿主屏：工具栏、进度与卡片视口。
@@ -30,6 +39,7 @@ import { personalContentService } from '../services/personalContentService';
  * 回调与步骤数据。
  */
 interface LearnScreenProps {
+  hasTask: boolean;
   active: boolean;
   isBehind: boolean;
   curWord: Word;
@@ -42,7 +52,7 @@ interface LearnScreenProps {
   repairContent: PrototypeIntroductionPackage | null;
   introductionPosition: number;
   introductionTotal: number;
-  reviewAssessmentPurpose: 'acquisition' | 'retention';
+  reviewAssessmentPurpose: "acquisition" | "retention";
   onExit: () => void;
   onUndo: () => void;
   onMarkKnown: () => void;
@@ -50,7 +60,6 @@ interface LearnScreenProps {
     e: MouseEvent,
     personalContent: PrototypeIntroductionPackage | null,
   ) => void;
-  onOpenSpelling?: (word: Word) => void;
   reviewAssessmentKind: ReviewAssessmentKind | null;
   reviewAssessmentTaskKey: string | null;
   assessmentPackageIdentity: AssessmentPackageIdentity | null;
@@ -61,6 +70,7 @@ interface LearnScreenProps {
 }
 
 export const LearnScreen = ({
+  hasTask,
   active,
   isBehind,
   curWord,
@@ -76,7 +86,6 @@ export const LearnScreen = ({
   onUndo,
   onMarkKnown,
   onOpenMenuMore,
-  onOpenSpelling,
   reviewAssessmentKind,
   reviewAssessmentTaskKey,
   assessmentPackageIdentity,
@@ -84,8 +93,10 @@ export const LearnScreen = ({
   repairResourceRef,
   host,
 }: LearnScreenProps) => {
+  const { t } = useTranslation();
   const [starred, setStarred] = useState(false);
-  const [introductionPhase, setIntroductionPhase] = useState<IntroductionPhase>('experience');
+  const [introductionPhase, setIntroductionPhase] =
+    useState<IntroductionPhase>("experience");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // 词或阶段切换时，将滚动容器置顶
@@ -95,69 +106,86 @@ export const LearnScreen = ({
 
   useEffect(() => {
     setStarred(false);
-    setIntroductionPhase('experience');
+    setIntroductionPhase("experience");
   }, [curWord.id, introductionContent?.senseKey]);
 
-  const isIntroduction = stage === 'introduction' && !!introductionContent;
+  const isIntroduction = stage === "introduction" && !!introductionContent;
   const repairContent = useMemo(
-    () => stage === 'review_repair' && introductionContent
-      ? preparedRepairContent
-        ?? materializeReviewRepairContent(introductionContent, repairResourceRef)
-      : null,
+    () =>
+      stage === "review_repair" && introductionContent
+        ? (preparedRepairContent ??
+          materializeReviewRepairContent(
+            introductionContent,
+            repairResourceRef,
+          ))
+        : null,
     [introductionContent, preparedRepairContent, repairResourceRef, stage],
   );
-  const isRepair = stage === 'review_repair' && !!repairContent;
-  const isRecognition = stage === 'recognition' && !!introductionContent;
-  const isMeaningToFormRecall = stage === 'recall' && !!introductionContent;
-  const isNovelTransfer = stage === 'transfer' && !!introductionContent;
-  const isReviewAssessment = stage === 'review_assessment'
-    && !!introductionContent
-    && !!reviewAssessmentKind;
-  const isReviewFeedback = stage === 'review_feedback'
-    && !!introductionContent
-    && !!reviewAssessmentKind
-    && !!reviewAssessmentResult;
-  const isReviewStage = (isRepair && reviewAssessmentPurpose === 'retention')
-    || isReviewAssessment
-    || isReviewFeedback;
-  const isIntroductionReveal = (isIntroduction || isRepair)
-    && introductionPhase === 'reveal';
-  const isProtectedLearningStage = isIntroduction
-    || isRepair
-    || isRecognition
-    || isMeaningToFormRecall
-    || isNovelTransfer;
-  const isExperienceHidden = isIntroduction && introductionPhase === 'experience';
-  const learningAssessmentKind = stage === 'recognition'
-    ? 'context_recognition' as const
-    : stage === 'recall'
-    ? 'meaning_to_form_recall' as const
-    : stage === 'transfer'
-    ? 'novel_context_transfer' as const
-    : null;
+  const isRepair = stage === "review_repair" && !!repairContent;
+  const isRecognition = stage === "recognition" && !!introductionContent;
+  const isMeaningToFormRecall = stage === "recall" && !!introductionContent;
+  const isNovelTransfer = stage === "transfer" && !!introductionContent;
+  const isReviewAssessment =
+    stage === "review_assessment" &&
+    !!introductionContent &&
+    !!reviewAssessmentKind;
+  const isReviewFeedback =
+    stage === "review_feedback" &&
+    !!introductionContent &&
+    !!reviewAssessmentKind &&
+    !!reviewAssessmentResult;
+  const isReviewStage =
+    (isRepair && reviewAssessmentPurpose === "retention") ||
+    isReviewAssessment ||
+    isReviewFeedback;
+  const isIntroductionReveal =
+    (isIntroduction || isRepair) && introductionPhase === "reveal";
+  const isProtectedLearningStage =
+    isIntroduction ||
+    isRepair ||
+    isRecognition ||
+    isMeaningToFormRecall ||
+    isNovelTransfer;
+  const isExperienceHidden =
+    isIntroduction && introductionPhase === "experience";
+  const learningAssessmentKind =
+    stage === "recognition"
+      ? ("context_recognition" as const)
+      : stage === "recall"
+        ? ("meaning_to_form_recall" as const)
+        : stage === "transfer"
+          ? ("novel_context_transfer" as const)
+          : null;
   const personalMenuContent = isIntroductionReveal
     ? introductionContent
     : isRepair
-    ? repairContent
-    : isReviewFeedback
-    ? introductionContent
-    : null;
-  const savedSenseId = introductionContent?.senseKey ?? curWord.id ?? `word:${curWord.w}`;
-  const progressLabel = isIntroduction
-    ? `新义项 ${introductionPosition}/${introductionTotal}`
-    : isRepair && reviewAssessmentPurpose === 'acquisition'
-    ? `学习 ${Math.min(step, groupSize)}/${groupSize}`
-    : isReviewStage
-    ? `复习 ${Math.min(step, groupSize)}/${groupSize}`
-    : `${Math.min(step, groupSize)}/${groupSize}`;
+      ? repairContent
+      : isReviewFeedback
+        ? introductionContent
+        : null;
+  const savedSenseId =
+    introductionContent?.senseKey ?? curWord.id ?? `word:${curWord.w}`;
+  const progressLabel = t("assurance.progress", {
+    current: Math.min(step, groupSize),
+    total: groupSize,
+  });
   const assessmentResource = useMemo<AssessmentResource | null>(() => {
-    const kind = isReviewAssessment || isReviewFeedback
-      ? reviewAssessmentKind
-      : learningAssessmentKind;
-    const needsAssessment = isReviewAssessment || isReviewFeedback || learningAssessmentKind !== null;
+    const kind =
+      isReviewAssessment || isReviewFeedback
+        ? reviewAssessmentKind
+        : learningAssessmentKind;
+    const needsAssessment =
+      isReviewAssessment || isReviewFeedback || learningAssessmentKind !== null;
     if (!needsAssessment) return null;
-    if (!kind || !introductionContent || !reviewAssessmentTaskKey || !assessmentPackageIdentity) {
-      throw new Error('Formal assessment stage is missing its selected Action resource.');
+    if (
+      !kind ||
+      !introductionContent ||
+      !reviewAssessmentTaskKey ||
+      !assessmentPackageIdentity
+    ) {
+      throw new Error(
+        "Formal assessment stage is missing its selected Action resource.",
+      );
     }
     return materializeAssessmentResource({
       packageIdentity: assessmentPackageIdentity,
@@ -175,7 +203,12 @@ export const LearnScreen = ({
     reviewAssessmentTaskKey,
   ]);
   const reviewSpec = useMemo(() => {
-    if (!introductionContent || !reviewAssessmentKind || !reviewAssessmentTaskKey) return null;
+    if (
+      !introductionContent ||
+      !reviewAssessmentKind ||
+      !reviewAssessmentTaskKey
+    )
+      return null;
     return buildPrototypeReviewAssessment(
       introductionContent,
       reviewAssessmentKind,
@@ -195,90 +228,68 @@ export const LearnScreen = ({
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   };
 
+  if(!hasTask) return <RuntimeFrame id="s-learn" active={active&&!isBehind} title={t('assurance.title')} stepLabel="" progress={0} onExit={onExit}>
+    <h1 className="text-2xl font-medium">{t('assurance.noTask')}</h1>
+    <button className="mt-8 min-h-12 rounded-xl bg-[#303f76] px-6 text-sm text-white" onClick={onExit}>{t('assurance.back')}</button>
+  </RuntimeFrame>;
   return (
-    <section
-      className={uiClass(`screen${active ? ' active' : ''}${isBehind ? ' behind' : ''}${isIntroductionReveal ? ' is-intro-reveal' : ''}`, "#s-learn")}
+    <RuntimeFrame
       id="s-learn"
-      data-anim="fade"
-    >
-      <div className={uiClass("h-sp")} />
-
-      {/* 顶部工具栏 */}
-      <div className={uiClass("lh")}>
-        <button onClick={onExit} aria-label="返回">
-          <svg className={uiClass("icon")} style={{ width: 26, height: 26 }}><use href="#i-chev-l" /></svg>
-        </button>
-        <span className={uiClass(`prog-n${isIntroduction ? ' sense-progress' : ''}`, "#lhProg")} id="lhProg">
-          {progressLabel}
-        </span>
-        <div className={uiClass("tools")}>
+      active={active && !isBehind}
+      title={t(
+        reviewAssessmentPurpose === "retention"
+          ? "assurance.review"
+          : "assurance.title",
+      )}
+      stepLabel={progressLabel}
+      progress={groupSize ? Math.min((step / groupSize) * 100, 100) : 0}
+      onExit={onExit}
+      tools={
+        <>
           {!isExperienceHidden && (
             <>
               {!isIntroduction && !isReviewStage && (
                 <button
-                  id="btnUndo"
+                  className="min-h-11 px-2 text-[#68748d] disabled:opacity-30"
                   disabled={step <= 1}
                   onClick={onUndo}
-                  aria-label="撤回"
+                  aria-label={t("assurance.undo")}
                 >
-                  <svg className={uiClass("icon")}><use href="#i-undo" /></svg>
+                  <Undo2 size={18} />
                 </button>
               )}
               <button
-                id="btnStar"
-                className={uiClass(starred ? 'on' : '', "#btnStar")}
+                className="min-h-11 px-2 text-[#68748d]"
+                aria-label={t("assurance.save")}
+                aria-pressed={starred}
                 onClick={() => {
                   const next = personalContentService.toggleSense(savedSenseId);
-                  host.toast(next ? '已收藏这个义项' : '已取消收藏');
+                  host.toast(t(next ? "assurance.saved" : "assurance.unsaved"));
                 }}
-                aria-label="收藏这个义项"
               >
-                <svg
-                  className={uiClass("icon")}
-                  style={{
-                    fill: starred ? '#d9642d' : 'none',
-                    stroke: starred ? '#d9642d' : 'currentColor',
-                  }}
-                >
-                  <use href="#i-star" />
-                </svg>
+                <Star size={18} fill={starred ? "currentColor" : "none"} />
               </button>
-              {!isProtectedLearningStage && !isReviewStage && (
-                <>
-                <button
-                  onClick={() => {
-                    if (onOpenSpelling) {
-                      onOpenSpelling(curWord);
-                    } else {
-                      host.toast(`开始拼写练习：${curWord.w}`);
-                    }
-                  }}
-                  aria-label="拼写练习"
-                  title="拼写练习"
-                >
-                  <span className={uiClass("txt")} style={{ fontSize: 17, letterSpacing: '-.5px', borderBottom: '1.6px solid currentColor', paddingBottom: 1 }}>
-                    abc
-                  </span>
-                </button>
-                </>
-              )}
             </>
           )}
-          <button onClick={onMarkKnown} aria-label="声明这个义项已会">
-            <span className={uiClass("txt")}>熟</span>
+          <button
+            className="min-h-11 px-2 text-xs text-[#68748d]"
+            onClick={onMarkKnown}
+          >
+            {t("assurance.known")}
           </button>
           <button
+            className="min-h-11 px-2 text-[#68748d]"
             onClick={(event) => onOpenMenuMore(event, personalMenuContent)}
-            aria-label="更多"
+            id="learning-more-button"
+              aria-label={t("assurance.more")}
           >
-            <svg className={uiClass("icon")}><use href="#i-dots" /></svg>
+            <MoreHorizontal size={20} />
           </button>
-        </div>
-      </div>
-
-      {/* 核心卡片渲染视口：章是编排盖的，卡是注册表查的（stepRenderers.tsx）。 */}
-      <div className={uiClass("lscroll", "#lScroll")} id="lScroll" ref={scrollRef}>
-        {stepRendererRegistry.get(stage)({
+        </>
+      }
+    >
+      <div id="lScroll" ref={scrollRef}>
+        {active && !isBehind && stepRendererRegistry.get(stage)({
           stepKind: stage,
           ordinal: step,
           curWord,
@@ -295,6 +306,6 @@ export const LearnScreen = ({
           host,
         })}
       </div>
-    </section>
+    </RuntimeFrame>
   );
 };

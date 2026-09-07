@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { uiText } from '../../i18n/uiText';
 import { uiClass } from '../ui/classes';
 /**
  * 待处理材料盒（Inbox）抽屉。
@@ -11,10 +13,12 @@ import { uiClass } from '../ui/classes';
 import { useEffect, useState } from 'react';
 import type { SensaIntakeItem, SensaIntakeSense } from '@sensa/contracts/sensa';
 import { newUuid } from '../personalMeaningJourney/ids';
-import { useJourneyGateway } from '../personalMeaningJourney';
+import { type JourneyWorldItemView, useJourneyGateway } from '../personalMeaningJourney';
 
 interface IntakeInboxDrawerProps {
   open: boolean;
+  drafts?: JourneyWorldItemView[];
+  onOpenDraft?: (id: string) => void;
   items: SensaIntakeItem[];
   onClose: () => void;
   /** 召唤 AI 成功后回调：关闭抽屉并打开新 Meaning 的澄清会话。 */
@@ -23,9 +27,9 @@ interface IntakeInboxDrawerProps {
 }
 
 const statusLabels: Record<SensaIntakeItem['status'], string> = {
-  pending_sense: '待确认词义',
-  pending_expression: '待圈定表达',
-  pending_acceptance: '待接纳',
+  get pending_sense() { return uiText('confirmMeaning'); },
+  get pending_expression() { return uiText('selectExpression'); },
+  get pending_acceptance() { return uiText('readyForAcceptance'); },
 };
 
 interface DisambiguationOption {
@@ -58,11 +62,14 @@ const disambiguationOptions = (item: SensaIntakeItem): DisambiguationOption[] =>
 
 export const IntakeInboxDrawer = ({
   open,
+  drafts = [],
+  onOpenDraft,
   items,
   onClose,
   onSummoned,
   toast,
 }: IntakeInboxDrawerProps) => {
+  useTranslation();
   const gateway = useJourneyGateway();
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -87,10 +94,10 @@ export const IntakeInboxDrawer = ({
       };
       const result = await gateway.resolveInboxItem(newUuid(), item.intakeId, { sense });
       toast(result.route === 'fast_track'
-        ? '已确认词义，材料已收进词义世界'
-        : '这条材料还不能结案，请换一个义项试试。');
+        ? uiText('meaningConfirmedAndSaved')
+        : uiText('thisMaterialStillNeedsClarificationTryAnother'));
     } catch (cause) {
-      toast(cause instanceof Error ? cause.message : '暂时无法处理这条材料。');
+      toast(cause instanceof Error ? cause.message : uiText('unableToProcessThisMaterial'));
     } finally {
       setBusyId(null);
     }
@@ -111,7 +118,7 @@ export const IntakeInboxDrawer = ({
       await gateway.dismissInboxItem(newUuid(), item.intakeId);
       onSummoned(created.personalMeaningId);
     } catch (cause) {
-      toast(cause instanceof Error ? cause.message : '暂时无法召唤 AI。');
+      toast(cause instanceof Error ? cause.message : uiText('unableToStartClarification'));
     } finally {
       setBusyId(null);
     }
@@ -121,9 +128,9 @@ export const IntakeInboxDrawer = ({
     setBusyId(item.intakeId);
     try {
       await gateway.dismissInboxItem(newUuid(), item.intakeId);
-      toast('已丢弃这条材料');
+      toast(uiText('materialDiscarded'));
     } catch (cause) {
-      toast(cause instanceof Error ? cause.message : '暂时无法丢弃。');
+      toast(cause instanceof Error ? cause.message : uiText('unableToDiscardThisMaterial'));
     } finally {
       setBusyId(null);
     }
@@ -143,16 +150,16 @@ export const IntakeInboxDrawer = ({
         <div className={uiClass("intake-drawer__grip")} aria-hidden="true" />
         <header className={uiClass("intake-drawer__head")}>
           <div>
-            <small>待处理材料盒</small>
-            <h2 id="intake-drawer-title">捕获的材料（{items.length}）</h2>
+            <small>{uiText('inbox')}</small>
+            <h2 id="intake-drawer-title">{uiText('inboxCount', { count: items.length + drafts.length })}</h2>
           </div>
-          <button type="button" onClick={onClose} aria-label="关闭">×</button>
+          <button type="button" onClick={onClose} aria-label={uiText('close')}>×</button>
         </header>
 
         <div className={uiClass("intake-drawer__body")}>
           <p className={uiClass("intake-drawer__hint")}>
-            生活与阅读中随手捕获、还差一步确认的材料。补齐后即进入词义世界。
-          </p>
+            {uiText('capturedMaterialAwaitingYourConfirmation')}</p>
+          {drafts.map(item => <button key={item.personalMeaningId} type="button" onClick={()=>onOpenDraft?.(item.personalMeaningId)} className="mb-4 block w-full rounded-xl border border-[#e1e5ed] bg-white p-5 text-left"><span className="text-xs text-[#75809a]">{uiText('continueDraft')}</span><strong className="mt-3 block text-sm font-medium leading-6">{item.experienceAnchors[0]?.surfaceForm || item.familiarAnchors[0]?.surfaceForm || item.primaryLabel}</strong></button>)}
           {items.map((item) => {
             const busy = busyId === item.intakeId || busyId != null;
             const options = disambiguationOptions(item);
@@ -167,18 +174,17 @@ export const IntakeInboxDrawer = ({
                   </span>
                   {mediaCount > 0 && (
                     <span className={uiClass("intake-card__media")}>
-                      <span aria-hidden="true">🖼</span> 附带 {mediaCount} 张图片
-                    </span>
+                      <span aria-hidden="true">🖼</span> {uiText('includes2')}{mediaCount} {uiText('images')}</span>
                   )}
                 </header>
                 <p className={uiClass("intake-card__summary")}>{item.summaryView}</p>
                 {source && (
                   <p className={uiClass("intake-card__source")}>
-                    来自网页：{source.title ?? source.url ?? '未知来源'}
+                    {uiText('webSource')}{source.title ?? source.url ?? uiText('unknownSource')}
                   </p>
                 )}
                 {options.length > 0 && (
-                  <div className={uiClass("intake-card__options")} role="group" aria-label="快速消歧：轻点候选义项直接结案">
+                  <div className={uiClass("intake-card__options")} role="group" aria-label={uiText('chooseAMeaningToConfirm')}>
                     {options.map((option, index) => (
                       <button
                         type="button"
@@ -198,24 +204,22 @@ export const IntakeInboxDrawer = ({
                     disabled={busy || !hasText}
                     onClick={() => void summon(item)}
                   >
-                    召唤 AI
-                  </button>
+                    {uiText('clarify')}</button>
                   <button
                     type="button"
                     className={uiClass("intake-card__discard")}
                     disabled={busy}
                     onClick={() => void discard(item)}
                   >
-                    丢弃
-                  </button>
+                    {uiText('discard')}</button>
                 </footer>
               </article>
             );
           })}
-          {items.length === 0 && (
+          {items.length === 0 && drafts.length === 0 && (
             <div className={uiClass("intake-drawer__empty")}>
               <span aria-hidden="true">✓</span>
-              <p>材料盒已清空，捕获的材料都会先出现在这里</p>
+              <p>{uiText('yourInboxIsEmpty')}</p>
             </div>
           )}
         </div>

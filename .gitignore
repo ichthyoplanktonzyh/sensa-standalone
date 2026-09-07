@@ -30,3 +30,6 @@ content/.env
 content/.venv/
 content/__pycache__/
 content/**/__pycache__/
+
+# Verified local learning media is staged for Web; binaries stay out of Git.
+apps/web/public/golden-audio/

@@ -21,3 +21,15 @@ before pulling, repairs a required bootstrap without clearing the outbox, and
 then loads the active plan's pinned content. A network failure leaves a visible
 local-save notice. Media controls only use short-lived download URLs returned
 by the authorized Sensa media endpoint.
+
+
+## Current M0-2 experience preview media
+
+The experience preview uses the installed learning release's immutable audio
+files. `npm run web:dev` and Web builds run `scripts/prepareWebMedia.mjs` first.
+It reads `content/data/media/audio` by default, or `SENSA_WEB_MEDIA_ROOT`
+when provisioned elsewhere, verifies each declared SHA-256, and stages only
+release audio in ignored `apps/web/public/golden-audio`. Missing or mismatched
+assets fail preparation rather than producing playable-looking broken links.
+This step performs no generation or paid provider calls. CI must provision the
+approved assets before building; the generated media directory is not committed.

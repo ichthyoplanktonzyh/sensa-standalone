@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { uiText } from '../../i18n/uiText';
 import { uiClass } from '../ui/classes';
 /**
  * The AI clarification workspace.
@@ -68,24 +70,24 @@ const semanticAgent = createRealSemanticAgent();
 const SEMANTIC_POLICY_VERSION = 'sensa-semantic-policy-agent-loop-v1';
 
 const expressionTypeLabels: Record<SensaExpressionType, string> = {
-  word: '单词',
-  phrase: '短语',
-  construction: '构式',
-  sentence: '完整句子',
-  utterance_strategy: '表达方式',
+  get word() { return uiText('word'); },
+  get phrase() { return uiText('phrase'); },
+  get construction() { return uiText('construction'); },
+  get sentence() { return uiText('sentence'); },
+  get utterance_strategy() { return uiText('expressionStrategy'); },
 };
 
 const relationLabels: Record<SensaExpressionBindingRelation, string> = {
-  realizes: '实现这个意思',
-  approximates: '接近这个意思',
-  evokes: '唤起这个意思',
+  get realizes() { return uiText('expressesThisMeaning'); },
+  get approximates() { return uiText('approximatesThisMeaning'); },
+  get evokes() { return uiText('evokesThisMeaning'); },
 };
 
 const coverageLabels: Record<SensaSemanticCoverage, string> = {
-  exact: '范围相符',
-  broader: '范围更宽',
-  narrower: '范围更窄',
-  overlapping: '部分重叠',
+  get exact() { return uiText('matchingScope'); },
+  get broader() { return uiText('broaderScope'); },
+  get narrower() { return uiText('narrowerScope'); },
+  get overlapping() { return uiText('partialOverlap'); },
 };
 
 const message = (
@@ -121,10 +123,10 @@ const trackTone = (hasCandidate: boolean, confirmed: boolean): {
   tone: TrackTone;
   label: string;
 } => {
-  if (confirmed) return { tone: 'confirmed', label: '已确认' };
+  if (confirmed) return { tone: 'confirmed', get label() { return uiText('confirmed'); } };
   return hasCandidate
-    ? { tone: 'candidate', label: '有候选' }
-    : { tone: 'idle', label: '还在聊' };
+    ? { tone: 'candidate', get label() { return uiText('candidateReady'); } }
+    : { tone: 'idle', get label() { return uiText('inConversation'); } };
 };
 
 // -- editable cards ---------------------------------------------------------
@@ -144,8 +146,8 @@ const FocusCard = ({
 }) => (
   <article className={uiClass("pmw-card")}>
     <header>
-      <small>表达侧面</small>
-      {!editing && <button type="button" onClick={onEdit}>改</button>}
+      <small>{uiText('meaningFocus')}</small>
+      {!editing && <button type="button" onClick={onEdit}>{uiText('edit')}</button>}
     </header>
     {editing ? (
       <div className={uiClass("pmw-edit")}>
@@ -154,7 +156,7 @@ const FocusCard = ({
           rows={2}
           onChange={(event) => onChange({ ...focus, statement: event.target.value })}
         />
-        <button type="button" className={uiClass("pmw-edit-done")} onClick={onDone}>改好了</button>
+        <button type="button" className={uiClass("pmw-edit-done")} onClick={onDone}>{uiText('done')}</button>
       </div>
     ) : (
       <>
@@ -182,8 +184,8 @@ const SenseCard = ({
 }) => (
   <article className={uiClass("pmw-card")}>
     <header>
-      <small>稳定意思</small>
-      {!editing && <button type="button" onClick={onEdit}>改</button>}
+      <small>{uiText('meaning')}</small>
+      {!editing && <button type="button" onClick={onEdit}>{uiText('edit')}</button>}
     </header>
     {editing ? (
       <div className={uiClass("pmw-edit")}>
@@ -192,7 +194,7 @@ const SenseCard = ({
           rows={2}
           onChange={(event) => onChange({ ...sense, coreMeaningFocus: event.target.value })}
         />
-        <button type="button" className={uiClass("pmw-edit-done")} onClick={onDone}>改好了</button>
+        <button type="button" className={uiClass("pmw-edit-done")} onClick={onDone}>{uiText('done')}</button>
       </div>
     ) : (
       <>
@@ -228,8 +230,8 @@ const ExpressionsCard = ({
   return (
     <article className={uiClass("pmw-card")}>
       <header>
-        <small>目标表达 {candidates.length > 1 ? `(${candidates.length} 个候选)` : ''}</small>
-        {!editing && active && <button type="button" onClick={onEdit}>改</button>}
+        <small>{uiText('targetExpression')}{candidates.length > 1 ? uiText('candidateCount', { count: candidates.length }) : ''}</small>
+        {!editing && active && <button type="button" onClick={onEdit}>{uiText('edit')}</button>}
       </header>
       {editing && active ? (
         <div className={uiClass("pmw-edit")}>
@@ -237,7 +239,7 @@ const ExpressionsCard = ({
             value={active.surfaceForm}
             onChange={(event) => onChange({ ...active, surfaceForm: event.target.value })}
           />
-          <button type="button" className={uiClass("pmw-edit-done")} onClick={onDone}>改好了</button>
+          <button type="button" className={uiClass("pmw-edit-done")} onClick={onDone}>{uiText('done')}</button>
         </div>
       ) : (
         <div className={uiClass("pmw-expr-candidates")}>
@@ -276,6 +278,7 @@ export const PersonalMeaningDetailScreen = ({
   onOpenConfirmedSense,
   toast,
 }: PersonalMeaningDetailScreenProps) => {
+  useTranslation();
   const gateway = useJourneyGateway();
   const { detail, status } = useJourneyDetail(personalMeaningId);
   const screenRef = useRef<HTMLElement>(null);
@@ -442,7 +445,7 @@ export const PersonalMeaningDetailScreen = ({
     } catch (cause) {
       stopPacer();
       setStreamingText('');
-      setError(cause instanceof Error ? cause.message : 'AI 暂时无法继续这轮对话。');
+      setError(cause instanceof Error ? cause.message : uiText('unableToContinueThisConversationPleaseRetry'));
     } finally {
       setBusy(false);
     }
@@ -490,9 +493,9 @@ export const PersonalMeaningDetailScreen = ({
         personalMeaningId: detail.personalMeaningId,
         block: { kind: 'image', personalMediaObjectId: mediaId },
       });
-      toast('材料已补充，下一轮 AI 就能看到');
+      toast(uiText('materialAddedForTheNextTurn'));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '这张图片暂时无法加入。');
+      setError(cause instanceof Error ? cause.message : uiText('unableToAddThisImage'));
     }
   };
 
@@ -555,9 +558,9 @@ export const PersonalMeaningDetailScreen = ({
           confirmedAt: new Date().toISOString(),
         },
       });
-      toast(result.expressionConfirmed ? '三个事实都已确认' : '已确认 2 / 3，表达待确认');
+      toast(result.expressionConfirmed ? uiText('meaningAndExpressionConfirmed') : uiText('meaningConfirmedExpressionStillPending'));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '暂时无法确认，请再试一次。');
+      setError(cause instanceof Error ? cause.message : uiText('unableToConfirmPleaseRetry'));
     } finally {
       setBusy(false);
     }
@@ -587,9 +590,9 @@ export const PersonalMeaningDetailScreen = ({
         ...session,
         outcome: { ...session.outcome!, expressionConfirmed: true },
       });
-      toast('目标表达已确认');
+      toast(uiText('targetExpressionConfirmed'));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '暂时无法确认这个表达。');
+      setError(cause instanceof Error ? cause.message : uiText('unableToConfirmThisExpression'));
     } finally {
       setBusy(false);
     }
@@ -619,21 +622,21 @@ export const PersonalMeaningDetailScreen = ({
 
   const body = !status.ok ? (
     <div className={uiClass("pmw-error")} role="alert">
-      <b>语义材料无法读取</b>
+      <b>{uiText('unableToReadThisMaterial')}</b>
       <p>{status.error}</p>
     </div>
   ) : !detail || !session ? (
-    <div className={uiClass("pmw-empty")}>没有找到这份语义材料。</div>
+    <div className={uiClass("pmw-empty")}>{uiText('thisMaterialWasNotFound')}</div>
   ) : allConfirmed ? (
     <div className={uiClass("pmw-done")}>
       <span className={uiClass("pmw-done-mark")} aria-hidden="true">✓</span>
-      <h2>这个意思已确认</h2>
-      <p>已为你记入词义世界。</p>
+      <h2>{uiText('meaningConfirmed')}</h2>
+      <p>{uiText('savedToYourMeanings')}</p>
       <div className={uiClass("pmw-done-facts")}>
-        <article><small>侧面</small><b>{confirmedFocus?.statement}</b></article>
-        <article><small>意思</small><b>{alignment?.coreMeaningFocus}</b></article>
+        <article><small>{uiText('focus')}</small><b>{confirmedFocus?.statement}</b></article>
+        <article><small>{uiText('meaning2')}</small><b>{alignment?.coreMeaningFocus}</b></article>
         <article>
-          <small>表达</small>
+          <small>{uiText('expression')}</small>
           <b>{boundExpression?.surfaceForm}</b>
           <span>
             {expressionTypeLabels[boundExpression!.expressionType]} ·{' '}
@@ -644,8 +647,7 @@ export const PersonalMeaningDetailScreen = ({
       </div>
       <div className={uiClass("pmw-done-actions")}>
         <button type="button" className={uiClass("pmw-primary")} onClick={startAnotherThread}>
-          这段经历还有别的侧面
-        </button>
+          {uiText('exploreAnotherAspectOfThisExperience')}</button>
         <button
           type="button"
           onClick={() => onOpenConfirmedSense(
@@ -653,21 +655,20 @@ export const PersonalMeaningDetailScreen = ({
             confirmedFocus!.meaningFocusId,
           )}
         >
-          查看已确认意思
-        </button>
-        <button type="button" onClick={onBack}>回词义世界</button>
+          {uiText('viewConfirmedMeaning')}</button>
+        <button type="button" onClick={onBack}>{uiText('backToMyContent')}</button>
       </div>
     </div>
   ) : (
     <>
       {materialOpen && (
-        <section className={uiClass("pmw-material")} aria-label="本轮材料">
+        <section className={uiClass("pmw-material")} aria-label={uiText('contextForThisConversation')}>
           {detail.materialBlocks.map((block) => (
             block.kind === 'image' ? (
               <img
                 key={block.anchorId}
                 src={getMedia(block.personalMediaObjectId ?? '')?.dataUrl ?? ''}
-                alt="材料图片"
+                alt={uiText('contextImage')}
               />
             ) : (
               <p key={block.anchorId}>{block.bodyText}</p>
@@ -675,10 +676,10 @@ export const PersonalMeaningDetailScreen = ({
           ))}
           {detail.familiarAnchors.map((anchor) => (
             <p key={anchor.anchorId} className={uiClass("pmw-material-familiar")}>
-              <small>中文说法</small>{anchor.surfaceForm}
+              <small>{uiText('chineseExpression')}</small>{anchor.surfaceForm}
             </p>
           ))}
-          <button type="button" onClick={() => fileRef.current?.click()}>＋补一张图</button>
+          <button type="button" onClick={() => fileRef.current?.click()}>{uiText('addAnImage')}</button>
           <input
             ref={fileRef}
             type="file"
@@ -725,8 +726,7 @@ export const PersonalMeaningDetailScreen = ({
             disabled={busy}
             onClick={() => void runTurn(session, undefined, lastModeRef.current)}
           >
-            重试
-          </button>
+            {uiText('retry')}</button>
         </div>
       )}
 
@@ -736,27 +736,27 @@ export const PersonalMeaningDetailScreen = ({
             type="button"
             className={uiClass(`pmw-dock-chip is-${focusStatus.tone}`)}
             onClick={() => setPanelOpen(true)}
-            aria-label="查看侧面"
+            aria-label={uiText('viewFocus')}
           >
-            <small>侧面</small>
+            <small>{uiText('focus')}</small>
             <b>{working.focus ? working.focus.statement : focusStatus.label}</b>
           </button>
           <button
             type="button"
             className={uiClass(`pmw-dock-chip is-${senseStatus.tone}`)}
             onClick={() => setPanelOpen(true)}
-            aria-label="查看意思"
+            aria-label={uiText('viewMeaning')}
           >
-            <small>意思</small>
+            <small>{uiText('meaning2')}</small>
             <b>{working.sense ? working.sense.coreMeaningFocus : senseStatus.label}</b>
           </button>
           <button
             type="button"
             className={uiClass(`pmw-dock-chip is-${expressionStatus.tone}`)}
             onClick={() => setPanelOpen(true)}
-            aria-label="查看表达"
+            aria-label={uiText('viewExpression')}
           >
-            <small>表达</small>
+            <small>{uiText('expression')}</small>
             <b>
               {working.expression
                 ? `${working.expression.surfaceForm}${candidatesList.length > 1 ? ` (+${candidatesList.length - 1})` : ''}`
@@ -771,10 +771,9 @@ export const PersonalMeaningDetailScreen = ({
             className={uiClass("pmw-dock-organize")}
             disabled={busy}
             onClick={() => void runTurn(session, undefined, 'consolidate')}
-            title="让 AI 梳理提炼当前结论"
+            title={uiText('summarizeTheCurrentUnderstanding')}
           >
-            ✨ 整理一下
-          </button>
+            {uiText('summarize')}</button>
           {senseConfirmed ? (
             alignment!.expressionCandidates.length === 0 ? null : (
               <button
@@ -783,8 +782,7 @@ export const PersonalMeaningDetailScreen = ({
                 disabled={!canConfirmExpressionOnly}
                 onClick={() => void confirmExpressionOnly()}
               >
-                确认表达
-              </button>
+                {uiText('confirmExpression')}</button>
             )
           ) : (
             <button
@@ -796,8 +794,7 @@ export const PersonalMeaningDetailScreen = ({
                 setReviewOpen(true);
               }}
             >
-              就确认成这样
-            </button>
+              {uiText('reviewAndConfirm')}</button>
           )}
         </div>
       </div>
@@ -812,11 +809,11 @@ export const PersonalMeaningDetailScreen = ({
               event.currentTarget.form?.requestSubmit();
             }
           }}
-          placeholder="继续说你的理解、例子或疑问…"
+          placeholder={uiText('shareYourUnderstandingExamplesOrQuestions')}
           rows={2}
           disabled={busy}
         />
-        <button type="submit" disabled={busy || !draft.trim()} aria-label="发送">
+        <button type="submit" disabled={busy || !draft.trim()} aria-label={uiText('send')}>
           <span aria-hidden="true">↑</span>
         </button>
       </form>
@@ -827,18 +824,17 @@ export const PersonalMeaningDetailScreen = ({
             className={uiClass("pmw-preview-sheet")}
             role="dialog"
             aria-modal="true"
-            aria-label="当前整理结果"
+            aria-label={uiText('currentUnderstanding')}
             onMouseDown={(event) => event.stopPropagation()}
           >
             <header>
-              <h2>当前整理结果</h2>
-              <button type="button" onClick={() => setPanelOpen(false)} aria-label="关闭">×</button>
+              <h2>{uiText('currentUnderstanding')}</h2>
+              <button type="button" onClick={() => setPanelOpen(false)} aria-label={uiText('close')}>×</button>
             </header>
             <div className={uiClass("pmw-preview-body")}>
               {senseConfirmed && (
                 <p className={uiClass("pmw-panel-note")}>
-                  侧面与意思已确认，接下来可以确认目标表达。
-                </p>
+                  {uiText('theFocusAndMeaningAreConfirmedYou')}</p>
               )}
               {working.focus && !senseConfirmed && (
                 <FocusCard
@@ -870,7 +866,7 @@ export const PersonalMeaningDetailScreen = ({
                 />
               )}
               {!working.focus && !working.sense && candidatesList.length === 0 && (
-                <p className={uiClass("pmw-panel-empty")}>继续聊聊你的场景或疑问。</p>
+                <p className={uiClass("pmw-panel-empty")}>{uiText('tellUsMoreAboutYourContextOr')}</p>
               )}
             </div>
             <footer>
@@ -884,9 +880,8 @@ export const PersonalMeaningDetailScreen = ({
                   setReviewOpen(true);
                 }}
               >
-                就确认成这样
-              </button>
-              <button type="button" onClick={() => setPanelOpen(false)}>继续聊</button>
+                {uiText('reviewAndConfirm')}</button>
+              <button type="button" onClick={() => setPanelOpen(false)}>{uiText('keepTalking')}</button>
             </footer>
           </section>
         </div>
@@ -902,24 +897,24 @@ export const PersonalMeaningDetailScreen = ({
             onMouseDown={(event) => event.stopPropagation()}
           >
             <header>
-              <h2 id="pmw-review-title">确认这些内容</h2>
-              <button type="button" onClick={() => setReviewOpen(false)} aria-label="继续聊">×</button>
+              <h2 id="pmw-review-title">{uiText('confirmTheseDetails')}</h2>
+              <button type="button" onClick={() => setReviewOpen(false)} aria-label={uiText('keepTalking')}>×</button>
             </header>
 
             <div className={uiClass("pmw-review-body")}>
               <article className={uiClass("pmw-review-card")}>
-                <header><small>侧面</small><em>一起确认</em></header>
+                <header><small>{uiText('focus')}</small><em>{uiText('confirmTogether')}</em></header>
                 <b>{working.focus.statement}</b>
               </article>
 
               <article className={uiClass("pmw-review-card")}>
-                <header><small>意思</small><em>一起确认</em></header>
+                <header><small>{uiText('meaning2')}</small><em>{uiText('confirmTogether')}</em></header>
                 <b>{working.sense.coreMeaningFocus}</b>
               </article>
 
               <article className={uiClass(`pmw-review-card${includeExpression ? '' : ' is-deferred'}`)}>
                 <header>
-                  <small>目标表达 {candidatesList.length > 1 ? `(${candidatesList.length} 个候选)` : ''}</small>
+                  <small>{uiText('targetExpression')}{candidatesList.length > 1 ? uiText('candidateCount', { count: candidatesList.length }) : ''}</small>
                   {working.expression ? (
                     <label className={uiClass("pmw-review-toggle")}>
                       <input
@@ -927,9 +922,9 @@ export const PersonalMeaningDetailScreen = ({
                         checked={includeExpression}
                         onChange={(event) => setIncludeExpression(event.target.checked)}
                       />
-                      <span>一起确认</span>
+                      <span>{uiText('confirmTogether')}</span>
                     </label>
-                  ) : <em>暂无候选</em>}
+                  ) : <em>{uiText('noCandidatesYet')}</em>}
                 </header>
                 {working.expression ? (
                   <div className={uiClass("pmw-review-candidates")}>
@@ -955,14 +950,14 @@ export const PersonalMeaningDetailScreen = ({
                     })}
                   </div>
                 ) : (
-                  <p>这次还没聊出合适的英语表达。确认前两个，之后可以接着聊。</p>
+                  <p>{uiText('noSuitableEnglishExpressionYetYouCan')}</p>
                 )}
               </article>
             </div>
 
             <footer>
               <p className={uiClass("pmw-review-consequence")}>
-                确认后将保存到词义世界{working.expression && includeExpression ? '并连接表达' : '，表达可稍后绑定'}。
+                {uiText('confirmationSavesThisToYourMeanings')}{working.expression && includeExpression ? uiText('andConnectsTheExpression') : uiText('youCanConnectAnExpressionLater')}。
               </p>
               {error && <p className={uiClass("pmw-review-error")} role="alert">{error}</p>}
               <div className={uiClass("pmw-review-actions")}>
@@ -972,11 +967,10 @@ export const PersonalMeaningDetailScreen = ({
                   disabled={busy}
                   onClick={() => void confirm()}
                 >
-                  {busy ? '正在确认…' : '确认'}
+                  {busy ? uiText('confirming') : uiText('confirm')}
                 </button>
                 <button type="button" disabled={busy} onClick={() => setReviewOpen(false)}>
-                  再聊聊
-                </button>
+                  {uiText('keepTalking2')}</button>
               </div>
             </footer>
           </section>
@@ -992,21 +986,22 @@ export const PersonalMeaningDetailScreen = ({
       id="s-personal-meaning"
       data-anim="slide"
     >
+      <div className="ml-auto flex h-full w-full flex-col bg-[#fbfbfa] shadow-xl lg:max-w-[860px]">
       <header className={uiClass("content-nav pmw-nav")}>
-        <button className={uiClass("content-nav-back")} onClick={onBack} aria-label="返回我的词义世界">
+        <button className={uiClass("content-nav-back")} onClick={onBack} aria-label={uiText('backToMyContent2')}>
           <svg className={uiClass("icon")}><use href="#i-chev-l" /></svg>
         </button>
-        <h1>AI 澄清</h1>
+        <h1>{uiText('clarifyYourMeaning')}</h1>
         <button
           type="button"
           className={uiClass(`pmw-material-toggle${materialOpen ? ' is-open' : ''}`)}
           onClick={() => setMaterialOpen((value) => !value)}
           aria-expanded={materialOpen}
         >
-          材料
-        </button>
+          {uiText('context')}</button>
       </header>
       <div className={uiClass("pmw-shell")}>{body}</div>
+      </div>
     </section>
   );
 };

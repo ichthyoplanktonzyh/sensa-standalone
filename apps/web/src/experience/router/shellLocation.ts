@@ -14,8 +14,8 @@
  * dimensions independent, which a single "current route" could not express.
  *
  *   /                              main shell, empty stack
- *   /academy/wordlist              stack = [s-academy, s-wordlist]
- *   /academy/wordlist?flow=study   same stack, learning flow on top
+ *   /study/learning-library        stack = [s-study, s-learning-library]
+ *   /study/learning-library?flow=study   same stack, learning flow on top
  *
  * Sheet ids carry an `s-` prefix in the DOM (`id="s-academy"`); the URL drops
  * it, so a path segment is the bare sheet name.
@@ -52,7 +52,6 @@ export const KNOWN_SHEET_IDS = [
   's-learning-library',
   's-learning-policy',
   's-learning-target',
-  's-listening',
   's-personal-meaning',
   's-practice-scope',
   's-profile',
@@ -60,7 +59,6 @@ export const KNOWN_SHEET_IDS = [
   's-semantic-world',
   's-stats',
   's-study',
-  's-wordlist',
 ] as const;
 
 const KNOWN_SHEET_ID_SET: ReadonlySet<string> = new Set(KNOWN_SHEET_IDS);
@@ -76,7 +74,7 @@ const bare = (sheetId: string): string =>
  * The rule is reversible without a lookup table: when parsing, a segment is
  * first tried joined to its parent, and only falls back to standing alone --
  * so `/content/library` resolves to `s-content-library` while
- * `/academy/listening` resolves to `s-listening`, no mapping to maintain.
+ * `/academy/real-world-listening` resolves to `s-real-world-listening`.
  */
 const toSegment = (sheetId: string, parentSheetId: string | undefined): string => {
   const name = bare(sheetId);
@@ -117,6 +115,16 @@ export const parseMainStack = (pathname: string): string[] => {
   const stack: string[] = [];
   for (const segment of pathname.split('/')) {
     if (segment.length === 0) continue;
+    // Retired word-book lists now resolve to the single learning-content list.
+    if (segment === 'wordlist' || segment === 's-wordlist') {
+      stack.splice(0, stack.length, 's-study', 's-learning-library');
+      continue;
+    }
+    // Portable listening was removed, not renamed to real-world listening.
+    if (segment === 'listening' || segment === 's-listening') {
+      if (stack.length === 0) stack.push('s-academy');
+      continue;
+    }
     const sheetId = toSheetId(segment, stack[stack.length - 1]);
     if (sheetId === undefined || stack.includes(sheetId)) continue;
     stack.push(sheetId);

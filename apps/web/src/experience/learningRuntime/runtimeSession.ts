@@ -30,8 +30,7 @@
  * 两个 summary 会同时存在——混合流里先复习后新学，结算页靠 flowMode 决定显示
  * 哪一个，两份数据都得留着。
  *
- * 将来接入数据层时，这里就是持久化落点：目前整份状态刷新即丢，是原型阶段的
- * 已知限制。
+ * useRuntimeSession 将运行记录与轻量步骤、学习事实一起保存到本机检查点。
  */
 import type { PrototypeLearningTargetId } from '../learningJourney/prototypeLearning';
 import type { PrototypeRuntimeSurface } from './runtimeCoordinator';

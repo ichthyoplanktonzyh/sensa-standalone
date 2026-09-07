@@ -48,7 +48,11 @@
     "sensa:sync-protocol-smoke": "tsx scripts/sensaSyncProtocolSmoke.ts",
     "sensa:capability-smoke": "tsx scripts/sensaCapabilitySmoke.ts",
     "sensa:capability-db-smoke": "node --env-file-if-exists=apps/api/.env --import tsx scripts/sensaCapabilityDatabaseSmoke.ts",
-    "sensa:web-ui-smoke": "tsx scripts/sensaWebUiSmoke.ts"
+    "sensa:web-ui-smoke": "tsx scripts/sensaWebUiSmoke.ts",
+    "sensa:content-navigation-smoke": "tsx scripts/sensaContentNavigationSmoke.ts",
+    "sensa:lightweight-runtime-smoke": "TSX_TSCONFIG_PATH=apps/web/tsconfig.json node --import tsx scripts/sensaLightweightRuntimeSmoke.tsx",
+    "sensa:runtime-checkpoint-smoke": "tsx scripts/sensaRuntimeCheckpointSmoke.ts",
+    "sensa:assurance-runtime-smoke": "TSX_TSCONFIG_PATH=apps/web/tsconfig.json node --import tsx scripts/sensaAssuranceRuntimeSmoke.tsx"
   },
   "engines": {
     "node": ">=24"

@@ -1,16 +1,16 @@
 /**
  * 学习旅程状态的入口。App 只通过这里读写每条 Target 的进度。
  *
- * 与 learningFlow / runtimeSession 一致，用 useReducer：全部合法转移列在
- * journeyState.ts 一处，reducer 是纯的，将来加持久化不需要动调用点。
+ * 全部合法转移列在 journeyState.ts；纯 reducer 的结果与运行步骤一起提交本机检查点。
  */
-import { useCallback, useMemo, useReducer } from 'react';
+import { useCallback, useMemo, useRef, useState } from "react";
+import { runtimeCheckpoint } from "../learningRuntime/runtimeCheckpoint";
 import {
   INITIAL_JOURNEY,
   journeyReducer,
   type JourneyAction,
   type JourneyState,
-} from './journeyState';
+} from "./journeyState";
 
 export interface JourneyStore {
   readonly journey: JourneyState;
@@ -18,7 +18,44 @@ export interface JourneyStore {
 }
 
 export function useJourneyState(): JourneyStore {
-  const [journey, dispatch] = useReducer(journeyReducer, INITIAL_JOURNEY);
-  const dispatchJourney = useCallback((action: JourneyAction) => dispatch(action), []);
-  return useMemo(() => ({ journey, dispatchJourney }), [journey, dispatchJourney]);
+  const [journey, setJourney] = useState(() => {
+    const saved = runtimeCheckpoint.read().journey;
+    return saved
+      ? {
+          ...saved,
+          declaredMasteryRetentionTargetIds: new Set(
+            saved.declaredMasteryRetentionTargetIds,
+          ),
+        }
+      : INITIAL_JOURNEY;
+  });
+  const current = useRef(journey);
+  const dispatchJourney = useCallback((action: JourneyAction) => {
+    const saved = runtimeCheckpoint.read().journey;
+    const base = saved
+      ? {
+          ...saved,
+          declaredMasteryRetentionTargetIds: new Set(
+            saved.declaredMasteryRetentionTargetIds,
+          ),
+        }
+      : current.current;
+    const next = journeyReducer(base, action);
+    runtimeCheckpoint.update({
+      journey: {
+        ...next,
+        declaredMasteryRetentionTargetIds: [
+          ...next.declaredMasteryRetentionTargetIds,
+        ],
+      },
+    });
+    runtimeCheckpoint.afterCommit(() => {
+      current.current = next;
+      setJourney(next);
+    });
+  }, []);
+  return useMemo(
+    () => ({ journey, dispatchJourney }),
+    [journey, dispatchJourney],
+  );
 }

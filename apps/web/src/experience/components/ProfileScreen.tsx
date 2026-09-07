@@ -1,217 +1,106 @@
-import { uiClass } from '../ui/classes';
-type ProfileIconKind =
-  | 'plan'
-  | 'preferences'
-  | 'sync'
-  | 'storage'
-  | 'data-control'
-  | 'about'
-  | 'privacy'
-  | 'feedback';
+import { useEffect, useState } from 'react';
+import { ArrowRight, BookOpen, SlidersHorizontal, UserRound, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { LanguageSwitch } from '../../i18n/LanguageSwitch';
+import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
+import type { PrototypeLearningPolicy } from '../learningJourney/prototypeLearning';
 
 interface ProfileScreenProps {
   active: boolean;
-  onBack: () => void;
   onGoStudyPlan: () => void;
-  onGoStudySettings: () => void;
-  toast: (msg: string) => void;
+  defaultPolicy: PrototypeLearningPolicy;
+  dailyNewCount: number;
+  onPolicyChange: (policy: PrototypeLearningPolicy) => void;
+  onDailyNewCountChange: (count: number) => void;
 }
 
-const ProfileIcon = ({ kind }: { kind: ProfileIconKind }) => {
-  switch (kind) {
-    case 'plan':
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5.5 5.5h5.2c.7 0 1.3.6 1.3 1.3v11.7c0-1.2-1-2.2-2.2-2.2H5.5z" />
-          <path d="M18.5 5.5h-5.2c-.7 0-1.3.6-1.3 1.3v11.7c0-1.2 1-2.2 2.2-2.2h4.3z" />
-        </svg>
-      );
-    case 'preferences':
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 7h8M17 7h2M5 12h2M11 12h8M5 17h9M18 17h1" />
-          <circle cx="15" cy="7" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="16" cy="17" r="2" />
-        </svg>
-      );
-    case 'sync':
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M6.2 8.2A7 7 0 0 1 18 7l1.5 2" /><path d="M19.5 5v4h-4" />
-          <path d="M17.8 15.8A7 7 0 0 1 6 17l-1.5-2" /><path d="M4.5 19v-4h4" />
-        </svg>
-      );
-    case 'storage':
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 7.5C5 6.1 8.1 5 12 5s7 1.1 7 2.5S15.9 10 12 10 5 8.9 5 7.5Z" />
-          <path d="M5 7.5v4C5 12.9 8.1 14 12 14s7-1.1 7-2.5v-4M5 11.5v4C5 16.9 8.1 18 12 18s7-1.1 7-2.5v-4" />
-        </svg>
-      );
-    case 'data-control':
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 4.5h7l3 3V19H7z" /><path d="M14 4.5V8h3M10 12h4M10 15h4" />
-        </svg>
-      );
-    case 'about':
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="8" /><path d="M12 11v5M12 8h.01" />
-        </svg>
-      );
-    case 'privacy':
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 4.5 18 7v4.5c0 3.7-2.4 6.6-6 8-3.6-1.4-6-4.3-6-8V7z" />
-          <path d="m9.5 12 1.7 1.7 3.5-3.7" />
-        </svg>
-      );
-    case 'feedback':
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 6.5h14v9H9l-4 3z" /><path d="M9 10h6M9 13h4" />
-        </svg>
-      );
+/** Only the current preview's namespace; other applications and media are excluded. */
+export function localPreviewBytes(storage: Storage): number {
+  let bytes = 0;
+  for (let index = 0; index < storage.length; index++) {
+    const key = storage.key(index);
+    if (key && (key.startsWith('sensa:web-ui:v1:') || key === 'sensa:interface-language:v1')) {
+      bytes += (key.length + (storage.getItem(key)?.length ?? 0)) * 2;
+    }
   }
-};
+  return bytes;
+}
 
-const Chevron = () => (
-  <svg className={uiClass("profile-chevron")} viewBox="0 0 24 24" aria-hidden="true">
-    <path d="m9 6 6 6-6 6" />
-  </svg>
-);
-
-export const ProfileScreen = ({
-  active,
-  onBack,
-  onGoStudyPlan,
-  onGoStudySettings,
-  toast,
-}: ProfileScreenProps) => {
-  return (
-    <section
-      className={uiClass(`screen profile-surface${active ? ' active' : ''}`, "#s-profile")}
-      id="s-profile"
-      data-anim="slide"
-    >
-      <header className={uiClass("profile-page-nav")}>
-        <button type="button" onClick={onBack} aria-label="返回首页">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6" /></svg>
-        </button>
-        <div>
-          <small>设置与数据</small>
-          <h1>我的</h1>
+export const ProfileScreen = (props: ProfileScreenProps) => {
+  const { t, i18n } = useTranslation();
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [online, setOnline] = useState(() => navigator.onLine);
+  const [bytes, setBytes] = useState<number | null>(null);
+  const refreshStorage = () => {
+    try { setBytes(localPreviewBytes(window.localStorage)); }
+    catch { setBytes(null); }
+  };
+  useEffect(() => {
+    if (!props.active) { setPreferencesOpen(false); return; }
+    refreshStorage();
+    const updateNetwork = () => setOnline(navigator.onLine);
+    updateNetwork();
+    window.addEventListener('online', updateNetwork);
+    window.addEventListener('offline', updateNetwork);
+    window.addEventListener('storage', refreshStorage);
+    return () => {
+      window.removeEventListener('online', updateNetwork);
+      window.removeEventListener('offline', updateNetwork);
+      window.removeEventListener('storage', refreshStorage);
+    };
+  }, [props.active, i18n.language]);
+  const closePreferences = () => {
+    setPreferencesOpen(false);
+    refreshStorage();
+    requestAnimationFrame(() => document.getElementById('account-learning-preferences')?.focus());
+  };
+  const usage = bytes === null ? t('account.unknown') : new Intl.NumberFormat(i18n.language, {
+    style: 'unit', unit: bytes >= 1024 * 1024 ? 'megabyte' : 'kilobyte', maximumFractionDigits: 1,
+  }).format(bytes / (bytes >= 1024 * 1024 ? 1024 * 1024 : 1024));
+  return <section id="s-profile" className={`screen absolute inset-0 z-10 overflow-y-auto bg-[#fbfbfa] text-[#222631] ${props.active ? 'active' : 'invisible pointer-events-none'}`}>
+    <main className="mx-auto max-w-[1280px] px-6 py-8 sm:px-10 lg:px-14 lg:py-14">
+      <h1 className="mb-10 text-3xl font-medium tracking-tight lg:text-4xl">{t('account.title')}</h1>
+      <section aria-labelledby="account-identity" className="flex flex-wrap items-center gap-5 rounded-3xl bg-[#edf0f7] p-6 sm:p-8">
+        <span aria-hidden="true" className="grid size-14 shrink-0 place-items-center rounded-2xl bg-white text-[#5268a9]"><UserRound size={25}/></span>
+        <div className="min-w-0 flex-1"><h2 id="account-identity" className="text-lg font-medium">{t('account.identity')}</h2><p className="mt-2 max-w-xl text-sm leading-6 text-[#68748d]">{t('account.identityNote')}</p></div>
+        <span className="rounded-full border border-[#cfd7e6] px-3 py-1.5 text-xs text-[#546582]">{t('account.local')}</span>
+      </section>
+      <div className="mt-9 grid items-start gap-8 lg:grid-cols-2">
+        <section aria-labelledby="account-preferences">
+          <h2 id="account-preferences" className="mb-4 text-lg font-medium">{t('account.preferences')}</h2>
+          <div className="divide-y divide-[#e3e5ea] rounded-2xl border border-[#e3e5ea] bg-white px-5 sm:px-6">
+            <div className="flex min-h-20 flex-wrap items-center justify-between gap-3 py-3"><span className="text-sm">{t('account.language')}</span><LanguageSwitch/></div>
+            <button id="account-learning-preferences" onClick={() => setPreferencesOpen(true)} className="flex min-h-24 w-full items-center gap-4 py-5 text-left hover:text-[#5268a9] focus-visible:outline-2 focus-visible:outline-[#5268a9]">
+              <SlidersHorizontal size={19} className="shrink-0 text-[#788398]"/><span className="flex-1"><span className="block text-sm font-medium">{t('account.learning')}</span><span className="mt-1 block text-xs leading-5 text-[#788398]">{t('account.learningNote')}</span></span><ArrowRight size={17}/>
+            </button>
+            <button onClick={props.onGoStudyPlan} className="flex min-h-24 w-full items-center gap-4 py-5 text-left hover:text-[#5268a9] focus-visible:outline-2 focus-visible:outline-[#5268a9]">
+              <BookOpen size={19} className="shrink-0 text-[#788398]"/><span className="flex-1"><span className="block text-sm font-medium">{t('account.plan')}</span><span className="mt-1 block text-xs leading-5 text-[#788398]">{t('account.planNote')}</span></span><ArrowRight size={17}/>
+            </button>
+          </div>
+        </section>
+        <section aria-labelledby="account-data">
+          <h2 id="account-data" className="mb-4 text-lg font-medium">{t('account.data')}</h2>
+          <div className="rounded-2xl border border-[#e3e5ea] bg-white px-5 sm:px-6">
+            <dl className="divide-y divide-[#e3e5ea] text-sm">
+              <div className="flex flex-wrap justify-between gap-3 py-5"><dt>{t('account.network')}</dt><dd aria-live="polite" className="text-[#68748d]">{t(online ? 'account.online' : 'account.offline')}</dd></div>
+              <div className="flex flex-wrap justify-between gap-3 py-5"><dt>{t('account.sync')}</dt><dd className="text-[#788398]">{t('account.unavailable')}</dd></div>
+              <div className="py-5"><dt>{t('account.storage')}</dt><dd className="mt-2 flex items-center justify-between gap-3"><span className="text-2xl tabular-nums" aria-live="polite">{usage}</span><button aria-label={t('account.refresh')} onClick={refreshStorage} className="grid size-11 place-items-center rounded-lg text-[#68748d] hover:bg-[#edf0f7]"><RefreshCw size={17}/></button></dd></div>
+            </dl>
+            <p className="pb-5 text-xs leading-6 text-[#788398]">{t('account.storageNote')}</p>
+          </div>
+          <p className="mt-3 text-xs leading-6 text-[#788398]">{t('account.controls')}</p>
+        </section>
+      </div>
+      <section aria-labelledby="account-support" className="mt-10">
+        <h2 id="account-support" className="mb-4 text-lg font-medium">{t('account.support')}</h2>
+        <div className="divide-y divide-[#e3e5ea] border-y border-[#e3e5ea]">
+          {(['about', 'privacy', 'feedback'] as const).map(key => <details key={key} className="group py-1">
+            <summary className="cursor-pointer py-5 text-sm font-medium marker:text-[#788398]">{t('account.' + key)}</summary>
+            <p className="max-w-2xl pb-5 text-sm leading-7 text-[#68748d]">{t('account.' + key + 'Text')}</p>
+          </details>)}
         </div>
-        <span className={uiClass("profile-local-state")}><i aria-hidden="true" />本机</span>
-      </header>
-
-      <main className={uiClass("profile-body")}>
-        <section className={uiClass("profile-identity")} aria-labelledby="profile-identity-title">
-          <div className={uiClass("profile-identity-field")} aria-hidden="true"><i /><i /><i /></div>
-          <span className={uiClass("profile-identity-mark")} aria-hidden="true"><i /><i /><i /></span>
-          <div className={uiClass("profile-identity-copy")}>
-            <small>本地交互原型</small>
-            <h2 id="profile-identity-title">你的 Sensa</h2>
-            <p>当前没有正式账号身份。这个页面展示本地原型状态，账号与云端同步接入后会在这里显示。</p>
-          </div>
-          <span className={uiClass("profile-identity-status")}><i aria-hidden="true" />本机使用中</span>
-        </section>
-
-        <section className={uiClass("profile-shortcuts")} aria-label="学习快捷入口">
-          <button type="button" onClick={onGoStudyPlan}>
-            <span className={uiClass("profile-shortcut-icon")}><ProfileIcon kind="plan" /></span>
-            <span className={uiClass("profile-shortcut-copy")}>
-              <small>范围与额度</small>
-              <strong>学习计划</strong>
-              <em>词书、目标与每日新学</em>
-            </span>
-            <Chevron />
-          </button>
-          <button type="button" onClick={onGoStudySettings}>
-            <span className={uiClass("profile-shortcut-icon is-settings")}><ProfileIcon kind="preferences" /></span>
-            <span className={uiClass("profile-shortcut-copy")}>
-              <small>方式与安排</small>
-              <strong>学习设置</strong>
-              <em>默认方式与复习安排</em>
-            </span>
-            <Chevron />
-          </button>
-        </section>
-
-        <section className={uiClass("profile-section")} aria-labelledby="profile-data-title">
-          <div className={uiClass("profile-section-heading")}>
-            <small>当前状态</small>
-            <h2 id="profile-data-title">设备与数据</h2>
-          </div>
-          <div className={uiClass("profile-list")}>
-            <div className={uiClass("profile-row is-static")}>
-              <span className={uiClass("profile-row-icon")}><ProfileIcon kind="sync" /></span>
-              <span className={uiClass("profile-row-copy")}>
-                <strong>数据与同步</strong>
-                <small>云端同步尚未接入，当前状态不会跨设备。</small>
-              </span>
-              <em>仅本机</em>
-            </div>
-            <div className={uiClass("profile-row is-static")}>
-              <span className={uiClass("profile-row-icon is-gold")}><ProfileIcon kind="storage" /></span>
-              <span className={uiClass("profile-row-copy")}>
-                <strong>本机存储</strong>
-                <small>正式版会在这里显示内容与媒体占用。</small>
-              </span>
-              <em>筹备中</em>
-            </div>
-            <div className={uiClass("profile-row is-static")}>
-              <span className={uiClass("profile-row-icon is-clay")}><ProfileIcon kind="data-control" /></span>
-              <span className={uiClass("profile-row-copy")}>
-                <strong>导出与删除</strong>
-                <small>需要正式账号和在线确认后才能使用。</small>
-              </span>
-              <em>未接入</em>
-            </div>
-          </div>
-        </section>
-
-        <section className={uiClass("profile-section")} aria-labelledby="profile-support-title">
-          <div className={uiClass("profile-section-heading")}>
-            <small>产品信息</small>
-            <h2 id="profile-support-title">关于与支持</h2>
-          </div>
-          <div className={uiClass("profile-list")}>
-            <button
-              type="button"
-              className={uiClass("profile-row")}
-              onClick={() => toast('Sensa：以一个具体意思与表达的连接为核心，安排首次学习和长期复习。')}
-            >
-              <span className={uiClass("profile-row-icon")}><ProfileIcon kind="about" /></span>
-              <span className={uiClass("profile-row-copy")}><strong>关于 Sensa</strong><small>产品定位与当前版本</small></span>
-              <Chevron />
-            </button>
-            <button
-              type="button"
-              className={uiClass("profile-row")}
-              onClick={() => toast('正式隐私说明将在账号与云端服务接入时提供。')}
-            >
-              <span className={uiClass("profile-row-icon is-gold")}><ProfileIcon kind="privacy" /></span>
-              <span className={uiClass("profile-row-copy")}><strong>隐私说明</strong><small>正式说明随账号服务提供</small></span>
-              <Chevron />
-            </button>
-            <button
-              type="button"
-              className={uiClass("profile-row")}
-              onClick={() => toast('反馈与内容纠错入口尚未接入。')}
-            >
-              <span className={uiClass("profile-row-icon is-clay")}><ProfileIcon kind="feedback" /></span>
-              <span className={uiClass("profile-row-copy")}><strong>反馈与内容纠错</strong><small>正式服务接入后开放</small></span>
-              <Chevron />
-            </button>
-          </div>
-        </section>
-
-        <footer className={uiClass("profile-footer")}>
-          <span className={uiClass("profile-footer-mark")} aria-hidden="true"><i /><i /><i /></span>
-          <p><strong>Sensa Web 交互原型</strong><small>账号、同步与数据控制尚未作为生产能力交付</small></p>
-        </footer>
-      </main>
-    </section>
-  );
+      </section>
+    </main>
+    {props.active && preferencesOpen && <LearningPreferencesPanel defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('account.done')}/>}
+  </section>;
 };

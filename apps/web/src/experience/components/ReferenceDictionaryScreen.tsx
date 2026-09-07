@@ -231,6 +231,7 @@ export function ReferenceDictionaryScreen({
     <section
       className={uiClass(`screen reference-dictionary-screen${active ? ' active' : ''}`, "#s-reference-dictionary")}
       id="s-reference-dictionary"
+      data-screen-layer="1"
       data-anim="slide"
       aria-hidden={!active}
     >

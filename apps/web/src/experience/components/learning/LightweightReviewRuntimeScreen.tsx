@@ -1,229 +1,269 @@
-import { uiClass } from '../../ui/classes';
-import { useEffect, useMemo, useState } from 'react';
+import { runtimeCheckpoint } from "../../learningRuntime/runtimeCheckpoint";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ArrowRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   PROTOTYPE_LEARNING_TARGETS,
   experienceGroundingForTarget,
   type PrototypeLearningTargetId,
   type PrototypeLightweightRating,
-} from '../../learningJourney/prototypeLearning';
-
-type LightweightReviewPhase =
-  | 'recall'
-  | 'answer'
-  | 'repair'
-  | 'retry'
-  | 'retry_answer'
-  | 'summary';
-
-interface LightweightReviewResult {
-  targetId: PrototypeLearningTargetId;
-  rating: PrototypeLightweightRating;
-}
-
+} from "../../learningJourney/prototypeLearning";
+import {
+  initialReviewState,
+  transitionReview,
+  type ReviewAction,
+} from "../../learningRuntime/lightweightReviewState";
+import { RuntimeFrame, runtimePrimary } from "./RuntimeFrame";
+import { RuntimeRating } from "./RuntimeRating";
 interface LightweightReviewRuntimeScreenProps {
   active: boolean;
   targetIds: readonly PrototypeLearningTargetId[];
   onExit: () => void;
   onRateTarget: (
-    targetId: PrototypeLearningTargetId,
+    id: PrototypeLearningTargetId,
     rating: PrototypeLightweightRating,
   ) => void;
-  onCompleteRepair: (targetId: PrototypeLearningTargetId) => void;
+  onCompleteRepair: (id: PrototypeLearningTargetId) => void;
   finishLabel?: string;
   onFinish: () => void;
 }
-
-const ratingLabel: Record<PrototypeLightweightRating, string> = {
-  again: '已修复 · 10 分钟后',
-  hard: '费力想起 · 明天',
-  good: '顺利想起 · 3 天后',
-};
-
-export const LightweightReviewRuntimeScreen = ({
+export function LightweightReviewRuntimeScreen({
   active,
   targetIds,
   onExit,
   onRateTarget,
   onCompleteRepair,
-  finishLabel = '完成并回到首页',
+  finishLabel,
   onFinish,
-}: LightweightReviewRuntimeScreenProps) => {
-  const [phase, setPhase] = useState<LightweightReviewPhase>('recall');
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [repairAttempts, setRepairAttempts] = useState(0);
-  const [results, setResults] = useState<LightweightReviewResult[]>([]);
-  const sessionKey = targetIds.join('|');
-
+}: LightweightReviewRuntimeScreenProps) {
+  const { t, i18n } = useTranslation();
+  const sessionKey =
+    (runtimeCheckpoint.read().reviewGeneration ?? 0) +
+    ":" +
+    targetIds.join("|");
+  const restore = () => {
+    const saved = runtimeCheckpoint.read().review;
+    return saved?.key === sessionKey ? saved.state : initialReviewState();
+  };
+  const [state, setState] = useState(restore);
+  const stateRef = useRef(state);
+  const [error, setError] = useState(false);
   useEffect(() => {
-    setPhase('recall');
-    setCurrentIndex(0);
-    setRepairAttempts(0);
-    setResults([]);
+    stateRef.current = restore();
+    setState(stateRef.current);
+    setError(false);
   }, [sessionKey]);
-
-  const targetId = targetIds[currentIndex]!;
-  const target = PROTOTYPE_LEARNING_TARGETS[targetId];
+  const targetId = targetIds[state.index];
+  const target = targetId ? PROTOTYPE_LEARNING_TARGETS[targetId] : null;
   const grounding = useMemo(
-    () => experienceGroundingForTarget(target),
+    () => (target ? experienceGroundingForTarget(target) : null),
     [target],
   );
-
-  const advanceCurrent = (rating: PrototypeLightweightRating) => {
-    setResults((current) => [
-      ...current,
-      { targetId, rating },
-    ]);
-    setRepairAttempts(0);
-
-    if (currentIndex + 1 < targetIds.length) {
-      setCurrentIndex((index) => index + 1);
-      setPhase('recall');
-      return;
+  const act = (action: ReviewAction) => {
+    const previous = stateRef.current;
+    const next = transitionReview(previous, action, targetIds);
+    if (next.state === previous) return;
+    // Reserve the transition synchronously so rapid clicks cannot rate twice.
+    stateRef.current = next.state;
+    try {
+      runtimeCheckpoint.atomic(() => {
+        if (next.rating) onRateTarget(targetIds[previous.index]!, next.rating);
+        if (next.repaired) onCompleteRepair(targetIds[previous.index]!);
+        runtimeCheckpoint.update({
+          review: { key: sessionKey, state: next.state },
+        });
+        runtimeCheckpoint.afterCommit(() => {
+          setError(false);
+          setState(next.state);
+        });
+      });
+    } catch {
+      stateRef.current = previous;
+      setError(true);
     }
-    setPhase('summary');
   };
-
-  const rate = (rating: PrototypeLightweightRating) => {
-    onRateTarget(targetId, rating);
-    if (rating === 'again') {
-      setRepairAttempts(1);
-      setPhase('repair');
-      return;
-    }
-    advanceCurrent(rating);
-  };
-
-  const completedCount = results.length;
-  const lapseCount = results.filter((result) => result.rating === 'again').length;
-
+  const phase = state.phase;
+  const progress = targetIds.length
+    ? (state.results.length / targetIds.length) * 100
+    : 0;
+  const summary = phase === "summary";
+  const fmt = (n: number) =>
+    new Intl.NumberFormat(i18n.resolvedLanguage).format(n);
   return (
-    <section
-      className={uiClass(`screen lightweight-review-runtime phase-${phase}${active ? ' active' : ''}`, "#s-lightweight-review-runtime")}
+    <RuntimeFrame
       id="s-lightweight-review-runtime"
-      data-anim="fade"
+      active={active}
+      title={t("runtime.review")}
+      stepLabel={
+        summary
+          ? t("runtime.done")
+          : t("runtime.position", {
+              current: fmt(state.index + 1),
+              total: fmt(targetIds.length),
+            })
+      }
+      progress={progress}
+      onExit={onExit}
     >
-      <header className={uiClass("lightweight-review-nav")}>
-        <button type="button" onClick={onExit} aria-label="暂时退出复习">×</button>
-        <div>
-          <small>轻量复习</small>
-          <strong>{phase === 'summary' ? '本轮完成' : `${currentIndex + 1} / ${targetIds.length}`}</strong>
-        </div>
-        <span>学习方式已锁定</span>
-      </header>
-
-      <main className={uiClass("lightweight-review-body")}>
-        {phase === 'recall' && (
-          <section className={uiClass("lightweight-review-stage lightweight-review-recall")} key={`recall-${targetId}`}>
-            <small>到期复习 · 独立取回</small>
-            <div className={uiClass("lightweight-review-cue")}>
-              <span>意思线索</span>
-              <h1>{target.meaning}</h1>
-              <p>{grounding.scene}</p>
-            </div>
-            <p>你会用哪个英语表达说出这个意思？</p>
-            <button type="button" onClick={() => setPhase('answer')}>显示答案</button>
-          </section>
-        )}
-
-        {phase === 'answer' && (
-          <section className={uiClass("lightweight-review-stage lightweight-review-answer")} key={`answer-${targetId}`} aria-live="polite">
-            <small>核对刚才的回想</small>
-            <h1>{target.expression}</h1>
-            <span>{target.expressionTypeLabel} · {target.partOfSpeech}</span>
-            <p>{target.meaning}</p>
-            <blockquote>{target.example}</blockquote>
-
-            <div className={uiClass("lightweight-review-rating")} role="group" aria-label="评价刚才的回想">
-              <button type="button" className={uiClass("is-again")} onClick={() => rate('again')}>
-                <strong>没想起</strong><small>记录遗忘并修复</small>
-              </button>
-              <button type="button" className={uiClass("is-hard")} onClick={() => rate('hard')}>
-                <strong>想起但费力</strong><small>缩短下次间隔</small>
-              </button>
-              <button type="button" className={uiClass("is-good")} onClick={() => rate('good')}>
-                <strong>顺利想起</strong><small>按正常间隔保持</small>
-              </button>
-            </div>
-          </section>
-        )}
-
-        {phase === 'repair' && (
-          <section className={uiClass("lightweight-review-stage lightweight-review-repair")} key={`repair-${targetId}-${repairAttempts}`}>
-            <small>遗忘修复 · 本次 Review 已记录</small>
-            <h1>重新连一次经验与表达</h1>
-            <div className={uiClass("lightweight-review-repair-scene")}>
-              <span>{grounding.sourceLabel}</span>
-              <p>{grounding.scene}</p>
-            </div>
-            <div className={uiClass("lightweight-review-repair-binding")}>
-              <strong>{target.expression}</strong>
-              <i aria-hidden="true">↔</i>
-              <p>{target.meaning}</p>
-            </div>
-            <p>这里是在恢复连接，不会再次改写刚才那次到期复习的结果。</p>
-            <button type="button" onClick={() => setPhase('retry')}>继续，重新回想</button>
-          </section>
-        )}
-
-        {phase === 'retry' && (
-          <section className={uiClass("lightweight-review-stage lightweight-review-recall is-retry")} key={`retry-${targetId}-${repairAttempts}`}>
-            <small>修复后的独立回想</small>
-            <div className={uiClass("lightweight-review-cue")}>
-              <span>只看意思</span>
-              <h1>{target.meaning}</h1>
-            </div>
-            <p>暂时移开刚才看到的表达，再从意思把它取回来。</p>
-            <button type="button" onClick={() => setPhase('retry_answer')}>核对修复结果</button>
-          </section>
-        )}
-
-        {phase === 'retry_answer' && (
-          <section className={uiClass("lightweight-review-stage lightweight-review-retry-result")} key={`retry-answer-${targetId}-${repairAttempts}`} aria-live="polite">
-            <small>修复检查 · 不重复评价 Review</small>
-            <h1>{target.expression}</h1>
-            <p>{target.meaning}</p>
-            <div>
+      {error && (
+        <p
+          role="alert"
+          className="mb-6 rounded-lg bg-red-50 p-4 text-sm text-red-700"
+        >
+          {t("runtime.saveError")}
+        </p>
+      )}
+      {!target || !grounding ? (
+        <section role="status" className="py-12 text-center">
+          <h1 className="text-2xl">{t("runtime.noReview")}</h1>
+          <button className={`${runtimePrimary} mt-8`} onClick={onExit}>
+            {t("runtime.back")}
+          </button>
+        </section>
+      ) : (
+        <>
+          {(phase === "recall" || phase === "retry") && (
+            <section key={`${phase}:${targetId}`}>
+              <p className="mb-4 text-xs text-[#7b8597]">
+                {t(
+                  phase === "retry"
+                    ? "runtime.repairRecall"
+                    : "runtime.recallStep",
+                )}
+              </p>
+              <h1 className="text-2xl font-medium leading-10 sm:text-3xl">
+                {t("runtime.recallPrompt")}
+              </h1>
+              <div className="mt-8 rounded-2xl border border-[#e0e5ee] bg-white p-7 sm:p-10">
+                <h2 className="text-xl leading-9 text-[#34425c]">
+                  {target.meaning}
+                </h2>
+                {phase === "recall" && (
+                  <p className="mt-6 border-t border-[#e7ebf2] pt-6 text-base leading-8 text-[#7b8597]">
+                    {grounding.scene}
+                  </p>
+                )}
+              </div>
               <button
-                type="button"
-                onClick={() => {
-                  setRepairAttempts((attempts) => attempts + 1);
-                  setPhase('repair');
-                }}
+                className={`${runtimePrimary} mt-9 w-full`}
+                onClick={() => act({ type: "reveal" })}
               >
-                <strong>还是没连上</strong><small>再修复一次</small>
+                {t("runtime.reveal")}
+                <ArrowRight size={17} />
               </button>
-              <button
-                type="button"
-                className={uiClass("is-restored")}
-                onClick={() => {
-                  onCompleteRepair(targetId);
-                  advanceCurrent('again');
-                }}
-              >
-                <strong>现在想起来了</strong><small>完成本次重学</small>
-              </button>
-            </div>
-          </section>
-        )}
-
-        {phase === 'summary' && (
-          <section className={uiClass("lightweight-review-stage lightweight-review-summary")} key="summary" aria-live="polite">
-            <span className={uiClass("lightweight-review-summary-mark")} aria-hidden="true">✓</span>
-            <small>轻量复习完成</small>
-            <h1>{completedCount} 个意思已处理</h1>
-            <p>{lapseCount > 0 ? `${lapseCount} 个遗忘已完成修复。` : '这轮没有出现需要修复的遗忘。'}</p>
-            <div className={uiClass("lightweight-review-summary-list")}>
-              {results.map((result) => (
-                <div key={result.targetId}>
-                  <strong>{PROTOTYPE_LEARNING_TARGETS[result.targetId].expression}</strong>
-                  <span>{ratingLabel[result.rating]}</span>
+            </section>
+          )}
+          {(phase === "answer" || phase === "retry_answer") && (
+            <section key={`${phase}:${targetId}`} aria-live="polite">
+              <p className="mb-5 text-xs text-[#7b8597]">
+                {t("runtime.compare")}
+              </p>
+              <h1 className="break-words text-5xl font-medium tracking-tight text-[#2b3854] sm:text-6xl">
+                {target.expression}
+              </h1>
+              <p className="mt-7 text-xl leading-8">{target.meaning}</p>
+              <blockquote className="mt-8 rounded-xl border border-[#e0e5ee] bg-white p-6 text-lg leading-8 text-[#5e6f8a]">
+                {target.example}
+              </blockquote>
+              {phase === "answer" ? (
+                <RuntimeRating
+                  onRate={(rating) => act({ type: "rate", rating })}
+                />
+              ) : (
+                <div className="mt-9 grid gap-3 sm:grid-cols-2">
+                  <button
+                    className="min-h-14 rounded-xl border border-[#dce3ef] bg-white px-5 text-sm text-[#697a95]"
+                    onClick={() =>
+                      act({ type: "repairResult", restored: false })
+                    }
+                  >
+                    {t("runtime.repairAgain")}
+                  </button>
+                  <button
+                    className={runtimePrimary}
+                    onClick={() =>
+                      act({ type: "repairResult", restored: true })
+                    }
+                  >
+                    {t("runtime.restored")}
+                  </button>
                 </div>
-              ))}
-            </div>
-            <button type="button" onClick={onFinish}>{finishLabel}</button>
-          </section>
-        )}
-      </main>
-    </section>
+              )}
+            </section>
+          )}
+          {phase === "repair" && (
+            <section>
+              <p className="mb-5 text-xs text-[#7b8597]">
+                {t("runtime.repair")}
+              </p>
+              <h1 className="text-2xl font-medium sm:text-3xl">
+                {t("runtime.repairTitle")}
+              </h1>
+              <p className="mt-7 text-lg leading-9 text-[#788398]">
+                {grounding.scene}
+              </p>
+              <div className="mt-8 rounded-xl border border-[#dce3ef] bg-white p-7">
+                <strong className="text-3xl font-medium text-[#34425c]">
+                  {target.expression}
+                </strong>
+                <p className="mt-5 leading-8 text-[#788398]">
+                  {target.meaning}
+                </p>
+              </div>
+              <button
+                className={`${runtimePrimary} mt-9 w-full`}
+                onClick={() => act({ type: "retry" })}
+              >
+                {t("runtime.retryRecall")}
+                <ArrowRight size={17} />
+              </button>
+            </section>
+          )}
+          {summary && (
+            <section aria-live="polite">
+              <span className="mb-7 grid size-14 place-items-center rounded-full bg-[#e9eef8] text-[#526a9b]">
+                <Check size={25} />
+              </span>
+              <h1 className="text-3xl font-medium">
+                {t("runtime.reviewDone")}
+              </h1>
+              <p className="mt-4 text-sm text-[#788398]">
+                {t("runtime.reviewCount", { count: state.results.length })}
+              </p>
+              <div className="mt-9 divide-y divide-[#e3e8f0] border-y border-[#e3e8f0]">
+                {state.results.map((result) => (
+                  <div
+                    key={result.targetId}
+                    className="flex items-center justify-between gap-4 py-5"
+                  >
+                    <strong className="font-medium">
+                      {
+                        PROTOTYPE_LEARNING_TARGETS[
+                          result.targetId as PrototypeLearningTargetId
+                        ].expression
+                      }
+                    </strong>
+                    <span className="text-sm text-[#7b8597]">
+                      {t(
+                        result.rating === "again"
+                          ? "runtime.repaired"
+                          : `runtime.ratings.${result.rating}`,
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <button
+                className={`${runtimePrimary} mt-9 w-full`}
+                onClick={onFinish}
+              >
+                {finishLabel ?? t("runtime.home")}
+                <ArrowRight size={17} />
+              </button>
+            </section>
+          )}
+        </>
+      )}
+    </RuntimeFrame>
   );
-};
+}

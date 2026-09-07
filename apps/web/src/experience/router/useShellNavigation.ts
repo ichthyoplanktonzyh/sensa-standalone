@@ -33,6 +33,8 @@ export interface ShellNavigation {
   goMain: (sheetId: string, params?: ShellParams) => void;
   backMain: () => void;
   resetMain: () => void;
+  returnHome: () => void;
+  leaveRuntime: (screenId:string) => void;
   setMainStack: (stack: readonly string[], params?: ShellParams) => void;
 }
 
@@ -96,6 +98,15 @@ export function useShellNavigation(): ShellNavigation {
     goToStack(mainStack.slice(0, -1));
   }, [mainStack, goToStack]);
 
+  // Exit a runtime in one navigation; separate flow/stack writes can race.
+  const returnHome = useCallback(() => {
+    navigate({ to: '/', search: {} });
+  }, [navigate]);
+
+  const leaveRuntime = useCallback((screenId:string) => {
+    navigate({to:'/$',params:{_splat:buildPathname([screenId]).slice(1)},search:{}});
+  },[navigate]);
+
   const resetMain = useCallback(() => {
     goToStack([]);
   }, [goToStack]);
@@ -115,6 +126,8 @@ export function useShellNavigation(): ShellNavigation {
     goMain,
     backMain,
     resetMain,
+    returnHome,
+    leaveRuntime,
     setMainStack,
   };
 }

@@ -1,7 +1,7 @@
 # Sensa 文档索引
 
 > 状态：Active index  
-> 更新日期：2026-09-05
+> 更新日期：2026-09-07
 
 本目录不再把所有设计记录都当作“领域模型”。文档按职责分层；下层文档不能覆盖
 上层文档的定义。
@@ -46,6 +46,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | Canonical stage | [`current-stage.md`](current-stage.md) | 当前里程碑、证据级别和交付边界 |
 | Canonical product | [`product-requirements-v1.md`](product-requirements-v1.md) | V1 IA、用户旅程和交互验收 |
 | Accepted first-round scope | [`first-round-product-baseline.md`](first-round-product-baseline.md) | M0-1 首轮九个能力区、浏览器采集插件边界及产品/插件/通用状态矩阵；不替代领域与 API 合同 |
+| Draft UI/state specification | [`m0-2-first-learning-state-spec.md`](m0-2-first-learning-state-spec.md) | M0-2 登录、首次使用与轻量首学/复习/重学状态、恢复与确认清单；新增交互待 owner 确认，不替代路线图或 M0-3 合同 |
 | Active roadmap | [`production-migration-plan.md`](production-migration-plan.md) | M0–M5 生产化路线图：正式产品与消费契约、生产闭环、恢复与数据控制、受邀发布和用户验证；含依赖、验收门与当前待办 |
 | Current working agreement | [`development-workflow.md`](development-workflow.md) | 可调整的开发方式：全局结构蓝图、owner 参与前端确认、消费契约、worker 纵向实现与端到端验收；不替代领域或路线图 |
 | Active decomposition | [`learning-extensibility-architecture.md`](learning-extensibility-architecture.md) | `web-next` 学习扩展性的实现 seam；把领域已有的显式 retention scope 扩展规定落到实现层，不新增领域定义 |

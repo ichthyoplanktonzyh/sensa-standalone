@@ -1,21 +1,19 @@
-import { uiClass } from '../../ui/classes';
-import { useMemo } from 'react';
-import type { PrototypeLearningTargetView } from '../../learningJourney/prototypeLearning';
-import {
-  assembleLightweightInitialPresentation,
-} from '../../learningRuntime/lightweightInitialPresentation';
-import type {
-  LightweightInitialLearningMaterialization,
-} from '../../learningRuntime/lightweightInitialContent';
+import { useTranslation } from "react-i18next";
+import { Check, ArrowRight } from "lucide-react";
+import { RuntimeFrame, runtimePrimary } from "./RuntimeFrame";
+import { useMemo } from "react";
+import type { PrototypeLearningTargetView } from "../../learningJourney/prototypeLearning";
+import { assembleLightweightInitialPresentation } from "../../learningRuntime/lightweightInitialPresentation";
+import type { LightweightInitialLearningMaterialization } from "../../learningRuntime/lightweightInitialContent";
 import {
   LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
   type LightweightInitialRating,
   type LightweightProtocolStepInstance,
-} from '../../learningRuntime/lightweightInitialProtocol';
+} from "../../learningRuntime/lightweightInitialProtocol";
 import {
   stepRendererRegistry,
   type LightweightInitialStepRendererProps,
-} from '../../learningRuntime/stepRenderers';
+} from "../../learningRuntime/stepRenderers";
 
 interface LightweightRuntimeStartScreenProps {
   readonly active: boolean;
@@ -47,20 +45,25 @@ export const LightweightRuntimeStartScreen = ({
   onRate,
   onFinish,
 }: LightweightRuntimeStartScreenProps) => {
+  const { t } = useTranslation();
   const presentation = useMemo(
-    () => step && materialization
-      ? assembleLightweightInitialPresentation(step, materialization)
-      : null,
+    () =>
+      step && materialization
+        ? assembleLightweightInitialPresentation(step, materialization)
+        : null,
     [step, materialization],
   );
-  const renderedStep = step && presentation
-    ? stepRendererRegistry.get<LightweightInitialStepRendererProps>(step.definition.stepKind)({
-        step,
-        presentation,
-        onReveal,
-        onRate,
-      })
-    : null;
+  const renderedStep =
+    step && presentation
+      ? stepRendererRegistry.get<LightweightInitialStepRendererProps>(
+          step.definition.stepKind,
+        )({
+          step,
+          presentation,
+          onReveal,
+          onRate,
+        })
+      : null;
   const progressStep = completed
     ? 2
     : step?.definition.stepKind === LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND
@@ -68,48 +71,59 @@ export const LightweightRuntimeStartScreen = ({
       : 1;
 
   return (
-    <section
-      className={uiClass(`screen lightweight-runtime${active ? ' active' : ''}`, "#s-lightweight-runtime")}
+    <RuntimeFrame
       id="s-lightweight-runtime"
-      data-anim="fade"
+      active={active}
+      title={t("runtime.learning")}
+      stepLabel={t(
+        completed
+          ? "runtime.done"
+          : progressStep === 0
+            ? "runtime.recallStep"
+            : "runtime.revealStep",
+      )}
+      progress={progressStep * 50}
+      onExit={onExit}
     >
-      <header className={uiClass("lightweight-runtime-nav")}>
-        <button type="button" onClick={onExit} aria-label="暂时退出学习">×</button>
-      </header>
-
-      <main className={uiClass("lightweight-runtime-body")}>
-        <div className={uiClass("lightweight-runtime-progress")} aria-label="轻量首次学习进度">
-          {[0, 1].map((position) => (
-            <span
-              key={position}
-              className={uiClass(position < progressStep
-                ? 'is-done'
-                : position === progressStep
-                  ? 'is-current'
-                  : '')}
-            />
-          ))}
+      {!completed && renderedStep}
+      {!completed && !renderedStep && (
+        <div
+          role="alert"
+          className="rounded-xl border border-[#e0e5ee] bg-white p-8"
+        >
+          <h1 className="text-xl font-medium">{t("runtime.unavailable")}</h1>
+          <p className="mt-4 text-sm text-[#7b8597]">
+            {t("runtime.unavailableHint")}
+          </p>
+          <button className={`${runtimePrimary} mt-7`} onClick={onExit}>
+            {t("runtime.back")}
+          </button>
         </div>
-
-        {!completed && renderedStep}
-
-        {completed && target && (
-          <section className={uiClass("lightweight-runtime-stage lightweight-complete")} aria-live="polite">
-            <span className={uiClass("lightweight-complete-mark")} aria-hidden="true">✓</span>
-            <small>首次轻量学习完成</small>
-            <h1>{target.expression}</h1>
-            <p>这条连接已经交给长期复习安排。</p>
-            <div>
-              <span>经验回想已完成</span>
-              <span>表达已经揭晓</span>
-              <span>等待首次复习</span>
-            </div>
-            <button type="button" onClick={onFinish}>
-              {hasNextTarget ? '继续下一条' : '完成并回到首页'}
-            </button>
-          </section>
-        )}
-      </main>
-    </section>
+      )}
+      {completed && target && (
+        <section aria-live="polite" className="py-8 text-center">
+          <span className="mx-auto mb-7 grid size-14 place-items-center rounded-full bg-[#e9eef8] text-[#526a9b]">
+            <Check size={25} strokeWidth={1.4} />
+          </span>
+          <p className="text-sm text-[#7b8597]">{t("runtime.initialDone")}</p>
+          <h1 className="mt-6 break-words text-4xl font-medium tracking-tight sm:text-5xl">
+            {target.expression}
+          </h1>
+          <p className="mt-5 text-base leading-7 text-[#788398]">
+            {target.meaning}
+          </p>
+          <p className="mt-8 text-sm text-[#788398]">
+            {t("runtime.scheduled")}
+          </p>
+          <button
+            className={`${runtimePrimary} mt-9 w-full sm:w-auto`}
+            onClick={onFinish}
+          >
+            {t(hasNextTarget ? "runtime.next" : "runtime.home")}
+            <ArrowRight size={17} />
+          </button>
+        </section>
+      )}
+    </RuntimeFrame>
   );
 };

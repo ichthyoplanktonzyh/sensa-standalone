@@ -1,11 +1,8 @@
-import { uiClass } from '../../ui/classes';
-import {
-  PROTOTYPE_LEARNING_TARGETS,
-  policyLabel,
-  type PrototypeLearningPolicy,
-  type PrototypeLearningReadiness,
-  type PrototypeLearningTargetId,
-} from '../../learningJourney/prototypeLearning';
+import { useState } from 'react';
+import { ArrowLeft, ArrowRight, Plus, Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { studyButton } from '../StudyScreen';
+import { PROTOTYPE_LEARNING_TARGETS, type PrototypeLearningPolicy, type PrototypeLearningReadiness, type PrototypeLearningTargetId } from '../../learningJourney/prototypeLearning';
 
 interface LearningTargetLibraryScreenProps {
   active: boolean;
@@ -26,122 +23,48 @@ interface LearningTargetLibraryScreenProps {
   onOpenTarget: (targetId: PrototypeLearningTargetId) => void;
 }
 
-const readinessLabel = {
-  ready: '可以开始',
-  preparing: '正在准备',
-  blocked: '需要处理',
-} as const;
 
-export const LearningTargetLibraryScreen = ({
-  active,
-  targetIds,
-  policyByTarget,
-  preparationByTarget,
-  committedTargetIds,
-  completedTargetIds,
-  reviewDueTargetIds,
-  relearningTargetIds,
-  reviewingTargetIds,
-  relearningRepairTargetIds,
-  relearningRetestTargetIds,
-  declaredMasteryTargetIds,
-  onBack,
-  onAddLearning,
-  onOpenTarget,
-}: LearningTargetLibraryScreenProps) => (
-  <section
-    className={uiClass(`screen learning-surface${active ? ' active' : ''}`, "#s-learning-library")}
-    id="s-learning-library"
-    data-anim="slide"
-  >
-    <header className={uiClass("learning-page-nav learning-library-nav")}>
-      <button type="button" onClick={onBack} aria-label="返回我的学习">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6" /></svg>
-      </button>
-      <div>
-        <small>我的学习</small>
-        <h1>学习内容</h1>
+type Filter = 'all' | 'new' | 'active' | 'review' | 'complete';
+export const LearningTargetLibraryScreen = (props: LearningTargetLibraryScreenProps) => {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<Filter>('all');
+  const items = props.targetIds.map(id => {
+    const state = props.declaredMasteryTargetIds.has(id) ? 'declared'
+      : props.relearningRetestTargetIds.has(id) ? 'relearning-retest'
+      : props.relearningRepairTargetIds.has(id) ? 'relearning-repair'
+      : props.reviewingTargetIds.has(id) ? 'reviewing'
+      : props.relearningTargetIds.has(id) ? 'relearning'
+      : props.reviewDueTargetIds.has(id) ? 'review-due'
+      : props.completedTargetIds.has(id) ? 'completed'
+      : props.committedTargetIds.has(id) ? 'committed' : props.preparationByTarget[id];
+    const group: Filter = ['declared', 'completed'].includes(state) ? 'complete'
+      : ['review-due', 'relearning', 'relearning-repair', 'relearning-retest', 'reviewing'].includes(state) ? 'review'
+      : state === 'committed' ? 'active' : 'new';
+    return { id, target: PROTOTYPE_LEARNING_TARGETS[id], state, group };
+  });
+  const visible = items.filter(item => (filter === 'all' || item.group === filter)
+    && `${item.target.expression} ${item.target.meaning}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  return <section id="s-learning-library" className={`screen absolute inset-0 z-20 overflow-y-auto bg-[#fbfbfa] text-[#222631] ${props.active ? 'active' : 'invisible pointer-events-none'}`}>
+    <main className="mx-auto max-w-[1280px] px-6 py-8 sm:px-10 lg:px-14 lg:py-14">
+      <button className={`${studyButton} -ml-4 text-[#68748d]`} onClick={props.onBack}><ArrowLeft size={18}/>{t('study.back')}</button>
+      <header className="mb-9 mt-5 flex flex-wrap items-center justify-between gap-4">
+        <div><h1 className="text-3xl font-medium tracking-tight">{t('study.library')}</h1><p className="mt-3 text-sm text-[#68748d]">{t('study.count', { count: items.length })}</p></div>
+        <button className={`${studyButton} bg-[#2f3b70] text-white`} onClick={props.onAddLearning}><Plus size={17}/>{t('study.add')}</button>
+      </header>
+      <div className="flex flex-wrap gap-3">
+        <label className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-xl border border-[#e3e5ea] bg-white px-4"><Search size={18} className="shrink-0 text-[#788398]"/><input value={query} onChange={event => setQuery(event.target.value)} aria-label={t('study.search')} placeholder={t('study.search')} className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"/></label>
+        <select aria-label={t('study.status')} value={filter} onChange={event => setFilter(event.target.value as Filter)} className="min-h-12 max-w-full rounded-xl border border-[#e3e5ea] bg-white px-4 text-sm">
+          {(['all','new','active','review','complete'] as const).map(value => <option key={value} value={value}>{t('study.filters.' + value)}</option>)}
+        </select>
       </div>
-      <button type="button" className={uiClass("learning-library-add")} onClick={onAddLearning} aria-label="添加学习内容">
-        <span aria-hidden="true">+</span>
-      </button>
-    </header>
-
-    <main className={uiClass("learning-page-body learning-library-body")}>
-      <div className={uiClass("learning-library-count")}>
-        <strong>{targetIds.length}</strong>
-        <span>个学习目标</span>
-      </div>
-
-      <div className={uiClass("learning-library-list")} aria-label="学习目标列表">
-        {targetIds.map((targetId) => {
-          const target = PROTOTYPE_LEARNING_TARGETS[targetId];
-          const selectedPolicy = policyByTarget[targetId];
-          const readiness = preparationByTarget[targetId];
-          const isCommitted = committedTargetIds.has(targetId);
-          const isCompleted = completedTargetIds.has(targetId);
-          const isReviewDue = reviewDueTargetIds.has(targetId);
-          const isRelearning = relearningTargetIds.has(targetId);
-          const isReviewing = reviewingTargetIds.has(targetId);
-          const isRelearningRepair = relearningRepairTargetIds.has(targetId);
-          const isRelearningRetest = relearningRetestTargetIds.has(targetId);
-          const isDeclaredMastery = declaredMasteryTargetIds.has(targetId);
-          const state = isDeclaredMastery
-            ? 'declared'
-            : isRelearningRetest
-              ? 'relearning-retest'
-              : isRelearningRepair
-                ? 'relearning-repair'
-                : isReviewing
-                  ? 'reviewing'
-                  : isRelearning
-                    ? 'relearning'
-                    : isReviewDue
-                      ? 'review-due'
-                      : isCompleted
-                        ? 'completed'
-                        : isCommitted
-                          ? 'committed'
-                          : readiness;
-          const stateLabel = isDeclaredMastery
-            ? '已声明掌握'
-            : isRelearningRetest
-              ? '等待独立重测 · 已锁定'
-              : isRelearningRepair
-                ? '重学修复中 · 已锁定'
-                : isReviewing
-                  ? '复习中 · 已锁定'
-                  : isRelearning
-                    ? '需要修复 · 已锁定'
-                    : isReviewDue
-                      ? '待复习 · 已锁定'
-                      : isCompleted
-                        ? '保持中 · 已锁定'
-                        : isCommitted
-                          ? '学习中 · 已锁定'
-                          : readinessLabel[readiness];
-
-          return (
-            <button type="button" key={targetId} onClick={() => onOpenTarget(targetId)}>
-              <span
-                className={uiClass(`my-learning-readiness-dot is-${state}`)}
-                aria-hidden="true"
-              />
-              <span className={uiClass("learning-library-target-copy")}>
-                <span>
-                  <strong>{target.expression}</strong>
-                  <em>{policyLabel(selectedPolicy)}</em>
-                </span>
-                <small>{target.meaning}</small>
-                <span className={uiClass(`my-learning-target-state is-${state}`)}>
-                  {stateLabel}
-                </span>
-              </span>
-              <span className={uiClass("my-learning-target-arrow")} aria-hidden="true">›</span>
-            </button>
-          );
-        })}
-      </div>
+      <ul className="mt-6 divide-y divide-[#e3e5ea]">
+        {visible.map(({id, target, state}) => <li key={id}><button onClick={() => props.onOpenTarget(id)} className="flex w-full items-center gap-4 rounded-xl py-6 text-left hover:bg-[#f0f2f7] focus-visible:outline-2 focus-visible:outline-[#5268a9]">
+          <span className="min-w-0 flex-1"><strong className="text-xl font-medium">{target.expression}</strong><span className="mt-2 block text-sm text-[#68748d]">{target.meaning}</span><span className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[#788398]"><span className="rounded-md bg-[#edf0f7] px-2 py-1 text-[#546582]">{t('study.states.' + state)}</span><span>{t('study.sources.' + target.sourceKind)}</span><span>{t('learningPreferences.policies.' + props.policyByTarget[id])}</span></span></span>
+          <ArrowRight size={18} className="shrink-0 text-[#788398]"/>
+        </button></li>)}
+      </ul>
+      {!visible.length && <p className="py-20 text-center text-sm text-[#788398]">{t(items.length ? 'study.noMatches' : 'study.empty')}</p>}
     </main>
-  </section>
-);
+  </section>;
+};

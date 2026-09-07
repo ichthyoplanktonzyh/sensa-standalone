@@ -1,7 +1,7 @@
 # Sensa 生产化路线图
 
 > 状态：Active roadmap\
-> 更新日期：2026-09-05\
+> 更新日期：2026-09-07\
 > 近期目标：React Web + 浏览器采集插件的小规模受邀测试版\
 > 当前工作：M0 进行中；M0-1 基线已记录，M0 整体验收待完成\
 > 阶段与范围：[current-stage.md](current-stage.md)
@@ -23,7 +23,9 @@ schema/Kernel、内容工具与 smoke。每项资产在接入生产前均须按�
 - 每个具体用例由 owner 与指定 supervisor/worker 先确认前端布局、功能及关键状态，再细化
   消费契约并开始正式实现；已有后端和旧 schema 不决定产品工作流。
 - 首轮 React Web 优先，以 lightweight 建立生产学习链。浏览器采集插件、个人语义与按需
-  内容都是受邀测试必交能力；高保证、自由练习、宽覆盖词典和 Flutter 按后续范围推进。
+  内容都是受邀测试必交能力；2026-09-07 允许自由练习、词典、统计、签到首发开放，
+  按真实能力验收，不自动扩展全部活动/资源。高保证、完整扩展与 Flutter 仍后置。
+  签到和练习不写正式 Evidence、进度或调度；真实语流 YouGlish 保留。
 - 在真实用户数据进入前，可以按明确方案重建原型/first-user 测试数据。进入受邀测试后，
   不得以该例外删除用户历史或待同步工作。
 - 阶段验收以可重现结果和证据为准，不使用按文件数推算的百分比。未确定人员投入前不承诺
@@ -76,7 +78,9 @@ M0 验收后，首条已确认用例进入 M1 的生产集成方式；未确认�
 发现需求。无需等完整领域的所有页面设计结束，也不能把本路线图当作消费合同已经完成。
 
 M0-1 的已确认产物是 [首轮产品清单与状态矩阵](first-round-product-baseline.md)，包括九个
-能力区及 Web/插件状态。M0-2 同时细化插件捕获、原位确认、收件箱交接及安装更新体验；
+能力区及 Web/插件状态；9 月 7 日已同步四类首发允许项，允许开放不等于已生产验收。
+[首条登录/学习状态规格](m0-2-first-learning-state-spec.md)是 M0-2 评审产物，
+新增交互待 owner 确认，不是 M0-3 合同或 M1 真实接入。M0-2 同时细化插件捕获、原位确认、收件箱交接及安装更新体验；
 M0-3 记录插件身份、Intake、幂等和数据控制需求，完整插件提交合同在 M2 开工前验收。
 
 ## 4. M1：首条生产学习闭环
@@ -200,7 +204,9 @@ build/smoke 不得调用付费 LLM/TTS。
 导出和删除的公网 smoke 通过；部署可重现、回滚和恢复已演练，错误可定位，费用受约束。
 插件安装、真实网页采集、原位确认/收件箱交接、重启重试、账号撤销及升级保护同样通过；
 浏览器插件未交付时不能声明首轮受邀测试版完成。
-尚未支持的功能没有虚假可执行入口，正式 Web 的性能和可访问性达到 M0 定义的预算与标准。
+允许首发的自由练习、词典、统计、签到分别核对实际资源/来源、账号与同步状态、失败恢复；
+签到/练习不得污染正式学习统计、Evidence 或调度。未支持活动不出现虚假可执行入口，
+开放与生产验收分列记录。正式 Web 性能和可访问性须达到 M0 确认后的预算与标准。
 
 只有这些条件通过后，才记录版本、环境、证据和已知限制并开始受邀测试。此门不等于公开
 V1 发布完成。AWS/Neon/R2/Cloudflare 资源与部署变更一律走 CI/CD，不从本地 shell 部署。
@@ -222,8 +228,8 @@ V1 发布完成。AWS/Neon/R2/Cloudflare 资源与部署变更一律走 CI/CD，
 | Flutter iOS/Android/桌面单一客户端 | Web/API/Sync 与核心恢复场景稳定；SQLite/outbox push→pull，共享语言无关合同和 smoke 规格，独立设计平台 UI，不复制服务端策略/FSRS 权威 |
 | 高保证学习 | Structured Protocol、Recognition/Recall/novel Transfer/条件 Boundary、interference、Evidence/5D、Graduation 和完整资源 validator 成套验收；不能成为轻量学习前置条件 |
 | Curriculum 与个人内容扩展 | Enrollment/Range/Scope Revision、Supplemental 多来源去重、Collection/Bookmark/Note 的版本与同步；换范围或删除来源不抹除 Target 历史，不静默更改 Committed Policy |
-| Reference 与语义投影 | 有 license/provenance 的 Reference Release、reviewed Sense Alignment、exact occurrence 与可信 resolution；查词不改变学习事实，assessment-only 资源不泄露 |
-| Free Practice | 四个 Area 的 Activity 合同、资源/provider 与客户端能力交集可执行；首组包括真实语流泛化、情境口语排演、语境推义和情境书面表达；Turn/Observation/Feedback/Artifact 不进入正式证据与调度 |
+| 词典首发之后的 Reference 与语义投影扩展 | 有 license/provenance 的 Reference Release、reviewed Sense Alignment、exact occurrence 与可信 resolution；查词不改变学习事实，assessment-only 资源不泄露 |
+| 首发之后的 Free Practice 扩展 | 四个 Area 的 Activity 合同、资源/provider 与客户端能力交集可执行；首组包括真实语流泛化、情境口语排演、语境推义和情境书面表达；Turn/Observation/Feedback/Artifact 不进入正式证据与调度 |
 | 其他扩展 | 通知、浏览器文字插件之外的图片/语音/移动分享/桌面全局采集、更多浏览器、更多偏好/会话管理与 Policy Migration 按明确用例推进 |
 
 更广泛的公开 V1 发布要依据受邀测试结果单独验收内容供给能力、运行成本与容量、支持和数据
@@ -256,7 +262,10 @@ implementation worker；同一文件默认只有一个实施 writer。
 - [x] **M0-1：首轮产品清单与状态矩阵。** Owner 确认八个能力区与通用状态，并加入浏览器
   插件；已写入 [产品基线](first-round-product-baseline.md) 并同步 PRD。插件支持范围和交互
   细节作为实施默认进入 M0-2 走查，不计为已完成的浏览器验证。
-- [ ] **M0-2：首条生产旅程的正式 UI 规格。** 确定桌面/手机布局、基础组件、可访问性和性能
+- [ ] **M0-2：首条生产旅程的正式 UI 规格（进行中）。**
+  已整理 [登录与首条轻量学习状态规格](m0-2-first-learning-state-spec.md)，基于原工作树当前
+  apps/web 重构，复用已确认 UI；Q2 首次确认数量、Q3 回首页开始、Q5 离线继续已授权且已下载材料的学习（不离线新建）已确认，其余问题与子项待 owner 裁决，插件捕获/原位确认/Web 交接/安装更新
+  规格仍待完成。本稿不计为 M0-2 整体通过。继续确认基础组件、可访问性和性能
   预算；覆盖 M1 的登录、选择目标、学习、完成及再次进入，并明确插件采集/确认/交接与分发体验。
   与 owner 确认相关功能、主要/异常状态与恢复行为，保存对应界面产物和确认范围。
 - [ ] **M0-3：M1 消费契约与迁移方案。** 完成 Query/Command/Projection/error/revision/Sync

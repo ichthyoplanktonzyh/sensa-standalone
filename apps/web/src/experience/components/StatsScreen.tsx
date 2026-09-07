@@ -1,410 +1,88 @@
-import { uiClass } from '../ui/classes';
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import type { LearningRecordKind, LearningRecordView } from '../learningJourney/learningHistory';
+import type { PrototypeLearningTargetId } from '../learningJourney/prototypeLearning';
+import { localRecordDate, projectLearningStatistics, type StatisticsRange } from '../learningJourney/learningStatistics';
+import { LearningSetupFrame, setupButton } from './learning/LearningSetupFrame';
 
 interface StatsScreenProps {
   active: boolean;
+  records: readonly LearningRecordView[];
   onBack: () => void;
-  todayLearnWords?: number;
-  todayReviewWords?: number;
-  todayMinutes?: number;
-  totalMinutes?: number;
-  toast: (msg: string) => void;
+  onOpenTarget: (id: PrototypeLearningTargetId) => void;
 }
-
-interface DayStat {
-  date: string;
-  isToday?: boolean;
-  learn: number;
-  review: number;
-  minutes: number;
-}
-
-export const StatsScreen = ({
-  active,
-  onBack,
-  todayLearnWords = 3,
-  todayReviewWords = 0,
-  todayMinutes = 14,
-  totalMinutes = 15348,
-  toast,
-}: StatsScreenProps) => {
-  // Tab 状态：'week' (最近一周) vs 'month' (按月查看)
-  const [tabInput, setTabInput] = useState<'week' | 'month'>('week');
-  const [tabDuration, setTabDuration] = useState<'week' | 'month'>('week');
-
-  // 刷新动效
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // 选中某天交互状态 (默认选中最后一天即「今日」)
-  const [selectedDayIdx, setSelectedDayIdx] = useState<number>(6);
-  const [selectedDurIdx, setSelectedDurIdx] = useState<number>(6);
-
-  // 7 天数据配置 (与原图 1/2 严格对齐)
-  const weekData: DayStat[] = useMemo(() => [
-    { date: '08-20', learn: 0, review: 0, minutes: 0 },
-    { date: '08-21', learn: 0, review: 0, minutes: 0 },
-    { date: '08-22', learn: 0, review: 0, minutes: 0 },
-    { date: '08-23', learn: 0, review: 0, minutes: 0 },
-    { date: '08-24', learn: 0, review: 0, minutes: 0 },
-    { date: '08-25', learn: 2, review: 0, minutes: 2 },
-    { date: '今日', isToday: true, learn: todayLearnWords, review: todayReviewWords, minutes: todayMinutes },
-  ], [todayLearnWords, todayReviewWords, todayMinutes]);
-
-  // 月度数据配置
-  const monthData = useMemo(() => {
-    return {
-      monthName: '8月',
-      monthLearn: 186 + todayLearnWords,
-      monthReview: 342 + todayReviewWords,
-      monthMinutes: 420 + todayMinutes,
-      daysInMonth: 31,
-    };
-  }, [todayLearnWords, todayReviewWords, todayMinutes]);
-
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-      toast('已同步最新学习统计数据');
-    }, 500);
+const kinds = ['initial_learning','retention_review','relearning'] as const;
+export const StatsScreen = ({active,records,onBack,onOpenTarget}:StatsScreenProps) => {
+  const {t,i18n}=useTranslation();
+  const [now,setNow]=useState(()=>new Date());
+  const [range,setRange]=useState<StatisticsRange>('week');
+  const [start,setStart]=useState(()=>localRecordDate(new Date()));
+  const [end,setEnd]=useState(()=>localRecordDate(new Date()));
+  const [kind,setKind]=useState<'all'|LearningRecordKind>('all');
+  const [limit,setLimit]=useState(20);
+  useEffect(()=>{
+    if(!active)return;
+    const refresh=()=>setNow(new Date());
+    refresh();
+    const timer=window.setInterval(refresh,60000);
+    window.addEventListener('focus',refresh);
+    return ()=>{window.clearInterval(timer);window.removeEventListener('focus',refresh);};
+  },[active,records]);
+  const projection=useMemo(()=>projectLearningStatistics(records,{now,range,start,end,kind}),[records,now,range,start,end,kind]);
+  const reset=()=>{setRange('all');setKind('all');setLimit(20);};
+  const dateFormat=new Intl.DateTimeFormat(i18n.language,{dateStyle:'medium'});
+  const formatDay=(key:string)=>{
+    const [year,month,day]=key.split('-').map(Number);
+    return dateFormat.format(new Date(year,month-1,day));
   };
-
-  const curSelectedDay = weekData[selectedDayIdx] || weekData[6];
-  const curSelectedDur = weekData[selectedDurIdx] || weekData[6];
-
-  return (
-    <section
-      className={uiClass(`screen stats-screen${active ? ' active' : ''}`, "#s-stats")}
-      id="s-stats"
-      data-anim="slide"
-    >
-      {/* ================= 1. 顶部 Header ================= */}
-      <header className={uiClass("stats-header")}>
-        <button
-          className={uiClass("stats-circle-btn")}
-          onClick={onBack}
-          aria-label="返回"
-        >
-          <svg className={uiClass("icon")}><use href="#i-chev-l" /></svg>
-        </button>
-
-        <h1 className={uiClass("stats-header-title")}>概览</h1>
-
-        <button
-          className={uiClass(`stats-circle-btn stats-refresh-btn${isRefreshing ? ' spinning' : ''}`)}
-          onClick={handleRefresh}
-          aria-label="刷新统计"
-        >
-          <svg className={uiClass("icon")}><use href="#i-refresh" /></svg>
-        </button>
-      </header>
-
-      {/* ================= 2. 统计卡片滚动容器 ================= */}
-      <div className={uiClass("stats-scroll-body")}>
-        {/* ----- 模块一：单词输入量 ----- */}
-        <section className={uiClass("stats-section")}>
-          <div className={uiClass("stats-sec-title-row")}>
-            <svg className={uiClass("stats-sec-icon stat-input-icon")}>
-              <use href="#i-stat-input" />
-            </svg>
-            <span className={uiClass("stats-sec-title")}>单词输入量</span>
-          </div>
-
-          <div className={uiClass("stats-card")}>
-            {/* 卡片顶部 Tab 切换 */}
-            <div className={uiClass("stats-tab-bar")}>
-              <button
-                className={uiClass(`stats-tab-btn${tabInput === 'week' ? ' active' : ''}`)}
-                onClick={() => setTabInput('week')}
-              >
-                <span>最近一周</span>
-                {tabInput === 'week' && <i className={uiClass("stats-tab-line")} />}
-              </button>
-
-              <button
-                className={uiClass(`stats-tab-btn${tabInput === 'month' ? ' active' : ''}`)}
-                onClick={() => setTabInput('month')}
-              >
-                <span>按月查看</span>
-                {tabInput === 'month' && <i className={uiClass("stats-tab-line")} />}
-              </button>
-            </div>
-
-            {/* 图表展示区 */}
-            {tabInput === 'week' ? (
-              <div className={uiClass("stats-chart-wrap")}>
-                {/* 右上角图例 */}
-                <div className={uiClass("stats-legend-bar")}>
-                  <span className={uiClass("stats-legend-item")}>
-                    <i className={uiClass("legend-dot learn-dot")} />
-                    学习
-                  </span>
-                  <span className={uiClass("stats-legend-item")}>
-                    <i className={uiClass("legend-dot review-dot")} />
-                    复习
-                  </span>
-                </div>
-
-                {/* 周视图柱状图表 */}
-                <div className={uiClass("stats-bar-chart")}>
-                  {/* 7 列竖向对齐虚线网格 */}
-                  <div className={uiClass("stats-grid-lines")}>
-                    {weekData.map((_, i) => (
-                      <div key={i} className={uiClass("stats-grid-col")} />
-                    ))}
-                  </div>
-
-                  {/* 7 列柱条与数值标注 */}
-                  <div className={uiClass("stats-bars-row")}>
-                    {weekData.map((day, idx) => {
-                      const isSelected = idx === selectedDayIdx;
-                      const hasWords = day.learn > 0 || day.review > 0;
-                      const totalWords = day.learn + day.review;
-
-                      return (
-                        <div
-                          key={day.date}
-                          className={uiClass(`stats-bar-col${isSelected ? ' selected' : ''}`)}
-                          onClick={() => setSelectedDayIdx(idx)}
-                        >
-                          {/* 柱条主体 */}
-                          <div className={uiClass("stats-bar-slot")}>
-                            {hasWords && (
-                              <div className={uiClass("stats-bar-group")}>
-                                {/* 顶部数值 */}
-                                <span className={uiClass(`stats-bar-val${day.isToday ? ' today' : ''}`)}>
-                                  {totalWords}
-                                </span>
-                                {/* 柱子：橙色学习 + 紫色复习 */}
-                                <div className={uiClass("stats-stacked-bar")}>
-                                  {day.review > 0 && (
-                                    <div
-                                      className={uiClass("bar-segment review-seg")}
-                                      style={{ height: Math.max(6, (day.review / 20) * 80) }}
-                                    />
-                                  )}
-                                  {day.learn > 0 && (
-                                    <div
-                                      className={uiClass("bar-segment learn-seg")}
-                                      style={{ height: Math.max(7, (day.learn / 20) * 80) }}
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* X 轴日期 */}
-                          <div className={uiClass(`stats-x-label${day.isToday ? ' today' : ''}`)}>
-                            {day.date}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* 按月查看视图 */
-              <div className={uiClass("stats-month-wrap")}>
-                <div className={uiClass("stats-month-head")}>
-                  <span className={uiClass("stats-month-badge")}>2026年 8月</span>
-                  <span className={uiClass("stats-month-sub")}>每日学习复习频次分布</span>
-                </div>
-                <div className={uiClass("stats-month-calendar")}>
-                  {Array.from({ length: monthData.daysInMonth }).map((_, i) => {
-                    const d = i + 1;
-                    const isToday = d === 27;
-                    const hasActivity = d >= 20 && d <= 27;
-                    return (
-                      <div
-                        key={d}
-                        className={uiClass(`month-cell${isToday ? ' today' : ''}${hasActivity ? ' active' : ''}`)}
-                      >
-                        <span className={uiClass("month-day-num")}>{d}</span>
-                        {hasActivity && <i className={uiClass("month-activity-dot")} />}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* 底部指标展示 */}
-            <div className={uiClass("stats-card-bottom")}>
-              <div className={uiClass("stats-metric-col")}>
-                <span className={uiClass("metric-label")}>
-                  {tabInput === 'week' ? '当日学习' : '本月学习'}
-                </span>
-                <div className={uiClass("metric-num")}>
-                  <b>{tabInput === 'week' ? curSelectedDay.learn : monthData.monthLearn}</b>
-                  <small>词</small>
-                </div>
-              </div>
-
-              <div className={uiClass("stats-metric-col")}>
-                <span className={uiClass("metric-label")}>
-                  {tabInput === 'week' ? '当日复习' : '本月复习'}
-                </span>
-                <div className={uiClass("metric-num")}>
-                  <b>{tabInput === 'week' ? curSelectedDay.review : monthData.monthReview}</b>
-                  <small>词</small>
-                </div>
-              </div>
-            </div>
+  return <LearningSetupFrame id="s-stats" active={active} onBack={onBack} title={t('statistics.title')}>
+    <h2 className="text-3xl font-medium tracking-tight sm:text-4xl">{t('statistics.intro')}</h2>
+    <p className="mt-4 max-w-2xl text-sm leading-7 text-[#68748d]">{t('statistics.note')}</p>
+    <div className="mt-8 flex flex-wrap items-center gap-2" role="group" aria-label={t('statistics.period')}>
+      {(['today','week','month','all','custom'] as const).map(value=><button type="button" key={value} aria-pressed={range===value} onClick={()=>{setRange(value);setLimit(20);}} className={setupButton+(range===value?' bg-[#edf0f7] text-[#303f76]':' text-[#68748d] hover:bg-[#f0f2f5]')}>{t('statistics.'+value)}</button>)}
+    </div>
+    <div className="mt-4 flex flex-wrap items-end gap-4">
+      {range==='custom'&&<>
+        <label className="flex flex-col gap-2 text-xs text-[#68748d]">{t('statistics.start')}<input type="date" value={start} max={end||localRecordDate(now)} aria-invalid={projection.invalidRange} aria-describedby={projection.invalidRange?'stats-date-error':undefined} onChange={event=>{setStart(event.target.value);setLimit(20);}} className="min-h-11 rounded-xl border border-[#dfe4ed] bg-white px-3 text-sm"/></label>
+        <label className="flex flex-col gap-2 text-xs text-[#68748d]">{t('statistics.end')}<input type="date" value={end} min={start} max={localRecordDate(now)} aria-invalid={projection.invalidRange} aria-describedby={projection.invalidRange?'stats-date-error':undefined} onChange={event=>{setEnd(event.target.value);setLimit(20);}} className="min-h-11 rounded-xl border border-[#dfe4ed] bg-white px-3 text-sm"/></label>
+      </>}
+      <label className="flex flex-col gap-2 text-xs text-[#68748d]">{t('statistics.kind')}<select value={kind} onChange={event=>{setKind(event.target.value as typeof kind);setLimit(20);}} className="min-h-11 rounded-xl border border-[#dfe4ed] bg-white px-3 text-sm">
+        <option value="all">{t('study.all')}</option>{kinds.map(value=><option key={value} value={value}>{t('study.'+value)}</option>)}
+      </select></label>
+    </div>
+    {projection.invalidRange?<p id="stats-date-error" role="alert" className="mt-6 rounded-xl bg-red-50 p-4 text-sm text-red-700">{t('statistics.invalid')}</p>:<>
+      <dl className="mt-7 grid gap-4 sm:grid-cols-3">
+        {kinds.map(value=><div key={value} className="rounded-2xl border border-[#e0e5ee] bg-white p-6"><dt className="text-sm text-[#68748d]">{t('statistics.'+value)}</dt><dd className="mt-4 text-3xl font-medium tabular-nums text-[#303f76]">{projection.counts[value].toLocaleString(i18n.language)}</dd></div>)}
+      </dl>
+      {projection.records.length===0?<section className="py-16 text-center" role="status">
+        <h3 className="text-lg font-medium">{t(projection.hasRecords?'statistics.empty':'statistics.noRecords')}</h3>
+        <p className="mt-3 text-sm text-[#788398]">{t(projection.hasRecords?'statistics.emptyHint':'statistics.noRecordsHint')}</p>
+        {projection.hasRecords&&<button type="button" className={setupButton+' mt-5 bg-[#edf0f7] text-[#303f76]'} onClick={reset}>{t('statistics.reset')}</button>}
+      </section>:<>
+        <section className="mt-9">
+          <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-lg font-medium">{t('statistics.daily')}</h3><p className="text-xs text-[#788398]">{t('statistics.days',{count:projection.days.length})}</p></div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <caption className="sr-only">{t('statistics.daily')}</caption>
+              <thead className="border-b border-[#dfe4ed] text-xs text-[#788398]"><tr><th scope="col" className="py-4 pr-4 font-medium">{t('statistics.date')}</th>{kinds.map(value=><th scope="col" key={value} className="px-3 py-4 text-right font-medium">{t('study.'+value)}</th>)}</tr></thead>
+              <tbody className="divide-y divide-[#e0e5ee]">{projection.days.slice(0,limit).map(([day,counts])=><tr key={day}><th scope="row" className="whitespace-nowrap py-4 pr-4 font-normal">{formatDay(day)}</th>{kinds.map(value=><td key={value} className="px-3 py-4 text-right tabular-nums">{counts[value]}</td>)}</tr>)}</tbody>
+            </table>
           </div>
         </section>
-
-        {/* ----- 模块二：学习时长 ----- */}
-        <section className={uiClass("stats-section")}>
-          <div className={uiClass("stats-sec-title-row")}>
-            <svg className={uiClass("stats-sec-icon stat-timer-icon")}>
-              <use href="#i-stat-timer" />
-            </svg>
-            <span className={uiClass("stats-sec-title")}>学习时长</span>
-          </div>
-
-          <div className={uiClass("stats-card")}>
-            {/* 卡片顶部 Tab 切换 */}
-            <div className={uiClass("stats-tab-bar")}>
-              <button
-                className={uiClass(`stats-tab-btn${tabDuration === 'week' ? ' active' : ''}`)}
-                onClick={() => setTabDuration('week')}
-              >
-                <span>最近一周</span>
-                {tabDuration === 'week' && <i className={uiClass("stats-tab-line")} />}
-              </button>
-
-              <button
-                className={uiClass(`stats-tab-btn${tabDuration === 'month' ? ' active' : ''}`)}
-                onClick={() => setTabDuration('month')}
-              >
-                <span>按月查看</span>
-                {tabDuration === 'month' && <i className={uiClass("stats-tab-line")} />}
-              </button>
-            </div>
-
-            {/* 图表展示区 */}
-            {tabDuration === 'week' ? (
-              <div className={uiClass("stats-chart-wrap")}>
-                {/* 折线图容器 */}
-                <div className={uiClass("stats-line-chart")}>
-                  {/* 7 列竖向对齐虚线网格 */}
-                  <div className={uiClass("stats-grid-lines")}>
-                    {weekData.map((_, i) => (
-                      <div key={i} className={uiClass("stats-grid-col")} />
-                    ))}
-                  </div>
-
-                  {/* SVG 平滑曲线与数据点 (1:1 还原截图 2) */}
-                  <div className={uiClass("stats-line-svg-layer")}>
-                    <svg
-                      viewBox="0 0 350 140"
-                      className={uiClass("stats-svg-canvas")}
-                      preserveAspectRatio="none"
-                    >
-                      {/* 平滑贝塞尔曲线路径 (基线 0-0-0-0-0 -> 08-25: 2 -> 今日: 14) */}
-                      <path
-                        d="M 25 120 L 75 120 L 125 120 L 175 120 L 225 120 C 250 120 260 114 275 110 C 295 104 308 42 325 36"
-                        fill="none"
-                        stroke="#d4d4d8"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-
-                    {/* 各天节点覆盖层 */}
-                    <div className={uiClass("stats-line-nodes-row")}>
-                      {weekData.map((day, idx) => {
-                        const isSelected = idx === selectedDurIdx;
-                        // 计算节点垂直高度
-                        let topPct = 85;
-                        if (day.minutes === 0) topPct = 85;
-                        else if (day.minutes <= 2) topPct = 78;
-                        else topPct = 26;
-
-                        return (
-                          <div
-                            key={day.date}
-                            className={uiClass(`stats-node-col${isSelected ? ' selected' : ''}`)}
-                            onClick={() => setSelectedDurIdx(idx)}
-                          >
-                            <div
-                              className={uiClass(`stats-node-dot-wrap${day.isToday ? ' is-today' : ''}`)}
-                              style={{ top: `${topPct}%` }}
-                            >
-                              {/* 数值标签 */}
-                              <span className={uiClass(`stats-node-val${day.isToday ? ' today' : ''}`)}>
-                                {day.minutes}
-                              </span>
-                              {/* 点 */}
-                              <i className={uiClass(`stats-node-point${day.isToday ? ' today' : ''}`)} />
-                            </div>
-
-                            {/* X 轴日期 */}
-                            <div className={uiClass(`stats-x-label${day.isToday ? ' today' : ''}`)}>
-                              {day.date}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* 按月查看学习时长 */
-              <div className={uiClass("stats-month-wrap")}>
-                <div className={uiClass("stats-month-head")}>
-                  <span className={uiClass("stats-month-badge")}>2026年 8月</span>
-                  <span className={uiClass("stats-month-sub")}>全月每日专注时长走势</span>
-                </div>
-                <div className={uiClass("stats-month-bars")}>
-                  {Array.from({ length: 31 }).map((_, i) => {
-                    const d = i + 1;
-                    const isToday = d === 27;
-                    const h = d === 27 ? 46 : d === 26 ? 20 : d === 25 ? 12 : d > 18 ? (d * 7) % 24 : 0;
-                    return (
-                      <div key={d} className={uiClass("month-dur-bar-col")}>
-                        <div
-                          className={uiClass(`month-dur-bar${isToday ? ' today' : ''}`)}
-                          style={{ height: `${Math.max(4, h)}px` }}
-                        />
-                        <span className={uiClass("month-dur-day")}>{d % 5 === 0 ? d : ''}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* 底部指标展示 */}
-            <div className={uiClass("stats-card-bottom")}>
-              <div className={uiClass("stats-metric-col")}>
-                <span className={uiClass("metric-label")}>
-                  {tabDuration === 'week' ? '当日学习' : '本月学习'}
-                </span>
-                <div className={uiClass("metric-num")}>
-                  <b>{tabDuration === 'week' ? curSelectedDur.minutes : monthData.monthMinutes}</b>
-                  <small>分钟</small>
-                </div>
-              </div>
-
-              <div className={uiClass("stats-metric-col")}>
-                <span className={uiClass("metric-label")}>总时长</span>
-                <div className={uiClass("metric-num")}>
-                  <b>{totalMinutes}</b>
-                  <small>分钟</small>
-                </div>
-              </div>
-            </div>
-          </div>
+        <section className="mt-9">
+          <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-lg font-medium">{t('statistics.details')}</h3><span role="status" className="text-xs text-[#788398]">{t('statistics.count',{count:projection.records.length})}</span></div>
+          <ol className="mt-4 divide-y divide-[#e0e5ee]">{projection.records.slice(0,limit).map(record=><li key={record.recordId}>
+            <button type="button" onClick={()=>onOpenTarget(record.targetId)} className="flex w-full items-center gap-4 rounded-lg px-1 py-5 text-left hover:bg-[#edf0f7] focus-visible:outline-2 focus-visible:outline-[#5268a9]">
+              <span className="min-w-0 flex-1"><strong className="break-words text-lg font-medium">{record.expression}</strong><span className="mt-2 block text-xs text-[#68748d]">{t('study.'+record.kind)}</span></span>
+              <time dateTime={record.occurredAt} className="text-right text-xs leading-6 tabular-nums text-[#788398]">{new Intl.DateTimeFormat(i18n.language,{dateStyle:'medium',timeStyle:'short'}).format(new Date(record.occurredAt))}</time>
+              <ArrowRight size={16} className="shrink-0 text-[#788398]" aria-hidden="true"/>
+            </button>
+          </li>)}</ol>
+          {projection.records.length>limit&&<button type="button" className={setupButton+' mt-4 border border-[#e0e5ee]'} onClick={()=>setLimit(value=>value+20)}>{t('statistics.more')}</button>}
         </section>
-
-        {/* 底部留白 */}
-        <div className={uiClass("stats-bottom-spacer")} />
-      </div>
-    </section>
-  );
+      </>}
+    </>}
+    <p className="mt-8 border-t border-[#e0e5ee] pt-5 pb-8 text-xs leading-6 text-[#788398]">{t('statistics.limits')}</p>
+  </LearningSetupFrame>;
 };

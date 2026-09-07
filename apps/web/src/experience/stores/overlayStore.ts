@@ -1,12 +1,11 @@
 import { create } from 'zustand';
 import type { PrototypeIntroductionPackage } from '../content/learningCatalog';
 import type { ReferenceExampleDeck } from '../components/ReferenceExampleViewer';
-import type { SpellingPracticeMode } from '../components/SpellingModal';
 import type { QuickDictEntry, Word } from '../types';
 
 /**
  * Every overlay that floats above the shell: the dictionary sheet, the note
- * editor, the scene editor, spelling practice, the popup menus and the toast.
+ * editor, the scene editor, the popup menus and the toast.
  *
  * These sat in App as sixteen `useState`s whose only job was to let a deeply
  * nested screen raise an overlay -- so each opener was threaded down as a prop
@@ -52,13 +51,6 @@ export interface OverlayState {
   readonly sceneEditorTarget: SceneEditorTarget | null;
   openSceneEditor: (target: SceneEditorTarget) => void;
   closeSceneEditor: () => void;
-
-  /** 独立单词拼写练习弹窗。 */
-  readonly spellingWord: DictSubject | null;
-  readonly spellingMode: SpellingPracticeMode;
-  readonly spellingCue: string;
-  openSpelling: (word?: DictSubject, mode?: SpellingPracticeMode, cueText?: string) => void;
-  closeSpelling: () => void;
 
   /** 全局弹窗菜单。 */
   readonly menuMoreOpen: boolean;
@@ -113,15 +105,6 @@ export const useOverlayStore = create<OverlayState>((set) => ({
   sceneEditorTarget: null,
   openSceneEditor: (sceneEditorTarget) => set({ sceneEditorTarget }),
   closeSceneEditor: () => set({ sceneEditorTarget: null }),
-
-  spellingWord: null,
-  spellingMode: 'legacy',
-  spellingCue: '',
-  openSpelling: (word, mode = 'legacy', cueText = '') => {
-    if (!word) return;
-    set({ spellingWord: word, spellingMode: mode, spellingCue: cueText });
-  },
-  closeSpelling: () => set({ spellingWord: null, spellingMode: 'legacy', spellingCue: '' }),
 
   menuMoreOpen: false,
   menuBookOpen: false,

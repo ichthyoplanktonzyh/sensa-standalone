@@ -1,109 +1,57 @@
-import { uiClass } from '../../ui/classes';
-import {
-  isPolicyAvailableForTarget,
-  policyLabel,
-  type PrototypeLearningPolicy,
-  type PrototypeLearningTargetView,
-} from '../../learningJourney/prototypeLearning';
+import { useEffect, useState } from 'react';
+import { Check, LockKeyhole } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { isPolicyAvailableForTarget, type PrototypeLearningPolicy, type PrototypeLearningTargetView } from '../../learningJourney/prototypeLearning';
 import { learningPolicyProfileRegistry } from '../../learningRuntime/policyProfiles';
+import { LearningSetupFrame, setupButton, setupPrimary } from './LearningSetupFrame';
 
 interface LearningPolicyScreenProps {
-  active: boolean;
-  target: PrototypeLearningTargetView | null;
-  selectedPolicy: PrototypeLearningPolicy;
-  onBack: () => void;
-  onSelect: (policy: PrototypeLearningPolicy) => void;
+  active:boolean;
+  target:PrototypeLearningTargetView|null;
+  selectedPolicy:PrototypeLearningPolicy;
+  onBack:()=>void;
+  onSelect:(policy:PrototypeLearningPolicy)=>void;
 }
-
-export const LearningPolicyScreen = ({
-  active,
-  target,
-  selectedPolicy,
-  onBack,
-  onSelect,
-}: LearningPolicyScreenProps) => {
-  const isTargetPolicy = target !== null;
-  const profileOptions = learningPolicyProfileRegistry.list().map((profile) => ({
-    profile,
-    available: target ? isPolicyAvailableForTarget(target, profile.profileId) : true,
-  }));
-
-  return (
-    <section
-      className={uiClass(`screen learning-surface${active ? ' active' : ''}`, "#s-learning-policy")}
-      id="s-learning-policy"
-      data-anim="slide"
-    >
-      <header className={uiClass("learning-page-nav")}>
-        <button type="button" onClick={onBack} aria-label="返回">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6" /></svg>
-        </button>
-        <div>
-          <small>{isTargetPolicy ? '这个意思' : '学习计划默认'}</small>
-          <h1>选择学习方式</h1>
-        </div>
-      </header>
-
-      <main className={uiClass("learning-page-body learning-policy-body")}>
-        {target && (
-          <section className={uiClass("learning-policy-target")} aria-label="当前学习目标">
-            <small>正在设置</small>
-            <strong>{target.expression}</strong>
-            <p>{target.meaning}</p>
-          </section>
-        )}
-
-        <section className={uiClass("learning-copy-intro is-compact")}>
-          <span>学习方式 ≠ 学习内容</span>
-          <h2>选择你希望怎样建立和保持这条连接</h2>
-          <p>系统随后根据目标、内容和客户端能力判断当前是否可以开始，不会静默换成另一种方式。</p>
-        </section>
-
-        <div className={uiClass("learning-policy-options")} role="radiogroup" aria-label="学习方式">
-          {profileOptions.map(({ profile, available }) => (
-            <button
-              key={profile.profileId}
-              type="button"
-              role="radio"
-              aria-checked={selectedPolicy === profile.profileId}
-              aria-disabled={!available}
-              disabled={!available}
-              className={uiClass([
-                'learning-policy-option',
-                profile.presentation.optionClassName,
-                selectedPolicy === profile.profileId ? 'is-selected' : '',
-              ].filter(Boolean).join(' '))}
-              onClick={() => onSelect(profile.profileId)}
-            >
-              <span className={uiClass("learning-policy-radio")} aria-hidden="true" />
-              <span className={uiClass("learning-policy-copy")}>
-                <span className={uiClass("learning-policy-title")}>
-                  <strong>{profile.presentation.label}</strong>
-                  <em>{available ? profile.presentation.shortBadge : '当前不可用'}</em>
-                </span>
-                <span className={uiClass("learning-policy-description")}>
-                  {profile.presentation.description}
-                </span>
-                <span className={uiClass("learning-policy-path")}>
-                  {profile.presentation.lifecycleLabel}
-                </span>
-                {!available && (
-                  <span className={uiClass("learning-policy-unavailable")}>
-                    当前目标缺少这种方式要求的内容或运行能力，系统不会自动降级。
-                  </span>
-                )}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        <section className={uiClass("learning-policy-confirmation")}>
-          <small>当前选择</small>
-          <strong>{policyLabel(selectedPolicy)}</strong>
-          <p>{isTargetPolicy ? '只影响这个目标；首次正式学习开始后锁定。' : '新加入的目标默认采用这种方式，仍可单独修改。'}</p>
-          <button type="button" onClick={onBack}>确认这个选择</button>
-        </section>
-      </main>
-    </section>
-  );
+export const LearningPolicyScreen=({active,target,selectedPolicy,onBack,onSelect}:LearningPolicyScreenProps)=>{
+  const {t}=useTranslation();
+  const [draft,setDraft]=useState(selectedPolicy);
+  const [error,setError]=useState(false);
+  useEffect(()=>{setDraft(selectedPolicy);setError(false);},[active,target?.targetId,selectedPolicy]);
+  const profiles=learningPolicyProfileRegistry.list();
+  const allowed=(policy:PrototypeLearningPolicy)=>!target||isPolicyAvailableForTarget(target,policy);
+  const save=()=>{
+    if(!allowed(draft))return;
+    try {onSelect(draft);setError(false);onBack();} catch {setError(true);}
+  };
+  return <LearningSetupFrame id="s-learning-policy" active={active} onBack={onBack} title={t('learningSetup.method')}>
+    <div className="max-w-2xl">
+      <p className="text-xs font-medium text-[#68748d]">{t(target?'learningSetup.scopeTarget':'learningSetup.scopeDefault')}</p>
+      <h2 className="mt-3 text-3xl font-medium tracking-tight">{t('learningSetup.choose')}</h2>
+      <p className="mt-4 text-sm leading-7 text-[#68748d]">{t('learningSetup.chooseHint')}</p>
+      {target&&<div className="mt-6 border-l-2 border-[#a5b2d0] pl-4"><strong className="text-xl font-medium">{target.expression}</strong><p className="mt-2 text-sm leading-6 text-[#68748d]">{target.meaning}</p></div>}
+    </div>
+    <fieldset className="mt-8 grid gap-4">
+      <legend className="sr-only">{t('learningSetup.choose')}</legend>
+      {profiles.map(profile=>{
+        const available=allowed(profile.profileId);
+        const selected=draft===profile.profileId;
+        return <label key={profile.profileId} className={`flex items-start gap-4 rounded-2xl border p-5 sm:p-6 ${selected?'border-[#5268a9] bg-[#edf0f7]':'border-[#e0e5ee] bg-white'} ${available?'cursor-pointer':'opacity-60'}`}>
+          <input type="radio" name="learning-setup-policy" value={profile.profileId} checked={selected} disabled={!available} onChange={()=>{setDraft(profile.profileId);setError(false);}} className="mt-1 size-5 shrink-0 accent-[#303f76]"/>
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center justify-between gap-3"><strong className="font-medium">{t('learningPreferences.policies.'+profile.profileId,{defaultValue:profile.presentation.label})}</strong>{selected?<Check size={18} className="text-[#5268a9]" aria-hidden="true"/>:!available?<LockKeyhole size={16} aria-hidden="true"/>:null}</span>
+            <span className="mt-3 block text-sm leading-7 text-[#68748d]">{t('learningSetup.descriptions.'+profile.profileId,{defaultValue:profile.presentation.description})}</span>
+            {!available&&<span className="mt-3 block text-xs leading-6 text-[#835c45]">{t('learningSetup.blockedHint')}</span>}
+          </span>
+        </label>;
+      })}
+    </fieldset>
+    <footer className="mt-8 border-t border-[#e0e5ee] pt-6 pb-8">
+      <p className="text-sm leading-6 text-[#68748d]">{t('learningSetup.draftHint')}</p>
+      {error&&<p role="alert" className="mt-4 text-sm text-red-700">{t('learningSetup.saveError')}</p>}
+      <div className="mt-5 flex flex-wrap gap-3">
+        <button type="button" className={setupPrimary} disabled={!allowed(draft)} onClick={save}>{t('learningSetup.confirm')}</button>
+        <button type="button" className={setupButton+' text-[#68748d] hover:bg-[#edf0f7]'} onClick={onBack}>{t('learningSetup.back')}</button>
+      </div>
+    </footer>
+  </LearningSetupFrame>;
 };

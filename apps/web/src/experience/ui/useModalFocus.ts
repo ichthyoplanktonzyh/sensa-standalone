@@ -1,3 +1,4 @@
+import { restoreSiblingInteraction } from './screenInteraction';
 import { useEffect, type RefObject } from 'react';
 
 /** Keep keyboard focus in visible modal surfaces without changing their actions. */
@@ -31,7 +32,11 @@ export function useModalFocus(root: RefObject<HTMLDivElement | null>) {
           if (!(sibling instanceof HTMLElement) || sibling === branch) continue;
           const wasInert = sibling.inert;
           sibling.inert = true;
-          restore.push(() => { sibling.inert = wasInert; });
+          restore.push(() => {
+            // Navigation may have changed while the dialog was open. Respect
+            // the current route instead of restoring a stale screen lock.
+            restoreSiblingInteraction(sibling, wasInert);
+          });
         }
         branch = branch.parentElement;
       }

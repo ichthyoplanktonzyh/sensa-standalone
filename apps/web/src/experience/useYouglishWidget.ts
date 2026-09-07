@@ -94,6 +94,11 @@ const loadYouglishApi = (): Promise<NonNullable<Window['YG']>> => {
     }
   });
 
+  apiPromise = apiPromise.catch(error => {
+    apiPromise = null;
+    document.querySelector(`script[src="${API_SRC}"]`)?.remove();
+    throw error;
+  });
   return apiPromise;
 };
 
@@ -194,7 +199,9 @@ export const useYouglishWidget = ({
         const width = Math.round(host.clientWidth) || 360;
         widgetRef.current = new YG.Widget(inner.id, {
           width,
-          components,
+          // Widget 4.3 replaces numeric 0 with its default mask (255).
+          // A string zero survives that truthiness check and emits e_comp=0.
+          components: components === 0 ? '0' : components,
           events: {
             onFetchDone: (event: WidgetEvent) => {
               if (!mountedRef.current) return;
@@ -250,6 +257,13 @@ export const useYouglishWidget = ({
       setStatus('error');
     }
   }, [ready, query, lang, accent]);
+
+  // Provider fetches can stall even after the API script has loaded.
+  useEffect(() => {
+    if (status !== 'loading') return;
+    const timer = window.setTimeout(() => setStatus(current => current === 'loading' ? 'error' : current), 15000);
+    return () => window.clearTimeout(timer);
+  }, [status, query, accent]);
 
   // Stop audio when the screen is not visible; keep the widget for re-entry.
   useEffect(() => {

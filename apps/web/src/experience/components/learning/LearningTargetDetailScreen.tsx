@@ -1,14 +1,10 @@
-import { uiClass } from '../../ui/classes';
-import {
-  policyLabel,
-  readinessForPolicy,
-  readinessTone,
-  type PrototypeLearningPolicy,
-  type PrototypeLearningReadiness,
-  type PrototypeLearningTargetView,
-} from '../../learningJourney/prototypeLearning';
+import { useEffect, useState } from 'react';
+import { ArrowRight, CheckCircle2, Clock3, LockKeyhole, AlertCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import type { PrototypeLearningPolicy, PrototypeLearningReadiness, PrototypeLearningTargetView } from '../../learningJourney/prototypeLearning';
 import type { RetentionRuntimeTargetStatus } from '../../engine/ReviewQueue';
 import type { InitialLearningCompletionKind } from '../../learningRuntime/orchestrations';
+import { LearningSetupFrame, setupButton, setupPrimary } from './LearningSetupFrame';
 
 interface LearningTargetDetailScreenProps {
   active: boolean;
@@ -35,206 +31,65 @@ interface LearningTargetDetailScreenProps {
   onRevokeDeclaredMastery: () => void;
 }
 
-const sourceKindLabel: Record<PrototypeLearningTargetView['sourceKind'], string> = {
-  book: '词书',
-  direct: '直接加入',
-  personal_semantic_world: '我的词义世界',
-};
 
-export const LearningTargetDetailScreen = ({
-  active,
-  target,
-  selectedPolicy,
-  preparation,
-  committedPolicy,
-  initialCompletionKind,
-  reviewDue,
-  relearning,
-  retentionRuntimeState,
-  nextReviewLabel,
-  declaredMastery,
-  isAdded,
-  onBack,
-  onAdd,
-  onOpenPolicy,
-  onOpenSource,
-  onRefreshPreparation,
-  onGoHome,
-  onStartReview,
-  onContinueRetentionRuntime,
-  onContinueRuntime,
-  onRevokeDeclaredMastery,
-}: LearningTargetDetailScreenProps) => {
-  const configuredReadiness = readinessForPolicy(target, selectedPolicy);
-  const readiness = preparation === configuredReadiness.status
-    ? configuredReadiness
-    : preparation === 'ready'
-      ? {
-          status: preparation,
-          label: '内容已准备好',
-          detail: '当前学习方式需要的内容已经生成并完成校验。',
-        }
-      : configuredReadiness;
-  const tone = readinessTone(preparation);
-  const effectiveReady = tone === 'ready';
-  const isCommitted = committedPolicy !== null;
-  const initialLearningCompleted = initialCompletionKind !== null;
-  const isStructuredGraduation = initialCompletionKind === 'acquisition_graduation';
-  const isActiveRetentionRuntime = retentionRuntimeState === 'reviewing'
-    || retentionRuntimeState === 'relearning_repair'
-    || retentionRuntimeState === 'relearning_retest';
-  const retentionRuntimeHeading = retentionRuntimeState === 'reviewing'
-    ? '复习中 · 本次到期检验'
-    : retentionRuntimeState === 'relearning_repair'
-      ? '重学中 · 定向修复'
-      : retentionRuntimeState === 'relearning_retest'
-        ? '重学中 · 等待独立重测'
-        : null;
-
-  return (
-    <section
-      className={uiClass(`screen learning-surface${active ? ' active' : ''}`, "#s-learning-target")}
-      id="s-learning-target"
-      data-anim="slide"
-    >
-      <header className={uiClass("learning-page-nav")}>
-        <button type="button" onClick={onBack} aria-label="返回">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6" /></svg>
-        </button>
-        <div>
-          <small>学习目标</small>
-          <h1>{declaredMastery
-            ? '已声明掌握'
-            : retentionRuntimeHeading
-              ? retentionRuntimeHeading
-              : initialLearningCompleted
-                ? isStructuredGraduation ? '高保证首次学习已完成' : '首次学习已完成'
-                : isCommitted ? '学习方式已锁定' : isAdded ? '已加入学习' : '加入前确认'}</h1>
-        </div>
-      </header>
-
-      <main className={uiClass("learning-page-body learning-target-body")}>
-        <section className={uiClass("learning-target-hero")}>
-          <span>{target.expressionTypeLabel} · {target.partOfSpeech}</span>
-          <h2>{target.expression}</h2>
-          <p>{target.meaning}</p>
-          <blockquote>{target.example}</blockquote>
-        </section>
-
-        <section className={uiClass("learning-target-facts")} aria-label="学习目标信息">
-          <button type="button" onClick={onOpenSource}>
-            <span>
-              <small>学习来源 · {sourceKindLabel[target.sourceKind]}</small>
-              <strong>{target.sourceLabel}</strong>
-            </span>
-            <span aria-hidden="true">›</span>
+export const LearningTargetDetailScreen=(props:LearningTargetDetailScreenProps)=>{
+  const {t}=useTranslation();
+  const [error,setError]=useState(false);
+  useEffect(()=>{setError(false);},[props.active,props.target.targetId]);
+  const {target,preparation,committedPolicy,initialCompletionKind,retentionRuntimeState}=props;
+  const committed=committedPolicy!==null;
+  const completed=initialCompletionKind!==null;
+  const retaining=retentionRuntimeState==='reviewing'||retentionRuntimeState==='relearning_repair'||retentionRuntimeState==='relearning_retest';
+  const status=props.declaredMastery?'declared'
+    : retaining?retentionRuntimeState==='reviewing'?'reviewing':retentionRuntimeState==='relearning_repair'?'repair':'retest'
+    : completed?props.relearning?'repair':props.reviewDue?'review':'maintaining'
+    : committed?'committed':preparation;
+  const hint=props.declaredMastery?'declaredHint'
+    : retaining?retentionRuntimeState==='reviewing'?'reviewingHint':retentionRuntimeState==='relearning_repair'?'repairHint':'retestHint'
+    : completed?props.relearning?'repairHint':'completedHint'
+    : committed?'lockedHint':preparation+'Hint';
+  // Curriculum membership, content readiness, active work and self-declarations
+  // remain distinct. A preparing target can be added, but cannot start a run.
+  const action: {label:string;run:()=>void}=!props.isAdded?{label:'add',run:props.onAdd}
+    : props.declaredMastery?{label:'restore',run:props.onRevokeDeclaredMastery}
+    : retaining?{label:retentionRuntimeState==='reviewing'?'continueReview':'continueRepair',run:props.onContinueRetentionRuntime}
+    : completed?props.reviewDue?{label:props.relearning?'continueRepair':'startReview',run:props.onStartReview}:{label:'home',run:props.onGoHome}
+    : committed?{label:'continue',run:props.onContinueRuntime}
+    : preparation==='ready'?{label:'home',run:props.onGoHome}
+    : preparation==='preparing'?{label:'check',run:props.onRefreshPreparation}
+    : {label:'change',run:props.onOpenPolicy};
+  const invoke=(callback:()=>void)=>{
+    try {callback();setError(false);} catch {setError(true);}
+  };
+  const MethodIcon=committed?LockKeyhole:ArrowRight;
+  const StatusIcon=preparation==='blocked'&&!committed&&!completed?AlertCircle
+    : preparation==='preparing'&&!committed&&!completed?Clock3:CheckCircle2;
+  return <LearningSetupFrame id="s-learning-target" active={props.active} onBack={props.onBack} title={t('learningSetup.target')}>
+    <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <section className="min-w-0">
+        <span className="inline-flex rounded-full bg-[#edf0f7] px-3 py-1.5 text-xs font-medium text-[#5268a9]">{t('learningSetup.'+(props.isAdded?'added':'beforeAdd'))}</span>
+        <div className="mt-6 flex flex-wrap items-baseline gap-4"><h2 className="break-words text-4xl font-medium tracking-tight sm:text-5xl">{target.expression}</h2><span className="text-sm text-[#788398]">{target.partOfSpeech}</span></div>
+        <p className="mt-5 text-lg leading-8 text-[#546078]">{target.meaning}</p>
+        <div className="mt-8 rounded-2xl bg-[#f0f2f6] p-6"><h3 className="text-xs text-[#788398]">{t('learningSetup.example')}</h3><blockquote className="mt-3 text-lg leading-8">{target.example}</blockquote></div>
+        <div className="mt-8 divide-y divide-[#e0e5ee] border-y border-[#e0e5ee]">
+          <button type="button" onClick={props.onOpenSource} className="flex min-h-24 w-full items-center gap-4 px-1 py-5 text-left focus-visible:outline-2 focus-visible:outline-[#5268a9]">
+            <span className="min-w-0 flex-1"><span className="block text-xs text-[#788398]">{t('learningSetup.source')}</span><span className="mt-2 block text-sm">{target.sourceLabel}</span></span><ArrowRight size={18} className="shrink-0 text-[#788398]"/>
           </button>
-          {isCommitted ? (
-            <div className={uiClass("learning-target-fact is-locked")}>
-              <span>
-                <small>学习方式 · 首次运行时锁定</small>
-                <strong>{policyLabel(committedPolicy)}</strong>
-              </span>
-              <em>已锁定</em>
-            </div>
-          ) : (
-            <button type="button" onClick={onOpenPolicy}>
-              <span>
-                <small>学习方式</small>
-                <strong>{policyLabel(selectedPolicy)}</strong>
-              </span>
-              <span aria-hidden="true">›</span>
-            </button>
-          )}
-        </section>
-
-        <section className={uiClass(`learning-readiness-card is-${isCommitted ? 'committed' : tone}`)}>
-          <div className={uiClass("learning-readiness-heading")}>
-            <span className={uiClass("learning-readiness-mark")} aria-hidden="true">
-              {isCommitted || tone === 'ready' ? '✓' : tone === 'preparing' ? '…' : '!'}
-            </span>
-            <div>
-              <small>{declaredMastery ? '计划资格' : initialLearningCompleted ? '学习阶段' : isCommitted ? 'Runtime 状态' : '内容准备状态'}</small>
-              <h2>{declaredMastery
-                ? '已从正式学习计划排除'
-                : initialLearningCompleted
-                ? retentionRuntimeHeading ?? (relearning
-                  ? '重学中 · 连接待恢复'
-                  : reviewDue ? '保持中 · 今天需要复习' : `保持中 · ${nextReviewLabel ?? '等待下次复习'}`)
-                : isCommitted ? '已进入学习 Runtime' : readiness.label}</h2>
-            </div>
+          <div className="flex min-h-24 items-center gap-3 px-1 py-5">
+            <div className="min-w-0 flex-1"><h3 className="text-xs text-[#788398]">{t('learningSetup.method')}</h3><p className="mt-2 text-sm font-medium">{t('learningPreferences.policies.'+(committedPolicy??props.selectedPolicy))}</p>{committed&&<p className="mt-2 text-xs text-[#788398]">{t('learningSetup.locked')}</p>}</div>
+            {committed?<MethodIcon size={18} className="text-[#788398]" aria-hidden="true"/>:<button type="button" onClick={props.onOpenPolicy} className={setupButton+' text-[#5268a9] hover:bg-[#edf0f7]'}>{t('learningSetup.change')}<ArrowRight size={16}/></button>}
           </div>
-          <p>{declaredMastery
-            ? 'Declared Mastery 是可撤销的学习者声明，不会伪造 Gate 通过、Graduation 或长期记忆结果。'
-            : isActiveRetentionRuntime
-              ? retentionRuntimeState === 'reviewing'
-                ? '当前正在完成一次到期检验；本轮只会产生一个 Memory Outcome。'
-                : retentionRuntimeState === 'relearning_repair'
-                  ? '遗忘事实已经结算，当前只恢复失败的经验—意思—表达连接。'
-                  : '修复已经结束，当前等待独立验证连接是否恢复。'
-              : initialLearningCompleted
-                ? isStructuredGraduation
-                  ? 'Required Gates 已全部通过，并已通过 Graduation 交给长期复习保持。'
-                  : '经验落地和首次主动回想已经完成，之后由长期复习继续保持这条连接。'
-                : isCommitted
-                  ? '首次正式运行已经创建，学习方式不会再从这里改写。'
-                  : readiness.detail}</p>
-          <ol>
-            <li className={uiClass("is-done")}><span>1</span>稳定意思与目标表达</li>
-            <li className={uiClass(tone === 'ready' || isCommitted ? 'is-done' : '')}><span>2</span>完成内容准备与校验</li>
-            <li className={uiClass(isCommitted ? 'is-done' : '')}><span>3</span>创建首次正式运行并锁定方式</li>
-          </ol>
-        </section>
-
-        <div className={uiClass("learning-target-actions")}>
-          {!isAdded ? (
-            <button type="button" className={uiClass("is-primary")} onClick={onAdd}>加入学习</button>
-          ) : declaredMastery ? (
-            <button type="button" className={uiClass("is-primary")} onClick={onRevokeDeclaredMastery}>恢复学习</button>
-          ) : isActiveRetentionRuntime ? (
-            <button type="button" className={uiClass("is-primary")} onClick={onContinueRetentionRuntime}>
-              {retentionRuntimeState === 'reviewing' ? '继续复习' : '继续重学'}
-            </button>
-          ) : initialLearningCompleted ? (
-            reviewDue
-              ? <button type="button" className={uiClass("is-primary")} onClick={onStartReview}>{relearning ? '继续修复' : '开始复习'}</button>
-              : <button type="button" className={uiClass("is-primary")} onClick={onGoHome}>回到首页</button>
-          ) : isCommitted ? (
-            <button type="button" className={uiClass("is-primary")} onClick={onContinueRuntime}>继续学习</button>
-          ) : effectiveReady ? (
-            <button type="button" className={uiClass("is-primary")} onClick={onGoHome}>回到首页开始学习</button>
-          ) : tone === 'preparing' ? (
-            <button type="button" className={uiClass("is-primary")} onClick={onRefreshPreparation}>更新准备状态</button>
-          ) : (
-            <button type="button" className={uiClass("is-primary")} onClick={onOpenPolicy}>更换学习方式</button>
-          )}
-          <small>
-            {!isAdded
-              ? '加入后才会按所选方式准备内容。'
-              : declaredMastery
-                ? '撤销后会依据未被改写的学习阶段、Gate 和长期记忆状态恢复计划资格。'
-              : initialLearningCompleted
-                ? isActiveRetentionRuntime
-                  ? retentionRuntimeState === 'reviewing'
-                    ? '本次到期检验已经开始，继续完成后只结算一个 Memory Outcome。'
-                    : retentionRuntimeState === 'relearning_repair'
-                      ? '本次遗忘已经结算，现在只修复失败的经验—意思—表达连接。'
-                      : '修复已经完成，下一次独立重测不会再次更新 FSRS。'
-                  : reviewDue
-                  ? relearning
-                    ? '本次遗忘已经记录，继续完成经验—意思—表达的重新连接。'
-                    : '这条目标已经到期，将从意思和经验线索独立取回表达。'
-                  : `首次学习已经结束，下次复习安排在${nextReviewLabel ?? '稍后'}。`
-              : isCommitted
-                ? `${policyLabel(committedPolicy)} 已成为这条目标的正式学习方式。`
-              : effectiveReady
-                ? '它已经可以进入今日新学计划。'
-                : tone === 'preparing'
-                  ? '准备完成前不会进入今日新学。'
-                  : '当前方式缺少必要内容，系统不会自动降级。'}
-          </small>
         </div>
-      </main>
-    </section>
-  );
+      </section>
+      <aside className="rounded-3xl border border-[#e0e5ee] bg-white p-6 sm:p-7">
+        <StatusIcon size={25} className={preparation==='blocked'&&!committed?'text-[#986c46]':'text-[#5268a9]'} aria-hidden="true"/>
+        <h3 className="mt-5 text-xl font-medium">{t('learningSetup.'+status)}</h3>
+        <p className="mt-3 text-sm leading-7 text-[#68748d]">{t('learningSetup.'+hint)}</p>
+        {completed&&!props.declaredMastery&&<div className="mt-5 border-t border-[#e0e5ee] pt-5"><p className="text-xs text-[#788398]">{t('learningSetup.'+(initialCompletionKind==='acquisition_graduation'?'graduated':'completed'))}</p>{!props.reviewDue&&!retaining&&<p className="mt-3 text-sm">{t('learningSetup.next')} · {props.nextReviewLabel??t('learningSetup.unscheduled')}</p>}</div>}
+        {error&&<p role="alert" className="mt-5 text-sm text-red-700">{t('learningSetup.saveError')}</p>}
+        <button type="button" className={setupPrimary+' mt-7 w-full'} onClick={()=>invoke(action.run)}>{t('learningSetup.'+action.label)}</button>
+        {!props.isAdded&&<p className="mt-4 text-xs leading-6 text-[#788398]">{t('learningSetup.addHint')}</p>}
+      </aside>
+    </div>
+  </LearningSetupFrame>;
 };

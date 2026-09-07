@@ -1,3 +1,4 @@
+import { contentStyles } from './contentStyles';
 import { twMerge } from 'tailwind-merge';
 import { recipes } from './recipes';
 
@@ -114,7 +115,7 @@ export function uiClass(...inputs: (string | undefined | null | false)[]): strin
   const existing = cache.get(key);
   if (existing) return existing;
   const tokens = key.split(/\s+/).filter(Boolean);
-  const result = twMerge(tokens.filter(t => !t.startsWith('#')).join(' '), ...tokens.map(t => recipes[t] ?? ''), ...tokens.map(t => overrides[t] ?? ''));
+  const result = twMerge(tokens.filter(t => !t.startsWith('#')).join(' '), ...tokens.map(t => recipes[t] ?? ''), ...tokens.map(t => overrides[t] ?? ''), ...tokens.map(t => contentStyles[t] ?? ''));
   if(cache.size > 4000) cache.clear();
   cache.set(key,result);
   return result;

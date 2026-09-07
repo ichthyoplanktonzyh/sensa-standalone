@@ -39,7 +39,7 @@ export function ExampleCardCarousel({
   }, [currentIndex, itemCount]);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest('button, a, input, textarea, .tok-word')) return;
+    if (itemCount < 2 || (event.target as HTMLElement).closest('button, a, input, textarea, summary, video, iframe, .tok-word')) return;
     pointerStartX.current = event.clientX;
     dragOffsetRef.current = 0;
     setDragOffset(0);
@@ -68,8 +68,10 @@ export function ExampleCardCarousel({
       // Ignore browsers that already released pointer capture.
     }
     const offset = dragOffsetRef.current;
-    if (offset < -44 && hasNext) onIndexChange(currentIndex + 1);
-    if (offset > 44 && hasPrevious) onIndexChange(currentIndex - 1);
+    if (event.type !== 'pointercancel') {
+      if (offset < -44 && hasNext) onIndexChange(currentIndex + 1);
+      if (offset > 44 && hasPrevious) onIndexChange(currentIndex - 1);
+    }
     dragOffsetRef.current = 0;
     setDragOffset(0);
   };

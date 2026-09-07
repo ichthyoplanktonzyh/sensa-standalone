@@ -5,6 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "VITE_");
   return {
+    publicDir: "public",
     plugins: [react(), tailwindcss()],
     server: {
       host: "127.0.0.1",

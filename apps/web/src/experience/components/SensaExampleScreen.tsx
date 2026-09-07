@@ -15,7 +15,7 @@ import { personalContentService } from '../services/personalContentService';
 import { lookupDictionaryEntry } from '../services/quickDict';
 import { ClickableSentence } from './ClickableSentence';
 import type { ExampleScreenProps } from './ExampleScreen';
-import { QuickDictPopup } from './QuickDictPopup';
+import { LearningExampleLookup } from './examples/LearningExampleLookup';
 import { useImmediateDictionaryLookup } from './useImmediateDictionaryLookup';
 import { ExampleCardCarousel } from './examples/ExampleCardCarousel';
 
@@ -23,7 +23,7 @@ const stripMarkup = (value: string): string => value.replace(/<[^>]*>/g, '').tri
 
 function SyncedMediaSurface({ render }: { render: SyncedExampleMediaRender }) {
   return (
-    <section className={uiClass("sensa-example-media")} aria-label={`${render.providerLabel} 原声片段`}>
+    <section className="sensa-example-media" aria-label={`${render.providerLabel} 原声片段`}>
       {render.kind === 'video' ? (
         <video
           controls
@@ -85,6 +85,7 @@ export function SensaExampleScreen({
   const [, setPersonalContentRevision] = useState(0);
   const playbackToken = useRef(0);
   const wordIdentity = curWord.id ?? curWord.w;
+  const sequenceIdentity = sentenceSequence?.join(',') ?? '';
 
   const sense = senseDetails[senseIndex] ?? senseDetails[0];
   const availableSentences = sense?.sentences?.length ? sense.sentences : curWord.sentences;
@@ -96,11 +97,11 @@ export function SensaExampleScreen({
       const item = availableSentences[index];
       return item ? [item] : [];
     });
-    return authorized.length > 0 ? authorized : availableSentences.slice(0, 1);
+    return authorized;
   }, [availableSentences, initialSentenceIdx, sentenceSequence]);
   const sentence = sentences[sentenceIndex] ?? sentences[0] ?? null;
   const exampleId = sentence?.exampleId
-    ?? `${curWord.id ?? curWord.w}:example:${senseIndex}:${sentenceIndex}`;
+    ?? `${curWord.id ?? curWord.w}:example:${senseIndex}:${sentence ? availableSentences.indexOf(sentence) : initialSentenceIdx}`;
   const isSaved = personalContentService.isExampleSaved(exampleId);
   const hasPrevious = sentenceIndex > 0;
   const hasNext = sentenceIndex < sentences.length - 1;
@@ -132,7 +133,7 @@ export function SensaExampleScreen({
     if (active) stopPlayback();
     // Sense Versions are immutable in one installed release, so identity—not
     // the presentation object's allocation—controls viewer reset.
-  }, [active, clearLookup, initialSenseIdx, initialSentenceIdx, senseDetails.length, stopPlayback, wordIdentity]);
+  }, [active, clearLookup, initialSenseIdx, initialSentenceIdx, senseDetails.length, sequenceIdentity, stopPlayback, wordIdentity]);
 
   useEffect(
     () => personalContentService.subscribe(() => {
@@ -144,6 +145,7 @@ export function SensaExampleScreen({
   useEffect(() => {
     if (!active) return;
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (activeLookup) return;
       if ((event.target as HTMLElement | null)?.closest('input, textarea, button, a')) return;
       if (event.key === 'ArrowLeft' && hasPrevious) {
         event.preventDefault();
@@ -159,7 +161,7 @@ export function SensaExampleScreen({
       window.removeEventListener('keydown', handleKeyDown);
       stopPlayback();
     };
-  }, [active, hasNext, hasPrevious, sentenceIndex, stopPlayback, switchSentence]);
+  }, [activeLookup, active, hasNext, hasPrevious, sentenceIndex, stopPlayback, switchSentence]);
 
   const playSentence = () => {
     if (!sentence) return;
@@ -181,7 +183,9 @@ export function SensaExampleScreen({
         ? audioService.playPackagedAudioUrl(sentence.audioUrl, text, 'us')
         : audioService.playAudioUrl(sentence.audioUrl, text, 'us')
       : audioService.playSentence(text, 'us');
-    void playback.finally(() => {
+    void playback.catch(() => {
+      if (playbackToken.current === token) toast('音频播放失败，请重试');
+    }).finally(() => {
       if (playbackToken.current === token) setIsPlaying(false);
     });
   };
@@ -194,11 +198,12 @@ export function SensaExampleScreen({
 
   return (
     <section
-      className={uiClass(`screen sensa-example-screen${active ? ' active' : ''}`, "#s-example")}
+      className={`screen sensa-example-screen${active ? ' active' : ''}`}
       id="s-example"
+      data-learning-example="true"
       data-anim="slide"
     >
-      <header className={uiClass("sensa-example-topbar")}>
+      <header className="sensa-example-topbar">
         <button type="button" onClick={close} aria-label="返回学习">
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
@@ -208,10 +213,16 @@ export function SensaExampleScreen({
         </div>
         <button
           type="button"
-          className={uiClass(isSaved ? 'is-saved' : '')}
+          className={isSaved ? 'is-saved' : ''}
+          disabled={!sentence}
+          aria-pressed={isSaved}
           onClick={() => {
-            const saved = personalContentService.toggleExample(exampleId);
-            toast(saved ? '已收藏这条例句' : '已取消收藏');
+            try {
+              const saved = personalContentService.toggleExample(exampleId);
+              toast(saved ? '已收藏这条例句' : '已取消收藏');
+            } catch {
+              toast('收藏未能保存，请重试');
+            }
           }}
           aria-label={isSaved ? '取消收藏这条例句' : '收藏这条例句'}
         >
@@ -219,7 +230,7 @@ export function SensaExampleScreen({
         </button>
       </header>
 
-      <div className={uiClass("sensa-example-scroll")}>
+      <div className="sensa-example-scroll">
         <ExampleCardCarousel
           itemCount={sentences.length}
           currentIndex={sentenceIndex}
@@ -227,8 +238,8 @@ export function SensaExampleScreen({
           itemKeys={sentences.map((entry, index) => entry.exampleId ?? String(index))}
         >
           {sentence ? (
-            <article className={uiClass("sensa-example-viewer")}>
-            <div className={uiClass("sensa-example-source")}>
+            <article className="sensa-example-viewer">
+            <div className="sensa-example-source">
               <div>
                 <span>{sentence.sourceKind === 'attested_usage' ? '已审核原声' : '已审核学习例句'}</span>
                 <strong>{sentence.src}</strong>
@@ -241,10 +252,11 @@ export function SensaExampleScreen({
 
             {active && sentence.syncedMedia && <SyncedMediaSurface render={sentence.syncedMedia} />}
 
-            <section className={uiClass("sensa-example-sentence")} aria-label="当前例句">
+            <section className="sensa-example-sentence" aria-label="当前例句">
+              <p className="example-lookup-hint">点击句中单词，查看释义</p>
               <button
                 type="button"
-                className={uiClass(`sensa-example-play${isPlaying ? ' is-playing' : ''}`)}
+                className={`sensa-example-play${isPlaying ? ' is-playing' : ''}`}
                 onClick={playSentence}
                 aria-label={isPlaying ? '停止播放例句' : '播放例句'}
               >
@@ -254,7 +266,7 @@ export function SensaExampleScreen({
                   <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-vol" /></svg>
                 )}
               </button>
-              <div className={uiClass("sensa-example-l2")}>
+              <div className="sensa-example-l2">
                 <ClickableSentence
                   sentenceHtml={sentence.en}
                   activeTokenIdx={activeLookup?.tokenIdx ?? null}
@@ -279,17 +291,18 @@ export function SensaExampleScreen({
                   }}
                 />
               </div>
-              {showTranslation && <p className={uiClass("sensa-example-l1")}>{sentence.zh}</p>}
+              {showTranslation && <p className="sensa-example-l1">{sentence.zh}</p>}
               <button
                 type="button"
-                className={uiClass("sensa-example-translation")}
+                className="sensa-example-translation"
+                aria-expanded={showTranslation}
                 onClick={() => setShowTranslation((visible) => !visible)}
               >
                 {showTranslation ? '隐藏译文' : '显示译文'}
               </button>
             </section>
 
-            <section className={uiClass("sensa-example-sense-anchor")}>
+            <section className="sensa-example-sense-anchor">
               <span>这句话里的 {curWord.w}</span>
               <strong>{sense?.pos} {sense?.text}</strong>
               {sense?.def && (
@@ -301,8 +314,8 @@ export function SensaExampleScreen({
             </section>
 
             {(sentence.contextL2 || sentence.contextL1) && (
-              <section className={uiClass(`sensa-example-context${showContext ? ' is-open' : ''}`)}>
-                <button type="button" onClick={() => setShowContext((visible) => !visible)}>
+              <section className={`sensa-example-context${showContext ? ' is-open' : ''}`}>
+                <button type="button" aria-expanded={showContext} onClick={() => setShowContext((visible) => !visible)}>
                   <span>完整上下文</span>
                   <b aria-hidden="true">{showContext ? '−' : '+'}</b>
                 </button>
@@ -316,7 +329,7 @@ export function SensaExampleScreen({
             )}
             </article>
           ) : (
-            <div className={uiClass("sensa-example-unavailable")} role="status">
+            <div className="sensa-example-unavailable" role="status">
               <strong>这条学习资源暂时不可用</strong>
               <p>当前义项没有可显示的已审核例句。</p>
             </div>
@@ -324,21 +337,20 @@ export function SensaExampleScreen({
         </ExampleCardCarousel>
       </div>
 
-      <footer className={uiClass("sensa-example-footer")}>
+      <footer className="sensa-example-footer">
         <button type="button" onClick={close}>返回学习</button>
         <p>查看、播放和收藏不会改变本次学习进度</p>
       </footer>
 
-      {activeLookup && (
-        <QuickDictPopup
+      {active && activeLookup && (
+        <LearningExampleLookup
           entry={activeLookup.entry}
           onClose={clearLookup}
           toast={toast}
-          onViewDetail={(word, contextualEntry) => {
+          onViewDetail={onOpenDict ? (entry) => {
             clearLookup();
-            if (onOpenDict) onOpenDict(contextualEntry ?? word);
-            else toast(`查看 “${word}” 的完整释义`);
-          }}
+            onOpenDict(entry);
+          } : undefined}
         />
       )}
     </section>

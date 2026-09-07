@@ -1,5 +1,9 @@
+import { LearningPreferencesPanel } from './components/learning/LearningPreferencesPanel';
+import { runtimeCheckpoint } from './learningRuntime/runtimeCheckpoint';
+import { runtimeText } from '../i18n/runtimeText';
+import { useTranslation } from 'react-i18next';
 import { uiClass } from './ui/classes';
-import { useState, useEffect, useCallback, useMemo, useRef, type MouseEvent } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, useSyncExternalStore, type MouseEvent } from 'react';
 import type { GradedMemoryOutcome } from '@sensa/learning-kernel';
 import type { Word } from './types';
 import { useLearnQueue } from './engine/useLearnQueue';
@@ -24,15 +28,9 @@ import { IconSprite } from './components/IconSprite';
 import { HomeScreen } from './components/HomeScreen';
 import { AcademyScreen } from './components/AcademyScreen';
 import { PracticeScopeScreen } from './components/PracticeScopeScreen';
-import {
-  PortableListeningScreen,
-} from './components/PortableListeningScreen';
 import { YouGlishListeningScreen } from './components/YouGlishListeningScreen';
 import { ContentScreen } from './components/ContentScreen';
 import { ContentLibraryScreen } from './components/ContentLibraryScreen';
-import {
-  SemanticWorldScreen,
-} from './components/SemanticWorldScreen';
 import { PersonalMeaningDetailScreen } from './components/PersonalMeaningDetailScreen';
 import { ConfirmedSenseDetailScreen } from './components/ConfirmedSenseDetailScreen';
 import { ExpressionBindingScreen } from './components/ExpressionBindingScreen';
@@ -62,8 +60,6 @@ import { ReferenceExampleViewer } from './components/ReferenceExampleViewer';
 import { DictionaryPresentationProvider } from './components/DictionaryPresentationContext';
 import { NoteEditorModal } from './components/NoteEditorModal';
 import { SceneEditorModal } from './components/SceneEditorModal';
-import { SpellingModal } from './components/SpellingModal';
-import { WordListScreen } from './components/WordListScreen';
 import { FinishScreen } from './components/FinishScreen';
 import { StatsScreen } from './components/StatsScreen';
 import { WebShell } from './ui/WebShell';
@@ -197,6 +193,19 @@ function reviewKindForCapability(capability: LearningCapability): ReviewAssessme
 }
 
 export default function App() {
+  const { t } = useTranslation();
+  const [learningPreferencesOpen,setLearningPreferencesOpen]=useState(false);
+  const closeLearningPreferences=useCallback(()=>{
+    setLearningPreferencesOpen(false);
+    requestAnimationFrame(()=>document.getElementById('learning-more-button')?.focus());
+  },[]);
+
+  const checkpointError = useSyncExternalStore(runtimeCheckpoint.subscribe, runtimeCheckpoint.getError, () => null);
+  const [pausedLightweightFlow, setPausedFlowState] = useState<'lightweight' | 'lightweightReview' | 'study' | null>(()=>runtimeCheckpoint.read().pausedFlow??runtimeCheckpoint.read().lastFlow??null);
+  const setPausedLightweightFlow=useCallback((flow:'lightweight'|'lightweightReview'|'study'|null)=>{
+    runtimeCheckpoint.update({pausedFlow:flow});
+    runtimeCheckpoint.afterCommit(()=>setPausedFlowState(flow));
+  },[]);
   /* ---------- 顶层视图模式与 Sheet 栈：真相源是 URL ---------- */
   const {
     viewMode,
@@ -206,6 +215,8 @@ export default function App() {
     goMain,
     backMain,
     resetMain,
+    returnHome,
+    leaveRuntime,
     setMainStack,
   } = useShellNavigation();
 
@@ -221,8 +232,6 @@ export default function App() {
   }, [goMain, practiceScopeCatalog.currentScope]);
 
   // 剩余展示版本对照开关由 presentationStore 持有：写在侧栏、读在各屏。
-  const semanticWorldPresentation = usePresentationStore((state) => state.semanticWorld);
-  const portableListeningPresentation = usePresentationStore((state) => state.portableListening);
   const dictionaryPresentation = usePresentationStore((state) => state.dictionary);
 
   /* ---------- 我的内容读取投影与下钻目标 ---------- */
@@ -307,11 +316,6 @@ export default function App() {
   const setSceneEditorTarget = useOverlayStore((state) => state.openSceneEditor);
   const closeSceneEditor = useOverlayStore((state) => state.closeSceneEditor);
 
-  const spellingWord = useOverlayStore((state) => state.spellingWord);
-  const spellingMode = useOverlayStore((state) => state.spellingMode);
-  const spellingCue = useOverlayStore((state) => state.spellingCue);
-  const openSpelling = useOverlayStore((state) => state.openSpelling);
-  const closeSpelling = useOverlayStore((state) => state.closeSpelling);
 
   // 例句卡：开着时是"看第几个义项、第几句"，关着时为 null。
   const exampleSheet = useOverlayStore((state) => state.exampleSheet);
@@ -333,11 +337,6 @@ export default function App() {
     : [];
 
   /* ---------- 业务状态（签到、统计） ---------- */
-  // 连续签到天数就是签到状态本身：0 天即未签到。原先是 signed 与 streak 两个
-  // useState 编码同一件事，于是 toast 里要写 `Math.max(1, streak)` 防着
-  // "已签到但天数为 0"——那种状态现在无法表示。
-  const [streak, setStreak] = useState(0);
-  const signed = streak > 0;
   const [studyTab, setStudyTab] = useState<'a' | 'b'>('a');
   /**
    * 打开的是哪条 Target、正在编辑谁的学习方式——这两个都是"某个 sheet 正在
@@ -416,12 +415,6 @@ export default function App() {
     goMain('s-learning-target', { targetId });
   }, [goMain]);
 
-  // 显式传 undefined 是在清 policyTarget：默认方式这一屏没有归属 Target，
-  // 不清的话会读到上一次从某条 Target 进来时留下的值。
-  const openDefaultLearningPolicy = useCallback(() => {
-    goMain('s-learning-policy', { policyTarget: undefined });
-  }, [goMain]);
-
   const openTargetLearningPolicy = useCallback(() => {
     if (journeyFor(journey, selectedLearningTargetId).committedPolicy) {
       toast('学习方式已在首次正式学习开始时锁定');
@@ -456,15 +449,15 @@ export default function App() {
       PROTOTYPE_LEARNING_TARGETS[selectedLearningTargetId],
       effectivePolicyFor(journey, selectedLearningTargetId),
     ).status;
-    // 原型里"刷新准备状态"就是把 preparing 推成 ready，其余状态照原样落一次。
-    const nextPreparation = configured === 'preparing' ? 'ready' : configured;
+    // Rechecking reports provisioned capabilities; it cannot complete preparation.
+    const nextPreparation = configured;
     dispatchJourney({
       type: 'setPreparation',
       targetId: selectedLearningTargetId,
       preparation: nextPreparation,
     });
-    toast(nextPreparation === 'ready' ? '内容已准备好，可以进入今日学习' : '准备状态已更新');
-  }, [dispatchJourney, journey, selectedLearningTargetId, toast]);
+    toast(t('learningSetup.' + (nextPreparation === 'ready' ? 'checkReady' : nextPreparation === 'preparing' ? 'checkPreparing' : 'checkBlocked')));
+  }, [dispatchJourney, journey, selectedLearningTargetId, toast, t]);
 
   const openLearningSource = useCallback(() => {
     const target = PROTOTYPE_LEARNING_TARGETS[selectedLearningTargetId];
@@ -474,15 +467,6 @@ export default function App() {
     }
     setMainStack(['s-study', 's-learning-entry']);
   }, [selectedLearningTargetId]);
-
-  const doSign = useCallback(() => {
-    if (streak > 0) {
-      toast(`今天已签到　连续签到 ${streak} 天`);
-      return;
-    }
-    setStreak(1);
-    toast('签到成功　连续签到 1 天');
-  }, [streak, toast]);
 
   /* ---------- 流程模式与每日新学词数 ---------- */
   // 一台状态机，不是六个互相牵制的 useState：demo 的负载只挂在 demo 分支上，
@@ -598,6 +582,7 @@ export default function App() {
   // Profile then chooses which retention adapter receives the Scheduling Handoff.
   // Keep this idempotent because two render paths can observe the same settled queue.
   const persistGraduatedSenses = useCallback(() => {
+    return runtimeCheckpoint.atomic(()=>{
     const fsrsItems = storageService.getFSRSItems();
     const graduatedRetentionTargetIds = getGraduatedRetentionTargetIds();
     graduatedRetentionTargetIds.forEach((retentionTargetId) => {
@@ -638,6 +623,7 @@ export default function App() {
       ),
       completedAt,
       now: Date.now(),
+    });
     });
   }, [
     structuredInitialTargetIds,
@@ -686,7 +672,16 @@ export default function App() {
     undo: undoReviewQueue,
   } = useReviewQueue<PrototypeIntroductionPackage>(onReviewEffect, { minGap: 2 });
 
-  const pendingMixedTargetRef = useRef<PrototypeLearningTargetId[] | null>(null);
+  const pendingMixedTargetRef = useRef<PrototypeLearningTargetId[] | null>((runtimeCheckpoint.read().pendingMixed as PrototypeLearningTargetId[]|null)??null);
+  const setPendingMixedTargets=useCallback((targets:PrototypeLearningTargetId[]|null)=>{
+    runtimeCheckpoint.update({pendingMixed:targets});
+    runtimeCheckpoint.afterCommit(()=>{pendingMixedTargetRef.current=targets;});
+  },[]);
+  useEffect(()=>{
+    if(viewMode==='lightweight'||viewMode==='lightweightReview'||viewMode==='study') {
+      try {runtimeCheckpoint.update({lastFlow:viewMode});} catch { /* RuntimeFrame reports persistence failures. */ }
+    }
+  },[viewMode]);
 
   const getReviewCandidates = useCallback((): ReviewCandidate<PrototypeIntroductionPackage>[] => {
     const boundTargets = PROTOTYPE_LEARNING_TARGET_ORDER.flatMap((targetId) => {
@@ -790,7 +785,7 @@ export default function App() {
    */
   const runtimeSurfaceContext = useMemo<RuntimeSurfaceContext>(() => ({
     toast,
-    showFlow: setViewMode,
+    showFlow: (flow) => runtimeCheckpoint.afterCommit(() => setViewMode(flow)),
     enterReviewMode: enterReview,
     commitPolicies: (targetIds) => {
       dispatchJourney({
@@ -839,13 +834,13 @@ export default function App() {
       return false;
     }
     if (journeyFor(journey, targetId).committedPolicy) {
-      toast('这条目标已经创建过首次学习运行');
+      toast(runtimeText('alreadyStarted'));
       return false;
     }
 
     const preparation = preparationFor(journey, targetId);
     if (preparation !== 'ready') {
-      toast(preparation === 'preparing' ? '学习内容仍在准备中' : '当前学习方式还不能开始');
+      toast(preparation === 'preparing' ? runtimeText('preparing') : runtimeText('notReady'));
       return false;
     }
 
@@ -854,7 +849,7 @@ export default function App() {
     enterLearn();
 
     if (!plannedInitialTargetIds.includes(targetId)) {
-      toast('这条目标尚未进入今日学习计划');
+      toast(runtimeText('notPlanned'));
       return false;
     }
 
@@ -876,13 +871,13 @@ export default function App() {
       });
     const launch = learningRuntimeCoordinator.planInitial(targetId, initialCandidates);
     if (!launch) {
-      toast('当前学习方式还不能创建首次学习运行');
+      toast(runtimeText('cannotStart'));
       return false;
     }
 
-    return runtimeSurfaceRegistry
+    return runtimeCheckpoint.atomic(() => runtimeSurfaceRegistry
       .get(launch.surface)
-      .startInitial(runtimeSurfaceContext, launch);
+      .startInitial(runtimeSurfaceContext, launch));
   }, [
     closeMenus,
     enterLearn,
@@ -915,13 +910,15 @@ export default function App() {
 
   // 开始第一个可运行的 Target；运行创建成功才会提交并锁定 Policy。
   const startLearn = useCallback(() => {
-    pendingMixedTargetRef.current = null;
+    try { runtimeCheckpoint.atomic(() => {
+    setPendingMixedTargets(null);
     const nextTargetId = plannedInitialTargetIds[0];
     if (!nextTargetId) {
-      toast('当前没有准备完成的新学习目标');
+      toast(runtimeText('noNew'));
       return;
     }
     beginInitialTargetRuntime(nextTargetId);
+    }); } catch { toast(runtimeText('saveError')); }
   }, [beginInitialTargetRuntime, plannedInitialTargetIds, toast]);
 
   // 继续学习下一组
@@ -931,43 +928,48 @@ export default function App() {
 
   // 开始真实复习流程 (全量到期流式复习)
   const startReview = useCallback(() => {
-    pendingMixedTargetRef.current = null;
+    try { runtimeCheckpoint.atomic(() => {
+    setPendingMixedTargets(null);
     closeMenus();
     closeExample();
     enterReview();
     const launch = retentionRuntimeLaunches[0];
+    runtimeCheckpoint.update({retentionPlan:retentionRuntimeLaunches});
     if (!launch) {
-      toast('今天没有到期的意思，可以开始今日学习');
+      toast(runtimeText('noDue'));
       return;
     }
     const started = runtimeSurfaceRegistry.get(launch.surface).startRetention(
       runtimeSurfaceContext,
       launch,
       {
-        announce: (count) => `开始今日复习：共 ${count} 个意思`,
+        announce: (count) => runtimeText('startingReview', { count }),
         enterOnEmpty: false,
       },
     );
-    if (!started) toast('今天没有到期的意思，可以开始今日学习');
+    if (!started) toast(runtimeText('noDue'));
+    }); } catch { toast(runtimeText('saveError')); }
   }, [closeMenus, enterReview, retentionRuntimeLaunches, runtimeSurfaceContext, toast, closeExample]);
 
   // MVP Mixed intent uses the same two proven runtimes in sequence: due Review
   // comes first, then ready Acquisition continues without returning home.
   const startMixedLearning = useCallback(() => {
+    try { runtimeCheckpoint.atomic(() => {
     closeMenus();
     closeExample();
     enterLearn();
 
     const newTargetIds = [...plannedInitialTargetIds];
     const launch = retentionRuntimeLaunches[0];
+    runtimeCheckpoint.update({retentionPlan:retentionRuntimeLaunches});
 
     if (launch) {
-      pendingMixedTargetRef.current = newTargetIds.length > 0 ? newTargetIds : null;
+      setPendingMixedTargets(newTargetIds.length > 0 ? newTargetIds : null);
       const started = runtimeSurfaceRegistry.get(launch.surface).startRetention(
         runtimeSurfaceContext,
         launch,
         {
-          announce: (count) => `进入今日学习流：先复习 ${count} 个意思`,
+          announce: (count) => runtimeText('startingReview', { count }),
           // 混合流照旧进入复习 Runtime，即使这一组已经没有到期项。
           enterOnEmpty: true,
         },
@@ -975,13 +977,14 @@ export default function App() {
       if (started) return;
     }
 
-    pendingMixedTargetRef.current = null;
+    setPendingMixedTargets(null);
     if (newTargetIds[0]) {
       beginInitialTargetRuntime(newTargetIds[0]);
       return;
     }
 
-    toast('今天的学习流已经完成，可以去自由练习');
+    toast(runtimeText('sessionDone'));
+    }); } catch { toast(runtimeText('saveError')); }
   }, [
     beginInitialTargetRuntime,
     closeMenus,
@@ -995,20 +998,28 @@ export default function App() {
 
   // 退出学习回首页
   const exitLearn = useCallback(() => {
-    pendingMixedTargetRef.current = null;
-    closeExample();
-    closeMenus();
-    // 原来只清了 demoPackage，flowMode 仍停在 'demo'、demoStage/demoWord 仍在，
-    // 于是"演示 → 回首页 → 继续某个已提交的 Target"会带着上次演示的阶段进学习屏。
-    enterLearn();
-    setViewMode('main');
-    resetMain();
-  }, [closeMenus, enterLearn, resetMain, closeExample]);
+    closeExample(); closeMenus();
+    if(flowMode!=='demo') {
+      const hasTask=flowMode==='review'?!!reviewSession:!!learnSession;
+      setPausedLightweightFlow(hasTask?'study':null);
+      if(!hasTask)runtimeCheckpoint.update({lastFlow:null});
+    }
+    returnHome();
+  }, [flowMode, reviewSession, learnSession, closeExample, closeMenus, setPausedLightweightFlow, returnHome]);
+
+  const exitStructuredSummary = useCallback(() => {
+    try { runtimeCheckpoint.atomic(()=>{
+      runtimeCheckpoint.update({lastFlow:null,pausedFlow:null,cardDraft:undefined,...(flowMode==='learn'?{learnQueue:undefined}:{reviewQueue:undefined})});
+      setPausedLightweightFlow(null);
+      if(flowMode==='learn')finishInitialRun('structured_session');
+      runtimeCheckpoint.afterCommit(returnHome);
+    }); } catch { toast(runtimeText('saveError')); }
+  },[flowMode,finishInitialRun,returnHome,setPausedLightweightFlow,toast]);
 
   const exitLightweightRuntime = useCallback(() => {
-    setViewMode('main');
-    setMainStack(['s-study', 's-learning-library', 's-learning-target']);
-  }, []);
+    setPausedLightweightFlow('lightweight');
+    returnHome();
+  }, [returnHome]);
 
   const completeLightweightRuntime = useCallback((
     rating: Exclude<PrototypeLightweightRating, 'again'>,
@@ -1046,30 +1057,37 @@ export default function App() {
   }, [dispatchJourney, journey, lightweightInitialTargetId]);
 
   const handleLightweightInitialRating = useCallback((rating: PrototypeLightweightRating) => {
-    const result = rateLightweightInitial(rating);
-    if (!result || rating === 'again') return;
-    if (!result.state.progress.completed) {
-      throw new Error(`Lightweight rating ${rating} did not complete the Protocol Run.`);
-    }
-    completeLightweightRuntime(rating);
-  }, [completeLightweightRuntime, rateLightweightInitial]);
+    try {
+      runtimeCheckpoint.atomic(()=>{
+        const result=rateLightweightInitial(rating);
+        if(!result||rating==='again')return;
+        if(!result.state.progress.completed)throw Error('Incomplete protocol result');
+        completeLightweightRuntime(rating);
+      });
+    } catch {toast(runtimeText('saveError'));}
+  },[completeLightweightRuntime,rateLightweightInitial,toast]);
 
   const finishLightweightRuntime = useCallback(() => {
     if (!lightweightInitialTargetId) return;
     const hasNextTarget = lightweightInitialTargetIds.length > 1;
-    finishInitialTarget('lightweight_initial', lightweightInitialTargetId);
+    try {
+      runtimeCheckpoint.atomic(() => {
+        runtimeCheckpoint.update({lastFlow:hasNextTarget?'lightweight':null});
+        setPausedLightweightFlow(null);
+        finishInitialTarget('lightweight_initial', lightweightInitialTargetId);
+      });
+    } catch { toast(runtimeText('saveError')); return; }
     if (hasNextTarget) {
-      toast('继续今天的下一条学习目标');
+      toast(runtimeText('nextToast'));
       return;
     }
-    setViewMode('main');
-    resetMain();
-    toast('首次学习已完成，之后会按计划进入复习');
+    returnHome();
+    toast(runtimeText('initialToast'));
   }, [
     finishInitialTarget,
     lightweightInitialTargetId,
     lightweightInitialTargetIds.length,
-    resetMain,
+    returnHome,
     toast,
   ]);
 
@@ -1114,9 +1132,9 @@ export default function App() {
   }, [finishInitialRun, resetMain, toast]);
 
   const exitLightweightReview = useCallback(() => {
-    setViewMode('main');
-    resetMain();
-  }, [resetMain]);
+    setPausedLightweightFlow('lightweightReview');
+    returnHome();
+  }, [returnHome]);
 
   const completeLightweightReviewTarget = useCallback((
     targetId: PrototypeLearningTargetId,
@@ -1251,7 +1269,7 @@ export default function App() {
         case null:
           throw new Error('An Introduction Step cannot be an acquisition repair.');
       }
-      toast('定向修复已完成，稍后会再次独立检验');
+      toast(t('assurance.completeRepair'));
       return;
     }
     completeLearnIntroduction();
@@ -1287,7 +1305,7 @@ export default function App() {
     } else {
       completeLearnRecognition(correct);
     }
-    toast(correct ? '已认出这个意思，继续学习' : '这个区别稍后会换个语境再出现');
+    toast(correct ? t('assurance.correct') : t('assurance.continueLater'));
   }, [flowMode, learnSession, advanceDemo, overrideDemoQueue, completeLearnRecognition, toast]);
 
   const handleCompleteMeaningToFormRecall = useCallback((
@@ -1313,8 +1331,8 @@ export default function App() {
 
     toast(
       independentlyRecalled
-        ? '已经独立想起这个表达，继续学习'
-        : '这个连接已修复，稍后会再试一次独立回想',
+        ? t('assurance.correct')
+        : t('assurance.continueLater'),
     );
   }, [
     flowMode,
@@ -1347,8 +1365,8 @@ export default function App() {
 
     toast(
       succeeded
-        ? '已完成这次新义项学习，后续进入长期记忆调度'
-        : '这个迁移已修复，稍后会换一个新场景再试',
+        ? t('assurance.correct')
+        : t('assurance.continueLater'),
     );
   }, [flowMode, learnSession, advanceDemo, overrideDemoQueue, completeLearnNovelTransfer, toast]);
 
@@ -1380,9 +1398,9 @@ export default function App() {
     toast(
       result.correct
         ? canonicalMemoryOutcome?.basis === 'transfer_confirmed'
-          ? '新语境迁移成立，本次复习已结算一次'
-          : '已独立提取，本次复习已结算一次'
-        : '本次记录为提取失败，接下来只做定向修复',
+          ? t('assurance.correct')
+          : t('assurance.correct')
+        : t('assurance.retry'),
     );
   }, [
     flowMode,
@@ -1396,9 +1414,10 @@ export default function App() {
 
   // 熟词标记
   const handleMarkKnown = useCallback(() => {
+    try { runtimeCheckpoint.atomic(()=>{
     if (flowMode === 'demo') {
       markKnownLearnQueue();
-      toast('已标记为熟词，本组内不再出现');
+      toast(t('assurance.declared'));
       return;
     }
     const retentionTargetId = flowMode === 'review'
@@ -1414,7 +1433,8 @@ export default function App() {
     } else {
       markKnownLearnQueue();
     }
-    toast('已标记为熟词，本组内不再出现');
+    toast(t('assurance.declared'));
+    }); } catch { toast(runtimeText('saveError')); }
   }, [
     excludeCurrentReviewForDeclaredMastery,
     flowMode,
@@ -1433,7 +1453,7 @@ export default function App() {
       defaultRetentionTargetIdFor(PROTOTYPE_LEARNING_TARGETS[targetId]),
       false,
     );
-    toast('已撤销熟词声明，这条目标会按原有进度恢复计划资格');
+    toast(t('assurance.continue'));
   }, [setLearnDeclaredMastery, toast]);
 
   // 撤回上一词
@@ -1441,16 +1461,16 @@ export default function App() {
     if (flowMode === 'review') {
       const prev = undoReviewQueue();
       if (!prev) {
-        toast('已经是本次复习第一个词了');
+        toast(t('assurance.noTask'));
       } else {
-        toast('已撤回上一词');
+        toast(t('assurance.undo'));
       }
     } else {
       const prev = undoLearnQueue();
       if (!prev) {
-        toast('已经是本组第一个词了');
+        toast(t('assurance.noTask'));
       } else {
-        toast('已撤回上一词');
+        toast(t('assurance.undo'));
       }
     }
   }, [flowMode, undoReviewQueue, undoLearnQueue, toast]);
@@ -1459,10 +1479,12 @@ export default function App() {
     const pendingTargetIds = pendingMixedTargetRef.current;
     if (!pendingTargetIds?.length) return false;
 
-    pendingMixedTargetRef.current = null;
     closeExample();
     const started = beginInitialTargetRuntime(pendingTargetIds[0]);
-    if (started) toast('到期复习已完成，继续建立新的意思连接');
+    if (started) {
+      setPendingMixedTargets(null);
+      toast(runtimeText('continueNewToast'));
+    }
     return started;
   }, [beginInitialTargetRuntime, toast, closeExample]);
 
@@ -1475,13 +1497,14 @@ export default function App() {
    * 不再要调用方自报家门。
    */
   const startNextRetentionGroup = useCallback((): boolean => {
-    const finishedIndex = retentionRuntimeLaunches.findIndex(
+    const sessionPlan = runtimeCheckpoint.read().retentionPlan ?? retentionRuntimeLaunches;
+    const finishedIndex = sessionPlan.findIndex(
       (launch) => launch.surface === retentionRunSurface,
     );
     // 能跑完某组，说明它在本次 plan 里；找不到时不猜，交给调用方收尾。
     const nextLaunch = finishedIndex < 0
       ? undefined
-      : retentionRuntimeLaunches[finishedIndex + 1];
+      : sessionPlan[finishedIndex + 1];
     if (!nextLaunch) return false;
     return runtimeSurfaceRegistry.get(nextLaunch.surface).startRetention(
       runtimeSurfaceContext,
@@ -1494,6 +1517,7 @@ export default function App() {
   }, [retentionRuntimeLaunches, retentionRunSurface, runtimeSurfaceContext]);
 
   const finishStructuredRetentionRuntime = useCallback(() => {
+    return runtimeCheckpoint.atomic(()=>{
     // 与轻量复习的收尾同一条顺序：先交接下一组，再回混合流，最后才是结算。
     if (startNextRetentionGroup()) return;
     finishRetentionRunSession();
@@ -1517,7 +1541,8 @@ export default function App() {
         return targetId && target.status === 'declared_mastery' ? [targetId] : [];
       }),
     });
-    setViewMode('finish');
+    runtimeCheckpoint.afterCommit(()=>setViewMode('finish'));
+    });
   }, [
     continueMixedAfterReview,
     finishRetentionRunSession,
@@ -1528,16 +1553,22 @@ export default function App() {
 
 
   const finishLightweightReview = useCallback(() => {
-    // 先交接：下一组开起来会直接顶掉当前这条运行记录，没有下一组才收尾清空。
-    if (startNextRetentionGroup()) return;
-    finishRetentionRunSession();
-    if (continueMixedAfterReview()) return;
-    setViewMode('main');
-    resetMain();
-    toast('今天的到期复习已完成');
+    try {
+      runtimeCheckpoint.atomic(() => {
+        runtimeCheckpoint.update({lastFlow:null});
+        setPausedLightweightFlow(null);
+        if (startNextRetentionGroup()) return;
+        finishRetentionRunSession();
+        if (continueMixedAfterReview()) return;
+        runtimeCheckpoint.afterCommit(() => {
+          returnHome();
+          toast(runtimeText('reviewToast'));
+        });
+      });
+    } catch { toast(runtimeText('saveError')); }
   }, [
     continueMixedAfterReview,
-    resetMain,
+    returnHome,
     startNextRetentionGroup,
     toast,
     finishRetentionRunSession,
@@ -1556,7 +1587,7 @@ export default function App() {
       if (queueDone) {
         closeExample();
         persistGraduatedSenses();
-        setViewMode('finish');
+        runtimeCheckpoint.afterCommit(()=>setViewMode('finish'));
         return;
       }
       nextLearnQueue();
@@ -1594,7 +1625,7 @@ export default function App() {
       if (flowMode === 'learn' && queueDone && (!learnSession || learnSession.settled)) {
         closeExample();
         persistGraduatedSenses();
-        setViewMode('finish');
+        runtimeCheckpoint.afterCommit(()=>setViewMode('finish'));
       } else if (flowMode === 'review' && reviewDone && (!reviewSession || reviewSession.settled)) {
         closeExample();
         finishStructuredRetentionRuntime();
@@ -1792,6 +1823,7 @@ export default function App() {
     <DictionaryPresentationProvider presentation={dictionaryPresentation}>
       <IconSprite />
 
+      {checkpointError && <div role="alert" className="fixed inset-x-4 top-4 z-[9999] mx-auto max-w-xl rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{t('runtime.' + checkpointError)}</div>}
       <WebShell
         current={mainStack[mainStack.length - 1] ?? 's-home'}
         focused={viewMode !== 'main'}
@@ -1802,11 +1834,11 @@ export default function App() {
           <HomeScreen
             active={viewMode === 'main'}
             onGo={goMain}
+            onResume={pausedLightweightFlow ? () => { setViewMode(pausedLightweightFlow); setPausedLightweightFlow(null); } : undefined}
             onStartMixed={startMixedLearning}
-            onStartReview={startReview}
+            onStartReview={pausedLightweightFlow === 'lightweightReview' || (pausedLightweightFlow === 'study' && runtimeCheckpoint.read().structuredMode === 'review') ? () => { setViewMode(pausedLightweightFlow!); setPausedLightweightFlow(null); } : startReview}
             reviewDueN={totalReviewCount}
-            signed={signed}
-            onSign={doSign}
+            onRecordContext={() => goMain('s-semantic-world', { worldAction: 'create' })}
             mixedReadyN={plannedInitialTargetIds.length + totalReviewCount}
           />
 
@@ -1829,24 +1861,15 @@ export default function App() {
 
           {/* 3. 我的内容 */}
           <ContentScreen
-            active={viewMode === 'main' && mainStack.includes('s-content')}
-            onBack={backMain}
-            onCreatePersonalMeaning={() => goMain('s-semantic-world', { worldAction: 'create' })}
-            onOpenPersonalMeaning={openPersonalMeaning}
-            onOpenSense={openSemanticWorldSense}
-            onOpenSection={openContentSection}
-          />
-
-          {/* 3.1 我的语义世界：Personal Meaning / Sense / Binding 事实投影 */}
-          <SemanticWorldScreen
-            active={viewMode === 'main' && mainStack.includes('s-semantic-world')}
+            active={viewMode === 'main' && (mainStack.includes('s-content') || mainStack.includes('s-semantic-world'))}
+            screenId={mainStack.includes('s-semantic-world') ? 's-semantic-world' : 's-content'}
             initialAction={params.worldAction === 'create' ? 'create' : undefined}
-            onBack={backMain}
-            onOpenSense={openSemanticWorldSense}
+            onBrowseExisting={() => goMain('s-learning-entry')}
             onOpenPersonalMeaning={openPersonalMeaning}
             onOpenConfirmedSense={openConfirmedSense}
+            onOpenSense={openSemanticWorldSense}
+            onOpenSection={openContentSection}
             toast={toast}
-            presentation={semanticWorldPresentation}
           />
 
           {/* 3.1.1 AI 澄清：一段对话收敛 Focus / Sense / Expression，一次确认落三个事实 */}
@@ -1926,28 +1949,6 @@ export default function App() {
             onBack={backMain}
           />
 
-          {/* 3.6 在学词书 (Word List / 单词表) */}
-          <WordListScreen
-            active={viewMode === 'main' && mainStack.includes('s-wordlist')}
-            bookTitle="COCA 20000 (上)"
-            totalBookWords={5585}
-            onBack={backMain}
-            onOpenListening={() => goMain('s-listening')}
-            onOpenDict={openDictModal}
-            onOpenSpelling={openSpelling}
-            toast={toast}
-          />
-
-          {/* 3.7 自由练习 / 随身听 (仅义项粒度的独立练习投影) */}
-          <PortableListeningScreen
-            active={viewMode === 'main' && mainStack.includes('s-listening')}
-            bookTitle="COCA 20000 (上)"
-            items={PRACTICE_SENSES}
-            onBack={backMain}
-            toast={toast}
-            presentation={portableListeningPresentation}
-          />
-
           {/* 3.8 自由练习 / 真实语流泛化（YouGlish，按 Expression form 检索） */}
           <YouGlishListeningScreen
             active={viewMode === 'main' && mainStack.includes('s-real-world-listening')}
@@ -1961,20 +1962,17 @@ export default function App() {
             active={viewMode === 'main' && mainStack.includes('s-study')}
             tab={studyTab}
             onTabChange={setStudyTab}
-            onBack={backMain}
             onAddLearning={() => goMain('s-learning-entry')}
             onOpenTargetLibrary={() => goMain('s-learning-library')}
-            onOpenDefaultPolicy={openDefaultLearningPolicy}
-            onOpenStats={() => goMain('s-stats')}
-            onSign={doSign}
-            signed={signed}
-            streak={streak}
+            onOpenTarget={openLearningTarget}
+            onPolicyChange={policy => dispatchJourney({ type: 'selectDefaultPolicy', policy })}
             defaultPolicy={defaultLearningPolicy}
             learningTargetCount={visibleLearningTargetIds.length}
             readyInitialCount={plannedInitialTargetIds.length}
             reviewCount={totalReviewCount}
             dailyNewCount={dailyNewCount}
             learningRecords={learningRecords}
+            onOpenStats={() => goMain('s-stats')}
             onDailyNewCountChange={setDailyNewCount}
           />
 
@@ -2053,32 +2051,21 @@ export default function App() {
           <StatsScreen
             active={viewMode === 'main' && mainStack.includes('s-stats')}
             onBack={backMain}
-            todayLearnWords={Math.max(3, queueStats.sessionsCompleted)}
-            todayReviewWords={reviewStats.completedTargets}
-            todayMinutes={14 + Math.round((queueStats.sessionsCompleted + reviewStats.completedTargets) / 2)}
-            totalMinutes={15348}
-            toast={toast}
+            records={learningRecords}
+            onOpenTarget={openLearningTarget}
           />
 
           {/* 5. 个人中心 */}
           <ProfileScreen
             active={viewMode === 'main' && mainStack.includes('s-profile')}
-            onBack={backMain}
             onGoStudyPlan={() => {
-              backMain();
-              setTimeout(() => {
-                goMain('s-study');
-                setStudyTab('a');
-              }, 260);
+              setStudyTab('a');
+              goMain('s-study');
             }}
-            onGoStudySettings={() => {
-              backMain();
-              setTimeout(() => {
-                goMain('s-study');
-                setStudyTab('b');
-              }, 260);
-            }}
-            toast={toast}
+            defaultPolicy={defaultLearningPolicy}
+            dailyNewCount={dailyNewCount}
+            onPolicyChange={policy => dispatchJourney({ type: 'selectDefaultPolicy', policy })}
+            onDailyNewCountChange={setDailyNewCount}
           />
 
           {/* 5.1 轻量首次运行入口：创建运行即提交并锁定 Learning Policy。 */}
@@ -2090,7 +2077,7 @@ export default function App() {
             completed={lightweightInitialProtocolState?.progress.completed ?? false}
             hasNextTarget={lightweightInitialTargetIds.length > 1}
             onExit={exitLightweightRuntime}
-            onReveal={() => { revealLightweightExpression(); }}
+            onReveal={() => { try {revealLightweightExpression();} catch {toast(runtimeText('saveError'));} }}
             onRate={handleLightweightInitialRating}
             onFinish={finishLightweightRuntime}
           />
@@ -2104,10 +2091,10 @@ export default function App() {
               onRateTarget={completeLightweightReviewTarget}
               onCompleteRepair={completeLightweightReviewRepair}
               finishLabel={schedulerReviewCount > 0
-                ? '继续剩余复习'
+                ? t('runtime.continueReview')
                 : pendingMixedTargetRef.current?.length
-                  ? '继续今天的新学'
-                  : '完成并回到首页'}
+                  ? t('runtime.continueNew')
+                  : t('runtime.home')}
               onFinish={finishLightweightReview}
             />
           )}
@@ -2139,6 +2126,7 @@ export default function App() {
           {/* ================= 独立学习流 (Study Flow) ================= */}
           {/* 6. 单词学习流程 */}
           <LearnScreen
+            hasTask={flowMode==='demo'||!!(flowMode==='review'?reviewSession:learnSession)}
             active={viewMode === 'study'}
             isBehind={exampleSheet !== null}
             curWord={currentWord}
@@ -2161,7 +2149,6 @@ export default function App() {
               setMenuPersonalContent(personalContent);
               setMenuMoreOpen(true);
             }}
-            onOpenSpelling={openSpelling}
             reviewAssessmentKind={currentReviewAssessmentKind}
             reviewAssessmentTaskKey={currentReviewAssessmentTaskKey}
             assessmentPackageIdentity={currentAssessmentPackageIdentity}
@@ -2236,16 +2223,6 @@ export default function App() {
             toast={toast}
           />
 
-          {/* 10. 独立单词拼写练习全屏弹窗 (Spelling Modal) */}
-          <SpellingModal
-            active={!!spellingWord}
-            wordData={spellingWord}
-            mode={spellingMode}
-            cueText={spellingCue}
-            onClose={closeSpelling}
-            toast={toast}
-          />
-
           {/* ================= 本组结算页 (Finish Flow) ================= */}
           {/* 11. Structured Graduation / Declared Mastery 总结不复用旧词组完成叙事。 */}
           {initialSummary && (
@@ -2253,7 +2230,7 @@ export default function App() {
               active={viewMode === 'finish' && flowMode === 'learn'}
               graduatedTargetIds={initialSummary.graduatedTargetIds}
               declaredMasteryTargetIds={initialSummary.declaredMasteryTargetIds}
-              onExit={exitLearn}
+              onExit={exitStructuredSummary}
             />
           )}
 
@@ -2263,7 +2240,7 @@ export default function App() {
               retainingTargetIds={retentionSummary.retainingTargetIds}
               relearningCompletedTargetIds={retentionSummary.relearningCompletedTargetIds}
               declaredMasteryTargetIds={retentionSummary.declaredMasteryTargetIds}
-              onExit={exitLearn}
+              onExit={exitStructuredSummary}
             />
           )}
 
@@ -2304,7 +2281,7 @@ export default function App() {
             {menuPersonalContent && (
               <>
                 <div className={uiClass("menu-personal-context")}>
-                  <span>当前义项</span>
+                  <span>{t('assurance.currentMeaning')}</span>
                   <strong>{menuPersonalContent.lemma}</strong>
                   <small>{menuPersonalContent.guideLabelL1}</small>
                 </div>
@@ -2315,7 +2292,7 @@ export default function App() {
                     openNoteEditor(content.lemma, content.senseKey, content.guideLabelL1);
                   }}
                 >
-                  <svg className={uiClass("icon")}><use href="#i-pen" /></svg>写／编辑笔记
+                  <svg className={uiClass("icon")}><use href="#i-pen" /></svg>{t('assurance.note')}
                 </button>
                 <button
                   onClick={() => {
@@ -2326,7 +2303,7 @@ export default function App() {
                   }}
                 >
                   <svg className={uiClass("icon")}><use href="#i-bulb" /></svg>
-                  {menuPersonalAnchors.length > 0 ? `我的场景 · ${menuPersonalAnchors.length}` : '建立我的场景'}
+                  {t('assurance.personalScene')}
                 </button>
                 {menuPersonalAnchors.length > 0 && (
                   <button
@@ -2336,7 +2313,7 @@ export default function App() {
                       setSceneEditorTarget({ content });
                     }}
                   >
-                    <svg className={uiClass("icon")}><use href="#i-penplus" /></svg>再建立一个场景
+                    <svg className={uiClass("icon")}><use href="#i-penplus" /></svg>{t('assurance.addScene')}
                   </button>
                 )}
                 <div className={uiClass("menu-section-divider")} />
@@ -2345,31 +2322,27 @@ export default function App() {
             <button
               onClick={() => {
                 closeMenus();
-                exitLearn();
-                goMain('s-study');
-                setStudyTab('b');
+                setLearningPreferencesOpen(true);
               }}
             >
-              <svg className={uiClass("icon")}><use href="#i-sliders" /></svg>学习偏好
-            </button>
-            <button onClick={() => { closeMenus(); toast('沉浸场景：为学习界面更换背景与音效'); }}>
-              <svg className={uiClass("icon")}><use href="#i-music" /></svg>沉浸场景
-            </button>
-            <button onClick={() => { closeMenus(); toast('小窍门：先回想再选择，记得更牢'); }}>
-              <svg className={uiClass("icon")}><use href="#i-bulb" /></svg>小窍门
-            </button>
-            <button onClick={() => { closeMenus(); toast('纠错｜举报'); }}>
-              <svg className={uiClass("icon")}><use href="#i-fix" /></svg>纠错｜举报
+              <svg className={uiClass("icon")}><use href="#i-sliders" /></svg>{t('assurance.preferences')}
             </button>
           </div>
+
+          {learningPreferencesOpen && viewMode==='study' && <LearningPreferencesPanel
+            defaultPolicy={defaultLearningPolicy} dailyNewCount={dailyNewCount}
+            onPolicyChange={policy=>dispatchJourney({type:'selectDefaultPolicy',policy})}
+            onDailyNewCountChange={setDailyNewCount}
+            onClose={closeLearningPreferences}
+          />}
 
           {/* 词书设置菜单 */}
           <div className={uiClass(`menu${menuBookOpen ? ' on' : ''}`, "#menu-book")} id="menu-book">
             <button onClick={() => { closeMenus(); toast('选择学习范围：按词频段 / 章节筛选'); }}>
               <svg className={uiClass("icon")}><use href="#i-filter" /></svg>选择学习范围
             </button>
-            <button onClick={() => { closeMenus(); goMain('s-wordlist'); }}>
-              <svg className={uiClass("icon")}><use href="#i-list" /></svg>查看词书单词表
+            <button onClick={() => { closeMenus(); setMainStack(['s-study', 's-learning-library']); }}>
+              <svg className={uiClass("icon")}><use href="#i-list" /></svg>查看学习内容
             </button>
             <button onClick={() => { closeMenus(); toast('开始下载离线单词包…'); }}>
               <svg className={uiClass("icon")}><use href="#i-dl" /></svg>下载离线单词包

@@ -1,4 +1,15 @@
-import { previewStorage } from './previewStorage';
+import { previewStorage as legacyPreviewStorage } from './previewStorage';
+import { runtimeCheckpoint } from '../learningRuntime/runtimeCheckpoint';
+const previewStorage = {
+  getItem(key:string) {
+    return runtimeCheckpoint.read().learningStorage?.[key] ?? legacyPreviewStorage.getItem(key);
+  },
+  setItem(key:string,value:string) {
+    if(key==='sensa_retention_memory_v1'||key==='sensa_review_runtime_v3') {
+      runtimeCheckpoint.update({learningStorage:{...runtimeCheckpoint.read().learningStorage,[key]:value}});
+    } else legacyPreviewStorage.setItem(key,value);
+  },
+};
 import type { GradedMemoryOutcome } from '@sensa/learning-kernel';
 import { FSRSItem, Rating, initFSRSFromLearn, reviewFSRS } from './fsrs';
 import type { Word } from '../types';
@@ -120,9 +131,7 @@ class StorageService {
   private knownCache: Set<string> | null = null;
   private listeners: Set<() => void> = new Set();
 
-  constructor() {
-    this.initDefaultFSRSIfEmpty();
-  }
+
 
   public subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -130,33 +139,21 @@ class StorageService {
   }
 
   private notify() {
-    this.listeners.forEach((fn) => {
+    runtimeCheckpoint.afterCommit(()=>this.listeners.forEach((fn) => {
       try {
         fn();
       } catch (e) {
         console.error(e);
       }
-    });
+    }));
   }
 
   /**
    * Keep an empty local runtime store until the installed Learning Catalog
    * supplies learner-specific Retention Target identities.
    */
-  private initDefaultFSRSIfEmpty() {
-    try {
-      const raw = previewStorage.getItem(STORAGE_KEYS.FSRS_ITEMS);
-      if (!raw) {
-        previewStorage.setItem(STORAGE_KEYS.FSRS_ITEMS, JSON.stringify({}));
-        this.fsrsCache = {};
-      }
-    } catch {
-      // 降级支持非浏览器/无 localStorage 环境
-    }
-  }
-
   public getFSRSItems(): Record<string, FSRSItem> {
-    if (this.fsrsCache) return this.fsrsCache;
+
     try {
       const raw = previewStorage.getItem(STORAGE_KEYS.FSRS_ITEMS);
       if (raw) {
@@ -176,7 +173,7 @@ class StorageService {
     try {
       previewStorage.setItem(STORAGE_KEYS.FSRS_ITEMS, JSON.stringify(items));
     } catch (e) {
-      console.warn('Failed to save FSRS item to localStorage', e);
+      throw e;
     }
     this.notify();
   }
@@ -249,9 +246,8 @@ class StorageService {
   }
 
   /**
-   * Apply the one Review runtime effect seam. Memory projection and
-   * Relearning progress use separate storage records even though the MVP
-   * keeps both in localStorage.
+   * Apply the one Review runtime effect seam. Memory projection, Relearning progress
+   * and the queue cursor commit together in the isolated local checkpoint.
    */
   public applyReviewRuntimeEffect<TContent>(effect: ReviewRuntimeEffect<TContent>): void {
     if (effect.type === 'retention_outcome') {
@@ -418,7 +414,7 @@ class StorageService {
   }
 
   private getReviewRuntimeStore(): ReviewRuntimeStore {
-    if (this.reviewRuntimeCache) return this.reviewRuntimeCache;
+
     const empty: ReviewRuntimeStore = {
       version: 3,
       settledOutcomes: {},
@@ -457,7 +453,7 @@ class StorageService {
     try {
       previewStorage.setItem(STORAGE_KEYS.REVIEW_RUNTIME, JSON.stringify(runtime));
     } catch (error) {
-      console.warn('Failed to save Review runtime state', error);
+      throw error;
     }
     this.notify();
   }
@@ -466,7 +462,7 @@ class StorageService {
     try {
       previewStorage.setItem(STORAGE_KEYS.FSRS_ITEMS, JSON.stringify(items));
     } catch (error) {
-      console.warn('Failed to save FSRS items to localStorage', error);
+      throw error;
     }
   }
 

@@ -1,7 +1,8 @@
+import { useTranslation } from 'react-i18next';
+import { uiText } from '../../i18n/uiText';
 import { uiClass } from '../ui/classes';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  contentSectionMeta,
   type ContentNoteItem,
   type ContentSectionId,
   type SavedExampleItem,
@@ -33,12 +34,12 @@ const SenseRow = ({ item, onOpen }: { item: PracticeSenseItem; onOpen: () => voi
 
 const EmptyState = ({ section }: { section: ContentSectionId }) => {
   const copy: Record<ContentSectionId, { icon: string; title: string; body: string }> = {
-    recent: { icon: '◷', title: '还没有可显示的学习记录', body: '完成具体意思的学习后，它会按时间出现在这里。' },
-    learned: { icon: '✓', title: '还没有已学意思', body: '开始今天的学习，你形成过连接的意思会留在这里。' },
-    known: { icon: '◎', title: '还没有已会声明', body: '只有明确标记为“这个意思已会”的内容才会出现。' },
-    'saved-senses': { icon: '☆', title: '还没有收藏意思', body: '在意思详情或自由练习中点收藏，稍后从这里回来。' },
-    'saved-examples': { icon: '“', title: '还没有收藏例句', body: '看到值得反复体会的例句时，可以单独保存它。' },
-    notes: { icon: '✎', title: '还没有笔记', body: '给某个具体意思写下自己的理解，它会出现在这里。' },
+    recent: { icon: '◷', get title() { return uiText('noLearningHistoryYet'); }, get body() { return uiText('meaningsAppearHereAfterYouStudyThem'); } },
+    learned: { icon: '✓', get title() { return uiText('noStudiedMeaningsYet'); }, get body() { return uiText('theMeaningsYouStudyWillAppearHere'); } },
+    known: { icon: '◎', get title() { return uiText('noMeaningsMarkedAsKnown'); }, get body() { return uiText('onlyMeaningsYouExplicitlyMarkAsKnown'); } },
+    'saved-senses': { icon: '☆', get title() { return uiText('noSavedMeaningsYet'); }, get body() { return uiText('saveAMeaningFromItsDetailsOr'); } },
+    'saved-examples': { icon: '“', get title() { return uiText('noSavedExamplesYet'); }, get body() { return uiText('saveAnExampleYouWantToRevisit'); } },
+    notes: { icon: '✎', get title() { return uiText('noNotesYet'); }, get body() { return uiText('writeANoteOnASpecificMeaning'); } },
   };
   const item = copy[section];
   return (
@@ -58,9 +59,10 @@ export const ContentLibraryScreen = ({
   onOpenExample,
   onEditNote,
 }: ContentLibraryScreenProps) => {
+  useTranslation();
   const projection = useContentProjection();
   const [query, setQuery] = useState('');
-  const meta = contentSectionMeta[section];
+  const meta = { title: uiText(section), description: '' };
 
   useEffect(() => setQuery(''), [section]);
 
@@ -94,7 +96,7 @@ export const ContentLibraryScreen = ({
   return (
     <section className={uiClass(`screen content-subscreen${active ? ' active' : ''}`, "#s-content-library")} id="s-content-library" data-anim="slide">
       <header className={uiClass("content-nav")}>
-        <button className={uiClass("content-nav-back")} onClick={onBack} aria-label="返回我的内容">
+        <button className={uiClass("content-nav-back")} onClick={onBack} aria-label={uiText('backToMyContent4')}>
           <svg className={uiClass("icon")}><use href="#i-chev-l" /></svg>
         </button>
         <h1>{meta.title}</h1>
@@ -102,24 +104,23 @@ export const ContentLibraryScreen = ({
       </header>
 
       <div className={uiClass("content-page-body")}>
-        <p className={uiClass("content-page-intro")}>{meta.description}</p>
         <label className={uiClass("content-search")}>
           <svg className={uiClass("icon")}><use href="#i-search" /></svg>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="只搜索我的内容"
-            aria-label={`搜索${meta.title}`}
+            placeholder={uiText('searchMyContent')}
+            aria-label={uiText('searchSection', { section: meta.title })}
           />
-          {query && <button onClick={() => setQuery('')} aria-label="清空搜索">×</button>}
+          {query && <button onClick={() => setQuery('')} aria-label={uiText('clearSearch')}>×</button>}
         </label>
 
         {filteredTotal === 0 ? (
           query ? (
             <div className={uiClass("content-empty content-empty-compact")}>
               <span className={uiClass("content-empty-icon")} aria-hidden="true">⌕</span>
-              <h3>没有匹配内容</h3>
-              <p>这里不会搜索全局词典，只检索你的个人内容。</p>
+              <h3>{uiText('noMatchingContent')}</h3>
+              <p>{uiText('searchCoversYourContentOnly')}</p>
             </div>
           ) : <EmptyState section={section} />
         ) : (
@@ -163,10 +164,10 @@ export const ContentLibraryScreen = ({
                   {item.isLegacy && (
                     <span className={uiClass("content-migration-label")}>
                       {item.candidateCount > 1
-                        ? `旧笔记：待从 ${item.candidateCount} 个意思中选择`
+                        ? uiText('legacyChoices', { count: item.candidateCount })
                         : item.candidateCount === 1
-                          ? '旧词头笔记：待迁移到这个意思'
-                          : '旧笔记：待绑定具体意思'}
+                          ? uiText('legacyNoteReadyToLinkToThis')
+                          : uiText('legacyNoteChooseASpecificMeaning')}
                     </span>
                   )}
                 </span>

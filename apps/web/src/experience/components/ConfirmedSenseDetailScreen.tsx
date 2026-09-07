@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { uiText } from '../../i18n/uiText';
 import { uiClass } from '../ui/classes';
 /**
  * Read-only endpoint for Meaning Formation.
@@ -28,35 +30,35 @@ export interface ConfirmedSenseDetailScreenProps {
 }
 
 const relationLabels: Record<SensaExpressionBindingRelation, string> = {
-  realizes: '实现这个意思',
-  approximates: '接近这个意思',
-  evokes: '唤起这个意思',
+  get realizes() { return uiText('expressesThisMeaning'); },
+  get approximates() { return uiText('approximatesThisMeaning'); },
+  get evokes() { return uiText('evokesThisMeaning'); },
 };
 
 const coverageLabels: Record<SensaSemanticCoverage, string> = {
-  exact: '完全覆盖',
-  broader: '范围更宽',
-  narrower: '范围更窄',
-  overlapping: '部分重叠',
+  get exact() { return uiText('exactCoverage'); },
+  get broader() { return uiText('broaderScope'); },
+  get narrower() { return uiText('narrowerScope'); },
+  get overlapping() { return uiText('partialOverlap'); },
 };
 
 const expressionTypeLabels = {
-  word: '单词',
-  phrase: '短语',
-  construction: '构式',
-  sentence: '完整句子',
-  utterance_strategy: '表达方式',
+  get word() { return uiText('word'); },
+  get phrase() { return uiText('phrase'); },
+  get construction() { return uiText('construction'); },
+  get sentence() { return uiText('sentence'); },
+  get utterance_strategy() { return uiText('expressionStrategy'); },
 } as const;
 
 const languageLabel = (languageTag: string): string =>
-  languageTag === 'en' ? '英语' : languageTag;
+  languageTag === 'en' ? uiText('english') : languageTag;
 
 const shortId = (id: string): string => id.split('-')[0].toUpperCase();
 
 const unavailableCopy = (reason: string) => (
   <div className={uiClass("csd-unavailable")} role="alert">
     <span className={uiClass("csd-unavailable-mark")} aria-hidden="true">!</span>
-    <h2>暂时无法打开</h2>
+    <h2>{uiText('unableToOpen')}</h2>
     <p>{reason}</p>
   </div>
 );
@@ -91,34 +93,34 @@ const SenseSpec = ({
   unresolvedQuestions: readonly string[];
 }) => (
   <details className={uiClass("csd-section csd-spec-details is-standalone")}>
-      <summary>场景与边界 <span>v{version ?? '1'}</span></summary>
+      <summary>{uiText('scenesAndBoundaries')}<span>v{version ?? '1'}</span></summary>
       <div className={uiClass("csd-spec-details-body")}>
         {spec.prototypeScenes.map((scene, index) => (
           <article className={uiClass("csd-prototype-scene")} key={`${scene.summary}-${index}`}>
-            <small>原型场景{spec.prototypeScenes.length > 1 ? ` ${index + 1}` : ''}</small>
+            <small>{uiText('typicalScene')}{spec.prototypeScenes.length > 1 ? ` ${index + 1}` : ''}</small>
             <h3>{scene.summary}</h3>
             <dl>
               {scene.participantRoles.length > 0 && (
-                <div><dt>参与角色</dt><dd>{scene.participantRoles.join(' / ')}</dd></div>
+                <div><dt>{uiText('participants')}</dt><dd>{scene.participantRoles.join(' / ')}</dd></div>
               )}
               {scene.states.length > 0 && (
-                <div><dt>状态</dt><dd>{scene.states.join('；')}</dd></div>
+                <div><dt>{uiText('state')}</dt><dd>{scene.states.join('；')}</dd></div>
               )}
               {scene.directionOrCausality && (
-                <div><dt>方向 / 因果</dt><dd>{scene.directionOrCausality}</dd></div>
+                <div><dt>{uiText('directionCausality')}</dt><dd>{scene.directionOrCausality}</dd></div>
               )}
             </dl>
           </article>
         ))}
 
         <div className={uiClass("csd-spec-columns")}>
-          <SpecList title="包含" items={spec.includedCases} tone="include" />
-          <SpecList title="排除" items={spec.excludedCases} tone="exclude" />
+          <SpecList title={uiText('includes')} items={spec.includedCases} tone="include" />
+          <SpecList title={uiText('excludes')} items={spec.excludedCases} tone="exclude" />
         </div>
 
         {spec.neighborContrasts.length > 0 && (
           <section className={uiClass("csd-neighbors")}>
-            <h3>与相邻意义的区别</h3>
+            <h3>{uiText('distinctionsFromNearbyMeanings')}</h3>
             <ul>
               {spec.neighborContrasts.map((contrast) => (
                 <li key={contrast.label}>
@@ -132,7 +134,7 @@ const SenseSpec = ({
 
         {spec.openQuestions.length > 0 || unresolvedQuestions.length > 0 ? (
           <section className={uiClass("csd-open-questions")}>
-            <h3>确认时仍保留的问题</h3>
+            <h3>{uiText('remainingQuestions')}</h3>
             <ul>
               {[...spec.openQuestions, ...unresolvedQuestions].map((question, index) => (
                 <li key={`${question}-${index}`}>{question}</li>
@@ -150,10 +152,10 @@ const BindingSummary = ({ alignment }: { alignment: JourneyAlignmentView }) => {
     <section className={uiClass(`csd-section csd-binding-summary${hasBindings ? ' is-bound' : ''}`)} aria-labelledby="csd-binding-heading">
       <header className={uiClass("csd-section-head")}>
         <div>
-          <small>目标表达</small>
-          <h2 id="csd-binding-heading">已经绑定的表达</h2>
+          <small>{uiText('targetExpression')}</small>
+          <h2 id="csd-binding-heading">{uiText('connectedExpressions')}</h2>
         </div>
-        <span className={uiClass("csd-fact-pill")}>{hasBindings ? '已绑定' : '待绑定'}</span>
+        <span className={uiClass("csd-fact-pill")}>{hasBindings ? uiText('connected') : uiText('pending')}</span>
       </header>
       {hasBindings ? (
         <ul className={uiClass("csd-binding-list")}>
@@ -169,7 +171,7 @@ const BindingSummary = ({ alignment }: { alignment: JourneyAlignmentView }) => {
         </ul>
       ) : (
         <div className={uiClass("csd-binding-empty")}>
-          <b>还没有确认目标表达</b>
+          <b>{uiText('noTargetExpressionConfirmedYet')}</b>
         </div>
       )}
     </section>
@@ -183,6 +185,7 @@ export const ConfirmedSenseDetailScreen = ({
   onBack,
   onOpenBinding,
 }: ConfirmedSenseDetailScreenProps) => {
+  useTranslation();
   const screenRef = useRef<HTMLElement>(null);
   const { detail, status } = useJourneyDetail(personalMeaningId);
   const focus = detail?.focuses.find((item) => item.meaningFocusId === meaningFocusId) ?? null;
@@ -198,34 +201,34 @@ export const ConfirmedSenseDetailScreen = ({
   const body = !status.ok
     ? (
       <div className={uiClass("csd-error")} role="alert">
-        <b>个人意义数据无法读取</b>
-        <p>{status.error ?? '本机个人意义数据不可用。'}</p>
-        <button type="button" onClick={onBack}>返回</button>
+        <b>{uiText('unableToLoadYourMeanings')}</b>
+        <p>{status.error ?? uiText('localMeaningDataIsUnavailable')}</p>
+        <button type="button" onClick={onBack}>{uiText('back')}</button>
       </div>
     )
     : !personalMeaningId || !meaningFocusId
-      ? unavailableCopy('没有找到对应的经验与已确认意思。')
+      ? unavailableCopy(uiText('theContextAndConfirmedMeaningWereNot'))
       : !detail || !alignment
-        ? unavailableCopy('没有找到对应的已确认 Sense。')
+        ? unavailableCopy(uiText('theConfirmedMeaningWasNotFound'))
         : !alignment.semanticSpec
-          ? unavailableCopy('这个已确认意思缺少 Sense 语义规格，暂时不能安全展示。')
+          ? unavailableCopy(uiText('theSemanticSpecificationIsMissingThisMeaning'))
           : (
             <>
               <section className={uiClass("csd-hero")}>
                 <span className={uiClass("csd-confirm-mark")} aria-hidden="true">✓</span>
-                <small>{alignment.confirmedBindings.length > 0 ? '已连接表达' : '已确认意思'}</small>
+                <small>{alignment.confirmedBindings.length > 0 ? uiText('expressionConnected') : uiText('confirmedMeaning')}</small>
                 <h2>{alignment.semanticSpec.coreMeaningFocus}</h2>
-                <p>{focus ? `来自侧面：${focus.statement}` : '由当前 Context 中定位的 Expression 直接解析'}</p>
+                <p>{focus ? uiText('fromFocus', { focus: focus.statement }) : uiText('resolvedDirectlyFromTheExpressionInThis')}</p>
               </section>
 
               <section className={uiClass("csd-next-step")}>
                 <div className={uiClass("csd-actions")}>
                   {focus && alignment.expressionCandidates.length > 0 && (
                     <button type="button" className={uiClass("csd-primary")} onClick={onOpenBinding}>
-                      {alignment.confirmedBindings.length > 0 ? '查看/更改目标表达' : '绑定目标表达'} <span aria-hidden="true">→</span>
+                      {alignment.confirmedBindings.length > 0 ? uiText('viewOrChangeExpression') : uiText('connectAnExpression')} <span aria-hidden="true">→</span>
                     </button>
                   )}
-                  <button type="button" onClick={onBack}>返回词义世界</button>
+                  <button type="button" onClick={onBack}>{uiText('backToMyContent3')}</button>
                 </div>
               </section>
 
@@ -235,12 +238,12 @@ export const ConfirmedSenseDetailScreen = ({
                 unresolvedQuestions={alignment.unresolvedQuestions}
               />
               <details className={uiClass("csd-identity-details")}>
-                <summary>来源与技术信息</summary>
+                <summary>{uiText('sourceDetails')}</summary>
                 <p>
                   ID {shortId(alignment.senseId)} · v{alignment.senseVersionNumber ?? '1'}
                 </p>
                 <p>
-                  来源：{alignment.origin}
+                  {uiText('source')}{alignment.origin}
                   {alignment.generator ? ` · ${alignment.generator.provider} / ${alignment.generator.model}` : ''}
                 </p>
               </details>
@@ -256,10 +259,10 @@ export const ConfirmedSenseDetailScreen = ({
       data-anim="slide"
     >
       <header className={uiClass("content-nav csd-nav")}>
-        <button type="button" className={uiClass("content-nav-back")} onClick={onBack} aria-label="返回上一页">
+        <button type="button" className={uiClass("content-nav-back")} onClick={onBack} aria-label={uiText('back2')}>
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
-        <h1>已确认意思</h1>
+        <h1>{uiText('confirmedMeaning')}</h1>
         <span />
       </header>
       <div className={uiClass("content-page-body csd-body")}>{body}</div>

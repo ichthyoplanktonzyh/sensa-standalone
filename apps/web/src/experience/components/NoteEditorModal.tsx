@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { uiText } from '../../i18n/uiText';
 import { uiClass } from '../ui/classes';
 import { useState, useEffect, useRef } from 'react';
 import type { Word, QuickDictEntry } from '../types';
@@ -24,6 +26,7 @@ export const NoteEditorModal = ({
   onSave,
   toast,
 }: NoteEditorModalProps) => {
+  useTranslation();
   const [noteText, setNoteText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -79,7 +82,7 @@ export const NoteEditorModal = ({
   const handleSave = () => {
     if (senseId) noteService.setSenseNote(senseId, noteText);
     else noteService.setNote(wordStr, noteText);
-    toast('已保存笔记');
+    toast(uiText('noteSaved'));
     if (onSave) {
       onSave(noteText);
     }
@@ -92,17 +95,17 @@ export const NoteEditorModal = ({
         className={uiClass("personal-note-sheet")}
         role="dialog"
         aria-modal="true"
-        aria-label={`${wordStr} 的个人笔记`}
+        aria-label={uiText('noteFor', { word: wordStr })}
       >
         <header className={uiClass("personal-note-header")}>
-          <button type="button" onClick={onClose} aria-label="关闭笔记编辑">
+          <button type="button" onClick={onClose} aria-label={uiText('close')}>
             <svg className={uiClass("icon")}><use href="#i-close" /></svg>
           </button>
           <div>
-            <span>PERSONAL SENSE NOTE</span>
-            <h2>我的笔记</h2>
+
+            <h2>{uiText('myNotes')}</h2>
           </div>
-          <button type="button" onClick={handleSave} aria-label="保存笔记">
+          <button type="button" onClick={handleSave} aria-label={uiText('saveNote')}>
             <svg className={uiClass("icon")}><use href="#i-chk-simple" /></svg>
           </button>
         </header>
@@ -113,24 +116,22 @@ export const NoteEditorModal = ({
         </div>
 
         <main className={uiClass("personal-note-canvas")}>
-          <label htmlFor="personal-sense-note">此刻，你想为这个意思留下什么？</label>
+          <label htmlFor="personal-sense-note">{uiText('notePrompt')}</label>
           <textarea
             id="personal-sense-note"
             ref={textareaRef}
-            placeholder="写下自己的理解、提醒，或一句以后想再看到的话……"
+            placeholder={uiText('notePlaceholder')}
             value={noteText}
             maxLength={1000}
             onChange={(e) => setNoteText(e.target.value)}
           />
           <footer>
-            <span>只绑定当前具体意思</span>
+            <span>{uiText('noteScope')}</span>
             <b>{noteText.length}/1000</b>
           </footer>
         </main>
 
-        <p className={uiClass("personal-note-privacy")}>
-          这条笔记只属于你；它不会被解析成标准释义、正确答案或学习证据。
-        </p>
+
       </div>
     </div>
   );

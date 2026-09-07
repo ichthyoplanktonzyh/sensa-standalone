@@ -1,3 +1,4 @@
+import { encodeQueueSnapshot, decodeQueueSnapshot } from './queueSnapshot';
 import {
   createProtocolProgressState,
   decideAndApplyProtocolTransition,
@@ -127,6 +128,35 @@ export class LearnQueue<TContent = unknown> {
   private readonly startTime: number;
   private totalAttempts = 0;
   private totalCorrect = 0;
+
+  public exportCheckpoint(): string {
+    return encodeQueueSnapshot({
+      packages: this.packages,
+      states: this.states,
+      minGap: this.minGap,
+      progressTarget: this.progressTarget,
+      currentSession: this.currentSession,
+      sessionHistory: this.sessionHistory,
+      historySnapshots: this.historySnapshots,
+      startTime: this.startTime,
+      totalAttempts: this.totalAttempts,
+      totalCorrect: this.totalCorrect
+    });
+  }
+
+  public static restoreCheckpoint<TContent>(raw: string,
+
+    orchestration = acquisitionOrchestration,
+  ): LearnQueue<TContent> {
+    const saved = decodeQueueSnapshot<Record<string, unknown>>(raw);
+    const queue = new LearnQueue<TContent>([], {}, orchestration);
+    const fields = ['packages', 'states', 'minGap', 'progressTarget', 'currentSession', 'sessionHistory', 'historySnapshots', 'startTime', 'totalAttempts', 'totalCorrect'];
+    for (const field of fields) {
+      if (!(field in saved)) throw Error('Incomplete queue checkpoint');
+      Object.assign(queue, {[field]: saved[field]});
+    }
+    return queue;
+  }
 
   constructor(
     packages: readonly SchedulablePackage<TContent>[],

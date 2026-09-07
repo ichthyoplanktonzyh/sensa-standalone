@@ -1,43 +1,72 @@
-import { ArrowRight, ArrowUpRight, BookOpen, Check, Compass, Layers3, Plus, RotateCcw, Sprout, UserRound } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, BookOpen, Plus, RotateCcw, MessageSquareText } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+
 interface HomeScreenProps {
-  active: boolean; onGo: (id: string) => void; onStartMixed: () => void;
-  onStartReview?: () => void; signed: boolean; onSign: () => void;
-  mixedReadyN: number; reviewDueN?: number;
+  active: boolean;
+  onGo: (id: string) => void;
+  onStartMixed: () => void;
+  onResume?: () => void;
+  onStartReview?: () => void;
+  onRecordContext: () => void;
+  mixedReadyN: number;
+  reviewDueN?: number;
 }
-export function HomeScreen({active,onGo,onStartMixed,onStartReview,signed,onSign,mixedReadyN,reviewDueN=0}: HomeScreenProps){
-  const newCount=Math.max(0,mixedReadyN-reviewDueN);
-  const today=new Intl.DateTimeFormat('zh-CN',{month:'long',day:'numeric',weekday:'long'}).format(new Date());
-  const description=reviewDueN>0&&newCount>0?`先处理 ${reviewDueN} 个到期复习，再开始 ${newCount} 个新意思。`:reviewDueN>0?`今天有 ${reviewDueN} 个意思需要复习。`:newCount>0?`今天可以开始 ${newCount} 个新意思。`:'今天的学习流暂时安静，可以添加内容，或稍后再回来。';
-  return <section id="s-home" className={`screen absolute inset-0 z-5 overflow-y-auto bg-paper ${active?'active':'invisible pointer-events-none'}`}>
-    <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 lg:px-12 lg:py-8">
-      <span className="flex items-center gap-2 text-sm text-muted"><span className="size-1.5 rounded-full bg-accent"/>{today}</span>
-      <button onClick={()=>onGo('s-profile')} aria-label="打开个人中心" className="grid size-11 place-items-center rounded-full border border-line bg-white text-muted transition-colors hover:bg-sage"><UserRound size={19} strokeWidth={1.5}/></button>
-    </header>
-    <main className="mx-auto max-w-6xl px-6 pb-10 lg:px-12 lg:pb-16">
-      <div className="mb-8 mt-3 flex flex-wrap items-end justify-between gap-4 lg:mb-10 lg:mt-6">
-        <div><p className="mb-3 text-sm text-muted">一点一滴，让语言成为自己的一部分。</p><h1 className="text-[28px] font-semibold tracking-tight lg:text-4xl">继续今天的学习<span className="text-accent">。</span></h1></div>
-        <button onClick={onSign} aria-pressed={signed} className={`flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-xs transition-colors ${signed?'border-accent/20 bg-sage text-accent':'border-line bg-white text-muted hover:border-accent/40'}`}>{signed?<Check size={15}/>:<Plus size={15}/>}<span>{signed?'今天已记录':'记录今天'}</span></button>
-      </div>
-      <div className="grid gap-5 xl:grid-cols-[1.65fr_1fr]">
-        <section className="relative flex min-h-96 flex-col overflow-hidden rounded-3xl bg-[#254f40] p-7 text-white sm:p-9 lg:min-h-[410px]" aria-labelledby="today-flow">
-          <div className="pointer-events-none absolute -right-20 -top-32 size-96 rounded-full border border-white/10" aria-hidden="true"/><div className="pointer-events-none absolute -right-28 -top-12 size-96 rounded-full border border-white/10" aria-hidden="true"/><div className="pointer-events-none absolute -right-36 top-8 size-96 rounded-full border border-white/10" aria-hidden="true"/>
-          <div className="relative"><span className="mb-7 inline-flex items-center gap-2 text-xs tracking-wider text-[#c6d9c2]"><Sprout size={16}/>今日学习流</span><h2 id="today-flow" className="max-w-xs text-2xl font-medium leading-relaxed sm:text-3xl">把意思记在心里，<br/>把表达用在生活里。</h2><p className="mt-4 max-w-sm text-sm leading-7 text-[#c6d9c2]">{description}</p></div>
-          <div className="relative mt-8 flex items-center gap-8" aria-label="今日学习摘要"><div><strong className="font-editorial text-5xl">{newCount}</strong><span className="ml-3 text-xs text-[#c6d9c2]">个新意思</span></div><span className="h-9 w-px bg-white/20"/><div><strong className="font-editorial text-5xl">{reviewDueN}</strong><span className="ml-3 text-xs text-[#c6d9c2]">个待复习</span></div></div>
-          <button onClick={onStartMixed} disabled={mixedReadyN===0} className="relative mt-8 flex min-h-14 w-full items-center justify-between rounded-xl bg-[#e0eccd] px-5 text-sm font-semibold text-[#254f40] transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"><span>{mixedReadyN>0?'开始今天的学习':'今日已完成'}</span><ArrowRight size={19}/></button>
-        </section>
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
-          <section className="flex flex-col rounded-3xl border border-line bg-white p-7">
-            <div className="mb-5 flex items-start justify-between"><span className="grid size-11 place-items-center rounded-2xl bg-sage text-accent"><RotateCcw size={20} strokeWidth={1.5}/></span><span className="text-xs text-muted">保持连接</span></div>
-            <h2 className="text-lg font-semibold">只复习</h2><p className="mt-2 text-sm leading-6 text-muted">回到熟悉的意思，给记忆一点时间。</p>
-            <button onClick={onStartReview} disabled={!reviewDueN||!onStartReview} aria-label={reviewDueN?`只复习 ${reviewDueN} 个意思`:'今天无需复习'} className="mt-5 flex min-h-11 items-center justify-between border-t border-line pt-4 text-sm text-accent disabled:text-muted disabled:opacity-60"><span>{reviewDueN?`${reviewDueN} 个意思待复习`:'今天无需复习'}</span><ArrowRight size={17}/></button>
-          </section>
-          <button onClick={()=>onGo('s-semantic-world')} className="group flex items-center gap-4 rounded-3xl border border-[#e6e4d7] bg-[#f0efe4] p-7 text-left transition-colors hover:bg-[#e8eadc]"><span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-white/70 text-clay"><Sprout size={24} strokeWidth={1.4}/></span><span className="flex-1"><strong className="block text-base font-semibold">留下一个真实的场景</strong><span className="mt-2 block text-xs leading-6 text-muted">从自己的经历，找到想说的表达。</span></span><ArrowUpRight size={18} className="shrink-0 text-muted"/></button>
+
+export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview, onRecordContext, mixedReadyN, reviewDueN = 0 }: HomeScreenProps) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? 'zh-CN';
+  const number = new Intl.NumberFormat(locale);
+  const newCount = Math.max(0, mixedReadyN - reviewDueN);
+  const hasWork = mixedReadyN > 0;
+  const date = new Date();
+  const dateLabel = new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric', weekday: 'long' }).format(date);
+  const focus = 'focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#3c51ad]';
+
+  return <section id="s-home" className={`screen absolute inset-0 z-5 overflow-y-auto bg-[#fbfbfa] font-sans text-[#222631] ${active ? 'active' : 'invisible pointer-events-none'}`}>
+    <main className="mx-auto w-full max-w-[1160px] px-6 pb-12 pt-8 sm:px-10 lg:px-16 lg:pb-16 lg:pt-16">
+      <header className="mb-8 flex flex-wrap items-end justify-between gap-3 lg:mb-12">
+        <h1 className="text-4xl font-medium tracking-[-0.04em] lg:text-5xl">{t('home.title')}</h1>
+        <time dateTime={`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`} className="pb-1 text-xs text-[#757a84] sm:text-sm">{dateLabel}</time>
+      </header>
+
+      <section aria-labelledby="today-learning-title" className="overflow-hidden rounded-2xl border border-[#e3e5ea] bg-white">
+        <div className="flex items-center justify-between gap-4 border-b border-[#eceef1] px-6 py-5 sm:px-9">
+          <h2 id="today-learning-title" className="flex items-center gap-2.5 text-sm font-medium"><span aria-hidden="true" className="h-3 w-1 rounded-full bg-[#4f61af]"/>{t('home.plan')}</h2>
+          <button type="button" onClick={() => onGo('s-study')} aria-label={t('home.manage')} className={`flex min-h-11 items-center gap-2 text-xs text-[#707582] transition-colors hover:text-[#3c51ad] ${focus}`}><span className="hidden sm:inline">{t('home.manage')}</span><ArrowUpRight size={17}/></button>
         </div>
-      </div>
-      <section className="mt-10" aria-labelledby="explore-title"><div className="mb-5 flex items-center justify-between"><h2 id="explore-title" className="text-lg font-semibold">以你的方式，继续探索</h2><span className="hidden text-xs text-muted sm:block">每一个意思，都有一个开始</span></div>
-        <div className="grid gap-3 sm:grid-cols-3">{[{id:'s-content',title:'我的内容',description:'浏览词书、意思与例句',icon:BookOpen},{id:'s-study',title:'我的学习',description:'查看目标、记录与学习计划',icon:Layers3},{id:'s-academy',title:'自由练习',description:'在听说读写中使用语言',icon:Compass}].map(({id,title,description,icon:Icon})=><button key={id} onClick={()=>onGo(id)} className="group flex items-center gap-4 rounded-2xl border border-line bg-white p-5 text-left transition-colors hover:border-accent/40 hover:bg-sage/40"><Icon size={21} strokeWidth={1.5} className="shrink-0 text-accent"/><span className="flex-1"><strong className="block text-sm font-medium">{title}</strong><span className="mt-1.5 block text-xs leading-5 text-muted">{description}</span></span><ArrowUpRight size={16} className="text-muted opacity-50 group-hover:opacity-100"/></button>)}</div>
+        <div className="px-6 py-7 sm:px-9 sm:py-10 lg:px-12">
+          <div className="grid grid-cols-2 divide-x divide-[#e9ebef]" aria-label={t('home.summary')}>
+            {[{label:t('home.new'),count:newCount},{label:t('home.review'),count:reviewDueN}].map(({label,count},index) => <div key={index} className={index ? 'pl-7 sm:pl-12' : 'pr-7'}>
+              <span className="text-sm text-[#6d7380]">{label}</span>
+              <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1"><strong className="text-6xl font-normal leading-none tracking-[-0.06em] tabular-nums sm:text-7xl lg:text-[88px]">{number.format(count)}</strong><span className="text-xs text-[#7c818d]">{t('home.unit')}</span></div>
+            </div>)}
+          </div>
+          <p className="mb-7 mt-9 text-sm leading-6 text-[#707582]">{t(onResume ? 'runtime.resumeHint' : !hasWork ? 'home.emptyHint' : reviewDueN && newCount ? 'home.reviewFirst' : reviewDueN ? 'home.reviewOnlyHint' : 'home.newOnly')}</p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+            <button type="button" onClick={onResume ?? (hasWork ? onStartMixed : () => onGo('s-learning-entry'))}
+              className={`flex min-h-14 items-center justify-between gap-12 rounded-xl bg-[#2f3b70] px-6 text-sm font-medium text-white transition-colors hover:bg-[#25305c] motion-reduce:transition-none sm:min-w-64 ${focus}`}>
+              {t(onResume ? 'runtime.resume' : hasWork ? 'home.start' : 'home.emptyAction')}<ArrowRight size={18} strokeWidth={1.6}/>
+            </button>
+            <button type="button" onClick={onStartReview} disabled={!reviewDueN || !onStartReview}
+              aria-label={reviewDueN ? t('home.reviewCount',{count:reviewDueN}) : t('home.noReview')}
+              className={`flex min-h-12 items-center justify-center gap-2.5 rounded-lg px-3 text-sm text-[#626b85] hover:bg-[#f3f4f8] disabled:cursor-default disabled:text-[#7d828c] disabled:hover:bg-transparent ${focus}`}>
+              <RotateCcw size={16} strokeWidth={1.6}/>{t(reviewDueN ? 'home.reviewOnly' : 'home.noReview')}
+            </button>
+          </div>
+          {!hasWork && !onResume && <p className="mt-4 text-xs text-[#707582]" role="status">{t('home.empty')}</p>}
+        </div>
       </section>
-      <footer className="mt-10 flex items-center justify-center gap-3 border-t border-line pt-6 text-xs text-muted"><span className="font-editorial text-lg text-accent">sensa.</span><span>理解一个意思，连接一个世界。</span></footer>
+
+      <section aria-labelledby="add-learning-title" className="mt-10 lg:mt-12">
+        <h2 id="add-learning-title" className="mb-4 flex items-center gap-2 text-sm font-medium"><Plus size={16} strokeWidth={1.6}/>{t('home.add')}</h2>
+        <div className="grid border-y border-[#e3e5ea] sm:grid-cols-2 sm:divide-x sm:divide-[#e3e5ea]">
+          {[{title:t('home.existing'),hint:t('home.existingHint'),icon:BookOpen,action:()=>onGo('s-learning-entry')},{title:t('home.personal'),hint:t('home.personalHint'),icon:MessageSquareText,action:onRecordContext}].map(({title,hint,icon:Icon,action},index)=><button key={index} type="button" onClick={action}
+            className={`group flex min-h-28 items-center gap-4 py-6 text-left transition-colors hover:bg-[#f3f4f7] ${index ? 'border-t border-[#e3e5ea] sm:border-0 sm:pl-7' : 'sm:pr-7'} ${focus}`}>
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#e2e5ec] bg-white text-[#58627e]"><Icon size={20} strokeWidth={1.4}/></span>
+            <span className="min-w-0 flex-1"><strong className="block text-sm font-medium">{title}</strong><span className="mt-2 block text-xs leading-5 text-[#757a85]">{hint}</span></span><ArrowUpRight size={17} className="shrink-0 text-[#858b98] group-hover:text-[#3c51ad]"/>
+          </button>)}
+        </div>
+      </section>
     </main>
   </section>;
 }

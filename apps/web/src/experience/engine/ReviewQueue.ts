@@ -1,3 +1,4 @@
+import { encodeQueueSnapshot, decodeQueueSnapshot } from './queueSnapshot';
 import { memoryOutcomeExposesForgetting } from '@sensa/learning-kernel';
 import {
   isPackageRepair,
@@ -227,6 +228,40 @@ export class ReviewQueue<TContent = unknown> {
   /** Keep a replayed session aligned with the first durable learner response. */
   private readonly emittedOutcomeResults = new Map<string, ReviewAssessmentResult>();
   private historySnapshots: ReviewSnapshot<TContent>[] = [];
+
+  public exportCheckpoint(): string {
+    return encodeQueueSnapshot({
+      pendingQueue: this.pendingQueue,
+      currentSession: this.currentSession,
+      totalInitialCount: this.totalInitialCount,
+      minGap: this.minGap,
+      progressTarget: this.progressTarget,
+      completedCount: this.completedCount,
+      actionOrdinal: this.actionOrdinal,
+      totalAttempts: this.totalAttempts,
+      totalCorrect: this.totalCorrect,
+      lastActionOrdinalByRetentionTarget: this.lastActionOrdinalByRetentionTarget,
+      startTime: this.startTime,
+      runtimeTargets: this.runtimeTargets,
+      emittedOutcomeKeys: this.emittedOutcomeKeys,
+      emittedOutcomeResults: this.emittedOutcomeResults,
+      historySnapshots: this.historySnapshots
+    });
+  }
+
+  public static restoreCheckpoint<TContent>(raw: string,
+    dependencies: ReviewQueueDependencies<TContent> = {},
+    orchestration = retentionOrchestration,
+  ): ReviewQueue<TContent> {
+    const saved = decodeQueueSnapshot<Record<string, unknown>>(raw);
+    const queue = new ReviewQueue<TContent>([], dependencies, {}, orchestration);
+    const fields = ['pendingQueue', 'currentSession', 'totalInitialCount', 'minGap', 'progressTarget', 'completedCount', 'actionOrdinal', 'totalAttempts', 'totalCorrect', 'lastActionOrdinalByRetentionTarget', 'startTime', 'runtimeTargets', 'emittedOutcomeKeys', 'emittedOutcomeResults', 'historySnapshots'];
+    for (const field of fields) {
+      if (!(field in saved)) throw Error('Incomplete queue checkpoint');
+      Object.assign(queue, {[field]: saved[field]});
+    }
+    return queue;
+  }
 
   constructor(
     dueCandidates: readonly ReviewCandidate<TContent>[],

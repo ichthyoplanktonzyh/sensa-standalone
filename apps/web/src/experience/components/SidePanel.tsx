@@ -9,7 +9,6 @@ interface SidePanelProps {
   onGoStudyTab: (tab: 'a' | 'b') => void;
   onOpenExampleDirect: () => void;
   onOpenNoteEditor?: (word?: string) => void;
-  onOpenSpelling?: (word?: string) => void;
 }
 
 export const SidePanel = ({
@@ -20,16 +19,11 @@ export const SidePanel = ({
   onGoStudyTab,
   onOpenExampleDirect,
   onOpenNoteEditor,
-  onOpenSpelling,
 }: SidePanelProps) => {
   // 对照开关直接读写 store，不再经由 App 传十个 props。
   const semanticWorldPresentation = usePresentationStore((state) => state.semanticWorld);
-  const portableListeningPresentation = usePresentationStore((state) => state.portableListening);
   const dictionaryPresentation = usePresentationStore((state) => state.dictionary);
   const onSemanticWorldPresentationChange = usePresentationStore((state) => state.setSemanticWorld);
-  const onPortableListeningPresentationChange = usePresentationStore(
-    (state) => state.setPortableListening,
-  );
   const onDictionaryPresentationChange = usePresentationStore((state) => state.setDictionary);
 
   return (
@@ -101,27 +95,6 @@ export const SidePanel = ({
           </button>
         </div>
       </div>
-      <div className={uiClass("prototype-presentation-switch")} aria-label="随身听展示版本">
-        <span>随身听</span>
-        <div role="group" aria-label="选择随身听展示版本">
-          <button
-            type="button"
-            className={uiClass(portableListeningPresentation === 'sensa' ? 'active' : '')}
-            aria-pressed={portableListeningPresentation === 'sensa'}
-            onClick={() => onPortableListeningPresentationChange('sensa')}
-          >
-            Sensa MVP
-          </button>
-          <button
-            type="button"
-            className={uiClass(portableListeningPresentation === 'baseline' ? 'active' : '')}
-            aria-pressed={portableListeningPresentation === 'baseline'}
-            onClick={() => onPortableListeningPresentationChange('baseline')}
-          >
-            Baseline
-          </button>
-        </div>
-      </div>
       <div className={uiClass("prototype-presentation-switch")} aria-label="词典展示版本">
         <span>词典</span>
         <div role="group" aria-label="选择词典展示版本">
@@ -156,9 +129,9 @@ export const SidePanel = ({
         </button>
         <button
           style={{ borderColor: '#f97316', color: '#ea580c', fontWeight: 600 }}
-          onClick={() => onGoScreen('s-wordlist')}
+          onClick={() => onGoScreen('s-learning-library')}
         >
-          📖 在学词书 (图1~3)
+          学习内容列表
         </button>
         <button
           style={{ borderColor: '#eab308', color: '#ca8a04', fontWeight: 600 }}
@@ -174,12 +147,6 @@ export const SidePanel = ({
           onClick={() => onOpenNoteEditor?.('path')}
         >
           ✏️ 唤起笔记编辑 (图1)
-        </button>
-        <button
-          style={{ borderColor: '#f97316', color: '#ea580c', fontWeight: 600 }}
-          onClick={() => onOpenSpelling?.('folk')}
-        >
-          ⌨️ 单词拼写练习 (abc)
         </button>
       </div>
     </aside>

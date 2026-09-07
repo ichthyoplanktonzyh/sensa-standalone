@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { uiText } from '../../i18n/uiText';
 import { uiClass } from '../ui/classes';
 import { useEffect, useState } from 'react';
 import { exampleIdForSense } from '../contentProjection';
@@ -20,6 +22,7 @@ export const ContentExampleDetailScreen = ({
   onOpenSense,
   toast,
 }: ContentExampleDetailScreenProps) => {
+  useTranslation();
   const [saved, setSaved] = useState(false);
   const [showTranslation, setShowTranslation] = useState(true);
 
@@ -38,17 +41,17 @@ export const ContentExampleDetailScreen = ({
   const toggleSaved = () => {
     const next = personalContentService.toggleExample(exampleId);
     setSaved(next);
-    toast(next ? '已收藏这条例句' : '已取消收藏这条例句');
+    toast(next ? uiText('exampleSaved') : uiText('exampleRemovedFromSaved'));
   };
 
   return (
     <section className={uiClass(`screen content-example-detail${active ? ' active' : ''}`, "#s-content-example")} id="s-content-example" data-anim="slide">
       <header className={uiClass("content-nav content-example-nav")}>
-        <button className={uiClass("content-nav-back")} onClick={onBack} aria-label="返回上一页">
+        <button className={uiClass("content-nav-back")} onClick={onBack} aria-label={uiText('back2')}>
           <svg className={uiClass("icon")}><use href="#i-chev-l" /></svg>
         </button>
-        <h1>学习例句</h1>
-        <button className={uiClass(`content-save-button${saved ? ' on' : ''}`)} onClick={toggleSaved} aria-pressed={saved} aria-label={saved ? '取消收藏例句' : '收藏例句'}>
+        <h1>{uiText('learningExample')}</h1>
+        <button className={uiClass(`content-save-button${saved ? ' on' : ''}`)} onClick={toggleSaved} aria-pressed={saved} aria-label={saved ? uiText('unsaveExample') : uiText('saveExample')}>
           <svg className={uiClass("icon")}><use href="#i-star" /></svg>
         </button>
       </header>
@@ -61,24 +64,23 @@ export const ContentExampleDetailScreen = ({
         {showTranslation && item.example.translation && <p>{item.example.translation}</p>}
         <button className={uiClass("example-audio-button")} onClick={() => void audioService.playSentence(item.example.text, 'us')}>
           <svg className={uiClass("icon")}><use href="#i-vol" /></svg>
-          播放例句
-        </button>
+          {uiText('playExample')}</button>
       </div>
 
       <div className={uiClass("example-detail-controls")}>
         <button onClick={() => setShowTranslation((visible) => !visible)}>
           <svg className={uiClass("icon")}><use href={showTranslation ? '#i-eye-lashes' : '#i-eye'} /></svg>
-          <span>{showTranslation ? '隐藏译文' : '显示译文'}</span>
+          <span>{showTranslation ? uiText('hideTranslation') : uiText('showTranslation')}</span>
         </button>
         <button onClick={toggleSaved} className={uiClass(saved ? 'on' : '')}>
           <svg className={uiClass("icon")}><use href="#i-star" /></svg>
-          <span>{saved ? '已收藏' : '收藏例句'}</span>
+          <span>{saved ? uiText('saved') : uiText('saveExample')}</span>
         </button>
       </div>
 
       <button className={uiClass("example-sense-link")} onClick={() => onOpenSense(item)}>
         <span className={uiClass("example-sense-word")}>{item.word}</span>
-        <span className={uiClass("example-sense-copy")}><b>{item.pos} {item.meaning}</b><small>查看这句话对应的具体意思</small></span>
+        <span className={uiClass("example-sense-copy")}><b>{item.pos} {item.meaning}</b><small>{uiText('viewThisExampleSMeaning')}</small></span>
         <svg className={uiClass("chev")}><use href="#i-chev-r" /></svg>
       </button>
     </section>

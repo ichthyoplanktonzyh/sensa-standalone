@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { uiText } from '../../i18n/uiText';
 import { uiClass } from '../ui/classes';
 import { useEffect, useMemo, useState } from 'react';
 import { semanticStatusLabel, type SemanticStatus } from '../contentProjection';
@@ -28,6 +30,7 @@ export const ContentSenseDetailScreen = ({
   onEditNote,
   toast,
 }: ContentSenseDetailScreenProps) => {
+  useTranslation();
   const projection = useContentProjection();
   const [saved, setSaved] = useState(false);
   const [note, setNote] = useState('');
@@ -59,17 +62,17 @@ export const ContentSenseDetailScreen = ({
   const toggleSaved = () => {
     const next = personalContentService.toggleSense(item.senseId);
     setSaved(next);
-    toast(next ? '已收藏这个意思' : '已取消收藏这个意思');
+    toast(next ? uiText('meaningSaved') : uiText('meaningRemovedFromSaved'));
   };
 
   return (
     <section className={uiClass(`screen content-detail-screen${active ? ' active' : ''}`, "#s-content-sense")} id="s-content-sense" data-anim="slide">
       <header className={uiClass("content-nav content-detail-nav")}>
-        <button className={uiClass("content-nav-back")} onClick={onBack} aria-label="返回上一页">
+        <button className={uiClass("content-nav-back")} onClick={onBack} aria-label={uiText('back2')}>
           <svg className={uiClass("icon")}><use href="#i-chev-l" /></svg>
         </button>
-        <span className={uiClass("content-detail-kicker")}>具体意思</span>
-        <button className={uiClass(`content-save-button${saved ? ' on' : ''}`)} onClick={toggleSaved} aria-pressed={saved} aria-label={saved ? '取消收藏这个意思' : '收藏这个意思'}>
+        <span className={uiClass("content-detail-kicker")}>{uiText('meaning3')}</span>
+        <button className={uiClass(`content-save-button${saved ? ' on' : ''}`)} onClick={toggleSaved} aria-pressed={saved} aria-label={saved ? uiText('unsaveThisMeaning') : uiText('saveThisMeaning')}>
           <svg className={uiClass("icon")}><use href="#i-star" /></svg>
         </button>
       </header>
@@ -81,9 +84,8 @@ export const ContentSenseDetailScreen = ({
             <span>{item.pos}</span>
           </div>
           <div className={uiClass("sense-detail-phonetic")}>
-            <button onClick={() => void audioService.playWord(item.word, 'us')} aria-label="播放美式发音">
-              <svg className={uiClass("icon")}><use href="#i-vol" /></svg>美音
-            </button>
+            <button onClick={() => void audioService.playWord(item.word, 'us')} aria-label={uiText('playUsPronunciation')}>
+              <svg className={uiClass("icon")}><use href="#i-vol" /></svg>{uiText('us')}</button>
             <span>{item.phonetic}</span>
           </div>
           <p className={uiClass("sense-detail-meaning")}>{item.meaning}</p>
@@ -96,8 +98,8 @@ export const ContentSenseDetailScreen = ({
 
         <section className={uiClass("sense-detail-section")}>
           <div className={uiClass("sense-section-heading")}>
-            <span>学习例句</span>
-            <button onClick={() => onOpenExample(item)}>查看详情</button>
+            <span>{uiText('learningExample')}</span>
+            <button onClick={() => onOpenExample(item)}>{uiText('viewDetails')}</button>
           </div>
           <div className={uiClass("sense-example-card")}>
             <button className={uiClass("sense-example-open")} onClick={() => onOpenExample(item)}>
@@ -107,19 +109,19 @@ export const ContentSenseDetailScreen = ({
             </button>
             <button className={uiClass("sense-example-play")} onClick={() => {
               void audioService.playSentence(item.example.text, 'us');
-            }} aria-label="播放学习例句">
+            }} aria-label={uiText('playLearningExample')}>
               <svg className={uiClass("icon")}><use href="#i-vol" /></svg>
             </button>
           </div>
         </section>
 
         <section className={uiClass("sense-detail-section")}>
-          <div className={uiClass("sense-section-heading")}><span>我的记录</span></div>
+          <div className={uiClass("sense-section-heading")}><span>{uiText('myAnnotations')}</span></div>
           <button className={uiClass("sense-note-card")} onClick={() => onEditNote(item)}>
             <span className={uiClass("sense-note-icon")}><svg className={uiClass("icon")}><use href="#i-pen" /></svg></span>
             <span>
-              <b>{note ? '我的笔记' : '给这个意思写笔记'}</b>
-              <small>{note || '写下自己的理解、联想或易混提醒'}</small>
+              <b>{note ? uiText('myNotes') : uiText('writeANoteOnThisMeaning')}</b>
+              <small>{note || uiText('addYourUnderstandingAssociationsOrReminders')}</small>
             </span>
             <svg className={uiClass("chev")}><use href="#i-chev-r" /></svg>
           </button>
@@ -127,7 +129,7 @@ export const ContentSenseDetailScreen = ({
 
         {siblings.length > 0 && (
           <section className={uiClass("sense-detail-section")}>
-            <div className={uiClass("sense-section-heading")}><span>这个单词的其他意思</span><em>{siblings.length}</em></div>
+            <div className={uiClass("sense-section-heading")}><span>{uiText('otherMeaningsOfThisWord')}</span><em>{siblings.length}</em></div>
             <div className={uiClass("sense-sibling-card")}>
               {siblings.map((sibling) => (
                 <button key={sibling.senseId} onClick={() => onOpenSense(sibling)}>
@@ -142,11 +144,11 @@ export const ContentSenseDetailScreen = ({
         <div className={uiClass("sense-detail-actions")}>
           <button onClick={() => onOpenDictionary(item)}>
             <svg className={uiClass("icon")}><use href="#i-bookopen" /></svg>
-            <span><b>查看词典</b><small>完整词条与相关内容</small></span>
+            <span><b>{uiText('openDictionary')}</b><small>{uiText('fullEntryAndRelatedContent')}</small></span>
           </button>
-          <button className={uiClass("is-later")} onClick={() => toast('加入学习暂未开放；收藏不会自动进入学习计划')}>
+          <button className={uiClass("is-later")} onClick={() => toast(uiText('addingToLearningIsNotAvailableYet'))}>
             <svg className={uiClass("icon")}><use href="#i-relearn" /></svg>
-            <span><b>加入学习</b><small>暂未开放</small></span>
+            <span><b>{uiText('addToLearning')}</b><small>{uiText('notAvailableYet')}</small></span>
           </button>
         </div>
       </div>

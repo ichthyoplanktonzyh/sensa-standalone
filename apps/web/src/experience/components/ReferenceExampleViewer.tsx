@@ -1,12 +1,12 @@
-import { uiClass } from '../ui/classes';
+import { ArrowLeft, BookOpen } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { setupButton, setupPrimary } from './learning/LearningSetupFrame';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ReferenceExample,
   ReferenceSense,
 } from '../reference/referenceDictionary';
 import { resolveLookupLemma } from '../reference/resolveClickedLemma';
-import { tokenizeSentence } from '../utils/sentenceTokenizer';
-import { ClickableSentence } from './ClickableSentence';
 import { ExampleCardCarousel } from './examples/ExampleCardCarousel';
 
 export interface ReferenceExampleDeck {
@@ -40,9 +40,14 @@ export function emphasizeReferenceExample(
   const knownForms = new Set(
     [headword, ...forms].map((form) => form.toLocaleLowerCase('en-US')),
   );
-  const { tokens } = tokenizeSentence(example.textL2);
+  // Reference text is plain text, not the learning viewer's markup format.
+  // Match against the original string so punctuation and literal tags keep exact offsets.
+  const tokens = [...example.textL2.matchAll(/[a-zA-Z0-9]+(?:['’][a-zA-Z0-9]+)?/g)].map(match => ({
+    cleanWord: match[0].replace(/['’]/g, "'"),
+    charStart: match.index,
+    charEnd: match.index + match[0].length,
+  }));
   const target = tokens.find((token) => {
-    if (!token.isWord) return false;
     const surface = token.cleanWord.toLocaleLowerCase('en-US');
     if (knownForms.has(surface)) return true;
     return resolveLookupLemma({
@@ -64,116 +69,110 @@ export function emphasizeReferenceExample(
   ].join('');
 }
 
-export function ReferenceExampleViewer({
-  active,
-  deck,
-  onClose,
-}: ReferenceExampleViewerProps) {
+export function ReferenceExampleViewer({ active, deck, onClose }: ReferenceExampleViewerProps) {
+  const { t } = useTranslation();
   const [exampleIndex, setExampleIndex] = useState(0);
   const [showTranslation, setShowTranslation] = useState(true);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const bodyRef = useRef<HTMLElement>(null);
+  const savedScroll = useRef(0);
+  const lastIdentity = useRef('');
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   const examples = deck?.sense.examples ?? [];
-  const example = examples[exampleIndex] ?? null;
-  const sentenceHtml = useMemo(() => (
-    example && deck
-      ? emphasizeReferenceExample(example, deck.headword, deck.forms)
-      : ''
-  ), [deck, example]);
+  // Keep position when closing and reopening the same immutable reference context.
+  const identity = deck ? JSON.stringify([deck.headword, deck.sense.referenceSenseId, examples.map(item => item.exampleId)]) : '';
+  const example = examples[Math.min(exampleIndex, Math.max(0, examples.length - 1))] ?? null;
+  const sentenceHtml = useMemo(() => example && deck
+    ? emphasizeReferenceExample(example, deck.headword, deck.forms) : '', [deck, example]);
 
   useEffect(() => {
+    if (!identity || identity === lastIdentity.current) return;
+    lastIdentity.current = identity;
     setExampleIndex(0);
     setShowTranslation(true);
-  }, [active, deck?.sense.referenceSenseId]);
+    savedScroll.current = 0;
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
+  }, [identity]);
 
   useEffect(() => {
     if (!active) return;
-    const previousFocus = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
-    const frame = requestAnimationFrame(() => closeButtonRef.current?.focus());
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = requestAnimationFrame(() => {
+      closeButtonRef.current?.focus();
+      if (bodyRef.current) bodyRef.current.scrollTop = savedScroll.current;
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (previousFocus?.isConnected && !previousFocus.closest('[inert]')) previousFocus.focus();
+    };
+  }, [active]);
+
+  useEffect(() => {
+    if (!active) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.defaultPrevented) return;
+      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); return; }
+      if (event.target instanceof HTMLElement && event.target.closest('button, input, textarea, select, a, [contenteditable="true"]')) return;
       if (event.key === 'ArrowLeft' && exampleIndex > 0) {
-        setExampleIndex((index) => index - 1);
+        event.preventDefault(); setExampleIndex(index => index - 1);
       }
       if (event.key === 'ArrowRight' && exampleIndex < examples.length - 1) {
-        setExampleIndex((index) => index + 1);
+        event.preventDefault(); setExampleIndex(index => index + 1);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener('keydown', handleKeyDown);
-      previousFocus?.focus();
-    };
-  }, [active, exampleIndex, examples.length, onClose]);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [active, exampleIndex, examples.length]);
 
-  if (!deck || examples.length === 0) return null;
+  const definition = deck?.sense.glossL1 || deck?.sense.definitionL2 || t('referenceExample.noDefinition');
 
-  const definition = deck.sense.glossL1
-    ?? deck.sense.definitionL2
-    ?? 'Definition unavailable';
+  return <section
+    className={`screen absolute inset-0 z-[40] flex flex-col overflow-hidden bg-[#fbfbfa] text-[#242a38] ${active ? 'active' : 'invisible pointer-events-none'}`}
+    id="s-reference-example" data-screen-layer="2" data-anim="slide" aria-hidden={!active}
+  >
+    <header className="flex shrink-0 items-center gap-4 border-b border-[#e1e5ed] px-6 py-4 sm:px-10">
+      <button ref={closeButtonRef} type="button" onClick={onClose} aria-label={t('referenceExample.back')} className={setupButton + ' size-11 shrink-0 px-0 text-[#5268a9] hover:bg-[#edf0f7]'}><ArrowLeft size={20}/></button>
+      <div className="min-w-0">
+        <p className="text-xs text-[#68748d]">{t('referenceExample.title')}</p>
+        <h1 className="mt-1 break-words text-xl font-medium">{deck?.headword || t('referenceExample.unavailable')}</h1>
+      </div>
+    </header>
 
-  return (
-    <section
-      className={uiClass(`screen reference-example-screen${active ? ' active' : ''}`, "#s-reference-example")}
-      id="s-reference-example"
-      data-anim="slide"
-      aria-hidden={!active}
-    >
-      <header className={uiClass("reference-example-header")}>
-        <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="返回词典">
-          <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
-        </button>
-        <div>
-          <strong>{deck.headword}</strong>
-          <span>{deck.sense.partOfSpeech} · 词典例句</span>
-        </div>
-        <i aria-hidden="true" />
-      </header>
+    <main ref={bodyRef} onScroll={event => { if (active) savedScroll.current = event.currentTarget.scrollTop; }}
+      className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-6 sm:px-10 sm:py-10">
+      <div className="mx-auto max-w-3xl [&_.sensa-example-pagination]:mt-6 [&_.sensa-example-pagination>div]:flex-wrap [&_.sensa-example-pagination>div>button]:size-11 [&_.sensa-example-pagination>div>button]:rounded-xl [&_.sensa-example-pagination>div>button]:bg-[#e1e5ed] [&_.sensa-example-pagination>div>button.active]:bg-[#303f76] [&_.sensa-example-pagination>div>button.active]:transform-none motion-reduce:[&_.example-card-carousel]:transition-none!">
+        {example && deck ? <ExampleCardCarousel itemCount={examples.length} currentIndex={exampleIndex} onIndexChange={setExampleIndex} itemKeys={examples.map(item => item.exampleId)}>
+          <article className="overflow-hidden rounded-3xl border border-[#e1e5ed] bg-white">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e1e5ed] px-6 py-5 text-xs text-[#68748d]">
+              <span className="inline-flex items-center gap-2"><BookOpen size={16}/>{t('referenceExample.title')}</span>
+              <span>{example.sourceLabel || t('referenceExample.noSource')}</span>
+            </div>
+            <section className="p-6 sm:p-8" aria-label={t('referenceExample.current')}>
+              {/* emphasizeReferenceExample escapes every source-text segment; only its own b tags remain. */}
+              <p lang="en" className="whitespace-pre-wrap break-words text-2xl leading-relaxed sm:text-3xl [&_b]:font-medium [&_b]:text-[#303f76]" dangerouslySetInnerHTML={{ __html: sentenceHtml }}/>
+              {showTranslation && example.textL1 && <p className="mt-6 border-l-2 border-[#dce2f0] pl-4 text-base leading-7 text-[#68748d]">{example.textL1}</p>}
+              {example.textL1 ? <button type="button" aria-expanded={showTranslation} className={setupButton + ' mt-3 px-0 text-[#5268a9]'} onClick={() => setShowTranslation(visible => !visible)}>
+                {t(showTranslation ? 'referenceExample.hideTranslation' : 'referenceExample.showTranslation')}
+              </button> : <p className="mt-6 text-xs text-[#68748d]">{t('referenceExample.noTranslation')}</p>}
+            </section>
+            <section className="mx-6 mb-6 rounded-2xl bg-[#edf0f7] p-6 text-[#303f76]">
+              <h2 className="text-xs">{t('referenceExample.sense')}</h2>
+              <p className="mt-3 text-base leading-7" lang={deck.sense.glossL1 ? undefined : 'en'}><span className="mr-2 text-sm text-[#68748d]">{deck.sense.partOfSpeech}</span>{definition}</p>
+            </section>
+          </article>
+        </ExampleCardCarousel> : <section role="status" className="rounded-3xl border border-dashed border-[#dce2f0] bg-white p-8 text-center">
+          <BookOpen size={28} className="mx-auto mb-4 text-[#68748d]"/>
+          <h2 className="text-xl font-medium">{t('referenceExample.empty')}</h2>
+          <p className="mt-3 text-sm leading-7 text-[#68748d]">{t('referenceExample.emptyHint')}</p>
+        </section>}
+        {examples.length > 0 && <p role="status" className="mt-4 text-center text-xs tabular-nums text-[#68748d]">{t('referenceExample.position', { current: exampleIndex + 1, total: examples.length })}</p>}
+      </div>
+    </main>
 
-      <main className={uiClass("reference-example-body")}>
-        <ExampleCardCarousel
-          itemCount={examples.length}
-          currentIndex={exampleIndex}
-          onIndexChange={setExampleIndex}
-          itemKeys={examples.map((item) => item.exampleId)}
-          className={uiClass("reference-example-carousel")}
-        >
-          {example && (
-            <article className={uiClass("reference-example-card")}>
-              <div className={uiClass("reference-example-source")}>
-                <span>词典例句</span>
-                <strong>{example.sourceLabel}</strong>
-              </div>
-
-              <section className={uiClass("reference-example-sentence")} aria-label="当前词典例句">
-                <ClickableSentence sentenceHtml={sentenceHtml} />
-                {showTranslation && example.textL1 && <p>{example.textL1}</p>}
-                {example.textL1 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowTranslation((visible) => !visible)}
-                  >
-                    {showTranslation ? '隐藏译文' : '显示译文'}
-                  </button>
-                )}
-              </section>
-
-              <section className={uiClass("reference-example-sense")}>
-                <span>对应义项</span>
-                <strong>{deck.sense.partOfSpeech}</strong>
-                <p lang={deck.sense.glossL1 ? undefined : 'en'}>{definition}</p>
-              </section>
-            </article>
-          )}
-        </ExampleCardCarousel>
-      </main>
-
-      <footer className={uiClass("reference-example-footer")}>
-        <button type="button" onClick={onClose}>返回词典</button>
-        <p>例句来自当前在线词典，不会进入学习进度。</p>
-      </footer>
-    </section>
-  );
+    <footer className="shrink-0 border-t border-[#e1e5ed] px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center">
+      <button type="button" onClick={onClose} className={setupPrimary + ' w-full max-w-3xl'}>{t('referenceExample.back')}</button>
+      <p className="mt-3 text-xs leading-5 text-[#68748d]">{t('referenceExample.boundary')}</p>
+    </footer>
+  </section>;
 }

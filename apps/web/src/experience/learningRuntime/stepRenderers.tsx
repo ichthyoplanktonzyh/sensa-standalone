@@ -1,3 +1,5 @@
+import { AssuranceCard } from "../components/learning/AssuranceCard";
+import { runtimeCheckpoint } from "./runtimeCheckpoint";
 /**
  * Step renderer 注册表：`stepKind → 组件`。
  *
@@ -23,35 +25,28 @@
  * interface；注册表擦除不同 renderer 的具体 props，而每个调用方在 get 时恢复
  * 自己的类型。Lightweight Retention 仍是待迁移的固定相位屏。
  */
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 import type {
   LearningStepKind,
   MeaningToFormRecallOutcome,
   NovelTransferOutcome,
   RepairResourceReference,
-} from '../engine/types';
-import type { Word, QuickDictEntry, DictionaryLookup } from '../types';
-import type { PrototypeIntroductionPackage } from '../content/learningCatalog';
-import type { AssessmentResource } from '../content/assessmentResources';
-import { IntroductionCard, type IntroductionPhase } from '../components/cards/IntroductionCard';
-import { RecognitionCard } from '../components/cards/RecognitionCard';
-import { RecallCard } from '../components/cards/RecallCard';
-import { NovelTransferCard } from '../components/cards/NovelTransferCard';
-import { SensaReviewAssessmentCard } from '../components/cards/review/SensaReviewAssessmentCard';
-import { SensaReviewFeedbackCard } from '../components/cards/review/SensaReviewFeedbackCard';
-import { ExperienceRecallCard } from '../components/cards/lightweight/ExperienceRecallCard';
-import { ExpressionRevealCard } from '../components/cards/lightweight/ExpressionRevealCard';
-import type {
-  LightweightInitialCardPresentation,
-} from './lightweightInitialPresentation';
+} from "../engine/types";
+import type { Word, QuickDictEntry, DictionaryLookup } from "../types";
+import type { PrototypeIntroductionPackage } from "../content/learningCatalog";
+import type { AssessmentResource } from "../content/assessmentResources";
+import type { IntroductionPhase } from "../components/cards/IntroductionCard";
+import { ExperienceRecallCard } from "../components/cards/lightweight/ExperienceRecallCard";
+import { ExpressionRevealCard } from "../components/cards/lightweight/ExpressionRevealCard";
+import type { LightweightInitialCardPresentation } from "./lightweightInitialPresentation";
 import type {
   LightweightInitialRating,
   LightweightProtocolStepInstance,
-} from './lightweightInitialProtocol';
+} from "./lightweightInitialProtocol";
 import type {
   ReviewAssessmentResult,
   ReviewAssessmentSpec,
-} from '../review/types';
+} from "../review/types";
 
 /**
  * 宿主提供给卡片的能力面。
@@ -63,7 +58,10 @@ import type {
 export interface StepRendererHost {
   readonly toast: (message: string) => void;
   readonly openExample: (senseIdx: number, sentenceIdx?: number) => void;
-  readonly openDict: (word: Word | QuickDictEntry | string, tab?: string) => void;
+  readonly openDict: (
+    word: Word | QuickDictEntry | string,
+    tab?: string,
+  ) => void;
   readonly openNoteEditor: (
     word: Word | QuickDictEntry | string,
     senseId?: string,
@@ -76,14 +74,16 @@ export interface StepRendererHost {
   readonly lookupDictionary: DictionaryLookup;
   readonly completeIntroduction: () => void;
   readonly completeRecognition: (correct: boolean) => void;
-  readonly completeMeaningToFormRecall: (outcome: MeaningToFormRecallOutcome) => void;
+  readonly completeMeaningToFormRecall: (
+    outcome: MeaningToFormRecallOutcome,
+  ) => void;
   readonly completeNovelTransfer: (outcome: NovelTransferOutcome) => void;
   readonly completeReviewAssessment: (result: ReviewAssessmentResult) => void;
   readonly continueReviewFeedback: () => void;
 }
 
 /** 评测属于首学取证还是到期复习；讲解卡的修复回放也用它选文案。 */
-export type StepAssessmentPurpose = 'acquisition' | 'retention';
+export type StepAssessmentPurpose = "acquisition" | "retention";
 
 /** 渲染一步要的全部输入。数据由宿主屏物化好，适配函数不再推导。 */
 export interface StepRendererProps {
@@ -119,7 +119,9 @@ export interface LightweightInitialStepRendererProps {
   readonly onRate: (rating: LightweightInitialRating) => void;
 }
 
-export type StepRenderer<TProps = StepRendererProps> = (props: TProps) => ReactNode;
+export type StepRenderer<TProps = StepRendererProps> = (
+  props: TProps,
+) => ReactNode;
 
 export interface StepRendererDefinition {
   readonly stepKind: LearningStepKind;
@@ -127,203 +129,13 @@ export interface StepRendererDefinition {
   readonly render: StepRenderer<never>;
 }
 
-/* ============================================================
-   内置七种：落地前 LearnScreen 的七个分支，逐字搬来当适配函数
-   ============================================================ */
-
-/** 守卫对应落地前的 `isIntroduction = stage === 'introduction' && !!introductionContent`。 */
-const renderIntroduction = (props: StepRendererProps): ReactNode => {
-  const { content, curWord, host } = props;
-  if (!content) return null;
-  return (
-    <IntroductionCard
-      content={content}
-      phase={props.phase}
-      onPhaseChange={props.onPhaseChange}
-      onComplete={host.completeIntroduction}
-      onOpenExample={(sentenceIndex = 0) => host.openExample(0, sentenceIndex)}
-      onOpenDictionary={(word) => host.openDict(word ?? curWord, '柯林斯')}
-      onOpenNote={() => host.openNoteEditor(
-        content.lemma,
-        content.senseKey,
-        content.guideLabelL1,
-      )}
-      onOpenScene={(anchorId) => host.openSceneEditor(content, anchorId)}
-      lookupDictionary={host.lookupDictionary}
-      toast={host.toast}
-    />
-  );
-};
-
-/** 守卫对应落地前的 `isRepair = stage === 'review_repair' && !!repairContent`。 */
-const renderReviewRepair = (props: StepRendererProps): ReactNode => {
-  const { repairContent, repairResourceRef, host } = props;
-  if (!repairContent) return null;
-  return (
-    <IntroductionCard
-      key={`${repairContent.senseKey}:${repairResourceRef?.role}:${repairResourceRef?.key}`}
-      content={repairContent}
-      phase={props.phase}
-      mode="repair_replay"
-      repairPurpose={props.purpose}
-      onPhaseChange={props.onPhaseChange}
-      onComplete={host.completeIntroduction}
-      onOpenExample={(sentenceIndex = 0) => host.openExample(0, sentenceIndex)}
-      onOpenDictionary={(word) => host.openDict(word ?? props.curWord, '柯林斯')}
-      onOpenNote={() => host.openNoteEditor(
-        repairContent.lemma,
-        repairContent.senseKey,
-        repairContent.guideLabelL1,
-      )}
-      onOpenScene={(anchorId) => host.openSceneEditor(repairContent, anchorId)}
-      lookupDictionary={host.lookupDictionary}
-      toast={host.toast}
-    />
-  );
-};
-
-/** 守卫对应落地前的 `isRecognition && assessmentResource?.kind === 'context_recognition'`。 */
-const renderRecognition = (props: StepRendererProps): ReactNode => {
-  const { content, ordinal, assessmentResource, host } = props;
-  if (!content || !assessmentResource || assessmentResource.kind !== 'context_recognition') {
-    return null;
-  }
-  return (
-    <RecognitionCard
-      key={`${content.senseKey}:${assessmentResource.taskKey}:${ordinal}`}
-      content={content}
-      assessment={assessmentResource}
-      onComplete={host.completeRecognition}
-      onOpenDictionary={(word) => host.openDict(word, '柯林斯')}
-      onOpenNote={() => host.openNoteEditor(
-        content.lemma,
-        content.senseKey,
-        content.guideLabelL1,
-      )}
-      onOpenScene={(anchorId) => host.openSceneEditor(content, anchorId)}
-      lookupDictionary={host.lookupDictionary}
-      onViewChange={props.onCardViewChange}
-      toast={host.toast}
-    />
-  );
-};
-
-/** 守卫对应落地前的 `isMeaningToFormRecall && assessmentResource?.kind === 'meaning_to_form_recall'`。 */
-const renderRecall = (props: StepRendererProps): ReactNode => {
-  const { content, ordinal, assessmentResource, host } = props;
-  if (!content || !assessmentResource || assessmentResource.kind !== 'meaning_to_form_recall') {
-    return null;
-  }
-  return (
-    <RecallCard
-      key={`${content.senseKey}:${assessmentResource.taskKey}:${ordinal}`}
-      content={content}
-      assessment={assessmentResource}
-      onComplete={host.completeMeaningToFormRecall}
-      onOpenDictionary={(word) => host.openDict(word, '柯林斯')}
-      onOpenExample={() => host.openExample(0, 0)}
-      onOpenNote={() => host.openNoteEditor(
-        content.lemma,
-        content.senseKey,
-        content.guideLabelL1,
-      )}
-      onOpenScene={(anchorId) => host.openSceneEditor(content, anchorId)}
-      onViewChange={props.onCardViewChange}
-      toast={host.toast}
-    />
-  );
-};
-
-/** 守卫对应落地前的 `isNovelTransfer && assessmentResource?.kind === 'novel_context_transfer'`。 */
-const renderTransfer = (props: StepRendererProps): ReactNode => {
-  const { content, ordinal, assessmentResource, host } = props;
-  if (!content || !assessmentResource || assessmentResource.kind !== 'novel_context_transfer') {
-    return null;
-  }
-  return (
-    <NovelTransferCard
-      key={`${content.senseKey}:${assessmentResource.taskKey}:${ordinal}`}
-      content={content}
-      assessment={assessmentResource}
-      onComplete={host.completeNovelTransfer}
-      onOpenDictionary={(word) => host.openDict(word, '柯林斯')}
-      onOpenExample={() => host.openExample(0, 0)}
-      onOpenNote={() => host.openNoteEditor(
-        content.lemma,
-        content.senseKey,
-        content.guideLabelL1,
-      )}
-      onOpenScene={(anchorId) => host.openSceneEditor(content, anchorId)}
-      lookupDictionary={host.lookupDictionary}
-      onViewChange={props.onCardViewChange}
-      toast={host.toast}
-    />
-  );
-};
-
-/**
- * 守卫对应落地前的 `isReviewAssessment && reviewSpec`。`reviewSpec` 的 memo
- * 已经要求 content/kind/taskKey 齐备，`assessmentResource` 在同一条件下由
- * memo 保证非空（缺身份时会先抛错），这里三查只是把落地前 `!` 断言写成守卫。
- */
-const renderReviewAssessment = (props: StepRendererProps): ReactNode => {
-  const { content, ordinal, assessmentResource, reviewSpec, host } = props;
-  if (!content || !reviewSpec || !assessmentResource) return null;
-  return (
-    <SensaReviewAssessmentCard
-      key={`${content.senseKey}:${reviewSpec.id}:${ordinal}:sensa`}
-      content={content}
-      spec={reviewSpec}
-      assessmentResource={assessmentResource}
-      purpose={props.purpose}
-      onSubmit={host.completeReviewAssessment}
-      onOpenDictionary={(word) => host.openDict(word, '柯林斯')}
-      onOpenExample={() => host.openExample(0, 0)}
-      onOpenNote={() => host.openNoteEditor(
-        content.lemma,
-        content.senseKey,
-        content.guideLabelL1,
-      )}
-      onOpenScene={(anchorId) => host.openSceneEditor(content, anchorId)}
-      lookupDictionary={host.lookupDictionary}
-      onViewChange={props.onCardViewChange}
-      toast={host.toast}
-    />
-  );
-};
-
-/** 守卫对应落地前的 `isReviewFeedback && reviewSpec && reviewAssessmentResult`。 */
-const renderReviewFeedback = (props: StepRendererProps): ReactNode => {
-  const { content, ordinal, assessmentResource, reviewSpec, reviewAssessmentResult, host } = props;
-  if (!content || !reviewSpec || !assessmentResource || !reviewAssessmentResult) return null;
-  return (
-    <SensaReviewFeedbackCard
-      key={`${content.senseKey}:${reviewSpec.id}:feedback:${ordinal}:sensa`}
-      content={content}
-      spec={reviewSpec}
-      assessmentResource={assessmentResource}
-      result={reviewAssessmentResult}
-      onContinue={host.continueReviewFeedback}
-      onOpenDictionary={(word) => host.openDict(word, '柯林斯')}
-      lookupDictionary={host.lookupDictionary}
-      onOpenExample={() => host.openExample(0, 0)}
-      onOpenNote={() => host.openNoteEditor(
-        content.lemma,
-        content.senseKey,
-        content.guideLabelL1,
-      )}
-      onOpenScene={(anchorId) => host.openSceneEditor(content, anchorId)}
-      onViewChange={props.onCardViewChange}
-      toast={host.toast}
-    />
-  );
-};
-
 const renderLightweightExperienceRecall = (
   props: LightweightInitialStepRendererProps,
 ): ReactNode => {
-  if (props.presentation.kind !== 'experience_recall') {
-    throw new Error(`Experience Recall renderer received ${props.presentation.kind}.`);
+  if (props.presentation.kind !== "experience_recall") {
+    throw new Error(
+      `Experience Recall renderer received ${props.presentation.kind}.`,
+    );
   }
   return (
     <ExperienceRecallCard
@@ -337,8 +149,10 @@ const renderLightweightExperienceRecall = (
 const renderLightweightExpressionReveal = (
   props: LightweightInitialStepRendererProps,
 ): ReactNode => {
-  if (props.presentation.kind !== 'expression_reveal') {
-    throw new Error(`Expression Reveal renderer received ${props.presentation.kind}.`);
+  if (props.presentation.kind !== "expression_reveal") {
+    throw new Error(
+      `Expression Reveal renderer received ${props.presentation.kind}.`,
+    );
   }
   return (
     <ExpressionRevealCard
@@ -349,16 +163,34 @@ const renderLightweightExpressionReveal = (
   );
 };
 
+const renderAssurance = (props: StepRendererProps): ReactNode => {
+  const key = [
+    runtimeCheckpoint.read().structuredGeneration ?? 0,
+    props.purpose,
+    props.stepKind,
+    props.content?.packageKey,
+    props.assessmentResource?.taskKey,
+    props.ordinal,
+  ].join(":");
+  return <AssuranceCard key={key} draftKey={key} {...props} />;
+};
+
 export const BUILTIN_STEP_RENDERERS: readonly StepRendererDefinition[] = [
-  { stepKind: 'introduction', render: renderIntroduction },
-  { stepKind: 'recognition', render: renderRecognition },
-  { stepKind: 'recall', render: renderRecall },
-  { stepKind: 'transfer', render: renderTransfer },
-  { stepKind: 'review_assessment', render: renderReviewAssessment },
-  { stepKind: 'review_feedback', render: renderReviewFeedback },
-  { stepKind: 'review_repair', render: renderReviewRepair },
-  { stepKind: 'lightweight_experience_recall', render: renderLightweightExperienceRecall },
-  { stepKind: 'lightweight_expression_reveal', render: renderLightweightExpressionReveal },
+  { stepKind: "introduction", render: renderAssurance },
+  { stepKind: "recognition", render: renderAssurance },
+  { stepKind: "recall", render: renderAssurance },
+  { stepKind: "transfer", render: renderAssurance },
+  { stepKind: "review_assessment", render: renderAssurance },
+  { stepKind: "review_feedback", render: renderAssurance },
+  { stepKind: "review_repair", render: renderAssurance },
+  {
+    stepKind: "lightweight_experience_recall",
+    render: renderLightweightExperienceRecall,
+  },
+  {
+    stepKind: "lightweight_expression_reveal",
+    render: renderLightweightExpressionReveal,
+  },
 ];
 
 /**
@@ -372,14 +204,20 @@ export class StepRendererRegistry {
     const seen = new Set<string>();
     for (const definition of definitions) {
       if (seen.has(definition.stepKind)) {
-        throw new Error(`Duplicate step renderer registration: ${definition.stepKind}`);
+        throw new Error(
+          `Duplicate step renderer registration: ${definition.stepKind}`,
+        );
       }
       seen.add(definition.stepKind);
     }
-    this.#renderers = new Map(definitions.map((definition) => [definition.stepKind, definition.render]));
+    this.#renderers = new Map(
+      definitions.map((definition) => [definition.stepKind, definition.render]),
+    );
   }
 
-  public get<TProps = StepRendererProps>(stepKind: LearningStepKind): StepRenderer<TProps> {
+  public get<TProps = StepRendererProps>(
+    stepKind: LearningStepKind,
+  ): StepRenderer<TProps> {
     const render = this.#renderers.get(stepKind);
     if (!render) {
       throw new Error(`Unknown step kind, no renderer registered: ${stepKind}`);
@@ -396,4 +234,6 @@ export class StepRendererRegistry {
   }
 }
 
-export const stepRendererRegistry = new StepRendererRegistry(BUILTIN_STEP_RENDERERS);
+export const stepRendererRegistry = new StepRendererRegistry(
+  BUILTIN_STEP_RENDERERS,
+);
