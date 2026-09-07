@@ -14,6 +14,7 @@
     "@sensa/contracts": "file:../../packages/contracts",
     "@sensa/learning-kernel": "file:../../packages/learning-kernel",
     "hono": "^4.0.0",
+    "jose": "^6.2.12",
     "pg": "^8.13.1",
     "zod": "^4.4.3"
   },

@@ -4,7 +4,7 @@ import {
   createRouter,
   type SearchSchemaInput,
 } from '@tanstack/react-router';
-import App from '../App';
+import App from '../../application/Root';
 import { parseShellParams, parseViewMode, type ShellFlow, type ShellParams } from './shellLocation';
 
 /**

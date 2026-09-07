@@ -52,12 +52,16 @@
     "sensa:content-navigation-smoke": "tsx scripts/sensaContentNavigationSmoke.ts",
     "sensa:lightweight-runtime-smoke": "TSX_TSCONFIG_PATH=apps/web/tsconfig.json node --import tsx scripts/sensaLightweightRuntimeSmoke.tsx",
     "sensa:runtime-checkpoint-smoke": "tsx scripts/sensaRuntimeCheckpointSmoke.ts",
-    "sensa:assurance-runtime-smoke": "TSX_TSCONFIG_PATH=apps/web/tsconfig.json node --import tsx scripts/sensaAssuranceRuntimeSmoke.tsx"
+    "sensa:assurance-runtime-smoke": "TSX_TSCONFIG_PATH=apps/web/tsconfig.json node --import tsx scripts/sensaAssuranceRuntimeSmoke.tsx",
+    "sensa:consumer-account-smoke": "node --import tsx scripts/sensaConsumerAccountSmoke.mts",
+    "sensa:consumer-browser-smoke": "node --import tsx scripts/sensaConsumerBrowserSmoke.mts",
+    "sensa:edge-check": "deno check --config supabase/functions/sensa-api/deno.json supabase/functions/sensa-api/index.ts"
   },
   "engines": {
     "node": ">=24"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.0.0",
     "tsx": "^4.20.0",
     "typescript": "^7.0.0"

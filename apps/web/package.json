@@ -15,6 +15,7 @@
   "dependencies": {
     "@sensa/contracts": "file:../../packages/contracts",
     "@sensa/learning-kernel": "file:../../packages/learning-kernel",
+    "@supabase/supabase-js": "^2.115.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-router": "^1.170.32",
     "compromise": "^14.16.0",

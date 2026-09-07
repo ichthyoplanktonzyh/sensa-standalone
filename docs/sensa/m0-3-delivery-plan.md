@@ -1,15 +1,14 @@
 # M0-3：M1 施工任务与合同验收
 
-> 日期：2026-09-07；状态：设计交付，实施未执行
+> 日期：2026-09-07；状态：设计交付；M1-A 本地实施与验证见 [交付记录](m1-a-account-handoff.md)
 > [消费合同](m0-3-consumer-contract.md)固定接口行为；[迁移蓝图](m0-3-migration-blueprint.md)固定所有权。
 > 本表细化现有[路线图](production-migration-plan.md)的M1，不新增平行里程碑。
 
 ## 1. 实施分工与共用约束
 
-所有任务仓库为 `/Users/shadow/sensa-standalone`。Supervisor负责需求/共享合同/目录蓝图、
-审查与最终验证；实质实现默认一个`luna_max_coder` worker依序完成。任务派发时必须明确
-该worker不是唯一可能编辑仓库的人，不得回滚他人修改，所有共享文件修改以当前diff为准。
-本轮不派发M1实现，不创建新工作树、空工程或部署资源。
+所有任务仓库为 `/Users/shadow/sensa-standalone`。2026-09-07 owner 修订：后续不再使用
+worker 模式，由主代理直接承担设计、实现、审查与验证，已允许浏览器测试。旧 worker
+分工由此覆盖，模块边界和验收条件继续适用；不创建新工作树，不从本地部署云资源。
 
 共同适用：AGENTS.md、development-workflow、七份领域模型、M0-2两份定稿和本轮两份合同。
 不得调用付费LLM/TTS，不部署本地shell，不重构四阶段，不恢复已移除入口；React UI沿用

@@ -3,6 +3,13 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
+// Production obtains version-pinned media from the authorized API/Storage path.
+// Local golden media belong only to the explicitly selected behavior preview.
+if(process.env.VITE_SENSA_MODE==='production'){
+  console.log('Production build: no preview media staging or provider calls.');
+  process.exit(0);
+}
+
 const root=fileURLToPath(new URL('../',import.meta.url));
 const release=JSON.parse(await readFile(path.join(root,'apps/web/src/experience/content/releases/golden-learning-release-v1.json'),'utf8'));
 const source=path.resolve(root,process.env.SENSA_WEB_MEDIA_ROOT??'content/data/media/audio');

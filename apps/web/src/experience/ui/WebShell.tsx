@@ -13,10 +13,11 @@ const sections = [
   { id: 's-academy', label: 'nav.practice', icon: Compass },
 ] as const;
 
-export function WebShell({ children, current, focused, onNavigate }: {
-  children: ReactNode; current: string; focused: boolean; onNavigate: (id: string) => void;
+export function WebShell({ children, current, focused, onNavigate, availableSections }: {
+  children: ReactNode; current: string; focused: boolean; onNavigate: (id: string) => void; availableSections?: readonly string[];
 }) {
   const { t } = useTranslation();
+  const visibleSections = sections.filter(section => !availableSections || availableSections.includes(section.id));
   const viewport = useRef<HTMLDivElement>(null);
   const shell = useRef<HTMLDivElement>(null);
   useModalFocus(shell);
@@ -51,7 +52,7 @@ export function WebShell({ children, current, focused, onNavigate }: {
         <span className="text-2xl font-semibold tracking-[-0.06em]">sensa</span>
       </button>
       <nav className="flex flex-col gap-1.5" aria-label={t('nav.label')}>
-        {sections.map(({id,label,icon:Icon}) => <button key={id} onClick={() => onNavigate(id)} aria-current={selectedSection === id ? 'page' : undefined} className={`flex min-h-12 items-center gap-3 rounded-lg px-4 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-[#3c51ad] ${selectedSection === id ? 'bg-[#e6e9f2] font-medium text-[#303e73]' : 'text-[#6d7380] hover:bg-[#e8ebf0] hover:text-[#222631]'}`}><Icon size={18} strokeWidth={1.5}/>{t(label)}</button>)}
+        {visibleSections.map(({id,label,icon:Icon}) => <button key={id} onClick={() => onNavigate(id)} aria-current={selectedSection === id ? 'page' : undefined} className={`flex min-h-12 items-center gap-3 rounded-lg px-4 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-[#3c51ad] ${selectedSection === id ? 'bg-[#e6e9f2] font-medium text-[#303e73]' : 'text-[#6d7380] hover:bg-[#e8ebf0] hover:text-[#222631]'}`}><Icon size={18} strokeWidth={1.5}/>{t(label)}</button>)}
       </nav>
       <div className="mt-auto border-t border-[#e0e3e9] pt-4">
         <button onClick={() => onNavigate('s-profile')} className="flex min-h-12 w-full items-center gap-3 rounded-lg px-4 text-sm text-[#6d7380] hover:bg-[#e8ebf0]" aria-current={current==='s-profile'?'page':undefined}><Settings2 size={18} strokeWidth={1.5}/>{t('nav.settings')}</button>
@@ -65,8 +66,8 @@ export function WebShell({ children, current, focused, onNavigate }: {
     <div ref={viewport} className={`absolute inset-0 isolate transform-gpu overflow-hidden ${focused ? '' : 'top-16 bottom-20 lg:top-0 lg:bottom-0 lg:left-56'}`}>
       {children}
     </div>
-    {!focused && <nav aria-label={t('nav.mobile')} className="fixed inset-x-0 bottom-0 z-50 grid h-20 grid-cols-4 border-t border-[#e4e6eb] bg-[#fbfbfa] px-2 pb-[env(safe-area-inset-bottom)] lg:hidden">
-      {sections.map(({id,label,icon:Icon}) => <button key={id} onClick={() => onNavigate(id)} aria-current={selectedSection===id?'page':undefined} className={`flex min-w-0 flex-col items-center justify-center gap-1.5 text-[10px] ${selectedSection===id?'text-[#303e73]':'text-[#6d7380]'}`}><span className={`grid h-7 w-12 place-items-center rounded-lg ${selectedSection===id?'bg-[#e6e9f2]':''}`}><Icon size={18} strokeWidth={1.5}/></span><span className="text-center leading-tight">{t(label)}</span></button>)}
+    {!focused && <nav aria-label={t('nav.mobile')} style={{gridTemplateColumns:`repeat(${visibleSections.length}, minmax(0, 1fr))`}} className="fixed inset-x-0 bottom-0 z-50 grid h-20 border-t border-[#e4e6eb] bg-[#fbfbfa] px-2 pb-[env(safe-area-inset-bottom)] lg:hidden">
+      {visibleSections.map(({id,label,icon:Icon}) => <button key={id} onClick={() => onNavigate(id)} aria-current={selectedSection===id?'page':undefined} className={`flex min-w-0 flex-col items-center justify-center gap-1.5 text-[10px] ${selectedSection===id?'text-[#303e73]':'text-[#6d7380]'}`}><span className={`grid h-7 w-12 place-items-center rounded-lg ${selectedSection===id?'bg-[#e6e9f2]':''}`}><Icon size={18} strokeWidth={1.5}/></span><span className="text-center leading-tight">{t(label)}</span></button>)}
     </nav>}
   </div>;
 }

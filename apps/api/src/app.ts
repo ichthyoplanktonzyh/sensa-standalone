@@ -1,3 +1,4 @@
+import { createConsumerRoutes } from './sensa/access/consumer.js';
 import { cors } from "hono/cors";
 import { Hono } from "hono";
 import type { Context } from "hono";
@@ -111,7 +112,7 @@ export function createApp(): Hono<AppEnv> {
   app.use("*", cors({
     origin: corsOrigins,
     allowMethods: ["GET", "POST", "OPTIONS"],
-    allowHeaders: ["content-type", "authorization", "x-client-platform", "x-client-version"],
+    allowHeaders: ["content-type", "authorization", "x-client-platform", "x-client-version", "x-installation-id"],
     exposeHeaders: ["x-request-id"],
     credentials: true,
   }));
@@ -155,6 +156,7 @@ export function createApp(): Hono<AppEnv> {
   app.get("/me", me);
   app.get("/v1/me", me);
 
+  app.route("", createConsumerRoutes());
   app.route("", createSensaRouteGroup(corsOrigins));
   app.route("/v1", createSensaRouteGroup(corsOrigins));
 

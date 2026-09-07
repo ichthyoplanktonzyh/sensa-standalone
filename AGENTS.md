@@ -57,3 +57,13 @@ All provider deployment is CI/CD work. Do not deploy from a local
 shell. Keep `.env`, generated content data and runtime media out of Git. Public
 production must replace local auth and local media with Supabase Auth/Storage and add
 monitoring/telemetry before launch.
+
+## Owner execution preference (2026-09-07)
+
+The owner explicitly requires the primary agent to perform all subsequent work directly.
+Do not use implementation workers, subagents, or OpenCode delegation. This overrides
+older worker-mode instructions. Browser testing is authorized. Continue in the original
+working tree and use CI/CD for cloud deployments.
+
+After each completed and validated vertical use-case slice, create a Git checkpoint commit.
+This is owner-authorized; do not push or deploy without the applicable delivery authorization.
