@@ -1,7 +1,7 @@
 import {calibrateRun} from '../replica/initialRuntime';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { accountContextSchema, consumerVersion, consumerWireVersion, consumerCanonicalizerVersion, planViewSchema, quantityResultSchema, revisionSchema, targetViewSchema, catalogTargetSchema, consumerRunSchema, consumerActivitySchema, canonicalConsumerJson, sensaLightweightInitialMaterializationContentSchema } from '@sensa/contracts/sensa';
+import { accountContextSchema, consumerVersion, consumerWireVersion, consumerCanonicalizerVersion, planViewSchema, quantityResultSchema, revisionSchema, targetViewSchema, catalogTargetSchema, consumerRunSchema, consumerActivitySchema, consumerSummarySchema, canonicalConsumerJson, sensaLightweightInitialMaterializationContentSchema } from '@sensa/contracts/sensa';
 import type { AccountContext, PlanView } from '@sensa/contracts/sensa';
 import { applyQuantityResults,changeAccountReplica,loadAccountReplica,mergeTargets,mergeRuns } from '../replica/accountStore';
 
@@ -33,8 +33,11 @@ const resultSchema=z.object({results:z.array(quantityResultSchema),serverTime:z.
 const pullSchema=z.object({scopeEpoch:revisionSchema,changes:z.array(z.discriminatedUnion('entityType',[z.object({entityType:z.literal('plan'),snapshot:planViewSchema}).passthrough(),z.object({entityType:z.literal('target'),snapshot:targetViewSchema}).passthrough(),z.object({entityType:z.literal('run'),snapshot:consumerRunSchema}).passthrough(),z.object({entityType:z.literal('activity'),snapshot:consumerActivitySchema}).passthrough()])),nextCursor:z.string(),hasMore:z.boolean()}).passthrough();
 const flights=new Map<string,Promise<Awaited<ReturnType<typeof loadAccountReplica>>>>();
 export function syncAccount(account:AccountContext) {
-  const running=flights.get(account.accountId);if(running)return running;
-  const work=drain(account).finally(()=>flights.delete(account.accountId));flights.set(account.accountId,work);return work;
+  // Each caller has just saved its own work. A pass already reading its final home
+  // snapshot cannot promise to include that work, so serialize a fresh pass.
+  const previous=flights.get(account.accountId);
+  const work=(previous?previous.catch(()=>undefined):Promise.resolve()).then(()=>drain(account)).finally(()=>{if(flights.get(account.accountId)===work)flights.delete(account.accountId);});
+  flights.set(account.accountId,work);return work;
 }
 function newestPlan(current:PlanView|null,next:PlanView|null) {
   return !current||(next&&BigInt(next.revision)>=BigInt(current.revision))?next:current;
@@ -65,8 +68,8 @@ async function drain(account:AccountContext) {
       state=await changeAccountReplica(account,current=>({...current,plan:newestPlan(current.plan,pulled.changes.filter(x=>x.entityType==='plan').at(-1)?.snapshot??null),targets:mergeTargets(current.targets,pulled.changes.filter(x=>x.entityType==='target').map(x=>x.snapshot)),runs:mergeRuns(current.runs,pulled.changes.filter(x=>x.entityType==='run').map(x=>x.snapshot)),activity:pulled.changes.filter(x=>x.entityType==='activity').at(-1)?.snapshot??current.activity,cursor:pulled.nextCursor,scopeEpoch:pulled.scopeEpoch}));more=pulled.hasMore;
     } catch(e){if(e instanceof ConsumerClientError&&e.code==='bootstrap_required'){await bootstrap();more=false;}else throw e;}
   }
-  const home=z.object({contractVersion:z.literal(consumerVersion),data:z.object({plan:planViewSchema.nullable(),targets:z.array(targetViewSchema),runs:z.array(consumerRunSchema),activity:consumerActivitySchema.nullable(),emptyReason:z.enum(['no_targets','onboarding_required','preparing','blocked','daily_limit','none_due']).nullable()}).passthrough()}).passthrough().parse(await request('/sensa/home'));
-  state=await changeAccountReplica(account,current=>({...current,plan:newestPlan(current.plan,home.data.plan),targets:mergeTargets(current.targets,home.data.targets),runs:mergeRuns(current.runs,home.data.runs),activity:home.data.activity}));
+  const home=z.object({contractVersion:z.literal(consumerVersion),data:z.object({plan:planViewSchema.nullable(),targets:z.array(targetViewSchema),runs:z.array(consumerRunSchema),activity:consumerActivitySchema.nullable(),summary:consumerSummarySchema.nullable(),counts:z.object({newAvailable:z.number(),initialContinuations:z.number(),dueReviews:z.number(),relearningReady:z.number(),relearningWaiting:z.number(),distinctExecutableTargets:z.number()}),emptyReason:z.enum(['no_targets','onboarding_required','preparing','blocked','daily_limit','none_due','waiting_relearning']).nullable()}).passthrough()}).passthrough().parse(await request('/sensa/home'));
+  state=await changeAccountReplica(account,current=>({...current,plan:newestPlan(current.plan,home.data.plan),targets:mergeTargets(current.targets,home.data.targets),runs:mergeRuns(current.runs,home.data.runs),activity:home.data.activity,summary:home.data.summary??current.summary,homeCounts:home.data.counts}));
   return state;
 }
 export async function revokeSession(){

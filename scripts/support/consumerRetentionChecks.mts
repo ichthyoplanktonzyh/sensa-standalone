@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+export async function runRetentionChecks(h:any){
+ const subject=crypto.randomUUID(),install=crypto.randomUUID(),clockSessionId=crypto.randomUUID();
+ await h.pool.query('INSERT INTO sensa_consumer.invitations(issuer,subject) VALUES($1,$2)',[h.issuer,subject]);
+ const bearer=await h.token(subject);const init=await h.initialize(install,bearer);const learner=init.body.data.learnerUserId,boot=await h.bootstrap(install,bearer);
+ const get=async(path:string)=>(await h.request(path,undefined,bearer)).body.data;
+ const command=(kind:string,payload:any,device=install,replica=boot.replicaId)=>({operationId:crypto.randomUUID(),occurredAt:h.now().toISOString(),installationId:device,replicaId:replica,dependsOn:[],kind,payload});
+ const push=async(op:any,b=boot)=>h.push(b,Array.isArray(op)?op:[op],bearer);
+ const value=(r:any)=>{assert.equal(r.status,200,JSON.stringify(r));assert.equal(r.body.results[0].status,'accepted',JSON.stringify(r.body));return r.body.results[0].value;};
+ const plan=value(await push(command('plan.confirm_quantity',{expectedRevision:null,dailyNewLimit:5,timeZone:'Asia/Shanghai'}))).plan;
+ async function add(id:string){const c=(await get('/sensa/catalog/targets/'+id)).candidate;return value(await push(command('curriculum.add_target',{planId:plan.id,expectedScopeRevision:(await get('/sensa/home')).plan.scopeRevision,candidateId:c.candidateId,source:c.source}))).target;}
+ const start=async(mode='review_only')=>value(await push(command('activity.start_or_resume',{mode,activityId:null,expectedScopeRevision:(await get('/sensa/home')).plan.scopeRevision,clockSessionId}))).runtime;
+ const next=async(r:any,early=false)=>value(await push(command('activity.next',{activityId:r.activity.id,expectedRevision:r.activity.revision,mode:r.activity.mode,allowEarlyRelearning:early,clockSessionId}))).runtime;
+ const action=(run:any,kind:string,rating?:string,device=install,replica=boot.replicaId)=>({...command('run.record_action',{runId:run.id,expectedRevision:run.revision,stepId:run.currentStep.id,ordinal:run.currentStep.ordinal,materialDigest:run.materialDigest,grantId:run.offlineGrant.id,clock:{sessionId:clockSessionId,elapsedMs:0},action:kind==='rate'?{kind,rating}:{kind}},device,replica),occurredAt:run.offlineGrant.issuedAt});
+ const act=async(run:any,kind:string,rating?:string)=>value(await push(action(run,kind,rating))).runtime;
+ const first=await add('b1000000-0000-4000-8000-000000000001');let runtime=await start('mixed');runtime=await act(runtime.run,'reveal');runtime=await act(runtime.run,'rate','good');
+ await add('b1000000-0000-4000-8000-000000000006');runtime=await next(runtime);const unfinished=runtime.run.id;
+ h.setNow(new Date(h.now().getTime()+2*86400000));runtime=await start();assert.equal(runtime.run.purpose,'retention_review');assert.notEqual(runtime.run.id,unfinished);assert.equal((await get('/sensa/home')).plan.newStartedToday,0);
+ const reviewId=runtime.run.id,retentionId=runtime.run.retentionTargetId;assert.equal(retentionId,first.retentionTarget.retentionTargetId);
+ const material=await get('/sensa/materializations/'+runtime.run.materializationId);assert.ok(material.content.resources.length);assert.notEqual(runtime.run.materializationId,first.plan.materializationId);
+ runtime=await act(runtime.run,'reveal');const again=action(runtime.run,'rate','again');
+ h.failDecision(true);assert.equal((await push(again)).status,503);h.failDecision(false);assert.equal((await get('/sensa/runs/'+reviewId)).completion,null);
+ const install2=crypto.randomUUID();await h.initialize(install2,bearer);const boot2=await h.bootstrap(install2,bearer);
+ const second=value(await push(command('activity.start_or_resume',{mode:'review_only',activityId:runtime.activity.id,expectedScopeRevision:(await get('/sensa/home')).plan.scopeRevision,clockSessionId},install2,boot2.replicaId),boot2)).runtime;
+ const competitor=action(second.run,'rate','again',install2,boot2.replicaId);
+ const race=await Promise.all([push(again),push(competitor,boot2)]);assert.deepEqual(race.map((x:any)=>x.body.results[0].status).sort(),['accepted','conflict']);runtime=value(race.find((x:any)=>x.body.results[0].status==='accepted')).runtime;
+ assert.equal(runtime.run.completion.rating,'again');assert.equal(runtime.run.completion.kind,'review_completed');assert.ok(runtime.run.completion.outcomeId);assert.equal(runtime.run.completion.handoffId,null);
+ const dueTime=runtime.run.nextEligibleAt;assert.equal(Date.parse(dueTime)-h.now().getTime(),600000);
+ const memory=async()=>(await h.pool.query('SELECT revision,schedule,due_at,scheduling_decision_id FROM sensa_consumer.retention_memory WHERE retention_target_id=$1',[retentionId])).rows[0];
+ const afterReview=await memory();assert.equal(String(afterReview.revision),'2');
+ const counts=await h.pool.query('SELECT count(*)::int AS n FROM sensa_consumer.memory_outcomes WHERE retention_target_id=$1',[retentionId]);assert.equal(counts.rows[0].n,1);
+ runtime=await next(runtime);assert.equal(runtime.reason,'waiting_relearning');assert.equal(runtime.run,null);assert.equal(runtime.summary.reviewTargetIds.length,1);assert.equal(runtime.summary.initialTargetIds.length,0);assert.equal(runtime.summary.waitingTargetIds.length,1);
+ h.setNow(new Date(h.now().getTime()+4*60000));runtime=await next(runtime);assert.equal(runtime.summary.nextEligibleAt,dueTime);
+ const oldActivity=runtime.activity.id;runtime=value(await push(command('activity.end',{activityId:oldActivity,expectedRevision:runtime.activity.revision}))).runtime;assert.equal(runtime.summary.waitingTargetIds.length,1);assert.equal((await get('/sensa/home')).activity.status,'ended');
+ runtime=await start();assert.equal(runtime.reason,'waiting_relearning');assert.notEqual(runtime.activity.id,oldActivity);assert.equal(runtime.summary.nextEligibleAt,dueTime);
+ runtime=await next(runtime,true);assert.equal(runtime.run.purpose,'relearning');const relearnId=runtime.run.id;
+ runtime=await act(runtime.run,'reveal');const failed=action(runtime.run,'rate','again');runtime=value(await push(failed)).runtime;assert.equal(runtime.run.currentStep,null);assert.equal(runtime.run.status,'active');assert.equal(Date.parse(runtime.run.nextEligibleAt)-h.now().getTime(),600000);
+ assert.deepEqual(await memory(),afterReview);assert.equal((await push(failed)).body.results[0].status,'replayed');
+ const delayed=runtime.run.nextEligibleAt;runtime=await next(runtime);assert.equal(runtime.reason,'waiting_relearning');assert.equal(runtime.summary.nextEligibleAt,delayed);
+ h.setNow(new Date(Date.parse(delayed)));runtime=await next(runtime);assert.equal(runtime.run.id,relearnId);assert.equal(runtime.run.currentStep.phase,'recall');
+ runtime=await act(runtime.run,'reveal');runtime=await act(runtime.run,'rate','hard');assert.equal(runtime.run.completion.kind,'relearning_completion');assert.equal(runtime.run.completion.outcomeId,null);assert.equal(runtime.run.completion.schedulingDecisionId,null);assert.deepEqual(await memory(),afterReview);
+ assert.equal(runtime.summary.restoredTargetIds.length,1);assert.equal(runtime.summary.needsRecallTargetIds.length,0);assert.equal((await get('/sensa/activities/'+oldActivity)).reviewTargetIds.length,1);
+ h.setNow(new Date(afterReview.due_at));runtime=await start();assert.equal(runtime.run.purpose,'retention_review');assert.notEqual(runtime.run.id,reviewId);runtime=await act(runtime.run,'reveal');runtime=await act(runtime.run,'rate','good');assert.equal(runtime.run.completion.rating,'good');assert.equal(String((await memory()).revision),'3');
+ runtime=await start('mixed');assert.equal(runtime.run.id,unfinished);assert.equal(runtime.run.purpose,'initial_learning');assert.equal((await get('/sensa/home')).plan.newStartedToday,0);
+ assert.equal((await h.request('/sensa/activities/'+oldActivity)).status,404);
+ const outcomes=await h.pool.query('SELECT grade,basis,evidence_level FROM sensa_consumer.memory_outcomes WHERE retention_target_id=$1 ORDER BY memory_revision',[retentionId]);assert.deepEqual(outcomes.rows.map((r:any)=>r.grade),['again','good']);assert.ok(outcomes.rows.every((r:any)=>r.basis==='learner_rated'&&r.evidence_level==='self_report'));
+ console.log('M1-D retention passed: mode isolation, due identity, two-install conflict, rollback, one Outcome/FSRS, 10-minute wait/early/repeat, immutable original rating, recovery without rescheduling, summary attribution.');
+}

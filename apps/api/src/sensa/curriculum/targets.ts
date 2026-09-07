@@ -39,12 +39,12 @@ export async function targetView(db:DatabaseExecutor,a:Scope,id:string,byCandida
   const r=(await db.query('SELECT * FROM sensa.retention_targets WHERE retention_target_id=$1 AND learner_user_id=$2',[member.retention_target_id,a.learner_user_id])).rows[0]!;
   const sources=(await db.query('SELECT c.source FROM sensa_consumer.target_sources s JOIN sensa_consumer.catalog_candidates c ON c.id=s.candidate_id WHERE s.membership_id=$1 ORDER BY c.id',[member.id])).rows.map(x=>x.source);
   const mastery=(await db.query('SELECT active,revision FROM sensa_consumer.declared_masteries WHERE retention_target_id=$1',[member.retention_target_id])).rows[0];
-  const runtime=(await db.query('SELECT r.status,m.due_at FROM sensa_consumer.runs r LEFT JOIN sensa_consumer.retention_memory m ON m.retention_target_id=r.retention_target_id WHERE r.retention_target_id=$1',[member.retention_target_id])).rows[0];
+  const runtime=(await db.query('SELECT r.status,m.due_at FROM sensa_consumer.runs r LEFT JOIN sensa_consumer.retention_memory m ON m.retention_target_id=r.retention_target_id WHERE r.retention_target_id=$1 ORDER BY r.started_at DESC,r.id DESC LIMIT 1',[member.retention_target_id])).rows[0];
   const contractVersion='sensa-learning-connection-v2';
   return targetViewSchema.parse({candidate:c,learningTarget:{contractVersion,learningTargetId:l.learning_target_id,learnerUserId:l.learner_user_id,senseId:l.sense_id,senseVersionId:l.sense_version_id,senseExpressionBindingId:l.sense_expression_binding_id,bindingVersionId:l.binding_version_id,familiarLanguageTag:l.familiar_language_tag,targetLanguageTag:l.target_language_tag,learnerLocale:l.learner_locale,curriculumProvenance:l.curriculum_provenance,createdByOperationId:l.created_by_operation_id,createdAt:l.created_at.toISOString()},
     retentionTarget:{contractVersion,retentionTargetId:r.retention_target_id,learningTargetId:l.learning_target_id,learnerUserId:r.learner_user_id,senseId:r.sense_id,senseExpressionBindingId:r.sense_expression_binding_id,retentionScopeKey:r.retention_scope_key,status:r.status,revision:Number(r.revision),createdAt:r.created_at.toISOString(),updatedAt:r.updated_at.toISOString()},
     membership:{id:member.id,revision:String(member.revision),status:member.status,provenances:sources},declaredMastery:{active:mastery?.active??false,revision:String(mastery?.revision??0)},
-    plan:{id:member.plan_id,revision:String(member.plan_revision),purpose:'initial_learning',readiness:member.readiness,reason:member.reason,retryAllowed:member.retry_allowed,materializationId:member.materialization_id,policyId:'lightweight',policyVersion:'v1'},phase:runtime?.status==='completed'?'retaining':runtime?'acquiring':'new',dueAt:runtime?.due_at?.toISOString()??null});
+    plan:{id:member.plan_id,revision:String(member.plan_revision),purpose:'initial_learning',readiness:member.readiness,reason:member.reason,retryAllowed:member.retry_allowed,materializationId:member.materialization_id,policyId:'lightweight',policyVersion:'v1'},phase:runtime?.due_at?'retaining':runtime?'acquiring':'new',dueAt:runtime?.due_at?.toISOString()??null});
 }
 export async function listTargets(db:DatabaseExecutor,a:Scope){
   const rows=(await db.query('SELECT learning_target_id FROM sensa_consumer.target_memberships WHERE learner_user_id=$1 ORDER BY id LIMIT 501',[a.learner_user_id])).rows;
@@ -139,7 +139,8 @@ export async function materialView(db:DatabaseExecutor,a:Scope,id:string){
   const row=(await db.query(`SELECT m.content_payload,m.content_digest FROM sensa.learning_materializations m
     JOIN sensa_consumer.target_plans p ON p.materialization_id=m.learning_materialization_id
     JOIN sensa_consumer.target_memberships t ON t.id=p.membership_id
-    WHERE m.learning_materialization_id=$1 AND m.learner_user_id=$2 AND t.learner_user_id=$2 AND p.readiness='ready'`,[id,a.learner_user_id])).rows[0];
+    WHERE m.learning_materialization_id=$1 AND m.learner_user_id=$2 AND t.learner_user_id=$2 AND p.readiness='ready'
+    UNION ALL SELECT m.content_payload,m.content_digest FROM sensa.learning_materializations m JOIN sensa_consumer.runs r ON r.materialization_id=m.learning_materialization_id WHERE m.learning_materialization_id=$1 AND m.learner_user_id=$2 AND r.learner_user_id=$2 LIMIT 1`,[id,a.learner_user_id])).rows[0];
   if(!row)throw new ConsumerError(404,'material_not_found');
   return {id,digest:row.content_digest,content:sensaLightweightInitialMaterializationContentSchema.parse(row.content_payload)};
 }

@@ -1,3 +1,4 @@
+import {runRetentionChecks} from './support/consumerRetentionChecks.mts';
 import {computeReviewSchedule,createEmptyReviewableCardScheduleState,defaultWorkspaceSchedulerConfig,consumerInitialStepId} from '@sensa/learning-kernel';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -205,6 +206,7 @@ if(process.argv.includes('--initial')){
  runtime=val(await push(boot,[cmd('activity.end',{activityId:runtime.activity.id,expectedRevision:runtime.activity.revision})]));assert.equal(runtime.summary.status,'ended');
  console.log('M1-C initial runtime passed: grant/clock/scope, local action protocol, fresh steps, atomic settlement, completion/handoff uniqueness, quota concurrency, next-day continuation, late upload, pause/end, private feed.');
 }
+if(process.argv.includes('--retention'))await runRetentionChecks({pool,issuer,token,initialize,bootstrap,request,push,now:()=>testNow,setNow:(at:Date)=>{testNow=at;},failDecision:(yes:boolean)=>{injectDecisionFailure=yes;}});
 assert.equal((await request('/sensa/account/session/revoke',{operationId:crypto.randomUUID()})).status,200);
 assert.equal((await request('/sensa/account/session/revoke',{operationId:crypto.randomUUID()})).status,200);
 assert.equal((await request('/sensa/home')).status,401);
@@ -214,13 +216,14 @@ console.log('M1-A PostgreSQL/JWT/quantity/sync smoke passed: invitation, signatu
 if(process.argv.includes('--serve')) {
   const serverPackage='@hono/node-server';
   const {serve}=await import(serverPackage);
-  const browserApp=new Hono();
+  let browserClockOffset=0;const browserApp=new Hono();
   browserApp.use('*',cors({origin:'http://127.0.0.1:3001',allowHeaders:['authorization','content-type','apikey','x-client-info','x-supabase-api-version']}));
-  browserApp.route('',createConsumerRoutes({verify:createConsumerVerifier(issuer,createLocalJWKSet({keys:[jwk]})),transaction,mediaReader}));
+  browserApp.route('',createConsumerRoutes({verify:createConsumerVerifier(issuer,createLocalJWKSet({keys:[jwk]})),transaction,mediaReader,clock:()=>new Date(Date.now()+browserClockOffset)}));
   // Synthetic Auth API only in this explicitly launched loopback test harness.
   // This is NOT real Supabase mail delivery and is never imported by production.
   const browserSubject=crypto.randomUUID();await pool.query('INSERT INTO sensa_consumer.invitations(issuer,subject) VALUES($1,$2)',[issuer,browserSubject]);
   async function session(){const sessionId=crypto.randomUUID();return {access_token:await token(browserSubject,sessionId),refresh_token:'local-only-test',token_type:'bearer',expires_in:3600,user:{id:browserSubject,aud:'authenticated',role:'authenticated',email:'test@sensa.invalid',email_confirmed_at:new Date().toISOString(),app_metadata:{provider:'email'},user_metadata:{},created_at:new Date().toISOString()}};}
+  browserApp.post('/__test/advance',async c=>{const input=await c.req.json();if(!Number.isSafeInteger(input.ms)||input.ms<0||input.ms>7*86400000)return c.json({error:'invalid'},400);browserClockOffset+=input.ms;return c.json({now:new Date(Date.now()+browserClockOffset).toISOString()});});
   browserApp.post('/auth/v1/otp',async c=>{const input=await c.req.json();return input.email==='test@sensa.invalid'?c.json({}):c.json({msg:'Not invited'},403);});
   browserApp.post('/auth/v1/verify',async c=>{const input=await c.req.json();return input.token==='123456'&&input.email==='test@sensa.invalid'?c.json(await session()):c.json({msg:'Invalid OTP'},400);});
   browserApp.post('/auth/v1/token',async c=>c.json(await session()));

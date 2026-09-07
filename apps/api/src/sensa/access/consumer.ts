@@ -1,4 +1,5 @@
-import {applyRuntime,listRuns,runView,currentActivity,initialAvailability,accountDate,startedToday} from '../runtime/initial.js';
+import {retentionAvailability} from '../runtime/retention.js';
+import {applyRuntime,listRuns,runView,currentActivity,initialAvailability,accountDate,startedToday,activitySummary} from '../runtime/initial.js';
 import { Hono } from 'hono';
 import {readConsumerMedia,bytesDigest} from '../media/consumer.js';
 import type {ConsumerMediaReader} from '../media/consumer.js';
@@ -49,7 +50,7 @@ async function plan(db: DatabaseExecutor, a: Account): Promise<PlanView|null> {
   return planViewSchema.parse({ id:row.id,revision:String(row.revision),scopeRevision:String(row.scope_revision),
     quantityConfirmed:true,dailyNewLimit:row.daily_new_limit,timeZone:a.time_zone,accountDate:date,newStartedToday:started,newRemaining:Math.max(0,row.daily_new_limit-started) });
 }
-function query(a: Account, data: unknown) { return { contractVersion:consumerVersion,serverTime:iso(),scopeEpoch:String(a.epoch),projectionRevision:String(a.feed_head),data }; }
+function query(a: Account, data: unknown) { return { contractVersion:consumerVersion,serverTime:a.now.toISOString(),scopeEpoch:String(a.epoch),projectionRevision:String(a.feed_head),data }; }
 async function context(db: DatabaseExecutor, a: Account, installationId: string) {
   const found = (await db.query('SELECT id FROM sensa_consumer.installations WHERE id=$1 AND account_id=$2', [installationId,a.account_id])).rows[0];
   if (!found) throw new ConsumerError(403,'installation_scope_mismatch');
@@ -189,7 +190,7 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
       if(op.replicaId!==input.replicaId)throw new ConsumerError(403,'replica_scope_mismatch');
       await replica(db,a,input.replicaId,op.installationId);return execute(db,a,op);
     }));
-    return c.json({wireVersion:consumerWireVersion,results,serverTime:iso()});
+    return c.json({wireVersion:consumerWireVersion,results,serverTime:clock().toISOString()});
   });
   app.post('/sensa/sync/pull',async c=>{
     const identity=await verify(c.req.raw);const input=consumerPullSchema.parse(await c.req.json());
@@ -206,11 +207,17 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
   app.get('/sensa/home',async c=>{
     const identity=await verify(c.req.raw);
     return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());const current=await plan(db,a);const targets=await listTargets(db,a);
-      const runs=await listRuns(db,a),active=runs.filter(r=>r.status==='active');
-      const available=Math.min((await initialAvailability(db,a)).length,current?.newRemaining??0);
-      const due=targets.filter(t=>!t.declaredMastery.active&&t.dueAt&&new Date(t.dueAt)<=a.now).length;
-      return query(a,{plan:current,targets,runs,activity:await currentActivity(db,a),counts:{newAvailable:available,initialContinuations:active.length,dueReviews:due,relearningReady:0,relearningWaiting:0,distinctExecutableTargets:available+active.length},resumeItems:active,emptyReason:!current?'onboarding_required':!targets.length?'no_targets':available||active.length?null:targets.some(t=>t.plan?.readiness==='preparing')?'preparing':targets.every(t=>t.plan?.readiness==='blocked')?'blocked':current.newRemaining===0?'daily_limit':'none_due'});
+      const runs=await listRuns(db,a),active=runs.filter(r=>r.status==='active'&&r.currentStep);
+      const available=Math.min((await initialAvailability(db,a)).length,current?.newRemaining??0),retention=await retentionAvailability(db,a);
+      const ready=retention.needs.filter(n=>n.next_eligible_at<=a.now),waiting=retention.needs.filter(n=>n.next_eligible_at>a.now);
+      const distinct=new Set([...active.map(r=>r.retentionTargetId),...retention.due.map(r=>r.retention_target_id),...ready.map(r=>r.retention_target_id)]);
+      const act=await currentActivity(db,a),summary=act?await activitySummary(db,a,act):null;
+      return query(a,{plan:current,targets,runs,activity:act,summary,counts:{newAvailable:available,initialContinuations:active.filter(r=>r.purpose==='initial_learning').length,dueReviews:retention.due.length+active.filter(r=>r.purpose==='retention_review').length,relearningReady:ready.length,relearningWaiting:waiting.length,distinctExecutableTargets:available+distinct.size},resumeItems:active,emptyReason:!current?'onboarding_required':!targets.length?'no_targets':available||distinct.size?null:waiting.length?'waiting_relearning':targets.some(t=>t.plan?.readiness==='preparing')?'preparing':targets.every(t=>t.plan?.readiness==='blocked')?'blocked':current.newRemaining===0?'daily_limit':'none_due'});
     }));
+  });
+  app.get('/sensa/activities/:id',async c=>{
+    const identity=await verify(c.req.raw),id=uuid.parse(c.req.param('id'));
+    return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());const row=(await db.query('SELECT id,revision,mode,status,current_run_id FROM sensa_consumer.activities WHERE id=$1 AND learner_user_id=$2',[id,a.learner_user_id])).rows[0];if(!row)throw new ConsumerError(404,'activity_not_found');return query(a,await activitySummary(db,a,{id:row.id,mode:row.mode,status:row.status,revision:String(row.revision),runId:row.current_run_id}));}));
   });
   app.get('/sensa/runs/:id',async c=>{
     const identity=await verify(c.req.raw),id=uuid.parse(c.req.param('id'));

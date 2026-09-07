@@ -106,15 +106,35 @@ try {
   await page.getByRole('button',{name:'想起来了',exact:true}).click();await expect(page.getByRole('heading',{name:'请联网恢复学习'})).toBeVisible();await expect(page.getByRole('button',{name:'联网恢复',exact:true})).toBeEnabled();
   await page.evaluate(()=>{Date.now=(window as any).__sensaOriginalNow;delete (window as any).__sensaOriginalNow;});
   await page.getByRole('button',{name:'联网恢复',exact:true}).click();await expect(page.getByRole('button',{name:'想起来了',exact:true})).toBeVisible();
-  await page.route('http://127.0.0.1:4319/sensa/sync/push',async route=>{const response=await route.fetch();expect(response.ok()).toBe(true);await route.abort('failed');});
+  let terminalDone!:()=>void;const terminalHandled=new Promise<void>(resolve=>{terminalDone=resolve;});
+  await page.route('http://127.0.0.1:4319/sensa/sync/push',async route=>{const response=await route.fetch();expect(response.ok()).toBe(true);await route.abort('failed');terminalDone();});
   await page.getByRole('button',{name:'想起来了',exact:true}).click();await expect(page.getByRole('heading',{name:'回答已保存在本机'})).toBeVisible();await expect(page.getByRole('heading',{name:'已完成首次学习'})).toHaveCount(0);
   await page.screenshot({path:output+'/initial-pending-result.png',fullPage:true});
+  await Promise.race([terminalHandled,new Promise((_,reject)=>setTimeout(()=>reject(new Error('Terminal response not intercepted')),15000))]);
   await page.unroute('http://127.0.0.1:4319/sensa/sync/push');await page.getByRole('button',{name:'检查本次结果',exact:true}).click();
   await expect(page.getByRole('heading',{name:'已完成首次学习'})).toBeVisible();await expect(page.getByText(/下次复习：/)).toBeVisible();
   await page.screenshot({path:output+'/initial-completed.png',fullPage:true});
   await page.getByRole('button',{name:'回首页',exact:true}).click();await expect(page.getByText('今天已开始 1 个新目标')).toBeVisible();
   await page.reload();await expect(page.getByText('已完成首次学习，等待复习')).toBeVisible();await expect(page.getByText(/项请求待同步/)).toHaveCount(0);
   console.log('M1-C Chromium passed: no answer leak, IDB failure does not advance, offline multi-step/pause/resume, reload clock guard, audio, lost completion response/replay, authoritative due time.');
+ }
+ if(process.env.SENSA_TEST_RETENTION==='1'){
+  const advance=async(ms:number)=>{const response=await page.request.post('http://127.0.0.1:4319/__test/advance',{data:{ms}});expect(response.ok()).toBe(true);};
+  await advance(2*86400000);await page.getByRole('button',{name:'只复习',exact:true}).click();await expect(page.getByRole('heading',{name:'到期复习',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'查看表达',exact:true}).click();await page.getByRole('button',{name:'没想起',exact:true}).click();await expect(page.getByRole('heading',{name:'本次复习已记录'})).toBeVisible();
+  await page.getByRole('button',{name:'继续其他内容',exact:true}).click();await expect(page.getByRole('heading',{name:'稍后还有 1 个需要再回想'})).toBeVisible();await expect(page.getByText('首次学习 1 个 · 已复习 1 个')).toHaveCount(0);
+  const waiting=await page.getByText(/最近可继续时间：/).innerText();await page.getByRole('button',{name:'结束本次',exact:true}).click();await expect(page.getByRole('button',{name:'继续学习',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'回首页',exact:true}).click();await page.getByRole('button',{name:'只复习',exact:true}).click();await expect(page.getByText(waiting,{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'提前继续',exact:true}).click();await expect(page.getByRole('heading',{name:'再次回想',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'查看表达',exact:true}).click();await page.getByRole('button',{name:'没想起',exact:true}).click();await expect(page.getByRole('heading',{name:'稍后再回想这个目标'})).toBeVisible();
+  await page.getByRole('button',{name:'继续其他内容',exact:true}).click();await expect(page.getByRole('heading',{name:'稍后还有 1 个需要再回想'})).toBeVisible();
+  const repeated=await page.getByText(/最近可继续时间：/).innerText();await page.screenshot({path:output+'/retention-waiting.png',fullPage:true});
+  await page.reload();await expect(page.getByRole('heading',{name:'今天的学习'})).toBeVisible();await page.getByRole('button',{name:'只复习',exact:true}).click();await expect(page.getByText(repeated,{exact:true})).toBeVisible();
+  await advance(600000);await page.getByRole('button',{name:'检查可继续内容',exact:true}).click();await expect(page.getByRole('heading',{name:'再次回想',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'查看表达',exact:true}).click();await page.getByRole('button',{name:'想起来了',exact:true}).click();await expect(page.getByRole('heading',{name:'这次已重新想起'})).toBeVisible();
+  await expect(page.getByText(/原复习评价与复习时间保持原样/)).toBeVisible();await page.getByRole('button',{name:'继续其他内容',exact:true}).click();await expect(page.getByText('重学已恢复 1 个 · 仍需回想 0 个')).toBeVisible();
+  await page.screenshot({path:output+'/retention-restored.png',fullPage:true});await page.getByRole('button',{name:'回首页',exact:true}).click();
+  console.log('M1-D Chromium passed: due review, recorded again, wait/end/reenter, explicit early recall, repeated wait retained on reload, timed continuation, restored summary.');
  }
  await page.getByRole('button',{name:'退出登录',exact:true}).click();await expect(page.getByRole('heading',{name:'欢迎来到 Sensa'})).toBeVisible();
  expect(errors).toEqual([]);if(process.env.SENSA_TEST_CURRICULUM==='1')console.log('M1-B Chromium smoke passed: catalog/detail, offline add/reload, ready target, private material/audio, mastery/revoke, return home.');console.log('M1-A Chromium smoke passed: OTP failure/success, explicit quantity, reload, offline outbox/reconnect, failed-network reload, lost accepted response/replay, logout; screenshots '+output);
