@@ -1,3 +1,5 @@
+import {extensionVerifier,extensionAuthorizationSchema,extensionExchangeSchema,authorizeExtension,exchangeExtension} from './extension.js';
+import {saveIntake,listIntakes,readIntake} from '../personal/intake.js';
 import {issueAccountClock,listCheckIns,recordCheckIn} from '../activity/checkin.js';
 import {retentionAvailability} from '../runtime/retention.js';
 import {applyRuntime,listRuns,runView,currentActivity,initialAvailability,accountDate,startedToday,activitySummary} from '../runtime/initial.js';
@@ -18,12 +20,13 @@ import type { DatabaseExecutor } from '../../database/index.js';
 import { ConsumerError, verifyConsumer } from './auth.js';
 import type { ConsumerVerifier, ConsumerPrincipal } from './auth.js';
 
-type Account = { account_id: string; learner_user_id: string; epoch: string; feed_head: string; time_zone: string; session_id: string; now:Date };
+type Account = { account_id: string; learner_user_id: string; epoch: string; feed_head: string; time_zone: string; session_id: string; now:Date;authorizedInstallationId?:string };
 type Transaction = <T>(work: (db: DatabaseExecutor) => Promise<T>) => Promise<T>;
 const uuid = z.string().uuid();
 const fail = (code: string, latest: {id: string; revision: string}|null = null) => ({ code, retryable: false, retryAfterMs: null, latest, field: null, messageKey: code });
 const iso = () => new Date().toISOString();
 async function account(db: DatabaseExecutor, identity: ConsumerPrincipal, create?: z.infer<typeof installationInputSchema>, allowRevokedSession = false, now=new Date()): Promise<Account> {
+  if(create&&identity.installationId&&create.installationId!==identity.installationId)throw new ConsumerError(403,'installation_scope_mismatch');
   const invite = (await db.query('SELECT revoked FROM sensa_consumer.invitations WHERE issuer=$1 AND subject=$2 FOR UPDATE', [identity.issuer,identity.subject])).rows[0];
   if (!invite || invite.revoked) throw new ConsumerError(403, 'invite_required');
   let row = (await db.query('SELECT * FROM sensa_consumer.accounts WHERE issuer=$1 AND subject=$2 FOR UPDATE', [identity.issuer,identity.subject])).rows[0];
@@ -42,7 +45,7 @@ async function account(db: DatabaseExecutor, identity: ConsumerPrincipal, create
     const installation = (await db.query('SELECT account_id FROM sensa_consumer.installations WHERE id=$1', [create.installationId])).rows[0];
     if (installation?.account_id !== row.account_id) throw new ConsumerError(403,'installation_scope_mismatch');
   }
-  return { ...row, session_id: session.id,now } as Account;
+  return { ...row, session_id: session.id,now,authorizedInstallationId:identity.installationId } as Account;
 }
 async function plan(db: DatabaseExecutor, a: Account): Promise<PlanView|null> {
   const row = (await db.query('SELECT * FROM sensa_consumer.plans WHERE learner_user_id=$1', [a.learner_user_id])).rows[0];
@@ -53,6 +56,7 @@ async function plan(db: DatabaseExecutor, a: Account): Promise<PlanView|null> {
 }
 function query(a: Account, data: unknown) { return { contractVersion:consumerVersion,serverTime:a.now.toISOString(),scopeEpoch:String(a.epoch),projectionRevision:String(a.feed_head),data }; }
 async function context(db: DatabaseExecutor, a: Account, installationId: string,clockSessionId?:string) {
+  if(a.authorizedInstallationId&&a.authorizedInstallationId!==installationId)throw new ConsumerError(403,'installation_scope_mismatch');
   const found = (await db.query('SELECT id FROM sensa_consumer.installations WHERE id=$1 AND account_id=$2', [installationId,a.account_id])).rows[0];
   if (!found) throw new ConsumerError(403,'installation_scope_mismatch');
   const current = await plan(db,a);
@@ -62,6 +66,7 @@ async function context(db: DatabaseExecutor, a: Account, installationId: string,
 }
 async function replica(db: DatabaseExecutor, a: Account, replicaId: string, installationId?: string) {
   const row = (await db.query('SELECT * FROM sensa_consumer.installations WHERE replica_id=$1 AND account_id=$2', [replicaId,a.account_id])).rows[0];
+  if (a.authorizedInstallationId&&row?.id!==a.authorizedInstallationId)throw new ConsumerError(403,'installation_scope_mismatch');
   if (!row || (installationId && row.id !== installationId)) throw new ConsumerError(403,'replica_scope_mismatch');
   return row;
 }
@@ -84,6 +89,10 @@ async function execute(db: DatabaseExecutor, a: Account, op: ConsumerOperation):
     const prior=(await db.query('SELECT result FROM sensa_consumer.operations WHERE learner_user_id=$1 AND operation_id=$2',[a.learner_user_id,dependency])).rows[0];
     if(!prior) return {operationId:op.operationId,status:'retryable',error:{...fail('missing_dependency'),retryable:true}};
     if(prior.result.status!=='accepted') return store({operationId:op.operationId,status:'rejected',error:fail('blocked_by_prior_operation')});
+  }
+  if(op.kind==='intake.save'){
+    const value=await saveIntake(db,a,op);if(!value.alreadySaved)await publish(db,a,'intake',value.intake);
+    return store({operationId:op.operationId,status:'accepted',value:{...value,plan:await plan(db,a)}});
   }
   if(op.kind==='check_in.record'){
     await db.query('SAVEPOINT domain_operation');
@@ -147,7 +156,7 @@ async function publish(db:DatabaseExecutor,a:Account,entity:string,snapshot:unkn
 }
 
 export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transaction?:Transaction;mediaReader?:ConsumerMediaReader;clock?:()=>Date} = {}) {
-  const clock=options.clock??(()=>new Date());const app=new Hono(); const verify=options.verify??verifyConsumer; const transaction=options.transaction??unsafeTransaction;
+  const clock=options.clock??(()=>new Date());const app=new Hono(); const transaction=options.transaction??unsafeTransaction; const verify=extensionVerifier(options.verify??verifyConsumer,transaction,clock);
   app.use('*',bodyLimit({maxSize:256*1024,onError:c=>c.json({code:'body_too_large'},413)}));
   app.onError((e,c)=> {
     if(e instanceof ConsumerError)return c.json({code:e.code},e.status);
@@ -155,6 +164,8 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
     console.error('Consumer request failed',e instanceof Error?e.name:'unknown');
     return c.json({code:'temporarily_unavailable'},503);
   });
+  app.post('/sensa/extension/authorize',async c=>{const identity=await verify(c.req.raw);if(identity.installationId)throw new ConsumerError(403,'web_authorization_required');const input=extensionAuthorizationSchema.parse(await c.req.json());return c.json(await transaction(async db=>authorizeExtension(db,await account(db,identity,undefined,false,clock()),input)));});
+  app.post('/sensa/extension/exchange',async c=>{const input=extensionExchangeSchema.parse(await c.req.json());return c.json(await transaction(db=>exchangeExtension(db,input,clock())));});
   app.post('/sensa/account/session',async c=> {
     const identity=await verify(c.req.raw);const input=installationInputSchema.parse(await c.req.json());
     return c.json(await transaction(async db=>{const a=await account(db,identity,input,false,clock());return query(a,await context(db,a,input.installationId,input.clockSessionId));}));
@@ -171,10 +182,11 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
     const identity=await verify(c.req.raw);const input=consumerBootstrapSchema.parse(await c.req.json());
     return c.json(await transaction(async db=>{
       const a=await account(db,identity,undefined,false,clock());
+      if(a.authorizedInstallationId&&a.authorizedInstallationId!==input.installationId)throw new ConsumerError(403,'installation_scope_mismatch');
       const install=(await db.query('SELECT * FROM sensa_consumer.installations WHERE id=$1 AND account_id=$2',[input.installationId,a.account_id])).rows[0];
       if(!install || (input.replicaId && install.replica_id!==input.replicaId))throw new ConsumerError(403,'replica_scope_mismatch');
       return {wireVersion:consumerWireVersion,scopeEpoch:String(a.epoch),replicaId:install.replica_id,
-        snapshotId:crypto.randomUUID(),pageCursor:null,syncCursor:cursor(a,install.replica_id,String(a.feed_head)),plan:await plan(db,a),targets:await listTargets(db,a),runs:await listRuns(db,a),activity:await currentActivity(db,a),checkins:await listCheckIns(db,a)};
+        snapshotId:crypto.randomUUID(),pageCursor:null,syncCursor:cursor(a,install.replica_id,String(a.feed_head)),plan:await plan(db,a),targets:await listTargets(db,a),runs:await listRuns(db,a),activity:await currentActivity(db,a),checkins:await listCheckIns(db,a),intakes:await listIntakes(db,a)};
     }));
   });
   app.post('/sensa/sync/push',async c=>{
@@ -185,7 +197,7 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
       const a=await account(db,identity,undefined,false,clock());if(String(a.epoch)!==envelope.scopeEpoch)throw new ConsumerError(409,'bootstrap_required');
       await replica(db,a,envelope.replicaId);
     });
-    if(envelope.operations.some(op=>op && typeof op==='object' && 'kind' in op && !['plan.confirm_quantity','plan.set_quantity','curriculum.add_target','learning.retry_preparation','declared_mastery.set','activity.start_or_resume','activity.next','activity.pause','activity.end','run.record_action','check_in.record'].includes(String(op.kind))))throw new ConsumerError(400,'unsupported_operation');
+    if(envelope.operations.some(op=>op && typeof op==='object' && 'kind' in op && !['plan.confirm_quantity','plan.set_quantity','curriculum.add_target','learning.retry_preparation','declared_mastery.set','activity.start_or_resume','activity.next','activity.pause','activity.end','run.record_action','check_in.record','intake.save'].includes(String(op.kind))))throw new ConsumerError(400,'unsupported_operation');
     const input:ConsumerPush=consumerPushSchema.parse(body);
     if(new Set(input.operations.map(o=>o.operationId)).size!==input.operations.length)throw new ConsumerError(400,'duplicate_operation');
     const pending=[...input.operations], ordered:ConsumerOperation[]=[];
@@ -210,6 +222,7 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
         nextCursor:cursor(a,input.replicaId,String(page.at(-1)?.sequence??last)),hasMore,serverTime:iso()};
     }));
   });
+  app.get('/sensa/intakes/:id',async c=>{const identity=await verify(c.req.raw);const id=uuid.parse(c.req.param('id'));return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());return query(a,await readIntake(db,a,id));}));});
   app.get('/sensa/home',async c=>{
     const identity=await verify(c.req.raw);
     return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());const current=await plan(db,a);const targets=await listTargets(db,a);

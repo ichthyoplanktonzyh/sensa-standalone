@@ -1,0 +1,17 @@
+{
+  "name": "@sensa/browser-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.0",
+    "esbuild": "^0.28.2"
+  },
+  "dependencies": {
+    "@sensa/contracts": "0.1.0"
+  }
+}

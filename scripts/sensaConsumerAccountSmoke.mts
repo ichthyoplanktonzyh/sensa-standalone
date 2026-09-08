@@ -1,3 +1,4 @@
+import {runIntakeChecks} from './support/consumerIntakeChecks.mts';
 import {runCheckInChecks} from './support/consumerCheckInChecks.mts';
 import {runRetentionChecks} from './support/consumerRetentionChecks.mts';
 import {computeReviewSchedule,createEmptyReviewableCardScheduleState,defaultWorkspaceSchedulerConfig,consumerInitialStepId} from '@sensa/learning-kernel';
@@ -210,6 +211,7 @@ if(process.argv.includes('--initial')){
 }
 if(process.argv.includes('--retention'))await runRetentionChecks({pool,issuer,token,initialize,bootstrap,request,push,now:()=>testNow,setNow:(at:Date)=>{testNow=at;},failDecision:(yes:boolean)=>{injectDecisionFailure=yes;}});
 if(process.argv.includes('--checkin'))await runCheckInChecks({pool,issuer,token,initialize,bootstrap,request,push,now:()=>testNow,setNow:(at:Date)=>{testNow=at;},failCheckIn:(yes:boolean)=>{injectCheckInFailure=yes;}});
+if(process.argv.includes('--intake')){const intakeSubject=crypto.randomUUID();await pool.query('INSERT INTO sensa_consumer.invitations(issuer,subject) VALUES($1,$2)',[issuer,intakeSubject]);await runIntakeChecks({request,initialize,bootstrap,push,token,subject:intakeSubject,pool,issuer,failLedger:(yes:boolean)=>{injectFailure=yes;}});}
 assert.equal((await request('/sensa/account/session/revoke',{operationId:crypto.randomUUID()})).status,200);
 assert.equal((await request('/sensa/account/session/revoke',{operationId:crypto.randomUUID()})).status,200);
 assert.equal((await request('/sensa/home')).status,401);

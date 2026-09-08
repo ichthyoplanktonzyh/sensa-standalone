@@ -1,3 +1,4 @@
+import {intakeViewSchema} from '@sensa/contracts/sensa';
 import {calibrateRun,calibrateClock,clockSessionId} from '../replica/clock';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
@@ -29,9 +30,9 @@ export async function initializeAccount(subject:string) {
 export function cachedAccount(subject:string):AccountContext|null {
   try {const raw=localStorage.getItem(`sensa:account:v3:${subject}`);return raw?accountContextSchema.parse(JSON.parse(raw)):null;}catch{return null;}
 }
-const bootstrapSchema=z.object({scopeEpoch:revisionSchema,replicaId:z.string().uuid(),syncCursor:z.string(),plan:planViewSchema.nullable(),targets:z.array(targetViewSchema),runs:z.array(consumerRunSchema),activity:consumerActivitySchema.nullable(),checkins:z.array(checkInViewSchema)}).passthrough();
+const bootstrapSchema=z.object({scopeEpoch:revisionSchema,replicaId:z.string().uuid(),syncCursor:z.string(),plan:planViewSchema.nullable(),targets:z.array(targetViewSchema),runs:z.array(consumerRunSchema),activity:consumerActivitySchema.nullable(),checkins:z.array(checkInViewSchema),intakes:z.array(intakeViewSchema)}).passthrough();
 const resultSchema=z.object({results:z.array(quantityResultSchema),serverTime:z.string().datetime()}).passthrough();
-const pullSchema=z.object({scopeEpoch:revisionSchema,changes:z.array(z.discriminatedUnion('entityType',[z.object({entityType:z.literal('plan'),snapshot:planViewSchema}).passthrough(),z.object({entityType:z.literal('target'),snapshot:targetViewSchema}).passthrough(),z.object({entityType:z.literal('run'),snapshot:consumerRunSchema}).passthrough(),z.object({entityType:z.literal('activity'),snapshot:consumerActivitySchema}).passthrough(),z.object({entityType:z.literal('check_in'),snapshot:checkInViewSchema}).passthrough()])),nextCursor:z.string(),hasMore:z.boolean()}).passthrough();
+const pullSchema=z.object({scopeEpoch:revisionSchema,changes:z.array(z.discriminatedUnion('entityType',[z.object({entityType:z.literal('intake'),snapshot:intakeViewSchema}).passthrough(),z.object({entityType:z.literal('plan'),snapshot:planViewSchema}).passthrough(),z.object({entityType:z.literal('target'),snapshot:targetViewSchema}).passthrough(),z.object({entityType:z.literal('run'),snapshot:consumerRunSchema}).passthrough(),z.object({entityType:z.literal('activity'),snapshot:consumerActivitySchema}).passthrough(),z.object({entityType:z.literal('check_in'),snapshot:checkInViewSchema}).passthrough()])),nextCursor:z.string(),hasMore:z.boolean()}).passthrough();
 const flights=new Map<string,Promise<Awaited<ReturnType<typeof loadAccountReplica>>>>();
 export function syncAccount(account:AccountContext) {
   // Each caller has just saved its own work. A pass already reading its final home
@@ -47,7 +48,7 @@ async function drain(account:AccountContext) {
   let state=await loadAccountReplica(account);
   async function bootstrap() {
     const value=bootstrapSchema.parse(await request('/sensa/sync/bootstrap',{wireVersion:consumerWireVersion,installationId:state.installationId,replicaId:state.replicaId}));
-    state=await changeAccountReplica(account,current=>({...current,scopeEpoch:value.scopeEpoch,replicaId:value.replicaId,cursor:value.syncCursor,runs:mergeRuns(current.scopeEpoch===value.scopeEpoch?current.runs:{},value.runs),activity:value.activity,checkins:{...current.checkins,...Object.fromEntries(value.checkins.map(x=>[x.date,x]))},targets:mergeTargets(current.scopeEpoch===value.scopeEpoch?current.targets:{},value.targets),plan:current.scopeEpoch===value.scopeEpoch?newestPlan(current.plan,value.plan):value.plan}));
+    state=await changeAccountReplica(account,current=>({...current,intakes:Object.fromEntries(value.intakes.map(x=>[x.id,x])),scopeEpoch:value.scopeEpoch,replicaId:value.replicaId,cursor:value.syncCursor,runs:mergeRuns(current.scopeEpoch===value.scopeEpoch?current.runs:{},value.runs),activity:value.activity,checkins:{...current.checkins,...Object.fromEntries(value.checkins.map(x=>[x.date,x]))},targets:mergeTargets(current.scopeEpoch===value.scopeEpoch?current.targets:{},value.targets),plan:current.scopeEpoch===value.scopeEpoch?newestPlan(current.plan,value.plan):value.plan}));
   }
   if(!state.replicaId||!state.cursor)await bootstrap();
   // Drain newly saved dependent steps too; retryable results end this pass without spinning.
@@ -67,7 +68,7 @@ async function drain(account:AccountContext) {
   while(more){
     try {
       const pulled=pullSchema.parse(await request('/sensa/sync/pull',{wireVersion:consumerWireVersion,scopeEpoch:state.scopeEpoch,replicaId:state.replicaId,cursor:state.cursor,limit:100}));
-      state=await changeAccountReplica(account,current=>({...current,plan:newestPlan(current.plan,pulled.changes.filter(x=>x.entityType==='plan').at(-1)?.snapshot??null),targets:mergeTargets(current.targets,pulled.changes.filter(x=>x.entityType==='target').map(x=>x.snapshot)),runs:mergeRuns(current.runs,pulled.changes.filter(x=>x.entityType==='run').map(x=>x.snapshot)),activity:pulled.changes.filter(x=>x.entityType==='activity').at(-1)?.snapshot??current.activity,checkins:{...current.checkins,...Object.fromEntries(pulled.changes.filter(x=>x.entityType==='check_in').map(x=>[x.snapshot.date,x.snapshot]))},cursor:pulled.nextCursor,scopeEpoch:pulled.scopeEpoch}));more=pulled.hasMore;
+      state=await changeAccountReplica(account,current=>({...current,plan:newestPlan(current.plan,pulled.changes.filter(x=>x.entityType==='plan').at(-1)?.snapshot??null),targets:mergeTargets(current.targets,pulled.changes.filter(x=>x.entityType==='target').map(x=>x.snapshot)),runs:mergeRuns(current.runs,pulled.changes.filter(x=>x.entityType==='run').map(x=>x.snapshot)),activity:pulled.changes.filter(x=>x.entityType==='activity').at(-1)?.snapshot??current.activity,checkins:{...current.checkins,...Object.fromEntries(pulled.changes.filter(x=>x.entityType==='check_in').map(x=>[x.snapshot.date,x.snapshot]))},intakes:{...current.intakes,...Object.fromEntries(pulled.changes.filter(x=>x.entityType==='intake').map(x=>[x.snapshot.id,x.snapshot]))},cursor:pulled.nextCursor,scopeEpoch:pulled.scopeEpoch}));more=pulled.hasMore;
     } catch(e){if(e instanceof ConsumerClientError&&e.code==='bootstrap_required'){await bootstrap();more=false;}else throw e;}
   }
   const home=z.object({contractVersion:z.literal(consumerVersion),data:z.object({plan:planViewSchema.nullable(),targets:z.array(targetViewSchema),runs:z.array(consumerRunSchema),activity:consumerActivitySchema.nullable(),summary:consumerSummarySchema.nullable(),checkins:z.array(checkInViewSchema),counts:z.object({newAvailable:z.number(),initialContinuations:z.number(),dueReviews:z.number(),relearningReady:z.number(),relearningWaiting:z.number(),distinctExecutableTargets:z.number()}),emptyReason:z.enum(['no_targets','onboarding_required','preparing','blocked','daily_limit','none_due','waiting_relearning']).nullable()}).passthrough()}).passthrough().parse(await request('/sensa/home'));
@@ -111,3 +112,5 @@ export async function cacheRunMaterial(account:AccountContext,run:import('@sensa
  for(const r of material.content.resources){const ref=r.contentPayload.audioUrl;if(typeof ref==='string'&&ref.startsWith('sensa-media:'))audio[ref.slice(12)]=await readMaterialAudio(material.id,ref.slice(12));}
  return changeAccountReplica(account,state=>({...state,materials:{...state.materials,[material.id]:material},audio:{...state.audio,...audio}}));
 }
+
+export async function connectExtension(input:unknown){return z.object({redirectUri:z.string().url()}).strict().parse(await request('/sensa/extension/authorize',input));}

@@ -51,11 +51,11 @@ jobs:
         run: |
           node --import tsx scripts/support/consumerTargetFixture.mts --write
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/sensa-m1b-fixture.sql
-      - run: npm run sensa:consumer-checkin-smoke
+      - run: node --import tsx scripts/sensaConsumerAccountSmoke.mts --targets --initial --retention --checkin --intake
         env:
           SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci
       - run: npm run sensa:edge-check
-      - run: deno run --allow-env --allow-net --allow-read --allow-sys --config supabase/functions/sensa-api/deno.json scripts/sensaConsumerAccountSmoke.mts --targets --initial --retention --checkin
+      - run: deno run --allow-env --allow-net --allow-read --allow-sys --config supabase/functions/sensa-api/deno.json scripts/sensaConsumerAccountSmoke.mts --targets --initial --retention --checkin --intake
         env:
           SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci
 

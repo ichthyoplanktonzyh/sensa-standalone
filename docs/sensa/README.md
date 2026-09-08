@@ -55,6 +55,8 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M1-B local implementation | [`m1-b-target-handoff.md`](m1-b-target-handoff.md) | 目录、加入、准备、私有材料与已会声明的本地纵切；DeepSeek/edge-tts 实际小样本与待验收边界 |
 | M1-C local implementation | [`m1-c-initial-handoff.md`](m1-c-initial-handoff.md) | 正式首学、离线回答、暂停恢复与一次性调度结算；本地集成/浏览器证据与时间合同细化 |
 | M1-D local implementation | [`m1-d-retention-handoff.md`](m1-d-retention-handoff.md) | 到期复习、一次 Memory Outcome、10 分钟重学与去重汇总的本地纵切 |
+| M2 contract | [`m2-consumer-contract.md`](m2-consumer-contract.md) | M2 分段、固定采集输入、插件授权与后续确认/供给边界 |
+| M2-A local implementation | [`m2-a-intake-handoff.md`](m2-a-intake-handoff.md) | 实际插件采集、PKCE、收件箱持久与同账号 Web 本地证据；原生权限矩阵待验收 |
 | Active roadmap | [`production-migration-plan.md`](production-migration-plan.md) | M0–M5 生产化路线图：正式产品与消费契约、生产闭环、恢复与数据控制、受邀发布和用户验证；含依赖、验收门与当前待办 |
 | Current working agreement | [`development-workflow.md`](development-workflow.md) | 可调整的开发方式：全局结构蓝图、owner 参与前端确认、消费契约、主代理直接实现与端到端验收；不替代领域或路线图 |
 | M1-E local implementation | [`m1-e-checkin-handoff.md`](m1-e-checkin-handoff.md) | 手动/正式学习签到、原日期离线上传、账号隔离恢复与 A–E 集成验收 |
