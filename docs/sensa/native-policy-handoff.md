@@ -55,3 +55,5 @@ Flutter analyze 无问题；macOS release 构建通过（54.4 MB）。保留已�
 
 将通用 Observation / Decision / Checkpoint 状态接入 SQLite 事务与恢复，再接对应多阶段 Flutter 消费链路。
 Policy Migration、完整角色资源/媒体、scope 准入、正式 Activity/Mixed/汇总均保留在迁移清单中。
+
+后续状态：上述通用进度账本已继续实施，见 [账本迁移记录](native-progress-journal-handoff.md)；多阶段执行与界面仍待推进。

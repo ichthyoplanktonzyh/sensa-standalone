@@ -31,7 +31,7 @@ Owner 最新确认：Flutter/Rust 原生 PC/移动应用是确定的主产品；
 | --- | --- | --- |
 | 协议推进与结果资格 | packages/learning-kernel/src/runtime/consumerInitial.ts、consumerSettlement.ts | 已迁入 sensa-core/protocol.rs、settlement.rs；三种 purpose，未知版本拒绝；尚非完整通用 Protocol Runtime |
 | 可配置 FSRS 与历史重建 | packages/learning-kernel/src/runtime/scheduling.ts、workspaceConfig.ts | 已迁入 sensa-core/scheduling.rs；四档评分、保留率、步长、最大间隔、确定性 fuzz；不是新 UI 设置或同步合并授权 |
-| Progression Kernel | packages/learning-kernel/src/runtime/protocolProgression.ts | 纯内核已迁移 credit/invalidate/repair/reassess/reset/complete、epoch 与 Checkpoint 不变量，通过 TS 差分；通用状态的 SQLite 账本及多阶段 Flutter 消费仍待接入 |
+| Progression Kernel | packages/learning-kernel/src/runtime/protocolProgression.ts | 纯内核已迁移 credit/invalidate/repair/reassess/reset/complete、epoch 与 Checkpoint 不变量，通过 TS 差分；通用状态的 SQLite 账本已接入轻量三 purpose，并验证多 Checkpoint 重置/恢复；多阶段 Flutter 消费仍待接入，见 native-progress-journal-handoff.md |
 | 正交策略与组合校验 | apps/web/src/experience/learningRuntime/protocolPolicies.ts、runtimeComposition.ts | 五轴 Registry/引用校验及三种 Progression 策略已迁移，原生入口校验真实轻量组合；专用编排/scope Registry 和行为执行器仍待迁移，见 native-progression-handoff.md |
 | Profile 与 Policy 生命周期 | apps/web/src/experience/learningRuntime/policyProfiles.ts；learning-connection-model.md | 四级 Assignment、版本化 purpose plan/readiness、首次 Run commitment 与 Flutter 设置已接入；普通配置不重写历史，Policy Migration 尚未实现，见 native-policy-handoff.md |
 | 编排、运行与存储适配 | apps/web/src/experience/learningRuntime/orchestrations.ts、runtimeCoordinator.ts、runtimeSession.ts、runtimeSurfaces.ts、retentionStores.ts | 待迁移 fresh/repair、暂停恢复、运行表面与存储职责；每日数量留在 Planner |
@@ -40,3 +40,23 @@ Owner 最新确认：Flutter/Rust 原生 PC/移动应用是确定的主产品；
 | 呈现与学习模式 | apps/web/src/experience/learningRuntime/stepRenderers.tsx、lightweightInitialPresentation.ts、lightweightInitialProtocol.ts、interleavedFourStageProtocol.ts | 规则/资源绑定迁 Rust，renderer 迁 Flutter；保留 intent/disclosure、轻量及已有多阶段行为，界面按正式 Web 验收 |
 
 现已继续实现有界文本包导入及多目标首学；纯内核基础见 [迁移记录](native-kernel-migration-handoff.md)。轻量复习/再学习事务与 Flutter 状态见 [本轮记录](native-retention-handoff.md)。后续继续完整角色学习包/媒体、通用 Runtime 扩展机制、正式 Activity 与汇总；上述未完成项全部保留，不能把本轮对照用例数换算为全项目完成率。
+
+## 怎样判定迁移完成（2026-09-08 更新）
+
+当前已经贯通的是原生轻量学习主链及若干通用内核基础，不是完整产品迁移。
+不能按提交数、文件数或差分测试数量换算百分比。待逐用例形成验收证据的主要工作可归为六组：
+
+1. **其余学习 Runtime**：多阶段/高保证执行、Action/材料绑定、编排与 scope 准入，以及原有策略的完整行为。
+2. **正式学习组织**：Activity/Mixed、每日计划、签到、记录与去重汇总。
+3. **个人语义世界**：Context/Sense/Expression、快慢轨、接受/澄清、保存修改与显式加入学习。
+4. **完整资源与在线任务协作**：正式学习包和媒体、固定 Materialization、LLM 任务状态/结果回收、音频及失败恢复。
+5. **采集入口交接**：TS 浏览器/YouTube、Agent 及后续端口通过统一接受规则进入本地库，验证幂等和隔离。
+6. **正式原生产品界面**：承接 apps/web 的完整功能、状态与恢复体验，分别通过桌面/移动验收；目前仍是技术验收壳。
+
+以上是工作分组，不是六个等量任务，也不承诺六次提交即可完成。
+每个已存在 Web 用例都必须有“原实现依据 → 原生合同/实现 → 成功、失败、离线、重启恢复证据”的闭合记录，
+内核扩展项不能只以单一轻量方式替代；完成这些才可称既有产品能力迁移完成。
+浏览器插件和 Hono 在线服务保留 TypeScript，不要求把它们重写成 Rust。
+
+**完整本地优先产品交付还需要**备份恢复、可选 E2EE 同步、必要的旧数据显式导入与分发/上线验收。
+其中同步是新架构工作；图片/语音/全局采集等尚未存在的完整蓝图能力，也不能伪称为“已有 TS 待迁代码”。

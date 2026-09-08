@@ -149,7 +149,7 @@ fn additive_v1_upgrade_preserves_completed_history() {
     let before = answer(&path, Action::Good);
     // Recreate the v1 schema shape around unchanged fact rows.
     let db = rusqlite::Connection::open(&path).unwrap();
-    db.execute_batch("DROP TABLE retention_run_policies; DROP TABLE initial_run_policies; DROP TABLE policy_commitments; DROP TABLE target_plans; DROP TABLE target_policy_sources; DROP TABLE material_policy_sources; DROP TABLE policy_assignments; DROP TABLE relearning_needs; DROP TABLE scheduling_decisions; DROP TABLE memory_outcomes; DROP TABLE retention_completions; DROP TABLE retention_attempts; DROP TABLE retention_runs; DROP TABLE imported_packs; ALTER TABLE library DROP COLUMN selected_material_id; PRAGMA user_version=1;").unwrap();
+    db.execute_batch("DROP TABLE consumer_progress_links; DROP TABLE protocol_transitions; DROP TABLE protocol_journals; DROP TABLE retention_run_policies; DROP TABLE initial_run_policies; DROP TABLE policy_commitments; DROP TABLE target_plans; DROP TABLE target_policy_sources; DROP TABLE material_policy_sources; DROP TABLE policy_assignments; DROP TABLE relearning_needs; DROP TABLE scheduling_decisions; DROP TABLE memory_outcomes; DROP TABLE retention_completions; DROP TABLE retention_attempts; DROP TABLE retention_runs; DROP TABLE imported_packs; ALTER TABLE library DROP COLUMN selected_material_id; PRAGMA user_version=1;").unwrap();
     drop(db);
     let upgraded = open_library(&path).unwrap();
     let mut upgraded_facts = serde_json::to_value(&upgraded).unwrap();
@@ -162,7 +162,13 @@ fn additive_v1_upgrade_preserves_completed_history() {
         .as_object_mut()
         .unwrap()
         .remove("policyState");
+    upgraded_facts.as_object_mut().unwrap().remove("progress");
+    previous_facts.as_object_mut().unwrap().remove("progress");
     assert_eq!(upgraded_facts, previous_facts);
+    assert_eq!(
+        upgraded.progress.as_ref().unwrap().state,
+        before.progress.as_ref().unwrap().state
+    );
     assert!(upgraded.policy_state.selected.as_ref().unwrap().committed);
     assert_eq!(
         open_library(&path).unwrap().completion_id,

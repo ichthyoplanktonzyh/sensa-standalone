@@ -61,6 +61,7 @@ fn answer(s: &Snapshot, action: Action) -> CommandAction {
 fn facts(s: &Snapshot) -> serde_json::Value {
     let mut v = serde_json::to_value(s).unwrap();
     v.as_object_mut().unwrap().remove("policyState");
+    v.as_object_mut().unwrap().remove("progress");
     v
 }
 #[test]
@@ -270,7 +271,7 @@ fn v3_upgrade_adds_provenance_without_changing_any_existing_learning_fact() {
     let s = apply(&p, answer(&s, Action::Reveal));
     let s = apply(&p, answer(&s, Action::Good));
     let db = Connection::open(&p).unwrap();
-    db.execute_batch("DROP TABLE retention_run_policies; DROP TABLE initial_run_policies; DROP TABLE policy_commitments; DROP TABLE target_plans; DROP TABLE target_policy_sources; DROP TABLE material_policy_sources; DROP TABLE policy_assignments; PRAGMA user_version=3;").unwrap();
+    db.execute_batch("DROP TABLE consumer_progress_links; DROP TABLE protocol_transitions; DROP TABLE protocol_journals; DROP TABLE retention_run_policies; DROP TABLE initial_run_policies; DROP TABLE policy_commitments; DROP TABLE target_plans; DROP TABLE target_policy_sources; DROP TABLE material_policy_sources; DROP TABLE policy_assignments; PRAGMA user_version=3;").unwrap();
     let upgraded = open_library(&p).unwrap();
     assert_eq!(facts(&upgraded), facts(&s));
     let selected = upgraded.policy_state.selected.unwrap();

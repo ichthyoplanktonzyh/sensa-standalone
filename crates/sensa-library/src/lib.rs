@@ -1,8 +1,10 @@
 //! Single-device application transactions. All writes go through execute().
 //! The acceptance material is opt-in; this is not a production package importer.
 pub mod composition;
+mod consumer_progress;
 pub mod pack;
 pub mod policy;
+pub mod progress;
 pub mod retention;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
@@ -113,6 +115,8 @@ pub struct Snapshot {
     pub retention: retention::RetentionView,
     #[serde(default)]
     pub policy_state: policy::PolicyView,
+    #[serde(default)]
+    pub progress: Option<progress::View>,
 }
 
 fn initial_protocol() -> String {
@@ -149,7 +153,7 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if ![1, 2, 3, 4].contains(&version) || application != APPLICATION {
+    } else if ![1, 2, 3, 4, 5].contains(&version) || application != APPLICATION {
         return Err(Error::Rule("unsupported_library_version"));
     }
     if version <= 1 {
@@ -164,6 +168,10 @@ fn connection(path: &Path) -> Result<Connection> {
     if version <= 3 {
         tx.execute_batch(include_str!("policy.sql"))?;
         policy::migrate_legacy(&tx)?;
+    }
+    if version <= 4 {
+        tx.execute_batch(include_str!("progress.sql"))?;
+        consumer_progress::migrate(&tx)?;
     }
     tx.commit()?;
     Ok(db)
@@ -242,8 +250,14 @@ fn read(db: &Connection) -> Result<Snapshot> {
         handoff_count: db.query_row("SELECT count(*) FROM handoffs", [], |r| r.get(0))?,
         retention: retention::RetentionView::default(),
         policy_state: policy::view(db)?,
+        progress: None,
     };
     retention::project(db, &mut snapshot)?;
+    snapshot.progress = snapshot
+        .run
+        .as_ref()
+        .map(|r| progress::load(db, &r.id))
+        .transpose()?;
     Ok(snapshot)
 }
 
@@ -486,6 +500,7 @@ pub fn execute_at_offset(
                         now.timestamp_millis()
                     ],
                 )?;
+                consumer_progress::start(&tx, &run_id, false)?;
             }
         }
         CommandAction::Pause => {
@@ -526,10 +541,11 @@ pub fn execute_at_offset(
                     .as_str()
                     .ok_or(Error::Rule("invalid_phase"))?
                     .to_owned();
+                let attempt_id = id();
                 tx.execute(
                     "INSERT INTO attempts VALUES(?1,?2,?3,?4,?5,?6,?7)",
                     params![
-                        id(),
+                        attempt_id,
                         command.operation_id,
                         run_id,
                         ordinal,
@@ -539,6 +555,15 @@ pub fn execute_at_offset(
                     ],
                 )?;
                 tx.execute("UPDATE runs SET phase=?2,ordinal=ordinal+?3,attempt_count=attempt_count+1 WHERE id=?1", params![run_id,phase,if next == Phase::Completed {0} else {1}])?;
+                consumer_progress::record(
+                    &tx,
+                    run_id,
+                    &attempt_id,
+                    *ordinal,
+                    next,
+                    now.timestamp_millis(),
+                    false,
+                )?;
                 if next == Phase::Completed {
                     let completion = id();
                     let handoff = id();

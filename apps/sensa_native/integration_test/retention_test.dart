@@ -75,6 +75,15 @@ void main() {
         expect(model.snapshot!.retention['reviewCount'], 1);
         expect(model.snapshot!.retention['relearningCount'], 1);
         expect(model.snapshot!.retention['pendingCount'], 0);
+        expect(model.snapshot!.value['progress']['state']['completed'], isTrue);
+        expect(
+          model.snapshot!.value['progress']['state']['protocolRunId'],
+          runId,
+        );
+        expect(
+          model.snapshot!.value['progress']['revision'],
+          model.snapshot!.run!['attemptCount'],
+        );
         expect(model.snapshot!.value['handoffCount'], 1);
       } else {
         await wait('本次首学已完成');

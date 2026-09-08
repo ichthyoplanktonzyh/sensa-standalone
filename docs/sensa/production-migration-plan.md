@@ -1,6 +1,6 @@
 # Sensa 生产化路线图
 
-2026-09-08 原生增量：轻量到期复习与再学习已接入 Rust/SQLite/Flutter，事务和平台验证见 [交付记录](native-retention-handoff.md)。通用 Progression Kernel 与策略组合引用校验的纯接口随后已迁移并接入原生组合入口，见 [进度内核记录](native-progression-handoff.md)。这些记录不将正式 Activity/Mixed/去重汇总、通用 Runtime 持久化或完整 LF-1b 标记为完成。 Policy Assignment、purpose plan/readiness 与首次 Run 固定已继续接入，见 [策略迁移记录](native-policy-handoff.md)；完整模式执行与 Policy Migration 仍待完成。
+2026-09-08 原生增量：轻量到期复习与再学习已接入 Rust/SQLite/Flutter，事务和平台验证见 [交付记录](native-retention-handoff.md)。通用 Progression Kernel 与策略组合引用校验的纯接口随后已迁移并接入原生组合入口，见 [进度内核记录](native-progression-handoff.md)。这些记录不将正式 Activity/Mixed/去重汇总、完整 Runtime 编排或完整 LF-1b 标记为完成。 Policy Assignment、purpose plan/readiness 与首次 Run 固定已继续接入，见 [策略迁移记录](native-policy-handoff.md)；完整模式执行与 Policy Migration 仍待完成。 通用进度账本随后已接入原生 consumer，见 [账本记录](native-progress-journal-handoff.md)，不代表多阶段执行器已交付。
 
 > 状态：Active roadmap\
 > 更新日期：2026-09-07\

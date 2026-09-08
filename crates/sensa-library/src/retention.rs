@@ -1,6 +1,7 @@
 //! Retention application adapter. Commands share the library transaction/CAS ledger.
 //! Initial material is explicitly reused in a purpose-pinned immutable run snapshot.
 use super::*;
+use rusqlite::Transaction;
 use sensa_core::protocol::{RELEARNING_PROTOCOL, REVIEW_PROTOCOL, consumer_purpose};
 use sensa_core::scheduling::{ReviewSchedule, ScheduleState};
 use sensa_core::settlement::{DueTrigger, ReviewMemory};
@@ -40,7 +41,7 @@ fn at(ms: i64) -> Result<DateTime<Utc>> {
 }
 
 pub(super) fn start(
-    db: &Connection,
+    db: &Transaction<'_>,
     state: &Snapshot,
     now: DateTime<Utc>,
     early: bool,
@@ -110,6 +111,7 @@ pub(super) fn start(
         ],
     )?;
     policy::pin_retention(db, &target, &run, protocol)?;
+    consumer_progress::start(db, &run, true)?;
     if let Some((need, _, _)) = need {
         db.execute(
             "UPDATE relearning_needs SET run_id=?2 WHERE id=?1",
@@ -120,7 +122,7 @@ pub(super) fn start(
 }
 
 pub(super) fn record(
-    db: &Connection,
+    db: &Transaction<'_>,
     run: &RunView,
     command: &Command,
     action: Action,
@@ -137,10 +139,11 @@ pub(super) fn record(
         .as_str()
         .ok_or(Error::Rule("invalid_phase"))?
         .to_owned();
+    let attempt_id = id();
     db.execute(
         "INSERT INTO retention_attempts VALUES(?1,?2,?3,?4,?5,?6,?7)",
         params![
-            id(),
+            attempt_id,
             command.operation_id,
             run.id,
             run.ordinal,
@@ -150,6 +153,15 @@ pub(super) fn record(
         ],
     )?;
     db.execute("UPDATE retention_runs SET phase=?2,ordinal=ordinal+?3,attempt_count=attempt_count+1 WHERE id=?1",params![run.id,phase,if next==Phase::Completed {0} else {1}])?;
+    consumer_progress::record(
+        db,
+        &run.id,
+        &attempt_id,
+        run.ordinal,
+        next,
+        now.timestamp_millis(),
+        false,
+    )?;
     if action == Action::Reveal {
         return Ok(());
     }
@@ -201,7 +213,7 @@ pub(super) fn record(
 }
 
 /// Review-only selection never resumes an initial run or consumes new-study quota.
-pub(super) fn next(db: &Connection, now: DateTime<Utc>) -> Result<()> {
+pub(super) fn next(db: &Transaction<'_>, now: DateTime<Utc>) -> Result<()> {
     let candidate: Option<(String,bool)> = db.query_row(
         "SELECT t.material_id,
           CASE WHEN n.id IS NOT NULL AND n.next_eligible_at_ms>?1 AND (r.id IS NULL OR r.phase='waiting') THEN 1 ELSE 0 END AS waiting
