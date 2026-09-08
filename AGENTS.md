@@ -74,7 +74,8 @@ generation (2026-09-07). Keep these opt-in and separate from routine no-cost/CI 
 ## Owner product preference (2026-09-08)
 
 Sensa is intended to be a closed-source product. Read Frog may be used as a
-product-behavior reference only; do not copy, vendor, or translate its source
+product-behavior reference. The owner permits reading its source to understand
+behavior and edge cases (2026-09-08); do not copy, vendor, or translate its source
 code into Sensa. Implement the confirmed reading interactions in Sensa's own
 code. Preserve existing third-party license notices; this preference does not
 authorize removing them or changing the licenses of pre-existing dependencies.

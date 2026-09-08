@@ -97,6 +97,7 @@ profile，而不是 `Sense`、Lightweight Study 或全部 Learning Protocol 的�
 - [`../../infra/README.md`](../../infra/README.md)：基础设施边界；
 - [`../migration-foundation.md`](../migration-foundation.md)：standalone baseline 的实现快照；
 - `docs/reference/bbdc/`：不背单词外壳参考；
+- [`../reference/read-frog/product-review.md`](../reference/read-frog/product-review.md)：陪读蛙产品与扩展源码评估、可借鉴体验、YouTube 能力边界与后续用例建议；非实施合同；
 - `docs/reference/sensa-v1/`：已接受的 Sensa V1 交互原型。
 
 参考材料只能说明来源或帮助视觉检查，不能定义领域对象和运行所有权。
