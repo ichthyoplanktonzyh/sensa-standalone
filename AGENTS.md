@@ -70,3 +70,11 @@ This is owner-authorized; do not push or deploy without the applicable delivery 
 
 Owner additionally authorized bounded DeepSeek API material-generation trials and edge-tts audio
 generation (2026-09-07). Keep these opt-in and separate from routine no-cost/CI validation.
+
+## Owner product preference (2026-09-08)
+
+Sensa is intended to be a closed-source product. Read Frog may be used as a
+product-behavior reference only; do not copy, vendor, or translate its source
+code into Sensa. Implement the confirmed reading interactions in Sensa's own
+code. Preserve existing third-party license notices; this preference does not
+authorize removing them or changing the licenses of pre-existing dependencies.

@@ -1,0 +1,328 @@
+import type {CaptureSnapshot, SemanticLookupView} from '@sensa/contracts/sensa';
+
+interface ReadingPanelInput {
+  snapshot: CaptureSnapshot;
+  range: Range;
+  accountId: string;
+  isAuthorized: () => boolean;
+  close: () => void;
+  keyboard: boolean;
+}
+
+/** Sensa's in-page understanding and optional-save surface. */
+export function showReadingPanel(input: ReadingPanelInput) {
+  const {snapshot, range, accountId, close} = input;
+  const host = document.createElement('div');
+  host.setAttribute('popover', 'manual');
+  host.style.cssText = 'all:initial;position:fixed;inset:auto;margin:0;padding:0;border:0;background:transparent;overflow:visible;z-index:2147483647;';
+  const shadow = host.attachShadow({mode: 'closed'});
+  const style = document.createElement('style');
+  style.textContent = `
+    :host{all:initial;color-scheme:light}
+    *{box-sizing:border-box}
+    section{font:14px/1.55 system-ui,sans-serif;color:#242a38;background:#fbfbfa;border:1px solid #cbd1df;border-radius:13px;box-shadow:0 8px 32px #0002;overflow:auto;overscroll-behavior:contain;width:max-content;max-width:calc(100vw - 16px)}
+    section.expanded{width:360px}
+    button{font:inherit;color:inherit;background:transparent;border:0;border-radius:8px;min-height:40px;padding:8px 10px;cursor:pointer;white-space:nowrap}
+    button:hover{background:#eaeef6}button:disabled{opacity:.55;cursor:wait}
+    button:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid #303f76;outline-offset:-3px}
+    .toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:2px;padding:4px}
+    .toolbar .dismiss{color:#68748d;margin-left:auto}
+    header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e4e7ed;padding:2px 8px}
+    .drag{font-weight:650;cursor:move;touch-action:none;user-select:none}
+    header span{font-size:12px;color:#68748d;padding-right:6px}
+    .body{padding:4px 16px 16px}
+    p{white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0}
+    .original{font-size:15px;margin:8px 0 4px}mark{background:#f5e5a6;color:inherit;border-radius:3px}
+    .source{display:block;font-size:12px;color:#68748d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:12px;text-decoration:none}
+    .source:hover{text-decoration:underline}
+    .explanation{font-size:15px;border-top:1px solid #e4e7ed;padding-top:12px}
+    .feedback{font-size:13px;color:#57627a}
+    .actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+    .actions button{border:1px solid #bec5d5;background:white}
+    .actions .primary{background:#303f76;color:white;border-color:#303f76}
+    summary{cursor:pointer;padding:8px 0;color:#57627a}
+    details p{font-size:13px;color:#57627a}
+    [hidden]{display:none!important}
+  `;
+  const panel = document.createElement('section');
+  panel.setAttribute('aria-label', 'Sensa 阅读');
+  const header = document.createElement('header');
+  header.hidden = true;
+  const button = (text: string, action: () => void) => {
+    const element = document.createElement('button');
+    element.type = 'button';
+    element.textContent = text;
+    element.onclick = action;
+    return element;
+  };
+  const drag = button('Sensa ⠿', () => undefined);
+  drag.className = 'drag';
+  drag.setAttribute('aria-label', '拖动阅读浮层');
+  drag.title = '拖动位置；聚焦后可用方向键移动';
+  const hint = document.createElement('span');
+  hint.textContent = '阅读助手';
+  header.append(drag, hint);
+  const toolbar = document.createElement('div');
+  toolbar.className = 'toolbar';
+  toolbar.setAttribute('role', 'group');
+  toolbar.setAttribute('aria-label', '选中文字的操作');
+  const lookup = button('句中解释', () => { expand(); void explain(); });
+  const speak = button('朗读', () => readAloud());
+  const preview = button('保存…', () => expand());
+  const dismiss = button('关闭', close);
+  dismiss.className = 'dismiss';
+  toolbar.append(lookup, speak, preview, dismiss);
+  const body = document.createElement('div');
+  body.className = 'body';
+  body.hidden = true;
+  const original = document.createElement('p');
+  original.className = 'original';
+  const expression = snapshot.expression;
+  if (expression) {
+    const chars = Array.from(snapshot.sentence);
+    const mark = document.createElement('mark');
+    mark.textContent = expression.text;
+    original.append(chars.slice(0, expression.start).join(''), mark, chars.slice(expression.end).join(''));
+  } else original.textContent = snapshot.sentence;
+  const source = document.createElement('a');
+  source.className = 'source';
+  source.textContent = snapshot.source.title || snapshot.source.url || '当前网页';
+  source.title = snapshot.source.url ?? '';
+  if (snapshot.source.url) source.href = snapshot.source.url;
+  source.target = '_blank';
+  source.rel = 'noopener noreferrer';
+  const explanation = document.createElement('p');
+  explanation.className = 'explanation';
+  explanation.setAttribute('role', 'status');
+  explanation.textContent = expression ? '点击「句中解释」了解这个表达；也可以先保存原句。' : '本次选区跨越句子，可先保存待处理。';
+  const details = document.createElement('details');
+  details.hidden = true;
+  const summary = document.createElement('summary');
+  summary.textContent = '详细意思';
+  const detailText = document.createElement('p');
+  details.append(summary, detailText);
+  const feedback = document.createElement('p');
+  feedback.className = 'feedback';
+  feedback.setAttribute('role', 'status');
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  const accept = button('加入 Sensa', () => void persist('accept'));
+  accept.className = 'primary';
+  accept.hidden = true;
+  const save = button('保存待处理', () => void persist('save'));
+  const check = button('检查解释结果', () => void explain());
+  check.hidden = true;
+  actions.append(accept, save, check);
+  const learningHint = document.createElement('p');
+  learningHint.className = 'feedback';
+  learningHint.textContent = '保存后，可在 Sensa 中选择是否加入学习。';
+  body.append(original, source, explanation, details, feedback, actions, learningHint);
+  panel.append(header, toolbar, body);
+  shadow.append(style, panel);
+  document.documentElement.append(host);
+  host.showPopover();
+
+  let disposed = false;
+  let expanded = false;
+  let position: {left: number; top: number} | null = null;
+  let manuallyMoved = false;
+  let frame = 0;
+  let lookupBusy = false;
+  let lookupReady = false;
+  let saving = false;
+  let saved = false;
+  let utterance: SpeechSynthesisUtterance | null = null;
+  const lookupId = crypto.randomUUID();
+  const saveId = crypto.randomUUID();
+  const acceptId = crypto.randomUUID();
+  const alive = () => !disposed && host.isConnected && input.isAuthorized();
+  function mayAct() {
+    if (!alive()) return false;
+    if (location.href !== snapshot.source.url) {
+      expand();
+      feedback.textContent = '页面已变化，请在当前页面重新划选。';
+      return false;
+    }
+    return true;
+  }
+  function layout() {
+    if (disposed) return;
+    const viewport = window.visualViewport;
+    const width = viewport?.width ?? innerWidth;
+    const height = viewport?.height ?? innerHeight;
+    const x = viewport?.offsetLeft ?? 0;
+    const y = viewport?.offsetTop ?? 0;
+    panel.style.maxWidth = `${Math.max(0, width - 16)}px`;
+    panel.style.maxHeight = `${Math.max(0, height - 16)}px`;
+    const size = panel.getBoundingClientRect();
+    if (!manuallyMoved) {
+      if (!range.startContainer.isConnected || !range.endContainer.isConnected) {
+        if (!expanded) { queueMicrotask(close); return; }
+      } else {
+        const rect = range.getBoundingClientRect();
+        if (!expanded && (rect.bottom <= y || rect.top >= y + height || rect.right <= x || rect.left >= x + width)) {
+          queueMicrotask(close); return;
+        }
+        position = {left: rect.left, top: rect.bottom + 8};
+        if (position.top + size.height > y + height - 8 && rect.top - size.height - 8 >= y + 8)
+          position.top = rect.top - size.height - 8;
+      }
+    }
+    position ??= {left: x + 8, top: y + 8};
+    position.left = Math.max(x + 8, Math.min(position.left, x + width - size.width - 8));
+    position.top = Math.max(y + 8, Math.min(position.top, y + height - size.height - 8));
+    host.style.left = `${position.left}px`;
+    host.style.top = `${position.top}px`;
+  }
+  function scheduleLayout() {
+    if (!frame && !disposed) frame = requestAnimationFrame(() => { frame = 0; layout(); });
+  }
+  function expand() {
+    expanded = true;
+    header.hidden = false;
+    body.hidden = false;
+    preview.hidden = true;
+    panel.classList.add('expanded');
+    layout();
+  }
+  async function explain() {
+    if (!mayAct() || lookupBusy || lookupReady || saved || !expression) return;
+    lookupBusy = true;
+    lookup.disabled = check.disabled = true;
+    explanation.textContent = '正在解释…';
+    explanation.setAttribute('aria-busy', 'true');
+    try {
+      const response = await chrome.runtime.sendMessage({kind: 'lookup', snapshot, lookupId, accountId});
+      if (response.error) throw new Error(response.error);
+      if (!alive()) return;
+      const result = response.value as SemanticLookupView;
+      if (result.status === 'ready' && result.proposal) {
+        lookupReady = true;
+        explanation.textContent = result.proposal.explanation;
+        detailText.textContent = result.proposal.semanticSpec.coreMeaningFocus + '\n' +
+          result.proposal.semanticSpec.prototypeScenes.map(scene => scene.summary).join('\n');
+        details.hidden = false;
+        accept.hidden = saved;
+        check.hidden = true;
+      } else {
+        explanation.textContent = result.status === 'running'
+          ? '仍在解释，可以稍后检查或保存待处理。'
+          : '暂时无法确定这个意思，可以保存待处理，在 Sensa 中继续。';
+        check.hidden = result.status !== 'running' || saved;
+      }
+    } catch {
+      if (alive()) {
+        explanation.textContent = '暂时无法解释，可以检查结果或保存待处理。';
+        check.hidden = saved;
+      }
+    } finally {
+      lookupBusy = false;
+      lookup.disabled = lookupReady || saved || !expression;
+      check.disabled = false;
+      explanation.removeAttribute('aria-busy');
+      if (alive()) layout();
+    }
+  }
+  async function persist(kind: 'save' | 'accept') {
+    if (!mayAct() || saving || saved || (kind === 'accept' && !lookupReady)) return;
+    saving = true;
+    save.disabled = accept.disabled = true;
+    feedback.textContent = kind === 'save' ? '正在保存…' : '正在加入 Sensa…';
+    try {
+      const response = await chrome.runtime.sendMessage(kind === 'save'
+        ? {kind, snapshot, operationId: saveId, accountId}
+        : {kind, lookupId, operationId: acceptId, accountId});
+      if (response.error) throw new Error(response.error);
+      if (!alive()) return;
+      saved = true;
+      save.hidden = accept.hidden = check.hidden = true;
+      lookup.disabled = true;
+      feedback.textContent = '已保存在本机，联网后同步。可从 Sensa 图标查看结果。';
+    } catch {
+      if (alive()) feedback.textContent = '尚未完成，请从 Sensa 图标检查原操作结果或登录后重试。';
+    } finally {
+      saving = false;
+      save.disabled = accept.disabled = false;
+      if (alive()) layout();
+    }
+  }
+  function stopSpeech() {
+    if (utterance) {
+      utterance.onend = utterance.onerror = null;
+      window.speechSynthesis.cancel();
+      utterance = null;
+    }
+    speak.textContent = '朗读';
+    speak.setAttribute('aria-pressed', 'false');
+  }
+  function readAloud() {
+    if (!mayAct()) return;
+    if (utterance) { stopSpeech(); return; }
+    // Installed browser/system voices only; no provider or paid TTS request.
+    const voice = window.speechSynthesis?.getVoices().find(item => item.localService && /^en(?:-|_)/iu.test(item.lang));
+    if (!voice) {
+      expand();
+      feedback.textContent = '当前浏览器没有可用的本机英语语音。解释和保存仍可使用。';
+      return;
+    }
+    utterance = new SpeechSynthesisUtterance(expression?.text ?? snapshot.sentence);
+    utterance.voice = voice;
+    utterance.lang = voice.lang;
+    utterance.onend = () => { utterance = null; speak.textContent = '朗读'; speak.setAttribute('aria-pressed', 'false'); };
+    utterance.onerror = () => {
+      utterance = null;
+      speak.textContent = '朗读';
+      speak.setAttribute('aria-pressed', 'false');
+      if (alive()) { expand(); feedback.textContent = '朗读未完成，请重试。'; }
+    };
+    speak.textContent = '停止朗读';
+    speak.setAttribute('aria-pressed', 'true');
+    window.speechSynthesis.speak(utterance);
+  }
+  let dragStart: {id: number; x: number; y: number; left: number; top: number} | null = null;
+  drag.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || !position) return;
+    dragStart = {id: event.pointerId, x: event.clientX, y: event.clientY, ...position};
+    drag.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+  drag.addEventListener('pointermove', event => {
+    if (!dragStart || event.pointerId !== dragStart.id) return;
+    manuallyMoved = true;
+    position = {left: dragStart.left + event.clientX - dragStart.x, top: dragStart.top + event.clientY - dragStart.y};
+    layout();
+  });
+  drag.addEventListener('lostpointercapture', () => { dragStart = null; });
+  drag.addEventListener('keydown', event => {
+    const delta: Record<string, [number, number]> = {ArrowLeft: [-16, 0], ArrowRight: [16, 0], ArrowUp: [0, -16], ArrowDown: [0, 16]};
+    if (!position || !delta[event.key]) return;
+    event.preventDefault();
+    manuallyMoved = true;
+    position.left += delta[event.key][0];
+    position.top += delta[event.key][1];
+    layout();
+  });
+  lookup.disabled = !expression;
+  const observer = new ResizeObserver(scheduleLayout);
+  observer.observe(panel);
+  document.addEventListener('scroll', scheduleLayout, true);
+  window.addEventListener('resize', scheduleLayout);
+  window.visualViewport?.addEventListener('resize', scheduleLayout);
+  window.visualViewport?.addEventListener('scroll', scheduleLayout);
+  layout();
+  if (input.keyboard) (lookup.disabled ? preview : lookup).focus({preventScroll: true});
+  return {
+    host,
+    destroy() {
+      disposed = true;
+      stopSpeech();
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+      document.removeEventListener('scroll', scheduleLayout, true);
+      window.removeEventListener('resize', scheduleLayout);
+      window.visualViewport?.removeEventListener('resize', scheduleLayout);
+      window.visualViewport?.removeEventListener('scroll', scheduleLayout);
+      host.remove();
+    },
+  };
+}

@@ -43,6 +43,8 @@ try {
    document.querySelector('p')!.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));
   },mode);
   await expect.poll(async()=>Boolean(await findButton(cdp,'关闭'))).toBe(true);
+  await click('句中解释');
+  await expect.poll(()=>page.evaluate(()=>(window as any).fixture.calls)).toBeGreaterThan(0);
  }
  async function closedWithoutLookup(){
   // Allow the deferred selection handler and async response rendering to run.
