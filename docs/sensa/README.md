@@ -74,6 +74,8 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M2 private context | [`m2-anchor-use-handoff.md`](m2-anchor-use-handoff.md) | 原文显式授权、撤销/迟到结果隔离、历史保留与后续复习材料替换的本地证据 |
 | M2-D local recovery | [`m2-d-extension-recovery-handoff.md`](m2-d-extension-recovery-handoff.md) | 插件原账号队列、版本保护及实际原生 activeTab 权限恢复的本地证据 |
 | Local settlement extraction | [`local-settlement-handoff.md`](local-settlement-handoff.md) | LF-1a 共用结算与 Node/断网 Chrome/隔离 Postgres 回归；本地库持久化仍待实施 |
+| Native local learning slice | [`native-local-learning-handoff.md`](native-local-learning-handoff.md) | Flutter/Rust/SQLite 首学技术纵切的实际证据与未完成边界 |
+| Native client architecture | [`../adr/0002-flutter-rust-local-core.md`](../adr/0002-flutter-rust-local-core.md) | Flutter/Dart 主应用、Rust 本地权威、TS 浏览器/云端；正式 Web 界面作为参考，首个原生技术纵切已在 macOS/Android 验证 |
 | Local library migration | [`local-library-migration-blueprint.md`](local-library-migration-blueprint.md) | 本地领域/存储/服务职责、单设备首条用例、浏览器交接、同步设计门与旧数据回退；整库离线尚未交付 |
 | Active roadmap | [`production-migration-plan.md`](production-migration-plan.md) | M0–M5 生产化路线图：正式产品与消费契约、生产闭环、恢复与数据控制、受邀发布和用户验证；含依赖、验收门与当前待办 |
 | Current working agreement | [`development-workflow.md`](development-workflow.md) | 可调整的开发方式：全局结构蓝图、owner 参与前端确认、消费契约、主代理直接实现与端到端验收；不替代领域或路线图 |

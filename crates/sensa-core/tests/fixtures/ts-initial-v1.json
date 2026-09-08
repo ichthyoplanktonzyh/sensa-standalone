@@ -1,0 +1,110 @@
+[
+  {
+    "occurredAt": "2026-09-08T08:00:00.000Z",
+    "rating": "hard",
+    "kind": "study_completion",
+    "evidenceLevel": "non_evidentiary",
+    "handoffBasis": "protocol_completion",
+    "schedule": {
+      "dueAt": "2026-09-10T08:00:00.000Z",
+      "reps": 1,
+      "lapses": 0,
+      "fsrsCardState": "review",
+      "fsrsStepIndex": null,
+      "fsrsStability": 2.3065,
+      "fsrsDifficulty": 2.11810397,
+      "fsrsLastReviewedAt": "2026-09-08T08:00:00.000Z",
+      "fsrsScheduledDays": 2
+    }
+  },
+  {
+    "occurredAt": "2026-09-08T08:00:00.000Z",
+    "rating": "good",
+    "kind": "study_completion",
+    "evidenceLevel": "non_evidentiary",
+    "handoffBasis": "protocol_completion",
+    "schedule": {
+      "dueAt": "2026-09-10T08:00:00.000Z",
+      "reps": 1,
+      "lapses": 0,
+      "fsrsCardState": "review",
+      "fsrsStepIndex": null,
+      "fsrsStability": 2.3065,
+      "fsrsDifficulty": 2.11810397,
+      "fsrsLastReviewedAt": "2026-09-08T08:00:00.000Z",
+      "fsrsScheduledDays": 2
+    }
+  },
+  {
+    "occurredAt": "2024-02-28T23:59:59.999Z",
+    "rating": "hard",
+    "kind": "study_completion",
+    "evidenceLevel": "non_evidentiary",
+    "handoffBasis": "protocol_completion",
+    "schedule": {
+      "dueAt": "2024-03-01T23:59:59.999Z",
+      "reps": 1,
+      "lapses": 0,
+      "fsrsCardState": "review",
+      "fsrsStepIndex": null,
+      "fsrsStability": 2.3065,
+      "fsrsDifficulty": 2.11810397,
+      "fsrsLastReviewedAt": "2024-02-28T23:59:59.999Z",
+      "fsrsScheduledDays": 2
+    }
+  },
+  {
+    "occurredAt": "2024-02-28T23:59:59.999Z",
+    "rating": "good",
+    "kind": "study_completion",
+    "evidenceLevel": "non_evidentiary",
+    "handoffBasis": "protocol_completion",
+    "schedule": {
+      "dueAt": "2024-03-01T23:59:59.999Z",
+      "reps": 1,
+      "lapses": 0,
+      "fsrsCardState": "review",
+      "fsrsStepIndex": null,
+      "fsrsStability": 2.3065,
+      "fsrsDifficulty": 2.11810397,
+      "fsrsLastReviewedAt": "2024-02-28T23:59:59.999Z",
+      "fsrsScheduledDays": 2
+    }
+  },
+  {
+    "occurredAt": "2026-12-31T23:59:59.000Z",
+    "rating": "hard",
+    "kind": "study_completion",
+    "evidenceLevel": "non_evidentiary",
+    "handoffBasis": "protocol_completion",
+    "schedule": {
+      "dueAt": "2027-01-02T23:59:59.000Z",
+      "reps": 1,
+      "lapses": 0,
+      "fsrsCardState": "review",
+      "fsrsStepIndex": null,
+      "fsrsStability": 2.3065,
+      "fsrsDifficulty": 2.11810397,
+      "fsrsLastReviewedAt": "2026-12-31T23:59:59.000Z",
+      "fsrsScheduledDays": 2
+    }
+  },
+  {
+    "occurredAt": "2026-12-31T23:59:59.000Z",
+    "rating": "good",
+    "kind": "study_completion",
+    "evidenceLevel": "non_evidentiary",
+    "handoffBasis": "protocol_completion",
+    "schedule": {
+      "dueAt": "2027-01-02T23:59:59.000Z",
+      "reps": 1,
+      "lapses": 0,
+      "fsrsCardState": "review",
+      "fsrsStepIndex": null,
+      "fsrsStability": 2.3065,
+      "fsrsDifficulty": 2.11810397,
+      "fsrsLastReviewedAt": "2026-12-31T23:59:59.000Z",
+      "fsrsScheduledDays": 2
+    }
+  }
+]

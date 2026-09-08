@@ -2,8 +2,8 @@
 
 > 状态日期：2026-09-08\
 > 当前阶段：领域与行为原型验证后期，生产应用建设前期\
-> 下一里程碑：React Web + 浏览器采集插件的小规模受邀测试版\
-> 当前执行位置：本地底座 LF-0 蓝图与 LF-1a 共用结算已完成，下一纵切 LF-1b；以下为旧架构证据：M0 设计已验收；M1-A/B/C/D/E 本地纵切已验证；托管验收待执行，M2-A/B 采集/直接语义接受本地切片已验证，M2-C 文本内容入学纵切已验证，Web 澄清/可恢复移除已验证，M2-D 原账号/版本及原生权限恢复已验证，原文授权与撤销本地纵切已验证，静态音频生成/解析与失败回退本地已验证，Chrome 151/152、实际进程恢复及有限真实质量抽查已有本地证据；M1/M2 已确认 Web 界面接入与简化页面删除完成本地验证，等待 owner 体验；云端/商店按 owner 要求暂缓\
+> 下一里程碑：Flutter 原生单设备本地学习库；旧 Web/API/浏览器插件作为迁移与回归基础\
+> 当前执行位置：本地底座 LF-0 蓝图与 LF-1a 共用结算已完成，LF-1b 的 Flutter → Rust → SQLite 首学技术纵切已在 macOS/Android 验证，完整 LF-1b 继续实施；以下为旧架构证据：M0 设计已验收；M1-A/B/C/D/E 本地纵切已验证；托管验收待执行，M2-A/B 采集/直接语义接受本地切片已验证，M2-C 文本内容入学纵切已验证，Web 澄清/可恢复移除已验证，M2-D 原账号/版本及原生权限恢复已验证，原文授权与撤销本地纵切已验证，静态音频生成/解析与失败回退本地已验证，Chrome 151/152、实际进程恢复及有限真实质量抽查已有本地证据；M1/M2 已确认 Web 界面接入与简化页面删除完成本地验证，等待 owner 体验；云端/商店按 owner 要求暂缓\
 > 执行路线图：[production-migration-plan.md](production-migration-plan.md)
 
 本文是项目阶段、证据级别和近期交付范围的唯一事实来源。[文档索引](README.md)列出的七份
@@ -18,7 +18,7 @@ owner 确认前端体验，再细化合同并纵向实现；该方式可根据�
 允许服务器保存密文副本，并提供可下载资源和按需在线服务。状态是“迁移已启动，共用结算提取与回归已通过；整库/客户端尚未切换”。
 下述 Postgres 权威、本地只存意图/投影、服务器专属结算及账号前置等描述属于现有实现和旧交付基线；
 后续实施前需按新方向修订，不能把当前本地缓存视为独立学习库或端到端加密同步已经完成。
-浏览器体验优化本轮已结束，后续清单继续保留；当前按 [本地学习库迁移蓝图](local-library-migration-blueprint.md)推进 LF-0/LF-1a：明确数据归属与迁移用例，并将既有 API 结算规则迁入平台无关 Kernel。[LF-1a 交付与验证记录](local-settlement-handoff.md)已完成。下一纵切是 LF-1b 单设备学习库；断网冷启动、备份恢复和加密同步均尚未验收。
+浏览器体验优化本轮已结束，后续清单继续保留；当前按 [本地学习库迁移蓝图](local-library-migration-blueprint.md)推进 LF-0/LF-1a：明确数据归属与迁移用例，并将既有 API 结算规则迁入平台无关 Kernel。[LF-1a 交付与验证记录](local-settlement-handoff.md)已完成。当前实施 LF-1b 单设备学习库的首个原生技术纵切，语言和职责按 [ADR 0002](../adr/0002-flutter-rust-local-core.md)。Flutter 界面以正式 Web 已确认的页面与行为为参考，针对桌面/移动重新实现。首学 SQLite 事务、macOS 独立进程恢复及 Android 飞行模式下首学/独立进程恢复均已验证，见 [原生纵切记录](native-local-learning-handoff.md)。一般资源导入、完整复习/重学、备份恢复和加密同步均尚未验收，不能将这个合成材料验收壳视为完整 LF-1b 或产品 UI 已交付。
 
 2026-09-08 owner 体验发现：此前 M1/M2 简化页面没有完整沿用已确认 UI，历史功能验证
 不能替代界面验收。本轮已将已实现链路接回既有首页、学习/账号/目录及 Runtime 组件，
@@ -33,7 +33,9 @@ Sensa 已具备开始生产化的领域、行为和工程基础。当前最主�
 具体范围与代码观察见 [M0-2 基线说明](m0-2-first-learning-state-spec.md)。下述旧纵切仍是工程基础，
 新 UI 的 previewStorage/checkpoint 不能冒充生产 API/Sync 接入。
 
-当前仓库存在两套进度不同的实现：
+当前仓库存在进度不同的实现：
+
+- apps/sensa_native + crates/sensa-core/sensa-library：新架构下的 Flutter/Rust/SQLite 首学技术验收壳；范围与验证见 [原生纵切记录](native-local-learning-handoff.md)，不能等同完整学习产品。
 
 - apps/web + apps/api：保留较早 first-user 纵切；正式 production 入口已完成 M1-A–E 的
   consumer-v1/Sync v3、Postgres、账号独立 IndexedDB/outbox、目标准备、首学、复习、

@@ -14,10 +14,10 @@
 开始/继续学习 → 本机结算 → 重启继续 → 到期复习。它不要求登录 Sensa 账号、购买同步或调用模型。
 导入/下载材料仍不等于加入学习；Sense 接受仍不自动入学；关注点仍可选。
 
-工程先沿正式 React Web 验证这条链，共用内核不依赖浏览器、HTTP 或数据库。
+工程顺序已由 Owner 确认的 [Flutter/Rust 决策](../adr/0002-flutter-rust-local-core.md)更新：先做 Flutter → Rust → SQLite 原生纵切；正式 Web 提供界面/行为与 TS 对照，共用内核不依赖浏览器、HTTP 或数据库。
 Owner 已明确完整产品的 PC/移动主应用由 Flutter 实现；React Web 的阶段性验证不替代这一终局。
 这不提前确认 Web 是完整本地产品的最终首发宿主：浏览器存储持久性、离线启动和扩展交接需要实际验收。
-Flutter 的交付时间和跨语言内核运行方案须在宿主验证后确定，不能沿用“复制服务端投影即可”。
+Flutter 调用 Rust 的方向已确定；平台交付资格逐项实测，不能沿用“复制服务端投影即可”。
 `web-next` 仅作为行为/场景参考，不迁入原型 fixture 状态或另外造一套学习界面。
 
 ## 2. 从实际代码到目标模块
@@ -51,8 +51,8 @@ React / Flutter / 浏览器采集交接
 本轮实际新文件是 `packages/learning-kernel/src/runtime/consumerSettlement.ts`，由原 API 消费。
 后续本地用例再创建 `apps/web/src/data/library/` 的存储和应用模块；现在不创建无消费者的目录/空接口。
 语言无关输入/输出在该用例形成时加入 contracts；Kernel 不反向依赖 contracts，避免现有包依赖环。
-Flutter 可使用共享可执行内核或受相同向量约束的 Dart 实现，选择前须验证浏览器/移动构建、版本冻结、
-离线执行、浮点/时间一致性及维护成本。本轮不选新的底层语言，也不把 TS 代码复制成未经验证的 Dart 策略。
+Flutter 使用 Rust 共享可执行内核，桥接选型和行为验证见 ADR 0002。Rust 分离纯领域与本地存储模块；
+TS 测试向量用于一致性对照，后续 Web WASM 需另外验证，不再默认新增 Dart 领域规则副本。
 
 ## 3. 库身份与事务所有权
 

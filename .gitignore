@@ -36,3 +36,11 @@ apps/web/public/golden-audio/
 
 # Explicit local provider trials; keep generated payloads and audio out of Git.
 content/data/consumer-generations/
+
+# Native local application build outputs and private learning libraries.
+/target/
+*.sqlite-wal
+*.sqlite-shm
+
+# Flutter scaffolding tool scratch output.
+/apps/build/

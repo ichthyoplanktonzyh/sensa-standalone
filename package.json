@@ -66,7 +66,8 @@
     "sensa:pronunciation-browser-smoke": "node --import tsx scripts/sensaPronunciationBrowserSmoke.mts",
     "sensa:content-recovery-browser-smoke": "node --import tsx scripts/sensaContentRecoveryBrowserSmoke.mts",
     "sensa:extension-native-fixture": "node --import tsx scripts/sensaExtensionNativeFixture.mts",
-    "sensa:consumer-settlement-smoke": "node --import tsx scripts/sensaConsumerSettlementSmoke.mts"
+    "sensa:consumer-settlement-smoke": "node --import tsx scripts/sensaConsumerSettlementSmoke.mts",
+    "sensa:native-core-smoke": "node --import tsx scripts/sensaNativeCoreParity.mts"
   },
   "engines": {
     "node": ">=24"

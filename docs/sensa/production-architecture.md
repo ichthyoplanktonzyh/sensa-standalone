@@ -64,8 +64,9 @@ Focus 可选；快慢轨都不降低 Context–Sense–Expression 的完整性�
 
 技术职责上，Flutter 主应用包含界面、本地应用/领域执行与 SQLite 持久化，并非仅渲染 Hono 返回的
 投影。Hono 继续作为现有云端 HTTP 服务框架，承载在线能力；本地学习不要求启动或连接 Hono。
-现有 TypeScript Kernel 如何由 Flutter 使用仍需确定跨语言方案，不能把已经在浏览器运行等同于
-已经能在 Dart 中直接运行。领域职责归属已确定，具体内核承载方式尚待验证。
+Owner 已确认 [Flutter/Dart + Rust 本地核心、TypeScript 浏览器/云端](../adr/0002-flutter-rust-local-core.md)。
+现有 TypeScript Kernel 作为迁移对照，Rust 经原生桥接供 Flutter 调用；各平台的实际构建、离线与恢复
+需分别验收，不能把浏览器测试当作原生平台证据。
 
 ### 领域层职责
 

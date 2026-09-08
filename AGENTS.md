@@ -32,19 +32,21 @@ deprecated prototype reports as implementation input.
 
 ## Architecture
 
-- Postgres is the authoritative server store.
-- Web uses its Sensa-only IndexedDB and outbox; writes are local first, then
-  `push → pull` through `/sensa/sync/*`.
-- API owns Semantic Policy, evidence, 5D projections, Memory Outcome and FSRS
-  handoff. Clients never write derived state directly.
-- Keep `LearnerScope` as the application seam while the compatibility schema is
-  being reduced. Do not expose Workspace as a product feature.
-- Web remains React. Mobile and desktop are one Flutter client for iOS,
-  Android and desktop; it uses SQLite, local outbox and the same
-  language-neutral API contracts. `apps/web-next` is a mobile-form behavior
-  prototype: its UI is not promised to migrate to any production client;
-  the cross-client assets are the domain docs, the seam shapes and the
-  smoke suites.
+- Target architecture follows ADR 0001/0002: Flutter/Dart owns PC/mobile UI and
+  platform integration; Rust owns the local domain core and SQLite transactions;
+  TypeScript owns the browser extension, React Web and Hono online services.
+- Local learning does not require an online account or running Hono. UI never
+  writes derived outcomes, evidence or schedules directly; the local core validates
+  and commits them. Optional sync transfers end-to-end encrypted personal data.
+- Existing API/Postgres/IndexedDB-outbox authority is migration-era implementation,
+  not the target architecture. Preserve it as regression evidence until each Rust
+  slice is validated; do not migrate owner data or silently dual-write histories.
+- Keep LearnerScope as the existing application seam during migration. Do not expose
+  Workspace as a product feature. Browser/Agent intake uses the same acceptance rules.
+- Formal Flutter UI references the confirmed apps/web experience and adapts it to
+  each platform. apps/web-next remains a behavior prototype, not a production UI source.
+- Rust WASM reuse for Web remains a separate validation task; neither native platform
+  scaffolding nor a build alone proves platform acceptance.
 
 ## Validation and delivery
 

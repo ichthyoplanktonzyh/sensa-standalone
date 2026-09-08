@@ -1,0 +1,12 @@
+[package]
+name = "sensa-core"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
