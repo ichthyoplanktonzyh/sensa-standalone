@@ -41,13 +41,13 @@ async function token(sub=subject,session=crypto.randomUUID(),aud='authenticated'
   return new SignJWT({session_id:session,email:'test@sensa.invalid'}).setProtectedHeader({alg:'ES256',kid:'local-smoke'}).setIssuer(issuer).setSubject(sub).setAudience(aud).setIssuedAt().setExpirationTime('1h').sign(keys.privateKey);
 }
 let mediaUnavailable=false;
-const mediaReader=async(digest:string)=>{if(mediaUnavailable)return null;try{const bytes=await readFile('/tmp/sensa-m1b-tactful.mp3');return createHash('sha256').update(bytes).digest('hex')===digest?bytes:null;}catch{return null;}};
+const mediaReader=async(digest:string)=>{if(mediaUnavailable)return null;try{const bytes=await readFile(process.env.SENSA_TEST_MEDIA_DIR?process.env.SENSA_TEST_MEDIA_DIR+'/'+digest+'.mp3':'/tmp/sensa-m1b-tactful.mp3');return createHash('sha256').update(bytes).digest('hex')===digest?bytes:null;}catch{return null;}};
 const app=new Hono();app.use('*',cors({origin:['http://127.0.0.1:3001','http://localhost:3001'],allowHeaders:['authorization','content-type','apikey','x-client-info','x-supabase-api-version','x-installation-id']}));
 app.route('',createConsumerRoutes({verify:createConsumerVerifier(issuer,createLocalJWKSet({keys:[jwk]})),transaction,mediaReader,semanticResolver:mockSemanticResolver,contentGenerator:mockContentGenerator,contentReviewer:mockContentReviewer,clock:()=>testNow}));
 const bearer=await token();const install=crypto.randomUUID();
 async function request(path:string,body?:unknown,bearerToken=bearer){
   const response=await app.request(path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+bearerToken,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
-  return {status:response.status,body:await response.json() as any};
+  return {status:response.status,body:response.headers.get('content-type')==='audio/mpeg'?{digest:createHash('sha256').update(new Uint8Array(await response.arrayBuffer())).digest('hex')}:await response.json() as any};
 }
 async function bootstrap(installationId=install,bearerToken=bearer){return (await request('/sensa/sync/bootstrap',{wireVersion:'sensa-sync-v3',installationId,replicaId:null},bearerToken)).body;}
 async function initialize(installationId=install,bearerToken=bearer,clockSessionId=crypto.randomUUID()){return request('/sensa/account/session',{installationId,clockSessionId,platform:'web',timeZone:'Asia/Shanghai'},bearerToken);}

@@ -1,3 +1,4 @@
+import {resolveStaticPronunciation} from './pronunciation.js';
 import {sensaContentGenerationRequestSchema,sensaMaterialCandidateBundleSchema} from '@sensa/contracts/sensa';
 import type {DatabaseExecutor} from '../../database/index.js';
 import {ConsumerError} from '../access/auth.js';
@@ -9,7 +10,7 @@ export async function createTask(db:DatabaseExecutor,a:Scope,member:Record<strin
  const meaning=(await db.query('SELECT * FROM sensa_consumer.personal_meanings WHERE learner_user_id=$1 AND id=$2',[a.learner_user_id,candidate.id])).rows[0];if(!meaning)throw new ConsumerError(409,'alignment_required');
  const plan=(await db.query('SELECT id,revision FROM sensa_consumer.target_plans WHERE membership_id=$1',[member.id])).rows[0]!;
  const anchor=meaning.anchor_use_grant_id?(await db.query('SELECT * FROM sensa_consumer.anchor_use_grants WHERE id=$1 AND learner_user_id=$2 AND revoked_at IS NULL',[meaning.anchor_use_grant_id,a.learner_user_id])).rows[0]:null;
- const fixed={anchor:anchor?{grantId:anchor.id,contextVersion:anchor.context_version,sentence:meaning.snapshot.sentence}:null,senseId:candidate.sense_id,senseVersionId:candidate.sense_version_id,bindingId:candidate.binding_id,bindingVersionId:candidate.binding_version_id,expression:candidate.expression,meaning:candidate.meaning,expressionKind:meaning.proposal.expression.type==='word'?'word':'phrase',prototype:meaning.proposal.semanticSpec.prototypeScenes[0].summary,planRevision:plan.id+':'+plan.revision,demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND};
+ const fixed={pronunciation:await resolveStaticPronunciation(db,candidate.expression),anchor:anchor?{grantId:anchor.id,contextVersion:anchor.context_version,sentence:meaning.snapshot.sentence}:null,senseId:candidate.sense_id,senseVersionId:candidate.sense_version_id,bindingId:candidate.binding_id,bindingVersionId:candidate.binding_version_id,expression:candidate.expression,meaning:candidate.meaning,expressionKind:meaning.proposal.expression.type==='word'?'word':'phrase',prototype:meaning.proposal.semanticSpec.prototypeScenes[0].summary,planRevision:plan.id+':'+plan.revision,demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND};
  await db.query("INSERT INTO sensa_consumer.provisioning_tasks(id,learner_user_id,learning_target_id,meaning_id,scope_epoch,status,fixed_input,created_at,updated_at) VALUES($1,$2,$3,$4,$5,'pending',$6::jsonb,$7,$7)",[crypto.randomUUID(),a.learner_user_id,member.learning_target_id,meaning.id,a.epoch,JSON.stringify(fixed),a.now]);
 }
 export async function resetTask(db:DatabaseExecutor,a:Scope,targetId:string,cancel=false){

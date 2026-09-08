@@ -63,6 +63,7 @@
     "sensa:consumer-target-smoke": "node --import tsx scripts/sensaConsumerAccountSmoke.mts --targets",
     "sensa:consumer-intake-smoke": "node --import tsx scripts/sensaConsumerAccountSmoke.mts --intake",
     "sensa:extension-browser-smoke": "node --import tsx scripts/sensaExtensionBrowserSmoke.mts",
+    "sensa:pronunciation-browser-smoke": "node --import tsx scripts/sensaPronunciationBrowserSmoke.mts",
     "sensa:content-recovery-browser-smoke": "node --import tsx scripts/sensaContentRecoveryBrowserSmoke.mts",
     "sensa:extension-native-fixture": "node --import tsx scripts/sensaExtensionNativeFixture.mts"
   },

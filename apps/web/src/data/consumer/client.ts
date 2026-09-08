@@ -111,7 +111,7 @@ export async function cacheRunMaterial(account:AccountContext,run:import('@sensa
  const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
  if(material.digest!==run.materialDigest||digest!==run.materialDigest)throw new Error('学习材料校验失败');
  const audio:Record<string,Blob>={};
- for(const r of material.content.resources){const ref=r.contentPayload.audioUrl;if(typeof ref==='string'&&ref.startsWith('sensa-media:'))audio[ref.slice(12)]=await readMaterialAudio(material.id,ref.slice(12));}
+ for(const r of material.content.resources){const ref=r.contentPayload.audioUrl;if(typeof ref==='string'&&ref.startsWith('sensa-media:')){try{audio[ref.slice(12)]=await readMaterialAudio(material.id,ref.slice(12));}catch{/* Optional audio failure must not discard validated text or block learning. */}}}
  return changeAccountReplica(account,state=>({...state,materials:{...state.materials,[material.id]:material},audio:{...state.audio,...audio}}));
 }
 

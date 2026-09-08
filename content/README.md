@@ -236,3 +236,11 @@ A package-valid Build is not a published release. Publication still requires an 
 release root, shared Lexeme/Relation consistency, real media bytes, complete review proof,
 the public curriculum gate when applicable, and controlled API/database/media ingestion.
 Local tools never deploy AWS, Neon, R2 or Cloudflare resources.
+
+## Consumer static pronunciation candidates
+
+For one already accepted target expression, `python3 content/tools/consumer_pronunciation.py
+--text '<expression>' --output-dir /tmp/sensa-pronunciation --allow-tts` performs one opt-in TTS
+call. Run the same command with `--validate` instead of `--allow-tts` for a no-cost media check.
+The tool emits a content-addressed MP3, manifest and SQL candidate for controlled review/CI
+ingestion; it never uploads or deploys. Do not commit generated media or manifests.
