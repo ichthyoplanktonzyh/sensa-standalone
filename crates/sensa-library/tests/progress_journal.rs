@@ -260,7 +260,7 @@ fn v4_backfill_cites_original_attempts_without_rewriting_old_facts() {
     let attempt: String = db
         .query_row("SELECT id FROM attempts", [], |r| r.get(0))
         .unwrap();
-    db.execute_batch("DROP TABLE consumer_progress_links; DROP TABLE protocol_transitions; DROP TABLE protocol_journals; PRAGMA user_version=4;").unwrap();
+    db.execute_batch("DROP TABLE assurance_cycles; DROP TABLE assurance_evidence; DROP TABLE assurance_events; DROP TABLE assurance_session_targets; DROP TABLE assurance_sessions; DROP TABLE runtime_media; DROP TABLE assurance_materials; DROP TABLE runtime_releases; DROP TABLE consumer_progress_links; DROP TABLE protocol_transitions; DROP TABLE protocol_journals; PRAGMA user_version=4;").unwrap();
     // An invalid legacy transition must roll back DDL and derived backfill together.
     db.execute("UPDATE attempts SET next_phase='completed'", [])
         .unwrap();

@@ -175,7 +175,7 @@ fn committed_id(db: &Connection, target: &str) -> Result<Option<String>> {
         )
         .optional()?)
 }
-fn refresh_target(db: &Connection, target: &str) -> Result<PlanView> {
+pub(super) fn refresh_target(db: &Connection, target: &str) -> Result<PlanView> {
     if let Some(id) = committed_id(db, target)? {
         return plan_by_id(db, &id, true);
     }
@@ -186,7 +186,10 @@ fn refresh_target(db: &Connection, target: &str) -> Result<PlanView> {
     let mut provider = BTreeMap::new();
     for (_, spec) in profile.protocols.entries() {
         for requirement in &spec.binding.content_requirement {
-            let available = requirement == "recall-reveal-text" && valid;
+            let available = valid
+                && (requirement == "recall-reveal-text"
+                    || requirement == "structured_learning_package"
+                        && assurance::ready(db, &material)?);
             provider.insert(
                 requirement.clone(),
                 Capability {
@@ -215,13 +218,28 @@ fn refresh_target(db: &Connection, target: &str) -> Result<PlanView> {
             );
         }
     }
-    let plan = resolve_plan(
+    let mut plan = resolve_plan(
         effective,
         &profile,
         &provider,
-        &["native-consumer-v1".into()],
+        &["native-consumer-v1".into(), "structured".into()],
     )
     .map_err(rule)?;
+    for (purpose, p) in [
+        ("initial_learning", &mut plan.purposes.initial_learning),
+        ("retention_review", &mut plan.purposes.retention_review),
+        ("relearning", &mut plan.purposes.relearning),
+    ] {
+        if p.binding.binding.runtime_adapter_id == "structured"
+            && crate::composition::validate_structured_spec(purpose, &p.binding).is_err()
+        {
+            p.readiness = ReadinessView {
+                status: Readiness::Blocked,
+                label: "当前客户端不支持这个学习组合".into(),
+                detail: "需要匹配的协议、评价、进度和结算策略。".into(),
+            };
+        }
+    }
     let encoded = serde_json::to_string(&plan)?;
     let old:Option<(String,u32,String)>=db.query_row("SELECT id,revision,content FROM target_plans WHERE target_id=?1 ORDER BY revision DESC LIMIT 1",[target],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
     if let Some((id, _, content)) = &old
@@ -329,7 +347,14 @@ pub(super) fn view(db: &Connection) -> Result<PolicyView> {
                 _ => p.profile_id.as_str(),
             }
             .into(),
-            executable: p.profile_id == "lightweight",
+            executable: matches!(
+                p.protocols
+                    .initial_learning
+                    .binding
+                    .runtime_adapter_id
+                    .as_str(),
+                "native-consumer-v1" | "structured"
+            ),
             policy: PolicyRef {
                 profile_id: p.profile_id,
                 profile_version: p.profile_version,
@@ -458,4 +483,44 @@ pub(super) fn migrate_legacy(db: &Connection) -> Result<()> {
         }
     }
     Ok(())
+}
+
+pub(super) fn commit_assurance(
+    db: &Connection,
+    target: &str,
+    run: &str,
+    now: i64,
+) -> Result<PlanView> {
+    if committed_id(db, target)?.is_some() {
+        return Err(Error::Rule("policy_committed"));
+    }
+    let view = refresh_target(db, target)?;
+    crate::composition::validate_structured_profile(&view.plan.profile)
+        .map_err(|_| Error::Rule("learning_plan_blocked"))?;
+    for (purpose, plan) in [
+        ("initial_learning", &view.plan.purposes.initial_learning),
+        ("retention_review", &view.plan.purposes.retention_review),
+        ("relearning", &view.plan.purposes.relearning),
+    ] {
+        crate::composition::validate_structured_spec(purpose, &plan.binding)
+            .map_err(|_| Error::Rule("learning_plan_blocked"))?;
+    }
+    let purpose = &view.plan.purposes.initial_learning;
+    if purpose.readiness.status != Readiness::Ready
+        || purpose.binding.binding.runtime_adapter_id != "structured"
+        || purpose.binding.protocol_id != "structured-acquisition"
+        || purpose.binding.protocol_version != "v1"
+        || !purpose.provisioned
+    {
+        return Err(Error::Rule("learning_plan_blocked"));
+    }
+    db.execute(
+        "INSERT INTO policy_commitments VALUES(?1,?2,?3,?4,'first_run')",
+        params![target, run, view.id, now],
+    )?;
+    db.execute(
+        "INSERT INTO initial_run_policies VALUES(?1,?2)",
+        params![run, view.id],
+    )?;
+    Ok(view)
 }

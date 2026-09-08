@@ -1,0 +1,2750 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "sensa-runtime-learning-release-v1"
+    },
+    "release": {
+      "type": "object",
+      "properties": {
+        "releaseKey": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+        },
+        "version": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "targetLanguage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "learnerLocale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deliveryProfileVersion": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+        },
+        "validatorVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capabilityResolverVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "releaseKey",
+        "version",
+        "targetLanguage",
+        "learnerLocale",
+        "deliveryProfileVersion",
+        "validatorVersion",
+        "capabilityResolverVersion",
+        "sourceDigest"
+      ],
+      "additionalProperties": false
+    },
+    "media": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "mediaKey": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "image",
+              "audio"
+            ]
+          },
+          "uri": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mimeType": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "sourceTextDigest": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "mediaKey",
+          "kind",
+          "uri",
+          "mimeType",
+          "sha256",
+          "sourceTextDigest"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "lexemes": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "lexemeKey": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+          },
+          "version": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "languageTag": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lemma": {
+            "type": "string",
+            "minLength": 1
+          },
+          "forms": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "syllables": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pronunciations": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pronunciationKey": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                },
+                "accentLocale": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "ipa": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "mediaKey": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "pronunciationKey",
+                "accentLocale",
+                "ipa",
+                "mediaKey"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "lexemeKey",
+          "version",
+          "languageTag",
+          "lemma",
+          "forms",
+          "syllables",
+          "pronunciations"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "relationKey": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+          },
+          "sourceSenseKey": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+          },
+          "targetSenseKey": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+          },
+          "relationType": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "intra_word",
+              "cross_word"
+            ]
+          },
+          "distinguishingFeature": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "relationKey",
+          "sourceSenseKey",
+          "targetSenseKey",
+          "relationType",
+          "scope",
+          "distinguishingFeature"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "packages": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "sensa-sense-learning-package-v1"
+          },
+          "identity": {
+            "type": "object",
+            "properties": {
+              "packageKey": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+              },
+              "packageVersion": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "senseKey": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+              },
+              "senseVersion": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "lexemeKey": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+              },
+              "lexemeVersion": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "targetLanguage": {
+                "type": "string",
+                "minLength": 1
+              },
+              "learnerLocale": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "packageKey",
+              "packageVersion",
+              "senseKey",
+              "senseVersion",
+              "lexemeKey",
+              "lexemeVersion",
+              "targetLanguage",
+              "learnerLocale"
+            ],
+            "additionalProperties": false
+          },
+          "sense": {
+            "type": "object",
+            "properties": {
+              "partOfSpeech": {
+                "type": "string",
+                "minLength": 1
+              },
+              "senseRank": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "guideLabelL1": {
+                "type": "string",
+                "minLength": 1
+              },
+              "definitionL2": {
+                "type": "string",
+                "minLength": 1
+              },
+              "teachingPriority": {
+                "type": "string",
+                "enum": [
+                  "core",
+                  "extended",
+                  "recognition"
+                ]
+              },
+              "coreFeatures": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "partOfSpeech",
+              "senseRank",
+              "guideLabelL1",
+              "definitionL2",
+              "teachingPriority",
+              "coreFeatures"
+            ],
+            "additionalProperties": false
+          },
+          "acquisitionProfile": {
+            "type": "object",
+            "properties": {
+              "profileKey": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+              },
+              "acquisitionNeeds": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "perceptual_grounding",
+                    "boundary_formation",
+                    "abstraction_invariant",
+                    "spatial_aspectual_tuning",
+                    "social_normative_calibration",
+                    "form_binding"
+                  ]
+                }
+              },
+              "minimumSufficientExperience": {
+                "type": "string",
+                "minLength": 1
+              },
+              "distinguishingFeatures": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "preferredPrimitives": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "visual_grounding",
+                    "motion_grounding",
+                    "spatial_relation",
+                    "causal_sequence",
+                    "temporal_sequence",
+                    "social_micro_scenario",
+                    "introspective_scenario",
+                    "contrast_pair",
+                    "counterexample",
+                    "contextual_variation",
+                    "production_cue"
+                  ]
+                }
+              },
+              "fallbackPrimitives": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "visual_grounding",
+                    "motion_grounding",
+                    "spatial_relation",
+                    "causal_sequence",
+                    "temporal_sequence",
+                    "social_micro_scenario",
+                    "introspective_scenario",
+                    "contrast_pair",
+                    "counterexample",
+                    "contextual_variation",
+                    "production_cue"
+                  ]
+                }
+              },
+              "requiredCapabilities": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "contextual_recognition"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "meaning_to_form_recall"
+                        },
+                        "gradingContract": {
+                          "type": "string",
+                          "const": "lexeme_identity_v1"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "gradingContract"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "novel_context_transfer"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "boundary_discrimination"
+                        },
+                        "relationKey": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "relationKey"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "optionalCapabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "sound_recognition",
+                    "form_realization",
+                    "boundary_discrimination"
+                  ]
+                }
+              },
+              "requiredAssetCapabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "meaning_grounding",
+                    "l1_mediation",
+                    "usage_pattern",
+                    "contextual_variation",
+                    "pronunciation",
+                    "study_example_audio",
+                    "boundary_contrast",
+                    "counterexample",
+                    "visual_grounding",
+                    "spatial_grounding",
+                    "causal_grounding",
+                    "temporal_grounding",
+                    "extended_audio"
+                  ]
+                }
+              },
+              "optionalAssetCapabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "meaning_grounding",
+                    "l1_mediation",
+                    "usage_pattern",
+                    "contextual_variation",
+                    "pronunciation",
+                    "study_example_audio",
+                    "boundary_contrast",
+                    "counterexample",
+                    "visual_grounding",
+                    "spatial_grounding",
+                    "causal_grounding",
+                    "temporal_grounding",
+                    "extended_audio"
+                  ]
+                }
+              },
+              "domainBound": {
+                "type": "boolean"
+              },
+              "domainConstraints": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "boundaryTargets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "relationKey": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                    },
+                    "isRequired": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "relationKey",
+                    "isRequired"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "profileKey",
+              "acquisitionNeeds",
+              "minimumSufficientExperience",
+              "distinguishingFeatures",
+              "preferredPrimitives",
+              "fallbackPrimitives",
+              "requiredCapabilities",
+              "optionalCapabilities",
+              "requiredAssetCapabilities",
+              "optionalAssetCapabilities",
+              "domainBound",
+              "domainConstraints",
+              "boundaryTargets"
+            ],
+            "additionalProperties": false
+          },
+          "experience": {
+            "type": "object",
+            "properties": {
+              "sketch": {
+                "type": "object",
+                "properties": {
+                  "sketchKey": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                  },
+                  "experienceGoal": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "focalStructure": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "learnerInference": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "constraints": {
+                    "type": "object",
+                    "properties": {
+                      "mustConvey": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "mustAvoid": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "hideTargetForms": {
+                        "type": "boolean",
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "mustConvey",
+                      "mustAvoid",
+                      "hideTargetForms"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "sketchKey",
+                  "experienceGoal",
+                  "focalStructure",
+                  "learnerInference",
+                  "constraints"
+                ],
+                "additionalProperties": false
+              },
+              "renders": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "renderKey": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                        },
+                        "primitive": {
+                          "type": "string",
+                          "enum": [
+                            "visual_grounding",
+                            "motion_grounding",
+                            "spatial_relation",
+                            "causal_sequence",
+                            "temporal_sequence",
+                            "social_micro_scenario",
+                            "introspective_scenario",
+                            "contrast_pair",
+                            "counterexample",
+                            "contextual_variation",
+                            "production_cue"
+                          ]
+                        },
+                        "supportedDeliveryProfiles": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          }
+                        },
+                        "kind": {
+                          "type": "string",
+                          "const": "text"
+                        },
+                        "sceneL1": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "renderKey",
+                        "primitive",
+                        "supportedDeliveryProfiles",
+                        "kind",
+                        "sceneL1"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "renderKey": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                        },
+                        "primitive": {
+                          "type": "string",
+                          "enum": [
+                            "visual_grounding",
+                            "motion_grounding",
+                            "spatial_relation",
+                            "causal_sequence",
+                            "temporal_sequence",
+                            "social_micro_scenario",
+                            "introspective_scenario",
+                            "contrast_pair",
+                            "counterexample",
+                            "contextual_variation",
+                            "production_cue"
+                          ]
+                        },
+                        "supportedDeliveryProfiles": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          }
+                        },
+                        "kind": {
+                          "type": "string",
+                          "const": "image"
+                        },
+                        "mediaKey": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                        },
+                        "altTextL1": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "renderKey",
+                        "primitive",
+                        "supportedDeliveryProfiles",
+                        "kind",
+                        "mediaKey",
+                        "altTextL1"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "renderKey": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                        },
+                        "primitive": {
+                          "type": "string",
+                          "enum": [
+                            "visual_grounding",
+                            "motion_grounding",
+                            "spatial_relation",
+                            "causal_sequence",
+                            "temporal_sequence",
+                            "social_micro_scenario",
+                            "introspective_scenario",
+                            "contrast_pair",
+                            "counterexample",
+                            "contextual_variation",
+                            "production_cue"
+                          ]
+                        },
+                        "supportedDeliveryProfiles": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          }
+                        },
+                        "kind": {
+                          "type": "string",
+                          "const": "sequence"
+                        },
+                        "sequenceKind": {
+                          "type": "string",
+                          "enum": [
+                            "causal",
+                            "temporal"
+                          ]
+                        },
+                        "steps": {
+                          "minItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "description": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "description"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "renderKey",
+                        "primitive",
+                        "supportedDeliveryProfiles",
+                        "kind",
+                        "sequenceKind",
+                        "steps"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "renderKey": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                        },
+                        "primitive": {
+                          "type": "string",
+                          "enum": [
+                            "visual_grounding",
+                            "motion_grounding",
+                            "spatial_relation",
+                            "causal_sequence",
+                            "temporal_sequence",
+                            "social_micro_scenario",
+                            "introspective_scenario",
+                            "contrast_pair",
+                            "counterexample",
+                            "contextual_variation",
+                            "production_cue"
+                          ]
+                        },
+                        "supportedDeliveryProfiles": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          }
+                        },
+                        "kind": {
+                          "type": "string",
+                          "const": "interaction"
+                        },
+                        "rendererKey": {
+                          "type": "string",
+                          "const": "state_change_v1"
+                        },
+                        "payload": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "instructionL1": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "runtimePresentation": {
+                                  "type": "object",
+                                  "properties": {
+                                    "variant": {
+                                      "type": "string",
+                                      "const": "physical_threshold"
+                                    },
+                                    "controlLabelL1": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "stageClassName": {
+                                      "type": "string",
+                                      "const": "physical"
+                                    },
+                                    "statusLabelsL1": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "objectLabelL1": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "projectLabelL1": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "supportLabelsL1": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "viewpointLabelL1": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "ownerLabelL1": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "userLabelL1": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "variant",
+                                    "controlLabelL1",
+                                    "stageClassName",
+                                    "statusLabelsL1",
+                                    "objectLabelL1",
+                                    "projectLabelL1",
+                                    "supportLabelsL1",
+                                    "viewpointLabelL1",
+                                    "ownerLabelL1",
+                                    "userLabelL1"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "subject": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "initialState": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "initialState"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "control": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "slider"
+                                    },
+                                    "valueKey": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "minimum": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "maximum": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "step": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "valueKey",
+                                    "minimum",
+                                    "maximum",
+                                    "step"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "states": {
+                                  "minItems": 2,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "value": {
+                                        "type": "number",
+                                        "minimum": 0
+                                      },
+                                      "state": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "labelL1": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "feedbackL1": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "state",
+                                      "labelL1",
+                                      "feedbackL1"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "resetLabelL1": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "accessibility": {
+                                  "type": "object",
+                                  "properties": {
+                                    "keyboardStep": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0
+                                    },
+                                    "summaryL1": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "keyboardStep",
+                                    "summaryL1"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "instructionL1",
+                                "runtimePresentation",
+                                "subject",
+                                "control",
+                                "states",
+                                "resetLabelL1",
+                                "accessibility"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "instructionL1": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "runtimePresentation": {
+                                  "type": "object",
+                                  "properties": {
+                                    "variant": {
+                                      "type": "string",
+                                      "const": "continuation_timeline"
+                                    },
+                                    "controlLabelL1": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "stageClassName": {
+                                      "type": "string",
+                                      "const": "process"
+                                    },
+                                    "statusLabelsL1": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "objectLabelL1": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "projectLabelL1": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "supportLabelsL1": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "viewpointLabelL1": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "ownerLabelL1": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "userLabelL1": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "variant",
+                                    "controlLabelL1",
+                                    "stageClassName",
+                                    "statusLabelsL1",
+                                    "objectLabelL1",
+                                    "projectLabelL1",
+                                    "supportLabelsL1",
+                                    "viewpointLabelL1",
+                                    "ownerLabelL1",
+                                    "userLabelL1"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "timeline": {
+                                  "minItems": 2,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "labelL1": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "state": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "feedbackL1": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "labelL1",
+                                      "state",
+                                      "feedbackL1"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "supportKindsL1": {
+                                  "minItems": 1,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                }
+                              },
+                              "required": [
+                                "instructionL1",
+                                "runtimePresentation",
+                                "timeline",
+                                "supportKindsL1"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "instructionL1": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "runtimePresentation": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "variant": {
+                                          "type": "string",
+                                          "const": "receiver_transfer"
+                                        },
+                                        "controlLabelL1": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "stageClassName": {
+                                          "type": "string",
+                                          "const": "borrow"
+                                        },
+                                        "statusLabelsL1": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "objectLabelL1": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "projectLabelL1": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "supportLabelsL1": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "viewpointLabelL1": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "ownerLabelL1": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "userLabelL1": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "variant",
+                                        "controlLabelL1",
+                                        "stageClassName",
+                                        "statusLabelsL1",
+                                        "objectLabelL1",
+                                        "projectLabelL1",
+                                        "supportLabelsL1",
+                                        "viewpointLabelL1",
+                                        "ownerLabelL1",
+                                        "userLabelL1"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "variant": {
+                                          "type": "string",
+                                          "const": "provider_transfer"
+                                        },
+                                        "controlLabelL1": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "stageClassName": {
+                                          "type": "string",
+                                          "const": "lend"
+                                        },
+                                        "statusLabelsL1": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "objectLabelL1": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "projectLabelL1": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "supportLabelsL1": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "viewpointLabelL1": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "ownerLabelL1": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "userLabelL1": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "variant",
+                                        "controlLabelL1",
+                                        "stageClassName",
+                                        "statusLabelsL1",
+                                        "objectLabelL1",
+                                        "projectLabelL1",
+                                        "supportLabelsL1",
+                                        "viewpointLabelL1",
+                                        "ownerLabelL1",
+                                        "userLabelL1"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "actors": {
+                                  "minItems": 1,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "roleL1": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "state": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "roleL1",
+                                      "state"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "object": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "ownership": {
+                                      "minItems": 1,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "ownership"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "states": {
+                                  "minItems": 2,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "key": {
+                                        "type": "string",
+                                        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                                      },
+                                      "labelL1": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "key",
+                                      "labelL1"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "instructionL1",
+                                "runtimePresentation",
+                                "actors",
+                                "object",
+                                "states"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "renderKey",
+                        "primitive",
+                        "supportedDeliveryProfiles",
+                        "kind",
+                        "rendererKey",
+                        "payload"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "renderPlan": {
+                "type": "object",
+                "properties": {
+                  "strategyVersion": {
+                    "type": "string",
+                    "const": "sensa-experience-render-plan-v1"
+                  },
+                  "selections": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "renderKey": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "preferred",
+                            "alternative",
+                            "fallback"
+                          ]
+                        },
+                        "rank": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "reason": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "renderKey",
+                        "role",
+                        "rank",
+                        "reason"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "strategyVersion",
+                  "selections"
+                ],
+                "additionalProperties": false
+              },
+              "recap": {
+                "type": "object",
+                "properties": {
+                  "recapKey": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                  },
+                  "titleL1": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "steps": {
+                    "minItems": 2,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "stepKey": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                        },
+                        "labelL1": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "descriptionL1": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "stepKey",
+                        "labelL1",
+                        "descriptionL1"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "bodyL1": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "recapKey",
+                  "titleL1",
+                  "steps",
+                  "bodyL1"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "sketch",
+              "renders",
+              "renderPlan",
+              "recap"
+            ],
+            "additionalProperties": false
+          },
+          "l1Bridge": {
+            "type": "object",
+            "properties": {
+              "assetKey": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+              },
+              "bodyL1": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "assetKey",
+              "bodyL1"
+            ],
+            "additionalProperties": false
+          },
+          "examples": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "exampleKey": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                },
+                "textL2": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "textL1": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "surface": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "start": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "end": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "surface",
+                    "start",
+                    "end"
+                  ],
+                  "additionalProperties": false
+                },
+                "scenarioFamily": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                },
+                "construction": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "roles": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "study_binding",
+                      "recognition_assessment",
+                      "retrieval_repair",
+                      "transfer_assessment",
+                      "retention_assessment",
+                      "usage_illustration",
+                      "free_practice"
+                    ]
+                  }
+                },
+                "visibility": {
+                  "type": "string",
+                  "enum": [
+                    "learning_only",
+                    "assessment_only"
+                  ]
+                },
+                "renders": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "text"
+                          },
+                          "renderKey": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "renderKey"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "static_audio"
+                          },
+                          "renderKey": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          },
+                          "mediaKey": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          },
+                          "accentLocale": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "sourceTextDigest": {
+                            "type": "string",
+                            "pattern": "^sha256:[0-9a-f]{64}$"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "renderKey",
+                          "mediaKey",
+                          "accentLocale",
+                          "sourceTextDigest"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "exampleKey",
+                "textL2",
+                "textL1",
+                "target",
+                "scenarioFamily",
+                "construction",
+                "roles",
+                "visibility",
+                "renders"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "usagePatterns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "patternKey": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                },
+                "canonicalPattern": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "registerLabel": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "domainLabel": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "usageRestriction": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "collocations": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "collocationKey": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                      },
+                      "displayTextL2": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "exampleBindings": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "bindingKey": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                            },
+                            "exampleKey": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                            },
+                            "start": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "end": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "role": {
+                              "type": "string",
+                              "enum": [
+                                "primary",
+                                "alternative"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "bindingKey",
+                            "exampleKey",
+                            "start",
+                            "end",
+                            "role"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "collocationKey",
+                      "displayTextL2",
+                      "exampleBindings"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "patternKey",
+                "canonicalPattern",
+                "registerLabel",
+                "domainLabel",
+                "usageRestriction",
+                "collocations"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "assessmentInventory": {
+            "type": "object",
+            "properties": {
+              "contextualRecognition": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "taskKey": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                    },
+                    "eligiblePurposes": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "acquisition_gate",
+                          "retention_review",
+                          "relearning_gate"
+                        ]
+                      }
+                    },
+                    "promptL1": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "contextual_recognition"
+                    },
+                    "exampleKey": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                    },
+                    "questionL1": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "options": {
+                      "minItems": 2,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "optionKey": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          },
+                          "labelL1": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "detailL1": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "isCorrect": {
+                            "type": "boolean"
+                          },
+                          "reasonCode": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          },
+                          "feedbackTitleL1": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "feedbackBodyL1": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "optionKey",
+                          "labelL1",
+                          "isCorrect",
+                          "reasonCode",
+                          "feedbackTitleL1",
+                          "feedbackBodyL1"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "featureLabelsL1": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "required": [
+                    "taskKey",
+                    "eligiblePurposes",
+                    "promptL1",
+                    "kind",
+                    "exampleKey",
+                    "questionL1",
+                    "options",
+                    "featureLabelsL1"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "meaningToFormRecall": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "taskKey": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                    },
+                    "eligiblePurposes": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "acquisition_gate",
+                          "retention_review",
+                          "relearning_gate"
+                        ]
+                      }
+                    },
+                    "promptL1": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "meaning_to_form_recall"
+                    },
+                    "cue": {
+                      "type": "object",
+                      "properties": {
+                        "bodyL1": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "featureLabelsL1": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        }
+                      },
+                      "required": [
+                        "bodyL1",
+                        "featureLabelsL1"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "gradingContract": {
+                      "type": "string",
+                      "const": "lexeme_identity_v1"
+                    },
+                    "supportInventory": {
+                      "type": "object",
+                      "properties": {
+                        "firstLetter": {
+                          "type": "boolean"
+                        },
+                        "formChoices": {
+                          "minItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "optionKey": {
+                                "type": "string",
+                                "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                              },
+                              "formL2": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "isTargetLexeme": {
+                                "type": "boolean"
+                              },
+                              "reasonCode": {
+                                "type": "string",
+                                "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                              }
+                            },
+                            "required": [
+                              "optionKey",
+                              "formL2",
+                              "isTargetLexeme",
+                              "reasonCode"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "firstLetter",
+                        "formChoices"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "feedback": {
+                      "type": "object",
+                      "properties": {
+                        "independentSuccessTitleL1": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "independentSuccessBodyL1": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "supportedSuccessTitleL1": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "supportedSuccessBodyL1": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "choiceSuccessTitleL1": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "choiceSuccessBodyL1": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "repairTitleL1": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "repairBodyL1": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "independentSuccessTitleL1",
+                        "independentSuccessBodyL1",
+                        "supportedSuccessTitleL1",
+                        "supportedSuccessBodyL1",
+                        "choiceSuccessTitleL1",
+                        "choiceSuccessBodyL1",
+                        "repairTitleL1",
+                        "repairBodyL1"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "taskKey",
+                    "eligiblePurposes",
+                    "promptL1",
+                    "kind",
+                    "cue",
+                    "gradingContract",
+                    "supportInventory",
+                    "feedback"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "novelContextTransfer": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "taskKey": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                    },
+                    "eligiblePurposes": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "acquisition_gate",
+                          "retention_review",
+                          "relearning_gate"
+                        ]
+                      }
+                    },
+                    "promptL1": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "novel_context_transfer"
+                    },
+                    "exampleKey": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                    },
+                    "scene": {
+                      "type": "object",
+                      "properties": {
+                        "sceneLabelL1": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "setupL2": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "setupL1": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "visualKind": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                        },
+                        "visualAltL1": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "sceneLabelL1",
+                        "setupL2",
+                        "setupL1",
+                        "visualKind",
+                        "visualAltL1"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "questionL1": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "options": {
+                      "minItems": 2,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "optionKey": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          },
+                          "labelL1": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "detailL1": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "isCorrect": {
+                            "type": "boolean"
+                          },
+                          "reasonCode": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          },
+                          "feedbackTitleL1": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "feedbackBodyL1": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "optionKey",
+                          "labelL1",
+                          "detailL1",
+                          "isCorrect",
+                          "reasonCode",
+                          "feedbackTitleL1",
+                          "feedbackBodyL1"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "connectionSummary": {
+                      "type": "object",
+                      "properties": {
+                        "fromLabelL1": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "toLabelL1": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "invariantLabelsL1": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        }
+                      },
+                      "required": [
+                        "fromLabelL1",
+                        "toLabelL1",
+                        "invariantLabelsL1"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "successTitleL1": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "successBodyL1": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "taskKey",
+                    "eligiblePurposes",
+                    "promptL1",
+                    "kind",
+                    "exampleKey",
+                    "scene",
+                    "questionL1",
+                    "options",
+                    "connectionSummary",
+                    "successTitleL1",
+                    "successBodyL1"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "boundaryContrast": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "taskKey": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                    },
+                    "eligiblePurposes": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "acquisition_gate",
+                          "retention_review",
+                          "relearning_gate"
+                        ]
+                      }
+                    },
+                    "promptL1": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "boundary_contrast"
+                    },
+                    "relationKey": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                    },
+                    "exampleKey": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                    },
+                    "questionL1": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "options": {
+                      "minItems": 2,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "optionKey": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          },
+                          "labelL1": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "detailL1": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "isCorrect": {
+                            "type": "boolean"
+                          },
+                          "reasonCode": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          },
+                          "feedbackTitleL1": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "feedbackBodyL1": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "optionKey",
+                          "labelL1",
+                          "isCorrect",
+                          "reasonCode",
+                          "feedbackTitleL1",
+                          "feedbackBodyL1"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "taskKey",
+                    "eligiblePurposes",
+                    "promptL1",
+                    "kind",
+                    "relationKey",
+                    "exampleKey",
+                    "questionL1",
+                    "options"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "contextualRecognition",
+              "meaningToFormRecall",
+              "novelContextTransfer",
+              "boundaryContrast"
+            ],
+            "additionalProperties": false
+          },
+          "repairBindings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "bindingKey": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                },
+                "capability": {
+                  "type": "string",
+                  "enum": [
+                    "grounding",
+                    "contextual_recognition",
+                    "meaning_to_form_recall",
+                    "novel_context_transfer",
+                    "boundary_discrimination"
+                  ]
+                },
+                "reasonCodes": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                  }
+                },
+                "strategyKind": {
+                  "type": "string",
+                  "enum": [
+                    "grounding_replay",
+                    "meaning_clarification",
+                    "form_rebinding",
+                    "varied_context_repair",
+                    "boundary_clarification"
+                  ]
+                },
+                "resourceRefs": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "experience_recap"
+                          },
+                          "recapKey": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "recapKey"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "experience_render"
+                          },
+                          "renderKey": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "renderKey"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "l1_bridge"
+                          },
+                          "assetKey": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "assetKey"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "learning_example"
+                          },
+                          "exampleKey": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "exampleKey"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "sense_features"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "lexeme_forms"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "sense_relation"
+                          },
+                          "relationKey": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "relationKey"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "bindingKey",
+                "capability",
+                "reasonCodes",
+                "strategyKind",
+                "resourceRefs"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "practiceManifest": {
+            "type": "object",
+            "properties": {
+              "profileVersion": {
+                "type": "string",
+                "const": "sensa-initial-free-practice-v1"
+              },
+              "grants": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "taskFamily": {
+                      "type": "string",
+                      "enum": [
+                        "immersive_browse",
+                        "portable_listening",
+                        "dictation",
+                        "quick_spelling"
+                      ]
+                    },
+                    "resourceKeys": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                      }
+                    }
+                  },
+                  "required": [
+                    "taskFamily",
+                    "resourceKeys"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "profileVersion",
+              "grants"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "identity",
+          "sense",
+          "acquisitionProfile",
+          "experience",
+          "l1Bridge",
+          "examples",
+          "usagePatterns",
+          "assessmentInventory",
+          "repairBindings"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "release",
+    "media",
+    "lexemes",
+    "relations",
+    "packages"
+  ],
+  "additionalProperties": false
+}

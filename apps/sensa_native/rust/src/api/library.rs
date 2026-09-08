@@ -14,3 +14,8 @@ pub fn library_command(path: String, command_json: String) -> anyhow::Result<Str
 pub fn init_app() {
     flutter_rust_bridge::setup_default_user_utils();
 }
+
+/// Returns verified packaged media for the current local encounter only.
+pub fn library_assurance_media(path:String,session_id:String,reference:String)->anyhow::Result<Vec<u8>> {
+    Ok(sensa_library::read_assurance_media(Path::new(&path),&session_id,&reference)?)
+}

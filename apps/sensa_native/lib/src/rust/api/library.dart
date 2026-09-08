@@ -17,3 +17,14 @@ Future<String> libraryCommand({
   path: path,
   commandJson: commandJson,
 );
+
+/// Returns verified packaged media for the current local encounter only.
+Future<Uint8List> libraryAssuranceMedia({
+  required String path,
+  required String sessionId,
+  required String reference,
+}) => RustLib.instance.api.crateApiLibraryLibraryAssuranceMedia(
+  path: path,
+  sessionId: sessionId,
+  reference: reference,
+);

@@ -12,7 +12,7 @@ Owner 最新确认：Flutter/Rust 原生 PC/移动应用是确定的主产品；
 | 用例/范围 | 现有成果入口 | Rust / Flutter 目标 | 当前状态与验收门 |
 | --- | --- | --- | --- |
 | 轻量首学与首次调度 | packages/learning-kernel、apps/api；local-settlement-handoff.md | crates/sensa-core、crates/sensa-library、apps/sensa_native | 合成材料技术纵切已通过 macOS/Android 首学及独立进程恢复；见 native-local-learning-handoff.md，不能标作完整正式学习用例 |
-| 正式学习包导入与入学 | packages/content-validator、packages/contracts、apps/api、apps/web | 本地校验、版本固定、SQLite 原子入学及 Flutter 资源入口 | 有界轻量文本包的本地导入、版本保护、显式入学与多目标首学已实现；完整 Published Package/角色材料和媒体仍待迁移，见 native-pack-import-handoff.md |
+| 正式学习包导入与入学 | packages/content-validator、packages/contracts、apps/api、apps/web | 本地校验、版本固定、SQLite 原子入学及 Flutter 资源入口 | 有界轻量文本包的本地导入、版本保护、显式入学与多目标首学已实现；高保证 runtime release/角色资源/静态媒体已接入并验收，见 native-assurance-integration-handoff.md；上游发布治理与在线生成仍待迁移 |
 | 到期复习与重学 | packages/learning-kernel/src/runtime/consumerInitial.ts、consumerSettlement.ts、scheduling.ts；apps/api；apps/web | Rust 协议/调度与 Flutter 学习界面 | 三 purpose 纯决策/FSRS、轻量 SQLite Review/Need/Outcome 事务及 Flutter 等待/恢复已接入；平台证据见 native-retention-handoff.md；正式 Activity/Mixed 计划与去重汇总仍待迁移 |
 | 多目标、每日计划、签到、记录及其他已有策略 | apps/api、apps/web、相关合同 | Rust 本地应用规则、读模型与 Flutter 页面 | 待逐项盘点；区分正式实现与原型证据，已有学习策略和扩展机制不因分阶段迁移而省略 |
 | 个人语义世界与快慢轨 | apps/api、apps/web、packages/contracts | 本地 Context/Sense/Expression、可选 Focus、接受与恢复流程 | 待迁移；保持领域语义与显式加入学习 |
@@ -37,22 +37,22 @@ Owner 最新确认：Flutter/Rust 原生 PC/移动应用是确定的主产品；
 | Progression Kernel | packages/learning-kernel/src/runtime/protocolProgression.ts | 纯内核已迁移 credit/invalidate/repair/reassess/reset/complete、epoch 与 Checkpoint 不变量，通过 TS 差分；通用状态的 SQLite 账本已接入轻量三 purpose，并验证多 Checkpoint 重置/恢复；多阶段 Flutter 消费仍待接入，见 native-progress-journal-handoff.md |
 | 正交策略与组合校验 | apps/web/src/experience/learningRuntime/protocolPolicies.ts、runtimeComposition.ts | 五轴 Registry/引用校验及三种 Progression 策略已迁移，原生入口校验真实轻量组合；专用编排/scope Registry 和行为执行器仍待迁移，见 native-progression-handoff.md |
 | Profile 与 Policy 生命周期 | apps/web/src/experience/learningRuntime/policyProfiles.ts；learning-connection-model.md | 四级 Assignment、版本化 purpose plan/readiness、首次 Run commitment 与 Flutter 设置已接入；普通配置不重写历史，Policy Migration 尚未实现，见 native-policy-handoff.md |
-| 编排、运行与存储适配 | apps/web/src/experience/learningRuntime/orchestrations.ts、runtimeCoordinator.ts、runtimeSession.ts、runtimeSurfaces.ts、retentionStores.ts | 高保证 fresh/repair Step 选择已迁移，见 native-assurance-orchestration-handoff.md；LearnQueue 纯生命周期/撤销/恢复已迁移，见 native-assurance-lifecycle-handoff.md；ReviewQueue 纯生命周期及 effect 对照已迁移，见 native-assurance-review-handoff.md；正式材料/评价/事务/界面仍待接入。四阶段保留扩展性验证，正式施工暂停；每日数量留在 Planner |
+| 编排、运行与存储适配 | apps/web/src/experience/learningRuntime/orchestrations.ts、runtimeCoordinator.ts、runtimeSession.ts、runtimeSurfaces.ts、retentionStores.ts | 高保证 fresh/repair Step 选择已迁移，见 native-assurance-orchestration-handoff.md；LearnQueue 纯生命周期/撤销/恢复已迁移，见 native-assurance-lifecycle-handoff.md；ReviewQueue 纯生命周期及 effect 对照已迁移，见 native-assurance-review-handoff.md；正式材料/评价/事务/Flutter 已接入，见 native-assurance-integration-handoff.md。四阶段保留扩展性验证，正式施工暂停；每日数量留在 Planner |
 | 目标与内容能力 | apps/web/src/experience/learningRuntime/retentionScopes.ts、contentCapabilities.ts | 能力合取已迁移并对照 TS；scope 准入仍待迁移，普通题型不拆分调度身份 |
 | 材料与生成 | apps/web/src/experience/learningRuntime/contentProvisioning.ts、contentAgentProvisioning.ts；packages/contracts/src/sensa/learningContent.ts | 待迁移独立候选校验、固定 Materialization、来源/用途/版本；模型生成不直接写学习结果 |
-| 呈现与学习模式 | apps/web/src/experience/learningRuntime/stepRenderers.tsx、lightweightInitialPresentation.ts、lightweightInitialProtocol.ts、interleavedFourStageProtocol.ts | 高保证的资源、评价绑定与 Flutter 呈现继续迁移；四阶段只保留扩展性证据，其正式材料/界面暂停，保留 intent/disclosure |
+| 呈现与学习模式 | apps/web/src/experience/learningRuntime/stepRenderers.tsx、lightweightInitialPresentation.ts、lightweightInitialProtocol.ts、interleavedFourStageProtocol.ts | 高保证的资源、评价绑定与 Flutter 呈现已验收；四阶段只保留扩展性证据，其正式材料/界面暂停，保留 intent/disclosure |
 
 现已继续实现有界文本包导入及多目标首学；纯内核基础见 [迁移记录](native-kernel-migration-handoff.md)。轻量复习/再学习事务与 Flutter 状态见 [本轮记录](native-retention-handoff.md)。后续继续完整角色学习包/媒体、通用 Runtime 扩展机制、正式 Activity 与汇总；上述未完成项全部保留，不能把本轮对照用例数换算为全项目完成率。
 
 ## 怎样判定迁移完成（2026-09-08 更新）
 
-当前已经贯通的是原生轻量学习主链及若干通用内核基础，不是完整产品迁移。
+当前已经贯通的是原生轻量与高保证学习主链及通用内核基础，不是完整产品迁移。
 不能按提交数、文件数或差分测试数量换算百分比。待逐用例形成验收证据的主要工作可归为六组：
 
-1. **其余学习 Runtime**：高保证执行、Action/材料绑定、编排与 scope 准入，以及确认纳入产品的策略行为；四阶段按 Owner 指示仅保留扩展性验证。
+1. **其余学习 Runtime**：高保证执行与 Action/材料绑定已贯通；其余 scope 准入、Policy Migration 及确认纳入产品的策略行为仍需逐项验收；四阶段按 Owner 指示仅保留扩展性验证。
 2. **正式学习组织**：Activity/Mixed、每日计划、签到、记录与去重汇总。
 3. **个人语义世界**：Context/Sense/Expression、快慢轨、接受/澄清、保存修改与显式加入学习。
-4. **完整资源与在线任务协作**：正式学习包和媒体、固定 Materialization、LLM 任务状态/结果回收、音频及失败恢复。
+4. **完整资源与在线任务协作**：高保证发布物/静态媒体/固定材料化已接入；上游内容治理、LLM 任务状态/结果回收、音频及失败恢复。
 5. **采集入口交接**：TS 浏览器/YouTube、Agent 及后续端口通过统一接受规则进入本地库，验证幂等和隔离。
 6. **正式原生产品界面**：承接 apps/web 的完整功能、状态与恢复体验，分别通过桌面/移动验收；目前仍是技术验收壳。
 
@@ -70,3 +70,5 @@ Owner 已确认：先推进高保证完整路径，随后专门验收 Profile �
 现有 Profile/Registry 声明、纯队列行为对照不能替代该验收。必须验证改变已支持的策略绑定确实改变执行行为，
 未知或不支持的组合明确阻塞，固定 Run 的版本不被普通设置改写；新增组合不能依赖通用内核中的 Profile 名称分支。
 此项是迁移完成门，不能在高保证队列对照通过后删除。四阶段正式材料/UI 仍暂停。
+
+2026-09-09：上述 Profile 执行接线门已通过本轮验证，具体策略行为、事务与平台证据见 [完整纵切记录](native-assurance-integration-handoff.md)。此完成状态仅覆盖已注册的轻量/高保证执行组合，不消除新组合、Policy Migration 或完整产品迁移的验收义务。

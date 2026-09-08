@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:sensa_native/src/rust/api/library.dart' as native;
 
 /// Read models contain only projections. Rust owns every domain transition.
@@ -54,12 +55,20 @@ class LibrarySnapshot {
   );
   String get defaultPolicyLabel =>
       policyLabel(policyState['defaultPolicy']?['profileId'] as String?);
+  Map<String, dynamic>? get assurance =>
+      value['assurance'] as Map<String, dynamic>?;
   int? get dueAtMs => value['dueAtMs'] as int?;
 }
 
 class LibraryRepository {
   LibraryRepository(this.path);
   final String path;
+  Future<Uint8List> media(String sessionId, String reference) =>
+      native.libraryAssuranceMedia(
+        path: path,
+        sessionId: sessionId,
+        reference: reference,
+      );
   Future<LibrarySnapshot> load() async =>
       LibrarySnapshot.decode(await native.librarySnapshot(path: path));
   Future<LibrarySnapshot> execute(Map<String, dynamic> command) async =>

@@ -17,11 +17,11 @@ owner 确认前端体验，再细化合同并纵向实现；该方式可根据�
 LF-1b 后续增量已接入有界轻量文本包导入、逐目标显式入学、选择/暂停恢复与每日新学上限。完整发布包/媒体仍未完成；导入平台证据见 [本轮记录](native-pack-import-handoff.md)。
 
 2026-09-08 本轮范围修订：四阶段只作内核扩展性验证，正式材料/UI 暂停，不作为当前迁移完成前置。
-改为优先高保证；fresh/repair Step 选择与通用账本组合已推进，见 [高保证迁移记录](native-assurance-orchestration-handoff.md)。首学队列、辅助回想规则、撤销及快照恢复的纯内核迁移已完成，见 [生命周期记录](native-assurance-lifecycle-handoff.md)；复习/重学纯生命周期及 effect 对照也已完成，见 [复习队列记录](native-assurance-review-handoff.md)；正式材料/评价/事务/界面仍待接入。高保证贯通后须单独验收 Profile 到执行器的真实连接。
+改为优先高保证；fresh/repair Step 选择与通用账本组合已推进，见 [高保证迁移记录](native-assurance-orchestration-handoff.md)。首学队列、辅助回想规则、撤销及快照恢复的纯内核迁移已完成，见 [生命周期记录](native-assurance-lifecycle-handoff.md)；复习/重学纯生命周期及 effect 对照也已完成，见 [复习队列记录](native-assurance-review-handoff.md)；正式材料/评价/SQLite 事务/Flutter 已接入，并完成 Profile 到执行器的真实连接验收，见 [完整纵切记录](native-assurance-integration-handoff.md)。
 
 2026-09-08 最新确认：原生 PC/移动是主产品；Web 保留已有成果、暂停新增建设，是否开放以后决定。原生迁移必须完整承接现有 Web 功能、状态及学习内核扩展机制，不能把首发或技术验收范围当成最终范围。同步优先原生设备并保留 E2EE，Web WASM/互通不是当前前置条件。
 
-本轮已将三种轻量 purpose 的纯推进/结算、可配置 FSRS 与历史重建迁入 Rust，并接回现有本地首学事务；见 [内核迁移记录](native-kernel-migration-handoff.md)和[完整性清单](native-migration-checklist.md)。轻量复习/重学的本地事务及 Flutter 等待/恢复已接入，见 [复习迁移记录](native-retention-handoff.md)；通用策略注册/Progression Kernel 的纯接口与组合校验已迁移，见 [进度内核记录](native-progression-handoff.md)；Policy Assignment、purpose plan/readiness 与首次 Run 固定已接入本地，见 [策略迁移记录](native-policy-handoff.md)；通用 Observation/Decision/Checkpoint 账本已接入原生 consumer，见 [账本迁移记录](native-progress-journal-handoff.md)；四阶段编排纯内核及快照恢复已迁移，见 [四阶段记录](native-four-stage-orchestration-handoff.md)；高保证的结构化材料、评价/事务适配和 Flutter UI、Policy Migration、正式 Activity/Mixed 与汇总仍待迁移；四阶段正式材料/UI 按本轮 Owner 指示暂停；完整 LF-1b 未完成。
+本轮已将三种轻量 purpose 的纯推进/结算、可配置 FSRS 与历史重建迁入 Rust，并接回现有本地首学事务；见 [内核迁移记录](native-kernel-migration-handoff.md)和[完整性清单](native-migration-checklist.md)。轻量复习/重学的本地事务及 Flutter 等待/恢复已接入，见 [复习迁移记录](native-retention-handoff.md)；通用策略注册/Progression Kernel 的纯接口与组合校验已迁移，见 [进度内核记录](native-progression-handoff.md)；Policy Assignment、purpose plan/readiness 与首次 Run 固定已接入本地，见 [策略迁移记录](native-policy-handoff.md)；通用 Observation/Decision/Checkpoint 账本已接入原生 consumer，见 [账本迁移记录](native-progress-journal-handoff.md)；四阶段编排纯内核及快照恢复已迁移，见 [四阶段记录](native-four-stage-orchestration-handoff.md)；高保证的结构化材料、评价/事务适配和 Flutter UI 已贯通，Profile 执行连接已验证；Policy Migration、正式 Activity/Mixed 与汇总仍待迁移；四阶段正式材料/UI 按本轮 Owner 指示暂停；完整 LF-1b 未完成。
 
 2026-09-08 Owner 已确认转向[完整本地学习库＋可选端到端加密同步](../adr/0001-local-library-optional-encrypted-sync.md)，
 允许服务器保存密文副本，并提供可下载资源和按需在线服务。状态是“迁移已启动，共用结算提取与回归已通过；整库/客户端尚未切换”。

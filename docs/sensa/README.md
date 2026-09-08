@@ -82,6 +82,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | Native four-stage orchestration | [`native-four-stage-orchestration-handoff.md`](native-four-stage-orchestration-handoff.md) | 四阶段与复习队列、版本化快照和源差分；Owner 已将其定位为扩展性验证，正式材料/UI 暂停 |
 | Native assurance orchestration | [`native-assurance-orchestration-handoff.md`](native-assurance-orchestration-handoff.md) | 高保证 Step 选择、定向修复与通用账本组合；完整生命周期、评价/事务及界面仍待迁移 |
 | Native assurance lifecycle | [`native-assurance-lifecycle-handoff.md`](native-assurance-lifecycle-handoff.md) | 高保证首学队列、撤销/恢复；复习重学及产品接入仍待迁移 |
+| Native assurance integration | [`native-assurance-integration-handoff.md`](native-assurance-integration-handoff.md) | 正式发布物/判题/媒体、SQLite 高保证三 purpose、Flutter 平台恢复及 Profile 执行连接验收 |
 | Native assurance review | [`native-assurance-review-handoff.md`](native-assurance-review-handoff.md) | 高保证复习/重学队列与 effect 对照；正式原生路径仍待接入 |
 | Native retention | [`native-retention-handoff.md`](native-retention-handoff.md) | 轻量本地复习结算、等待/提前/同 Run 恢复及原生验证；正式 Activity 与去重汇总仍待迁移 |
 | Native kernel migration | [`native-kernel-migration-handoff.md`](native-kernel-migration-handoff.md) | 三 purpose 决策、可配置 FSRS、TS 差分及本地首学事务接入；完整原生复习仍待完成 |

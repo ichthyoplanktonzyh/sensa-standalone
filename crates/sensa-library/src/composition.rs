@@ -96,3 +96,80 @@ pub(super) fn validate() -> Result<(), String> {
         .get_or_init(|| validate_composition(&native_graph(), &native_registry()?).map(|_| ()))
         .clone()
 }
+
+/// Resolve supported executable contracts by binding, independent of profile names.
+/// A registry entry alone does not promise that a concrete runtime supports it.
+pub fn validate_structured_spec(
+    purpose: &str,
+    spec: &sensa_core::planning::ProtocolSpec,
+) -> Result<(), String> {
+    let b = &spec.binding;
+    let (protocol, orchestration, completion, memory, progression) = match purpose {
+        "initial_learning" => (
+            "structured-acquisition",
+            "structured_acquisition",
+            "all-required-current-epoch-v1",
+            None,
+            &["structured-current-checkpoint-reset-v1", "run-reset-v1"][..],
+        ),
+        "retention_review" => (
+            "evidence-oriented-retention-review",
+            "structured_retention",
+            "one-review-one-outcome-v1",
+            Some("behavioral-binary-graded-v1"),
+            &["completion-only-v1"][..],
+        ),
+        "relearning" => (
+            "targeted-structured-relearning",
+            "structured_retention",
+            "relearning-completion-v1",
+            None,
+            &["structured-current-checkpoint-reset-v1"][..],
+        ),
+        _ => return Err("Unknown structured purpose".into()),
+    };
+    if spec.protocol_id != protocol
+        || spec.protocol_version != "v1"
+        || b.runtime_adapter_id != "structured"
+        || b.orchestration_id != orchestration
+        || b.evaluation_policy_id != "structured-behavioral-v1"
+        || !progression.contains(&b.progression_policy_id.as_str())
+        || b.completion_policy_id != completion
+        || b.repair_policy_id != "structured-targeted-repair-v1"
+        || b.memory_outcome_policy_id.as_deref() != memory
+        || b.content_requirement != ["structured_learning_package"]
+    {
+        return Err("Unsupported structured executable composition".into());
+    }
+    let expected = if purpose == "initial_learning" {
+        vec![
+            "structured-acquisition:contextual_recognition",
+            "structured-acquisition:meaning_to_form_recall",
+            "structured-acquisition:novel_context_transfer",
+            "structured-acquisition:boundary_discrimination",
+        ]
+    } else {
+        vec![]
+    };
+    if b.checkpoint_definition_ids != expected {
+        return Err("Unsupported structured checkpoint definition".into());
+    }
+    let registry = existing_policy_inventory()?;
+    registry.progression(&b.progression_policy_id)?;
+    registry.completion(&b.completion_policy_id)?;
+    Ok(())
+}
+
+/// The executor has no implicit scheduling/evidence fallback.
+pub fn validate_structured_profile(profile: &sensa_core::planning::Profile) -> Result<(), String> {
+    if profile.lifecycle["schedulingPolicyId"] != "fsrs-retention-v1"
+        || profile.lifecycle["evidencePolicyId"] != "behavioral-acquisition-evidence-v1"
+        || profile.lifecycle["migrationPolicy"] != "pin_existing_runs"
+    {
+        return Err("Unsupported structured lifecycle policies".into());
+    }
+    for (purpose, spec) in profile.protocols.entries() {
+        validate_structured_spec(purpose, spec)?;
+    }
+    Ok(())
+}

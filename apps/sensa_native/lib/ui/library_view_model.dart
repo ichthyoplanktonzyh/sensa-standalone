@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../data/library_repository.dart';
@@ -97,7 +98,20 @@ class LibraryViewModel extends ChangeNotifier {
       _notify();
     }
     if (_disposed || encoded == null) return;
-    await act({'kind': 'import_pack', 'pack_json': encoded});
+    try {
+      final value = jsonDecode(encoded) as Map<String, dynamic>;
+      final structured =
+          value['format'] == 'sensa-runtime-artifact-v1' ||
+          value['schemaVersion'] == 'sensa-runtime-learning-release-v1';
+      await act(
+        structured
+            ? {'kind': 'import_runtime_release', 'release_json': encoded}
+            : {'kind': 'import_pack', 'pack_json': encoded},
+      );
+    } catch (e) {
+      error = message(e);
+      _notify();
+    }
     if (error == null) {
       home = true;
       notice = '材料已导入本机。选择内容后，可单独加入学习。';
@@ -122,6 +136,17 @@ class LibraryViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> assuranceIntent(Map<String, dynamic> intent) async {
+    final a = snapshot?.assurance;
+    if (a == null) return;
+    await act({
+      'kind': 'assurance_event',
+      'session_id': a['id'],
+      'ordinal': a['ordinal'],
+      'intent': intent,
+    });
+  }
+
   Future<void> answer(String action) async {
     final run = snapshot?.run;
     if (run == null) return;
@@ -140,6 +165,19 @@ class LibraryViewModel extends ChangeNotifier {
 
   String message(Object error) {
     final text = error.toString();
+    if (text.contains('undo_across_settlement')) {
+      return '这一步已经结算，不能撤销。已保存的复习安排会继续保留。';
+    }
+    if (text.contains('assurance_journal_mismatch')) {
+      return '学习记录校验未通过，请保留本机资料并恢复有效备份。';
+    }
+    if (text.contains('invalid_runtime_release')) {
+      return '学习包的任务或资源校验未通过，原有内容已保留。';
+    }
+    if (text.contains('invalid_runtime_media')) return '学习包的媒体校验未通过，未导入任何内容。';
+    if (text.contains('assurance_session_active')) {
+      return '还有一组高保证学习正在进行，请先返回继续或结束。';
+    }
     if (text.contains('policy_committed')) return '这项学习已固定方式。修改默认方式不会改写已有学习。';
     if (text.contains('learning_plan_blocked')) {
       return '当前学习方式尚未就绪，请查看原因或在首次学习前更换方式。';
@@ -154,7 +192,7 @@ class LibraryViewModel extends ChangeNotifier {
     if (text.contains('daily_limit')) {
       return '今天的新学数量已达到设置，可继续已有学习。';
     }
-    if (text.contains('pack_too_large')) return '学习包超过 2 MB，请选择较小的文本包。';
+    if (text.contains('pack_too_large')) return '文件或学习包过大。文本包上限 2 MB，含媒体学习包上限 20 MB，请拆分后再导入。';
     if (text.contains('unsupported_pack')) return '此包的版本、协议或语言暂不支持，原有资料不受影响。';
     if (text.contains('pack_version_conflict') ||
         text.contains('material_version_conflict') ||

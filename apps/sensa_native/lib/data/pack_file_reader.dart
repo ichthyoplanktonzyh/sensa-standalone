@@ -9,17 +9,17 @@ class PackFileReader {
     final file = await openFile(
       acceptedTypeGroups: const [
         XTypeGroup(
-          label: 'Sensa 文本学习包',
+          label: 'Sensa 学习包',
           extensions: ['json'],
           uniformTypeIdentifiers: ['public.json'],
         ),
       ],
     );
     if (file == null) return null;
-    if (await file.length() > 2000000) throw StateError('pack_too_large');
+    if (await file.length() > 20000000) throw StateError('pack_too_large');
     final bytes = BytesBuilder(copy: false);
     await for (final chunk in file.openRead()) {
-      if (bytes.length + chunk.length > 2000000) {
+      if (bytes.length + chunk.length > 20000000) {
         throw StateError('pack_too_large');
       }
       bytes.add(chunk);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
+import 'assurance_view.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key, required this.model});
@@ -177,6 +178,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
           button(
             '确认每日数量',
             () => vm.act({'kind': 'confirm_quantity', 'quantity': quantity}),
+          ),
+        ];
+      } else if (s.assurance != null && !vm.home) {
+        final a = s.assurance!;
+        final action = a['queue']?['session']?['action'];
+        body = [
+          AssuranceView(
+            key: ValueKey(
+              '${a['id']}:${action?['ordinal']}:${action?['actionKey']}',
+            ),
+            model: vm,
           ),
         ];
       } else if (s.nextEligibleAtMs != null &&

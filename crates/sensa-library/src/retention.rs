@@ -49,6 +49,9 @@ pub(super) fn start(
     if !state.enrolled || state.completion_id.is_none() {
         return Err(Error::Rule("no_due_review"));
     }
+    if assurance_runtime::is_selected(db)? {
+        return assurance_retention::start(db, now);
+    }
     let target: String = db.query_row(
         "SELECT id FROM targets WHERE material_id=(SELECT selected_material_id FROM library)",
         [],

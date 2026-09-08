@@ -31,6 +31,11 @@ if(assuranceQueue.status!==0)process.exit(assuranceQueue.status??1);
 const assuranceReview=spawnSync(process.execPath,['--import','tsx','scripts/sensaNativeAssuranceReviewParity.mts'],{cwd:new URL('..',import.meta.url),stdio:'inherit'});
 if(assuranceReview.error)throw assuranceReview.error;
 if(assuranceReview.status!==0)process.exit(assuranceReview.status??1);
+for(const script of ['sensaNativeAssuranceMaterialParity.mts','sensaNativeReleaseParity.mts']) {
+ const check=spawnSync(process.execPath,['--import','tsx',`scripts/${script}`],{cwd:new URL('..',import.meta.url),stdio:'inherit'});
+ if(check.error)throw check.error;
+ if(check.status!==0)process.exit(check.status??1);
+}
 const result=spawnSync('cargo',['test','--workspace','--locked','--features','sensa-library/acceptance-fixture'],{cwd:new URL('..',import.meta.url),stdio:'inherit'});
 if(result.error)throw result.error;
 process.exitCode=result.status??1;

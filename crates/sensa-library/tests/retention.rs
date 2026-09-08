@@ -255,7 +255,7 @@ fn v2_upgrade_and_stale_due_do_not_rewrite_history() {
     let p = dir.path().join("test.sqlite");
     let before = prepare(&p);
     let db = Connection::open(&p).unwrap();
-    db.execute_batch("DROP TABLE consumer_progress_links; DROP TABLE protocol_transitions; DROP TABLE protocol_journals; DROP TABLE retention_run_policies; DROP TABLE initial_run_policies; DROP TABLE policy_commitments; DROP TABLE target_plans; DROP TABLE target_policy_sources; DROP TABLE material_policy_sources; DROP TABLE policy_assignments; DROP TABLE relearning_needs; DROP TABLE scheduling_decisions; DROP TABLE memory_outcomes; DROP TABLE retention_completions; DROP TABLE retention_attempts; DROP TABLE retention_runs; PRAGMA user_version=2;").unwrap();
+    db.execute_batch("DROP TABLE assurance_cycles; DROP TABLE assurance_evidence; DROP TABLE assurance_events; DROP TABLE assurance_session_targets; DROP TABLE assurance_sessions; DROP TABLE runtime_media; DROP TABLE assurance_materials; DROP TABLE runtime_releases; DROP TABLE consumer_progress_links; DROP TABLE protocol_transitions; DROP TABLE protocol_journals; DROP TABLE retention_run_policies; DROP TABLE initial_run_policies; DROP TABLE policy_commitments; DROP TABLE target_plans; DROP TABLE target_policy_sources; DROP TABLE material_policy_sources; DROP TABLE policy_assignments; DROP TABLE relearning_needs; DROP TABLE scheduling_decisions; DROP TABLE memory_outcomes; DROP TABLE retention_completions; DROP TABLE retention_attempts; DROP TABLE retention_runs; PRAGMA user_version=2;").unwrap();
     drop(db);
     let upgraded = open_library(&p).unwrap();
     let mut upgraded_facts = serde_json::to_value(&upgraded).unwrap();

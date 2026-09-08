@@ -70,15 +70,32 @@ pub enum Transfer {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Event {
+    Evaluated {
+        event: Box<Event>,
+        attempt_id: String,
+    },
     Next,
     Introduction,
-    Recognition { correct: bool },
-    Recall { outcome: Recall },
-    Transfer { outcome: Transfer },
-    Boundary { correct: bool },
-    Settle { correct: bool },
+    Recognition {
+        correct: bool,
+    },
+    Recall {
+        outcome: Recall,
+    },
+    Transfer {
+        outcome: Transfer,
+    },
+    Boundary {
+        correct: bool,
+    },
+    Settle {
+        correct: bool,
+    },
     Mistake,
-    Mastery { target: String, mastered: bool },
+    Mastery {
+        target: String,
+        mastered: bool,
+    },
     Skip,
     Undo,
 }
@@ -103,6 +120,10 @@ pub struct Queue {
     frame: Frame,
     undo: Vec<Frame>,
     events: Vec<Event>,
+    #[serde(default)]
+    evaluation_identity: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    progression_policies: BTreeMap<String, String>,
 }
 fn checkpoint(c: Capability) -> String {
     format!("structured-acquisition:{}", c.key())
@@ -222,9 +243,34 @@ impl Queue {
             },
             undo: vec![],
             events: vec![],
+            evaluation_identity: None,
+            progression_policies: BTreeMap::new(),
         };
         q.next()?;
         Ok(q)
+    }
+    /// Pin each target's resolved strategy before the first learner event.
+    /// Profiles are names for compositions; they are never dispatch branches here.
+    pub fn with_progression_policies(mut self, bindings: BTreeMap<String, String>) -> Result<Self> {
+        if !self.events.is_empty() {
+            return Err("Cannot replace an active progression policy.".into());
+        }
+        for (target, policy) in &bindings {
+            if !self
+                .packages
+                .iter()
+                .any(|p| &p.retention_target_id == target)
+                || !matches!(
+                    policy.as_str(),
+                    "structured-current-checkpoint-reset-v1" | "run-reset-v1"
+                )
+            {
+                return Err("Unsupported structured progression binding.".into());
+            }
+            crate::policies::existing_policy_inventory()?.progression(policy)?;
+        }
+        self.progression_policies = bindings;
+        Ok(self)
     }
     fn complete(t: &Target) -> bool {
         t.introduced && t.protocol_progress.completed
@@ -349,10 +395,12 @@ impl Queue {
         let action = s.definition["actionKey"]
             .as_str()
             .ok_or("Invalid acquisition action identity.")?;
-        let identity = format!(
-            "{}:{}:{}:{}",
-            t.protocol_progress.protocol_run_id, s.index, action, suffix
-        );
+        let identity = self.evaluation_identity.clone().unwrap_or_else(|| {
+            format!(
+                "{}:{}:{}:{}",
+                t.protocol_progress.protocol_run_id, s.index, action, suffix
+            )
+        });
         let observation = Observation {
             observation_id: format!("{identity}:observation"),
             attempt_id: format!("{identity}:attempt"),
@@ -367,9 +415,11 @@ impl Queue {
         };
         t.protocol_progress = decide_and_apply(
             &progress_definition(&p.inventory),
-            &CheckpointPolicy::new(
-                "structured-current-checkpoint-reset-v1",
-                FailureReset::Current,
+            crate::policies::existing_policy_inventory()?.progression(
+                self.progression_policies
+                    .get(&p.retention_target_id)
+                    .map(String::as_str)
+                    .unwrap_or("structured-current-checkpoint-reset-v1"),
             )?,
             &t.protocol_progress,
             &observation,
@@ -532,6 +582,17 @@ impl Queue {
     }
     fn inner(&mut self, event: &Event) -> Result<()> {
         match event {
+            Event::Evaluated { event, attempt_id } => {
+                if self.evaluation_identity.is_some()
+                    || attempt_id.trim().is_empty()
+                    || matches!(event.as_ref(), Event::Evaluated { .. })
+                {
+                    return Err("Invalid evaluation identity.".into());
+                }
+                self.evaluation_identity = Some(attempt_id.clone());
+                self.inner(event)?;
+                self.evaluation_identity = None;
+            }
             Event::Next => self.next()?,
             Event::Introduction => self.introduction()?,
             Event::Recognition { correct } => {
@@ -642,6 +703,7 @@ impl Queue {
             saved.start_time,
             saved.target_order.clone(),
         )?;
+        next = next.with_progression_policies(saved.progression_policies.clone())?;
         for event in &saved.events {
             next.execute(event.clone())?;
         }

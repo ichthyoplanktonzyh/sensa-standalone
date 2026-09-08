@@ -3,7 +3,7 @@
 2026-09-08 原生增量：轻量到期复习与再学习已接入 Rust/SQLite/Flutter，事务和平台验证见 [交付记录](native-retention-handoff.md)。通用 Progression Kernel 与策略组合引用校验的纯接口随后已迁移并接入原生组合入口，见 [进度内核记录](native-progression-handoff.md)。这些记录不将正式 Activity/Mixed/去重汇总、完整 Runtime 编排或完整 LF-1b 标记为完成。 Policy Assignment、purpose plan/readiness 与首次 Run 固定已继续接入，见 [策略迁移记录](native-policy-handoff.md)；完整模式执行与 Policy Migration 仍待完成。 通用进度账本随后已接入原生 consumer，见 [账本记录](native-progress-journal-handoff.md)，不代表多阶段执行器已交付。 四阶段纯编排与恢复格式已继续迁移，见 [四阶段记录](native-four-stage-orchestration-handoff.md)，正式材料、评价、事务适配与 Flutter 呈现仍是开放前置。
 
 2026-09-08 Owner 范围调整：四阶段只作扩展性测试，正式材料/UI 暂停；高保证是当前优先迁移对象。
-高保证 fresh/repair 选择器与首学队列纯生命周期已迁移，见 [选择器记录](native-assurance-orchestration-handoff.md)及[生命周期记录](native-assurance-lifecycle-handoff.md)。复习/重学纯队列与 effect 对照已完成，见 [复习队列记录](native-assurance-review-handoff.md)。材料、评价、原生事务和界面仍待接入；高保证贯通后单独验收 Profile 执行接线。
+高保证 fresh/repair 选择器与首学队列纯生命周期已迁移，见 [选择器记录](native-assurance-orchestration-handoff.md)及[生命周期记录](native-assurance-lifecycle-handoff.md)。复习/重学纯队列与 effect 对照已完成，见 [复习队列记录](native-assurance-review-handoff.md)。2026-09-09 材料、评价、原生事务和 Flutter 界面已贯通，Profile 执行接线已验收，见 [完整纵切记录](native-assurance-integration-handoff.md)；完整产品迁移与 M3 仍保留。
 
 > 状态：Active roadmap\
 > 更新日期：2026-09-07\

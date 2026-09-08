@@ -1,5 +1,8 @@
 //! Single-device application transactions. All writes go through execute().
 //! The acceptance material is opt-in; this is not a production package importer.
+mod assurance;
+mod assurance_retention;
+pub mod assurance_runtime;
 pub mod composition;
 mod consumer_progress;
 pub mod pack;
@@ -39,10 +42,18 @@ pub struct Command {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CommandAction {
+    AssuranceEvent {
+        session_id: String,
+        ordinal: u32,
+        intent: assurance_runtime::Intent,
+    },
     ConfirmQuantity {
         quantity: u32,
     },
     ImportAcceptanceMaterial,
+    ImportRuntimeRelease {
+        release_json: String,
+    },
     ImportPack {
         pack_json: String,
     },
@@ -117,6 +128,10 @@ pub struct Snapshot {
     pub policy_state: policy::PolicyView,
     #[serde(default)]
     pub progress: Option<progress::View>,
+    #[serde(default)]
+    pub structured_material: bool,
+    #[serde(default)]
+    pub assurance: Option<serde_json::Value>,
 }
 
 fn initial_protocol() -> String {
@@ -153,7 +168,7 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if ![1, 2, 3, 4, 5].contains(&version) || application != APPLICATION {
+    } else if ![1, 2, 3, 4, 5, 6].contains(&version) || application != APPLICATION {
         return Err(Error::Rule("unsupported_library_version"));
     }
     if version <= 1 {
@@ -173,6 +188,9 @@ fn connection(path: &Path) -> Result<Connection> {
         tx.execute_batch(include_str!("progress.sql"))?;
         consumer_progress::migrate(&tx)?;
     }
+    if version <= 5 {
+        tx.execute_batch(include_str!("assurance.sql"))?;
+    }
     tx.commit()?;
     Ok(db)
 }
@@ -191,7 +209,7 @@ fn read(db: &Connection) -> Result<Snapshot> {
         .optional()?;
     let run = db
         .query_row(
-            "SELECT id,phase,ordinal,attempt_count,paused FROM runs WHERE material_id=(SELECT selected_material_id FROM library)",
+            "SELECT id,phase,ordinal,attempt_count,paused,protocol_version FROM runs WHERE material_id=(SELECT selected_material_id FROM library)",
             [],
             |r| {
                 let raw: String = r.get(1)?;
@@ -207,7 +225,7 @@ fn read(db: &Connection) -> Result<Snapshot> {
                     ordinal: r.get(2)?,
                     attempt_count: r.get(3)?,
                     paused: r.get(4)?,
-                    protocol_version: PROTOCOL.into(),
+                    protocol_version: r.get(5)?,
                 })
             },
         )
@@ -251,11 +269,25 @@ fn read(db: &Connection) -> Result<Snapshot> {
         retention: retention::RetentionView::default(),
         policy_state: policy::view(db)?,
         progress: None,
+        structured_material: false,
+        assurance: None,
     };
+    if let Some(material) = &snapshot.material {
+        snapshot.structured_material = db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM assurance_materials WHERE material_id=?1)",
+            [&material.id],
+            |r| r.get(0),
+        )?;
+        if snapshot.structured_material {
+            assurance::load(db, &material.id)?;
+        }
+    }
     retention::project(db, &mut snapshot)?;
+    snapshot.assurance = assurance_runtime::project(db)?;
     snapshot.progress = snapshot
         .run
         .as_ref()
+        .filter(|r| sensa_core::protocol::consumer_purpose(&r.protocol_version).is_ok())
         .map(|r| progress::load(db, &r.id))
         .transpose()?;
     Ok(snapshot)
@@ -327,11 +359,21 @@ pub fn execute_at_offset(
         return Err(Error::Rule("clock_moved_backwards"));
     }
     match &command.action {
+        CommandAction::AssuranceEvent {
+            session_id,
+            ordinal,
+            intent,
+        } => {
+            assurance_runtime::record(&tx, session_id, *ordinal, intent, &command, now)?;
+        }
         CommandAction::ConfirmQuantity { quantity } => {
             if ![5, 10, 15, 20, 30].contains(quantity) {
                 return Err(Error::Rule("invalid_quantity"));
             }
             tx.execute("UPDATE library SET daily_new_limit=?1", [quantity])?;
+        }
+        CommandAction::ImportRuntimeRelease { release_json } => {
+            assurance::import(&tx, release_json)?;
         }
         CommandAction::ImportPack { pack_json } => {
             let pack = pack::LearningPack::parse(pack_json)?;
@@ -389,6 +431,10 @@ pub fn execute_at_offset(
             if !exists {
                 return Err(Error::Rule("material_unavailable"));
             }
+            tx.execute(
+                "UPDATE assurance_sessions SET paused=1 WHERE completed=0",
+                [],
+            )?;
             tx.execute("UPDATE runs SET paused=1 WHERE phase<>'completed'", [])?;
             tx.execute(
                 "UPDATE retention_runs SET paused=1 WHERE phase<>'completed'",
@@ -439,68 +485,72 @@ pub fn execute_at_offset(
             retention::start(&tx, &state, now, *early)?;
         }
         CommandAction::StartOrResume => {
-            if let Some(material) = &state.material {
-                let digest: String = tx.query_row(
-                    "SELECT digest FROM materials WHERE id=?1",
-                    [&material.id],
-                    |r| r.get(0),
-                )?;
-                if format!(
-                    "{:x}",
-                    Sha256::digest(serde_json::to_string(material)?.as_bytes())
-                ) != digest
-                {
-                    return Err(Error::Rule("material_mismatch"));
-                }
-            }
-            if !state.enrolled {
-                return Err(Error::Rule("no_targets"));
-            }
-            if state.daily_new_limit.is_none() {
-                return Err(Error::Rule("quantity_required"));
-            }
-            if let Some(run) = &state.run {
-                if run.phase == Phase::Completed || run.protocol_version != PROTOCOL {
-                    retention::start(&tx, &state, now, false)?;
-                } else {
-                    tx.execute("UPDATE runs SET paused=0 WHERE id=?1", [&run.id])?;
-                }
+            if assurance_runtime::is_selected(&tx)? {
+                assurance_runtime::start(&tx, now, offset_minutes)?;
             } else {
-                let offset = chrono::Duration::minutes(i64::from(offset_minutes));
-                let local = now
-                    .checked_add_signed(offset)
-                    .ok_or(Error::Rule("clock_out_of_range"))?;
-                let start = local
-                    .date_naive()
-                    .and_hms_opt(0, 0, 0)
-                    .ok_or(Error::Rule("clock_out_of_range"))?
-                    .and_utc()
-                    .checked_sub_signed(offset)
-                    .ok_or(Error::Rule("clock_out_of_range"))?
-                    .timestamp_millis();
-                let count: u32 = tx.query_row(
-                    "SELECT count(*) FROM runs WHERE started_at_ms>=?1",
-                    [start],
-                    |r| r.get(0),
-                )?;
-                if count >= state.daily_new_limit.unwrap_or(0) {
-                    return Err(Error::Rule("daily_limit"));
+                if let Some(material) = &state.material {
+                    let digest: String = tx.query_row(
+                        "SELECT digest FROM materials WHERE id=?1",
+                        [&material.id],
+                        |r| r.get(0),
+                    )?;
+                    if format!(
+                        "{:x}",
+                        Sha256::digest(serde_json::to_string(material)?.as_bytes())
+                    ) != digest
+                    {
+                        return Err(Error::Rule("material_mismatch"));
+                    }
                 }
-                let (target,material,digest): (String,String,String) = tx.query_row("SELECT t.id,m.id,m.digest FROM targets t JOIN materials m ON m.id=t.material_id WHERE m.id=(SELECT selected_material_id FROM library)", [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
-                let run_id = id();
-                policy::commit_initial(&tx, &target, &run_id, now.timestamp_millis())?;
-                tx.execute(
-                    "INSERT INTO runs VALUES(?1,?2,?3,?4,?5,'recall',1,0,0,?6)",
-                    params![
-                        run_id,
-                        target,
-                        material,
-                        digest,
-                        PROTOCOL,
-                        now.timestamp_millis()
-                    ],
-                )?;
-                consumer_progress::start(&tx, &run_id, false)?;
+                if !state.enrolled {
+                    return Err(Error::Rule("no_targets"));
+                }
+                if state.daily_new_limit.is_none() {
+                    return Err(Error::Rule("quantity_required"));
+                }
+                if let Some(run) = &state.run {
+                    if run.phase == Phase::Completed || run.protocol_version != PROTOCOL {
+                        retention::start(&tx, &state, now, false)?;
+                    } else {
+                        tx.execute("UPDATE runs SET paused=0 WHERE id=?1", [&run.id])?;
+                    }
+                } else {
+                    let offset = chrono::Duration::minutes(i64::from(offset_minutes));
+                    let local = now
+                        .checked_add_signed(offset)
+                        .ok_or(Error::Rule("clock_out_of_range"))?;
+                    let start = local
+                        .date_naive()
+                        .and_hms_opt(0, 0, 0)
+                        .ok_or(Error::Rule("clock_out_of_range"))?
+                        .and_utc()
+                        .checked_sub_signed(offset)
+                        .ok_or(Error::Rule("clock_out_of_range"))?
+                        .timestamp_millis();
+                    let count: u32 = tx.query_row(
+                        "SELECT count(*) FROM runs WHERE started_at_ms>=?1",
+                        [start],
+                        |r| r.get(0),
+                    )?;
+                    if count >= state.daily_new_limit.unwrap_or(0) {
+                        return Err(Error::Rule("daily_limit"));
+                    }
+                    let (target,material,digest): (String,String,String) = tx.query_row("SELECT t.id,m.id,m.digest FROM targets t JOIN materials m ON m.id=t.material_id WHERE m.id=(SELECT selected_material_id FROM library)", [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
+                    let run_id = id();
+                    policy::commit_initial(&tx, &target, &run_id, now.timestamp_millis())?;
+                    tx.execute(
+                        "INSERT INTO runs VALUES(?1,?2,?3,?4,?5,'recall',1,0,0,?6)",
+                        params![
+                            run_id,
+                            target,
+                            material,
+                            digest,
+                            PROTOCOL,
+                            now.timestamp_millis()
+                        ],
+                    )?;
+                    consumer_progress::start(&tx, &run_id, false)?;
+                }
             }
         }
         CommandAction::Pause => {
@@ -524,6 +574,14 @@ pub fn execute_at_offset(
                 return Err(Error::Rule("stale_step"));
             }
             if run.protocol_version != PROTOCOL {
+                let initial: bool = tx.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM runs WHERE id=?1)",
+                    [run_id],
+                    |r| r.get(0),
+                )?;
+                if initial {
+                    return Err(Error::Rule("unsupported_protocol"));
+                }
                 retention::record(&tx, run, &command, *action, now)?;
             } else {
                 let (target,protocol,content,expected_digest): (String,String,String,String) = tx.query_row("SELECT r.target_id,r.protocol_version,m.content,r.material_digest FROM runs r JOIN materials m ON m.id=r.material_id WHERE r.id=?1", [run_id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)))?;
@@ -632,4 +690,49 @@ fn acceptance_material() -> Result<Material> {
 #[cfg(not(feature = "acceptance-fixture"))]
 fn acceptance_material() -> Result<Material> {
     Err(Error::Rule("acceptance_fixture_disabled"))
+}
+/// Reads only packaged media belonging to the currently projected encounter.
+/// No network, arbitrary media path or filesystem write is involved.
+pub fn read_assurance_media(path: &Path, session_id: &str, reference: &str) -> Result<Vec<u8>> {
+    let db = connection(path)?;
+    let tx = db.unchecked_transaction()?;
+    let snapshot = read(&tx)?;
+    let view = snapshot.assurance.ok_or(Error::Rule("no_active_run"))?;
+    if view["id"] != session_id {
+        return Err(Error::Rule("stale_step"));
+    }
+    let target = view["queue"]["session"]["action"]["retentionTargetId"]
+        .as_str()
+        .ok_or(Error::Rule("no_active_step"))?;
+    let mid: String = tx.query_row(
+        "SELECT material_id FROM assurance_session_targets WHERE session_id=?1 AND target_id=?2",
+        params![session_id, target],
+        |r| r.get(0),
+    )?;
+    let (release, _, _) = assurance::load(&tx, &mid)?;
+    let digest_ref = reference
+        .strip_prefix("/golden-audio/")
+        .and_then(|s| s.strip_suffix(".mp3"))
+        .map(|s| format!("sha256:{s}"));
+    let m = release["media"]
+        .as_array()
+        .and_then(|ms| {
+            ms.iter().find(|m| {
+                m["mediaKey"] == reference || digest_ref.as_ref().is_some_and(|d| m["sha256"] == *d)
+            })
+        })
+        .ok_or(Error::Rule("media_unavailable"))?;
+    let digest = m["sha256"]
+        .as_str()
+        .ok_or(Error::Rule("media_unavailable"))?;
+    let bytes: Vec<u8> = tx.query_row(
+        "SELECT bytes FROM runtime_media WHERE digest=?1",
+        [digest],
+        |r| r.get(0),
+    )?;
+    if format!("sha256:{:x}", Sha256::digest(&bytes)) != digest {
+        return Err(Error::Rule("material_mismatch"));
+    }
+    tx.commit()?;
+    Ok(bytes)
 }
