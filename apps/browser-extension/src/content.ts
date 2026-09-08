@@ -4,13 +4,13 @@ const key='__sensaCaptureInstalled';
 const local=globalThis as typeof globalThis & {__sensaCaptureInstalled?:boolean};
 if(!local[key]){
  local[key]=true;
- let enabled=false,host:HTMLDivElement|null=null;
+ let accountId:string|null=null;let enabled=false,host:HTMLDivElement|null=null;
  const close=()=>{host?.remove();host=null;};
- chrome.runtime.onMessage.addListener(message=>{if(message.kind==='reading'){enabled=message.enabled;if(!enabled)close();}});
+ chrome.runtime.onMessage.addListener(message=>{if(message.kind==='reading'){if(accountId!==message.accountId)close();accountId=message.accountId??null;enabled=message.enabled===true&&Boolean(accountId);if(!enabled)close();}});
  document.addEventListener('keydown',event=>{if(event.key==='Escape')close();});
  document.addEventListener('pointerdown',event=>{if(host&&!event.composedPath().includes(host))close();});
  function selected(){
- if(!enabled||host?.matches(':hover'))return;
+ if(!enabled||!accountId||host?.matches(':hover'))return;const captureAccountId=accountId;
  const selection=getSelection();if(!selection||selection.isCollapsed||!selection.rangeCount)return;
  const range=selection.getRangeAt(0);if(host?.contains(range.commonAncestorContainer))return;
  const start=range.startContainer.nodeType===Node.TEXT_NODE?range.startContainer.parentElement:range.startContainer as Element;
@@ -31,12 +31,12 @@ if(!local[key]){
  const original=document.createElement('p');const e=snapshot.expression,chars=Array.from(raw);if(e){original.append(chars.slice(0,e.start).join(''));const mark=document.createElement('mark');mark.textContent=e.text;original.append(mark,chars.slice(e.end).join(''));}else original.textContent=raw;panel.append(original);
  const status=document.createElement('p');status.setAttribute('role','status');status.textContent=snapshot.expression?'正在解释…':'请重新定位表达，或先保存待处理。';panel.append(status);
  const save=document.createElement('button'),dismiss=document.createElement('button');save.textContent='保存待处理';dismiss.textContent='关闭';dismiss.onclick=close;const operationId=crypto.randomUUID();
- save.onclick=async()=>{save.disabled=true;try{const response=await chrome.runtime.sendMessage({kind:'save',snapshot,operationId});if(response.error)throw new Error(response.error);status.textContent='已保存在本机，联网后同步。可从 Sensa 图标查看结果。';save.hidden=true;}catch{status.textContent='尚未保存，请从 Sensa 图标检查登录并重试。';save.disabled=false;}};panel.append(save,dismiss);shadow.append(panel);document.documentElement.append(host);
+ save.onclick=async()=>{save.disabled=true;try{const response=await chrome.runtime.sendMessage({kind:'save',snapshot,operationId,accountId:captureAccountId});if(response.error)throw new Error(response.error);status.textContent='已保存在本机，联网后同步。可从 Sensa 图标查看结果。';save.hidden=true;}catch{status.textContent='尚未保存，请从 Sensa 图标检查登录并重试。';save.disabled=false;}};panel.append(save,dismiss);shadow.append(panel);document.documentElement.append(host);
  const lookupId=crypto.randomUUID(),acceptId=crypto.randomUUID();
  const check=document.createElement('button');check.textContent='检查解释结果';
- const explain=async()=>{check.disabled=true;try{const response=await chrome.runtime.sendMessage({kind:'lookup',snapshot,lookupId});if(response.error)throw new Error(response.error);const result=response.value;
+ const explain=async()=>{check.disabled=true;try{const response=await chrome.runtime.sendMessage({kind:'lookup',snapshot,lookupId,accountId:captureAccountId});if(response.error)throw new Error(response.error);if(!enabled||accountId!==captureAccountId||!panel.isConnected)return;const result=response.value;
  if(result.status==='ready'&&result.proposal){status.textContent=result.proposal.explanation;check.remove();const details=document.createElement('details'),summary=document.createElement('summary'),body=document.createElement('p');summary.textContent='详细意思';body.textContent=result.proposal.semanticSpec.coreMeaningFocus+'\n'+result.proposal.semanticSpec.prototypeScenes.map((x:{summary:string})=>x.summary).join('\n');details.append(summary,body);panel.insertBefore(details,save);
- const accept=document.createElement('button');accept.textContent='加入 Sensa';accept.onclick=async()=>{accept.disabled=true;save.disabled=true;try{const answer=await chrome.runtime.sendMessage({kind:'accept',lookupId,operationId:acceptId});if(answer.error)throw new Error(answer.error);status.textContent='确认已保存在本机，联网后同步。可从 Sensa 图标查看结果。';accept.hidden=true;save.hidden=true;}catch{status.textContent='确认尚未完成，请检查原操作结果或重试。';accept.disabled=false;save.disabled=false;}};panel.insertBefore(accept,save);
+ const accept=document.createElement('button');accept.textContent='加入 Sensa';accept.onclick=async()=>{accept.disabled=true;save.disabled=true;try{const answer=await chrome.runtime.sendMessage({kind:'accept',lookupId,operationId:acceptId,accountId:captureAccountId});if(answer.error)throw new Error(answer.error);status.textContent='确认已保存在本机，联网后同步。可从 Sensa 图标查看结果。';accept.hidden=true;save.hidden=true;}catch{status.textContent='确认尚未完成，请检查原操作结果或重试。';accept.disabled=false;save.disabled=false;}};panel.insertBefore(accept,save);
  }else{status.textContent=result.status==='running'?'仍在解释，可以稍后检查或保存待处理。':'暂时无法确定这个意思，可以保存待处理。';if(result.status==='running')panel.append(check);}
  }catch{status.textContent='暂时无法解释，可以检查结果或保存待处理。';panel.append(check);}finally{check.disabled=false;}};
  check.onclick=()=>void explain();if(snapshot.expression)void explain();

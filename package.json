@@ -62,7 +62,9 @@
     "sensa:consumer-initial-smoke": "node --import tsx scripts/sensaConsumerAccountSmoke.mts --targets --initial",
     "sensa:consumer-target-smoke": "node --import tsx scripts/sensaConsumerAccountSmoke.mts --targets",
     "sensa:consumer-intake-smoke": "node --import tsx scripts/sensaConsumerAccountSmoke.mts --intake",
-    "sensa:extension-browser-smoke": "node --import tsx scripts/sensaExtensionBrowserSmoke.mts"
+    "sensa:extension-browser-smoke": "node --import tsx scripts/sensaExtensionBrowserSmoke.mts",
+    "sensa:content-recovery-browser-smoke": "node --import tsx scripts/sensaContentRecoveryBrowserSmoke.mts",
+    "sensa:extension-native-fixture": "node --import tsx scripts/sensaExtensionNativeFixture.mts"
   },
   "engines": {
     "node": ">=24"

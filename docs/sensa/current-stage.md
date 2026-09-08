@@ -3,7 +3,7 @@
 > 状态日期：2026-09-08\
 > 当前阶段：领域与行为原型验证后期，生产应用建设前期\
 > 下一里程碑：React Web + 浏览器采集插件的小规模受邀测试版\
-> 当前执行位置：M0 设计已验收；M1-A/B/C/D/E 本地纵切已验证；托管验收待执行，M2-A/B 采集/直接语义接受本地切片已验证，M2-C 文本内容入学纵切已验证，Web 澄清/可恢复移除已验证，继续授权资源及 M2-D\
+> 当前执行位置：M0 设计已验收；M1-A/B/C/D/E 本地纵切已验证；托管验收待执行，M2-A/B 采集/直接语义接受本地切片已验证，M2-C 文本内容入学纵切已验证，Web 澄清/可恢复移除已验证，M2-D 原账号/版本及原生权限恢复已验证，继续授权资源和剩余兼容/质量验收\
 > 执行路线图：[production-migration-plan.md](production-migration-plan.md)
 
 本文是项目阶段、证据级别和近期交付范围的唯一事实来源。[文档索引](README.md)列出的七份
@@ -44,7 +44,7 @@ Sensa 已具备开始生产化的领域、行为和工程基础。当前最主�
 | 共享合同与内核 | Learning Connection v2、Content Demand/Task/Attempt/Bundle、Protocol、Completion/Handoff、Progression Kernel 与扩展 seam | 已有可执行 schema 和 smoke；生产 API、DB 与 Sync 需要逐项对齐 |
 | 数据库 | baseline、0008–0010 领域结构及 0011–0015 consumer 账号/目标/Runtime/签到迁移 | 0001–0015 已在全新隔离 Postgres 应用并完成 A–E 事务验证；托管数据库待验收 |
 | API 与同步 | M1 consumer API、私有材料、正式 React Web 账号独立 IndexedDB/outbox 与 Sync v3，旧路径并存 | A–E 本地浏览器与 Node/Deno 闭环通过；M2/M3 全部事实及真实托管尚未验收 |
-| 内容与 LLM | 内容编译/校验工具、版本化原型学习包、Semantic Agent 开发代理、Content Agent 与模型适配 seam | 开发接入和无成本校验已存在；持久任务、生产质量、预算与恢复闭环待实现 |
+| 内容与 LLM | 内容编译/校验工具、版本化原型学习包、Semantic Agent 开发代理、Content Agent 与模型适配 seam | 开发接入和无成本校验已存在；持久任务、独立校验及有预算的恢复已有本地证据；授权资源与生产质量验收仍待完成 |
 | 运行环境 | Supabase Postgres/Auth/Storage 为主，Cloudflare 前端托管和 Resend 邮件的已确认选型；Edge 入口与本地 CI 检查已提供 | 真实云端配置、部署、邮件和 Storage 验收仍缺证据；本地合成认证不等于托管认证通过 |
 
 需要特别处理的实现差异：
