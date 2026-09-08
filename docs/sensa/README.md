@@ -60,6 +60,8 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M2-B local implementation | [`m2-b-semantic-handoff.md`](m2-b-semantic-handoff.md) | 固定候选、原位/Web 直接接受和稳定语义 registry 的本地证据 |
 | M2-C local implementation | [`m2-c-provisioning-handoff.md`](m2-c-provisioning-handoff.md) | 个人意义显式入学、持久任务/独立校验/冻结文本材料及 M1 Runtime 本地证据 |
 | M2 content recovery | [`m2-content-recovery-handoff.md`](m2-content-recovery-handoff.md) | Web 明确关注点、重新解释、旧候选拒绝与可恢复移除/恢复的本地证据 |
+| M2 quality/recovery/compatibility | [`m2-quality-recovery-handoff.md`](m2-quality-recovery-handoff.md) | 真实个人场景质量复测、SIGKILL 恢复与 Chrome 151/152 原生权限证据 |
+| Release authorization | [`release-authorization.md`](release-authorization.md) | 云端/商店所需具体授权、项目访问和发布前产物 |
 | M2 static pronunciation | [`m2-pronunciation-handoff.md`](m2-pronunciation-handoff.md) | 按需材料静态发音绑定、真实 TTS 小样本、离线播放和可选音频失败回退 |
 | M2 private context | [`m2-anchor-use-handoff.md`](m2-anchor-use-handoff.md) | 原文显式授权、撤销/迟到结果隔离、历史保留与后续复习材料替换的本地证据 |
 | M2-D local recovery | [`m2-d-extension-recovery-handoff.md`](m2-d-extension-recovery-handoff.md) | 插件原账号队列、版本保护及实际原生 activeTab 权限恢复的本地证据 |

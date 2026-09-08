@@ -36,7 +36,7 @@ export async function finishLookup(db:DatabaseExecutor,a:Scope,id:string,result:
  else if(result?.proposal){
   const parsed=semanticProposalSchema.safeParse(result.proposal);
   if(!parsed.success||parsed.data.expression.surface!==row.snapshot.expression?.text){reason='invalid_proposal';status='failed';}
-  else{proposal=parsed.data;provenance={provider:result.provider,model:result.model,policyVersion:row.meaning_focus?'consumer-semantic-v2':'consumer-semantic-v1',inputDigest:row.input_digest,outputDigest:await contentHash(proposal)};reason='';status='ready';}
+  else{proposal=parsed.data;provenance={provider:result.provider,model:result.model,policyVersion:result.policyVersion??(row.meaning_focus?'consumer-semantic-v2':'consumer-semantic-v1'),inputDigest:row.input_digest,outputDigest:await contentHash(proposal)};reason='';status='ready';}
  }
  const saved=(await db.query('UPDATE sensa_consumer.semantic_lookups SET status=$3,proposal=$4::jsonb,provenance=$5::jsonb,reason=$6 WHERE learner_user_id=$1 AND id=$2 RETURNING *',[a.learner_user_id,id,status,proposal?JSON.stringify(proposal):null,provenance?JSON.stringify(provenance):null,reason||null])).rows[0]!;return lookupView(saved);
 }

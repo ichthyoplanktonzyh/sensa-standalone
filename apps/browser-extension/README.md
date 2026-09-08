@@ -16,7 +16,7 @@ CI/正式打包需明确设置 `SENSA_EXTENSION_WEB_URL` 和 `SENSA_EXTENSION_AP
 关闭阅读模式恢复普通选择；浏览器重启默认关闭阅读模式，本机保存队列继续保留。
 跨站重新点图标授予 activeTab 后继续；同源导航尝试复用临时授权。
 
-支持范围当前仅本地 Chrome for Testing 149 的普通文字 HTML 实测。
+普通文字 HTML 已在 Chrome for Testing 151.0.7922.138 / 152.0.7977.82 验证自动插件链及原生 activeTab 同源/跨源矩阵；149 保留历史证据。真实商店热更新尚未验收。
 内置 PDF、受限页、跨域 iframe、文件页和无痕不作支持承诺。
 `npm run sensa:extension-browser-smoke` 使用隔离 profile、实际扩展与本地 fixture。
 它为 fixture origin 附加测试 host 权限，因此不能替代 activeTab 原生工具栏授权实测。
