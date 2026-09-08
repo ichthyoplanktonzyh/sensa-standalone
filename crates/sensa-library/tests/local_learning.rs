@@ -177,3 +177,34 @@ fn corrupt_material_unknown_schema_clock_and_invalid_step_fail_closed() {
         "unsupported_library_version"
     );
 }
+
+#[test]
+fn core_protocol_support_does_not_grant_unimplemented_storage_authority() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("library.sqlite");
+    let initial = prepared(&path);
+    let revealed = apply(&path, action(&initial, Action::Reveal));
+    let db = Connection::open(&path).unwrap();
+    db.execute("UPDATE runs SET protocol_version='consumer-review-v1'", [])
+        .unwrap();
+    let before = serde_json::to_value(open_library(&path).unwrap()).unwrap();
+    assert_eq!(
+        execute_at(
+            &path,
+            command(&revealed, action(&revealed, Action::Good)),
+            now()
+        )
+        .unwrap_err()
+        .to_string(),
+        "unsupported_protocol"
+    );
+    assert_eq!(
+        serde_json::to_value(open_library(&path).unwrap()).unwrap(),
+        before
+    );
+    assert_eq!(
+        db.query_row("SELECT count(*) FROM memory", [], |r| r.get::<_, u32>(0))
+            .unwrap(),
+        0
+    );
+}

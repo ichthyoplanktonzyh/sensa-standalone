@@ -74,6 +74,8 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M2 private context | [`m2-anchor-use-handoff.md`](m2-anchor-use-handoff.md) | 原文显式授权、撤销/迟到结果隔离、历史保留与后续复习材料替换的本地证据 |
 | M2-D local recovery | [`m2-d-extension-recovery-handoff.md`](m2-d-extension-recovery-handoff.md) | 插件原账号队列、版本保护及实际原生 activeTab 权限恢复的本地证据 |
 | Local settlement extraction | [`local-settlement-handoff.md`](local-settlement-handoff.md) | LF-1a 共用结算与 Node/断网 Chrome/隔离 Postgres 回归；本地库持久化仍待实施 |
+| Native migration checklist | [`native-migration-checklist.md`](native-migration-checklist.md) | 已有 TS 成果的保留/迁移范围、验收状态；首版登记，待逐项盘点 |
+| Native kernel migration | [`native-kernel-migration-handoff.md`](native-kernel-migration-handoff.md) | 三 purpose 决策、可配置 FSRS、TS 差分及本地首学事务接入；完整原生复习仍待完成 |
 | Native local learning slice | [`native-local-learning-handoff.md`](native-local-learning-handoff.md) | Flutter/Rust/SQLite 首学技术纵切的实际证据与未完成边界 |
 | Native client architecture | [`../adr/0002-flutter-rust-local-core.md`](../adr/0002-flutter-rust-local-core.md) | Flutter/Dart 主应用、Rust 本地权威、TS 浏览器/云端；正式 Web 界面作为参考，首个原生技术纵切已在 macOS/Android 验证 |
 | Local library migration | [`local-library-migration-blueprint.md`](local-library-migration-blueprint.md) | 本地领域/存储/服务职责、单设备首条用例、浏览器交接、同步设计门与旧数据回退；整库离线尚未交付 |
@@ -82,8 +84,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M1-E local implementation | [`m1-e-checkin-handoff.md`](m1-e-checkin-handoff.md) | 手动/正式学习签到、原日期离线上传、账号隔离恢复与 A–E 集成验收 |
 | Active decomposition | [`learning-extensibility-architecture.md`](learning-extensibility-architecture.md) | `web-next` 学习扩展性的实现 seam；把领域已有的显式 retention scope 扩展规定落到实现层，不新增领域定义 |
 
-当前路线图 M0 设计已验收，M0-1/2/3 产物齐备，M1-A/B/C/D/E 本地纵切已验证、托管验收待执行，近期里程碑是 React Web + 浏览器采集插件的小规模
-受邀测试版。领域能力、原型中已经验证的能力和首轮生产交付范围分别管理，不能从原型菜单
+当前路线图 M0 设计已验收，M0-1/2/3 产物齐备，M1-A/B/C/D/E 本地纵切已验证、托管验收待执行，近期里程碑已改为 Flutter/Rust 原生本地学习库；Web 保留当前成果，暂停新建设，是否对外开放后定。领域能力、原型中已经验证的能力和首轮生产交付范围分别管理，不能从原型菜单
 或完整领域目录推导上线清单。
 
 原先的 `content-kernel-contract.md`、`curriculum-runtime-contract.md`、`runtime-rule-packet-v1.md`、

@@ -10,6 +10,9 @@ for(const date of ['2026-09-08T08:00:00.000Z','2024-02-28T23:59:59.999Z','2026-1
 }
 const fixed=JSON.parse(await readFile(new URL('../crates/sensa-core/tests/fixtures/ts-initial-v1.json',import.meta.url),'utf8'));
 assert.deepEqual(JSON.parse(JSON.stringify(current)),fixed,'TS behavior changed: review the pinned Rust migration vectors');
+const parity=spawnSync(process.execPath,['--import','tsx','scripts/sensaNativeSchedulingParity.mts'],{cwd:new URL('..',import.meta.url),stdio:'inherit'});
+if(parity.error)throw parity.error;
+if(parity.status!==0)process.exit(parity.status??1);
 const result=spawnSync('cargo',['test','--workspace','--locked','--features','sensa-library/acceptance-fixture'],{cwd:new URL('..',import.meta.url),stdio:'inherit'});
 if(result.error)throw result.error;
 process.exitCode=result.status??1;

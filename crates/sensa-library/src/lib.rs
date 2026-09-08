@@ -2,7 +2,8 @@
 //! The acceptance material is opt-in; this is not a production package importer.
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
-use sensa_core::{Action, PROTOCOL, Phase, SCHEDULING_POLICY, initial_schedule, transition};
+use sensa_core::settlement::{Settlement, SettlementContext, decide_consumer_settlement};
+use sensa_core::{Action, PROTOCOL, Phase, SCHEDULING_POLICY, transition};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -298,6 +299,11 @@ pub fn execute_at(path: &Path, command: Command, now: DateTime<Utc>) -> Result<S
             if format!("{:x}", Sha256::digest(content.as_bytes())) != expected_digest {
                 return Err(Error::Rule("material_mismatch"));
             }
+            // This storage adapter still admits initial runs only. Supporting a
+            // protocol in the pure core does not grant this adapter review writes.
+            if protocol != PROTOCOL {
+                return Err(Error::Rule("unsupported_protocol"));
+            }
             let next = transition(&protocol, run.phase, *action).map_err(Error::Rule)?;
             let phase = serde_json::to_value(next)?
                 .as_str()
@@ -319,7 +325,17 @@ pub fn execute_at(path: &Path, command: Command, now: DateTime<Utc>) -> Result<S
             if next == Phase::Completed {
                 let completion = id();
                 let handoff = id();
-                let schedule = initial_schedule(now).map_err(Error::Rule)?;
+                let Settlement::StudyCompletion { schedule, .. } = decide_consumer_settlement(
+                    &target,
+                    &protocol,
+                    *action,
+                    now,
+                    &SettlementContext::InitialLearning,
+                )
+                .map_err(Error::Rule)?
+                else {
+                    return Err(Error::Rule("invalid_settlement"));
+                };
                 let serialized = serde_json::to_string(&schedule)?;
                 tx.execute(
                     "INSERT INTO completions VALUES(?1,?2,'study_completion','non_evidentiary',?3)",

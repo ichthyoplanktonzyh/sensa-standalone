@@ -49,10 +49,10 @@ React / Flutter / 浏览器采集交接
 ```
 
 本轮实际新文件是 `packages/learning-kernel/src/runtime/consumerSettlement.ts`，由原 API 消费。
-后续本地用例再创建 `apps/web/src/data/library/` 的存储和应用模块；现在不创建无消费者的目录/空接口。
+后续本地用例在 `crates/sensa-core`、`crates/sensa-library` 与 `apps/sensa_native` 施工；Web 保留成果并暂停新建设，不新增浏览器本地库作为当前前置任务。
 语言无关输入/输出在该用例形成时加入 contracts；Kernel 不反向依赖 contracts，避免现有包依赖环。
 Flutter 使用 Rust 共享可执行内核，桥接选型和行为验证见 ADR 0002。Rust 分离纯领域与本地存储模块；
-TS 测试向量用于一致性对照，后续 Web WASM 需另外验证，不再默认新增 Dart 领域规则副本。
+TS 测试向量用于一致性对照，Web WASM 暂不施工，不新增 Dart 领域规则副本。
 
 ## 3. 库身份与事务所有权
 

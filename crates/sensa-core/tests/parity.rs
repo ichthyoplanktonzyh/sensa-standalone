@@ -34,7 +34,7 @@ fn matches_ts_initial_settlement_vectors() {
         Err("stale_step")
     );
     assert_eq!(
-        transition("consumer-review-v1", Phase::Reveal, Action::Good),
+        transition("consumer-review-v99", Phase::Reveal, Action::Good),
         Err("unsupported_protocol")
     );
 }
