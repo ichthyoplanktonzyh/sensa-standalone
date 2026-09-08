@@ -1,0 +1,30 @@
+{
+  "format": "sensa-local-text-pack-v1",
+  "id": "sensa-synthetic-import-example",
+  "version": "1",
+  "title": "本地导入验收样本（合成材料）",
+  "protocolVersion": "consumer-initial-v1",
+  "targetLanguageTag": "en",
+  "familiarLanguageTag": "zh-CN",
+  "learnerLocale": "zh-CN",
+  "materials": [
+    {
+      "id": "641e1192-8fd8-47f2-a1d1-b14a4c5d3431",
+      "senseVersionId": "122a2b64-1ba4-41a7-a8a9-a7f248be1d75",
+      "bindingVersionId": "5839c93b-55c8-4863-8eaa-311fd8ae6afb",
+      "scene": "同事的方案有问题，你既要说明事实，也想照顾他的感受。",
+      "sense": "表达真实意见时照顾对方感受，避免让对方难堪。",
+      "expression": "tactful",
+      "source": "合成导入验收材料 · 非正式发布资源"
+    },
+    {
+      "id": "380bef0f-08f4-44e2-930e-69c5db6f7b7a",
+      "senseVersionId": "e4792dab-f64d-4601-afab-73d0e91695b0",
+      "bindingVersionId": "6613a7f5-c77f-4082-9c09-7b84a7e6a945",
+      "scene": "你的笔没水了，向同桌要一支笔暂用，下课后还给他。",
+      "sense": "暂时取得他人的东西使用，并打算归还。",
+      "expression": "borrow",
+      "source": "合成导入验收材料 · 非正式发布资源"
+    }
+  ]
+}

@@ -9,7 +9,7 @@ Owner 最新确认：Flutter/Rust 原生 PC/移动应用是确定的主产品；
 | 用例/范围 | 现有成果入口 | Rust / Flutter 目标 | 当前状态与验收门 |
 | --- | --- | --- | --- |
 | 轻量首学与首次调度 | packages/learning-kernel、apps/api；local-settlement-handoff.md | crates/sensa-core、crates/sensa-library、apps/sensa_native | 合成材料技术纵切已通过 macOS/Android 首学及独立进程恢复；见 native-local-learning-handoff.md，不能标作完整正式学习用例 |
-| 正式学习包导入与入学 | packages/content-validator、packages/contracts、apps/api、apps/web | 本地校验、版本固定、SQLite 原子入学及 Flutter 资源入口 | 下一条计划用例；待实现与验收 |
+| 正式学习包导入与入学 | packages/content-validator、packages/contracts、apps/api、apps/web | 本地校验、版本固定、SQLite 原子入学及 Flutter 资源入口 | 有界轻量文本包的本地导入、版本保护、显式入学与多目标首学已实现；完整 Published Package/角色材料和媒体仍待迁移，见 native-pack-import-handoff.md |
 | 到期复习与重学 | packages/learning-kernel/src/runtime/consumerInitial.ts、consumerSettlement.ts、scheduling.ts；apps/api；apps/web | Rust 协议/调度与 Flutter 学习界面 | 三 purpose 纯决策及可配置 FSRS 已迁移并通过 TS 对照；SQLite Review/Need/Outcome 事务与 Flutter 交互尚待接入 |
 | 多目标、每日计划、签到、记录及其他已有策略 | apps/api、apps/web、相关合同 | Rust 本地应用规则、读模型与 Flutter 页面 | 待逐项盘点；区分正式实现与原型证据，已有学习策略和扩展机制不因分阶段迁移而省略 |
 | 个人语义世界与快慢轨 | apps/api、apps/web、packages/contracts | 本地 Context/Sense/Expression、可选 Focus、接受与恢复流程 | 待迁移；保持领域语义与显式加入学习 |
@@ -39,4 +39,4 @@ Owner 最新确认：Flutter/Rust 原生 PC/移动应用是确定的主产品；
 | 材料与生成 | apps/web/src/experience/learningRuntime/contentProvisioning.ts、contentAgentProvisioning.ts；packages/contracts/src/sensa/learningContent.ts | 待迁移独立候选校验、固定 Materialization、来源/用途/版本；模型生成不直接写学习结果 |
 | 呈现与学习模式 | apps/web/src/experience/learningRuntime/stepRenderers.tsx、lightweightInitialPresentation.ts、lightweightInitialProtocol.ts、interleavedFourStageProtocol.ts | 规则/资源绑定迁 Rust，renderer 迁 Flutter；保留 intent/disclosure、轻量及已有多阶段行为，界面按正式 Web 验收 |
 
-本轮先完成可被现有本地事务消费的纯内核基础，见 [迁移记录](native-kernel-migration-handoff.md)。后续继续一般学习包导入、多目标/版本固定、显式入学及完整复习重学事务和 Flutter 状态；上述未完成项全部保留，不能把本轮对照用例数换算为全项目完成率。
+现已继续实现有界文本包导入及多目标首学；纯内核基础见 [迁移记录](native-kernel-migration-handoff.md)。后续继续一般学习包导入、多目标/版本固定、显式入学及完整复习重学事务和 Flutter 状态；上述未完成项全部保留，不能把本轮对照用例数换算为全项目完成率。

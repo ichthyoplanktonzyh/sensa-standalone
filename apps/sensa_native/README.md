@@ -78,3 +78,26 @@ flutter test -v --no-uninstall integration_test/local_learning_test.dart -d emul
 The generated platform scaffolds do not imply iOS/Windows/Linux/Web acceptance.
 Rust's native SQLite module is not WebAssembly compatible as-is; Web needs a storage
 adapter and a separate integration, not a claim that native builds work in browsers.
+
+## Local text-pack import
+
+After quantity setup, choose **导入学习包**, select a `sensa-local-text-pack-v1`
+JSON file, then explicitly choose **加入学习** for each target. Use **选择其他内容**
+to switch; the previous run is paused and its material and progress stay pinned.
+The OS picker grants read access only to the selected file. Nothing is uploaded.
+
+A synthetic example is at
+`../../crates/sensa-library/tests/fixtures/local-text-pack-v1.json`.
+This bounded text transport is not yet a general Published Package importer:
+media, other protocols/languages and material replacement are rejected rather
+than discarded. See `../../docs/sensa/native-pack-import-contract.md`.
+
+The pack integration test injects the selected file contents while using real
+Flutter/Rust/SQLite. It does not automate the OS picker itself. Use a fresh run
+name for the first command; reuse it for recovery. Android requires
+`--no-uninstall` in both commands.
+
+```sh
+flutter test integration_test/pack_import_test.dart -d macos --dart-define=SENSA_NATIVE_RUN=my-pack-run
+flutter test integration_test/pack_import_test.dart -d macos --dart-define=SENSA_NATIVE_RUN=my-pack-run --dart-define=SENSA_NATIVE_RECOVERY=true
+```

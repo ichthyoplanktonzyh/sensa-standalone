@@ -1,9 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../data/library_repository.dart';
+import '../data/pack_file_reader.dart';
 
 class LibraryViewModel extends ChangeNotifier {
-  LibraryViewModel(this.repository);
+  LibraryViewModel(this.repository, {PackFileReader? packReader})
+    : packReader = packReader ?? const PackFileReader();
+  final PackFileReader packReader;
+  String? notice;
   final LibraryRepository repository;
   LibrarySnapshot? snapshot;
   bool busy = false;
@@ -71,6 +75,38 @@ class LibraryViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> importPack() async {
+    if (busy || _pending != null) return;
+    busy = true;
+    error = null;
+    notice = null;
+    _notify();
+    String? encoded;
+    try {
+      encoded = await packReader.pick();
+    } catch (e) {
+      error = message(e);
+    } finally {
+      busy = false;
+      _notify();
+    }
+    if (_disposed || encoded == null) return;
+    await act({'kind': 'import_pack', 'pack_json': encoded});
+    if (error == null) {
+      home = true;
+      notice = '材料已导入本机。选择内容后，可单独加入学习。';
+      _notify();
+    }
+  }
+
+  Future<void> selectMaterial(String id) async {
+    await act({'kind': 'select_material', 'material_id': id});
+    if (error == null) {
+      home = true;
+      _notify();
+    }
+  }
+
   Future<void> answer(String action) async {
     final run = snapshot?.run;
     if (run == null) return;
@@ -89,6 +125,20 @@ class LibraryViewModel extends ChangeNotifier {
 
   String message(Object error) {
     final text = error.toString();
+    if (text.contains('daily_limit')) {
+      return '今天的新学数量已达到设置，可继续已有学习。';
+    }
+    if (text.contains('pack_too_large')) return '学习包超过 2 MB，请选择较小的文本包。';
+    if (text.contains('unsupported_pack')) return '此包的版本、协议或语言暂不支持，原有资料不受影响。';
+    if (text.contains('pack_version_conflict') ||
+        text.contains('material_version_conflict') ||
+        text.contains('target_material_conflict')) {
+      return '包内版本与已保存材料冲突，未覆盖原有内容。';
+    }
+    if (text.contains('invalid_pack') ||
+        text.contains('pack_reveals_expression')) {
+      return '学习包校验未通过，未导入任何内容。';
+    }
     if (text.contains('clock_moved_backwards')) return '设备时间早于上次保存，请校准时间后重试。';
     if (text.contains('revision_conflict') || text.contains('stale_step')) {
       return '学习状态已更新，请重新读取后继续。';

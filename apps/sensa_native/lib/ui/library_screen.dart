@@ -10,6 +10,60 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> {
   int quantity = 5;
+  Future<void> chooseMaterial() async {
+    final snapshot = widget.model.snapshot;
+    if (snapshot == null) return;
+    final id = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.65,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Expanded(child: Text('选择学习内容')),
+                    IconButton(
+                      tooltip: '关闭',
+                      onPressed: () => Navigator.pop(sheetContext),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: snapshot.catalog.length,
+                  itemBuilder: (context, index) {
+                    final entry = snapshot.catalog[index];
+                    final item = entry['material'] as Map<String, dynamic>;
+                    return ListTile(
+                      title: Text(item['expression'] as String),
+                      subtitle: Text(
+                        entry['completed'] == true
+                            ? '首学已完成'
+                            : entry['enrolled'] == true
+                            ? '已加入学习'
+                            : '尚未加入学习',
+                      ),
+                      selected: item['id'] == snapshot.material?['id'],
+                      onTap: () =>
+                          Navigator.pop(sheetContext, item['id'] as String),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (id != null && mounted) await widget.model.selectMaterial(id);
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.model,
@@ -104,6 +158,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
         body = [
           Text('我的本地学习库', style: t.headlineLarge),
           Text('每日新学 ${s.quantity} 个 · 无需登录'),
+          button('导入学习包', vm.importPack, primary: false),
+          if (vm.notice != null)
+            Semantics(liveRegion: true, child: Text(vm.notice!)),
+          if (s.catalog.isNotEmpty) ...[
+            Text('已下载的内容', style: t.headlineSmall),
+            Text('${s.catalog.length} 项内容已保存在本机'),
+            button('选择其他内容', chooseMaterial, primary: false),
+            const Divider(),
+          ],
           if (s.material == null) ...[
             const Text('先载入一份合成验收材料，验证本机保存与学习。'),
             button(
@@ -148,11 +211,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     ],
                   ),
                   const SizedBox(height: 32),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: const Color(0xfffffefd),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
+                  Material(
+                    color: const Color(0xfffffefd),
+                    borderRadius: BorderRadius.circular(24),
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Column(

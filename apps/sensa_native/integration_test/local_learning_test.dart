@@ -32,7 +32,9 @@ void main() {
       }
 
       Future<void> tap(String label, String next) async {
+        await tester.pumpAndSettle();
         await tester.ensureVisible(find.text(label));
+        await tester.pumpAndSettle();
         await tester.tap(find.text(label));
         await waitFor(next);
         expect(model.error, isNull);

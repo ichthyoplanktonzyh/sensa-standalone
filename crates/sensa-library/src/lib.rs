@@ -1,15 +1,13 @@
 //! Single-device application transactions. All writes go through execute().
 //! The acceptance material is opt-in; this is not a production package importer.
+pub mod pack;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use sensa_core::settlement::{Settlement, SettlementContext, decide_consumer_settlement};
 use sensa_core::{Action, PROTOCOL, Phase, SCHEDULING_POLICY, transition};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{
-    path::Path,
-    time::{Duration, SystemTime},
-};
+use std::{path::Path, time::Duration};
 use uuid::Uuid;
 
 #[derive(Debug, thiserror::Error)]
@@ -38,6 +36,12 @@ pub enum CommandAction {
         quantity: u32,
     },
     ImportAcceptanceMaterial,
+    ImportPack {
+        pack_json: String,
+    },
+    SelectMaterial {
+        material_id: String,
+    },
     AddToLearning,
     StartOrResume,
     RecordAction {
@@ -69,8 +73,17 @@ pub struct RunView {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CatalogItem {
+    pub material: Material,
+    pub enrolled: bool,
+    pub completed: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     pub library_id: String,
+    #[serde(default)]
+    pub catalog: Vec<CatalogItem>,
     pub revision: u32,
     pub daily_new_limit: Option<u32>,
     pub material: Option<Material>,
@@ -111,8 +124,14 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if version != 1 || application != APPLICATION {
+    } else if ![1, 2].contains(&version) || application != APPLICATION {
         return Err(Error::Rule("unsupported_library_version"));
+    }
+    if version <= 1 {
+        tx.execute_batch("ALTER TABLE library ADD COLUMN selected_material_id TEXT REFERENCES materials(id);
+            UPDATE library SET selected_material_id=(SELECT id FROM materials ORDER BY rowid LIMIT 1);
+            CREATE TABLE imported_packs(id TEXT NOT NULL,version TEXT NOT NULL,digest TEXT NOT NULL,content TEXT NOT NULL,PRIMARY KEY(id,version));
+            PRAGMA user_version=2;")?;
     }
     tx.commit()?;
     Ok(db)
@@ -124,11 +143,15 @@ fn read(db: &Connection) -> Result<Snapshot> {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?))
         })?;
     let material: Option<String> = db
-        .query_row("SELECT content FROM materials LIMIT 1", [], |r| r.get(0))
+        .query_row(
+            "SELECT content FROM materials WHERE id=(SELECT selected_material_id FROM library)",
+            [],
+            |r| r.get(0),
+        )
         .optional()?;
     let run = db
         .query_row(
-            "SELECT id,phase,ordinal,attempt_count,paused FROM runs LIMIT 1",
+            "SELECT id,phase,ordinal,attempt_count,paused FROM runs WHERE material_id=(SELECT selected_material_id FROM library)",
             [],
             |r| {
                 let raw: String = r.get(1)?;
@@ -148,18 +171,39 @@ fn read(db: &Connection) -> Result<Snapshot> {
             },
         )
         .optional()?;
+    let catalog = {
+        let mut query=db.prepare("SELECT m.content, EXISTS(SELECT 1 FROM targets t WHERE t.material_id=m.id), EXISTS(SELECT 1 FROM runs r WHERE r.material_id=m.id AND phase='completed') FROM materials m ORDER BY m.rowid")?;
+        let rows = query.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, bool>(1)?,
+                r.get::<_, bool>(2)?,
+            ))
+        })?;
+        let mut items = Vec::new();
+        for row in rows {
+            let (content, enrolled, completed) = row?;
+            items.push(CatalogItem {
+                material: serde_json::from_str(&content)?,
+                enrolled,
+                completed,
+            });
+        }
+        items
+    };
     Ok(Snapshot {
         library_id,
+        catalog,
         revision,
         daily_new_limit,
         material: material.map(|s| serde_json::from_str(&s)).transpose()?,
-        enrolled: db.query_row("SELECT count(*)>0 FROM targets", [], |r| r.get(0))?,
+        enrolled: db.query_row("SELECT count(*)>0 FROM targets WHERE material_id=(SELECT selected_material_id FROM library)", [], |r| r.get(0))?,
         run,
         completion_id: db
-            .query_row("SELECT id FROM completions LIMIT 1", [], |r| r.get(0))
+            .query_row("SELECT c.id FROM completions c JOIN runs r ON r.id=c.run_id WHERE r.material_id=(SELECT selected_material_id FROM library)", [], |r| r.get(0))
             .optional()?,
         due_at_ms: db
-            .query_row("SELECT due_at_ms FROM memory LIMIT 1", [], |r| r.get(0))
+            .query_row("SELECT mem.due_at_ms FROM memory mem JOIN targets t ON t.id=mem.target_id WHERE t.material_id=(SELECT selected_material_id FROM library)", [], |r| r.get(0))
             .optional()?,
         completion_count: db.query_row("SELECT count(*) FROM completions", [], |r| r.get(0))?,
         handoff_count: db.query_row("SELECT count(*) FROM handoffs", [], |r| r.get(0))?,
@@ -175,12 +219,32 @@ pub fn open_library(path: &Path) -> Result<Snapshot> {
 }
 
 pub fn execute(path: &Path, command: Command) -> Result<Snapshot> {
-    execute_at(path, command, DateTime::<Utc>::from(SystemTime::now()))
+    let now = chrono::Local::now();
+    execute_at_offset(
+        path,
+        command,
+        now.with_timezone(&Utc),
+        now.offset().local_minus_utc() / 60,
+    )
 }
 
 /// Explicit time is a testable application dependency, not a UI-supplied result.
 /// Runtime bridge calls execute(), which obtains device time itself.
 pub fn execute_at(path: &Path, command: Command, now: DateTime<Utc>) -> Result<Snapshot> {
+    execute_at_offset(path, command, now, 0)
+}
+
+/// Host time-zone offset is a testable dependency; it is never a UI command field.
+/// A future stored Study Plan zone can replace this device-local default.
+pub fn execute_at_offset(
+    path: &Path,
+    command: Command,
+    now: DateTime<Utc>,
+    offset_minutes: i32,
+) -> Result<Snapshot> {
+    if !(-840..=840).contains(&offset_minutes) {
+        return Err(Error::Rule("invalid_time_zone"));
+    }
     if Uuid::parse_str(&command.operation_id).is_err() {
         return Err(Error::Rule("invalid_operation_id"));
     }
@@ -218,6 +282,63 @@ pub fn execute_at(path: &Path, command: Command, now: DateTime<Utc>) -> Result<S
             }
             tx.execute("UPDATE library SET daily_new_limit=?1", [quantity])?;
         }
+        CommandAction::ImportPack { pack_json } => {
+            let pack = pack::LearningPack::parse(pack_json)?;
+            let content = serde_json::to_string(&pack)?;
+            let digest = format!("{:x}", Sha256::digest(content.as_bytes()));
+            let previous: Option<String> = tx
+                .query_row(
+                    "SELECT digest FROM imported_packs WHERE id=?1 AND version=?2",
+                    params![pack.id, pack.version],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if previous.as_ref().is_some_and(|v| v != &digest) {
+                return Err(Error::Rule("pack_version_conflict"));
+            }
+            for material in &pack.materials {
+                let content = serde_json::to_string(material)?;
+                let digest = format!("{:x}", Sha256::digest(content.as_bytes()));
+                let existing: Option<String> = tx
+                    .query_row(
+                        "SELECT digest FROM materials WHERE id=?1",
+                        [&material.id],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                if existing.as_ref().is_some_and(|v| v != &digest) {
+                    return Err(Error::Rule("material_version_conflict"));
+                }
+                let collision: bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM materials WHERE id<>?1 AND json_extract(content,'$.senseVersionId')=?2 AND json_extract(content,'$.bindingVersionId')=?3)",params![material.id,material.sense_version_id,material.binding_version_id],|r|r.get(0))?;
+                if collision {
+                    return Err(Error::Rule("target_material_conflict"));
+                }
+                tx.execute(
+                    "INSERT INTO materials VALUES(?1,?2,?3) ON CONFLICT(id) DO NOTHING",
+                    params![material.id, digest, content],
+                )?;
+            }
+            tx.execute(
+                "INSERT INTO imported_packs VALUES(?1,?2,?3,?4) ON CONFLICT(id,version) DO NOTHING",
+                params![pack.id, pack.version, digest, content],
+            )?;
+            tx.execute(
+                "UPDATE library SET selected_material_id=COALESCE(selected_material_id,?1)",
+                [&pack.materials[0].id],
+            )?;
+        }
+        CommandAction::SelectMaterial { material_id } => {
+            let exists: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM materials WHERE id=?1)",
+                [material_id],
+                |r| r.get(0),
+            )?;
+            if !exists {
+                return Err(Error::Rule("material_unavailable"));
+            }
+            tx.execute("UPDATE runs SET paused=1 WHERE phase<>'completed'", [])?;
+            tx.execute("UPDATE library SET selected_material_id=?1", [material_id])?;
+        }
         CommandAction::ImportAcceptanceMaterial => {
             let material = acceptance_material()?;
             let content = serde_json::to_string(&material)?;
@@ -225,6 +346,10 @@ pub fn execute_at(path: &Path, command: Command, now: DateTime<Utc>) -> Result<S
             tx.execute(
                 "INSERT INTO materials VALUES(?1,?2,?3) ON CONFLICT(id) DO NOTHING",
                 params![material.id, digest, content],
+            )?;
+            tx.execute(
+                "UPDATE library SET selected_material_id=COALESCE(selected_material_id,?1)",
+                [&material.id],
             )?;
         }
         CommandAction::AddToLearning => {
@@ -265,7 +390,27 @@ pub fn execute_at(path: &Path, command: Command, now: DateTime<Utc>) -> Result<S
                 }
                 tx.execute("UPDATE runs SET paused=0 WHERE id=?1", [&run.id])?;
             } else {
-                let (target,material,digest): (String,String,String) = tx.query_row("SELECT t.id,m.id,m.digest FROM targets t JOIN materials m ON m.id=t.material_id LIMIT 1", [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
+                let offset = chrono::Duration::minutes(i64::from(offset_minutes));
+                let local = now
+                    .checked_add_signed(offset)
+                    .ok_or(Error::Rule("clock_out_of_range"))?;
+                let start = local
+                    .date_naive()
+                    .and_hms_opt(0, 0, 0)
+                    .ok_or(Error::Rule("clock_out_of_range"))?
+                    .and_utc()
+                    .checked_sub_signed(offset)
+                    .ok_or(Error::Rule("clock_out_of_range"))?
+                    .timestamp_millis();
+                let count: u32 = tx.query_row(
+                    "SELECT count(*) FROM runs WHERE started_at_ms>=?1",
+                    [start],
+                    |r| r.get(0),
+                )?;
+                if count >= state.daily_new_limit.unwrap_or(0) {
+                    return Err(Error::Rule("daily_limit"));
+                }
+                let (target,material,digest): (String,String,String) = tx.query_row("SELECT t.id,m.id,m.digest FROM targets t JOIN materials m ON m.id=t.material_id WHERE m.id=(SELECT selected_material_id FROM library)", [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
                 tx.execute(
                     "INSERT INTO runs VALUES(?1,?2,?3,?4,?5,'recall',1,0,0,?6)",
                     params![

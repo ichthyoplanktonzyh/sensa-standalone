@@ -10,6 +10,8 @@ class LibrarySnapshot {
     ),
   );
   final Map<String, dynamic> value;
+  List<Map<String, dynamic>> get catalog =>
+      (value['catalog'] as List? ?? []).cast<Map<String, dynamic>>();
   String get id => value['libraryId'] as String;
   int get revision => value['revision'] as int;
   int? get quantity => value['dailyNewLimit'] as int?;
