@@ -27,6 +27,9 @@ let state:State;
 try{state=JSON.parse(await readFile(statePath,'utf8'));}
 catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;const keys=await generateKeyPair('ES256',{extractable:true});state={privateKey:await exportJWK(keys.privateKey),publicKey:await exportJWK(keys.publicKey),vaultKey:randomBytes(32).toString('hex'),used:0,limit:8};await writeFile(statePath,JSON.stringify(state),{mode:0o600,flag:'wx'});}
 process.env.SENSA_PROVIDER_VAULT_KEY=state.vaultKey;
+// Explicit cumulative ceiling for a newly authorized round; never reset used reservations.
+const requestedLimit=process.argv.find(argument=>argument.startsWith('--request-limit='))?.split('=')[1];
+if(requestedLimit!==undefined){const limit=Number(requestedLimit);if(!Number.isSafeInteger(limit)||limit<state.used||limit>state.used+8)throw new Error('Limit must preserve usage and allow at most 8 further calls');state.limit=limit;await writeFile(statePath,JSON.stringify(state),{mode:0o600});}
 process.env.SENSA_SEMANTIC_PROVIDER='deepseek';
 process.env.SENSA_CONTENT_PROVIDER='deepseek';
 const privateKey=await importJWK(state.privateKey,'ES256');
@@ -46,6 +49,11 @@ globalThis.fetch=async(input,init)=>{
   console.log(JSON.stringify({provider:'deepseek',sequence,status:response.status,elapsedMs:Date.now()-started}));
   return response;
 };
+if(process.argv.includes('--semantic-check')){
+  try{const {runSemanticLiveChecks}=await import('./support/semanticLiveChecks.mts');await runSemanticLiveChecks(process.argv.includes('--baseline'),process.argv.find(argument=>argument.startsWith('--case='))?.split('=')[1]);}
+  finally{await pool.end();}
+  process.exit(0);
+}
 async function session(){const sessionId=crypto.randomUUID();return {access_token:await new SignJWT({session_id:sessionId,email}).setProtectedHeader({alg:'ES256',kid:'browser-live'}).setIssuer(issuer).setSubject(subject).setAudience('authenticated').setIssuedAt().setExpirationTime('1h').sign(privateKey),refresh_token:'local-only-test:'+email,token_type:'bearer',expires_in:3600,user:{id:subject,aud:'authenticated',role:'authenticated',email,email_confirmed_at:new Date().toISOString(),app_metadata:{provider:'email'},user_metadata:{},created_at:new Date().toISOString()}};}
 const app=new Hono();
 app.use('*',cors({origin:'http://127.0.0.1:3001',allowHeaders:['authorization','content-type','apikey','x-client-info','x-supabase-api-version']}));

@@ -12,7 +12,7 @@ const subjects=[crypto.randomUUID(),crypto.randomUUID()];const sessions=[crypto.
 await pool.query('INSERT INTO sensa_consumer.invitations(issuer,subject) VALUES($1,$2),($1,$3)',['browser-smoke',...subjects]);
 let calls=0,failing=false,release:(()=>void)|null=null,now=new Date();
 const app=createConsumerRoutes({transaction,clock:()=>now,verify:async request=>{const index=request.headers.get('authorization')==='Bearer second'?1:0;return {issuer:'browser-smoke',subject:subjects[index],sessionId:sessions[index],email:null};},
-  readingCompletion:async(connection,messages,json)=>{calls++;assert.equal(connection.apiKey,'fixture-secret-key');if(failing)throw new Error('do not expose provider payload');if(release)await new Promise<void>(resolve=>{release=resolve;});if(json){const input=JSON.parse(messages[1].content);return JSON.stringify({proposal:(await mockSemanticResolver(input)).proposal});}return '这是一段阅读译文。';}});
+  readingCompletion:async(connection,messages,json)=>{calls++;assert.equal(connection.apiKey,'fixture-secret-key');if(failing)throw new Error('do not expose provider payload');if(release)await new Promise<void>(resolve=>{release=resolve;});if(json){const input=JSON.parse(messages[1].content);return JSON.stringify({proposal:(await mockSemanticResolver(input,input.learnerFocus?{text:input.learnerFocus}:null)).proposal});}return '这是一段阅读译文。';}});
 async function request(path:string,body?:unknown,second=false){const response=await app.request(path,{method:body===undefined?'GET':'POST',headers:{authorization:second?'Bearer second':'Bearer first','content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:response.status,body:await response.json() as any};}
 try{
   const installs=[crypto.randomUUID(),crypto.randomUUID()];
@@ -45,6 +45,27 @@ try{
   const lookupId=crypto.randomUUID();const lookup=await request('/sensa/semantic/lookups',{id:lookupId,snapshot});assert.equal(lookup.body.status,'ready',JSON.stringify(lookup.body));assert.equal(lookup.body.provenance.model,'fixture-model');
   const previousCalls=calls;await request('/sensa/semantic/lookups',{id:lookupId,snapshot});assert.equal(calls,previousCalls);
   const boot=(await request('/sensa/sync/bootstrap',{wireVersion:'sensa-sync-v3',installationId:installs[0],replicaId:null})).body;
+  const fastSnapshot={...snapshot,source:{...snapshot.source,video:{...snapshot.source.video!,startMs:20000,endMs:23000}}};
+  const fastId=crypto.randomUUID();
+  const fastLookup=(await request('/sensa/semantic/lookups',{id:fastId,snapshot:fastSnapshot})).body;
+  assert.equal(fastLookup.status,'ready');assert.equal(fastLookup.focus,null);assert.equal(fastLookup.provenance.policyVersion,'consumer-semantic-v4');
+  const bootstrap=async()=>(await request('/sensa/sync/bootstrap',{wireVersion:'sensa-sync-v3',installationId:installs[0],replicaId:boot.replicaId})).body;
+  const queried=await bootstrap();assert.equal(queried.meanings.length,0);assert.equal(queried.intakes.length,0);
+  const fastAccept={operationId:crypto.randomUUID(),occurredAt:new Date().toISOString(),installationId:installs[0],replicaId:boot.replicaId,dependsOn:[],kind:'semantic.accept',payload:{lookupId:fastId,expectedRevision:'1',intakeId:null,consent:'accept_context_expression_sense'}};
+  const fastPush={wireVersion:'sensa-sync-v3',canonicalizerVersion:'sensa-sync-v3-canonical-1',scopeEpoch:boot.scopeEpoch,replicaId:boot.replicaId,operations:[fastAccept]};
+  const fastResult=(await request('/sensa/sync/push',fastPush)).body.results[0];
+  assert.equal(fastResult.status,'accepted',JSON.stringify(fastResult));assert.equal(fastResult.value.meaning.focus,null);assert.equal(fastResult.value.meaning.acceptanceKind,'direct');assert.equal(fastResult.value.plan,null);
+  assert.equal((await request('/sensa/sync/push',fastPush)).body.results[0].status,'replayed');
+  const fastState=await bootstrap();assert.equal(fastState.meanings.length,1);assert.equal(fastState.intakes.length,0);assert.equal(fastState.targets.length,0);assert.equal(fastState.runs.length,0);assert.equal(fastState.checkins.length,0);
+  const ambiguousId=crypto.randomUUID();const ambiguousSnapshot={...snapshot,sentence:'He waited by the bank.',expression:{text:'bank',start:17,end:21}};
+  const ambiguous=(await request('/sensa/semantic/lookups',{id:ambiguousId,snapshot:ambiguousSnapshot})).body;
+  assert.equal(ambiguous.status,'unresolved');assert.equal(ambiguous.focus,null);
+  const denied=(await request('/sensa/sync/push',{...fastPush,operations:[{...fastAccept,operationId:crypto.randomUUID(),payload:{...fastAccept.payload,lookupId:ambiguousId}}]})).body.results[0];
+  assert.equal(denied.error.code,'proposal_not_ready');assert.equal((await bootstrap()).meanings.length,1);
+  const clarified=(await request('/sensa/semantic/lookups',{id:crypto.randomUUID(),snapshot:ambiguousSnapshot,clarification:{previousLookupId:ambiguousId,text:'我关注河流边缘的陆地。'}})).body;
+  assert.equal(clarified.status,'ready');assert.equal(clarified.focus.previousLookupId,ambiguousId);assert.equal(clarified.focus.text,'我关注河流边缘的陆地。');
+  assert.equal((await bootstrap()).meanings.length,1); // Clarification still proposes only.
+  console.log('PASS: ready lookup creates no inventory; direct fast-track acceptance preserves null focus, skips Inbox and learning, replays once; unresolved cannot be accepted.');
   const operation={operationId:crypto.randomUUID(),occurredAt:new Date().toISOString(),installationId:installs[0],replicaId:boot.replicaId,dependsOn:[],kind:'intake.save',payload:{snapshot}};
   const syncInput={wireVersion:'sensa-sync-v3',canonicalizerVersion:'sensa-sync-v3-canonical-1',scopeEpoch:boot.scopeEpoch,replicaId:boot.replicaId,operations:[operation]};
   const pushed=(await request('/sensa/sync/push',syncInput)).body;assert.equal(pushed.results[0].status,'accepted');const intake=pushed.results[0].value.intake;
