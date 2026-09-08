@@ -26,6 +26,34 @@ class LibrarySnapshot {
   Map<String, dynamic> get retention =>
       value['retention'] as Map<String, dynamic>? ?? {};
   int? get nextEligibleAtMs => retention['nextEligibleAtMs'] as int?;
+  Map<String, dynamic> get policyState =>
+      value['policyState'] as Map<String, dynamic>? ?? {};
+  Map<String, dynamic>? get policyPlan =>
+      policyState['selected'] as Map<String, dynamic>?;
+  List<Map<String, dynamic>> get policyChoices =>
+      (policyState['choices'] as List? ?? []).cast<Map<String, dynamic>>();
+  bool get policyCommitted => policyPlan?['committed'] == true;
+  Map<String, dynamic>? get initialReadiness =>
+      policyPlan?['plan']?['purposes']?['initial_learning']?['readiness']
+          as Map<String, dynamic>?;
+  String policyLabel(String? id) =>
+      policyChoices
+          .where((c) => c['policy']['profileId'] == id)
+          .map((c) => c['label'] as String)
+          .firstOrNull ??
+      (id ?? '尚未设置');
+  String get policySourceLabel =>
+      switch (policyPlan?['plan']?['effective']?['scope']) {
+        'target' => '此项单独设置',
+        'curriculum' => '学习包默认设置',
+        'learner' => '我的默认设置',
+        _ => '系统默认设置',
+      };
+  String get selectedPolicyLabel => policyLabel(
+    policyPlan?['plan']?['effective']?['policy']?['profileId'] as String?,
+  );
+  String get defaultPolicyLabel =>
+      policyLabel(policyState['defaultPolicy']?['profileId'] as String?);
   int? get dueAtMs => value['dueAtMs'] as int?;
 }
 

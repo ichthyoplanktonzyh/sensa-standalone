@@ -1,0 +1,258 @@
+[
+  {
+    "profileId": "lightweight",
+    "profileVersion": "lightweight-profile-v2",
+    "presentation": {
+      "label": "轻量学习",
+      "shortBadge": "更快开始",
+      "description": "使用紧凑场景、目标表达、例句和简单回想，完成后交给系统安排长期复习。",
+      "lifecycleLabel": "首次轻量学习 · 简单复习 · 轻量再学",
+      "optionClassName": ""
+    },
+    "lifecycle": {
+      "evidencePolicyId": "lightweight-non-evidentiary-v1",
+      "schedulingPolicyId": "fixed-ladder-v1",
+      "learnerVisibleClaimBoundary": "只声称已完成学习并安排复习，不声称独立回忆或掌握。",
+      "provisioningFallback": {
+        "behavior": "blocked"
+      },
+      "migrationPolicy": "pin_existing_runs"
+    },
+    "protocols": {
+      "initial_learning": {
+        "protocolId": "lightweight-study",
+        "protocolVersion": "v2",
+        "runtimeAdapterId": "lightweight",
+        "orchestrationId": "lightweight_study",
+        "evaluationPolicyId": "lightweight-practice-observation-v1",
+        "progressionPolicyId": "completion-only-v1",
+        "completionPolicyId": "study-completion-v1",
+        "repairPolicyId": "lightweight-retry-v1",
+        "memoryOutcomePolicyId": null,
+        "checkpointDefinitionIds": [],
+        "contentRequirement": [
+          "compact_learning_material"
+        ],
+        "contentDemands": [
+          {
+            "contentDemandKey": "lightweight-initial-content",
+            "definitionVersion": "v1"
+          }
+        ]
+      },
+      "retention_review": {
+        "protocolId": "learner-rated-retention-review",
+        "protocolVersion": "v1",
+        "runtimeAdapterId": "lightweight",
+        "orchestrationId": "lightweight_retention",
+        "evaluationPolicyId": "learner-rating-v1",
+        "progressionPolicyId": "completion-only-v1",
+        "completionPolicyId": "one-review-one-outcome-v1",
+        "repairPolicyId": "lightweight-rebinding-v1",
+        "memoryOutcomePolicyId": "learner-rated-graded-v1",
+        "checkpointDefinitionIds": [],
+        "contentRequirement": [
+          "compact_learning_material"
+        ],
+        "contentDemands": []
+      },
+      "relearning": {
+        "protocolId": "lightweight-rebinding",
+        "protocolVersion": "v1",
+        "runtimeAdapterId": "lightweight",
+        "orchestrationId": "lightweight_retention",
+        "evaluationPolicyId": "learner-rating-v1",
+        "progressionPolicyId": "completion-only-v1",
+        "completionPolicyId": "relearning-completion-v1",
+        "repairPolicyId": "lightweight-rebinding-v1",
+        "memoryOutcomePolicyId": null,
+        "checkpointDefinitionIds": [],
+        "contentRequirement": [
+          "compact_learning_material"
+        ],
+        "contentDemands": []
+      }
+    }
+  },
+  {
+    "profileId": "high_assurance",
+    "profileVersion": "high-assurance-profile-v1",
+    "presentation": {
+      "label": "高保证学习",
+      "shortBadge": "可选择",
+      "description": "通过识别、主动回想、新语境迁移和必要的边界辨析，更充分地检验连接。",
+      "lifecycleLabel": "深度首次学习 · 证据型复习 · 针对性再学",
+      "optionClassName": "is-assurance"
+    },
+    "lifecycle": {
+      "evidencePolicyId": "behavioral-acquisition-evidence-v1",
+      "schedulingPolicyId": "fsrs-retention-v1",
+      "learnerVisibleClaimBoundary": "只声称满足当前协议的独立行为要求，不声称永久掌握。",
+      "provisioningFallback": {
+        "behavior": "learner_explicit_downgrade",
+        "targetProfileId": "lightweight"
+      },
+      "migrationPolicy": "pin_existing_runs"
+    },
+    "protocols": {
+      "initial_learning": {
+        "protocolId": "structured-acquisition",
+        "protocolVersion": "v1",
+        "runtimeAdapterId": "structured",
+        "orchestrationId": "structured_acquisition",
+        "evaluationPolicyId": "structured-behavioral-v1",
+        "progressionPolicyId": "structured-current-checkpoint-reset-v1",
+        "completionPolicyId": "all-required-current-epoch-v1",
+        "repairPolicyId": "structured-targeted-repair-v1",
+        "memoryOutcomePolicyId": null,
+        "checkpointDefinitionIds": [
+          "structured-acquisition:contextual_recognition",
+          "structured-acquisition:meaning_to_form_recall",
+          "structured-acquisition:novel_context_transfer",
+          "structured-acquisition:boundary_discrimination"
+        ],
+        "contentRequirement": [
+          "structured_learning_package"
+        ],
+        "contentDemands": [
+          {
+            "contentDemandKey": "structured-learning-package",
+            "definitionVersion": "v1"
+          }
+        ]
+      },
+      "retention_review": {
+        "protocolId": "evidence-oriented-retention-review",
+        "protocolVersion": "v1",
+        "runtimeAdapterId": "structured",
+        "orchestrationId": "structured_retention",
+        "evaluationPolicyId": "structured-behavioral-v1",
+        "progressionPolicyId": "completion-only-v1",
+        "completionPolicyId": "one-review-one-outcome-v1",
+        "repairPolicyId": "structured-targeted-repair-v1",
+        "memoryOutcomePolicyId": "behavioral-binary-graded-v1",
+        "checkpointDefinitionIds": [],
+        "contentRequirement": [
+          "structured_learning_package"
+        ],
+        "contentDemands": [
+          {
+            "contentDemandKey": "structured-learning-package",
+            "definitionVersion": "v1"
+          }
+        ]
+      },
+      "relearning": {
+        "protocolId": "targeted-structured-relearning",
+        "protocolVersion": "v1",
+        "runtimeAdapterId": "structured",
+        "orchestrationId": "structured_retention",
+        "evaluationPolicyId": "structured-behavioral-v1",
+        "progressionPolicyId": "structured-current-checkpoint-reset-v1",
+        "completionPolicyId": "relearning-completion-v1",
+        "repairPolicyId": "structured-targeted-repair-v1",
+        "memoryOutcomePolicyId": null,
+        "checkpointDefinitionIds": [],
+        "contentRequirement": [
+          "structured_learning_package"
+        ],
+        "contentDemands": [
+          {
+            "contentDemandKey": "structured-learning-package",
+            "definitionVersion": "v1"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "profileId": "interleaved_four_stage",
+    "profileVersion": "interleaved-four-stage-profile-v1",
+    "presentation": {
+      "label": "四阶段穿插",
+      "shortBadge": "连续四关",
+      "description": "词义选择、语境回想、听音辨义和终关回想组内穿插；任一失败从第一阶段重来。",
+      "lifecycleLabel": "四阶段首次学习 · 三向自评复习 · 当日重学",
+      "optionClassName": "is-interleaved"
+    },
+    "lifecycle": {
+      "evidencePolicyId": "mixed-self-report-and-behavior-v1",
+      "schedulingPolicyId": "fsrs-retention-v1",
+      "learnerVisibleClaimBoundary": "只声称完成本协议四阶段连续通过，不借用高保证能力结论。",
+      "provisioningFallback": {
+        "behavior": "blocked"
+      },
+      "migrationPolicy": "pin_existing_runs"
+    },
+    "protocols": {
+      "initial_learning": {
+        "protocolId": "interleaved-four-stage-acquisition",
+        "protocolVersion": "v1",
+        "runtimeAdapterId": "interleaved_four_stage",
+        "orchestrationId": "interleaved_four_stage_acquisition",
+        "evaluationPolicyId": "four-stage-mixed-evaluation-v1",
+        "progressionPolicyId": "run-reset-v1",
+        "completionPolicyId": "all-required-current-epoch-v1",
+        "repairPolicyId": "four-stage-detail-repair-v1",
+        "memoryOutcomePolicyId": null,
+        "checkpointDefinitionIds": [
+          "four-stage:meaning-choice",
+          "four-stage:context-recall",
+          "four-stage:sound-choice",
+          "four-stage:final-recall"
+        ],
+        "contentRequirement": [
+          "structured_learning_package"
+        ],
+        "contentDemands": [
+          {
+            "contentDemandKey": "structured-learning-package",
+            "definitionVersion": "v1"
+          }
+        ]
+      },
+      "retention_review": {
+        "protocolId": "interleaved-four-stage-retention",
+        "protocolVersion": "v1",
+        "runtimeAdapterId": "interleaved_four_stage",
+        "orchestrationId": "interleaved_four_stage_retention",
+        "evaluationPolicyId": "learner-rating-v1",
+        "progressionPolicyId": "completion-only-v1",
+        "completionPolicyId": "one-review-one-outcome-v1",
+        "repairPolicyId": "four-stage-rebinding-v1",
+        "memoryOutcomePolicyId": "learner-rated-graded-v1",
+        "checkpointDefinitionIds": [],
+        "contentRequirement": [
+          "structured_learning_package"
+        ],
+        "contentDemands": [
+          {
+            "contentDemandKey": "structured-learning-package",
+            "definitionVersion": "v1"
+          }
+        ]
+      },
+      "relearning": {
+        "protocolId": "interleaved-four-stage-relearning",
+        "protocolVersion": "v1",
+        "runtimeAdapterId": "interleaved_four_stage",
+        "orchestrationId": "interleaved_four_stage_retention",
+        "evaluationPolicyId": "learner-rating-v1",
+        "progressionPolicyId": "completion-only-v1",
+        "completionPolicyId": "relearning-completion-v1",
+        "repairPolicyId": "four-stage-rebinding-v1",
+        "memoryOutcomePolicyId": null,
+        "checkpointDefinitionIds": [],
+        "contentRequirement": [
+          "structured_learning_package"
+        ],
+        "contentDemands": [
+          {
+            "contentDemandKey": "structured-learning-package",
+            "definitionVersion": "v1"
+          }
+        ]
+      }
+    }
+  }
+]

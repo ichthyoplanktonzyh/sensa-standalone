@@ -77,6 +77,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | Native migration checklist | [`native-migration-checklist.md`](native-migration-checklist.md) | 已有 TS 成果的保留/迁移范围、验收状态；首版登记，待逐项盘点 |
 | Native pack import | [`native-pack-import-contract.md`](native-pack-import-contract.md) / [`native-pack-import-handoff.md`](native-pack-import-handoff.md) | 有界文本包、显式入学、多目标首学、版本保护与原生验收；完整发布包/媒体仍待迁移 |
 | Native progression | [`native-progression-handoff.md`](native-progression-handoff.md) | 通用 Checkpoint 进度、正交策略 Registry、组合引用校验与原生入口；通用持久化/多阶段 UI 仍待接入 |
+| Native policy | [`native-policy-handoff.md`](native-policy-handoff.md) | 策略分配、purpose 准备状态、首次 Run 固定及本地 schema 升级；其他学习模式仍待接入 |
 | Native retention | [`native-retention-handoff.md`](native-retention-handoff.md) | 轻量本地复习结算、等待/提前/同 Run 恢复及原生验证；正式 Activity 与去重汇总仍待迁移 |
 | Native kernel migration | [`native-kernel-migration-handoff.md`](native-kernel-migration-handoff.md) | 三 purpose 决策、可配置 FSRS、TS 差分及本地首学事务接入；完整原生复习仍待完成 |
 | Native local learning slice | [`native-local-learning-handoff.md`](native-local-learning-handoff.md) | Flutter/Rust/SQLite 首学技术纵切的实际证据与未完成边界 |

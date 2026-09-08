@@ -113,6 +113,15 @@ class LibraryViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> setPolicy(String scope, Map<String, dynamic>? policy) async {
+    await act({'kind': 'set_policy', 'scope': scope, 'policy': policy});
+    if (error == null) {
+      home = true;
+      notice = '学习方式已保存。已经开始的学习仍使用原来的方式。';
+      _notify();
+    }
+  }
+
   Future<void> answer(String action) async {
     final run = snapshot?.run;
     if (run == null) return;
@@ -131,6 +140,12 @@ class LibraryViewModel extends ChangeNotifier {
 
   String message(Object error) {
     final text = error.toString();
+    if (text.contains('policy_committed')) return '这项学习已固定方式。修改默认方式不会改写已有学习。';
+    if (text.contains('learning_plan_blocked')) {
+      return '当前学习方式尚未就绪，请查看原因或在首次学习前更换方式。';
+    }
+    if (text.contains('unsupported_learning_policy')) return '此学习方式或版本暂不支持。';
+    if (text.contains('policy_pin_mismatch')) return '运行的学习方式校验未通过，原有进度已保留。';
     if (text.contains('relearning_waiting')) {
       return '还未到再学习时间，可以稍后继续，或明确选择提前回想。';
     }

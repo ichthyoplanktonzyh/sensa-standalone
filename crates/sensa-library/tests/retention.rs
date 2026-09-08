@@ -255,12 +255,21 @@ fn v2_upgrade_and_stale_due_do_not_rewrite_history() {
     let p = dir.path().join("test.sqlite");
     let before = prepare(&p);
     let db = Connection::open(&p).unwrap();
-    db.execute_batch("DROP TABLE relearning_needs; DROP TABLE scheduling_decisions; DROP TABLE memory_outcomes; DROP TABLE retention_completions; DROP TABLE retention_attempts; DROP TABLE retention_runs; PRAGMA user_version=2;").unwrap();
+    db.execute_batch("DROP TABLE retention_run_policies; DROP TABLE initial_run_policies; DROP TABLE policy_commitments; DROP TABLE target_plans; DROP TABLE target_policy_sources; DROP TABLE material_policy_sources; DROP TABLE policy_assignments; DROP TABLE relearning_needs; DROP TABLE scheduling_decisions; DROP TABLE memory_outcomes; DROP TABLE retention_completions; DROP TABLE retention_attempts; DROP TABLE retention_runs; PRAGMA user_version=2;").unwrap();
     drop(db);
-    assert_eq!(
-        serde_json::to_value(open_library(&p).unwrap()).unwrap(),
-        serde_json::to_value(&before).unwrap()
-    );
+    let upgraded = open_library(&p).unwrap();
+    let mut upgraded_facts = serde_json::to_value(&upgraded).unwrap();
+    let mut previous_facts = serde_json::to_value(&before).unwrap();
+    upgraded_facts
+        .as_object_mut()
+        .unwrap()
+        .remove("policyState");
+    previous_facts
+        .as_object_mut()
+        .unwrap()
+        .remove("policyState");
+    assert_eq!(upgraded_facts, previous_facts);
+    assert!(upgraded.policy_state.selected.as_ref().unwrap().committed);
     let t = DateTime::from_timestamp_millis(before.due_at_ms.unwrap()).unwrap();
     apply(&p, CommandAction::NextRetention, t);
     let s = rate(&p, Action::Reveal, t);

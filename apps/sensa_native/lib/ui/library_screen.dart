@@ -64,6 +64,76 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (id != null && mounted) await widget.model.selectMaterial(id);
   }
 
+  Future<void> choosePolicy(String scope) async {
+    final snapshot = widget.model.snapshot;
+    if (snapshot == null) return;
+    final selected = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.7,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        scope == 'target'
+                            ? '选择此项学习方式'
+                            : scope == 'curriculum'
+                            ? '设置学习包默认方式'
+                            : '设置默认学习方式',
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '关闭',
+                      onPressed: () => Navigator.pop(sheetContext),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text('首次开始学习后，此项方式固定。更改默认设置只影响尚未固定的项目。'),
+              ),
+              Expanded(
+                child: ListView(
+                  children: [
+                    for (final choice in snapshot.policyChoices)
+                      ListTile(
+                        title: Text(choice['label'] as String),
+                        subtitle: Text(
+                          choice['executable'] == true
+                              ? '当前设备可使用'
+                              : '当前设备尚未支持，选择后会保留为待准备项目',
+                        ),
+                        onTap: () => Navigator.pop(sheetContext, choice),
+                      ),
+                    ListTile(
+                      title: Text(scope == 'learner' ? '恢复系统默认' : '使用继承设置'),
+                      onTap: () =>
+                          Navigator.pop(sheetContext, {'inherit': true}),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected != null && mounted) {
+      await widget.model.setPolicy(
+        scope,
+        selected['policy'] as Map<String, dynamic>?,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.model,
@@ -206,6 +276,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
           Text(
             '累计复习 ${s.retention['reviewCount'] ?? 0} 次 · 再学习完成 ${s.retention['relearningCount'] ?? 0} 次 · 待恢复 ${s.retention['pendingCount'] ?? 0} 项',
           ),
+          Text('默认方式：${s.defaultPolicyLabel}'),
+          button('默认学习方式', () => choosePolicy('learner'), primary: false),
           button('只复习', () => vm.act({'kind': 'next_retention'})),
           button('导入学习包', vm.importPack, primary: false),
           if (vm.notice != null)
@@ -226,9 +298,32 @@ class _LibraryScreenState extends State<LibraryScreen> {
             Text(s.material!['expression'] as String, style: t.headlineSmall),
             Text(s.material!['sense'] as String, style: t.bodyLarge),
             Text(s.material!['source'] as String),
+            if (s.policyPlan != null) ...[
+              Text('学习方式：${s.selectedPolicyLabel}'),
+              Text('来源：${s.policySourceLabel}'),
+              if (s.policyCommitted)
+                const Text('此项方式已固定，默认设置的变化不会改写已有学习。')
+              else
+                button('更换此项方式', () => choosePolicy('target'), primary: false),
+              if (s.policyState['sourceKey'] != null)
+                button(
+                  '学习包默认方式',
+                  () => choosePolicy('curriculum'),
+                  primary: false,
+                ),
+            ],
             if (!s.enrolled)
               button('加入学习', () => vm.act({'kind': 'add_to_learning'}))
-            else if (s.nextEligibleAtMs != null &&
+            else if (s.run == null &&
+                s.initialReadiness?['status'] != 'ready') ...[
+              Text(s.initialReadiness?['label'] as String? ?? '学习材料正在准备'),
+              Text(s.initialReadiness?['detail'] as String? ?? ''),
+              button(
+                '刷新准备状态',
+                () => vm.act({'kind': 'refresh_plans'}),
+                primary: false,
+              ),
+            ] else if (s.nextEligibleAtMs != null &&
                 (s.phase == 'completed' || s.phase == 'waiting')) ...[
               const Text('这项内容还需要再回想，等待进度已保存在本机。'),
               button(

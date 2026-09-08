@@ -109,6 +109,7 @@ pub(super) fn start(
             due
         ],
     )?;
+    policy::pin_retention(db, &target, &run, protocol)?;
     if let Some((need, _, _)) = need {
         db.execute(
             "UPDATE relearning_needs SET run_id=?2 WHERE id=?1",
@@ -130,6 +131,7 @@ pub(super) fn record(
     if format!("{:x}", Sha256::digest(content.as_bytes())) != digest {
         return Err(Error::Rule("material_mismatch"));
     }
+    policy::validate_run(db, &run.id, &protocol, true)?;
     let next = transition(&protocol, run.phase, action).map_err(Error::Rule)?;
     let phase = serde_json::to_value(next)?
         .as_str()

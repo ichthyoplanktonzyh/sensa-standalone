@@ -2,6 +2,7 @@
 //! The acceptance material is opt-in; this is not a production package importer.
 pub mod composition;
 pub mod pack;
+pub mod policy;
 pub mod retention;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
@@ -46,6 +47,11 @@ pub enum CommandAction {
     SelectMaterial {
         material_id: String,
     },
+    SetPolicy {
+        scope: sensa_core::planning::AssignmentScope,
+        policy: Option<sensa_core::planning::PolicyRef>,
+    },
+    RefreshPlans,
     AddToLearning,
     StartOrResume,
     NextRetention,
@@ -105,6 +111,8 @@ pub struct Snapshot {
     pub handoff_count: u32,
     #[serde(default)]
     pub retention: retention::RetentionView,
+    #[serde(default)]
+    pub policy_state: policy::PolicyView,
 }
 
 fn initial_protocol() -> String {
@@ -141,7 +149,7 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if ![1, 2, 3].contains(&version) || application != APPLICATION {
+    } else if ![1, 2, 3, 4].contains(&version) || application != APPLICATION {
         return Err(Error::Rule("unsupported_library_version"));
     }
     if version <= 1 {
@@ -152,6 +160,10 @@ fn connection(path: &Path) -> Result<Connection> {
     }
     if version <= 2 {
         tx.execute_batch(include_str!("retention.sql"))?;
+    }
+    if version <= 3 {
+        tx.execute_batch(include_str!("policy.sql"))?;
+        policy::migrate_legacy(&tx)?;
     }
     tx.commit()?;
     Ok(db)
@@ -229,6 +241,7 @@ fn read(db: &Connection) -> Result<Snapshot> {
         completion_count: db.query_row("SELECT count(*) FROM completions", [], |r| r.get(0))?,
         handoff_count: db.query_row("SELECT count(*) FROM handoffs", [], |r| r.get(0))?,
         retention: retention::RetentionView::default(),
+        policy_state: policy::view(db)?,
     };
     retention::project(db, &mut snapshot)?;
     Ok(snapshot)
@@ -350,6 +363,8 @@ pub fn execute_at_offset(
                 "UPDATE library SET selected_material_id=COALESCE(selected_material_id,?1)",
                 [&pack.materials[0].id],
             )?;
+            policy::register_pack(&tx, &pack)?;
+            policy::refresh(&tx)?;
         }
         CommandAction::SelectMaterial { material_id } => {
             let exists: bool = tx.query_row(
@@ -380,6 +395,12 @@ pub fn execute_at_offset(
                 [&material.id],
             )?;
         }
+        CommandAction::SetPolicy { scope, policy } => {
+            policy::set(&tx, scope, policy.as_ref(), now.timestamp_millis())?;
+        }
+        CommandAction::RefreshPlans => {
+            policy::refresh(&tx)?;
+        }
         CommandAction::AddToLearning => {
             let material = state
                 .material
@@ -390,6 +411,12 @@ pub fn execute_at_offset(
             }
             tx.execute("INSERT INTO targets VALUES(?1,?2,?3,?4,'lightweight','v1') ON CONFLICT(sense_version_id,binding_version_id) DO NOTHING",
                 params![id(),material.id,material.sense_version_id,material.binding_version_id])?;
+            let target: String = tx.query_row(
+                "SELECT id FROM targets WHERE material_id=?1",
+                [&material.id],
+                |r| r.get(0),
+            )?;
+            policy::enroll(&tx, &target)?;
         }
         CommandAction::NextRetention => {
             retention::next(&tx, now)?;
@@ -446,10 +473,12 @@ pub fn execute_at_offset(
                     return Err(Error::Rule("daily_limit"));
                 }
                 let (target,material,digest): (String,String,String) = tx.query_row("SELECT t.id,m.id,m.digest FROM targets t JOIN materials m ON m.id=t.material_id WHERE m.id=(SELECT selected_material_id FROM library)", [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
+                let run_id = id();
+                policy::commit_initial(&tx, &target, &run_id, now.timestamp_millis())?;
                 tx.execute(
                     "INSERT INTO runs VALUES(?1,?2,?3,?4,?5,'recall',1,0,0,?6)",
                     params![
-                        id(),
+                        run_id,
                         target,
                         material,
                         digest,
@@ -491,6 +520,7 @@ pub fn execute_at_offset(
                 if protocol != PROTOCOL {
                     return Err(Error::Rule("unsupported_protocol"));
                 }
+                policy::validate_run(&tx, run_id, &protocol, false)?;
                 let next = transition(&protocol, run.phase, *action).map_err(Error::Rule)?;
                 let phase = serde_json::to_value(next)?
                     .as_str()

@@ -149,13 +149,21 @@ fn additive_v1_upgrade_preserves_completed_history() {
     let before = answer(&path, Action::Good);
     // Recreate the v1 schema shape around unchanged fact rows.
     let db = rusqlite::Connection::open(&path).unwrap();
-    db.execute_batch("DROP TABLE relearning_needs; DROP TABLE scheduling_decisions; DROP TABLE memory_outcomes; DROP TABLE retention_completions; DROP TABLE retention_attempts; DROP TABLE retention_runs; DROP TABLE imported_packs; ALTER TABLE library DROP COLUMN selected_material_id; PRAGMA user_version=1;").unwrap();
+    db.execute_batch("DROP TABLE retention_run_policies; DROP TABLE initial_run_policies; DROP TABLE policy_commitments; DROP TABLE target_plans; DROP TABLE target_policy_sources; DROP TABLE material_policy_sources; DROP TABLE policy_assignments; DROP TABLE relearning_needs; DROP TABLE scheduling_decisions; DROP TABLE memory_outcomes; DROP TABLE retention_completions; DROP TABLE retention_attempts; DROP TABLE retention_runs; DROP TABLE imported_packs; ALTER TABLE library DROP COLUMN selected_material_id; PRAGMA user_version=1;").unwrap();
     drop(db);
     let upgraded = open_library(&path).unwrap();
-    assert_eq!(
-        serde_json::to_value(&upgraded).unwrap(),
-        serde_json::to_value(&before).unwrap()
-    );
+    let mut upgraded_facts = serde_json::to_value(&upgraded).unwrap();
+    let mut previous_facts = serde_json::to_value(&before).unwrap();
+    upgraded_facts
+        .as_object_mut()
+        .unwrap()
+        .remove("policyState");
+    previous_facts
+        .as_object_mut()
+        .unwrap()
+        .remove("policyState");
+    assert_eq!(upgraded_facts, previous_facts);
+    assert!(upgraded.policy_state.selected.as_ref().unwrap().committed);
     assert_eq!(
         open_library(&path).unwrap().completion_id,
         before.completion_id

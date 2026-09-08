@@ -1,5 +1,6 @@
 //! Platform-independent domain decisions. No storage, network or UI dependencies.
 //! Protocol progression, settlement eligibility and scheduling are separate seams.
+pub mod planning;
 pub mod policies;
 pub mod progression;
 pub mod protocol;
