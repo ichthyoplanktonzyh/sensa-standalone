@@ -79,7 +79,8 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | Native progression | [`native-progression-handoff.md`](native-progression-handoff.md) | 通用 Checkpoint 进度、正交策略 Registry、组合引用校验与原生入口；通用持久化/多阶段 UI 仍待接入 |
 | Native policy | [`native-policy-handoff.md`](native-policy-handoff.md) | 策略分配、purpose 准备状态、首次 Run 固定及本地 schema 升级；其他学习模式仍待接入 |
 | Native progress journal | [`native-progress-journal-handoff.md`](native-progress-journal-handoff.md) | Observation/Decision/Checkpoint SQLite 账本、consumer 接入与历史恢复；多阶段编排仍待迁移 |
-| Native four-stage orchestration | [`native-four-stage-orchestration-handoff.md`](native-four-stage-orchestration-handoff.md) | 四阶段与复习队列、版本化快照和源差分；材料/评价/事务与 Flutter 呈现仍待接入 |
+| Native four-stage orchestration | [`native-four-stage-orchestration-handoff.md`](native-four-stage-orchestration-handoff.md) | 四阶段与复习队列、版本化快照和源差分；Owner 已将其定位为扩展性验证，正式材料/UI 暂停 |
+| Native assurance orchestration | [`native-assurance-orchestration-handoff.md`](native-assurance-orchestration-handoff.md) | 高保证 Step 选择、定向修复与通用账本组合；完整生命周期、评价/事务及界面仍待迁移 |
 | Native retention | [`native-retention-handoff.md`](native-retention-handoff.md) | 轻量本地复习结算、等待/提前/同 Run 恢复及原生验证；正式 Activity 与去重汇总仍待迁移 |
 | Native kernel migration | [`native-kernel-migration-handoff.md`](native-kernel-migration-handoff.md) | 三 purpose 决策、可配置 FSRS、TS 差分及本地首学事务接入；完整原生复习仍待完成 |
 | Native local learning slice | [`native-local-learning-handoff.md`](native-local-learning-handoff.md) | Flutter/Rust/SQLite 首学技术纵切的实际证据与未完成边界 |

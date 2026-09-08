@@ -2,6 +2,10 @@
 
 日期：2026-09-08。LF-1b 增量，迁移对象是已有 Web 四阶段队列及复习/再学习编排。
 
+后续 Owner 指示：四阶段只是验证内核可扩展性的原型，其正式 UI 尚未完整确认。
+本记录的代码/测试作为扩展性证据保留；文末材料与 Flutter 施工计划暂停，不再是当前迁移前置。
+当前优先 [高保证学习](native-assurance-orchestration-handoff.md)。
+
 ## 本轮实现
 
 `crates/sensa-core/src/four_stage.rs` 直接对照
