@@ -26,3 +26,6 @@ CI/正式打包需明确设置 `SENSA_EXTENSION_WEB_URL` 和 `SENSA_EXTENSION_AP
 和鼠标点击，runtime 消息为本地 stub，网络全部拦截，不调用模型。
 2026-09-08 修复关闭点击被延迟划词监听重新捕获的问题；覆盖成功/失败/等待结果时关闭、
 迟到结果、Esc、外部点击、重新划选及保存按钮不触发重复捕获。
+
+`node --import tsx scripts/sensaExtensionPopupSmoke.mts` 用本地 runtime stub 检查
+工具栏按钮的等待、成功、失败、防连点与恢复状态，不调用模型或账号服务。

@@ -5,7 +5,10 @@ React/Vite Web 的正常入口使用已确认的 `experience` 页面与正式 co
 首页、我的学习、账号、目录与 Runtime 共享已有界面组件，不以原型数据替代学习事实。
 
 正常运行需配置 `VITE_SENSA_MODE=production`、`VITE_SUPABASE_URL`、
-`VITE_SUPABASE_PUBLISHABLE_KEY` 和 `VITE_SENSA_API_URL`。Web 使用账号独立 IndexedDB
+`VITE_SUPABASE_PUBLISHABLE_KEY` 和 `VITE_SENSA_API_URL`。账号模式缺少这些配置时构建会失败。
+本地生产构建体验可将完整配置放入不入 Git 的 `apps/web/.env.production.local`，
+避免后续重新构建漏传；本地 synthetic Auth 的配置不能用于公开部署。
+Web 使用账号独立 IndexedDB
 与 outbox，按 Sync v3 push → pull 收敛到 Postgres；模型密钥只在 API 服务端。
 
 `VITE_SENSA_MODE=preview` 仍可显式查看先前的行为原型；它使用独立预览存储，

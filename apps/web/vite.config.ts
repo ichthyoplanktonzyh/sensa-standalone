@@ -4,6 +4,11 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "VITE_");
+  if (env.VITE_SENSA_MODE === "production") {
+    for (const name of ["VITE_SENSA_API_URL", "VITE_SUPABASE_URL", "VITE_SUPABASE_PUBLISHABLE_KEY"]) {
+      if (!env[name]?.trim()) throw new Error(`Sensa account mode requires ${name}`);
+    }
+  }
   return {
     publicDir: "public",
     plugins: [react(), tailwindcss()],
