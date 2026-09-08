@@ -93,3 +93,10 @@ Meaning projection 的 nullable `anchorUseGrantId` 是服务端当前许可。�
 pronunciation candidate 引用 target_expression candidate，确定性 validator 检查该绑定。
 缺失/不可下载音频保留文字学习；Web 不因可选媒体失败丢弃已验证文本缓存。回想不展示发音，
 揭示可播放已下载的音频。生成候选显式 opt-in，发布仍走 CI/CD，见[记录](m2-pronunciation-handoff.md)。
+
+## 个人经历细节的边界（2026-09-08 owner 确认）
+
+公共 Sense 的语义规格保持抽象。已授权的私人学习材料可保留来源中的人名、关系、地点和
+具体事件，以唤起真实生活经历并连接目标 L2 表达；不得默认匿名化或替换成无关通用情景。
+校验应检查来源忠实性、目标 Sense 一致性与回想阶段的目标表达隐藏，不把保留人名判作泄漏。
+模型不得编造用户经历；账号隔离、显式授权和撤销后的后续使用限制继续有效。
