@@ -1,8 +1,8 @@
-import {captureSnapshotSchema,intakeOperationSchema} from '@sensa/contracts/sensa';
-import type {IntakeOperation,IntakeView} from '@sensa/contracts/sensa';
+import {captureSnapshotSchema,intakeOperationSchema,semanticAcceptOperationSchema} from '@sensa/contracts/sensa';
+import type {IntakeOperation,IntakeView,SemanticAcceptOperation,PersonalMeaningView} from '@sensa/contracts/sensa';
 import {webUrl,apiUrl} from './config';
-type Queue={wireVersion:'sensa-sync-v3';epoch:string;operation:IntakeOperation;error?:string};
-type Account={accountId:string;installationId:string;token:string;replicaId:string;epoch:string;queue:Queue[];recent:IntakeView[];savedOperations:Record<string,IntakeOperation>};
+type Queue={wireVersion:'sensa-sync-v3';epoch:string;operation:IntakeOperation|SemanticAcceptOperation;error?:string};
+type Account={accountId:string;installationId:string;token:string;replicaId:string;epoch:string;queue:Queue[];recent:(IntakeView|PersonalMeaningView)[];savedOperations:Record<string,IntakeOperation|SemanticAcceptOperation>};
 type Store={active:string|null;accounts:Record<string,Account>};
 let serial:Promise<unknown>=Promise.resolve();
 function locked<T>(work:()=>Promise<T>):Promise<T>{const next=serial.catch(()=>undefined).then(work);serial=next;return next;}
@@ -12,7 +12,7 @@ async function request(path:string,body:unknown,token?:string){const response=aw
 async function sync(){return locked(async()=>{const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a)return;
  for(const item of [...a.queue]){if(item.error)continue;if(item.wireVersion!=='sensa-sync-v3'){item.error='client_update_required';await persist(store);continue;}
  try{const result=await request('/sensa/sync/push',{wireVersion:item.wireVersion,canonicalizerVersion:'sensa-sync-v3-canonical-1',scopeEpoch:item.epoch,replicaId:a.replicaId,operations:[item.operation]},a.token);const r=result.results?.[0];if(r?.operationId!==item.operation.operationId)throw new Error('unknown_result');
- if(r.status==='accepted'||r.status==='replayed'&&r.original==='accepted'){a.queue=a.queue.filter(x=>x.operation.operationId!==item.operation.operationId);if(r.value?.intake)a.recent=[r.value.intake,...a.recent.filter(x=>x.id!==r.value.intake.id)].slice(0,20);}else if(r.status!=='retryable')item.error=r.error?.code??'rejected';await persist(store);
+ if(r.status==='accepted'||r.status==='replayed'&&r.original==='accepted'){a.queue=a.queue.filter(x=>x.operation.operationId!==item.operation.operationId);const saved=r.value?.meaning??r.value?.intake;if(saved)a.recent=[saved,...a.recent.filter(x=>x.id!==saved.id)].slice(0,20);}else if(r.status!=='retryable')item.error=r.error?.code??'rejected';await persist(store);
  }catch(error){if(error instanceof Error&&['access_revoked','invite_required','bootstrap_required'].includes(error.message)){item.error=error.message;await persist(store);}break;}}
  });}
 async function login(existingInstallation?:string,expectedAccount?:string){
@@ -37,6 +37,8 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  if(sender.id!==chrome.runtime.id)return;
  const isPopup=sender.url===chrome.runtime.getURL('popup.html');
  const work=async()=>{
+ if(message.kind==='lookup'&&sender.tab){const snapshot=captureSnapshotSchema.parse(message.snapshot);const modes=((await chrome.storage.session.get('modes')).modes??{}) as Record<number,boolean>;const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a||!modes[sender.tab.id!]||snapshot.source.url!==sender.url)throw new Error('authentication_required');return request('/sensa/semantic/lookups',{id:message.lookupId,snapshot},a.token);}
+ if(message.kind==='accept'&&sender.tab){const modes=((await chrome.storage.session.get('modes')).modes??{}) as Record<number,boolean>;if(!modes[sender.tab.id!])throw new Error('reading_mode_off');await locked(async()=>{const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a)throw new Error('authentication_required');const operation=semanticAcceptOperationSchema.parse({operationId:message.operationId,occurredAt:new Date().toISOString(),installationId:a.installationId,replicaId:a.replicaId,dependsOn:[],kind:'semantic.accept',payload:{lookupId:message.lookupId,expectedRevision:'1',intakeId:null,consent:'accept_context_expression_sense'}});if(!a.savedOperations[operation.operationId]){a.savedOperations[operation.operationId]=operation;a.queue.push({wireVersion:'sensa-sync-v3',epoch:a.epoch,operation});}await persist(store);});void sync();return {savedLocally:true};}
  if(message.kind==='save'&&sender.tab){const mode=((await chrome.storage.session.get('modes')).modes??{}) as Record<number,boolean>;if(!mode[sender.tab.id!])throw new Error('reading_mode_off');const snapshot=captureSnapshotSchema.parse(message.snapshot);if(!sender.url||snapshot.source.url!==sender.url)throw new Error('source_mismatch');await locked(async()=>{const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a)throw new Error('authentication_required');const operation=a.savedOperations[message.operationId]??intakeOperationSchema.parse({operationId:message.operationId,occurredAt:new Date().toISOString(),installationId:a.installationId,replicaId:a.replicaId,dependsOn:[],kind:'intake.save',payload:{snapshot}});if(!a.savedOperations[operation.operationId]){a.savedOperations[operation.operationId]=operation;a.queue.push({wireVersion:'sensa-sync-v3',epoch:a.epoch,operation});}await persist(store);});void sync();return {savedLocally:true};}
  if(!isPopup)throw new Error('unsupported_message');
  if(message.kind==='status'){const [tab]=await chrome.tabs.query({active:true,currentWindow:true});const modes=((await chrome.storage.session.get('modes')).modes??{}) as Record<number,boolean>;if(tab?.id&&modes[tab.id]){try{await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});await chrome.tabs.sendMessage(tab.id,{kind:'reading',enabled:true});await chrome.action.setBadgeText({tabId:tab.id,text:''});}catch{/* Preserve intent until the user grants this page. */}}}

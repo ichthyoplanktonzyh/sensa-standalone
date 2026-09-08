@@ -1,10 +1,12 @@
+import {semanticAcceptOperationSchema} from '@sensa/contracts/sensa';
+import type {PersonalMeaningView} from '@sensa/contracts/sensa';
 import {intakeOperationSchema,captureIdentity,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import type {CaptureSnapshot,IntakeView} from '@sensa/contracts/sensa';
 import { quantityOperationSchema, targetOperationSchema, planViewSchema } from '@sensa/contracts/sensa';
 import type { AccountContext, PlanView, ConsumerOperation, QuantityResult, TargetView, CatalogTarget, ConsumerRun, ConsumerActivity, ConsumerSummary, CheckInView, SensaLightweightInitialMaterializationContent } from '@sensa/contracts/sensa';
 
 export type PendingQuantity = {operation:ConsumerOperation; state:'pending'|'retained'; error:string|null;resolved?:boolean};
-export type AccountReplica = {intakes:Record<string,IntakeView>;accountId:string;installationId:string;replicaId:string|null;scopeEpoch:string;cursor:string|null;plan:PlanView|null;outbox:PendingQuantity[];targets:Record<string,TargetView>;catalog:CatalogTarget[];runs:Record<string,ConsumerRun>;activity:ConsumerActivity|null;localRuns:Record<string,{revision:string;ordinal:number;phase:"recall"|"reveal"|"pending_result"}>;materials:Record<string,{id:string;digest:string;content:SensaLightweightInitialMaterializationContent}>;audio:Record<string,Blob>;summary:ConsumerSummary|null;checkins:Record<string,CheckInView>;runEntries:Record<string,string>;homeCounts:{newAvailable:number;initialContinuations:number;dueReviews:number;relearningReady:number;relearningWaiting:number;distinctExecutableTargets:number}|null};
+export type AccountReplica = {meanings:Record<string,PersonalMeaningView>;intakes:Record<string,IntakeView>;accountId:string;installationId:string;replicaId:string|null;scopeEpoch:string;cursor:string|null;plan:PlanView|null;outbox:PendingQuantity[];targets:Record<string,TargetView>;catalog:CatalogTarget[];runs:Record<string,ConsumerRun>;activity:ConsumerActivity|null;localRuns:Record<string,{revision:string;ordinal:number;phase:"recall"|"reveal"|"pending_result"}>;materials:Record<string,{id:string;digest:string;content:SensaLightweightInitialMaterializationContent}>;audio:Record<string,Blob>;summary:ConsumerSummary|null;checkins:Record<string,CheckInView>;runEntries:Record<string,string>;homeCounts:{newAvailable:number;initialContinuations:number;dueReviews:number;relearningReady:number;relearningWaiting:number;distinctExecutableTargets:number}|null};
 const connections=new Map<string,Promise<IDBDatabase>>();
 function open(accountId:string) {
   let value=connections.get(accountId);
@@ -18,7 +20,7 @@ function open(accountId:string) {
     }); connections.set(accountId,value);value.catch(()=>connections.delete(accountId));
   } return value;
 }
-function initial(account:AccountContext):AccountReplica {return {accountId:account.accountId,installationId:account.installationId,replicaId:null,scopeEpoch:'1',cursor:null,plan:account.plan,outbox:[],targets:{},catalog:[],runs:{},activity:null,localRuns:{},materials:{},audio:{},summary:null,homeCounts:null,checkins:{},runEntries:{},intakes:{}};}
+function initial(account:AccountContext):AccountReplica {return {accountId:account.accountId,installationId:account.installationId,replicaId:null,scopeEpoch:'1',cursor:null,plan:account.plan,outbox:[],targets:{},catalog:[],runs:{},activity:null,localRuns:{},materials:{},audio:{},summary:null,homeCounts:null,checkins:{},runEntries:{},intakes:{},meanings:{}};}
 /** One IDB transaction owns the read-modify-write; no network or token enters it. */
 export async function changeAccountReplica(account:AccountContext,change:(value:AccountReplica)=>AccountReplica):Promise<AccountReplica> {
   const db=await open(account.accountId);
@@ -44,12 +46,13 @@ export function queueQuantity(account:AccountContext,quantity:5|10|15|20|30) {
 }
 export function applyQuantityResults(account:AccountContext,results:QuantityResult[]) {
   return changeAccountReplica(account,state=>{
-    let intakes=state.intakes;let plan=state.plan;let outbox=state.outbox;let targets=state.targets;let runs=state.runs,activity=state.activity,summary=state.summary,checkins=state.checkins,runEntries=state.runEntries;
+    let meanings=state.meanings;let intakes=state.intakes;let plan=state.plan;let outbox=state.outbox;let targets=state.targets;let runs=state.runs,activity=state.activity,summary=state.summary,checkins=state.checkins,runEntries=state.runEntries;
     for(const result of results) {
       const accepted=result.status==='accepted'||(result.status==='replayed'&&result.original==='accepted');
       if(accepted && 'value' in result && result.value) {
         const next=result.value.plan?planViewSchema.parse(result.value.plan):null;
         if(next&&(!plan||BigInt(next.revision)>=BigInt(plan.revision)))plan=next;
+        if('meaning' in result.value)meanings={...meanings,[result.value.meaning.id]:result.value.meaning};
         if('intake' in result.value)intakes={...intakes,[result.value.intake.id]:result.value.intake};
         if('target' in result.value)targets=mergeTargets(targets,[result.value.target]);
         if('checkin' in result.value)checkins={...checkins,[result.value.checkin.date]:result.value.checkin};
@@ -59,7 +62,7 @@ export function applyQuantityResults(account:AccountContext,results:QuantityResu
         const error='error' in result?result.error?.code??'unknown':'unknown';
         outbox=outbox.map(x=>x.operation.operationId===result.operationId?{...x,state:'retained' as const,error}:x);
       }
-    }const localRuns={...state.localRuns};for(const id of Object.keys(localRuns))if(!outbox.some(x=>x.operation.kind==='run.record_action'&&x.operation.payload.runId===id))delete localRuns[id];return {...state,plan,outbox,targets,runs,activity,localRuns,summary,checkins,runEntries,intakes};
+    }const localRuns={...state.localRuns};for(const id of Object.keys(localRuns))if(!outbox.some(x=>x.operation.kind==='run.record_action'&&x.operation.payload.runId===id))delete localRuns[id];return {...state,plan,outbox,targets,runs,activity,localRuns,summary,checkins,runEntries,intakes,meanings};
   });
 }
 
@@ -101,3 +104,10 @@ export function queueIntake(account:AccountContext,snapshot:CaptureSnapshot){
   return {...state,outbox:[...state.outbox,{operation,state:'pending',error:null}]};
  });
 }
+
+export function queueSemanticAcceptance(account:AccountContext,lookupId:string,intakeId:string|null){return changeAccountReplica(account,state=>{
+ if(!state.replicaId)throw new Error('请先联网初始化账号');
+ if(state.outbox.some(x=>x.state==='pending'&&x.operation.kind==='semantic.accept'&&x.operation.payload.lookupId===lookupId))return state;
+ const operation=semanticAcceptOperationSchema.parse({operationId:crypto.randomUUID(),occurredAt:new Date().toISOString(),installationId:state.installationId,replicaId:state.replicaId,dependsOn:[],kind:'semantic.accept',payload:{lookupId,expectedRevision:'1',intakeId,consent:'accept_context_expression_sense'}});
+ return {...state,outbox:[...state.outbox,{operation,state:'pending',error:null}]};
+});}

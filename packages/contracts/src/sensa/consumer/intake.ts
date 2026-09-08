@@ -7,7 +7,7 @@ export const captureSnapshotSchema=z.object({
   expression:z.object({text:z.string().min(1).max(2000),start:z.number().int().nonnegative(),end:z.number().int().positive()}).strict().nullable(),
 }).strict().superRefine((value,ctx)=>{const e=value.expression;if(e&&(e.end<=e.start||Array.from(value.sentence).slice(e.start,e.end).join('')!==e.text||e.end>Array.from(value.sentence).length))ctx.addIssue({code:'custom',message:'Invalid code point occurrence',path:['expression']});});
 export const intakeOperationSchema=z.object({operationId:id,occurredAt:z.string().datetime({offset:true}),installationId:id,replicaId:id,dependsOn:z.array(id).max(50),kind:z.literal('intake.save'),payload:z.object({snapshot:captureSnapshotSchema}).strict()}).strict();
-export const intakeViewSchema=z.object({id,revision:z.string().regex(/^[1-9][0-9]*$/u),status:z.literal('inbox'),snapshot:captureSnapshotSchema,savedAt:z.string().datetime({offset:true})}).strict();
+export const intakeViewSchema=z.object({id,revision:z.string().regex(/^[1-9][0-9]*$/u),status:z.enum(['inbox','confirmed']),meaningId:id.nullable().default(null),snapshot:captureSnapshotSchema,savedAt:z.string().datetime({offset:true})}).strict();
 export type CaptureSnapshot=z.infer<typeof captureSnapshotSchema>;
 export type IntakeView=z.infer<typeof intakeViewSchema>;
 export type IntakeOperation=z.infer<typeof intakeOperationSchema>;

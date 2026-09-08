@@ -26,6 +26,8 @@ try{
  const href=await popup.locator('#recent a').first().getAttribute('href');expect(href).toContain('intake=');
  const web=await context.newPage();await web.goto(href!);
  await expect(web.getByRole('heading',{name:'我的内容',exact:true})).toBeVisible();await expect(web.getByRole('region',{name:'收件箱'}).getByText('😀 She took her time, then took a seat.',{exact:true})).toBeVisible();await web.screenshot({path:'/tmp/sensa-m2-inbox.png'});
+ // The Inbox slow path accepts the same fixed relation without adding learning.
+ await web.getByRole('button',{name:'查看句中解释',exact:true}).first().click();await web.getByRole('button',{name:'加入 Sensa',exact:true}).click();await expect(web.getByRole('region',{name:'已确认的意思'})).toContainText('从容');
  // Second occurrence remains a different capture and survives a browser restart offline.
  await context.setOffline(true);
  await reading.evaluate(()=>{document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));const node=document.querySelector('p')!.firstChild!;const range=document.createRange();range.setStart(node,27);range.setEnd(node,31);getSelection()!.removeAllRanges();getSelection()!.addRange(range);document.dispatchEvent(new PointerEvent('pointerup'));});
@@ -36,5 +38,14 @@ try{
  const restored=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');
  const restoredPopup=await context.newPage();await restoredPopup.goto(`chrome-extension://${extensionId}/popup.html`);await restoredPopup.getByRole('button',{name:'检查保存结果'}).click();await expect(restoredPopup.locator('#status')).toContainText('0 项待同步');await expect(restoredPopup.locator('#recent a')).toHaveCount(2);
  expect(await restored.evaluate(async()=>Object.keys((await chrome.storage.session.get('modes')).modes??{}).length)).toBe(0);
- console.log('M2-A extension browser passed: real launchWebAuthFlow + Web consent + PKCE exchange, injected selection/Unicode capture, durable queue, server Inbox, same-account deep link. activeTab itself requires manual grant verification.');
+ // Fast path: another source is confirmed in the original page, then opened as a Meaning.
+ const fast=await context.newPage();await fast.goto('http://127.0.0.1:4321/fast');await restoredPopup.evaluate(()=>chrome.runtime.sendMessage({kind:'toggle'}));
+ await fast.evaluate(()=>{const node=document.querySelector('p')!.firstChild!;const range=document.createRange();range.setStart(node,7);range.setEnd(node,11);getSelection()!.removeAllRanges();getSelection()!.addRange(range);document.dispatchEvent(new PointerEvent('pointerup'));});
+ const fastCdp=await context.newCDPSession(fast);let acceptNode:any;
+ await expect.poll(async()=>{const tree=await fastCdp.send('DOM.getDocument',{depth:-1,pierce:true});function find(node:any):any{if(node.nodeName==='BUTTON'&&node.children?.some((c:any)=>c.nodeValue==='加入 Sensa'))return node;for(const child of [...node.children??[],...node.shadowRoots??[]]){const found=find(child);if(found)return found;}}acceptNode=find(tree.root);return Boolean(acceptNode);}).toBe(true);
+ const box=await fastCdp.send('DOM.getBoxModel',{nodeId:acceptNode.nodeId}),q=box.model.content;await fast.mouse.click((q[0]+q[2])/2,(q[1]+q[5])/2);
+ await expect.poll(async()=>{await restoredPopup.getByRole('button',{name:'检查保存结果'}).click();return restoredPopup.locator('#recent').textContent();}).toContain('已加入 Sensa');
+ const meaningLink=await restoredPopup.locator('#recent a').filter({hasText:'已加入 Sensa'}).first().getAttribute('href');const confirmed=await context.newPage();await confirmed.goto(meaningLink!);await expect(confirmed.getByRole('region',{name:'已确认的意思'})).toBeVisible();await confirmed.screenshot({path:'/tmp/sensa-m2-meaning.png'});
+
+ console.log('M2-A/B extension browser passed: real launchWebAuthFlow + Web consent + PKCE exchange, injected selection/Unicode capture, durable queue, server Inbox, Web slow acceptance, in-page fast acceptance, same-account deep links, offline restart. activeTab itself requires manual grant verification.');
 }finally{await context.close();server.close();}

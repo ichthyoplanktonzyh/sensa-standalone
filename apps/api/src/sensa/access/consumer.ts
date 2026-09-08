@@ -1,3 +1,7 @@
+import {beginLookup,readLookup,finishLookup,acceptSemantic,listMeanings} from '../personal/semantic.js';
+import {resolveSemantic} from '../personal/semanticResolver.js';
+import type {SemanticResolver} from '../personal/semanticResolver.js';
+import {semanticLookupInputSchema} from '@sensa/contracts/sensa';
 import {extensionVerifier,extensionAuthorizationSchema,extensionExchangeSchema,authorizeExtension,exchangeExtension} from './extension.js';
 import {saveIntake,listIntakes,readIntake} from '../personal/intake.js';
 import {issueAccountClock,listCheckIns,recordCheckIn} from '../activity/checkin.js';
@@ -90,6 +94,11 @@ async function execute(db: DatabaseExecutor, a: Account, op: ConsumerOperation):
     if(!prior) return {operationId:op.operationId,status:'retryable',error:{...fail('missing_dependency'),retryable:true}};
     if(prior.result.status!=='accepted') return store({operationId:op.operationId,status:'rejected',error:fail('blocked_by_prior_operation')});
   }
+  if(op.kind==='semantic.accept'){
+    await db.query('SAVEPOINT domain_operation');
+    try{const value=await acceptSemantic(db,a,op);if(!value.alreadySaved)await publish(db,a,'personal_meaning',value.meaning);for(const intake of await listIntakes(db,a))if(intake.meaningId===value.meaning.id)await publish(db,a,'intake',intake);await db.query('RELEASE SAVEPOINT domain_operation');return store({operationId:op.operationId,status:'accepted',value:{...value,plan:await plan(db,a)}});}
+    catch(error){if(!(error instanceof ConsumerError)||error.status===503)throw error;await db.query('ROLLBACK TO SAVEPOINT domain_operation');return store({operationId:op.operationId,status:'rejected',error:fail(error.code)});}
+  }
   if(op.kind==='intake.save'){
     const value=await saveIntake(db,a,op);if(!value.alreadySaved)await publish(db,a,'intake',value.intake);
     return store({operationId:op.operationId,status:'accepted',value:{...value,plan:await plan(db,a)}});
@@ -155,7 +164,7 @@ async function publish(db:DatabaseExecutor,a:Account,entity:string,snapshot:unkn
   await db.query('INSERT INTO sensa_consumer.changes(learner_user_id,sequence,snapshot,entity_type) VALUES($1,$2,$3::jsonb,$4)',[a.learner_user_id,head,JSON.stringify(snapshot),entity]);
 }
 
-export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transaction?:Transaction;mediaReader?:ConsumerMediaReader;clock?:()=>Date} = {}) {
+export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transaction?:Transaction;mediaReader?:ConsumerMediaReader;clock?:()=>Date;semanticResolver?:SemanticResolver} = {}) {
   const clock=options.clock??(()=>new Date());const app=new Hono(); const transaction=options.transaction??unsafeTransaction; const verify=extensionVerifier(options.verify??verifyConsumer,transaction,clock);
   app.use('*',bodyLimit({maxSize:256*1024,onError:c=>c.json({code:'body_too_large'},413)}));
   app.onError((e,c)=> {
@@ -186,7 +195,7 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
       const install=(await db.query('SELECT * FROM sensa_consumer.installations WHERE id=$1 AND account_id=$2',[input.installationId,a.account_id])).rows[0];
       if(!install || (input.replicaId && install.replica_id!==input.replicaId))throw new ConsumerError(403,'replica_scope_mismatch');
       return {wireVersion:consumerWireVersion,scopeEpoch:String(a.epoch),replicaId:install.replica_id,
-        snapshotId:crypto.randomUUID(),pageCursor:null,syncCursor:cursor(a,install.replica_id,String(a.feed_head)),plan:await plan(db,a),targets:await listTargets(db,a),runs:await listRuns(db,a),activity:await currentActivity(db,a),checkins:await listCheckIns(db,a),intakes:await listIntakes(db,a)};
+        snapshotId:crypto.randomUUID(),pageCursor:null,syncCursor:cursor(a,install.replica_id,String(a.feed_head)),plan:await plan(db,a),targets:await listTargets(db,a),runs:await listRuns(db,a),activity:await currentActivity(db,a),checkins:await listCheckIns(db,a),intakes:await listIntakes(db,a),meanings:await listMeanings(db,a)};
     }));
   });
   app.post('/sensa/sync/push',async c=>{
@@ -197,7 +206,7 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
       const a=await account(db,identity,undefined,false,clock());if(String(a.epoch)!==envelope.scopeEpoch)throw new ConsumerError(409,'bootstrap_required');
       await replica(db,a,envelope.replicaId);
     });
-    if(envelope.operations.some(op=>op && typeof op==='object' && 'kind' in op && !['plan.confirm_quantity','plan.set_quantity','curriculum.add_target','learning.retry_preparation','declared_mastery.set','activity.start_or_resume','activity.next','activity.pause','activity.end','run.record_action','check_in.record','intake.save'].includes(String(op.kind))))throw new ConsumerError(400,'unsupported_operation');
+    if(envelope.operations.some(op=>op && typeof op==='object' && 'kind' in op && !['plan.confirm_quantity','plan.set_quantity','curriculum.add_target','learning.retry_preparation','declared_mastery.set','activity.start_or_resume','activity.next','activity.pause','activity.end','run.record_action','check_in.record','intake.save','semantic.accept'].includes(String(op.kind))))throw new ConsumerError(400,'unsupported_operation');
     const input:ConsumerPush=consumerPushSchema.parse(body);
     if(new Set(input.operations.map(o=>o.operationId)).size!==input.operations.length)throw new ConsumerError(400,'duplicate_operation');
     const pending=[...input.operations], ordered:ConsumerOperation[]=[];
@@ -222,6 +231,11 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
         nextCursor:cursor(a,input.replicaId,String(page.at(-1)?.sequence??last)),hasMore,serverTime:iso()};
     }));
   });
+  app.post('/sensa/semantic/lookups',async c=>{const identity=await verify(c.req.raw),input=semanticLookupInputSchema.parse(await c.req.json());const started=await transaction(async db=>beginLookup(db,await account(db,identity,undefined,false,clock()),input));if(!started.fresh)return c.json(started.view);
+    let result=null;try{result=await (options.semanticResolver??resolveSemantic)(input.snapshot);}catch{/* No source/provider payload in logs. */}
+    return c.json(await transaction(async db=>finishLookup(db,await account(db,identity,undefined,false,clock()),input.id,result)));
+  });
+  app.get('/sensa/semantic/lookups/:id',async c=>{const identity=await verify(c.req.raw),id=uuid.parse(c.req.param('id'));return c.json(await transaction(async db=>readLookup(db,await account(db,identity,undefined,false,clock()),id)));});
   app.get('/sensa/intakes/:id',async c=>{const identity=await verify(c.req.raw);const id=uuid.parse(c.req.param('id'));return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());return query(a,await readIntake(db,a,id));}));});
   app.get('/sensa/home',async c=>{
     const identity=await verify(c.req.raw);

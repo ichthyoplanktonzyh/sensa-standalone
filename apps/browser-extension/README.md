@@ -1,7 +1,7 @@
 # Sensa Chrome 采集插件
 
-M2-A 本地开发版：主动划选 → 保存待处理 → 同账号 Web 收件箱。
-句中解释与直接语义接受尚待 M2-B，当前不显示可用的确认按钮。
+M2-A/B 本地开发版：主动划选 → 句中解释 → 原位确认或保存待处理 → 同账号 Web。
+真实解释需服务端显式配置 Semantic provider；无 provider 时仍可保存 Inbox。
 
 根目录 `npm run build` 构建插件，默认只连接 loopback Web 3001/API 4319。
 CI/正式打包需明确设置 `SENSA_EXTENSION_WEB_URL` 和 `SENSA_EXTENSION_API_URL`；

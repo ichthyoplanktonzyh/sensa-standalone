@@ -1,3 +1,4 @@
+import {runSemanticChecks,mockSemanticResolver} from './support/consumerSemanticChecks.mts';
 import {runIntakeChecks} from './support/consumerIntakeChecks.mts';
 import {runCheckInChecks} from './support/consumerCheckInChecks.mts';
 import {runRetentionChecks} from './support/consumerRetentionChecks.mts';
@@ -41,7 +42,7 @@ async function token(sub=subject,session=crypto.randomUUID(),aud='authenticated'
 let mediaUnavailable=false;
 const mediaReader=async(digest:string)=>{if(mediaUnavailable)return null;try{const bytes=await readFile('/tmp/sensa-m1b-tactful.mp3');return createHash('sha256').update(bytes).digest('hex')===digest?bytes:null;}catch{return null;}};
 const app=new Hono();app.use('*',cors({origin:['http://127.0.0.1:3001','http://localhost:3001'],allowHeaders:['authorization','content-type','apikey','x-client-info','x-supabase-api-version','x-installation-id']}));
-app.route('',createConsumerRoutes({verify:createConsumerVerifier(issuer,createLocalJWKSet({keys:[jwk]})),transaction,mediaReader,clock:()=>testNow}));
+app.route('',createConsumerRoutes({verify:createConsumerVerifier(issuer,createLocalJWKSet({keys:[jwk]})),transaction,mediaReader,semanticResolver:mockSemanticResolver,clock:()=>testNow}));
 const bearer=await token();const install=crypto.randomUUID();
 async function request(path:string,body?:unknown,bearerToken=bearer){
   const response=await app.request(path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+bearerToken,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
@@ -211,6 +212,7 @@ if(process.argv.includes('--initial')){
 }
 if(process.argv.includes('--retention'))await runRetentionChecks({pool,issuer,token,initialize,bootstrap,request,push,now:()=>testNow,setNow:(at:Date)=>{testNow=at;},failDecision:(yes:boolean)=>{injectDecisionFailure=yes;}});
 if(process.argv.includes('--checkin'))await runCheckInChecks({pool,issuer,token,initialize,bootstrap,request,push,now:()=>testNow,setNow:(at:Date)=>{testNow=at;},failCheckIn:(yes:boolean)=>{injectCheckInFailure=yes;}});
+if(process.argv.includes('--semantic'))await runSemanticChecks({request,initialize,bootstrap,push,token,pool,issuer,failLedger:(yes:boolean)=>{injectFailure=yes;}});
 if(process.argv.includes('--intake')){const intakeSubject=crypto.randomUUID();await pool.query('INSERT INTO sensa_consumer.invitations(issuer,subject) VALUES($1,$2)',[issuer,intakeSubject]);await runIntakeChecks({request,initialize,bootstrap,push,token,subject:intakeSubject,pool,issuer,failLedger:(yes:boolean)=>{injectFailure=yes;}});}
 assert.equal((await request('/sensa/account/session/revoke',{operationId:crypto.randomUUID()})).status,200);
 assert.equal((await request('/sensa/account/session/revoke',{operationId:crypto.randomUUID()})).status,200);
@@ -223,7 +225,7 @@ if(process.argv.includes('--serve')) {
   const {serve}=await import(serverPackage);
   let browserClockOffset=0;const browserApp=new Hono();
   browserApp.use('*',cors({origin:'http://127.0.0.1:3001',allowHeaders:['authorization','content-type','apikey','x-client-info','x-supabase-api-version']}));
-  browserApp.route('',createConsumerRoutes({verify:createConsumerVerifier(issuer,createLocalJWKSet({keys:[jwk]})),transaction,mediaReader,clock:()=>new Date(Date.now()+browserClockOffset)}));
+  browserApp.route('',createConsumerRoutes({verify:createConsumerVerifier(issuer,createLocalJWKSet({keys:[jwk]})),transaction,mediaReader,semanticResolver:mockSemanticResolver,clock:()=>new Date(Date.now()+browserClockOffset)}));
   // Synthetic Auth API only in this explicitly launched loopback test harness.
   // This is NOT real Supabase mail delivery and is never imported by production.
   const browserUsers=new Map([['test@sensa.invalid',crypto.randomUUID()],['second@sensa.invalid',crypto.randomUUID()]]);

@@ -19,3 +19,5 @@ export * from './consumer/runtime.js';
 export * from './consumer/checkin.js';
 
 export * from './consumer/intake.js';
+
+export * from './consumer/semantic.js';

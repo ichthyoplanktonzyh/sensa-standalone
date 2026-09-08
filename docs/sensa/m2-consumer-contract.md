@@ -30,3 +30,24 @@ lookup 请求固定 snapshot/query identity，输出 candidate ID/revision、完
 独立 personal.add_to_learning 引用已接受 Alignment revision 与显式 anchor-use 选择，汇入现有 Target 去重。删除个人材料不删学习历史。Content Task 固定 Target/Demand/purpose，Attempt 受预算/超时/lease 限制；取消/过期 attempt 的迟到 bundle 不冻结。模型只产出候选，独立 validator 接纳后固定 digest。必需角色失败 blocked/preparing，可选音频失败显式缺省；重试不换 Target/Policy。
 
 后续各段在实现前细化可执行 schema 和事务验收向量，不将本节设计当作已交付。
+
+## M2-B 可执行确认合同（2026-09-08）
+
+`POST /sensa/semantic/lookups` 固定 id/snapshot；同 id 原载荷可查询但不重新调用模型，
+修改载荷拒绝。`GET .../:id` 检查原结果；单账号滚动 24 小时最多 30 次新 lookup，
+provider 单次 35 秒，45 秒后迟到结果不进入 ready，服务重启遗留 running 读时转 timeout。
+候选有 24 小时接受期限；未保存的过期预览在该账号后续 lookup 访问时清除全文/候选，
+保留 id/digest 以拒绝复活原请求。它不是 Inbox 或个人意义库存。
+
+`semantic.accept` 是 Sync v3 操作，引用 lookupId/revision=1/intakeId? 与明确的
+`accept_context_expression_sense` command intent。只有同账号、ready、完整 occurrence、
+未过期候选可新接受。事务创建 stable semantic registry、Context/Expression Anchor identities、
+Meaning/Alignment/Acceptance，记录原 Session/installation/operation。Anchor 输入与完整
+Proposal 保留在私人 Meaning，公共 Sense 只含抽象 semantic spec 和 generator digest。
+完全相同 semantic spec + typed expression 复用稳定 registry；不是按词形或中文标签合并意思。
+含歧义、schema 不合法、模型失败都保留材料而不建立 membership。
+
+`personal_meaning` feed 与 bootstrap，intake.status 从 inbox 变 confirmed 并引用 meaningId；
+Web 待处理与已确认分开，深链只读取对应账号投影。Acceptance 不创建 Curriculum/Runtime。
+真实 DeepSeek adapter 必须显式配置 `SENSA_SEMANTIC_PROVIDER=deepseek`，只在服务端读取
+DEEPSEEK_API_KEY；常规 smoke 注入确定性 adapter。模型不得访问 SQL、接受或学习操作。

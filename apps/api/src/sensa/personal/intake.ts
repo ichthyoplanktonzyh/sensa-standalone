@@ -3,13 +3,14 @@ import type {IntakeOperation,IntakeView} from '@sensa/contracts/sensa';
 import type {DatabaseExecutor} from '../../database/index.js';
 import {ConsumerError} from '../access/auth.js';
 type Scope={learner_user_id:string;now:Date};
-function view(row:Record<string,any>):IntakeView{return intakeViewSchema.parse({id:row.id,revision:String(row.revision),status:'inbox',snapshot:row.snapshot,savedAt:new Date(row.saved_at).toISOString()});}
+function view(row:Record<string,any>):IntakeView{return intakeViewSchema.parse({id:row.id,revision:String(row.revision),status:row.meaning_id?'confirmed':'inbox',meaningId:row.meaning_id??null,snapshot:row.snapshot,savedAt:new Date(row.saved_at).toISOString()});}
 export async function saveIntake(db:DatabaseExecutor,a:Scope,op:IntakeOperation){
  const bytes=new TextEncoder().encode(canonicalConsumerJson(captureIdentity(op.payload.snapshot)));
  const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
  const old=(await db.query('SELECT * FROM sensa_consumer.intakes WHERE learner_user_id=$1 AND identity_digest=$2',[a.learner_user_id,digest])).rows[0];
  if(old)return {intake:view(old),alreadySaved:true};
- const row=(await db.query('INSERT INTO sensa_consumer.intakes(id,learner_user_id,identity_digest,snapshot,saved_at) VALUES($1,$2,$3,$4::jsonb,$5) RETURNING *',[crypto.randomUUID(),a.learner_user_id,digest,JSON.stringify(op.payload.snapshot),a.now])).rows[0]!;
+ const meaning=(await db.query('SELECT id FROM sensa_consumer.personal_meanings WHERE learner_user_id=$1 AND identity_digest=$2',[a.learner_user_id,digest])).rows[0];
+ const row=(await db.query('INSERT INTO sensa_consumer.intakes(id,learner_user_id,identity_digest,snapshot,saved_at,meaning_id) VALUES($1,$2,$3,$4::jsonb,$5,$6) RETURNING *',[crypto.randomUUID(),a.learner_user_id,digest,JSON.stringify(op.payload.snapshot),a.now,meaning?.id??null])).rows[0]!;
  return {intake:view(row),alreadySaved:false};
 }
 export async function listIntakes(db:DatabaseExecutor,a:Scope){
