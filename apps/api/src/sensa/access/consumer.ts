@@ -1,3 +1,4 @@
+import {setAnchorUse} from '../personal/anchorUse.js';
 import {setContentMembership} from '../personal/membership.js';
 import {processTask} from '../provisioning/tasks.js';
 import {generateContent,reviewContent} from '../provisioning/material.js';
@@ -98,8 +99,15 @@ async function execute(db: DatabaseExecutor, a: Account, op: ConsumerOperation):
     if(!prior) return {operationId:op.operationId,status:'retryable',error:{...fail('missing_dependency'),retryable:true}};
     if(prior.result.status!=='accepted') return store({operationId:op.operationId,status:'rejected',error:fail('blocked_by_prior_operation')});
   }
-  if(op.kind==='content.set_membership'){
-    try{const value=await setContentMembership(db,a,op);await publish(db,a,'meaning' in value?'personal_meaning':'intake','meaning' in value?value.meaning:value.intake);return store({operationId:op.operationId,status:'accepted',value:{plan:await plan(db,a),...value}});}catch(e){if(e instanceof ConsumerError)return store({operationId:op.operationId,status:'rejected',error:fail(e.code)});throw e;}
+  if(op.kind==='content.set_membership'||op.kind==='personal.set_anchor_use'){
+    await db.query('SAVEPOINT domain_operation');
+    try{
+      const {targetIds,...value}=op.kind==='personal.set_anchor_use'?await setAnchorUse(db,a,op):await setContentMembership(db,a,op);
+      await publish(db,a,'meaning' in value?'personal_meaning':'intake','meaning' in value?value.meaning:value.intake);
+      for(const id of targetIds)await publish(db,a,'target',await targetView(db,a,id));
+      await db.query('RELEASE SAVEPOINT domain_operation');
+      return store({operationId:op.operationId,status:'accepted',value:{plan:await plan(db,a),...value}});
+    }catch(e){if(!(e instanceof ConsumerError))throw e;await db.query('ROLLBACK TO SAVEPOINT domain_operation');return store({operationId:op.operationId,status:'rejected',error:fail(e.code)});}
   }
   if(op.kind==='semantic.accept'){
     await db.query('SAVEPOINT domain_operation');
@@ -213,7 +221,7 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
       const a=await account(db,identity,undefined,false,clock());if(String(a.epoch)!==envelope.scopeEpoch)throw new ConsumerError(409,'bootstrap_required');
       await replica(db,a,envelope.replicaId);
     });
-    if(envelope.operations.some(op=>op && typeof op==='object' && 'kind' in op && !['plan.confirm_quantity','plan.set_quantity','curriculum.add_target','learning.retry_preparation','declared_mastery.set','activity.start_or_resume','activity.next','activity.pause','activity.end','run.record_action','check_in.record','intake.save','semantic.accept','personal.add_to_learning','learning.cancel_preparation','content.set_membership'].includes(String(op.kind))))throw new ConsumerError(400,'unsupported_operation');
+    if(envelope.operations.some(op=>op && typeof op==='object' && 'kind' in op && !['plan.confirm_quantity','plan.set_quantity','curriculum.add_target','learning.retry_preparation','declared_mastery.set','activity.start_or_resume','activity.next','activity.pause','activity.end','run.record_action','check_in.record','intake.save','semantic.accept','personal.add_to_learning','learning.cancel_preparation','content.set_membership','personal.set_anchor_use'].includes(String(op.kind))))throw new ConsumerError(400,'unsupported_operation');
     const input:ConsumerPush=consumerPushSchema.parse(body);
     if(new Set(input.operations.map(o=>o.operationId)).size!==input.operations.length)throw new ConsumerError(400,'duplicate_operation');
     const pending=[...input.operations], ordered:ConsumerOperation[]=[];

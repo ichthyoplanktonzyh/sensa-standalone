@@ -9,20 +9,21 @@ export async function retentionAvailability(db:DatabaseExecutor,a:RuntimeScope){
  const due=(await db.query(`SELECT m.*,t.learning_target_id FROM sensa_consumer.retention_memory m JOIN sensa_consumer.target_memberships t USING(retention_target_id)
  JOIN sensa.retention_targets rt USING(retention_target_id) LEFT JOIN sensa_consumer.declared_masteries d USING(retention_target_id)
  WHERE m.learner_user_id=$1 AND m.due_at<=$2 AND rt.status='active' AND coalesce(d.active,false)=false
+ AND EXISTS(SELECT FROM sensa_consumer.target_plans p WHERE p.membership_id=t.id AND p.readiness='ready')
  AND NOT EXISTS(SELECT FROM sensa_consumer.runs r WHERE r.retention_target_id=m.retention_target_id AND r.status='active')
  AND NOT EXISTS(SELECT FROM sensa_consumer.relearning_needs n WHERE n.retention_target_id=m.retention_target_id AND n.status='pending') ORDER BY m.due_at,m.retention_target_id`,[a.learner_user_id,a.now])).rows;
  const needs=(await db.query(`SELECT n.*,t.learning_target_id FROM sensa_consumer.relearning_needs n JOIN sensa_consumer.target_memberships t USING(retention_target_id)
  JOIN sensa.retention_targets rt USING(retention_target_id) LEFT JOIN sensa_consumer.declared_masteries d USING(retention_target_id)
- WHERE n.learner_user_id=$1 AND n.status='pending' AND rt.status='active' AND coalesce(d.active,false)=false ORDER BY n.next_eligible_at,n.id`,[a.learner_user_id])).rows;
+ WHERE (n.run_id IS NOT NULL OR EXISTS(SELECT FROM sensa_consumer.target_plans p WHERE p.membership_id=t.id AND p.readiness='ready')) AND n.learner_user_id=$1 AND n.status='pending' AND rt.status='active' AND coalesce(d.active,false)=false ORDER BY n.next_eligible_at,n.id`,[a.learner_user_id])).rows;
  return {due,needs};
 }
 async function retentionMaterial(db:DatabaseExecutor,a:RuntimeScope,targetId:string,purpose:string){
- const source=(await db.query("SELECT materialization_id FROM sensa_consumer.runs WHERE learning_target_id=$1 AND learner_user_id=$2 AND purpose='initial_learning' AND status='completed'",[targetId,a.learner_user_id])).rows[0];
+ const source=(await db.query("SELECT p.materialization_id FROM sensa_consumer.target_plans p JOIN sensa_consumer.target_memberships t ON t.id=p.membership_id WHERE t.learning_target_id=$1 AND t.learner_user_id=$2 AND p.readiness='ready' AND EXISTS(SELECT FROM sensa_consumer.runs r WHERE r.learning_target_id=t.learning_target_id AND r.learner_user_id=t.learner_user_id AND r.purpose='initial_learning' AND r.status='completed')",[targetId,a.learner_user_id])).rows[0];
  if(!source)throw new ConsumerError(409,'material_unavailable');
  const material=await materialView(db,a,source.materialization_id);const workspace=await learnerScope(db,a);const id=crypto.randomUUID();
  // Same validated recall/reveal roles, separately pinned to the retention purpose.
  await db.query(`INSERT INTO sensa.learning_materializations(learning_materialization_id,workspace_id,learner_user_id,learning_target_id,protocol_purpose,provisioning_path,content_schema_version,content_payload,content_digest,validation_status,validator_version,provenance)
- VALUES($1,$2,$3,$4,$5,'published','lightweight-initial-materialization-v1',$6::jsonb,$7,'validated','consumer-retention-reuse-v1',$8::jsonb)`,[id,workspace,a.learner_user_id,targetId,purpose,JSON.stringify(material.content),material.digest,JSON.stringify({sourceMaterializationId:source.materialization_id,purpose,policy:'lightweight-v1'})]);
+ VALUES($1,$2,$3,$4,$5,(SELECT provisioning_path FROM sensa.learning_materializations WHERE learning_materialization_id=$9),'lightweight-initial-materialization-v1',$6::jsonb,$7,'validated','consumer-retention-reuse-v1',$8::jsonb)`,[id,workspace,a.learner_user_id,targetId,purpose,JSON.stringify(material.content),material.digest,JSON.stringify({sourceMaterializationId:source.materialization_id,purpose,policy:'lightweight-v1'}),source.materialization_id]);
  return {id,digest:material.digest};
 }
 export async function selectRetention(db:DatabaseExecutor,a:RuntimeScope,activityId:string,early:boolean){

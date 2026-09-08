@@ -1,4 +1,4 @@
-import {semanticAcceptOperationSchema,personalMeaningViewSchema} from './semantic.js';
+import {anchorUseOperationSchema,semanticAcceptOperationSchema,personalMeaningViewSchema} from './semantic.js';
 import {contentMembershipOperationSchema,intakeOperationSchema,intakeViewSchema} from './intake.js';
 import {accountClockGrantSchema,checkInOperationSchema,checkInViewSchema} from './checkin.js';
 import { z } from 'zod';
@@ -40,7 +40,7 @@ export const quantityOperationSchema = z.discriminatedUnion('kind', [
     planId: id, expectedRevision: revisionSchema, dailyNewLimit: quantitySchema,
   }).strict() }).strict(),
 ]);
-export const consumerOperationSchema=z.union([quantityOperationSchema,targetOperationSchema,runtimeOperationSchema,checkInOperationSchema,intakeOperationSchema,semanticAcceptOperationSchema,personalLearningOperationSchema,contentMembershipOperationSchema]);
+export const consumerOperationSchema=z.union([quantityOperationSchema,targetOperationSchema,runtimeOperationSchema,checkInOperationSchema,intakeOperationSchema,semanticAcceptOperationSchema,personalLearningOperationSchema,contentMembershipOperationSchema,anchorUseOperationSchema]);
 export type ConsumerOperation=z.infer<typeof consumerOperationSchema>;
 export const consumerPushSchema = z.object({
   wireVersion: z.literal(consumerWireVersion), canonicalizerVersion: z.literal(consumerCanonicalizerVersion),

@@ -37,8 +37,8 @@ async function runFaultChecks({request,initialize,bootstrap,push,token,pool,issu
   const view=async()=>(await request('/sensa/learning-targets/'+id,undefined,bearer)).body.data;
   const advance=async(fresh=false)=>(await (fresh?restartRequest:request)('/sensa/provisioning/'+id+'/advance',{},bearer));
   const command=async(kind:string)=>send(kind,{learningTargetId:id,expectedPlanRevision:(await view()).plan.revision});
-  const task=async()=>(await pool.query('SELECT * FROM sensa_consumer.provisioning_tasks WHERE learning_target_id=$1',[id])).rows[0];
-  return {id,bearer,boot,installationId,view,advance,command,task};
+  const task=async()=>(await pool.query('SELECT * FROM sensa_consumer.provisioning_tasks WHERE learning_target_id=$1 AND superseded_at IS NULL',[id])).rows[0];
+  return {id,bearer,boot,installationId,view,advance,command,task,send,meaning};
  }
  function gate(){let release!:()=>void,started!:()=>void;const waiting=new Promise<void>(r=>release=r),entered=new Promise<void>(r=>started=r);return {release,entered,run:async()=>{started();await waiting;}};}
  try{
@@ -63,6 +63,40 @@ async function runFaultChecks({request,initialize,bootstrap,push,token,pool,issu
   const timed=await setup(),v=gate();provisioningFaults.review=async()=>{await v.run();return {accepted:true,provider:'fixture',model:'late-review',reason:'synthetic'};};
   const validating=timed.advance();await v.entered;assert.equal((await timed.task()).status,'validating');setNow(new Date(now().getTime()+76000));assert.equal((await timed.advance(true)).body.data.plan.reason,'attempt_timed_out');v.release();await validating;assert.equal((await timed.task()).materialization_id,null);delete provisioningFaults.review;
   assert.equal((await timed.command('learning.retry_preparation')).status,'accepted');assert.equal((await timed.advance(true)).body.data.plan.readiness,'ready');
+  // Explicit grants pin only the sentence. Revocation while generating stops the review call.
+  const privateCase=await setup();let privateMeaning=(await privateCase.send('personal.set_anchor_use',{meaningId:privateCase.meaning.id,expectedRevision:'1',enabled:true,policy:'original-context-v1'})).value.meaning;
+  assert.ok(privateMeaning.anchorUseGrantId);assert.equal(privateMeaning.revision,'2');
+  const pg=gate();let reviewCalls=0;provisioningFaults.generate=async req=>{const anchor=req.contextArtifacts.find(x=>x.source==='personal_anchor')!;assert.equal(anchor.personalAnchorUseGrantId,privateMeaning.anchorUseGrantId);assert.equal(anchor.payload.scene,privateCase.meaning.snapshot.sentence);assert.ok(!JSON.stringify(req).includes('example.org/fault'));await pg.run();return {cue:{scene:'你慢慢完成手头的事情，不着急行动。',senseFocus:'从容地行动'},provider:'fixture',model:'private-context'};};
+  provisioningFaults.review=async()=>{reviewCalls++;return {accepted:true,provider:'fixture',model:'independent',reason:'ok'};};
+  const privateRunning=privateCase.advance();await pg.entered;const originalTask=await privateCase.task();
+  const revokeResult=await privateCase.send('personal.set_anchor_use',{meaningId:privateMeaning.id,expectedRevision:'2',enabled:false,policy:'original-context-v1'});assert.equal(revokeResult.status,'accepted',JSON.stringify(revokeResult));privateMeaning=revokeResult.value.meaning;assert.equal(privateMeaning.anchorUseGrantId,null);
+  assert.notEqual((await privateCase.task()).id,originalTask.id);assert.equal((await privateCase.task()).fixed_input.anchor,null);pg.release();await privateRunning;assert.equal(reviewCalls,0);assert.equal((await privateCase.task()).materialization_id,null);
+  const revoked=(await pool.query('SELECT * FROM sensa_consumer.anchor_use_grants WHERE id=$1',[originalTask.fixed_input.anchor.grantId])).rows[0];assert.ok(revoked.revoked_at);await assert.rejects(pool.query('UPDATE sensa_consumer.anchor_use_grants SET revoked_at=NULL WHERE id=$1',[revoked.id]));
+  delete provisioningFaults.generate;delete provisioningFaults.review;await privateCase.advance();assert.equal((await privateCase.view()).plan.readiness,'ready');
+  // Revocation while an independent validator is already in flight cannot freeze a late bundle.
+  privateMeaning=(await privateCase.send('personal.set_anchor_use',{meaningId:privateMeaning.id,expectedRevision:'3',enabled:true,policy:'original-context-v1'})).value.meaning;
+  assert.notEqual(privateMeaning.anchorUseGrantId,revoked.id);const vg=gate();provisioningFaults.review=async()=>{await vg.run();return {accepted:true,provider:'fixture',model:'late',reason:'ok'};};
+  const privateValidating=privateCase.advance();await vg.entered;
+  const archive=await privateCase.send('content.set_membership',{entity:'meaning',id:privateMeaning.id,expectedRevision:'4',active:false});assert.equal(archive.status,'accepted');assert.equal(archive.value.meaning.anchorUseGrantId,null);
+  vg.release();await privateValidating;assert.equal((await privateCase.task()).materialization_id,null);delete provisioningFaults.review;
+  const restored=await privateCase.send('content.set_membership',{entity:'meaning',id:privateMeaning.id,expectedRevision:'5',active:true});assert.equal(restored.value.meaning.anchorUseGrantId,null);assert.equal((await privateCase.task()).fixed_input.anchor,null);
+  assert.equal((await privateCase.send('personal.set_anchor_use',{meaningId:privateMeaning.id,expectedRevision:'4',enabled:true,policy:'original-context-v1'})).error.code,'revision_conflict');
+  // An already-started run retains its immutable material; future retention reuses the new generic plan.
+  const historical=await setup();await historical.send('personal.set_anchor_use',{meaningId:historical.meaning.id,expectedRevision:'1',enabled:true,policy:'original-context-v1'});provisioningFaults.generate=async()=>({cue:{scene:'一个人放慢脚步，按照自己的节奏完成原先安排的事情。',senseFocus:'从容地行动'},provider:'fixture',model:'private-history'});await historical.advance();delete provisioningFaults.generate;const oldMaterial=(await historical.view()).plan.materializationId;
+  const clockSessionId=crypto.randomUUID(),home=async()=>(await request('/sensa/home',undefined,historical.bearer)).body.data;
+  const start=async(mode='mixed')=>(await historical.send('activity.start_or_resume',{mode,activityId:null,expectedScopeRevision:(await home()).plan.scopeRevision,clockSessionId})).value.runtime;
+  const act=async(run:any,kind:string)=>{const action=kind==='rate'?{kind,rating:'good'}:{kind};const op={operationId:crypto.randomUUID(),occurredAt:run.offlineGrant.issuedAt,installationId:historical.installationId,replicaId:historical.boot.replicaId,dependsOn:[],kind:'run.record_action',payload:{runId:run.id,expectedRevision:run.revision,stepId:run.currentStep.id,ordinal:run.currentStep.ordinal,materialDigest:run.materialDigest,grantId:run.offlineGrant.id,clock:{sessionId:clockSessionId,elapsedMs:0},action}};const result=(await push(historical.boot,[op],historical.bearer)).body.results[0];assert.equal(result.status,'accepted',JSON.stringify(result));return result.value.runtime;};
+  let runtime=await start();assert.equal(runtime.run.materializationId,oldMaterial);
+  await historical.send('personal.set_anchor_use',{meaningId:historical.meaning.id,expectedRevision:'2',enabled:false,policy:'original-context-v1'});
+  assert.equal((await request('/sensa/materializations/'+oldMaterial,undefined,historical.bearer)).status,200);
+  runtime=await act(runtime.run,'reveal');runtime=await act(runtime.run,'rate');assert.equal(runtime.run.completion.kind,'study_completion');
+  setNow(new Date(now().getTime()+4*86400000));
+  const blockedRuntime=await start('review_only');assert.equal(blockedRuntime.run,null);
+  await historical.advance();const newMaterial=(await historical.view()).plan.materializationId;assert.notEqual(newMaterial,oldMaterial);
+  runtime=await start('review_only');assert.equal(runtime.run.purpose,'retention_review');const generic=(await request('/sensa/materializations/'+newMaterial,undefined,historical.bearer)).body.data,previous=(await request('/sensa/materializations/'+oldMaterial,undefined,historical.bearer)).body.data;assert.notEqual(generic.digest,previous.digest);assert.equal(runtime.run.materialDigest,generic.digest);assert.notEqual(runtime.run.materializationId,newMaterial);
+  // Another learner cannot change the grant even knowing the Meaning ID.
+  assert.equal((await privateCase.send('personal.set_anchor_use',{meaningId:historical.meaning.id,expectedRevision:'3',enabled:true,policy:'original-context-v1'})).error.code,'not_found');
+  console.log('M2 anchor authorization passed: explicit sentence-only grant, generation/review revocation races, removal/restore, immutable revoked grants, stale/cross-account rejection, preserved active run and generic future retention.');
   console.log('M2-C failure matrix passed: independent rejection, immutable snapshots, provider failure/three-attempt budget, concurrent polling, cancel/late response, reconstructed routes and expired validation lease.');
  }finally{delete provisioningFaults.generate;delete provisioningFaults.review;setNow(originalNow);}
 }

@@ -55,7 +55,7 @@ DEEPSEEK_API_KEY；常规 smoke 注入确定性 adapter。模型不得访问 SQL
 ## M2-C 入学与内容准备施工合同
 
 `personal.add_to_learning` 显式引用 Meaning/Alignment revision 与当前 Curriculum scope revision，
-默认不授权原网页 Anchor 用于生成；首条内容路径只使用已接受的抽象 Sense 与 target expression。
+默认不授权原网页 Anchor 用于生成；未授权路径只使用已接受的抽象 Sense 与 target expression。
 正式目标输入由 `target_candidates` 统一保存并按 learner 隔离，公开 catalog 为过滤视图；
 不能把私人 Meaning 作为公开 catalog 条目。入口复用 Target 去重及 M1 Runtime，不把 learner-confirmed 冒充 reviewed。
 
@@ -65,7 +65,7 @@ Content generator 只提交 cue candidate；target/meaning 由 authoritative pas
 独立 validator 验证固定语义一致性、语言、scene 质量与 reveal 前泄漏，再经 schema/角色/来源验证冻结。
 缺可选音频不伪造 URL，必需内容未就绪不允许开始 Runtime。
 
-每 task 最多 3 次显式尝试，每 attempt 最多一次生成和一次独立校验，无开放工具。
+每账号滚动 24 小时最多 30 次准备尝试，每 task 最多 3 次显式尝试，每 attempt 最多一次生成和一次独立校验，无开放工具。
 生成结果先持久提交 bundle 再进入校验；lease 过期保留未知/失败原因，不自动重复计费。
 重启后 ready 保持；pending 可领取，未过期进行中不重复调用，过期须明确重试。
 取消阻止迟到结果冻结；原 Target 和历史不删除。epoch/账号撤销在各阶段重新检查。
@@ -77,3 +77,12 @@ Lookup 可显式引用 previousLookupId 和 learner 自写关注点，生成新�
 查询最新未取代的 lookup；模型失败后重试必须由用户触发。
 `content.set_membership` 按 entity/id/revision 控制可恢复移除/恢复，走同一 local-first 账本。
 移除不删除学习目标或历史；旧保存/接受不得复活移除的个人列表状态。永久删除另走数据控制。
+
+## 原文使用授权与撤销
+
+`personal.set_anchor_use` 固定 Meaning expectedRevision、enabled 和 `original-context-v1`，
+显式允许把该固定句子发给 DeepSeek 生成/独立校验；不包含来源 URL/title 或私人 Focus。
+Meaning projection 的 nullable `anchorUseGrantId` 是服务端当前许可。未同步撤销尚未生效。
+授权改变时保留旧 task，创建新的当前 task；原文 artifact 必须带 grant ID 与原文版本 digest。
+撤销/移出个人内容阻止后续调用和迟到冻结；恢复列表不恢复 grant。已开始的 Run 与历史保持
+不可变，新学习/复习/重学只使用当前 ready plan 的材料。详见[交付记录](m2-anchor-use-handoff.md)。

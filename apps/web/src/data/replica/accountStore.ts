@@ -1,4 +1,4 @@
-import {contentMembershipOperationSchema,personalLearningOperationSchema,semanticAcceptOperationSchema} from '@sensa/contracts/sensa';
+import {anchorUseOperationSchema,contentMembershipOperationSchema,personalLearningOperationSchema,semanticAcceptOperationSchema} from '@sensa/contracts/sensa';
 import type {PersonalMeaningView} from '@sensa/contracts/sensa';
 import {intakeOperationSchema,captureIdentity,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import type {CaptureSnapshot,IntakeView} from '@sensa/contracts/sensa';
@@ -124,5 +124,12 @@ export function queueContentMembership(account:AccountContext,entity:'intake'|'m
  const item=entity==='meaning'?state.meanings[id]:state.intakes[id];if(!item||!state.replicaId)throw new Error('请先同步内容');
  if(state.outbox.some(x=>x.state==='pending'&&x.operation.kind==='content.set_membership'&&x.operation.payload.id===id))return state;
  const operation=contentMembershipOperationSchema.parse({operationId:crypto.randomUUID(),occurredAt:new Date().toISOString(),installationId:state.installationId,replicaId:state.replicaId,dependsOn:[],kind:'content.set_membership',payload:{entity,id,expectedRevision:item.revision,active}});
+ return {...state,outbox:[...state.outbox,{operation,state:'pending',error:null}]};
+});}
+
+export function queueAnchorUse(account:AccountContext,meaningId:string,enabled:boolean){return changeAccountReplica(account,state=>{
+ const meaning=state.meanings[meaningId];if(!meaning||!state.replicaId)throw new Error('请先同步内容');
+ if(state.outbox.some(x=>x.state==='pending'&&x.operation.kind==='personal.set_anchor_use'&&x.operation.payload.meaningId===meaningId))return state;
+ const operation=anchorUseOperationSchema.parse({operationId:crypto.randomUUID(),occurredAt:new Date().toISOString(),installationId:state.installationId,replicaId:state.replicaId,dependsOn:[],kind:'personal.set_anchor_use',payload:{meaningId,expectedRevision:meaning.revision,enabled,policy:'original-context-v1'}});
  return {...state,outbox:[...state.outbox,{operation,state:'pending',error:null}]};
 });}
