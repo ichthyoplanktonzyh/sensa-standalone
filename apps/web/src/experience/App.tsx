@@ -1964,7 +1964,7 @@ export default function App() {
             onTabChange={setStudyTab}
             onAddLearning={() => goMain('s-learning-entry')}
             onOpenTargetLibrary={() => goMain('s-learning-library')}
-            onOpenTarget={openLearningTarget}
+            onOpenTarget={id=>{if(id in PROTOTYPE_LEARNING_TARGETS)openLearningTarget(id as PrototypeLearningTargetId);}}
             onPolicyChange={policy => dispatchJourney({ type: 'selectDefaultPolicy', policy })}
             defaultPolicy={defaultLearningPolicy}
             learningTargetCount={visibleLearningTargetIds.length}
@@ -1998,14 +1998,14 @@ export default function App() {
             declaredMasteryTargetIds={visibleDeclaredMasteryTargetIds}
             onBack={backMain}
             onAddLearning={() => goMain('s-learning-entry')}
-            onOpenTarget={openLearningTarget}
+            onOpenTarget={id=>{if(id in PROTOTYPE_LEARNING_TARGETS)openLearningTarget(id as PrototypeLearningTargetId);}}
           />
 
           {/* 4.2 添加学习内容：三种来源汇入同一学习目标 */}
           <LearningEntryScreen
             active={viewMode === 'main' && mainStack.includes('s-learning-entry')}
             onBack={backMain}
-            onOpenTarget={openLearningTarget}
+            onOpenTarget={id=>{if(id in PROTOTYPE_LEARNING_TARGETS)openLearningTarget(id as PrototypeLearningTargetId);}}
             onOpenPersonalSemanticWorld={() => setMainStack(['s-semantic-world'])}
           />
 
@@ -2052,7 +2052,7 @@ export default function App() {
             active={viewMode === 'main' && mainStack.includes('s-stats')}
             onBack={backMain}
             records={learningRecords}
-            onOpenTarget={openLearningTarget}
+            onOpenTarget={id=>{if(id in PROTOTYPE_LEARNING_TARGETS)openLearningTarget(id as PrototypeLearningTargetId);}}
           />
 
           {/* 5. 个人中心 */}

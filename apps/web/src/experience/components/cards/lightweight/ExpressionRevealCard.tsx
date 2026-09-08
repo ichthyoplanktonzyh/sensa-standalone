@@ -4,11 +4,13 @@ import type { ExpressionRevealCardPresentation } from "../../../learningRuntime/
 import type { LightweightInitialRating } from "../../../learningRuntime/lightweightInitialProtocol";
 import { RuntimeRating } from "../../learning/RuntimeRating";
 interface ExpressionRevealCardProps {
+  readonly initial?: boolean;
   readonly presentation: ExpressionRevealCardPresentation;
   readonly onRate: (rating: LightweightInitialRating) => void;
 }
 export function ExpressionRevealCard({
   presentation,
+  initial = true,
   onRate,
 }: ExpressionRevealCardProps) {
   const { t } = useTranslation();
@@ -77,7 +79,7 @@ export function ExpressionRevealCard({
           <p className="leading-7">{sceneBridge.text}</p>
         </details>
       )}
-      <RuntimeRating initial onRate={onRate} />
+      <RuntimeRating initial={initial} onRate={onRate} />
     </section>
   );
 }

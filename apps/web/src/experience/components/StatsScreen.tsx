@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { LearningRecordKind, LearningRecordView } from '../learningJourney/learningHistory';
-import type { PrototypeLearningTargetId } from '../learningJourney/prototypeLearning';
 import { localRecordDate, projectLearningStatistics, type StatisticsRange } from '../learningJourney/learningStatistics';
 import { LearningSetupFrame, setupButton } from './learning/LearningSetupFrame';
 
@@ -10,7 +9,7 @@ interface StatsScreenProps {
   active: boolean;
   records: readonly LearningRecordView[];
   onBack: () => void;
-  onOpenTarget: (id: PrototypeLearningTargetId) => void;
+  onOpenTarget: (id: string) => void;
 }
 const kinds = ['initial_learning','retention_review','relearning'] as const;
 export const StatsScreen = ({active,records,onBack,onOpenTarget}:StatsScreenProps) => {

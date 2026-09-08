@@ -2,25 +2,26 @@ import { useState } from 'react';
 import { ArrowLeft, ArrowRight, Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { studyButton } from '../StudyScreen';
-import { PROTOTYPE_LEARNING_TARGETS, type PrototypeLearningPolicy, type PrototypeLearningReadiness, type PrototypeLearningTargetId } from '../../learningJourney/prototypeLearning';
+import { PROTOTYPE_LEARNING_TARGETS, type PrototypeLearningPolicy, type PrototypeLearningReadiness } from '../../learningJourney/prototypeLearning';
 
 interface LearningTargetLibraryScreenProps {
   active: boolean;
-  targetIds: readonly PrototypeLearningTargetId[];
+  targets?: Readonly<Record<string, {expression: string; meaning: string; sourceKind: string}>>;
+  targetIds: readonly string[];
   /** 生效方式与准备状态由 journeyState 算好传入——优先级规则只应有一份。 */
-  policyByTarget: Readonly<Record<PrototypeLearningTargetId, PrototypeLearningPolicy>>;
-  preparationByTarget: Readonly<Record<PrototypeLearningTargetId, PrototypeLearningReadiness>>;
-  committedTargetIds: ReadonlySet<PrototypeLearningTargetId>;
-  completedTargetIds: ReadonlySet<PrototypeLearningTargetId>;
-  reviewDueTargetIds: ReadonlySet<PrototypeLearningTargetId>;
-  relearningTargetIds: ReadonlySet<PrototypeLearningTargetId>;
-  reviewingTargetIds: ReadonlySet<PrototypeLearningTargetId>;
-  relearningRepairTargetIds: ReadonlySet<PrototypeLearningTargetId>;
-  relearningRetestTargetIds: ReadonlySet<PrototypeLearningTargetId>;
-  declaredMasteryTargetIds: ReadonlySet<PrototypeLearningTargetId>;
+  policyByTarget: Readonly<Record<string, PrototypeLearningPolicy>>;
+  preparationByTarget: Readonly<Record<string, PrototypeLearningReadiness>>;
+  committedTargetIds: ReadonlySet<string>;
+  completedTargetIds: ReadonlySet<string>;
+  reviewDueTargetIds: ReadonlySet<string>;
+  relearningTargetIds: ReadonlySet<string>;
+  reviewingTargetIds: ReadonlySet<string>;
+  relearningRepairTargetIds: ReadonlySet<string>;
+  relearningRetestTargetIds: ReadonlySet<string>;
+  declaredMasteryTargetIds: ReadonlySet<string>;
   onBack: () => void;
   onAddLearning: () => void;
-  onOpenTarget: (targetId: PrototypeLearningTargetId) => void;
+  onOpenTarget: (targetId: string) => void;
 }
 
 
@@ -41,7 +42,7 @@ export const LearningTargetLibraryScreen = (props: LearningTargetLibraryScreenPr
     const group: Filter = ['declared', 'completed'].includes(state) ? 'complete'
       : ['review-due', 'relearning', 'relearning-repair', 'relearning-retest', 'reviewing'].includes(state) ? 'review'
       : state === 'committed' ? 'active' : 'new';
-    return { id, target: PROTOTYPE_LEARNING_TARGETS[id], state, group };
+    return { id, target: props.targets?.[id] ?? PROTOTYPE_LEARNING_TARGETS[id as keyof typeof PROTOTYPE_LEARNING_TARGETS], state, group };
   });
   const visible = items.filter(item => (filter === 'all' || item.group === filter)
     && `${item.target.expression} ${item.target.meaning}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));

@@ -1,8 +1,13 @@
+import type { ReactNode } from 'react';
 import { ArrowRight, ArrowUpRight, BookOpen, Plus, RotateCcw, MessageSquareText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface HomeScreenProps {
   active: boolean;
+  busy?: boolean;
+  status?: ReactNode;
+  newAvailable?: number;
+  accountDate?: string;
   onGo: (id: string) => void;
   onStartMixed: () => void;
   onResume?: () => void;
@@ -12,13 +17,13 @@ interface HomeScreenProps {
   reviewDueN?: number;
 }
 
-export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview, onRecordContext, mixedReadyN, reviewDueN = 0 }: HomeScreenProps) {
+export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview, onRecordContext, mixedReadyN, reviewDueN = 0, newAvailable, busy, status, accountDate }: HomeScreenProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? 'zh-CN';
   const number = new Intl.NumberFormat(locale);
-  const newCount = Math.max(0, mixedReadyN - reviewDueN);
+  const newCount = newAvailable ?? Math.max(0, mixedReadyN - reviewDueN);
   const hasWork = mixedReadyN > 0;
-  const date = new Date();
+  const date = accountDate ? new Date(accountDate+'T12:00:00') : new Date();
   const dateLabel = new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric', weekday: 'long' }).format(date);
   const focus = 'focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#3c51ad]';
 
@@ -29,6 +34,7 @@ export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview
         <time dateTime={`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`} className="pb-1 text-xs text-[#757a84] sm:text-sm">{dateLabel}</time>
       </header>
 
+      {status}
       <section aria-labelledby="today-learning-title" className="overflow-hidden rounded-2xl border border-[#e3e5ea] bg-white">
         <div className="flex items-center justify-between gap-4 border-b border-[#eceef1] px-6 py-5 sm:px-9">
           <h2 id="today-learning-title" className="flex items-center gap-2.5 text-sm font-medium"><span aria-hidden="true" className="h-3 w-1 rounded-full bg-[#4f61af]"/>{t('home.plan')}</h2>
@@ -43,11 +49,11 @@ export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview
           </div>
           <p className="mb-7 mt-9 text-sm leading-6 text-[#707582]">{t(onResume ? 'runtime.resumeHint' : !hasWork ? 'home.emptyHint' : reviewDueN && newCount ? 'home.reviewFirst' : reviewDueN ? 'home.reviewOnlyHint' : 'home.newOnly')}</p>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
-            <button type="button" onClick={onResume ?? (hasWork ? onStartMixed : () => onGo('s-learning-entry'))}
+            <button type="button" disabled={busy} onClick={onResume ?? (hasWork ? onStartMixed : () => onGo('s-learning-entry'))}
               className={`flex min-h-14 items-center justify-between gap-12 rounded-xl bg-[#2f3b70] px-6 text-sm font-medium text-white transition-colors hover:bg-[#25305c] motion-reduce:transition-none sm:min-w-64 ${focus}`}>
               {t(onResume ? 'runtime.resume' : hasWork ? 'home.start' : 'home.emptyAction')}<ArrowRight size={18} strokeWidth={1.6}/>
             </button>
-            <button type="button" onClick={onStartReview} disabled={!reviewDueN || !onStartReview}
+            <button type="button" onClick={onStartReview} disabled={busy || !reviewDueN || !onStartReview}
               aria-label={reviewDueN ? t('home.reviewCount',{count:reviewDueN}) : t('home.noReview')}
               className={`flex min-h-12 items-center justify-center gap-2.5 rounded-lg px-3 text-sm text-[#626b85] hover:bg-[#f3f4f8] disabled:cursor-default disabled:text-[#7d828c] disabled:hover:bg-transparent ${focus}`}>
               <RotateCcw size={16} strokeWidth={1.6}/>{t(reviewDueN ? 'home.reviewOnly' : 'home.noReview')}

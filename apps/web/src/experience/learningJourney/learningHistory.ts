@@ -16,7 +16,8 @@ export type LearningRecordKind =
 
 export interface LearningRecordView {
   readonly recordId: string;
-  readonly targetId: PrototypeLearningTargetId;
+  readonly targetId: string;
+  readonly meaning?: string;
   readonly expression: string;
   readonly occurredAt: string;
   readonly kind: LearningRecordKind;

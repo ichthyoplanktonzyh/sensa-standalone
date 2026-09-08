@@ -1,29 +1,22 @@
 # Sensa Web
 
-This is the Sensa-only React/Vite client. `/sensa` is the product entrypoint;
-the root path redirects there. The client uses `@sensa/contracts` for HTTP
-and Sync DTOs and `@sensa/learning-kernel` for the browser-safe learning
-vocabulary.
+React/Vite Web 的正常入口使用已确认的 `experience` 页面与正式 consumer API。
+`experience/account/SensaApp.tsx` 负责账号链路组合；原简化 `AccountRoot` 及其页面已删除。
+首页、我的学习、账号、目录与 Runtime 共享已有界面组件，不以原型数据替代学习事实。
 
-The browser database is `sensa-standalone-v1` (schema version 3) and contains
-only Sensa scope metadata, pinned Sense Learning Packages, mutable learning
-projections, append-only Sync facts, and the learning outbox. It does not read
-any other product's browser database or local storage.
+正常运行需配置 `VITE_SENSA_MODE=production`、`VITE_SUPABASE_URL`、
+`VITE_SUPABASE_PUBLISHABLE_KEY` 和 `VITE_SENSA_API_URL`。Web 使用账号独立 IndexedDB
+与 outbox，按 Sync v3 push → pull 收敛到 Postgres；模型密钥只在 API 服务端。
 
-For local use, run the standalone API first and then:
+`VITE_SENSA_MODE=preview` 仍可显式查看先前的行为原型；它使用独立预览存储，
+不代表已发布能力，也不是正式账号数据的导入来源。
 
-```sh
-VITE_SENSA_API_URL=http://127.0.0.1:8080 VITE_WEB_PORT=3000 npm run web:dev
-```
+本地可用合成认证和无成本 mock API 验证。浏览器 smoke 会检查服务端的
+`/__test/environment`，拒绝运行在真实 Provider 体验服务上。
+可通过 `SENSA_BROWSER_TEST_URL` / `SENSA_BROWSER_TEST_API_URL` 配置隔离测试端口。
+实际集成范围与证据见 [M1/M2 界面接入记录](../../docs/sensa/m1-m2-ui-integration-handoff.md)。
 
-The initial load calls `/me`, negotiates Sync v2, pushes pending operations
-before pulling, repairs a required bootstrap without clearing the outbox, and
-then loads the active plan's pinned content. A network failure leaves a visible
-local-save notice. Media controls only use short-lived download URLs returned
-by the authorized Sensa media endpoint.
-
-
-## Current M0-2 experience preview media
+## Preview media
 
 The experience preview uses the installed learning release's immutable audio
 files. `npm run web:dev` and Web builds run `scripts/prepareWebMedia.mjs` first.

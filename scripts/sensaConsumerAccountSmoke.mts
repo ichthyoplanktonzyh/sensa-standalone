@@ -229,6 +229,7 @@ if(process.argv.includes('--serve')) {
   let browserClockOffset=0;const browserApp=new Hono();
   browserApp.use('*',cors({origin:'http://127.0.0.1:3001',allowHeaders:['authorization','content-type','apikey','x-client-info','x-supabase-api-version']}));
   browserApp.route('',createConsumerRoutes({verify:createConsumerVerifier(issuer,createLocalJWKSet({keys:[jwk]})),transaction,mediaReader,semanticResolver:mockSemanticResolver,contentGenerator:mockContentGenerator,contentReviewer:mockContentReviewer,clock:()=>new Date(Date.now()+browserClockOffset)}));
+  browserApp.get('/__test/environment',c=>c.json({semantic:'mock',content:'mock',auth:'synthetic'}));
   // Synthetic Auth API only in this explicitly launched loopback test harness.
   // This is NOT real Supabase mail delivery and is never imported by production.
   const browserUsers=new Map([['test@sensa.invalid',crypto.randomUUID()],['second@sensa.invalid',crypto.randomUUID()]]);

@@ -1,22 +1,33 @@
-import {queueAnchorUse,queueContentMembership} from '../data/replica/accountStore';
-import {preparePersonalTarget} from '../data/consumer/client';
+import {useNavigate,useRouterState} from '@tanstack/react-router';
+import {parseMainStack} from '../router/shellLocation';
+import {WebShell} from '../ui/WebShell';
+import {HomeScreen} from '../components/HomeScreen';
+import {StudyScreen} from '../components/StudyScreen';
+import {StudyCalendar} from '../components/StudyCalendar';
+import {ProfileScreen} from '../components/ProfileScreen';
+import {StatsScreen} from '../components/StatsScreen';
+import {LearningTargetLibraryScreen} from '../components/learning/LearningTargetLibraryScreen';
+import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
+import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
+import {AccountCatalog} from './AccountCatalog';
+import {AccountContent} from './AccountContent';
+import {AccountLearning} from './AccountLearning';
+import {AccountLearningSummary} from './AccountLearningSummary';
+import {checkInDate} from '../../data/replica/checkin';
+import {clockSample} from '../../data/replica/clock';
+import {learningRecords,presentTarget} from './projections';
+import {queueAnchorUse,queueContentMembership} from '../../data/replica/accountStore';
+import {preparePersonalTarget} from '../../data/consumer/client';
 import type {TargetView} from '@sensa/contracts/sensa';
-import {connectExtension} from '../data/consumer/client';
-import {IntakeInbox} from './IntakeInbox';
-import {queuePersonalLearning,queueCancelPreparation,queueSemanticAcceptance,queueIntake} from '../data/replica/accountStore';
-import {CheckInCalendar} from './CheckInCalendar';
-import {queueCheckIn} from '../data/replica/checkin';
-import {LearningActivitySummary} from './LearningActivitySummary';
-import {InitialLearning} from './InitialLearning';
-import {queueRuntimeCommand,queueRunAction,useLatestRunProgress} from '../data/replica/initialRuntime';
+import {connectExtension} from '../../data/consumer/client';
+import {queuePersonalLearning,queueCancelPreparation,queueSemanticAcceptance,queueIntake} from '../../data/replica/accountStore';
+import {queueCheckIn} from '../../data/replica/checkin';
+import {queueRuntimeCommand,queueRunAction,useLatestRunProgress} from '../../data/replica/initialRuntime';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { TargetLibrary } from './TargetLibrary';
 import type { AccountContext } from '@sensa/contracts/sensa';
-import { WebShell } from '../experience/ui/WebShell';
-import { LearningSetupFrame, setupButton, setupPrimary } from '../experience/components/learning/LearningSetupFrame';
-import { auth,cachedAccount,ConsumerClientError,initializeAccount,revokeSession,syncAccount,cacheRunMaterial } from '../data/consumer/client';
-import { loadAccountReplica,queueQuantity,queueTarget,queueMastery } from '../data/replica/accountStore';
-import type { AccountReplica } from '../data/replica/accountStore';
+import { auth,cachedAccount,ConsumerClientError,initializeAccount,revokeSession,syncAccount,cacheRunMaterial } from '../../data/consumer/client';
+import { loadAccountReplica,queueQuantity,queueTarget,queueMastery } from '../../data/replica/accountStore';
+import type { AccountReplica } from '../../data/replica/accountStore';
 
 const choices=[5,10,15,20,30] as const;
 const message=(error:unknown)=> {
@@ -29,7 +40,7 @@ const message=(error:unknown)=> {
   return navigator.onLine?'暂时无法完成，请重试。已保存的本机记录仍然保留。':'当前离线，已保存在本机的记录会在联网后同步。';
 };
 
-export default function AccountRoot(){
+export default function SensaApp(){
   const [account,setAccount]=useState<AccountContext|null>(null);
   const [replica,setReplicaState]=useState<AccountReplica|null>(null);
   const accountScope=useRef<string|null>(null);
@@ -41,7 +52,13 @@ export default function AccountRoot(){
   const [quantity,setQuantity]=useState<(typeof choices)[number]>(5);const [settings,setSettings]=useState(false);
   const [showSummary,setShowSummary]=useState(false);
   const [runId,setRunId]=useState<string|null>(null);
-  const [current,setCurrent]=useState('s-home');const generation=useRef(0);
+  const routePath=useRouterState({select:state=>state.location.pathname});
+  const navigate=useNavigate();
+  const [current,setCurrentState]=useState(()=>parseMainStack(location.pathname).at(-1)??'s-home');
+  const [createRequested,setCreateRequested]=useState(false);
+  const [selectedTarget,setSelectedTarget]=useState<TargetView|null>(null);
+  const setCurrent=(id:string)=>{setCurrentState(id);setCreateRequested(false);setSelectedTarget(null);void navigate({to:'/$',params:{_splat:id==='s-home'?'':id.slice(2)},search:{}});};
+  useEffect(()=>{setCurrentState(parseMainStack(routePath).at(-1)??'s-home');},[routePath]);const generation=useRef(0);
   const recover=useCallback(async()=>{
     if(!auth){setBoot(false);return;}
     const own=++generation.current;
@@ -57,7 +74,7 @@ export default function AccountRoot(){
       next=cached;
     }
     if(own!==generation.current)return;
-    if(accountScope.current!==next.accountId){setReplica(null);setRunId(null);setShowSummary(false);setSettings(false);setCurrent((new URLSearchParams(location.search).has('intake')||new URLSearchParams(location.search).has('meaning'))?'s-content':'s-home');}
+    if(accountScope.current!==next.accountId){setReplica(null);setRunId(null);setShowSummary(false);setSettings(false);setCurrentState((new URLSearchParams(location.search).has('intake')||new URLSearchParams(location.search).has('meaning'))?'s-content':parseMainStack(location.pathname).at(-1)??'s-home');}
     accountScope.current=next.accountId;setAccount(next);
     try {
       const local=await loadAccountReplica(next);if(own!==generation.current)return;setReplica(local);setQuantity(local.plan?.dailyNewLimit??5);
@@ -83,10 +100,10 @@ export default function AccountRoot(){
     if(!auth)return;const {error}=await auth.verifyOtp({email:email.trim(),token:code.trim(),type:'email'});
     if(error)setNotice('验证码不正确或已过期，请重新输入或发送。');
   }
-  async function saveQuantity(){
+  async function saveQuantity(value=quantity){
     if(!account)return;
-    const saved=await queueQuantity(account,quantity);setReplica(saved);setNotice('已保存在本机，正在同步。');
-    try{const synced=await syncAccount(account);setReplica(synced);setSettings(false);setNotice(synced.outbox.some(x=>x.state==='retained')?'数量已在另一处更新。已保留你的选择，请查看最新设置后重新确认。':'');}
+    const saved=await queueQuantity(account,value);setReplica(saved);setNotice('已保存在本机，正在同步。');
+    try{const synced=await syncAccount(account);setReplica(synced);setQuantity(synced.plan?.dailyNewLimit??5);if(!replica?.plan)setSettings(false);setNotice(synced.outbox.some(x=>x.state==='retained')?'数量已在另一处更新。已保留你的选择，请查看最新设置后重新确认。':'');}
     catch(e){setNotice(message(e));}
   }
   async function startLearning(next=false,mode:'mixed'|'review_only'=replica?.activity?.mode??'mixed',early=false){
@@ -137,8 +154,7 @@ export default function AccountRoot(){
   </main>;
   const extensionParams=new URLSearchParams(location.search);
   if(extensionParams.get('extension')==='connect')return <main className="mx-auto max-w-lg space-y-5 p-8"><h1 className="text-2xl">连接 Sensa 浏览器插件</h1><p>当前账号：{connectedEmail}</p><p>允许插件将你主动保存的网页材料同步到当前账号。未点击保存的网页不会进入收件箱。</p>{alert}<button className={setupPrimary} disabled={busy} onClick={()=>void perform(async()=>{const result=await connectExtension({installationId:extensionParams.get('installationId'),state:extensionParams.get('state'),challenge:extensionParams.get('challenge'),redirectUri:extensionParams.get('redirectUri')});window.location.assign(result.redirectUri);})}>连接当前账号</button><button className={setupButton} onClick={()=>window.close()}>取消</button></main>;
-  if(replica&&!replica.plan&&current==='s-content')return <LearningSetupFrame id="s-content" active title="我的内容" onBack={()=>setCurrent('s-home')}><div className="mx-auto max-w-3xl space-y-6">{alert}<IntakeInbox key={account.accountId} onAnchorUse={async(id,enabled)=>{setReplica(await queueAnchorUse(account,id,enabled));setReplica(await syncAccount(account));}} onMembership={async(entity,id,active)=>{setReplica(await queueContentMembership(account,entity,id,active));setReplica(await syncAccount(account));}} onAdd={addMeaning} onPrepare={prepareMeaning} onHome={()=>setCurrent('s-home')} onAccept={async(lookupId,intakeId)=>{setReplica(await queueSemanticAcceptance(account,lookupId,intakeId));setReplica(await syncAccount(account));}} replica={replica} onSave={async snapshot=>{setReplica(await queueIntake(account,snapshot));try{setReplica(await syncAccount(account));}catch(e){setNotice(message(e));}}}/><button className={setupButton} onClick={()=>void perform(recover)}>检查保存结果</button><button className={setupPrimary} onClick={()=>setCurrent('s-home')}>设置每日学习数量</button></div></LearningSetupFrame>;
-  const setup=!replica?.plan||settings;
+  const setup=!replica?.plan&&current!=='s-content';
   if(setup)return <LearningSetupFrame id="s-quantity" active title="每日新学数量" onBack={()=>{if(replica?.plan)setSettings(false);else setNotice('请先明确确认每日数量，再开始学习。');}}>
     <div className="mx-auto max-w-lg space-y-6"><h2 className="text-3xl font-semibold">每天想新学多少个？</h2><p className="text-[#68748d] leading-7">这是每天新内容的上限。以后可以修改，已经开始的学习会保持原样。</p>
       <fieldset><legend className="mb-3 text-sm">每日新学数量</legend><div className="flex flex-wrap gap-3">{choices.map(n=><label key={n} className={'flex min-h-12 min-w-14 cursor-pointer items-center justify-center gap-2 rounded-xl border p-3 '+(quantity===n?'border-[#303f76] bg-[#edf0f7]':'border-[#bec5d5]')}><input type="radio" name="quantity" value={n} checked={quantity===n} onChange={()=>setQuantity(n)} />{n}</label>)}</div></fieldset>
@@ -147,24 +163,35 @@ export default function AccountRoot(){
       {(pending>0||!replica?.replicaId)&&<button className={setupButton} onClick={()=>void perform(recover)}>检查同步结果</button>}
     </div>
   </LearningSetupFrame>;
-  if(showSummary)return <LearningActivitySummary replica={replica} busy={busy} notice={notice} onNext={()=>void perform(()=>startLearning(replica.summary?.status!=='ended'))} onEarly={()=>void perform(()=>startLearning(true,replica.activity?.mode??'mixed',true))} onEnd={()=>void perform(endLearning)} onHome={()=>{setShowSummary(false);setCurrent('s-home');}}/>;
-  if(runId&&replica.runs[runId])return <InitialLearning replica={replica} run={replica.runs[runId]!} busy={busy} notice={notice} onAction={action=>void perform(async()=>{const saved=await queueRunAction(account,runId,action);setReplica(saved);setBusy(false);try{setReplica(await syncAccount(account));}catch(e){setNotice(message(e));}})} onPause={()=>void perform(pauseLearning)} onCheck={()=>void perform(checkLearning)} onNext={()=>void perform(()=>startLearning(true))} onHome={()=>{setRunId(null);setCurrent('s-home');}} onEntered={()=>void checkIn(true)}/>;
-  return <WebShell current={current} focused={false} onNavigate={setCurrent} availableSections={['s-home','s-content','s-study']}>
-    <section id={current} className="screen active absolute inset-0 overflow-y-auto p-6 sm:p-10">
-      <div className="mx-auto max-w-3xl space-y-6"><h1 className="text-3xl font-semibold">{current==='s-home'?'今天的学习':current==='s-study'?'我的学习':current==='s-content'?'我的内容':current==='s-profile'?'账号与设置':'自由练习'}</h1>
-        {alert}{pending>0&&<div role="status" className="rounded-2xl bg-[#edf0f7] p-5">有 {pending} 项请求待同步。<button className={setupButton} onClick={()=>void perform(recover)}>检查本次结果</button></div>}
-        {retained>0&&<details><summary className="cursor-pointer py-3">有 {retained} 项未接受的请求，查看原选择</summary><ul>{replica.outbox.filter(x=>x.state==='retained').map(x=><li key={x.operation.operationId} className="py-2 text-sm">{'dailyNewLimit' in x.operation.payload?`每日 ${x.operation.payload.dailyNewLimit} 个`:x.operation.kind==='run.record_action'?`学习回答：${x.operation.payload.action.kind==='reveal'?'查看表达':x.operation.payload.action.rating==='again'?'没想起':x.operation.payload.action.rating==='hard'?'有点困难':'想起来了'}`:x.operation.kind==='check_in.record'?`签到：${x.operation.occurredAt}`:'学习或目标请求'}：未被接受。请查看最新状态后重新确认。</li>)}</ul></details>}
-        {current==='s-home'&&<div className="rounded-2xl border p-6 space-y-4"><p>今天已开始 {replica.plan?.newStartedToday??0} 个新目标</p><button className={setupPrimary} disabled={busy} onClick={()=>void perform(()=>startLearning(false,'mixed'))}>{Object.values(replica.runs).some(r=>r.status==='active')?'继续本次学习':'开始学习'}</button><button className={setupButton} disabled={busy} onClick={()=>void perform(()=>startLearning(false,'review_only'))}>只复习</button>{replica.homeCounts&&<p className="text-sm text-[#68748d]">到期复习 {replica.homeCounts.dueReviews} 个 · 可再次回想 {replica.homeCounts.relearningReady} 个 · 等待再回想 {replica.homeCounts.relearningWaiting} 个</p>}</div>}
-        {current==='s-study'&&<CheckInCalendar account={account} replica={replica} busy={busy} onCheckIn={()=>void perform(()=>checkIn())}/>}
-        {current==='s-content'?<><IntakeInbox key={account.accountId} onAnchorUse={async(id,enabled)=>{setReplica(await queueAnchorUse(account,id,enabled));setReplica(await syncAccount(account));}} onMembership={async(entity,id,active)=>{setReplica(await queueContentMembership(account,entity,id,active));setReplica(await syncAccount(account));}} onAdd={addMeaning} onPrepare={prepareMeaning} onHome={()=>setCurrent('s-home')} onAccept={async(lookupId,intakeId)=>{setReplica(await queueSemanticAcceptance(account,lookupId,intakeId));setReplica(await syncAccount(account));}} replica={replica} onSave={async snapshot=>{setReplica(await queueIntake(account,snapshot));try{setReplica(await syncAccount(account));}catch(e){setNotice(message(e));}}}/><TargetLibrary account={account} replica={replica} onMastery={async(target)=>{setReplica(await queueMastery(account,target));setReplica(await syncAccount(account));}} onHome={()=>setCurrent('s-home')} onSubmit={async(candidate,retry)=>{const saved=await queueTarget(account,candidate,retry);setReplica(saved);try{setReplica(await syncAccount(account));}catch(e){setNotice(message(e));}}}/></>:<>
-        <div className="rounded-2xl border border-[#e2e6ef] bg-white p-6"><p className="text-sm text-[#68748d]">每日新学上限</p><p className="my-3 text-4xl font-semibold">{replica.plan!.dailyNewLimit}<span className="ml-2 text-base font-normal">个</span></p><button className={setupButton} onClick={()=>setSettings(true)}>修改数量</button></div>
-        <div className="rounded-2xl border border-[#e2e6ef] p-6 space-y-4"><h2 className="text-xl">{Object.keys(replica.targets).length?'你的学习目标':'还没有学习目标'}</h2>
-          {Object.values(replica.targets).map(target=><div key={target.learningTarget!.learningTargetId} className="border-b py-3"><p className="font-semibold">{target.candidate.expression}</p><p className="my-2 text-[#68748d]">{target.candidate.meaning}</p><p className="text-sm">{target.declaredMastery.active?'已声明会用':target.phase==='retaining'?'已完成首次学习，等待复习':target.phase==='acquiring'?'首次学习进行中':target.plan?.readiness==='ready'?'学习内容已准备好':target.plan?.readiness==='preparing'?'学习内容准备中':'暂时无法准备，目标已保留'}</p></div>)}
-          <button className={setupPrimary} onClick={()=>setCurrent('s-content')}>选择学习内容</button>
-        </div></>}
-        <button className={setupButton} disabled={busy||pending>0} onClick={()=>void perform(async()=>{await revokeSession();setAccount(null);setReplica(null);setSent(false);setCode('');})}>退出登录</button>
-        {pending>0&&<p className="text-sm text-[#68748d]">请先同步本机请求，再退出登录。</p>}
-      </div>
-    </section>
+  if(!replica)return <main role="status">正在读取你的学习…</main>;
+  const showContent=()=>{setCurrent('s-content');setCreateRequested(true);};
+  const openTarget=(target:TargetView)=>{setCurrentState('s-learning-target');setCreateRequested(false);setSelectedTarget(target);void navigate({to:'/$',params:{_splat:'learning-target'},search:{candidate:target.candidate.candidateId}});};
+  const counts=replica.homeCounts;
+  const targets=Object.values(replica.targets).filter(t=>t.membership&&t.learningTarget);
+  const ids=targets.map(t=>t.learningTarget!.learningTargetId);
+  const matching=(predicate:(target:TargetView)=>boolean)=>new Set(targets.filter(predicate).map(t=>t.learningTarget!.learningTargetId));
+  const hasPendingRun=replica.outbox.some(x=>x.state==='pending'&&x.operation.kind==='run.record_action');
+  const activeRun=Object.values(replica.runs).find(r=>r.status==='active');
+  const records=learningRecords(replica);
+  const day=clockSample(account.clockGrant)?.occurredAt;
+  const today=day?checkInDate(day,account.timeZone):replica.plan?.accountDate??new Date().toISOString().slice(0,10);
+  const pendingDates=replica.outbox.filter(x=>x.state==='pending'&&x.operation.kind==='check_in.record').map(x=>checkInDate(x.operation.occurredAt,account.timeZone));
+  const status=<>{alert}{pending>0&&<div role="status" className="my-5 rounded-xl bg-[#edf0f7] p-4 text-sm leading-7">有 {pending} 项请求待同步。<button className={setupButton} disabled={busy} onClick={()=>void perform(recover)}>检查本次结果</button></div>}{retained>0&&<details className="my-5 rounded-xl border border-[#e0e5ee] p-4 text-sm"><summary>有 {retained} 项未接受的请求，查看原选择</summary>{replica.outbox.filter(x=>x.state==='retained').map(x=><p className="mt-3" key={x.operation.operationId}>{'dailyNewLimit' in x.operation.payload?`每日 ${x.operation.payload.dailyNewLimit} 个`:'原请求'}：未被接受。原选择已保留，请查看最新状态后重试。</p>)}</details>}</>;
+  const screenStatus=settings?null:status;
+  const focused=showSummary||!!runId;
+  const home=()=>{setRunId(null);setShowSummary(false);setCurrent('s-home');};
+  return <WebShell current={focused?showSummary?'s-activity-summary':'s-initial-learning':current} focused={focused} onNavigate={setCurrent} availableSections={['s-home','s-content','s-study']}>
+   {showSummary?<AccountLearningSummary replica={replica} busy={busy} notice={notice} onNext={()=>void perform(()=>startLearning(replica.summary?.status!=='ended'))} onEarly={()=>void perform(()=>startLearning(true,replica.activity?.mode??'mixed',true))} onEnd={()=>void perform(endLearning)} onHome={home}/>:
+   runId&&replica.runs[runId]?<AccountLearning replica={replica} run={replica.runs[runId]!} busy={busy} notice={notice} onAction={action=>void perform(async()=>{const saved=await queueRunAction(account,runId,action);setReplica(saved);setBusy(false);try{setReplica(await syncAccount(account));}catch(e){setNotice(message(e));}})} onPause={()=>void perform(pauseLearning)} onCheck={()=>void perform(checkLearning)} onNext={()=>void perform(()=>startLearning(true))} onHome={home} onEntered={()=>void checkIn(true)}/>:
+   <>
+    {current==='s-home'&&<HomeScreen active onGo={setCurrent} busy={busy} status={screenStatus} accountDate={replica.plan?.accountDate} newAvailable={counts?.newAvailable??0} mixedReadyN={counts?.distinctExecutableTargets??0} reviewDueN={counts?.dueReviews??0} onStartMixed={()=>void perform(()=>startLearning(false,'mixed'))} onResume={activeRun||hasPendingRun?()=>void perform(()=>startLearning(false,'mixed')):undefined} onStartReview={()=>void perform(()=>startLearning(false,'review_only'))} onRecordContext={showContent}/>}
+    {current==='s-content'&&<AccountContent key={account.accountId} status={screenStatus} createRequested={createRequested} replica={replica} onBrowse={()=>setCurrent('s-learning-entry')} onTarget={openTarget} onAnchorUse={async(id,enabled)=>{setReplica(await queueAnchorUse(account,id,enabled));setReplica(await syncAccount(account));}} onMembership={async(entity,id,active)=>{setReplica(await queueContentMembership(account,entity,id,active));setReplica(await syncAccount(account));}} onAdd={addMeaning} onPrepare={prepareMeaning} onHome={home} onAccept={async(lookupId,intakeId)=>{setReplica(await queueSemanticAcceptance(account,lookupId,intakeId));const state=await syncAccount(account);setReplica(state);return state.intakes[intakeId]?.meaningId??null;}} onSave={async snapshot=>{setReplica(await queueIntake(account,snapshot));try{setReplica(await syncAccount(account));}catch(e){setNotice(message(e));}}}/>}
+    {(current==='s-learning-entry'||current==='s-learning-target')&&<AccountCatalog status={screenStatus} screenId={current} key={selectedTarget?.learningTarget?.learningTargetId??'catalog'} initialTarget={selectedTarget} account={account} replica={replica} onPrepare={prepareMeaning} onPersonal={()=>setCurrent('s-content')} onBack={()=>setCurrent(current==='s-learning-target'?'s-learning-library':'s-home')} onMastery={async(target)=>{setReplica(await queueMastery(account,target));setReplica(await syncAccount(account));}} onHome={home} onSubmit={async(candidate,retry)=>{const saved=await queueTarget(account,candidate,retry);setReplica(saved);try{setReplica(await syncAccount(account));}catch(e){setNotice(message(e));}}}/>}
+    {current==='s-study'&&<StudyScreen active tab="a" onTabChange={()=>setSettings(true)} status={screenStatus} onOpenPreferences={()=>setSettings(true)} onAddLearning={()=>setCurrent('s-learning-entry')} onOpenTargetLibrary={()=>setCurrent('s-learning-library')} onOpenStats={()=>setCurrent('s-stats')} onOpenTarget={id=>{const target=replica.targets[id];if(target)openTarget(target);}} defaultPolicy="lightweight" onPolicyChange={()=>{}} learningTargetCount={ids.length} readyInitialCount={(counts?.newAvailable??0)+(counts?.initialContinuations??0)} reviewCount={counts?.dueReviews??0} dailyNewCount={replica.plan?.dailyNewLimit??5} learningRecords={records} onDailyNewCountChange={value=>void perform(()=>saveQuantity(value as typeof quantity))} calendar={<StudyCalendar account={{today,dates:Object.keys(replica.checkins),pending:pendingDates,busy,uncertain:replica.outbox.some(x=>x.state==='retained'&&x.error==='clock_untrusted'),timeZone:account.timeZone,onCheckIn:()=>void perform(()=>checkIn())}}/>}/>}
+    {current==='s-learning-library'&&<LearningTargetLibraryScreen active targetIds={ids} targets={Object.fromEntries(targets.map(t=>[t.learningTarget!.learningTargetId,presentTarget(t.candidate,t)]))} policyByTarget={Object.fromEntries(ids.map(id=>[id,'lightweight' as const]))} preparationByTarget={Object.fromEntries(targets.map(t=>[t.learningTarget!.learningTargetId,t.plan?.readiness??'preparing']))} committedTargetIds={matching(t=>t.phase==='acquiring')} completedTargetIds={matching(t=>t.phase==='retaining')} reviewDueTargetIds={matching(t=>!!t.dueAt&&Date.parse(t.dueAt)<=Date.now())} relearningTargetIds={new Set(Object.values(replica.runs).filter(r=>r.status==='active'&&r.purpose==='relearning').map(r=>r.learningTargetId))} reviewingTargetIds={new Set(Object.values(replica.runs).filter(r=>r.status==='active'&&r.purpose==='retention_review').map(r=>r.learningTargetId))} relearningRepairTargetIds={new Set()} relearningRetestTargetIds={new Set()} declaredMasteryTargetIds={matching(t=>t.declaredMastery.active)} onBack={()=>setCurrent('s-study')} onAddLearning={()=>setCurrent('s-learning-entry')} onOpenTarget={id=>{const target=replica.targets[id];if(target)openTarget(target);}}/>}
+    {current==='s-stats'&&<StatsScreen active records={records} onBack={()=>setCurrent('s-study')} onOpenTarget={id=>{const target=replica.targets[id];if(target)openTarget(target);}}/>}
+    {current==='s-profile'&&<ProfileScreen active status={screenStatus} account={{email:connectedEmail,pending,busy,onSync:()=>void perform(recover),onLogout:()=>void perform(async()=>{await revokeSession();setAccount(null);setReplica(null);setSent(false);setCode('');})}} onOpenPreferences={()=>setSettings(true)} onGoStudyPlan={()=>setCurrent('s-study')} defaultPolicy="lightweight" dailyNewCount={replica.plan?.dailyNewLimit??5} onPolicyChange={()=>{}} onDailyNewCountChange={value=>void perform(()=>saveQuantity(value as typeof quantity))}/>}
+    {settings&&<LearningPreferencesPanel fixedPolicy busy={busy} status={status} closeLabel="完成" defaultPolicy="lightweight" dailyNewCount={replica.plan?.dailyNewLimit??5} onPolicyChange={()=>{}} onDailyNewCountChange={value=>void perform(()=>saveQuantity(value as typeof quantity))} onClose={()=>setSettings(false)}/>}
+   </>}
   </WebShell>;
 }

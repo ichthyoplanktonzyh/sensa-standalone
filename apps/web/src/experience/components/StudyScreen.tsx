@@ -1,19 +1,22 @@
 import { StudyCalendar } from './StudyCalendar';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ArrowRight, BookOpen, Plus, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { LearningRecordKind, LearningRecordView } from '../learningJourney/learningHistory';
-import { PROTOTYPE_LEARNING_TARGETS, type PrototypeLearningPolicy, type PrototypeLearningTargetId } from '../learningJourney/prototypeLearning';
+import { PROTOTYPE_LEARNING_TARGETS, type PrototypeLearningPolicy } from '../learningJourney/prototypeLearning';
 import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
 
 interface StudyScreenProps {
   active: boolean;
+  status?: ReactNode;
+  calendar?: ReactNode;
+  onOpenPreferences?: () => void;
   tab: 'a' | 'b';
   onTabChange: (tab: 'a' | 'b') => void;
   onAddLearning: () => void;
   onOpenTargetLibrary: () => void;
   onOpenStats: () => void;
-  onOpenTarget: (id: PrototypeLearningTargetId) => void;
+  onOpenTarget: (id: string) => void;
   onPolicyChange: (policy: PrototypeLearningPolicy) => void;
   defaultPolicy: PrototypeLearningPolicy;
   learningTargetCount: number;
@@ -37,8 +40,9 @@ export const StudyScreen = (props: StudyScreenProps) => {
     <main className="mx-auto max-w-[1280px] px-6 py-8 sm:px-10 lg:px-14 lg:py-14">
       <header className="mb-10 flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-3xl font-medium tracking-tight lg:text-4xl">{t('study.title')}</h1>
-        <button id="study-preferences-button" className={`${studyButton} border border-[#e3e5ea] bg-white`} onClick={()=>props.onTabChange('b')}><SlidersHorizontal size={17}/>{t('study.preferences')}</button>
+        <button id="study-preferences-button" className={`${studyButton} border border-[#e3e5ea] bg-white`} onClick={()=>props.onOpenPreferences ? props.onOpenPreferences() : props.onTabChange('b')}><SlidersHorizontal size={17}/>{t('study.preferences')}</button>
       </header>
+      {props.status}
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <section className="flex flex-col rounded-3xl bg-[#edf0f7] p-6 sm:p-8">
           <div className="flex items-center gap-2 text-sm text-[#68748d]"><BookOpen size={18}/>{t('study.scope')}</div>
@@ -54,13 +58,13 @@ export const StudyScreen = (props: StudyScreenProps) => {
         </section>
         <section className="rounded-3xl border border-[#e3e5ea] bg-white p-6 sm:p-8">
           <h2 className="text-lg font-medium">{t('study.plan')}</h2>
-          <button className="mt-7 block w-full rounded-xl text-left focus-visible:outline-2 focus-visible:outline-[#5268a9]" onClick={()=>props.onTabChange('b')}>
+          <button className="mt-7 block w-full rounded-xl text-left focus-visible:outline-2 focus-visible:outline-[#5268a9]" onClick={()=>props.onOpenPreferences ? props.onOpenPreferences() : props.onTabChange('b')}>
             <span className="text-sm text-[#68748d]">{t('study.daily')}</span><span className="mt-2 flex items-center justify-between gap-3 text-2xl">{t('study.count',{count:props.dailyNewCount})}<ArrowRight size={18}/></span>
           </button>
           <div className="mt-7 border-t border-[#e3e5ea] pt-6"><p className="text-sm text-[#68748d]">{t('study.method')}</p><p className="mt-2 font-medium">{t('learningPreferences.policies.'+props.defaultPolicy)}</p></div>
         </section>
       </div>
-      <StudyCalendar/>
+      {props.calendar ?? <StudyCalendar/>}
       <section className="mt-12" aria-labelledby="study-history-title">
         <div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-4"><h2 id="study-history-title" className="text-xl font-medium">{t('study.history')}</h2><button type="button" className={studyButton+' text-[#5268a9] hover:bg-[#edf0f7]'} onClick={props.onOpenStats}>{t('statistics.title')}<ArrowRight size={16}/></button></div>
           <div className="flex flex-wrap gap-1" aria-label={t('study.history')}>
@@ -70,7 +74,7 @@ export const StudyScreen = (props: StudyScreenProps) => {
         <p className="mt-3 text-xs leading-6 text-[#788398]">{t('study.historyNote')}</p>
         {records.length===0?<div className="py-16 text-center"><p className="font-medium">{t(props.learningRecords.length?'study.noMatches':'study.noRecords')}</p>{!props.learningRecords.length&&<p className="mt-2 text-sm text-[#788398]">{t('study.noRecordsHint')}</p>}</div>:<ol className="mt-5 divide-y divide-[#e3e5ea]">
           {records.slice(0,limit).map(record=><li key={record.recordId}><button className="flex w-full flex-wrap items-center gap-4 rounded-lg py-5 text-left hover:bg-[#f2f4f8] focus-visible:outline-2 focus-visible:outline-[#5268a9] sm:flex-nowrap" onClick={()=>props.onOpenTarget(record.targetId)}>
-            <span className="min-w-0 flex-1"><strong className="font-medium">{record.expression}</strong><span className="mt-1 block text-sm text-[#68748d]">{PROTOTYPE_LEARNING_TARGETS[record.targetId].meaning}</span></span>
+            <span className="min-w-0 flex-1"><strong className="font-medium">{record.expression}</strong><span className="mt-1 block text-sm text-[#68748d]">{record.meaning ?? PROTOTYPE_LEARNING_TARGETS[record.targetId as keyof typeof PROTOTYPE_LEARNING_TARGETS]?.meaning ?? record.detail}</span></span>
             <span className="rounded-md bg-[#edf0f7] px-2 py-1 text-xs text-[#546582]">{t('study.'+record.kind)}</span>
             <time className="w-full text-xs tabular-nums text-[#788398] sm:w-auto" dateTime={record.occurredAt}>{new Intl.DateTimeFormat(i18n.language,{dateStyle:'medium',timeStyle:'short'}).format(new Date(record.occurredAt))}</time><ArrowRight className="hidden shrink-0 text-[#788398] sm:block" size={16}/>
           </button></li>)}

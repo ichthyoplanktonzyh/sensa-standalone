@@ -1,3 +1,4 @@
+import {ContentHeader} from './ContentWorkspace';
 import { MeaningGraphView } from "./MeaningGraphView";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -179,32 +180,7 @@ export function ContentScreen({
       className={`screen absolute inset-0 z-10 overflow-y-auto bg-[#fbfbfa] text-[#222631] ${active ? "active" : "invisible pointer-events-none"}`}
     >
       <main className="mx-auto max-w-[1280px] px-6 py-8 sm:px-10 lg:px-14 lg:py-14">
-        <header className="mb-9 flex flex-wrap items-center justify-between gap-5">
-          <h1 className="text-3xl font-medium tracking-tight lg:text-4xl">
-            {t("content.title")}
-          </h1>
-          <div className="flex gap-2">
-            <button
-              className={`${button} border border-[#e3e5ea] bg-white`}
-              onClick={() => setInboxOpen(true)}
-            >
-              <Inbox size={17} />
-              {t("content.inbox")}
-              {inbox.length + drafts.length > 0 && (
-                <span className="rounded bg-[#edf0f7] px-1.5 text-xs">
-                  {fmt(inbox.length + drafts.length)}
-                </span>
-              )}
-            </button>
-            <button
-              className={`${button} bg-[#2f3b70] text-white hover:bg-[#25305c]`}
-              onClick={() => setAdding(true)}
-            >
-              <Plus size={17} />
-              {t("content.add")}
-            </button>
-          </div>
-        </header>
+        <ContentHeader inboxCount={inbox.length+drafts.length} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/>
         <nav
           aria-label={t("content.categories")}
           className="mb-7 flex gap-6 overflow-x-auto border-b border-[#e1e4eb]"
