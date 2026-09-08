@@ -1,7 +1,7 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-09-05
+> Updated: 2026-09-08
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
@@ -783,13 +783,23 @@ Personal Meaning, Semantic Intake or Add-to-Learning Intent.
 
 ## Account and settings language
 
+**Personal Learning Library（个人学习库）**:
+The learner-owned body of captured context, confirmed meanings, learning material,
+history and scheduling state, usable locally independently of optional online services.
+It contains more than Personal Semantic World and does not replace its domain identities.
+
+**Sensa Sync**:
+An optional service that synchronizes a Personal Learning Library across the learner's
+devices. It does not own semantic acceptance, learning outcomes or permission to use the local library.
+
 **Account / Learner**:  
 Account is the authenticated access and lifecycle identity; Learner is the
 learning identity that owns plans, progress, personal content and learner-scoped
-preferences. Sensa V1 relates one Account to exactly one Learner without merging them.
+preferences. Ownership and use of a local Personal Learning Library do not require
+an online Account; linking an Account does not merge these identities.
 
 **Account Session**:  
-One authorized login session for an Account. It grants product access and is
+One authorized login session for an Account. It grants online service access and is
 unrelated to a Learning Session or Free Practice Session.
 
 **Learner Preference**:  

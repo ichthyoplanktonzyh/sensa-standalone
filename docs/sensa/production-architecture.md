@@ -14,6 +14,12 @@ Protocol、学习结果与 FSRS 交接由
 
 ## 1. 产品组成
 
+2026-09-08 目标架构修订已确认：[完整本地学习库与可选加密同步](../adr/0001-local-library-optional-encrypted-sync.md)。
+个人事实归属完整本地学习库，领域逻辑须支持本地执行；同步服务器可以保存端到端加密的密文副本，
+不持有个人内容解密密钥。公共资源分发、账号与按需在线服务分别保留。
+现有代码尚未迁移；本文后续服务器专属执行位置及在线 Account 绑定条款需逐项修订，不再作为
+新目标的前提。领域身份、校验、接受与学习分离、Outcome/FSRS 幂等等业务不变量继续适用。
+
 Sensa 由三个职责独立的层组成：
 
 - **Product Shell**：用户看到的信息架构、Curriculum lifecycle、Session intent、Lexical Reference、
