@@ -65,7 +65,8 @@
     "sensa:extension-browser-smoke": "node --import tsx scripts/sensaExtensionBrowserSmoke.mts",
     "sensa:pronunciation-browser-smoke": "node --import tsx scripts/sensaPronunciationBrowserSmoke.mts",
     "sensa:content-recovery-browser-smoke": "node --import tsx scripts/sensaContentRecoveryBrowserSmoke.mts",
-    "sensa:extension-native-fixture": "node --import tsx scripts/sensaExtensionNativeFixture.mts"
+    "sensa:extension-native-fixture": "node --import tsx scripts/sensaExtensionNativeFixture.mts",
+    "sensa:consumer-settlement-smoke": "node --import tsx scripts/sensaConsumerSettlementSmoke.mts"
   },
   "engines": {
     "node": ">=24"
@@ -73,6 +74,7 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@types/node": "^24.0.0",
+    "esbuild": "0.28.2",
     "tsx": "^4.20.0",
     "typescript": "^7.0.0"
   }

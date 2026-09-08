@@ -1,10 +1,8 @@
-import {computeReviewSchedule,consumerRunStepId} from '@sensa/learning-kernel';
+import {decideConsumerSettlement,ConsumerSettlementError,consumerSchedulingPolicyVersion,consumerRunStepId} from '@sensa/learning-kernel';
 import type {DatabaseExecutor} from '../../database/index.js';
 import type {RuntimeScope} from './initial.js';
 import {ConsumerError} from '../access/auth.js';
 import {learnerScope,materialView} from '../curriculum/targets.js';
-export const schedulingPolicy={algorithm:'fsrs-6' as const,desiredRetention:0.9,maximumIntervalDays:36500,learningStepsMinutes:[],relearningStepsMinutes:[],enableFuzz:false};
-const intervalMs=10*60*1000;
 export async function retentionAvailability(db:DatabaseExecutor,a:RuntimeScope){
  const due=(await db.query(`SELECT m.*,t.learning_target_id FROM sensa_consumer.retention_memory m JOIN sensa_consumer.target_memberships t USING(retention_target_id)
  JOIN sensa.retention_targets rt USING(retention_target_id) LEFT JOIN sensa_consumer.declared_masteries d USING(retention_target_id)
@@ -49,24 +47,29 @@ export async function selectRetention(db:DatabaseExecutor,a:RuntimeScope,activit
  return row;
 }
 export async function settleRetention(db:DatabaseExecutor,a:RuntimeScope,run:Record<string,any>,rating:'again'|'hard'|'good',operationId:string,occurred:Date){
- if(run.purpose==='relearning'&&rating==='again'){
-  const at=new Date(occurred.getTime()+intervalMs);
-  await db.query('UPDATE sensa_consumer.relearning_needs SET next_eligible_at=$2,revision=revision+1 WHERE run_id=$1 AND status=\'pending\'',[run.id,at]);
+ const review=run.purpose==='retention_review';
+ const memory=review?(await db.query('SELECT * FROM sensa_consumer.retention_memory WHERE retention_target_id=$1 FOR UPDATE',[run.retention_target_id])).rows[0]:null;
+ if(review&&!memory)throw new ConsumerError(409,'stale_due');
+ const common={protocolVersion:run.protocol_version,retentionTargetId:run.retention_target_id,rating,occurredAt:occurred};
+ let decision;
+ try {
+  decision=decideConsumerSettlement(review?{...common,purpose:'retention_review',memory:{revision:String(memory!.revision),dueAt:memory!.due_at,schedule:{...memory!.schedule,cardId:run.retention_target_id,fsrsLastReviewedAt:new Date(memory!.schedule.fsrsLastReviewedAt)}},trigger:{memoryRevision:String(run.trigger_memory_revision),dueAt:run.trigger_due_at}}:{...common,purpose:'relearning'});
+ }catch(error){if(error instanceof ConsumerSettlementError)throw new ConsumerError(409,error.code);throw error;}
+ if(decision.kind==='wait_relearning'){
+  const at=decision.nextEligibleAt;
+  await db.query("UPDATE sensa_consumer.relearning_needs SET next_eligible_at=$2,revision=revision+1 WHERE run_id=$1 AND status='pending'",[run.id,at]);
   await db.query('UPDATE sensa_consumer.runs SET next_eligible_at=$2 WHERE id=$1',[run.id,at]);return;
  }
- const completionId=crypto.randomUUID(),review=run.purpose==='retention_review';
- await db.query('INSERT INTO sensa_consumer.completions(id,run_id,retention_target_id,activity_id,operation_id,kind,evidence_level,completed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[completionId,run.id,run.retention_target_id,run.activity_id,operationId,review?'review_completed':'relearning_completion',review?'self_report':'non_evidentiary',occurred]);
- if(review){
-  const memory=(await db.query('SELECT * FROM sensa_consumer.retention_memory WHERE retention_target_id=$1 FOR UPDATE',[run.retention_target_id])).rows[0]!;
-  if(String(memory.revision)!==String(run.trigger_memory_revision)||memory.due_at.getTime()!==run.trigger_due_at.getTime())throw new ConsumerError(409,'stale_due');
-  if(occurred<memory.due_at)throw new ConsumerError(409,'clock_untrusted');
-  const previous={...memory.schedule,cardId:run.retention_target_id,fsrsLastReviewedAt:new Date(memory.schedule.fsrsLastReviewedAt)};
-  const schedule=computeReviewSchedule(previous,schedulingPolicy,rating==='again'?0:rating==='hard'?1:2,occurred),outcomeId=crypto.randomUUID(),decisionId=crypto.randomUUID();
-  await db.query("INSERT INTO sensa_consumer.memory_outcomes(id,run_id,retention_target_id,completion_id,memory_revision,due_at,grade,basis,evidence_level,occurred_at) VALUES($1,$2,$3,$4,$5,$6,$7,'learner_rated','self_report',$8)",[outcomeId,run.id,run.retention_target_id,completionId,memory.revision,memory.due_at,rating,occurred]);
-  await db.query("INSERT INTO sensa_consumer.scheduling_decisions(id,outcome_id,policy_version,schedule,decided_at) VALUES($1,$2,'sensa-lightweight-scheduling-v1',$3::jsonb,$4)",[decisionId,outcomeId,JSON.stringify(schedule),a.now]);
+ if(decision.kind!=='review_completed'&&decision.kind!=='relearning_completion')throw new ConsumerError(409,'stale_step');
+ const completionId=crypto.randomUUID();
+ await db.query('INSERT INTO sensa_consumer.completions(id,run_id,retention_target_id,activity_id,operation_id,kind,evidence_level,completed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[completionId,run.id,run.retention_target_id,run.activity_id,operationId,decision.kind,decision.evidenceLevel,occurred]);
+ if(decision.kind==='review_completed'){
+  const schedule=decision.schedule,outcomeId=crypto.randomUUID(),decisionId=crypto.randomUUID();
+  await db.query("INSERT INTO sensa_consumer.memory_outcomes(id,run_id,retention_target_id,completion_id,memory_revision,due_at,grade,basis,evidence_level,occurred_at) VALUES($1,$2,$3,$4,$5,$6,$7,'learner_rated','self_report',$8)",[outcomeId,run.id,run.retention_target_id,completionId,memory!.revision,memory!.due_at,rating,occurred]);
+  await db.query("INSERT INTO sensa_consumer.scheduling_decisions(id,outcome_id,policy_version,schedule,decided_at) VALUES($1,$2,$5,$3::jsonb,$4)",[decisionId,outcomeId,JSON.stringify(schedule),a.now,consumerSchedulingPolicyVersion]);
   await db.query('UPDATE sensa_consumer.retention_memory SET revision=revision+1,due_at=$2,schedule=$3::jsonb,scheduling_decision_id=$4 WHERE retention_target_id=$1',[run.retention_target_id,schedule.dueAt,JSON.stringify(schedule),decisionId]);
-  if(rating==='again'){
-   const at=new Date(occurred.getTime()+intervalMs);
+  if(decision.nextEligibleAt){
+   const at=decision.nextEligibleAt;
    await db.query("INSERT INTO sensa_consumer.relearning_needs(id,learner_user_id,retention_target_id,triggering_outcome_id,status,next_eligible_at) VALUES($1,$2,$3,$4,'pending',$5)",[crypto.randomUUID(),a.learner_user_id,run.retention_target_id,outcomeId,at]);
    await db.query('UPDATE sensa_consumer.runs SET next_eligible_at=$2 WHERE id=$1',[run.id,at]);
   }

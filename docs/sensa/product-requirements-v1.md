@@ -14,8 +14,14 @@
 [personal-semantic-world-model.md](personal-semantic-world-model.md) 控制；学习材料完整性由
 [sense-learning-resource-model.md](sense-learning-resource-model.md) 控制；内容供给、Learning Protocol
 与 FSRS 交接由 [learning-connection-model.md](learning-connection-model.md) 控制。本文不能把
-Product Shell 变成 Card/Deck 产品，也不能让客户端接管 Semantic Policy、Evidence、
-5D、Memory Outcome 或 FSRS。
+Product Shell 变成 Card/Deck 产品，也不能让 UI 直接写入 Evidence、5D、Memory Outcome 或 FSRS。
+2026-09-08 本地优先决策后，这些派生与结算由可在本地执行的领域内核负责；旧服务器专属位置
+不再是产品要求。
+
+完整产品形态已由 owner 确认，见[领域架构的完整产品蓝图](production-architecture.md#完整产品形态不以首发范围裁剪)：
+Flutter PC/移动主应用承载完整本地库，多端采集经快慢轨进入个人语义世界，显式加入学习后准备合格材料，
+本地完成学习与复习。可下载学习包是独立入口；Sensa 提供可选加密同步及在线 LLM/资源服务。
+以下 Web 先行与首发范围是阶段安排，不裁剪该完整形态。
 
 当前交付目标是 React Web + 浏览器采集插件的小规模受邀测试版，推进顺序见
 [生产化路线图](production-migration-plan.md)。本文保留完整 V1 IA 与后续能力定义；首轮按

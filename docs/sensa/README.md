@@ -40,7 +40,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 ## 其他当前文档
 
 2026-09-08 Owner 已确认[本地学习库与可选加密同步的架构决策](../adr/0001-local-library-optional-encrypted-sync.md)。
-目标方向已接受、现有实现未迁移；架构、阶段与路线图已标注过渡状态，后续消费合同不得继续
+目标方向已接受、已启动本地底座迁移，用户库尚未切换；架构、阶段与路线图已标注过渡状态，后续消费合同不得继续
 把个人事实必须由服务器裁决作为不可调整的产品规则。
 
 这些文档仍有用途，但不属于领域模型：
@@ -73,6 +73,8 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M2 static pronunciation | [`m2-pronunciation-handoff.md`](m2-pronunciation-handoff.md) | 按需材料静态发音绑定、真实 TTS 小样本、离线播放和可选音频失败回退 |
 | M2 private context | [`m2-anchor-use-handoff.md`](m2-anchor-use-handoff.md) | 原文显式授权、撤销/迟到结果隔离、历史保留与后续复习材料替换的本地证据 |
 | M2-D local recovery | [`m2-d-extension-recovery-handoff.md`](m2-d-extension-recovery-handoff.md) | 插件原账号队列、版本保护及实际原生 activeTab 权限恢复的本地证据 |
+| Local settlement extraction | [`local-settlement-handoff.md`](local-settlement-handoff.md) | LF-1a 共用结算与 Node/断网 Chrome/隔离 Postgres 回归；本地库持久化仍待实施 |
+| Local library migration | [`local-library-migration-blueprint.md`](local-library-migration-blueprint.md) | 本地领域/存储/服务职责、单设备首条用例、浏览器交接、同步设计门与旧数据回退；整库离线尚未交付 |
 | Active roadmap | [`production-migration-plan.md`](production-migration-plan.md) | M0–M5 生产化路线图：正式产品与消费契约、生产闭环、恢复与数据控制、受邀发布和用户验证；含依赖、验收门与当前待办 |
 | Current working agreement | [`development-workflow.md`](development-workflow.md) | 可调整的开发方式：全局结构蓝图、owner 参与前端确认、消费契约、主代理直接实现与端到端验收；不替代领域或路线图 |
 | M1-E local implementation | [`m1-e-checkin-handoff.md`](m1-e-checkin-handoff.md) | 手动/正式学习签到、原日期离线上传、账号隔离恢复与 A–E 集成验收 |

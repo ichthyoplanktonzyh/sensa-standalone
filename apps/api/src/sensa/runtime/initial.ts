@@ -1,7 +1,7 @@
-import {retentionAvailability,selectRetention,settleRetention,schedulingPolicy} from './retention.js';
+import {retentionAvailability,selectRetention,settleRetention} from './retention.js';
 import {consumerActivitySchema,consumerRunSchema,consumerGrantSchema} from '@sensa/contracts/sensa';
 import type {ConsumerRun,RuntimeOperation,RuntimeValue,ConsumerActivity} from '@sensa/contracts/sensa';
-import {consumerInitialStepId,consumerRunStepId,transitionConsumerRun,computeReviewSchedule,createEmptyReviewableCardScheduleState} from '@sensa/learning-kernel';
+import {consumerInitialStepId,consumerRunStepId,transitionConsumerRun,decideConsumerSettlement,consumerSchedulingPolicyVersion} from '@sensa/learning-kernel';
 import type {DatabaseExecutor} from '../../database/index.js';
 import {learnerScope,materialView} from '../curriculum/targets.js';
 import {ConsumerError} from '../access/auth.js';
@@ -122,10 +122,13 @@ async function recordAction(db:DatabaseExecutor,a:RuntimeScope,op:Extract<Runtim
  if(run.purpose!=='initial_learning'&&p.action.kind==='rate')await settleRetention(db,a,run,p.action.rating,op.operationId,occurred);
  if(next==='completed'&&run.purpose==='initial_learning'){
   const completionId=crypto.randomUUID(),handoffId=crypto.randomUUID(),decisionId=crypto.randomUUID();
-  const schedule=computeReviewSchedule(createEmptyReviewableCardScheduleState(run.retention_target_id),schedulingPolicy,2,occurred);
+  if(p.action.kind!=='rate')throw new ConsumerError(409,'stale_step');
+  const decision=decideConsumerSettlement({purpose:'initial_learning',protocolVersion:run.protocol_version,retentionTargetId:run.retention_target_id,rating:p.action.rating,occurredAt:occurred});
+  if(decision.kind!=='study_completion')throw new ConsumerError(409,'stale_step');
+  const schedule=decision.schedule;
   await db.query("INSERT INTO sensa_consumer.completions(id,run_id,retention_target_id,operation_id,kind,evidence_level,completed_at,activity_id) VALUES($1,$2,$3,$4,'study_completion','non_evidentiary',$5,$6)",[completionId,run.id,run.retention_target_id,op.operationId,occurred,run.activity_id]);
   await db.query("INSERT INTO sensa_consumer.scheduling_handoffs(id,retention_target_id,completion_id,basis) VALUES($1,$2,$3,'protocol_completion')",[handoffId,run.retention_target_id,completionId]);
-  await db.query("INSERT INTO sensa_consumer.scheduling_decisions(id,handoff_id,policy_version,schedule,decided_at) VALUES($1,$2,'sensa-lightweight-scheduling-v1',$3::jsonb,$4)",[decisionId,handoffId,JSON.stringify(schedule),a.now]);
+  await db.query("INSERT INTO sensa_consumer.scheduling_decisions(id,handoff_id,policy_version,schedule,decided_at) VALUES($1,$2,$5,$3::jsonb,$4)",[decisionId,handoffId,JSON.stringify(schedule),a.now,consumerSchedulingPolicyVersion]);
   await db.query('INSERT INTO sensa_consumer.retention_memory(retention_target_id,learner_user_id,due_at,schedule,scheduling_decision_id) VALUES($1,$2,$3,$4::jsonb,$5)',[run.retention_target_id,a.learner_user_id,schedule.dueAt,JSON.stringify(schedule),decisionId]);
   await db.query('UPDATE sensa_consumer.target_memberships SET revision=revision+1 WHERE retention_target_id=$1',[run.retention_target_id]);
  }

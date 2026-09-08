@@ -1,7 +1,7 @@
 # Sensa 生产领域架构
 
 > 状态：Canonical domain model  
-> 更新日期：2026-09-05
+> 更新日期：2026-09-08
 
 本文是 Sensa 领域对象、聚合边界和全局不变量的主入口。术语定义以
 [`../../CONTEXT.md`](../../CONTEXT.md) 为准；资源细节和运行行为分别由
@@ -17,8 +17,48 @@ Protocol、学习结果与 FSRS 交接由
 2026-09-08 目标架构修订已确认：[完整本地学习库与可选加密同步](../adr/0001-local-library-optional-encrypted-sync.md)。
 个人事实归属完整本地学习库，领域逻辑须支持本地执行；同步服务器可以保存端到端加密的密文副本，
 不持有个人内容解密密钥。公共资源分发、账号与按需在线服务分别保留。
-现有代码尚未迁移；本文后续服务器专属执行位置及在线 Account 绑定条款需逐项修订，不再作为
+已启动共用结算规则提取，完整本地库尚未接入；本文后续服务器专属执行位置及在线 Account 绑定条款需逐项修订，不再作为
 新目标的前提。领域身份、校验、接受与学习分离、Outcome/FSRS 幂等等业务不变量继续适用。
+
+### 完整产品形态（不以首发范围裁剪）
+
+2026-09-08 Owner 再次确认：Sensa 的 PC/移动主应用是 Flutter 编写的本地软件，承载完整个人学习库、
+我的语义世界及学习/复习流程，产品形态参考 Obsidian/Anki 的本地使用与可选同步。
+React Web 保持既有平台定位和迁移验证价值；不能把阶段性的 Web 先行理解为最终产品只有网站。
+具体采集平台的接入顺序由路线图安排，不限制完整产品的多端入口。
+
+```text
+浏览器网页/YouTube、移动分享、桌面及其他现实场景采集
+                       ↓ 固定上下文与表达
+            快轨原位确认 / 慢轨保存后澄清
+                       ↓ 合法 Semantic Acceptance
+             我的语义世界：Context–Sense–Expression
+                       ↓ 显式加入学习
+      Learning Target + 用户选择的 Learning Policy
+                       ↓ 按需生成 / 复用 / 混合供给
+              校验并冻结 Learning Materialization
+                       ↓
+          本地初学 → 本地复习/重学 → 本地记录与调度
+
+Sensa 发布的学习包 → 下载到本地 → 显式加入学习 ──┘
+```
+
+未确认 Sense 的材料保存在 Intake Inbox；完整 Personal Meaning 才进入语义世界的稳定意义集合。
+Focus 可选；快慢轨都不降低 Context–Sense–Expression 的完整性要求。
+语义世界不是必须清空的待学队列，保存意义不等于学习承诺。学习包是独立入口，不必伪造个人经历
+或先建立 Personal Meaning。学习内容由 Published/On-demand/Hybrid 供给，不能规定每次都调用模型；
+生成与独立校验完成后才能开始需要这些材料的正式 Protocol。
+
+用户拥有本地资料、材料、学习记录及调度；已有合格资料的管理、学习、复习和结果结算不依赖
+账号、同步订阅或 Sensa 后端。主应用必须能离线启动和恢复；具体格式不因参考 Obsidian 而承诺
+全部使用 Markdown，也不引入通用 Card/Deck 模型。
+
+服务端承担四类可选能力：端到端加密同步；公共学习资源目录与下载；在线 LLM 澄清/解释/材料生成；
+支撑这些服务的账号、授权、订阅与用量。LLM 是主要在线智能能力，不能成为本地学习的隐式前提。
+调用云端模型仍需联网；离线新生成能力取决于另行提供的本地模型，不包含在“已有资料完全本地使用”
+的承诺中。同步服务器只保存个人内容密文，不负责解密后执行学习结算。
+
+### 领域层职责
 
 Sensa 由三个职责独立的层组成：
 
@@ -28,7 +68,8 @@ Sensa 由三个职责独立的层组成：
 - **Learning Kernel**：Learning Target/Capability Objective、内容物化、Learning Protocol Purpose、
   Protocol Step/Checkpoint、Attempt→Observation→Evidence→Transition、协议特定进度、Initial Learning
   Completion、graded Memory Outcome、Scheduling Decision 与 Scheduling Handoff；
-- **Production Base**：身份、Postgres、离线副本、Sensa Sync、媒体授权和 FSRS。
+- **Production Base**：本地库持久化与恢复、设备/可选账号身份、Sensa Sync、公共资源交付和在线服务适配。
+  Flutter 本地使用 SQLite；浏览器存储与宿主约束按迁移用例验收。Postgres 保留在线服务及迁移前实现用途。
 
 Product Shell 不定义学习证据或毕业条件。Learning Kernel 不拥有账号、网络同步或媒体字节。
 Production Base 不决定一个 Sense 应当如何被理解或当前应当使用哪种学习干预。

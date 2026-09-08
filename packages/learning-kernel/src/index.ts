@@ -56,3 +56,4 @@ export type {
 } from "./runtime/scheduling.js";
 export * from "./runtime/workspaceConfig.js";
 export * from './runtime/consumerInitial.js';
+export * from './runtime/consumerSettlement.js';
