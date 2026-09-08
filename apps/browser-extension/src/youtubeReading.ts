@@ -3,7 +3,19 @@ import type {CaptureSnapshot} from '@sensa/contracts/sensa';
 import {runReading,readingError} from './readingClient';
 type Cue={text:string;start:number;end:number};
 export function youtubeId(){if(!['www.youtube.com','youtube.com','m.youtube.com','www.youtube-nocookie.com'].includes(location.hostname))return null;const u=new URL(location.href);const id=u.pathname==='/watch'?u.searchParams.get('v'):u.pathname.match(/^\/(?:shorts|embed)\/([^/]+)$/u)?.[1];return id&&/^[a-zA-Z0-9_-]{11}$/u.test(id)?id:null;}
-function safeCues(cues:Cue[]){return cues.filter(c=>c.text.trim()&&c.text.length<=12000&&Number.isFinite(c.start)&&Number.isFinite(c.end)&&c.start>=0&&c.end>=c.start&&c.end<=86400).sort((a,b)=>a.start-b.start).slice(0,10000);}
+function safeCues(cues:Cue[]){
+  const ordered=cues.filter(c=>c.text.trim()&&c.text.length<=12000&&Number.isFinite(c.start)&&Number.isFinite(c.end)&&c.start>=0&&c.end>=c.start&&c.end<=86400).sort((a,b)=>a.start-b.start).slice(0,10000);
+  const sentences:Cue[]=[];
+  // Caption display rows are often fragments of one sentence. Preserve source
+  // words across adjacent rows, while bounding long unpunctuated speech/gaps.
+  for(const cue of ordered){
+    const previous=sentences.at(-1);
+    if(previous&&!/[.!?]["'’”\])]*$/u.test(previous.text.trim())&&cue.start-previous.end<=2&&cue.end-previous.start<=25&&previous.text.length+cue.text.length<1200){
+      previous.text+=' '+cue.text.trim();previous.end=Math.max(previous.end,cue.end);
+    }else sentences.push({...cue,text:cue.text.trim()});
+  }
+  return sentences;
+}
 function parseJson(text:string):Cue[]{
   const data=JSON.parse(text);if(!Array.isArray(data.events))throw new Error('invalid_subtitles');
   return safeCues(data.events.filter((e:any)=>Array.isArray(e.segs)).map((e:any)=>({text:e.segs.map((s:any)=>typeof s.utf8==='string'?s.utf8:'').join('').trim(),start:e.tStartMs/1000,end:(e.tStartMs+e.dDurationMs)/1000})));

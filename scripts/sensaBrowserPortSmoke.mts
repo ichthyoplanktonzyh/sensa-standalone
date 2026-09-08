@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {readYoutubePlayer} from '../apps/browser-extension/src/youtubePlayer.ts';
 import {captureSnapshotSchema} from '@sensa/contracts/sensa';
 const browser=await chromium.launch({executablePath:process.env.SENSA_CHROMIUM_PATH});
-const cues={events:[{tStartMs:12500,dDurationMs:3000,segs:[{utf8:'She took her time.'}]},{tStartMs:18000,dDurationMs:4000,segs:[{utf8:'They looked up at the sky.'}]}]};
+const cues={events:[{tStartMs:12500,dDurationMs:1000,segs:[{utf8:'She took'}]},{tStartMs:13500,dDurationMs:2000,segs:[{utf8:'her time.'}]},{tStartMs:18000,dDurationMs:4000,segs:[{utf8:'They looked up at the sky.'}]}]};
 let captionRequest:URL|null=null,emptyCaptions=false;
 try{
  const page=await browser.newPage({viewport:{width:1200,height:850}});
