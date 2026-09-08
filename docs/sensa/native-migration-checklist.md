@@ -34,10 +34,10 @@ Owner 最新确认：Flutter/Rust 原生 PC/移动应用是确定的主产品；
 | Progression Kernel | packages/learning-kernel/src/runtime/protocolProgression.ts | 纯内核已迁移 credit/invalidate/repair/reassess/reset/complete、epoch 与 Checkpoint 不变量，通过 TS 差分；通用状态的 SQLite 账本已接入轻量三 purpose，并验证多 Checkpoint 重置/恢复；多阶段 Flutter 消费仍待接入，见 native-progress-journal-handoff.md |
 | 正交策略与组合校验 | apps/web/src/experience/learningRuntime/protocolPolicies.ts、runtimeComposition.ts | 五轴 Registry/引用校验及三种 Progression 策略已迁移，原生入口校验真实轻量组合；专用编排/scope Registry 和行为执行器仍待迁移，见 native-progression-handoff.md |
 | Profile 与 Policy 生命周期 | apps/web/src/experience/learningRuntime/policyProfiles.ts；learning-connection-model.md | 四级 Assignment、版本化 purpose plan/readiness、首次 Run commitment 与 Flutter 设置已接入；普通配置不重写历史，Policy Migration 尚未实现，见 native-policy-handoff.md |
-| 编排、运行与存储适配 | apps/web/src/experience/learningRuntime/orchestrations.ts、runtimeCoordinator.ts、runtimeSession.ts、runtimeSurfaces.ts、retentionStores.ts | 待迁移 fresh/repair、暂停恢复、运行表面与存储职责；每日数量留在 Planner |
+| 编排、运行与存储适配 | apps/web/src/experience/learningRuntime/orchestrations.ts、runtimeCoordinator.ts、runtimeSession.ts、runtimeSurfaces.ts、retentionStores.ts | 四阶段首学/复习/再学习的队列规则与核心快照恢复已迁移；正式材料/评价/SQLite 编排及 Flutter 表面仍待接入，其余 fresh/repair 与存储职责继续迁移；每日数量留在 Planner |
 | 目标与内容能力 | apps/web/src/experience/learningRuntime/retentionScopes.ts、contentCapabilities.ts | 能力合取已迁移并对照 TS；scope 准入仍待迁移，普通题型不拆分调度身份 |
 | 材料与生成 | apps/web/src/experience/learningRuntime/contentProvisioning.ts、contentAgentProvisioning.ts；packages/contracts/src/sensa/learningContent.ts | 待迁移独立候选校验、固定 Materialization、来源/用途/版本；模型生成不直接写学习结果 |
-| 呈现与学习模式 | apps/web/src/experience/learningRuntime/stepRenderers.tsx、lightweightInitialPresentation.ts、lightweightInitialProtocol.ts、interleavedFourStageProtocol.ts | 规则/资源绑定迁 Rust，renderer 迁 Flutter；保留 intent/disclosure、轻量及已有多阶段行为，界面按正式 Web 验收 |
+| 呈现与学习模式 | apps/web/src/experience/learningRuntime/stepRenderers.tsx、lightweightInitialPresentation.ts、lightweightInitialProtocol.ts、interleavedFourStageProtocol.ts | 四阶段编排规则已迁 Rust（native-four-stage-orchestration-handoff.md）；资源与评价绑定、四种 Flutter 呈现仍待迁移，保留 intent/disclosure，界面按正式 Web 验收 |
 
 现已继续实现有界文本包导入及多目标首学；纯内核基础见 [迁移记录](native-kernel-migration-handoff.md)。轻量复习/再学习事务与 Flutter 状态见 [本轮记录](native-retention-handoff.md)。后续继续完整角色学习包/媒体、通用 Runtime 扩展机制、正式 Activity 与汇总；上述未完成项全部保留，不能把本轮对照用例数换算为全项目完成率。
 
