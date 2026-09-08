@@ -1,6 +1,7 @@
 //! Single-device application transactions. All writes go through execute().
 //! The acceptance material is opt-in; this is not a production package importer.
 pub mod pack;
+pub mod retention;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use sensa_core::settlement::{Settlement, SettlementContext, decide_consumer_settlement};
@@ -44,6 +45,10 @@ pub enum CommandAction {
     },
     AddToLearning,
     StartOrResume,
+    NextRetention,
+    StartRetention {
+        early: bool,
+    },
     RecordAction {
         run_id: String,
         ordinal: u32,
@@ -70,6 +75,8 @@ pub struct RunView {
     pub ordinal: u32,
     pub attempt_count: u32,
     pub paused: bool,
+    #[serde(default = "initial_protocol")]
+    pub protocol_version: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,6 +100,12 @@ pub struct Snapshot {
     pub due_at_ms: Option<i64>,
     pub completion_count: u32,
     pub handoff_count: u32,
+    #[serde(default)]
+    pub retention: retention::RetentionView,
+}
+
+fn initial_protocol() -> String {
+    PROTOCOL.into()
 }
 
 fn id() -> String {
@@ -124,7 +137,7 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if ![1, 2].contains(&version) || application != APPLICATION {
+    } else if ![1, 2, 3].contains(&version) || application != APPLICATION {
         return Err(Error::Rule("unsupported_library_version"));
     }
     if version <= 1 {
@@ -132,6 +145,9 @@ fn connection(path: &Path) -> Result<Connection> {
             UPDATE library SET selected_material_id=(SELECT id FROM materials ORDER BY rowid LIMIT 1);
             CREATE TABLE imported_packs(id TEXT NOT NULL,version TEXT NOT NULL,digest TEXT NOT NULL,content TEXT NOT NULL,PRIMARY KEY(id,version));
             PRAGMA user_version=2;")?;
+    }
+    if version <= 2 {
+        tx.execute_batch(include_str!("retention.sql"))?;
     }
     tx.commit()?;
     Ok(db)
@@ -167,6 +183,7 @@ fn read(db: &Connection) -> Result<Snapshot> {
                     ordinal: r.get(2)?,
                     attempt_count: r.get(3)?,
                     paused: r.get(4)?,
+                    protocol_version: PROTOCOL.into(),
                 })
             },
         )
@@ -191,7 +208,7 @@ fn read(db: &Connection) -> Result<Snapshot> {
         }
         items
     };
-    Ok(Snapshot {
+    let mut snapshot = Snapshot {
         library_id,
         catalog,
         revision,
@@ -207,7 +224,10 @@ fn read(db: &Connection) -> Result<Snapshot> {
             .optional()?,
         completion_count: db.query_row("SELECT count(*) FROM completions", [], |r| r.get(0))?,
         handoff_count: db.query_row("SELECT count(*) FROM handoffs", [], |r| r.get(0))?,
-    })
+        retention: retention::RetentionView::default(),
+    };
+    retention::project(db, &mut snapshot)?;
+    Ok(snapshot)
 }
 
 pub fn open_library(path: &Path) -> Result<Snapshot> {
@@ -337,6 +357,10 @@ pub fn execute_at_offset(
                 return Err(Error::Rule("material_unavailable"));
             }
             tx.execute("UPDATE runs SET paused=1 WHERE phase<>'completed'", [])?;
+            tx.execute(
+                "UPDATE retention_runs SET paused=1 WHERE phase<>'completed'",
+                [],
+            )?;
             tx.execute("UPDATE library SET selected_material_id=?1", [material_id])?;
         }
         CommandAction::ImportAcceptanceMaterial => {
@@ -363,6 +387,12 @@ pub fn execute_at_offset(
             tx.execute("INSERT INTO targets VALUES(?1,?2,?3,?4,'lightweight','v1') ON CONFLICT(sense_version_id,binding_version_id) DO NOTHING",
                 params![id(),material.id,material.sense_version_id,material.binding_version_id])?;
         }
+        CommandAction::NextRetention => {
+            retention::next(&tx, now)?;
+        }
+        CommandAction::StartRetention { early } => {
+            retention::start(&tx, &state, now, *early)?;
+        }
         CommandAction::StartOrResume => {
             if let Some(material) = &state.material {
                 let digest: String = tx.query_row(
@@ -385,10 +415,11 @@ pub fn execute_at_offset(
                 return Err(Error::Rule("quantity_required"));
             }
             if let Some(run) = &state.run {
-                if run.phase == Phase::Completed {
-                    return Err(Error::Rule("review_not_implemented"));
+                if run.phase == Phase::Completed || run.protocol_version != PROTOCOL {
+                    retention::start(&tx, &state, now, false)?;
+                } else {
+                    tx.execute("UPDATE runs SET paused=0 WHERE id=?1", [&run.id])?;
                 }
-                tx.execute("UPDATE runs SET paused=0 WHERE id=?1", [&run.id])?;
             } else {
                 let offset = chrono::Duration::minutes(i64::from(offset_minutes));
                 let local = now
@@ -429,7 +460,11 @@ pub fn execute_at_offset(
             if run.phase == Phase::Completed {
                 return Err(Error::Rule("no_active_run"));
             }
-            tx.execute("UPDATE runs SET paused=1 WHERE id=?1", [&run.id])?;
+            if run.protocol_version == PROTOCOL {
+                tx.execute("UPDATE runs SET paused=1 WHERE id=?1", [&run.id])?;
+            } else {
+                tx.execute("UPDATE retention_runs SET paused=1 WHERE id=?1", [&run.id])?;
+            }
         }
         CommandAction::RecordAction {
             run_id,
@@ -440,65 +475,69 @@ pub fn execute_at_offset(
             if run.id != *run_id || run.ordinal != *ordinal || run.paused {
                 return Err(Error::Rule("stale_step"));
             }
-            let (target,protocol,content,expected_digest): (String,String,String,String) = tx.query_row("SELECT r.target_id,r.protocol_version,m.content,r.material_digest FROM runs r JOIN materials m ON m.id=r.material_id WHERE r.id=?1", [run_id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)))?;
-            if format!("{:x}", Sha256::digest(content.as_bytes())) != expected_digest {
-                return Err(Error::Rule("material_mismatch"));
-            }
-            // This storage adapter still admits initial runs only. Supporting a
-            // protocol in the pure core does not grant this adapter review writes.
-            if protocol != PROTOCOL {
-                return Err(Error::Rule("unsupported_protocol"));
-            }
-            let next = transition(&protocol, run.phase, *action).map_err(Error::Rule)?;
-            let phase = serde_json::to_value(next)?
-                .as_str()
-                .ok_or(Error::Rule("invalid_phase"))?
-                .to_owned();
-            tx.execute(
-                "INSERT INTO attempts VALUES(?1,?2,?3,?4,?5,?6,?7)",
-                params![
-                    id(),
-                    command.operation_id,
-                    run_id,
-                    ordinal,
-                    serde_json::to_string(action)?,
-                    phase,
-                    now.timestamp_millis()
-                ],
-            )?;
-            tx.execute("UPDATE runs SET phase=?2,ordinal=ordinal+?3,attempt_count=attempt_count+1 WHERE id=?1", params![run_id,phase,if next == Phase::Completed {0} else {1}])?;
-            if next == Phase::Completed {
-                let completion = id();
-                let handoff = id();
-                let Settlement::StudyCompletion { schedule, .. } = decide_consumer_settlement(
-                    &target,
-                    &protocol,
-                    *action,
-                    now,
-                    &SettlementContext::InitialLearning,
-                )
-                .map_err(Error::Rule)?
-                else {
-                    return Err(Error::Rule("invalid_settlement"));
-                };
-                let serialized = serde_json::to_string(&schedule)?;
+            if run.protocol_version != PROTOCOL {
+                retention::record(&tx, run, &command, *action, now)?;
+            } else {
+                let (target,protocol,content,expected_digest): (String,String,String,String) = tx.query_row("SELECT r.target_id,r.protocol_version,m.content,r.material_digest FROM runs r JOIN materials m ON m.id=r.material_id WHERE r.id=?1", [run_id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)))?;
+                if format!("{:x}", Sha256::digest(content.as_bytes())) != expected_digest {
+                    return Err(Error::Rule("material_mismatch"));
+                }
+                // Historical initial runs cannot be relabeled to gain review authority.
+                // Retention has its own due trigger and purpose-pinned snapshot.
+                if protocol != PROTOCOL {
+                    return Err(Error::Rule("unsupported_protocol"));
+                }
+                let next = transition(&protocol, run.phase, *action).map_err(Error::Rule)?;
+                let phase = serde_json::to_value(next)?
+                    .as_str()
+                    .ok_or(Error::Rule("invalid_phase"))?
+                    .to_owned();
                 tx.execute(
+                    "INSERT INTO attempts VALUES(?1,?2,?3,?4,?5,?6,?7)",
+                    params![
+                        id(),
+                        command.operation_id,
+                        run_id,
+                        ordinal,
+                        serde_json::to_string(action)?,
+                        phase,
+                        now.timestamp_millis()
+                    ],
+                )?;
+                tx.execute("UPDATE runs SET phase=?2,ordinal=ordinal+?3,attempt_count=attempt_count+1 WHERE id=?1", params![run_id,phase,if next == Phase::Completed {0} else {1}])?;
+                if next == Phase::Completed {
+                    let completion = id();
+                    let handoff = id();
+                    let Settlement::StudyCompletion { schedule, .. } = decide_consumer_settlement(
+                        &target,
+                        &protocol,
+                        *action,
+                        now,
+                        &SettlementContext::InitialLearning,
+                    )
+                    .map_err(Error::Rule)?
+                    else {
+                        return Err(Error::Rule("invalid_settlement"));
+                    };
+                    let serialized = serde_json::to_string(&schedule)?;
+                    tx.execute(
                     "INSERT INTO completions VALUES(?1,?2,'study_completion','non_evidentiary',?3)",
                     params![completion, run_id, now.timestamp_millis()],
                 )?;
-                tx.execute(
-                    "INSERT INTO handoffs VALUES(?1,?2,?3,'protocol_completion',?4,?5)",
-                    params![handoff, target, completion, SCHEDULING_POLICY, serialized],
-                )?;
-                tx.execute(
-                    "INSERT INTO memory VALUES(?1,?2,1,?3,?4)",
-                    params![
-                        target,
-                        handoff,
-                        schedule.due_at.timestamp_millis(),
-                        serialized
-                    ],
-                )?;
+                    tx.execute(
+                        "INSERT INTO handoffs VALUES(?1,?2,?3,'protocol_completion',?4,?5)",
+                        params![handoff, target, completion, SCHEDULING_POLICY, serialized],
+                    )?;
+                    tx.execute(
+                        "INSERT INTO memory VALUES(?1,?2,1,?3,?4)",
+                        params![
+                            target,
+                            handoff,
+                            schedule.due_at.timestamp_millis(),
+                            serialized
+                        ],
+                    )?;
+                }
             }
         }
     }

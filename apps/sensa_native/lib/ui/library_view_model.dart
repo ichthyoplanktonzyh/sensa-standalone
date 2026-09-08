@@ -68,7 +68,13 @@ class LibraryViewModel extends ChangeNotifier {
       snapshot = await repository.load();
       home = false;
     } catch (e) {
-      error = message(e);
+      if (e.toString().contains('no_due_review')) {
+        _pending = null;
+        home = true;
+        notice = '目前没有可开始的到期复习，可以继续新学或稍后再来。';
+      } else {
+        error = message(e);
+      }
     } finally {
       busy = false;
       _notify();
@@ -125,6 +131,11 @@ class LibraryViewModel extends ChangeNotifier {
 
   String message(Object error) {
     final text = error.toString();
+    if (text.contains('relearning_waiting')) {
+      return '还未到再学习时间，可以稍后继续，或明确选择提前回想。';
+    }
+    if (text.contains('no_due_review')) return '这项内容还未到复习时间。';
+    if (text.contains('stale_due')) return '复习状态已更新，请重新读取后继续。';
     if (text.contains('daily_limit')) {
       return '今天的新学数量已达到设置，可继续已有学习。';
     }

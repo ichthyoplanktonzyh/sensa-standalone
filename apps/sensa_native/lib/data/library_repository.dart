@@ -21,6 +21,11 @@ class LibrarySnapshot {
   bool get enrolled => value['enrolled'] as bool;
   String? get phase => run?['phase'] as String?;
   bool get paused => run?['paused'] as bool? ?? false;
+  String get protocol =>
+      run?['protocolVersion'] as String? ?? 'consumer-initial-v1';
+  Map<String, dynamic> get retention =>
+      value['retention'] as Map<String, dynamic>? ?? {};
+  int? get nextEligibleAtMs => retention['nextEligibleAtMs'] as int?;
   int? get dueAtMs => value['dueAtMs'] as int?;
 }
 

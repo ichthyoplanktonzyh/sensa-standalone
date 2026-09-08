@@ -76,6 +76,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | Local settlement extraction | [`local-settlement-handoff.md`](local-settlement-handoff.md) | LF-1a 共用结算与 Node/断网 Chrome/隔离 Postgres 回归；本地库持久化仍待实施 |
 | Native migration checklist | [`native-migration-checklist.md`](native-migration-checklist.md) | 已有 TS 成果的保留/迁移范围、验收状态；首版登记，待逐项盘点 |
 | Native pack import | [`native-pack-import-contract.md`](native-pack-import-contract.md) / [`native-pack-import-handoff.md`](native-pack-import-handoff.md) | 有界文本包、显式入学、多目标首学、版本保护与原生验收；完整发布包/媒体仍待迁移 |
+| Native retention | [`native-retention-handoff.md`](native-retention-handoff.md) | 轻量本地复习结算、等待/提前/同 Run 恢复及原生验证；正式 Activity 与去重汇总仍待迁移 |
 | Native kernel migration | [`native-kernel-migration-handoff.md`](native-kernel-migration-handoff.md) | 三 purpose 决策、可配置 FSRS、TS 差分及本地首学事务接入；完整原生复习仍待完成 |
 | Native local learning slice | [`native-local-learning-handoff.md`](native-local-learning-handoff.md) | Flutter/Rust/SQLite 首学技术纵切的实际证据与未完成边界 |
 | Native client architecture | [`../adr/0002-flutter-rust-local-core.md`](../adr/0002-flutter-rust-local-core.md) | Flutter/Dart 主应用、Rust 本地权威、TS 浏览器/云端；正式 Web 界面作为参考，首个原生技术纵切已在 macOS/Android 验证 |

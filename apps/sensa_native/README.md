@@ -1,8 +1,8 @@
-# Sensa native — first local learning slice
+# Sensa native — local learning acceptance slices
 
 Flutter/Dart calls a Rust application module through generated flutter_rust_bridge
 bindings. SQLite transactions own the operation ledger, attempts, completion,
-scheduling handoff and initial memory state. No Hono/API/account is used at runtime.
+scheduling handoff, review outcomes, relearning needs and memory state. No Hono/API/account is used at runtime.
 
 This is a **bounded acceptance application**, not the complete product UI:
 - Reuses the confirmed Web colors and lightweight Recall → Reveal → rating behavior.
@@ -11,14 +11,14 @@ This is a **bounded acceptance application**, not the complete product UI:
   `acceptance-fixture` feature. General package import/publication is not implemented.
 - Initial hard/good settle once; again returns to recall. Pause/reopen preserves the Run.
 - Due time is real local time plus the existing initial scheduling policy's interval.
-  Review/relearning execution, multiple targets, personal capture, Agent intake,
-  E2EE sync, backup/export and old-data migration are not implemented here.
+  Lightweight review/relearning and multiple text targets are supported. Personal capture,
+  Agent intake, E2EE sync, backup/export and old-data migration remain pending.
 - The library is in application support under `local-acceptance/acceptance-v1.sqlite`,
   separate from any existing Web/API account or user library.
 
 ## Structure
 
-- `../../crates/sensa-core`: pure Rust initial protocol/initializer, no IO.
+- `../../crates/sensa-core`: pure Rust purpose-specific protocols/settlements and configurable FSRS, no IO.
 - `../../crates/sensa-library`: SQLite schema and atomic commands. Only its Rust API writes facts.
 - `rust/src/api/library.rs`: asynchronous bridge to the library; generated glue in
   `rust/src/frb_generated.rs` and `lib/src/rust/`.
@@ -101,3 +101,23 @@ name for the first command; reuse it for recovery. Android requires
 flutter test integration_test/pack_import_test.dart -d macos --dart-define=SENSA_NATIVE_RUN=my-pack-run
 flutter test integration_test/pack_import_test.dart -d macos --dart-define=SENSA_NATIVE_RUN=my-pack-run --dart-define=SENSA_NATIVE_RECOVERY=true
 ```
+
+## Local retention
+
+**只复习** selects due reviews and pending relearning without resuming unfinished
+initial learning. **再回想** in a review saves the original rating once and schedules
+relearning in ten minutes; **提前回想** is an explicit early return. Completing
+relearning preserves the review rating and FSRS schedule. Waiting survives restart.
+The shell reports lifetime counts, not a full Activity summary.
+
+The integration fixture is a synthetic already-due library created through the
+public Rust commands by `crates/sensa-library/examples/retention_fixture.rs`.
+It is embedded only in test source. Never seed a real library or change device time.
+
+```sh
+flutter test integration_test/retention_test.dart -d macos --dart-define=SENSA_NATIVE_RUN=my-retention-run
+flutter test integration_test/retention_test.dart -d macos --dart-define=SENSA_NATIVE_RUN=my-retention-run --dart-define=SENSA_NATIVE_RECOVERY=true
+```
+
+For Android replace `-d macos` with `-d emulator-5554 --no-uninstall` in both runs.
+See `../../docs/sensa/native-retention-handoff.md` for scope and evidence.

@@ -109,6 +109,30 @@ class _LibraryScreenState extends State<LibraryScreen> {
             () => vm.act({'kind': 'confirm_quantity', 'quantity': quantity}),
           ),
         ];
+      } else if (s.nextEligibleAtMs != null &&
+          (s.phase == 'waiting' || s.phase == 'completed') &&
+          !vm.home) {
+        final eligible = DateTime.fromMillisecondsSinceEpoch(
+          s.nextEligibleAtMs!,
+        ).toLocal();
+        body = [
+          Text('稍后再回想', style: t.headlineLarge),
+          const Text('遗忘记录已保存。再学习会帮助恢复连接，不会改写刚才的复习评分。'),
+          Text(
+            '可继续时间：${eligible.hour.toString().padLeft(2, '0')}:${eligible.minute.toString().padLeft(2, '0')}',
+          ),
+          button(
+            '到时继续',
+            () => vm.act({'kind': 'start_retention', 'early': false}),
+          ),
+          button(
+            '提前回想',
+            () => vm.act({'kind': 'start_retention', 'early': true}),
+            primary: false,
+          ),
+          button('先学习其他内容', vm.showHome, primary: false),
+          button('结束本次', vm.showHome, primary: false),
+        ];
       } else if (s.phase == 'completed' && !vm.home) {
         final due = DateTime.fromMillisecondsSinceEpoch(s.dueAtMs!).toLocal();
         body = [
@@ -117,11 +141,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
             size: 48,
             color: Color(0xff147663),
           ),
-          Text('本次首学已完成', style: t.headlineLarge),
+          Text(
+            s.protocol == 'consumer-initial-v1'
+                ? '本次首学已完成'
+                : s.protocol == 'consumer-review-v1'
+                ? '本次复习已完成'
+                : '本次再学习已完成',
+            style: t.headlineLarge,
+          ),
           Text(s.material!['expression'] as String, style: t.headlineSmall),
-          const Text('学习记录和复习时间已保存到本机。完成首学不代表已经掌握。'),
+          Text(
+            s.protocol == 'consumer-relearning-v1'
+                ? '连接已恢复，原复习评分与复习时间保持不变。'
+                : '学习记录和复习时间已保存到本机。完成学习不代表已经掌握。',
+          ),
           Text('下次复习：${due.year}/${due.month}/${due.day}', style: t.bodyLarge),
-          const Text('此验收版先验证首学与恢复，复习交互将在后续接入。'),
+
+          if (s.protocol != 'consumer-initial-v1')
+            button('继续复习其他内容', () => vm.act({'kind': 'next_retention'})),
           button('回到首页', vm.showHome),
         ];
       } else if (s.run != null &&
@@ -130,6 +167,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
           !vm.home) {
         final recall = s.phase == 'recall';
         body = [
+          Text(
+            s.protocol == 'consumer-review-v1'
+                ? '到期复习'
+                : s.protocol == 'consumer-relearning-v1'
+                ? '再次学习'
+                : '首次学习',
+            style: t.labelLarge,
+          ),
           Text(recall ? '回想这个情境' : '连接这个表达', style: t.headlineSmall),
           Text(s.material!['scene'] as String, style: t.bodyLarge),
           if (recall) ...[
@@ -158,6 +203,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
         body = [
           Text('我的本地学习库', style: t.headlineLarge),
           Text('每日新学 ${s.quantity} 个 · 无需登录'),
+          Text(
+            '累计复习 ${s.retention['reviewCount'] ?? 0} 次 · 再学习完成 ${s.retention['relearningCount'] ?? 0} 次 · 待恢复 ${s.retention['pendingCount'] ?? 0} 项',
+          ),
+          button('只复习', () => vm.act({'kind': 'next_retention'})),
           button('导入学习包', vm.importPack, primary: false),
           if (vm.notice != null)
             Semantics(liveRegion: true, child: Text(vm.notice!)),
@@ -179,13 +228,32 @@ class _LibraryScreenState extends State<LibraryScreen> {
             Text(s.material!['source'] as String),
             if (!s.enrolled)
               button('加入学习', () => vm.act({'kind': 'add_to_learning'}))
-            else if (s.phase != 'completed')
+            else if (s.nextEligibleAtMs != null &&
+                (s.phase == 'completed' || s.phase == 'waiting')) ...[
+              const Text('这项内容还需要再回想，等待进度已保存在本机。'),
+              button(
+                '继续再学习',
+                () => vm.act({'kind': 'start_retention', 'early': false}),
+              ),
+              button(
+                '提前回想',
+                () => vm.act({'kind': 'start_retention', 'early': true}),
+                primary: false,
+              ),
+            ] else if (s.phase != 'completed')
               button(
                 s.run == null ? '开始学习' : '继续学习',
                 () => vm.act({'kind': 'start_or_resume'}),
               )
-            else
-              const Text('首学已完成，复习时间已保存在本机。'),
+            else ...[
+              Text(
+                '复习日期：${DateTime.fromMillisecondsSinceEpoch(s.dueAtMs!).toLocal().toString().substring(0, 16)}',
+              ),
+              button(
+                '开始到期复习',
+                () => vm.act({'kind': 'start_retention', 'early': false}),
+              ),
+            ],
           ],
         ];
       }
@@ -196,6 +264,35 @@ class _LibraryScreenState extends State<LibraryScreen> {
             Padding(padding: EdgeInsets.all(16), child: Text('本地验收版')),
           ],
         ),
+        bottomNavigationBar: vm.error == null
+            ? null
+            : SafeArea(
+                child: Material(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Semantics(liveRegion: true, child: Text(vm.error!)),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            TextButton(
+                              onPressed: vm.busy ? null : vm.retry,
+                              child: const Text('重试本次操作'),
+                            ),
+                            TextButton(
+                              onPressed: vm.busy ? null : vm.load,
+                              child: const Text('重新读取'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
@@ -224,23 +321,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ),
                     ),
                   ),
-                  if (vm.error != null) ...[
-                    const SizedBox(height: 24),
-                    Semantics(liveRegion: true, child: Text(vm.error!)),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        TextButton(
-                          onPressed: vm.busy ? null : vm.retry,
-                          child: const Text('重试本次操作'),
-                        ),
-                        TextButton(
-                          onPressed: vm.busy ? null : vm.load,
-                          child: const Text('重新读取'),
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
               ),
             ),

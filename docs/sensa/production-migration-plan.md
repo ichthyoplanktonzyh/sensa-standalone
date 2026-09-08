@@ -1,5 +1,7 @@
 # Sensa 生产化路线图
 
+2026-09-08 原生增量：轻量到期复习与再学习已接入 Rust/SQLite/Flutter，事务和平台验证见 [交付记录](native-retention-handoff.md)。此记录不将正式 Activity/Mixed/去重汇总、通用 Runtime 或完整 LF-1b 标记为完成。
+
 > 状态：Active roadmap\
 > 更新日期：2026-09-07\
 > 近期目标：Flutter/Rust 原生单设备本地学习库；Web 保留成果、暂停新建设\

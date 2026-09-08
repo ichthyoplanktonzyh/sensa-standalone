@@ -149,7 +149,7 @@ fn additive_v1_upgrade_preserves_completed_history() {
     let before = answer(&path, Action::Good);
     // Recreate the v1 schema shape around unchanged fact rows.
     let db = rusqlite::Connection::open(&path).unwrap();
-    db.execute_batch("DROP TABLE imported_packs; ALTER TABLE library DROP COLUMN selected_material_id; PRAGMA user_version=1;").unwrap();
+    db.execute_batch("DROP TABLE relearning_needs; DROP TABLE scheduling_decisions; DROP TABLE memory_outcomes; DROP TABLE retention_completions; DROP TABLE retention_attempts; DROP TABLE retention_runs; DROP TABLE imported_packs; ALTER TABLE library DROP COLUMN selected_material_id; PRAGMA user_version=1;").unwrap();
     drop(db);
     let upgraded = open_library(&path).unwrap();
     assert_eq!(
