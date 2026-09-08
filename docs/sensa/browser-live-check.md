@@ -67,6 +67,9 @@ Meaning Focus 只是可选桥梁。代码原本已允许无 Focus 直接接受�
 
 ## 按源码发现并修复的问题
 
+本节记录首轮拼接修复。后续日常阅读轮已细化为来源时间边界分句，真实视频从 59 段变为
+112 段，上下句与原生播放跟随通过；最新行为和限制见[日常阅读验收](browser-reading-continuity-handoff.md)。
+
 新增阅读了 Read Frog 固定提交 `e3cbe2b7c669c875dbf1b050254da9b628daefe1` 的
 `src/utils/subtitles/fetchers/youtube/parser/scrolling-asr-parser.ts` 与
 `src/utils/subtitles/processor/optimizer.ts`。它们把字幕显示行与语义片段分开处理，

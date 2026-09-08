@@ -4,6 +4,7 @@
 Owner 已确认浏览器端口包含 YouTube，并要求以陪读蛙源码为参考、独立实现闭源产品。
 后续实测结果、字幕断行修复及本地服务恢复见[真实浏览器验证记录](browser-live-check.md)。
 快轨补充验收：普通 Chrome 的 YouTube 字幕选中 `multiply` → 正式解释 → 原位「加入 Sensa」→ 服务端完整意义；无关注点、无新增 Inbox、无自动加入学习。语义策略已校准为 v4，详见同一记录中的快轨章节。
+日常阅读流畅度补充：视口优先的长页翻译、原位重试、字幕时间分段与过期队列隔离已完成；普通 Chrome 验证上下句及原生播放恢复跟随，见[本轮验收](browser-reading-continuity-handoff.md)。
 
 ## 已实现的纵切
 
@@ -20,7 +21,8 @@ Owner 已确认浏览器端口包含 YouTube，并要求以陪读蛙源码为参
 请求 ID 固定原输入；同 ID 重复访问不再次调用模型，不同载荷拒绝。读请求每日每账号最多
 300 次、同时最多 3 次；单次模型请求 35 秒，超过 45 秒的结果不进入 ready。过期响应内容
 在后续访问时清除，保留请求 ID 防止旧重试再次收费。账号授权在结果返回前再次检查。
-网页本轮最多识别 150 个标准/叶子文本块，不包含所有网站专用规则和复杂虚拟段落策略。
+网页随滚动登记视口附近的标准/叶子文本块，不再截断到前 150 段；最多两个翻译任务并发，
+相同文本共享在途请求，成功缓存滚动保留 150 条。不包含所有网站专用规则和复杂虚拟段落策略。
 
 ## 实际源码参考
 
@@ -31,7 +33,7 @@ Owner 已确认浏览器端口包含 YouTube，并要求以陪读蛙源码为参
 | --- | --- | --- |
 | `src/entrypoints/options/pages/api-providers/feature-providers/index.tsx`、`src/utils/constants/feature-providers.ts` | 连接与按功能分配分开 | 功能映射按 Sensa 解释/采集链定义 |
 | `src/types/config/provider/schemas.ts`、Provider 编辑表单及连接测试/模型选择组件 | 自定义兼容地址、手填/获取模型、测试反馈、高级设置 | 服务端凭据库；不把扩展本地密钥方案照搬过来 |
-| `src/utils/request/`、官方 request-control 文档 | 控制请求、去重、失败处理 | 服务端幂等账本与限额；网页按需串行，不照搬上游批处理参数 |
+| `src/utils/request/`、官方 request-control 文档 | 控制请求、去重、失败处理 | 服务端幂等账本与限额；网页按需、限并发，不照搬上游批处理参数 |
 | `src/entrypoints/selection.content/selection-toolbar/use-selection-popover-snapshot.ts`、`custom-action-button/use-custom-action-execution.ts` | 固定选区、隔离旧结果、显式动作 | 保留 Sensa 原快照/lookup/accept 边界 |
 | `src/utils/host/translate/dom/paragraph-segmentation.ts`、`translation-cleanup.ts` | 文本块边界、宿主动态更新、恢复时不能覆盖宿主新状态 | 先实现标准与叶子文本块；通过自有标记切换原文可见性，保留宿主事件与 inline style |
 | `src/utils/subtitles/fetchers/youtube/index.ts`、`pot-token.ts`、`url-builder.ts`、`src/entrypoints/interceptor.content/inject-player-api.ts`、`utils.ts` | 当前视频/轨道校验、播放器字幕来源、原生请求回退、空响应不能当成功 | activeTab 授权后在 MAIN world 读取数据；保留选中轨道地址，补入当前播放器提供的字幕令牌、客户端与设备参数；不记录签名地址/令牌，字幕数据与模型凭据隔离 |
@@ -66,6 +68,7 @@ JSON3 夹具通过写成真实 YouTube 字幕兼容已完成。播放器请求�
 随后在 owner 已打开的普通 Chrome 中，视频 `NfNHImQPHJc` 成功读取 272 条真实英文字幕，
 经上下文合并后形成 59 段。真实模型翻译、阅读动作、保存、澄清/确认和视频回访通过。
 这补上一个真实网站成功案例，不代表所有视频/浏览器兼容，也未确定首轮空响应的根因。
+后续日常阅读轮采用源时间片段分句，同一视频实测加载 112 段；未增加真实模型调用。
 
 尚未完成：无字幕视频的云端 AI 转录；Shorts/跨域嵌入和直播的完整兼容验收；独立电子书
 阅读器接入；上游全部站点规则/长文虚拟分段/流式结果/批量翻译；完整非兼容协议 Provider
