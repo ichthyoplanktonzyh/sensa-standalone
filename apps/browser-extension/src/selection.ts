@@ -6,7 +6,7 @@ export function captureSelection(range: Range): CaptureSnapshot | null {
     ? range.startContainer.parentElement : range.startContainer as Element;
   const end = range.endContainer.nodeType === Node.TEXT_NODE
     ? range.endContainer.parentElement : range.endContainer as Element;
-  const excluded = 'input,textarea,select,[contenteditable]:not([contenteditable="false"]),script,style,noscript';
+  const excluded = 'input,textarea,select,[contenteditable]:not([contenteditable="false"]),script,style,noscript,[data-sensa-ui]';
   if (!start || !end || start.closest(excluded) || end.closest(excluded)) return null;
   let block: Element | null = start;
   while (block && block !== document.body && block !== document.documentElement) {

@@ -1,5 +1,38 @@
 # Sensa Chrome 采集插件
 
+2026-09-08 浏览器端口扩展见 [施工约定](../../docs/sensa/browser-port-contract.md) 和
+[交付记录](../../docs/sensa/browser-port-handoff.md)。新增独立模型设置页、划词翻译/阅读动作、
+页面双语/仅译文与恢复、YouTube 字幕阅读及视频时间定位。
+这是独立实现，源码行为参考清单和实际验收范围在交付记录中。
+
+新服务需要应用 `0021_sensa_browser_reading.sql`。服务端设置
+`SENSA_PROVIDER_VAULT_KEY` 为独立的 32 字节随机密钥（64 位十六进制），保存于部署密钥管理中；
+不要提交到 Git，不要在普通日志或配置导出中输出。遗失或随意更换该密钥会导致已存连接无法解密。
+默认支持 DeepSeek、OpenAI、OpenRouter 的 HTTPS origin；自定义兼容服务需部署明确加入
+`SENSA_READING_ALLOWED_ORIGINS`（逗号分隔）。密钥不持久化到插件 storage。
+OpenAI 等兼容服务的 Base URL 应包括其 API 前缀，例如 `/v1`。
+
+设置页可新增/编辑/移除连接、获取已保存连接的模型列表、主动测试，分别指定各阅读功能的连接。
+新连接须先保存再测试；密钥留空表示保留，改变地址需重新填写密钥。设置为“Sensa 默认”沿用
+服务器已显式配置的默认 DeepSeek；没有配置时会提示，不自动调用其他服务商。
+页面翻译按可见段落执行，单页最多 150 段，成功结果在当前阅读会话内复用；Alt + T 翻译悬停段落。
+关闭模式清除临时译文和缓存，保留原宿主节点。普通页面适配不等于任意站点排版均已兼容。
+
+YouTube 点击“加载英文字幕”读取当前视频轨道；无法获取全文时会提示，不能将空响应当作成功。
+已有英文字幕的展示/选词/保存有固定浏览器证据，真实网站完整字幕获取尚待兼容验收。
+无字幕 AI 转录尚未接入；用户提供的英文 VTT/SRT 是独立备用输入。
+
+无付费验证入口：
+
+```sh
+node --import tsx scripts/sensaBrowserPortSmoke.mts
+node --import tsx scripts/sensaBrowserReadingApiSmoke.mts --browser
+```
+
+后者要求 `SENSA_TEST_DATABASE_URL` 指向名称以 `sensa_m1a_browser_` 开头的隔离 loopback
+Postgres，以及测试专用 vault key。模型完成与模型列表使用替身，扩展后台、HTTP、API、
+加密存储及采集数据库使用实际实现。测试为临时插件附加 fixture origin 权限，不替代商店验收。
+
 M2-A/B 本地开发版：主动划选 → 句中解释 → 原位确认或保存待处理 → 同账号 Web。
 真实解释需服务端显式配置 Semantic provider；无 provider 时仍可保存 Inbox。
 

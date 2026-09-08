@@ -1,4 +1,8 @@
 import type {CaptureSnapshot, SemanticLookupView} from '@sensa/contracts/sensa';
+import {captureSourceLink} from '@sensa/contracts/sensa';
+import {runReading,readingError} from './readingClient';
+import {defaultPreferences} from './preferences';
+import type {ReadingPreferences} from './preferences';
 
 interface ReadingPanelInput {
   snapshot: CaptureSnapshot;
@@ -7,6 +11,7 @@ interface ReadingPanelInput {
   isAuthorized: () => boolean;
   close: () => void;
   keyboard: boolean;
+  preferences?:ReadingPreferences;
 }
 
 /** Sensa's in-page understanding and optional-save surface. */
@@ -69,9 +74,11 @@ export function showReadingPanel(input: ReadingPanelInput) {
   const lookup = button('句中解释', () => { expand(); void explain(); });
   const speak = button('朗读', () => readAloud());
   const preview = button('保存…', () => expand());
+  const translate = button('翻译', () => void assist('selection'));
+  const custom = button(input.preferences?.actionName??defaultPreferences.actionName, () => void assist('action'));
   const dismiss = button('关闭', close);
   dismiss.className = 'dismiss';
-  toolbar.append(lookup, speak, preview, dismiss);
+  toolbar.append(lookup, translate, speak, custom, preview, dismiss);
   const body = document.createElement('div');
   body.className = 'body';
   body.hidden = true;
@@ -116,7 +123,10 @@ export function showReadingPanel(input: ReadingPanelInput) {
   const learningHint = document.createElement('p');
   learningHint.className = 'feedback';
   learningHint.textContent = '保存后，可在 Sensa 中选择是否加入学习。';
-  body.append(original, source, explanation, details, feedback, actions, learningHint);
+  const assistance=document.createElement('p');assistance.setAttribute('role','status');assistance.hidden=true;
+  body.append(original, source, assistance, explanation, details, feedback, actions, learningHint);
+  if(snapshot.source.url)source.href=captureSourceLink(snapshot.source)!;
+  if(snapshot.source.video)source.textContent=`${snapshot.source.title} · ${Math.floor(snapshot.source.video.startMs/60000)}:${String(Math.floor(snapshot.source.video.startMs%60000/1000)).padStart(2,'0')}`;
   panel.append(header, toolbar, body);
   shadow.append(style, panel);
   document.documentElement.append(host);
@@ -132,10 +142,18 @@ export function showReadingPanel(input: ReadingPanelInput) {
   let saving = false;
   let saved = false;
   let utterance: SpeechSynthesisUtterance | null = null;
+  let assistanceRun=0;
   const lookupId = crypto.randomUUID();
   const saveId = crypto.randomUUID();
   const acceptId = crypto.randomUUID();
   const alive = () => !disposed && host.isConnected && input.isAuthorized();
+  async function assist(feature:'selection'|'action'){
+    if(!mayAct())return;expand();const run=++assistanceRun;assistance.hidden=false;assistance.textContent='正在处理…';
+    translate.disabled=custom.disabled=true;
+    try{const text=await runReading(accountId,feature,expression?.text??snapshot.sentence,snapshot.sentence,input.preferences?.actionPrompt??defaultPreferences.actionPrompt);if(alive()&&run===assistanceRun)assistance.textContent=text;}
+    catch(e){if(alive()&&run===assistanceRun)assistance.textContent=readingError(e);}
+    finally{if(alive()&&run===assistanceRun){translate.disabled=custom.disabled=false;layout();}}
+  }
   function mayAct() {
     if (!alive()) return false;
     if (location.href !== snapshot.source.url) {

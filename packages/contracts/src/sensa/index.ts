@@ -21,3 +21,4 @@ export * from './consumer/checkin.js';
 export * from './consumer/intake.js';
 
 export * from './consumer/semantic.js';
+export * from './consumer/reading.js';

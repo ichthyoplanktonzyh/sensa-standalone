@@ -15,3 +15,4 @@ async function act(kind:string){
  }catch(error){status.textContent=errors[error instanceof Error?error.message:'']??'暂时无法完成，请重试。原账号材料仍保留。';}
  finally{busy=false;buttons.forEach(button=>{button.disabled=false;});if(trigger&&label)trigger.textContent=label;status.setAttribute('aria-busy','false');}}
 for(const id of ['login','toggle','stop','sync','disconnect'])document.getElementById(id)!.addEventListener('click',()=>void act(id));void act('status');
+document.getElementById('options')?.addEventListener('click',()=>void chrome.runtime.openOptionsPage());

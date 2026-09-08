@@ -4,7 +4,9 @@ import {processTask} from '../provisioning/tasks.js';
 import {generateContent,reviewContent} from '../provisioning/material.js';
 import type {ContentGenerator,ContentReviewer} from '../provisioning/material.js';
 import {beginLookup,readLookup,finishLookup,acceptSemantic,listMeanings} from '../personal/semantic.js';
-import {resolveSemantic} from '../personal/semanticResolver.js';
+import {resolveSemantic,semanticResolverFor} from '../personal/semanticResolver.js';
+import {registerReadingRoutes,configuredMeaningConnection} from '../reading/service.js';
+import type {ReadingCompletion} from '../reading/service.js';
 import type {SemanticResolver} from '../personal/semanticResolver.js';
 import {semanticLookupInputSchema} from '@sensa/contracts/sensa';
 import {extensionVerifier,extensionAuthorizationSchema,extensionExchangeSchema,authorizeExtension,exchangeExtension} from './extension.js';
@@ -179,7 +181,7 @@ async function publish(db:DatabaseExecutor,a:Account,entity:string,snapshot:unkn
   await db.query('INSERT INTO sensa_consumer.changes(learner_user_id,sequence,snapshot,entity_type) VALUES($1,$2,$3::jsonb,$4)',[a.learner_user_id,head,JSON.stringify(snapshot),entity]);
 }
 
-export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transaction?:Transaction;mediaReader?:ConsumerMediaReader;clock?:()=>Date;semanticResolver?:SemanticResolver;contentGenerator?:ContentGenerator;contentReviewer?:ContentReviewer} = {}) {
+export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transaction?:Transaction;mediaReader?:ConsumerMediaReader;clock?:()=>Date;semanticResolver?:SemanticResolver;contentGenerator?:ContentGenerator;contentReviewer?:ContentReviewer;readingCompletion?:ReadingCompletion} = {}) {
   const clock=options.clock??(()=>new Date());const app=new Hono(); const transaction=options.transaction??unsafeTransaction; const verify=extensionVerifier(options.verify??verifyConsumer,transaction,clock);
   app.use('*',bodyLimit({maxSize:256*1024,onError:c=>c.json({code:'body_too_large'},413)}));
   app.onError((e,c)=> {
@@ -188,6 +190,7 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
     console.error('Consumer request failed',e instanceof Error?e.name:'unknown');
     return c.json({code:'temporarily_unavailable'},503);
   });
+  registerReadingRoutes(app,async(request,work)=>{const identity=await verify(request);return transaction(async db=>work(db,await account(db,identity,undefined,false,clock())));},options.readingCompletion);
   app.post('/sensa/extension/authorize',async c=>{const identity=await verify(c.req.raw);if(identity.installationId)throw new ConsumerError(403,'web_authorization_required');const input=extensionAuthorizationSchema.parse(await c.req.json());return c.json(await transaction(async db=>authorizeExtension(db,await account(db,identity,undefined,false,clock()),input)));});
   app.post('/sensa/extension/exchange',async c=>{const input=extensionExchangeSchema.parse(await c.req.json());return c.json(await transaction(db=>exchangeExtension(db,input,clock())));});
   app.post('/sensa/account/session',async c=> {
@@ -248,7 +251,7 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
   });
   app.post('/sensa/provisioning/:targetId/advance',async c=>{const identity=await verify(c.req.raw),targetId=uuid.parse(c.req.param('targetId'));z.object({}).strict().parse(await c.req.json());await processTask({targetId,generate:options.contentGenerator??generateContent,review:options.contentReviewer??reviewContent,withScope:work=>transaction(async db=>{const a=await account(db,identity,undefined,false,clock());const before=await targetView(db,a,targetId);const result=await work(db,a);const after=await targetView(db,a,targetId);if(before.plan?.revision!==after.plan?.revision)await publish(db,a,'target',after);return result;})});return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());return query(a,await targetView(db,a,targetId));}));});
   app.post('/sensa/semantic/lookups',async c=>{const identity=await verify(c.req.raw),input=semanticLookupInputSchema.parse(await c.req.json());const started=await transaction(async db=>beginLookup(db,await account(db,identity,undefined,false,clock()),input));if(!started.fresh)return c.json(started.view);
-    let result=null;try{result=await (options.semanticResolver??resolveSemantic)(input.snapshot,started.view.focus);}catch{/* No source/provider payload in logs. */}
+    let result=null;try{const connection=options.semanticResolver?null:await transaction(async db=>configuredMeaningConnection(db,await account(db,identity,undefined,false,clock())));result=await (options.semanticResolver??(connection?semanticResolverFor(connection,options.readingCompletion):resolveSemantic))(input.snapshot,started.view.focus);}catch{/* No source/provider payload in logs. */}
     return c.json(await transaction(async db=>finishLookup(db,await account(db,identity,undefined,false,clock()),input.id,result)));
   });
   app.get('/sensa/semantic/lookups/:id',async c=>{const identity=await verify(c.req.raw),id=uuid.parse(c.req.param('id'));return c.json(await transaction(async db=>readLookup(db,await account(db,identity,undefined,false,clock()),id)));});
