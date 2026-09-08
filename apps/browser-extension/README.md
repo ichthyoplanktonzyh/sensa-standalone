@@ -20,3 +20,9 @@ CI/正式打包需明确设置 `SENSA_EXTENSION_WEB_URL` 和 `SENSA_EXTENSION_AP
 内置 PDF、受限页、跨域 iframe、文件页和无痕不作支持承诺。
 `npm run sensa:extension-browser-smoke` 使用隔离 profile、实际扩展与本地 fixture。
 它为 fixture origin 附加测试 host 权限，因此不能替代 activeTab 原生工具栏授权实测。
+
+`node --import tsx scripts/sensaExtensionDismissSmoke.mts` 检查原位浮层的关闭行为，
+可用 `SENSA_CHROMIUM_PATH` 指定 Chrome。使用实际 content bundle、closed Shadow DOM
+和鼠标点击，runtime 消息为本地 stub，网络全部拦截，不调用模型。
+2026-09-08 修复关闭点击被延迟划词监听重新捕获的问题；覆盖成功/失败/等待结果时关闭、
+迟到结果、Esc、外部点击、重新划选及保存按钮不触发重复捕获。

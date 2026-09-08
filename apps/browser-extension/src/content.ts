@@ -5,10 +5,20 @@ const local=globalThis as typeof globalThis & {__sensaCaptureInstalled?:boolean}
 if(!local[key]){
  local[key]=true;
  let accountId:string|null=null;let enabled=false,host:HTMLDivElement|null=null;
- const close=()=>{host?.remove();host=null;};
+ let selectionTimer:ReturnType<typeof setTimeout>|null=null;
+ const close=()=>{if(selectionTimer!==null){clearTimeout(selectionTimer);selectionTimer=null;}host?.remove();host=null;};
+ const fromPanel=(event:Event)=>Boolean(host&&event.composedPath().includes(host));
+ let outsideDismissSelection:Range|null=null;
  chrome.runtime.onMessage.addListener(message=>{if(message.kind==='reading'){if(accountId!==message.accountId)close();accountId=message.accountId??null;enabled=message.enabled===true&&Boolean(accountId);if(!enabled)close();}});
  document.addEventListener('keydown',event=>{if(event.key==='Escape')close();});
- document.addEventListener('pointerdown',event=>{if(host&&!event.composedPath().includes(host))close();});
+ document.addEventListener('pointerdown',event=>{
+  outsideDismissSelection=null;
+  if(host&&!fromPanel(event)){
+   const selection=getSelection();
+   outsideDismissSelection=selection?.rangeCount?selection.getRangeAt(0).cloneRange():null;
+   close();
+  }
+ });
  function selected(){
  if(!enabled||!accountId||host?.matches(':hover'))return;const captureAccountId=accountId;
  const selection=getSelection();if(!selection||selection.isCollapsed||!selection.rangeCount)return;
@@ -41,6 +51,15 @@ if(!local[key]){
  }catch{status.textContent='暂时无法解释，可以检查结果或保存待处理。';panel.append(check);}finally{check.disabled=false;}};
  check.onclick=()=>void explain();if(snapshot.expression)void explain();
  }
- document.addEventListener('pointerup',()=>{setTimeout(selected,0);});
- document.addEventListener('keyup',event=>{if(event.key==='Shift')selected();});
+ document.addEventListener('pointerup',event=>{
+  // Check before click can remove the closed-shadow host. A deferred hover check
+  // would otherwise capture the unchanged page selection and reopen the panel.
+  if(fromPanel(event))return;
+  const dismissed=outsideDismissSelection;outsideDismissSelection=null;
+  const selection=getSelection(),range=selection?.rangeCount?selection.getRangeAt(0):null;
+  if(dismissed&&range&&range.startContainer===dismissed.startContainer&&range.startOffset===dismissed.startOffset&&range.endContainer===dismissed.endContainer&&range.endOffset===dismissed.endOffset)return;
+  if(selectionTimer!==null)clearTimeout(selectionTimer);
+  selectionTimer=setTimeout(()=>{selectionTimer=null;selected();},0);
+ });
+ document.addEventListener('keyup',event=>{if(event.key==='Shift'&&!fromPanel(event))selected();});
 }
