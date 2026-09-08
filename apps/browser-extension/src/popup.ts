@@ -10,6 +10,8 @@ async function act(kind:string){
  const trigger=buttons.find(button=>button.id===kind),label=trigger?.textContent;if(trigger)trigger.textContent=kind==='login'?'等待账号连接…':'正在处理…';
  try{const response=await chrome.runtime.sendMessage({kind});if(response.error)throw new Error(response.error);const value=response.value;const account=value.accountId?`已连接账号 · ${value.pending} 项待同步${value.errors.length?'，请重新连接原账号后检查结果':''}`:'尚未连接账号';status.textContent=[success[kind],account].filter(Boolean).join('\n');
  const recent=document.querySelector('#recent')!;recent.replaceChildren();for(const item of value.recent){const link=document.createElement('a');const url=new URL(webUrl);url.searchParams.set(('acceptanceId' in item||item.meaningId)?'meaning':'intake',item.meaningId??item.id);link.href=url.href;link.target='_blank';link.textContent=(item.status==='removed'?'已移出我的内容 · ':item.status==='confirmed'?'已加入 Sensa · ':'已存入收件箱 · ')+(item.snapshot.expression?.text??'文字材料');recent.append(link);}
+ document.getElementById('recent-count')!.textContent=`${value.recent.length} 条`;
+ const empty=document.getElementById('recent-empty')!;empty.hidden=value.recent.length>0;empty.textContent=value.accountId?'暂无最近保存的内容。':'连接账号后查看最近保存的内容。';
  }catch(error){status.textContent=errors[error instanceof Error?error.message:'']??'暂时无法完成，请重试。原账号材料仍保留。';}
  finally{busy=false;buttons.forEach(button=>{button.disabled=false;});if(trigger&&label)trigger.textContent=label;status.setAttribute('aria-busy','false');}}
 for(const id of ['login','toggle','stop','sync','disconnect'])document.getElementById(id)!.addEventListener('click',()=>void act(id));void act('status');

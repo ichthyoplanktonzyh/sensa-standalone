@@ -29,3 +29,5 @@ CI/正式打包需明确设置 `SENSA_EXTENSION_WEB_URL` 和 `SENSA_EXTENSION_AP
 
 `node --import tsx scripts/sensaExtensionPopupSmoke.mts` 用本地 runtime stub 检查
 工具栏按钮的等待、成功、失败、防连点与恢复状态，不调用模型或账号服务。
+最近保存记录放在独立区域内滚动，显示当前记录数；检查覆盖 20 条记录、长文本、
+键盘滚动、空状态和切换账号后的列表清空，避免记录增长撑长整个弹窗。

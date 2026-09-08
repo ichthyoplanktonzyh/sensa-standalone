@@ -22,6 +22,8 @@ try {
  },{error,account});
  await expect(status).toHaveText('正在检查账号…');await expect(page.locator('#login')).toBeDisabled();
  await complete();await expect(status).toContainText('已连接账号');
+ await expect(page.getByRole('heading',{name:'最近保存'})).toBeVisible();
+ await expect(page.locator('#recent-empty')).toHaveText('暂无最近保存的内容。');
  for(const [kind,waiting,done] of [
   ['login','正在连接账号','账号连接成功'],
   ['toggle','正在开启','阅读模式已开启'],
@@ -42,5 +44,23 @@ try {
  await expect(status).toContainText('此页面不支持采集');await expect(page.locator('#toggle')).toBeEnabled();
  await page.locator('#login').click();await complete('authorization_cancelled');
  await expect(status).toContainText('登录已取消');await expect(page.locator('#login')).toHaveText('连接 Sensa 账号');
+ await page.setViewportSize({width:352,height:600});
+ await page.locator('#sync').click();
+ await page.evaluate(()=>{
+  (window as any).fixture.finish({value:{accountId:'fixture-account',pending:0,errors:[],recent:Array.from({length:20},(_,i)=>({id:'fixture-'+i,status:'saved',snapshot:{expression:{text:i===0?'a very long expression '.repeat(20):'expression '+i}}}))}});
+ });
+ await expect(page.locator('#recent a')).toHaveCount(20);
+ await expect(page.locator('#recent-count')).toHaveText('20 条');
+ await expect(page.locator('#recent-empty')).toBeHidden();
+ const geometry=await page.locator('#recent').evaluate(element=>({height:element.clientHeight,content:element.scrollHeight,width:element.clientWidth,contentWidth:element.scrollWidth}));
+ expect(geometry.height).toBeLessThanOrEqual(128);expect(geometry.content).toBeGreaterThan(geometry.height);
+ expect(geometry.contentWidth).toBeLessThanOrEqual(geometry.width);
+ await page.locator('#recent').focus();await page.keyboard.press('End');
+ await expect.poll(()=>page.locator('#recent').evaluate(element=>element.scrollTop)).toBeGreaterThan(0);
+ await expect(page.locator('#recent a').last()).toHaveAttribute('href',/intake=fixture-19$/);
+ await page.screenshot({path:'/tmp/sensa-recent-many.png',fullPage:true});
+ await page.locator('#disconnect').click();await complete(undefined,false);
+ await expect(page.locator('#recent a')).toHaveCount(0);await expect(page.locator('#recent-count')).toHaveText('0 条');
+ await expect(page.locator('#recent-empty')).toHaveText('连接账号后查看最近保存的内容。');
  console.log('PASS: all popup actions show pending/success/error feedback, prevent duplicate clicks and restore controls; no network calls.');
 } finally {await browser.close();}
