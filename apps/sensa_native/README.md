@@ -18,7 +18,7 @@ This is a **bounded acceptance application**, not the complete product UI:
 
 ## Structure
 
-- `../../crates/sensa-core`: pure Rust purpose-specific protocols/settlements and configurable FSRS, no IO.
+- `../../crates/sensa-core`: pure Rust purpose-specific protocols/settlements, Checkpoint progression, policy composition and configurable FSRS, no IO.
 - `../../crates/sensa-library`: SQLite schema and atomic commands. Only its Rust API writes facts.
 - `rust/src/api/library.rs`: asynchronous bridge to the library; generated glue in
   `rust/src/frb_generated.rs` and `lib/src/rust/`.
@@ -121,3 +121,10 @@ flutter test integration_test/retention_test.dart -d macos --dart-define=SENSA_N
 
 For Android replace `-d macos` with `-d emulator-5554 --no-uninstall` in both runs.
 See `../../docs/sensa/native-retention-handoff.md` for scope and evidence.
+
+The local composition root (`crates/sensa-library/src/composition.rs`) validates
+its actually implemented capabilities before opening SQLite. The core's broader
+policy inventory does not enable extra native learning modes. Generic Checkpoint
+progression is available as a Rust interface; its SQLite lifecycle and Flutter
+multi-stage renderers are separate migration work. See
+`../../docs/sensa/native-progression-handoff.md`.

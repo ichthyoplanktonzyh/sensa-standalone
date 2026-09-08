@@ -31,8 +31,8 @@ Owner 最新确认：Flutter/Rust 原生 PC/移动应用是确定的主产品；
 | --- | --- | --- |
 | 协议推进与结果资格 | packages/learning-kernel/src/runtime/consumerInitial.ts、consumerSettlement.ts | 已迁入 sensa-core/protocol.rs、settlement.rs；三种 purpose，未知版本拒绝；尚非完整通用 Protocol Runtime |
 | 可配置 FSRS 与历史重建 | packages/learning-kernel/src/runtime/scheduling.ts、workspaceConfig.ts | 已迁入 sensa-core/scheduling.rs；四档评分、保留率、步长、最大间隔、确定性 fuzz；不是新 UI 设置或同步合并授权 |
-| Progression Kernel | packages/learning-kernel/src/runtime/protocolProgression.ts | 待迁移 credit/invalidate/repair/reassess/reset/complete、epoch 与 Checkpoint 不变量 |
-| 正交策略与组合校验 | apps/web/src/experience/learningRuntime/protocolPolicies.ts、runtimeComposition.ts | 待迁移 Evaluation/Progression/Completion/Repair/Memory Outcome 注册及引用完整性；不得按 Profile 名称复制分支或静默降级 |
+| Progression Kernel | packages/learning-kernel/src/runtime/protocolProgression.ts | 纯内核已迁移 credit/invalidate/repair/reassess/reset/complete、epoch 与 Checkpoint 不变量，通过 TS 差分；通用状态的 SQLite 账本及多阶段 Flutter 消费仍待接入 |
+| 正交策略与组合校验 | apps/web/src/experience/learningRuntime/protocolPolicies.ts、runtimeComposition.ts | 五轴 Registry/引用校验及三种 Progression 策略已迁移，原生入口校验真实轻量组合；专用编排/scope Registry 和行为执行器仍待迁移，见 native-progression-handoff.md |
 | Profile 与 Policy 生命周期 | apps/web/src/experience/learningRuntime/policyProfiles.ts；learning-connection-model.md | 待迁移 Assignment 优先级、purpose plan/readiness、首次 Run commitment；历史不随普通配置变化重写 |
 | 编排、运行与存储适配 | apps/web/src/experience/learningRuntime/orchestrations.ts、runtimeCoordinator.ts、runtimeSession.ts、runtimeSurfaces.ts、retentionStores.ts | 待迁移 fresh/repair、暂停恢复、运行表面与存储职责；每日数量留在 Planner |
 | 目标与内容能力 | apps/web/src/experience/learningRuntime/retentionScopes.ts、contentCapabilities.ts | 待迁移 scope 准入和能力合取；普通题型不拆分调度身份 |

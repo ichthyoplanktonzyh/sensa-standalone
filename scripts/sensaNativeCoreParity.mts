@@ -13,6 +13,9 @@ assert.deepEqual(JSON.parse(JSON.stringify(current)),fixed,'TS behavior changed:
 const parity=spawnSync(process.execPath,['--import','tsx','scripts/sensaNativeSchedulingParity.mts'],{cwd:new URL('..',import.meta.url),stdio:'inherit'});
 if(parity.error)throw parity.error;
 if(parity.status!==0)process.exit(parity.status??1);
+const progression=spawnSync(process.execPath,['--import','tsx','scripts/sensaNativeProgressionParity.mts'],{cwd:new URL('..',import.meta.url),stdio:'inherit'});
+if(progression.error)throw progression.error;
+if(progression.status!==0)process.exit(progression.status??1);
 const result=spawnSync('cargo',['test','--workspace','--locked','--features','sensa-library/acceptance-fixture'],{cwd:new URL('..',import.meta.url),stdio:'inherit'});
 if(result.error)throw result.error;
 process.exitCode=result.status??1;

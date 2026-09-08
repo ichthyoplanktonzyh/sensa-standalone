@@ -1,5 +1,6 @@
 //! Single-device application transactions. All writes go through execute().
 //! The acceptance material is opt-in; this is not a production package importer.
+pub mod composition;
 pub mod pack;
 pub mod retention;
 use chrono::{DateTime, Utc};
@@ -13,6 +14,8 @@ use uuid::Uuid;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("invalid_runtime_composition: {0}")]
+    Composition(String),
     #[error("{0}")]
     Rule(&'static str),
     #[error("local_storage_failed")]
@@ -112,6 +115,7 @@ fn id() -> String {
     Uuid::new_v4().to_string()
 }
 fn connection(path: &Path) -> Result<Connection> {
+    composition::validate().map_err(Error::Composition)?;
     let mut db = Connection::open(path)?;
     db.busy_timeout(Duration::from_secs(5))?;
     db.pragma_update(None, "foreign_keys", true)?;
