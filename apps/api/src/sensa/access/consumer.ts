@@ -1,3 +1,6 @@
+import {processTask} from '../provisioning/tasks.js';
+import {generateContent,reviewContent} from '../provisioning/material.js';
+import type {ContentGenerator,ContentReviewer} from '../provisioning/material.js';
 import {beginLookup,readLookup,finishLookup,acceptSemantic,listMeanings} from '../personal/semantic.js';
 import {resolveSemantic} from '../personal/semanticResolver.js';
 import type {SemanticResolver} from '../personal/semanticResolver.js';
@@ -10,7 +13,7 @@ import {applyRuntime,listRuns,runView,currentActivity,initialAvailability,accoun
 import { Hono } from 'hono';
 import {readConsumerMedia,bytesDigest} from '../media/consumer.js';
 import type {ConsumerMediaReader} from '../media/consumer.js';
-import {applyTargetOperation,listCatalog,listTargets,targetView,materialView,authorizeMedia,catalogQuerySchema} from '../curriculum/targets.js';
+import {addPersonalTarget,applyTargetOperation,listCatalog,listTargets,targetView,materialView,authorizeMedia,catalogQuerySchema} from '../curriculum/targets.js';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import {
@@ -122,10 +125,10 @@ async function execute(db: DatabaseExecutor, a: Account, op: ConsumerOperation):
       return store({operationId:op.operationId,status:['revision_conflict','stale_step'].includes(error.code)?'conflict':'rejected',error:fail(error.code)});
     }
   }
-  if(op.kind==='curriculum.add_target'||op.kind==='learning.retry_preparation'||op.kind==='declared_mastery.set'){
+  if(op.kind==='personal.add_to_learning'||op.kind==='learning.cancel_preparation'||op.kind==='curriculum.add_target'||op.kind==='learning.retry_preparation'||op.kind==='declared_mastery.set'){
     await db.query('SAVEPOINT domain_operation');
     try {
-      const value=await applyTargetOperation(db,a,op);const next=(await plan(db,a))!;
+      const value=op.kind==='personal.add_to_learning'?await addPersonalTarget(db,a,op):await applyTargetOperation(db,a,op);const next=(await plan(db,a))!;
       await publish(db,a,'target',value.target);
       await publish(db,a,'plan',next);
       await db.query('RELEASE SAVEPOINT domain_operation');
@@ -164,7 +167,7 @@ async function publish(db:DatabaseExecutor,a:Account,entity:string,snapshot:unkn
   await db.query('INSERT INTO sensa_consumer.changes(learner_user_id,sequence,snapshot,entity_type) VALUES($1,$2,$3::jsonb,$4)',[a.learner_user_id,head,JSON.stringify(snapshot),entity]);
 }
 
-export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transaction?:Transaction;mediaReader?:ConsumerMediaReader;clock?:()=>Date;semanticResolver?:SemanticResolver} = {}) {
+export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transaction?:Transaction;mediaReader?:ConsumerMediaReader;clock?:()=>Date;semanticResolver?:SemanticResolver;contentGenerator?:ContentGenerator;contentReviewer?:ContentReviewer} = {}) {
   const clock=options.clock??(()=>new Date());const app=new Hono(); const transaction=options.transaction??unsafeTransaction; const verify=extensionVerifier(options.verify??verifyConsumer,transaction,clock);
   app.use('*',bodyLimit({maxSize:256*1024,onError:c=>c.json({code:'body_too_large'},413)}));
   app.onError((e,c)=> {
@@ -206,7 +209,7 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
       const a=await account(db,identity,undefined,false,clock());if(String(a.epoch)!==envelope.scopeEpoch)throw new ConsumerError(409,'bootstrap_required');
       await replica(db,a,envelope.replicaId);
     });
-    if(envelope.operations.some(op=>op && typeof op==='object' && 'kind' in op && !['plan.confirm_quantity','plan.set_quantity','curriculum.add_target','learning.retry_preparation','declared_mastery.set','activity.start_or_resume','activity.next','activity.pause','activity.end','run.record_action','check_in.record','intake.save','semantic.accept'].includes(String(op.kind))))throw new ConsumerError(400,'unsupported_operation');
+    if(envelope.operations.some(op=>op && typeof op==='object' && 'kind' in op && !['plan.confirm_quantity','plan.set_quantity','curriculum.add_target','learning.retry_preparation','declared_mastery.set','activity.start_or_resume','activity.next','activity.pause','activity.end','run.record_action','check_in.record','intake.save','semantic.accept','personal.add_to_learning','learning.cancel_preparation'].includes(String(op.kind))))throw new ConsumerError(400,'unsupported_operation');
     const input:ConsumerPush=consumerPushSchema.parse(body);
     if(new Set(input.operations.map(o=>o.operationId)).size!==input.operations.length)throw new ConsumerError(400,'duplicate_operation');
     const pending=[...input.operations], ordered:ConsumerOperation[]=[];
@@ -231,6 +234,7 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
         nextCursor:cursor(a,input.replicaId,String(page.at(-1)?.sequence??last)),hasMore,serverTime:iso()};
     }));
   });
+  app.post('/sensa/provisioning/:targetId/advance',async c=>{const identity=await verify(c.req.raw),targetId=uuid.parse(c.req.param('targetId'));z.object({}).strict().parse(await c.req.json());await processTask({targetId,generate:options.contentGenerator??generateContent,review:options.contentReviewer??reviewContent,withScope:work=>transaction(async db=>{const a=await account(db,identity,undefined,false,clock());const before=await targetView(db,a,targetId);const result=await work(db,a);const after=await targetView(db,a,targetId);if(before.plan?.revision!==after.plan?.revision)await publish(db,a,'target',after);return result;})});return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());return query(a,await targetView(db,a,targetId));}));});
   app.post('/sensa/semantic/lookups',async c=>{const identity=await verify(c.req.raw),input=semanticLookupInputSchema.parse(await c.req.json());const started=await transaction(async db=>beginLookup(db,await account(db,identity,undefined,false,clock()),input));if(!started.fresh)return c.json(started.view);
     let result=null;try{result=await (options.semanticResolver??resolveSemantic)(input.snapshot);}catch{/* No source/provider payload in logs. */}
     return c.json(await transaction(async db=>finishLookup(db,await account(db,identity,undefined,false,clock()),input.id,result)));

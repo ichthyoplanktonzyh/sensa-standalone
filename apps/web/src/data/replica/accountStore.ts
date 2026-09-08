@@ -1,4 +1,4 @@
-import {semanticAcceptOperationSchema} from '@sensa/contracts/sensa';
+import {personalLearningOperationSchema,semanticAcceptOperationSchema} from '@sensa/contracts/sensa';
 import type {PersonalMeaningView} from '@sensa/contracts/sensa';
 import {intakeOperationSchema,captureIdentity,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import type {CaptureSnapshot,IntakeView} from '@sensa/contracts/sensa';
@@ -111,3 +111,11 @@ export function queueSemanticAcceptance(account:AccountContext,lookupId:string,i
  const operation=semanticAcceptOperationSchema.parse({operationId:crypto.randomUUID(),occurredAt:new Date().toISOString(),installationId:state.installationId,replicaId:state.replicaId,dependsOn:[],kind:'semantic.accept',payload:{lookupId,expectedRevision:'1',intakeId,consent:'accept_context_expression_sense'}});
  return {...state,outbox:[...state.outbox,{operation,state:'pending',error:null}]};
 });}
+
+export function queuePersonalLearning(account:AccountContext,meaningId:string){return changeAccountReplica(account,state=>{
+ if(!state.plan||!state.replicaId)throw new Error('请先设置每日学习数量');
+ if(state.outbox.some(x=>x.state==='pending'&&x.operation.kind==='personal.add_to_learning'&&x.operation.payload.meaningId===meaningId))return state;
+ const operation=personalLearningOperationSchema.parse({operationId:crypto.randomUUID(),occurredAt:new Date().toISOString(),installationId:state.installationId,replicaId:state.replicaId,dependsOn:[],kind:'personal.add_to_learning',payload:{meaningId,expectedRevision:'1',planId:state.plan.id,expectedScopeRevision:state.plan.scopeRevision}});
+ return {...state,outbox:[...state.outbox,{operation,state:'pending',error:null}]};
+});}
+export function queueCancelPreparation(account:AccountContext,target:TargetView){return changeAccountReplica(account,state=>{const operation=targetOperationSchema.parse({operationId:crypto.randomUUID(),occurredAt:new Date().toISOString(),installationId:state.installationId,replicaId:state.replicaId,dependsOn:[],kind:'learning.cancel_preparation',payload:{learningTargetId:target.learningTarget?.learningTargetId,expectedPlanRevision:target.plan?.revision}});return {...state,outbox:[...state.outbox,{operation,state:'pending',error:null}]};});}

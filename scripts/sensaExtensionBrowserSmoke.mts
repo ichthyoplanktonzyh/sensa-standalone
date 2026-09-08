@@ -47,5 +47,16 @@ try{
  await expect.poll(async()=>{await restoredPopup.getByRole('button',{name:'检查保存结果'}).click();return restoredPopup.locator('#recent').textContent();}).toContain('已加入 Sensa');
  const meaningLink=await restoredPopup.locator('#recent a').filter({hasText:'已加入 Sensa'}).first().getAttribute('href');const confirmed=await context.newPage();await confirmed.goto(meaningLink!);await expect(confirmed.getByRole('region',{name:'已确认的意思'})).toBeVisible();await confirmed.screenshot({path:'/tmp/sensa-m2-meaning.png'});
 
- console.log('M2-A/B extension browser passed: real launchWebAuthFlow + Web consent + PKCE exchange, injected selection/Unicode capture, durable queue, server Inbox, Web slow acceptance, in-page fast acceptance, same-account deep links, offline restart. activeTab itself requires manual grant verification.');
+ // Both accepted paths reach the same target and complete the M1 initial-learning protocol.
+ await confirmed.getByRole('button',{name:'设置每日学习数量',exact:true}).click();await confirmed.getByRole('button',{name:'确认数量并继续',exact:true}).click();
+ await confirmed.goto(meaningLink!);await confirmed.getByRole('button',{name:'加入学习',exact:true}).first().click();
+ await expect(confirmed.getByRole('button',{name:'准备 / 检查学习内容',exact:true}).first()).toBeVisible();
+ await confirmed.getByRole('button',{name:'准备 / 检查学习内容',exact:true}).first().click();await expect(confirmed.getByText('学习内容已准备好',{exact:true}).first()).toBeVisible();
+ await confirmed.reload();await expect(confirmed.getByText('学习内容已准备好',{exact:true}).first()).toBeVisible();
+ await confirmed.getByRole('button',{name:'回首页',exact:true}).first().click();await confirmed.getByRole('button',{name:'开始学习',exact:true}).click();
+ await expect(confirmed.getByRole('button',{name:'查看表达',exact:true})).toBeVisible();await expect(confirmed.getByRole('heading',{name:'took',exact:true})).toHaveCount(0);
+ await confirmed.screenshot({path:'/tmp/sensa-m2-personal-recall.png'});await confirmed.getByRole('button',{name:'查看表达',exact:true}).click();await confirmed.getByRole('button',{name:'想起来了',exact:true}).click();
+ await expect(confirmed.getByRole('heading',{name:'已完成首次学习',exact:true})).toBeVisible();await expect(confirmed.getByText(/下次复习：/)).toBeVisible();await confirmed.screenshot({path:'/tmp/sensa-m2-personal-completion.png'});
+
+ console.log('M2-A/B/C extension browser passed: real launchWebAuthFlow + Web consent + PKCE exchange, injected selection/Unicode capture, durable queue, server Inbox, Web slow acceptance, in-page fast acceptance, same-account deep links, offline restart, personal target preparation/reload and M1 completion/handoff. activeTab itself requires manual grant verification.');
 }finally{await context.close();server.close();}

@@ -3,7 +3,7 @@ import {intakeOperationSchema,intakeViewSchema} from './intake.js';
 import {accountClockGrantSchema,checkInOperationSchema,checkInViewSchema} from './checkin.js';
 import { z } from 'zod';
 import {runtimeOperationSchema,consumerRuntimeValueSchema} from './runtime.js';
-import { targetOperationSchema, targetViewSchema } from './target.js';
+import { personalLearningOperationSchema,targetOperationSchema, targetViewSchema } from './target.js';
 
 export const consumerVersion = 'sensa-consumer-v1' as const;
 export const consumerWireVersion = 'sensa-sync-v3' as const;
@@ -40,7 +40,7 @@ export const quantityOperationSchema = z.discriminatedUnion('kind', [
     planId: id, expectedRevision: revisionSchema, dailyNewLimit: quantitySchema,
   }).strict() }).strict(),
 ]);
-export const consumerOperationSchema=z.union([quantityOperationSchema,targetOperationSchema,runtimeOperationSchema,checkInOperationSchema,intakeOperationSchema,semanticAcceptOperationSchema]);
+export const consumerOperationSchema=z.union([quantityOperationSchema,targetOperationSchema,runtimeOperationSchema,checkInOperationSchema,intakeOperationSchema,semanticAcceptOperationSchema,personalLearningOperationSchema]);
 export type ConsumerOperation=z.infer<typeof consumerOperationSchema>;
 export const consumerPushSchema = z.object({
   wireVersion: z.literal(consumerWireVersion), canonicalizerVersion: z.literal(consumerCanonicalizerVersion),

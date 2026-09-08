@@ -1,3 +1,4 @@
+import {createTask,resetTask} from '../provisioning/tasks.js';
 import { z } from 'zod';
 import { canonicalConsumerJson, catalogTargetSchema, targetViewSchema, sensaLightweightInitialMaterializationContentSchema } from '@sensa/contracts/sensa';
 import type { CatalogTarget, TargetView, TargetOperation } from '@sensa/contracts/sensa';
@@ -5,7 +6,7 @@ import type { DatabaseExecutor } from '../../database/index.js';
 import {bytesDigest} from '../media/consumer.js';
 import { ConsumerError } from '../access/auth.js';
 
-type Scope={learner_user_id:string;account_id:string};
+type Scope={learner_user_id:string;account_id:string;epoch?:string;now?:Date};
 export async function contentHash(value:unknown){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonicalConsumerJson(value)))),b=>b.toString(16).padStart(2,'0')).join('');}
 export async function learnerScope(db:DatabaseExecutor,a:Scope){
   let row=(await db.query('SELECT workspace_id FROM sensa_consumer.learner_scopes WHERE learner_user_id=$1',[a.learner_user_id])).rows[0];
@@ -17,8 +18,8 @@ export async function learnerScope(db:DatabaseExecutor,a:Scope){
   await db.query("SELECT set_config('app.user_id',$1,true),set_config('app.workspace_id',$2,true)",[a.learner_user_id,row.workspace_id]);return row.workspace_id as string;
 }
 function candidate(row:Record<string,any>):CatalogTarget{return catalogTargetSchema.parse({candidateId:row.id,senseId:row.sense_id,senseVersionId:row.sense_version_id,bindingId:row.binding_id,bindingVersionId:row.binding_version_id,expression:row.expression,meaning:row.meaning,targetLanguageTag:row.target_language,familiarLanguageTag:row.familiar_language,learnerLocale:row.learner_locale,source:row.source,admission:row.admission});}
-async function candidateRow(db:DatabaseExecutor,id:string){
-  const row=(await db.query('SELECT * FROM sensa_consumer.catalog_candidates WHERE id=$1',[id])).rows[0];
+async function candidateRow(db:DatabaseExecutor,id:string,a:Scope){
+  const row=(await db.query('SELECT * FROM sensa_consumer.target_candidates WHERE id=$1 AND (learner_user_id IS NULL OR learner_user_id=$2)',[id,a.learner_user_id])).rows[0];
   if(!row)throw new ConsumerError(404,'target_not_found');return row;
 }
 export async function listCatalog(db:DatabaseExecutor,input:{q?:string;cursor?:string;limit?:number;sourceId?:string}){
@@ -31,13 +32,13 @@ export async function targetView(db:DatabaseExecutor,a:Scope,id:string,byCandida
   await learnerScope(db,a);
   const member=(await db.query(`SELECT m.*,p.id AS plan_id,p.revision AS plan_revision,p.readiness,p.reason,p.retry_allowed,p.materialization_id
     FROM sensa_consumer.target_memberships m JOIN sensa_consumer.target_plans p ON p.membership_id=m.id
-    WHERE m.learner_user_id=$1 AND ${byCandidate?'m.retention_target_id IN (SELECT r.retention_target_id FROM sensa.retention_targets r JOIN sensa_consumer.catalog_candidates c ON c.sense_id=r.sense_id AND c.binding_id=r.sense_expression_binding_id WHERE c.id=$2)':'m.learning_target_id=$2'}`,[a.learner_user_id,id])).rows[0];
+    WHERE m.learner_user_id=$1 AND ${byCandidate?'m.retention_target_id IN (SELECT r.retention_target_id FROM sensa.retention_targets r JOIN sensa_consumer.target_candidates c ON c.sense_id=r.sense_id AND c.binding_id=r.sense_expression_binding_id WHERE c.id=$2)':'m.learning_target_id=$2'}`,[a.learner_user_id,id])).rows[0];
   if(!member&&!byCandidate)throw new ConsumerError(404,'target_not_found');
-  const c=candidate(await candidateRow(db,byCandidate?id:member!.candidate_id));
+  const c=candidate(await candidateRow(db,byCandidate?id:member!.candidate_id,a));
   if(!member)return targetViewSchema.parse({candidate:c,learningTarget:null,retentionTarget:null,membership:null,declaredMastery:{active:false,revision:'0'},plan:null,phase:'new',dueAt:null});
   const l=(await db.query('SELECT * FROM sensa.learning_targets WHERE learning_target_id=$1 AND learner_user_id=$2',[member.learning_target_id,a.learner_user_id])).rows[0]!;
   const r=(await db.query('SELECT * FROM sensa.retention_targets WHERE retention_target_id=$1 AND learner_user_id=$2',[member.retention_target_id,a.learner_user_id])).rows[0]!;
-  const sources=(await db.query('SELECT c.source FROM sensa_consumer.target_sources s JOIN sensa_consumer.catalog_candidates c ON c.id=s.candidate_id WHERE s.membership_id=$1 ORDER BY c.id',[member.id])).rows.map(x=>x.source);
+  const sources=(await db.query('SELECT c.source FROM sensa_consumer.target_sources s JOIN sensa_consumer.target_candidates c ON c.id=s.candidate_id WHERE s.membership_id=$1 ORDER BY c.id',[member.id])).rows.map(x=>x.source);
   const mastery=(await db.query('SELECT active,revision FROM sensa_consumer.declared_masteries WHERE retention_target_id=$1',[member.retention_target_id])).rows[0];
   const runtime=(await db.query('SELECT r.status,m.due_at FROM sensa_consumer.runs r LEFT JOIN sensa_consumer.retention_memory m ON m.retention_target_id=r.retention_target_id WHERE r.retention_target_id=$1 ORDER BY r.started_at DESC,r.id DESC LIMIT 1',[member.retention_target_id])).rows[0];
   const contractVersion='sensa-learning-connection-v2';
@@ -52,6 +53,7 @@ export async function listTargets(db:DatabaseExecutor,a:Scope){
   const views:TargetView[]=[];for(const row of rows)views.push(await targetView(db,a,row.learning_target_id));return views;
 }
 async function validateAdmission(db:DatabaseExecutor,row:Record<string,any>){
+  if(row.learner_user_id){const meaning=(await db.query('SELECT id FROM sensa_consumer.personal_meanings WHERE id=$1 AND learner_user_id=$2 AND sense_id=$3 AND sense_version_id=$4 AND binding_id=$5 AND binding_version_id=$6',[row.id,row.learner_user_id,row.sense_id,row.sense_version_id,row.binding_id,row.binding_version_id])).rows[0];if(!meaning)throw new ConsumerError(409,'alignment_required');return;}
   if(row.admission!=='available')throw new ConsumerError(409,'target_unavailable');
   const binding=(await db.query(`SELECT ev.surface_form,e.language_tag,sv.semantic_spec->>'coreMeaningFocus' AS meaning FROM sensa.sense_expression_binding_versions bv
     JOIN sensa.sense_expression_bindings b ON b.sense_expression_binding_id=bv.sense_expression_binding_id
@@ -63,7 +65,8 @@ async function validateAdmission(db:DatabaseExecutor,row:Record<string,any>){
   if(!binding||binding.meaning!==row.meaning||binding.surface_form!==row.expression||binding.language_tag!==row.target_language||row.familiar_language===row.target_language)throw new ConsumerError(409,'invalid_binding');
 }
 async function prepare(db:DatabaseExecutor,a:Scope,member:Record<string,any>,workspaceId:string){
-  const row=await candidateRow(db,member.candidate_id);
+  const row=await candidateRow(db,member.candidate_id,a);
+  if(row.learner_user_id){await createTask(db,{...a,epoch:a.epoch??'1',now:a.now??new Date()},member,row);return;}
   const parsed=sensaLightweightInitialMaterializationContentSchema.safeParse(row.content);
   let reason:string|null=null;
   if(!parsed.success||await contentHash(row.content)!==row.content_digest)reason='material_invalid';
@@ -101,14 +104,16 @@ export async function applyTargetOperation(db:DatabaseExecutor,a:Scope,op:Target
     await db.query('UPDATE sensa_consumer.plans SET scope_revision=scope_revision+1,revision=revision+1 WHERE learner_user_id=$1',[a.learner_user_id]);
     return {target:await targetView(db,a,member.learning_target_id)};
   }
-  if(op.kind==='learning.retry_preparation'){
+  if(op.kind==='learning.retry_preparation'||op.kind==='learning.cancel_preparation'){
     const view=await targetView(db,a,op.payload.learningTargetId);
     if(view.plan?.revision!==op.payload.expectedPlanRevision)throw new ConsumerError(409,'revision_conflict');
+    if(view.candidate.source.kind==='personal_alignment'){await resetTask(db,{...a,epoch:a.epoch??'1',now:a.now??new Date()},op.payload.learningTargetId,op.kind==='learning.cancel_preparation');return {target:await targetView(db,a,op.payload.learningTargetId)};}
+    if(op.kind==='learning.cancel_preparation')throw new ConsumerError(409,'cancel_not_allowed');
     if(!view.plan.retryAllowed)throw new ConsumerError(409,'retry_not_allowed');
     const member=(await db.query('SELECT * FROM sensa_consumer.target_memberships WHERE id=$1',[view.membership!.id])).rows[0]!;
     await prepare(db,a,member,workspaceId);return {target:await targetView(db,a,op.payload.learningTargetId)};
   }
-  const row=await candidateRow(db,op.payload.candidateId);await validateAdmission(db,row);
+  const row=await candidateRow(db,op.payload.candidateId,a);await validateAdmission(db,row);
   if(canonicalConsumerJson(row.source)!==canonicalConsumerJson(op.payload.source))throw new ConsumerError(409,'invalid_source');
   if(study.id!==op.payload.planId)throw new ConsumerError(409,'revision_conflict');
   const old=await targetView(db,a,row.id,true);
@@ -151,4 +156,12 @@ export async function authorizeMedia(db:DatabaseExecutor,a:Scope,materialId:stri
   if(!material.content.resources.some(r=>r.materialRoleKey==='pronunciation'&&r.contentPayload.audioUrl==='sensa-media:'+digest))throw new ConsumerError(404,'material_not_found');
   const media=(await db.query('SELECT * FROM sensa_consumer.published_media WHERE digest=$1',[digest])).rows[0];
   if(!media)throw new ConsumerError(503,'media_unavailable');return media;
+}
+
+export async function addPersonalTarget(db:DatabaseExecutor,a:Scope,op:import('@sensa/contracts/sensa').ConsumerOperation){
+ if(op.kind!=='personal.add_to_learning')throw new ConsumerError(400,'unsupported_operation');
+ const meaning=(await db.query('SELECT * FROM sensa_consumer.personal_meanings WHERE learner_user_id=$1 AND id=$2',[a.learner_user_id,op.payload.meaningId])).rows[0];if(!meaning)throw new ConsumerError(404,'not_found');
+ const source={kind:'personal_alignment' as const,id:meaning.alignment_id,version:'1'};
+ await db.query("INSERT INTO sensa_consumer.target_candidates(id,sense_id,sense_version_id,binding_id,binding_version_id,expression,meaning,target_language,familiar_language,learner_locale,source,admission,content,content_digest,review_reference,learner_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,'en','zh-CN','zh-CN',$8::jsonb,'available','{}',$9,'learner-acceptance',$10) ON CONFLICT DO NOTHING",[meaning.id,meaning.sense_id,meaning.sense_version_id,meaning.binding_id,meaning.binding_version_id,meaning.proposal.expression.surface,meaning.proposal.semanticSpec.coreMeaningFocus,JSON.stringify(source),await contentHash({}),a.learner_user_id]);
+ return applyTargetOperation(db,a,{...op,kind:'curriculum.add_target',payload:{planId:op.payload.planId,expectedScopeRevision:op.payload.expectedScopeRevision,candidateId:meaning.id,source}});
 }
