@@ -54,3 +54,5 @@ Clippy `--workspace --all-targets --locked -- -D warnings`、原生桥 `cargo ch
 
 继续迁移高保证 LearnQueue 的 Gate 生命周期与评价约束，使其消费本轮选择器和已有进度账本；
 随后以正式 Web AssuranceCard 为依据接入结构化材料、Action 与 Flutter 交互及离线恢复验收。
+
+后续进展：首学 LearnQueue 的纯生命周期、撤销和快照恢复已迁移，见 [生命周期记录](native-assurance-lifecycle-handoff.md)。复习/重学与正式产品接入仍未完成。

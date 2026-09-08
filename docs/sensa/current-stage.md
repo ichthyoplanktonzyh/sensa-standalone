@@ -17,7 +17,7 @@ owner 确认前端体验，再细化合同并纵向实现；该方式可根据�
 LF-1b 后续增量已接入有界轻量文本包导入、逐目标显式入学、选择/暂停恢复与每日新学上限。完整发布包/媒体仍未完成；导入平台证据见 [本轮记录](native-pack-import-handoff.md)。
 
 2026-09-08 本轮范围修订：四阶段只作内核扩展性验证，正式材料/UI 暂停，不作为当前迁移完成前置。
-改为优先高保证；fresh/repair Step 选择与通用账本组合已推进，见 [高保证迁移记录](native-assurance-orchestration-handoff.md)。
+改为优先高保证；fresh/repair Step 选择与通用账本组合已推进，见 [高保证迁移记录](native-assurance-orchestration-handoff.md)。首学队列、辅助回想规则、撤销及快照恢复的纯内核迁移已完成，见 [生命周期记录](native-assurance-lifecycle-handoff.md)；复习/重学生命周期及正式原生接入仍待完成。
 
 2026-09-08 最新确认：原生 PC/移动是主产品；Web 保留已有成果、暂停新增建设，是否开放以后决定。原生迁移必须完整承接现有 Web 功能、状态及学习内核扩展机制，不能把首发或技术验收范围当成最终范围。同步优先原生设备并保留 E2EE，Web WASM/互通不是当前前置条件。
 
