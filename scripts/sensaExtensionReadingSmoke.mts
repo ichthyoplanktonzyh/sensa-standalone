@@ -237,5 +237,39 @@ try {
     document.dispatchEvent(new PointerEvent('pointerup', {button: 0}));
   });
   await page.waitForTimeout(100); expect(await panelObject()).toBeNull();
+  // Rich article text, adjacent paragraphs and explicit context changes keep the target occurrence.
+  await page.evaluate(()=>{document.querySelector('main')!.insertAdjacentHTML('afterbegin','<article id="article"><p id="rich">Before the trip. She <a href="#">took</a><span hidden>PRIVATE HIDDEN</span><strong> her time</strong>.<br>Then she left.</p><p id="cross">Another paragraph follows.</p></article>');});
+  await set({calls:[],mode:'pending'});await select('#rich a','took');await click('句中解释');
+  const narrow=(await calls()).at(-1);expect(narrow.snapshot.sentence).toContain('She took her time.');expect(narrow.snapshot.sentence).not.toContain('PRIVATE');
+  await click('扩展上下文');expect(await visible('加入 Sensa')).toBe(false);
+  await page.evaluate(()=>(window as any).fixture.pending({value:{status:'ready',proposal:{explanation:'OLD CONTEXT RESULT',semanticSpec:{coreMeaningFocus:'old',prototypeScenes:[]}}}}));
+  await page.waitForTimeout(60);expect(await inspect('this.textContent')).not.toContain('OLD CONTEXT RESULT');
+  await set({mode:'ready'});await click('句中解释');
+  const wide=(await calls()).at(-1);expect(wide.lookupId).not.toBe(narrow.lookupId);expect(wide.snapshot.sentence).toContain('Before the trip.');expect(wide.snapshot.sentence).toContain('\nThen she left.');
+  expect(captureSnapshotSchema.safeParse(wide.snapshot).success).toBe(true);
+  await click('收起');expect(await visible('保存待处理')).toBe(false);await click('保存…');expect(await visible('加入 Sensa')).toBe(true);await close();
+  await set({calls:[]});
+  await page.evaluate(()=>{const range=document.createRange();range.setStart(document.querySelector('#rich strong')!.firstChild!,1);range.setEnd(document.querySelector('#cross')!.firstChild!,7);getSelection()!.removeAllRanges();getSelection()!.addRange(range);document.dispatchEvent(new PointerEvent('pointerup',{button:0}));});
+  await expect.poll(panelObject).toBeTruthy();await click('句中解释');
+  const crossed=(await calls()).at(-1).snapshot;expect(crossed.expression.text).toContain('her time.');expect(crossed.expression.text).toContain('\nAnother');expect(captureSnapshotSchema.safeParse(crossed).success).toBe(true);await close();
+  // Streaming UI shows actual partial text, clears it on failure and isolates a closed panel.
+  await page.evaluate(()=>{const fixture=(window as any).fixture;fixture.streams=[];(window as any).chrome.runtime.connect=()=>{let receive:any;const item={send:(value:any)=>receive(value),closed:false};fixture.streams.push(item);return {onMessage:{addListener:(fn:any)=>receive=fn},onDisconnect:{addListener:()=>{}},postMessage:(payload:any)=>{if(payload.input)Object.assign(item,{payload});},disconnect:()=>{item.closed=true;}};};});
+  await select('#rich a','took');await click('句中解释');
+  await page.evaluate(()=>(window as any).fixture.streams.at(-1).send({type:'partial',text:'未完成的解释'}));
+  expect(await inspect('this.textContent')).toContain('未完成的解释');expect(await visible('加入 Sensa')).toBe(false);
+  await page.evaluate(()=>(window as any).fixture.streams.at(-1).send({type:'result',value:{status:'unresolved',proposal:null}}));
+  expect(await inspect('this.textContent')).not.toContain('未完成的解释');expect(await visible('加入 Sensa')).toBe(false);await close();
+  await select('#rich a','took');await click('句中解释');
+  const failedLookup=await page.evaluate(()=>(window as any).fixture.streams.at(-1).payload.input.id);
+  await page.evaluate(()=>(window as any).fixture.streams.at(-1).send({type:'result',value:{status:'failed',proposal:null}}));
+  expect(await visible('重新解释')).toBe(true);await click('重新解释');
+  expect(await page.evaluate(()=>(window as any).fixture.streams.at(-1).payload.input.id)).not.toBe(failedLookup);await close();
+  await select('#rich a','took');await click('翻译');
+  await page.evaluate(()=>(window as any).fixture.streams.at(-1).send({type:'partial',text:'真实分片'}));
+  expect(await inspect('this.textContent')).toContain('真实分片');expect(await visible('加入 Sensa')).toBe(false);
+  await page.evaluate(()=>(window as any).fixture.streams.at(-1).send({type:'error',error:'reading_interrupted'}));
+  expect(await inspect('this.textContent')).not.toContain('真实分片');expect(await inspect('this.textContent')).toContain('连接已中断');
+  await click('翻译');await close();expect(await page.evaluate(()=>(window as any).fixture.streams.at(-1).closed)).toBe(true);
+  await page.evaluate(()=>(window as any).fixture.streams.at(-1).send({type:'partial',text:'LATE STREAM'}));expect(await panelObject()).toBeNull();
   console.log('PASS: explicit lookup, Unicode/context/source, preview/save/accept, retries and idempotency, late results, account switch, local speech, drag/resize/edge/scroll, keyboard and editable guard; no network/provider calls.');
 } finally { await browser.close(); }

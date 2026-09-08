@@ -12,7 +12,7 @@ const subjects=[crypto.randomUUID(),crypto.randomUUID()];const sessions=[crypto.
 await pool.query('INSERT INTO sensa_consumer.invitations(issuer,subject) VALUES($1,$2),($1,$3)',['browser-smoke',...subjects]);
 let calls=0,failing=false,release:(()=>void)|null=null,now=new Date();
 const app=createConsumerRoutes({transaction,clock:()=>now,verify:async request=>{const index=request.headers.get('authorization')==='Bearer second'?1:0;return {issuer:'browser-smoke',subject:subjects[index],sessionId:sessions[index],email:null};},
-  readingCompletion:async(connection,messages,json)=>{calls++;assert.equal(connection.apiKey,'fixture-secret-key');if(failing)throw new Error('do not expose provider payload');if(release)await new Promise<void>(resolve=>{release=resolve;});if(json){const input=JSON.parse(messages[1].content);return JSON.stringify({proposal:(await mockSemanticResolver(input,input.learnerFocus?{text:input.learnerFocus}:null)).proposal});}return '这是一段阅读译文。';}});
+  readingCompletion:async(connection,messages,json,onText)=>{calls++;assert.equal(connection.apiKey,'fixture-secret-key');if(failing)throw new Error('do not expose provider payload');if(onText)await onText(json?' {"proposal":{"explanation":"解释预览':'这是一段');if(release)await new Promise<void>(resolve=>{release=resolve;});if(json){const input=JSON.parse(messages[1].content);return JSON.stringify({proposal:(await mockSemanticResolver(input,input.learnerFocus?{text:input.learnerFocus}:null)).proposal});}return '这是一段阅读译文。';}});
 async function request(path:string,body?:unknown,second=false){const response=await app.request(path,{method:body===undefined?'GET':'POST',headers:{authorization:second?'Bearer second':'Bearer first','content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:response.status,body:await response.json() as any};}
 try{
   const installs=[crypto.randomUUID(),crypto.randomUUID()];
@@ -38,10 +38,29 @@ try{
   assert.equal((await request('/sensa/reading/run',{...input,text:'Different text'})).body.code,'reading_id_reuse');
   assert.equal((await request('/sensa/reading/run',input,true)).body.code,'provider_not_configured');
   failing=true;const failure={...input,id:crypto.randomUUID()};const failed=await request('/sensa/reading/run',failure);assert.equal(failed.body.error,'provider_unavailable');assert.ok(!JSON.stringify(failed).includes('do not expose'));const before=calls;await request('/sensa/reading/run',failure);assert.equal(calls,before);failing=false;
+  const streamed={...input,id:crypto.randomUUID()};const streamCalls=calls;release=()=>{};
+  const streamResponse=await app.request('/sensa/reading/stream',{method:'POST',headers:{authorization:'Bearer first','content-type':'application/json'},body:JSON.stringify(streamed)});
+  const reader=streamResponse.body!.getReader(),decoder=new TextDecoder();
+  const firstFrame=decoder.decode((await reader.read()).value);assert.match(firstFrame,/partial/u);assert.match(firstFrame,/这是一段/u);
+  assert.equal((await request('/sensa/reading/run',streamed)).body.status,'running');assert.equal(calls,streamCalls+1);
+  release!();release=null;let remainder='';while(true){const next=await reader.read();if(next.done)break;remainder+=decoder.decode(next.value);}
+  assert.match(remainder,/ready/u);assert.equal((await request('/sensa/reading/run',streamed)).body.text,'这是一段阅读译文。');assert.equal(calls,streamCalls+1);
+  failing=true;const badStream=await app.request('/sensa/reading/stream',{method:'POST',headers:{authorization:'Bearer first','content-type':'application/json'},body:JSON.stringify({...input,id:crypto.randomUUID()})});
+  const badBody=await badStream.text();assert.match(badBody,/failed/u);assert.ok(!badBody.includes('do not expose'));failing=false;
+  console.log('PASS: authenticated partial reading text arrives before completion; only final text commits, same-ID replay does not call provider again.');
   const snapshot=captureSnapshotSchema.parse({sentence:'She took her time.',language:'en',expression:{text:'took',start:4,end:8},source:{url:'https://www.youtube.com/watch?v=abcdefghijk',title:'Fixture video',capturedAt:new Date().toISOString(),video:{platform:'youtube',videoId:'abcdefghijk',startMs:12500,endMs:15500}}});
   assert.match(captureSourceLink(snapshot.source)!,/t=12s/u);
   assert.notDeepEqual(captureIdentity(snapshot),captureIdentity({...snapshot,source:{...snapshot.source,video:{...snapshot.source.video!,startMs:13000}}}));
   assert.equal(captureSnapshotSchema.safeParse({...snapshot,source:{...snapshot.source,url:'https://example.com'}}).success,false);
+  const semanticStreamId=crypto.randomUUID();release=()=>{};const semanticGate=release;
+  const semanticStream=await app.request('/sensa/semantic/lookups/stream',{method:'POST',headers:{authorization:'Bearer first','content-type':'application/json'},body:JSON.stringify({id:semanticStreamId,snapshot})});
+  const semanticReader=semanticStream.body!.getReader();assert.match(new TextDecoder().decode((await semanticReader.read()).value),/解释预览/u);
+  assert.equal((await request('/sensa/semantic/lookups/'+semanticStreamId)).body.status,'running');
+  for(let i=0;i<100&&release===semanticGate;i++)await new Promise(resolve=>setTimeout(resolve,5));assert.notEqual(release,semanticGate);
+  release!();release=null;let semanticTail='';while(true){const next=await semanticReader.read();if(next.done)break;semanticTail+=new TextDecoder().decode(next.value);}
+  assert.match(semanticTail,/ready/u);assert.equal((await request('/sensa/semantic/lookups/'+semanticStreamId)).body.status,'ready');
+  const semanticCalls=calls;const semanticReplay=await app.request('/sensa/semantic/lookups/stream',{method:'POST',headers:{authorization:'Bearer first','content-type':'application/json'},body:JSON.stringify({id:semanticStreamId,snapshot})});await semanticReplay.text();assert.equal(calls,semanticCalls);
+  console.log('PASS: semantic preview streams while lookup remains running; only the validated complete Proposal becomes ready; replay reuses its identity.');
   const lookupId=crypto.randomUUID();const lookup=await request('/sensa/semantic/lookups',{id:lookupId,snapshot});assert.equal(lookup.body.status,'ready',JSON.stringify(lookup.body));assert.equal(lookup.body.provenance.model,'fixture-model');
   const previousCalls=calls;await request('/sensa/semantic/lookups',{id:lookupId,snapshot});assert.equal(calls,previousCalls);
   const boot=(await request('/sensa/sync/bootstrap',{wireVersion:'sensa-sync-v3',installationId:installs[0],replicaId:null})).body;
@@ -86,6 +105,14 @@ try{
   now=new Date(now.getTime()+46000);assert.equal((await request('/sensa/reading/run',held)).body.error,'reading_timeout');release!();release=null;assert.equal((await pending).body.error,'reading_timeout');
   release=()=>{};const count=calls;const revokedPending=request('/sensa/reading/run',{...input,id:crypto.randomUUID()});
   for(let i=0;i<100&&calls===count;i++)await new Promise(resolve=>setTimeout(resolve,5));assert.equal(calls,count+1);
-  assert.equal((await request('/sensa/account/session/revoke',{operationId:crypto.randomUUID()})).status,200);release!();release=null;assert.equal((await revokedPending).status,401);
+  const releaseNormal=release!;
+  const revokedStream=await app.request('/sensa/reading/stream',{method:'POST',headers:{authorization:'Bearer first','content-type':'application/json'},body:JSON.stringify({...input,id:crypto.randomUUID()})});
+  const revokedReader=revokedStream.body!.getReader();assert.match(new TextDecoder().decode((await revokedReader.read()).value),/partial/u);
+  // Wait until the completion has installed its gate after delivering the partial frame.
+  for(let i=0;i<100&&release===releaseNormal;i++)await new Promise(resolve=>setTimeout(resolve,5));assert.notEqual(release,releaseNormal);
+  const releaseStream=release!;
+  assert.equal((await request('/sensa/account/session/revoke',{operationId:crypto.randomUUID()})).status,200);releaseNormal();releaseStream();release=null;assert.equal((await revokedPending).status,401);
+  let revokedTail='';while(true){const next=await revokedReader.read();if(next.done)break;revokedTail+=new TextDecoder().decode(next.value);}
+  assert.match(revokedTail,/error/u);assert.ok(!revokedTail.includes('这是一段阅读译文。'));assert.ok(!revokedTail.includes('ready'));
   console.log('PASS: model listing stays server-side, concurrent deduplication, late-result timeout and revoked-session result isolation.');
 }finally{await pool.end();}

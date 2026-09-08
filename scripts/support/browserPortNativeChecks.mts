@@ -27,6 +27,7 @@ export async function browserPortNativeChecks(app:Hono,account:{accountId:string
     await expect.poll(panel).not.toBeNull();const objectId=(await panel())!;
     async function click(label:string){await cdp.send('Runtime.callFunctionOn',{objectId,functionDeclaration:'function(label){Array.from(this.querySelectorAll("button")).find(b=>b.textContent===label).click();}',arguments:[{value:label}]});}
     await click('翻译');await expect.poll(async()=>{const result=await cdp.send('Runtime.callFunctionOn',{objectId,functionDeclaration:'function(){return this.textContent;}',returnByValue:true});return result.result.value;}).toContain('这是一段阅读译文。');
+    await click('句中解释');await expect.poll(async()=>{const result=await cdp.send('Runtime.callFunctionOn',{objectId,functionDeclaration:'function(){return Array.from(this.querySelectorAll("button")).some(b=>b.textContent==="加入 Sensa"&&!b.hidden);}',returnByValue:true});return result.result.value;}).toBe(true);
     await click('保存待处理');await expect.poll(checkSaved,{timeout:15000}).toBe(true);
     await page.screenshot({path:'/tmp/sensa-browser-native-saved.png'});
     console.log('PASS: installed extension settings and reading panel -> real background sender checks -> HTTP/API -> isolated Postgres save; no secret in extension storage.');

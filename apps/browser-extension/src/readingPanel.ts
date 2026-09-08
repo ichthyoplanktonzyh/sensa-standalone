@@ -1,11 +1,12 @@
-import type {CaptureSnapshot, SemanticLookupView} from '@sensa/contracts/sensa';
+import type {CaptureSnapshot} from '@sensa/contracts/sensa';
 import {captureSourceLink} from '@sensa/contracts/sensa';
-import {runReading,readingError} from './readingClient';
+import {runReading,runLookup,readingError} from './readingClient';
 import {defaultPreferences} from './preferences';
 import type {ReadingPreferences} from './preferences';
 
 interface ReadingPanelInput {
   snapshot: CaptureSnapshot;
+  contextAlternative?: CaptureSnapshot;
   range: Range;
   accountId: string;
   isAuthorized: () => boolean;
@@ -16,7 +17,8 @@ interface ReadingPanelInput {
 
 /** Sensa's in-page understanding and optional-save surface. */
 export function showReadingPanel(input: ReadingPanelInput) {
-  const {snapshot, range, accountId, close} = input;
+  const {range, accountId, close} = input;
+  let snapshot=input.snapshot;
   const host = document.createElement('div');
   host.setAttribute('popover', 'manual');
   host.style.cssText = 'all:initial;position:fixed;inset:auto;margin:0;padding:0;border:0;background:transparent;overflow:visible;z-index:2147483647;';
@@ -66,7 +68,8 @@ export function showReadingPanel(input: ReadingPanelInput) {
   drag.title = '拖动位置；聚焦后可用方向键移动';
   const hint = document.createElement('span');
   hint.textContent = '阅读助手';
-  header.append(drag, hint);
+  const collapse=button('收起',()=>{expanded=false;header.hidden=body.hidden=true;preview.hidden=false;panel.classList.remove('expanded');manuallyMoved=false;layout();});
+  header.append(drag, hint, collapse);
   const toolbar = document.createElement('div');
   toolbar.className = 'toolbar';
   toolbar.setAttribute('role', 'group');
@@ -84,13 +87,17 @@ export function showReadingPanel(input: ReadingPanelInput) {
   body.hidden = true;
   const original = document.createElement('p');
   original.className = 'original';
-  const expression = snapshot.expression;
+  let expression = snapshot.expression;
+  function renderOriginal(){
+  original.replaceChildren();
   if (expression) {
     const chars = Array.from(snapshot.sentence);
     const mark = document.createElement('mark');
     mark.textContent = expression.text;
     original.append(chars.slice(0, expression.start).join(''), mark, chars.slice(expression.end).join(''));
   } else original.textContent = snapshot.sentence;
+  }
+  renderOriginal();
   const source = document.createElement('a');
   source.className = 'source';
   source.textContent = snapshot.source.title || snapshot.source.url || '当前网页';
@@ -119,7 +126,9 @@ export function showReadingPanel(input: ReadingPanelInput) {
   const save = button('保存待处理', () => void persist('save'));
   const check = button('检查解释结果', () => void explain());
   check.hidden = true;
-  actions.append(accept, save, check);
+  const contextToggle=button('扩展上下文',()=>changeContext());
+  contextToggle.hidden=!input.contextAlternative||input.contextAlternative.sentence===input.snapshot.sentence;
+  actions.append(accept, save, check, contextToggle);
   const learningHint = document.createElement('p');
   learningHint.className = 'feedback';
   learningHint.textContent = '保存后，可在 Sensa 中选择是否加入学习。';
@@ -131,6 +140,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
   shadow.append(style, panel);
   document.documentElement.append(host);
   host.showPopover();
+  shadow.addEventListener('pointerdown',event=>{const target=event.target;if(target instanceof HTMLButtonElement&&(event as PointerEvent).button===0)event.preventDefault();});
 
   let disposed = false;
   let expanded = false;
@@ -139,20 +149,38 @@ export function showReadingPanel(input: ReadingPanelInput) {
   let frame = 0;
   let lookupBusy = false;
   let lookupReady = false;
+  let lookupFailed = false;
   let saving = false;
   let saved = false;
   let utterance: SpeechSynthesisUtterance | null = null;
   let assistanceRun=0;
-  const lookupId = crypto.randomUUID();
-  const saveId = crypto.randomUUID();
-  const acceptId = crypto.randomUUID();
+  let lookupId = crypto.randomUUID();
+  let saveId = crypto.randomUUID();
+  let acceptId = crypto.randomUUID();
+  let revision=0;
+  let assistanceController:AbortController|null=null;
+  let lookupController:AbortController|null=null;
+  let poll:ReturnType<typeof setTimeout>|null=null;
+  let waitTimer:ReturnType<typeof setTimeout>|null=null;
   const alive = () => !disposed && host.isConnected && input.isAuthorized();
   async function assist(feature:'selection'|'action'){
     if(!mayAct())return;expand();const run=++assistanceRun;assistance.hidden=false;assistance.textContent='正在处理…';
-    translate.disabled=custom.disabled=true;
-    try{const text=await runReading(accountId,feature,expression?.text??snapshot.sentence,snapshot.sentence,input.preferences?.actionPrompt??defaultPreferences.actionPrompt);if(alive()&&run===assistanceRun)assistance.textContent=text;}
+    assistanceController?.abort();assistanceController=new AbortController();
+    assistance.setAttribute('aria-busy','true');translate.disabled=custom.disabled=true;
+    try{const text=await runReading(accountId,feature,expression?.text??snapshot.sentence,snapshot.sentence,input.preferences?.actionPrompt??defaultPreferences.actionPrompt,crypto.randomUUID(),partial=>{if(alive()&&run===assistanceRun)assistance.textContent=partial;},assistanceController.signal);if(alive()&&run===assistanceRun)assistance.textContent=text;}
     catch(e){if(alive()&&run===assistanceRun)assistance.textContent=readingError(e);}
-    finally{if(alive()&&run===assistanceRun){translate.disabled=custom.disabled=false;layout();}}
+    finally{if(alive()&&run===assistanceRun){translate.disabled=custom.disabled=false;assistance.removeAttribute('aria-busy');layout();}}
+  }
+  function changeContext(){
+    if(!mayAct()||saving||saved||!input.contextAlternative)return;
+    revision++;lookupController?.abort();lookupBusy=false;lookupReady=false;lookupFailed=false;assistanceRun++;assistanceController?.abort();
+    if(poll)clearTimeout(poll);if(waitTimer)clearTimeout(waitTimer);
+    snapshot=snapshot===input.snapshot?input.contextAlternative:input.snapshot;expression=snapshot.expression;
+    lookupId=crypto.randomUUID();saveId=crypto.randomUUID();acceptId=crypto.randomUUID();
+    renderOriginal();hint.textContent='阅读助手';contextToggle.textContent=snapshot===input.snapshot?'扩展上下文':'使用原上下文';
+    explanation.textContent='上下文已调整，点击「句中解释」重新解释。';explanation.removeAttribute('aria-busy');
+    assistance.hidden=true;assistance.removeAttribute('aria-busy');details.hidden=accept.hidden=check.hidden=true;
+    lookup.disabled=!expression;check.disabled=false;translate.disabled=custom.disabled=false;feedback.textContent='';layout();
   }
   function mayAct() {
     if (!alive()) return false;
@@ -205,15 +233,19 @@ export function showReadingPanel(input: ReadingPanelInput) {
   }
   async function explain() {
     if (!mayAct() || lookupBusy || lookupReady || saved || !expression) return;
+    if(lookupFailed){lookupId=crypto.randomUUID();lookupFailed=false;}
+    check.textContent='检查解释结果';
     lookupBusy = true;
     lookup.disabled = check.disabled = true;
+    const version=revision;const id=lookupId;
+    lookupController?.abort();lookupController=new AbortController();
+    if(poll)clearTimeout(poll);if(waitTimer)clearTimeout(waitTimer);
+    waitTimer=setTimeout(()=>{if(alive()&&version===revision&&lookupBusy)explanation.textContent='仍在解释，可继续阅读；结果未完成前不会保存意义。';},6000);
     explanation.textContent = '正在解释…';
     explanation.setAttribute('aria-busy', 'true');
     try {
-      const response = await chrome.runtime.sendMessage({kind: 'lookup', snapshot, lookupId, accountId});
-      if (response.error) throw new Error(response.error);
-      if (!alive()) return;
-      const result = response.value as SemanticLookupView;
+      const result=await runLookup(accountId,snapshot,id,partial=>{if(alive()&&version===revision){if(waitTimer)clearTimeout(waitTimer);explanation.textContent=partial;hint.textContent='解释生成中 · 尚未完成';}},lookupController.signal);
+      if (!alive()||version!==revision) return;
       if (result.status === 'ready' && result.proposal) {
         lookupReady = true;
         explanation.textContent = result.proposal.explanation;
@@ -223,17 +255,22 @@ export function showReadingPanel(input: ReadingPanelInput) {
         accept.hidden = saved;
         check.hidden = true;
       } else {
-        explanation.textContent = result.status === 'running'
+        lookupFailed=result.status==='failed';
+        explanation.textContent = lookupFailed?'解释未完成，可重新解释或保存待处理。':result.status === 'running'
           ? '仍在解释，可以稍后检查或保存待处理。'
           : '暂时无法确定这个意思，可以保存待处理，在 Sensa 中继续。';
-        check.hidden = result.status !== 'running' || saved;
+        check.hidden = (!lookupFailed&&result.status !== 'running') || saved;
+        if(lookupFailed)check.textContent='重新解释';
+        if(result.status==='running')poll=setTimeout(()=>{if(alive()&&version===revision)void explain();},2000);
       }
     } catch {
-      if (alive()) {
+      if (alive()&&version===revision) {
         explanation.textContent = '暂时无法解释，可以检查结果或保存待处理。';
         check.hidden = saved;
       }
     } finally {
+      if(version!==revision)return;
+      if(waitTimer)clearTimeout(waitTimer);hint.textContent='阅读助手';
       lookupBusy = false;
       lookup.disabled = lookupReady || saved || !expression;
       check.disabled = false;
@@ -244,7 +281,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
   async function persist(kind: 'save' | 'accept') {
     if (!mayAct() || saving || saved || (kind === 'accept' && !lookupReady)) return;
     saving = true;
-    save.disabled = accept.disabled = true;
+    save.disabled = accept.disabled = contextToggle.disabled = true;
     feedback.textContent = kind === 'save' ? '正在保存…' : '正在加入 Sensa…';
     try {
       const response = await chrome.runtime.sendMessage(kind === 'save'
@@ -260,7 +297,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
       if (alive()) feedback.textContent = '尚未完成，请从 Sensa 图标检查原操作结果或登录后重试。';
     } finally {
       saving = false;
-      save.disabled = accept.disabled = false;
+      save.disabled = accept.disabled = false;contextToggle.disabled=saved;
       if (alive()) layout();
     }
   }
@@ -332,7 +369,8 @@ export function showReadingPanel(input: ReadingPanelInput) {
   return {
     host,
     destroy() {
-      disposed = true;
+      disposed = true;assistanceRun++;assistanceController?.abort();lookupController?.abort();
+      if(poll)clearTimeout(poll);if(waitTimer)clearTimeout(waitTimer);
       stopSpeech();
       observer.disconnect();
       cancelAnimationFrame(frame);

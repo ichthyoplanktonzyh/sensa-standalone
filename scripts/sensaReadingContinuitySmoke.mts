@@ -91,7 +91,12 @@ try{
   await page.getByRole('button',{name:'暂停 / 固定字幕',exact:true}).click();
   await page.evaluate(()=>{const video=document.querySelector('video')!;video.currentTime=20;video.dispatchEvent(new Event('play'));});
   await expect(caption).toHaveText('');
+  await page.evaluate(()=>{const video=document.querySelector('video')!;video.currentTime=4;video.dispatchEvent(new Event('seeked'));});
+  await expect(caption).toHaveText('Replacement transcript.');
   await page.evaluate(()=>{history.pushState({},'', '/watch?v=lmnopqrstuv');document.dispatchEvent(new Event('yt-navigate-start'));});
-  await expect(caption).toHaveText('');await expect(translation).toHaveText('');
+  await expect(caption).toHaveCount(0);await expect(translation).toHaveCount(0);
+  await page.waitForTimeout(550);await expect(page.getByRole('button',{name:'加载英文字幕',exact:true})).toHaveCount(0);
+  await page.evaluate(()=>{(window as any).fixture.captions={events:[{tStartMs:1000,dDurationMs:8000,segs:[{utf8:'Next video captions.'}]}]};document.dispatchEvent(new Event('yt-navigate-finish'));});
+  await expect(caption).toHaveText('Next video captions.');
   console.log('PASS: long-page viewport translation beyond paragraph 150, dynamic host text/restore, bounded concurrency, late responses and in-place retry; timed sentence segmentation, same-start repaint, latest-only subtitle queue, mode/reload isolation, native playback resume and SPA cleanup. No paid/network provider calls.');
 }finally{await browser.close();}

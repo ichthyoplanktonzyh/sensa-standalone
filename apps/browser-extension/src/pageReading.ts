@@ -20,7 +20,7 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
   const visibility=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting))void drain();},{rootMargin:'200px'});
   function reveal(item:Item){if(item.source.dataset.sensaHidden===marker)delete item.source.dataset.sensaHidden;item.hidden=false;}
   function restoreItem(item:Item){reveal(item);item.translation.remove();visibility.unobserve(item.source);}
-  function eligible(element:HTMLElement){return !element.closest(excluded)&&!element.querySelector(excluded)&&!element.querySelector(blocks)&&element.getClientRects().length>0;}
+  function eligible(element:HTMLElement){return !element.closest(excluded)&&!element.querySelector(excluded.replace(',code',''))&&!element.querySelector(blocks)&&element.getClientRects().length>0;}
   function add(element:HTMLElement){
     if(items.has(element)||!eligible(element)||!nearby(element))return;
     const text=element.textContent??'';if(text.trim().length<2||text.length>12000||!/[a-z]{2}/iu.test(text))return;
@@ -54,7 +54,11 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
   async function translationFor(text:string){
     const cached=cache.get(text);if(cached!==undefined)return cached;
     const existing=requests.get(text);if(existing)return existing;
-    const request=runReading(accountId,'page',text);requests.set(text,request);
+    const run=generation;
+    const request=runReading(accountId,'page',text,'','',crypto.randomUUID(),partial=>{
+      if(!valid()||run!==generation)return;
+      for(const item of items.values())if(item.text===text&&item.state==='running'&&item.source.isConnected&&item.source.textContent===text)item.translation.textContent=partial;
+    });requests.set(text,request);
     try{return await request;}finally{if(requests.get(text)===request)requests.delete(text);}
   }
   async function translateItem(item:Item,run:number){

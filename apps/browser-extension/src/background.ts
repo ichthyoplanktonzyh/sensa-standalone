@@ -90,3 +90,33 @@ chrome.tabs.onUpdated.addListener((id,change)=>{if(change.status!=='complete')re
 chrome.tabs.onRemoved.addListener(id=>{void locked(async()=>{const readingModes=await modes();delete readingModes[id];await chrome.storage.session.set({modes:readingModes});}).catch(()=>undefined);});
 chrome.alarms.create('sync',{periodInMinutes:1});chrome.alarms.onAlarm.addListener(()=>void sync().catch(()=>undefined));
 void chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
+
+// Credentials stay in this trusted background; pages receive only bounded text/result frames.
+chrome.runtime.onConnect?.addListener(port=>{
+ if(!['sensa-reading-stream','sensa-lookup-stream'].includes(port.name))return;
+ const meaning=port.name==='sensa-lookup-stream';
+ const sender=port.sender;let started=false,closed=false;
+ const controller=new AbortController();
+ port.onDisconnect.addListener(()=>{closed=true;controller.abort();});
+ port.onMessage.addListener(message=>{
+  if(started)return;started=true;
+  void(async()=>{
+   if(sender?.id!==chrome.runtime.id||!sender.tab?.id||sender.url!==message.pageUrl)throw new Error('authentication_required');
+   const store=await load(),a=store.active?store.accounts[store.active]:null;
+   async function authorize(){const current=await load(),mode=(await modes())[sender!.tab!.id!];if(!a||current.active!==a.accountId||current.accounts[a.accountId]?.token!==a.token||mode?.accountId!==a.accountId||message.accountId!==a.accountId)throw new Error('account_mismatch');}
+   await authorize();
+   if(meaning&&captureSnapshotSchema.parse(message.input?.snapshot).source.url!==sender.url)throw new Error('source_mismatch');
+   const response=await fetch(apiUrl+(meaning?'/sensa/semantic/lookups/stream':'/sensa/reading/stream'),{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+a!.token},body:JSON.stringify(message.input),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(45000)])});
+   if(!response.ok){const data=await response.json();throw new Error(data.code??'provider_unavailable');}
+   if(!response.body)throw new Error('provider_invalid_response');
+   const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',bytes=0,finished=false;
+   try{while(!closed){const next=await reader.read();if(next.done)break;bytes+=next.value.length;if(bytes>4000000)throw new Error('provider_invalid_response');buffer+=decoder.decode(next.value,{stream:true});let index;
+    while((index=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,index);buffer=buffer.slice(index+1);if(!line.trim())continue;const frame=JSON.parse(line);await authorize();if(closed)return;
+     if(frame.type==='partial'&&(typeof frame.text!=='string'||frame.text.length>24000))throw new Error('provider_invalid_response');
+     if(!['partial','result','error'].includes(frame.type))throw new Error('provider_invalid_response');
+     port.postMessage(frame);if(frame.type!=='partial'){finished=true;return;}
+    }
+   }if(!finished&&!closed)throw new Error('reading_interrupted');}finally{await reader.cancel().catch(()=>undefined);}
+  })().catch(error=>{if(!closed)port.postMessage({type:'error',error:error instanceof Error?error.message:'provider_unavailable'});});
+ });
+});

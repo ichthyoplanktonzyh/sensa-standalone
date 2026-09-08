@@ -4,7 +4,7 @@ import {runReading,readingError} from './readingClient';
 import {parseYoutubeCaptions,parseSubtitleFile} from './subtitleCues';
 import type {Cue} from './subtitleCues';
 export function youtubeId(){if(!['www.youtube.com','youtube.com','m.youtube.com','www.youtube-nocookie.com'].includes(location.hostname))return null;const u=new URL(location.href);const id=u.pathname==='/watch'?u.searchParams.get('v'):u.pathname.match(/^\/(?:shorts|embed)\/([^/]+)$/u)?.[1];return id&&/^[a-zA-Z0-9_-]{11}$/u.test(id)?id:null;}
-export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,onSelection:(snapshot:CaptureSnapshot,range:Range)=>void){
+export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,onSelection:(snapshot:CaptureSnapshot,range:Range)=>void,continuity?:{autoLoad:boolean;onLoaded:()=>void}){
   const id=youtubeId();if(!id)return null;
   const host=document.createElement('div');host.dataset.sensaUi='youtube';
   host.style.cssText='position:fixed;left:20px;bottom:20px;width:min(640px,calc(100vw - 40px));z-index:2147483646';
@@ -52,7 +52,7 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
       if(job.generation!==run||job.cue!==current||(!job.manual&&display.value==='original'))continue;
       running=job;renderTranslation();const key=keyOf(job.cue);
       try{
-        const text=await runReading(accountId,'subtitles',job.cue.text);
+        const text=await runReading(accountId,'subtitles',job.cue.text,'','',crypto.randomUUID(),partial=>{if(valid()&&job.generation===run&&current===job.cue)translated.textContent=partial;});
         if(valid()&&job.generation===run){
           translations.set(key,text);if(translations.size>150)translations.delete(translations.keys().next().value!);
         }
@@ -90,6 +90,7 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
       const response=await chrome.runtime.sendMessage({kind:'youtube-captions',accountId,pageUrl:location.href,videoId:id});
       if(response.error)throw new Error(response.error);if(!valid()||generation!==run)return;
       const data=response.value;cues=data?.json?parseYoutubeCaptions(data.json):[];
+      if(cues.length)continuity?.onLoaded();
       status.textContent=cues.length?`已加载 ${cues.length} 段英文字幕。选择文字即可解释与保存。`:data?.error==='live_unsupported'?'当前直播字幕尚不支持。':'未找到可读取的英文字幕。可检查视频字幕设置，或加载自己的字幕文件。';
       tick();renderTranslation();
     }catch{if(valid()&&generation===run)status.textContent='字幕读取失败，请重试或加载自己的字幕文件。';}
@@ -112,7 +113,10 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
   // Native player controls must resume following too, not just our own button.
   const resumed=(event:Event)=>{if(event.target===video()&&valid()){pinned=false;status.textContent='已恢复字幕跟随。';tick();}};
   document.addEventListener('play',resumed,true);
+  const seeked=(event:Event)=>{if(event.target!==video()||!valid())return;pinned=false;tick();if(video()?.paused){pinned=true;status.textContent='已定位到新位置，播放后恢复字幕跟随。';}};
+  document.addEventListener('seeked',seeked,true);
   renderTranslation();
   const timer=setInterval(tick,250);
-  return {host,destroy(){disposed=true;run++;pending=null;clearInterval(timer);document.removeEventListener('play',resumed,true);host.remove();}};
+  if(continuity?.autoLoad)void load();
+  return {host,destroy(){disposed=true;run++;pending=null;clearInterval(timer);document.removeEventListener('play',resumed,true);document.removeEventListener('seeked',seeked,true);host.remove();}};
 }

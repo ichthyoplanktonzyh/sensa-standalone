@@ -71,7 +71,7 @@ try{
  await page.screenshot({path:'/tmp/sensa-browser-video.png'});
  emptyCaptions=true;await page.getByRole('button',{name:'加载英文字幕',exact:true}).click();await expect(caption).toHaveText('');await expect(page.getByText('未找到可读取的英文字幕。可检查视频字幕设置，或加载自己的字幕文件。',{exact:true})).toBeVisible();
  await page.evaluate(()=>{history.pushState({},'', '/watch?v=lmnopqrstuv');document.dispatchEvent(new Event('yt-navigate-start'));});
- await expect(page.getByLabel('当前原字幕',{exact:true})).toHaveText('');
+ await expect(page.getByLabel('当前原字幕',{exact:true})).toHaveCount(0);
  await page.evaluate(()=>(window as any).fixture.receive({kind:'reading',enabled:false}));await expect(page.locator('[data-sensa-ui]')).toHaveCount(0);
  const settingsPage=await browser.newPage();const settingsHtml=(await readFile('apps/browser-extension/options.html','utf8')).replace('<script src="options.js"></script>','');
  await settingsPage.route('**/*',route=>route.request().url()==='https://example.com/settings'?route.fulfill({contentType:'text/html',body:settingsHtml}):route.abort());await settingsPage.goto('https://example.com/settings');

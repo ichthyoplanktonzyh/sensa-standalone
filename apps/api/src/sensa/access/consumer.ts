@@ -1,3 +1,4 @@
+import {stream} from 'hono/streaming';
 import {setAnchorUse} from '../personal/anchorUse.js';
 import {setContentMembership} from '../personal/membership.js';
 import {processTask} from '../provisioning/tasks.js';
@@ -250,9 +251,26 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
     }));
   });
   app.post('/sensa/provisioning/:targetId/advance',async c=>{const identity=await verify(c.req.raw),targetId=uuid.parse(c.req.param('targetId'));z.object({}).strict().parse(await c.req.json());await processTask({targetId,generate:options.contentGenerator??generateContent,review:options.contentReviewer??reviewContent,withScope:work=>transaction(async db=>{const a=await account(db,identity,undefined,false,clock());const before=await targetView(db,a,targetId);const result=await work(db,a);const after=await targetView(db,a,targetId);if(before.plan?.revision!==after.plan?.revision)await publish(db,a,'target',after);return result;})});return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());return query(a,await targetView(db,a,targetId));}));});
-  app.post('/sensa/semantic/lookups',async c=>{const identity=await verify(c.req.raw),input=semanticLookupInputSchema.parse(await c.req.json());const started=await transaction(async db=>beginLookup(db,await account(db,identity,undefined,false,clock()),input));if(!started.fresh)return c.json(started.view);
-    let result=null;try{const connection=options.semanticResolver?null:await transaction(async db=>configuredMeaningConnection(db,await account(db,identity,undefined,false,clock())));result=await (options.semanticResolver??(connection?semanticResolverFor(connection,options.readingCompletion):resolveSemantic))(input.snapshot,started.view.focus);}catch{/* No source/provider payload in logs. */}
-    return c.json(await transaction(async db=>finishLookup(db,await account(db,identity,undefined,false,clock()),input.id,result)));
+  for(const path of ['/sensa/semantic/lookups','/sensa/semantic/lookups/stream'])app.post(path,async c=>{
+    const identity=await verify(c.req.raw),input=semanticLookupInputSchema.parse(await c.req.json());
+    const started=await transaction(async db=>beginLookup(db,await account(db,identity,undefined,false,clock()),input));
+    async function resolve(onExplanation?:(text:string)=>Promise<void>){
+      if(!started.fresh)return started.view;
+      let result=null;
+      try{const connection=options.semanticResolver?null:await transaction(async db=>configuredMeaningConnection(db,await account(db,identity,undefined,false,clock())));
+        result=await (options.semanticResolver??(connection?semanticResolverFor(connection,options.readingCompletion):resolveSemantic))(input.snapshot,started.view.focus,onExplanation);
+      }catch{/* No source/provider payload in logs. */}
+      return transaction(async db=>finishLookup(db,await account(db,identity,undefined,false,clock()),input.id,result));
+    }
+    if(!path.endsWith('/stream'))return c.json(await resolve());
+    c.header('Content-Type','application/x-ndjson');c.header('Cache-Control','no-store');c.header('X-Accel-Buffering','no');
+    return stream(c,async output=>{
+      let last=0;
+      try{
+        const result=await resolve(async text=>{if(output.aborted)throw new ConsumerError(503,'reading_interrupted');if(Date.now()-last<100)return;last=Date.now();await transaction(async db=>account(db,identity,undefined,false,clock()));await output.write(JSON.stringify({type:'partial',text})+'\n');});
+        await output.write(JSON.stringify({type:'result',value:result})+'\n');
+      }catch(e){if(!output.aborted)await output.write(JSON.stringify({type:'error',error:e instanceof ConsumerError?e.code:'provider_unavailable'})+'\n');}
+    });
   });
   app.get('/sensa/semantic/lookups/:id',async c=>{const identity=await verify(c.req.raw),id=uuid.parse(c.req.param('id'));return c.json(await transaction(async db=>readLookup(db,await account(db,identity,undefined,false,clock()),id)));});
   app.get('/sensa/intakes/:id/lookup',async c=>{const identity=await verify(c.req.raw),id=uuid.parse(c.req.param('id'));return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock()),intake=await readIntake(db,a,id);const row=(await db.query("SELECT id FROM sensa_consumer.semantic_lookups WHERE learner_user_id=$1 AND snapshot=$2::jsonb AND reason IS DISTINCT FROM 'superseded' AND expires_at>$3 ORDER BY created_at DESC,id DESC LIMIT 1",[a.learner_user_id,JSON.stringify(intake.snapshot),a.now])).rows[0];return row?await readLookup(db,a,row.id):null;}));});
