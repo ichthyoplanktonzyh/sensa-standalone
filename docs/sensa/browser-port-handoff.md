@@ -6,6 +6,7 @@ Owner 已确认浏览器端口包含 YouTube，并要求以陪读蛙源码为参
 快轨补充验收：普通 Chrome 的 YouTube 字幕选中 `multiply` → 正式解释 → 原位「加入 Sensa」→ 服务端完整意义；无关注点、无新增 Inbox、无自动加入学习。语义策略已校准为 v4，详见同一记录中的快轨章节。
 日常阅读流畅度补充：视口优先的长页翻译、原位重试、字幕时间分段与过期队列隔离已完成；普通 Chrome 验证上下句及原生播放恢复跟随，见[本轮验收](browser-reading-continuity-handoff.md)。
 第二轮补充：流式预览、上下文调整、跨段选区、浮层收起及视频 seek/导航衔接，见[第二轮交付](browser-reading-polish-handoff.md)。下文首批记录中的流式结果缺口已由该轮补充，批量翻译与全站点覆盖仍未完成。
+Owner 已决定本轮到此结束；后续问题、建议优先级与陪读蛙差距统一记录在[后续优化清单](browser-port-followups.md)，留待之后回访。
 
 ## 已实现的纵切
 

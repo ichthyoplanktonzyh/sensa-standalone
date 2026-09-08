@@ -64,6 +64,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M1/M2 Web UI integration | [`m1-m2-ui-integration-handoff.md`](m1-m2-ui-integration-handoff.md) | 已确认 Web 界面接入真实账号链路、简化页面删除及本地浏览器证据 |
 | M2 reading interaction | [`m2-reading-interaction-handoff.md`](m2-reading-interaction-handoff.md) | 轻量划词工具栏、按需解释、保存预览、拖动／本机朗读及闭源实现边界；本地验证完成，owner 继续体验 |
 | Browser port implementation | [`browser-port-contract.md`](browser-port-contract.md) / [`browser-port-handoff.md`](browser-port-handoff.md) | 参考陪读蛙源码独立实现的 Provider、网页阅读与视频采集纵切；实际测试和未完成兼容范围见交付记录 |
+| Browser port deferred follow-ups | [`browser-port-followups.md`](browser-port-followups.md) | Owner 已结束本轮优化；保存恢复、原位慢轨、真实模型、字幕轨道、偏好记忆及兼容性差距留待回访，尚未实施或排期 |
 | Release authorization | [`release-authorization.md`](release-authorization.md) | 云端/商店所需具体授权、项目访问和发布前产物 |
 | M2 static pronunciation | [`m2-pronunciation-handoff.md`](m2-pronunciation-handoff.md) | 按需材料静态发音绑定、真实 TTS 小样本、离线播放和可选音频失败回退 |
 | M2 private context | [`m2-anchor-use-handoff.md`](m2-anchor-use-handoff.md) | 原文显式授权、撤销/迟到结果隔离、历史保留与后续复习材料替换的本地证据 |
