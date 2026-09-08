@@ -29,4 +29,4 @@ export type CatalogTarget=z.infer<typeof catalogTargetSchema>;
 export type TargetView=z.infer<typeof targetViewSchema>;
 export type TargetOperation=z.infer<typeof targetOperationSchema>;
 
-export const personalLearningOperationSchema=z.object({...common,kind:z.literal('personal.add_to_learning'),payload:z.object({meaningId:id,expectedRevision:z.literal('1'),planId:id,expectedScopeRevision:revision}).strict()}).strict();
+export const personalLearningOperationSchema=z.object({...common,kind:z.literal('personal.add_to_learning'),payload:z.object({meaningId:id,expectedRevision:revision,planId:id,expectedScopeRevision:revision}).strict()}).strict();

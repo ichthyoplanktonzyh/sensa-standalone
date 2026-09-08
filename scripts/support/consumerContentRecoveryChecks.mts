@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+export async function runContentRecoveryChecks({request,initialize,bootstrap,push,token,pool,issuer,failLedger}:any){
+ const subject=crypto.randomUUID();await pool.query('INSERT INTO sensa_consumer.invitations(issuer,subject) VALUES($1,$2)',[issuer,subject]);const bearer=await token(subject),installationId=crypto.randomUUID();await initialize(installationId,bearer);const boot=await bootstrap(installationId,bearer);
+ const cmd=(kind:string,payload:any)=>({operationId:crypto.randomUUID(),occurredAt:new Date().toISOString(),installationId,replicaId:boot.replicaId,dependsOn:[],kind,payload});
+ const send=async(kind:string,payload:any)=>(await push(boot,[cmd(kind,payload)],bearer)).body.results[0];
+ const snapshot={sentence:'She sat by the bank.',language:'en',source:{url:'https://example.org/clarify',title:'Synthetic clarification',capturedAt:new Date().toISOString()},expression:{text:'bank',start:15,end:19}};
+ const intake=(await send('intake.save',{snapshot})).value.intake,firstId=crypto.randomUUID();assert.equal((await request('/sensa/semantic/lookups',{id:firstId,snapshot},bearer)).body.status,'unresolved');
+ const clarification={previousLookupId:firstId,text:'我关注河边的地形（私人关注点 marker-zeta）'},id=crypto.randomUUID();const resolved=await request('/sensa/semantic/lookups',{id,snapshot,clarification},bearer);assert.equal(resolved.status,200,JSON.stringify(resolved.body));assert.equal(resolved.body.status,'ready');assert.equal(resolved.body.focus.text,clarification.text);assert.equal(resolved.body.provenance.policyVersion,'consumer-semantic-v2');
+ assert.deepEqual((await request('/sensa/semantic/lookups',{id,snapshot,clarification},bearer)).body,resolved.body);
+ assert.equal((await request('/sensa/semantic/lookups',{id,snapshot,clarification:{...clarification,text:'changed'}},bearer)).status,409);
+ assert.equal((await request('/sensa/intakes/'+intake.id+'/lookup',undefined,bearer)).body.id,id);
+ const accept=(lookupId:string)=>({lookupId,expectedRevision:'1',intakeId:intake.id,consent:'accept_context_expression_sense'});
+ assert.equal((await send('semantic.accept',accept(firstId))).error.code,'proposal_not_ready');assert.equal((await bootstrap(installationId,bearer)).meanings.length,0);
+ const wrong=await request('/sensa/semantic/lookups',{id:crypto.randomUUID(),snapshot:{...snapshot,source:{...snapshot.source,title:'changed'}},clarification:{previousLookupId:id,text:'focus'}},bearer);assert.equal(wrong.status,409);
+ const meaning=(await send('semantic.accept',accept(id))).value.meaning;assert.equal(meaning.focus.id,resolved.body.focus.id);assert.equal(meaning.focus.text,clarification.text);
+ const publicSpec=(await pool.query('SELECT semantic_spec FROM sensa.sense_versions WHERE sense_version_id=$1',[meaning.senseVersionId])).rows[0].semantic_spec;assert.ok(!JSON.stringify(publicSpec).includes('marker-zeta'));
+ assert.equal((await request('/sensa/semantic/lookups',{id:crypto.randomUUID(),snapshot,clarification:{previousLookupId:id,text:'改一下'}},bearer)).status,409);
+ const plan=(await send('plan.confirm_quantity',{expectedRevision:null,dailyNewLimit:5,timeZone:'Asia/Shanghai'})).value.plan;
+ const add={meaningId:meaning.id,expectedRevision:meaning.revision,planId:plan.id,expectedScopeRevision:plan.scopeRevision};const target=(await send('personal.add_to_learning',add)).value.target;
+ const remove=cmd('content.set_membership',{entity:'meaning',id:meaning.id,expectedRevision:'1',active:false});
+ failLedger(true);assert.equal((await push(boot,[remove],bearer)).status,503);failLedger(false);assert.equal((await bootstrap(installationId,bearer)).meanings[0].status,'confirmed');
+ assert.equal((await push(boot,[remove],bearer)).body.results[0].value.meaning.status,'removed');assert.equal((await push(boot,[remove],bearer)).body.results[0].status,'replayed');
+ assert.equal((await send('personal.add_to_learning',add)).error.code,'meaning_removed');assert.equal((await send('semantic.accept',accept(id))).error.code,'meaning_removed');
+ const archived=await bootstrap(installationId,bearer);assert.equal(archived.targets[0].learningTarget.learningTargetId,target.learningTarget.learningTargetId);assert.equal(archived.targets[0].plan.readiness,'preparing');
+ assert.equal((await send('content.set_membership',{entity:'meaning',id:meaning.id,expectedRevision:'1',active:true})).error.code,'revision_conflict');
+ const restored=(await send('content.set_membership',{entity:'meaning',id:meaning.id,expectedRevision:'2',active:true})).value.meaning;assert.equal(restored.id,meaning.id);assert.equal(restored.revision,'3');assert.equal(restored.status,'confirmed');
+ assert.equal((await send('personal.add_to_learning',{...add,expectedRevision:'3'})).value.target.learningTarget.learningTargetId,target.learningTarget.learningTargetId);
+ const unsavedSnapshot={...snapshot,source:{...snapshot.source,url:'https://example.org/remove-inbox'}},pending=(await send('intake.save',{snapshot:unsavedSnapshot})).value.intake;
+ const removeIntake=cmd('content.set_membership',{entity:'intake',id:pending.id,expectedRevision:'1',active:false});const race=await Promise.all([push(boot,[removeIntake],bearer),push(boot,[{...removeIntake,operationId:crypto.randomUUID()}],bearer)]);assert.deepEqual(race.map(x=>x.body.results[0].status).sort(),['accepted','rejected']);
+ assert.equal((await send('intake.save',{snapshot:unsavedSnapshot})).value.intake.status,'removed');assert.equal((await request('/sensa/intakes/'+pending.id,undefined,bearer)).body.data.status,'removed');
+ assert.equal((await send('content.set_membership',{entity:'intake',id:pending.id,expectedRevision:'2',active:true})).value.intake.status,'inbox');
+ const otherSubject=crypto.randomUUID();await pool.query('INSERT INTO sensa_consumer.invitations(issuer,subject) VALUES($1,$2)',[issuer,otherSubject]);const other=await token(otherSubject),otherInstall=crypto.randomUUID();await initialize(otherInstall,other);const otherBoot=await bootstrap(otherInstall,other);
+ const foreign=await push(otherBoot,[{...remove,operationId:crypto.randomUUID(),installationId:otherInstall,replicaId:otherBoot.replicaId}],other);assert.equal(foreign.body.results[0].error.code,'not_found');
+ assert.equal((await request('/sensa/semantic/lookups',{id:crypto.randomUUID(),snapshot,clarification:{previousLookupId:id,text:'foreign'}},other)).status,404);
+ console.log('M2 content recovery passed: explicit private focus, immutable retry, superseded proposal blocked, latest-query recovery, direct acceptance, archive/restore CAS/rollback, stale save protection, learning identity retained and cross-account denial.');
+}

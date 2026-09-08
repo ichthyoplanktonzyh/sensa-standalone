@@ -53,7 +53,7 @@ export async function listTargets(db:DatabaseExecutor,a:Scope){
   const views:TargetView[]=[];for(const row of rows)views.push(await targetView(db,a,row.learning_target_id));return views;
 }
 async function validateAdmission(db:DatabaseExecutor,row:Record<string,any>){
-  if(row.learner_user_id){const meaning=(await db.query('SELECT id FROM sensa_consumer.personal_meanings WHERE id=$1 AND learner_user_id=$2 AND sense_id=$3 AND sense_version_id=$4 AND binding_id=$5 AND binding_version_id=$6',[row.id,row.learner_user_id,row.sense_id,row.sense_version_id,row.binding_id,row.binding_version_id])).rows[0];if(!meaning)throw new ConsumerError(409,'alignment_required');return;}
+  if(row.learner_user_id){const meaning=(await db.query('SELECT id FROM sensa_consumer.personal_meanings WHERE id=$1 AND learner_user_id=$2 AND sense_id=$3 AND sense_version_id=$4 AND binding_id=$5 AND binding_version_id=$6 AND removed_at IS NULL',[row.id,row.learner_user_id,row.sense_id,row.sense_version_id,row.binding_id,row.binding_version_id])).rows[0];if(!meaning)throw new ConsumerError(409,'alignment_required');return;}
   if(row.admission!=='available')throw new ConsumerError(409,'target_unavailable');
   const binding=(await db.query(`SELECT ev.surface_form,e.language_tag,sv.semantic_spec->>'coreMeaningFocus' AS meaning FROM sensa.sense_expression_binding_versions bv
     JOIN sensa.sense_expression_bindings b ON b.sense_expression_binding_id=bv.sense_expression_binding_id
@@ -161,6 +161,7 @@ export async function authorizeMedia(db:DatabaseExecutor,a:Scope,materialId:stri
 export async function addPersonalTarget(db:DatabaseExecutor,a:Scope,op:import('@sensa/contracts/sensa').ConsumerOperation){
  if(op.kind!=='personal.add_to_learning')throw new ConsumerError(400,'unsupported_operation');
  const meaning=(await db.query('SELECT * FROM sensa_consumer.personal_meanings WHERE learner_user_id=$1 AND id=$2',[a.learner_user_id,op.payload.meaningId])).rows[0];if(!meaning)throw new ConsumerError(404,'not_found');
+ if(meaning.removed_at)throw new ConsumerError(409,'meaning_removed');if(String(meaning.revision)!==op.payload.expectedRevision)throw new ConsumerError(409,'revision_conflict');
  const source={kind:'personal_alignment' as const,id:meaning.alignment_id,version:'1'};
  await db.query("INSERT INTO sensa_consumer.target_candidates(id,sense_id,sense_version_id,binding_id,binding_version_id,expression,meaning,target_language,familiar_language,learner_locale,source,admission,content,content_digest,review_reference,learner_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,'en','zh-CN','zh-CN',$8::jsonb,'available','{}',$9,'learner-acceptance',$10) ON CONFLICT DO NOTHING",[meaning.id,meaning.sense_id,meaning.sense_version_id,meaning.binding_id,meaning.binding_version_id,meaning.proposal.expression.surface,meaning.proposal.semanticSpec.coreMeaningFocus,JSON.stringify(source),await contentHash({}),a.learner_user_id]);
  return applyTargetOperation(db,a,{...op,kind:'curriculum.add_target',payload:{planId:op.payload.planId,expectedScopeRevision:op.payload.expectedScopeRevision,candidateId:meaning.id,source}});

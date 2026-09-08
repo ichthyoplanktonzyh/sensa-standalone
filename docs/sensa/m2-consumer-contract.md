@@ -69,3 +69,11 @@ Content generator 只提交 cue candidate；target/meaning 由 authoritative pas
 生成结果先持久提交 bundle 再进入校验；lease 过期保留未知/失败原因，不自动重复计费。
 重启后 ready 保持；pending 可领取，未过期进行中不重复调用，过期须明确重试。
 取消阻止迟到结果冻结；原 Target 和历史不删除。epoch/账号撤销在各阶段重新检查。
+
+## Web 澄清与个人列表恢复
+
+Lookup 可显式引用 previousLookupId 和 learner 自写关注点，生成新的固定候选；旧候选失效，
+原文/occurrence 不变。Focus/Construction identity 留在私有链，接受时保留引用。刷新通过 Intake
+查询最新未取代的 lookup；模型失败后重试必须由用户触发。
+`content.set_membership` 按 entity/id/revision 控制可恢复移除/恢复，走同一 local-first 账本。
+移除不删除学习目标或历史；旧保存/接受不得复活移除的个人列表状态。永久删除另走数据控制。

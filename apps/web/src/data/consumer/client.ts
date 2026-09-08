@@ -117,7 +117,9 @@ export async function cacheRunMaterial(account:AccountContext,run:import('@sensa
 
 export async function connectExtension(input:unknown){return z.object({redirectUri:z.string().url()}).strict().parse(await request('/sensa/extension/authorize',input));}
 
-export async function lookupSemantic(snapshot:CaptureSnapshot,id:string){return semanticLookupViewSchema.parse(await request('/sensa/semantic/lookups',{id,snapshot}));}
+export async function lookupSemantic(snapshot:CaptureSnapshot,id:string,clarification?:{previousLookupId:string;text:string}){return semanticLookupViewSchema.parse(await request('/sensa/semantic/lookups',{id,snapshot,...(clarification?{clarification}:{})}));}
 export async function checkSemanticLookup(id:string){return semanticLookupViewSchema.parse(await request('/sensa/semantic/lookups/'+id));}
 
 export async function preparePersonalTarget(account:AccountContext,targetId:string){const value=z.object({data:targetViewSchema}).passthrough().parse(await request('/sensa/provisioning/'+targetId+'/advance',{}));return changeAccountReplica(account,state=>({...state,targets:mergeTargets(state.targets,[value.data])}));}
+
+export async function intakeSemanticLookup(id:string){return semanticLookupViewSchema.nullable().parse(await request('/sensa/intakes/'+id+'/lookup'));}

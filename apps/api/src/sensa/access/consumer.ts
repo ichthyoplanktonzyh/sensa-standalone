@@ -1,3 +1,4 @@
+import {setContentMembership} from '../personal/membership.js';
 import {processTask} from '../provisioning/tasks.js';
 import {generateContent,reviewContent} from '../provisioning/material.js';
 import type {ContentGenerator,ContentReviewer} from '../provisioning/material.js';
@@ -96,6 +97,9 @@ async function execute(db: DatabaseExecutor, a: Account, op: ConsumerOperation):
     const prior=(await db.query('SELECT result FROM sensa_consumer.operations WHERE learner_user_id=$1 AND operation_id=$2',[a.learner_user_id,dependency])).rows[0];
     if(!prior) return {operationId:op.operationId,status:'retryable',error:{...fail('missing_dependency'),retryable:true}};
     if(prior.result.status!=='accepted') return store({operationId:op.operationId,status:'rejected',error:fail('blocked_by_prior_operation')});
+  }
+  if(op.kind==='content.set_membership'){
+    try{const value=await setContentMembership(db,a,op);await publish(db,a,'meaning' in value?'personal_meaning':'intake','meaning' in value?value.meaning:value.intake);return store({operationId:op.operationId,status:'accepted',value:{plan:await plan(db,a),...value}});}catch(e){if(e instanceof ConsumerError)return store({operationId:op.operationId,status:'rejected',error:fail(e.code)});throw e;}
   }
   if(op.kind==='semantic.accept'){
     await db.query('SAVEPOINT domain_operation');
@@ -209,7 +213,7 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
       const a=await account(db,identity,undefined,false,clock());if(String(a.epoch)!==envelope.scopeEpoch)throw new ConsumerError(409,'bootstrap_required');
       await replica(db,a,envelope.replicaId);
     });
-    if(envelope.operations.some(op=>op && typeof op==='object' && 'kind' in op && !['plan.confirm_quantity','plan.set_quantity','curriculum.add_target','learning.retry_preparation','declared_mastery.set','activity.start_or_resume','activity.next','activity.pause','activity.end','run.record_action','check_in.record','intake.save','semantic.accept','personal.add_to_learning','learning.cancel_preparation'].includes(String(op.kind))))throw new ConsumerError(400,'unsupported_operation');
+    if(envelope.operations.some(op=>op && typeof op==='object' && 'kind' in op && !['plan.confirm_quantity','plan.set_quantity','curriculum.add_target','learning.retry_preparation','declared_mastery.set','activity.start_or_resume','activity.next','activity.pause','activity.end','run.record_action','check_in.record','intake.save','semantic.accept','personal.add_to_learning','learning.cancel_preparation','content.set_membership'].includes(String(op.kind))))throw new ConsumerError(400,'unsupported_operation');
     const input:ConsumerPush=consumerPushSchema.parse(body);
     if(new Set(input.operations.map(o=>o.operationId)).size!==input.operations.length)throw new ConsumerError(400,'duplicate_operation');
     const pending=[...input.operations], ordered:ConsumerOperation[]=[];
@@ -236,10 +240,11 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
   });
   app.post('/sensa/provisioning/:targetId/advance',async c=>{const identity=await verify(c.req.raw),targetId=uuid.parse(c.req.param('targetId'));z.object({}).strict().parse(await c.req.json());await processTask({targetId,generate:options.contentGenerator??generateContent,review:options.contentReviewer??reviewContent,withScope:work=>transaction(async db=>{const a=await account(db,identity,undefined,false,clock());const before=await targetView(db,a,targetId);const result=await work(db,a);const after=await targetView(db,a,targetId);if(before.plan?.revision!==after.plan?.revision)await publish(db,a,'target',after);return result;})});return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());return query(a,await targetView(db,a,targetId));}));});
   app.post('/sensa/semantic/lookups',async c=>{const identity=await verify(c.req.raw),input=semanticLookupInputSchema.parse(await c.req.json());const started=await transaction(async db=>beginLookup(db,await account(db,identity,undefined,false,clock()),input));if(!started.fresh)return c.json(started.view);
-    let result=null;try{result=await (options.semanticResolver??resolveSemantic)(input.snapshot);}catch{/* No source/provider payload in logs. */}
+    let result=null;try{result=await (options.semanticResolver??resolveSemantic)(input.snapshot,started.view.focus);}catch{/* No source/provider payload in logs. */}
     return c.json(await transaction(async db=>finishLookup(db,await account(db,identity,undefined,false,clock()),input.id,result)));
   });
   app.get('/sensa/semantic/lookups/:id',async c=>{const identity=await verify(c.req.raw),id=uuid.parse(c.req.param('id'));return c.json(await transaction(async db=>readLookup(db,await account(db,identity,undefined,false,clock()),id)));});
+  app.get('/sensa/intakes/:id/lookup',async c=>{const identity=await verify(c.req.raw),id=uuid.parse(c.req.param('id'));return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock()),intake=await readIntake(db,a,id);const row=(await db.query("SELECT id FROM sensa_consumer.semantic_lookups WHERE learner_user_id=$1 AND snapshot=$2::jsonb AND reason IS DISTINCT FROM 'superseded' AND expires_at>$3 ORDER BY created_at DESC,id DESC LIMIT 1",[a.learner_user_id,JSON.stringify(intake.snapshot),a.now])).rows[0];return row?await readLookup(db,a,row.id):null;}));});
   app.get('/sensa/intakes/:id',async c=>{const identity=await verify(c.req.raw);const id=uuid.parse(c.req.param('id'));return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());return query(a,await readIntake(db,a,id));}));});
   app.get('/sensa/home',async c=>{
     const identity=await verify(c.req.raw);

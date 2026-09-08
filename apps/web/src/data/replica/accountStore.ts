@@ -1,4 +1,4 @@
-import {personalLearningOperationSchema,semanticAcceptOperationSchema} from '@sensa/contracts/sensa';
+import {contentMembershipOperationSchema,personalLearningOperationSchema,semanticAcceptOperationSchema} from '@sensa/contracts/sensa';
 import type {PersonalMeaningView} from '@sensa/contracts/sensa';
 import {intakeOperationSchema,captureIdentity,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import type {CaptureSnapshot,IntakeView} from '@sensa/contracts/sensa';
@@ -115,7 +115,14 @@ export function queueSemanticAcceptance(account:AccountContext,lookupId:string,i
 export function queuePersonalLearning(account:AccountContext,meaningId:string){return changeAccountReplica(account,state=>{
  if(!state.plan||!state.replicaId)throw new Error('请先设置每日学习数量');
  if(state.outbox.some(x=>x.state==='pending'&&x.operation.kind==='personal.add_to_learning'&&x.operation.payload.meaningId===meaningId))return state;
- const operation=personalLearningOperationSchema.parse({operationId:crypto.randomUUID(),occurredAt:new Date().toISOString(),installationId:state.installationId,replicaId:state.replicaId,dependsOn:[],kind:'personal.add_to_learning',payload:{meaningId,expectedRevision:'1',planId:state.plan.id,expectedScopeRevision:state.plan.scopeRevision}});
+ const operation=personalLearningOperationSchema.parse({operationId:crypto.randomUUID(),occurredAt:new Date().toISOString(),installationId:state.installationId,replicaId:state.replicaId,dependsOn:[],kind:'personal.add_to_learning',payload:{meaningId,expectedRevision:state.meanings[meaningId]?.revision,planId:state.plan.id,expectedScopeRevision:state.plan.scopeRevision}});
  return {...state,outbox:[...state.outbox,{operation,state:'pending',error:null}]};
 });}
 export function queueCancelPreparation(account:AccountContext,target:TargetView){return changeAccountReplica(account,state=>{const operation=targetOperationSchema.parse({operationId:crypto.randomUUID(),occurredAt:new Date().toISOString(),installationId:state.installationId,replicaId:state.replicaId,dependsOn:[],kind:'learning.cancel_preparation',payload:{learningTargetId:target.learningTarget?.learningTargetId,expectedPlanRevision:target.plan?.revision}});return {...state,outbox:[...state.outbox,{operation,state:'pending',error:null}]};});}
+
+export function queueContentMembership(account:AccountContext,entity:'intake'|'meaning',id:string,active:boolean){return changeAccountReplica(account,state=>{
+ const item=entity==='meaning'?state.meanings[id]:state.intakes[id];if(!item||!state.replicaId)throw new Error('请先同步内容');
+ if(state.outbox.some(x=>x.state==='pending'&&x.operation.kind==='content.set_membership'&&x.operation.payload.id===id))return state;
+ const operation=contentMembershipOperationSchema.parse({operationId:crypto.randomUUID(),occurredAt:new Date().toISOString(),installationId:state.installationId,replicaId:state.replicaId,dependsOn:[],kind:'content.set_membership',payload:{entity,id,expectedRevision:item.revision,active}});
+ return {...state,outbox:[...state.outbox,{operation,state:'pending',error:null}]};
+});}

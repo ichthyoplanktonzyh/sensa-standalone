@@ -59,6 +59,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M2-A local implementation | [`m2-a-intake-handoff.md`](m2-a-intake-handoff.md) | 实际插件采集、PKCE、收件箱持久与同账号 Web 本地证据；原生权限矩阵待验收 |
 | M2-B local implementation | [`m2-b-semantic-handoff.md`](m2-b-semantic-handoff.md) | 固定候选、原位/Web 直接接受和稳定语义 registry 的本地证据 |
 | M2-C local implementation | [`m2-c-provisioning-handoff.md`](m2-c-provisioning-handoff.md) | 个人意义显式入学、持久任务/独立校验/冻结文本材料及 M1 Runtime 本地证据 |
+| M2 content recovery | [`m2-content-recovery-handoff.md`](m2-content-recovery-handoff.md) | Web 明确关注点、重新解释、旧候选拒绝与可恢复移除/恢复的本地证据 |
 | Active roadmap | [`production-migration-plan.md`](production-migration-plan.md) | M0–M5 生产化路线图：正式产品与消费契约、生产闭环、恢复与数据控制、受邀发布和用户验证；含依赖、验收门与当前待办 |
 | Current working agreement | [`development-workflow.md`](development-workflow.md) | 可调整的开发方式：全局结构蓝图、owner 参与前端确认、消费契约、主代理直接实现与端到端验收；不替代领域或路线图 |
 | M1-E local implementation | [`m1-e-checkin-handoff.md`](m1-e-checkin-handoff.md) | 手动/正式学习签到、原日期离线上传、账号隔离恢复与 A–E 集成验收 |
