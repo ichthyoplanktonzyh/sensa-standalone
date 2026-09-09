@@ -1,0 +1,369 @@
+use chrono::{Duration, Utc};
+use sensa_library::*;
+use serde_json::{Value, json};
+use std::path::Path;
+fn uid() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
+fn command(p: &Path, a: Value) -> Command {
+    let s = open_library(p).unwrap();
+    serde_json::from_value(json!({"operationId":uid(),"libraryId":s.library_id,"expectedRevision":s.revision,"action":a})).unwrap()
+}
+fn apply(p: &Path, a: Value) -> Snapshot {
+    execute(p, command(p, a)).unwrap()
+}
+fn act(p: &Path, a: Value) -> Snapshot {
+    apply(p, json!({"kind":"agent","action":a}))
+}
+fn row(p: &Path, id: &str) -> Value {
+    agent::query(p).unwrap()["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["id"] == id)
+        .unwrap()
+        .clone()
+}
+fn provider() -> Value {
+    json!({"id":uid(),"name":"fixture","endpoint":"http://127.0.0.1:4331","model":"fixture","kind":"compatible","vision":true})
+}
+fn lease(p: &Path, id: &str) -> String {
+    let v = row(p, id);
+    act(
+        p,
+        json!({"kind":"lease","id":id,"revision":v["revision"],"provider":provider()}),
+    );
+    row(p, id)["lease"]["id"].as_str().unwrap().into()
+}
+fn tool(p: &Path, id: &str, name: &str, args: Value) {
+    let l = lease(p, id);
+    act(
+        p,
+        json!({"kind":"turn","id":id,"lease_id":l,"message":"一个简短建议","model_used":"fixture-actual","calls":[{"id":uid(),"name":name,"args":args}]}),
+    );
+}
+fn reject(p: &Path, a: Value, code: &str) {
+    let before = agent::query(p).unwrap();
+    let s = serde_json::to_value(open_library(p).unwrap()).unwrap();
+    let e = execute(p, command(p, json!({"kind":"agent","action":a}))).unwrap_err();
+    assert!(e.to_string().contains(code), "{e}");
+    assert_eq!(agent::query(p).unwrap(), before);
+    assert_eq!(serde_json::to_value(open_library(p).unwrap()).unwrap(), s);
+}
+fn create(p: &Path) -> (String, String) {
+    let d = uid();
+    apply(
+        p,
+        json!({"kind":"world","action":{"kind":"save","id":d,"expected_revision":0,"draft":{"blocks":[{"kind":"text","id":uid(),"text":"PRIVATE 场景：把雨伞借给朋友"}],"familiarExpression":"","startingPoint":null},"submit":true}}),
+    );
+    let id = uid();
+    act(
+        p,
+        json!({"kind":"create","id":id,"source":{"kind":"world","draft_id":d,"revision":1,"share_images":true}}),
+    );
+    (id, d)
+}
+fn proposal() -> Value {
+    json!({"explanation":"把东西暂时给别人用，可以说 lend。","expression":{"surface":"lend","type":"word","language":"en"},"semanticSpec":{"schemaVersion":"sensa-sense-semantic-spec-v1","coreMeaningFocus":"把东西暂时给别人使用，之后归还。","prototypeScenes":[{"summary":"一个人把物品暂时给另一个人使用。","participantRoles":["提供者","使用者"],"states":[],"directionOrCausality":null}],"includedCases":[],"excludedCases":[],"neighborContrasts":[],"openQuestions":[]}})
+}
+fn accept(p: &Path, id: &str) {
+    act(
+        p,
+        json!({"kind":"accept","id":id,"revision":row(p,id)["revision"],"consent":"accept_context_expression_sense"}),
+    );
+}
+#[test]
+fn teacher_waits_corrections_are_candidates_and_context_commit_is_explicit() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("teacher.db");
+    let (id, d) = create(&p);
+    let before = open_library(&p).unwrap();
+    tool(&p, &id, "lookup_meanings", json!({"query":"lend"}));
+    assert_eq!(row(&p, &id)["status"], "idle");
+    tool(
+        &p,
+        &id,
+        "ask_learner",
+        json!({"question":"你是给别人用，还是从别人那里借来？"}),
+    );
+    let v = row(&p, &id);
+    assert_eq!(v["status"], "waiting");
+    reject(
+        &p,
+        json!({"kind":"lease","id":id,"revision":v["revision"],"provider":provider()}),
+        "agent_not_runnable",
+    );
+    act(
+        &p,
+        json!({"kind":"say","id":id,"revision":v["revision"],"message":"给别人用。"}),
+    );
+    tool(
+        &p,
+        &id,
+        "propose_meaning",
+        json!({"explanation":"缺少结构的候选"}),
+    );
+    assert_eq!(row(&p, &id)["status"], "idle");
+    assert!(
+        row(&p, &id)["messages"]
+            .to_string()
+            .contains("Invalid proposal")
+    );
+    tool(&p, &id, "propose_meaning", proposal());
+    assert!(
+        open_library(&p).unwrap().personal["meanings"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let v = row(&p, &id);
+    act(
+        &p,
+        json!({"kind":"say","id":id,"revision":v["revision"],"message":"表达用完整短语也可以吗？"}),
+    );
+    assert!(row(&p, &id)["candidate"].is_null());
+    tool(&p, &id, "propose_meaning", proposal());
+    let after = open_library(&p).unwrap();
+    assert_eq!(after.learning, before.learning);
+    assert_eq!(
+        serde_json::to_value(after.run).unwrap(),
+        serde_json::to_value(before.run).unwrap()
+    );
+    accept(&p, &id);
+    let s = open_library(&p).unwrap();
+    let m = &s.personal["meanings"][0];
+    assert!(m["focus"].is_null());
+    assert_eq!(m["worldContext"]["id"], d);
+    assert_eq!(m["addedToLearning"], false);
+    assert_eq!(m["resolutionProvenance"]["modelUsed"], "fixture-actual");
+    assert_eq!(row(&p, &id)["status"], "accepted");
+}
+#[test]
+fn cancellation_late_duplicate_unknown_cross_library_and_expired_calls_are_fenced() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("fences.db");
+    let (id, d) = create(&p);
+    let l = lease(&p, &id);
+    let request = agent::request(&p, &id).unwrap();
+    assert!(
+        request["messages"][0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("language teacher")
+    );
+    reject(
+        &p,
+        json!({"kind":"turn","id":id,"lease_id":l,"message":"","calls":[{"id":uid(),"name":"delete_library","args":{}}]}),
+        "agent_unapproved_tool",
+    );
+    act(
+        &p,
+        json!({"kind":"stop","id":id,"revision":row(&p,&id)["revision"]}),
+    );
+    reject(
+        &p,
+        json!({"kind":"turn","id":id,"lease_id":l,"message":"迟到","calls":[]}),
+        "agent_stale_result",
+    );
+    let l = lease(&p, &id);
+    let cid = uid();
+    act(
+        &p,
+        json!({"kind":"turn","id":id,"lease_id":l,"message":"","calls":[{"id":cid,"name":"lookup_meanings","args":{"query":"lend"}}]}),
+    );
+    let l = lease(&p, &id);
+    reject(
+        &p,
+        json!({"kind":"turn","id":id,"lease_id":l,"message":"","calls":[{"id":cid,"name":"lookup_meanings","args":{"query":"lend"}}]}),
+        "agent_duplicate_tool",
+    );
+    let c = command(
+        &p,
+        json!({"kind":"agent","action":{"kind":"turn","id":id,"lease_id":l,"message":"过期","calls":[]}}),
+    );
+    let e = execute_at(&p, c, Utc::now() + Duration::minutes(2)).unwrap_err();
+    assert!(e.to_string().contains("expired"));
+    let mut c = command(
+        &p,
+        json!({"kind":"agent","action":{"kind":"stop","id":id,"revision":row(&p,&id)["revision"]}}),
+    );
+    c.library_id = uid();
+    assert!(
+        execute(&p, c)
+            .unwrap_err()
+            .to_string()
+            .contains("library_mismatch")
+    );
+    act(&p, json!({"kind":"fail","id":id,"lease_id":l}));
+    apply(
+        &p,
+        json!({"kind":"world","action":{"kind":"save","id":d,"expected_revision":1,"draft":{"blocks":[],"familiarExpression":"新的上下文","startingPoint":null},"submit":true}}),
+    );
+    reject(
+        &p,
+        json!({"kind":"lease","id":id,"revision":row(&p,&id)["revision"],"provider":provider()}),
+        "draft_conflict",
+    );
+}
+#[test]
+fn content_loop_reviews_independently_and_commits_only_bound_material() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("content.db");
+    let (id, _) = create(&p);
+    tool(&p, &id, "propose_meaning", proposal());
+    accept(&p, &id);
+    apply(&p, json!({"kind":"confirm_quantity","quantity":5}));
+    let m = open_library(&p).unwrap().personal["meanings"][0].clone();
+    let s = apply(
+        &p,
+        json!({"kind":"provisioning","action":{"kind":"add","meaning_id":m["id"],"expected_revision":m["revision"],"policy":{"profileId":"lightweight","profileVersion":"v1"}}}),
+    );
+    let task = &s.personal["preparations"][0];
+    let cid = uid();
+    act(
+        &p,
+        json!({"kind":"create","id":cid,"source":{"kind":"content","task_id":task["id"],"revision":task["revision"]}}),
+    );
+    assert!(!row(&p, &cid)["input"].to_string().contains("PRIVATE"));
+    tool(&p, &cid, "read_demand", json!({}));
+    tool(
+        &p,
+        &cid,
+        "submit_candidate",
+        json!({"scene":"你把自己的物品暂时交给朋友使用，约好用完后归还。","senseFocus":"暂时给别人用"}),
+    );
+    let l = lease(&p, &cid);
+    let req = agent::request(&p, &cid).unwrap();
+    assert_eq!(req["messages"].as_array().unwrap().len(), 2);
+    assert_eq!(req["tools"], json!([]));
+    act(
+        &p,
+        json!({"kind":"review","id":cid,"lease_id":l,"accepted":false,"reason":"请再检查是否忠于所选意思","model_used":"fixture-review"}),
+    );
+    assert_eq!(row(&p, &cid)["status"], "idle");
+    assert!(open_library(&p).unwrap().catalog.is_empty());
+    tool(
+        &p,
+        &cid,
+        "submit_candidate",
+        json!({"scene":"你把自己的雨伞暂时给朋友使用，约好用完后归还。","senseFocus":"暂时给别人用"}),
+    );
+    let l = lease(&p, &cid);
+    reject(
+        &p,
+        json!({"kind":"commit","id":cid,"revision":row(&p,&cid)["revision"]}),
+        "agent_not_ready",
+    );
+    act(
+        &p,
+        json!({"kind":"review","id":cid,"lease_id":l,"accepted":true,"reason":"符合固定意思，没有答案泄露","model_used":"fixture-review"}),
+    );
+    let c = command(
+        &p,
+        json!({"kind":"agent","action":{"kind":"commit","id":cid,"revision":row(&p,&cid)["revision"]}}),
+    );
+    let s = execute(&p, c.clone()).unwrap();
+    assert_eq!(s.catalog.len(), 1);
+    assert_eq!(s.personal["preparations"][0]["status"], "ready");
+    assert!(s.run.is_none());
+    assert_eq!(
+        serde_json::to_value(execute(&p, c).unwrap()).unwrap(),
+        serde_json::to_value(s).unwrap()
+    );
+    assert_eq!(row(&p, &cid)["status"], "committed");
+}
+#[test]
+fn schema14_upgrade_preserves_world_and_operations() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("migration.db");
+    let _ = open_library(&p).unwrap();
+    let db = rusqlite::Connection::open(&p).unwrap();
+    db.execute_batch("DROP TABLE agent_sessions;PRAGMA user_version=14;")
+        .unwrap();
+    drop(db);
+    let s = open_library(&p).unwrap();
+    assert_eq!(s.revision, 0);
+    assert_eq!(agent::query(&p).unwrap()["sessions"], json!([]));
+}
+#[test]
+fn authorized_origin_is_fixed_per_request_and_revocation_fences_the_loop() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("origin.db");
+    let (id, _) = create(&p);
+    tool(&p, &id, "propose_meaning", proposal());
+    accept(&p, &id);
+    let m = open_library(&p).unwrap().personal["meanings"][0].clone();
+    apply(&p, json!({"kind":"confirm_quantity","quantity":5}));
+    apply(
+        &p,
+        json!({"kind":"anchor","action":{"kind":"set","meaning_id":m["id"],"expected_revision":m["revision"],"enabled":true,"recipient":"http://127.0.0.1:4331/"}}),
+    );
+    let m = open_library(&p).unwrap().personal["meanings"][0].clone();
+    let s = apply(
+        &p,
+        json!({"kind":"provisioning","action":{"kind":"add","meaning_id":m["id"],"expected_revision":m["revision"],"policy":{"profileId":"lightweight","profileVersion":"v1"}}}),
+    );
+    let t = &s.personal["preparations"][0];
+    let cid = uid();
+    reject(
+        &p,
+        json!({"kind":"create","id":cid,"source":{"kind":"content","task_id":t["id"],"revision":t["revision"],"service_origin":"https://other.invalid"}}),
+        "anchor_recipient_mismatch",
+    );
+    act(
+        &p,
+        json!({"kind":"create","id":cid,"source":{"kind":"content","task_id":t["id"],"revision":t["revision"],"service_origin":"http://127.0.0.1:4331"}}),
+    );
+    let mut wrong = provider();
+    wrong["endpoint"] = json!("https://other.invalid");
+    reject(
+        &p,
+        json!({"kind":"lease","id":cid,"revision":row(&p,&cid)["revision"],"provider":wrong}),
+        "anchor_recipient_mismatch",
+    );
+    let l = lease(&p, &cid);
+    assert!(
+        agent::request(&p, &cid)
+            .unwrap()
+            .to_string()
+            .contains("PRIVATE")
+    );
+    let m = open_library(&p).unwrap().personal["meanings"][0].clone();
+    apply(
+        &p,
+        json!({"kind":"anchor","action":{"kind":"set","meaning_id":m["id"],"expected_revision":m["revision"],"enabled":false,"recipient":null}}),
+    );
+    let before = agent::query(&p).unwrap();
+    assert!(execute(&p,command(&p,json!({"kind":"agent","action":{"kind":"turn","id":cid,"lease_id":l,"message":"late","calls":[{"id":uid(),"name":"read_demand","args":{}}]}}))).is_err());
+    assert_eq!(agent::query(&p).unwrap(), before);
+    assert!(open_library(&p).unwrap().catalog.is_empty());
+}
+#[test]
+fn model_request_budget_survives_reopening_and_explicit_resumes() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("budget.db");
+    let (id, _) = create(&p);
+    for _ in 0..24 {
+        let l = lease(&p, &id);
+        act(
+            &p,
+            json!({"kind":"turn","id":id,"lease_id":l,"message":"请补充一句话。","calls":[]}),
+        );
+        act(
+            &p,
+            json!({"kind":"say","id":id,"revision":row(&p,&id)["revision"],"message":"补充一个简单场景。"}),
+        );
+        let _ = open_library(&p).unwrap();
+    }
+    reject(
+        &p,
+        json!({"kind":"lease","id":id,"revision":row(&p,&id)["revision"],"provider":provider()}),
+        "agent_budget_exhausted",
+    );
+    assert!(
+        open_library(&p).unwrap().personal["meanings"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}

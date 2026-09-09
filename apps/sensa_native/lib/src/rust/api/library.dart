@@ -86,3 +86,12 @@ Future<Uint8List> libraryWorldMedia({
   path: path,
   digest: digest,
 );
+
+Future<String> libraryAgents({required String path}) =>
+    RustLib.instance.api.crateApiLibraryLibraryAgents(path: path);
+
+Future<String> libraryAgentRequest({
+  required String path,
+  required String id,
+}) =>
+    RustLib.instance.api.crateApiLibraryLibraryAgentRequest(path: path, id: id);

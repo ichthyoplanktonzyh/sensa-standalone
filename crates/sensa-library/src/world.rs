@@ -64,7 +64,7 @@ fn uuid(s: &str) -> Result<()> {
 fn bounded(s: &str, n: usize) -> bool {
     s.chars().count() <= n
 }
-fn read_draft(db: &Connection, id: &str, revision: u32) -> Result<(Draft, String)> {
+pub(super) fn read_draft(db: &Connection, id: &str, revision: u32) -> Result<(Draft, String)> {
     let (r, status, raw): (u32, String, String) = db
         .query_row(
             "SELECT revision,status,content FROM world_drafts WHERE id=?1",
@@ -77,7 +77,7 @@ fn read_draft(db: &Connection, id: &str, revision: u32) -> Result<(Draft, String
     rule(status != "removed", "draft_removed")?;
     Ok((serde_json::from_str(&raw)?, status))
 }
-fn validate(db: &Connection, d: &Draft, complete: bool) -> Result<()> {
+pub(super) fn validate(db: &Connection, d: &Draft, complete: bool) -> Result<()> {
     rule(
         d.blocks.len() <= 30 && bounded(&d.familiar_expression, 4000),
         "invalid_world_draft",
@@ -190,7 +190,7 @@ fn source(db: &Connection, s: &Source) -> Result<Value> {
         }
     }
 }
-fn insert_meaning(
+pub(super) fn insert_meaning(
     db: &Connection,
     mut m: Value,
     identity: String,
@@ -456,4 +456,77 @@ pub fn query(path: &Path) -> Result<Value> {
     Ok(
         json!({"libraryId":s.library_id,"revision":s.revision,"drafts":drafts,"meanings":s.personal["meanings"],"materials":s.catalog}),
     )
+}
+
+/// Commit a teacher proposal only under the learner's explicit acceptance.
+pub(super) fn accept_agent(
+    db: &Connection,
+    draft_id: &str,
+    revision: u32,
+    proposal: Value,
+    provenance: Value,
+    command: &Command,
+    now: i64,
+) -> Result<()> {
+    let (draft, _) = read_draft(db, draft_id, revision)?;
+    validate(db, &draft, true)?;
+    let proposal = semantic::validate_proposal(proposal)?;
+    let digest = semantic::hash(
+        &json!({"semanticSpec":proposal["semanticSpec"],"expression":proposal["expression"]}),
+    )?;
+    let raw: Option<String> = db
+        .query_row(
+            "SELECT content FROM semantic_identities WHERE digest=?1",
+            [&digest],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let identity = if let Some(raw) = raw {
+        serde_json::from_str::<Value>(&raw)?
+    } else {
+        let value = json!({"senseId":id(),"senseVersionId":id(),"bindingId":id(),"bindingVersionId":id(),"semanticSpec":proposal["semanticSpec"],"expression":proposal["expression"]});
+        db.execute(
+            "INSERT INTO semantic_identities VALUES(?1,?2)",
+            params![digest, value.to_string()],
+        )?;
+        value
+    };
+    let text = draft
+        .blocks
+        .iter()
+        .filter_map(|b| {
+            if let Block::Text { text, .. } = b {
+                Some(text.as_str())
+            } else {
+                None
+            }
+        })
+        .chain(Some(draft.familiar_expression.as_str()))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let context = format!("world:{draft_id}:{revision}");
+    let mut m = identity;
+    m["snapshot"] = json!({"sentence":text,"language":"und","expression":null,"source":{"url":null,"title":"语言老师对话材料","capturedAt":DateTime::from_timestamp_millis(now).unwrap().to_rfc3339()}});
+    m["worldContext"] = json!({"id":draft_id,"revision":revision,"draft":draft});
+    m["contextAnchorId"] = json!(context);
+    m["focus"] = Value::Null;
+    m["sourceLink"] = Value::Null;
+    m["expressionLocator"] =
+        json!({"kind":"context","contextId":draft_id,"contextRevision":revision});
+    m["sense"] = proposal["semanticSpec"]["coreMeaningFocus"].clone();
+    m["expression"] = proposal["expression"]["surface"].clone();
+    m["proposal"] = proposal;
+    m["materialId"] = Value::Null;
+    m["materialDigest"] = Value::Null;
+    m["materialSource"] = json!("语言老师建议，经本人确认");
+    m["resolutionProvenance"] = provenance;
+    let key = semantic::hash(
+        &json!({"contextAnchorId":context,"senseVersionId":m["senseVersionId"],"bindingVersionId":m["bindingVersionId"]}),
+    )?;
+    insert_meaning(db, m, key, &command.operation_id, now)?;
+    db.execute(
+        "UPDATE world_drafts SET status='accepted' WHERE id=?1",
+        [draft_id],
+    )?;
+    Ok(())
 }

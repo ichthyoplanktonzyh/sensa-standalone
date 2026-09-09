@@ -50,3 +50,5 @@ pub fn library_world_put_media(path:String,bytes:Vec<u8>)->anyhow::Result<String
 pub fn library_world_media(path:String,digest:String)->anyhow::Result<Vec<u8>> {
  Ok(sensa_library::world::media(Path::new(&path),&digest)?)
 }
+pub fn library_agents(path:String)->anyhow::Result<String> {Ok(sensa_library::agent::query(Path::new(&path))?.to_string())}
+pub fn library_agent_request(path:String,id:String)->anyhow::Result<String> {Ok(sensa_library::agent::request(Path::new(&path),&id)?.to_string())}

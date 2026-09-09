@@ -291,7 +291,7 @@ fn schema13_upgrade_preserves_facts_and_receipts() {
     let _ = semantic(&p);
     let before = serde_json::to_value(open_library(&p).unwrap()).unwrap();
     let db = rusqlite::Connection::open(&p).unwrap();
-    db.execute_batch("DROP TABLE world_bindings; DROP TABLE world_media; DROP TABLE world_drafts; PRAGMA user_version=13;").unwrap();
+    db.execute_batch("DROP TABLE agent_sessions; DROP TABLE world_bindings; DROP TABLE world_media; DROP TABLE world_drafts; PRAGMA user_version=13;").unwrap();
     drop(db);
     assert_eq!(
         serde_json::to_value(open_library(&p).unwrap()).unwrap(),

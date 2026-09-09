@@ -1,7 +1,7 @@
 # Sensa 文档索引
 
 > 状态：Active index  
-> 更新日期：2026-09-07
+> 更新日期：2026-09-09
 
 本目录不再把所有设计记录都当作“领域模型”。文档按职责分层；下层文档不能覆盖
 上层文档的定义。
@@ -80,7 +80,8 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | Native anchor use | [`native-anchor-use-plan.md`](native-anchor-use-plan.md) / [`native-anchor-use-handoff.md`](native-anchor-use-handoff.md) | 固定原文授权/撤销、准备版本与材料替换、旧 Run 保留、原生冷恢复；音频见后续交付 |
 | Native content provisioning | [`native-provisioning-plan.md`](native-provisioning-plan.md) / [`native-provisioning-handoff.md`](native-provisioning-handoff.md) | 个人意义显式入学、按需文本任务、独立复核/本地冻结及现有 Profile 学习与原生恢复证据 |
 | Native semantic resolution | [`native-semantic-resolution-plan.md`](native-semantic-resolution-plan.md) / [`native-semantic-resolution-handoff.md`](native-semantic-resolution-handoff.md) | 在线解析/澄清、本地候选与新 Sense 接受、服务用量去重及原生恢复证据 |
-| Native Personal World | [`native-world-group-plan.md`](native-world-group-plan.md) / [`native-world-group-handoff.md`](native-world-group-handoff.md) | 图文草稿、本机语义连接、表达分支与关系投影；多模态 provider 留在资源组 |
+| Native Personal World | [`native-world-group-plan.md`](native-world-group-plan.md) / [`native-world-group-handoff.md`](native-world-group-handoff.md) | 图文草稿、本机语义连接、表达分支与关系投影；模型协作见 Native Agent 记录 |
+| Native Agent 协作 | [`native-agent-group-plan.md`](native-agent-group-plan.md) / [`native-agent-group-handoff.md`](native-agent-group-handoff.md) | 语言老师图文澄清、内容工具循环、独立审核与本机 Provider 接线 |
 | Native Runtime scope / practice | [`native-runtime-scope-plan.md`](native-runtime-scope-plan.md) / [`native-runtime-scope-handoff.md`](native-runtime-scope-handoff.md) | 独立 scope 准入、个人/课程范围、独立自由练习账本与原生播放器验收 |
 | Native migration checklist | [`native-migration-checklist.md`](native-migration-checklist.md) | 已有 TS 成果的保留/迁移范围、验收状态；首版登记，待逐项盘点 |
 | Native pack import | [`native-pack-import-contract.md`](native-pack-import-contract.md) / [`native-pack-import-handoff.md`](native-pack-import-handoff.md) | 有界文本包、显式入学、多目标首学、版本保护与原生验收；完整发布包/媒体仍待迁移 |

@@ -37,7 +37,7 @@ pub enum Action {
         reason: String,
     },
 }
-fn read(db: &Connection, id: &str) -> Result<Value> {
+pub(super) fn read(db: &Connection, id: &str) -> Result<Value> {
     let s: String = db
         .query_row(
             "SELECT content FROM personal_learning_tasks WHERE id=?1",
@@ -626,7 +626,12 @@ pub(super) fn apply(
                 task["status"] = json!("blocked");
                 task["reason"] = json!(reason);
             } else {
-                let (scene, sense, expression) = validate_result(&request, result)?;
+                let (scene, sense, expression) =
+                    if result["proof"]["adapter"] == "native-agent-lightweight-v1" {
+                        agent::validated_material(db, &request, result)?
+                    } else {
+                        validate_result(&request, result)?
+                    };
                 let material = Material {
                     pronunciation: result["material"]
                         .get("pronunciation")
@@ -729,7 +734,7 @@ fn end_attempt(db: &Connection, task: &Value, reason: &str, now: DateTime<Utc>) 
     }
     Ok(())
 }
-fn active(task: &Value, attempt: &str, now: DateTime<Utc>) -> Result<()> {
+pub(super) fn active(task: &Value, attempt: &str, now: DateTime<Utc>) -> Result<()> {
     if task["status"] != "generating" || task["activeAttemptId"] != attempt {
         return Err(Error::Rule("preparation_superseded"));
     }

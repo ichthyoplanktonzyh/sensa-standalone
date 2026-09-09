@@ -192,8 +192,10 @@ construction draft，不得通过伪造 Focus、Proposal 或 Confirmation 提前
 ## 5. LLM 语义访谈
 
 Sense Construction 不是普通的句中词义消歧，也不是每条 Intake 的必经步骤；它用于 Context 无法
-直接决定 intended Sense，或 learner 从个人表达意图出发尚无适用 stable Sense 的情况。LLM 扮演
-语义访谈者和 Sense 导航器，承担：
+直接决定 intended Sense，或 learner 从个人表达意图出发尚无适用 stable Sense 的情况。LLM 面向 learner 的角色是语言老师：帮助理解当前场景并找到自然、合适的表达。
+只澄清会影响实际理解或使用的差别，不穷举细微语义边界，不要求 learner 填写内部语义结构；
+信息足够便收敛，Focus 始终可选。内部仍需整理可校验的 Sense/Expression 候选并保留真实不确定性。
+这一体验定位由 Owner 于 2026-09-09 确认，不改变下述接受权限和事实边界。具体承担：
 
 1. 从非结构化文本、媒介和个人叙述中提出可修改的 Meaning Focus；
 2. 识别同一场景中的多个可能焦点，并在必要时建议拆分；

@@ -1,9 +1,11 @@
+import 'agent_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../data/world_repository.dart';
 
 class WorldModel extends ChangeNotifier {
-  WorldModel(this.repository);
+  WorldModel(this.repository, {required this.agents});
+  final AgentController agents;
   final WorldRepository repository;
   Map<String, dynamic>? data;
   String? error;

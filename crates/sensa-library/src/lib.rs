@@ -2,6 +2,7 @@
 //! Replaceable pronunciation byte caches use a separate verified resource API.
 //! The acceptance material is opt-in; this is not a production package importer.
 pub mod activity;
+pub mod agent;
 pub mod anchor;
 mod assurance;
 mod assurance_retention;
@@ -53,6 +54,9 @@ pub struct Command {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CommandAction {
+    Agent {
+        action: agent::Action,
+    },
     World {
         action: world::Action,
     },
@@ -227,7 +231,7 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].contains(&version)
+    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].contains(&version)
         || application != APPLICATION
     {
         return Err(Error::Rule("unsupported_library_version"));
@@ -277,6 +281,9 @@ fn connection(path: &Path) -> Result<Connection> {
     }
     if version <= 13 {
         tx.execute_batch(include_str!("world.sql"))?;
+    }
+    if version <= 14 {
+        tx.execute_batch(include_str!("agent.sql"))?;
     }
     tx.commit()?;
     Ok(db)
@@ -456,8 +463,17 @@ pub fn execute_at_offset(
     if state.revision != command.expected_revision {
         return Err(Error::Rule("revision_conflict"));
     }
-    if let CommandAction::World { action } = &command.action {
-        world::apply(&tx, action, &command, now.timestamp_millis())?;
+    if matches!(
+        &command.action,
+        CommandAction::World { .. } | CommandAction::Agent { .. }
+    ) {
+        match &command.action {
+            CommandAction::World { action } => {
+                world::apply(&tx, action, &command, now.timestamp_millis())?
+            }
+            CommandAction::Agent { action } => agent::apply(&tx, action, &command, now)?,
+            _ => unreachable!(),
+        }
         tx.execute("UPDATE library SET revision=revision+1", [])?;
         let result = read(&tx)?;
         tx.execute(
@@ -496,7 +512,9 @@ pub fn execute_at_offset(
         |r| r.get(0),
     )?;
     match &command.action {
-        CommandAction::World { .. } => unreachable!("isolated world transaction above"),
+        CommandAction::Agent { .. } | CommandAction::World { .. } => {
+            unreachable!("isolated world transaction above")
+        }
         CommandAction::Curriculum { action } => curriculum::apply(&tx, action)?,
         CommandAction::Anchor { action } => anchor::apply(&tx, action, &command, now)?,
         CommandAction::Provisioning { action } => provisioning::apply(&tx, action, &command, now)?,

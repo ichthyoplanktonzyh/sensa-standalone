@@ -1,3 +1,4 @@
+import 'agent_controller.dart';
 import '../data/semantic_service.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -8,6 +9,7 @@ import '../data/pack_file_reader.dart';
 class LibraryViewModel extends ChangeNotifier {
   LibraryViewModel(this.repository, {PackFileReader? packReader})
     : packReader = packReader ?? const PackFileReader();
+  late final agents = AgentController(repository);
   final PackFileReader packReader;
   final semanticService = SemanticService();
   bool semanticBusy = false;
@@ -233,6 +235,7 @@ class LibraryViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    agents.dispose();
     semanticService.clear();
     _disposed = true;
     super.dispose();

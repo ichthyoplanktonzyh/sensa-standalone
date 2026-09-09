@@ -1,3 +1,4 @@
+import 'agent_screen.dart';
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
 import 'online_service_dialog.dart';
@@ -250,6 +251,40 @@ class _PreparationScreenState extends State<PreparationScreen> {
                         child: const Text('回到学习入口'),
                       )
                     else ...[
+                      OutlinedButton(
+                        onPressed: model.busy || model.provisioningBusy
+                            ? null
+                            : () async {
+                                await model.agents.load();
+                                final active = model.agents.sessions
+                                    .where(
+                                      (s) =>
+                                          current['status'] == 'generating' &&
+                                          !expired &&
+                                          s['kind'] == 'content' &&
+                                          s['input']['id'] ==
+                                              current['activeAttemptId'],
+                                    )
+                                    .firstOrNull;
+                                if (!context.mounted) return;
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => AgentScreen(
+                                      controller: model.agents,
+                                      id: active?['id'],
+                                      source: {
+                                        'kind': 'content',
+                                        'task_id': current['id'],
+                                        'revision': current['revision'],
+                                      },
+                                    ),
+                                  ),
+                                );
+                                await model.load();
+                              },
+                        child: const Text('使用模型服务准备'),
+                      ),
                       TextButton(
                         onPressed: model.provisioningBusy ? null : configure,
                         child: Text(

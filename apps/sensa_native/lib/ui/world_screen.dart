@@ -1,3 +1,4 @@
+import 'agent_screen.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -26,6 +27,7 @@ class _WorldScreenState extends State<WorldScreen> {
     super.initState();
     model = WorldModel(
       widget.repository ?? WorldRepository(widget.library.repository),
+      agents: widget.library.agents,
     );
     model.addListener(changed);
     model.load();
@@ -91,7 +93,25 @@ class _WorldScreenState extends State<WorldScreen> {
         ? region
         : groups.keys.firstOrNull;
     return Scaffold(
-      appBar: AppBar(title: const Text('图文与语义关系')),
+      appBar: AppBar(
+        title: const Text('图文与语义关系'),
+        actions: [
+          IconButton(
+            tooltip: '对话与资源准备',
+            icon: const Icon(Icons.chat_outlined),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) =>
+                      AgentHistoryScreen(controller: widget.library.agents),
+                ),
+              );
+              await model.load();
+            },
+          ),
+        ],
+      ),
       body: model.data == null
           ? Center(
               child: TextButton(
@@ -643,7 +663,36 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
                 TextButton(onPressed: image, child: const Text('添加图片')),
               ],
             ),
-          const Text('保存材料不调用模型。图片保存在本机；在线澄清仍从文字捕获入口开始，图片不会自动发送。'),
+          const Text('保存材料不调用模型。需要帮助时，可以把材料发送给你选择的语言老师服务。'),
+          OutlinedButton(
+            onPressed: saving
+                ? null
+                : () async {
+                    await save(submit: true);
+                    if (!context.mounted || model.error != null) return;
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => AgentScreen(
+                          controller: model.agents,
+                          source: {
+                            'kind': 'world',
+                            'draft_id': id,
+                            'revision': revision,
+                          },
+                        ),
+                      ),
+                    );
+                    await model.load();
+                    if (context.mounted &&
+                        (model.data!['drafts'] as List).any(
+                          (d) => d['id'] == id && d['status'] == 'accepted',
+                        )) {
+                      Navigator.pop(context);
+                    }
+                  },
+            child: const Text('和语言老师聊一聊'),
+          ),
           if (!frozen)
             FilledButton(
               onPressed: saving
