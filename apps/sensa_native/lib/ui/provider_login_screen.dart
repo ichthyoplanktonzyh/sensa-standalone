@@ -1,3 +1,4 @@
+import 'product_theme.dart';
 import '../data/agent_provider.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -67,118 +68,123 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
     final signed = providers.accountEmail(widget.profile['id']);
     return Scaffold(
       appBar: AppBar(title: const Text('在线服务账户')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Text('服务：${widget.profile['name']}\n${widget.profile['endpoint']}'),
-          const Text('登录只用于访问这个在线服务。本机资料、学习进度和所属学习库不会随登录或退出改变；这不会启用同步。'),
-          if (signed != null) ...[
-            Text('已登录：$signed', key: const ValueKey('provider-account-email')),
-            Text(providers.status(widget.profile['id'])),
-            OutlinedButton(
-              onPressed: busy
-                  ? null
-                  : () => perform(() async {
-                      final role = ['teacher', 'content', 'review', 'service']
-                          .where(
-                            (r) =>
-                                providers.forPurpose(r)?['id'] ==
-                                widget.profile['id'],
-                          )
-                          .firstOrNull;
-                      if (role == null) {
-                        notice = '请先把这个服务分配给需要的用途。';
-                        return;
-                      }
-                      await providers.ensureAccess(role);
-                      notice = '在线访问凭据已检查。';
-                    }),
-              child: const Text('检查在线访问'),
-            ),
+      body: Readable(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Text('服务：${widget.profile['name']}\n${widget.profile['endpoint']}'),
+            const Text('登录只用于访问这个在线服务。本机资料、学习进度和所属学习库不会随登录或退出改变；这不会启用同步。'),
+            if (signed != null) ...[
+              Text(
+                '已登录：$signed',
+                key: const ValueKey('provider-account-email'),
+              ),
+              Text(providers.status(widget.profile['id'])),
+              OutlinedButton(
+                onPressed: busy
+                    ? null
+                    : () => perform(() async {
+                        final role = ['teacher', 'content', 'review', 'service']
+                            .where(
+                              (r) =>
+                                  providers.forPurpose(r)?['id'] ==
+                                  widget.profile['id'],
+                            )
+                            .firstOrNull;
+                        if (role == null) {
+                          notice = '请先把这个服务分配给需要的用途。';
+                          return;
+                        }
+                        await providers.ensureAccess(role);
+                        notice = '在线访问凭据已检查。';
+                      }),
+                child: const Text('检查在线访问'),
+              ),
 
-            FilledButton(
-              onPressed: busy
-                  ? null
-                  : () => perform(() async {
-                      await providers.logout(widget.profile['id']);
-                      notice = '已退出本机在线服务账户。';
-                    }),
-              child: const Text('退出在线账户'),
-            ),
-          ] else ...[
-            const Text('使用受邀邮箱验证码登录。认证项目地址与公开访问密钥由服务提供方提供，登录会将邮箱发送到该认证项目。'),
-            TextField(
-              key: const ValueKey('auth-url'),
-              controller: address,
-              enabled: !busy,
-              decoration: const InputDecoration(
-                labelText: '认证项目地址',
-                hintText: 'https://your-project.supabase.co',
-              ),
-            ),
-            TextField(
-              key: const ValueKey('auth-key'),
-              controller: apiKey,
-              enabled: !busy,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: '公开访问密钥'),
-            ),
-            TextField(
-              key: const ValueKey('auth-email'),
-              controller: email,
-              enabled: !busy,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: '受邀邮箱'),
-            ),
-            OutlinedButton(
-              onPressed: busy || cooling
-                  ? null
-                  : () => perform(() async {
-                      await ProviderAuth.sendCode(
-                        address.text.trim(),
-                        apiKey.text.trim(),
-                        email.text.trim(),
-                      );
-                      sent = true;
-                      cooling = true;
-                      notice = '验证码已发送，请检查邮箱。';
-                      timer?.cancel();
-                      timer = Timer(const Duration(seconds: 60), () {
-                        if (mounted) setState(() => cooling = false);
-                      });
-                    }),
-              child: Text(cooling ? '请稍后再发送' : '发送验证码'),
-            ),
-            if (sent) ...[
-              TextField(
-                key: const ValueKey('auth-code'),
-                controller: code,
-                enabled: !busy,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: '邮箱验证码'),
-              ),
               FilledButton(
                 onPressed: busy
                     ? null
                     : () => perform(() async {
-                        await providers.login(
-                          widget.profile,
+                        await providers.logout(widget.profile['id']);
+                        notice = '已退出本机在线服务账户。';
+                      }),
+                child: const Text('退出在线账户'),
+              ),
+            ] else ...[
+              const Text('使用受邀邮箱验证码登录。认证项目地址与公开访问密钥由服务提供方提供，登录会将邮箱发送到该认证项目。'),
+              TextField(
+                key: const ValueKey('auth-url'),
+                controller: address,
+                enabled: !busy,
+                decoration: const InputDecoration(
+                  labelText: '认证项目地址',
+                  hintText: 'https://your-project.supabase.co',
+                ),
+              ),
+              TextField(
+                key: const ValueKey('auth-key'),
+                controller: apiKey,
+                enabled: !busy,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: '公开访问密钥'),
+              ),
+              TextField(
+                key: const ValueKey('auth-email'),
+                controller: email,
+                enabled: !busy,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: '受邀邮箱'),
+              ),
+              OutlinedButton(
+                onPressed: busy || cooling
+                    ? null
+                    : () => perform(() async {
+                        await ProviderAuth.sendCode(
                           address.text.trim(),
                           apiKey.text.trim(),
                           email.text.trim(),
-                          code.text.trim(),
                         );
-                        code.clear();
-                        apiKey.clear();
-                        notice = '已登录，访问凭据保存在系统安全存储。';
+                        sent = true;
+                        cooling = true;
+                        notice = '验证码已发送，请检查邮箱。';
+                        timer?.cancel();
+                        timer = Timer(const Duration(seconds: 60), () {
+                          if (mounted) setState(() => cooling = false);
+                        });
                       }),
-                child: const Text('验证并登录'),
+                child: Text(cooling ? '请稍后再发送' : '发送验证码'),
               ),
+              if (sent) ...[
+                TextField(
+                  key: const ValueKey('auth-code'),
+                  controller: code,
+                  enabled: !busy,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: '邮箱验证码'),
+                ),
+                FilledButton(
+                  onPressed: busy
+                      ? null
+                      : () => perform(() async {
+                          await providers.login(
+                            widget.profile,
+                            address.text.trim(),
+                            apiKey.text.trim(),
+                            email.text.trim(),
+                            code.text.trim(),
+                          );
+                          code.clear();
+                          apiKey.clear();
+                          notice = '已登录，访问凭据保存在系统安全存储。';
+                        }),
+                  child: const Text('验证并登录'),
+                ),
+              ],
             ],
+            if (busy) const LinearProgressIndicator(),
+            if (notice != null) Text(notice!),
           ],
-          if (busy) const LinearProgressIndicator(),
-          if (notice != null) Text(notice!),
-        ],
+        ),
       ),
     );
   }

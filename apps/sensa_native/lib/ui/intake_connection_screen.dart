@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'intake_setup_screen.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -32,13 +34,52 @@ class _IntakeConnectionScreenState extends State<IntakeConnectionScreen> {
         return;
       }
       final accept = request['acceptance'] != null;
+      final resolution = request['resolution'] as Map?;
+      final sense = resolution?['kind'] == 'proposal'
+          ? resolution?['proposal']?['explanation']
+          : widget.model.snapshot!.catalog
+                .where((e) => e['material']['id'] == resolution?['material_id'])
+                .map((e) => e['material']['sense'])
+                .firstOrNull;
       final yes = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
           title: Text(accept ? '确认上下文、表达与词义？' : '保存到本机收件箱？'),
           content: SingleChildScrollView(
-            child: SelectableText(
-              const JsonEncoder.withIndent('  ').convert(request),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('上下文'),
+                SelectableText('${request['snapshot']?['sentence'] ?? ''}'),
+                const SizedBox(height: 16),
+                Text(
+                  '表达：${request['snapshot']?['expression']?['text'] ?? '待确认'}',
+                ),
+                const SizedBox(height: 12),
+                Text('词义：${sense ?? '待确认'}'),
+                const SizedBox(height: 12),
+                Text(
+                  '来源：${request['snapshot']?['source']?['title'] ?? '未命名来源'}',
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  accept
+                      ? '这次操作会确认并保存词义。加入学习仍需另行选择。'
+                      : '材料先进入收件箱，可以之后选择表达并澄清词义。',
+                ),
+                ExpansionTile(
+                  key: const PageStorageKey(
+                    'intake_connection_screen-detail-1',
+                  ),
+                  title: const Text('查看完整请求'),
+                  children: [
+                    SelectableText(
+                      const JsonEncoder.withIndent('  ').convert(request),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
           actions: [
@@ -82,6 +123,21 @@ class _IntakeConnectionScreenState extends State<IntakeConnectionScreen> {
             children: [
               const Text('浏览器和本地 Agent 可以直接保存到这个学习库。保存待处理不需要账号；确认词义后仍需显式加入学习。'),
               const SizedBox(height: 16),
+              if (Platform.isMacOS) ...[
+                FilledButton(
+                  onPressed: busy
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) =>
+                                IntakeSetupScreen(model: widget.model),
+                          ),
+                        ),
+                  child: const Text('连接浏览器与 Agent'),
+                ),
+                const SizedBox(height: 20),
+              ],
               const Text('本机库标识'),
               SelectableText(
                 widget.model.snapshot!.value['libraryId'] as String,
@@ -96,12 +152,13 @@ class _IntakeConnectionScreenState extends State<IntakeConnectionScreen> {
                 child: const Text('复制库位置'),
               ),
               const ExpansionTile(
+                key: PageStorageKey('intake-setup-detail'),
                 title: Text('桌面接入设置'),
                 children: [
                   Padding(
                     padding: EdgeInsets.all(12),
                     child: Text(
-                      '使用随桌面接入工具提供的 sensa-intake 配置当前库。浏览器插件通过已登记的本机桥接连接，首次连接时核对库名称和标识。Agent 使用同一连接配置调用 CLI。接入工具和安装步骤见 native-intake-group-handoff.md；当前是迁移验收入口。不要让外部工具直接修改数据库。',
+                      '浏览器插件通过桌面接入工具连接这个学习库。首次连接时，请在插件中核对库名称和标识；本地 Agent 使用同一连接。更换库不会转移旧连接中尚未送达的材料。',
                     ),
                   ),
                 ],

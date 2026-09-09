@@ -52,7 +52,7 @@ void main() {
       }
 
       Future<void> show(Widget w) async {
-        await tester.pumpWidget(MaterialApp(home: w));
+        await tester.pumpWidget(NativeApp(model: model, home: w));
         await wait();
       }
 

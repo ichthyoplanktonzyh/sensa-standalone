@@ -6,8 +6,9 @@ import 'library_view_model.dart';
 /// Presentation of a Rust-owned encounter. Every grading result comes from its
 /// committed snapshot, including after a replay with a changed learner answer.
 class AssuranceView extends StatefulWidget {
-  const AssuranceView({super.key, required this.model});
+  const AssuranceView({super.key, required this.model, this.onHome});
   final LibraryViewModel model;
+  final VoidCallback? onHome;
   @override
   State<AssuranceView> createState() => _AssuranceViewState();
 }
@@ -335,7 +336,10 @@ class _AssuranceViewState extends State<AssuranceView> {
               ? '本轮通过验证 ${(queue["graduated"] as List? ?? []).length} 个连接。只有通过验证的连接才新增复习安排；已掌握声明可重新加入学习。'
               : '复习结果和修复进展已保存在本机。修复不会重复改变本次复习的排程。',
         ),
-        FilledButton(onPressed: vm.showHome, child: const Text('回到首页')),
+        FilledButton(
+          onPressed: widget.onHome ?? vm.showHome,
+          child: const Text('回到首页'),
+        ),
       ]);
     } else if (a['paused'] == true) {
       children.addAll([
@@ -626,11 +630,27 @@ class _AssuranceViewState extends State<AssuranceView> {
         ),
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children
-          .expand((w) => [w, const SizedBox(height: 20)])
-          .toList(),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop || !Navigator.of(context).canPop()) return;
+        // A route may close before the typing debounce fires. Commit the draft
+        // against the current encounter before allowing navigation away.
+        await saveDraft();
+        if (mounted &&
+            context.mounted &&
+            !dirty &&
+            !vm.busy &&
+            vm.error == null) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children
+            .expand((w) => [w, const SizedBox(height: 20)])
+            .toList(),
+      ),
     );
   }
 }

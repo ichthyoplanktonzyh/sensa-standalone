@@ -1,6 +1,6 @@
 # TS 成果向 Rust / Flutter 迁移清单
 
-日期：2026-09-08。Owner 已同意建立迁移清单。本文是首版范围登记，尚未完成逐文件盘点，不能据此计算完成百分比；阶段事实以 current-stage.md 为准。
+日期：2026-09-08。Owner 已同意建立迁移清单。本清单保留历史盘点与交付索引。2026-09-09 六组已有能力的本机迁移收口，见 native-product-ui-handoff.md；不等于 Web 本地化、所有平台发布、备份/同步或 M3 完成，阶段事实以 current-stage.md 为准。
 
 2026-09-08 历史确认（Web 终局范围已由 ADR 0003 更新）：Flutter/Rust 原生 PC/移动应用是确定的主产品；Web 保留当前成果，暂停新增建设，是否最终开放以后决定。浏览器插件和 Hono 在线服务继续使用 TS；同步先面向原生设备，沿用 ADR 0001 的可选 E2EE，不实施 Web WASM 或 Web/本地互通作为当前前置条件。
 
@@ -19,7 +19,7 @@
 | 网页 / YouTube 采集交接 | apps/browser-extension、apps/api | 现有 TS 插件交接至本地库 | 插件继续使用 TS；Web/原生目的地分离、本机 Native Messaging、幂等回执、队列恢复与隔离见 native-intake-group-handoff.md |
 | Agent 入口 | 已确认完整蓝图及相关合同 | 与其他采集端一致的本地接受入口 | 本机 CLI、显式接受权限及可安装 Codex Skill 已接入，见 native-intake-group-handoff.md；远程 Agent 仍为后续蓝图 |
 | LLM / 资源任务 / 音频协作 | apps/api、packages/content-validator、apps/web | Hono 保留在线执行；Rust/Flutter 固定结果、存储与恢复 | 在线语义请求、候选/接受本地状态与 Hono 解析已贯通；个人意义入学、轻量按需文本生成/独立校验/冻结与双平台恢复已接入，见 native-provisioning-handoff.md；Anchor Use 授权/撤销与材料替换已接入，见 native-anchor-use-handoff.md；静态发音获取/校验/离线播放及文字回退见 native-pronunciation-handoff.md；安全凭据与用途配置见 native-provider-group-handoff.md；参考事实、图文授权、关系准备、流式预览、原生在线账户及 Agent 静态发音见 native-resource-group-handoff.md，资源组本机迁移收口 |
-| 完整原生界面 | apps/web 已确认体验 | apps/sensa_native | 首学/复习/再学习验收壳已接入；导航、语义世界等尚未整体迁移 |
+| 完整原生界面 | apps/web 已确认体验 | apps/sensa_native | 正式导航、学习/语义世界/资源/设置/采集入口已接入；双平台程序验证与 macOS 实际体验见 native-product-ui-handoff.md，平台发布边界仍单列 |
 | React Web 保留 | apps/web、packages/learning-kernel | 当前成果、行为与回归依据保留 | 已确定终局为本地客户端；原生迁移后实施 React/TS 本地事务/调度与离线资源，WASM 非前置 |
 | 备份恢复与可选 E2EE 同步 | ADR 0001 / 本地迁移蓝图 | 本地完整导出恢复、密文同步与本地合并 | 新架构工作，不能算作已有 TS 同步代码直接迁移 |
 | 旧用户数据导入 | 现有 Web/API 存储 | 显式导入、校验与回退 | 尚未实施；不迁移 owner 数据、不双写 |
@@ -51,14 +51,14 @@ Owner 已确认 [ADR 0003](../adr/0003-three-client-local-facts.md)：Web 保留
 ## 怎样判定迁移完成（2026-09-09 更新）
 
 当前已经贯通的是原生轻量与高保证学习主链及通用内核基础，不是完整产品迁移。
-不能按提交数、文件数或差分测试数量换算百分比。待逐用例形成验收证据的主要工作可归为以下工作组（第 1、2、3、4、5 组已完成本轮本机能力迁移，第 6 组仍有未完项）：
+不能按提交数、文件数或差分测试数量换算百分比。待逐用例形成验收证据的主要工作可归为以下工作组（六组已完成本轮已确认的既有能力原生迁移，发布/同步后续门不由此替代）：
 
 1. **其余学习 Runtime**：高保证执行与 Action/材料绑定已贯通；Retention scope Registry、课程/个人 Free Practice Scope、独立练习账本及原生 YouGlish 接线本轮收口，见 [整组记录](native-runtime-scope-handoff.md)。既有已交付规则的迁移完成；Policy Migration、新独立 scope 与未交付的说/读/写 Activity 保留为未来蓝图能力，四阶段仍只保留扩展性验证。真实 provider 的外部可用性边界见交付记录，完整原生视觉仍在第 6 组。
 2. **正式学习组织**：Activity/Mixed、Review-only、每日 Introduction、签到、近期记录与去重汇总已贯通，见 [交付记录](native-activity-integration-handoff.md)。本机 Curriculum/Book Enrollment/Range、来源选择、补充学习排序、长历史筛选分页与冷恢复已补齐，见 [整组交付](native-learning-organization-handoff.md)。第 2 组来源组织与记录查询完成；正式视觉/词性元数据/状态徽标等全站体验仍在第 6 组承接。
 3. **个人语义世界**：本机文本收件箱、已有 Sense 的 Context/Expression 直接接受、移除恢复、显式加入学习已贯通，见 [本轮记录](native-personal-world-handoff.md)。在线澄清/Proposal/新 Sense 本地构造与接受已贯通，见 [语义协作记录](native-semantic-resolution-handoff.md)。Anchor Use 按需文本任务协作已接入，见 [交付记录](native-anchor-use-handoff.md)。图文材料、草稿冷恢复、同上下文多义、表达连接、列表/展开/图谱与明确入学已在 [整组交付](native-world-group-handoff.md) 接入。第 3 组本机内容与投影收口；图文模型协作已在 [Agent 交付](native-agent-group-handoff.md) 接入，正式视觉仍在第 6 组。
 4. **完整资源与在线任务协作**：本组本机迁移收口，见 [整组交付](native-resource-group-handoff.md)。在既有高保证发布物/媒体、轻量任务、独立审核、Anchor Use、Provider 与可选文本资源基础上，补齐有来源参考摘录（词性、用法、音标）的编译/显式对齐/撤回与版本治理、World 图文原文授权、Binding relation/coverage 准备、兼容接口流式预览、统一 Agent 的静态发音供给，以及原生邮箱登录/安全续期/在线访问初始化/退出与恢复。上游生产审核发布工具保留 TS/Python 并验证；本机学习不依赖在线账户。真实生产邮件/邀请、托管 Provider 和内容质量仍受发布门约束；宽覆盖词典与任意实时 TTS 是后续蓝图能力，不冒充已交付。
 5. **采集入口交接**：本组完成，见 [整组记录](native-intake-group-handoff.md)。TS 插件可选 Web/原生目的地，网页与 YouTube 本机交接、独立模型账号、来源定位、断线与浏览器重启后重试已验收；本地 Agent 使用同一合同的 CLI/Skill。Rust 原子准入与回执固定目标库/调用方，完整提案需明确接受、缺信息进入收件箱，不自动加入学习。原生导入/刷新与双平台冷恢复已验证。远程 Agent、移动 OS 分享和正式安装包向导仍属后续蓝图/第 6 组发布体验。
-6. **正式原生产品界面**：承接 apps/web 的完整功能、状态与恢复体验，分别通过桌面/移动验收；目前仍是技术验收壳。Owner 已确认测试分层方式；[正式 UI 验收矩阵](native-ui-acceptance-matrix.md) 已登记关键用户任务、现有证据和缺口，[测试策略](testing-strategy.md) 区分程序回归、平台与体验验收。测试索引建立不代表本组产品验收完成。
+6. **正式原生产品界面**：本组收口，见 [交付与实证](native-product-ui-handoff.md)。以 apps/web 已确认体验适配正式导航与页面，macOS/Android 程序验收覆盖 Profile、主学习/复习修复、语义接纳、资源、记录与设置；macOS 正常程序补验系统文件选择与连接向导。旧 MigrationApp 仅留作测试包装器。四阶段正式 UI、Windows/iOS、手持真机 UX 和生产分发仍按既有范围单列；[测试策略](testing-strategy.md) 与 [验收矩阵](native-ui-acceptance-matrix.md) 不把程序回归冒充全部平台验收。
 
 以上是工作分组，不是六个等量任务，也不承诺六次提交即可完成。
 每个已存在 Web 用例都必须有“原实现依据 → 原生合同/实现 → 成功、失败、离线、重启恢复证据”的闭合记录，
@@ -77,4 +77,4 @@ Owner 已确认：先推进高保证完整路径，随后专门验收 Profile �
 
 2026-09-09：上述 Profile 执行接线门已通过本轮验证，具体策略行为、事务与平台证据见 [完整纵切记录](native-assurance-integration-handoff.md)。此完成状态仅覆盖已注册的轻量/高保证执行组合，不消除新组合、Policy Migration 或完整产品迁移的验收义务。
 
-2026-09-09 源码盘点修正：Policy Migration 在领域模型中明确为未来能力，当前 Web/TS 没有对应执行实现；仍保留在完整产品蓝图，不计作已有 TS 成果的迁移欠账。在线语义解析/澄清与本地接受协作已完成本轮用例。个人意义显式入学、按需文本资源任务及校验/冻结材料化已完成，见 [交付记录](native-provisioning-handoff.md)。Anchor Use 原文授权/撤销、迟到结果隔离与后续材料替换已完成 [原生纵切](native-anchor-use-handoff.md)；静态发音/音频获取、离线播放与失败回退已在 [后续纵切](native-pronunciation-handoff.md) 接入。来源组织/Book Range 与完整记录查询已在 [整组交付](native-learning-organization-handoff.md) 补齐。其余 Runtime scope 与自由练习已在 [后续整组](native-runtime-scope-handoff.md) 补齐。个人语义世界本机内容与投影已在 [整组记录](native-world-group-handoff.md) 补齐；资源/多模态协作已在 [资源整组](native-resource-group-handoff.md) 收口，采集交接已在 [整组记录](native-intake-group-handoff.md) 完成，后续继续正式 UI。
+2026-09-09 源码盘点修正：Policy Migration 在领域模型中明确为未来能力，当前 Web/TS 没有对应执行实现；仍保留在完整产品蓝图，不计作已有 TS 成果的迁移欠账。在线语义解析/澄清与本地接受协作已完成本轮用例。个人意义显式入学、按需文本资源任务及校验/冻结材料化已完成，见 [交付记录](native-provisioning-handoff.md)。Anchor Use 原文授权/撤销、迟到结果隔离与后续材料替换已完成 [原生纵切](native-anchor-use-handoff.md)；静态发音/音频获取、离线播放与失败回退已在 [后续纵切](native-pronunciation-handoff.md) 接入。来源组织/Book Range 与完整记录查询已在 [整组交付](native-learning-organization-handoff.md) 补齐。其余 Runtime scope 与自由练习已在 [后续整组](native-runtime-scope-handoff.md) 补齐。个人语义世界本机内容与投影已在 [整组记录](native-world-group-handoff.md) 补齐；资源/多模态协作已在 [资源整组](native-resource-group-handoff.md) 收口，采集交接已在 [整组记录](native-intake-group-handoff.md) 完成，正式 UI 已在第 6 组收口，之后转向已确认的 Web 本地执行与共同事实验证。

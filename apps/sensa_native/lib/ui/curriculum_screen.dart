@@ -1,3 +1,4 @@
+import 'product_theme.dart';
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
 
@@ -115,6 +116,7 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
                 children: [
                   const Text('只改变之后的新学范围，已开始的内容仍按词书状态继续。'),
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     initialValue: mode,
                     items: const [
                       DropdownMenuItem(value: 'all', child: Text('整本')),
@@ -248,192 +250,196 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
           .toList();
       return Scaffold(
         appBar: AppBar(title: const Text('学习来源')),
-        body: ListView(
-          key: const ValueKey('curriculum-scroll'),
-          padding: const EdgeInsets.all(20),
-          children: [
-            const Text('词书与补充学习共用每日新学额度。暂停、换词书或移出补充学习都不会删除历史。'),
-            if (model.error != null) Text(model.error!),
-            if (active)
-              FilledButton(
-                onPressed: model.busy ? null : () => model.stopActivity(),
-                child: const Text('暂停当前活动以调整'),
-              ),
-            Wrap(
-              spacing: 8,
-              children: [
-                OutlinedButton(
-                  onPressed: enabled ? model.importPack : null,
-                  child: const Text('导入学习包或词书'),
+        body: Readable(
+          child: ListView(
+            key: const ValueKey('curriculum-scroll'),
+            padding: const EdgeInsets.all(20),
+            children: [
+              const Text('词书与补充学习共用每日新学额度。暂停、换词书或移出补充学习都不会删除历史。'),
+              if (model.error != null) Text(model.error!),
+              if (active)
+                FilledButton(
+                  onPressed: model.busy ? null : () => model.stopActivity(),
+                  child: const Text('暂停当前活动以调整'),
                 ),
-                OutlinedButton(
-                  onPressed: enabled ? selectSources : null,
-                  child: const Text('选择学习来源'),
+              Wrap(
+                spacing: 8,
+                children: [
+                  OutlinedButton(
+                    onPressed: enabled ? model.importPack : null,
+                    child: const Text('导入学习包或词书'),
+                  ),
+                  OutlinedButton(
+                    onPressed: enabled ? selectSources : null,
+                    child: const Text('选择学习来源'),
+                  ),
+                  TextButton(
+                    onPressed: enabled
+                        ? () => action({
+                            'kind': 'select_sources',
+                            'source_ids': null,
+                          })
+                        : null,
+                    child: const Text('使用全部来源'),
+                  ),
+                ],
+              ),
+              Text(
+                '当前范围：${(data['scope']['members'] as List).length} 项（包含准备中的目标）',
+              ),
+              TextField(
+                key: const ValueKey('book-search'),
+                decoration: const InputDecoration(labelText: '搜索词书'),
+                onChanged: (v) => setState(() => search = v),
+              ),
+              if (books.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('没有匹配的本机词书。导入学习包后可选择整本学习。'),
+                ),
+              for (final b in books)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${b['title']} · 版本 ${b['version']}',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        Text('${(b['members'] as List).length} 个意思'),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            TextButton(
+                              onPressed: () => inspect(b),
+                              child: const Text('查看与搜索内容'),
+                            ),
+                            FilledButton(
+                              onPressed: enabled
+                                  ? () async {
+                                      final selected = await range(b);
+                                      if (selected != null) {
+                                        await action({
+                                          'kind': 'enroll',
+                                          'book_id': b['id'],
+                                          'version': b['version'],
+                                          'range': selected,
+                                        });
+                                      }
+                                    }
+                                  : null,
+                              child: const Text('设为当前新学词书'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              const Divider(),
+              Text('已选择的词书', style: Theme.of(context).textTheme.titleLarge),
+              for (final e in rows('enrollments')) ...[
+                Text(
+                  '${rows('books').firstWhere((b) => b['id'] == e['bookId'] && b['version'] == e['version'])['title']} · ${e['version']}',
+                ),
+                DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  key: ValueKey('enrollment-${e['id']}-${e['mode']}'),
+                  initialValue: e['mode'] as String,
+                  items: ['active', 'maintenance', 'paused']
+                      .map(
+                        (m) =>
+                            DropdownMenuItem(value: m, child: Text(label(m))),
+                      )
+                      .toList(),
+                  onChanged: enabled
+                      ? (v) => action({
+                          'kind': 'set_mode',
+                          'enrollment_id': e['id'],
+                          'mode': v,
+                        })
+                      : null,
                 ),
                 TextButton(
                   onPressed: enabled
-                      ? () => action({
-                          'kind': 'select_sources',
-                          'source_ids': null,
-                        })
+                      ? () async {
+                          final b = rows('books').firstWhere(
+                            (b) =>
+                                b['id'] == e['bookId'] &&
+                                b['version'] == e['version'],
+                          );
+                          final r = await range(
+                            b,
+                            initial: e['range'] as Map<String, dynamic>,
+                          );
+                          if (r != null) {
+                            await action({
+                              'kind': 'set_range',
+                              'enrollment_id': e['id'],
+                              'range': r,
+                            });
+                          }
+                        }
                       : null,
-                  child: const Text('使用全部来源'),
+                  child: const Text('调整未来新学范围'),
                 ),
               ],
-            ),
-            Text(
-              '当前范围：${(data['scope']['members'] as List).length} 项（包含准备中的目标）',
-            ),
-            TextField(
-              key: const ValueKey('book-search'),
-              decoration: const InputDecoration(labelText: '搜索词书'),
-              onChanged: (v) => setState(() => search = v),
-            ),
-            if (books.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('没有匹配的本机词书。导入学习包后可选择整本学习。'),
-              ),
-            for (final b in books)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              const Divider(),
+              Text('补充学习', style: Theme.of(context).textTheme.titleLarge),
+              if (rows('supplemental').isEmpty) const Text('单独加入学习的意思会显示在这里。'),
+              for (final (i, m) in rows('supplemental').indexed)
+                ListTile(
+                  title: Text(m['expression'] as String),
+                  subtitle: Text(m['active'] == true ? '参与学习' : '已移出，历史保留'),
+                  trailing: Wrap(
                     children: [
-                      Text(
-                        '${b['title']} · 版本 ${b['version']}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Text('${(b['members'] as List).length} 个意思'),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          TextButton(
-                            onPressed: () => inspect(b),
-                            child: const Text('查看与搜索内容'),
-                          ),
-                          FilledButton(
-                            onPressed: enabled
-                                ? () async {
-                                    final selected = await range(b);
-                                    if (selected != null) {
-                                      await action({
-                                        'kind': 'enroll',
-                                        'book_id': b['id'],
-                                        'version': b['version'],
-                                        'range': selected,
-                                      });
-                                    }
-                                  }
-                                : null,
-                            child: const Text('设为当前新学词书'),
-                          ),
-                        ],
+                      if (i > 0)
+                        IconButton(
+                          tooltip: '上移',
+                          onPressed: enabled
+                              ? () => action({
+                                  'kind': 'move_supplemental',
+                                  'target_id': m['targetId'],
+                                  'before_target_id': rows(
+                                    'supplemental',
+                                  )[i - 1]['targetId'],
+                                })
+                              : null,
+                          icon: const Icon(Icons.arrow_upward),
+                        ),
+                      TextButton(
+                        onPressed: enabled
+                            ? () => action({
+                                'kind': 'supplemental',
+                                'target_id': m['targetId'],
+                                'active': m['active'] != true,
+                              })
+                            : null,
+                        child: Text(m['active'] == true ? '移出学习' : '恢复学习'),
                       ),
                     ],
                   ),
                 ),
-              ),
-            const Divider(),
-            Text('已选择的词书', style: Theme.of(context).textTheme.titleLarge),
-            for (final e in rows('enrollments')) ...[
-              Text(
-                '${rows('books').firstWhere((b) => b['id'] == e['bookId'] && b['version'] == e['version'])['title']} · ${e['version']}',
-              ),
-              DropdownButtonFormField<String>(
-                key: ValueKey('enrollment-${e['id']}-${e['mode']}'),
-                initialValue: e['mode'] as String,
-                items: ['active', 'maintenance', 'paused']
-                    .map(
-                      (m) => DropdownMenuItem(value: m, child: Text(label(m))),
-                    )
-                    .toList(),
-                onChanged: enabled
-                    ? (v) => action({
-                        'kind': 'set_mode',
-                        'enrollment_id': e['id'],
-                        'mode': v,
-                      })
-                    : null,
-              ),
-              TextButton(
+              const Divider(),
+              const Text('已暂停的活动保留原范围。开始新活动会结束同模式旧活动，并按当前来源继续尚未完成的学习。'),
+              FilledButton(
                 onPressed: enabled
                     ? () async {
-                        final b = rows('books').firstWhere(
-                          (b) =>
-                              b['id'] == e['bookId'] &&
-                              b['version'] == e['version'],
-                        );
-                        final r = await range(
-                          b,
-                          initial: e['range'] as Map<String, dynamic>,
-                        );
-                        if (r != null) {
-                          await action({
-                            'kind': 'set_range',
-                            'enrollment_id': e['id'],
-                            'range': r,
-                          });
+                        await model.act({
+                          'kind': 'activity_fresh',
+                          'mode': 'mixed',
+                        });
+                        if (context.mounted && model.error == null) {
+                          Navigator.pop(context);
                         }
                       }
                     : null,
-                child: const Text('调整未来新学范围'),
+                child: const Text('按当前来源开始新活动'),
               ),
             ],
-            const Divider(),
-            Text('补充学习', style: Theme.of(context).textTheme.titleLarge),
-            if (rows('supplemental').isEmpty) const Text('单独加入学习的意思会显示在这里。'),
-            for (final (i, m) in rows('supplemental').indexed)
-              ListTile(
-                title: Text(m['expression'] as String),
-                subtitle: Text(m['active'] == true ? '参与学习' : '已移出，历史保留'),
-                trailing: Wrap(
-                  children: [
-                    if (i > 0)
-                      IconButton(
-                        tooltip: '上移',
-                        onPressed: enabled
-                            ? () => action({
-                                'kind': 'move_supplemental',
-                                'target_id': m['targetId'],
-                                'before_target_id': rows(
-                                  'supplemental',
-                                )[i - 1]['targetId'],
-                              })
-                            : null,
-                        icon: const Icon(Icons.arrow_upward),
-                      ),
-                    TextButton(
-                      onPressed: enabled
-                          ? () => action({
-                              'kind': 'supplemental',
-                              'target_id': m['targetId'],
-                              'active': m['active'] != true,
-                            })
-                          : null,
-                      child: Text(m['active'] == true ? '移出学习' : '恢复学习'),
-                    ),
-                  ],
-                ),
-              ),
-            const Divider(),
-            const Text('已暂停的活动保留原范围。开始新活动会结束同模式旧活动，并按当前来源继续尚未完成的学习。'),
-            FilledButton(
-              onPressed: enabled
-                  ? () async {
-                      await model.act({
-                        'kind': 'activity_fresh',
-                        'mode': 'mixed',
-                      });
-                      if (context.mounted && model.error == null) {
-                        Navigator.pop(context);
-                      }
-                    }
-                  : null,
-              child: const Text('按当前来源开始新活动'),
-            ),
-          ],
+          ),
         ),
       );
     },
@@ -469,47 +475,49 @@ class _BookMembersScreenState extends State<BookMembersScreen> {
         .toList();
     return Scaffold(
       appBar: AppBar(title: Text(widget.book['title'] as String)),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          TextField(
-            key: const ValueKey('book-member-search'),
-            decoration: const InputDecoration(labelText: '搜索表达或意思'),
-            onChanged: (v) => setState(() {
-              search = v;
-              visible = 40;
-            }),
-          ),
-          Text('找到 ${members.length} 项'),
-          for (final m in members.take(visible))
-            ListTile(
-              onTap: widget.model.busy
-                  ? null
-                  : () async {
-                      await widget.model.selectMaterial(m['id'] as String);
-                      if (context.mounted && widget.model.error == null) {
-                        Navigator.of(
-                          context,
-                        ).popUntil((route) => route.isFirst);
-                      }
-                    },
-              title: Text(m['expression'] as String),
-              subtitle: Text(m['sense'] as String),
-              trailing: Text(
-                widget.model.snapshot!.catalog.firstWhere(
-                          (c) => c['material']['id'] == m['id'],
-                        )['completed'] ==
-                        true
-                    ? '已完成首学'
-                    : '尚未完成首学',
+      body: Readable(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            TextField(
+              key: const ValueKey('book-member-search'),
+              decoration: const InputDecoration(labelText: '搜索表达或意思'),
+              onChanged: (v) => setState(() {
+                search = v;
+                visible = 40;
+              }),
+            ),
+            Text('找到 ${members.length} 项'),
+            for (final m in members.take(visible))
+              ListTile(
+                onTap: widget.model.busy
+                    ? null
+                    : () async {
+                        await widget.model.selectMaterial(m['id'] as String);
+                        if (context.mounted && widget.model.error == null) {
+                          Navigator.of(
+                            context,
+                          ).popUntil((route) => route.isFirst);
+                        }
+                      },
+                title: Text(m['expression'] as String),
+                subtitle: Text(m['sense'] as String),
+                trailing: Text(
+                  widget.model.snapshot!.catalog.firstWhere(
+                            (c) => c['material']['id'] == m['id'],
+                          )['completed'] ==
+                          true
+                      ? '已完成首学'
+                      : '尚未完成首学',
+                ),
               ),
-            ),
-          if (members.length > visible)
-            TextButton(
-              onPressed: () => setState(() => visible += 40),
-              child: const Text('显示更多'),
-            ),
-        ],
+            if (members.length > visible)
+              TextButton(
+                onPressed: () => setState(() => visible += 40),
+                child: const Text('显示更多'),
+              ),
+          ],
+        ),
       ),
     );
   }

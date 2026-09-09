@@ -1,3 +1,4 @@
+import 'support/migration_app.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -22,7 +23,7 @@ void main() {
       final model = await createLibrary(name: 'integration-$runId.sqlite');
       final receipt = File('${model.repository.path}.receipt.json');
       addTearDown(model.dispose);
-      await tester.pumpWidget(NativeApp(model: model));
+      await tester.pumpWidget(MigrationApp(model: model));
       Future<void> waitFor(String label) async {
         for (var i = 0; i < 400; i++) {
           await tester.pump(const Duration(milliseconds: 50));

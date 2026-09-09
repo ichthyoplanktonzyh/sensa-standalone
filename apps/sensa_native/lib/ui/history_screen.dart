@@ -1,3 +1,4 @@
+import 'product_theme.dart';
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
 
@@ -119,120 +120,131 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final checkins = (data?['checkins'] as List?) ?? [];
     return Scaffold(
       appBar: AppBar(title: const Text('学习记录')),
-      body: ListView(
-        key: const ValueKey('history-scroll'),
-        padding: const EdgeInsets.all(20),
-        children: [
-          const Text('记录来自本机实际完成的首学、复习与再学习。完成首学不等于已经掌握。'),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final p in [
-                ('today', '今天'),
-                ('week', '最近7天'),
-                ('month', '最近30天'),
-                ('all', '全部'),
-              ])
-                ChoiceChip(
-                  label: Text(p.$2),
-                  selected: period == p.$1,
-                  onSelected: loading
-                      ? null
-                      : (_) {
-                          setState(() => period = p.$1);
-                          load();
-                        },
+      body: Readable(
+        child: ListView(
+          key: const ValueKey('history-scroll'),
+          padding: const EdgeInsets.all(20),
+          children: [
+            const Text('记录来自本机实际完成的首学、复习与再学习。完成首学不等于已经掌握。'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final p in [
+                  ('today', '今天'),
+                  ('week', '最近7天'),
+                  ('month', '最近30天'),
+                  ('all', '全部'),
+                ])
+                  ChoiceChip(
+                    label: Text(p.$2),
+                    selected: period == p.$1,
+                    onSelected: loading
+                        ? null
+                        : (_) {
+                            setState(() => period = p.$1);
+                            load();
+                          },
+                  ),
+                ActionChip(
+                  label: Text(
+                    period == 'custom'
+                        ? '${day(start!)} — ${day(end!)}'
+                        : '自选日期',
+                  ),
+                  onPressed: loading ? null : dates,
                 ),
-              ActionChip(
-                label: Text(
-                  period == 'custom' ? '${day(start!)} — ${day(end!)}' : '自选日期',
+              ],
+            ),
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              key: const ValueKey('history-kind'),
+              initialValue: kind,
+              items:
+                  ['all', 'initial_learning', 'retention_review', 'relearning']
+                      .map(
+                        (k) =>
+                            DropdownMenuItem(value: k, child: Text(label(k))),
+                      )
+                      .toList(),
+              onChanged: loading
+                  ? null
+                  : (v) {
+                      setState(() => kind = v!);
+                      load();
+                    },
+            ),
+            TextField(
+              key: const ValueKey('history-search'),
+              controller: searchController,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                labelText: '搜索表达或意思',
+                hintText: '输入后查询',
+                suffixIcon: IconButton(
+                  tooltip: '搜索记录',
+                  onPressed: loading ? null : submitSearch,
+                  icon: const Icon(Icons.search),
                 ),
-                onPressed: loading ? null : dates,
               ),
-            ],
-          ),
-          DropdownButtonFormField<String>(
-            key: const ValueKey('history-kind'),
-            initialValue: kind,
-            items: ['all', 'initial_learning', 'retention_review', 'relearning']
-                .map((k) => DropdownMenuItem(value: k, child: Text(label(k))))
-                .toList(),
-            onChanged: loading
-                ? null
-                : (v) {
-                    setState(() => kind = v!);
-                    load();
-                  },
-          ),
-          TextField(
-            key: const ValueKey('history-search'),
-            controller: searchController,
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              labelText: '搜索表达或意思',
-              hintText: '输入后查询',
-              suffixIcon: IconButton(
-                tooltip: '搜索记录',
-                onPressed: loading ? null : submitSearch,
-                icon: const Icon(Icons.search),
+              onSubmitted: (_) => submitSearch(),
+            ),
+            if (error != null)
+              Text(
+                error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
-            ),
-            onSubmitted: (_) => submitSearch(),
-          ),
-          if (error != null)
-            Text(
-              error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          TextButton(
-            onPressed: loading ? null : () => load(),
-            child: const Text('刷新记录'),
-          ),
-          if (loading) const LinearProgressIndicator(),
-          Text(
-            '首次学习 ${counts['initial_learning'] ?? 0} · 保持复习 ${counts['retention_review'] ?? 0} · 再学习 ${counts['relearning'] ?? 0}',
-          ),
-          ExpansionTile(
-            title: const Text('每日汇总'),
-            children: [
-              for (final d in days)
-                ListTile(
-                  title: Text('${d['date']} · ${label(d['kind'])}'),
-                  trailing: Text('${d['count']} 条'),
-                ),
-            ],
-          ),
-          ExpansionTile(
-            title: Text('签到日历 · ${checkins.length} 天'),
-            children: [
-              for (final d in checkins)
-                ListTile(
-                  title: Text(d['date'] as String),
-                  trailing: Text(d['source'] == 'manual' ? '手动签到' : '正式学习'),
-                ),
-            ],
-          ),
-          if (records.isEmpty && !loading)
-            const Padding(
-              padding: EdgeInsets.all(20),
-              child: Text('此范围内没有学习记录。可以调整日期或类型。'),
-            ),
-          for (final r in records)
-            ListTile(
-              key: ValueKey('history-${r['id']}'),
-              title: Text('${r['expression']} · ${label(r['kind'])}'),
-              subtitle: Text(
-                '${r['meaning']}\n${DateTime.fromMillisecondsSinceEpoch(r['occurredAtMs'] as int).toLocal()}',
-              ),
-            ),
-          if (data?['nextCursor'] != null)
             TextButton(
-              onPressed: loading ? null : () => load(more: true),
-              child: const Text('显示更多记录'),
+              onPressed: loading ? null : () => load(),
+              child: const Text('刷新记录'),
             ),
-          const Text('不展示缺少可靠依据的时长、正确率或掌握率。'),
-        ],
+            if (loading) const LinearProgressIndicator(),
+            Text(
+              '首次学习 ${counts['initial_learning'] ?? 0} · 保持复习 ${counts['retention_review'] ?? 0} · 再学习 ${counts['relearning'] ?? 0}',
+            ),
+            ExpansionTile(
+              key: const PageStorageKey('history_screen-detail-1'),
+              title: const Text('每日汇总'),
+              children: [
+                for (final d in days)
+                  ListTile(
+                    title: Text('${d['date']} · ${label(d['kind'])}'),
+                    trailing: Text('${d['count']} 条'),
+                  ),
+              ],
+            ),
+            ExpansionTile(
+              key: const PageStorageKey('history_screen-detail-2'),
+              title: Text('签到日历 · ${checkins.length} 天'),
+              children: [
+                for (final d in checkins)
+                  ListTile(
+                    title: Text(d['date'] as String),
+                    trailing: Text(d['source'] == 'manual' ? '手动签到' : '正式学习'),
+                  ),
+              ],
+            ),
+            if (records.isEmpty && !loading)
+              const Padding(
+                padding: EdgeInsets.all(20),
+                child: Text('此范围内没有学习记录。可以调整日期或类型。'),
+              ),
+            for (final r in records)
+              ListTile(
+                key: ValueKey('history-${r['id']}'),
+                title: Text('${r['expression']} · ${label(r['kind'])}'),
+                subtitle: Text(
+                  '${r['meaning']}\n${DateTime.fromMillisecondsSinceEpoch(r['occurredAtMs'] as int).toLocal()}',
+                ),
+              ),
+            if (data?['nextCursor'] != null)
+              TextButton(
+                onPressed: loading ? null : () => load(more: true),
+                child: const Text('显示更多记录'),
+              ),
+            const Text('不展示缺少可靠依据的时长、正确率或掌握率。'),
+          ],
+        ),
       ),
     );
   }

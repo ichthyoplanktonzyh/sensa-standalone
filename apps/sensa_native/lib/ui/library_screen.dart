@@ -9,8 +9,15 @@ import 'learning_activity_view.dart';
 import 'personal_world_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({super.key, required this.model});
+  const LibraryScreen({
+    super.key,
+    required this.model,
+    this.acceptanceTools = false,
+    this.onHome,
+  });
   final LibraryViewModel model;
+  final bool acceptanceTools;
+  final VoidCallback? onHome;
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
@@ -71,74 +78,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (id != null && mounted) await widget.model.selectMaterial(id);
   }
 
-  Future<void> choosePolicy(String scope) async {
-    final snapshot = widget.model.snapshot;
-    if (snapshot == null) return;
-    final selected = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.sizeOf(sheetContext).height * 0.7,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        scope == 'target'
-                            ? '选择此项学习方式'
-                            : scope == 'curriculum'
-                            ? '设置学习包默认方式'
-                            : '设置默认学习方式',
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: '关闭',
-                      onPressed: () => Navigator.pop(sheetContext),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Text('首次开始学习后，此项方式固定。更改默认设置只影响尚未固定的项目。'),
-              ),
-              Expanded(
-                child: ListView(
-                  children: [
-                    for (final choice in snapshot.policyChoices)
-                      ListTile(
-                        title: Text(choice['label'] as String),
-                        subtitle: Text(
-                          choice['executable'] == true
-                              ? '当前设备可使用'
-                              : '当前设备尚未支持，选择后会保留为待准备项目',
-                        ),
-                        onTap: () => Navigator.pop(sheetContext, choice),
-                      ),
-                    ListTile(
-                      title: Text(scope == 'learner' ? '恢复系统默认' : '使用继承设置'),
-                      onTap: () =>
-                          Navigator.pop(sheetContext, {'inherit': true}),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (selected != null && mounted) {
-      await widget.model.setPolicy(
-        scope,
-        selected['policy'] as Map<String, dynamic>?,
-      );
-    }
+  Future<void> choosePolicy(String scope) => showLearningPolicy(
+    context,
+    widget.model,
+    scope,
+    includeUnavailable: widget.acceptanceTools,
+  );
+
+  Future<void> returnHome() async {
+    await widget.model.showHome();
+    if (mounted) widget.onHome?.call();
   }
 
   @override
@@ -190,7 +139,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           !vm.home &&
           (s.activity!['status'] != 'active' ||
               s.activity!['canAnswer'] != true)) {
-        body = [LearningActivityView(model: vm)];
+        body = [LearningActivityView(model: vm, onHome: returnHome)];
       } else if (s.assurance != null && !vm.home) {
         final a = s.assurance!;
         final action = a['queue']?['session']?['action'];
@@ -200,6 +149,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               '${a['id']}:${action?['ordinal']}:${action?['actionKey']}',
             ),
             model: vm,
+            onHome: returnHome,
           ),
         ];
       } else if (s.nextEligibleAtMs != null &&
@@ -223,8 +173,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
             () => vm.act({'kind': 'start_retention', 'early': true}),
             primary: false,
           ),
-          button('先学习其他内容', vm.showHome, primary: false),
-          button('结束本次', vm.showHome, primary: false),
+          button('先学习其他内容', returnHome, primary: false),
+          button('结束本次', returnHome, primary: false),
         ];
       } else if (s.phase == 'completed' && !vm.home) {
         final due = DateTime.fromMillisecondsSinceEpoch(s.dueAtMs!).toLocal();
@@ -252,7 +202,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
           if (s.protocol != 'consumer-initial-v1')
             button('继续复习其他内容', () => vm.act({'kind': 'next_retention'})),
-          button('回到首页', vm.showHome),
+          button('回到首页', returnHome),
         ];
       } else if (s.run != null &&
           s.phase != 'completed' &&
@@ -275,7 +225,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             OptionalResourcesView(material: s.material!, revealed: false),
             const Text('先在心里试着表达，再揭示答案。'),
             button('揭示表达', () => vm.answer('reveal')),
-          ] else ...[
+          ] else if (s.material != null) ...[
             Text(s.material!['expression'] as String, style: t.headlineLarge),
             PronunciationView(
               key: ValueKey(
@@ -307,30 +257,32 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ];
       } else {
         body = [
-          Text('我的本地学习库', style: t.headlineLarge),
-          Text('每日新学 ${s.quantity} 个 · 无需登录'),
-          Text(
-            '累计复习 ${s.retention['reviewCount'] ?? 0} 次 · 再学习完成 ${s.retention['relearningCount'] ?? 0} 次 · 待恢复 ${s.retention['pendingCount'] ?? 0} 项',
-          ),
-          Text('默认方式：${s.defaultPolicyLabel}'),
-          button('默认学习方式', () => choosePolicy('learner'), primary: false),
-          LearningActivityView(model: vm, overview: true),
-          button('导入学习包', vm.importPack, primary: false),
-          if (vm.notice != null)
-            Semantics(liveRegion: true, child: Text(vm.notice!)),
-          if (s.catalog.isNotEmpty) ...[
-            Text('已下载的内容', style: t.headlineSmall),
-            Text('${s.catalog.length} 项内容已保存在本机'),
-            button('选择其他内容', chooseMaterial, primary: false),
-            const Divider(),
+          if (widget.acceptanceTools) ...[
+            Text('我的本地学习库', style: t.headlineLarge),
+            Text('每日新学 ${s.quantity} 个 · 无需登录'),
+            Text(
+              '累计复习 ${s.retention['reviewCount'] ?? 0} 次 · 再学习完成 ${s.retention['relearningCount'] ?? 0} 次 · 待恢复 ${s.retention['pendingCount'] ?? 0} 项',
+            ),
+            Text('默认方式：${s.defaultPolicyLabel}'),
+            button('默认学习方式', () => choosePolicy('learner'), primary: false),
+            LearningActivityView(model: vm, overview: true),
+            button('导入学习包', vm.importPack, primary: false),
+            if (vm.notice != null)
+              Semantics(liveRegion: true, child: Text(vm.notice!)),
+            if (s.catalog.isNotEmpty) ...[
+              Text('已下载的内容', style: t.headlineSmall),
+              Text('${s.catalog.length} 项内容已保存在本机'),
+              button('选择其他内容', chooseMaterial, primary: false),
+              const Divider(),
+            ],
           ],
-          if (s.material == null) ...[
+          if (s.material == null && widget.acceptanceTools) ...[
             const Text('先载入一份合成验收材料，验证本机保存与学习。'),
             button(
               '载入验收材料',
               () => vm.act({'kind': 'import_acceptance_material'}),
             ),
-          ] else ...[
+          ] else if (s.material != null) ...[
             Text(s.material!['expression'] as String, style: t.headlineSmall),
             Text(s.material!['sense'] as String, style: t.bodyLarge),
             Text(s.material!['source'] as String),
@@ -422,42 +374,49 @@ class _LibraryScreenState extends State<LibraryScreen> {
       }
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Sensa'),
+          title: Text(
+            widget.acceptanceTools
+                ? 'Sensa'
+                : vm.home
+                ? '学习内容'
+                : '学习',
+          ),
           actions: [
-            IconButton(
-              tooltip: '自由练习',
-              icon: const Icon(Icons.headphones),
-              onPressed: vm.busy || s == null
-                  ? null
-                  : () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => PracticeScreen(library: vm),
+            if (widget.acceptanceTools) ...[
+              IconButton(
+                tooltip: '自由练习',
+                icon: const Icon(Icons.headphones),
+                onPressed: vm.busy || s == null
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => PracticeScreen(library: vm),
+                        ),
                       ),
-                    ),
-            ),
-            IconButton(
-              tooltip: '学习来源',
-              icon: const Icon(Icons.library_books_outlined),
-              onPressed: vm.busy || s == null
-                  ? null
-                  : () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => CurriculumScreen(model: vm),
+              ),
+              IconButton(
+                tooltip: '学习来源',
+                icon: const Icon(Icons.library_books_outlined),
+                onPressed: vm.busy || s == null
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => CurriculumScreen(model: vm),
+                        ),
                       ),
-                    ),
-            ),
-            IconButton(
-              tooltip: '我的词义世界',
-              icon: const Icon(Icons.hub_outlined),
-              onPressed: vm.busy || s == null
-                  ? null
-                  : () => Navigator.of(context).push<void>(
-                      MaterialPageRoute(
-                        builder: (_) => PersonalWorldScreen(model: vm),
+              ),
+              IconButton(
+                tooltip: '我的词义世界',
+                icon: const Icon(Icons.hub_outlined),
+                onPressed: vm.busy || s == null
+                    ? null
+                    : () => Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => PersonalWorldScreen(model: vm),
+                        ),
                       ),
-                    ),
-            ),
-            const Padding(padding: EdgeInsets.all(16), child: Text('本地验收版')),
+              ),
+            ],
           ],
         ),
         bottomNavigationBar: vm.error == null
@@ -500,7 +459,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     children: [
                       const Icon(Icons.offline_pin_outlined, size: 18),
                       const SizedBox(width: 8),
-                      Text(vm.busy ? '正在保存到本机…' : '本地学习 · 云同步未接入'),
+                      Expanded(child: Text(vm.busy ? '正在保存到本机…' : '本地学习')),
                     ],
                   ),
                   const SizedBox(height: 32),
@@ -525,4 +484,77 @@ class _LibraryScreenState extends State<LibraryScreen> {
       );
     },
   );
+}
+
+Future<void> showLearningPolicy(
+  BuildContext context,
+  LibraryViewModel model,
+  String scope, {
+  bool includeUnavailable = false,
+}) async {
+  final snapshot = model.snapshot;
+  if (snapshot == null) return;
+  final selected = await showModalBottomSheet<Map<String, dynamic>>(
+    context: context,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: SizedBox(
+        height: MediaQuery.sizeOf(sheetContext).height * 0.7,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      scope == 'target'
+                          ? '选择此项学习方式'
+                          : scope == 'curriculum'
+                          ? '设置学习包默认方式'
+                          : '设置默认学习方式',
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '关闭',
+                    onPressed: () => Navigator.pop(sheetContext),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text('首次开始学习后，此项方式固定。更改默认设置只影响尚未固定的项目。'),
+            ),
+            Expanded(
+              child: ListView(
+                children: [
+                  for (final choice in snapshot.policyChoices.where(
+                    (c) => includeUnavailable || c['executable'] == true,
+                  ))
+                    ListTile(
+                      title: Text(choice['label'] as String),
+                      subtitle: Text(
+                        choice['executable'] == true
+                            ? '当前设备可使用'
+                            : '当前设备尚未支持，选择后会保留为待准备项目',
+                      ),
+                      onTap: () => Navigator.pop(sheetContext, choice),
+                    ),
+                  ListTile(
+                    title: Text(scope == 'learner' ? '恢复系统默认' : '使用继承设置'),
+                    onTap: () => Navigator.pop(sheetContext, {'inherit': true}),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (selected != null && context.mounted) {
+    await model.setPolicy(scope, selected['policy'] as Map<String, dynamic>?);
+  }
 }

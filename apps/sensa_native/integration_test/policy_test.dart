@@ -1,3 +1,4 @@
+import 'support/migration_app.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -28,7 +29,7 @@ void main() {
     await model.load();
     addTearDown(model.dispose);
     final receipt = File('${model.repository.path}.receipt.json');
-    await tester.pumpWidget(NativeApp(model: model));
+    await tester.pumpWidget(MigrationApp(model: model));
     Future<void> wait(String label) async {
       for (var i = 0; i < 400; i++) {
         await tester.pump(const Duration(milliseconds: 50));

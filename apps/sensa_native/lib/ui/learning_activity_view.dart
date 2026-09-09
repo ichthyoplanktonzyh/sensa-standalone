@@ -8,9 +8,13 @@ class LearningActivityView extends StatelessWidget {
     super.key,
     required this.model,
     this.overview = false,
+    this.onStart,
+    this.onHome,
   });
   final LibraryViewModel model;
   final bool overview;
+  final Future<void> Function(String)? onStart;
+  final VoidCallback? onHome;
   @override
   Widget build(BuildContext context) {
     final s = model.snapshot!;
@@ -35,20 +39,23 @@ class LearningActivityView extends StatelessWidget {
         Text(
           '待继续 ${counts['initialContinuations'] ?? 0} · 到期复习 ${counts['dueReviews'] ?? 0} · 可再学 ${counts['relearningReady'] ?? 0}',
         ),
-        button('开始今天的学习', () => model.startActivity('mixed')),
+        button('开始今天的学习', () => (onStart ?? model.startActivity)('mixed')),
         OutlinedButton(
-          onPressed: enabled ? () => model.startActivity('review_only') : null,
+          onPressed: enabled
+              ? () => (onStart ?? model.startActivity)('review_only')
+              : null,
           child: const Text('只复习'),
         ),
         if (a != null && a['status'] == 'paused')
           Text('有一段${a['mode'] == 'mixed' ? '混合学习' : '复习'}已暂停，开始相同模式会恢复原进度。'),
         button(checked ? '今天已签到' : '手动签到', () => model.checkIn()),
-        TextButton(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => HistoryScreen(model: model)),
+        if (onStart == null)
+          TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => HistoryScreen(model: model)),
+            ),
+            child: const Text('全部学习记录'),
           ),
-          child: const Text('全部学习记录'),
-        ),
         TextButton(
           onPressed: () => showModalBottomSheet<void>(
             context: context,
@@ -119,7 +126,10 @@ class LearningActivityView extends StatelessWidget {
                     : null,
                 child: Text('重新学习：${target['packageId']}'),
               ),
-        TextButton(onPressed: model.showHome, child: const Text('回到首页')),
+        TextButton(
+          onPressed: onHome ?? model.showHome,
+          child: const Text('回到首页'),
+        ),
       ]);
     }
     return Column(

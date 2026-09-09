@@ -1,3 +1,4 @@
+import 'support/migration_app.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
@@ -53,7 +54,9 @@ void main() {
       }
 
       Future<void> show(Widget w) async {
-        await tester.pumpWidget(MaterialApp(key: UniqueKey(), home: w));
+        await tester.pumpWidget(
+          NativeApp(key: UniqueKey(), model: model, home: w),
+        );
         await wait();
       }
 
@@ -253,7 +256,7 @@ void main() {
       expect(model.snapshot!.value['completionCount'], 0);
       await model.selectMaterial(model.preparations.single['materialId']);
       await model.showHome();
-      await tester.pumpWidget(NativeApp(model: model));
+      await tester.pumpWidget(MigrationApp(model: model));
       await wait();
       await tap(find.text('开始学习'));
       expect(find.text('May I borrow your umbrella?'), findsNothing);
@@ -265,7 +268,7 @@ void main() {
       await tap(find.byKey(const ValueKey('reference-remove')));
       expect(model.error, isNull);
       expect(model.snapshot!.run!['id'], fixedRun);
-      await tester.pumpWidget(NativeApp(model: model));
+      await tester.pumpWidget(MigrationApp(model: model));
       await wait();
       await tap(find.text('揭示表达'));
       expect(find.text('May I borrow your umbrella?'), findsOneWidget);

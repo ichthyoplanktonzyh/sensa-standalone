@@ -3,11 +3,18 @@ import '../data/practice_repository.dart';
 import 'library_view_model.dart';
 import 'practice_model.dart';
 import 'youglish_view.dart';
+import 'product_theme.dart';
 
 class PracticeScreen extends StatefulWidget {
-  const PracticeScreen({super.key, required this.library, this.fixtureScript});
+  const PracticeScreen({
+    super.key,
+    required this.library,
+    this.fixtureScript,
+    this.onExit,
+  });
   final LibraryViewModel library;
   final String? fixtureScript;
+  final VoidCallback? onExit;
   @override
   State<PracticeScreen> createState() => _PracticeScreenState();
 }
@@ -145,6 +152,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     initialValue: source,
                     items: const [
                       DropdownMenuItem(
@@ -231,9 +239,15 @@ class _PracticeScreenState extends State<PracticeScreen> {
         : targets[(state['index'] as int).clamp(0, targets.length - 1)];
     final token = generation;
     return PopScope(
-      canPop: !playerOpen,
+      canPop: !playerOpen && widget.onExit == null,
       onPopInvokedWithResult: (p, _) async {
-        if (!p) await closePlayer();
+        if (!p) {
+          if (playerOpen) {
+            await closePlayer();
+          } else {
+            widget.onExit?.call();
+          }
+        }
       },
       child: Scaffold(
         appBar: AppBar(
@@ -242,6 +256,8 @@ class _PracticeScreenState extends State<PracticeScreen> {
             onPressed: () async {
               if (playerOpen) {
                 await closePlayer();
+              } else if (widget.onExit != null) {
+                widget.onExit!();
               } else if (context.mounted) {
                 Navigator.pop(context);
               }
@@ -257,238 +273,245 @@ class _PracticeScreenState extends State<PracticeScreen> {
                         child: Text('${model.error} 点击重试'),
                       ),
               )
-            : ListView(
-                key: const ValueKey('practice-scroll'),
-                padding: const EdgeInsets.all(20),
-                children: [
-                  const Text('自由练习不改变正式学习、复习进度、每日额度或到期时间。'),
-                  if (model.error != null) ...[
-                    Text(model.error!),
-                    TextButton(
-                      onPressed: model.load,
-                      child: const Text('重新读取练习'),
-                    ),
-                  ],
-                  if (!playerOpen) ...[
-                    TextButton(
-                      onPressed: model.busy ? null : select,
-                      child: const Text('选择练习范围'),
-                    ),
-                    Text(
-                      '${(model.data!['catalog']['targets'] as List).length} 个目标 · ${(model.data!['catalog']['targets'] as List).map((t) => t['expression']).toSet().length} 个表达',
-                    ),
-                    for (final t in (model.data!['catalog']['targets'] as List))
-                      ListTile(
-                        title: Text(t['expression']),
-                        subtitle: Text(t['sense']),
-                      ),
-                    if ((model.data!['catalog']['blockedTargets'] as List)
-                        .isNotEmpty)
-                      const Text('部分表达可能同形异音，当前来源无法约束发音，已排除。'),
-                    TextField(
-                      key: const ValueKey('practice-brief'),
-                      controller: brief,
-                      enabled: model.session == null,
-                      maxLength: 500,
-                      decoration: const InputDecoration(labelText: '这次想练习什么'),
-                    ),
-                    const Text('听 · 真实语流泛化'),
-                    const Text('YouGlish 需要联网。说、读、写的执行与资源尚未交付。'),
-                    FilledButton(
-                      onPressed: model.busy || targets.isEmpty ? null : open,
-                      child: Text(model.session == null ? '进入真实语流' : '继续真实语流'),
-                    ),
-                    if (model.session != null) ...[
-                      Text(
-                        '继续原练习：${model.session!['snapshot']['brief']}（范围保持不变）',
-                      ),
+            : Readable(
+                child: ListView(
+                  key: const ValueKey('practice-scroll'),
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    const Text('自由练习不改变正式学习、复习进度、每日额度或到期时间。'),
+                    if (model.error != null) ...[
+                      Text(model.error!),
                       TextButton(
-                        onPressed: model.busy
-                            ? null
-                            : () => model.act(
-                                () => {
-                                  'kind': 'end',
-                                  'session_id': model.session!['id'],
-                                  'abandoned': true,
-                                },
-                              ),
-                        child: const Text('放弃这次练习'),
+                        onPressed: model.load,
+                        child: const Text('重新读取练习'),
                       ),
                     ],
-                    const Divider(),
-                    const Text('练习记录'),
-                    for (final h in model.data!['history'])
-                      ListTile(
-                        title: Text(h['snapshot']['brief']),
-                        subtitle: Text(
-                          '${h['status'] == 'active'
-                              ? '未结束'
-                              : h['status'] == 'completed'
-                              ? '已结束'
-                              : '已放弃'} · ${h['turnCount']} 次练习交互',
+                    if (!playerOpen) ...[
+                      TextButton(
+                        onPressed: model.busy ? null : select,
+                        child: const Text('选择练习范围'),
+                      ),
+                      Text(
+                        '${(model.data!['catalog']['targets'] as List).length} 个目标 · ${(model.data!['catalog']['targets'] as List).map((t) => t['expression']).toSet().length} 个表达',
+                      ),
+                      for (final t
+                          in (model.data!['catalog']['targets'] as List))
+                        ListTile(
+                          title: Text(t['expression']),
+                          subtitle: Text(t['sense']),
+                        ),
+                      if ((model.data!['catalog']['blockedTargets'] as List)
+                          .isNotEmpty)
+                        const Text('部分表达可能同形异音，当前来源无法约束发音，已排除。'),
+                      TextField(
+                        key: const ValueKey('practice-brief'),
+                        controller: brief,
+                        enabled: model.session == null,
+                        maxLength: 500,
+                        decoration: const InputDecoration(labelText: '这次想练习什么'),
+                      ),
+                      const Text('听 · 真实语流泛化'),
+                      const Text('YouGlish 需要联网。说、读、写的执行与资源尚未交付。'),
+                      FilledButton(
+                        onPressed: model.busy || targets.isEmpty ? null : open,
+                        child: Text(
+                          model.session == null ? '进入真实语流' : '继续真实语流',
                         ),
                       ),
-                  ] else if (current != null) ...[
-                    const Text('按表达形式检索，片段可能包含其他词义。来源：YouGlish。'),
-                    Text('原范围中 ${targets.length} 个表达'),
-                    DropdownButtonFormField<int>(
-                      key: ValueKey('expression-${state['index']}'),
-                      initialValue: state['index'] as int,
-                      items: [
-                        for (var i = 0; i < targets.length; i++)
-                          DropdownMenuItem(
-                            value: i,
-                            child: Text(targets[i]['expression']),
-                          ),
-                      ],
-                      onChanged: model.busy || model.session == null
-                          ? null
-                          : (i) async {
-                              await changeQuery({
-                                'kind': 'navigate',
-                                'index': i,
-                              });
-                              if (mounted) setState(() => status = 'loading');
-                            },
-                    ),
-                    Wrap(
-                      spacing: 4,
-                      children: [
-                        for (final accent in [
-                          'all',
-                          'us',
-                          'uk',
-                          'aus',
-                          'ca',
-                          'ie',
-                        ])
-                          ChoiceChip(
-                            label: Text(
-                              {
-                                'all': '全部口音',
-                                'us': '美国',
-                                'uk': '英国',
-                                'aus': '澳洲',
-                                'ca': '加拿大',
-                                'ie': '爱尔兰',
-                              }[accent]!,
-                            ),
-                            selected: state['accent'] == accent,
-                            onSelected: model.busy || model.session == null
-                                ? null
-                                : (_) async {
-                                    await changeQuery({
-                                      'kind': 'accent',
-                                      'accent': accent,
-                                    });
-                                    if (mounted) {
-                                      setState(() => status = 'loading');
-                                    }
+                      if (model.session != null) ...[
+                        Text(
+                          '继续原练习：${model.session!['snapshot']['brief']}（范围保持不变）',
+                        ),
+                        TextButton(
+                          onPressed: model.busy
+                              ? null
+                              : () => model.act(
+                                  () => {
+                                    'kind': 'end',
+                                    'session_id': model.session!['id'],
+                                    'abandoned': true,
                                   },
-                          ),
-                      ],
-                    ),
-                    SizedBox(
-                      height: 240,
-                      child: YouglishView(
-                        key: ValueKey(
-                          '$generation-${state['index']}-${state['accent']}',
+                                ),
+                          child: const Text('放弃这次练习'),
                         ),
-                        expression: current['expression'],
-                        accent: state['accent'],
-                        rate: (state['rate'] as num).toDouble(),
-                        fixtureScript: widget.fixtureScript,
-                        onEvent: (e) {
-                          if (current['expression'] ==
-                              targets[(state['index'] as int)]['expression']) {
-                            provider(e, token);
-                          }
-                        },
-                        onController: (c) => player = c,
-                      ),
-                    ),
-                    Text(
-                      status == 'ready'
-                          ? '找到 ${observation['total'] ?? 0} 段真实语流'
-                          : status == 'error'
-                          ? '暂时无法连接 YouGlish，请检查网络后重试。'
-                          : status == 'empty'
-                          ? '当前表达没有找到片段。'
-                          : '正在连接 YouGlish…',
-                    ),
-                    if (status == 'error' || status == 'empty')
-                      TextButton(onPressed: open, child: const Text('重试连接')),
-                    if (observation['playing'] == true) const Text('播放器正在播放'),
-                    if (observation['video'] != null)
-                      Text('YouGlish 片段：${observation['video']}'),
-                    if (observation['occurrence'] != null)
-                      Text('当前第 ${observation['occurrence']} 段'),
-                    Text(
-                      (observation['caption'] as String? ?? '暂无字幕')
-                          .replaceAll('[[[', '')
-                          .replaceAll(']]]', ''),
-                    ),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        for (final pair in [
-                          ('previous', '上一段'),
-                          ('play', '播放'),
-                          ('pause', '暂停'),
-                          ('replay', '重听'),
-                          ('next', '下一段'),
-                        ])
-                          OutlinedButton(
-                            onPressed: ready ? () => controls(pair.$1) : null,
-                            child: Text(pair.$2),
-                          ),
                       ],
-                    ),
-                    Wrap(
-                      spacing: 4,
-                      children: [
-                        for (final rate in [0.5, 0.75, 1.0, 1.25])
-                          ChoiceChip(
-                            label: Text('$rate×'),
-                            selected: state['rate'] == rate,
-                            onSelected: ready
-                                ? (_) => model.turn({
-                                    'kind': 'speed',
-                                    'rate': rate,
-                                  })
-                                : null,
+                      const Divider(),
+                      const Text('练习记录'),
+                      for (final h in model.data!['history'])
+                        ListTile(
+                          title: Text(h['snapshot']['brief']),
+                          subtitle: Text(
+                            '${h['status'] == 'active'
+                                ? '未结束'
+                                : h['status'] == 'completed'
+                                ? '已结束'
+                                : '已放弃'} · ${h['turnCount']} 次练习交互',
                           ),
-                      ],
-                    ),
-                    TextButton(
-                      onPressed: closePlayer,
-                      child: const Text('保存并返回自由练习'),
-                    ),
-                    FilledButton(
-                      onPressed: model.busy || model.session == null
-                          ? null
-                          : () async {
-                              closing = true;
-                              await player?.call('pause');
-                              await events;
-                              await model.act(
-                                () => {
-                                  'kind': 'end',
-                                  'session_id': model.session!['id'],
-                                  'abandoned': false,
-                                },
-                              );
-                              if (mounted) {
-                                setState(() {
-                                  playerOpen = false;
-                                  generation++;
+                        ),
+                    ] else if (current != null) ...[
+                      const Text('按表达形式检索，片段可能包含其他词义。来源：YouGlish。'),
+                      Text('原范围中 ${targets.length} 个表达'),
+                      DropdownButtonFormField<int>(
+                        isExpanded: true,
+                        key: ValueKey('expression-${state['index']}'),
+                        initialValue: state['index'] as int,
+                        items: [
+                          for (var i = 0; i < targets.length; i++)
+                            DropdownMenuItem(
+                              value: i,
+                              child: Text(targets[i]['expression']),
+                            ),
+                        ],
+                        onChanged: model.busy || model.session == null
+                            ? null
+                            : (i) async {
+                                await changeQuery({
+                                  'kind': 'navigate',
+                                  'index': i,
                                 });
-                              }
-                            },
-                      child: const Text('结束本次练习'),
-                    ),
+                                if (mounted) setState(() => status = 'loading');
+                              },
+                      ),
+                      Wrap(
+                        spacing: 4,
+                        children: [
+                          for (final accent in [
+                            'all',
+                            'us',
+                            'uk',
+                            'aus',
+                            'ca',
+                            'ie',
+                          ])
+                            ChoiceChip(
+                              label: Text(
+                                {
+                                  'all': '全部口音',
+                                  'us': '美国',
+                                  'uk': '英国',
+                                  'aus': '澳洲',
+                                  'ca': '加拿大',
+                                  'ie': '爱尔兰',
+                                }[accent]!,
+                              ),
+                              selected: state['accent'] == accent,
+                              onSelected: model.busy || model.session == null
+                                  ? null
+                                  : (_) async {
+                                      await changeQuery({
+                                        'kind': 'accent',
+                                        'accent': accent,
+                                      });
+                                      if (mounted) {
+                                        setState(() => status = 'loading');
+                                      }
+                                    },
+                            ),
+                        ],
+                      ),
+                      SizedBox(
+                        height: 240,
+                        child: YouglishView(
+                          key: ValueKey(
+                            '$generation-${state['index']}-${state['accent']}',
+                          ),
+                          expression: current['expression'],
+                          accent: state['accent'],
+                          rate: (state['rate'] as num).toDouble(),
+                          fixtureScript: widget.fixtureScript,
+                          onEvent: (e) {
+                            if (current['expression'] ==
+                                targets[(state['index']
+                                    as int)]['expression']) {
+                              provider(e, token);
+                            }
+                          },
+                          onController: (c) => player = c,
+                        ),
+                      ),
+                      Text(
+                        status == 'ready'
+                            ? '找到 ${observation['total'] ?? 0} 段真实语流'
+                            : status == 'error'
+                            ? '暂时无法连接 YouGlish，请检查网络后重试。'
+                            : status == 'empty'
+                            ? '当前表达没有找到片段。'
+                            : '正在连接 YouGlish…',
+                      ),
+                      if (status == 'error' || status == 'empty')
+                        TextButton(onPressed: open, child: const Text('重试连接')),
+                      if (observation['playing'] == true) const Text('播放器正在播放'),
+                      if (observation['video'] != null)
+                        Text('YouGlish 片段：${observation['video']}'),
+                      if (observation['occurrence'] != null)
+                        Text('当前第 ${observation['occurrence']} 段'),
+                      Text(
+                        (observation['caption'] as String? ?? '暂无字幕')
+                            .replaceAll('[[[', '')
+                            .replaceAll(']]]', ''),
+                      ),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          for (final pair in [
+                            ('previous', '上一段'),
+                            ('play', '播放'),
+                            ('pause', '暂停'),
+                            ('replay', '重听'),
+                            ('next', '下一段'),
+                          ])
+                            OutlinedButton(
+                              onPressed: ready ? () => controls(pair.$1) : null,
+                              child: Text(pair.$2),
+                            ),
+                        ],
+                      ),
+                      Wrap(
+                        spacing: 4,
+                        children: [
+                          for (final rate in [0.5, 0.75, 1.0, 1.25])
+                            ChoiceChip(
+                              label: Text('$rate×'),
+                              selected: state['rate'] == rate,
+                              onSelected: ready
+                                  ? (_) => model.turn({
+                                      'kind': 'speed',
+                                      'rate': rate,
+                                    })
+                                  : null,
+                            ),
+                        ],
+                      ),
+                      TextButton(
+                        onPressed: closePlayer,
+                        child: const Text('保存并返回自由练习'),
+                      ),
+                      FilledButton(
+                        onPressed: model.busy || model.session == null
+                            ? null
+                            : () async {
+                                closing = true;
+                                await player?.call('pause');
+                                await events;
+                                await model.act(
+                                  () => {
+                                    'kind': 'end',
+                                    'session_id': model.session!['id'],
+                                    'abandoned': false,
+                                  },
+                                );
+                                if (mounted) {
+                                  setState(() {
+                                    playerOpen = false;
+                                    generation++;
+                                  });
+                                }
+                              },
+                        child: const Text('结束本次练习'),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
       ),
     );

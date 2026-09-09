@@ -1,3 +1,4 @@
+import 'product_theme.dart';
 import 'provider_login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
@@ -38,6 +39,7 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
                   '连接配置保存在本机，凭据保存在系统安全存储。更改服务地址或类型需重新填写凭据。材料只发送给你选择的服务。',
                 ),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: kind,
                   items: const [
                     DropdownMenuItem(
@@ -137,111 +139,114 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('模型服务设置')),
-    body: ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        for (final p in widget.controller.providers.profiles)
-          ListTile(
-            title: Text(p['name']),
-            subtitle: Text(
-              '${p['model']} · ${p['vision'] ? '可发送图片' : '文字'} · ${widget.controller.providers.status(p['id'])}',
-            ),
-            onTap: () => edit(p),
-            trailing: PopupMenuButton<String>(
-              tooltip: '管理模型服务',
-              onSelected: (value) async {
-                try {
-                  if (value == 'login') {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (_) => ProviderLoginScreen(
-                          controller: widget.controller,
-                          profile: p,
+    body: Readable(
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          for (final p in widget.controller.providers.profiles)
+            ListTile(
+              title: Text(p['name']),
+              subtitle: Text(
+                '${p['model']} · ${p['vision'] ? '可发送图片' : '文字'} · ${widget.controller.providers.status(p['id'])}',
+              ),
+              onTap: () => edit(p),
+              trailing: PopupMenuButton<String>(
+                tooltip: '管理模型服务',
+                onSelected: (value) async {
+                  try {
+                    if (value == 'login') {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => ProviderLoginScreen(
+                            controller: widget.controller,
+                            profile: p,
+                          ),
                         ),
-                      ),
-                    );
-                  } else if (value == 'forget') {
-                    await widget.controller.providers.forget(p['id']);
-                  } else {
-                    await widget.controller.providers.remove(p['id']);
+                      );
+                    } else if (value == 'forget') {
+                      await widget.controller.providers.forget(p['id']);
+                    } else {
+                      await widget.controller.providers.remove(p['id']);
+                    }
+                    widget.controller.error = null;
+                    widget.controller.changed();
+                    if (mounted) setState(() {});
+                  } catch (e) {
+                    widget.controller.error = widget.controller.describe(e);
+                    widget.controller.changed();
+                    if (mounted) setState(() {});
                   }
-                  widget.controller.error = null;
+                },
+                itemBuilder: (_) => [
+                  if (p['kind'] == 'sensa')
+                    const PopupMenuItem(value: 'login', child: Text('在线服务账户')),
+                  const PopupMenuItem(value: 'forget', child: Text('删除已保存凭据')),
+                  const PopupMenuItem(value: 'remove', child: Text('删除此服务')),
+                ],
+              ),
+            ),
+          if (widget.controller.error != null) Text(widget.controller.error!),
+          TextButton(
+            onPressed: () async {
+              await widget.controller.providers.unlock();
+              widget.controller.changed();
+              if (mounted) setState(() {});
+            },
+            child: const Text('重新读取安全凭据'),
+          ),
+          for (final role in const {
+            'teacher': '澄清与解释',
+            'content': '学习材料生成',
+            'review': '独立审核',
+            'service': 'Sensa 在线资源',
+          }.entries)
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              key: ValueKey(
+                'provider-role-${role.key}-${(widget.controller.providers.forPurpose(role.key)?['id'])}',
+              ),
+              initialValue:
+                  widget.controller.providers.profiles.any(
+                    (p) =>
+                        p['id'] ==
+                            (widget.controller.providers.forPurpose(
+                              role.key,
+                            )?['id']) &&
+                        (role.key != 'service' || p['kind'] == 'sensa'),
+                  )
+                  ? (widget.controller.providers.forPurpose(role.key)?['id'])
+                  : '',
+              decoration: InputDecoration(labelText: role.value),
+              items: [
+                const DropdownMenuItem(value: '', child: Text('暂不配置')),
+                for (final p in widget.controller.providers.profiles)
+                  if (role.key != 'service' || p['kind'] == 'sensa')
+                    DropdownMenuItem(
+                      value: p['id'] as String,
+                      child: Text(p['name']),
+                    ),
+              ],
+              onChanged: (id) async {
+                try {
+                  await widget.controller.providers.assign(
+                    role.key,
+                    id == '' ? null : id,
+                  );
                   widget.controller.changed();
                   if (mounted) setState(() {});
                 } catch (e) {
                   widget.controller.error = widget.controller.describe(e);
-                  widget.controller.changed();
                   if (mounted) setState(() {});
                 }
               },
-              itemBuilder: (_) => [
-                if (p['kind'] == 'sensa')
-                  const PopupMenuItem(value: 'login', child: Text('在线服务账户')),
-                const PopupMenuItem(value: 'forget', child: Text('删除已保存凭据')),
-                const PopupMenuItem(value: 'remove', child: Text('删除此服务')),
-              ],
             ),
+          const Text(
+            '各用途可选择同一服务，也可分别选择。审核使用独立请求。未配置或失效时会停止，不会改用其他服务。Sensa 在线资源用于兼容解析、资源下载等已有服务。',
           ),
-        if (widget.controller.error != null) Text(widget.controller.error!),
-        TextButton(
-          onPressed: () async {
-            await widget.controller.providers.unlock();
-            widget.controller.changed();
-            if (mounted) setState(() {});
-          },
-          child: const Text('重新读取安全凭据'),
-        ),
-        for (final role in const {
-          'teacher': '澄清与解释',
-          'content': '学习材料生成',
-          'review': '独立审核',
-          'service': 'Sensa 在线资源',
-        }.entries)
-          DropdownButtonFormField<String>(
-            key: ValueKey(
-              'provider-role-${role.key}-${(widget.controller.providers.forPurpose(role.key)?['id'])}',
-            ),
-            initialValue:
-                widget.controller.providers.profiles.any(
-                  (p) =>
-                      p['id'] ==
-                          (widget.controller.providers.forPurpose(
-                            role.key,
-                          )?['id']) &&
-                      (role.key != 'service' || p['kind'] == 'sensa'),
-                )
-                ? (widget.controller.providers.forPurpose(role.key)?['id'])
-                : '',
-            decoration: InputDecoration(labelText: role.value),
-            items: [
-              const DropdownMenuItem(value: '', child: Text('暂不配置')),
-              for (final p in widget.controller.providers.profiles)
-                if (role.key != 'service' || p['kind'] == 'sensa')
-                  DropdownMenuItem(
-                    value: p['id'] as String,
-                    child: Text(p['name']),
-                  ),
-            ],
-            onChanged: (id) async {
-              try {
-                await widget.controller.providers.assign(
-                  role.key,
-                  id == '' ? null : id,
-                );
-                widget.controller.changed();
-                if (mounted) setState(() {});
-              } catch (e) {
-                widget.controller.error = widget.controller.describe(e);
-                if (mounted) setState(() {});
-              }
-            },
-          ),
-        const Text(
-          '各用途可选择同一服务，也可分别选择。审核使用独立请求。未配置或失效时会停止，不会改用其他服务。Sensa 在线资源用于兼容解析、资源下载等已有服务。',
-        ),
-        FilledButton(onPressed: () => edit(), child: const Text('添加模型服务')),
-      ],
+          FilledButton(onPressed: () => edit(), child: const Text('添加模型服务')),
+        ],
+      ),
     ),
   );
 }
@@ -265,24 +270,26 @@ class _AgentHistoryScreenState extends State<AgentHistoryScreen> {
     animation: widget.controller,
     builder: (context, _) => Scaffold(
       appBar: AppBar(title: const Text('对话与资源准备')),
-      body: ListView(
-        children: [
-          if (widget.controller.error != null) Text(widget.controller.error!),
-          if (widget.controller.sessions.isEmpty)
-            const ListTile(title: Text('还没有保存的对话。')),
-          for (final s in widget.controller.sessions)
-            ListTile(
-              title: Text(s['kind'] == 'teacher' ? '与语言老师的对话' : '学习资源准备'),
-              subtitle: Text(agentStatus(s['status'])),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      AgentScreen(controller: widget.controller, id: s['id']),
+      body: Readable(
+        child: ListView(
+          children: [
+            if (widget.controller.error != null) Text(widget.controller.error!),
+            if (widget.controller.sessions.isEmpty)
+              const ListTile(title: Text('还没有保存的对话。')),
+            for (final s in widget.controller.sessions)
+              ListTile(
+                title: Text(s['kind'] == 'teacher' ? '与语言老师的对话' : '学习资源准备'),
+                subtitle: Text(agentStatus(s['status'])),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        AgentScreen(controller: widget.controller, id: s['id']),
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     ),
   );

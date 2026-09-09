@@ -1,3 +1,4 @@
+import 'support/migration_app.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ void main() {
   const activity = bool.fromEnvironment('SENSA_NATIVE_ACTIVITY');
   const reviewing = bool.fromEnvironment('SENSA_NATIVE_REVIEW');
   const recovery = bool.fromEnvironment('SENSA_NATIVE_RECOVERY');
+  const formal = bool.fromEnvironment('SENSA_FORMAL_UI');
   const artifactPath = String.fromEnvironment('SENSA_TEST_ARTIFACT_PATH');
   setUpAll(() async => RustLib.init());
   testWidgets(
@@ -28,7 +30,9 @@ void main() {
                   ? '${model.repository.path}.artifact'
                   : artifactPath,
             ).readAsString();
-      await tester.pumpWidget(NativeApp(model: model));
+      await tester.pumpWidget(
+        formal ? NativeApp(model: model) : MigrationApp(model: model),
+      );
       Future<void> ready() async {
         for (var i = 0; i < 600; i++) {
           await tester.pump(const Duration(milliseconds: 50));
@@ -51,16 +55,22 @@ void main() {
 
       if (recovery) {
         expect(model.snapshot!.value, jsonDecode(await receipt.readAsString()));
-        expect(
-          find.text(
-            activity
-                ? '本段学习已保存'
-                : reviewing
-                ? '本次复习与修复已完成'
-                : '本次高保证首学已完成',
-          ),
-          findsOneWidget,
-        );
+        if (formal) {
+          await tap(find.byKey(const ValueKey('nav-2')));
+          await tap(find.text('全部学习记录'));
+          expect(find.text('学习记录'), findsOneWidget);
+        } else {
+          expect(
+            find.text(
+              activity
+                  ? '本段学习已保存'
+                  : reviewing
+                  ? '本次复习与修复已完成'
+                  : '本次高保证首学已完成',
+            ),
+            findsOneWidget,
+          );
+        }
         expect(model.snapshot!.value['completionCount'], 1);
       } else {
         if (!reviewing) {
@@ -70,30 +80,67 @@ void main() {
             'kind': 'import_runtime_release',
             'release_json': artifact,
           });
-          await model.act({
-            'kind': 'set_policy',
-            'scope': 'learner',
-            'policy': {
-              'profileId': 'high_assurance',
-              'profileVersion': 'high-assurance-profile-v1',
-            },
-          });
+          if (formal) {
+            await ready();
+            await tap(
+              find.byKey(const ValueKey('nav-4')).evaluate().isNotEmpty
+                  ? find.byKey(const ValueKey('nav-4'))
+                  : find.byTooltip('设置'),
+            );
+            await tap(find.text('默认学习方式'));
+            await tap(find.text('高保证学习'));
+          } else {
+            await model.act({
+              'kind': 'set_policy',
+              'scope': 'learner',
+              'policy': {
+                'profileId': 'high_assurance',
+                'profileVersion': 'high-assurance-profile-v1',
+              },
+            });
+          }
           await model.act({'kind': 'add_to_learning'});
         }
-        await model.act(
-          activity
-              ? {
-                  'kind': 'activity_start',
-                  'mode': reviewing ? 'review_only' : 'mixed',
-                }
-              : reviewing
-              ? {'kind': 'start_retention', 'early': false}
-              : {'kind': 'start_or_resume'},
-        );
+        if (formal) {
+          await ready();
+          if (activity) {
+            await tap(find.byKey(const ValueKey('nav-0')));
+            await tap(
+              reviewing
+                  ? find.text('只复习')
+                  : find.byKey(const ValueKey('home-start')),
+            );
+          } else {
+            await tap(find.byKey(const ValueKey('nav-2')));
+            await tap(
+              find.byKey(
+                ValueKey('material-${model.snapshot!.material!['id']}'),
+              ),
+            );
+            await tap(find.text(reviewing ? '开始到期复习' : '开始学习'));
+          }
+        } else {
+          await model.act(
+            activity
+                ? {
+                    'kind': 'activity_start',
+                    'mode': reviewing ? 'review_only' : 'mixed',
+                  }
+                : reviewing
+                ? {'kind': 'start_retention', 'early': false}
+                : {'kind': 'start_or_resume'},
+          );
+        }
         await ready();
         await tap(find.text('暂停'));
         if (activity) {
-          await tap(find.text(reviewing ? '只复习' : '开始今天的学习'));
+          if (formal) {
+            await tester.pageBack();
+            await tester.pumpAndSettle();
+            await tap(find.byKey(const ValueKey('home-start')));
+          } else {
+            await tap(find.text(reviewing ? '只复习' : '开始今天的学习'));
+          }
         } else {
           await tap(find.byKey(const ValueKey('assurance-resume')));
         }
@@ -137,6 +184,20 @@ void main() {
                 f,
                 reviewing && !failedReview ? 'wrong-answer' : lemma,
               );
+              if (formal && !activity && !restoredDraft && !reviewing) {
+                // Leave before the 300 ms debounce: Back must flush the draft.
+                await tester.pageBack();
+                await ready();
+                await tester.pumpAndSettle();
+                expect(model.snapshot!.assurance!['draft']['text'], lemma);
+                await tap(
+                  find.byKey(
+                    ValueKey('material-${model.snapshot!.material!['id']}'),
+                  ),
+                );
+                await tap(find.text('继续学习'));
+                expect(tester.widget<TextField>(f).controller!.text, lemma);
+              }
               await tester.pump(const Duration(milliseconds: 400));
               await ready();
               if (!restoredDraft && !reviewing) {
@@ -206,6 +267,10 @@ void main() {
             1,
           );
           expect(model.snapshot!.learning['checkins'].length, 1);
+        }
+        if (formal && !activity) {
+          await tap(find.text('回到首页'));
+          expect(find.text('今天，连接新的意义'), findsOneWidget);
         }
         await receipt.writeAsString(
           jsonEncode(model.snapshot!.value),

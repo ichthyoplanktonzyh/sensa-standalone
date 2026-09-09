@@ -1,3 +1,4 @@
+import 'product_theme.dart';
 import 'agent_screen.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -559,186 +560,191 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
         title: Text(frozen ? '已确认的图文材料' : '图文材料草稿'),
         leading: BackButton(onPressed: exit),
       ),
-      body: ListView(
-        key: const ValueKey('world-editor-scroll'),
-        padding: const EdgeInsets.all(20),
-        children: [
-          Text(
-            frozen
-                ? '原版本保持不变，可以再次选义，或复制后编辑。'
-                : saving
-                ? '正在保存…'
-                : dirty || revision == 0
-                ? '尚未保存'
-                : '已保存在本机',
-          ),
-          if (localError != null) Text(localError!),
-          TextField(
-            key: const ValueKey('world-familiar'),
-            controller: familiar,
-            enabled: !frozen,
-            decoration: const InputDecoration(labelText: '熟悉表达或想表达的意思（可选）'),
-            onChanged: (_) => change(),
-          ),
-          DropdownButtonFormField<String>(
-            initialValue: start,
-            decoration: const InputDecoration(labelText: '从哪里开始（可选）'),
-            items: const [
-              DropdownMenuItem(value: 'from_experience', child: Text('从上下文开始')),
-              DropdownMenuItem(
-                value: 'from_expression',
-                child: Text('遇到了一个表达'),
-              ),
-              DropdownMenuItem(value: 'from_sense', child: Text('有意思，想找表达')),
-            ],
-            onChanged: frozen
-                ? null
-                : (v) {
-                    start = v;
-                    change();
-                  },
-          ),
-          for (final (i, b) in blocks.indexed)
-            Card(
-              key: ValueKey(b['id']),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  children: [
-                    if (b['kind'] == 'text')
-                      TextField(
-                        key: ValueKey('world-block-$i'),
-                        controller: controllers[b['id']],
-                        enabled: !frozen,
-                        minLines: 3,
-                        maxLines: 8,
-                        decoration: const InputDecoration(labelText: '上下文文字'),
-                        onChanged: (_) => change(),
-                      )
-                    else
-                      WorldImage(
-                        repository: model.repository,
-                        digest: b['digest'],
-                      ),
-                    if (!frozen)
-                      Wrap(
-                        children: [
-                          IconButton(
-                            tooltip: '上移材料',
-                            onPressed: i == 0
-                                ? null
-                                : () {
-                                    final a = blocks.removeAt(i);
-                                    blocks.insert(i - 1, a);
-                                    change();
-                                  },
-                            icon: const Icon(Icons.arrow_upward),
-                          ),
-                          IconButton(
-                            tooltip: '移除材料块',
-                            onPressed: () {
-                              blocks.removeAt(i);
-                              change();
-                            },
-                            icon: const Icon(Icons.remove_circle_outline),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
+      body: Readable(
+        child: ListView(
+          key: const ValueKey('world-editor-scroll'),
+          padding: const EdgeInsets.all(20),
+          children: [
+            Text(
+              frozen
+                  ? '原版本保持不变，可以再次选义，或复制后编辑。'
+                  : saving
+                  ? '正在保存…'
+                  : dirty || revision == 0
+                  ? '尚未保存'
+                  : '已保存在本机',
             ),
-          if (!frozen)
-            Wrap(
-              children: [
-                TextButton(
-                  onPressed: () {
-                    final bid = const Uuid().v4();
-                    controllers[bid] = TextEditingController();
-                    blocks.add({'kind': 'text', 'id': bid, 'text': ''});
-                    change();
-                  },
-                  child: const Text('添加文字'),
+            if (localError != null) Text(localError!),
+            TextField(
+              key: const ValueKey('world-familiar'),
+              controller: familiar,
+              enabled: !frozen,
+              decoration: const InputDecoration(labelText: '熟悉表达或想表达的意思（可选）'),
+              onChanged: (_) => change(),
+            ),
+            DropdownButtonFormField<String>(
+              initialValue: start,
+              decoration: const InputDecoration(labelText: '从哪里开始（可选）'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'from_experience',
+                  child: Text('从上下文开始'),
                 ),
-                TextButton(onPressed: image, child: const Text('添加图片')),
+                DropdownMenuItem(
+                  value: 'from_expression',
+                  child: Text('遇到了一个表达'),
+                ),
+                DropdownMenuItem(value: 'from_sense', child: Text('有意思，想找表达')),
               ],
+              onChanged: frozen
+                  ? null
+                  : (v) {
+                      start = v;
+                      change();
+                    },
             ),
-          const Text('保存材料不调用模型。需要帮助时，可以把材料发送给你选择的语言老师服务。'),
-          OutlinedButton(
-            onPressed: saving
-                ? null
-                : () async {
-                    await save(submit: true);
-                    if (!context.mounted || model.error != null) return;
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (_) => AgentScreen(
-                          controller: model.agents,
-                          source: {
-                            'kind': 'world',
-                            'draft_id': id,
-                            'revision': revision,
-                          },
+            for (final (i, b) in blocks.indexed)
+              Card(
+                key: ValueKey(b['id']),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    children: [
+                      if (b['kind'] == 'text')
+                        TextField(
+                          key: ValueKey('world-block-$i'),
+                          controller: controllers[b['id']],
+                          enabled: !frozen,
+                          minLines: 3,
+                          maxLines: 8,
+                          decoration: const InputDecoration(labelText: '上下文文字'),
+                          onChanged: (_) => change(),
+                        )
+                      else
+                        WorldImage(
+                          repository: model.repository,
+                          digest: b['digest'],
                         ),
-                      ),
-                    );
-                    await model.load();
-                    if (context.mounted &&
-                        (model.data!['drafts'] as List).any(
-                          (d) => d['id'] == id && d['status'] == 'accepted',
-                        )) {
-                      Navigator.pop(context);
-                    }
-                  },
-            child: const Text('和语言老师聊一聊'),
-          ),
-          if (!frozen)
-            FilledButton(
+                      if (!frozen)
+                        Wrap(
+                          children: [
+                            IconButton(
+                              tooltip: '上移材料',
+                              onPressed: i == 0
+                                  ? null
+                                  : () {
+                                      final a = blocks.removeAt(i);
+                                      blocks.insert(i - 1, a);
+                                      change();
+                                    },
+                              icon: const Icon(Icons.arrow_upward),
+                            ),
+                            IconButton(
+                              tooltip: '移除材料块',
+                              onPressed: () {
+                                blocks.removeAt(i);
+                                change();
+                              },
+                              icon: const Icon(Icons.remove_circle_outline),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            if (!frozen)
+              Wrap(
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      final bid = const Uuid().v4();
+                      controllers[bid] = TextEditingController();
+                      blocks.add({'kind': 'text', 'id': bid, 'text': ''});
+                      change();
+                    },
+                    child: const Text('添加文字'),
+                  ),
+                  TextButton(onPressed: image, child: const Text('添加图片')),
+                ],
+              ),
+            const Text('保存材料不调用模型。需要帮助时，可以把材料发送给你选择的语言老师服务。'),
+            OutlinedButton(
               onPressed: saving
                   ? null
                   : () async {
                       await save(submit: true);
-                      if (context.mounted && model.error == null) {
+                      if (!context.mounted || model.error != null) return;
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => AgentScreen(
+                            controller: model.agents,
+                            source: {
+                              'kind': 'world',
+                              'draft_id': id,
+                              'revision': revision,
+                            },
+                          ),
+                        ),
+                      );
+                      await model.load();
+                      if (context.mounted &&
+                          (model.data!['drafts'] as List).any(
+                            (d) => d['id'] == id && d['status'] == 'accepted',
+                          )) {
                         Navigator.pop(context);
                       }
                     },
-              child: const Text('保存到待确认材料'),
+              child: const Text('和语言老师聊一聊'),
             ),
-          FilledButton(
-            onPressed: saving ? null : resolve,
-            child: Text(frozen ? '再确认一个意思' : '选择已有意思并确认'),
-          ),
-          if (frozen || localError != null)
+            if (!frozen)
+              FilledButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        await save(submit: true);
+                        if (context.mounted && model.error == null) {
+                          Navigator.pop(context);
+                        }
+                      },
+                child: const Text('保存到待确认材料'),
+              ),
+            FilledButton(
+              onPressed: saving ? null : resolve,
+              child: Text(frozen ? '再确认一个意思' : '选择已有意思并确认'),
+            ),
+            if (frozen || localError != null)
+              TextButton(
+                onPressed: () async {
+                  await Navigator.of(context).pushReplacement(
+                    MaterialPageRoute<void>(
+                      builder: (_) => WorldEditor(model: model, copy: body()),
+                    ),
+                  );
+                },
+                child: const Text('复制为新草稿'),
+              ),
             TextButton(
               onPressed: () async {
-                await Navigator.of(context).pushReplacement(
-                  MaterialPageRoute<void>(
-                    builder: (_) => WorldEditor(model: model, copy: body()),
-                  ),
+                await save();
+                if (model.error != null) return;
+                await model.act(
+                  () => {
+                    'kind': 'membership',
+                    'id': id,
+                    'expected_revision': revision,
+                    'active': false,
+                  },
                 );
+                if (context.mounted && model.error == null) {
+                  Navigator.pop(context);
+                }
               },
-              child: const Text('复制为新草稿'),
+              child: Text(frozen ? '移除材料入口（保留已确认内容）' : '移除这份草稿'),
             ),
-          TextButton(
-            onPressed: () async {
-              await save();
-              if (model.error != null) return;
-              await model.act(
-                () => {
-                  'kind': 'membership',
-                  'id': id,
-                  'expected_revision': revision,
-                  'active': false,
-                },
-              );
-              if (context.mounted && model.error == null) {
-                Navigator.pop(context);
-              }
-            },
-            child: Text(frozen ? '移除材料入口（保留已确认内容）' : '移除这份草稿'),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );
@@ -898,167 +904,176 @@ class WorldDetail extends StatelessWidget {
       );
       return Scaffold(
         appBar: AppBar(title: const Text('上下文与表达')),
-        body: ListView(
-          key: const ValueKey('world-detail-scroll'),
-          padding: const EdgeInsets.all(20),
-          children: [
-            Text(
-              m['expression'],
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            Text(m['sense'], style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 16),
-            const Text('上下文'),
-            if (draft != null) ...[
-              for (final b in draft['blocks'])
-                if (b['kind'] == 'text')
-                  SelectableText(b['text'])
-                else
-                  WorldImage(repository: model.repository, digest: b['digest']),
-              if (draft['familiarExpression'] != '')
-                SelectableText(draft['familiarExpression']),
-            ] else
-              SelectableText(m['snapshot']['sentence']),
-            if (m['focus'] != null) Text('关注点：${m['focus']}'),
-            if (m['sourceLink'] != null)
-              TextButton(
-                onPressed: () =>
-                    Clipboard.setData(ClipboardData(text: m['sourceLink'])),
-                child: const Text('复制来源链接'),
+        body: Readable(
+          child: ListView(
+            key: const ValueKey('world-detail-scroll'),
+            padding: const EdgeInsets.all(20),
+            children: [
+              Text(
+                m['expression'],
+                style: Theme.of(context).textTheme.headlineMedium,
               ),
-            Text('来源：${m['materialSource'] ?? '本人确认'}'),
-            Text(
-              binding == null
-                  ? '已确认表达连接'
-                  : '${binding['type']} · ${binding['relation']} · ${binding['semanticCoverage']}',
-            ),
-            ExpansionTile(
-              title: const Text('版本与确认来源'),
-              children: [
-                SelectableText(
-                  '上下文：${m['contextAnchorId']}\n意思版本：${m['senseVersionId']}\n表达版本：${m['bindingVersionId']}\n${jsonEncode(m['resolutionProvenance'])}',
-                ),
-              ],
-            ),
-            if (model.error != null) Text(model.error!),
-            if (m['status'] == 'removed')
-              FilledButton(
-                onPressed: model.busy
-                    ? null
-                    : () => model.act(
-                        () => {
-                          'kind': 'meaning_membership',
-                          'meaning_id': meaningId,
-                          'expected_revision': m['revision'],
-                          'active': true,
-                        },
-                      ),
-                child: const Text('恢复这个连接'),
-              )
-            else ...[
-              if (!supported) const Text('这个关系已保存。目前学习资源仅支持恰好表达该意思的连接。'),
-              FilledButton(
-                onPressed:
-                    model.busy || !supported || m['addedToLearning'] == true
-                    ? null
-                    : () async {
-                        await library.load();
-                        if (!context.mounted) return;
-                        if (m['materialId'] == null) {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => PreparationScreen(
-                                model: library,
-                                meaningId: meaningId,
-                              ),
-                            ),
-                          );
-                        } else {
-                          await library.personalAction({
-                            'kind': 'add_to_learning',
-                            'meaning_id': meaningId,
-                            'expected_revision': m['revision'],
-                          });
-                          if (context.mounted && library.error != null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(library.error!)),
-                            );
-                          }
-                        }
-                        await model.load();
-                      },
-                child: Text(m['addedToLearning'] == true ? '已加入学习' : '显式加入学习'),
-              ),
-              if (m['proposal'] != null)
-                OutlinedButton(
-                  onPressed: model.busy ? null : () => bind(context, m),
-                  child: const Text('补充一个表达'),
-                )
-              else
-                const Text('这份旧材料未携带完整词义定义，暂不能据此确认新的表达绑定。'),
+              Text(m['sense'], style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              const Text('上下文'),
               if (draft != null) ...[
-                OutlinedButton(
+                for (final b in draft['blocks'])
+                  if (b['kind'] == 'text')
+                    SelectableText(b['text'])
+                  else
+                    WorldImage(
+                      repository: model.repository,
+                      digest: b['digest'],
+                    ),
+                if (draft['familiarExpression'] != '')
+                  SelectableText(draft['familiarExpression']),
+              ] else
+                SelectableText(m['snapshot']['sentence']),
+              if (m['focus'] != null) Text('关注点：${m['focus']}'),
+              if (m['sourceLink'] != null)
+                TextButton(
+                  onPressed: () =>
+                      Clipboard.setData(ClipboardData(text: m['sourceLink'])),
+                  child: const Text('复制来源链接'),
+                ),
+              Text('来源：${m['materialSource'] ?? '本人确认'}'),
+              Text(
+                binding == null
+                    ? '已确认表达连接'
+                    : '${binding['type']} · ${binding['relation']} · ${binding['semanticCoverage']}',
+              ),
+              ExpansionTile(
+                key: const PageStorageKey('world_screen-detail-1'),
+                title: const Text('版本与确认来源'),
+                children: [
+                  SelectableText(
+                    '上下文：${m['contextAnchorId']}\n意思版本：${m['senseVersionId']}\n表达版本：${m['bindingVersionId']}\n${jsonEncode(m['resolutionProvenance'])}',
+                  ),
+                ],
+              ),
+              if (model.error != null) Text(model.error!),
+              if (m['status'] == 'removed')
+                FilledButton(
                   onPressed: model.busy
                       ? null
+                      : () => model.act(
+                          () => {
+                            'kind': 'meaning_membership',
+                            'meaning_id': meaningId,
+                            'expected_revision': m['revision'],
+                            'active': true,
+                          },
+                        ),
+                  child: const Text('恢复这个连接'),
+                )
+              else ...[
+                if (!supported) const Text('这个关系已保存。目前学习资源仅支持恰好表达该意思的连接。'),
+                FilledButton(
+                  onPressed:
+                      model.busy || !supported || m['addedToLearning'] == true
+                      ? null
                       : () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => WorldEditor(
-                                model: model,
-                                copy: Map<String, dynamic>.from(draft),
+                          await library.load();
+                          if (!context.mounted) return;
+                          if (m['materialId'] == null) {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => PreparationScreen(
+                                  model: library,
+                                  meaningId: meaningId,
+                                ),
                               ),
-                            ),
-                          );
+                            );
+                          } else {
+                            await library.personalAction({
+                              'kind': 'add_to_learning',
+                              'meaning_id': meaningId,
+                              'expected_revision': m['revision'],
+                            });
+                            if (context.mounted && library.error != null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(library.error!)),
+                              );
+                            }
+                          }
                           await model.load();
                         },
-                  child: const Text('复制上下文后编辑'),
+                  child: Text(
+                    m['addedToLearning'] == true ? '已加入学习' : '显式加入学习',
+                  ),
                 ),
-                for (final d in model.data!['drafts'])
-                  if (d['id'] == m['worldContext']['id'] &&
-                      d['status'] == 'accepted')
-                    OutlinedButton(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => WorldEditor(model: model, record: d),
+                if (m['proposal'] != null)
+                  OutlinedButton(
+                    onPressed: model.busy ? null : () => bind(context, m),
+                    child: const Text('补充一个表达'),
+                  )
+                else
+                  const Text('这份旧材料未携带完整词义定义，暂不能据此确认新的表达绑定。'),
+                if (draft != null) ...[
+                  OutlinedButton(
+                    onPressed: model.busy
+                        ? null
+                        : () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => WorldEditor(
+                                  model: model,
+                                  copy: Map<String, dynamic>.from(draft),
+                                ),
+                              ),
+                            );
+                            await model.load();
+                          },
+                    child: const Text('复制上下文后编辑'),
+                  ),
+                  for (final d in model.data!['drafts'])
+                    if (d['id'] == m['worldContext']['id'] &&
+                        d['status'] == 'accepted')
+                      OutlinedButton(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) =>
+                                WorldEditor(model: model, record: d),
+                          ),
                         ),
+                        child: const Text('同一上下文补充意思'),
                       ),
-                      child: const Text('同一上下文补充意思'),
-                    ),
+                ],
+                TextButton(
+                  onPressed: model.busy
+                      ? null
+                      : () => model.act(
+                          () => {
+                            'kind': 'meaning_membership',
+                            'meaning_id': meaningId,
+                            'expected_revision': m['revision'],
+                            'active': false,
+                          },
+                        ),
+                  child: const Text('移除这个连接'),
+                ),
               ],
-              TextButton(
-                onPressed: model.busy
-                    ? null
-                    : () => model.act(
-                        () => {
-                          'kind': 'meaning_membership',
-                          'meaning_id': meaningId,
-                          'expected_revision': m['revision'],
-                          'active': false,
-                        },
+              if (siblings.isNotEmpty) const Text('同一上下文的其他连接'),
+              for (final other in siblings)
+                ListTile(
+                  title: Text(other['expression']),
+                  subtitle: Text(other['sense']),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => WorldDetail(
+                        model: model,
+                        library: library,
+                        meaningId: other['id'],
                       ),
-                child: const Text('移除这个连接'),
-              ),
-            ],
-            if (siblings.isNotEmpty) const Text('同一上下文的其他连接'),
-            for (final other in siblings)
-              ListTile(
-                title: Text(other['expression']),
-                subtitle: Text(other['sense']),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => WorldDetail(
-                      model: model,
-                      library: library,
-                      meaningId: other['id'],
                     ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       );
     },

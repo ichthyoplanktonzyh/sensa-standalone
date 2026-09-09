@@ -40,6 +40,10 @@ const native = (id, title, names, real, fixtures, excludes, handoff) => entry(
   real, fixtures, excludes, [], `docs/sensa/${handoff}.md`,
 );
 catalog.push(
+  native('native-product', '正式原生导航、学习与语义接纳', ['product_journey', 'product_retention'],
+    '正式 NativeApp → 页面操作 → Rust/SQLite；独立进程核对完整快照',
+    '合成学习包、注入文件读取器；没有调用模型或云服务',
+    'OS 文件选择/安装向导由独立 macOS UX 验收；高保证需 formal 变体与音频 artifact；不代表 Windows/iOS 或上线门通过', 'native-product-ui-handoff'),
   native('native-learning', '轻量首学、复习/重学与冷恢复', ['local_learning', 'retention'],
     'Widget 操作 → Dart → Rust → SQLite；主流程和独立进程恢复分开执行',
     '合成验收材料；retention 使用预置历史库/时钟前提',

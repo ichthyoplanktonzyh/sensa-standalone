@@ -1,3 +1,4 @@
+import 'product_theme.dart';
 import 'agent_screen.dart';
 import 'reference_source_panel.dart';
 import 'package:flutter/material.dart';
@@ -13,27 +14,29 @@ class PreparationListScreen extends StatelessWidget {
     animation: model,
     builder: (context, _) => Scaffold(
       appBar: AppBar(title: const Text('学习准备')),
-      body: ListView(
-        children: [
-          if (model.preparations.isEmpty)
-            const ListTile(title: Text('还没有需要准备材料的学习目标。')),
-          for (final task in model.preparations)
-            ListTile(
-              title: Text(
-                task['target']['proposal']['expression']['surface'] as String,
-              ),
-              subtitle: Text(preparationLabel(task)),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => PreparationScreen(
-                    model: model,
-                    taskId: task['id'] as String,
+      body: Readable(
+        child: ListView(
+          children: [
+            if (model.preparations.isEmpty)
+              const ListTile(title: Text('还没有需要准备材料的学习目标。')),
+            for (final task in model.preparations)
+              ListTile(
+                title: Text(
+                  task['target']['proposal']['expression']['surface'] as String,
+                ),
+                subtitle: Text(preparationLabel(task)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => PreparationScreen(
+                      model: model,
+                      taskId: task['id'] as String,
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     ),
   );
@@ -188,6 +191,7 @@ class _PreparationScreenState extends State<PreparationScreen> {
                     if (current == null && existingTarget != null)
                       const Text('这个语义目标已经加入学习。本次会关联已有目标，保留原学习方式和进度。'),
                     DropdownButtonFormField<String>(
+                      isExpanded: true,
                       key: ValueKey(
                         'preparation-policy-${current?['revision'] ?? 0}',
                       ),
