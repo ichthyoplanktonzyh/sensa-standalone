@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
 import 'assurance_view.dart';
+import 'learning_activity_view.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key, required this.model});
@@ -180,6 +181,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
             () => vm.act({'kind': 'confirm_quantity', 'quantity': quantity}),
           ),
         ];
+      } else if (s.activity != null &&
+          !vm.home &&
+          (s.activity!['status'] != 'active' ||
+              s.activity!['canAnswer'] != true)) {
+        body = [LearningActivityView(model: vm)];
       } else if (s.assurance != null && !vm.home) {
         final a = s.assurance!;
         final action = a['queue']?['session']?['action'];
@@ -277,7 +283,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
           ],
           TextButton(
-            onPressed: available ? () => vm.act({'kind': 'pause'}) : null,
+            onPressed: available
+                ? () => (s.activity?['status']) == 'active'
+                      ? vm.stopActivity()
+                      : vm.act({'kind': 'pause'})
+                : null,
             child: const Text('暂停学习'),
           ),
         ];
@@ -290,7 +300,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
           Text('默认方式：${s.defaultPolicyLabel}'),
           button('默认学习方式', () => choosePolicy('learner'), primary: false),
-          button('只复习', () => vm.act({'kind': 'next_retention'})),
+          LearningActivityView(model: vm, overview: true),
           button('导入学习包', vm.importPack, primary: false),
           if (vm.notice != null)
             Semantics(liveRegion: true, child: Text(vm.notice!)),
@@ -363,6 +373,25 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ],
           ],
         ];
+      }
+      if (s?.activity?['status'] == 'active' &&
+          s?.activity?['canAnswer'] == true &&
+          !vm.home) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) vm.enteredActivity();
+        });
+        body.add(
+          OutlinedButton(
+            onPressed: available ? () => vm.stopActivity() : null,
+            child: const Text('暂停本次学习并返回'),
+          ),
+        );
+      }
+      if (vm.checkInPending && !vm.busy) {
+        body.addAll([
+          Semantics(liveRegion: true, child: const Text('签到尚未保存，学习可以继续。')),
+          TextButton(onPressed: () => vm.checkIn(), child: const Text('重试签到')),
+        ]);
       }
       return Scaffold(
         appBar: AppBar(

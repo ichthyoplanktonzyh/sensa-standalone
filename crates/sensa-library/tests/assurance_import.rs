@@ -178,7 +178,20 @@ fn structured_initial_answers_commit_evidence_and_graduation_offline() {
         });
         apply(CommandAction::AddToLearning);
     }
-    let s = apply(CommandAction::StartOrResume);
+    let s = apply(CommandAction::ActivityStart {
+        mode: sensa_library::activity::Mode::Mixed,
+    });
+    assert_eq!(s.learning["newStartedToday"], 0);
+    assert_eq!(s.learning["newReservedToday"], 4);
+    let session_id = s.assurance.as_ref().unwrap()["id"].clone();
+    let only = apply(CommandAction::ActivityStart {
+        mode: sensa_library::activity::Mode::ReviewOnly,
+    });
+    assert!(only.learning["activity"]["executionId"].is_null());
+    let s = apply(CommandAction::ActivityStart {
+        mode: sensa_library::activity::Mode::Mixed,
+    });
+    assert_eq!(s.assurance.as_ref().unwrap()["id"], session_id);
     assert!(s.assurance.is_some());
     let original = s.assurance.clone();
     let changed = apply(CommandAction::SetPolicy {
@@ -276,6 +289,11 @@ fn structured_initial_answers_commit_evidence_and_graduation_offline() {
     let s = open_library(&path).unwrap();
     assert_eq!(s.completion_count, 4);
     assert_eq!(s.handoff_count, 4);
+    assert_eq!(s.learning["newStartedToday"], 4);
+    assert_eq!(s.learning["activity"]["summary"]["distinctTargetCount"], 4);
+    apply(CommandAction::ActivityEnd {
+        activity_id: s.learning["activity"]["id"].as_str().unwrap().into(),
+    });
     let db = rusqlite::Connection::open(&path).unwrap();
     assert_eq!(
         db.query_row(
@@ -301,7 +319,9 @@ fn structured_initial_answers_commit_evidence_and_graduation_offline() {
         let s = open_library(&path).unwrap();
         execute_at(&path, cmd(&s, action), later).unwrap()
     };
-    apply_review(CommandAction::StartOrResume);
+    apply_review(CommandAction::ActivityStart {
+        mode: sensa_library::activity::Mode::ReviewOnly,
+    });
     let mut first = true;
     let mut review_steps = 0;
     loop {
@@ -425,6 +445,22 @@ fn structured_initial_answers_commit_evidence_and_graduation_offline() {
             |r| r.get::<_, u32>(0)
         )
         .unwrap(),
+        1
+    );
+    let s = open_library(&path).unwrap();
+    assert_eq!(s.learning["activity"]["summary"]["distinctTargetCount"], 4);
+    assert_eq!(
+        s.learning["activity"]["summary"]["reviewTargetIds"]
+            .as_array()
+            .unwrap()
+            .len(),
+        4
+    );
+    assert_eq!(
+        s.learning["activity"]["summary"]["restoredTargetIds"]
+            .as_array()
+            .unwrap()
+            .len(),
         1
     );
 }

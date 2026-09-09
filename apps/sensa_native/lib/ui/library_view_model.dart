@@ -34,6 +34,16 @@ class LibraryViewModel extends ChangeNotifier {
     try {
       snapshot = await repository.load();
       _pending = null;
+      final today = DateTime.now().toIso8601String().substring(0, 10);
+      final date = snapshot!.learning['date'] as String? ?? '';
+      if (date.compareTo(today) < 0) {
+        snapshot = await repository.execute({
+          'operationId': const Uuid().v4(),
+          'libraryId': snapshot!.id,
+          'expectedRevision': snapshot!.revision,
+          'action': {'kind': 'refresh_activity'},
+        });
+      }
     } catch (e) {
       error = message(e);
     } finally {
@@ -136,9 +146,86 @@ class LibraryViewModel extends ChangeNotifier {
     }
   }
 
+  String? _attemptedEntry;
+  Map<String, dynamic>? _pendingCheckin;
+  bool get checkInPending => _pendingCheckin != null;
+  Future<void> startActivity(String mode) =>
+      act({'kind': 'activity_start', 'mode': mode});
+  Future<void> nextActivity({bool early = false}) => act({
+    'kind': 'activity_next',
+    'activity_id': snapshot!.activity!['id'],
+    'early': early,
+  });
+  Future<void> stopActivity({bool end = false}) async {
+    await act({
+      'kind': end ? 'activity_end' : 'activity_pause',
+      'activity_id': snapshot!.activity!['id'],
+    });
+    if (!end && error == null) showHome();
+  }
+
+  Future<void> enteredActivity() async {
+    final a = snapshot?.activity;
+    if (a == null ||
+        a['status'] != 'active' ||
+        a['canAnswer'] != true ||
+        busy ||
+        error != null ||
+        home) {
+      return;
+    }
+    final key = '${snapshot!.learning['date']}:${a['entryOperationId']}';
+    if (_attemptedEntry == key) return;
+    _attemptedEntry = key;
+    await checkIn(formal: true);
+  }
+
+  /// Check-in failure is visible but never blocks the learning command queue.
+  Future<void> checkIn({bool formal = false}) async {
+    if (busy || snapshot == null || _pending != null) return;
+    final a = snapshot!.activity;
+    _pendingCheckin ??= {
+      'operationId': const Uuid().v4(),
+      'libraryId': snapshot!.id,
+      'expectedRevision': snapshot!.revision,
+      'action': {
+        'kind': 'check_in',
+        'activity_id': formal ? (a?['id']) : null,
+        'execution_id': formal ? (a?['executionId']) : null,
+        'entry_operation_id': formal ? (a?['entryOperationId']) : null,
+      },
+    };
+    busy = true;
+    _notify();
+    try {
+      await repository.execute(_pendingCheckin!);
+      _pendingCheckin = null;
+      snapshot = await repository.load();
+      notice = '今天的签到已保存在本机。';
+    } catch (e) {
+      if (e.toString().contains('revision_conflict')) {
+        try {
+          snapshot = await repository.load();
+          _pendingCheckin!['expectedRevision'] = snapshot!.revision;
+        } catch (_) {
+          // Keep the separate check-in retry; the learning queue remains usable.
+        }
+      }
+      notice = '签到尚未保存，可以稍后重试；学习可以继续。';
+    } finally {
+      busy = false;
+      _notify();
+    }
+  }
+
   Future<void> assuranceIntent(Map<String, dynamic> intent) async {
     final a = snapshot?.assurance;
     if (a == null) return;
+    if (intent['kind'] == 'pause' &&
+        snapshot?.activity?['status'] == 'active') {
+      await stopActivity();
+      return;
+    }
     await act({
       'kind': 'assurance_event',
       'session_id': a['id'],
@@ -158,13 +245,20 @@ class LibraryViewModel extends ChangeNotifier {
     });
   }
 
-  void showHome() {
+  Future<void> showHome() async {
     home = true;
     _notify();
+    if (!busy && _pending == null && snapshot != null) {
+      await act({'kind': 'refresh_activity'});
+      home = true;
+      _notify();
+    }
   }
 
   String message(Object error) {
     final text = error.toString();
+    if (text.contains('pending_result')) return '请先完成或暂停当前步骤，再继续安排。';
+    if (text.contains('activity_not_active')) return '这次学习已暂停或结束，请从首页继续。';
     if (text.contains('undo_across_settlement')) {
       return '这一步已经结算，不能撤销。已保存的复习安排会继续保留。';
     }
@@ -192,7 +286,9 @@ class LibraryViewModel extends ChangeNotifier {
     if (text.contains('daily_limit')) {
       return '今天的新学数量已达到设置，可继续已有学习。';
     }
-    if (text.contains('pack_too_large')) return '文件或学习包过大。文本包上限 2 MB，含媒体学习包上限 20 MB，请拆分后再导入。';
+    if (text.contains('pack_too_large')) {
+      return '文件或学习包过大。文本包上限 2 MB，含媒体学习包上限 20 MB，请拆分后再导入。';
+    }
     if (text.contains('unsupported_pack')) return '此包的版本、协议或语言暂不支持，原有资料不受影响。';
     if (text.contains('pack_version_conflict') ||
         text.contains('material_version_conflict') ||

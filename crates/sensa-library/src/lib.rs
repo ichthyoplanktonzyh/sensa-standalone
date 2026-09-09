@@ -1,5 +1,6 @@
 //! Single-device application transactions. All writes go through execute().
 //! The acceptance material is opt-in; this is not a production package importer.
+pub mod activity;
 mod assurance;
 mod assurance_retention;
 pub mod assurance_runtime;
@@ -47,6 +48,25 @@ pub enum CommandAction {
         ordinal: u32,
         intent: assurance_runtime::Intent,
     },
+    ActivityStart {
+        mode: activity::Mode,
+    },
+    ActivityNext {
+        activity_id: String,
+        early: bool,
+    },
+    ActivityPause {
+        activity_id: String,
+    },
+    ActivityEnd {
+        activity_id: String,
+    },
+    CheckIn {
+        activity_id: Option<String>,
+        execution_id: Option<String>,
+        entry_operation_id: Option<String>,
+    },
+    RefreshActivity,
     ConfirmQuantity {
         quantity: u32,
     },
@@ -132,6 +152,8 @@ pub struct Snapshot {
     pub structured_material: bool,
     #[serde(default)]
     pub assurance: Option<serde_json::Value>,
+    #[serde(default)]
+    pub learning: serde_json::Value,
 }
 
 fn initial_protocol() -> String {
@@ -168,7 +190,7 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if ![1, 2, 3, 4, 5, 6].contains(&version) || application != APPLICATION {
+    } else if ![1, 2, 3, 4, 5, 6, 7].contains(&version) || application != APPLICATION {
         return Err(Error::Rule("unsupported_library_version"));
     }
     if version <= 1 {
@@ -190,6 +212,9 @@ fn connection(path: &Path) -> Result<Connection> {
     }
     if version <= 5 {
         tx.execute_batch(include_str!("assurance.sql"))?;
+    }
+    if version <= 6 {
+        tx.execute_batch(include_str!("activity.sql"))?;
     }
     tx.commit()?;
     Ok(db)
@@ -271,6 +296,7 @@ fn read(db: &Connection) -> Result<Snapshot> {
         progress: None,
         structured_material: false,
         assurance: None,
+        learning: serde_json::Value::Null,
     };
     if let Some(material) = &snapshot.material {
         snapshot.structured_material = db.query_row(
@@ -290,6 +316,7 @@ fn read(db: &Connection) -> Result<Snapshot> {
         .filter(|r| sensa_core::protocol::consumer_purpose(&r.protocol_version).is_ok())
         .map(|r| progress::load(db, &r.id))
         .transpose()?;
+    snapshot.learning = activity::project(db)?;
     Ok(snapshot)
 }
 
@@ -358,7 +385,44 @@ pub fn execute_at_offset(
     if now.timestamp_millis() < last {
         return Err(Error::Rule("clock_moved_backwards"));
     }
+    tx.execute(
+        "UPDATE activity_clock SET offset_minutes=?1",
+        [offset_minutes],
+    )?;
+    let initial_baseline: i64 =
+        tx.query_row("SELECT coalesce(max(rowid),0) FROM completions", [], |r| {
+            r.get(0)
+        })?;
+    let retention_baseline: i64 = tx.query_row(
+        "SELECT coalesce(max(rowid),0) FROM retention_completions",
+        [],
+        |r| r.get(0),
+    )?;
     match &command.action {
+        CommandAction::ActivityStart { mode } => {
+            activity::start(&tx, *mode, &command, now, offset_minutes)?
+        }
+        CommandAction::ActivityNext { activity_id, early } => {
+            activity::next(&tx, activity_id, *early, &command, now, offset_minutes)?
+        }
+        CommandAction::ActivityPause { activity_id } => {
+            activity::stop(&tx, activity_id, false, now)?
+        }
+        CommandAction::ActivityEnd { activity_id } => activity::stop(&tx, activity_id, true, now)?,
+        CommandAction::CheckIn {
+            activity_id,
+            execution_id,
+            entry_operation_id,
+        } => activity::check_in(
+            &tx,
+            activity_id.as_deref(),
+            execution_id.as_deref(),
+            entry_operation_id.as_deref(),
+            &command,
+            now,
+            offset_minutes,
+        )?,
+        CommandAction::RefreshActivity => {}
         CommandAction::AssuranceEvent {
             session_id,
             ordinal,
@@ -423,6 +487,7 @@ pub fn execute_at_offset(
             policy::refresh(&tx)?;
         }
         CommandAction::SelectMaterial { material_id } => {
+            activity::leave(&tx)?;
             let exists: bool = tx.query_row(
                 "SELECT EXISTS(SELECT 1 FROM materials WHERE id=?1)",
                 [material_id],
@@ -479,79 +544,16 @@ pub fn execute_at_offset(
             policy::enroll(&tx, &target)?;
         }
         CommandAction::NextRetention => {
+            activity::leave(&tx)?;
             retention::next(&tx, now)?;
         }
         CommandAction::StartRetention { early } => {
+            activity::leave(&tx)?;
             retention::start(&tx, &state, now, *early)?;
         }
         CommandAction::StartOrResume => {
-            if assurance_runtime::is_selected(&tx)? {
-                assurance_runtime::start(&tx, now, offset_minutes)?;
-            } else {
-                if let Some(material) = &state.material {
-                    let digest: String = tx.query_row(
-                        "SELECT digest FROM materials WHERE id=?1",
-                        [&material.id],
-                        |r| r.get(0),
-                    )?;
-                    if format!(
-                        "{:x}",
-                        Sha256::digest(serde_json::to_string(material)?.as_bytes())
-                    ) != digest
-                    {
-                        return Err(Error::Rule("material_mismatch"));
-                    }
-                }
-                if !state.enrolled {
-                    return Err(Error::Rule("no_targets"));
-                }
-                if state.daily_new_limit.is_none() {
-                    return Err(Error::Rule("quantity_required"));
-                }
-                if let Some(run) = &state.run {
-                    if run.phase == Phase::Completed || run.protocol_version != PROTOCOL {
-                        retention::start(&tx, &state, now, false)?;
-                    } else {
-                        tx.execute("UPDATE runs SET paused=0 WHERE id=?1", [&run.id])?;
-                    }
-                } else {
-                    let offset = chrono::Duration::minutes(i64::from(offset_minutes));
-                    let local = now
-                        .checked_add_signed(offset)
-                        .ok_or(Error::Rule("clock_out_of_range"))?;
-                    let start = local
-                        .date_naive()
-                        .and_hms_opt(0, 0, 0)
-                        .ok_or(Error::Rule("clock_out_of_range"))?
-                        .and_utc()
-                        .checked_sub_signed(offset)
-                        .ok_or(Error::Rule("clock_out_of_range"))?
-                        .timestamp_millis();
-                    let count: u32 = tx.query_row(
-                        "SELECT count(*) FROM runs WHERE started_at_ms>=?1",
-                        [start],
-                        |r| r.get(0),
-                    )?;
-                    if count >= state.daily_new_limit.unwrap_or(0) {
-                        return Err(Error::Rule("daily_limit"));
-                    }
-                    let (target,material,digest): (String,String,String) = tx.query_row("SELECT t.id,m.id,m.digest FROM targets t JOIN materials m ON m.id=t.material_id WHERE m.id=(SELECT selected_material_id FROM library)", [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
-                    let run_id = id();
-                    policy::commit_initial(&tx, &target, &run_id, now.timestamp_millis())?;
-                    tx.execute(
-                        "INSERT INTO runs VALUES(?1,?2,?3,?4,?5,'recall',1,0,0,?6)",
-                        params![
-                            run_id,
-                            target,
-                            material,
-                            digest,
-                            PROTOCOL,
-                            now.timestamp_millis()
-                        ],
-                    )?;
-                    consumer_progress::start(&tx, &run_id, false)?;
-                }
-            }
+            activity::leave(&tx)?;
+            start_selected(&tx, &state, now, offset_minutes)?;
         }
         CommandAction::Pause => {
             let run = state.run.as_ref().ok_or(Error::Rule("no_active_run"))?;
@@ -569,6 +571,7 @@ pub fn execute_at_offset(
             ordinal,
             action,
         } => {
+            activity::guard_execution(&tx, run_id)?;
             let run = state.run.as_ref().ok_or(Error::Rule("no_active_run"))?;
             if run.id != *run_id || run.ordinal != *ordinal || run.paused {
                 return Err(Error::Rule("stale_step"));
@@ -594,6 +597,9 @@ pub fn execute_at_offset(
                     return Err(Error::Rule("unsupported_protocol"));
                 }
                 policy::validate_run(&tx, run_id, &protocol, false)?;
+                if *action == Action::Reveal {
+                    activity::introduce(&tx, &target, run_id, now)?;
+                }
                 let next = transition(&protocol, run.phase, *action).map_err(Error::Rule)?;
                 let phase = serde_json::to_value(next)?
                     .as_str()
@@ -658,6 +664,11 @@ pub fn execute_at_offset(
             }
         }
     }
+    activity::capture_results(&tx, initial_baseline, retention_baseline)?;
+    tx.execute(
+        "UPDATE activity_clock SET offset_minutes=?1",
+        [offset_minutes],
+    )?;
     tx.execute(
         "UPDATE library SET revision=revision+1,last_time_ms=?1",
         [now.timestamp_millis()],
@@ -735,4 +746,65 @@ pub fn read_assurance_media(path: &Path, session_id: &str, reference: &str) -> R
     }
     tx.commit()?;
     Ok(bytes)
+}
+
+fn start_selected(
+    tx: &rusqlite::Transaction<'_>,
+    state: &Snapshot,
+    now: DateTime<Utc>,
+    offset_minutes: i32,
+) -> Result<()> {
+    if assurance_runtime::is_selected(tx)? {
+        assurance_runtime::start(tx, now, offset_minutes)?;
+    } else {
+        if let Some(material) = &state.material {
+            let digest: String = tx.query_row(
+                "SELECT digest FROM materials WHERE id=?1",
+                [&material.id],
+                |r| r.get(0),
+            )?;
+            if format!(
+                "{:x}",
+                Sha256::digest(serde_json::to_string(material)?.as_bytes())
+            ) != digest
+            {
+                return Err(Error::Rule("material_mismatch"));
+            }
+        }
+        if !state.enrolled {
+            return Err(Error::Rule("no_targets"));
+        }
+        if state.daily_new_limit.is_none() {
+            return Err(Error::Rule("quantity_required"));
+        }
+        if let Some(run) = &state.run {
+            if run.phase == Phase::Completed || run.protocol_version != PROTOCOL {
+                retention::start(tx, state, now, false)?;
+            } else {
+                tx.execute("UPDATE runs SET paused=0 WHERE id=?1", [&run.id])?;
+            }
+        } else {
+            let count = activity::quota(tx, now, offset_minutes, true)?;
+            if count >= state.daily_new_limit.unwrap_or(0) {
+                return Err(Error::Rule("daily_limit"));
+            }
+            let (target,material,digest): (String,String,String) = tx.query_row("SELECT t.id,m.id,m.digest FROM targets t JOIN materials m ON m.id=t.material_id WHERE m.id=(SELECT selected_material_id FROM library)", [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
+            let run_id = id();
+            policy::commit_initial(tx, &target, &run_id, now.timestamp_millis())?;
+            tx.execute(
+                "INSERT INTO runs VALUES(?1,?2,?3,?4,?5,'recall',1,0,0,?6)",
+                params![
+                    run_id,
+                    target,
+                    material,
+                    digest,
+                    PROTOCOL,
+                    now.timestamp_millis()
+                ],
+            )?;
+            consumer_progress::start(tx, &run_id, false)?;
+        }
+    }
+
+    Ok(())
 }

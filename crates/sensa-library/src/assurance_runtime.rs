@@ -122,9 +122,12 @@ pub(super) fn is_selected(db: &Connection) -> Result<bool> {
 }
 pub(super) fn start(db: &Transaction<'_>, now: DateTime<Utc>, offset_minutes: i32) -> Result<()> {
     let target = selected(db)?;
+    if !activity::allows(db, &target, true)? {
+        return Err(Error::Rule("activity_scope_mismatch"));
+    }
     let active: Option<String> = db
         .query_row(
-            "SELECT id FROM assurance_sessions WHERE completed=0",
+            "SELECT id FROM assurance_sessions WHERE completed=0 AND purpose='initial_learning'",
             [],
             |r| r.get(0),
         )
@@ -159,47 +162,7 @@ pub(super) fn start(db: &Transaction<'_>, now: DateTime<Utc>, offset_minutes: i3
         }
         return assurance_retention::start(db, now);
     }
-    let limit: u32 = db.query_row("SELECT daily_new_limit FROM library", [], |r| r.get(0))?;
-    let offset = chrono::Duration::minutes(i64::from(offset_minutes));
-    let local = now
-        .checked_add_signed(offset)
-        .ok_or(Error::Rule("clock_out_of_range"))?;
-    let day = local
-        .date_naive()
-        .and_hms_opt(0, 0, 0)
-        .ok_or(Error::Rule("clock_out_of_range"))?
-        .and_utc()
-        .checked_sub_signed(offset)
-        .ok_or(Error::Rule("clock_out_of_range"))?
-        .timestamp_millis();
-    let count: u32 = db.query_row(
-        "SELECT count(*) FROM runs WHERE started_at_ms>=?1",
-        [day],
-        |r| r.get(0),
-    )?;
-    if count >= limit {
-        return Err(Error::Rule("daily_limit"));
-    }
-    let mut targets = vec![target.clone()];
-    let mut stmt=db.prepare("SELECT id FROM targets WHERE id<>?1 AND NOT EXISTS(SELECT 1 FROM runs WHERE runs.target_id=targets.id) ORDER BY id")?;
-    for row in stmt.query_map([&target], |r| r.get::<_, String>(0))? {
-        let id = row?;
-        if targets.len() >= (limit - count) as usize {
-            break;
-        }
-        let p = policy::refresh_target(db, &id)?;
-        if p.plan
-            .purposes
-            .initial_learning
-            .binding
-            .binding
-            .runtime_adapter_id
-            == "structured"
-            && p.plan.purposes.initial_learning.provisioned
-        {
-            targets.push(id);
-        }
-    }
+    let mut targets = activity::initial_cohort(db, &target, now, offset_minutes)?;
     let sid = id();
     let mut packages = vec![];
     let mut links = vec![];
@@ -361,6 +324,7 @@ pub(super) fn record(
     command: &Command,
     now: DateTime<Utc>,
 ) -> Result<()> {
+    activity::guard_execution(db, sid)?;
     let purpose: String = db.query_row(
         "SELECT purpose FROM assurance_sessions WHERE id=?1",
         [sid],
@@ -393,7 +357,7 @@ pub(super) fn record(
                 return Err(Error::Rule("no_declared_mastery"));
             }
             let other: bool = db.query_row(
-                "SELECT EXISTS(SELECT 1 FROM assurance_sessions WHERE completed=0 AND id<>?1)",
+                "SELECT EXISTS(SELECT 1 FROM assurance_sessions WHERE completed=0 AND purpose='initial_learning' AND id<>?1)",
                 [sid],
                 |r| r.get(0),
             )?;
@@ -489,6 +453,11 @@ pub(super) fn record(
                     return Err(Error::Rule("reveal_required"));
                 }
                 if action["intent"] == "instruction" {
+                    let target = action["retentionTargetId"]
+                        .as_str()
+                        .ok_or(Error::Rule("no_active_run"))?;
+                    let run: String=db.query_row("SELECT run_id FROM assurance_session_targets WHERE session_id=?1 AND target_id=?2",params![sid,target],|r|r.get(0))?;
+                    activity::introduce(db, target, &run, now)?;
                     acquisition::Event::Introduction
                 } else {
                     acquisition::Event::Settle { correct: true }

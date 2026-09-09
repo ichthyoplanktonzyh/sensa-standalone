@@ -5,6 +5,8 @@
 2026-09-08 Owner 范围调整：四阶段只作扩展性测试，正式材料/UI 暂停；高保证是当前优先迁移对象。
 高保证 fresh/repair 选择器与首学队列纯生命周期已迁移，见 [选择器记录](native-assurance-orchestration-handoff.md)及[生命周期记录](native-assurance-lifecycle-handoff.md)。复习/重学纯队列与 effect 对照已完成，见 [复习队列记录](native-assurance-review-handoff.md)。2026-09-09 材料、评价、原生事务和 Flutter 界面已贯通，Profile 执行接线已验收，见 [完整纵切记录](native-assurance-integration-handoff.md)；完整产品迁移与 M3 仍保留。
 
+2026-09-09 学习组织增量：Activity/Mixed、Review-only、每日 Introduction 计数、独立签到和近期学习记录/去重汇总已接入本地学习主链，见 [活动纵切记录](native-activity-integration-handoff.md)。完整 Curriculum/范围选择、正式产品 IA、Policy Migration 与其余迁移仍保留；不据此关闭 LF-1b 或 M3。
+
 > 状态：Active roadmap\
 > 更新日期：2026-09-07\
 > 近期目标：Flutter/Rust 原生单设备本地学习库；Web 保留成果、暂停新建设\

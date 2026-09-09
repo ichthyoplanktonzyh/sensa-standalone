@@ -26,7 +26,7 @@ pub(super) fn start(db: &Transaction<'_>, now: DateTime<Utc>) -> Result<()> {
     )?;
     let active: Option<String> = db
         .query_row(
-            "SELECT id FROM assurance_sessions WHERE completed=0",
+            "SELECT id FROM assurance_sessions WHERE completed=0 AND purpose='retention_review'",
             [],
             |r| r.get(0),
         )
@@ -56,6 +56,9 @@ pub(super) fn start(db: &Transaction<'_>, now: DateTime<Utc>) -> Result<()> {
     let mut candidates = vec![];
     let mut links = vec![];
     for (target, mid, revision, due, _, plan_id) in rows {
+        if !activity::allows(db, &target, false)? {
+            continue;
+        }
         let plan: String = db.query_row(
             "SELECT content FROM target_plans WHERE id=?1",
             [&plan_id],

@@ -9,6 +9,7 @@ import 'package:sensa_native/src/rust/frb_generated.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   const run = String.fromEnvironment('SENSA_NATIVE_RUN');
+  const activity = bool.fromEnvironment('SENSA_NATIVE_ACTIVITY');
   const reviewing = bool.fromEnvironment('SENSA_NATIVE_REVIEW');
   const recovery = bool.fromEnvironment('SENSA_NATIVE_RECOVERY');
   const artifactPath = String.fromEnvironment('SENSA_TEST_ARTIFACT_PATH');
@@ -51,7 +52,13 @@ void main() {
       if (recovery) {
         expect(model.snapshot!.value, jsonDecode(await receipt.readAsString()));
         expect(
-          find.text(reviewing ? '本次复习与修复已完成' : '本次高保证首学已完成'),
+          find.text(
+            activity
+                ? '本段学习已保存'
+                : reviewing
+                ? '本次复习与修复已完成'
+                : '本次高保证首学已完成',
+          ),
           findsOneWidget,
         );
         expect(model.snapshot!.value['completionCount'], 1);
@@ -74,13 +81,22 @@ void main() {
           await model.act({'kind': 'add_to_learning'});
         }
         await model.act(
-          reviewing
+          activity
+              ? {
+                  'kind': 'activity_start',
+                  'mode': reviewing ? 'review_only' : 'mixed',
+                }
+              : reviewing
               ? {'kind': 'start_retention', 'early': false}
               : {'kind': 'start_or_resume'},
         );
         await ready();
         await tap(find.text('暂停'));
-        await tap(find.byKey(const ValueKey('assurance-resume')));
+        if (activity) {
+          await tap(find.text(reviewing ? '只复习' : '开始今天的学习'));
+        } else {
+          await tap(find.byKey(const ValueKey('assurance-resume')));
+        }
         final release =
             (jsonDecode(artifact) as Map<String, dynamic>)['release'];
         var steps = 0;
@@ -175,9 +191,22 @@ void main() {
           expect(model.snapshot!.retention['relearningCount'], 1);
         }
         expect(
-          find.text(reviewing ? '本次复习与修复已完成' : '本次高保证首学已完成'),
+          find.text(
+            activity
+                ? '本段学习已保存'
+                : reviewing
+                ? '本次复习与修复已完成'
+                : '本次高保证首学已完成',
+          ),
           findsOneWidget,
         );
+        if (activity) {
+          expect(
+            model.snapshot!.activity!['summary']['distinctTargetCount'],
+            1,
+          );
+          expect(model.snapshot!.learning['checkins'].length, 1);
+        }
         await receipt.writeAsString(
           jsonEncode(model.snapshot!.value),
           flush: true,
