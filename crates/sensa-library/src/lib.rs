@@ -11,6 +11,7 @@ pub mod personal;
 pub mod policy;
 pub mod progress;
 pub mod retention;
+pub mod semantic;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use sensa_core::settlement::{Settlement, SettlementContext, decide_consumer_settlement};
@@ -44,6 +45,9 @@ pub struct Command {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CommandAction {
+    Semantic {
+        action: Box<semantic::Action>,
+    },
     Personal {
         action: Box<personal::Action>,
     },
@@ -196,7 +200,7 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if ![1, 2, 3, 4, 5, 6, 7, 8].contains(&version) || application != APPLICATION {
+    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9].contains(&version) || application != APPLICATION {
         return Err(Error::Rule("unsupported_library_version"));
     }
     if version <= 1 {
@@ -224,6 +228,9 @@ fn connection(path: &Path) -> Result<Connection> {
     }
     if version <= 7 {
         tx.execute_batch(include_str!("personal.sql"))?;
+    }
+    if version <= 8 {
+        tx.execute_batch(include_str!("semantic.sql"))?;
     }
     tx.commit()?;
     Ok(db)
@@ -410,6 +417,7 @@ pub fn execute_at_offset(
         |r| r.get(0),
     )?;
     match &command.action {
+        CommandAction::Semantic { action } => semantic::apply(&tx, action, &command, now)?,
         CommandAction::Personal { action } => personal::apply(&tx, action, &command, now)?,
         CommandAction::ActivityStart { mode } => {
             activity::start(&tx, *mode, &command, now, offset_minutes)?

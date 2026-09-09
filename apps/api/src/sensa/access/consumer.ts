@@ -1,3 +1,4 @@
+import {createNativeSemanticRoutes} from '../personal/nativeSemantic.js';
 import {stream} from 'hono/streaming';
 import {setAnchorUse} from '../personal/anchorUse.js';
 import {setContentMembership} from '../personal/membership.js';
@@ -192,6 +193,24 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
     return c.json({code:'temporarily_unavailable'},503);
   });
   registerReadingRoutes(app,async(request,work)=>{const identity=await verify(request);return transaction(async db=>work(db,await account(db,identity,undefined,false,clock())));},options.readingCompletion);
+  app.route('/sensa/native/semantic',createNativeSemanticRoutes(async request=>{
+    const identity=await verify(request);
+    const connection=await transaction(async db=>{
+      const a=await account(db,identity,undefined,false,clock());
+      return options.semanticResolver?null:configuredMeaningConnection(db,a);
+    });
+    return options.semanticResolver??(connection?semanticResolverFor(connection,options.readingCompletion):resolveSemantic);
+  },async(request,input)=>{
+    const identity=await verify(request);
+    await transaction(async db=>{
+      const a=await account(db,identity,undefined,false,clock()); // Account row lock serializes quota reservation.
+      const old=(await db.query('SELECT input_digest FROM sensa_consumer.native_semantic_usage WHERE account_id=$1 AND request_id=$2',[a.account_id,input.id])).rows[0];
+      if(old)throw new ConsumerError(409,old.input_digest===input.inputDigest?'native_request_consumed':'native_request_id_reuse');
+      const count=(await db.query('SELECT count(*)::int AS n FROM sensa_consumer.native_semantic_usage WHERE account_id=$1 AND created_at>$2',[a.account_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
+      if(count>=30)throw new ConsumerError(409,'native_semantic_daily_budget');
+      await db.query('INSERT INTO sensa_consumer.native_semantic_usage VALUES($1,$2,$3,$4)',[a.account_id,input.id,input.inputDigest,a.now]);
+    });
+  }));
   app.post('/sensa/extension/authorize',async c=>{const identity=await verify(c.req.raw);if(identity.installationId)throw new ConsumerError(403,'web_authorization_required');const input=extensionAuthorizationSchema.parse(await c.req.json());return c.json(await transaction(async db=>authorizeExtension(db,await account(db,identity,undefined,false,clock()),input)));});
   app.post('/sensa/extension/exchange',async c=>{const input=extensionExchangeSchema.parse(await c.req.json());return c.json(await transaction(db=>exchangeExtension(db,input,clock())));});
   app.post('/sensa/account/session',async c=> {

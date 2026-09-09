@@ -1,3 +1,4 @@
+import 'semantic_resolution_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'library_view_model.dart';
@@ -32,6 +33,19 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen> {
     }
   }
 
+  Future<void> openLookup(Map<String, dynamic> lookup) async {
+    final accepted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => SemanticResolutionScreen(
+          model: model,
+          capture: lookup['request']['snapshot'] as Map<String, dynamic>,
+          intakeId: lookup['intakeId'] as String?,
+        ),
+      ),
+    );
+    if (mounted && accepted == true) setState(() => section = 0);
+  }
+
   Future<void> membership(
     Map<String, dynamic> item,
     String entity,
@@ -54,6 +68,17 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen> {
           .cast<Map<String, dynamic>>();
       final items =
           [
+                if (section == 1)
+                  for (final lookup in model.lookups.where(
+                    (v) =>
+                        v['status'] != 'accepted' &&
+                        v['status'] != 'superseded',
+                  ))
+                    {
+                      ...lookup,
+                      'snapshot': lookup['request']['snapshot'],
+                      'entity': 'lookup',
+                    },
                 for (final m in meanings)
                   if (section == 0 && m['status'] == 'confirmed' ||
                       section == 2 && m['status'] == 'removed')
@@ -125,6 +150,16 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen> {
                             itemCount: items.length,
                             itemBuilder: (context, index) {
                               final item = items[index];
+                              if (item['entity'] == 'lookup') {
+                                return ListTile(
+                                  title: Text(
+                                    '待确认：${item['request']['snapshot']['expression']['text']}',
+                                  ),
+                                  subtitle: const Text('查看解释、补充关注点或恢复请求'),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: () => openLookup(item),
+                                );
+                              }
                               final meaning = item['entity'] == 'meaning';
                               final removed = item['status'] == 'removed';
                               return Card(
@@ -206,6 +241,8 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen> {
                                               FilledButton(
                                                 onPressed:
                                                     model.busy ||
+                                                        item['materialId'] ==
+                                                            null ||
                                                         item['addedToLearning'] ==
                                                             true
                                                     ? null
@@ -223,6 +260,9 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen> {
                                                   item['addedToLearning'] ==
                                                           true
                                                       ? '已加入学习'
+                                                      : item['materialId'] ==
+                                                            null
+                                                      ? '学习材料尚未准备'
                                                       : '加入学习',
                                                 ),
                                               ),
@@ -398,6 +438,19 @@ class _CaptureEditorState extends State<_CaptureEditor> {
     };
   }
 
+  Future<void> explain() async {
+    final accepted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => SemanticResolutionScreen(
+          model: model,
+          capture: snapshot,
+          intakeId: widget.intake?['id'] as String?,
+        ),
+      ),
+    );
+    if (mounted && accepted == true) Navigator.pop(context, true);
+  }
+
   Future<void> save(bool accept) async {
     await model.personalAction(
       accept
@@ -508,12 +561,16 @@ class _CaptureEditorState extends State<_CaptureEditor> {
                       child: const Text('先保存到收件箱'),
                     ),
                   if (selected) ...[
+                    OutlinedButton(
+                      onPressed: available ? explain : null,
+                      child: const Text('在线解释这个表达'),
+                    ),
                     Text(
                       '选择这段上下文中的词义',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     if (candidates.isEmpty)
-                      const Text('本机暂时没有匹配的词义。材料可保留在收件箱，后续再澄清。'),
+                      const Text('本机暂时没有匹配的词义。可以在线解释，也可以先保留在收件箱。'),
                     RadioGroup<String>(
                       groupValue: materialId,
                       onChanged: (v) {

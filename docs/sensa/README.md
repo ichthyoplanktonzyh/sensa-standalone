@@ -74,6 +74,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M2 private context | [`m2-anchor-use-handoff.md`](m2-anchor-use-handoff.md) | 原文显式授权、撤销/迟到结果隔离、历史保留与后续复习材料替换的本地证据 |
 | M2-D local recovery | [`m2-d-extension-recovery-handoff.md`](m2-d-extension-recovery-handoff.md) | 插件原账号队列、版本保护及实际原生 activeTab 权限恢复的本地证据 |
 | Local settlement extraction | [`local-settlement-handoff.md`](local-settlement-handoff.md) | LF-1a 共用结算与 Node/断网 Chrome/隔离 Postgres 回归；本地库持久化仍待实施 |
+| Native semantic resolution | [`native-semantic-resolution-plan.md`](native-semantic-resolution-plan.md) / [`native-semantic-resolution-handoff.md`](native-semantic-resolution-handoff.md) | 在线解析/澄清、本地候选与新 Sense 接受、服务用量去重及原生恢复证据 |
 | Native migration checklist | [`native-migration-checklist.md`](native-migration-checklist.md) | 已有 TS 成果的保留/迁移范围、验收状态；首版登记，待逐项盘点 |
 | Native pack import | [`native-pack-import-contract.md`](native-pack-import-contract.md) / [`native-pack-import-handoff.md`](native-pack-import-handoff.md) | 有界文本包、显式入学、多目标首学、版本保护与原生验收；完整发布包/媒体仍待迁移 |
 | Native progression | [`native-progression-handoff.md`](native-progression-handoff.md) | 通用 Checkpoint 进度、正交策略 Registry、组合引用校验与原生入口；通用持久化/多阶段 UI 仍待接入 |

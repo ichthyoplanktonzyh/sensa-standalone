@@ -1,3 +1,4 @@
+import '../data/semantic_service.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -8,6 +9,66 @@ class LibraryViewModel extends ChangeNotifier {
   LibraryViewModel(this.repository, {PackFileReader? packReader})
     : packReader = packReader ?? const PackFileReader();
   final PackFileReader packReader;
+  final semanticService = SemanticService();
+  bool semanticBusy = false;
+  List<Map<String, dynamic>> get lookups =>
+      (snapshot?.personal['lookups'] as List? ?? [])
+          .cast<Map<String, dynamic>>();
+
+  Future<void> semanticAction(Map<String, dynamic> action) async {
+    final wasHome = home;
+    await act({'kind': 'semantic', 'action': action});
+    home = wasHome;
+    _notify();
+  }
+
+  Future<String?> resolveSemantic(
+    Map<String, dynamic> capture, {
+    String? intakeId,
+    String? previousId,
+    String? clarification,
+  }) async {
+    if (semanticBusy ||
+        busy ||
+        _pending != null ||
+        !semanticService.configured) {
+      return null;
+    }
+    semanticBusy = true;
+    _notify();
+    final id = const Uuid().v4();
+    try {
+      await semanticAction({
+        'kind': 'begin',
+        'id': id,
+        'snapshot': capture,
+        'intake_id': intakeId,
+        'previous_id': previousId,
+        'clarification': clarification,
+      });
+      if (error != null) return null;
+      final job = lookups.firstWhere((v) => v['id'] == id);
+      Map<String, dynamic> result;
+      busy = true;
+      _notify();
+      try {
+        result = await semanticService.resolve(
+          job['request'] as Map<String, dynamic>,
+        );
+      } on SemanticServiceException catch (e) {
+        busy = false;
+        await semanticAction({'kind': 'fail', 'id': id, 'reason': e.code});
+        return id;
+      }
+      busy = false;
+      await semanticAction({'kind': 'finish', 'result': result});
+      return id;
+    } finally {
+      semanticBusy = false;
+      _notify();
+    }
+  }
+
   String? notice;
   final LibraryRepository repository;
   LibrarySnapshot? snapshot;
@@ -22,6 +83,7 @@ class LibraryViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    semanticService.clear();
     _disposed = true;
     super.dispose();
   }
@@ -267,6 +329,18 @@ class LibraryViewModel extends ChangeNotifier {
     if (text.contains('quantity_required')) {
       return '加入学习前，请先回首页确认每日新学数量。保存的材料不会丢失。';
     }
+    if (text.contains('lookup_expired')) return '候选已过期，请重新读取后再请求解释。';
+    if (text.contains('lookup_superseded')) return '这次解释已被替代，请查看最新候选。';
+    if (text.contains('lookup_already_exists')) return '已有待处理解释，请从收件箱继续。';
+    if (text.contains('invalid_proposal') ||
+        text.contains('invalid_provenance') ||
+        text.contains('lookup_input_mismatch')) {
+      return '解释结果未通过本地校验，没有建立词义。请重新读取后再请求。';
+    }
+    if (text.contains('lookup_not_ready')) return '解释尚未完成，不能确认词义。';
+    if (text.contains('meaning_already_confirmed')) {
+      return '这个上下文与表达已经确认，请查看已保存内容。';
+    }
     if (text.contains('invalid_occurrence')) return '所选表达需要准确位于原文中，请重新选择。';
     if (text.contains('invalid_capture')) return '请输入有效的英文上下文，并检查材料长度。';
     if (text.contains('invalid_source') ||
@@ -284,7 +358,7 @@ class LibraryViewModel extends ChangeNotifier {
       return '这份材料的状态已更新，请重新读取后继续。';
     }
     if (text.contains('personal_snapshot_limit')) {
-      return '本机当前支持最多 500 份收件材料和 500 条已确认词义。';
+      return '本机当前支持最多 500 份收件材料、500 条词义和 500 次解析记录。';
     }
     if (text.contains('pending_result')) return '请先完成或暂停当前步骤，再继续安排。';
     if (text.contains('activity_not_active')) return '这次学习已暂停或结束，请从首页继续。';

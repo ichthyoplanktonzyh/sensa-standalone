@@ -15,10 +15,10 @@ Owner 最新确认：Flutter/Rust 原生 PC/移动应用是确定的主产品；
 | 正式学习包导入与入学 | packages/content-validator、packages/contracts、apps/api、apps/web | 本地校验、版本固定、SQLite 原子入学及 Flutter 资源入口 | 有界轻量文本包的本地导入、版本保护、显式入学与多目标首学已实现；高保证 runtime release/角色资源/静态媒体已接入并验收，见 native-assurance-integration-handoff.md；上游发布治理与在线生成仍待迁移 |
 | 到期复习与重学 | packages/learning-kernel/src/runtime/consumerInitial.ts、consumerSettlement.ts、scheduling.ts；apps/api；apps/web | Rust 协议/调度与 Flutter 学习界面 | 三 purpose 纯决策/FSRS、轻量 SQLite Review/Need/Outcome 事务及 Flutter 等待/恢复已接入；平台证据见 native-retention-handoff.md；正式 Activity/Mixed、独立签到与去重汇总已接入，见 native-activity-integration-handoff.md |
 | 多目标、每日计划、签到、记录及其他已有策略 | apps/api、apps/web、相关合同 | Rust 本地应用规则、读模型与 Flutter 页面 | Activity/Mixed、Review-only、每日 Introduction 与独立签到/近期记录已迁移；完整 Curriculum lifecycle/Book Range、来源选择及长历史检索仍待逐项验收；见 native-activity-integration-handoff.md |
-| 个人语义世界与快慢轨 | apps/api、apps/web、packages/contracts | 本地 Context/Sense/Expression、可选 Focus、接受与恢复流程 | 本机文本收件箱、已有 Sense 直接接受（Focus 可选）、移除恢复与显式入学已接入，见 native-personal-world-handoff.md；在线澄清/新 Sense 构造、多模态/草稿、图谱等仍待迁移 |
+| 个人语义世界与快慢轨 | apps/api、apps/web、packages/contracts | 本地 Context/Sense/Expression、可选 Focus、接受与恢复流程 | 本机文本收件箱、已有 Sense 直接接受（Focus 可选）、移除恢复与显式入学已接入，见 native-personal-world-handoff.md；在线澄清/新 Sense 构造与本地接受已接入，见 native-semantic-resolution-handoff.md；多模态/草稿、图谱等仍待迁移 |
 | 网页 / YouTube 采集交接 | apps/browser-extension、apps/api | 现有 TS 插件交接至本地库 | 插件继续使用 TS；本地交接、幂等和隔离待验收 |
 | Agent 入口 | 已确认完整蓝图及相关合同 | 与其他采集端一致的本地接受入口 | 待盘点当前实现，不宣称已有完整 Agent 成果 |
-| LLM / 资源任务 / 音频协作 | apps/api、packages/content-validator、apps/web | Hono 保留在线执行；Rust/Flutter 固定结果、存储与恢复 | 待划分在线服务与本地任务状态，按用例迁移 |
+| LLM / 资源任务 / 音频协作 | apps/api、packages/content-validator、apps/web | Hono 保留在线执行；Rust/Flutter 固定结果、存储与恢复 | 在线语义请求、候选/接受本地状态与 Hono 解析已贯通；流式解释预览、资源生成/校验/材料化与音频协作仍待迁移 |
 | 完整原生界面 | apps/web 已确认体验 | apps/sensa_native | 首学/复习/再学习验收壳已接入；导航、语义世界等尚未整体迁移 |
 | React Web 保留 | apps/web、packages/learning-kernel | 当前成果、行为与回归依据保留 | 暂停新建设；是否开放后定，WASM 不在当前施工范围 |
 | 备份恢复与可选 E2EE 同步 | ADR 0001 / 本地迁移蓝图 | 本地完整导出恢复、密文同步与本地合并 | 新架构工作，不能算作已有 TS 同步代码直接迁移 |
@@ -51,7 +51,7 @@ Owner 最新确认：Flutter/Rust 原生 PC/移动应用是确定的主产品；
 
 1. **其余学习 Runtime**：高保证执行与 Action/材料绑定已贯通；其余 scope 准入及确认纳入产品的已有策略行为仍需逐项验收；Policy Migration 为未来蓝图扩展，区别于既有 TS 迁移；四阶段按 Owner 指示仅保留扩展性验证。
 2. **正式学习组织**：Activity/Mixed、Review-only、每日 Introduction、签到、近期记录与去重汇总已贯通，见 [交付记录](native-activity-integration-handoff.md)。完整 Curriculum/Book Range 与来源选择仍随对应产品入口迁移。
-3. **个人语义世界**：本机文本收件箱、已有 Sense 的 Context/Expression 直接接受、移除恢复、显式加入学习已贯通，见 [本轮记录](native-personal-world-handoff.md)。在线澄清/Proposal/新 Sense 构造、多模态与草稿恢复、图谱/表达分支、Anchor Use 任务协作仍需迁移。
+3. **个人语义世界**：本机文本收件箱、已有 Sense 的 Context/Expression 直接接受、移除恢复、显式加入学习已贯通，见 [本轮记录](native-personal-world-handoff.md)。在线澄清/Proposal/新 Sense 本地构造与接受已贯通，见 [语义协作记录](native-semantic-resolution-handoff.md)。多模态与草稿恢复、图谱/表达分支、Anchor Use 任务协作仍需迁移。
 4. **完整资源与在线任务协作**：高保证发布物/静态媒体/固定材料化已接入；上游内容治理、LLM 任务状态/结果回收、音频及失败恢复。
 5. **采集入口交接**：TS 浏览器/YouTube、Agent 及后续端口通过统一接受规则进入本地库，验证幂等和隔离。
 6. **正式原生产品界面**：承接 apps/web 的完整功能、状态与恢复体验，分别通过桌面/移动验收；目前仍是技术验收壳。
@@ -73,4 +73,4 @@ Owner 已确认：先推进高保证完整路径，随后专门验收 Profile �
 
 2026-09-09：上述 Profile 执行接线门已通过本轮验证，具体策略行为、事务与平台证据见 [完整纵切记录](native-assurance-integration-handoff.md)。此完成状态仅覆盖已注册的轻量/高保证执行组合，不消除新组合、Policy Migration 或完整产品迁移的验收义务。
 
-2026-09-09 源码盘点修正：Policy Migration 在领域模型中明确为未来能力，当前 Web/TS 没有对应执行实现；仍保留在完整产品蓝图，不计作已有 TS 成果的迁移欠账。下一条已有功能纵切为在线语义解析/澄清与本地接受协作。
+2026-09-09 源码盘点修正：Policy Migration 在领域模型中明确为未来能力，当前 Web/TS 没有对应执行实现；仍保留在完整产品蓝图，不计作已有 TS 成果的迁移欠账。在线语义解析/澄清与本地接受协作已完成本轮用例。下一条已有功能纵切为个人意义显式入学、按需资源任务及校验/冻结材料化。

@@ -175,7 +175,7 @@ impl Capture {
             .or_else(|| self.source.url.clone())
     }
 }
-fn digest(c: &Capture) -> Result<String> {
+pub(super) fn digest(c: &Capture) -> Result<String> {
     Ok(format!(
         "{:x}",
         Sha256::digest(serde_json::to_vec(&c.identity())?)
@@ -397,5 +397,5 @@ pub(super) fn project(db: &Connection) -> Result<Value> {
     if intakes.len() > 500 || meanings.len() > 500 {
         return Err(Error::Rule("personal_snapshot_limit"));
     }
-    Ok(json!({"intakes":intakes,"meanings":meanings}))
+    Ok(json!({"intakes":intakes,"meanings":meanings,"lookups":semantic::project(db)?}))
 }
