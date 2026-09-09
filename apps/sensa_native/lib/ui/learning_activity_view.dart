@@ -1,3 +1,4 @@
+import 'history_screen.dart';
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
 
@@ -42,6 +43,12 @@ class LearningActivityView extends StatelessWidget {
         if (a != null && a['status'] == 'paused')
           Text('有一段${a['mode'] == 'mixed' ? '混合学习' : '复习'}已暂停，开始相同模式会恢复原进度。'),
         button(checked ? '今天已签到' : '手动签到', () => model.checkIn()),
+        TextButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => HistoryScreen(model: model)),
+          ),
+          child: const Text('全部学习记录'),
+        ),
         TextButton(
           onPressed: () => showModalBottomSheet<void>(
             context: context,

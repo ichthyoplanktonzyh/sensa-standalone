@@ -467,6 +467,7 @@ pub(super) fn apply(
                 )?;
                 tid
             };
+            curriculum::supplement(db, &tid)?;
             db.execute("INSERT INTO personal_task_entries VALUES(?1,?2,?3) ON CONFLICT(meaning_id) DO NOTHING",params![meaning_id,tid,command.operation_id])?;
             save_version(db, &read(db, &tid)?)?;
             if let Some(g) = anchor::current(db, meaning_id)?

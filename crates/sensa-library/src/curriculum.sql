@@ -1,0 +1,14 @@
+CREATE TABLE curriculum_books(id TEXT NOT NULL,version TEXT NOT NULL,content TEXT NOT NULL,PRIMARY KEY(id,version));
+CREATE TABLE curriculum_enrollments(id TEXT PRIMARY KEY,book_id TEXT NOT NULL,book_version TEXT NOT NULL,mode TEXT NOT NULL CHECK(mode IN ('active','maintenance','paused')),range_json TEXT NOT NULL,UNIQUE(book_id,book_version),FOREIGN KEY(book_id,book_version) REFERENCES curriculum_books(id,version));
+CREATE UNIQUE INDEX one_active_book ON curriculum_enrollments((1)) WHERE mode='active';
+CREATE TABLE curriculum_members(source_id TEXT NOT NULL,target_id TEXT NOT NULL,material_id TEXT REFERENCES materials(id),ordinal INTEGER NOT NULL,in_range INTEGER NOT NULL,started INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(source_id,target_id));
+CREATE TABLE curriculum_supplemental(target_id TEXT PRIMARY KEY,active INTEGER NOT NULL,ordinal INTEGER NOT NULL,provenance TEXT NOT NULL);
+INSERT INTO curriculum_supplemental SELECT id,1,rowid,'legacy_explicit_admission_v11' FROM targets;
+INSERT INTO curriculum_supplemental SELECT id,1,rowid,'legacy_personal_admission_v11' FROM personal_learning_tasks WHERE true ON CONFLICT DO NOTHING;
+CREATE TABLE curriculum_settings(singleton INTEGER PRIMARY KEY CHECK(singleton=1),selection TEXT NOT NULL);
+INSERT INTO curriculum_settings VALUES(1,'null');
+CREATE TABLE curriculum_scopes(revision INTEGER PRIMARY KEY,content TEXT NOT NULL);
+ALTER TABLE activity_scope ADD COLUMN new_eligible INTEGER NOT NULL DEFAULT 1;
+CREATE TABLE activity_scope_sources(activity_id TEXT NOT NULL,target_id TEXT NOT NULL,source_id TEXT NOT NULL,PRIMARY KEY(activity_id,target_id,source_id));
+CREATE TABLE curriculum_introduction_sources(target_id TEXT NOT NULL,source_id TEXT NOT NULL,run_id TEXT NOT NULL,PRIMARY KEY(target_id,source_id));
+PRAGMA user_version=12;

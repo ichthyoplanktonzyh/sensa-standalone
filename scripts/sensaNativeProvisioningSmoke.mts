@@ -64,8 +64,10 @@ if(!process.argv.includes('--serve-only')){
  // Exercise a real v10 preparation upgrade with existing targets, requests and receipts.
  const {DatabaseSync}=await import('node:sqlite');const upgradeDb=new DatabaseSync(path);
  const preUpgrade=run();const receiptsBefore=upgradeDb.prepare('SELECT id,command,result FROM operations ORDER BY rowid').all();
- upgradeDb.exec('DROP TABLE personal_anchor_revocations; DROP TABLE personal_anchor_grants; DROP TABLE personal_preparation_versions; PRAGMA user_version=10;');
- assert.deepEqual(run(),preUpgrade);
+ upgradeDb.exec('DROP TABLE curriculum_introduction_sources; DROP TABLE activity_scope_sources; DROP TABLE curriculum_scopes; DROP TABLE curriculum_settings; DROP TABLE curriculum_supplemental; DROP TABLE curriculum_members; DROP TABLE curriculum_enrollments; DROP TABLE curriculum_books; ALTER TABLE activity_scope DROP COLUMN new_eligible; DROP TABLE personal_anchor_revocations; DROP TABLE personal_anchor_grants; DROP TABLE personal_preparation_versions; PRAGMA user_version=10;');
+ const {curriculum: _previousCurriculum, ...previousFacts}=preUpgrade;
+ const {curriculum: _upgradedCurriculum, ...upgradedFacts}=run();
+ assert.deepEqual(upgradedFacts,previousFacts);
  assert.deepEqual(upgradeDb.prepare('SELECT id,command,result FROM operations ORDER BY rowid').all(),receiptsBefore);
  const versions=upgradeDb.prepare('SELECT id,target_id,content FROM personal_preparation_versions').all();
  assert.equal(versions.length,preUpgrade.personal.preparations.length);

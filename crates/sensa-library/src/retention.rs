@@ -57,6 +57,10 @@ pub(super) fn start(
         [],
         |r| r.get(0),
     )?;
+    if !activity::allows(db, &target, false)? {
+        return Err(Error::Rule("target_outside_study_scope"));
+    }
+
     let need: Option<(String,Option<String>,i64)> = db.query_row("SELECT id,run_id,next_eligible_at_ms FROM relearning_needs WHERE target_id=?1 AND resolved_at_ms IS NULL",[&target],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional()?;
     if let Some(run) = &state.run
         && run.phase != Phase::Completed

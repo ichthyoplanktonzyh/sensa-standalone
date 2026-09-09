@@ -44,7 +44,15 @@ fn day(now: DateTime<Utc>, offset: i32) -> Result<(String, i64)> {
     ))
 }
 pub(super) fn allows(db: &Connection, target: &str, initial: bool) -> Result<bool> {
-    Ok(db.query_row("SELECT NOT EXISTS(SELECT 1 FROM learning_activities WHERE status='active') OR EXISTS(SELECT 1 FROM learning_activities a JOIN activity_scope s ON s.activity_id=a.id WHERE a.status='active' AND s.target_id=?1 AND (?2=0 OR a.mode='mixed'))",params![target,initial],|r|r.get(0))?)
+    let active: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM learning_activities WHERE status='active')",
+        [],
+        |r| r.get(0),
+    )?;
+    if !active {
+        return curriculum::allows(db, target, initial);
+    }
+    Ok(db.query_row("SELECT EXISTS(SELECT 1 FROM learning_activities a JOIN activity_scope s ON s.activity_id=a.id WHERE a.status='active' AND s.target_id=?1 AND (?2=0 OR (a.mode='mixed' AND (s.new_eligible=1 OR EXISTS(SELECT 1 FROM runs WHERE target_id=?1)))))",params![target,initial],|r|r.get(0))?)
 }
 /// Reservations constrain admission, but only accepted introductions count as learning.
 pub(super) fn quota(
@@ -114,8 +122,19 @@ pub(super) fn initial_cohort(
     }
     let mut targets = vec![target.to_owned()];
     let mut stmt=db.prepare("SELECT id FROM targets WHERE id<>?1 AND NOT EXISTS(SELECT 1 FROM runs WHERE runs.target_id=targets.id) ORDER BY id")?;
-    for row in stmt.query_map([target], |r| r.get::<_, String>(0))? {
-        let id = row?;
+    let active: Option<String> = db
+        .query_row(
+            "SELECT id FROM learning_activities WHERE status='active'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let ranks = scope_ranks(db, active.as_deref())?;
+    let mut ordered = stmt
+        .query_map([target], |r| r.get::<_, String>(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    ordered.sort_by_key(|id| (ranks.get(id).map(|r| r.1).unwrap_or(i64::MAX), id.clone()));
+    for id in ordered {
         if !allows(db, &id, true)? {
             continue;
         }
@@ -139,6 +158,29 @@ pub(super) fn initial_cohort(
     }
     Ok(targets)
 }
+fn scope_ranks(
+    db: &Connection,
+    scope: Option<&str>,
+) -> Result<std::collections::BTreeMap<String, (bool, i64)>> {
+    let scope_content = if let Some(aid) = scope {
+        db.query_row("SELECT c.content FROM curriculum_scopes c JOIN learning_activities a ON a.scope_revision=c.revision WHERE a.id=?1 AND EXISTS(SELECT 1 FROM activity_scope_sources WHERE activity_id=a.id)",[aid],|r|r.get::<_,String>(0)).optional()?.map(|s|serde_json::from_str::<Value>(&s)).transpose()?.unwrap_or(json!({"members":[]}))
+    } else {
+        curriculum::current(db)?.1
+    };
+    let ranks = scope_content["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            (
+                m["targetId"].as_str().unwrap().to_owned(),
+                (m["newEligible"] == true, i as i64),
+            )
+        })
+        .collect();
+    Ok(ranks)
+}
 fn candidates(
     db: &Connection,
     mode: Mode,
@@ -147,6 +189,8 @@ fn candidates(
     offset: i32,
 ) -> Result<(Vec<Candidate>, u32)> {
     let used = quota(db, now, offset, true)?;
+    let ranks = scope_ranks(db, scope)?;
+
     let mut stmt=db.prepare("SELECT t.id,t.material_id,r.id,r.phase,r.started_at_ms,n.next_eligible_at_ms,m.due_at_ms FROM targets t LEFT JOIN runs r ON r.target_id=t.id LEFT JOIN relearning_needs n ON n.target_id=t.id AND n.resolved_at_ms IS NULL LEFT JOIN memory m ON m.target_id=t.id WHERE ?1 IS NULL OR EXISTS(SELECT 1 FROM activity_scope s WHERE s.activity_id=?1 AND s.target_id=t.id) ORDER BY t.id")?;
     let rows = stmt
         .query_map([scope], |r| {
@@ -164,6 +208,9 @@ fn candidates(
     let mut out = vec![];
     for (target, material, run, phase, started, need, due) in rows {
         let declared:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM assurance_sessions s, json_each(s.state,'$.queue.frame.states') t WHERE json_extract(t.value,'$.retentionTargetId')=?1 AND json_extract(t.value,'$.declaredMastery')=1 AND s.rowid=(SELECT max(s2.rowid) FROM assurance_sessions s2 JOIN assurance_session_targets t2 ON t2.session_id=s2.id WHERE t2.target_id=?1 AND s2.purpose='initial_learning'))",[&target],|r|r.get(0))?;
+        if scope.is_none() && !ranks.contains_key(&target) {
+            continue;
+        }
         if declared {
             continue;
         }
@@ -198,6 +245,19 @@ fn candidates(
         } else {
             continue;
         };
+        if kind == "new"
+            && !if let Some(aid) = scope {
+                db.query_row(
+                    "SELECT new_eligible FROM activity_scope WHERE activity_id=?1 AND target_id=?2",
+                    params![aid, target],
+                    |r| r.get::<_, bool>(0),
+                )?
+            } else {
+                ranks.get(&target).is_some_and(|r| r.0)
+            }
+        {
+            continue;
+        }
         let plan:Option<String>=db.query_row("SELECT content FROM target_plans WHERE id=COALESCE((SELECT plan_id FROM policy_commitments WHERE target_id=?1),(SELECT id FROM target_plans WHERE target_id=?1 ORDER BY revision DESC LIMIT 1))",[&target],|r|r.get(0)).optional()?;
         let ready = plan
             .map(|p| serde_json::from_str::<Value>(&p))
@@ -207,6 +267,11 @@ fn candidates(
         if !pinned && (!ready || !provisioning::material_current(db, &target)?) {
             continue;
         }
+        let time = if kind == "new" {
+            ranks.get(&target).map(|r| r.1).unwrap_or(0)
+        } else {
+            time
+        };
         out.push(Candidate {
             target,
             material,
@@ -229,6 +294,16 @@ fn pause_executors(db: &Connection) -> Result<()> {
         [],
     )?;
     Ok(())
+}
+pub(super) fn fresh(
+    db: &Transaction<'_>,
+    mode: Mode,
+    command: &Command,
+    now: DateTime<Utc>,
+    offset: i32,
+) -> Result<()> {
+    db.execute("UPDATE learning_activities SET status='ended',ended_at_ms=?2 WHERE mode=?1 AND status IN ('active','paused')",params![mode.key(),now.timestamp_millis()])?;
+    start(db, mode, command, now, offset)
 }
 pub(super) fn start(
     db: &Transaction<'_>,
@@ -254,10 +329,7 @@ pub(super) fn start(
     db.execute("INSERT INTO learning_activities VALUES(?1,?2,'active',(SELECT revision FROM library),NULL,NULL,NULL,?3,NULL) ON CONFLICT(id) DO UPDATE SET status='active'",params![aid,mode.key(),now.timestamp_millis()])?;
     // Empty scopes are valid immutable snapshots too; only populate a new activity.
     if fresh {
-        db.execute(
-            "INSERT INTO activity_scope SELECT ?1,id,material_id FROM targets",
-            [&aid],
-        )?;
+        curriculum::freeze(db, &aid)?;
     }
     db.execute("UPDATE activity_clock SET current_activity=?1", [&aid])?;
     select(db, &aid, false, command, now, offset)

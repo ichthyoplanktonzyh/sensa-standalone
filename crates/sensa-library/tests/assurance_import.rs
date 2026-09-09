@@ -591,3 +591,65 @@ fn structured_executor_acceptance_uses_bindings_not_profile_names() {
         .is_err()
     );
 }
+
+#[test]
+fn book_selection_constrains_the_registered_structured_cohort() {
+    use serde_json::json;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("book.sqlite");
+    let time = Utc.timestamp_millis_opt(1788850000000).unwrap();
+    let apply = |a: Value| {
+        execute_at(
+            &path,
+            cmd(
+                &open_library(&path).unwrap(),
+                serde_json::from_value(a).unwrap(),
+            ),
+            time,
+        )
+        .unwrap()
+    };
+    apply(json!({"kind":"confirm_quantity","quantity":5}));
+    let s = apply(json!({"kind":"import_runtime_release","release_json":artifact().to_string()}));
+    apply(
+        json!({"kind":"set_policy","scope":"learner","policy":{"profileId":"high_assurance","profileVersion":"high-assurance-profile-v1"}}),
+    );
+    let members: Vec<_> = s
+        .catalog
+        .iter()
+        .map(|m| json!({"materialId":m.material.id}))
+        .collect();
+    let book = json!({"format":"sensa-local-book-v1","id":"assurance-book","version":"1","title":"Structured source","members":members});
+    apply(
+        json!({"kind":"curriculum","action":{"kind":"import_book","book_json":book.to_string()}}),
+    );
+    apply(
+        json!({"kind":"curriculum","action":{"kind":"enroll","book_id":"assurance-book","version":"1","range":{"kind":"ordinals","start":2,"end":3}}}),
+    );
+    let s = apply(json!({"kind":"activity_start","mode":"mixed"}));
+    assert_eq!(
+        s.assurance.as_ref().unwrap()["queue"]["projection"]["targets"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    let db = rusqlite::Connection::open(&path).unwrap();
+    let mut q = db
+        .prepare("SELECT material_id FROM runs ORDER BY rowid")
+        .unwrap();
+    let ids = q
+        .query_map([], |r| r.get::<_, String>(0))
+        .unwrap()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(
+        ids,
+        vec![
+            members[1]["materialId"].as_str().unwrap(),
+            members[2]["materialId"].as_str().unwrap()
+        ]
+    );
+    assert_eq!(s.learning["newStartedToday"], 0);
+    assert_eq!(s.learning["newReservedToday"], 2);
+}

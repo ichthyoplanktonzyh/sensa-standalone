@@ -364,6 +364,7 @@ pub(super) fn apply(
                 |r| r.get(0),
             )?;
             policy::enroll(db, &target)?;
+            curriculum::supplement(db, &target)?;
             db.execute("INSERT INTO personal_learning_links VALUES(?1,?2,?3,?4) ON CONFLICT(meaning_id,target_id) DO NOTHING",params![meaning_id,target,command.operation_id,now.timestamp_millis()])?;
         }
     }

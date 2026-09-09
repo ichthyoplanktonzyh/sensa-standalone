@@ -8,6 +8,8 @@ mod assurance_retention;
 pub mod assurance_runtime;
 pub mod composition;
 mod consumer_progress;
+pub mod curriculum;
+pub mod history;
 pub mod pack;
 pub mod personal;
 pub mod policy;
@@ -49,6 +51,9 @@ pub struct Command {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CommandAction {
+    Curriculum {
+        action: curriculum::Action,
+    },
     Anchor {
         action: Box<anchor::Action>,
     },
@@ -65,6 +70,9 @@ pub enum CommandAction {
         session_id: String,
         ordinal: u32,
         intent: assurance_runtime::Intent,
+    },
+    ActivityFresh {
+        mode: activity::Mode,
     },
     ActivityStart {
         mode: activity::Mode,
@@ -176,6 +184,8 @@ pub struct Snapshot {
     pub learning: serde_json::Value,
     #[serde(default)]
     pub personal: serde_json::Value,
+    #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
+    pub curriculum: serde_json::Value,
 }
 
 fn initial_protocol() -> String {
@@ -212,7 +222,8 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].contains(&version) || application != APPLICATION
+    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].contains(&version)
+        || application != APPLICATION
     {
         return Err(Error::Rule("unsupported_library_version"));
     }
@@ -250,6 +261,11 @@ fn connection(path: &Path) -> Result<Connection> {
     }
     if version <= 10 {
         tx.execute_batch(include_str!("anchor.sql"))?;
+    }
+    if version <= 11 {
+        tx.execute_batch(include_str!("curriculum.sql"))?;
+        curriculum::register_packs(&tx)?;
+        curriculum::refresh(&tx)?;
     }
     tx.commit()?;
     Ok(db)
@@ -342,6 +358,7 @@ fn read(db: &Connection) -> Result<Snapshot> {
         assurance: None,
         learning: serde_json::Value::Null,
         personal: serde_json::Value::Null,
+        curriculum: serde_json::Value::Null,
     };
     if let Some(material) = &snapshot.material {
         snapshot.structured_material = db.query_row(
@@ -363,6 +380,7 @@ fn read(db: &Connection) -> Result<Snapshot> {
         .transpose()?;
     snapshot.learning = activity::project(db)?;
     snapshot.personal = personal::project(db)?;
+    snapshot.curriculum = curriculum::project(db)?;
     Ok(snapshot)
 }
 
@@ -444,11 +462,22 @@ pub fn execute_at_offset(
         [],
         |r| r.get(0),
     )?;
+    let run_baseline: i64 =
+        tx.query_row("SELECT coalesce(max(rowid),0) FROM runs", [], |r| r.get(0))?;
+    let introduction_baseline: i64 = tx.query_row(
+        "SELECT coalesce(max(rowid),0) FROM initial_introductions",
+        [],
+        |r| r.get(0),
+    )?;
     match &command.action {
+        CommandAction::Curriculum { action } => curriculum::apply(&tx, action)?,
         CommandAction::Anchor { action } => anchor::apply(&tx, action, &command, now)?,
         CommandAction::Provisioning { action } => provisioning::apply(&tx, action, &command, now)?,
         CommandAction::Semantic { action } => semantic::apply(&tx, action, &command, now)?,
         CommandAction::Personal { action } => personal::apply(&tx, action, &command, now)?,
+        CommandAction::ActivityFresh { mode } => {
+            activity::fresh(&tx, *mode, &command, now, offset_minutes)?;
+        }
         CommandAction::ActivityStart { mode } => {
             activity::start(&tx, *mode, &command, now, offset_minutes)?
         }
@@ -534,6 +563,7 @@ pub fn execute_at_offset(
                 [&pack.materials[0].id],
             )?;
             policy::register_pack(&tx, &pack)?;
+            curriculum::register_packs(&tx)?;
             policy::refresh(&tx)?;
         }
         CommandAction::SelectMaterial { material_id } => {
@@ -596,6 +626,7 @@ pub fn execute_at_offset(
                 |r| r.get(0),
             )?;
             policy::enroll(&tx, &target)?;
+            curriculum::supplement(&tx, &target)?;
         }
         CommandAction::NextRetention => {
             activity::leave(&tx)?;
@@ -718,6 +749,8 @@ pub fn execute_at_offset(
             }
         }
     }
+    curriculum::capture_started(&tx, run_baseline, introduction_baseline)?;
+    curriculum::refresh(&tx)?;
     activity::capture_results(&tx, initial_baseline, retention_baseline)?;
     tx.execute(
         "UPDATE activity_clock SET offset_minutes=?1",
@@ -831,6 +864,14 @@ fn start_selected(
         }
         if state.daily_new_limit.is_none() {
             return Err(Error::Rule("quantity_required"));
+        }
+        let target: String = tx.query_row(
+            "SELECT id FROM targets WHERE material_id=(SELECT selected_material_id FROM library)",
+            [],
+            |r| r.get(0),
+        )?;
+        if !activity::allows(tx, &target, true)? {
+            return Err(Error::Rule("target_outside_study_scope"));
         }
         if let Some(run) = &state.run {
             if run.phase == Phase::Completed || run.protocol_version != PROTOCOL {

@@ -1,3 +1,4 @@
+import 'curriculum_screen.dart';
 import 'pronunciation_view.dart';
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
@@ -345,7 +346,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ],
             if (!s.enrolled)
               button('加入学习', () => vm.act({'kind': 'add_to_learning'}))
-            else if (s.run == null &&
+            else if (!s.inStudyScope) ...[
+              const Text('此项不在当前学习来源中，已有进度与历史仍保留。'),
+              button(
+                '调整学习来源',
+                () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => CurriculumScreen(model: vm),
+                  ),
+                ),
+                primary: false,
+              ),
+            ] else if (s.run == null &&
                 s.initialReadiness?['status'] != 'ready') ...[
               Text(s.initialReadiness?['label'] as String? ?? '学习材料正在准备'),
               Text(s.initialReadiness?['detail'] as String? ?? ''),
@@ -408,6 +420,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
         appBar: AppBar(
           title: const Text('Sensa'),
           actions: [
+            IconButton(
+              tooltip: '学习来源',
+              icon: const Icon(Icons.library_books_outlined),
+              onPressed: vm.busy || s == null
+                  ? null
+                  : () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CurriculumScreen(model: vm),
+                      ),
+                    ),
+            ),
             IconButton(
               tooltip: '我的词义世界',
               icon: const Icon(Icons.hub_outlined),

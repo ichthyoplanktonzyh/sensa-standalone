@@ -66,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1363880355;
+  int get rustContentHash => 24926601;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -100,6 +100,11 @@ abstract class RustLibApi extends BaseApi {
   Future<String> crateApiLibraryLibraryCommand({
     required String path,
     required String commandJson,
+  });
+
+  Future<String> crateApiLibraryLibraryHistory({
+    required String path,
+    required String queryJson,
   });
 
   Future<String> crateApiLibraryLibrarySnapshot({required String path});
@@ -285,6 +290,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<String> crateApiLibraryLibraryHistory({
+    required String path,
+    required String queryJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          sse_encode_String(queryJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiLibraryLibraryHistoryConstMeta,
+        argValues: [path, queryJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLibraryLibraryHistoryConstMeta =>
+      const TaskConstMeta(
+        debugName: "library_history",
+        argNames: ["path", "queryJson"],
+      );
+
+  @override
   Future<String> crateApiLibraryLibrarySnapshot({required String path}) {
     return handler.executeNormal(
       NormalTask(
@@ -294,7 +334,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 7,
             port: port_,
           );
         },

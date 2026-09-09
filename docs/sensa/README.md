@@ -75,6 +75,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M2-D local recovery | [`m2-d-extension-recovery-handoff.md`](m2-d-extension-recovery-handoff.md) | 插件原账号队列、版本保护及实际原生 activeTab 权限恢复的本地证据 |
 | Local settlement extraction | [`local-settlement-handoff.md`](local-settlement-handoff.md) | LF-1a 共用结算与 Node/断网 Chrome/隔离 Postgres 回归；本地库持久化仍待实施 |
 | Personal library facts | [`../adr/0003-three-client-local-facts.md`](../adr/0003-three-client-local-facts.md) / [`personal-library-fact-model.md`](personal-library-fact-model.md) | 三端本地终景、事实/版本/投影、分层验收门及有界模型实验；生产同步与调度裁决未完成 |
+| Native learning organization | [`native-learning-organization-plan.md`](native-learning-organization-plan.md) / [`native-learning-organization-handoff.md`](native-learning-organization-handoff.md) | Book/Enrollment/Range、来源过滤与排序、固定 Activity scope、完整学习记录查询及两端恢复 |
 | Native pronunciation | [`native-pronunciation-plan.md`](native-pronunciation-plan.md) / [`native-pronunciation-handoff.md`](native-pronunciation-handoff.md) | 静态发音绑定/获取/摘要校验、本机缓存与离线播放、可选失败回退；不改变学习事实 |
 | Native anchor use | [`native-anchor-use-plan.md`](native-anchor-use-plan.md) / [`native-anchor-use-handoff.md`](native-anchor-use-handoff.md) | 固定原文授权/撤销、准备版本与材料替换、旧 Run 保留、原生冷恢复；音频见后续交付 |
 | Native content provisioning | [`native-provisioning-plan.md`](native-provisioning-plan.md) / [`native-provisioning-handoff.md`](native-provisioning-handoff.md) | 个人意义显式入学、按需文本任务、独立复核/本地冻结及现有 Profile 学习与原生恢复证据 |

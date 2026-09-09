@@ -323,18 +323,20 @@ fn v7_upgrade_preserves_existing_learning_activity_and_operation_receipts() {
     );
     let db = rusqlite::Connection::open(&p).unwrap();
     let receipts:String=db.query_row("SELECT json_group_array(json_object('id',id,'command',command,'result',result)) FROM operations",[],|r|r.get(0)).unwrap();
-    db.execute_batch("DROP TABLE personal_anchor_revocations; DROP TABLE personal_anchor_grants; DROP TABLE personal_preparation_versions; DROP TABLE personal_task_entries; DROP TABLE personal_content_attempts; DROP TABLE personal_learning_tasks; DROP TABLE semantic_lookups; DROP TABLE semantic_identities; DROP TABLE personal_learning_links; DROP TABLE personal_intakes; DROP TABLE personal_meanings; PRAGMA user_version=7;").unwrap();
+    db.execute_batch("DROP TABLE curriculum_introduction_sources; DROP TABLE activity_scope_sources; DROP TABLE curriculum_scopes; DROP TABLE curriculum_settings; DROP TABLE curriculum_supplemental; DROP TABLE curriculum_members; DROP TABLE curriculum_enrollments; DROP TABLE curriculum_books; ALTER TABLE activity_scope DROP COLUMN new_eligible; DROP TABLE personal_anchor_revocations; DROP TABLE personal_anchor_grants; DROP TABLE personal_preparation_versions; DROP TABLE personal_task_entries; DROP TABLE personal_content_attempts; DROP TABLE personal_learning_tasks; DROP TABLE semantic_lookups; DROP TABLE semantic_identities; DROP TABLE personal_learning_links; DROP TABLE personal_intakes; DROP TABLE personal_meanings; PRAGMA user_version=7;").unwrap();
     drop(db);
     let after = open_library(&p).unwrap();
-    assert_eq!(
-        serde_json::to_value(before).unwrap(),
-        serde_json::to_value(after).unwrap()
-    );
+    let mut before = serde_json::to_value(before).unwrap();
+    let mut after = serde_json::to_value(after).unwrap();
+    // Curriculum is an additive v12 projection, absent from the simulated v7 store.
+    before.as_object_mut().unwrap().remove("curriculum");
+    after.as_object_mut().unwrap().remove("curriculum");
+    assert_eq!(before, after);
     let db = rusqlite::Connection::open(p).unwrap();
     assert_eq!(db.query_row("SELECT json_group_array(json_object('id',id,'command',command,'result',result)) FROM operations",[],|r|r.get::<_,String>(0)).unwrap(),receipts);
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        11
+        12
     );
 }

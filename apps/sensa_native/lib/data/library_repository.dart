@@ -20,6 +20,10 @@ class LibrarySnapshot {
       value['material'] as Map<String, dynamic>?;
   Map<String, dynamic>? get run => value['run'] as Map<String, dynamic>?;
   bool get enrolled => value['enrolled'] as bool;
+  bool get inStudyScope =>
+      ((value['curriculum']?['scope']?['members'] as List?) ?? []).any(
+        (m) => m['materialId'] == material?['id'],
+      );
   String? get phase => run?['phase'] as String?;
   bool get paused => run?['paused'] as bool? ?? false;
   String get protocol =>
@@ -83,6 +87,14 @@ class LibraryRepository {
         materialId: materialId,
         bytes: bytes,
       );
+  Future<Map<String, dynamic>> history(Map<String, dynamic> query) async =>
+      jsonDecode(
+            await native.libraryHistory(
+              path: path,
+              queryJson: jsonEncode(query),
+            ),
+          )
+          as Map<String, dynamic>;
   Future<LibrarySnapshot> load() async =>
       LibrarySnapshot.decode(await native.librarySnapshot(path: path));
   Future<LibrarySnapshot> execute(Map<String, dynamic> command) async =>

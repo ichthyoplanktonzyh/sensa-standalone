@@ -296,6 +296,19 @@ class LibraryViewModel extends ChangeNotifier {
         home = true;
         notice = '目前没有可开始的到期复习，可以继续新学或稍后再来。';
       } else {
+        // These Rust validation errors roll back the whole command. A corrected
+        // source/range intent must receive a new operation id; uncertain I/O
+        // failures retain the pending id for safe replay.
+        if ([
+          'pause_activity_before_curriculum_change',
+          'invalid_curriculum',
+          'book_unavailable',
+          'book_material_not_downloaded',
+          'book_version_conflict',
+          'target_outside_study_scope',
+        ].any(e.toString().contains)) {
+          _pending = null;
+        }
         error = message(e);
       }
     } finally {
@@ -326,7 +339,12 @@ class LibraryViewModel extends ChangeNotifier {
           value['format'] == 'sensa-runtime-artifact-v1' ||
           value['schemaVersion'] == 'sensa-runtime-learning-release-v1';
       await act(
-        structured
+        value['format'] == 'sensa-local-book-v1'
+            ? {
+                'kind': 'curriculum',
+                'action': {'kind': 'import_book', 'book_json': encoded},
+              }
+            : structured
             ? {'kind': 'import_runtime_release', 'release_json': encoded}
             : {'kind': 'import_pack', 'pack_json': encoded},
       );
@@ -547,6 +565,17 @@ class LibraryViewModel extends ChangeNotifier {
     if (text.contains('invalid_runtime_release')) {
       return '学习包的任务或资源校验未通过，原有内容已保留。';
     }
+    if (text.contains('pause_activity_before_curriculum_change')) {
+      return '请先暂停当前活动，再调整学习来源。';
+    }
+    if (text.contains('target_outside_study_scope')) {
+      return '此项已暂停或不在当前学习来源中，请到学习来源调整。';
+    }
+    if (text.contains('book_material_not_downloaded')) {
+      return '请先下载或导入词书引用的学习材料。';
+    }
+    if (text.contains('book_version_conflict')) return '同一词书版本内容不一致，原词书已保留。';
+    if (text.contains('invalid_curriculum')) return '词书或学习范围无效，请检查文件、序号或所选内容。';
     if (text.contains('invalid_runtime_media')) return '学习包的媒体校验未通过，未导入任何内容。';
     if (text.contains('assurance_session_active')) {
       return '还有一组高保证学习正在进行，请先返回继续或结束。';

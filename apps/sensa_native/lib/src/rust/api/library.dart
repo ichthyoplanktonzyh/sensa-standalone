@@ -47,3 +47,12 @@ Future<Uint8List> libraryCachedPronunciation({
   path: path,
   materialId: materialId,
 );
+
+/// Paginated local completion facts; does not execute a domain command.
+Future<String> libraryHistory({
+  required String path,
+  required String queryJson,
+}) => RustLib.instance.api.crateApiLibraryLibraryHistory(
+  path: path,
+  queryJson: queryJson,
+);

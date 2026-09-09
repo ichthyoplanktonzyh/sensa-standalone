@@ -28,3 +28,8 @@ pub fn library_cache_pronunciation(path:String,material_id:String,bytes:Vec<u8>)
 pub fn library_cached_pronunciation(path:String,material_id:String)->anyhow::Result<Vec<u8>> {
     Ok(sensa_library::pronunciation::cached(Path::new(&path),&material_id)?)
 }
+
+/// Paginated local completion facts; does not execute a domain command.
+pub fn library_history(path:String,query_json:String)->anyhow::Result<String> {
+ Ok(serde_json::to_string(&sensa_library::history::query(Path::new(&path),serde_json::from_str(&query_json)?)?)?)
+}
