@@ -93,7 +93,7 @@ fn assignment(db: &Connection, scope: &str, key: &str) -> Result<Option<Assignme
 fn library_id(db: &Connection) -> Result<String> {
     Ok(db.query_row("SELECT id FROM library", [], |r| r.get(0))?)
 }
-fn append_assignment(
+pub(super) fn append_assignment(
     db: &Connection,
     scope: &str,
     key: &str,

@@ -37,22 +37,33 @@ class SemanticService {
     _token = '';
   }
 
-  Future<Map<String, dynamic>> resolve(Map<String, dynamic> request) async {
+  Future<Map<String, dynamic>> resolve(Map<String, dynamic> request) =>
+      send(request, path: '/sensa/native/semantic/resolve');
+
+  Future<Map<String, dynamic>> prepare(Map<String, dynamic> request) => send(
+    request,
+    path: '/sensa/native/content/prepare',
+    timeout: const Duration(seconds: 80),
+    maxBytes: 256 * 1024,
+  );
+
+  Future<Map<String, dynamic>> send(
+    Map<String, dynamic> request, {
+    required String path,
+    Duration timeout = const Duration(seconds: 50),
+    int maxBytes = 96 * 1024,
+  }) async {
     if (!configured) throw const SemanticServiceException('access_required');
     final client = http.Client();
     try {
       return await (() async {
-        final message =
-            http.Request(
-                'POST',
-                _origin!.resolve('/sensa/native/semantic/resolve'),
-              )
-              ..followRedirects = false
-              ..headers.addAll({
-                'Authorization': 'Bearer $_token',
-                'Content-Type': 'application/json',
-              })
-              ..body = jsonEncode(request);
+        final message = http.Request('POST', _origin!.resolve(path))
+          ..followRedirects = false
+          ..headers.addAll({
+            'Authorization': 'Bearer $_token',
+            'Content-Type': 'application/json',
+          })
+          ..body = jsonEncode(request);
         final response = await client.send(message);
         if (response.statusCode == 401 || response.statusCode == 403) {
           throw const SemanticServiceException('access_required');
@@ -62,7 +73,7 @@ class SemanticService {
         }
         final bytes = <int>[];
         await for (final chunk in response.stream) {
-          if (bytes.length + chunk.length > 96 * 1024) {
+          if (bytes.length + chunk.length > maxBytes) {
             throw const SemanticServiceException('invalid_response');
           }
           bytes.addAll(chunk);
@@ -74,7 +85,7 @@ class SemanticService {
           throw const SemanticServiceException('invalid_response');
         }
         return value;
-      })().timeout(const Duration(seconds: 50));
+      })().timeout(timeout);
     } on SemanticServiceException {
       rethrow;
     } on TimeoutException {

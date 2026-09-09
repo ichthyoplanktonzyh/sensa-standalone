@@ -7,7 +7,7 @@
 
 2026-09-09 学习组织增量：Activity/Mixed、Review-only、每日 Introduction 计数、独立签到和近期学习记录/去重汇总已接入本地学习主链，见 [活动纵切记录](native-activity-integration-handoff.md)。完整 Curriculum/范围选择、正式产品 IA、Policy Migration 与其余迁移仍保留；不据此关闭 LF-1b 或 M3。
 
-2026-09-09 个人语义世界增量：已有本机 Sense 的文本快轨/收件箱、独立接受、移除恢复和显式入学已贯通，见 [交付记录](native-personal-world-handoff.md)。在线语义解析/澄清与本地新 Sense 接受已在 [后续纵切](native-semantic-resolution-handoff.md) 接入；下一项为显式入学与按需内容任务/冻结材料化。完整多模态、图谱及其余迁移不因此关闭。
+2026-09-09 个人语义世界增量：已有本机 Sense 的文本快轨/收件箱、独立接受、移除恢复和显式入学已贯通，见 [交付记录](native-personal-world-handoff.md)。在线语义解析/澄清与本地新 Sense 接受已在 [后续纵切](native-semantic-resolution-handoff.md) 接入；显式入学与按需文本任务/冻结材料化也已在 [原生内容纵切](native-provisioning-handoff.md) 接入现有 Profile 学习。下一项为 Anchor Use 授权/撤销与材料替换。完整多模态、图谱及其余迁移不因此关闭。
 
 > 状态：Active roadmap\
 > 更新日期：2026-09-07\

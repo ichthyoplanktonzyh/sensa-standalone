@@ -195,7 +195,7 @@ fn material(db: &Connection, id: &str) -> Result<(Material, String)> {
     }
     Ok((serde_json::from_str(&content)?, digest))
 }
-fn read_meaning(db: &Connection, id: &str, revision: u32) -> Result<Value> {
+pub(super) fn read_meaning(db: &Connection, id: &str, revision: u32) -> Result<Value> {
     let (content, actual, removed): (String, u32, bool) = db
         .query_row(
             "SELECT content,revision,removed FROM personal_meanings WHERE id=?1",
@@ -390,12 +390,16 @@ pub(super) fn project(db: &Connection) -> Result<Value> {
                 [v["id"].as_str()],
                 |r| r.get(0),
             )?;
-            v["addedToLearning"] = json!(linked);
+            let task = provisioning::for_meaning(db, v["id"].as_str().unwrap_or(""))?;
+            v["addedToLearning"] = json!(linked || task.is_some());
+            v["preparation"] = json!(task);
             Ok(v)
         })
         .collect::<Result<Vec<_>>>()?;
     if intakes.len() > 500 || meanings.len() > 500 {
         return Err(Error::Rule("personal_snapshot_limit"));
     }
-    Ok(json!({"intakes":intakes,"meanings":meanings,"lookups":semantic::project(db)?}))
+    Ok(
+        json!({"intakes":intakes,"meanings":meanings,"lookups":semantic::project(db)?,"preparations":provisioning::project(db)?}),
+    )
 }

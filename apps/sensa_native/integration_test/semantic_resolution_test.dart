@@ -110,7 +110,7 @@ void main() {
         expect(model.snapshot!.personal['meanings'], isEmpty);
         await tap(find.text('确认词义并保存到本机'));
         expect(model.snapshot!.personal['meanings'], hasLength(1));
-        expect(find.text('学习材料尚未准备'), findsOneWidget);
+        expect(find.text('加入学习'), findsOneWidget);
         await capture('The crane lifted it.', 'crane');
         await tap(find.text('请求解释'));
         expect(model.lookups.first['status'], 'unresolved');

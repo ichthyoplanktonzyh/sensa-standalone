@@ -1,0 +1,276 @@
+{
+  "contractVersion": "sensa-learning-content-v3",
+  "contentDemandKey": "lightweight-initial-content",
+  "definitionVersion": "v1",
+  "applicablePurposes": [
+    "initial_learning"
+  ],
+  "acceptedProvisioningPaths": [
+    "published",
+    "on_demand",
+    "hybrid"
+  ],
+  "contextRequirements": [
+    {
+      "contextKind": "expression_snapshot",
+      "required": true,
+      "minItems": 1,
+      "maxItems": 1,
+      "contentSchemaId": "lightweight.expression-snapshot",
+      "contentSchemaVersion": "v1",
+      "acceptedSources": [
+        "target_expression"
+      ]
+    },
+    {
+      "contextKind": "sense_snapshot",
+      "required": true,
+      "minItems": 1,
+      "maxItems": 1,
+      "contentSchemaId": "lightweight.sense-snapshot",
+      "contentSchemaVersion": "v1",
+      "acceptedSources": [
+        "confirmed_sense"
+      ]
+    },
+    {
+      "contextKind": "origin_experience",
+      "required": false,
+      "minItems": 0,
+      "maxItems": 1,
+      "contentSchemaId": "lightweight.origin-experience",
+      "contentSchemaVersion": "v1",
+      "acceptedSources": [
+        "personal_anchor",
+        "other_authoritative_source"
+      ]
+    },
+    {
+      "contextKind": "reference_fact",
+      "required": false,
+      "minItems": 0,
+      "maxItems": null,
+      "contentSchemaId": "lightweight.reference-fact",
+      "contentSchemaVersion": "v1",
+      "acceptedSources": [
+        "dictionary",
+        "corpus",
+        "pronunciation_lexicon",
+        "other_authoritative_source"
+      ]
+    }
+  ],
+  "materialRoles": [
+    {
+      "materialRoleKey": "experience_recall_cue",
+      "required": true,
+      "minItems": 1,
+      "maxItems": 1,
+      "contentSchemaId": "lightweight.experience-recall-cue",
+      "contentSchemaVersion": "v1",
+      "eligibleStepIntents": [
+        "practice"
+      ],
+      "evidenceEligibility": "none",
+      "provisioningPolicyId": "lightweight.pedagogical-provisioning",
+      "provisioningPolicyVersion": "v1",
+      "validatorPolicies": [
+        {
+          "validatorPolicyId": "lightweight.schema",
+          "validatorVersion": "v1"
+        },
+        {
+          "validatorPolicyId": "lightweight.sense-alignment",
+          "validatorVersion": "v1"
+        },
+        {
+          "validatorPolicyId": "lightweight.pre-reveal-non-disclosure",
+          "validatorVersion": "v1"
+        }
+      ]
+    },
+    {
+      "materialRoleKey": "recall_support",
+      "required": false,
+      "minItems": 0,
+      "maxItems": 4,
+      "contentSchemaId": "lightweight.recall-support",
+      "contentSchemaVersion": "v1",
+      "eligibleStepIntents": [
+        "practice"
+      ],
+      "evidenceEligibility": "none",
+      "provisioningPolicyId": "lightweight.pedagogical-provisioning",
+      "provisioningPolicyVersion": "v1",
+      "validatorPolicies": [
+        {
+          "validatorPolicyId": "lightweight.schema",
+          "validatorVersion": "v1"
+        },
+        {
+          "validatorPolicyId": "lightweight.pre-reveal-non-disclosure",
+          "validatorVersion": "v1"
+        }
+      ]
+    },
+    {
+      "materialRoleKey": "target_expression",
+      "required": true,
+      "minItems": 1,
+      "maxItems": 1,
+      "contentSchemaId": "lightweight.target-expression",
+      "contentSchemaVersion": "v1",
+      "eligibleStepIntents": [
+        "instruction"
+      ],
+      "evidenceEligibility": "none",
+      "provisioningPolicyId": "lightweight.authoritative-passthrough",
+      "provisioningPolicyVersion": "v1",
+      "validatorPolicies": [
+        {
+          "validatorPolicyId": "lightweight.schema",
+          "validatorVersion": "v1"
+        },
+        {
+          "validatorPolicyId": "lightweight.authoritative-binding",
+          "validatorVersion": "v1"
+        }
+      ]
+    },
+    {
+      "materialRoleKey": "sense_confirmation",
+      "required": true,
+      "minItems": 1,
+      "maxItems": 1,
+      "contentSchemaId": "lightweight.sense-confirmation",
+      "contentSchemaVersion": "v1",
+      "eligibleStepIntents": [
+        "instruction"
+      ],
+      "evidenceEligibility": "none",
+      "provisioningPolicyId": "lightweight.authoritative-passthrough",
+      "provisioningPolicyVersion": "v1",
+      "validatorPolicies": [
+        {
+          "validatorPolicyId": "lightweight.schema",
+          "validatorVersion": "v1"
+        },
+        {
+          "validatorPolicyId": "lightweight.authoritative-binding",
+          "validatorVersion": "v1"
+        }
+      ]
+    },
+    {
+      "materialRoleKey": "pronunciation",
+      "required": false,
+      "minItems": 0,
+      "maxItems": 1,
+      "contentSchemaId": "lightweight.pronunciation",
+      "contentSchemaVersion": "v1",
+      "eligibleStepIntents": [
+        "instruction"
+      ],
+      "evidenceEligibility": "none",
+      "provisioningPolicyId": "lightweight.objective-derivation",
+      "provisioningPolicyVersion": "v1",
+      "validatorPolicies": [
+        {
+          "validatorPolicyId": "lightweight.schema",
+          "validatorVersion": "v1"
+        },
+        {
+          "validatorPolicyId": "lightweight.objective-derivation-binding",
+          "validatorVersion": "v1"
+        }
+      ]
+    },
+    {
+      "materialRoleKey": "language_structure",
+      "required": false,
+      "minItems": 0,
+      "maxItems": 1,
+      "contentSchemaId": "lightweight.language-structure",
+      "contentSchemaVersion": "v1",
+      "eligibleStepIntents": [
+        "instruction"
+      ],
+      "evidenceEligibility": "none",
+      "provisioningPolicyId": "lightweight.pedagogical-provisioning",
+      "provisioningPolicyVersion": "v1",
+      "validatorPolicies": [
+        {
+          "validatorPolicyId": "lightweight.schema",
+          "validatorVersion": "v1"
+        },
+        {
+          "validatorPolicyId": "lightweight.sense-alignment",
+          "validatorVersion": "v1"
+        }
+      ]
+    },
+    {
+      "materialRoleKey": "usage_guidance",
+      "required": false,
+      "minItems": 0,
+      "maxItems": 1,
+      "contentSchemaId": "lightweight.usage-guidance",
+      "contentSchemaVersion": "v1",
+      "eligibleStepIntents": [
+        "instruction"
+      ],
+      "evidenceEligibility": "none",
+      "provisioningPolicyId": "lightweight.pedagogical-provisioning",
+      "provisioningPolicyVersion": "v1",
+      "validatorPolicies": [
+        {
+          "validatorPolicyId": "lightweight.schema",
+          "validatorVersion": "v1"
+        },
+        {
+          "validatorPolicyId": "lightweight.sense-alignment",
+          "validatorVersion": "v1"
+        }
+      ]
+    },
+    {
+      "materialRoleKey": "scene_bridge",
+      "required": false,
+      "minItems": 0,
+      "maxItems": 1,
+      "contentSchemaId": "lightweight.scene-bridge",
+      "contentSchemaVersion": "v1",
+      "eligibleStepIntents": [
+        "instruction"
+      ],
+      "evidenceEligibility": "none",
+      "provisioningPolicyId": "lightweight.pedagogical-provisioning",
+      "provisioningPolicyVersion": "v1",
+      "validatorPolicies": [
+        {
+          "validatorPolicyId": "lightweight.schema",
+          "validatorVersion": "v1"
+        },
+        {
+          "validatorPolicyId": "lightweight.sense-alignment",
+          "validatorVersion": "v1"
+        }
+      ]
+    }
+  ],
+  "derivations": [
+    {
+      "derivationKey": "lightweight.pronunciation-from-expression",
+      "derivationKind": "external_pronunciation_lookup_or_tts",
+      "inputMaterialRoleKeys": [
+        "target_expression"
+      ],
+      "outputMaterialRoleKey": "pronunciation",
+      "producerPolicyId": "lightweight.objective-derivation",
+      "producerPolicyVersion": "v1",
+      "required": false
+    }
+  ],
+  "assemblyPolicyId": "lightweight.role-indexed-materialization",
+  "assemblyPolicyVersion": "v1"
+}

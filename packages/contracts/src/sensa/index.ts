@@ -23,3 +23,4 @@ export * from './consumer/intake.js';
 export * from './consumer/semantic.js';
 export * from './consumer/reading.js';
 export * from './consumer/nativeSemantic.js';
+export * from './consumer/nativeProvisioning.js';

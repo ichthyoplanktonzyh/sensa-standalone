@@ -1,3 +1,4 @@
+import 'preparation_screen.dart';
 import 'semantic_resolution_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -96,7 +97,20 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen> {
               )
               .toList();
       return Scaffold(
-        appBar: AppBar(title: const Text('我的词义世界')),
+        appBar: AppBar(
+          title: const Text('我的词义世界'),
+          actions: [
+            IconButton(
+              tooltip: '学习准备',
+              icon: const Icon(Icons.auto_stories_outlined),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => PreparationListScreen(model: model),
+                ),
+              ),
+            ),
+          ],
+        ),
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
@@ -237,7 +251,31 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen> {
                                                           compose(intake: item),
                                                 child: const Text('选择表达与词义'),
                                               ),
-                                            if (meaning)
+                                            if (meaning &&
+                                                item['materialId'] == null)
+                                              FilledButton(
+                                                onPressed: model.busy
+                                                    ? null
+                                                    : () => Navigator.of(context).push(
+                                                        MaterialPageRoute(
+                                                          builder: (_) =>
+                                                              PreparationScreen(
+                                                                model: model,
+                                                                meaningId:
+                                                                    item['id']
+                                                                        as String,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                child: Text(
+                                                  item['addedToLearning'] ==
+                                                          true
+                                                      ? '查看学习准备'
+                                                      : '加入学习',
+                                                ),
+                                              ),
+                                            if (meaning &&
+                                                item['materialId'] != null)
                                               FilledButton(
                                                 onPressed:
                                                     model.busy ||

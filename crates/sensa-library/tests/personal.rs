@@ -323,7 +323,7 @@ fn v7_upgrade_preserves_existing_learning_activity_and_operation_receipts() {
     );
     let db = rusqlite::Connection::open(&p).unwrap();
     let receipts:String=db.query_row("SELECT json_group_array(json_object('id',id,'command',command,'result',result)) FROM operations",[],|r|r.get(0)).unwrap();
-    db.execute_batch("DROP TABLE semantic_lookups; DROP TABLE semantic_identities; DROP TABLE personal_learning_links; DROP TABLE personal_intakes; DROP TABLE personal_meanings; PRAGMA user_version=7;").unwrap();
+    db.execute_batch("DROP TABLE personal_task_entries; DROP TABLE personal_content_attempts; DROP TABLE personal_learning_tasks; DROP TABLE semantic_lookups; DROP TABLE semantic_identities; DROP TABLE personal_learning_links; DROP TABLE personal_intakes; DROP TABLE personal_meanings; PRAGMA user_version=7;").unwrap();
     drop(db);
     let after = open_library(&p).unwrap();
     assert_eq!(
@@ -335,6 +335,6 @@ fn v7_upgrade_preserves_existing_learning_activity_and_operation_receipts() {
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        9
+        10
     );
 }

@@ -69,6 +69,69 @@ class LibraryViewModel extends ChangeNotifier {
     }
   }
 
+  bool provisioningBusy = false;
+  List<Map<String, dynamic>> get preparations =>
+      (snapshot?.personal['preparations'] as List? ?? [])
+          .cast<Map<String, dynamic>>();
+  Future<void> provisioningAction(Map<String, dynamic> action) async {
+    final wasHome = home;
+    await act({'kind': 'provisioning', 'action': action});
+    home = wasHome;
+    _notify();
+  }
+
+  Future<void> prepareContent(String taskId) async {
+    if (busy ||
+        provisioningBusy ||
+        _pending != null ||
+        !semanticService.configured) {
+      return;
+    }
+    final task = preparations.firstWhere((v) => v['id'] == taskId);
+    provisioningBusy = true;
+    _notify();
+    try {
+      await provisioningAction({
+        'kind': 'begin',
+        'task_id': taskId,
+        'expected_revision': task['revision'],
+      });
+      if (error != null) return;
+      final request =
+          preparations.firstWhere((v) => v['id'] == taskId)['request']
+              as Map<String, dynamic>;
+      Map<String, dynamic> completion;
+      try {
+        completion = {
+          'kind': 'finish',
+          'task_id': taskId,
+          'result': await semanticService.prepare(request),
+        };
+      } on SemanticServiceException catch (e) {
+        completion = {
+          'kind': 'fail',
+          'task_id': taskId,
+          'attempt_id': request['id'],
+          'reason': e.code,
+        };
+      }
+      // A response waits for another local transaction/recovery; it never repeats the provider call.
+      while (busy || _pending != null) {
+        if (_disposed) return;
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      if (_disposed) return;
+      final latest = preparations.firstWhere((v) => v['id'] == taskId);
+      if (latest['activeAttemptId'] == request['id'] &&
+          latest['status'] == 'generating') {
+        await provisioningAction(completion);
+      }
+    } finally {
+      provisioningBusy = false;
+      _notify();
+    }
+  }
+
   String? notice;
   final LibraryRepository repository;
   LibrarySnapshot? snapshot;
@@ -326,6 +389,24 @@ class LibraryViewModel extends ChangeNotifier {
 
   String message(Object error) {
     final text = error.toString();
+    if (text.contains('learning_target_policy_exists')) {
+      return '这个语义目标已采用其他学习方式，请关联现有目标后在学习设置中明确修改。';
+    }
+    if (text.contains('preparation_budget_exhausted')) {
+      return '这个目标的三次准备机会已用完，任务与已有资料已保留。';
+    }
+    if (text.contains('unsupported_content_policy')) {
+      return '在线服务暂不能提供此学习方式所需的材料，请明确选择其他方式或等待匹配资源。';
+    }
+    if (text.contains('preparation_running')) return '上次准备尚在有效期内，请等待或先取消后重试。';
+    if (text.contains('invalid_prepared_material')) {
+      return '返回材料没有通过本地校验，未进入学习。请重新读取后重试。';
+    }
+    if (text.contains('preparation_superseded')) {
+      return '这个准备请求已经取消或被替代，请查看当前任务。';
+    }
+    if (text.contains('daily_preparation_limit')) return '今天的准备预算已用完，请稍后再试。';
+    if (text.contains('attempt_timed_out')) return '准备已超时，资料已保留，请重新读取任务后重试。';
     if (text.contains('quantity_required')) {
       return '加入学习前，请先回首页确认每日新学数量。保存的材料不会丢失。';
     }

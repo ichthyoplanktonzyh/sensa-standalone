@@ -10,6 +10,7 @@ pub mod pack;
 pub mod personal;
 pub mod policy;
 pub mod progress;
+pub mod provisioning;
 pub mod retention;
 pub mod semantic;
 use chrono::{DateTime, Utc};
@@ -45,6 +46,9 @@ pub struct Command {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CommandAction {
+    Provisioning {
+        action: Box<provisioning::Action>,
+    },
     Semantic {
         action: Box<semantic::Action>,
     },
@@ -200,7 +204,7 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9].contains(&version) || application != APPLICATION {
+    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].contains(&version) || application != APPLICATION {
         return Err(Error::Rule("unsupported_library_version"));
     }
     if version <= 1 {
@@ -231,6 +235,9 @@ fn connection(path: &Path) -> Result<Connection> {
     }
     if version <= 8 {
         tx.execute_batch(include_str!("semantic.sql"))?;
+    }
+    if version <= 9 {
+        tx.execute_batch(include_str!("provisioning.sql"))?;
     }
     tx.commit()?;
     Ok(db)
@@ -417,6 +424,7 @@ pub fn execute_at_offset(
         |r| r.get(0),
     )?;
     match &command.action {
+        CommandAction::Provisioning { action } => provisioning::apply(&tx, action, &command, now)?,
         CommandAction::Semantic { action } => semantic::apply(&tx, action, &command, now)?,
         CommandAction::Personal { action } => personal::apply(&tx, action, &command, now)?,
         CommandAction::ActivityStart { mode } => {

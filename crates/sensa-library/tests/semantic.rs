@@ -203,7 +203,7 @@ fn v8_upgrade_preserves_existing_facts() {
     let before = open_library(&p).unwrap();
     let db = rusqlite::Connection::open(&p).unwrap();
     db.execute_batch(
-        "DROP TABLE semantic_lookups; DROP TABLE semantic_identities; PRAGMA user_version=8;",
+        "DROP TABLE personal_task_entries; DROP TABLE personal_content_attempts; DROP TABLE personal_learning_tasks; DROP TABLE semantic_lookups; DROP TABLE semantic_identities; PRAGMA user_version=8;",
     )
     .unwrap();
     drop(db);
