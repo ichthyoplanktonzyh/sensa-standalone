@@ -60,9 +60,11 @@ class ProductPage extends StatelessWidget {
     required this.title,
     required this.children,
     this.subtitle,
+    this.pageId,
   });
   final String title;
   final String? subtitle;
+  final String? pageId;
   final List<Widget> children;
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -70,7 +72,7 @@ class ProductPage extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1120),
         child: ListView(
-          key: PageStorageKey(title),
+          key: PageStorageKey(pageId ?? title),
           padding: EdgeInsets.all(constraints.maxWidth < 600 ? 20 : 48),
           children: [
             Text(title, style: Theme.of(context).textTheme.headlineLarge),

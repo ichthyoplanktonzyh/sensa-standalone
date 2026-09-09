@@ -1,3 +1,4 @@
+import 'package:sensa_native/l10n/interface_locale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -70,6 +71,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: interfaceLocale.locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: SemanticResolutionScreen(
             model: library,
             capture: capture,

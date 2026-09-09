@@ -1,3 +1,4 @@
+import 'package:sensa_native/l10n/interface_locale.dart';
 import 'support/migration_app.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -19,6 +20,9 @@ void main() {
   testWidgets(
     'structured learning uses local tasks, evidence and cold recovery',
     (tester) async {
+      await interfaceLocale.select(
+        const String.fromEnvironment('SENSA_UI_LANGUAGE', defaultValue: 'zh'),
+      );
       expect(run, isNotEmpty);
       final model = await createLibrary(name: 'assurance-$run.sqlite');
       addTearDown(model.dispose);
@@ -57,16 +61,16 @@ void main() {
         expect(model.snapshot!.value, jsonDecode(await receipt.readAsString()));
         if (formal) {
           await tap(find.byKey(const ValueKey('nav-2')));
-          await tap(find.text('全部学习记录'));
-          expect(find.text('学习记录'), findsOneWidget);
+          await tap(find.text(l10n.uiAllLearningHistory));
+          expect(find.text(l10n.uiLearningHistory), findsOneWidget);
         } else {
           expect(
             find.text(
               activity
-                  ? '本段学习已保存'
+                  ? l10n.uiProgressSaved
                   : reviewing
-                  ? '本次复习与修复已完成'
-                  : '本次高保证首学已完成',
+                  ? l10n.uiReviewAndRepairComplete
+                  : l10n.uiInitialLearningComplete,
             ),
             findsOneWidget,
           );
@@ -85,10 +89,10 @@ void main() {
             await tap(
               find.byKey(const ValueKey('nav-4')).evaluate().isNotEmpty
                   ? find.byKey(const ValueKey('nav-4'))
-                  : find.byTooltip('设置'),
+                  : find.byTooltip(l10n.uiSettings),
             );
-            await tap(find.text('默认学习方式'));
-            await tap(find.text('高保证学习'));
+            await tap(find.text(l10n.uiDefaultLearningMode));
+            await tap(find.text(l10n.learningHighAssurance));
           } else {
             await model.act({
               'kind': 'set_policy',
@@ -107,7 +111,7 @@ void main() {
             await tap(find.byKey(const ValueKey('nav-0')));
             await tap(
               reviewing
-                  ? find.text('只复习')
+                  ? find.text(l10n.uiReviewOnly)
                   : find.byKey(const ValueKey('home-start')),
             );
           } else {
@@ -117,7 +121,11 @@ void main() {
                 ValueKey('material-${model.snapshot!.material!['id']}'),
               ),
             );
-            await tap(find.text(reviewing ? '开始到期复习' : '开始学习'));
+            await tap(
+              find.text(
+                reviewing ? l10n.uiStartDueReview : l10n.uiStartLearning,
+              ),
+            );
           }
         } else {
           await model.act(
@@ -132,14 +140,16 @@ void main() {
           );
         }
         await ready();
-        await tap(find.text('暂停'));
+        await tap(find.text(l10n.uiPause));
         if (activity) {
           if (formal) {
             await tester.pageBack();
             await tester.pumpAndSettle();
             await tap(find.byKey(const ValueKey('home-start')));
           } else {
-            await tap(find.text(reviewing ? '只复习' : '开始今天的学习'));
+            await tap(
+              find.text(reviewing ? l10n.uiReviewOnly : l10n.uiStartToday),
+            );
           }
         } else {
           await tap(find.byKey(const ValueKey('assurance-resume')));
@@ -172,7 +182,7 @@ void main() {
               final f = find.byKey(const ValueKey('assurance-answer'));
               final lemma = a['teaching']['lemma'] as String;
               if (!reviewing && !assisted) {
-                await tap(find.text('需要首字母提示'));
+                await tap(find.text(l10n.uiShowFirstLetters));
                 assisted = true;
                 expect(
                   model.snapshot!.assurance!['draft']['support'],
@@ -195,7 +205,7 @@ void main() {
                     ValueKey('material-${model.snapshot!.material!['id']}'),
                   ),
                 );
-                await tap(find.text('继续学习'));
+                await tap(find.text(l10n.uiContinueLearning662));
                 expect(tester.widget<TextField>(f).controller!.text, lemma);
               }
               await tester.pump(const Duration(milliseconds: 400));
@@ -254,10 +264,10 @@ void main() {
         expect(
           find.text(
             activity
-                ? '本段学习已保存'
+                ? l10n.uiProgressSaved
                 : reviewing
-                ? '本次复习与修复已完成'
-                : '本次高保证首学已完成',
+                ? l10n.uiReviewAndRepairComplete
+                : l10n.uiInitialLearningComplete,
           ),
           findsOneWidget,
         );
@@ -269,8 +279,8 @@ void main() {
           expect(model.snapshot!.learning['checkins'].length, 1);
         }
         if (formal && !activity) {
-          await tap(find.text('回到首页'));
-          expect(find.text('今天，连接新的意义'), findsOneWidget);
+          await tap(find.text(l10n.uiBackToHome));
+          expect(find.text(l10n.uiConnectWithNewMeanings), findsOneWidget);
         }
         await receipt.writeAsString(
           jsonEncode(model.snapshot!.value),

@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+import '../l10n/interface_locale.dart';
 import 'history_screen.dart';
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
@@ -33,28 +35,52 @@ class LearningActivityView extends StatelessWidget {
         FilledButton(onPressed: enabled ? action : null, child: Text(label));
     if (overview) {
       children.addAll([
-        heading('今天的学习'),
+        heading(context.l10n.uiToday),
         Text(date),
-        Text('今日已引入 ${board['newStartedToday'] ?? 0} / ${s.quantity}'),
         Text(
-          '待继续 ${counts['initialContinuations'] ?? 0} · 到期复习 ${counts['dueReviews'] ?? 0} · 可再学 ${counts['relearningReady'] ?? 0}',
+          context.l10n.uiIntroducedToday(
+            (board['newStartedToday'] ?? 0).toString(),
+            (s.quantity).toString(),
+          ),
         ),
-        button('开始今天的学习', () => (onStart ?? model.startActivity)('mixed')),
+        Text(
+          context.l10n.uiContinueReviewsRelearn(
+            (counts['initialContinuations'] ?? 0).toString(),
+            (counts['dueReviews'] ?? 0).toString(),
+            (counts['relearningReady'] ?? 0).toString(),
+          ),
+        ),
+        button(
+          context.l10n.uiStartToday,
+          () => (onStart ?? model.startActivity)('mixed'),
+        ),
         OutlinedButton(
           onPressed: enabled
               ? () => (onStart ?? model.startActivity)('review_only')
               : null,
-          child: const Text('只复习'),
+          child: Text(context.l10n.uiReviewOnly),
         ),
         if (a != null && a['status'] == 'paused')
-          Text('有一段${a['mode'] == 'mixed' ? '混合学习' : '复习'}已暂停，开始相同模式会恢复原进度。'),
-        button(checked ? '今天已签到' : '手动签到', () => model.checkIn()),
+          Text(
+            context.l10n.uiYourIsPausedResumeTheSame(
+              (a['mode'] == 'mixed'
+                      ? context.l10n.uiMixedLearning
+                      : context.l10n.uiReview)
+                  .toString(),
+            ),
+          ),
+        button(
+          checked
+              ? context.l10n.uiCheckedInToday
+              : context.l10n.uiManualCheckIn,
+          () => model.checkIn(),
+        ),
         if (onStart == null)
           TextButton(
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => HistoryScreen(model: model)),
             ),
-            child: const Text('全部学习记录'),
+            child: Text(context.l10n.uiAllLearningHistory),
           ),
         TextButton(
           onPressed: () => showModalBottomSheet<void>(
@@ -62,7 +88,7 @@ class LearningActivityView extends StatelessWidget {
             isScrollControlled: true,
             builder: (context) => _Records(board: board),
           ),
-          child: const Text('学习记录与签到日历'),
+          child: Text(context.l10n.uiHistoryAndCheckInCalendar),
         ),
       ]);
     } else if (a != null) {
@@ -72,44 +98,62 @@ class LearningActivityView extends StatelessWidget {
       children.addAll([
         heading(
           ended
-              ? '本次学习已结束'
+              ? context.l10n.uiLearningEnded
               : a['status'] == 'paused'
-              ? '本次学习已暂停'
-              : '本段学习已保存',
+              ? context.l10n.uiLearningPaused278
+              : context.l10n.uiProgressSaved,
         ),
-        Text(a['mode'] == 'review_only' ? '只复习 · 不增加新学任务' : '今天的学习 · 新学与复习'),
-        Text('本次涉及 ${summary['distinctTargetCount']} 个不同的学习目标'),
         Text(
-          '完成首学 ${count('initialTargetIds')} · 完成复习 ${count('reviewTargetIds')} · 再学完成 ${count('restoredTargetIds')}',
+          a['mode'] == 'review_only'
+              ? context.l10n.uiReviewOnly280
+              : context.l10n.uiNewLearningAndReviews,
         ),
-        const Text('同一个目标可能出现在多个分类中，总数已经去重。'),
+        Text(
+          context.l10n.uiLearningTargets(
+            (summary['distinctTargetCount']).toString(),
+          ),
+        ),
+        Text(
+          context.l10n.uiInitialReviewsRelearningCompleted(
+            (count('initialTargetIds')).toString(),
+            (count('reviewTargetIds')).toString(),
+            (count('restoredTargetIds')).toString(),
+          ),
+        ),
+        Text(context.l10n.uiTargetsMayAppearInMoreThan),
         if (!ended && a['immediateAvailable'] != true)
           Text(
             a['emptyReason'] == 'daily_limit'
-                ? '今天的新学名额已用完，可明天继续。'
+                ? context.l10n.uiDailyNewLimitReachedContinueTomorrow
                 : a['emptyReason'] == 'waiting'
-                ? '目前没有可立即继续的任务，再回想时间尚未到。'
-                : '本次范围内暂时没有可继续的任务。新加入的内容会在新活动中安排。',
+                ? context.l10n.uiNothingIsReadyYetReturnWhen
+                : context.l10n.uiNothingElseInThisScopeStart,
           ),
         if (count('needsRecallTargetIds') > 0)
           Text(
-            '仍需回想 ${count('needsRecallTargetIds')} 个，其中等待 ${count('waitingTargetIds')} 个。',
+            context.l10n.uiToRecallIncludingWaiting(
+              (count('needsRecallTargetIds')).toString(),
+              (count('waitingTargetIds')).toString(),
+            ),
           ),
         if (!ended &&
             a['status'] == 'active' &&
             a['immediateAvailable'] == true)
-          button('继续安排', () => model.nextActivity()),
+          button(context.l10n.uiContinuePlanning, () => model.nextActivity()),
         if (!ended && a['status'] == 'active' && count('waitingTargetIds') > 0)
           OutlinedButton(
             onPressed: enabled ? () => model.nextActivity(early: true) : null,
-            child: const Text('提前再回想'),
+            child: Text(context.l10n.uiRecallEarly),
           ),
         if (!ended && a['status'] == 'paused')
-          button('恢复本次学习', () => model.startActivity(a['mode'] as String)),
+          button(
+            context.l10n.uiResumeLearning,
+            () => model.startActivity(a['mode'] as String),
+          ),
         if (!ended && a['status'] == 'active')
           OutlinedButton(
             onPressed: enabled ? () => model.stopActivity(end: true) : null,
-            child: const Text('结束本次学习'),
+            child: Text(context.l10n.uiEndLearning),
           ),
         if (!ended &&
             a['status'] == 'active' &&
@@ -124,11 +168,13 @@ class LearningActivityView extends StatelessWidget {
                         'target_id': target['retentionTargetId'],
                       })
                     : null,
-                child: Text('重新学习：${target['packageId']}'),
+                child: Text(
+                  context.l10n.uiRelearn((target['packageId']).toString()),
+                ),
               ),
         TextButton(
           onPressed: onHome ?? model.showHome,
-          child: const Text('回到首页'),
+          child: Text(context.l10n.uiBackToHome),
         ),
       ]);
     }
@@ -174,7 +220,10 @@ class _RecordsState extends State<_Records> {
           key: const ValueKey('learning-records-scroll'),
           padding: const EdgeInsets.all(24),
           children: [
-            Text('学习记录', style: Theme.of(context).textTheme.headlineSmall),
+            Text(
+              context.l10n.uiLearningHistory,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -184,7 +233,11 @@ class _RecordsState extends State<_Records> {
                   ),
                   icon: const Icon(Icons.chevron_left),
                 ),
-                Text('${month.year} 年 ${month.month} 月'),
+                Text(
+                  DateFormat.yMMMM(
+                    Localizations.localeOf(context).toLanguageTag(),
+                  ).format(month),
+                ),
                 IconButton(
                   onPressed: () => setState(
                     () => month = DateTime(month.year, month.month + 1),
@@ -193,20 +246,28 @@ class _RecordsState extends State<_Records> {
                 ),
               ],
             ),
-            const Text('日历标记只表示签到，不表示完成学习或掌握。'),
+            Text(context.l10n.uiCalendarMarksShowCheckIns),
             GridView.count(
               crossAxisCount: 7,
               mainAxisExtent: 44,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               children: [
-                for (final d in ['一', '二', '三', '四', '五', '六', '日'])
+                for (final d in [
+                  context.l10n.uiM,
+                  context.l10n.uiT,
+                  context.l10n.uiW,
+                  context.l10n.uiT298,
+                  context.l10n.uiF,
+                  context.l10n.uiS,
+                  context.l10n.uiS301,
+                ])
                   Center(child: Text(d)),
                 for (var i = 1; i < month.weekday; i++) const SizedBox.shrink(),
                 for (var d = 1; d <= days; d++)
                   Semantics(
                     label:
-                        '${date(d)} ${checked.contains(date(d)) ? '已签到' : '未签到'}',
+                        '${date(d)} ${checked.contains(date(d)) ? context.l10n.uiCheckedIn : context.l10n.uiNotCheckedIn}',
                     child: Container(
                       margin: const EdgeInsets.all(3),
                       decoration: BoxDecoration(
@@ -220,18 +281,24 @@ class _RecordsState extends State<_Records> {
                   ),
               ],
             ),
-            if (history.isEmpty) const Text('还没有正式学习记录。'),
+            if (history.isEmpty) Text(context.l10n.uiNoLearningHistoryYet),
             for (final h in history)
               ListTile(
                 title: Text(
-                  '${h['mode'] == 'mixed' ? '混合学习' : '只复习'} · ${h['summary']['distinctTargetCount']} 个目标',
+                  context.l10n.uiTargets305(
+                    (h['mode'] == 'mixed'
+                            ? context.l10n.uiMixedLearning
+                            : context.l10n.uiReviewOnly)
+                        .toString(),
+                    (h['summary']['distinctTargetCount']).toString(),
+                  ),
                 ),
                 subtitle: Text(
                   '${DateTime.fromMillisecondsSinceEpoch(h['startedAtMs'] as int).toLocal()} · ${h['status'] == 'ended'
-                      ? '已结束'
+                      ? context.l10n.uiEnded
                       : h['status'] == 'paused'
-                      ? '已暂停'
-                      : '进行中'}',
+                      ? context.l10n.uiPaused
+                      : context.l10n.uiInProgress307}',
                 ),
               ),
           ],

@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'package:flutter/material.dart';
 
 /// These resources were admitted with the immutable material by the local core.
@@ -21,20 +22,20 @@ class OptionalResourcesView extends StatelessWidget {
           if ((resource['materialRoleKey'] == 'recall_support') == !revealed)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
-              child: _resource(resource),
+              child: _resource(context, resource),
             ),
       ],
     );
   }
 
-  Widget _resource(Map<String, dynamic> resource) {
+  Widget _resource(BuildContext context, Map<String, dynamic> resource) {
     final p = resource['contentPayload'] as Map<String, dynamic>;
     final label = switch (resource['materialRoleKey']) {
-      'recall_support' => '回忆提示',
-      'pronunciation' => '发音',
-      'language_structure' => '语言结构',
-      'usage_guidance' => '用法例句',
-      'scene_bridge' => '联系场景',
+      'recall_support' => context.l10n.uiRecallHint,
+      'pronunciation' => context.l10n.uiPronunciation,
+      'language_structure' => context.l10n.uiLanguageStructure,
+      'usage_guidance' => context.l10n.uiUsageExamples,
+      'scene_bridge' => context.l10n.uiRelatedScene,
       _ => '',
     };
     final body = switch (resource['materialRoleKey']) {

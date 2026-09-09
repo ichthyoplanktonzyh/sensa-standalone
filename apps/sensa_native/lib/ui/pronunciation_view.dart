@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import '../data/local_audio.dart';
@@ -33,7 +34,7 @@ class _PronunciationViewState extends State<PronunciationView> {
         if (mounted && playing) {
           setState(() {
             playing = false;
-            message = '发音播放完成';
+            message = context.l10n.uiAudioFinished;
           });
         }
       },
@@ -41,7 +42,7 @@ class _PronunciationViewState extends State<PronunciationView> {
         if (mounted) {
           setState(() {
             playing = false;
-            message = '发音无法播放，可以继续文字学习或重试播放。';
+            message = context.l10n.uiAudioUnavailableContinueWithTextOr;
           });
         }
       },
@@ -61,13 +62,13 @@ class _PronunciationViewState extends State<PronunciationView> {
       if (mounted) {
         setState(() {
           bytes = result;
-          message = '发音已保存到本机，可离线播放';
+          message = context.l10n.uiAudioSavedForOfflinePlayback;
         });
       }
     } catch (_) {
       if (mounted) {
         setState(() {
-          message = '发音暂不可用，可以继续文字学习；联网并配置服务后重试。';
+          message = context.l10n.uiAudioUnavailableConnectToYourService;
         });
       }
     } finally {
@@ -90,7 +91,7 @@ class _PronunciationViewState extends State<PronunciationView> {
       if (mounted) {
         setState(() {
           playing = false;
-          message = '发音无法播放，可以继续文字学习或重试播放。';
+          message = context.l10n.uiAudioUnavailableContinueWithTextOr;
         });
       }
     }
@@ -106,8 +107,8 @@ class _PronunciationViewState extends State<PronunciationView> {
   @override
   Widget build(BuildContext context) {
     if (widget.material['pronunciation'] == null) {
-      return const Text(
-        '暂无静态发音，可以继续文字学习。',
+      return Text(
+        context.l10n.uiNoAudioYetYouCanContinue,
         key: ValueKey('pronunciation-absent'),
       );
     }
@@ -126,12 +127,12 @@ class _PronunciationViewState extends State<PronunciationView> {
           icon: Icon(playing ? Icons.volume_up : Icons.play_arrow),
           label: Text(
             loading
-                ? '正在获取发音…'
+                ? context.l10n.uiDownloadingAudio
                 : playing
-                ? '正在播放…'
+                ? context.l10n.uiPlaying477
                 : bytes == null
-                ? '重试下载发音'
-                : '播放发音',
+                ? context.l10n.uiRetryAudioDownload
+                : context.l10n.uiPlayPronunciation,
           ),
         ),
       ],

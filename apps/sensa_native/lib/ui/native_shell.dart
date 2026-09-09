@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'agent_screen.dart';
@@ -26,7 +27,13 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
   int quantity = 5;
   bool opening = false;
   LibraryViewModel get model => widget.model;
-  static const labels = ['首页', '我的内容', '学习', '练习', '设置'];
+  List<String> get labels => [
+    context.l10n.uiHome,
+    context.l10n.uiMyContent,
+    context.l10n.uiLearn,
+    context.l10n.uiPractice,
+    context.l10n.uiSettings,
+  ];
   static const icons = [
     Icons.home_outlined,
     Icons.book_outlined,
@@ -123,9 +130,9 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       if (model.busy)
-        const LinearProgressIndicator(
+        LinearProgressIndicator(
           minHeight: 2,
-          semanticsLabel: '正在读取或保存本机资料',
+          semanticsLabel: context.l10n.uiReadingOrSavingYourLibrary,
         ),
       if (model.error != null)
         Material(
@@ -141,11 +148,11 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
                   children: [
                     TextButton(
                       onPressed: model.busy ? null : model.retry,
-                      child: const Text('重试本次操作'),
+                      child: Text(context.l10n.uiRetry),
                     ),
                     TextButton(
                       onPressed: model.busy ? null : model.load,
-                      child: const Text('重新读取'),
+                      child: Text(context.l10n.uiReload),
                     ),
                   ],
                 ),
@@ -162,15 +169,17 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
   );
 
   Widget welcome() => ProductPage(
-    title: '从自己的节奏开始',
-    subtitle: '资料和学习记录保存在本机，无需登录就能开始。',
+    pageId: 'welcome',
+    title: context.l10n.uiStartAtYourOwnPace,
+    subtitle: context.l10n.uiLearnOfflineWithoutAnAccount,
     children: [
+      languagePicker(),
       ProductPanel(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              '每天学习多少个新的意义连接？',
+              context.l10n.uiHowManyNewConnectionsEachDay,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 20),
@@ -197,10 +206,10 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
                       'kind': 'confirm_quantity',
                       'quantity': quantity,
                     }),
-              child: const Text('确认每日数量'),
+              child: Text(context.l10n.uiSetDailyQuantity),
             ),
             const SizedBox(height: 12),
-            const Text('之后可以在设置中调整。复习按已有学习安排，不占用新学数量。'),
+            Text(context.l10n.uiYouCanChangeThisInSettings),
           ],
         ),
       ),
@@ -215,23 +224,29 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
     final fresh = counts['newAvailable'] ?? 0;
     final hasWork = (counts['distinctExecutableTargets'] as int? ?? 0) > 0;
     return ProductPage(
-      title: '今天，连接新的意义',
-      subtitle: '${s.learning['date'] ?? ''} · 本地学习',
+      pageId: 'home',
+      title: context.l10n.uiConnectWithNewMeanings,
+      subtitle: context.l10n.uiMessage(
+        context.localDate(DateTime.parse(s.learning['date'] as String)),
+      ),
       children: [
         ProductPanel(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('今天的学习', style: Theme.of(context).textTheme.headlineSmall),
+              Text(
+                context.l10n.uiToday,
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
               const SizedBox(height: 28),
               Wrap(
                 spacing: 48,
                 runSpacing: 20,
                 children: [
-                  _Count(label: '可新学', value: '$fresh'),
-                  _Count(label: '到期复习', value: '$due'),
+                  _Count(label: context.l10n.uiNew, value: '$fresh'),
+                  _Count(label: context.l10n.uiDueReviews, value: '$due'),
                   _Count(
-                    label: '待继续',
+                    label: context.l10n.uiToContinue,
                     value: '${counts['initialContinuations'] ?? 0}',
                   ),
                 ],
@@ -239,10 +254,10 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
               const SizedBox(height: 28),
               Text(
                 resumable
-                    ? '上次的学习进度已保存在本机，可以继续。'
+                    ? context.l10n.uiPickUpWhereYouLeftOff
                     : s.catalog.isEmpty
-                    ? '从已有内容开始，或记录一个你想表达的情境。'
-                    : '从新学和复习中安排今天的学习，按自己的节奏继续。',
+                    ? context.l10n.uiAddLearningContentOrCaptureA
+                    : context.l10n.uiLearnAtYourOwnPace,
               ),
               const SizedBox(height: 20),
               FilledButton.icon(
@@ -259,10 +274,10 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
                 icon: const Icon(Icons.arrow_forward),
                 label: Text(
                   resumable
-                      ? '继续今天的学习'
+                      ? context.l10n.uiContinueToday
                       : !hasWork
-                      ? '添加学习内容'
-                      : '开始今天的学习',
+                      ? context.l10n.uiAddLearningContent
+                      : context.l10n.uiStartToday,
                 ),
               ),
               const SizedBox(height: 8),
@@ -271,21 +286,25 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
                     ? null
                     : () => study('review_only'),
                 icon: const Icon(Icons.replay),
-                label: Text(due == 0 ? '暂无到期复习' : '只复习'),
+                label: Text(
+                  due == 0
+                      ? context.l10n.uiNoReviewsDue
+                      : context.l10n.uiReviewOnly,
+                ),
               ),
             ],
           ),
         ),
         link(
-          '浏览学习内容',
-          '导入学习包，选择想学习的表达。',
+          context.l10n.uiBrowseLearningContent,
+          context.l10n.uiImportALearningPackageAndChoose,
           Icons.library_books_outlined,
           () => setState(() => selected = 2),
         ),
         const Divider(),
         link(
-          '记录自己的情境',
-          '保存上下文，在需要时与语言老师一起澄清。',
+          context.l10n.uiCaptureAContext,
+          context.l10n.uiGetHelpFromYourLanguageTeacher,
           Icons.chat_bubble_outline,
           () => open(PersonalWorldScreen(model: model)),
         ),
@@ -294,22 +313,22 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
   }
 
   Widget content() => ProductPage(
-    title: '我的内容',
-    subtitle: '从眼前的情境，建立自己的语义世界。保存和加入学习是两个独立步骤。',
+    pageId: 'content',
+    title: context.l10n.uiMyContent,
     children: [
       ProductPanel(
         child: Column(
           children: [
             link(
-              '我的词义世界',
-              '已确认的意思、收件箱与移除的材料。',
+              context.l10n.uiMySemanticWorld,
+              context.l10n.uiSavedMeaningsAndInbox,
               Icons.book_outlined,
               () => open(PersonalWorldScreen(model: model)),
             ),
             const Divider(),
             link(
-              '图文与语义关系',
-              '继续草稿，探索同一情境中的表达连接。',
+              context.l10n.uiImagesAndConnections,
+              context.l10n.uiExploreDraftsAndRelatedExpressions,
               Icons.hub_outlined,
               () => open(WorldScreen(library: model)),
             ),
@@ -317,14 +336,14 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
         ),
       ),
       link(
-        '学习准备',
-        '查看材料生成、审核结果与可恢复的任务。',
+        context.l10n.uiLearningPreparation,
+        context.l10n.uiCheckMaterialPreparationAndPendingTasks,
         Icons.auto_stories_outlined,
         () => open(PreparationListScreen(model: model)),
       ),
       link(
-        '采集接入',
-        '接收浏览器和本地 Agent 保存的上下文。',
+        context.l10n.uiCaptureConnections,
+        context.l10n.uiReceiveContextsFromYourBrowserAnd,
         Icons.input,
         () => open(IntakeConnectionScreen(model: model)),
       ),
@@ -341,8 +360,8 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
         )
         .toList();
     return ProductPage(
-      title: '我的学习',
-      subtitle: '内容决定学什么，学习方式决定怎样建立并保持连接。',
+      pageId: 'learning',
+      title: context.l10n.uiMyLearning,
       children: [
         Wrap(
           spacing: 12,
@@ -351,33 +370,33 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
             FilledButton.icon(
               onPressed: model.busy ? null : model.importPack,
               icon: const Icon(Icons.download_outlined),
-              label: const Text('导入学习包'),
+              label: Text(context.l10n.uiImportLearningPackage),
             ),
             OutlinedButton(
               onPressed: model.busy
                   ? null
                   : () => open(CurriculumScreen(model: model)),
-              child: const Text('学习来源'),
+              child: Text(context.l10n.uiLearningSources),
             ),
             OutlinedButton(
               onPressed: () => open(HistoryScreen(model: model)),
-              child: const Text('全部学习记录'),
+              child: Text(context.l10n.uiAllLearningHistory),
             ),
           ],
         ),
         TextField(
           key: const ValueKey('library-search'),
           controller: search,
-          decoration: const InputDecoration(
-            labelText: '搜索表达或词义',
+          decoration: InputDecoration(
+            labelText: context.l10n.uiSearchExpressionsOrMeanings,
             prefixIcon: Icon(Icons.search),
           ),
           onChanged: (_) => setState(() {}),
         ),
         if (s.catalog.isEmpty)
-          const ProductPanel(child: Text('还没有下载的学习内容。导入学习包，或将语义世界中的意思明确加入学习。'))
+          ProductPanel(child: Text(context.l10n.uiImportALearningPackageOrAdd))
         else if (entries.isEmpty)
-          const Text('没有找到匹配的内容，试试其他表达。')
+          Text(context.l10n.uiNoMatchesTryAnotherExpression)
         else
           ...entries.map(
             (e) => ProductPanel(
@@ -390,10 +409,10 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
                 ),
                 subtitle: Text(
                   '${e['material']['sense']}\n${e['completed'] == true
-                      ? '首学已完成'
+                      ? context.l10n.uiInitialLearningComplete127
                       : e['enrolled'] == true
-                      ? '已加入学习'
-                      : '尚未加入学习'}',
+                      ? context.l10n.uiAddedToLearning
+                      : context.l10n.uiNotAddedToLearning}',
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: model.busy ? null : () => material(e['material']['id']),
@@ -412,7 +431,7 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, set) => AlertDialog(
-          title: const Text('每日新学数量'),
+          title: Text(context.l10n.uiDailyNewQuantity),
           content: Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -429,11 +448,11 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
+              child: Text(context.l10n.uiCancel),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, next),
-              child: const Text('保存数量'),
+              child: Text(context.l10n.uiSaveQuantity),
             ),
           ],
         ),
@@ -444,22 +463,54 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
     }
   }
 
+  Widget languagePicker() => ProductPanel(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          key: ValueKey(
+            'interface-language-${interfaceLocale.locale.languageCode}',
+          ),
+          initialValue: interfaceLocale.locale.languageCode,
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: context.l10n.interfaceLanguage,
+          ),
+          items: [
+            DropdownMenuItem(
+              value: 'zh',
+              child: Text(context.l10n.simplifiedChinese),
+            ),
+            DropdownMenuItem(value: 'en', child: Text(context.l10n.english)),
+          ],
+          onChanged: interfaceLocale.saving
+              ? null
+              : (value) {
+                  if (value != null) interfaceLocale.select(value);
+                },
+        ),
+        if (interfaceLocale.saveFailed) Text(context.l10n.languageSaveFailed),
+      ],
+    ),
+  );
+
   Widget settings() => ProductPage(
-    title: '设置',
-    subtitle: '本地使用无需账号。在线服务由你选择，在需要时连接。',
+    pageId: 'settings',
+    title: context.l10n.uiSettings,
     children: [
+      languagePicker(),
       ProductPanel(
         child: Column(
           children: [
             link(
-              '每日新学数量',
-              '${model.snapshot!.quantity} 个新的意义连接',
+              context.l10n.uiDailyNewQuantity,
+              context.l10n.uiNewConnections(model.snapshot!.quantity!),
               Icons.today_outlined,
               changeQuantity,
             ),
             const Divider(),
             link(
-              '默认学习方式',
+              context.l10n.uiDefaultLearningMode,
               model.snapshot!.defaultPolicyLabel,
               Icons.tune,
               () => showLearningPolicy(context, model, 'learner'),
@@ -471,25 +522,25 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
         child: Column(
           children: [
             link(
-              '模型服务',
-              '设置自己的模型和 Key，或连接可选的 Sensa 在线服务。',
+              context.l10n.uiModelServices,
+              context.l10n.uiUseYourOwnApiKeyOr,
               Icons.cloud_outlined,
               () => open(AgentSettingsScreen(controller: model.agents)),
             ),
             const Divider(),
             link(
-              '采集接入',
-              '浏览器、本地 Agent 与文件导入。',
+              context.l10n.uiCaptureConnections,
+              context.l10n.uiBrowserAgentsAndFileImport,
               Icons.input,
               () => open(IntakeConnectionScreen(model: model)),
             ),
           ],
         ),
       ),
-      const Text('资料和学习记录保存在这台设备。跨设备同步尚未提供。'),
+      Text(context.l10n.uiYourContentIsOnThisDevice),
       ExpansionTile(
         key: const PageStorageKey('native_shell-detail-1'),
-        title: const Text('本机资料库'),
+        title: Text(context.l10n.uiLocalLibrary),
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
@@ -517,7 +568,7 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
         settings,
       ];
       Widget page = s == null
-          ? const Center(child: Text('正在打开本地学习库…'))
+          ? Center(child: Text(context.l10n.uiOpeningYourLibrary))
           : !ready
           ? welcome()
           : pages[selected]();
@@ -536,7 +587,7 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
                       title: const Text('sensa'),
                       actions: [
                         IconButton(
-                          tooltip: '设置',
+                          tooltip: context.l10n.uiSettings,
                           onPressed: ready
                               ? () => setState(() => selected = 4)
                               : null,
@@ -600,40 +651,47 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const Padding(
-                              padding: EdgeInsets.symmetric(
-                                vertical: 24,
-                                horizontal: 16,
-                              ),
-                              child: Text(
-                                'sensa',
-                                style: TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                            Expanded(
+                              child: ListView(
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      vertical: 24,
+                                      horizontal: 16,
+                                    ),
+                                    child: Text(
+                                      'sensa',
+                                      style: TextStyle(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  for (var i = 0; i < 4; i++)
+                                    ListTile(
+                                      key: ValueKey('nav-$i'),
+                                      leading: Icon(icons[i]),
+                                      title: Text(labels[i]),
+                                      selected: selected == i,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      selectedTileColor: const Color(
+                                        0xffe6e9f2,
+                                      ),
+                                      onTap: ready
+                                          ? () => setState(() => selected = i)
+                                          : null,
+                                    ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 24),
-                            for (var i = 0; i < 4; i++)
-                              ListTile(
-                                key: ValueKey('nav-$i'),
-                                leading: Icon(icons[i]),
-                                title: Text(labels[i]),
-                                selected: selected == i,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                selectedTileColor: const Color(0xffe6e9f2),
-                                onTap: ready
-                                    ? () => setState(() => selected = i)
-                                    : null,
-                              ),
-                            const Spacer(),
                             const Divider(),
                             ListTile(
                               key: const ValueKey('nav-4'),
                               leading: const Icon(Icons.tune),
-                              title: const Text('设置'),
+                              title: Text(context.l10n.uiSettings),
                               selected: selected == 4,
                               onTap: ready
                                   ? () => setState(() => selected = 4)

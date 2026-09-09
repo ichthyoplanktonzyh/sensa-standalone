@@ -1,3 +1,4 @@
+import 'package:sensa_native/l10n/interface_locale.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -24,6 +25,10 @@ void main() {
       base.dispose();
       await model.load();
       addTearDown(model.dispose);
+      final preferenceFile = File('${model.repository.path}.interface.json');
+      await interfaceLocale.load(preferenceFile);
+      if (!recovery) await interfaceLocale.select('en');
+      expect(interfaceLocale.locale.languageCode, 'en');
       final receipt = File('${model.repository.path}.product-receipt');
       await tester.pumpWidget(NativeApp(model: model));
       Future<void> wait() async {
@@ -64,31 +69,33 @@ void main() {
       }
 
       await wait();
-      expect(find.text('载入验收材料'), findsNothing);
+      expect(find.text(l10n.uiLoadAcceptanceMaterial), findsNothing);
       if (recovery) {
         expect(model.snapshot!.value, jsonDecode(await receipt.readAsString()));
         await tap(find.byKey(const ValueKey('nav-2')));
         expect(find.text('tactful'), findsOneWidget);
         expect(model.snapshot!.value['completionCount'], 1);
         await tap(find.byKey(const ValueKey('nav-1')));
-        await tap(find.text('我的词义世界'));
-        expect(find.text('已保存'), findsOneWidget);
+        await tap(find.text(l10n.uiMySemanticWorld));
+        expect(find.text(l10n.uiSaved), findsOneWidget);
         expect(model.snapshot!.personal['meanings'].length, 1);
       } else {
         expect(model.snapshot!.quantity, isNull);
-        await tap(find.text('确认每日数量'));
-        expect(find.text('今天，连接新的意义'), findsOneWidget);
+        await tap(find.text(l10n.uiSetDailyQuantity));
+        expect(find.text(l10n.uiConnectWithNewMeanings), findsOneWidget);
         await tap(find.byKey(const ValueKey('nav-2')));
         final original = model.snapshot!.revision;
-        await tap(find.text('导入学习包')); // OS picker cancellation substitute.
+        await tap(
+          find.text(l10n.uiImportLearningPackage),
+        ); // OS picker cancellation substitute.
         expect(model.snapshot!.revision, original);
         reader.encoded = 'not json';
-        await tap(find.text('导入学习包'));
+        await tap(find.text(l10n.uiImportLearningPackage));
         expect(model.error, isNotNull);
         expect(model.snapshot!.catalog, isEmpty);
-        await tap(find.text('重新读取'));
+        await tap(find.text(l10n.uiReload));
         reader.encoded = sample();
-        await tap(find.text('导入学习包'));
+        await tap(find.text(l10n.uiImportLearningPackage));
         expect(model.error, isNull);
         expect(
           model.snapshot!.catalog.every((e) => e['enrolled'] != true),
@@ -100,35 +107,35 @@ void main() {
             const ValueKey('material-00000000-0000-4000-8000-000000000001'),
           ),
         );
-        expect(find.text('载入验收材料'), findsNothing);
-        await tap(find.text('加入学习'));
-        await tap(find.text('更换此项方式'));
-        await tap(find.text('轻量学习'));
-        await tap(find.text('开始学习'));
+        expect(find.text(l10n.uiLoadAcceptanceMaterial), findsNothing);
+        await tap(find.text(l10n.uiAddToLearning));
+        await tap(find.text(l10n.uiChangeModeForThisItem));
+        await tap(find.text(l10n.learningLightweight));
+        await tap(find.text(l10n.uiStartLearning));
         expect(find.text('tactful'), findsNothing);
-        await tap(find.text('揭示表达'));
-        await tap(find.text('再回想'));
+        await tap(find.text(l10n.uiRevealExpression));
+        await tap(find.text(l10n.uiAgain));
         expect(model.snapshot!.value['completionCount'], 0);
-        await tap(find.text('揭示表达'));
-        await tap(find.text('可以继续'));
-        expect(find.text('本次首学已完成'), findsOneWidget);
+        await tap(find.text(l10n.uiRevealExpression));
+        await tap(find.text(l10n.uiGood));
+        expect(find.text(l10n.uiInitialLearningComplete626), findsOneWidget);
         expect(model.snapshot!.value['completionCount'], 1);
         expect(model.snapshot!.value['handoffCount'], 1);
-        await tap(find.text('回到首页'));
+        await tap(find.text(l10n.uiBackToHome));
         await tap(find.byKey(const ValueKey('nav-1')));
-        await tap(find.text('我的词义世界'));
-        await tap(find.text('保存材料'));
+        await tap(find.text(l10n.uiMySemanticWorld));
+        await tap(find.text(l10n.uiSaveContent));
         await text('capture-context', 'May I borrow your umbrella?');
-        await tap(find.text('先保存到收件箱'));
-        await tap(find.text('收件箱'));
-        await tap(find.text('选择表达与词义'));
+        await tap(find.text(l10n.uiSaveToInboxFirst));
+        await tap(find.widgetWithText(ChoiceChip, l10n.uiInbox));
+        await tap(find.text(l10n.uiChooseExpressionAndMeaning));
         await text('capture-expression', 'borrow');
         await tap(
           find.byKey(
             const ValueKey('sense-00000000-0000-4000-8000-000000000002'),
           ),
         );
-        await tap(find.text('确认词义并保存'));
+        await tap(find.text(l10n.uiConfirmMeaningAndSave));
         expect(model.snapshot!.personal['meanings'].length, 1);
         expect(model.snapshot!.personal['meanings'][0]['focus'], isNull);
         expect(
@@ -138,50 +145,60 @@ void main() {
         );
         await tester.pageBack();
         await wait();
-        await tap(find.text('图文与语义关系'));
-        expect(find.text('图文与语义关系'), findsOneWidget);
+        await tap(find.text(l10n.uiImagesAndConnections));
+        expect(find.text(l10n.uiImagesAndConnections), findsOneWidget);
         await tester.pageBack();
         await wait();
-        await tap(find.text('学习准备'));
-        expect(find.text('学习准备'), findsOneWidget);
+        await tap(find.text(l10n.uiLearningPreparation));
+        expect(find.text(l10n.uiLearningPreparation), findsOneWidget);
         await tester.pageBack();
         await wait();
-        await tap(find.text('采集接入'));
-        expect(find.text('导入采集请求'), findsOneWidget);
+        await tap(find.text(l10n.uiCaptureConnections));
+        expect(find.text(l10n.uiImportCaptureRequest), findsOneWidget);
         await tester.pageBack();
         await wait();
         await tap(find.byKey(const ValueKey('nav-2')));
-        await tap(find.text('全部学习记录'));
-        expect(find.text('学习记录'), findsOneWidget);
+        await tap(find.text(l10n.uiAllLearningHistory));
+        expect(find.text(l10n.uiLearningHistory), findsOneWidget);
         await tester.pageBack();
         await wait();
-        await tap(find.text('学习来源'));
-        expect(find.text('学习来源'), findsOneWidget);
+        await tap(find.text(l10n.uiLearningSources));
+        expect(find.text(l10n.uiLearningSources), findsOneWidget);
         await tester.pageBack();
         await wait();
         await tap(
           find.byKey(const ValueKey('nav-4')).evaluate().isNotEmpty
               ? find.byKey(const ValueKey('nav-4'))
-              : find.byTooltip('设置'),
+              : find.byTooltip(l10n.uiSettings),
         );
-        await tap(find.text('每日新学数量'));
+        final beforeLanguage = model.snapshot!.value;
+        await tap(find.byKey(const ValueKey('interface-language-en')));
+        await tap(find.text('简体中文').last);
+        expect(interfaceLocale.locale.languageCode, 'zh');
+        expect(find.text('默认学习方式'), findsOneWidget);
+        expect(model.snapshot!.value, beforeLanguage);
+        await tap(find.byKey(const ValueKey('interface-language-zh')));
+        await tap(find.text('English').last);
+        expect(interfaceLocale.locale.languageCode, 'en');
+        expect(model.snapshot!.value, beforeLanguage);
+        await tap(find.text(l10n.uiDailyNewQuantity));
         await tap(find.text('10'));
-        await tap(find.text('保存数量'));
+        await tap(find.text(l10n.uiSaveQuantity));
         expect(model.snapshot!.quantity, 10);
-        await tap(find.text('模型服务'));
-        await tap(find.text('添加模型服务'));
-        await tap(find.text('取消'));
+        await tap(find.text(l10n.uiModelServices));
+        await tap(find.text(l10n.uiAddModelService));
+        await tap(find.text(l10n.uiCancel));
         expect(model.agents.providers.profiles, isEmpty);
         await tester.pageBack();
         await wait();
         final beforePractice = model.snapshot!.value;
         await tap(find.byKey(const ValueKey('nav-3')));
-        expect(find.text('自由练习'), findsOneWidget);
-        await tap(find.text('选择练习范围'));
-        await tap(find.text('取消'));
+        expect(find.text(l10n.uiFreePractice), findsOneWidget);
+        await tap(find.text(l10n.uiChoosePracticeScope));
+        await tap(find.text(l10n.uiCancel));
         // Formal tab's BackButton must return home, never pop the root route.
         await tap(find.byType(BackButton));
-        expect(find.text('今天，连接新的意义'), findsOneWidget);
+        expect(find.text(l10n.uiConnectWithNewMeanings), findsOneWidget);
         await model.load();
         await wait();
         expect(

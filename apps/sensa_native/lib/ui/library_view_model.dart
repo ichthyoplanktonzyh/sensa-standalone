@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'agent_controller.dart';
 import '../data/semantic_service.dart';
 import 'dart:convert';
@@ -85,14 +86,14 @@ class LibraryViewModel extends ChangeNotifier {
       if (!semanticService.configured ||
           request['anchor'] != null &&
               request['anchor']['recipient'] != semanticService.origin) {
-        notice = '本机已停止接纳旧结果；尚未通知原在线服务，已发送的请求无法收回。';
+        setNotice(() => l10n.uiOldResultsAreBlockedLocallyThe);
         _notify();
         continue;
       }
       try {
         await semanticService.cancelPreparation(request);
       } catch (_) {
-        notice = '本机已停止接纳旧结果；在线取消通知未成功，服务可能继续处理已收到的内容。';
+        setNotice(() => l10n.uiOldResultsAreBlockedLocallyCancellation);
       }
       _notify();
     }
@@ -121,9 +122,11 @@ class LibraryViewModel extends ChangeNotifier {
     });
     home = wasHome;
     if (error == null) {
-      notice = enabled
-          ? '原文授权已保存在本机；请明确准备新的学习材料。'
-          : '该原文授权已在本机撤销；使用它的后续材料需重新准备，已开始的学习与历史保留。';
+      setNotice(
+        () => enabled
+            ? l10n.uiPermissionSavedPrepareNewLearningMaterial
+            : l10n.uiPermissionRevokedFutureMaterialNeedsTo,
+      );
       await _cancelInvalidated(requests);
     }
     _notify();
@@ -204,7 +207,7 @@ class LibraryViewModel extends ChangeNotifier {
             try {
               await obtainPronunciation(material!);
             } catch (_) {
-              notice = '文字材料已准备好；发音尚未下载，联网后可在揭示表达时重试。';
+              setNotice(() => l10n.uiTextIsReadyDownloadAudioLater);
             }
           }
         }
@@ -231,12 +234,16 @@ class LibraryViewModel extends ChangeNotifier {
     return repository.pronunciation(id);
   }
 
-  String? notice;
+  String Function()? _notice;
+  String? get notice => _notice?.call();
+  void setNotice(String Function()? value) => _notice = value;
   final LibraryRepository repository;
   LibrarySnapshot? snapshot;
   bool busy = false;
   bool home = false;
-  String? error;
+  String Function()? _error;
+  String? get error => _error?.call();
+  void setError(String Function()? value) => _error = value;
   Map<String, dynamic>? _pending;
   bool _disposed = false;
   void _notify() {
@@ -254,7 +261,7 @@ class LibraryViewModel extends ChangeNotifier {
   Future<void> load() async {
     if (busy) return;
     busy = true;
-    error = null;
+    setError(null);
     _notify();
     try {
       snapshot = await repository.load();
@@ -271,7 +278,7 @@ class LibraryViewModel extends ChangeNotifier {
         });
       }
     } catch (e) {
-      error = message(e);
+      setError(() => message(e));
     } finally {
       busy = false;
       _notify();
@@ -296,7 +303,7 @@ class LibraryViewModel extends ChangeNotifier {
       return;
     }
     busy = true;
-    error = null;
+    setError(null);
     _notify();
     try {
       snapshot = await repository.execute(_pending!);
@@ -308,7 +315,7 @@ class LibraryViewModel extends ChangeNotifier {
       if (e.toString().contains('no_due_review')) {
         _pending = null;
         home = true;
-        notice = '目前没有可开始的到期复习，可以继续新学或稍后再来。';
+        setNotice(() => l10n.uiNoReviewsAreDueStartNew);
       } else {
         // These Rust validation errors roll back the whole command. A corrected
         // source/range intent must receive a new operation id; uncertain I/O
@@ -323,7 +330,7 @@ class LibraryViewModel extends ChangeNotifier {
         ].any(e.toString().contains)) {
           _pending = null;
         }
-        error = message(e);
+        setError(() => message(e));
       }
     } finally {
       busy = false;
@@ -334,14 +341,14 @@ class LibraryViewModel extends ChangeNotifier {
   Future<void> importPack() async {
     if (busy || _pending != null) return;
     busy = true;
-    error = null;
-    notice = null;
+    setError(null);
+    setNotice(null);
     _notify();
     String? encoded;
     try {
       encoded = await packReader.pick();
     } catch (e) {
-      error = message(e);
+      setError(() => message(e));
     } finally {
       busy = false;
       _notify();
@@ -363,12 +370,12 @@ class LibraryViewModel extends ChangeNotifier {
             : {'kind': 'import_pack', 'pack_json': encoded},
       );
     } catch (e) {
-      error = message(e);
+      setError(() => message(e));
       _notify();
     }
     if (error == null) {
       home = true;
-      notice = '材料已导入本机。选择内容后，可单独加入学习。';
+      setNotice(() => l10n.uiPackageImportedChooseContentToAdd);
       _notify();
     }
   }
@@ -385,7 +392,7 @@ class LibraryViewModel extends ChangeNotifier {
     await act({'kind': 'set_policy', 'scope': scope, 'policy': policy});
     if (error == null) {
       home = true;
-      notice = '学习方式已保存。已经开始的学习仍使用原来的方式。';
+      setNotice(() => l10n.uiLearningModeSavedStartedLearningKeeps);
       _notify();
     }
   }
@@ -445,7 +452,7 @@ class LibraryViewModel extends ChangeNotifier {
       await repository.execute(_pendingCheckin!);
       _pendingCheckin = null;
       snapshot = await repository.load();
-      notice = '今天的签到已保存在本机。';
+      setNotice(() => l10n.uiCheckedInToday721);
     } catch (e) {
       if (e.toString().contains('revision_conflict')) {
         try {
@@ -455,7 +462,7 @@ class LibraryViewModel extends ChangeNotifier {
           // Keep the separate check-in retry; the learning queue remains usable.
         }
       }
-      notice = '签到尚未保存，可以稍后重试；学习可以继续。';
+      setNotice(() => l10n.uiCheckInWasNotSavedRetry);
     } finally {
       busy = false;
       _notify();
@@ -511,132 +518,174 @@ class LibraryViewModel extends ChangeNotifier {
   String message(Object error) {
     final text = error.toString();
     if (text.contains('anchor_recipient')) {
-      return '请配置已授权的在线服务；更换服务需先撤销并重新授权原文。';
+      return l10n.uiSelectTheAuthorizedServiceOrRevoke;
     }
     if (text.contains('learning_material_preparing')) {
-      return '后续学习需要新的材料，请先完成准备；已开始的学习可继续。';
+      return l10n.uiPrepareNewMaterialForFutureLearning;
     }
     if (text.contains('learning_target_policy_exists')) {
-      return '这个语义目标已采用其他学习方式，请关联现有目标后在学习设置中明确修改。';
+      return l10n.uiThisTargetUsesAnotherLearningMode;
     }
     if (text.contains('preparation_budget_exhausted')) {
-      return '这个目标的三次准备机会已用完，任务与已有资料已保留。';
+      return l10n.uiAllThreePreparationAttemptsAreUsed;
     }
     if (text.contains('unsupported_content_policy')) {
-      return '在线服务暂不能提供此学习方式所需的材料，请明确选择其他方式或等待匹配资源。';
+      return l10n.uiThisServiceCannotProvideMaterialFor;
     }
-    if (text.contains('preparation_running')) return '上次准备尚在有效期内，请等待或先取消后重试。';
+    if (text.contains('preparation_running')) {
+      return l10n.uiThePreviousRequestIsStillActive;
+    }
     if (text.contains('invalid_prepared_material')) {
-      return '返回材料没有通过本地校验，未进入学习。请重新读取后重试。';
+      return l10n.uiMaterialFailedValidationReloadAndRetry;
     }
     if (text.contains('preparation_superseded')) {
-      return '这个准备请求已经取消或被替代，请查看当前任务。';
+      return l10n.uiThisRequestWasCanceledOrReplaced;
     }
     if (text.contains('reference_version_conflict')) {
-      return '同一来源版本的内容不能改写，请使用新的资料版本。';
+      return l10n.uiUseANewReferenceVersionTo;
     }
     if (text.contains('reference_digest_mismatch') ||
         text.contains('invalid_reference_source')) {
-      return '参考资料的来源、摘要或目标不匹配，未附加资料。';
+      return l10n.uiReferenceSourceDigestOrTargetDoes;
     }
-    if (text.contains('daily_preparation_limit')) return '今天的准备预算已用完，请稍后再试。';
-    if (text.contains('attempt_timed_out')) return '准备已超时，资料已保留，请重新读取任务后重试。';
+    if (text.contains('daily_preparation_limit')) {
+      return l10n.uiDailyPreparationBudgetReachedTryAgain;
+    }
+    if (text.contains('attempt_timed_out')) {
+      return l10n.uiPreparationTimedOutReloadTheTask;
+    }
     if (text.contains('quantity_required')) {
-      return '加入学习前，请先回首页确认每日新学数量。保存的材料不会丢失。';
+      return l10n.uiSetYourDailyNewQuantityOn;
     }
-    if (text.contains('lookup_expired')) return '候选已过期，请重新读取后再请求解释。';
-    if (text.contains('lookup_superseded')) return '这次解释已被替代，请查看最新候选。';
-    if (text.contains('lookup_already_exists')) return '已有待处理解释，请从收件箱继续。';
+    if (text.contains('lookup_expired')) {
+      return l10n.uiSuggestionExpiredReloadAndRequestAn;
+    }
+    if (text.contains('lookup_superseded')) {
+      return l10n.uiThisExplanationWasReplacedViewThe;
+    }
+    if (text.contains('lookup_already_exists')) {
+      return l10n.uiAnExplanationIsAlreadyPendingContinue;
+    }
     if (text.contains('invalid_proposal') ||
         text.contains('invalid_provenance') ||
         text.contains('lookup_input_mismatch')) {
-      return '解释结果未通过本地校验，没有建立词义。请重新读取后再请求。';
+      return l10n.uiExplanationFailedValidationReloadAndRequest;
     }
-    if (text.contains('lookup_not_ready')) return '解释尚未完成，不能确认词义。';
+    if (text.contains('lookup_not_ready')) {
+      return l10n.uiWaitForTheExplanationBeforeConfirming;
+    }
     if (text.contains('meaning_already_confirmed')) {
-      return '这个上下文与表达已经确认，请查看已保存内容。';
+      return l10n.uiThisContextAndExpressionAreAlready;
     }
-    if (text.contains('invalid_occurrence')) return '所选表达需要准确位于原文中，请重新选择。';
-    if (text.contains('invalid_capture')) return '请输入有效的英文上下文，并检查材料长度。';
+    if (text.contains('invalid_occurrence')) {
+      return l10n.uiChooseTheExactExpressionFromThe;
+    }
+    if (text.contains('invalid_capture')) {
+      return l10n.uiEnterValidEnglishContextAndCheck;
+    }
     if (text.contains('invalid_source') ||
         text.contains('invalid_video_source')) {
-      return '来源链接或视频定位无效，请检查后再保存。';
+      return l10n.uiCheckTheSourceLinkOrVideo;
     }
     if (text.contains('expression_binding_mismatch')) {
-      return '这项词义绑定与所选表达不匹配，请重新选择。';
+      return l10n.uiTheMeaningBindingDoesNotMatch;
     }
     if (text.contains('intake_removed') || text.contains('meaning_removed')) {
-      return '这份内容已移除，请先从已移除列表恢复。';
+      return l10n.uiRestoreThisContentFromRemovedFirst;
     }
     if (text.contains('intake_mismatch') ||
         text.contains('intake_already_confirmed')) {
-      return '这份材料的状态已更新，请重新读取后继续。';
+      return l10n.uiThisContentChangedReloadToContinue;
     }
     if (text.contains('personal_snapshot_limit')) {
-      return '本机当前支持最多 500 份收件材料、500 条词义和 500 次解析记录。';
+      return l10n.uiTheCurrentLimitIsInboxItems;
     }
-    if (text.contains('pending_result')) return '请先完成或暂停当前步骤，再继续安排。';
-    if (text.contains('activity_not_active')) return '这次学习已暂停或结束，请从首页继续。';
+    if (text.contains('pending_result')) {
+      return l10n.uiFinishOrPauseTheCurrentStep;
+    }
+    if (text.contains('activity_not_active')) {
+      return l10n.uiThisLearningIsPausedOrEnded;
+    }
     if (text.contains('undo_across_settlement')) {
-      return '这一步已经结算，不能撤销。已保存的复习安排会继续保留。';
+      return l10n.uiThisStepIsAlreadySettledAnd;
     }
     if (text.contains('assurance_journal_mismatch')) {
-      return '学习记录校验未通过，请保留本机资料并恢复有效备份。';
+      return l10n.uiLearningHistoryFailedValidationPreserveYour;
     }
     if (text.contains('invalid_runtime_release')) {
-      return '学习包的任务或资源校验未通过，原有内容已保留。';
+      return l10n.uiPackageTasksOrResourcesFailedValidation;
     }
     if (text.contains('pause_activity_before_curriculum_change')) {
-      return '请先暂停当前活动，再调整学习来源。';
+      return l10n.uiPauseTheCurrentSessionBeforeChanging;
     }
     if (text.contains('target_outside_study_scope')) {
-      return '此项已暂停或不在当前学习来源中，请到学习来源调整。';
+      return l10n.uiThisItemIsPausedOrOutside;
     }
     if (text.contains('book_material_not_downloaded')) {
-      return '请先下载或导入词书引用的学习材料。';
+      return l10n.uiDownloadOrImportTheMaterialReferenced;
     }
-    if (text.contains('book_version_conflict')) return '同一词书版本内容不一致，原词书已保留。';
-    if (text.contains('invalid_curriculum')) return '词书或学习范围无效，请检查文件、序号或所选内容。';
-    if (text.contains('invalid_runtime_media')) return '学习包的媒体校验未通过，未导入任何内容。';
+    if (text.contains('book_version_conflict')) {
+      return l10n.uiThisBookVersionConflictsWithThe;
+    }
+    if (text.contains('invalid_curriculum')) {
+      return l10n.uiCheckTheBookFilePositionsOr;
+    }
+    if (text.contains('invalid_runtime_media')) {
+      return l10n.uiPackageMediaFailedValidationNothingWas;
+    }
     if (text.contains('assurance_session_active')) {
-      return '还有一组高保证学习正在进行，请先返回继续或结束。';
+      return l10n.uiResumeOrEndTheCurrentHigh;
     }
-    if (text.contains('policy_committed')) return '这项学习已固定方式。修改默认方式不会改写已有学习。';
+    if (text.contains('policy_committed')) {
+      return l10n.uiThisLearningModeIsFixedDefault;
+    }
     if (text.contains('learning_plan_blocked')) {
-      return '当前学习方式尚未就绪，请查看原因或在首次学习前更换方式。';
+      return l10n.uiThisModeIsNotReadyCheck;
     }
-    if (text.contains('unsupported_learning_policy')) return '此学习方式或版本暂不支持。';
-    if (text.contains('policy_pin_mismatch')) return '运行的学习方式校验未通过，原有进度已保留。';
+    if (text.contains('unsupported_learning_policy')) {
+      return l10n.uiThisLearningModeOrVersionIs;
+    }
+    if (text.contains('policy_pin_mismatch')) {
+      return l10n.uiLearningModeValidationFailedYourProgress;
+    }
     if (text.contains('relearning_waiting')) {
-      return '还未到再学习时间，可以稍后继续，或明确选择提前回想。';
+      return l10n.uiRelearningIsNotDueYetReturn;
     }
-    if (text.contains('no_due_review')) return '这项内容还未到复习时间。';
-    if (text.contains('stale_due')) return '复习状态已更新，请重新读取后继续。';
+    if (text.contains('no_due_review')) return l10n.uiThisItemIsNotDueFor;
+    if (text.contains('stale_due')) {
+      return l10n.uiReviewStateChangedReloadToContinue;
+    }
     if (text.contains('daily_limit')) {
-      return '今天的新学数量已达到设置，可继续已有学习。';
+      return l10n.uiDailyNewLimitReachedYouCan;
     }
     if (text.contains('pack_too_large')) {
-      return '文件或学习包过大。文本包上限 2 MB，含媒体学习包上限 20 MB，请拆分后再导入。';
+      return l10n.uiPackageTooLargeTextPackagesAllow;
     }
-    if (text.contains('unsupported_pack')) return '此包的版本、协议或语言暂不支持，原有资料不受影响。';
+    if (text.contains('unsupported_pack')) {
+      return l10n.uiThisPackageVersionProtocolOrLanguage;
+    }
     if (text.contains('pack_version_conflict') ||
         text.contains('material_version_conflict') ||
         text.contains('target_material_conflict')) {
-      return '包内版本与已保存材料冲突，未覆盖原有内容。';
+      return l10n.uiPackageContentConflictsWithSavedVersions;
     }
     if (text.contains('invalid_optional_resource') ||
         text.contains('invalid_pack') ||
         text.contains('pack_reveals_expression')) {
-      return '学习包校验未通过，未导入任何内容。';
+      return l10n.uiPackageValidationFailedNothingWasImported;
     }
-    if (text.contains('clock_moved_backwards')) return '设备时间早于上次保存，请校准时间后重试。';
+    if (text.contains('clock_moved_backwards')) {
+      return l10n.uiYourDeviceClockIsEarlierThan;
+    }
     if (text.contains('revision_conflict') || text.contains('stale_step')) {
-      return '学习状态已更新，请重新读取后继续。';
+      return l10n.uiLearningStateChangedReloadToContinue;
     }
-    if (text.contains('material_mismatch')) return '材料校验未通过，当前学习已保留。';
+    if (text.contains('material_mismatch')) {
+      return l10n.uiMaterialValidationFailedYourCurrentLearning;
+    }
     if (text.contains('unsupported_library_version')) {
-      return '此学习库需要更新版本的 Sensa。';
+      return l10n.uiUpdateSensaToOpenThisLibrary;
     }
-    return '本机操作未完成，当前内容已保留。请重试或重新读取。';
+    return l10n.uiTheActionDidNotFinishRetry;
   }
 }

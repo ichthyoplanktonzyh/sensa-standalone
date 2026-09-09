@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'product_theme.dart';
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
@@ -33,10 +34,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
   String day(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   String label(String k) => switch (k) {
-    'initial_learning' => '首次学习',
-    'retention_review' => '保持复习',
-    'relearning' => '再学习',
-    _ => '全部类型',
+    'initial_learning' => context.l10n.uiInitialLearning,
+    'retention_review' => context.l10n.uiRetentionReview,
+    'relearning' => context.l10n.uiRelearning,
+    _ => context.l10n.uiAllTypes,
   };
   @override
   void initState() {
@@ -81,10 +82,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
       if (mounted && generation == request) {
         setState(
           () => error = e.toString().contains('history_changed')
-              ? '记录已有更新，请刷新后继续。'
+              ? context.l10n.uiHistoryChangedRefreshToContinue
               : e.toString().contains('invalid_history_range')
-              ? '日期范围无效，请检查起止日期。'
-              : '学习记录暂时无法读取，请重试。',
+              ? context.l10n.uiCheckTheStartAndEndDates
+              : context.l10n.uiCouldNotReadLearningHistoryRetry,
         );
       }
     } finally {
@@ -119,22 +120,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final days = (data?['days'] as List?) ?? [];
     final checkins = (data?['checkins'] as List?) ?? [];
     return Scaffold(
-      appBar: AppBar(title: const Text('学习记录')),
+      appBar: AppBar(title: Text(context.l10n.uiLearningHistory)),
       body: Readable(
         child: ListView(
           key: const ValueKey('history-scroll'),
           padding: const EdgeInsets.all(20),
           children: [
-            const Text('记录来自本机实际完成的首学、复习与再学习。完成首学不等于已经掌握。'),
+            Text(context.l10n.uiYourCompletedLearningAndReviews),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
                 for (final p in [
-                  ('today', '今天'),
-                  ('week', '最近7天'),
-                  ('month', '最近30天'),
-                  ('all', '全部'),
+                  ('today', context.l10n.uiToday212),
+                  ('week', context.l10n.uiLastDays),
+                  ('month', context.l10n.uiLastDays214),
+                  ('all', context.l10n.uiAll),
                 ])
                   ChoiceChip(
                     label: Text(p.$2),
@@ -150,7 +151,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   label: Text(
                     period == 'custom'
                         ? '${day(start!)} — ${day(end!)}'
-                        : '自选日期',
+                        : context.l10n.uiCustomDates,
                   ),
                   onPressed: loading ? null : dates,
                 ),
@@ -179,10 +180,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
               controller: searchController,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
-                labelText: '搜索表达或意思',
-                hintText: '输入后查询',
+                labelText: context.l10n.uiSearchExpressionsOrMeanings217,
+                hintText: context.l10n.uiEnterAQuery,
                 suffixIcon: IconButton(
-                  tooltip: '搜索记录',
+                  tooltip: context.l10n.uiSearchHistory,
                   onPressed: loading ? null : submitSearch,
                   icon: const Icon(Icons.search),
                 ),
@@ -196,38 +197,50 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
             TextButton(
               onPressed: loading ? null : () => load(),
-              child: const Text('刷新记录'),
+              child: Text(context.l10n.uiRefreshHistory),
             ),
             if (loading) const LinearProgressIndicator(),
             Text(
-              '首次学习 ${counts['initial_learning'] ?? 0} · 保持复习 ${counts['retention_review'] ?? 0} · 再学习 ${counts['relearning'] ?? 0}',
+              context.l10n.uiInitialReviewsRelearning(
+                (counts['initial_learning'] ?? 0).toString(),
+                (counts['retention_review'] ?? 0).toString(),
+                (counts['relearning'] ?? 0).toString(),
+              ),
             ),
             ExpansionTile(
               key: const PageStorageKey('history_screen-detail-1'),
-              title: const Text('每日汇总'),
+              title: Text(context.l10n.uiDailySummary),
               children: [
                 for (final d in days)
                   ListTile(
                     title: Text('${d['date']} · ${label(d['kind'])}'),
-                    trailing: Text('${d['count']} 条'),
+                    trailing: Text(context.l10n.uiRecords(d['count'] as int)),
                   ),
               ],
             ),
             ExpansionTile(
               key: const PageStorageKey('history_screen-detail-2'),
-              title: Text('签到日历 · ${checkins.length} 天'),
+              title: Text(
+                context.l10n.uiCheckInCalendarDays(
+                  (checkins.length).toString(),
+                ),
+              ),
               children: [
                 for (final d in checkins)
                   ListTile(
                     title: Text(d['date'] as String),
-                    trailing: Text(d['source'] == 'manual' ? '手动签到' : '正式学习'),
+                    trailing: Text(
+                      d['source'] == 'manual'
+                          ? context.l10n.uiManualCheckIn
+                          : context.l10n.uiLearning,
+                    ),
                   ),
               ],
             ),
             if (records.isEmpty && !loading)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.all(20),
-                child: Text('此范围内没有学习记录。可以调整日期或类型。'),
+                child: Text(context.l10n.uiNoRecordsInThisRangeTry),
               ),
             for (final r in records)
               ListTile(
@@ -240,9 +253,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
             if (data?['nextCursor'] != null)
               TextButton(
                 onPressed: loading ? null : () => load(more: true),
-                child: const Text('显示更多记录'),
+                child: Text(context.l10n.uiShowMoreRecords),
               ),
-            const Text('不展示缺少可靠依据的时长、正确率或掌握率。'),
           ],
         ),
       ),

@@ -1,3 +1,4 @@
+import 'l10n/interface_locale.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -54,16 +55,19 @@ class _BootstrapState extends State<_Bootstrap> {
       failure = null;
     });
     try {
-      if (!initialized) {
-        await RustLib.init();
-        initialized = true;
-      }
       final support = await (attemptedSupport
           ? getApplicationSupportDirectory()
           : widget.support);
       attemptedSupport = true;
       if (support == null) {
         throw const FileSystemException('Application support unavailable');
+      }
+      await interfaceLocale.load(
+        File('${support.path}/interface-preferences.json'),
+      );
+      if (!initialized) {
+        await RustLib.init();
+        initialized = true;
       }
       final directory = Directory('${support.path}/libraries');
       await directory.create(recursive: true);
@@ -79,7 +83,7 @@ class _BootstrapState extends State<_Bootstrap> {
     } catch (_) {
       attemptedSupport = true;
       if (mounted) {
-        setState(() => failure = '暂时无法打开本地学习库。请检查设备的可用空间和文件访问权限，再重试。');
+        setState(() => failure = l10n.uiCouldNotOpenYourLibraryCheck);
       }
     } finally {
       if (mounted) setState(() => opening = false);
@@ -93,40 +97,46 @@ class _BootstrapState extends State<_Bootstrap> {
   }
 
   @override
-  Widget build(BuildContext context) => model != null
-      ? NativeApp(model: model!)
-      : MaterialApp(
-          theme: productTheme(),
-          debugShowCheckedModeBanner: false,
-          home: Scaffold(
-            body: SafeArea(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('sensa', style: TextStyle(fontSize: 36)),
-                      const SizedBox(height: 24),
-                      if (failure == null)
-                        const CircularProgressIndicator(
-                          semanticsLabel: '正在打开本地学习库',
-                        )
-                      else ...[
-                        Text(failure!),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: open,
-                          child: const Text('重新打开'),
-                        ),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: interfaceLocale,
+    builder: (context, _) => model != null
+        ? NativeApp(model: model!)
+        : MaterialApp(
+            theme: productTheme(),
+            locale: interfaceLocale.locale,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(
+              body: SafeArea(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('sensa', style: TextStyle(fontSize: 36)),
+                        const SizedBox(height: 24),
+                        if (failure == null)
+                          CircularProgressIndicator(
+                            semanticsLabel: l10n.uiOpeningYourLibrary617,
+                          )
+                        else ...[
+                          Text(failure!),
+                          const SizedBox(height: 16),
+                          FilledButton(
+                            onPressed: open,
+                            child: Text(l10n.uiReopen),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        );
+  );
 }
 
 class NativeApp extends StatelessWidget {
@@ -134,10 +144,16 @@ class NativeApp extends StatelessWidget {
   final LibraryViewModel model;
   final Widget? home;
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'Sensa',
-    debugShowCheckedModeBanner: false,
-    theme: productTheme(),
-    home: home ?? NativeShell(model: model),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: interfaceLocale,
+    builder: (context, _) => MaterialApp(
+      title: 'Sensa',
+      debugShowCheckedModeBanner: false,
+      theme: productTheme(),
+      locale: interfaceLocale.locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: home ?? NativeShell(model: model),
+    ),
   );
 }

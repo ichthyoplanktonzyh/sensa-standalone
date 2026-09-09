@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'intake_connection_screen.dart';
 import 'world_screen.dart';
 import 'preparation_screen.dart';
@@ -51,7 +52,13 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
     if (mounted && accepted != null) {
       setState(() => section = accepted ? 0 : 1);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(accepted ? '词义已保存到本机。' : '材料已保存在收件箱。')),
+        SnackBar(
+          content: Text(
+            accepted
+                ? context.l10n.uiMeaningSaved
+                : context.l10n.uiSavedToInbox,
+          ),
+        ),
       );
     }
   }
@@ -120,15 +127,15 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
               .toList();
       return Scaffold(
         appBar: AppBar(
-          title: const Text('我的词义世界'),
+          title: Text(context.l10n.uiMySemanticWorld),
           actions: [
             IconButton(
-              tooltip: '刷新采集结果',
+              tooltip: context.l10n.uiRefreshCaptures,
               icon: const Icon(Icons.refresh),
               onPressed: model.busy ? null : model.load,
             ),
             IconButton(
-              tooltip: '采集接入',
+              tooltip: context.l10n.uiCaptureConnections,
               icon: const Icon(Icons.input),
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(
@@ -137,7 +144,7 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
               ),
             ),
             IconButton(
-              tooltip: '图文与语义关系',
+              tooltip: context.l10n.uiImagesAndConnections,
               icon: const Icon(Icons.hub_outlined),
               onPressed: () async {
                 await Navigator.of(context).push(
@@ -149,7 +156,7 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
               },
             ),
             IconButton(
-              tooltip: '学习准备',
+              tooltip: context.l10n.uiLearningPreparation,
               icon: const Icon(Icons.auto_stories_outlined),
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(
@@ -170,20 +177,20 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text('保存身边的上下文，在确认词义后建立自己的表达连接。'),
+                        Text(context.l10n.uiSaveAContextAndFindThe),
                         const SizedBox(height: 12),
                         FilledButton(
                           onPressed: model.busy ? null : () => compose(),
-                          child: const Text('保存材料'),
+                          child: Text(context.l10n.uiSaveContent),
                         ),
                         const SizedBox(height: 12),
                         Wrap(
                           spacing: 8,
                           children: [
                             for (final (index, label) in [
-                              '已保存',
-                              '收件箱',
-                              '已移除',
+                              context.l10n.uiSaved,
+                              context.l10n.uiInbox,
+                              context.l10n.uiRemoved,
                             ].indexed)
                               ChoiceChip(
                                 label: Text(label),
@@ -195,8 +202,10 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
                         ),
                         TextField(
                           key: const ValueKey('personal-search'),
-                          decoration: const InputDecoration(
-                            labelText: '搜索上下文、表达或词义',
+                          decoration: InputDecoration(
+                            labelText: context
+                                .l10n
+                                .uiSearchContextsExpressionsOrMeanings,
                           ),
                           onChanged: (value) => setState(() => search = value),
                         ),
@@ -211,7 +220,7 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
                   if (model.error != null) _ErrorNotice(model: model),
                   Expanded(
                     child: items.isEmpty
-                        ? const Center(child: Text('这里还没有内容。'))
+                        ? Center(child: Text(context.l10n.uiNoContentYet))
                         : ListView.builder(
                             key: const ValueKey('personal-items'),
                             itemCount: items.length,
@@ -220,9 +229,16 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
                               if (item['entity'] == 'lookup') {
                                 return ListTile(
                                   title: Text(
-                                    '待确认：${item['request']['snapshot']['expression']['text']}',
+                                    context.l10n.uiToConfirm(
+                                      (item['request']['snapshot']['expression']['text'])
+                                          .toString(),
+                                    ),
                                   ),
-                                  subtitle: const Text('查看解释、补充关注点或恢复请求'),
+                                  subtitle: Text(
+                                    context
+                                        .l10n
+                                        .uiViewExplanationOrContinueClarifying,
+                                  ),
                                   trailing: const Icon(Icons.chevron_right),
                                   onTap: () => openLookup(item),
                                 );
@@ -256,14 +272,27 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
                                         const SizedBox(height: 8),
                                         Text(item['sense'] as String),
                                         if (item['focus'] != null)
-                                          Text('关注点：${item['focus']}'),
-                                        Text('词义来源：${item['materialSource']}'),
-                                        const Text('已确认保存；保存本身不会开始学习。'),
+                                          Text(
+                                            context.l10n.uiFocus(
+                                              (item['focus']).toString(),
+                                            ),
+                                          ),
+                                        Text(
+                                          context.l10n.uiMeaningSource(
+                                            (item['materialSource']).toString(),
+                                          ),
+                                        ),
+                                        Text(
+                                          context.l10n.uiSavedYouCanAddThisTo,
+                                        ),
                                       ],
                                       if (item['snapshot']['source']['title'] !=
                                           '')
                                         Text(
-                                          '来源：${item['snapshot']['source']['title']}',
+                                          context.l10n.uiSource(
+                                            (item['snapshot']['source']['title'])
+                                                .toString(),
+                                          ),
                                         ),
                                       if (item['sourceLink'] != null)
                                         SelectableText(
@@ -282,7 +311,9 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
                                                               as String,
                                                     ),
                                                   ),
-                                              child: const Text('复制来源链接'),
+                                              child: Text(
+                                                context.l10n.uiCopySourceLink,
+                                              ),
                                             ),
                                           if (removed)
                                             OutlinedButton(
@@ -293,7 +324,9 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
                                                       item['entity'] as String,
                                                       true,
                                                     ),
-                                              child: const Text('恢复'),
+                                              child: Text(
+                                                context.l10n.uiRestore,
+                                              ),
                                             )
                                           else ...[
                                             if (!meaning)
@@ -302,7 +335,11 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
                                                     ? null
                                                     : () =>
                                                           compose(intake: item),
-                                                child: const Text('选择表达与词义'),
+                                                child: Text(
+                                                  context
+                                                      .l10n
+                                                      .uiChooseExpressionAndMeaning,
+                                                ),
                                               ),
                                             if (meaning &&
                                                 item['materialId'] == null &&
@@ -329,8 +366,12 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
                                                 child: Text(
                                                   item['addedToLearning'] ==
                                                           true
-                                                      ? '查看学习准备'
-                                                      : '加入学习',
+                                                      ? context
+                                                            .l10n
+                                                            .uiViewPreparation
+                                                      : context
+                                                            .l10n
+                                                            .uiAddToLearning,
                                                 ),
                                               ),
                                             if (meaning &&
@@ -356,11 +397,17 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
                                                 child: Text(
                                                   item['addedToLearning'] ==
                                                           true
-                                                      ? '已加入学习'
+                                                      ? context
+                                                            .l10n
+                                                            .uiAddedToLearning
                                                       : item['materialId'] ==
                                                             null
-                                                      ? '学习材料尚未准备'
-                                                      : '加入学习',
+                                                      ? context
+                                                            .l10n
+                                                            .uiLearningMaterialNotPrepared
+                                                      : context
+                                                            .l10n
+                                                            .uiAddToLearning,
                                                 ),
                                               ),
                                             TextButton(
@@ -371,7 +418,9 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
                                                       item['entity'] as String,
                                                       false,
                                                     ),
-                                              child: const Text('移除'),
+                                              child: Text(
+                                                context.l10n.uiRemove,
+                                              ),
                                             ),
                                             if (meaning &&
                                                 item['worldContext'] == null)
@@ -386,7 +435,9 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
                                                                   dynamic
                                                                 >,
                                                       ),
-                                                child: const Text('以此重新保存'),
+                                                child: Text(
+                                                  context.l10n.uiSaveAsNew,
+                                                ),
                                               ),
                                           ],
                                         ],
@@ -428,11 +479,11 @@ class _ErrorNotice extends StatelessWidget {
           children: [
             TextButton(
               onPressed: model.busy ? null : model.retry,
-              child: const Text('重试保存'),
+              child: Text(context.l10n.uiRetrySaving),
             ),
             TextButton(
               onPressed: model.busy ? null : model.load,
-              child: const Text('重新读取'),
+              child: Text(context.l10n.uiReload),
             ),
           ],
         ),
@@ -581,7 +632,13 @@ class _CaptureEditorState extends State<_CaptureEditor> {
           .toList();
       final available = !model.busy && model.error == null;
       return Scaffold(
-        appBar: AppBar(title: Text(widget.intake == null ? '保存材料' : '确认这份材料')),
+        appBar: AppBar(
+          title: Text(
+            widget.intake == null
+                ? context.l10n.uiSaveContent
+                : context.l10n.uiConfirmThisContent,
+          ),
+        ),
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
@@ -594,7 +651,9 @@ class _CaptureEditorState extends State<_CaptureEditor> {
                     key: const ValueKey('capture-context'),
                     controller: contextText,
                     readOnly: widget.intake != null,
-                    decoration: const InputDecoration(labelText: '英文上下文（必填）'),
+                    decoration: InputDecoration(
+                      labelText: context.l10n.uiEnglishContextRequired,
+                    ),
                     minLines: 4,
                     maxLines: 8,
                     onChanged: (_) => setState(() {
@@ -607,8 +666,9 @@ class _CaptureEditorState extends State<_CaptureEditor> {
                     key: const ValueKey('capture-expression'),
                     controller: expressionText,
                     readOnly: widget.intake?['snapshot']?['expression'] != null,
-                    decoration: const InputDecoration(
-                      labelText: '原文中的表达（可稍后选择）',
+                    decoration: InputDecoration(
+                      labelText:
+                          context.l10n.uiExpressionInContextOptionalForNow,
                     ),
                     onChanged: (_) => setState(() {
                       occurrence = null;
@@ -616,9 +676,9 @@ class _CaptureEditorState extends State<_CaptureEditor> {
                     }),
                   ),
                   if (expressionText.text.isNotEmpty && starts.isEmpty)
-                    const Text('表达需要与原文中的文字一致；也可以先只保存上下文。'),
+                    Text(context.l10n.uiUseTheExactWordingFromThe),
                   if (starts.length > 1) ...[
-                    const Text('原文多次出现此表达，请选择你要保存的那一次：'),
+                    Text(context.l10n.uiChooseWhichOccurrenceYouWantTo),
                     RadioGroup<int>(
                       groupValue: occurrence,
                       onChanged: (v) {
@@ -629,7 +689,10 @@ class _CaptureEditorState extends State<_CaptureEditor> {
                           for (final (i, start) in starts.indexed)
                             RadioListTile<int>(
                               title: Text(
-                                '第 ${i + 1} 处：${expressionText.text}',
+                                context.l10n.uiOccurrence(
+                                  (i + 1).toString(),
+                                  (expressionText.text).toString(),
+                                ),
                               ),
                               value: start,
                               enabled: available,
@@ -642,12 +705,16 @@ class _CaptureEditorState extends State<_CaptureEditor> {
                     TextField(
                       key: const ValueKey('capture-source-title'),
                       controller: sourceTitle,
-                      decoration: const InputDecoration(labelText: '来源名称（可选）'),
+                      decoration: InputDecoration(
+                        labelText: context.l10n.uiSourceNameOptional,
+                      ),
                     ),
                     TextField(
                       key: const ValueKey('capture-source-url'),
                       controller: sourceUrl,
-                      decoration: const InputDecoration(labelText: '来源链接（可选）'),
+                      decoration: InputDecoration(
+                        labelText: context.l10n.uiSourceLinkOptional,
+                      ),
                     ),
                   ],
                   const SizedBox(height: 20),
@@ -656,19 +723,19 @@ class _CaptureEditorState extends State<_CaptureEditor> {
                       onPressed: available && contextText.text.trim().isNotEmpty
                           ? () => save(false)
                           : null,
-                      child: const Text('先保存到收件箱'),
+                      child: Text(context.l10n.uiSaveToInboxFirst),
                     ),
                   if (selected) ...[
                     OutlinedButton(
                       onPressed: available ? explain : null,
-                      child: const Text('在线解释这个表达'),
+                      child: Text(context.l10n.uiExplainThisExpression),
                     ),
                     Text(
-                      '选择这段上下文中的词义',
+                      context.l10n.uiChooseTheMeaningInThisContext,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     if (candidates.isEmpty)
-                      const Text('本机暂时没有匹配的词义。可以在线解释，也可以先保留在收件箱。'),
+                      Text(context.l10n.uiNoMatchingMeaningInYourLibrary),
                     RadioGroup<String>(
                       groupValue: materialId,
                       onChanged: (v) {
@@ -681,7 +748,10 @@ class _CaptureEditorState extends State<_CaptureEditor> {
                               key: ValueKey('sense-${m['id']}'),
                               title: Text(m['sense'] as String),
                               subtitle: Text(
-                                '参考场景：${m['scene']}\n来源：${m['source']}',
+                                context.l10n.uiExampleSceneSource(
+                                  (m['scene']).toString(),
+                                  (m['source']).toString(),
+                                ),
                               ),
                               value: m['id'] as String,
                               enabled: available,
@@ -690,11 +760,11 @@ class _CaptureEditorState extends State<_CaptureEditor> {
                       ),
                     ),
                     if (candidates.isNotEmpty)
-                      const Text('请确认所选词义与原文相符。保存只建立词义连接，加入学习需要另外选择。'),
+                      Text(context.l10n.uiCheckThatTheMeaningFitsYour),
                     if (candidates.any((m) => m['id'] == materialId))
                       FilledButton(
                         onPressed: available ? () => save(true) : null,
-                        child: const Text('确认词义并保存'),
+                        child: Text(context.l10n.uiConfirmMeaningAndSave),
                       ),
                   ],
                   if (model.notice != null)

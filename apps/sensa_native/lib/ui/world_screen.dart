@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'product_theme.dart';
 import 'agent_screen.dart';
 import 'dart:async';
@@ -20,7 +21,8 @@ class WorldScreen extends StatefulWidget {
 
 class _WorldScreenState extends State<WorldScreen> {
   late final WorldModel model;
-  String view = '列表', search = '';
+  int view = 0;
+  String search = '';
   int section = 0;
   String? region;
   @override
@@ -95,10 +97,10 @@ class _WorldScreenState extends State<WorldScreen> {
         : groups.keys.firstOrNull;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('图文与语义关系'),
+        title: Text(context.l10n.uiImagesAndConnections),
         actions: [
           IconButton(
-            tooltip: '对话与资源准备',
+            tooltip: context.l10n.uiConversationsAndResources,
             icon: const Icon(Icons.chat_outlined),
             onPressed: () async {
               await Navigator.push(
@@ -117,7 +119,7 @@ class _WorldScreenState extends State<WorldScreen> {
           ? Center(
               child: TextButton(
                 onPressed: model.load,
-                child: Text(model.error ?? '正在读取本机资料…'),
+                child: Text(model.error ?? context.l10n.uiLoadingYourLibrary),
               ),
             )
           : Column(
@@ -131,12 +133,12 @@ class _WorldScreenState extends State<WorldScreen> {
                         children: [
                           FilledButton(
                             onPressed: model.busy ? null : () => edit(),
-                            child: const Text('新建图文材料'),
+                            child: Text(context.l10n.uiNewTextAndImageCapture),
                           ),
                           for (final (i, label) in [
-                            '已保存',
-                            '草稿与材料',
-                            '已移除',
+                            context.l10n.uiSaved,
+                            context.l10n.uiDraftsAndCaptures,
+                            context.l10n.uiRemoved,
                           ].indexed)
                             ChoiceChip(
                               label: Text(label),
@@ -147,8 +149,10 @@ class _WorldScreenState extends State<WorldScreen> {
                       ),
                       TextField(
                         key: const ValueKey('world-search'),
-                        decoration: const InputDecoration(
-                          labelText: '搜索上下文、意思或表达',
+                        decoration: InputDecoration(
+                          labelText: context
+                              .l10n
+                              .uiSearchContextsMeaningsOrExpressions,
                         ),
                         onChanged: (v) => setState(() => search = v),
                       ),
@@ -156,9 +160,15 @@ class _WorldScreenState extends State<WorldScreen> {
                         Wrap(
                           spacing: 8,
                           children: [
-                            for (final v in ['列表', '展开', '图谱'])
+                            for (var v = 0; v < 3; v++)
                               ChoiceChip(
-                                label: Text(v),
+                                label: Text(
+                                  [
+                                    context.l10n.uiList,
+                                    context.l10n.uiExpand,
+                                    context.l10n.uiGraph,
+                                  ][v],
+                                ),
                                 selected: view == v,
                                 onSelected: (_) => setState(() => view = v),
                               ),
@@ -184,22 +194,33 @@ class _WorldScreenState extends State<WorldScreen> {
                                             .toString()
                                             .isNotEmpty
                                         ? d['draft']['familiarExpression']
-                                        : '图文材料 · v${d['revision']}',
+                                        : context.l10n.uiTextAndImageCaptureV(
+                                            (d['revision']).toString(),
+                                          ),
                                   ),
                                   subtitle: Text(
-                                    '${d['status'] == 'accepted'
-                                        ? '已确认，可继续补充意思'
-                                        : d['status'] == 'inbox'
-                                        ? '待确认'
-                                        : '编辑草稿'} · ${(d['draft']['blocks'] as List).length} 个材料块',
+                                    context.l10n.uiBlocks(
+                                      (d['status'] == 'accepted'
+                                              ? context
+                                                    .l10n
+                                                    .uiConfirmedMoreMeaningsCanBeAdded
+                                              : d['status'] == 'inbox'
+                                              ? context
+                                                    .l10n
+                                                    .uiAwaitingConfirmation
+                                              : context.l10n.uiEditDraft)
+                                          .toString(),
+                                      ((d['draft']['blocks'] as List).length)
+                                          .toString(),
+                                    ),
                                   ),
                                   onTap: () => edit(d),
                                 ),
                             if ((model.data!['drafts'] as List).isEmpty)
-                              const ListTile(title: Text('还没有图文草稿。')),
+                              ListTile(title: Text(context.l10n.uiNoDraftsYet)),
                           ],
                         )
-                      : section == 0 && view == '图谱'
+                      : section == 0 && view == 2
                       ? Column(
                           children: [
                             if (selected != null)
@@ -218,7 +239,7 @@ class _WorldScreenState extends State<WorldScreen> {
                                         child: Text(
                                           '${groups[key]!.first['snapshot']['sentence']}'
                                                   .isEmpty
-                                              ? '图片上下文'
+                                              ? context.l10n.uiImageContext
                                               : groups[key]!
                                                     .first['snapshot']['sentence'],
                                           maxLines: 1,
@@ -229,10 +250,16 @@ class _WorldScreenState extends State<WorldScreen> {
                                   onChanged: (v) => setState(() => region = v),
                                 ),
                               ),
-                            const Text('上下文 → 意思 → 表达；拖动或双指缩放，点节点查看。'),
+                            Text(context.l10n.uiDragOrPinchToExploreSelect),
                             Expanded(
                               child: selected == null
-                                  ? const Center(child: Text('完整确认的内容会出现在图谱中。'))
+                                  ? Center(
+                                      child: Text(
+                                        context
+                                            .l10n
+                                            .uiConfirmedConnectionsAppearHere,
+                                      ),
+                                    )
                                   : WorldGraph(
                                       items: groups[selected]!,
                                       onOpen: detail,
@@ -253,13 +280,19 @@ class _WorldScreenState extends State<WorldScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(m['sense']),
-                                      if (view == '展开') ...[
+                                      if (view == 1) ...[
                                         Text(m['snapshot']['sentence']),
                                         if (m['focus'] != null)
-                                          Text('关注点：${m['focus']}'),
+                                          Text(
+                                            context.l10n.uiFocus(
+                                              (m['focus']).toString(),
+                                            ),
+                                          ),
                                         Text(
                                           m['bindingMetadata'] == null
-                                              ? '来自已确认绑定'
+                                              ? context
+                                                    .l10n
+                                                    .uiFromAConfirmedBinding
                                               : '${m['bindingMetadata']['relation']} · ${m['bindingMetadata']['semanticCoverage']}',
                                         ),
                                       ],
@@ -273,7 +306,7 @@ class _WorldScreenState extends State<WorldScreen> {
                               for (final d in model.data!['drafts'])
                                 if (d['status'] == 'removed')
                                   ListTile(
-                                    title: const Text('已移除图文草稿'),
+                                    title: Text(context.l10n.uiRemovedDrafts),
                                     trailing: TextButton(
                                       onPressed: () => model.act(
                                         () => {
@@ -283,11 +316,15 @@ class _WorldScreenState extends State<WorldScreen> {
                                           'active': true,
                                         },
                                       ),
-                                      child: const Text('恢复草稿'),
+                                      child: Text(context.l10n.uiRestoreDraft),
                                     ),
                                   ),
                             if (filtered.isEmpty)
-                              const ListTile(title: Text('这里还没有完整确认的内容。')),
+                              ListTile(
+                                title: Text(
+                                  context.l10n.uiNoConfirmedConnectionsYet,
+                                ),
+                              ),
                           ],
                         ),
                 ),
@@ -321,9 +358,13 @@ class _WorldImageState extends State<WorldImage> {
             s.data!,
             height: 180,
             fit: BoxFit.contain,
-            errorBuilder: (_, e, st) => const Text('图片无法显示'),
+            errorBuilder: (_, e, st) => Text(context.l10n.uiImageUnavailable),
           )
-        : Text(s.hasError ? '本机图片不可用，原引用仍保留。' : '正在读取图片…'),
+        : Text(
+            s.hasError
+                ? context.l10n.uiTheLocalImageIsUnavailableIts
+                : context.l10n.uiLoadingImage,
+          ),
   );
 }
 
@@ -448,9 +489,7 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
       }
     } catch (_) {
       if (mounted) {
-        setState(
-          () => localError = '图片不可读取或超过限制。支持4MB以内、4096像素以内的PNG/JPEG/WebP。',
-        );
+        setState(() => localError = context.l10n.uiChooseAPngJpegOrWebp);
       }
     }
   }
@@ -461,7 +500,7 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
     final source = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('选择已确认的意思与表达'),
+        title: Text(context.l10n.uiChooseAConfirmedMeaningAndExpression),
         content: SizedBox(
           width: 550,
           height: 400,
@@ -471,7 +510,10 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
                 ListTile(
                   title: Text(item['material']['expression']),
                   subtitle: Text(
-                    '${item['material']['sense']}\n参考：${item['material']['scene']}',
+                    context.l10n.uiReference(
+                      (item['material']['sense']).toString(),
+                      (item['material']['scene']).toString(),
+                    ),
                   ),
                   onTap: () => Navigator.pop(ctx, {
                     'kind': 'material',
@@ -495,7 +537,7 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(context.l10n.uiCancel),
           ),
         ],
       ),
@@ -504,16 +546,16 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
     final yes = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('确认上下文中的这个意思？'),
-        content: const Text('确认选择的意思和英语表达适用于这份完整图文材料。保存不会自动加入学习。'),
+        title: Text(context.l10n.uiConfirmThisMeaningInContext),
+        content: Text(context.l10n.uiCheckThatTheMeaningAndEnglish),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(context.l10n.uiCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('确认并保存连接'),
+            child: Text(context.l10n.uiConfirmAndSaveConnection),
           ),
         ],
       ),
@@ -557,7 +599,11 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
     },
     child: Scaffold(
       appBar: AppBar(
-        title: Text(frozen ? '已确认的图文材料' : '图文材料草稿'),
+        title: Text(
+          frozen
+              ? context.l10n.uiConfirmedTextAndImageCapture
+              : context.l10n.uiTextAndImageDraft,
+        ),
         leading: BackButton(onPressed: exit),
       ),
       body: Readable(
@@ -567,34 +613,42 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
           children: [
             Text(
               frozen
-                  ? '原版本保持不变，可以再次选义，或复制后编辑。'
+                  ? context.l10n.uiChooseAnotherMeaningOrMakeA
                   : saving
-                  ? '正在保存…'
+                  ? context.l10n.uiSaving
                   : dirty || revision == 0
-                  ? '尚未保存'
-                  : '已保存在本机',
+                  ? context.l10n.uiNotSaved
+                  : context.l10n.uiSavedOnThisDevice,
             ),
             if (localError != null) Text(localError!),
             TextField(
               key: const ValueKey('world-familiar'),
               controller: familiar,
               enabled: !frozen,
-              decoration: const InputDecoration(labelText: '熟悉表达或想表达的意思（可选）'),
+              decoration: InputDecoration(
+                labelText:
+                    context.l10n.uiFamiliarExpressionOrIntendedMeaningOptional,
+              ),
               onChanged: (_) => change(),
             ),
             DropdownButtonFormField<String>(
               initialValue: start,
-              decoration: const InputDecoration(labelText: '从哪里开始（可选）'),
-              items: const [
+              decoration: InputDecoration(
+                labelText: context.l10n.uiStartingPointOptional,
+              ),
+              items: [
                 DropdownMenuItem(
                   value: 'from_experience',
-                  child: Text('从上下文开始'),
+                  child: Text(context.l10n.uiStartFromAContext),
                 ),
                 DropdownMenuItem(
                   value: 'from_expression',
-                  child: Text('遇到了一个表达'),
+                  child: Text(context.l10n.uiIFoundAnExpression),
                 ),
-                DropdownMenuItem(value: 'from_sense', child: Text('有意思，想找表达')),
+                DropdownMenuItem(
+                  value: 'from_sense',
+                  child: Text(context.l10n.uiIHaveAMeaningToExpress),
+                ),
               ],
               onChanged: frozen
                   ? null
@@ -617,7 +671,9 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
                           enabled: !frozen,
                           minLines: 3,
                           maxLines: 8,
-                          decoration: const InputDecoration(labelText: '上下文文字'),
+                          decoration: InputDecoration(
+                            labelText: context.l10n.uiContextText,
+                          ),
                           onChanged: (_) => change(),
                         )
                       else
@@ -629,7 +685,7 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
                         Wrap(
                           children: [
                             IconButton(
-                              tooltip: '上移材料',
+                              tooltip: context.l10n.uiMoveBlockUp,
                               onPressed: i == 0
                                   ? null
                                   : () {
@@ -640,7 +696,7 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
                               icon: const Icon(Icons.arrow_upward),
                             ),
                             IconButton(
-                              tooltip: '移除材料块',
+                              tooltip: context.l10n.uiRemoveBlock,
                               onPressed: () {
                                 blocks.removeAt(i);
                                 change();
@@ -663,12 +719,15 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
                       blocks.add({'kind': 'text', 'id': bid, 'text': ''});
                       change();
                     },
-                    child: const Text('添加文字'),
+                    child: Text(context.l10n.uiAddText),
                   ),
-                  TextButton(onPressed: image, child: const Text('添加图片')),
+                  TextButton(
+                    onPressed: image,
+                    child: Text(context.l10n.uiAddImage),
+                  ),
                 ],
               ),
-            const Text('保存材料不调用模型。需要帮助时，可以把材料发送给你选择的语言老师服务。'),
+            Text(context.l10n.uiWhenYouNeedHelpSendThis),
             OutlinedButton(
               onPressed: saving
                   ? null
@@ -696,7 +755,7 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
                         Navigator.pop(context);
                       }
                     },
-              child: const Text('和语言老师聊一聊'),
+              child: Text(context.l10n.uiTalkToALanguageTeacher),
             ),
             if (!frozen)
               FilledButton(
@@ -708,11 +767,15 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
                           Navigator.pop(context);
                         }
                       },
-                child: const Text('保存到待确认材料'),
+                child: Text(context.l10n.uiSaveForConfirmation),
               ),
             FilledButton(
               onPressed: saving ? null : resolve,
-              child: Text(frozen ? '再确认一个意思' : '选择已有意思并确认'),
+              child: Text(
+                frozen
+                    ? context.l10n.uiConfirmAnotherMeaning
+                    : context.l10n.uiChooseAndConfirmAnExistingMeaning,
+              ),
             ),
             if (frozen || localError != null)
               TextButton(
@@ -723,7 +786,7 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
                     ),
                   );
                 },
-                child: const Text('复制为新草稿'),
+                child: Text(context.l10n.uiCopyToNewDraft),
               ),
             TextButton(
               onPressed: () async {
@@ -741,7 +804,11 @@ class _WorldEditorState extends State<WorldEditor> with WidgetsBindingObserver {
                   Navigator.pop(context);
                 }
               },
-              child: Text(frozen ? '移除材料入口（保留已确认内容）' : '移除这份草稿'),
+              child: Text(
+                frozen
+                    ? context.l10n.uiRemoveCaptureKeepConfirmedContent
+                    : context.l10n.uiRemoveThisDraft,
+              ),
             ),
           ],
         ),
@@ -770,29 +837,33 @@ class WorldDetail extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, set) => AlertDialog(
-          title: const Text('为这个意思补充表达'),
+          title: Text(context.l10n.uiAddAnExpressionForThisMeaning),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(m['sense']),
                 if (failure != null) Text(failure!),
-                const Text('候选需要你确认。新连接不会改写原表达，也不会自动加入学习。'),
+                Text(context.l10n.uiConfirmTheNewExpressionBeforeSaving),
                 TextField(
                   key: const ValueKey('binding-surface'),
                   controller: surface,
-                  decoration: const InputDecoration(labelText: '英语表达'),
+                  decoration: InputDecoration(
+                    labelText: context.l10n.uiEnglishExpression,
+                  ),
                 ),
                 DropdownButtonFormField<String>(
                   initialValue: type,
-                  decoration: const InputDecoration(labelText: '表达类型'),
+                  decoration: InputDecoration(
+                    labelText: context.l10n.uiExpressionType,
+                  ),
                   items: [
                     for (final entry in {
-                      'word': '单词',
-                      'phrase': '短语',
-                      'construction': '构式',
-                      'sentence': '句子',
-                      'utterance_strategy': '表达策略',
+                      'word': context.l10n.uiWord,
+                      'phrase': context.l10n.uiPhrase,
+                      'construction': context.l10n.uiConstruction,
+                      'sentence': context.l10n.uiSentence,
+                      'utterance_strategy': context.l10n.uiExpressionStrategy,
                     }.entries)
                       DropdownMenuItem(
                         value: entry.key,
@@ -803,12 +874,14 @@ class WorldDetail extends StatelessWidget {
                 ),
                 DropdownButtonFormField<String>(
                   key: const ValueKey('binding-relation'),
-                  decoration: const InputDecoration(labelText: '和这个意思的关系'),
+                  decoration: InputDecoration(
+                    labelText: context.l10n.uiRelationToThisMeaning,
+                  ),
                   items: [
                     for (final entry in {
-                      'realizes': '表达这个意思',
-                      'approximates': '近似表达',
-                      'evokes': '唤起联想',
+                      'realizes': context.l10n.uiExpressesThisMeaning,
+                      'approximates': context.l10n.uiApproximatesThisMeaning,
+                      'evokes': context.l10n.uiEvokesAnAssociation,
                     }.entries)
                       DropdownMenuItem(
                         value: entry.key,
@@ -819,13 +892,15 @@ class WorldDetail extends StatelessWidget {
                 ),
                 DropdownButtonFormField<String>(
                   key: const ValueKey('binding-coverage'),
-                  decoration: const InputDecoration(labelText: '含义覆盖范围'),
+                  decoration: InputDecoration(
+                    labelText: context.l10n.uiMeaningCoverage,
+                  ),
                   items: [
                     for (final entry in {
-                      'exact': '恰好覆盖',
-                      'broader': '更宽',
-                      'narrower': '更窄',
-                      'overlapping': '部分重叠',
+                      'exact': context.l10n.uiExact,
+                      'broader': context.l10n.uiBroader,
+                      'narrower': context.l10n.uiNarrower,
+                      'overlapping': context.l10n.uiPartialOverlap,
                     }.entries)
                       DropdownMenuItem(
                         value: entry.key,
@@ -840,7 +915,7 @@ class WorldDetail extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: submitting ? null : () => Navigator.pop(ctx),
-              child: const Text('取消'),
+              child: Text(context.l10n.uiCancel),
             ),
             FilledButton(
               onPressed: submitting || relation == null || coverage == null
@@ -868,7 +943,7 @@ class WorldDetail extends StatelessWidget {
                         });
                       }
                     },
-              child: const Text('确认表达连接'),
+              child: Text(context.l10n.uiConfirmExpressionConnection),
             ),
           ],
         ),
@@ -888,7 +963,10 @@ class WorldDetail extends StatelessWidget {
           .where((m) => m['id'] == meaningId)
           .firstOrNull;
       if (m == null) {
-        return Scaffold(appBar: AppBar(), body: const Text('内容暂不可用，请返回重试。'));
+        return Scaffold(
+          appBar: AppBar(),
+          body: Text(context.l10n.uiContentUnavailableGoBackAndRetry),
+        );
       }
       final draft = m['worldContext']?['draft'];
       final binding = m['bindingMetadata'];
@@ -903,7 +981,7 @@ class WorldDetail extends StatelessWidget {
             v['id'] != m['id'],
       );
       return Scaffold(
-        appBar: AppBar(title: const Text('上下文与表达')),
+        appBar: AppBar(title: Text(context.l10n.uiContextAndExpression)),
         body: Readable(
           child: ListView(
             key: const ValueKey('world-detail-scroll'),
@@ -915,7 +993,7 @@ class WorldDetail extends StatelessWidget {
               ),
               Text(m['sense'], style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 16),
-              const Text('上下文'),
+              Text(context.l10n.uiContext),
               if (draft != null) ...[
                 for (final b in draft['blocks'])
                   if (b['kind'] == 'text')
@@ -929,25 +1007,36 @@ class WorldDetail extends StatelessWidget {
                   SelectableText(draft['familiarExpression']),
               ] else
                 SelectableText(m['snapshot']['sentence']),
-              if (m['focus'] != null) Text('关注点：${m['focus']}'),
+              if (m['focus'] != null)
+                Text(context.l10n.uiFocus((m['focus']).toString())),
               if (m['sourceLink'] != null)
                 TextButton(
                   onPressed: () =>
                       Clipboard.setData(ClipboardData(text: m['sourceLink'])),
-                  child: const Text('复制来源链接'),
+                  child: Text(context.l10n.uiCopySourceLink),
                 ),
-              Text('来源：${m['materialSource'] ?? '本人确认'}'),
+              Text(
+                context.l10n.uiSource(
+                  (m['materialSource'] ?? context.l10n.uiConfirmedByYou)
+                      .toString(),
+                ),
+              ),
               Text(
                 binding == null
-                    ? '已确认表达连接'
+                    ? context.l10n.uiConfirmedExpressionConnection
                     : '${binding['type']} · ${binding['relation']} · ${binding['semanticCoverage']}',
               ),
               ExpansionTile(
                 key: const PageStorageKey('world_screen-detail-1'),
-                title: const Text('版本与确认来源'),
+                title: Text(context.l10n.uiVersionsAndConfirmationSource),
                 children: [
                   SelectableText(
-                    '上下文：${m['contextAnchorId']}\n意思版本：${m['senseVersionId']}\n表达版本：${m['bindingVersionId']}\n${jsonEncode(m['resolutionProvenance'])}',
+                    context.l10n.uiContextMeaningVersionExpressionVersion(
+                      (m['contextAnchorId']).toString(),
+                      (m['senseVersionId']).toString(),
+                      (m['bindingVersionId']).toString(),
+                      (jsonEncode(m['resolutionProvenance'])).toString(),
+                    ),
                   ),
                 ],
               ),
@@ -964,10 +1053,15 @@ class WorldDetail extends StatelessWidget {
                             'active': true,
                           },
                         ),
-                  child: const Text('恢复这个连接'),
+                  child: Text(context.l10n.uiRestoreThisConnection),
                 )
               else ...[
-                if (!supported) const Text('这个关系已保存。目前学习资源仅支持恰好表达该意思的连接。'),
+                if (!supported)
+                  Text(
+                    context
+                        .l10n
+                        .uiConnectionSavedLearningResourcesCurrentlyRequire,
+                  ),
                 FilledButton(
                   onPressed:
                       model.busy || !supported || m['addedToLearning'] == true
@@ -1000,16 +1094,18 @@ class WorldDetail extends StatelessWidget {
                           await model.load();
                         },
                   child: Text(
-                    m['addedToLearning'] == true ? '已加入学习' : '显式加入学习',
+                    m['addedToLearning'] == true
+                        ? context.l10n.uiAddedToLearning
+                        : context.l10n.uiAddToLearning390,
                   ),
                 ),
                 if (m['proposal'] != null)
                   OutlinedButton(
                     onPressed: model.busy ? null : () => bind(context, m),
-                    child: const Text('补充一个表达'),
+                    child: Text(context.l10n.uiAddAnExpression),
                   )
                 else
-                  const Text('这份旧材料未携带完整词义定义，暂不能据此确认新的表达绑定。'),
+                  Text(context.l10n.uiThisOlderCaptureLacksTheFull),
                 if (draft != null) ...[
                   OutlinedButton(
                     onPressed: model.busy
@@ -1026,7 +1122,7 @@ class WorldDetail extends StatelessWidget {
                             );
                             await model.load();
                           },
-                    child: const Text('复制上下文后编辑'),
+                    child: Text(context.l10n.uiCopyContextToEdit),
                   ),
                   for (final d in model.data!['drafts'])
                     if (d['id'] == m['worldContext']['id'] &&
@@ -1039,7 +1135,7 @@ class WorldDetail extends StatelessWidget {
                                 WorldEditor(model: model, record: d),
                           ),
                         ),
-                        child: const Text('同一上下文补充意思'),
+                        child: Text(context.l10n.uiAddAMeaningToThisContext),
                       ),
                 ],
                 TextButton(
@@ -1053,10 +1149,11 @@ class WorldDetail extends StatelessWidget {
                             'active': false,
                           },
                         ),
-                  child: const Text('移除这个连接'),
+                  child: Text(context.l10n.uiRemoveThisConnection),
                 ),
               ],
-              if (siblings.isNotEmpty) const Text('同一上下文的其他连接'),
+              if (siblings.isNotEmpty)
+                Text(context.l10n.uiOtherConnectionsInThisContext),
               for (final other in siblings)
                 ListTile(
                   title: Text(other['expression']),
@@ -1132,9 +1229,9 @@ class WorldGraph extends StatelessWidget {
     );
     nodes.add(
       node(
-        '上下文',
+        context.l10n.uiContext,
         items.first['snapshot']['sentence'].toString().isEmpty
-            ? '图片上下文'
+            ? context.l10n.uiImageContext
             : items.first['snapshot']['sentence'],
         20,
         center.dy - 65,
@@ -1147,7 +1244,9 @@ class WorldGraph extends StatelessWidget {
       lines.add((start: Offset(260, center.dy), end: Offset(340, y + 65)));
       nodes.add(
         node(
-          group.first['focus'] == null ? '意思' : '意思 · ${group.first['focus']}',
+          group.first['focus'] == null
+              ? context.l10n.uiMeaning
+              : context.l10n.uiMeaning398((group.first['focus']).toString()),
           group.first['sense'],
           340,
           y,
@@ -1157,7 +1256,9 @@ class WorldGraph extends StatelessWidget {
       );
       for (final m in group) {
         lines.add((start: Offset(580, y + 65), end: Offset(660, row + 65)));
-        nodes.add(node('表达', m['expression'], 660, row, 220, m));
+        nodes.add(
+          node(context.l10n.uiExpression, m['expression'], 660, row, 220, m),
+        );
         row += 160;
       }
     }

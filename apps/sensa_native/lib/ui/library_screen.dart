@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'optional_resources_view.dart';
 import 'curriculum_screen.dart';
 import 'practice_screen.dart';
@@ -39,9 +40,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    const Expanded(child: Text('选择学习内容')),
+                    Expanded(child: Text(context.l10n.uiChooseLearningContent)),
                     IconButton(
-                      tooltip: '关闭',
+                      tooltip: context.l10n.uiClose,
                       onPressed: () => Navigator.pop(sheetContext),
                       icon: const Icon(Icons.close),
                     ),
@@ -58,10 +59,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       title: Text(item['expression'] as String),
                       subtitle: Text(
                         entry['completed'] == true
-                            ? '首学已完成'
+                            ? context.l10n.uiInitialLearningComplete127
                             : entry['enrolled'] == true
-                            ? '已加入学习'
-                            : '尚未加入学习',
+                            ? context.l10n.uiAddedToLearning
+                            : context.l10n.uiNotAddedToLearning,
                       ),
                       selected: item['id'] == snapshot.material?['id'],
                       onTap: () =>
@@ -110,11 +111,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
             );
       List<Widget> body;
       if (s == null) {
-        body = [Text('正在打开本地学习库', style: t.headlineSmall)];
+        body = [
+          Text(context.l10n.uiOpeningYourLibrary617, style: t.headlineSmall),
+        ];
       } else if (s.quantity == null) {
         body = [
-          Text('从自己的节奏开始', style: t.headlineLarge),
-          const Text('每天想学习多少个新的意义连接？'),
+          Text(context.l10n.uiStartAtYourOwnPace, style: t.headlineLarge),
+          Text(context.l10n.uiHowManyNewConnectionsWouldYou),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -131,7 +134,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 .toList(),
           ),
           button(
-            '确认每日数量',
+            context.l10n.uiSetDailyQuantity,
             () => vm.act({'kind': 'confirm_quantity', 'quantity': quantity}),
           ),
         ];
@@ -159,22 +162,25 @@ class _LibraryScreenState extends State<LibraryScreen> {
           s.nextEligibleAtMs!,
         ).toLocal();
         body = [
-          Text('稍后再回想', style: t.headlineLarge),
-          const Text('遗忘记录已保存。再学习会帮助恢复连接，不会改写刚才的复习评分。'),
+          Text(context.l10n.uiRecallAgainLater, style: t.headlineLarge),
+          Text(context.l10n.uiTakeSomeTimeThenTryRecalling),
           Text(
-            '可继续时间：${eligible.hour.toString().padLeft(2, '0')}:${eligible.minute.toString().padLeft(2, '0')}',
+            context.l10n.uiReadyAt(
+              (eligible.hour.toString().padLeft(2, '0')).toString(),
+              (eligible.minute.toString().padLeft(2, '0')).toString(),
+            ),
           ),
           button(
-            '到时继续',
+            context.l10n.uiContinueWhenReady,
             () => vm.act({'kind': 'start_retention', 'early': false}),
           ),
           button(
-            '提前回想',
+            context.l10n.uiRecallEarly623,
             () => vm.act({'kind': 'start_retention', 'early': true}),
             primary: false,
           ),
-          button('先学习其他内容', returnHome, primary: false),
-          button('结束本次', returnHome, primary: false),
+          button(context.l10n.uiLearnSomethingElse, returnHome, primary: false),
+          button(context.l10n.uiEndSession, returnHome, primary: false),
         ];
       } else if (s.phase == 'completed' && !vm.home) {
         final due = DateTime.fromMillisecondsSinceEpoch(s.dueAtMs!).toLocal();
@@ -186,23 +192,29 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
           Text(
             s.protocol == 'consumer-initial-v1'
-                ? '本次首学已完成'
+                ? context.l10n.uiInitialLearningComplete626
                 : s.protocol == 'consumer-review-v1'
-                ? '本次复习已完成'
-                : '本次再学习已完成',
+                ? context.l10n.uiReviewComplete
+                : context.l10n.uiRelearningComplete,
             style: t.headlineLarge,
           ),
           Text(s.material!['expression'] as String, style: t.headlineSmall),
           Text(
             s.protocol == 'consumer-relearning-v1'
-                ? '连接已恢复，原复习评分与复习时间保持不变。'
-                : '学习记录和复习时间已保存到本机。完成学习不代表已经掌握。',
+                ? context.l10n.uiConnectionRestored
+                : context.l10n.uiLearningProgressAndNextReviewSaved,
           ),
-          Text('下次复习：${due.year}/${due.month}/${due.day}', style: t.bodyLarge),
+          Text(
+            context.l10n.nextReviewDate(context.localDate(due)),
+            style: t.bodyLarge,
+          ),
 
           if (s.protocol != 'consumer-initial-v1')
-            button('继续复习其他内容', () => vm.act({'kind': 'next_retention'})),
-          button('回到首页', returnHome),
+            button(
+              context.l10n.uiReviewOtherContent,
+              () => vm.act({'kind': 'next_retention'}),
+            ),
+          button(context.l10n.uiBackToHome, returnHome),
         ];
       } else if (s.run != null &&
           s.phase != 'completed' &&
@@ -212,19 +224,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
         body = [
           Text(
             s.protocol == 'consumer-review-v1'
-                ? '到期复习'
+                ? context.l10n.uiDueReviews
                 : s.protocol == 'consumer-relearning-v1'
-                ? '再次学习'
-                : '首次学习',
+                ? context.l10n.uiLearnAgain
+                : context.l10n.uiInitialLearning,
             style: t.labelLarge,
           ),
-          Text(recall ? '回想这个情境' : '连接这个表达', style: t.headlineSmall),
+          Text(
+            recall
+                ? context.l10n.uiRecallThisContext
+                : context.l10n.uiConnectThisExpression,
+            style: t.headlineSmall,
+          ),
           Text(s.material!['scene'] as String, style: t.bodyLarge),
           if (recall) ...[
             Text(s.material!['sense'] as String, style: t.bodyMedium),
             OptionalResourcesView(material: s.material!, revealed: false),
-            const Text('先在心里试着表达，再揭示答案。'),
-            button('揭示表达', () => vm.answer('reveal')),
+            Text(context.l10n.uiTryExpressingItInYourMind),
+            button(context.l10n.uiRevealExpression, () => vm.answer('reveal')),
           ] else if (s.material != null) ...[
             Text(s.material!['expression'] as String, style: t.headlineLarge),
             PronunciationView(
@@ -240,9 +257,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                button('再回想', () => vm.answer('again'), primary: false),
-                button('有些费力', () => vm.answer('hard'), primary: false),
-                button('可以继续', () => vm.answer('good')),
+                button(
+                  context.l10n.uiAgain,
+                  () => vm.answer('again'),
+                  primary: false,
+                ),
+                button(
+                  context.l10n.uiHard,
+                  () => vm.answer('hard'),
+                  primary: false,
+                ),
+                button(context.l10n.uiGood, () => vm.answer('good')),
               ],
             ),
           ],
@@ -252,34 +277,50 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ? vm.stopActivity()
                       : vm.act({'kind': 'pause'})
                 : null,
-            child: const Text('暂停学习'),
+            child: Text(context.l10n.uiPauseLearning),
           ),
         ];
       } else {
         body = [
           if (widget.acceptanceTools) ...[
-            Text('我的本地学习库', style: t.headlineLarge),
-            Text('每日新学 ${s.quantity} 个 · 无需登录'),
+            Text(context.l10n.uiMyLocalLibrary, style: t.headlineLarge),
+            Text(context.l10n.uiNewPerDay((s.quantity).toString())),
             Text(
-              '累计复习 ${s.retention['reviewCount'] ?? 0} 次 · 再学习完成 ${s.retention['relearningCount'] ?? 0} 次 · 待恢复 ${s.retention['pendingCount'] ?? 0} 项',
+              context.l10n.uiReviewsRelearningCompletionsToRestore(
+                (s.retention['reviewCount'] ?? 0).toString(),
+                (s.retention['relearningCount'] ?? 0).toString(),
+                (s.retention['pendingCount'] ?? 0).toString(),
+              ),
             ),
-            Text('默认方式：${s.defaultPolicyLabel}'),
-            button('默认学习方式', () => choosePolicy('learner'), primary: false),
+            Text(context.l10n.uiDefaultMode((s.defaultPolicyLabel).toString())),
+            button(
+              context.l10n.uiDefaultLearningMode,
+              () => choosePolicy('learner'),
+              primary: false,
+            ),
             LearningActivityView(model: vm, overview: true),
-            button('导入学习包', vm.importPack, primary: false),
+            button(
+              context.l10n.uiImportLearningPackage,
+              vm.importPack,
+              primary: false,
+            ),
             if (vm.notice != null)
               Semantics(liveRegion: true, child: Text(vm.notice!)),
             if (s.catalog.isNotEmpty) ...[
-              Text('已下载的内容', style: t.headlineSmall),
-              Text('${s.catalog.length} 项内容已保存在本机'),
-              button('选择其他内容', chooseMaterial, primary: false),
+              Text(context.l10n.uiDownloadedContent, style: t.headlineSmall),
+              Text(context.l10n.uiItemsSaved(s.catalog.length)),
+              button(
+                context.l10n.uiChooseOtherContent,
+                chooseMaterial,
+                primary: false,
+              ),
               const Divider(),
             ],
           ],
           if (s.material == null && widget.acceptanceTools) ...[
-            const Text('先载入一份合成验收材料，验证本机保存与学习。'),
+            Text(context.l10n.uiLoadSyntheticAcceptanceMaterialToTest),
             button(
-              '载入验收材料',
+              context.l10n.uiLoadAcceptanceMaterial,
               () => vm.act({'kind': 'import_acceptance_material'}),
             ),
           ] else if (s.material != null) ...[
@@ -287,25 +328,34 @@ class _LibraryScreenState extends State<LibraryScreen> {
             Text(s.material!['sense'] as String, style: t.bodyLarge),
             Text(s.material!['source'] as String),
             if (s.policyPlan != null) ...[
-              Text('学习方式：${s.selectedPolicyLabel}'),
-              Text('来源：${s.policySourceLabel}'),
+              Text(
+                context.l10n.uiLearningMode((s.selectedPolicyLabel).toString()),
+              ),
+              Text(context.l10n.uiSource((s.policySourceLabel).toString())),
               if (s.policyCommitted)
-                const Text('此项方式已固定，默认设置的变化不会改写已有学习。')
+                Text(context.l10n.uiThisModeIsFixedForLearning)
               else
-                button('更换此项方式', () => choosePolicy('target'), primary: false),
+                button(
+                  context.l10n.uiChangeModeForThisItem,
+                  () => choosePolicy('target'),
+                  primary: false,
+                ),
               if (s.policyState['sourceKey'] != null)
                 button(
-                  '学习包默认方式',
+                  context.l10n.uiPackageDefaultMode,
                   () => choosePolicy('curriculum'),
                   primary: false,
                 ),
             ],
             if (!s.enrolled)
-              button('加入学习', () => vm.act({'kind': 'add_to_learning'}))
-            else if (!s.inStudyScope) ...[
-              const Text('此项不在当前学习来源中，已有进度与历史仍保留。'),
               button(
-                '调整学习来源',
+                context.l10n.uiAddToLearning,
+                () => vm.act({'kind': 'add_to_learning'}),
+              )
+            else if (!s.inStudyScope) ...[
+              Text(context.l10n.uiThisItemIsOutsideYourCurrent),
+              button(
+                context.l10n.uiAdjustLearningSources,
                 () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => CurriculumScreen(model: vm),
@@ -315,36 +365,41 @@ class _LibraryScreenState extends State<LibraryScreen> {
               ),
             ] else if (s.run == null &&
                 s.initialReadiness?['status'] != 'ready') ...[
-              Text(s.initialReadiness?['label'] as String? ?? '学习材料正在准备'),
-              Text(s.initialReadiness?['detail'] as String? ?? ''),
+              Text(context.l10n.learningNotReady),
               button(
-                '刷新准备状态',
+                context.l10n.uiRefreshPreparation,
                 () => vm.act({'kind': 'refresh_plans'}),
                 primary: false,
               ),
             ] else if (s.nextEligibleAtMs != null &&
                 (s.phase == 'completed' || s.phase == 'waiting')) ...[
-              const Text('这项内容还需要再回想，等待进度已保存在本机。'),
+              Text(context.l10n.uiThisItemNeedsAnotherRecallAttempt),
               button(
-                '继续再学习',
+                context.l10n.uiContinueRelearning,
                 () => vm.act({'kind': 'start_retention', 'early': false}),
               ),
               button(
-                '提前回想',
+                context.l10n.uiRecallEarly623,
                 () => vm.act({'kind': 'start_retention', 'early': true}),
                 primary: false,
               ),
             ] else if (s.phase != 'completed')
               button(
-                s.run == null ? '开始学习' : '继续学习',
+                s.run == null
+                    ? context.l10n.uiStartLearning
+                    : context.l10n.uiContinueLearning662,
                 () => vm.act({'kind': 'start_or_resume'}),
               )
             else ...[
               Text(
-                '复习日期：${DateTime.fromMillisecondsSinceEpoch(s.dueAtMs!).toLocal().toString().substring(0, 16)}',
+                context.l10n.uiReviewDate(
+                  (DateTime.fromMillisecondsSinceEpoch(
+                    s.dueAtMs!,
+                  ).toLocal().toString().substring(0, 16)).toString(),
+                ),
               ),
               button(
-                '开始到期复习',
+                context.l10n.uiStartDueReview,
                 () => vm.act({'kind': 'start_retention', 'early': false}),
               ),
             ],
@@ -362,14 +417,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
         body.add(
           OutlinedButton(
             onPressed: available ? () => vm.stopActivity() : null,
-            child: const Text('暂停本次学习并返回'),
+            child: Text(context.l10n.uiPauseAndGoBack),
           ),
         );
       }
       if (vm.checkInPending && !vm.busy) {
         body.addAll([
-          Semantics(liveRegion: true, child: const Text('签到尚未保存，学习可以继续。')),
-          TextButton(onPressed: () => vm.checkIn(), child: const Text('重试签到')),
+          Semantics(
+            liveRegion: true,
+            child: Text(context.l10n.uiCheckInWasNotSavedYou),
+          ),
+          TextButton(
+            onPressed: () => vm.checkIn(),
+            child: Text(context.l10n.uiRetryCheckIn),
+          ),
         ]);
       }
       return Scaffold(
@@ -378,13 +439,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
             widget.acceptanceTools
                 ? 'Sensa'
                 : vm.home
-                ? '学习内容'
-                : '学习',
+                ? context.l10n.uiLearningContent
+                : context.l10n.uiLearn,
           ),
           actions: [
             if (widget.acceptanceTools) ...[
               IconButton(
-                tooltip: '自由练习',
+                tooltip: context.l10n.uiFreePractice,
                 icon: const Icon(Icons.headphones),
                 onPressed: vm.busy || s == null
                     ? null
@@ -395,7 +456,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ),
               ),
               IconButton(
-                tooltip: '学习来源',
+                tooltip: context.l10n.uiLearningSources,
                 icon: const Icon(Icons.library_books_outlined),
                 onPressed: vm.busy || s == null
                     ? null
@@ -406,7 +467,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ),
               ),
               IconButton(
-                tooltip: '我的词义世界',
+                tooltip: context.l10n.uiMySemanticWorld,
                 icon: const Icon(Icons.hub_outlined),
                 onPressed: vm.busy || s == null
                     ? null
@@ -435,11 +496,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           children: [
                             TextButton(
                               onPressed: vm.busy ? null : vm.retry,
-                              child: const Text('重试本次操作'),
+                              child: Text(context.l10n.uiRetry),
                             ),
                             TextButton(
                               onPressed: vm.busy ? null : vm.load,
-                              child: const Text('重新读取'),
+                              child: Text(context.l10n.uiReload),
                             ),
                           ],
                         ),
@@ -459,7 +520,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     children: [
                       const Icon(Icons.offline_pin_outlined, size: 18),
                       const SizedBox(width: 8),
-                      Expanded(child: Text(vm.busy ? '正在保存到本机…' : '本地学习')),
+                      Expanded(
+                        child: Text(
+                          vm.busy
+                              ? context.l10n.uiSavingLocally
+                              : context.l10n.uiLocalLearning,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 32),
@@ -509,23 +576,23 @@ Future<void> showLearningPolicy(
                   Expanded(
                     child: Text(
                       scope == 'target'
-                          ? '选择此项学习方式'
+                          ? context.l10n.uiChooseThisLearningMode
                           : scope == 'curriculum'
-                          ? '设置学习包默认方式'
-                          : '设置默认学习方式',
+                          ? context.l10n.uiSetPackageDefaultMode
+                          : context.l10n.uiSetDefaultLearningMode,
                     ),
                   ),
                   IconButton(
-                    tooltip: '关闭',
+                    tooltip: context.l10n.uiClose,
                     onPressed: () => Navigator.pop(sheetContext),
                     icon: const Icon(Icons.close),
                   ),
                 ],
               ),
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('首次开始学习后，此项方式固定。更改默认设置只影响尚未固定的项目。'),
+              child: Text(context.l10n.uiDefaultChangesApplyToLearningThat),
             ),
             Expanded(
               child: ListView(
@@ -534,16 +601,24 @@ Future<void> showLearningPolicy(
                     (c) => includeUnavailable || c['executable'] == true,
                   ))
                     ListTile(
-                      title: Text(choice['label'] as String),
+                      title: Text(
+                        model.snapshot!.policyLabel(
+                          choice['policy']['profileId'] as String,
+                        ),
+                      ),
                       subtitle: Text(
                         choice['executable'] == true
-                            ? '当前设备可使用'
-                            : '当前设备尚未支持，选择后会保留为待准备项目',
+                            ? context.l10n.uiAvailableOnThisDevice
+                            : context.l10n.uiNotYetSupportedOnThisDevice,
                       ),
                       onTap: () => Navigator.pop(sheetContext, choice),
                     ),
                   ListTile(
-                    title: Text(scope == 'learner' ? '恢复系统默认' : '使用继承设置'),
+                    title: Text(
+                      scope == 'learner'
+                          ? context.l10n.uiRestoreSystemDefault
+                          : context.l10n.uiUseInheritedSetting,
+                    ),
                     onTap: () => Navigator.pop(sheetContext, {'inherit': true}),
                   ),
                 ],

@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'product_theme.dart';
 import 'provider_login_screen.dart';
 import 'package:flutter/material.dart';
@@ -13,7 +14,9 @@ class AgentSettingsScreen extends StatefulWidget {
 
 class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
   Future<void> edit([Map<String, dynamic>? old]) async {
-    final name = TextEditingController(text: old?['name'] ?? '我的模型');
+    final name = TextEditingController(
+      text: old?['name'] ?? context.l10n.uiMyModels,
+    );
     final endpoint = TextEditingController(
       text: old?['endpoint'] ?? 'https://api.deepseek.com',
     );
@@ -30,45 +33,48 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, set) => AlertDialog(
-          title: const Text('模型服务'),
+          title: Text(context.l10n.uiModelServices),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  '连接配置保存在本机，凭据保存在系统安全存储。更改服务地址或类型需重新填写凭据。材料只发送给你选择的服务。',
-                ),
+                Text(context.l10n.uiCredentialsAreKeptInSecureStorage),
                 DropdownButtonFormField<String>(
                   isExpanded: true,
                   initialValue: kind,
-                  items: const [
+                  items: [
                     DropdownMenuItem(
                       value: 'compatible',
-                      child: Text('自带 Key · OpenAI 兼容接口'),
+                      child: Text(context.l10n.uiOwnKeyOpenaiCompatibleApi),
                     ),
-                    DropdownMenuItem(value: 'sensa', child: Text('Sensa 模型服务')),
+                    DropdownMenuItem(
+                      value: 'sensa',
+                      child: Text(context.l10n.uiSensaModelService),
+                    ),
                   ],
                   onChanged: (v) => set(() => kind = v!),
                 ),
                 TextField(
                   key: const ValueKey('agent-provider-name'),
                   controller: name,
-                  decoration: const InputDecoration(labelText: '名称'),
+                  decoration: InputDecoration(labelText: context.l10n.uiName),
                 ),
                 TextField(
                   key: const ValueKey('agent-provider-url'),
                   controller: endpoint,
                   decoration: InputDecoration(
                     labelText: kind == 'sensa'
-                        ? 'Sensa 服务根地址'
-                        : 'API 基础地址（例如 https://api.deepseek.com）',
+                        ? context.l10n.uiSensaServiceUrl
+                        : context.l10n.uiApiBaseUrlEGHttps,
                   ),
                 ),
                 TextField(
                   key: const ValueKey('agent-provider-model'),
                   controller: model,
                   decoration: InputDecoration(
-                    labelText: kind == 'sensa' ? '模型备注（实际模型由服务设置决定）' : '模型 ID',
+                    labelText: kind == 'sensa'
+                        ? context.l10n.uiModelNoteActualModelIsSet
+                        : context.l10n.uiModelId,
                   ),
                 ),
                 TextField(
@@ -79,14 +85,14 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
                   enableSuggestions: false,
                   decoration: InputDecoration(
                     labelText: kind == 'sensa'
-                        ? 'Sensa 访问令牌'
-                        : '模型 API Key（留空保留已有凭据）',
+                        ? context.l10n.uiSensaAccessToken
+                        : context.l10n.uiApiKeyLeaveBlankToKeep,
                   ),
                 ),
                 CheckboxListTile(
                   value: vision,
                   onChanged: (v) => set(() => vision = v!),
-                  title: const Text('此模型支持图片输入'),
+                  title: Text(context.l10n.uiSupportsImageInput),
                 ),
                 if (failure != null) Text(failure!),
               ],
@@ -95,7 +101,7 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
           actions: [
             TextButton(
               onPressed: saving ? null : () => Navigator.pop(ctx),
-              child: const Text('取消'),
+              child: Text(context.l10n.uiCancel),
             ),
             FilledButton(
               onPressed: saving
@@ -111,7 +117,7 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
                           'kind': kind,
                           'vision': vision,
                         }, key.text);
-                        widget.controller.error = null;
+                        widget.controller.setError(null);
                         widget.controller.changed();
                         if (ctx.mounted) Navigator.pop(ctx);
                       } catch (e) {
@@ -123,7 +129,7 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
                         }
                       }
                     },
-              child: const Text('保存模型服务'),
+              child: Text(context.l10n.uiSaveModelService),
             ),
           ],
         ),
@@ -138,7 +144,7 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('模型服务设置')),
+    appBar: AppBar(title: Text(context.l10n.uiModelServiceSettings)),
     body: Readable(
       child: ListView(
         padding: const EdgeInsets.all(20),
@@ -147,11 +153,11 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
             ListTile(
               title: Text(p['name']),
               subtitle: Text(
-                '${p['model']} · ${p['vision'] ? '可发送图片' : '文字'} · ${widget.controller.providers.status(p['id'])}',
+                '${p['model']} · ${p['vision'] ? context.l10n.uiImagesSupported : context.l10n.uiText} · ${widget.controller.providers.status(p['id'])}',
               ),
               onTap: () => edit(p),
               trailing: PopupMenuButton<String>(
-                tooltip: '管理模型服务',
+                tooltip: context.l10n.uiManageModelServices,
                 onSelected: (value) async {
                   try {
                     if (value == 'login') {
@@ -169,20 +175,31 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
                     } else {
                       await widget.controller.providers.remove(p['id']);
                     }
-                    widget.controller.error = null;
+                    widget.controller.setError(null);
                     widget.controller.changed();
                     if (mounted) setState(() {});
                   } catch (e) {
-                    widget.controller.error = widget.controller.describe(e);
+                    widget.controller.setError(
+                      () => widget.controller.describe(e),
+                    );
                     widget.controller.changed();
                     if (mounted) setState(() {});
                   }
                 },
                 itemBuilder: (_) => [
                   if (p['kind'] == 'sensa')
-                    const PopupMenuItem(value: 'login', child: Text('在线服务账户')),
-                  const PopupMenuItem(value: 'forget', child: Text('删除已保存凭据')),
-                  const PopupMenuItem(value: 'remove', child: Text('删除此服务')),
+                    PopupMenuItem(
+                      value: 'login',
+                      child: Text(context.l10n.uiOnlineAccount),
+                    ),
+                  PopupMenuItem(
+                    value: 'forget',
+                    child: Text(context.l10n.uiDeleteSavedCredentials),
+                  ),
+                  PopupMenuItem(
+                    value: 'remove',
+                    child: Text(context.l10n.uiDeleteService),
+                  ),
                 ],
               ),
             ),
@@ -193,58 +210,68 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
               widget.controller.changed();
               if (mounted) setState(() {});
             },
-            child: const Text('重新读取安全凭据'),
+            child: Text(context.l10n.uiReloadCredentials),
           ),
-          for (final role in const {
-            'teacher': '澄清与解释',
-            'content': '学习材料生成',
-            'review': '独立审核',
-            'service': 'Sensa 在线资源',
+          for (final role in {
+            'teacher': context.l10n.uiClarificationAndExplanation,
+            'content': context.l10n.uiLearningMaterialGeneration,
+            'review': context.l10n.uiIndependentReview,
+            'service': context.l10n.uiSensaOnlineResources,
           }.entries)
-            DropdownButtonFormField<String>(
-              isExpanded: true,
-              key: ValueKey(
-                'provider-role-${role.key}-${(widget.controller.providers.forPurpose(role.key)?['id'])}',
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: DropdownButtonFormField<String>(
+                isExpanded: true,
+                key: ValueKey(
+                  'provider-role-${role.key}-${(widget.controller.providers.forPurpose(role.key)?['id'])}',
+                ),
+                initialValue:
+                    widget.controller.providers.profiles.any(
+                      (p) =>
+                          p['id'] ==
+                              (widget.controller.providers.forPurpose(
+                                role.key,
+                              )?['id']) &&
+                          (role.key != 'service' || p['kind'] == 'sensa'),
+                    )
+                    ? (widget.controller.providers.forPurpose(role.key)?['id'])
+                    : '',
+                decoration: InputDecoration(labelText: role.value),
+                items: [
+                  DropdownMenuItem(
+                    value: '',
+                    child: Text(context.l10n.uiNotConfigured),
+                  ),
+                  for (final p in widget.controller.providers.profiles)
+                    if (role.key != 'service' || p['kind'] == 'sensa')
+                      DropdownMenuItem(
+                        value: p['id'] as String,
+                        child: Text(p['name']),
+                      ),
+                ],
+                onChanged: (id) async {
+                  try {
+                    await widget.controller.providers.assign(
+                      role.key,
+                      id == '' ? null : id,
+                    );
+                    widget.controller.changed();
+                    if (mounted) setState(() {});
+                  } catch (e) {
+                    widget.controller.setError(
+                      () => widget.controller.describe(e),
+                    );
+                    if (mounted) setState(() {});
+                  }
+                },
               ),
-              initialValue:
-                  widget.controller.providers.profiles.any(
-                    (p) =>
-                        p['id'] ==
-                            (widget.controller.providers.forPurpose(
-                              role.key,
-                            )?['id']) &&
-                        (role.key != 'service' || p['kind'] == 'sensa'),
-                  )
-                  ? (widget.controller.providers.forPurpose(role.key)?['id'])
-                  : '',
-              decoration: InputDecoration(labelText: role.value),
-              items: [
-                const DropdownMenuItem(value: '', child: Text('暂不配置')),
-                for (final p in widget.controller.providers.profiles)
-                  if (role.key != 'service' || p['kind'] == 'sensa')
-                    DropdownMenuItem(
-                      value: p['id'] as String,
-                      child: Text(p['name']),
-                    ),
-              ],
-              onChanged: (id) async {
-                try {
-                  await widget.controller.providers.assign(
-                    role.key,
-                    id == '' ? null : id,
-                  );
-                  widget.controller.changed();
-                  if (mounted) setState(() {});
-                } catch (e) {
-                  widget.controller.error = widget.controller.describe(e);
-                  if (mounted) setState(() {});
-                }
-              },
             ),
-          const Text(
-            '各用途可选择同一服务，也可分别选择。审核使用独立请求。未配置或失效时会停止，不会改用其他服务。Sensa 在线资源用于兼容解析、资源下载等已有服务。',
+          Text(context.l10n.uiChooseAServiceForEachPurpose),
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: () => edit(),
+            child: Text(context.l10n.uiAddModelService),
           ),
-          FilledButton(onPressed: () => edit(), child: const Text('添加模型服务')),
         ],
       ),
     ),
@@ -269,17 +296,21 @@ class _AgentHistoryScreenState extends State<AgentHistoryScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.controller,
     builder: (context, _) => Scaffold(
-      appBar: AppBar(title: const Text('对话与资源准备')),
+      appBar: AppBar(title: Text(context.l10n.uiConversationsAndResources)),
       body: Readable(
         child: ListView(
           children: [
             if (widget.controller.error != null) Text(widget.controller.error!),
             if (widget.controller.sessions.isEmpty)
-              const ListTile(title: Text('还没有保存的对话。')),
+              ListTile(title: Text(context.l10n.uiNoConversationsYet)),
             for (final s in widget.controller.sessions)
               ListTile(
-                title: Text(s['kind'] == 'teacher' ? '与语言老师的对话' : '学习资源准备'),
-                subtitle: Text(agentStatus(s['status'])),
+                title: Text(
+                  s['kind'] == 'teacher'
+                      ? context.l10n.uiConversationWithYourTeacher
+                      : context.l10n.uiLearningResourcePreparation,
+                ),
+                subtitle: Text(agentStatus(context, s['status'])),
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute<void>(
@@ -295,17 +326,17 @@ class _AgentHistoryScreenState extends State<AgentHistoryScreen> {
   );
 }
 
-String agentStatus(dynamic status) => switch (status) {
-  'waiting' => '等你补充一句话',
-  'proposal' => '建议已整理，等待你确认',
-  'accepted' => '已保存到语义世界',
-  'review' => '正在等待独立审核',
-  'ready' => '审核通过，待保存材料',
-  'committed' => '学习材料已就绪',
-  'inflight' => '正在处理；若上次已中断，可以明确继续',
-  'failed' => '上次未完成，记录已保留',
-  'paused' => '已暂停，记录已保留',
-  _ => '可以开始或继续',
+String agentStatus(BuildContext context, dynamic status) => switch (status) {
+  'waiting' => context.l10n.uiWaitingForYourReply,
+  'proposal' => context.l10n.uiSuggestionReadyForConfirmation,
+  'accepted' => context.l10n.uiSavedToYourSemanticWorld,
+  'review' => context.l10n.uiWaitingForIndependentReview,
+  'ready' => context.l10n.uiReviewPassedReadyToSave,
+  'committed' => context.l10n.uiLearningMaterialReady,
+  'inflight' => context.l10n.uiProcessingResumeIfInterrupted,
+  'failed' => context.l10n.uiNotCompletedConversationKept,
+  'paused' => context.l10n.uiPausedConversationKept,
+  _ => context.l10n.uiReadyToStartOrContinue,
 };
 
 class AgentScreen extends StatefulWidget {
@@ -351,7 +382,7 @@ class _AgentScreenState extends State<AgentScreen> {
         if (!c.providers.ready(
           widget.source!['kind'] == 'content' ? 'content' : 'teacher',
         )) {
-          c.error = '请先选择模型服务并保存有效凭据。';
+          c.setError(() => l10n.uiChooseAModelServiceAndSave);
           c.changed();
           return;
         }
@@ -365,7 +396,7 @@ class _AgentScreenState extends State<AgentScreen> {
         await c.say(id!, input.text.trim());
         if (c.error == null) input.clear();
       } else if (['waiting', 'proposal'].contains(c.session(id!)['status'])) {
-        c.error = '请补充一句话，或确认已经整理好的建议。';
+        c.setError(() => l10n.uiAddAReplyOrConfirmThe);
         c.changed();
       } else {
         await c.run(id!);
@@ -389,10 +420,14 @@ class _AgentScreenState extends State<AgentScreen> {
       final done = ['accepted', 'committed'].contains(s?['status']);
       return Scaffold(
         appBar: AppBar(
-          title: Text(teacher ? '和语言老师聊一聊' : '准备学习资源'),
+          title: Text(
+            teacher
+                ? context.l10n.uiTalkToALanguageTeacher
+                : context.l10n.uiPrepareLearningResources,
+          ),
           actions: [
             IconButton(
-              tooltip: '模型服务',
+              tooltip: context.l10n.uiModelServices,
               onPressed: c.busy || submitting
                   ? null
                   : () async {
@@ -415,36 +450,44 @@ class _AgentScreenState extends State<AgentScreen> {
             children: [
               Text(
                 teacher
-                    ? '说说你想理解或表达的意思。老师会在需要时追问，足够清楚后给出建议。'
-                    : '根据已确认的意思和学习方式准备材料，并单独审核；这不会替你完成学习。',
+                    ? context.l10n.uiTellYourTeacherWhatYouWant
+                    : context.l10n.uiPrepareAndReviewMaterialForThe,
               ),
               Text(
                 c.providers.forPurpose(teacher ? 'teacher' : 'content') == null
-                    ? '尚未选择模型服务'
-                    : '当前服务：${c.providers.forPurpose(teacher ? 'teacher' : 'content')!['name']}',
+                    ? context.l10n.uiNoModelServiceSelected
+                    : context.l10n.uiCurrentService(
+                        (c.providers.forPurpose(
+                          teacher ? 'teacher' : 'content',
+                        )!['name']).toString(),
+                      ),
               ),
               if (!teacher)
                 Text(
-                  '独立审核服务：${c.providers.forPurpose('review')?['name'] ?? '尚未配置'}',
+                  context.l10n.uiReviewService(
+                    (c.providers.forPurpose('review')?['name'] ??
+                            context.l10n.uiNotConfigured572)
+                        .toString(),
+                  ),
                 ),
               if (id == null && widget.source?['kind'] == 'world') ...[
-                const Text('点击发送后，会把当前材料及本次对话发送给所选服务。其他私人上下文不会随查询发送。'),
+                Text(context.l10n.uiSendingSharesThisCaptureAndConversation),
                 CheckboxListTile(
                   value: images,
                   onChanged: submitting
                       ? null
                       : (v) => setState(() => images = v!),
-                  title: const Text('同时发送材料中的图片'),
+                  title: Text(context.l10n.uiIncludeImagesFromTheCapture),
                 ),
-                const Text('取消勾选表示只讨论文字，图片仍保存在本机。'),
+                Text(context.l10n.uiTurnOffToDiscussTextOnly),
               ],
               if (c.busy && c.previewSession == id && c.preview.isNotEmpty)
                 Text(
-                  '正在整理（尚未完成）：${c.preview}',
+                  context.l10n.uiWorkingDraft((c.preview).toString()),
                   key: const ValueKey('agent-preview'),
                 ),
               if (s != null) ...[
-                Text(agentStatus(s['status'])),
+                Text(agentStatus(context, s['status'])),
                 if (teacher)
                   for (final m in s['messages'])
                     if (['assistant', 'user'].contains(m['role']) &&
@@ -454,7 +497,7 @@ class _AgentScreenState extends State<AgentScreen> {
                         child: Padding(
                           padding: const EdgeInsets.all(14),
                           child: Text(
-                            '${m['role'] == 'user' ? '你' : '老师'}：${m['content']}',
+                            '${m['role'] == 'user' ? context.l10n.uiYou : context.l10n.uiTeacher}：${m['content']}',
                           ),
                         ),
                       ),
@@ -464,7 +507,9 @@ class _AgentScreenState extends State<AgentScreen> {
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(14),
-                      child: Text('老师：${s['question']}'),
+                      child: Text(
+                        context.l10n.uiTeacher579((s['question']).toString()),
+                      ),
                     ),
                   ),
                 if (s['candidate'] != null)
@@ -494,16 +539,20 @@ class _AgentScreenState extends State<AgentScreen> {
                     ),
                   ),
                 if (!teacher && s['review'] != null)
-                  Text('独立审核：${s['review']['reason']}'),
+                  Text(
+                    context.l10n.uiReview580(
+                      (s['review']['reason']).toString(),
+                    ),
+                  ),
                 if (s['status'] == 'proposal')
                   FilledButton(
                     onPressed: c.busy || submitting
                         ? null
                         : () => c.accept(id!),
-                    child: const Text('就是这个意思，保存'),
+                    child: Text(context.l10n.uiThatIsWhatIMeanSave),
                   ),
                 if (s['status'] == 'accepted')
-                  const Text('上下文、意思和表达已保存。之后可以另行选择加入学习。'),
+                  Text(context.l10n.uiSavedYouCanAddThisTo582),
               ],
               if (c.error != null) Text(c.error!),
               if (c.busy) const LinearProgressIndicator(),
@@ -514,13 +563,15 @@ class _AgentScreenState extends State<AgentScreen> {
                   enabled: !c.busy && !submitting,
                   minLines: 2,
                   maxLines: 5,
-                  decoration: const InputDecoration(labelText: '补充、回答或更正老师的建议'),
+                  decoration: InputDecoration(
+                    labelText: context.l10n.uiReplyOrCorrectTheSuggestion,
+                  ),
                 ),
               if (!done) ...[
                 if (c.busy && id != null)
                   OutlinedButton(
                     onPressed: () => c.stop(id!),
-                    child: const Text('暂停这轮'),
+                    child: Text(context.l10n.uiPauseThisConversation),
                   )
                 else
                   FilledButton(
@@ -528,20 +579,20 @@ class _AgentScreenState extends State<AgentScreen> {
                     child: Text(
                       id == null
                           ? teacher
-                                ? '发送材料，开始交流'
-                                : '开始准备'
+                                ? context.l10n.uiSendCaptureAndStart
+                                : context.l10n.uiStartPreparation
                           : s?['status'] == 'waiting' ||
                                 s?['status'] == 'proposal'
-                          ? '发送补充'
-                          : '明确继续',
+                          ? context.l10n.uiSendReply
+                          : context.l10n.uiResume588,
                     ),
                   ),
-                const Text('离开页面会保留记录。重启后不会自动发送请求，凭据保存在系统安全存储。'),
+                Text(context.l10n.uiYourConversationIsSavedRestartingWill),
               ],
               if (done)
                 FilledButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('返回'),
+                  child: Text(context.l10n.uiBack),
                 ),
             ],
           ),

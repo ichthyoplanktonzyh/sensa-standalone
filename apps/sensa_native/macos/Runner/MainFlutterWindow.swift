@@ -34,10 +34,9 @@ private class IntakeInstaller {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        panel.prompt = "选择文件夹"
-        panel.message = call.method == "chooseDestination"
-          ? "选择保存 Sensa 连接工具的位置。将在其中创建新的专用文件夹。"
-          : "选择此浏览器的 NativeMessagingHosts 文件夹。现有连接不会被覆盖。"
+        let labels = call.arguments as? [String: String] ?? [:]
+        panel.prompt = labels["prompt"] ?? "Choose folder"
+        panel.message = labels["message"]
         panel.begin { response in
           guard response == .OK, let url = panel.url else { result(nil); return }
           if call.method == "chooseDestination" { self.destination = url }
@@ -46,14 +45,14 @@ private class IntakeInstaller {
         }
       case "install":
         do { result(try self.install(call.arguments as? [String: Any] ?? [:])) }
-        catch { result(FlutterError(code: "installation_failed", message: error.localizedDescription, details: nil)) }
+        catch { result(FlutterError(code: "installation_failed", message: error.localizedDescription, details: (error as NSError).userInfo["reason"] ?? "write_failed")) }
       default: result(FlutterMethodNotImplemented)
       }
     }
   }
 
-  private func invalid(_ message: String) -> NSError {
-    NSError(domain: "SensaIntake", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+  private func invalid(_ reason: String) -> NSError {
+    NSError(domain: "SensaIntake", code: 1, userInfo: ["reason": reason])
   }
 
   private func install(_ input: [String: Any]) throws -> [String: Any] {
@@ -62,27 +61,27 @@ private class IntakeInstaller {
           let libraryId = input["libraryId"] as? String,
           UUID(uuidString: libraryId) != nil,
           let label = input["label"] as? String, !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-          label.count <= 100 else { throw invalid("请先选择连接文件夹并填写库名称。") }
+          label.count <= 100 else { throw invalid("select_folder") }
     let ext = input["extensionId"] as? String ?? ""
-    guard let browser = input["browser"] as? Bool else { throw invalid("请选择是否连接浏览器。") }
+    guard let browser = input["browser"] as? Bool else { throw invalid("select_browser") }
     if browser && (ext.count != 32 || !ext.allSatisfy({ "abcdefghijklmnop".contains($0) })) {
-      throw invalid("扩展 ID 应为 Chrome 提供的 32 位小写字母。")
+      throw invalid("extension_id")
     }
     if browser && (registration == nil || registration!.lastPathComponent != "NativeMessagingHosts") {
-      throw invalid("请选择浏览器的 NativeMessagingHosts 文件夹。")
+      throw invalid("registration_folder")
     }
     let fm = FileManager.default
     // Only an existing library inside this application's support directory is eligible.
     let support = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).resolvingSymlinksInPath()
     let library = URL(fileURLWithPath: libraryPath).resolvingSymlinksInPath()
     guard library.path.hasPrefix(support.path + "/"), fm.fileExists(atPath: library.path) else {
-      throw invalid("本机学习库不可用，请返回后重新读取。")
+      throw invalid("library_unavailable")
     }
-    guard let executable = Bundle.main.executableURL else { throw invalid("找不到桌面接入工具。") }
+    guard let executable = Bundle.main.executableURL else { throw invalid("helper_missing") }
     let helper = executable.deletingLastPathComponent().appendingPathComponent("sensa-intake")
-    guard fm.isExecutableFile(atPath: helper.path) else { throw invalid("安装包未包含桌面接入工具，请更新 Sensa。") }
+    guard fm.isExecutableFile(atPath: helper.path) else { throw invalid("helper_missing") }
     let manifest = registration?.appendingPathComponent("app.sensa.intake.json")
-    if browser && fm.fileExists(atPath: manifest!.path) { throw invalid("此浏览器已有连接，本次未覆盖。请先保留原连接并在需要时明确更换。") }
+    if browser && fm.fileExists(atPath: manifest!.path) { throw invalid("already_connected") }
     let client = UUID().uuidString.lowercased()
     let folder = root.appendingPathComponent("Sensa-" + String(client.prefix(8)))
     try fm.createDirectory(at: folder, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
@@ -107,7 +106,7 @@ private class IntakeInstaller {
     } catch {
       if registered, let path = manifest { try? fm.removeItem(at: path) }
       try? fm.removeItem(at: folder)
-      throw invalid("未能写入连接。请检查所选文件夹的访问权限与可用空间，本次新建内容已清理。")
+      throw invalid("write_failed")
     }
   }
 

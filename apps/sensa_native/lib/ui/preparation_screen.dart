@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'product_theme.dart';
 import 'agent_screen.dart';
 import 'reference_source_panel.dart';
@@ -13,18 +14,20 @@ class PreparationListScreen extends StatelessWidget {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: model,
     builder: (context, _) => Scaffold(
-      appBar: AppBar(title: const Text('学习准备')),
+      appBar: AppBar(title: Text(context.l10n.uiLearningPreparation)),
       body: Readable(
         child: ListView(
           children: [
             if (model.preparations.isEmpty)
-              const ListTile(title: Text('还没有需要准备材料的学习目标。')),
+              ListTile(
+                title: Text(context.l10n.uiNoLearningTargetsNeedPreparation),
+              ),
             for (final task in model.preparations)
               ListTile(
                 title: Text(
                   task['target']['proposal']['expression']['surface'] as String,
                 ),
-                subtitle: Text(preparationLabel(task)),
+                subtitle: Text(preparationLabel(context, task)),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
@@ -42,13 +45,14 @@ class PreparationListScreen extends StatelessWidget {
   );
 }
 
-String preparationLabel(Map<String, dynamic> task) => switch (task['status']) {
-  'ready' => '材料已就绪',
-  'generating' => '正在准备／等待检查',
-  'blocked' => '准备受阻，学习目标已保留',
-  'cancelled' => '已取消准备，学习目标已保留',
-  _ => '已加入学习，等待准备材料',
-};
+String preparationLabel(BuildContext context, Map<String, dynamic> task) =>
+    switch (task['status']) {
+      'ready' => context.l10n.uiMaterialReady,
+      'generating' => context.l10n.uiPreparingOrAwaitingReview,
+      'blocked' => context.l10n.uiPreparationBlocked,
+      'cancelled' => context.l10n.uiPreparationCanceled,
+      _ => context.l10n.uiAddedToLearningAwaitingMaterial,
+    };
 
 class PreparationScreen extends StatefulWidget {
   const PreparationScreen({
@@ -153,7 +157,7 @@ class _PreparationScreenState extends State<PreparationScreen> {
           meaning?['expression'] ??
           '';
       return Scaffold(
-        appBar: AppBar(title: const Text('准备学习材料')),
+        appBar: AppBar(title: Text(context.l10n.uiPrepareLearningMaterial)),
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
@@ -175,33 +179,52 @@ class _PreparationScreenState extends State<PreparationScreen> {
                   if (meaning != null && meaning!['status'] == 'confirmed')
                     AnchorUsePanel(model: model, meaning: meaning!),
                   if (current?['anchor'] != null)
-                    Text('当前目标使用的已授权原文：${current!['anchor']['sentence']}'),
+                    Text(
+                      context.l10n.uiAuthorizedContext(
+                        (current!['anchor']['sentence']).toString(),
+                      ),
+                    ),
                   if (current != null)
                     ReferenceSourcePanel(model: model, task: current),
                   if ((current?['target']['binding'] ??
                           meaning?['bindingMetadata'])
                       case final Map binding)
                     Text(
-                      '表达关系：${bindingRelationLabel(binding['relation'])} · 覆盖范围：${bindingCoverageLabel(binding['semanticCoverage'])}。材料将按这条关系解释实际用法。',
+                      context.l10n.uiRelationCoverage(
+                        (bindingRelationLabel(
+                          context,
+                          binding['relation'],
+                        )).toString(),
+                        (bindingCoverageLabel(
+                          context,
+                          binding['semanticCoverage'],
+                        )).toString(),
+                      ),
                     ),
                   if (model.notice != null) Text(model.notice!),
                   const SizedBox(height: 16),
                   if (!ready) ...[
-                    const Text('选择此目标的学习方式。准备服务只接收已确认的词义、表达和通用场景，不默认使用你的原始材料。'),
+                    Text(context.l10n.uiChooseALearningModeOnlyConfirmed),
                     if (current == null && existingTarget != null)
-                      const Text('这个语义目标已经加入学习。本次会关联已有目标，保留原学习方式和进度。'),
+                      Text(context.l10n.uiThisMeaningIsAlreadyInLearning),
                     DropdownButtonFormField<String>(
                       isExpanded: true,
                       key: ValueKey(
                         'preparation-policy-${current?['revision'] ?? 0}',
                       ),
                       initialValue: policy['profileId'] as String,
-                      decoration: const InputDecoration(labelText: '学习方式'),
+                      decoration: InputDecoration(
+                        labelText: context.l10n.uiLearningMode690,
+                      ),
                       items: [
                         for (final choice in model.snapshot!.policyChoices)
                           DropdownMenuItem(
                             value: choice['policy']['profileId'] as String,
-                            child: Text(choice['label'] as String),
+                            child: Text(
+                              model.snapshot!.policyLabel(
+                                choice['policy']['profileId'] as String,
+                              ),
+                            ),
                           ),
                       ],
                       onChanged:
@@ -218,46 +241,63 @@ class _PreparationScreenState extends State<PreparationScreen> {
                               ),
                             ),
                     ),
-                    const Text('当前在线供给支持轻量文本；其他方式保留原需求，缺少相应资源时会显示受阻。'),
+                    Text(
+                      context.l10n.uiTheCurrentOnlineServiceProvidesLightweight,
+                    ),
                     if (current == null || selected != null)
                       FilledButton(
                         onPressed: model.busy ? null : choose,
-                        child: Text(current == null ? '确认加入学习' : '应用新的学习方式'),
+                        child: Text(
+                          current == null
+                              ? context.l10n.uiConfirmAndAddToLearning
+                              : context.l10n.uiApplyNewLearningMode,
+                        ),
                       ),
                   ],
                   if (current != null) ...[
                     const SizedBox(height: 16),
                     Text(
-                      preparationLabel(current),
+                      preparationLabel(context, current),
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    Text('已使用 ${current['attemptCount']} / 3 次准备机会'),
+                    Text(
+                      context.l10n.uiPreparationAttemptsUsed(
+                        (current['attemptCount']).toString(),
+                      ),
+                    ),
                     if (current['status'] == 'generating') ...[
                       if (model.provisioningBusy)
                         const LinearProgressIndicator(),
                       Text(
                         expired
-                            ? '上次请求已超时，可明确重试。'
+                            ? context.l10n.uiTheRequestTimedOutYouCan
                             : model.provisioningBusy
-                            ? '正在生成并独立校验。可以离开此页，或取消准备。'
-                            : '上次请求可能已中断。不会自动调用模型；可以等待有效期结束，或取消后重试。',
+                            ? context.l10n.uiGeneratingAndReviewingYouCanLeave
+                            : context.l10n.uiTheRequestMayHaveBeenInterrupted,
                       ),
                     ],
                     if (current['reason'] != null)
                       Text(switch (current['reason']) {
                         'unsupported_content_policy' =>
-                          '在线供给不满足此学习方式的内容需求，请明确选择其他方式或等待匹配资源。',
-                        'material_rejected' => '候选未通过独立校验，没有进入学习。',
-                        'validation_unavailable' => '独立校验服务暂时不可用，材料没有进入学习。',
-                        'generation_failed' => '生成失败，目标与词义已保存在本机。',
-                        'cancelled' => '本次准备已取消。已发出的在线调用可能仍计入预算。',
-                        'access_required' => '在线服务需要有效访问权限，请检查服务配置。',
-                        _ => '准备未完成，可以检查服务或网络后明确重试。',
+                          context.l10n.uiTheServiceCannotProvideMaterialFor,
+                        'material_rejected' =>
+                          context.l10n.uiTheCandidateFailedIndependentReviewAnd,
+                        'validation_unavailable' =>
+                          context.l10n.uiTheReviewServiceIsUnavailableMaterial,
+                        'generation_failed' =>
+                          context.l10n.uiGenerationFailedYourTargetAndMeaning,
+                        'cancelled' =>
+                          context
+                              .l10n
+                              .uiPreparationCanceledRequestsAlreadySentMay,
+                        'access_required' =>
+                          context.l10n.uiValidServiceAccessIsRequiredCheck,
+                        _ => context.l10n.uiPreparationDidNotFinishCheckThe,
                       }),
                     if (ready)
                       FilledButton(
                         onPressed: model.busy ? null : learn,
-                        child: const Text('回到学习入口'),
+                        child: Text(context.l10n.uiBackToLearning),
                       )
                     else ...[
                       OutlinedButton(
@@ -292,11 +332,11 @@ class _PreparationScreenState extends State<PreparationScreen> {
                                 );
                                 await model.load();
                               },
-                        child: const Text('使用模型服务准备'),
+                        child: Text(context.l10n.uiPrepareWithModelService),
                       ),
                       TextButton(
                         onPressed: model.provisioningBusy ? null : configure,
-                        child: Text('模型服务设置'),
+                        child: Text(context.l10n.uiModelServiceSettings),
                       ),
                       if (current['status'] != 'cancelled')
                         OutlinedButton(
@@ -307,14 +347,18 @@ class _PreparationScreenState extends State<PreparationScreen> {
                                   'task_id': current['id'],
                                   'expected_revision': current['revision'],
                                 }),
-                          child: const Text('取消准备'),
+                          child: Text(context.l10n.uiCancelPreparation),
                         ),
                       if ((current['attemptCount'] as int) >= 3)
-                        const Text('该任务的准备次数已用完；目标与尝试记录仍保留在本机。'),
+                        Text(
+                          context
+                              .l10n
+                              .uiPreparationAttemptLimitReachedYourTarget,
+                        ),
                     ],
                     TextButton(
                       onPressed: model.busy ? null : model.load,
-                      child: const Text('检查本地任务'),
+                      child: Text(context.l10n.uiCheckLocalTask),
                     ),
                   ],
                   if (model.error != null) ...[
@@ -326,11 +370,11 @@ class _PreparationScreenState extends State<PreparationScreen> {
                     ),
                     TextButton(
                       onPressed: model.busy ? null : model.retry,
-                      child: const Text('重试本地保存'),
+                      child: Text(context.l10n.uiRetrySavingLocally),
                     ),
                     TextButton(
                       onPressed: model.busy ? null : model.load,
-                      child: const Text('重新读取本地状态'),
+                      child: Text(context.l10n.uiReloadLocalState),
                     ),
                   ],
                 ],
@@ -343,14 +387,16 @@ class _PreparationScreenState extends State<PreparationScreen> {
   );
 }
 
-String bindingRelationLabel(dynamic value) => switch (value) {
-  'approximates' => '近似表达',
-  'evokes' => '唤起这个意思',
-  _ => '表达这个意思',
-};
-String bindingCoverageLabel(dynamic value) => switch (value) {
-  'broader' => '更广',
-  'narrower' => '更窄',
-  'overlapping' => '部分重叠',
-  _ => '一致',
-};
+String bindingRelationLabel(BuildContext context, dynamic value) =>
+    switch (value) {
+      'approximates' => context.l10n.uiApproximatesThisMeaning,
+      'evokes' => context.l10n.uiEvokesThisMeaning,
+      _ => context.l10n.uiExpressesThisMeaning,
+    };
+String bindingCoverageLabel(BuildContext context, dynamic value) =>
+    switch (value) {
+      'broader' => context.l10n.uiBroader711,
+      'narrower' => context.l10n.uiNarrower,
+      'overlapping' => context.l10n.uiPartialOverlap,
+      _ => context.l10n.uiSame,
+    };

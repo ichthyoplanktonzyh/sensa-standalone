@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import '../data/semantic_service.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -15,7 +16,9 @@ class AgentController extends ChangeNotifier {
   final AgentProviders providers;
   final transport = AgentTransport();
   List<Map<String, dynamic>> sessions = [];
-  String? error;
+  String Function()? _error;
+  String? get error => _error?.call();
+  void setError(String Function()? value) => _error = value;
   String preview = '';
   String? previewSession;
   bool busy = false, closed = false;
@@ -34,7 +37,7 @@ class AgentController extends ChangeNotifier {
       try {
         await providers.load();
       } catch (_) {
-        error = '模型配置无法读取，请重新设置；本机对话仍可查看。';
+        setError(() => l10n.uiCouldNotReadModelSettingsConfigure);
       }
     }
     try {
@@ -45,7 +48,7 @@ class AgentController extends ChangeNotifier {
                   as List)
               .cast<Map<String, dynamic>>();
     } catch (_) {
-      error = '本机对话无法读取，请重试。';
+      setError(() => l10n.uiCouldNotReadConversationsRetry);
     }
     changed();
   }
@@ -72,7 +75,7 @@ class AgentController extends ChangeNotifier {
   }
 
   Future<String?> create(Map<String, dynamic> source) async {
-    error = null;
+    setError(null);
     try {
       final id = const Uuid().v4();
       Map<String, dynamic>? pronunciation;
@@ -106,7 +109,7 @@ class AgentController extends ChangeNotifier {
       );
       return id;
     } catch (e) {
-      error = describe(e);
+      setError(() => describe(e));
       changed();
       return null;
     }
@@ -124,7 +127,7 @@ class AgentController extends ChangeNotifier {
       );
       await run(id);
     } catch (e) {
-      error = describe(e);
+      setError(() => describe(e));
       changed();
     }
   }
@@ -147,9 +150,9 @@ class AgentController extends ChangeNotifier {
           },
         );
         await cacheAudio(id);
-        error = null;
+        setError(null);
       } catch (e) {
-        error = describe(e);
+        setError(() => describe(e));
       }
       changed();
       return;
@@ -157,19 +160,19 @@ class AgentController extends ChangeNotifier {
     try {
       await providers.ensureAccess(purpose(id));
     } catch (e) {
-      error = describe(e);
+      setError(() => describe(e));
       changed();
       return;
     }
     if (!providers.ready(purpose(id))) {
-      error = '请先选择模型服务并保存有效凭据。';
+      setError(() => l10n.uiChooseAModelServiceAndSave);
       changed();
       return;
     }
     busy = true;
     preview = '';
     previewSession = id;
-    error = null;
+    setError(null);
     final token = ++epoch;
     changed();
     String? lease;
@@ -240,10 +243,10 @@ class AgentController extends ChangeNotifier {
       await act(
         () => {'kind': 'stop', 'id': id, 'revision': session(id)['revision']},
       );
-      error = '这一轮先停在这里。可以查看记录后明确继续。';
+      setError(() => l10n.uiPausedHereReviewTheConversationBefore);
     } catch (e) {
       if (epoch == token) {
-        error = describe(e);
+        setError(() => describe(e));
         if (lease != null) {
           try {
             await act(() => {'kind': 'fail', 'id': id, 'lease_id': lease});
@@ -289,14 +292,14 @@ class AgentController extends ChangeNotifier {
         () => {'kind': 'stop', 'id': id, 'revision': session(id)['revision']},
       );
     } catch (e) {
-      error = describe(e);
+      setError(() => describe(e));
     }
     busy = false;
     changed();
   }
 
   Future<void> accept(String id) async {
-    error = null;
+    setError(null);
     try {
       await act(
         () => {
@@ -307,7 +310,7 @@ class AgentController extends ChangeNotifier {
         },
       );
     } catch (e) {
-      error = describe(e);
+      setError(() => describe(e));
     }
     changed();
   }
@@ -315,28 +318,34 @@ class AgentController extends ChangeNotifier {
   String describe(Object e) {
     final code = e is AgentFailure ? e.code : e.toString();
     if (code.contains('secure_storage')) {
-      return '系统安全存储暂不可用，凭据没有以明文保存。请解锁设备后重试。';
+      return l10n.uiSecureStorageIsUnavailableUnlockYour;
     }
-    if (code.contains('vision')) return '这份材料含图片。请选择支持图片的模型服务，或返回后明确选择只讨论文字。';
-    if (code.contains('credentials')) return '凭据未设置或已失效，请重新填写。';
+    if (code.contains('vision')) return l10n.uiChooseAnImageCapableServiceOr;
+    if (code.contains('credentials')) {
+      return l10n.uiCredentialsAreMissingOrExpiredEnter;
+    }
     if (code.contains('budget') || code.contains('limit')) {
-      return '本轮次数已用完，已保留对话和候选，不会继续自动调用。';
+      return l10n.uiThisConversationReachedItsRequestLimit;
     }
     if (code.contains('conflict') ||
         code.contains('draft_') ||
         code.contains('superseded') ||
         code.contains('stale')) {
-      return '材料或任务已发生变化，旧结果没有覆盖新内容。请返回查看最新状态。';
+      return l10n.uiTheCaptureOrTaskChangedGo;
     }
     if (code.contains('anchor_recipient')) {
-      return '原文授权的接收服务与当前选择不一致。请选择原授权服务，或返回撤销、重新授权后再准备。';
+      return l10n.uiSelectTheServiceAuthorizedToReceive;
     }
     if (code.contains('unsupported_content_policy')) {
-      return '当前资源循环不支持此学习方式，原来的学习选择已保留。';
+      return l10n.uiResourcePreparationDoesNotSupportThis;
     }
-    if (code.contains('size')) return '图片或对话超过本次发送大小限制，请减少材料后重试。';
-    if (code.contains('configuration')) return '请填写有效的服务地址、名称和模型。';
-    return '这轮暂时没有完成，对话已保存在本机。可以检查服务设置后明确继续。';
+    if (code.contains('size')) {
+      return l10n.uiImagesOrConversationExceedTheRequest;
+    }
+    if (code.contains('configuration')) {
+      return l10n.uiEnterAValidServiceAddressName;
+    }
+    return l10n.uiThisAttemptDidNotFinishCheck;
   }
 
   @override

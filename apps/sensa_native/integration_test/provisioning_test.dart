@@ -91,7 +91,7 @@ void main() {
         }
         await resolveLegacyFixture(tester, model);
         await wait();
-        await tap(find.text('确认词义并保存到本机'));
+        await tap(find.text("确认并保存词义"));
         await tap(find.text('加入学习'));
         await tap(find.text('确认加入学习'));
       }

@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'library_view_model.dart';
@@ -12,7 +13,7 @@ class IntakeSetupScreen extends StatefulWidget {
 
 class _IntakeSetupScreenState extends State<IntakeSetupScreen> {
   static const channel = MethodChannel('app.sensa/intake-install');
-  final label = TextEditingController(text: '我的 Sensa 学习库');
+  late final label = TextEditingController(text: context.l10n.uiMySensaLibrary);
   final extension = TextEditingController();
   String? destination, registration, error;
   bool browser = true, busy = false;
@@ -28,6 +29,12 @@ class _IntakeSetupScreenState extends State<IntakeSetupScreen> {
     try {
       final path = await channel.invokeMethod<String>(
         host ? 'chooseRegistration' : 'chooseDestination',
+        {
+          'prompt': context.l10n.chooseFolder,
+          'message': host
+              ? context.l10n.chooseBrowserFolder
+              : context.l10n.chooseToolFolder,
+        },
       );
       if (mounted && path != null) {
         setState(() {
@@ -39,13 +46,25 @@ class _IntakeSetupScreenState extends State<IntakeSetupScreen> {
         });
       }
     } on PlatformException catch (e) {
-      if (mounted) setState(() => error = e.message);
+      if (mounted) setState(() => error = installerMessage(e));
     }
   }
 
+  String installerMessage(PlatformException error) => switch (error.details) {
+    'select_folder' => context.l10n.installerSelectFolder,
+    'select_browser' => context.l10n.installerSelectBrowser,
+    'extension_id' => context.l10n.uiEnterTheCharacterChromeExtensionId,
+    'registration_folder' => context.l10n.installerRegistrationFolder,
+    'library_unavailable' => context.l10n.installerLibraryUnavailable,
+    'helper_missing' => context.l10n.installerHelperMissing,
+    'already_connected' => context.l10n.installerAlreadyConnected,
+    'write_failed' => context.l10n.installerWriteFailed,
+    _ => context.l10n.uiCouldNotCreateTheConnectionCheck,
+  };
+
   Future<void> install() async {
     if (browser && !RegExp(r'^[a-p]{32}$').hasMatch(extension.text.trim())) {
-      setState(() => error = '请填写 Chrome 提供的 32 位扩展 ID，或关闭浏览器连接。');
+      setState(() => error = context.l10n.uiEnterTheCharacterChromeExtensionId);
       return;
     }
     setState(() {
@@ -62,7 +81,12 @@ class _IntakeSetupScreenState extends State<IntakeSetupScreen> {
       });
       if (mounted) setState(() => connection = result);
     } on PlatformException catch (e) {
-      if (mounted) setState(() => error = e.message ?? '无法建立连接，请检查所选位置。');
+      if (mounted) {
+        setState(
+          () => error =
+              e.message ?? context.l10n.uiCouldNotCreateTheConnectionCheck,
+        );
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -70,7 +94,7 @@ class _IntakeSetupScreenState extends State<IntakeSetupScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('连接浏览器与 Agent')),
+    appBar: AppBar(title: Text(context.l10n.uiConnectBrowserAndAgents)),
     body: Readable(
       child: ListView(
         padding: const EdgeInsets.all(24),
@@ -82,31 +106,38 @@ class _IntakeSetupScreenState extends State<IntakeSetupScreen> {
               color: Color(0xff147663),
             ),
             const SizedBox(height: 20),
-            Text('连接已创建', style: Theme.of(context).textTheme.headlineSmall),
-            Text('${connection!['label']} · 资料将保存到当前本机库。'),
+            Text(
+              context.l10n.uiConnectionCreated,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            Text(
+              context.l10n.uiCapturesWillBeSavedToThis(
+                (connection!['label']).toString(),
+              ),
+            ),
             if (connection!['browser'] == true)
-              const Text('打开 Sensa 浏览器插件，选择原生接收端，核对库名称并确认连接。'),
+              Text(context.l10n.uiOpenTheSensaExtensionSelectThe),
             const SizedBox(height: 24),
-            const Text('本地 Agent 接入工具'),
+            Text(context.l10n.uiLocalAgentTool),
             SelectableText('${connection!['executable']}'),
             OutlinedButton(
               onPressed: () => Clipboard.setData(
                 ClipboardData(text: '${connection!['executable']}'),
               ),
-              child: const Text('复制工具位置'),
+              child: Text(context.l10n.uiCopyToolLocation),
             ),
-            const Text('工具使用同目录的连接配置。Agent 通过标准输入发送采集请求；确认词义需你的明确授权。'),
+            Text(context.l10n.uiTheToolReadsItsConnectionConfiguration),
             const SizedBox(height: 24),
             FilledButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('完成'),
+              child: Text(context.l10n.uiDone),
             ),
           ] else ...[
-            const Text('选择接收这个学习库的入口。连接工具只接收采集请求，不会替你加入学习或修改学习结果。'),
+            Text(context.l10n.uiChooseHowToSendCapturesTo),
             const SizedBox(height: 20),
             SwitchListTile(
-              title: const Text('同时连接 Chrome 浏览器'),
-              subtitle: const Text('关闭后只创建本地 Agent 连接。'),
+              title: Text(context.l10n.uiAlsoConnectChrome),
+              subtitle: Text(context.l10n.uiTurnOffToCreateOnlyAn),
               value: browser,
               onChanged: busy ? null : (v) => setState(() => browser = v),
             ),
@@ -114,12 +145,14 @@ class _IntakeSetupScreenState extends State<IntakeSetupScreen> {
               controller: label,
               enabled: !busy,
               maxLength: 100,
-              decoration: const InputDecoration(labelText: '显示的库名称'),
+              decoration: InputDecoration(
+                labelText: context.l10n.uiLibraryDisplayName,
+              ),
             ),
             const SizedBox(height: 16),
             OutlinedButton(
               onPressed: busy ? null : () => choose(false),
-              child: const Text('选择连接工具保存位置'),
+              child: Text(context.l10n.uiChooseToolLocation),
             ),
             if (destination != null) SelectableText(destination!),
             if (browser) ...[
@@ -129,18 +162,16 @@ class _IntakeSetupScreenState extends State<IntakeSetupScreen> {
                 enabled: !busy,
                 maxLength: 32,
                 autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'Sensa Chrome 扩展 ID',
-                  helperText: '从 Chrome 扩展详情复制扩展 ID。',
+                decoration: InputDecoration(
+                  labelText: context.l10n.uiSensaChromeExtensionId,
+                  helperText: context.l10n.uiCopyTheExtensionIdFromChrome,
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                '选择这个浏览器用户目录中的 NativeMessagingHosts 文件夹；没有时可在系统窗口中创建同名文件夹。现有连接不会被覆盖。',
-              ),
+              Text(context.l10n.uiChooseTheNativemessaginghostsFolderInThis),
               OutlinedButton(
                 onPressed: busy ? null : () => choose(true),
-                child: const Text('选择浏览器连接文件夹'),
+                child: Text(context.l10n.uiChooseBrowserConnectionFolder),
               ),
               if (registration != null) SelectableText(registration!),
             ],
@@ -160,7 +191,11 @@ class _IntakeSetupScreenState extends State<IntakeSetupScreen> {
                       (browser && registration == null)
                   ? null
                   : install,
-              child: Text(busy ? '正在创建连接…' : '创建此库的连接'),
+              child: Text(
+                busy
+                    ? context.l10n.uiCreatingConnection
+                    : context.l10n.uiCreateConnection,
+              ),
             ),
           ],
         ],

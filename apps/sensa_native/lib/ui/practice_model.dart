@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../data/practice_repository.dart';
@@ -6,7 +7,9 @@ class PracticeModel extends ChangeNotifier {
   PracticeModel(this.repository);
   final PracticeRepository repository;
   Map<String, dynamic>? data;
-  String? error;
+  String Function()? _error;
+  String? get error => _error?.call();
+  void setError(String Function()? value) => _error = value;
   bool busy = false, disposed = false;
   Future<void> queue = Future.value();
   Map<String, dynamic>? get session =>
@@ -18,9 +21,9 @@ class PracticeModel extends ChangeNotifier {
   Future<void> load() async {
     try {
       data = await repository.load();
-      error = null;
+      setError(null);
     } catch (_) {
-      error = '练习记录无法读取，请重试。';
+      setError(() => l10n.uiCouldNotReadPracticeHistoryRetry);
     }
     emit();
   }
@@ -29,7 +32,7 @@ class PracticeModel extends ChangeNotifier {
     final result = queue.then((_) async {
       if (disposed) return;
       busy = true;
-      error = null;
+      setError(null);
       emit();
       try {
         final command = {
@@ -46,11 +49,13 @@ class PracticeModel extends ChangeNotifier {
         }
         data = await repository.load();
       } catch (e) {
-        error = e.toString().contains('empty_scope')
-            ? '当前范围没有可练习的表达。'
-            : e.toString().contains('provider_unavailable')
-            ? '播放器暂不可用，请重试。'
-            : '练习操作未完成，请重新读取后重试。';
+        setError(
+          () => e.toString().contains('empty_scope')
+              ? l10n.uiNoExpressionsToPracticeInThis
+              : e.toString().contains('provider_unavailable')
+              ? l10n.uiPlayerUnavailableRetry
+              : l10n.uiPracticeActionFailedReloadAndRetry,
+        );
       } finally {
         busy = false;
         emit();

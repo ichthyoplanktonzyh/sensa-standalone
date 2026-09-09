@@ -1,3 +1,4 @@
+import 'package:sensa_native/l10n/interface_locale.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -71,7 +72,15 @@ void main() {
       }
 
       Future<void> show(Widget w) async {
-        await tester.pumpWidget(MaterialApp(key: UniqueKey(), home: w));
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: interfaceLocale.locale,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            key: UniqueKey(),
+            home: w,
+          ),
+        );
         await wait();
       }
 

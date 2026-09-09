@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'dart:async';
 import '../data/local_audio.dart';
 import 'package:flutter/material.dart';
@@ -86,7 +87,11 @@ class _AssuranceViewState extends State<AssuranceView> {
       if (!mounted) return;
       await player.play(bytes);
     } catch (_) {
-      if (mounted) setState(() => mediaError = '音频暂时无法播放，可以继续阅读文字，稍后重试。');
+      if (mounted) {
+        setState(
+          () => mediaError = context.l10n.uiAudioIsUnavailableYouCanKeep,
+        );
+      }
     } finally {
       if (mounted) setState(() => playing = false);
     }
@@ -127,7 +132,7 @@ class _AssuranceViewState extends State<AssuranceView> {
         key: const ValueKey('assurance-example-audio'),
         onPressed: playing ? null : () => play(e['audioUrl'] as String),
         icon: const Icon(Icons.volume_up_outlined),
-        label: const Text('播放例句'),
+        label: Text(context.l10n.uiPlayExample),
       ),
   ]);
   Widget scene() {
@@ -167,7 +172,9 @@ class _AssuranceViewState extends State<AssuranceView> {
         )
         .firstOrNull;
     final fallback = planned.where((r) => r['kind'] == 'text').firstOrNull;
-    if (render == null) return const Text('当前场景暂不可用，请重新读取。');
+    if (render == null) {
+      return Text(context.l10n.uiThisSceneIsUnavailableReload);
+    }
     if (render['kind'] == 'text' || draft['textScene'] == true) {
       return panel([
         Text(
@@ -209,7 +216,8 @@ class _AssuranceViewState extends State<AssuranceView> {
             .toList(),
       ),
       Text(
-        payload['runtimePresentation']?['controlLabelL1'] as String? ?? '体验变化',
+        payload['runtimePresentation']?['controlLabelL1'] as String? ??
+            context.l10n.uiSceneVariation,
       ),
       Slider(
         key: const ValueKey('assurance-experience'),
@@ -235,7 +243,7 @@ class _AssuranceViewState extends State<AssuranceView> {
                   'text_scene': true,
                 })
               : null,
-          child: const Text('切换文字场景'),
+          child: Text(context.l10n.uiSwitchScene),
         ),
     ]);
   }
@@ -327,82 +335,104 @@ class _AssuranceViewState extends State<AssuranceView> {
           size: 44,
           color: Color(0xff147663),
         ),
-        title(a['purpose'] == 'initial_learning' ? '本次高保证首学已完成' : '本次复习与修复已完成'),
+        title(
+          a['purpose'] == 'initial_learning'
+              ? context.l10n.uiInitialLearningComplete
+              : context.l10n.uiReviewAndRepairComplete,
+        ),
         Text(
-          '测评 ${stats['totalAttempts']} 次 · 正确 ${stats['correctAttempts']} 次',
+          context.l10n.uiChecksCorrect(
+            (stats['totalAttempts']).toString(),
+            (stats['correctAttempts']).toString(),
+          ),
         ),
         Text(
           a['purpose'] == 'initial_learning'
-              ? '本轮通过验证 ${(queue["graduated"] as List? ?? []).length} 个连接。只有通过验证的连接才新增复习安排；已掌握声明可重新加入学习。'
-              : '复习结果和修复进展已保存在本机。修复不会重复改变本次复习的排程。',
+              ? context.l10n.uiConnectionsVerified(
+                  ((queue["graduated"] as List? ?? []).length).toString(),
+                )
+              : context.l10n.uiReviewProgressSaved,
         ),
         FilledButton(
           onPressed: widget.onHome ?? vm.showHome,
-          child: const Text('回到首页'),
+          child: Text(context.l10n.uiBackToHome),
         ),
       ]);
     } else if (a['paused'] == true) {
       children.addAll([
-        title('学习已暂停'),
-        const Text('场景、回答和学习进度已保留。'),
+        title(context.l10n.uiLearningPaused),
+        Text(context.l10n.uiYourAnswersAndProgressAreSaved),
         FilledButton(
           key: const ValueKey('assurance-resume'),
           onPressed: available
               ? () => vm.act({'kind': 'start_or_resume'})
               : null,
-          child: const Text('继续高保证学习'),
+          child: Text(context.l10n.uiContinueLearning),
         ),
       ]);
     } else if (session == null) {
       children.addAll([
-        title('当前步骤暂不可用'),
-        const Text('保留了当前学习，请检查材料后重新读取。'),
-        OutlinedButton(onPressed: vm.load, child: const Text('重新读取')),
+        title(context.l10n.uiThisStepIsUnavailable),
+        Text(context.l10n.uiYourProgressIsKeptCheckThe),
+        OutlinedButton(onPressed: vm.load, child: Text(context.l10n.uiReload)),
       ]);
     } else {
       children.add(
         Text(switch (a['purpose']) {
-          'initial_learning' => '高保证首学',
-          'relearning' => '针对性再学',
-          _ => '到期复习',
+          'initial_learning' => context.l10n.uiHighAssuranceLearning,
+          'relearning' => context.l10n.uiTargetedRelearning,
+          _ => context.l10n.uiDueReviews,
         }, style: Theme.of(context).textTheme.labelLarge),
       );
       children.add(
-        Text('步骤 ${session['index']} · 已完成测评 ${stats['totalAttempts']} 次'),
+        Text(
+          context.l10n.uiStepChecksCompleted(
+            (session['index']).toString(),
+            (stats['totalAttempts']).toString(),
+          ),
+        ),
       );
       if (isTeaching) {
         if (draft['revealed'] == true) {
           children.addAll(revealed());
           children.add(
             primary(
-              action!['intent'] == 'repair' ? '完成修复，稍后重测' : '开始检验连接',
+              action!['intent'] == 'repair'
+                  ? context.l10n.uiFinishRepairCheckAgainLater
+                  : context.l10n.uiCheckTheConnection,
               'continue',
             ),
           );
         } else {
           children.add(
-            title(action!['intent'] == 'repair' ? '重新连接这个意义' : '先进入这个场景'),
+            title(
+              action!['intent'] == 'repair'
+                  ? context.l10n.uiReconnectThisMeaning
+                  : context.l10n.uiImagineThisScene,
+            ),
           );
           children.add(scene());
-          children.add(primary('揭示意义与表达', 'reveal'));
+          children.add(
+            primary(context.l10n.uiRevealMeaningAndExpression, 'reveal'),
+          );
         }
       } else if (feedback) {
         children.add(
           title(
             supported
-                ? '借助提示想起来了'
+                ? context.l10n.uiRecalledWithHelp
                 : correct
-                ? '这次连接成功'
-                : '还需要再连接一次',
+                ? context.l10n.uiIMadeTheConnection
+                : context.l10n.uiTryConnectingAgain,
           ),
         );
         children.add(
           Text(
             supported
-                ? '辅助回想不会算作独立通过，稍后会再次检验。'
+                ? context.l10n.uiYouWillTryAgainWithoutHints
                 : correct
-                ? '继续下一步，检查在其他场景中的连接。'
-                : '先看清这个意义，修复后再独立回想。',
+                ? context.l10n.uiNextTryTheExpressionInAnother
+                : context.l10n.uiReviewThisMeaningThenTryRecalling,
           ),
         );
         if (resource != null) {
@@ -443,7 +473,7 @@ class _AssuranceViewState extends State<AssuranceView> {
           }
         }
         children.add(panel([Text(teaching['l1Bridge'] as String? ?? '')]));
-        children.add(primary('继续', 'continue'));
+        children.add(primary(context.l10n.uiContinue, 'continue'));
         children.add(
           TextButton(
             onPressed: available
@@ -463,7 +493,7 @@ class _AssuranceViewState extends State<AssuranceView> {
                     ),
                   )
                 : null,
-            child: const Text('回看讲解与例句'),
+            child: Text(context.l10n.uiReviewExplanationAndExamples),
           ),
         );
       } else if (resource != null) {
@@ -472,12 +502,12 @@ class _AssuranceViewState extends State<AssuranceView> {
         children.add(
           title(
             recall
-                ? '试着主动想起这个表达'
+                ? context.l10n.uiTryToRecallTheExpression
                 : transfer
-                ? '换一个场景，还能用上吗？'
+                ? context.l10n.uiCanYouUseItInA
                 : resource['kind'] == 'boundary_contrast'
-                ? '分清这个意义的边界'
-                : '在新语境中辨认意义',
+                ? context.l10n.uiExploreTheMeaningBoundary
+                : context.l10n.uiRecognizeTheMeaningInANew,
           ),
         );
         children.add(Text(resource['instructionL1'] as String? ?? ''));
@@ -510,7 +540,15 @@ class _AssuranceViewState extends State<AssuranceView> {
           if (draft['support'] == 'first_letter') {
             children.add(
               Text(
-                '首字母提示：${(resource['primaryForm'] as String? ?? teaching['lemma'] as String? ?? '').characters.firstOrNull ?? ''}',
+                context.l10n.uiFirstLetters(
+                  ((resource['primaryForm'] as String? ??
+                                  teaching['lemma'] as String? ??
+                                  '')
+                              .characters
+                              .firstOrNull ??
+                          '')
+                      .toString(),
+                ),
               ),
             );
           }
@@ -520,8 +558,8 @@ class _AssuranceViewState extends State<AssuranceView> {
               controller: answer,
               autocorrect: false,
               enableSuggestions: false,
-              decoration: const InputDecoration(
-                labelText: '输入表达',
+              decoration: InputDecoration(
+                labelText: context.l10n.uiEnterTheExpression,
                 border: OutlineInputBorder(),
               ),
               onChanged: (_) {
@@ -544,7 +582,9 @@ class _AssuranceViewState extends State<AssuranceView> {
                       })
                     : null,
                 child: Text(
-                  draft['support'] == 'independent' ? '需要首字母提示' : '使用选择辅助',
+                  draft['support'] == 'independent'
+                      ? context.l10n.uiShowFirstLetters
+                      : context.l10n.uiShowChoices,
                 ),
               ),
             );
@@ -582,7 +622,7 @@ class _AssuranceViewState extends State<AssuranceView> {
             );
           }
         }
-        children.add(primary('确认回答', 'submit'));
+        children.add(primary(context.l10n.uiCheckAnswer, 'submit'));
       }
       children.add(
         Wrap(
@@ -591,17 +631,19 @@ class _AssuranceViewState extends State<AssuranceView> {
           children: [
             TextButton(
               onPressed: available ? () => act({'kind': 'undo'}) : null,
-              child: const Text('撤销上一步'),
+              child: Text(context.l10n.uiUndoLastStep),
             ),
             TextButton(
               onPressed: available ? () => act({'kind': 'mastery'}) : null,
               child: Text(
-                a['purpose'] == 'initial_learning' ? '这个连接我已掌握' : '本轮暂时跳过',
+                a['purpose'] == 'initial_learning'
+                    ? context.l10n.uiIAlreadyKnowThis
+                    : context.l10n.uiSkipForNow,
               ),
             ),
             TextButton(
               onPressed: available ? () => act({'kind': 'pause'}) : null,
-              child: const Text('暂停'),
+              child: Text(context.l10n.uiPause),
             ),
           ],
         ),
@@ -617,7 +659,9 @@ class _AssuranceViewState extends State<AssuranceView> {
                     'target_id': target['retentionTargetId'],
                   })
                 : null,
-            child: Text('重新学习：${target['packageId']}'),
+            child: Text(
+              context.l10n.uiRelearn((target['packageId']).toString()),
+            ),
           ),
         );
       }

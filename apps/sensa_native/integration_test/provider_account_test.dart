@@ -1,3 +1,4 @@
+import 'package:sensa_native/l10n/interface_locale.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -50,6 +51,9 @@ void main() {
       Future<void> show(Map<String, dynamic> profile) async {
         await tester.pumpWidget(
           MaterialApp(
+            locale: interfaceLocale.locale,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: ProviderLoginScreen(controller: c, profile: profile),
           ),
         );
@@ -70,7 +74,7 @@ void main() {
         expect(p.accountEmail('account-fixture'), isNull);
         await model.load();
         expect(model.snapshot!.value, before);
-        expect(find.text('已退出本机在线服务账户。'), findsOneWidget);
+        expect(find.text("已退出登录。"), findsOneWidget);
         return;
       }
       var sends = 0, verifies = 0, refreshes = 0;

@@ -98,7 +98,7 @@ void main() {
         await tap(find.text('收件箱'));
         await tap(find.text('待确认：tactful'));
         expect(find.text('模型服务设置'), findsOneWidget);
-        await tap(find.text('确认词义并保存到本机'));
+        await tap(find.text("确认并保存词义"));
         expect(model.snapshot!.personal['meanings'], hasLength(3));
         expect(model.snapshot!.run, isNull);
       } else {
@@ -111,7 +111,7 @@ void main() {
         await wait();
         expect(model.lookups.single['focus'], isNull);
         expect(model.snapshot!.personal['meanings'], isEmpty);
-        await tap(find.text('确认词义并保存到本机'));
+        await tap(find.text("确认并保存词义"));
         expect(model.snapshot!.personal['meanings'], hasLength(1));
         expect(find.text('加入学习'), findsOneWidget);
         await capture('The crane lifted it.', 'crane');
@@ -135,7 +135,7 @@ void main() {
         await wait();
         expect(model.lookups.first['status'], 'ready');
         expect(model.lookups.first['focus']['text'], 'lifting machine');
-        await tap(find.text('确认词义并保存到本机'));
+        await tap(find.text("确认并保存词义"));
         expect(model.snapshot!.personal['meanings'], hasLength(2));
         // Leave a valid unaccepted result for a separate process with no service credentials.
         await capture('He was tactful.', 'tactful');

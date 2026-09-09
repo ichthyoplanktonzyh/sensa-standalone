@@ -1,3 +1,4 @@
+import 'package:sensa_native/l10n/interface_locale.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -121,6 +122,9 @@ void main() {
       }
       await tester.pumpWidget(
         MaterialApp(
+          locale: interfaceLocale.locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: WorldScreen(library: library, repository: repository),
         ),
       );
@@ -255,7 +259,7 @@ void main() {
       await tap(find.widgetWithText(ListTile, 'derrick'));
       await tap(find.text('移除这个连接'));
       await tap(find.text('恢复这个连接'));
-      await tap(find.text('显式加入学习'));
+      await tap(find.text("加入学习"));
       await tap(find.text('确认加入学习'));
       expect(library.preparations.single['status'], 'pending');
       expect(library.preparations.single['attemptCount'], 0);

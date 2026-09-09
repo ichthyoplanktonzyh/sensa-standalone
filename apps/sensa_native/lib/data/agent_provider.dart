@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'provider_auth.dart';
 import 'agent_stream.dart';
 import 'dart:async';
@@ -406,14 +407,14 @@ class AgentProviders {
   String status(String id) {
     final session = _sessions[id];
     if (session != null && session['authorized'] != true) {
-      return '邮箱已验证，等待在线服务授权';
+      return l10n.uiEmailVerifiedWaitingForServiceAccess;
     }
     return switch (credentialStates[id]) {
-      'saved' => '凭据已安全保存',
-      'invalid' => '凭据已失效，请更新',
-      'locked' => '安全存储暂不可用',
-      'changed' => '服务已变化，请重新填写凭据',
-      _ => '需填写凭据',
+      'saved' => l10n.uiCredentialsSavedSecurely,
+      'invalid' => l10n.uiCredentialsExpiredUpdateThem,
+      'locked' => l10n.uiSecureStorageUnavailable,
+      'changed' => l10n.uiServiceChangedEnterCredentialsAgain,
+      _ => l10n.uiCredentialsRequired,
     };
   }
 

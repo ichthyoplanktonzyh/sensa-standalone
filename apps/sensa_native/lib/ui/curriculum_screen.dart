@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'product_theme.dart';
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
@@ -18,9 +19,9 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
   Future<void> action(Map<String, dynamic> value) =>
       widget.model.act({'kind': 'curriculum', 'action': value});
   String label(String mode) => switch (mode) {
-    'active' => '当前新学',
-    'maintenance' => '只继续已学内容',
-    _ => '已暂停',
+    'active' => context.l10n.uiCurrentNewLearning,
+    'maintenance' => context.l10n.uiContinueStartedContentOnly,
+    _ => context.l10n.uiPaused,
   };
   Future<void> selectSources() async {
     final chosen =
@@ -30,13 +31,16 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, set) => AlertDialog(
-          title: const Text('选择学习来源'),
+          title: Text(context.l10n.uiChooseLearningSources),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 for (final source in [
-                  {'id': 'supplemental', 'title': '补充学习'},
+                  {
+                    'id': 'supplemental',
+                    'title': context.l10n.uiAdditionalLearning,
+                  },
                   ...rows('enrollments').map(
                     (e) => {
                       'id': e['id'],
@@ -60,11 +64,11 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
+              child: Text(context.l10n.uiCancel),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, chosen.toList()),
-              child: const Text('应用来源'),
+              child: Text(context.l10n.uiApplySources),
             ),
           ],
         ),
@@ -106,7 +110,7 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, set) => AlertDialog(
-          title: const Text('调整未来新学范围'),
+          title: Text(context.l10n.uiAdjustNewLearningRange),
           content: SizedBox(
             width: 500,
             child: SingleChildScrollView(
@@ -114,15 +118,27 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('只改变之后的新学范围，已开始的内容仍按词书状态继续。'),
+                  Text(context.l10n.uiThisChangesFutureNewLearningStarted),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
                     initialValue: mode,
-                    items: const [
-                      DropdownMenuItem(value: 'all', child: Text('整本')),
-                      DropdownMenuItem(value: 'ordinals', child: Text('按序号')),
-                      DropdownMenuItem(value: 'section', child: Text('按章节')),
-                      DropdownMenuItem(value: 'selection', child: Text('指定意思')),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'all',
+                        child: Text(context.l10n.uiWholeBook),
+                      ),
+                      DropdownMenuItem(
+                        value: 'ordinals',
+                        child: Text(context.l10n.uiByPosition),
+                      ),
+                      DropdownMenuItem(
+                        value: 'section',
+                        child: Text(context.l10n.uiByChapter),
+                      ),
+                      DropdownMenuItem(
+                        value: 'selection',
+                        child: Text(context.l10n.uiSpecificMeanings),
+                      ),
                     ],
                     onChanged: (v) => set(() {
                       mode = v!;
@@ -134,18 +150,22 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
                       key: const ValueKey('range-start'),
                       controller: start,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: '起始序号'),
+                      decoration: InputDecoration(
+                        labelText: context.l10n.uiStartPosition,
+                      ),
                     ),
                     TextField(
                       key: const ValueKey('range-end'),
                       controller: end,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: '结束序号'),
+                      decoration: InputDecoration(
+                        labelText: context.l10n.uiEndPosition,
+                      ),
                     ),
                   ],
                   if (mode == 'section')
                     sections.isEmpty
-                        ? const Text('此版本没有章节标记。')
+                        ? Text(context.l10n.uiThisVersionHasNoChapters)
                         : DropdownButton<String>(
                             value: section,
                             items: sections
@@ -191,7 +211,7 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
+              child: Text(context.l10n.uiCancel),
             ),
             FilledButton(
               onPressed: () {
@@ -204,7 +224,7 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
                             b > members.length) ||
                     mode == 'section' && section == null ||
                     mode == 'selection' && selected.isEmpty) {
-                  set(() => error = '请选择有效且非空的范围。');
+                  set(() => error = context.l10n.uiChooseAValidNonemptyRange);
                   return;
                 }
                 Navigator.pop(context, {
@@ -214,7 +234,7 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
                   if (mode == 'selection') 'material_ids': selected.toList(),
                 });
               },
-              child: const Text('保存范围'),
+              child: Text(context.l10n.uiSaveRange),
             ),
           ],
         ),
@@ -249,29 +269,29 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
           )
           .toList();
       return Scaffold(
-        appBar: AppBar(title: const Text('学习来源')),
+        appBar: AppBar(title: Text(context.l10n.uiLearningSources)),
         body: Readable(
           child: ListView(
             key: const ValueKey('curriculum-scroll'),
             padding: const EdgeInsets.all(20),
             children: [
-              const Text('词书与补充学习共用每日新学额度。暂停、换词书或移出补充学习都不会删除历史。'),
+              Text(context.l10n.uiBooksAndAdditionalLearningShareYour),
               if (model.error != null) Text(model.error!),
               if (active)
                 FilledButton(
                   onPressed: model.busy ? null : () => model.stopActivity(),
-                  child: const Text('暂停当前活动以调整'),
+                  child: Text(context.l10n.uiPauseLearningToMakeChanges),
                 ),
               Wrap(
                 spacing: 8,
                 children: [
                   OutlinedButton(
                     onPressed: enabled ? model.importPack : null,
-                    child: const Text('导入学习包或词书'),
+                    child: Text(context.l10n.uiImportAPackageOrBook),
                   ),
                   OutlinedButton(
                     onPressed: enabled ? selectSources : null,
-                    child: const Text('选择学习来源'),
+                    child: Text(context.l10n.uiChooseLearningSources),
                   ),
                   TextButton(
                     onPressed: enabled
@@ -280,22 +300,26 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
                             'source_ids': null,
                           })
                         : null,
-                    child: const Text('使用全部来源'),
+                    child: Text(context.l10n.uiUseAllSources),
                   ),
                 ],
               ),
               Text(
-                '当前范围：${(data['scope']['members'] as List).length} 项（包含准备中的目标）',
+                context.l10n.uiCurrentScopeItemsIncludingThoseBeing(
+                  ((data['scope']['members'] as List).length).toString(),
+                ),
               ),
               TextField(
                 key: const ValueKey('book-search'),
-                decoration: const InputDecoration(labelText: '搜索词书'),
+                decoration: InputDecoration(
+                  labelText: context.l10n.uiSearchBooks,
+                ),
                 onChanged: (v) => setState(() => search = v),
               ),
               if (books.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.all(16),
-                  child: Text('没有匹配的本机词书。导入学习包后可选择整本学习。'),
+                  child: Text(context.l10n.uiNoMatchingBooksImportALearning),
                 ),
               for (final b in books)
                 Card(
@@ -305,16 +329,25 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${b['title']} · 版本 ${b['version']}',
+                          context.l10n.uiVersion(
+                            (b['title']).toString(),
+                            (b['version']).toString(),
+                          ),
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        Text('${(b['members'] as List).length} 个意思'),
+                        Text(
+                          context.l10n.uiMeanings(
+                            (b['members'] as List).length,
+                          ),
+                        ),
                         Wrap(
                           spacing: 8,
                           children: [
                             TextButton(
                               onPressed: () => inspect(b),
-                              child: const Text('查看与搜索内容'),
+                              child: Text(
+                                context.l10n.uiBrowseAndSearchContent,
+                              ),
                             ),
                             FilledButton(
                               onPressed: enabled
@@ -330,7 +363,7 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
                                       }
                                     }
                                   : null,
-                              child: const Text('设为当前新学词书'),
+                              child: Text(context.l10n.uiUseForNewLearning),
                             ),
                           ],
                         ),
@@ -339,7 +372,10 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
                   ),
                 ),
               const Divider(),
-              Text('已选择的词书', style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                context.l10n.uiSelectedBooks,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               for (final e in rows('enrollments')) ...[
                 Text(
                   '${rows('books').firstWhere((b) => b['id'] == e['bookId'] && b['version'] == e['version'])['title']} · ${e['version']}',
@@ -383,21 +419,29 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
                           }
                         }
                       : null,
-                  child: const Text('调整未来新学范围'),
+                  child: Text(context.l10n.uiAdjustNewLearningRange),
                 ),
               ],
               const Divider(),
-              Text('补充学习', style: Theme.of(context).textTheme.titleLarge),
-              if (rows('supplemental').isEmpty) const Text('单独加入学习的意思会显示在这里。'),
+              Text(
+                context.l10n.uiAdditionalLearning,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              if (rows('supplemental').isEmpty)
+                Text(context.l10n.uiMeaningsAddedIndividuallyAppearHere),
               for (final (i, m) in rows('supplemental').indexed)
                 ListTile(
                   title: Text(m['expression'] as String),
-                  subtitle: Text(m['active'] == true ? '参与学习' : '已移出，历史保留'),
+                  subtitle: Text(
+                    m['active'] == true
+                        ? context.l10n.uiIncludedInLearning
+                        : context.l10n.uiRemovedFromLearningHistoryKept,
+                  ),
                   trailing: Wrap(
                     children: [
                       if (i > 0)
                         IconButton(
-                          tooltip: '上移',
+                          tooltip: context.l10n.uiMoveUp,
                           onPressed: enabled
                               ? () => action({
                                   'kind': 'move_supplemental',
@@ -417,13 +461,17 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
                                 'active': m['active'] != true,
                               })
                             : null,
-                        child: Text(m['active'] == true ? '移出学习' : '恢复学习'),
+                        child: Text(
+                          m['active'] == true
+                              ? context.l10n.uiRemoveFromLearning
+                              : context.l10n.uiResumeLearning513,
+                        ),
                       ),
                     ],
                   ),
                 ),
               const Divider(),
-              const Text('已暂停的活动保留原范围。开始新活动会结束同模式旧活动，并按当前来源继续尚未完成的学习。'),
+              Text(context.l10n.uiPausedSessionsKeepTheirScopeA),
               FilledButton(
                 onPressed: enabled
                     ? () async {
@@ -436,7 +484,7 @@ class _CurriculumScreenState extends State<CurriculumScreen> {
                         }
                       }
                     : null,
-                child: const Text('按当前来源开始新活动'),
+                child: Text(context.l10n.uiStartWithCurrentSources),
               ),
             ],
           ),
@@ -481,13 +529,15 @@ class _BookMembersScreenState extends State<BookMembersScreen> {
           children: [
             TextField(
               key: const ValueKey('book-member-search'),
-              decoration: const InputDecoration(labelText: '搜索表达或意思'),
+              decoration: InputDecoration(
+                labelText: context.l10n.uiSearchExpressionsOrMeanings217,
+              ),
               onChanged: (v) => setState(() {
                 search = v;
                 visible = 40;
               }),
             ),
-            Text('找到 ${members.length} 项'),
+            Text(context.l10n.uiItemsFound(members.length)),
             for (final m in members.take(visible))
               ListTile(
                 onTap: widget.model.busy
@@ -507,14 +557,14 @@ class _BookMembersScreenState extends State<BookMembersScreen> {
                             (c) => c['material']['id'] == m['id'],
                           )['completed'] ==
                           true
-                      ? '已完成首学'
-                      : '尚未完成首学',
+                      ? context.l10n.uiInitialLearningCompleted
+                      : context.l10n.uiInitialLearningNotCompleted,
                 ),
               ),
             if (members.length > visible)
               TextButton(
                 onPressed: () => setState(() => visible += 40),
-                child: const Text('显示更多'),
+                child: Text(context.l10n.uiShowMore),
               ),
           ],
         ),

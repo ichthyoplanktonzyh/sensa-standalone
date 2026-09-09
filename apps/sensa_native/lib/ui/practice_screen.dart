@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'package:flutter/material.dart';
 import '../data/practice_repository.dart';
 import 'library_view_model.dart';
@@ -21,7 +22,9 @@ class PracticeScreen extends StatefulWidget {
 
 class _PracticeScreenState extends State<PracticeScreen> {
   late final PracticeModel model;
-  final brief = TextEditingController(text: '听一听同一表达在不同说话者中的用法');
+  late final brief = TextEditingController(
+    text: context.l10n.uiHearHowDifferentSpeakersUseThis,
+  );
   bool playerOpen = false, closing = false;
   int generation = 0;
   String status = 'loading';
@@ -144,7 +147,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, set) => AlertDialog(
-          title: const Text('练习范围'),
+          title: Text(context.l10n.uiPracticeScope),
           content: SizedBox(
             width: 500,
             child: SingleChildScrollView(
@@ -154,22 +157,26 @@ class _PracticeScreenState extends State<PracticeScreen> {
                   DropdownButtonFormField<String>(
                     isExpanded: true,
                     initialValue: source,
-                    items: const [
+                    items: [
                       DropdownMenuItem(
                         value: 'current_study',
-                        child: Text('当前学习范围'),
+                        child: Text(context.l10n.uiCurrentLearningScope),
                       ),
                       DropdownMenuItem(
                         value: 'personal_semantic_world',
-                        child: Text('我的词义世界'),
+                        child: Text(context.l10n.uiMySemanticWorld),
                       ),
                     ],
                     onChanged: (v) => set(() => source = v!),
                   ),
                   if (source == 'current_study')
-                    Text('${(sources[0]['targets'] as List).length} 个目标'),
+                    Text(
+                      context.l10n.uiTargets(
+                        (sources[0]['targets'] as List).length,
+                      ),
+                    ),
                   if (source == 'personal_semantic_world') ...[
-                    const Text('已确认的意思与表达，无需先加入学习。'),
+                    Text(context.l10n.uiPracticeSavedMeaningsWithoutAddingThem),
                     TextButton(
                       onPressed: () => set(() {
                         final all = (sources[1]['targets'] as List)
@@ -179,7 +186,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
                             ? chosen.clear()
                             : chosen.addAll(all);
                       }),
-                      child: const Text('全选 / 清空'),
+                      child: Text(context.l10n.uiSelectAllClear),
                     ),
                     for (final t in sources[1]['targets'])
                       CheckboxListTile(
@@ -200,7 +207,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
+              child: Text(context.l10n.uiCancel),
             ),
             FilledButton(
               onPressed: source == 'personal_semantic_world' && chosen.isEmpty
@@ -210,7 +217,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
                       if (source == 'personal_semantic_world')
                         'targetIds': chosen.toList(),
                     }),
-              child: const Text('使用此范围'),
+              child: Text(context.l10n.uiUseThisScope),
             ),
           ],
         ),
@@ -251,7 +258,11 @@ class _PracticeScreenState extends State<PracticeScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(playerOpen ? '真实语流泛化' : '自由练习'),
+          title: Text(
+            playerOpen
+                ? context.l10n.uiAuthenticListening
+                : context.l10n.uiFreePractice,
+          ),
           leading: BackButton(
             onPressed: () async {
               if (playerOpen) {
@@ -270,7 +281,9 @@ class _PracticeScreenState extends State<PracticeScreen> {
                     ? const CircularProgressIndicator()
                     : TextButton(
                         onPressed: model.load,
-                        child: Text('${model.error} 点击重试'),
+                        child: Text(
+                          context.l10n.uiTapToRetry((model.error).toString()),
+                        ),
                       ),
               )
             : Readable(
@@ -278,21 +291,29 @@ class _PracticeScreenState extends State<PracticeScreen> {
                   key: const ValueKey('practice-scroll'),
                   padding: const EdgeInsets.all(20),
                   children: [
-                    const Text('自由练习不改变正式学习、复习进度、每日额度或到期时间。'),
+                    Text(context.l10n.uiPracticeIsSeparateFromYourLearning),
                     if (model.error != null) ...[
                       Text(model.error!),
                       TextButton(
                         onPressed: model.load,
-                        child: const Text('重新读取练习'),
+                        child: Text(context.l10n.uiReloadPractice),
                       ),
                     ],
                     if (!playerOpen) ...[
                       TextButton(
                         onPressed: model.busy ? null : select,
-                        child: const Text('选择练习范围'),
+                        child: Text(context.l10n.uiChoosePracticeScope),
                       ),
                       Text(
-                        '${(model.data!['catalog']['targets'] as List).length} 个目标 · ${(model.data!['catalog']['targets'] as List).map((t) => t['expression']).toSet().length} 个表达',
+                        context.l10n.uiTargetsExpressions(
+                          ((model.data!['catalog']['targets'] as List).length)
+                              .toString(),
+                          ((model.data!['catalog']['targets'] as List)
+                                  .map((t) => t['expression'])
+                                  .toSet()
+                                  .length)
+                              .toString(),
+                        ),
                       ),
                       for (final t
                           in (model.data!['catalog']['targets'] as List))
@@ -302,25 +323,35 @@ class _PracticeScreenState extends State<PracticeScreen> {
                         ),
                       if ((model.data!['catalog']['blockedTargets'] as List)
                           .isNotEmpty)
-                        const Text('部分表达可能同形异音，当前来源无法约束发音，已排除。'),
+                        Text(
+                          context
+                              .l10n
+                              .uiSomeExpressionsWithAmbiguousPronunciationWere,
+                        ),
                       TextField(
                         key: const ValueKey('practice-brief'),
                         controller: brief,
                         enabled: model.session == null,
                         maxLength: 500,
-                        decoration: const InputDecoration(labelText: '这次想练习什么'),
+                        decoration: InputDecoration(
+                          labelText: context.l10n.uiWhatWouldYouLikeToPractice,
+                        ),
                       ),
-                      const Text('听 · 真实语流泛化'),
-                      const Text('YouGlish 需要联网。说、读、写的执行与资源尚未交付。'),
+                      Text(context.l10n.uiListenToRealSpeech),
+                      Text(context.l10n.uiYouglishRequiresAnInternetConnection),
                       FilledButton(
                         onPressed: model.busy || targets.isEmpty ? null : open,
                         child: Text(
-                          model.session == null ? '进入真实语流' : '继续真实语流',
+                          model.session == null
+                              ? context.l10n.uiStartListening
+                              : context.l10n.uiContinueListening,
                         ),
                       ),
                       if (model.session != null) ...[
                         Text(
-                          '继续原练习：${model.session!['snapshot']['brief']}（范围保持不变）',
+                          context.l10n.uiResume(
+                            (model.session!['snapshot']['brief']).toString(),
+                          ),
                         ),
                         TextButton(
                           onPressed: model.busy
@@ -332,25 +363,33 @@ class _PracticeScreenState extends State<PracticeScreen> {
                                     'abandoned': true,
                                   },
                                 ),
-                          child: const Text('放弃这次练习'),
+                          child: Text(context.l10n.uiAbandonThisPractice),
                         ),
                       ],
                       const Divider(),
-                      const Text('练习记录'),
+                      Text(context.l10n.uiPracticeHistory),
                       for (final h in model.data!['history'])
                         ListTile(
                           title: Text(h['snapshot']['brief']),
                           subtitle: Text(
-                            '${h['status'] == 'active'
-                                ? '未结束'
-                                : h['status'] == 'completed'
-                                ? '已结束'
-                                : '已放弃'} · ${h['turnCount']} 次练习交互',
+                            context.l10n.uiInteractions(
+                              (h['status'] == 'active'
+                                      ? context.l10n.uiInProgress
+                                      : h['status'] == 'completed'
+                                      ? context.l10n.uiEnded
+                                      : context.l10n.uiAbandoned)
+                                  .toString(),
+                              (h['turnCount']).toString(),
+                            ),
                           ),
                         ),
                     ] else if (current != null) ...[
-                      const Text('按表达形式检索，片段可能包含其他词义。来源：YouGlish。'),
-                      Text('原范围中 ${targets.length} 个表达'),
+                      Text(context.l10n.uiYouglishSearchesByExpressionSoClips),
+                      Text(
+                        context.l10n.uiExpressionsInThisScope(
+                          (targets.length).toString(),
+                        ),
+                      ),
                       DropdownButtonFormField<int>(
                         isExpanded: true,
                         key: ValueKey('expression-${state['index']}'),
@@ -386,12 +425,12 @@ class _PracticeScreenState extends State<PracticeScreen> {
                             ChoiceChip(
                               label: Text(
                                 {
-                                  'all': '全部口音',
-                                  'us': '美国',
-                                  'uk': '英国',
-                                  'aus': '澳洲',
-                                  'ca': '加拿大',
-                                  'ie': '爱尔兰',
+                                  'all': context.l10n.uiAllAccents,
+                                  'us': context.l10n.uiUs,
+                                  'uk': context.l10n.uiUk,
+                                  'aus': context.l10n.uiAustralia,
+                                  'ca': context.l10n.uiCanada,
+                                  'ie': context.l10n.uiIreland,
                                 }[accent]!,
                               ),
                               selected: state['accent'] == accent,
@@ -431,22 +470,37 @@ class _PracticeScreenState extends State<PracticeScreen> {
                       ),
                       Text(
                         status == 'ready'
-                            ? '找到 ${observation['total'] ?? 0} 段真实语流'
+                            ? context.l10n.uiFoundClips(
+                                (observation['total'] ?? 0).toString(),
+                              )
                             : status == 'error'
-                            ? '暂时无法连接 YouGlish，请检查网络后重试。'
+                            ? context.l10n.uiCouldNotConnectToYouglishCheck
                             : status == 'empty'
-                            ? '当前表达没有找到片段。'
-                            : '正在连接 YouGlish…',
+                            ? context.l10n.uiNoClipsFoundForThisExpression
+                            : context.l10n.uiConnectingToYouglish,
                       ),
                       if (status == 'error' || status == 'empty')
-                        TextButton(onPressed: open, child: const Text('重试连接')),
-                      if (observation['playing'] == true) const Text('播放器正在播放'),
+                        TextButton(
+                          onPressed: open,
+                          child: Text(context.l10n.uiRetryConnection),
+                        ),
+                      if (observation['playing'] == true)
+                        Text(context.l10n.uiPlaying),
                       if (observation['video'] != null)
-                        Text('YouGlish 片段：${observation['video']}'),
+                        Text(
+                          context.l10n.uiYouglishClip(
+                            (observation['video']).toString(),
+                          ),
+                        ),
                       if (observation['occurrence'] != null)
-                        Text('当前第 ${observation['occurrence']} 段'),
+                        Text(
+                          context.l10n.uiClip(
+                            (observation['occurrence']).toString(),
+                          ),
+                        ),
                       Text(
-                        (observation['caption'] as String? ?? '暂无字幕')
+                        (observation['caption'] as String? ??
+                                context.l10n.uiNoSubtitles)
                             .replaceAll('[[[', '')
                             .replaceAll(']]]', ''),
                       ),
@@ -454,11 +508,11 @@ class _PracticeScreenState extends State<PracticeScreen> {
                         spacing: 8,
                         children: [
                           for (final pair in [
-                            ('previous', '上一段'),
-                            ('play', '播放'),
-                            ('pause', '暂停'),
-                            ('replay', '重听'),
-                            ('next', '下一段'),
+                            ('previous', context.l10n.uiPreviousClip),
+                            ('play', context.l10n.uiPlay),
+                            ('pause', context.l10n.uiPause),
+                            ('replay', context.l10n.uiReplay),
+                            ('next', context.l10n.uiNextClip),
                           ])
                             OutlinedButton(
                               onPressed: ready ? () => controls(pair.$1) : null,
@@ -484,7 +538,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
                       ),
                       TextButton(
                         onPressed: closePlayer,
-                        child: const Text('保存并返回自由练习'),
+                        child: Text(context.l10n.uiSaveAndReturnToPractice),
                       ),
                       FilledButton(
                         onPressed: model.busy || model.session == null
@@ -507,7 +561,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
                                   });
                                 }
                               },
-                        child: const Text('结束本次练习'),
+                        child: Text(context.l10n.uiEndPractice),
                       ),
                     ],
                   ],

@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'agent_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -8,7 +9,9 @@ class WorldModel extends ChangeNotifier {
   final AgentController agents;
   final WorldRepository repository;
   Map<String, dynamic>? data;
-  String? error;
+  String Function()? _error;
+  String? get error => _error?.call();
+  void setError(String Function()? value) => _error = value;
   bool busy = false, closed = false;
   Future<void> pending = Future.value();
   void changed() {
@@ -18,9 +21,9 @@ class WorldModel extends ChangeNotifier {
   Future<void> load() async {
     try {
       data = await repository.load();
-      error = null;
+      setError(null);
     } catch (_) {
-      error = '本机资料无法读取，请重试。';
+      setError(() => l10n.uiCouldNotReadYourLibraryRetry);
     }
     changed();
   }
@@ -28,7 +31,7 @@ class WorldModel extends ChangeNotifier {
   Future<void> act(Map<String, dynamic> Function() action) {
     final next = pending.then((_) async {
       busy = true;
-      error = null;
+      setError(null);
       changed();
       try {
         data = await repository.load();
@@ -45,15 +48,17 @@ class WorldModel extends ChangeNotifier {
         }
         data = await repository.load();
       } catch (e) {
-        error =
-            e.toString().contains('draft_conflict') ||
-                e.toString().contains('revision_conflict')
-            ? '资料已在别处修改。保留了当前输入，请复制为新草稿或重新打开。'
-            : e.toString().contains('frozen')
-            ? '已确认的材料不能覆盖，请复制后修改。'
-            : e.toString().contains('empty_world')
-            ? '请至少保存一段文字、图片或熟悉表达。'
-            : '操作未完成，当前输入已保留，请重试。';
+        setError(
+          () =>
+              e.toString().contains('draft_conflict') ||
+                  e.toString().contains('revision_conflict')
+              ? l10n.uiThisContentChangedElsewhereYourInput
+              : e.toString().contains('frozen')
+              ? l10n.uiConfirmedContentCannotBeOverwrittenMake
+              : e.toString().contains('empty_world')
+              ? l10n.uiAddTextAnImageOrA
+              : l10n.uiCouldNotCompleteTheActionYour,
+        );
       } finally {
         busy = false;
         changed();

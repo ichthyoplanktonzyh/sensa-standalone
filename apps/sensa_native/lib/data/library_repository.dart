@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:sensa_native/src/rust/api/library.dart' as native;
@@ -41,18 +42,23 @@ class LibrarySnapshot {
   Map<String, dynamic>? get initialReadiness =>
       policyPlan?['plan']?['purposes']?['initial_learning']?['readiness']
           as Map<String, dynamic>?;
-  String policyLabel(String? id) =>
+  String policyLabel(String? id) => switch (id) {
+    'lightweight' => l10n.learningLightweight,
+    'high_assurance' => l10n.learningHighAssurance,
+    'interleaved_four_stage' => l10n.learningFourStage,
+    _ =>
       policyChoices
-          .where((c) => c['policy']['profileId'] == id)
-          .map((c) => c['label'] as String)
-          .firstOrNull ??
-      (id ?? '尚未设置');
+              .where((c) => c['policy']['profileId'] == id)
+              .map((c) => c['label'] as String)
+              .firstOrNull ??
+          (id ?? l10n.uiNotSet),
+  };
   String get policySourceLabel =>
       switch (policyPlan?['plan']?['effective']?['scope']) {
-        'target' => '此项单独设置',
-        'curriculum' => '学习包默认设置',
-        'learner' => '我的默认设置',
-        _ => '系统默认设置',
+        'target' => l10n.uiItemOverride,
+        'curriculum' => l10n.uiPackageDefault,
+        'learner' => l10n.uiMyDefault,
+        _ => l10n.uiSystemDefault,
       };
   String get selectedPolicyLabel => policyLabel(
     policyPlan?['plan']?['effective']?['policy']?['profileId'] as String?,

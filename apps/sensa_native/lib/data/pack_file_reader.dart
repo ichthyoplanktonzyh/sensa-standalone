@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:file_selector/file_selector.dart';
@@ -7,9 +8,9 @@ class PackFileReader {
   const PackFileReader();
   Future<String?> pick() async {
     final file = await openFile(
-      acceptedTypeGroups: const [
+      acceptedTypeGroups: [
         XTypeGroup(
-          label: 'Sensa 学习包',
+          label: l10n.uiSensaLearningPackage,
           extensions: ['json'],
           uniformTypeIdentifiers: ['public.json'],
         ),

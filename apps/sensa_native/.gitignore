@@ -46,3 +46,6 @@ app.*.map.json
 
 # Gradle diagnostics generated during plugin compilation.
 /android/build/
+
+# Generated from ARB by flutter gen-l10n / Flutter package resolution.
+/lib/l10n/generated/

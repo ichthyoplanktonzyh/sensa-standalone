@@ -91,7 +91,7 @@ void main() {
         }
         await resolveLegacyFixture(tester, model);
         await wait();
-        await tap(find.text('确认词义并保存到本机'));
+        await tap(find.text("确认并保存词义"));
         await tap(find.text('加入学习'));
         await tap(find.text('确认加入学习'));
       }
@@ -114,9 +114,9 @@ void main() {
         await tap(find.byTooltip('我的词义世界'));
         await tap(find.byTooltip('学习准备'));
         await tap(find.text('recoverable'));
-        expect(find.text('原文已授权给材料服务'), findsOneWidget);
+        expect(find.text("已授权使用原文"), findsOneWidget);
         await tap(find.text('撤销原文授权'));
-        expect(find.text('原文未授权给材料服务'), findsOneWidget);
+        expect(find.text("未授权使用原文"), findsOneWidget);
         expect(task('recoverable')['anchor'], isNull);
         expect(task('recoverable')['status'], 'pending');
       } else {
@@ -124,7 +124,7 @@ void main() {
         await wait();
         await tap(find.byTooltip('我的词义世界'));
         await capture('tactful', configure: true);
-        expect(find.text('原文未授权给材料服务'), findsOneWidget);
+        expect(find.text("未授权使用原文"), findsOneWidget);
         await authorize();
         expect(task('tactful')['anchor']['sentence'], '张琳在谈话中很 tactful');
         await prepareLegacyFixture(tester, model);

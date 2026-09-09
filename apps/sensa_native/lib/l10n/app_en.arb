@@ -1,0 +1,1419 @@
+{
+  "@@locale": "en",
+  "uiYourCodeOrCredentialsExpiredSign": "Your code or credentials expired. Sign in again.",
+  "uiEnterAValidEmailAddress": "Enter a valid email address.",
+  "uiTooManyRequestsTryAgainLater": "Too many requests. Try again later.",
+  "uiEmailVerifiedButAccessIsNot": "Email verified, but access is not yet granted. Check your invitation or service address.",
+  "uiCheckTheAuthenticationUrlAndPublic": "Check the authentication URL and public access key.",
+  "uiSignInIsUnavailableTryAgain": "Sign-in is unavailable. Try again later.",
+  "uiCredentialsCouldNotBeSavedSecurely": "Credentials could not be saved securely. Check secure storage.",
+  "uiAccessCouldNotBeRestoredCheck": "Access could not be restored. Check your invitation and connection, or sign in again.",
+  "uiCredentialsCouldNotBeSavedSecurely8": "Credentials could not be saved securely. Check secure storage and retry.",
+  "uiOnlineAccount": "Online account",
+  "uiService": "Service: {p0}\n{p1}",
+  "@uiService": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiThisAccountProvidesAccessToThis": "This account provides access to this service. Signing in does not enable sync.",
+  "uiSignedIn": "Signed in: {p0}",
+  "@uiSignedIn": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiAssignThisServiceToAPurpose": "Assign this service to a purpose first.",
+  "uiAccessChecked": "Access checked.",
+  "uiCheckAccess": "Check access",
+  "uiSignedOut": "Signed out.",
+  "uiSignOut": "Sign out",
+  "uiSignInWithTheCodeSent": "Sign in with the code sent to your invited email. Your email is sent to the authentication service below.",
+  "uiAuthenticationUrl": "Authentication URL",
+  "uiPublicAccessKey": "Public access key",
+  "uiInvitedEmail": "Invited email",
+  "uiCodeSentCheckYourEmail": "Code sent. Check your email.",
+  "uiWaitBeforeResending": "Wait before resending",
+  "uiSendCode": "Send code",
+  "uiEmailCode": "Email code",
+  "uiSignedInCredentialsSavedSecurely": "Signed in. Credentials saved securely.",
+  "uiVerifyAndSignIn": "Verify and sign in",
+  "uiCouldNotReadYourLibraryRetry": "Could not read your library. Retry.",
+  "uiThisContentChangedElsewhereYourInput": "This content changed elsewhere. Your input is kept; copy it to a new draft or reopen.",
+  "uiConfirmedContentCannotBeOverwrittenMake": "Confirmed content cannot be overwritten. Make a copy to edit.",
+  "uiAddTextAnImageOrA": "Add text, an image, or a familiar expression.",
+  "uiCouldNotCompleteTheActionYour": "Could not complete the action. Your input is kept. Retry.",
+  "uiAudioIsUnavailableYouCanKeep": "Audio is unavailable. You can keep reading or retry later.",
+  "uiPlayExample": "Play example",
+  "uiThisSceneIsUnavailableReload": "This scene is unavailable. Reload.",
+  "uiSceneVariation": "Scene variation",
+  "uiSwitchScene": "Switch scene",
+  "uiInitialLearningComplete": "Initial learning complete",
+  "uiReviewAndRepairComplete": "Review and repair complete",
+  "uiChecksCorrect": "{p0} checks · {p1} correct",
+  "@uiChecksCorrect": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiConnectionsVerified": "{p0} connections verified.",
+  "@uiConnectionsVerified": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiReviewProgressSaved": "Review progress saved.",
+  "uiBackToHome": "Back to home",
+  "uiLearningPaused": "Learning paused",
+  "uiYourAnswersAndProgressAreSaved": "Your answers and progress are saved.",
+  "uiContinueLearning": "Continue learning",
+  "uiThisStepIsUnavailable": "This step is unavailable",
+  "uiYourProgressIsKeptCheckThe": "Your progress is kept. Check the material and reload.",
+  "uiReload": "Reload",
+  "uiHighAssuranceLearning": "High-assurance learning",
+  "uiTargetedRelearning": "Targeted relearning",
+  "uiDueReviews": "Due reviews",
+  "uiStepChecksCompleted": "Step {p0} · {p1} checks completed",
+  "@uiStepChecksCompleted": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiFinishRepairCheckAgainLater": "Finish repair, check again later",
+  "uiCheckTheConnection": "Check the connection",
+  "uiReconnectThisMeaning": "Reconnect this meaning",
+  "uiImagineThisScene": "Imagine this scene",
+  "uiRevealMeaningAndExpression": "Reveal meaning and expression",
+  "uiRecalledWithHelp": "Recalled with help",
+  "uiIMadeTheConnection": "I made the connection",
+  "uiTryConnectingAgain": "Try connecting again",
+  "uiYouWillTryAgainWithoutHints": "You will try again without hints later.",
+  "uiNextTryTheExpressionInAnother": "Next, try the expression in another scene.",
+  "uiReviewThisMeaningThenTryRecalling": "Review this meaning, then try recalling it again.",
+  "uiContinue": "Continue",
+  "uiReviewExplanationAndExamples": "Review explanation and examples",
+  "uiTryToRecallTheExpression": "Try to recall the expression",
+  "uiCanYouUseItInA": "Can you use it in a different scene?",
+  "uiExploreTheMeaningBoundary": "Explore the meaning boundary",
+  "uiRecognizeTheMeaningInANew": "Recognize the meaning in a new context",
+  "uiFirstLetters": "First letters: {p0}",
+  "@uiFirstLetters": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiEnterTheExpression": "Enter the expression",
+  "uiShowFirstLetters": "Show first letters",
+  "uiShowChoices": "Show choices",
+  "uiCheckAnswer": "Check answer",
+  "uiUndoLastStep": "Undo last step",
+  "uiIAlreadyKnowThis": "I already know this",
+  "uiSkipForNow": "Skip for now",
+  "uiPause": "Pause",
+  "uiRelearn": "Relearn: {p0}",
+  "@uiRelearn": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiHome": "Home",
+  "uiMyContent": "My content",
+  "uiLearn": "Learn",
+  "uiPractice": "Practice",
+  "uiSettings": "Settings",
+  "uiReadingOrSavingYourLibrary": "Reading or saving your library",
+  "uiRetry": "Retry",
+  "uiStartAtYourOwnPace": "Start at your own pace",
+  "uiLearnOfflineWithoutAnAccount": "Learn offline, without an account.",
+  "uiHowManyNewConnectionsEachDay": "How many new connections each day?",
+  "uiSetDailyQuantity": "Set daily quantity",
+  "uiYouCanChangeThisInSettings": "You can change this in Settings.",
+  "uiConnectWithNewMeanings": "Connect with new meanings",
+  "uiMessage": "{p0}",
+  "@uiMessage": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiToday": "Today",
+  "uiNew": "New",
+  "uiToContinue": "To continue",
+  "uiPickUpWhereYouLeftOff": "Pick up where you left off.",
+  "uiAddLearningContentOrCaptureA": "Add learning content or capture a context.",
+  "uiLearnAtYourOwnPace": "Learn at your own pace.",
+  "uiContinueToday": "Continue today",
+  "uiAddLearningContent": "Add learning content",
+  "uiStartToday": "Start today",
+  "uiNoReviewsDue": "No reviews due",
+  "uiReviewOnly": "Review only",
+  "uiBrowseLearningContent": "Browse learning content",
+  "uiImportALearningPackageAndChoose": "Import a learning package and choose what to learn.",
+  "uiCaptureAContext": "Capture a context",
+  "uiGetHelpFromYourLanguageTeacher": "Get help from your language teacher when needed.",
+  "uiBuildYourSemanticWorldFromEveryday": "Build your semantic world from everyday contexts.",
+  "uiMySemanticWorld": "My semantic world",
+  "uiSavedMeaningsAndInbox": "Saved meanings and inbox.",
+  "uiImagesAndConnections": "Images and connections",
+  "uiExploreDraftsAndRelatedExpressions": "Explore drafts and related expressions.",
+  "uiLearningPreparation": "Learning preparation",
+  "uiCheckMaterialPreparationAndPendingTasks": "Check material preparation and pending tasks.",
+  "uiCaptureConnections": "Capture connections",
+  "uiReceiveContextsFromYourBrowserAnd": "Receive contexts from your browser and agents.",
+  "uiMyLearning": "My learning",
+  "uiChooseWhatAndHowToLearn": "Choose what and how to learn.",
+  "uiImportLearningPackage": "Import learning package",
+  "uiLearningSources": "Learning sources",
+  "uiAllLearningHistory": "All learning history",
+  "uiSearchExpressionsOrMeanings": "Search expressions or meanings",
+  "uiImportALearningPackageOrAdd": "Import a learning package or add a saved meaning to learning.",
+  "uiNoMatchesTryAnotherExpression": "No matches. Try another expression.",
+  "uiInitialLearningComplete127": "Initial learning complete",
+  "uiAddedToLearning": "Added to learning",
+  "uiNotAddedToLearning": "Not added to learning",
+  "uiDailyNewQuantity": "Daily new quantity",
+  "uiCancel": "Cancel",
+  "uiSaveQuantity": "Save quantity",
+  "uiChooseTheOnlineServicesYouWant": "Choose the online services you want to use.",
+  "uiNewConnections": "{p0, plural, =1{1 new connection} other{{p0} new connections}}",
+  "@uiNewConnections": {
+    "placeholders": {
+      "p0": {
+        "type": "int"
+      }
+    }
+  },
+  "uiDefaultLearningMode": "Default learning mode",
+  "uiModelServices": "Model services",
+  "uiUseYourOwnApiKeyOr": "Use your own API key or a Sensa service.",
+  "uiBrowserAgentsAndFileImport": "Browser, agents, and file import.",
+  "uiYourContentIsOnThisDevice": "Your content is on this device. Sync is not yet available.",
+  "uiLocalLibrary": "Local library",
+  "uiOpeningYourLibrary": "Opening your library…",
+  "uiHearHowDifferentSpeakersUseThis": "Hear how different speakers use this expression",
+  "uiPracticeScope": "Practice scope",
+  "uiCurrentLearningScope": "Current learning scope",
+  "uiTargets": "{p0, plural, =1{1 target} other{{p0} targets}}",
+  "@uiTargets": {
+    "placeholders": {
+      "p0": {
+        "type": "int"
+      }
+    }
+  },
+  "uiPracticeSavedMeaningsWithoutAddingThem": "Practice saved meanings without adding them to learning.",
+  "uiSelectAllClear": "Select all / Clear",
+  "uiUseThisScope": "Use this scope",
+  "uiAuthenticListening": "Authentic listening",
+  "uiFreePractice": "Free practice",
+  "uiTapToRetry": "{p0} Tap to retry",
+  "@uiTapToRetry": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiPracticeIsSeparateFromYourLearning": "Practice is separate from your learning and review schedule.",
+  "uiReloadPractice": "Reload practice",
+  "uiChoosePracticeScope": "Choose practice scope",
+  "uiTargetsExpressions": "{p0} targets · {p1} expressions",
+  "@uiTargetsExpressions": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSomeExpressionsWithAmbiguousPronunciationWere": "Some expressions with ambiguous pronunciation were excluded.",
+  "uiWhatWouldYouLikeToPractice": "What would you like to practice?",
+  "uiListenToRealSpeech": "Listen to real speech",
+  "uiYouglishRequiresAnInternetConnection": "YouGlish requires an internet connection.",
+  "uiStartListening": "Start listening",
+  "uiContinueListening": "Continue listening",
+  "uiResume": "Resume: {p0}",
+  "@uiResume": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiAbandonThisPractice": "Abandon this practice",
+  "uiPracticeHistory": "Practice history",
+  "uiInteractions": "{p0} · {p1} interactions",
+  "@uiInteractions": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiInProgress": "In progress",
+  "uiEnded": "Ended",
+  "uiAbandoned": "Abandoned",
+  "uiYouglishSearchesByExpressionSoClips": "YouGlish searches by expression, so clips may use other meanings.",
+  "uiExpressionsInThisScope": "{p0} expressions in this scope",
+  "@uiExpressionsInThisScope": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiAllAccents": "All accents",
+  "uiUs": "US",
+  "uiUk": "UK",
+  "uiAustralia": "Australia",
+  "uiCanada": "Canada",
+  "uiIreland": "Ireland",
+  "uiFoundClips": "Found {p0} clips",
+  "@uiFoundClips": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiCouldNotConnectToYouglishCheck": "Could not connect to YouGlish. Check your connection and retry.",
+  "uiNoClipsFoundForThisExpression": "No clips found for this expression.",
+  "uiConnectingToYouglish": "Connecting to YouGlish…",
+  "uiRetryConnection": "Retry connection",
+  "uiPlaying": "Playing",
+  "uiYouglishClip": "YouGlish clip: {p0}",
+  "@uiYouglishClip": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiClip": "Clip {p0}",
+  "@uiClip": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiNoSubtitles": "No subtitles",
+  "uiPreviousClip": "Previous clip",
+  "uiPlay": "Play",
+  "uiReplay": "Replay",
+  "uiNextClip": "Next clip",
+  "uiSaveAndReturnToPractice": "Save and return to practice",
+  "uiEndPractice": "End practice",
+  "uiAllowUseOfThisContext": "Allow use of this context?",
+  "uiRecipient": "Recipient: {p0}",
+  "@uiRecipient": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSendTheTextImagesConfirmedMeaning": "Send the text, images, confirmed meaning, and expression shown above to your selected generation and review services. Source links, titles, and focus notes are excluded. Both services must support images when included.",
+  "uiRevokingPermissionBlocksOldResultsFrom": "Revoking permission blocks old results from being accepted. Content already sent cannot be recalled. Existing learning history is kept.",
+  "uiNotNow": "Not now",
+  "uiAllowThisContext": "Allow this context",
+  "uiContextSharingOff": "Context sharing off",
+  "uiContextSharingOn": "Context sharing on",
+  "uiThisAppliesToFutureLearningMaterial": "This applies to future learning material for this target.",
+  "uiAllowContextUse": "Allow context use",
+  "uiRevokePermission": "Revoke permission",
+  "uiInitialLearning": "Initial learning",
+  "uiRetentionReview": "Retention review",
+  "uiRelearning": "Relearning",
+  "uiAllTypes": "All types",
+  "uiHistoryChangedRefreshToContinue": "History changed. Refresh to continue.",
+  "uiCheckTheStartAndEndDates": "Check the start and end dates.",
+  "uiCouldNotReadLearningHistoryRetry": "Could not read learning history. Retry.",
+  "uiLearningHistory": "Learning history",
+  "uiYourCompletedLearningAndReviews": "Your completed learning and reviews.",
+  "uiToday212": "Today",
+  "uiLastDays": "Last 7 days",
+  "uiLastDays214": "Last 30 days",
+  "uiAll": "All",
+  "uiCustomDates": "Custom dates",
+  "uiSearchExpressionsOrMeanings217": "Search expressions or meanings",
+  "uiEnterAQuery": "Enter a query",
+  "uiSearchHistory": "Search history",
+  "uiRefreshHistory": "Refresh history",
+  "uiInitialReviewsRelearning": "Initial {p0} · Reviews {p1} · Relearning {p2}",
+  "@uiInitialReviewsRelearning": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "uiDailySummary": "Daily summary",
+  "uiRecords": "{p0, plural, =1{1 record} other{{p0} records}}",
+  "@uiRecords": {
+    "placeholders": {
+      "p0": {
+        "type": "int"
+      }
+    }
+  },
+  "uiCheckInCalendarDays": "Check-in calendar · {p0} days",
+  "@uiCheckInCalendarDays": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiManualCheckIn": "Manual check-in",
+  "uiLearning": "Learning",
+  "uiNoRecordsInThisRangeTry": "No records in this range. Try other dates or types.",
+  "uiShowMoreRecords": "Show more records",
+  "uiOnlyRecordedLearningIsShown": "Only recorded learning is shown.",
+  "uiMeaningSaved": "Meaning saved.",
+  "uiSavedToInbox": "Saved to inbox.",
+  "uiRefreshCaptures": "Refresh captures",
+  "uiSaveAContextAndFindThe": "Save a context and find the meaning you want to express.",
+  "uiSaveContent": "Save content",
+  "uiSaved": "Saved",
+  "uiInbox": "Inbox",
+  "uiRemoved": "Removed",
+  "uiSearchContextsExpressionsOrMeanings": "Search contexts, expressions, or meanings",
+  "uiNoContentYet": "No content yet.",
+  "uiToConfirm": "To confirm: {p0}",
+  "@uiToConfirm": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiViewExplanationOrContinueClarifying": "View explanation or continue clarifying",
+  "uiFocus": "Focus: {p0}",
+  "@uiFocus": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMeaningSource": "Meaning source: {p0}",
+  "@uiMeaningSource": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSavedYouCanAddThisTo": "Saved. You can add this to learning when ready.",
+  "uiSource": "Source: {p0}",
+  "@uiSource": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiCopySourceLink": "Copy source link",
+  "uiRestore": "Restore",
+  "uiChooseExpressionAndMeaning": "Choose expression and meaning",
+  "uiViewPreparation": "View preparation",
+  "uiAddToLearning": "Add to learning",
+  "uiLearningMaterialNotPrepared": "Learning material not prepared",
+  "uiRemove": "Remove",
+  "uiSaveAsNew": "Save as new",
+  "uiRetrySaving": "Retry saving",
+  "uiConfirmThisContent": "Confirm this content",
+  "uiEnglishContextRequired": "English context (required)",
+  "uiExpressionInContextOptionalForNow": "Expression in context (optional for now)",
+  "uiUseTheExactWordingFromThe": "Use the exact wording from the context, or save the context first.",
+  "uiChooseWhichOccurrenceYouWantTo": "Choose which occurrence you want to save:",
+  "uiOccurrence": "Occurrence {p0}: {p1}",
+  "@uiOccurrence": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSourceNameOptional": "Source name (optional)",
+  "uiSourceLinkOptional": "Source link (optional)",
+  "uiSaveToInboxFirst": "Save to inbox first",
+  "uiExplainThisExpression": "Explain this expression",
+  "uiChooseTheMeaningInThisContext": "Choose the meaning in this context",
+  "uiNoMatchingMeaningInYourLibrary": "No matching meaning in your library. Ask for an explanation or keep it in the inbox.",
+  "uiExampleSceneSource": "Example scene: {p0}\nSource: {p1}",
+  "@uiExampleSceneSource": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiCheckThatTheMeaningFitsYour": "Check that the meaning fits your context.",
+  "uiConfirmMeaningAndSave": "Confirm meaning and save",
+  "uiIntroducedToday": "Introduced today: {p0} / {p1}",
+  "@uiIntroducedToday": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiContinueReviewsRelearn": "Continue {p0} · Reviews {p1} · Relearn {p2}",
+  "@uiContinueReviewsRelearn": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "uiYourIsPausedResumeTheSame": "Your {p0} is paused. Resume the same mode to continue.",
+  "@uiYourIsPausedResumeTheSame": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMixedLearning": "Mixed learning",
+  "uiReview": "Review",
+  "uiCheckedInToday": "Checked in today",
+  "uiHistoryAndCheckInCalendar": "History and check-in calendar",
+  "uiLearningEnded": "Learning ended",
+  "uiLearningPaused278": "Learning paused",
+  "uiProgressSaved": "Progress saved",
+  "uiReviewOnly280": "Review only",
+  "uiNewLearningAndReviews": "New learning and reviews",
+  "uiLearningTargets": "{p0} learning targets",
+  "@uiLearningTargets": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiInitialReviewsRelearningCompleted": "Initial {p0} · Reviews {p1} · Relearning {p2} completed",
+  "@uiInitialReviewsRelearningCompleted": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "uiTargetsMayAppearInMoreThan": "Targets may appear in more than one category.",
+  "uiDailyNewLimitReachedContinueTomorrow": "Daily new limit reached. Continue tomorrow.",
+  "uiNothingIsReadyYetReturnWhen": "Nothing is ready yet. Return when it is time to recall again.",
+  "uiNothingElseInThisScopeStart": "Nothing else in this scope. Start a new session to include newly added content.",
+  "uiToRecallIncludingWaiting": "{p0} to recall, including {p1} waiting",
+  "@uiToRecallIncludingWaiting": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiContinuePlanning": "Continue planning",
+  "uiRecallEarly": "Recall early",
+  "uiResumeLearning": "Resume learning",
+  "uiEndLearning": "End learning",
+  "uiMessage293": "{p0}-{p1}",
+  "@uiMessage293": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiCalendarMarksShowCheckIns": "Calendar marks show check-ins.",
+  "uiM": "M",
+  "uiT": "T",
+  "uiW": "W",
+  "uiT298": "T",
+  "uiF": "F",
+  "uiS": "S",
+  "uiS301": "S",
+  "uiCheckedIn": "Checked in",
+  "uiNotCheckedIn": "Not checked in",
+  "uiNoLearningHistoryYet": "No learning history yet.",
+  "uiTargets305": "{p0} · {p1} targets",
+  "@uiTargets305": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiPaused": "Paused",
+  "uiInProgress307": "In progress",
+  "uiList": "List",
+  "uiConversationsAndResources": "Conversations and resources",
+  "uiLoadingYourLibrary": "Loading your library…",
+  "uiNewTextAndImageCapture": "New text and image capture",
+  "uiDraftsAndCaptures": "Drafts and captures",
+  "uiSearchContextsMeaningsOrExpressions": "Search contexts, meanings, or expressions",
+  "uiExpand": "Expand",
+  "uiGraph": "Graph",
+  "uiTextAndImageCaptureV": "Text and image capture · v{p0}",
+  "@uiTextAndImageCaptureV": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiBlocks": "{p0} · {p1} blocks",
+  "@uiBlocks": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiConfirmedMoreMeaningsCanBeAdded": "Confirmed; more meanings can be added",
+  "uiAwaitingConfirmation": "Awaiting confirmation",
+  "uiEditDraft": "Edit draft",
+  "uiNoDraftsYet": "No drafts yet.",
+  "uiImageContext": "Image context",
+  "uiDragOrPinchToExploreSelect": "Drag or pinch to explore. Select a node to view it.",
+  "uiConfirmedConnectionsAppearHere": "Confirmed connections appear here.",
+  "uiFromAConfirmedBinding": "From a confirmed binding",
+  "uiRemovedDrafts": "Removed drafts",
+  "uiRestoreDraft": "Restore draft",
+  "uiNoConfirmedConnectionsYet": "No confirmed connections yet.",
+  "uiImageUnavailable": "Image unavailable",
+  "uiTheLocalImageIsUnavailableIts": "The local image is unavailable. Its reference is kept.",
+  "uiLoadingImage": "Loading image…",
+  "uiChooseAPngJpegOrWebp": "Choose a PNG, JPEG, or WebP up to 4 MB and 4096 pixels.",
+  "uiChooseAConfirmedMeaningAndExpression": "Choose a confirmed meaning and expression",
+  "uiReference": "{p0}\nReference: {p1}",
+  "@uiReference": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiConfirmThisMeaningInContext": "Confirm this meaning in context?",
+  "uiCheckThatTheMeaningAndEnglish": "Check that the meaning and English expression fit this text and image context.",
+  "uiConfirmAndSaveConnection": "Confirm and save connection",
+  "uiConfirmedTextAndImageCapture": "Confirmed text and image capture",
+  "uiTextAndImageDraft": "Text and image draft",
+  "uiChooseAnotherMeaningOrMakeA": "Choose another meaning or make a copy to edit.",
+  "uiSaving": "Saving…",
+  "uiNotSaved": "Not saved",
+  "uiSavedOnThisDevice": "Saved on this device",
+  "uiFamiliarExpressionOrIntendedMeaningOptional": "Familiar expression or intended meaning (optional)",
+  "uiStartingPointOptional": "Starting point (optional)",
+  "uiStartFromAContext": "Start from a context",
+  "uiIFoundAnExpression": "I found an expression",
+  "uiIHaveAMeaningToExpress": "I have a meaning to express",
+  "uiContextText": "Context text",
+  "uiMoveBlockUp": "Move block up",
+  "uiRemoveBlock": "Remove block",
+  "uiAddText": "Add text",
+  "uiAddImage": "Add image",
+  "uiWhenYouNeedHelpSendThis": "When you need help, send this capture to your chosen language teacher.",
+  "uiTalkToALanguageTeacher": "Talk to a language teacher",
+  "uiSaveForConfirmation": "Save for confirmation",
+  "uiConfirmAnotherMeaning": "Confirm another meaning",
+  "uiChooseAndConfirmAnExistingMeaning": "Choose and confirm an existing meaning",
+  "uiCopyToNewDraft": "Copy to new draft",
+  "uiRemoveCaptureKeepConfirmedContent": "Remove capture (keep confirmed content)",
+  "uiRemoveThisDraft": "Remove this draft",
+  "uiAddAnExpressionForThisMeaning": "Add an expression for this meaning",
+  "uiConfirmTheNewExpressionBeforeSaving": "Confirm the new expression before saving.",
+  "uiEnglishExpression": "English expression",
+  "uiExpressionType": "Expression type",
+  "uiWord": "Word",
+  "uiPhrase": "Phrase",
+  "uiConstruction": "Construction",
+  "uiSentence": "Sentence",
+  "uiExpressionStrategy": "Expression strategy",
+  "uiRelationToThisMeaning": "Relation to this meaning",
+  "uiExpressesThisMeaning": "Expresses this meaning",
+  "uiApproximatesThisMeaning": "Approximates this meaning",
+  "uiEvokesAnAssociation": "Evokes an association",
+  "uiMeaningCoverage": "Meaning coverage",
+  "uiExact": "Exact",
+  "uiBroader": "Broader",
+  "uiNarrower": "Narrower",
+  "uiPartialOverlap": "Partial overlap",
+  "uiConfirmExpressionConnection": "Confirm expression connection",
+  "uiContentUnavailableGoBackAndRetry": "Content unavailable. Go back and retry.",
+  "uiContextAndExpression": "Context and expression",
+  "uiContext": "Context",
+  "uiConfirmedByYou": "Confirmed by you",
+  "uiConfirmedExpressionConnection": "Confirmed expression connection",
+  "uiVersionsAndConfirmationSource": "Versions and confirmation source",
+  "uiContextMeaningVersionExpressionVersion": "Context: {p0}\nMeaning version: {p1}\nExpression version: {p2}\n{p3}",
+  "@uiContextMeaningVersionExpressionVersion": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      },
+      "p3": {
+        "type": "String"
+      }
+    }
+  },
+  "uiRestoreThisConnection": "Restore this connection",
+  "uiConnectionSavedLearningResourcesCurrentlyRequire": "Connection saved. Learning resources currently require an exact meaning match.",
+  "uiAddToLearning390": "Add to learning",
+  "uiAddAnExpression": "Add an expression",
+  "uiThisOlderCaptureLacksTheFull": "This older capture lacks the full meaning definition needed to confirm another expression.",
+  "uiCopyContextToEdit": "Copy context to edit",
+  "uiAddAMeaningToThisContext": "Add a meaning to this context",
+  "uiRemoveThisConnection": "Remove this connection",
+  "uiOtherConnectionsInThisContext": "Other connections in this context",
+  "uiMeaning": "Meaning",
+  "uiMeaning398": "Meaning · {p0}",
+  "@uiMeaning398": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiExpression": "Expression",
+  "uiThisRequestBelongsToAnotherLibrary": "This request belongs to another library and was not imported.",
+  "uiConfirmContextExpressionAndMeaning": "Confirm context, expression, and meaning?",
+  "uiSaveToYourInbox": "Save to your inbox?",
+  "uiExpression403": "Expression: {p0}",
+  "@uiExpression403": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMeaning404": "Meaning: {p0}",
+  "@uiMeaning404": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiUnnamedSource": "Unnamed source",
+  "uiSaveThisMeaningNowYouCan": "Save this meaning now. You can add it to learning separately.",
+  "uiKeepThisInYourInboxTo": "Keep this in your inbox to choose an expression and clarify later.",
+  "uiViewFullRequest": "View full request",
+  "uiSaveForLater": "Save for later",
+  "uiMeaningSaved410": "Meaning saved.",
+  "uiSavedContinueClarifyingInYourInbox": "Saved. Continue clarifying in your inbox.",
+  "uiImportFailedCheckTheCaptureRequest": "Import failed. Check the capture request format.",
+  "uiReceiveCapturesFromYourBrowserOr": "Receive captures from your browser or local agents.",
+  "uiConnectBrowserAndAgents": "Connect browser and agents",
+  "uiLibraryId": "Library ID",
+  "uiLibraryLocation": "Library location",
+  "uiCopyLibraryLocation": "Copy library location",
+  "uiDesktopConnectionDetails": "Desktop connection details",
+  "uiOnFirstConnectionConfirmTheLibrary": "On first connection, confirm the library name and ID in the extension. Switching libraries does not move pending captures from the old connection.",
+  "uiYouCanAlsoImportACapture": "You can also import a capture request file. Review its contents before saving.",
+  "uiImportCaptureRequest": "Import capture request",
+  "uiMySensaLibrary": "My Sensa library",
+  "uiEnterTheCharacterChromeExtensionId": "Enter the 32-character Chrome extension ID, or turn off browser connection.",
+  "uiCouldNotCreateTheConnectionCheck": "Could not create the connection. Check the selected location.",
+  "uiConnectionCreated": "Connection created",
+  "uiCapturesWillBeSavedToThis": "{p0} · Captures will be saved to this library.",
+  "@uiCapturesWillBeSavedToThis": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiOpenTheSensaExtensionSelectThe": "Open the Sensa extension, select the native destination, and confirm the library name.",
+  "uiLocalAgentTool": "Local agent tool",
+  "uiCopyToolLocation": "Copy tool location",
+  "uiTheToolReadsItsConnectionConfiguration": "The tool reads its connection configuration from the same folder. Agents send capture requests through standard input; confirming a meaning requires your authorization.",
+  "uiDone": "Done",
+  "uiChooseHowToSendCapturesTo": "Choose how to send captures to this library.",
+  "uiAlsoConnectChrome": "Also connect Chrome",
+  "uiTurnOffToCreateOnlyAn": "Turn off to create only an agent connection.",
+  "uiLibraryDisplayName": "Library display name",
+  "uiChooseToolLocation": "Choose tool location",
+  "uiSensaChromeExtensionId": "Sensa Chrome extension ID",
+  "uiCopyTheExtensionIdFromChrome": "Copy the extension ID from Chrome extension details.",
+  "uiChooseTheNativemessaginghostsFolderInThis": "Choose the NativeMessagingHosts folder in this browser profile, or create it in the system dialog. Existing connections will not be overwritten.",
+  "uiChooseBrowserConnectionFolder": "Choose browser connection folder",
+  "uiCreatingConnection": "Creating connection…",
+  "uiCreateConnection": "Create connection",
+  "uiCouldNotReadPracticeHistoryRetry": "Could not read practice history. Retry.",
+  "uiNoExpressionsToPracticeInThis": "No expressions to practice in this scope.",
+  "uiPlayerUnavailableRetry": "Player unavailable. Retry.",
+  "uiPracticeActionFailedReloadAndRetry": "Practice action failed. Reload and retry.",
+  "uiUnderstandThisExpression": "Understand this expression",
+  "uiYourContextAndExpressionWillBe": "Your context and expression will be sent to your selected teacher service.",
+  "uiModelServiceSettings": "Model service settings",
+  "uiExplainingYouCanLeaveThisPage": "Explaining… You can leave this page.",
+  "uiThePreviousRequestWasInterruptedRetrying": "The previous request was interrupted. Retrying may use the model service again.",
+  "uiThisSuggestionExpiredRequestANew": "This suggestion expired. Request a new explanation.",
+  "uiThisServiceRequiresValidAccessCheck": "This service requires valid access. Check its configuration.",
+  "uiExplanationTimedOutYourInputIs": "Explanation timed out. Your input is kept; retry later.",
+  "uiTheResultFailedValidationAndWas": "The result failed validation and was not saved as a meaning.",
+  "uiCouldNotGetAnExplanationYour": "Could not get an explanation. Your input is kept; check your connection and retry.",
+  "uiAddALittleMoreContextOr": "Add a little more context or an optional focus note to clarify the meaning.",
+  "uiTypicalScene": "Typical scene: {p0}",
+  "@uiTypicalScene": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiIncludes": "Includes: {p0}",
+  "@uiIncludes": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiExcludes": "Excludes: {p0}",
+  "@uiExcludes": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiExplanationSource": "Explanation source: {p0} / {p1}",
+  "@uiExplanationSource": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMeaningConfirmedAndSaved": "Meaning confirmed and saved.",
+  "uiConfirmAndSaveMeaning": "Confirm and save meaning",
+  "uiYouCanPrepareLearningMaterialAfter": "You can prepare learning material after saving.",
+  "uiFocusNoteOptional": "Focus note (optional)",
+  "uiExplainWithThisFocus": "Explain with this focus",
+  "uiRequestExplanation": "Request explanation",
+  "uiRequestAnotherExplanation": "Request another explanation",
+  "uiRetrySavingLocally": "Retry saving locally",
+  "uiReloadLocalState": "Reload local state",
+  "uiAudioFinished": "Audio finished",
+  "uiAudioUnavailableContinueWithTextOr": "Audio unavailable. Continue with text or retry playback.",
+  "uiAudioSavedForOfflinePlayback": "Audio saved for offline playback",
+  "uiAudioUnavailableConnectToYourService": "Audio unavailable. Connect to your service and retry, or continue with text.",
+  "uiNoAudioYetYouCanContinue": "No audio yet. You can continue with text.",
+  "uiDownloadingAudio": "Downloading audio…",
+  "uiPlaying477": "Playing…",
+  "uiRetryAudioDownload": "Retry audio download",
+  "uiPlayPronunciation": "Play pronunciation",
+  "uiCurrentNewLearning": "Current new learning",
+  "uiContinueStartedContentOnly": "Continue started content only",
+  "uiChooseLearningSources": "Choose learning sources",
+  "uiAdditionalLearning": "Additional learning",
+  "uiApplySources": "Apply sources",
+  "uiAdjustNewLearningRange": "Adjust new learning range",
+  "uiThisChangesFutureNewLearningStarted": "This changes future new learning. Started content continues under its current book status.",
+  "uiWholeBook": "Whole book",
+  "uiByPosition": "By position",
+  "uiByChapter": "By chapter",
+  "uiSpecificMeanings": "Specific meanings",
+  "uiStartPosition": "Start position",
+  "uiEndPosition": "End position",
+  "uiThisVersionHasNoChapters": "This version has no chapters.",
+  "uiChooseAValidNonemptyRange": "Choose a valid, nonempty range.",
+  "uiSaveRange": "Save range",
+  "uiBooksAndAdditionalLearningShareYour": "Books and additional learning share your daily new limit.",
+  "uiPauseLearningToMakeChanges": "Pause learning to make changes",
+  "uiImportAPackageOrBook": "Import a package or book",
+  "uiUseAllSources": "Use all sources",
+  "uiCurrentScopeItemsIncludingThoseBeing": "Current scope: {p0} items, including those being prepared",
+  "@uiCurrentScopeItemsIncludingThoseBeing": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSearchBooks": "Search books",
+  "uiNoMatchingBooksImportALearning": "No matching books. Import a learning package to get started.",
+  "uiVersion": "{p0} · Version {p1}",
+  "@uiVersion": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiMeanings": "{p0, plural, =1{1 meaning} other{{p0} meanings}}",
+  "@uiMeanings": {
+    "placeholders": {
+      "p0": {
+        "type": "int"
+      }
+    }
+  },
+  "uiBrowseAndSearchContent": "Browse and search content",
+  "uiUseForNewLearning": "Use for new learning",
+  "uiSelectedBooks": "Selected books",
+  "uiMeaningsAddedIndividuallyAppearHere": "Meanings added individually appear here.",
+  "uiIncludedInLearning": "Included in learning",
+  "uiRemovedFromLearningHistoryKept": "Removed from learning; history kept",
+  "uiMoveUp": "Move up",
+  "uiRemoveFromLearning": "Remove from learning",
+  "uiResumeLearning513": "Resume learning",
+  "uiPausedSessionsKeepTheirScopeA": "Paused sessions keep their scope. A new session replaces the paused session of the same mode and uses your current sources.",
+  "uiStartWithCurrentSources": "Start with current sources",
+  "uiItemsFound": "{p0, plural, =1{1 item found} other{{p0} items found}}",
+  "@uiItemsFound": {
+    "placeholders": {
+      "p0": {
+        "type": "int"
+      }
+    }
+  },
+  "uiInitialLearningCompleted": "Initial learning completed",
+  "uiInitialLearningNotCompleted": "Initial learning not completed",
+  "uiShowMore": "Show more",
+  "uiRecallHint": "Recall hint",
+  "uiPronunciation": "Pronunciation",
+  "uiLanguageStructure": "Language structure",
+  "uiUsageExamples": "Usage examples",
+  "uiRelatedScene": "Related scene",
+  "uiMyModels": "My models",
+  "uiCredentialsAreKeptInSecureStorage": "Credentials are kept in secure storage. Changing a service address or type requires new credentials.",
+  "uiOwnKeyOpenaiCompatibleApi": "Own key · OpenAI-compatible API",
+  "uiSensaModelService": "Sensa model service",
+  "uiName": "Name",
+  "uiSensaServiceUrl": "Sensa service URL",
+  "uiApiBaseUrlEGHttps": "API base URL (e.g. https://api.deepseek.com)",
+  "uiModelNoteActualModelIsSet": "Model note (actual model is set by the service)",
+  "uiModelId": "Model ID",
+  "uiSensaAccessToken": "Sensa access token",
+  "uiApiKeyLeaveBlankToKeep": "API key (leave blank to keep current key)",
+  "uiSupportsImageInput": "Supports image input",
+  "uiSaveModelService": "Save model service",
+  "uiImagesSupported": "Images supported",
+  "uiText": "Text",
+  "uiManageModelServices": "Manage model services",
+  "uiDeleteSavedCredentials": "Delete saved credentials",
+  "uiDeleteService": "Delete service",
+  "uiReloadCredentials": "Reload credentials",
+  "uiClarificationAndExplanation": "Clarification and explanation",
+  "uiLearningMaterialGeneration": "Learning material generation",
+  "uiIndependentReview": "Independent review",
+  "uiSensaOnlineResources": "Sensa online resources",
+  "uiNotConfigured": "Not configured",
+  "uiChooseAServiceForEachPurpose": "Choose a service for each purpose. No other service is used automatically if your choice is unavailable.",
+  "uiAddModelService": "Add model service",
+  "uiNoConversationsYet": "No conversations yet.",
+  "uiConversationWithYourTeacher": "Conversation with your teacher",
+  "uiLearningResourcePreparation": "Learning resource preparation",
+  "uiWaitingForYourReply": "Waiting for your reply",
+  "uiSuggestionReadyForConfirmation": "Suggestion ready for confirmation",
+  "uiSavedToYourSemanticWorld": "Saved to your semantic world",
+  "uiWaitingForIndependentReview": "Waiting for independent review",
+  "uiReviewPassedReadyToSave": "Review passed; ready to save",
+  "uiLearningMaterialReady": "Learning material ready",
+  "uiProcessingResumeIfInterrupted": "Processing; resume if interrupted",
+  "uiNotCompletedConversationKept": "Not completed; conversation kept",
+  "uiPausedConversationKept": "Paused; conversation kept",
+  "uiReadyToStartOrContinue": "Ready to start or continue",
+  "uiChooseAModelServiceAndSave": "Choose a model service and save valid credentials first.",
+  "uiAddAReplyOrConfirmThe": "Add a reply or confirm the suggestion.",
+  "uiPrepareLearningResources": "Prepare learning resources",
+  "uiTellYourTeacherWhatYouWant": "Tell your teacher what you want to understand or express.",
+  "uiPrepareAndReviewMaterialForThe": "Prepare and review material for the confirmed meaning and learning mode.",
+  "uiNoModelServiceSelected": "No model service selected",
+  "uiCurrentService": "Current service: {p0}",
+  "@uiCurrentService": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiReviewService": "Review service: {p0}",
+  "@uiReviewService": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiNotConfigured572": "Not configured",
+  "uiSendingSharesThisCaptureAndConversation": "Sending shares this capture and conversation with the selected service.",
+  "uiIncludeImagesFromTheCapture": "Include images from the capture",
+  "uiTurnOffToDiscussTextOnly": "Turn off to discuss text only. Images remain in your library.",
+  "uiWorkingDraft": "Working draft: {p0}",
+  "@uiWorkingDraft": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiYou": "You",
+  "uiTeacher": "Teacher",
+  "uiTeacher579": "Teacher: {p0}",
+  "@uiTeacher579": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiReview580": "Review: {p0}",
+  "@uiReview580": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiThatIsWhatIMeanSave": "That is what I mean — save",
+  "uiSavedYouCanAddThisTo582": "Saved. You can add this to learning when ready.",
+  "uiReplyOrCorrectTheSuggestion": "Reply or correct the suggestion",
+  "uiPauseThisConversation": "Pause this conversation",
+  "uiSendCaptureAndStart": "Send capture and start",
+  "uiStartPreparation": "Start preparation",
+  "uiSendReply": "Send reply",
+  "uiResume588": "Resume",
+  "uiYourConversationIsSavedRestartingWill": "Your conversation is saved. Restarting will not send requests automatically.",
+  "uiBack": "Back",
+  "uiUseThisReference": "Use this reference?",
+  "uiUseThisForTheCurrentMeaning": "Use this for the current meaning of {p0}. Check its source, license, and relevance. This excerpt will be sent to your selected generation and review services.",
+  "@uiUseThisForTheCurrentMeaning": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiConfirmReference": "Confirm reference",
+  "uiChooseASensaJsonReferenceExcerpt": "Choose a Sensa JSON reference excerpt with source and digest information.",
+  "uiNoReferenceAttached": "No reference attached",
+  "uiReference596": "Reference: {p0} · {p1}",
+  "@uiReference596": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiSourceLicenseReview": "Source: {p0}\nLicense: {p1}\nReview: {p2}",
+  "@uiSourceLicenseReview": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "uiReplacingOrRemovingThisReferenceAffects": "Replacing or removing this reference affects future material. Existing learning keeps its current version.",
+  "uiImportReference": "Import reference",
+  "uiReplaceReference": "Replace reference",
+  "uiRemoveReference": "Remove reference",
+  "uiCouldNotReadModelSettingsConfigure": "Could not read model settings. Configure them again; saved conversations remain available.",
+  "uiCouldNotReadConversationsRetry": "Could not read conversations. Retry.",
+  "uiPausedHereReviewTheConversationBefore": "Paused here. Review the conversation before resuming.",
+  "uiSecureStorageIsUnavailableUnlockYour": "Secure storage is unavailable. Unlock your device and retry.",
+  "uiChooseAnImageCapableServiceOr": "Choose an image-capable service, or go back and choose text only.",
+  "uiCredentialsAreMissingOrExpiredEnter": "Credentials are missing or expired. Enter them again.",
+  "uiThisConversationReachedItsRequestLimit": "This conversation reached its request limit. Your conversation and suggestions are saved.",
+  "uiTheCaptureOrTaskChangedGo": "The capture or task changed. Go back to view its current state.",
+  "uiSelectTheServiceAuthorizedToReceive": "Select the service authorized to receive this context, or revoke permission and authorize the new service.",
+  "uiResourcePreparationDoesNotSupportThis": "Resource preparation does not support this learning mode yet.",
+  "uiImagesOrConversationExceedTheRequest": "Images or conversation exceed the request size limit. Reduce the content and retry.",
+  "uiEnterAValidServiceAddressName": "Enter a valid service address, name, and model.",
+  "uiThisAttemptDidNotFinishCheck": "This attempt did not finish. Check service settings and resume.",
+  "uiChooseLearningContent": "Choose learning content",
+  "uiClose": "Close",
+  "uiOpeningYourLibrary617": "Opening your library",
+  "uiHowManyNewConnectionsWouldYou": "How many new connections would you like to learn daily?",
+  "uiRecallAgainLater": "Recall again later",
+  "uiTakeSomeTimeThenTryRecalling": "Take some time, then try recalling again.",
+  "uiReadyAt": "Ready at {p0}:{p1}",
+  "@uiReadyAt": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiContinueWhenReady": "Continue when ready",
+  "uiRecallEarly623": "Recall early",
+  "uiLearnSomethingElse": "Learn something else",
+  "uiEndSession": "End session",
+  "uiInitialLearningComplete626": "Initial learning complete",
+  "uiReviewComplete": "Review complete",
+  "uiRelearningComplete": "Relearning complete",
+  "uiConnectionRestored": "Connection restored.",
+  "uiLearningProgressAndNextReviewSaved": "Learning progress and next review saved.",
+  "uiNextReview": "Next review: {p0}/{p1}/{p2}",
+  "@uiNextReview": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "uiReviewOtherContent": "Review other content",
+  "uiLearnAgain": "Learn again",
+  "uiRecallThisContext": "Recall this context",
+  "uiConnectThisExpression": "Connect this expression",
+  "uiTryExpressingItInYourMind": "Try expressing it in your mind before revealing the answer.",
+  "uiRevealExpression": "Reveal expression",
+  "uiAgain": "Again",
+  "uiHard": "Hard",
+  "uiGood": "Good",
+  "uiPauseLearning": "Pause learning",
+  "uiMyLocalLibrary": "My local library",
+  "uiNewPerDay": "{p0} new per day",
+  "@uiNewPerDay": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiReviewsRelearningCompletionsToRestore": "{p0} reviews · {p1} relearning completions · {p2} to restore",
+  "@uiReviewsRelearningCompletionsToRestore": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "uiDefaultMode": "Default mode: {p0}",
+  "@uiDefaultMode": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiDownloadedContent": "Downloaded content",
+  "uiItemsSaved": "{p0, plural, =1{1 item saved} other{{p0} items saved}}",
+  "@uiItemsSaved": {
+    "placeholders": {
+      "p0": {
+        "type": "int"
+      }
+    }
+  },
+  "uiChooseOtherContent": "Choose other content",
+  "uiLoadSyntheticAcceptanceMaterialToTest": "Load synthetic acceptance material to test local learning.",
+  "uiLoadAcceptanceMaterial": "Load acceptance material",
+  "uiLearningMode": "Learning mode: {p0}",
+  "@uiLearningMode": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiThisModeIsFixedForLearning": "This mode is fixed for learning already started.",
+  "uiChangeModeForThisItem": "Change mode for this item",
+  "uiPackageDefaultMode": "Package default mode",
+  "uiThisItemIsOutsideYourCurrent": "This item is outside your current learning sources. Progress is kept.",
+  "uiAdjustLearningSources": "Adjust learning sources",
+  "uiPreparingLearningMaterial": "Preparing learning material",
+  "uiRefreshPreparation": "Refresh preparation",
+  "uiThisItemNeedsAnotherRecallAttempt": "This item needs another recall attempt.",
+  "uiContinueRelearning": "Continue relearning",
+  "uiStartLearning": "Start learning",
+  "uiContinueLearning662": "Continue learning",
+  "uiReviewDate": "Review date: {p0}",
+  "@uiReviewDate": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiStartDueReview": "Start due review",
+  "uiPauseAndGoBack": "Pause and go back",
+  "uiCheckInWasNotSavedYou": "Check-in was not saved. You can keep learning.",
+  "uiRetryCheckIn": "Retry check-in",
+  "uiLearningContent": "Learning content",
+  "uiSavingLocally": "Saving locally…",
+  "uiLocalLearning": "Local learning",
+  "uiChooseThisLearningMode": "Choose this learning mode",
+  "uiSetPackageDefaultMode": "Set package default mode",
+  "uiSetDefaultLearningMode": "Set default learning mode",
+  "uiDefaultChangesApplyToLearningThat": "Default changes apply to learning that has not started yet.",
+  "uiAvailableOnThisDevice": "Available on this device",
+  "uiNotYetSupportedOnThisDevice": "Not yet supported on this device; selected items will await preparation",
+  "uiRestoreSystemDefault": "Restore system default",
+  "uiUseInheritedSetting": "Use inherited setting",
+  "uiNoLearningTargetsNeedPreparation": "No learning targets need preparation.",
+  "uiMaterialReady": "Material ready",
+  "uiPreparingOrAwaitingReview": "Preparing or awaiting review",
+  "uiPreparationBlocked": "Preparation blocked",
+  "uiPreparationCanceled": "Preparation canceled",
+  "uiAddedToLearningAwaitingMaterial": "Added to learning; awaiting material",
+  "uiPrepareLearningMaterial": "Prepare learning material",
+  "uiAuthorizedContext": "Authorized context: {p0}",
+  "@uiAuthorizedContext": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiRelationCoverage": "Relation: {p0} · Coverage: {p1}",
+  "@uiRelationCoverage": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "uiChooseALearningModeOnlyConfirmed": "Choose a learning mode. Only confirmed meaning, expression, and general scenes are sent unless you authorize your original context.",
+  "uiThisMeaningIsAlreadyInLearning": "This meaning is already in learning. Link to it and keep its current mode and progress.",
+  "uiLearningMode690": "Learning mode",
+  "uiTheCurrentOnlineServiceProvidesLightweight": "The current online service provides lightweight text material. Other modes need matching resources.",
+  "uiConfirmAndAddToLearning": "Confirm and add to learning",
+  "uiApplyNewLearningMode": "Apply new learning mode",
+  "uiPreparationAttemptsUsed": "{p0} / 3 preparation attempts used",
+  "@uiPreparationAttemptsUsed": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiTheRequestTimedOutYouCan": "The request timed out. You can retry.",
+  "uiGeneratingAndReviewingYouCanLeave": "Generating and reviewing… You can leave this page or cancel.",
+  "uiTheRequestMayHaveBeenInterrupted": "The request may have been interrupted. Wait for it to expire or cancel and retry.",
+  "uiTheServiceCannotProvideMaterialFor": "The service cannot provide material for this mode. Choose another mode or wait for matching resources.",
+  "uiTheCandidateFailedIndependentReviewAnd": "The candidate failed independent review and was not added to learning.",
+  "uiTheReviewServiceIsUnavailableMaterial": "The review service is unavailable. Material was not added to learning.",
+  "uiGenerationFailedYourTargetAndMeaning": "Generation failed. Your target and meaning are saved.",
+  "uiPreparationCanceledRequestsAlreadySentMay": "Preparation canceled. Requests already sent may still count toward your budget.",
+  "uiValidServiceAccessIsRequiredCheck": "Valid service access is required. Check your configuration.",
+  "uiPreparationDidNotFinishCheckThe": "Preparation did not finish. Check the service or connection and retry.",
+  "uiBackToLearning": "Back to learning",
+  "uiPrepareWithModelService": "Prepare with model service",
+  "uiCancelPreparation": "Cancel preparation",
+  "uiPreparationAttemptLimitReachedYourTarget": "Preparation attempt limit reached. Your target and attempt history are saved.",
+  "uiCheckLocalTask": "Check local task",
+  "uiEvokesThisMeaning": "Evokes this meaning",
+  "uiBroader711": "Broader",
+  "uiSame": "Same",
+  "uiOldResultsAreBlockedLocallyThe": "Old results are blocked locally. The service has not been notified; requests already sent cannot be recalled.",
+  "uiOldResultsAreBlockedLocallyCancellation": "Old results are blocked locally. Cancellation notification failed; the service may still process the request.",
+  "uiPermissionSavedPrepareNewLearningMaterial": "Permission saved. Prepare new learning material when ready.",
+  "uiPermissionRevokedFutureMaterialNeedsTo": "Permission revoked. Future material needs to be prepared again; existing learning is kept.",
+  "uiTextIsReadyDownloadAudioLater": "Text is ready. Download audio later when connected.",
+  "uiNoReviewsAreDueStartNew": "No reviews are due. Start new learning or return later.",
+  "uiPackageImportedChooseContentToAdd": "Package imported. Choose content to add to learning.",
+  "uiLearningModeSavedStartedLearningKeeps": "Learning mode saved. Started learning keeps its current mode.",
+  "uiCheckedInToday721": "Checked in today.",
+  "uiCheckInWasNotSavedRetry": "Check-in was not saved. Retry later; learning can continue.",
+  "uiSelectTheAuthorizedServiceOrRevoke": "Select the authorized service, or revoke and renew context permission to change services.",
+  "uiPrepareNewMaterialForFutureLearning": "Prepare new material for future learning. Started learning can continue.",
+  "uiThisTargetUsesAnotherLearningMode": "This target uses another learning mode. Link to the existing target and change its settings explicitly.",
+  "uiAllThreePreparationAttemptsAreUsed": "All three preparation attempts are used. Your task and material are saved.",
+  "uiThisServiceCannotProvideMaterialFor": "This service cannot provide material for the selected mode. Choose another mode or wait for resources.",
+  "uiThePreviousRequestIsStillActive": "The previous request is still active. Wait, or cancel before retrying.",
+  "uiMaterialFailedValidationReloadAndRetry": "Material failed validation. Reload and retry.",
+  "uiThisRequestWasCanceledOrReplaced": "This request was canceled or replaced. View the current task.",
+  "uiUseANewReferenceVersionTo": "Use a new reference version to change its content.",
+  "uiReferenceSourceDigestOrTargetDoes": "Reference source, digest, or target does not match. Nothing was attached.",
+  "uiDailyPreparationBudgetReachedTryAgain": "Daily preparation budget reached. Try again later.",
+  "uiPreparationTimedOutReloadTheTask": "Preparation timed out. Reload the task and retry.",
+  "uiSetYourDailyNewQuantityOn": "Set your daily new quantity on Home before adding to learning.",
+  "uiSuggestionExpiredReloadAndRequestAn": "Suggestion expired. Reload and request an explanation again.",
+  "uiThisExplanationWasReplacedViewThe": "This explanation was replaced. View the latest suggestion.",
+  "uiAnExplanationIsAlreadyPendingContinue": "An explanation is already pending. Continue from your inbox.",
+  "uiExplanationFailedValidationReloadAndRequest": "Explanation failed validation. Reload and request it again.",
+  "uiWaitForTheExplanationBeforeConfirming": "Wait for the explanation before confirming the meaning.",
+  "uiThisContextAndExpressionAreAlready": "This context and expression are already confirmed. View your saved content.",
+  "uiChooseTheExactExpressionFromThe": "Choose the exact expression from the original context.",
+  "uiEnterValidEnglishContextAndCheck": "Enter valid English context and check its length.",
+  "uiCheckTheSourceLinkOrVideo": "Check the source link or video position before saving.",
+  "uiTheMeaningBindingDoesNotMatch": "The meaning binding does not match the expression. Choose again.",
+  "uiRestoreThisContentFromRemovedFirst": "Restore this content from Removed first.",
+  "uiThisContentChangedReloadToContinue": "This content changed. Reload to continue.",
+  "uiTheCurrentLimitIsInboxItems": "The current limit is 500 inbox items, 500 meanings, and 500 explanations.",
+  "uiFinishOrPauseTheCurrentStep": "Finish or pause the current step first.",
+  "uiThisLearningIsPausedOrEnded": "This learning is paused or ended. Continue from Home.",
+  "uiThisStepIsAlreadySettledAnd": "This step is already settled and cannot be undone.",
+  "uiLearningHistoryFailedValidationPreserveYour": "Learning history failed validation. Preserve your library and restore a valid backup.",
+  "uiPackageTasksOrResourcesFailedValidation": "Package tasks or resources failed validation. Existing content is kept.",
+  "uiPauseTheCurrentSessionBeforeChanging": "Pause the current session before changing sources.",
+  "uiThisItemIsPausedOrOutside": "This item is paused or outside your scope. Adjust learning sources.",
+  "uiDownloadOrImportTheMaterialReferenced": "Download or import the material referenced by this book first.",
+  "uiThisBookVersionConflictsWithThe": "This book version conflicts with the saved version. The saved book is kept.",
+  "uiCheckTheBookFilePositionsOr": "Check the book file, positions, or selected content.",
+  "uiPackageMediaFailedValidationNothingWas": "Package media failed validation. Nothing was imported.",
+  "uiResumeOrEndTheCurrentHigh": "Resume or end the current high-assurance session first.",
+  "uiThisLearningModeIsFixedDefault": "This learning mode is fixed. Default changes do not affect started learning.",
+  "uiThisModeIsNotReadyCheck": "This mode is not ready. Check the reason or change modes before starting.",
+  "uiThisLearningModeOrVersionIs": "This learning mode or version is not supported yet.",
+  "uiLearningModeValidationFailedYourProgress": "Learning mode validation failed. Your progress is kept.",
+  "uiRelearningIsNotDueYetReturn": "Relearning is not due yet. Return later or choose to recall early.",
+  "uiThisItemIsNotDueFor": "This item is not due for review yet.",
+  "uiReviewStateChangedReloadToContinue": "Review state changed. Reload to continue.",
+  "uiDailyNewLimitReachedYouCan": "Daily new limit reached. You can continue started learning.",
+  "uiPackageTooLargeTextPackagesAllow": "Package too large. Text packages allow 2 MB; media packages allow 20 MB. Split the package and retry.",
+  "uiThisPackageVersionProtocolOrLanguage": "This package version, protocol, or language is not supported yet.",
+  "uiPackageContentConflictsWithSavedVersions": "Package content conflicts with saved versions. Existing content was not overwritten.",
+  "uiPackageValidationFailedNothingWasImported": "Package validation failed. Nothing was imported.",
+  "uiYourDeviceClockIsEarlierThan": "Your device clock is earlier than the last save. Correct it and retry.",
+  "uiLearningStateChangedReloadToContinue": "Learning state changed. Reload to continue.",
+  "uiMaterialValidationFailedYourCurrentLearning": "Material validation failed. Your current learning is kept.",
+  "uiUpdateSensaToOpenThisLibrary": "Update Sensa to open this library.",
+  "uiTheActionDidNotFinishRetry": "The action did not finish. Retry or reload; your content is kept.",
+  "uiCouldNotOpenYourLibraryCheck": "Could not open your library. Check free space and file permissions, then retry.",
+  "uiReopen": "Reopen",
+  "uiEmailVerifiedWaitingForServiceAccess": "Email verified; waiting for service access",
+  "uiCredentialsSavedSecurely": "Credentials saved securely",
+  "uiCredentialsExpiredUpdateThem": "Credentials expired; update them",
+  "uiSecureStorageUnavailable": "Secure storage unavailable",
+  "uiServiceChangedEnterCredentialsAgain": "Service changed; enter credentials again",
+  "uiCredentialsRequired": "Credentials required",
+  "uiImage": "Image",
+  "uiImageExceedsMb": "Image exceeds 4 MB",
+  "uiSensaLearningPackage": "Sensa learning package",
+  "uiNotSet": "Not set",
+  "uiItemOverride": "Item override",
+  "uiPackageDefault": "Package default",
+  "uiMyDefault": "My default",
+  "uiSystemDefault": "System default",
+  "interfaceLanguage": "Interface language",
+  "languageSaveFailed": "Could not save your language preference. Retry.",
+  "simplifiedChinese": "简体中文",
+  "english": "English",
+  "learningLightweight": "Lightweight",
+  "learningHighAssurance": "High assurance",
+  "learningFourStage": "Four-stage (extensibility test)",
+  "chooseFolder": "Choose folder",
+  "chooseToolFolder": "Choose a location for the connection tool. A dedicated folder will be created.",
+  "chooseBrowserFolder": "Choose this browser’s NativeMessagingHosts folder. Existing connections will not be overwritten.",
+  "installerSelectFolder": "Choose a folder and enter a library name.",
+  "installerSelectBrowser": "Choose whether to connect the browser.",
+  "installerRegistrationFolder": "Choose the browser’s NativeMessagingHosts folder.",
+  "installerLibraryUnavailable": "Library unavailable. Go back and reload.",
+  "installerHelperMissing": "The connection tool is missing. Update Sensa.",
+  "installerAlreadyConnected": "This browser already has a connection. It was not overwritten.",
+  "installerWriteFailed": "Could not write the connection. Check folder permissions and free space.",
+  "nextReviewDate": "Next review: {date}",
+  "@nextReviewDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "learningNotReady": "This mode is not ready. Prepare matching material or choose another mode."
+}

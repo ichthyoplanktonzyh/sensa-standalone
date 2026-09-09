@@ -1,3 +1,4 @@
+import '../l10n/interface_locale.dart';
 import 'online_service_dialog.dart';
 import 'agent_screen.dart';
 import 'dart:convert';
@@ -100,7 +101,7 @@ class _SemanticResolutionScreenState extends State<SemanticResolutionScreen> {
       final proposal = current?['proposal'] as Map<String, dynamic>?;
       final spec = proposal?['semanticSpec'] as Map<String, dynamic>?;
       return Scaffold(
-        appBar: AppBar(title: const Text('理解这段表达')),
+        appBar: AppBar(title: Text(context.l10n.uiUnderstandThisExpression)),
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
@@ -112,33 +113,49 @@ class _SemanticResolutionScreenState extends State<SemanticResolutionScreen> {
                   SelectableText(widget.capture['sentence'] as String),
                   const SizedBox(height: 12),
                   Text(
-                    '表达：${widget.capture['expression']['text']}',
+                    context.l10n.uiExpression403(
+                      (widget.capture['expression']['text']).toString(),
+                    ),
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  Text('来源：${widget.capture['source']['title']}'),
+                  Text(
+                    context.l10n.uiSource(
+                      (widget.capture['source']['title']).toString(),
+                    ),
+                  ),
                   const SizedBox(height: 16),
-                  const Text('与老师讨论时会发送这段上下文和目标表达。使用统一模型设置，候选与确认记录保存在本机。'),
+                  Text(context.l10n.uiYourContextAndExpressionWillBe),
                   TextButton(
                     onPressed: model.semanticBusy ? null : configure,
-                    child: Text('模型服务设置'),
+                    child: Text(context.l10n.uiModelServiceSettings),
                   ),
                   if (model.semanticBusy) ...[
                     const LinearProgressIndicator(),
-                    const Text('正在解释，可以返回；任务已保存在本机。'),
+                    Text(context.l10n.uiExplainingYouCanLeaveThisPage),
                   ] else if (current?['status'] == 'running')
-                    const Text('上次请求已中断。可明确重新请求，可能再次使用模型服务。'),
-                  if (expired) const Text('候选已过期，请重新解释后再确认。'),
+                    Text(
+                      context.l10n.uiThePreviousRequestWasInterruptedRetrying,
+                    ),
+                  if (expired)
+                    Text(context.l10n.uiThisSuggestionExpiredRequestANew),
                   if (current?['status'] == 'failed')
                     Text(switch (current?['reason']) {
-                      'access_required' => '在线服务需要有效的访问权限，请检查服务配置。',
-                      'lookup_timeout' => '解释超时。输入已保留，可以稍后重新请求。',
-                      'invalid_response' => '服务结果未通过校验，未保存为词义。',
-                      _ => '暂时无法取得解释。输入已保留，可以恢复网络后重试。',
+                      'access_required' =>
+                        context.l10n.uiThisServiceRequiresValidAccessCheck,
+                      'lookup_timeout' =>
+                        context.l10n.uiExplanationTimedOutYourInputIs,
+                      'invalid_response' =>
+                        context.l10n.uiTheResultFailedValidationAndWas,
+                      _ => context.l10n.uiCouldNotGetAnExplanationYour,
                     }),
                   if (current?['status'] == 'unresolved')
-                    const Text('目前的上下文还不足以确定词义。可以补充关注点后重新解释。'),
+                    Text(context.l10n.uiAddALittleMoreContextOr),
                   if (current?['focus'] != null)
-                    Text('关注点：${current!['focus']['text']}'),
+                    Text(
+                      context.l10n.uiFocus(
+                        (current!['focus']['text']).toString(),
+                      ),
+                    ),
                   if (proposal != null) ...[
                     const SizedBox(height: 16),
                     Text(proposal['explanation'] as String),
@@ -148,34 +165,41 @@ class _SemanticResolutionScreenState extends State<SemanticResolutionScreen> {
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     for (final scene in spec['prototypeScenes'] as List)
-                      Text('典型场景：${scene['summary']}'),
+                      Text(
+                        context.l10n.uiTypicalScene(
+                          (scene['summary']).toString(),
+                        ),
+                      ),
                     for (final value in spec['includedCases'] as List)
-                      Text('涵盖：$value'),
+                      Text(context.l10n.uiIncludes((value).toString())),
                     for (final value in spec['excludedCases'] as List)
-                      Text('不涵盖：$value'),
+                      Text(context.l10n.uiExcludes((value).toString())),
                     for (final value in spec['neighborContrasts'] as List)
                       Text('${value['label']}：${value['distinction']}'),
                     Text(
-                      '解析来源：${current!['provenance']['provider']} / ${current['provenance']['model']}',
+                      context.l10n.uiExplanationSource(
+                        (current!['provenance']['provider']).toString(),
+                        (current['provenance']['model']).toString(),
+                      ),
                     ),
                   ],
                   if (accepted)
-                    const Text('这条词义已确认保存在本机。')
+                    Text(context.l10n.uiMeaningConfirmedAndSaved)
                   else ...[
                     if (ready)
                       FilledButton(
                         onPressed: available ? accept : null,
-                        child: const Text('确认词义并保存到本机'),
+                        child: Text(context.l10n.uiConfirmAndSaveMeaning),
                       ),
-                    const Text('确认只建立上下文、表达与词义的连接；学习材料需另行准备。'),
+                    Text(context.l10n.uiYouCanPrepareLearningMaterialAfter),
                     if (current != null)
                       TextField(
                         key: const ValueKey('semantic-focus'),
                         controller: focus,
                         maxLength: 2000,
                         maxLines: 3,
-                        decoration: const InputDecoration(
-                          labelText: '补充关注点（可选）',
+                        decoration: InputDecoration(
+                          labelText: context.l10n.uiFocusNoteOptional,
                         ),
                         onChanged: (_) => setState(() {}),
                       ),
@@ -184,11 +208,15 @@ class _SemanticResolutionScreenState extends State<SemanticResolutionScreen> {
                         onPressed: available
                             ? () => request(clarify: true)
                             : null,
-                        child: const Text('按关注点重新解释'),
+                        child: Text(context.l10n.uiExplainWithThisFocus),
                       ),
                     OutlinedButton(
                       onPressed: available ? request : null,
-                      child: Text(current == null ? '请求解释' : '重新请求解释'),
+                      child: Text(
+                        current == null
+                            ? context.l10n.uiRequestExplanation
+                            : context.l10n.uiRequestAnotherExplanation,
+                      ),
                     ),
                   ],
                   if (model.error != null) ...[
@@ -200,11 +228,11 @@ class _SemanticResolutionScreenState extends State<SemanticResolutionScreen> {
                     ),
                     TextButton(
                       onPressed: model.busy ? null : model.retry,
-                      child: const Text('重试本地保存'),
+                      child: Text(context.l10n.uiRetrySavingLocally),
                     ),
                     TextButton(
                       onPressed: model.busy ? null : model.load,
-                      child: const Text('重新读取本地状态'),
+                      child: Text(context.l10n.uiReloadLocalState),
                     ),
                   ],
                 ],
