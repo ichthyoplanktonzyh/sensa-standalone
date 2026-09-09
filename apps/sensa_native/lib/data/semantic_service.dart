@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'agent_provider.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
@@ -8,11 +9,25 @@ class SemanticServiceException implements Exception {
   final String code;
 }
 
-/// Credentials remain in memory. No provider key belongs in a local library.
+/// Legacy wire adapters use the same protected Sensa service connection.
 class SemanticService {
-  Uri? _origin;
-  String _token = '';
-  String get origin => _origin?.toString() ?? '';
+  SemanticService({this.providers});
+  final AgentProviders Function()? providers;
+  Uri? _legacyOrigin;
+  String _legacyToken = '';
+  Map<String, dynamic>? get connection {
+    final p = providers?.call().forPurpose('service');
+    return p?['kind'] == 'sensa' ? p : null;
+  }
+
+  bool get managed => providers?.call().profiles.isNotEmpty ?? false;
+  Uri? get _origin => managed
+      ? (connection == null ? null : Uri.parse(connection!['endpoint']))
+      : _legacyOrigin;
+  String get _token => managed
+      ? (connection == null ? '' : providers!().credential(connection!['id']))
+      : _legacyToken;
+  String get origin => _origin?.origin ?? '';
   bool get configured => _origin != null && _token.isNotEmpty;
   void configure(String origin, String token) {
     final uri = Uri.tryParse(origin.trim());
@@ -29,13 +44,13 @@ class SemanticService {
         token.contains(RegExp(r'[\r\n]'))) {
       throw const SemanticServiceException('invalid_service_configuration');
     }
-    _origin = uri;
-    _token = token.trim();
+    _legacyOrigin = uri;
+    _legacyToken = token.trim();
   }
 
   void clear() {
-    _origin = null;
-    _token = '';
+    _legacyOrigin = null;
+    _legacyToken = '';
   }
 
   Future<Map<String, dynamic>> resolve(Map<String, dynamic> request) =>
@@ -58,8 +73,13 @@ class SemanticService {
 
   Future<Uint8List> pronunciation(Map<String, dynamic> reference) async {
     if (!configured) throw const SemanticServiceException('access_required');
-    final uri = _origin!
-        .resolve('/sensa/native/content/pronunciation/${reference['digest']}')
+    final endpoint = _origin!;
+    final used = connection;
+    final uri = endpoint
+        .replace(
+          path:
+              '${endpoint.path.replaceFirst(RegExp(r'/+$'), '')}/sensa/native/content/pronunciation/${reference['digest']}',
+        )
         .replace(
           queryParameters: {
             'expressionDigest': reference['sourceTextDigest'] as String,
@@ -74,6 +94,10 @@ class SemanticService {
             ..followRedirects = false
             ..headers['Authorization'] = 'Bearer $token',
         );
+        if ((response.statusCode == 401 || response.statusCode == 403) &&
+            used != null) {
+          await providers!().invalidate(used, token);
+        }
         if (response.statusCode != 200 ||
             response.headers['content-type']?.split(';').first !=
                 'audio/mpeg') {
@@ -107,18 +131,29 @@ class SemanticService {
     int maxBytes = 96 * 1024,
   }) async {
     if (!configured) throw const SemanticServiceException('access_required');
+    final used = connection;
+    final token = _token;
+    final endpoint = _origin!;
     final client = http.Client();
     try {
       return await (() async {
-        final message = http.Request('POST', _origin!.resolve(path))
-          ..followRedirects = false
-          ..headers.addAll({
-            'Authorization': 'Bearer $_token',
-            'Content-Type': 'application/json',
-          })
-          ..body = jsonEncode(request);
+        final message =
+            http.Request(
+                'POST',
+                endpoint.replace(
+                  path:
+                      '${endpoint.path.replaceFirst(RegExp(r'/+$'), '')}$path',
+                ),
+              )
+              ..followRedirects = false
+              ..headers.addAll({
+                'Authorization': 'Bearer $token',
+                'Content-Type': 'application/json',
+              })
+              ..body = jsonEncode(request);
         final response = await client.send(message);
         if (response.statusCode == 401 || response.statusCode == 403) {
+          if (used != null) await providers!().invalidate(used, token);
           throw const SemanticServiceException('access_required');
         }
         if (response.statusCode != 200) {

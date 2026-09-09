@@ -88,3 +88,5 @@ Android 加 `--no-uninstall`。成功后同名追加 `--dart-define=SENSA_NATIVE
 
 下一步资源组仍需收口这些已有 Web 用例与原生入口的映射，再推进采集交接和正式原生 IA/视觉。
 浏览器/Agent 端口、三端事实同步、Web 本地执行和 M3 均未因本组而完成。
+
+2026-09-09 后续更新：本记录中的“内存凭据”属于上一组交付边界；系统安全持久化、用途选择、统一入口与 Capture 接线已由 [Provider 组](native-provider-group-handoff.md) 接续。原生账户、发布治理和可选资源边界仍保留。

@@ -81,6 +81,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | Native content provisioning | [`native-provisioning-plan.md`](native-provisioning-plan.md) / [`native-provisioning-handoff.md`](native-provisioning-handoff.md) | 个人意义显式入学、按需文本任务、独立复核/本地冻结及现有 Profile 学习与原生恢复证据 |
 | Native semantic resolution | [`native-semantic-resolution-plan.md`](native-semantic-resolution-plan.md) / [`native-semantic-resolution-handoff.md`](native-semantic-resolution-handoff.md) | 在线解析/澄清、本地候选与新 Sense 接受、服务用量去重及原生恢复证据 |
 | Native Personal World | [`native-world-group-plan.md`](native-world-group-plan.md) / [`native-world-group-handoff.md`](native-world-group-handoff.md) | 图文草稿、本机语义连接、表达分支与关系投影；模型协作见 Native Agent 记录 |
+| Native Provider 与凭据 | [`native-provider-group-plan.md`](native-provider-group-plan.md) / [`native-provider-group-handoff.md`](native-provider-group-handoff.md) | 系统安全存储、用途独立选择、统一模型入口与 Capture 老师循环 |
 | Native Agent 协作 | [`native-agent-group-plan.md`](native-agent-group-plan.md) / [`native-agent-group-handoff.md`](native-agent-group-handoff.md) | 语言老师图文澄清、内容工具循环、独立审核与本机 Provider 接线 |
 | Native Runtime scope / practice | [`native-runtime-scope-plan.md`](native-runtime-scope-plan.md) / [`native-runtime-scope-handoff.md`](native-runtime-scope-handoff.md) | 独立 scope 准入、个人/课程范围、独立自由练习账本与原生播放器验收 |
 | Native migration checklist | [`native-migration-checklist.md`](native-migration-checklist.md) | 已有 TS 成果的保留/迁移范围、验收状态；首版登记，待逐项盘点 |

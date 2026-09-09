@@ -74,7 +74,7 @@ pub(super) fn apply(
         let sentence = &meaning["snapshot"]["sentence"];
         let context_version =
             semantic::hash(&json!({"anchorId":meaning["contextAnchorId"],"sentence":sentence}))?;
-        let grant = json!({"grantId":id(),"meaningId":meaning_id,"contextAnchorId":meaning["contextAnchorId"],"contextVersion":context_version,"sentence":sentence,"recipient":origin,"provider":"deepseek","purpose":"learning_content","policyVersion":"original-context-v1","grantedAtMs":now.timestamp_millis()});
+        let grant = json!({"grantId":id(),"meaningId":meaning_id,"contextAnchorId":meaning["contextAnchorId"],"contextVersion":context_version,"sentence":sentence,"recipient":origin,"provider":"configured_model_service","purpose":"learning_content","policyVersion":"original-context-v1","grantedAtMs":now.timestamp_millis()});
         db.execute(
             "INSERT INTO personal_anchor_grants VALUES(?1,?2,?3,?4)",
             params![

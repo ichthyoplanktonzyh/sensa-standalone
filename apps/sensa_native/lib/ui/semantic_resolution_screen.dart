@@ -1,4 +1,5 @@
 import 'online_service_dialog.dart';
+import 'agent_screen.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
@@ -53,13 +54,25 @@ class _SemanticResolutionScreenState extends State<SemanticResolutionScreen> {
   }
 
   Future<void> request({bool clarify = false}) async {
-    final previous = job;
-    await model.resolveSemantic(
-      widget.capture,
-      intakeId: widget.intakeId,
-      previousId: previous?['id'] as String?,
-      clarification: clarify ? focus.text.trim() : null,
+    await model.agents.load();
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => AgentScreen(
+          controller: model.agents,
+          initialMessage: clarify ? focus.text.trim() : null,
+          source: {
+            'kind': 'capture',
+            'snapshot': widget.capture,
+            'intake_id': widget.intakeId,
+            'previous_id': job?['id'],
+          },
+        ),
+      ),
     );
+    await model.load();
+    if (mounted && job?['status'] == 'accepted') Navigator.pop(context, true);
   }
 
   Future<void> accept() async {
@@ -104,12 +117,10 @@ class _SemanticResolutionScreenState extends State<SemanticResolutionScreen> {
                   ),
                   Text('来源：${widget.capture['source']['title']}'),
                   const SizedBox(height: 16),
-                  const Text('请求解释会将这段上下文、表达和你补充的关注点发送到在线模型服务。候选与确认记录保存在本机。'),
+                  const Text('与老师讨论时会发送这段上下文和目标表达。使用统一模型设置，候选与确认记录保存在本机。'),
                   TextButton(
                     onPressed: model.semanticBusy ? null : configure,
-                    child: Text(
-                      model.semanticService.configured ? '更改在线服务' : '配置在线服务',
-                    ),
+                    child: Text('模型服务设置'),
                   ),
                   if (model.semanticBusy) ...[
                     const LinearProgressIndicator(),
@@ -170,15 +181,13 @@ class _SemanticResolutionScreenState extends State<SemanticResolutionScreen> {
                       ),
                     if (current != null && focus.text.trim().isNotEmpty)
                       OutlinedButton(
-                        onPressed: available && model.semanticService.configured
+                        onPressed: available
                             ? () => request(clarify: true)
                             : null,
                         child: const Text('按关注点重新解释'),
                       ),
                     OutlinedButton(
-                      onPressed: available && model.semanticService.configured
-                          ? request
-                          : null,
+                      onPressed: available ? request : null,
                       child: Text(current == null ? '请求解释' : '重新请求解释'),
                     ),
                   ],

@@ -1,3 +1,4 @@
+import 'legacy_wire_fixture.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -82,12 +83,13 @@ void main() {
         await text('capture-expression', expression);
         await tap(find.text('在线解释这个表达'));
         if (configure) {
-          await tap(find.text('配置在线服务'));
-          await text('semantic-origin', 'http://127.0.0.1:4324');
-          await text('semantic-token', 'local-native-test');
-          await tap(find.text('使用此服务'));
+          model.semanticService.configure(
+            'http://127.0.0.1:4324',
+            'local-native-test',
+          );
         }
-        await tap(find.text('请求解释'));
+        await resolveLegacyFixture(tester, model);
+        await wait();
         await tap(find.text('确认词义并保存到本机'));
         await tap(find.text('加入学习'));
         await tap(find.text('确认加入学习'));
@@ -106,7 +108,7 @@ void main() {
         await tap(find.byTooltip('我的词义世界'));
         await tap(find.byTooltip('学习准备'));
         await tap(find.text('recoverable'));
-        expect(find.text('配置在线服务'), findsOneWidget);
+        expect(find.text('统一模型服务设置'), findsOneWidget);
         await tap(find.text('取消准备'));
         expect(task('recoverable')['status'], 'cancelled');
         expect(task('recoverable')['attemptCount'], 1);
@@ -118,7 +120,8 @@ void main() {
         await capture('tactful', configure: true);
         expect(task('tactful')['status'], 'pending');
         expect(model.snapshot!.catalog, isEmpty);
-        await tap(find.text('开始准备材料'));
+        await prepareLegacyFixture(tester, model);
+        await wait();
         expect(task('tactful')['status'], 'ready');
         expect(model.snapshot!.catalog, hasLength(1));
         expect(model.snapshot!.value['completionCount'], 0);
@@ -136,17 +139,19 @@ void main() {
         expect(model.snapshot!.value['handoffCount'], 1);
         await tap(find.byTooltip('我的词义世界'));
         await capture('rejected');
-        await tap(find.text('开始准备材料'));
+        await prepareLegacyFixture(tester, model);
+        await wait();
         expect(task('rejected')['reason'], 'material_rejected');
-        await tap(find.text('明确重试准备'));
-        await tap(find.text('明确重试准备'));
+        await prepareLegacyFixture(tester, model);
+        await wait();
+        await prepareLegacyFixture(tester, model);
+        await wait();
         expect(task('rejected')['attemptCount'], 3);
         expect(model.snapshot!.catalog, hasLength(1));
         await tap(find.byType(BackButton).first);
         await capture('delayed');
-        final start = find.text('开始准备材料');
-        await visible(start);
-        await tester.tap(start);
+        // Keep the delayed legacy request in flight while exercising local cancellation.
+        final generating = prepareLegacyFixture(tester, model);
         for (var i = 0; i < 100; i++) {
           await tester.pump(const Duration(milliseconds: 10));
           if (task('delayed')['status'] == 'generating') break;
@@ -158,6 +163,7 @@ void main() {
         await wait();
         expect(task('delayed')['status'], 'cancelled');
         expect(model.snapshot!.catalog, hasLength(1));
+        await generating;
         await tap(find.byType(BackButton).first);
         await capture('recoverable');
         final pending = task('recoverable');

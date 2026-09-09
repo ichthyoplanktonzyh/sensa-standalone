@@ -367,3 +367,42 @@ fn model_request_budget_survives_reopening_and_explicit_resumes() {
             .is_empty()
     );
 }
+#[test]
+fn captured_occurrence_teacher_preserves_intake_source_and_explicit_acceptance() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("capture.db");
+    let capture = json!({"sentence":"Please lend me your umbrella.","language":"en","expression":{"text":" lend ","start":6,"end":12},"source":{"url":"https://example.com/reading","title":"original source","capturedAt":"2026-09-09T00:00:00Z"}});
+    let s = apply(
+        &p,
+        json!({"kind":"personal","action":{"kind":"save_intake","snapshot":capture}}),
+    );
+    let intake = &s.personal["intakes"][0];
+    let cid = uid();
+    act(
+        &p,
+        json!({"kind":"create","id":cid,"source":{"kind":"capture","snapshot":capture,"intake_id":intake["id"]}}),
+    );
+    let mut bad = proposal();
+    bad["expression"]["surface"] = json!("borrow");
+    tool(&p, &cid, "propose_meaning", bad);
+    assert!(row(&p, &cid)["candidate"].is_null());
+    tool(&p, &cid, "propose_meaning", proposal());
+    assert!(
+        open_library(&p).unwrap().personal["meanings"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    accept(&p, &cid);
+    let s = open_library(&p).unwrap();
+    let m = &s.personal["meanings"][0];
+    assert_eq!(m["snapshot"], capture);
+    assert_eq!(
+        m["resolutionProvenance"]["generator"]["policyVersion"],
+        "language-teacher-v1"
+    );
+    assert!(m["focus"].is_null());
+    assert_eq!(s.personal["intakes"][0]["meaningId"], m["id"]);
+    assert!(!m["addedToLearning"].as_bool().unwrap());
+    assert!(s.run.is_none());
+}

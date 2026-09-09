@@ -22,8 +22,10 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
     String kind = old?['kind'] ?? 'compatible';
     bool vision = old?['vision'] ?? false;
     String? failure;
+    bool saving = false;
     await showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, set) => AlertDialog(
           title: const Text('模型服务'),
@@ -31,7 +33,9 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('连接配置保存在此设备；凭据只用于本次应用会话，重启需重新填写。材料只发送给你选择的服务。'),
+                const Text(
+                  '连接配置保存在本机，凭据保存在系统安全存储。更改服务地址或类型需重新填写凭据。材料只发送给你选择的服务。',
+                ),
                 DropdownButtonFormField<String>(
                   initialValue: kind,
                   items: const [
@@ -71,7 +75,9 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
                   autocorrect: false,
                   enableSuggestions: false,
                   decoration: InputDecoration(
-                    labelText: kind == 'sensa' ? 'Sensa 访问令牌' : '模型 API Key',
+                    labelText: kind == 'sensa'
+                        ? 'Sensa 访问令牌'
+                        : '模型 API Key（留空保留已有凭据）',
                   ),
                 ),
                 CheckboxListTile(
@@ -85,26 +91,35 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: saving ? null : () => Navigator.pop(ctx),
               child: const Text('取消'),
             ),
             FilledButton(
-              onPressed: () async {
-                try {
-                  await widget.controller.providers.save({
-                    'id': old?['id'] ?? const Uuid().v4(),
-                    'name': name.text.trim(),
-                    'endpoint': endpoint.text.trim(),
-                    'model': model.text.trim(),
-                    'kind': kind,
-                    'vision': vision,
-                  }, key.text);
-                  widget.controller.changed();
-                  if (ctx.mounted) Navigator.pop(ctx);
-                } catch (e) {
-                  set(() => failure = widget.controller.describe(e));
-                }
-              },
+              onPressed: saving
+                  ? null
+                  : () async {
+                      set(() => saving = true);
+                      try {
+                        await widget.controller.providers.save({
+                          'id': old?['id'] ?? const Uuid().v4(),
+                          'name': name.text.trim(),
+                          'endpoint': endpoint.text.trim(),
+                          'model': model.text.trim(),
+                          'kind': kind,
+                          'vision': vision,
+                        }, key.text);
+                        widget.controller.error = null;
+                        widget.controller.changed();
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          set(() {
+                            saving = false;
+                            failure = widget.controller.describe(e);
+                          });
+                        }
+                      }
+                    },
               child: const Text('保存模型服务'),
             ),
           ],
@@ -128,33 +143,90 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
           ListTile(
             title: Text(p['name']),
             subtitle: Text(
-              '${p['model']} · ${p['vision'] ? '可发送图片' : '文字'}${widget.controller.providers.credential(p['id']).isEmpty ? ' · 需填写凭据' : ''}',
-            ),
-            leading: IconButton(
-              tooltip: '选择此服务',
-              icon: Icon(
-                widget.controller.providers.selected == p['id']
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-              ),
-              onPressed: () async {
-                widget.controller.providers.selected = p['id'];
-                await widget.controller.providers.persist();
-                widget.controller.changed();
-                if (mounted) setState(() {});
-              },
+              '${p['model']} · ${p['vision'] ? '可发送图片' : '文字'} · ${widget.controller.providers.status(p['id'])}',
             ),
             onTap: () => edit(p),
-            trailing: IconButton(
-              tooltip: '删除此服务',
-              onPressed: () async {
-                await widget.controller.providers.remove(p['id']);
-                widget.controller.changed();
-                if (mounted) setState(() {});
+            trailing: PopupMenuButton<String>(
+              tooltip: '管理模型服务',
+              onSelected: (value) async {
+                try {
+                  if (value == 'forget') {
+                    await widget.controller.providers.forget(p['id']);
+                  } else {
+                    await widget.controller.providers.remove(p['id']);
+                  }
+                  widget.controller.error = null;
+                  widget.controller.changed();
+                  if (mounted) setState(() {});
+                } catch (e) {
+                  widget.controller.error = widget.controller.describe(e);
+                  widget.controller.changed();
+                  if (mounted) setState(() {});
+                }
               },
-              icon: const Icon(Icons.delete_outline),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'forget', child: Text('删除已保存凭据')),
+                PopupMenuItem(value: 'remove', child: Text('删除此服务')),
+              ],
             ),
           ),
+        if (widget.controller.error != null) Text(widget.controller.error!),
+        TextButton(
+          onPressed: () async {
+            await widget.controller.providers.unlock();
+            widget.controller.changed();
+            if (mounted) setState(() {});
+          },
+          child: const Text('重新读取安全凭据'),
+        ),
+        for (final role in const {
+          'teacher': '澄清与解释',
+          'content': '学习材料生成',
+          'review': '独立审核',
+          'service': 'Sensa 在线资源',
+        }.entries)
+          DropdownButtonFormField<String>(
+            key: ValueKey(
+              'provider-role-${role.key}-${(widget.controller.providers.forPurpose(role.key)?['id'])}',
+            ),
+            initialValue:
+                widget.controller.providers.profiles.any(
+                  (p) =>
+                      p['id'] ==
+                          (widget.controller.providers.forPurpose(
+                            role.key,
+                          )?['id']) &&
+                      (role.key != 'service' || p['kind'] == 'sensa'),
+                )
+                ? (widget.controller.providers.forPurpose(role.key)?['id'])
+                : '',
+            decoration: InputDecoration(labelText: role.value),
+            items: [
+              const DropdownMenuItem(value: '', child: Text('暂不配置')),
+              for (final p in widget.controller.providers.profiles)
+                if (role.key != 'service' || p['kind'] == 'sensa')
+                  DropdownMenuItem(
+                    value: p['id'] as String,
+                    child: Text(p['name']),
+                  ),
+            ],
+            onChanged: (id) async {
+              try {
+                await widget.controller.providers.assign(
+                  role.key,
+                  id == '' ? null : id,
+                );
+                widget.controller.changed();
+                if (mounted) setState(() {});
+              } catch (e) {
+                widget.controller.error = widget.controller.describe(e);
+                if (mounted) setState(() {});
+              }
+            },
+          ),
+        const Text(
+          '各用途可选择同一服务，也可分别选择。审核使用独立请求。未配置或失效时会停止，不会改用其他服务。Sensa 在线资源用于兼容解析、资源下载等已有服务。',
+        ),
         FilledButton(onPressed: () => edit(), child: const Text('添加模型服务')),
       ],
     ),
@@ -222,10 +294,12 @@ class AgentScreen extends StatefulWidget {
     required this.controller,
     this.id,
     this.source,
+    this.initialMessage,
   });
   final AgentController controller;
   final String? id;
   final Map<String, dynamic>? source;
+  final String? initialMessage;
   @override
   State<AgentScreen> createState() => _AgentScreenState();
 }
@@ -239,6 +313,7 @@ class _AgentScreenState extends State<AgentScreen> {
   void initState() {
     super.initState();
     id = widget.id;
+    input.text = widget.initialMessage ?? '';
     c.load();
   }
 
@@ -253,8 +328,10 @@ class _AgentScreenState extends State<AgentScreen> {
     setState(() => submitting = true);
     try {
       if (id == null) {
-        if (!c.providers.configured) {
-          c.error = '请先选择模型服务，并填写本次会话使用的凭据。';
+        if (!c.providers.ready(
+          widget.source!['kind'] == 'content' ? 'content' : 'teacher',
+        )) {
+          c.error = '请先选择模型服务并保存有效凭据。';
           c.changed();
           return;
         }
@@ -286,7 +363,9 @@ class _AgentScreenState extends State<AgentScreen> {
           ? null
           : c.sessions.where((s) => s['id'] == id).firstOrNull;
       final teacher =
-          s?['kind'] == 'teacher' || widget.source?['kind'] == 'world';
+          s?['kind'] == 'teacher' ||
+          widget.source?['kind'] == 'world' ||
+          widget.source?['kind'] == 'capture';
       final done = ['accepted', 'committed'].contains(s?['status']);
       return Scaffold(
         appBar: AppBar(
@@ -320,11 +399,15 @@ class _AgentScreenState extends State<AgentScreen> {
                     : '根据已确认的意思和学习方式准备材料，并单独审核；这不会替你完成学习。',
               ),
               Text(
-                c.providers.current == null
+                c.providers.forPurpose(teacher ? 'teacher' : 'content') == null
                     ? '尚未选择模型服务'
-                    : '当前服务：${c.providers.current!['name']}',
+                    : '当前服务：${c.providers.forPurpose(teacher ? 'teacher' : 'content')!['name']}',
               ),
-              if (id == null && teacher) ...[
+              if (!teacher)
+                Text(
+                  '独立审核服务：${c.providers.forPurpose('review')?['name'] ?? '尚未配置'}',
+                ),
+              if (id == null && widget.source?['kind'] == 'world') ...[
                 const Text('点击发送后，会把当前材料及本次对话发送给所选服务。其他私人上下文不会随查询发送。'),
                 CheckboxListTile(
                   value: images,
@@ -428,7 +511,7 @@ class _AgentScreenState extends State<AgentScreen> {
                           : '明确继续',
                     ),
                   ),
-                const Text('离开页面会保留记录。重启后不会自动发送请求，凭据也不会保留。'),
+                const Text('离开页面会保留记录。重启后不会自动发送请求，凭据保存在系统安全存储。'),
               ],
               if (done)
                 FilledButton(

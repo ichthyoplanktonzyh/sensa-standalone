@@ -7,9 +7,9 @@ class AnchorUsePanel extends StatelessWidget {
   final LibraryViewModel model;
   final Map<String, dynamic> meaning;
   Future<void> enable(BuildContext context) async {
-    if (!model.semanticService.configured) {
+    if (!model.contentServiceConfigured) {
       await configureOnlineService(context, model);
-      if (!context.mounted || !model.semanticService.configured) return;
+      if (!context.mounted || !model.contentServiceConfigured) return;
     }
     final confirmed = await showDialog<bool>(
       context: context,
@@ -22,9 +22,9 @@ class AnchorUsePanel extends StatelessWidget {
             children: [
               SelectableText(meaning['snapshot']['sentence'] as String),
               const SizedBox(height: 12),
-              Text('接收服务：${model.semanticService.origin}'),
+              Text('接收服务：${model.contentServiceOrigin}'),
               const Text(
-                '用于 DeepSeek 学习材料生成与独立复核。仅发送上述固定原文和已确认词义、表达，不发送来源网址、标题或关注点。原文中的真实人物和事件可保留在私人提示中。',
+                '用于所选模型服务的学习材料生成与独立复核。仅发送上述固定原文和已确认词义、表达，不发送来源网址、标题或关注点。原文中的真实人物和事件可保留在私人提示中。',
               ),
               const Text('撤销后本机拒绝旧结果，并准备后续通用材料；已发送的内容无法收回，已经开始的学习与历史仍保留。'),
             ],

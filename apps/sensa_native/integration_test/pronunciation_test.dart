@@ -1,3 +1,4 @@
+import 'legacy_wire_fixture.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -82,11 +83,13 @@ void main() {
       await text('capture-context', 'A person is $expression');
       await text('capture-expression', expression);
       await tap(find.text('在线解释这个表达'));
-      await tap(find.text('请求解释'));
+      await resolveLegacyFixture(tester, model);
+      await wait();
       await tap(find.text('确认词义并保存到本机'));
       await tap(find.text('加入学习'));
       await tap(find.text('确认加入学习'));
-      await tap(find.text('开始准备材料'));
+      await prepareLegacyFixture(tester, model);
+      await wait();
       expect(
         model.preparations.firstWhere(
           (t) => t['target']['proposal']['expression']['surface'] == expression,

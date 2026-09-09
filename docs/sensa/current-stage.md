@@ -14,7 +14,7 @@ owner 确认前端体验，再细化合同并纵向实现；该方式可根据�
 
 ## 1. 当前判断
 
-2026-09-09 Agent 协作增量：语言老师图文澄清、自然语言更正与明确接受，轻量内容工具循环/独立审核，以及自带 Key/Sensa Provider 接线已实现，见 [交付记录](native-agent-group-handoff.md)。完整资源组仍有发布治理、可选供给与安全凭据管理等范围；原生迁移和 M3 尚未完成。
+2026-09-09 Agent 协作增量：语言老师图文澄清、自然语言更正与明确接受，轻量内容工具循环/独立审核，以及自带 Key/Sensa Provider 接线已实现，见 [交付记录](native-agent-group-handoff.md)。安全凭据持久化、用途独立选择与既有入口统一见 [Provider 交付](native-provider-group-handoff.md)。完整资源组仍有发布治理、可选供给等范围；原生迁移和 M3 尚未完成。
 
 2026-09-09 最新确认：[三端本地与共同事实模型](../adr/0003-three-client-local-facts.md) 已接受，替代下文历史记录中 Web 终局未定的范围。先建立事实模型并开始分层校验，继续原生迁移，再改造 React/TS Web 本地执行，最后完成真实三端/E2EE 验收；不会等 Web 完工才开始模型校验。本轮有界 G0 模型实验已通过乱序/重复、因果缺失、语义冲突及共同 Handoff 下的并发 Review 分类，见 [范围与证据](personal-library-fact-model.md)。尚非生产同步、完整调度收敛或 M3 完成；Anchor Use 已在后续原生纵切接入，静态发音/音频协作已在 [后续纵切](native-pronunciation-handoff.md) 接入；来源组织/Curriculum/Book Range 与完整记录查询已在 [整组交付](native-learning-organization-handoff.md) 补齐；Runtime scope 与自由练习已在 [整组记录](native-runtime-scope-handoff.md) 收口；个人语义世界的图文/草稿、表达连接与关系投影已在 [整组交付](native-world-group-handoff.md) 接入；原生迁移仍有其余 3 个工作组，范围见迁移清单。
 

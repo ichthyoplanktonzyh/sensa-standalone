@@ -12,7 +12,8 @@ const stats = {
   proposals: 0,
   rejections: 0,
   acceptances: 0,
-  observations: 0
+  observations: 0,
+  models: {} as Record<string,number>
 };
 function proposal(borrow = false) {
   return {
@@ -40,6 +41,7 @@ function proposal(borrow = false) {
 }
 function complete(body: any) {
   stats.calls++;
+  stats.models[body.model]=(stats.models[body.model]??0)+1;
   const messages = body.messages;
   for (const m of messages) {
     if (Array.isArray(m.content)) for (const p of m.content) if (p.type === 'image_url') {
@@ -231,7 +233,9 @@ if (process.argv.includes('--serve')) createServer(async (req, res) => {
       res.end(JSON.stringify(stats));
       return;
     }
-    assert.equal(req.headers.authorization, 'Bearer fixture-access');
+    if (req.headers.authorization !== 'Bearer fixture-access') {
+      res.statusCode = 401; res.end('invalid synthetic credential'); return;
+    }
     const parts: Buffer[] = [];
     for await (const p of req) parts.push(p);
     const raw=Buffer.concat(parts).toString();

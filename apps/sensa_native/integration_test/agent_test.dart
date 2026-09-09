@@ -86,8 +86,8 @@ void main() {
         final before = await stats();
         expect(await world.load(), saved['world']);
         expect(c.sessions, saved['sessions']);
-        expect(c.providers.profiles, hasLength(1));
-        expect(c.providers.configured, false);
+        expect(c.providers.profiles, hasLength(3));
+        expect(c.providers.configured, true);
         final pending = c.sessions.firstWhere((s) => s['status'] == 'proposal');
         await show(AgentScreen(controller: c, id: pending['id']));
         expect(find.text('建议已整理，等待你确认'), findsOneWidget);
@@ -123,6 +123,39 @@ void main() {
       await text('agent-provider-key', 'fixture-access');
       await tap(find.text('此模型支持图片输入'));
       await tap(find.text('保存模型服务'));
+      await tap(find.byType(BackButton).first);
+      // Separate role assignments must drive real model requests, not merely labels.
+      await c.providers.save({
+        ...c.providers.connection(c.providers.current!),
+        'id': 'generator-$run',
+        'name': '生成服务',
+        'model': 'fixture-generator',
+      }, 'fixture-access');
+
+      await c.providers.save({
+        ...c.providers.connection(c.providers.current!),
+        'id': 'reviewer-$run',
+        'name': '审核服务',
+        'model': 'fixture-reviewer',
+      }, 'fixture-access');
+      c.changed();
+      await tap(find.byTooltip('模型服务'));
+      await tap(
+        find.byWidgetPredicate(
+          (w) =>
+              w is DropdownButtonFormField<String> &&
+              w.key.toString().contains('provider-role-content-'),
+        ),
+      );
+      await tap(find.text('生成服务').last);
+      await tap(
+        find.byWidgetPredicate(
+          (w) =>
+              w is DropdownButtonFormField<String> &&
+              w.key.toString().contains('provider-role-review-'),
+        ),
+      );
+      await tap(find.text('审核服务').last);
       await tap(find.byType(BackButton).first);
       await tap(find.text('发送材料，开始交流'));
       expect(c.error, isNull);
@@ -168,6 +201,8 @@ void main() {
       final finished = await stats();
       expect(finished['images'], greaterThan(initialStats['images']));
       expect(finished['rejections'], initialStats['rejections'] + 1);
+      expect(finished['models']['fixture-generator'], greaterThan(0));
+      expect(finished['models']['fixture-reviewer'], greaterThan(0));
       expect(finished['acceptances'], initialStats['acceptances'] + 1);
       expect(
         finished['observations'],

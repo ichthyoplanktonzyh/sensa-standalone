@@ -5,6 +5,12 @@ const MAX_TURNS: u64 = 24;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Source {
+    Capture {
+        snapshot: Box<personal::Capture>,
+        intake_id: Option<String>,
+        #[serde(default)]
+        previous_id: Option<String>,
+    },
     World {
         draft_id: String,
         revision: u32,
@@ -121,6 +127,9 @@ fn active_source(db: &Connection, v: &Value, now: DateTime<Utc>) -> Result<()> {
     if v["kind"] == "content" {
         let task = provisioning::read(db, v["input"]["taskId"].as_str().unwrap())?;
         provisioning::active(&task, v["input"]["id"].as_str().unwrap(), now)?;
+    } else if v["source"]["kind"] == "capture" {
+        let snapshot: personal::Capture = serde_json::from_value(v["input"].clone())?;
+        semantic::intake_guard(db, &snapshot, v["source"]["intake_id"].as_str())?;
     } else {
         world::read_draft(
             db,
@@ -179,6 +188,16 @@ pub(super) fn apply(
     {
         require(Uuid::parse_str(session_id).is_ok(), "invalid_agent_id")?;
         let (kind, input) = match source {
+            Source::Capture {
+                snapshot,
+                intake_id,
+                ..
+            } => {
+                snapshot.validate()?;
+                require(snapshot.expression.is_some(), "expression_required")?;
+                semantic::intake_guard(db, snapshot, intake_id.as_deref())?;
+                ("teacher", json!(snapshot))
+            }
             Source::World {
                 draft_id, revision, ..
             } => {
@@ -427,9 +446,18 @@ pub(super) fn apply(
                         ("teacher", "propose_meaning") => {
                             match semantic::validate_proposal(call.args.clone()) {
                                 Ok(p) => {
-                                    v["candidate"] = p;
-                                    v["status"] = json!("proposal");
-                                    json!({"candidateStored":true,"accepted":false})
+                                    if v["source"]["kind"] == "capture"
+                                        && p["expression"]["surface"].as_str()
+                                            != v["input"]["expression"]["text"]
+                                                .as_str()
+                                                .map(str::trim)
+                                    {
+                                        json!({"error":"Keep the captured target expression unchanged; clarify its meaning in this context."})
+                                    } else {
+                                        v["candidate"] = p;
+                                        v["status"] = json!("proposal");
+                                        json!({"candidateStored":true,"accepted":false})
+                                    }
                                 }
                                 Err(_) => {
                                     json!({"error":"Invalid proposal structure. Follow the semanticSpec schema; optional lists may be empty. Do not ask the learner to fill these internal fields."})
@@ -507,15 +535,57 @@ pub(super) fn apply(
                 consent == "accept_context_expression_sense",
                 "semantic_acceptance_required",
             )?;
-            world::accept_agent(
-                db,
-                v["source"]["draft_id"].as_str().unwrap(),
-                v["source"]["revision"].as_u64().unwrap() as u32,
-                v["candidate"].clone(),
-                json!({"kind":"language_teacher","sessionId":sid,"policy":"language-teacher-v1","provider":v["lease"]["provider"],"modelUsed":v["generator"]["modelUsed"],"sharedImages":v["source"]["share_images"]}),
-                command,
-                now.timestamp_millis(),
-            )?;
+            if v["source"]["kind"] == "capture" {
+                active_source(db, &v, now)?;
+                let lookup = id();
+                semantic::apply(
+                    db,
+                    &semantic::Action::Begin {
+                        id: lookup.clone(),
+                        snapshot: Box::new(serde_json::from_value(v["input"].clone())?),
+                        intake_id: v["source"]["intake_id"].as_str().map(str::to_owned),
+                        previous_id: v["source"]["previous_id"].as_str().map(str::to_owned),
+                        clarification: None,
+                    },
+                    command,
+                    now,
+                )?;
+                let job = semantic::project(db)?
+                    .into_iter()
+                    .find(|j| j["id"] == lookup)
+                    .unwrap();
+                let model = v["generator"]["modelUsed"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(v["lease"]["provider"]["model"].as_str().unwrap());
+                semantic::apply(
+                    db,
+                    &semantic::Action::Finish {
+                        result: json!({"version":"sensa-native-semantic-v1","id":lookup,"inputDigest":job["request"]["inputDigest"],"status":"ready","proposal":v["candidate"],"provenance":{"provider":v["lease"]["provider"]["name"],"model":model,"policyVersion":"language-teacher-v1","outputDigest":semantic::hash(&v["candidate"])?}}),
+                    },
+                    command,
+                    now,
+                )?;
+                semantic::apply(
+                    db,
+                    &semantic::Action::Accept {
+                        id: lookup,
+                        consent: consent.clone(),
+                    },
+                    command,
+                    now,
+                )?;
+            } else {
+                world::accept_agent(
+                    db,
+                    v["source"]["draft_id"].as_str().unwrap(),
+                    v["source"]["revision"].as_u64().unwrap() as u32,
+                    v["candidate"].clone(),
+                    json!({"kind":"language_teacher","sessionId":sid,"policy":"language-teacher-v1","provider":v["lease"]["provider"],"modelUsed":v["generator"]["modelUsed"],"sharedImages":v["source"]["share_images"]}),
+                    command,
+                    now.timestamp_millis(),
+                )?;
+            }
             v["status"] = json!("accepted");
         }
         Action::Commit { revision: r, .. } => {
@@ -600,6 +670,12 @@ pub fn request(path: &Path, sid: &str) -> Result<Value> {
     } else {
         messages.push(json!({"role":"user","content":v["input"].to_string()}));
         messages.extend(v["messages"].as_array().unwrap().iter().cloned());
+    }
+    if v["source"]["kind"] == "capture" {
+        let base = messages[0]["content"].as_str().unwrap();
+        messages[0]["content"] = json!(format!(
+            "{base} This is a captured occurrence: preserve its target expression unchanged and explain its meaning in that context."
+        ));
     }
     let tools = if review {
         vec![]

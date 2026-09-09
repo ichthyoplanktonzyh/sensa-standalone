@@ -143,11 +143,7 @@ class _PreparationScreenState extends State<PreparationScreen> {
           current?['status'] == 'generating' &&
           (current?['leaseUntilMs'] as int? ?? 0) <=
               DateTime.now().millisecondsSinceEpoch;
-      final canRetry =
-          current != null &&
-          !ready &&
-          (current['attemptCount'] as int) < 3 &&
-          current['reason'] != 'unsupported_content_policy';
+
       final expression =
           current?['target']['proposal']['expression']['surface'] ??
           meaning?['expression'] ??
@@ -287,27 +283,8 @@ class _PreparationScreenState extends State<PreparationScreen> {
                       ),
                       TextButton(
                         onPressed: model.provisioningBusy ? null : configure,
-                        child: Text(
-                          model.semanticService.configured
-                              ? '更改在线服务'
-                              : '配置在线服务',
-                        ),
+                        child: Text('模型服务设置'),
                       ),
-                      if (canRetry)
-                        FilledButton(
-                          onPressed:
-                              !model.busy &&
-                                  !model.provisioningBusy &&
-                                  model.semanticService.configured &&
-                                  (current['status'] != 'generating' || expired)
-                              ? () => model.prepareContent(
-                                  current['id'] as String,
-                                )
-                              : null,
-                          child: Text(
-                            current['attemptCount'] == 0 ? '开始准备材料' : '明确重试准备',
-                          ),
-                        ),
                       if (current['status'] != 'cancelled')
                         OutlinedButton(
                           onPressed: model.busy

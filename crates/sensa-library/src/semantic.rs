@@ -157,7 +157,11 @@ fn usable(v: &Value, now: DateTime<Utc>) -> Result<()> {
     }
     Ok(())
 }
-fn intake_guard(db: &Connection, snapshot: &Capture, intake: Option<&str>) -> Result<()> {
+pub(super) fn intake_guard(
+    db: &Connection,
+    snapshot: &Capture,
+    intake: Option<&str>,
+) -> Result<()> {
     if let Some(intake) = intake {
         let (encoded, removed, meaning): (String, bool, Option<String>) = db
             .query_row(
@@ -302,7 +306,10 @@ pub(super) fn apply(
             keys(p, &["provider", "model", "policyVersion", "outputDigest"])?;
             text(&p["provider"], 200)?;
             text(&p["model"], 200)?;
-            if p["policyVersion"] != "consumer-semantic-v4" || p["outputDigest"] != hash(&proposal)?
+            if !matches!(
+                p["policyVersion"].as_str(),
+                Some("consumer-semantic-v4" | "language-teacher-v1")
+            ) || p["outputDigest"] != hash(&proposal)?
             {
                 return Err(Error::Rule("invalid_provenance"));
             }

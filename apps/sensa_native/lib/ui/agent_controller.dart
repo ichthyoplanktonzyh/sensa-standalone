@@ -78,9 +78,10 @@ class AgentController extends ChangeNotifier {
           'id': id,
           'source': {
             ...source,
-            if (source['kind'] == 'content' && providers.current != null)
+            if (source['kind'] == 'content' &&
+                providers.forPurpose('content') != null)
               'service_origin': Uri.parse(
-                providers.current!['endpoint'],
+                providers.forPurpose('content')!['endpoint'],
               ).origin,
           },
         },
@@ -110,6 +111,12 @@ class AgentController extends ChangeNotifier {
     }
   }
 
+  String purpose(String id) => session(id)['kind'] == 'teacher'
+      ? 'teacher'
+      : session(id)['candidate'] != null
+      ? 'review'
+      : 'content';
+
   Future<void> run(String id) async {
     if (busy) return;
     if (session(id)['status'] == 'ready') {
@@ -128,8 +135,8 @@ class AgentController extends ChangeNotifier {
       changed();
       return;
     }
-    if (!providers.configured) {
-      error = '请先选择模型服务，并填写本次会话使用的凭据。';
+    if (!providers.ready(purpose(id))) {
+      error = '请先选择模型服务并保存有效凭据。';
       changed();
       return;
     }
@@ -141,12 +148,17 @@ class AgentController extends ChangeNotifier {
     try {
       for (var step = 0; step < 8; step++) {
         if (epoch != token) return;
+        if (!providers.ready(purpose(id))) {
+          throw const AgentFailure('credentials');
+        }
         await act(
           () => {
             'kind': 'lease',
             'id': id,
             'revision': session(id)['revision'],
-            'provider': providers.current!,
+            'provider': providers.connection(
+              providers.forPurpose(purpose(id))!,
+            ),
           },
         );
         if (epoch != token) return;
@@ -242,6 +254,9 @@ class AgentController extends ChangeNotifier {
 
   String describe(Object e) {
     final code = e is AgentFailure ? e.code : e.toString();
+    if (code.contains('secure_storage')) {
+      return '系统安全存储暂不可用，凭据没有以明文保存。请解锁设备后重试。';
+    }
     if (code.contains('vision')) return '这份材料含图片。请选择支持图片的模型服务，或返回后明确选择只讨论文字。';
     if (code.contains('credentials')) return '凭据未设置或已失效，请重新填写。';
     if (code.contains('budget') || code.contains('limit')) {

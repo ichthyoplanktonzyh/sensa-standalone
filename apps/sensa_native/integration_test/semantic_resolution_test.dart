@@ -1,3 +1,4 @@
+import 'legacy_wire_fixture.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -95,37 +96,50 @@ void main() {
         expect(model.semanticService.configured, isFalse);
         await tap(find.text('收件箱'));
         await tap(find.text('待确认：tactful'));
-        expect(find.text('配置在线服务'), findsOneWidget);
+        expect(find.text('模型服务设置'), findsOneWidget);
         await tap(find.text('确认词义并保存到本机'));
         expect(model.snapshot!.personal['meanings'], hasLength(3));
         expect(model.snapshot!.run, isNull);
       } else {
         await capture('She was tactful.', 'tactful');
-        await tap(find.text('配置在线服务'));
-        await text('semantic-origin', 'http://127.0.0.1:4323');
-        await text('semantic-token', 'local-native-test');
-        await tap(find.text('使用此服务'));
-        await tap(find.text('请求解释'));
+        model.semanticService.configure(
+          'http://127.0.0.1:4323',
+          'local-native-test',
+        );
+        await resolveLegacyFixture(tester, model);
+        await wait();
         expect(model.lookups.single['focus'], isNull);
         expect(model.snapshot!.personal['meanings'], isEmpty);
         await tap(find.text('确认词义并保存到本机'));
         expect(model.snapshot!.personal['meanings'], hasLength(1));
         expect(find.text('加入学习'), findsOneWidget);
         await capture('The crane lifted it.', 'crane');
-        await tap(find.text('请求解释'));
+        await resolveLegacyFixture(tester, model);
+        await wait();
         expect(model.lookups.first['status'], 'unresolved');
         await text('semantic-focus', 'simulate failure');
-        await tap(find.text('按关注点重新解释'));
+        await resolveLegacyFixture(
+          tester,
+          model,
+          clarification: 'simulate failure',
+        );
+        await wait();
         expect(model.lookups.first['status'], 'failed');
         await text('semantic-focus', 'lifting machine');
-        await tap(find.text('按关注点重新解释'));
+        await resolveLegacyFixture(
+          tester,
+          model,
+          clarification: 'lifting machine',
+        );
+        await wait();
         expect(model.lookups.first['status'], 'ready');
         expect(model.lookups.first['focus']['text'], 'lifting machine');
         await tap(find.text('确认词义并保存到本机'));
         expect(model.snapshot!.personal['meanings'], hasLength(2));
         // Leave a valid unaccepted result for a separate process with no service credentials.
         await capture('He was tactful.', 'tactful');
-        await tap(find.text('请求解释'));
+        await resolveLegacyFixture(tester, model);
+        await wait();
         expect(model.lookups.first['status'], 'ready');
         await tap(find.byType(BackButton).first);
         await tap(find.byType(BackButton).first);

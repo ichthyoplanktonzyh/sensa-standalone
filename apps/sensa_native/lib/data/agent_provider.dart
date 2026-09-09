@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'world_repository.dart';
+import 'provider_credentials.dart';
+import 'package:uuid/uuid.dart';
 
 Object? canonicalAgentJson(Object? value) {
   if (value is Map) {
@@ -19,18 +21,49 @@ class AgentFailure implements Exception {
   final String code;
 }
 
-/// Persist only public connection preferences. Credentials never enter SQLite or files.
+/// Public preferences and role routing are separate from OS-protected credentials.
 class AgentProviders {
-  AgentProviders(this.file);
+  AgentProviders(this.file, {this.vault = const ProviderCredentials()});
   final File file;
+  final ProviderCredentials vault;
+  Future<void> _pending = Future.value();
+  Future<void> _serial(Future<void> Function() work) {
+    final next = _pending.then((_) => work());
+    _pending = next.catchError((_) {});
+    return next;
+  }
+
   List<Map<String, dynamic>> profiles = [];
   String? selected;
+  Map<String, String?> roles = {};
   final Map<String, String> _keys = {};
-  Map<String, dynamic>? get current =>
-      profiles.where((p) => p['id'] == selected).firstOrNull;
-  bool get configured =>
-      current != null && (_keys[selected]?.isNotEmpty ?? false);
-  Future<void> load() async {
+  final Map<String, String> credentialStates = {};
+  Map<String, dynamic>? forPurpose(String purpose) => profiles
+      .where(
+        (p) =>
+            p['id'] ==
+                (roles.containsKey(purpose) ? roles[purpose] : selected) &&
+            (purpose != 'service' || p['kind'] == 'sensa'),
+      )
+      .firstOrNull;
+  Map<String, dynamic>? get current => forPurpose('teacher');
+  bool ready(String purpose) =>
+      forPurpose(purpose) != null &&
+      credential(forPurpose(purpose)!['id']).isNotEmpty;
+  bool get configured => ready('teacher');
+  Map<String, dynamic> connection(Map<String, dynamic> p) => {
+    for (final k in ['id', 'name', 'endpoint', 'model', 'kind', 'vision'])
+      k: p[k],
+  };
+  String fingerprint(Map<String, dynamic> p) => sha256
+      .convert(
+        utf8.encode(
+          '${file.absolute.path}\n${p['id']}\n${p['kind']}\n${p['endpoint']}',
+        ),
+      )
+      .toString();
+  Future<void> load() => _serial(_load);
+  Future<void> _load() async {
     if (!await file.exists()) return;
     final value = jsonDecode(await file.readAsString());
     final items = (value['profiles'] as List).cast<Map<String, dynamic>>();
@@ -39,6 +72,45 @@ class AgentProviders {
     }
     profiles = items;
     selected = value['selected'];
+    roles = Map<String, String?>.from(value['roles'] ?? {});
+    await _unlock();
+  }
+
+  Future<void> unlock() => _serial(_unlock);
+  Future<void> _unlock() async {
+    _keys.clear();
+    for (final p in profiles) {
+      final id = p['id'] as String;
+      credentialStates[id] = 'missing';
+      if (p['credentialInvalid'] == true) {
+        credentialStates[id] = 'invalid';
+        continue;
+      }
+      final ref = p['credentialRef'];
+      if (ref is! String) continue;
+      try {
+        final raw = await vault.read(ref);
+        if (raw == null) continue;
+        final entry = jsonDecode(raw);
+        if (entry['fingerprint'] != fingerprint(p)) {
+          credentialStates[id] = 'changed';
+          continue;
+        }
+        if (entry['invalid'] == true) {
+          credentialStates[id] = 'invalid';
+          continue;
+        }
+        final key = entry['credential'];
+        if (key is String &&
+            key.isNotEmpty &&
+            !key.contains(RegExp(r'[\r\n]'))) {
+          _keys[id] = key;
+          credentialStates[id] = 'saved';
+        }
+      } catch (_) {
+        credentialStates[id] = 'locked';
+      }
+    }
   }
 
   static void validate(Map<String, dynamic> p) {
@@ -64,48 +136,186 @@ class AgentProviders {
     }
   }
 
-  Future<void> save(Map<String, dynamic> p, String key) async {
+  Future<void> save(Map<String, dynamic> p, String key) =>
+      _serial(() => _save(Map<String, dynamic>.from(p), key));
+  Future<void> _save(Map<String, dynamic> p, String key) async {
     validate(p);
     if (key.contains(RegExp(r'[\r\n]'))) {
       throw const AgentFailure('configuration');
     }
-    final previous = profiles.where((old) => old['id'] == p['id']).firstOrNull;
-    if (previous != null &&
-        (previous['endpoint'] != p['endpoint'] ||
-            previous['kind'] != p['kind'])) {
-      _keys.remove(p['id']);
+    final old = profiles.where((v) => v['id'] == p['id']).firstOrNull;
+    final same = old != null && fingerprint(old) == fingerprint(p);
+    String? ref = same ? old['credentialRef'] : null;
+    String? created;
+    if (key.trim().isNotEmpty) {
+      ref = created = const Uuid().v4();
+      try {
+        await vault.write(
+          ref,
+          jsonEncode({'fingerprint': fingerprint(p), 'credential': key.trim()}),
+        );
+      } catch (_) {
+        try {
+          await vault.delete(ref);
+        } catch (_) {}
+        throw const AgentFailure('secure_storage');
+      }
     }
-    if (key.trim().isNotEmpty) _keys[p['id']] = key.trim();
-    profiles = [
-      for (final old in profiles)
-        if (old['id'] != p['id']) old,
-      {
-        for (final k in ['id', 'name', 'endpoint', 'model', 'kind', 'vision'])
-          k: p[k],
-      },
+    final updated = {
+      ...connection(p),
+      'credentialRef': ?ref,
+      if (same && key.trim().isEmpty && old['credentialInvalid'] == true)
+        'credentialInvalid': true,
+    };
+    final next = [
+      for (final v in profiles)
+        if (v['id'] != p['id']) v,
+      updated,
     ];
-    selected = p['id'];
-    await persist();
+    try {
+      await _persist(next, selected ?? p['id'], roles);
+    } catch (_) {
+      if (created != null) {
+        try {
+          await vault.delete(created);
+        } catch (_) {}
+      }
+      rethrow;
+    }
+    profiles = next;
+    selected ??= p['id'];
+    _keys.remove(p['id']);
+    if (key.trim().isNotEmpty) {
+      _keys[p['id']] = key.trim();
+    } else if (same) {
+      await _unlock();
+    }
+    if (!same || key.trim().isNotEmpty) {
+      credentialStates[p['id']] = _keys.containsKey(p['id'])
+          ? 'saved'
+          : 'missing';
+    }
+    if (old?['credentialRef'] != null && old!['credentialRef'] != ref) {
+      try {
+        await vault.delete(old['credentialRef']);
+      } catch (_) {}
+    }
   }
 
-  Future<void> persist() async {
+  Future<void> assign(String purpose, String? id) =>
+      _serial(() => _assign(purpose, id));
+  Future<void> _assign(String purpose, String? id) async {
+    if (id != null &&
+        !profiles.any(
+          (p) =>
+              p['id'] == id && (purpose != 'service' || p['kind'] == 'sensa'),
+        )) {
+      throw const AgentFailure('configuration');
+    }
+    final next = {...roles, purpose: id};
+    await _persist(profiles, selected, next);
+    roles = next;
+  }
+
+  Future<void> _persist(
+    List<Map<String, dynamic>> list,
+    String? choice,
+    Map<String, String?> assignments,
+  ) async {
     await file.parent.create(recursive: true);
     final tmp = File('${file.path}.tmp');
     await tmp.writeAsString(
-      jsonEncode({'profiles': profiles, 'selected': selected}),
+      jsonEncode({
+        'version': 2,
+        'profiles': list,
+        'selected': choice,
+        'roles': assignments,
+      }),
       flush: true,
     );
     await tmp.rename(file.path);
   }
 
-  Future<void> remove(String id) async {
+  Future<void> persist() => _serial(() => _persist(profiles, selected, roles));
+  Future<void> forget(String id) => _serial(() => _forget(id));
+  Future<void> _forget(String id) async {
+    final p = profiles.firstWhere((p) => p['id'] == id);
     _keys.remove(id);
-    profiles.removeWhere((p) => p['id'] == id);
-    if (selected == id) selected = profiles.firstOrNull?['id'];
-    await persist();
+    credentialStates[id] = 'missing';
+    if (p['credentialRef'] != null) {
+      try {
+        await vault.delete(p['credentialRef']);
+      } catch (_) {
+        credentialStates[id] = 'locked';
+        throw const AgentFailure('secure_storage');
+      }
+    }
+    final next = [
+      for (final v in profiles)
+        if (v['id'] == id) connection(v) else v,
+    ];
+    await _persist(next, selected, roles);
+    profiles = next;
+  }
+
+  Future<void> remove(String id) => _serial(() => _remove(id));
+  Future<void> _remove(String id) async {
+    await _forget(id);
+    final next = profiles.where((p) => p['id'] != id).toList();
+    final assignments = {
+      for (final e in roles.entries) e.key: e.value == id ? null : e.value,
+    };
+    // Deletion never silently routes calls to another service.
+    for (final purpose in ['teacher', 'content', 'review', 'service']) {
+      if (forPurpose(purpose)?['id'] == id) assignments[purpose] = null;
+    }
+    final choice = selected == id ? null : selected;
+    await _persist(next, choice, assignments);
+    profiles = next;
+    selected = choice;
+    roles = assignments;
+  }
+
+  Future<void> invalidate(Map<String, dynamic> used, String attemptedKey) =>
+      _serial(() => _invalidate(used, attemptedKey));
+  Future<void> _invalidate(
+    Map<String, dynamic> used,
+    String attemptedKey,
+  ) async {
+    final p = profiles.where((p) => p['id'] == used['id']).firstOrNull;
+    if (p == null ||
+        fingerprint(p) != fingerprint(used) ||
+        credential(p['id']) != attemptedKey) {
+      return;
+    }
+    _keys.remove(p['id']);
+    credentialStates[p['id']] = 'invalid';
+    final next = [
+      for (final v in profiles)
+        if (v['id'] == p['id']) {...v, 'credentialInvalid': true} else v,
+    ];
+    try {
+      await _persist(next, selected, roles);
+      profiles = next;
+    } catch (_) {}
+    if (p['credentialRef'] != null) {
+      try {
+        await vault.write(
+          p['credentialRef'],
+          jsonEncode({'fingerprint': fingerprint(p), 'invalid': true}),
+        );
+      } catch (_) {}
+    }
   }
 
   String credential(String id) => _keys[id] ?? '';
+  String status(String id) => switch (credentialStates[id]) {
+    'saved' => '凭据已安全保存',
+    'invalid' => '凭据已失效，请更新',
+    'locked' => '安全存储暂不可用',
+    'changed' => '服务已变化，请重新填写凭据',
+    _ => '需填写凭据',
+  };
   void clear() {
     _keys.clear();
   }
@@ -195,6 +405,9 @@ class AgentTransport {
             })
             ..body = encoded,
         );
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          await providers.invalidate(p, key);
+        }
         if (response.statusCode != 200) {
           throw AgentFailure(
             response.statusCode == 401 || response.statusCode == 403

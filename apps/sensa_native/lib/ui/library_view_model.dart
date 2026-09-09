@@ -9,9 +9,11 @@ import '../data/pack_file_reader.dart';
 class LibraryViewModel extends ChangeNotifier {
   LibraryViewModel(this.repository, {PackFileReader? packReader})
     : packReader = packReader ?? const PackFileReader();
-  late final agents = AgentController(repository);
+  late final agents = AgentController(repository)..addListener(_notify);
   final PackFileReader packReader;
-  final semanticService = SemanticService();
+  late final semanticService = SemanticService(
+    providers: () => agents.providers,
+  );
   bool semanticBusy = false;
   List<Map<String, dynamic>> get lookups =>
       (snapshot?.personal['lookups'] as List? ?? [])
@@ -96,6 +98,14 @@ class LibraryViewModel extends ChangeNotifier {
     }
   }
 
+  bool get contentServiceConfigured => agents.providers.profiles.isEmpty
+      ? semanticService.configured
+      : agents.providers.ready('content');
+  String get contentServiceOrigin => agents.providers.profiles.isEmpty
+      ? semanticService.origin
+      : agents.providers.forPurpose('content') == null
+      ? ''
+      : Uri.parse(agents.providers.forPurpose('content')!['endpoint']).origin;
   Future<void> setAnchorUse(Map<String, dynamic> meaning, bool enabled) async {
     final requests = _activePreparationRequests();
     final wasHome = home;
@@ -106,7 +116,7 @@ class LibraryViewModel extends ChangeNotifier {
         'meaning_id': meaning['id'],
         'expected_revision': meaning['revision'],
         'enabled': enabled,
-        'recipient': enabled ? semanticService.origin : null,
+        'recipient': enabled ? contentServiceOrigin : null,
       },
     });
     home = wasHome;
@@ -248,6 +258,7 @@ class LibraryViewModel extends ChangeNotifier {
     _notify();
     try {
       snapshot = await repository.load();
+      await agents.load();
       _pending = null;
       final today = DateTime.now().toIso8601String().substring(0, 10);
       final date = snapshot!.learning['date'] as String? ?? '';

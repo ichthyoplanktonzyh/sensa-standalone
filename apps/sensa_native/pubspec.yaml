@@ -45,6 +45,7 @@ dependencies:
   flutter_inappwebview: 6.2.0-beta.3
 
   crypto: ^3.0.7
+  flutter_secure_storage: ^10.3.1
 
 dev_dependencies:
   flutter_test:

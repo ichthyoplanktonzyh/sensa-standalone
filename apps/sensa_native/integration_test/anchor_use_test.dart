@@ -1,3 +1,4 @@
+import 'legacy_wire_fixture.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -82,12 +83,13 @@ void main() {
         await text('capture-expression', expression);
         await tap(find.text('在线解释这个表达'));
         if (configure) {
-          await tap(find.text('配置在线服务'));
-          await text('semantic-origin', 'http://127.0.0.1:4325');
-          await text('semantic-token', 'local-native-test');
-          await tap(find.text('使用此服务'));
+          model.semanticService.configure(
+            'http://127.0.0.1:4325',
+            'local-native-test',
+          );
         }
-        await tap(find.text('请求解释'));
+        await resolveLegacyFixture(tester, model);
+        await wait();
         await tap(find.text('确认词义并保存到本机'));
         await tap(find.text('加入学习'));
         await tap(find.text('确认加入学习'));
@@ -124,7 +126,8 @@ void main() {
         expect(find.text('原文未授权给材料服务'), findsOneWidget);
         await authorize();
         expect(task('tactful')['anchor']['sentence'], '张琳在谈话中很 tactful');
-        await tap(find.text('开始准备材料'));
+        await prepareLegacyFixture(tester, model);
+        await wait();
         expect(task('tactful')['status'], 'ready');
         final privateId = task('tactful')['materialId'];
         await tap(find.text('回到学习入口'));
@@ -139,7 +142,8 @@ void main() {
         await tap(find.text('tactful'));
         await tap(find.text('撤销原文授权'));
         expect(task('tactful')['status'], 'pending');
-        await tap(find.text('开始准备材料'));
+        await prepareLegacyFixture(tester, model);
+        await wait();
         expect(task('tactful')['status'], 'ready');
         expect(task('tactful')['materialId'], isNot(privateId));
         expect(model.snapshot!.catalog, hasLength(1));
@@ -148,9 +152,8 @@ void main() {
         await tap(find.byType(BackButton).first);
         await capture('delayed');
         await authorize();
-        final start = find.text('开始准备材料');
-        await visible(start);
-        await tester.tap(start);
+        // Keep the delayed legacy request in flight while exercising local cancellation.
+        final generating = prepareLegacyFixture(tester, model);
         for (var i = 0; i < 100; i++) {
           await tester.pump(const Duration(milliseconds: 10));
           if (task('delayed')['status'] == 'generating') break;
@@ -163,6 +166,7 @@ void main() {
         expect(task('delayed')['status'], 'pending');
         expect(task('delayed')['anchor'], isNull);
         expect(model.snapshot!.catalog, hasLength(1));
+        await generating;
         await tap(find.byType(BackButton).first);
         await capture('recoverable');
         await authorize();
