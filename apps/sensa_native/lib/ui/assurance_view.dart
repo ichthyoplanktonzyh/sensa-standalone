@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:audioplayers/audioplayers.dart';
+import '../data/local_audio.dart';
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
 
@@ -16,7 +16,7 @@ class _AssuranceViewState extends State<AssuranceView> {
   late final TextEditingController answer;
   Timer? saveTimer;
   bool dirty = false;
-  final player = AudioPlayer();
+  final player = LocalAudioPlayer();
   String? mediaError;
   bool playing = false;
   Map<String, dynamic> get a => widget.model.snapshot!.assurance!;
@@ -83,7 +83,7 @@ class _AssuranceViewState extends State<AssuranceView> {
         reference,
       );
       if (!mounted) return;
-      await player.play(BytesSource(bytes, mimeType: 'audio/mpeg'));
+      await player.play(bytes);
     } catch (_) {
       if (mounted) setState(() => mediaError = '音频暂时无法播放，可以继续阅读文字，稍后重试。');
     } finally {

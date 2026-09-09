@@ -11,6 +11,24 @@ fn main() {
     let v: Value = serde_json::from_str(&input).unwrap();
     let path = PathBuf::from(v["path"].as_str().unwrap());
     let s = open_library(&path).unwrap();
+    if let Some(mid) = v["audioMaterialId"].as_str() {
+        use base64::Engine;
+        let result = if let Some(encoded) = v["audioBytes"].as_str() {
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .unwrap();
+            pronunciation::cache(&path, mid, &bytes).map(|()| json!({"cached":true}))
+        } else {
+            pronunciation::cached(&path, mid).map(
+                |bytes| json!({"bytes":base64::engine::general_purpose::STANDARD.encode(bytes)}),
+            )
+        };
+        println!(
+            "{}",
+            result.unwrap_or_else(|e| json!({"error":e.to_string()}))
+        );
+        return;
+    }
     if v["action"].is_null() {
         println!("{}", serde_json::to_string(&s).unwrap());
         return;

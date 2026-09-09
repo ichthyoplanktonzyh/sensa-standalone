@@ -128,7 +128,9 @@ pub fn validate_result(input: &Value, result: &Value) -> Result<(String, String,
                 == json!({"maxModelTurns":1,"maxToolCalls":0,"timeoutMs":35000}),
     )?;
     let artifacts = array(&request["contextArtifacts"])?;
-    require(artifacts.len() == 3)?;
+    let audio = result["material"].get("pronunciation");
+    let audio_count = usize::from(audio.is_some());
+    require(artifacts.len() == 3 + audio_count)?;
     let proposal = &input["target"];
     let expression = text(&proposal["expression"]["surface"], 2000)?;
     let mut ids = Vec::new();
@@ -189,6 +191,29 @@ pub fn validate_result(input: &Value, result: &Value) -> Result<(String, String,
         )?;
         ids.push(a["artifactId"].clone());
     }
+    if let Some(audio) = audio {
+        let reference: pronunciation::Reference = serde_json::from_value(audio.clone())?;
+        reference.validate(expression)?;
+        let facts: Vec<_> = artifacts
+            .iter()
+            .filter(|a| a["contextKind"] == "reference_fact")
+            .collect();
+        require(facts.len() == 1)?;
+        let a = facts[0];
+        let expected = json!({"factKind":"pronunciation","audioUrl":format!("sensa-media:{}",reference.digest),"phoneticNotation":null,"accentLabel":null});
+        require(
+            a["source"] == "pronunciation_lexicon"
+                && a["sourceVersion"] == reference.digest
+                && a["payload"] == expected
+                && a["contentDigest"] == hash(&expected)?
+                && a["contentSchemaId"] == "lightweight.reference-fact"
+                && a["contentSchemaVersion"] == "v1"
+                && a["personalAnchorUseGrantId"].is_null()
+                && a["producerToolCallId"].is_null()
+                && a["mediaReference"].is_null(),
+        )?;
+        ids.push(a["artifactId"].clone());
+    }
     require(
         bundle["contentProvisioningTaskId"] == input["taskId"]
             && bundle["contentAgentAttemptId"] == input["id"]
@@ -196,7 +221,12 @@ pub fn validate_result(input: &Value, result: &Value) -> Result<(String, String,
             && bundle["inputSnapshotDigest"] == hash(request)?
             && bundle["supportingContextArtifacts"] == json!([])
             && bundle["toolCalls"] == json!([])
-            && proof["adapter"] == "native-lightweight-v1"
+            && proof["adapter"]
+                == if audio.is_some() {
+                    "native-lightweight-v2"
+                } else {
+                    "native-lightweight-v1"
+                }
             && proof["contentDigest"] == hash(content)?
             && proof["materialDigest"] == hash(&result["material"])?,
     )?;
@@ -208,7 +238,9 @@ pub fn validate_result(input: &Value, result: &Value) -> Result<(String, String,
     let omissions = array(&bundle["omissions"])?;
     let optional: Vec<_> = array(&demand["materialRoles"])?
         .iter()
-        .filter(|v| v["required"] == false)
+        .filter(|v| {
+            v["required"] == false && !(audio.is_some() && v["materialRoleKey"] == "pronunciation")
+        })
         .collect();
     require(omissions.len() == optional.len())?;
     for role in optional {
@@ -231,18 +263,22 @@ pub fn validate_result(input: &Value, result: &Value) -> Result<(String, String,
     let resources = array(&content["resources"])?;
     let validations = array(&proof["validation"]["validations"])?;
     require(
-        candidates.len() == 3
-            && resources.len() == 3
-            && validations.len() == 3
+        candidates.len() == 3 + audio_count
+            && resources.len() == 3 + audio_count
+            && validations.len() == 3 + audio_count
             && content["contentDemandKey"] == "lightweight-initial-content"
             && content["definitionVersion"] == "v1"
             && content["contentGenerationRequestId"] == request["contentGenerationRequestId"],
     )?;
-    for role in [
+    let mut roles = vec![
         "experience_recall_cue",
         "target_expression",
         "sense_confirmation",
-    ] {
+    ];
+    if audio.is_some() {
+        roles.push("pronunciation");
+    }
+    for role in roles {
         let matched: Vec<_> = candidates
             .iter()
             .filter(|v| v["materialRoleKey"] == role)
@@ -260,10 +296,26 @@ pub fn validate_result(input: &Value, result: &Value) -> Result<(String, String,
                 && candidate["contentSchemaVersion"] == "v1"
                 && candidate["producerPolicyId"] == definition["provisioningPolicyId"]
                 && candidate["producerPolicyVersion"] == definition["provisioningPolicyVersion"]
-                && candidate["contentDigest"] == hash(&candidate["contentPayload"])?
-                && candidate["sourceArtifactIds"] == json!(ids)
-                && candidate["sourceMaterialCandidateIds"] == json!([]),
+                && candidate["contentDigest"] == hash(&candidate["contentPayload"])?,
         )?;
+        if role == "pronunciation" {
+            let expression_candidate = candidates
+                .iter()
+                .find(|v| v["materialRoleKey"] == "target_expression")
+                .ok_or(Error::Rule("invalid_prepared_material"))?;
+            require(
+                candidate["sourceArtifactIds"] == json!([ids[3]])
+                    && candidate["sourceMaterialCandidateIds"]
+                        == json!([expression_candidate["materialCandidateId"]])
+                    && candidate["contentPayload"]
+                        == json!({"audioUrl":format!("sensa-media:{}",audio.unwrap()["digest"].as_str().unwrap_or("")),"phoneticNotation":null,"accentLabel":null}),
+            )?;
+        } else {
+            require(
+                candidate["sourceArtifactIds"] == json!(ids)
+                    && candidate["sourceMaterialCandidateIds"] == json!([]),
+            )?;
+        }
         if role == "experience_recall_cue" {
             require(
                 candidate["productionMethod"] == "model_generation"
@@ -273,7 +325,12 @@ pub fn validate_result(input: &Value, result: &Value) -> Result<(String, String,
         } else {
             require(
                 candidate["productionMethod"] == "deterministic_transform"
-                    && candidate["producerProvider"] == "sensa-authority"
+                    && candidate["producerProvider"]
+                        == if role == "pronunciation" {
+                            "sensa-static-pronunciation"
+                        } else {
+                            "sensa-authority"
+                        }
                     && candidate["producerModel"].is_null(),
             )?;
         }
@@ -564,6 +621,11 @@ pub(super) fn apply(
             } else {
                 let (scene, sense, expression) = validate_result(&request, result)?;
                 let material = Material {
+                    pronunciation: result["material"]
+                        .get("pronunciation")
+                        .cloned()
+                        .map(serde_json::from_value)
+                        .transpose()?,
                     id: id(),
                     sense_version_id: text(&task["target"]["senseVersionId"], 100)?.into(),
                     binding_version_id: text(&task["target"]["bindingVersionId"], 100)?.into(),

@@ -178,11 +178,45 @@ class LibraryViewModel extends ChangeNotifier {
       if (latest['activeAttemptId'] == request['id'] &&
           latest['status'] == 'generating') {
         await provisioningAction(completion);
+        if (error == null &&
+            completion['kind'] == 'finish' &&
+            completion['result']['status'] == 'ready') {
+          final materialId = preparations.firstWhere(
+            (v) => v['id'] == taskId,
+          )['materialId'];
+          final material = snapshot!.catalog
+              .map((v) => v['material'] as Map<String, dynamic>)
+              .where((m) => m['id'] == materialId)
+              .firstOrNull;
+          if (material?['pronunciation'] != null) {
+            try {
+              await obtainPronunciation(material!);
+            } catch (_) {
+              notice = '文字材料已准备好；发音尚未下载，联网后可在揭示表达时重试。';
+            }
+          }
+        }
       }
     } finally {
       provisioningBusy = false;
       _notify();
     }
+  }
+
+  Future<Uint8List> obtainPronunciation(Map<String, dynamic> material) async {
+    final id = material['id'] as String;
+    try {
+      return await repository.pronunciation(id);
+    } catch (_) {
+      /* Cache missing or damaged. */
+    }
+    final reference = material['pronunciation'] as Map<String, dynamic>;
+    final bytes = await semanticService.pronunciation(reference);
+    await repository.cachePronunciation(
+      id,
+      bytes,
+    ); // Rust verifies exact fixed digest before persistence.
+    return repository.pronunciation(id);
   }
 
   String? notice;

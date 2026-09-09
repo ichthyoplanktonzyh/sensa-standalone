@@ -75,6 +75,14 @@ class LibraryRepository {
         sessionId: sessionId,
         reference: reference,
       );
+  Future<Uint8List> pronunciation(String materialId) =>
+      native.libraryCachedPronunciation(path: path, materialId: materialId);
+  Future<void> cachePronunciation(String materialId, Uint8List bytes) =>
+      native.libraryCachePronunciation(
+        path: path,
+        materialId: materialId,
+        bytes: bytes,
+      );
   Future<LibrarySnapshot> load() async =>
       LibrarySnapshot.decode(await native.librarySnapshot(path: path));
   Future<LibrarySnapshot> execute(Map<String, dynamic> command) async =>

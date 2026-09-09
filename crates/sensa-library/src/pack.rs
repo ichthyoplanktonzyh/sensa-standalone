@@ -43,6 +43,9 @@ impl LearningPack {
         let mut ids = HashSet::new();
         let mut targets = HashSet::new();
         for m in &pack.materials {
+            if m.pronunciation.is_some() {
+                return Err(Error::Rule("unsupported_pack"));
+            }
             if [&m.id, &m.sense_version_id, &m.binding_version_id]
                 .iter()
                 .any(|v| uuid::Uuid::parse_str(v).map_or(true, |id| id.to_string() != v.as_str()))

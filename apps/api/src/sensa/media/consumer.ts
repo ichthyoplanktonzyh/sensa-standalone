@@ -7,6 +7,10 @@ export const readConsumerMedia:ConsumerMediaReader=async digest=>{
  if(new URL(project).protocol!=='https:')throw new ConsumerError(503,'media_unavailable');
  const response=await fetch(project.replace(/\/$/u,'')+'/storage/v1/object/authenticated/'+encodeURIComponent(bucket)+'/'+digest+'.mp3',{headers:{authorization:'Bearer '+key,apikey:key},signal:AbortSignal.timeout(15000),redirect:'error'});
  if(response.status===404)return null;if(!response.ok)throw new ConsumerError(503,'media_unavailable');
- const bytes=new Uint8Array(await response.arrayBuffer());if(bytes.length>2*1024*1024)throw new ConsumerError(503,'media_unavailable');return bytes;
+ const limit=2*1024*1024,reader=response.body?.getReader();
+ if(!reader)throw new ConsumerError(503,'media_unavailable');
+ const chunks:Uint8Array[]=[];let size=0;
+ try{while(true){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>limit)throw new ConsumerError(503,'media_unavailable');chunks.push(value);}}finally{await reader.cancel();}
+ const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}return bytes;
 };
 export async function bytesDigest(bytes:Uint8Array){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',Uint8Array.from(bytes))),b=>b.toString(16).padStart(2,'0')).join('');}

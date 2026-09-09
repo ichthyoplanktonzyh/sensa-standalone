@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 class SemanticServiceException implements Exception {
@@ -54,6 +55,50 @@ class SemanticService {
     timeout: const Duration(seconds: 80),
     maxBytes: 256 * 1024,
   );
+
+  Future<Uint8List> pronunciation(Map<String, dynamic> reference) async {
+    if (!configured) throw const SemanticServiceException('access_required');
+    final uri = _origin!
+        .resolve('/sensa/native/content/pronunciation/${reference['digest']}')
+        .replace(
+          queryParameters: {
+            'expressionDigest': reference['sourceTextDigest'] as String,
+          },
+        );
+    final token = _token;
+    final client = http.Client();
+    try {
+      return await (() async {
+        final response = await client.send(
+          http.Request('GET', uri)
+            ..followRedirects = false
+            ..headers['Authorization'] = 'Bearer $token',
+        );
+        if (response.statusCode != 200 ||
+            response.headers['content-type']?.split(';').first !=
+                'audio/mpeg') {
+          throw const SemanticServiceException('media_unavailable');
+        }
+        final expected = reference['byteSize'] as int;
+        if (expected <= 0 || expected > 2097152) {
+          throw const SemanticServiceException('invalid_response');
+        }
+        final bytes = BytesBuilder(copy: false);
+        await for (final chunk in response.stream) {
+          if (bytes.length + chunk.length > expected) {
+            throw const SemanticServiceException('invalid_response');
+          }
+          bytes.add(chunk);
+        }
+        if (bytes.length != expected) {
+          throw const SemanticServiceException('invalid_response');
+        }
+        return bytes.takeBytes();
+      })().timeout(const Duration(seconds: 20));
+    } finally {
+      client.close();
+    }
+  }
 
   Future<Map<String, dynamic>> send(
     Map<String, dynamic> request, {

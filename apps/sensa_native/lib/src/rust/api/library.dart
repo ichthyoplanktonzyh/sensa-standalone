@@ -28,3 +28,22 @@ Future<Uint8List> libraryAssuranceMedia({
   sessionId: sessionId,
   reference: reference,
 );
+
+/// Replaceable verified byte cache; does not write learning facts or operation receipts.
+Future<void> libraryCachePronunciation({
+  required String path,
+  required String materialId,
+  required List<int> bytes,
+}) => RustLib.instance.api.crateApiLibraryLibraryCachePronunciation(
+  path: path,
+  materialId: materialId,
+  bytes: bytes,
+);
+
+Future<Uint8List> libraryCachedPronunciation({
+  required String path,
+  required String materialId,
+}) => RustLib.instance.api.crateApiLibraryLibraryCachedPronunciation(
+  path: path,
+  materialId: materialId,
+);

@@ -1,3 +1,4 @@
+import 'pronunciation_view.dart';
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
 import 'assurance_view.dart';
@@ -272,6 +273,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
             button('揭示表达', () => vm.answer('reveal')),
           ] else ...[
             Text(s.material!['expression'] as String, style: t.headlineLarge),
+            PronunciationView(
+              key: ValueKey(
+                'pronunciation-${s.run!["id"]}-${s.material!["id"]}',
+              ),
+              model: vm,
+              material: s.material!,
+            ),
             Text(s.material!['sense'] as String, style: t.bodyLarge),
             Wrap(
               spacing: 8,

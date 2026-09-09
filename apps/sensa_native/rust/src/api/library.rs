@@ -19,3 +19,12 @@ pub fn init_app() {
 pub fn library_assurance_media(path:String,session_id:String,reference:String)->anyhow::Result<Vec<u8>> {
     Ok(sensa_library::read_assurance_media(Path::new(&path),&session_id,&reference)?)
 }
+
+/// Replaceable verified byte cache; does not write learning facts or operation receipts.
+pub fn library_cache_pronunciation(path:String,material_id:String,bytes:Vec<u8>)->anyhow::Result<()> {
+    Ok(sensa_library::pronunciation::cache(Path::new(&path),&material_id,&bytes)?)
+}
+
+pub fn library_cached_pronunciation(path:String,material_id:String)->anyhow::Result<Vec<u8>> {
+    Ok(sensa_library::pronunciation::cached(Path::new(&path),&material_id)?)
+}

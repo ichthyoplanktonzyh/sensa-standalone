@@ -1,4 +1,5 @@
-//! Single-device application transactions. All writes go through execute().
+//! Single-device application transactions. Learning fact writes go through execute().
+//! Replaceable pronunciation byte caches use a separate verified resource API.
 //! The acceptance material is opt-in; this is not a production package importer.
 pub mod activity;
 pub mod anchor;
@@ -11,6 +12,7 @@ pub mod pack;
 pub mod personal;
 pub mod policy;
 pub mod progress;
+pub mod pronunciation;
 pub mod provisioning;
 pub mod retention;
 pub mod semantic;
@@ -124,6 +126,8 @@ pub struct Material {
     pub sense: String,
     pub expression: String,
     pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pronunciation: Option<pronunciation::Reference>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -739,6 +743,7 @@ pub fn execute_at_offset(
 #[cfg(feature = "acceptance-fixture")]
 fn acceptance_material() -> Result<Material> {
     Ok(Material {
+        pronunciation: None,
         id: "native-acceptance-material-v1".into(),
         sense_version_id: "native-acceptance-tactful-sense-v1".into(),
         binding_version_id: "native-acceptance-tactful-binding-v1".into(),

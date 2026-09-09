@@ -206,6 +206,17 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
     });},
     cancel:async(request,input)=>{const identity=await verify(request);await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());const old=(await db.query('SELECT input_digest FROM sensa_consumer.native_content_cancellations WHERE account_id=$1 AND request_id=$2',[a.account_id,input.id])).rows[0];if(old&&old.input_digest!==input.inputDigest)throw new ConsumerError(409,'native_request_id_reuse');await db.query('INSERT INTO sensa_consumer.native_content_cancellations VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[a.account_id,input.id,input.inputDigest,a.now]);});},
     checkActive:async(request,input)=>{const identity=await verify(request);await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());if((await db.query('SELECT 1 FROM sensa_consumer.native_content_cancellations WHERE account_id=$1 AND request_id=$2',[a.account_id,input.id])).rows.length)throw new ConsumerError(409,'native_request_cancelled');});},
+    pronunciation:async expression=>transaction(async db=>{
+      const digest=await bytesDigest(new TextEncoder().encode(expression));
+      const row=(await db.query('SELECT digest,source_text_digest,mime_type,byte_size FROM sensa_consumer.published_media WHERE source_text_digest=$1 ORDER BY verified_at DESC,digest LIMIT 1',[digest])).rows[0];
+      return row?{digest:row.digest,sourceTextDigest:row.source_text_digest,mimeType:row.mime_type,byteSize:row.byte_size}:null;
+    }),
+    media:async(digest,expressionDigest)=>{
+      const row=await transaction(async db=>(await db.query('SELECT digest,source_text_digest,mime_type,byte_size FROM sensa_consumer.published_media WHERE digest=$1 AND source_text_digest=$2',[digest,expressionDigest])).rows[0]);
+      if(!row)return null;
+      const bytes=await (options.mediaReader??readConsumerMedia)(digest);
+      return bytes?{metadata:{digest:row.digest,sourceTextDigest:row.source_text_digest,mimeType:row.mime_type,byteSize:row.byte_size},bytes}:null;
+    },
     generate:options.contentGenerator??generateContent,review:options.contentReviewer??reviewContent,
   }));
   app.route('/sensa/native/semantic',createNativeSemanticRoutes(async request=>{
