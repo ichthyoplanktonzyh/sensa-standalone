@@ -532,6 +532,13 @@ class LibraryViewModel extends ChangeNotifier {
     if (text.contains('preparation_superseded')) {
       return '这个准备请求已经取消或被替代，请查看当前任务。';
     }
+    if (text.contains('reference_version_conflict')) {
+      return '同一来源版本的内容不能改写，请使用新的资料版本。';
+    }
+    if (text.contains('reference_digest_mismatch') ||
+        text.contains('invalid_reference_source')) {
+      return '参考资料的来源、摘要或目标不匹配，未附加资料。';
+    }
     if (text.contains('daily_preparation_limit')) return '今天的准备预算已用完，请稍后再试。';
     if (text.contains('attempt_timed_out')) return '准备已超时，资料已保留，请重新读取任务后重试。';
     if (text.contains('quantity_required')) {

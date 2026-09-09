@@ -77,3 +77,29 @@ pub fn cached(path: &Path, material_id: &str) -> Result<Vec<u8>> {
     reference.verify(&bytes)?;
     Ok(bytes)
 }
+
+/// Fixed metadata from an explicitly configured static-resource service.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Source {
+    pub reference: Reference,
+    pub recipient: String,
+}
+impl Source {
+    pub fn validate(&self, expression: &str) -> Result<()> {
+        self.reference.validate(expression)?;
+        let url =
+            url::Url::parse(&self.recipient).map_err(|_| Error::Rule("invalid_pronunciation"))?;
+        if !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || !(url.scheme() == "https"
+                || url.scheme() == "http"
+                    && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]")))
+        {
+            return Err(Error::Rule("invalid_pronunciation"));
+        }
+        Ok(())
+    }
+}

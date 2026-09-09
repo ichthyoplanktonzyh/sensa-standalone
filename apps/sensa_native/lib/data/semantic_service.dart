@@ -1,3 +1,4 @@
+import 'package:crypto/crypto.dart';
 import 'dart:async';
 import 'agent_provider.dart';
 import 'dart:convert';
@@ -71,7 +72,37 @@ class SemanticService {
     maxBytes: 256 * 1024,
   );
 
+  Future<Map<String, dynamic>?> lookupPronunciation(String expression) async {
+    try {
+      await providers?.call().ensureAccess('service');
+      if (!configured) return null;
+      final recipient = _origin!.toString();
+      final result = await send(
+        {'expression': expression},
+        path: '/sensa/native/content/pronunciation/lookup',
+        timeout: const Duration(seconds: 4),
+        maxBytes: 4096,
+      );
+      final r = result['reference'];
+      if (r is! Map ||
+          r['sourceTextDigest'] !=
+              sha256.convert(utf8.encode(expression)).toString() ||
+          r['mimeType'] != 'audio/mpeg' ||
+          r['byteSize'] is! int ||
+          r['byteSize'] <= 0 ||
+          r['byteSize'] > 2097152 ||
+          r['digest'] is! String ||
+          !RegExp(r'^[a-f0-9]{64}$').hasMatch(r['digest'])) {
+        return null;
+      }
+      return {'reference': r, 'recipient': recipient};
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<Uint8List> pronunciation(Map<String, dynamic> reference) async {
+    await providers?.call().ensureAccess('service');
     if (!configured) throw const SemanticServiceException('access_required');
     final endpoint = _origin!;
     final used = connection;
@@ -130,6 +161,7 @@ class SemanticService {
     Duration timeout = const Duration(seconds: 50),
     int maxBytes = 96 * 1024,
   }) async {
+    await providers?.call().ensureAccess('service');
     if (!configured) throw const SemanticServiceException('access_required');
     final used = connection;
     final token = _token;

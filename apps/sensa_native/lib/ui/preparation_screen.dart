@@ -1,4 +1,5 @@
 import 'agent_screen.dart';
+import 'reference_source_panel.dart';
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
 import 'online_service_dialog.dart';
@@ -172,6 +173,14 @@ class _PreparationScreenState extends State<PreparationScreen> {
                     AnchorUsePanel(model: model, meaning: meaning!),
                   if (current?['anchor'] != null)
                     Text('当前目标使用的已授权原文：${current!['anchor']['sentence']}'),
+                  if (current != null)
+                    ReferenceSourcePanel(model: model, task: current),
+                  if ((current?['target']['binding'] ??
+                          meaning?['bindingMetadata'])
+                      case final Map binding)
+                    Text(
+                      '表达关系：${bindingRelationLabel(binding['relation'])} · 覆盖范围：${bindingCoverageLabel(binding['semanticCoverage'])}。材料将按这条关系解释实际用法。',
+                    ),
                   if (model.notice != null) Text(model.notice!),
                   const SizedBox(height: 16),
                   if (!ready) ...[
@@ -329,3 +338,15 @@ class _PreparationScreenState extends State<PreparationScreen> {
     },
   );
 }
+
+String bindingRelationLabel(dynamic value) => switch (value) {
+  'approximates' => '近似表达',
+  'evokes' => '唤起这个意思',
+  _ => '表达这个意思',
+};
+String bindingCoverageLabel(dynamic value) => switch (value) {
+  'broader' => '更广',
+  'narrower' => '更窄',
+  'overlapping' => '部分重叠',
+  _ => '一致',
+};

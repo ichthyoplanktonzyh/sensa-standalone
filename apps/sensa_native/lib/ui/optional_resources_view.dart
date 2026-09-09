@@ -31,12 +31,17 @@ class OptionalResourcesView extends StatelessWidget {
     final p = resource['contentPayload'] as Map<String, dynamic>;
     final label = switch (resource['materialRoleKey']) {
       'recall_support' => '回忆提示',
+      'pronunciation' => '发音',
       'language_structure' => '语言结构',
       'usage_guidance' => '用法例句',
       'scene_bridge' => '联系场景',
       _ => '',
     };
     final body = switch (resource['materialRoleKey']) {
+      'pronunciation' => [
+        p['phoneticNotation'],
+        p['accentLabel'],
+      ].whereType<String>().join(' · '),
       'language_structure' => [
         p['expressionTypeLabel'],
         p['partOfSpeech'],

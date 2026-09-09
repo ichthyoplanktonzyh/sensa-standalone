@@ -90,3 +90,5 @@ Android 加 `--no-uninstall`。成功后同名追加 `--dart-define=SENSA_NATIVE
 浏览器/Agent 端口、三端事实同步、Web 本地执行和 M3 均未因本组而完成。
 
 2026-09-09 后续更新：本记录中的“内存凭据”属于上一组交付边界；系统安全持久化、用途选择、统一入口与 Capture 接线已由 [Provider 组](native-provider-group-handoff.md) 接续。原生账户、发布治理和可选资源边界仍保留。
+
+后续更新（2026-09-09）：本文所列资源供给、图文授权、关系准备、流式与原生在线账户事项，已由 [资源整组交付](native-resource-group-handoff.md) 接续；本文保留原轮次验收记录，当前状态以迁移清单为准。

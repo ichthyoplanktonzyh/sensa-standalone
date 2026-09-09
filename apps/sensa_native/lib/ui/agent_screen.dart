@@ -1,3 +1,4 @@
+import 'provider_login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'agent_controller.dart';
@@ -150,7 +151,17 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
               tooltip: '管理模型服务',
               onSelected: (value) async {
                 try {
-                  if (value == 'forget') {
+                  if (value == 'login') {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => ProviderLoginScreen(
+                          controller: widget.controller,
+                          profile: p,
+                        ),
+                      ),
+                    );
+                  } else if (value == 'forget') {
                     await widget.controller.providers.forget(p['id']);
                   } else {
                     await widget.controller.providers.remove(p['id']);
@@ -164,9 +175,11 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
                   if (mounted) setState(() {});
                 }
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'forget', child: Text('删除已保存凭据')),
-                PopupMenuItem(value: 'remove', child: Text('删除此服务')),
+              itemBuilder: (_) => [
+                if (p['kind'] == 'sensa')
+                  const PopupMenuItem(value: 'login', child: Text('在线服务账户')),
+                const PopupMenuItem(value: 'forget', child: Text('删除已保存凭据')),
+                const PopupMenuItem(value: 'remove', child: Text('删除此服务')),
               ],
             ),
           ),
@@ -418,6 +431,11 @@ class _AgentScreenState extends State<AgentScreen> {
                 ),
                 const Text('取消勾选表示只讨论文字，图片仍保存在本机。'),
               ],
+              if (c.busy && c.previewSession == id && c.preview.isNotEmpty)
+                Text(
+                  '正在整理（尚未完成）：${c.preview}',
+                  key: const ValueKey('agent-preview'),
+                ),
               if (s != null) ...[
                 Text(agentStatus(s['status'])),
                 if (teacher)

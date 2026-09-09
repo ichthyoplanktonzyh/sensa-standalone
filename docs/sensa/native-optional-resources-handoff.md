@@ -72,3 +72,5 @@ analyze 和根级 typecheck/build/lint 通过；既有真实 TS assembler → Ru
 Android 加 `--no-uninstall`，同名追加 `--dart-define=SENSA_NATIVE_RECOVERY=true` 做冷恢复。
 Agent 测试先运行 `node --import tsx scripts/sensaNativeAgentSmoke.mts --serve`，按 Provider 交付中的
 命令执行。schema 对照使用 `node --import tsx scripts/sensaNativeOptionalResourcesSmoke.mts`。
+
+后续更新（2026-09-09）：本文所列资源供给、图文授权、关系准备、流式与原生在线账户事项，已由 [资源整组交付](native-resource-group-handoff.md) 接续；本文保留原轮次验收记录，当前状态以迁移清单为准。

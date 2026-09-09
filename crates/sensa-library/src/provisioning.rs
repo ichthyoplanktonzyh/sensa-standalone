@@ -12,6 +12,11 @@ pub enum Action {
         expected_revision: u32,
         policy: PolicyRef,
     },
+    SetReference {
+        task_id: String,
+        expected_revision: u32,
+        reference: Option<Box<resources::Reference>>,
+    },
     SetPolicy {
         task_id: String,
         expected_revision: u32,
@@ -435,12 +440,6 @@ pub(super) fn apply(
             policy: p,
         } => {
             let meaning = personal::read_meaning(db, meaning_id, *expected_revision)?;
-            if meaning["bindingMetadata"].is_object()
-                && (meaning["bindingMetadata"]["relation"] != "realizes"
-                    || meaning["bindingMetadata"]["semanticCoverage"] != "exact")
-            {
-                return Err(Error::Rule("binding_learning_not_supported"));
-            }
             if !meaning["materialId"].is_null() {
                 return Err(Error::Rule("local_material_already_available"));
             }
@@ -460,6 +459,11 @@ pub(super) fn apply(
                 policy::append_assignment(db, "target", &tid, Some(p), now.timestamp_millis())?;
                 let proposal = semantic::validate_proposal(meaning["proposal"].clone())?;
                 let mut task = json!({"id":tid,"revision":1,"policy":p,"planRevision":id(),"target":{"senseId":meaning["senseId"],"senseVersionId":meaning["senseVersionId"],"bindingId":meaning["bindingId"],"bindingVersionId":meaning["bindingVersionId"],"proposal":proposal},"attemptCount":0,"activeAttemptId":null,"materialId":null,"createdAtMs":now.timestamp_millis()});
+                task["target"]["binding"] = if meaning["bindingMetadata"].is_object() {
+                    meaning["bindingMetadata"].clone()
+                } else {
+                    json!({"relation":"realizes","semanticCoverage":"exact"})
+                };
                 status(&mut task, p);
                 task["anchor"] = json!(anchor::current(db, meaning_id)?);
                 db.execute(
@@ -483,6 +487,52 @@ pub(super) fn apply(
             }
             if read(db, &tid)?["status"] == "ready" {
                 db.execute("INSERT INTO personal_learning_links VALUES(?1,?2,?3,?4) ON CONFLICT DO NOTHING",params![meaning_id,tid,command.operation_id,now.timestamp_millis()])?;
+            }
+        }
+        Action::SetReference {
+            task_id,
+            expected_revision,
+            reference,
+        } => {
+            let mut task = read(db, task_id)?;
+            revision(&task, *expected_revision)?;
+            if let Some(reference) = reference {
+                reference.validate(&task["target"])?;
+                // A source edition is immutable even after detach or process restart.
+                let mut q = db.prepare("SELECT content FROM personal_preparation_versions")?;
+                for raw in q.query_map([], |r| r.get::<_, String>(0))? {
+                    let prior: Value = serde_json::from_str(&raw?)?;
+                    let r = &prior["reference"];
+                    if r["sourceId"] == reference.source_id
+                        && r["edition"] == reference.edition
+                        && r["entryId"] == reference.entry_id
+                        && !r.is_null()
+                        && r["digest"] != reference.digest
+                    {
+                        return Err(Error::Rule("reference_version_conflict"));
+                    }
+                }
+            }
+            let value = json!(reference);
+            if task["reference"] == value {
+                return Ok(());
+            }
+            save_version(db, &task)?;
+            end_attempt(db, &task, "reference_changed", now)?;
+            task["reference"] = value;
+            task["planRevision"] = json!(id());
+            task["attemptCount"] = json!(0);
+            task["activeAttemptId"] = Value::Null;
+            let p: PolicyRef = serde_json::from_value(task["policy"].clone())?;
+            status(&mut task, &p);
+            save_version(db, &task)?;
+            write(db, &mut task)?;
+            if db.query_row(
+                "SELECT EXISTS(SELECT 1 FROM targets WHERE id=?1)",
+                [task_id],
+                |r| r.get::<_, bool>(0),
+            )? {
+                policy::refresh_target(db, task_id)?;
             }
         }
         Action::SetPolicy {
@@ -555,11 +605,22 @@ pub(super) fn apply(
             // Explanations may describe the private occurrence. Only reusable semantic facts leave the library.
             let mut target = task["target"].clone();
             target.as_object_mut().unwrap().remove("proposal");
+            if target["binding"]["relation"] == "realizes"
+                && target["binding"]["semanticCoverage"] == "exact"
+            {
+                target.as_object_mut().unwrap().remove("binding");
+            }
             target["semanticSpec"] = task["target"]["proposal"]["semanticSpec"].clone();
             target["expression"] = task["target"]["proposal"]["expression"].clone();
             let mut request = json!({"version":"sensa-native-provisioning-v1","id":attempt,"taskId":task_id,"learnerId":learner,"planRevision":task["planRevision"],"policy":p,"target":target,"protocol":{"id":"consumer-initial","version":"v1","purpose":"initial_learning"},"demandReference":{"contentDemandKey":"lightweight-initial-content","definitionVersion":"v1"},"requestedAt":now.to_rfc3339()});
             if let Some(g) = task.get("anchor").filter(|g| !g.is_null()) {
                 request["anchor"] = json!({"grantId":g["grantId"],"contextVersion":g["contextVersion"],"sentence":g["sentence"],"recipient":g["recipient"]});
+            }
+            if let Some(material) = task["anchor"].get("material") {
+                request["anchor"]["material"] = material.clone();
+            }
+            if let Some(reference) = task.get("reference").filter(|r| !r.is_null()) {
+                request["reference"] = reference.clone();
             }
             request["inputDigest"] = json!(hash(&request)?);
             db.execute(
@@ -634,7 +695,14 @@ pub(super) fn apply(
                     };
                 let material = Material {
                     resources: if result["proof"]["adapter"] == "native-agent-lightweight-v1" {
-                        resources::from_candidate(&result["material"], &expression)?
+                        let items: Vec<resources::Resource> = serde_json::from_value(
+                            result["material"]
+                                .get("resources")
+                                .cloned()
+                                .unwrap_or(json!([])),
+                        )?;
+                        resources::validate(&items, &expression, false)?;
+                        items
                     } else {
                         vec![]
                     },
@@ -786,7 +854,7 @@ pub(super) fn project(db: &Connection) -> Result<Vec<Value>> {
 }
 
 pub(super) fn save_version(db: &Connection, task: &Value) -> Result<()> {
-    let fixed = json!({"id":task["planRevision"],"targetId":task["id"],"target":task["target"],"policy":task["policy"],"anchor":task["anchor"]});
+    let fixed = json!({"id":task["planRevision"],"targetId":task["id"],"target":task["target"],"policy":task["policy"],"anchor":task["anchor"],"reference":task["reference"]});
     db.execute(
         "INSERT INTO personal_preparation_versions VALUES(?1,?2,?3) ON CONFLICT(id) DO NOTHING",
         params![

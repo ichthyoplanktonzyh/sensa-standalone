@@ -23,6 +23,17 @@ export function createNativeProvisioningRoutes(options:{authorize:(request:Reque
   await options.authorize(c.req.raw);
   return new Response(Uint8Array.from(asset.bytes),{headers:{'Content-Type':'audio/mpeg','Content-Length':String(asset.bytes.length),'Cache-Control':'private, no-store'}});
  });
+ app.post('/pronunciation/lookup',async c=>{
+  c.header('Cache-Control','no-store');await options.authorize(c.req.raw);
+  const {expression}=z.object({expression:z.string().trim().min(1).max(2000)}).strict().parse(await c.req.json());
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  try{
+   const reference=await Promise.race([options.pronunciation?.(expression)??Promise.resolve(null),new Promise<null>(resolve=>{timer=setTimeout(()=>resolve(null),3000);})]).catch(()=>null);
+   await options.authorize(c.req.raw);
+   const valid=reference&&reference.sourceTextDigest===await bytesDigest(new TextEncoder().encode(expression))&&/^[0-9a-f]{64}$/u.test(reference.digest)&&reference.mimeType==='audio/mpeg'&&Number.isInteger(reference.byteSize)&&reference.byteSize>0&&reference.byteSize<=2097152;
+   return c.json({reference:valid?reference:null});
+  }finally{clearTimeout(timer);}
+ });
  app.post('/cancel',async c=>{await options.authorize(c.req.raw);const input=z.object({id:z.string().uuid(),inputDigest:z.string().regex(/^[0-9a-f]{64}$/u)}).strict().parse(await c.req.json());if(!options.cancel)throw new ConsumerError(503,'cancellation_unavailable');await options.cancel(c.req.raw,input);c.header('Cache-Control','no-store');return c.json({id:input.id,inputDigest:input.inputDigest,status:'cancelled'});});
  app.post('/prepare',async c=>{
   c.header('Cache-Control','no-store');await options.authorize(c.req.raw);

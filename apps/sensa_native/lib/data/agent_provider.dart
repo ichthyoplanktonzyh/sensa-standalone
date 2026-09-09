@@ -1,3 +1,5 @@
+import 'provider_auth.dart';
+import 'agent_stream.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -37,6 +39,8 @@ class AgentProviders {
   String? selected;
   Map<String, String?> roles = {};
   final Map<String, String> _keys = {};
+  final Map<String, Map<String, dynamic>> _sessions = {};
+  String? accountEmail(String id) => _sessions[id]?['email'];
   final Map<String, String> credentialStates = {};
   Map<String, dynamic>? forPurpose(String purpose) => profiles
       .where(
@@ -49,7 +53,9 @@ class AgentProviders {
   Map<String, dynamic>? get current => forPurpose('teacher');
   bool ready(String purpose) =>
       forPurpose(purpose) != null &&
-      credential(forPurpose(purpose)!['id']).isNotEmpty;
+      credential(forPurpose(purpose)!['id']).isNotEmpty &&
+      (_sessions[forPurpose(purpose)!['id']] == null ||
+          _sessions[forPurpose(purpose)!['id']]!['authorized'] == true);
   bool get configured => ready('teacher');
   Map<String, dynamic> connection(Map<String, dynamic> p) => {
     for (final k in ['id', 'name', 'endpoint', 'model', 'kind', 'vision'])
@@ -79,6 +85,7 @@ class AgentProviders {
   Future<void> unlock() => _serial(_unlock);
   Future<void> _unlock() async {
     _keys.clear();
+    _sessions.clear();
     for (final p in profiles) {
       final id = p['id'] as String;
       credentialStates[id] = 'missing';
@@ -105,6 +112,10 @@ class AgentProviders {
             key.isNotEmpty &&
             !key.contains(RegExp(r'[\r\n]'))) {
           _keys[id] = key;
+          if (p['kind'] == 'sensa' && entry['session'] is Map) {
+            final session = Map<String, dynamic>.from(entry['session']);
+            if (session['access'] == key) _sessions[id] = session;
+          }
           credentialStates[id] = 'saved';
         }
       } catch (_) {
@@ -138,7 +149,11 @@ class AgentProviders {
 
   Future<void> save(Map<String, dynamic> p, String key) =>
       _serial(() => _save(Map<String, dynamic>.from(p), key));
-  Future<void> _save(Map<String, dynamic> p, String key) async {
+  Future<void> _save(
+    Map<String, dynamic> p,
+    String key, {
+    Map<String, dynamic>? session,
+  }) async {
     validate(p);
     if (key.contains(RegExp(r'[\r\n]'))) {
       throw const AgentFailure('configuration');
@@ -152,7 +167,11 @@ class AgentProviders {
       try {
         await vault.write(
           ref,
-          jsonEncode({'fingerprint': fingerprint(p), 'credential': key.trim()}),
+          jsonEncode({
+            'fingerprint': fingerprint(p),
+            'credential': key.trim(),
+            'session': ?session,
+          }),
         );
       } catch (_) {
         try {
@@ -185,8 +204,10 @@ class AgentProviders {
     profiles = next;
     selected ??= p['id'];
     _keys.remove(p['id']);
+    _sessions.remove(p['id']);
     if (key.trim().isNotEmpty) {
       _keys[p['id']] = key.trim();
+      if (session != null) _sessions[p['id']] = session;
     } else if (same) {
       await _unlock();
     }
@@ -201,6 +222,77 @@ class AgentProviders {
       } catch (_) {}
     }
   }
+
+  Future<void> login(
+    Map<String, dynamic> p,
+    String address,
+    String apiKey,
+    String email,
+    String code,
+  ) => _serial(() async {
+    if (p['kind'] != 'sensa' ||
+        !profiles.any((v) => fingerprint(v) == fingerprint(p))) {
+      throw const AgentFailure('configuration');
+    }
+    final session = {
+      ...await ProviderAuth.verify(address, apiKey, email, code),
+      'installationId': const Uuid().v4(),
+      'authorized': false,
+    };
+    await _save(p, session['access'], session: session);
+    await ProviderAuth.authorizeService(p['endpoint'], session);
+    await _save(
+      p,
+      session['access'],
+      session: {...session, 'authorized': true},
+    );
+  });
+  Future<void> ensureAccess(String purpose) => _serial(() async {
+    final p = forPurpose(purpose);
+    if (p == null) return;
+    var session = _sessions[p['id']];
+    if (session == null) return;
+    try {
+      if ((session['expiresAt'] as int) <=
+          DateTime.now().millisecondsSinceEpoch + 60000) {
+        session = await ProviderAuth.refresh(session);
+        // Persist rotated refresh credentials before any separate service request can fail.
+        await _save(p, session['access'], session: session);
+      }
+      if (session['authorized'] != true) {
+        await ProviderAuth.authorizeService(p['endpoint'], session);
+        await _save(
+          p,
+          session['access'],
+          session: {...session, 'authorized': true},
+        );
+      }
+    } on OnlineAuthFailure catch (e) {
+      if (e.code == 'invalid') await _forget(p['id']);
+      throw const AgentFailure('credentials');
+    }
+  });
+  Future<void> logout(String id) => _serial(() async {
+    final session = _sessions[id];
+    final endpoint =
+        profiles.firstWhere((p) => p['id'] == id)['endpoint'] as String;
+    // Clear local access even when offline; local learning and library ownership do not change.
+    await _forget(id);
+    if (session != null) {
+      try {
+        await ProviderAuth.revokeService(endpoint, session, const Uuid().v4());
+      } catch (_) {}
+      try {
+        await ProviderAuth.request(
+          session['authUrl'],
+          session['apiKey'],
+          'logout?scope=local',
+          {},
+          access: session['access'],
+        );
+      } catch (_) {}
+    }
+  });
 
   Future<void> assign(String purpose, String? id) =>
       _serial(() => _assign(purpose, id));
@@ -241,6 +333,7 @@ class AgentProviders {
   Future<void> _forget(String id) async {
     final p = profiles.firstWhere((p) => p['id'] == id);
     _keys.remove(id);
+    _sessions.remove(id);
     credentialStates[id] = 'missing';
     if (p['credentialRef'] != null) {
       try {
@@ -289,6 +382,7 @@ class AgentProviders {
       return;
     }
     _keys.remove(p['id']);
+    _sessions.remove(p['id']);
     credentialStates[p['id']] = 'invalid';
     final next = [
       for (final v in profiles)
@@ -309,14 +403,22 @@ class AgentProviders {
   }
 
   String credential(String id) => _keys[id] ?? '';
-  String status(String id) => switch (credentialStates[id]) {
-    'saved' => '凭据已安全保存',
-    'invalid' => '凭据已失效，请更新',
-    'locked' => '安全存储暂不可用',
-    'changed' => '服务已变化，请重新填写凭据',
-    _ => '需填写凭据',
-  };
+  String status(String id) {
+    final session = _sessions[id];
+    if (session != null && session['authorized'] != true) {
+      return '邮箱已验证，等待在线服务授权';
+    }
+    return switch (credentialStates[id]) {
+      'saved' => '凭据已安全保存',
+      'invalid' => '凭据已失效，请更新',
+      'locked' => '安全存储暂不可用',
+      'changed' => '服务已变化，请重新填写凭据',
+      _ => '需填写凭据',
+    };
+  }
+
   void clear() {
+    _sessions.clear();
     _keys.clear();
   }
 }
@@ -331,8 +433,9 @@ class AgentTransport {
   Future<Map<String, dynamic>> complete(
     Map<String, dynamic> request,
     AgentProviders providers,
-    WorldRepository media,
-  ) async {
+    WorldRepository media, {
+    void Function(String)? onPreview,
+  }) async {
     final p = Map<String, dynamic>.from(request['provider']);
     final key = providers.credential(p['id']);
     if (key.isEmpty) throw const AgentFailure('credentials');
@@ -369,7 +472,7 @@ class AgentTransport {
         'thinking': {'type': 'disabled'},
       'messages': messages,
       'max_tokens': 3000,
-      'stream': false,
+      'stream': p['kind'] == 'compatible' && request['purpose'] != 'review',
       if ((request['tools'] as List).isNotEmpty) 'tools': request['tools'],
       if (request['purpose'] == 'review')
         'response_format': {'type': 'json_object'},
@@ -417,14 +520,22 @@ class AgentTransport {
                 : 'provider',
           );
         }
-        final bytes = <int>[];
-        await for (final chunk in response.stream) {
-          if (bytes.length + chunk.length > 256 * 1024) {
-            throw const AgentFailure('response');
+        dynamic value;
+        if ((response.headers['content-type'] ?? '').startsWith(
+          'text/event-stream',
+        )) {
+          if (p['kind'] != 'compatible') throw const AgentFailure('response');
+          value = await readAgentStream(response.stream, onPreview: onPreview);
+        } else {
+          final bytes = <int>[];
+          await for (final chunk in response.stream) {
+            if (bytes.length + chunk.length > 256 * 1024) {
+              throw const AgentFailure('response');
+            }
+            bytes.addAll(chunk);
           }
-          bytes.addAll(chunk);
+          value = jsonDecode(utf8.decode(bytes));
         }
-        final value = jsonDecode(utf8.decode(bytes));
         final content = p['kind'] == 'sensa' ? value['response'] : value;
         if (p['kind'] == 'sensa' &&
             (value['id'] != wire['id'] ||
@@ -457,6 +568,8 @@ class AgentTransport {
       })().timeout(const Duration(seconds: 45));
     } on AgentFailure {
       rethrow;
+    } on FormatException {
+      throw const AgentFailure('response');
     } on TimeoutException {
       throw const AgentFailure('timeout');
     } catch (_) {

@@ -71,10 +71,43 @@ pub(super) fn apply(
             return Ok(());
         }
         revoke(db, meaning_id, command, now)?;
-        let sentence = &meaning["snapshot"]["sentence"];
+        let world = meaning["worldContext"]["draft"].as_object();
+        let blocks = world.map(|d| d["blocks"].clone());
+        let sentence = if let Some(blocks) = &blocks {
+            json!(
+                blocks
+                    .as_array()
+                    .ok_or(Error::Rule("invalid_world_draft"))?
+                    .iter()
+                    .filter_map(|b| b["text"].as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        } else {
+            meaning["snapshot"]["sentence"].clone()
+        };
         let context_version =
             semantic::hash(&json!({"anchorId":meaning["contextAnchorId"],"sentence":sentence}))?;
-        let grant = json!({"grantId":id(),"meaningId":meaning_id,"contextAnchorId":meaning["contextAnchorId"],"contextVersion":context_version,"sentence":sentence,"recipient":origin,"provider":"configured_model_service","purpose":"learning_content","policyVersion":"original-context-v1","grantedAtMs":now.timestamp_millis()});
+        let mut grant = json!({"grantId":id(),"meaningId":meaning_id,"contextAnchorId":meaning["contextAnchorId"],"contextVersion":context_version,"sentence":sentence,"recipient":origin,"provider":"configured_model_service","purpose":"learning_content","policyVersion":"original-context-v1","grantedAtMs":now.timestamp_millis()});
+        if let Some(mut blocks) = blocks {
+            for block in blocks.as_array_mut().unwrap() {
+                if block["kind"] == "image" {
+                    let (mime, size): (String, i64) = db.query_row(
+                        "SELECT mime,length(bytes) FROM world_media WHERE digest=?1",
+                        [block["digest"].as_str()],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    )?;
+                    block["mediaType"] = json!(mime);
+                    block["byteSize"] = json!(size);
+                }
+            }
+            let material = json!({"blocks":blocks});
+            grant["contextVersion"] = json!(semantic::hash(
+                &json!({"context":meaning["worldContext"]["id"],"revision":meaning["worldContext"]["revision"],"material":material})
+            )?);
+            grant["material"] = material;
+            grant["policyVersion"] = json!("original-context-v2");
+        }
         db.execute(
             "INSERT INTO personal_anchor_grants VALUES(?1,?2,?3,?4)",
             params![

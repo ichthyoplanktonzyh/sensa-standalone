@@ -13,6 +13,9 @@ const stats = {
   rejections: 0,
   acceptances: 0,
   observations: 0,
+  contentImages: 0,
+  reviewImages: 0,
+  references: 0,
   models: {} as Record<string,number>
 };
 function proposal(borrow = false) {
@@ -85,11 +88,21 @@ function complete(body: any) {
     stats.proposals++;
     return call('propose_meaning', proposal(replies.includes('更正')));
   }
-  assert.ok(!JSON.stringify(messages).includes('PRIVATE'), 'Unapproved personal context sent to content generation');
+  const first = messages[1].content;
+  const input = JSON.parse(Array.isArray(first) ? first.find((p:any)=>p.type==='text').text : first);
+  const origin = input.anchor ?? input.origin;
+  if (JSON.stringify(messages).includes('PRIVATE')) assert.ok(origin?.grantId, 'Unapproved personal context');
+  if (Array.isArray(first)) {
+    const n=first.filter((p:any)=>p.type==='image_url').length;
+    assert.equal(origin.material.blocks.filter((b:any)=>b.kind==='image').length,n);
+    if(tools.includes('read_demand')) stats.contentImages+=n; else stats.reviewImages+=n;
+  }
+  if(input.reference) { assert.equal(input.reference.attribution,'Synthetic resource acceptance'); stats.references++; }
+
   if (tools.includes('read_demand')) {
     if (!previous.includes('read_demand')) return call('read_demand', {});
     if (!previous.includes('lookup_reference_facts')) return call('lookup_reference_facts', {});
-    const corrected = messages.some((m: any) => m.role === 'user' && m.content.includes('审核')) || previous.includes('submit_candidate');
+    const corrected = messages.some((m: any) => m.role === 'user' && typeof m.content === 'string' && m.content.includes('审核')) || previous.includes('submit_candidate');
     return call('submit_candidate', {
       scene: corrected ? '下雨时你从朋友那里借来一把雨伞，用完后再归还给朋友。' : '你从朋友那里借来一把雨伞，暂时使用以后会归还。',
       senseFocus: '暂时从别人那里借来使用',
@@ -98,7 +111,7 @@ function complete(body: any) {
   }
   assert.equal(messages.length, 2, 'Review must have a fresh isolated conversation');
   assert.deepEqual(tools, []);
-  const data = JSON.parse(messages[1].content);
+  const data = input;
   const accepted = data.candidate.scene.startsWith('下雨时');
   if (accepted) stats.acceptances++;else stats.rejections++;
   return respond({
@@ -247,8 +260,22 @@ if (process.argv.includes('--serve')) createServer(async (req, res) => {
     assert.equal(req.url, '/chat/completions');
     const b = JSON.parse(raw);
     const result = complete(b);
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify(result));
+    if(b.stream){
+      res.setHeader('Content-Type','text/event-stream');
+      const msg=result.choices[0].message;
+      const send=(delta:any,finish_reason:string|null=null)=>res.write(`data: ${JSON.stringify({model:result.model,choices:[{index:0,delta,finish_reason}]})}\n\n`);
+      send({content:msg.content.slice(0,3)}); send({content:msg.content.slice(3)});
+      for(const [index,call] of (msg.tool_calls??[]).entries()) {
+        const args=call.function.arguments;
+        send({tool_calls:[{index,id:call.id,type:'function',function:{name:call.function.name,arguments:args.slice(0,5)}}]});
+        send({tool_calls:[{index,function:{arguments:args.slice(5)}}]});
+      }
+      send({},msg.tool_calls?.length?'tool_calls':'stop');
+      res.end('data: [DONE]\n\n');
+    }else{
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(result));
+    }
   } catch (e) {
     console.error(String(e));
     res.statusCode = 400;

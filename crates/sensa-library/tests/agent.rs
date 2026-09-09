@@ -226,6 +226,13 @@ fn content_loop_reviews_independently_and_commits_only_bound_material() {
     );
     assert!(!row(&p, &cid)["input"].to_string().contains("PRIVATE"));
     tool(&p, &cid, "read_demand", json!({}));
+    tool(
+        &p,
+        &cid,
+        "submit_candidate",
+        json!({"scene":"你把雨伞交给朋友，答案是 ｌｅｎｄ，随后归还。","senseFocus":"暂时给别人使用"}),
+    );
+    assert!(row(&p, &cid)["candidate"].is_null());
     for invalid in [
         json!({"materialRoleKey":"recall_support","contentPayload":{"text":"ｌｅｎｄ"}}),
         json!({"materialRoleKey":"language_structure","contentPayload":{"expressionKind":"word","expressionTypeLabel":"单词","partOfSpeech":"动词"}}),
@@ -426,4 +433,315 @@ fn captured_occurrence_teacher_preserves_intake_source_and_explicit_acceptance()
     assert_eq!(s.personal["intakes"][0]["meaningId"], m["id"]);
     assert!(!m["addedToLearning"].as_bool().unwrap());
     assert!(s.run.is_none());
+}
+
+fn task(p: &Path) -> Value {
+    open_library(p).unwrap().personal["preparations"][0].clone()
+}
+fn reference(t: &Value) -> Value {
+    use sha2::{Digest, Sha256};
+    let payload = json!({"sourceId":"fixture-reference","edition":"v1","entryId":"lend-1","sourceUrl":"https://example.invalid/fixture-reference","license":"CC0 synthetic fixture","attribution":"Synthetic acceptance corpus","reviewer":"fixture-reviewer","expression":"lend","resources":[{"materialRoleKey":"pronunciation","contentPayload":{"audioUrl":null,"phoneticNotation":"/lend/","accentLabel":null}},{"materialRoleKey":"language_structure","contentPayload":{"expressionKind":"word","expressionTypeLabel":"单词","partOfSpeech":"动词"}},{"materialRoleKey":"usage_guidance","contentPayload":{"example":"Could you lend me an umbrella?"}}]});
+    let digest = format!("{:x}", Sha256::digest(payload.to_string().as_bytes()));
+    let mut r = payload;
+    r["digest"] = json!(digest);
+    r["senseVersionId"] = t["target"]["senseVersionId"].clone();
+    r["bindingVersionId"] = t["target"]["bindingVersionId"].clone();
+    r
+}
+#[test]
+fn reference_source_revision_freeze_independent_review_and_withdrawal() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("reference.db");
+    let (sid, _) = create(&p);
+    tool(&p, &sid, "propose_meaning", proposal());
+    accept(&p, &sid);
+    apply(&p, json!({"kind":"confirm_quantity","quantity":5}));
+    let m = open_library(&p).unwrap().personal["meanings"][0].clone();
+    apply(
+        &p,
+        json!({"kind":"provisioning","action":{"kind":"add","meaning_id":m["id"],"expected_revision":m["revision"],"policy":{"profileId":"lightweight","profileVersion":"v1"}}}),
+    );
+    let r = reference(&task(&p));
+    let values: Vec<resources::Resource> = serde_json::from_value(r["resources"].clone()).unwrap();
+    assert!(resources::validate(&values, "lend", true).is_err());
+    let mut unsafe_audio = values.clone();
+    unsafe_audio[0].content_payload["audioUrl"] = json!("https://example.invalid/audio.mp3");
+    assert!(resources::validate(&unsafe_audio, "lend", false).is_err());
+    let set = |r: Value| json!({"kind":"provisioning","action":{"kind":"set_reference","task_id":task(&p)["id"],"expected_revision":task(&p)["revision"],"reference":r}});
+    let mut wrong = r.clone();
+    wrong["digest"] = json!("bad");
+    assert!(
+        execute(&p, command(&p, set(wrong)))
+            .unwrap_err()
+            .to_string()
+            .contains("digest")
+    );
+    apply(&p, set(r.clone()));
+    let cid = uid();
+    act(
+        &p,
+        json!({"kind":"create","id":cid,"source":{"kind":"content","task_id":task(&p)["id"],"revision":task(&p)["revision"]}}),
+    );
+    tool(&p, &cid, "lookup_reference_facts", json!({}));
+    assert!(
+        row(&p, &cid)["messages"]
+            .to_string()
+            .contains("Could you lend")
+    );
+    tool(
+        &p,
+        &cid,
+        "submit_candidate",
+        json!({"scene":"你把自己的雨伞暂时交给朋友使用，之后再拿回来。","senseFocus":"暂时给别人使用"}),
+    );
+    let l = lease(&p, &cid);
+    assert!(
+        agent::request(&p, &cid).unwrap()["messages"]
+            .to_string()
+            .contains("fixture-reference")
+    );
+    act(
+        &p,
+        json!({"kind":"review","id":cid,"lease_id":l,"accepted":true,"reason":"参考资料与目标用法一致"}),
+    );
+    act(
+        &p,
+        json!({"kind":"commit","id":cid,"revision":row(&p,&cid)["revision"]}),
+    );
+    let before = open_library(&p).unwrap();
+    assert_eq!(before.catalog[0].material.resources.len(), 3);
+    assert_eq!(
+        before.catalog[0].material.resources[0].content_payload["phoneticNotation"],
+        "/lend/"
+    );
+    assert!(before.run.is_none());
+    // Retained materials are immutable; a new attempt excludes a withdrawn source.
+    apply(&p, set(Value::Null));
+    assert_eq!(
+        open_library(&p).unwrap().catalog[0]
+            .material
+            .resources
+            .len(),
+        3
+    );
+    let later = uid();
+    act(
+        &p,
+        json!({"kind":"create","id":later,"source":{"kind":"content","task_id":task(&p)["id"],"revision":task(&p)["revision"]}}),
+    );
+    assert!(row(&p, &later)["input"]["reference"].is_null());
+    let l = lease(&p, &later);
+    apply(&p, set(r.clone()));
+    reject(
+        &p,
+        json!({"kind":"turn","id":later,"lease_id":l,"message":"迟到","calls":[]}),
+        "preparation_superseded",
+    );
+    // Same source edition cannot be rewritten with a freshly valid payload digest.
+    use sha2::{Digest, Sha256};
+    let mut changed = r.clone();
+    changed["attribution"] = json!("changed");
+    let mut payload = changed.clone();
+    for k in ["digest", "senseVersionId", "bindingVersionId"] {
+        payload.as_object_mut().unwrap().remove(k);
+    }
+    changed["digest"] = json!(format!(
+        "{:x}",
+        Sha256::digest(payload.to_string().as_bytes())
+    ));
+    assert!(
+        execute(&p, command(&p, set(changed)))
+            .unwrap_err()
+            .to_string()
+            .contains("reference_version_conflict")
+    );
+    assert_eq!(task(&p)["reference"], r);
+}
+#[test]
+fn non_exact_bindings_pin_relation_and_require_post_reveal_usage_limits() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("coverage.db");
+    let (sid, _) = create(&p);
+    tool(&p, &sid, "propose_meaning", proposal());
+    accept(&p, &sid);
+    apply(&p, json!({"kind":"confirm_quantity","quantity":5}));
+    let m = open_library(&p).unwrap().personal["meanings"][0].clone();
+    apply(
+        &p,
+        json!({"kind":"world","action":{"kind":"bind","meaning_id":m["id"],"expected_revision":m["revision"],"surface":"lend","expression_type":"word","relation":"approximates","coverage":"overlapping","consent":"confirm_expression_binding"}}),
+    );
+    let m = open_library(&p).unwrap().personal["meanings"][0].clone();
+    apply(
+        &p,
+        json!({"kind":"provisioning","action":{"kind":"add","meaning_id":m["id"],"expected_revision":m["revision"],"policy":{"profileId":"lightweight","profileVersion":"v1"}}}),
+    );
+    let cid = uid();
+    act(
+        &p,
+        json!({"kind":"create","id":cid,"source":{"kind":"content","task_id":task(&p)["id"],"revision":task(&p)["revision"]}}),
+    );
+    assert_eq!(
+        row(&p, &cid)["input"]["target"]["binding"]["relation"],
+        "approximates"
+    );
+    let mut cue = json!({"scene":"你把自己的雨伞暂时交给朋友使用，之后再拿回来。","senseFocus":"暂时给别人使用"});
+    tool(&p, &cid, "submit_candidate", cue.clone());
+    assert!(row(&p, &cid)["candidate"].is_null());
+    cue["resources"] = json!([{"materialRoleKey":"scene_bridge","contentPayload":{"text":"此表达在物品借出的情境适用，并不覆盖这个意思的所有情境。"}}]);
+    tool(&p, &cid, "submit_candidate", cue);
+    let l = lease(&p, &cid);
+    assert!(
+        agent::request(&p, &cid).unwrap()["messages"]
+            .to_string()
+            .contains("overlapping")
+    );
+    act(
+        &p,
+        json!({"kind":"review","id":cid,"lease_id":l,"accepted":true,"reason":"限定适用场景"}),
+    );
+    act(
+        &p,
+        json!({"kind":"commit","id":cid,"revision":row(&p,&cid)["revision"]}),
+    );
+    assert_eq!(
+        open_library(&p).unwrap().catalog[0]
+            .material
+            .binding_version_id,
+        m["bindingVersionId"].as_str().unwrap()
+    );
+}
+
+#[test]
+fn image_grant_is_shared_with_independent_reviewer_and_capability_fenced() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("images.db");
+    let (sid, draft) = create(&p);
+    tool(&p, &sid, "propose_meaning", proposal());
+    accept(&p, &sid);
+    // New context uses a real verified image, resolved against the same known meaning.
+    let original = open_library(&p).unwrap().personal["meanings"][0].clone();
+    let mut bytes = std::io::Cursor::new(vec![]);
+    image::DynamicImage::new_rgb8(2, 2)
+        .write_to(&mut bytes, image::ImageFormat::Png)
+        .unwrap();
+    let digest = world::put_media(&p, &bytes.into_inner()).unwrap();
+    let second = uid();
+    apply(
+        &p,
+        json!({"kind":"world","action":{"kind":"save","id":second,"expected_revision":0,"draft":{"blocks":[{"id":uid(),"kind":"image","digest":digest},{"id":uid(),"kind":"text","text":"PRIVATE 图文经历"}],"familiarExpression":"","startingPoint":null},"submit":true}}),
+    );
+    apply(
+        &p,
+        json!({"kind":"world","action":{"kind":"resolve","id":second,"expected_revision":1,"source":{"kind":"meaning","id":original["id"],"revision":original["revision"]},"consent":"accept_context_expression_sense"}}),
+    );
+    let m = world::query(&p).unwrap()["meanings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["worldContext"]["id"] == second)
+        .unwrap()
+        .clone();
+    assert_ne!(m["worldContext"]["id"], draft);
+    apply(&p, json!({"kind":"confirm_quantity","quantity":5}));
+    apply(
+        &p,
+        json!({"kind":"anchor","action":{"kind":"set","meaning_id":m["id"],"expected_revision":m["revision"],"enabled":true,"recipient":"http://127.0.0.1:4331"}}),
+    );
+    let m = open_library(&p).unwrap().personal["meanings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["id"] == m["id"])
+        .unwrap()
+        .clone();
+    apply(
+        &p,
+        json!({"kind":"provisioning","action":{"kind":"add","meaning_id":m["id"],"expected_revision":m["revision"],"policy":{"profileId":"lightweight","profileVersion":"v1"}}}),
+    );
+    let cid = uid();
+    act(
+        &p,
+        json!({"kind":"create","id":cid,"source":{"kind":"content","task_id":task(&p)["id"],"revision":task(&p)["revision"],"service_origin":"http://127.0.0.1:4331"}}),
+    );
+    let mut no_vision = provider();
+    no_vision["vision"] = json!(false);
+    reject(
+        &p,
+        json!({"kind":"lease","id":cid,"revision":row(&p,&cid)["revision"],"provider":no_vision}),
+        "agent_vision_required",
+    );
+    let l = lease(&p, &cid);
+    let generation = agent::request(&p, &cid).unwrap();
+    assert_eq!(
+        generation["material"]["blocks"][0]["mediaType"],
+        "image/png"
+    );
+    act(
+        &p,
+        json!({"kind":"turn","id":cid,"lease_id":l,"message":"候选","calls":[{"id":uid(),"name":"submit_candidate","args":{"scene":"你把自己的物品暂时交给朋友使用，约好之后再归还。","senseFocus":"借给别人使用"}}]}),
+    );
+    reject(
+        &p,
+        json!({"kind":"lease","id":cid,"revision":row(&p,&cid)["revision"],"provider":no_vision}),
+        "agent_vision_required",
+    );
+    lease(&p, &cid);
+    let review = agent::request(&p, &cid).unwrap();
+    assert_eq!(review["material"], generation["material"]);
+    assert_eq!(review["messages"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn static_pronunciation_is_fixed_before_generation_and_bound_to_the_expression() {
+    use sha2::{Digest, Sha256};
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("static.db");
+    let (sid, _) = create(&p);
+    tool(&p, &sid, "propose_meaning", proposal());
+    accept(&p, &sid);
+    apply(&p, json!({"kind":"confirm_quantity","quantity":5}));
+    let m = open_library(&p).unwrap().personal["meanings"][0].clone();
+    apply(
+        &p,
+        json!({"kind":"provisioning","action":{"kind":"add","meaning_id":m["id"],"expected_revision":m["revision"],"policy":{"profileId":"lightweight","profileVersion":"v1"}}}),
+    );
+    let bytes = b"synthetic-object";
+    let reference = json!({"digest":format!("{:x}",Sha256::digest(bytes)),"sourceTextDigest":format!("{:x}",Sha256::digest(b"lend")),"mimeType":"audio/mpeg","byteSize":bytes.len()});
+    let cid = uid();
+    let source = json!({"kind":"content","task_id":task(&p)["id"],"revision":task(&p)["revision"],"pronunciation":{"reference":reference,"recipient":"https://example.invalid/static"}});
+    let mut wrong = source.clone();
+    wrong["pronunciation"]["reference"]["sourceTextDigest"] = json!("0".repeat(64));
+    reject(
+        &p,
+        json!({"kind":"create","id":cid,"source":wrong}),
+        "invalid_pronunciation",
+    );
+    act(&p, json!({"kind":"create","id":cid,"source":source}));
+    tool(
+        &p,
+        &cid,
+        "submit_candidate",
+        json!({"scene":"你把自己的雨伞暂时交给朋友使用，约好之后再拿回来。","senseFocus":"暂时给别人用"}),
+    );
+    let l = lease(&p, &cid);
+    assert!(
+        agent::request(&p, &cid).unwrap()["messages"]
+            .to_string()
+            .contains("sourceTextDigest")
+    );
+    act(
+        &p,
+        json!({"kind":"review","id":cid,"lease_id":l,"accepted":true,"reason":"目标和静态来源绑定正确"}),
+    );
+    act(
+        &p,
+        json!({"kind":"commit","id":cid,"revision":row(&p,&cid)["revision"]}),
+    );
+    let material = &open_library(&p).unwrap().catalog[0].material;
+    assert_eq!(
+        serde_json::to_value(material.pronunciation.as_ref().unwrap()).unwrap(),
+        reference
+    );
+    pronunciation::cache(&p, &material.id, bytes).unwrap();
+    assert_eq!(pronunciation::cached(&p, &material.id).unwrap(), bytes);
 }

@@ -15,8 +15,16 @@ const app=createConsumerRoutes({mediaReader:async digest=>digest===mediaDigest?(
 const post=async(path:string,body:unknown)=>{const r=await app.request(path,{method:'POST',headers:{Authorization:'Bearer native-test','Content-Type':'application/json'},body:JSON.stringify(body)});return {status:r.status,body:await r.json() as any};};
 async function input(){const id=()=>crypto.randomUUID();const p={version:'sensa-native-provisioning-v1',id:id(),taskId:id(),learnerId:id(),planRevision:id(),policy:{profileId:'lightweight',profileVersion:'v1'},protocol:{id:'consumer-initial',version:'v1',purpose:'initial_learning'},demandReference:{contentDemandKey:'lightweight-initial-content',definitionVersion:'v1'},target:{senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),expression:{surface:'tactful',type:'word',language:'en'},semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'Care for feelings in communication.',prototypeScenes:[{summary:'A sensitive conversation.',participantRoles:[],states:[],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]}},requestedAt:now.toISOString()};return {...p,inputDigest:await semanticDigest(p)};}
 try{
+ assert.equal((await post('/sensa/native/access/session',{installationId:crypto.randomUUID()})).status,403);
  await pool.query('INSERT INTO sensa_consumer.invitations(issuer,subject) VALUES($1,$2)',[issuer,subject]);
- assert.equal((await post('/sensa/account/session',{installationId:crypto.randomUUID(),platform:'web',timeZone:'Asia/Shanghai'})).status,200);
+ const installationId=crypto.randomUUID();
+ assert.deepEqual(await post('/sensa/native/access/session',{installationId}),{status:200,body:{authorized:true}});
+ assert.deepEqual(await post('/sensa/native/access/session',{installationId}),{status:200,body:{authorized:true}});
+ const accessAccount=(await pool.query('SELECT account_id FROM sensa_consumer.accounts WHERE issuer=$1 AND subject=$2',[issuer,subject])).rows[0].account_id;
+ assert.equal((await pool.query('SELECT count(*)::int AS n FROM sensa_consumer.plans WHERE learner_user_id=$1',[accessAccount])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT count(*)::int AS n FROM sensa_consumer.installations WHERE account_id=$1',[accessAccount])).rows[0].n,0);
+
+
  await pool.query("INSERT INTO sensa_consumer.published_media(digest,source_text_digest,mime_type,byte_size,producer,verified_at) VALUES($1,$2,'audio/mpeg',$3,'no-cost-native-audio','2099-01-01')",[mediaDigest,expressionDigest,mediaBytes.length]);
  const mediaUrl='/sensa/native/content/pronunciation/'+mediaDigest+'?expressionDigest='+expressionDigest;
  let audio=await app.request(mediaUrl);assert.equal(audio.status,200);assert.deepEqual(Buffer.from(await audio.arrayBuffer()),mediaBytes);
@@ -45,7 +53,10 @@ try{
  }
  const cancellations=(await pool.query('SELECT * FROM sensa_consumer.native_content_cancellations WHERE account_id=$1',[account])).rows;
  assert.equal(cancellations.length,3);assert.deepEqual(Object.keys(cancellations[0]).sort(),['account_id','cancelled_at','input_digest','request_id']);
+ assert.equal((await post('/sensa/account/session',{installationId:crypto.randomUUID(),platform:'web',timeZone:'Asia/Shanghai'})).status,200);
+ assert.equal((await pool.query('SELECT time_zone FROM sensa_consumer.accounts WHERE account_id=$1',[accessAccount])).rows[0].time_zone,'Asia/Shanghai');
  const beforeGen=generation,beforeReview=review;revoke=true;assert.equal((await post('/sensa/native/content/prepare',await input())).status,403);assert.equal(generation,beforeGen+1);assert.equal(review,beforeReview+1);
  assert.equal((await app.request(mediaUrl)).status,403);
+ assert.equal((await post('/sensa/native/access/session',{installationId})).status,403);
  console.log('PASS: static pronunciation resolution, exact expression binding, media integrity and revoked access; native content HTTP + real Postgres usage quota/concurrent dedup/day rollover/revocation, cancellation before dispatch/before review/after review with metadata-only tombstones, separate generator/reviewer, no persisted private task or content payload.');
 }finally{await pool.query('DELETE FROM sensa_consumer.published_media WHERE digest=$1',[mediaDigest]);await pool.end();}

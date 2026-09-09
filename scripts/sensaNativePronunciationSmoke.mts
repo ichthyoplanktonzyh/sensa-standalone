@@ -20,7 +20,7 @@ const authorize=async(r:Request)=>{if(r.headers.get('Authorization')!=='Bearer l
 const app=new Hono();
 app.route('/sensa/native/content',createNativeProvisioningRoutes({authorize,reserve:async()=>{},
  pronunciation:async expression=>{if(expression==='missing')throw Error('Catalog unavailable');return metadata(expression);},
- media:async(d,e)=>{for(const expression of ['tactful','broken','invalid']){const m=await metadata(expression);if(m.digest===d&&m.sourceTextDigest===e)return {metadata:m,bytes:expression==='broken'?new Uint8Array(bytes.length):expression==='invalid'?invalid:bytes};}return null;},
+ media:async(d,e)=>{for(const expression of ['tactful','broken','invalid','borrow']){const m=await metadata(expression);if(m.digest===d&&m.sourceTextDigest===e)return {metadata:m,bytes:expression==='broken'?new Uint8Array(bytes.length):expression==='invalid'?invalid:bytes};}return null;},
  generate:async()=>({cue:{scene:'你向同事提出建议时顾及对方的感受，用委婉的措辞说明问题。',senseFocus:'顾及感受，表达得体'},provider:'fixture-generator',model:'no-cost'}),
  review:async()=>({accepted:true,provider:'fixture-independent-review',model:'no-cost',reason:'Fixture accepted'}),
 }));
@@ -28,6 +28,10 @@ app.route('/sensa/native/semantic',createNativeSemanticRoutes(async r=>{await au
 if(process.argv.includes('--serve-only')){
  const {serve}=await import('@hono/node-server');serve({fetch:app.fetch,hostname:'127.0.0.1',port:4326});console.log('No-cost native pronunciation fixture listening on 127.0.0.1:4326');
 }else{
+ const lookup=(expression:string,auth='Bearer local-native-test')=>app.request('/sensa/native/content/pronunciation/lookup',{method:'POST',headers:{Authorization:auth,'Content-Type':'application/json'},body:JSON.stringify({expression})});
+ assert.equal((await lookup('borrow','Bearer invalid')).status,401);
+ assert.deepEqual((await (await lookup('borrow')).json() as any).reference,await metadata('borrow'));
+ assert.equal((await (await lookup('missing')).json() as any).reference,null);
  const build=spawnSync('cargo',['build','--locked','--quiet','-p','sensa-library','--example','provisioning_driver'],{encoding:'utf8'});assert.equal(build.status,0,build.stderr);
  const path=join(temp,'library.sqlite');let now:string|undefined;
  const run=(action?:unknown,extra={})=>{const r=spawnSync('target/debug/examples/provisioning_driver',[],{input:JSON.stringify({path,action,now,...extra}),encoding:'utf8'});assert.equal(r.status,0,r.stderr);return JSON.parse(r.stdout);};

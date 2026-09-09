@@ -1,3 +1,4 @@
+import '../data/semantic_service.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -15,6 +16,8 @@ class AgentController extends ChangeNotifier {
   final transport = AgentTransport();
   List<Map<String, dynamic>> sessions = [];
   String? error;
+  String preview = '';
+  String? previewSession;
   bool busy = false, closed = false;
   int epoch = 0;
   Future<void> pending = Future.value();
@@ -72,12 +75,27 @@ class AgentController extends ChangeNotifier {
     error = null;
     try {
       final id = const Uuid().v4();
+      Map<String, dynamic>? pronunciation;
+      if (source['kind'] == 'content') {
+        final snapshot = await library.load();
+        final tasks = snapshot.personal['preparations'] as List;
+        final task = tasks
+            .where((t) => t['id'] == source['task_id'])
+            .firstOrNull;
+        if (task != null) {
+          pronunciation = await SemanticService(providers: () => providers)
+              .lookupPronunciation(
+                task['target']['proposal']['expression']['surface'],
+              );
+        }
+      }
       await act(
         () => {
           'kind': 'create',
           'id': id,
           'source': {
             ...source,
+            'pronunciation': ?pronunciation,
             if (source['kind'] == 'content' &&
                 providers.forPurpose('content') != null)
               'service_origin': Uri.parse(
@@ -128,10 +146,18 @@ class AgentController extends ChangeNotifier {
             'revision': session(id)['revision'],
           },
         );
+        await cacheAudio(id);
         error = null;
       } catch (e) {
         error = describe(e);
       }
+      changed();
+      return;
+    }
+    try {
+      await providers.ensureAccess(purpose(id));
+    } catch (e) {
+      error = describe(e);
       changed();
       return;
     }
@@ -141,6 +167,8 @@ class AgentController extends ChangeNotifier {
       return;
     }
     busy = true;
+    preview = '';
+    previewSession = id;
     error = null;
     final token = ++epoch;
     changed();
@@ -148,6 +176,7 @@ class AgentController extends ChangeNotifier {
     try {
       for (var step = 0; step < 8; step++) {
         if (epoch != token) return;
+        await providers.ensureAccess(purpose(id));
         if (!providers.ready(purpose(id))) {
           throw const AgentFailure('credentials');
         }
@@ -172,8 +201,15 @@ class AgentController extends ChangeNotifier {
           req,
           providers,
           WorldRepository(library),
+          onPreview: (text) {
+            if (epoch == token) {
+              preview = text;
+              changed();
+            }
+          },
         );
         if (epoch != token) return;
+        preview = '';
         await act(
           () => {
             'kind': req['purpose'] == 'review' ? 'review' : 'turn',
@@ -192,6 +228,7 @@ class AgentController extends ChangeNotifier {
               'revision': session(id)['revision'],
             },
           );
+          await cacheAudio(id);
           return;
         }
         if (status == 'waiting' ||
@@ -216,14 +253,37 @@ class AgentController extends ChangeNotifier {
     } finally {
       if (epoch == token) {
         busy = false;
+        preview = '';
+        previewSession = null;
         changed();
       }
+    }
+  }
+
+  Future<void> cacheAudio(String id) async {
+    try {
+      final source = session(id)['input']['pronunciation'];
+      if (source == null) return;
+      final service = SemanticService(providers: () => providers);
+      if (service.connection?['endpoint'] != source['recipient']) return;
+      final snapshot = await library.load();
+      final task = (snapshot.personal['preparations'] as List).firstWhere(
+        (t) => t['id'] == session(id)['input']['taskId'],
+      );
+      final bytes = await service.pronunciation(
+        Map<String, dynamic>.from(source['reference']),
+      );
+      await library.cachePronunciation(task['materialId'], bytes);
+    } catch (_) {
+      /* Optional audio never undoes an admitted text material. */
     }
   }
 
   Future<void> stop(String id) async {
     epoch++;
     transport.cancel();
+    preview = '';
+    previewSession = null;
     try {
       await act(
         () => {'kind': 'stop', 'id': id, 'revision': session(id)['revision']},
@@ -283,6 +343,8 @@ class AgentController extends ChangeNotifier {
   void dispose() {
     epoch++;
     transport.cancel();
+    preview = '';
+    previewSession = null;
     providers.clear();
     closed = true;
     super.dispose();

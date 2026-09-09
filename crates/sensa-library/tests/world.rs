@@ -265,11 +265,15 @@ fn bindings_reuse_sense_keep_old_target_and_require_explicit_supported_learning(
         .find(|v| v["expression"] == "hoist")
         .unwrap();
     assert_eq!(formal(&p), before);
-    reject(
+    let prepared = apply(
         &p,
         json!({"kind":"provisioning","action":{"kind":"add","policy":{"profileId":"lightweight","profileVersion":"v1"},"meaning_id":broad["id"],"expected_revision":broad["revision"]}}),
-        "binding_learning_not_supported",
     );
+    assert_eq!(
+        prepared.personal["preparations"][0]["target"]["binding"]["semanticCoverage"],
+        "broader"
+    );
+    assert!(prepared.run.is_none());
     let s = apply(
         &p,
         json!({"kind":"provisioning","action":{"kind":"add","policy":{"profileId":"lightweight","profileVersion":"v1"},"meaning_id":branch["id"],"expected_revision":branch["revision"]}}),

@@ -40,7 +40,7 @@ type Transaction = <T>(work: (db: DatabaseExecutor) => Promise<T>) => Promise<T>
 const uuid = z.string().uuid();
 const fail = (code: string, latest: {id: string; revision: string}|null = null) => ({ code, retryable: false, retryAfterMs: null, latest, field: null, messageKey: code });
 const iso = () => new Date().toISOString();
-async function account(db: DatabaseExecutor, identity: ConsumerPrincipal, create?: z.infer<typeof installationInputSchema>, allowRevokedSession = false, now=new Date()): Promise<Account> {
+async function account(db: DatabaseExecutor, identity: ConsumerPrincipal, create?: z.infer<typeof installationInputSchema>, allowRevokedSession = false, now=new Date(), accessOnly=false): Promise<Account> {
   if(create&&identity.installationId&&create.installationId!==identity.installationId)throw new ConsumerError(403,'installation_scope_mismatch');
   const invite = (await db.query('SELECT revoked FROM sensa_consumer.invitations WHERE issuer=$1 AND subject=$2 FOR UPDATE', [identity.issuer,identity.subject])).rows[0];
   if (!invite || invite.revoked) throw new ConsumerError(403, 'invite_required');
@@ -55,7 +55,11 @@ async function account(db: DatabaseExecutor, identity: ConsumerPrincipal, create
   let session = (await db.query('SELECT * FROM sensa_consumer.sessions WHERE account_id=$1 AND provider_session_id=$2', [row.account_id,identity.sessionId])).rows[0];
   if (!session && create) session = (await db.query('INSERT INTO sensa_consumer.sessions(account_id,provider_session_id) VALUES($1,$2) RETURNING *', [row.account_id,identity.sessionId])).rows[0];
   if (!session || (session.revoked && !allowRevokedSession)) throw new ConsumerError(401,'access_revoked');
-  if (create) {
+  if (create && !accessOnly) {
+    // An account first created for native service access has no Web learning settings yet.
+    if(!(await db.query('SELECT 1 FROM sensa_consumer.installations WHERE account_id=$1 LIMIT 1',[row.account_id])).rows.length && !(await db.query('SELECT 1 FROM sensa_consumer.plans WHERE learner_user_id=$1',[row.learner_user_id])).rows.length){
+      await db.query('UPDATE sensa_consumer.accounts SET time_zone=$2 WHERE account_id=$1',[row.account_id,create.timeZone]);row.time_zone=create.timeZone;
+    }
     await db.query('INSERT INTO sensa_consumer.installations(id,account_id,platform) VALUES($1,$2,$3) ON CONFLICT(id) DO NOTHING', [create.installationId,row.account_id,create.platform]);
     const installation = (await db.query('SELECT account_id FROM sensa_consumer.installations WHERE id=$1', [create.installationId])).rows[0];
     if (installation?.account_id !== row.account_id) throw new ConsumerError(403,'installation_scope_mismatch');
@@ -251,6 +255,12 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
   }));
   app.post('/sensa/extension/authorize',async c=>{const identity=await verify(c.req.raw);if(identity.installationId)throw new ConsumerError(403,'web_authorization_required');const input=extensionAuthorizationSchema.parse(await c.req.json());return c.json(await transaction(async db=>authorizeExtension(db,await account(db,identity,undefined,false,clock()),input)));});
   app.post('/sensa/extension/exchange',async c=>{const input=extensionExchangeSchema.parse(await c.req.json());return c.json(await transaction(db=>exchangeExtension(db,input,clock())));});
+  // Native online access initializes only service identity/session, never a replica or learning plan.
+  app.post('/sensa/native/access/session',async c=>{
+    const identity=await verify(c.req.raw);const input=z.object({installationId:uuid}).strict().parse(await c.req.json());
+    await transaction(async db=>{await account(db,identity,{...input,platform:'flutter',timeZone:'UTC'},false,clock(),true);});
+    c.header('Cache-Control','no-store');return c.json({authorized:true});
+  });
   app.post('/sensa/account/session',async c=> {
     const identity=await verify(c.req.raw);const input=installationInputSchema.parse(await c.req.json());
     return c.json(await transaction(async db=>{const a=await account(db,identity,input,false,clock());return query(a,await context(db,a,input.installationId,input.clockSessionId));}));
