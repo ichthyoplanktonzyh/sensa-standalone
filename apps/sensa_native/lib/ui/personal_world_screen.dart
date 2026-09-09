@@ -1,3 +1,4 @@
+import 'intake_connection_screen.dart';
 import 'world_screen.dart';
 import 'preparation_screen.dart';
 import 'semantic_resolution_screen.dart';
@@ -13,7 +14,27 @@ class PersonalWorldScreen extends StatefulWidget {
   State<PersonalWorldScreen> createState() => _PersonalWorldScreenState();
 }
 
-class _PersonalWorldScreenState extends State<PersonalWorldScreen> {
+class _PersonalWorldScreenState extends State<PersonalWorldScreen>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !model.busy) {
+      model.load();
+    }
+  }
+
   int section = 0;
   String search = '';
   LibraryViewModel get model => widget.model;
@@ -101,6 +122,20 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen> {
         appBar: AppBar(
           title: const Text('我的词义世界'),
           actions: [
+            IconButton(
+              tooltip: '刷新采集结果',
+              icon: const Icon(Icons.refresh),
+              onPressed: model.busy ? null : model.load,
+            ),
+            IconButton(
+              tooltip: '采集接入',
+              icon: const Icon(Icons.input),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => IntakeConnectionScreen(model: model),
+                ),
+              ),
+            ),
             IconButton(
               tooltip: '图文与语义关系',
               icon: const Icon(Icons.hub_outlined),

@@ -306,8 +306,10 @@ fn schema14_upgrade_preserves_world_and_operations() {
     let p = dir.path().join("migration.db");
     let _ = open_library(&p).unwrap();
     let db = rusqlite::Connection::open(&p).unwrap();
-    db.execute_batch("DROP TABLE agent_sessions;PRAGMA user_version=14;")
-        .unwrap();
+    db.execute_batch(
+        "DROP TABLE native_intake_receipts; DROP TABLE agent_sessions;PRAGMA user_version=14;",
+    )
+    .unwrap();
     drop(db);
     let s = open_library(&p).unwrap();
     assert_eq!(s.revision, 0);

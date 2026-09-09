@@ -1,0 +1,26 @@
+{
+  "version": "sensa-intake-v1",
+  "libraryId": "00000000-0000-4000-8000-000000000001",
+  "clientId": "00000000-0000-4000-8000-000000000002",
+  "operationId": "00000000-0000-4000-8000-000000000003",
+  "snapshot": {
+    "sentence": "May I borrow your umbrella?",
+    "language": "en",
+    "source": {"url": null, "title": "User-provided conversation", "capturedAt": "2026-09-09T00:00:00Z"},
+    "expression": {"text": "borrow", "start": 6, "end": 12}
+  },
+  "resolution": {
+    "kind": "proposal",
+    "proposal": {
+      "explanation": "临时借来使用，之后归还。",
+      "expression": {"surface": "borrow", "type": "word", "language": "en"},
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "临时取得别人的物品供自己使用，之后归还",
+        "prototypeScenes": [{"summary": "向朋友借伞，使用后归还。", "participantRoles": [], "states": [], "directionOrCausality": null}],
+        "includedCases": [], "excludedCases": [], "neighborContrasts": [], "openQuestions": []
+      }
+    }
+  },
+  "acceptance": null
+}

@@ -130,7 +130,7 @@ pub fn validate_proposal(mut v: Value) -> Result<Value> {
     }
     Ok(v)
 }
-fn read(db: &Connection, id: &str) -> Result<Value> {
+pub(super) fn read(db: &Connection, id: &str) -> Result<Value> {
     let encoded: String = db
         .query_row(
             "SELECT content FROM semantic_lookups WHERE id=?1",
@@ -385,7 +385,7 @@ pub(super) fn apply(
                     ids
                 };
                 let mid = super::id();
-                let content = json!({"id":mid,"snapshot":snapshot,"focus":v["focus"]["text"],"meaningFocus":v["focus"],"materialId":null,"materialDigest":null,"senseId":identity["senseId"],"senseVersionId":identity["senseVersionId"],"bindingId":identity["bindingId"],"bindingVersionId":identity["bindingVersionId"],"sense":proposal["semanticSpec"]["coreMeaningFocus"],"expression":proposal["expression"]["surface"],"proposal":proposal,"materialSource":"在线解析，经本人确认","contextAnchorId":super::id(),"expressionAnchorId":super::id(),"alignmentId":super::id(),"acceptanceId":super::id(),"acceptedAtMs":now.timestamp_millis(),"acceptanceKind":"direct","resolutionProvenance":{"kind":"online_resolution","lookupId":id,"inputDigest":v["request"]["inputDigest"],"generator":v["provenance"]},"sourceLink":snapshot.source_link()});
+                let content = json!({"id":mid,"snapshot":snapshot,"focus":v["focus"]["text"],"meaningFocus":v["focus"],"materialId":null,"materialDigest":null,"senseId":identity["senseId"],"senseVersionId":identity["senseVersionId"],"bindingId":identity["bindingId"],"bindingVersionId":identity["bindingVersionId"],"sense":proposal["semanticSpec"]["coreMeaningFocus"],"expression":proposal["expression"]["surface"],"proposal":proposal,"materialSource":if v["provenance"]["provider"]=="external_intake" {"外部采集，经本人确认"} else {"在线解析，经本人确认"},"contextAnchorId":super::id(),"expressionAnchorId":super::id(),"alignmentId":super::id(),"acceptanceId":super::id(),"acceptedAtMs":now.timestamp_millis(),"acceptanceKind":"direct","resolutionProvenance":{"kind":if v["provenance"]["provider"]=="external_intake" {"external_intake"} else {"online_resolution"},"lookupId":id,"inputDigest":v["request"]["inputDigest"],"generator":v["provenance"]},"sourceLink":snapshot.source_link()});
                 db.execute("INSERT INTO personal_meanings(id,identity_digest,content,accepted_at_ms,operation_id) VALUES(?1,?2,?3,?4,?5)",params![mid,capture_digest,content.to_string(),now.timestamp_millis(),command.operation_id])?;
                 mid
             };

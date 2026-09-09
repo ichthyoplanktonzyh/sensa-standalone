@@ -3,6 +3,7 @@
 <meta charset="utf-8">
 <title>Sensa 阅读采集</title>
 <style>
+  [hidden]{display:none!important}
   body{box-sizing:border-box;width:352px;margin:0;padding:16px;font:14px/1.6 system-ui;color:#242a38;background:#fbfbfa}
   h1{font-size:24px;line-height:1.3;margin:0 0 12px}
   button,a{display:block;box-sizing:border-box;min-height:44px;padding:8px;width:100%;color:#242a38}
@@ -24,6 +25,11 @@
 </style>
 <h1>Sensa</h1>
 <p id="status" role="status">正在检查账号…</p>
+<button id="native-discover">保存到原生本机库…</button>
+<p id="native-candidate" hidden></p>
+<button id="native-select" hidden>确认接收库</button>
+<button id="web-select">保存到 Web（现有路径）</button>
+<small>账号用于在线阅读模型与 Web 服务；原生原文采集可离线使用。</small>
 <button id="login">连接 Sensa 账号</button>
 <button id="toggle">在当前网站开启 / 继续阅读</button>
 <button id="stop">关闭当前页阅读模式</button>

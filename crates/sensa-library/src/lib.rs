@@ -11,6 +11,7 @@ pub mod composition;
 mod consumer_progress;
 pub mod curriculum;
 pub mod history;
+pub mod intake;
 pub mod pack;
 pub mod personal;
 pub mod policy;
@@ -55,6 +56,9 @@ pub struct Command {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CommandAction {
+    Intake {
+        request: Box<intake::Request>,
+    },
     Agent {
         action: agent::Action,
     },
@@ -234,7 +238,7 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].contains(&version)
+    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].contains(&version)
         || application != APPLICATION
     {
         return Err(Error::Rule("unsupported_library_version"));
@@ -287,6 +291,9 @@ fn connection(path: &Path) -> Result<Connection> {
     }
     if version <= 14 {
         tx.execute_batch(include_str!("agent.sql"))?;
+    }
+    if version <= 15 {
+        tx.execute_batch(include_str!("intake.sql"))?;
     }
     tx.commit()?;
     Ok(db)
@@ -468,13 +475,16 @@ pub fn execute_at_offset(
     }
     if matches!(
         &command.action,
-        CommandAction::World { .. } | CommandAction::Agent { .. }
+        CommandAction::World { .. } | CommandAction::Agent { .. } | CommandAction::Intake { .. }
     ) {
         match &command.action {
             CommandAction::World { action } => {
                 world::apply(&tx, action, &command, now.timestamp_millis())?
             }
             CommandAction::Agent { action } => agent::apply(&tx, action, &command, now)?,
+            CommandAction::Intake { request } => {
+                intake::apply(&tx, request, &command, now)?;
+            }
             _ => unreachable!(),
         }
         tx.execute("UPDATE library SET revision=revision+1", [])?;
@@ -515,7 +525,9 @@ pub fn execute_at_offset(
         |r| r.get(0),
     )?;
     match &command.action {
-        CommandAction::Agent { .. } | CommandAction::World { .. } => {
+        CommandAction::Agent { .. }
+        | CommandAction::World { .. }
+        | CommandAction::Intake { .. } => {
             unreachable!("isolated world transaction above")
         }
         CommandAction::Curriculum { action } => curriculum::apply(&tx, action)?,
