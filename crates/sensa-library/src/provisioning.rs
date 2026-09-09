@@ -435,6 +435,12 @@ pub(super) fn apply(
             policy: p,
         } => {
             let meaning = personal::read_meaning(db, meaning_id, *expected_revision)?;
+            if meaning["bindingMetadata"].is_object()
+                && (meaning["bindingMetadata"]["relation"] != "realizes"
+                    || meaning["bindingMetadata"]["semanticCoverage"] != "exact")
+            {
+                return Err(Error::Rule("binding_learning_not_supported"));
+            }
             if !meaning["materialId"].is_null() {
                 return Err(Error::Rule("local_material_already_available"));
             }

@@ -95,7 +95,7 @@ fn sources(db: &Connection) -> Result<(Vec<Value>, Vec<Value>)> {
     let mut personal = vec![];
     for row in q.query_map([], |r| r.get::<_, String>(0))? {
         let m: Value = serde_json::from_str(&row?)?;
-        personal.push(json!({"targetId":format!("personal:{}:{}",m["alignmentId"].as_str().unwrap(),m["bindingVersionId"].as_str().unwrap()),"expression":m["expression"],"sense":m["sense"],"context":m["snapshot"]["sentence"],"senseVersionId":m["senseVersionId"],"bindingVersionId":m["bindingVersionId"],"sourceId":"personal_semantic_world","personalMeaningId":m["id"],"alignmentId":m["alignmentId"],"acceptanceId":m["acceptanceId"],"senseId":m["senseId"],"bindingId":m["bindingId"],"languageTag":m["snapshot"]["language"],"contextSnapshot":m["snapshot"],"sourceLink":m["sourceLink"],"resolutionProvenance":m["resolutionProvenance"]}));
+        personal.push(json!({"targetId":format!("personal:{}:{}",m["alignmentId"].as_str().unwrap(),m["bindingVersionId"].as_str().unwrap()),"expression":m["expression"],"sense":m["sense"],"context":m["snapshot"]["sentence"],"senseVersionId":m["senseVersionId"],"bindingVersionId":m["bindingVersionId"],"sourceId":"personal_semantic_world","personalMeaningId":m["id"],"alignmentId":m["alignmentId"],"acceptanceId":m["acceptanceId"],"senseId":m["senseId"],"bindingId":m["bindingId"],"languageTag":m["snapshot"]["language"],"contextSnapshot":m["snapshot"],"worldContext":m["worldContext"],"bindingMetadata":m["bindingMetadata"],"expressionLocator":m["expressionLocator"],"sourceLink":m["sourceLink"],"resolutionProvenance":m["resolutionProvenance"]}));
     }
     Ok((study, personal))
 }

@@ -15,7 +15,7 @@
 | 正式学习包导入与入学 | packages/content-validator、packages/contracts、apps/api、apps/web | 本地校验、版本固定、SQLite 原子入学及 Flutter 资源入口 | 有界轻量文本包的本地导入、版本保护、显式入学与多目标首学已实现；高保证 runtime release/角色资源/静态媒体已接入并验收，见 native-assurance-integration-handoff.md；上游发布治理与在线生成仍待迁移 |
 | 到期复习与重学 | packages/learning-kernel/src/runtime/consumerInitial.ts、consumerSettlement.ts、scheduling.ts；apps/api；apps/web | Rust 协议/调度与 Flutter 学习界面 | 三 purpose 纯决策/FSRS、轻量 SQLite Review/Need/Outcome 事务及 Flutter 等待/恢复已接入；平台证据见 native-retention-handoff.md；正式 Activity/Mixed、独立签到与去重汇总已接入，见 native-activity-integration-handoff.md |
 | 多目标、每日计划、签到、记录及其他已有策略 | apps/api、apps/web、相关合同 | Rust 本地应用规则、读模型与 Flutter 页面 | Activity/Mixed、Review-only、每日 Introduction 与独立签到已迁移；本机 Curriculum lifecycle/Book Range、来源选择、补充来源排序与长历史检索已接入，平台完成门见 native-learning-organization-handoff.md |
-| 个人语义世界与快慢轨 | apps/api、apps/web、packages/contracts | 本地 Context/Sense/Expression、可选 Focus、接受与恢复流程 | 本机文本收件箱、已有 Sense 直接接受（Focus 可选）、移除恢复与显式入学已接入，见 native-personal-world-handoff.md；在线澄清/新 Sense 构造与本地接受已接入，见 native-semantic-resolution-handoff.md；多模态/草稿、图谱等仍待迁移 |
+| 个人语义世界与快慢轨 | apps/api、apps/web、packages/contracts | 本地 Context/Sense/Expression、可选 Focus、接受与恢复流程 | 本机文本收件箱、已有 Sense 直接接受（Focus 可选）、移除恢复与显式入学已接入，见 native-personal-world-handoff.md；在线澄清/新 Sense 构造与本地接受已接入，见 native-semantic-resolution-handoff.md；图文/草稿、图谱与表达分支已接入，见 native-world-group-handoff.md；多模态模型协作由第 4 组继续 |
 | 网页 / YouTube 采集交接 | apps/browser-extension、apps/api | 现有 TS 插件交接至本地库 | 插件继续使用 TS；本地交接、幂等和隔离待验收 |
 | Agent 入口 | 已确认完整蓝图及相关合同 | 与其他采集端一致的本地接受入口 | 待盘点当前实现，不宣称已有完整 Agent 成果 |
 | LLM / 资源任务 / 音频协作 | apps/api、packages/content-validator、apps/web | Hono 保留在线执行；Rust/Flutter 固定结果、存储与恢复 | 在线语义请求、候选/接受本地状态与 Hono 解析已贯通；个人意义入学、轻量按需文本生成/独立校验/冻结与双平台恢复已接入，见 native-provisioning-handoff.md；Anchor Use 授权/撤销与材料替换已接入，见 native-anchor-use-handoff.md；静态发音获取/校验/离线播放及文字回退见 native-pronunciation-handoff.md；流式预览、provider 管理等仍待迁移 |
@@ -51,12 +51,12 @@ Owner 已确认 [ADR 0003](../adr/0003-three-client-local-facts.md)：Web 保留
 ## 怎样判定迁移完成（2026-09-09 更新）
 
 当前已经贯通的是原生轻量与高保证学习主链及通用内核基础，不是完整产品迁移。
-不能按提交数、文件数或差分测试数量换算百分比。待逐用例形成验收证据的主要工作可归为以下工作组（第 1、2 组已完成本轮既有能力迁移，另 4 组仍有未完项）：
+不能按提交数、文件数或差分测试数量换算百分比。待逐用例形成验收证据的主要工作可归为以下工作组（第 1、2、3 组已完成本轮本机既有能力迁移，另 3 组仍有未完项）：
 
 1. **其余学习 Runtime**：高保证执行与 Action/材料绑定已贯通；Retention scope Registry、课程/个人 Free Practice Scope、独立练习账本及原生 YouGlish 接线本轮收口，见 [整组记录](native-runtime-scope-handoff.md)。既有已交付规则的迁移完成；Policy Migration、新独立 scope 与未交付的说/读/写 Activity 保留为未来蓝图能力，四阶段仍只保留扩展性验证。真实 provider 的外部可用性边界见交付记录，完整原生视觉仍在第 6 组。
 2. **正式学习组织**：Activity/Mixed、Review-only、每日 Introduction、签到、近期记录与去重汇总已贯通，见 [交付记录](native-activity-integration-handoff.md)。本机 Curriculum/Book Enrollment/Range、来源选择、补充学习排序、长历史筛选分页与冷恢复已补齐，见 [整组交付](native-learning-organization-handoff.md)。第 2 组来源组织与记录查询完成；正式视觉/词性元数据/状态徽标等全站体验仍在第 6 组承接。
-3. **个人语义世界**：本机文本收件箱、已有 Sense 的 Context/Expression 直接接受、移除恢复、显式加入学习已贯通，见 [本轮记录](native-personal-world-handoff.md)。在线澄清/Proposal/新 Sense 本地构造与接受已贯通，见 [语义协作记录](native-semantic-resolution-handoff.md)。Anchor Use 按需文本任务协作已接入，见 [交付记录](native-anchor-use-handoff.md)。多模态与草稿恢复、图谱/表达分支仍需迁移。
-4. **完整资源与在线任务协作**：高保证发布物/静态媒体/固定材料化已接入；个人意义轻量文本 LLM 任务、独立校验、结果接纳与中断恢复已贯通，见 [本轮交付](native-provisioning-handoff.md)。Anchor Use、撤销和后续材料替换已在 [原生记录](native-anchor-use-handoff.md) 验证；静态发音/离线播放与失败回退已在 [本轮交付](native-pronunciation-handoff.md) 验证；上游内容治理、provider 管理及其余资源协作仍需迁移。
+3. **个人语义世界**：本机文本收件箱、已有 Sense 的 Context/Expression 直接接受、移除恢复、显式加入学习已贯通，见 [本轮记录](native-personal-world-handoff.md)。在线澄清/Proposal/新 Sense 本地构造与接受已贯通，见 [语义协作记录](native-semantic-resolution-handoff.md)。Anchor Use 按需文本任务协作已接入，见 [交付记录](native-anchor-use-handoff.md)。图文材料、草稿冷恢复、同上下文多义、表达连接、列表/展开/图谱与明确入学已在 [整组交付](native-world-group-handoff.md) 接入。第 3 组本机内容与投影收口；完整多模态模型解析由第 4 组继续，正式视觉仍在第 6 组。
+4. **完整资源与在线任务协作**：高保证发布物/静态媒体/固定材料化已接入；个人意义轻量文本 LLM 任务、独立校验、结果接纳与中断恢复已贯通，见 [本轮交付](native-provisioning-handoff.md)。Anchor Use、撤销和后续材料替换已在 [原生记录](native-anchor-use-handoff.md) 验证；静态发音/离线播放与失败回退已在 [本轮交付](native-pronunciation-handoff.md) 验证；上游内容治理、provider 管理、图文多模态模型解析及其余资源协作仍需迁移；包括当前准备合同尚不支持的表达关系/coverage。
 5. **采集入口交接**：TS 浏览器/YouTube、Agent 及后续端口通过统一接受规则进入本地库，验证幂等和隔离。
 6. **正式原生产品界面**：承接 apps/web 的完整功能、状态与恢复体验，分别通过桌面/移动验收；目前仍是技术验收壳。
 
@@ -77,4 +77,4 @@ Owner 已确认：先推进高保证完整路径，随后专门验收 Profile �
 
 2026-09-09：上述 Profile 执行接线门已通过本轮验证，具体策略行为、事务与平台证据见 [完整纵切记录](native-assurance-integration-handoff.md)。此完成状态仅覆盖已注册的轻量/高保证执行组合，不消除新组合、Policy Migration 或完整产品迁移的验收义务。
 
-2026-09-09 源码盘点修正：Policy Migration 在领域模型中明确为未来能力，当前 Web/TS 没有对应执行实现；仍保留在完整产品蓝图，不计作已有 TS 成果的迁移欠账。在线语义解析/澄清与本地接受协作已完成本轮用例。个人意义显式入学、按需文本资源任务及校验/冻结材料化已完成，见 [交付记录](native-provisioning-handoff.md)。Anchor Use 原文授权/撤销、迟到结果隔离与后续材料替换已完成 [原生纵切](native-anchor-use-handoff.md)；静态发音/音频获取、离线播放与失败回退已在 [后续纵切](native-pronunciation-handoff.md) 接入。来源组织/Book Range 与完整记录查询已在 [整组交付](native-learning-organization-handoff.md) 补齐。其余 Runtime scope 与自由练习已在 [后续整组](native-runtime-scope-handoff.md) 补齐。后续继续语义世界、资源协作、采集交接及正式 UI。
+2026-09-09 源码盘点修正：Policy Migration 在领域模型中明确为未来能力，当前 Web/TS 没有对应执行实现；仍保留在完整产品蓝图，不计作已有 TS 成果的迁移欠账。在线语义解析/澄清与本地接受协作已完成本轮用例。个人意义显式入学、按需文本资源任务及校验/冻结材料化已完成，见 [交付记录](native-provisioning-handoff.md)。Anchor Use 原文授权/撤销、迟到结果隔离与后续材料替换已完成 [原生纵切](native-anchor-use-handoff.md)；静态发音/音频获取、离线播放与失败回退已在 [后续纵切](native-pronunciation-handoff.md) 接入。来源组织/Book Range 与完整记录查询已在 [整组交付](native-learning-organization-handoff.md) 补齐。其余 Runtime scope 与自由练习已在 [后续整组](native-runtime-scope-handoff.md) 补齐。个人语义世界本机内容与投影已在 [整组记录](native-world-group-handoff.md) 补齐；后续继续资源/多模态协作、采集交接及正式 UI。

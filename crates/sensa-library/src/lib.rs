@@ -19,6 +19,7 @@ pub mod pronunciation;
 pub mod provisioning;
 pub mod retention;
 pub mod semantic;
+pub mod world;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use sensa_core::settlement::{Settlement, SettlementContext, decide_consumer_settlement};
@@ -52,6 +53,9 @@ pub struct Command {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CommandAction {
+    World {
+        action: world::Action,
+    },
     Curriculum {
         action: curriculum::Action,
     },
@@ -223,7 +227,7 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].contains(&version)
+    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].contains(&version)
         || application != APPLICATION
     {
         return Err(Error::Rule("unsupported_library_version"));
@@ -270,6 +274,9 @@ fn connection(path: &Path) -> Result<Connection> {
     }
     if version <= 12 {
         tx.execute_batch(include_str!("practice.sql"))?;
+    }
+    if version <= 13 {
+        tx.execute_batch(include_str!("world.sql"))?;
     }
     tx.commit()?;
     Ok(db)
@@ -449,6 +456,21 @@ pub fn execute_at_offset(
     if state.revision != command.expected_revision {
         return Err(Error::Rule("revision_conflict"));
     }
+    if let CommandAction::World { action } = &command.action {
+        world::apply(&tx, action, &command, now.timestamp_millis())?;
+        tx.execute("UPDATE library SET revision=revision+1", [])?;
+        let result = read(&tx)?;
+        tx.execute(
+            "INSERT INTO operations VALUES(?1,?2,?3)",
+            params![
+                command.operation_id,
+                encoded,
+                serde_json::to_string(&result)?
+            ],
+        )?;
+        tx.commit()?;
+        return Ok(result);
+    }
     let last: i64 = tx.query_row("SELECT last_time_ms FROM library", [], |r| r.get(0))?;
     if now.timestamp_millis() < last {
         return Err(Error::Rule("clock_moved_backwards"));
@@ -474,6 +496,7 @@ pub fn execute_at_offset(
         |r| r.get(0),
     )?;
     match &command.action {
+        CommandAction::World { .. } => unreachable!("isolated world transaction above"),
         CommandAction::Curriculum { action } => curriculum::apply(&tx, action)?,
         CommandAction::Anchor { action } => anchor::apply(&tx, action, &command, now)?,
         CommandAction::Provisioning { action } => provisioning::apply(&tx, action, &command, now)?,

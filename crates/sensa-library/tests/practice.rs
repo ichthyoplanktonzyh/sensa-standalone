@@ -197,7 +197,7 @@ fn active_formal_execution_and_v12_receipts_survive_practice_and_reopen() {
     formal(&p, json!({"kind":"activity_start","mode":"mixed"}));
     let before = formal_rows(&p);
     let db = rusqlite::Connection::open(&p).unwrap();
-    db.execute_batch("DROP TABLE practice_operations; DROP TABLE practice_turns; DROP TABLE practice_sessions; DROP TABLE practice_state; PRAGMA user_version=12;").unwrap();
+    db.execute_batch("DROP TABLE world_bindings; DROP TABLE world_media; DROP TABLE world_drafts; DROP TABLE practice_operations; DROP TABLE practice_turns; DROP TABLE practice_sessions; DROP TABLE practice_state; PRAGMA user_version=12;").unwrap();
     drop(db);
     open_library(&p).unwrap();
     assert_eq!(formal_rows(&p), before);

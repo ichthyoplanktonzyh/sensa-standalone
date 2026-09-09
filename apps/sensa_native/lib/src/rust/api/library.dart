@@ -67,3 +67,22 @@ Future<String> libraryPracticeCommand({
   path: path,
   commandJson: commandJson,
 );
+
+Future<String> libraryWorld({required String path}) =>
+    RustLib.instance.api.crateApiLibraryLibraryWorld(path: path);
+
+Future<String> libraryWorldPutMedia({
+  required String path,
+  required List<int> bytes,
+}) => RustLib.instance.api.crateApiLibraryLibraryWorldPutMedia(
+  path: path,
+  bytes: bytes,
+);
+
+Future<Uint8List> libraryWorldMedia({
+  required String path,
+  required String digest,
+}) => RustLib.instance.api.crateApiLibraryLibraryWorldMedia(
+  path: path,
+  digest: digest,
+);

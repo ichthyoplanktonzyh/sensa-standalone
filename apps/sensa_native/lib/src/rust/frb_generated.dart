@@ -66,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 755269360;
+  int get rustContentHash => 742078785;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -115,6 +115,18 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<String> crateApiLibraryLibrarySnapshot({required String path});
+
+  Future<String> crateApiLibraryLibraryWorld({required String path});
+
+  Future<Uint8List> crateApiLibraryLibraryWorldMedia({
+    required String path,
+    required String digest,
+  });
+
+  Future<String> crateApiLibraryLibraryWorldPutMedia({
+    required String path,
+    required List<int> bytes,
+  });
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -421,6 +433,104 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiLibraryLibrarySnapshotConstMeta =>
       const TaskConstMeta(debugName: "library_snapshot", argNames: ["path"]);
+
+  @override
+  Future<String> crateApiLibraryLibraryWorld({required String path}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiLibraryLibraryWorldConstMeta,
+        argValues: [path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLibraryLibraryWorldConstMeta =>
+      const TaskConstMeta(debugName: "library_world", argNames: ["path"]);
+
+  @override
+  Future<Uint8List> crateApiLibraryLibraryWorldMedia({
+    required String path,
+    required String digest,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          sse_encode_String(digest, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiLibraryLibraryWorldMediaConstMeta,
+        argValues: [path, digest],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLibraryLibraryWorldMediaConstMeta =>
+      const TaskConstMeta(
+        debugName: "library_world_media",
+        argNames: ["path", "digest"],
+      );
+
+  @override
+  Future<String> crateApiLibraryLibraryWorldPutMedia({
+    required String path,
+    required List<int> bytes,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          sse_encode_list_prim_u_8_loose(bytes, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiLibraryLibraryWorldPutMediaConstMeta,
+        argValues: [path, bytes],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLibraryLibraryWorldPutMediaConstMeta =>
+      const TaskConstMeta(
+        debugName: "library_world_put_media",
+        argNames: ["path", "bytes"],
+      );
 
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {

@@ -1,3 +1,4 @@
+import 'world_screen.dart';
 import 'preparation_screen.dart';
 import 'semantic_resolution_screen.dart';
 import 'package:flutter/material.dart';
@@ -100,6 +101,18 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen> {
         appBar: AppBar(
           title: const Text('我的词义世界'),
           actions: [
+            IconButton(
+              tooltip: '图文与语义关系',
+              icon: const Icon(Icons.hub_outlined),
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => WorldScreen(library: model),
+                  ),
+                );
+                await model.load();
+              },
+            ),
             IconButton(
               tooltip: '学习准备',
               icon: const Icon(Icons.auto_stories_outlined),
@@ -257,7 +270,13 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen> {
                                                 child: const Text('选择表达与词义'),
                                               ),
                                             if (meaning &&
-                                                item['materialId'] == null)
+                                                item['materialId'] == null &&
+                                                (item['bindingMetadata'] ==
+                                                        null ||
+                                                    item['bindingMetadata']['relation'] ==
+                                                            'realizes' &&
+                                                        item['bindingMetadata']['semanticCoverage'] ==
+                                                            'exact'))
                                               FilledButton(
                                                 onPressed: model.busy
                                                     ? null
@@ -319,7 +338,8 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen> {
                                                     ),
                                               child: const Text('移除'),
                                             ),
-                                            if (meaning)
+                                            if (meaning &&
+                                                item['worldContext'] == null)
                                               TextButton(
                                                 onPressed: model.busy
                                                     ? null

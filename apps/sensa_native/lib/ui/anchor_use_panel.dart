@@ -48,6 +48,9 @@ class AnchorUsePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (meaning['worldContext'] != null) {
+      return const Text('图文上下文保存在本机。当前准备服务只使用已确认的词义和表达；图文原文授权将在多模态服务接入后提供。');
+    }
     final grant = meaning['anchorGrant'];
     return Card(
       child: Padding(

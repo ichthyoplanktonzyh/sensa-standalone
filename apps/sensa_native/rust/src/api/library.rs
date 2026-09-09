@@ -40,3 +40,13 @@ pub fn library_practice(path:String)->anyhow::Result<String> {
 pub fn library_practice_command(path:String,command_json:String)->anyhow::Result<String> {
  Ok(sensa_library::practice::execute(Path::new(&path),serde_json::from_str(&command_json)?)?.to_string())
 }
+
+pub fn library_world(path:String)->anyhow::Result<String> {
+ Ok(sensa_library::world::query(Path::new(&path))?.to_string())
+}
+pub fn library_world_put_media(path:String,bytes:Vec<u8>)->anyhow::Result<String> {
+ Ok(sensa_library::world::put_media(Path::new(&path),&bytes)?)
+}
+pub fn library_world_media(path:String,digest:String)->anyhow::Result<Vec<u8>> {
+ Ok(sensa_library::world::media(Path::new(&path),&digest)?)
+}
