@@ -43,6 +43,7 @@ impl LearningPack {
         let mut ids = HashSet::new();
         let mut targets = HashSet::new();
         for m in &pack.materials {
+            crate::resources::validate(&m.resources, &m.expression, false)?;
             if m.pronunciation.is_some() {
                 return Err(Error::Rule("unsupported_pack"));
             }

@@ -226,6 +226,20 @@ fn content_loop_reviews_independently_and_commits_only_bound_material() {
     );
     assert!(!row(&p, &cid)["input"].to_string().contains("PRIVATE"));
     tool(&p, &cid, "read_demand", json!({}));
+    for invalid in [
+        json!({"materialRoleKey":"recall_support","contentPayload":{"text":"ｌｅｎｄ"}}),
+        json!({"materialRoleKey":"language_structure","contentPayload":{"expressionKind":"word","expressionTypeLabel":"单词","partOfSpeech":"动词"}}),
+    ] {
+        tool(
+            &p,
+            &cid,
+            "submit_candidate",
+            json!({"scene":"你把自己的物品暂时交给朋友使用，约好用完后归还。","senseFocus":"暂时给别人用","resources":[invalid]}),
+        );
+        assert!(row(&p, &cid)["candidate"].is_null());
+        assert!(open_library(&p).unwrap().catalog.is_empty());
+    }
+
     tool(
         &p,
         &cid,
@@ -246,7 +260,7 @@ fn content_loop_reviews_independently_and_commits_only_bound_material() {
         &p,
         &cid,
         "submit_candidate",
-        json!({"scene":"你把自己的雨伞暂时给朋友使用，约好用完后归还。","senseFocus":"暂时给别人用"}),
+        json!({"scene":"你把自己的雨伞暂时给朋友使用，约好用完后归还。","senseFocus":"暂时给别人用","resources":[{"materialRoleKey":"recall_support","contentPayload":{"text":"想想物品从谁手里交出去"}},{"materialRoleKey":"scene_bridge","contentPayload":{"text":"联系物品暂时交出、随后归还的场景。"}}]}),
     );
     let l = lease(&p, &cid);
     reject(
@@ -271,6 +285,13 @@ fn content_loop_reviews_independently_and_commits_only_bound_material() {
         serde_json::to_value(s).unwrap()
     );
     assert_eq!(row(&p, &cid)["status"], "committed");
+    assert_eq!(
+        open_library(&p).unwrap().catalog[0]
+            .material
+            .resources
+            .len(),
+        2
+    );
 }
 #[test]
 fn schema14_upgrade_preserves_world_and_operations() {

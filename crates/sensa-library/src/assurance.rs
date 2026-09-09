@@ -118,6 +118,7 @@ pub(super) fn import(tx: &Transaction<'_>, encoded: &str) -> Result<()> {
             .transpose()?
             .unwrap_or(field(&p["experience"]["recap"], "bodyL1")?);
         let m = Material {
+            resources: vec![],
             pronunciation: None,
             id: id.clone(),
             sense_version_id: sense,

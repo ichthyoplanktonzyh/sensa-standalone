@@ -245,3 +245,65 @@ fn daily_limit_counts_targets_not_attempts_and_resume_is_allowed() {
     assert!(result.run.is_some());
     assert_eq!(result.completion_count, 0);
 }
+
+#[test]
+fn optional_resources_are_atomic_bounded_immutable_and_preserved_in_runs() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("optional.sqlite");
+    let mut pack: Value = serde_json::from_str(PACK).unwrap();
+    let resources = json!([
+      {"materialRoleKey":"recall_support","contentPayload":{"text":"想想对方的感受"}},
+      {"materialRoleKey":"language_structure","contentPayload":{"expressionKind":"word","expressionTypeLabel":"单词","partOfSpeech":"形容词"}},
+      {"materialRoleKey":"usage_guidance","contentPayload":{"example":"She was tactful."}},
+      {"materialRoleKey":"scene_bridge","contentPayload":{"text":"联系刚才的场景。"}}
+    ]);
+    pack["materials"][0]["resources"] = resources.clone();
+    let before = open_library(&path).unwrap();
+    for invalid in [
+        json!([{"materialRoleKey":"recall_support","contentPayload":{"text":"ｂｏｒｒｏｗ"}}]),
+        json!([{"materialRoleKey":"unknown","contentPayload":{"text":"提示"}}]),
+        json!([{"materialRoleKey":"recall_support","contentPayload":{"text":""}}]),
+        json!(vec![
+            json!({"materialRoleKey":"usage_guidance","contentPayload":{"example":"example"}});
+            2
+        ]),
+        json!(vec![
+            json!({"materialRoleKey":"recall_support","contentPayload":{"text":"提示"}});
+            5
+        ]),
+    ] {
+        let mut bad = pack.clone();
+        bad["materials"][1]["resources"] = invalid;
+        assert!(execute_at(&path, command(&before, import(&bad.to_string())), now()).is_err());
+        assert_eq!(open_library(&path).unwrap().revision, before.revision);
+        assert!(open_library(&path).unwrap().catalog.is_empty());
+    }
+    apply(&path, import(&pack.to_string()));
+    apply(&path, CommandAction::ConfirmQuantity { quantity: 5 });
+    apply(&path, CommandAction::AddToLearning);
+    let started = apply(&path, CommandAction::StartOrResume);
+    assert_eq!(
+        serde_json::to_value(&started.material.unwrap().resources).unwrap(),
+        resources
+    );
+    let mut changed = pack.clone();
+    changed["materials"][0]["resources"][0]["contentPayload"]["text"] = json!("新的提示");
+    let current = open_library(&path).unwrap();
+    assert!(
+        execute_at(
+            &path,
+            command(&current, import(&changed.to_string())),
+            now()
+        )
+        .is_err()
+    );
+    let restored = open_library(&path).unwrap();
+    assert_eq!(restored.revision, current.revision);
+    assert_eq!(
+        serde_json::to_value(restored.material.unwrap().resources).unwrap(),
+        resources
+    );
+    assert_eq!(restored.completion_count, 0);
+    assert_eq!(answer(&path, Action::Reveal).completion_count, 0);
+    assert_eq!(answer(&path, Action::Good).completion_count, 1);
+}

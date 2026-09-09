@@ -33,6 +33,29 @@ String sample() => jsonEncode({
         'sense': i == 1 ? '表达意见时照顾对方感受。' : '暂时取得他人的东西使用，并打算归还。',
         'expression': i == 1 ? 'tactful' : 'borrow',
         'source': '合成集成测试材料',
+        if (i == 1)
+          'resources': [
+            {
+              'materialRoleKey': 'recall_support',
+              'contentPayload': {'text': '想想对方的感受'},
+            },
+            {
+              'materialRoleKey': 'language_structure',
+              'contentPayload': {
+                'expressionKind': 'word',
+                'expressionTypeLabel': '单词',
+                'partOfSpeech': '形容词',
+              },
+            },
+            {
+              'materialRoleKey': 'usage_guidance',
+              'contentPayload': {'example': 'She was tactful.'},
+            },
+            {
+              'materialRoleKey': 'scene_bridge',
+              'contentPayload': {'text': '联系刚才的场景。'},
+            },
+          ],
       },
   ],
 });
@@ -96,6 +119,12 @@ void main() {
         expect(model.snapshot!.value, jsonDecode(await receipt.readAsString()));
         await wait('本次首学已完成');
         expect(model.snapshot!.catalog.length, 2);
+        expect(
+          model.snapshot!.catalog.firstWhere(
+            (v) => v['material']['expression'] == 'tactful',
+          )['material']['resources'],
+          hasLength(4),
+        );
         expect(model.snapshot!.value['completionCount'], 2);
       } else {
         expect(model.snapshot!.quantity, isNull);
@@ -114,7 +143,15 @@ void main() {
         await tap('加入学习', '开始学习');
         await tap('开始学习', '揭示表达');
         expect(find.text('tactful'), findsNothing);
+        expect(find.text('想想对方的感受'), findsOneWidget);
+        expect(find.text('She was tactful.'), findsNothing);
+        expect(find.text('语言结构'), findsNothing);
+        expect(find.text('联系刚才的场景。'), findsNothing);
         await tap('揭示表达', '可以继续');
+        expect(find.text('She was tactful.'), findsOneWidget);
+        expect(find.text('语言结构'), findsOneWidget);
+        expect(find.text('联系刚才的场景。'), findsOneWidget);
+        expect(find.text('想想对方的感受'), findsNothing);
         await tap('暂停学习', '继续学习');
         final firstRun = model.snapshot!.run!['id'];
         await select('borrow');

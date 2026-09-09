@@ -102,6 +102,7 @@ void main() {
         );
         final snapshot = await library.repository.load();
         expect(snapshot.catalog, hasLength(1));
+        expect(snapshot.catalog.single['material']['resources'], hasLength(2));
         expect(snapshot.run, isNull);
         expect(snapshot.value['completionCount'], saved['completions']);
         return;
@@ -193,6 +194,10 @@ void main() {
       await library.load();
       expect(library.preparations.single['status'], 'ready');
       expect(library.snapshot!.catalog, hasLength(1));
+      expect(
+        library.snapshot!.catalog.single['material']['resources'],
+        hasLength(2),
+      );
       expect(library.snapshot!.run, isNull);
       expect(
         library.snapshot!.value['completionCount'],

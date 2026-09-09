@@ -92,7 +92,8 @@ function complete(body: any) {
     const corrected = messages.some((m: any) => m.role === 'user' && m.content.includes('审核')) || previous.includes('submit_candidate');
     return call('submit_candidate', {
       scene: corrected ? '下雨时你从朋友那里借来一把雨伞，用完后再归还给朋友。' : '你从朋友那里借来一把雨伞，暂时使用以后会归还。',
-      senseFocus: '暂时从别人那里借来使用'
+      senseFocus: '暂时从别人那里借来使用',
+      resources: [{materialRoleKey:'recall_support',contentPayload:{text:'想想物品从哪里来、之后要交还给谁。'}},{materialRoleKey:'scene_bridge',contentPayload:{text:'联系借来物品后归还的场景。'}}]
     });
   }
   assert.equal(messages.length, 2, 'Review must have a fresh isolated conversation');

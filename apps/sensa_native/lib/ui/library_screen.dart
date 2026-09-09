@@ -1,3 +1,4 @@
+import 'optional_resources_view.dart';
 import 'curriculum_screen.dart';
 import 'practice_screen.dart';
 import 'pronunciation_view.dart';
@@ -271,6 +272,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           Text(s.material!['scene'] as String, style: t.bodyLarge),
           if (recall) ...[
             Text(s.material!['sense'] as String, style: t.bodyMedium),
+            OptionalResourcesView(material: s.material!, revealed: false),
             const Text('先在心里试着表达，再揭示答案。'),
             button('揭示表达', () => vm.answer('reveal')),
           ] else ...[
@@ -283,6 +285,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               material: s.material!,
             ),
             Text(s.material!['sense'] as String, style: t.bodyLarge),
+            OptionalResourcesView(material: s.material!, revealed: true),
             Wrap(
               spacing: 8,
               runSpacing: 8,

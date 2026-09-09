@@ -18,6 +18,7 @@ pub mod practice;
 pub mod progress;
 pub mod pronunciation;
 pub mod provisioning;
+pub mod resources;
 pub mod retention;
 pub mod semantic;
 pub mod world;
@@ -136,6 +137,8 @@ pub enum CommandAction {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Material {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<resources::Resource>,
     pub id: String,
     pub sense_version_id: String,
     pub binding_version_id: String,
@@ -821,6 +824,7 @@ pub fn execute_at_offset(
 #[cfg(feature = "acceptance-fixture")]
 fn acceptance_material() -> Result<Material> {
     Ok(Material {
+        resources: vec![],
         pronunciation: None,
         id: "native-acceptance-material-v1".into(),
         sense_version_id: "native-acceptance-tactful-sense-v1".into(),

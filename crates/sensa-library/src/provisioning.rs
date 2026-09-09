@@ -633,6 +633,11 @@ pub(super) fn apply(
                         validate_result(&request, result)?
                     };
                 let material = Material {
+                    resources: if result["proof"]["adapter"] == "native-agent-lightweight-v1" {
+                        resources::from_candidate(&result["material"], &expression)?
+                    } else {
+                        vec![]
+                    },
                     pronunciation: result["material"]
                         .get("pronunciation")
                         .cloned()

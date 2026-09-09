@@ -617,7 +617,8 @@ class LibraryViewModel extends ChangeNotifier {
         text.contains('target_material_conflict')) {
       return '包内版本与已保存材料冲突，未覆盖原有内容。';
     }
-    if (text.contains('invalid_pack') ||
+    if (text.contains('invalid_optional_resource') ||
+        text.contains('invalid_pack') ||
         text.contains('pack_reveals_expression')) {
       return '学习包校验未通过，未导入任何内容。';
     }
