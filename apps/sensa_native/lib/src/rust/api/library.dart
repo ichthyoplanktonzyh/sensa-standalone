@@ -56,3 +56,14 @@ Future<String> libraryHistory({
   path: path,
   queryJson: queryJson,
 );
+
+Future<String> libraryPractice({required String path}) =>
+    RustLib.instance.api.crateApiLibraryLibraryPractice(path: path);
+
+Future<String> libraryPracticeCommand({
+  required String path,
+  required String commandJson,
+}) => RustLib.instance.api.crateApiLibraryLibraryPracticeCommand(
+  path: path,
+  commandJson: commandJson,
+);

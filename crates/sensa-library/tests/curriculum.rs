@@ -413,7 +413,7 @@ fn v11_upgrade_keeps_fixed_activity_facts_and_original_receipts() {
     let before = answer(&path, "reveal");
     let db = rusqlite::Connection::open(&path).unwrap();
     let receipts:String=db.query_row("SELECT json_group_array(json_object('id',id,'command',command,'result',result)) FROM operations",[],|r|r.get(0)).unwrap();
-    db.execute_batch("DROP TABLE curriculum_introduction_sources; DROP TABLE activity_scope_sources; DROP TABLE curriculum_scopes; DROP TABLE curriculum_settings; DROP TABLE curriculum_supplemental; DROP TABLE curriculum_members; DROP TABLE curriculum_enrollments; DROP TABLE curriculum_books; ALTER TABLE activity_scope DROP COLUMN new_eligible; PRAGMA user_version=11;").unwrap();
+    db.execute_batch("DROP TABLE practice_operations; DROP TABLE practice_turns; DROP TABLE practice_sessions; DROP TABLE practice_state; DROP TABLE curriculum_introduction_sources; DROP TABLE activity_scope_sources; DROP TABLE curriculum_scopes; DROP TABLE curriculum_settings; DROP TABLE curriculum_supplemental; DROP TABLE curriculum_members; DROP TABLE curriculum_enrollments; DROP TABLE curriculum_books; ALTER TABLE activity_scope DROP COLUMN new_eligible; PRAGMA user_version=11;").unwrap();
     drop(db);
     let mut before = serde_json::to_value(before).unwrap();
     let mut after = serde_json::to_value(open_library(&path).unwrap()).unwrap();

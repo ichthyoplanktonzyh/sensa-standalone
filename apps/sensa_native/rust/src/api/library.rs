@@ -33,3 +33,10 @@ pub fn library_cached_pronunciation(path:String,material_id:String)->anyhow::Res
 pub fn library_history(path:String,query_json:String)->anyhow::Result<String> {
  Ok(serde_json::to_string(&sensa_library::history::query(Path::new(&path),serde_json::from_str(&query_json)?)?)?)
 }
+
+pub fn library_practice(path:String)->anyhow::Result<String> {
+ Ok(sensa_library::practice::query(Path::new(&path))?.to_string())
+}
+pub fn library_practice_command(path:String,command_json:String)->anyhow::Result<String> {
+ Ok(sensa_library::practice::execute(Path::new(&path),serde_json::from_str(&command_json)?)?.to_string())
+}

@@ -27,6 +27,10 @@ pub fn native_registry() -> Result<Registry, String> {
     )
 }
 pub fn native_graph() -> Graph {
+    let scopes = sensa_core::retention_scopes::default_registry();
+    let scope = scopes
+        .get("semantic_connection")
+        .expect("registered default scope");
     let binding =
         |evaluation: &str, completion: &str, repair: &str, memory: Option<&str>| Binding {
             runtime_adapter_id: "native-consumer-v1".into(),
@@ -82,18 +86,29 @@ pub fn native_graph() -> Graph {
         }],
         surfaces: vec!["flutter-local-learning".into()],
         retention_stores: vec!["sqlite-consumer-v1".into()],
-        content_capability_ids: vec!["recall-reveal-text".into()],
+        // Validated native Material supplies the compact Context/Sense/Expression
+        // resource; recall-reveal-text is its current renderer capability.
+        content_capability_ids: vec![
+            "recall-reveal-text".into(),
+            "compact_learning_material".into(),
+        ],
         step_kinds: vec!["recall".into(), "reveal".into()],
         retention_scopes: vec![Scope {
-            scope_id: "primary".into(),
-            content_requirement: vec!["recall-reveal-text".into()],
+            scope_id: scope.scope_id.clone(),
+            content_requirement: scope.content_requirement.clone(),
         }],
     }
 }
 pub(super) fn validate() -> Result<(), String> {
     static VALIDATED: OnceLock<Result<(), String>> = OnceLock::new();
     VALIDATED
-        .get_or_init(|| validate_composition(&native_graph(), &native_registry()?).map(|_| ()))
+        .get_or_init(|| {
+            let scopes = sensa_core::retention_scopes::default_registry();
+            for s in &native_graph().retention_scopes {
+                scopes.get(&s.scope_id)?;
+            }
+            validate_composition(&native_graph(), &native_registry()?).map(|_| ())
+        })
         .clone()
 }
 

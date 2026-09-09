@@ -13,6 +13,7 @@ pub mod history;
 pub mod pack;
 pub mod personal;
 pub mod policy;
+pub mod practice;
 pub mod progress;
 pub mod pronunciation;
 pub mod provisioning;
@@ -222,7 +223,7 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].contains(&version)
+    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].contains(&version)
         || application != APPLICATION
     {
         return Err(Error::Rule("unsupported_library_version"));
@@ -266,6 +267,9 @@ fn connection(path: &Path) -> Result<Connection> {
         tx.execute_batch(include_str!("curriculum.sql"))?;
         curriculum::register_packs(&tx)?;
         curriculum::refresh(&tx)?;
+    }
+    if version <= 12 {
+        tx.execute_batch(include_str!("practice.sql"))?;
     }
     tx.commit()?;
     Ok(db)

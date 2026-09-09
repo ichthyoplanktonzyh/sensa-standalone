@@ -515,7 +515,15 @@ fn declared_mastery_can_return_and_uncommitted_errors_preserve_history() {
     );
     assert!(execute_at(&path, invalid, now).is_err());
     assert_eq!(open_library(&path).unwrap().revision, before.revision);
+    let practice_before =
+        sensa_library::practice::query(&path).unwrap()["catalog"]["targets"].clone();
+    assert!(!practice_before.as_array().unwrap().is_empty());
     let skipped = event(Intent::Mastery);
+    assert_eq!(
+        sensa_library::practice::query(&path).unwrap()["catalog"]["targets"],
+        practice_before
+    );
+    assert_eq!(open_library(&path).unwrap().revision, skipped.revision);
     assert_eq!(skipped.assurance.as_ref().unwrap()["completed"], true);
     assert_eq!(skipped.completion_count, 0);
     assert_eq!(skipped.handoff_count, 0);

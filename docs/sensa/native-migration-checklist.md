@@ -39,10 +39,10 @@ Owner 已确认 [ADR 0003](../adr/0003-three-client-local-facts.md)：Web 保留
 | 协议推进与结果资格 | packages/learning-kernel/src/runtime/consumerInitial.ts、consumerSettlement.ts | 已迁入 sensa-core/protocol.rs、settlement.rs；三种 purpose，未知版本拒绝；尚非完整通用 Protocol Runtime |
 | 可配置 FSRS 与历史重建 | packages/learning-kernel/src/runtime/scheduling.ts、workspaceConfig.ts | 已迁入 sensa-core/scheduling.rs；四档评分、保留率、步长、最大间隔、确定性 fuzz；不是新 UI 设置或同步合并授权 |
 | Progression Kernel | packages/learning-kernel/src/runtime/protocolProgression.ts | 纯内核已迁移 credit/invalidate/repair/reassess/reset/complete、epoch 与 Checkpoint 不变量，通过 TS 差分；通用状态的 SQLite 账本已接入轻量三 purpose，并验证多 Checkpoint 重置/恢复；多阶段 Flutter 消费仍待接入，见 native-progress-journal-handoff.md |
-| 正交策略与组合校验 | apps/web/src/experience/learningRuntime/protocolPolicies.ts、runtimeComposition.ts | 五轴 Registry/引用校验及三种 Progression 策略已迁移，原生入口校验真实轻量组合；专用编排/scope Registry 和行为执行器仍待迁移，见 native-progression-handoff.md |
+| 正交策略与组合校验 | apps/web/src/experience/learningRuntime/protocolPolicies.ts、runtimeComposition.ts | 五轴 Registry/引用校验及三种 Progression 策略已迁移，原生入口校验真实轻量组合；高保证编排已接入，scope Registry 本轮补齐，见 native-runtime-scope-handoff.md |
 | Profile 与 Policy 生命周期 | apps/web/src/experience/learningRuntime/policyProfiles.ts；learning-connection-model.md | 四级 Assignment、版本化 purpose plan/readiness、首次 Run commitment 与 Flutter 设置已接入；普通配置不重写历史；Policy Migration 经本轮源盘点确认为尚无 Web 执行实现的蓝图扩展，单独保留，见 native-policy-handoff.md |
 | 编排、运行与存储适配 | apps/web/src/experience/learningRuntime/orchestrations.ts、runtimeCoordinator.ts、runtimeSession.ts、runtimeSurfaces.ts、retentionStores.ts | 高保证 fresh/repair Step 选择已迁移，见 native-assurance-orchestration-handoff.md；LearnQueue 纯生命周期/撤销/恢复已迁移，见 native-assurance-lifecycle-handoff.md；ReviewQueue 纯生命周期及 effect 对照已迁移，见 native-assurance-review-handoff.md；正式材料/评价/事务/Flutter 已接入，见 native-assurance-integration-handoff.md。四阶段保留扩展性验证，正式施工暂停；每日数量留在 Planner |
-| 目标与内容能力 | apps/web/src/experience/learningRuntime/retentionScopes.ts、contentCapabilities.ts | 能力合取已迁移并对照 TS；scope 准入仍待迁移，普通题型不拆分调度身份 |
+| 目标与内容能力 | apps/web/src/experience/learningRuntime/retentionScopes.ts、contentCapabilities.ts | 能力合取已迁移并对照 TS；scope 唯一默认、四项准入、显式选择/依赖及稳定身份已迁移并对照真实 TS；普通题型不拆分调度身份，见 native-runtime-scope-handoff.md |
 | 材料与生成 | apps/web/src/experience/learningRuntime/contentProvisioning.ts、contentAgentProvisioning.ts；packages/contracts/src/sensa/learningContent.ts | 轻量按需文本的独立候选校验、固定 Materialization、来源/用途/版本已接入，见 native-provisioning-handoff.md；模型生成不写学习结果，Anchor Use 已接入，见 native-anchor-use-handoff.md；其余资源协作仍待迁移 |
 | 呈现与学习模式 | apps/web/src/experience/learningRuntime/stepRenderers.tsx、lightweightInitialPresentation.ts、lightweightInitialProtocol.ts、interleavedFourStageProtocol.ts | 高保证的资源、评价绑定与 Flutter 呈现已验收；四阶段只保留扩展性证据，其正式材料/界面暂停，保留 intent/disclosure |
 
@@ -51,9 +51,9 @@ Owner 已确认 [ADR 0003](../adr/0003-three-client-local-facts.md)：Web 保留
 ## 怎样判定迁移完成（2026-09-09 更新）
 
 当前已经贯通的是原生轻量与高保证学习主链及通用内核基础，不是完整产品迁移。
-不能按提交数、文件数或差分测试数量换算百分比。待逐用例形成验收证据的主要工作可归为以下工作组（第 2 组整组证据见下文，其余 5 组仍有未完项）：
+不能按提交数、文件数或差分测试数量换算百分比。待逐用例形成验收证据的主要工作可归为以下工作组（第 1、2 组已完成本轮既有能力迁移，另 4 组仍有未完项）：
 
-1. **其余学习 Runtime**：高保证执行与 Action/材料绑定已贯通；其余 scope 准入及确认纳入产品的已有策略行为仍需逐项验收；Policy Migration 为未来蓝图扩展，区别于既有 TS 迁移；四阶段按 Owner 指示仅保留扩展性验证。
+1. **其余学习 Runtime**：高保证执行与 Action/材料绑定已贯通；Retention scope Registry、课程/个人 Free Practice Scope、独立练习账本及原生 YouGlish 接线本轮收口，见 [整组记录](native-runtime-scope-handoff.md)。既有已交付规则的迁移完成；Policy Migration、新独立 scope 与未交付的说/读/写 Activity 保留为未来蓝图能力，四阶段仍只保留扩展性验证。真实 provider 的外部可用性边界见交付记录，完整原生视觉仍在第 6 组。
 2. **正式学习组织**：Activity/Mixed、Review-only、每日 Introduction、签到、近期记录与去重汇总已贯通，见 [交付记录](native-activity-integration-handoff.md)。本机 Curriculum/Book Enrollment/Range、来源选择、补充学习排序、长历史筛选分页与冷恢复已补齐，见 [整组交付](native-learning-organization-handoff.md)。第 2 组来源组织与记录查询完成；正式视觉/词性元数据/状态徽标等全站体验仍在第 6 组承接。
 3. **个人语义世界**：本机文本收件箱、已有 Sense 的 Context/Expression 直接接受、移除恢复、显式加入学习已贯通，见 [本轮记录](native-personal-world-handoff.md)。在线澄清/Proposal/新 Sense 本地构造与接受已贯通，见 [语义协作记录](native-semantic-resolution-handoff.md)。Anchor Use 按需文本任务协作已接入，见 [交付记录](native-anchor-use-handoff.md)。多模态与草稿恢复、图谱/表达分支仍需迁移。
 4. **完整资源与在线任务协作**：高保证发布物/静态媒体/固定材料化已接入；个人意义轻量文本 LLM 任务、独立校验、结果接纳与中断恢复已贯通，见 [本轮交付](native-provisioning-handoff.md)。Anchor Use、撤销和后续材料替换已在 [原生记录](native-anchor-use-handoff.md) 验证；静态发音/离线播放与失败回退已在 [本轮交付](native-pronunciation-handoff.md) 验证；上游内容治理、provider 管理及其余资源协作仍需迁移。
@@ -77,4 +77,4 @@ Owner 已确认：先推进高保证完整路径，随后专门验收 Profile �
 
 2026-09-09：上述 Profile 执行接线门已通过本轮验证，具体策略行为、事务与平台证据见 [完整纵切记录](native-assurance-integration-handoff.md)。此完成状态仅覆盖已注册的轻量/高保证执行组合，不消除新组合、Policy Migration 或完整产品迁移的验收义务。
 
-2026-09-09 源码盘点修正：Policy Migration 在领域模型中明确为未来能力，当前 Web/TS 没有对应执行实现；仍保留在完整产品蓝图，不计作已有 TS 成果的迁移欠账。在线语义解析/澄清与本地接受协作已完成本轮用例。个人意义显式入学、按需文本资源任务及校验/冻结材料化已完成，见 [交付记录](native-provisioning-handoff.md)。Anchor Use 原文授权/撤销、迟到结果隔离与后续材料替换已完成 [原生纵切](native-anchor-use-handoff.md)；静态发音/音频获取、离线播放与失败回退已在 [后续纵切](native-pronunciation-handoff.md) 接入。来源组织/Book Range 与完整记录查询已在 [整组交付](native-learning-organization-handoff.md) 补齐。后续继续其余 Runtime scope、语义世界、资源协作、采集交接及正式 UI。
+2026-09-09 源码盘点修正：Policy Migration 在领域模型中明确为未来能力，当前 Web/TS 没有对应执行实现；仍保留在完整产品蓝图，不计作已有 TS 成果的迁移欠账。在线语义解析/澄清与本地接受协作已完成本轮用例。个人意义显式入学、按需文本资源任务及校验/冻结材料化已完成，见 [交付记录](native-provisioning-handoff.md)。Anchor Use 原文授权/撤销、迟到结果隔离与后续材料替换已完成 [原生纵切](native-anchor-use-handoff.md)；静态发音/音频获取、离线播放与失败回退已在 [后续纵切](native-pronunciation-handoff.md) 接入。来源组织/Book Range 与完整记录查询已在 [整组交付](native-learning-organization-handoff.md) 补齐。其余 Runtime scope 与自由练习已在 [后续整组](native-runtime-scope-handoff.md) 补齐。后续继续语义世界、资源协作、采集交接及正式 UI。

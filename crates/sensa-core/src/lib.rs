@@ -31,3 +31,5 @@ pub mod assurance_review;
 pub mod assurance_material;
 
 pub mod runtime_release;
+
+pub mod retention_scopes;

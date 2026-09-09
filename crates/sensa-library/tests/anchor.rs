@@ -18,7 +18,7 @@ fn schema_ten_upgrade_preserves_snapshot_and_receipts() {
     let receipt: String = db
         .query_row("SELECT result FROM operations", [], |r| r.get(0))
         .unwrap();
-    db.execute_batch("DROP TABLE curriculum_introduction_sources; DROP TABLE activity_scope_sources; DROP TABLE curriculum_scopes; DROP TABLE curriculum_settings; DROP TABLE curriculum_supplemental; DROP TABLE curriculum_members; DROP TABLE curriculum_enrollments; DROP TABLE curriculum_books; ALTER TABLE activity_scope DROP COLUMN new_eligible; DROP TABLE personal_anchor_revocations; DROP TABLE personal_anchor_grants; DROP TABLE personal_preparation_versions; PRAGMA user_version=10;").unwrap();
+    db.execute_batch("DROP TABLE practice_operations; DROP TABLE practice_turns; DROP TABLE practice_sessions; DROP TABLE practice_state; DROP TABLE curriculum_introduction_sources; DROP TABLE activity_scope_sources; DROP TABLE curriculum_scopes; DROP TABLE curriculum_settings; DROP TABLE curriculum_supplemental; DROP TABLE curriculum_members; DROP TABLE curriculum_enrollments; DROP TABLE curriculum_books; ALTER TABLE activity_scope DROP COLUMN new_eligible; DROP TABLE personal_anchor_revocations; DROP TABLE personal_anchor_grants; DROP TABLE personal_preparation_versions; PRAGMA user_version=10;").unwrap();
     drop(db);
     assert_eq!(
         serde_json::to_value(before).unwrap(),
@@ -34,6 +34,6 @@ fn schema_ten_upgrade_preserves_snapshot_and_receipts() {
     assert_eq!(
         db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        12
+        13
     );
 }

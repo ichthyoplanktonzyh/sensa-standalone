@@ -1,4 +1,5 @@
 import 'curriculum_screen.dart';
+import 'practice_screen.dart';
 import 'pronunciation_view.dart';
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
@@ -420,6 +421,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
         appBar: AppBar(
           title: const Text('Sensa'),
           actions: [
+            IconButton(
+              tooltip: '自由练习',
+              icon: const Icon(Icons.headphones),
+              onPressed: vm.busy || s == null
+                  ? null
+                  : () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => PracticeScreen(library: vm),
+                      ),
+                    ),
+            ),
             IconButton(
               tooltip: '学习来源',
               icon: const Icon(Icons.library_books_outlined),

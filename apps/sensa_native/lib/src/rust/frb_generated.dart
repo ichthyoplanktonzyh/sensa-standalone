@@ -66,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 24926601;
+  int get rustContentHash => 755269360;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -105,6 +105,13 @@ abstract class RustLibApi extends BaseApi {
   Future<String> crateApiLibraryLibraryHistory({
     required String path,
     required String queryJson,
+  });
+
+  Future<String> crateApiLibraryLibraryPractice({required String path});
+
+  Future<String> crateApiLibraryLibraryPracticeCommand({
+    required String path,
+    required String commandJson,
   });
 
   Future<String> crateApiLibraryLibrarySnapshot({required String path});
@@ -325,7 +332,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<String> crateApiLibraryLibrarySnapshot({required String path}) {
+  Future<String> crateApiLibraryLibraryPractice({required String path}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -335,6 +342,69 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             generalizedFrbRustBinding,
             serializer,
             funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiLibraryLibraryPracticeConstMeta,
+        argValues: [path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLibraryLibraryPracticeConstMeta =>
+      const TaskConstMeta(debugName: "library_practice", argNames: ["path"]);
+
+  @override
+  Future<String> crateApiLibraryLibraryPracticeCommand({
+    required String path,
+    required String commandJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          sse_encode_String(commandJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiLibraryLibraryPracticeCommandConstMeta,
+        argValues: [path, commandJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLibraryLibraryPracticeCommandConstMeta =>
+      const TaskConstMeta(
+        debugName: "library_practice_command",
+        argNames: ["path", "commandJson"],
+      );
+
+  @override
+  Future<String> crateApiLibraryLibrarySnapshot({required String path}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
             port: port_,
           );
         },
