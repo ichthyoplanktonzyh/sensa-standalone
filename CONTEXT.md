@@ -788,6 +788,16 @@ The learner-owned body of captured context, confirmed meanings, learning materia
 history and scheduling state, usable locally independently of optional online services.
 It contains more than Personal Semantic World and does not replace its domain identities.
 
+**Personal Library Fact（个人学习库事实）**:
+A durable, provenance-bearing record of accepted content, a learner decision or a
+learning event and its pinned interpretation. Reconciliation preserves its history;
+it is distinct from a pending command and the current projection of the library.
+
+**Learning Reconciliation Decision（学习合并裁决）**:
+An auditable, versioned determination of how concurrent learning histories contribute
+to the effective learning state and schedule. It preserves the original histories
+and cannot create another scheduling contribution for the same due Review.
+
 **Sensa Sync**:
 An optional service that synchronizes a Personal Learning Library across the learner's
 devices. It does not own semantic acceptance, learning outcomes or permission to use the local library.

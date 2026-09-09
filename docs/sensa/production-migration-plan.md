@@ -1,5 +1,7 @@
 # Sensa 生产化路线图
 
+2026-09-09 当前顺序更新：[ADR 0003](../adr/0003-three-client-local-facts.md) 确认三端本地终景。事实模型 G0 现在开始验；原生迁移中接入真实事实适配/多副本 G1，随后 React/TS 本地改造与跨语言 G2，再做三端/E2EE G3。具体门与本轮有限证据见 [事实模型蓝图](personal-library-fact-model.md)。后文 Web 暂停/是否开放未定是旧顺序，不再定义终局范围；原生下一用例仍为 Anchor Use。
+
 2026-09-08 原生增量：轻量到期复习与再学习已接入 Rust/SQLite/Flutter，事务和平台验证见 [交付记录](native-retention-handoff.md)。通用 Progression Kernel 与策略组合引用校验的纯接口随后已迁移并接入原生组合入口，见 [进度内核记录](native-progression-handoff.md)。这些记录不将正式 Activity/Mixed/去重汇总、完整 Runtime 编排或完整 LF-1b 标记为完成。 Policy Assignment、purpose plan/readiness 与首次 Run 固定已继续接入，见 [策略迁移记录](native-policy-handoff.md)；完整模式执行与 Policy Migration 仍待完成。 通用进度账本随后已接入原生 consumer，见 [账本记录](native-progress-journal-handoff.md)，不代表多阶段执行器已交付。 四阶段纯编排与恢复格式已继续迁移，见 [四阶段记录](native-four-stage-orchestration-handoff.md)，正式材料、评价、事务适配与 Flutter 呈现仍是开放前置。
 
 2026-09-08 Owner 范围调整：四阶段只作扩展性测试，正式材料/UI 暂停；高保证是当前优先迁移对象。

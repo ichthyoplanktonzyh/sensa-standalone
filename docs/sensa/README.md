@@ -74,6 +74,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M2 private context | [`m2-anchor-use-handoff.md`](m2-anchor-use-handoff.md) | 原文显式授权、撤销/迟到结果隔离、历史保留与后续复习材料替换的本地证据 |
 | M2-D local recovery | [`m2-d-extension-recovery-handoff.md`](m2-d-extension-recovery-handoff.md) | 插件原账号队列、版本保护及实际原生 activeTab 权限恢复的本地证据 |
 | Local settlement extraction | [`local-settlement-handoff.md`](local-settlement-handoff.md) | LF-1a 共用结算与 Node/断网 Chrome/隔离 Postgres 回归；本地库持久化仍待实施 |
+| Personal library facts | [`../adr/0003-three-client-local-facts.md`](../adr/0003-three-client-local-facts.md) / [`personal-library-fact-model.md`](personal-library-fact-model.md) | 三端本地终景、事实/版本/投影、分层验收门及有界模型实验；生产同步与调度裁决未完成 |
 | Native content provisioning | [`native-provisioning-plan.md`](native-provisioning-plan.md) / [`native-provisioning-handoff.md`](native-provisioning-handoff.md) | 个人意义显式入学、按需文本任务、独立复核/本地冻结及现有 Profile 学习与原生恢复证据 |
 | Native semantic resolution | [`native-semantic-resolution-plan.md`](native-semantic-resolution-plan.md) / [`native-semantic-resolution-handoff.md`](native-semantic-resolution-handoff.md) | 在线解析/澄清、本地候选与新 Sense 接受、服务用量去重及原生恢复证据 |
 | Native migration checklist | [`native-migration-checklist.md`](native-migration-checklist.md) | 已有 TS 成果的保留/迁移范围、验收状态；首版登记，待逐项盘点 |
@@ -96,7 +97,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M1-E local implementation | [`m1-e-checkin-handoff.md`](m1-e-checkin-handoff.md) | 手动/正式学习签到、原日期离线上传、账号隔离恢复与 A–E 集成验收 |
 | Active decomposition | [`learning-extensibility-architecture.md`](learning-extensibility-architecture.md) | `web-next` 学习扩展性的实现 seam；把领域已有的显式 retention scope 扩展规定落到实现层，不新增领域定义 |
 
-当前路线图 M0 设计已验收，M0-1/2/3 产物齐备，M1-A/B/C/D/E 本地纵切已验证、托管验收待执行，近期里程碑已改为 Flutter/Rust 原生本地学习库；Web 保留当前成果，暂停新建设，是否对外开放后定。领域能力、原型中已经验证的能力和首轮生产交付范围分别管理，不能从原型菜单
+当前路线图 M0 设计已验收，M0-1/2/3 产物齐备，M1-A/B/C/D/E 本地纵切已验证、托管验收待执行，近期里程碑已改为 Flutter/Rust 原生本地学习库；Web 保留 React/TS，按 ADR 0003 在原生迁移后建设完整本地执行；事实模型从现在开始分层校验。领域能力、原型中已经验证的能力和首轮生产交付范围分别管理，不能从原型菜单
 或完整领域目录推导上线清单。
 
 原先的 `content-kernel-contract.md`、`curriculum-runtime-contract.md`、`runtime-rule-packet-v1.md`、
