@@ -58,7 +58,7 @@ Owner 已确认 [ADR 0003](../adr/0003-three-client-local-facts.md)：Web 保留
 3. **个人语义世界**：本机文本收件箱、已有 Sense 的 Context/Expression 直接接受、移除恢复、显式加入学习已贯通，见 [本轮记录](native-personal-world-handoff.md)。在线澄清/Proposal/新 Sense 本地构造与接受已贯通，见 [语义协作记录](native-semantic-resolution-handoff.md)。Anchor Use 按需文本任务协作已接入，见 [交付记录](native-anchor-use-handoff.md)。图文材料、草稿冷恢复、同上下文多义、表达连接、列表/展开/图谱与明确入学已在 [整组交付](native-world-group-handoff.md) 接入。第 3 组本机内容与投影收口；图文模型协作已在 [Agent 交付](native-agent-group-handoff.md) 接入，正式视觉仍在第 6 组。
 4. **完整资源与在线任务协作**：本组本机迁移收口，见 [整组交付](native-resource-group-handoff.md)。在既有高保证发布物/媒体、轻量任务、独立审核、Anchor Use、Provider 与可选文本资源基础上，补齐有来源参考摘录（词性、用法、音标）的编译/显式对齐/撤回与版本治理、World 图文原文授权、Binding relation/coverage 准备、兼容接口流式预览、统一 Agent 的静态发音供给，以及原生邮箱登录/安全续期/在线访问初始化/退出与恢复。上游生产审核发布工具保留 TS/Python 并验证；本机学习不依赖在线账户。真实生产邮件/邀请、托管 Provider 和内容质量仍受发布门约束；宽覆盖词典与任意实时 TTS 是后续蓝图能力，不冒充已交付。
 5. **采集入口交接**：本组完成，见 [整组记录](native-intake-group-handoff.md)。TS 插件可选 Web/原生目的地，网页与 YouTube 本机交接、独立模型账号、来源定位、断线与浏览器重启后重试已验收；本地 Agent 使用同一合同的 CLI/Skill。Rust 原子准入与回执固定目标库/调用方，完整提案需明确接受、缺信息进入收件箱，不自动加入学习。原生导入/刷新与双平台冷恢复已验证。远程 Agent、移动 OS 分享和正式安装包向导仍属后续蓝图/第 6 组发布体验。
-6. **正式原生产品界面**：承接 apps/web 的完整功能、状态与恢复体验，分别通过桌面/移动验收；目前仍是技术验收壳。
+6. **正式原生产品界面**：承接 apps/web 的完整功能、状态与恢复体验，分别通过桌面/移动验收；目前仍是技术验收壳。Owner 已确认测试分层方式；[正式 UI 验收矩阵](native-ui-acceptance-matrix.md) 已登记关键用户任务、现有证据和缺口，[测试策略](testing-strategy.md) 区分程序回归、平台与体验验收。测试索引建立不代表本组产品验收完成。
 
 以上是工作分组，不是六个等量任务，也不承诺六次提交即可完成。
 每个已存在 Web 用例都必须有“原实现依据 → 原生合同/实现 → 成功、失败、离线、重启恢复证据”的闭合记录，

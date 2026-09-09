@@ -104,6 +104,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | Local library migration | [`local-library-migration-blueprint.md`](local-library-migration-blueprint.md) | 本地领域/存储/服务职责、单设备首条用例、浏览器交接、同步设计门与旧数据回退；整库离线尚未交付 |
 | Active roadmap | [`production-migration-plan.md`](production-migration-plan.md) | M0–M5 生产化路线图：正式产品与消费契约、生产闭环、恢复与数据控制、受邀发布和用户验证；含依赖、验收门与当前待办 |
 | Current working agreement | [`development-workflow.md`](development-workflow.md) | 可调整的开发方式：全局结构蓝图、owner 参与前端确认、消费契约、主代理直接实现与端到端验收；不替代领域或路线图 |
+| Testing strategy | [`testing-strategy.md`](testing-strategy.md) / [`native-ui-acceptance-matrix.md`](native-ui-acceptance-matrix.md) | 测试层级、真实/替身边界、可执行目录与最后一组原生 UI 用例/平台验收缺口；索引不等于产品已通过 |
 | M1-E local implementation | [`m1-e-checkin-handoff.md`](m1-e-checkin-handoff.md) | 手动/正式学习签到、原日期离线上传、账号隔离恢复与 A–E 集成验收 |
 | Active decomposition | [`learning-extensibility-architecture.md`](learning-extensibility-architecture.md) | `web-next` 学习扩展性的实现 seam；把领域已有的显式 retention scope 扩展规定落到实现层，不新增领域定义 |
 

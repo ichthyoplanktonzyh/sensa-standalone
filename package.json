@@ -12,6 +12,9 @@
     "apps/browser-extension"
   ],
   "scripts": {
+    "sensa:acceptance": "node scripts/sensaAcceptance.mjs",
+    "sensa:acceptance:check": "node scripts/sensaAcceptance.mjs check",
+    "sensa:acceptance:smoke": "node scripts/sensaAcceptanceSmoke.mjs",
     "build": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/api && npm run build -w @sensa/web && npm --prefix apps/web-next run build && npm run build -w @sensa/browser-extension",
     "typecheck": "tsc -b --pretty false && npm run typecheck -w @sensa/web && npm --prefix apps/web-next run typecheck && npm run typecheck -w @sensa/browser-extension",
     "lint": "npm run typecheck",

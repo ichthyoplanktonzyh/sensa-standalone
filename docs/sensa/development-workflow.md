@@ -15,6 +15,11 @@ Owner 已明确要求后续不再使用 worker 模式，由主代理直接设计
 2026-09-09：Owner 改为按迁移工作组连续推进；组内通过验收的纵切直接 checkpoint 提交，
 不在 checkpoint 结束任务或要求继续授权，完成整组后统一交付。
 
+2026-09-09 测试方式修订：Owner 已确认以程序自动化承担日常功能回归，整组完成再做平台和
+体验走查。按真实经过的组件及替身划分证据，不因使用 integration_test/Playwright 就称为完整
+E2E；主流程、独立冷恢复、OS/真实 Provider 和 owner 体验确认分别记录。执行方式见
+[测试策略](testing-strategy.md)，最后一组的入口与缺口见 [原生 UI 验收矩阵](native-ui-acceptance-matrix.md)。
+
 ## 1. 基本方式与文档职责
 
 全局结构自上而下规划，具体工作按端到端用户用例纵向交付。每条用例先由 owner 与负责该轮
