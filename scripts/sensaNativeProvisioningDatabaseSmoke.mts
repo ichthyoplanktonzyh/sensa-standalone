@@ -8,7 +8,8 @@ if(!url||new URL(url).hostname!=='127.0.0.1'||!new URL(url).pathname.startsWith(
 const pool=new pg.Pool({connectionString:url});
 async function transaction<T>(work:(db:DatabaseExecutor)=>Promise<T>){const c=await pool.connect();await c.query('BEGIN');try{const r=await work({query:(s,p)=>c.query(s,p as unknown[])});await c.query('COMMIT');return r;}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}}
 const subject=crypto.randomUUID(),session=crypto.randomUUID(),issuer='native-provisioning-smoke';let generation=0,review=0,revoke=false,now=new Date();
-const app=createConsumerRoutes({transaction,clock:()=>now,verify:async()=>({issuer,subject,sessionId:session,email:null}),contentGenerator:async request=>{generation++;assert.ok(request.contextArtifacts.every(a=>a.source!=='personal_anchor'));return {cue:{scene:'你要提出不同意见，先顾及对方的感受，再委婉地表达自己的想法。',senseFocus:'表达得体，顾及感受'},provider:'fixture-generator',model:'no-cost'};},contentReviewer:async()=>{review++;if(revoke)await pool.query('UPDATE sensa_consumer.invitations SET revoked=true WHERE issuer=$1 AND subject=$2',[issuer,subject]);return {accepted:true,provider:'fixture-independent-review',model:'no-cost',reason:'fixed rubric passed'};}});
+let onGenerate:(()=>Promise<void>)|undefined,onReview:(()=>Promise<void>)|undefined;
+const app=createConsumerRoutes({transaction,clock:()=>now,verify:async()=>({issuer,subject,sessionId:session,email:null}),contentGenerator:async request=>{generation++;if(onGenerate)await onGenerate();assert.ok(request.contextArtifacts.every(a=>a.source!=='personal_anchor'));return {cue:{scene:'你要提出不同意见，先顾及对方的感受，再委婉地表达自己的想法。',senseFocus:'表达得体，顾及感受'},provider:'fixture-generator',model:'no-cost'};},contentReviewer:async()=>{review++;if(onReview)await onReview();if(revoke)await pool.query('UPDATE sensa_consumer.invitations SET revoked=true WHERE issuer=$1 AND subject=$2',[issuer,subject]);return {accepted:true,provider:'fixture-independent-review',model:'no-cost',reason:'fixed rubric passed'};}});
 const post=async(path:string,body:unknown)=>{const r=await app.request(path,{method:'POST',headers:{Authorization:'Bearer native-test','Content-Type':'application/json'},body:JSON.stringify(body)});return {status:r.status,body:await r.json() as any};};
 async function input(){const id=()=>crypto.randomUUID();const p={version:'sensa-native-provisioning-v1',id:id(),taskId:id(),learnerId:id(),planRevision:id(),policy:{profileId:'lightweight',profileVersion:'v1'},protocol:{id:'consumer-initial',version:'v1',purpose:'initial_learning'},demandReference:{contentDemandKey:'lightweight-initial-content',definitionVersion:'v1'},target:{senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),expression:{surface:'tactful',type:'word',language:'en'},semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'Care for feelings in communication.',prototypeScenes:[{summary:'A sensitive conversation.',participantRoles:[],states:[],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]}},requestedAt:now.toISOString()};return {...p,inputDigest:await semanticDigest(p)};}
 try{
@@ -21,6 +22,22 @@ try{
  const account=(await pool.query('SELECT account_id FROM sensa_consumer.accounts WHERE issuer=$1 AND subject=$2',[issuer,subject])).rows[0].account_id;
  const rows=(await pool.query('SELECT * FROM sensa_consumer.native_content_usage WHERE account_id=$1',[account])).rows;assert.equal(rows.length,30);assert.deepEqual(Object.keys(rows[0]).sort(),['account_id','created_at','input_digest','request_id']);
  assert.equal((await pool.query('SELECT count(*)::int AS n FROM sensa_consumer.provisioning_tasks WHERE learner_user_id=$1',[account])).rows[0].n,0);
- now=new Date(now.getTime()+86400001);revoke=true;assert.equal((await post('/sensa/native/content/prepare',await input())).status,403);assert.equal(generation,31);assert.equal(review,31);
- console.log('PASS: native content HTTP + real Postgres usage quota/concurrent dedup/day rollover/revocation, separate generator/reviewer, no persisted private task or content payload.');
+ now=new Date(now.getTime()+86400001);
+ const preCancelled=await input();const tombstone={id:preCancelled.id,inputDigest:preCancelled.inputDigest};
+ assert.equal((await post('/sensa/native/content/cancel',tombstone)).status,200);
+ assert.equal((await post('/sensa/native/content/cancel',tombstone)).status,200);
+ assert.equal((await post('/sensa/native/content/cancel',{...tombstone,inputDigest:'0'.repeat(64)})).status,409);
+ assert.equal((await post('/sensa/native/content/prepare',preCancelled)).body.code,'native_request_cancelled');assert.equal(generation,30);
+ for(const phase of ['generate','review']){
+  let entered!:()=>void,release!:()=>void;const seen=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);
+  const hook=async()=>{entered();await gate;};if(phase==='generate')onGenerate=hook;else onReview=hook;
+  const pendingInput=await input(),beforeReview=review;const pending=post('/sensa/native/content/prepare',pendingInput);await seen;
+  assert.equal((await post('/sensa/native/content/cancel',{id:pendingInput.id,inputDigest:pendingInput.inputDigest})).status,200);
+  release();assert.equal((await pending).body.code,'native_request_cancelled');if(phase==='generate')assert.equal(review,beforeReview);
+  onGenerate=undefined;onReview=undefined;
+ }
+ const cancellations=(await pool.query('SELECT * FROM sensa_consumer.native_content_cancellations WHERE account_id=$1',[account])).rows;
+ assert.equal(cancellations.length,3);assert.deepEqual(Object.keys(cancellations[0]).sort(),['account_id','cancelled_at','input_digest','request_id']);
+ const beforeGen=generation,beforeReview=review;revoke=true;assert.equal((await post('/sensa/native/content/prepare',await input())).status,403);assert.equal(generation,beforeGen+1);assert.equal(review,beforeReview+1);
+ console.log('PASS: native content HTTP + real Postgres usage quota/concurrent dedup/day rollover/revocation, cancellation before dispatch/before review/after review with metadata-only tombstones, separate generator/reviewer, no persisted private task or content payload.');
 }finally{await pool.end();}

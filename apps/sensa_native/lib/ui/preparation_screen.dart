@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'library_view_model.dart';
 import 'online_service_dialog.dart';
+import 'anchor_use_panel.dart';
 
 class PreparationListScreen extends StatelessWidget {
   const PreparationListScreen({super.key, required this.model});
@@ -60,11 +61,27 @@ class PreparationScreen extends StatefulWidget {
 class _PreparationScreenState extends State<PreparationScreen> {
   LibraryViewModel get model => widget.model;
   Map<String, dynamic>? selected;
-  Map<String, dynamic>? get meaning =>
-      (model.snapshot!.personal['meanings'] as List)
-          .cast<Map<String, dynamic>>()
-          .where((m) => m['id'] == widget.meaningId)
-          .firstOrNull;
+  Map<String, dynamic>? get meaning {
+    final meanings = (model.snapshot!.personal['meanings'] as List)
+        .cast<Map<String, dynamic>>();
+    if (widget.meaningId != null) {
+      return meanings.where((m) => m['id'] == widget.meaningId).firstOrNull;
+    }
+    final slot = model.preparations
+        .where((t) => t['id'] == widget.taskId)
+        .firstOrNull;
+    final source = slot?['anchor']?['meaningId'];
+    return meanings
+        .where(
+          (m) =>
+              m['status'] == 'confirmed' &&
+              (source != null
+                  ? m['id'] == source
+                  : m['preparation']?['id'] == widget.taskId),
+        )
+        .firstOrNull;
+  }
+
   Map<String, dynamic>? get task => model.preparations
       .where(
         (v) => v['id'] == (widget.taskId ?? meaning?['preparation']?['id']),
@@ -154,6 +171,11 @@ class _PreparationScreenState extends State<PreparationScreen> {
                             '')
                         as String,
                   ),
+                  if (meaning != null && meaning!['status'] == 'confirmed')
+                    AnchorUsePanel(model: model, meaning: meaning!),
+                  if (current?['anchor'] != null)
+                    Text('当前目标使用的已授权原文：${current!['anchor']['sentence']}'),
+                  if (model.notice != null) Text(model.notice!),
                   const SizedBox(height: 16),
                   if (!ready) ...[
                     const Text('选择此目标的学习方式。准备服务只接收已确认的词义、表达和通用场景，不默认使用你的原始材料。'),
@@ -174,6 +196,7 @@ class _PreparationScreenState extends State<PreparationScreen> {
                       ],
                       onChanged:
                           model.busy ||
+                              current?['policyCommitted'] == true ||
                               current == null && existingTarget != null
                           ? null
                           : (value) => setState(

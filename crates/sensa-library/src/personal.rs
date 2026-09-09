@@ -328,6 +328,9 @@ pub(super) fn apply(
                 }
             }
             if removed == *active {
+                if matches!(entity, Entity::Meaning) && !active {
+                    anchor::revoke(db, id, command, now)?;
+                }
                 db.execute(
                     &format!("UPDATE {table} SET removed=?2,revision=revision+1 WHERE id=?1"),
                     params![id, !active],
@@ -393,6 +396,7 @@ pub(super) fn project(db: &Connection) -> Result<Value> {
             let task = provisioning::for_meaning(db, v["id"].as_str().unwrap_or(""))?;
             v["addedToLearning"] = json!(linked || task.is_some());
             v["preparation"] = json!(task);
+            v["anchorGrant"] = json!(anchor::current(db, v["id"].as_str().unwrap_or(""))?);
             Ok(v)
         })
         .collect::<Result<Vec<_>>>()?;

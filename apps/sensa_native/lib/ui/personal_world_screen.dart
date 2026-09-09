@@ -155,6 +155,11 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen> {
                       ],
                     ),
                   ),
+                  if (model.notice != null)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(model.notice!),
+                    ),
                   if (model.error != null) _ErrorNotice(model: model),
                   Expanded(
                     child: items.isEmpty
@@ -637,6 +642,11 @@ class _CaptureEditorState extends State<_CaptureEditor> {
                         child: const Text('确认词义并保存'),
                       ),
                   ],
+                  if (model.notice != null)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(model.notice!),
+                    ),
                   if (model.error != null) _ErrorNotice(model: model),
                 ],
               ),

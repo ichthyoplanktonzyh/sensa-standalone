@@ -203,7 +203,8 @@ fn candidates(
             .map(|p| serde_json::from_str::<Value>(&p))
             .transpose()?
             .is_some_and(|p| p["purposes"][purpose]["readiness"]["status"] == "ready");
-        if !ready {
+        let pinned = active.is_some() || run.is_some() && phase.as_deref() != Some("completed");
+        if !pinned && (!ready || !provisioning::material_current(db, &target)?) {
             continue;
         }
         out.push(Candidate {

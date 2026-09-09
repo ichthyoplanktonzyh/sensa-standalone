@@ -75,6 +75,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M2-D local recovery | [`m2-d-extension-recovery-handoff.md`](m2-d-extension-recovery-handoff.md) | 插件原账号队列、版本保护及实际原生 activeTab 权限恢复的本地证据 |
 | Local settlement extraction | [`local-settlement-handoff.md`](local-settlement-handoff.md) | LF-1a 共用结算与 Node/断网 Chrome/隔离 Postgres 回归；本地库持久化仍待实施 |
 | Personal library facts | [`../adr/0003-three-client-local-facts.md`](../adr/0003-three-client-local-facts.md) / [`personal-library-fact-model.md`](personal-library-fact-model.md) | 三端本地终景、事实/版本/投影、分层验收门及有界模型实验；生产同步与调度裁决未完成 |
+| Native anchor use | [`native-anchor-use-plan.md`](native-anchor-use-plan.md) / [`native-anchor-use-handoff.md`](native-anchor-use-handoff.md) | 固定原文授权/撤销、准备版本与材料替换、旧 Run 保留、原生冷恢复；音频仍待迁移 |
 | Native content provisioning | [`native-provisioning-plan.md`](native-provisioning-plan.md) / [`native-provisioning-handoff.md`](native-provisioning-handoff.md) | 个人意义显式入学、按需文本任务、独立复核/本地冻结及现有 Profile 学习与原生恢复证据 |
 | Native semantic resolution | [`native-semantic-resolution-plan.md`](native-semantic-resolution-plan.md) / [`native-semantic-resolution-handoff.md`](native-semantic-resolution-handoff.md) | 在线解析/澄清、本地候选与新 Sense 接受、服务用量去重及原生恢复证据 |
 | Native migration checklist | [`native-migration-checklist.md`](native-migration-checklist.md) | 已有 TS 成果的保留/迁移范围、验收状态；首版登记，待逐项盘点 |

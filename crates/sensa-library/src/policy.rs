@@ -176,13 +176,21 @@ fn committed_id(db: &Connection, target: &str) -> Result<Option<String>> {
         .optional()?)
 }
 pub(super) fn refresh_target(db: &Connection, target: &str) -> Result<PlanView> {
-    if let Some(id) = committed_id(db, target)? {
-        return plan_by_id(db, &id, true);
-    }
-    let effective = effective(db, target)?;
+    let commitment = committed_id(db, target)?;
+    let managed = provisioning::has_task(db, target)?;
+    let effective = if let Some(id) = &commitment {
+        let original = plan_by_id(db, id, true)?;
+        if !managed {
+            return Ok(original);
+        }
+        original.plan.effective
+    } else {
+        effective(db, target)?
+    };
     let profile = profile(&effective.policy)?;
     let (material,digest,content):(String,String,String)=db.query_row("SELECT m.id,m.digest,m.content FROM targets t JOIN materials m ON m.id=t.material_id WHERE t.id=?1",[target],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
-    let valid = format!("{:x}", Sha256::digest(content.as_bytes())) == digest;
+    let valid = format!("{:x}", Sha256::digest(content.as_bytes())) == digest
+        && provisioning::material_current(db, target)?;
     let mut provider = BTreeMap::new();
     for (_, spec) in profile.protocols.entries() {
         for requirement in &spec.binding.content_requirement {
@@ -245,7 +253,7 @@ pub(super) fn refresh_target(db: &Connection, target: &str) -> Result<PlanView> 
     if let Some((id, _, content)) = &old
         && content == &encoded
     {
-        return plan_by_id(db, id, false);
+        return plan_by_id(db, id, commitment.is_some());
     }
     let revision = old.map_or(1, |(_, r, _)| r + 1);
     let id = id();
@@ -265,7 +273,7 @@ pub(super) fn refresh_target(db: &Connection, target: &str) -> Result<PlanView> 
         id,
         revision,
         plan,
-        committed: false,
+        committed: commitment.is_some(),
     })
 }
 pub(super) fn refresh(db: &Connection) -> Result<()> {
@@ -396,7 +404,8 @@ pub(super) fn pin_retention(
     run: &str,
     protocol: &str,
 ) -> Result<()> {
-    let plan = committed_id(db, target)?.ok_or(Error::Rule("policy_commitment_missing"))?;
+    committed_id(db, target)?.ok_or(Error::Rule("policy_commitment_missing"))?;
+    let plan = refresh_target(db, target)?.id;
     db.execute(
         "INSERT INTO retention_run_policies VALUES(?1,?2)",
         params![run, plan],

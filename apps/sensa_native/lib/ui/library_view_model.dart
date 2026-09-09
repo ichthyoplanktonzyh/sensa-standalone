@@ -69,15 +69,67 @@ class LibraryViewModel extends ChangeNotifier {
     }
   }
 
+  List<Map<String, dynamic>> _activePreparationRequests() => preparations
+      .where((t) => t['status'] == 'generating' && t['request'] != null)
+      .map((t) => Map<String, dynamic>.from(t['request'] as Map))
+      .toList();
+  Future<void> _cancelInvalidated(List<Map<String, dynamic>> requests) async {
+    for (final request in requests) {
+      if (preparations.any((t) => t['activeAttemptId'] == request['id'])) {
+        continue;
+      }
+      if (!semanticService.configured ||
+          request['anchor'] != null &&
+              request['anchor']['recipient'] != semanticService.origin) {
+        notice = '本机已停止接纳旧结果；尚未通知原在线服务，已发送的请求无法收回。';
+        _notify();
+        continue;
+      }
+      try {
+        await semanticService.cancelPreparation(request);
+      } catch (_) {
+        notice = '本机已停止接纳旧结果；在线取消通知未成功，服务可能继续处理已收到的内容。';
+      }
+      _notify();
+    }
+  }
+
+  Future<void> setAnchorUse(Map<String, dynamic> meaning, bool enabled) async {
+    final requests = _activePreparationRequests();
+    final wasHome = home;
+    await act({
+      'kind': 'anchor',
+      'action': {
+        'kind': 'set',
+        'meaning_id': meaning['id'],
+        'expected_revision': meaning['revision'],
+        'enabled': enabled,
+        'recipient': enabled ? semanticService.origin : null,
+      },
+    });
+    home = wasHome;
+    if (error == null) {
+      notice = enabled
+          ? '原文授权已保存在本机；请明确准备新的学习材料。'
+          : '该原文授权已在本机撤销；使用它的后续材料需重新准备，已开始的学习与历史保留。';
+      await _cancelInvalidated(requests);
+    }
+    _notify();
+  }
+
   bool provisioningBusy = false;
   List<Map<String, dynamic>> get preparations =>
       (snapshot?.personal['preparations'] as List? ?? [])
           .cast<Map<String, dynamic>>();
   Future<void> provisioningAction(Map<String, dynamic> action) async {
+    final requests = _activePreparationRequests();
     final wasHome = home;
     await act({'kind': 'provisioning', 'action': action});
     home = wasHome;
     _notify();
+    if (error == null && ['cancel', 'set_policy'].contains(action['kind'])) {
+      await _cancelInvalidated(requests);
+    }
   }
 
   Future<void> prepareContent(String taskId) async {
@@ -95,6 +147,7 @@ class LibraryViewModel extends ChangeNotifier {
         'kind': 'begin',
         'task_id': taskId,
         'expected_revision': task['revision'],
+        'service_origin': semanticService.origin,
       });
       if (error != null) return;
       final request =
@@ -381,14 +434,22 @@ class LibraryViewModel extends ChangeNotifier {
   }
 
   Future<void> personalAction(Map<String, dynamic> action) async {
+    final requests = _activePreparationRequests();
     final wasHome = home;
     await act({'kind': 'personal', 'action': action});
     home = wasHome;
     _notify();
+    if (error == null) await _cancelInvalidated(requests);
   }
 
   String message(Object error) {
     final text = error.toString();
+    if (text.contains('anchor_recipient')) {
+      return '请配置已授权的在线服务；更换服务需先撤销并重新授权原文。';
+    }
+    if (text.contains('learning_material_preparing')) {
+      return '后续学习需要新的材料，请先完成准备；已开始的学习可继续。';
+    }
     if (text.contains('learning_target_policy_exists')) {
       return '这个语义目标已采用其他学习方式，请关联现有目标后在学习设置中明确修改。';
     }

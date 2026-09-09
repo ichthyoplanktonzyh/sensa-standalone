@@ -20,6 +20,8 @@ pub enum Action {
     Begin {
         task_id: String,
         expected_revision: u32,
+        #[serde(default)]
+        service_origin: Option<String>,
     },
     Cancel {
         task_id: String,
@@ -143,8 +145,12 @@ pub fn validate_result(input: &Value, result: &Value) -> Result<(String, String,
         ),
         (
             "origin_experience",
-            "other_authoritative_source",
-            json!({"scene":proposal["semanticSpec"]["prototypeScenes"][0]["summary"],"senseFocus":proposal["semanticSpec"]["coreMeaningFocus"],"featureLabels":[]}),
+            if input["anchor"].is_object() {
+                "personal_anchor"
+            } else {
+                "other_authoritative_source"
+            },
+            json!({"scene":if input["anchor"].is_object() {&input["anchor"]["sentence"]} else {&proposal["semanticSpec"]["prototypeScenes"][0]["summary"]},"senseFocus":proposal["semanticSpec"]["coreMeaningFocus"],"featureLabels":[]}),
         ),
     ] {
         let matches: Vec<_> = artifacts
@@ -156,16 +162,26 @@ pub fn validate_result(input: &Value, result: &Value) -> Result<(String, String,
         require(
             a["source"] == source
                 && a["payload"] == expected
-                && a["personalAnchorUseGrantId"].is_null()
+                && a["personalAnchorUseGrantId"]
+                    == if kind == "origin_experience" {
+                        input["anchor"]["grantId"].clone()
+                    } else {
+                        Value::Null
+                    }
                 && a["contentDigest"] == hash(&expected)?,
         )?;
         require(
             a["sourceVersion"]
-                == input["target"][if kind == "expression_snapshot" {
-                    "bindingVersionId"
+                == if kind == "origin_experience" && input["anchor"].is_object() {
+                    input["anchor"]["contextVersion"].clone()
                 } else {
-                    "senseVersionId"
-                }]
+                    input["target"][if kind == "expression_snapshot" {
+                        "bindingVersionId"
+                    } else {
+                        "senseVersionId"
+                    }]
+                    .clone()
+                }
                 && a["contentSchemaId"] == format!("lightweight.{}", kind.replace('_', "-"))
                 && a["contentSchemaVersion"] == "v1"
                 && a["producerToolCallId"].is_null()
@@ -382,6 +398,7 @@ pub(super) fn apply(
                 let proposal = semantic::validate_proposal(meaning["proposal"].clone())?;
                 let mut task = json!({"id":tid,"revision":1,"policy":p,"planRevision":id(),"target":{"senseId":meaning["senseId"],"senseVersionId":meaning["senseVersionId"],"bindingId":meaning["bindingId"],"bindingVersionId":meaning["bindingVersionId"],"proposal":proposal},"attemptCount":0,"activeAttemptId":null,"materialId":null,"createdAtMs":now.timestamp_millis()});
                 status(&mut task, p);
+                task["anchor"] = json!(anchor::current(db, meaning_id)?);
                 db.execute(
                     "INSERT INTO personal_learning_tasks VALUES(?1,?2,?3,?4)",
                     params![
@@ -394,6 +411,12 @@ pub(super) fn apply(
                 tid
             };
             db.execute("INSERT INTO personal_task_entries VALUES(?1,?2,?3) ON CONFLICT(meaning_id) DO NOTHING",params![meaning_id,tid,command.operation_id])?;
+            save_version(db, &read(db, &tid)?)?;
+            if let Some(g) = anchor::current(db, meaning_id)?
+                && read(db, &tid)?["anchor"] != g
+            {
+                replace_anchor(db, meaning_id, Some(g), now)?;
+            }
             if read(db, &tid)?["status"] == "ready" {
                 db.execute("INSERT INTO personal_learning_links VALUES(?1,?2,?3,?4) ON CONFLICT DO NOTHING",params![meaning_id,tid,command.operation_id,now.timestamp_millis()])?;
             }
@@ -408,20 +431,35 @@ pub(super) fn apply(
             if task["status"] == "ready" {
                 return Err(Error::Rule("prepared_policy_fixed"));
             }
+            if db.query_row(
+                "SELECT EXISTS(SELECT 1 FROM policy_commitments WHERE target_id=?1)",
+                [task_id],
+                |r| r.get::<_, bool>(0),
+            )? {
+                return Err(Error::Rule("policy_committed"));
+            }
             policy::append_assignment(db, "target", task_id, Some(p), now.timestamp_millis())?;
             end_attempt(db, &task, "policy_changed", now)?;
+            save_version(db, &task)?;
             task["policy"] = json!(p);
             task["planRevision"] = json!(id());
             task["activeAttemptId"] = Value::Null;
             status(&mut task, p);
+            save_version(db, &task)?;
             write(db, &mut task)?;
         }
         Action::Begin {
             task_id,
             expected_revision,
+            service_origin,
         } => {
             let mut task = read(db, task_id)?;
             revision(&task, *expected_revision)?;
+            if let Some(g) = task.get("anchor").filter(|g| !g.is_null())
+                && (!anchor::valid(db, g)? || service_origin.as_deref() != g["recipient"].as_str())
+            {
+                return Err(Error::Rule("anchor_recipient_mismatch"));
+            }
             if task["status"] == "ready" {
                 return Err(Error::Rule("preparation_already_ready"));
             }
@@ -456,6 +494,9 @@ pub(super) fn apply(
             target["semanticSpec"] = task["target"]["proposal"]["semanticSpec"].clone();
             target["expression"] = task["target"]["proposal"]["expression"].clone();
             let mut request = json!({"version":"sensa-native-provisioning-v1","id":attempt,"taskId":task_id,"learnerId":learner,"planRevision":task["planRevision"],"policy":p,"target":target,"protocol":{"id":"consumer-initial","version":"v1","purpose":"initial_learning"},"demandReference":{"contentDemandKey":"lightweight-initial-content","definitionVersion":"v1"},"requestedAt":now.to_rfc3339()});
+            if let Some(g) = task.get("anchor").filter(|g| !g.is_null()) {
+                request["anchor"] = json!({"grantId":g["grantId"],"contextVersion":g["contextVersion"],"sentence":g["sentence"],"recipient":g["recipient"]});
+            }
             request["inputDigest"] = json!(hash(&request)?);
             db.execute(
                 "INSERT INTO personal_content_attempts VALUES(?1,?2,?3,NULL,?4)",
@@ -491,6 +532,11 @@ pub(super) fn apply(
         Action::Finish { task_id, result } => {
             let mut task = read(db, task_id)?;
             active(&task, text(&result["id"], 100)?, now)?;
+            if let Some(g) = task.get("anchor").filter(|g| !g.is_null())
+                && !anchor::valid(db, g)?
+            {
+                return Err(Error::Rule("preparation_superseded"));
+            }
             let encoded: String = db.query_row(
                 "SELECT request FROM personal_content_attempts WHERE id=?1",
                 [result["id"].as_str()],
@@ -532,8 +578,15 @@ pub(super) fn apply(
                     "INSERT INTO materials VALUES(?1,?2,?3)",
                     params![material.id, digest, content],
                 )?;
+                let old_material: Option<String> = db
+                    .query_row(
+                        "SELECT material_id FROM targets WHERE id=?1",
+                        [task_id],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
                 db.execute(
-                    "INSERT INTO targets VALUES(?1,?2,?3,?4,?5,?6)",
+                    "INSERT INTO targets VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(id) DO UPDATE SET material_id=excluded.material_id",
                     params![
                         task_id,
                         material.id,
@@ -543,6 +596,12 @@ pub(super) fn apply(
                         task["policy"]["profileVersion"].as_str()
                     ],
                 )?;
+                if let Some(old) = old_material {
+                    db.execute(
+                        "UPDATE library SET selected_material_id=?1 WHERE selected_material_id=?2",
+                        params![material.id, old],
+                    )?;
+                }
                 policy::enroll(db, task_id)?;
                 db.execute("INSERT INTO personal_learning_links SELECT meaning_id,task_id,?2,?3 FROM personal_task_entries WHERE task_id=?1 ON CONFLICT DO NOTHING",params![task_id,command.operation_id,now.timestamp_millis()])?;
                 db.execute(
@@ -561,6 +620,9 @@ pub(super) fn apply(
             )?;
             task["activeAttemptId"] = Value::Null;
             write(db, &mut task)?;
+            if task["status"] == "ready" {
+                policy::refresh_target(db, task_id)?;
+            }
         }
         Action::Fail {
             task_id,
@@ -624,6 +686,11 @@ pub(super) fn project(db: &Connection) -> Result<Vec<Value>> {
         .map(|r| Ok(serde_json::from_str::<Value>(&r?)?))
         .collect::<Result<Vec<_>>>()?;
     for task in &mut tasks {
+        task["policyCommitted"] = json!(db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM policy_commitments WHERE target_id=?1)",
+            [task["id"].as_str()],
+            |r| r.get::<_, bool>(0)
+        )?);
         if let Some(active) = task["activeAttemptId"].as_str() {
             let r: String = db.query_row(
                 "SELECT request FROM personal_content_attempts WHERE id=?1",
@@ -637,4 +704,82 @@ pub(super) fn project(db: &Connection) -> Result<Vec<Value>> {
         return Err(Error::Rule("personal_snapshot_limit"));
     }
     Ok(tasks)
+}
+
+pub(super) fn save_version(db: &Connection, task: &Value) -> Result<()> {
+    let fixed = json!({"id":task["planRevision"],"targetId":task["id"],"target":task["target"],"policy":task["policy"],"anchor":task["anchor"]});
+    db.execute(
+        "INSERT INTO personal_preparation_versions VALUES(?1,?2,?3) ON CONFLICT(id) DO NOTHING",
+        params![
+            task["planRevision"].as_str(),
+            task["id"].as_str(),
+            fixed.to_string()
+        ],
+    )?;
+    Ok(())
+}
+pub(super) fn replace_anchor(
+    db: &Connection,
+    meaning: &str,
+    grant: Option<Value>,
+    now: DateTime<Utc>,
+) -> Result<()> {
+    let target: Option<String> = db
+        .query_row(
+            "SELECT task_id FROM personal_task_entries WHERE meaning_id=?1",
+            [meaning],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if let Some(target) = target {
+        let mut task = read(db, &target)?;
+        if grant.is_none() && task["anchor"]["meaningId"] != meaning {
+            return Ok(());
+        }
+        save_version(db, &task)?;
+        end_attempt(db, &task, "anchor_authorization_changed", now)?;
+        task["anchor"] = json!(grant);
+        task["planRevision"] = json!(id());
+        task["attemptCount"] = json!(0);
+        task["activeAttemptId"] = Value::Null;
+        let policy: PolicyRef = serde_json::from_value(task["policy"].clone())?;
+        status(&mut task, &policy);
+        if supported(&policy) {
+            task["reason"] = json!("anchor_authorization_changed");
+        }
+        // Keep the previous immutable material reference for audit, never use it for a new Run.
+        save_version(db, &task)?;
+        write(db, &mut task)?;
+        if db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM targets WHERE id=?1)",
+            [&target],
+            |r| r.get::<_, bool>(0),
+        )? {
+            policy::refresh_target(db, &target)?;
+        }
+    }
+    Ok(())
+}
+pub(super) fn material_current(db: &Connection, target: &str) -> Result<bool> {
+    if !has_task(db, target)? {
+        return Ok(true);
+    }
+    let s: Option<String> = db
+        .query_row(
+            "SELECT json_extract(content,'$.status') FROM personal_learning_tasks WHERE id=?1",
+            [target],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(s.is_none_or(|v| v == "ready"))
+}
+
+pub(super) fn has_task(db: &Connection, target: &str) -> Result<bool> {
+    let exists:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='personal_learning_tasks')",[],|r|r.get(0))?;
+    Ok(exists
+        && db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM personal_learning_tasks WHERE id=?1)",
+            [target],
+            |r| r.get::<_, bool>(0),
+        )?)
 }

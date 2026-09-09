@@ -1,6 +1,7 @@
 //! Single-device application transactions. All writes go through execute().
 //! The acceptance material is opt-in; this is not a production package importer.
 pub mod activity;
+pub mod anchor;
 mod assurance;
 mod assurance_retention;
 pub mod assurance_runtime;
@@ -46,6 +47,9 @@ pub struct Command {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CommandAction {
+    Anchor {
+        action: Box<anchor::Action>,
+    },
     Provisioning {
         action: Box<provisioning::Action>,
     },
@@ -204,7 +208,8 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].contains(&version) || application != APPLICATION {
+    } else if ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].contains(&version) || application != APPLICATION
+    {
         return Err(Error::Rule("unsupported_library_version"));
     }
     if version <= 1 {
@@ -239,6 +244,9 @@ fn connection(path: &Path) -> Result<Connection> {
     if version <= 9 {
         tx.execute_batch(include_str!("provisioning.sql"))?;
     }
+    if version <= 10 {
+        tx.execute_batch(include_str!("anchor.sql"))?;
+    }
     tx.commit()?;
     Ok(db)
 }
@@ -248,7 +256,7 @@ fn read(db: &Connection) -> Result<Snapshot> {
         db.query_row("SELECT id,revision,daily_new_limit FROM library", [], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?))
         })?;
-    let material: Option<String> = db
+    let mut material: Option<String> = db
         .query_row(
             "SELECT content FROM materials WHERE id=(SELECT selected_material_id FROM library)",
             [],
@@ -257,7 +265,7 @@ fn read(db: &Connection) -> Result<Snapshot> {
         .optional()?;
     let run = db
         .query_row(
-            "SELECT id,phase,ordinal,attempt_count,paused,protocol_version FROM runs WHERE material_id=(SELECT selected_material_id FROM library)",
+            "SELECT id,phase,ordinal,attempt_count,paused,protocol_version FROM runs WHERE target_id=(SELECT id FROM targets WHERE material_id=(SELECT selected_material_id FROM library))",
             [],
             |r| {
                 let raw: String = r.get(1)?;
@@ -278,8 +286,17 @@ fn read(db: &Connection) -> Result<Snapshot> {
             },
         )
         .optional()?;
+    if let Some(r) = &run
+        && r.phase != Phase::Completed
+    {
+        material = Some(db.query_row(
+            "SELECT m.content FROM materials m JOIN runs r ON r.material_id=m.id WHERE r.id=?1",
+            [&r.id],
+            |r| r.get(0),
+        )?);
+    }
     let catalog = {
-        let mut query=db.prepare("SELECT m.content, EXISTS(SELECT 1 FROM targets t WHERE t.material_id=m.id), EXISTS(SELECT 1 FROM runs r WHERE r.material_id=m.id AND phase='completed') FROM materials m ORDER BY m.rowid")?;
+        let mut query=db.prepare("SELECT m.content, EXISTS(SELECT 1 FROM targets t WHERE t.material_id=m.id), EXISTS(SELECT 1 FROM runs r JOIN targets t ON t.id=r.target_id WHERE t.material_id=m.id AND r.phase='completed') FROM materials m WHERE json_extract(m.content,'$.source') NOT LIKE 'on-demand:%' OR EXISTS(SELECT 1 FROM targets t WHERE t.material_id=m.id) ORDER BY m.rowid")?;
         let rows = query.query_map([], |r| {
             Ok((
                 r.get::<_, String>(0)?,
@@ -307,7 +324,7 @@ fn read(db: &Connection) -> Result<Snapshot> {
         enrolled: db.query_row("SELECT count(*)>0 FROM targets WHERE material_id=(SELECT selected_material_id FROM library)", [], |r| r.get(0))?,
         run,
         completion_id: db
-            .query_row("SELECT c.id FROM completions c JOIN runs r ON r.id=c.run_id WHERE r.material_id=(SELECT selected_material_id FROM library)", [], |r| r.get(0))
+            .query_row("SELECT c.id FROM completions c JOIN runs r ON r.id=c.run_id WHERE r.target_id=(SELECT id FROM targets WHERE material_id=(SELECT selected_material_id FROM library))", [], |r| r.get(0))
             .optional()?,
         due_at_ms: db
             .query_row("SELECT mem.due_at_ms FROM memory mem JOIN targets t ON t.id=mem.target_id WHERE t.material_id=(SELECT selected_material_id FROM library)", [], |r| r.get(0))
@@ -424,6 +441,7 @@ pub fn execute_at_offset(
         |r| r.get(0),
     )?;
     match &command.action {
+        CommandAction::Anchor { action } => anchor::apply(&tx, action, &command, now)?,
         CommandAction::Provisioning { action } => provisioning::apply(&tx, action, &command, now)?,
         CommandAction::Semantic { action } => semantic::apply(&tx, action, &command, now)?,
         CommandAction::Personal { action } => personal::apply(&tx, action, &command, now)?,
@@ -523,6 +541,10 @@ pub fn execute_at_offset(
             )?;
             if !exists {
                 return Err(Error::Rule("material_unavailable"));
+            }
+            let historical:bool=tx.query_row("SELECT json_extract(content,'$.source') LIKE 'on-demand:%' AND NOT EXISTS(SELECT 1 FROM targets t WHERE t.material_id=materials.id) FROM materials WHERE id=?1",[material_id],|r|r.get(0))?;
+            if historical {
+                return Err(Error::Rule("historical_material_only"));
             }
             tx.execute(
                 "UPDATE assurance_sessions SET paused=1 WHERE completed=0",
@@ -817,6 +839,9 @@ fn start_selected(
                 return Err(Error::Rule("daily_limit"));
             }
             let (target,material,digest): (String,String,String) = tx.query_row("SELECT t.id,m.id,m.digest FROM targets t JOIN materials m ON m.id=t.material_id WHERE m.id=(SELECT selected_material_id FROM library)", [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
+            if !provisioning::material_current(tx, &target)? {
+                return Err(Error::Rule("learning_material_preparing"));
+            }
             let run_id = id();
             policy::commit_initial(tx, &target, &run_id, now.timestamp_millis())?;
             tx.execute(

@@ -61,6 +61,16 @@ if(!process.argv.includes('--serve-only')){
  const pending=post(late.request);s=action({kind:'cancel',task_id:late.id,expected_revision:late.revision});const lateResult=await (await pending).json();assert.match(action({kind:'finish',task_id:late.id,result:lateResult}).error,/preparation_superseded/);assert.equal(run().catalog.length,1);
  const unsupported=await meaning('failure');s=action({kind:'add',meaning_id:unsupported.id,expected_revision:1,policy:{profileId:'high_assurance',profileVersion:'high-assurance-profile-v1'}});assert.ok(!s.error,s.error);let task4=s.personal.preparations.find(v=>v.target.proposal.expression.surface==='failure');assert.equal(task4.status,'blocked');assert.equal(task4.policy.profileId,'high_assurance');assert.match(action({kind:'begin',task_id:task4.id,expected_revision:task4.revision}).error,/unsupported_content_policy/);
  s=action({kind:'set_policy',task_id:task4.id,expected_revision:task4.revision,policy:{profileId:'lightweight',profileVersion:'v1'}});task4=s.personal.preparations.find(v=>v.id===task4.id);s=action({kind:'begin',task_id:task4.id,expected_revision:task4.revision});task4=s.personal.preparations.find(v=>v.id===task4.id);s=action({kind:'finish',task_id:task4.id,result:await (await post(task4.request)).json()});assert.equal(s.personal.preparations.find(v=>v.id===task4.id).reason,'generation_failed');
+ // Exercise a real v10 preparation upgrade with existing targets, requests and receipts.
+ const {DatabaseSync}=await import('node:sqlite');const upgradeDb=new DatabaseSync(path);
+ const preUpgrade=run();const receiptsBefore=upgradeDb.prepare('SELECT id,command,result FROM operations ORDER BY rowid').all();
+ upgradeDb.exec('DROP TABLE personal_anchor_revocations; DROP TABLE personal_anchor_grants; DROP TABLE personal_preparation_versions; PRAGMA user_version=10;');
+ assert.deepEqual(run(),preUpgrade);
+ assert.deepEqual(upgradeDb.prepare('SELECT id,command,result FROM operations ORDER BY rowid').all(),receiptsBefore);
+ const versions=upgradeDb.prepare('SELECT id,target_id,content FROM personal_preparation_versions').all();
+ assert.equal(versions.length,preUpgrade.personal.preparations.length);
+ for(const row of versions){const fixed=JSON.parse(row.content as string);assert.equal(fixed.id,row.id);assert.equal(fixed.targetId,row.target_id);assert.ok(fixed.target.senseVersionId);assert.equal(fixed.anchor,null);}
+ upgradeDb.close();
  console.log('PASS: actual TS demand/assembler + Rust local admission, immutable material and Profile readiness; no private capture sent, independent rejection, replay, same-target dedup, three attempts and late cancellation.');
 }
 if(process.argv.includes('--serve')||process.argv.includes('--serve-only')){const name='@hono/node-server';const {serve}=await import(name);serve({fetch:app.fetch,hostname:'127.0.0.1',port:4324});console.log('No-cost provisioning fixture on 127.0.0.1:4324');}

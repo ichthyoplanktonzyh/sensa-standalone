@@ -27,7 +27,18 @@ fn main() {
             .unwrap_or(s.revision),
         action: serde_json::from_value(v["action"].clone()).unwrap(),
     };
-    match execute(&path, command) {
+    let result = if let Some(now) = v["now"].as_str() {
+        execute_at(
+            &path,
+            command,
+            chrono::DateTime::parse_from_rfc3339(now)
+                .unwrap()
+                .with_timezone(&chrono::Utc),
+        )
+    } else {
+        execute(&path, command)
+    };
+    match result {
         Ok(s) => println!("{}", serde_json::to_string(&s).unwrap()),
         Err(e) => println!("{}", json!({"error":e.to_string()})),
     }

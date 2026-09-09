@@ -40,6 +40,14 @@ class SemanticService {
   Future<Map<String, dynamic>> resolve(Map<String, dynamic> request) =>
       send(request, path: '/sensa/native/semantic/resolve');
 
+  Future<void> cancelPreparation(Map<String, dynamic> request) async {
+    await send(
+      {'id': request['id'], 'inputDigest': request['inputDigest']},
+      path: '/sensa/native/content/cancel',
+      timeout: const Duration(seconds: 8),
+    );
+  }
+
   Future<Map<String, dynamic>> prepare(Map<String, dynamic> request) => send(
     request,
     path: '/sensa/native/content/prepare',

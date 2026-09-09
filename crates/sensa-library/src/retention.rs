@@ -1,5 +1,5 @@
 //! Retention application adapter. Commands share the library transaction/CAS ledger.
-//! Initial material is explicitly reused in a purpose-pinned immutable run snapshot.
+//! Each new Run pins current approved material; existing Run snapshots are immutable.
 use super::*;
 use rusqlite::Transaction;
 use sensa_core::protocol::{RELEARNING_PROTOCOL, REVIEW_PROTOCOL, consumer_purpose};
@@ -22,7 +22,7 @@ pub(super) fn project(db: &Connection, state: &mut Snapshot) -> Result<()> {
         relearning_count: db.query_row("SELECT count(*) FROM retention_completions WHERE kind='relearning_completion'",[],|r|r.get(0))?,
         pending_count: db.query_row("SELECT count(*) FROM relearning_needs WHERE resolved_at_ms IS NULL",[],|r|r.get(0))?,
     };
-    let row: Option<(String,String,u32,u32,bool,String,String)> = db.query_row("SELECT id,phase,ordinal,attempt_count,paused,protocol_version,content FROM retention_runs WHERE material_id=(SELECT selected_material_id FROM library) ORDER BY rowid DESC LIMIT 1", [], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?))).optional()?;
+    let row: Option<(String,String,u32,u32,bool,String,String)> = db.query_row("SELECT id,phase,ordinal,attempt_count,paused,protocol_version,content FROM retention_runs WHERE target_id=(SELECT id FROM targets WHERE material_id=(SELECT selected_material_id FROM library)) ORDER BY rowid DESC LIMIT 1", [], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?))).optional()?;
     if let Some((id, phase, ordinal, attempt_count, paused, protocol, content)) = row {
         state.run = Some(RunView {
             id,
@@ -94,6 +94,9 @@ pub(super) fn start(
         }
         (REVIEW_PROTOCOL, Some(revision), Some(due))
     };
+    if !provisioning::material_current(db, &target)? {
+        return Err(Error::Rule("learning_material_preparing"));
+    }
     let (material,digest,content): (String,String,String) = db.query_row("SELECT m.id,m.digest,m.content FROM materials m JOIN targets t ON t.material_id=m.id WHERE t.id=?1",[&target],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
     if format!("{:x}", Sha256::digest(content.as_bytes())) != digest {
         return Err(Error::Rule("material_mismatch"));

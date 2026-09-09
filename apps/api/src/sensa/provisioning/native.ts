@@ -8,25 +8,30 @@ import {ConsumerError} from '../access/auth.js';
 import {semanticDigest} from '../personal/nativeSemantic.js';
 import {makeRequest,makeBundle,validateBundle,SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND} from './material.js';
 import type {ContentGenerator,ContentReviewer} from './material.js';
-export function createNativeProvisioningRoutes(options:{authorize:(request:Request)=>Promise<void>;reserve:(request:Request,input:NativeProvisioningInput)=>Promise<void>;generate:ContentGenerator;review:ContentReviewer}){
+export function createNativeProvisioningRoutes(options:{authorize:(request:Request)=>Promise<void>;reserve:(request:Request,input:NativeProvisioningInput)=>Promise<void>;generate:ContentGenerator;review:ContentReviewer;cancel?:(request:Request,input:{id:string;inputDigest:string})=>Promise<void>;checkActive?:(request:Request,input:NativeProvisioningInput)=>Promise<void>}){
  const app=new Hono();
  app.use('*',bodyLimit({maxSize:64*1024,onError:c=>c.json({code:'body_too_large'},413)}));
  app.onError((e,c)=>c.json({code:e instanceof ConsumerError?e.code:e instanceof z.ZodError||e instanceof SyntaxError?'invalid_request':'provider_unavailable'},e instanceof ConsumerError?e.status:e instanceof z.ZodError||e instanceof SyntaxError?400:503));
+ app.post('/cancel',async c=>{await options.authorize(c.req.raw);const input=z.object({id:z.string().uuid(),inputDigest:z.string().regex(/^[0-9a-f]{64}$/u)}).strict().parse(await c.req.json());if(!options.cancel)throw new ConsumerError(503,'cancellation_unavailable');await options.cancel(c.req.raw,input);c.header('Cache-Control','no-store');return c.json({id:input.id,inputDigest:input.inputDigest,status:'cancelled'});});
  app.post('/prepare',async c=>{
   c.header('Cache-Control','no-store');await options.authorize(c.req.raw);
   const input=nativeProvisioningInputSchema.parse(await c.req.json());const {inputDigest,...payload}=input;
   if(await semanticDigest(payload)!==inputDigest)throw new ConsumerError(400,'input_digest_mismatch');
   await options.reserve(c.req.raw,input);
+  const check=async()=>{await options.authorize(c.req.raw);await options.checkActive?.(c.req.raw,input);};
+  await check();
   const {target}=input,proposal=target;
-  const request=await makeRequest({id:input.taskId,learner_user_id:input.learnerId,learning_target_id:input.taskId,fixed_input:{...target,expression:proposal.expression.surface,expressionKind:proposal.expression.type==='word'?'word':'phrase',meaning:proposal.semanticSpec.coreMeaningFocus,prototype:proposal.semanticSpec.prototypeScenes[0].summary,planRevision:input.planRevision,demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND}},input.id,new Date(input.requestedAt));
+  const request=await makeRequest({id:input.taskId,learner_user_id:input.learnerId,learning_target_id:input.taskId,fixed_input:{...target,anchor:input.anchor,expression:proposal.expression.surface,expressionKind:proposal.expression.type==='word'?'word':'phrase',meaning:proposal.semanticSpec.coreMeaningFocus,prototype:proposal.semanticSpec.prototypeScenes[0].summary,planRevision:input.planRevision,demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND}},input.id,new Date(input.requestedAt));
   const envelope={version:input.version,id:input.id,inputDigest};
   const blocked=(reason:string)=>({...envelope,status:'blocked',reason,material:null,proof:null});
   let timer:ReturnType<typeof setTimeout>|undefined;
   const execute=async()=>{
    let generated,bundle;
    try{generated=await options.generate(request);bundle=await makeBundle(request,generated,new Date());}catch{return blocked('generation_failed');}
+   await check();
    let review;
    try{review=await options.review(request,generated.cue);}catch{return blocked('validation_unavailable');}
+   await check();
    let checked;
    try{checked=await validateBundle(request,bundle,review,new Date());}catch{return blocked('material_invalid');}
    if(!checked.content)return {...blocked('material_rejected'),proof:{request,bundle,validation:{validations:checked.validations,review,issues:checked.issues}}};
@@ -37,7 +42,7 @@ export function createNativeProvisioningRoutes(options:{authorize:(request:Reque
   };
   try{
    const result=await Promise.race([execute(),new Promise<ReturnType<typeof blocked>>(resolve=>{timer=setTimeout(()=>resolve(blocked('attempt_timed_out')),75000);})]);
-   await options.authorize(c.req.raw);
+   await check();
    return c.json(result);
   }finally{clearTimeout(timer);}
  });return app;

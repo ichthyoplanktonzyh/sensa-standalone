@@ -203,7 +203,10 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
       const count=(await db.query('SELECT count(*)::int AS n FROM sensa_consumer.native_content_usage WHERE account_id=$1 AND created_at>$2',[a.account_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
       if(count>=30)throw new ConsumerError(409,'daily_preparation_limit');
       await db.query('INSERT INTO sensa_consumer.native_content_usage VALUES($1,$2,$3,$4)',[a.account_id,input.id,input.inputDigest,a.now]);
-    });},generate:options.contentGenerator??generateContent,review:options.contentReviewer??reviewContent,
+    });},
+    cancel:async(request,input)=>{const identity=await verify(request);await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());const old=(await db.query('SELECT input_digest FROM sensa_consumer.native_content_cancellations WHERE account_id=$1 AND request_id=$2',[a.account_id,input.id])).rows[0];if(old&&old.input_digest!==input.inputDigest)throw new ConsumerError(409,'native_request_id_reuse');await db.query('INSERT INTO sensa_consumer.native_content_cancellations VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[a.account_id,input.id,input.inputDigest,a.now]);});},
+    checkActive:async(request,input)=>{const identity=await verify(request);await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());if((await db.query('SELECT 1 FROM sensa_consumer.native_content_cancellations WHERE account_id=$1 AND request_id=$2',[a.account_id,input.id])).rows.length)throw new ConsumerError(409,'native_request_cancelled');});},
+    generate:options.contentGenerator??generateContent,review:options.contentReviewer??reviewContent,
   }));
   app.route('/sensa/native/semantic',createNativeSemanticRoutes(async request=>{
     const identity=await verify(request);
