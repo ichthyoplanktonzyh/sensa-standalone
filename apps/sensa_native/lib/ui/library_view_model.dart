@@ -255,8 +255,37 @@ class LibraryViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> personalAction(Map<String, dynamic> action) async {
+    final wasHome = home;
+    await act({'kind': 'personal', 'action': action});
+    home = wasHome;
+    _notify();
+  }
+
   String message(Object error) {
     final text = error.toString();
+    if (text.contains('quantity_required')) {
+      return '加入学习前，请先回首页确认每日新学数量。保存的材料不会丢失。';
+    }
+    if (text.contains('invalid_occurrence')) return '所选表达需要准确位于原文中，请重新选择。';
+    if (text.contains('invalid_capture')) return '请输入有效的英文上下文，并检查材料长度。';
+    if (text.contains('invalid_source') ||
+        text.contains('invalid_video_source')) {
+      return '来源链接或视频定位无效，请检查后再保存。';
+    }
+    if (text.contains('expression_binding_mismatch')) {
+      return '这项词义绑定与所选表达不匹配，请重新选择。';
+    }
+    if (text.contains('intake_removed') || text.contains('meaning_removed')) {
+      return '这份内容已移除，请先从已移除列表恢复。';
+    }
+    if (text.contains('intake_mismatch') ||
+        text.contains('intake_already_confirmed')) {
+      return '这份材料的状态已更新，请重新读取后继续。';
+    }
+    if (text.contains('personal_snapshot_limit')) {
+      return '本机当前支持最多 500 份收件材料和 500 条已确认词义。';
+    }
     if (text.contains('pending_result')) return '请先完成或暂停当前步骤，再继续安排。';
     if (text.contains('activity_not_active')) return '这次学习已暂停或结束，请从首页继续。';
     if (text.contains('undo_across_settlement')) {

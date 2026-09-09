@@ -7,6 +7,7 @@ pub mod assurance_runtime;
 pub mod composition;
 mod consumer_progress;
 pub mod pack;
+pub mod personal;
 pub mod policy;
 pub mod progress;
 pub mod retention;
@@ -43,6 +44,9 @@ pub struct Command {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CommandAction {
+    Personal {
+        action: Box<personal::Action>,
+    },
     AssuranceEvent {
         session_id: String,
         ordinal: u32,
@@ -154,6 +158,8 @@ pub struct Snapshot {
     pub assurance: Option<serde_json::Value>,
     #[serde(default)]
     pub learning: serde_json::Value,
+    #[serde(default)]
+    pub personal: serde_json::Value,
 }
 
 fn initial_protocol() -> String {
@@ -190,7 +196,7 @@ fn connection(path: &Path) -> Result<Connection> {
             "INSERT INTO library VALUES(?1,?2,0,NULL,0)",
             params![id(), id()],
         )?;
-    } else if ![1, 2, 3, 4, 5, 6, 7].contains(&version) || application != APPLICATION {
+    } else if ![1, 2, 3, 4, 5, 6, 7, 8].contains(&version) || application != APPLICATION {
         return Err(Error::Rule("unsupported_library_version"));
     }
     if version <= 1 {
@@ -215,6 +221,9 @@ fn connection(path: &Path) -> Result<Connection> {
     }
     if version <= 6 {
         tx.execute_batch(include_str!("activity.sql"))?;
+    }
+    if version <= 7 {
+        tx.execute_batch(include_str!("personal.sql"))?;
     }
     tx.commit()?;
     Ok(db)
@@ -297,6 +306,7 @@ fn read(db: &Connection) -> Result<Snapshot> {
         structured_material: false,
         assurance: None,
         learning: serde_json::Value::Null,
+        personal: serde_json::Value::Null,
     };
     if let Some(material) = &snapshot.material {
         snapshot.structured_material = db.query_row(
@@ -317,6 +327,7 @@ fn read(db: &Connection) -> Result<Snapshot> {
         .map(|r| progress::load(db, &r.id))
         .transpose()?;
     snapshot.learning = activity::project(db)?;
+    snapshot.personal = personal::project(db)?;
     Ok(snapshot)
 }
 
@@ -399,6 +410,7 @@ pub fn execute_at_offset(
         |r| r.get(0),
     )?;
     match &command.action {
+        CommandAction::Personal { action } => personal::apply(&tx, action, &command, now)?,
         CommandAction::ActivityStart { mode } => {
             activity::start(&tx, *mode, &command, now, offset_minutes)?
         }

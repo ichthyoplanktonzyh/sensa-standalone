@@ -55,6 +55,8 @@ class LibrarySnapshot {
   );
   String get defaultPolicyLabel =>
       policyLabel(policyState['defaultPolicy']?['profileId'] as String?);
+  Map<String, dynamic> get personal =>
+      (value['personal'] as Map<String, dynamic>?) ?? {};
   Map<String, dynamic> get learning =>
       (value['learning'] as Map<String, dynamic>?) ?? {};
   Map<String, dynamic>? get activity =>

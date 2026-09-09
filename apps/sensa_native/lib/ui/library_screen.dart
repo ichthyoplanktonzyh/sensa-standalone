@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'library_view_model.dart';
 import 'assurance_view.dart';
 import 'learning_activity_view.dart';
+import 'personal_world_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key, required this.model});
@@ -378,7 +379,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
           s?.activity?['canAnswer'] == true &&
           !vm.home) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) vm.enteredActivity();
+          if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
+            vm.enteredActivity();
+          }
         });
         body.add(
           OutlinedButton(
@@ -396,8 +399,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Sensa'),
-          actions: const [
-            Padding(padding: EdgeInsets.all(16), child: Text('本地验收版')),
+          actions: [
+            IconButton(
+              tooltip: '我的词义世界',
+              icon: const Icon(Icons.hub_outlined),
+              onPressed: vm.busy || s == null
+                  ? null
+                  : () => Navigator.of(context).push<void>(
+                      MaterialPageRoute(
+                        builder: (_) => PersonalWorldScreen(model: vm),
+                      ),
+                    ),
+            ),
+            const Padding(padding: EdgeInsets.all(16), child: Text('本地验收版')),
           ],
         ),
         bottomNavigationBar: vm.error == null
