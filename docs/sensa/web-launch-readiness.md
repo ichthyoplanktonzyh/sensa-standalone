@@ -161,3 +161,17 @@ SENSA_WEB_ORIGIN=http://127.0.0.1:3000 SENSA_PACKAGE_OUTPUT=apps/web/public/lear
 
 发布方式参考 [Supabase 官方 CI 文档](https://supabase.com/docs/guides/functions/examples/github-actions)
 与 [Cloudflare 官方 Direct Upload CI 文档](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/)。
+
+### 2026-09-10：Web 个人资源默认仅代码校验
+
+完整 Web 的个人内容准备默认只调用生成模型，再执行代码 validator。额外模型审核仅在
+个人页高级设置显式开启后执行；旧库没有开关值时视为关闭，已存在的审核连接分配不代表开启。
+代码校验始终检查资源结构、摘要、固定表达/含义、必需角色和目标表达泄漏等；
+它不等同于对语义质量或原文忠实度的模型判断。记录中未调用审核时保存 null，不伪造审核通过。
+关闭审核后可复用尚未被拒绝的已保存候选，备份支持仅代码校验及旧的模型审核记录。
+开关变更会阻止旧配置的未完成准备继续提交，用户可显式重试。
+
+首位用户的隔离真实服务可先采用本机 Web/API + 独立 Supabase 测试项目 + 模型 API，
+无需先部署网站。准备项目 URL/ref、公开浏览器 key、测试登录邮箱；服务角色密钥、
+数据库连接和模型密钥只配置到忽略的环境文件或 CI Secrets。邀请授权、数据库迁移、
+邮件模板及回调地址仍需接通验证。正式域名/托管和监控告警渠道在云端验收前配置。

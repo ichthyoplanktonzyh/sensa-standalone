@@ -15,17 +15,24 @@ const provider=await api.saveProvider(id(),{id:id(),expectedRevision:0,name:'Fix
 for(const purpose of ['teacher','content','review']){const {settings}=await api.providerSnapshot();await api.assignProvider(id(),purpose,provider.id,settings.revision);}
 const proposal={explanation:'临时使用并归还。',expression:{surface:'borrow',type:'word',language:'en'},semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'临时取得他人物品，并预期归还。',prototypeScenes:[{summary:'一个人向同伴借用物品，约好稍后归还。',participantRoles:['借用者','所有者'],states:['临时使用'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]}};
 const raw=()=>({version:'sensa-intake-v1',libraryId:library.id,clientId:id(),operationId:id(),snapshot:{sentence:'Private marker: May asked to borrow an umbrella.',language:'en',source:{url:'https://example.org/article',title:'Private fixture',capturedAt:new Date().toISOString()},expression:{text:'borrow',start:29,end:35}},resolution:null,acceptance:null});
-const calls:any[]=[];let holdTeacher=false;let mode:'good'|'reject'|'review-fail'|'hold'='good',teacherTurn=0,release:(()=>void)|undefined,arrived:(()=>void)|undefined;
+const calls:any[]=[];let holdTeacher=false;let mode:'good'|'reject'|'review-fail'|'hold'|'leak'='good',teacherTurn=0,release:(()=>void)|undefined,arrived:(()=>void)|undefined;
 const realFetch=globalThis.fetch;globalThis.fetch=async(_url,input)=>{const body=JSON.parse(String(input?.body));calls.push(body);let value:unknown;
  if(body.tools){if(holdTeacher)await new Promise<void>(resolve=>{release=resolve;arrived?.();});teacherTurn++;value={model:'fixture',choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:[{id:id(),type:'function',function:teacherTurn===1?{name:'ask_learner',arguments:JSON.stringify({question:'是否需要归还这件物品？'})}:{name:'propose_meaning',arguments:JSON.stringify(proposal)}}]}}]};}
  else{const review=body.messages[0].content.includes('independent Sensa');if(review&&mode==='review-fail')throw Error('Offline');if(!review&&mode==='hold'){await new Promise<void>(resolve=>{release=resolve;arrived?.();});}
- const result=review?{accepted:mode!=='reject',reason:mode==='reject'?'场景改变了原意':'符合固定含义与来源'}:{scene:'一个人向同伴临时借用一把雨伞，约好之后归还。',senseFocus:'临时使用并预期归还'};
+ const result=review?{accepted:mode!=='reject',reason:mode==='reject'?'场景改变了原意':'符合固定含义与来源'}:{scene:mode==='leak'?'一个人想要 borrow 一把雨伞。':'一个人向同伴临时借用一把雨伞，约好之后归还。',senseFocus:'临时使用并预期归还'};
  value={model:'fixture',choices:[{finish_reason:'stop',message:{content:JSON.stringify(result)}}]};}
  return new Response(JSON.stringify(value),{headers:{'content-type':'application/json'}});};
-const prepare=(meaningId:string)=>api.preparePersonal(meaningId,provider,provider,new AbortController().signal,()=>{});
+const prepare=async(meaningId:string)=>api.preparePersonal(meaningId,provider,await api.selectedReviewProvider(),new AbortController().signal,()=>{});
+assert.equal(await api.selectedReviewProvider(),null);
+
 try{
  const slow=raw();await api.receiveWebIntake(accountId,slow);await assert.rejects(api.enrollPersonal(id(),slow.operationId,false));const draft=await api.readLibrary((tx:any)=>tx.get('drafts',slow.operationId));let session=await api.createTeacher(id(),draft);await api.continueTeacher(session.id,provider,new AbortController().signal,()=>{});session=await api.getTeacher(session.id);assert.equal(session.status,'waiting');await api.sayToTeacher(id(),session.id,session.revision,'是的，需要归还。');await api.continueTeacher(session.id,provider,new AbortController().signal,()=>{});session=await api.getTeacher(session.id);assert.equal(session.status,'proposal');assert.equal((await api.readLearning()).targets.length,0);
  const meaning=await api.acceptTeacher(id(),session.id,session.revision);assert.equal((await api.personalLearningSnapshot()).length,0);await api.enrollPersonal(id(),meaning.id,false);await api.enrollPersonal(id(),meaning.id,false);assert.equal((await api.personalLearningSnapshot()).length,1);assert.equal((await api.readLearning()).targets.length,0);
+ const defaultBefore=calls.length;mode='leak';await prepare(meaning.id);
+ assert.equal(calls.length-defaultBefore,1,'Default preparation only calls the generator');
+ assert.equal((await api.personalLearningSnapshot())[0].status,'rejected','Code validator blocks target-expression leakage without model review');
+ assert.equal((await api.readLearning()).targets.length,0);
+ await api.setModelReviewEnabled(id(),true,(await api.providerSnapshot()).settings.revision);
  const before=calls.length;mode='review-fail';await assert.rejects(prepare(meaning.id));assert.equal(calls.length-before,2);assert(!JSON.stringify(calls.slice(before)).includes('Private marker'));assert.equal((await api.readLearning()).targets.length,0);
  mode='good';await prepare(meaning.id);assert.equal(calls.length-before,3,'Retry must reuse saved candidate and call only the reviewer');let task=(await api.personalLearningSnapshot())[0];assert.equal(task.status,'ready');const learning=await api.readLearning();assert.equal(learning.targets.length,1);assert.equal(learning.runs.length,0);assert.equal(learning.targets[0].material.snapshot.provisioningPath,'on_demand');assert.equal(learning.targets[0].material.snapshot.personalAnchorUseGrantIds.length,0);
  await api.confirmLearningQuantity(id(),20);let run=await api.startLearning(id(),task.targetId,20);run=await api.actLearning(id(),run.id,run.revision,{kind:'reveal'});run=await api.actLearning(id(),run.id,run.revision,{kind:'rate',rating:'good'});assert.equal((await api.readLearning()).targets[0].memoryRevision,1);
@@ -34,7 +41,10 @@ try{
  // A cancellation fences a late generator, even if its HTTP implementation ignores abort.
  mode='hold';const held=new Promise<void>(resolve=>{arrived=resolve;});const work=prepare(fastMeaning.id);await held;await api.stopPersonalPreparation(id(),fastMeaning.id);release!();await assert.rejects(work);assert.equal((await api.readLearning()).targets.length,1);
  // A failed final write cannot publish a ready material or leak a partial target.
- mode='good';const put=api.LibraryTransaction.prototype.put;api.LibraryTransaction.prototype.put=function(table:any,key:any,value:any){if(table==='learningTargets')throw Error('injected disk error');return put.call(this,table,key,value);};await assert.rejects(prepare(fastMeaning.id));api.LibraryTransaction.prototype.put=put;assert.equal((await api.readLearning()).targets.length,1);await prepare(fastMeaning.id);assert.equal((await api.readLearning()).targets.length,2);
+ mode='good';const put=api.LibraryTransaction.prototype.put;api.LibraryTransaction.prototype.put=function(table:any,key:any,value:any){if(table==='learningTargets')throw Error('injected disk error');return put.call(this,table,key,value);};await assert.rejects(prepare(fastMeaning.id));api.LibraryTransaction.prototype.put=put;assert.equal((await api.readLearning()).targets.length,1);
+ await api.setModelReviewEnabled(id(),false,(await api.providerSnapshot()).settings.revision);
+ assert.equal(await api.selectedReviewProvider(),null);const beforeCodeOnly=calls.length;await prepare(fastMeaning.id);assert.equal(calls.length,beforeCodeOnly,'Disabling model review reuses the saved candidate with zero model calls');
+ const codeAttempt=await api.readLibrary(async(tx:any)=>(await tx.all('contentAttempts')).find((a:any)=>a.status==='ready'&&a.reviewProvider===null));assert.equal(codeAttempt.review,null);assert(codeAttempt.validation.content);assert.equal((await api.readLearning()).targets.length,2);
  const dump=JSON.stringify(await api.readLibrary(async(tx:any)=>({attempts:await tx.all('contentAttempts'),tasks:await tx.all('personalLearning')})));assert(!dump.includes('fixture-secret'));
  if(process.argv.includes('--backup')){
   // Include published resources, review/relearning history and a resumable reveal step.

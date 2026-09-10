@@ -3,12 +3,12 @@ import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useRef,useState} from 'react';
 import {personalLearningSnapshot,enrollPersonal,preparePersonal,stopPersonalPreparation,type PersonalLearning} from '../../data/library/personalLearning';
 import {observeLibrary} from '../../data/library/store';
-import {selectedProvider,type Provider} from '../../data/library/providers';
+import {selectedProvider,selectedReviewProvider,type Provider} from '../../data/library/providers';
 export function usePersonalLearning(){
  useTranslation();
- const [tasks,setTasks]=useState<PersonalLearning[]>([]),[providers,setProviders]=useState<{content:Provider;review:Provider}|null>(null),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[clock,setClock]=useState(Date.now());
+ const [tasks,setTasks]=useState<PersonalLearning[]>([]),[providers,setProviders]=useState<{content:Provider;review:Provider|null}|null>(null),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[clock,setClock]=useState(Date.now());
  const abort=useRef<AbortController|null>(null);
- const refresh=async()=>{setTasks(await personalLearningSnapshot());const [content,review]=await Promise.all([selectedProvider('content'),selectedProvider('review')]);setProviders({content,review});};
+ const refresh=async()=>{setTasks(await personalLearningSnapshot());const [content,review]=await Promise.all([selectedProvider('content'),selectedReviewProvider()]);setProviders({content,review});};
  useEffect(()=>{const read=()=>void refresh().catch(()=>setNotice(localFlowText('preparationReadFailed')));read();const stop=observeLibrary(read);const timer=setInterval(()=>setClock(Date.now()),1000);return()=>{stop();clearInterval(timer);abort.current?.abort();};},[]);
  const perform=async<T,>(work:()=>Promise<T>)=>{setBusy(true);setNotice('');try{const result=await work();await refresh();return result;}catch(e){setNotice(e instanceof Error&&e.message.startsWith('localFlow.')?e.message:localFlowText('preparationPreserved'));return null;}finally{setBusy(false);}};
  return {tasks,providers,notice:localFlowNotice(notice),busy,clock,

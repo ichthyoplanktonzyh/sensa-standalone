@@ -8,7 +8,7 @@ const endpointSchema=z.string().trim().url().transform(value=>value.replace(/\/+
 },'localFlow.endpointInvalid');
 export const providerInputSchema=z.object({id:z.string().uuid(),expectedRevision:z.number().int().min(0),name:z.string().trim().min(1).max(80),kind:z.enum(['compatible','sensa']),endpoint:endpointSchema,model:z.string().trim().min(1).max(100)}).strict();
 export type Provider={id:string;revision:number;name:string;kind:'compatible'|'sensa';endpoint:string;model:string};
-export type ProviderSettings={revision:number;assignments:Partial<Record<Purpose,string>>};
+export type ProviderSettings={modelReviewEnabled?:boolean;revision:number;assignments:Partial<Record<Purpose,string>>};
 // Never persisted or synchronized. A config revision change invalidates its credential.
 const credentials=new Map<string,{revision:number;key:string}>();
 export async function saveProvider(operationId:string,raw:z.input<typeof providerInputSchema>,key=''){
@@ -48,7 +48,7 @@ export async function assignProvider(operationId:string,purpose:Purpose,id:strin
   const current=await tx.get<ProviderSettings>('settings','providers')??{revision:0,assignments:{}};
   if(current.revision!==expectedRevision)throw new Error('localFlow.assignmentChanged');
   if(id&&!await tx.get('providers',id))throw new Error('localFlow.connectionMissing');
-  const next:ProviderSettings={revision:current.revision+1,assignments:{...current.assignments}};
+  const next:ProviderSettings={...current,revision:current.revision+1,assignments:{...current.assignments}};
   if(id)next.assignments[purpose]=id;else delete next.assignments[purpose];tx.put('settings','providers',next);return next;
  });
 }
@@ -64,4 +64,18 @@ export async function providerCredential(provider:Provider){
  if(current?.revision!==provider.revision)throw new Error('localFlow.requestConfigChanged');
  const entry=credentials.get(provider.id);if(!entry||entry.revision!==provider.revision)throw new Error('localFlow.keyRequired');
  return entry.key;
+}
+
+export async function setModelReviewEnabled(operationId:string,enabled:boolean,expectedRevision:number){
+ return command({id:operationId,kind:'provider.review-policy',input:{enabled,expectedRevision}},async tx=>{
+  const current=await tx.get<ProviderSettings>('settings','providers')??{revision:0,assignments:{}};
+  if(current.revision!==expectedRevision)throw new Error('localFlow.assignmentChanged');
+  const next={...current,revision:current.revision+1,modelReviewEnabled:enabled};
+  tx.put('settings','providers',next);return next;
+ });
+}
+
+export async function selectedReviewProvider():Promise<Provider|null>{
+ const {settings}=await providerSnapshot();
+ return settings.modelReviewEnabled===true?selectedProvider('review'):null;
 }

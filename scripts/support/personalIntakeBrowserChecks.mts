@@ -3,6 +3,12 @@ import {expect,type Page} from '@playwright/test';
 export const personalFixtureProposal={explanation:'临时使用并归还。',expression:{surface:'borrow',type:'word',language:'en'},semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'临时取得他人物品，并预期归还。',prototypeScenes:[{summary:'一个人向同伴借用物品，约好稍后归还。',participantRoles:['借用者','所有者'],states:['临时使用'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]}};
 async function rows(page:Page,name:string){return page.evaluate(async name=>{const db=await new Promise<IDBDatabase>((resolve,reject)=>{const r=indexedDB.open('sensa:local-library:v1');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});const values=await new Promise<any[]>((resolve,reject)=>{const r=db.transaction(name).objectStore(name).getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});db.close();return values;},name);}
 export async function runPersonalIntakeBrowserChecks(page:Page,origin:string){
+ // This scenario intentionally exercises optional review interruption and recovery.
+ await page.goto(origin+'/profile');
+ await page.getByText('高级设置 · 自定义模型服务',{exact:true}).click();
+ const reviewToggle=page.getByLabel('启用额外模型审核',{exact:true});
+ await expect(reviewToggle).not.toBeChecked();await reviewToggle.click();await expect(reviewToggle).toBeChecked();
+ await expect.poll(async()=> (await rows(page,'settings')).some(s=>s.modelReviewEnabled===true)).toBe(true);
  const slowId=crypto.randomUUID(),fastId=crypto.randomUUID();
  // tsx preserves nested function names using this helper in serialized test callbacks.
  await page.evaluate('globalThis.__name = (fn) => fn');
