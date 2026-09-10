@@ -237,7 +237,17 @@ export const localFlowZh = {
 "refreshingCatalog":"正在更新目录…",
 "reviewTitle":"复习",
 "relearningTitle":"再学习",
-"dailyNewQuantity":"每日新学数量"
+"dailyNewQuantity":"每日新学数量",
+"libraryReplaced":"本机资料库已在另一操作中替换，请重新打开页面后继续。",
+"clearChanged":"资料已发生变化，请重新检查后再确认清除。",
+"clearTitle":"清除本机资料",
+"clearIntro":"仅清除这个浏览器中的资料、学习进度和模型设置，不删除账号。需要保留的内容请先在上方导出备份。",
+"clearInspect":"检查要清除的资料",
+"clearSummary":"将移除 {{drafts}} 份材料、{{meanings}} 个意思、{{packages}} 个学习包、{{targets}} 项学习内容和 {{events}} 条学习记录。",
+"clearPending":"还有 {{count}} 项未完成准备；清除后将无法继续。",
+"clearConfirm":"我已保存需要的备份，确认清除以上本机资料。",
+"clearAction":"确认清除本机资料",
+"clearDone":"本机资料已清除。重新打开应用可开始使用空资料库。"
 };
 export const localFlowEn: Record<keyof typeof localFlowZh,string> = {
   "restoredPreparation": "Restored from backup. Preparation was interrupted; retry when ready.",
@@ -478,5 +488,15 @@ export const localFlowEn: Record<keyof typeof localFlowZh,string> = {
 "refreshingCatalog":"Updating catalog…",
 "reviewTitle":"Review",
 "relearningTitle":"Relearning",
-"dailyNewQuantity":"Daily new-learning quantity"
+"dailyNewQuantity":"Daily new-learning quantity",
+"libraryReplaced":"This local library was replaced. Reopen the page to continue.",
+"clearChanged":"The library changed. Check it again before confirming erasure.",
+"clearTitle":"Clear local content",
+"clearIntro":"Clear content, learning progress and model settings from this browser only. Your account is not deleted. Export a backup above if you want to keep this content.",
+"clearInspect":"Review local content",
+"clearSummary":"This removes {{drafts}} sources, {{meanings}} meanings, {{packages}} packages, {{targets}} learning items and {{events}} events.",
+"clearPending":"There are {{count}} unfinished preparations. They cannot continue after erasure.",
+"clearConfirm":"I have saved any backup I need and confirm erasing this local content.",
+"clearAction":"Erase local content",
+"clearDone":"Local content cleared. Reopen the app to use the empty library."
 };

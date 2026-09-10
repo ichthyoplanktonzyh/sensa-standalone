@@ -4,6 +4,7 @@ export const libraryDatabaseName='sensa:local-library:v1';
 export const libraryTables=['meta','drafts','providers','settings','operations','sessions','meanings','identities','packages','learningTargets','learningRuns','learningEvents','personalLearning','contentAttempts'] as const;
 export type Table=typeof libraryTables[number];
 let connection:Promise<IDBDatabase>|undefined;
+let sessionIncarnation:string|undefined;
 function open(){
  if(!connection){
   connection=new Promise<IDBDatabase>((resolve,reject)=>{
@@ -24,6 +25,7 @@ export class LibraryTransaction {
  entries(table:Table){const store=this.tx.objectStore(table);return Promise.all([result(store.getAllKeys()),result(store.getAll())]).then(([keys,values])=>keys.map((key,i)=>({key,value:values[i]})));}
  all<T>(table:Table){return result(this.tx.objectStore(table).getAll()) as Promise<T[]>;}
  put(table:Table,key:IDBValidKey,value:unknown){this.tx.objectStore(table).put(value,key);}
+ clear(table:Table){this.tx.objectStore(table).clear();}
  delete(table:Table,key:IDBValidKey){this.tx.objectStore(table).delete(key);}
 }
 /** Only local IDB requests belong in work; network and hashing must finish before entry. */
@@ -42,11 +44,19 @@ async function transaction<T>(mode:IDBTransactionMode,work:(tx:LibraryTransactio
 /** Reserved for validated full-library restore; it remains one transaction. */
 export const restoreLibraryTransaction=<T>(work:(tx:LibraryTransaction)=>Promise<T>)=>transaction('readwrite',work);
 export const readLibrary=<T>(work:(tx:LibraryTransaction)=>Promise<T>)=>transaction('readonly',work);
+/** A cleared/restored library fences every command from an older page instance. */
+export async function assertCurrentLibrary(tx:LibraryTransaction){
+ const current=await tx.get<string>('meta','local-incarnation')??'initial';
+ sessionIncarnation??=current;
+ if(sessionIncarnation!==current)throw new Error('localFlow.libraryReplaced');
+ return current;
+}
 export type Operation={id:string;kind:string;input:unknown};
 export async function command<T>(op:Operation,work:(tx:LibraryTransaction)=>Promise<T>):Promise<T>{
  if(!/^[0-9a-f-]{36}$/i.test(op.id))throw new Error('localFlow.operationInvalid');
  const input=canonicalConsumerJson({kind:op.kind,input:op.input});
  return transaction('readwrite',async tx=>{
+  await assertCurrentLibrary(tx);
   const prior=await tx.get<{input:string;result:T}>('operations',op.id);
   if(prior){if(prior.input!==input)throw new Error('localFlow.operationConflict');return prior.result;}
   const value=await work(tx);tx.put('operations',op.id,{input,result:value,committedAt:new Date().toISOString()});return value;

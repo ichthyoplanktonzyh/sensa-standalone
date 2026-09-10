@@ -81,6 +81,26 @@ try{
 
   await page.getByRole('button',{name:'重新打开应用',exact:true}).click();await expect(page.getByRole('heading',{name:'本机库备份与恢复',exact:true})).toBeVisible();assert.deepEqual(await snapshot(page),saved);assert.equal(contentCalls,1);assert.equal(reviewCalls,2);await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>true));
   console.log('PASS: full /profile encrypted download, occupied-library refusal, independent fresh browser login/preview/restore/reload; no generation on restore.');
+  const stalePage=await context!.newPage();await stalePage.goto(origin+'/profile');
+  await expect(stalePage.getByRole('button',{name:'检查要清除的资料',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'检查要清除的资料',exact:true}).click();
+  await expect(page.getByRole('button',{name:'确认清除本机资料',exact:true})).toBeDisabled();
+  await page.getByRole('button',{name:'取消',exact:true}).click();assert.deepEqual(await snapshot(page),saved);
+  await page.getByRole('button',{name:'检查要清除的资料',exact:true}).click();
+  await page.getByRole('checkbox',{name:'我已保存需要的备份，确认清除以上本机资料。',exact:true}).check();
+  await page.getByRole('button',{name:'确认清除本机资料',exact:true}).click();
+  await expect(page.getByText('本机资料已清除。重新打开应用可开始使用空资料库。',{exact:true})).toBeVisible();
+  assert.equal((await snapshot(page)).learningTargets.length,0);
+  await stalePage.getByRole('button',{name:'检查要清除的资料',exact:true}).click();
+  await expect(stalePage.getByRole('alert')).toBeVisible();await stalePage.close();
+  await page.getByRole('button',{name:'重新打开应用',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'本机库备份与恢复',exact:true})).toBeVisible();
+  await page.getByLabel('备份密码',{exact:true}).fill(password);await page.getByLabel('选择备份文件',{exact:true}).setInputFiles(backupPath);
+  await page.getByRole('button',{name:'检查备份',exact:true}).click();await page.getByRole('button',{name:'确认恢复到当前空本机库',exact:true}).click();
+  await page.getByRole('button',{name:'重新打开应用',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'本机库备份与恢复',exact:true})).toBeVisible();assert.deepEqual(await snapshot(page),saved);
+  console.log('PASS: full profile local erase confirmation/cancel, stale tab fencing, empty library reload and backup recovery.');
+
  }
  await context!.close();context=undefined;await new Promise<void>(resolve=>server.close(()=>resolve()));page=await launch(true);const response=await page.goto(origin+'/?flow=lightweight');assert(response?.fromServiceWorker());await expect(page.getByText('本次首次学习已完成',{exact:true})).toBeVisible({timeout:20000});assert.deepEqual(await snapshot(page),saved);assert.deepEqual(errors,[]);console.log('PASS: full production UI Intake slow/fast paths, clarification, explicit enrollment, interrupted review recovery without regeneration, shared runtime and offline process-restart persistence; synthetic extension bridge and model HTTP, no paid services.');}
  else{
