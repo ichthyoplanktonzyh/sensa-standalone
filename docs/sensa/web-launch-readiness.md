@@ -8,7 +8,7 @@
 
 | 范围 | 当前代码证据 | 缺口、依赖与关闭条件 |
 | --- | --- | --- |
-| 正式入口 | `apps/web/src/application/Root.tsx` 默认进入 `account/SensaApp.tsx`，preview 才进入原型 App | 正式页面目前以 Auth 和 API 初始化为前提。须按 ADR 0003 接入无账号本地库，不把 preview 的 localStorage 状态作为生产实现 |
+| 正式入口 | 默认/production 均进入原完整 App，无账号/API 配置构建和页面回归已通过；旧账号入口明确隔离为 legacy-account 回归模式 | 已关闭入口与账号配置前置问题；既有学习仍含迁移期实现，不能把切换入口视为本地学习闭环 |
 | 本地领域执行 | `data/replica/accountStore.ts` 保存账号独立 IndexedDB；`initialRuntime.ts` 支持已取得授权 Run 的离线动作；`data/consumer/client.ts` 向 sync push/pull、home 请求权威投影 | 新目标、开始 Run、Completion/Handoff/FSRS 仍依赖 API。须完成 LF-1 Web 本机事务、三 purpose、真实持久与 TS/Rust 差分；现有断网答题不能关闭此门 |
 | 安装与冷启动 | `vite.config.ts` 普通静态构建；当前未发现正式 service worker/离线外壳入口 | 需要安装资源与必要材料/媒体缓存、浏览器独立重启断网启动、升级和配额失败验收。打开的页面断网不算冷启动 |
 | 账号与隔离 | Supabase 客户端 PKCE、consumer JWT/邀请校验；原浏览器 smoke 使用合成 Auth | 本轮修复跨标签切换期间的客户端身份混用。真实托管邮箱 OTP、会话续期/撤销、目标地区送达仍未验收 |

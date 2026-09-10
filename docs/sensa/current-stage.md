@@ -1,5 +1,9 @@
 # Sensa 当前阶段与交付边界
 
+2026-09-10 Web 正式入口收口：默认和 `production` 构建均进入现有完整 `experience/App.tsx`，
+不要求账号/API 配置；旧账号实现仅通过显式 `legacy-account` 模式做迁移回归。
+无账号配置的静态发布构建通过完整页面流程回归，但学习包本地结算、离线冷启动和上线门仍未关闭。
+
 2026-09-10 Web 整组工作已确认：本机记录 → 老师澄清 → 确认 → 显式入学 → 生成/审核 → 学习，
 Provider 与本地持久化随用例贯通。第一条材料/模型/澄清切片直接接入 owner 指定的完整 `experience/App.tsx`（`/profile`、`/content`），
 已删除 `LibraryWorkspace` 和 `?library=local` 分支，保留原四项导航、学习偏好及学习计划。既有账号服务入口保持独立，

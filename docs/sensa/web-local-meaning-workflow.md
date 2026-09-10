@@ -42,7 +42,7 @@
 ### 已执行验证
 
 `SENSA_CHROMIUM_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' node --import tsx scripts/sensaWebLocalJourneySmoke.mts`
-配合隔离 loopback Vite（默认 3014、`VITE_SENSA_MODE=preview`，与 owner 完整应用入口一致）运行，真实 React 页面、Supabase 客户端模块、IndexedDB，
+配合隔离 loopback Vite（默认 3014；默认和 production 均进入 owner 的完整应用）运行，真实 React 页面、Supabase 客户端模块、IndexedDB，
 模型 HTTP 使用严格限定的确定性替身；其余外部请求拒绝，无真实模型/邮件/owner 数据。
 
 - 普通 `/profile` 无专用参数即可显示 Provider；四项导航可见，原学习偏好修改与刷新恢复、
@@ -59,3 +59,18 @@
 回归已接入现有 consumer CI；修复共享学习者消息对比度，并验证追问在回答和刷新后保留。
 
 本条切片尚未接通显式加入学习、内容生成、独立审核和学习结算；不能视为完整本地学习闭环。日常自动验证无成本；以上不是实际在线 Provider 或上线验收。
+
+
+## 正式入口收口 checkpoint
+
+默认和 `VITE_SENSA_MODE=production` 直接加载完整 App，取消强制账号/API 构建配置。
+`legacy-account` 仅保留旧 consumer 迁移回归，CI 独立验证它；没有删除或迁移旧账号资料。
+新本机库继续使用 IndexedDB；现存原型学习数据尚未迁移，不能当作正式本地结算依据。
+
+验证：清空三个在线服务构建参数生成静态产物，在 loopback 3015 执行完整页面浏览器回归通过；
+根级 typecheck/build/lint 通过。CI 已加入相同无账号配置发布构建回归，尚未宣称远程 CI 已执行。
+没有新建页面、没有模型付费调用、没有推送或部署。
+
+下一条用例固定使用原“添加学习内容”、目标详情与 Runtime：校验学习包、原子导入、显式入学、
+冻结材料和 Run、本地 Attempt/Completion/调度事务、刷新恢复。学习包导入不自动入学，
+本条必须验证失败回滚和重复提交；不能用加载原型 fixture 来替代导入和结算。

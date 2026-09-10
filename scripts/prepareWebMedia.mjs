@@ -5,7 +5,7 @@ import path from 'node:path';
 
 // Production obtains version-pinned media from the authorized API/Storage path.
 // Local golden media belong only to the explicitly selected behavior preview.
-if(process.env.VITE_SENSA_MODE==='production'){
+if(['production','legacy-account'].includes(process.env.VITE_SENSA_MODE)){
   console.log('Production build: no preview media staging or provider calls.');
   process.exit(0);
 }

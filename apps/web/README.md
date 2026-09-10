@@ -1,23 +1,24 @@
 # Sensa Web
 
-React/Vite Web 的正常入口使用已确认的 `experience` 页面与正式 consumer API。
-`experience/account/SensaApp.tsx` 负责账号链路组合；原简化 `AccountRoot` 及其页面已删除。
-首页、我的学习、账号、目录与 Runtime 共享已有界面组件，不以原型数据替代学习事实。
+默认和 `VITE_SENSA_MODE=production` 均进入现有完整 `experience/App.tsx`。
+打开 `/profile`、`/content` 等原路径即可使用；不需要专用本机页面或查询参数。
+构建及本机材料保存不要求配置账号或运行 Hono。
 
-正常运行需配置 `VITE_SENSA_MODE=production`、`VITE_SUPABASE_URL`、
-`VITE_SUPABASE_PUBLISHABLE_KEY` 和 `VITE_SENSA_API_URL`。账号模式缺少这些配置时构建会失败。
-本地生产构建体验可将完整配置放入不入 Git 的 `apps/web/.env.production.local`，
-避免后续重新构建漏传；本地 synthetic Auth 的配置不能用于公开部署。
-Web 使用账号独立 IndexedDB
-与 outbox，按 Sync v3 push → pull 收敛到 Postgres；模型密钥只在 API 服务端。
+已接入：完整导航、原学习偏好/计划、文本本机保存、Provider 配置、老师澄清与明确接受。
+新本机资料保存在独立 IndexedDB；自带 Key 仅存当前页面内存。生成/审核的用途选择不代表
+整个资源生成链已完成。学习包本地结算、离线冷启动、备份恢复、E2EE 和上线验收仍在推进。
+原 App 内尚有迁移期学习实现；完整页面和成功构建不能视为整个产品已生产就绪。
 
-`VITE_SENSA_MODE=preview` 仍可显式查看先前的行为原型；它使用独立预览存储，
-不代表已发布能力，也不是正式账号数据的导入来源。
+`VITE_SENSA_MODE=legacy-account` 显式启用旧 consumer 账号链路作迁移回归。
+仅此模式要求 `VITE_SUPABASE_URL`、`VITE_SUPABASE_PUBLISHABLE_KEY`、`VITE_SENSA_API_URL`。
+其账号独立 IndexedDB/outbox 与旧 API/Postgres 保持原样，不自动迁入新库。
+`preview` 目前也是完整应用入口，不再决定另一套页面。
 
-本地可用合成认证和无成本 mock API 验证。浏览器 smoke 会检查服务端的
-`/__test/environment`，拒绝运行在真实 Provider 体验服务上。
-可通过 `SENSA_BROWSER_TEST_URL` / `SENSA_BROWSER_TEST_API_URL` 配置隔离测试端口。
-实际集成范围与证据见 [M1/M2 界面接入记录](../../docs/sensa/m1-m2-ui-integration-handoff.md)。
+无成本完整应用回归：`npm run sensa:web-local-journey-smoke`，默认指向隔离 loopback 3014，
+可设置 `SENSA_LOCAL_WEB_URL`。测试使用独立浏览器上下文和确定性模型响应，不应指向 owner 的
+3000 服务。旧账号 smoke 保留独立合成认证与 API 环境检查。
+
+当前范围和验收见 [Web 工作流](../../docs/sensa/web-local-meaning-workflow.md)。
 
 ## Preview media
 
