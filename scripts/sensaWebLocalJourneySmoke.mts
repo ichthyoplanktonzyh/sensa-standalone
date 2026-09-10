@@ -88,7 +88,7 @@ try{
  await page.getByRole('button',{name:/设置/}).click();await page.getByRole('button',{name:'退出账号',exact:true}).click();
  await expect(page.getByRole('heading',{name:'欢迎来到 Sensa'})).toBeVisible();subject=crypto.randomUUID();
  await page.getByLabel('邮箱',{exact:true}).fill('other@sensa.invalid');await page.getByRole('button',{name:'发送登录邮件',exact:true}).click();await page.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
- await expect(page.getByText('此设备的资料属于另一个账号。请使用原账号登录；本机资料没有改变。')).toBeVisible();
+ await expect(page.getByText('此设备的资料属于另一个账号或登录状态无法读取。请使用原账号登录；本机资料没有改变。')).toBeVisible();
  await expect(page.getByRole('heading',{name:'我的内容',exact:true})).not.toBeVisible();
  expect(errors).toEqual([]);console.log('PASS: full App routes/four navigation sections/preferences persistence/study plan, ContentScreen/Composer/MeaningDetail/Profile: local draft save/failure/reload, provider purpose/ephemeral key, teacher clarification/correction, explicit offline confirmation, no automatic calls. Synthetic model, real React and IndexedDB.');
 }catch(e){await mkdir('/tmp/sensa-web-local',{recursive:true});await page.screenshot({path:'/tmp/sensa-web-local/failure.png'});console.error(await page.locator('body').innerText());throw e;}finally{await browser.close();}
