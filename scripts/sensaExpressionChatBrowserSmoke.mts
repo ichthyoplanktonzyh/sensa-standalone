@@ -7,7 +7,8 @@ if(new URL(origin).hostname!=='127.0.0.1')throw Error('Isolated loopback require
 const browser=await chromium.launch({headless:true,executablePath:process.env.SENSA_CHROMIUM_PATH});
 const context=await browser.newContext({viewport:{width:1280,height:900}}),page=await context.newPage();
 const subject=crypto.randomUUID(),errors:string[]=[],requests:any[]=[];page.on('pageerror',e=>errors.push(e.message));
-let fail=true;
+let fail=true,failContent=false;const contentRequests:any[]=[];
+const interaction='<div style="display:flex;gap:20px"><div id="piece" draggable="true" style="padding:16px;background:#abc">●</div><div id="zone" data-dropzone="true" style="padding:30px;border:1px solid">Drop here</div></div><button data-action="toggle" data-target="hint">Show hint</button><p id="hint" hidden>Think of keeping dry.</p>';
 const proposal={contextSummary:'Riding home in rain while wearing a raincoat.',explanation:'Raincoat is a coat that keeps rain off. I wore a raincoat on my ride home.',expression:{surface:'raincoat',type:'word',language:'en'},semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'A coat worn to protect the body from rain.',prototypeScenes:[{summary:'Someone wears a coat to stay dry in rain.',participantRoles:['wearer'],states:['raining'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]}};
 await context.route('**/*',async route=>{
  const u=new URL(route.request().url());
@@ -21,7 +22,14 @@ await context.route('**/*',async route=>{
  if(u.pathname==='/sensa/web/access/session'){await route.fulfill({json:{authorized:true,accountId:subject}});return;}
  if(u.pathname==='/sensa/service/status'){await route.fulfill({json:{authorized:true,explanationAvailable:true,checkedAt:new Date().toISOString(),windowHours:24,usage:[]}});return;}
  if(u.pathname==='/sensa/native/agent/turn'){
-  const input=route.request().postDataJSON();requests.push(input);await new Promise(r=>setTimeout(r,250));
+  const input=route.request().postDataJSON();
+  if(input.purpose==='content'){
+   contentRequests.push(input);if(failContent){await route.fulfill({status:503,json:{code:'provider_unavailable'}});return;}
+   const parts=input.body.messages[1].content;const facts=JSON.parse(typeof parts==='string'?parts:parts.find((p:any)=>p.type==='text').text);
+   const cue={scene:'回想下雨时穿上这件衣服，身体没有被雨水打湿。',senseFocus:'挡住雨水的衣服',imageIds:facts.context.images.map((i:any)=>i.id),html:contentRequests.length===1?'<script>fetch("https://example.org")</script>':interaction};
+   await route.fulfill({json:{id:input.id,inputDigest:input.inputDigest,response:{model:'fixture',choices:[{finish_reason:'stop',message:{content:JSON.stringify(cue)}}]}}});return;
+  }
+  requests.push(input);await new Promise(r=>setTimeout(r,250));
   if(fail){fail=false;await route.fulfill({status:503,json:{code:'provider_unavailable'}});return;}
   for(const m of input.body.messages)for(const t of m.tool_calls??[])assert(!('index' in t),'Provider metadata must not leak into follow-up requests');
   await route.fulfill({json:{id:input.id,inputDigest:input.inputDigest,response:{model:'deepseek-flash',choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:[{index:0,id:crypto.randomUUID(),type:'function',function:{name:'propose_meaning',arguments:JSON.stringify(proposal)}}]}}]}}});return;
@@ -55,5 +63,23 @@ try{
  await page.getByRole('button',{name:'Send',exact:true}).click();await expect.poll(()=>requests.length).toBe(4);await expect(page.getByRole('button',{name:'Save this expression',exact:true})).toBeEnabled();
  assert((await rows('drafts')).some(d=>d.text===''&&d.images?.length===1));
  await page.reload();await expect(page.getByRole('img',{name:'image-only.png'})).toBeVisible();assert.equal(requests.length,4);
- assert.deepEqual(errors,[]);console.log('PASS: direct chat, text+image wire format, failure/retry and reload without repeats, DeepSeek tool index compatibility, bilingual follow-up, confirmed context/sense/expression, images persisted and no implicit learning enrollment.');
-}finally{await browser.close();}
+
+ const saved=(await rows('meanings'))[0];await page.goto(origin+'/personal-meaning?meaningId='+saved.draftId);
+ await page.getByRole('button',{name:'Edit context',exact:true}).click();await page.getByLabel('Context',{exact:true}).fill('My own coat in the rain, updated context.');
+ await page.getByLabel('Add images',{exact:true}).setInputFiles({name:'my-coat.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});await page.getByRole('button',{name:'Save context',exact:true}).click();
+ await expect.poll(async()=> (await rows('meanings'))[0].contextRevision).toBe(2);assert.equal(contentRequests.length,0);assert.equal((await rows('meanings'))[0].contextImages.length,2);
+ await page.getByLabel('Use my context to prepare learning content.',{exact:true}).check();await page.getByRole('button',{name:'Add to learning',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Start / continue learning',exact:true})).toBeVisible({timeout:15000});assert.equal(contentRequests.length,2);assert.equal(contentRequests[0].body.messages[1].content.filter((p:any)=>p.type==='image_url').length,2);
+ await page.getByText('View learning resources',{exact:true}).click();const preview=page.frameLocator('iframe[title="Interactive experience"]');await preview.getByRole('button',{name:'Show hint'}).click();await expect(preview.getByText('Think of keeping dry.',{exact:true})).toBeVisible();await preview.locator('#piece').dragTo(preview.locator('#zone'));await expect(preview.locator('#zone #piece')).toHaveCount(1);assert.equal(await page.locator('iframe').getAttribute('sandbox'),'allow-scripts');
+ const before=(await rows('learningTargets'))[0];assert.equal(before.material.content.resources.find((r:any)=>r.materialRoleKey==='experience_recall_cue').contentPayload.images.length,2);
+ await page.getByRole('button',{name:'Start / continue learning',exact:true}).click();await page.getByRole('button',{name:'Confirm quantity and start',exact:true}).click();await expect(page.locator('#s-lightweight-runtime iframe')).toBeVisible();await expect(page.locator('#s-lightweight-runtime img')).toHaveCount(2);
+ const run=(await rows('learningRuns'))[0];assert.equal(run.material.snapshot.learningMaterializationId,before.material.snapshot.learningMaterializationId);
+ await page.goto(origin+'/personal-meaning?meaningId='+saved.draftId);await page.getByRole('button',{name:'Edit context',exact:true}).click();await page.getByLabel('Context',{exact:true}).fill('Another wet day with my coat.');await page.getByRole('button',{name:'Save context',exact:true}).click();
+ await expect(page.getByText('Context has changed. Existing learning resources have not been updated.',{exact:true})).toBeVisible();failContent=true;
+ await page.getByRole('button',{name:'Update resources with current context settings',exact:true}).click();await expect(page.getByRole('button',{name:'Retry / resume preparation',exact:true})).toBeVisible();assert.equal((await rows('learningTargets'))[0].material.snapshot.learningMaterializationId,before.material.snapshot.learningMaterializationId);
+ failContent=false;await page.getByRole('button',{name:'Retry / resume preparation',exact:true}).click();await expect(page.getByRole('button',{name:'Start / continue learning',exact:true})).toBeVisible({timeout:15000});const after=(await rows('learningTargets'))[0];assert.notEqual(after.material.snapshot.learningMaterializationId,before.material.snapshot.learningMaterializationId);assert.equal(after.startedAt,(await rows('learningRuns'))[0].startedAt);assert.equal(after.memoryRevision,before.memoryRevision);assert.equal((await rows('learningRuns'))[0].material.snapshot.learningMaterializationId,before.material.snapshot.learningMaterializationId);
+ await page.reload();await page.getByText('View learning resources',{exact:true}).click();await expect(page.locator('iframe[title="Interactive experience"]').filter({visible:true})).toBeVisible();
+ await context.setOffline(true);const offlineFrame=page.locator('iframe[title="Interactive experience"]').filter({visible:true}).contentFrame();await offlineFrame.getByRole('button',{name:'Show hint'}).click();await expect(offlineFrame.getByText('Think of keeping dry.',{exact:true})).toBeVisible();const isolated=await offlineFrame.locator('body').evaluate(()=>{try{void parent.document;return false;}catch{return true;}});assert(isolated);await context.setOffline(false);
+ await page.screenshot({path:'/tmp/sensa-expression-chat/rich-resources.png',fullPage:true});
+ assert.deepEqual(errors,[]);console.log('PASS: editable rich context, native image generation input, bounded HTML correction, resource preview/drag/click/offline isolation, runtime images/interaction, failed update retention and pinned active-run material; direct chat, text+image wire format, failure/retry and reload without repeats, DeepSeek tool index compatibility, bilingual follow-up, confirmed context/sense/expression, images persisted and no implicit learning enrollment.');
+}catch(error){console.error(await page.locator('body').innerText());console.error(JSON.stringify((await rows('contentAttempts')).map(a=>({status:a.status,steps:a.generationSteps,notice:a.notice})),null,2));throw error;}finally{await browser.close();}

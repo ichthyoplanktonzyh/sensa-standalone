@@ -355,3 +355,14 @@ Intake/Construction draft 可以长期保持未确认 Sense 或没有自然的�
 - 没有稳定 Sense 的个人内容不能进入正式 Curriculum；
 - 没有合法 Learning Materialization 与可执行 Learning Protocol 的目标不能进入正式 Learning Runtime；
 - Personal Semantic World 的布局、距离和区域不宣称是 learner 大脑的真实结构。
+
+
+### 2026-09-10 已确认扩展：图文 Context
+
+个人 Context 可以组合文字和用户图片；澄清接收图文，语义接纳保留已确认的图文
+Context 与 Sense、Expression 的关联。用户可修改 Context，修订不改变稳定的
+Sense–Expression 身份，不重置学习事实。原始澄清资料与 Context 修订历史保留。
+
+Context 修订不自动替换学习资源。用户明确请求资源更新后，生成使用该次固定的
+Context 版本；失败保留原可用资源，成功产生新 Materialization。已开始的学习
+继续使用其开始时固定的资源，后续学习可使用更新后的资源。

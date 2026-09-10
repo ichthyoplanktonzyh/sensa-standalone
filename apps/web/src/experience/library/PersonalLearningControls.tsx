@@ -1,6 +1,7 @@
+import {LearningResourceDetails} from '../components/learning/LearningResourceDetails';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
 import type {LocalMeaning} from '../../data/library/teacher';
 import type {PersonalLearning} from '../../data/library/personalLearning';
 import type {usePersonalLearning} from './usePersonalLearning';
@@ -9,14 +10,16 @@ import {LearningTargetDetailScreen} from '../components/learning/LearningTargetD
 type Controller=ReturnType<typeof usePersonalLearning>;
 export function PersonalLearningControls({meaning,c,onStart}:{meaning:LocalMeaning;c:Controller;onStart:(targetId:string)=>void}){
  useTranslation();
- const [useContext,setUseContext]=useState(false);const task=c.tasks.find(t=>t.id===meaning.id);
+ const task=c.tasks.find(t=>t.id===meaning.id);const [useContext,setUseContext]=useState(task?.useContext??false);const target=c.targets.find(t=>t.id===task?.targetId);const stale=!!task&&(task.meaning.contextRevision??1)!==(meaning.contextRevision??1);
+ useEffect(()=>{if(task)setUseContext(task.useContext);},[task?.id,task?.useContext]);
  const running=!!task&&['generating','reviewing'].includes(task.status)&&task.leaseUntil>c.clock;
  return <section className="mx-5 my-4 space-y-3 rounded-2xl border border-[#dfe4ed] p-5" aria-label={localFlowText('personalPreparation')}>
   <h3 className="font-medium">{localFlowText(task?.status==='ready'?'learningReady':task?'learningPreparation':'learningChoice')}</h3>
   <p className="text-sm text-[#68748d]">{localFlowText('fixedLightweight')}</p>
-  {!task&&<label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={useContext} onChange={e=>setUseContext(e.target.checked)}/>{localFlowText('sourceConsent')}</label>}
-  {(c.notice||task?.notice)&&<p role="status" className="text-sm">{localFlowNotice(c.notice||task?.notice)}</p>}
-  {!task?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.enroll(meaning.id,useContext)}>{localFlowText('enroll')}</button>:task.status==='ready'?<button className={setupPrimary} onClick={()=>onStart(task.targetId)}>{localFlowText('startLearning')}</button>:running?<><p role="status">{task.status==='generating'?localFlowText('generating'):localFlowText('reviewing')}</p><button className={setupButton} onClick={()=>c.stop(task.id)}>{localFlowText('stopPreparation')}</button></>:<button className={setupPrimary} disabled={c.busy||!c.providers} onClick={()=>void c.prepare(task.id)}>{c.busy?localFlowText('processing'):task.status==='waiting'?localFlowText('generateResources'):task.status==='rejected'?localFlowText('regenerate'):localFlowText('retryPreparation')}</button>}
+  {(!task||!!target)&&<label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={useContext} onChange={e=>setUseContext(e.target.checked)}/>{localFlowText('sourceConsent')}</label>}
+  {(c.notice||(task?.status!=='ready'&&task?.notice))&&<p role="status" className="text-sm">{localFlowNotice(c.notice||task?.notice)}</p>}
+  {!task?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.enroll(meaning.id,useContext)}>{localFlowText('enroll')}</button>:task.status==='ready'?<button className={setupPrimary} onClick={()=>onStart(task.targetId)}>{localFlowText('startLearning')}</button>:running?<><p role="status">{task.status==='generating'?localFlowText('generating'):localFlowText('reviewing')}</p><button className={setupButton} onClick={()=>c.stop(task.id)}>{localFlowText('stopPreparation')}</button></>:<button className={setupPrimary} disabled={c.busy||!c.providers} onClick={()=>void (stale?c.update(meaning.id,useContext):c.prepare(task.id))}>{c.busy?localFlowText('processing'):task.status==='waiting'?localFlowText('generateResources'):task.status==='rejected'?localFlowText('regenerate'):localFlowText('retryPreparation')}</button>}
+  {target&&<><LearningResourceDetails material={target.material}/>{stale&&<p className="text-sm">{localFlowText('contextResourcesStale')}</p>}<button className={setupButton} disabled={c.busy||running} onClick={()=>void c.update(meaning.id,useContext)}>{localFlowText('updateResources')}</button>{task?.status!=='ready'&&<button className={setupButton} onClick={()=>onStart(target.id)}>{localFlowText('useExistingResources')}</button>}</>}
  </section>;
 }
 export const pendingPersonalTargetView=(t:PersonalLearning)=>({targetId:t.targetId,expression:t.meaning.proposal.expression.surface,meaning:t.meaning.proposal.semanticSpec.coreMeaningFocus,example:'',partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:'personal_semantic_world' as const,sourceLabel:localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:'lightweight' as const,lightweightReadiness:{status:'preparing' as const,label:localFlowText('prepareResources'),detail:localFlowNotice(t.notice)}});

@@ -1,3 +1,4 @@
+import {RichExperience} from '../../learning/RichExperience';
 import { ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ExperienceRecallCardPresentation } from "../../../learningRuntime/lightweightInitialPresentation";
@@ -23,7 +24,7 @@ export function ExperienceRecallCard({
       <div className="rounded-2xl border border-[#e0e5ee] bg-white p-7 sm:p-10">
         <span className="text-xs text-[#8390a6]">{t("runtime.context")}</span>
         <blockquote className="mt-5 text-xl leading-[1.9] text-[#313c50] sm:text-2xl">
-          {experienceSketch.scene}
+          <RichExperience scene={experienceSketch.scene} images={experienceSketch.images} html={experienceSketch.html}/>
         </blockquote>
         <p className="mt-7 border-t border-[#e8ebf2] pt-5 text-sm leading-7 text-[#7a859a]">
           {experienceSketch.senseFocus}

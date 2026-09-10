@@ -4,7 +4,7 @@ import {command,readLibrary,type LibraryTransaction,type LibraryIdentity} from '
 import {learningOwner,type InstalledPackage} from './packages';
 import {validateLightweightInitialMaterialization,type LightweightInitialLearningMaterialization} from '../../experience/learningRuntime/lightweightInitialContent';
 export type LocalLearningTarget={id:string;retentionId:string;packageKey:string|null;expression:string;meaning:string;material:LightweightInitialLearningMaterialization;createdAt:string;startedAt:string|null;completedAt:string|null;memory:ReviewSchedule|null;memoryRevision:number;relearnAt:string|null};
-export type LocalLearningRun={id:string;targetId:string;purpose:'initial_learning'|'retention_review'|'relearning';protocolVersion:string;phase:'recall'|'reveal';ordinal:number;revision:number;startedAt:string;completedAt:string|null;memoryRevision:number;dueAt:string|null;completionKind?:string};
+export type LocalLearningRun={material?:LightweightInitialLearningMaterialization;id:string;targetId:string;purpose:'initial_learning'|'retention_review'|'relearning';protocolVersion:string;phase:'recall'|'reveal';ordinal:number;revision:number;startedAt:string;completedAt:string|null;memoryRevision:number;dueAt:string|null;completionKind?:string};
 export type LearningEvent={id:string;runId:string;targetId:string;kind:string;at:string;detail:unknown};
 export async function enrollPackage(operationId:string,key:string){return command({id:operationId,kind:'learning.enroll',input:{key}},async tx=>{
  const owner=await learningOwner(tx),pack=await tx.get<InstalledPackage>('packages',key);if(!pack)throw new Error('localFlow.downloadFirst');
@@ -30,7 +30,7 @@ export async function startLearning(operationId:string,targetId:string,dailyLimi
  const now=new Date(at),purpose=t.relearnAt?'relearning':t.completedAt?'retention_review':'initial_learning';
  if(t.relearnAt&&now<new Date(t.relearnAt)||purpose==='retention_review'&&(!t.memory||now<t.memory.dueAt))throw new Error('localFlow.notDue');
  if(purpose==='initial_learning'&&!t.startedAt&&(await tx.all<LocalLearningTarget>('learningTargets')).filter(v=>v.startedAt&&day(new Date(v.startedAt))===day(now)).length>=dailyLimit)throw new Error('localFlow.dailyLimit');
- const run:LocalLearningRun={id:crypto.randomUUID(),targetId,purpose,protocolVersion:purpose==='initial_learning'?'consumer-initial-v1':purpose==='retention_review'?'consumer-review-v1':'consumer-relearning-v1',phase:'recall',ordinal:1,revision:1,startedAt:at,completedAt:null,memoryRevision:t.memoryRevision,dueAt:t.memory?.dueAt.toISOString()??null};
+ const run:LocalLearningRun={material:t.material,id:crypto.randomUUID(),targetId,purpose,protocolVersion:purpose==='initial_learning'?'consumer-initial-v1':purpose==='retention_review'?'consumer-review-v1':'consumer-relearning-v1',phase:'recall',ordinal:1,revision:1,startedAt:at,completedAt:null,memoryRevision:t.memoryRevision,dueAt:t.memory?.dueAt.toISOString()??null};
  if(!t.startedAt){t.startedAt=at;tx.put('learningTargets',t.id,t);}
  tx.put('learningRuns',run.id,run);tx.put('meta','learning-active',run.id);return run;
 });}
@@ -57,11 +57,15 @@ export async function actLearning(operationId:string,runId:string,revision:numbe
 export async function finishLearning(operationId:string,runId:string){return command({id:operationId,kind:'learning.finish',input:{runId}},async tx=>{await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);if(!run?.completedAt)throw new Error('localFlow.finishFirst');if(await tx.get('meta','learning-active')===runId)tx.delete('meta','learning-active');return true;});}
 
 /** The same runtime target is committed only after independent material validation. */
-export async function commitPersonalMaterial(tx:LibraryTransaction,owner:LibraryIdentity,meaning:import('./teacher').LocalMeaning,content:LightweightInitialLearningMaterialization['content'],attemptId:string,grantId:string|null){
+export async function commitPersonalMaterial(tx:LibraryTransaction,owner:LibraryIdentity,meaning:import('./teacher').LocalMeaning,content:LightweightInitialLearningMaterialization['content'],attemptId:string,grantId:string|null,replace=false){
  const id=stableUuid(`sensa-learning-target:${owner.learnerId}:${meaning.senseVersionId}:${meaning.bindingVersionId}`);
- const existing=await tx.get<LocalLearningTarget>('learningTargets',id);if(existing)return existing;
+ const existing=await tx.get<LocalLearningTarget>('learningTargets',id);if(existing&&!replace)return existing;
  const now=new Date().toISOString();
  const snapshot=sensaLearningMaterializationSnapshotSchema.parse({contractVersion:sensaLearningConnectionContractVersion,learningMaterializationId:stableUuid(`sensa-personal-material:${attemptId}`),learnerUserId:owner.learnerId,learningTargetId:id,protocolPurpose:'initial_learning',provisioningPath:'on_demand',contentSchemaVersion:LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION,contentPayload:content,contentDigest:canonicalJsonDigest(content),validationStatus:'validated',validatorVersion:'sensa-web-content-v1',provenance:{meaningId:meaning.id,acceptanceId:meaning.acceptanceId,senseId:meaning.senseId,senseVersionId:meaning.senseVersionId,bindingId:meaning.bindingId,bindingVersionId:meaning.bindingVersionId,attemptId},personalAnchorUseGrantIds:grantId?[grantId]:[],createdAt:now});
  const target:LocalLearningTarget={id,retentionId:stableUuid(`sensa-retention:${id}`),packageKey:null,expression:meaning.proposal.expression.surface,meaning:meaning.proposal.semanticSpec.coreMeaningFocus,material:{snapshot,content},createdAt:now,startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null};
+ if(existing){
+  for(const run of await tx.all<LocalLearningRun>('learningRuns'))if(run.targetId===id&&!run.material){run.material=existing.material;tx.put('learningRuns',run.id,run);}
+  Object.assign(target,{createdAt:existing.createdAt,startedAt:existing.startedAt,completedAt:existing.completedAt,memory:existing.memory,memoryRevision:existing.memoryRevision,relearnAt:existing.relearnAt});
+ }
  validateLightweightInitialMaterialization(target.material);tx.put('learningTargets',id,target);return target;
 }

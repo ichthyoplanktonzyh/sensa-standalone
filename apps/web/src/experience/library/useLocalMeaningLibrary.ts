@@ -5,7 +5,7 @@ import {useEffect,useRef,useState} from 'react';
 import {captureSourceLink} from '@sensa/contracts/sensa';
 import {openLibrary,observeLibrary} from '../../data/library/store';
 import {listDrafts,saveDraft,type LocalDraft} from '../../data/library/drafts';
-import {acceptTeacher,continueTeacher,createTeacher,listMeanings,listTeachers,sayToTeacher,stopTeacher,type LocalMeaning,type TeacherSession} from '../../data/library/teacher';
+import {acceptTeacher,updateMeaningContext,continueTeacher,createTeacher,listMeanings,listTeachers,sayToTeacher,stopTeacher,type LocalMeaning,type TeacherSession} from '../../data/library/teacher';
 import {selectedProvider,type Provider} from '../../data/library/providers';
 import type {ContentScreenSource} from '../components/ContentScreen';
 import type {MeaningConversationController} from '../components/PersonalMeaningDetailScreen';
@@ -40,7 +40,8 @@ export function useLocalMeaningLibrary(draftId:string|null, active:boolean,start
   if(session.status!=='idle'||session.requests!==0||session.messages.length)return;
   void perform(run).catch(()=>{});
  },[active,startRequest,session?.id]);
- const conversation:MeaningConversationController|undefined=session?{material:session.input,images:session.inputImages,source:draft?.intake?{url:captureSourceLink(draft.intake.snapshot.source),title:draft.intake.snapshot.source.title}:undefined,messages:session.messages.flatMap<{role:'learner'|'assistant';body:string;images?:ConversationImage[]}>(m=>{
+ const acceptedMeaning=meanings.find(m=>m.id===session?.meaningId);
+ const conversation:MeaningConversationController|undefined=session?{material:session.input,images:acceptedMeaning?.contextImages??session.inputImages,source:draft?.intake?{url:captureSourceLink(draft.intake.snapshot.source),title:draft.intake.snapshot.source.title}:undefined,messages:session.messages.flatMap<{role:'learner'|'assistant';body:string;images?:ConversationImage[]}>(m=>{
   if(m.role==='user')return [{role:'learner' as const,body:m.content??'',images:m.images}];
   if(m.role!=='assistant')return [];
   const bodies=m.content?[m.content]:[];
@@ -52,7 +53,7 @@ export function useLocalMeaningLibrary(draftId:string|null, active:boolean,start
    if(call.function.name==='propose_meaning'&&output.candidateStored)bodies.push(args.explanation);
   }
   return bodies.map(body=>({role:'assistant' as const,body}));
- }),candidate:session.candidate?{context:session.contextSummary??session.input,expression:session.candidate.expression.surface,meaning:session.candidate.semanticSpec.coreMeaningFocus,explanation:session.candidate.explanation}:null,accepted:session.status==='accepted',busy:busy||session.status==='inflight',notice:localFlowNotice(notice),recipient:recipient?(recipient.kind==='sensa'?'Sensa':recipient.name+' · '+recipient.endpoint):localFlowText('sensaUnavailable'),canContinue:!['waiting','proposal','accepted'].includes(session.status),onSend:async(text,images)=>{await perform(async()=>{await sayToTeacher(crypto.randomUUID(),session.id,session.revision,text,images);await run();});},onContinue:async()=>{await perform(run).catch(()=>{});},onStop:()=>{controller.current?.abort();void perform(async()=>{const latest=(await listTeachers()).find(s=>s.id===session.id);if(latest)await stopTeacher(crypto.randomUUID(),latest.id,latest.revision);}).catch(()=>{});},onConfirm:async()=>{await perform(()=>acceptTeacher(crypto.randomUUID(),session.id,session.revision));}}:draftId==='new'?{
+ }),candidate:session.candidate?{context:acceptedMeaning?.context??session.contextSummary??session.input,expression:session.candidate.expression.surface,meaning:session.candidate.semanticSpec.coreMeaningFocus,explanation:session.candidate.explanation}:null,onUpdateContext:acceptedMeaning?async(text,images)=>{await perform(()=>updateMeaningContext(crypto.randomUUID(),acceptedMeaning.id,acceptedMeaning.contextRevision??1,text,images));}:undefined,accepted:session.status==='accepted',busy:busy||session.status==='inflight',notice:localFlowNotice(notice),recipient:recipient?(recipient.kind==='sensa'?'Sensa':recipient.name+' · '+recipient.endpoint):localFlowText('sensaUnavailable'),canContinue:!['waiting','proposal','accepted'].includes(session.status),onSend:async(text,images)=>{await perform(async()=>{await sayToTeacher(crypto.randomUUID(),session.id,session.revision,text,images);await run();});},onContinue:async()=>{await perform(run).catch(()=>{});},onStop:()=>{controller.current?.abort();void perform(async()=>{const latest=(await listTeachers()).find(s=>s.id===session.id);if(latest)await stopTeacher(crypto.randomUUID(),latest.id,latest.revision);}).catch(()=>{});},onConfirm:async()=>{await perform(()=>acceptTeacher(crypto.randomUUID(),session.id,session.revision));}}:draftId==='new'?{
   material:'',messages:[],candidate:null,accepted:false,busy,notice:localFlowNotice(notice),recipient:recipient?.kind==='compatible'?recipient.name:'Sensa',canContinue:false,
   onSend:async(text,images)=>{await perform(async()=>{
    const d=await saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text,images});

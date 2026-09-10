@@ -636,8 +636,8 @@ result eligibility and next-step rules without prescribing a visual component.
 
 **Experience Recall Step**:
 The non-evidentiary practice Step in Lightweight Study that presents an
-experience-and-Sense cue while withholding the target expression and invites the
-learner to retrieve that expression before requesting a reveal.
+experience-and-Sense cue to establish or evoke experience while withholding the target
+expression, then invites the learner to retrieve that expression before requesting a reveal.
 
 **Expression Reveal Step**:
 The instructional Step in Lightweight Study that discloses the target expression,
@@ -889,3 +889,12 @@ around them, including constrained learner–LLM Sense Construction. Exam-paper
 corpora or “真题” sections, Cards, Decks, generic flashcard behavior, Workspace
 navigation, generic AI/MCP surfaces, community, commerce and historical
 experiments are outside this context.
+
+
+**Rich Personal Context**:
+A learner-owned, revisable combination of text and images that grounds a confirmed
+Sense–expression connection; changing it does not replace the connection or erase learning history.
+
+**Experience Recall Content**:
+Material that establishes or evokes an experience before the learner recalls its expression,
+using text, images, offline interaction or a combination, from published or personal sources.

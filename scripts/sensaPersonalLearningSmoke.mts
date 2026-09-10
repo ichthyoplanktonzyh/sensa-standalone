@@ -46,6 +46,16 @@ try{
  assert.equal(await api.selectedReviewProvider(),null);const beforeCodeOnly=calls.length;await prepare(fastMeaning.id);assert.equal(calls.length,beforeCodeOnly,'Disabling model review reuses the saved candidate with zero model calls');
  const codeAttempt=await api.readLibrary(async(tx:any)=>(await tx.all('contentAttempts')).find((a:any)=>a.status==='ready'&&a.reviewProvider===null));assert.equal(codeAttempt.review,null);assert(codeAttempt.validation.content);assert.equal((await api.readLearning()).targets.length,2);
  const dump=JSON.stringify(await api.readLibrary(async(tx:any)=>({attempts:await tx.all('contentAttempts'),tasks:await tx.all('personalLearning')})));assert(!dump.includes('fixture-secret'));
+
+ const previousTarget=(await api.readLearning()).targets.find((t:any)=>t.id===learning.targets[0].id);
+ const edited=await api.updateMeaningContext(id(),meaning.id,1,'Updated private context.',[{id:id(),name:'context.jpg',dataUrl:'data:image/jpeg;base64,/9j/2Q=='}]);
+ await assert.rejects(api.updateMeaningContext(id(),meaning.id,1,'Stale edit',[]));
+ assert.equal(edited.senseVersionId,meaning.senseVersionId);assert.equal((await api.readLearning()).targets.find((t:any)=>t.id===previousTarget.id).material.snapshot.learningMaterializationId,previousTarget.material.snapshot.learningMaterializationId);
+ await api.requestPersonalResourceUpdate(id(),meaning.id,true);await prepare(meaning.id);
+ const updatedTarget=(await api.readLearning()).targets.find((t:any)=>t.id===previousTarget.id);
+ assert.equal(updatedTarget.memoryRevision,previousTarget.memoryRevision);assert.deepEqual(updatedTarget.memory,previousTarget.memory);assert.notEqual(updatedTarget.material.snapshot.learningMaterializationId,previousTarget.material.snapshot.learningMaterializationId);
+ assert.equal(updatedTarget.material.content.resources.find((r:any)=>r.materialRoleKey==='experience_recall_cue').contentPayload.images.length,1);
+ assert.equal((await api.readLearning()).runs.find((r:any)=>r.targetId===previousTarget.id).material.snapshot.learningMaterializationId,previousTarget.material.snapshot.learningMaterializationId);
  if(process.argv.includes('--backup')){
   // Include published resources, review/relearning history and a resumable reveal step.
   await api.finishLearning(id(),run.id);

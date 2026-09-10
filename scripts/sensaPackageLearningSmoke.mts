@@ -68,5 +68,15 @@ try{
  await assert.rejects(enrollPackage(id(),extraPack.key));await assert.rejects(startLearning(id(),extraId!,1,'2026-09-11T08:00:00.000Z'));
  const corrupted=structuredClone(bundle);corrupted.entries[0]!.content.resources[0]!.contentDigest='invalid';await assert.rejects(installPackage(new TextEncoder().encode(JSON.stringify(corrupted))));
  assert.equal(canonicalJsonDigest((await readLearning()).targets[0]!.material.content),canonicalJsonDigest(entry.content));
+
+ await command({id:id(),kind:'fixture.resume',input:{}},async tx=>tx.delete('meta','signed-out'));
+ const rich=structuredClone(bundle);rich.id=id();rich.entries[0]!.senseVersionId=id();rich.entries[0]!.bindingVersionId=id();
+ const cue=rich.entries[0]!.content.resources.find(r=>r.materialRoleKey==='experience_recall_cue')!;
+ cue.contentPayload={scene:'',senseFocus:'临时使用并归还',images:[{id:id(),name:'context.jpg',dataUrl:'data:image/jpeg;base64,/9j/2Q=='}],html:'<button data-action="toggle" data-target="cue">Hint</button><p id="cue" hidden>Imagine this moment.</p>'};cue.contentDigest=canonicalJsonDigest(cue.contentPayload);
+ const richPack=await installPackage(new TextEncoder().encode(JSON.stringify(rich)));const [richId]=await enrollPackage(id(),richPack.key);const richTarget=(await readLearning()).targets.find(t=>t.id===richId)!;
+ const definition=LIGHTWEIGHT_EXPERIENCE_RECALL_STEP;
+ const richPresentation=assembleLightweightInitialPresentation({protocolStepInstanceId:id(),protocolRunId:id(),retentionTargetId:richTarget.retentionId,ordinal:1,definition,materialBindings:richTarget.material.content.resources.filter(r=>definition.materialRequirements.some(m=>m.materialRoleKey===r.materialRoleKey)).map(r=>({materialRoleKey:r.materialRoleKey,resourceKey:r.resourceKey,learningMaterializationId:richTarget.material.snapshot.learningMaterializationId}))},richTarget.material);
+ assert.equal(richPresentation.kind,'experience_recall');if(richPresentation.kind==='experience_recall'){assert.equal(richPresentation.slots.experienceSketch.images?.length,1);assert(richPresentation.slots.experienceSketch.html?.includes('data-action'));}
+ const unsafe=structuredClone(rich);unsafe.id=id();const unsafeCue=unsafe.entries[0]!.content.resources.find(r=>r.materialRoleKey==='experience_recall_cue')!;unsafeCue.contentPayload={scene:'scene',senseFocus:'meaning',html:'<script>fetch("https://example.org")</script>'};unsafeCue.contentDigest=canonicalJsonDigest(unsafeCue.contentPayload);await assert.rejects(installPackage(new TextEncoder().encode(JSON.stringify(unsafe))));
  console.log('PASS: verified download/import, immutable versions, separate enrollment, local initial/review/relearning, replay, stale-step rejection, rollback and pinned content; fake IndexedDB, no browser/model calls.');
 }finally{globalThis.fetch=realFetch;}

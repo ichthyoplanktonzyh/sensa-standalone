@@ -27,3 +27,5 @@ export * from './consumer/nativeProvisioning.js';
 export * from './consumer/localIntake.js';
 export * from './consumer/learningPackage.js';
 export * from './contentExecution.js';
+
+export * from './richExperience.js';

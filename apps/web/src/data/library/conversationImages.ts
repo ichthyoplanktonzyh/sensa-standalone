@@ -1,7 +1,7 @@
-import {z} from 'zod';
-export const conversationImageSchema=z.object({id:z.string().uuid(),name:z.string().max(200),dataUrl:z.string().max(256000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/u)}).strict();
-export type ConversationImage=z.infer<typeof conversationImageSchema>;
-export const conversationImagesSchema=z.array(conversationImageSchema).max(4);
+import {sensaContextImageSchema,sensaContextImagesSchema,type SensaContextImage} from '@sensa/contracts/sensa';
+export const conversationImageSchema=sensaContextImageSchema;
+export const conversationImagesSchema=sensaContextImagesSchema;
+export type ConversationImage=SensaContextImage;
 /** Normalize selected files locally before persistence or transmission. */
 export async function prepareConversationImage(file:File):Promise<ConversationImage>{
  if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw Error('localFlow.imageType');

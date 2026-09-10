@@ -64,6 +64,7 @@ import type {
 export interface MeaningConversationController {
  material:string; images?:ConversationImage[]; source?:{url:string|null;title:string}; messages:{role:"learner"|"assistant";body:string;images?:ConversationImage[]}[];
  candidate:{context:string;expression:string;meaning:string;explanation:string}|null;
+ onUpdateContext?:(text:string,images:ConversationImage[])=>Promise<void>;
  accepted:boolean;busy:boolean;notice:string;recipient:string;canContinue:boolean;
  onSend:(text:string,images:ConversationImage[])=>Promise<void>;onContinue:()=>Promise<void>;onStop:()=>void;onConfirm:()=>Promise<void>;
 }
@@ -1010,7 +1011,7 @@ function MeaningWorkspaceFrame({active,onBack,materialOpen,onToggleMaterial,scre
 }
 function ConnectedMeaningConversation({active,onBack,conversation:c,learningControls}:PersonalMeaningDetailScreenProps & {conversation:MeaningConversationController}){
  useTranslation();
- const [materialOpen,setMaterialOpen]=useState(false);
+ const [materialOpen,setMaterialOpen]=useState(false),[editing,setEditing]=useState(false);
  const transcript=useRef<HTMLDivElement>(null);
  useEffect(()=>{transcript.current?.scrollTo({top:transcript.current.scrollHeight});},[c.messages.length,c.busy]);
  const candidate=c.candidate;
@@ -1018,9 +1019,12 @@ function ConnectedMeaningConversation({active,onBack,conversation:c,learningCont
   <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
    <article className="space-y-5 py-5" aria-label={localFlowText('expressionDetails')}>
     <div><p className="text-sm text-[#68748d]">{uiText('expression')}</p><h2 className="mt-2 text-3xl font-semibold">{candidate.expression}</h2></div>
-    <div><h3 className="text-sm text-[#68748d]">{uiText('meaning2')}</h3><p className="mt-2 leading-7">{candidate.meaning}</p></div>
-    <div><h3 className="text-sm text-[#68748d]">{localFlowText('context')}</h3><p className="mt-2 leading-7">{candidate.context}</p>{c.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-3 max-h-64 max-w-full rounded-xl object-contain"/>)}</div>
+    <div><h3 className="text-sm text-[#68748d]">{uiText('meaning2')}</h3><p className="mt-2 whitespace-pre-wrap leading-7">{candidate.meaning}</p></div>
+    <div><h3 className="text-sm text-[#68748d]">{localFlowText('context')}</h3><p className="mt-2 whitespace-pre-wrap leading-7">{candidate.context}</p>{c.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-3 max-h-64 max-w-full rounded-xl object-contain"/>)}</div>
    </article>
+   {c.onUpdateContext&&<button className="mb-4 rounded-lg border px-4 py-2" onClick={()=>setEditing(v=>!v)}>{localFlowText(editing?'cancelEdit':'editContext')}</button>}
+   {editing&&<ExpressionChatInput busy={c.busy} initialText={candidate.context} inputLabel={localFlowText('context')} inputHint={localFlowText('context')} initialImages={c.images??[]} submitLabel={localFlowText('saveContext')} onSend={async(text,images)=>{await c.onUpdateContext!(text,images);setEditing(false);}}/>}
+   {c.notice&&<p role="status">{c.notice}</p>}
    {learningControls}
    <details className="mt-5" open={materialOpen||undefined}><summary className="cursor-pointer py-3 text-sm text-[#68748d]">{localFlowText('conversationHistory')}</summary><div className="space-y-4 text-sm leading-7"><p>{c.material}</p>{c.messages.map((m,i)=><div key={i}><p>{m.body}</p>{m.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="max-h-64 max-w-full"/>)}</div>)}</div></details>
   </div>

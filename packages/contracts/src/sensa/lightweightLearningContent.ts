@@ -1,3 +1,4 @@
+import {sensaContextImagesSchema,sensaInteractiveHtmlSchema} from './richExperience.js';
 import { z } from "zod";
 
 import {
@@ -35,9 +36,10 @@ export const sensaLightweightSenseSnapshotSchema = z
 
 export const sensaLightweightOriginExperienceSchema = z
   .object({
-    scene: nonEmpty,
+    scene: z.string().trim(),
     senseFocus: nonEmpty,
     featureLabels: z.array(nonEmpty).max(4),
+    images: sensaContextImagesSchema.optional(),
   })
   .strict();
 
@@ -76,8 +78,8 @@ export const sensaLightweightReferenceFactSchema = z.discriminatedUnion("factKin
 ]);
 
 export const sensaLightweightExperienceRecallCueSchema = z
-  .object({ scene: nonEmpty, senseFocus: nonEmpty })
-  .strict();
+  .object({ scene: z.string().trim(), senseFocus: nonEmpty, images:sensaContextImagesSchema.optional(), html:sensaInteractiveHtmlSchema.optional() })
+  .strict().refine(c=>!!c.scene||!!c.images?.length||!!c.html,"Experience content is required");
 export const sensaLightweightRecallSupportSchema = z
   .object({ text: nonEmpty })
   .strict();

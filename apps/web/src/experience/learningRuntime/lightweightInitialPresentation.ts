@@ -237,6 +237,8 @@ export interface ExperienceRecallCardPresentation {
   readonly presentationVersion: 'v1';
   readonly slots: {
     readonly experienceSketch: {
+      readonly images?: readonly import('@sensa/contracts/sensa').SensaContextImage[];
+      readonly html?: string;
       readonly scene: string;
       readonly senseFocus: string;
     };
@@ -350,6 +352,8 @@ export const assembleLightweightInitialPresentation = (
       slots: Object.freeze({
         experienceSketch: Object.freeze({
           scene: cue.scene,
+          images: cue.images,
+          html: cue.html,
           senseFocus: cue.senseFocus,
         }),
         auxiliaryCues: Object.freeze(auxiliaryCues),
