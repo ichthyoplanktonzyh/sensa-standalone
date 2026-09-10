@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import {expect,type Page} from '@playwright/test';
+export const personalFixtureProposal={explanation:'临时使用并归还。',expression:{surface:'borrow',type:'word',language:'en'},semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'临时取得他人物品，并预期归还。',prototypeScenes:[{summary:'一个人向同伴借用物品，约好稍后归还。',participantRoles:['借用者','所有者'],states:['临时使用'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]}};
+async function rows(page:Page,name:string){return page.evaluate(async name=>{const db=await new Promise<IDBDatabase>((resolve,reject)=>{const r=indexedDB.open('sensa:local-library:v1');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});const values=await new Promise<any[]>((resolve,reject)=>{const r=db.transaction(name).objectStore(name).getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});db.close();return values;},name);}
+export async function runPersonalIntakeBrowserChecks(page:Page,origin:string){
+ const slowId=crypto.randomUUID(),fastId=crypto.randomUUID();
+ // tsx preserves nested function names using this helper in serialized test callbacks.
+ await page.evaluate('globalThis.__name = (fn) => fn');
+ await page.evaluate(({slowId,fastId,proposal})=>{
+  const request=(operationId:string,fast:boolean)=>({version:'sensa-intake-v1',libraryId:'',clientId:crypto.randomUUID(),operationId,snapshot:{sentence:'May asked to borrow an umbrella.',language:'en',source:{url:'https://example.org/fixture',title:fast?'快轨资料':'慢轨资料',capturedAt:new Date().toISOString()},expression:{text:'borrow',start:13,end:19}},resolution:fast?{kind:'proposal',proposal}:null,acceptance:fast?{kind:'direct',consent:'accept_context_expression_sense',authorization:'browser:explicit_accept_button'}:null});
+  const queue=[request(slowId,false),request(fastId,true)];
+  window.addEventListener('message',event=>{const q=event.data;if(event.source!==window||q?.channel!=='sensa-web-intake-request')return;let value:unknown;if(q.kind==='web-intake-pull')value=queue.map(r=>({...r,libraryId:q.libraryId}));else{const i=queue.findIndex(r=>r.operationId===q.receipt?.operationId);if(i>=0)queue.splice(i,1);value={ok:true};}window.postMessage({channel:'sensa-web-intake-response',id:q.id,value},location.origin);});
+ },{slowId,fastId,proposal:personalFixtureProposal});
+ await expect.poll(async()=> (await rows(page,'drafts')).length,{timeout:12000}).toBe(2);
+ assert.equal((await rows(page,'meanings')).length,1);assert.equal((await rows(page,'personalLearning')).length,0);
+ await page.goto(origin+'/personal-meaning?meaningId='+slowId);await page.getByRole('button',{name:'继续对话',exact:true}).click();await expect(page.getByText('这件物品是否需要归还？',{exact:true})).toBeVisible();await page.getByLabel('补充或更正').fill('是的，之后需要归还。');await page.getByRole('button',{name:'发送',exact:true}).click();
+ await expect.poll(async()=> (await rows(page,'sessions')).find(s=>s.draftId===slowId)?.status).toBe('proposal');
+ // Existing confirmation layer, no shortcut into the database.
+ await page.locator('.pmw-dock-confirm').click();await page.getByRole('button',{name:'就是这个意思，保存',exact:true}).click();await expect(page.getByRole('heading',{name:'意思已确认',exact:true})).toBeVisible();
+ const controls=page.getByRole('region',{name:'个人内容学习准备'});await controls.getByRole('button',{name:'加入学习',exact:true}).click();assert.equal((await rows(page,'learningTargets')).length,0);
+ await controls.getByRole('button',{name:'生成学习资源',exact:true}).click();await expect(controls.getByRole('button',{name:'重试 / 恢复准备',exact:true})).toBeVisible({timeout:15000});const attempts=await rows(page,'contentAttempts');assert(attempts[0].bundle);assert.equal((await rows(page,'learningTargets')).length,0);
+ const task=(await rows(page,'personalLearning'))[0];await page.goto(origin+'/learning-target?targetId='+task.targetId);await expect(page.getByRole('region',{name:'个人内容学习准备'}).getByRole('button',{name:'重试 / 恢复准备',exact:true})).toBeVisible();
+ await page.goto(origin+'/personal-meaning?meaningId='+slowId);await page.reload();await page.getByRole('region',{name:'个人内容学习准备'}).getByRole('button',{name:'重试 / 恢复准备',exact:true}).click();await expect(page.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeVisible({timeout:15000});assert.equal((await rows(page,'contentAttempts')).length,2);
+ await page.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();await page.getByRole('button',{name:'确认数量并开始',exact:true}).click();await page.getByRole('button',{name:'显示表达',exact:true}).click();await page.getByRole('button',{name:/顺利想起/}).click();await expect(page.getByText('本次首次学习已完成',{exact:true})).toBeVisible();await page.reload();await expect(page.getByText('本次首次学习已完成',{exact:true})).toBeVisible();assert.equal((await rows(page,'learningTargets'))[0].memoryRevision,1);
+ await page.goto(origin+'/personal-meaning?meaningId='+fastId);await expect(page.getByRole('heading',{name:'意思已确认',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'加入学习',exact:true})).toBeVisible();await page.getByRole('button',{name:'加入学习',exact:true}).click();await expect(page.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeVisible();assert.equal((await rows(page,'learningTargets')).length,1,'Same semantic identity reuses runtime target without new generation');
+ for(const width of [390,1280]){await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
+}

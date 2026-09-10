@@ -8,9 +8,11 @@ import {once} from 'node:events';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {chromium,expect,type BrowserContext,type Page} from '@playwright/test';
+import {runPersonalIntakeBrowserChecks,personalFixtureProposal} from './support/personalIntakeBrowserChecks.mts';
 import {createHash} from 'node:crypto';
 import {provisionLightweightInitialContent} from '../apps/web/src/experience/learningRuntime/lightweightInitialContent.ts';
 const root=await mkdtemp(join(tmpdir(),'sensa-offline-')),output=join(root,'dist'),profile=join(root,'profile');
+const personalMode=process.argv.includes('--personal-intake');let teacherTurns=0,contentCalls=0,reviewCalls=0,failNextReview=true;
 const id=()=>crypto.randomUUID(),subject=id();let context:BrowserContext|undefined;const errors:string[]=[];let requests=0;
 const result=provisionLightweightInitialContent({learnerUserId:id(),learningTargetId:id(),senseId:id(),senseVersionId:id(),senseExpressionBindingId:id(),resolvedLearningPlanRevisionId:'fixture-v1',expressionSourceVersion:'fixture-v1',senseSourceVersion:'fixture-v1',expression:{surface:'borrow',languageTag:'en',expressionKind:'word'},sense:{meaning:'临时取得他人物品，并预期归还。',familiarLanguageTag:'zh-CN'},originExperience:{source:'other_authoritative_source',sourceVersion:'fixture-v1',personalAnchorUseGrantId:null,experience:{scene:'下雨了，你向同事要一把伞，约好明天归还。',senseFocus:'临时取得他人的物品',featureLabels:[]}},referenceFacts:[],requestedAt:new Date().toISOString()});
 if(result.status!=='ready')throw Error('Fixture not ready');
@@ -18,13 +20,21 @@ const pack={format:'sensa-learning-package-v1',id:id(),version:'1',title:'离线
 const bytes=Buffer.from(JSON.stringify(pack));
 const token=[{}, {sub:subject,exp:Math.floor(Date.now()/1000)+3600},'fixture'].map(x=>Buffer.from(JSON.stringify(x)).toString('base64url')).join('.');
 const server=createServer(async(req,res)=>{requests++;const path=new URL(req.url!,'http://localhost').pathname;const json=(value:unknown)=>{res.setHeader('content-type','application/json');res.end(JSON.stringify(value));};
+ if(personalMode&&path==='/sensa/native/agent/turn'){
+  const parts:Buffer[]=[];for await(const part of req)parts.push(Buffer.from(part));const input=JSON.parse(Buffer.concat(parts).toString());
+  let message:any,finish_reason='stop';
+  if(input.purpose==='teacher'){teacherTurns++;finish_reason='tool_calls';message={content:null,tool_calls:[{id:id(),type:'function',function:teacherTurns===1?{name:'ask_learner',arguments:JSON.stringify({question:'这件物品是否需要归还？'})}:{name:'propose_meaning',arguments:JSON.stringify(personalFixtureProposal)}}]};}
+  else if(input.purpose==='content'){contentCalls++;message={content:JSON.stringify({scene:'一个人向同伴临时借用一把雨伞，约好之后归还。',senseFocus:'临时使用并预期归还'})};}
+  else{reviewCalls++;if(failNextReview){failNextReview=false;res.statusCode=503;json({code:'fixture_unavailable'});return;}message={content:JSON.stringify({accepted:true,reason:'符合固定含义与来源'})};}
+  json({id:input.id,inputDigest:input.inputDigest,response:{model:'fixture',choices:[{finish_reason,message}]}});return;
+ }
  if(path==='/auth/v1/otp'||path==='/auth/v1/logout'){json({});return;}
  if(path==='/auth/v1/verify'){json({access_token:token,refresh_token:'fixture-refresh',token_type:'bearer',expires_in:3600,user:{id:subject,email:'offline@sensa.invalid',aud:'authenticated',app_metadata:{},user_metadata:{},created_at:new Date().toISOString()}});return;}
  if(path==='/sensa/web/access/session'){json({authorized:true,accountId:subject});return;}
  if(path==='/sensa/service/status'){json({authorized:true,explanationAvailable:false,checkedAt:new Date().toISOString(),windowHours:24,usage:['reading','teacher','content'].map(kind=>({kind,used:0,limit:30}))});return;}
  if(path==='/sensa/packages'){json({items:[{id:pack.id,version:'1',title:pack.title,description:'隔离测试资料',entryCount:1,byteLength:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),url:origin+'/fixture-package.json'}]});return;}
  if(path==='/fixture-package.json'){res.setHeader('content-type','application/json');res.end(bytes);return;}
- if(path.startsWith('/sensa/')||path.startsWith('/auth/')){res.writeHead(503);json({code:'fixture_unavailable'});return;}
+ if(path.startsWith('/sensa/')||path.startsWith('/auth/')){res.statusCode=503;json({code:'fixture_unavailable'});return;}
  try{const file=path==='/sw.js'||path.startsWith('/assets/')?resolve(output,'.'+path):join(output,'index.html');if(!file.startsWith(output+'/'))throw Error();res.setHeader('content-type',({'.js':'text/javascript','.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.woff2':'font/woff2'} as Record<string,string>)[extname(file)]??'application/octet-stream');res.end(await readFile(file));}catch{res.writeHead(404);res.end();}
 });
 server.listen(0,'127.0.0.1');await once(server,'listening');const origin=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
@@ -34,6 +44,8 @@ try{
  console.log('Building isolated production app…');await promisify(execFile)('npm',['run','build','-w','@sensa/web','--','--outDir',output],{cwd:process.cwd(),env:{...process.env,VITE_SENSA_MODE:'',VITE_SUPABASE_URL:origin,VITE_SUPABASE_PUBLISHABLE_KEY:'fixture-public',VITE_SENSA_API_URL:origin},maxBuffer:8*1024*1024});
  let page=await launch();await page.goto(origin+'/profile');await page.getByLabel('邮箱',{exact:true}).fill('offline@sensa.invalid');await page.getByRole('button',{name:'发送验证码',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Sensa 服务',exact:true})).toBeVisible();await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>true));await page.reload();await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller)).toBe(true);
+ if(personalMode){await runPersonalIntakeBrowserChecks(page,origin);assert.equal(contentCalls,1);assert.equal(reviewCalls,2);const saved=await snapshot(page);await context!.close();context=undefined;await new Promise<void>(resolve=>server.close(()=>resolve()));page=await launch(true);const response=await page.goto(origin+'/?flow=lightweight');assert(response?.fromServiceWorker());await expect(page.getByText('本次首次学习已完成',{exact:true})).toBeVisible({timeout:20000});assert.deepEqual(await snapshot(page),saved);assert.deepEqual(errors,[]);console.log('PASS: full production UI Intake slow/fast paths, clarification, explicit enrollment, interrupted review recovery without regeneration, shared runtime and offline process-restart persistence; synthetic extension bridge and model HTTP, no paid services.');}
+ else{
  await page.goto(origin+'/learning-entry');await page.getByRole('button',{name:/离线验收学习包/}).click();await page.getByRole('button',{name:'下载学习包',exact:true}).click();await expect.poll(async()=> (await snapshot(page)).packages.length).toBe(1);assert.equal((await snapshot(page)).learningTargets.length,0);
  await page.getByRole('button',{name:'加入学习',exact:true}).click();await expect(page.getByRole('button',{name:'已加入学习',exact:true})).toBeVisible();await page.getByRole('button',{name:'borrow · 查看学习目标',exact:true}).click();await page.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();await page.getByRole('button',{name:'确认数量并开始',exact:true}).click();await page.getByRole('button',{name:'显示表达',exact:true}).click();
  await expect.poll(async()=> (await snapshot(page)).learningRuns[0]?.phase).toBe('reveal');const before=await snapshot(page);assert.equal(before.learningTargets[0].memory,null);
@@ -58,4 +70,5 @@ try{
  // No preparation => no shell; an empty profile must not pass by HTTP disk cache.
  context=await chromium.launchPersistentContext(join(root,'fresh'),{headless:true,executablePath:process.env.SENSA_CHROMIUM_PATH});await context.setOffline(true);const fresh=await context.newPage();await assert.rejects(fresh.goto(origin+'/profile'));await context.close();context=undefined;
  console.log('PASS: actual Chromium process restarts, server unavailable, offline /profile and /, downloaded package and reveal-step recovery, one settlement persisted across another restart, expired-token learning, cached catalog retry, cross-account/signout lock, no account/API/package cache, no-preparation negative control. Synthetic account/catalog; no real email/provider calls.');
+}
 }finally{await context?.close();server.close();await rm(root,{recursive:true,force:true});}

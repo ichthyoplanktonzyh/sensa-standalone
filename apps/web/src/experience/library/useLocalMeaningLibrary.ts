@@ -40,5 +40,5 @@ export function useLocalMeaningLibrary(draftId:string|null, active:boolean){
   }
   return bodies.map(body=>({role:'assistant' as const,body}));
  }),candidate:session.candidate?{expression:session.candidate.expression.surface,meaning:session.candidate.semanticSpec.coreMeaningFocus,explanation:session.candidate.explanation}:null,accepted:session.status==='accepted',busy:busy||session.status==='inflight',notice,recipient:recipient?(recipient.kind==='sensa'?'Sensa':recipient.name+' · '+recipient.endpoint):'Sensa 服务暂不可用',canContinue:!['waiting','proposal','accepted'].includes(session.status),onSend:async text=>{await perform(async()=>{await sayToTeacher(crypto.randomUUID(),session.id,session.revision,text);await run();});},onContinue:async()=>{await perform(run).catch(()=>{});},onStop:()=>{controller.current?.abort();void perform(async()=>{const latest=(await listTeachers()).find(s=>s.id===session.id);if(latest)await stopTeacher(crypto.randomUUID(),latest.id,latest.revision);}).catch(()=>{});},onConfirm:async()=>{await perform(()=>acceptTeacher(crypto.randomUUID(),session.id,session.revision));}}:undefined;
- return {source,conversation,isLocal:!!draft,loaded,notice};
+ return {meanings,meaning:meanings.find(m=>m.draftId===draftId&&m.draftRevision===draft?.revision),source,conversation,isLocal:!!draft,loaded,notice};
 }

@@ -74,6 +74,8 @@
     "sensa:extension-native-fixture": "node --import tsx scripts/sensaExtensionNativeFixture.mts",
     "sensa:consumer-settlement-smoke": "node --import tsx scripts/sensaConsumerSettlementSmoke.mts",
     "sensa:native-core-smoke": "node --import tsx scripts/sensaNativeCoreParity.mts",
+    "sensa:personal-learning-smoke": "node --import tsx scripts/sensaPersonalLearningSmoke.mts",
+    "sensa:personal-intake-browser-smoke": "node --import tsx scripts/sensaOfflineColdStartSmoke.mts --personal-intake",
     "sensa:package-learning-smoke": "node --import tsx scripts/sensaPackageLearningSmoke.mts",
     "sensa:offline-cold-start-smoke": "node --import tsx scripts/sensaOfflineColdStartSmoke.mts",
     "sensa:offline-shell-smoke": "node --import tsx scripts/sensaOfflineShellSmoke.mts",

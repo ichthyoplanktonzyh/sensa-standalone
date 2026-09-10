@@ -6,15 +6,19 @@ export type ModelMessage={role:'system'|'user'|'assistant'|'tool';content:string
 export type ModelTool={type:'function';function:{name:string;description:string;parameters:Record<string,unknown>}};
 export const completionSchema=z.object({model:z.string().max(200),choices:z.array(z.object({finish_reason:z.enum(['stop','tool_calls']),message:z.object({content:z.string().max(32000).nullable().optional(),tool_calls:z.array(z.object({id:z.string().min(1).max(100),type:z.literal('function'),function:z.object({name:z.string().max(100),arguments:z.string().max(32000)}).strict()}).strict()).max(4).optional()}).passthrough()}).passthrough()).length(1)}).passthrough();
 export const digest=async(value:unknown)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonicalConsumerJson(value)))),b=>b.toString(16).padStart(2,'0')).join('');
+async function abortable<T>(promise:Promise<T>,signal:AbortSignal):Promise<T>{
+ return new Promise((resolve,reject)=>{const abort=()=>{signal.removeEventListener('abort',abort);reject(new Error('本次请求已停止或超时。'));};if(signal.aborted){void promise.catch(()=>{});abort();return;}signal.addEventListener('abort',abort,{once:true});promise.then(value=>{signal.removeEventListener('abort',abort);resolve(value);},error=>{signal.removeEventListener('abort',abort);reject(error);});});
+}
 export async function complete(provider:Provider,purpose:Purpose,id:string,messages:ModelMessage[],tools:ModelTool[],signal:AbortSignal){
- const base=new URL(provider.endpoint),body={model:provider.model,messages,...(tools.length?{tools}:{}),max_tokens:3000,stream:false as const,...(purpose==='review'?{response_format:{type:'json_object' as const}}:{})};
+ signal=AbortSignal.any([signal,AbortSignal.timeout(45000)]);
+ const base=new URL(provider.endpoint),body={model:provider.model,messages,...(tools.length?{tools}:{}),max_tokens:3000,stream:false as const,...(purpose!=='teacher'&&!tools.length?{response_format:{type:'json_object' as const}}:{})};
  if(messages.length>100||new TextEncoder().encode(JSON.stringify(body)).length>256*1024)throw new Error('本次对话已达到长度上限，请保存现有结果。');
  let endpoint=provider.endpoint+'/chat/completions',payload:unknown=body,key:string,subject:string|undefined;
  if(provider.kind==='sensa'){
   const configured=import.meta.env.VITE_SENSA_API_URL as string|undefined;
   if(!configured||provider.endpoint!==configured.replace(/\/+$/u,''))throw new Error('Sensa 连接需要使用当前应用配置的服务地址。');
   if(!auth)throw new Error('Sensa 登录服务暂不可用，请稍后重试。');
-  const {data,error}=await auth.getSession();if(error||!data.session)throw new Error('请先登录 Sensa 在线服务。本机资料仍然保留。');
+  const {data,error}=await abortable(auth.getSession(),signal);if(error||!data.session)throw new Error('请先登录 Sensa 在线服务。本机资料仍然保留。');
   key=data.session.access_token;subject=data.session.user.id;endpoint=provider.endpoint+'/sensa/native/agent/turn';
   const input={id,purpose,body};payload={...input,inputDigest:await digest(input)};
  }else{key=await providerCredential(provider);payload={...body,...(base.hostname==='api.deepseek.com'?{thinking:{type:'disabled'}}:{})};}
@@ -29,7 +33,7 @@ export async function complete(provider:Provider,purpose:Purpose,id:string,messa
  const current=(await providerSnapshot()).providers.find(p=>p.id===provider.id);
  if(current?.revision!==provider.revision)throw new Error('服务配置已改变，旧请求结果未接纳。');
  if(provider.kind==='sensa'){
-  if((await auth!.getSession()).data.session?.user.id!==subject)throw new Error('登录身份已改变，旧请求结果未接纳。');
+  if((await abortable(auth!.getSession(),signal)).data.session?.user.id!==subject)throw new Error('登录身份已改变，旧请求结果未接纳。');
   const envelope=z.object({id:z.literal(id),inputDigest:z.literal((payload as {inputDigest:string}).inputDigest),response:z.unknown()}).strict().parse(value);value=envelope.response;
  }
  if(signal.aborted)throw new Error('本次请求已停止，旧结果未接纳。');

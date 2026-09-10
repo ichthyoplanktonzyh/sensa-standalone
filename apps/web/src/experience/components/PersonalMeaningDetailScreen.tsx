@@ -65,6 +65,7 @@ export interface MeaningConversationController {
  onSend:(text:string)=>Promise<void>;onContinue:()=>Promise<void>;onStop:()=>void;onConfirm:()=>Promise<void>;
 }
 interface PersonalMeaningDetailScreenProps {
+ learningControls?:import('react').ReactNode;
  conversation?:MeaningConversationController;
   active: boolean;
   personalMeaningId: string | null;
@@ -1004,7 +1005,7 @@ function MeaningWorkspaceFrame({active,onBack,materialOpen,onToggleMaterial,scre
   </div>
  </section>;
 }
-function ConnectedMeaningConversation({active,onBack,conversation:c}:PersonalMeaningDetailScreenProps & {conversation:MeaningConversationController}){
+function ConnectedMeaningConversation({active,onBack,conversation:c,learningControls}:PersonalMeaningDetailScreenProps & {conversation:MeaningConversationController}){
  useTranslation();
  const [text,setText]=useState(''),[materialOpen,setMaterialOpen]=useState(false),[panelOpen,setPanelOpen]=useState(false),[reviewOpen,setReviewOpen]=useState(false);
  const transcript=useRef<HTMLDivElement>(null);
@@ -1018,8 +1019,9 @@ function ConnectedMeaningConversation({active,onBack,conversation:c}:PersonalMea
   <div ref={transcript} className={uiClass('pmw-transcript')} aria-live="polite">
    {c.messages.map((m,i)=><div key={i} className={uiClass(`pmw-message is-${m.role}`)}>{m.role==='assistant'&&<span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span>}<div><p>{m.body}</p></div></div>)}
    {c.busy&&<div className={uiClass('pmw-message is-assistant is-thinking')}><span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span><div><p><i/><i/><i/></p></div></div>}
-   {c.accepted&&<div className={uiClass('pmw-done')}><span className={uiClass('pmw-done-mark')}>✓</span><h2>意思已确认</h2><p>已保存在本机，尚未加入学习。</p></div>}
+   {c.accepted&&<div className={uiClass('pmw-done')}><span className={uiClass('pmw-done-mark')}>✓</span><h2>意思已确认</h2><p>已保存在本机。</p></div>}
   </div>
+  {c.accepted&&learningControls}
   {c.notice&&<div className={uiClass('pmw-inline-error')} role="status">{c.notice}</div>}
   <div className={uiClass('pmw-dock-bar')}>
    <div className={uiClass('pmw-dock-chips')}>

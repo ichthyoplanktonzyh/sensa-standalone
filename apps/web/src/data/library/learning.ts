@@ -1,9 +1,9 @@
 import {stableUuid,canonicalJsonDigest,consumerRunStepId,transitionConsumerRun,decideConsumerSettlement,type ReviewSchedule} from '@sensa/learning-kernel';
 import {sensaLearningMaterializationSnapshotSchema,sensaLearningConnectionContractVersion,LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION} from '@sensa/contracts/sensa';
-import {command,readLibrary} from './store';
+import {command,readLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
 import {learningOwner,type InstalledPackage} from './packages';
 import {validateLightweightInitialMaterialization,type LightweightInitialLearningMaterialization} from '../../experience/learningRuntime/lightweightInitialContent';
-export type LocalLearningTarget={id:string;retentionId:string;packageKey:string;expression:string;meaning:string;material:LightweightInitialLearningMaterialization;createdAt:string;startedAt:string|null;completedAt:string|null;memory:ReviewSchedule|null;memoryRevision:number;relearnAt:string|null};
+export type LocalLearningTarget={id:string;retentionId:string;packageKey:string|null;expression:string;meaning:string;material:LightweightInitialLearningMaterialization;createdAt:string;startedAt:string|null;completedAt:string|null;memory:ReviewSchedule|null;memoryRevision:number;relearnAt:string|null};
 export type LocalLearningRun={id:string;targetId:string;purpose:'initial_learning'|'retention_review'|'relearning';protocolVersion:string;phase:'recall'|'reveal';ordinal:number;revision:number;startedAt:string;completedAt:string|null;memoryRevision:number;dueAt:string|null;completionKind?:string};
 export type LearningEvent={id:string;runId:string;targetId:string;kind:string;at:string;detail:unknown};
 export async function enrollPackage(operationId:string,key:string){return command({id:operationId,kind:'learning.enroll',input:{key}},async tx=>{
@@ -55,3 +55,13 @@ export async function actLearning(operationId:string,runId:string,revision:numbe
  tx.put('learningEvents',operationId,{id:operationId,runId,targetId:t.id,kind:action.kind,at,detail:{stepId,action,settlement}} satisfies LearningEvent);return run;
 });}
 export async function finishLearning(operationId:string,runId:string){return command({id:operationId,kind:'learning.finish',input:{runId}},async tx=>{await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);if(!run?.completedAt)throw new Error('请先完成当前学习。');if(await tx.get('meta','learning-active')===runId)tx.delete('meta','learning-active');return true;});}
+
+/** The same runtime target is committed only after independent material validation. */
+export async function commitPersonalMaterial(tx:LibraryTransaction,owner:LibraryIdentity,meaning:import('./teacher').LocalMeaning,content:LightweightInitialLearningMaterialization['content'],attemptId:string,grantId:string|null){
+ const id=stableUuid(`sensa-learning-target:${owner.learnerId}:${meaning.senseVersionId}:${meaning.bindingVersionId}`);
+ const existing=await tx.get<LocalLearningTarget>('learningTargets',id);if(existing)return existing;
+ const now=new Date().toISOString();
+ const snapshot=sensaLearningMaterializationSnapshotSchema.parse({contractVersion:sensaLearningConnectionContractVersion,learningMaterializationId:stableUuid(`sensa-personal-material:${attemptId}`),learnerUserId:owner.learnerId,learningTargetId:id,protocolPurpose:'initial_learning',provisioningPath:'on_demand',contentSchemaVersion:LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION,contentPayload:content,contentDigest:canonicalJsonDigest(content),validationStatus:'validated',validatorVersion:'sensa-web-content-v1',provenance:{meaningId:meaning.id,acceptanceId:meaning.acceptanceId,senseId:meaning.senseId,senseVersionId:meaning.senseVersionId,bindingId:meaning.bindingId,bindingVersionId:meaning.bindingVersionId,attemptId},personalAnchorUseGrantIds:grantId?[grantId]:[],createdAt:now});
+ const target:LocalLearningTarget={id,retentionId:stableUuid(`sensa-retention:${id}`),packageKey:null,expression:meaning.proposal.expression.surface,meaning:meaning.proposal.semanticSpec.coreMeaningFocus,material:{snapshot,content},createdAt:now,startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null};
+ validateLightweightInitialMaterialization(target.material);tx.put('learningTargets',id,target);return target;
+}
