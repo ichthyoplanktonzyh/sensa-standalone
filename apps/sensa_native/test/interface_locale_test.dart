@@ -128,7 +128,9 @@ void main() {
       final original = jsonEncode(model.snapshot!.value);
       model.setNotice(() => l10n.uiPackageImportedChooseContentToAdd);
       await tester.pumpWidget(NativeApp(model: model));
-      await tester.tap(find.byKey(const ValueKey('nav-2')));
+      await tester.tap(find.byKey(const ValueKey('nav-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('content-section-1')));
       await tester.pumpAndSettle();
       final search = find.byKey(const ValueKey('library-search'));
       await tester.ensureVisible(search);
@@ -146,7 +148,9 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('已导入，选择内容后可加入学习。'), findsNothing);
-      await tester.tap(find.byKey(const ValueKey('nav-2')));
+      await tester.tap(find.byKey(const ValueKey('nav-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('content-section-1')));
       await tester.pumpAndSettle();
       expect(
         tester.widget<TextField>(search).controller!.text,

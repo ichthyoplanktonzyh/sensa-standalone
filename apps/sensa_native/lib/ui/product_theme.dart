@@ -17,16 +17,16 @@ ThemeData productTheme() => ThemeData(
   ),
   textTheme: const TextTheme(
     headlineLarge: TextStyle(
-      fontSize: 36,
+      fontSize: 28,
       fontWeight: FontWeight.w500,
       color: Color(0xff222631),
     ),
     headlineSmall: TextStyle(
-      fontSize: 24,
+      fontSize: 21,
       fontWeight: FontWeight.w500,
       color: Color(0xff222631),
     ),
-    bodyLarge: TextStyle(fontSize: 17, height: 1.65, color: Color(0xff222631)),
+    bodyLarge: TextStyle(fontSize: 16, height: 1.5, color: Color(0xff222631)),
     bodyMedium: TextStyle(fontSize: 14, height: 1.6, color: Color(0xff626b7b)),
   ),
   inputDecorationTheme: InputDecorationTheme(
@@ -73,15 +73,15 @@ class ProductPage extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 1120),
         child: ListView(
           key: PageStorageKey(pageId ?? title),
-          padding: EdgeInsets.all(constraints.maxWidth < 600 ? 20 : 48),
+          padding: EdgeInsets.all(constraints.maxWidth < 600 ? 16 : 32),
           children: [
             Text(title, style: Theme.of(context).textTheme.headlineLarge),
             if (subtitle != null) ...[
               const SizedBox(height: 12),
               Text(subtitle!),
             ],
-            const SizedBox(height: 32),
-            ...children.expand((w) => [w, const SizedBox(height: 24)]),
+            const SizedBox(height: 20),
+            ...children.expand((w) => [w, const SizedBox(height: 16)]),
           ],
         ),
       ),
@@ -96,11 +96,11 @@ class ProductPanel extends StatelessWidget {
   Widget build(BuildContext context) => Material(
     color: Colors.white,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(16),
       side: const BorderSide(color: Color(0xffe3e5ea)),
     ),
     clipBehavior: Clip.antiAlias,
-    child: Padding(padding: const EdgeInsets.all(24), child: child),
+    child: Padding(padding: const EdgeInsets.all(20), child: child),
   );
 }
 

@@ -9,8 +9,10 @@ import 'package:sensa_native/ui/library_view_model.dart';
 void main() {
   for (final language in ['zh', 'en']) {
     for (final size in [
+      const Size(375, 667),
       const Size(375, 812),
       const Size(390, 844),
+      const Size(800, 632),
       const Size(800, 1024),
       const Size(1280, 800),
     ]) {
@@ -41,16 +43,27 @@ void main() {
         await tester.pumpWidget(NativeApp(model: model));
         expect(find.text(l10n.uiLoadAcceptanceMaterial), findsNothing);
         expect(tester.takeException(), isNull);
-        await tester.tap(find.byKey(const ValueKey('nav-2')));
+        await tester.tap(find.byKey(const ValueKey('nav-1')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('content-section-1')));
         await tester.pumpAndSettle();
         final search = find.byKey(const ValueKey('library-search'));
         await tester.ensureVisible(search);
         await tester.enterText(search, 'borrow');
         await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('nav-2')));
+        await tester.pumpAndSettle();
+        expect(find.text(l10n.uiMyLearning), findsOneWidget);
+        expect(search, findsNothing);
         await tester.tap(find.byKey(const ValueKey('nav-1')));
         await tester.pumpAndSettle();
-        expect(find.text(l10n.uiMySemanticWorld), findsOneWidget);
-        await tester.tap(find.byKey(const ValueKey('nav-2')));
+        expect(find.byKey(const ValueKey('content-section-0')), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('content-section-0')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('personal-search')), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('nav-1')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('content-section-1')));
         await tester.pumpAndSettle();
         expect(tester.widget<TextField>(search).controller!.text, 'borrow');
         if (size.width < 1000) {

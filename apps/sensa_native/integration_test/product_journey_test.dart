@@ -72,18 +72,20 @@ void main() {
       expect(find.text(l10n.uiLoadAcceptanceMaterial), findsNothing);
       if (recovery) {
         expect(model.snapshot!.value, jsonDecode(await receipt.readAsString()));
-        await tap(find.byKey(const ValueKey('nav-2')));
+        await tap(find.byKey(const ValueKey('nav-1')));
+        await tap(find.byKey(const ValueKey('content-section-1')));
         expect(find.text('tactful'), findsOneWidget);
         expect(model.snapshot!.value['completionCount'], 1);
         await tap(find.byKey(const ValueKey('nav-1')));
-        await tap(find.text(l10n.uiMySemanticWorld));
+        await tap(find.byKey(const ValueKey('content-section-0')));
         expect(find.text(l10n.uiSaved), findsOneWidget);
         expect(model.snapshot!.personal['meanings'].length, 1);
       } else {
         expect(model.snapshot!.quantity, isNull);
         await tap(find.text(l10n.uiSetDailyQuantity));
         expect(find.text(l10n.uiConnectWithNewMeanings), findsOneWidget);
-        await tap(find.byKey(const ValueKey('nav-2')));
+        await tap(find.byKey(const ValueKey('nav-1')));
+        await tap(find.byKey(const ValueKey('content-section-1')));
         final original = model.snapshot!.revision;
         await tap(
           find.text(l10n.uiImportLearningPackage),
@@ -123,7 +125,7 @@ void main() {
         expect(model.snapshot!.value['handoffCount'], 1);
         await tap(find.text(l10n.uiBackToHome));
         await tap(find.byKey(const ValueKey('nav-1')));
-        await tap(find.text(l10n.uiMySemanticWorld));
+        await tap(find.byKey(const ValueKey('content-section-0')));
         await tap(find.text(l10n.uiSaveContent));
         await text('capture-context', 'May I borrow your umbrella?');
         await tap(find.text(l10n.uiSaveToInboxFirst));
@@ -143,17 +145,15 @@ void main() {
           1,
           reason: 'Semantic acceptance must not enroll borrow',
         );
-        await tester.pageBack();
-        await wait();
-        await tap(find.text(l10n.uiImagesAndConnections));
+        await tap(find.byTooltip(l10n.uiImagesAndConnections));
         expect(find.text(l10n.uiImagesAndConnections), findsOneWidget);
         await tester.pageBack();
         await wait();
-        await tap(find.text(l10n.uiLearningPreparation));
+        await tap(find.byTooltip(l10n.uiLearningPreparation));
         expect(find.text(l10n.uiLearningPreparation), findsOneWidget);
         await tester.pageBack();
         await wait();
-        await tap(find.text(l10n.uiCaptureConnections));
+        await tap(find.byTooltip(l10n.uiCaptureConnections));
         expect(find.text(l10n.uiImportCaptureRequest), findsOneWidget);
         await tester.pageBack();
         await wait();

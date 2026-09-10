@@ -9,8 +9,13 @@ import 'library_view_model.dart';
 
 /// Personal content consumes Rust projections; no UI flag can confirm a Sense.
 class PersonalWorldScreen extends StatefulWidget {
-  const PersonalWorldScreen({super.key, required this.model});
+  const PersonalWorldScreen({
+    super.key,
+    required this.model,
+    this.embedded = false,
+  });
   final LibraryViewModel model;
+  final bool embedded;
   @override
   State<PersonalWorldScreen> createState() => _PersonalWorldScreenState();
 }
@@ -87,6 +92,38 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
     'expected_revision': item['revision'],
     'active': active,
   });
+  List<Widget> tools() => [
+    IconButton(
+      tooltip: context.l10n.uiRefreshCaptures,
+      icon: const Icon(Icons.refresh),
+      onPressed: model.busy ? null : model.load,
+    ),
+    IconButton(
+      tooltip: context.l10n.uiCaptureConnections,
+      icon: const Icon(Icons.input),
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => IntakeConnectionScreen(model: model)),
+      ),
+    ),
+    IconButton(
+      tooltip: context.l10n.uiImagesAndConnections,
+      icon: const Icon(Icons.hub_outlined),
+      onPressed: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => WorldScreen(library: model)),
+        );
+        await model.load();
+      },
+    ),
+    IconButton(
+      tooltip: context.l10n.uiLearningPreparation,
+      icon: const Icon(Icons.auto_stories_outlined),
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => PreparationListScreen(model: model)),
+      ),
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: model,
@@ -126,329 +163,322 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
               )
               .toList();
       return Scaffold(
-        appBar: AppBar(
-          title: Text(context.l10n.uiMySemanticWorld),
-          actions: [
-            IconButton(
-              tooltip: context.l10n.uiRefreshCaptures,
-              icon: const Icon(Icons.refresh),
-              onPressed: model.busy ? null : model.load,
-            ),
-            IconButton(
-              tooltip: context.l10n.uiCaptureConnections,
-              icon: const Icon(Icons.input),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => IntakeConnectionScreen(model: model),
-                ),
+        appBar: widget.embedded
+            ? null
+            : AppBar(
+                automaticallyImplyLeading: !widget.embedded,
+                title: widget.embedded
+                    ? null
+                    : Text(context.l10n.uiMySemanticWorld),
+                actions: tools(),
               ),
-            ),
-            IconButton(
-              tooltip: context.l10n.uiImagesAndConnections,
-              icon: const Icon(Icons.hub_outlined),
-              onPressed: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => WorldScreen(library: model),
-                  ),
-                );
-                await model.load();
-              },
-            ),
-            IconButton(
-              tooltip: context.l10n.uiLearningPreparation,
-              icon: const Icon(Icons.auto_stories_outlined),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => PreparationListScreen(model: model),
-                ),
-              ),
-            ),
-          ],
-        ),
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 800),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(context.l10n.uiSaveAContextAndFindThe),
-                        const SizedBox(height: 12),
-                        FilledButton(
-                          onPressed: model.busy ? null : () => compose(),
-                          child: Text(context.l10n.uiSaveContent),
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            for (final (index, label) in [
-                              context.l10n.uiSaved,
-                              context.l10n.uiInbox,
-                              context.l10n.uiRemoved,
-                            ].indexed)
-                              ChoiceChip(
-                                label: Text(label),
-                                selected: section == index,
-                                onSelected: (_) =>
-                                    setState(() => section = index),
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 8,
+                                alignment: WrapAlignment.spaceBetween,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  FilledButton.icon(
+                                    onPressed: model.busy
+                                        ? null
+                                        : () => compose(),
+                                    icon: const Icon(Icons.add),
+                                    label: Text(context.l10n.uiSaveContent),
+                                  ),
+                                  if (widget.embedded) Wrap(children: tools()),
+                                ],
                               ),
-                          ],
-                        ),
-                        TextField(
-                          key: const ValueKey('personal-search'),
-                          decoration: InputDecoration(
-                            labelText: context
-                                .l10n
-                                .uiSearchContextsExpressionsOrMeanings,
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
+                                children: [
+                                  for (final (index, label) in [
+                                    context.l10n.uiSaved,
+                                    context.l10n.uiInbox,
+                                    context.l10n.uiRemoved,
+                                  ].indexed)
+                                    ChoiceChip(
+                                      label: Text(label),
+                                      selected: section == index,
+                                      onSelected: (_) =>
+                                          setState(() => section = index),
+                                    ),
+                                ],
+                              ),
+                              TextField(
+                                key: const ValueKey('personal-search'),
+                                decoration: InputDecoration(
+                                  labelText: context
+                                      .l10n
+                                      .uiSearchContextsExpressionsOrMeanings,
+                                ),
+                                onChanged: (value) =>
+                                    setState(() => search = value),
+                              ),
+                            ],
                           ),
-                          onChanged: (value) => setState(() => search = value),
                         ),
+                        if (!widget.embedded && model.notice != null)
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Text(model.notice!),
+                          ),
+                        if (!widget.embedded && model.error != null)
+                          _ErrorNotice(model: model),
                       ],
                     ),
                   ),
-                  if (model.notice != null)
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(model.notice!),
-                    ),
-                  if (model.error != null) _ErrorNotice(model: model),
-                  Expanded(
-                    child: items.isEmpty
-                        ? Center(child: Text(context.l10n.uiNoContentYet))
-                        : ListView.builder(
-                            key: const ValueKey('personal-items'),
-                            itemCount: items.length,
-                            itemBuilder: (context, index) {
-                              final item = items[index];
-                              if (item['entity'] == 'lookup') {
-                                return ListTile(
-                                  title: Text(
-                                    context.l10n.uiToConfirm(
-                                      (item['request']['snapshot']['expression']['text'])
-                                          .toString(),
-                                    ),
+                  items.isEmpty
+                      ? SliverToBoxAdapter(
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    search.isEmpty
+                                        ? Icons.bookmark_border
+                                        : Icons.search,
+                                    size: 32,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
                                   ),
-                                  subtitle: Text(
-                                    context
-                                        .l10n
-                                        .uiViewExplanationOrContinueClarifying,
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    search.isEmpty
+                                        ? context.l10n.uiNoContentYet
+                                        : context
+                                              .l10n
+                                              .uiNoMatchesTryAnotherExpression,
+                                    textAlign: TextAlign.center,
                                   ),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () => openLookup(item),
-                                );
-                              }
-                              final meaning = item['entity'] == 'meaning';
-                              final removed = item['status'] == 'removed';
-                              return Card(
-                                margin: const EdgeInsets.fromLTRB(
-                                  16,
-                                  4,
-                                  16,
-                                  12,
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
+                      : SliverList.builder(
+                          key: const ValueKey('personal-items'),
+                          itemCount: items.length,
+                          itemBuilder: (context, index) {
+                            final item = items[index];
+                            if (item['entity'] == 'lookup') {
+                              return ListTile(
+                                title: Text(
+                                  context.l10n.uiToConfirm(
+                                    (item['request']['snapshot']['expression']['text'])
+                                        .toString(),
+                                  ),
                                 ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      if (meaning)
-                                        Text(
-                                          item['expression'] as String,
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.titleLarge,
-                                        ),
-                                      SelectableText(
-                                        item['snapshot']['sentence'] as String,
+                                subtitle: Text(
+                                  context
+                                      .l10n
+                                      .uiViewExplanationOrContinueClarifying,
+                                ),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () => openLookup(item),
+                              );
+                            }
+                            final meaning = item['entity'] == 'meaning';
+                            final removed = item['status'] == 'removed';
+                            return Card(
+                              margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    if (meaning)
+                                      Text(
+                                        item['expression'] as String,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleLarge,
                                       ),
-                                      if (meaning) ...[
-                                        const SizedBox(height: 8),
-                                        Text(item['sense'] as String),
-                                        if (item['focus'] != null)
-                                          Text(
-                                            context.l10n.uiFocus(
-                                              (item['focus']).toString(),
-                                            ),
-                                          ),
+                                    SelectableText(
+                                      item['snapshot']['sentence'] as String,
+                                    ),
+                                    if (meaning) ...[
+                                      const SizedBox(height: 8),
+                                      Text(item['sense'] as String),
+                                      if (item['focus'] != null)
                                         Text(
-                                          context.l10n.uiMeaningSource(
-                                            (item['materialSource']).toString(),
+                                          context.l10n.uiFocus(
+                                            (item['focus']).toString(),
                                           ),
                                         ),
-                                        Text(
-                                          context.l10n.uiSavedYouCanAddThisTo,
+                                      Text(
+                                        context.l10n.uiMeaningSource(
+                                          (item['materialSource']).toString(),
                                         ),
-                                      ],
-                                      if (item['snapshot']['source']['title'] !=
-                                          '')
-                                        Text(
-                                          context.l10n.uiSource(
-                                            (item['snapshot']['source']['title'])
-                                                .toString(),
-                                          ),
-                                        ),
-                                      if (item['sourceLink'] != null)
-                                        SelectableText(
-                                          item['sourceLink'] as String,
-                                        ),
-                                      Wrap(
-                                        spacing: 8,
-                                        children: [
-                                          if (item['sourceLink'] != null)
-                                            TextButton(
-                                              onPressed: () =>
-                                                  Clipboard.setData(
-                                                    ClipboardData(
-                                                      text:
-                                                          item['sourceLink']
-                                                              as String,
-                                                    ),
-                                                  ),
-                                              child: Text(
-                                                context.l10n.uiCopySourceLink,
-                                              ),
-                                            ),
-                                          if (removed)
-                                            OutlinedButton(
-                                              onPressed: model.busy
-                                                  ? null
-                                                  : () => membership(
-                                                      item,
-                                                      item['entity'] as String,
-                                                      true,
-                                                    ),
-                                              child: Text(
-                                                context.l10n.uiRestore,
-                                              ),
-                                            )
-                                          else ...[
-                                            if (!meaning)
-                                              FilledButton(
-                                                onPressed: model.busy
-                                                    ? null
-                                                    : () =>
-                                                          compose(intake: item),
-                                                child: Text(
-                                                  context
-                                                      .l10n
-                                                      .uiChooseExpressionAndMeaning,
-                                                ),
-                                              ),
-                                            if (meaning &&
-                                                item['materialId'] == null &&
-                                                (item['bindingMetadata'] ==
-                                                        null ||
-                                                    item['bindingMetadata']['relation'] ==
-                                                            'realizes' &&
-                                                        item['bindingMetadata']['semanticCoverage'] ==
-                                                            'exact'))
-                                              FilledButton(
-                                                onPressed: model.busy
-                                                    ? null
-                                                    : () => Navigator.of(context).push(
-                                                        MaterialPageRoute(
-                                                          builder: (_) =>
-                                                              PreparationScreen(
-                                                                model: model,
-                                                                meaningId:
-                                                                    item['id']
-                                                                        as String,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                child: Text(
-                                                  item['addedToLearning'] ==
-                                                          true
-                                                      ? context
-                                                            .l10n
-                                                            .uiViewPreparation
-                                                      : context
-                                                            .l10n
-                                                            .uiAddToLearning,
-                                                ),
-                                              ),
-                                            if (meaning &&
-                                                item['materialId'] != null)
-                                              FilledButton(
-                                                onPressed:
-                                                    model.busy ||
-                                                        item['materialId'] ==
-                                                            null ||
-                                                        item['addedToLearning'] ==
-                                                            true
-                                                    ? null
-                                                    : () => model.personalAction(
-                                                        {
-                                                          'kind':
-                                                              'add_to_learning',
-                                                          'meaning_id':
-                                                              item['id'],
-                                                          'expected_revision':
-                                                              item['revision'],
-                                                        },
-                                                      ),
-                                                child: Text(
-                                                  item['addedToLearning'] ==
-                                                          true
-                                                      ? context
-                                                            .l10n
-                                                            .uiAddedToLearning
-                                                      : item['materialId'] ==
-                                                            null
-                                                      ? context
-                                                            .l10n
-                                                            .uiLearningMaterialNotPrepared
-                                                      : context
-                                                            .l10n
-                                                            .uiAddToLearning,
-                                                ),
-                                              ),
-                                            TextButton(
-                                              onPressed: model.busy
-                                                  ? null
-                                                  : () => membership(
-                                                      item,
-                                                      item['entity'] as String,
-                                                      false,
-                                                    ),
-                                              child: Text(
-                                                context.l10n.uiRemove,
-                                              ),
-                                            ),
-                                            if (meaning &&
-                                                item['worldContext'] == null)
-                                              TextButton(
-                                                onPressed: model.busy
-                                                    ? null
-                                                    : () => compose(
-                                                        copy:
-                                                            item['snapshot']
-                                                                as Map<
-                                                                  String,
-                                                                  dynamic
-                                                                >,
-                                                      ),
-                                                child: Text(
-                                                  context.l10n.uiSaveAsNew,
-                                                ),
-                                              ),
-                                          ],
-                                        ],
                                       ),
                                     ],
-                                  ),
+                                    if (item['snapshot']['source']['title'] !=
+                                        '')
+                                      Text(
+                                        context.l10n.uiSource(
+                                          (item['snapshot']['source']['title'])
+                                              .toString(),
+                                        ),
+                                      ),
+                                    if (item['sourceLink'] != null)
+                                      SelectableText(
+                                        item['sourceLink'] as String,
+                                      ),
+                                    Wrap(
+                                      spacing: 8,
+                                      children: [
+                                        if (item['sourceLink'] != null)
+                                          TextButton(
+                                            onPressed: () => Clipboard.setData(
+                                              ClipboardData(
+                                                text:
+                                                    item['sourceLink']
+                                                        as String,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              context.l10n.uiCopySourceLink,
+                                            ),
+                                          ),
+                                        if (removed)
+                                          OutlinedButton(
+                                            onPressed: model.busy
+                                                ? null
+                                                : () => membership(
+                                                    item,
+                                                    item['entity'] as String,
+                                                    true,
+                                                  ),
+                                            child: Text(context.l10n.uiRestore),
+                                          )
+                                        else ...[
+                                          if (!meaning)
+                                            FilledButton(
+                                              onPressed: model.busy
+                                                  ? null
+                                                  : () => compose(intake: item),
+                                              child: Text(
+                                                context
+                                                    .l10n
+                                                    .uiChooseExpressionAndMeaning,
+                                              ),
+                                            ),
+                                          if (meaning &&
+                                              item['materialId'] == null &&
+                                              (item['bindingMetadata'] ==
+                                                      null ||
+                                                  item['bindingMetadata']['relation'] ==
+                                                          'realizes' &&
+                                                      item['bindingMetadata']['semanticCoverage'] ==
+                                                          'exact'))
+                                            FilledButton(
+                                              onPressed: model.busy
+                                                  ? null
+                                                  : () => Navigator.of(context).push(
+                                                      MaterialPageRoute(
+                                                        builder: (_) =>
+                                                            PreparationScreen(
+                                                              model: model,
+                                                              meaningId:
+                                                                  item['id']
+                                                                      as String,
+                                                            ),
+                                                      ),
+                                                    ),
+                                              child: Text(
+                                                item['addedToLearning'] == true
+                                                    ? context
+                                                          .l10n
+                                                          .uiViewPreparation
+                                                    : context
+                                                          .l10n
+                                                          .uiAddToLearning,
+                                              ),
+                                            ),
+                                          if (meaning &&
+                                              item['materialId'] != null)
+                                            FilledButton(
+                                              onPressed:
+                                                  model.busy ||
+                                                      item['materialId'] ==
+                                                          null ||
+                                                      item['addedToLearning'] ==
+                                                          true
+                                                  ? null
+                                                  : () => model.personalAction({
+                                                      'kind': 'add_to_learning',
+                                                      'meaning_id': item['id'],
+                                                      'expected_revision':
+                                                          item['revision'],
+                                                    }),
+                                              child: Text(
+                                                item['addedToLearning'] == true
+                                                    ? context
+                                                          .l10n
+                                                          .uiAddedToLearning
+                                                    : item['materialId'] == null
+                                                    ? context
+                                                          .l10n
+                                                          .uiLearningMaterialNotPrepared
+                                                    : context
+                                                          .l10n
+                                                          .uiAddToLearning,
+                                              ),
+                                            ),
+                                          TextButton(
+                                            onPressed: model.busy
+                                                ? null
+                                                : () => membership(
+                                                    item,
+                                                    item['entity'] as String,
+                                                    false,
+                                                  ),
+                                            child: Text(context.l10n.uiRemove),
+                                          ),
+                                          if (meaning &&
+                                              item['worldContext'] == null)
+                                            TextButton(
+                                              onPressed: model.busy
+                                                  ? null
+                                                  : () => compose(
+                                                      copy:
+                                                          item['snapshot']
+                                                              as Map<
+                                                                String,
+                                                                dynamic
+                                                              >,
+                                                    ),
+                                              child: Text(
+                                                context.l10n.uiSaveAsNew,
+                                              ),
+                                            ),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                              );
-                            },
-                          ),
-                  ),
+                              ),
+                            );
+                          },
+                        ),
                 ],
               ),
             ),

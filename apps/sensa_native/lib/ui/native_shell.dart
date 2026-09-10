@@ -12,7 +12,6 @@ import 'personal_world_screen.dart';
 import 'practice_screen.dart';
 import 'preparation_screen.dart';
 import 'product_theme.dart';
-import 'world_screen.dart';
 
 class NativeShell extends StatefulWidget {
   const NativeShell({super.key, required this.model});
@@ -23,6 +22,7 @@ class NativeShell extends StatefulWidget {
 
 class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
   int selected = 0;
+  int contentSection = 0;
   final search = TextEditingController();
   int quantity = 5;
   bool opening = false;
@@ -238,10 +238,10 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
                 context.l10n.uiToday,
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 16),
               Wrap(
-                spacing: 48,
-                runSpacing: 20,
+                spacing: 32,
+                runSpacing: 12,
                 children: [
                   _Count(label: context.l10n.uiNew, value: '$fresh'),
                   _Count(label: context.l10n.uiDueReviews, value: '$due'),
@@ -251,7 +251,7 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
                   ),
                 ],
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 16),
               Text(
                 resumable
                     ? context.l10n.uiPickUpWhereYouLeftOff
@@ -265,7 +265,10 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
                 onPressed: model.busy || opening
                     ? null
                     : () => !hasWork && !resumable
-                          ? setState(() => selected = 2)
+                          ? setState(() {
+                              selected = 1;
+                              contentSection = 1;
+                            })
                           : study(
                               resumable
                                   ? s.activity!['mode'] as String
@@ -299,7 +302,10 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
           context.l10n.uiBrowseLearningContent,
           context.l10n.uiImportALearningPackageAndChoose,
           Icons.library_books_outlined,
-          () => setState(() => selected = 2),
+          () => setState(() {
+            selected = 1;
+            contentSection = 1;
+          }),
         ),
         const Divider(),
         link(
@@ -312,45 +318,81 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
     );
   }
 
-  Widget content() => ProductPage(
-    pageId: 'content',
-    title: context.l10n.uiMyContent,
+  Widget content() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      ProductPanel(
-        child: Column(
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            link(
+            for (final (index, label) in [
               context.l10n.uiMySemanticWorld,
-              context.l10n.uiSavedMeaningsAndInbox,
-              Icons.book_outlined,
-              () => open(PersonalWorldScreen(model: model)),
-            ),
-            const Divider(),
-            link(
-              context.l10n.uiImagesAndConnections,
-              context.l10n.uiExploreDraftsAndRelatedExpressions,
-              Icons.hub_outlined,
-              () => open(WorldScreen(library: model)),
-            ),
+              context.l10n.uiBrowseLearningContent,
+            ].indexed)
+              ChoiceChip(
+                key: ValueKey('content-section-$index'),
+                label: Text(label),
+                selected: contentSection == index,
+                onSelected: (_) => setState(() => contentSection = index),
+              ),
           ],
         ),
       ),
-      link(
-        context.l10n.uiLearningPreparation,
-        context.l10n.uiCheckMaterialPreparationAndPendingTasks,
-        Icons.auto_stories_outlined,
-        () => open(PreparationListScreen(model: model)),
-      ),
-      link(
-        context.l10n.uiCaptureConnections,
-        context.l10n.uiReceiveContextsFromYourBrowserAnd,
-        Icons.input,
-        () => open(IntakeConnectionScreen(model: model)),
+      Expanded(
+        child: IndexedStack(
+          index: contentSection,
+          children: [
+            PersonalWorldScreen(model: model, embedded: true),
+            catalog(),
+          ],
+        ),
       ),
     ],
   );
 
-  Widget learning() {
+  Widget learning() => ProductPage(
+    pageId: 'learning',
+    title: context.l10n.uiMyLearning,
+    children: [
+      ProductPanel(
+        child: LearningActivityView(
+          model: model,
+          overview: true,
+          onStart: study,
+        ),
+      ),
+      ProductPanel(
+        child: Column(
+          children: [
+            link(
+              context.l10n.uiLearningSources,
+              context.l10n.uiAddedToLearning,
+              Icons.playlist_add_check,
+              () => open(CurriculumScreen(model: model)),
+            ),
+            const Divider(height: 1),
+            link(
+              context.l10n.uiLearningPreparation,
+              context.l10n.uiCheckMaterialPreparationAndPendingTasks,
+              Icons.auto_stories_outlined,
+              () => open(PreparationListScreen(model: model)),
+            ),
+            const Divider(height: 1),
+            link(
+              context.l10n.uiAllLearningHistory,
+              context.l10n.uiLearningHistory,
+              Icons.history,
+              () => open(HistoryScreen(model: model)),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget catalog() {
     final s = model.snapshot!;
     final entries = s.catalog
         .where(
@@ -360,8 +402,8 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
         )
         .toList();
     return ProductPage(
-      pageId: 'learning',
-      title: context.l10n.uiMyLearning,
+      pageId: 'catalog',
+      title: context.l10n.uiBrowseLearningContent,
       children: [
         Wrap(
           spacing: 12,
@@ -371,16 +413,6 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
               onPressed: model.busy ? null : model.importPack,
               icon: const Icon(Icons.download_outlined),
               label: Text(context.l10n.uiImportLearningPackage),
-            ),
-            OutlinedButton(
-              onPressed: model.busy
-                  ? null
-                  : () => open(CurriculumScreen(model: model)),
-              child: Text(context.l10n.uiLearningSources),
-            ),
-            OutlinedButton(
-              onPressed: () => open(HistoryScreen(model: model)),
-              child: Text(context.l10n.uiAllLearningHistory),
             ),
           ],
         ),
@@ -399,28 +431,24 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
           Text(context.l10n.uiNoMatchesTryAnotherExpression)
         else
           ...entries.map(
-            (e) => ProductPanel(
-              child: ListTile(
-                key: ValueKey('material-${e['material']['id']}'),
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  e['material']['expression'],
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                subtitle: Text(
-                  '${e['material']['sense']}\n${e['completed'] == true
-                      ? context.l10n.uiInitialLearningComplete127
-                      : e['enrolled'] == true
-                      ? context.l10n.uiAddedToLearning
-                      : context.l10n.uiNotAddedToLearning}',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: model.busy ? null : () => material(e['material']['id']),
+            (e) => ListTile(
+              key: ValueKey('material-${e['material']['id']}'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                e['material']['expression'],
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
+              subtitle: Text(
+                '${e['material']['sense']}\n${e['completed'] == true
+                    ? context.l10n.uiInitialLearningComplete127
+                    : e['enrolled'] == true
+                    ? context.l10n.uiAddedToLearning
+                    : context.l10n.uiNotAddedToLearning}',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: model.busy ? null : () => material(e['material']['id']),
             ),
           ),
-        const Divider(),
-        LearningActivityView(model: model, overview: true, onStart: study),
       ],
     );
   }
@@ -727,10 +755,10 @@ class _Count extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(label),
-      const SizedBox(height: 12),
+      const SizedBox(height: 4),
       Text(
         value,
-        style: const TextStyle(fontSize: 56, color: Color(0xff303e73)),
+        style: const TextStyle(fontSize: 36, color: Color(0xff303e73)),
       ),
     ],
   );
