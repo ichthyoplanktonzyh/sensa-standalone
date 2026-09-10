@@ -65,6 +65,8 @@ jobs:
         env:
           SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci
 
+      - name: Service access and usage contract (no browser or model calls)
+        run: npm run sensa:service-status-smoke
       - name: Install test browser
         run: npx playwright install --with-deps chromium
       - name: Cross-tab account isolation (synthetic HTTP, real browser storage)

@@ -13,6 +13,7 @@ type Settings={providers:Connection[];assignments:ReadingAssignments};
 type Scope={account_id:string;now:Date};
 type WithScope=<T>(request:Request,work:(db:DatabaseExecutor,a:Scope)=>Promise<T>)=>Promise<T>;
 export type ReadingCompletion=(connection:Connection,messages:{role:'system'|'user';content:string}[],json?:boolean,onText?:(text:string)=>Promise<void>)=>Promise<string>;
+export const readingDailyLimit=300;
 const origins=()=>['https://api.deepseek.com','https://api.openai.com','https://openrouter.ai',
   ...(process.env.SENSA_READING_ALLOWED_ORIGINS??'').split(',').map(s=>s.trim()).filter(Boolean)];
 const empty=():Settings=>({providers:[],assignments:{...defaultReadingAssignments}});
@@ -49,6 +50,7 @@ export function selectReadingConnection(settings:Settings,feature:keyof ReadingA
   };
   throw new ConsumerError(409,'provider_not_configured');
 }
+export async function activeMeaningConnection(db:DatabaseExecutor,a:Scope){return selectReadingConnection((await readSettings(db,a)).settings,'meaning');}
 export async function configuredMeaningConnection(db:DatabaseExecutor,a:Scope):Promise<Connection|null>{
   const {settings}=await readSettings(db,a);
   return settings.assignments.meaning?selectReadingConnection(settings,'meaning'):null;
@@ -113,7 +115,7 @@ export function registerReadingRoutes(app:Hono,withScope:WithScope,completion:Re
         if(old.status==='running'&&a.now.getTime()-old.created_at.getTime()>45000){old.status='failed';old.error='reading_timeout';}
         return {existing:{status:old.status,text:old.result??null,error:old.error??null},connection:null};}
       const count=(await db.query('SELECT count(*)::int AS n FROM sensa_consumer.reading_requests WHERE account_id=$1 AND created_at>$2',[a.account_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
-      if(count>=300)throw new ConsumerError(409,'reading_daily_budget');
+      if(count>=readingDailyLimit)throw new ConsumerError(409,'reading_daily_budget');
       const active=(await db.query("SELECT count(*)::int AS n FROM sensa_consumer.reading_requests WHERE account_id=$1 AND status='running' AND created_at>$2",[a.account_id,new Date(a.now.getTime()-45000)])).rows[0]!.n;
       if(active>=3)throw new ConsumerError(409,'reading_busy');
       const {settings}=await readSettings(db,a);

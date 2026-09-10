@@ -46,7 +46,16 @@ export default function AccountExperience({children}:{children:ReactNode}){
  const send=async()=>{if(!auth)return;const {error}=await auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true}});if(error){setNotice(error.status===429?'发送过于频繁，请稍后重试。':'验证码未能发送，请检查邮箱后重试。');return;}setSent(true);setRetryAt(Date.now()+60000);};
  const logout=async()=>{clearAllCredentials();await command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async tx=>{tx.put('meta','signed-out',true);return null;});generation.current++;setLocal(false);setOnlineService(false);setLoginOpen(false);const result=await auth?.signOut({scope:'local'});if(result?.error)setNotice('已锁定本机入口，在线会话退出未完成，请重试。');};
  if(!ready)return <main role="status" className="grid min-h-screen place-content-center">正在读取 Sensa…</main>;
- if(local&&!loginOpen)return <AccountContext.Provider value={{email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout}}>{children}</AccountContext.Provider>;
+ const extension=new URLSearchParams(location.search);
+ if(local&&onlineService&&extension.get('extension')==='connect')return <main className="mx-auto max-w-lg space-y-5 p-8"><h1 className="text-2xl">连接 Sensa 浏览器插件</h1><p>当前账号：{owner?.email}</p><p>允许插件使用当前账号的阅读服务，并交接你主动保存的材料。未保存的网页不会进入收件箱。</p>{notice&&<p role="status">{notice}</p>}<button className={setupPrimary} disabled={busy} onClick={()=>void perform(async()=>{
+  const session=(await auth?.getSession())?.data.session;if(!session||session.user.id!==owner?.subject)throw new Error('account changed');
+  const response=await fetch(import.meta.env.VITE_SENSA_API_URL.replace(/\/+$/,'')+'/sensa/extension/authorize',{method:'POST',headers:{authorization:'Bearer '+session.access_token,'content-type':'application/json'},body:JSON.stringify({installationId:extension.get('installationId'),state:extension.get('state'),challenge:extension.get('challenge'),redirectUri:extension.get('redirectUri')}),signal:AbortSignal.timeout(15000),redirect:'error'});
+  if(!response.ok){setNotice('插件连接未完成，请检查服务权限后重试。');return;}
+  const result=await response.json();const destination=new URL(result.redirectUri);const expected=new URL(extension.get('redirectUri')??'');
+  if(destination.origin!==expected.origin||destination.pathname!==expected.pathname||(await auth?.getSession())?.data.session?.user.id!==session.user.id)throw new Error('invalid handoff');
+  location.assign(destination.toString());
+ })}>连接当前账号</button><button className={setupButton} onClick={()=>location.assign('/profile')}>取消</button></main>;
+ if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout}}>{children}</AccountContext.Provider>;
  // Reuses the established email/OTP entry layout from the account application.
  return <main className="flex min-h-screen items-center justify-center bg-[#fbfbfa] px-6 text-[#242a38]"><form className="w-full max-w-sm space-y-5" onSubmit={e=>{e.preventDefault();void perform(sent?async()=>{const result=await auth!.verifyOtp({email:email.trim(),token:code.trim(),type:'email'});if(result.error){setNotice('验证码不正确或已过期，请重新输入。');return;}await recover();}:send);}}>
   <p className="text-sm text-[#68748d]">Sensa</p><h1 className="text-3xl font-semibold">{sent?'输入邮箱验证码':'欢迎来到 Sensa'}</h1>

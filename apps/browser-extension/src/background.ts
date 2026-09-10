@@ -79,6 +79,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
    if(a&&(await load()).active!==a.accountId)throw new Error('account_mismatch');
    return message.kind==='reading-settings'?{...result,accountId:a!.accountId}:result;
  }
+ if((isOptions||isPopup)&&message.kind==='service-status'){const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a)throw new Error('authentication_required');const result=await request('/sensa/service/status',undefined,a.token);if((await load()).active!==a.accountId)throw new Error('account_mismatch');return result;}
  if(isOptions&&message.kind==='status')return status();
  if(await nativeEnabled()&&['save','accept'].includes(message.kind)&&sender.tab){
    const scope=await activeScope(),mode=(await modes())[sender.tab.id!];if(!scope||message.accountId!==scope||mode?.accountId!==scope)throw new Error('account_mismatch');

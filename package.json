@@ -12,6 +12,7 @@
     "apps/browser-extension"
   ],
   "scripts": {
+    "sensa:service-status-smoke": "node --import tsx scripts/sensaServiceStatusSmoke.mts",
     "sensa:acceptance": "node scripts/sensaAcceptance.mjs",
     "sensa:acceptance:check": "node scripts/sensaAcceptance.mjs check",
     "sensa:acceptance:smoke": "node scripts/sensaAcceptanceSmoke.mjs",

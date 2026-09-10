@@ -1,10 +1,16 @@
+import {readServiceStatus} from '../../data/library/serviceStatus';
+import type {ServiceStatus} from '@sensa/contracts/sensa';
 import {useAccountExperience} from '../account/AccountExperience';
-import {useEffect,useState} from 'react';
+import {useEffect,useState,useRef} from 'react';
 import {assignProvider,clearCredential,deleteProvider,hasCredential,providerSnapshot,purposes,purposeLabels,saveProvider,setCredential,type Provider,type ProviderSettings} from '../../data/library/providers';
 import {setupButton,setupPrimary} from './learning/LearningSetupFrame';
 const field='mt-2 block min-h-11 w-full rounded-xl border border-[#cbd1df] bg-white p-3';
 export function ProviderPanel(){
  const account=useAccountExperience();
+ const [service,setService]=useState<ServiceStatus|null>(null),[serviceError,setServiceError]=useState('');
+ const statusGeneration=useRef(0);
+ const refreshService=async()=>{const gen=++statusGeneration.current;setService(null);setServiceError('');try{const next=await readServiceStatus();if(gen===statusGeneration.current)setService(next);}catch(e){if(gen===statusGeneration.current)setServiceError(e instanceof Error?e.message:'服务状态暂不可用。');}};
+ useEffect(()=>{if(account.onlineService)void refreshService();else setService(null);return()=>{statusGeneration.current++;};},[account.onlineService,account.email]);
  const [providers,setProviders]=useState<Provider[]>([]),[settings,setSettings]=useState<ProviderSettings>({revision:0,assignments:{}});
  const [name,setName]=useState(''),[endpoint,setEndpoint]=useState(''),[model,setModel]=useState(''),[kind,setKind]=useState<'compatible'|'sensa'>('compatible'),[key,setKey]=useState('');
  const [notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[selected,setSelected]=useState<Provider|null>(null),[credential,setKeyInput]=useState('');
@@ -12,7 +18,7 @@ export function ProviderPanel(){
  useEffect(()=>{void refresh().catch(()=>setNotice('无法读取本机模型配置，请重试。'));},[]);
  const perform=async(work:()=>Promise<unknown>)=>{setBusy(true);setNotice('');try{await work();await refresh();}catch(e){setNotice(e instanceof Error?e.message:'未能保存配置，请重试。');}finally{setBusy(false);}};
  return <div className="space-y-8">
-  <header><h2 className="text-2xl font-semibold">Sensa 服务</h2><p className="mt-3 leading-7 text-[#68748d]">解释与澄清默认由 Sensa 提供，无需配置模型。已有学习内容可在本机继续使用。</p><p className="mt-3 text-sm">{account.onlineService?"已连接账号，具体功能按服务权限开放。":"在线服务尚未连接。"}</p>{!account.onlineService&&<button className={setupButton} onClick={account.login}>登录 Sensa</button>}<p className="mt-3 text-sm text-[#68748d]">服务用量展示尚未开放；材料生成与审核会随学习准备流程接入。</p></header>
+  <header><h2 className="text-2xl font-semibold">Sensa 服务</h2><p className="mt-3 leading-7 text-[#68748d]">解释与澄清默认由 Sensa 提供，无需配置模型。已有学习内容可在本机继续使用。</p><p className="mt-3 text-sm">{account.onlineService?"已连接账号，具体功能按服务权限开放。":"在线服务尚未连接。"}</p>{!account.onlineService&&<button className={setupButton} onClick={account.login}>登录 Sensa</button>}{service&&<div className="mt-5 space-y-2"><p>{service.explanationAvailable?'解释与澄清服务可用':'解释与澄清服务暂不可用'}</p><p className="text-sm text-[#68748d]">最近 24 小时的请求用量（各项独立限制，含已预约请求）</p>{service.usage.map(u=><p key={u.kind}>{({reading:'网页阅读',teacher:'澄清与解析',content:'材料准备'})[u.kind]}：{u.used} / {u.limit}{u.used>=u.limit?' · 已达上限，请稍后再试':''}</p>)}<p className="text-xs text-[#68748d]">此处显示在线服务用量，不代表同步已启用或学习材料已准备完成。</p></div>}{serviceError&&<p role="status" className="mt-3">{serviceError}</p>}<button className={setupButton} onClick={()=>void refreshService()}>刷新服务状态</button></header>
   {notice&&<p role="status" className="rounded-xl bg-[#edf0f7] p-4">{notice}</p>}
   <details className="rounded-2xl border border-[#e0e5ee] p-5"><summary className="cursor-pointer font-medium">高级设置 · 自定义模型服务</summary><div className="mt-6 space-y-6">
   <div className="grid gap-5 sm:grid-cols-3">{purposes.map(purpose=><label key={purpose} className="text-sm">{purposeLabels[purpose]}<select aria-label={purposeLabels[purpose]} className={field} value={settings.assignments[purpose]??''} disabled={busy} onChange={e=>void perform(()=>assignProvider(crypto.randomUUID(),purpose,e.target.value||null,settings.revision))}><option value="">默认使用 Sensa</option>{providers.map(p=><option key={p.id} value={p.id}>{p.name} · {p.model}</option>)}</select></label>)}</div>

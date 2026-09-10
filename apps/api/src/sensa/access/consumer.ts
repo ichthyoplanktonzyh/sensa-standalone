@@ -9,7 +9,7 @@ import {generateContent,reviewContent} from '../provisioning/material.js';
 import type {ContentGenerator,ContentReviewer} from '../provisioning/material.js';
 import {beginLookup,readLookup,finishLookup,acceptSemantic,listMeanings} from '../personal/semantic.js';
 import {resolveSemantic,semanticResolverFor} from '../personal/semanticResolver.js';
-import {registerReadingRoutes,configuredMeaningConnection} from '../reading/service.js';
+import {registerReadingRoutes,configuredMeaningConnection,activeMeaningConnection,readingDailyLimit} from '../reading/service.js';
 import type {ReadingCompletion} from '../reading/service.js';
 import type {SemanticResolver} from '../personal/semanticResolver.js';
 import {semanticLookupInputSchema} from '@sensa/contracts/sensa';
@@ -35,6 +35,7 @@ import type { DatabaseExecutor } from '../../database/index.js';
 import { ConsumerError, verifyConsumer } from './auth.js';
 import type { ConsumerVerifier, ConsumerPrincipal } from './auth.js';
 
+const nativeModelDailyLimit=30;
 type Account = { account_id: string; learner_user_id: string; epoch: string; feed_head: string; time_zone: string; session_id: string; now:Date;authorizedInstallationId?:string };
 type Transaction = <T>(work: (db: DatabaseExecutor) => Promise<T>) => Promise<T>;
 const uuid = z.string().uuid();
@@ -200,13 +201,13 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
   });
   registerReadingRoutes(app,async(request,work)=>{const identity=await verify(request);return transaction(async db=>work(db,await account(db,identity,undefined,false,clock())));},options.readingCompletion);
   app.route('/sensa/native/agent',createNativeAgentRoutes({
-    authorize:async request=>{const identity=await verify(request);return transaction(async db=>{const connection=await configuredMeaningConnection(db,await account(db,identity,undefined,false,clock()));if(!connection)throw new ConsumerError(503,'provider_unavailable');return connection;});},
+    authorize:async request=>{const identity=await verify(request);return transaction(async db=>{return activeMeaningConnection(db,await account(db,identity,undefined,false,clock()));});},
     reserve:async(request,input)=>{const identity=await verify(request);await transaction(async db=>{
       const a=await account(db,identity,undefined,false,clock());
       const old=(await db.query('SELECT input_digest FROM sensa_consumer.native_semantic_usage WHERE account_id=$1 AND request_id=$2',[a.account_id,input.id])).rows[0];
       if(old)throw new ConsumerError(409,'native_request_consumed');
       const count=(await db.query('SELECT count(*)::int AS n FROM sensa_consumer.native_semantic_usage WHERE account_id=$1 AND created_at>$2',[a.account_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
-      if(count>=30)throw new ConsumerError(409,'native_semantic_daily_budget');
+      if(count>=nativeModelDailyLimit)throw new ConsumerError(409,'native_semantic_daily_budget');
       await db.query('INSERT INTO sensa_consumer.native_semantic_usage VALUES($1,$2,$3,$4)',[a.account_id,input.id,input.inputDigest,a.now]);
     });},
   }));
@@ -217,7 +218,7 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
       const old=(await db.query('SELECT input_digest FROM sensa_consumer.native_content_usage WHERE account_id=$1 AND request_id=$2',[a.account_id,input.id])).rows[0];
       if(old)throw new ConsumerError(409,old.input_digest===input.inputDigest?'native_request_consumed':'native_request_id_reuse');
       const count=(await db.query('SELECT count(*)::int AS n FROM sensa_consumer.native_content_usage WHERE account_id=$1 AND created_at>$2',[a.account_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
-      if(count>=30)throw new ConsumerError(409,'daily_preparation_limit');
+      if(count>=nativeModelDailyLimit)throw new ConsumerError(409,'daily_preparation_limit');
       await db.query('INSERT INTO sensa_consumer.native_content_usage VALUES($1,$2,$3,$4)',[a.account_id,input.id,input.inputDigest,a.now]);
     });},
     cancel:async(request,input)=>{const identity=await verify(request);await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());const old=(await db.query('SELECT input_digest FROM sensa_consumer.native_content_cancellations WHERE account_id=$1 AND request_id=$2',[a.account_id,input.id])).rows[0];if(old&&old.input_digest!==input.inputDigest)throw new ConsumerError(409,'native_request_id_reuse');await db.query('INSERT INTO sensa_consumer.native_content_cancellations VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[a.account_id,input.id,input.inputDigest,a.now]);});},
@@ -249,13 +250,26 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
       const old=(await db.query('SELECT input_digest FROM sensa_consumer.native_semantic_usage WHERE account_id=$1 AND request_id=$2',[a.account_id,input.id])).rows[0];
       if(old)throw new ConsumerError(409,old.input_digest===input.inputDigest?'native_request_consumed':'native_request_id_reuse');
       const count=(await db.query('SELECT count(*)::int AS n FROM sensa_consumer.native_semantic_usage WHERE account_id=$1 AND created_at>$2',[a.account_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
-      if(count>=30)throw new ConsumerError(409,'native_semantic_daily_budget');
+      if(count>=nativeModelDailyLimit)throw new ConsumerError(409,'native_semantic_daily_budget');
       await db.query('INSERT INTO sensa_consumer.native_semantic_usage VALUES($1,$2,$3,$4)',[a.account_id,input.id,input.inputDigest,a.now]);
     });
   }));
   app.post('/sensa/extension/authorize',async c=>{const identity=await verify(c.req.raw);if(identity.installationId)throw new ConsumerError(403,'web_authorization_required');const input=extensionAuthorizationSchema.parse(await c.req.json());return c.json(await transaction(async db=>authorizeExtension(db,await account(db,identity,undefined,false,clock()),input)));});
   app.post('/sensa/extension/exchange',async c=>{const input=extensionExchangeSchema.parse(await c.req.json());return c.json(await transaction(db=>exchangeExtension(db,input,clock())));});
   // Native online access initializes only service identity/session, never a replica or learning plan.
+  app.get('/sensa/service/status',async c=>{
+    const identity=await verify(c.req.raw);
+    const result=await transaction(async db=>{
+      const a=await account(db,identity,undefined,false,clock());
+      const since=new Date(a.now.getTime()-86400000);
+      const used=async(table:string)=>Number((await db.query(`SELECT count(*)::int AS n FROM sensa_consumer.${table} WHERE account_id=$1 AND created_at>$2`,[a.account_id,since])).rows[0]!.n);
+      let explanationAvailable=false;
+      try{await activeMeaningConnection(db,a);explanationAvailable=true;}catch(e){if(!(e instanceof ConsumerError))throw e;}
+      return {authorized:true,explanationAvailable,checkedAt:a.now.toISOString(),windowHours:24,
+        usage:[{kind:'reading',used:await used('reading_requests'),limit:readingDailyLimit},{kind:'teacher',used:await used('native_semantic_usage'),limit:nativeModelDailyLimit},{kind:'content',used:await used('native_content_usage'),limit:nativeModelDailyLimit}]};
+    });
+    c.header('Cache-Control','no-store');return c.json(result);
+  });
   app.post('/sensa/native/access/session',async c=>{
     const identity=await verify(c.req.raw);const input=z.object({installationId:uuid}).strict().parse(await c.req.json());
     await transaction(async db=>{await account(db,identity,{...input,platform:'flutter',timeZone:'UTC'},false,clock(),true);});

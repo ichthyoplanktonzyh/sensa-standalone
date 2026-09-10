@@ -16,6 +16,7 @@ await context.route('**/*',async route=>{
  if(url.origin==='http://127.0.0.1:4399'&&url.pathname==='/auth/v1/otp'){await route.fulfill({json:{}});return;}
  if(url.origin==='http://127.0.0.1:4399'&&url.pathname==='/auth/v1/verify'){if(route.request().postDataJSON().token!=='123456'){await route.fulfill({status:400,json:{msg:'invalid code'}});return;}await route.fulfill({json:{access_token:token(),refresh_token:'fixture-refresh',token_type:'bearer',expires_in:3600,user:{id:subject,email:'learner@sensa.invalid',aud:'authenticated',app_metadata:{},user_metadata:{},created_at:new Date().toISOString()}}});return;}
  if(url.origin==='http://127.0.0.1:4399'&&url.pathname==='/sensa/native/access/session'){await route.fulfill({status:serviceAvailable?200:503,json:serviceAvailable?{authorized:true}:{code:'unavailable'}});return;}
+ if(url.origin==='http://127.0.0.1:4399'&&url.pathname==='/sensa/service/status'){await route.fulfill({json:{authorized:true,explanationAvailable:true,checkedAt:new Date().toISOString(),windowHours:24,usage:[{kind:'reading',used:0,limit:300},{kind:'teacher',used:2,limit:30},{kind:'content',used:0,limit:30}]}});return;}
  if(url.origin==='http://127.0.0.1:4399'&&url.pathname==='/auth/v1/logout'){await route.fulfill({json:{}});return;}
  if(url.origin===origin){await route.continue();return;}
  if(url.pathname==='/sensa/native/agent/turn'||url.origin==='http://127.0.0.1:4398'&&url.pathname==='/v1/chat/completions'){

@@ -79,6 +79,7 @@ try{
  await settingsPage.evaluate(()=>{
    const fixture={local:{} as Record<string,unknown>,lastInput:null as any,conflict:false,settings:{revision:0,providers:[] as any[],assignments:{selection:null,page:null,subtitles:null,action:null,meaning:null},configured:true,allowedOrigins:['https://api.deepseek.com'],accountId:'fixture-account'}};
    Object.assign(window,{settingsFixture:fixture,chrome:{storage:{local:{get:async()=>fixture.local,set:async(value:any)=>Object.assign(fixture.local,value)}},runtime:{sendMessage:async(message:any)=>{
+     if(message.kind==='service-status')return {value:{authorized:true,explanationAvailable:true,usage:[{kind:'reading',used:0,limit:300}]}};
      if(message.kind==='reading-settings')return {value:structuredClone(fixture.settings)};
      if(message.kind==='reading-settings-save'){
        if(fixture.conflict)return {error:'settings_conflict'};
@@ -88,15 +89,15 @@ try{
      return {value:{status:'ready',text:'OK'}};
    }}}});
  });
- await settingsPage.addScriptTag({path:resolve('apps/browser-extension/dist/options.js')});await expect(settingsPage.getByRole('status')).toHaveText('模型设置已加载。');
+ await settingsPage.addScriptTag({path:resolve('apps/browser-extension/dist/options.js')});await expect(settingsPage.locator('#service-status')).toContainText('账号已连接');await expect(settingsPage.getByRole('button',{name:'添加连接',exact:true})).not.toBeVisible();await settingsPage.getByText('高级设置 · 自定义模型服务',{exact:true}).click();await expect(settingsPage.locator('#feedback')).toHaveText('模型设置已加载。');
  await settingsPage.getByRole('button',{name:'添加连接',exact:true}).click();await settingsPage.getByLabel('API Key',{exact:true}).fill('fixture-secret-key');
  await settingsPage.getByLabel('模型标识',{exact:true}).fill('fixture-model');await settingsPage.getByLabel('划词翻译',{exact:true}).selectOption({label:'DeepSeek'});await settingsPage.getByRole('button',{name:'保存模型设置',exact:true}).click();
  await expect(settingsPage.getByLabel('API Key（已配置，留空保留）',{exact:true})).toHaveValue('');
  expect(JSON.stringify(await settingsPage.evaluate(()=>(window as any).settingsFixture.local))).not.toContain('fixture-secret-key');
- await settingsPage.getByRole('button',{name:'重新加载',exact:true}).click();await expect(settingsPage.getByLabel('模型标识',{exact:true})).toHaveValue('fixture-model');
- await settingsPage.getByRole('button',{name:'获取已保存连接的模型列表',exact:true}).click();await expect(settingsPage.getByRole('status')).toContainText('已获取 2 个模型');
- await settingsPage.getByRole('button',{name:'测试已保存连接',exact:true}).click();await expect(settingsPage.getByRole('status')).toContainText('连接成功');
- await settingsPage.evaluate(()=>(window as any).settingsFixture.conflict=true);await settingsPage.getByRole('button',{name:'保存模型设置',exact:true}).click();await expect(settingsPage.getByRole('status')).toContainText('另一处更新');
+ await settingsPage.getByRole('button',{name:'重新加载高级设置',exact:true}).click();await expect(settingsPage.getByLabel('模型标识',{exact:true})).toHaveValue('fixture-model');
+ await settingsPage.getByRole('button',{name:'获取已保存连接的模型列表',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('已获取 2 个模型');
+ await settingsPage.getByRole('button',{name:'测试已保存连接',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('连接成功');
+ await settingsPage.evaluate(()=>(window as any).settingsFixture.conflict=true);await settingsPage.getByRole('button',{name:'保存模型设置',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('另一处更新');
  await settingsPage.screenshot({path:'/tmp/sensa-browser-settings.png',fullPage:true});
  console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, main-world caption reader, subtitle selection with timestamped save, seek, SPA cleanup, reading shutdown. Network fixtures only.');
  console.log('PASS: actual settings UI save/reload, feature assignment, explicit test/model fetch, cleared password field, no secret in browser storage, conflict feedback.');

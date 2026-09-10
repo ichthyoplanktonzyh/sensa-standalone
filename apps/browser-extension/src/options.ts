@@ -1,3 +1,4 @@
+import {webUrl} from './config';
 import {readingFeatures,defaultReadingAssignments} from '@sensa/contracts/sensa';
 import type {ReadingSettingsView,ReadingSettingsInput} from '@sensa/contracts/sensa';
 import {readingError} from './readingClient';
@@ -62,4 +63,9 @@ document.getElementById('preferences')!.onclick=()=>void perform(async()=>{
   if(disabledSites.length>100||disabledSites.some(s=>!/^([a-z0-9-]+\.)*[a-z0-9-]+$/u.test(s)))throw new Error('invalid_sites');
   await chrome.storage.local.set({readingPreferences:{actionName:value('action-name')||'阅读动作',actionPrompt:value('action-prompt'),disabledSites}});feedback.textContent='本机偏好已保存，重新开启页面阅读后生效。';
 });
-void perform(async()=>{const prefs=await readingPreferences();(document.getElementById('action-name') as HTMLInputElement).value=prefs.actionName;(document.getElementById('action-prompt') as HTMLTextAreaElement).value=prefs.actionPrompt;(document.getElementById('disabled-sites') as HTMLTextAreaElement).value=prefs.disabledSites.join('\n');await reload();});
+document.getElementById('account')!.onclick=()=>void chrome.tabs.create({url:new URL('/profile',webUrl).toString()});
+async function serviceStatus(){const target=document.getElementById('service-status')!;try{const result=await message('service-status');target.textContent=result.authorized?`账号已连接。${result.explanationAvailable?'解释服务可用。':'解释服务暂不可用。'} 最近 24 小时：`+result.usage.map((u:{kind:string;used:number;limit:number})=>`${({reading:'网页阅读',teacher:'澄清与解析',content:'材料准备'} as Record<string,string>)[u.kind]} ${u.used}/${u.limit}`).join('；'):'请从插件弹窗登录 Sensa。';}catch(e){target.textContent=readingError(e);}}
+document.getElementById('service-reload')!.onclick=()=>void serviceStatus();
+document.getElementById('advanced')!.addEventListener('toggle',()=>{if((document.getElementById('advanced') as HTMLDetailsElement).open&&!current)void perform(reload);});
+void serviceStatus();
+void perform(async()=>{const prefs=await readingPreferences();(document.getElementById('action-name') as HTMLInputElement).value=prefs.actionName;(document.getElementById('action-prompt') as HTMLTextAreaElement).value=prefs.actionPrompt;(document.getElementById('disabled-sites') as HTMLTextAreaElement).value=prefs.disabledSites.join('\n');feedback.textContent='阅读偏好已加载。自定义模型服务可在高级设置中调整。';});
