@@ -85,7 +85,8 @@
     "sensa:account-service-db-smoke": "node --import tsx scripts/sensaAccountServiceDatabaseSmoke.mts",
     "sensa:library-backup-smoke": "node --import tsx scripts/sensaPersonalLearningSmoke.mts --backup",
     "sensa:library-backup-browser-smoke": "node --import tsx scripts/sensaOfflineColdStartSmoke.mts --backup",
-    "sensa:local-i18n-smoke": "node --import tsx scripts/sensaLocalI18nSmoke.mts"
+    "sensa:local-i18n-smoke": "node --import tsx scripts/sensaLocalI18nSmoke.mts",
+    "sensa:expression-chat-browser-smoke": "node --import tsx scripts/sensaExpressionChatBrowserSmoke.mts"
   },
   "engines": {
     "node": ">=24"

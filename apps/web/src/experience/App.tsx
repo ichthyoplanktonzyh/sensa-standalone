@@ -262,7 +262,7 @@ export default function App() {
   const personalMeaningId = params.meaningId ?? null;
   const meaningFocusId = params.focusId ?? null;
   const [clarificationStart, setClarificationStart] = useState<{id:string;draftId:string}|null>(null);
-  const localLibrary = useLocalMeaningLibrary(personalMeaningId, viewMode === 'main' && mainStack.includes('s-personal-meaning'), clarificationStart);
+  const localLibrary = useLocalMeaningLibrary(personalMeaningId, viewMode === 'main' && mainStack.includes('s-personal-meaning'), clarificationStart, id=>goMain('s-personal-meaning',{meaningId:id}));
   const selectedContentSense = useMemo(
     () => (params.senseId ? contentSenseForId(params.senseId) : null),
     [params.senseId],
@@ -1883,6 +1883,7 @@ export default function App() {
           {/* 3. 我的内容 */}
           <ContentScreen
             localLibrary={localLibrary.source}
+            onStartConversation={()=>openPersonalMeaning('new')}
             active={viewMode === 'main' && (mainStack.includes('s-content') || mainStack.includes('s-semantic-world'))}
             screenId={mainStack.includes('s-semantic-world') ? 's-semantic-world' : 's-content'}
             initialAction={params.worldAction === 'create' ? 'create' : undefined}

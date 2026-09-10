@@ -1,3 +1,5 @@
+import {ExpressionChatInput} from './ExpressionChatInput';
+import type {ConversationImage} from '../../data/library/conversationImages';
 import {localFlowText} from '../../i18n/localFlowText';
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
@@ -60,10 +62,10 @@ import type {
 } from '@sensa/contracts/sensa';
 
 export interface MeaningConversationController {
- material:string; source?:{url:string|null;title:string}; messages:{role:"learner"|"assistant";body:string}[];
- candidate:{expression:string;meaning:string;explanation:string}|null;
+ material:string; images?:ConversationImage[]; source?:{url:string|null;title:string}; messages:{role:"learner"|"assistant";body:string;images?:ConversationImage[]}[];
+ candidate:{context:string;expression:string;meaning:string;explanation:string}|null;
  accepted:boolean;busy:boolean;notice:string;recipient:string;canContinue:boolean;
- onSend:(text:string)=>Promise<void>;onContinue:()=>Promise<void>;onStop:()=>void;onConfirm:()=>Promise<void>;
+ onSend:(text:string,images:ConversationImage[])=>Promise<void>;onContinue:()=>Promise<void>;onStop:()=>void;onConfirm:()=>Promise<void>;
 }
 interface PersonalMeaningDetailScreenProps {
  learningControls?:import('react').ReactNode;
@@ -995,12 +997,12 @@ const PreviewPersonalMeaningDetailScreen = ({
 };
 
 /** One existing workspace frame for both persisted and preview controllers. */
-function MeaningWorkspaceFrame({active,onBack,materialOpen,onToggleMaterial,screenRef,children}:{active:boolean;onBack:()=>void;materialOpen:boolean;onToggleMaterial:()=>void;screenRef?:import('react').Ref<HTMLElement>;children:import('react').ReactNode}){
+function MeaningWorkspaceFrame({active,onBack,materialOpen,onToggleMaterial,screenRef,children,title}:{active:boolean;onBack:()=>void;materialOpen:boolean;onToggleMaterial:()=>void;screenRef?:import('react').Ref<HTMLElement>;title?:string;children:import('react').ReactNode}){
  return <section ref={screenRef} className={uiClass(`screen pmw-screen${active?' active':''}`, '#s-personal-meaning')} id="s-personal-meaning" data-anim="slide">
   <div className="ml-auto flex h-full w-full flex-col bg-[#fbfbfa] shadow-xl lg:max-w-[860px]">
    <header className={uiClass('content-nav pmw-nav')}>
     <button className={uiClass('content-nav-back')} onClick={onBack} aria-label={uiText('backToMyContent2')}><svg className={uiClass('icon')}><use href="#i-chev-l"/></svg></button>
-    <h1>{uiText('clarifyYourMeaning')}</h1>
+    <h1>{title??uiText('clarifyYourMeaning')}</h1>
     <button type="button" className={uiClass(`pmw-material-toggle${materialOpen?' is-open':''}`)} onClick={onToggleMaterial} aria-expanded={materialOpen}>{uiText('context')}</button>
    </header><div className={uiClass('pmw-shell')}>{children}</div>
   </div>
@@ -1008,36 +1010,31 @@ function MeaningWorkspaceFrame({active,onBack,materialOpen,onToggleMaterial,scre
 }
 function ConnectedMeaningConversation({active,onBack,conversation:c,learningControls}:PersonalMeaningDetailScreenProps & {conversation:MeaningConversationController}){
  useTranslation();
- const [text,setText]=useState(''),[materialOpen,setMaterialOpen]=useState(false),[panelOpen,setPanelOpen]=useState(false),[reviewOpen,setReviewOpen]=useState(false);
+ const [materialOpen,setMaterialOpen]=useState(false);
  const transcript=useRef<HTMLDivElement>(null);
  useEffect(()=>{transcript.current?.scrollTo({top:transcript.current.scrollHeight});},[c.messages.length,c.busy]);
  const candidate=c.candidate;
- const send=async()=>{await c.onSend(text);setText('');};
- return <MeaningWorkspaceFrame active={active} onBack={onBack} materialOpen={materialOpen} onToggleMaterial={()=>setMaterialOpen(v=>!v)}>
+ return <MeaningWorkspaceFrame title={localFlowText('findExpression')} active={active} onBack={onBack} materialOpen={materialOpen} onToggleMaterial={()=>setMaterialOpen(v=>!v)}>
   {materialOpen&&<section className={uiClass('pmw-material')} aria-label={uiText('contextForThisConversation')}><p>{c.material}</p></section>}
   <p className="px-5 text-xs">{c.source?.url&&<a href={c.source.url} target="_blank" rel="noreferrer">{localFlowText('viewSource')}{c.source.title||c.source.url}</a>}</p>
   <p className="px-5 py-3 text-xs leading-6 text-[#68748d]">{localFlowText('sendTo')}{c.recipient}{localFlowText('sendDisclosure')}</p>
   <div ref={transcript} className={uiClass('pmw-transcript')} aria-live="polite">
-   <div className={uiClass('pmw-message is-learner')}><div><p>{c.material}</p></div></div>
-   {c.messages.map((m,i)=><div key={i} className={uiClass(`pmw-message is-${m.role}`)}>{m.role==='assistant'&&<span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span>}<div><p>{m.body}</p></div></div>)}
+   {(c.material||c.images?.length)?<div className={uiClass('pmw-message is-learner')}><div>{c.material&&<p>{c.material}</p>}{c.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-2 max-h-64 max-w-full rounded-xl object-contain"/>)}</div></div>:<div className="mx-auto max-w-md px-6 py-10 text-center"><h2 className="text-lg font-medium">{localFlowText('chatWelcome')}</h2><p className="mt-3 text-sm leading-6 text-[#68748d]">{localFlowText('chatWelcomeHint')}</p></div>}
+   {c.messages.map((m,i)=><div key={i} className={uiClass(`pmw-message is-${m.role}`)}>{m.role==='assistant'&&<span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span>}<div>{m.body&&<p>{m.body}</p>}{m.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-2 max-h-64 max-w-full rounded-xl object-contain"/>)}</div></div>)}
    {c.busy&&<div className={uiClass('pmw-message is-assistant is-thinking')}><span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span><div><p role="status">{localFlowText('clarificationWorking')}</p></div></div>}
    {c.accepted&&<div className={uiClass('pmw-done')}><span className={uiClass('pmw-done-mark')}>✓</span><h2>{localFlowText('meaningConfirmed')}</h2><p>{localFlowText('savedLocally')}</p></div>}
   </div>
   {c.accepted&&learningControls}
   {c.notice&&<div className={uiClass('pmw-inline-error')} role="status">{c.notice}</div>}
-  <div className={uiClass('pmw-dock-bar')}>
-   <div className={uiClass('pmw-dock-chips')}>
-    <button className={uiClass(`pmw-dock-chip is-${c.accepted?'confirmed':candidate?'candidate':'idle'}`)} onClick={()=>setPanelOpen(true)} aria-label={uiText('viewMeaning')}><small>{uiText('meaning2')}</small><b>{candidate?.meaning??uiText('inConversation')}</b></button>
-    <button className={uiClass(`pmw-dock-chip is-${c.accepted?'confirmed':candidate?'candidate':'idle'}`)} onClick={()=>setPanelOpen(true)} aria-label={uiText('viewExpression')}><small>{uiText('expression')}</small><b>{candidate?.expression??uiText('inConversation')}</b></button>
-   </div>
-   <div className={uiClass('pmw-dock-actions')}>
-    {c.canContinue&&!c.accepted&&<button className={uiClass('pmw-dock-organize')} disabled={c.busy} onClick={()=>void c.onContinue()}>{localFlowText('continueConversation')}</button>}
-    {c.busy&&<button className={uiClass('pmw-dock-organize')} onClick={c.onStop}>{localFlowText('stopRequest')}</button>}
-    {!c.accepted&&<button className={uiClass(`pmw-dock-confirm${candidate?' is-ready':''}`)} disabled={c.busy||!candidate} onClick={()=>setReviewOpen(true)}>{uiText('reviewAndConfirm')}</button>}
-   </div>
+  {candidate&&!c.accepted&&<section className="mx-4 mb-3 rounded-2xl border border-[#d9deea] bg-white p-4 sm:mx-6" aria-label={localFlowText('expressionCandidate')}>
+   <h2 className="text-xl font-semibold">{candidate.expression}</h2><p className="mt-2 text-sm">{candidate.meaning}</p>
+   <p className="mt-3 text-sm leading-6 text-[#68748d]">{localFlowText('myContext')}{candidate.context}</p>
+   <button className="mt-4 min-h-11 rounded-xl bg-[#3c5087] px-5 text-sm text-white disabled:opacity-40" disabled={c.busy} onClick={()=>void c.onConfirm().catch(()=>{})}>{localFlowText('saveExpression')}</button>
+  </section>}
+  <div className="mx-6 mb-2 flex gap-3">
+   {c.canContinue&&!c.accepted&&<button className={uiClass('pmw-dock-organize')} disabled={c.busy} onClick={()=>void c.onContinue()}>{localFlowText('continueConversation')}</button>}
+   {c.busy&&<button className={uiClass('pmw-dock-organize')} onClick={c.onStop}>{localFlowText('stopRequest')}</button>}
   </div>
-  {!c.accepted&&<form className={uiClass('pmw-composer')} onSubmit={e=>{e.preventDefault();void send().catch(()=>{});}}><textarea aria-label={localFlowText('addOrCorrect')} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.currentTarget.form?.requestSubmit();}}} placeholder={uiText('shareYourUnderstandingExamplesOrQuestions')} rows={2} disabled={c.busy}/><button type="submit" disabled={c.busy||!text.trim()} aria-label={uiText('send')}><span aria-hidden="true">↑</span></button></form>}
-  {panelOpen&&<div className={uiClass('pmw-preview-layer')} onMouseDown={()=>setPanelOpen(false)}><section className={uiClass('pmw-preview-sheet')} role="dialog" aria-modal="true" aria-label={localFlowText('currentUnderstanding')} onMouseDown={e=>e.stopPropagation()}><header><h2>{localFlowText('currentUnderstanding')}</h2><button onClick={()=>setPanelOpen(false)}>{uiText('close')}</button></header><div className={uiClass('pmw-preview-body')}>{candidate?<><article className={uiClass('pmw-card')}><small>{uiText('meaning2')}</small><p>{candidate.meaning}</p></article><article className={uiClass('pmw-card')}><b>{candidate.expression}</b><p>{candidate.explanation}</p></article></>:<p>{uiText('tellUsMoreAboutYourContextOr')}</p>}</div></section></div>}
-  {reviewOpen&&candidate&&<div className={uiClass('pmw-review-layer')}><section className={uiClass('pmw-review')} role="dialog" aria-modal="true" aria-labelledby="pmw-review-title"><header><h2 id="pmw-review-title">{uiText('confirmTheseDetails')}</h2><button disabled={c.busy} onClick={()=>setReviewOpen(false)}>{uiText('close')}</button></header><div className={uiClass('pmw-review-body')}><article className={uiClass('pmw-review-card')}><small>{localFlowText('context')}</small><p>{c.material}</p></article><article className={uiClass('pmw-review-card')}><small>{uiText('meaning2')}</small><p>{candidate.meaning}</p></article><article className={uiClass('pmw-review-card')}><small>{uiText('expression')}</small><b>{candidate.expression}</b><p>{candidate.explanation}</p></article><p className={uiClass('pmw-review-consequence')}>{localFlowText('confirmationHint')}</p>{c.notice&&<p role="status">{c.notice}</p>}<div className={uiClass('pmw-review-actions')}><button className={uiClass('pmw-primary')} disabled={c.busy} onClick={()=>void c.onConfirm().then(()=>setReviewOpen(false)).catch(()=>{})}>{localFlowText('confirmMeaningSave')}</button><button disabled={c.busy} onClick={()=>setReviewOpen(false)}>{localFlowText('continueClarifying')}</button></div></div></section></div>}
+  {!c.accepted&&<ExpressionChatInput busy={c.busy} onSend={c.onSend}/>}
  </MeaningWorkspaceFrame>;
 }

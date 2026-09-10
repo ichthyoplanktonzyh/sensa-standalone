@@ -21,12 +21,12 @@ export async function runPersonalIntakeBrowserChecks(page:Page,origin:string){
  assert.equal((await rows(page,'meanings')).length,1);assert.equal((await rows(page,'personalLearning')).length,0);
  await page.goto(origin+'/personal-meaning?meaningId='+slowId);
  await page.getByRole('complementary').getByLabel('界面语言',{exact:true}).selectOption('en');
- await expect(page.getByLabel('Add or correct',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('What would you like to express?',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Continue conversation',exact:true}).click();
- await page.getByRole('complementary').getByLabel('Interface language',{exact:true}).selectOption('zh-CN');await expect(page.getByText('这件物品是否需要归还？',{exact:true})).toBeVisible();await page.getByLabel('补充或更正').fill('是的，之后需要归还。');await page.getByRole('button',{name:'发送',exact:true}).click();
+ await page.getByRole('complementary').getByLabel('Interface language',{exact:true}).selectOption('zh-CN');await expect(page.getByText('这件物品是否需要归还？',{exact:true})).toBeVisible();await page.getByLabel('你想表达什么？').fill('是的，之后需要归还。');await page.getByRole('button',{name:'发送',exact:true}).click();
  await expect.poll(async()=> (await rows(page,'sessions')).find(s=>s.draftId===slowId)?.status).toBe('proposal');
  // Existing confirmation layer, no shortcut into the database.
- await page.locator('.pmw-dock-confirm').click();await page.getByRole('button',{name:'就是这个意思，保存',exact:true}).click();await expect(page.getByRole('heading',{name:'意思已确认',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'保存这个表达',exact:true}).click();await expect(page.getByRole('heading',{name:'意思已确认',exact:true})).toBeVisible();
  const controls=page.getByRole('region',{name:'个人内容学习准备'});await controls.getByRole('button',{name:'加入学习',exact:true}).click();assert.equal((await rows(page,'learningTargets')).length,0);
  await controls.getByRole('button',{name:'生成学习资源',exact:true}).click();await expect(controls.getByRole('button',{name:'重试 / 恢复准备',exact:true})).toBeVisible({timeout:15000});await page.getByRole('complementary').getByLabel('界面语言',{exact:true}).selectOption('en');
  const englishControls=page.getByRole('region',{name:'Personal learning preparation',exact:true});await expect(englishControls.getByRole('button',{name:'Retry / resume preparation',exact:true})).toBeVisible();assert(!/[\u4e00-\u9fff]/u.test(await englishControls.innerText()));

@@ -42,6 +42,7 @@ interface ContentScreenProps {
   active: boolean;
   screenId?: string;
   initialAction?: "create";
+  onStartConversation?:()=>void;
   onBrowseExisting: () => void;
   onOpenPersonalMeaning: (id: string, focusId?: string) => void;
   onOpenConfirmedSense: (id: string, focusId: string) => void;
@@ -94,7 +95,7 @@ function ContentScreenView({
   active,
   screenId = "s-content",
   initialAction,
-  onBrowseExisting,
+  onBrowseExisting,onStartConversation,
   onOpenPersonalMeaning,
   onOpenConfirmedSense,
   onOpenSense,
@@ -114,7 +115,7 @@ function ContentScreenView({
   const fmt = (n: number) =>
     new Intl.NumberFormat(i18n.resolvedLanguage).format(n);
   useEffect(() => {
-    if (active && initialAction === "create") setComposerOpen(true);
+    if (active && initialAction === "create") {if(onStartConversation)onStartConversation();else setComposerOpen(true);}
   }, [active, initialAction]);
   useEffect(() => {
     if (!adding) return;
@@ -181,10 +182,10 @@ function ContentScreenView({
       {!query && category === "personal" && (
         <button
           className={`${button} mt-5 text-[#34477d]`}
-          onClick={() => setComposerOpen(true)}
+          onClick={() => onStartConversation?onStartConversation():setComposerOpen(true)}
         >
           <Plus size={16} />
-          {t("content.record")}
+          {t(onStartConversation?"content.findExpression":"content.record")}
         </button>
       )}
     </div>
@@ -422,11 +423,12 @@ function ContentScreenView({
             </header>
             {[
               {
-                title: "record",
-                hint: "recordHint",
+                title: onStartConversation?"findExpression":"record",
+                hint: onStartConversation?"findExpressionHint":"recordHint",
                 icon: MessageSquareText,
-                action: () => setComposerOpen(true),
+                action: () => onStartConversation?onStartConversation():setComposerOpen(true),
               },
+              ...(onStartConversation?[{title:"record",hint:"recordHint",icon:StickyNote,action:()=>setComposerOpen(true)}]:[]),
               {
                 title: "existing",
                 hint: "existingHint",
