@@ -13,8 +13,8 @@ export async function authorizeExtension(db:DatabaseExecutor,a:{account_id:strin
  const redirect=new URL(input.redirectUri);redirect.searchParams.set('code',code);redirect.searchParams.set('state',input.state);return {redirectUri:redirect.href};
 }
 export async function exchangeExtension(db:DatabaseExecutor,input:z.infer<typeof extensionExchangeSchema>,now:Date){
- const row=(await db.query(`SELECT c.*,a.issuer,a.subject,a.epoch,s.provider_session_id,s.revoked,i.revoked AS invite_revoked FROM sensa_consumer.extension_codes c JOIN sensa_consumer.accounts a USING(account_id) JOIN sensa_consumer.sessions s ON s.id=c.session_id JOIN sensa_consumer.invitations i ON i.issuer=a.issuer AND i.subject=a.subject WHERE code_hash=$1 FOR UPDATE OF c`,[await hash(input.code)])).rows[0];
- if(!row||row.consumed||row.expires_at<=now||row.revoked||row.invite_revoked||String(row.epoch)!==String(row.scope_epoch)||row.installation_id!==input.installationId||row.state!==input.state||row.challenge!==await challenge(input.verifier))throw new ConsumerError(401,'authorization_expired');
+ const row=(await db.query(`SELECT c.*,a.issuer,a.subject,a.epoch,a.lifecycle,s.provider_session_id,s.revoked,i.revoked AS invite_revoked FROM sensa_consumer.extension_codes c JOIN sensa_consumer.accounts a USING(account_id) JOIN sensa_consumer.sessions s ON s.id=c.session_id JOIN sensa_consumer.invitations i ON i.issuer=a.issuer AND i.subject=a.subject WHERE code_hash=$1 FOR UPDATE OF c`,[await hash(input.code)])).rows[0];
+ if(!row||row.lifecycle!=='active'||row.consumed||row.expires_at<=now||row.revoked||row.invite_revoked||String(row.epoch)!==String(row.scope_epoch)||row.installation_id!==input.installationId||row.state!==input.state||row.challenge!==await challenge(input.verifier))throw new ConsumerError(401,'authorization_expired');
  const token='sensa_ext_'+crypto.randomUUID()+crypto.randomUUID(),expiresAt=new Date(now.getTime()+7*86400000);
  await db.query('UPDATE sensa_consumer.extension_codes SET consumed=true WHERE code_hash=$1',[await hash(input.code)]);
  await db.query('INSERT INTO sensa_consumer.extension_credentials(token_hash,account_id,session_id,scope_epoch,installation_id,expires_at) VALUES($1,$2,$3,$4,$5,$6)',[await hash(token),row.account_id,row.session_id,row.scope_epoch,row.installation_id,expiresAt]);
@@ -23,8 +23,8 @@ export async function exchangeExtension(db:DatabaseExecutor,input:z.infer<typeof
 export function extensionVerifier(base:ConsumerVerifier,transaction:<T>(work:(db:DatabaseExecutor)=>Promise<T>)=>Promise<T>,clock:()=>Date):ConsumerVerifier{
  return async request=>{
   const token=request.headers.get('authorization')?.match(/^Bearer (sensa_ext_\S+)$/u)?.[1];if(!token)return base(request);
-  const row=await transaction(async db=>(await db.query(`SELECT c.*,a.issuer,a.subject,a.epoch,s.provider_session_id,s.revoked,i.revoked AS invite_revoked FROM sensa_consumer.extension_credentials c JOIN sensa_consumer.accounts a USING(account_id) JOIN sensa_consumer.sessions s ON s.id=c.session_id JOIN sensa_consumer.invitations i ON i.issuer=a.issuer AND i.subject=a.subject WHERE token_hash=$1`,[await hash(token)])).rows[0]);
-  if(!row||row.expires_at<=clock()||row.revoked||row.invite_revoked||String(row.epoch)!==String(row.scope_epoch))throw new ConsumerError(401,'access_revoked');
+  const row=await transaction(async db=>(await db.query(`SELECT c.*,a.issuer,a.subject,a.epoch,a.lifecycle,s.provider_session_id,s.revoked,i.revoked AS invite_revoked FROM sensa_consumer.extension_credentials c JOIN sensa_consumer.accounts a USING(account_id) JOIN sensa_consumer.sessions s ON s.id=c.session_id JOIN sensa_consumer.invitations i ON i.issuer=a.issuer AND i.subject=a.subject WHERE token_hash=$1`,[await hash(token)])).rows[0]);
+  if(!row||row.lifecycle!=='active'||row.expires_at<=clock()||row.revoked||row.invite_revoked||String(row.epoch)!==String(row.scope_epoch))throw new ConsumerError(401,'access_revoked');
   return {issuer:row.issuer,subject:row.subject,sessionId:row.provider_session_id,email:null,installationId:row.installation_id} as ConsumerPrincipal;
  };
 }

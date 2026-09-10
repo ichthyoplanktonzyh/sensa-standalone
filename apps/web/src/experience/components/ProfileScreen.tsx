@@ -108,7 +108,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
         </section>
       </div>
       {props.account && <div className="mt-8 flex flex-wrap gap-3"><button className="min-h-11 rounded-xl bg-[#edf0f7] px-5 text-sm text-[#303f76]" disabled={props.account.busy} onClick={props.account.onSync}>{t('account.localWeb.syncResults')}</button><button className="min-h-11 rounded-xl border border-[#e3e5ea] px-5 text-sm" disabled={props.account.busy || props.account.pending > 0} onClick={props.account.onLogout}>{t('account.localWeb.signout')}</button>{props.account.pending > 0 && <p className="w-full text-sm text-[#68748d]">{t('account.localWeb.pendingLogout')}</p>}</div>}
-      {props.localLibrary&&<><LibraryBackupPanel/><LocalDataControlPanel/></>}
+      {props.localLibrary&&<><LibraryBackupPanel/><LocalDataControlPanel/><button className="mt-6 min-h-11 rounded-xl border border-red-200 px-5 text-sm text-red-800" onClick={serviceAccount.deleteAccount}>{t('localFlow.deleteTitle')}</button></>}
       {props.modelSettings&&<section aria-label={t('modelService.title')} className="mt-10">{props.modelSettings}</section>}
       <section aria-labelledby="account-support" className="mt-10">
         <h2 id="account-support" className="mb-4 text-lg font-medium">{t('account.support')}</h2>

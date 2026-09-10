@@ -83,6 +83,12 @@ jobs:
         run: npm run sensa:offline-cold-start-smoke
       - name: Complete Intake to personal learning in production UI (synthetic providers)
         run: npm run sensa:personal-intake-browser-smoke
+      - name: Account deletion transaction and old-credential barrier
+        env:
+          SENSA_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: node --import tsx scripts/sensaAccountDeletionSmoke.mts
+      - name: Account deletion full UI (synthetic identity service)
+        run: node --import tsx scripts/sensaOfflineColdStartSmoke.mts --deletion
       - name: Release configuration and privacy-safe telemetry guards
         run: node scripts/sensaReleaseCandidateSmoke.mjs && node --import tsx scripts/sensaTelemetrySmoke.mts
       - name: Encrypted library backup and fresh browser recovery

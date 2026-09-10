@@ -1,3 +1,4 @@
+import {assertDeletionConfigured,requestAccountDeletion,finishAccountDeletion,type DeleteIdentity} from './deletion.js';
 import {serviceTelemetry,type ServiceRequestRecord} from './telemetry.js';
 import {ensureAdmission} from './admission.js';
 import {learningPackageCatalogSchema} from '@sensa/contracts/sensa';
@@ -55,6 +56,7 @@ async function account(db: DatabaseExecutor, identity: ConsumerPrincipal, create
     row = (await db.query('INSERT INTO sensa_consumer.accounts(account_id,learner_user_id,issuer,subject,time_zone) VALUES($1,$1,$2,$3,$4) RETURNING *', [id,identity.issuer,identity.subject,create.timeZone])).rows[0];
   }
   if (!row) throw new ConsumerError(409,'session_initialization_required');
+  if(row.lifecycle&&row.lifecycle!=='active')throw new ConsumerError(403,'account_deleted');
   let session = (await db.query('SELECT * FROM sensa_consumer.sessions WHERE account_id=$1 AND provider_session_id=$2', [row.account_id,identity.sessionId])).rows[0];
   if (!session && create) session = (await db.query('INSERT INTO sensa_consumer.sessions(account_id,provider_session_id) VALUES($1,$2) RETURNING *', [row.account_id,identity.sessionId])).rows[0];
   if (!session || (session.revoked && !allowRevokedSession)) throw new ConsumerError(401,'access_revoked');
@@ -192,7 +194,7 @@ async function publish(db:DatabaseExecutor,a:Account,entity:string,snapshot:unkn
   await db.query('INSERT INTO sensa_consumer.changes(learner_user_id,sequence,snapshot,entity_type) VALUES($1,$2,$3::jsonb,$4)',[a.learner_user_id,head,JSON.stringify(snapshot),entity]);
 }
 
-export function createConsumerRoutes(options: {telemetry?:(record:ServiceRequestRecord)=>void;verify?:ConsumerVerifier; transaction?:Transaction;mediaReader?:ConsumerMediaReader;clock?:()=>Date;semanticResolver?:SemanticResolver;contentGenerator?:ContentGenerator;contentReviewer?:ContentReviewer;readingCompletion?:ReadingCompletion} = {}) {
+export function createConsumerRoutes(options: {deleteIdentity?:DeleteIdentity;telemetry?:(record:ServiceRequestRecord)=>void;verify?:ConsumerVerifier; transaction?:Transaction;mediaReader?:ConsumerMediaReader;clock?:()=>Date;semanticResolver?:SemanticResolver;contentGenerator?:ContentGenerator;contentReviewer?:ContentReviewer;readingCompletion?:ReadingCompletion} = {}) {
   const clock=options.clock??(()=>new Date());const app=new Hono(); const transaction=options.transaction??unsafeTransaction; const verify=extensionVerifier(options.verify??verifyConsumer,transaction,clock);
   app.use('*',serviceTelemetry(options.telemetry));
   app.use('*',(c,next)=>bodyLimit({maxSize:c.req.path.endsWith('/sensa/native/agent/turn')?12*1024*1024:256*1024,onError:c=>c.json({code:'body_too_large'},413)})(c,next));
@@ -294,6 +296,19 @@ export function createConsumerRoutes(options: {telemetry?:(record:ServiceRequest
   app.get('/sensa/account/session',async c=>{
     const identity=await verify(c.req.raw);const installationId=uuid.parse(c.req.header('x-installation-id'));
     return c.json(await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());return query(a,await context(db,a,installationId));}));
+  });
+  // The unguessable operation ID is a deletion receipt, not authority to start deletion.
+  app.post('/sensa/account/deletion/status',async c=>{
+    const input=z.object({operationId:uuid}).strict().parse(await c.req.json());
+    const identity=await transaction(async db=>(await db.query('SELECT a.issuer,a.subject FROM sensa_consumer.account_deletions d JOIN sensa_consumer.accounts a USING(account_id) WHERE d.operation_id=$1',[input.operationId])).rows[0]);
+    if(!identity)throw new ConsumerError(404,'deletion_not_found');
+    return c.json(await finishAccountDeletion(transaction,{issuer:String(identity.issuer),subject:String(identity.subject)},input.operationId,options.deleteIdentity));
+  });
+  app.post('/sensa/account/deletion',async c=>{
+    const identity=await verify(c.req.raw);const input=z.object({operationId:uuid,confirmation:z.literal('delete-account')}).strict().parse(await c.req.json());
+    if(!options.deleteIdentity)assertDeletionConfigured();
+    await transaction(db=>requestAccountDeletion(db,identity,input.operationId,clock()));
+    return c.json(await finishAccountDeletion(transaction,identity,input.operationId,options.deleteIdentity));
   });
   app.post('/sensa/account/session/revoke',async c=>{
     const identity=await verify(c.req.raw); z.object({operationId:uuid}).strict().parse(await c.req.json());

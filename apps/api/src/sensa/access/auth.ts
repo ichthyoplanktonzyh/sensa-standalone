@@ -4,7 +4,7 @@ import type { JWTVerifyGetKey } from 'jose';
 export class ConsumerError extends Error {
   constructor(public readonly status: 400|401|403|404|409|413|503, public readonly code: string) { super(code); }
 }
-export type ConsumerPrincipal = { installationId?:string; issuer: string; subject: string; sessionId: string; email: string | null };
+export type ConsumerPrincipal = { authenticatedAt?:number; installationId?:string; issuer: string; subject: string; sessionId: string; email: string | null };
 export type ConsumerVerifier = (request: Request) => Promise<ConsumerPrincipal>;
 /** The injected key seam is for deterministic signature tests, never request-controlled. */
 export function createConsumerVerifier(issuer: string, key: JWTVerifyGetKey): ConsumerVerifier {
@@ -15,7 +15,9 @@ export function createConsumerVerifier(issuer: string, key: JWTVerifyGetKey): Co
       const { payload } = await jwtVerify(token, key, { issuer, audience: 'authenticated', algorithms: ['ES256','RS256'] });
       if (!payload.sub || typeof payload.session_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(payload.session_id)
         || typeof payload.exp !== 'number') throw new Error('Invalid claims');
-      return { issuer, subject: payload.sub, sessionId: payload.session_id, email: typeof payload.email === 'string' ? payload.email : null };
+      const amr=Array.isArray(payload.amr)?payload.amr:[];
+      const times=amr.filter((a:any)=>a?.method==='otp'&&Number.isFinite(a.timestamp)).map((a:any)=>a.timestamp as number);
+      return { authenticatedAt:times.length?Math.max(...times):undefined, issuer, subject: payload.sub, sessionId: payload.session_id, email: typeof payload.email === 'string' ? payload.email : null };
     } catch { throw new ConsumerError(401, 'authentication_required'); }
   };
 }

@@ -247,6 +247,7 @@ export const localFlowZh = {
 "clearPending":"还有 {{count}} 项未完成准备；清除后将无法继续。",
 "clearConfirm":"我已保存需要的备份，确认清除以上本机资料。",
 "clearAction":"确认清除本机资料",
+"deleteCheck":"检查删除进度","deleteTitle":"删除账号","deleteScope":"删除账号及在线服务资料，并清除当前浏览器的资料。此操作无法撤销，旧登录与插件授权将失效。其他离线设备和已导出的备份需要你另行清除；删除后不能再用原账号恢复备份。","deleteConfirm":"我已处理需要保留的资料，确认永久删除账号。","deleteSend":"发送删除确认验证码","deleteCode":"邮箱验证码","deleteAction":"验证并删除账号","deleteResend":"重新发送验证码","deleteDone":"账号已删除，当前浏览器资料已清除。","deleteExit":"返回登录","deleteRetry":"删除结果尚未确认，请重试。重试不会创建第二次删除。","deletePending":"账号访问已停止，身份服务仍在处理删除。请稍后重试完成处理。","deleteUnavailable":"此账号当前无法自助删除，请联系支持处理。",
 "clearDone":"本机资料已清除。重新打开应用可开始使用空资料库。"
 };
 export const localFlowEn: Record<keyof typeof localFlowZh,string> = {
@@ -498,5 +499,6 @@ export const localFlowEn: Record<keyof typeof localFlowZh,string> = {
 "clearPending":"There are {{count}} unfinished preparations. They cannot continue after erasure.",
 "clearConfirm":"I have saved any backup I need and confirm erasing this local content.",
 "clearAction":"Erase local content",
+"deleteCheck":"Check deletion status","deleteTitle":"Delete account","deleteScope":"Delete your account and online service data, and clear this browser. This cannot be undone. Previous sessions and extension access will stop working. Clear other offline devices and exported backups separately; backups cannot be restored with the deleted account.","deleteConfirm":"I have handled any content I need and confirm permanently deleting my account.","deleteSend":"Send deletion verification code","deleteCode":"Email verification code","deleteAction":"Verify and delete account","deleteResend":"Resend code","deleteDone":"Account deleted and this browser cleared.","deleteExit":"Return to sign in","deleteRetry":"Deletion is not confirmed yet. Retry safely using the same deletion request.","deletePending":"Account access has stopped. The identity service is still processing deletion. Retry later to finish.","deleteUnavailable":"Self-service deletion is unavailable for this account. Contact support.",
 "clearDone":"Local content cleared. Reopen the app to use the empty library."
 };

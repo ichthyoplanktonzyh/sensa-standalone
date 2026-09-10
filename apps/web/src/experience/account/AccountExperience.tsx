@@ -1,3 +1,5 @@
+import {eraseDeletedAccount} from '../../data/library/dataControl';
+import {AccountDeletion,pendingAccountDeletion} from './AccountDeletion';
 import {LanguageSwitch} from '../../i18n/LanguageSwitch';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
@@ -9,18 +11,20 @@ import {auth,cachedAuthSubject,authStorageKey} from '../../data/consumer/client'
 import {command,readLibrary,openLibrary,observeLibrary} from '../../data/library/store';
 import {setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 
-type Access={notice:string;email:string|null;onlineService:boolean;login:()=>void;logout:()=>Promise<void>};
-const AccountContext=createContext<Access>({notice:'',email:null,onlineService:false,login:()=>{},logout:async()=>{}});
+type Access={deleteAccount:()=>void;notice:string;email:string|null;onlineService:boolean;login:()=>void;logout:()=>Promise<void>};
+const AccountContext=createContext<Access>({deleteAccount:()=>{},notice:'',email:null,onlineService:false,login:()=>{},logout:async()=>{}});
 export const useAccountExperience=()=>useContext(AccountContext);
 type Owner={subject:string;email:string;accountId?:string};
 /** Authentication is an online-service boundary, not a consumer sync bootstrap. */
 export default function AccountExperience({children}:{children:ReactNode}){
  useTranslation();
+ const [deletionOpen,setDeletionOpen]=useState(()=>!!pendingAccountDeletion());const deletionRef=useRef(deletionOpen);deletionRef.current=deletionOpen;
  const [ready,setReady]=useState(false),[local,setLocal]=useState(false),[loginOpen,setLoginOpen]=useState(false),[onlineService,setOnlineService]=useState(false);
  const [email,setEmail]=useState(''),[code,setCode]=useState(''),[sent,setSent]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[owner,setOwner]=useState<Owner|null>(null);
  const [retryAt,setRetryAt]=useState(0),[now,setNow]=useState(Date.now());
  const generation=useRef(0),localRef=useRef(false);localRef.current=local;
  const recover=async()=>{
+  if(deletionRef.current)return;
   const gen=++generation.current;
   try{
    const stored=await readLibrary(async tx=>({owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out')}));
@@ -45,7 +49,7 @@ export default function AccountExperience({children}:{children:ReactNode}){
    if(gen!==generation.current)return;
    const response=await fetch(endpoint.replace(/\/+$/,'')+'/sensa/web/access/session',{method:'POST',headers:{authorization:'Bearer '+session.access_token,'content-type':'application/json'},body:JSON.stringify({installationId}),signal:AbortSignal.timeout(15000),redirect:'error'});
    if(gen!==generation.current)return;
-   if(!response.ok){setNotice(response.status===403?localFlowText('contactSupport'):localFlowText('serviceRetry'));return;}
+   if(!response.ok){const failure=await response.json().catch(()=>({}));if(failure.code==='account_deleted'){await eraseDeletedAccount(session.user.id);setLocal(false);setNotice(localFlowText('deleteDone'));await auth?.signOut({scope:'local'});return;}setNotice(response.status===403?localFlowText('contactSupport'):localFlowText('serviceRetry'));return;}
    const access=z.object({authorized:z.literal(true),accountId:z.string().uuid()}).parse(await response.json());
    if((await auth?.getSession())?.data.session?.user.id!==session.user.id)throw new Error('account changed');
    if(gen!==generation.current)return;
@@ -56,11 +60,12 @@ export default function AccountExperience({children}:{children:ReactNode}){
   }catch{if(gen===generation.current)setNotice(localFlowText('networkRetry'));}
   finally{if(gen===generation.current)setReady(true);}
  };
- useEffect(()=>{void recover();const sub=auth?.onAuthStateChange((event)=>{if(event==='SIGNED_OUT')clearAllCredentials();setOnlineService(false);if(event==='SIGNED_OUT'||event==='SIGNED_IN')setLocal(false);setTimeout(()=>void recover(),0);});const online=()=>void recover();const storage=(event:StorageEvent)=>{if(event.key===null||event.key===authStorageKey)void recover();};window.addEventListener('online',online);window.addEventListener('storage',storage);const timer=setInterval(()=>setNow(Date.now()),1000);return()=>{generation.current++;sub?.data.subscription.unsubscribe();window.removeEventListener('online',online);window.removeEventListener('storage',storage);clearInterval(timer);};},[]);
+ useEffect(()=>{void recover();const sub=auth?.onAuthStateChange((event)=>{if(deletionRef.current)return;if(event==='SIGNED_OUT')clearAllCredentials();setOnlineService(false);if(event==='SIGNED_OUT'||event==='SIGNED_IN')setLocal(false);setTimeout(()=>void recover(),0);});const online=()=>void recover();const storage=(event:StorageEvent)=>{if(event.key===null||event.key===authStorageKey)void recover();};window.addEventListener('online',online);window.addEventListener('storage',storage);const timer=setInterval(()=>setNow(Date.now()),1000);return()=>{generation.current++;sub?.data.subscription.unsubscribe();window.removeEventListener('online',online);window.removeEventListener('storage',storage);clearInterval(timer);};},[]);
  useEffect(()=>observeLibrary(()=>{void readLibrary(async tx=>({signedOut:await tx.get('meta','signed-out')})).then(state=>{if(state.signedOut&&localRef.current){generation.current++;clearAllCredentials();setLocal(false);setOnlineService(false);}}).catch(()=>setNotice(localFlowText('localStatusFailed')));}),[]);
  const perform=async(work:()=>Promise<void>)=>{setBusy(true);setNotice('');try{await work();}catch{setNotice(localFlowText('tryLater'));}finally{setBusy(false);}};
  const send=async()=>{if(!auth)return;const {error}=await auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true}});if(error){setNotice(error.status===429?localFlowText('otpRateLimit'):localFlowText('otpSendFailed'));return;}setSent(true);setRetryAt(Date.now()+60000);};
  const logout=async()=>{clearAllCredentials();await command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async tx=>{tx.put('meta','signed-out',true);return null;});generation.current++;setLocal(false);setOnlineService(false);setLoginOpen(false);setSent(false);setCode('');const result=await auth?.signOut({scope:'local'});if(result?.error)setNotice(localFlowText('signoutIncomplete'));};
+ if(deletionOpen)return <AccountDeletion onClose={()=>{location.assign('/profile');}}/>;
  if(!ready)return <main role="status" className="grid min-h-screen place-content-center">{localFlowText('loadingSensa')}</main>;
  const extension=new URLSearchParams(location.search);
  if(local&&onlineService&&extension.get('extension')==='connect')return <main className="mx-auto max-w-lg space-y-5 p-8"><LanguageSwitch/><h1 className="text-2xl">{localFlowText('connectExtension')}</h1><p>{localFlowText('currentAccount')}{owner?.email}</p><p>{localFlowText('extensionConsent')}</p>{notice&&<p role="status">{localFlowNotice(notice)}</p>}<button className={setupPrimary} disabled={busy} onClick={()=>void perform(async()=>{
@@ -73,7 +78,7 @@ export default function AccountExperience({children}:{children:ReactNode}){
   if((await auth?.getSession())?.data.session?.user.id!==session.user.id)throw new Error('account changed');
   location.assign(destination.toString());
  })}>{localFlowText('connectAccount')}</button><button className={setupButton} onClick={()=>location.assign('/profile')}>{localFlowText('cancel')}</button></main>;
- if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{notice:localFlowNotice(notice),email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout:()=>perform(logout)}}>{owner?.accountId&&<ExtensionIntake accountId={owner.accountId}/>} {children}</AccountContext.Provider>;
+ if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{deleteAccount:()=>{generation.current++;setDeletionOpen(true);},notice:localFlowNotice(notice),email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout:()=>perform(logout)}}>{owner?.accountId&&<ExtensionIntake accountId={owner.accountId}/>} {children}</AccountContext.Provider>;
  // Reuses the established email/OTP entry layout from the account application.
  return <main className="flex min-h-screen items-center justify-center bg-[#fbfbfa] px-6 text-[#242a38]"><form className="w-full max-w-sm space-y-5" onSubmit={e=>{e.preventDefault();void perform(sent?async()=>{const result=await auth!.verifyOtp({email:email.trim(),token:code.trim(),type:'email'});if(result.error){setNotice(localFlowText('otpInvalid'));return;}await recover();}:send);}}>
   <div className="flex items-center justify-between"><p className="text-sm text-[#68748d]">Sensa</p><LanguageSwitch/></div><h1 className="text-3xl font-semibold">{sent?localFlowText('enterOtp'):localFlowText('welcome')}</h1>

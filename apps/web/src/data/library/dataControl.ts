@@ -22,3 +22,14 @@ export async function clearLocalLibrary(preview:LocalClearPreview){
   tx.put('operations','00000000-0000-4000-8000-000000000001',{input:canonicalConsumerJson({kind:'library.create',input:{}}),result:identity,committedAt:identity.createdAt});
  });clearAllCredentials();
 }
+/** Apply a confirmed account barrier locally; never clear a different account's library. */
+export async function eraseDeletedAccount(subject:string){
+ await restoreLibraryTransaction(async tx=>{
+  const owner=await tx.get<{subject:string}>('meta','service-owner');
+  if(!owner&&await tx.get('meta','signed-out'))return;
+  await assertCurrentLibrary(tx);
+  if(owner&&owner.subject!==subject)throw new Error('localFlow.wrongAccount');
+  for(const table of libraryTables)tx.clear(table);
+  tx.put('meta','local-incarnation',crypto.randomUUID());tx.put('meta','signed-out',true);
+ });clearAllCredentials();
+}

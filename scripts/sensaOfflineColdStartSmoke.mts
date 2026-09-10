@@ -12,6 +12,7 @@ import {runPersonalIntakeBrowserChecks,personalFixtureProposal} from './support/
 import {createHash} from 'node:crypto';
 import {provisionLightweightInitialContent} from '../apps/web/src/experience/learningRuntime/lightweightInitialContent.ts';
 const root=await mkdtemp(join(tmpdir(),'sensa-offline-')),output=join(root,'dist'),initialProfile=join(root,'profile');let profile=initialProfile;
+const deletionMode=process.argv.includes('--deletion');let deletionReceipt='';
 const backupMode=process.argv.includes('--backup');const personalMode=process.argv.includes('--personal-intake')||backupMode;let teacherTurns=0,contentCalls=0,reviewCalls=0,failNextReview=true;
 const id=()=>crypto.randomUUID(),subject=id();let context:BrowserContext|undefined;const errors:string[]=[];let requests=0;
 const result=provisionLightweightInitialContent({learnerUserId:id(),learningTargetId:id(),senseId:id(),senseVersionId:id(),senseExpressionBindingId:id(),resolvedLearningPlanRevisionId:'fixture-v1',expressionSourceVersion:'fixture-v1',senseSourceVersion:'fixture-v1',expression:{surface:'borrow',languageTag:'en',expressionKind:'word'},sense:{meaning:'临时取得他人物品，并预期归还。',familiarLanguageTag:'zh-CN'},originExperience:{source:'other_authoritative_source',sourceVersion:'fixture-v1',personalAnchorUseGrantId:null,experience:{scene:'下雨了，你向同事要一把伞，约好明天归还。',senseFocus:'临时取得他人的物品',featureLabels:[]}},referenceFacts:[],requestedAt:new Date().toISOString()});
@@ -28,6 +29,7 @@ const server=createServer(async(req,res)=>{requests++;const path=new URL(req.url
   else{reviewCalls++;if(failNextReview){failNextReview=false;res.statusCode=503;json({code:'fixture_unavailable'});return;}message={content:JSON.stringify({accepted:true,reason:'符合固定含义与来源'})};}
   json({id:input.id,inputDigest:input.inputDigest,response:{model:'fixture',choices:[{finish_reason,message}]}});return;
  }
+ if(deletionMode&&path.startsWith('/sensa/account/deletion')){const parts=[];for await(const part of req)parts.push(Buffer.from(part));const input=JSON.parse(Buffer.concat(parts).toString());if(path.endsWith('/status')){assert.equal(input.operationId,deletionReceipt);json({operationId:deletionReceipt,state:'deleted'});}else{assert.equal(input.confirmation,'delete-account');deletionReceipt=input.operationId;json({operationId:deletionReceipt,state:'deletion_pending'});}return;}
  if(path==='/auth/v1/otp'||path==='/auth/v1/logout'){json({});return;}
  if(path==='/auth/v1/verify'){json({access_token:token,refresh_token:'fixture-refresh',token_type:'bearer',expires_in:3600,user:{id:subject,email:'offline@sensa.invalid',aud:'authenticated',app_metadata:{},user_metadata:{},created_at:new Date().toISOString()}});return;}
  if(path==='/sensa/web/access/session'){json({authorized:true,accountId:subject});return;}
@@ -44,7 +46,18 @@ try{
  console.log('Building isolated production app…');await promisify(execFile)('npm',['run','build','-w','@sensa/web','--','--outDir',output],{cwd:process.cwd(),env:{...process.env,VITE_SENSA_MODE:'',VITE_SUPABASE_URL:origin,VITE_SUPABASE_PUBLISHABLE_KEY:'fixture-public',VITE_SENSA_API_URL:origin},maxBuffer:8*1024*1024});
  let page=await launch();await page.goto(origin+'/profile');await page.getByLabel('邮箱',{exact:true}).fill('offline@sensa.invalid');await page.getByRole('button',{name:'发送验证码',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Sensa 服务',exact:true})).toBeVisible();await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>true));await page.reload();await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller)).toBe(true);
- if(personalMode){await runPersonalIntakeBrowserChecks(page,origin);assert.equal(contentCalls,1);assert.equal(reviewCalls,2);const saved=await snapshot(page);
+ if(deletionMode){
+  await page.goto(origin+'/learning-entry');await page.getByRole('button',{name:/离线验收学习包/}).click();await page.getByRole('button',{name:'下载学习包',exact:true}).click();await expect.poll(async()=> (await snapshot(page)).packages.length).toBe(1);
+  await page.goto(origin+'/profile');await page.locator('#s-profile').getByLabel('界面语言',{exact:true}).selectOption('en');
+  await page.getByRole('button',{name:'Delete account',exact:true}).click();await expect(page.getByRole('button',{name:'Send deletion verification code',exact:true})).toBeDisabled();
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();await expect(page.getByRole('heading',{name:'Backup & restore',exact:true})).toBeVisible();assert.equal((await snapshot(page)).packages.length,1);
+  await page.getByRole('button',{name:'Delete account',exact:true}).click();await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Send deletion verification code',exact:true}).click();
+  await page.getByLabel('Email verification code',{exact:true}).fill('123456');await page.getByRole('button',{name:'Verify and delete account',exact:true}).click();await expect(page.getByRole('alert')).toContainText('Account access has stopped');assert.equal((await snapshot(page)).packages.length,0);
+  await page.reload();await page.getByRole('button',{name:'Check deletion status',exact:true}).click();await expect(page.getByRole('status')).toContainText('Account deleted and this browser cleared');
+  assert.equal(await page.evaluate(()=>localStorage.getItem('sensa:account-deletion')),null);assert.deepEqual(errors,[]);
+  console.log('PASS: real full app deletion cancel/confirmation, OTP flow, pending erasure, reload receipt recovery and English feedback. Auth/deletion HTTP is synthetic.');
+ }
+ else if(personalMode){await runPersonalIntakeBrowserChecks(page,origin);assert.equal(contentCalls,1);assert.equal(reviewCalls,2);const saved=await snapshot(page);
  if(backupMode){
   const password='browser-backup-test-password',backupPath=join(root,'library.sensa-backup');
   await page.goto(origin+'/profile');
