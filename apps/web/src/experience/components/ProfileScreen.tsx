@@ -7,6 +7,7 @@ import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
 import type { PrototypeLearningPolicy } from '../learningJourney/prototypeLearning';
 
 interface ProfileScreenProps {
+  fixedLearningPolicy?: boolean;
   active: boolean;
   account?: {email: string; pending: number; busy: boolean; onSync: () => void; onLogout: () => void};
   status?: ReactNode;
@@ -37,6 +38,8 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
   const serviceAccount=useAccountExperience();
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [online, setOnline] = useState(() => navigator.onLine);
+  const [offlineShell,setOfflineShell]=useState(document.documentElement.dataset.offlineShell??'development');
+  useEffect(()=>{const update=()=>setOfflineShell(document.documentElement.dataset.offlineShell??'development');window.addEventListener('sensa-offline-shell',update);return()=>window.removeEventListener('sensa-offline-shell',update);},[]);
   const [bytes, setBytes] = useState<number | null>(null);
   const refreshStorage = () => {
     try { setBytes(localPreviewBytes(window.localStorage)); }
@@ -75,6 +78,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
       {!props.account&&<div className="mt-5 flex flex-wrap gap-3"><button className="min-h-11 rounded-xl bg-[#edf0f7] px-5 text-sm" onClick={serviceAccount.login}>{serviceAccount.onlineService?'检查在线服务':'登录 Sensa'}</button>{serviceAccount.email&&<button className="min-h-11 rounded-xl border px-5 text-sm" onClick={()=>void serviceAccount.logout().catch(()=>{})}>退出账号</button>}</div>}
       {!props.account&&serviceAccount.notice&&<p role="status" className="mt-3 text-sm">{serviceAccount.notice}</p>}
       {props.status}
+      {props.localLibrary&&<p className="mt-3 text-sm text-[#68748d]">{offlineShell==='ready'?'应用外壳已保存，可在断网时重新打开。':offlineShell==='failed'?'离线启动准备失败，已有资料仍保留，可联网后重新打开。':offlineShell==='development'?'开发服务模式：已下载资料保存在本机，断网冷启动需使用发布构建。':'正在准备离线启动…'}</p>}
       <div className="mt-9 grid items-start gap-8 lg:grid-cols-2">
         <section aria-labelledby="account-preferences">
           <h2 id="account-preferences" className="mb-4 text-lg font-medium">{t('account.preferences')}</h2>
@@ -113,6 +117,6 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
         </div>
       </section>
     </main>
-    {props.active && preferencesOpen && <LearningPreferencesPanel defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('account.done')}/>}
+    {props.active && preferencesOpen && <LearningPreferencesPanel fixedPolicy={props.fixedLearningPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('account.done')}/>}
   </section>;
 };

@@ -1,3 +1,6 @@
+import {LearningSetupFrame} from './components/learning/LearningSetupFrame';
+import {usePackageLearning} from './library/usePackageLearning';
+import {PackageEntry,PackageTarget,PackageRuntime,localTargetView} from './library/PackageLearningViews';
 import {useLocalMeaningLibrary} from './library/useLocalMeaningLibrary';
 import {ProviderPanel} from './components/ProviderPanel';
 import { LearningPreferencesPanel } from './components/learning/LearningPreferencesPanel';
@@ -222,6 +225,9 @@ export default function App() {
     setMainStack,
   } = useShellNavigation();
 
+  const packageLearning=usePackageLearning(viewMode==='main'&&mainStack.includes('s-learning-entry'));
+  const localSelectedTarget=packageLearning.targets.find(t=>t.id===params.targetId);
+  const openLocalTarget=(id:string)=>goMain('s-learning-target',{targetId:id});
   /* ---------- 自由练习范围：typed sources → learner selection → resolved scope ---------- */
   const { catalog: practiceScopeCatalog, selectScope } = usePracticeScope();
   const [activePracticeScope, setActivePracticeScope] = useState<ResolvedPracticeScope | null>(null);
@@ -478,7 +484,12 @@ export default function App() {
   const { flowMode, demo, enterLearn, enterReview, enterDemo, advanceDemo } = useLearningFlow();
   // 这两个都不是状态：一个是 settings 里的设置项，一个是 FSRS 的派生计数。
   // 它们随 storageService 的写入自动更新，所以没有 refreshReviewCount 了。
-  const dailyNewCount = useDailyNewCount();
+  const previewDailyNewCount = useDailyNewCount();
+  const dailyNewCount = packageLearning.dailyLimit??previewDailyNewCount;
+  const [quantityTarget,setQuantityTarget]=useState<string|null>(null);
+  const [quantityChoice,setQuantityChoice]=useState(20);
+  const updateLocalQuantity=(value:number)=>{void packageLearning.confirmQuantity(value).then(ok=>{if(ok)setDailyNewCount(value);});};
+  const startLocalLearning=async(id?:string,reviewOnly=false)=>{const targetId=id??packageLearning.run?.targetId??packageLearning.due[0]?.id??(!reviewOnly?packageLearning.initialReady[0]?.id:undefined);if(!targetId){goMain('s-learning-entry');return;}if(packageLearning.dailyLimit===undefined){setQuantityChoice(dailyNewCount);setQuantityTarget(targetId);return;}if(await packageLearning.start(targetId,dailyNewCount))setViewMode('lightweight');};
   const reviewN = useDueReviewCount();
 
   // Keep structured-retention handoffs created earlier in the same hot-reloaded session
@@ -1835,16 +1846,14 @@ export default function App() {
       >
           {/* ================= 主页面体系 (Main Shell) ================= */}
           {/* 1. 首页 */}
-          <HomeScreen
-            active={viewMode === 'main'}
-            onGo={goMain}
-            onResume={pausedLightweightFlow ? () => { setViewMode(pausedLightweightFlow); setPausedLightweightFlow(null); } : undefined}
-            onStartMixed={startMixedLearning}
-            onStartReview={pausedLightweightFlow === 'lightweightReview' || (pausedLightweightFlow === 'study' && runtimeCheckpoint.read().structuredMode === 'review') ? () => { setViewMode(pausedLightweightFlow!); setPausedLightweightFlow(null); } : startReview}
-            reviewDueN={totalReviewCount}
-            onRecordContext={() => goMain('s-semantic-world', { worldAction: 'create' })}
-            mixedReadyN={plannedInitialTargetIds.length + totalReviewCount}
-          />
+          <HomeScreen active={viewMode==='main'} onGo={goMain}
+            busy={packageLearning.busy} status={packageLearning.notice&&<p role="status">{packageLearning.notice}</p>}
+            onResume={packageLearning.run?()=>setViewMode('lightweight'):undefined}
+            onStartMixed={()=>void startLocalLearning()} onStartReview={()=>void startLocalLearning(undefined,true)}
+            reviewDueN={packageLearning.due.length} newAvailable={packageLearning.initialReady.length}
+            onRecordContext={()=>goMain('s-semantic-world',{worldAction:'create'})}
+            mixedReadyN={packageLearning.initialReady.length+packageLearning.due.length}/>
+
 
           {/* 2. 自由练习 */}
           <AcademyScreen
@@ -1971,79 +1980,40 @@ export default function App() {
             onTabChange={setStudyTab}
             onAddLearning={() => goMain('s-learning-entry')}
             onOpenTargetLibrary={() => goMain('s-learning-library')}
-            onOpenTarget={id=>{if(id in PROTOTYPE_LEARNING_TARGETS)openLearningTarget(id as PrototypeLearningTargetId);}}
+            onOpenTarget={openLocalTarget}
             onPolicyChange={policy => dispatchJourney({ type: 'selectDefaultPolicy', policy })}
-            defaultPolicy={defaultLearningPolicy}
-            learningTargetCount={visibleLearningTargetIds.length}
-            readyInitialCount={plannedInitialTargetIds.length}
-            reviewCount={totalReviewCount}
+            defaultPolicy="lightweight" fixedPolicy
+            learningTargetCount={packageLearning.targets.length}
+            readyInitialCount={packageLearning.initialReady.length}
+            reviewCount={packageLearning.due.length}
             dailyNewCount={dailyNewCount}
-            learningRecords={learningRecords}
+            learningRecords={packageLearning.records}
             onOpenStats={() => goMain('s-stats')}
-            onDailyNewCountChange={setDailyNewCount}
+            onDailyNewCountChange={updateLocalQuantity}
           />
 
           {/* 4.1 Target 库：主页只保留入口，具体内容在此展开 */}
-          <LearningTargetLibraryScreen
-            active={viewMode === 'main' && mainStack.includes('s-learning-library')}
-            targetIds={visibleLearningTargetIds}
-            policyByTarget={effectivePolicies(journey)}
-            preparationByTarget={preparations(journey)}
-            committedTargetIds={committedTargetIds(journey)}
-            completedTargetIds={completedTargetIds(journey)}
-            reviewDueTargetIds={new Set([
-              ...lightweightDueTargetIds,
-              ...structuredReviewDueTargetIds,
-            ])}
-            relearningTargetIds={new Set([
-              ...lightweightRelearningTargetIds,
-              ...structuredRelearningTargetIds,
-            ])}
-            reviewingTargetIds={new Set(structuredReviewingTargetIds)}
-            relearningRepairTargetIds={new Set(structuredRelearningRepairTargetIds)}
-            relearningRetestTargetIds={new Set(structuredRelearningRetestTargetIds)}
-            declaredMasteryTargetIds={visibleDeclaredMasteryTargetIds}
-            onBack={backMain}
-            onAddLearning={() => goMain('s-learning-entry')}
-            onOpenTarget={id=>{if(id in PROTOTYPE_LEARNING_TARGETS)openLearningTarget(id as PrototypeLearningTargetId);}}
-          />
+          <LearningTargetLibraryScreen active={viewMode==='main'&&mainStack.includes('s-learning-library')}
+            targets={Object.fromEntries(packageLearning.targets.map(t=>[t.id,localTargetView(t)]))}
+            targetIds={packageLearning.targets.map(t=>t.id)}
+            policyByTarget={Object.fromEntries(packageLearning.targets.map(t=>[t.id,'lightweight' as const]))}
+            preparationByTarget={Object.fromEntries(packageLearning.targets.map(t=>[t.id,'ready' as const]))}
+            committedTargetIds={new Set(packageLearning.targets.filter(t=>t.startedAt).map(t=>t.id))}
+            completedTargetIds={new Set(packageLearning.targets.filter(t=>t.completedAt).map(t=>t.id))}
+            reviewDueTargetIds={new Set(packageLearning.due.map(t=>t.id))}
+            relearningTargetIds={new Set(packageLearning.targets.filter(t=>t.relearnAt).map(t=>t.id))}
+            reviewingTargetIds={new Set()} relearningRepairTargetIds={new Set()} relearningRetestTargetIds={new Set()} declaredMasteryTargetIds={new Set()}
+            onBack={backMain} onAddLearning={()=>goMain('s-learning-entry')} onOpenTarget={openLocalTarget}/>
+
 
           {/* 4.2 添加学习内容：三种来源汇入同一学习目标 */}
-          <LearningEntryScreen
-            active={viewMode === 'main' && mainStack.includes('s-learning-entry')}
-            onBack={backMain}
-            onOpenTarget={id=>{if(id in PROTOTYPE_LEARNING_TARGETS)openLearningTarget(id as PrototypeLearningTargetId);}}
-            onOpenPersonalSemanticWorld={() => setMainStack(['s-semantic-world'])}
-          />
+          <PackageEntry active={viewMode==='main'&&mainStack.includes('s-learning-entry')} c={packageLearning} onBack={backMain} onPersonal={()=>goMain('s-semantic-world')} onTarget={openLocalTarget}/>
+
 
           {/* 4.3 学习目标详情：来源、方式和准备状态分开表达 */}
-          <LearningTargetDetailScreen
-            active={viewMode === 'main' && mainStack.includes('s-learning-target')}
-            target={selectedPrototypeLearningTarget}
-            selectedPolicy={selectedPrototypeLearningPolicy}
-            preparation={selectedPrototypePreparation}
-            committedPolicy={selectedCommittedPolicy}
-            initialCompletionKind={selectedInitialCompletionKind}
-            reviewDue={selectedReviewDue}
-            relearning={selectedRelearning}
-            retentionRuntimeState={selectedRetentionRuntimeState}
-            nextReviewLabel={selectedNextReviewLabel}
-            declaredMastery={selectedDeclaredMastery}
-            isAdded={selectedJourney.added}
-            onBack={backMain}
-            onAdd={addSelectedLearningTarget}
-            onOpenPolicy={openTargetLearningPolicy}
-            onOpenSource={openLearningSource}
-            onRefreshPreparation={refreshSelectedTargetPreparation}
-            onGoHome={resetMain}
-            onStartReview={startReview}
-            onContinueRetentionRuntime={() => {
-              enterReview();
-              setViewMode('study');
-            }}
-            onContinueRuntime={() => continueCommittedTargetRuntime(selectedLearningTargetId)}
-            onRevokeDeclaredMastery={() => revokeDeclaredMastery(selectedLearningTargetId)}
-          />
+          {localSelectedTarget&&<PackageTarget active={viewMode==='main'&&mainStack.includes('s-learning-target')} target={localSelectedTarget} c={packageLearning} onBack={backMain} onHome={resetMain} onStart={()=>void startLocalLearning(localSelectedTarget.id)}/>}
+          {!localSelectedTarget&&viewMode==='main'&&mainStack.includes('s-learning-target')&&<LearningSetupFrame id="s-learning-target" active title="学习目标" onBack={backMain}><p role="status">{packageLearning.loaded?'当前本机库中没有这个学习目标。':'正在读取学习目标…'}</p></LearningSetupFrame>}
+
 
           {/* 4.4 学习方式选择：默认方式或单个目标覆盖 */}
           <LearningPolicyScreen
@@ -2058,37 +2028,29 @@ export default function App() {
           <StatsScreen
             active={viewMode === 'main' && mainStack.includes('s-stats')}
             onBack={backMain}
-            records={learningRecords}
-            onOpenTarget={id=>{if(id in PROTOTYPE_LEARNING_TARGETS)openLearningTarget(id as PrototypeLearningTargetId);}}
+            records={packageLearning.records}
+            onOpenTarget={openLocalTarget}
           />
 
           {/* 5. 个人中心 */}
           <ProfileScreen
+            localLibrary fixedLearningPolicy
             modelSettings={<ProviderPanel/>}
             active={viewMode === 'main' && mainStack.includes('s-profile')}
             onGoStudyPlan={() => {
               setStudyTab('a');
               goMain('s-study');
             }}
-            defaultPolicy={defaultLearningPolicy}
+            defaultPolicy="lightweight"
             dailyNewCount={dailyNewCount}
             onPolicyChange={policy => dispatchJourney({ type: 'selectDefaultPolicy', policy })}
-            onDailyNewCountChange={setDailyNewCount}
+            onDailyNewCountChange={updateLocalQuantity}
           />
 
           {/* 5.1 轻量首次运行入口：创建运行即提交并锁定 Learning Policy。 */}
-          <LightweightRuntimeStartScreen
-            active={viewMode === 'lightweight'}
-            target={activeLightweightRuntimeTarget}
-            materialization={lightweightInitialMaterialization}
-            step={lightweightInitialProtocolStep}
-            completed={lightweightInitialProtocolState?.progress.completed ?? false}
-            hasNextTarget={lightweightInitialTargetIds.length > 1}
-            onExit={exitLightweightRuntime}
-            onReveal={() => { try {revealLightweightExpression();} catch {toast(runtimeText('saveError'));} }}
-            onRate={handleLightweightInitialRating}
-            onFinish={finishLightweightRuntime}
-          />
+          {quantityTarget&&<LearningPreferencesPanel fixedPolicy defaultPolicy="lightweight" dailyNewCount={quantityChoice} onPolicyChange={()=>{}} onDailyNewCountChange={setQuantityChoice} busy={packageLearning.busy} status={packageLearning.notice&&<p role="status">{packageLearning.notice}</p>} onClose={()=>setQuantityTarget(null)} closeLabel="确认数量并开始" onConfirm={()=>void packageLearning.confirmQuantity(quantityChoice).then(async ok=>{if(!ok)return;const target=quantityTarget;setQuantityTarget(null);if(await packageLearning.start(target,quantityChoice))setViewMode('lightweight');})}/>}
+          <PackageRuntime active={viewMode==='lightweight'} c={packageLearning} onExit={returnHome} onFinish={()=>void packageLearning.finish().then(async ok=>{if(!ok)return;if(packageLearning.nextTarget){if(await packageLearning.start(packageLearning.nextTarget.id,dailyNewCount))return;}returnHome();})}/>
+
 
           {/* 5.2 轻量长期复习：一次 due Review 只记录一次结果，遗忘后单独完成修复。 */}
           {lightweightReviewTargetIds.length > 0 && (
@@ -2340,7 +2302,7 @@ export default function App() {
           {learningPreferencesOpen && viewMode==='study' && <LearningPreferencesPanel
             defaultPolicy={defaultLearningPolicy} dailyNewCount={dailyNewCount}
             onPolicyChange={policy=>dispatchJourney({type:'selectDefaultPolicy',policy})}
-            onDailyNewCountChange={setDailyNewCount}
+            onDailyNewCountChange={updateLocalQuantity}
             onClose={closeLearningPreferences}
           />}
 

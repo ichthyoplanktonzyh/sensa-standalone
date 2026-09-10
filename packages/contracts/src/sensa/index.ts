@@ -25,3 +25,4 @@ export * from './consumer/reading.js';
 export * from './consumer/nativeSemantic.js';
 export * from './consumer/nativeProvisioning.js';
 export * from './consumer/localIntake.js';
+export * from './consumer/learningPackage.js';

@@ -1,14 +1,14 @@
 /** Production local-library storage. Separate from account replicas and preview data. */
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 export const libraryDatabaseName='sensa:local-library:v1';
-const tables=['meta','drafts','providers','settings','operations','sessions','meanings','identities'] as const;
+const tables=['meta','drafts','providers','settings','operations','sessions','meanings','identities','packages','learningTargets','learningRuns','learningEvents'] as const;
 export type Table=typeof tables[number];
 let connection:Promise<IDBDatabase>|undefined;
 function open(){
  if(!connection){
   connection=new Promise<IDBDatabase>((resolve,reject)=>{
-   const request=indexedDB.open(libraryDatabaseName,1);
-   request.onupgradeneeded=()=>{for(const table of tables)request.result.createObjectStore(table);};
+   const request=indexedDB.open(libraryDatabaseName,2);
+   request.onupgradeneeded=()=>{for(const table of tables)if(!request.result.objectStoreNames.contains(table))request.result.createObjectStore(table);};
    request.onerror=()=>reject(new Error('无法打开本机存储，请检查浏览器设置后重试。'));
    request.onblocked=()=>reject(new Error('请关闭其他旧版本 Sensa 页面后重试。'));
    request.onsuccess=()=>{const db=request.result;db.onversionchange=()=>{db.close();connection=undefined;};resolve(db);};

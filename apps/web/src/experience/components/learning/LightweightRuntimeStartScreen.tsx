@@ -16,8 +16,11 @@ import {
 } from "../../learningRuntime/stepRenderers";
 
 interface LightweightRuntimeStartScreenProps {
+  readonly purpose?: 'initial_learning'|'retention_review'|'relearning';
+  readonly completionLabel?: string;
+  readonly completionDetail?: string;
   readonly active: boolean;
-  readonly target: PrototypeLearningTargetView | null;
+  readonly target: (Omit<PrototypeLearningTargetView, "targetId"> & {targetId:string}) | null;
   readonly materialization: LightweightInitialLearningMaterialization | null;
   readonly step: LightweightProtocolStepInstance | null;
   readonly completed: boolean;
@@ -34,6 +37,9 @@ interface LightweightRuntimeStartScreenProps {
  * Instance, the registry supplies its renderer, and completion is a Run result.
  */
 export const LightweightRuntimeStartScreen = ({
+  purpose='initial_learning',
+  completionLabel,
+  completionDetail,
   active,
   target,
   materialization,
@@ -74,7 +80,7 @@ export const LightweightRuntimeStartScreen = ({
     <RuntimeFrame
       id="s-lightweight-runtime"
       active={active}
-      title={t("runtime.learning")}
+      title={purpose==='initial_learning'?t('runtime.learning'):purpose==='retention_review'?'复习':'再学习'}
       stepLabel={t(
         completed
           ? "runtime.done"
@@ -105,7 +111,7 @@ export const LightweightRuntimeStartScreen = ({
           <span className="mx-auto mb-7 grid size-14 place-items-center rounded-full bg-[#e9eef8] text-[#526a9b]">
             <Check size={25} strokeWidth={1.4} />
           </span>
-          <p className="text-sm text-[#7b8597]">{t("runtime.initialDone")}</p>
+          <p className="text-sm text-[#7b8597]">{completionLabel??t("runtime.initialDone")}</p>
           <h1 className="mt-6 break-words text-4xl font-medium tracking-tight sm:text-5xl">
             {target.expression}
           </h1>
@@ -113,7 +119,7 @@ export const LightweightRuntimeStartScreen = ({
             {target.meaning}
           </p>
           <p className="mt-8 text-sm text-[#788398]">
-            {t("runtime.scheduled")}
+            {completionDetail??t("runtime.scheduled")}
           </p>
           <button
             className={`${runtimePrimary} mt-9 w-full sm:w-auto`}

@@ -7,6 +7,7 @@ import { PROTOTYPE_LEARNING_TARGETS, type PrototypeLearningPolicy } from '../lea
 import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
 
 interface StudyScreenProps {
+  fixedPolicy?: boolean;
   active: boolean;
   status?: ReactNode;
   calendar?: ReactNode;
@@ -82,6 +83,6 @@ export const StudyScreen = (props: StudyScreenProps) => {
         {records.length>limit&&<button className={`${studyButton} mt-4 border border-[#e3e5ea]`} onClick={()=>setLimit(value=>value+10)}>{t('study.more')}</button>}
       </section>
     </main>
-    {props.active&&props.tab==='b'&&<LearningPreferencesPanel defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('study.done')}/>}
+    {props.active&&props.tab==='b'&&<LearningPreferencesPanel fixedPolicy={props.fixedPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('study.done')}/>}
   </section>;
 };

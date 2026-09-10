@@ -1,0 +1,72 @@
+import {assembleLightweightInitialPresentation} from '../apps/web/src/experience/learningRuntime/lightweightInitialPresentation.ts';
+import {LIGHTWEIGHT_EXPERIENCE_RECALL_STEP,LIGHTWEIGHT_EXPRESSION_REVEAL_STEP} from '../apps/web/src/experience/learningRuntime/lightweightInitialProtocol.ts';
+import assert from 'node:assert/strict';
+import {indexedDB} from 'fake-indexeddb';
+import {canonicalJsonDigest} from '@sensa/learning-kernel';
+import {provisionLightweightInitialContent} from '../apps/web/src/experience/learningRuntime/lightweightInitialContent.ts';
+import {libraryDatabaseName,openLibrary,command,readLibrary,LibraryTransaction} from '../apps/web/src/data/library/store.ts';
+import {installPackage,downloadPackage,sha256} from '../apps/web/src/data/library/packages.ts';
+import {enrollPackage,readLearning,startLearning,actLearning,finishLearning,confirmLearningQuantity} from '../apps/web/src/data/library/learning.ts';
+Object.assign(globalThis,{indexedDB,window:new EventTarget(),BroadcastChannel:undefined});
+// Upgrade the previous library in place without replacing owner drafts.
+await new Promise<void>((resolve,reject)=>{const r=indexedDB.open(libraryDatabaseName,1);r.onupgradeneeded=()=>{for(const name of ['meta','drafts','providers','settings','operations','sessions','meanings','identities'])r.result.createObjectStore(name);r.transaction!.objectStore('drafts').put({text:'preserved owner draft'},'existing');};r.onerror=()=>reject(r.error);r.onsuccess=()=>{r.result.close();resolve();};});
+const identity=await openLibrary();assert.deepEqual(await readLibrary(tx=>tx.get('drafts','existing')),{text:'preserved owner draft'});await command({id:crypto.randomUUID(),kind:'fixture.owner',input:{}},async tx=>{tx.put('meta','service-owner',{subject:crypto.randomUUID()});});
+const id=()=>crypto.randomUUID();
+const result=provisionLightweightInitialContent({learnerUserId:identity.learnerId,learningTargetId:id(),senseId:id(),senseVersionId:id(),senseExpressionBindingId:id(),resolvedLearningPlanRevisionId:'fixture-v1',expressionSourceVersion:'fixture-v1',senseSourceVersion:'fixture-v1',expression:{surface:'borrow',languageTag:'en',expressionKind:'word'},sense:{meaning:'临时取得他人物品，并预期归还。',familiarLanguageTag:'zh-CN'},originExperience:{source:'other_authoritative_source',sourceVersion:'fixture-v1',personalAnchorUseGrantId:null,experience:{scene:'下雨了，你向同事要一把伞，约好明天归还。',senseFocus:'临时取得他人的物品',featureLabels:[]}},referenceFacts:[],requestedAt:new Date().toISOString()});
+assert.equal(result.status,'ready',JSON.stringify(result));if(result.status!=='ready')throw Error();
+const entry={senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),expression:'borrow',meaning:'临时取得他人物品，并预期归还。',content:result.materialization.content};
+const bundle={format:'sensa-learning-package-v1',id:id(),version:'1',title:'合成验证包',targetLanguage:'en',familiarLanguage:'zh-CN',entries:[entry]};
+const bytes=new TextEncoder().encode(JSON.stringify(bundle));
+const descriptor={id:bundle.id,version:'1',title:bundle.title,description:'fixture',entryCount:1,byteLength:bytes.length,sha256:await sha256(bytes),url:'https://fixture.invalid/package.json'};
+const realFetch=globalThis.fetch;globalThis.fetch=async()=>new Response(bytes);
+try{
+ const cancelled=new AbortController();cancelled.abort();await assert.rejects(downloadPackage(descriptor,cancelled.signal,()=>{}));
+ globalThis.fetch=async()=>new Response(bytes.slice(0,bytes.length-1));await assert.rejects(downloadPackage(descriptor,new AbortController().signal,()=>{}));globalThis.fetch=async()=>new Response(bytes);
+ await assert.rejects(downloadPackage({...descriptor,sha256:'0'.repeat(64)},new AbortController().signal,()=>{}));
+ assert.equal((await readLibrary(tx=>tx.all('packages'))).length,0);
+ const pack=await downloadPackage(descriptor,new AbortController().signal,()=>{});
+ assert.equal((await readLearning()).targets.length,0);
+ await installPackage(bytes,descriptor);assert.equal((await readLibrary(tx=>tx.all('packages'))).length,1);
+ await assert.rejects(installPackage(new TextEncoder().encode(JSON.stringify({...bundle,title:'changed'}))));
+ const [targetId]=await enrollPackage(id(),pack.key);await enrollPackage(id(),pack.key);
+ assert.equal((await readLearning()).targets.length,1);
+ const target=(await readLearning()).targets[0]!;
+ for(const definition of [LIGHTWEIGHT_EXPERIENCE_RECALL_STEP,LIGHTWEIGHT_EXPRESSION_REVEAL_STEP]){
+  const presentation=assembleLightweightInitialPresentation({protocolStepInstanceId:id(),protocolRunId:id(),retentionTargetId:target.retentionId,ordinal:1,definition,materialBindings:target.material.content.resources.filter(r=>definition.materialRequirements.some(m=>m.materialRoleKey===r.materialRoleKey)).map(r=>({materialRoleKey:r.materialRoleKey,resourceKey:r.resourceKey,learningMaterializationId:target.material.snapshot.learningMaterializationId}))},target.material);
+  if(presentation.kind==='expression_reveal')assert.equal(presentation.slots.expressionPrimary.surface,'borrow');else assert(!JSON.stringify(presentation).includes('borrow'));
+ }
+ globalThis.fetch=async()=>{throw Error('Offline');};
+ const at='2026-09-10T08:00:00.000Z';await assert.rejects(startLearning(id(),targetId!,20,at));await confirmLearningQuantity(id(),20);let run=await startLearning(id(),targetId!,20,at);
+ assert.equal((await startLearning(id(),targetId!,20,at)).id,run.id);
+ await assert.rejects(actLearning(id(),run.id,run.revision,{kind:'rate',rating:'good'},at));
+ const reveal=id();run=await actLearning(reveal,run.id,run.revision,{kind:'reveal'},at);
+ assert.equal((await readLearning()).runs[0]!.phase,'reveal');
+ assert.equal((await actLearning(reveal,run.id,1,{kind:'reveal'},at)).revision,run.revision);
+ const original=LibraryTransaction.prototype.put;
+ LibraryTransaction.prototype.put=function(table,key,value){if(table==='learningEvents')throw Error('injected disk failure');return original.call(this,table,key,value);};
+ await assert.rejects(actLearning(id(),run.id,run.revision,{kind:'rate',rating:'good'},at));LibraryTransaction.prototype.put=original;
+ assert.equal((await readLearning()).targets[0]!.memory,null);assert.equal((await readLearning()).runs[0]!.revision,run.revision);
+ const rating=id();run=await actLearning(rating,run.id,run.revision,{kind:'rate',rating:'good'},at);
+ await actLearning(rating,run.id,2,{kind:'rate',rating:'good'},at);
+ assert.equal((await readLearning()).targets[0]!.memoryRevision,1);
+ await finishLearning(id(),run.id);
+ await assert.rejects(startLearning(id(),targetId!,20,at));
+ const due=(await readLearning()).targets[0]!.memory!.dueAt.toISOString();run=await startLearning(id(),targetId!,20,due);assert.equal(run.purpose,'retention_review');
+ run=await actLearning(id(),run.id,run.revision,{kind:'reveal'},due);
+ run=await actLearning(id(),run.id,run.revision,{kind:'rate',rating:'again'},due);assert(run.completedAt);await finishLearning(id(),run.id);
+ const t=(await readLearning()).targets[0]!;assert.equal(t.memoryRevision,2);assert(t.relearnAt);
+ await assert.rejects(startLearning(id(),targetId!,20,due));
+ run=await startLearning(id(),targetId!,20,t.relearnAt!);assert.equal(run.purpose,'relearning');
+ run=await actLearning(id(),run.id,run.revision,{kind:'reveal'},t.relearnAt!);run=await actLearning(id(),run.id,run.revision,{kind:'rate',rating:'good'},t.relearnAt!);
+ assert.equal((await readLearning()).targets[0]!.memoryRevision,2);assert.equal((await readLearning()).targets[0]!.relearnAt,null);
+ await finishLearning(id(),run.id);
+ // Daily admission and explicit sign-out remain enforced while fetch is unavailable.
+ const extra={...bundle,id:id(),entries:[{...entry,senseVersionId:id(),bindingVersionId:id()}]};
+ const extraPack=await installPackage(new TextEncoder().encode(JSON.stringify(extra)));const [extraId]=await enrollPackage(id(),extraPack.key);
+ await confirmLearningQuantity(id(),1);await assert.rejects(startLearning(id(),extraId!,1,at));
+ await command({id:id(),kind:'fixture.signout',input:{}},async tx=>{tx.put('meta','signed-out',true);});
+ await assert.rejects(enrollPackage(id(),extraPack.key));await assert.rejects(startLearning(id(),extraId!,1,'2026-09-11T08:00:00.000Z'));
+ const corrupted=structuredClone(bundle);corrupted.entries[0]!.content.resources[0]!.contentDigest='invalid';await assert.rejects(installPackage(new TextEncoder().encode(JSON.stringify(corrupted))));
+ assert.equal(canonicalJsonDigest((await readLearning()).targets[0]!.material.content),canonicalJsonDigest(entry.content));
+ console.log('PASS: verified download/import, immutable versions, separate enrollment, local initial/review/relearning, replay, stale-step rejection, rollback and pinned content; fake IndexedDB, no browser/model calls.');
+}finally{globalThis.fetch=realFetch;}

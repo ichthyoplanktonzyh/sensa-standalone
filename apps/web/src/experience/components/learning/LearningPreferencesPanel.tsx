@@ -7,6 +7,7 @@ import type { PrototypeLearningPolicy } from '../../learningJourney/prototypeLea
 import { runtimePrimary } from './RuntimeFrame';
 
 interface Props {
+  onConfirm?:()=>void;
   closeLabel?: string;
   fixedPolicy?: boolean;
   busy?: boolean;
@@ -17,7 +18,7 @@ interface Props {
   onDailyNewCountChange: (count:number)=>void;
   onClose: ()=>void;
 }
-export function LearningPreferencesPanel({closeLabel,fixedPolicy,busy,status,defaultPolicy,dailyNewCount,onPolicyChange,onDailyNewCountChange,onClose}:Props) {
+export function LearningPreferencesPanel({onConfirm,closeLabel,fixedPolicy,busy,status,defaultPolicy,dailyNewCount,onPolicyChange,onDailyNewCountChange,onClose}:Props) {
   const {t}=useTranslation();
   const [error,setError]=useState(false);
   useEffect(()=>{
@@ -64,7 +65,7 @@ export function LearningPreferencesPanel({closeLabel,fixedPolicy,busy,status,def
         {error&&<p role="alert" className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{t('runtime.saveError')}</p>}
       </div>
       <footer className="mt-auto shrink-0 border-t border-[#e0e5ee] px-6 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-        <button type="button" className={`${runtimePrimary} w-full`} onClick={onClose}>{closeLabel ?? t('learningPreferences.resume')}</button>
+        <button type="button" disabled={busy} className={`${runtimePrimary} w-full`} onClick={onConfirm??onClose}>{closeLabel ?? t('learningPreferences.resume')}</button>
       </footer>
     </section>
   </div>;

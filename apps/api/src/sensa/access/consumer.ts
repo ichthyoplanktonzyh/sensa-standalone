@@ -1,4 +1,5 @@
 import {ensureAdmission} from './admission.js';
+import {learningPackageCatalogSchema} from '@sensa/contracts/sensa';
 import {createNativeAgentRoutes} from '../agent/native.js';
 import {createNativeProvisioningRoutes} from '../provisioning/native.js';
 import {createNativeSemanticRoutes} from '../personal/nativeSemantic.js';
@@ -200,6 +201,12 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
     return c.json({code:'temporarily_unavailable'},503);
   });
   registerReadingRoutes(app,async(request,work)=>{const identity=await verify(request);return transaction(async db=>work(db,await account(db,identity,undefined,false,clock())));},options.readingCompletion);
+  app.get('/sensa/packages',async c=>{
+    const identity=await verify(c.req.raw);await transaction(async db=>account(db,identity,undefined,false,clock()));
+    // Publication catalog is deployment-owned. An absent catalog is genuinely empty.
+    const catalog=learningPackageCatalogSchema.parse(JSON.parse(process.env.SENSA_PACKAGE_CATALOG_JSON??'{"items":[]}'));
+    c.header('Cache-Control','no-store');return c.json(catalog);
+  });
   app.route('/sensa/native/agent',createNativeAgentRoutes({
     authorize:async request=>{const identity=await verify(request);return transaction(async db=>{return activeMeaningConnection(db,await account(db,identity,undefined,false,clock()));});},
     reserve:async(request,input)=>{const identity=await verify(request);await transaction(async db=>{

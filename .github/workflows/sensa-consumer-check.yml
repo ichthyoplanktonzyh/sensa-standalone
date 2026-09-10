@@ -73,6 +73,8 @@ jobs:
         env:
           SENSA_TEST_DATABASE_URL: postgresql://postgres:local-ci-only@127.0.0.1:5432/sensa_m1a_ci
         run: npm run sensa:account-service-db-smoke && npm run sensa:web-intake-smoke
+      - name: Local package learning and offline shell (no browser or model calls)
+        run: npm run sensa:package-learning-smoke && npm run sensa:offline-shell-smoke
       - name: Install test browser
         run: npx playwright install --with-deps chromium
       - name: Cross-tab account isolation (synthetic HTTP, real browser storage)
