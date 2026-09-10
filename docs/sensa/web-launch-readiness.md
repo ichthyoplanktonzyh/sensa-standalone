@@ -240,3 +240,39 @@ Supabase JS 的 PKCE challenge/verifier，与合成邮件跳转/Auth/API 一起�
 使用配置中的 `127.0.0.1` origin 发起和完成登录，不能与 localhost 或 3000 混用。
 本轮浏览器控制台检查停在登录页，未修改设置；owner 要求后续外部平台步骤无法由插件
 完成时直接请求协助，不再自行通过浏览器接管。此配置当前等待 owner 确认。
+
+随后 owner 已确认保存回调配置。公开 Auth verify 接口用无效测试 token 检查到默认跳转
+`http://127.0.0.1:3001/`、指定页面跳转 `/profile`；未发送邮件或验证登录。插件仍不能列出
+完整 redirect 白名单，不把这项行为检查当作白名单逐条审计。
+
+### 2026-09-10：隔离数据库初始化交付准备
+
+Owner 指示继续推进，并明确选择新建私有 `ichthyoplanktonzyh/sensa-standalone` 仓库。
+仓库已创建、私有属性已核实，原工作树配置该 origin；尚未推送或运行远程工作流。
+原 `ichthyoplanktonzyh/sensa` 为公开仓库，本轮不使用或修改它。
+
+新增 `.github/workflows/sensa-trial-database.yml`，固定测试项目
+`kwwmukqzlxxsnviyhwmr`，使用 `sensa-trial` environment 和完整已审阅 SHA。
+显式选择 initialize 或 invite；不包含应用部署、默认模型调用、内容发布或旧资料导入。
+
+- initialize：校验管理员/运行连接的项目、相同主机/数据库及 TLS；拒绝未登记的 Sensa
+  schema。按现有 27 个迁移逐个事务应用，并使用 session advisory lock 排除并发初始化。
+  内部迁移账本启用 RLS 并移除公共客户端权限。创建专用运行登录，仅继承 backend_app；
+  已有运行角色不重设密码，拒绝提权/意外成员关系/对象所有权，真实登录验证权限。
+- invite：仅为指定且已验证邮箱、未禁用、非匿名的 Auth UUID 建立受邀记录。
+  不创建 Auth 用户，不恢复已撤销邀请或已删除账号，不写学习事实。
+- 重跑保留已应用迁移和运行密码；迁移失败保留既有成功步骤并中止，不删库回滚。
+  真正云端执行仍需 owner 对具体 SHA、推送和操作范围的交付授权。
+
+凭据输入文件为忽略且 0600 的 `apps/api/.env.trial-ci`；owner 在其中填写管理员
+`MIGRATION_DATABASE_URL`。`node scripts/release/prepareTrialEnvironment.mjs` 只在本机
+校验配置并生成/复用专用运行密码，将 `SENSA_RUNTIME_DATABASE_URL` 写入该文件、
+相同连接写入 API `.env.real-service` 的 DATABASE_URL。此脚本不连接数据库或上传秘密，
+其“已填写”不表示远程角色已创建。`sensa-trial` 的 Secrets 只需要这两条数据库连接。
+Supabase service-role key 不属于本次启动学习的前置，留待账号删除真实验收。
+
+`sensa:trial-database-smoke` 已用一次性本地 Postgres 库验过 27 个迁移、幂等重跑、
+受限角色实际登录、内部账本拒读、权限提升/错误密码拒绝、目标/TLS 校验、已验证身份
+开通和撤销不恢复；Auth 表为合成记录。已加入 no-cost CI。本机 owner 数据库未迁移，
+测试库及专用测试角色已清理。根级 typecheck/build/lint 已通过；凭据准备脚本另用临时
+目录和合成连接串验证 CI/API 值一致、0600 权限、输出不含密码及重复运行不轮换密码。

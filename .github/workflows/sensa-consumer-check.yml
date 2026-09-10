@@ -40,6 +40,8 @@ jobs:
       - run: npm ci --prefix apps/web-next
       - run: npm run typecheck && npm run build && npm run lint
       - run: npm run db:migrate
+      - name: Isolated trial initializer (disposable local database)
+        run: npm run sensa:trial-database-smoke
       - name: Restricted test principal (disposable CI database only)
         run: |
           node --input-type=module <<'JS'

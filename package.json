@@ -27,6 +27,7 @@
     "web:build": "npm run build -w @sensa/web",
     "web:preview": "npm run preview -w @sensa/web",
     "db:migrate": "tsx scripts/db-migrate.ts",
+    "sensa:trial-database-smoke": "node scripts/sensaTrialDatabaseSmoke.mjs",
     "sensa:first-user-import": "tsx scripts/sensaFirstUser/import.ts",
     "sensa:restore-first-user-plan": "tsx scripts/sensaFirstUser/restorePlan.ts",
     "sensa:repair-first-user-sync": "tsx scripts/sensaFirstUser/repairSync.ts",
