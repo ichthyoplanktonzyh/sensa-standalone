@@ -1,5 +1,6 @@
 {
   "extends": "../../tsconfig.package.json",
   "compilerOptions": { "outDir": "dist", "rootDir": "src" },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "references": [{ "path": "../learning-kernel" }]
 }

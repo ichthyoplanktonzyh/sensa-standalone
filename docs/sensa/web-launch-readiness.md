@@ -283,3 +283,15 @@ Supabase service-role key 不属于本次启动学习的前置，留待账号删
 但管理员登录返回 `28P01`（密码认证失败），仍需 owner 更正项目数据库密码。
 尚未执行远程迁移、创建运行角色或推送代码。证书配置后的 typecheck/build/lint、
 一次性数据库 smoke 和配置幂等/权限检查均通过。
+
+2026-09-10 后续：owner 完成云端密码重置后连接成功，并明确授权推送、CI Secrets
+及初始化。代码已推送至私有 `ichthyoplanktonzyh/sensa-standalone`；两条数据库 URL
+通过 stdin 配置到 `sensa-trial` environment。首次初始化失败且未建表，补充仅输出阶段和
+错误码的诊断后，[CI 初始化](https://github.com/ichthyoplanktonzyh/sensa-standalone/actions/runs/34475932554)
+成功完成 27 个迁移和专用角色。随后本机通过 `BEGIN READ ONLY` 实查迁移数量为 27，
+`sensa_trial_runtime` 可读服务表，账号/邀请均为 0；尚无真实登录身份。
+Web 3001 和 API 8081 已启动，health 与页面返回 200，未登录服务请求返回 401。
+常规 CI 另外发现 web-next 缺少 learning-kernel 的 lock 条目，已补齐；干净安装及根级
+typecheck/build/lint 通过。云端首次干净构建进一步暴露 contracts/content-validator 的
+TypeScript project references 缺失，已补上实际包依赖顺序；清除构建输出后的
+typecheck/build/lint 也通过，云端完整检查继续运行。真实邮箱登录与邀请开通待 owner 完成登录。
