@@ -295,3 +295,8 @@ Web 3001 和 API 8081 已启动，health 与页面返回 200，未登录服务�
 typecheck/build/lint 通过。云端首次干净构建进一步暴露 contracts/content-validator 的
 TypeScript project references 缺失，已补上实际包依赖顺序；清除构建输出后的
 typecheck/build/lint 也通过，云端完整检查继续运行。真实邮箱登录与邀请开通待 owner 完成登录。
+
+Owner 已完成首个真实邮箱验证；[CI 开通](https://github.com/ichthyoplanktonzyh/sensa-standalone/actions/runs/34476564285)
+成功，本机受限连接确认 1 个有效邀请、1 个服务账号，真实登录已创建服务资料。
+云端回归又发现离线 smoke 将构建模式置空，误依赖未入库的预览音频；改为 production，
+使用隔离 Chrome 验过完整离线冷启动/恢复/账号隔离，根级检查也通过。
