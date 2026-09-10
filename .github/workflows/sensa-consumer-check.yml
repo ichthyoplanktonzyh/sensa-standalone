@@ -74,13 +74,15 @@ jobs:
           SENSA_TEST_DATABASE_URL: postgresql://postgres:local-ci-only@127.0.0.1:5432/sensa_m1a_ci
         run: npm run sensa:account-service-db-smoke && npm run sensa:web-intake-smoke
       - name: Local package learning and offline shell (no browser or model calls)
-        run: npm run sensa:package-learning-smoke && npm run sensa:offline-shell-smoke && npm run sensa:personal-learning-smoke
+        run: npm run sensa:package-learning-smoke && npm run sensa:offline-shell-smoke && npm run sensa:personal-learning-smoke && npm run sensa:library-backup-smoke
       - name: Install test browser
         run: npx playwright install --with-deps chromium
       - name: Production offline cold start (isolated Chromium processes and synthetic account/catalog)
         run: npm run sensa:offline-cold-start-smoke
       - name: Complete Intake to personal learning in production UI (synthetic providers)
         run: npm run sensa:personal-intake-browser-smoke
+      - name: Encrypted library backup and fresh browser recovery
+        run: npm run sensa:library-backup-browser-smoke
       - name: Cross-tab account isolation (synthetic HTTP, real browser storage)
         run: npm run sensa:web-account-isolation-smoke
       - name: Full production-preview browser journey (synthetic local services)

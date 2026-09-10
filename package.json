@@ -80,7 +80,9 @@
     "sensa:offline-cold-start-smoke": "node --import tsx scripts/sensaOfflineColdStartSmoke.mts",
     "sensa:offline-shell-smoke": "node --import tsx scripts/sensaOfflineShellSmoke.mts",
     "sensa:web-intake-smoke": "node --import tsx scripts/sensaWebIntakeSmoke.mts",
-    "sensa:account-service-db-smoke": "node --import tsx scripts/sensaAccountServiceDatabaseSmoke.mts"
+    "sensa:account-service-db-smoke": "node --import tsx scripts/sensaAccountServiceDatabaseSmoke.mts",
+    "sensa:library-backup-smoke": "node --import tsx scripts/sensaPersonalLearningSmoke.mts --backup",
+    "sensa:library-backup-browser-smoke": "node --import tsx scripts/sensaOfflineColdStartSmoke.mts --backup"
   },
   "engines": {
     "node": ">=24"

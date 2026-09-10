@@ -1,3 +1,4 @@
+import {LibraryBackupPanel} from './LibraryBackupPanel';
 import {useAccountExperience} from '../account/AccountExperience';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ArrowRight, BookOpen, SlidersHorizontal, UserRound, RefreshCw } from 'lucide-react';
@@ -102,10 +103,11 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
             </dl>
             <p className="pb-5 text-xs leading-6 text-[#788398]">{props.account ? '学习记录按当前账号保存在本机，并与服务器同步。' : props.localLibrary ? '材料、对话和已确认的意思保存在当前浏览器。清除网站数据会移除这些本机资料。' : t('account.storageNote')}</p>
           </div>
-          <p className="mt-3 text-xs leading-6 text-[#788398]">{props.account ? '导出与账号删除暂未开放。' : t('account.controls')}</p>
+          <p className="mt-3 text-xs leading-6 text-[#788398]">{props.account ? '导出与账号删除暂未开放。' : props.localLibrary ? '可在下方导出本机备份。账号删除暂未开放。' : t('account.controls')}</p>
         </section>
       </div>
       {props.account && <div className="mt-8 flex flex-wrap gap-3"><button className="min-h-11 rounded-xl bg-[#edf0f7] px-5 text-sm text-[#303f76]" disabled={props.account.busy} onClick={props.account.onSync}>检查同步结果</button><button className="min-h-11 rounded-xl border border-[#e3e5ea] px-5 text-sm" disabled={props.account.busy || props.account.pending > 0} onClick={props.account.onLogout}>退出登录</button>{props.account.pending > 0 && <p className="w-full text-sm text-[#68748d]">请先同步本机请求，再退出登录。</p>}</div>}
+      {props.localLibrary&&<LibraryBackupPanel/>}
       {props.modelSettings&&<section aria-label="模型服务设置" className="mt-10">{props.modelSettings}</section>}
       <section aria-labelledby="account-support" className="mt-10">
         <h2 id="account-support" className="mb-4 text-lg font-medium">{t('account.support')}</h2>
