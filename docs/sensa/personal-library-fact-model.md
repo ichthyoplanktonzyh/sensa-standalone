@@ -72,3 +72,17 @@ Retention Target 按领域模型采用 learner × stable Sense × stable target 
 这里的 due 分组只覆盖共同 Handoff 后首个复习机会，不构成完整 Review lineage 算法。身份摘要不是签名；没有校验 Device/Agent 权限。未执行真实 SQLite 合并、FSRS 分支裁决、Rust/TS 差分、真实浏览器/Flutter UI 或加密传输。不得把 720 种排列表述为完整模型/同步已验收。
 
 本轮验证命令：上述 smoke、对两个实验文件的独立 strict TypeScript 检查，以及根级 `npm run typecheck`、`npm run build`、`npm run lint` 均通过。生产客户端、数据库迁移和线上接口未改动；未迁移用户数据、推送或部署。
+
+## 7. G1 前置学习分支向量（2026-09-10）
+
+`node --import tsx scripts/sensaLearningReconciliationSmoke.mts` 新增独立参考模型，输入仍假定是
+领域层已验证的提交结果，不能作为生产导入 API。覆盖共同初始化身份、不同 Policy/grader 的
+并发评价、显式候选选择/不贡献、并发裁决、未观察迟到分支、历史更正、后继依赖、普通与显式
+scheduler-eligible 重学、换事实 ID 的重复 operation/run 及设备钟偏差。五条学习分支的 120 种
+投递排列与重复投递收敛，原 G0 的 720 种排列仍通过。
+
+参考处理是保留全部历史，冲突不按评分、时钟或到达顺序胜出；裁决记录成为新的因果依据。
+遗漏当前分支、并发裁决或选择已更正旧结果时继续待裁决；基于失效依据的后继保留但不参与
+有效调度。这里没有执行 FSRS 重放，也没有证明现实中的授权、合法初始完成/评价来源、
+时间间隔、附件或版本合同。实际跨端机会重映射、原生/Web 事实适配和 UI 裁决仍待实现，
+不能据此关闭 G1/G2/G3 或 M3。
