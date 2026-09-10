@@ -1,12 +1,13 @@
 import {readdir,readFile,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import type {Plugin} from 'vite';
 /** Only immutable application files; account/API responses and packages are never cached here. */
-export function offlineShell():Plugin{return {name:'sensa-offline-shell',apply:'build',async closeBundle(){
- const assets=(await readdir('dist/assets')).filter(n=>!n.endsWith('.map')).map(n=>'/assets/'+n);
- const paths=['/index.html',...assets];const hash=createHash('sha256');for(const path of paths)hash.update(await readFile('dist'+path));
+export function offlineShell():Plugin{let output='dist';return {configResolved(config){output=resolve(config.root,config.build.outDir);},name:'sensa-offline-shell',apply:'build',async closeBundle(){
+ const assets=(await readdir(resolve(output,'assets'))).filter(n=>!n.endsWith('.map')).map(n=>'/assets/'+n);
+ const paths=['/index.html',...assets];const hash=createHash('sha256');for(const path of paths)hash.update(await readFile(resolve(output,'.'+path)));
  const cache='sensa-shell-'+hash.digest('hex').slice(0,20);
- await writeFile('dist/sw.js',`const CACHE=${JSON.stringify(cache)},FILES=${JSON.stringify(paths)};
+ await writeFile(resolve(output,'sw.js'),`const CACHE=${JSON.stringify(cache)},FILES=${JSON.stringify(paths)};
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES))));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('sensa-shell-')&&key!==CACHE).map(key=>caches.delete(key))))));
 self.addEventListener('fetch',event=>{

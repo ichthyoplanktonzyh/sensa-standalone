@@ -2,7 +2,7 @@ import {z} from 'zod';
 import {ExtensionIntake} from './ExtensionIntake';
 import {createContext,useContext,useEffect,useRef,useState,type ReactNode} from 'react';
 import {clearAllCredentials} from '../../data/library/providers';
-import {auth} from '../../data/consumer/client';
+import {auth,cachedAuthSubject,authStorageKey} from '../../data/consumer/client';
 import {command,readLibrary,openLibrary,observeLibrary} from '../../data/library/store';
 import {setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 
@@ -22,6 +22,14 @@ export default function AccountExperience({children}:{children:ReactNode}){
    const stored=await readLibrary(async tx=>({owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out')}));
    if(gen!==generation.current)return;
    setOwner(stored.owner??null);setOnlineService(false);
+   // Local access uses the already admitted owner. Refreshing an expired online
+   // token may wait indefinitely offline; it must not hold the local library gate.
+   const cachedSubject=cachedAuthSubject();
+   if(stored.owner&&(cachedSubject===undefined||cachedSubject!==null&&cachedSubject!==stored.owner.subject)){
+    setLocal(false);setNotice('此设备的资料属于另一个账号或登录状态无法读取。请使用原账号登录；本机资料没有改变。');return;
+   }
+   if(stored.signedOut){setLocal(false);setReady(true);}
+   else if(stored.owner&&stored.identity){setLocal(true);setReady(true);}
    const session=(await auth?.getSession())?.data.session;
    if(gen!==generation.current)return;
    if(!session){setLocal(!!stored.identity&&!stored.signedOut);return;}
@@ -44,7 +52,7 @@ export default function AccountExperience({children}:{children:ReactNode}){
   }catch{if(gen===generation.current)setNotice('暂时无法连接服务，请检查网络后重试。已保存的资料仍保留。');}
   finally{if(gen===generation.current)setReady(true);}
  };
- useEffect(()=>{void recover();const sub=auth?.onAuthStateChange((event)=>{if(event==='SIGNED_OUT')clearAllCredentials();setOnlineService(false);if(event==='SIGNED_OUT'||event==='SIGNED_IN')setLocal(false);setTimeout(()=>void recover(),0);});const online=()=>void recover();window.addEventListener('online',online);const timer=setInterval(()=>setNow(Date.now()),1000);return()=>{generation.current++;sub?.data.subscription.unsubscribe();window.removeEventListener('online',online);clearInterval(timer);};},[]);
+ useEffect(()=>{void recover();const sub=auth?.onAuthStateChange((event)=>{if(event==='SIGNED_OUT')clearAllCredentials();setOnlineService(false);if(event==='SIGNED_OUT'||event==='SIGNED_IN')setLocal(false);setTimeout(()=>void recover(),0);});const online=()=>void recover();const storage=(event:StorageEvent)=>{if(event.key===null||event.key===authStorageKey)void recover();};window.addEventListener('online',online);window.addEventListener('storage',storage);const timer=setInterval(()=>setNow(Date.now()),1000);return()=>{generation.current++;sub?.data.subscription.unsubscribe();window.removeEventListener('online',online);window.removeEventListener('storage',storage);clearInterval(timer);};},[]);
  useEffect(()=>observeLibrary(()=>{void readLibrary(async tx=>({signedOut:await tx.get('meta','signed-out')})).then(state=>{if(state.signedOut&&localRef.current){generation.current++;clearAllCredentials();setLocal(false);setOnlineService(false);}}).catch(()=>setNotice('本机状态暂时无法读取，请稍后重试。'));}),[]);
  const perform=async(work:()=>Promise<void>)=>{setBusy(true);setNotice('');try{await work();}catch{setNotice('操作未完成，请稍后重试。');}finally{setBusy(false);}};
  const send=async()=>{if(!auth)return;const {error}=await auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true}});if(error){setNotice(error.status===429?'发送过于频繁，请稍后重试。':'验证码未能发送，请检查邮箱后重试。');return;}setSent(true);setRetryAt(Date.now()+60000);};

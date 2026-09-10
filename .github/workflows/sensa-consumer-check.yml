@@ -77,6 +77,8 @@ jobs:
         run: npm run sensa:package-learning-smoke && npm run sensa:offline-shell-smoke
       - name: Install test browser
         run: npx playwright install --with-deps chromium
+      - name: Production offline cold start (isolated Chromium processes and synthetic account/catalog)
+        run: npm run sensa:offline-cold-start-smoke
       - name: Cross-tab account isolation (synthetic HTTP, real browser storage)
         run: npm run sensa:web-account-isolation-smoke
       - name: Full production-preview browser journey (synthetic local services)

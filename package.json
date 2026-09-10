@@ -75,6 +75,7 @@
     "sensa:consumer-settlement-smoke": "node --import tsx scripts/sensaConsumerSettlementSmoke.mts",
     "sensa:native-core-smoke": "node --import tsx scripts/sensaNativeCoreParity.mts",
     "sensa:package-learning-smoke": "node --import tsx scripts/sensaPackageLearningSmoke.mts",
+    "sensa:offline-cold-start-smoke": "node --import tsx scripts/sensaOfflineColdStartSmoke.mts",
     "sensa:offline-shell-smoke": "node --import tsx scripts/sensaOfflineShellSmoke.mts",
     "sensa:web-intake-smoke": "node --import tsx scripts/sensaWebIntakeSmoke.mts",
     "sensa:account-service-db-smoke": "node --import tsx scripts/sensaAccountServiceDatabaseSmoke.mts"

@@ -17,12 +17,13 @@ export function usePackageLearning(entryOpen:boolean){
  const perform=async<T,>(work:()=>Promise<T>)=>{setBusy(true);setNotice('');try{const result=await work();await refresh();return result;}catch(e){setNotice(e instanceof Error&&/[\u4e00-\u9fff]/u.test(e.message)?e.message:'操作未完成，原资料仍保留，请重试。');return null;}finally{setBusy(false);setProgress(null);}};
  const reloadCatalog=async()=>{
   const gen=++generation.current;
+  let sessionTimer:ReturnType<typeof setTimeout>|undefined;
   try{const cached=await readLibrary(tx=>tx.get<LearningPackageDescriptor[]>('meta','package-catalog'));if(gen!==generation.current)return;setCatalog(cached??[]);
-  const session=(await auth?.getSession())?.data.session,endpoint=import.meta.env.VITE_SENSA_API_URL;if(!session||!endpoint)throw Error();
+  const session=(await Promise.race([auth?.getSession(),new Promise<never>((_,reject)=>{sessionTimer=setTimeout(()=>reject(new Error('session unavailable')),3000);})]))?.data.session,endpoint=import.meta.env.VITE_SENSA_API_URL;if(!session||!endpoint)throw Error();
    const r=await fetch(endpoint.replace(/\/+$/u,'')+'/sensa/packages',{headers:{authorization:'Bearer '+session.access_token},signal:AbortSignal.timeout(15000),redirect:'error'});if(!r.ok)throw Error();const c=learningPackageCatalogSchema.parse(await r.json());
    if(gen!==generation.current||(await auth?.getSession())?.data.session?.user.id!==session.user.id)return;
    await command({id:crypto.randomUUID(),kind:'package.catalog',input:{items:c.items}},async tx=>{tx.put('meta','package-catalog',c.items);});if(gen===generation.current){setCatalog(c.items);setNotice('');}
-  }catch{if(gen===generation.current)setNotice('暂时无法更新目录。已下载内容可继续使用；可以联网后重试。');}
+  }catch{if(gen===generation.current)setNotice('暂时无法更新目录。已下载内容可继续使用；可以联网后重试。');}finally{clearTimeout(sessionTimer);}
  };
  useEffect(()=>{if(entryOpen)void reloadCatalog();},[entryOpen]);
  const run=runs.find(r=>r.id===activeId)??null;
