@@ -1018,8 +1018,9 @@ function ConnectedMeaningConversation({active,onBack,conversation:c,learningCont
   <p className="px-5 text-xs">{c.source?.url&&<a href={c.source.url} target="_blank" rel="noreferrer">{localFlowText('viewSource')}{c.source.title||c.source.url}</a>}</p>
   <p className="px-5 py-3 text-xs leading-6 text-[#68748d]">{localFlowText('sendTo')}{c.recipient}{localFlowText('sendDisclosure')}</p>
   <div ref={transcript} className={uiClass('pmw-transcript')} aria-live="polite">
+   <div className={uiClass('pmw-message is-learner')}><div><p>{c.material}</p></div></div>
    {c.messages.map((m,i)=><div key={i} className={uiClass(`pmw-message is-${m.role}`)}>{m.role==='assistant'&&<span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span>}<div><p>{m.body}</p></div></div>)}
-   {c.busy&&<div className={uiClass('pmw-message is-assistant is-thinking')}><span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span><div><p><i/><i/><i/></p></div></div>}
+   {c.busy&&<div className={uiClass('pmw-message is-assistant is-thinking')}><span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span><div><p role="status">{localFlowText('clarificationWorking')}</p></div></div>}
    {c.accepted&&<div className={uiClass('pmw-done')}><span className={uiClass('pmw-done-mark')}>✓</span><h2>{localFlowText('meaningConfirmed')}</h2><p>{localFlowText('savedLocally')}</p></div>}
   </div>
   {c.accepted&&learningControls}

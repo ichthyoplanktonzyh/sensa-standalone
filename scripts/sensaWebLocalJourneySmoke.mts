@@ -10,7 +10,7 @@ const proposal={explanation:'用 tactful 描述顾及他人感受的得体表达
 let subject=crypto.randomUUID();
 let serviceAvailable=true;
 const token=()=>[{}, {sub:subject,exp:Math.floor(Date.now()/1000)+3600},'synthetic'].map(x=>Buffer.from(JSON.stringify(x)).toString('base64url')).join('.');
-let count=0;const requests:any[]=[];
+let count=0;const requests:any[]=[];let releaseFirstTurn:(()=>void)|undefined;
 await context.route('**/*',async route=>{
  const url=new URL(route.request().url());
  if(url.origin==='http://127.0.0.1:4399'&&url.pathname==='/auth/v1/otp'){await route.fulfill({json:{}});return;}
@@ -21,6 +21,7 @@ await context.route('**/*',async route=>{
  if(url.origin===origin){await route.continue();return;}
  if(url.pathname==='/sensa/native/agent/turn'||url.origin==='http://127.0.0.1:4398'&&url.pathname==='/v1/chat/completions'){
   const input=route.request().postDataJSON();const body=input.body??input;requests.push(body);count++;
+  if(count===1)await new Promise<void>(resolve=>{releaseFirstTurn=resolve;});
   const call=count===1?{name:'ask_learner',arguments:JSON.stringify({question:'你更想表达说话得体，还是做事谨慎？'})}:{name:'propose_meaning',arguments:JSON.stringify(proposal)};
   const completion={model:'fixture-model',choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:[{id:crypto.randomUUID(),type:'function',function:call}]}}]};await route.fulfill({headers:{'access-control-allow-origin':origin},json:input.body?{id:input.id,inputDigest:input.inputDigest,response:completion}:completion});return;
  }
@@ -62,8 +63,12 @@ try{
  await page.getByRole('button',{name:/设置/}).click();await expect(page.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible();await expect(page.getByLabel('连接名称',{exact:true})).not.toBeVisible();await page.getByText('高级设置 · 自定义模型服务',{exact:true}).click();await page.getByLabel('连接名称',{exact:true}).fill('本机测试服务');await page.getByLabel('服务地址',{exact:true}).fill('http://127.0.0.1:4398/v1');await page.getByLabel('模型名称',{exact:true}).fill('fixture-model');await page.getByLabel('Key（可稍后填写）').fill('only-in-memory-test-key');await page.getByRole('button',{name:'保存连接',exact:true}).click();await expect(page.getByText('当前页面已填写 Key',{exact:true})).toBeVisible();
  expect(count).toBe(0);
  await page.getByRole('button',{name:'我的内容',exact:true}).last().click();await page.getByRole('button').filter({hasText:'我想指出同事的问题，但不想让他难堪。'}).last().click();
- await expect(page.getByRole('heading',{name:'澄清意思',exact:true})).toBeVisible();expect(count).toBe(0);
- await page.getByRole('button',{name:'继续对话',exact:true}).click();await expect(page.getByText('你更想表达说话得体，还是做事谨慎？',{exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'澄清意思',exact:true})).toBeVisible();
+ await expect(page.getByText('正在理解你的场景…',{exact:true})).toBeVisible();
+ await expect(page.locator('.pmw-transcript').getByText('我想指出同事的问题，但不想让他难堪。',{exact:true})).toBeVisible();
+ await expect.poll(()=>count).toBe(1);releaseFirstTurn!();
+ await expect(page.getByText('你更想表达说话得体，还是做事谨慎？',{exact:true})).toBeVisible();expect(count).toBe(1);
+ await page.reload();await expect(page.getByText('你更想表达说话得体，还是做事谨慎？',{exact:true})).toBeVisible();expect(count).toBe(1);
  await page.getByLabel('补充或更正',{exact:true}).fill('是说话得体，顾及他的感受。');await page.getByRole('button',{name:'发送',exact:true}).click();await expect(page.getByRole('button',{name:'就是这个意思',exact:true})).toBeEnabled();expect(count).toBe(2);expect(requests[1].messages.some((m:any)=>m.content==='是说话得体，顾及他的感受。')).toBe(true);
  await expect(page.getByText('你更想表达说话得体，还是做事谨慎？',{exact:true})).toBeVisible();
  await capture('clarification');
@@ -90,5 +95,5 @@ try{
  await page.getByLabel('邮箱',{exact:true}).fill('other@sensa.invalid');await page.getByRole('button',{name:'发送登录邮件',exact:true}).click();await page.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
  await expect(page.getByText('此设备的资料属于另一个账号或登录状态无法读取。请使用原账号登录；本机资料没有改变。')).toBeVisible();
  await expect(page.getByRole('heading',{name:'我的内容',exact:true})).not.toBeVisible();
- expect(errors).toEqual([]);console.log('PASS: full App routes/four navigation sections/preferences persistence/study plan, ContentScreen/Composer/MeaningDetail/Profile: local draft save/failure/reload, provider purpose/ephemeral key, teacher clarification/correction, explicit offline confirmation, no automatic calls. Synthetic model, real React and IndexedDB.');
+ expect(errors).toEqual([]);console.log('PASS: full App routes/four navigation sections/preferences persistence/study plan, ContentScreen/Composer/MeaningDetail/Profile: local draft save/failure/reload, provider purpose/ephemeral key, teacher clarification/correction, explicit offline confirmation, one initial turn on navigation and no repeat on reload. Synthetic model, real React and IndexedDB.');
 }catch(e){await mkdir('/tmp/sensa-web-local',{recursive:true});await page.screenshot({path:'/tmp/sensa-web-local/failure.png'});console.error(await page.locator('body').innerText());throw e;}finally{await browser.close();}

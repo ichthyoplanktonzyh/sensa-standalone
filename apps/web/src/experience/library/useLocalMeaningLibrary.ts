@@ -11,11 +11,12 @@ import type {ContentScreenSource} from '../components/ContentScreen';
 import type {MeaningConversationController} from '../components/PersonalMeaningDetailScreen';
 import {projectLocalWorld} from './projection';
 const errorText=(e:unknown)=>e instanceof Error&&e.message.startsWith('localFlow.')?e.message:localFlowText('operationFailed');
-export function useLocalMeaningLibrary(draftId:string|null, active:boolean){
+export function useLocalMeaningLibrary(draftId:string|null, active:boolean,startRequest:{id:string;draftId:string}|null=null){
  useTranslation();
  const [drafts,setDrafts]=useState<LocalDraft[]>([]),[sessions,setSessions]=useState<TeacherSession[]>([]),[meanings,setMeanings]=useState<LocalMeaning[]>([]);
  const [notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[loaded,setLoaded]=useState(false),[recipient,setRecipient]=useState<Provider|null>(null);
  const controller=useRef<AbortController|null>(null);
+ const consumedStart=useRef<string|null>(null);
  const refresh=async()=>{const [d,s,m]=await Promise.all([listDrafts(),listTeachers(),listMeanings()]);setDrafts(d);setSessions(s);setMeanings(m);setLoaded(true);};
  useEffect(()=>{void openLibrary().then(refresh).catch(e=>setNotice(errorText(e)));const stop=observeLibrary(()=>void refresh().catch(e=>setNotice(errorText(e))));return ()=>{stop();controller.current?.abort();};},[]);
  useEffect(()=>{void selectedProvider('teacher').then(setRecipient).catch(()=>setRecipient(null));},[draftId,active,busy]);
@@ -29,7 +30,15 @@ export function useLocalMeaningLibrary(draftId:string|null, active:boolean){
  const source:Pick<ContentScreenSource,'items'|'status'|'reload'|'composer'>={items:projectLocalWorld(drafts,sessions,meanings),status:{ok:loaded,error:localFlowNotice(notice),errorKind:loaded?null:'unavailable'},reload:()=>void refresh().catch(e=>setNotice(errorText(e))),composer:{save:async input=>{const text=input.texts.join('\n\n')||input.familiarExpression;const d=await saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text,familiarExpression:input.familiarExpression,startingPoint:input.startingPoint});await refresh();return d.id;}}};
  const draft=drafts.find(d=>d.id===draftId);
  const session=sessions.filter(s=>s.draftId===draftId&&s.draftRevision===draft?.revision).at(-1);
- const run=async()=>{if(!recipient||!session)throw new Error('localFlow.checkSensa');const c=new AbortController();controller.current=c;try{await continueTeacher(session.id,recipient,c.signal,()=>void refresh());}finally{if(controller.current===c)controller.current=null;}};
+ const run=async()=>{if(!session)throw new Error('localFlow.checkSensa');const provider=await selectedProvider('teacher');const c=new AbortController();controller.current=c;try{await continueTeacher(session.id,provider,c.signal,()=>void refresh());}finally{if(controller.current===c)controller.current=null;}};
+ // Only a user navigation requests the first turn. A reload has no request,
+ // and reopening a conversation with prior attempts never resumes it silently.
+ useEffect(()=>{
+  if(!active||!session||!startRequest||startRequest.draftId!==draftId||consumedStart.current===startRequest.id)return;
+  consumedStart.current=startRequest.id;
+  if(session.status!=='idle'||session.requests!==0||session.messages.length)return;
+  void perform(run).catch(()=>{});
+ },[active,startRequest,session?.id]);
  const conversation:MeaningConversationController|undefined=session?{material:session.input,source:draft?.intake?{url:captureSourceLink(draft.intake.snapshot.source),title:draft.intake.snapshot.source.title}:undefined,messages:session.messages.flatMap<{role:'learner'|'assistant';body:string}>(m=>{
   if(m.role==='user')return [{role:'learner' as const,body:m.content??''}];
   if(m.role!=='assistant')return [];

@@ -40,7 +40,7 @@ try{
  process.env.DEEPSEEK_API_KEY='synthetic-never-sent';
  globalThis.fetch=async(input,options)=>{
   assert.equal(String(input),'https://api.deepseek.com/chat/completions');
-  assert.equal(JSON.parse(String(options?.body)).model,'deepseek-chat');providerCalls++;
+  assert.equal(JSON.parse(String(options?.body)).model,'deepseek-flash');providerCalls++;
   return Response.json({model:'fixture',choices:[{finish_reason:'stop',message:{content:'fixture'}}]});
  };
  const turn={id:crypto.randomUUID(),purpose:'teacher',body:{model:'sensa-managed',messages:[{role:'system',content:'fixture'},{role:'user',content:'fixture'}],max_tokens:100,stream:false}};

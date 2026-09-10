@@ -261,7 +261,8 @@ export default function App() {
     params.coming === 'collections' ? 'collections' : 'scenes';
   const personalMeaningId = params.meaningId ?? null;
   const meaningFocusId = params.focusId ?? null;
-  const localLibrary = useLocalMeaningLibrary(personalMeaningId, viewMode === 'main' && mainStack.includes('s-personal-meaning'));
+  const [clarificationStart, setClarificationStart] = useState<{id:string;draftId:string}|null>(null);
+  const localLibrary = useLocalMeaningLibrary(personalMeaningId, viewMode === 'main' && mainStack.includes('s-personal-meaning'), clarificationStart);
   const selectedContentSense = useMemo(
     () => (params.senseId ? contentSenseForId(params.senseId) : null),
     [params.senseId],
@@ -288,6 +289,7 @@ export default function App() {
     nextPersonalMeaningId: string,
     nextMeaningFocusId?: string,
   ) => {
+    setClarificationStart({id:crypto.randomUUID(),draftId:nextPersonalMeaningId});
     goMain('s-personal-meaning', {
       meaningId: nextPersonalMeaningId,
       focusId: nextMeaningFocusId,

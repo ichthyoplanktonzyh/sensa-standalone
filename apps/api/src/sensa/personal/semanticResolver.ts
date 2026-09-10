@@ -22,5 +22,5 @@ The explanation should connect this occurrence to its meaning. surface must matc
 };}
 export const resolveSemantic:SemanticResolver=async(snapshot,focus,onExplanation)=>{
  if(process.env.SENSA_SEMANTIC_PROVIDER!=='deepseek'||!process.env.DEEPSEEK_API_KEY)throw new Error('provider_unavailable');
- return semanticResolverFor({id:'00000000-0000-4000-8000-000000000001',name:'deepseek',baseUrl:'https://api.deepseek.com',enabled:true,model:process.env.SENSA_SEMANTIC_MODEL??'deepseek-chat',apiKey:process.env.DEEPSEEK_API_KEY})(snapshot,focus,onExplanation);
+ return semanticResolverFor({id:'00000000-0000-4000-8000-000000000001',name:'deepseek',baseUrl:'https://api.deepseek.com',enabled:true,model:process.env.SENSA_SEMANTIC_MODEL??'deepseek-flash',apiKey:process.env.DEEPSEEK_API_KEY})(snapshot,focus,onExplanation);
 };

@@ -47,7 +47,7 @@ export function selectReadingConnection(settings:Settings,feature:keyof ReadingA
   if(process.env.SENSA_MANAGED_MODELS_PAUSED==='1')throw new ConsumerError(503,'managed_models_paused');
   if(process.env.SENSA_SEMANTIC_PROVIDER==='deepseek'&&process.env.DEEPSEEK_API_KEY)return {
     id:'00000000-0000-4000-8000-000000000001',name:'Sensa 默认',enabled:true,
-    baseUrl:'https://api.deepseek.com',model:process.env.SENSA_SEMANTIC_MODEL??'deepseek-chat',apiKey:process.env.DEEPSEEK_API_KEY,
+    baseUrl:'https://api.deepseek.com',model:process.env.SENSA_SEMANTIC_MODEL??'deepseek-flash',apiKey:process.env.DEEPSEEK_API_KEY,
   };
   throw new ConsumerError(409,'provider_not_configured');
 }
