@@ -1,0 +1,7 @@
+project_id = "sensa"
+
+[functions.sensa-api]
+# Hono verifies issuer/audience/JWKS and extension credentials. The deletion
+# receipt endpoint intentionally remains available after Auth erasure.
+verify_jwt = false
+import_map = "./functions/sensa-api/deno.json"

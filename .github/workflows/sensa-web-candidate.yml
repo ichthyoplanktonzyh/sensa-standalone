@@ -23,6 +23,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - run: npm ci --prefix apps/web-next
       - name: Refuse incomplete or unsafe release configuration
         run: node scripts/release/webCandidate.mjs --check
       - run: npm run typecheck
@@ -34,6 +35,10 @@ jobs:
           npm run sensa:local-i18n-smoke
           node scripts/sensaReleaseCandidateSmoke.mjs
           node --import tsx scripts/sensaTelemetrySmoke.mts
+      - name: Build authored starter learning package
+        env:
+          SENSA_PACKAGE_OUTPUT: apps/web/dist/learning-packages
+        run: node --import tsx scripts/release/buildStarterPackage.mts
       - name: Prepare fixed candidate and static hosting headers
         run: node scripts/release/webCandidate.mjs
       - uses: actions/upload-artifact@v4
@@ -45,3 +50,4 @@ jobs:
             apps/web/dist/
             apps/browser-extension/dist/
             release-candidate/manifest.json
+            release-candidate/catalog.json

@@ -87,10 +87,12 @@ jobs:
         env:
           SENSA_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
         run: node --import tsx scripts/sensaAccountDeletionSmoke.mts
+      - name: Browser upgrade rollback and offline recovery
+        run: node --import tsx scripts/sensaLibraryUpgradeSmoke.mts && node --import tsx scripts/sensaOfflineColdStartSmoke.mts --upgrade
       - name: Account deletion full UI (synthetic identity service)
         run: node --import tsx scripts/sensaOfflineColdStartSmoke.mts --deletion
       - name: Release configuration and privacy-safe telemetry guards
-        run: node scripts/sensaReleaseCandidateSmoke.mjs && node --import tsx scripts/sensaTelemetrySmoke.mts
+        run: node scripts/sensaReleaseCandidateSmoke.mjs && node --import tsx scripts/sensaTelemetrySmoke.mts && node --import tsx scripts/sensaModelBudgetSmoke.mts
       - name: Encrypted library backup and fresh browser recovery
         run: npm run sensa:library-backup-browser-smoke
       - name: Cross-tab account isolation (synthetic HTTP, real browser storage)

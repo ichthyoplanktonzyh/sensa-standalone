@@ -47,3 +47,6 @@ content/data/consumer-generations/
 
 # Local release manifests; CI artifacts hold the reviewed candidate.
 /release-candidate/
+
+# Generated authored package payloads for local acceptance.
+/apps/web/public/learning-packages/

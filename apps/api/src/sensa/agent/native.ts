@@ -126,6 +126,8 @@ export function createNativeAgentRoutes(options: {
       ...payload
     } = input;
     if ((await semanticDigest(payload)) !== inputDigest) throw new ConsumerError(400, 'input_digest_mismatch');
+    const textBody=JSON.stringify({...input.body,messages:input.body.messages.map(m=>({...m,content:Array.isArray(m.content)?m.content.map(p=>p.type==='image_url'?{type:'image_url'}:p):m.content}))});
+    if(new TextEncoder().encode(textBody).length>256*1024)throw new ConsumerError(413,'model_input_too_large');
     const names = input.body.tools?.map(t => t.function.name) ?? [];
     const allowed = input.purpose === 'teacher' ? ['lookup_meanings', 'ask_learner', 'propose_meaning'] : input.purpose === 'content' ? ['read_demand', 'lookup_reference_facts', 'submit_candidate'] : [];
     if (names.some(n => !allowed.includes(n)) || new Set(names).size !== names.length) throw new ConsumerError(400, 'unapproved_tool');

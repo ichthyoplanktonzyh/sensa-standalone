@@ -1,0 +1,30 @@
+name: Web operational checks
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+permissions:
+  contents: read
+jobs:
+  monitor:
+    if: vars.SENSA_MONITOR_ENABLED == 'true'
+    environment: web-monitor
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Check public surfaces
+        env:
+          SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
+          VITE_SENSA_API_URL: ${{ vars.VITE_SENSA_API_URL }}
+        run: node scripts/release/hostedSmoke.mjs
+      - name: Check aggregate service thresholds
+        env:
+          MONITOR_DATABASE_URL: ${{ secrets.MONITOR_DATABASE_URL }}
+          SENSA_ALERT_MODEL_CALLS_24H: ${{ vars.SENSA_ALERT_MODEL_CALLS_24H || '500' }}
+        run: node scripts/release/operationalCheck.mjs

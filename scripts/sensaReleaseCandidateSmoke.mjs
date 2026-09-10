@@ -10,7 +10,7 @@ assert.throws(()=>validateReleaseEnvironment({...env,VITE_SUPABASE_PUBLISHABLE_K
 console.log('PASS: release config rejects loopback, secret/service keys, unexpected VITE variables, wrong project/extension, legacy mode and floating revisions without logging values.');
 
 const {mkdtemp,mkdir,writeFile,readFile,rm}=await import('node:fs/promises');
-const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {execFileSync}=await import('node:child_process');
+const {tmpdir}=await import('node:os');const {join,resolve}=await import('node:path');const {execFileSync}=await import('node:child_process');
 const root=await mkdtemp(join(tmpdir(),'sensa-candidate-'));
 try{
  execFileSync('git',['init','-q'],{cwd:root});execFileSync('git',['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--allow-empty','-qm','fixture'],{cwd:root});
@@ -19,7 +19,10 @@ try{
  await writeFile(join(web,'index.html'),'<html></html>');await writeFile(join(web,'sw.js'),'// fixture');
  await writeFile(join(web,'assets/app.js'),JSON.stringify([env.VITE_SUPABASE_URL,env.VITE_SENSA_API_URL,env.VITE_SUPABASE_PUBLISHABLE_KEY]));
  await writeFile(join(extension,'manifest.json'),JSON.stringify({host_permissions:['https://fixture.supabase.co/*'],content_scripts:[{matches:[env.SENSA_WEB_ORIGIN+'/*']}]}));
+ await mkdir(join(root,'release-candidate'),{recursive:true});await writeFile(join(root,'release-candidate/catalog.json'),JSON.stringify({items:[]}));
  const releaseEnv={...env,SENSA_RELEASE_SHA:sha};const candidate=await prepareCandidate(releaseEnv,root);
+ const verify=()=>execFileSync(process.execPath,[resolve('scripts/release/verifyCandidate.mjs')],{cwd:root,env:{...process.env,...releaseEnv},stdio:'pipe'});verify();
+ await writeFile(join(web,'unlisted.js'),'unexpected');assert.throws(verify);await rm(join(web,'unlisted.js'));
  assert.equal(candidate.commit,sha);assert(candidate.files.every(f=>/^[a-f0-9]{64}$/.test(f.sha256)));
  assert(!(await readFile(join(root,'release-candidate/manifest.json'),'utf8')).includes(env.VITE_SUPABASE_PUBLISHABLE_KEY));
  await assert.rejects(prepareCandidate(env,root),/HEAD/);

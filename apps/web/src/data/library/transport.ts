@@ -24,7 +24,7 @@ export async function complete(provider:Provider,purpose:Purpose,id:string,messa
  }else{key=await providerCredential(provider);payload={...body,...(base.hostname==='api.deepseek.com'?{thinking:{type:'disabled'}}:{})};}
  const response=await fetch(endpoint,{method:'POST',redirect:'error',credentials:'omit',headers:{authorization:'Bearer '+key,'content-type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.any([signal,AbortSignal.timeout(45000)])});
  if(response.status===401||response.status===403){clearCredential(provider.id);throw new Error('localFlow.providerAccessDenied');}
- if(!response.ok){const error=await response.json().catch(()=>({}));if(['native_semantic_daily_budget','daily_preparation_limit','reading_daily_budget'].includes(error.code))throw new Error('localFlow.serviceLimit');throw new Error('localFlow.modelUnavailable');}
+ if(!response.ok){const error=await response.json().catch(()=>({}));if(error.code==='model_input_too_large')throw new Error('localFlow.modelInputLarge');if(['native_semantic_daily_budget','daily_preparation_limit','reading_daily_budget'].includes(error.code))throw new Error('localFlow.serviceLimit');throw new Error('localFlow.modelUnavailable');}
  if(!response.body)throw new Error('localFlow.modelIncomplete');
  const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
  try{for(;;){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>256*1024)throw new Error('localFlow.responseLimit');chunks.push(value);}}finally{await reader.cancel();}

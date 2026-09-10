@@ -85,8 +85,8 @@ try{
   await restored.confirmLearningQuantity(id(),19);await assert.rejects(restored.clearLocalLibrary(preview),/clearChanged/);
   const confirmed=await restored.inspectLocalClear();
   const originalClear=restored.LibraryTransaction.prototype.clear;
-  restored.LibraryTransaction.prototype.clear=function(table:any){if(table==='learningEvents')throw Error('clear disk failure');return originalClear.call(this,table);};
-  await assert.rejects(restored.clearLocalLibrary(confirmed),/clear disk failure/);restored.LibraryTransaction.prototype.clear=originalClear;
+  restored.LibraryTransaction.prototype.clear=function(table:any){if(table==='learningEvents')throw new DOMException('synthetic storage limit','QuotaExceededError');return originalClear.call(this,table);};
+  await assert.rejects(restored.clearLocalLibrary(confirmed),/storageFull/);restored.LibraryTransaction.prototype.clear=originalClear;
   assert.equal((await restored.readLearning()).targets.length,3);
   const lateBytes=new TextEncoder().encode(JSON.stringify(pack.bundle)),lateDescriptor={id:pack.bundle.id,version:pack.bundle.version,title:pack.bundle.title,description:'fixture',entryCount:1,byteLength:lateBytes.length,sha256:await restored.sha256(lateBytes),url:'https://fixture.invalid/package.json'};
   let releaseDownload!:()=>void;globalThis.fetch=async()=>{await new Promise<void>(resolve=>{releaseDownload=resolve;});return new Response(lateBytes);};

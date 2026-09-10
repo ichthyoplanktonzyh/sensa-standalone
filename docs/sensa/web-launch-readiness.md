@@ -100,7 +100,64 @@ OTP 认证才可发起，token refresh 不算重新认证。事务先撤销账�
 重新注册；不保留邮箱或服务内容。已存在服务器权威学习数据的迁移期账号拒绝此自助路径，
 不得用新 Web 的范围直接删除其历史；需要单独审查的旧数据删除适配。
 
-新增 migration 0026；部署顺序必须先迁移再发布 API。受限 backend_app 事务在独立 Postgres
+新增 migration 0026/0027（含删除回执 RLS）；部署顺序必须先迁移再发布 API。受限 backend_app 事务在独立 Postgres
 测试了原子回滚、重新认证、插件旧凭据拒绝、外部身份服务失败/重试、幂等与账号隔离。
 完整 Chrome UI 通过取消、确认、OTP、处理中清除、刷新回执恢复及英文反馈；HTTP 为合成服务。
 真实 Supabase 删除仍待目标项目验证，不自动删除 owner 账号或数据。
+
+## 首位真实用户验收前的交付状态（2026-09-10）
+
+| 项目 | 本地交付与证据 | 仍需真实环境确认 |
+| --- | --- | --- |
+| 完整 Web 两条学习路径 | IndexedDB + 实际 Chrome，下载/入学/澄清/生成审核/学习/备份恢复通过 | 真实邮件、默认模型质量与请求耗时 |
+| 数据控制 | 删除、旧凭据屏障、失败回滚、回执恢复；本机清除与配额错误提示 | Supabase Admin 删除演练，不能删除 owner 主账号来冒充测试 |
+| 更新与可靠性 | v2→v3 保留身份/原文/账本；SW 下载失败保留旧版本、成功激活后断网重启 | 目标浏览器/托管响应头与持续真实使用 |
+| 首发资源 | `content/authored/web-starter.json` 八条原创文本；编译通过真实 material/package 合同，产物不入 Git | owner 内容评审；无音频，不宣称完整词书/音频库 |
+| 费用与安全 | 现有每日用途限额、256 KiB 文本上下文上限、默认模型暂停开关、CSP、隐私请求日志 | 真实账单/告警接收与外部 YouGlish/词典可达性 |
+| 发布与运维 | 固定 SHA 候选→摘要核验→迁移→API→已验收 Web 资产；监控默认关闭 | 目标资源、Secrets、受保护环境、真实 Actions 执行/回滚 |
+
+已执行核心类型/构建/lint、Deno Edge 检查、删除数据库集成、包学习/备份/国际化及实际浏览器
+备份/删除/升级回归。模型/邮件 HTTP 为替身；没有触发部署、上传或付费模型。不能将本地通过
+标成线上收尾完成。当前进入“配置真实服务 → owner 真实使用 → 修复 → 批准部署”的交接点。
+
+### 本地真实使用配置
+
+不需要先取得正式 Web 域名。需要一个隔离 Supabase 测试项目、可用邮件、默认模型服务和数据库。
+分别参考 `apps/api/.env.example` 与 `apps/web/.env.example`，把实际值放在未跟踪的 `.env` /
+`.env.local`；管理员/模型 Key 只在 API。首发 `invited` 策略需为自己的 Auth subject 建立邀请，
+不得使用旧 first-user 学习数据导入脚本来开通新 Web 账号。
+
+在配置完成后启动 `npm run api:dev`（8080）和 `npm run web:dev`（3000）。学习包可用下列无模型
+编译命令准备到本地 Web 静态目录，再把 `release-candidate/catalog.json` 压缩为单行填入 API
+的 `SENSA_PACKAGE_CATALOG_JSON`。发布流水线会自动编译并配置对应 HTTPS 目录。
+
+```sh
+SENSA_WEB_ORIGIN=http://127.0.0.1:3000 SENSA_PACKAGE_OUTPUT=apps/web/public/learning-packages node --import tsx scripts/release/buildStarterPackage.mts
+```
+
+真实使用重点依次是：注册与再次打开、八条文本包下载学习、浏览器插件采集、慢轨澄清和快轨接纳、
+生成/审核失败后的重试、刷新和断网续学、备份与恢复。账号删除只用独立测试账号。记录问题时
+保留页面路径、步骤、时间和 X-Request-ID；不发送 API Key、验证码或私人原文日志。
+
+### 实际部署与回滚
+
+- `web-candidate`：只生成制品。公开变量见本页前文；包含已编译包目录、catalog 摘要与文件摘要。
+- `web-production`：手动填写已成功候选 run ID、完整 SHA、owner 已验收确认；应开启 GitHub
+  environment required reviewers。拒绝目标或摘要不一致。该工作流未执行，当前无部署授权。
+- Secrets：独立 `MIGRATION_DATABASE_URL` 与受限 `SENSA_RUNTIME_DATABASE_URL`、
+  `SUPABASE_ACCESS_TOKEN`、`DEEPSEEK_API_KEY`、`SENSA_PROVIDER_VAULT_KEY`、
+  `CLOUDFLARE_API_TOKEN`。公开项目变量另含 Supabase ref、Cloudflare account/project。数据库
+  连接必须匹配项目并要求 TLS；运行角色不允许超级用户/创建角色权限。Supabase 自带 service-role
+  环境用于账号删除，不进入 Web。真实 Auth SMTP 与 bucket 策略在项目中配置并验证。
+- 当前资源只有公共文本包，直接随已验收 Web 资产发布；后续私有/音频媒体继续按 Storage 授权合同
+  独立验收，不能把现有 Storage 适配误称为本次真实媒体发布已通过。
+- 首发自动配置为受邀访问。回滚优先重新发布上一份已验收 Web/API 版本，保留已应用的向前兼容
+  迁移；**不能回滚至不识别账号删除 lifecycle 的 API**。紧急时先暂停默认模型或关闭 API，
+  不删除/重建学习数据。数据库恢复必须另行批准且验证删除屏障仍存在，避免备份恢复复活账号。
+- 仓库变量 `SENSA_MONITOR_ENABLED=true` 才启用小时监控；`web-monitor` 放只读
+  `MONITOR_DATABASE_URL` 和公开 URL。检查公网、超过一小时的删除 pending 及每日总请求阈值，
+  失败由 Actions 通知；必须实际测试通知接收。默认模型可用 `SENSA_MANAGED_MODELS_PAUSED=1`
+  暂停，不清空本机学习资料。
+
+发布方式参考 [Supabase 官方 CI 文档](https://supabase.com/docs/guides/functions/examples/github-actions)
+与 [Cloudflare 官方 Direct Upload CI 文档](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/)。

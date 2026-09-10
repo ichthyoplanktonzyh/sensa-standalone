@@ -36,7 +36,7 @@ async function transaction<T>(mode:IDBTransactionMode,work:(tx:LibraryTransactio
   try{tx=db.transaction([...libraryTables],mode);}catch{reject(new Error('localFlow.storageUnavailable'));return;}
   let value:T,failed:unknown;
   tx.oncomplete=()=>{if(mode==='readwrite'){window.dispatchEvent(new Event('sensa-library-changed'));if(typeof BroadcastChannel!=='undefined'){const channel=new BroadcastChannel('sensa-local-library');channel.postMessage('changed');channel.close();}}resolve(value!);};
-  const fail=()=>reject(failed??new Error('localFlow.storageWrite'));
+  const fail=()=>{const cause=failed??tx.error;reject(cause instanceof DOMException&&cause.name==='QuotaExceededError'?new Error('localFlow.storageFull'):cause??new Error('localFlow.storageWrite'));};
   tx.onerror=fail;tx.onabort=fail;
   work(new LibraryTransaction(tx)).then(v=>{value=v;},e=>{failed=e;try{tx.abort();}catch{reject(e);}});
  });

@@ -1,6 +1,7 @@
+import {candidateCsp} from './release/webCandidate.mjs';
 /** Real production UI, Chromium processes, SW and disk IDB; synthetic HTTP account/catalog only. */
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,extname,resolve} from 'node:path';
 import {createServer} from 'node:http';
@@ -12,6 +13,7 @@ import {runPersonalIntakeBrowserChecks,personalFixtureProposal} from './support/
 import {createHash} from 'node:crypto';
 import {provisionLightweightInitialContent} from '../apps/web/src/experience/learningRuntime/lightweightInitialContent.ts';
 const root=await mkdtemp(join(tmpdir(),'sensa-offline-')),output=join(root,'dist'),initialProfile=join(root,'profile');let profile=initialProfile;
+const upgradeMode=process.argv.includes('--upgrade');let failUpgradeAssets=false;
 const deletionMode=process.argv.includes('--deletion');let deletionReceipt='';
 const backupMode=process.argv.includes('--backup');const personalMode=process.argv.includes('--personal-intake')||backupMode;let teacherTurns=0,contentCalls=0,reviewCalls=0,failNextReview=true;
 const id=()=>crypto.randomUUID(),subject=id();let context:BrowserContext|undefined;const errors:string[]=[];let requests=0;
@@ -20,7 +22,7 @@ if(result.status!=='ready')throw Error('Fixture not ready');
 const pack={format:'sensa-learning-package-v1',id:id(),version:'1',title:'离线验收学习包',targetLanguage:'en',familiarLanguage:'zh-CN',entries:[{senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),expression:'borrow',meaning:'临时取得他人物品，并预期归还。',content:result.materialization.content}]};
 const bytes=Buffer.from(JSON.stringify(pack));
 const token=[{}, {sub:subject,exp:Math.floor(Date.now()/1000)+3600},'fixture'].map(x=>Buffer.from(JSON.stringify(x)).toString('base64url')).join('.');
-const server=createServer(async(req,res)=>{requests++;const path=new URL(req.url!,'http://localhost').pathname;const json=(value:unknown)=>{res.setHeader('content-type','application/json');res.end(JSON.stringify(value));};
+const server=createServer(async(req,res)=>{res.setHeader('Content-Security-Policy',candidateCsp);requests++;const path=new URL(req.url!,'http://localhost').pathname;const json=(value:unknown)=>{res.setHeader('content-type','application/json');res.end(JSON.stringify(value));};
  if(personalMode&&path==='/sensa/native/agent/turn'){
   const parts:Buffer[]=[];for await(const part of req)parts.push(Buffer.from(part));const input=JSON.parse(Buffer.concat(parts).toString());
   let message:any,finish_reason='stop';
@@ -37,6 +39,7 @@ const server=createServer(async(req,res)=>{requests++;const path=new URL(req.url
  if(path==='/sensa/packages'){json({items:[{id:pack.id,version:'1',title:pack.title,description:'隔离测试资料',entryCount:1,byteLength:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),url:origin+'/fixture-package.json'}]});return;}
  if(path==='/fixture-package.json'){res.setHeader('content-type','application/json');res.end(bytes);return;}
  if(path.startsWith('/sensa/')||path.startsWith('/auth/')){res.statusCode=503;json({code:'fixture_unavailable'});return;}
+ if(failUpgradeAssets&&path.startsWith('/assets/')){res.writeHead(503);res.end();return;}
  try{const file=path==='/sw.js'||path.startsWith('/assets/')?resolve(output,'.'+path):join(output,'index.html');if(!file.startsWith(output+'/'))throw Error();res.setHeader('content-type',({'.js':'text/javascript','.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.woff2':'font/woff2'} as Record<string,string>)[extname(file)]??'application/octet-stream');res.end(await readFile(file));}catch{res.writeHead(404);res.end();}
 });
 server.listen(0,'127.0.0.1');await once(server,'listening');const origin=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
@@ -46,7 +49,22 @@ try{
  console.log('Building isolated production app…');await promisify(execFile)('npm',['run','build','-w','@sensa/web','--','--outDir',output],{cwd:process.cwd(),env:{...process.env,VITE_SENSA_MODE:'',VITE_SUPABASE_URL:origin,VITE_SUPABASE_PUBLISHABLE_KEY:'fixture-public',VITE_SENSA_API_URL:origin},maxBuffer:8*1024*1024});
  let page=await launch();await page.goto(origin+'/profile');await page.getByLabel('邮箱',{exact:true}).fill('offline@sensa.invalid');await page.getByRole('button',{name:'发送验证码',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Sensa 服务',exact:true})).toBeVisible();await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>true));await page.reload();await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller)).toBe(true);
- if(deletionMode){
+ if(upgradeMode){
+  await page.goto(origin+'/learning-entry');await page.getByRole('button',{name:/离线验收学习包/}).click();await page.getByRole('button',{name:'下载学习包',exact:true}).click();await expect.poll(async()=> (await snapshot(page)).packages.length).toBe(1);
+  const saved=await snapshot(page),oldCaches=await page.evaluate(()=>caches.keys());
+  const swPath=join(output,'sw.js'),oldWorker=await readFile(swPath,'utf8');
+  const htmlPath=join(output,'index.html');await writeFile(htmlPath,(await readFile(htmlPath,'utf8')).replace('</head>','<meta name="sensa-upgrade-fixture" content="v2"></head>'));
+  await writeFile(swPath,oldWorker.replace(/sensa-shell-([a-f0-9]+)/,'sensa-shell-$1-failed'));failUpgradeAssets=true;
+  const failed=await page.evaluate(async()=>{const registration=await navigator.serviceWorker.getRegistration();await registration!.update();const worker=registration!.installing;if(!worker)return 'missing';return new Promise<string>(resolve=>{worker.addEventListener('statechange',()=>{if(['installed','redundant'].includes(worker.state))resolve(worker.state);});});});
+  assert.equal(failed,'redundant');assert((await page.evaluate(()=>caches.keys())).some(k=>oldCaches.includes(k)));assert.deepEqual(await snapshot(page),saved);
+  failUpgradeAssets=false;await writeFile(swPath,oldWorker.replace(/sensa-shell-([a-f0-9]+)/,'sensa-shell-$1-success'));
+  await page.evaluate(async()=>{const registration=await navigator.serviceWorker.getRegistration();await registration!.update();if(registration!.waiting)return;await new Promise<void>(resolve=>{const w=registration!.installing!;w.addEventListener('statechange',()=>{if(w.state==='installed')resolve();});});});
+  assert.deepEqual(await snapshot(page),saved);await context!.close();context=undefined;page=await launch();await page.goto(origin+'/profile');await expect(page.getByRole('heading',{name:'Sensa 服务',exact:true})).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>caches.keys())).toEqual([oldCaches.find(k=>k.startsWith('sensa-shell-'))+'-success']);assert.deepEqual(await snapshot(page),saved);
+  await context!.close();context=undefined;await new Promise<void>(resolve=>server.close(()=>resolve()));page=await launch(true);await page.goto(origin+'/profile');await expect(page.getByRole('heading',{name:'Sensa 服务',exact:true})).toBeVisible();assert.equal(await page.locator('meta[name="sensa-upgrade-fixture"]').getAttribute('content'),'v2');assert.deepEqual(await snapshot(page),saved);
+  console.log('PASS: real service worker failed-update rollback, deferred successful activation, old cache cleanup and offline process restart with unchanged installed library.');
+ }
+ else if(deletionMode){
   await page.goto(origin+'/learning-entry');await page.getByRole('button',{name:/离线验收学习包/}).click();await page.getByRole('button',{name:'下载学习包',exact:true}).click();await expect.poll(async()=> (await snapshot(page)).packages.length).toBe(1);
   await page.goto(origin+'/profile');await page.locator('#s-profile').getByLabel('界面语言',{exact:true}).selectOption('en');
   await page.getByRole('button',{name:'Delete account',exact:true}).click();await expect(page.getByRole('button',{name:'Send deletion verification code',exact:true})).toBeDisabled();
