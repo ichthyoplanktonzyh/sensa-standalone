@@ -19,6 +19,8 @@ import { parseShellParams, parseViewMode, type ShellFlow, type ShellParams } fro
 
 interface ShellSearch extends ShellParams {
   readonly flow?: ShellFlow;
+  readonly library?: "local";
+  readonly conversation?:string;
   readonly candidate?: string;
 }
 
@@ -26,7 +28,8 @@ const rootRoute = createRootRoute({
   component: App,
   validateSearch: (search: Record<string, unknown> & SearchSchemaInput): ShellSearch => {
     const candidate=typeof search.candidate==='string'&&/^[0-9a-f-]{36}$/i.test(search.candidate)?search.candidate:undefined;
-    const params = {...parseShellParams(search),...(candidate?{candidate}:{})};
+    const local=search.library==='local'?{library:'local' as const,...(typeof search.conversation==='string'&&/^[0-9a-f-]{36}$/i.test(search.conversation)?{conversation:search.conversation}:{})}:{};
+    const params = {...parseShellParams(search),...local,...(candidate?{candidate}:{})};
     const viewMode = parseViewMode(search.flow);
     return viewMode === 'main' ? params : { ...params, flow: viewMode };
   },

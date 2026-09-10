@@ -27,7 +27,17 @@ import {
 import { PersonalMeaningComposer } from "./PersonalMeaningComposer";
 import { IntakeInboxDrawer } from "./IntakeInboxDrawer";
 
+export interface ContentScreenSource {
+  items: JourneyWorldItemView[];
+  status: import("../personalMeaningJourney/gateway").JourneyGatewayStatus;
+  inbox: import("@sensa/contracts/sensa").SensaIntakeItem[];
+  projection: import("../contentProjection").ContentProjectionSnapshot;
+  reload:()=>void;
+  composer: import("./PersonalMeaningComposer").MaterialComposerPort;
+}
 interface ContentScreenProps {
+  source?:ContentScreenSource;
+  notice?:import("react").ReactNode;
   active: boolean;
   screenId?: string;
   initialAction?: "create";
@@ -72,7 +82,14 @@ const searchText = (item: JourneyWorldItemView) =>
     .join(" ")
     .toLocaleLowerCase();
 
-export function ContentScreen({
+export function ContentScreen(props:ContentScreenProps){
+ return props.source?<ContentScreenView {...props} source={props.source}/>:<ConnectedContentScreen {...props}/>;
+}
+function ConnectedContentScreen(props:ContentScreenProps){
+ const {items,status}=useJourneyWorld();const gateway=useJourneyGateway();const inbox=useJourneyInbox();const projection=useContentProjection();
+ return <ContentScreenView {...props} source={{items,status,inbox,projection,reload:()=>gateway.reload()}}/>;
+}
+function ContentScreenView({
   active,
   screenId = "s-content",
   initialAction,
@@ -81,13 +98,10 @@ export function ContentScreen({
   onOpenConfirmedSense,
   onOpenSense,
   onOpenSection,
-  toast,
-}: ContentScreenProps) {
+  toast,source,notice,
+}: Omit<ContentScreenProps,"source"> & {source:Omit<ContentScreenSource,"composer"> & {composer?:ContentScreenSource["composer"]}}) {
   const { t, i18n } = useTranslation();
-  const { items, status } = useJourneyWorld();
-  const gateway = useJourneyGateway();
-  const inbox = useJourneyInbox();
-  const projection = useContentProjection();
+  const {items,status,inbox,projection}=source;
   const [category, setCategory] = useState<Category>("personal");
   const [view, setView] = useState<"list" | "world">("list");
   const [filter, setFilter] = useState<Filter>("all");
@@ -180,7 +194,7 @@ export function ContentScreen({
       className={`screen absolute inset-0 z-10 overflow-y-auto bg-[#fbfbfa] text-[#222631] ${active ? "active" : "invisible pointer-events-none"}`}
     >
       <main className="mx-auto max-w-[1280px] px-6 py-8 sm:px-10 lg:px-14 lg:py-14">
-        <ContentHeader inboxCount={inbox.length+drafts.length} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/>
+        {notice}<ContentHeader inboxCount={inbox.length+drafts.length} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/>
         <nav
           aria-label={t("content.categories")}
           className="mb-7 flex gap-6 overflow-x-auto border-b border-[#e1e4eb]"
@@ -271,7 +285,7 @@ export function ContentScreen({
           (!status.ok ? (
             <div role="alert" className="rounded-xl border border-red-200 p-6">
               <p>{t("content.loadError")}</p>
-              <button className={button} onClick={() => gateway.reload()}>
+              <button className={button} onClick={source.reload}>
                 {t("content.retry")}
               </button>
             </div>
@@ -447,6 +461,7 @@ export function ContentScreen({
         </div>
       )}
       <PersonalMeaningComposer
+        persistence={source.composer}
         open={composerOpen}
         onClose={() => setComposerOpen(false)}
         onSaved={toast}

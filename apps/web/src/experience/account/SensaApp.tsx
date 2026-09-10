@@ -1,3 +1,4 @@
+import LibraryWorkspace from '../library/LibraryWorkspace';
 import {useNavigate,useRouterState} from '@tanstack/react-router';
 import {parseMainStack} from '../router/shellLocation';
 import {WebShell} from '../ui/WebShell';
@@ -42,6 +43,10 @@ const message=(error:unknown)=> {
 };
 
 export default function SensaApp(){
+ if(new URLSearchParams(location.search).get("library")==="local")return <LibraryWorkspace/>;
+ return <AccountApp/>;
+}
+function AccountApp(){
   const [account,setAccount]=useState<AccountContext|null>(null);
   const [replica,setReplicaState]=useState<AccountReplica|null>(null);
   const accountScope=useRef<string|null>(null);
@@ -153,10 +158,10 @@ export default function SensaApp(){
   const retained=replica?.outbox.filter(x=>x.state==='retained').length??0;
   const alert=notice?<p role="status" className="my-4 rounded-xl bg-[#edf0f7] p-4 text-sm leading-6">{notice}</p>:null;
   if(boot)return <main className="grid min-h-screen place-content-center bg-[#fbfbfa]" role="status">正在读取你的学习…</main>;
-  if(!auth)return <main className="grid min-h-screen place-content-center gap-4 bg-[#fbfbfa] p-6"><h1 className="text-2xl">Sensa</h1><p role="status">登录服务暂时不可用，请稍后重试。</p></main>;
+  if(!auth)return <main className="grid min-h-screen place-content-center gap-4 bg-[#fbfbfa] p-6"><h1 className="text-2xl">Sensa</h1><p role="status">登录服务暂时不可用，请稍后重试。</p><a className={setupButton} href="/content?library=local">在本机记录和澄清意思</a></main>;
   if(!account)return <main className="flex min-h-screen items-center justify-center bg-[#fbfbfa] px-6 text-[#242a38]">
     <form className="w-full max-w-sm space-y-5" onSubmit={e=>{e.preventDefault();void perform(sent?verifyCode:sendCode);}}>
-      <p className="text-sm text-[#68748d]">Sensa · 受邀使用</p><h1 className="text-3xl font-semibold">{sent?'输入邮箱验证码':'欢迎来到 Sensa'}</h1>
+      <a className={setupButton} href="/content?library=local">在本机记录和澄清意思</a><p className="text-sm text-[#68748d]">Sensa · 受邀使用</p><h1 className="text-3xl font-semibold">{sent?'输入邮箱验证码':'欢迎来到 Sensa'}</h1>
       <p className="text-sm leading-6">{sent?`验证码已发送至 ${email}`:'使用受邀邮箱登录，无需设置密码。'}</p>
       {!sent?<label className="block text-sm">邮箱<input className="mt-2 w-full rounded-xl border border-[#bec5d5] bg-white p-3" type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)} /></label>:
         <label className="block text-sm">验证码<input className="mt-2 w-full rounded-xl border border-[#bec5d5] bg-white p-3" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={e=>setCode(e.target.value)} /></label>}

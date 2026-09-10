@@ -25,7 +25,11 @@ import {
   storeImageFile,
 } from "../personalMeaningJourney/mediaStore";
 
+export interface MaterialComposerPort {
+  save: (input: {texts:string[]; familiarExpression:string; startingPoint:ClarificationStartingPoint|null}) => Promise<string>;
+}
 interface PersonalMeaningComposerProps {
+  persistence?: MaterialComposerPort;
   open: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
@@ -53,11 +57,13 @@ export const PersonalMeaningComposer = ({
   onClose,
   onSaved,
   onCreated,
+  persistence,
 }: PersonalMeaningComposerProps) => {
   const { t } = useTranslation();
   const gateway = useJourneyGateway();
   const fileRef = useRef<HTMLInputElement>(null);
   const [savedDraft] = useState(() => {
+    if(persistence)return null;
     try {
       const value = JSON.parse(
         previewStorage.getItem("content-composer-draft") ?? "null",
@@ -97,6 +103,7 @@ export const PersonalMeaningComposer = ({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
+    if(persistence)return;
     try {
       previewStorage.setItem(
         "content-composer-draft",
@@ -157,6 +164,7 @@ export const PersonalMeaningComposer = ({
   };
 
   const handleClose = () => {
+    if(persistence&&canSave&&!window.confirm("当前材料尚未保存，确定离开吗？"))return;
     if (!busy) onClose(); // Keep the in-progress material when the panel closes.
   };
 
@@ -211,6 +219,7 @@ export const PersonalMeaningComposer = ({
     setError("");
     setBusy(true);
     try {
+      if(persistence){const id=await persistence.save({texts:filled.filter(b=>b.kind==='text').map(b=>b.bodyText.trim()),familiarExpression:familiarExpression.trim(),startingPoint});onSaved(t("composer.saved"));return id;}
       const payload: MaterialBlockInput[] = filled.map((block) =>
         block.kind === "image"
           ? { kind: "image", personalMediaObjectId: block.mediaId! }
@@ -330,8 +339,9 @@ export const PersonalMeaningComposer = ({
             </button>
             <button
               className={action}
-              disabled={busy}
+              disabled={busy||!!persistence}
               onClick={() => fileRef.current?.click()}
+              title={persistence?"本机图片保存尚未接入":""}
             >
               <ImagePlus size={17} />
               {t("composer.image")}

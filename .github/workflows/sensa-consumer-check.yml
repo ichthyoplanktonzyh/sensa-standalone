@@ -87,3 +87,4 @@ jobs:
             sleep 0.5
           done
           npm run sensa:consumer-browser-smoke
+          SENSA_LOCAL_WEB_URL=http://127.0.0.1:3001 npm run sensa:web-local-journey-smoke

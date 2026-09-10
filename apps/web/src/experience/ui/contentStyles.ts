@@ -79,7 +79,7 @@ export const contentStyles: Record<string, string> = {
     "flex-1! h-auto! min-h-0! bg-[#fbfbfa]! px-6! py-4! sm:px-8! text-[#222631]!",
   "pmw-transcript": "gap-6! py-6! [scrollbar-width:thin]!",
   "pmw-message":
-    "text-sm! leading-7! [&>div]:bg-transparent! [&>div]:text-[#313b50]! [&.is-user>div]:rounded-xl! [&.is-user>div]:bg-[#edf0f7]!",
+    "text-sm! leading-7! [&>div]:bg-transparent! [&>div]:text-[#313b50]! [&.is-learner>div]:rounded-xl! [&.is-learner>div]:bg-[#edf0f7]! [&.is-learner_p]:text-[#313b50]!",
   "pmw-avatar": "bg-[#e7ebf5]! text-[#5b6b94]!",
   "pmw-material":
     "max-h-56! shrink-0! overflow-y-auto! rounded-xl! border! border-[#e1e5ed]! bg-white! p-5! [&_p]:text-[#64718d]!",

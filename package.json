@@ -58,6 +58,7 @@
     "sensa:runtime-checkpoint-smoke": "tsx scripts/sensaRuntimeCheckpointSmoke.ts",
     "sensa:assurance-runtime-smoke": "TSX_TSCONFIG_PATH=apps/web/tsconfig.json node --import tsx scripts/sensaAssuranceRuntimeSmoke.tsx",
     "sensa:consumer-account-smoke": "node --import tsx scripts/sensaConsumerAccountSmoke.mts",
+    "sensa:web-local-journey-smoke": "node --import tsx scripts/sensaWebLocalJourneySmoke.mts",
     "sensa:web-account-isolation-smoke": "node --import tsx scripts/sensaWebAccountIsolationSmoke.mts",
     "sensa:consumer-browser-smoke": "node --import tsx scripts/sensaConsumerBrowserSmoke.mts",
     "sensa:edge-check": "deno check --config supabase/functions/sensa-api/deno.json supabase/functions/sensa-api/index.ts",

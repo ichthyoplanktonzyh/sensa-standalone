@@ -9,6 +9,8 @@ interface ProfileScreenProps {
   active: boolean;
   account?: {email: string; pending: number; busy: boolean; onSync: () => void; onLogout: () => void};
   status?: ReactNode;
+  modelSettings?: ReactNode;
+  localLibrary?: boolean;
   onOpenPreferences?: () => void;
   onGoStudyPlan: () => void;
   defaultPolicy: PrototypeLearningPolicy;
@@ -40,7 +42,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
   };
   useEffect(() => {
     if (!props.active) { setPreferencesOpen(false); return; }
-    if (!props.account) refreshStorage();
+    if (!props.account&&!props.localLibrary) refreshStorage();
     const updateNetwork = () => setOnline(navigator.onLine);
     updateNetwork();
     window.addEventListener('online', updateNetwork);
@@ -88,14 +90,15 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
             <dl className="divide-y divide-[#e3e5ea] text-sm">
               <div className="flex flex-wrap justify-between gap-3 py-5"><dt>{t('account.network')}</dt><dd aria-live="polite" className="text-[#68748d]">{t(online ? 'account.online' : 'account.offline')}</dd></div>
               <div className="flex flex-wrap justify-between gap-3 py-5"><dt>{t('account.sync')}</dt><dd className="text-[#788398]">{props.account ? (props.account.pending ? `${props.account.pending} 项待同步` : '已同步') : t('account.unavailable')}</dd></div>
-              {!props.account && <div className="py-5"><dt>{t('account.storage')}</dt><dd className="mt-2 flex items-center justify-between gap-3"><span className="text-2xl tabular-nums" aria-live="polite">{usage}</span><button aria-label={t('account.refresh')} onClick={refreshStorage} className="grid size-11 place-items-center rounded-lg text-[#68748d] hover:bg-[#edf0f7]"><RefreshCw size={17}/></button></dd></div>}
+              {!props.account&&!props.localLibrary && <div className="py-5"><dt>{t('account.storage')}</dt><dd className="mt-2 flex items-center justify-between gap-3"><span className="text-2xl tabular-nums" aria-live="polite">{usage}</span><button aria-label={t('account.refresh')} onClick={refreshStorage} className="grid size-11 place-items-center rounded-lg text-[#68748d] hover:bg-[#edf0f7]"><RefreshCw size={17}/></button></dd></div>}
             </dl>
-            <p className="pb-5 text-xs leading-6 text-[#788398]">{props.account ? '学习记录按当前账号保存在本机，并与服务器同步。' : t('account.storageNote')}</p>
+            <p className="pb-5 text-xs leading-6 text-[#788398]">{props.account ? '学习记录按当前账号保存在本机，并与服务器同步。' : props.localLibrary ? '材料、对话和已确认的意思保存在当前浏览器。清除网站数据会移除这些本机资料。' : t('account.storageNote')}</p>
           </div>
           <p className="mt-3 text-xs leading-6 text-[#788398]">{props.account ? '导出与账号删除暂未开放。' : t('account.controls')}</p>
         </section>
       </div>
       {props.account && <div className="mt-8 flex flex-wrap gap-3"><button className="min-h-11 rounded-xl bg-[#edf0f7] px-5 text-sm text-[#303f76]" disabled={props.account.busy} onClick={props.account.onSync}>检查同步结果</button><button className="min-h-11 rounded-xl border border-[#e3e5ea] px-5 text-sm" disabled={props.account.busy || props.account.pending > 0} onClick={props.account.onLogout}>退出登录</button>{props.account.pending > 0 && <p className="w-full text-sm text-[#68748d]">请先同步本机请求，再退出登录。</p>}</div>}
+      {props.modelSettings&&<section aria-label="模型服务设置" className="mt-10">{props.modelSettings}</section>}
       <section aria-labelledby="account-support" className="mt-10">
         <h2 id="account-support" className="mb-4 text-lg font-medium">{t('account.support')}</h2>
         <div className="divide-y divide-[#e3e5ea] border-y border-[#e3e5ea]">

@@ -58,7 +58,14 @@ import type {
   SensaSemanticCoverage,
 } from '@sensa/contracts/sensa';
 
+export interface MeaningConversationController {
+ material:string; messages:{role:"learner"|"assistant";body:string}[];
+ candidate:{expression:string;meaning:string;explanation:string}|null;
+ accepted:boolean;busy:boolean;notice:string;recipient:string;canContinue:boolean;
+ onSend:(text:string)=>Promise<void>;onContinue:()=>Promise<void>;onStop:()=>void;onConfirm:()=>Promise<void>;
+}
 interface PersonalMeaningDetailScreenProps {
+ conversation?:MeaningConversationController;
   active: boolean;
   personalMeaningId: string | null;
   onBack: () => void;
@@ -271,7 +278,10 @@ const ExpressionsCard = ({
 
 // -- screen -----------------------------------------------------------------
 
-export const PersonalMeaningDetailScreen = ({
+export const PersonalMeaningDetailScreen=(props:PersonalMeaningDetailScreenProps)=>props.conversation
+ ? <ConnectedMeaningConversation {...props} conversation={props.conversation}/>
+ : <PreviewPersonalMeaningDetailScreen {...props}/>;
+const PreviewPersonalMeaningDetailScreen = ({
   active,
   personalMeaningId,
   onBack,
@@ -979,29 +989,50 @@ export const PersonalMeaningDetailScreen = ({
     </>
   );
 
-  return (
-    <section
-      ref={screenRef}
-      className={uiClass(`screen pmw-screen${active ? ' active' : ''}`, "#s-personal-meaning")}
-      id="s-personal-meaning"
-      data-anim="slide"
-    >
-      <div className="ml-auto flex h-full w-full flex-col bg-[#fbfbfa] shadow-xl lg:max-w-[860px]">
-      <header className={uiClass("content-nav pmw-nav")}>
-        <button className={uiClass("content-nav-back")} onClick={onBack} aria-label={uiText('backToMyContent2')}>
-          <svg className={uiClass("icon")}><use href="#i-chev-l" /></svg>
-        </button>
-        <h1>{uiText('clarifyYourMeaning')}</h1>
-        <button
-          type="button"
-          className={uiClass(`pmw-material-toggle${materialOpen ? ' is-open' : ''}`)}
-          onClick={() => setMaterialOpen((value) => !value)}
-          aria-expanded={materialOpen}
-        >
-          {uiText('context')}</button>
-      </header>
-      <div className={uiClass("pmw-shell")}>{body}</div>
-      </div>
-    </section>
-  );
+  return <MeaningWorkspaceFrame active={active} onBack={onBack} materialOpen={materialOpen} onToggleMaterial={()=>setMaterialOpen(v=>!v)} screenRef={screenRef}>{body}</MeaningWorkspaceFrame>;
 };
+
+/** One existing workspace frame for both persisted and preview controllers. */
+function MeaningWorkspaceFrame({active,onBack,materialOpen,onToggleMaterial,screenRef,children}:{active:boolean;onBack:()=>void;materialOpen:boolean;onToggleMaterial:()=>void;screenRef?:import('react').Ref<HTMLElement>;children:import('react').ReactNode}){
+ return <section ref={screenRef} className={uiClass(`screen pmw-screen${active?' active':''}`, '#s-personal-meaning')} id="s-personal-meaning" data-anim="slide">
+  <div className="ml-auto flex h-full w-full flex-col bg-[#fbfbfa] shadow-xl lg:max-w-[860px]">
+   <header className={uiClass('content-nav pmw-nav')}>
+    <button className={uiClass('content-nav-back')} onClick={onBack} aria-label={uiText('backToMyContent2')}><svg className={uiClass('icon')}><use href="#i-chev-l"/></svg></button>
+    <h1>{uiText('clarifyYourMeaning')}</h1>
+    <button type="button" className={uiClass(`pmw-material-toggle${materialOpen?' is-open':''}`)} onClick={onToggleMaterial} aria-expanded={materialOpen}>{uiText('context')}</button>
+   </header><div className={uiClass('pmw-shell')}>{children}</div>
+  </div>
+ </section>;
+}
+function ConnectedMeaningConversation({active,onBack,conversation:c}:PersonalMeaningDetailScreenProps & {conversation:MeaningConversationController}){
+ useTranslation();
+ const [text,setText]=useState(''),[materialOpen,setMaterialOpen]=useState(false),[panelOpen,setPanelOpen]=useState(false),[reviewOpen,setReviewOpen]=useState(false);
+ const transcript=useRef<HTMLDivElement>(null);
+ useEffect(()=>{transcript.current?.scrollTo({top:transcript.current.scrollHeight});},[c.messages.length,c.busy]);
+ const candidate=c.candidate;
+ const send=async()=>{await c.onSend(text);setText('');};
+ return <MeaningWorkspaceFrame active={active} onBack={onBack} materialOpen={materialOpen} onToggleMaterial={()=>setMaterialOpen(v=>!v)}>
+  {materialOpen&&<section className={uiClass('pmw-material')} aria-label={uiText('contextForThisConversation')}><p>{c.material}</p></section>}
+  <p className="px-5 py-3 text-xs leading-6 text-[#68748d]">发送至：{c.recipient}。发送或继续时才会提供本次材料和对话。</p>
+  <div ref={transcript} className={uiClass('pmw-transcript')} aria-live="polite">
+   {c.messages.map((m,i)=><div key={i} className={uiClass(`pmw-message is-${m.role}`)}>{m.role==='assistant'&&<span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span>}<div><p>{m.body}</p></div></div>)}
+   {c.busy&&<div className={uiClass('pmw-message is-assistant is-thinking')}><span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span><div><p><i/><i/><i/></p></div></div>}
+   {c.accepted&&<div className={uiClass('pmw-done')}><span className={uiClass('pmw-done-mark')}>✓</span><h2>意思已确认</h2><p>已保存在本机，尚未加入学习。</p></div>}
+  </div>
+  {c.notice&&<div className={uiClass('pmw-inline-error')} role="status">{c.notice}</div>}
+  <div className={uiClass('pmw-dock-bar')}>
+   <div className={uiClass('pmw-dock-chips')}>
+    <button className={uiClass(`pmw-dock-chip is-${c.accepted?'confirmed':candidate?'candidate':'idle'}`)} onClick={()=>setPanelOpen(true)} aria-label={uiText('viewMeaning')}><small>{uiText('meaning2')}</small><b>{candidate?.meaning??uiText('inConversation')}</b></button>
+    <button className={uiClass(`pmw-dock-chip is-${c.accepted?'confirmed':candidate?'candidate':'idle'}`)} onClick={()=>setPanelOpen(true)} aria-label={uiText('viewExpression')}><small>{uiText('expression')}</small><b>{candidate?.expression??uiText('inConversation')}</b></button>
+   </div>
+   <div className={uiClass('pmw-dock-actions')}>
+    {c.canContinue&&!c.accepted&&<button className={uiClass('pmw-dock-organize')} disabled={c.busy} onClick={()=>void c.onContinue()}>继续对话</button>}
+    {c.busy&&<button className={uiClass('pmw-dock-organize')} onClick={c.onStop}>停止请求</button>}
+    {!c.accepted&&<button className={uiClass(`pmw-dock-confirm${candidate?' is-ready':''}`)} disabled={c.busy||!candidate} onClick={()=>setReviewOpen(true)}>{uiText('reviewAndConfirm')}</button>}
+   </div>
+  </div>
+  {!c.accepted&&<form className={uiClass('pmw-composer')} onSubmit={e=>{e.preventDefault();void send().catch(()=>{});}}><textarea aria-label="补充或更正" value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.currentTarget.form?.requestSubmit();}}} placeholder={uiText('shareYourUnderstandingExamplesOrQuestions')} rows={2} disabled={c.busy}/><button type="submit" disabled={c.busy||!text.trim()} aria-label={uiText('send')}><span aria-hidden="true">↑</span></button></form>}
+  {panelOpen&&<div className={uiClass('pmw-preview-layer')} onMouseDown={()=>setPanelOpen(false)}><section className={uiClass('pmw-preview-sheet')} role="dialog" aria-modal="true" aria-label="当前理解" onMouseDown={e=>e.stopPropagation()}><header><h2>当前理解</h2><button onClick={()=>setPanelOpen(false)}>{uiText('close')}</button></header><div className={uiClass('pmw-preview-body')}>{candidate?<><article className={uiClass('pmw-card')}><small>{uiText('meaning2')}</small><p>{candidate.meaning}</p></article><article className={uiClass('pmw-card')}><b>{candidate.expression}</b><p>{candidate.explanation}</p></article></>:<p>{uiText('tellUsMoreAboutYourContextOr')}</p>}</div></section></div>}
+  {reviewOpen&&candidate&&<div className={uiClass('pmw-review-layer')}><section className={uiClass('pmw-review')} role="dialog" aria-modal="true" aria-labelledby="pmw-review-title"><header><h2 id="pmw-review-title">{uiText('confirmTheseDetails')}</h2><button disabled={c.busy} onClick={()=>setReviewOpen(false)}>{uiText('close')}</button></header><div className={uiClass('pmw-review-body')}><article className={uiClass('pmw-review-card')}><small>场景</small><p>{c.material}</p></article><article className={uiClass('pmw-review-card')}><small>{uiText('meaning2')}</small><p>{candidate.meaning}</p></article><article className={uiClass('pmw-review-card')}><small>{uiText('expression')}</small><b>{candidate.expression}</b><p>{candidate.explanation}</p></article><p className={uiClass('pmw-review-consequence')}>确认只保存这个意思与表达，不自动加入学习。</p>{c.notice&&<p role="status">{c.notice}</p>}<div className={uiClass('pmw-review-actions')}><button className={uiClass('pmw-primary')} disabled={c.busy} onClick={()=>void c.onConfirm().then(()=>setReviewOpen(false)).catch(()=>{})}>就是这个意思，保存</button><button disabled={c.busy} onClick={()=>setReviewOpen(false)}>继续澄清</button></div></div></section></div>}
+ </MeaningWorkspaceFrame>;
+}
