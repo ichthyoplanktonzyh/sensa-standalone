@@ -1,3 +1,4 @@
+import {ensureAdmission} from './admission.js';
 import {createNativeAgentRoutes} from '../agent/native.js';
 import {createNativeProvisioningRoutes} from '../provisioning/native.js';
 import {createNativeSemanticRoutes} from '../personal/nativeSemantic.js';
@@ -43,8 +44,7 @@ const fail = (code: string, latest: {id: string; revision: string}|null = null) 
 const iso = () => new Date().toISOString();
 async function account(db: DatabaseExecutor, identity: ConsumerPrincipal, create?: z.infer<typeof installationInputSchema>, allowRevokedSession = false, now=new Date(), accessOnly=false): Promise<Account> {
   if(create&&identity.installationId&&create.installationId!==identity.installationId)throw new ConsumerError(403,'installation_scope_mismatch');
-  const invite = (await db.query('SELECT revoked FROM sensa_consumer.invitations WHERE issuer=$1 AND subject=$2 FOR UPDATE', [identity.issuer,identity.subject])).rows[0];
-  if (!invite || invite.revoked) throw new ConsumerError(403, 'invite_required');
+  await ensureAdmission(db,identity,!!create);
   let row = (await db.query('SELECT * FROM sensa_consumer.accounts WHERE issuer=$1 AND subject=$2 FOR UPDATE', [identity.issuer,identity.subject])).rows[0];
   if (!row && create) {
     const id = crypto.randomUUID();
@@ -269,6 +269,10 @@ export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transac
         usage:[{kind:'reading',used:await used('reading_requests'),limit:readingDailyLimit},{kind:'teacher',used:await used('native_semantic_usage'),limit:nativeModelDailyLimit},{kind:'content',used:await used('native_content_usage'),limit:nativeModelDailyLimit}]};
     });
     c.header('Cache-Control','no-store');return c.json(result);
+  });
+  app.post('/sensa/web/access/session',async c=>{
+    const identity=await verify(c.req.raw);const input=z.object({installationId:uuid}).strict().parse(await c.req.json());
+    return c.json(await transaction(async db=>{const a=await account(db,identity,{...input,platform:'web',timeZone:'UTC'},false,clock(),true);return {authorized:true,accountId:a.account_id};}));
   });
   app.post('/sensa/native/access/session',async c=>{
     const identity=await verify(c.req.raw);const input=z.object({installationId:uuid}).strict().parse(await c.req.json());

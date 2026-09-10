@@ -70,9 +70,10 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
       <section aria-labelledby="account-identity" className="flex flex-wrap items-center gap-5 rounded-3xl bg-[#edf0f7] p-6 sm:p-8">
         <span aria-hidden="true" className="grid size-14 shrink-0 place-items-center rounded-2xl bg-white text-[#5268a9]"><UserRound size={25}/></span>
         <div className="min-w-0 flex-1"><h2 id="account-identity" className="text-lg font-medium">{props.account || serviceAccount.email ? '当前账号' : t('account.identity')}</h2><p className="mt-2 max-w-xl text-sm leading-6 text-[#68748d]">{props.account?.email ?? serviceAccount.email ?? t('account.identityNote')}</p></div>
-        <span className="rounded-full border border-[#cfd7e6] px-3 py-1.5 text-xs text-[#546582]">{props.account ? '已连接账号' : t('account.local')}</span>
+        <span className="rounded-full border border-[#cfd7e6] px-3 py-1.5 text-xs text-[#546582]">{props.account||serviceAccount.onlineService ? '已连接账号' : t('account.local')}</span>
       </section>
       {!props.account&&<div className="mt-5 flex flex-wrap gap-3"><button className="min-h-11 rounded-xl bg-[#edf0f7] px-5 text-sm" onClick={serviceAccount.login}>{serviceAccount.onlineService?'检查在线服务':'登录 Sensa'}</button>{serviceAccount.email&&<button className="min-h-11 rounded-xl border px-5 text-sm" onClick={()=>void serviceAccount.logout().catch(()=>{})}>退出账号</button>}</div>}
+      {!props.account&&serviceAccount.notice&&<p role="status" className="mt-3 text-sm">{serviceAccount.notice}</p>}
       {props.status}
       <div className="mt-9 grid items-start gap-8 lg:grid-cols-2">
         <section aria-labelledby="account-preferences">

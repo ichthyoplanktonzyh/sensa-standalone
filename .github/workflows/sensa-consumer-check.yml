@@ -19,6 +19,8 @@ jobs:
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
+      SENSA_EXTENSION_LEGACY_WEB: '1'
+      SENSA_EXTENSION_WEB_URL: http://127.0.0.1:3001
       VITE_SENSA_MODE: legacy-account
       # Compile the authenticated UI too; these are synthetic loopback test values.
       VITE_SUPABASE_URL: http://127.0.0.1:4319
@@ -67,6 +69,10 @@ jobs:
 
       - name: Service access and usage contract (no browser or model calls)
         run: npm run sensa:service-status-smoke
+      - name: Account and extension intake closure (no browser or model calls)
+        env:
+          SENSA_TEST_DATABASE_URL: postgresql://postgres:local-ci-only@127.0.0.1:5432/sensa_m1a_ci
+        run: npm run sensa:account-service-db-smoke && npm run sensa:web-intake-smoke
       - name: Install test browser
         run: npx playwright install --with-deps chromium
       - name: Cross-tab account isolation (synthetic HTTP, real browser storage)

@@ -292,7 +292,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
       saved = true;
       save.hidden = accept.hidden = check.hidden = true;
       lookup.disabled = true;
-      feedback.textContent = response.value?.destination==='native' ? (response.value.committed ? '已保存到所选原生库，可在原生 Sensa 查看。' : '已暂存于插件，等待交给所选原生库。可从 Sensa 图标检查结果。') : '已保存在本机，联网后同步。可从 Sensa 图标查看结果。';
+      feedback.textContent = response.value?.destination==='native' ? (response.value.committed ? '已保存到所选原生库，可在原生 Sensa 查看。' : '已暂存于插件，等待交给所选原生库。可从 Sensa 图标检查结果。') : response.value?.destination==='web' ? '已暂存于插件，打开 Sensa 后交接到我的内容。可从 Sensa 图标检查结果。' : '已保存在本机，联网后同步。可从 Sensa 图标查看结果。';
     } catch {
       if (alive()) feedback.textContent = '尚未完成，请从 Sensa 图标检查原操作结果或登录后重试。';
     } finally {

@@ -59,7 +59,7 @@ import type {
 } from '@sensa/contracts/sensa';
 
 export interface MeaningConversationController {
- material:string; messages:{role:"learner"|"assistant";body:string}[];
+ material:string; source?:{url:string|null;title:string}; messages:{role:"learner"|"assistant";body:string}[];
  candidate:{expression:string;meaning:string;explanation:string}|null;
  accepted:boolean;busy:boolean;notice:string;recipient:string;canContinue:boolean;
  onSend:(text:string)=>Promise<void>;onContinue:()=>Promise<void>;onStop:()=>void;onConfirm:()=>Promise<void>;
@@ -1013,6 +1013,7 @@ function ConnectedMeaningConversation({active,onBack,conversation:c}:PersonalMea
  const send=async()=>{await c.onSend(text);setText('');};
  return <MeaningWorkspaceFrame active={active} onBack={onBack} materialOpen={materialOpen} onToggleMaterial={()=>setMaterialOpen(v=>!v)}>
   {materialOpen&&<section className={uiClass('pmw-material')} aria-label={uiText('contextForThisConversation')}><p>{c.material}</p></section>}
+  <p className="px-5 text-xs">{c.source?.url&&<a href={c.source.url} target="_blank" rel="noreferrer">查看来源：{c.source.title||c.source.url}</a>}</p>
   <p className="px-5 py-3 text-xs leading-6 text-[#68748d]">发送至：{c.recipient}。发送或继续时才会提供本次材料和对话。</p>
   <div ref={transcript} className={uiClass('pmw-transcript')} aria-live="polite">
    {c.messages.map((m,i)=><div key={i} className={uiClass(`pmw-message is-${m.role}`)}>{m.role==='assistant'&&<span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span>}<div><p>{m.body}</p></div></div>)}

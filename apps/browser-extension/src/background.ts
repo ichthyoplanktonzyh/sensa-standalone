@@ -1,3 +1,5 @@
+import {queueWeb,pendingWeb,acknowledgeWeb,webStatus} from './webDestination';
+declare const SENSA_EXTENSION_LEGACY_WEB:boolean;
 import {nativeEnabled,nativeScope,discoverNative,selectNative,selectWeb,queueNative,flushNative,nativeStatus} from './nativeDestination';
 import {z} from 'zod';
 import {canonicalConsumerJson,captureSnapshotSchema,intakeOperationSchema,semanticAcceptOperationSchema,intakeViewSchema,personalMeaningViewSchema} from '@sensa/contracts/sensa';
@@ -6,11 +8,11 @@ import {webUrl,apiUrl} from './config';
 import {readYoutubePlayer} from './youtubePlayer';
 import {readingPreferences} from './preferences';
 type Queue={wireVersion:'sensa-sync-v3';epoch:string;operation:IntakeOperation|SemanticAcceptOperation;error?:string};
-type Account={accountId:string;installationId:string;token:string;replicaId:string;epoch:string;queue:Queue[];recent:(IntakeView|PersonalMeaningView)[];savedOperations:Record<string,IntakeOperation|SemanticAcceptOperation>};
+type Account={webLibraryId?:string;accountId:string;installationId:string;token:string;replicaId?:string;epoch?:string;queue:Queue[];recent:(IntakeView|PersonalMeaningView)[];savedOperations:Record<string,IntakeOperation|SemanticAcceptOperation>};
 type Store={version:1;active:string|null;accounts:Record<string,Account>};
 type Mode={accountId:string};
 const operationSchema=z.union([intakeOperationSchema,semanticAcceptOperationSchema]);
-const accountSchema=z.object({accountId:z.string().uuid(),installationId:z.string().uuid(),token:z.string().min(1),replicaId:z.string().uuid(),epoch:z.string().regex(/^[1-9][0-9]*$/u),queue:z.array(z.object({wireVersion:z.literal('sensa-sync-v3'),epoch:z.string(),operation:operationSchema,error:z.string().optional()}).strict()),recent:z.array(z.union([intakeViewSchema,personalMeaningViewSchema])),savedOperations:z.record(z.string(),operationSchema)}).strict();
+const accountSchema=z.object({webLibraryId:z.string().uuid().optional(),accountId:z.string().uuid(),installationId:z.string().uuid(),token:z.string().min(1),replicaId:z.string().uuid().optional(),epoch:z.string().regex(/^[1-9][0-9]*$/u).optional(),queue:z.array(z.object({wireVersion:z.literal('sensa-sync-v3'),epoch:z.string(),operation:operationSchema,error:z.string().optional()}).strict()),recent:z.array(z.union([intakeViewSchema,personalMeaningViewSchema])),savedOperations:z.record(z.string(),operationSchema)}).strict();
 const storeSchema=z.object({version:z.literal(1).default(1),active:z.string().uuid().nullable(),accounts:z.record(z.string(),accountSchema)}).strict();
 let serial:Promise<unknown>=Promise.resolve();
 function locked<T>(work:()=>Promise<T>):Promise<T>{const next=serial.catch(()=>undefined).then(work);serial=next;return next;}
@@ -23,7 +25,7 @@ async function load():Promise<Store>{
 }
 async function modes():Promise<Record<number,Mode>>{const raw=(await chrome.storage.session.get('modes')).modes??{};return Object.fromEntries(Object.entries(raw).filter((entry):entry is [string,Mode]=>typeof entry[1]==='object'&&entry[1]!==null&&typeof (entry[1] as Mode).accountId==='string'));}
 async function stopAllReading(){const active=(await chrome.storage.session.get('modes')).modes??{};await chrome.storage.session.set({modes:{}});await Promise.all(Object.keys(active).map(id=>chrome.tabs.sendMessage(Number(id),{kind:'reading',enabled:false}).catch(()=>undefined)));}
-function queueOperation(a:Account,operation:IntakeOperation|SemanticAcceptOperation){const previous=a.savedOperations[operation.operationId];if(previous){if(previous.kind!==operation.kind||canonicalConsumerJson(previous.payload)!==canonicalConsumerJson(operation.payload))throw new Error('operation_id_reuse');return;}a.savedOperations[operation.operationId]=operation;a.queue.push({wireVersion:'sensa-sync-v3',epoch:a.epoch,operation});}
+function queueOperation(a:Account,operation:IntakeOperation|SemanticAcceptOperation){if(!a.epoch||!a.replicaId)throw new Error('client_update_required');const previous=a.savedOperations[operation.operationId];if(previous){if(previous.kind!==operation.kind||canonicalConsumerJson(previous.payload)!==canonicalConsumerJson(operation.payload))throw new Error('operation_id_reuse');return;}a.savedOperations[operation.operationId]=operation;a.queue.push({wireVersion:'sensa-sync-v3',epoch:a.epoch,operation});}
 
 async function persist(store:Store){await chrome.storage.local.set({sensa:store});}
 async function request(path:string,body:unknown,token?:string){const response=await fetch(apiUrl+path,{method:body===undefined?'GET':'POST',headers:{'content-type':'application/json',...(token?{authorization:'Bearer '+token}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(45000)});const data=await response.json();if(!response.ok)throw new Error(data.code??'temporarily_unavailable');return data;}
@@ -40,23 +42,38 @@ async function login(existingInstallation?:string,expectedAccount?:string){
  const redirectUri=chrome.identity.getRedirectURL('sensa'),url=new URL(webUrl);url.search=new URLSearchParams({extension:'connect',installationId,state,challenge,redirectUri}).toString();
  const callback=await chrome.identity.launchWebAuthFlow({url:url.href,interactive:true});if(!callback)throw new Error('authorization_cancelled');const result=new URL(callback);
  if(result.origin+result.pathname!==redirectUri||result.searchParams.get('state')!==state)throw new Error('authorization_invalid');
- const credential=await request('/sensa/extension/exchange',{code:result.searchParams.get('code'),installationId,state,verifier});
+ const webLibraryId=SENSA_EXTENSION_LEGACY_WEB?undefined:z.string().uuid().parse(result.searchParams.get('libraryId'));
+ const credential=z.object({token:z.string().min(1),accountId:z.string().uuid(),expiresAt:z.string().datetime()}).parse(await request('/sensa/extension/exchange',{code:result.searchParams.get('code'),installationId,state,verifier}));
  if(expectedAccount&&credential.accountId!==expectedAccount)throw new Error('account_mismatch');
  const previous=(await load()).accounts[credential.accountId];
  if(previous&&previous.installationId!==installationId)return login(previous.installationId,credential.accountId);
  await locked(async()=>{const store=await load();const old=store.accounts[credential.accountId];
+ if(!SENSA_EXTENSION_LEGACY_WEB){
+  store.accounts[credential.accountId]={...old,accountId:credential.accountId,installationId,webLibraryId,token:credential.token,queue:old?.queue??[],recent:old?.recent??[],savedOperations:old?.savedOperations??{}};
+  store.active=credential.accountId;await persist(store);await stopAllReading();return;
+ }
  const session=await request('/sensa/account/session',{installationId,platform:'extension',timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone},credential.token);
  const boot=await request('/sensa/sync/bootstrap',{wireVersion:'sensa-sync-v3',installationId,replicaId:null},credential.token);
- store.accounts[session.data.accountId]={accountId:session.data.accountId,installationId,token:credential.token,replicaId:boot.replicaId,epoch:boot.scopeEpoch,queue:old?.queue??[],recent:old?.recent??[],savedOperations:old?.savedOperations??{}};
+ store.accounts[session.data.accountId]={webLibraryId,accountId:session.data.accountId,installationId,token:credential.token,replicaId:boot.replicaId,epoch:boot.scopeEpoch,queue:old?.queue??[],recent:old?.recent??[],savedOperations:old?.savedOperations??{}};
  for(const item of store.accounts[session.data.accountId].queue)if(item.error==='access_revoked'&&item.epoch===boot.scopeEpoch)delete item.error;store.active=session.data.accountId;await persist(store);await stopAllReading();});
 }
 async function activeScope(){return await nativeEnabled()?nativeScope():(await load()).active;}
-async function status(){if(await nativeEnabled())return nativeStatus();const store=await load(),a=store.active?store.accounts[store.active]:null;return {accountId:a?.accountId??null,pending:a?.queue.length??0,errors:a?.queue.filter(x=>x.error).map(x=>x.error)??[],recent:a?.recent??[]};}
+async function status(){if(await nativeEnabled())return nativeStatus();const store=await load(),a=store.active?store.accounts[store.active]:null;if(a&&!SENSA_EXTENSION_LEGACY_WEB){const current=await webStatus(a.accountId);return {accountId:a.accountId,destination:'web-local',...current,legacyPending:a.queue.length,errors:[]};}return {accountId:a?.accountId??null,pending:a?.queue.length??0,errors:a?.queue.filter(x=>x.error).map(x=>x.error)??[],recent:a?.recent??[]};}
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  if(sender.id!==chrome.runtime.id)return;
  const isPopup=sender.url===chrome.runtime.getURL('popup.html');
  const isOptions=sender.url===chrome.runtime.getURL('options.html');
  const work=async()=>{
+ if(['web-intake-pull','web-intake-ack'].includes(message.kind)){
+  if(!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin||!sender.tab)throw new Error('unsupported_message');
+  const store=await load(),a=store.active?store.accounts[store.active]:null;
+  if(!a)throw new Error('authentication_required');
+  if(message.accountId!==a.accountId)throw new Error('account_mismatch');
+  const libraryId=z.string().uuid().parse(message.libraryId);
+  if(message.kind==='web-intake-ack'){if(message.receipt?.libraryId!==libraryId)throw new Error('library_mismatch');return acknowledgeWeb(a.accountId,message.receipt);}
+  return pendingWeb(a.accountId,libraryId);
+ }
+
  if(isPopup&&message.kind==='native-discover')return discoverNative();
  if(isPopup&&message.kind==='native-select'){await selectNative(message.connection);await stopAllReading();return status();}
  if(isPopup&&message.kind==='web-select'){await selectWeb();await stopAllReading();return status();}
@@ -87,6 +104,21 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
    if(message.kind==='accept'){const cached:Record<string,any>=(await chrome.storage.session.get('nativeLookups')).nativeLookups as Record<string,any>??{};const item=cached[message.lookupId];if(!item||item.scope!==scope||item.tabId!==sender.tab.id||item.pageUrl!==sender.url)throw new Error('lookup_unavailable');snapshot=item.snapshot;resolution={kind:'proposal' as const,proposal:item.proposal};}
    snapshot=captureSnapshotSchema.parse(snapshot);if(snapshot.source.url!==sender.url)throw new Error('source_mismatch');
    return queueNative({operationId:message.operationId,snapshot,resolution,acceptance:message.kind==='accept'?{kind:'direct',consent:'accept_context_expression_sense',authorization:'browser:explicit_accept_button'}:null},scope);
+ }
+ if(!SENSA_EXTENSION_LEGACY_WEB&&!await nativeEnabled()&&['save','accept'].includes(message.kind)&&sender.tab){
+  return locked(async()=>{
+   const store=await load(),a=store.active?store.accounts[store.active]:null,mode=(await modes())[sender.tab!.id!];
+   if(!a||a.accountId!==message.accountId||mode?.accountId!==a.accountId)throw new Error('account_mismatch');
+   if(!a.webLibraryId)throw new Error('web_reconnect_required');
+   let snapshot=message.snapshot,resolution=null;
+   if(message.kind==='accept'){
+    const cached=(await chrome.storage.session.get('nativeLookups')).nativeLookups as Record<string,any>??{},item=cached[message.lookupId];
+    if(!item||item.scope!==a.accountId||item.tabId!==sender.tab!.id||item.pageUrl!==sender.url)throw new Error('lookup_unavailable');
+    snapshot=item.snapshot;resolution={kind:'proposal' as const,proposal:item.proposal};
+   }
+   snapshot=captureSnapshotSchema.parse(snapshot);if(snapshot.source.url!==sender.url)throw new Error('source_mismatch');
+   return queueWeb(a.accountId,{version:'sensa-intake-v1',libraryId:a.webLibraryId,clientId:a.installationId,operationId:message.operationId,snapshot,resolution,acceptance:message.kind==='accept'?{kind:'direct',consent:'accept_context_expression_sense',authorization:'browser:explicit_accept_button'}:null});
+  });
  }
  if(message.kind==='lookup'&&sender.tab){const snapshot=captureSnapshotSchema.parse(message.snapshot);const readingModes=await modes();const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a||message.accountId!==await activeScope()||readingModes[sender.tab!.id!]?.accountId!==await activeScope()||snapshot.source.url!==sender.url)throw new Error('authentication_required');const result=await request('/sensa/semantic/lookups',{id:message.lookupId,snapshot},a.token);await rememberLookup(sender,message.lookupId,snapshot,result,message.accountId);return result;}
  if(message.kind==='accept'&&sender.tab){const readingModes=await modes();if(!readingModes[sender.tab!.id!])throw new Error('reading_mode_off');await locked(async()=>{const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a||message.accountId!==a.accountId||readingModes[sender.tab!.id!]?.accountId!==a.accountId)throw new Error('account_mismatch');const operation=semanticAcceptOperationSchema.parse({operationId:message.operationId,occurredAt:new Date().toISOString(),installationId:a.installationId,replicaId:a.replicaId,dependsOn:[],kind:'semantic.accept',payload:{lookupId:message.lookupId,expectedRevision:'1',intakeId:null,consent:'accept_context_expression_sense'}});queueOperation(a,operation);await persist(store);});void sync().catch(()=>undefined);return {savedLocally:true};}
@@ -137,7 +169,7 @@ chrome.runtime.onConnect?.addListener(port=>{
 });
 
 async function rememberLookup(sender:chrome.runtime.MessageSender,id:string,snapshot:unknown,result:any,scope:string){
- if(!await nativeEnabled()||result?.status!=='ready'||!result.proposal)return;
+ if(result?.status!=='ready'||!result.proposal)return;
  if(await activeScope()!==scope)throw new Error('account_mismatch');
  const store:Record<string,any>=(await chrome.storage.session.get('nativeLookups')).nativeLookups as Record<string,any>??{};
  store[id]={scope,tabId:sender.tab?.id,pageUrl:sender.url,snapshot:captureSnapshotSchema.parse(snapshot),proposal:result.proposal};
