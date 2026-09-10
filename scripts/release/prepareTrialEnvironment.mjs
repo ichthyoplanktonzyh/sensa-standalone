@@ -16,13 +16,17 @@ try{
  const ciSource=await readFile(ciPath,'utf8'),apiSource=await readFile(apiPath,'utf8');
  const ci=parseEnv(ciSource),api=parseEnv(apiSource);
  if(!ci.MIGRATION_DATABASE_URL||/\[YOUR.PASSWORD\]/i.test(ci.MIGRATION_DATABASE_URL))throw Error('Administrator connection missing');
- const admin=new URL(ci.MIGRATION_DATABASE_URL),runtime=new URL(admin);
+ const admin=new URL(ci.MIGRATION_DATABASE_URL);
+ admin.searchParams.set('sslmode','verify-full');
+ const runtime=new URL(admin);
  runtime.username='sensa_trial_runtime'+(admin.hostname.endsWith('.pooler.supabase.com')?'.'+projectRef:'');
  runtime.password=randomBytes(32).toString('hex');
  // Keep the same runtime credential on retries; never silently rotate a live role.
- const runtimeUrl=ci.SENSA_RUNTIME_DATABASE_URL||api.DATABASE_URL||runtime.toString();
- validateTrialConnections({adminUrl:admin.toString(),runtimeUrl,projectRef});
  if(ci.SENSA_RUNTIME_DATABASE_URL&&api.DATABASE_URL&&ci.SENSA_RUNTIME_DATABASE_URL!==api.DATABASE_URL)throw Error('Conflicting runtime credentials');
+ const selectedRuntime=new URL(ci.SENSA_RUNTIME_DATABASE_URL||api.DATABASE_URL||runtime.toString());
+ selectedRuntime.searchParams.set('sslmode','verify-full');
+ const runtimeUrl=selectedRuntime.toString();
+ validateTrialConnections({adminUrl:admin.toString(),runtimeUrl,projectRef});
  if(api.SUPABASE_URL!==`https://${projectRef}.supabase.co`)throw Error('API project mismatch');
  let next=update(ciSource,'MIGRATION_DATABASE_URL',admin.toString());
  next=update(next,'SENSA_RUNTIME_DATABASE_URL',runtimeUrl);next=update(next,'SUPABASE_PROJECT_REF',projectRef);

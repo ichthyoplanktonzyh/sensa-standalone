@@ -194,7 +194,7 @@ publishable key 已读取，真实 `/auth/v1/settings` 返回 200：Email 开启
 配置齐备后，从仓库根目录分别运行（不叠加旧 API `.env`）：
 
 ```sh
-node --env-file=apps/api/.env.real-service --import tsx/esm apps/api/src/server.ts
+NODE_EXTRA_CA_CERTS="$PWD/infra/certs/supabase-prod-ca-2021.crt" node --env-file=apps/api/.env.real-service --import tsx/esm apps/api/src/server.ts
 npm run web:dev -- --mode real-service --host 127.0.0.1 --port 3001 --strictPort
 ```
 
@@ -276,3 +276,10 @@ Supabase service-role key 不属于本次启动学习的前置，留待账号删
 开通和撤销不恢复；Auth 表为合成记录。已加入 no-cost CI。本机 owner 数据库未迁移，
 测试库及专用测试角色已清理。根级 typecheck/build/lint 已通过；凭据准备脚本另用临时
 目录和合成连接串验证 CI/API 值一致、0600 权限、输出不含密码及重复运行不轮换密码。
+
+2026-09-10 连接诊断：已在忽略文件内修正连接串特殊字符编码。Supabase 官方公共 CA
+存于 `infra/certs/`，CI 和上述本机启动命令通过 `NODE_EXTRA_CA_CERTS` 加载；准备脚本
+统一使用 `sslmode=verify-full`，保留既有运行密码。只读连接探测已通过 TLS 验证，
+但管理员登录返回 `28P01`（密码认证失败），仍需 owner 更正项目数据库密码。
+尚未执行远程迁移、创建运行角色或推送代码。证书配置后的 typecheck/build/lint、
+一次性数据库 smoke 和配置幂等/权限检查均通过。
