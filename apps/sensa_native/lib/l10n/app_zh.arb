@@ -812,5 +812,10 @@
   "installerAlreadyConnected": "此浏览器已有连接，本次未覆盖。",
   "installerWriteFailed": "未能写入连接，请检查文件夹权限与可用空间。",
   "nextReviewDate": "下次复习：{date}",
-  "learningNotReady": "此学习方式尚未就绪，请准备匹配的材料或更换方式。"
+  "learningNotReady": "此学习方式尚未就绪，请准备匹配的材料或更换方式。",
+  "uiDiscardCaptureTitle": "放弃未保存的修改？",
+  "uiDiscardCaptureBody": "修改尚未保存。你可以继续编辑，或先存入收件箱。",
+  "uiKeepEditing": "继续编辑",
+  "uiDiscardChanges": "放弃修改",
+  "uiContextResources": "上下文与参考资料"
 }

@@ -176,29 +176,12 @@ class _PreparationScreenState extends State<PreparationScreen> {
                             '')
                         as String,
                   ),
-                  if (meaning != null && meaning!['status'] == 'confirmed')
-                    AnchorUsePanel(model: model, meaning: meaning!),
-                  if (current?['anchor'] != null)
-                    Text(
-                      context.l10n.uiAuthorizedContext(
-                        (current!['anchor']['sentence']).toString(),
-                      ),
-                    ),
                   if (current != null)
-                    ReferenceSourcePanel(model: model, task: current),
-                  if ((current?['target']['binding'] ??
-                          meaning?['bindingMetadata'])
-                      case final Map binding)
-                    Text(
-                      context.l10n.uiRelationCoverage(
-                        (bindingRelationLabel(
-                          context,
-                          binding['relation'],
-                        )).toString(),
-                        (bindingCoverageLabel(
-                          context,
-                          binding['semanticCoverage'],
-                        )).toString(),
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        preparationLabel(context, current),
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
                   if (model.notice != null) Text(model.notice!),
@@ -256,10 +239,6 @@ class _PreparationScreenState extends State<PreparationScreen> {
                   ],
                   if (current != null) ...[
                     const SizedBox(height: 16),
-                    Text(
-                      preparationLabel(context, current),
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
                     Text(
                       context.l10n.uiPreparationAttemptsUsed(
                         (current['attemptCount']).toString(),
@@ -361,6 +340,37 @@ class _PreparationScreenState extends State<PreparationScreen> {
                       child: Text(context.l10n.uiCheckLocalTask),
                     ),
                   ],
+                  ExpansionTile(
+                    key: const PageStorageKey('preparation-context-details'),
+                    title: Text(context.l10n.uiContextResources),
+                    children: [
+                      if (meaning != null && meaning!['status'] == 'confirmed')
+                        AnchorUsePanel(model: model, meaning: meaning!),
+                      if (current?['anchor'] != null)
+                        Text(
+                          context.l10n.uiAuthorizedContext(
+                            (current!['anchor']['sentence']).toString(),
+                          ),
+                        ),
+                      if (current != null)
+                        ReferenceSourcePanel(model: model, task: current),
+                      if ((current?['target']['binding'] ??
+                              meaning?['bindingMetadata'])
+                          case final Map binding)
+                        Text(
+                          context.l10n.uiRelationCoverage(
+                            (bindingRelationLabel(
+                              context,
+                              binding['relation'],
+                            )).toString(),
+                            (bindingCoverageLabel(
+                              context,
+                              binding['semanticCoverage'],
+                            )).toString(),
+                          ),
+                        ),
+                    ],
+                  ),
                   if (model.error != null) ...[
                     Text(
                       model.error!,

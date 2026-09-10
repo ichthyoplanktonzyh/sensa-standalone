@@ -1,7 +1,7 @@
 # Sensa 文档索引
 
 > 状态：Active index  
-> 更新日期：2026-09-09
+> 更新日期：2026-09-10
 
 本目录不再把所有设计记录都当作“领域模型”。文档按职责分层；下层文档不能覆盖
 上层文档的定义。
@@ -83,6 +83,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | Native Personal World | [`native-world-group-plan.md`](native-world-group-plan.md) / [`native-world-group-handoff.md`](native-world-group-handoff.md) | 图文草稿、本机语义连接、表达分支与关系投影；模型协作见 Native Agent 记录 |
 | Native resource group | [`native-resource-group-plan.md`](native-resource-group-plan.md) / [`native-resource-group-handoff.md`](native-resource-group-handoff.md) | 参考资料来源生命周期、图文授权、关系准备、流式/静态发音与原生在线账户的整组收口 |
 | Native intake group | [`native-intake-group-handoff.md`](native-intake-group-handoff.md) | 插件可选原生库、CLI/Native Messaging、统一准入回执、Codex Skill、断线/重启恢复与双平台导入验收 |
+| Native use-case UX | [`native-use-case-ux-refinement.md`](native-use-case-ux-refinement.md) | 意义详情/复制编辑、采集离开保护、学习题面与输入、手机关系浏览、准备与服务设置分层；程序验收边界见记录 |
 | Native localization | [`native-localization-handoff.md`](native-localization-handoff.md) | 原生中英文切换、本机界面偏好、文案精简及分层验收；学习内容语言保持原合同 |
 | Native product UI | [`native-product-ui-handoff.md`](native-product-ui-handoff.md) | 正式导航、Profile 与学习执行器、平台连接向导、双平台程序回归和实际体验证据 |
 | Native optional resources | [`native-optional-resources-plan.md`](native-optional-resources-plan.md) / [`native-optional-resources-handoff.md`](native-optional-resources-handoff.md) | 可选文本角色、独立审核、本机准入与分阶段呈现；上游生产工具仍保留 |

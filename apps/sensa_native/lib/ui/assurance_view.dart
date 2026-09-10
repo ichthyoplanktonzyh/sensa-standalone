@@ -556,6 +556,8 @@ class _AssuranceViewState extends State<AssuranceView> {
             TextField(
               key: const ValueKey('assurance-answer'),
               controller: answer,
+              enabled: available,
+              textInputAction: TextInputAction.done,
               autocorrect: false,
               enableSuggestions: false,
               decoration: InputDecoration(
@@ -563,7 +565,7 @@ class _AssuranceViewState extends State<AssuranceView> {
                 border: OutlineInputBorder(),
               ),
               onChanged: (_) {
-                dirty = true;
+                setState(() => dirty = true);
                 saveTimer?.cancel();
                 saveTimer = Timer(const Duration(milliseconds: 300), saveDraft);
               },

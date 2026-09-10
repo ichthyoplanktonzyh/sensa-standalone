@@ -1415,5 +1415,10 @@
       }
     }
   },
-  "learningNotReady": "This mode is not ready. Prepare matching material or choose another mode."
+  "learningNotReady": "This mode is not ready. Prepare matching material or choose another mode.",
+  "uiDiscardCaptureTitle": "Discard unsaved changes?",
+  "uiDiscardCaptureBody": "Your changes have not been saved. Keep editing to finish or save them to your inbox.",
+  "uiKeepEditing": "Keep editing",
+  "uiDiscardChanges": "Discard changes",
+  "uiContextResources": "Context and reference resources"
 }

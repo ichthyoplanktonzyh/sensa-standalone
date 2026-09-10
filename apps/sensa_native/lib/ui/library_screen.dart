@@ -414,12 +414,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
             vm.enteredActivity();
           }
         });
-        body.add(
-          OutlinedButton(
-            onPressed: available ? () => vm.stopActivity() : null,
-            child: Text(context.l10n.uiPauseAndGoBack),
-          ),
-        );
+        if (s?.assurance == null && s?.run == null) {
+          body.add(
+            OutlinedButton(
+              onPressed: available ? () => vm.stopActivity() : null,
+              child: Text(context.l10n.uiPauseAndGoBack),
+            ),
+          );
+        }
       }
       if (vm.checkInPending && !vm.busy) {
         body.addAll([
@@ -512,9 +514,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 600),
+              constraints: const BoxConstraints(maxWidth: 760),
               child: ListView(
-                padding: const EdgeInsets.all(24),
+                key: ValueKey(
+                  'learning-${vm.home}-${s?.run?['id']}-${s?.phase}-${s?.assurance?['id']}-${s?.assurance?['queue']?['session']?['action']?['actionKey']}-${s?.assurance?['queue']?['session']?['action']?['ordinal']}',
+                ),
+                padding: EdgeInsets.all(
+                  MediaQuery.sizeOf(context).width < 600 ? 16 : 24,
+                ),
                 children: [
                   Row(
                     children: [
@@ -529,16 +536,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
                   Material(
                     color: const Color(0xfffffefd),
                     borderRadius: BorderRadius.circular(24),
                     child: Padding(
-                      padding: const EdgeInsets.all(24),
+                      padding: EdgeInsets.all(
+                        MediaQuery.sizeOf(context).width < 600 ? 12 : 24,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: body
-                            .expand((w) => [w, const SizedBox(height: 24)])
+                            .expand((w) => [w, const SizedBox(height: 16)])
                             .toList(),
                       ),
                     ),

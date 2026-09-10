@@ -145,6 +145,30 @@ void main() {
           1,
           reason: 'Semantic acceptance must not enroll borrow',
         );
+        // Open the same confirmed meaning from the compact list. Detail reads
+        // the real Rust World projection; browsing and copying do not enroll it.
+        final meaning = model.snapshot!.personal['meanings'][0];
+        await tap(find.byKey(ValueKey('personal-meaning-${meaning['id']}')));
+        expect(find.text(l10n.uiContextAndExpression), findsOneWidget);
+        await tap(find.text(l10n.uiSaveAsNew));
+        expect(
+          tester
+              .widget<TextField>(find.byKey(const ValueKey('capture-context')))
+              .controller!
+              .text,
+          'May I borrow your umbrella?',
+        );
+        await tester.pageBack();
+        await wait();
+        await tap(find.text(l10n.uiRemoveThisConnection));
+        await tap(find.text(l10n.uiRestoreThisConnection));
+        await tester.pageBack();
+        await wait();
+        expect(model.snapshot!.personal['meanings'][0]['status'], 'confirmed');
+        expect(
+          model.snapshot!.catalog.where((e) => e['enrolled'] == true).length,
+          1,
+        );
         await tap(find.byTooltip(l10n.uiImagesAndConnections));
         expect(find.text(l10n.uiImagesAndConnections), findsOneWidget);
         await tester.pageBack();

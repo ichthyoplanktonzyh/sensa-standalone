@@ -122,213 +122,209 @@ class _WorldScreenState extends State<WorldScreen> {
                 child: Text(model.error ?? context.l10n.uiLoadingYourLibrary),
               ),
             )
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          FilledButton(
-                            onPressed: model.busy ? null : () => edit(),
-                            child: Text(context.l10n.uiNewTextAndImageCapture),
-                          ),
-                          for (final (i, label) in [
-                            context.l10n.uiSaved,
-                            context.l10n.uiDraftsAndCaptures,
-                            context.l10n.uiRemoved,
-                          ].indexed)
-                            ChoiceChip(
-                              label: Text(label),
-                              selected: section == i,
-                              onSelected: (_) => setState(() => section = i),
-                            ),
-                        ],
-                      ),
-                      TextField(
-                        key: const ValueKey('world-search'),
-                        decoration: InputDecoration(
-                          labelText: context
-                              .l10n
-                              .uiSearchContextsMeaningsOrExpressions,
-                        ),
-                        onChanged: (v) => setState(() => search = v),
-                      ),
-                      if (section == 0)
+          : NestedScrollView(
+              headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
                         Wrap(
                           spacing: 8,
                           children: [
-                            for (var v = 0; v < 3; v++)
+                            FilledButton(
+                              onPressed: model.busy ? null : () => edit(),
+                              child: Text(
+                                context.l10n.uiNewTextAndImageCapture,
+                              ),
+                            ),
+                            for (final (i, label) in [
+                              context.l10n.uiSaved,
+                              context.l10n.uiDraftsAndCaptures,
+                              context.l10n.uiRemoved,
+                            ].indexed)
                               ChoiceChip(
-                                label: Text(
-                                  [
-                                    context.l10n.uiList,
-                                    context.l10n.uiExpand,
-                                    context.l10n.uiGraph,
-                                  ][v],
-                                ),
-                                selected: view == v,
-                                onSelected: (_) => setState(() => view = v),
+                                label: Text(label),
+                                selected: section == i,
+                                onSelected: (_) => setState(() => section = i),
                               ),
                           ],
                         ),
-                      if (model.error != null) Text(model.error!),
-                    ],
+                        TextField(
+                          key: const ValueKey('world-search'),
+                          decoration: InputDecoration(
+                            labelText: context
+                                .l10n
+                                .uiSearchContextsMeaningsOrExpressions,
+                          ),
+                          onChanged: (v) => setState(() => search = v),
+                        ),
+                        if (section == 0)
+                          Wrap(
+                            spacing: 8,
+                            children: [
+                              for (var v = 0; v < 3; v++)
+                                ChoiceChip(
+                                  label: Text(
+                                    [
+                                      context.l10n.uiList,
+                                      context.l10n.uiExpand,
+                                      context.l10n.uiGraph,
+                                    ][v],
+                                  ),
+                                  selected: view == v,
+                                  onSelected: (_) => setState(() => view = v),
+                                ),
+                            ],
+                          ),
+                        if (model.error != null) Text(model.error!),
+                      ],
+                    ),
                   ),
                 ),
-                Expanded(
-                  child: section == 1
-                      ? ListView(
-                          key: const ValueKey('world-list'),
-                          children: [
-                            for (final d in model.data!['drafts'])
-                              if (d['status'] != 'removed' &&
-                                  jsonEncode(d['draft']).toLowerCase().contains(
-                                    search.toLowerCase(),
-                                  ))
-                                ListTile(
-                                  title: Text(
-                                    d['draft']['familiarExpression']
-                                            .toString()
-                                            .isNotEmpty
-                                        ? d['draft']['familiarExpression']
-                                        : context.l10n.uiTextAndImageCaptureV(
-                                            (d['revision']).toString(),
-                                          ),
-                                  ),
-                                  subtitle: Text(
-                                    context.l10n.uiBlocks(
-                                      (d['status'] == 'accepted'
-                                              ? context
-                                                    .l10n
-                                                    .uiConfirmedMoreMeaningsCanBeAdded
-                                              : d['status'] == 'inbox'
-                                              ? context
-                                                    .l10n
-                                                    .uiAwaitingConfirmation
-                                              : context.l10n.uiEditDraft)
-                                          .toString(),
-                                      ((d['draft']['blocks'] as List).length)
-                                          .toString(),
-                                    ),
-                                  ),
-                                  onTap: () => edit(d),
-                                ),
-                            if ((model.data!['drafts'] as List).isEmpty)
-                              ListTile(title: Text(context.l10n.uiNoDraftsYet)),
-                          ],
-                        )
-                      : section == 0 && view == 2
-                      ? Column(
-                          children: [
-                            if (selected != null)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                child: DropdownButtonFormField<String>(
-                                  key: ValueKey(selected),
-                                  initialValue: selected,
-                                  isExpanded: true,
-                                  items: [
-                                    for (final key in groups.keys)
-                                      DropdownMenuItem(
-                                        value: key,
-                                        child: Text(
-                                          '${groups[key]!.first['snapshot']['sentence']}'
-                                                  .isEmpty
-                                              ? context.l10n.uiImageContext
-                                              : groups[key]!
-                                                    .first['snapshot']['sentence'],
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                  ],
-                                  onChanged: (v) => setState(() => region = v),
-                                ),
-                              ),
-                            Text(context.l10n.uiDragOrPinchToExploreSelect),
-                            Expanded(
-                              child: selected == null
-                                  ? Center(
-                                      child: Text(
-                                        context
-                                            .l10n
-                                            .uiConfirmedConnectionsAppearHere,
-                                      ),
-                                    )
-                                  : WorldGraph(
-                                      items: groups[selected]!,
-                                      onOpen: detail,
-                                    ),
-                            ),
-                          ],
-                        )
-                      : ListView(
-                          key: const ValueKey('world-list'),
-                          padding: const EdgeInsets.all(16),
-                          children: [
-                            for (final m in filtered)
-                              Card(
-                                child: ListTile(
-                                  title: Text(m['expression']),
-                                  subtitle: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(m['sense']),
-                                      if (view == 1) ...[
-                                        Text(m['snapshot']['sentence']),
-                                        if (m['focus'] != null)
-                                          Text(
-                                            context.l10n.uiFocus(
-                                              (m['focus']).toString(),
-                                            ),
-                                          ),
-                                        Text(
-                                          m['bindingMetadata'] == null
-                                              ? context
-                                                    .l10n
-                                                    .uiFromAConfirmedBinding
-                                              : '${m['bindingMetadata']['relation']} · ${m['bindingMetadata']['semanticCoverage']}',
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () => detail(m),
-                                ),
-                              ),
-                            if (section == 2)
-                              for (final d in model.data!['drafts'])
-                                if (d['status'] == 'removed')
-                                  ListTile(
-                                    title: Text(context.l10n.uiRemovedDrafts),
-                                    trailing: TextButton(
-                                      onPressed: () => model.act(
-                                        () => {
-                                          'kind': 'membership',
-                                          'id': d['id'],
-                                          'expected_revision': d['revision'],
-                                          'active': true,
-                                        },
-                                      ),
-                                      child: Text(context.l10n.uiRestoreDraft),
-                                    ),
-                                  ),
-                            if (filtered.isEmpty)
-                              ListTile(
-                                title: Text(
-                                  context.l10n.uiNoConfirmedConnectionsYet,
-                                ),
-                              ),
-                          ],
-                        ),
-                ),
               ],
+              body: section == 1
+                  ? ListView(
+                      key: const ValueKey('world-list'),
+                      children: [
+                        for (final d in model.data!['drafts'])
+                          if (d['status'] != 'removed' &&
+                              jsonEncode(
+                                d['draft'],
+                              ).toLowerCase().contains(search.toLowerCase()))
+                            ListTile(
+                              title: Text(
+                                d['draft']['familiarExpression']
+                                        .toString()
+                                        .isNotEmpty
+                                    ? d['draft']['familiarExpression']
+                                    : context.l10n.uiTextAndImageCaptureV(
+                                        (d['revision']).toString(),
+                                      ),
+                              ),
+                              subtitle: Text(
+                                context.l10n.uiBlocks(
+                                  (d['status'] == 'accepted'
+                                          ? context
+                                                .l10n
+                                                .uiConfirmedMoreMeaningsCanBeAdded
+                                          : d['status'] == 'inbox'
+                                          ? context.l10n.uiAwaitingConfirmation
+                                          : context.l10n.uiEditDraft)
+                                      .toString(),
+                                  ((d['draft']['blocks'] as List).length)
+                                      .toString(),
+                                ),
+                              ),
+                              onTap: () => edit(d),
+                            ),
+                        if ((model.data!['drafts'] as List).isEmpty)
+                          ListTile(title: Text(context.l10n.uiNoDraftsYet)),
+                      ],
+                    )
+                  : section == 0 && view == 2
+                  ? Column(
+                      children: [
+                        if (selected != null)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: DropdownButtonFormField<String>(
+                              key: ValueKey(selected),
+                              initialValue: selected,
+                              isExpanded: true,
+                              items: [
+                                for (final key in groups.keys)
+                                  DropdownMenuItem(
+                                    value: key,
+                                    child: Text(
+                                      '${groups[key]!.first['snapshot']['sentence']}'
+                                              .isEmpty
+                                          ? context.l10n.uiImageContext
+                                          : groups[key]!
+                                                .first['snapshot']['sentence'],
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                              ],
+                              onChanged: (v) => setState(() => region = v),
+                            ),
+                          ),
+                        if (MediaQuery.sizeOf(context).width >= 600)
+                          Text(context.l10n.uiDragOrPinchToExploreSelect),
+                        Expanded(
+                          child: selected == null
+                              ? Center(
+                                  child: Text(
+                                    context
+                                        .l10n
+                                        .uiConfirmedConnectionsAppearHere,
+                                  ),
+                                )
+                              : WorldGraph(
+                                  items: groups[selected]!,
+                                  onOpen: detail,
+                                ),
+                        ),
+                      ],
+                    )
+                  : ListView(
+                      key: const ValueKey('world-list'),
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        for (final m in filtered)
+                          Card(
+                            child: ListTile(
+                              title: Text(m['expression']),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(m['sense']),
+                                  if (view == 1) ...[
+                                    Text(m['snapshot']['sentence']),
+                                    if (m['focus'] != null)
+                                      Text(
+                                        context.l10n.uiFocus(
+                                          (m['focus']).toString(),
+                                        ),
+                                      ),
+                                    Text(
+                                      m['bindingMetadata'] == null
+                                          ? context.l10n.uiFromAConfirmedBinding
+                                          : '${m['bindingMetadata']['relation']} · ${m['bindingMetadata']['semanticCoverage']}',
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => detail(m),
+                            ),
+                          ),
+                        if (section == 2)
+                          for (final d in model.data!['drafts'])
+                            if (d['status'] == 'removed')
+                              ListTile(
+                                title: Text(context.l10n.uiRemovedDrafts),
+                                trailing: TextButton(
+                                  onPressed: () => model.act(
+                                    () => {
+                                      'kind': 'membership',
+                                      'id': d['id'],
+                                      'expected_revision': d['revision'],
+                                      'active': true,
+                                    },
+                                  ),
+                                  child: Text(context.l10n.uiRestoreDraft),
+                                ),
+                              ),
+                        if (filtered.isEmpty)
+                          ListTile(
+                            title: Text(
+                              context.l10n.uiNoConfirmedConnectionsYet,
+                            ),
+                          ),
+                      ],
+                    ),
             ),
     );
   }
@@ -823,10 +819,12 @@ class WorldDetail extends StatelessWidget {
     required this.model,
     required this.library,
     required this.meaningId,
+    this.onCopyContext,
   });
   final WorldModel model;
   final LibraryViewModel library;
   final String meaningId;
+  final VoidCallback? onCopyContext;
   Future<void> bind(BuildContext context, Map<String, dynamic> m) async {
     final surface = TextEditingController(text: m['expression']);
     String type = m['proposal']['expression']['type'];
@@ -1009,6 +1007,10 @@ class WorldDetail extends StatelessWidget {
                 SelectableText(m['snapshot']['sentence']),
               if (m['focus'] != null)
                 Text(context.l10n.uiFocus((m['focus']).toString())),
+              if ((m['snapshot']?['source']?['title'] as String? ?? '')
+                  .isNotEmpty)
+                Text(m['snapshot']['source']['title']),
+              if (m['sourceLink'] != null) SelectableText(m['sourceLink']),
               if (m['sourceLink'] != null)
                 TextButton(
                   onPressed: () =>
@@ -1024,21 +1026,7 @@ class WorldDetail extends StatelessWidget {
               Text(
                 binding == null
                     ? context.l10n.uiConfirmedExpressionConnection
-                    : '${binding['type']} · ${binding['relation']} · ${binding['semanticCoverage']}',
-              ),
-              ExpansionTile(
-                key: const PageStorageKey('world_screen-detail-1'),
-                title: Text(context.l10n.uiVersionsAndConfirmationSource),
-                children: [
-                  SelectableText(
-                    context.l10n.uiContextMeaningVersionExpressionVersion(
-                      (m['contextAnchorId']).toString(),
-                      (m['senseVersionId']).toString(),
-                      (m['bindingVersionId']).toString(),
-                      (jsonEncode(m['resolutionProvenance'])).toString(),
-                    ),
-                  ),
-                ],
+                    : '${bindingRelationLabel(context, binding['relation'])} · ${bindingCoverageLabel(context, binding['semanticCoverage'])}',
               ),
               if (model.error != null) Text(model.error!),
               if (m['status'] == 'removed')
@@ -1064,7 +1052,10 @@ class WorldDetail extends StatelessWidget {
                   ),
                 FilledButton(
                   onPressed:
-                      model.busy || !supported || m['addedToLearning'] == true
+                      model.busy ||
+                          !supported ||
+                          (m['addedToLearning'] == true &&
+                              m['materialId'] != null)
                       ? null
                       : () async {
                           await library.load();
@@ -1095,7 +1086,9 @@ class WorldDetail extends StatelessWidget {
                         },
                   child: Text(
                     m['addedToLearning'] == true
-                        ? context.l10n.uiAddedToLearning
+                        ? m['materialId'] == null
+                              ? context.l10n.uiViewPreparation
+                              : context.l10n.uiAddedToLearning
                         : context.l10n.uiAddToLearning390,
                   ),
                 ),
@@ -1106,6 +1099,11 @@ class WorldDetail extends StatelessWidget {
                   )
                 else
                   Text(context.l10n.uiThisOlderCaptureLacksTheFull),
+                if (onCopyContext != null)
+                  OutlinedButton(
+                    onPressed: model.busy ? null : onCopyContext,
+                    child: Text(context.l10n.uiSaveAsNew),
+                  ),
                 if (draft != null) ...[
                   OutlinedButton(
                     onPressed: model.busy
@@ -1169,6 +1167,20 @@ class WorldDetail extends StatelessWidget {
                     ),
                   ),
                 ),
+              ExpansionTile(
+                key: const PageStorageKey('world_screen-detail-1'),
+                title: Text(context.l10n.uiVersionsAndConfirmationSource),
+                children: [
+                  SelectableText(
+                    context.l10n.uiContextMeaningVersionExpressionVersion(
+                      (m['contextAnchorId']).toString(),
+                      (m['senseVersionId']).toString(),
+                      (m['bindingVersionId']).toString(),
+                      (jsonEncode(m['resolutionProvenance'])).toString(),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -1182,101 +1194,131 @@ class WorldGraph extends StatelessWidget {
   final List<Map<String, dynamic>> items;
   final void Function(Map<String, dynamic>) onOpen;
   @override
-  Widget build(BuildContext context) {
-    final groups = <String, List<Map<String, dynamic>>>{};
-    for (final m in items) {
-      groups.putIfAbsent(m['senseVersionId'], () => []).add(m);
-    }
-    final height = items.length * 160.0 + 40;
-    final nodes = <Widget>[];
-    final lines = <({Offset start, Offset end})>[];
-    final center = Offset(140, height / 2);
-    double row = 20;
-    Widget node(
-      String label,
-      String text,
-      double x,
-      double y,
-      double width,
-      Map<String, dynamic> m,
-    ) => Positioned(
-      left: x,
-      top: y,
-      width: width,
-      height: 130,
-      child: Card(
-        child: InkWell(
-          onTap: () => onOpen(m),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: Theme.of(context).textTheme.labelLarge),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: Text(
-                    text,
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      if (items.isEmpty) return const SizedBox.shrink();
+      if (constraints.maxWidth < 600) {
+        return ListView(
+          key: const ValueKey('world-graph-relations'),
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(
+              context.l10n.uiContext,
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            Text(
+              items.first['snapshot']['sentence'].toString().isEmpty
+                  ? context.l10n.uiImageContext
+                  : items.first['snapshot']['sentence'],
+            ),
+            const SizedBox(height: 16),
+            for (final item in items)
+              Card(
+                child: ListTile(
+                  title: Text(item['sense']),
+                  subtitle: Text(item['expression']),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => onOpen(item),
                 ),
-              ],
+              ),
+          ],
+        );
+      }
+      final groups = <String, List<Map<String, dynamic>>>{};
+      for (final m in items) {
+        groups.putIfAbsent(m['senseVersionId'], () => []).add(m);
+      }
+      final height = items.length * 160.0 + 40;
+      final nodes = <Widget>[];
+      final lines = <({Offset start, Offset end})>[];
+      final center = Offset(140, height / 2);
+      double row = 20;
+      Widget node(
+        String label,
+        String text,
+        double x,
+        double y,
+        double width,
+        Map<String, dynamic> m,
+      ) => Positioned(
+        left: x,
+        top: y,
+        width: width,
+        height: 130,
+        child: Card(
+          child: InkWell(
+            onTap: () => onOpen(m),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: Text(
+                      text,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
-    nodes.add(
-      node(
-        context.l10n.uiContext,
-        items.first['snapshot']['sentence'].toString().isEmpty
-            ? context.l10n.uiImageContext
-            : items.first['snapshot']['sentence'],
-        20,
-        center.dy - 65,
-        240,
-        items.first,
-      ),
-    );
-    for (final group in groups.values) {
-      final y = row + (group.length - 1) * 80;
-      lines.add((start: Offset(260, center.dy), end: Offset(340, y + 65)));
+      );
       nodes.add(
         node(
-          group.first['focus'] == null
-              ? context.l10n.uiMeaning
-              : context.l10n.uiMeaning398((group.first['focus']).toString()),
-          group.first['sense'],
-          340,
-          y,
+          context.l10n.uiContext,
+          items.first['snapshot']['sentence'].toString().isEmpty
+              ? context.l10n.uiImageContext
+              : items.first['snapshot']['sentence'],
+          20,
+          center.dy - 65,
           240,
-          group.first,
+          items.first,
         ),
       );
-      for (final m in group) {
-        lines.add((start: Offset(580, y + 65), end: Offset(660, row + 65)));
+      for (final group in groups.values) {
+        final y = row + (group.length - 1) * 80;
+        lines.add((start: Offset(260, center.dy), end: Offset(340, y + 65)));
         nodes.add(
-          node(context.l10n.uiExpression, m['expression'], 660, row, 220, m),
+          node(
+            group.first['focus'] == null
+                ? context.l10n.uiMeaning
+                : context.l10n.uiMeaning398((group.first['focus']).toString()),
+            group.first['sense'],
+            340,
+            y,
+            240,
+            group.first,
+          ),
         );
-        row += 160;
+        for (final m in group) {
+          lines.add((start: Offset(580, y + 65), end: Offset(660, row + 65)));
+          nodes.add(
+            node(context.l10n.uiExpression, m['expression'], 660, row, 220, m),
+          );
+          row += 160;
+        }
       }
-    }
-    return InteractiveViewer(
-      constrained: false,
-      boundaryMargin: const EdgeInsets.all(60),
-      minScale: 0.25,
-      maxScale: 2,
-      child: SizedBox(
-        width: 910,
-        height: height,
-        child: CustomPaint(
-          painter: _WorldEdges(lines, Theme.of(context).colorScheme.outline),
-          child: Stack(children: nodes),
+      return InteractiveViewer(
+        constrained: false,
+        boundaryMargin: const EdgeInsets.all(60),
+        minScale: 0.25,
+        maxScale: 2,
+        child: SizedBox(
+          width: 910,
+          height: height,
+          child: CustomPaint(
+            painter: _WorldEdges(lines, Theme.of(context).colorScheme.outline),
+            child: Stack(children: nodes),
+          ),
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
 }
 
 class _WorldEdges extends CustomPainter {

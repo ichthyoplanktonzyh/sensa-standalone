@@ -204,74 +204,78 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
               ),
             ),
           if (widget.controller.error != null) Text(widget.controller.error!),
-          TextButton(
-            onPressed: () async {
-              await widget.controller.providers.unlock();
-              widget.controller.changed();
-              if (mounted) setState(() {});
-            },
-            child: Text(context.l10n.uiReloadCredentials),
-          ),
-          for (final role in {
-            'teacher': context.l10n.uiClarificationAndExplanation,
-            'content': context.l10n.uiLearningMaterialGeneration,
-            'review': context.l10n.uiIndependentReview,
-            'service': context.l10n.uiSensaOnlineResources,
-          }.entries)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: DropdownButtonFormField<String>(
-                isExpanded: true,
-                key: ValueKey(
-                  'provider-role-${role.key}-${(widget.controller.providers.forPurpose(role.key)?['id'])}',
-                ),
-                initialValue:
-                    widget.controller.providers.profiles.any(
-                      (p) =>
-                          p['id'] ==
-                              (widget.controller.providers.forPurpose(
-                                role.key,
-                              )?['id']) &&
-                          (role.key != 'service' || p['kind'] == 'sensa'),
-                    )
-                    ? (widget.controller.providers.forPurpose(role.key)?['id'])
-                    : '',
-                decoration: InputDecoration(labelText: role.value),
-                items: [
-                  DropdownMenuItem(
-                    value: '',
-                    child: Text(context.l10n.uiNotConfigured),
-                  ),
-                  for (final p in widget.controller.providers.profiles)
-                    if (role.key != 'service' || p['kind'] == 'sensa')
-                      DropdownMenuItem(
-                        value: p['id'] as String,
-                        child: Text(p['name']),
-                      ),
-                ],
-                onChanged: (id) async {
-                  try {
-                    await widget.controller.providers.assign(
-                      role.key,
-                      id == '' ? null : id,
-                    );
-                    widget.controller.changed();
-                    if (mounted) setState(() {});
-                  } catch (e) {
-                    widget.controller.setError(
-                      () => widget.controller.describe(e),
-                    );
-                    if (mounted) setState(() {});
-                  }
-                },
-              ),
-            ),
-          Text(context.l10n.uiChooseAServiceForEachPurpose),
-          const SizedBox(height: 12),
           FilledButton(
             onPressed: () => edit(),
             child: Text(context.l10n.uiAddModelService),
           ),
+          const SizedBox(height: 24),
+          if (widget.controller.providers.profiles.isNotEmpty) ...[
+            for (final role in {
+              'teacher': context.l10n.uiClarificationAndExplanation,
+              'content': context.l10n.uiLearningMaterialGeneration,
+              'review': context.l10n.uiIndependentReview,
+              'service': context.l10n.uiSensaOnlineResources,
+            }.entries)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  key: ValueKey(
+                    'provider-role-${role.key}-${(widget.controller.providers.forPurpose(role.key)?['id'])}',
+                  ),
+                  initialValue:
+                      widget.controller.providers.profiles.any(
+                        (p) =>
+                            p['id'] ==
+                                (widget.controller.providers.forPurpose(
+                                  role.key,
+                                )?['id']) &&
+                            (role.key != 'service' || p['kind'] == 'sensa'),
+                      )
+                      ? (widget.controller.providers.forPurpose(
+                          role.key,
+                        )?['id'])
+                      : '',
+                  decoration: InputDecoration(labelText: role.value),
+                  items: [
+                    DropdownMenuItem(
+                      value: '',
+                      child: Text(context.l10n.uiNotConfigured),
+                    ),
+                    for (final p in widget.controller.providers.profiles)
+                      if (role.key != 'service' || p['kind'] == 'sensa')
+                        DropdownMenuItem(
+                          value: p['id'] as String,
+                          child: Text(p['name']),
+                        ),
+                  ],
+                  onChanged: (id) async {
+                    try {
+                      await widget.controller.providers.assign(
+                        role.key,
+                        id == '' ? null : id,
+                      );
+                      widget.controller.changed();
+                      if (mounted) setState(() {});
+                    } catch (e) {
+                      widget.controller.setError(
+                        () => widget.controller.describe(e),
+                      );
+                      if (mounted) setState(() {});
+                    }
+                  },
+                ),
+              ),
+            Text(context.l10n.uiChooseAServiceForEachPurpose),
+            TextButton(
+              onPressed: () async {
+                await widget.controller.providers.unlock();
+                widget.controller.changed();
+                if (mounted) setState(() {});
+              },
+              child: Text(context.l10n.uiReloadCredentials),
+            ),
+          ],
         ],
       ),
     ),
