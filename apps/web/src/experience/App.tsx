@@ -1,3 +1,4 @@
+import {localFlowText} from '../i18n/localFlowText';
 import {usePersonalLearning} from './library/usePersonalLearning';
 import {PersonalLearningControls,PersonalPreparationTarget,pendingPersonalTargetView} from './library/PersonalLearningControls';
 import {LearningSetupFrame} from './components/learning/LearningSetupFrame';
@@ -157,9 +158,9 @@ const LIGHTWEIGHT_REVIEW_SCHEDULE: Record<
   { delayMs: number; nextReviewLabel: string }
 > = {
   // 重学步，与第一档（学习步 2，FIXED_LADDER_FIRST_RUNG）同为 Anki 式短步长。
-  again: { delayMs: 10 * 60 * 1000, nextReviewLabel: '10 分钟后' },
-  hard: { delayMs: 24 * 60 * 60 * 1000, nextReviewLabel: '明天' },
-  good: { delayMs: 3 * 24 * 60 * 60 * 1000, nextReviewLabel: '3 天后' },
+  again: { delayMs: 10 * 60 * 1000, get nextReviewLabel(){return localFlowText('tenMinutes');} },
+  hard: { delayMs: 24 * 60 * 60 * 1000, get nextReviewLabel(){return localFlowText('tomorrow');} },
+  good: { delayMs: 3 * 24 * 60 * 60 * 1000, get nextReviewLabel(){return localFlowText('threeDays');} },
 };
 
 const TARGET_ID_BY_RETENTION_TARGET = new Map(
@@ -432,7 +433,7 @@ export default function App() {
 
   const openTargetLearningPolicy = useCallback(() => {
     if (journeyFor(journey, selectedLearningTargetId).committedPolicy) {
-      toast('学习方式已在首次正式学习开始时锁定');
+      toast(localFlowText('policyLockedAtStart'));
       return;
     }
     goMain('s-learning-policy', { policyTarget: selectedLearningTargetId });
@@ -444,7 +445,7 @@ export default function App() {
       return;
     }
     if (journeyFor(journey, learningPolicyContext.targetId).committedPolicy) {
-      toast('这条目标的学习方式已经锁定');
+      toast(localFlowText('policyLocked'));
       return;
     }
     dispatchJourney({
@@ -456,7 +457,7 @@ export default function App() {
 
   const addSelectedLearningTarget = useCallback(() => {
     dispatchJourney({ type: 'addTarget', targetId: selectedLearningTargetId });
-    toast('已加入“我的学习”，内容会按所选方式准备');
+    toast(localFlowText('learningAdded'));
   }, [dispatchJourney, selectedLearningTargetId, toast]);
 
   const refreshSelectedTargetPreparation = useCallback(() => {
@@ -822,11 +823,11 @@ export default function App() {
       const runtimePackages = targetIds.map((targetId) =>
         runtimePackageForTarget(PROTOTYPE_LEARNING_TARGETS[targetId])!);
       if (runtimePackages.length === 0) {
-        toast('当前学习方式要求的内容尚未完整接入');
+        toast(localFlowText('methodIncomplete'));
         return false;
       }
       if (!startLearnQueue(runtimePackages)) {
-        toast('首次学习运行创建失败');
+        toast(localFlowText('initialRunFailed'));
         return false;
       }
       return true;
@@ -850,7 +851,7 @@ export default function App() {
 
   const beginInitialTargetRuntime = useCallback((targetId: PrototypeLearningTargetId) => {
     if (!journeyFor(journey, targetId).added) {
-      toast('请先把这条目标加入学习');
+      toast(localFlowText('targetEnrollFirst'));
       return false;
     }
     if (journeyFor(journey, targetId).committedPolicy) {
@@ -1148,7 +1149,7 @@ export default function App() {
     finishInitialRun('interleaved_four_stage');
     setViewMode('main');
     resetMain();
-    toast('四阶段首次学习已完成，后续由长期记忆调度安排复习');
+    toast(localFlowText('fourStageCompleted'));
   }, [finishInitialRun, resetMain, toast]);
 
   const exitLightweightReview = useCallback(() => {
@@ -1265,7 +1266,7 @@ export default function App() {
       if (!pkg) return;
       advanceDemo({ stage: 'recognition', word: demoWordFor(pkg, 1) });
       overrideDemoQueue(pkg, 'contextual_recognition', 2, 4);
-      toast('这个义项已建立初次连接，稍后会在新语境中再次出现');
+      toast(localFlowText('initialConnection'));
       return;
     }
     if (flowMode === 'review' && reviewSession?.action.intent === 'repair') {
@@ -1530,7 +1531,7 @@ export default function App() {
       runtimeSurfaceContext,
       nextLaunch,
       {
-        announce: (count) => `当前复习组已完成，继续处理 ${count} 个复习`,
+        announce: (count) => localFlowText('moreReviews',{count}),
         enterOnEmpty: true,
       },
     );
@@ -1633,7 +1634,7 @@ export default function App() {
         reviewResult: null,
       });
       overrideDemoQueue(pkg, 'contextual_recognition', 1, 1);
-      toast('可从右侧 Review 目录继续查看其他评测卡');
+      toast(localFlowText('reviewDirectory'));
       return;
     }
     handleNextWord();
@@ -2019,7 +2020,7 @@ export default function App() {
           {/* 4.3 学习目标详情：来源、方式和准备状态分开表达 */}
           {localSelectedTarget&&<PackageTarget active={viewMode==='main'&&mainStack.includes('s-learning-target')} target={localSelectedTarget} c={packageLearning} onSource={()=>{const m=localLibrary.meanings.find(m=>m.id===localSelectedTarget.material.snapshot.provenance.meaningId);if(m)openPersonalMeaning(m.draftId);else backMain();}} onBack={backMain} onHome={resetMain} onStart={()=>void startLocalLearning(localSelectedTarget.id)}/>}
           {selectedPersonalTask&&<PersonalPreparationTarget task={selectedPersonalTask} c={personalLearning} onSource={()=>openPersonalMeaning(selectedPersonalTask.meaning.draftId)} active={viewMode==='main'&&mainStack.includes('s-learning-target')} onBack={backMain} onHome={resetMain} onStart={id=>void startLocalLearning(id)}/>}
-          {!localSelectedTarget&&!selectedPersonalTask&&viewMode==='main'&&mainStack.includes('s-learning-target')&&<LearningSetupFrame id="s-learning-target" active title="学习目标" onBack={backMain}><p role="status">{packageLearning.loaded?'当前本机库中没有这个学习目标。':'正在读取学习目标…'}</p></LearningSetupFrame>}
+          {!localSelectedTarget&&!selectedPersonalTask&&viewMode==='main'&&mainStack.includes('s-learning-target')&&<LearningSetupFrame id="s-learning-target" active title={localFlowText('learningTarget')} onBack={backMain}><p role="status">{packageLearning.loaded?localFlowText('targetMissing'):localFlowText('targetLoading')}</p></LearningSetupFrame>}
 
 
           {/* 4.4 学习方式选择：默认方式或单个目标覆盖 */}
@@ -2055,7 +2056,7 @@ export default function App() {
           />
 
           {/* 5.1 轻量首次运行入口：创建运行即提交并锁定 Learning Policy。 */}
-          {quantityTarget&&<LearningPreferencesPanel fixedPolicy defaultPolicy="lightweight" dailyNewCount={quantityChoice} onPolicyChange={()=>{}} onDailyNewCountChange={setQuantityChoice} busy={packageLearning.busy} status={packageLearning.notice&&<p role="status">{packageLearning.notice}</p>} onClose={()=>setQuantityTarget(null)} closeLabel="确认数量并开始" onConfirm={()=>void packageLearning.confirmQuantity(quantityChoice).then(async ok=>{if(!ok)return;const target=quantityTarget;setQuantityTarget(null);if(await packageLearning.start(target,quantityChoice))setViewMode('lightweight');})}/>}
+          {quantityTarget&&<LearningPreferencesPanel fixedPolicy defaultPolicy="lightweight" dailyNewCount={quantityChoice} onPolicyChange={()=>{}} onDailyNewCountChange={setQuantityChoice} busy={packageLearning.busy} status={packageLearning.notice&&<p role="status">{packageLearning.notice}</p>} onClose={()=>setQuantityTarget(null)} closeLabel={localFlowText('confirmAndStart')} onConfirm={()=>void packageLearning.confirmQuantity(quantityChoice).then(async ok=>{if(!ok)return;const target=quantityTarget;setQuantityTarget(null);if(await packageLearning.start(target,quantityChoice))setViewMode('lightweight');})}/>}
           <PackageRuntime active={viewMode==='lightweight'} c={packageLearning} onExit={returnHome} onFinish={()=>void packageLearning.finish().then(async ok=>{if(!ok)return;if(packageLearning.nextTarget){if(await packageLearning.start(packageLearning.nextTarget.id,dailyNewCount))return;}returnHome();})}/>
 
 
@@ -2315,21 +2316,16 @@ export default function App() {
 
           {/* 词书设置菜单 */}
           <div className={uiClass(`menu${menuBookOpen ? ' on' : ''}`, "#menu-book")} id="menu-book">
-            <button onClick={() => { closeMenus(); toast('选择学习范围：按词频段 / 章节筛选'); }}>
-              <svg className={uiClass("icon")}><use href="#i-filter" /></svg>选择学习范围
-            </button>
+            <button onClick={() => { closeMenus(); toast(localFlowText('chooseRangeHint')); }}>
+              <svg className={uiClass("icon")}><use href="#i-filter" /></svg>{localFlowText('chooseRange')}</button>
             <button onClick={() => { closeMenus(); setMainStack(['s-study', 's-learning-library']); }}>
-              <svg className={uiClass("icon")}><use href="#i-list" /></svg>查看学习内容
-            </button>
-            <button onClick={() => { closeMenus(); toast('开始下载离线单词包…'); }}>
-              <svg className={uiClass("icon")}><use href="#i-dl" /></svg>下载离线单词包
-            </button>
-            <button onClick={() => { closeMenus(); toast('重学词书会清空当前进度'); }}>
-              <svg className={uiClass("icon")}><use href="#i-relearn" /></svg>重学词书
-            </button>
+              <svg className={uiClass("icon")}><use href="#i-list" /></svg>{localFlowText('viewContent')}</button>
+            <button onClick={() => { closeMenus(); toast(localFlowText('downloadingWords')); }}>
+              <svg className={uiClass("icon")}><use href="#i-dl" /></svg>{localFlowText('downloadWords')}</button>
+            <button onClick={() => { closeMenus(); toast(localFlowText('resetBookWarning')); }}>
+              <svg className={uiClass("icon")}><use href="#i-relearn" /></svg>{localFlowText('relearnBook')}</button>
             <button disabled>
-              <svg className={uiClass("icon")}><use href="#i-refresh" /></svg>更新词书
-            </button>
+              <svg className={uiClass("icon")}><use href="#i-refresh" /></svg>{localFlowText('updateBook')}</button>
           </div>
 
           {/* 全局 Toast 提示 */}

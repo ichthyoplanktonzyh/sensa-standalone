@@ -1,3 +1,5 @@
+import {useTranslation} from 'react-i18next';
+import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 /** Connects the existing product screens to the local library; owns no page layout. */
 import {useEffect,useRef,useState} from 'react';
 import {captureSourceLink} from '@sensa/contracts/sensa';
@@ -8,8 +10,9 @@ import {selectedProvider,type Provider} from '../../data/library/providers';
 import type {ContentScreenSource} from '../components/ContentScreen';
 import type {MeaningConversationController} from '../components/PersonalMeaningDetailScreen';
 import {projectLocalWorld} from './projection';
-const errorText=(e:unknown)=>e instanceof Error&&/[\u4e00-\u9fff]/u.test(e.message)?e.message:'这次操作未完成，已保存的资料仍在，请检查服务或网络后重试。';
+const errorText=(e:unknown)=>e instanceof Error&&e.message.startsWith('localFlow.')?e.message:localFlowText('operationFailed');
 export function useLocalMeaningLibrary(draftId:string|null, active:boolean){
+ useTranslation();
  const [drafts,setDrafts]=useState<LocalDraft[]>([]),[sessions,setSessions]=useState<TeacherSession[]>([]),[meanings,setMeanings]=useState<LocalMeaning[]>([]);
  const [notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[loaded,setLoaded]=useState(false),[recipient,setRecipient]=useState<Provider|null>(null);
  const controller=useRef<AbortController|null>(null);
@@ -23,10 +26,10 @@ export function useLocalMeaningLibrary(draftId:string|null, active:boolean){
   if(!draft||sessions.some(s=>s.draftId===draftId&&s.draftRevision===draft.revision))return;
   void createTeacher(crypto.randomUUID(),draft).then(refresh).catch(e=>setNotice(errorText(e)));
  },[active,loaded,draftId,drafts,sessions]);
- const source:Pick<ContentScreenSource,'items'|'status'|'reload'|'composer'>={items:projectLocalWorld(drafts,sessions,meanings),status:{ok:loaded,error:notice,errorKind:loaded?null:'unavailable'},reload:()=>void refresh().catch(e=>setNotice(errorText(e))),composer:{save:async input=>{const text=input.texts.join('\n\n')||input.familiarExpression;const d=await saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text,familiarExpression:input.familiarExpression,startingPoint:input.startingPoint});await refresh();return d.id;}}};
+ const source:Pick<ContentScreenSource,'items'|'status'|'reload'|'composer'>={items:projectLocalWorld(drafts,sessions,meanings),status:{ok:loaded,error:localFlowNotice(notice),errorKind:loaded?null:'unavailable'},reload:()=>void refresh().catch(e=>setNotice(errorText(e))),composer:{save:async input=>{const text=input.texts.join('\n\n')||input.familiarExpression;const d=await saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text,familiarExpression:input.familiarExpression,startingPoint:input.startingPoint});await refresh();return d.id;}}};
  const draft=drafts.find(d=>d.id===draftId);
  const session=sessions.filter(s=>s.draftId===draftId&&s.draftRevision===draft?.revision).at(-1);
- const run=async()=>{if(!recipient||!session)throw new Error('Sensa 服务暂不可用，请到账号与服务检查连接。');const c=new AbortController();controller.current=c;try{await continueTeacher(session.id,recipient,c.signal,()=>void refresh());}finally{if(controller.current===c)controller.current=null;}};
+ const run=async()=>{if(!recipient||!session)throw new Error('localFlow.checkSensa');const c=new AbortController();controller.current=c;try{await continueTeacher(session.id,recipient,c.signal,()=>void refresh());}finally{if(controller.current===c)controller.current=null;}};
  const conversation:MeaningConversationController|undefined=session?{material:session.input,source:draft?.intake?{url:captureSourceLink(draft.intake.snapshot.source),title:draft.intake.snapshot.source.title}:undefined,messages:session.messages.flatMap<{role:'learner'|'assistant';body:string}>(m=>{
   if(m.role==='user')return [{role:'learner' as const,body:m.content??''}];
   if(m.role!=='assistant')return [];
@@ -39,6 +42,6 @@ export function useLocalMeaningLibrary(draftId:string|null, active:boolean){
    if(call.function.name==='propose_meaning'&&output.candidateStored)bodies.push(args.explanation);
   }
   return bodies.map(body=>({role:'assistant' as const,body}));
- }),candidate:session.candidate?{expression:session.candidate.expression.surface,meaning:session.candidate.semanticSpec.coreMeaningFocus,explanation:session.candidate.explanation}:null,accepted:session.status==='accepted',busy:busy||session.status==='inflight',notice,recipient:recipient?(recipient.kind==='sensa'?'Sensa':recipient.name+' · '+recipient.endpoint):'Sensa 服务暂不可用',canContinue:!['waiting','proposal','accepted'].includes(session.status),onSend:async text=>{await perform(async()=>{await sayToTeacher(crypto.randomUUID(),session.id,session.revision,text);await run();});},onContinue:async()=>{await perform(run).catch(()=>{});},onStop:()=>{controller.current?.abort();void perform(async()=>{const latest=(await listTeachers()).find(s=>s.id===session.id);if(latest)await stopTeacher(crypto.randomUUID(),latest.id,latest.revision);}).catch(()=>{});},onConfirm:async()=>{await perform(()=>acceptTeacher(crypto.randomUUID(),session.id,session.revision));}}:undefined;
- return {meanings,meaning:meanings.find(m=>m.draftId===draftId&&m.draftRevision===draft?.revision),source,conversation,isLocal:!!draft,loaded,notice};
+ }),candidate:session.candidate?{expression:session.candidate.expression.surface,meaning:session.candidate.semanticSpec.coreMeaningFocus,explanation:session.candidate.explanation}:null,accepted:session.status==='accepted',busy:busy||session.status==='inflight',notice:localFlowNotice(notice),recipient:recipient?(recipient.kind==='sensa'?'Sensa':recipient.name+' · '+recipient.endpoint):localFlowText('sensaUnavailable'),canContinue:!['waiting','proposal','accepted'].includes(session.status),onSend:async text=>{await perform(async()=>{await sayToTeacher(crypto.randomUUID(),session.id,session.revision,text);await run();});},onContinue:async()=>{await perform(run).catch(()=>{});},onStop:()=>{controller.current?.abort();void perform(async()=>{const latest=(await listTeachers()).find(s=>s.id===session.id);if(latest)await stopTeacher(crypto.randomUUID(),latest.id,latest.revision);}).catch(()=>{});},onConfirm:async()=>{await perform(()=>acceptTeacher(crypto.randomUUID(),session.id,session.revision));}}:undefined;
+ return {meanings,meaning:meanings.find(m=>m.draftId===draftId&&m.draftRevision===draft?.revision),source,conversation,isLocal:!!draft,loaded,notice:localFlowNotice(notice)};
 }

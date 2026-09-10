@@ -7,7 +7,7 @@ export async function saveDraft(operationId:string,raw:z.input<typeof inputSchem
  const input=inputSchema.parse(raw);
  return command({id:operationId,kind:'draft.save',input},async tx=>{
   const current=await tx.get<LocalDraft>('drafts',input.id);
-  if((current?.revision??0)!==input.expectedRevision)throw new Error('这份材料已在另一页面修改。你的输入还在，请先读取最新版本。');
+  if((current?.revision??0)!==input.expectedRevision)throw new Error('localFlow.draftChanged');
   const now=new Date().toISOString();
   const next:LocalDraft={...(current?.intake?{intake:current.intake}:{}),id:input.id,revision:input.expectedRevision+1,text:input.text,familiarExpression:input.familiarExpression,startingPoint:input.startingPoint,createdAt:current?.createdAt??now,updatedAt:now};
   tx.put('drafts',input.id,next);return next;

@@ -82,7 +82,8 @@
     "sensa:web-intake-smoke": "node --import tsx scripts/sensaWebIntakeSmoke.mts",
     "sensa:account-service-db-smoke": "node --import tsx scripts/sensaAccountServiceDatabaseSmoke.mts",
     "sensa:library-backup-smoke": "node --import tsx scripts/sensaPersonalLearningSmoke.mts --backup",
-    "sensa:library-backup-browser-smoke": "node --import tsx scripts/sensaOfflineColdStartSmoke.mts --backup"
+    "sensa:library-backup-browser-smoke": "node --import tsx scripts/sensaOfflineColdStartSmoke.mts --backup",
+    "sensa:local-i18n-smoke": "node --import tsx scripts/sensaLocalI18nSmoke.mts"
   },
   "engines": {
     "node": ">=24"
@@ -93,6 +94,7 @@
     "esbuild": "0.28.2",
     "fake-indexeddb": "^6.2.5",
     "tsx": "^4.20.0",
-    "typescript": "^7.0.0"
+    "typescript": "^7.0.0",
+    "@babel/parser": "7.29.8"
   }
 }

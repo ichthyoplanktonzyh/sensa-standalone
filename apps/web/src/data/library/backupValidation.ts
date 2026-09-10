@@ -10,7 +10,7 @@ export type BackupRows=Record<Table,{key:string;value:any}[]>;
 const uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
 const identitySchema=z.object({id:uuid,learnerId:uuid,deviceId:uuid,createdAt:timestamp,schemaVersion:z.literal(1)}).strict();
 export const backupOwnerSchema=z.object({subject:uuid,accountId:uuid,email:z.string().max(500).optional()}).strict();
-const fail=()=>{throw new Error('备份记录不完整或彼此不一致，未恢复任何资料。');};
+const fail=()=>{throw new Error('libraryBackup.errors.inconsistent');};
 export function validateBackupRows(rows:BackupRows){
  const maps=Object.fromEntries(libraryTables.map(t=>[t,new Map(rows[t].map(r=>[r.key,r.value]))])) as Record<Table,Map<string,any>>;
  const requireRow=(table:Table,id:string)=>maps[table].get(id)??fail();

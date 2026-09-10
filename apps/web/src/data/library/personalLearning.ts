@@ -13,32 +13,32 @@ export type ContentAttempt={id:string;taskId:string;createdAt:string;contentProv
 export const personalLearningSnapshot=()=>readLibrary(tx=>tx.all<PersonalLearning>('personalLearning'));
 async function currentMeaning(tx:LibraryTransaction,meaning:LocalMeaning){
  const current=await tx.get<LocalMeaning>('meanings',meaning.id),draft=await tx.get<LocalDraft>('drafts',meaning.draftId);
- if(!current||canonicalConsumerJson(current)!==canonicalConsumerJson(meaning)||draft?.revision!==meaning.draftRevision)throw new Error('原内容已改变，请从最新确认的意思重新加入学习。');
+ if(!current||canonicalConsumerJson(current)!==canonicalConsumerJson(meaning)||draft?.revision!==meaning.draftRevision)throw new Error('localFlow.meaningChanged');
 }
 export async function enrollPersonal(operationId:string,meaningId:string,useContext:boolean){return command({id:operationId,kind:'personal.enroll',input:{meaningId,useContext}},async tx=>{
- const owner=await learningOwner(tx),meaning=await tx.get<LocalMeaning>('meanings',meaningId);if(!meaning)throw new Error('请先确认这个意思。');await currentMeaning(tx,meaning);
+ const owner=await learningOwner(tx),meaning=await tx.get<LocalMeaning>('meanings',meaningId);if(!meaning)throw new Error('localFlow.confirmMeaning');await currentMeaning(tx,meaning);
  const existing=await tx.get<PersonalLearning>('personalLearning',meaningId);if(existing)return existing;
  const targetId=stableUuid(`sensa-learning-target:${owner.learnerId}:${meaning.senseVersionId}:${meaning.bindingVersionId}`);
  const ready=await tx.get<LocalLearningTarget>('learningTargets',targetId);
  const task:PersonalLearning={id:meaningId,meaning,targetId,planRevision:crypto.randomUUID(),useContext,status:ready?'ready':'waiting',attemptId:null,leaseUntil:0,notice:'',createdAt:new Date().toISOString()};tx.put('personalLearning',task.id,task);return task;
 });}
-async function checkProvider(tx:LibraryTransaction,purpose:'content'|'review',provider:Provider){const settings=await tx.get<ProviderSettings>('settings','providers');const id=settings?.assignments[purpose]??defaultSensaProvider.id;const current=id===defaultSensaProvider.id?defaultSensaProvider:await tx.get<Provider>('providers',id);if(canonicalConsumerJson(current??null)!==canonicalConsumerJson(provider))throw new Error('模型服务已改变，请确认新的接收方后重试。');}
+async function checkProvider(tx:LibraryTransaction,purpose:'content'|'review',provider:Provider){const settings=await tx.get<ProviderSettings>('settings','providers');const id=settings?.assignments[purpose]??defaultSensaProvider.id;const current=id===defaultSensaProvider.id?defaultSensaProvider:await tx.get<Provider>('providers',id);if(canonicalConsumerJson(current??null)!==canonicalConsumerJson(provider))throw new Error('localFlow.providerChanged');}
 async function active(tx:LibraryTransaction,id:string,attemptId:string,content:Provider,review:Provider){
  const owner=await learningOwner(tx),task=await tx.get<PersonalLearning>('personalLearning',id);
- if(!task||task.attemptId!==attemptId||!['generating','reviewing'].includes(task.status)||task.leaseUntil<Date.now())throw new Error('准备任务已停止或过期，旧结果未接纳。');
+ if(!task||task.attemptId!==attemptId||!['generating','reviewing'].includes(task.status)||task.leaseUntil<Date.now())throw new Error('localFlow.preparationExpired');
  await currentMeaning(tx,task.meaning);await checkProvider(tx,'content',content);await checkProvider(tx,'review',review);return {owner,task};
 }
-export async function stopPersonalPreparation(operationId:string,id:string){return command({id:operationId,kind:'personal.stop',input:{id}},async tx=>{await learningOwner(tx);const task=await tx.get<PersonalLearning>('personalLearning',id);if(task&&task.status!=='ready'){task.status='stopped';task.leaseUntil=0;task.notice='准备已停止，已保存的候选与原内容仍保留。';tx.put('personalLearning',id,task);if(task.attemptId){const attempt=await tx.get<ContentAttempt>('contentAttempts',task.attemptId);if(attempt){attempt.status='stopped';tx.put('contentAttempts',attempt.id,attempt);}}}return true;});}
+export async function stopPersonalPreparation(operationId:string,id:string){return command({id:operationId,kind:'personal.stop',input:{id}},async tx=>{await learningOwner(tx);const task=await tx.get<PersonalLearning>('personalLearning',id);if(task&&task.status!=='ready'){task.status='stopped';task.leaseUntil=0;task.notice='localFlow.preparationStopped';tx.put('personalLearning',id,task);if(task.attemptId){const attempt=await tx.get<ContentAttempt>('contentAttempts',task.attemptId);if(attempt){attempt.status='stopped';tx.put('contentAttempts',attempt.id,attempt);}}}return true;});}
 /** Explicit invocation only. Reloading reads saved states and never starts a model request. */
 export async function preparePersonal(id:string,contentProvider:Provider,reviewProvider:Provider,signal:AbortSignal,onSaved:()=>void){
  const attemptId=crypto.randomUUID();
  const begun=await command({id:attemptId,kind:'personal.prepare',input:{id,contentProvider,reviewProvider}},async tx=>{
-  const owner=await learningOwner(tx),task=await tx.get<PersonalLearning>('personalLearning',id);if(!task)throw new Error('请先加入学习。');await currentMeaning(tx,task.meaning);
+  const owner=await learningOwner(tx),task=await tx.get<PersonalLearning>('personalLearning',id);if(!task)throw new Error('localFlow.enrollFirst');await currentMeaning(tx,task.meaning);
   await checkProvider(tx,'content',contentProvider);await checkProvider(tx,'review',reviewProvider);
   if(task.status==='ready')return null;
   if(await tx.get('learningTargets',task.targetId)){task.status='ready';task.leaseUntil=0;tx.put('personalLearning',id,task);return null;}
-  if(['generating','reviewing'].includes(task.status)&&task.leaseUntil>Date.now())throw new Error('正在准备，请等待或停止后重试。');
-  const attempts=(await tx.all<ContentAttempt>('contentAttempts')).filter(a=>a.taskId===id&&Date.parse(a.createdAt)>Date.now()-86400000);if(attempts.length>=6)throw new Error('这条内容今天的准备次数已达上限，请稍后再试。');
+  if(['generating','reviewing'].includes(task.status)&&task.leaseUntil>Date.now())throw new Error('localFlow.preparationBusy');
+  const attempts=(await tx.all<ContentAttempt>('contentAttempts')).filter(a=>a.taskId===id&&Date.parse(a.createdAt)>Date.now()-86400000);if(attempts.length>=6)throw new Error('localFlow.preparationLimit');
   const prior=task.attemptId?await tx.get<ContentAttempt>('contentAttempts',task.attemptId):undefined;
   // Continue a saved candidate after transport interruption without repeating generation.
   const reuse=prior?.bundle&&prior.request&&task.status!=='rejected'&&canonicalConsumerJson(prior.contentProvider)===canonicalConsumerJson(contentProvider)&&canonicalConsumerJson(prior.reviewProvider)===canonicalConsumerJson(reviewProvider)?prior:null;
@@ -46,7 +46,7 @@ export async function preparePersonal(id:string,contentProvider:Provider,reviewP
   task.attemptId=attemptId;task.status=reuse?'reviewing':'generating';task.leaseUntil=Date.now()+120000;task.notice='';tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);return {task,attempt,owner};
  });if(!begun)return;onSaved();
  const runSignal=AbortSignal.any([signal,AbortSignal.timeout(100000)]);
- const save=async(work:(tx:LibraryTransaction,task:PersonalLearning,attempt:ContentAttempt)=>Promise<void>)=>command({id:crypto.randomUUID(),kind:'personal.progress',input:{id,attemptId,nonce:crypto.randomUUID()}},async tx=>{const {task}=await active(tx,id,attemptId,contentProvider,reviewProvider);if(runSignal.aborted)throw new Error('请求已停止。');const attempt=(await tx.get<ContentAttempt>('contentAttempts',attemptId))!;await work(tx,task,attempt);tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);});
+ const save=async(work:(tx:LibraryTransaction,task:PersonalLearning,attempt:ContentAttempt)=>Promise<void>)=>command({id:crypto.randomUUID(),kind:'personal.progress',input:{id,attemptId,nonce:crypto.randomUUID()}},async tx=>{const {task}=await active(tx,id,attemptId,contentProvider,reviewProvider);if(runSignal.aborted)throw new Error('localFlow.requestStopped');const attempt=(await tx.get<ContentAttempt>('contentAttempts',attemptId))!;await work(tx,task,attempt);tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);});
  try{
   let {request,bundle,grant}=begun.attempt;const m=begun.task.meaning;
   if(!request||!bundle){
@@ -54,16 +54,16 @@ export async function preparePersonal(id:string,contentProvider:Provider,reviewP
    request=await makeRequest({id,learner_user_id:begun.owner.learnerId,learning_target_id:begun.task.targetId,fixed_input:{senseId:m.senseId,senseVersionId:m.senseVersionId,bindingId:m.bindingId,bindingVersionId:m.bindingVersionId,planRevision:begun.task.planRevision,expression:m.proposal.expression.surface,expressionKind:m.proposal.expression.type==='word'?'word':'phrase',meaning:m.proposal.semanticSpec.coreMeaningFocus,prototype:m.proposal.semanticSpec.prototypeScenes[0].summary,...(grant?{anchor:{sentence:m.context,contextVersion:grant.contextDigest,grantId:grant.id}}:{}),demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND}},attemptId,new Date());
    await save(async(_tx,_task,a)=>{a.request=request;a.grant=grant;});
    const generated=await complete(contentProvider,'content',crypto.randomUUID(),[{role:'system',content:generationSystem(!!grant)},{role:'user',content:JSON.stringify(modelFacts(request))}],[],AbortSignal.any([runSignal,AbortSignal.timeout(request.attemptBudget.timeoutMs)]));
-   const message=generated.choices[0]!.message;if(message.tool_calls?.length)throw new Error('材料生成返回了未授权的工具请求。');
+   const message=generated.choices[0]!.message;if(message.tool_calls?.length)throw new Error('localFlow.generationToolDenied');
    bundle=await makeBundle(request,{cue:JSON.parse(message.content??'null'),provider:contentProvider.id,model:generated.model},new Date());
    await save(async(_tx,task,a)=>{a.bundle=bundle;task.status='reviewing';a.status='reviewing';});onSaved();
   }
   const reviewed=await complete(reviewProvider,'review',crypto.randomUUID(),[{role:'system',content:independentReviewSystem},{role:'user',content:JSON.stringify({facts:modelFacts(request),cue:bundle.candidates.find(c=>c.materialRoleKey==='experience_recall_cue')!.contentPayload})}],[],runSignal);
-  const message=reviewed.choices[0]!.message;if(message.tool_calls?.length)throw new Error('审核返回了未授权的工具请求。');
+  const message=reviewed.choices[0]!.message;if(message.tool_calls?.length)throw new Error('localFlow.reviewToolDenied');
   const review={...z.object({accepted:z.boolean(),reason:z.string().max(2000)}).strict().parse(JSON.parse(message.content??'null')),provider:reviewProvider.id,model:reviewed.model};
   const checked=await validateBundle(request,bundle,review,new Date());
-  await save(async(tx,task,a)=>{a.review=review;a.validation=checked;task.leaseUntil=0;if(checked.content){await commitPersonalMaterial(tx,begun.owner,task.meaning,checked.content,attemptId,grant?.id??null);task.status='ready';a.status='ready';task.notice='资源已通过独立审核，可以开始学习。';}else{task.status='rejected';a.status='rejected';task.notice='资源未通过审核：'+review.reason;}});onSaved();
+  await save(async(tx,task,a)=>{a.review=review;a.validation=checked;task.leaseUntil=0;if(checked.content){await commitPersonalMaterial(tx,begun.owner,task.meaning,checked.content,attemptId,grant?.id??null);task.status='ready';a.status='ready';task.notice='localFlow.materialReady';}else{task.status='rejected';a.status='rejected';task.notice='localFlow.reviewRejected'+review.reason;}});onSaved();
  }catch(error){
-  await command({id:crypto.randomUUID(),kind:'personal.fail',input:{id,attemptId}},async tx=>{const task=await tx.get<PersonalLearning>('personalLearning',id);if(task?.attemptId===attemptId&&['generating','reviewing'].includes(task.status)){task.status='failed';task.leaseUntil=0;task.notice=signal.aborted?'准备已中断，可重试。':error instanceof Error&&/[\u4e00-\u9fff]/u.test(error.message)?error.message:'准备未完成，已保存的候选可恢复，请重试。';tx.put('personalLearning',id,task);const a=await tx.get<ContentAttempt>('contentAttempts',attemptId);if(a){a.status='failed';tx.put('contentAttempts',attemptId,a);}}return null;});onSaved();throw error;
+  await command({id:crypto.randomUUID(),kind:'personal.fail',input:{id,attemptId}},async tx=>{const task=await tx.get<PersonalLearning>('personalLearning',id);if(task?.attemptId===attemptId&&['generating','reviewing'].includes(task.status)){task.status='failed';task.leaseUntil=0;task.notice=signal.aborted?'localFlow.preparationInterrupted':error instanceof Error&&error.message.startsWith('localFlow.')?error.message:'localFlow.preparationFailed';tx.put('personalLearning',id,task);const a=await tx.get<ContentAttempt>('contentAttempts',attemptId);if(a){a.status='failed';tx.put('contentAttempts',attemptId,a);}}return null;});onSaved();throw error;
  }
 }

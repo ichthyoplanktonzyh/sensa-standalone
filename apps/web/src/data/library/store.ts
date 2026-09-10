@@ -9,8 +9,8 @@ function open(){
   connection=new Promise<IDBDatabase>((resolve,reject)=>{
    const request=indexedDB.open(libraryDatabaseName,3);
    request.onupgradeneeded=()=>{for(const table of libraryTables)if(!request.result.objectStoreNames.contains(table))request.result.createObjectStore(table);};
-   request.onerror=()=>reject(new Error('无法打开本机存储，请检查浏览器设置后重试。'));
-   request.onblocked=()=>reject(new Error('请关闭其他旧版本 Sensa 页面后重试。'));
+   request.onerror=()=>reject(new Error('localFlow.storageOpen'));
+   request.onblocked=()=>reject(new Error('localFlow.closeOldTabs'));
    request.onsuccess=()=>{const db=request.result;db.onversionchange=()=>{db.close();connection=undefined;};resolve(db);};
   });
   connection.catch(()=>{connection=undefined;});
@@ -31,10 +31,10 @@ async function transaction<T>(mode:IDBTransactionMode,work:(tx:LibraryTransactio
  const db=await open();
  return new Promise<T>((resolve,reject)=>{
   let tx:IDBTransaction;
-  try{tx=db.transaction([...libraryTables],mode);}catch{reject(new Error('本机存储暂不可用，请重新打开页面。'));return;}
+  try{tx=db.transaction([...libraryTables],mode);}catch{reject(new Error('localFlow.storageUnavailable'));return;}
   let value:T,failed:unknown;
   tx.oncomplete=()=>{if(mode==='readwrite'){window.dispatchEvent(new Event('sensa-library-changed'));if(typeof BroadcastChannel!=='undefined'){const channel=new BroadcastChannel('sensa-local-library');channel.postMessage('changed');channel.close();}}resolve(value!);};
-  const fail=()=>reject(failed??new Error('未能保存到本机，可能存储空间不足。请保留输入并重试。'));
+  const fail=()=>reject(failed??new Error('localFlow.storageWrite'));
   tx.onerror=fail;tx.onabort=fail;
   work(new LibraryTransaction(tx)).then(v=>{value=v;},e=>{failed=e;try{tx.abort();}catch{reject(e);}});
  });
@@ -44,11 +44,11 @@ export const restoreLibraryTransaction=<T>(work:(tx:LibraryTransaction)=>Promise
 export const readLibrary=<T>(work:(tx:LibraryTransaction)=>Promise<T>)=>transaction('readonly',work);
 export type Operation={id:string;kind:string;input:unknown};
 export async function command<T>(op:Operation,work:(tx:LibraryTransaction)=>Promise<T>):Promise<T>{
- if(!/^[0-9a-f-]{36}$/i.test(op.id))throw new Error('无效的操作标识。');
+ if(!/^[0-9a-f-]{36}$/i.test(op.id))throw new Error('localFlow.operationInvalid');
  const input=canonicalConsumerJson({kind:op.kind,input:op.input});
  return transaction('readwrite',async tx=>{
   const prior=await tx.get<{input:string;result:T}>('operations',op.id);
-  if(prior){if(prior.input!==input)throw new Error('此操作标识已用于不同内容，请重新操作。');return prior.result;}
+  if(prior){if(prior.input!==input)throw new Error('localFlow.operationConflict');return prior.result;}
   const value=await work(tx);tx.put('operations',op.id,{input,result:value,committedAt:new Date().toISOString()});return value;
  });
 }

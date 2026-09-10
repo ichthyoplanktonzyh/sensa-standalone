@@ -75,6 +75,8 @@ jobs:
         run: npm run sensa:account-service-db-smoke && npm run sensa:web-intake-smoke
       - name: Local package learning and offline shell (no browser or model calls)
         run: npm run sensa:package-learning-smoke && npm run sensa:offline-shell-smoke && npm run sensa:personal-learning-smoke && npm run sensa:library-backup-smoke
+      - name: Local Web translation coverage
+        run: npm run sensa:local-i18n-smoke
       - name: Install test browser
         run: npx playwright install --with-deps chromium
       - name: Production offline cold start (isolated Chromium processes and synthetic account/catalog)

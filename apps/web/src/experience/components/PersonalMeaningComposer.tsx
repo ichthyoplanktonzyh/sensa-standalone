@@ -1,3 +1,4 @@
+import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import { previewStorage } from "../services/previewStorage";
 import { useTranslation } from "react-i18next";
 import { Plus, ImagePlus, X } from "lucide-react";
@@ -164,7 +165,7 @@ export const PersonalMeaningComposer = ({
   };
 
   const handleClose = () => {
-    if(persistence&&canSave&&!window.confirm("当前材料尚未保存，确定离开吗？"))return;
+    if(persistence&&canSave&&!window.confirm(localFlowText('unsavedSource')))return;
     if (!busy) onClose(); // Keep the in-progress material when the panel closes.
   };
 
@@ -341,7 +342,7 @@ export const PersonalMeaningComposer = ({
               className={action}
               disabled={busy||!!persistence}
               onClick={() => fileRef.current?.click()}
-              title={persistence?"本机图片保存尚未接入":""}
+              title={persistence?localFlowText('imagesUnavailable'):""}
             >
               <ImagePlus size={17} />
               {t("composer.image")}
@@ -397,7 +398,7 @@ export const PersonalMeaningComposer = ({
           </details>
           {error && (
             <p className="mt-5 text-sm text-red-700" role="alert">
-              {error}
+              {localFlowNotice(error)}
             </p>
           )}
         </div>

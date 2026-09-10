@@ -7,7 +7,7 @@ export type LocalLearningTarget={id:string;retentionId:string;packageKey:string|
 export type LocalLearningRun={id:string;targetId:string;purpose:'initial_learning'|'retention_review'|'relearning';protocolVersion:string;phase:'recall'|'reveal';ordinal:number;revision:number;startedAt:string;completedAt:string|null;memoryRevision:number;dueAt:string|null;completionKind?:string};
 export type LearningEvent={id:string;runId:string;targetId:string;kind:string;at:string;detail:unknown};
 export async function enrollPackage(operationId:string,key:string){return command({id:operationId,kind:'learning.enroll',input:{key}},async tx=>{
- const owner=await learningOwner(tx),pack=await tx.get<InstalledPackage>('packages',key);if(!pack)throw new Error('请先下载完整学习包。');
+ const owner=await learningOwner(tx),pack=await tx.get<InstalledPackage>('packages',key);if(!pack)throw new Error('localFlow.downloadFirst');
  const ids:string[]=[];
  for(const e of pack.bundle.entries){
   const id=stableUuid(`sensa-learning-target:${owner.learnerId}:${e.senseVersionId}:${e.bindingVersionId}`);ids.push(id);
@@ -19,26 +19,26 @@ export async function enrollPackage(operationId:string,key:string){return comman
  return ids;
 });}
 export const readLearning=()=>readLibrary(async tx=>({targets:await tx.all<LocalLearningTarget>('learningTargets'),runs:await tx.all<LocalLearningRun>('learningRuns'),events:await tx.all<LearningEvent>('learningEvents'),active:await tx.get<string>('meta','learning-active'),dailyLimit:await tx.get<number>('settings','learning-daily-limit')}));
-export async function confirmLearningQuantity(operationId:string,dailyLimit:number){return command({id:operationId,kind:'learning.quantity',input:{dailyLimit}},async tx=>{await learningOwner(tx);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100)throw new Error('每日数量应在 1 至 100 之间。');tx.put('settings','learning-daily-limit',dailyLimit);return true;});}
+export async function confirmLearningQuantity(operationId:string,dailyLimit:number){return command({id:operationId,kind:'learning.quantity',input:{dailyLimit}},async tx=>{await learningOwner(tx);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100)throw new Error('localFlow.quantityRange');tx.put('settings','learning-daily-limit',dailyLimit);return true;});}
 const day=(date:Date)=>`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 export async function startLearning(operationId:string,targetId:string,dailyLimit:number,at=new Date().toISOString()){return command({id:operationId,kind:'learning.start',input:{targetId,dailyLimit,at}},async tx=>{
- await learningOwner(tx);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100||!Number.isFinite(Date.parse(at)))throw new Error('请确认每日学习数量。');
- if(await tx.get('settings','learning-daily-limit')!==dailyLimit)throw new Error('请先确认每日新学数量。');
+ await learningOwner(tx);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100||!Number.isFinite(Date.parse(at)))throw new Error('localFlow.confirmQuantity');
+ if(await tx.get('settings','learning-daily-limit')!==dailyLimit)throw new Error('localFlow.confirmNewQuantity');
  const active=await tx.get<string>('meta','learning-active');if(active){const run=await tx.get<LocalLearningRun>('learningRuns',active);if(run)return run;}
- const t=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!t)throw new Error('请先加入学习。');validateLightweightInitialMaterialization(t.material);
+ const t=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!t)throw new Error('localFlow.enrollFirst');validateLightweightInitialMaterialization(t.material);
  const unfinished=(await tx.all<LocalLearningRun>('learningRuns')).find(r=>r.targetId===targetId&&!r.completedAt);if(unfinished){tx.put('meta','learning-active',unfinished.id);return unfinished;}
  const now=new Date(at),purpose=t.relearnAt?'relearning':t.completedAt?'retention_review':'initial_learning';
- if(t.relearnAt&&now<new Date(t.relearnAt)||purpose==='retention_review'&&(!t.memory||now<t.memory.dueAt))throw new Error('这项内容尚未到复习时间。');
- if(purpose==='initial_learning'&&!t.startedAt&&(await tx.all<LocalLearningTarget>('learningTargets')).filter(v=>v.startedAt&&day(new Date(v.startedAt))===day(now)).length>=dailyLimit)throw new Error('今天的新学数量已达上限，已下载内容仍然保留。');
+ if(t.relearnAt&&now<new Date(t.relearnAt)||purpose==='retention_review'&&(!t.memory||now<t.memory.dueAt))throw new Error('localFlow.notDue');
+ if(purpose==='initial_learning'&&!t.startedAt&&(await tx.all<LocalLearningTarget>('learningTargets')).filter(v=>v.startedAt&&day(new Date(v.startedAt))===day(now)).length>=dailyLimit)throw new Error('localFlow.dailyLimit');
  const run:LocalLearningRun={id:crypto.randomUUID(),targetId,purpose,protocolVersion:purpose==='initial_learning'?'consumer-initial-v1':purpose==='retention_review'?'consumer-review-v1':'consumer-relearning-v1',phase:'recall',ordinal:1,revision:1,startedAt:at,completedAt:null,memoryRevision:t.memoryRevision,dueAt:t.memory?.dueAt.toISOString()??null};
  if(!t.startedAt){t.startedAt=at;tx.put('learningTargets',t.id,t);}
  tx.put('learningRuns',run.id,run);tx.put('meta','learning-active',run.id);return run;
 });}
 export async function actLearning(operationId:string,runId:string,revision:number,action:{kind:'reveal'}|{kind:'rate';rating:'again'|'hard'|'good'},at=new Date().toISOString()){return command({id:operationId,kind:'learning.act',input:{runId,revision,action,at}},async tx=>{
  await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);
- if(!run||run.revision!==revision||run.completedAt||await tx.get('meta','learning-active')!==runId)throw new Error('学习步骤已改变，请读取最新进度。');
+ if(!run||run.revision!==revision||run.completedAt||await tx.get('meta','learning-active')!==runId)throw new Error('localFlow.stepChanged');
  const t=(await tx.get<LocalLearningTarget>('learningTargets',run.targetId))!;
- if(!Number.isFinite(Date.parse(at))||Date.parse(at)<Date.parse(run.startedAt))throw new Error('设备时间有变化，请检查后重试。');
+ if(!Number.isFinite(Date.parse(at))||Date.parse(at)<Date.parse(run.startedAt))throw new Error('localFlow.clockChanged');
  const stepId=consumerRunStepId(run.id,run.ordinal,run.phase,run.protocolVersion);
  const next=transitionConsumerRun(run.protocolVersion,run.phase,action);let settlement:unknown=null;
  if(action.kind==='rate'){
@@ -54,7 +54,7 @@ export async function actLearning(operationId:string,runId:string,revision:numbe
  run.ordinal++;run.revision++;tx.put('learningRuns',run.id,run);
  tx.put('learningEvents',operationId,{id:operationId,runId,targetId:t.id,kind:action.kind,at,detail:{stepId,action,settlement}} satisfies LearningEvent);return run;
 });}
-export async function finishLearning(operationId:string,runId:string){return command({id:operationId,kind:'learning.finish',input:{runId}},async tx=>{await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);if(!run?.completedAt)throw new Error('请先完成当前学习。');if(await tx.get('meta','learning-active')===runId)tx.delete('meta','learning-active');return true;});}
+export async function finishLearning(operationId:string,runId:string){return command({id:operationId,kind:'learning.finish',input:{runId}},async tx=>{await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);if(!run?.completedAt)throw new Error('localFlow.finishFirst');if(await tx.get('meta','learning-active')===runId)tx.delete('meta','learning-active');return true;});}
 
 /** The same runtime target is committed only after independent material validation. */
 export async function commitPersonalMaterial(tx:LibraryTransaction,owner:LibraryIdentity,meaning:import('./teacher').LocalMeaning,content:LightweightInitialLearningMaterialization['content'],attemptId:string,grantId:string|null){

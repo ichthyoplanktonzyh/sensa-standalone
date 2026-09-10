@@ -47,13 +47,38 @@ try{
  if(personalMode){await runPersonalIntakeBrowserChecks(page,origin);assert.equal(contentCalls,1);assert.equal(reviewCalls,2);const saved=await snapshot(page);
  if(backupMode){
   const password='browser-backup-test-password',backupPath=join(root,'library.sensa-backup');
-  await page.goto(origin+'/profile');await page.getByLabel('备份密码',{exact:true}).fill(password);
+  await page.goto(origin+'/profile');
+  await page.locator('#s-profile').getByLabel('界面语言',{exact:true}).selectOption('en');
+  await expect(page.getByRole('heading',{name:'Backup & restore',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Sensa services',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Export encrypted backup',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('Use at least 12 characters');
+  await expect(page.getByLabel('Backup password',{exact:true})).toBeFocused();
+  await page.locator('#s-profile').getByLabel('Interface language',{exact:true}).selectOption('zh-CN');
+  await expect(page.getByRole('alert')).toContainText('至少 12 个字符');
+  await page.locator('#s-profile').getByLabel('界面语言',{exact:true}).selectOption('en');await page.reload();
+  await expect(page.getByRole('heading',{name:'Backup & restore',exact:true})).toBeVisible();
+  let releaseStatus!:()=>void;const statusBarrier=new Promise<void>(resolve=>{releaseStatus=resolve;});
+  await page.route('**/sensa/service/status',async route=>{await statusBarrier;await route.continue();});
+  await page.getByRole('button',{name:'Refresh service status',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Refreshing…',exact:true})).toBeDisabled();releaseStatus();
+  await expect(page.getByText('Service status updated.',{exact:true})).toBeVisible();await page.unroute('**/sensa/service/status');
+  await page.getByText('Advanced · Custom model services',{exact:true}).click();
+  await expect(page.getByLabel('Independent review',{exact:true})).toBeVisible();
+  const settingsText=await page.locator('section[aria-label="Sensa services"]').innerText();assert(!/[\u4e00-\u9fff]/u.test(settingsText),'Service settings must not contain hardcoded Chinese');
+  await page.locator('#s-profile').getByLabel('Interface language',{exact:true}).selectOption('zh-CN');
+  await page.getByLabel('备份密码',{exact:true}).fill(password);
   const downloading=page.waitForEvent('download');await page.getByRole('button',{name:'导出加密备份',exact:true}).click();await (await downloading).saveAs(backupPath);
   await page.getByLabel('选择备份文件',{exact:true}).setInputFiles(backupPath);await page.getByRole('button',{name:'检查备份',exact:true}).click();await page.getByRole('button',{name:'确认恢复到当前空本机库',exact:true}).click();await expect(page.getByText(/当前本机库已有资料或操作记录/)).toBeVisible();assert.deepEqual(await snapshot(page),saved);
   await context!.close();context=undefined;profile=join(root,'restored');page=await launch();await page.goto(origin+'/profile');
   await page.getByLabel('邮箱',{exact:true}).fill('offline@sensa.invalid');await page.getByRole('button',{name:'发送验证码',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
   await expect(page.getByRole('heading',{name:'本机库备份与恢复',exact:true})).toBeVisible();assert.equal((await snapshot(page)).learningTargets.length,0);
-  await page.getByLabel('备份密码',{exact:true}).fill(password);await page.getByLabel('选择备份文件',{exact:true}).setInputFiles(backupPath);await page.getByRole('button',{name:'检查备份',exact:true}).click();await page.getByRole('button',{name:'确认恢复到当前空本机库',exact:true}).click();await expect(page.getByText('本机库已完整恢复。重新打开应用后可继续学习。',{exact:true})).toBeVisible();
+  await page.locator('#s-profile').getByLabel('界面语言',{exact:true}).selectOption('en');
+  await page.getByLabel('Backup password',{exact:true}).fill('incorrect-password');await page.getByLabel('Choose backup file',{exact:true}).setInputFiles(backupPath);await page.getByRole('button',{name:'Check backup',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('Incorrect password');assert.equal((await snapshot(page)).learningTargets.length,0);
+  await page.getByLabel('Backup password',{exact:true}).fill(password);await page.getByRole('button',{name:'Check backup',exact:true}).click();await page.getByRole('button',{name:'Restore to this empty library',exact:true}).click();await expect(page.getByText('Library restored. Reopen the app to continue learning.',{exact:true})).toBeVisible();
+  await page.locator('#s-profile').getByLabel('Interface language',{exact:true}).selectOption('zh-CN');
+
   await page.getByRole('button',{name:'重新打开应用',exact:true}).click();await expect(page.getByRole('heading',{name:'本机库备份与恢复',exact:true})).toBeVisible();assert.deepEqual(await snapshot(page),saved);assert.equal(contentCalls,1);assert.equal(reviewCalls,2);await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>true));
   console.log('PASS: full /profile encrypted download, occupied-library refusal, independent fresh browser login/preview/restore/reload; no generation on restore.');
  }

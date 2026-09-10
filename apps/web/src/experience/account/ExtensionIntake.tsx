@@ -1,3 +1,5 @@
+import {useTranslation} from 'react-i18next';
+import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useState} from 'react';
 import {z} from 'zod';
 import {localIntakeRequestSchema} from '@sensa/contracts/sensa';
@@ -17,6 +19,7 @@ function bridge(kind:string,accountId:string,libraryId:string,signal:AbortSignal
 }
 /** Receives only explicitly saved extension requests into the existing content screens. */
 export function ExtensionIntake({accountId}:{accountId:string}){
+ useTranslation();
  const [error,setError]=useState('');
  useEffect(()=>{
   const controller=new AbortController();let running=false;let identity:Awaited<ReturnType<typeof openLibrary>>|undefined;
@@ -32,10 +35,10 @@ export function ExtensionIntake({accountId}:{accountId:string}){
      await bridge('web-intake-ack',accountId,library.id,controller.signal,receipt);
     }
     setError('');
-   }catch(e){if(!controller.signal.aborted&&!(e instanceof Error&&['extension_unavailable','authentication_required'].includes(e.message)))setError(e instanceof Error&&e.message==='account_mismatch'?'插件与 Web 的账号不一致，请连接原账号后继续交接。':'插件材料尚未写入本机，原材料仍在插件中。请检查本机存储，稍后会自动重试。');}
+   }catch(e){if(!controller.signal.aborted&&!(e instanceof Error&&['extension_unavailable','authentication_required'].includes(e.message)))setError(e instanceof Error&&e.message==='account_mismatch'?localFlowText('extensionAccountMismatch'):localFlowText('intakeStorageFailed'));}
    finally{running=false;}
   };
   void receive();const timer=setInterval(()=>void receive(),5000);return()=>{controller.abort();clearInterval(timer);};
  },[accountId]);
- return error?<p role="status" className="fixed bottom-20 left-4 right-4 z-50 rounded-xl bg-amber-50 p-3 text-sm">{error}</p>:null;
+ return error?<p role="status" className="fixed bottom-20 left-4 right-4 z-50 rounded-xl bg-amber-50 p-3 text-sm">{localFlowNotice(error)}</p>:null;
 }

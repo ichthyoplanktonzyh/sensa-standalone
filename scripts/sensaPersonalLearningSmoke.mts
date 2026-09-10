@@ -58,13 +58,13 @@ try{
   assert.equal((await api.inspectLibraryBackup(exported.file,password)).targets,3);
   await assert.rejects(api.inspectLibraryBackup(exported.file,'wrong-password'));
   const damaged=exported.file.slice();damaged[damaged.length-10]^=1;await assert.rejects(api.inspectLibraryBackup(damaged,password));
-  await assert.rejects(api.restoreLibraryBackup(exported.file,password),/已有资料/);
+  await assert.rejects(api.restoreLibraryBackup(exported.file,password),/libraryBackup.errors.occupied/);
   const source=await api.readLearning();
   Object.assign(globalThis,{indexedDB:new IDBFactory()});
   const restored=await import(pathToFileURL(join(temp,'core.mjs')).href+'?fresh');
   const fresh=await restored.openLibrary();
   const owner=async(subject:string)=>restored.command({id:id(),kind:'service.fixture',input:{subject}},async(tx:any)=>tx.put('meta','service-owner',{subject,accountId:subject}));
-  await owner(id());await assert.rejects(restored.restoreLibraryBackup(exported.file,password),/另一个账号/);
+  await owner(id());await assert.rejects(restored.restoreLibraryBackup(exported.file,password),/libraryBackup.errors.accountMismatch/);
   await owner(accountId);
   const originalPut=restored.LibraryTransaction.prototype.put;
   restored.LibraryTransaction.prototype.put=function(table:any,key:any,value:any){if(table==='learningEvents')throw Error('injected disk error');return originalPut.call(this,table,key,value);};
@@ -75,7 +75,7 @@ try{
   assert.deepEqual(await restored.readLearning(),source);
   assert.equal((await restored.getTeacher(inFlightSession.id)).status,'stopped');assert.equal(restored.hasCredential(provider),false);
   const identity=await restored.openLibrary();assert.equal(identity.id,library.id);assert.equal(identity.learnerId,library.learnerId);assert.equal(identity.deviceId,fresh.deviceId);assert.notEqual(identity.deviceId,library.deviceId);
-  await assert.rejects(restored.restoreLibraryBackup(exported.file,password),/已有资料/);
+  await assert.rejects(restored.restoreLibraryBackup(exported.file,password),/libraryBackup.errors.occupied/);
   await restored.actLearning(id(),packageRun.id,packageRun.revision,{kind:'rate',rating:'good'},relearnAt);
   await restored.exportLibraryBackup(password);
   console.log('PASS: encrypted backup, wrong password/corruption, account and occupied-library guards, transaction rollback, fresh-library restore, preserved runtime dates/facts and new device identity.');

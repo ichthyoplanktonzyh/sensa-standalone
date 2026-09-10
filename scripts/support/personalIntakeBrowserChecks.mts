@@ -13,15 +13,24 @@ export async function runPersonalIntakeBrowserChecks(page:Page,origin:string){
  },{slowId,fastId,proposal:personalFixtureProposal});
  await expect.poll(async()=> (await rows(page,'drafts')).length,{timeout:12000}).toBe(2);
  assert.equal((await rows(page,'meanings')).length,1);assert.equal((await rows(page,'personalLearning')).length,0);
- await page.goto(origin+'/personal-meaning?meaningId='+slowId);await page.getByRole('button',{name:'继续对话',exact:true}).click();await expect(page.getByText('这件物品是否需要归还？',{exact:true})).toBeVisible();await page.getByLabel('补充或更正').fill('是的，之后需要归还。');await page.getByRole('button',{name:'发送',exact:true}).click();
+ await page.goto(origin+'/personal-meaning?meaningId='+slowId);
+ await page.getByRole('complementary').getByLabel('界面语言',{exact:true}).selectOption('en');
+ await expect(page.getByLabel('Add or correct',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Continue conversation',exact:true}).click();
+ await page.getByRole('complementary').getByLabel('Interface language',{exact:true}).selectOption('zh-CN');await expect(page.getByText('这件物品是否需要归还？',{exact:true})).toBeVisible();await page.getByLabel('补充或更正').fill('是的，之后需要归还。');await page.getByRole('button',{name:'发送',exact:true}).click();
  await expect.poll(async()=> (await rows(page,'sessions')).find(s=>s.draftId===slowId)?.status).toBe('proposal');
  // Existing confirmation layer, no shortcut into the database.
  await page.locator('.pmw-dock-confirm').click();await page.getByRole('button',{name:'就是这个意思，保存',exact:true}).click();await expect(page.getByRole('heading',{name:'意思已确认',exact:true})).toBeVisible();
  const controls=page.getByRole('region',{name:'个人内容学习准备'});await controls.getByRole('button',{name:'加入学习',exact:true}).click();assert.equal((await rows(page,'learningTargets')).length,0);
- await controls.getByRole('button',{name:'生成学习资源',exact:true}).click();await expect(controls.getByRole('button',{name:'重试 / 恢复准备',exact:true})).toBeVisible({timeout:15000});const attempts=await rows(page,'contentAttempts');assert(attempts[0].bundle);assert.equal((await rows(page,'learningTargets')).length,0);
+ await controls.getByRole('button',{name:'生成学习资源',exact:true}).click();await expect(controls.getByRole('button',{name:'重试 / 恢复准备',exact:true})).toBeVisible({timeout:15000});await page.getByRole('complementary').getByLabel('界面语言',{exact:true}).selectOption('en');
+ const englishControls=page.getByRole('region',{name:'Personal learning preparation',exact:true});await expect(englishControls.getByRole('button',{name:'Retry / resume preparation',exact:true})).toBeVisible();assert(!/[\u4e00-\u9fff]/u.test(await englishControls.innerText()));
+ await page.getByRole('complementary').getByLabel('Interface language',{exact:true}).selectOption('zh-CN');
+ const attempts=await rows(page,'contentAttempts');assert(attempts[0].bundle);assert.equal((await rows(page,'learningTargets')).length,0);
  const task=(await rows(page,'personalLearning'))[0];await page.goto(origin+'/learning-target?targetId='+task.targetId);await expect(page.getByRole('region',{name:'个人内容学习准备'}).getByRole('button',{name:'重试 / 恢复准备',exact:true})).toBeVisible();
  await page.goto(origin+'/personal-meaning?meaningId='+slowId);await page.reload();await page.getByRole('region',{name:'个人内容学习准备'}).getByRole('button',{name:'重试 / 恢复准备',exact:true}).click();await expect(page.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeVisible({timeout:15000});assert.equal((await rows(page,'contentAttempts')).length,2);
  await page.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();await page.getByRole('button',{name:'确认数量并开始',exact:true}).click();await page.getByRole('button',{name:'显示表达',exact:true}).click();await page.getByRole('button',{name:/顺利想起/}).click();await expect(page.getByText('本次首次学习已完成',{exact:true})).toBeVisible();await page.reload();await expect(page.getByText('本次首次学习已完成',{exact:true})).toBeVisible();assert.equal((await rows(page,'learningTargets'))[0].memoryRevision,1);
+ const runtimeUrl=page.url();await page.goto(origin+'/profile');await page.locator('#s-profile').getByLabel('界面语言',{exact:true}).selectOption('en');await page.goto(runtimeUrl);await expect(page.locator('#s-lightweight-runtime').getByText('Initial learning completed',{exact:true})).toBeVisible();
+ await page.goto(origin+'/profile');await page.locator('#s-profile').getByLabel('Interface language',{exact:true}).selectOption('zh-CN');
  await page.goto(origin+'/personal-meaning?meaningId='+fastId);await expect(page.getByRole('heading',{name:'意思已确认',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'加入学习',exact:true})).toBeVisible();await page.getByRole('button',{name:'加入学习',exact:true}).click();await expect(page.getByRole('button',{name:'开始 / 继续学习',exact:true})).toBeVisible();assert.equal((await rows(page,'learningTargets')).length,1,'Same semantic identity reuses runtime target without new generation');
  for(const width of [390,1280]){await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
 }

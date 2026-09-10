@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-export const setupButton = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#5268a9] disabled:cursor-not-allowed disabled:opacity-45';
+export const setupButton = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium transition-[color,background-color,box-shadow,transform] hover:shadow-sm hover:ring-1 hover:ring-[#cbd1df] active:scale-[0.98] motion-reduce:transform-none disabled:hover:shadow-none disabled:hover:ring-0 disabled:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#5268a9] disabled:cursor-not-allowed disabled:opacity-45 hover:brightness-95 active:brightness-90';
 export const setupPrimary = setupButton + ' bg-[#303f76] text-white hover:bg-[#25315d]';
 export function LearningSetupFrame({id,active,title,onBack,children}:{id:string;active:boolean;title:string;onBack:()=>void;children:ReactNode}) {
   const {t}=useTranslation();

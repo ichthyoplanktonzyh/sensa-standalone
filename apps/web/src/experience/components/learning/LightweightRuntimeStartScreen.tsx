@@ -1,3 +1,4 @@
+import {localFlowText} from '../../../i18n/localFlowText';
 import { useTranslation } from "react-i18next";
 import { Check, ArrowRight } from "lucide-react";
 import { RuntimeFrame, runtimePrimary } from "./RuntimeFrame";
@@ -80,7 +81,7 @@ export const LightweightRuntimeStartScreen = ({
     <RuntimeFrame
       id="s-lightweight-runtime"
       active={active}
-      title={purpose==='initial_learning'?t('runtime.learning'):purpose==='retention_review'?'复习':'再学习'}
+      title={purpose==='initial_learning'?t('runtime.learning'):purpose==='retention_review'?localFlowText('reviewTitle'):localFlowText('relearningTitle')}
       stepLabel={t(
         completed
           ? "runtime.done"

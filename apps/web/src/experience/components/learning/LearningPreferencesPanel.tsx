@@ -1,3 +1,4 @@
+import {localFlowText} from '../../../i18n/localFlowText';
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -56,7 +57,7 @@ export function LearningPreferencesPanel({onConfirm,closeLabel,fixedPolicy,busy,
         </div>
         <label className="flex items-center justify-between gap-4 text-sm font-medium">
           {t('learningPreferences.daily')}
-          <select disabled={busy} aria-label="每日新学数量" className="min-h-12 rounded-xl border border-[#dce3ef] bg-white px-4 text-sm text-[#546582]" value={dailyNewCount} onChange={event=>change(()=>onDailyNewCountChange(Number(event.target.value)))}>
+          <select disabled={busy} aria-label={localFlowText('dailyNewQuantity')} className="min-h-12 rounded-xl border border-[#dce3ef] bg-white px-4 text-sm text-[#546582]" value={dailyNewCount} onChange={event=>change(()=>onDailyNewCountChange(Number(event.target.value)))}>
             {counts.map(count=><option value={count} key={count}>{t('learningPreferences.count',{count})}</option>)}
           </select>
         </label>
