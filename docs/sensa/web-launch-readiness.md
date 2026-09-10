@@ -175,3 +175,42 @@ SENSA_WEB_ORIGIN=http://127.0.0.1:3000 SENSA_PACKAGE_OUTPUT=apps/web/public/lear
 无需先部署网站。准备项目 URL/ref、公开浏览器 key、测试登录邮箱；服务角色密钥、
 数据库连接和模型密钥只配置到忽略的环境文件或 CI Secrets。邀请授权、数据库迁移、
 邮件模板及回调地址仍需接通验证。正式域名/托管和监控告警渠道在云端验收前配置。
+
+### 2026-09-10：Supabase 插件连接与隔离配置实查
+
+插件已可调用，owner 确认 `kwwmukqzlxxsnviyhwmr` 为 Sensa 隔离测试项目。
+项目位于 `ca-central-1`、Free 计划、状态 `ACTIVE_HEALTHY`。公开 URL 与启用的
+publishable key 已读取，真实 `/auth/v1/settings` 返回 200：Email 开启、允许注册、
+邮箱自动确认关闭。只读 SQL 确认 `sensa` schema、`backend_app` 角色和 Sensa 迁移
+账本均不存在；public 表和 Supabase 迁移列表为空。未执行远程写入、发邮件或部署。
+插件未提供读取数据库密码、service-role key 或 Auth SMTP/模板配置的工具。
+
+本机实际已有旧 API 本地认证配置和根目录 DeepSeek key。保留旧环境，新增忽略文件
+`apps/api/.env.real-service`（0600）与 `apps/web/.env.real-service.local`，使用 8081/3001
+隔离现有 3000 本地库。公开连接已填入；API 私下复用模型 key、生成 vault key、保持受邀策略。
+八条原创文本包已编译并通过材料/包合同校验，目录写入该 API 配置；没有模型调用。
+数据库连接与服务角色 key 仍为空，不能把公开 Auth 连接成功视为真实服务验收。
+
+配置齐备后，从仓库根目录分别运行（不叠加旧 API `.env`）：
+
+```sh
+node --env-file=apps/api/.env.real-service --import tsx/esm apps/api/src/server.ts
+npm run web:dev -- --mode real-service --host 127.0.0.1 --port 3001 --strictPort
+```
+
+剩余依赖：受限运行数据库连接、独立迁移凭据与授权 CI 初始化、真实邮件、首次登录后的
+Sensa 邀请授权，以及独立账号删除验收所需服务角色 key。现有生产部署工作流同时发布
+API/Web，不应为本机试用直接触发；隔离项目初始化需独立可审阅的 CI 方案。
+
+邮件前提发生变化：[官方 2026-06-03 公告](https://supabase.com/changelog/46599-changes-to-email-template-customisation-on-free-tier)
+规定新 Free 项目使用默认邮件服务时不能修改 Auth 模板。当前 Web 输入数字 OTP，且关闭
+URL 自动会话检测；[官方 OTP 文档](https://supabase.com/docs/guides/auth/auth-email-passwordless)
+要求邮件模板包含 `{{ .Token }}`，不能将默认 Magic Link 邮件当成已兼容。
+需核实项目模板并配置自定义 SMTP 后落实验证码邮件。
+[默认 SMTP](https://supabase.com/docs/guides/auth/auth-smtp)仍仅发给团队邮箱、当前每小时两封。
+仅有团队邮箱并不足以证明当前 OTP 体验可用；尚未发送邮件或验证登录。
+
+本轮配置检查覆盖 Vite real-service 模式加载、Web/API 项目一致、端口和 origin、密钥存在性
+（不打印值）、API 文件权限、目录可解析与缺失凭据保持空值。根级 typecheck/build/lint、
+Git diff 空白检查通过；没有运行真实登录/付费模型或云端迁移。工作树仅提交本节实查记录，
+本机环境、编译包与密钥保持忽略。
