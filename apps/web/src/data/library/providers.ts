@@ -30,6 +30,7 @@ export async function setCredential(provider:Provider,key:string){
  credentials.set(provider.id,{revision:provider.revision,key:key.trim()});
 }
 export function hasCredential(provider:Provider){return credentials.get(provider.id)?.revision===provider.revision;}
+export function clearAllCredentials(){credentials.clear();}
 export function clearCredential(id:string){credentials.delete(id);}
 export async function deleteProvider(operationId:string,provider:Provider){
  await command({id:operationId,kind:'provider.delete',input:{id:provider.id,revision:provider.revision}},async tx=>{
@@ -51,9 +52,10 @@ export async function assignProvider(operationId:string,purpose:Purpose,id:strin
   if(id)next.assignments[purpose]=id;else delete next.assignments[purpose];tx.put('settings','providers',next);return next;
  });
 }
-export const providerSnapshot=()=>readLibrary(async tx=>({providers:await tx.all<Provider>('providers'),settings:await tx.get<ProviderSettings>('settings','providers')??{revision:0,assignments:{}}}));
+export const defaultSensaProvider:Provider={id:'00000000-0000-4000-8000-000000000002',revision:1,name:'Sensa 服务',kind:'sensa',endpoint:(import.meta.env.VITE_SENSA_API_URL??location.origin).replace(/\/+$/u,''),model:'sensa-managed'};
+export const providerSnapshot=()=>readLibrary(async tx=>({providers:[defaultSensaProvider,...await tx.all<Provider>('providers')],settings:await tx.get<ProviderSettings>('settings','providers')??{revision:0,assignments:{}}}));
 export async function selectedProvider(purpose:Purpose){
- const snapshot=await providerSnapshot();const found=snapshot.providers.find(p=>p.id===snapshot.settings.assignments[purpose]);
+ const snapshot=await providerSnapshot();const found=snapshot.providers.find(p=>p.id===(snapshot.settings.assignments[purpose]??defaultSensaProvider.id));
  if(!found)throw new Error(`请先为“${purposeLabels[purpose]}”选择模型服务。`);return found;
 }
 export async function providerCredential(provider:Provider){

@@ -89,9 +89,9 @@ jobs:
           npm run sensa:consumer-browser-smoke
 
 
-      - name: Complete local application release without account configuration
+      - name: Complete application account and managed-service journey
         run: |
-          VITE_SENSA_MODE=production VITE_SUPABASE_URL= VITE_SUPABASE_PUBLISHABLE_KEY= VITE_SENSA_API_URL= npm run build -w @sensa/web
+          VITE_SENSA_MODE=production VITE_SUPABASE_URL=http://127.0.0.1:4399 VITE_SUPABASE_PUBLISHABLE_KEY=synthetic-test-key VITE_SENSA_API_URL=http://127.0.0.1:4399 npm run build -w @sensa/web
           VITE_SENSA_MODE=production npm run preview -w @sensa/web -- --port 3014 > /tmp/sensa-full-app.log 2>&1 &
           full_app_pid=$!
           trap 'kill "$full_app_pid" 2>/dev/null || true' EXIT
