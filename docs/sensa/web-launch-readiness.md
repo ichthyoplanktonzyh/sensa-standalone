@@ -195,7 +195,7 @@ publishable key 已读取，真实 `/auth/v1/settings` 返回 200：Email 开启
 
 ```sh
 NODE_EXTRA_CA_CERTS="$PWD/infra/certs/supabase-prod-ca-2021.crt" node --env-file=apps/api/.env.real-service --import tsx/esm apps/api/src/server.ts
-npm run web:dev -- --mode real-service --host 127.0.0.1 --port 3001 --strictPort
+npm run dev -w @sensa/web -- --mode real-service --host 127.0.0.1 --port 3001 --strictPort
 ```
 
 剩余依赖：受限运行数据库连接、独立迁移凭据与授权 CI 初始化、真实邮件、首次登录后的

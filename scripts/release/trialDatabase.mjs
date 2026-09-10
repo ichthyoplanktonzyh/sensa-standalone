@@ -39,13 +39,15 @@ async function verifyRole(db,role){
  if(owned.length)throw Error('Runtime must not own application objects');
 }
 
-export async function initializeTrialDatabase(config,onProgress=()=>{}) {
+export async function initializeTrialDatabase(config,onProgress=()=>{},onStage=()=>{}) {
  const {role}=validateTrialConnections(config);
  const admin=new pg.Client({connectionString:config.adminUrl,connectionTimeoutMillis:15000});
  const runtime=new pg.Client({connectionString:config.runtimeUrl,connectionTimeoutMillis:15000});
  let locked=false;
  try{
+  onStage('stage: administrator connection');
   await admin.connect();
+  onStage('stage: initialization lock and schema checks');
   const lock=(await admin.query("SELECT pg_try_advisory_lock(hashtextextended('sensa-trial-initialize',0)) AS locked")).rows[0];
   if(!lock.locked)throw Error('Another initialization is running');locked=true;
   const ledger=(await admin.query("SELECT to_regclass('public.sensa_schema_migrations') AS ledger")).rows[0].ledger;
@@ -56,6 +58,7 @@ export async function initializeTrialDatabase(config,onProgress=()=>{}) {
   const roleExists=(await admin.query('SELECT 1 FROM pg_roles WHERE rolname=$1',[role])).rowCount>0;
   if(roleExists){await verifyRole(admin,role);await runtime.connect();}
   // The migration ledger is internal bookkeeping, never a browser Data API table.
+  onStage('stage: migration ledger');
   await admin.query(`CREATE TABLE IF NOT EXISTS public.sensa_schema_migrations(filename TEXT PRIMARY KEY,applied_at TIMESTAMPTZ NOT NULL DEFAULT now());
    ALTER TABLE public.sensa_schema_migrations ENABLE ROW LEVEL SECURITY;
    REVOKE ALL ON public.sensa_schema_migrations FROM PUBLIC;
@@ -73,7 +76,7 @@ export async function initializeTrialDatabase(config,onProgress=()=>{}) {
     await admin.query(await readFile(resolve(migrationDirectory,filename),'utf8'));
     await admin.query('INSERT INTO public.sensa_schema_migrations(filename) VALUES($1)',[filename]);
     await admin.query('COMMIT');onProgress(filename);
-   }catch{await admin.query('ROLLBACK');throw Error('Migration failed: '+filename);}
+   }catch(cause){await admin.query('ROLLBACK');throw Error('Migration failed: '+filename,{cause});}
   }
   if(!roleExists){
    await admin.query('BEGIN');
@@ -83,7 +86,7 @@ export async function initializeTrialDatabase(config,onProgress=()=>{}) {
     await admin.query(statement);
     const grant=(await admin.query("SELECT format('GRANT backend_app TO %I', $1::text) AS statement",[role])).rows[0].statement;
     await admin.query(grant);await admin.query('COMMIT');
-   }catch{await admin.query('ROLLBACK');throw Error('Runtime role creation failed');}
+   }catch(cause){await admin.query('ROLLBACK');throw Error('Runtime role creation failed',{cause});}
    await runtime.connect();
   }
   await verifyRole(runtime,role);
@@ -134,9 +137,13 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
     console.log('One verified Auth identity admitted. No account created or revoked access restored.');
    }else{
     if(!process.argv.includes('--apply'))throw Error('Explicit operation required');
-    const result=await initializeTrialDatabase(config,file=>console.log('Applied '+file));
+    const result=await initializeTrialDatabase(config,file=>console.log('Applied '+file),stage=>console.log(stage));
     console.log(`Trial database verified: ${result.migrationCount} migrations and a restricted runtime role. No accounts invited or application deployed.`);
    }
   }
- }catch{console.error('Trial database preparation failed. Check the approved project, credentials, existing schema and runtime role. Secret values and database error details are suppressed.');process.exitCode=1;}
+ }catch(error){
+  const code=error?.cause?.code??error?.code;
+  const safeCode=typeof code==='string'&&/^[A-Z0-9_]{2,50}$/.test(code)?code:'UNCLASSIFIED';
+  console.error(`Trial database preparation failed (${safeCode}). Check the last reported stage. Secret values and database error details are suppressed.`);process.exitCode=1;
+ }
 }
