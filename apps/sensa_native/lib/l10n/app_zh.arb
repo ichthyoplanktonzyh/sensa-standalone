@@ -829,5 +829,12 @@
   "homeQuietHint": "当前范围内暂时没有可开始的学习，可以查看学习状态或添加内容。",
   "homeProgress": "查看学习进度",
   "homeContinueHint": "有尚未完成的学习，可以接着上次继续。",
-  "homeCaptureHint": "先记下来，再确认想表达的意思。"
+  "homeCaptureHint": "先记下来，再确认想表达的意思。",
+  "studyPlan": "学习计划",
+  "studyRecent": "近期学习活动",
+  "studyNoPreparation": "目前没有待准备的材料。",
+  "studyPreviousMonth": "上个月",
+  "studyNextMonth": "下个月",
+  "studyScopeHint": "管理已加入的内容、来源和学习范围。",
+  "studyCheckinTitle": "签到日历"
 }

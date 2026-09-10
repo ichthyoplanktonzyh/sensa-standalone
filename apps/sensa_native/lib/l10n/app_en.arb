@@ -1432,5 +1432,12 @@
   "homeQuietHint": "Nothing is ready in your current scope. Check your learning or add content.",
   "homeProgress": "View learning progress",
   "homeContinueHint": "You have unfinished learning. Pick up where you left off.",
-  "homeCaptureHint": "Save a context, then clarify what you want to express."
+  "homeCaptureHint": "Save a context, then clarify what you want to express.",
+  "studyPlan": "Learning plan",
+  "studyRecent": "Recent learning activities",
+  "studyNoPreparation": "No material is awaiting preparation.",
+  "studyPreviousMonth": "Previous month",
+  "studyNextMonth": "Next month",
+  "studyScopeHint": "Manage added content, sources, and your learning scope.",
+  "studyCheckinTitle": "Check-in calendar"
 }

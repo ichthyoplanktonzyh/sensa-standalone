@@ -86,7 +86,7 @@ class LearningActivityView extends StatelessWidget {
           onPressed: () => showModalBottomSheet<void>(
             context: context,
             isScrollControlled: true,
-            builder: (context) => _Records(board: board),
+            builder: (context) => LearningRecords(board: board),
           ),
           child: Text(context.l10n.uiHistoryAndCheckInCalendar),
         ),
@@ -187,14 +187,19 @@ class LearningActivityView extends StatelessWidget {
   }
 }
 
-class _Records extends StatefulWidget {
-  const _Records({required this.board});
+class LearningRecords extends StatefulWidget {
+  const LearningRecords({
+    super.key,
+    required this.board,
+    this.embedded = false,
+  });
+  final bool embedded;
   final Map<String, dynamic> board;
   @override
-  State<_Records> createState() => _RecordsState();
+  State<LearningRecords> createState() => _RecordsState();
 }
 
-class _RecordsState extends State<_Records> {
+class _RecordsState extends State<LearningRecords> {
   late DateTime month;
   @override
   void initState() {
@@ -213,95 +218,110 @@ class _RecordsState extends State<_Records> {
     final days = DateTime(month.year, month.month + 1, 0).day;
     String date(int day) =>
         '${month.year}-${month.month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+    final content = <Widget>[
+      Text(
+        context.l10n.studyCheckinTitle,
+        style: Theme.of(context).textTheme.headlineSmall,
+      ),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            tooltip: context.l10n.studyPreviousMonth,
+            onPressed: () =>
+                setState(() => month = DateTime(month.year, month.month - 1)),
+            icon: const Icon(Icons.chevron_left),
+          ),
+          Expanded(
+            child: Text(
+              DateFormat.yMMMM(
+                Localizations.localeOf(context).toLanguageTag(),
+              ).format(month),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          IconButton(
+            tooltip: context.l10n.studyNextMonth,
+            onPressed: () =>
+                setState(() => month = DateTime(month.year, month.month + 1)),
+            icon: const Icon(Icons.chevron_right),
+          ),
+        ],
+      ),
+      Text(context.l10n.uiCalendarMarksShowCheckIns),
+      GridView.count(
+        crossAxisCount: 7,
+        mainAxisExtent: 44,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        children: [
+          for (final d in [
+            context.l10n.uiM,
+            context.l10n.uiT,
+            context.l10n.uiW,
+            context.l10n.uiT298,
+            context.l10n.uiF,
+            context.l10n.uiS,
+            context.l10n.uiS301,
+          ])
+            Center(child: Text(d)),
+          for (var i = 1; i < month.weekday; i++) const SizedBox.shrink(),
+          for (var d = 1; d <= days; d++)
+            Semantics(
+              label:
+                  '${date(d)} ${checked.contains(date(d)) ? context.l10n.uiCheckedIn : context.l10n.uiNotCheckedIn}',
+              child: Container(
+                margin: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: checked.contains(date(d))
+                      ? const Color(0xffd5eee5)
+                      : null,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(child: Text('$d')),
+              ),
+            ),
+        ],
+      ),
+      const SizedBox(height: 20),
+      Text(
+        context.l10n.studyRecent,
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+      if (history.isEmpty) Text(context.l10n.uiNoLearningHistoryYet),
+      for (final h in widget.embedded ? history.take(3) : history)
+        ListTile(
+          title: Text(
+            context.l10n.uiTargets305(
+              (h['mode'] == 'mixed'
+                      ? context.l10n.uiMixedLearning
+                      : context.l10n.uiReviewOnly)
+                  .toString(),
+              (h['summary']['distinctTargetCount']).toString(),
+            ),
+          ),
+          subtitle: Text(
+            '${DateFormat.yMMMd(Localizations.localeOf(context).toLanguageTag()).add_jm().format(DateTime.fromMillisecondsSinceEpoch(h['startedAtMs'] as int).toLocal())} · ${h['status'] == 'ended'
+                ? context.l10n.uiEnded
+                : h['status'] == 'paused'
+                ? context.l10n.uiPaused
+                : context.l10n.uiInProgress307}',
+          ),
+        ),
+    ];
+    if (widget.embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: content,
+      );
+    }
     return SafeArea(
       child: SizedBox(
         height: MediaQuery.sizeOf(context).height * .85,
         child: ListView(
           key: const ValueKey('learning-records-scroll'),
           padding: const EdgeInsets.all(24),
-          children: [
-            Text(
-              context.l10n.uiLearningHistory,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  onPressed: () => setState(
-                    () => month = DateTime(month.year, month.month - 1),
-                  ),
-                  icon: const Icon(Icons.chevron_left),
-                ),
-                Text(
-                  DateFormat.yMMMM(
-                    Localizations.localeOf(context).toLanguageTag(),
-                  ).format(month),
-                ),
-                IconButton(
-                  onPressed: () => setState(
-                    () => month = DateTime(month.year, month.month + 1),
-                  ),
-                  icon: const Icon(Icons.chevron_right),
-                ),
-              ],
-            ),
-            Text(context.l10n.uiCalendarMarksShowCheckIns),
-            GridView.count(
-              crossAxisCount: 7,
-              mainAxisExtent: 44,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                for (final d in [
-                  context.l10n.uiM,
-                  context.l10n.uiT,
-                  context.l10n.uiW,
-                  context.l10n.uiT298,
-                  context.l10n.uiF,
-                  context.l10n.uiS,
-                  context.l10n.uiS301,
-                ])
-                  Center(child: Text(d)),
-                for (var i = 1; i < month.weekday; i++) const SizedBox.shrink(),
-                for (var d = 1; d <= days; d++)
-                  Semantics(
-                    label:
-                        '${date(d)} ${checked.contains(date(d)) ? context.l10n.uiCheckedIn : context.l10n.uiNotCheckedIn}',
-                    child: Container(
-                      margin: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        color: checked.contains(date(d))
-                            ? const Color(0xffd5eee5)
-                            : null,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(child: Text('$d')),
-                    ),
-                  ),
-              ],
-            ),
-            if (history.isEmpty) Text(context.l10n.uiNoLearningHistoryYet),
-            for (final h in history)
-              ListTile(
-                title: Text(
-                  context.l10n.uiTargets305(
-                    (h['mode'] == 'mixed'
-                            ? context.l10n.uiMixedLearning
-                            : context.l10n.uiReviewOnly)
-                        .toString(),
-                    (h['summary']['distinctTargetCount']).toString(),
-                  ),
-                ),
-                subtitle: Text(
-                  '${DateTime.fromMillisecondsSinceEpoch(h['startedAtMs'] as int).toLocal()} · ${h['status'] == 'ended'
-                      ? context.l10n.uiEnded
-                      : h['status'] == 'paused'
-                      ? context.l10n.uiPaused
-                      : context.l10n.uiInProgress307}',
-                ),
-              ),
-          ],
+          children: content,
         ),
       ),
     );

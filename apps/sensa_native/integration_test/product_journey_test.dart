@@ -187,6 +187,27 @@ void main() {
         await tester.pageBack();
         await wait();
         await tap(find.byKey(const ValueKey('nav-2')));
+        await tap(find.byKey(const ValueKey('study-quantity')));
+        await tap(find.widgetWithText(ChoiceChip, '10'));
+        await tap(find.text(l10n.uiSaveQuantity));
+        expect(model.snapshot!.quantity, 10);
+        expect(model.snapshot!.value['completionCount'], 1);
+        final checkin = find.byKey(const ValueKey('study-check-in'));
+        if (checkin.evaluate().isEmpty) {
+          await tester.scrollUntilVisible(
+            checkin,
+            200,
+            scrollable: find.byType(Scrollable).first,
+            maxScrolls: 30,
+          );
+        }
+        await tester.ensureVisible(checkin);
+        await wait();
+        if (tester.widget<FilledButton>(checkin).onPressed != null) {
+          await tap(checkin);
+        }
+        expect(tester.widget<FilledButton>(checkin).onPressed, isNull);
+        expect(model.snapshot!.value['completionCount'], 1);
         await tap(find.text(l10n.uiAllLearningHistory));
         expect(find.text(l10n.uiLearningHistory), findsOneWidget);
         await tester.pageBack();
@@ -211,7 +232,7 @@ void main() {
         expect(interfaceLocale.locale.languageCode, 'en');
         expect(model.snapshot!.value, beforeLanguage);
         await tap(find.text(l10n.uiDailyNewQuantity));
-        await tap(find.text('10'));
+        await tap(find.widgetWithText(ChoiceChip, '10'));
         await tap(find.text(l10n.uiSaveQuantity));
         expect(model.snapshot!.quantity, 10);
         await tap(find.text(l10n.uiModelServices));

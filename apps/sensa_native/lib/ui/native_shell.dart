@@ -6,7 +6,7 @@ import 'curriculum_screen.dart';
 import 'history_screen.dart';
 import 'home_screen.dart';
 import 'intake_connection_screen.dart';
-import 'learning_activity_view.dart';
+import 'study_screen.dart';
 import 'library_screen.dart';
 import 'library_view_model.dart';
 import 'personal_world_screen.dart';
@@ -296,44 +296,14 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
     ],
   );
 
-  Widget learning() => ProductPage(
-    pageId: 'learning',
-    title: context.l10n.uiMyLearning,
-    children: [
-      ProductPanel(
-        child: LearningActivityView(
-          model: model,
-          overview: true,
-          onStart: study,
-        ),
-      ),
-      ProductPanel(
-        child: Column(
-          children: [
-            link(
-              context.l10n.uiLearningSources,
-              context.l10n.uiAddedToLearning,
-              Icons.playlist_add_check,
-              () => open(CurriculumScreen(model: model)),
-            ),
-            const Divider(height: 1),
-            link(
-              context.l10n.uiLearningPreparation,
-              context.l10n.uiCheckMaterialPreparationAndPendingTasks,
-              Icons.auto_stories_outlined,
-              () => open(PreparationListScreen(model: model)),
-            ),
-            const Divider(height: 1),
-            link(
-              context.l10n.uiAllLearningHistory,
-              context.l10n.uiLearningHistory,
-              Icons.history,
-              () => open(HistoryScreen(model: model)),
-            ),
-          ],
-        ),
-      ),
-    ],
+  Widget learning() => StudyScreen(
+    model: model,
+    onStart: study,
+    onScope: () => open(CurriculumScreen(model: model)),
+    onPreparation: () => open(PreparationListScreen(model: model)),
+    onHistory: () => open(HistoryScreen(model: model)),
+    onQuantity: changeQuantity,
+    onPolicy: () => showLearningPolicy(context, model, 'learner'),
   );
 
   Widget catalog() {
