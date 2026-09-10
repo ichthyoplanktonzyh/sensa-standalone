@@ -5,6 +5,8 @@ import 'library_view_model.dart';
 import 'practice_model.dart';
 import 'youglish_view.dart';
 import 'product_theme.dart';
+import 'practice_home.dart';
+import 'practice_scope_screen.dart';
 
 class PracticeScreen extends StatefulWidget {
   const PracticeScreen({
@@ -25,6 +27,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
   late final brief = TextEditingController(
     text: context.l10n.uiHearHowDifferentSpeakersUseThis,
   );
+  final scroll = ScrollController();
   bool playerOpen = false, closing = false;
   int generation = 0;
   String status = 'loading';
@@ -51,6 +54,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
     model.removeListener(changed);
     model.dispose();
     brief.dispose();
+    scroll.dispose();
     super.dispose();
   }
 
@@ -131,96 +135,16 @@ class _PracticeScreenState extends State<PracticeScreen> {
     if (mounted) {
       setState(() {
         playerOpen = false;
+        if (scroll.hasClients) scroll.jumpTo(0);
         generation++;
       });
     }
   }
 
   Future<void> select() async {
-    final data = model.data!['catalog'];
-    final sources = (data['sources'] as List).cast<Map<String, dynamic>>();
-    String source = data['selection']['sourceId'];
-    final chosen = ((data['selection']['targetIds'] as List?) ?? [])
-        .cast<String>()
-        .toSet();
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, set) => AlertDialog(
-          title: Text(context.l10n.uiPracticeScope),
-          content: SizedBox(
-            width: 500,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: source,
-                    items: [
-                      DropdownMenuItem(
-                        value: 'current_study',
-                        child: Text(context.l10n.uiCurrentLearningScope),
-                      ),
-                      DropdownMenuItem(
-                        value: 'personal_semantic_world',
-                        child: Text(context.l10n.uiMySemanticWorld),
-                      ),
-                    ],
-                    onChanged: (v) => set(() => source = v!),
-                  ),
-                  if (source == 'current_study')
-                    Text(
-                      context.l10n.uiTargets(
-                        (sources[0]['targets'] as List).length,
-                      ),
-                    ),
-                  if (source == 'personal_semantic_world') ...[
-                    Text(context.l10n.uiPracticeSavedMeaningsWithoutAddingThem),
-                    TextButton(
-                      onPressed: () => set(() {
-                        final all = (sources[1]['targets'] as List)
-                            .map((t) => t['targetId'] as String)
-                            .toSet();
-                        chosen.length == all.length
-                            ? chosen.clear()
-                            : chosen.addAll(all);
-                      }),
-                      child: Text(context.l10n.uiSelectAllClear),
-                    ),
-                    for (final t in sources[1]['targets'])
-                      CheckboxListTile(
-                        value: chosen.contains(t['targetId']),
-                        title: Text(t['expression']),
-                        subtitle: Text('${t['sense']}\n${t['context']}'),
-                        onChanged: (v) => set(
-                          () => v == true
-                              ? chosen.add(t['targetId'])
-                              : chosen.remove(t['targetId']),
-                        ),
-                      ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(context.l10n.uiCancel),
-            ),
-            FilledButton(
-              onPressed: source == 'personal_semantic_world' && chosen.isEmpty
-                  ? null
-                  : () => Navigator.pop(ctx, {
-                      'sourceId': source,
-                      if (source == 'personal_semantic_world')
-                        'targetIds': chosen.toList(),
-                    }),
-              child: Text(context.l10n.uiUseThisScope),
-            ),
-          ],
-        ),
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => PracticeScopeScreen(catalog: model.data!['catalog']),
       ),
     );
     if (result != null) {
@@ -229,6 +153,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
   }
 
   void open() {
+    if (scroll.hasClients) scroll.jumpTo(0);
     setState(() {
       closing = false;
       playerOpen = true;
@@ -289,6 +214,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
             : Readable(
                 child: ListView(
                   key: const ValueKey('practice-scroll'),
+                  controller: scroll,
                   padding: const EdgeInsets.all(20),
                   children: [
                     Text(context.l10n.uiPracticeIsSeparateFromYourLearning),
@@ -300,90 +226,38 @@ class _PracticeScreenState extends State<PracticeScreen> {
                       ),
                     ],
                     if (!playerOpen) ...[
-                      TextButton(
-                        onPressed: model.busy ? null : select,
-                        child: Text(context.l10n.uiChoosePracticeScope),
-                      ),
-                      Text(
-                        context.l10n.uiTargetsExpressions(
-                          ((model.data!['catalog']['targets'] as List).length)
-                              .toString(),
-                          ((model.data!['catalog']['targets'] as List)
-                                  .map((t) => t['expression'])
-                                  .toSet()
-                                  .length)
-                              .toString(),
+                      PracticeHome(
+                        data: model.data!,
+                        busy: model.busy || model.error != null,
+                        brief: brief,
+                        onScope: select,
+                        onStart: open,
+                        onAbandon: () => model.act(
+                          () => {
+                            'kind': 'end',
+                            'session_id': model.session!['id'],
+                            'abandoned': true,
+                          },
                         ),
                       ),
-                      for (final t
-                          in (model.data!['catalog']['targets'] as List))
-                        ListTile(
-                          title: Text(t['expression']),
-                          subtitle: Text(t['sense']),
-                        ),
-                      if ((model.data!['catalog']['blockedTargets'] as List)
-                          .isNotEmpty)
-                        Text(
-                          context
-                              .l10n
-                              .uiSomeExpressionsWithAmbiguousPronunciationWere,
-                        ),
-                      TextField(
-                        key: const ValueKey('practice-brief'),
-                        controller: brief,
-                        enabled: model.session == null,
-                        maxLength: 500,
-                        decoration: InputDecoration(
-                          labelText: context.l10n.uiWhatWouldYouLikeToPractice,
-                        ),
-                      ),
-                      Text(context.l10n.uiListenToRealSpeech),
-                      Text(context.l10n.uiYouglishRequiresAnInternetConnection),
-                      FilledButton(
-                        onPressed: model.busy || targets.isEmpty ? null : open,
-                        child: Text(
-                          model.session == null
-                              ? context.l10n.uiStartListening
-                              : context.l10n.uiContinueListening,
-                        ),
-                      ),
-                      if (model.session != null) ...[
-                        Text(
-                          context.l10n.uiResume(
-                            (model.session!['snapshot']['brief']).toString(),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: model.busy
-                              ? null
-                              : () => model.act(
-                                  () => {
-                                    'kind': 'end',
-                                    'session_id': model.session!['id'],
-                                    'abandoned': true,
-                                  },
-                                ),
-                          child: Text(context.l10n.uiAbandonThisPractice),
-                        ),
-                      ],
-                      const Divider(),
-                      Text(context.l10n.uiPracticeHistory),
-                      for (final h in model.data!['history'])
-                        ListTile(
-                          title: Text(h['snapshot']['brief']),
-                          subtitle: Text(
-                            context.l10n.uiInteractions(
-                              (h['status'] == 'active'
-                                      ? context.l10n.uiInProgress
-                                      : h['status'] == 'completed'
-                                      ? context.l10n.uiEnded
-                                      : context.l10n.uiAbandoned)
-                                  .toString(),
-                              (h['turnCount']).toString(),
-                            ),
-                          ),
-                        ),
                     ] else if (current != null) ...[
+                      Text(
+                        key: const ValueKey('practice-provider-status'),
+                        status == 'ready'
+                            ? context.l10n.uiFoundClips(
+                                (observation['total'] ?? 0).toString(),
+                              )
+                            : status == 'error'
+                            ? context.l10n.uiCouldNotConnectToYouglishCheck
+                            : status == 'empty'
+                            ? context.l10n.uiNoClipsFoundForThisExpression
+                            : context.l10n.uiConnectingToYouglish,
+                      ),
+                      if (status == 'error' || status == 'empty')
+                        TextButton(
+                          onPressed: open,
+                          child: Text(context.l10n.uiRetryConnection),
+                        ),
                       Text(context.l10n.uiYouglishSearchesByExpressionSoClips),
                       Text(
                         context.l10n.uiExpressionsInThisScope(
@@ -448,8 +322,9 @@ class _PracticeScreenState extends State<PracticeScreen> {
                             ),
                         ],
                       ),
-                      SizedBox(
-                        height: 240,
+                      AspectRatio(
+                        key: const ValueKey('practice-video'),
+                        aspectRatio: 16 / 9,
                         child: YouglishView(
                           key: ValueKey(
                             '$generation-${state['index']}-${state['accent']}',
@@ -468,58 +343,83 @@ class _PracticeScreenState extends State<PracticeScreen> {
                           onController: (c) => player = c,
                         ),
                       ),
-                      Text(
-                        status == 'ready'
-                            ? context.l10n.uiFoundClips(
-                                (observation['total'] ?? 0).toString(),
-                              )
-                            : status == 'error'
-                            ? context.l10n.uiCouldNotConnectToYouglishCheck
-                            : status == 'empty'
-                            ? context.l10n.uiNoClipsFoundForThisExpression
-                            : context.l10n.uiConnectingToYouglish,
-                      ),
-                      if (status == 'error' || status == 'empty')
-                        TextButton(
-                          onPressed: open,
-                          child: Text(context.l10n.uiRetryConnection),
+                      if (observation['occurrence'] != null)
+                        Text(
+                          context.l10n.uiClip('${observation['occurrence']}'),
                         ),
-                      if (observation['playing'] == true)
-                        Text(context.l10n.uiPlaying),
                       if (observation['video'] != null)
                         Text(
                           context.l10n.uiYouglishClip(
-                            (observation['video']).toString(),
+                            '${observation['video']}',
                           ),
                         ),
-                      if (observation['occurrence'] != null)
-                        Text(
-                          context.l10n.uiClip(
-                            (observation['occurrence']).toString(),
-                          ),
-                        ),
-                      Text(
-                        (observation['caption'] as String? ??
-                                context.l10n.uiNoSubtitles)
-                            .replaceAll('[[[', '')
-                            .replaceAll(']]]', ''),
-                      ),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          for (final pair in [
-                            ('previous', context.l10n.uiPreviousClip),
-                            ('play', context.l10n.uiPlay),
-                            ('pause', context.l10n.uiPause),
-                            ('replay', context.l10n.uiReplay),
-                            ('next', context.l10n.uiNextClip),
-                          ])
-                            OutlinedButton(
-                              onPressed: ready ? () => controls(pair.$1) : null,
-                              child: Text(pair.$2),
+                      const SizedBox(height: 16),
+                      ProductPanel(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              context.l10n.practiceCaptions,
+                              style: Theme.of(context).textTheme.labelLarge,
                             ),
-                        ],
+                            const SizedBox(height: 12),
+                            PracticeCaption(
+                              caption:
+                                  observation['caption'] as String? ??
+                                  context.l10n.uiNoSubtitles,
+                            ),
+                            const SizedBox(height: 20),
+                            Wrap(
+                              alignment: WrapAlignment.center,
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: ready
+                                      ? () => controls('previous')
+                                      : null,
+                                  icon: const Icon(Icons.skip_previous),
+                                  label: Text(context.l10n.uiPreviousClip),
+                                ),
+                                FilledButton.icon(
+                                  onPressed: ready
+                                      ? () => controls(
+                                          observation['playing'] == true
+                                              ? 'pause'
+                                              : 'play',
+                                        )
+                                      : null,
+                                  icon: Icon(
+                                    observation['playing'] == true
+                                        ? Icons.pause
+                                        : Icons.play_arrow,
+                                  ),
+                                  label: Text(
+                                    observation['playing'] == true
+                                        ? context.l10n.uiPause
+                                        : context.l10n.uiPlay,
+                                  ),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: ready
+                                      ? () => controls('next')
+                                      : null,
+                                  icon: const Icon(Icons.skip_next),
+                                  label: Text(context.l10n.uiNextClip),
+                                ),
+                                TextButton.icon(
+                                  onPressed: ready
+                                      ? () => controls('replay')
+                                      : null,
+                                  icon: const Icon(Icons.replay),
+                                  label: Text(context.l10n.uiReplay),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(height: 12),
                       Wrap(
                         spacing: 4,
                         children: [
@@ -557,6 +457,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
                                 if (mounted) {
                                   setState(() {
                                     playerOpen = false;
+                                    if (scroll.hasClients) scroll.jumpTo(0);
                                     generation++;
                                   });
                                 }

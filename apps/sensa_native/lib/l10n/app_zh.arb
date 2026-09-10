@@ -836,5 +836,22 @@
   "studyPreviousMonth": "上个月",
   "studyNextMonth": "下个月",
   "studyScopeHint": "管理已加入的内容、来源和学习范围。",
-  "studyCheckinTitle": "签到日历"
+  "studyCheckinTitle": "签到日历",
+  "practiceListening": "真实语流泛化",
+  "practiceSpeaking": "情境口语排演",
+  "practiceReading": "语境推义",
+  "practiceWriting": "情境书面表达",
+  "practiceListeningCue": "听见不同口音与语速",
+  "practiceSpeakingCue": "开口回应一个情境",
+  "practiceReadingCue": "从短语境里找到意思",
+  "practiceWritingCue": "写出你在情境中想说的话",
+  "practiceComingSoon": "尚未开放",
+  "practiceEmptyScope": "当前范围没有可练习的表达，请选择其他范围。",
+  "practiceChangeScope": "更换范围",
+  "practiceResumeTitle": "继续上次练习",
+  "practicePinnedScope": "继续时使用以下已保存范围；更换范围仅影响下一次练习。",
+  "practiceCaptions": "字幕",
+  "practiceEmptyHistory": "还没有练习记录。",
+  "practiceMoreHistory": "查看全部练习记录",
+  "practiceBriefOptional": "练习目标（可选）"
 }

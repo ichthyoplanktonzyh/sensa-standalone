@@ -1439,5 +1439,22 @@
   "studyPreviousMonth": "Previous month",
   "studyNextMonth": "Next month",
   "studyScopeHint": "Manage added content, sources, and your learning scope.",
-  "studyCheckinTitle": "Check-in calendar"
+  "studyCheckinTitle": "Check-in calendar",
+  "practiceListening": "Real-world listening",
+  "practiceSpeaking": "Scenario speaking",
+  "practiceReading": "Meaning in context",
+  "practiceWriting": "Scenario writing",
+  "practiceListeningCue": "Hear different accents and speaking speeds",
+  "practiceSpeakingCue": "Respond to a situation aloud",
+  "practiceReadingCue": "Find meaning in a short context",
+  "practiceWritingCue": "Write what you want to say in a situation",
+  "practiceComingSoon": "Not yet available",
+  "practiceEmptyScope": "No expressions are available. Choose another scope.",
+  "practiceChangeScope": "Change scope",
+  "practiceResumeTitle": "Resume your practice",
+  "practicePinnedScope": "Resume uses the saved scope below. Scope changes apply to your next practice.",
+  "practiceCaptions": "Captions",
+  "practiceEmptyHistory": "No practice history yet.",
+  "practiceMoreHistory": "View all practice history",
+  "practiceBriefOptional": "Practice goal (optional)"
 }

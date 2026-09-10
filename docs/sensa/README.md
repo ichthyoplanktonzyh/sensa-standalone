@@ -83,6 +83,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | Native Personal World | [`native-world-group-plan.md`](native-world-group-plan.md) / [`native-world-group-handoff.md`](native-world-group-handoff.md) | 图文草稿、本机语义连接、表达分支与关系投影；模型协作见 Native Agent 记录 |
 | Native resource group | [`native-resource-group-plan.md`](native-resource-group-plan.md) / [`native-resource-group-handoff.md`](native-resource-group-handoff.md) | 参考资料来源生命周期、图文授权、关系准备、流式/静态发音与原生在线账户的整组收口 |
 | Native intake group | [`native-intake-group-handoff.md`](native-intake-group-handoff.md) | 插件可选原生库、CLI/Native Messaging、统一准入回执、Codex Skill、断线/重启恢复与双平台导入验收 |
+| Native practice | [`native-practice-refinement.md`](native-practice-refinement.md) | 四类练习卡片及诚实占位、独立范围页、固定会话恢复和自适应播放器；验证边界见记录 |
 | Native study | [`native-study-refinement.md`](native-study-refinement.md) | 学习范围与计划、直接调整数量/方式、准备入口、内联签到日历和近期活动；验证边界见记录 |
 | Native home | [`native-home-refinement.md`](native-home-refinement.md) | 首页数字与主操作层级、真实可用状态、直接记录情境及桌面/手机自适应；验证边界见记录 |
 | Native use-case UX | [`native-use-case-ux-refinement.md`](native-use-case-ux-refinement.md) | 意义详情/复制编辑、采集离开保护、学习题面与输入、手机关系浏览、准备与服务设置分层；程序验收边界见记录 |

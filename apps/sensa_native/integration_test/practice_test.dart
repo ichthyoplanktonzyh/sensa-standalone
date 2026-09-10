@@ -124,7 +124,11 @@ void main() {
       final chip = find.widgetWithText(ChoiceChip, label);
       final f = chip.evaluate().isNotEmpty ? chip : find.text(label);
       await visible(f);
-      await tester.tap(f.last);
+      final visibleChip = find.widgetWithText(ChoiceChip, label);
+      final target = visibleChip.evaluate().isNotEmpty ? visibleChip : f;
+      await tester.ensureVisible(target.last);
+      await tester.pumpAndSettle();
+      await tester.tap(target.last);
       for (var i = 0; i < 20; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
@@ -132,6 +136,7 @@ void main() {
     }
 
     Future<void> waitText(String label) async {
+      await visible(find.byKey(const ValueKey('practice-provider-status')));
       for (var i = 0; i < 220; i++) {
         await tester.pump(const Duration(milliseconds: 100));
         if (find.text(label).evaluate().isNotEmpty) return;
@@ -153,6 +158,8 @@ void main() {
     await page(live ? null : fixture);
     if (!recovery) {
       await tap('选择练习范围');
+      await tester.tap(find.text('更换范围'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byType(DropdownButtonFormField<String>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('我的词义世界').last);
