@@ -4,7 +4,7 @@ import { cors } from 'hono/cors';
 import { createConsumerRoutes } from '../../../apps/api/dist/sensa/access/consumer.js';
 const app = new Hono();
 const origins = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s=>s.trim()).filter(Boolean);
-app.use('*', cors({origin:origins,allowMethods:['GET','POST','OPTIONS'],allowHeaders:['authorization','content-type','x-installation-id']}));
+app.use('*', cors({origin:origins,allowMethods:['GET','POST','OPTIONS'],allowHeaders:['authorization','content-type','x-installation-id'],exposeHeaders:['X-Request-ID']}));
 app.route('',createConsumerRoutes());
 Deno.serve(request => {
   const url=new URL(request.url);

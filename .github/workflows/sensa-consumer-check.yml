@@ -83,6 +83,8 @@ jobs:
         run: npm run sensa:offline-cold-start-smoke
       - name: Complete Intake to personal learning in production UI (synthetic providers)
         run: npm run sensa:personal-intake-browser-smoke
+      - name: Release configuration and privacy-safe telemetry guards
+        run: node scripts/sensaReleaseCandidateSmoke.mjs && node --import tsx scripts/sensaTelemetrySmoke.mts
       - name: Encrypted library backup and fresh browser recovery
         run: npm run sensa:library-backup-browser-smoke
       - name: Cross-tab account isolation (synthetic HTTP, real browser storage)

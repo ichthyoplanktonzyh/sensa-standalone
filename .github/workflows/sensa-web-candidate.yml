@@ -1,0 +1,47 @@
+name: Sensa Web release candidate (no deployment)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    environment: web-candidate
+    env:
+      VITE_SENSA_MODE: production
+      SENSA_RELEASE_SHA: ${{ github.sha }}
+      SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SENSA_API_URL: ${{ vars.VITE_SENSA_API_URL }}
+      SENSA_EXTENSION_WEB_URL: ${{ vars.SENSA_WEB_ORIGIN }}
+      SENSA_EXTENSION_API_URL: ${{ vars.VITE_SENSA_API_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Refuse incomplete or unsafe release configuration
+        run: node scripts/release/webCandidate.mjs --check
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run lint
+      - name: Validate local data controls and release guard
+        run: |
+          npm run sensa:library-backup-smoke
+          npm run sensa:local-i18n-smoke
+          node scripts/sensaReleaseCandidateSmoke.mjs
+          node --import tsx scripts/sensaTelemetrySmoke.mts
+      - name: Prepare fixed candidate and static hosting headers
+        run: node scripts/release/webCandidate.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sensa-web-candidate-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            apps/web/dist/
+            apps/browser-extension/dist/
+            release-candidate/manifest.json

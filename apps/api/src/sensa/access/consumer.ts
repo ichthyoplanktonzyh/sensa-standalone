@@ -1,3 +1,4 @@
+import {serviceTelemetry,type ServiceRequestRecord} from './telemetry.js';
 import {ensureAdmission} from './admission.js';
 import {learningPackageCatalogSchema} from '@sensa/contracts/sensa';
 import {createNativeAgentRoutes} from '../agent/native.js';
@@ -191,13 +192,13 @@ async function publish(db:DatabaseExecutor,a:Account,entity:string,snapshot:unkn
   await db.query('INSERT INTO sensa_consumer.changes(learner_user_id,sequence,snapshot,entity_type) VALUES($1,$2,$3::jsonb,$4)',[a.learner_user_id,head,JSON.stringify(snapshot),entity]);
 }
 
-export function createConsumerRoutes(options: {verify?:ConsumerVerifier; transaction?:Transaction;mediaReader?:ConsumerMediaReader;clock?:()=>Date;semanticResolver?:SemanticResolver;contentGenerator?:ContentGenerator;contentReviewer?:ContentReviewer;readingCompletion?:ReadingCompletion} = {}) {
+export function createConsumerRoutes(options: {telemetry?:(record:ServiceRequestRecord)=>void;verify?:ConsumerVerifier; transaction?:Transaction;mediaReader?:ConsumerMediaReader;clock?:()=>Date;semanticResolver?:SemanticResolver;contentGenerator?:ContentGenerator;contentReviewer?:ContentReviewer;readingCompletion?:ReadingCompletion} = {}) {
   const clock=options.clock??(()=>new Date());const app=new Hono(); const transaction=options.transaction??unsafeTransaction; const verify=extensionVerifier(options.verify??verifyConsumer,transaction,clock);
+  app.use('*',serviceTelemetry(options.telemetry));
   app.use('*',(c,next)=>bodyLimit({maxSize:c.req.path.endsWith('/sensa/native/agent/turn')?12*1024*1024:256*1024,onError:c=>c.json({code:'body_too_large'},413)})(c,next));
   app.onError((e,c)=> {
     if(e instanceof ConsumerError)return c.json({code:e.code},e.status);
     if(e instanceof z.ZodError || e instanceof SyntaxError)return c.json({code:'invalid_request'},400);
-    console.error('Consumer request failed',e instanceof Error?e.name:'unknown');
     return c.json({code:'temporarily_unavailable'},503);
   });
   registerReadingRoutes(app,async(request,work)=>{const identity=await verify(request);return transaction(async db=>work(db,await account(db,identity,undefined,false,clock())));},options.readingCompletion);

@@ -4,6 +4,38 @@
 本文登记实际代码与本轮证据；顺序由 production-migration-plan.md 裁决，不新增并行路线图。
 核查起点 `504f9059`，原工作树无未提交修改。主代理直接实施，无 worker、push、部署或用户数据迁移。
 
+## Web 首发范围与发布候选（2026-09-10 更新）
+
+Owner 已确认只推进 Web 生产收尾，然后由 owner 作为首位真实用户进行使用验收、修复后部署。
+首发暂缓自动跨设备同步；不等待原生 UI/三端 G1–G3。资料保存在当前浏览器，换设备通过
+加密备份恢复；不得宣称自动同步或云端资料已备份。此范围调整不撤销账号删除、隔离、
+可靠持久化与生产服务验收。
+
+本文下方“核查起点”表是历史盘点，不能继续将已完成的本地运行时、离线壳、备份恢复视为
+尚未实现。最新实现与测试见 current-stage.md 和 web-local-meaning-workflow.md。
+
+新增 `.github/workflows/sensa-web-candidate.yml`：只生成固定 SHA 的候选包，不部署、迁移或
+上传商店。GitHub `web-candidate` environment 配置公开变量：`SENSA_WEB_ORIGIN`、
+`VITE_SUPABASE_URL`、`VITE_SUPABASE_PUBLISHABLE_KEY`、`VITE_SENSA_API_URL`。
+当前首发适配限定托管 Supabase 的 `functions/v1/sensa-api`；其他服务布局需显式修改发布合同。
+没有目标环境时检查失败，不能使用 localhost 或合成配置冒充生产候选。
+
+`node scripts/release/webCandidate.mjs --check` 检查环境；构建后去掉 `--check` 校验 SHA、
+Web 实际嵌入配置与插件目标，生成静态托管响应头和 `release-candidate/manifest.json`。
+清单包含文件 SHA-256，不包含模型密钥或公开认证 Key。制品有效期 14 天；生成候选不等于
+测试或上线已通过。API 新增 X-Request-ID 和仅含方法、服务分类、状态、耗时的结构化日志，
+不保存 URL/正文/邮箱/令牌/模型内容；真实告警与仪表盘尚待平台配置。
+
+交给 owner 真实使用前仍需逐项完成：
+
+- 真实邮箱 OTP、会话续期/撤销、默认模型配置和实际质量/费用验证。
+- 真实学习包/媒体目录，以及实际安装插件后的采集交接。
+- 浏览器存储不足与版本升级恢复验收、账号删除及旧凭据屏障。
+- 生产限流覆盖、费用处置与告警配置。
+- 发布部署工作流、目标迁移/回滚清单和实际托管验收。
+
+候选生成流水线只是上述发布准备的一部分，不表示这些缺口已关闭。
+
 ## 上线差距与验收门
 
 | 范围 | 当前代码证据 | 缺口、依赖与关闭条件 |

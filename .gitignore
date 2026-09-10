@@ -44,3 +44,6 @@ content/data/consumer-generations/
 
 # Flutter scaffolding tool scratch output.
 /apps/build/
+
+# Local release manifests; CI artifacts hold the reviewed candidate.
+/release-candidate/
