@@ -34,4 +34,4 @@
 
 Flutter 文件选择器只读取用户选中的文件；macOS 仅增加 user-selected read-only entitlement。Repository/ViewModel 负责读取和操作反馈，Rust 负责合同、版本和事务；不上传文件，不要求账号。
 
-验收证据见 `native-pack-import-handoff.md`。这条用例不代表复习/重学原生界面、一般 Published Package 导入或完整 LF-1b 完成。
+验收证据见 `native-capability-status.md`。这条用例不代表复习/重学原生界面、一般 Published Package 导入或完整 LF-1b 完成。

@@ -14,6 +14,14 @@ Construction 与确认门由
 Protocol、学习结果与 FSRS 交接由
 [`learning-connection-model.md`](learning-connection-model.md) 裁决。
 
+## 跨入口体验职责
+
+2026-09-10 Owner 确认账号优先的首次使用和默认 Sensa 服务；BYOK 属于高级功能。
+Intake 负责现场获取/处理，Web、桌面和移动主应用负责整理/澄清/学习，Hono 提供在线支撑。
+这不是强制跳转边界：Intake 可以原位接受，主应用可以直接采集，统一准入和交接回执。
+已初始化设备的断网学习不受在线会话失效阻断；本地事实仍由本地领域事务裁决。
+完整用户旅程与失败状态以 [PRD 的统一体验](product-requirements-v1.md#统一用户体验2026-09-10-owner-确认) 为准。
+
 ## 1. 产品组成
 
 2026-09-08 目标架构修订已确认：[完整本地学习库与可选加密同步](../adr/0001-local-library-optional-encrypted-sync.md)。

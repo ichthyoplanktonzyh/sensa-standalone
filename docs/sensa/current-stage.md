@@ -1,5 +1,11 @@
 # Sensa 当前阶段与交付边界
 
+2026-09-10 最新体验决策：先注册/登录、默认 Sensa 服务；BYOK 为全项目高级功能。
+Intake 现场处理，主应用整理/澄清/学习，账号与权益统一。下一施工顺序先落实账号首次使用、
+主应用/插件服务体验，再贯通选包下载和本地学习；完整规则见 PRD。
+此前无账号构建 checkpoint 仅是本地执行解耦证据，不再代表首次用户旅程。
+原生分轮次过程文档已归并为 [能力与验收摘要](native-capability-status.md)；原始证据可通过该摘要的 Git 基线追溯。
+
 2026-09-10 Web 正式入口收口：默认和 `production` 构建均进入现有完整 `experience/App.tsx`，
 不要求账号/API 配置；旧账号实现仅通过显式 `legacy-account` 模式做迁移回归。
 无账号配置的静态发布构建通过完整页面流程回归，但学习包本地结算、离线冷启动和上线门仍未关闭。
@@ -16,34 +22,34 @@ Web 本地执行、备份/恢复、账号与在线资源、安全/监控和 CI/C
 
 2026-09-10 自由练习专项：按 owner 确认参考正式 Web 优化范围摘要、四类活动卡片、独立范围页和播放器；
 owner 明确允许说/读/写显示未开放占位。20 项组件回归、macOS/Android 主流程与独立冷恢复、
-静态分析及根级检查通过，见 [自由练习记录](native-practice-refinement.md)。媒体使用确定性替身，
+静态分析及根级检查通过，见 [自由练习记录](native-capability-status.md)。媒体使用确定性替身，
 不作为真实在线视频或视觉走查验收。
 
 2026-09-10 “我的学习”专项：范围与计划、直接修改数量/方式、准备入口、内联签到日历和近期活动已接入。
 43 项组件回归、macOS/Android 主流程与独立冷恢复、静态分析及根级检查通过，见
-[学习管理记录](native-study-refinement.md)。本轮未进行应用走查，保留既有学习与调度合同。
+[学习管理记录](native-capability-status.md)。本轮未进行应用走查，保留既有学习与调度合同。
 
 2026-09-10 首页专项：按 owner 确认对照正式 Web 优化今日学习层级、桌面/手机布局、可用状态和直接采集入口。
-37 项组件回归、双平台主流程/独立冷恢复及根级检查通过，见 [首页记录](native-home-refinement.md)。
+37 项组件回归、双平台主流程/独立冷恢复及根级检查通过，见 [首页记录](native-capability-status.md)。
 未进行应用走查，不扩展为其他页面或整体体验已验收。
 
 2026-09-10 原生体验第二轮：意义摘要进入完整详情，保留复制编辑/移除/恢复与显式入学；
 采集未保存保护、学习题面滚动/输入、手机关系浏览、准备和服务配置分层已完成。
 28 项组件回归、macOS/Android 真实本地主流程与独立冷恢复及根级检查通过，见
-[用例体验记录](native-use-case-ux-refinement.md)。遵照 owner 要求没有进行应用走查，不宣称整体 UX 已验收。
+[用例体验记录](native-capability-status.md)。遵照 owner 要求没有进行应用走查，不宣称整体 UX 已验收。
 
 2026-09-10 原生体验第一轮：我的内容直接呈现词义世界与材料浏览，我的学习集中学习状态、范围、准备和历史；
 收紧主界面层级并修复短窗口大字号溢出。组件与双平台本地主流程、冷恢复通过；owner 要求停止进一步走查，
-不据此宣布整体 UX 已验收。后续具体详情、编辑和学习呈现的优化范围见 [记录](native-navigation-refinement.md)。
+不据此宣布整体 UX 已验收。后续具体详情、编辑和学习呈现的优化范围见 [记录](native-capability-status.md)。
 
 2026-09-09 原生体验补齐：在推进 Web 本地执行前，先完成文案精简和简体中文／English 国际化，
 包含首次使用与设置入口、本机语言偏好、内置 Profile 显示、状态错误和原生连接向导。
-语言切换不改写学习事实和用户材料；双平台英文主流程与冷恢复、macOS 高保证英文流程及正常应用切换已有证据，见 [交付记录](native-localization-handoff.md)。
+语言切换不改写学习事实和用户材料；双平台英文主流程与冷恢复、macOS 高保证英文流程及正常应用切换已有证据，见 [交付记录](native-capability-status.md)。
 
 2026-09-09 第 6 组正式原生产品界面收口：正式首页/内容/学习/练习/设置替代默认验收壳，
 Profile 到轻量/高保证执行器、语义接纳、资源与采集接入保留 Rust 权威。
 macOS/Android 正式主流程、复习修复、独立冷恢复及资源回归通过；macOS 正常应用和系统选择/连接向导另有实况证据。
-详见 [整组交付](native-product-ui-handoff.md) 与 [验收矩阵](native-ui-acceptance-matrix.md)。
+详见 [整组交付](native-capability-status.md) 与 [验收矩阵](native-ui-acceptance-matrix.md)。
 六组既有能力的原生迁移范围现已收口；Web 本地执行、G1–G3 事实/同步、备份恢复、Windows/iOS 和生产发布仍未完成，M3 不由本次迁移替代。
 
 > 状态日期：2026-09-10\
@@ -60,36 +66,36 @@ owner 确认前端体验，再细化合同并纵向实现；该方式可根据�
 
 ## 1. 当前判断
 
-2026-09-09 采集交接大组完成：统一 Capture/Proposal 准入合同与本机回执、桌面 CLI/Native Messaging、插件 Web/原生接收目标选择、断线与浏览器重启恢复、本地 Agent Skill、原生导入/确认/刷新及 macOS/Android 冷恢复均接入，见 [整组记录](native-intake-group-handoff.md)。模型账号与保存目的地独立，本机原文采集无需账号；资料不经 Web 中转，也不启用同步。现有 Web 仍保留迁移期路径。已有 TS 能力的原生迁移已在后续第 6 组收口；Web 本地化、远程 Agent、移动系统分享、生产安装包、同步及 M3 未完成。
+2026-09-09 采集交接大组完成：统一 Capture/Proposal 准入合同与本机回执、桌面 CLI/Native Messaging、插件 Web/原生接收目标选择、断线与浏览器重启恢复、本地 Agent Skill、原生导入/确认/刷新及 macOS/Android 冷恢复均接入，见 [整组记录](native-capability-status.md)。模型账号与保存目的地独立，本机原文采集无需账号；资料不经 Web 中转，也不启用同步。现有 Web 仍保留迁移期路径。已有 TS 能力的原生迁移已在后续第 6 组收口；Web 本地化、远程 Agent、移动系统分享、生产安装包、同步及 M3 未完成。
 
-2026-09-09 Agent 协作增量：语言老师图文澄清、自然语言更正与明确接受，轻量内容工具循环/独立审核，以及自带 Key/Sensa Provider 接线已实现，见 [交付记录](native-agent-group-handoff.md)。安全凭据持久化、用途独立选择与既有入口统一见 [Provider 交付](native-provider-group-handoff.md)。可选文本资源、按揭示阶段呈现和本机准入治理见 [本轮记录](native-optional-resources-handoff.md)。参考事实供给、图文授权、coverage、流式与原生在线账户已在 [资源整组记录](native-resource-group-handoff.md) 补齐；原生迁移和 M3 尚未完成。
+2026-09-09 Agent 协作增量：语言老师图文澄清、自然语言更正与明确接受，轻量内容工具循环/独立审核，以及自带 Key/Sensa Provider 接线已实现，见 [交付记录](native-capability-status.md)。安全凭据持久化、用途独立选择与既有入口统一见 [Provider 交付](native-capability-status.md)。可选文本资源、按揭示阶段呈现和本机准入治理见 [本轮记录](native-capability-status.md)。参考事实供给、图文授权、coverage、流式与原生在线账户已在 [资源整组记录](native-capability-status.md) 补齐；原生迁移和 M3 尚未完成。
 
-2026-09-09 最新确认：[三端本地与共同事实模型](../adr/0003-three-client-local-facts.md) 已接受，替代下文历史记录中 Web 终局未定的范围。先建立事实模型并开始分层校验，继续原生迁移，再改造 React/TS Web 本地执行，最后完成真实三端/E2EE 验收；不会等 Web 完工才开始模型校验。本轮有界 G0 模型实验已通过乱序/重复、因果缺失、语义冲突及共同 Handoff 下的并发 Review 分类，见 [范围与证据](personal-library-fact-model.md)。尚非生产同步、完整调度收敛或 M3 完成；Anchor Use 已在后续原生纵切接入，静态发音/音频协作已在 [后续纵切](native-pronunciation-handoff.md) 接入；来源组织/Curriculum/Book Range 与完整记录查询已在 [整组交付](native-learning-organization-handoff.md) 补齐；Runtime scope 与自由练习已在 [整组记录](native-runtime-scope-handoff.md) 收口；个人语义世界的图文/草稿、表达连接与关系投影已在 [整组交付](native-world-group-handoff.md) 接入；原生资源与在线协作已在 [整组交付](native-resource-group-handoff.md) 收口；原生采集交接已在 [整组记录](native-intake-group-handoff.md) 完成；已有能力的六组原生迁移已收口，范围与仍保留的发布/同步门见迁移清单。
+2026-09-09 最新确认：[三端本地与共同事实模型](../adr/0003-three-client-local-facts.md) 已接受，替代下文历史记录中 Web 终局未定的范围。先建立事实模型并开始分层校验，继续原生迁移，再改造 React/TS Web 本地执行，最后完成真实三端/E2EE 验收；不会等 Web 完工才开始模型校验。本轮有界 G0 模型实验已通过乱序/重复、因果缺失、语义冲突及共同 Handoff 下的并发 Review 分类，见 [范围与证据](personal-library-fact-model.md)。尚非生产同步、完整调度收敛或 M3 完成；Anchor Use 已在后续原生纵切接入，静态发音/音频协作已在 [后续纵切](native-capability-status.md) 接入；来源组织/Curriculum/Book Range 与完整记录查询已在 [整组交付](native-capability-status.md) 补齐；Runtime scope 与自由练习已在 [整组记录](native-capability-status.md) 收口；个人语义世界的图文/草稿、表达连接与关系投影已在 [整组交付](native-capability-status.md) 接入；原生资源与在线协作已在 [整组交付](native-capability-status.md) 收口；原生采集交接已在 [整组记录](native-capability-status.md) 完成；已有能力的六组原生迁移已收口，范围与仍保留的发布/同步门见迁移清单。
 
-LF-1b 后续增量已接入有界轻量文本包导入、逐目标显式入学、选择/暂停恢复与每日新学上限。完整发布包/媒体仍未完成；导入平台证据见 [本轮记录](native-pack-import-handoff.md)。
+LF-1b 后续增量已接入有界轻量文本包导入、逐目标显式入学、选择/暂停恢复与每日新学上限。完整发布包/媒体仍未完成；导入平台证据见 [本轮记录](native-capability-status.md)。
 
 2026-09-08 本轮范围修订：四阶段只作内核扩展性验证，正式材料/UI 暂停，不作为当前迁移完成前置。
-改为优先高保证；fresh/repair Step 选择与通用账本组合已推进，见 [高保证迁移记录](native-assurance-orchestration-handoff.md)。首学队列、辅助回想规则、撤销及快照恢复的纯内核迁移已完成，见 [生命周期记录](native-assurance-lifecycle-handoff.md)；复习/重学纯生命周期及 effect 对照也已完成，见 [复习队列记录](native-assurance-review-handoff.md)；正式材料/评价/SQLite 事务/Flutter 已接入，并完成 Profile 到执行器的真实连接验收，见 [完整纵切记录](native-assurance-integration-handoff.md)。
+改为优先高保证；fresh/repair Step 选择与通用账本组合已推进，见 [高保证迁移记录](native-capability-status.md)。首学队列、辅助回想规则、撤销及快照恢复的纯内核迁移已完成，见 [生命周期记录](native-capability-status.md)；复习/重学纯生命周期及 effect 对照也已完成，见 [复习队列记录](native-capability-status.md)；正式材料/评价/SQLite 事务/Flutter 已接入，并完成 Profile 到执行器的真实连接验收，见 [完整纵切记录](native-capability-status.md)。
 
 2026-09-08 历史确认（Web 终局已由上文 ADR 0003 更新）：原生 PC/移动是主产品；Web 保留已有成果、暂停新增建设，是否开放以后决定。原生迁移必须完整承接现有 Web 功能、状态及学习内核扩展机制，不能把首发或技术验收范围当成最终范围。同步优先原生设备并保留 E2EE，Web WASM/互通不是当前前置条件。
 
-2026-09-09 在线语义协作增量：原生在线解析/可选 Focus 澄清、候选本地恢复和新 Sense 明确接受已接入，见 [交付记录](native-semantic-resolution-handoff.md)。个人意义显式入学、按需文本任务、独立校验/本地材料冻结与现有 Profile 学习已在 [后续交付](native-provisioning-handoff.md) 验证；候选本身仍不能直接标为可学习。原文 Anchor Use 授权/撤销、固定准备版本及后续材料替换已通过 [原生验收](native-anchor-use-handoff.md)，已开始的 Run 和历史保持固定；静态发音/音频获取、离线播放及失败回退已在 [后续纵切](native-pronunciation-handoff.md) 验证。来源组织/Curriculum/Book Range 与完整记录查询已在 [整组交付](native-learning-organization-handoff.md) 补齐；Runtime scope 与自由练习已在 [整组记录](native-runtime-scope-handoff.md) 收口；个人语义世界的图文/草稿、表达连接与关系投影已在 [整组交付](native-world-group-handoff.md) 接入；原生资源与在线协作已在 [整组交付](native-resource-group-handoff.md) 收口；原生采集交接已在 [整组记录](native-intake-group-handoff.md) 完成；已有能力的六组原生迁移已收口，范围与仍保留的发布/同步门见迁移清单。完整迁移与 M3 仍未完成。
+2026-09-09 在线语义协作增量：原生在线解析/可选 Focus 澄清、候选本地恢复和新 Sense 明确接受已接入，见 [交付记录](native-capability-status.md)。个人意义显式入学、按需文本任务、独立校验/本地材料冻结与现有 Profile 学习已在 [后续交付](native-capability-status.md) 验证；候选本身仍不能直接标为可学习。原文 Anchor Use 授权/撤销、固定准备版本及后续材料替换已通过 [原生验收](native-capability-status.md)，已开始的 Run 和历史保持固定；静态发音/音频获取、离线播放及失败回退已在 [后续纵切](native-capability-status.md) 验证。来源组织/Curriculum/Book Range 与完整记录查询已在 [整组交付](native-capability-status.md) 补齐；Runtime scope 与自由练习已在 [整组记录](native-capability-status.md) 收口；个人语义世界的图文/草稿、表达连接与关系投影已在 [整组交付](native-capability-status.md) 接入；原生资源与在线协作已在 [整组交付](native-capability-status.md) 收口；原生采集交接已在 [整组记录](native-capability-status.md) 完成；已有能力的六组原生迁移已收口，范围与仍保留的发布/同步门见迁移清单。完整迁移与 M3 仍未完成。
 
 2026-09-09 资源大组完成本机迁移：有来源参考资料、World 图文授权、表达关系/coverage 准备、
 兼容模型 SSE 预览、统一 Agent 静态发音，以及原生受邀邮箱登录/安全续期/在线访问会话与退出
-均接入；原生本机资料/学习不依赖登录。测试与保留边界见 [资源整组记录](native-resource-group-handoff.md)。
+均接入；原生本机资料/学习不依赖登录。测试与保留边界见 [资源整组记录](native-capability-status.md)。
 完整原生 UI、事实模型 G1–G3、Web 本地执行、备份/可选同步、M3 与生产发布门仍未完成。
 
 
-2026-09-09 个人语义世界增量：本机文本捕获/收件箱、已有 Sense 的直接接受、可选 Focus、移除恢复与显式入学已接入，见 [本轮记录](native-personal-world-handoff.md)。在线澄清/新 Sense 构造已在后续纵切接入；图文草稿/冷恢复、同上下文多义、表达分支和图谱已在 [整组记录](native-world-group-handoff.md) 验证。完整多模态模型解析、采集 transport 与正式视觉继续保留；完整迁移与 LF-1b 未完成。Policy Migration 经源盘点确认为未来蓝图能力，区别于已有 TS 待迁移项。
+2026-09-09 个人语义世界增量：本机文本捕获/收件箱、已有 Sense 的直接接受、可选 Focus、移除恢复与显式入学已接入，见 [本轮记录](native-capability-status.md)。在线澄清/新 Sense 构造已在后续纵切接入；图文草稿/冷恢复、同上下文多义、表达分支和图谱已在 [整组记录](native-capability-status.md) 验证。完整多模态模型解析、采集 transport 与正式视觉继续保留；完整迁移与 LF-1b 未完成。Policy Migration 经源盘点确认为未来蓝图能力，区别于已有 TS 待迁移项。
 
-本轮已将三种轻量 purpose 的纯推进/结算、可配置 FSRS 与历史重建迁入 Rust，并接回现有本地首学事务；见 [内核迁移记录](native-kernel-migration-handoff.md)和[完整性清单](native-migration-checklist.md)。轻量复习/重学的本地事务及 Flutter 等待/恢复已接入，见 [复习迁移记录](native-retention-handoff.md)；通用策略注册/Progression Kernel 的纯接口与组合校验已迁移，见 [进度内核记录](native-progression-handoff.md)；Policy Assignment、purpose plan/readiness 与首次 Run 固定已接入本地，见 [策略迁移记录](native-policy-handoff.md)；通用 Observation/Decision/Checkpoint 账本已接入原生 consumer，见 [账本迁移记录](native-progress-journal-handoff.md)；四阶段编排纯内核及快照恢复已迁移，见 [四阶段记录](native-four-stage-orchestration-handoff.md)；高保证的结构化材料、评价/事务适配和 Flutter UI 已贯通，Profile 执行连接已验证；正式 Activity/Mixed、每日 Introduction、签到和近期记录/去重汇总已贯通，见 [活动交付记录](native-activity-integration-handoff.md)；完整 Curriculum/范围选择仍待迁移；Policy Migration 保留为未来蓝图；四阶段正式材料/UI 按本轮 Owner 指示暂停；完整 LF-1b 未完成。
+本轮已将三种轻量 purpose 的纯推进/结算、可配置 FSRS 与历史重建迁入 Rust，并接回现有本地首学事务；见 [内核迁移记录](native-capability-status.md)和[完整性清单](native-migration-checklist.md)。轻量复习/重学的本地事务及 Flutter 等待/恢复已接入，见 [复习迁移记录](native-capability-status.md)；通用策略注册/Progression Kernel 的纯接口与组合校验已迁移，见 [进度内核记录](native-capability-status.md)；Policy Assignment、purpose plan/readiness 与首次 Run 固定已接入本地，见 [策略迁移记录](native-capability-status.md)；通用 Observation/Decision/Checkpoint 账本已接入原生 consumer，见 [账本迁移记录](native-capability-status.md)；四阶段编排纯内核及快照恢复已迁移，见 [四阶段记录](native-capability-status.md)；高保证的结构化材料、评价/事务适配和 Flutter UI 已贯通，Profile 执行连接已验证；正式 Activity/Mixed、每日 Introduction、签到和近期记录/去重汇总已贯通，见 [活动交付记录](native-capability-status.md)；完整 Curriculum/范围选择仍待迁移；Policy Migration 保留为未来蓝图；四阶段正式材料/UI 按本轮 Owner 指示暂停；完整 LF-1b 未完成。
 
 2026-09-08 Owner 已确认转向[完整本地学习库＋可选端到端加密同步](../adr/0001-local-library-optional-encrypted-sync.md)，
 允许服务器保存密文副本，并提供可下载资源和按需在线服务。状态是“迁移已启动，共用结算提取与回归已通过；整库/客户端尚未切换”。
 下述 Postgres 权威、本地只存意图/投影、服务器专属结算及账号前置等描述属于现有实现和旧交付基线；
 后续实施前需按新方向修订，不能把当前本地缓存视为独立学习库或端到端加密同步已经完成。
-浏览器体验优化本轮已结束，后续清单继续保留；当前按 [本地学习库迁移蓝图](local-library-migration-blueprint.md)推进 LF-0/LF-1a：明确数据归属与迁移用例，并将既有 API 结算规则迁入平台无关 Kernel。[LF-1a 交付与验证记录](local-settlement-handoff.md)已完成。当前实施 LF-1b 单设备学习库的首个原生技术纵切，语言和职责按 [ADR 0002](../adr/0002-flutter-rust-local-core.md)。Flutter 界面以正式 Web 已确认的页面与行为为参考，针对桌面/移动重新实现。首学 SQLite 事务、macOS 独立进程恢复及 Android 飞行模式下首学/独立进程恢复均已验证，见 [原生纵切记录](native-local-learning-handoff.md)。一般资源导入、完整复习/重学、备份恢复和加密同步均尚未验收，不能将这个合成材料验收壳视为完整 LF-1b 或产品 UI 已交付。
+浏览器体验优化本轮已结束，后续清单继续保留；当前按 [本地学习库迁移蓝图](local-library-migration-blueprint.md)推进 LF-0/LF-1a：明确数据归属与迁移用例，并将既有 API 结算规则迁入平台无关 Kernel。[LF-1a 交付与验证记录](local-settlement-handoff.md)已完成。当前实施 LF-1b 单设备学习库的首个原生技术纵切，语言和职责按 [ADR 0002](../adr/0002-flutter-rust-local-core.md)。Flutter 界面以正式 Web 已确认的页面与行为为参考，针对桌面/移动重新实现。首学 SQLite 事务、macOS 独立进程恢复及 Android 飞行模式下首学/独立进程恢复均已验证，见 [原生纵切记录](native-capability-status.md)。一般资源导入、完整复习/重学、备份恢复和加密同步均尚未验收，不能将这个合成材料验收壳视为完整 LF-1b 或产品 UI 已交付。
 
 2026-09-08 owner 体验发现：此前 M1/M2 简化页面没有完整沿用已确认 UI，历史功能验证
 不能替代界面验收。本轮已将已实现链路接回既有首页、学习/账号/目录及 Runtime 组件，
@@ -106,7 +112,7 @@ Sensa 已具备开始生产化的领域、行为和工程基础。当前最主�
 
 当前仓库存在进度不同的实现：
 
-- apps/sensa_native + crates/sensa-core/sensa-library：新架构下的 Flutter/Rust/SQLite 首学技术验收壳；范围与验证见 [原生纵切记录](native-local-learning-handoff.md)，不能等同完整学习产品。
+- apps/sensa_native + crates/sensa-core/sensa-library：新架构下的 Flutter/Rust/SQLite 首学技术验收壳；范围与验证见 [原生纵切记录](native-capability-status.md)，不能等同完整学习产品。
 
 - apps/web + apps/api：保留较早 first-user 纵切；正式 production 入口已完成 M1-A–E 的
   consumer-v1/Sync v3、Postgres、账号独立 IndexedDB/outbox、目标准备、首学、复习、

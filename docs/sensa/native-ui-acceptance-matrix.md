@@ -18,7 +18,7 @@ Owner 同意沿用 apps/web 已确认体验并适配 Flutter 桌面/移动；测
 ## 用例清单
 
 下表“现有证据”指历史迁移测试入口，并非这次重新执行或正式 UI 已完成。
-下表保留施工要求；各项实际执行结果在 [正式产品界面交付记录](native-product-ui-handoff.md) 中登记。不得把历史测试壳的结果算成正式导航证据。
+下表保留施工要求；各项实际执行结果在 [正式产品界面交付记录](native-capability-status.md) 中登记。不得把历史测试壳的结果算成正式导航证据。
 自动化入口的真实依赖、替身、恢复前置由 `npm run sensa:acceptance -- plan <组 ID>` 展开。
 
 | 用例 ID / 用户结果 | apps/web 依据（src 下） | 原生现有入口 / 证据组 | 最后一组必须补齐的证据 |
@@ -34,7 +34,7 @@ Owner 同意沿用 apps/web 已确认体验并适配 Flutter 桌面/移动；测
 | UI-09 资源准备、审核、参考和音频 | experience/learningRuntime/contentAgentProvisioning.ts；components/ReferenceDictionaryScreen.tsx | preparation_screen.dart、reference_source_panel.dart、pronunciation_view.dart；native-resources、native-preparation | pending/失败/重试、独立审核后冻结、参考来源、文本回退、音频离线；不播放/不展示未准入内容；不误称宽词典已交付 |
 | UI-10 自由练习 | experience/components/SensaFreePracticeScreen.tsx、YouGlishListeningScreen.tsx | practice_screen.dart；native-practice | scope、不可用/重试、退出恢复、真实播放器边界；正式证据/进度/调度保持不变 |
 | UI-11 本地 Provider 与可选在线账号 | experience/components/ProfileScreen.tsx；account/SensaApp.tsx；原生 Provider 既有合同 | agent_screen.dart、provider_login_screen.dart；native-agent、native-vault、native-provider-account | 设置用途/连接、失败重试、退出、凭据失效；无账号仍可本地学习；模型和邮件实况单独记录 |
-| UI-12 浏览器/Agent 交接和本机刷新 | 浏览器 popup/options；native-intake-group-plan.md | intake_connection_screen.dart；native-intake、intake-bridge | 目的地明确、取消无提交、错误库拒绝、断线排队、回执确认、重启重试、资料显示且不自动入学；实际安装/系统边界单列 |
+| UI-12 浏览器/Agent 交接和本机刷新 | 浏览器 popup/options；native-capability-status.md | intake_connection_screen.dart；native-intake、intake-bridge | 目的地明确、取消无提交、错误库拒绝、断线排队、回执确认、重启重试、资料显示且不自动入学；实际安装/系统边界单列 |
 
 以上是可追踪的关键任务，不按行数计算完成率。细分断言来自既有测试和领域规则；实现中发现
 遗漏的已有 Web 行为需要补入对应行，不能以当前表行数冻结范围。

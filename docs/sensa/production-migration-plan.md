@@ -1,5 +1,10 @@
 # Sensa 生产化路线图
 
+2026-09-10 最新产品体验以 PRD 为准：账号优先、默认 Sensa 模型服务，BYOK 收进高级设置。
+先统一现有完整主应用和插件的账号/服务体验，再完成选择学习包、下载、显式入学和本地运行。
+“本地学习不依赖账号在线”指已初始化库的持续执行，不取消首次注册/登录入口。
+Intake 与主应用统一准入和交接回执，禁止用新简化页面替代完整产品验收。
+
 2026-09-10 owner 优先级更新：暂停原生 UI 优化，优先完成正式 Web 并达到上线可用。
 该指示覆盖下文旧的“Web 暂停”及“先继续原生优化”顺序，不撤销 ADR 0003 的本地权威与
 可选 E2EE 同步边界，也不构成 push/deploy 授权。实际缺口、代码位置与本轮结果见
@@ -20,16 +25,16 @@
 跨账号数据污染属于当前可独立关闭的 P0，先修复旧 consumer 客户端的身份绑定并加入回归，
 不为修复旧路径扩大服务器权威架构。每条通过验收的纵切 checkpoint，持续推进上述依赖。
 
-2026-09-09 当前顺序更新：[ADR 0003](../adr/0003-three-client-local-facts.md) 确认三端本地终景。事实模型 G0 现在开始验；原生迁移中接入真实事实适配/多副本 G1，随后 React/TS 本地改造与跨语言 G2，再做三端/E2EE G3。具体门与本轮有限证据见 [事实模型蓝图](personal-library-fact-model.md)。后文 Web 暂停/是否开放未定是旧顺序，不再定义终局范围；原生 Anchor Use 已在 [后续纵切](native-anchor-use-handoff.md) 验证，静态发音/音频协作已在 [后续纵切](native-pronunciation-handoff.md) 接入；下一用例继续学习组织的来源选择/Curriculum/Book Range。
+2026-09-09 当前顺序更新：[ADR 0003](../adr/0003-three-client-local-facts.md) 确认三端本地终景。事实模型 G0 现在开始验；原生迁移中接入真实事实适配/多副本 G1，随后 React/TS 本地改造与跨语言 G2，再做三端/E2EE G3。具体门与本轮有限证据见 [事实模型蓝图](personal-library-fact-model.md)。后文 Web 暂停/是否开放未定是旧顺序，不再定义终局范围；原生 Anchor Use 已在 [后续纵切](native-capability-status.md) 验证，静态发音/音频协作已在 [后续纵切](native-capability-status.md) 接入；下一用例继续学习组织的来源选择/Curriculum/Book Range。
 
-2026-09-08 原生增量：轻量到期复习与再学习已接入 Rust/SQLite/Flutter，事务和平台验证见 [交付记录](native-retention-handoff.md)。通用 Progression Kernel 与策略组合引用校验的纯接口随后已迁移并接入原生组合入口，见 [进度内核记录](native-progression-handoff.md)。这些记录不将正式 Activity/Mixed/去重汇总、完整 Runtime 编排或完整 LF-1b 标记为完成。 Policy Assignment、purpose plan/readiness 与首次 Run 固定已继续接入，见 [策略迁移记录](native-policy-handoff.md)；完整模式执行与 Policy Migration 仍待完成。 通用进度账本随后已接入原生 consumer，见 [账本记录](native-progress-journal-handoff.md)，不代表多阶段执行器已交付。 四阶段纯编排与恢复格式已继续迁移，见 [四阶段记录](native-four-stage-orchestration-handoff.md)，正式材料、评价、事务适配与 Flutter 呈现仍是开放前置。
+2026-09-08 原生增量：轻量到期复习与再学习已接入 Rust/SQLite/Flutter，事务和平台验证见 [交付记录](native-capability-status.md)。通用 Progression Kernel 与策略组合引用校验的纯接口随后已迁移并接入原生组合入口，见 [进度内核记录](native-capability-status.md)。这些记录不将正式 Activity/Mixed/去重汇总、完整 Runtime 编排或完整 LF-1b 标记为完成。 Policy Assignment、purpose plan/readiness 与首次 Run 固定已继续接入，见 [策略迁移记录](native-capability-status.md)；完整模式执行与 Policy Migration 仍待完成。 通用进度账本随后已接入原生 consumer，见 [账本记录](native-capability-status.md)，不代表多阶段执行器已交付。 四阶段纯编排与恢复格式已继续迁移，见 [四阶段记录](native-capability-status.md)，正式材料、评价、事务适配与 Flutter 呈现仍是开放前置。
 
 2026-09-08 Owner 范围调整：四阶段只作扩展性测试，正式材料/UI 暂停；高保证是当前优先迁移对象。
-高保证 fresh/repair 选择器与首学队列纯生命周期已迁移，见 [选择器记录](native-assurance-orchestration-handoff.md)及[生命周期记录](native-assurance-lifecycle-handoff.md)。复习/重学纯队列与 effect 对照已完成，见 [复习队列记录](native-assurance-review-handoff.md)。2026-09-09 材料、评价、原生事务和 Flutter 界面已贯通，Profile 执行接线已验收，见 [完整纵切记录](native-assurance-integration-handoff.md)；完整产品迁移与 M3 仍保留。
+高保证 fresh/repair 选择器与首学队列纯生命周期已迁移，见 [选择器记录](native-capability-status.md)及[生命周期记录](native-capability-status.md)。复习/重学纯队列与 effect 对照已完成，见 [复习队列记录](native-capability-status.md)。2026-09-09 材料、评价、原生事务和 Flutter 界面已贯通，Profile 执行接线已验收，见 [完整纵切记录](native-capability-status.md)；完整产品迁移与 M3 仍保留。
 
-2026-09-09 学习组织增量：Activity/Mixed、Review-only、每日 Introduction 计数、独立签到和近期学习记录/去重汇总已接入本地学习主链，见 [活动纵切记录](native-activity-integration-handoff.md)。完整 Curriculum/范围选择、正式产品 IA、Policy Migration 与其余迁移仍保留；不据此关闭 LF-1b 或 M3。
+2026-09-09 学习组织增量：Activity/Mixed、Review-only、每日 Introduction 计数、独立签到和近期学习记录/去重汇总已接入本地学习主链，见 [活动纵切记录](native-capability-status.md)。完整 Curriculum/范围选择、正式产品 IA、Policy Migration 与其余迁移仍保留；不据此关闭 LF-1b 或 M3。
 
-2026-09-09 个人语义世界增量：已有本机 Sense 的文本快轨/收件箱、独立接受、移除恢复和显式入学已贯通，见 [交付记录](native-personal-world-handoff.md)。在线语义解析/澄清与本地新 Sense 接受已在 [后续纵切](native-semantic-resolution-handoff.md) 接入；显式入学与按需文本任务/冻结材料化也已在 [原生内容纵切](native-provisioning-handoff.md) 接入现有 Profile 学习。Anchor Use 授权/撤销与材料替换已在 [原生纵切](native-anchor-use-handoff.md) 通过双平台主流程/恢复，静态发音/音频协作已在 [后续纵切](native-pronunciation-handoff.md) 接入；下一项继续学习组织的来源选择/Curriculum/Book Range。完整多模态、图谱及其余迁移不因此关闭。
+2026-09-09 个人语义世界增量：已有本机 Sense 的文本快轨/收件箱、独立接受、移除恢复和显式入学已贯通，见 [交付记录](native-capability-status.md)。在线语义解析/澄清与本地新 Sense 接受已在 [后续纵切](native-capability-status.md) 接入；显式入学与按需文本任务/冻结材料化也已在 [原生内容纵切](native-capability-status.md) 接入现有 Profile 学习。Anchor Use 授权/撤销与材料替换已在 [原生纵切](native-capability-status.md) 通过双平台主流程/恢复，静态发音/音频协作已在 [后续纵切](native-capability-status.md) 接入；下一项继续学习组织的来源选择/Curriculum/Book Range。完整多模态、图谱及其余迁移不因此关闭。
 
 > 状态：Active roadmap\
 > 更新日期：2026-09-10\

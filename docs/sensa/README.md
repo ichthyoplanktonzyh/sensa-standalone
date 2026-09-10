@@ -47,6 +47,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 
 | 状态 | 文档 | 职责 |
 | --- | --- | --- |
+| Native implementation status | [`native-capability-status.md`](native-capability-status.md) | 原生能力、历史验收、未关闭边界与过程原文 Git 追溯；替代分轮次计划/交接/优化记录 |
 | Canonical stage | [`current-stage.md`](current-stage.md) | 当前里程碑、证据级别和交付边界 |
 | Canonical product | [`product-requirements-v1.md`](product-requirements-v1.md) | V1 IA、用户旅程和交互验收 |
 | Accepted first-round scope | [`first-round-product-baseline.md`](first-round-product-baseline.md) | M0-1 首轮九个能力区、浏览器采集插件边界及产品/插件/通用状态矩阵；不替代领域与 API 合同 |
@@ -77,37 +78,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M2-D local recovery | [`m2-d-extension-recovery-handoff.md`](m2-d-extension-recovery-handoff.md) | 插件原账号队列、版本保护及实际原生 activeTab 权限恢复的本地证据 |
 | Local settlement extraction | [`local-settlement-handoff.md`](local-settlement-handoff.md) | LF-1a 共用结算与 Node/断网 Chrome/隔离 Postgres 回归；本地库持久化仍待实施 |
 | Personal library facts | [`../adr/0003-three-client-local-facts.md`](../adr/0003-three-client-local-facts.md) / [`personal-library-fact-model.md`](personal-library-fact-model.md) | 三端本地终景、事实/版本/投影、分层验收门及有界模型实验；生产同步与调度裁决未完成 |
-| Native learning organization | [`native-learning-organization-plan.md`](native-learning-organization-plan.md) / [`native-learning-organization-handoff.md`](native-learning-organization-handoff.md) | Book/Enrollment/Range、来源过滤与排序、固定 Activity scope、完整学习记录查询及两端恢复 |
-| Native pronunciation | [`native-pronunciation-plan.md`](native-pronunciation-plan.md) / [`native-pronunciation-handoff.md`](native-pronunciation-handoff.md) | 静态发音绑定/获取/摘要校验、本机缓存与离线播放、可选失败回退；不改变学习事实 |
-| Native anchor use | [`native-anchor-use-plan.md`](native-anchor-use-plan.md) / [`native-anchor-use-handoff.md`](native-anchor-use-handoff.md) | 固定原文授权/撤销、准备版本与材料替换、旧 Run 保留、原生冷恢复；音频见后续交付 |
-| Native content provisioning | [`native-provisioning-plan.md`](native-provisioning-plan.md) / [`native-provisioning-handoff.md`](native-provisioning-handoff.md) | 个人意义显式入学、按需文本任务、独立复核/本地冻结及现有 Profile 学习与原生恢复证据 |
-| Native semantic resolution | [`native-semantic-resolution-plan.md`](native-semantic-resolution-plan.md) / [`native-semantic-resolution-handoff.md`](native-semantic-resolution-handoff.md) | 在线解析/澄清、本地候选与新 Sense 接受、服务用量去重及原生恢复证据 |
-| Native Personal World | [`native-world-group-plan.md`](native-world-group-plan.md) / [`native-world-group-handoff.md`](native-world-group-handoff.md) | 图文草稿、本机语义连接、表达分支与关系投影；模型协作见 Native Agent 记录 |
-| Native resource group | [`native-resource-group-plan.md`](native-resource-group-plan.md) / [`native-resource-group-handoff.md`](native-resource-group-handoff.md) | 参考资料来源生命周期、图文授权、关系准备、流式/静态发音与原生在线账户的整组收口 |
-| Native intake group | [`native-intake-group-handoff.md`](native-intake-group-handoff.md) | 插件可选原生库、CLI/Native Messaging、统一准入回执、Codex Skill、断线/重启恢复与双平台导入验收 |
-| Native practice | [`native-practice-refinement.md`](native-practice-refinement.md) | 四类练习卡片及诚实占位、独立范围页、固定会话恢复和自适应播放器；验证边界见记录 |
-| Native study | [`native-study-refinement.md`](native-study-refinement.md) | 学习范围与计划、直接调整数量/方式、准备入口、内联签到日历和近期活动；验证边界见记录 |
-| Native home | [`native-home-refinement.md`](native-home-refinement.md) | 首页数字与主操作层级、真实可用状态、直接记录情境及桌面/手机自适应；验证边界见记录 |
-| Native use-case UX | [`native-use-case-ux-refinement.md`](native-use-case-ux-refinement.md) | 意义详情/复制编辑、采集离开保护、学习题面与输入、手机关系浏览、准备与服务设置分层；程序验收边界见记录 |
-| Native localization | [`native-localization-handoff.md`](native-localization-handoff.md) | 原生中英文切换、本机界面偏好、文案精简及分层验收；学习内容语言保持原合同 |
-| Native product UI | [`native-product-ui-handoff.md`](native-product-ui-handoff.md) | 正式导航、Profile 与学习执行器、平台连接向导、双平台程序回归和实际体验证据 |
-| Native optional resources | [`native-optional-resources-plan.md`](native-optional-resources-plan.md) / [`native-optional-resources-handoff.md`](native-optional-resources-handoff.md) | 可选文本角色、独立审核、本机准入与分阶段呈现；上游生产工具仍保留 |
-| Native Provider 与凭据 | [`native-provider-group-plan.md`](native-provider-group-plan.md) / [`native-provider-group-handoff.md`](native-provider-group-handoff.md) | 系统安全存储、用途独立选择、统一模型入口与 Capture 老师循环 |
-| Native Agent 协作 | [`native-agent-group-plan.md`](native-agent-group-plan.md) / [`native-agent-group-handoff.md`](native-agent-group-handoff.md) | 语言老师图文澄清、内容工具循环、独立审核与本机 Provider 接线 |
-| Native Runtime scope / practice | [`native-runtime-scope-plan.md`](native-runtime-scope-plan.md) / [`native-runtime-scope-handoff.md`](native-runtime-scope-handoff.md) | 独立 scope 准入、个人/课程范围、独立自由练习账本与原生播放器验收 |
 | Native migration checklist | [`native-migration-checklist.md`](native-migration-checklist.md) | 已有 TS 成果的保留/迁移范围、验收状态；首版登记，待逐项盘点 |
-| Native pack import | [`native-pack-import-contract.md`](native-pack-import-contract.md) / [`native-pack-import-handoff.md`](native-pack-import-handoff.md) | 有界文本包、显式入学、多目标首学、版本保护与原生验收；完整发布包/媒体仍待迁移 |
-| Native progression | [`native-progression-handoff.md`](native-progression-handoff.md) | 通用 Checkpoint 进度、正交策略 Registry、组合引用校验与原生入口；通用持久化/多阶段 UI 仍待接入 |
-| Native policy | [`native-policy-handoff.md`](native-policy-handoff.md) | 策略分配、purpose 准备状态、首次 Run 固定及本地 schema 升级；其他学习模式仍待接入 |
-| Native progress journal | [`native-progress-journal-handoff.md`](native-progress-journal-handoff.md) | Observation/Decision/Checkpoint SQLite 账本、consumer 接入与历史恢复；多阶段编排仍待迁移 |
-| Native four-stage orchestration | [`native-four-stage-orchestration-handoff.md`](native-four-stage-orchestration-handoff.md) | 四阶段与复习队列、版本化快照和源差分；Owner 已将其定位为扩展性验证，正式材料/UI 暂停 |
-| Native assurance orchestration | [`native-assurance-orchestration-handoff.md`](native-assurance-orchestration-handoff.md) | 高保证 Step 选择、定向修复与通用账本组合；完整生命周期、评价/事务及界面仍待迁移 |
-| Native assurance lifecycle | [`native-assurance-lifecycle-handoff.md`](native-assurance-lifecycle-handoff.md) | 高保证首学队列、撤销/恢复；复习重学及产品接入仍待迁移 |
-| Native assurance integration | [`native-assurance-integration-handoff.md`](native-assurance-integration-handoff.md) | 正式发布物/判题/媒体、SQLite 高保证三 purpose、Flutter 平台恢复及 Profile 执行连接验收 |
-| Native assurance review | [`native-assurance-review-handoff.md`](native-assurance-review-handoff.md) | 高保证复习/重学队列与 effect 对照；正式原生路径仍待接入 |
-| Native retention | [`native-retention-handoff.md`](native-retention-handoff.md) | 轻量本地复习结算、等待/提前/同 Run 恢复及原生验证；正式 Activity 与去重汇总仍待迁移 |
-| Native kernel migration | [`native-kernel-migration-handoff.md`](native-kernel-migration-handoff.md) | 三 purpose 决策、可配置 FSRS、TS 差分及本地首学事务接入；完整原生复习仍待完成 |
-| Native local learning slice | [`native-local-learning-handoff.md`](native-local-learning-handoff.md) | Flutter/Rust/SQLite 首学技术纵切的实际证据与未完成边界 |
 | Native client architecture | [`../adr/0002-flutter-rust-local-core.md`](../adr/0002-flutter-rust-local-core.md) | Flutter/Dart 主应用、Rust 本地权威、TS 浏览器/云端；正式 Web 界面作为参考，首个原生技术纵切已在 macOS/Android 验证 |
 | Local library migration | [`local-library-migration-blueprint.md`](local-library-migration-blueprint.md) | 本地领域/存储/服务职责、单设备首条用例、浏览器交接、同步设计门与旧数据回退；整库离线尚未交付 |
 | Active roadmap | [`production-migration-plan.md`](production-migration-plan.md) | M0–M5 生产化路线图：正式产品与消费契约、生产闭环、恢复与数据控制、受邀发布和用户验证；含依赖、验收门与当前待办 |

@@ -9,6 +9,16 @@ is one learner-specific Sense–target-expression connection. A versioned,
 learner-selectable Learning Policy coordinates purpose-specific Learning Protocols
 that establish, check, strengthen or restore that connection across long-term retention.
 
+## Product access and surfaces
+
+**Intake Surface**: An entry for capturing and processing information where it is encountered. It may complete explanation and valid Semantic Acceptance locally in the interaction, or hand off unfinished work with its source and acceptance state.
+
+**Main Application**: A complete user application for organizing personal meanings, continuing clarification, managing learning and running learning activities. Web, desktop and mobile are main application surfaces; they may also host Intake.
+
+**Online Service**: Account, entitlement, resource, model and synchronization support used by the product. An online service is distinct from a main application and does not own a learner's local learning facts.
+
+**Default Service / Custom Provider**: Sensa is the default managed model service for ordinary users. A custom model provider is an advanced user choice, not a prerequisite for learning downloaded content.
+
 ## Content language
 
 **Lexeme**:  

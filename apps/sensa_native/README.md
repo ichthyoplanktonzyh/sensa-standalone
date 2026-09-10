@@ -120,11 +120,11 @@ flutter test integration_test/retention_test.dart -d macos --dart-define=SENSA_N
 ```
 
 For Android replace `-d macos` with `-d emulator-5554 --no-uninstall` in both runs.
-See `../../docs/sensa/native-retention-handoff.md` for scope and evidence.
+See `../../docs/sensa/native-capability-status.md` for scope and evidence.
 
 The local composition root (`crates/sensa-library/src/composition.rs`) validates
 its actually implemented capabilities before opening SQLite. The core's broader
 policy inventory does not enable extra native learning modes. Generic Checkpoint
 progression is available as a Rust interface; its SQLite lifecycle and Flutter
 multi-stage renderers are separate migration work. See
-`../../docs/sensa/native-progression-handoff.md`.
+`../../docs/sensa/native-capability-status.md`.
