@@ -1,6 +1,7 @@
+import {generateLearningCandidate,type ContentGenerationStep} from './contentGenerationLoop';
 import {z} from 'zod';
 import {stableUuid} from '@sensa/learning-kernel';
-import {makeRequest,makeBundle,validateBundle,modelFacts,generationSystem,independentReviewSystem,SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,canonicalConsumerJson,type SensaContentGenerationRequest,type SensaMaterialCandidateBundle,type ContentReviewer} from '@sensa/contracts/sensa';
+import {makeRequest,validateBundle,modelFacts,independentReviewSystem,SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,canonicalConsumerJson,type SensaContentGenerationRequest,type SensaMaterialCandidateBundle,type ContentReviewer} from '@sensa/contracts/sensa';
 import {command,readLibrary,type LibraryTransaction} from './store';
 import {learningOwner} from './packages';
 import {commitPersonalMaterial,type LocalLearningTarget} from './learning';
@@ -9,7 +10,7 @@ import type {LocalDraft} from './drafts';
 import {defaultSensaProvider,type Provider,type ProviderSettings} from './providers';
 import {complete,digest} from './transport';
 export type PersonalLearning={id:string;meaning:LocalMeaning;targetId:string;planRevision:string;useContext:boolean;status:'waiting'|'generating'|'reviewing'|'failed'|'rejected'|'stopped'|'ready';attemptId:string|null;leaseUntil:number;notice:string;createdAt:string};
-export type ContentAttempt={id:string;taskId:string;createdAt:string;contentProvider:Provider;reviewProvider:Provider|null;request:SensaContentGenerationRequest|null;bundle:SensaMaterialCandidateBundle|null;review:Awaited<ReturnType<ContentReviewer>>|null;validation:Awaited<ReturnType<typeof validateBundle>>|null;status:string;resumedFrom:string|null;grant:{id:string;contextDigest:string;recipients:string[]}|null};
+export type ContentAttempt={generationSteps?:ContentGenerationStep[];id:string;taskId:string;createdAt:string;contentProvider:Provider;reviewProvider:Provider|null;request:SensaContentGenerationRequest|null;bundle:SensaMaterialCandidateBundle|null;review:Awaited<ReturnType<ContentReviewer>>|null;validation:Awaited<ReturnType<typeof validateBundle>>|null;status:string;resumedFrom:string|null;grant:{id:string;contextDigest:string;recipients:string[]}|null};
 export const personalLearningSnapshot=()=>readLibrary(tx=>tx.all<PersonalLearning>('personalLearning'));
 async function currentMeaning(tx:LibraryTransaction,meaning:LocalMeaning){
  const current=await tx.get<LocalMeaning>('meanings',meaning.id),draft=await tx.get<LocalDraft>('drafts',meaning.draftId);
@@ -56,10 +57,9 @@ export async function preparePersonal(id:string,contentProvider:Provider,reviewP
   if(!request||!bundle){
    grant=begun.task.useContext?{id:crypto.randomUUID(),contextDigest:await digest(m.context),recipients:[...new Set([contentProvider.endpoint,...(reviewProvider?[reviewProvider.endpoint]:[])])]}:null;
    request=await makeRequest({id,learner_user_id:begun.owner.learnerId,learning_target_id:begun.task.targetId,fixed_input:{senseId:m.senseId,senseVersionId:m.senseVersionId,bindingId:m.bindingId,bindingVersionId:m.bindingVersionId,planRevision:begun.task.planRevision,expression:m.proposal.expression.surface,expressionKind:m.proposal.expression.type==='word'?'word':'phrase',meaning:m.proposal.semanticSpec.coreMeaningFocus,prototype:m.proposal.semanticSpec.prototypeScenes[0].summary,...(grant?{anchor:{sentence:m.context,contextVersion:grant.contextDigest,grantId:grant.id}}:{}),demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND}},attemptId,new Date());
+   request={...request,attemptBudget:{...request.attemptBudget,maxModelTurns:3}};
    await save(async(_tx,_task,a)=>{a.request=request;a.grant=grant;});
-   const generated=await complete(contentProvider,'content',crypto.randomUUID(),[{role:'system',content:generationSystem(!!grant)},{role:'user',content:JSON.stringify(modelFacts(request))}],[],AbortSignal.any([runSignal,AbortSignal.timeout(request.attemptBudget.timeoutMs)]));
-   const message=generated.choices[0]!.message;if(message.tool_calls?.length)throw new Error('localFlow.generationToolDenied');
-   bundle=await makeBundle(request,{cue:JSON.parse(message.content??'null'),provider:contentProvider.id,model:generated.model},new Date());
+   bundle=await generateLearningCandidate(request,contentProvider,!!grant,runSignal,async step=>{await save(async(_tx,_task,a)=>{a.generationSteps=[...(a.generationSteps??[]),step];});});
    await save(async(_tx,task,a)=>{a.bundle=bundle;task.status='reviewing';a.status='reviewing';});onSaved();
   }
   let review:ContentAttempt['review']=null;

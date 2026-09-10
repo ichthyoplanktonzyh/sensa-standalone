@@ -55,6 +55,7 @@ type Filter = "all" | "continue" | "binding" | "complete";
 const button =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3c51ad] disabled:opacity-50";
 const labelFor = (item: JourneyWorldItemView) =>
+  item.detail.directAlignments[0]?.confirmedBindings[0]?.surfaceForm ||
   item.experienceAnchors[0]?.surfaceForm ||
   item.familiarAnchors[0]?.surfaceForm ||
   item.primaryLabel;

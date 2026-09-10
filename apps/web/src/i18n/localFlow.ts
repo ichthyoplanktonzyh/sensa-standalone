@@ -1,4 +1,12 @@
 export const localFlowZh = {
+"savedExpression":"内容详情",
+"expressionDetails":"表达详情",
+"conversationHistory":"原始材料与对话",
+"learningChoice":"学习",
+"learningPreparation":"学习资源准备",
+"learningReady":"已加入学习集合",
+"fixedLightweight":"学习方式：轻量学习",
+
 "imageConversation":"图片对话",
 "findExpression":"找个表达",
 "expressionInput":"你想表达什么？",
@@ -50,7 +58,7 @@ export const localFlowZh = {
   "preparationLimit": "这条内容今天的准备次数已达上限，请稍后再试。",
   "requestStopped": "请求已停止。",
   "generationToolDenied": "材料生成返回了未授权的工具请求。",
-  "validationRejected": "资源未通过代码校验，请重新生成。",
+  "validationRejected": "资源未通过检查，请重新生成。",
   "generationRecipient": "生成：{{content}}。",
   "reviewToolDenied": "审核返回了未授权的工具请求。",
   "materialReady": "资源已通过检查，可以开始学习。",
@@ -153,7 +161,7 @@ export const localFlowZh = {
   "disclosure": "。点击生成时发送已确认的意思与表达",
   "sourceIncluded": "及这段原文",
   "sourceExcluded": "，默认不发送原始采集内容",
-  "sourceConsent": "允许上述服务使用这段原文，生成贴合原场景的学习材料。",
+  "sourceConsent": "使用我的场景准备学习内容。",
   "generating": "正在生成学习资源…",
   "reviewing": "正在检查资源…",
   "stopPreparation": "停止准备",
@@ -282,6 +290,14 @@ export const localFlowZh = {
 "clearDone":"本机资料已清除。重新打开应用可开始使用空资料库。"
 };
 export const localFlowEn: Record<keyof typeof localFlowZh,string> = {
+"savedExpression":"Content details",
+"expressionDetails":"Expression details",
+"conversationHistory":"Original material and conversation",
+"learningChoice":"Learning",
+"learningPreparation":"Preparing learning resources",
+"learningReady":"In your learning collection",
+"fixedLightweight":"Learning method: Lightweight",
+
 "imageConversation":"Image conversation",
 "findExpression":"Find an expression",
 "expressionInput":"What would you like to express?",
@@ -436,7 +452,7 @@ export const localFlowEn: Record<keyof typeof localFlowZh,string> = {
   "disclosure": ". Generation sends the confirmed meaning and expression",
   "sourceIncluded": " along with this source text",
   "sourceExcluded": ", without the original captured content",
-  "sourceConsent": "Allow the services listed above to use this source text for materials based on the original context.",
+  "sourceConsent": "Use my context to prepare learning content.",
   "generating": "Generating learning resources…",
   "reviewing": "Checking resources…",
   "stopPreparation": "Stop preparation",

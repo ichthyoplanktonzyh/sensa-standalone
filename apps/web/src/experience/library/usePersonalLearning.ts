@@ -11,9 +11,10 @@ export function usePersonalLearning(){
  const refresh=async()=>{setTasks(await personalLearningSnapshot());const [content,review]=await Promise.all([selectedProvider('content'),selectedReviewProvider()]);setProviders({content,review});};
  useEffect(()=>{const read=()=>void refresh().catch(()=>setNotice(localFlowText('preparationReadFailed')));read();const stop=observeLibrary(read);const timer=setInterval(()=>setClock(Date.now()),1000);return()=>{stop();clearInterval(timer);abort.current?.abort();};},[]);
  const perform=async<T,>(work:()=>Promise<T>)=>{setBusy(true);setNotice('');try{const result=await work();await refresh();return result;}catch(e){setNotice(e instanceof Error&&e.message.startsWith('localFlow.')?e.message:localFlowText('preparationPreserved'));return null;}finally{setBusy(false);}};
+ const prepare=async(id:string)=>{if(!providers)throw new Error('localFlow.checkModels');const controller=new AbortController();abort.current=controller;try{await preparePersonal(id,providers.content,providers.review,controller.signal,()=>void refresh());}finally{if(abort.current===controller)abort.current=null;}};
  return {tasks,providers,notice:localFlowNotice(notice),busy,clock,
-  enroll:(id:string,useContext:boolean)=>perform(()=>enrollPersonal(crypto.randomUUID(),id,useContext)),
-  prepare:(id:string)=>perform(async()=>{if(!providers)throw new Error('localFlow.checkModels');const controller=new AbortController();abort.current=controller;try{await preparePersonal(id,providers.content,providers.review,controller.signal,()=>void refresh());}finally{if(abort.current===controller)abort.current=null;}}),
+  enroll:(id:string,useContext:boolean)=>perform(async()=>{const task=await enrollPersonal(crypto.randomUUID(),id,useContext);await refresh();if(task.status!=='ready')await prepare(task.id);}),
+  prepare:(id:string)=>perform(()=>prepare(id)),
   stop:(id:string)=>{abort.current?.abort();void perform(()=>stopPersonalPreparation(crypto.randomUUID(),id));},
  };
 }

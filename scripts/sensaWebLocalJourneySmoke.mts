@@ -76,7 +76,7 @@ try{
  await page.reload();await expect(page.getByRole('heading',{name:'找个表达',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'保存这个表达',exact:true})).toBeEnabled();expect(count).toBe(2);
  await expect(page.getByRole('region',{name:'待保存的表达'}).getByText('tactful',{exact:true})).toBeVisible();
  await capture('confirmation');
- await page.getByRole('button',{name:'保存这个表达',exact:true}).click();await expect(page.getByRole('heading',{name:'意思已确认',exact:true})).toBeVisible();expect(count).toBe(2);
+ await page.getByRole('button',{name:'保存这个表达',exact:true}).click();await expect(page.getByRole('heading',{name:'内容详情',exact:true})).toBeVisible();expect(count).toBe(2);
  const snapshot=await page.evaluate(async()=>{const db=await new Promise<IDBDatabase>((resolve,reject)=>{const r=indexedDB.open('sensa:local-library:v1');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});const tx=db.transaction([...db.objectStoreNames],'readonly');const entries=await Promise.all([...db.objectStoreNames].map(name=>new Promise<unknown>(resolve=>{const r=tx.objectStore(name).getAll();r.onsuccess=()=>resolve({name,rows:r.result});})));db.close();return JSON.stringify(entries);});
  expect(snapshot).not.toContain('only-in-memory-test-key');expect(snapshot).toContain('accept_context_expression_sense');expect(snapshot).not.toContain('study_completion');
  await page.getByRole('button',{name:/设置/}).click();await page.getByText('高级设置 · 自定义模型服务',{exact:true}).click();await expect(page.getByText('当前页面尚未填写 Key',{exact:true})).toBeVisible();expect(count).toBe(2);
@@ -88,7 +88,7 @@ try{
  await page.reload();await expect(page.getByRole('heading',{name:'欢迎来到 Sensa'})).toBeVisible();
  await page.getByLabel('邮箱',{exact:true}).fill('learner@sensa.invalid');await page.getByRole('button',{name:'发送登录邮件',exact:true}).click();await page.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
  await expect(page.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'我的内容',exact:true}).click();await expect(page.getByRole('button').filter({hasText:'我想指出同事的问题，但不想让他难堪。'}).last()).toBeVisible();
+ await page.getByRole('button',{name:'我的内容',exact:true}).click();await expect(page.getByRole('button').filter({hasText:'tactful'}).last()).toBeVisible();
  expect(count).toBe(2);
  serviceAvailable=false;await page.reload();await expect(page.getByRole('heading',{name:'我的内容',exact:true})).toBeVisible();serviceAvailable=true;
  await page.getByRole('button',{name:/设置/}).click();await page.getByRole('button',{name:'退出账号',exact:true}).click();

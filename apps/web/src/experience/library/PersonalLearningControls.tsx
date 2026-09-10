@@ -11,11 +11,9 @@ export function PersonalLearningControls({meaning,c,onStart}:{meaning:LocalMeani
  useTranslation();
  const [useContext,setUseContext]=useState(false);const task=c.tasks.find(t=>t.id===meaning.id);
  const running=!!task&&['generating','reviewing'].includes(task.status)&&task.leaseUntil>c.clock;
- const providerLabel=(p:NonNullable<Controller['providers']>['content'])=>p.kind==='sensa'?'Sensa':`${p.name} (${p.endpoint})`;
  return <section className="mx-5 my-4 space-y-3 rounded-2xl border border-[#dfe4ed] p-5" aria-label={localFlowText('personalPreparation')}>
-  <h3 className="font-medium">{task?localFlowText('enrolled'):localFlowText('addMeaning')}</h3>
-  <p className="text-sm">{task?.status==='ready'?localFlowText('personalReady'):localFlowText('reviewRequired')}</p>
-  {c.providers&&task?.status!=='ready'&&<p className="text-sm">{localFlowText(c.providers.review?'recipients':'generationRecipient',{content:providerLabel(c.providers.content),review:c.providers.review?providerLabel(c.providers.review):''})} {localFlowText(task?.useContext?'discloseSource':'discloseMeaning')}</p>}
+  <h3 className="font-medium">{localFlowText(task?.status==='ready'?'learningReady':task?'learningPreparation':'learningChoice')}</h3>
+  <p className="text-sm text-[#68748d]">{localFlowText('fixedLightweight')}</p>
   {!task&&<label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={useContext} onChange={e=>setUseContext(e.target.checked)}/>{localFlowText('sourceConsent')}</label>}
   {(c.notice||task?.notice)&&<p role="status" className="text-sm">{localFlowNotice(c.notice||task?.notice)}</p>}
   {!task?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.enroll(meaning.id,useContext)}>{localFlowText('enroll')}</button>:task.status==='ready'?<button className={setupPrimary} onClick={()=>onStart(task.targetId)}>{localFlowText('startLearning')}</button>:running?<><p role="status">{task.status==='generating'?localFlowText('generating'):localFlowText('reviewing')}</p><button className={setupButton} onClick={()=>c.stop(task.id)}>{localFlowText('stopPreparation')}</button></>:<button className={setupPrimary} disabled={c.busy||!c.providers} onClick={()=>void c.prepare(task.id)}>{c.busy?localFlowText('processing'):task.status==='waiting'?localFlowText('generateResources'):task.status==='rejected'?localFlowText('regenerate'):localFlowText('retryPreparation')}</button>}

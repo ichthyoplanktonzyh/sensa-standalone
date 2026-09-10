@@ -1014,10 +1014,21 @@ function ConnectedMeaningConversation({active,onBack,conversation:c,learningCont
  const transcript=useRef<HTMLDivElement>(null);
  useEffect(()=>{transcript.current?.scrollTo({top:transcript.current.scrollHeight});},[c.messages.length,c.busy]);
  const candidate=c.candidate;
+ if(c.accepted&&candidate)return <MeaningWorkspaceFrame title={localFlowText('savedExpression')} active={active} onBack={onBack} materialOpen={false} onToggleMaterial={()=>setMaterialOpen(v=>!v)}>
+  <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
+   <article className="space-y-5 py-5" aria-label={localFlowText('expressionDetails')}>
+    <div><p className="text-sm text-[#68748d]">{uiText('expression')}</p><h2 className="mt-2 text-3xl font-semibold">{candidate.expression}</h2></div>
+    <div><h3 className="text-sm text-[#68748d]">{uiText('meaning2')}</h3><p className="mt-2 leading-7">{candidate.meaning}</p></div>
+    <div><h3 className="text-sm text-[#68748d]">{localFlowText('context')}</h3><p className="mt-2 leading-7">{candidate.context}</p>{c.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-3 max-h-64 max-w-full rounded-xl object-contain"/>)}</div>
+   </article>
+   {learningControls}
+   <details className="mt-5" open={materialOpen||undefined}><summary className="cursor-pointer py-3 text-sm text-[#68748d]">{localFlowText('conversationHistory')}</summary><div className="space-y-4 text-sm leading-7"><p>{c.material}</p>{c.messages.map((m,i)=><div key={i}><p>{m.body}</p>{m.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="max-h-64 max-w-full"/>)}</div>)}</div></details>
+  </div>
+ </MeaningWorkspaceFrame>;
  return <MeaningWorkspaceFrame title={localFlowText('findExpression')} active={active} onBack={onBack} materialOpen={materialOpen} onToggleMaterial={()=>setMaterialOpen(v=>!v)}>
   {materialOpen&&<section className={uiClass('pmw-material')} aria-label={uiText('contextForThisConversation')}><p>{c.material}</p></section>}
   <p className="px-5 text-xs">{c.source?.url&&<a href={c.source.url} target="_blank" rel="noreferrer">{localFlowText('viewSource')}{c.source.title||c.source.url}</a>}</p>
-  <p className="px-5 py-3 text-xs leading-6 text-[#68748d]">{localFlowText('sendTo')}{c.recipient}{localFlowText('sendDisclosure')}</p>
+
   <div ref={transcript} className={uiClass('pmw-transcript')} aria-live="polite">
    {(c.material||c.images?.length)?<div className={uiClass('pmw-message is-learner')}><div>{c.material&&<p>{c.material}</p>}{c.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-2 max-h-64 max-w-full rounded-xl object-contain"/>)}</div></div>:<div className="mx-auto max-w-md px-6 py-10 text-center"><h2 className="text-lg font-medium">{localFlowText('chatWelcome')}</h2><p className="mt-3 text-sm leading-6 text-[#68748d]">{localFlowText('chatWelcomeHint')}</p></div>}
    {c.messages.map((m,i)=><div key={i} className={uiClass(`pmw-message is-${m.role}`)}>{m.role==='assistant'&&<span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span>}<div>{m.body&&<p>{m.body}</p>}{m.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-2 max-h-64 max-w-full rounded-xl object-contain"/>)}</div></div>)}
