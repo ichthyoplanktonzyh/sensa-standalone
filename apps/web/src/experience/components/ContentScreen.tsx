@@ -37,6 +37,7 @@ export interface ContentScreenSource {
 }
 interface ContentScreenProps {
   source?:ContentScreenSource;
+  localLibrary?:Pick<ContentScreenSource,'items'|'status'|'reload'|'composer'>;
   notice?:import("react").ReactNode;
   active: boolean;
   screenId?: string;
@@ -87,7 +88,7 @@ export function ContentScreen(props:ContentScreenProps){
 }
 function ConnectedContentScreen(props:ContentScreenProps){
  const {items,status}=useJourneyWorld();const gateway=useJourneyGateway();const inbox=useJourneyInbox();const projection=useContentProjection();
- return <ContentScreenView {...props} source={{items,status,inbox,projection,reload:()=>gateway.reload()}}/>;
+ return <ContentScreenView {...props} source={{items:[...(props.localLibrary?.items??[]),...items],status:props.localLibrary&&!props.localLibrary.status.ok?props.localLibrary.status:status,inbox,projection,composer:props.localLibrary?.composer,reload:()=>{gateway.reload();props.localLibrary?.reload();}}}/>;
 }
 function ContentScreenView({
   active,

@@ -87,4 +87,15 @@ jobs:
             sleep 0.5
           done
           npm run sensa:consumer-browser-smoke
-          SENSA_LOCAL_WEB_URL=http://127.0.0.1:3001 npm run sensa:web-local-journey-smoke
+
+
+      - name: Full application local meaning journey (synthetic model)
+        run: |
+          VITE_SENSA_MODE=preview npm run dev -w @sensa/web -- --port 3014 > /tmp/sensa-full-app.log 2>&1 &
+          full_app_pid=$!
+          trap 'kill "$full_app_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3014 >/dev/null; then break; fi
+            sleep 0.5
+          done
+          npm run sensa:web-local-journey-smoke

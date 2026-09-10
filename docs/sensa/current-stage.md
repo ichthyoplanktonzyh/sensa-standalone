@@ -1,7 +1,8 @@
 # Sensa 当前阶段与交付边界
 
 2026-09-10 Web 整组工作已确认：本机记录 → 老师澄清 → 确认 → 显式入学 → 生成/审核 → 学习，
-Provider 与本地持久化随用例贯通。第一条材料/模型/澄清切片接入已有正式页面（`/content?library=local`），已移除简化 `/local` 页面，既有账号入口保持独立，
+Provider 与本地持久化随用例贯通。第一条材料/模型/澄清切片直接接入 owner 指定的完整 `experience/App.tsx`（`/profile`、`/content`），
+已删除 `LibraryWorkspace` 和 `?library=local` 分支，保留原四项导航、学习偏好及学习计划。既有账号服务入口保持独立，
 不迁移旧数据；整组状态与边界见 [工作流记录](web-local-meaning-workflow.md)。
 
 2026-09-10 最新 owner 决定：原生 UI 优化暂停，当前优先完成正式 `apps/web`，达到上线可用后再回访原生。

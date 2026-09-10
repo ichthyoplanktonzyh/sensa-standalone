@@ -8,17 +8,20 @@
 
 - `apps/web/src/data/library`：浏览器本机库事务、命令去重、模型配置、会话/候选与确认；
   `drafts/providers/settings/operations/sessions/meanings/identities` 按对象分别保存，不使用整库 JSON。
-- `experience/library`：为已有正式页面提供本机数据控制器，只提交用户命令，不写派生结果。
-  复用 `ContentScreen`、`PersonalMeaningComposer`、`PersonalMeaningDetailScreen` 的共享工作区布局
-  和 `ProfileScreen`；Provider 配置嵌入已有账号与设置页面。
+- `experience/library/useLocalMeaningLibrary.ts`：无页面和路由的本机数据 hook，由完整
+  `experience/App.tsx` 调用。新材料追加到原“我的内容”，原学习/收藏/笔记投影保持；
+  原 `PersonalMeaningComposer` 提交本机文本，原澄清路由按 `meaningId` 读取本机会话。
+  Provider 嵌入原 `/profile`，不替换学习偏好和计划回调。
 - 模型 transport 在事务外执行；请求前固定 Provider、接收方、输入版本和租约，提交结果时重查。
 - 共享 `semanticProposalSchema` 校验候选；接受创建稳定 Sense/Binding、两个 Anchor、Alignment
   与明确 Acceptance；同 semanticSpec/Expression 在当前库复用语义身份。未接受对话不建立意义。
 - 后续 Curriculum、Content Task/Attempt/Bundle/Review、Material 和 Runtime 分表落账；
   保留共享合同与 TS/Rust 对照，不借原账号服务器给本地 Run 结算。
-- 已按 owner 要求移除简化的 `/local` 页面。入口为 `/content?library=local`，澄清和设置
-  仍使用已有页面路由；查询参数区分本机数据来源。原账号登录页提供明确链接，不改变 owner 原账号/preview 数据，
-  不自动切换旧用户历史。待整组/迁移验收后再决定默认入口。
+- 纠正前次交付：只复用组件、另建裁剪应用不满足 owner 的“完整应用”要求。
+  已删除 `LibraryWorkspace`、`/local` 与 `?library=local` 专用入口；本次以 owner 指定
+  `http://127.0.0.1:3000/profile` 所在完整应用为接入和走查对象。
+  四项导航、学习偏好、学习计划保持原路径和逻辑；新本机资料不迁移或覆盖旧资料。
+  旧学习实现仍是迁移期实现，本轮没有宣称其已完成生产化。生产账号应用入口也未被替换。
 
 ## 第一条纵切：材料、Provider 与老师确认
 
@@ -39,9 +42,11 @@
 ### 已执行验证
 
 `SENSA_CHROMIUM_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' node --import tsx scripts/sensaWebLocalJourneySmoke.mts`
-配合隔离 loopback Vite（默认 3013）运行，真实 React 页面、Supabase 客户端模块、IndexedDB，
+配合隔离 loopback Vite（默认 3014、`VITE_SENSA_MODE=preview`，与 owner 完整应用入口一致）运行，真实 React 页面、Supabase 客户端模块、IndexedDB，
 模型 HTTP 使用严格限定的确定性替身；其余外部请求拒绝，无真实模型/邮件/owner 数据。
 
+- 普通 `/profile` 无专用参数即可显示 Provider；四项导航可见，原学习偏好修改与刷新恢复、
+  原学习计划下钻通过。owner 的 3000 页面也完成只读走查（没有改动学习设置或录入测试资料）。
 - 无账号保存材料；注入真实 IDB 写入失败后保持输入，不提示已保存；重试与刷新恢复。
 - 保存 Provider 不调用模型；分别选择用途，Key 在页面内存、重开后不存在于凭据状态。
 - 老师追问、自然语言更正、候选显示、重开不增加请求次数；离线能力以无新请求确认验证，

@@ -1,3 +1,5 @@
+import {useLocalMeaningLibrary} from './library/useLocalMeaningLibrary';
+import {ProviderPanel} from './components/ProviderPanel';
 import { LearningPreferencesPanel } from './components/learning/LearningPreferencesPanel';
 import { runtimeCheckpoint } from './learningRuntime/runtimeCheckpoint';
 import { runtimeText } from '../i18n/runtimeText';
@@ -247,6 +249,7 @@ export default function App() {
     params.coming === 'collections' ? 'collections' : 'scenes';
   const personalMeaningId = params.meaningId ?? null;
   const meaningFocusId = params.focusId ?? null;
+  const localLibrary = useLocalMeaningLibrary(personalMeaningId, viewMode === 'main' && mainStack.includes('s-personal-meaning'));
   const selectedContentSense = useMemo(
     () => (params.senseId ? contentSenseForId(params.senseId) : null),
     [params.senseId],
@@ -280,11 +283,12 @@ export default function App() {
   }, [goMain]);
 
   const openConfirmedSense = useCallback((nextPersonalMeaningId: string, nextMeaningFocusId: string) => {
+    if(localLibrary.source.items.some(item=>item.personalMeaningId===nextPersonalMeaningId)){openPersonalMeaning(nextPersonalMeaningId);return;}
     goMain('s-confirmed-sense', {
       meaningId: nextPersonalMeaningId,
       focusId: nextMeaningFocusId,
     });
-  }, [goMain]);
+  }, [goMain,localLibrary.source.items,openPersonalMeaning]);
 
   const openExpressionBinding = useCallback(() => {
     goMain('s-expression-binding');
@@ -1861,6 +1865,7 @@ export default function App() {
 
           {/* 3. 我的内容 */}
           <ContentScreen
+            localLibrary={localLibrary.source}
             active={viewMode === 'main' && (mainStack.includes('s-content') || mainStack.includes('s-semantic-world'))}
             screenId={mainStack.includes('s-semantic-world') ? 's-semantic-world' : 's-content'}
             initialAction={params.worldAction === 'create' ? 'create' : undefined}
@@ -1873,13 +1878,15 @@ export default function App() {
           />
 
           {/* 3.1.1 AI 澄清：一段对话收敛 Focus / Sense / Expression，一次确认落三个事实 */}
-          <PersonalMeaningDetailScreen
+          {localLibrary.loaded && (!localLibrary.isLocal || localLibrary.conversation) && <PersonalMeaningDetailScreen
+            key={personalMeaningId}
+            conversation={localLibrary.isLocal ? localLibrary.conversation : undefined}
             active={viewMode === 'main' && mainStack.includes('s-personal-meaning')}
             personalMeaningId={personalMeaningId}
             onBack={backMain}
             onOpenConfirmedSense={openConfirmedSense}
             toast={toast}
-          />
+          />}
 
           {/* 3.1.2 已确认 Sense：Meaning Formation 终点与 Binding 入口 */}
           <ConfirmedSenseDetailScreen
@@ -2057,6 +2064,7 @@ export default function App() {
 
           {/* 5. 个人中心 */}
           <ProfileScreen
+            modelSettings={<ProviderPanel/>}
             active={viewMode === 'main' && mainStack.includes('s-profile')}
             onGoStudyPlan={() => {
               setStudyTab('a');

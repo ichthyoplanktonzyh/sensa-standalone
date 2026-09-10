@@ -19,6 +19,8 @@ async function active(tx:LibraryTransaction,id:string,revision?:number){
 export async function createTeacher(operationId:string,draft:LocalDraft){
  return command({id:operationId,kind:'teacher.create',input:{draftId:draft.id,revision:draft.revision}},async tx=>{
   if((await tx.get<LocalDraft>('drafts',draft.id))?.revision!==draft.revision)throw new Error('材料已改变，请读取最新版本。');
+  const existing=(await tx.all<TeacherSession>('sessions')).find(s=>s.draftId===draft.id&&s.draftRevision===draft.revision);
+  if(existing)return existing;
   const session:TeacherSession={id:crypto.randomUUID(),draftId:draft.id,draftRevision:draft.revision,revision:1,input:draft.text,messages:[],status:'idle',question:null,candidate:null,requests:0,toolCount:0,seenCalls:[],lease:null,provenance:[],meaningId:null};tx.put('sessions',session.id,session);return session;
  });
 }

@@ -1,7 +1,7 @@
 /** Formal React local surface, real browser storage; synthetic model responses only. */
 import {chromium,expect} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
-const origin=process.env.SENSA_LOCAL_WEB_URL??'http://127.0.0.1:3013';
+const origin=process.env.SENSA_LOCAL_WEB_URL??'http://127.0.0.1:3014';
 if(new URL(origin).hostname!=='127.0.0.1')throw new Error('Use an isolated loopback Vite server');
 const browser=await chromium.launch({headless:true,executablePath:process.env.SENSA_CHROMIUM_PATH});
 const context=await browser.newContext({viewport:{width:390,height:844}}),page=await context.newPage();
@@ -24,7 +24,22 @@ async function capture(name:string){
  await page.setViewportSize({width:390,height:844});
 }
 try{
- await page.goto(origin+'/content?library=local');await expect(page.getByRole('heading',{name:'我的内容',exact:true})).toBeVisible();expect(count).toBe(0);
+ await page.goto(origin+'/profile');
+ for(const name of ['今日','我的内容','我的学习','练习'])await expect(page.getByRole('button',{name,exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'模型服务',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'学习偏好 学习方式与每日新学数量'}).click();
+ await expect(page.getByRole('heading',{name:'默认学习方式',exact:true})).toBeVisible();
+ await page.getByLabel('每日新学数量',{exact:true}).selectOption({label:'10 个意思'});
+ await page.getByRole('button',{name:'完成',exact:true}).click();
+ await page.reload();
+ await page.getByRole('button',{name:'学习偏好 学习方式与每日新学数量'}).click();
+ await expect(page.getByLabel('每日新学数量',{exact:true})).toHaveValue('10');
+ await page.getByRole('button',{name:'完成',exact:true}).click();
+ await page.getByRole('button',{name:'学习计划 学习内容与最近记录'}).click();
+ await expect(page.getByRole('heading',{name:'我的学习',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'每日新学上限 10 个意思'})).toBeVisible();
+ expect(new URL(page.url()).searchParams.has('library')).toBe(false);
+ await page.getByRole('button',{name:'我的内容',exact:true}).click();await expect(page.getByRole('heading',{name:'我的内容',exact:true})).toBeVisible();expect(count).toBe(0);
  await page.getByRole('button',{name:'记录场景',exact:true}).click();
  await expect(page.getByRole('dialog')).toBeVisible();
  await page.getByLabel('发生了什么？你想表达什么？').fill('我想指出同事的问题，但不想让他难堪。');
@@ -49,5 +64,5 @@ try{
  await page.getByRole('button',{name:/设置/}).click();await expect(page.getByText('当前页面尚未填写 Key',{exact:true})).toBeVisible();expect(count).toBe(2);
  for(const width of [320,390,1280]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
  await mkdir('/tmp/sensa-web-local',{recursive:true});await page.screenshot({path:'/tmp/sensa-web-local/providers.png'});
- expect(errors).toEqual([]);console.log('PASS: existing ContentScreen/Composer/MeaningDetail/Profile: local draft save/failure/reload, provider purpose/ephemeral key, teacher clarification/correction, explicit offline confirmation, no automatic calls. Synthetic model, real React and IndexedDB.');
+ expect(errors).toEqual([]);console.log('PASS: full App routes/four navigation sections/preferences persistence/study plan, ContentScreen/Composer/MeaningDetail/Profile: local draft save/failure/reload, provider purpose/ephemeral key, teacher clarification/correction, explicit offline confirmation, no automatic calls. Synthetic model, real React and IndexedDB.');
 }catch(e){await mkdir('/tmp/sensa-web-local',{recursive:true});await page.screenshot({path:'/tmp/sensa-web-local/failure.png'});console.error(await page.locator('body').innerText());throw e;}finally{await browser.close();}
