@@ -15,9 +15,11 @@ class PersonalWorldScreen extends StatefulWidget {
     super.key,
     required this.model,
     this.embedded = false,
+    this.initialSection = 0,
   });
   final LibraryViewModel model;
   final bool embedded;
+  final int initialSection;
   @override
   State<PersonalWorldScreen> createState() => _PersonalWorldScreenState();
 }
@@ -28,6 +30,7 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    section = widget.initialSection;
   }
 
   @override
@@ -52,8 +55,7 @@ class _PersonalWorldScreenState extends State<PersonalWorldScreen>
   }) async {
     final accepted = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) =>
-            _CaptureEditor(model: model, intake: intake, copy: copy),
+        builder: (_) => CaptureEditor(model: model, intake: intake, copy: copy),
       ),
     );
     if (mounted && accepted != null) {
@@ -487,16 +489,16 @@ class _ErrorNotice extends StatelessWidget {
   );
 }
 
-class _CaptureEditor extends StatefulWidget {
-  const _CaptureEditor({required this.model, this.intake, this.copy});
+class CaptureEditor extends StatefulWidget {
+  const CaptureEditor({super.key, required this.model, this.intake, this.copy});
   final LibraryViewModel model;
   final Map<String, dynamic>? intake;
   final Map<String, dynamic>? copy;
   @override
-  State<_CaptureEditor> createState() => _CaptureEditorState();
+  State<CaptureEditor> createState() => _CaptureEditorState();
 }
 
-class _CaptureEditorState extends State<_CaptureEditor> {
+class _CaptureEditorState extends State<CaptureEditor> {
   late final TextEditingController contextText,
       expressionText,
       sourceUrl,

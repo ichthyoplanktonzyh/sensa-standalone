@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'agent_screen.dart';
 import 'curriculum_screen.dart';
 import 'history_screen.dart';
+import 'home_screen.dart';
 import 'intake_connection_screen.dart';
 import 'learning_activity_view.dart';
 import 'library_screen.dart';
@@ -23,6 +24,7 @@ class NativeShell extends StatefulWidget {
 class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
   int selected = 0;
   int contentSection = 0;
+  int personalSection = 0;
   final search = TextEditingController();
   int quantity = 5;
   bool opening = false;
@@ -216,107 +218,45 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
     ],
   );
 
-  Widget home() {
-    final s = model.snapshot!;
-    final counts = s.learning['counts'] as Map? ?? {};
-    final due = counts['dueReviews'] as int? ?? 0;
-    final resumable = s.activity != null && s.activity!['status'] != 'ended';
-    final fresh = counts['newAvailable'] ?? 0;
-    final hasWork = (counts['distinctExecutableTargets'] as int? ?? 0) > 0;
-    return ProductPage(
-      pageId: 'home',
-      title: context.l10n.uiConnectWithNewMeanings,
-      subtitle: context.l10n.uiMessage(
-        context.localDate(DateTime.parse(s.learning['date'] as String)),
+  Future<void> capture() async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (routeContext) => CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.escape): () =>
+                Navigator.of(routeContext).maybePop(),
+          },
+          child: CaptureEditor(model: model),
+        ),
       ),
-      children: [
-        ProductPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                context.l10n.uiToday,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 32,
-                runSpacing: 12,
-                children: [
-                  _Count(label: context.l10n.uiNew, value: '$fresh'),
-                  _Count(label: context.l10n.uiDueReviews, value: '$due'),
-                  _Count(
-                    label: context.l10n.uiToContinue,
-                    value: '${counts['initialContinuations'] ?? 0}',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                resumable
-                    ? context.l10n.uiPickUpWhereYouLeftOff
-                    : s.catalog.isEmpty
-                    ? context.l10n.uiAddLearningContentOrCaptureA
-                    : context.l10n.uiLearnAtYourOwnPace,
-              ),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                key: const ValueKey('home-start'),
-                onPressed: model.busy || opening
-                    ? null
-                    : () => !hasWork && !resumable
-                          ? setState(() {
-                              selected = 1;
-                              contentSection = 1;
-                            })
-                          : study(
-                              resumable
-                                  ? s.activity!['mode'] as String
-                                  : 'mixed',
-                            ),
-                icon: const Icon(Icons.arrow_forward),
-                label: Text(
-                  resumable
-                      ? context.l10n.uiContinueToday
-                      : !hasWork
-                      ? context.l10n.uiAddLearningContent
-                      : context.l10n.uiStartToday,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: model.busy || due == 0
-                    ? null
-                    : () => study('review_only'),
-                icon: const Icon(Icons.replay),
-                label: Text(
-                  due == 0
-                      ? context.l10n.uiNoReviewsDue
-                      : context.l10n.uiReviewOnly,
-                ),
-              ),
-            ],
-          ),
+    );
+    if (!mounted || saved == null) return;
+    setState(() {
+      selected = 1;
+      contentSection = 0;
+      personalSection = saved ? 0 : 1;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          saved ? context.l10n.uiMeaningSaved : context.l10n.uiSavedToInbox,
         ),
-        link(
-          context.l10n.uiBrowseLearningContent,
-          context.l10n.uiImportALearningPackageAndChoose,
-          Icons.library_books_outlined,
-          () => setState(() {
-            selected = 1;
-            contentSection = 1;
-          }),
-        ),
-        const Divider(),
-        link(
-          context.l10n.uiCaptureAContext,
-          context.l10n.uiGetHelpFromYourLanguageTeacher,
-          Icons.chat_bubble_outline,
-          () => open(PersonalWorldScreen(model: model)),
-        ),
-      ],
+      ),
     );
   }
+
+  Widget home() => HomeScreen(
+    model: model,
+    opening: opening,
+    onStudy: study,
+    onManage: () => setState(() => selected = 2),
+    onPrepare: () => open(PreparationListScreen(model: model)),
+    onBrowse: () => setState(() {
+      selected = 1;
+      contentSection = 1;
+    }),
+    onCapture: capture,
+  );
 
   Widget content() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -344,7 +284,11 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
         child: IndexedStack(
           index: contentSection,
           children: [
-            PersonalWorldScreen(model: model, embedded: true),
+            PersonalWorldScreen(
+              model: model,
+              embedded: true,
+              initialSection: personalSection,
+            ),
             catalog(),
           ],
         ),
@@ -744,22 +688,5 @@ class _NativeShellState extends State<NativeShell> with WidgetsBindingObserver {
         },
       );
     },
-  );
-}
-
-class _Count extends StatelessWidget {
-  const _Count({required this.label, required this.value});
-  final String label, value;
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label),
-      const SizedBox(height: 4),
-      Text(
-        value,
-        style: const TextStyle(fontSize: 36, color: Color(0xff303e73)),
-      ),
-    ],
   );
 }

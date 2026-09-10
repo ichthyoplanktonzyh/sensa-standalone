@@ -124,11 +124,16 @@ void main() {
         expect(model.snapshot!.value['completionCount'], 1);
         expect(model.snapshot!.value['handoffCount'], 1);
         await tap(find.text(l10n.uiBackToHome));
-        await tap(find.byKey(const ValueKey('nav-1')));
-        await tap(find.byKey(const ValueKey('content-section-0')));
-        await tap(find.text(l10n.uiSaveContent));
+        await tap(find.byKey(const ValueKey('home-capture')));
+        expect(find.byKey(const ValueKey('capture-context')), findsOneWidget);
         await text('capture-context', 'May I borrow your umbrella?');
         await tap(find.text(l10n.uiSaveToInboxFirst));
+        expect(
+          tester
+              .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, l10n.uiInbox))
+              .selected,
+          true,
+        );
         await tap(find.widgetWithText(ChoiceChip, l10n.uiInbox));
         await tap(find.text(l10n.uiChooseExpressionAndMeaning));
         await text('capture-expression', 'borrow');

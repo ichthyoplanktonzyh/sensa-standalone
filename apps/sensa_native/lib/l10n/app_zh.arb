@@ -817,5 +817,17 @@
   "uiDiscardCaptureBody": "修改尚未保存。你可以继续编辑，或先存入收件箱。",
   "uiKeepEditing": "继续编辑",
   "uiDiscardChanges": "放弃修改",
-  "uiContextResources": "上下文与参考资料"
+  "uiContextResources": "上下文与参考资料",
+  "homeManage": "管理学习",
+  "homeAddHeading": "添加想学习的内容",
+  "homeNewHint": "从一个情境开始，建立意思与表达的连接。",
+  "homeReviewHint": "今天有到期的意思可以复习。",
+  "homeMixedHint": "今天有新内容，也有到期的复习。",
+  "homeWaitingHint": "有内容需要稍后再回想，可以查看学习进度。",
+  "homeLimitHint": "今日新学额度已用完，之后仍可继续到期复习。",
+  "homePreparingHint": "已有目标尚未准备好，查看准备状态后再开始。",
+  "homeQuietHint": "当前范围内暂时没有可开始的学习，可以查看学习状态或添加内容。",
+  "homeProgress": "查看学习进度",
+  "homeContinueHint": "有尚未完成的学习，可以接着上次继续。",
+  "homeCaptureHint": "先记下来，再确认想表达的意思。"
 }

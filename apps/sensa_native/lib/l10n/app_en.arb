@@ -1420,5 +1420,17 @@
   "uiDiscardCaptureBody": "Your changes have not been saved. Keep editing to finish or save them to your inbox.",
   "uiKeepEditing": "Keep editing",
   "uiDiscardChanges": "Discard changes",
-  "uiContextResources": "Context and reference resources"
+  "uiContextResources": "Context and reference resources",
+  "homeManage": "Manage learning",
+  "homeAddHeading": "Add something to learn",
+  "homeNewHint": "Start with a context and connect its meaning to an expression.",
+  "homeReviewHint": "You have meanings due for review today.",
+  "homeMixedHint": "New content and due reviews are available today.",
+  "homeWaitingHint": "Some content needs another recall later. Check your learning progress.",
+  "homeLimitHint": "Today’s new-learning allowance is used. Due reviews remain available when ready.",
+  "homePreparingHint": "Some targets are not ready yet. Check their preparation status.",
+  "homeQuietHint": "Nothing is ready in your current scope. Check your learning or add content.",
+  "homeProgress": "View learning progress",
+  "homeContinueHint": "You have unfinished learning. Pick up where you left off.",
+  "homeCaptureHint": "Save a context, then clarify what you want to express."
 }
