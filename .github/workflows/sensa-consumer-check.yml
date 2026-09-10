@@ -79,6 +79,8 @@ jobs:
         run: npm run sensa:local-i18n-smoke
       - name: Install test browser
         run: npx playwright install --with-deps chromium
+      - name: Email link sign-in (real SDK PKCE, synthetic mail and Auth)
+        run: npm run sensa:email-link-browser-smoke
       - name: Production offline cold start (isolated Chromium processes and synthetic account/catalog)
         run: npm run sensa:offline-cold-start-smoke
       - name: Complete Intake to personal learning in production UI (synthetic providers)

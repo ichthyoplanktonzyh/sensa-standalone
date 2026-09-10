@@ -73,6 +73,13 @@ This is owner-authorized; do not push or deploy without the applicable delivery 
 Owner additionally authorized bounded DeepSeek API material-generation trials and edge-tts audio
 generation (2026-09-07). Keep these opt-in and separate from routine no-cost/CI validation.
 
+## Owner assistance preference (2026-09-10)
+
+When a connector cannot complete an external-platform step or that step requires a
+dashboard login or manual configuration, contact the owner for assistance. Do not
+autonomously fall back to browser control of external platforms. Existing authorization
+for isolated local application browser tests remains separate from external account operations.
+
 ## Owner product preference (2026-09-08)
 
 Sensa is intended to be a closed-source product. Read Frog may be used as a

@@ -34,7 +34,7 @@ async function capture(name:string){
 try{
  await page.goto(origin+'/profile');
  await expect(page.getByRole('heading',{name:'欢迎来到 Sensa'})).toBeVisible();
- await page.getByLabel('邮箱',{exact:true}).fill('learner@sensa.invalid');await page.getByRole('button',{name:'发送验证码',exact:true}).click();
+ await page.getByLabel('邮箱',{exact:true}).fill('learner@sensa.invalid');await page.getByRole('button',{name:'发送登录邮件',exact:true}).click();await page.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();
  await page.getByLabel('验证码',{exact:true}).fill('000000');await page.getByRole('button',{name:'验证并继续',exact:true}).click();await expect(page.getByText('验证码不正确或已过期，请重新输入。')).toBeVisible();
  await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
  for(const name of ['今日','我的内容','我的学习','练习'])await expect(page.getByRole('button',{name,exact:true})).toBeVisible();
@@ -80,14 +80,14 @@ try{
  await page.getByRole('button',{name:'退出账号',exact:true}).click();
  await expect(page.getByRole('heading',{name:'欢迎来到 Sensa'})).toBeVisible();
  await page.reload();await expect(page.getByRole('heading',{name:'欢迎来到 Sensa'})).toBeVisible();
- await page.getByLabel('邮箱',{exact:true}).fill('learner@sensa.invalid');await page.getByRole('button',{name:'发送验证码',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
+ await page.getByLabel('邮箱',{exact:true}).fill('learner@sensa.invalid');await page.getByRole('button',{name:'发送登录邮件',exact:true}).click();await page.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
  await expect(page.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'我的内容',exact:true}).click();await expect(page.getByRole('button').filter({hasText:'我想指出同事的问题，但不想让他难堪。'}).last()).toBeVisible();
  expect(count).toBe(2);
  serviceAvailable=false;await page.reload();await expect(page.getByRole('heading',{name:'我的内容',exact:true})).toBeVisible();serviceAvailable=true;
  await page.getByRole('button',{name:/设置/}).click();await page.getByRole('button',{name:'退出账号',exact:true}).click();
  await expect(page.getByRole('heading',{name:'欢迎来到 Sensa'})).toBeVisible();subject=crypto.randomUUID();
- await page.getByLabel('邮箱',{exact:true}).fill('other@sensa.invalid');await page.getByRole('button',{name:'发送验证码',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
+ await page.getByLabel('邮箱',{exact:true}).fill('other@sensa.invalid');await page.getByRole('button',{name:'发送登录邮件',exact:true}).click();await page.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
  await expect(page.getByText('此设备的资料属于另一个账号。请使用原账号登录；本机资料没有改变。')).toBeVisible();
  await expect(page.getByRole('heading',{name:'我的内容',exact:true})).not.toBeVisible();
  expect(errors).toEqual([]);console.log('PASS: full App routes/four navigation sections/preferences persistence/study plan, ContentScreen/Composer/MeaningDetail/Profile: local draft save/failure/reload, provider purpose/ephemeral key, teacher clarification/correction, explicit offline confirmation, no automatic calls. Synthetic model, real React and IndexedDB.');

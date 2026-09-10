@@ -8,6 +8,7 @@ import {ExtensionIntake} from './ExtensionIntake';
 import {createContext,useContext,useEffect,useRef,useState,type ReactNode} from 'react';
 import {clearAllCredentials} from '../../data/library/providers';
 import {auth,cachedAuthSubject,authStorageKey} from '../../data/consumer/client';
+import {completeEmailLink,emailLinkRedirect} from '../../data/consumer/emailLink';
 import {command,readLibrary,openLibrary,observeLibrary} from '../../data/library/store';
 import {setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 
@@ -22,11 +23,15 @@ export default function AccountExperience({children}:{children:ReactNode}){
  const [ready,setReady]=useState(false),[local,setLocal]=useState(false),[loginOpen,setLoginOpen]=useState(false),[onlineService,setOnlineService]=useState(false);
  const [email,setEmail]=useState(''),[code,setCode]=useState(''),[sent,setSent]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[owner,setOwner]=useState<Owner|null>(null);
  const [retryAt,setRetryAt]=useState(0),[now,setNow]=useState(Date.now());
+ const [useCode,setUseCode]=useState(false);const callbackDismissed=useRef(false);
  const generation=useRef(0),localRef=useRef(false);localRef.current=local;
  const recover=async()=>{
   if(deletionRef.current)return;
   const gen=++generation.current;
   try{
+   const callback=await completeEmailLink();
+   if(gen!==generation.current)return;
+   if(callback==='failed'&&!callbackDismissed.current){setLocal(false);setNotice(localFlowText('emailLinkInvalid'));return;}
    const stored=await readLibrary(async tx=>({owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out')}));
    if(gen!==generation.current)return;
    setOwner(stored.owner??null);setOnlineService(false);
@@ -62,9 +67,9 @@ export default function AccountExperience({children}:{children:ReactNode}){
  };
  useEffect(()=>{void recover();const sub=auth?.onAuthStateChange((event)=>{if(deletionRef.current)return;if(event==='SIGNED_OUT')clearAllCredentials();setOnlineService(false);if(event==='SIGNED_OUT'||event==='SIGNED_IN')setLocal(false);setTimeout(()=>void recover(),0);});const online=()=>void recover();const storage=(event:StorageEvent)=>{if(event.key===null||event.key===authStorageKey)void recover();};window.addEventListener('online',online);window.addEventListener('storage',storage);const timer=setInterval(()=>setNow(Date.now()),1000);return()=>{generation.current++;sub?.data.subscription.unsubscribe();window.removeEventListener('online',online);window.removeEventListener('storage',storage);clearInterval(timer);};},[]);
  useEffect(()=>observeLibrary(()=>{void readLibrary(async tx=>({signedOut:await tx.get('meta','signed-out')})).then(state=>{if(state.signedOut&&localRef.current){generation.current++;clearAllCredentials();setLocal(false);setOnlineService(false);}}).catch(()=>setNotice(localFlowText('localStatusFailed')));}),[]);
- const perform=async(work:()=>Promise<void>)=>{setBusy(true);setNotice('');try{await work();}catch{setNotice(localFlowText('tryLater'));}finally{setBusy(false);}};
- const send=async()=>{if(!auth)return;const {error}=await auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true}});if(error){setNotice(error.status===429?localFlowText('otpRateLimit'):localFlowText('otpSendFailed'));return;}setSent(true);setRetryAt(Date.now()+60000);};
- const logout=async()=>{clearAllCredentials();await command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async tx=>{tx.put('meta','signed-out',true);return null;});generation.current++;setLocal(false);setOnlineService(false);setLoginOpen(false);setSent(false);setCode('');const result=await auth?.signOut({scope:'local'});if(result?.error)setNotice(localFlowText('signoutIncomplete'));};
+ const perform=async(work:()=>Promise<void>)=>{callbackDismissed.current=true;setBusy(true);setNotice('');try{await work();}catch{setNotice(localFlowText('tryLater'));}finally{setBusy(false);}};
+ const send=async()=>{if(!auth)return;const {error}=await auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true,emailRedirectTo:emailLinkRedirect()}});if(error){setNotice(error.status===429?localFlowText('otpRateLimit'):localFlowText('emailLinkSendFailed'));return;}setSent(true);setRetryAt(Date.now()+60000);};
+ const logout=async()=>{clearAllCredentials();await command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async tx=>{tx.put('meta','signed-out',true);return null;});generation.current++;setLocal(false);setOnlineService(false);setLoginOpen(false);setSent(false);setCode('');setUseCode(false);const result=await auth?.signOut({scope:'local'});if(result?.error)setNotice(localFlowText('signoutIncomplete'));};
  if(deletionOpen)return <AccountDeletion onClose={()=>{location.assign('/profile');}}/>;
  if(!ready)return <main role="status" className="grid min-h-screen place-content-center">{localFlowText('loadingSensa')}</main>;
  const extension=new URLSearchParams(location.search);
@@ -79,13 +84,13 @@ export default function AccountExperience({children}:{children:ReactNode}){
   location.assign(destination.toString());
  })}>{localFlowText('connectAccount')}</button><button className={setupButton} onClick={()=>location.assign('/profile')}>{localFlowText('cancel')}</button></main>;
  if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{deleteAccount:()=>{generation.current++;setDeletionOpen(true);},notice:localFlowNotice(notice),email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout:()=>perform(logout)}}>{owner?.accountId&&<ExtensionIntake accountId={owner.accountId}/>} {children}</AccountContext.Provider>;
- // Reuses the established email/OTP entry layout from the account application.
- return <main className="flex min-h-screen items-center justify-center bg-[#fbfbfa] px-6 text-[#242a38]"><form className="w-full max-w-sm space-y-5" onSubmit={e=>{e.preventDefault();void perform(sent?async()=>{const result=await auth!.verifyOtp({email:email.trim(),token:code.trim(),type:'email'});if(result.error){setNotice(localFlowText('otpInvalid'));return;}await recover();}:send);}}>
-  <div className="flex items-center justify-between"><p className="text-sm text-[#68748d]">Sensa</p><LanguageSwitch/></div><h1 className="text-3xl font-semibold">{sent?localFlowText('enterOtp'):localFlowText('welcome')}</h1>
-  <p className="text-sm leading-6">{sent?localFlowText('otpSent',{email}):localFlowText('loginIntro')}</p>
-  {!auth?<p role="status">{localFlowText('loginUnavailable')}</p>:<>{sent?<label className="block text-sm">{localFlowText('otp')}<input className="mt-2 w-full rounded-xl border border-[#bec5d5] bg-white p-3" autoComplete="one-time-code" inputMode="numeric" value={code} onChange={e=>setCode(e.target.value)} required/></label>:<label className="block text-sm">{localFlowText('email')}<input className="mt-2 w-full rounded-xl border border-[#bec5d5] bg-white p-3" type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label>}<button className={setupPrimary+' w-full'} disabled={busy}>{busy?localFlowText('processing'):sent?localFlowText('verify'):localFlowText('sendOtp')}</button></>}
+ // Default Supabase templates send links; custom OTP templates remain supported.
+ return <main className="flex min-h-screen items-center justify-center bg-[#fbfbfa] px-6 text-[#242a38]"><form className="w-full max-w-sm space-y-5" onSubmit={e=>{e.preventDefault();void perform(sent?useCode?async()=>{const result=await auth!.verifyOtp({email:email.trim(),token:code.trim(),type:'email'});if(result.error){setNotice(localFlowText('otpInvalid'));return;}await recover();}:recover:send);}}>
+  <div className="flex items-center justify-between"><p className="text-sm text-[#68748d]">Sensa</p><LanguageSwitch/></div><h1 className="text-3xl font-semibold">{sent?localFlowText(useCode?'enterOtp':'checkEmailLink'):localFlowText('welcome')}</h1>
+  <p className="text-sm leading-6">{sent?localFlowText(useCode?'otpSent':'emailLinkSent',{email}):localFlowText('loginIntro')}</p>
+  {!auth?<p role="status">{localFlowText('loginUnavailable')}</p>:<>{sent?useCode&&<label className="block text-sm">{localFlowText('otp')}<input className="mt-2 w-full rounded-xl border border-[#bec5d5] bg-white p-3" autoComplete="one-time-code" inputMode="numeric" value={code} onChange={e=>setCode(e.target.value)} required/></label>:<label className="block text-sm">{localFlowText('email')}<input className="mt-2 w-full rounded-xl border border-[#bec5d5] bg-white p-3" type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label>}{(!sent||useCode)&&<button className={setupPrimary+' w-full'} disabled={busy}>{busy?localFlowText('processing'):sent?localFlowText('verify'):localFlowText('sendEmailLink')}</button>}</>}
   {notice&&<p role="status">{localFlowNotice(notice)}</p>}
-  {sent&&<div className="flex flex-wrap gap-2"><button type="button" className={setupButton} disabled={busy||now<retryAt} onClick={()=>void perform(send)}>{now<retryAt?localFlowText('resendLater'):localFlowText('resend')}</button><button type="button" className={setupButton} disabled={busy} onClick={()=>{setSent(false);setCode('');}}>{localFlowText('changeEmail')}</button></div>}
+  {sent&&<div className="flex flex-wrap gap-2"><button type="button" className={setupButton} disabled={busy||now<retryAt} onClick={()=>void perform(send)}>{now<retryAt?localFlowText('resendLater'):localFlowText('resend')}</button><button type="button" className={setupButton} disabled={busy} onClick={()=>{setSent(false);setCode('');setUseCode(false);}}>{localFlowText('changeEmail')}</button>{!useCode&&<button type="button" className={setupButton} disabled={busy} onClick={()=>setUseCode(true)}>{localFlowText('useEmailCode')}</button>}</div>}
   <button type="button" className={setupButton} disabled={busy} onClick={()=>void perform(recover)}>{localFlowText('checkLogin')}</button>
   {owner&&<button type="button" className={setupButton} disabled={busy} onClick={()=>void perform(logout)}>{localFlowText('switchAccount')}</button>}
   {local&&extension.get('extension')!=='connect'&&<button type="button" className={setupButton} onClick={()=>setLoginOpen(false)}>{localFlowText('continueLocal')}</button>}
