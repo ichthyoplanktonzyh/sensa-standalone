@@ -1,0 +1,57 @@
+# 正式 Web 上线核查与首条修复
+
+2026-09-10。Owner 要求暂停原生界面优化，优先完成 Web 并达到上线可用。
+本文登记实际代码与本轮证据；顺序由 production-migration-plan.md 裁决，不新增并行路线图。
+核查起点 `504f9059`，原工作树无未提交修改。主代理直接实施，无 worker、push、部署或用户数据迁移。
+
+## 上线差距与验收门
+
+| 范围 | 当前代码证据 | 缺口、依赖与关闭条件 |
+| --- | --- | --- |
+| 正式入口 | `apps/web/src/application/Root.tsx` 默认进入 `account/SensaApp.tsx`，preview 才进入原型 App | 正式页面目前以 Auth 和 API 初始化为前提。须按 ADR 0003 接入无账号本地库，不把 preview 的 localStorage 状态作为生产实现 |
+| 本地领域执行 | `data/replica/accountStore.ts` 保存账号独立 IndexedDB；`initialRuntime.ts` 支持已取得授权 Run 的离线动作；`data/consumer/client.ts` 向 sync push/pull、home 请求权威投影 | 新目标、开始 Run、Completion/Handoff/FSRS 仍依赖 API。须完成 LF-1 Web 本机事务、三 purpose、真实持久与 TS/Rust 差分；现有断网答题不能关闭此门 |
+| 安装与冷启动 | `vite.config.ts` 普通静态构建；当前未发现正式 service worker/离线外壳入口 | 需要安装资源与必要材料/媒体缓存、浏览器独立重启断网启动、升级和配额失败验收。打开的页面断网不算冷启动 |
+| 账号与隔离 | Supabase 客户端 PKCE、consumer JWT/邀请校验；原浏览器 smoke 使用合成 Auth | 本轮修复跨标签切换期间的客户端身份混用。真实托管邮箱 OTP、会话续期/撤销、目标地区送达仍未验收 |
+| 媒体 | `apps/api/src/sensa/media/consumer.ts` 已有私有 Supabase Storage 适配，HTTPS、大小上限/超时；consumer 路由先授权再校验摘要；Web 也校验摘要 | 不能称“尚无 Storage 适配”，也不能称“已接好生产媒体”。缺目标 bucket/策略、授权资源清单及上传发布、真实访问/缺失/撤销/离线恢复证据 |
+| 个人意义与供给 | 正式 `AccountContent` 接 consumer 解析/接纳/准备；已有任务和材料校验代码 | 本地库接纳与准备结果落地、Provider 选择/私有上下文边界、实际内容质量/费用验收需贯通；替身响应不能代表生产模型 |
+| 恢复与数据控制 | 副本有 outbox、bootstrap 和 retained 状态；当前 consumer 路由无完整数据导出/账号删除生命周期 | LF-1c 完整库导出/独立恢复、LF-3 可选 E2EE/密钥恢复、M3 删除与旧设备屏障、跨日/版本/多标签故障矩阵均未关闭；不自动迁移 owner 数据 |
+| 安全与运行监控 | consumer 有请求体上限、邀请限制、部分用途日预算；Edge 配置 origins；异常主要记录错误名并返回 503 | 不能把局部限额当完整防滥用。缺可审阅的按身份限流/用途预算覆盖表、结构化请求关联、同步/准备/媒体告警、隐私日志与费用处置演练 |
+| 正式功能覆盖 | SensaApp 以首页/内容/学习和账号链为主，已有 catalog、轻量 Runtime、统计与签到 | 按已确认 PRD 逐项核对独立内容/个人意义两旅程、偏好、词典/练习实际资源及 unavailable 状态；原型/原生有能力不代表正式 Web 已接入 |
+| CI/CD 与发布 | `.github/workflows/sensa-consumer-check.yml` 只有本地检查、临时 Postgres、Node/Deno 和合成 Auth 浏览器检查 | 缺部署工作流、固定目标项目/域名/SHA/媒体清单、迁移回滚与恢复演练、公网 smoke。实际操作仍需 release-authorization.md 的具体授权，不能在本地 shell 部署 |
+
+**结论：当前不能标记 Web 上线就绪。** 本次调整优先级没有降低 LF/M3/M4 门，
+也没有把旧明文服务器同步变成可选 E2EE。无账号本地使用与受邀在线服务要分别验收。
+线上配置尚未指定不阻止本地实现与流水线准备，也不是现在反复索取凭据的理由。
+
+## 本轮纵切：账号切换后保留原账号工作
+
+沿用 PRD 6.11、11 及 M0-2 已确认的账号隔离、退出和待提交工作保留体验，不新增产品页面。
+
+修复前 `syncAccount(accountA)` 虽然写入 A 的 IndexedDB，但每次 HTTP 请求从全局 Auth
+获取当前 session。bootstrap/pull 等待过程中若另一标签页切到 B，后续请求可能携带 B 的
+令牌。服务器的请求隔离并不能阻止客户端把 B 的 home 返回写入 A 的副本；初始化也可能
+把错误身份的返回缓存到传入的 subject key 下。
+
+修复将初始化/缓存恢复的 `AccountContext` 在内存绑定到原 subject。全部 consumer 请求，
+包括目录、目标、文本/音频材料、语义查找、准备、插件授权和退出，发起前核对当前身份。
+身份不符返回 `account_changed`，不发出请求、不丢弃 outbox。初始化在响应返回后再次检查，
+防止迟到响应建立当前授权。凭据不写入副本、文档或新映射。已发出的 A 请求仍仅使用 A 令牌，
+合法 A 响应可以保留在 A 库中；后续请求不得换用 B 的令牌。
+
+UI 在 Auth subject 改变时清除当前展示引用，并阻止过期 recover 的无 session 分支覆盖新恢复。
+退出 A 的迟到流程也会在 signOut 前复核身份，不能退出当前 B。此修复不改变结算或服务器合同。
+
+## 验证与边界
+
+`npm run sensa:web-account-isolation-smoke`：真实 Chromium、Supabase JS 客户端、
+跨标签 Auth 通知和 IndexedDB；HTTP 为确定性替身，无 Postgres、真实邮箱或 Provider。
+覆盖延迟 bootstrap 后跨标签切换、十个账号请求入口拒绝、待提交数量保留、页面刷新、
+原账号重登录恢复，以及延迟初始化不会写入缓存。已加入现有无成本 CI，尚未在远程 Actions 执行。
+
+本机使用已安装 Google Chrome，通过 `SENSA_CHROMIUM_PATH` 指定可执行文件；
+隔离临时 browser context、随机 loopback 端口，不连接 owner 服务/浏览器 profile。
+该脚本验证客户端集成，不是完整页面旅程或云端发布 E2E；UI 重置部分通过类型检查，
+完整正式页面账号切换走查仍应与后续 Web 本地入口整体验收一起执行。
+
+本轮根级 `npm run typecheck`、`npm run build`、`npm run lint` 均通过；lint 当前等同类型检查，
+不代表独立静态安全或可访问性审计。构建结果不改变上述未关闭的发布门。

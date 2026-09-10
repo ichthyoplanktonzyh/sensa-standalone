@@ -69,6 +69,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M2 reading interaction | [`m2-reading-interaction-handoff.md`](m2-reading-interaction-handoff.md) | 轻量划词工具栏、按需解释、保存预览、拖动／本机朗读及闭源实现边界；本地验证完成，owner 继续体验 |
 | Browser port implementation | [`browser-port-contract.md`](browser-port-contract.md) / [`browser-port-handoff.md`](browser-port-handoff.md) | 参考陪读蛙源码独立实现的 Provider、网页阅读与视频采集纵切；实际测试和未完成兼容范围见交付记录 |
 | Browser port deferred follow-ups | [`browser-port-followups.md`](browser-port-followups.md) | Owner 已结束本轮优化；保存恢复、原位慢轨、真实模型、字幕轨道、偏好记忆及兼容性差距留待回访，尚未实施或排期 |
+| Web launch audit | [`web-launch-readiness.md`](web-launch-readiness.md) | 2026-09-10 Web 优先级、实际代码缺口、发布验收门与账号切换隔离回归 |
 | Release authorization | [`release-authorization.md`](release-authorization.md) | 云端/商店所需具体授权、项目访问和发布前产物 |
 | M2 static pronunciation | [`m2-pronunciation-handoff.md`](m2-pronunciation-handoff.md) | 按需材料静态发音绑定、真实 TTS 小样本、离线播放和可选音频失败回退 |
 | M2 private context | [`m2-anchor-use-handoff.md`](m2-anchor-use-handoff.md) | 原文显式授权、撤销/迟到结果隔离、历史保留与后续复习材料替换的本地证据 |
@@ -114,7 +115,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | M1-E local implementation | [`m1-e-checkin-handoff.md`](m1-e-checkin-handoff.md) | 手动/正式学习签到、原日期离线上传、账号隔离恢复与 A–E 集成验收 |
 | Active decomposition | [`learning-extensibility-architecture.md`](learning-extensibility-architecture.md) | `web-next` 学习扩展性的实现 seam；把领域已有的显式 retention scope 扩展规定落到实现层，不新增领域定义 |
 
-当前路线图 M0 设计已验收，M0-1/2/3 产物齐备，M1-A/B/C/D/E 本地纵切已验证、托管验收待执行，近期里程碑已改为 Flutter/Rust 原生本地学习库；Web 保留 React/TS，按 ADR 0003 在原生迁移后建设完整本地执行；事实模型从现在开始分层校验。领域能力、原型中已经验证的能力和首轮生产交付范围分别管理，不能从原型菜单
+当前路线图 M0 设计已验收，M0-1/2/3 产物齐备，M1-A/B/C/D/E 本地纵切已验证、托管验收待执行，近期里程碑于 2026-09-10 改为优先完成正式 Web 上线可用，原生 UI 优化暂停；Web 保留 React/TS，按 ADR 0003 建设完整本地执行；事实模型继续分层校验。领域能力、原型中已经验证的能力和首轮生产交付范围分别管理，不能从原型菜单
 或完整领域目录推导上线清单。
 
 原先的 `content-kernel-contract.md`、`curriculum-runtime-contract.md`、`runtime-rule-packet-v1.md`、

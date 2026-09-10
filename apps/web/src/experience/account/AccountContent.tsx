@@ -8,7 +8,7 @@ import {captureSnapshotSchema,captureSourceLink} from '@sensa/contracts/sensa';
 import type {CaptureSnapshot} from '@sensa/contracts/sensa';
 import type {AccountReplica} from '../../data/replica/accountStore';
 import {setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
-export function AccountContent({replica,onSave,onAccept,onAdd,onPrepare,onHome,onMembership,onAnchorUse,onBrowse,onTarget,createRequested,status}:{status?:import('react').ReactNode;createRequested:boolean;onTarget:(target:TargetView)=>void;onBrowse:()=>void;onAnchorUse:(id:string,enabled:boolean)=>Promise<void>;onMembership:(entity:'intake'|'meaning',id:string,active:boolean)=>Promise<void>;onAdd:(meaningId:string)=>Promise<void>;onPrepare:(target:TargetView,cancel?:boolean)=>Promise<void>;onHome:()=>void;onAccept:(lookupId:string,intakeId:string)=>Promise<string|null>;replica:AccountReplica;onSave:(snapshot:CaptureSnapshot)=>Promise<void>}){
+export function AccountContent({account,replica,onSave,onAccept,onAdd,onPrepare,onHome,onMembership,onAnchorUse,onBrowse,onTarget,createRequested,status}:{account:import('@sensa/contracts/sensa').AccountContext;status?:import('react').ReactNode;createRequested:boolean;onTarget:(target:TargetView)=>void;onBrowse:()=>void;onAnchorUse:(id:string,enabled:boolean)=>Promise<void>;onMembership:(entity:'intake'|'meaning',id:string,active:boolean)=>Promise<void>;onAdd:(meaningId:string)=>Promise<void>;onPrepare:(target:TargetView,cancel?:boolean)=>Promise<void>;onHome:()=>void;onAccept:(lookupId:string,intakeId:string)=>Promise<string|null>;replica:AccountReplica;onSave:(snapshot:CaptureSnapshot)=>Promise<void>}){
  const {t}=useTranslation();
  const [inboxOpen,setInboxOpen]=useState(new URLSearchParams(location.search).has('intake'));
  const [selected,setSelected]=useState<string|null>(new URLSearchParams(location.search).get('meaning'));
@@ -25,13 +25,13 @@ export function AccountContent({replica,onSave,onAccept,onAdd,onPrepare,onHome,o
   setBusy(true);setNotice('');
   try{
    if(mode==='check'){
-    const existing=queries[id]?await checkSemanticLookup(queries[id]):await intakeSemanticLookup(id);
+    const existing=queries[id]?await checkSemanticLookup(account,queries[id]):await intakeSemanticLookup(account,id);
     if(existing){setQueries(q=>({...q,[id]:existing.id}));setLookup(q=>({...q,[id]:existing}));return;}
    }
    const previous=lookup[id],text=mode==='clarify'?focus[id]?.trim():previous?.focus?.text;
    if(mode==='clarify'&&(!text||!previous))return;
    const queryId=crypto.randomUUID();setQueries(q=>({...q,[id]:queryId}));
-   const result=await lookupSemantic(snapshot,queryId,text&&previous?{previousLookupId:previous.id,text}:undefined);setLookup(q=>({...q,[id]:result}));
+   const result=await lookupSemantic(account,snapshot,queryId,text&&previous?{previousLookupId:previous.id,text}:undefined);setLookup(q=>({...q,[id]:result}));
   }catch{setNotice('暂时无法解释，原材料仍保留。可以检查原请求结果。');}finally{setBusy(false);}
  };
  const membership=async(entity:'intake'|'meaning',id:string,active:boolean)=>{setBusy(true);setNotice('');try{await onMembership(entity,id,active);if(entity==='meaning')selectMeaning(active?id:null);setNotice(active?'内容已恢复。':'已移出我的内容，可在下方恢复。已有学习目标和记录保留。');}catch{setNotice('操作结果尚未确认，请检查同步结果。本机请求仍保留。');}finally{setBusy(false);}};

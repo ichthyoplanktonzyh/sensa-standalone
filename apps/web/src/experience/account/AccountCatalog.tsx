@@ -20,8 +20,8 @@ export function AccountCatalog({status:globalStatus,screenId,account,replica,onS
  const view=selection?(Object.values(replica.targets).find(x=>x.candidate.senseId===selection.candidate.senseId&&x.candidate.bindingId===selection.candidate.bindingId)??selection):Object.values(replica.targets).find(x=>x.candidate.candidateId===new URLSearchParams(location.search).get('candidate'))??null;
  const pending=!!view&&replica.outbox.some(x=>x.state==='pending'&&((x.operation.kind==='curriculum.add_target'&&x.operation.payload.candidateId===view.candidate.candidateId)||(x.operation.kind==='learning.retry_preparation'&&x.operation.payload.learningTargetId===view.learningTarget?.learningTargetId)));
  async function submit(retry=false){if(!view)return;setBusy(true);setNotice('');try{await onSubmit(view.candidate,retry?view:undefined);}catch{setNotice('暂时无法完成。请检查同步结果后重试。');}finally{setBusy(false);}}
- async function inspectMaterial(){if(!view?.plan?.materializationId)return;setBusy(true);try{const material=await checkMaterial(view.plan.materializationId);const reference=material.content.resources.find(r=>r.materialRoleKey==='pronunciation')?.contentPayload.audioUrl;
-   if(typeof reference==='string'&&reference.startsWith('sensa-media:'))setAudio(URL.createObjectURL(await readMaterialAudio(material.id,reference.slice(12))));
+ async function inspectMaterial(){if(!view?.plan?.materializationId)return;setBusy(true);try{const material=await checkMaterial(account,view.plan.materializationId);const reference=material.content.resources.find(r=>r.materialRoleKey==='pronunciation')?.contentPayload.audioUrl;
+   if(typeof reference==='string'&&reference.startsWith('sensa-media:'))setAudio(URL.createObjectURL(await readMaterialAudio(account,material.id,reference.slice(12))));
    setNotice('学习材料已读取，可以返回首页。');}catch{setNotice('暂时无法读取学习材料，请联网后重试。');}finally{setBusy(false);}}
  const status=<>{globalStatus}{notice?<p role="status" className="rounded-xl bg-[#edf0f7] p-4 text-sm leading-6">{notice}</p>:null}</>;
  if(view){

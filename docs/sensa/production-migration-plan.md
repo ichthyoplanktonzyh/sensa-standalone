@@ -1,5 +1,25 @@
 # Sensa 生产化路线图
 
+2026-09-10 owner 优先级更新：暂停原生 UI 优化，优先完成正式 Web 并达到上线可用。
+该指示覆盖下文旧的“Web 暂停”及“先继续原生优化”顺序，不撤销 ADR 0003 的本地权威与
+可选 E2EE 同步边界，也不构成 push/deploy 授权。实际缺口、代码位置与本轮结果见
+[Web 上线核查记录](web-launch-readiness.md)。
+
+当前依赖顺序（沿用 LF/M 编号）：
+
+1. **LF-1 Web 本地纵切**：复用确认过的 Web 体验，正式入口支持无账号保存/导入、显式入学、
+   三 purpose 本机原子结算；真实 IndexedDB 事务、跨标签互斥和 TS/Rust 差分验证。
+   现有 consumer 账号副本只保留作回归，禁止接回旧服务器进行隐式双写。
+2. **LF-1c/LF-2**：断网冷启动、配额失败、版本升级、备份导出与独立恢复；
+   个人意义/资源/采集交接进入同一库，使用已确认的准备/失败/恢复体验。
+3. **LF-3/4、M3**：事实 G1–G3、可选加密同步/密钥恢复、旧数据只读核对与明确切换；
+   并发 due 分支裁决不能用最后写入覆盖。账号删除与旧设备屏障、连续使用单列验收。
+4. **M4 准备与验收**：在线 Auth/Storage/模型边界、隐私安全、监控、成本限额、
+   CI/CD 发布清单/迁移/回滚及恢复演练；完整发布批准后才能触发云端/商店动作。
+
+跨账号数据污染属于当前可独立关闭的 P0，先修复旧 consumer 客户端的身份绑定并加入回归，
+不为修复旧路径扩大服务器权威架构。每条通过验收的纵切 checkpoint，持续推进上述依赖。
+
 2026-09-09 当前顺序更新：[ADR 0003](../adr/0003-three-client-local-facts.md) 确认三端本地终景。事实模型 G0 现在开始验；原生迁移中接入真实事实适配/多副本 G1，随后 React/TS 本地改造与跨语言 G2，再做三端/E2EE G3。具体门与本轮有限证据见 [事实模型蓝图](personal-library-fact-model.md)。后文 Web 暂停/是否开放未定是旧顺序，不再定义终局范围；原生 Anchor Use 已在 [后续纵切](native-anchor-use-handoff.md) 验证，静态发音/音频协作已在 [后续纵切](native-pronunciation-handoff.md) 接入；下一用例继续学习组织的来源选择/Curriculum/Book Range。
 
 2026-09-08 原生增量：轻量到期复习与再学习已接入 Rust/SQLite/Flutter，事务和平台验证见 [交付记录](native-retention-handoff.md)。通用 Progression Kernel 与策略组合引用校验的纯接口随后已迁移并接入原生组合入口，见 [进度内核记录](native-progression-handoff.md)。这些记录不将正式 Activity/Mixed/去重汇总、完整 Runtime 编排或完整 LF-1b 标记为完成。 Policy Assignment、purpose plan/readiness 与首次 Run 固定已继续接入，见 [策略迁移记录](native-policy-handoff.md)；完整模式执行与 Policy Migration 仍待完成。 通用进度账本随后已接入原生 consumer，见 [账本记录](native-progress-journal-handoff.md)，不代表多阶段执行器已交付。 四阶段纯编排与恢复格式已继续迁移，见 [四阶段记录](native-four-stage-orchestration-handoff.md)，正式材料、评价、事务适配与 Flutter 呈现仍是开放前置。
@@ -12,9 +32,9 @@
 2026-09-09 个人语义世界增量：已有本机 Sense 的文本快轨/收件箱、独立接受、移除恢复和显式入学已贯通，见 [交付记录](native-personal-world-handoff.md)。在线语义解析/澄清与本地新 Sense 接受已在 [后续纵切](native-semantic-resolution-handoff.md) 接入；显式入学与按需文本任务/冻结材料化也已在 [原生内容纵切](native-provisioning-handoff.md) 接入现有 Profile 学习。Anchor Use 授权/撤销与材料替换已在 [原生纵切](native-anchor-use-handoff.md) 通过双平台主流程/恢复，静态发音/音频协作已在 [后续纵切](native-pronunciation-handoff.md) 接入；下一项继续学习组织的来源选择/Curriculum/Book Range。完整多模态、图谱及其余迁移不因此关闭。
 
 > 状态：Active roadmap\
-> 更新日期：2026-09-07\
-> 近期目标：Flutter/Rust 原生单设备本地学习库；Web 保留成果、暂停新建设\
-> 当前工作：本地底座 LF-1b 的 Flutter/Rust/SQLite 首学技术纵切；M1/M2 保留为迁移回归基础\
+> 更新日期：2026-09-10\
+> 近期目标：正式 Web 上线可用；原生 UI 优化暂停\
+> 当前工作：Web 实际差距核查、账号隔离修复及 LF-1 Web 本地执行；M1/M2 保留为迁移回归基础\
 > 阶段与范围：[current-stage.md](current-stage.md)
 
 ## 1. 路线图职责与交付原则
