@@ -31,6 +31,7 @@ jobs:
       VITE_SENSA_API_URL: ${{ vars.VITE_SENSA_API_URL }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       CLOUDFLARE_WORKER_NAME: ${{ vars.CLOUDFLARE_WORKER_NAME }}
+      NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/infra/certs/supabase-prod-ca-2021.crt
     steps:
       - uses: actions/checkout@v4
         with:

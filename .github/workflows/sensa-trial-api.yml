@@ -41,6 +41,9 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
       - run: npm ci
       - name: Build and check reviewed API
         run: |
