@@ -14,6 +14,7 @@ const subjects=new Map([['owner@sensa.invalid',randomUUID()],['other@sensa.inval
 type Mail={email:string;challenge:string;redirect:string;code:string;used:boolean};
 const inbox:Mail[]=[];const exchanges:string[]=[],admissions:string[]=[],errors:string[]=[];
 let browser:Browser|undefined;
+let extensionAuthorizations=0;
 const server=createServer(async(req,res)=>{
  const url=new URL(req.url!,'http://localhost');
  const json=(value:unknown,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(value));};
@@ -42,6 +43,7 @@ const server=createServer(async(req,res)=>{
  if(url.pathname==='/sensa/web/access/session'){
   const claims=JSON.parse(Buffer.from(req.headers.authorization!.split('.')[1],'base64url').toString());admissions.push(claims.sub);json({authorized:true,accountId:claims.sub});return;
  }
+ if(url.pathname==='/sensa/extension/authorize'){const input=await body();assert(req.headers.authorization?.startsWith('Bearer '));extensionAuthorizations++;const destination=new URL(input.redirectUri);destination.searchParams.set('state',input.state);destination.searchParams.set('code','fixture-code');json({redirectUri:destination.toString()});return;}
  if(url.pathname==='/sensa/service/status'){json({authorized:true,explanationAvailable:false,checkedAt:new Date().toISOString(),windowHours:24,usage:['reading','teacher','content'].map(kind=>({kind,used:0,limit:30}))});return;}
  if(url.pathname==='/sensa/packages'){json({items:[]});return;}
  if(url.pathname.startsWith('/sensa/')||url.pathname.startsWith('/auth/')){json({code:'fixture_unavailable'},503);return;}
@@ -64,6 +66,17 @@ try{
  await promisify(execFile)('npm',['run','build','-w','@sensa/web','--','--outDir',output],{env:{...process.env,VITE_SENSA_MODE:'production',VITE_SUPABASE_URL:origin,VITE_SUPABASE_PUBLISHABLE_KEY:'fixture-public',VITE_SENSA_API_URL:origin},maxBuffer:8*1024*1024});
  browser=await chromium.launch({headless:true,executablePath:process.env.SENSA_CHROMIUM_PATH});
  const context=await browser.newContext({serviceWorkers:'block'});context.on('page',p=>p.on('pageerror',e=>errors.push(e.message)));
+ await context.addInitScript(()=>{
+  let connected=false;Object.assign(window,{extensionConnected:false});
+  window.addEventListener('message',event=>{
+   const m=event.data;if(event.source!==window||event.origin!==location.origin||m?.channel!=='sensa-web-intake-request')return;
+   let value:unknown;
+   if(m.kind==='web-connect-prepare')value=connected?{connected:true}:{authorization:{installationId:'11111111-1111-4111-8111-111111111111',state:'a'.repeat(64),challenge:'b'.repeat(43),redirectUri:'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/sensa'}};
+   else if(m.kind==='web-connect-complete'){if(Object.keys(m.receipt).join()!=='redirectUri'||new URL(m.receipt.redirectUri).searchParams.get('code')!=='fixture-code')throw Error('Credential exposed or missing authorization');connected=true;(window as any).extensionConnected=true;value={connected:true};}
+   else if(m.kind==='web-intake-pull')value=[];else return;
+   window.postMessage({channel:'sensa-web-intake-response',id:m.id,value},location.origin);
+  });
+ });
  const page=await context.newPage();await page.goto(origin+'/profile');
  const mail=await requestMail(page);
  assert.equal(mail.redirect,origin+'/profile');
@@ -71,14 +84,15 @@ try{
  await wrong.goto(link(mail));await expect(wrong.getByRole('status')).toContainText('登录链接已失效');
  assert.equal(exchanges.length,0);assert.equal(new URL(wrong.url()).search,'');await otherBrowser.close();
  const callback=await context.newPage();await callback.goto(link(mail));
- await expect(callback.getByRole('heading',{name:'Sensa 服务',exact:true})).toBeVisible();
- await expect(page.getByRole('heading',{name:'Sensa 服务',exact:true})).toBeVisible();
+ await expect(callback.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible();
  assert.equal(exchanges.length,1);assert.equal(new URL(callback.url()).search,'');
+ await expect.poll(()=>callback.evaluate(()=>(window as any).extensionConnected)).toBe(true);assert(extensionAuthorizations>0);
  const saved=await owner(callback);assert(saved);
- await callback.reload();await expect(callback.getByRole('heading',{name:'Sensa 服务',exact:true})).toBeVisible();assert.equal(exchanges.length,1);
+ await callback.reload();await expect(callback.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible();assert.equal(exchanges.length,1);
  await callback.goto(link(mail));await expect(callback.getByRole('status')).toContainText('登录链接已失效');assert.deepEqual(await owner(callback),saved);
  await callback.getByLabel('界面语言',{exact:true}).selectOption('en');await expect(callback.getByRole('status')).toContainText('sign-in link has expired');
- await callback.goto(origin+'/profile');await expect(callback.getByRole('heading',{name:'Sensa services',exact:true})).toBeVisible();
+ await callback.goto(origin+'/profile');await expect(callback.getByRole('heading',{name:'Account & settings',exact:true})).toBeVisible();
  await context.close();
  // A fresh flow receives a provider error. Its text/hash must never reach the UI.
  const failedContext=await browser.newContext({serviceWorkers:'block'}),failed=await failedContext.newPage();await failed.goto(origin+'/profile');

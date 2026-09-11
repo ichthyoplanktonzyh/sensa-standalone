@@ -1,0 +1,27 @@
+const messages={
+ account:['管理账号','Manage account'],
+ checking:['正在检查账号…','Checking account…'],login:['登录 Sensa','Log in to Sensa'],loggingIn:['请在 Sensa 页面登录，插件会自动连接。','Sign in on the Sensa page. The extension will connect automatically.'],
+ connected:['已登录 Sensa','Signed in to Sensa'],guest:['尚未登录 Sensa','Not signed in to Sensa'],
+ reading:['开始 / 继续阅读','Start / continue reading'],stop:['关闭当前页阅读','Stop reading on this page'],open:['打开我的内容','Open My Content'],options:['阅读与模型设置','Reading and model settings'],
+ advanced:['高级连接设置','Advanced connection settings'],native:['连接桌面端学习库…','Connect a desktop library…'],web:['使用浏览器中的学习库','Use the browser library'],confirm:['确认接收库','Confirm receiving library'],disconnect:['断开插件连接','Disconnect extension'],sync:['检查保存结果','Check saved content'],
+ recent:['最近保存','Recently saved'],empty:['暂无最近保存的内容。','No recently saved content.'],guestEmpty:['登录后查看最近保存的内容。','Sign in to see recently saved content.'],count:['{count} 条','{count} items'],
+ working:['正在处理…','Working…'],starting:['正在开启当前页阅读模式…','Starting reading mode…'],stopping:['正在关闭当前页阅读模式…','Stopping reading mode…'],checkingSave:['正在检查保存结果…','Checking saved content…'],disconnecting:['正在断开连接…','Disconnecting…'],
+ started:['当前页阅读模式已开启，可以划词查看意思。','Reading mode is on. Select text to look it up.'],stopped:['当前页阅读模式已关闭。','Reading mode is off.'],checked:['已检查保存结果。','Saved content checked.'],disconnected:['已断开插件连接，原账号材料已保留。','Extension disconnected. Existing content is preserved.'],
+ pending:['{count} 项已暂存在插件，等待交付到我的内容。','{count} items saved in the extension, awaiting delivery to My Content.'],legacy:['另有 {count} 项旧版记录待处理。','{count} legacy items also need attention.'],
+ library:['接收库：{name}','Receiving library: {name}'],select:['请选择接收库。','Choose the receiving library.'],unknownLibrary:['尚未选择','Not selected'],
+ saved:['已保存到我的内容 · ','Saved to My Content · '],inbox:['已保存待处理 · ','Saved for clarification · '],removed:['已移出 · ','Removed · '],text:['文字材料','Text'],
+ failed:['暂时无法完成，已保存的内容仍保留。','Could not complete this action. Saved content is preserved.'],
+ authentication_required:['请登录 Sensa 后重试。','Sign in to Sensa and try again.'],access_revoked:['登录授权已失效，请重新登录 Sensa。','Authorization expired. Sign in to Sensa again.'],
+ account_mismatch:['账户已变化，请核对当前账户后重新连接。','The account changed. Check the current account and reconnect.'],library_mismatch:['接收库不一致，原记录不会转移到其他库。','The receiving library differs. Existing items will not be transferred to another library.'],
+ native_unavailable:['桌面端接收服务未就绪，已暂存的内容仍保留。','The desktop receiver is unavailable. Queued content is preserved.'],connection_mismatch:['桌面端接收库已变化，请重新选择。','The desktop receiving library changed. Select it again.'],
+ unsupported_page:['此页面不支持采集，请打开普通网页。','Capture is unavailable on this page. Open a regular web page.'],authorization_cancelled:['登录已取消。','Sign-in cancelled.'],
+ authorization_expired:['连接授权已过期，请重试。','Connection authorization expired. Try again.'],web_reconnect_required:['请登录 Sensa 以恢复接收。','Sign in to Sensa to reconnect.'],
+ client_update_required:['请更新插件，原记录已保留。','Update the extension. Existing content is preserved.'],web_queue_full:['插件暂存已满，请打开 Sensa 完成交付。','The extension queue is full. Open Sensa to complete delivery.'],
+ lookupFailed:['暂时无法解释，请重试或保存待处理。','Explanation failed. Retry or save for clarification.'],networkFailed:['无法连接 Sensa 服务，请检查网络和服务地址。','Cannot connect to Sensa. Check the network and service address.'],
+ timeout:['解释请求超时，请重试。','The explanation timed out. Try again.'],model_auth_failed:['模型服务授权失败，请检查模型设置。','Model authorization failed. Check model settings.'],model_rate_limited:['模型服务繁忙，请稍后重试。','The model service is busy. Try again shortly.'],model_invalid_response:['模型返回的解释格式不正确，请重试。','The model returned an invalid explanation. Try again.'],
+ saveAction:['保存到我的内容','Save to My Content'],saving:['正在保存…','Saving…'],savedPending:['已暂存于插件，等待交付到我的内容。','Saved in the extension, awaiting delivery to My Content.'],savedDone:['已保存到我的内容。','Saved to My Content.'],
+} as const;
+export type MessageKey=keyof typeof messages;
+export const extensionLanguage=()=>navigator.language.toLowerCase().startsWith('zh')?'zh-CN':'en';
+export function t(key:MessageKey,values:Record<string,string|number>={}){let value:string=messages[key][extensionLanguage()==='zh-CN'?0:1];for(const [name,item] of Object.entries(values))value=value.replaceAll('{'+name+'}',String(item));return value;}
+export function errorText(error:unknown){const code=error instanceof Error?error.message:String(error);return code in messages?t(code as MessageKey):t(code==='Failed to fetch'||code==='network_failed'?'networkFailed':code==='model_cancelled'||code==='TimeoutError'?'timeout':code==='provider_invalid_response'?'model_invalid_response':'failed');}

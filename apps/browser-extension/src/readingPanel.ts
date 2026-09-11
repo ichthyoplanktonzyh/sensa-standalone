@@ -1,3 +1,4 @@
+import {t,errorText} from './i18n';
 import type {CaptureSnapshot} from '@sensa/contracts/sensa';
 import {captureSourceLink} from '@sensa/contracts/sensa';
 import {runReading,runLookup,readingError} from './readingClient';
@@ -263,9 +264,9 @@ export function showReadingPanel(input: ReadingPanelInput) {
         if(lookupFailed)check.textContent='重新解释';
         if(result.status==='running')poll=setTimeout(()=>{if(alive()&&version===revision)void explain();},2000);
       }
-    } catch {
+    } catch (error) {
       if (alive()&&version===revision) {
-        explanation.textContent = '暂时无法解释，可以检查结果或保存待处理。';
+        explanation.textContent = errorText(error);
         check.hidden = saved;
       }
     } finally {
@@ -282,7 +283,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
     if (!mayAct() || saving || saved || (kind === 'accept' && !lookupReady)) return;
     saving = true;
     save.disabled = accept.disabled = contextToggle.disabled = true;
-    feedback.textContent = kind === 'save' ? '正在保存…' : '正在加入 Sensa…';
+    feedback.textContent = t('saving');
     try {
       const response = await chrome.runtime.sendMessage(kind === 'save'
         ? {kind, snapshot, operationId: saveId, accountId}
@@ -292,7 +293,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
       saved = true;
       save.hidden = accept.hidden = check.hidden = true;
       lookup.disabled = true;
-      feedback.textContent = response.value?.destination==='native' ? (response.value.committed ? '已保存到所选原生库，可在原生 Sensa 查看。' : '已暂存于插件，等待交给所选原生库。可从 Sensa 图标检查结果。') : response.value?.destination==='web' ? '已暂存于插件，打开 Sensa 后交接到我的内容。可从 Sensa 图标检查结果。' : '已保存在本机，联网后同步。可从 Sensa 图标查看结果。';
+      feedback.textContent = t(response.value?.committed?'savedDone':'savedPending');
     } catch {
       if (alive()) feedback.textContent = '尚未完成，请从 Sensa 图标检查原操作结果或登录后重试。';
     } finally {

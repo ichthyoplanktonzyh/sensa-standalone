@@ -1,3 +1,4 @@
+import {authorizeExtensionConnection} from './extensionConnection';
 import {eraseDeletedAccount} from '../../data/library/dataControl';
 import {AccountDeletion,pendingAccountDeletion} from './AccountDeletion';
 import {LanguageSwitch} from '../../i18n/LanguageSwitch';
@@ -74,16 +75,11 @@ export default function AccountExperience({children}:{children:ReactNode}){
  if(!ready)return <main role="status" className="grid min-h-screen place-content-center">{localFlowText('loadingSensa')}</main>;
  const extension=new URLSearchParams(location.search);
  if(local&&onlineService&&extension.get('extension')==='connect')return <main className="mx-auto max-w-lg space-y-5 p-8"><LanguageSwitch/><h1 className="text-2xl">{localFlowText('connectExtension')}</h1><p>{localFlowText('currentAccount')}{owner?.email}</p><p>{localFlowText('extensionConsent')}</p>{notice&&<p role="status">{localFlowNotice(notice)}</p>}<button className={setupPrimary} disabled={busy} onClick={()=>void perform(async()=>{
-  const session=(await auth?.getSession())?.data.session;if(!session||session.user.id!==owner?.subject)throw new Error('account changed');
-  const response=await fetch(import.meta.env.VITE_SENSA_API_URL.replace(/\/+$/,'')+'/sensa/extension/authorize',{method:'POST',headers:{authorization:'Bearer '+session.access_token,'content-type':'application/json'},body:JSON.stringify({installationId:extension.get('installationId'),state:extension.get('state'),challenge:extension.get('challenge'),redirectUri:extension.get('redirectUri')}),signal:AbortSignal.timeout(15000),redirect:'error'});
-  if(!response.ok){setNotice(localFlowText('extensionFailed'));return;}
-  const result=await response.json();const destination=new URL(result.redirectUri);const expected=new URL(extension.get('redirectUri')??'');
-  if(destination.origin!==expected.origin||destination.pathname!==expected.pathname||(await auth?.getSession())?.data.session?.user.id!==session.user.id)throw new Error('invalid handoff');
-  destination.searchParams.set('libraryId',(await openLibrary()).id);
-  if((await auth?.getSession())?.data.session?.user.id!==session.user.id)throw new Error('account changed');
+  const result=await authorizeExtensionConnection({installationId:extension.get('installationId'),state:extension.get('state'),challenge:extension.get('challenge'),redirectUri:extension.get('redirectUri')},AbortSignal.timeout(15000),owner?.subject);
+  const destination=new URL(result.redirectUri);destination.searchParams.set('libraryId',(await openLibrary()).id);
   location.assign(destination.toString());
  })}>{localFlowText('connectAccount')}</button><button className={setupButton} onClick={()=>location.assign('/profile')}>{localFlowText('cancel')}</button></main>;
- if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{deleteAccount:()=>{generation.current++;setDeletionOpen(true);},notice:localFlowNotice(notice),email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout:()=>perform(logout)}}>{owner?.accountId&&<ExtensionIntake accountId={owner.accountId}/>} {children}</AccountContext.Provider>;
+ if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{deleteAccount:()=>{generation.current++;setDeletionOpen(true);},notice:localFlowNotice(notice),email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout:()=>perform(logout)}}>{owner?.accountId&&<ExtensionIntake accountId={owner.accountId} onlineService={onlineService}/>} {children}</AccountContext.Provider>;
  // Default Supabase templates send links; custom OTP templates remain supported.
  return <main className="flex min-h-screen items-center justify-center bg-[#fbfbfa] px-6 text-[#242a38]"><form className="w-full max-w-sm space-y-5" onSubmit={e=>{e.preventDefault();void perform(sent?useCode?async()=>{const result=await auth!.verifyOtp({email:email.trim(),token:code.trim(),type:'email'});if(result.error){setNotice(localFlowText('otpInvalid'));return;}await recover();}:recover:send);}}>
   <div className="flex items-center justify-between"><p className="text-sm text-[#68748d]">Sensa</p><LanguageSwitch/></div><h1 className="text-3xl font-semibold">{sent?localFlowText(useCode?'enterOtp':'checkEmailLink'):localFlowText('welcome')}</h1>
