@@ -280,7 +280,7 @@ export function createConsumerRoutes(options: {deleteIdentity?:DeleteIdentity;te
       let explanationAvailable=false;
       try{await activeMeaningConnection(db,a);explanationAvailable=true;}catch(e){if(!(e instanceof ConsumerError))throw e;}
       return {authorized:true,explanationAvailable,checkedAt:a.now.toISOString(),windowHours:24,
-        usage:[{kind:'reading',used:await used('reading_requests'),limit:readingDailyLimit},{kind:'teacher',used:await used('native_semantic_usage'),limit:process.env.SENSA_UNLIMITED_MODEL_USAGE==='true'?null:nativeModelDailyLimit},{kind:'content',used:await used('native_content_usage'),limit:process.env.SENSA_UNLIMITED_MODEL_USAGE==='true'?null:nativeModelDailyLimit}]};
+        usage:[{kind:'reading',used:await used('reading_requests'),limit:process.env.SENSA_UNLIMITED_MODEL_USAGE==='true'?null:readingDailyLimit},{kind:'teacher',used:await used('native_semantic_usage'),limit:process.env.SENSA_UNLIMITED_MODEL_USAGE==='true'?null:nativeModelDailyLimit},{kind:'content',used:await used('native_content_usage'),limit:process.env.SENSA_UNLIMITED_MODEL_USAGE==='true'?null:nativeModelDailyLimit}]};
     });
     c.header('Cache-Control','no-store');return c.json(result);
   });
@@ -368,11 +368,14 @@ export function createConsumerRoutes(options: {deleteIdentity?:DeleteIdentity;te
     const started=await transaction(async db=>beginLookup(db,await account(db,identity,undefined,false,clock()),input));
     async function resolve(onExplanation?:(text:string)=>Promise<void>){
       if(!started.fresh)return started.view;
-      let result=null;
-      try{const connection=options.semanticResolver?null:await transaction(async db=>configuredMeaningConnection(db,await account(db,identity,undefined,false,clock())));
-        result=await (options.semanticResolver??(connection?semanticResolverFor(connection,options.readingCompletion):resolveSemantic))(input.snapshot,started.view.focus,onExplanation);
-      }catch{/* No source/provider payload in logs. */}
-      return transaction(async db=>finishLookup(db,await account(db,identity,undefined,false,clock()),input.id,result));
+      let result=null,failureReason='provider_unavailable';
+      try{const connection=options.semanticResolver?null:await transaction(async db=>activeMeaningConnection(db,await account(db,identity,undefined,false,clock())));
+        result=await (options.semanticResolver??semanticResolverFor(connection!,options.readingCompletion))(input.snapshot,started.view.focus,onExplanation);
+      }catch(error){
+        // Only stable service codes cross the boundary; never provider payloads.
+        failureReason=error instanceof ConsumerError?error.code:error instanceof z.ZodError||error instanceof SyntaxError?'model_invalid_response':'provider_unavailable';
+      }
+      return transaction(async db=>finishLookup(db,await account(db,identity,undefined,false,clock()),input.id,result,failureReason));
     }
     if(!path.endsWith('/stream'))return c.json(await resolve());
     c.header('Content-Type','application/x-ndjson');c.header('Cache-Control','no-store');c.header('X-Accel-Buffering','no');

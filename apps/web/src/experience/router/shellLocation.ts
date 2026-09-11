@@ -173,6 +173,7 @@ export const SHELL_PARAM_KEYS = [
  * screen rather than accumulating every id the learner ever visited.
  */
 const SHEET_PARAM_OWNERS: Readonly<Record<string, readonly (keyof ShellParams)[]>> = {
+  's-content': ['worldAction'],
   's-content-library': ['section'],
   's-content-sense': ['senseId'],
   's-content-example': ['exampleId'],

@@ -109,7 +109,7 @@ export function registerReadingRoutes(app:Hono,withScope:WithScope,completion:Re
         if(old.status==='running'&&a.now.getTime()-old.created_at.getTime()>45000){old.status='failed';old.error='reading_timeout';}
         return {existing:{status:old.status,text:old.result??null,error:old.error??null},connection:null};}
       const count=(await db.query('SELECT count(*)::int AS n FROM sensa_consumer.reading_requests WHERE account_id=$1 AND created_at>$2',[a.account_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
-      if(count>=readingDailyLimit)throw new ConsumerError(409,'reading_daily_budget');
+      if(process.env.SENSA_UNLIMITED_MODEL_USAGE!=='true'&&count>=readingDailyLimit)throw new ConsumerError(409,'reading_daily_budget');
       const active=(await db.query("SELECT count(*)::int AS n FROM sensa_consumer.reading_requests WHERE account_id=$1 AND status='running' AND created_at>$2",[a.account_id,new Date(a.now.getTime()-45000)])).rows[0]!.n;
       if(active>=3)throw new ConsumerError(409,'reading_busy');
       const {settings}=await readSettings(db,a);

@@ -1,7 +1,23 @@
 const messages={
+ openInbox:['打开 Sensa 收件箱','Open Sensa inbox'],
+ deliveryHint:['保存后打开同一浏览器中的 Sensa，内容会自动进入收件箱。','After saving, open Sensa in this browser. Your capture will appear in the inbox automatically.'],
+ savedInbox:['已进入 Sensa 收件箱。','Delivered to the Sensa inbox.'],
+ savePendingAction:['保存待处理','Save for clarification'],checkExplanation:['检查解释结果','Check explanation'],retryExplanation:['重新解释','Retry explanation'],
+ explaining:['正在解释…','Explaining…'],explanationPartial:['解释生成中 · 尚未完成','Generating explanation · Not finished'],readingAssistant:['阅读助手','Reading assistant'],
+ explanationWaiting:['仍在解释，可继续阅读。','Still explaining. You can keep reading.'],meaningUnresolved:['暂时无法确定这个意思，可保存到收件箱继续澄清。','The meaning is uncertain. Save it to the inbox to continue clarifying.'],
+ provider_unavailable:['解释服务暂不可用，请重试。原文仍可保存。','The explanation service is unavailable. Retry, or save the source.'],
+ model_provider_failed:['无法连接模型服务，请稍后重试。','Could not reach the model service. Try again shortly.'],
+ model_request_rejected:['模型服务不接受当前请求，请检查服务配置。','The model rejected this request. Check the service configuration.'],
+ managed_models_paused:['Sensa 模型服务已暂停，原文仍可保存。','Sensa model service is paused. You can still save the source.'],
+ provider_not_configured:['Sensa 模型服务尚未配置。','Sensa model service is not configured.'],
+ semantic_daily_budget:['今日解释额度已用完，原文仍可保存。','The explanation limit has been reached. You can still save the source.'],
+ reading_daily_budget:['今日阅读额度已用完，原文仍可保存。','The reading limit has been reached. You can still save the source.'],
+ lookup_timeout:['解释请求超时，请重新解释。','The explanation timed out. Retry the explanation.'],
+ invalid_proposal:['解释结果未通过校验，请重新解释。','The explanation did not pass validation. Retry the explanation.'],
+
  delivery_paused:['云端交付已暂停，内容仍保存在插件。','Cloud delivery is paused. Content remains in the extension.'],delivery_queue_full:['云端待接收队列已满，请打开 Sensa 接收后重试。','The cloud queue is full. Open Sensa to receive captures, then retry.'],
  cloudPending:['其中 {count} 项已加密交付云端，等待学习库接收。','{count} items delivered encrypted to the cloud, awaiting library receipt.'],
- account:['管理账号','Manage account'],
+ account:['重新连接 Web 账号','Reconnect Web account'],
  checking:['正在检查账号…','Checking account…'],login:['登录 Sensa','Log in to Sensa'],loggingIn:['请在 Sensa 页面登录，插件会自动连接。','Sign in on the Sensa page. The extension will connect automatically.'],
  connected:['已登录 Sensa','Signed in to Sensa'],guest:['尚未登录 Sensa','Not signed in to Sensa'],
  reading:['开始 / 继续阅读','Start / continue reading'],stop:['关闭当前页阅读','Stop reading on this page'],open:['打开我的内容','Open My Content'],options:['阅读与模型设置','Reading and model settings'],
@@ -21,7 +37,7 @@ const messages={
  client_update_required:['请更新插件，原记录已保留。','Update the extension. Existing content is preserved.'],web_queue_full:['插件暂存已满，请打开 Sensa 完成交付。','The extension queue is full. Open Sensa to complete delivery.'],
  lookupFailed:['暂时无法解释，请重试或保存待处理。','Explanation failed. Retry or save for clarification.'],networkFailed:['无法连接 Sensa 服务，请检查网络和服务地址。','Cannot connect to Sensa. Check the network and service address.'],
  timeout:['解释请求超时，请重试。','The explanation timed out. Try again.'],model_auth_failed:['模型服务授权失败，请检查模型设置。','Model authorization failed. Check model settings.'],model_rate_limited:['模型服务繁忙，请稍后重试。','The model service is busy. Try again shortly.'],model_invalid_response:['模型返回的解释格式不正确，请重试。','The model returned an invalid explanation. Try again.'],
- saveAction:['保存到我的内容','Save to My Content'],saving:['正在保存…','Saving…'],savedPending:['已暂存于插件，等待交付到我的内容。','Saved in the extension, awaiting delivery to My Content.'],savedDone:['已保存到我的内容。','Saved to My Content.'],
+ saveAction:['保存到我的内容','Save to My Content'],saving:['正在保存…','Saving…'],savedPending:['已暂存在插件。打开同一浏览器中的 Sensa 收件箱即可接收。','Saved in the extension. Open the Sensa inbox in this browser to receive it.'],savedDone:['已保存到我的内容。','Saved to My Content.'],
 } as const;
 export type MessageKey=keyof typeof messages;
 export const extensionLanguage=()=>navigator.language.toLowerCase().startsWith('zh')?'zh-CN':'en';

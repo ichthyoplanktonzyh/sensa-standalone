@@ -42,7 +42,7 @@ interface ContentScreenProps {
   notice?:import("react").ReactNode;
   active: boolean;
   screenId?: string;
-  initialAction?: "create";
+  initialAction?: "create" | "inbox";
   onStartConversation?:()=>void;
   onBrowseExisting: () => void;
   onOpenPersonalMeaning: (id: string, focusId?: string) => void;
@@ -117,6 +117,7 @@ function ContentScreenView({
   const fmt = (n: number) =>
     new Intl.NumberFormat(i18n.resolvedLanguage).format(n);
   useEffect(() => {
+    if (active && initialAction === "inbox") setInboxOpen(true);
     if (active && initialAction === "create") {if(onStartConversation)onStartConversation();else setComposerOpen(true);}
   }, [active, initialAction]);
   useEffect(() => {

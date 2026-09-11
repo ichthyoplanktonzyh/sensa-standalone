@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import pg from 'pg';
+import {ConsumerError} from '../apps/api/dist/sensa/access/auth.js';
 import {createConsumerRoutes} from '../apps/api/dist/sensa/access/consumer.js';
 import {captureSnapshotSchema,captureIdentity,captureSourceLink} from '@sensa/contracts/sensa';
 import {mockSemanticResolver} from './support/consumerSemanticChecks.mts';
@@ -10,9 +11,9 @@ const pool=new pg.Pool({connectionString:url});
 async function transaction<T>(work:(db:DatabaseExecutor)=>Promise<T>){const client=await pool.connect();await client.query('BEGIN');try{const result=await work({query:(sql,params)=>client.query(sql,params as unknown[])});await client.query('COMMIT');return result;}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}
 const subjects=[crypto.randomUUID(),crypto.randomUUID()];const sessions=[crypto.randomUUID(),crypto.randomUUID()];
 await pool.query('INSERT INTO sensa_consumer.invitations(issuer,subject) VALUES($1,$2),($1,$3)',['browser-smoke',...subjects]);
-let calls=0,failing=false,release:(()=>void)|null=null,now=new Date();
+let calls=0,failing=false,typedFailure=false,release:(()=>void)|null=null,now=new Date();
 const app=createConsumerRoutes({transaction,clock:()=>now,verify:async request=>{const index=request.headers.get('authorization')==='Bearer second'?1:0;return {issuer:'browser-smoke',subject:subjects[index],sessionId:sessions[index],email:null};},
-  readingCompletion:async(connection,messages,json,onText)=>{calls++;assert.equal(connection.apiKey,'fixture-secret-key');if(failing)throw new Error('do not expose provider payload');if(onText)await onText(json?' {"proposal":{"explanation":"解释预览':'这是一段');if(release)await new Promise<void>(resolve=>{release=resolve;});if(json){const input=JSON.parse(messages[1].content);return JSON.stringify({proposal:(await mockSemanticResolver(input,input.learnerFocus?{text:input.learnerFocus}:null)).proposal});}return '这是一段阅读译文。';}});
+  readingCompletion:async(connection,messages,json,onText)=>{calls++;if(typedFailure)throw new ConsumerError(503,'model_auth_failed');assert.equal(connection.apiKey,'fixture-secret-key');if(failing)throw new Error('do not expose provider payload');if(onText)await onText(json?' {"proposal":{"explanation":"解释预览':'这是一段');if(release)await new Promise<void>(resolve=>{release=resolve;});if(json){const input=JSON.parse(messages[1].content);return JSON.stringify({proposal:(await mockSemanticResolver(input,input.learnerFocus?{text:input.learnerFocus}:null)).proposal});}return '这是一段阅读译文。';}});
 async function request(path:string,body?:unknown,second=false){const response=await app.request(path,{method:body===undefined?'GET':'POST',headers:{authorization:second?'Bearer second':'Bearer first','content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:response.status,body:await response.json() as any};}
 try{
   const installs=[crypto.randomUUID(),crypto.randomUUID()];
@@ -94,6 +95,17 @@ try{
   const accept={...operation,operationId:crypto.randomUUID(),kind:'semantic.accept',payload:{lookupId,expectedRevision:'1',intakeId:intake.id,consent:'accept_context_expression_sense'}};
   const accepted=(await request('/sensa/sync/push',{...syncInput,operations:[accept]})).body;assert.equal(accepted.results[0].status,'accepted',JSON.stringify(accepted));assert.deepEqual(accepted.results[0].value.meaning.snapshot.source.video,snapshot.source.video);
   console.log('PASS: encrypted provider persistence, redaction, account isolation, revision conflict, endpoint restriction, explicit calls, idempotent reading/errors, video source contract and Postgres intake replay; no paid calls.');
+  typedFailure=true;
+  const typed=await request('/sensa/semantic/lookups',{id:crypto.randomUUID(),snapshot});
+  assert.equal(typed.body.status,'failed');assert.equal(typed.body.reason,'model_auth_failed');typedFailure=false;
+  const previousUnlimited=process.env.SENSA_UNLIMITED_MODEL_USAGE;
+  try{
+    process.env.SENSA_UNLIMITED_MODEL_USAGE='true';
+    for(let i=0;i<31;i++)assert.equal((await request('/sensa/semantic/lookups',{id:crypto.randomUUID(),snapshot})).body.status,'ready');
+    process.env.SENSA_UNLIMITED_MODEL_USAGE='false';
+    assert.equal((await request('/sensa/semantic/lookups',{id:crypto.randomUUID(),snapshot})).body.code,'semantic_daily_budget');
+  }finally{if(previousUnlimited===undefined)delete process.env.SENSA_UNLIMITED_MODEL_USAGE;else process.env.SENSA_UNLIMITED_MODEL_USAGE=previousUnlimited;}
+  console.log('PASS: safe typed model failures survive lookup persistence; explicit unlimited testing bypasses the semantic limit while ordinary limits remain enforced.');
   if(process.argv.includes('--browser')){
     const {browserPortNativeChecks}=await import('./support/browserPortNativeChecks.mts');
     const accountId=(await pool.query('SELECT account_id FROM sensa_consumer.accounts WHERE subject=$1',[subjects[0]])).rows[0].account_id;

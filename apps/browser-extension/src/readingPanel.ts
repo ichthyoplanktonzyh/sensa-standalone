@@ -124,15 +124,17 @@ export function showReadingPanel(input: ReadingPanelInput) {
   const accept = button(t('saveAction'), () => void persist('accept'));
   accept.className = 'primary';
   accept.hidden = true;
-  const save = button('保存待处理', () => void persist('save'));
-  const check = button('检查解释结果', () => void explain());
+  const save = button(t('savePendingAction'), () => void persist('save'));
+  const check = button(t('checkExplanation'), () => void explain());
   check.hidden = true;
   const contextToggle=button('扩展上下文',()=>changeContext());
   contextToggle.hidden=!input.contextAlternative||input.contextAlternative.sentence===input.snapshot.sentence;
-  actions.append(accept, save, check, contextToggle);
+  const openInbox = button(t('openInbox'), () => void chrome.runtime.sendMessage({kind:'open-inbox',accountId,operationId:savedOperation}).then(response=>{if(response.error)feedback.textContent=errorText(new Error(response.error));}).catch(error=>{feedback.textContent=errorText(error);}));
+  openInbox.hidden=true;
+  actions.append(accept, save, check, contextToggle, openInbox);
   const learningHint = document.createElement('p');
   learningHint.className = 'feedback';
-  learningHint.textContent = '保存后，可在 Sensa 中选择是否加入学习。';
+  learningHint.textContent = t('deliveryHint');
   const assistance=document.createElement('p');assistance.setAttribute('role','status');assistance.hidden=true;
   body.append(original, source, assistance, explanation, details, feedback, actions, learningHint);
   if(snapshot.source.url)source.href=captureSourceLink(snapshot.source)!;
@@ -153,6 +155,8 @@ export function showReadingPanel(input: ReadingPanelInput) {
   let lookupFailed = false;
   let saving = false;
   let saved = false;
+  let savedOperation:string|undefined;
+  let deliveryTimer:ReturnType<typeof setTimeout>|undefined;
   let utterance: SpeechSynthesisUtterance | null = null;
   let assistanceRun=0;
   let lookupId = crypto.randomUUID();
@@ -178,7 +182,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
     if(poll)clearTimeout(poll);if(waitTimer)clearTimeout(waitTimer);
     snapshot=snapshot===input.snapshot?input.contextAlternative:input.snapshot;expression=snapshot.expression;
     lookupId=crypto.randomUUID();saveId=crypto.randomUUID();acceptId=crypto.randomUUID();
-    renderOriginal();hint.textContent='阅读助手';contextToggle.textContent=snapshot===input.snapshot?'扩展上下文':'使用原上下文';
+    renderOriginal();hint.textContent=t('readingAssistant');contextToggle.textContent=snapshot===input.snapshot?'扩展上下文':'使用原上下文';
     explanation.textContent='上下文已调整，点击「句中解释」重新解释。';explanation.removeAttribute('aria-busy');
     assistance.hidden=true;assistance.removeAttribute('aria-busy');details.hidden=accept.hidden=check.hidden=true;
     lookup.disabled=!expression;check.disabled=false;translate.disabled=custom.disabled=false;feedback.textContent='';layout();
@@ -235,17 +239,17 @@ export function showReadingPanel(input: ReadingPanelInput) {
   async function explain() {
     if (!mayAct() || lookupBusy || lookupReady || saved || !expression) return;
     if(lookupFailed){lookupId=crypto.randomUUID();lookupFailed=false;}
-    check.textContent='检查解释结果';
+    check.textContent=t('checkExplanation');
     lookupBusy = true;
     lookup.disabled = check.disabled = true;
     const version=revision;const id=lookupId;
     lookupController?.abort();lookupController=new AbortController();
     if(poll)clearTimeout(poll);if(waitTimer)clearTimeout(waitTimer);
-    waitTimer=setTimeout(()=>{if(alive()&&version===revision&&lookupBusy)explanation.textContent='仍在解释，可继续阅读；结果未完成前不会保存意义。';},6000);
-    explanation.textContent = '正在解释…';
+    waitTimer=setTimeout(()=>{if(alive()&&version===revision&&lookupBusy)explanation.textContent=t('explanationWaiting');},6000);
+    explanation.textContent = t('explaining');
     explanation.setAttribute('aria-busy', 'true');
     try {
-      const result=await runLookup(accountId,snapshot,id,partial=>{if(alive()&&version===revision){if(waitTimer)clearTimeout(waitTimer);explanation.textContent=partial;hint.textContent='解释生成中 · 尚未完成';}},lookupController.signal);
+      const result=await runLookup(accountId,snapshot,id,partial=>{if(alive()&&version===revision){if(waitTimer)clearTimeout(waitTimer);explanation.textContent=partial;hint.textContent=t('explanationPartial');}},lookupController.signal);
       if (!alive()||version!==revision) return;
       if (result.status === 'ready' && result.proposal) {
         lookupReady = true;
@@ -257,11 +261,9 @@ export function showReadingPanel(input: ReadingPanelInput) {
         check.hidden = true;
       } else {
         lookupFailed=result.status==='failed';
-        explanation.textContent = lookupFailed?'解释未完成，可重新解释或保存待处理。':result.status === 'running'
-          ? '仍在解释，可以稍后检查或保存待处理。'
-          : '暂时无法确定这个意思，可以保存待处理，在 Sensa 中继续。';
+        explanation.textContent = lookupFailed?errorText(new Error(result.reason??'lookupFailed')):t(result.status==='running'?'explanationWaiting':'meaningUnresolved');
         check.hidden = (!lookupFailed&&result.status !== 'running') || saved;
-        if(lookupFailed)check.textContent='重新解释';
+        if(lookupFailed)check.textContent=t('retryExplanation');
         if(result.status==='running')poll=setTimeout(()=>{if(alive()&&version===revision)void explain();},2000);
       }
     } catch (error) {
@@ -271,7 +273,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
       }
     } finally {
       if(version!==revision)return;
-      if(waitTimer)clearTimeout(waitTimer);hint.textContent='阅读助手';
+      if(waitTimer)clearTimeout(waitTimer);hint.textContent=t('readingAssistant');
       lookupBusy = false;
       lookup.disabled = lookupReady || saved || !expression;
       check.disabled = false;
@@ -291,16 +293,29 @@ export function showReadingPanel(input: ReadingPanelInput) {
       if (response.error) throw new Error(response.error);
       if (!alive()) return;
       saved = true;
+      savedOperation=kind==='save'?saveId:acceptId;
+      openInbox.hidden=response.value?.destination!=='web';
       save.hidden = accept.hidden = check.hidden = true;
       lookup.disabled = true;
-      feedback.textContent = t(response.value?.committed?'savedDone':'savedPending');
-    } catch {
-      if (alive()) feedback.textContent = '尚未完成，请从 Sensa 图标检查原操作结果或登录后重试。';
+      feedback.textContent = t(response.value?.committed?(kind==='save'?'savedInbox':'savedDone'):'savedPending');
+      if(response.value?.destination==='web'&&!response.value.committed)void checkDelivery();
+    } catch (error) {
+      if (alive()) feedback.textContent = errorText(error);
     } finally {
       saving = false;
       save.disabled = accept.disabled = false;contextToggle.disabled=saved;
       if (alive()) layout();
     }
+  }
+  async function checkDelivery(){
+    if(!alive()||!savedOperation)return;
+    try{
+      const result=await chrome.runtime.sendMessage({kind:'save-status',accountId,operationId:savedOperation});
+      if(!alive())return;
+      if(result.error){feedback.textContent=errorText(new Error(result.error));return;}
+      if(result.value?.committed){feedback.textContent=t(result.value.status==='pending'?'savedInbox':'savedDone');return;}
+    }catch {if(!alive())return;}
+    deliveryTimer=setTimeout(()=>void checkDelivery(),2000);
   }
   function stopSpeech() {
     if (utterance) {
@@ -370,6 +385,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
   return {
     host,
     destroy() {
+      if(deliveryTimer)clearTimeout(deliveryTimer);
       disposed = true;assistanceRun++;assistanceController?.abort();lookupController?.abort();
       if(poll)clearTimeout(poll);if(waitTimer)clearTimeout(waitTimer);
       stopSpeech();

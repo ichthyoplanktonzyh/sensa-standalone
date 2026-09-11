@@ -39,3 +39,16 @@ export async function flushWebDelivery(accountId:string,send:(envelope:unknown)=
   }catch(error){await locked(async()=>{const entries=await load(),current=entries.find(e=>e.accountId===accountId&&e.request.operationId===entry.request.operationId);if(current){current.deliveryError=error instanceof Error?error.message:'delivery_unavailable';await persist(entries);}});break;}
  }}finally{flushing=false;}
 }
+
+/** A page can observe only the operation it saved, after background ownership checks. */
+export async function webOperationStatus(accountId:string,operationId:string){
+ const entry=(await load()).find(e=>e.accountId===accountId&&e.request.operationId===operationId);
+ if(!entry)throw new Error('not_found');
+ return {committed:!!entry.receipt,status:entry.receipt?.status??'pending'};
+}
+
+/** Explicit user deletion removes only undelivered captures for the selected account. */
+export async function discardPendingWeb(accountId:string){return locked(async()=>{
+ const entries=await load(),kept=entries.filter(e=>e.accountId!==accountId||e.receipt);
+ await persist(kept);return entries.length-kept.length;
+});}

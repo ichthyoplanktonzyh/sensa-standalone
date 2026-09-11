@@ -24,7 +24,7 @@ async function act(kind:string){
   if(v.errors.length)status.textContent+='\n'+v.errors.map(errorText).join('\n');
   const recent=document.querySelector('#recent')!;recent.replaceChildren();
   for(const item of v.recent){const element=document.createElement(native?'p':'a');
-   if(element instanceof HTMLAnchorElement){const url=new URL(v.destination==='web-local'?'/content/personal-meaning':webUrl,webUrl);url.searchParams.set(v.destination==='web-local'?'meaningId':('acceptanceId'in item||item.meaningId)?'meaning':'intake',item.meaningId??item.id);element.href=url.href;element.target='_blank';}
+   if(element instanceof HTMLAnchorElement){const url=new URL(v.destination==='web-local'?(item.status==='confirmed'?'/content/personal-meaning':'/content?worldAction=inbox'):webUrl,webUrl);url.searchParams.set(v.destination==='web-local'?'meaningId':('acceptanceId'in item||item.meaningId)?'meaning':'intake',item.meaningId??item.id);element.href=url.href;element.target='_blank';}
    element.textContent=t(item.status==='removed'?'removed':item.status==='confirmed'?'saved':'inbox')+(item.snapshot.expression?.text??t('text'));recent.append(element);
   }
   document.getElementById('recent-count')!.textContent=t('count',{count:v.recent.length});
@@ -33,5 +33,5 @@ async function act(kind:string){
  finally{busy=false;buttons.forEach(b=>{b.disabled=false;});status.setAttribute('aria-busy','false');}
 }
 for(const id of ['login','toggle','stop','sync','disconnect','native-discover','native-select','web-select'])document.getElementById(id)!.addEventListener('click',()=>void act(id));
-document.getElementById('open-web')!.addEventListener('click',()=>void chrome.tabs.create({url:new URL('/content',webUrl).href}));
+document.getElementById('open-web')!.addEventListener('click',()=>void chrome.tabs.create({url:new URL('/content?worldAction=inbox',webUrl).href}));
 void act('status');document.getElementById('options')?.addEventListener('click',()=>void chrome.runtime.openOptionsPage());

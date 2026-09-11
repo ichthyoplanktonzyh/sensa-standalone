@@ -1890,7 +1890,7 @@ export default function App() {
             onStartConversation={()=>openPersonalMeaning('new')}
             active={viewMode === 'main' && (mainStack.includes('s-content') || mainStack.includes('s-semantic-world'))}
             screenId={mainStack.includes('s-semantic-world') ? 's-semantic-world' : 's-content'}
-            initialAction={params.worldAction === 'create' ? 'create' : undefined}
+            initialAction={params.worldAction === 'create' || params.worldAction === 'inbox' ? params.worldAction : undefined}
             onBrowseExisting={() => goMain('s-learning-entry')}
             onOpenPersonalMeaning={openPersonalMeaning}
             onOpenConfirmedSense={openConfirmedSense}

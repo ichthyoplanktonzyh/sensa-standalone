@@ -23,15 +23,15 @@ export async function beginLookup(db:DatabaseExecutor,a:Scope,input:SemanticLook
  }
 
  const count=(await db.query('SELECT count(*)::int AS n FROM sensa_consumer.semantic_lookups WHERE learner_user_id=$1 AND created_at>$2',[a.learner_user_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
- if(count>=30)throw new ConsumerError(409,'semantic_daily_budget');
+ if(process.env.SENSA_UNLIMITED_MODEL_USAGE!=='true'&&count>=30)throw new ConsumerError(409,'semantic_daily_budget');
  const row=(await db.query("INSERT INTO sensa_consumer.semantic_lookups(id,learner_user_id,input_digest,snapshot,status,created_at,expires_at,meaning_focus) VALUES($1,$2,$3,$4::jsonb,'running',$5,$6,$7::jsonb) RETURNING *",[input.id,a.learner_user_id,digest,JSON.stringify(input.snapshot),a.now,new Date(a.now.getTime()+86400000),focus?JSON.stringify(focus):null])).rows[0]!;
  if(focus)await db.query("UPDATE sensa_consumer.semantic_lookups SET status='failed',reason='superseded' WHERE learner_user_id=$1 AND id=$2",[a.learner_user_id,focus.previousLookupId]);
  return {fresh:true,view:lookupView(row)};
 }
-export async function finishLookup(db:DatabaseExecutor,a:Scope,id:string,result:SemanticResolution|null){
+export async function finishLookup(db:DatabaseExecutor,a:Scope,id:string,result:SemanticResolution|null,failureReason='provider_unavailable'){
  const row=(await db.query('SELECT * FROM sensa_consumer.semantic_lookups WHERE learner_user_id=$1 AND id=$2',[a.learner_user_id,id])).rows[0]!;
  if(row.status!=='running')return lookupView(row);
- let proposal=null,provenance=null,reason=result?'meaning_unresolved':'provider_unavailable',status=result?'unresolved':'failed';
+ let proposal=null,provenance=null,reason=result?'meaning_unresolved':failureReason,status=result?'unresolved':'failed';
  if(a.now.getTime()-row.created_at.getTime()>45000){reason='lookup_timeout';status='failed';}
  else if(result?.proposal){
   const parsed=semanticProposalSchema.safeParse(result.proposal);
