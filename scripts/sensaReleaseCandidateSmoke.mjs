@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {validateReleaseEnvironment,prepareCandidate} from './release/webCandidate.mjs';
+const workerConfig=JSON.parse(await readFile(new URL('../wrangler.jsonc',import.meta.url),'utf8'));
+assert.equal(workerConfig.name,'sensa-standalone');
+assert.equal(workerConfig.assets.directory,'./apps/web/dist');
+assert.equal(workerConfig.assets.not_found_handling,'single-page-application');
+const staticHeaders=await readFile(new URL('../apps/web/public/_headers',import.meta.url),'utf8');
+assert.match(staticHeaders,/Content-Security-Policy:/);
+assert.match(staticHeaders,/\/sw\.js\n  Cache-Control: no-cache/);
 const env={SENSA_WEB_ORIGIN:'https://learn.example.com',VITE_SUPABASE_URL:'https://fixture.supabase.co',VITE_SENSA_API_URL:'https://fixture.supabase.co/functions/v1/sensa-api',VITE_SUPABASE_PUBLISHABLE_KEY:'sb_publishable_'+'x'.repeat(30),VITE_SENSA_MODE:'production',SENSA_EXTENSION_WEB_URL:'https://learn.example.com',SENSA_EXTENSION_API_URL:'https://fixture.supabase.co/functions/v1/sensa-api',SENSA_RELEASE_SHA:'a'.repeat(40)};
 assert.equal(validateReleaseEnvironment(env).webOrigin,env.SENSA_WEB_ORIGIN);
 for(const change of [{SENSA_WEB_ORIGIN:'http://127.0.0.1:3000'},{VITE_SUPABASE_PUBLISHABLE_KEY:'sb_secret_never-print-this'},{VITE_DEEPSEEK_API_KEY:'never-print-this'},{VITE_SENSA_MODE:'legacy-account'},{SENSA_EXTENSION_LEGACY_WEB:'1'},{SENSA_EXTENSION_API_URL:'http://localhost:4319'},{VITE_SENSA_API_URL:'https://another.supabase.co/functions/v1/sensa-api'},{SENSA_RELEASE_SHA:'main'}]){
@@ -9,7 +17,7 @@ const serviceJwt='e30.'+Buffer.from(JSON.stringify({role:'service_role',exp:9999
 assert.throws(()=>validateReleaseEnvironment({...env,VITE_SUPABASE_PUBLISHABLE_KEY:serviceJwt}));
 console.log('PASS: release config rejects loopback, secret/service keys, unexpected VITE variables, wrong project/extension, legacy mode and floating revisions without logging values.');
 
-const {mkdtemp,mkdir,writeFile,readFile,rm}=await import('node:fs/promises');
+const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');
 const {tmpdir}=await import('node:os');const {join,resolve}=await import('node:path');const {execFileSync}=await import('node:child_process');
 const root=await mkdtemp(join(tmpdir(),'sensa-candidate-'));
 try{

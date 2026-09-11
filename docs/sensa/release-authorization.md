@@ -2,8 +2,9 @@
 
 2026-09-11：本次范围为少量外部真实用户的 Web＋浏览器插件，本地优先＋普通账号云同步。
 隔离 Supabase 项目 `kwwmukqzlxxsnviyhwmr` 已存在并用于 owner 试用；旧“没有项目”判断失效。
-本地准备、修复、无付费验证和 checkpoint commits 已授权。新任务的创建不包含 push、
-云端迁移/部署或商店上传/提交/发布授权；后续授权应指向完整 SHA 和具体目标。
+Owner 已授权推送固定 SHA 并在该隔离项目执行 0028/0029，执行与只读复核均已成功；该授权不删除
+或迁移 owner 数据。Owner 随后授权通过已连接的 Cloudflare 插件完成试用 Web 配置与部署，并要求
+遇到产品决策再联系。Chrome 商店上传、提交审核与发布仍按本页独立授权边界执行。
 
 ## 云端
 
@@ -23,13 +24,10 @@ project ref、Cloudflare 项目/域名，以及实际待执行的数据库迁移
 自动变成线上静态对象。发布通过 CI/CD 执行，不从本地 shell 直接部署。
 
 现有 no-cost 检查、Web＋插件候选、部署与监控流水线仍需在目标环境实测。
-2026-09-11 只读核查：GitHub 只有 `sensa-trial` environment，含两个数据库 Secrets 名称；
-真实迁移账本已到 `0027_sensa_deletion_receipt_rls.sql`，待执行 `0028_sensa_encrypted_intake.sql`
-和 `0029_sensa_library_sync.sql`，`sensa_consumer.library_cloud` 尚不存在。
-0028 保留旧交付兼容表，不重新启用旧加密产品入口；0029 接通普通账号库同步。
-
-可以单独审批推送固定 SHA 并运行隔离库 initialize CI。该动作不发布 API/Web、不删除 owner
-资料、不开放新用户。应用和媒体发布另需明确 Web origin、Cloudflare project 与对应候选。
+2026-09-11 真实迁移账本已包含 0028/0029，云同步表与受限运行角色权限已复核。
+Cloudflare 试用 Worker 为 `sensa-standalone`，Web origin 为
+`https://sensa-standalone.ichthyoplanktonzyh.workers.dev`；生产监听专用
+`codex/cloudflare-trial` 分支。应用发布仍需以实际构建与公网 smoke 为证据。
 候选环境 `web-candidate`、部署环境 `web-production`、监控环境 `web-monitor` 及配置仍需接通。
 平台账号登录、项目创建或手动配置由 owner 协助，不擅自接管外部平台浏览器。
 

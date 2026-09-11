@@ -3,7 +3,8 @@
 本页维护配置、候选、发布/回滚与未关闭的真实环境验收门，不维护逐次修复日志。
 产品工作状态见 [当前阶段](current-stage.md)，个人内容、资源与运行见 [Web 工作流](web-local-meaning-workflow.md)。
 首发交付 Web＋浏览器插件，需接通普通账号同步与其他浏览器恢复；原生、E2EE、恢复码和设备批准不作为前置。
-普通账号全库同步已通过本地真实浏览器与数据库验证；仍需 CI/CD 应用 `0029_sensa_library_sync.sql` 并发布相应 API/Web。
+普通账号全库同步已通过本地真实浏览器与数据库验证；隔离项目已通过 CI/CD 应用 `0028_sensa_encrypted_intake.sql`
+与 `0029_sensa_library_sync.sql`，仍需发布并验收相应 API/Web。
 旧加密采集测试不能替代此项真实环境验收。个人试用不等于公开部署。云端操作必须走 CI/CD，
 对应授权见 [发布约定](release-authorization.md)。
 
@@ -68,12 +69,16 @@ borrow/lend 及媒体资源见 [学习包指南](assurance-package-import.md)。
 
 ## 部署与回滚
 
+- 隔离 Web 托管复用 Cloudflare Worker `sensa-standalone`，地址为
+  `https://sensa-standalone.ichthyoplanktonzyh.workers.dev`。它使用 Workers Static Assets、
+  `codex/cloudflare-trial` 生产分支和仓库固定的 `wrangler.jsonc`；普通 `main` 推送不自动发布。
 - `web-candidate`：只生成制品。公开变量见本页前文；包含已编译包目录、catalog 摘要与文件摘要。
 - `web-production`：手动填写已成功候选 run ID、完整 SHA、owner 已验收确认；应开启 GitHub
   environment required reviewers。拒绝目标或摘要不一致。实际执行必须有对应发布授权，不从旧日志推断已部署。
 - Secrets：独立 `MIGRATION_DATABASE_URL` 与受限 `SENSA_RUNTIME_DATABASE_URL`、
   `SUPABASE_ACCESS_TOKEN`、`DEEPSEEK_API_KEY`、`SENSA_PROVIDER_VAULT_KEY`、
-  `CLOUDFLARE_API_TOKEN`。公开项目变量另含 Supabase ref、Cloudflare account/project。数据库
+  `CLOUDFLARE_API_TOKEN`。公开项目变量另含 Supabase ref、Cloudflare account/Worker。正式流水线
+  使用 `CLOUDFLARE_WORKER_NAME=sensa-standalone`；数据库
   连接必须匹配项目并要求 TLS；运行角色不允许超级用户/创建角色权限。Supabase 自带 service-role
   环境用于账号删除，不进入 Web。真实 Auth SMTP 与 bucket 策略在项目中配置并验证。
 - 公共文本包可随已验收 Web 资产发布；私有/音频媒体按 Storage 授权合同

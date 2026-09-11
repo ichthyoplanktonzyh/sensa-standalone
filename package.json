@@ -19,6 +19,7 @@
     "sensa:acceptance:check": "node scripts/sensaAcceptance.mjs check",
     "sensa:acceptance:smoke": "node scripts/sensaAcceptanceSmoke.mjs",
     "build": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/model-runtime && npm run build -w @sensa/intake-transport && npm run build -w @sensa/api && npm run build -w @sensa/web && npm --prefix apps/web-next run build && npm run build -w @sensa/browser-extension",
+    "build:cloudflare": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/model-runtime && npm run build -w @sensa/intake-transport && npm run build -w @sensa/web",
     "typecheck": "tsc -b --pretty false && npm run typecheck -w @sensa/web && npm --prefix apps/web-next run typecheck && npm run typecheck -w @sensa/browser-extension",
     "lint": "npm run typecheck",
     "dev": "npm run dev -w @sensa/api",
@@ -105,12 +106,13 @@
     "node": ">=24"
   },
   "devDependencies": {
+    "@babel/parser": "7.29.8",
     "@playwright/test": "^1.63.0",
     "@types/node": "^24.0.0",
     "esbuild": "0.28.2",
     "fake-indexeddb": "^6.2.5",
     "tsx": "^4.20.0",
     "typescript": "^7.0.0",
-    "@babel/parser": "7.29.8"
+    "wrangler": "4.130.0"
   }
 }
