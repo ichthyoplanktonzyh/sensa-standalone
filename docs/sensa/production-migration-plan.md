@@ -81,7 +81,7 @@ schema/Kernel、内容工具与 smoke。每项资产在接入生产前均须按�
 
 以下保留迁移工作包的依赖与退出条件，状态按 current-stage 和原生能力表核对；旧首学技术
 纵切不是当前全部能力。沿用 M1/M2 的已确认学习与采集体验，先完成
-[本地学习库迁移蓝图](local-library-migration-blueprint.md)中的单设备链，再进入多设备及交付。
+[本地学习库迁移蓝图](local-library-architecture.md)中的单设备链，再进入多设备及交付。
 已有 Web 功能与学习内核扩展机制均须完整迁移；[迁移清单](native-migration-checklist.md)逐项登记，分批交付不裁剪范围。同步优先原生多设备，暂不建设 WASM/Web 互通。
 以下 LF 编号是本路线图中跨 M1–M3 的迁移工作包，不是新增产品领域或替代 M0–M5 的另一套路线图。
 
@@ -145,11 +145,9 @@ M1 可以先通过 CI 建立开发/内部集成环境；资源、secrets、迁�
 M0 验收后，首条已确认用例进入 M1 的生产集成方式；未确认的后续用例继续按同一状态/合同门
 发现需求。无需等完整领域的所有页面设计结束，也不能把本路线图当作消费合同已经完成。
 
-M0-1 的已确认产物是 [首轮产品清单与状态矩阵](first-round-product-baseline.md)，包括九个
-能力区及 Web/插件状态；9 月 7 日已同步四类首发允许项，允许开放不等于已生产验收。
-[首条登录/学习状态规格](m0-2-first-learning-state-spec.md)是 M0-2 评审产物，
-体验规格已确认完成，不是 M0-3 合同或 M1 真实接入。M0-2 同时细化插件捕获、原位确认、收件箱交接及安装更新体验；
-M0-3 记录插件身份、Intake、幂等和数据控制需求，完整插件提交合同在 M2 开工前验收。
+M0 的阶段产物已按长期职责收敛到 [PRD](product-requirements-v1.md)、
+[浏览器合同](browser-port-contract.md)、[Consumer 兼容参考](consumer-compatibility-reference.md)
+和 [本地库架构](local-library-architecture.md)。设计确认不等于功能或发布通过。
 
 ## 4. M1：首条生产学习闭环
 
@@ -195,7 +193,7 @@ stable Sense/Version/Binding 与 Alignment → 显式加入学习 → 内容准�
 
 交付物：
 
-- 浏览器采集插件：按 M0-2 核定的浏览器/分发范围交付，默认桌面 Chrome。支持主动选区、
+- 浏览器采集插件：按浏览器合同核定的浏览器/分发范围交付，默认桌面 Chrome。支持主动选区、
   Context/来源预览与固定快照、Expression occurrence、原位确认快轨和收件箱慢轨；同账号
   Web 可继续，不要求对有效确认重复接受。只保存材料不自动加入学习。
 - 插件与 Web 的统一认证授权、幂等 Intake/commit 和原账号待提交队列；关闭、重启、断网、
@@ -225,7 +223,7 @@ stable Sense/Version/Binding 与 Alignment → 显式加入学习 → 内容准�
 验收单列，使用事先明确授权的预算执行并记录结果；mock 通过不能代替该上线证据，常规
 build/smoke 不得调用付费 LLM/TTS。
 
-M2 兼容接口见 [消费合同](m2-consumer-contract.md)，历史本地能力、恢复/权限测试和有效
+M2 兼容接口见 [消费合同](consumer-compatibility-reference.md)，历史本地能力、恢复/权限测试和有效
 约束见 [Consumer 兼容参考](consumer-compatibility-reference.md)。当前工作状态见 current-stage，
 本节历史施工顺序不重新变成待办。
 
@@ -300,7 +298,7 @@ FSRS 所有权保持不变；Supabase 自动数据 API/Realtime 不替代 Sensa 
 - 发布、数据迁移、回滚、备份恢复、provider 不可用与费用异常的操作说明。给受邀用户提供
   简短的测试说明、已知限制与反馈方式，不需要为此建设完整后台产品。
 - 插件可重复构建与版本化产物、普通受邀用户可执行的安装/更新/卸载说明、权限说明和兼容
-  页面清单。具体分发方式在 M0-2 确定，发布日程纳入该渠道实际需要的准备时间。
+  页面清单。具体分发方式见浏览器合同，发布日程纳入该渠道实际需要的准备时间。
 - 在邀请用户前确定观察周期、使用场景、内容抽查方式、可靠性/成本阈值和暂停扩招条件；
   阈值依据内部环境结果设置，不引用历史原型中的经验数字作为实证。
 

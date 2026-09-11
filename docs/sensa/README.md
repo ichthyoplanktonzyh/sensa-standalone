@@ -68,20 +68,15 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | [原生迁移清单](native-migration-checklist.md) / [UI 验收矩阵](native-ui-acceptance-matrix.md) | 迁移范围、平台和体验验证边界 |
 | [原生包导入合同](native-pack-import-contract.md) | 包格式与准入约束 |
 
-## 保留的设计与兼容合同
+## 数据架构与兼容参考
 
-这些文档包含仍需维护的状态、接口或迁移约束，不能因名称带阶段编号而删除；它们不覆盖最新
-领域模型和 owner 已确认的产品变化。旧路径的实现细化、V01–V20 回归向量和测量预算集中在
-[Consumer 兼容参考](consumer-compatibility-reference.md)。
+- [本地库架构与迁移保护](local-library-architecture.md)：身份、事务、交接、可选同步与旧数据回退。
+- [Consumer 兼容参考](consumer-compatibility-reference.md)：旧 API/Sync 接口设计、迁移约束、回归向量和性能预算；不覆盖当前本地架构。
 
-- [首轮范围基线](first-round-product-baseline.md)：已确认范围的来源，当前优先级见当前阶段。
-- [首次学习状态规格](m0-2-first-learning-state-spec.md)、[浏览器采集状态规格](m0-2-browser-capture-state-spec.md)。
-- [Consumer v3 合同](m0-3-consumer-contract.md)、[迁移裁决](m0-3-migration-blueprint.md)、[采集与供给合同](m2-consumer-contract.md)。
-- [本地库迁移蓝图](local-library-migration-blueprint.md)：本地职责、旧数据回退与同步设计门。
-
-逐次 handoff、轮次优化报告、M0-3 施工任务表和 standalone 初始快照已移除。
-有效内容已并入上述长期文档，旧原文的 Git 追溯方法见 Consumer 兼容参考。
-不新增归档目录复制旧报告。历史通过结果不会因文档合并而升级为当前产品、真实服务或发布验收。
+M0/M2 阶段规格、首轮基线、旧迁移施工蓝图及逐次 handoff 已移除。有效产品状态归入 PRD，
+浏览器恢复规则归入阅读合同，旧接口归入兼容参考；Git 保留原文，不另建归档副本。
+Web 工作流、发布核查、学习包指南与开发约定只维护当前职责，不再按轮次追加施工日志。
+历史证据不会因整理升级为当前发布验收，未关闭事项仍在 current-stage、路线图和各功能说明中。
 
 ## 操作文档和参考材料
 

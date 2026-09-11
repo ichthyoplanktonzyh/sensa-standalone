@@ -26,7 +26,7 @@ Flutter integration_test 不操作 OS 文件选择器/权限弹窗；这些需�
 ## 执行入口与证据目录
 
 可执行目录是 [`scripts/acceptance/catalog.mjs`](../../scripts/acceptance/catalog.mjs)。每组列出源入口、
-真实依赖、替身/前置、不覆盖事项和已有 handoff。它是索引，不是已通过状态表；尤其不表示正式 UI 已通过。
+真实依赖、替身/前置、不覆盖事项和操作说明。它是索引，不是已通过状态表；尤其不表示正式 UI 已通过。
 
 ```sh
 npm run sensa:acceptance -- list
@@ -37,7 +37,7 @@ npm run sensa:acceptance -- plan reading popup
 npm run sensa:acceptance -- run reading popup
 ```
 
-`check` 只检查索引、源文件与 handoff 存在，并要求所有原生 `*_test.dart` 有证据边界；
+`check` 只检查索引、源文件与操作说明存在，并要求所有原生 `*_test.dart` 有证据边界；
 **不运行产品测试，不证明断言覆盖完整**。`plan` 只读。`run` 只运行明确选中的可执行组，
 没有隐式全量模式、自动重试、付费 Provider 或 `.env` 自动加载。
 `smoke` 在 macOS/Linux 使用合成失败命令验证运行器拒绝无效选择、记录失败和及时停止；不运行产品旅程。
@@ -57,7 +57,7 @@ HTTP、签名和凭据沙盒。混合选择原生组与可运行组会在任何�
 
 ## 原生自动化约束
 
-1. 每次主流程使用唯一 `SENSA_NATIVE_RUN` 和合成库。先满足该用例 handoff 的 fixture/服务/
+1. 每次主流程使用唯一 `SENSA_NATIVE_RUN` 和合成库。先满足该用例操作说明的 fixture/服务/
    签名前置；不要通过迁移 owner 库获得测试数据。高保证必须先生成 artifact；review/activity
    是不同变体，不能从默认分支通过推导全部变体通过。
 2. 被验收的动作通过真实 Widget/DOM 执行；允许直接建立前置课程和历史，但要记录。
@@ -85,15 +85,8 @@ HTTP、签名和凭据沙盒。混合选择原生组与可运行组会在任何�
 真实 Provider/TTS 测试与常规无成本回归分离，不能把旧样本质量记录当成本轮新结果。
 正式 UI 的详细任务与缺口见 [验收矩阵](native-ui-acceptance-matrix.md)。
 
-## 本轮落地记录（2026-09-09）
+## 目录维护
 
-- 登记 16 组证据，覆盖当前 20 个 Flutter 集成测试文件。提供 plan/check 与四组明确选取的
-  自动运行入口；原生文件仍按各自 handoff 准备设备/fixture，未包装成虚假的一键全量测试。
-- 实际运行 `run core reading popup` 通过：TS/Rust 差分、Rust workspace/SQLite 回归、
-  Chromium 阅读/字幕交互和 popup 状态/长列表/键盘检查。报告目录为
-  `/var/folders/l1/g0zjpx713mjfxdpg2gcbbbg00000gn/T/sensa-acceptance-Nkc27i`，属于本机临时证据，
-  其他机器应按命令重新生成。浏览器使用已有 Chromium 1228 构建；网页和模型依赖为替身。
-- 运行器 smoke 验证未知/重复/需要手工前置的选择在执行前拒绝；合成构建失败保留 exit 23
-  与日志，未执行后续脚本/用例。索引检查、Node 语法检查、根级 typecheck/build/lint 通过。
-- 本轮未更改产品 UI/领域规则、重跑 Flutter 设备用例或验证 OS 文件选择器，未调用付费服务，
-  未连接 owner 库、推送或部署。已有 Flutter handoff 是历史证据，正式 UI 矩阵仍待逐项实施验收。
+证据组数量、源文件和原生测试清单由 `sensa:acceptance:check` 实查，不在文档中冻结某一轮数量。
+新增/移动操作文档时同步 catalog 的准备说明引用。检查通过仅证明目录完整，不代表重跑产品测试。
+历史执行日志和临时报告可从 Git 与本机测试产物追溯，不逐次追加到本页。
