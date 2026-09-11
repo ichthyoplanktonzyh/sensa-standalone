@@ -93,6 +93,7 @@
     "sensa:package-entry-browser-smoke": "node --import tsx scripts/sensaPackageEntryBrowserSmoke.mts",
     "sensa:expression-chat-browser-smoke": "node --import tsx scripts/sensaExpressionChatBrowserSmoke.mts",
     "sensa:model-execution-smoke": "GENKIT_ENV=prod node --import tsx scripts/sensaModelExecutionSmoke.mts",
+    "sensa:settings-browser-smoke": "node --import tsx scripts/sensaSettingsBrowserSmoke.mts",
     "sensa:four-stage-local-smoke": "node --import tsx scripts/sensaFourStageLocalSmoke.mts",
     "sensa:four-stage-browser-smoke": "node --import tsx scripts/sensaAssurancePackageBrowserSmoke.mts --four-stage"
   },

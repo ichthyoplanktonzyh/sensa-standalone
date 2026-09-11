@@ -1,8 +1,10 @@
+import {providerSnapshot} from '../../data/library/providers';
+import {observeLibrary} from '../../data/library/store';
 import {LocalDataControlPanel} from './LocalDataControlPanel';
 import {LibraryBackupPanel} from './LibraryBackupPanel';
 import {useAccountExperience} from '../account/AccountExperience';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowRight, BookOpen, SlidersHorizontal, UserRound, RefreshCw } from 'lucide-react';
+import { ArrowRight, ArrowLeft, BookOpen, SlidersHorizontal, UserRound, RefreshCw, Database, Cpu, Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitch } from '../../i18n/LanguageSwitch';
 import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
@@ -38,6 +40,25 @@ export function localPreviewBytes(storage: Storage): number {
 export const ProfileScreen = (props: ProfileScreenProps) => {
   const { t, i18n } = useTranslation();
   const serviceAccount=useAccountExperience();
+  const [page, setPage] = useState<'home'|'security'|'preferences'|'models'|'data'|'backup'|'storage'|'support'>('home');
+  const openPage = (next: typeof page) => {
+    setPage(next);
+    requestAnimationFrame(() => { document.getElementById('s-profile')?.scrollTo(0, 0); document.getElementById('settings-heading')?.focus(); });
+  };
+  const [modelNames, setModelNames] = useState<string[]>([]);
+  useEffect(() => {
+    if (!props.localLibrary || !props.active) return;
+    let live = true;
+    const refresh = () => void providerSnapshot().then(({providers, settings}) => {
+      if (live) setModelNames([...new Set(['teacher','content'].map(purpose => {
+        const id = settings.assignments[purpose as 'teacher'|'content'];
+        const provider = providers.find(item => item.id === id);
+        return provider ? provider.name + ' · ' + provider.model : t('modelService.default');
+      }))]);
+    }).catch(() => { if (live) setModelNames([t('modelService.readFailed')]); });
+    refresh(); const stop = observeLibrary(refresh);
+    return () => {live = false; stop();};
+  }, [props.active, props.localLibrary, i18n.language]);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [offlineShell,setOfflineShell]=useState(document.documentElement.dataset.offlineShell??'development');
@@ -48,7 +69,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
     catch { setBytes(null); }
   };
   useEffect(() => {
-    if (!props.active) { setPreferencesOpen(false); return; }
+    if (!props.active) { setPreferencesOpen(false); setPage('home'); return; }
     if (!props.account&&!props.localLibrary) refreshStorage();
     const updateNetwork = () => setOnline(navigator.onLine);
     updateNetwork();
@@ -69,47 +90,75 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
   const usage = bytes === null ? t('account.unknown') : new Intl.NumberFormat(i18n.language, {
     style: 'unit', unit: bytes >= 1024 * 1024 ? 'megabyte' : 'kilobyte', maximumFractionDigits: 1,
   }).format(bytes / (bytes >= 1024 * 1024 ? 1024 * 1024 : 1024));
+  const button = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#cbd3e1] bg-white px-4 py-2 text-sm font-medium text-[#405780] hover:bg-[#edf0f7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5268a9] disabled:opacity-50';
+  const labels = {home:'account.title', security:'account.security', preferences:'account.preferences', models:'account.models', data:'account.data', backup:'libraryBackup.title', storage:'account.storageActions', support:'account.support'};
+  const row = (destination: typeof page, label: string, note: string, icon: ReactNode) => <button id={'settings-'+destination} onClick={() => openPage(destination)} className="flex min-h-24 w-full items-center gap-4 rounded-2xl border border-[#d8deea] bg-white p-5 text-left shadow-sm transition-colors hover:border-[#91a3c5] hover:bg-[#f3f5fa] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5268a9]">
+    <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#edf0f7] text-[#5268a9]">{icon}</span><span className="min-w-0 flex-1"><span className="block text-base font-medium">{t(label)}</span><span className="mt-1 block break-words text-sm leading-6 text-[#68748d]">{note}</span></span><ArrowRight aria-hidden="true" size={18} className="shrink-0 text-[#5268a9]"/>
+  </button>;
   return <section id="s-profile" className={`screen absolute inset-0 z-10 overflow-y-auto bg-[#fbfbfa] text-[#222631] ${props.active ? 'active' : 'invisible pointer-events-none'}`}>
-    <main className="mx-auto max-w-[1280px] px-6 py-8 sm:px-10 lg:px-14 lg:py-14">
-      <h1 className="mb-10 text-3xl font-medium tracking-tight lg:text-4xl">{t('account.title')}</h1>
-      <section aria-labelledby="account-identity" className="flex flex-wrap items-center gap-5 rounded-3xl bg-[#edf0f7] p-6 sm:p-8">
+    <main className="mx-auto max-w-[960px] px-5 py-8 sm:px-10 lg:py-12">
+      {page !== 'home' && <button className={button+' mb-6'} onClick={() => openPage(page==='backup'||page==='storage'?'data':'home')}><ArrowLeft size={17}/>{t(page==='backup'||page==='storage'?'account.data':'account.title')}</button>}
+      <h1 id="settings-heading" tabIndex={-1} className="mb-7 text-3xl font-medium tracking-tight outline-none">{t(labels[page])}</h1>
+      {page==='home'&&<>
+      <section aria-labelledby="account-identity" className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4 rounded-3xl bg-[#edf0f7] p-6 sm:p-8">
         <span aria-hidden="true" className="grid size-14 shrink-0 place-items-center rounded-2xl bg-white text-[#5268a9]"><UserRound size={25}/></span>
-        <div className="min-w-0 flex-1"><h2 id="account-identity" className="text-lg font-medium">{props.account || serviceAccount.email ? t('account.localWeb.current') : t('account.identity')}</h2><p className="mt-2 max-w-xl text-sm leading-6 text-[#68748d]">{props.account?.email ?? serviceAccount.email ?? t('account.identityNote')}</p></div>
-        <span className="rounded-full border border-[#cfd7e6] px-3 py-1.5 text-xs text-[#546582]">{props.account||serviceAccount.onlineService ? t('account.localWeb.connected') : t('account.local')}</span>
+        <div className="min-w-0 flex-1"><h2 id="account-identity" className="text-lg font-medium">{props.account || serviceAccount.email ? t('account.localWeb.current') : t('account.identity')}</h2><p className="mt-2 max-w-xl break-all text-sm leading-6 text-[#68748d]">{props.account?.email ?? serviceAccount.email ?? t('account.identityNote')}</p></div>
+        <span className="col-start-2 w-fit rounded-full border border-[#cfd7e6] px-3 py-1.5 text-xs text-[#546582]">{props.account||serviceAccount.onlineService ? t('account.localWeb.connected') : t('account.local')}</span>
       </section>
-      {!props.account&&<div className="mt-5 flex flex-wrap gap-3"><button className="min-h-11 rounded-xl bg-[#edf0f7] px-5 text-sm" onClick={serviceAccount.login}>{serviceAccount.onlineService?t('account.localWeb.check'):t('account.localWeb.login')}</button>{serviceAccount.email&&<button className="min-h-11 rounded-xl border px-5 text-sm" onClick={()=>void serviceAccount.logout().catch(()=>{})}>{t('account.localWeb.logout')}</button>}</div>}
-      {!props.account&&serviceAccount.notice&&<p role="status" className="mt-3 text-sm">{serviceAccount.notice}</p>}
+      <div className="mt-6 space-y-3">
+        {row('security','account.security',props.account?.email ?? serviceAccount.email ?? t('account.identity'),<UserRound size={20}/>)}
+        {row('preferences','account.preferences',t('account.preferencesSummary'),<SlidersHorizontal size={20}/>)}
+        {props.modelSettings&&row('models','account.models',modelNames.join(' / ') || t('account.modelsSummary'),<Cpu size={20}/>)}
+        {row('data','account.data',t('account.dataSummary'),<Database size={20}/>)}
+        {row('support','account.support',t('account.supportSummary'),<Info size={20}/>)}
+      </div>
+      </>}
+      {page!=='security'&&serviceAccount.notice&&<p role="status" className="mt-4 text-sm">{serviceAccount.notice}</p>}
       {props.status}
       {props.localLibrary&&offlineShell==='failed'&&<p role="status" className="mt-3 text-sm text-[#68748d]">{t('account.localWeb.offlineFailed')}</p>}
-      <div className="mt-9 grid items-start gap-8 lg:grid-cols-2">
+      <div hidden={page!=='security'}>
+      {!props.account&&<div className="mt-5 flex flex-wrap gap-3"><button className="min-h-11 rounded-xl bg-[#edf0f7] px-5 text-sm" onClick={serviceAccount.login}>{serviceAccount.onlineService?t('account.localWeb.check'):t('account.localWeb.login')}</button>{serviceAccount.email&&<button className="min-h-11 rounded-xl border px-5 text-sm" onClick={()=>void serviceAccount.logout().catch(()=>{})}>{t('account.localWeb.logout')}</button>}</div>}
+      {!props.account&&serviceAccount.notice&&<p role="status" className="mt-3 text-sm">{serviceAccount.notice}</p>}
+
+      {props.account && <div className="mt-8 flex flex-wrap gap-3"><button className="min-h-11 rounded-xl border border-[#e3e5ea] px-5 text-sm" disabled={props.account.busy || props.account.pending > 0} onClick={props.account.onLogout}>{t('account.localWeb.signout')}</button>{props.account.pending > 0 && <p className="w-full text-sm text-[#68748d]">{t('account.localWeb.pendingLogout')}</p>}</div>}
+      {props.localLibrary&&<div className="mt-12 border-t border-[#e3e5ea] pt-6"><button className={button+' border-red-200 text-red-800'} onClick={serviceAccount.deleteAccount}>{t('localFlow.deleteTitle')}</button></div>}
+      </div>
+      <div hidden={page!=='preferences'}>
         <section aria-labelledby="account-preferences">
           <h2 id="account-preferences" className="mb-4 text-lg font-medium">{t('account.preferences')}</h2>
           <div className="divide-y divide-[#e3e5ea] rounded-2xl border border-[#e3e5ea] bg-white px-5 sm:px-6">
             <div className="flex min-h-20 flex-wrap items-center justify-between gap-3 py-3"><span className="text-sm">{t('account.language')}</span><LanguageSwitch/></div>
             <button id="account-learning-preferences" onClick={() => props.onOpenPreferences ? props.onOpenPreferences() : setPreferencesOpen(true)} className="flex min-h-24 w-full items-center gap-4 py-5 text-left hover:text-[#5268a9] focus-visible:outline-2 focus-visible:outline-[#5268a9]">
-              <SlidersHorizontal size={19} className="shrink-0 text-[#788398]"/><span className="flex-1"><span className="block text-sm font-medium">{t('account.learning')}</span><span className="mt-1 block text-xs leading-5 text-[#788398]">{t('account.learningNote')}</span></span><ArrowRight size={17}/>
+              <SlidersHorizontal size={19} className="shrink-0 text-[#788398]"/><span className="flex-1"><span className="block text-sm font-medium">{t('account.learning')}</span><span className="mt-1 block text-xs leading-5 text-[#788398]">{t(props.fixedLearningPolicy?'account.dailyLearningNote':'account.learningNote')}</span></span><ArrowRight size={17}/>
             </button>
             <button onClick={props.onGoStudyPlan} className="flex min-h-24 w-full items-center gap-4 py-5 text-left hover:text-[#5268a9] focus-visible:outline-2 focus-visible:outline-[#5268a9]">
               <BookOpen size={19} className="shrink-0 text-[#788398]"/><span className="flex-1"><span className="block text-sm font-medium">{t('account.plan')}</span><span className="mt-1 block text-xs leading-5 text-[#788398]">{t('account.planNote')}</span></span><ArrowRight size={17}/>
             </button>
           </div>
         </section>
+      </div>
+      <div hidden={page!=='data'}>
+      {props.account&&<div className="mb-5"><button className="min-h-11 rounded-xl bg-[#edf0f7] px-5 text-sm text-[#303f76]" disabled={props.account.busy} onClick={props.account.onSync}>{t('account.localWeb.syncResults')}</button></div>}
         <section aria-labelledby="account-data">
           <h2 id="account-data" className="mb-4 text-lg font-medium">{t('account.data')}</h2>
           <div className="rounded-2xl border border-[#e3e5ea] bg-white px-5 sm:px-6">
             <dl className="divide-y divide-[#e3e5ea] text-sm">
               <div className="flex flex-wrap justify-between gap-3 py-5"><dt>{t('account.network')}</dt><dd aria-live="polite" className="text-[#68748d]">{t(online ? 'account.online' : 'account.offline')}</dd></div>
-              <div className="flex flex-wrap justify-between gap-3 py-5"><dt>{t('account.sync')}</dt><dd className="text-[#788398]">{props.account ? (props.account.pending ? t('account.localWeb.pending',{count:props.account.pending}) : t('account.localWeb.synced')) : t('account.unavailable')}</dd></div>
+              <div className="flex flex-wrap justify-between gap-3 py-5"><dt>{t('account.sync')}</dt><dd className="text-[#788398]">{props.account ? (props.account.pending ? t('account.localWeb.pending',{count:props.account.pending}) : t('account.localWeb.synced')) : t('account.localSync')}</dd></div>
               {!props.account&&!props.localLibrary && <div className="py-5"><dt>{t('account.storage')}</dt><dd className="mt-2 flex items-center justify-between gap-3"><span className="text-2xl tabular-nums" aria-live="polite">{usage}</span><button aria-label={t('account.refresh')} onClick={refreshStorage} className="grid size-11 place-items-center rounded-lg text-[#68748d] hover:bg-[#edf0f7]"><RefreshCw size={17}/></button></dd></div>}
             </dl>
             <p className="pb-5 text-xs leading-6 text-[#788398]">{props.account ? t('account.localWeb.cloudNote') : props.localLibrary ? t('account.localWeb.localNote') : t('account.storageNote')}</p>
           </div>
           {!props.localLibrary&&<p className="mt-3 text-xs leading-6 text-[#788398]">{props.account?t('account.localWeb.controls'):t('account.controls')}</p>}
         </section>
+        {props.localLibrary&&<div className="mt-6 space-y-3">
+          {row('backup','libraryBackup.title',t('account.backupSummary'),<Database size={20}/>)}
+          {row('storage','account.storageActions',t('account.storageSummary'),<Database size={20}/>)}
+        </div>}
       </div>
-      {props.account && <div className="mt-8 flex flex-wrap gap-3"><button className="min-h-11 rounded-xl bg-[#edf0f7] px-5 text-sm text-[#303f76]" disabled={props.account.busy} onClick={props.account.onSync}>{t('account.localWeb.syncResults')}</button><button className="min-h-11 rounded-xl border border-[#e3e5ea] px-5 text-sm" disabled={props.account.busy || props.account.pending > 0} onClick={props.account.onLogout}>{t('account.localWeb.signout')}</button>{props.account.pending > 0 && <p className="w-full text-sm text-[#68748d]">{t('account.localWeb.pendingLogout')}</p>}</div>}
-      {props.localLibrary&&<><LibraryBackupPanel/><LocalDataControlPanel/><button className="mt-6 min-h-11 rounded-xl border border-red-200 px-5 text-sm text-red-800" onClick={serviceAccount.deleteAccount}>{t('localFlow.deleteTitle')}</button></>}
-      {props.modelSettings&&<section aria-label={t('modelService.title')} className="mt-10">{props.modelSettings}</section>}
+      {props.localLibrary&&<><div hidden={page!=='backup'}><LibraryBackupPanel/></div><div hidden={page!=='storage'}><LocalDataControlPanel/></div></>}
+      <section hidden={page!=='models'} aria-label={t('modelService.title')}>{props.modelSettings}</section>
+      <div hidden={page!=='support'}>
       <section aria-labelledby="account-support" className="mt-10">
         <h2 id="account-support" className="mb-4 text-lg font-medium">{t('account.support')}</h2>
         <div className="divide-y divide-[#e3e5ea] border-y border-[#e3e5ea]">
@@ -119,6 +168,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
           </details>)}
         </div>
       </section>
+      </div>
     </main>
     {props.active && preferencesOpen && <LearningPreferencesPanel fixedPolicy={props.fixedLearningPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('account.done')}/>}
   </section>;
