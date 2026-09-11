@@ -217,7 +217,7 @@ export function createConsumerRoutes(options: {deleteIdentity?:DeleteIdentity;te
       const old=(await db.query('SELECT input_digest FROM sensa_consumer.native_semantic_usage WHERE account_id=$1 AND request_id=$2',[a.account_id,input.id])).rows[0];
       if(old)throw new ConsumerError(409,'native_request_consumed');
       const count=(await db.query('SELECT count(*)::int AS n FROM sensa_consumer.native_semantic_usage WHERE account_id=$1 AND created_at>$2',[a.account_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
-      if(count>=nativeModelDailyLimit)throw new ConsumerError(409,'native_semantic_daily_budget');
+      if(process.env.SENSA_UNLIMITED_MODEL_USAGE!=='true'&&count>=nativeModelDailyLimit)throw new ConsumerError(409,'native_semantic_daily_budget');
       await db.query('INSERT INTO sensa_consumer.native_semantic_usage VALUES($1,$2,$3,$4)',[a.account_id,input.id,input.inputDigest,a.now]);
     });},
   }));
@@ -228,7 +228,7 @@ export function createConsumerRoutes(options: {deleteIdentity?:DeleteIdentity;te
       const old=(await db.query('SELECT input_digest FROM sensa_consumer.native_content_usage WHERE account_id=$1 AND request_id=$2',[a.account_id,input.id])).rows[0];
       if(old)throw new ConsumerError(409,old.input_digest===input.inputDigest?'native_request_consumed':'native_request_id_reuse');
       const count=(await db.query('SELECT count(*)::int AS n FROM sensa_consumer.native_content_usage WHERE account_id=$1 AND created_at>$2',[a.account_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
-      if(count>=nativeModelDailyLimit)throw new ConsumerError(409,'daily_preparation_limit');
+      if(process.env.SENSA_UNLIMITED_MODEL_USAGE!=='true'&&count>=nativeModelDailyLimit)throw new ConsumerError(409,'daily_preparation_limit');
       await db.query('INSERT INTO sensa_consumer.native_content_usage VALUES($1,$2,$3,$4)',[a.account_id,input.id,input.inputDigest,a.now]);
     });},
     cancel:async(request,input)=>{const identity=await verify(request);await transaction(async db=>{const a=await account(db,identity,undefined,false,clock());const old=(await db.query('SELECT input_digest FROM sensa_consumer.native_content_cancellations WHERE account_id=$1 AND request_id=$2',[a.account_id,input.id])).rows[0];if(old&&old.input_digest!==input.inputDigest)throw new ConsumerError(409,'native_request_id_reuse');await db.query('INSERT INTO sensa_consumer.native_content_cancellations VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[a.account_id,input.id,input.inputDigest,a.now]);});},
@@ -260,7 +260,7 @@ export function createConsumerRoutes(options: {deleteIdentity?:DeleteIdentity;te
       const old=(await db.query('SELECT input_digest FROM sensa_consumer.native_semantic_usage WHERE account_id=$1 AND request_id=$2',[a.account_id,input.id])).rows[0];
       if(old)throw new ConsumerError(409,old.input_digest===input.inputDigest?'native_request_consumed':'native_request_id_reuse');
       const count=(await db.query('SELECT count(*)::int AS n FROM sensa_consumer.native_semantic_usage WHERE account_id=$1 AND created_at>$2',[a.account_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
-      if(count>=nativeModelDailyLimit)throw new ConsumerError(409,'native_semantic_daily_budget');
+      if(process.env.SENSA_UNLIMITED_MODEL_USAGE!=='true'&&count>=nativeModelDailyLimit)throw new ConsumerError(409,'native_semantic_daily_budget');
       await db.query('INSERT INTO sensa_consumer.native_semantic_usage VALUES($1,$2,$3,$4)',[a.account_id,input.id,input.inputDigest,a.now]);
     });
   }));
@@ -276,7 +276,7 @@ export function createConsumerRoutes(options: {deleteIdentity?:DeleteIdentity;te
       let explanationAvailable=false;
       try{await activeMeaningConnection(db,a);explanationAvailable=true;}catch(e){if(!(e instanceof ConsumerError))throw e;}
       return {authorized:true,explanationAvailable,checkedAt:a.now.toISOString(),windowHours:24,
-        usage:[{kind:'reading',used:await used('reading_requests'),limit:readingDailyLimit},{kind:'teacher',used:await used('native_semantic_usage'),limit:nativeModelDailyLimit},{kind:'content',used:await used('native_content_usage'),limit:nativeModelDailyLimit}]};
+        usage:[{kind:'reading',used:await used('reading_requests'),limit:readingDailyLimit},{kind:'teacher',used:await used('native_semantic_usage'),limit:process.env.SENSA_UNLIMITED_MODEL_USAGE==='true'?null:nativeModelDailyLimit},{kind:'content',used:await used('native_content_usage'),limit:process.env.SENSA_UNLIMITED_MODEL_USAGE==='true'?null:nativeModelDailyLimit}]};
     });
     c.header('Cache-Control','no-store');return c.json(result);
   });

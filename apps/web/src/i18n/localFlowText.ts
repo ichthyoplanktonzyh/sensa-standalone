@@ -15,6 +15,7 @@ export function localFlowNotice(value:string|null|undefined):string {
 
 /** Keep actionable domain failures; do not show raw transport or schema dumps to learners. */
 export function localFlowErrorKey(error:unknown,fallback:string):string {
+ if(error instanceof Error&&['AbortError','TimeoutError'].includes(error.name))return 'localFlow.requestTimeout';
  const candidates=error instanceof Error?[error.message]:[];
  if(error&&typeof error==='object'&&'issues' in error&&Array.isArray(error.issues))for(const issue of error.issues)if(issue&&typeof issue.message==='string')candidates.push(issue.message);
  return candidates.find(key=>key.startsWith('localFlow.')&&i18n.exists(key))??fallback;

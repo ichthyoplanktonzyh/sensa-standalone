@@ -23,6 +23,8 @@ try{
  assert.equal((await app.request('/sensa/packages')).status,401);revoked=true;assert.equal((await app.request('/sensa/packages',{headers:{authorization:'Bearer a'}})).status,403);revoked=false;
  process.env.SENSA_SEMANTIC_PROVIDER='deepseek';process.env.DEEPSEEK_API_KEY='fixture-never-sent';
  for(const who of ['a','b']){const response=await app.request('/sensa/service/status',{headers:{authorization:'Bearer '+who}});assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');const raw=await response.text();assert(!raw.includes('fixture-never-sent'));const status=serviceStatusSchema.parse(JSON.parse(raw));assert.equal(status.explanationAvailable,true);assert.deepEqual(status.usage.map(u=>u.limit),[300,30,30]);assert(status.usage.every(u=>u.used===(who==='a'?4:2)));}
+ process.env.SENSA_UNLIMITED_MODEL_USAGE='true';
+ const unlimited=serviceStatusSchema.parse(await (await app.request('/sensa/service/status',{headers:{authorization:'Bearer a'}})).json());assert.deepEqual(unlimited.usage.map(u=>u.limit),[300,null,null]);delete process.env.SENSA_UNLIMITED_MODEL_USAGE;
  delete process.env.DEEPSEEK_API_KEY;const unavailable=await app.request('/sensa/service/status',{headers:{authorization:'Bearer a'}});assert.equal((await unavailable.json()).explanationAvailable,false);
  revoked=true;assert.equal((await app.request('/sensa/service/status',{headers:{authorization:'Bearer a'}})).status,403);
  const before=calls.length;assert.equal((await app.request('/sensa/service/status')).status,401);assert.equal(calls.length,before);

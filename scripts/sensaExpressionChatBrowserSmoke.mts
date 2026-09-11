@@ -59,7 +59,8 @@ try{
  await page.goto(origin+'/personal-meaning?meaningId=new');
  await page.getByLabel('Add images',{exact:true}).setInputFiles({name:'bad.txt',mimeType:'text/plain',buffer:Buffer.from('not an image')});
  await expect(page.getByText('Choose a JPG, PNG, or WebP image.',{exact:true})).toBeVisible();assert.equal(requests.length,3);
- await page.getByLabel('Add images',{exact:true}).setInputFiles({name:'image-only.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
+ await page.getByLabel('What would you like to express?',{exact:true}).evaluate((el,png)=>{const bytes=Uint8Array.from(atob(png),c=>c.charCodeAt(0));const transfer=new DataTransfer();transfer.items.add(new File([bytes],'image-only.png',{type:'image/png'}));el.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}));},png);
+ await expect(page.getByRole('img',{name:'image-only.png'})).toBeVisible();
  await page.getByRole('button',{name:'Send',exact:true}).click();await expect.poll(()=>requests.length).toBe(4);await expect(page.getByRole('button',{name:'Save this expression',exact:true})).toBeEnabled();
  assert((await rows('drafts')).some(d=>d.text===''&&d.images?.length===1));
  await page.reload();await expect(page.getByRole('img',{name:'image-only.png'})).toBeVisible();assert.equal(requests.length,4);
@@ -70,6 +71,9 @@ try{
  await expect.poll(async()=> (await rows('meanings'))[0].contextRevision).toBe(2);assert.equal(contentRequests.length,0);assert.equal((await rows('meanings'))[0].contextImages.length,2);
  await page.getByLabel('Use my context to prepare learning content.',{exact:true}).check();await page.getByRole('button',{name:'Add to learning',exact:true}).click();
  await expect(page.getByRole('button',{name:'Start / continue learning',exact:true})).toBeVisible({timeout:15000});assert.equal(contentRequests.length,2);assert.equal(contentRequests[0].body.messages[1].content.filter((p:any)=>p.type==='image_url').length,2);
+ await expect(page.getByRole('button',{name:'Update resources with current context settings',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'Edit context',exact:true}).click();await page.getByRole('button',{name:'Save context',exact:true}).click();
+ assert.equal((await rows('meanings'))[0].contextRevision,2);await expect(page.getByRole('button',{name:'Update resources with current context settings',exact:true})).toBeDisabled();
  await page.getByText('View learning resources',{exact:true}).click();const preview=page.frameLocator('iframe[title="Interactive experience"]');await preview.getByRole('button',{name:'Show hint'}).click();await expect(preview.getByText('Think of keeping dry.',{exact:true})).toBeVisible();await preview.locator('#piece').dragTo(preview.locator('#zone'));await expect(preview.locator('#zone #piece')).toHaveCount(1);assert.equal(await page.locator('iframe').getAttribute('sandbox'),'allow-scripts');
  const before=(await rows('learningTargets'))[0];assert.equal(before.material.content.resources.find((r:any)=>r.materialRoleKey==='experience_recall_cue').contentPayload.images.length,2);
  await page.getByRole('button',{name:'Start / continue learning',exact:true}).click();await page.getByRole('button',{name:'Confirm quantity and start',exact:true}).click();await expect(page.locator('#s-lightweight-runtime iframe')).toBeVisible();await expect(page.locator('#s-lightweight-runtime img')).toHaveCount(2);

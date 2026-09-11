@@ -43,7 +43,7 @@ export async function preparePersonal(id:string,contentProvider:Provider,reviewP
   if(task.status==='ready')return null;
   if(!task.replacing&&await tx.get('learningTargets',task.targetId)){task.status='ready';task.leaseUntil=0;tx.put('personalLearning',id,task);return null;}
   if(['generating','reviewing'].includes(task.status)&&task.leaseUntil>Date.now())throw new Error('localFlow.preparationBusy');
-  const attempts=(await tx.all<ContentAttempt>('contentAttempts')).filter(a=>a.taskId===id&&Date.parse(a.createdAt)>Date.now()-86400000);if(attempts.length>=6)throw new Error('localFlow.preparationLimit');
+  const attempts=(await tx.all<ContentAttempt>('contentAttempts')).filter(a=>a.taskId===id&&Date.parse(a.createdAt)>Date.now()-86400000);if(import.meta.env.VITE_SENSA_UNLIMITED_PREPARATION!=='true'&&attempts.length>=6)throw new Error('localFlow.preparationLimit');
   const prior=task.attemptId?await tx.get<ContentAttempt>('contentAttempts',task.attemptId):undefined;
   // Continue a saved candidate after transport interruption without repeating generation.
   const reuse=prior?.bundle&&prior.request&&task.status!=='rejected'&&canonicalConsumerJson(prior.contentProvider)===canonicalConsumerJson(contentProvider)&&(reviewProvider===null||canonicalConsumerJson(prior.reviewProvider)===canonicalConsumerJson(reviewProvider))?prior:null;
@@ -79,5 +79,6 @@ export async function preparePersonal(id:string,contentProvider:Provider,reviewP
 export async function requestPersonalResourceUpdate(operationId:string,meaningId:string,useContext:boolean){return command({id:operationId,kind:'personal.update-resources',input:{meaningId,useContext}},async tx=>{
  await learningOwner(tx);const task=await tx.get<PersonalLearning>('personalLearning',meaningId),meaning=await tx.get<LocalMeaning>('meanings',meaningId);if(!task||!meaning)throw Error('localFlow.enrollFirst');
  if(['generating','reviewing'].includes(task.status)&&task.leaseUntil>Date.now())throw Error('localFlow.preparationBusy');
+ if((task.meaning.contextRevision??1)===(meaning.contextRevision??1))throw Error('localFlow.resourcesUnchanged');
  task.meaning=meaning;task.useContext=useContext;task.replacing=true;task.planRevision=crypto.randomUUID();task.attemptId=null;task.status='waiting';task.notice='';tx.put('personalLearning',task.id,task);return task;
 });}

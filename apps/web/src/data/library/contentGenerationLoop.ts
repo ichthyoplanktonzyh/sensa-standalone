@@ -14,16 +14,16 @@ export async function generateLearningCandidate(request:SensaContentGenerationRe
   const message=result.choices[0]!.message;
   if(message.tool_calls?.length)throw new Error('localFlow.generationToolDenied');
   let bundle:SensaMaterialCandidateBundle|undefined;
-  let accepted=false;
+  let accepted=false;let correction='The candidate did not satisfy the fixed learning demand.';
   try{
    bundle=await makeBundle(request,{cue:JSON.parse(message.content??'null'),provider:provider.id,model:result.model},new Date());
    bundle.usage.modelTurns=round;
    accepted=!!(await validateBundle(request,bundle,null,new Date())).content;
-  }catch(error){if(!(error instanceof SyntaxError)&&!(error instanceof Error&&(error.name==='ZodError'||error.message==='unknown_context_image')))throw error;}
+  }catch(error){if(!(error instanceof SyntaxError)&&!(error instanceof Error&&(error.name==='ZodError'||error.message==='unknown_context_image')))throw error;correction=error instanceof SyntaxError?'Return valid JSON without markdown fences.':error.message.slice(0,4000);}
   await onStep({round,accepted,issues:accepted?[]:['invalid_recall_cue']});
   if(accepted)return bundle!;
   if(round===request.attemptBudget.maxModelTurns){if(bundle)return bundle;throw new Error('localFlow.validationRejected');}
-  messages.push({role:'assistant',content:message.content??''},{role:'user',content:'Validation failed. Return JSON {scene,senseFocus,imageIds?,html?} using the declared offline HTML interactions and only supplied image IDs. scene must be a concrete Chinese recall cue of 10–1800 characters; senseFocus must be 2–500 characters. Neither field may contain the target expression. Preserve the fixed sense and authorized context. Correct the candidate; do not change the learning target.'});
+  messages.push({role:'assistant',content:message.content??''},{role:'user',content:correction+' Validation failed. Return only JSON {scene,senseFocus,imageIds?,html?} using the declared offline HTML interactions and only supplied image IDs. scene must be a concrete Chinese recall cue of 10–1800 characters; senseFocus must be 2–500 characters. Neither field may contain the target expression. Preserve the fixed sense and authorized context. Correct the candidate; do not change the learning target. Do not add undeclared keys such as type.'});
  }
  throw new Error('localFlow.validationRejected');
 }

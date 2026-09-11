@@ -1022,7 +1022,7 @@ function ConnectedMeaningConversation({active,onBack,conversation:c,learningCont
     <div><h3 className="text-sm text-[#68748d]">{uiText('meaning2')}</h3><p className="mt-2 whitespace-pre-wrap leading-7">{candidate.meaning}</p></div>
     <div><h3 className="text-sm text-[#68748d]">{localFlowText('context')}</h3><p className="mt-2 whitespace-pre-wrap leading-7">{candidate.context}</p>{c.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-3 max-h-64 max-w-full rounded-xl object-contain"/>)}</div>
    </article>
-   {c.onUpdateContext&&<button className="mb-4 rounded-lg border px-4 py-2" onClick={()=>setEditing(v=>!v)}>{localFlowText(editing?'cancelEdit':'editContext')}</button>}
+   {c.onUpdateContext&&<button className="mb-4 rounded-lg border border-[#bdc8dd] bg-[#eef2fa] px-4 py-3" onClick={()=>setEditing(v=>!v)}>{localFlowText(editing?'cancelEdit':'editContext')}</button>}
    {editing&&<ExpressionChatInput busy={c.busy} initialText={candidate.context} inputLabel={localFlowText('context')} inputHint={localFlowText('context')} initialImages={c.images??[]} submitLabel={localFlowText('saveContext')} onSend={async(text,images)=>{await c.onUpdateContext!(text,images);setEditing(false);}}/>}
    {c.notice&&<p role="status">{c.notice}</p>}
    {learningControls}
@@ -1047,7 +1047,7 @@ function ConnectedMeaningConversation({active,onBack,conversation:c,learningCont
    <button className="mt-4 min-h-11 rounded-xl bg-[#3c5087] px-5 text-sm text-white disabled:opacity-40" disabled={c.busy} onClick={()=>void c.onConfirm().catch(()=>{})}>{localFlowText('saveExpression')}</button>
   </section>}
   <div className="mx-6 mb-2 flex gap-3">
-   {c.canContinue&&!c.accepted&&<button className={uiClass('pmw-dock-organize')} disabled={c.busy} onClick={()=>void c.onContinue()}>{localFlowText('continueConversation')}</button>}
+   {c.canContinue&&!c.accepted&&<button className="inline-flex min-h-11 items-center rounded-xl border border-[#bdc8dd] bg-[#eef2fa] px-4 text-sm text-[#59678f] disabled:opacity-40" disabled={c.busy} onClick={()=>void c.onContinue()}>{localFlowText('continueConversation')}</button>}
    {c.busy&&<button className={uiClass('pmw-dock-organize')} onClick={c.onStop}>{localFlowText('stopRequest')}</button>}
   </div>
   {!c.accepted&&<ExpressionChatInput busy={c.busy} onSend={c.onSend}/>}

@@ -89,6 +89,6 @@ export function canonicalConsumerJson(value: unknown): string {
 /** Read-only online service access and actual rolling request counters. */
 export const serviceStatusSchema=z.object({
   authorized:z.literal(true),explanationAvailable:z.boolean(),checkedAt:z.string().datetime(),windowHours:z.literal(24),
-  usage:z.array(z.object({kind:z.enum(['reading','teacher','content']),used:z.number().int().nonnegative(),limit:z.number().int().positive()}).strict()).length(3),
+  usage:z.array(z.object({kind:z.enum(['reading','teacher','content']),used:z.number().int().nonnegative(),limit:z.number().int().positive().nullable()}).strict()).length(3),
 }).strict();
 export type ServiceStatus=z.infer<typeof serviceStatusSchema>;

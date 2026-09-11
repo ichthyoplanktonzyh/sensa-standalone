@@ -32,7 +32,7 @@ export async function complete(provider:Provider,purpose:Purpose,id:string,messa
  const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
  try{for(;;){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>256*1024)throw new Error('localFlow.responseLimit');chunks.push(value);}}finally{await reader.cancel();}
  const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
- let value=JSON.parse(new TextDecoder().decode(bytes));
+ let value;try{value=JSON.parse(new TextDecoder().decode(bytes));}catch{throw new Error('localFlow.modelResponseInvalid');}
  const current=(await providerSnapshot()).providers.find(p=>p.id===provider.id);
  if(current?.revision!==provider.revision)throw new Error('localFlow.staleConfigResult');
  if(provider.kind==='sensa'){
@@ -40,5 +40,7 @@ export async function complete(provider:Provider,purpose:Purpose,id:string,messa
   const envelope=z.object({id:z.literal(id),inputDigest:z.literal((payload as {inputDigest:string}).inputDigest),response:z.unknown()}).strict().parse(value);value=envelope.response;
  }
  if(signal.aborted)throw new Error('localFlow.stoppedResult');
- return completionSchema.parse(value);
+ if(value?.choices?.[0]?.finish_reason==='length')throw new Error('localFlow.modelTruncated');
+ const parsed=completionSchema.safeParse(value);if(!parsed.success)throw new Error('localFlow.modelResponseInvalid');
+ return parsed.data;
 }
