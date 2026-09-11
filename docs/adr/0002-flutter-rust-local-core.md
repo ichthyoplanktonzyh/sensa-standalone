@@ -5,6 +5,8 @@ date: 2026-09-08
 
 # Flutter/Dart 主应用、Rust 本地核心与 TypeScript 浏览器/云端
 
+> 2026-09-11：首发改为 Web 本地优先＋普通账号云同步，见 [ADR 0001](0001-local-library-optional-encrypted-sync.md)。本 ADR 的原生架构保留；旧 E2EE 限制及原生优先交付顺序不再适用于首发。
+
 > 2026-09-09：Web 终局范围与 TS/Rust 共存策略已由 [ADR 0003](0003-three-client-local-facts.md) 更新；下文保留当时的原生优先决策与历史证据。
 
 Owner 已确认完整产品以三种主要语言协作，并授权开始实施；本轮另明确安装 Android SDK 一起验收。
