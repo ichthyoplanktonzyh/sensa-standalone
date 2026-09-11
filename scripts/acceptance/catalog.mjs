@@ -16,7 +16,7 @@ export const catalog = [
     'Chromium DOM、扩展 content/options 构建产物、字幕解析与交互',
     '网页/字幕 HTTP、chrome.runtime、模型设置与解释响应',
     '不是已安装扩展到后台/SQLite 的 E2E；不证明真实 YouTube 或模型质量',
-    [extensionBuild, node('sensaBrowserPortSmoke.mts')], 'docs/sensa/browser-port-handoff.md'),
+    [extensionBuild, node('sensaBrowserPortSmoke.mts')], 'docs/sensa/browser-port-contract.md'),
   entry('popup', '插件反馈、重复点击、长列表与键盘滚动', 'interaction',
     ['scripts/sensaExtensionPopupSmoke.mts'],
     'Chromium 中的 popup HTML/JS、DOM、窄宽度与键盘滚动',

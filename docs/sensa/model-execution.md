@@ -40,7 +40,9 @@ Sensa API 使用默认服务；客户端不依赖 Genkit 的内部数据结构�
 密钥；Owner 已于 2026-09-11 确认插件部分本轮暂不处理，继续保留旧配置兼容。插件现有服务请求
 已经进入统一 Genkit 执行层。不能将此旧路径描述为本机直连已全面完成。
 
-## 验证
+## 验证入口与边界
+
+常规模型执行验证入口：`npm run sensa:model-execution-smoke`。
 
 `npm run typecheck`、`npm run build`、`npm run lint`、本地国际化扫描、备份和服务
 状态 smoke 通过。真实 Genkit Flow/兼容适配器搭配合成 fetch，在 Node 和 Deno

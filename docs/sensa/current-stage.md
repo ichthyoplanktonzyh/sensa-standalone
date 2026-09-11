@@ -1,329 +1,54 @@
 # Sensa 当前阶段与交付边界
 
-2026-09-10 首位试用登录适配：owner 已确认默认邮件链接登录，完整 Web 增加显式 PKCE
-回调及失效恢复，保留自定义模板的验证码入口。浏览器证据与真实环境前提统一记录于
-[Web 上线核查](web-launch-readiness.md)；尚未证明真实邮件送达或云端服务已初始化。
+更新：2026-09-11。本文只维护当前判断，不逐次追加施工日志。
+产品范围由 [PRD](product-requirements-v1.md) 裁决，长期交付门见
+[生产路线图](production-migration-plan.md)，领域规则见 [文档索引](README.md)。
 
-2026-09-10 Web-only 收尾：新增配额回滚提示、数据库/离线壳升级回归、原创文本包候选、
-模型输入保护、候选部署和默认关闭的运行监控。代码与本地验收不等于真实服务验收；
-等待隔离 Supabase/邮件/模型环境后交给 owner 真实使用，修复后再授权部署。具体操作与
-限制统一记录在 [Web 上线核查](web-launch-readiness.md)，自动多设备同步继续后置。
+## 当前工作重点
 
-2026-09-10 Web 生产收尾：账号删除接入完整个人页，增加 0026 迁移和永久旧凭据屏障，
-失败可凭持久回执恢复。受限 Postgres 与完整 Chrome 合成服务验收通过；真实 Supabase
-删除仍待验证，迁移期旧云端学习账号不进入此删除范围，见 Web 上线核查记录。
+Owner 正在本机正式 Web 中进行首位真实用户走查，按反馈逐项修正。学习运行时本轮已暂告一段落，
+账号与设置已完成分组入口调整；目前整理文档。此状态不等于公开生产部署或全部平台验收完成。
 
-2026-09-10 M3 本机清除纵切：完整 Web 个人页支持范围检查、待处理工作提示、确认清除、
-取消与空库重开。清除/恢复轮换本机 incarnation，旧标签页命令和延迟下载无法写回；
-清除是单事务，预览过期拒绝、故障回滚已验。独立 Chrome 完整页面清除/恢复及断网重启通过，
-根级 typecheck/build/lint 通过。仅合成数据；账号删除、跨端事实同步和 G1–G3 仍未完成。
+首发优先 Web，原生 UI 优化与插件新增工作暂缓。自动跨设备同步后置；个人资料保存在当前
+浏览器，可通过加密备份恢复，不宣称登录即同步或云端已备份。云端操作走 CI/CD，具体发布
+授权及真实环境核查见 [发布核查](web-launch-readiness.md) 和 [发布授权](release-authorization.md)。
 
-2026-09-10 体验修正：近期正式 Web 的账号、模型服务、包学习、Intake/澄清、个人资源准备、
-运行时与备份已统一接入中英文，补齐按钮与异步状态反馈、缩减个人页技术说明。新增国际化
-检查与双语完整应用浏览器验收；旧通知在展示层兼容，原文/模型内容与学习事实保持原样。
-详见 [Web 工作流](web-local-meaning-workflow.md)。
+## 已具备的主链与证据
 
-2026-09-10 本机备份恢复纵切：正式 `/profile` 已接入加密导出、摘要检查与原账号空库原子恢复。
-个人内容和学习包的固定材料、运行/调度、操作账本与中断请求已纳入；独立 Chrome 新配置恢复
-及恢复端离线进程重启通过。测试使用合成账号/模型，无线上部署。跨端同步、密钥恢复、删除
-屏障与生产门仍未关闭，M3 仅推进了 Web 单库恢复部分，见 [Web 工作流](web-local-meaning-workflow.md)。
-
-2026-09-10 第三项本地整链：已接通 Intake 快慢轨 → 个人内容确认 → 显式入学 →
-生成/独立审核 → 第二项运行时。准备与候选分表持久化，支持审核故障恢复、取消/过期隔离，
-共享原服务端材料校验；完整生产 UI 合成服务浏览器验收通过。真实模型质量、安装插件后的
-整链与公网/同步验收仍待执行，见 [Web 工作流](web-local-meaning-workflow.md)。
-
-2026-09-10 离线冷启动后续：已在独立本机 Chrome 进程中验收完整生产构建，关闭测试服务器后
-断网重启，深链接、过期令牌下学习恢复/结算、再次重启结果一致、跨账号与退出锁定通过。
-修复在线认证刷新阻塞本机入口及目录等待问题；此前“未执行真实浏览器冷启动”记录已由本条
-补充。账号/目录为合成本地 HTTP，公网和其他浏览器验收仍待执行，见 [Web 工作流](web-local-meaning-workflow.md)。
-
-2026-09-10 第二项本地纵切：完整 Web 已接入真实目录/完整包安装、显式入学、数量确认、
-共享 kernel 的本机首次学习/复习/再学习及记录恢复。新增 IDB 表保留旧资料，生产构建
-提供独立应用壳缓存；通过无浏览器下载/事务/生成 SW 验证。暂无发布目录和线上环境，
-真实浏览器离线冷启动及公网验收仍未执行；原生包格式兼容、跨设备同步和个人内容生成
-不在本切片内。具体合同与证据见 [Web 工作流](web-local-meaning-workflow.md)。
-
-2026-09-10 第一项后续：已补齐可配置注册准入、完整 Web 服务 Account ID/恢复，
-以及插件新采集队列 → 完整 Web 本机内容库 → 持久回执的代码路径，保留快慢轨与明确接纳，
-不创建旧学习副本或自动入学。隔离 Postgres 与非浏览器 IndexedDB/background 检查通过；
-owner 明确暂无线上环境，线上配置/部署验收暂缓，不宣称第一项全部上线闭环。
-本轮未操控浏览器。详见 [Web 工作流最新记录](web-local-meaning-workflow.md)。
-
-2026-09-10 账号权益/插件增量：Web/插件共享服务状态与实际请求计数，默认 Agent 配置修复，
-完整 Web 插件授权入口及插件高级设置分层已接入。非浏览器合成 SQL/Hono 检查通过；本轮按 owner
-要求未进行浏览器/截图走查。公开权益开通仍受现有访问门限制，真实部署及插件主链交接尚未验收。
-
-2026-09-10 Web 账号与服务切片：首次邮箱 OTP + 服务权限接入完整应用，默认 Sensa，BYOK 折叠。
-已存在设备本机继续、显式退出锁定/资料保留与异账号隔离有浏览器替身证据；真实邮件、访问开通、
-用量 UI、插件同体验和学习包整链仍未关闭，见 Web 工作流记录。
-
-2026-09-10 最新体验决策：先注册/登录、默认 Sensa 服务；BYOK 为全项目高级功能。
-Intake 现场处理，主应用整理/澄清/学习，账号与权益统一。下一施工顺序先落实账号首次使用、
-主应用/插件服务体验，再贯通选包下载和本地学习；完整规则见 PRD。
-此前无账号构建 checkpoint 仅是本地执行解耦证据，不再代表首次用户旅程。
-原生分轮次过程文档已归并为 [能力与验收摘要](native-capability-status.md)；原始证据可通过该摘要的 Git 基线追溯。
-
-2026-09-10 Web 正式入口收口：默认和 `production` 构建均进入现有完整 `experience/App.tsx`，
-不要求账号/API 配置；旧账号实现仅通过显式 `legacy-account` 模式做迁移回归。
-无账号配置的静态发布构建通过完整页面流程回归，但学习包本地结算、离线冷启动和上线门仍未关闭。
-
-2026-09-10 Web 整组工作已确认：本机记录 → 老师澄清 → 确认 → 显式入学 → 生成/审核 → 学习，
-Provider 与本地持久化随用例贯通。第一条材料/模型/澄清切片直接接入 owner 指定的完整 `experience/App.tsx`（`/profile`、`/content`），
-已删除 `LibraryWorkspace` 和 `?library=local` 分支，保留原四项导航、学习偏好及学习计划。既有账号服务入口保持独立，
-不迁移旧数据；整组状态与边界见 [工作流记录](web-local-meaning-workflow.md)。
-
-2026-09-10 最新 owner 决定：原生 UI 优化暂停，当前优先完成正式 `apps/web`，达到上线可用后再回访原生。
-继续原工作树、主代理直接实施，沿用已确认体验；不自动 push/deploy，不迁移 owner 数据。
-Web 本地执行、备份/恢复、账号与在线资源、安全/监控和 CI/CD 逐门验收；旧 consumer 或 preview
-通过构建不代表上线就绪。本轮代码盘点及账号隔离修复见 [Web 上线核查记录](web-launch-readiness.md)。
-
-2026-09-10 自由练习专项：按 owner 确认参考正式 Web 优化范围摘要、四类活动卡片、独立范围页和播放器；
-owner 明确允许说/读/写显示未开放占位。20 项组件回归、macOS/Android 主流程与独立冷恢复、
-静态分析及根级检查通过，见 [自由练习记录](native-capability-status.md)。媒体使用确定性替身，
-不作为真实在线视频或视觉走查验收。
-
-2026-09-10 “我的学习”专项：范围与计划、直接修改数量/方式、准备入口、内联签到日历和近期活动已接入。
-43 项组件回归、macOS/Android 主流程与独立冷恢复、静态分析及根级检查通过，见
-[学习管理记录](native-capability-status.md)。本轮未进行应用走查，保留既有学习与调度合同。
-
-2026-09-10 首页专项：按 owner 确认对照正式 Web 优化今日学习层级、桌面/手机布局、可用状态和直接采集入口。
-37 项组件回归、双平台主流程/独立冷恢复及根级检查通过，见 [首页记录](native-capability-status.md)。
-未进行应用走查，不扩展为其他页面或整体体验已验收。
-
-2026-09-10 原生体验第二轮：意义摘要进入完整详情，保留复制编辑/移除/恢复与显式入学；
-采集未保存保护、学习题面滚动/输入、手机关系浏览、准备和服务配置分层已完成。
-28 项组件回归、macOS/Android 真实本地主流程与独立冷恢复及根级检查通过，见
-[用例体验记录](native-capability-status.md)。遵照 owner 要求没有进行应用走查，不宣称整体 UX 已验收。
-
-2026-09-10 原生体验第一轮：我的内容直接呈现词义世界与材料浏览，我的学习集中学习状态、范围、准备和历史；
-收紧主界面层级并修复短窗口大字号溢出。组件与双平台本地主流程、冷恢复通过；owner 要求停止进一步走查，
-不据此宣布整体 UX 已验收。后续具体详情、编辑和学习呈现的优化范围见 [记录](native-capability-status.md)。
-
-2026-09-09 原生体验补齐：在推进 Web 本地执行前，先完成文案精简和简体中文／English 国际化，
-包含首次使用与设置入口、本机语言偏好、内置 Profile 显示、状态错误和原生连接向导。
-语言切换不改写学习事实和用户材料；双平台英文主流程与冷恢复、macOS 高保证英文流程及正常应用切换已有证据，见 [交付记录](native-capability-status.md)。
-
-2026-09-09 第 6 组正式原生产品界面收口：正式首页/内容/学习/练习/设置替代默认验收壳，
-Profile 到轻量/高保证执行器、语义接纳、资源与采集接入保留 Rust 权威。
-macOS/Android 正式主流程、复习修复、独立冷恢复及资源回归通过；macOS 正常应用和系统选择/连接向导另有实况证据。
-详见 [整组交付](native-capability-status.md) 与 [验收矩阵](native-ui-acceptance-matrix.md)。
-六组既有能力的原生迁移范围现已收口；Web 本地执行、G1–G3 事实/同步、备份恢复、Windows/iOS 和生产发布仍未完成，M3 不由本次迁移替代。
-
-> 状态日期：2026-09-10\
-> 当前阶段：领域与行为原型验证后期，生产应用建设前期\
-> 下一里程碑：正式 Web 上线可用；先完成本地执行和恢复，再关闭在线资源与 M3/M4 发布门；原生 UI 优化暂停\
-> 当前执行位置：本地底座 LF-0 蓝图与 LF-1a 共用结算已完成，LF-1b 的六组已有能力原生迁移已在 macOS/Android 收口，完整 LF-1b 的备份/发布等后续门继续实施；以下为旧架构证据：M0 设计已验收；M1-A/B/C/D/E 本地纵切已验证；托管验收待执行，M2-A/B 采集/直接语义接受本地切片已验证，M2-C 文本内容入学纵切已验证，Web 澄清/可恢复移除已验证，M2-D 原账号/版本及原生权限恢复已验证，原文授权与撤销本地纵切已验证，静态音频生成/解析与失败回退本地已验证，Chrome 151/152、实际进程恢复及有限真实质量抽查已有本地证据；M1/M2 已确认 Web 界面接入与简化页面删除完成本地验证，等待 owner 体验；云端/商店按 owner 要求暂缓\
-> 执行路线图：[production-migration-plan.md](production-migration-plan.md)
-
-本文是项目阶段、证据级别和近期交付范围的唯一事实来源。[文档索引](README.md)列出的七份
-领域文档裁决身份、所有权和不变量；[PRD](product-requirements-v1.md) 裁决产品 IA 与用户语言；
-路线图负责工作顺序、依赖和验收门。阶段变化不重定义领域对象，原型能力不自动成为生产承诺。
-具体协作方式遵守 [开发工作约定](development-workflow.md)：全局结构先规划，每条用例先与
-owner 确认前端体验，再细化合同并纵向实现；该方式可根据实际开发反馈调整。
-
-## 1. 当前判断
-
-2026-09-09 采集交接大组完成：统一 Capture/Proposal 准入合同与本机回执、桌面 CLI/Native Messaging、插件 Web/原生接收目标选择、断线与浏览器重启恢复、本地 Agent Skill、原生导入/确认/刷新及 macOS/Android 冷恢复均接入，见 [整组记录](native-capability-status.md)。模型账号与保存目的地独立，本机原文采集无需账号；资料不经 Web 中转，也不启用同步。现有 Web 仍保留迁移期路径。已有 TS 能力的原生迁移已在后续第 6 组收口；Web 本地化、远程 Agent、移动系统分享、生产安装包、同步及 M3 未完成。
-
-2026-09-09 Agent 协作增量：语言老师图文澄清、自然语言更正与明确接受，轻量内容工具循环/独立审核，以及自带 Key/Sensa Provider 接线已实现，见 [交付记录](native-capability-status.md)。安全凭据持久化、用途独立选择与既有入口统一见 [Provider 交付](native-capability-status.md)。可选文本资源、按揭示阶段呈现和本机准入治理见 [本轮记录](native-capability-status.md)。参考事实供给、图文授权、coverage、流式与原生在线账户已在 [资源整组记录](native-capability-status.md) 补齐；原生迁移和 M3 尚未完成。
-
-2026-09-09 最新确认：[三端本地与共同事实模型](../adr/0003-three-client-local-facts.md) 已接受，替代下文历史记录中 Web 终局未定的范围。先建立事实模型并开始分层校验，继续原生迁移，再改造 React/TS Web 本地执行，最后完成真实三端/E2EE 验收；不会等 Web 完工才开始模型校验。本轮有界 G0 模型实验已通过乱序/重复、因果缺失、语义冲突及共同 Handoff 下的并发 Review 分类，见 [范围与证据](personal-library-fact-model.md)。尚非生产同步、完整调度收敛或 M3 完成；Anchor Use 已在后续原生纵切接入，静态发音/音频协作已在 [后续纵切](native-capability-status.md) 接入；来源组织/Curriculum/Book Range 与完整记录查询已在 [整组交付](native-capability-status.md) 补齐；Runtime scope 与自由练习已在 [整组记录](native-capability-status.md) 收口；个人语义世界的图文/草稿、表达连接与关系投影已在 [整组交付](native-capability-status.md) 接入；原生资源与在线协作已在 [整组交付](native-capability-status.md) 收口；原生采集交接已在 [整组记录](native-capability-status.md) 完成；已有能力的六组原生迁移已收口，范围与仍保留的发布/同步门见迁移清单。
-
-LF-1b 后续增量已接入有界轻量文本包导入、逐目标显式入学、选择/暂停恢复与每日新学上限。完整发布包/媒体仍未完成；导入平台证据见 [本轮记录](native-capability-status.md)。
-
-2026-09-08 本轮范围修订：四阶段只作内核扩展性验证，正式材料/UI 暂停，不作为当前迁移完成前置。
-改为优先高保证；fresh/repair Step 选择与通用账本组合已推进，见 [高保证迁移记录](native-capability-status.md)。首学队列、辅助回想规则、撤销及快照恢复的纯内核迁移已完成，见 [生命周期记录](native-capability-status.md)；复习/重学纯生命周期及 effect 对照也已完成，见 [复习队列记录](native-capability-status.md)；正式材料/评价/SQLite 事务/Flutter 已接入，并完成 Profile 到执行器的真实连接验收，见 [完整纵切记录](native-capability-status.md)。
-
-2026-09-08 历史确认（Web 终局已由上文 ADR 0003 更新）：原生 PC/移动是主产品；Web 保留已有成果、暂停新增建设，是否开放以后决定。原生迁移必须完整承接现有 Web 功能、状态及学习内核扩展机制，不能把首发或技术验收范围当成最终范围。同步优先原生设备并保留 E2EE，Web WASM/互通不是当前前置条件。
-
-2026-09-09 在线语义协作增量：原生在线解析/可选 Focus 澄清、候选本地恢复和新 Sense 明确接受已接入，见 [交付记录](native-capability-status.md)。个人意义显式入学、按需文本任务、独立校验/本地材料冻结与现有 Profile 学习已在 [后续交付](native-capability-status.md) 验证；候选本身仍不能直接标为可学习。原文 Anchor Use 授权/撤销、固定准备版本及后续材料替换已通过 [原生验收](native-capability-status.md)，已开始的 Run 和历史保持固定；静态发音/音频获取、离线播放及失败回退已在 [后续纵切](native-capability-status.md) 验证。来源组织/Curriculum/Book Range 与完整记录查询已在 [整组交付](native-capability-status.md) 补齐；Runtime scope 与自由练习已在 [整组记录](native-capability-status.md) 收口；个人语义世界的图文/草稿、表达连接与关系投影已在 [整组交付](native-capability-status.md) 接入；原生资源与在线协作已在 [整组交付](native-capability-status.md) 收口；原生采集交接已在 [整组记录](native-capability-status.md) 完成；已有能力的六组原生迁移已收口，范围与仍保留的发布/同步门见迁移清单。完整迁移与 M3 仍未完成。
-
-2026-09-09 资源大组完成本机迁移：有来源参考资料、World 图文授权、表达关系/coverage 准备、
-兼容模型 SSE 预览、统一 Agent 静态发音，以及原生受邀邮箱登录/安全续期/在线访问会话与退出
-均接入；原生本机资料/学习不依赖登录。测试与保留边界见 [资源整组记录](native-capability-status.md)。
-完整原生 UI、事实模型 G1–G3、Web 本地执行、备份/可选同步、M3 与生产发布门仍未完成。
-
-
-2026-09-09 个人语义世界增量：本机文本捕获/收件箱、已有 Sense 的直接接受、可选 Focus、移除恢复与显式入学已接入，见 [本轮记录](native-capability-status.md)。在线澄清/新 Sense 构造已在后续纵切接入；图文草稿/冷恢复、同上下文多义、表达分支和图谱已在 [整组记录](native-capability-status.md) 验证。完整多模态模型解析、采集 transport 与正式视觉继续保留；完整迁移与 LF-1b 未完成。Policy Migration 经源盘点确认为未来蓝图能力，区别于已有 TS 待迁移项。
-
-本轮已将三种轻量 purpose 的纯推进/结算、可配置 FSRS 与历史重建迁入 Rust，并接回现有本地首学事务；见 [内核迁移记录](native-capability-status.md)和[完整性清单](native-migration-checklist.md)。轻量复习/重学的本地事务及 Flutter 等待/恢复已接入，见 [复习迁移记录](native-capability-status.md)；通用策略注册/Progression Kernel 的纯接口与组合校验已迁移，见 [进度内核记录](native-capability-status.md)；Policy Assignment、purpose plan/readiness 与首次 Run 固定已接入本地，见 [策略迁移记录](native-capability-status.md)；通用 Observation/Decision/Checkpoint 账本已接入原生 consumer，见 [账本迁移记录](native-capability-status.md)；四阶段编排纯内核及快照恢复已迁移，见 [四阶段记录](native-capability-status.md)；高保证的结构化材料、评价/事务适配和 Flutter UI 已贯通，Profile 执行连接已验证；正式 Activity/Mixed、每日 Introduction、签到和近期记录/去重汇总已贯通，见 [活动交付记录](native-capability-status.md)；完整 Curriculum/范围选择仍待迁移；Policy Migration 保留为未来蓝图；四阶段正式材料/UI 按本轮 Owner 指示暂停；完整 LF-1b 未完成。
-
-2026-09-08 Owner 已确认转向[完整本地学习库＋可选端到端加密同步](../adr/0001-local-library-optional-encrypted-sync.md)，
-允许服务器保存密文副本，并提供可下载资源和按需在线服务。状态是“迁移已启动，共用结算提取与回归已通过；整库/客户端尚未切换”。
-下述 Postgres 权威、本地只存意图/投影、服务器专属结算及账号前置等描述属于现有实现和旧交付基线；
-后续实施前需按新方向修订，不能把当前本地缓存视为独立学习库或端到端加密同步已经完成。
-浏览器体验优化本轮已结束，后续清单继续保留；当前按 [本地学习库迁移蓝图](local-library-migration-blueprint.md)推进 LF-0/LF-1a：明确数据归属与迁移用例，并将既有 API 结算规则迁入平台无关 Kernel。[LF-1a 交付与验证记录](local-settlement-handoff.md)已完成。当前实施 LF-1b 单设备学习库的首个原生技术纵切，语言和职责按 [ADR 0002](../adr/0002-flutter-rust-local-core.md)。Flutter 界面以正式 Web 已确认的页面与行为为参考，针对桌面/移动重新实现。首学 SQLite 事务、macOS 独立进程恢复及 Android 飞行模式下首学/独立进程恢复均已验证，见 [原生纵切记录](native-capability-status.md)。一般资源导入、完整复习/重学、备份恢复和加密同步均尚未验收，不能将这个合成材料验收壳视为完整 LF-1b 或产品 UI 已交付。
-
-2026-09-08 owner 体验发现：此前 M1/M2 简化页面没有完整沿用已确认 UI，历史功能验证
-不能替代界面验收。本轮已将已实现链路接回既有首页、学习/账号/目录及 Runtime 组件，
-并删除简化页面，见 [界面接入记录](m1-m2-ui-integration-handoff.md)。最终体验由 owner
-继续走查。云端部署与商店发布已明确暂缓，不作为继续本地开发的阻塞项。
-
-Sensa 已具备开始生产化的领域、行为和工程基础。当前最主要的工作，是让最新领域模型、正式
-客户端、服务端持久化与同步成为同一条真实闭环。正式 UI 需要按平台设计，消费契约、数据库
-映射、服务端业务执行及运行保障仍需建立或迁移。
-
-2026-09-07 原工作树的 apps/web 桌面/手机 UI 重构已存入本地 checkpoint `5fee636e`，
-具体范围与代码观察见 [M0-2 基线说明](m0-2-first-learning-state-spec.md)。下述旧纵切仍是工程基础，
-新 UI 的 previewStorage/checkpoint 不能冒充生产 API/Sync 接入。
-
-当前仓库存在进度不同的实现：
-
-- apps/sensa_native + crates/sensa-core/sensa-library：新架构下的 Flutter/Rust/SQLite 首学技术验收壳；范围与验证见 [原生纵切记录](native-capability-status.md)，不能等同完整学习产品。
-
-- apps/web + apps/api：保留较早 first-user 纵切；正式 production 入口已完成 M1-A–E 的
-  consumer-v1/Sync v3、Postgres、账号独立 IndexedDB/outbox、目标准备、首学、复习、
-  重学与签到本地闭环。旧 preview 和 Sync v2 路径不能代替该入口的验收；真实托管仍待验证。
-- apps/web-next：移动端形态的 React 行为原型，更贴近当前领域模型，已实现两条核心旅程及
-  多种学习策略、内容供给和 Runtime 行为。主要学习与个人语义状态仍由本地原型存储维护，
-  尚未接通正式 API/Postgres/Sync。其 UI 不承诺迁入任何正式客户端。
-
-不能按页面数量估计上线完成度，也不能将两套实现的功能简单相加。当前尚未进入真实用户
-测试版的稳定性收尾阶段；接下来需要完成首条生产闭环，再验证持续使用与恢复能力。
-
-## 2. 已有资产及证据边界
-
-| 层面 | 已有资产 | 当前证据边界 |
+| 范围 | 当前结果 | 证据限制 |
 | --- | --- | --- |
-| 领域模型 | 七份领域文档定义语义身份、学习连接、内容资源、Runtime、Account 与数据控制 | 核心模型基本稳定；不代表所有生产用例合同和事务边界已落实 |
-| IA 与旅程 | PRD 已定义导航、页面职责和状态要求；web-next/journeys 冻结两条主旅程 | 原型叙事可复用；正式 Web 布局、组件、失败与恢复体验仍须设计和验收 |
-| 行为原型 | Personal Semantic World/Intake、独立学习、轻量与高保证路径、Review/Relearning、学习记录及练习入口 | 证明原型行为与确定性场景；不证明生产状态、真实练习服务或学习效果 |
-| 共享合同与内核 | Learning Connection v2、Content Demand/Task/Attempt/Bundle、Protocol、Completion/Handoff、Progression Kernel 与扩展 seam | 已有可执行 schema 和 smoke；生产 API、DB 与 Sync 需要逐项对齐 |
-| 数据库 | baseline、0008–0010 领域结构及 0011–0015 consumer 账号/目标/Runtime/签到迁移 | 0001–0015 已在全新隔离 Postgres 应用并完成 A–E 事务验证；托管数据库待验收 |
-| API 与同步 | M1 consumer API、私有材料、正式 React Web 账号独立 IndexedDB/outbox 与 Sync v3，旧路径并存 | A–E 本地浏览器与 Node/Deno 闭环通过；M2/M3 全部事实及真实托管尚未验收 |
-| 内容与 LLM | 内容编译/校验工具、版本化原型学习包、Semantic Agent 开发代理、Content Agent 与模型适配 seam | 开发接入和无成本校验已存在；持久任务、独立校验及有预算的恢复已有本地证据；授权资源与生产质量验收仍待完成 |
-| 运行环境 | Supabase Postgres/Auth/Storage 为主，Cloudflare 前端托管和 Resend 邮件的已确认选型；Edge 入口与本地 CI 检查已提供 | 真实云端配置、部署、邮件和 Storage 验收仍缺证据；本地合成认证不等于托管认证通过 |
+| 个人内容 | 图文创建/澄清、确认 Context–Sense–Expression、详情修改、显式/批量加入学习、生成并校验资源 | Owner 已走查基本流程；模型结果的普遍质量不能由单次通过推出 |
+| 学习包与运行时 | 包选择、资源导入、显式入学；轻量、高保证和四阶段复用原有策略、协议队列与页面，通过共享本机执行层保存/恢复 | 四阶段已有多目标交错、失败重置、复习/重学和备份回归；这不是所有未来学习方式仅靠配置即可实现的保证 |
+| 方法选择 | 未开始的结构化目标可选高保证或四阶段；已开始历史固定，轻量保留 FSRS | 不实现既有历史的静默 Policy Migration |
+| 模型执行 | 默认服务使用 Genkit；Web/原生自定义服务按既有本机直连与队列工作 | 插件旧服务端凭据路径仍保留；跨实例全局配额、集中监控及真实供应商广覆盖另验 |
+| 账号与设置 | 账号摘要、五个分组入口、原面板复用、中英文与窄屏；登录、网络和本机保存状态区分 | 界面验证使用隔离身份/服务，不等于真实账号删除或云端同步验收 |
+| 本机恢复与数据控制 | Web 本机事务、离线应用壳、独立 Chrome 冷启动、加密备份/空库恢复、清除与旧标签页隔离已有测试 | 浏览器/存储条件和平台覆盖有限；账号删除真实服务及完整灾备另验 |
+| 原生与插件 | 原生六组既有能力有 macOS/Android 迁移证据；浏览器采集/阅读/字幕有本地和有界实况记录 | 原生完整体验、其他平台、插件真实商店升级不能从这些记录推导完成 |
 
-需要特别处理的实现差异：
+详细运行说明与范围分别见 [Web 工作流](web-local-meaning-workflow.md)、
+[学习包与四阶段](assurance-package-import.md)、[模型执行](model-execution.md)、
+[原生能力](native-capability-status.md)、[浏览器合同](browser-port-contract.md)。
 
-- [Learning Connection 合同](../../packages/contracts/src/sensa/learningConnection.ts)已为 v2，
-  而 [0010 迁移](../../db/migrations/0010_sensa_learning_connection_v1.sql)仍是较早的 v1
-  持久化形状。例如 Target 间的引用方向尚未对齐，必须在新用例合同下设计迁移，不能把已有
-  SQL 当作最终 schema。
-- M1 consumer 的 Retention Target、Protocol Run/Step、Completion/Handoff、Memory State/Outcome
-  已形成独立权威持久化闭环；旧 Sense/Encounter API 仍是兼容基础，不参与正式新入口结算。
-- web-next 的 localStorage、fixture target 和「毕业后立即到期」等走查安排必须在生产接入时
-  明确替换。真实调度时间、Evidence、Outcome 和 FSRS 由服务端决定。
+## 仍需保留的门
 
-既有本地内容纵切曾记录 438 个 Sense、249 个 Lexeme，其中 424 个 Package 通过当时的
-可执行性检查，14 个 legacy Package 未满足 boundary 能力要求。这是历史迁移库存记录，本次
-未重新核对数量；不能据此宣称符合新高保证发布标准，也不作为个人语义轻量路径的上线配额。
-可重建内容源与媒体继续按 [content/README.md](../../content/README.md) 管理，生成数据与运行
-媒体保持在 Git 之外。
+- 公开发布：固定构建候选、真实环境部署/回滚、账号隔离与删除、邮件与会话恢复、资源/媒体许可、
+  生产监控告警、费用治理、公网弱网和真实设备性能。个人试用成功不能替代这些门。
+- 本地事实 G1–G3、E2EE/密钥恢复与轮换、跨端合并/并发调度、旧数据导入和 Policy Migration。
+- 原生正式体验和未验证平台的签名/安装、Windows/iOS/Linux、系统分享/文件选择器等平台边界。
+- 宽覆盖参考事实、资源发布治理、真实模型质量、未接通的自由练习能力与长期使用证据。
+- 插件后续问题见 [后续清单](browser-port-followups.md)，暂缓不等于已完成。
 
-## 3. 下一里程碑的交付范围
+## 维护与架构约束
 
-2026-09-05 的生产化规划采用以下交付顺序：先以 React Web 和轻量学习完成受邀测试闭环，
-随后依据稳定性与用户证据扩展。该顺序解决此前「V1 必须保留高保证」与 PRD Later 分类的冲突；
-高保证仍属于产品与领域模型，当前受邀测试版不要求交付它。
+Flutter/Dart 拥有 PC/mobile UI 与平台集成，Rust 拥有原生本地领域核与 SQLite 事务；TypeScript
+拥有正式 React Web、浏览器扩展与在线服务。Rust WASM 复用 Web 仍是独立验证任务。
+LearnerScope 保留为应用 seam，不暴露 Workspace。UI 不自行写学习结果/证据/调度；本地执行层
+校验并原子提交。旧 API/Postgres/outbox 是迁移兼容资产，不是所有个人事实必须上云的产品规则。
 
-同轮产品讨论明确将浏览器采集插件列为必交特色功能，其余已确认清单按当前建议推进。
-完整产品清单、插件边界与状态矩阵见
-[首轮产品基线](first-round-product-baseline.md)。浏览器支持及安装更新方式在详细设计中核实，
-实施默认先以桌面 Chrome 为目标；其他系统采集端口继续后置。
+复用 `apps/web/src/experience` 的已确认实现，禁止新增简化替代页、重复编排和专用硬编码链。
+`apps/web-next` 是行为原型，其 fixture/临时调度与页面数量不构成生产能力。保持 owner 原数据，
+不静默双写或迁移历史。测试、程序通过、owner 体验、真实平台与托管服务分别标注。
 
-### 必须交付
-
-| 能力 | 受邀测试版要求 |
-| --- | --- |
-| 客户端与语言 | 正式 React Web，适配桌面与手机浏览器；中文 familiar language、英语 target language |
-| 账号 | 真实 Supabase Auth 认证、Account ↔ Learner 1:1、当前 Account Session、受邀访问边界与安全退出 |
-| 独立学习入口 | 从最小可用的已发布 Book/Catalog 选择 stable Sense 与 expression binding；不要求先创建 Personal Meaning |
-| 个人语义入口 | 先保存 Intake/收件箱材料，按需澄清；完整 Context–Expression–Sense 经合法 Semantic Acceptance 后形成 Personal Meaning 与 Alignment，再显式加入学习 |
-| 浏览器采集插件 | 用户主动选取网页文字与上下文，预览固定来源和 occurrence；可在原位解析/确认完整意义或存入收件箱，在同账号 Web 继续并显式加入学习 |
-| 学习目标与策略 | Learning Target/Retention Target、入口 provenance、lightweight Policy Assignment/Effective Policy、readiness，以及首次 Run 的 Policy commitment |
-| 内容供给 | 可用 Published 路径及个人语义所需 On-demand 路径；固定 Demand，校验后冻结 Materialization，保留来源、版本和 digest；Hybrid 按真实需求接入 |
-| 正式学习 | Mixed/Review-only、每日新学额度、轻量 Initial Learning、Study Completion、原子 Scheduling Handoff、到期 Review 与 Lightweight Relearning |
-| 学习事实 | 服务端权威进度与最小学习记录、下一次复习信息；primary Retention Target 的 Declared Mastery 与复习结果保持独立 |
-| 媒体与设置 | 可用的发音/例句静态音频及授权读取；已开放的 Learner Preference 版本化同步，Device Preference 留在本机，缺少可选资源时诚实呈现 |
-| 离线与恢复 | Sensa IndexedDB/outbox、新对象 Sync、Sync Health、刷新/重试/断网恢复及第二设备收敛 |
-| 数据控制 | 幂等导出、账号删除、pending-safe 退出/本机清除、Session/Replica 撤销，以及阻止旧离线 outbox 复活已删除数据 |
-| 上线保障 | CI/CD、云端授权配置、错误与使用漏斗监控、内容生成预算、备份恢复、回滚及受邀测试操作说明 |
-
-个人语义确认、加入学习、内容准备和正式 Runtime 保持不同事实。快轨或受委托确认仍须满足
-领域规定的明确授权；模型输出本身没有提交语义身份、Curriculum 或学习进度的权力。
-Book/direct/personal 来源汇合到同一 Target 边界，同一学习连接不因重复提交或多来源建立重复调度。
-
-2026-09-07 owner 明确：首发允许开放自由练习、词典、统计和签到；允许开放不等于已生产验收，
-不自动扩展到全部 Activity、词典资源、复杂诊断或激励。保留现有笔记与场景编辑体验。
-首轮只开放真实具备资源、服务端合同和客户端支持的能力。M0-1 已记录页面职责、操作清单及
-基准状态，M0-2 已补齐体验规格，M0-3 已固定消费合同设计。首次使用不强制选词书；首次须明确确认每日新学数量后才能开始，目标就绪后回首页开始（9 月 7 日确认）；未交付主入口隐藏；签到沿用我的学习按钮/日历，手动或开始正式学习触发，按账号时区去重；首版无连续天数、奖励或补签，签到和练习不产生正式 Evidence、进度或调度；仅开放轻量学习时不显示无实际选择的 Policy 选择器。
-
-### 后续交付，不阻塞当前受邀测试版
-
-- high_assurance/Structured Acquisition、Gate/5D 诊断、完整 protected assessment inventory
-  与高保证 validator；第三个架构验证 preset 不构成生产承诺。
-- Free Practice 尚未具备执行条件的 Activity、provider、录音/ASR/反馈链扩展；练习资源缺失不阻止正式
-  学习内容发布，练习不能写正式 Evidence、进度或调度。
-- 词典已允许首发开放；宽覆盖资源、完整离线 Release、Sense Alignment、Lexical Enrichment、
-  Semantic Field 与更完整的语义投影。
-- 完整 Book Enrollment/Range/Scope lifecycle、个人 Collection、Bookmark/Note 管理及扩展历史
-  体验；首轮仍须实现独立入口和 personal-first 加入学习所必需的最小 Curriculum 事实。
-- Flutter iOS/Android/桌面单一客户端；在 Web/API 合同稳定后实施，不作为 Web 测试版前置条件。
-- Learning Policy Migration、通知提醒、高级主题、设备会话列表，以及浏览器文字插件之外的
-  图片/语音、移动分享、桌面全局采集和更多浏览器覆盖。
-
-当前不建设 Cards/Decks、generic flashcard sync、Workspace 产品导航、通用 AI/MCP、社区、
-commerce、admin 或考试「真题」。真实语流 YouGlish 保留在自由练习；正式学习的影视/电视/YouTube 原声例句生产链、词级媒体 timeline、动态生成
-交互 UI、Listening Gate 和全量学习历史 reset 均不属于当前交付范围。
-
-## 4. 架构与迁移约束
-
-- Postgres 是服务器权威存储。客户端持久化用户意图与只读投影，local-first 写入经 outbox
-  push → pull 收敛；客户端不权威写入 Evidence、5D、Outcome、进度或 FSRS。
-- 保留 LearnerScope 作为授权与同步 seam。生产身份与数据隔离不得依赖原型 learner 或本地
-  auth；Workspace 不成为用户功能。
-- Semantic LLM 与 Learning Content LLM 分别固定输入、工具、policy、预算、输出和审计。
-  Runtime 消费不可变 Materialization，不在作答后重新生成题目、答案或评分依据。
-- 浏览器插件与 Web 共用账号和 Semantic Intake authority；采集队列绑定原账号，处理幂等、
-  pending、重启恢复、撤销和删除屏障。插件不构建独立词义库存，也不持有模型密钥或学习调度权威。
-- 每个 Retention Target 默认最多一份 FSRS State；Initial Completion/Handoff 原子且幂等，
-  一个 due Review 最多一次 Memory Outcome/FSRS 更新。Relearning 不重新初始化或改写原 Review。
-  协议声明的独立重学评价若进入实施范围，必须有独立、可审计、幂等的 Outcome。
-- 正式 Web 保持 React；Flutter 共享语言无关合同与场景规格，不复制服务端策略或调度权威。
-  apps/web 作为现有正式 Web 工程起点，按用例改造；web-next 保留为行为参考与回归来源。
-- 原型与 first-user 学习记录是可丢弃测试数据。迁移/重建须有明确方案，不静默重解释旧事实；
-  受邀用户开始产生真实数据后，升级必须保护其历史与待同步操作。
-- 所有服务商的资源与部署变更通过 CI/CD 交付，不从本地 shell 部署。
-
-## 5. 验证记录与完成标准
-
-2026-09-05 基于提交 af5522cd 的仓库评估实际通过：
-
-- 根级 npm run typecheck、npm run build、npm run lint；其中 lint 当前复用类型检查。
-- npm run sensa:web-next-smoke 的全部 23 个子任务，以及 sensa:runtime-learning-smoke。
-- Personal Semantic World、Learning Extensibility、Learning Content、DeepSeek mock transport、
-  Protocol Progression 和 Sync Protocol 的专项 smoke。
-- Python 内容工具编译与无成本 pipeline smoke。
-
-构建仍提示 web-next 主 JS chunk 较大；正式 Web 应有自身性能预算。上述验证没有执行数据库
-迁移、真实多设备浏览器闭环、公网部署或付费 LLM/TTS 调用，不能将 schema/smoke 通过写成
-生产集成完成。历史本地 Postgres/浏览器纵切证据也不替代新模型验收。
-
-下一里程碑只有在以下结果均有证据时才算完成：真实受邀用户可创建或选择目标并完成学习；
-浏览器插件可安装、采集并将同一意义或收件箱材料交接到 Web；
-离开后再次登录、跨日或换设备可继续；记录与调度正确；内容、网络或同步失败可恢复；账号
-退出、导出和删除有效；服务可观测、可回滚并完成备份恢复演练。完整门槛见路线图 M1–M4。
-
-当前没有足够的真实用户、多 session、留存或学习效果证据。受邀测试首先验证可用性、可靠性、
-内容质量与持续使用，不能把 Study Completion、签到、点击量或测试通过率解释为学习效果。
-
-## 6. 阶段维护
-
-M0-1 产品范围已记录；M0-2 [登录与首条轻量学习状态规格](m0-2-first-learning-state-spec.md)
-及 [插件规格](m0-2-browser-capture-state-spec.md)已完成规格验收。当前没有待 owner 裁决的
-产品范围问题；组件、异常、恢复和工程验收要求已落文档，真实浏览器/服务验证仍在后续阶段。
-M0-3 [消费合同](m0-3-consumer-contract.md)、[迁移蓝图](m0-3-migration-blueprint.md)与
-[施工验收](m0-3-delivery-plan.md)已完成设计审阅，M0 设计门已验收。M1-A 登录、数量与空首页已完成本地纵切，
-SQL 迁移、数量 Sync v3、Node/Deno 与 Chromium 测试已有证据，详见
-[交付记录](m1-a-account-handoff.md)。真实 Supabase 邮件登录、托管 Edge 与公网验证待执行，
-M1-A 尚未完成生产验收；M1-B 目标加入/准备、私有材料与已会声明已完成本地纵切，
-包括已授权的 DeepSeek/edge-tts 小样本，见 [M1-B 记录](m1-b-target-handoff.md)。
-M1-B 的生产发布/Storage 仍待验收；M1-C 首学与结果确认本地纵切已完成，见
-[首学交付记录](m1-c-initial-handoff.md)。M1-D 到期复习与重学已完成本地纵切，见[交付记录](m1-d-retention-handoff.md)。M1-E 签到与恢复验收也已完成本地纵切，见[交付记录](m1-e-checkin-handoff.md)。A–E 本地施工齐备，真实托管验收仍待执行，下一产品施工阶段为 M2。
-每次里程碑验收后，同步更新本文的执行位置与证据，以及路线图状态。
-具体任务、验收记录和未解决问题由路线图追踪；本文不再累积逐日原型功能日志。
-
-2026-09-07 首条旅程离线范围确认：可继续已授权且材料已下载的学习，不离线新建学习；
-本机回答与服务端确认结果分开呈现，具体授权/版本/恢复合同已在 M0-3 固定，实施待 M1。
+文档清理没有重新运行历史业务验收，也不修改里程碑门；旧 M1/M2 回归与追溯见
+[Consumer 兼容参考](consumer-compatibility-reference.md)。后续仅更新本页的当前结果和未关闭门，
+逐次命令输出、临时机器路径及提交过程交给 Git 与测试报告。

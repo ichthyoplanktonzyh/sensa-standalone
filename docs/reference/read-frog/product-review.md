@@ -147,7 +147,7 @@ Sensa 的全局边界可以沿用既有模型：
 | 4. 学习配置体验 | 用户看懂所选方式会怎样学，并完成相应首学/复习 | 步骤预览、内容不足反馈、选择生效范围、已开始学习的版本保护 |
 | 5. 第二种采集端口 | 同一个账号从另一端保存，随后在现有学习端继续 | 同一学习身份、不同来源定位、队列与账号隔离、跨端恢复 |
 
-第 1、2 条已有部分实现，应围绕实际缺口继续验收而非重做；参见[浏览器阅读交付记录](../../sensa/m2-reading-interaction-handoff.md)。第 3–5 条是建议的新增工作顺序，需要先做对应前端用例确认再细化合同。全文翻译、批量候选、电子书专用阅读器和无字幕转录按反馈插入，不作为完成第一条闭环的前置条件。
+第 1、2 条已有部分实现，应围绕实际缺口继续验收而非重做；参见[浏览器阅读合同](../../sensa/browser-port-contract.md)。第 3–5 条是建议的新增工作顺序，需要先做对应前端用例确认再细化合同。全文翻译、批量候选、电子书专用阅读器和无字幕转录按反馈插入，不作为完成第一条闭环的前置条件。
 
 ## 8. LLM Provider 配置专项补充
 
@@ -182,5 +182,25 @@ Sensa 的全局边界可以沿用既有模型：
 
 后续独立实现时，以这份行为清单、已确认前端体验和 Sensa 领域文档为输入，记录采用的场景；不把上游源码当作移植底稿。
 
-2026-09-08 实现进展：见[浏览器端口第一批交付记录](../../sensa/browser-port-handoff.md)。
-该记录逐项对应本轮实际阅读的上游源码、独立实现、测试证据与未完成范围；本报告的调研结论不自动等同于功能已交付。
+Sensa 实现范围：见[浏览器阅读与采集合同](../../sensa/browser-port-contract.md)。
+该合同记录实际阅读的上游源码、独立实现、测试入口与未完成范围；本报告的调研结论不自动等同于功能已交付。
+
+## Sensa 浏览器实现的源码参考追溯
+
+固定 Read Frog v1.46.8 / `e3cbe2b7c669c875dbf1b050254da9b628daefe1`。
+只参考行为与边界，未复制、转译或引入上游源码、提示词、测试与素材。
+
+| 上游模块（仓库相对路径） | 实际采用的依据 | Sensa 的调整 |
+| --- | --- | --- |
+| `src/entrypoints/options/pages/api-providers/feature-providers/index.tsx`、`src/utils/constants/feature-providers.ts` | 连接与按功能分配分开 | 功能映射按 Sensa 解释/采集链定义 |
+| `src/types/config/provider/schemas.ts`、Provider 编辑表单及连接测试/模型选择组件 | 自定义兼容地址、手填/获取模型、测试反馈、高级设置 | 服务端凭据库；不把扩展本地密钥方案照搬过来 |
+| `src/utils/request/`、官方 request-control 文档 | 控制请求、去重、失败处理 | 服务端幂等账本与限额；网页按需、限并发，不照搬上游批处理参数 |
+| `src/entrypoints/selection.content/selection-toolbar/use-selection-popover-snapshot.ts`、`custom-action-button/use-custom-action-execution.ts` | 固定选区、隔离旧结果、显式动作 | 保留 Sensa 原快照/lookup/accept 边界 |
+| `src/utils/host/translate/dom/paragraph-segmentation.ts`、`translation-cleanup.ts` | 文本块边界、宿主动态更新、恢复时不能覆盖宿主新状态 | 先实现标准与叶子文本块；通过自有标记切换原文可见性，保留宿主事件与 inline style |
+| `src/utils/subtitles/fetchers/youtube/index.ts`、`pot-token.ts`、`url-builder.ts`、`src/entrypoints/interceptor.content/inject-player-api.ts`、`utils.ts` | 当前视频/轨道校验、播放器字幕来源、原生请求回退、空响应不能当成功 | activeTab 授权后在 MAIN world 读取数据；保留选中轨道地址，补入当前播放器提供的字幕令牌、客户端与设备参数；不记录签名地址/令牌，字幕数据与模型凭据隔离 |
+| `src/entrypoints/subtitles.content/platforms/youtube/config.ts`、`universal-adapter.ts`、`ui/subtitles-view.tsx` | 广告状态、SPA 切换、可选择字幕、全屏环境 | 原视频定位进入 Sensa 快照，后续共用原保存/意义链 |
+
+
+另外参考字幕 scrolling-asr-parser / optimizer 的来源时间分组、port-streaming 的终态与断线处理、
+selection popover 的固定选区，以及 YouTube config / universal-adapter 的导航恢复。
+Sensa 当前合同见 [浏览器阅读与采集](../../sensa/browser-port-contract.md)。

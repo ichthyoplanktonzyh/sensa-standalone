@@ -85,14 +85,14 @@ Lookup 可显式引用 previousLookupId 和 learner 自写关注点，生成新�
 Meaning projection 的 nullable `anchorUseGrantId` 是服务端当前许可。未同步撤销尚未生效。
 授权改变时保留旧 task，创建新的当前 task；原文 artifact 必须带 grant ID 与原文版本 digest。
 撤销/移出个人内容阻止后续调用和迟到冻结；恢复列表不恢复 grant。已开始的 Run 与历史保持
-不可变，新学习/复习/重学只使用当前 ready plan 的材料。详见[交付记录](m2-anchor-use-handoff.md)。
+不可变，新学习/复习/重学只使用当前 ready plan 的材料。详见[兼容参考](consumer-compatibility-reference.md)。
 
 ## 按需材料静态发音
 
 准备任务按 exact accepted expression 的文本 digest 解析受控静态发音，固定 reference fact，
 pronunciation candidate 引用 target_expression candidate，确定性 validator 检查该绑定。
 缺失/不可下载音频保留文字学习；Web 不因可选媒体失败丢弃已验证文本缓存。回想不展示发音，
-揭示可播放已下载的音频。生成候选显式 opt-in，发布仍走 CI/CD，见[记录](m2-pronunciation-handoff.md)。
+揭示可播放已下载的音频。生成候选显式 opt-in，发布仍走 CI/CD，见[兼容参考](consumer-compatibility-reference.md)。
 
 ## 个人经历细节的边界（2026-09-08 owner 确认）
 

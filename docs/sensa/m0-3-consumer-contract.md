@@ -2,7 +2,7 @@
 
 > 状态：设计合同已定稿；尚未实现的新接口，不能当作当前运行接口
 > 日期：2026-09-07；产品依据：[M0-2 学习规格](m0-2-first-learning-state-spec.md)
-> 共同交付：[迁移裁决](m0-3-migration-blueprint.md)、[施工与验收](m0-3-delivery-plan.md)
+> 共同交付：[迁移裁决](m0-3-migration-blueprint.md)、[兼容实现与验收向量](consumer-compatibility-reference.md)
 
 ## 1. 适用范围和权威
 
@@ -353,20 +353,9 @@ JSON payload整数、UUID、版本、timezone以及Operation字段均由严格sc
 installation必须属于该replica。partial accepted不重发新ID，按每条result收敛。
 
 
-## M1-C 可执行合同记录（2026-09-07）
+## 兼容实现细化
 
-首学子集已按本合同落地，具体 schema、统一 runtime 结果外形和新增时钟字段见
-[M1-C 交付记录](m1-c-initial-handoff.md)。其可执行版本为 `consumer-initial-v1`；
-该记录描述 C 完成时的范围；后续 D/E 的实现记录见下。
-
-
-## M1-D/E 可执行合同记录（2026-09-08）
-
-D 已提供 consumer-review-v1 / consumer-relearning-v1、一次 due Outcome 与独立重学结算，
-见 [D 交付记录](m1-d-retention-handoff.md)。E 已提供独立 check_in.record 与账号日投影，
-见 [E 交付记录](m1-e-checkin-handoff.md)。C11 增加 clock 校准引用，形式为
-`{grantId,sessionId,elapsedMs}|null`；null 原请求可保留但不能被接受，结果外形为
-`{plan,checkin,alreadyRecorded}`。formal 仍必须引用接受的实际进入操作与对应 Run grant。
-Q08 的 M1 子集返回最新最多 366 条 CheckInView，日历展示当前及前 11 个月，尚未实现任意
-月份查询；账号时区、日期、发生时间及来源均由该 view 携带。其余不变量沿用正文，实际字段
-以共享 schema 与该纵切记录为准。A–E 的本地验证不替代真实托管验收。
+consumer-initial-v1、consumer-review-v1、consumer-relearning-v1、时钟授权、签到视图与
+V01–V20 回归向量统一见 [Consumer 兼容参考](consumer-compatibility-reference.md)。
+实际字段以 `packages/contracts/src/sensa/consumer/` 的版本化 schema 为准。
+该路径的服务端结算不覆盖正式 Web 本机库或 ADR 的目标架构。

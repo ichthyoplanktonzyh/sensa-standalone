@@ -1,9 +1,8 @@
 # Sensa Chrome 采集插件
 
-2026-09-08 浏览器端口扩展见 [施工约定](../../docs/sensa/browser-port-contract.md) 和
-[交付记录](../../docs/sensa/browser-port-handoff.md)。新增独立模型设置页、划词翻译/阅读动作、
-页面双语/仅译文与恢复、YouTube 字幕阅读及视频时间定位。
-这是独立实现，源码行为参考清单和实际验收范围在交付记录中。
+浏览器阅读、字幕与采集行为见 [阅读与采集合同](../../docs/sensa/browser-port-contract.md)。
+模型设置、页面翻译、保存与时间定位复用既有链路；参考来源、测试入口和未覆盖范围也在该文说明。
+
 
 新服务需要应用 `0021_sensa_browser_reading.sql`。服务端设置
 `SENSA_PROVIDER_VAULT_KEY` 为独立的 32 字节随机密钥（64 位十六进制），保存于部署密钥管理中；
@@ -20,7 +19,7 @@ OpenAI 等兼容服务的 Base URL 应包括其 API 前缀，例如 `/v1`。
 
 YouTube 点击“加载英文字幕”读取当前视频轨道；无法获取全文时会提示，不能将空响应当作成功。
 已有英文字幕的展示/选词/保存有固定浏览器证据；owner 普通 Chrome 的一个真实 YouTube 视频已走通
-字幕获取、真实 DeepSeek、保存、澄清/确认和回访，详见[实测记录](../../docs/sensa/browser-live-check.md)。
+字幕获取、真实 DeepSeek、保存、澄清/确认和回访，详见[实测范围](../../docs/sensa/browser-port-contract.md)。
 字幕按相邻断行合并为有界上下文，视频回访目前定位到上下文起点；更多视频及复杂字幕格式仍待兼容验收。
 无字幕 AI 转录尚未接入；用户提供的英文 VTT/SRT 是独立备用输入。
 

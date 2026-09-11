@@ -5,9 +5,7 @@
 
 ## 当前基线
 
-已完成第一批浏览器端口、快轨修复及两轮阅读优化，最新实现 checkpoint 为 `3d624073`，
-上一轮为 `69615af5`。具体证据见[端口交付](browser-port-handoff.md)、
-[阅读连续性验收](browser-reading-continuity-handoff.md)与[阅读体验第二轮](browser-reading-polish-handoff.md)。
+当前行为、测试入口与边界见 [浏览器阅读与采集合同](browser-port-contract.md)。
 
 已具备流式预览、上下文范围调整、跨句/跨段捕获、浮层收起、长页视口调度和视频 seek/导航衔接。
 下面五项是此后提出、尚未实施的新一轮优化建议，不能误记为已完成。

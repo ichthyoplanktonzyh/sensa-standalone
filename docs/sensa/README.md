@@ -1,7 +1,7 @@
 # Sensa 文档索引
 
 > 状态：Active index  
-> 更新日期：2026-09-10
+> 更新日期：2026-09-11
 
 本目录不再把所有设计记录都当作“领域模型”。文档按职责分层；下层文档不能覆盖
 上层文档的定义。
@@ -37,72 +37,51 @@ Learner Semantic Projection，以及与正式证据链隔离的 Free Practice。
 Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/删除。Settings Surface 只是
 组合入口，不是第五条学习链或通用状态聚合。
 
-## 其他当前文档
+## 产品、架构与日常开发
 
-2026-09-08 Owner 已确认[本地学习库与可选加密同步的架构决策](../adr/0001-local-library-optional-encrypted-sync.md)。
-目标方向已接受、已启动本地底座迁移，用户库尚未切换；架构、阶段与路线图已标注过渡状态，后续消费合同不得继续
-把个人事实必须由服务器裁决作为不可调整的产品规则。
+目标架构遵循 [ADR 0001](../adr/0001-local-library-optional-encrypted-sync.md)、
+[ADR 0002](../adr/0002-flutter-rust-local-core.md) 与 [ADR 0003](../adr/0003-three-client-local-facts.md)。
+正式 Web 本机执行、原生迁移和旧 Consumer 路径的证据分别管理，不将迁移期服务端权威当作目标架构。
 
-这些文档仍有用途，但不属于领域模型：
+| 文档 | 用途 |
+| --- | --- |
+| [当前阶段](current-stage.md) | 当前工作重点、已验收范围与尚未关闭的门 |
+| [产品需求](product-requirements-v1.md) | 信息架构、用户旅程、交互与功能范围 |
+| [生产路线图](production-migration-plan.md) | 里程碑依赖、发布门与后续工作 |
+| [开发约定](development-workflow.md) | 体验确认、复用、实施与交付规则 |
+| [测试策略](testing-strategy.md) | 执行入口、真实/替身边界与测试条件 |
+| [个人库事实模型](personal-library-fact-model.md) | 本地事实、版本、投影与 G1–G3 验收门 |
+| [学习扩展架构](learning-extensibility-architecture.md) | 原型实现 seam 的设计参考；正式 Web 接线见学习包指南 |
 
-| 状态 | 文档 | 职责 |
-| --- | --- | --- |
-| Native implementation status | [`native-capability-status.md`](native-capability-status.md) | 原生能力、历史验收、未关闭边界与过程原文 Git 追溯；替代分轮次计划/交接/优化记录 |
-| Canonical stage | [`current-stage.md`](current-stage.md) | 当前里程碑、证据级别和交付边界 |
-| Canonical product | [`product-requirements-v1.md`](product-requirements-v1.md) | V1 IA、用户旅程和交互验收 |
-| Accepted first-round scope | [`first-round-product-baseline.md`](first-round-product-baseline.md) | M0-1 首轮九个能力区、浏览器采集插件边界及产品/插件/通用状态矩阵；不替代领域与 API 合同 |
-| Completed M0-2 specification | [`m0-2-first-learning-state-spec.md`](m0-2-first-learning-state-spec.md) | M0-2 登录、首次使用与轻量首学/复习/重学状态、恢复与确认清单；体验已确认，实施待验收，不替代路线图或 M0-3 合同 |
-| Completed M0-2 plugin specification | [`m0-2-browser-capture-state-spec.md`](m0-2-browser-capture-state-spec.md) | M0-2 捕获、原位确认、Web 交接、安装更新与账号恢复状态；交互形态/渠道已确认，实际运行待验收 |
-| Accepted M0-3 consumer contract | [`m0-3-consumer-contract.md`](m0-3-consumer-contract.md) | M1 Query/Command/Projection、Sync v3、身份/版本/结果/离线/调度合同；新接口设计；M1-A 数量子集已实现，完整合同仍待后续切片 |
-| Accepted M0-3 blueprint | [`m0-3-migration-blueprint.md`](m0-3-migration-blueprint.md) | 代码/SQL差异、目标目录、所有权、增量迁移和Supabase适配检查点 |
-| M1 execution input | [`m0-3-delivery-plan.md`](m0-3-delivery-plan.md) | M1纵向任务所有权、20个验收向量、预算与M0-3设计验收记录 |
-| M1-A local implementation | [`m1-a-account-handoff.md`](m1-a-account-handoff.md) | 登录、数量、空首页纵切的实现范围、本地测试、运行步骤与托管验收缺口 |
-| M1-B local implementation | [`m1-b-target-handoff.md`](m1-b-target-handoff.md) | 目录、加入、准备、私有材料与已会声明的本地纵切；DeepSeek/edge-tts 实际小样本与待验收边界 |
-| M1-C local implementation | [`m1-c-initial-handoff.md`](m1-c-initial-handoff.md) | 正式首学、离线回答、暂停恢复与一次性调度结算；本地集成/浏览器证据与时间合同细化 |
-| M1-D local implementation | [`m1-d-retention-handoff.md`](m1-d-retention-handoff.md) | 到期复习、一次 Memory Outcome、10 分钟重学与去重汇总的本地纵切 |
-| M2 contract | [`m2-consumer-contract.md`](m2-consumer-contract.md) | M2 分段、固定采集输入、插件授权与后续确认/供给边界 |
-| M2-A local implementation | [`m2-a-intake-handoff.md`](m2-a-intake-handoff.md) | 实际插件采集、PKCE、收件箱持久与同账号 Web 本地证据；原生权限矩阵待验收 |
-| M2-B local implementation | [`m2-b-semantic-handoff.md`](m2-b-semantic-handoff.md) | 固定候选、原位/Web 直接接受和稳定语义 registry 的本地证据 |
-| M2-C local implementation | [`m2-c-provisioning-handoff.md`](m2-c-provisioning-handoff.md) | 个人意义显式入学、持久任务/独立校验/冻结文本材料及 M1 Runtime 本地证据 |
-| M2 content recovery | [`m2-content-recovery-handoff.md`](m2-content-recovery-handoff.md) | Web 明确关注点、重新解释、旧候选拒绝与可恢复移除/恢复的本地证据 |
-| M2 quality/recovery/compatibility | [`m2-quality-recovery-handoff.md`](m2-quality-recovery-handoff.md) | 真实个人场景质量复测、SIGKILL 恢复与 Chrome 151/152 原生权限证据 |
-| M1/M2 Web UI integration | [`m1-m2-ui-integration-handoff.md`](m1-m2-ui-integration-handoff.md) | 已确认 Web 界面接入真实账号链路、简化页面删除及本地浏览器证据 |
-| M2 reading interaction | [`m2-reading-interaction-handoff.md`](m2-reading-interaction-handoff.md) | 轻量划词工具栏、按需解释、保存预览、拖动／本机朗读及闭源实现边界；本地验证完成，owner 继续体验 |
-| Browser port implementation | [`browser-port-contract.md`](browser-port-contract.md) / [`browser-port-handoff.md`](browser-port-handoff.md) | 参考陪读蛙源码独立实现的 Provider、网页阅读与视频采集纵切；实际测试和未完成兼容范围见交付记录 |
-| Browser port deferred follow-ups | [`browser-port-followups.md`](browser-port-followups.md) | Owner 已结束本轮优化；保存恢复、原位慢轨、真实模型、字幕轨道、偏好记忆及兼容性差距留待回访，尚未实施或排期 |
-| Web local workflow | [`web-local-meaning-workflow.md`](web-local-meaning-workflow.md) | 本机材料、Provider、语言老师到本地学习的整组施工与逐切证据 |
-| Web assurance package | [`assurance-package-import.md`](assurance-package-import.md) | Borrow/lend 高保证包本机导入与开始学习；完整验证见 Web launch audit |
-| Model execution | [`model-execution-handoff.md`](model-execution-handoff.md) | Genkit 默认服务、直连协议/调度、元数据观测与本地验证；插件旧密钥迁移暂缓 |
-| Web launch audit | [`web-launch-readiness.md`](web-launch-readiness.md) | 2026-09-10 Web 优先级、实际代码缺口、发布验收门与账号切换隔离回归 |
-| Release authorization | [`release-authorization.md`](release-authorization.md) | 云端/商店所需具体授权、项目访问和发布前产物 |
-| M2 static pronunciation | [`m2-pronunciation-handoff.md`](m2-pronunciation-handoff.md) | 按需材料静态发音绑定、真实 TTS 小样本、离线播放和可选音频失败回退 |
-| M2 private context | [`m2-anchor-use-handoff.md`](m2-anchor-use-handoff.md) | 原文显式授权、撤销/迟到结果隔离、历史保留与后续复习材料替换的本地证据 |
-| M2-D local recovery | [`m2-d-extension-recovery-handoff.md`](m2-d-extension-recovery-handoff.md) | 插件原账号队列、版本保护及实际原生 activeTab 权限恢复的本地证据 |
-| Local settlement extraction | [`local-settlement-handoff.md`](local-settlement-handoff.md) | LF-1a 共用结算与 Node/断网 Chrome/隔离 Postgres 回归；本地库持久化仍待实施 |
-| Personal library facts | [`../adr/0003-three-client-local-facts.md`](../adr/0003-three-client-local-facts.md) / [`personal-library-fact-model.md`](personal-library-fact-model.md) | 三端本地终景、事实/版本/投影、分层验收门及有界模型实验；生产同步与调度裁决未完成 |
-| Native migration checklist | [`native-migration-checklist.md`](native-migration-checklist.md) | 已有 TS 成果的保留/迁移范围、验收状态；首版登记，待逐项盘点 |
-| Native client architecture | [`../adr/0002-flutter-rust-local-core.md`](../adr/0002-flutter-rust-local-core.md) | Flutter/Dart 主应用、Rust 本地权威、TS 浏览器/云端；正式 Web 界面作为参考，首个原生技术纵切已在 macOS/Android 验证 |
-| Local library migration | [`local-library-migration-blueprint.md`](local-library-migration-blueprint.md) | 本地领域/存储/服务职责、单设备首条用例、浏览器交接、同步设计门与旧数据回退；整库离线尚未交付 |
-| Active roadmap | [`production-migration-plan.md`](production-migration-plan.md) | M0–M5 生产化路线图：正式产品与消费契约、生产闭环、恢复与数据控制、受邀发布和用户验证；含依赖、验收门与当前待办 |
-| Current working agreement | [`development-workflow.md`](development-workflow.md) | 可调整的开发方式：全局结构蓝图、owner 参与前端确认、消费契约、主代理直接实现与端到端验收；不替代领域或路线图 |
-| Testing strategy | [`testing-strategy.md`](testing-strategy.md) / [`native-ui-acceptance-matrix.md`](native-ui-acceptance-matrix.md) | 测试层级、真实/替身边界、可执行目录与最后一组原生 UI 用例/平台验收缺口；索引不等于产品已通过 |
-| M1-E local implementation | [`m1-e-checkin-handoff.md`](m1-e-checkin-handoff.md) | 手动/正式学习签到、原日期离线上传、账号隔离恢复与 A–E 集成验收 |
-| Active decomposition | [`learning-extensibility-architecture.md`](learning-extensibility-architecture.md) | `web-next` 学习扩展性的实现 seam；把领域已有的显式 retention scope 扩展规定落到实现层，不新增领域定义 |
+## 功能与操作指南
 
-当前路线图 M0 设计已验收，M0-1/2/3 产物齐备，M1-A/B/C/D/E 本地纵切已验证、托管验收待执行，近期里程碑于 2026-09-10 改为优先完成正式 Web 上线可用，原生 UI 优化暂停；Web 保留 React/TS，按 ADR 0003 建设完整本地执行；事实模型继续分层校验。领域能力、原型中已经验证的能力和首轮生产交付范围分别管理，不能从原型菜单
-或完整领域目录推导上线清单。
+| 文档 | 用途 |
+| --- | --- |
+| [Web 个人内容与本机学习](web-local-meaning-workflow.md) | 本机内容、澄清、资源准备、学习与恢复 |
+| [学习包导入与运行](assurance-package-import.md) | borrow/lend 资源、高保证/轻量/四阶段接入与验收入口 |
+| [模型执行](model-execution.md) | Genkit、默认服务、自定义直连、调度、观测与密钥边界 |
+| [浏览器阅读与采集](browser-port-contract.md) | 当前阅读/字幕/保存行为、兼容约束、源码参考和测试入口 |
+| [浏览器后续事项](browser-port-followups.md) | 尚未关闭的问题与兼容性范围，未自动排期 |
+| [Web 发布核查](web-launch-readiness.md) | 发布候选、真实服务配置、检查与未关闭门；历史盘点不等于当前缺口 |
+| [发布授权与前置](release-authorization.md) | 云端/商店操作所需的授权和产物 |
+| [原生能力](native-capability-status.md) | 原生功能摘要、历史证据与未完成平台范围 |
+| [原生迁移清单](native-migration-checklist.md) / [UI 验收矩阵](native-ui-acceptance-matrix.md) | 迁移范围、平台和体验验证边界 |
+| [原生包导入合同](native-pack-import-contract.md) | 包格式与准入约束 |
 
-原先的 `content-kernel-contract.md`、`curriculum-runtime-contract.md`、`runtime-rule-packet-v1.md`、
-`runtime-rule-packet-v2.md` 与 `sensa-sync-contract.md` 已移除，不再列为当前可执行文档；旧事实
-可从 Git 历史追溯。当前实现依据仓库内的 [共享合同](../../packages/contracts/src/sensa/index.ts)、
-[数据库迁移](../../db/migrations/)及 API/客户端代码核查。新生产用例合同按路线图随用例交付并在
-本索引登记，不恢复旧文档来替代新合同。
+## 保留的设计与兼容合同
 
-实现合同描述当前代码或历史事实，不自动成为永久领域规律。2026-08-27 接受的 Acquisition Cycle
-仍是 Structured Acquisition Protocol 的 canonical 模型，但不再是所有学习目标的唯一协议；新实现
-必须通过 versioned Learning Protocol、Content Provisioning 与 Scheduling Handoff contracts 落地，
-不能静默重解释旧 Encounter。当前 validator 的例句数量仍只是 V3 Structured Acquisition delivery
-profile，而不是 `Sense`、Lightweight Study 或全部 Learning Protocol 的定义。
+这些文档包含仍需维护的状态、接口或迁移约束，不能因名称带阶段编号而删除；它们不覆盖最新
+领域模型和 owner 已确认的产品变化。旧路径的实现细化、V01–V20 回归向量和测量预算集中在
+[Consumer 兼容参考](consumer-compatibility-reference.md)。
+
+- [首轮范围基线](first-round-product-baseline.md)：已确认范围的来源，当前优先级见当前阶段。
+- [首次学习状态规格](m0-2-first-learning-state-spec.md)、[浏览器采集状态规格](m0-2-browser-capture-state-spec.md)。
+- [Consumer v3 合同](m0-3-consumer-contract.md)、[迁移裁决](m0-3-migration-blueprint.md)、[采集与供给合同](m2-consumer-contract.md)。
+- [本地库迁移蓝图](local-library-migration-blueprint.md)：本地职责、旧数据回退与同步设计门。
+
+逐次 handoff、轮次优化报告、M0-3 施工任务表和 standalone 初始快照已移除。
+有效内容已并入上述长期文档，旧原文的 Git 追溯方法见 Consumer 兼容参考。
+不新增归档目录复制旧报告。历史通过结果不会因文档合并而升级为当前产品、真实服务或发布验收。
 
 ## 操作文档和参考材料
 
@@ -111,7 +90,6 @@ profile，而不是 `Sense`、Lightweight Study 或全部 Learning Protocol 的�
 - [`../../content/README.md`](../../content/README.md)：内容工具当前实际支持的命令与安全边界；
 - [`../../apps/web/README.md`](../../apps/web/README.md)：Web 本地运行说明；
 - [`../../infra/README.md`](../../infra/README.md)：基础设施边界；
-- [`../migration-foundation.md`](../migration-foundation.md)：standalone baseline 的实现快照；
 - `docs/reference/bbdc/`：不背单词外壳参考；
 - [`../reference/read-frog/product-review.md`](../reference/read-frog/product-review.md)：陪读蛙产品与扩展源码评估、可借鉴体验、YouTube 能力边界与后续用例建议；非实施合同；
 - `docs/reference/sensa-v1/`：已接受的 Sensa V1 交互原型。

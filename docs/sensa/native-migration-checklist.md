@@ -11,7 +11,7 @@
 
 | 用例/范围 | 现有成果入口 | Rust / Flutter 目标 | 当前状态与验收门 |
 | --- | --- | --- | --- |
-| 轻量首学与首次调度 | packages/learning-kernel、apps/api；local-settlement-handoff.md | crates/sensa-core、crates/sensa-library、apps/sensa_native | 合成材料技术纵切已通过 macOS/Android 首学及独立进程恢复；见 native-capability-status.md，不能标作完整正式学习用例 |
+| 轻量首学与首次调度 | packages/learning-kernel、apps/api；consumer-compatibility-reference.md | crates/sensa-core、crates/sensa-library、apps/sensa_native | 合成材料技术纵切已通过 macOS/Android 首学及独立进程恢复；见 native-capability-status.md，不能标作完整正式学习用例 |
 | 正式学习包导入与入学 | packages/content-validator、packages/contracts、apps/api、apps/web | 本地校验、版本固定、SQLite 原子入学及 Flutter 资源入口 | 有界轻量文本包的本地导入、版本保护、显式入学与多目标首学已实现；高保证 runtime release/角色资源/静态媒体已接入并验收；上游 TS/Python 生产审核保留，本机准入和在线协作已在 native-capability-status.md 收口 ；历史证据见 [能力摘要](native-capability-status.md) |
 | 到期复习与重学 | packages/learning-kernel/src/runtime/consumerInitial.ts、consumerSettlement.ts、scheduling.ts；apps/api；apps/web | Rust 协议/调度与 Flutter 学习界面 | 三 purpose 纯决策/FSRS、轻量 SQLite Review/Need/Outcome 事务及 Flutter 等待/恢复已接入；平台证据；正式 Activity/Mixed、独立签到与去重汇总已接入 ；历史证据见 [能力摘要](native-capability-status.md) |
 | 多目标、每日计划、签到、记录及其他已有策略 | apps/api、apps/web、相关合同 | Rust 本地应用规则、读模型与 Flutter 页面 | Activity/Mixed、Review-only、每日 Introduction 与独立签到已迁移；本机 Curriculum lifecycle/Book Range、来源选择、补充来源排序与长历史检索已接入，平台完成门见 native-capability-status.md |
