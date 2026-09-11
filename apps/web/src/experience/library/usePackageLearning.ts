@@ -5,7 +5,7 @@ import {learningPackageCatalogSchema,type LearningPackageDescriptor} from '@sens
 import {auth} from '../../data/consumer/client';
 import {openLibrary,observeLibrary,readLibrary,command} from '../../data/library/store';
 import {installedPackages,downloadPackage,installPackage,type InstalledPackage} from '../../data/library/packages';
-import {setLocalDeclaredMastery,readLearning,enrollPackage,startLearning,actLearning,finishLearning,confirmLearningQuantity,type LocalLearningTarget,type LocalLearningRun} from '../../data/library/learning';
+import {localRunTargetIds,selectLocalLearningPolicy,setLocalDeclaredMastery,readLearning,enrollPackage,startLearning,actLearning,finishLearning,confirmLearningQuantity,type LocalLearningTarget,type LocalLearningRun} from '../../data/library/learning';
 import type {LearningRecordView} from '../learningJourney/learningHistory';
 export function usePackageLearning(entryOpen:boolean){
  useTranslation();
@@ -31,15 +31,16 @@ export function usePackageLearning(entryOpen:boolean){
  };
  useEffect(()=>{if(entryOpen)void reloadCatalog();},[entryOpen]);
  const run=runs.find(r=>r.id===activeId)??null;
- const records:LearningRecordView[]=runs.filter(r=>r.completedAt&&r.completionKind!=='wait_relearning').map(r=>({recordId:r.id,targetId:r.targetId,expression:targets.find(t=>t.id===r.targetId)?.expression??'',meaning:targets.find(t=>t.id===r.targetId)?.meaning,occurredAt:r.completedAt!,kind:r.purpose,label:r.purpose==='initial_learning'?localFlowText('initialRecord'):r.purpose==='retention_review'?localFlowText('reviewRecord'):localFlowText('relearningRecord'),detail:localFlowText('localRecord')})).sort((a,b)=>b.occurredAt.localeCompare(a.occurredAt));
+ const records:LearningRecordView[]=runs.filter(r=>r.completedAt&&r.completionKind!=='wait_relearning').flatMap(r=>localRunTargetIds(r).map(targetId=>({recordId:r.id+':'+targetId,targetId,expression:targets.find(t=>t.id===targetId)?.expression??'',meaning:targets.find(t=>t.id===targetId)?.meaning,occurredAt:r.targetCompletions?.[targetId]?.at??r.completedAt!,kind:r.purpose,label:r.purpose==='initial_learning'?localFlowText('initialRecord'):r.purpose==='retention_review'?localFlowText('reviewRecord'):localFlowText('relearningRecord'),detail:localFlowText('localRecord')}))).sort((a,b)=>b.occurredAt.localeCompare(a.occurredAt));
  const due=targets.filter(t=>!t.declaredMastery).filter(t=>t.relearnAt?Date.parse(t.relearnAt)<=clock:t.memory&&t.memory.dueAt.getTime()<=clock);
  const startedToday=targets.filter(t=>t.startedAt&&new Date(t.startedAt).toDateString()===new Date(clock).toDateString()).length;
  const remaining=Math.max(0,(dailyLimit??20)-startedToday);
  const initialReady=[...targets.filter(t=>!t.declaredMastery&&!t.completedAt&&t.startedAt),...targets.filter(t=>!t.declaredMastery&&!t.completedAt&&!t.startedAt).slice(0,remaining)];
- const nextTarget=[...due,...initialReady].find(t=>t.id!==run?.targetId);
+ const nextTarget=[...due,...initialReady].find(t=>!run||!localRunTargetIds(run).includes(t.id));
  return {nextTarget,initialReady,packages,catalog,targets,runs,run,records,due,notice:localFlowNotice(notice),busy,progress,loaded,catalogBusy,reloadCatalog,refresh,dailyLimit,confirmQuantity:(n:number)=>perform(()=>confirmLearningQuantity(crypto.randomUUID(),n)),
   download:(d:LearningPackageDescriptor)=>perform(async()=>{const c=new AbortController();transfer.current=c;try{setProgress(0);return await downloadPackage(d,AbortSignal.any([c.signal,AbortSignal.timeout(120000)]),n=>setProgress(Math.round(100*n/d.byteLength)));}finally{if(transfer.current===c)transfer.current=null;}}),
   cancelDownload:()=>transfer.current?.abort(),importFile:(file:File)=>perform(async()=>{if(file.size>8*1024*1024)throw new Error('localFlow.packageTooLarge');return installPackage(new Uint8Array(await file.arrayBuffer()));}),
+  selectPolicy:(targetId:string,profileId:Parameters<typeof selectLocalLearningPolicy>[2])=>perform(()=>selectLocalLearningPolicy(crypto.randomUUID(),targetId,profileId)),
   enroll:(key:string)=>perform(()=>enrollPackage(crypto.randomUUID(),key)),
   start:(id:string,limit:number)=>perform(()=>startLearning(crypto.randomUUID(),id,limit)),
   act:(action:Parameters<typeof actLearning>[3])=>run?perform(()=>actLearning(crypto.randomUUID(),run.id,run.revision,action)):Promise.resolve(null),

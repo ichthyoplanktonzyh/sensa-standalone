@@ -1,3 +1,10 @@
+import {InterleavedFourStageRuntimeScreen} from '../components/learning/InterleavedFourStageRuntimeScreen';
+import {InterleavedFourStageReviewScreen} from '../components/learning/InterleavedFourStageReviewScreen';
+import {InterleavedFourStageQueue,InterleavedFourStageReviewQueue} from '../learningRuntime/interleavedFourStageProtocol';
+import {fourStageQueue,fourStageContent,type FourStageAction} from '../../data/library/fourStage';
+import {learningPolicyProfileRegistry} from '../learningRuntime/policyProfiles';
+import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
+import {localRunTargetIds} from '../../data/library/learning';
 import {assuranceContent} from '../../data/library/assurance';
 import {cardText} from '../../i18n/originalCards';
 import {RuntimeTools} from '../components/learning/RuntimeTools';
@@ -92,8 +99,10 @@ export function PackageTarget({active,target,c,onBack,onHome,onStart,onSource}:{
  useTranslation();
  const pack=c.packages.find(p=>p.key===target.packageKey);
  const policy=localTargetPolicy(target);
+ const [editingPolicy,setEditingPolicy]=useState(false);
+ const canSelectPolicy=!!target.assurancePackageKey&&!target.startedAt;
  const content=pack&&target.assurancePackageKey?assuranceContent(pack,target.assurancePackageKey).template.content:null;
- return <LearningTargetDetailScreen active={active} target={localTargetView(target)} selectedPolicy={policy} fixedPolicy preparation="ready" committedPolicy={target.startedAt?policy:null} initialCompletionKind={target.completedAt?'study_completion':null} reviewDue={c.due.includes(target)} relearning={!!target.relearnAt} retentionRuntimeState={null} nextReviewLabel={target.memory?.dueAt.toLocaleString(i18n.language)??null} declaredMastery={!!target.declaredMastery} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>{}} onOpenSource={onSource??onBack} onRefreshPreparation={()=>void c.refresh()} onGoHome={onHome} onStartReview={onStart} onContinueRetentionRuntime={onStart} onContinueRuntime={onStart} onRevokeDeclaredMastery={()=>void c.declareKnown(target.id,false)} notice={c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>} actions={<><LearningResourceDetails material={target.material}/>{content&&<StudyResources content={content}/>}{target.declaredMastery?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.declareKnown(target.id,false)}>{cardText('revokeKnown')}</button>:<button className={setupPrimary} disabled={c.busy||!!target.completedAt&&!c.due.includes(target)&&c.run?.targetId!==target.id} onClick={onStart}>{target.completedAt?localFlowText('startReview'):localFlowText('startLearning')}</button>}</>}/>;
+ return <><LearningTargetDetailScreen active={active} target={localTargetView(target)} selectedPolicy={policy} fixedPolicy={!canSelectPolicy} preparation="ready" committedPolicy={target.startedAt?policy:null} initialCompletionKind={target.completedAt?'study_completion':null} reviewDue={c.due.includes(target)} relearning={!!target.relearnAt} retentionRuntimeState={null} nextReviewLabel={target.memory?.dueAt.toLocaleString(i18n.language)??null} declaredMastery={!!target.declaredMastery} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>setEditingPolicy(true)} onOpenSource={onSource??onBack} onRefreshPreparation={()=>void c.refresh()} onGoHome={onHome} onStartReview={onStart} onContinueRetentionRuntime={onStart} onContinueRuntime={onStart} onRevokeDeclaredMastery={()=>void c.declareKnown(target.id,false)} notice={c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>} actions={<><LearningResourceDetails material={target.material}/>{content&&<StudyResources content={content}/>}{target.declaredMastery?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.declareKnown(target.id,false)}>{cardText('revokeKnown')}</button>:<button className={setupPrimary} disabled={c.busy||!!target.completedAt&&!c.due.includes(target)&&(!c.run||!localRunTargetIds(c.run).includes(target.id))} onClick={onStart}>{target.completedAt?localFlowText('startReview'):localFlowText('startLearning')}</button>}</>}/>{editingPolicy&&canSelectPolicy&&<LearningPreferencesPanel closeLabel={i18n.t('learningPreferences.finishSelection')} allowedPolicies={learningPolicyProfileRegistry.list().filter(p=>p.localSelectable).map(p=>p.profileId)} showDailyQuantity={false} defaultPolicy={policy} dailyNewCount={c.dailyLimit??20} onDailyNewCountChange={()=>{}} onPolicyChange={value=>{void c.selectPolicy(target.id,value);}} busy={c.busy} status={c.notice&&<p role="status">{c.notice}</p>} onClose={()=>setEditingPolicy(false)}/>}</>;
 }
 type PackageRuntimeProps={active:boolean;c:Controller;host:AssuranceSupportHost;onExit:()=>void;onFinish:()=>void};
 export function PackageRuntime(props:PackageRuntimeProps){
@@ -123,3 +132,26 @@ function LightweightPackageRuntime({active,c,onExit,onFinish,host}:PackageRuntim
 runtimeSurfaceRegistry.bindLocalRenderer('lightweight_initial',LightweightPackageRuntime);
 runtimeSurfaceRegistry.bindLocalRenderer('lightweight_retention',LightweightPackageRuntime);
 runtimeSurfaceRegistry.bindLocalRenderer('structured_session',StructuredPackageRuntime);
+
+function fourStagePresentation(c:Controller){
+ const run=c.run;if(!run)throw new Error('Missing runtime');
+ const queue=fourStageQueue(run),session=queue.getCurrentSession();
+ const target=c.targets.find(t=>t.id===session?.targetId);
+ const pack=c.packages.find(p=>p.key===target?.packageKey);
+ const content=target?fourStageContent(target,pack):null;
+ return {run,queue,session,content,target:target&&content?{expression:target.expression,meaning:target.meaning,example:content.learningExamples[0]?.textL2??'',partOfSpeech:''}:null};
+}
+function FourStageInitialPackageRuntime({active,c,onExit,onFinish}:PackageRuntimeProps){
+ const {queue,target,content}=fourStagePresentation(c);
+ if(!(queue instanceof InterleavedFourStageQueue))throw new Error('Invalid initial queue');
+ const act=(response:FourStageAction['response'])=>{if(!c.busy)void c.act({kind:'protocol',response});};
+ return <InterleavedFourStageRuntimeScreen active={active} targetIds={[]} onExit={onExit} onFinish={onFinish} onComplete={()=>{}} execution={{session:queue.getCurrentSession(),projection:queue.getProjection(),target,content,busy:c.busy,notice:c.notice&&<p role="alert">{c.notice}</p>,onChoice:optionId=>act({kind:'choice',optionId}),onSelfReport:known=>act({kind:'self_report',known}),onContinue:()=>act({kind:'continue'})}}/>;
+}
+function FourStageReviewPackageRuntime({active,c,onExit,onFinish}:PackageRuntimeProps){
+ const {run,queue,target}=fourStagePresentation(c);
+ if(!(queue instanceof InterleavedFourStageReviewQueue))throw new Error('Invalid review queue');
+ const act=(response:FourStageAction['response'])=>{if(!c.busy)void c.act({kind:'protocol',response});};
+ return <InterleavedFourStageReviewScreen active={active} targetIds={[]} relearningTargetIds={new Set()} onExit={onExit} onFinish={onFinish} onMemoryOutcome={()=>{}} onRelearningComplete={()=>{}} execution={{session:queue.getCurrentSession(),target,done:!!run.completedAt,targetCount:localRunTargetIds(run).length,busy:c.busy,notice:c.notice&&<p role="alert">{c.notice}</p>,onAnswer:answer=>act({kind:'review',answer}),onContinue:()=>act({kind:'continue'})}}/>;
+}
+runtimeSurfaceRegistry.bindLocalRenderer('interleaved_four_stage',FourStageInitialPackageRuntime);
+runtimeSurfaceRegistry.bindLocalRenderer('interleaved_four_stage_review',FourStageReviewPackageRuntime);

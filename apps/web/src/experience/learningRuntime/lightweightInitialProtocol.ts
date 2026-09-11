@@ -364,7 +364,7 @@ export const lightweightLocalExecution: LocalProtocolExecution = {
  replayStart:(target,_pack,saved)=>{const run:LocalLearningRun={...saved,phase:'recall',ordinal:1,revision:1,completedAt:null,completionKind:undefined};if(saved.lightweight)run.lightweight=localInitialState(run,target);return run;},
  transition:(target,run,_pack,action,at)=>{
   localActionSchema.parse(action);
-  if(action.kind==='assurance'||run.assurance)throw new Error('localFlow.stepChanged');
+  if(action.kind!=='reveal'&&action.kind!=='rate'||run.assurance)throw new Error('localFlow.stepChanged');
   let next: 'recall'|'reveal'|'completed'|'waiting';
   if(run.purpose==='initial_learning'){
    const state=run.lightweight??localInitialState(run,target);

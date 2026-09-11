@@ -1,3 +1,4 @@
+import {encodeQueueSnapshot,decodeQueueSnapshot} from '../engine/queueSnapshot';
 import {
   createProtocolProgressState,
   decideAndApplyProtocolTransition,
@@ -114,6 +115,17 @@ export class InterleavedFourStageQueue<TargetId extends string> {
       mistakes: 0,
     }));
     this.next();
+  }
+
+  public exportCheckpoint(): string {
+    return encodeQueueSnapshot({targetOrder:this.#targetOrder,minGap:this.#minGap,targets:this.#targets,currentSession:this.#currentSession,sessionOrdinal:this.#sessionOrdinal});
+  }
+
+  public static restoreCheckpoint<TargetId extends string>(raw:string):InterleavedFourStageQueue<TargetId> {
+    const saved=decodeQueueSnapshot<{targetOrder:Map<TargetId,number>;minGap:number;targets:FourStageTargetProgress<TargetId>[];currentSession:FourStageSession<TargetId>|null;sessionOrdinal:number}>(raw);
+    const queue=new InterleavedFourStageQueue<TargetId>([...saved.targetOrder.keys()],{minGap:saved.minGap,protocolRunId:'restore'});
+    queue.#targets=saved.targets;queue.#currentSession=saved.currentSession;queue.#sessionOrdinal=saved.sessionOrdinal;
+    return queue;
   }
 
   public isDone(): boolean {
@@ -272,6 +284,19 @@ export class InterleavedFourStageReviewQueue<TargetId extends string> {
     }
     this.#pending = normalized.map((candidate) => ({ ...candidate }));
     this.next();
+  }
+
+  public exportCheckpoint():string {
+    return encodeQueueSnapshot({pending:this.#pending,current:this.#current,ordinal:this.#ordinal,outcomes:this.#outcomes,completed:this.#completed});
+  }
+
+  public static restoreCheckpoint<TargetId extends string>(raw:string):InterleavedFourStageReviewQueue<TargetId> {
+    const saved=decodeQueueSnapshot<{pending:Array<FourStageReviewCandidate<TargetId>>;current:FourStageReviewSession<TargetId>|null;ordinal:number;outcomes:Map<TargetId,GradedMemoryOutcome>;completed:Set<TargetId>}>(raw);
+    const queue=new InterleavedFourStageReviewQueue<TargetId>([]);
+    queue.#pending=saved.pending;queue.#current=saved.current;queue.#ordinal=saved.ordinal;
+    for(const [key,value] of saved.outcomes)queue.#outcomes.set(key,value);
+    for(const key of saved.completed)queue.#completed.add(key);
+    return queue;
   }
 
   public getCurrentSession(): FourStageReviewSession<TargetId> | null {

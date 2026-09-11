@@ -1,3 +1,4 @@
+import {fourStageLocalExecution} from '../../data/library/fourStage';
 import {localRunBinding} from './localRuntimeBindings';
 import type { LocalLearningRun, LocalLearningTarget } from '../../data/library/learning';
 import type { InstalledPackage } from '../../data/library/packages';
@@ -6,13 +7,16 @@ import { assuranceLocalExecution } from '../../data/library/assurance';
 
 /** Storage ports bind existing protocol engines; they do not own another step graph. */
 export interface LocalProtocolExecution {
+  readonly cohort?: boolean;
+  validate?(target:LocalLearningTarget,pack:InstalledPackage|undefined):void;
+  activeTargetId?(run:LocalLearningRun):string;
   purpose(target: LocalLearningTarget): LearningProtocolPurpose;
   initialize(target: LocalLearningTarget, pack: InstalledPackage | undefined, purpose: LearningProtocolPurpose, run:LocalLearningRun): Partial<LocalLearningRun>;
   stepId(run: LocalLearningRun): string;
   transition(target: LocalLearningTarget, run: LocalLearningRun, pack: InstalledPackage | undefined, action: LocalLearningAction, at: string): unknown;
   replayStart(target: LocalLearningTarget, pack: InstalledPackage | undefined, saved: LocalLearningRun): LocalLearningRun;
 }
-export type LocalLearningAction = {kind:'reveal'} | {kind:'rate';rating:'again'|'hard'|'good'} | import('../../data/library/assurance').AssuranceAction;
+export type LocalLearningAction = {kind:'reveal'} | {kind:'rate';rating:'again'|'hard'|'good'} | import('../../data/library/assurance').AssuranceAction | {kind:'protocol';response:unknown};
 import { sameContentCapabilitySet } from './contentCapabilities';
 import {
   learningPolicyProfileRegistry,
@@ -72,6 +76,7 @@ const structuredRuntimeAdapter: ProtocolRuntimeAdapter = {
 
 const interleavedFourStageRuntimeAdapter: ProtocolRuntimeAdapter = {
   adapterId: 'interleaved_four_stage',
+  localExecution: fourStageLocalExecution,
   retentionPriority: 1,
   retentionStoreId: 'scheduler_memory',
   surfaceFor: (purpose) => purpose === 'initial_learning'

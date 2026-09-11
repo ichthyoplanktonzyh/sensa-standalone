@@ -1,3 +1,4 @@
+import {fourStageZh,fourStageEn} from '../apps/web/src/i18n/fourStage.ts';
 import {originalCardsZh,originalCardsEn} from '../apps/web/src/i18n/originalCardCopy.ts';
 /** Guard the new local Web slices: interface copy belongs in locale resources, content does not. */
 import assert from 'node:assert/strict';
@@ -16,12 +17,12 @@ function parity(a:any,b:any,path=''){
   const placeholders=(s:string)=>[...s.matchAll(/\{\{(.*?)\}\}/gu)].map(m=>m[1]).sort();assert.deepEqual(placeholders(a[key]),placeholders(b[key]),path+'.'+key);
  }
 }
-parity(originalCardsZh,originalCardsEn);parity(libraryBackupZh,libraryBackupEn);parity(modelServiceZh,modelServiceEn);parity(localFlowZh,localFlowEn);parity(accountZh,accountEn);
+parity(fourStageZh,fourStageEn);parity(originalCardsZh,originalCardsEn);parity(libraryBackupZh,libraryBackupEn);parity(modelServiceZh,modelServiceEn);parity(localFlowZh,localFlowEn);parity(accountZh,accountEn);
 const folders=['apps/web/src/data/library','apps/web/src/experience/library'];
 const files=(await Promise.all(folders.map(async d=>(await readdir(d)).filter(f=>/\.tsx?$/u.test(f)).map(f=>d+'/'+f)))).flat();
 files.push(...['App.tsx','account/AccountExperience.tsx','account/AccountDeletion.tsx','account/ExtensionIntake.tsx','components/ProfileScreen.tsx','components/ProviderPanel.tsx','components/ModelExecutionPanel.tsx','components/LibraryBackupPanel.tsx','components/LocalDataControlPanel.tsx','components/ExpressionChatInput.tsx','components/learning/RichExperience.tsx','components/learning/LearningResourceDetails.tsx','components/PersonalMeaningComposer.tsx','components/PersonalMeaningDetailScreen.tsx','components/StudyScreen.tsx','components/learning/LearningPreferencesPanel.tsx','components/learning/LightweightRuntimeStartScreen.tsx'].map(p=>'apps/web/src/experience/'+p));
 files.push(...['IntroductionCard','ExperienceRenderer','SensaRecognitionCard','SensaRecallCard','NovelTransferCard','review/SensaReviewAssessmentCard','review/SensaReviewFeedbackCard'].map(n=>'apps/web/src/experience/components/cards/'+n+'.tsx'));
-files.push(...['SceneEditorModal','ReferenceDictionaryScreen','learning/RuntimeTools','LearnScreen','SensaExampleScreen','examples/ExampleCardCarousel','examples/LearningExampleLookup'].map(n=>'apps/web/src/experience/components/'+n+'.tsx'));
+files.push(...['SceneEditorModal','ReferenceDictionaryScreen','learning/RuntimeTools','learning/InterleavedFourStageRuntimeScreen','learning/InterleavedFourStageReviewScreen','LearnScreen','SensaExampleScreen','examples/ExampleCardCarousel','examples/LearningExampleLookup'].map(n=>'apps/web/src/experience/components/'+n+'.tsx'));
 for(const file of files){
  const ast=parse(await readFile(file,'utf8'),{sourceType:'module',plugins:['typescript','jsx']});
  function visit(node:any,parent?:any){

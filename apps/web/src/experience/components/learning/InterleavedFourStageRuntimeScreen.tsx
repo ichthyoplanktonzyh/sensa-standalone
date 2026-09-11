@@ -1,3 +1,5 @@
+import type {PrototypeIntroductionPackage} from '../../content/learningCatalog';
+import {useTranslation} from 'react-i18next';
 import { uiClass } from '../../ui/classes';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -16,7 +18,20 @@ export interface FourStageCompletionItem {
   readonly mistakeCount: number;
 }
 
+export interface FourStageTargetPresentation {expression:string;meaning:string;example:string;partOfSpeech:string}
+export interface FourStageInitialExecution {
+  session:FourStageSession<string>|null;
+  projection:FourStageQueueProjection<string>;
+  target:FourStageTargetPresentation|null;
+  content:PrototypeIntroductionPackage|null;
+  busy:boolean;
+  notice?:import('react').ReactNode;
+  onChoice:(id:string)=>void;
+  onSelfReport:(known:boolean)=>void;
+  onContinue:()=>void;
+}
 interface InterleavedFourStageRuntimeScreenProps {
+  readonly execution?:FourStageInitialExecution;
   readonly active: boolean;
   readonly targetIds: readonly PrototypeLearningTargetId[];
   readonly onExit: () => void;
@@ -25,26 +40,30 @@ interface InterleavedFourStageRuntimeScreenProps {
 }
 
 const presentationLabel = {
-  meaning_choice: '第一阶段 · 看词选义',
-  context_recall: '第二阶段 · 语境回想',
-  sound_choice: '第三阶段 · 听音选义',
-  final_recall: '第四阶段 · 终关回想',
+  meaning_choice: 'meaningChoice',
+  context_recall: 'contextRecall',
+  sound_choice: 'soundChoice',
+  final_recall: 'finalRecall',
 } as const;
 
 export function InterleavedFourStageRuntimeScreen({
   active,
+  execution,
   targetIds,
   onExit,
   onComplete,
   onFinish,
 }: InterleavedFourStageRuntimeScreenProps) {
+  const {t}=useTranslation();
   const queueRef = useRef<InterleavedFourStageQueue<PrototypeLearningTargetId> | null>(null);
   const completionReportedRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
-  const [session, setSession] = useState<FourStageSession<PrototypeLearningTargetId> | null>(null);
-  const [projection, setProjection] = useState<FourStageQueueProjection<PrototypeLearningTargetId> | null>(null);
+  const [previewSession, setSession] = useState<FourStageSession<PrototypeLearningTargetId> | null>(null);
+  const [previewProjection, setProjection] = useState<FourStageQueueProjection<PrototypeLearningTargetId> | null>(null);
   const runKey = targetIds.join('|');
+  const session=execution?execution.session:previewSession;
+  const projection=execution?execution.projection:previewProjection;
 
   const sync = useCallback((queue: InterleavedFourStageQueue<PrototypeLearningTargetId>) => {
     const nextProjection = queue.getProjection();
@@ -60,18 +79,21 @@ export function InterleavedFourStageRuntimeScreen({
   }, []);
 
   useEffect(() => {
+    if(execution)return;
     const queue = new InterleavedFourStageQueue(targetIds, { minGap: 2 });
     queueRef.current = queue;
     completionReportedRef.current = false;
     sync(queue);
   }, [runKey, sync]);
 
-  const target = session ? PROTOTYPE_LEARNING_TARGETS[session.targetId] : null;
+  const previewTarget=previewSession?PROTOTYPE_LEARNING_TARGETS[previewSession.targetId]:null;
+  const target = execution?execution.target:previewTarget;
   const runtimePackage = useMemo(
-    () => target ? runtimePackageForTarget(target) : null,
-    [target],
+    () => previewTarget ? runtimePackageForTarget(previewTarget) : null,
+    [previewTarget],
   );
-  const recognitionOptions = runtimePackage?.content.recognitionAssessment.options ?? [];
+  const runtimeContent=execution?execution.content:runtimePackage?.content;
+  const recognitionOptions = runtimeContent?.recognitionAssessment.options ?? [];
   const completedCredits = session && projection
     ? Object.values(
       projection.targets.find((candidate) => candidate.targetId === session.targetId)
@@ -80,6 +102,7 @@ export function InterleavedFourStageRuntimeScreen({
     : 0;
 
   const settle = (satisfied: boolean) => {
+    if(execution){execution.onSelfReport(satisfied);return;}
     const queue = queueRef.current;
     if (!queue) return;
     queue.settle(satisfied);
@@ -87,18 +110,23 @@ export function InterleavedFourStageRuntimeScreen({
   };
 
   const continueAfterFeedback = () => {
+    if(execution){execution.onContinue();return;}
     const queue = queueRef.current;
     if (!queue) return;
     queue.completeFeedback();
     sync(queue);
   };
 
+  const audioRef=useRef<HTMLAudioElement|null>(null);
+  useEffect(()=>{if(!active)audioRef.current?.pause();return()=>{audioRef.current?.pause();};},[active,session?.sessionOrdinal]);
   const playPronunciation = () => {
-    const audioUrl = runtimePackage?.content.pronunciations.find(
+    const audioUrl = runtimeContent?.pronunciations.find(
       (pronunciation) => pronunciation.audioUrl,
     )?.audioUrl;
     if (!audioUrl || typeof Audio === 'undefined') return;
-    void new Audio(audioUrl).play().catch(() => undefined);
+    audioRef.current?.pause();
+    const audio=new Audio(audioUrl);audioRef.current=audio;
+    void audio.play().catch(() => undefined);
   };
 
   if (!projection) return null;
@@ -110,24 +138,25 @@ export function InterleavedFourStageRuntimeScreen({
       data-anim="fade"
     >
       <header className={uiClass("lightweight-runtime-nav")}>
-        <button type="button" onClick={onExit} aria-label="暂时退出学习">×</button>
-        <span>{session ? presentationLabel[session.presentation] : '四阶段完成'}</span>
-        <em>{projection.graduatedTargetIds.length} / {projection.targetCount} 个目标</em>
+        <button disabled={execution?.busy} type="button" onClick={onExit} aria-label={t('fourStage.exitLearning')}>×</button>
+        <span>{session ? t('fourStage.'+presentationLabel[session.presentation]) : t('fourStage.completed')}</span>
+        <em>{projection.graduatedTargetIds.length} / {t('fourStage.targetCount',{count:projection.targetCount})}</em>
       </header>
 
       <main className={uiClass("lightweight-runtime-body")}>
+        {execution?.notice}
         {session && target && session.phase === 'assessment' && (
           <section className={uiClass("lightweight-runtime-stage lightweight-answer")} key={`${session.sessionOrdinal}:assessment`}>
-            <small>{presentationLabel[session.presentation]} · 当前连续通过 {completedCredits}/4</small>
+            <small>{t('fourStage.'+presentationLabel[session.presentation])} · {t('fourStage.credits',{count:completedCredits})}</small>
 
             {session.presentation === 'meaning_choice' && (
               <>
                 <h1>{target.expression}</h1>
-                <p>选择这个表达在当前 Learning Target 中的意思。</p>
-                <div className={uiClass("lightweight-rating")} role="group" aria-label="词义选项">
+                <p>{t('fourStage.chooseMeaning')}</p>
+                <div className={uiClass("lightweight-rating")} role="group" aria-label={t('fourStage.meaningOptions')}>
                   {recognitionOptions.map((option) => (
-                    <button type="button" key={option.id} onClick={() => settle(option.isCorrect)}>
-                      <strong>{option.textL1}</strong><small>选择</small>
+                    <button disabled={execution?.busy} type="button" key={option.id} onClick={() => execution?execution.onChoice(option.id):settle(option.isCorrect)}>
+                      <strong>{option.textL1}</strong><small>{t('fourStage.choose')}</small>
                     </button>
                   ))}
                 </div>
@@ -137,13 +166,13 @@ export function InterleavedFourStageRuntimeScreen({
             {session.presentation === 'context_recall' && (
               <>
                 <blockquote>{target.example}</blockquote>
-                <h1>你在这个语境里认出了当前意思吗？</h1>
-                <div className={uiClass("lightweight-rating")} role="group" aria-label="语境回想结果">
-                  <button type="button" className={uiClass("is-again")} onClick={() => settle(false)}>
-                    <strong>没有认出</strong><small>四阶段清零</small>
+                <h1>{t('fourStage.recognizeContext')}</h1>
+                <div className={uiClass("lightweight-rating")} role="group" aria-label={t('fourStage.contextResult')}>
+                  <button disabled={execution?.busy} type="button" className={uiClass("is-again")} onClick={() => settle(false)}>
+                    <strong>{t('fourStage.notRecognized')}</strong><small>{t('fourStage.reset')}</small>
                   </button>
-                  <button type="button" className={uiClass("is-good")} onClick={() => settle(true)}>
-                    <strong>认出来了</strong><small>进入下一阶段</small>
+                  <button disabled={execution?.busy} type="button" className={uiClass("is-good")} onClick={() => settle(true)}>
+                    <strong>{t('fourStage.recognized')}</strong><small>{t('fourStage.nextStage')}</small>
                   </button>
                 </div>
               </>
@@ -151,12 +180,12 @@ export function InterleavedFourStageRuntimeScreen({
 
             {session.presentation === 'sound_choice' && (
               <>
-                <button type="button" onClick={playPronunciation}>▶ 播放目标发音</button>
-                <h1>只根据声音选择意思</h1>
-                <div className={uiClass("lightweight-rating")} role="group" aria-label="听音词义选项">
+                <button disabled={execution?.busy} type="button" onClick={playPronunciation}>{t('fourStage.play')}</button>
+                <h1>{t('fourStage.listenMeaning')}</h1>
+                <div className={uiClass("lightweight-rating")} role="group" aria-label={t('fourStage.soundOptions')}>
                   {recognitionOptions.map((option) => (
-                    <button type="button" key={option.id} onClick={() => settle(option.isCorrect)}>
-                      <strong>{option.textL1}</strong><small>选择</small>
+                    <button disabled={execution?.busy} type="button" key={option.id} onClick={() => execution?execution.onChoice(option.id):settle(option.isCorrect)}>
+                      <strong>{option.textL1}</strong><small>{t('fourStage.choose')}</small>
                     </button>
                   ))}
                 </div>
@@ -165,15 +194,15 @@ export function InterleavedFourStageRuntimeScreen({
 
             {session.presentation === 'final_recall' && (
               <>
-                <small>无额外提示</small>
+                <small>{t('fourStage.noHint')}</small>
                 <h1>{target.expression}</h1>
-                <p>现在你认识这个表达对应的目标意思吗？</p>
-                <div className={uiClass("lightweight-rating")} role="group" aria-label="终关回想结果">
-                  <button type="button" className={uiClass("is-again")} onClick={() => settle(false)}>
-                    <strong>不认识</strong><small>四阶段清零</small>
+                <p>{t('fourStage.recognizeFinal')}</p>
+                <div className={uiClass("lightweight-rating")} role="group" aria-label={t('fourStage.finalResult')}>
+                  <button disabled={execution?.busy} type="button" className={uiClass("is-again")} onClick={() => settle(false)}>
+                    <strong>{t('fourStage.unknown')}</strong><small>{t('fourStage.reset')}</small>
                   </button>
-                  <button type="button" className={uiClass("is-good")} onClick={() => settle(true)}>
-                    <strong>认识</strong><small>完成这个目标</small>
+                  <button disabled={execution?.busy} type="button" className={uiClass("is-good")} onClick={() => settle(true)}>
+                    <strong>{t('fourStage.known')}</strong><small>{t('fourStage.finishTarget')}</small>
                   </button>
                 </div>
               </>
@@ -183,25 +212,25 @@ export function InterleavedFourStageRuntimeScreen({
 
         {session && target && session.phase === 'feedback' && (
           <section className={uiClass("lightweight-runtime-stage lightweight-answer")} key={`${session.sessionOrdinal}:feedback`}>
-            <small>{session.result ? '本阶段通过' : '本词四阶段已清零'}</small>
+            <small>{session.result ? t('fourStage.stagePassed') : t('fourStage.stageReset')}</small>
             <h1>{target.expression}</h1>
             <span>{target.partOfSpeech}</span>
             <p>{target.meaning}</p>
             <blockquote>{target.example}</blockquote>
             <p>{session.result
-              ? '详情只负责反馈；本次 Checkpoint credit 已由刚才的评价产生。'
-              : '详情用于重新建立连接，不会替你通过；稍后从第一阶段重新评价。'}</p>
-            <button type="button" onClick={continueAfterFeedback}>继续穿插学习</button>
+              ? t('fourStage.feedbackPassed')
+              : t('fourStage.feedbackReset')}</p>
+            <button disabled={execution?.busy} type="button" onClick={continueAfterFeedback}>{t('fourStage.continueLearning')}</button>
           </section>
         )}
 
         {!session && projection.targetCount > 0 && (
           <section className={uiClass("lightweight-runtime-stage lightweight-complete")} aria-live="polite">
             <span className={uiClass("lightweight-complete-mark")} aria-hidden="true">✓</span>
-            <small>四阶段学习完成</small>
-            <h1>{projection.targetCount} 个目标已连续通过四阶段</h1>
-            <p>每个目标已经独立交接给长期记忆调度。</p>
-            <button type="button" onClick={onFinish}>完成并回到首页</button>
+            <small>{t('fourStage.learningComplete')}</small>
+            <h1>{t('fourStage.completeCount',{count:projection.targetCount})}</h1>
+            <p>{t('fourStage.scheduled')}</p>
+            <button disabled={execution?.busy} type="button" onClick={onFinish}>{t('fourStage.finish')}</button>
           </section>
         )}
       </main>

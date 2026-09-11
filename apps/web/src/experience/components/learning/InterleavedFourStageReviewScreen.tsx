@@ -1,3 +1,5 @@
+import type {FourStageTargetPresentation} from './InterleavedFourStageRuntimeScreen';
+import {useTranslation} from 'react-i18next';
 import { uiClass } from '../../ui/classes';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GradedMemoryOutcome } from '@sensa/learning-kernel';
@@ -11,7 +13,13 @@ import {
   type FourStageReviewSession,
 } from '../../learningRuntime/interleavedFourStageProtocol';
 
+export interface FourStageReviewExecution {
+ session:FourStageReviewSession<string>|null;target:FourStageTargetPresentation|null;
+ done:boolean;targetCount:number;busy:boolean;notice?:import('react').ReactNode;
+ onAnswer:(answer:FourStageReviewAnswer)=>void;onContinue:()=>void;
+}
 interface InterleavedFourStageReviewScreenProps {
+ readonly execution?:FourStageReviewExecution;
   readonly active: boolean;
   readonly targetIds: readonly PrototypeLearningTargetId[];
   readonly relearningTargetIds: ReadonlySet<PrototypeLearningTargetId>;
@@ -26,6 +34,7 @@ interface InterleavedFourStageReviewScreenProps {
 
 export function InterleavedFourStageReviewScreen({
   active,
+  execution,
   targetIds,
   relearningTargetIds,
   onExit,
@@ -33,9 +42,12 @@ export function InterleavedFourStageReviewScreen({
   onRelearningComplete,
   onFinish,
 }: InterleavedFourStageReviewScreenProps) {
+  const {t}=useTranslation();
   const queueRef = useRef<InterleavedFourStageReviewQueue<PrototypeLearningTargetId> | null>(null);
-  const [session, setSession] = useState<FourStageReviewSession<PrototypeLearningTargetId> | null>(null);
-  const [done, setDone] = useState(false);
+  const [previewSession, setSession] = useState<FourStageReviewSession<PrototypeLearningTargetId> | null>(null);
+  const [previewDone, setDone] = useState(false);
+  const session=execution?execution.session:previewSession;
+  const done=execution?execution.done:previewDone;
   const runKey = targetIds.map((targetId) =>
     `${targetId}:${relearningTargetIds.has(targetId) ? 'relearning' : 'review'}`).join('|');
 
@@ -45,6 +57,7 @@ export function InterleavedFourStageReviewScreen({
   }, []);
 
   useEffect(() => {
+    if(execution)return;
     const queue = new InterleavedFourStageReviewQueue(targetIds.map((targetId) => ({
       targetId,
       mode: relearningTargetIds.has(targetId) ? 'relearning' as const : 'review' as const,
@@ -54,6 +67,7 @@ export function InterleavedFourStageReviewScreen({
   }, [runKey, sync]);
 
   const settle = (answer: FourStageReviewAnswer) => {
+    if(execution){execution.onAnswer(answer);return;}
     const queue = queueRef.current;
     if (!queue || !session) return;
     const settled = queue.settle(answer);
@@ -65,13 +79,14 @@ export function InterleavedFourStageReviewScreen({
   };
 
   const advance = () => {
+    if(execution){execution.onContinue();return;}
     const queue = queueRef.current;
     if (!queue) return;
     queue.completeFeedback();
     sync(queue);
   };
 
-  const target = session ? PROTOTYPE_LEARNING_TARGETS[session.targetId] : null;
+  const target = execution?execution.target:previewSession ? PROTOTYPE_LEARNING_TARGETS[previewSession.targetId] : null;
 
   return (
     <section
@@ -80,28 +95,29 @@ export function InterleavedFourStageReviewScreen({
       data-anim="fade"
     >
       <header className={uiClass("lightweight-review-nav")}>
-        <button type="button" onClick={onExit} aria-label="暂时退出复习">×</button>
-        <div><small>四阶段长期复习</small><strong>{session ? session.ordinal : '完成'}</strong></div>
-        <span>FSRS 调度</span>
+        <button disabled={execution?.busy} type="button" onClick={onExit} aria-label={t('fourStage.exitReview')}>×</button>
+        <div><small>{t('fourStage.reviewTitle')}</small><strong>{session ? session.ordinal : t('fourStage.done')}</strong></div>
+        <span>{t('fourStage.schedule')}</span>
       </header>
 
       <main className={uiClass("lightweight-review-body")}>
+        {execution?.notice}
         {session && target && session.phase === 'assessment' && (
           <section className={uiClass("lightweight-review-stage lightweight-review-recall")}>
-            <small>{session.mode === 'review' ? '到期复习 · 三向评价' : '遗忘后的当日重学检查'}</small>
+            <small>{session.mode === 'review' ? t('fourStage.dueReview') : t('fourStage.relearning')}</small>
             <h1>{target.expression}</h1>
             <p>{session.mode === 'review'
-              ? '先回想这个表达对应的目标意思，再评价当前记忆状态。'
-              : '详情修复后再次回想；这里不会产生第二个原 Review Outcome。'}</p>
-            <div className={uiClass("lightweight-review-rating")} role="group" aria-label="记忆评价">
-              <button type="button" className={uiClass("is-again")} onClick={() => settle('forgotten')}>
-                <strong>忘记了</strong><small>{session.mode === 'review' ? 'Again · 进入重学' : '继续重学'}</small>
+              ? t('fourStage.reviewPrompt')
+              : t('fourStage.relearnPrompt')}</p>
+            <div className={uiClass("lightweight-review-rating")} role="group" aria-label={t('fourStage.rating')}>
+              <button disabled={execution?.busy} type="button" className={uiClass("is-again")} onClick={() => settle('forgotten')}>
+                <strong>{t('fourStage.forgotten')}</strong><small>{session.mode === 'review' ? t('fourStage.again') : t('fourStage.continueRelearning')}</small>
               </button>
-              <button type="button" className={uiClass("is-hard")} onClick={() => settle('vague')}>
-                <strong>模糊</strong><small>{session.mode === 'review' ? 'Hard' : '完成重学'}</small>
+              <button disabled={execution?.busy} type="button" className={uiClass("is-hard")} onClick={() => settle('vague')}>
+                <strong>{t('fourStage.vague')}</strong><small>{session.mode === 'review' ? 'Hard' : t('fourStage.finishRelearning')}</small>
               </button>
-              <button type="button" className={uiClass("is-good")} onClick={() => settle('known')}>
-                <strong>认识</strong><small>{session.mode === 'review' ? 'Good' : '完成重学'}</small>
+              <button disabled={execution?.busy} type="button" className={uiClass("is-good")} onClick={() => settle('known')}>
+                <strong>{t('fourStage.known')}</strong><small>{session.mode === 'review' ? 'Good' : t('fourStage.finishRelearning')}</small>
               </button>
             </div>
           </section>
@@ -109,27 +125,27 @@ export function InterleavedFourStageReviewScreen({
 
         {session && target && session.phase === 'feedback' && (
           <section className={uiClass("lightweight-review-stage lightweight-review-answer")} aria-live="polite">
-            <small>{session.mode === 'review' ? '本次 Review 已唯一结算' : '重学反馈'}</small>
+            <small>{session.mode === 'review' ? t('fourStage.reviewSaved') : t('fourStage.relearnFeedback')}</small>
             <h1>{target.expression}</h1>
             <span>{target.partOfSpeech}</span>
             <p>{target.meaning}</p>
             <blockquote>{target.example}</blockquote>
             <p>{session.answer === 'forgotten'
-              ? '这个目标已放回队尾。详情负责修复，不会重复更新刚才的 FSRS Outcome。'
+              ? t('fourStage.requeued')
               : session.mode === 'review'
-                ? `已保留分级结果：${session.memoryOutcome?.grade ?? ''}`
-                : '连接已恢复；原先的 Again 结果与调度修订保持不变。'}</p>
-            <button type="button" onClick={advance}>继续</button>
+                ? t('fourStage.grade',{grade:session.memoryOutcome?.grade??''})
+                : t('fourStage.relearnSaved')}</p>
+            <button disabled={execution?.busy} type="button" onClick={advance}>{t('fourStage.continue')}</button>
           </section>
         )}
 
         {done && (
           <section className={uiClass("lightweight-review-stage lightweight-review-summary")} aria-live="polite">
             <span className={uiClass("lightweight-review-summary-mark")} aria-hidden="true">✓</span>
-            <small>四阶段长期复习完成</small>
-            <h1>{targetIds.length} 个目标已处理</h1>
-            <p>每个到期目标最多产生一个分级 Memory Outcome。</p>
-            <button type="button" onClick={onFinish}>完成并回到首页</button>
+            <small>{t('fourStage.reviewComplete')}</small>
+            <h1>{t('fourStage.reviewCount',{count:execution?.targetCount??targetIds.length})}</h1>
+            <p>{t('fourStage.reviewSummary')}</p>
+            <button disabled={execution?.busy} type="button" onClick={onFinish}>{t('fourStage.finish')}</button>
           </section>
         )}
       </main>

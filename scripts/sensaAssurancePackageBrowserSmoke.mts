@@ -1,3 +1,4 @@
+import {runFourStageBrowser} from './support/fourStageBrowser';
 /** Package discovery/download/enrollment UI. Synthetic identity and content; no provider calls. */
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -15,6 +16,7 @@ if(new URL(origin).hostname!=='127.0.0.1')throw Error('Loopback required');
 const browser=await chromium.launch({headless:true,executablePath:process.env.SENSA_CHROMIUM_PATH});
 const context=await browser.newContext({viewport:{width:1280,height:900}}),page=await context.newPage();
 page.setDefaultTimeout(10000);
+const fixtureTokenLifetime=process.argv.includes('--four-stage')?365*24*3600:3600;
 const subject=id(),errors:string[]=[];let failDownload=false,downloads=0;
 page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')console.error('Browser:',m.text());});
 await context.route('**/*',async route=>{
@@ -23,7 +25,7 @@ await context.route('**/*',async route=>{
  if(u.origin!=='http://127.0.0.1:4399'){await route.abort();return;}
  const json=async(value:unknown)=>route.fulfill({json:value});
  if(u.pathname==='/auth/v1/otp')return json({});
- if(u.pathname==='/auth/v1/verify')return json({access_token:[{},{sub:subject,exp:Math.floor(Date.now()/1000)+3600},'fixture'].map(v=>Buffer.from(JSON.stringify(v)).toString('base64url')).join('.'),refresh_token:'fixture',token_type:'bearer',expires_in:3600,user:{id:subject,email:'packages@sensa.invalid',aud:'authenticated',app_metadata:{},user_metadata:{},created_at:new Date().toISOString()}});
+ if(u.pathname==='/auth/v1/verify')return json({access_token:[{},{sub:subject,exp:Math.floor(Date.now()/1000)+fixtureTokenLifetime},'fixture'].map(v=>Buffer.from(JSON.stringify(v)).toString('base64url')).join('.'),refresh_token:'fixture',token_type:'bearer',expires_in:fixtureTokenLifetime,user:{id:subject,email:'packages@sensa.invalid',aud:'authenticated',app_metadata:{},user_metadata:{},created_at:new Date().toISOString()}});
  if(u.pathname==='/sensa/web/access/session')return json({authorized:true,accountId:subject});
  if(u.pathname==='/sensa/service/status')return json({authorized:true,explanationAvailable:true,checkedAt:new Date().toISOString(),windowHours:24,usage:[]});
  if(u.pathname==='/sensa/packages')return json({items:[descriptor]});
@@ -35,6 +37,8 @@ const rows=(table:string)=>page.evaluate(async table=>{const db=await new Promis
 try{
  await page.goto(origin+'/profile');await page.getByLabel('邮箱',{exact:true}).fill('packages@sensa.invalid');await page.getByRole('button',{name:'发送登录邮件',exact:true}).click();await page.getByRole('button',{name:'邮件中有验证码？',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'验证并继续',exact:true}).click();
  await page.getByRole('button',{name:'我的内容',exact:true}).click();await page.goto(origin+'/study/learning-entry');const screen=page.locator('#s-learning-entry');await screen.getByRole('button',{name:/Borrow & lend/}).click();await screen.getByRole('button',{name:'下载学习包',exact:true}).click();await expect(screen.getByRole('button',{name:'加入学习',exact:true})).toBeVisible();assert.equal(await count('learningTargets'),0);await screen.getByRole('button',{name:'加入学习',exact:true}).click();await screen.getByRole('button',{name:'查看 borrow 的详情',exact:true}).click();
+ if(process.argv.includes('--four-stage')){await runFourStageBrowser({page,rows,pack});assert.deepEqual(errors,[]);}
+ else {
  const details=page.locator('#s-learning-target');await expect(details.getByRole('heading',{name:'学习目标',exact:true})).toBeVisible();await expect(details.locator('audio')).toHaveCount(5);
  await details.locator('audio').first().evaluate(async(a:HTMLAudioElement)=>{await a.play();a.pause();if(!Number.isFinite(a.duration)||a.duration<=0)throw Error('Audio did not decode');});
  await details.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();await page.getByRole('button',{name:'确认数量并开始',exact:true}).click();
@@ -107,4 +111,5 @@ try{
  assert.equal((await rows('learningRuns')).find(r=>r.id===lightRun.id).revision,lightRun.revision);
  await page.screenshot({path:'/tmp/sensa-assurance/lightweight-tools-mobile.png'});assert(await runtime.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
  assert.deepEqual(errors,[]);console.log('PASS: real assurance bundle/download, audio decode, original high-assurance host/cards, hidden initial expression, four checks, summary, reload, next target, pause/resume; both methods preserve notes/scenes across reopening, preferences, dictionary navigation, English and mobile layout. No model calls.');
+ }
 }catch(error){console.error('UI errors:',errors);if(await page.getByRole('button',{name:'Show Error',exact:true}).count()){await page.getByRole('button',{name:'Show Error',exact:true}).click();console.error(await page.locator('body').innerText());}console.error(await page.locator('#s-lightweight-runtime').innerText().catch(()=>''));await page.screenshot({path:'/tmp/sensa-assurance/failure.png'});throw error;}finally{await browser.close();}

@@ -92,6 +92,7 @@ export interface LearningPolicyLifecycleContract<ProfileId extends string = stri
 }
 
 export interface LearningPolicyProfileDefinition<ProfileId extends string = string> {
+  readonly localSelectable?:boolean;
   profileId: ProfileId;
   profileVersion: string;
   presentation: LearningPolicyPresentation;
@@ -254,6 +255,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
   },
   {
     profileId: 'high_assurance',
+    localSelectable:true,
     profileVersion: 'high-assurance-profile-v1',
     presentation: {
       label: '高保证学习',
@@ -337,6 +339,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
   },
   {
     profileId: 'interleaved_four_stage',
+    localSelectable:true,
     profileVersion: 'interleaved-four-stage-profile-v1',
     presentation: {
       label: '四阶段穿插',
@@ -348,6 +351,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
     lifecycle: {
       evidencePolicyId: 'mixed-self-report-and-behavior-v1',
       schedulingPolicyId: 'fsrs-retention-v1',
+      schedulingPolicy: consumerSchedulingPolicy,
       learnerVisibleClaimBoundary: '只声称完成本协议四阶段连续通过，不借用高保证能力结论。',
       provisioningFallback: { behavior: 'blocked' },
       migrationPolicy: 'pin_existing_runs',
@@ -356,6 +360,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
       initial_learning: {
         protocolId: 'interleaved-four-stage-acquisition',
         protocolVersion: 'v1',
+        localProtocolVersion: 'sensa-four-stage-v1',
         runtimeAdapterId: 'interleaved_four_stage',
         orchestrationId: 'interleaved_four_stage_acquisition',
         evaluationPolicyId: 'four-stage-mixed-evaluation-v1',
@@ -378,6 +383,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
       retention_review: {
         protocolId: 'interleaved-four-stage-retention',
         protocolVersion: 'v1',
+        localProtocolVersion: 'sensa-four-stage-v1',
         runtimeAdapterId: 'interleaved_four_stage',
         orchestrationId: 'interleaved_four_stage_retention',
         evaluationPolicyId: 'learner-rating-v1',
@@ -395,6 +401,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
       relearning: {
         protocolId: 'interleaved-four-stage-relearning',
         protocolVersion: 'v1',
+        localProtocolVersion: 'sensa-four-stage-v1',
         runtimeAdapterId: 'interleaved_four_stage',
         orchestrationId: 'interleaved_four_stage_retention',
         evaluationPolicyId: 'learner-rating-v1',
