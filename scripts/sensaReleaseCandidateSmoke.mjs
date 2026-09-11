@@ -23,7 +23,7 @@ try{
  const releaseEnv={...env,SENSA_RELEASE_SHA:sha};const candidate=await prepareCandidate(releaseEnv,root);
  const verify=()=>execFileSync(process.execPath,[resolve('scripts/release/verifyCandidate.mjs')],{cwd:root,env:{...process.env,...releaseEnv},stdio:'pipe'});verify();
  await writeFile(join(web,'unlisted.js'),'unexpected');assert.throws(verify);await rm(join(web,'unlisted.js'));
- assert.equal(candidate.commit,sha);assert(candidate.files.every(f=>/^[a-f0-9]{64}$/.test(f.sha256)));
+ assert.equal(candidate.commit,sha);assert.match(candidate.scope,/Web and browser extension/);assert.match(candidate.scope,/ordinary account cloud sync/);assert(candidate.files.every(f=>/^[a-f0-9]{64}$/.test(f.sha256)));
  assert(!(await readFile(join(root,'release-candidate/manifest.json'),'utf8')).includes(env.VITE_SUPABASE_PUBLISHABLE_KEY));
  await assert.rejects(prepareCandidate(env,root),/HEAD/);
  await writeFile(join(web,'assets/app.js'),'// stale local build');await assert.rejects(prepareCandidate(releaseEnv,root),/rebuild/);

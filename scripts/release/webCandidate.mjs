@@ -48,7 +48,7 @@ export async function prepareCandidate(env,root=process.cwd()){
   entries.push({path:relative(root,path),bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')});
  }
  const catalogSha256=createHash('sha256').update(await readFile(resolve(root,'release-candidate/catalog.json'))).digest('hex');
- const report={catalogSha256,format:'sensa-web-candidate-v1',...config,createdAt:new Date().toISOString(),scope:'Web local library; automatic cross-device sync unavailable',acceptance:'not yet user or hosted acceptance',files:entries};
+ const report={catalogSha256,format:'sensa-web-candidate-v1',...config,createdAt:new Date().toISOString(),scope:'Web and browser extension; local-first library with ordinary account cloud sync',acceptance:'not yet user or hosted acceptance',files:entries};
  await mkdir(resolve(root,'release-candidate'),{recursive:true});await writeFile(resolve(root,'release-candidate/manifest.json'),JSON.stringify(report,null,2)+'\n');
  return report;
 }
