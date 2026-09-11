@@ -88,3 +88,11 @@ behavior and edge cases (2026-09-08); do not copy, vendor, or translate its sour
 code into Sensa. Implement the confirmed reading interactions in Sensa's own
 code. Preserve existing third-party license notices; this preference does not
 authorize removing them or changing the licenses of pre-existing dependencies.
+
+## Owner UI reuse requirement (2026-09-11)
+
+Reuse the original complete implementation when connecting learning data: runtime
+host, registered cards, toolbar, notes, scenes, dictionary, examples and preferences.
+Do not replace approved pages with simplified pages or introduce a second card registry.
+Check both lightweight and high-assurance paths. Keep local learning transactions
+separate from presentation services and retain the original interaction boundaries.

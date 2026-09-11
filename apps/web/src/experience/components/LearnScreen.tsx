@@ -1,8 +1,10 @@
+import {audioService} from '../services/audioService';
 import { useTranslation } from "react-i18next";
-import { Star, Undo2, MoreHorizontal } from "lucide-react";
+import type { CardExecution } from "./cards/CardExecution";
+import { RuntimeTools, type RuntimeToolsProps } from "./learning/RuntimeTools";
 import { RuntimeFrame } from "./learning/RuntimeFrame";
 import { uiClass } from "../ui/classes";
-import { useState, useEffect, useMemo, useRef, type MouseEvent } from "react";
+import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
 import type { Word } from "../types";
 import type { IntroductionPhase } from "./cards/IntroductionCard";
 import {
@@ -27,7 +29,7 @@ import {
   stepRendererRegistry,
   type StepRendererHost,
 } from "../learningRuntime/stepRenderers";
-import { personalContentService } from "../services/personalContentService";
+import { toReviewSpec } from "../content/prototypeReviewCards";
 
 /**
  * 队列驱动 Step 的宿主屏：工具栏、进度与卡片视口。
@@ -39,6 +41,14 @@ import { personalContentService } from "../services/personalContentService";
  * 回调与步骤数据。
  */
 interface LearnScreenProps {
+  stepLabel?: string;
+  screenId?: string;
+  busy?: boolean;
+  notice?: ReactNode;
+  execution?: CardExecution;
+  preparedAssessmentResource?: AssessmentResource | null;
+  controlledPhase?: IntroductionPhase;
+  onControlledPhaseChange?: (phase: IntroductionPhase) => void;
   hasTask: boolean;
   active: boolean;
   isBehind: boolean;
@@ -56,10 +66,7 @@ interface LearnScreenProps {
   onExit: () => void;
   onUndo: () => void;
   onMarkKnown: () => void;
-  onOpenMenuMore: (
-    e: MouseEvent,
-    personalContent: PrototypeIntroductionPackage | null,
-  ) => void;
+  onOpenMenuMore: RuntimeToolsProps['onOpenMenuMore'];
   reviewAssessmentKind: ReviewAssessmentKind | null;
   reviewAssessmentTaskKey: string | null;
   assessmentPackageIdentity: AssessmentPackageIdentity | null;
@@ -70,6 +77,7 @@ interface LearnScreenProps {
 }
 
 export const LearnScreen = ({
+  stepLabel, screenId="s-learn", busy, notice, execution, preparedAssessmentResource, controlledPhase, onControlledPhaseChange,
   hasTask,
   active,
   isBehind,
@@ -94,9 +102,11 @@ export const LearnScreen = ({
   host,
 }: LearnScreenProps) => {
   const { t } = useTranslation();
-  const [starred, setStarred] = useState(false);
-  const [introductionPhase, setIntroductionPhase] =
+  useEffect(() => { if(active && !isBehind) return () => audioService.stop(); }, [active, isBehind, stage]);
+  const [localPhase, setLocalPhase] =
     useState<IntroductionPhase>("experience");
+  const introductionPhase = controlledPhase ?? localPhase;
+  const setIntroductionPhase = onControlledPhaseChange ?? setLocalPhase;
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // 词或阶段切换时，将滚动容器置顶
@@ -105,8 +115,7 @@ export const LearnScreen = ({
   }, [curWord, stage, step, introductionPhase]);
 
   useEffect(() => {
-    setStarred(false);
-    setIntroductionPhase("experience");
+    setLocalPhase("experience");
   }, [curWord.id, introductionContent?.senseKey]);
 
   const isIntroduction = stage === "introduction" && !!introductionContent;
@@ -122,9 +131,6 @@ export const LearnScreen = ({
     [introductionContent, preparedRepairContent, repairResourceRef, stage],
   );
   const isRepair = stage === "review_repair" && !!repairContent;
-  const isRecognition = stage === "recognition" && !!introductionContent;
-  const isMeaningToFormRecall = stage === "recall" && !!introductionContent;
-  const isNovelTransfer = stage === "transfer" && !!introductionContent;
   const isReviewAssessment =
     stage === "review_assessment" &&
     !!introductionContent &&
@@ -140,12 +146,6 @@ export const LearnScreen = ({
     isReviewFeedback;
   const isIntroductionReveal =
     (isIntroduction || isRepair) && introductionPhase === "reveal";
-  const isProtectedLearningStage =
-    isIntroduction ||
-    isRepair ||
-    isRecognition ||
-    isMeaningToFormRecall ||
-    isNovelTransfer;
   const isExperienceHidden =
     isIntroduction && introductionPhase === "experience";
   const learningAssessmentKind =
@@ -160,16 +160,15 @@ export const LearnScreen = ({
     ? introductionContent
     : isRepair
       ? repairContent
-      : isReviewFeedback
+      : isReviewFeedback || !!execution?.feedback
         ? introductionContent
         : null;
-  const savedSenseId =
-    introductionContent?.senseKey ?? curWord.id ?? `word:${curWord.w}`;
   const progressLabel = t("assurance.progress", {
     current: Math.min(step, groupSize),
     total: groupSize,
   });
   const assessmentResource = useMemo<AssessmentResource | null>(() => {
+    if (preparedAssessmentResource !== undefined) return preparedAssessmentResource;
     const kind =
       isReviewAssessment || isReviewFeedback
         ? reviewAssessmentKind
@@ -194,6 +193,7 @@ export const LearnScreen = ({
       kind,
     });
   }, [
+    preparedAssessmentResource,
     assessmentPackageIdentity,
     introductionContent,
     isReviewAssessment,
@@ -203,6 +203,7 @@ export const LearnScreen = ({
     reviewAssessmentTaskKey,
   ]);
   const reviewSpec = useMemo(() => {
+    if (preparedAssessmentResource !== undefined) return preparedAssessmentResource && introductionContent ? toReviewSpec(preparedAssessmentResource, introductionContent) : null;
     if (
       !introductionContent ||
       !reviewAssessmentKind ||
@@ -214,82 +215,31 @@ export const LearnScreen = ({
       reviewAssessmentKind,
       reviewAssessmentTaskKey,
     );
-  }, [introductionContent, reviewAssessmentKind, reviewAssessmentTaskKey]);
-
-  useEffect(() => {
-    const updateSavedState = () => {
-      setStarred(personalContentService.isSenseSaved(savedSenseId));
-    };
-    updateSavedState();
-    return personalContentService.subscribe(updateSavedState);
-  }, [savedSenseId]);
+  }, [preparedAssessmentResource, introductionContent, reviewAssessmentKind, reviewAssessmentTaskKey]);
 
   const scrollToTop = () => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   };
 
-  if(!hasTask) return <RuntimeFrame id="s-learn" active={active&&!isBehind} title={t('assurance.title')} stepLabel="" progress={0} onExit={onExit}>
+  if(!hasTask) return <RuntimeFrame id={screenId} active={active&&!isBehind} title={t('assurance.title')} stepLabel="" progress={0} onExit={onExit}>
     <h1 className="text-2xl font-medium">{t('assurance.noTask')}</h1>
     <button className="mt-8 min-h-12 rounded-xl bg-[#303f76] px-6 text-sm text-white" onClick={onExit}>{t('assurance.back')}</button>
   </RuntimeFrame>;
   return (
-    <RuntimeFrame
-      id="s-learn"
-      active={active && !isBehind}
-      title={t(
-        reviewAssessmentPurpose === "retention"
-          ? "assurance.review"
-          : "assurance.title",
-      )}
-      stepLabel={progressLabel}
-      progress={groupSize ? Math.min((step / groupSize) * 100, 100) : 0}
-      onExit={onExit}
-      tools={
-        <>
-          {!isExperienceHidden && (
-            <>
-              {!isIntroduction && !isReviewStage && (
-                <button
-                  className="min-h-11 px-2 text-[#68748d] disabled:opacity-30"
-                  disabled={step <= 1}
-                  onClick={onUndo}
-                  aria-label={t("assurance.undo")}
-                >
-                  <Undo2 size={18} />
-                </button>
-              )}
-              <button
-                className="min-h-11 px-2 text-[#68748d]"
-                aria-label={t("assurance.save")}
-                aria-pressed={starred}
-                onClick={() => {
-                  const next = personalContentService.toggleSense(savedSenseId);
-                  host.toast(t(next ? "assurance.saved" : "assurance.unsaved"));
-                }}
-              >
-                <Star size={18} fill={starred ? "currentColor" : "none"} />
-              </button>
-            </>
-          )}
-          <button
-            className="min-h-11 px-2 text-xs text-[#68748d]"
-            onClick={onMarkKnown}
-          >
-            {t("assurance.known")}
-          </button>
-          <button
-            className="min-h-11 px-2 text-[#68748d]"
-            onClick={(event) => onOpenMenuMore(event, personalMenuContent)}
-            id="learning-more-button"
-              aria-label={t("assurance.more")}
-          >
-            <MoreHorizontal size={20} />
-          </button>
-        </>
-      }
-    >
-      <div id="lScroll" ref={scrollRef}>
+    <section id={screenId} data-anim="fade" className={uiClass(`screen${active && !isBehind ? ' active' : ''}${isBehind ? ' behind' : ''}${isIntroductionReveal ? ' is-intro-reveal' : ''}`, '#s-learn')}>
+      <div className={uiClass('h-sp')}/>
+      <div className={uiClass('lh')}>
+        <button onClick={onExit} aria-label={t('runtime.pause')}><svg className={uiClass('icon')} width="26" height="26"><use href="#i-chev-l"/></svg></button>
+        <span className={uiClass(`prog-n${isIntroduction ? ' sense-progress' : ''}`, '#lhProg')}>{stepLabel ?? progressLabel}</span>
+        <div className={uiClass('tools')}><RuntimeTools content={introductionContent} personalContent={personalMenuContent} showSave={!isExperienceHidden}
+          onUndo={!isIntroduction && !isReviewStage ? onUndo : undefined} canUndo={step > 1} onMarkKnown={onMarkKnown}
+          onOpenMenuMore={onOpenMenuMore} toast={host.toast} busy={busy}/></div>
+      </div>
+      <div className={uiClass('lscroll', '#lScroll')} id={screenId === 's-learn' ? 'lScroll' : undefined} ref={scrollRef}>
+        {notice}
+        <fieldset disabled={busy} className="min-w-0 border-0 p-0 disabled:opacity-60" data-assurance-original-cards>
         {active && !isBehind && stepRendererRegistry.get(stage)({
+          execution,
           stepKind: stage,
           ordinal: step,
           curWord,
@@ -305,7 +255,8 @@ export const LearnScreen = ({
           onCardViewChange: scrollToTop,
           host,
         })}
+        </fieldset>
       </div>
-    </RuntimeFrame>
+    </section>
   );
 };

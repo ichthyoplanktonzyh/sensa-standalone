@@ -1,3 +1,4 @@
+import {localRuntimePolicy} from './learningRuntime/localRuntimeBindings';
 import {BatchPersonalLearning} from './library/BatchPersonalLearning';
 import {localFlowText} from '../i18n/localFlowText';
 import {usePersonalLearning} from './library/usePersonalLearning';
@@ -206,7 +207,7 @@ export default function App() {
   const [learningPreferencesOpen,setLearningPreferencesOpen]=useState(false);
   const closeLearningPreferences=useCallback(()=>{
     setLearningPreferencesOpen(false);
-    requestAnimationFrame(()=>document.getElementById('learning-more-button')?.focus());
+    requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.screen.active [data-learning-more]')?.focus());
   },[]);
 
   const checkpointError = useSyncExternalStore(runtimeCheckpoint.subscribe, runtimeCheckpoint.getError, () => null);
@@ -2062,7 +2063,7 @@ export default function App() {
 
           {/* 5.1 轻量首次运行入口：创建运行即提交并锁定 Learning Policy。 */}
           {quantityTarget&&<LearningPreferencesPanel fixedPolicy defaultPolicy={packageLearning.targets.find(t=>t.id===quantityTarget)?.assurancePackageKey?"high_assurance":"lightweight"} dailyNewCount={quantityChoice} onPolicyChange={()=>{}} onDailyNewCountChange={setQuantityChoice} busy={packageLearning.busy} status={packageLearning.notice&&<p role="status">{packageLearning.notice}</p>} onClose={()=>setQuantityTarget(null)} closeLabel={localFlowText('confirmAndStart')} onConfirm={()=>void packageLearning.confirmQuantity(quantityChoice).then(async ok=>{if(!ok)return;const target=quantityTarget;setQuantityTarget(null);if(await packageLearning.start(target,quantityChoice))setViewMode('lightweight');})}/>}
-          <PackageRuntime host={stepRendererHost} active={viewMode==='lightweight'} c={packageLearning} onExit={returnHome} onFinish={()=>void packageLearning.finish().then(async ok=>{if(!ok)return;if(packageLearning.nextTarget){if(await packageLearning.start(packageLearning.nextTarget.id,dailyNewCount))return;}returnHome();})}/>
+          <PackageRuntime host={{...stepRendererHost,onOpenMenuMore:(event,content)=>{event.stopPropagation();closeMenus();setMenuPersonalContent(content);setMenuMoreOpen(true);}}} active={viewMode==='lightweight'} c={packageLearning} onExit={returnHome} onFinish={()=>void packageLearning.finish().then(async ok=>{if(!ok)return;if(packageLearning.nextTarget){if(await packageLearning.start(packageLearning.nextTarget.id,dailyNewCount))return;}returnHome();})}/>
 
 
           {/* 5.2 轻量长期复习：一次 due Review 只记录一次结果，遗忘后单独完成修复。 */}
@@ -2299,6 +2300,7 @@ export default function App() {
                     <svg className={uiClass("icon")}><use href="#i-penplus" /></svg>{t('assurance.addScene')}
                   </button>
                 )}
+                <button onClick={()=>{const content=menuPersonalContent;closeMenus();openDictModal(content.lemma);}}><svg className={uiClass("icon")}><use href="#i-search" /></svg>{t('originalCards.dictionary')}</button>
                 <div className={uiClass("menu-section-divider")} />
               </>
             )}
@@ -2312,8 +2314,9 @@ export default function App() {
             </button>
           </div>
 
-          {learningPreferencesOpen && viewMode==='study' && <LearningPreferencesPanel
-            defaultPolicy={defaultLearningPolicy} dailyNewCount={dailyNewCount}
+          {learningPreferencesOpen && (viewMode==='study'||viewMode==='lightweight') && <LearningPreferencesPanel
+            fixedPolicy={viewMode==='lightweight'} busy={packageLearning.busy}
+            defaultPolicy={viewMode==='lightweight'&&packageLearning.run?localRuntimePolicy(packageLearning.run.protocolVersion):defaultLearningPolicy} dailyNewCount={packageLearning.dailyLimit??dailyNewCount}
             onPolicyChange={policy=>dispatchJourney({type:'selectDefaultPolicy',policy})}
             onDailyNewCountChange={updateLocalQuantity}
             onClose={closeLearningPreferences}

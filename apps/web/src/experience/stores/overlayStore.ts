@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PrototypeIntroductionPackage } from '../content/learningCatalog';
+export interface RuntimePersonalContent { senseKey: string; lemma: string; guideLabelL1: string; }
 import type { ReferenceExampleDeck } from '../components/ReferenceExampleViewer';
 import type { QuickDictEntry, Word } from '../types';
 
@@ -28,7 +28,7 @@ export interface ExampleSheet {
 }
 
 export interface SceneEditorTarget {
-  readonly content: PrototypeIntroductionPackage;
+  readonly content: RuntimePersonalContent;
   readonly anchorId?: string;
 }
 
@@ -55,10 +55,10 @@ export interface OverlayState {
   /** 全局弹窗菜单。 */
   readonly menuMoreOpen: boolean;
   readonly menuBookOpen: boolean;
-  readonly menuPersonalContent: PrototypeIntroductionPackage | null;
+  readonly menuPersonalContent: RuntimePersonalContent | null;
   setMenuMoreOpen: (open: boolean) => void;
   setMenuBookOpen: (open: boolean) => void;
-  setMenuPersonalContent: (content: PrototypeIntroductionPackage | null) => void;
+  setMenuPersonalContent: (content: RuntimePersonalContent | null) => void;
   closeMenus: () => void;
 
   /**

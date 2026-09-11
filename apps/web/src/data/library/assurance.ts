@@ -11,7 +11,7 @@ import type {InstalledPackage} from './packages';
 import type {LocalLearningRun,LocalLearningTarget} from './learning';
 export type AssuranceState={initialCheckpoint:string;checkpoint:string;mode:'independent'|'first_letter'|'choice';revealed:boolean;feedback:{correct:boolean;answer:string}|null};
 export const assuranceActionSchema=z.discriminatedUnion('kind',[
- z.object({kind:z.literal('reveal')}).strict(),z.object({kind:z.literal('continue')}).strict(),
+ z.object({kind:z.literal('undo')}).strict(),z.object({kind:z.literal('reveal')}).strict(),z.object({kind:z.literal('continue')}).strict(),
  z.object({kind:z.literal('hint'),mode:z.enum(['first_letter','choice'])}).strict(),
  z.object({kind:z.literal('skip')}).strict(),
  z.object({kind:z.literal('try_recall'),value:z.string().trim().min(1).max(500)}).strict(),
@@ -59,7 +59,11 @@ export function transitionAssurance(t:LocalLearningTarget,run:LocalLearningRun,p
    t.memory=computeReviewSchedule({...t.memory!,cardId:t.retentionId},schedulingPolicy,grade==='again'?0:grade==='hard'?1:grade==='easy'?3:2,new Date(at));t.memoryRevision++;t.relearnAt=effect.relearningCycle?at:null;
   }
  });
- if(response.kind==='reveal'){
+ if(response.kind==='undo'){
+  if(!(queue instanceof LearnQueue)||view.introduction||!queue.undo())throw new Error('localFlow.stepChanged');
+  state.feedback=null;state.revealed=false;state.mode='independent';
+  effects.push({kind:'undo'});
+ }else if(response.kind==='reveal'){
   if(!view.introduction||state.feedback)throw new Error('localFlow.stepChanged');state.revealed=true;
  }else if(response.kind==='hint'){
   if(view.resource?.kind!=='meaning_to_form_recall'||state.feedback||state.mode==='choice')throw new Error('localFlow.stepChanged');state.mode=response.mode;

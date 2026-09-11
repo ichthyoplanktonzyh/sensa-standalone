@@ -4,7 +4,7 @@ import {sensaLearningMaterializationSnapshotSchema,sensaLearningConnectionContra
 import {command,readLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
 import {learningOwner,type InstalledPackage} from './packages';
 import {validateLightweightInitialMaterialization,type LightweightInitialLearningMaterialization} from '../../experience/learningRuntime/lightweightInitialContent';
-export type LocalLearningTarget={assurancePackageKey?:string;id:string;retentionId:string;packageKey:string|null;expression:string;meaning:string;material:LightweightInitialLearningMaterialization;createdAt:string;startedAt:string|null;completedAt:string|null;memory:ReviewSchedule|null;memoryRevision:number;relearnAt:string|null};
+export type LocalLearningTarget={declaredMastery?:boolean;declaredMasteryOperationId?:string;assurancePackageKey?:string;id:string;retentionId:string;packageKey:string|null;expression:string;meaning:string;material:LightweightInitialLearningMaterialization;createdAt:string;startedAt:string|null;completedAt:string|null;memory:ReviewSchedule|null;memoryRevision:number;relearnAt:string|null};
 export type LocalLearningRun={assurance?:AssuranceState;material?:LightweightInitialLearningMaterialization;id:string;targetId:string;purpose:'initial_learning'|'retention_review'|'relearning';protocolVersion:string;phase:'recall'|'reveal';ordinal:number;revision:number;startedAt:string;completedAt:string|null;memoryRevision:number;dueAt:string|null;completionKind?:string};
 export type LearningEvent={id:string;runId:string;targetId:string;kind:string;at:string;detail:unknown};
 export async function enrollPackage(operationId:string,key:string){return command({id:operationId,kind:'learning.enroll',input:{key}},async tx=>{
@@ -26,7 +26,7 @@ export async function startLearning(operationId:string,targetId:string,dailyLimi
  await learningOwner(tx);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100||!Number.isFinite(Date.parse(at)))throw new Error('localFlow.confirmQuantity');
  if(await tx.get('settings','learning-daily-limit')!==dailyLimit)throw new Error('localFlow.confirmNewQuantity');
  const active=await tx.get<string>('meta','learning-active');if(active){const run=await tx.get<LocalLearningRun>('learningRuns',active);if(run)return run;}
- const t=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!t)throw new Error('localFlow.enrollFirst');validateLightweightInitialMaterialization(t.material);
+ const t=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!t)throw new Error('localFlow.enrollFirst');validateLightweightInitialMaterialization(t.material);if(t.declaredMastery)throw new Error('localFlow.stepChanged');
  const unfinished=(await tx.all<LocalLearningRun>('learningRuns')).find(r=>r.targetId===targetId&&!r.completedAt);if(unfinished){tx.put('meta','learning-active',unfinished.id);return unfinished;}
  const now=new Date(at),purpose=t.assurancePackageKey?(t.completedAt?'retention_review':'initial_learning'):t.relearnAt?'relearning':t.completedAt?'retention_review':'initial_learning';
  if(t.relearnAt&&now<new Date(t.relearnAt)||purpose==='retention_review'&&(!t.memory||now<t.memory.dueAt))throw new Error('localFlow.notDue');
@@ -40,6 +40,7 @@ export async function actLearning(operationId:string,runId:string,revision:numbe
  await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);
  if(!run||run.revision!==revision||run.completedAt||await tx.get('meta','learning-active')!==runId)throw new Error('localFlow.stepChanged');
  const t=(await tx.get<LocalLearningTarget>('learningTargets',run.targetId))!;
+ if(t.declaredMastery)throw new Error('localFlow.stepChanged');
  if(!Number.isFinite(Date.parse(at))||Date.parse(at)<Date.parse(run.startedAt))throw new Error('localFlow.clockChanged');
  if(run.assurance){if(action.kind!=='assurance'||!t.assurancePackageKey)throw new Error('localFlow.stepChanged');const pack=await tx.get<InstalledPackage>('packages',t.packageKey!);if(!pack)throw new Error('localFlow.resourceInvalid');const settlement=transitionAssurance(t,run,pack,action.response,at);tx.put('learningEvents',operationId,{id:operationId,runId,targetId:t.id,kind:action.kind,at,detail:{stepId:run.id+':'+run.ordinal,action,settlement}} satisfies LearningEvent);run.revision++;run.ordinal++;tx.put('learningRuns',run.id,run);tx.put('learningTargets',t.id,t);return run;}
  if(action.kind==='assurance'||t.assurancePackageKey)throw new Error('localFlow.stepChanged');
@@ -69,7 +70,21 @@ export async function commitPersonalMaterial(tx:LibraryTransaction,owner:Library
  const target:LocalLearningTarget={id,retentionId:stableUuid(`sensa-retention:${id}`),packageKey:null,expression:meaning.proposal.expression.surface,meaning:meaning.proposal.semanticSpec.coreMeaningFocus,material:{snapshot,content},createdAt:now,startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null};
  if(existing){
   for(const run of await tx.all<LocalLearningRun>('learningRuns'))if(run.targetId===id&&!run.material){run.material=existing.material;tx.put('learningRuns',run.id,run);}
-  Object.assign(target,{createdAt:existing.createdAt,startedAt:existing.startedAt,completedAt:existing.completedAt,memory:existing.memory,memoryRevision:existing.memoryRevision,relearnAt:existing.relearnAt});
+  Object.assign(target,{declaredMastery:existing.declaredMastery,declaredMasteryOperationId:existing.declaredMasteryOperationId,createdAt:existing.createdAt,startedAt:existing.startedAt,completedAt:existing.completedAt,memory:existing.memory,memoryRevision:existing.memoryRevision,relearnAt:existing.relearnAt});
  }
  validateLightweightInitialMaterialization(target.material);tx.put('learningTargets',id,target);return target;
+}
+
+/** A reversible learner declaration changes planning eligibility, never evidence or schedules. */
+export async function setLocalDeclaredMastery(operationId:string,targetId:string,active:boolean){
+ return command({id:operationId,kind:'learning.declareMastery',input:{targetId,active}},async tx=>{
+  await learningOwner(tx);
+  const target=await tx.get<LocalLearningTarget>('learningTargets',targetId);
+  if(!target)throw new Error('localFlow.enrollFirst');
+  target.declaredMastery=active;target.declaredMasteryOperationId=operationId;tx.put('learningTargets',target.id,target);
+  const runId=await tx.get<string>('meta','learning-active');
+  const run=runId?await tx.get<LocalLearningRun>('learningRuns',runId):null;
+  if(active&&run?.targetId===targetId)tx.delete('meta','learning-active');
+  return true;
+ });
 }

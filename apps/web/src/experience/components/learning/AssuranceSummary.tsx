@@ -14,13 +14,17 @@ export function AssuranceSummary({
   repaired = [],
   declared,
   onExit,
+  targetPresentation,
+  continueLabel,
 }: {
   id: string;
   active: boolean;
   review?: boolean;
-  completed: readonly PrototypeLearningTargetId[];
-  repaired?: readonly PrototypeLearningTargetId[];
-  declared: readonly PrototypeLearningTargetId[];
+  completed: readonly string[];
+  repaired?: readonly string[];
+  declared: readonly string[];
+  targetPresentation?: (id:string)=>{expression:string;meaning:string};
+  continueLabel?: string;
   onExit: () => void;
 }) {
   const { t } = useTranslation();
@@ -67,10 +71,10 @@ export function AssuranceSummary({
             >
               <div>
                 <strong className="text-xl font-medium">
-                  {PROTOTYPE_LEARNING_TARGETS[id].expression}
+                  {(targetPresentation ? targetPresentation(id) : PROTOTYPE_LEARNING_TARGETS[id as PrototypeLearningTargetId]).expression}
                 </strong>
                 <p className="mt-2 text-sm leading-6 text-[#788398]">
-                  {PROTOTYPE_LEARNING_TARGETS[id].meaning}
+                  {(targetPresentation ? targetPresentation(id) : PROTOTYPE_LEARNING_TARGETS[id as PrototypeLearningTargetId]).meaning}
                 </p>
               </div>
               <span className="shrink-0 text-xs text-[#68748d]">
@@ -86,7 +90,7 @@ export function AssuranceSummary({
         </p>
       )}
       <button className={`${runtimePrimary} mt-9 w-full`} onClick={onExit}>
-        {t("assurance.home")}
+        {continueLabel ?? t("assurance.home")}
         <ArrowRight size={17} />
       </button>
     </RuntimeFrame>

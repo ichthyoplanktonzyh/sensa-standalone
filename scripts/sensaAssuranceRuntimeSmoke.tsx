@@ -33,6 +33,8 @@ async function main() {
   const window = new Window({ url: "http://localhost:3000" });
   Object.assign(globalThis, {
     window,
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     document: window.document,
     HTMLElement: window.HTMLElement,
     HTMLInputElement: window.HTMLInputElement,
@@ -293,18 +295,18 @@ async function main() {
     reviewAssessmentResult={null} repairResourceRef={null} host={host}
   />;
   await act(async()=>root.render(learningScreen(false)));
-  await click(assuranceEn.reveal);
-  const pronunciation=container.querySelector('button[aria-label^="Play pronunciation"]') as HTMLElement;
+  await click("Reveal this meaning");
+  const pronunciation=container.querySelector('button[aria-label^="Play American pronunciation"]') as HTMLElement;
   assert.ok(pronunciation,'pronunciation uses an ordinary button');
   assert.equal(container.querySelectorAll('audio[controls]').length,0);
   await act(async()=>pronunciation.click());
   assert.equal(audios.length,1);
   await act(async()=>root.render(learningScreen(true)));
-  assert.equal(container.querySelector('button[aria-label^="Play pronunciation"]'),null,'no pronunciation controls remain behind example sheet');
+  assert.equal(container.querySelector('button[aria-label^="Play American pronunciation"]'),null,'no pronunciation controls remain behind example sheet');
   assert.equal(audios[0].paused,true,'leaving stops the previous audio');
   assert.equal(audios[0].onerror,null,'hidden playback cannot emit an error toast');
   await act(async()=>root.render(learningScreen(false)));
-  assert.ok(container.querySelector('button[aria-label^="Play pronunciation"]'),'return restores reveal phase');
+  assert.ok(container.querySelector('button[aria-label^="Play American pronunciation"]'),'return restores reveal phase');
   await act(async()=>root.unmount());
 
   // Preferences stays over the mounted learning UI and does not navigate or replan its queue.

@@ -6,8 +6,12 @@ export const localRuntimeBindings: Readonly<Record<string, PrototypeLearningPoli
   'consumer-relearning-v1': 'lightweight',
   'sensa-high-assurance-v1': 'high_assurance'
 };
-export function localRuntimeAdapter(protocolVersion: string, purpose: LearningProtocolPurpose): string {
+export function localRuntimePolicy(protocolVersion: string): PrototypeLearningPolicy {
   const profileId = localRuntimeBindings[protocolVersion];
   if (!profileId) throw Error('Unknown local learning protocol: ' + protocolVersion);
-  return learningPolicyProfileRegistry.get(profileId).protocols[purpose].runtimeAdapterId;
+  learningPolicyProfileRegistry.get(profileId);
+  return profileId;
+}
+export function localRuntimeAdapter(protocolVersion: string, purpose: LearningProtocolPurpose): string {
+  return learningPolicyProfileRegistry.get(localRuntimePolicy(protocolVersion)).protocols[purpose].runtimeAdapterId;
 }

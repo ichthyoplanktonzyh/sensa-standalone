@@ -52,6 +52,19 @@ try{
   assert(await runtime.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
   if(view.introduction&&run.assurance.revealed&&!supportsChecked){
    supportsChecked=true;await page.screenshot({path:'/tmp/sensa-assurance/reveal.png'});
+   await runtime.getByRole('button',{name:'更多',exact:true}).click();
+   await page.locator('#menu-more').getByRole('button',{name:'笔记',exact:true}).click();
+   let dialog=page.getByRole('dialog');await dialog.getByRole('textbox').fill('Runtime note persistence');await dialog.getByRole('button',{name:'保存笔记',exact:true}).click();
+   await runtime.getByRole('button',{name:'更多',exact:true}).click();await page.locator('#menu-more').getByRole('button',{name:'笔记',exact:true}).click();
+   dialog=page.getByRole('dialog');await expect(dialog.getByRole('textbox')).toHaveValue('Runtime note persistence');await dialog.getByRole('button',{name:'关闭',exact:true}).click();
+   await runtime.getByRole('button',{name:'更多',exact:true}).click();await page.locator('#menu-more').getByRole('button',{name:'我的场景',exact:true}).click();
+   dialog=page.getByRole('dialog');await dialog.getByRole('textbox').fill('Borrowing my umbrella in the rain');await dialog.getByRole('button',{name:'保存我的场景',exact:true}).click();
+   await runtime.getByRole('button',{name:'更多',exact:true}).click();await page.locator('#menu-more').getByRole('button',{name:'我的场景',exact:true}).click();
+   dialog=page.getByRole('dialog');await expect(dialog.getByRole('textbox')).toHaveValue('Borrowing my umbrella in the rain');await dialog.getByRole('button',{name:'关闭我的场景编辑',exact:true}).click();
+   await runtime.getByRole('button',{name:'更多',exact:true}).click();await page.locator('#menu-more').getByRole('button',{name:'学习偏好',exact:true}).click();
+   dialog=page.getByRole('dialog');await expect(dialog.getByRole('radio')).toHaveCount(1);await dialog.getByRole('button',{name:'继续学习',exact:true}).click();
+   assert.equal((await rows('learningRuns')).find(r=>r.id===run.id).revision,run.revision);
+
    await runtime.getByRole('button',{name:'回看体验',exact:true}).click();await expect(runtime.getByRole('heading',{name:'先感受一下',exact:true})).toBeVisible();await runtime.getByRole('button',{name:'揭晓这个意思',exact:true}).click();
    assert.equal((await rows('learningRuns')).find(r=>r.id===run.id).revision,run.revision);
    await runtime.getByRole('button',{name:'查看完整例句',exact:true}).click();const examples=page.locator('#s-package-example.active');await expect(examples).toBeVisible();await expect(examples.getByText('borrow',{exact:true}).first()).toBeVisible();await examples.getByRole('button',{name:'返回学习',exact:true}).first().click();await expect(examples).toHaveCount(0);assert.equal((await rows('learningRuns')).find(r=>r.id===run.id).revision,run.revision);
@@ -65,9 +78,33 @@ try{
   await expect.poll(async()=>((await rows('learningRuns')).find(r=>r.id===run.id)?.revision)).toBe(run.revision+1);
   if(view.resource?.kind==='meaning_to_form_recall'&&!scaffolded){await page.reload();await expect(runtime).toBeVisible();assert.equal((await rows('learningRuns')).find(r=>r.id===run.id).revision,run.revision+1);}
  }
- await expect(runtime.getByRole('heading',{name:'本次学习已完成',exact:true})).toBeVisible();assert.equal(gates.size,4);assert.equal((await rows('learningTargets')).find(t=>t.expression==='borrow').memoryRevision,1);
+ await expect(runtime.getByRole('heading',{name:'本轮学习完成',exact:true})).toBeVisible();assert.equal(gates.size,4);assert.equal((await rows('learningTargets')).find(t=>t.expression==='borrow').memoryRevision,1);
  await page.setViewportSize({width:390,height:844});assert(await runtime.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await page.screenshot({path:'/tmp/sensa-assurance/completion-mobile.png'});
  await runtime.getByRole('button',{name:'继续学习',exact:true}).click();await expect(runtime.getByRole('heading',{name:'先感受一下',exact:true})).toBeVisible();assert.equal((await rows('learningRuns')).length,2);
- await runtime.getByRole('button',{name:'暂停',exact:true}).click();await page.getByRole('banner').getByLabel('界面语言',{exact:true}).selectOption('en');await page.goto(origin+'/?flow=lightweight');await expect(runtime.getByText('High-assurance learning',{exact:true})).toBeVisible();await expect(runtime.getByRole('heading',{name:'Experience it first',exact:true})).toBeVisible();
- assert.deepEqual(errors,[]);console.log('PASS: real assurance bundle/download, audio decode, fixed high-assurance entry, hidden initial expression, four checks, reload, graduation, next target, pause/resume, English and mobile layout. No model calls.');
+ await runtime.getByRole('button',{name:'暂停',exact:true}).click();await page.getByRole('banner').getByLabel('界面语言',{exact:true}).selectOption('en');await page.goto(origin+'/?flow=lightweight');await expect(runtime.getByRole('heading',{name:'Experience it first',exact:true})).toBeVisible();
+ // The same services must also work on the lightweight package path.
+ await page.getByRole('button',{name:'Declare already known',exact:true}).click();
+ await expect.poll(async()=> (await rows('learningTargets')).find(t=>t.expression==='lend').declaredMastery).toBe(true);
+ await page.goto(origin+'/study/learning-entry');
+ const light={format:bundle.format,id:id(),version:'1',title:'Lightweight services fixture',targetLanguage:bundle.targetLanguage,familiarLanguage:bundle.familiarLanguage,entries:[{...bundle.entries[0],senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),assurancePackageKey:undefined}]};
+ await screen.locator('input[type=file]').setInputFiles({name:'lightweight.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(light))});
+ await screen.getByRole('button',{name:'Add to learning',exact:true}).click();
+ await screen.getByRole('button',{name:/borrow/}).click();
+ await details.getByRole('button',{name:'Start / continue learning',exact:true}).click();
+ if(await page.getByRole('button',{name:'Confirm quantity and start',exact:true}).count())await page.getByRole('button',{name:'Confirm quantity and start',exact:true}).click();
+ await runtime.getByRole('button',{name:'Show expression',exact:true}).click();
+ const lightRun=(await rows('learningRuns')).find(r=>!r.assurance);
+ await runtime.getByRole('button',{name:'More',exact:true}).click();await page.locator('#menu-more').getByRole('button',{name:'Note',exact:true}).click();
+ let lightDialog=page.getByRole('dialog');await lightDialog.getByRole('textbox').fill('Lightweight private note');await lightDialog.getByRole('button',{name:'Save note',exact:true}).click();
+ await runtime.getByRole('button',{name:'More',exact:true}).click();await page.locator('#menu-more').getByRole('button',{name:'My scene',exact:true}).click();
+ lightDialog=page.getByRole('dialog');await lightDialog.getByRole('textbox').fill('My lightweight context');await lightDialog.getByRole('button',{name:'Save scene',exact:true}).click();
+ await page.reload();await expect(runtime).toBeVisible();
+ await runtime.getByRole('button',{name:'More',exact:true}).click();await page.locator('#menu-more').getByRole('button',{name:'Note',exact:true}).click();
+ lightDialog=page.getByRole('dialog');await expect(lightDialog.getByRole('textbox')).toHaveValue('Lightweight private note');await lightDialog.getByRole('button',{name:'Close',exact:true}).click();
+ await runtime.getByRole('button',{name:'More',exact:true}).click();await page.locator('#menu-more').getByRole('button',{name:'My scene',exact:true}).click();
+ lightDialog=page.getByRole('dialog');await expect(lightDialog.getByRole('textbox')).toHaveValue('My lightweight context');await lightDialog.getByRole('button',{name:'Close scene editor',exact:true}).click();
+ await runtime.getByRole('button',{name:'More',exact:true}).click();await page.locator('#menu-more').getByRole('button',{name:'Dictionary',exact:true}).click();await expect(page.locator('#s-reference-dictionary.active')).toBeVisible();await page.locator('#s-reference-dictionary').getByRole('button',{name:'Back',exact:true}).click();await expect(runtime).toBeVisible();
+ assert.equal((await rows('learningRuns')).find(r=>r.id===lightRun.id).revision,lightRun.revision);
+ await page.screenshot({path:'/tmp/sensa-assurance/lightweight-tools-mobile.png'});assert(await runtime.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
+ assert.deepEqual(errors,[]);console.log('PASS: real assurance bundle/download, audio decode, original high-assurance host/cards, hidden initial expression, four checks, summary, reload, next target, pause/resume; both methods preserve notes/scenes across reopening, preferences, dictionary navigation, English and mobile layout. No model calls.');
 }catch(error){console.error('UI errors:',errors);if(await page.getByRole('button',{name:'Show Error',exact:true}).count()){await page.getByRole('button',{name:'Show Error',exact:true}).click();console.error(await page.locator('body').innerText());}console.error(await page.locator('#s-lightweight-runtime').innerText().catch(()=>''));await page.screenshot({path:'/tmp/sensa-assurance/failure.png'});throw error;}finally{await browser.close();}

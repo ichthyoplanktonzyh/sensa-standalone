@@ -10,17 +10,18 @@ import type {BackupRows} from '../apps/web/src/data/library/backupValidation.ts'
 Object.assign(globalThis,{indexedDB,window:new EventTarget(),location:{origin:'http://127.0.0.1:9998'},BroadcastChannel:undefined});
 const compiled=await build({stdin:{contents:['store','packages','learning','assurance','backupValidation'].map(n=>`export * from './apps/web/src/data/library/${n}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':'{}'}});
 const temp=await mkdtemp(join(tmpdir(),'sensa-assurance-'));await writeFile(join(temp,'core.mjs'),compiled.outputFiles[0]!.text);
-const {openLibrary,command,readLibrary,libraryTables,installPackage,enrollPackage,confirmLearningQuantity,startLearning,actLearning,finishLearning,readLearning,assuranceView,validateBackupRows}=await import(pathToFileURL(join(temp,'core.mjs')).href);
+const {openLibrary,command,readLibrary,libraryTables,installPackage,enrollPackage,confirmLearningQuantity,startLearning,actLearning,finishLearning,readLearning,assuranceView,validateBackupRows,setLocalDeclaredMastery}=await import(pathToFileURL(join(temp,'core.mjs')).href);
 const id=()=>crypto.randomUUID(),owner=await openLibrary();await command({id:id(),kind:'fixture.owner',input:{}},async tx=>{const subject=id();tx.put('meta','service-owner',{subject,accountId:subject});});
 const d=JSON.parse(await readFile('release-candidate/assurance-catalog.json','utf8')).items[0];const bytes=new Uint8Array(await readFile('release-candidate/learning-packages/'+d.url.split('/').at(-1)));
 const broken=JSON.parse(new TextDecoder().decode(bytes));const media=Object.keys(broken.assurance.audio)[0];broken.assurance.audio[media]='data:audio/mpeg;base64,YQ==';await assert.rejects(installPackage(new TextEncoder().encode(JSON.stringify(broken))));
 const pack=await installPackage(bytes,d);assert.equal((await readLearning()).targets.length,0);const ids=await enrollPackage(id(),pack.key);await enrollPackage(id(),pack.key);assert.equal((await readLearning()).targets.length,2);await confirmLearningQuantity(id(),20);
 let operations=0;
 for(const targetId of ids){
- let run=await startLearning(id(),targetId,20,'2026-09-11T00:00:00Z');const capabilities=new Set();let supported=false,wrong=false;
+ let run=await startLearning(id(),targetId,20,'2026-09-11T00:00:00Z');const beforeDeclaration=structuredClone(run);await setLocalDeclaredMastery(id(),targetId,true);assert.equal((await readLearning()).active,undefined);assert.deepEqual((await readLearning()).runs.find(r=>r.id===run.id),beforeDeclaration);await assert.rejects(startLearning(id(),targetId,20,'2026-09-11T00:00:00Z'));await setLocalDeclaredMastery(id(),targetId,false);assert.equal((await startLearning(id(),targetId,20,'2026-09-11T00:00:00Z')).id,run.id);const capabilities=new Set();let supported=false,wrong=false,undone=false;
  while(!run.completedAt&&operations++<180){
   const view=assuranceView(run,pack)!;let response:any;
-  if(view.introduction)response={kind:run.assurance!.revealed?'continue':'reveal'};
+  if(!view.introduction&&!undone){undone=true;response={kind:'undo'};}
+  else if(view.introduction)response={kind:run.assurance!.revealed?'continue':'reveal'};
   else if(run.assurance!.feedback)response={kind:'continue'};
   else if(view.resource!.kind==='meaning_to_form_recall'&&!supported&&run.assurance!.mode!=='choice'){response={kind:'try_recall',value:'wrong-answer'};}
   else{const r=view.resource!;capabilities.add(view.action.capability);const value=r.kind==='meaning_to_form_recall'?(run.assurance!.mode==='choice'?r.choiceOptions.find(o=>o.isTarget)!.id:r.primaryForm):r.kind==='novel_context_transfer'?r.scenario.options.find(o=>o.isCorrect)!.id:r.options.find(o=>o.isCorrect)!.id;response={kind:'answer',value};if(r.kind==='meaning_to_form_recall')supported=true;if(r.kind==='novel_context_transfer'&&!wrong){wrong=true;response={kind:'skip'};}}

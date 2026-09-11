@@ -1,3 +1,5 @@
+import {useTranslation} from 'react-i18next';
+import {cardText} from '../../i18n/originalCards';
 import { uiClass } from '../ui/classes';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { QuickDictEntry, Word } from '../types';
@@ -49,7 +51,7 @@ function selectedSenseId(result: ReferenceLookupResult | null): string | undefin
 }
 
 function accentLabel(accent: ReferencePronunciation['accent']): string {
-  return accent === 'en-GB' ? '英' : '美';
+  return accent === 'en-GB' ? cardText('british') : cardText('american');
 }
 
 function partOfSpeechGroups(senses: readonly ReferenceSense[]): Array<{
@@ -78,9 +80,9 @@ function SenseRow({
   return (
     <article className={uiClass(`reference-dictionary-sense${isContextual ? ' is-contextual' : ''}`)}>
       <div className={uiClass("reference-dictionary-sense-copy")}>
-        {isContextual && <span className={uiClass("reference-dictionary-current-label")}>当前语境</span>}
+        {isContextual && <span className={uiClass("reference-dictionary-current-label")}>{cardText('dictCurrent')}</span>}
         <p lang={sense.glossL1 ? undefined : 'en'}>
-          {sense.glossL1 ?? sense.definitionL2 ?? 'Definition unavailable'}
+          {sense.glossL1 ?? sense.definitionL2 ?? cardText('dictDefinitionMissing')}
         </p>
         {sense.glossL1 && sense.definitionL2 && <small lang="en">{sense.definitionL2}</small>}
         {sense.labels && sense.labels.length > 0 && (
@@ -95,7 +97,7 @@ function SenseRow({
           className={uiClass("reference-dictionary-examples-button")}
           onClick={() => onOpenExamples(sense)}
         >
-          <span>查看 {examples.length} 条例句</span>
+          <span>{cardText('dictExamples',{count:examples.length})}</span>
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-r" /></svg>
         </button>
       )}
@@ -109,13 +111,14 @@ export function ReferenceDictionaryScreen({
   onClose,
   onOpenExamples,
 }: ReferenceDictionaryScreenProps) {
+  useTranslation();
   const initialQuery = queryFromWordData(wordData);
   const [query, setQuery] = useState(initialQuery);
   const [result, setResult] = useState<ReferenceLookupResult | null>(
     () => contextualResultFromWordData(wordData),
   );
   const [isLoading, setIsLoading] = useState(false);
-  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [lookupError, setLookupError] = useState<'dictInput'|'dictMissing'|'dictUnavailable'|null>(null);
   const [playingPronunciationId, setPlayingPronunciationId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lookupSequenceRef = useRef(0);
@@ -128,7 +131,7 @@ export function ReferenceDictionaryScreen({
     lookupSequenceRef.current = sequence;
     if (!normalizedQuery) {
       setResult(null);
-      setLookupError('请输入要查询的英文单词');
+      setLookupError('dictInput');
       setIsLoading(false);
       return;
     }
@@ -143,11 +146,11 @@ export function ReferenceDictionaryScreen({
       const nextResult = await lookupReference(normalizedQuery, { signal: controller.signal });
       if (lookupSequenceRef.current !== sequence || controller.signal.aborted) return;
       setResult(nextResult);
-      setLookupError(nextResult ? null : '没有找到这个英文词条');
+      setLookupError(nextResult ? null : 'dictMissing');
     } catch {
       if (lookupSequenceRef.current !== sequence || controller.signal.aborted) return;
       setResult(null);
-      setLookupError('词典服务暂时不可用，请稍后再试');
+      setLookupError('dictUnavailable');
     } finally {
       if (lookupSequenceRef.current === sequence && !controller.signal.aborted) {
         setIsLoading(false);
@@ -236,10 +239,10 @@ export function ReferenceDictionaryScreen({
       aria-hidden={!active}
     >
       <header className={uiClass("reference-dictionary-header")}>
-        <button type="button" onClick={onClose} aria-label="返回上一页">
+        <button type="button" onClick={onClose} aria-label={cardText('dictBack')}>
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
-        <h1>词典</h1>
+        <h1>{cardText('dictionary')}</h1>
         <i aria-hidden="true" />
       </header>
 
@@ -250,28 +253,28 @@ export function ReferenceDictionaryScreen({
           type="search"
           value={query}
           onChange={(event) => setQuery(event.currentTarget.value)}
-          placeholder="查找英文单词"
-          aria-label="查找英文单词"
+          placeholder={cardText('dictSearch')}
+          aria-label={cardText('dictSearch')}
           autoComplete="off"
           spellCheck={false}
         />
-        <button type="submit">搜索</button>
+        <button type="submit">{cardText('dictSubmit')}</button>
       </form>
 
       <div className={uiClass("reference-dictionary-scroll")}>
         {isLoading ? (
           <div className={uiClass("reference-dictionary-state")} role="status">
             <i aria-hidden="true" />
-            <strong>正在查询词典…</strong>
+            <strong>{cardText('dictLoading')}</strong>
           </div>
         ) : !entry ? (
           <div className={uiClass("reference-dictionary-state")} role="status">
-            <strong>{lookupError ?? '没有找到这个英文词条'}</strong>
-            <p>请检查拼写后重新查询。</p>
+            <strong>{cardText(lookupError ?? 'dictMissing')}</strong>
+            <p>{cardText('dictRetry')}</p>
           </div>
         ) : (
           <>
-            <section className={uiClass("reference-dictionary-identity")} aria-label="词条信息">
+            <section className={uiClass("reference-dictionary-identity")} aria-label={cardText('dictIdentity')}>
               <h2>{entry.headword}</h2>
               {showLemmaRelation && (
                 <p className={uiClass("reference-dictionary-lemma-relation")}>
@@ -307,7 +310,7 @@ export function ReferenceDictionaryScreen({
 
             {contextualSense && (
               <section className={uiClass("reference-dictionary-section is-current")}>
-                <h2>当前语境</h2>
+                <h2>{cardText('dictCurrent')}</h2>
                 <div className={uiClass("reference-dictionary-pos-heading")}>
                   <span>{contextualSense.partOfSpeech}</span>
                 </div>
@@ -316,13 +319,13 @@ export function ReferenceDictionaryScreen({
             )}
 
             <section className={uiClass("reference-dictionary-section")}>
-              <h2>{contextualSense ? '其他释义' : '全部释义'}</h2>
+              <h2>{contextualSense ? cardText('dictOther') : cardText('dictAll')}</h2>
               <div className={uiClass("reference-dictionary-groups")}>
                 {senseGroups.map((group) => (
                   <section key={group.partOfSpeech} className={uiClass("reference-dictionary-group")}>
                     <div className={uiClass("reference-dictionary-pos-heading")}>
                       <span>{group.partOfSpeech}</span>
-                      <small>{group.senses.length} 个义项</small>
+                      <small>{cardText('dictSenses',{count:group.senses.length})}</small>
                     </div>
                     {group.senses.map((sense) => (
                       <SenseRow
@@ -339,7 +342,7 @@ export function ReferenceDictionaryScreen({
 
             {entry.forms && entry.forms.length > 1 && (
               <section className={uiClass("reference-dictionary-section reference-dictionary-forms")}>
-                <h2>词形</h2>
+                <h2>{cardText('dictForms')}</h2>
                 <div>{entry.forms.map((form) => <span key={form}>{form}</span>)}</div>
               </section>
             )}
@@ -348,7 +351,7 @@ export function ReferenceDictionaryScreen({
               || (entry.morphology?.length ?? 0) > 0
               || (entry.etymology?.length ?? 0) > 0) && (
               <section className={uiClass("reference-dictionary-section reference-dictionary-notes")}>
-                <h2>补充信息</h2>
+                <h2>{cardText('dictAdditional')}</h2>
                 {[...(entry.usageNotes ?? []), ...(entry.morphology ?? []), ...(entry.etymology ?? [])]
                   .map((note) => (
                     <details key={note.noteId}>

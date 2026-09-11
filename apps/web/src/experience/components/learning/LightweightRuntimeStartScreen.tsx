@@ -17,6 +17,7 @@ import {
 } from "../../learningRuntime/stepRenderers";
 
 interface LightweightRuntimeStartScreenProps {
+  readonly tools?: import('react').ReactNode;
   readonly purpose?: 'initial_learning'|'retention_review'|'relearning';
   readonly completionLabel?: string;
   readonly completionDetail?: string;
@@ -38,6 +39,7 @@ interface LightweightRuntimeStartScreenProps {
  * Instance, the registry supplies its renderer, and completion is a Run result.
  */
 export const LightweightRuntimeStartScreen = ({
+  tools,
   purpose='initial_learning',
   completionLabel,
   completionDetail,
@@ -90,6 +92,7 @@ export const LightweightRuntimeStartScreen = ({
             : "runtime.revealStep",
       )}
       progress={progressStep * 50}
+      tools={tools}
       onExit={onExit}
     >
       {!completed && renderedStep}

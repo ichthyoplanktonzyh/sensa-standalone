@@ -1,3 +1,5 @@
+import {useTranslation} from 'react-i18next';
+import {cardText} from '../../i18n/originalCards';
 import { uiClass } from '../ui/classes';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import {
@@ -71,6 +73,7 @@ export function SceneEditorModal({
   onClose,
   toast,
 }: SceneEditorModalProps) {
+  useTranslation();
   const [body, setBody] = useState('');
   const [media, setMedia] = useState<PersonalSemanticAnchorMedia[]>([]);
   const [processing, setProcessing] = useState(false);
@@ -93,7 +96,7 @@ export function SceneEditorModal({
     event.currentTarget.value = '';
     if (files.length === 0) return;
     if (media.length >= MAX_IMAGES) {
-      toast(`每个场景最多添加 ${MAX_IMAGES} 张图片`);
+      toast(cardText('sceneImageLimit'));
       return;
     }
 
@@ -101,7 +104,7 @@ export function SceneEditorModal({
       .filter((file) => file.type.startsWith('image/') && file.size <= MAX_SOURCE_BYTES)
       .slice(0, MAX_IMAGES - media.length);
     if (accepted.length !== files.length) {
-      toast('仅支持不超过 8 MB 的图片，最多保留 3 张');
+      toast(cardText('sceneImageLimit'));
     }
     if (accepted.length === 0) return;
 
@@ -110,7 +113,7 @@ export function SceneEditorModal({
       const nextMedia = await Promise.all(accepted.map(compressSceneImage));
       setMedia((current) => [...current, ...nextMedia].slice(0, MAX_IMAGES));
     } catch {
-      toast('图片处理失败，请换一张图片重试');
+      toast(cardText('sceneImageFailed'));
     } finally {
       setProcessing(false);
     }
@@ -118,7 +121,7 @@ export function SceneEditorModal({
 
   const handleSave = () => {
     if (!body.trim() && media.length === 0) {
-      toast('写下一段场景，或至少添加一张图片');
+      toast(cardText('sceneRequired'));
       return;
     }
     personalContentService.saveSemanticAnchor({
@@ -127,22 +130,22 @@ export function SceneEditorModal({
       body,
       media,
     });
-    toast('已保存到我的场景');
+    toast(cardText('sceneSaved'));
     onClose();
   };
 
   return (
     <div className={uiClass(`scene-editor-backdrop${active ? ' active' : ''}`)}>
-      <div className={uiClass("scene-editor-sheet")} role="dialog" aria-modal="true" aria-label={`${word} 的我的场景`}>
+      <div className={uiClass("scene-editor-sheet")} role="dialog" aria-modal="true" aria-label={cardText('sceneFor',{word})}>
         <header className={uiClass("scene-editor-header")}>
-          <button type="button" onClick={onClose} aria-label="关闭我的场景编辑">
+          <button type="button" onClick={onClose} aria-label={cardText('sceneClose')}>
             <svg className={uiClass("icon")}><use href="#i-close" /></svg>
           </button>
           <div>
-            <span>PERSONAL SEMANTIC ANCHOR</span>
-            <h2>我的场景</h2>
+
+            <h2>{cardText('sceneTitle')}</h2>
           </div>
-          <button type="button" onClick={handleSave} aria-label="保存我的场景">
+          <button type="button" onClick={handleSave} aria-label={cardText('sceneSave')}>
             <svg className={uiClass("icon")}><use href="#i-chk-simple" /></svg>
           </button>
         </header>
@@ -158,18 +161,18 @@ export function SceneEditorModal({
             value={body}
             maxLength={1000}
             onChange={(event) => setBody(event.currentTarget.value)}
-            placeholder="写下一段真实经历：当时发生了什么？为什么它让你想到这个意思？"
+            placeholder={cardText('scenePlaceholder')}
           />
 
           {media.length > 0 && (
             <div className={uiClass("scene-editor-media-grid")}>
               {media.map((item) => (
                 <div className={uiClass("scene-editor-media-item")} key={item.mediaId}>
-                  <img src={item.dataUrl} alt={item.altText || '我的场景图片'} />
+                  <img src={item.dataUrl} alt={item.altText || cardText('sceneImage')} />
                   <button
                     type="button"
                     onClick={() => setMedia((current) => current.filter((candidate) => candidate.mediaId !== item.mediaId))}
-                    aria-label={`移除图片 ${item.fileName}`}
+                    aria-label={cardText('sceneRemove',{name:item.fileName})}
                   >
                     <svg className={uiClass("icon")}><use href="#i-close" /></svg>
                   </button>
@@ -182,8 +185,8 @@ export function SceneEditorModal({
                         candidate.mediaId === item.mediaId ? { ...candidate, altText } : candidate
                       )));
                     }}
-                    aria-label={`图片 ${item.fileName} 的说明`}
-                    placeholder="图片说明"
+                    aria-label={cardText('sceneDescribe',{name:item.fileName})}
+                    placeholder={cardText('sceneCaption')}
                   />
                 </div>
               ))}
@@ -198,9 +201,9 @@ export function SceneEditorModal({
               disabled={processing || media.length >= MAX_IMAGES}
             >
               <svg className={uiClass("icon")}><use href="#i-gearpic" /></svg>
-              {processing ? '正在处理图片…' : '添加图片'}
+              {processing ? cardText('sceneProcessing') : cardText('sceneAddImage')}
             </button>
-            <span>{body.length}/1000 · {media.length}/{MAX_IMAGES} 张</span>
+            <span>{body.length}/1000 · {cardText('sceneCount',{count:media.length,max:MAX_IMAGES})}</span>
           </div>
         </div>
 
@@ -214,7 +217,7 @@ export function SceneEditorModal({
         />
 
         <p className={uiClass("scene-editor-privacy")}>
-          只属于你的私人连接；它不会被当成标准释义、正确答案或学习证据。
+          {cardText('scenePrivacy')}
         </p>
       </div>
     </div>

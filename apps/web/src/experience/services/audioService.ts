@@ -60,6 +60,8 @@ class AudioService {
     const audio = this.currentAudio;
     this.currentAudio = null;
     if (audio) {
+      audio.onended = null;
+      audio.onerror = null;
       try {
         audio.pause();
         audio.currentTime = 0;
