@@ -31,6 +31,7 @@ export interface RuntimeCheckpoint {
 interface Store {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+  subscribe?(key: string, listener: () => void): () => void;
 }
 const KEY = "learning-checkpoint:v1";
 const checksum = (text: string) => {
@@ -50,7 +51,9 @@ export class RuntimeCheckpointStore {
   private rollbacks: (() => void)[] = [];
   private listeners = new Set<() => void>();
   private error: string | null = null;
-  constructor(private storage: Store) {}
+  constructor(private storage: Store) {
+    storage.subscribe?.(KEY, () => this.refresh());
+  }
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -62,27 +65,43 @@ export class RuntimeCheckpointStore {
     this.error = error;
     this.listeners.forEach((fn) => fn());
   }
+  private load(raw: string | null) {
+    this.data = {};
+    this.revision = 0;
+    if (raw) {
+      const envelope = JSON.parse(raw);
+      if (
+        envelope.version !== 1 ||
+        typeof envelope.payload !== "string" ||
+        checksum(envelope.payload) !== envelope.checksum ||
+        !Number.isInteger(envelope.revision)
+      )
+        throw Error("invalid");
+      const data = JSON.parse(envelope.payload);
+      if (!data || typeof data !== "object" || Array.isArray(data))
+        throw Error("invalid");
+      this.data = data;
+      this.revision = envelope.revision;
+    }
+    this.loaded = true;
+    this.broken = false;
+  }
+  private refresh() {
+    if (!this.loaded || this.depth) return;
+    try {
+      this.load(this.storage.getItem(KEY));
+      this.report(null);
+    } catch {
+      this.broken = true;
+      this.report("checkpointUnreadable");
+    }
+  }
   read(): RuntimeCheckpoint {
     if (this.loaded) return this.data;
-    this.loaded = true;
     try {
-      const raw = this.storage.getItem(KEY);
-      if (raw) {
-        const envelope = JSON.parse(raw);
-        if (
-          envelope.version !== 1 ||
-          typeof envelope.payload !== "string" ||
-          checksum(envelope.payload) !== envelope.checksum ||
-          !Number.isInteger(envelope.revision)
-        )
-          throw Error("invalid");
-        const data = JSON.parse(envelope.payload);
-        if (!data || typeof data !== "object" || Array.isArray(data))
-          throw Error("invalid");
-        this.data = data;
-        this.revision = envelope.revision;
-      }
+      this.load(this.storage.getItem(KEY));
     } catch {
+      this.loaded = true;
       this.broken = true;
       this.report("checkpointUnreadable");
     }

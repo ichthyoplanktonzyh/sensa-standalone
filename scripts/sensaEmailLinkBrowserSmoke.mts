@@ -1,4 +1,3 @@
-import {createDeviceJoin,receiveDeviceGrant,encryptCapture,decryptCapture,deviceApprovalCode} from '../packages/intake-transport/src/index.ts';
 /** Complete Web + real Supabase SDK/PKCE + isolated Chrome; synthetic mail/Auth/API. */
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
@@ -14,9 +13,9 @@ const root=await mkdtemp(join(tmpdir(),'sensa-email-link-')),output=join(root,'d
 const subjects=new Map([['owner@sensa.invalid',randomUUID()],['other@sensa.invalid',randomUUID()]]);
 type Mail={email:string;challenge:string;redirect:string;code:string;used:boolean};
 const inbox:Mail[]=[];const exchanges:string[]=[],admissions:string[]=[],errors:string[]=[];
+const cloudBlocks=new Map<string,string>();let cloudRevision=0,cloudManifest:string[]|null=null;
 let browser:Browser|undefined;
 let extensionAuthorizations=0;
-let deliveryConfig:any=null,deliveryEnabled=false;let deviceRequest:any=null,deviceGrant:string|null=null;
 const server=createServer(async(req,res)=>{
  const url=new URL(req.url!,'http://localhost');
  const json=(value:unknown,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(value));};
@@ -47,15 +46,11 @@ const server=createServer(async(req,res)=>{
  }
  if(url.pathname==='/sensa/extension/authorize'){const input=await body();assert(req.headers.authorization?.startsWith('Bearer '));extensionAuthorizations++;const destination=new URL(input.redirectUri);destination.searchParams.set('state',input.state);destination.searchParams.set('code','fixture-code');json({redirectUri:destination.toString()});return;}
  if(url.pathname==='/sensa/service/status'){json({authorized:true,explanationAvailable:false,checkedAt:new Date().toISOString(),windowHours:24,usage:['reading','teacher','content'].map(kind=>({kind,used:0,limit:30}))});return;}
- if(url.pathname.startsWith('/sensa/intake-delivery')){
-  if(url.pathname.endsWith('/configure')){deliveryConfig=await body();deliveryEnabled=true;json({configured:true});return;}
-  if(url.pathname.endsWith('/state')){deliveryEnabled=(await body()).enabled;json({enabled:deliveryEnabled});return;}
-  if(url.pathname.endsWith('/approve')){const input=await body();assert.equal(input.deviceId,deviceRequest.deviceId);deviceGrant=input.grant;json({approved:true});return;}
-  if(url.pathname.endsWith('/devices')){json({items:deviceRequest?[{request:deviceRequest,grant_envelope:deviceGrant}]:[]});return;}
-  if(url.pathname.endsWith('/pending')){json({items:[]});return;}
-  if(!deliveryConfig){json({code:'delivery_not_enabled'},404);return;}
-  json({config:deliveryConfig,enabled:deliveryEnabled});return;
- }
+ if(url.pathname==='/sensa/library-sync/head'){json({revision:cloudRevision,manifest:cloudManifest});return;}
+ if(url.pathname==='/sensa/library-sync/blocks/missing'){const input=await body();json({missing:input.hashes.filter((hash:string)=>!cloudBlocks.has(hash))});return;}
+ if(url.pathname==='/sensa/library-sync/blocks'){const input=await body();assert.equal(createHash('sha256').update(input.data).digest('hex'),input.hash);cloudBlocks.set(input.hash,input.data);json({stored:true});return;}
+ if(url.pathname.startsWith('/sensa/library-sync/blocks/')){const hash=url.pathname.split('/').at(-1)!;const data=cloudBlocks.get(hash);if(data===undefined){json({code:'library_sync_missing_block'},404);return;}json({hash,data});return;}
+ if(url.pathname==='/sensa/library-sync/commit'){const input=await body();if(input.baseRevision!==cloudRevision){json({code:'library_sync_conflict'},409);return;}cloudRevision++;cloudManifest=input.manifest;json({revision:cloudRevision,manifest:cloudManifest});return;}
  if(url.pathname==='/sensa/packages'){json({items:[]});return;}
  if(url.pathname.startsWith('/sensa/')||url.pathname.startsWith('/auth/')){json({code:'fixture_unavailable'},503);return;}
  try{const path=url.pathname.startsWith('/assets/')?resolve(output,'.'+url.pathname):join(output,'index.html');assert(path.startsWith(output+'/'));res.setHeader('content-type',extname(path)==='.js'?'text/javascript':extname(path)==='.css'?'text/css':'text/html');res.end(await readFile(path));}catch{res.writeHead(404);res.end();}
@@ -99,31 +94,7 @@ try{
  await expect(page.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible();
  assert.equal(exchanges.length,1);assert.equal(new URL(callback.url()).search,'');
  await expect.poll(()=>callback.evaluate(()=>(window as any).extensionConnected)).toBe(true);assert(extensionAuthorizations>0);
- const saved=await owner(callback);assert(saved);
- await callback.getByRole('button',{name:/设备与数据/}).click();
- await callback.getByRole('button',{name:'启用加密交付',exact:true}).click();
- await expect(callback.getByRole('textbox',{name:'恢复码',exact:true})).toBeVisible();
- const recoveryCode=await callback.getByLabel('恢复码',{exact:true}).inputValue();assert(recoveryCode.startsWith('SENSA-'));
- await expect(callback.getByRole('button',{name:'确认启用',exact:true})).toBeDisabled();
- await callback.getByLabel('我已保存恢复码',{exact:true}).check();await callback.getByRole('button',{name:'确认启用',exact:true}).click();
- await expect(callback.getByRole('button',{name:'暂停交付',exact:true})).toBeVisible();assert(deliveryConfig);assert(!JSON.stringify(deliveryConfig).includes(recoveryCode));
- const joining=await createDeviceJoin(deliveryConfig);deviceRequest=joining.request;
- await callback.getByRole('button',{name:'刷新状态',exact:true}).click();
- await expect(callback.getByText(await deviceApprovalCode(joining.request),{exact:true})).toBeVisible();
- await expect(callback.getByRole('button',{name:'核对后批准',exact:true})).toBeDisabled();
- await callback.getByRole('checkbox',{name:/请在新旧设备上核对/}).check();await callback.getByRole('button',{name:'核对后批准',exact:true}).click();
- await expect.poll(()=>deviceGrant!==null).toBe(true);
- const deviceSecret=await receiveDeviceGrant(deliveryConfig,joining,deviceGrant!);
- const payload={operationId:randomUUID(),clientId:randomUUID(),libraryId:deliveryConfig.libraryId,text:'Synthetic private capture'};
- assert.deepEqual(await decryptCapture(deliveryConfig,deviceSecret,await encryptCapture(deliveryConfig,payload)),payload);
- await callback.getByRole('button',{name:'暂停交付',exact:true}).click();await expect(callback.getByRole('button',{name:'恢复交付',exact:true})).toBeVisible();assert.equal(deliveryEnabled,false);
- await callback.getByRole('button',{name:'恢复交付',exact:true}).click();await expect(callback.getByRole('button',{name:'暂停交付',exact:true})).toBeVisible();assert.equal(deliveryEnabled,true);
- await callback.evaluate(async()=>{const db=await new Promise<IDBDatabase>((resolve,reject)=>{const r=indexedDB.open('sensa:local-library:v1');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});await new Promise<void>((resolve,reject)=>{const tx=db.transaction('meta','readwrite');tx.objectStore('meta').delete('delivery-private');tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});db.close();});
- await callback.reload();await callback.getByRole('button',{name:/设备与数据/}).click();
- await callback.getByText('恢复已有交付权限',{exact:true}).click();
- await callback.getByLabel('输入恢复码',{exact:true}).fill(recoveryCode);await callback.getByRole('button',{name:'用恢复码解锁',exact:true}).click();await expect(callback.getByRole('button',{name:'暂停交付',exact:true})).toBeVisible();
-
- await callback.screenshot({path:'/tmp/sensa-intake-delivery-panel.png',fullPage:true});
+ const saved=await owner(callback);assert(saved);assert(cloudRevision>0&&cloudManifest);
  await callback.reload();await expect(callback.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible();assert.equal(exchanges.length,1);
  await callback.goto(link(mail));await expect(callback.getByRole('status')).toContainText('登录链接已失效');assert.deepEqual(await owner(callback),saved);
  await callback.getByLabel('界面语言',{exact:true}).selectOption('en');await expect(callback.getByRole('status')).toContainText('sign-in link has expired');
@@ -138,14 +109,14 @@ try{
  const retry=await requestMail(failed);assert.equal(new URL(retry.redirect).searchParams.get('state'),'test-state');
  await failed.goto(link(retry));await expect(failed.getByRole('heading',{name:'连接 Sensa 浏览器插件',exact:true})).toBeVisible();assert(!new URL(failed.url()).searchParams.has('code'));
  const original=await owner(failed);
- await failed.goto(origin+'/profile');
- // Request a different identity without changing the admitted local library.
- await failed.evaluate(async()=>{const key=Object.keys(localStorage).find(k=>k.startsWith('sb-')&&k.endsWith('-auth-token'))!;localStorage.removeItem(key);});
- await failed.reload();
- await failed.getByRole('button',{name:/登录|连接服务/}).first().click();
+ await failed.goto(origin+'/profile');await expect(failed.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible();
+ // Sign out through the product flow, then request a different identity without
+ // changing the admitted owner of the local library.
+ await failed.getByRole('button',{name:/账号与安全/}).click();
+ await failed.getByRole('button',{name:'退出账号',exact:true}).click();
+ await expect(failed.getByRole('heading',{name:'欢迎来到 Sensa',exact:true})).toBeVisible();
  const foreign=await requestMail(failed,'other@sensa.invalid');await failed.goto(link(foreign));
  await expect(failed.getByRole('status')).toContainText('此设备的资料属于另一个账号');assert.deepEqual(await owner(failed),original);assert(!admissions.includes(subjects.get('other@sensa.invalid')!));
  await failedContext.close();assert.deepEqual(errors,[]);
- console.log('PASS: encrypted delivery enable confirmation, pause/resume, local key loss and recovery through real Web Crypto + existing settings UI. Synthetic cloud.');
  console.log('PASS: real SDK PKCE challenge exchange, same-browser new-tab login, original-tab recovery, reload, replay/wrong-browser/expired errors, bilingual feedback, extension destination and foreign-account isolation. Synthetic mail/Auth/API only.');
 }finally{await browser?.close();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}

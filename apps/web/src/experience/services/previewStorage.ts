@@ -12,4 +12,13 @@ export const previewStorage = {
   removeItem(key: string): void {
     if (typeof window !== 'undefined') window.localStorage.removeItem(PREFIX + key);
   },
+  subscribe(key: string, listener: () => void): () => void {
+    if (typeof window === 'undefined') return () => {};
+    const storageKey = PREFIX + key;
+    const handle = (event: StorageEvent) => {
+      if (event.storageArea === window.localStorage && (event.key === storageKey || event.key === null)) listener();
+    };
+    window.addEventListener('storage', handle);
+    return () => window.removeEventListener('storage', handle);
+  },
 };

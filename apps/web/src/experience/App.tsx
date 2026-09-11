@@ -526,14 +526,18 @@ export default function App() {
     });
     if (targetIdsToAdvance.length === 0) return;
 
-    targetIdsToAdvance.forEach((targetId) => {
-      const retentionTargetId = defaultRetentionTargetIdFor(
-        PROTOTYPE_LEARNING_TARGETS[targetId],
-      );
-      const memory = storageService.getFSRSItems()[retentionTargetId]!;
-      storageService.saveFSRSItem({ ...memory, due: dueAt, scheduledDays: 0 });
-    });
-    dispatchJourney({ type: 'advanceStructuredHandoffs', targetIds: targetIdsToAdvance, dueAt });
+    try {
+      runtimeCheckpoint.atomic(() => {
+        targetIdsToAdvance.forEach((targetId) => {
+          const retentionTargetId = defaultRetentionTargetIdFor(
+            PROTOTYPE_LEARNING_TARGETS[targetId],
+          );
+          const memory = storageService.getFSRSItems()[retentionTargetId]!;
+          storageService.saveFSRSItem({ ...memory, due: dueAt, scheduledDays: 0 });
+        });
+        dispatchJourney({ type: 'advanceStructuredHandoffs', targetIds: targetIdsToAdvance, dueAt });
+      });
+    } catch { /* RuntimeFrame reports cross-tab or storage failures. */ }
   }, [declaredMasteryRetentionTargetIds, dispatchJourney, journey]);
 
 
@@ -556,7 +560,8 @@ export default function App() {
       plannedAt,
     );
     if (targetIds.length > 0) {
-      dispatchJourney({ type: 'planInitialTargets', targetIds, plannedAt });
+      try { dispatchJourney({ type: 'planInitialTargets', targetIds, plannedAt }); }
+      catch { /* RuntimeFrame reports cross-tab or storage failures. */ }
     }
   }, [dailyNewCount, dispatchJourney, journey, visibleLearningTargetIds]);
 
