@@ -36,6 +36,7 @@ export interface ContentScreenSource {
   composer: import("./PersonalMeaningComposer").MaterialComposerPort;
 }
 interface ContentScreenProps {
+  bulkLearning?:(items:JourneyWorldItemView[],list:import('react').ReactNode)=>import('react').ReactNode;
   source?:ContentScreenSource;
   localLibrary?:Pick<ContentScreenSource,'items'|'status'|'reload'|'composer'>;
   notice?:import("react").ReactNode;
@@ -101,7 +102,7 @@ function ContentScreenView({
   onOpenConfirmedSense,
   onOpenSense,
   onOpenSection,
-  toast,source,notice,
+  toast,source,notice,bulkLearning,
 }: Omit<ContentScreenProps,"source"> & {source:Omit<ContentScreenSource,"composer"> & {composer?:ContentScreenSource["composer"]}}) {
   const { t, i18n } = useTranslation();
   const {items,status,inbox,projection}=source;
@@ -190,6 +191,31 @@ function ContentScreenView({
         </button>
       )}
     </div>
+  );
+  const personalList=(
+            <div className="divide-y divide-[#e7e9ef] border-y border-[#e7e9ef]">
+              {visible.map((item) => (
+                <button
+                  key={item.personalMeaningId}
+                  onClick={() => open(item.personalMeaningId)}
+                  className={`flex w-full items-center gap-5 px-2 py-6 text-left hover:bg-[#f3f4f7] ${selected === item.personalMeaningId ? "bg-[#f0f2f8]" : ""}`}
+                >
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-[#e1e4eb] bg-white text-[#697494]">
+                    <MessageSquareText size={18} strokeWidth={1.5} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <strong className="block truncate text-sm font-medium">
+                      {labelFor(item)}
+                    </strong>
+                    <span className="mt-2 block text-xs text-[#798191]">
+                      {t(`content.phase.${item.senseFormation.phase}`)} ·{" "}
+                      {t(`content.expression.${item.expressionBinding.phase}`)}
+                    </span>
+                  </span>
+                  <ArrowUpRight size={16} className="shrink-0 text-[#7c8597]" />
+                </button>
+              ))}
+            </div>
   );
   return (
     <section
@@ -295,29 +321,7 @@ function ContentScreenView({
           ) : !visible.length ? (
             empty
           ) : view === "list" ? (
-            <div className="divide-y divide-[#e7e9ef] border-y border-[#e7e9ef]">
-              {visible.map((item) => (
-                <button
-                  key={item.personalMeaningId}
-                  onClick={() => open(item.personalMeaningId)}
-                  className={`flex w-full items-center gap-5 px-2 py-6 text-left hover:bg-[#f3f4f7] ${selected === item.personalMeaningId ? "bg-[#f0f2f8]" : ""}`}
-                >
-                  <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-[#e1e4eb] bg-white text-[#697494]">
-                    <MessageSquareText size={18} strokeWidth={1.5} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <strong className="block truncate text-sm font-medium">
-                      {labelFor(item)}
-                    </strong>
-                    <span className="mt-2 block text-xs text-[#798191]">
-                      {t(`content.phase.${item.senseFormation.phase}`)} ·{" "}
-                      {t(`content.expression.${item.expressionBinding.phase}`)}
-                    </span>
-                  </span>
-                  <ArrowUpRight size={16} className="shrink-0 text-[#7c8597]" />
-                </button>
-              ))}
-            </div>
+            bulkLearning?bulkLearning(visible,personalList):personalList
           ) : (
             <MeaningGraphView
               items={visible}

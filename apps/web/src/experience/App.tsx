@@ -1,3 +1,4 @@
+import {BatchPersonalLearning} from './library/BatchPersonalLearning';
 import {localFlowText} from '../i18n/localFlowText';
 import {usePersonalLearning} from './library/usePersonalLearning';
 import {PersonalLearningControls,PersonalPreparationTarget,pendingPersonalTargetView} from './library/PersonalLearningControls';
@@ -1883,6 +1884,7 @@ export default function App() {
           {/* 3. 我的内容 */}
           <ContentScreen
             localLibrary={localLibrary.source}
+            bulkLearning={(items,list)=><BatchPersonalLearning items={items} meanings={localLibrary.meanings} c={personalLearning}>{list}</BatchPersonalLearning>}
             onStartConversation={()=>openPersonalMeaning('new')}
             active={viewMode === 'main' && (mainStack.includes('s-content') || mainStack.includes('s-semantic-world'))}
             screenId={mainStack.includes('s-semantic-world') ? 's-semantic-world' : 's-content'}
