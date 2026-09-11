@@ -32,3 +32,4 @@ export * from './richExperience.js';
 
 export * from "./modelExecution.js";
 export * from './modelProtocol.js';
+export * from './librarySync.js';

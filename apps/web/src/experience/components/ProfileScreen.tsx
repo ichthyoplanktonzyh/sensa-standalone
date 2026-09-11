@@ -1,4 +1,4 @@
-import {IntakeDeliveryPanel} from './IntakeDeliveryPanel';
+import {CloudSyncPanel} from './CloudSyncPanel';
 import {providerSnapshot} from '../../data/library/providers';
 import {observeLibrary} from '../../data/library/store';
 import {LocalDataControlPanel} from './LocalDataControlPanel';
@@ -145,7 +145,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
           <div className="rounded-2xl border border-[#e3e5ea] bg-white px-5 sm:px-6">
             <dl className="divide-y divide-[#e3e5ea] text-sm">
               <div className="flex flex-wrap justify-between gap-3 py-5"><dt>{t('account.network')}</dt><dd aria-live="polite" className="text-[#68748d]">{t(online ? 'account.online' : 'account.offline')}</dd></div>
-              <div className="flex flex-wrap justify-between gap-3 py-5"><dt>{t('account.sync')}</dt><dd className="text-[#788398]">{props.account ? (props.account.pending ? t('account.localWeb.pending',{count:props.account.pending}) : t('account.localWeb.synced')) : t('account.localSync')}</dd></div>
+              {!props.localLibrary&&<div className="flex flex-wrap justify-between gap-3 py-5"><dt>{t('account.sync')}</dt><dd className="text-[#788398]">{props.account ? (props.account.pending ? t('account.localWeb.pending',{count:props.account.pending}) : t('account.localWeb.synced')) : t('account.localSync')}</dd></div>}
               {!props.account&&!props.localLibrary && <div className="py-5"><dt>{t('account.storage')}</dt><dd className="mt-2 flex items-center justify-between gap-3"><span className="text-2xl tabular-nums" aria-live="polite">{usage}</span><button aria-label={t('account.refresh')} onClick={refreshStorage} className="grid size-11 place-items-center rounded-lg text-[#68748d] hover:bg-[#edf0f7]"><RefreshCw size={17}/></button></dd></div>}
             </dl>
             <p className="pb-5 text-xs leading-6 text-[#788398]">{props.account ? t('account.localWeb.cloudNote') : props.localLibrary ? t('account.localWeb.localNote') : t('account.storageNote')}</p>
@@ -153,7 +153,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
           {!props.localLibrary&&<p className="mt-3 text-xs leading-6 text-[#788398]">{props.account?t('account.localWeb.controls'):t('account.controls')}</p>}
         </section>
         {props.localLibrary&&<div className="mt-6 space-y-3">
-          <IntakeDeliveryPanel/>
+          <CloudSyncPanel/>
           {row('backup','libraryBackup.title',t('account.backupSummary'),<Database size={20}/>)}
           {row('storage','account.storageActions',t('account.storageSummary'),<Database size={20}/>)}
         </div>}

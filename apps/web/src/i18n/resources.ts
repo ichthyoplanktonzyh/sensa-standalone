@@ -1,3 +1,4 @@
+import {cloudSyncZh,cloudSyncEn} from './cloudSync';
 import {deliveryZh,deliveryEn} from './delivery';
 import {fourStageZh,fourStageEn} from './fourStage';
 import {originalCardsZh,originalCardsEn} from './originalCardCopy';
@@ -17,7 +18,7 @@ import { contentZh, contentEn, composerZh, composerEn } from "./content";
 export const resources = {
   "zh-CN": {
     translation: {
-      fourStage:fourStageZh, originalCards: originalCardsZh, intakeDelivery:deliveryZh,localFlow: localFlowZh, libraryBackup: libraryBackupZh, modelService: modelServiceZh, learningSetup: learningSetupZh, practice: practiceZh, account: accountZh, study: studyZh, learningPreferences: learningPreferencesZh, runtime: runtimeZh, assurance: assuranceZh,
+      fourStage:fourStageZh, originalCards: originalCardsZh, cloudSync:cloudSyncZh,intakeDelivery:deliveryZh,localFlow: localFlowZh, libraryBackup: libraryBackupZh, modelService: modelServiceZh, learningSetup: learningSetupZh, practice: practiceZh, account: accountZh, study: studyZh, learningPreferences: learningPreferencesZh, runtime: runtimeZh, assurance: assuranceZh,
       content: contentZh,
       statistics: statisticsZh,
       referenceExample: referenceExampleZh,
@@ -66,7 +67,7 @@ export const resources = {
   },
   en: {
     translation: {
-      fourStage:fourStageEn, originalCards: originalCardsEn, intakeDelivery:deliveryEn,localFlow: localFlowEn, libraryBackup: libraryBackupEn, modelService: modelServiceEn, learningSetup: learningSetupEn, practice: practiceEn, account: accountEn, study: studyEn, learningPreferences: learningPreferencesEn, runtime: runtimeEn, assurance: assuranceEn,
+      fourStage:fourStageEn, originalCards: originalCardsEn, cloudSync:cloudSyncEn,intakeDelivery:deliveryEn,localFlow: localFlowEn, libraryBackup: libraryBackupEn, modelService: modelServiceEn, learningSetup: learningSetupEn, practice: practiceEn, account: accountEn, study: studyEn, learningPreferences: learningPreferencesEn, runtime: runtimeEn, assurance: assuranceEn,
       content: contentEn,
       statistics: statisticsEn,
       referenceExample: referenceExampleEn,

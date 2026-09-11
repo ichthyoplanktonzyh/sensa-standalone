@@ -98,6 +98,7 @@
     "sensa:four-stage-local-smoke": "node --import tsx scripts/sensaFourStageLocalSmoke.mts",
     "sensa:four-stage-browser-smoke": "node --import tsx scripts/sensaAssurancePackageBrowserSmoke.mts --four-stage",
     "sensa:encrypted-intake-smoke": "node --import tsx scripts/sensaEncryptedIntakeSmoke.mts",
+    "sensa:library-cloud-smoke": "node --import tsx scripts/sensaLibraryCloudSmoke.mts",
     "sensa:encrypted-intake-db-smoke": "node --import tsx scripts/sensaEncryptedIntakeDatabaseSmoke.mts"
   },
   "engines": {

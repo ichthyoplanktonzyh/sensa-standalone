@@ -37,7 +37,8 @@ deprecated prototype reports as implementation input.
   TypeScript owns the browser extension, React Web and Hono online services.
 - Local learning does not require an online account or running Hono. UI never
   writes derived outcomes, evidence or schedules directly; the local core validates
-  and commits them. Optional sync transfers end-to-end encrypted personal data.
+  and commits them. Web launch uses ordinary account cloud sync; server-side access to synced data is allowed.
+  E2EE and native delivery are not launch prerequisites (owner decision 2026-09-11).
 - Existing API/Postgres/IndexedDB-outbox authority is migration-era implementation,
   not the target architecture. Preserve it as regression evidence until each Rust
   slice is validated; do not migrate owner data or silently dual-write histories.

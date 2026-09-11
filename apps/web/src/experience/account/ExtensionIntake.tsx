@@ -1,4 +1,3 @@
-import {deliveryState,receiveCloudDelivery} from '../../data/library/delivery';
 import {authorizeExtensionConnection} from './extensionConnection';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
@@ -29,7 +28,6 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
    if(running||controller.signal.aborted)return;running=true;
    try{
     const library=identity??=await openLibrary();
-    if(onlineService)await receiveCloudDelivery(accountId);
     if(onlineService){
      const connection=z.object({connected:z.boolean().optional(),paused:z.boolean().optional(),authorization:z.object({installationId:z.string().uuid(),state:z.string(),challenge:z.string(),redirectUri:z.string().url()}).optional()}).parse(await bridge('web-connect-prepare',accountId,library.id,controller.signal));
      if(connection.paused)return;
@@ -38,8 +36,7 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
       await bridge('web-connect-complete',accountId,library.id,controller.signal,result);
      }
     }
-    const delivery=await deliveryState();
-    await bridge('web-delivery-config',accountId,library.id,controller.signal,delivery?.enabled&&delivery.privateKey?delivery.config:null);
+    await bridge('web-delivery-config',accountId,library.id,controller.signal,null);
     const requests=z.array(localIntakeRequestSchema).max(10).parse(await bridge('web-intake-pull',accountId,library.id,controller.signal));
     for(const request of requests){
      if(controller.signal.aborted)return;

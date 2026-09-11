@@ -1,3 +1,4 @@
+import {registerLibrarySync} from '../library/sync.js';
 import {registerIntakeDelivery} from '../intake/delivery.js';
 import {assertDeletionConfigured,requestAccountDeletion,finishAccountDeletion,type DeleteIdentity} from './deletion.js';
 import {serviceTelemetry,type ServiceRequestRecord} from './telemetry.js';
@@ -205,6 +206,7 @@ export function createConsumerRoutes(options: {deleteIdentity?:DeleteIdentity;te
     return c.json({code:'temporarily_unavailable'},503);
   });
   registerIntakeDelivery(app,async(request,work)=>{const identity=await verify(request);return transaction(async db=>{const a=await account(db,identity,undefined,false,clock());return work(db,{accountId:a.account_id,installationId:identity.installationId,now:a.now});});});
+  registerLibrarySync(app,async(request,work)=>{const identity=await verify(request);return transaction(async db=>{const a=await account(db,identity,undefined,false,clock());return work(db,{accountId:a.account_id,installationId:identity.installationId,now:a.now});});});
   registerReadingRoutes(app,async(request,work)=>{const identity=await verify(request);return transaction(async db=>work(db,await account(db,identity,undefined,false,clock())));},options.readingCompletion);
   app.get('/sensa/packages',async c=>{
     const identity=await verify(c.req.raw);await transaction(async db=>account(db,identity,undefined,false,clock()));

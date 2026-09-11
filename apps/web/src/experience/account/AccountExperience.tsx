@@ -1,3 +1,5 @@
+import {AccountLibrarySync} from './AccountLibrarySync';
+import {syncAccountLibrary} from '../../data/library/cloudSyncService';
 import {authorizeExtensionConnection,notifyExtensionSignout} from './extensionConnection';
 import {eraseDeletedAccount} from '../../data/library/dataControl';
 import {AccountDeletion,pendingAccountDeletion} from './AccountDeletion';
@@ -33,7 +35,7 @@ export default function AccountExperience({children}:{children:ReactNode}){
    const callback=await completeEmailLink();
    if(gen!==generation.current)return;
    if(callback==='failed'&&!callbackDismissed.current){setLocal(false);setNotice(localFlowText('emailLinkInvalid'));return;}
-   const stored=await readLibrary(async tx=>({owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out')}));
+   const stored=await readLibrary(async tx=>({owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out'),usable:!!(await tx.get<{revision:number}>('meta','cloud-sync'))?.revision||(await tx.all('drafts')).length>0||(await tx.all('packages')).length>0||(await tx.all('learningTargets')).length>0}));
    if(gen!==generation.current)return;
    setOwner(stored.owner??null);setOnlineService(false);
    // Local access uses the already admitted owner. Refreshing an expired online
@@ -43,12 +45,12 @@ export default function AccountExperience({children}:{children:ReactNode}){
     setLocal(false);setNotice(localFlowText('accountUnreadable'));return;
    }
    if(stored.signedOut){setLocal(false);setReady(true);}
-   else if(stored.owner&&stored.identity){setLocal(true);setReady(true);}
+   else if(stored.owner&&stored.identity&&stored.usable){setLocal(true);setReady(true);}
    const session=(await auth?.getSession())?.data.session;
    if(gen!==generation.current)return;
-   if(!session){setLocal(!!stored.identity&&!stored.signedOut);return;}
+   if(!session){setLocal(!!stored.identity&&stored.usable&&!stored.signedOut);return;}
    if(stored.owner&&stored.owner.subject!==session.user.id){setLocal(false);setNotice(localFlowText('wrongAccount'));return;}
-   setLocal(!!stored.identity&&!stored.signedOut);
+   setLocal(!!stored.identity&&stored.usable&&!stored.signedOut);
    const endpoint=import.meta.env.VITE_SENSA_API_URL;
    if(!endpoint){setNotice(localFlowText('onlineUnavailable'));return;}
    const installationId=await command({id:crypto.randomUUID(),kind:'service.installation',input:{}},async tx=>{const existing=await tx.get<string>('meta','service-installation');if(existing)return existing;const id=crypto.randomUUID();tx.put('meta','service-installation',id);return id;});
@@ -61,6 +63,9 @@ export default function AccountExperience({children}:{children:ReactNode}){
    if(gen!==generation.current)return;
    const next={subject:session.user.id,email:session.user.email??'',accountId:access.accountId};
    await command({id:crypto.randomUUID(),kind:'service.connect',input:next},async tx=>{const current=await tx.get<Owner>('meta','service-owner');if(gen!==generation.current)throw new Error('stale login');if(current&&current.subject!==next.subject)throw new Error('account mismatch');tx.put('meta','service-owner',next);tx.put('meta','signed-out',false);return null;});
+   if(gen!==generation.current)return;
+   await openLibrary();
+   try{await syncAccountLibrary();}catch{if(!stored.usable){setLocal(false);setNotice(localFlowText('serviceRetry'));return;}}
    if(gen!==generation.current)return;
    setOwner(next);setLocal(true);setOnlineService(true);setLoginOpen(false);setNotice('');
   }catch{if(gen===generation.current)setNotice(localFlowText('networkRetry'));}
@@ -79,7 +84,7 @@ export default function AccountExperience({children}:{children:ReactNode}){
   const destination=new URL(result.redirectUri);destination.searchParams.set('libraryId',(await openLibrary()).id);
   location.assign(destination.toString());
  })}>{localFlowText('connectAccount')}</button><button className={setupButton} onClick={()=>location.assign('/profile')}>{localFlowText('cancel')}</button></main>;
- if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{deleteAccount:()=>{generation.current++;setDeletionOpen(true);},notice:localFlowNotice(notice),email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout:()=>perform(logout)}}>{owner?.accountId&&<ExtensionIntake accountId={owner.accountId} onlineService={onlineService}/>} {children}</AccountContext.Provider>;
+ if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{deleteAccount:()=>{generation.current++;setDeletionOpen(true);},notice:localFlowNotice(notice),email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout:()=>perform(logout)}}><AccountLibrarySync online={onlineService}/>{owner?.accountId&&<ExtensionIntake accountId={owner.accountId} onlineService={onlineService}/>} {children}</AccountContext.Provider>;
  // Default Supabase templates send links; custom OTP templates remain supported.
  return <main className="flex min-h-screen items-center justify-center bg-[#fbfbfa] px-6 text-[#242a38]"><form className="w-full max-w-sm space-y-5" onSubmit={e=>{e.preventDefault();void perform(sent?useCode?async()=>{const result=await auth!.verifyOtp({email:email.trim(),token:code.trim(),type:'email'});if(result.error){setNotice(localFlowText('otpInvalid'));return;}await recover();}:recover:send);}}>
   <div className="flex items-center justify-between"><p className="text-sm text-[#68748d]">Sensa</p><LanguageSwitch/></div><h1 className="text-3xl font-semibold">{sent?localFlowText(useCode?'enterOtp':'checkEmailLink'):localFlowText('welcome')}</h1>
