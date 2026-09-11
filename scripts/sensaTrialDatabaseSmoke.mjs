@@ -13,7 +13,7 @@ const config={adminUrl:target.toString(),runtimeUrl:runtime.toString(),projectRe
 try{
  await admin.connect();await admin.query(`CREATE DATABASE ${database}`);
  const first=[];const result=await initializeTrialDatabase(config,f=>first.push(f));
- assert.equal(result.migrationCount,27);assert.equal(first.length,27);
+ assert.equal(result.migrationCount,29);assert.equal(first.length,29);
  const repeated=[];assert.deepEqual(await initializeTrialDatabase(config,f=>repeated.push(f)),result);assert.equal(repeated.length,0);
  const client=new pg.Client({connectionString:runtime.toString()});await client.connect();
  try{
@@ -45,7 +45,7 @@ try{
   await assert.rejects(inviteTrialAccount(config,subject),/must not be restored/);
   assert.equal((await setup.query('SELECT revoked FROM sensa_consumer.invitations')).rows[0].revoked,true);
  }finally{await setup.end();}
- console.log('PASS: 27 migrations, idempotent rerun, restricted login/ledger, unsafe-role/password/project/TLS refusal, verified-only invitation and revocation preservation. Disposable local database with synthetic Auth records only.');
+ console.log('PASS: 29 migrations, idempotent rerun, restricted login/ledger, unsafe-role/password/project/TLS refusal, verified-only invitation and revocation preservation. Disposable local database with synthetic Auth records only.');
 }finally{
  await admin.query(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`).catch(()=>{});
  await admin.query(`DROP ROLE IF EXISTS ${role}`).catch(()=>{});
