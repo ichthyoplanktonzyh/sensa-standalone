@@ -32,7 +32,7 @@ try{
  if(process.env.SENSA_TEST_CHECKIN==='1'){
   await page.goto(webUrl+'/study');await expect(page.getByRole('grid',{name:'签到日历'})).toBeVisible();await expect(page.getByRole('gridcell',{name:/已签到/}).first()).toBeVisible();await page.getByRole('button',{name:'上个月'}).click();await page.getByRole('button',{name:'下个月'}).click();
  }
- await page.goto(webUrl+'/profile');await expect(page.getByText('test@sensa.invalid',{exact:true})).toBeVisible();await page.screenshot({path:output+'/profile.png'});
+ await page.goto(webUrl+'/profile');await expect(page.getByText('test@sensa.invalid',{exact:true}).first()).toBeVisible();await page.screenshot({path:output+'/profile.png'});
  for(const width of [320,390,768,1280]){await page.setViewportSize({width,height:900});await goHome(page);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
  await page.goto(webUrl+'/profile');await page.getByRole('button',{name:'退出登录',exact:true}).click();await expect(page.getByRole('heading',{name:'欢迎来到 Sensa'})).toBeVisible();expect(errors).toEqual([]);
  console.log('Connected confirmed UI passed: desktop/mobile home, account settings, offline and lost-response quantity, catalog/reload/mastery, durable recall/reveal, study records/statistics, review/relearning, calendar and logout. Mock providers only.');
