@@ -33,6 +33,8 @@ jobs:
         run: |
           npm run sensa:library-backup-smoke
           npm run sensa:local-i18n-smoke
+          npm run sensa:encrypted-intake-smoke
+          npm run sensa:web-intake-smoke
           node scripts/sensaReleaseCandidateSmoke.mjs
           node --import tsx scripts/sensaTelemetrySmoke.mts
       - name: Build authored starter learning package

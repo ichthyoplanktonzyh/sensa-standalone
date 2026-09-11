@@ -1,4 +1,5 @@
-import {queueWeb,pendingWeb,acknowledgeWeb,webStatus} from './webDestination';
+import {deliveryConfigSchema} from '@sensa/intake-transport';
+import {queueWeb,pendingWeb,acknowledgeWeb,webStatus,flushWebDelivery} from './webDestination';
 declare const SENSA_EXTENSION_LEGACY_WEB:boolean;
 import {nativeEnabled,nativeScope,discoverNative,selectNative,selectWeb,queueNative,flushNative,nativeStatus} from './nativeDestination';
 import {z} from 'zod';
@@ -93,20 +94,23 @@ async function webConnect(message:any,sender:chrome.runtime.MessageSender){
   return {connected:true};
  });
 }
+async function deliverWeb(){const store=await load(),a=store.active?store.accounts[store.active]:null;if(a)await flushWebDelivery(a.accountId,async envelope=>{if((await load()).active!==a.accountId)throw new Error('account_mismatch');return request('/sensa/intake-delivery/push',envelope,a.token);});}
 async function activeScope(){return await nativeEnabled()?nativeScope():(await load()).active;}
-async function status(){if(await nativeEnabled())return nativeStatus();const store=await load(),a=store.active?store.accounts[store.active]:null;if(a&&!SENSA_EXTENSION_LEGACY_WEB){const current=await webStatus(a.accountId);return {accountId:a.accountId,destination:'web-local',...current,legacyPending:a.queue.length,errors:[]};}return {accountId:a?.accountId??null,pending:a?.queue.length??0,errors:a?.queue.filter(x=>x.error).map(x=>x.error)??[],recent:a?.recent??[]};}
+async function status(){if(await nativeEnabled())return nativeStatus();const store=await load(),a=store.active?store.accounts[store.active]:null;if(a&&!SENSA_EXTENSION_LEGACY_WEB){const current=await webStatus(a.accountId);return {accountId:a.accountId,destination:'web-local',...current,legacyPending:a.queue.length};}return {accountId:a?.accountId??null,pending:a?.queue.length??0,errors:a?.queue.filter(x=>x.error).map(x=>x.error)??[],recent:a?.recent??[]};}
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  if(sender.id!==chrome.runtime.id)return;
  const isPopup=sender.url===chrome.runtime.getURL('popup.html');
  const isOptions=sender.url===chrome.runtime.getURL('options.html');
  const work=async()=>{
+ if(message.kind==='web-session-ended'){if(!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin||!sender.tab)throw new Error('unsupported_message');return locked(async()=>{const store=await load();if(!store.active||store.active!==message.accountId)return {disconnected:false};const a=store.accounts[store.active];a.token='disconnected';a.expiresAt=new Date(0).toISOString();store.active=null;await persist(store);await chrome.storage.session.set({sensaWebConnect:null});await stopAllReading();return {disconnected:true};});}
  if(['web-connect-prepare','web-connect-complete'].includes(message.kind))return webConnect(message,sender);
- if(['web-intake-pull','web-intake-ack'].includes(message.kind)){
+ if(['web-intake-pull','web-intake-ack','web-delivery-config'].includes(message.kind)){
   if(!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin||!sender.tab)throw new Error('unsupported_message');
   const store=await load(),a=store.active?store.accounts[store.active]:null;
   if(!a)throw new Error('authentication_required');
   if(message.accountId!==a.accountId)throw new Error('account_mismatch');
   const libraryId=z.string().uuid().parse(message.libraryId);
+  if(message.kind==='web-delivery-config'){if(a.webLibraryId!==libraryId)throw new Error('library_mismatch');const config=message.receipt===null?null:deliveryConfigSchema.parse(message.receipt);if(config&&(config.accountId!==a.accountId||config.libraryId!==libraryId))throw new Error('account_mismatch');await chrome.storage.local.set({['sensaDelivery:'+a.accountId+':'+libraryId]:config});return {configured:true};}
   if(message.kind==='web-intake-ack'){if(message.receipt?.libraryId!==libraryId)throw new Error('library_mismatch');return acknowledgeWeb(a.accountId,message.receipt);}
   return pendingWeb(a.accountId,libraryId);
  }
@@ -154,7 +158,8 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
     snapshot=item.snapshot;resolution={kind:'proposal' as const,proposal:item.proposal};
    }
    snapshot=captureSnapshotSchema.parse(snapshot);if(snapshot.source.url!==sender.url)throw new Error('source_mismatch');
-   return queueWeb(a.accountId,{version:'sensa-intake-v1',libraryId:a.webLibraryId,clientId:a.installationId,operationId:message.operationId,snapshot,resolution,acceptance:message.kind==='accept'?{kind:'direct',consent:'accept_context_expression_sense',authorization:'browser:explicit_accept_button'}:null});
+   const queued=await queueWeb(a.accountId,{version:'sensa-intake-v1',libraryId:a.webLibraryId,clientId:a.installationId,operationId:message.operationId,snapshot,resolution,acceptance:message.kind==='accept'?{kind:'direct',consent:'accept_context_expression_sense',authorization:'browser:explicit_accept_button'}:null});
+   void deliverWeb().catch(()=>undefined);return queued;
   });
  }
  if(message.kind==='lookup'&&sender.tab){const snapshot=captureSnapshotSchema.parse(message.snapshot);const readingModes=await modes();const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a||message.accountId!==await activeScope()||readingModes[sender.tab!.id!]?.accountId!==await activeScope()||snapshot.source.url!==sender.url)throw new Error('authentication_required');const result=await request('/sensa/semantic/lookups',{id:message.lookupId,snapshot},a.token);await rememberLookup(sender,message.lookupId,snapshot,result,message.accountId);return result;}
@@ -163,7 +168,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  if(!isPopup)throw new Error('unsupported_message');
  if(message.kind==='status'){const [tab]=await chrome.tabs.query({active:true,currentWindow:true});const readingModes=await modes();if(tab?.id&&readingModes[tab.id]?.accountId===await activeScope()){try{await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});await chrome.tabs.sendMessage(tab.id,{kind:'reading',enabled:true,accountId:readingModes[tab.id].accountId,preferences:await readingPreferences()});await chrome.action.setBadgeText({tabId:tab.id,text:''});}catch{/* Preserve intent until the user grants this page. */}}}
  if(message.kind==='login'){await chrome.storage.local.set({sensaAutoConnectPaused:false});if(SENSA_EXTENSION_LEGACY_WEB)await login();else await chrome.tabs.create({url:new URL('/profile',webUrl).href});}
- if(message.kind==='sync'){if(await nativeEnabled())await flushNative();else await sync();}
+ if(message.kind==='sync'){await deliverWeb();if(await nativeEnabled())await flushNative();else await sync();}
  if(message.kind==='disconnect')await locked(async()=>{const store=await load();store.active=null;await chrome.storage.local.set({sensaAutoConnectPaused:true});await chrome.storage.session.set({sensaWebConnect:null});await persist(store);await stopAllReading();});
  if(message.kind==='toggle'){const scope=await activeScope();if(!scope)throw new Error('authentication_required');const [tab]=await chrome.tabs.query({active:true,currentWindow:true});if(!tab.id||!tab.url||!/^https?:/u.test(tab.url))throw new Error('unsupported_page');const readingModes=await modes();readingModes[tab.id]={accountId:scope};await chrome.storage.session.set({modes:readingModes});await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});await chrome.tabs.sendMessage(tab.id,{kind:'reading',enabled:true,accountId:scope,preferences:await readingPreferences()});}
  if(message.kind==='stop'){const [tab]=await chrome.tabs.query({active:true,currentWindow:true});if(tab.id){const readingModes=await modes();delete readingModes[tab.id];await chrome.storage.session.set({modes:readingModes});await chrome.tabs.sendMessage(tab.id,{kind:'reading',enabled:false}).catch(()=>undefined);}}
@@ -171,7 +176,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
 });
 chrome.tabs.onUpdated.addListener((id,change)=>{if(change.status!=='complete')return;void (async()=>{const readingModes=await modes();if(!readingModes[id]||readingModes[id].accountId!==await activeScope())return;try{await chrome.scripting.executeScript({target:{tabId:id},files:['content.js']});await chrome.tabs.sendMessage(id,{kind:'reading',enabled:true,accountId:readingModes[id].accountId,preferences:await readingPreferences()});await chrome.action.setBadgeText({tabId:id,text:''});}catch{await chrome.action.setBadgeText({tabId:id,text:'继续'});await chrome.action.setTitle({tabId:id,title:'点一次 Sensa 图标，继续当前网站的阅读模式'});}})().catch(()=>undefined);});
 chrome.tabs.onRemoved.addListener(id=>{void locked(async()=>{const readingModes=await modes();delete readingModes[id];await chrome.storage.session.set({modes:readingModes});}).catch(()=>undefined);});
-chrome.alarms.create('sync',{periodInMinutes:1});chrome.alarms.onAlarm.addListener(()=>{void sync().catch(()=>undefined);void flushNative().catch(()=>undefined);});
+chrome.alarms.create('sync',{periodInMinutes:1});chrome.alarms.onAlarm.addListener(()=>{void sync().catch(()=>undefined);void deliverWeb().catch(()=>undefined);void flushNative().catch(()=>undefined);});
 void chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
 
 // Credentials stay in this trusted background; pages receive only bounded text/result frames.

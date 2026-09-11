@@ -12,7 +12,7 @@ export async function browserPortNativeChecks(app:Hono,account:{accountId:string
   await build({entryPoints:['background','content','popup','options'].map(name=>resolve('apps/browser-extension/src',name+'.ts')),bundle:true,outdir:extension,format:'iife',target:'chrome120',define:{SENSA_WEB_URL:JSON.stringify('http://127.0.0.1:3001'),SENSA_API_URL:JSON.stringify('http://127.0.0.1:4327')}});
   for(const name of ['popup.html','options.html'])await copyFile(resolve('apps/browser-extension',name),resolve(extension,name));
   const manifest=JSON.parse(await readFile('apps/browser-extension/dist/manifest.json','utf8'));manifest.host_permissions=['http://127.0.0.1:4327/*'];await writeFile(resolve(extension,'manifest.json'),JSON.stringify(manifest));
-  const context=await chromium.launchPersistentContext(resolve(dir,'profile'),{executablePath:process.env.SENSA_CHROMIUM_PATH,headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
+  const context=await chromium.launchPersistentContext(resolve(dir,'profile'),{locale:'zh-CN',executablePath:process.env.SENSA_CHROMIUM_PATH,headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
   try{
     const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
     await worker.evaluate(async a=>{await chrome.storage.local.set({sensa:{version:1,active:a.accountId,accounts:{[a.accountId]:{...a,token:'fixture-first',queue:[],recent:[],savedOperations:{}}}}});},account);
@@ -27,7 +27,7 @@ export async function browserPortNativeChecks(app:Hono,account:{accountId:string
     await expect.poll(panel).not.toBeNull();const objectId=(await panel())!;
     async function click(label:string){await cdp.send('Runtime.callFunctionOn',{objectId,functionDeclaration:'function(label){Array.from(this.querySelectorAll("button")).find(b=>b.textContent===label).click();}',arguments:[{value:label}]});}
     await click('翻译');await expect.poll(async()=>{const result=await cdp.send('Runtime.callFunctionOn',{objectId,functionDeclaration:'function(){return this.textContent;}',returnByValue:true});return result.result.value;}).toContain('这是一段阅读译文。');
-    await click('句中解释');await expect.poll(async()=>{const result=await cdp.send('Runtime.callFunctionOn',{objectId,functionDeclaration:'function(){return Array.from(this.querySelectorAll("button")).some(b=>b.textContent==="加入 Sensa"&&!b.hidden);}',returnByValue:true});return result.result.value;}).toBe(true);
+    await click('句中解释');await expect.poll(async()=>{const result=await cdp.send('Runtime.callFunctionOn',{objectId,functionDeclaration:'function(){return Array.from(this.querySelectorAll("button")).some(b=>b.textContent==="保存到我的内容"&&!b.hidden);}',returnByValue:true});return result.result.value;}).toBe(true);
     await click('保存待处理');await expect.poll(checkSaved,{timeout:15000}).toBe(true);
     await page.screenshot({path:'/tmp/sensa-browser-native-saved.png'});
     console.log('PASS: installed extension settings and reading panel -> real background sender checks -> HTTP/API -> isolated Postgres save; no secret in extension storage.');

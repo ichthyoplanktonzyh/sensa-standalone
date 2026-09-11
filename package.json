@@ -10,14 +10,15 @@
     "packages/learning-kernel",
     "packages/content-validator",
     "apps/browser-extension",
-    "packages/model-runtime"
+    "packages/model-runtime",
+    "packages/intake-transport"
   ],
   "scripts": {
     "sensa:service-status-smoke": "node --import tsx scripts/sensaServiceStatusSmoke.mts",
     "sensa:acceptance": "node scripts/sensaAcceptance.mjs",
     "sensa:acceptance:check": "node scripts/sensaAcceptance.mjs check",
     "sensa:acceptance:smoke": "node scripts/sensaAcceptanceSmoke.mjs",
-    "build": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/model-runtime && npm run build -w @sensa/api && npm run build -w @sensa/web && npm --prefix apps/web-next run build && npm run build -w @sensa/browser-extension",
+    "build": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/model-runtime && npm run build -w @sensa/intake-transport && npm run build -w @sensa/api && npm run build -w @sensa/web && npm --prefix apps/web-next run build && npm run build -w @sensa/browser-extension",
     "typecheck": "tsc -b --pretty false && npm run typecheck -w @sensa/web && npm --prefix apps/web-next run typecheck && npm run typecheck -w @sensa/browser-extension",
     "lint": "npm run typecheck",
     "dev": "npm run dev -w @sensa/api",
@@ -95,7 +96,9 @@
     "sensa:model-execution-smoke": "GENKIT_ENV=prod node --import tsx scripts/sensaModelExecutionSmoke.mts",
     "sensa:settings-browser-smoke": "node --import tsx scripts/sensaSettingsBrowserSmoke.mts",
     "sensa:four-stage-local-smoke": "node --import tsx scripts/sensaFourStageLocalSmoke.mts",
-    "sensa:four-stage-browser-smoke": "node --import tsx scripts/sensaAssurancePackageBrowserSmoke.mts --four-stage"
+    "sensa:four-stage-browser-smoke": "node --import tsx scripts/sensaAssurancePackageBrowserSmoke.mts --four-stage",
+    "sensa:encrypted-intake-smoke": "node --import tsx scripts/sensaEncryptedIntakeSmoke.mts",
+    "sensa:encrypted-intake-db-smoke": "node --import tsx scripts/sensaEncryptedIntakeDatabaseSmoke.mts"
   },
   "engines": {
     "node": ">=24"

@@ -13,3 +13,5 @@ export async function authorizeExtensionConnection(input:unknown,signal:AbortSig
  if(destination.origin+destination.pathname!==request.redirectUri||destination.searchParams.get('state')!==request.state||signal.aborted||(await auth?.getSession())?.data.session?.user.id!==session.user.id)throw new Error('authorization_invalid');
  return result;
 }
+
+export function notifyExtensionSignout(accountId?:string){if(accountId)window.postMessage({channel:'sensa-web-intake-request',id:crypto.randomUUID(),kind:'web-session-ended',accountId},location.origin);}

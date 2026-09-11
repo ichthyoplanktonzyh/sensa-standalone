@@ -121,7 +121,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
   feedback.setAttribute('role', 'status');
   const actions = document.createElement('div');
   actions.className = 'actions';
-  const accept = button('加入 Sensa', () => void persist('accept'));
+  const accept = button(t('saveAction'), () => void persist('accept'));
   accept.className = 'primary';
   accept.hidden = true;
   const save = button('保存待处理', () => void persist('save'));

@@ -8,7 +8,7 @@ const directory=await mkdtemp(join(tmpdir(),'sensa-extension-')),extension=join(
 // Automated harness grants only this fixture origin; manual activeTab toolbar grant remains a separate acceptance vector.
 const manifest=JSON.parse(await readFile(join(extension,'manifest.json'),'utf8'));expect(manifest.host_permissions).toEqual([new URL(apiUrl).origin+'/*']);manifest.host_permissions.push('http://127.0.0.1:4321/*');await writeFile(join(extension,'manifest.json'),JSON.stringify(manifest));
 const server=createServer((req,res)=>{res.setHeader('content-type','text/html; charset=utf-8');res.end('<!doctype html><title>Reading fixture</title><main style="margin:80px;font:24px/2 system-ui"><p>😀 She took her time, then took a seat.</p></main>');});await new Promise<void>(r=>server.listen(4321,'127.0.0.1',r));
-let context=await chromium.launchPersistentContext(join(directory,'profile'),{channel:'chromium',executablePath:process.env.SENSA_CHROMIUM_PATH,headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`],viewport:{width:1280,height:800}});
+let context=await chromium.launchPersistentContext(join(directory,'profile'),{locale:'zh-CN',channel:'chromium',executablePath:process.env.SENSA_CHROMIUM_PATH,headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`],viewport:{width:1280,height:800}});
 try{
  const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const extensionId=new URL(worker.url()).host;
  const popup=await context.newPage();await assertMockServer(popup);await popup.goto(`chrome-extension://${extensionId}/popup.html`);
@@ -42,7 +42,7 @@ try{
  // Replace the unpacked package version before restart; store-distributed hot update is a separate vector.
  await writeFile(join(extension,'manifest.json'),JSON.stringify({...manifest,version:'0.1.1'}));
  await context.close();
- context=await chromium.launchPersistentContext(join(directory,'profile'),{channel:'chromium',executablePath:process.env.SENSA_CHROMIUM_PATH,headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
+ context=await chromium.launchPersistentContext(join(directory,'profile'),{locale:'zh-CN',channel:'chromium',executablePath:process.env.SENSA_CHROMIUM_PATH,headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
  const restored=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');expect(await restored.evaluate(()=>chrome.runtime.getManifest().version)).toBe('0.1.1');
  const restoredPopup=await context.newPage();await restoredPopup.goto(`chrome-extension://${extensionId}/popup.html`);await restoredPopup.getByRole('button',{name:'检查保存结果'}).click();await expect(restoredPopup.locator('#status')).toContainText('0 项待同步');await expect(restoredPopup.locator('#recent a')).toHaveCount(2);
  expect(await restored.evaluate(async()=>Object.keys((await chrome.storage.session.get('modes')).modes??{}).length)).toBe(0);
@@ -52,7 +52,7 @@ try{
  const fastCdp=await context.newCDPSession(fast);let acceptNode:any;
  async function clickFastButton(label:string){await expect.poll(async()=>Boolean(await closedNode(label))).toBe(true);const node=await closedNode(label),box=await fastCdp.send('DOM.getBoxModel',{nodeId:node.nodeId}),q=box.model.content;await fast.mouse.click((q[0]+q[2])/2,(q[1]+q[5])/2);}
  await clickFastButton('句中解释');
- await expect.poll(async()=>{const tree=await fastCdp.send('DOM.getDocument',{depth:-1,pierce:true});function find(node:any):any{if(node.nodeName==='BUTTON'&&!node.attributes?.includes('hidden')&&node.children?.some((c:any)=>c.nodeValue==='加入 Sensa'))return node;for(const child of [...node.children??[],...node.shadowRoots??[]]){const found=find(child);if(found)return found;}}acceptNode=find(tree.root);return Boolean(acceptNode);}).toBe(true);
+ await expect.poll(async()=>{const tree=await fastCdp.send('DOM.getDocument',{depth:-1,pierce:true});function find(node:any):any{if(node.nodeName==='BUTTON'&&!node.attributes?.includes('hidden')&&node.children?.some((c:any)=>c.nodeValue==='保存到我的内容'))return node;for(const child of [...node.children??[],...node.shadowRoots??[]]){const found=find(child);if(found)return found;}}acceptNode=find(tree.root);return Boolean(acceptNode);}).toBe(true);
  const box=await fastCdp.send('DOM.getBoxModel',{nodeId:acceptNode.nodeId}),q=box.model.content;await fast.mouse.click((q[0]+q[2])/2,(q[1]+q[5])/2);
  await expect.poll(async()=>{await restoredPopup.getByRole('button',{name:'检查保存结果'}).click();return restoredPopup.locator('#recent').textContent();}).toContain('已加入 Sensa');
  const meaningLink=await restoredPopup.locator('#recent a').filter({hasText:'已加入 Sensa'}).first().getAttribute('href');const confirmed=await context.newPage();await confirmed.goto(meaningLink!);await expect(confirmed.getByRole('region',{name:'已确认的意思'})).toBeVisible();await confirmed.screenshot({path:'/tmp/sensa-m2-meaning.png'});

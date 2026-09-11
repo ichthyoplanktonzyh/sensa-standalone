@@ -1,4 +1,6 @@
 const messages={
+ delivery_paused:['云端交付已暂停，内容仍保存在插件。','Cloud delivery is paused. Content remains in the extension.'],delivery_queue_full:['云端待接收队列已满，请打开 Sensa 接收后重试。','The cloud queue is full. Open Sensa to receive captures, then retry.'],
+ cloudPending:['其中 {count} 项已加密交付云端，等待学习库接收。','{count} items delivered encrypted to the cloud, awaiting library receipt.'],
  account:['管理账号','Manage account'],
  checking:['正在检查账号…','Checking account…'],login:['登录 Sensa','Log in to Sensa'],loggingIn:['请在 Sensa 页面登录，插件会自动连接。','Sign in on the Sensa page. The extension will connect automatically.'],
  connected:['已登录 Sensa','Signed in to Sensa'],guest:['尚未登录 Sensa','Not signed in to Sensa'],

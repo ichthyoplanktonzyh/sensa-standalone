@@ -18,6 +18,7 @@ async function act(kind:string){
   document.getElementById('login')!.textContent=t(v.accountId?'account':'login');
   status.textContent=native?t('library',{name:v.label??t('unknownLibrary')}):t(v.accountId?'connected':'guest');
   if(v.pending)status.textContent+='\n'+t('pending',{count:v.pending});
+  if(v.cloudPending)status.textContent+='\n'+t('cloudPending',{count:v.cloudPending});
   if(v.legacyPending)status.textContent+='\n'+t('legacy',{count:v.legacyPending});
   if(success[kind])status.textContent=t(success[kind])+'\n'+status.textContent;
   if(v.errors.length)status.textContent+='\n'+v.errors.map(errorText).join('\n');

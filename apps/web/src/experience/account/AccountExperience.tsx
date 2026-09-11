@@ -1,4 +1,4 @@
-import {authorizeExtensionConnection} from './extensionConnection';
+import {authorizeExtensionConnection,notifyExtensionSignout} from './extensionConnection';
 import {eraseDeletedAccount} from '../../data/library/dataControl';
 import {AccountDeletion,pendingAccountDeletion} from './AccountDeletion';
 import {LanguageSwitch} from '../../i18n/LanguageSwitch';
@@ -70,7 +70,7 @@ export default function AccountExperience({children}:{children:ReactNode}){
  useEffect(()=>observeLibrary(()=>{void readLibrary(async tx=>({signedOut:await tx.get('meta','signed-out')})).then(state=>{if(state.signedOut&&localRef.current){generation.current++;clearAllCredentials();setLocal(false);setOnlineService(false);}}).catch(()=>setNotice(localFlowText('localStatusFailed')));}),[]);
  const perform=async(work:()=>Promise<void>)=>{callbackDismissed.current=true;setBusy(true);setNotice('');try{await work();}catch{setNotice(localFlowText('tryLater'));}finally{setBusy(false);}};
  const send=async()=>{if(!auth)return;const {error}=await auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true,emailRedirectTo:emailLinkRedirect()}});if(error){setNotice(error.status===429?localFlowText('otpRateLimit'):localFlowText('emailLinkSendFailed'));return;}setSent(true);setRetryAt(Date.now()+60000);};
- const logout=async()=>{clearAllCredentials();await command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async tx=>{tx.put('meta','signed-out',true);return null;});generation.current++;setLocal(false);setOnlineService(false);setLoginOpen(false);setSent(false);setCode('');setUseCode(false);const result=await auth?.signOut({scope:'local'});if(result?.error)setNotice(localFlowText('signoutIncomplete'));};
+ const logout=async()=>{notifyExtensionSignout(owner?.accountId);clearAllCredentials();await command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async tx=>{tx.put('meta','signed-out',true);return null;});generation.current++;setLocal(false);setOnlineService(false);setLoginOpen(false);setSent(false);setCode('');setUseCode(false);const result=await auth?.signOut({scope:'local'});if(result?.error)setNotice(localFlowText('signoutIncomplete'));};
  if(deletionOpen)return <AccountDeletion onClose={()=>{location.assign('/profile');}}/>;
  if(!ready)return <main role="status" className="grid min-h-screen place-content-center">{localFlowText('loadingSensa')}</main>;
  const extension=new URLSearchParams(location.search);

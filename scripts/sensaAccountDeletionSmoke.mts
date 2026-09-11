@@ -23,6 +23,7 @@ try{
  assert.equal((await request('/sensa/account/deletion',original,body)).status,403);
  assert.equal((await request('/sensa/account/deletion',await token([{method:'otp',timestamp:now-3600}]),body)).status,403);
  assert.equal((await request('/sensa/account/deletion',await token([{method:'token_refresh',timestamp:now}]),body)).status,403);
+ await pool.query('INSERT INTO sensa_consumer.intake_channels(account_id,library_id,config) VALUES($1,$2,$3)',[accountId,crypto.randomUUID(),JSON.stringify({fixture:true})]);
  await pool.query("INSERT INTO sensa_consumer.reading_settings(account_id,encrypted_settings) VALUES($1,'synthetic private settings')",[accountId]);
  const extensionToken='sensa_ext_'+crypto.randomUUID();
  const sessionRow=(await pool.query('SELECT id FROM sensa_consumer.sessions WHERE account_id=$1',[accountId])).rows[0];
@@ -40,6 +41,7 @@ assert.equal(pending.status,200,JSON.stringify(pending.body));assert.equal(pendi
  assert.equal((await request('/sensa/web/access/session',fresh,{installationId})).status,403);
  assert.equal((await request('/sensa/service/status',original)).status,403);
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.reading_settings WHERE account_id=$1',[accountId])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.intake_channels WHERE account_id=$1',[accountId])).rows[0].n,0);
  assert.equal((await pool.query('SELECT email FROM core.accounts WHERE account_id=$1',[accountId])).rows[0].email,null);
  assert.equal((await request('/sensa/account/deletion',fresh,{...body,operationId:crypto.randomUUID()})).status,409);
  const completed=await request('/sensa/account/deletion/status','invalid-expired-token',{operationId:body.operationId});assert.equal(completed.body.state,'deleted');

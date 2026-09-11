@@ -1,3 +1,4 @@
+import {createDeviceJoin,receiveDeviceGrant,encryptCapture,decryptCapture,deviceApprovalCode} from '../packages/intake-transport/src/index.ts';
 /** Complete Web + real Supabase SDK/PKCE + isolated Chrome; synthetic mail/Auth/API. */
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
@@ -15,6 +16,7 @@ type Mail={email:string;challenge:string;redirect:string;code:string;used:boolea
 const inbox:Mail[]=[];const exchanges:string[]=[],admissions:string[]=[],errors:string[]=[];
 let browser:Browser|undefined;
 let extensionAuthorizations=0;
+let deliveryConfig:any=null,deliveryEnabled=false;let deviceRequest:any=null,deviceGrant:string|null=null;
 const server=createServer(async(req,res)=>{
  const url=new URL(req.url!,'http://localhost');
  const json=(value:unknown,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(value));};
@@ -45,6 +47,15 @@ const server=createServer(async(req,res)=>{
  }
  if(url.pathname==='/sensa/extension/authorize'){const input=await body();assert(req.headers.authorization?.startsWith('Bearer '));extensionAuthorizations++;const destination=new URL(input.redirectUri);destination.searchParams.set('state',input.state);destination.searchParams.set('code','fixture-code');json({redirectUri:destination.toString()});return;}
  if(url.pathname==='/sensa/service/status'){json({authorized:true,explanationAvailable:false,checkedAt:new Date().toISOString(),windowHours:24,usage:['reading','teacher','content'].map(kind=>({kind,used:0,limit:30}))});return;}
+ if(url.pathname.startsWith('/sensa/intake-delivery')){
+  if(url.pathname.endsWith('/configure')){deliveryConfig=await body();deliveryEnabled=true;json({configured:true});return;}
+  if(url.pathname.endsWith('/state')){deliveryEnabled=(await body()).enabled;json({enabled:deliveryEnabled});return;}
+  if(url.pathname.endsWith('/approve')){const input=await body();assert.equal(input.deviceId,deviceRequest.deviceId);deviceGrant=input.grant;json({approved:true});return;}
+  if(url.pathname.endsWith('/devices')){json({items:deviceRequest?[{request:deviceRequest,grant_envelope:deviceGrant}]:[]});return;}
+  if(url.pathname.endsWith('/pending')){json({items:[]});return;}
+  if(!deliveryConfig){json({code:'delivery_not_enabled'},404);return;}
+  json({config:deliveryConfig,enabled:deliveryEnabled});return;
+ }
  if(url.pathname==='/sensa/packages'){json({items:[]});return;}
  if(url.pathname.startsWith('/sensa/')||url.pathname.startsWith('/auth/')){json({code:'fixture_unavailable'},503);return;}
  try{const path=url.pathname.startsWith('/assets/')?resolve(output,'.'+url.pathname):join(output,'index.html');assert(path.startsWith(output+'/'));res.setHeader('content-type',extname(path)==='.js'?'text/javascript':extname(path)==='.css'?'text/css':'text/html');res.end(await readFile(path));}catch{res.writeHead(404);res.end();}
@@ -73,7 +84,7 @@ try{
    let value:unknown;
    if(m.kind==='web-connect-prepare')value=connected?{connected:true}:{authorization:{installationId:'11111111-1111-4111-8111-111111111111',state:'a'.repeat(64),challenge:'b'.repeat(43),redirectUri:'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/sensa'}};
    else if(m.kind==='web-connect-complete'){if(Object.keys(m.receipt).join()!=='redirectUri'||new URL(m.receipt.redirectUri).searchParams.get('code')!=='fixture-code')throw Error('Credential exposed or missing authorization');connected=true;(window as any).extensionConnected=true;value={connected:true};}
-   else if(m.kind==='web-intake-pull')value=[];else return;
+   else if(m.kind==='web-intake-pull')value=[];else if(m.kind==='web-delivery-config')value={configured:true};else return;
    window.postMessage({channel:'sensa-web-intake-response',id:m.id,value},location.origin);
   });
  });
@@ -89,6 +100,30 @@ try{
  assert.equal(exchanges.length,1);assert.equal(new URL(callback.url()).search,'');
  await expect.poll(()=>callback.evaluate(()=>(window as any).extensionConnected)).toBe(true);assert(extensionAuthorizations>0);
  const saved=await owner(callback);assert(saved);
+ await callback.getByRole('button',{name:/设备与数据/}).click();
+ await callback.getByRole('button',{name:'启用加密交付',exact:true}).click();
+ await expect(callback.getByRole('textbox',{name:'恢复码',exact:true})).toBeVisible();
+ const recoveryCode=await callback.getByLabel('恢复码',{exact:true}).inputValue();assert(recoveryCode.startsWith('SENSA-'));
+ await expect(callback.getByRole('button',{name:'确认启用',exact:true})).toBeDisabled();
+ await callback.getByLabel('我已保存恢复码',{exact:true}).check();await callback.getByRole('button',{name:'确认启用',exact:true}).click();
+ await expect(callback.getByRole('button',{name:'暂停交付',exact:true})).toBeVisible();assert(deliveryConfig);assert(!JSON.stringify(deliveryConfig).includes(recoveryCode));
+ const joining=await createDeviceJoin(deliveryConfig);deviceRequest=joining.request;
+ await callback.getByRole('button',{name:'刷新状态',exact:true}).click();
+ await expect(callback.getByText(await deviceApprovalCode(joining.request),{exact:true})).toBeVisible();
+ await expect(callback.getByRole('button',{name:'核对后批准',exact:true})).toBeDisabled();
+ await callback.getByRole('checkbox',{name:/请在新旧设备上核对/}).check();await callback.getByRole('button',{name:'核对后批准',exact:true}).click();
+ await expect.poll(()=>deviceGrant!==null).toBe(true);
+ const deviceSecret=await receiveDeviceGrant(deliveryConfig,joining,deviceGrant!);
+ const payload={operationId:randomUUID(),clientId:randomUUID(),libraryId:deliveryConfig.libraryId,text:'Synthetic private capture'};
+ assert.deepEqual(await decryptCapture(deliveryConfig,deviceSecret,await encryptCapture(deliveryConfig,payload)),payload);
+ await callback.getByRole('button',{name:'暂停交付',exact:true}).click();await expect(callback.getByRole('button',{name:'恢复交付',exact:true})).toBeVisible();assert.equal(deliveryEnabled,false);
+ await callback.getByRole('button',{name:'恢复交付',exact:true}).click();await expect(callback.getByRole('button',{name:'暂停交付',exact:true})).toBeVisible();assert.equal(deliveryEnabled,true);
+ await callback.evaluate(async()=>{const db=await new Promise<IDBDatabase>((resolve,reject)=>{const r=indexedDB.open('sensa:local-library:v1');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});await new Promise<void>((resolve,reject)=>{const tx=db.transaction('meta','readwrite');tx.objectStore('meta').delete('delivery-private');tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});db.close();});
+ await callback.reload();await callback.getByRole('button',{name:/设备与数据/}).click();
+ await callback.getByText('恢复已有交付权限',{exact:true}).click();
+ await callback.getByLabel('输入恢复码',{exact:true}).fill(recoveryCode);await callback.getByRole('button',{name:'用恢复码解锁',exact:true}).click();await expect(callback.getByRole('button',{name:'暂停交付',exact:true})).toBeVisible();
+
+ await callback.screenshot({path:'/tmp/sensa-intake-delivery-panel.png',fullPage:true});
  await callback.reload();await expect(callback.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible();assert.equal(exchanges.length,1);
  await callback.goto(link(mail));await expect(callback.getByRole('status')).toContainText('登录链接已失效');assert.deepEqual(await owner(callback),saved);
  await callback.getByLabel('界面语言',{exact:true}).selectOption('en');await expect(callback.getByRole('status')).toContainText('sign-in link has expired');
@@ -111,5 +146,6 @@ try{
  const foreign=await requestMail(failed,'other@sensa.invalid');await failed.goto(link(foreign));
  await expect(failed.getByRole('status')).toContainText('此设备的资料属于另一个账号');assert.deepEqual(await owner(failed),original);assert(!admissions.includes(subjects.get('other@sensa.invalid')!));
  await failedContext.close();assert.deepEqual(errors,[]);
+ console.log('PASS: encrypted delivery enable confirmation, pause/resume, local key loss and recovery through real Web Crypto + existing settings UI. Synthetic cloud.');
  console.log('PASS: real SDK PKCE challenge exchange, same-browser new-tab login, original-tab recovery, reload, replay/wrong-browser/expired errors, bilingual feedback, extension destination and foreign-account isolation. Synthetic mail/Auth/API only.');
 }finally{await browser?.close();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}

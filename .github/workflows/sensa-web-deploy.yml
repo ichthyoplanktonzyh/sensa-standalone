@@ -59,7 +59,7 @@ jobs:
       - run: node scripts/release/verifyCandidate.mjs
       - run: npm ci
       - name: Build server from reviewed source (preserve Web candidate)
-        run: npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/model-runtime && npm run build -w @sensa/api
+        run: npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/model-runtime && npm run build -w @sensa/intake-transport && npm run build -w @sensa/api
       - uses: supabase/setup-cli@v1
         with:
           version: 2.117.0

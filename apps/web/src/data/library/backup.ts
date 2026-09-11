@@ -6,7 +6,7 @@ import {validateBackupRows,backupOwnerSchema,type BackupRows} from './backupVali
 import {clearAllCredentials} from './providers';
 const MAX_PLAIN=64*1024*1024,MAX_FILE=90*1024*1024;
 const AAD=new TextEncoder().encode('sensa-web-library-backup-v1:PBKDF2-SHA256:600000:AES-256-GCM');
-const localMeta=new Set(['service-owner','service-installation','signed-out','backup-restored','local-incarnation']);
+const localMeta=new Set(['delivery-private','delivery-join','service-owner','service-installation','signed-out','backup-restored','local-incarnation']);
 const serviceOperation=(value:any)=>typeof value?.input==='string'&&JSON.parse(value.input).kind?.startsWith('service.');
 const b64=(bytes:Uint8Array)=>{let s='';for(let i=0;i<bytes.length;i+=16384)s+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(s);};
 const unb64=(value:string)=>{if(!/^[A-Za-z0-9+/]*={0,2}$/u.test(value))throw new Error('libraryBackup.errors.encoding');const bytes=Uint8Array.from(atob(value),c=>c.charCodeAt(0));if(b64(bytes)!==value)throw new Error('libraryBackup.errors.encoding');return bytes;};

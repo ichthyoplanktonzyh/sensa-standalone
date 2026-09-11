@@ -26,6 +26,8 @@ export async function requestAccountDeletion(db:DatabaseExecutor,identity:Consum
  await db.query('INSERT INTO sensa_consumer.account_deletions(account_id,operation_id,requested_at) VALUES($1,$2,$3)',[a.account_id,operationId,now]);
  await db.query("UPDATE sensa_consumer.accounts SET lifecycle='deletion_pending',epoch=epoch+1 WHERE account_id=$1",[a.account_id]);
  await db.query('UPDATE sensa_consumer.sessions SET revoked=true WHERE account_id=$1',[a.account_id]);
+ // The optional delivery migration may not yet exist during a staged rollout.
+ if((await db.query("SELECT to_regclass('sensa_consumer.intake_channels') AS table_name")).rows[0]?.table_name)await db.query('DELETE FROM sensa_consumer.intake_channels WHERE account_id=$1',[a.account_id]);
  for(const table of ['extension_codes','extension_credentials','reading_settings','reading_requests','native_semantic_usage','native_content_usage','native_content_cancellations'])await db.query(`DELETE FROM sensa_consumer.${table} WHERE account_id=$1`,[a.account_id]);
  await db.query('DELETE FROM sensa_consumer.sessions WHERE account_id=$1',[a.account_id]);
  await db.query('UPDATE core.accounts SET email=NULL WHERE account_id=$1',[a.account_id]);

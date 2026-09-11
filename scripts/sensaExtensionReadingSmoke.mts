@@ -5,7 +5,7 @@ import {captureSnapshotSchema} from '../packages/contracts/src/sensa/consumer/in
 // Actual production bundle, real mouse/keyboard and closed Shadow DOM. All network is blocked.
 const browser = await chromium.launch({executablePath: process.env.SENSA_CHROMIUM_PATH});
 try {
-  const page = await browser.newPage({viewport: {width: 1100, height: 760}});
+  const page = await browser.newPage({locale:'zh-CN',viewport: {width: 1100, height: 760}});
   await page.route('**/*', route => route.request().url() === 'http://127.0.0.1/reading-fixture'
     ? route.fulfill({contentType: 'text/html; charset=utf-8', body: `<!doctype html><meta charset="utf-8"><title>Reading fixture</title>
       <style>body{margin:0;font:22px/1.8 system-ui}main{padding:60px;max-width:950px}p{margin:20px 0}#scroll{height:90px;overflow:auto}#scroll p{margin:0}#edge{position:fixed;bottom:0;right:0;margin:0}#outside{position:fixed;top:0;left:0}</style>
@@ -110,7 +110,7 @@ try {
   expect(await inspect('this.getBoundingClientRect().height')).toBeLessThan(70);
   await page.screenshot({path: '/tmp/sensa-reading-toolbar.png'});
   await click('句中解释');
-  await expect.poll(() => visible('加入 Sensa')).toBe(true);
+  await expect.poll(() => visible('保存到我的内容')).toBe(true);
   const first = (await calls())[0];
   expect(first.kind).toBe('lookup');
   captureSnapshotSchema.parse(first.snapshot);
@@ -121,8 +121,8 @@ try {
   expect(await inspect('this.querySelector("details").open')).toBe(false);
   expect(await calls()).toHaveLength(1); // Understanding is neither saving nor learning.
   await page.screenshot({path: '/tmp/sensa-reading-explanation.png'});
-  await click('加入 Sensa');
-  await expect.poll(() => visible('加入 Sensa')).toBe(false);
+  await click('保存到我的内容');
+  await expect.poll(() => visible('保存到我的内容')).toBe(false);
   expect((await calls()).map((call: any) => call.kind)).toEqual(['lookup', 'accept']);
   expect((await calls())[1].lookupId).toBe(first.lookupId);
   await close();
@@ -150,17 +150,17 @@ try {
   await page.evaluate(() => (window as any).fixture.pending({value: {status: 'ready', proposal: {
     explanation: '迟到解释', semanticSpec: {coreMeaningFocus: '固定意思', prototypeScenes: []}}}}));
   await expect.poll(() => inspect('this.querySelector(".explanation").textContent')).toBe('迟到解释');
-  expect(await visible('加入 Sensa')).toBe(false); // No second save after saving during lookup.
+  expect(await visible('保存到我的内容')).toBe(false); // No second save after saving during lookup.
   await close();
 
   for (const mode of ['error', 'running', 'unresolved']) {
     await set({calls: [], mode}); await select(); await click('句中解释');
     await expect.poll(() => inspect('this.querySelector(".explanation").getAttribute("aria-busy")')).toBeNull();
-    expect(await visible('加入 Sensa')).toBe(false);
+    expect(await visible('保存到我的内容')).toBe(false);
     expect(await visible('保存待处理')).toBe(true);
     if (mode !== 'unresolved') {
       await set({mode: 'ready'}); await click('检查解释结果');
-      await expect.poll(() => visible('加入 Sensa')).toBe(true);
+      await expect.poll(() => visible('保存到我的内容')).toBe(true);
       expect((await calls())[0].lookupId).toBe((await calls())[1].lookupId);
     }
     await close();
@@ -219,9 +219,9 @@ try {
   });
   await expect.poll(panelObject).toBeTruthy();
   expect(await inspect('this.getRootNode().activeElement.textContent')).toBe('句中解释');
-  await page.keyboard.press('Enter'); await expect.poll(() => visible('加入 Sensa')).toBe(true); await close();
+  await page.keyboard.press('Enter'); await expect.poll(() => visible('保存到我的内容')).toBe(true); await close();
   await set({mode: 'long'}); await select(); await click('句中解释');
-  await expect.poll(() => visible('加入 Sensa')).toBe(true);
+  await expect.poll(() => visible('保存到我的内容')).toBe(true);
   await inViewport();
   expect(await inspect('this.scrollHeight > this.clientHeight')).toBe(true);
   const scrollPanel = await inspect('this.getBoundingClientRect().toJSON()');
@@ -241,13 +241,13 @@ try {
   await page.evaluate(()=>{document.querySelector('main')!.insertAdjacentHTML('afterbegin','<article id="article"><p id="rich">Before the trip. She <a href="#">took</a><span hidden>PRIVATE HIDDEN</span><strong> her time</strong>.<br>Then she left.</p><p id="cross">Another paragraph follows.</p></article>');});
   await set({calls:[],mode:'pending'});await select('#rich a','took');await click('句中解释');
   const narrow=(await calls()).at(-1);expect(narrow.snapshot.sentence).toContain('She took her time.');expect(narrow.snapshot.sentence).not.toContain('PRIVATE');
-  await click('扩展上下文');expect(await visible('加入 Sensa')).toBe(false);
+  await click('扩展上下文');expect(await visible('保存到我的内容')).toBe(false);
   await page.evaluate(()=>(window as any).fixture.pending({value:{status:'ready',proposal:{explanation:'OLD CONTEXT RESULT',semanticSpec:{coreMeaningFocus:'old',prototypeScenes:[]}}}}));
   await page.waitForTimeout(60);expect(await inspect('this.textContent')).not.toContain('OLD CONTEXT RESULT');
   await set({mode:'ready'});await click('句中解释');
   const wide=(await calls()).at(-1);expect(wide.lookupId).not.toBe(narrow.lookupId);expect(wide.snapshot.sentence).toContain('Before the trip.');expect(wide.snapshot.sentence).toContain('\nThen she left.');
   expect(captureSnapshotSchema.safeParse(wide.snapshot).success).toBe(true);
-  await click('收起');expect(await visible('保存待处理')).toBe(false);await click('保存…');expect(await visible('加入 Sensa')).toBe(true);await close();
+  await click('收起');expect(await visible('保存待处理')).toBe(false);await click('保存…');expect(await visible('保存到我的内容')).toBe(true);await close();
   await set({calls:[]});
   await page.evaluate(()=>{const range=document.createRange();range.setStart(document.querySelector('#rich strong')!.firstChild!,1);range.setEnd(document.querySelector('#cross')!.firstChild!,7);getSelection()!.removeAllRanges();getSelection()!.addRange(range);document.dispatchEvent(new PointerEvent('pointerup',{button:0}));});
   await expect.poll(panelObject).toBeTruthy();await click('句中解释');
@@ -256,9 +256,9 @@ try {
   await page.evaluate(()=>{const fixture=(window as any).fixture;fixture.streams=[];(window as any).chrome.runtime.connect=()=>{let receive:any;const item={send:(value:any)=>receive(value),closed:false};fixture.streams.push(item);return {onMessage:{addListener:(fn:any)=>receive=fn},onDisconnect:{addListener:()=>{}},postMessage:(payload:any)=>{if(payload.input)Object.assign(item,{payload});},disconnect:()=>{item.closed=true;}};};});
   await select('#rich a','took');await click('句中解释');
   await page.evaluate(()=>(window as any).fixture.streams.at(-1).send({type:'partial',text:'未完成的解释'}));
-  expect(await inspect('this.textContent')).toContain('未完成的解释');expect(await visible('加入 Sensa')).toBe(false);
+  expect(await inspect('this.textContent')).toContain('未完成的解释');expect(await visible('保存到我的内容')).toBe(false);
   await page.evaluate(()=>(window as any).fixture.streams.at(-1).send({type:'result',value:{status:'unresolved',proposal:null}}));
-  expect(await inspect('this.textContent')).not.toContain('未完成的解释');expect(await visible('加入 Sensa')).toBe(false);await close();
+  expect(await inspect('this.textContent')).not.toContain('未完成的解释');expect(await visible('保存到我的内容')).toBe(false);await close();
   await select('#rich a','took');await click('句中解释');
   const failedLookup=await page.evaluate(()=>(window as any).fixture.streams.at(-1).payload.input.id);
   await page.evaluate(()=>(window as any).fixture.streams.at(-1).send({type:'result',value:{status:'failed',proposal:null}}));
@@ -266,7 +266,7 @@ try {
   expect(await page.evaluate(()=>(window as any).fixture.streams.at(-1).payload.input.id)).not.toBe(failedLookup);await close();
   await select('#rich a','took');await click('翻译');
   await page.evaluate(()=>(window as any).fixture.streams.at(-1).send({type:'partial',text:'真实分片'}));
-  expect(await inspect('this.textContent')).toContain('真实分片');expect(await visible('加入 Sensa')).toBe(false);
+  expect(await inspect('this.textContent')).toContain('真实分片');expect(await visible('保存到我的内容')).toBe(false);
   await page.evaluate(()=>(window as any).fixture.streams.at(-1).send({type:'error',error:'reading_interrupted'}));
   expect(await inspect('this.textContent')).not.toContain('真实分片');expect(await inspect('this.textContent')).toContain('连接已中断');
   await click('翻译');await close();expect(await page.evaluate(()=>(window as any).fixture.streams.at(-1).closed)).toBe(true);

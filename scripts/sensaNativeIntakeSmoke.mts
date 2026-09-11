@@ -14,7 +14,7 @@ const background=join(extension,'background.js');await writeFile(background,(awa
 const manifest=JSON.parse(await readFile(join(extension,'manifest.json'),'utf8'));manifest.host_permissions.push('http://127.0.0.1:4323/*','https://www.youtube.com/*');await writeFile(join(extension,'manifest.json'),JSON.stringify(manifest));
 const sample=JSON.parse(await readFile('integrations/codex/sensa-intake/request-example.json','utf8'));
 const server=createServer((req,res)=>{if(req.url==='/sensa/semantic/lookups/stream'){assert.equal(req.headers.authorization,'Bearer synthetic-reading-token');res.setHeader('content-type','application/x-ndjson');res.end(JSON.stringify({type:'result',value:{status:'ready',proposal:sample.resolution.proposal}})+'\n');return;}res.setHeader('content-type','text/html');res.end('<!doctype html><title>Intake fixture</title><p>May I borrow your umbrella?</p>');});await new Promise<void>(r=>server.listen(4323,'127.0.0.1',r));
-const launch=()=>chromium.launchPersistentContext(join(root,'profile'),{channel:'chromium',executablePath:process.env.SENSA_CHROMIUM_PATH,headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
+const launch=()=>chromium.launchPersistentContext(join(root,'profile'),{locale:'zh-CN',channel:'chromium',executablePath:process.env.SENSA_CHROMIUM_PATH,headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
 let context=await launch();
 const manifests:string[]=[];
 try {
@@ -63,7 +63,7 @@ try {
  await worker.evaluate(async({accountId,installationId,replicaId})=>chrome.storage.local.set({sensa:{version:1,active:accountId,accounts:{[accountId]:{accountId,installationId,replicaId,token:'synthetic-reading-token',epoch:'1',queue:[],recent:[],savedOperations:{}}}}}),{accountId,installationId,replicaId});
  await page.reload();await popup.evaluate(()=>chrome.runtime.sendMessage({kind:'toggle'}));
  await page.evaluate(()=>{const n=document.querySelector('p')!.firstChild!;const r=document.createRange();r.setStart(n,6);r.setEnd(n,12);getSelection()!.removeAllRanges();getSelection()!.addRange(r);document.dispatchEvent(new PointerEvent('pointerup'));});
- await click('句中解释');await expect.poll(async()=>await worker.evaluate(async()=>Object.keys((await chrome.storage.session.get('nativeLookups')).nativeLookups??{}).length)).toBe(1);await click('加入 Sensa');
+ await click('句中解释');await expect.poll(async()=>await worker.evaluate(async()=>Object.keys((await chrome.storage.session.get('nativeLookups')).nativeLookups??{}).length)).toBe(1);await click('保存到我的内容');
  await expect.poll(async()=>{const r=await popup.evaluate(()=>chrome.runtime.sendMessage({kind:'status'}));return r.value.recent.some((x:any)=>x.status==='confirmed');}).toBe(true);
  // A changed host connection cannot consume the old library's request, and Web selection preserves receipts.
  const wrong=cli({kind:'submit',request:{...request,clientId:randomUUID()}},true);assert.equal(wrong.error,'connection_mismatch');

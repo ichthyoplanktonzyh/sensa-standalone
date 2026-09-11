@@ -1,3 +1,4 @@
+import {IntakeDeliveryPanel} from './IntakeDeliveryPanel';
 import {providerSnapshot} from '../../data/library/providers';
 import {observeLibrary} from '../../data/library/store';
 import {LocalDataControlPanel} from './LocalDataControlPanel';
@@ -152,6 +153,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
           {!props.localLibrary&&<p className="mt-3 text-xs leading-6 text-[#788398]">{props.account?t('account.localWeb.controls'):t('account.controls')}</p>}
         </section>
         {props.localLibrary&&<div className="mt-6 space-y-3">
+          <IntakeDeliveryPanel/>
           {row('backup','libraryBackup.title',t('account.backupSummary'),<Database size={20}/>)}
           {row('storage','account.storageActions',t('account.storageSummary'),<Database size={20}/>)}
         </div>}

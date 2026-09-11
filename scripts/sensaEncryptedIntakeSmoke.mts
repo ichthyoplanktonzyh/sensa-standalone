@@ -1,0 +1,24 @@
+/** Real JWE cryptography and recovery/device grant isolation. */
+import assert from 'node:assert/strict';
+import {createDelivery,recoverDelivery,encryptCapture,decryptCapture,createDeviceJoin,approveDevice,receiveDeviceGrant,deviceApprovalCode} from '../packages/intake-transport/src/index.ts';
+const accountId=crypto.randomUUID(),libraryId=crypto.randomUUID(),clientId=crypto.randomUUID();
+const prepared=await createDelivery(accountId,libraryId);
+const request={libraryId,clientId,operationId:crypto.randomUUID(),privateText:'My private raincoat memory'};
+const envelope=await encryptCapture(prepared.config,request);
+assert(!JSON.stringify(envelope).includes(request.privateText));
+assert(!JSON.stringify(prepared.config).includes(prepared.privateKey.d));
+assert.deepEqual(await decryptCapture(prepared.config,prepared.privateKey,envelope),request);
+const restored=await recoverDelivery(prepared.config,prepared.recoveryCode);assert.deepEqual(restored,prepared.privateKey);
+await assert.rejects(()=>recoverDelivery(prepared.config,'SENSA-'+'a'.repeat(43)));
+await assert.rejects(()=>decryptCapture(prepared.config,prepared.privateKey,{...envelope,accountId:crypto.randomUUID()}));
+await assert.rejects(()=>decryptCapture(prepared.config,prepared.privateKey,{...envelope,operationId:crypto.randomUUID()}));
+const parts=envelope.ciphertext.split('.');parts[3]=(parts[3][0]==='a'?'b':'a')+parts[3].slice(1);
+await assert.rejects(()=>decryptCapture(prepared.config,prepared.privateKey,{...envelope,ciphertext:parts.join('.')}));
+const other=await createDelivery(accountId,libraryId);await assert.rejects(()=>decryptCapture(prepared.config,other.privateKey,envelope));
+const join=await createDeviceJoin(prepared.config),another=await createDeviceJoin(prepared.config);
+assert.notEqual(await deviceApprovalCode(join.request),await deviceApprovalCode(another.request));
+const grant=await approveDevice(prepared.config,prepared.privateKey,join.request);
+assert.deepEqual(await receiveDeviceGrant(prepared.config,join,grant),prepared.privateKey);
+await assert.rejects(()=>receiveDeviceGrant(prepared.config,another,grant));
+await assert.rejects(()=>approveDevice(prepared.config,prepared.privateKey,{...join.request,libraryId:crypto.randomUUID()}));
+console.log('PASS: JWE capture encryption, authenticated scope, ciphertext tampering, recovery code, wrong key, device approval and cross-device grant rejection. No network or providers.');
