@@ -1,9 +1,11 @@
+import type { CardExecution } from './CardExecution';
 import type { MeaningToFormRecallAssessmentResource } from '../../content/assessmentResources';
 import type { PrototypeIntroductionPackage } from '../../content/learningCatalog';
 import type { MeaningToFormRecallOutcome } from '../../engine/types';
 import { SensaRecallCard } from './SensaRecallCard';
 
 export interface RecallCardProps {
+  execution?: CardExecution;
   content: PrototypeIntroductionPackage;
   /** Exact Assessment Resource selected by the current Action. */
   assessment: MeaningToFormRecallAssessmentResource;

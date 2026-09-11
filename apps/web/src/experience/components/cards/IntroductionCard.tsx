@@ -1,3 +1,4 @@
+import {cardText} from '../../../i18n/originalCards';
 import { uiClass } from '../../ui/classes';
 import { useEffect, useRef, useState } from 'react';
 import type { PrototypeIntroductionPackage } from '../../content/learningCatalog';
@@ -74,18 +75,18 @@ export function IntroductionCard({
   const isRepairReplay = mode === 'repair_replay';
   const repairContext = repairPurpose === 'acquisition'
     ? {
-        title: '学习中的定向修复',
-        body: '这里只重建当前能力连接，稍后仍需再次独立检验。',
+        title: cardText('targetedRepairDuringLearning'),
+        body: cardText('rebuildThisConnectionThenCheckItIndependentlyAgain'),
       }
     : {
-        title: '复习中的 Reveal 回看',
-        body: '这里只重建意思连接，不会再次结算本次复习。',
+        title: cardText('replayAfterReview'),
+        body: cardText('rebuildTheMeaningConnectionWithoutGradingThisReview'),
       };
   const continuationLabel = !isRepairReplay
-    ? '继续，让它稍后再出现'
+    ? cardText('continueAndMeetItAgainLater')
     : repairPurpose === 'acquisition'
-    ? '完成修复，稍后再检验'
-    : '返回复习结果';
+    ? cardText('finishRepairAndCheckAgainLater')
+    : cardText('returnToReviewFeedback');
   const lookupExampleToken = async (
     token: {
       text: string;
@@ -107,7 +108,7 @@ export function IntroductionCard({
     };
     const entry = await lookupDictionary(request, options);
     if (!entry) {
-      toast('当前 Reference 样本没有这个词');
+      toast(cardText('thisWordIsNotInTheCurrentReference'));
     }
     return entry;
   };
@@ -146,14 +147,14 @@ export function IntroductionCard({
       }
 
       if (!announceNext || content.pronunciations.length < 2) {
-        toast(`正在播放${isUk ? '英式' : '美式'}发音`);
+        toast(cardText('playing',{accent:isUk ? cardText('british') : cardText('american')}));
         return;
       }
 
       const nextIndex = (index + 1) % content.pronunciations.length;
       const nextIsUk = content.pronunciations[nextIndex]?.accentLocale === 'en-GB';
       setPronunciationIndex(nextIndex);
-      toast(`正在播放${isUk ? '英式' : '美式'}发音；下次为${nextIsUk ? '英式' : '美式'}`);
+      toast(cardText('playingNext',{accent:isUk ? cardText('british') : cardText('american'),next:nextIsUk ? cardText('british') : cardText('american')}));
     };
 
     const activeIsUk = activePronunciation?.accentLocale === 'en-GB';
@@ -183,10 +184,10 @@ export function IntroductionCard({
                 <button
                   type="button"
                   onClick={() => playPronunciation(pronunciationIndex, true)}
-                  aria-label={`播放${activeIsUk ? '英式' : '美式'}发音 ${activePronunciation.ipa}${content.pronunciations.length > 1 ? `；播放后切换为${nextIsUk ? '英式' : '美式'}` : ''}`}
-                  title="点击播放；再次点击切换发音"
+                  aria-label={cardText('play',{accent:activeIsUk ? cardText('british') : cardText('american'),ipa:activePronunciation.ipa})}
+                  title={cardText('playTapAgainToSwitchAccent')}
                 >
-                  <span>{activeIsUk ? '英' : '美'}</span>
+                  <span>{activeIsUk ? cardText('uk') : cardText('us')}</span>
                   <b>{activePronunciation.ipa}</b>
                   <SoundIcon />
                 </button>
@@ -204,40 +205,39 @@ export function IntroductionCard({
               className={uiClass("intro-compact-recap")}
               onClick={() => onPhaseChange('experience')}
             >
-              <ReplayIcon />回看体验
-            </button>
+              <ReplayIcon />{cardText('replayExperience')}</button>
           </div>
         </header>
 
         <section className={uiClass("intro-reveal-bridge intro-reveal-bridge-compact")} aria-labelledby="intro-reveal-bridge-title">
-          <span className={uiClass("intro-reveal-section-label", "#intro-reveal-bridge-title")} id="intro-reveal-bridge-title">核心意思</span>
+          <span className={uiClass("intro-reveal-section-label", "#intro-reveal-bridge-title")} id="intro-reveal-bridge-title">{cardText('coreMeaning')}</span>
           <p>{content.l1Bridge}</p>
         </section>
 
         {primaryPattern?.usageRestriction && (
-          <section className={uiClass("intro-compact-boundary")} aria-label="这个义项的使用边界">
-            <span>边界</span>
+          <section className={uiClass("intro-compact-boundary")} aria-label={cardText('usageBoundariesForThisSense')}>
+            <span>{cardText('boundary')}</span>
             <p>{primaryPattern.usageRestriction}</p>
           </section>
         )}
 
         <section className={uiClass("intro-reveal-example intro-reveal-example-compact")} aria-labelledby="intro-reveal-example-title">
           <div className={uiClass("intro-reveal-example-head")}>
-            <span className={uiClass("intro-reveal-section-label", "#intro-reveal-example-title")} id="intro-reveal-example-title">放进一句话</span>
+            <span className={uiClass("intro-reveal-section-label", "#intro-reveal-example-title")} id="intro-reveal-example-title">{cardText('putItInASentence')}</span>
             <div>
               {example.audioUrl && (
                 <button
                   type="button"
                   onClick={() => {
                     void audioService.playPackagedAudioUrl(example.audioUrl!, example.textL2, 'us');
-                    toast('正在播放学习例句');
+                    toast(cardText('playingTheLearningExample'));
                   }}
-                  aria-label="播放学习例句"
+                  aria-label={cardText('playLearningExample')}
                 >
                   <SoundIcon />
                 </button>
               )}
-              <button type="button" onClick={() => onOpenExample(0)} aria-label="查看完整例句">
+              <button type="button" onClick={() => onOpenExample(0)} aria-label={cardText('viewTheFullExample')}>
                 <OpenIcon />
               </button>
             </div>
@@ -265,7 +265,7 @@ export function IntroductionCard({
 
         {primaryPattern && (
           <details className={uiClass("intro-compact-more")}>
-            <summary>更多用法</summary>
+            <summary>{cardText('moreUsage')}</summary>
             <div>
               <p className={uiClass("intro-compact-full-bridge")}>{content.l1Bridge}</p>
               <strong>{primaryPattern.canonicalPattern}</strong>
@@ -273,7 +273,7 @@ export function IntroductionCard({
                 <small>{primaryPattern.registerLabel ?? primaryPattern.domainLabel}</small>
               )}
               {visibleCollocations.length > 0 && (
-                <div className={uiClass("intro-reveal-collocations")} aria-label="相关例句">
+                <div className={uiClass("intro-reveal-collocations")} aria-label={cardText('relatedExamples')}>
                   {visibleCollocations.map((collocation) => collocation.exampleIndex >= 0 ? (
                     <button
                       type="button"

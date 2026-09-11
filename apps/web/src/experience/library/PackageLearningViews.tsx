@@ -1,3 +1,5 @@
+import {localRuntimeAdapter} from '../learningRuntime/localRuntimeBindings';
+import type {AssuranceSupportHost} from './AssuranceLearningViews';
 import {AssuranceRuntime,AssuranceTarget} from './AssuranceLearningViews';
 import {LearningResourceDetails} from '../components/learning/LearningResourceDetails';
 import {useTranslation} from 'react-i18next';
@@ -88,11 +90,26 @@ export function PackageTarget({active,target,c,onBack,onHome,onStart,onSource}:{
  if(target.assurancePackageKey&&pack)return <AssuranceTarget active={active} target={target} pack={pack} busy={c.busy} notice={c.notice} canResume={c.run?.targetId===target.id} onBack={onBack} onStart={onStart}/>;
  return <LearningTargetDetailScreen active={active} target={localTargetView(target)} selectedPolicy="lightweight" fixedPolicy preparation="ready" committedPolicy={target.startedAt?'lightweight':null} initialCompletionKind={target.completedAt?'study_completion':null} reviewDue={c.due.includes(target)} relearning={!!target.relearnAt} retentionRuntimeState={null} nextReviewLabel={target.memory?.dueAt.toLocaleString(i18n.language)??null} declaredMastery={false} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>{}} onOpenSource={onSource??onBack} onRefreshPreparation={()=>void c.refresh()} onGoHome={onHome} onStartReview={onStart} onContinueRetentionRuntime={onStart} onContinueRuntime={onStart} onRevokeDeclaredMastery={()=>{}} notice={c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>} actions={<><LearningResourceDetails material={target.material}/><button className={setupPrimary} disabled={c.busy||!!target.completedAt&&!c.due.includes(target)&&c.run?.targetId!==target.id} onClick={onStart}>{target.completedAt?localFlowText('startReview'):localFlowText('startLearning')}</button></>}/>;
 }
-export function PackageRuntime({active,c,onExit,onFinish}:{active:boolean;c:Controller;onExit:()=>void;onFinish:()=>void}){
+type PackageRuntimeProps={active:boolean;c:Controller;host:AssuranceSupportHost;onExit:()=>void;onFinish:()=>void};
+export function PackageRuntime(props:PackageRuntimeProps){
+ const run=props.c.run;
+ if(!run)return <LightweightPackageRuntime {...props}/>;
+ const Surface=packageRuntimeSurfaces[localRuntimeAdapter(run.protocolVersion,run.purpose)];
+ if(!Surface)throw new Error('No local runtime surface for the configured adapter');
+ return <Surface {...props}/>;
+}
+const packageRuntimeSurfaces:Record<string,(props:PackageRuntimeProps)=>React.ReactNode>={
+ lightweight:LightweightPackageRuntime,structured:StructuredPackageRuntime,
+};
+function StructuredPackageRuntime({active,c,onExit,onFinish,host}:PackageRuntimeProps){
+ const run=c.run,target=c.targets.find(t=>t.id===run?.targetId),pack=c.packages.find(p=>p.key===target?.packageKey);
+ if(!run?.assurance||!target||!pack)throw new Error('Missing structured runtime resources');
+ return <AssuranceRuntime host={host} key={run.id+':'+run.revision} active={active} run={run} target={target} pack={pack} busy={c.busy} notice={c.notice} onAction={action=>{if(!c.busy)void c.act(action);}} onExit={onExit} onFinish={onFinish}/>;
+}
+function LightweightPackageRuntime({active,c,onExit,onFinish}:PackageRuntimeProps){
  useTranslation();
  const run=c.run,target=c.targets.find(t=>t.id===run?.targetId);
  if(!run||!target)return <LightweightRuntimeStartScreen active={active} target={null} materialization={null} step={null} completed={false} hasNextTarget={false} onExit={onExit} onReveal={()=>{}} onRate={()=>{}} onFinish={onFinish}/>;
- if(run.assurance){const pack=c.packages.find(p=>p.key===target.packageKey);if(pack)return <AssuranceRuntime key={run.id+':'+run.revision} active={active} run={run} target={target} pack={pack} busy={c.busy} notice={c.notice} onAction={action=>{if(!c.busy)void c.act(action);}} onExit={onExit} onFinish={onFinish}/>;}
  // Reuse the existing role-based card presentations; formal transitions remain in the local core.
  const material=run.material??target.material;
  const definition=run.phase==='recall'?LIGHTWEIGHT_EXPERIENCE_RECALL_STEP:LIGHTWEIGHT_EXPRESSION_REVEAL_STEP;

@@ -22,8 +22,8 @@ for(const targetId of ids){
   const view=assuranceView(run,pack)!;let response:any;
   if(view.introduction)response={kind:run.assurance!.revealed?'continue':'reveal'};
   else if(run.assurance!.feedback)response={kind:'continue'};
-  else if(view.resource!.kind==='meaning_to_form_recall'&&!supported){supported=true;response={kind:'hint',mode:'first_letter'};}
-  else{const r=view.resource!;capabilities.add(view.action.capability);const value=r.kind==='meaning_to_form_recall'?r.primaryForm:r.kind==='novel_context_transfer'?r.scenario.options.find(o=>o.isCorrect)!.id:r.options.find(o=>o.isCorrect)!.id;response={kind:'answer',value};if(r.kind==='novel_context_transfer'&&!wrong){wrong=true;response.value=r.scenario.options.find(o=>!o.isCorrect)!.id;}}
+  else if(view.resource!.kind==='meaning_to_form_recall'&&!supported&&run.assurance!.mode!=='choice'){response={kind:'try_recall',value:'wrong-answer'};}
+  else{const r=view.resource!;capabilities.add(view.action.capability);const value=r.kind==='meaning_to_form_recall'?(run.assurance!.mode==='choice'?r.choiceOptions.find(o=>o.isTarget)!.id:r.primaryForm):r.kind==='novel_context_transfer'?r.scenario.options.find(o=>o.isCorrect)!.id:r.options.find(o=>o.isCorrect)!.id;response={kind:'answer',value};if(r.kind==='meaning_to_form_recall')supported=true;if(r.kind==='novel_context_transfer'&&!wrong){wrong=true;response={kind:'skip'};}}
   const op=id(),before=run;run=await actLearning(op,run.id,run.revision,{kind:'assurance',response},'2026-09-11T00:01:00Z');assert.deepEqual(await actLearning(op,before.id,before.revision,{kind:'assurance',response},'2026-09-11T00:01:00Z'),run);
   await assert.rejects(actLearning(id(),before.id,before.revision,{kind:'assurance',response},'2026-09-11T00:01:00Z'));
   const target=(await readLearning()).targets.find(t=>t.id===targetId)!;if(!run.completedAt)assert.equal(target.memory,null);

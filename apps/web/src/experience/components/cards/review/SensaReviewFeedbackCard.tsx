@@ -1,3 +1,4 @@
+import {cardText} from '../../../../i18n/originalCards';
 import { uiClass } from '../../../ui/classes';
 import { useMemo, useState } from 'react';
 import type {
@@ -30,6 +31,7 @@ import {
 } from '../IntroductionCard';
 
 interface SensaReviewFeedbackCardProps {
+  purpose?: 'acquisition'|'retention';
   content: PrototypeIntroductionPackage;
   spec: ReviewAssessmentSpec;
   assessmentResource: AssessmentResource;
@@ -59,17 +61,18 @@ function responseOptions(spec: ReviewAssessmentSpec): ReviewChoiceOption[] {
 }
 
 function outcomeLabel(result: ReviewAssessmentResult): string {
-  if (result.memoryOutcome?.basis === 'transfer_confirmed') return '新语境中仍能认出';
-  if (result.memoryOutcome?.basis === 'independent_retrieval') return '独立取回成功';
-  if (result.memoryOutcome?.basis === 'retrieval_failed') return '独立取回失败';
-  if (result.memoryOutcome?.grade === 'hard') return '想起但比较费力';
-  if (result.memoryOutcome?.grade === 'easy') return '非常轻松地想起';
-  if (result.memoryOutcome?.grade === 'good') return '本次回想完成';
-  if (result.memoryOutcome?.grade === 'again') return '本次未能想起';
-  return '本次只记录反馈，不改变长期调度';
+  if (result.memoryOutcome?.basis === 'transfer_confirmed') return cardText('recognizedInANewContext');
+  if (result.memoryOutcome?.basis === 'independent_retrieval') return cardText('recalledIndependently');
+  if (result.memoryOutcome?.basis === 'retrieval_failed') return cardText('independentRecallFailed');
+  if (result.memoryOutcome?.grade === 'hard') return cardText('recalledWithEffort');
+  if (result.memoryOutcome?.grade === 'easy') return cardText('recalledVeryEasily');
+  if (result.memoryOutcome?.grade === 'good') return cardText('recallCompleted');
+  if (result.memoryOutcome?.grade === 'again') return cardText('couldNotRecallThisTime');
+  return cardText('feedbackOnlyTheLongTermScheduleStaysUnchanged');
 }
 
 export function SensaReviewFeedbackCard({
+  purpose = 'retention',
   content,
   spec,
   assessmentResource,
@@ -171,7 +174,7 @@ export function SensaReviewFeedbackCard({
       clickedSurface: token.text,
     };
     const entry = await lookupDictionary(request, options);
-    if (!entry) toast('当前 Reference 样本没有这个词');
+    if (!entry) toast(cardText('thisWordIsNotInTheCurrentReference'));
     return entry;
   };
 
@@ -204,7 +207,7 @@ export function SensaReviewFeedbackCard({
   return (
     <div className={uiClass(`sensa-review-feedback-page ${result.correct ? 'is-success' : 'is-repair'}`)}>
       <header className={uiClass("sensa-review-feedback-heading")}>
-        <span>长期复习 · 本次结果已记录</span>
+        <span>{cardText(purpose==='acquisition'?'checkRecorded':'reviewResultRecorded')}</span>
         <div className={uiClass("sensa-review-feedback-mark")} aria-hidden="true">
           {result.correct ? '✓' : '↗'}
         </div>
@@ -212,24 +215,24 @@ export function SensaReviewFeedbackCard({
         <p>{feedback.body}</p>
       </header>
 
-      <section className={uiClass("sensa-review-observation")} aria-label="本次复习结果">
+      <section className={uiClass("sensa-review-observation")} aria-label={cardText('reviewResult')}>
         <div>
-          <small>这次检验了</small>
+          <small>{cardText('thisCheckCovered')}</small>
           <strong>{result.focusDimension}</strong>
         </div>
         <span>{outcomeLabel(result)}</span>
         <p>
-          {result.evidenceEligible
+          {purpose==='acquisition'?cardText('initialCheckHint'):result.evidenceEligible
             ? result.correct
-              ? '系统已经完成本次复习安排。'
-              : '这次遗忘不会被后面的解释或修复覆盖。'
-            : '这是边界体验预览，不改变长期复习安排。'}
+              ? cardText('thisReviewHasBeenScheduled')
+              : cardText('laterExplanationsOrRepairWillNotOverwriteThis')
+            : cardText('thisBoundaryCheckDoesNotChangeTheLong')}
         </p>
       </section>
 
       {!result.correct && spec.kind === 'meaning_to_form_recall' && (
         <section className={uiClass("sensa-review-form-repair")}>
-          <span>重新连接到这层意思</span>
+          <span>{cardText('reconnectToThisMeaning')}</span>
           <strong>{spec.primaryForm}</strong>
           <p>{content.l1Bridge}</p>
         </section>
@@ -237,15 +240,15 @@ export function SensaReviewFeedbackCard({
 
       {!result.correct && spec.kind === 'boundary_contrast' && (
         <section className={uiClass("sensa-review-boundary-repair")}>
-          <div><small>当前意思</small><strong>{spec.currentSenseL1}</strong></div>
+          <div><small>{cardText('currentMeaning')}</small><strong>{spec.currentSenseL1}</strong></div>
           <span aria-hidden="true">≠</span>
-          <div><small>相邻意思</small><strong>{spec.contrastSenseL1}</strong></div>
+          <div><small>{cardText('relatedMeaning')}</small><strong>{spec.contrastSenseL1}</strong></div>
         </section>
       )}
 
       {spec.kind === 'novel_context_transfer' && (
         <section className={uiClass("sensa-review-transfer-trace")}>
-          <span>场景变了，没有改变的是</span>
+          <span>{cardText('theSituationChangedWhatStayedTheSame')}</span>
           <div>
             {spec.scenario.invariantLabelsL1.map((label) => <i key={label}>{label}</i>)}
           </div>
@@ -254,8 +257,8 @@ export function SensaReviewFeedbackCard({
 
       <section className={uiClass("sensa-review-reveal-example")}>
         <div>
-          <span>{spec.kind === 'novel_context_transfer' ? '放回英文表达' : '回看刚才的语境'}</span>
-          <small>现在可以点词查义</small>
+          <span>{spec.kind === 'novel_context_transfer' ? cardText('returnToTheEnglishExpression') : cardText('revisitTheContext')}</span>
+          <small>{cardText('youCanNowTapWordsForDefinitions2')}</small>
         </div>
         <div className={uiClass("sensa-review-feedback-sentence")}>
           <ClickableSentence
@@ -287,17 +290,17 @@ export function SensaReviewFeedbackCard({
           }}
         >
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-eye" /></svg>
-          <span>{result.correct ? '回看意思连接' : '重新建立这个意思'}</span>
+          <span>{result.correct ? cardText('replayTheMeaningConnection2') : cardText('rebuildThisMeaning')}</span>
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-r" /></svg>
         </button>
         <button type="button" onClick={onOpenExample}>
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-bookopen" /></svg>
-          <span>查看学习例句</span>
+          <span>{cardText('viewLearningExamples')}</span>
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-r" /></svg>
         </button>
         <button type="button" onClick={() => onOpenDictionary(content.lemma)}>
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-search" /></svg>
-          <span>查看完整词典</span>
+          <span>{cardText('openTheFullDictionary')}</span>
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-r" /></svg>
         </button>
       </div>
@@ -311,7 +314,7 @@ export function SensaReviewFeedbackCard({
 
       <footer className={uiClass("sensa-review-feedback-footer")}>
         <button type="button" onClick={onContinue}>
-          {result.evidenceEligible ? '继续复习' : '返回评测卡目录'}
+          {purpose==='acquisition'?cardText('continueLearning'):cardText('continueReview')}
         </button>
       </footer>
 

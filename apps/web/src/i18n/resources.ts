@@ -1,3 +1,4 @@
+import {originalCardsZh,originalCardsEn} from './originalCardCopy';
 import {localFlowZh,localFlowEn} from './localFlow';
 import {libraryBackupZh,libraryBackupEn,modelServiceZh,modelServiceEn} from './localLibrary';
 import { practiceZh, practiceEn } from './practice';
@@ -14,7 +15,7 @@ import { contentZh, contentEn, composerZh, composerEn } from "./content";
 export const resources = {
   "zh-CN": {
     translation: {
-      localFlow: localFlowZh, libraryBackup: libraryBackupZh, modelService: modelServiceZh, learningSetup: learningSetupZh, practice: practiceZh, account: accountZh, study: studyZh, learningPreferences: learningPreferencesZh, runtime: runtimeZh, assurance: assuranceZh,
+      originalCards: originalCardsZh, localFlow: localFlowZh, libraryBackup: libraryBackupZh, modelService: modelServiceZh, learningSetup: learningSetupZh, practice: practiceZh, account: accountZh, study: studyZh, learningPreferences: learningPreferencesZh, runtime: runtimeZh, assurance: assuranceZh,
       content: contentZh,
       statistics: statisticsZh,
       referenceExample: referenceExampleZh,
@@ -63,7 +64,7 @@ export const resources = {
   },
   en: {
     translation: {
-      localFlow: localFlowEn, libraryBackup: libraryBackupEn, modelService: modelServiceEn, learningSetup: learningSetupEn, practice: practiceEn, account: accountEn, study: studyEn, learningPreferences: learningPreferencesEn, runtime: runtimeEn, assurance: assuranceEn,
+      originalCards: originalCardsEn, localFlow: localFlowEn, libraryBackup: libraryBackupEn, modelService: modelServiceEn, learningSetup: learningSetupEn, practice: practiceEn, account: accountEn, study: studyEn, learningPreferences: learningPreferencesEn, runtime: runtimeEn, assurance: assuranceEn,
       content: contentEn,
       statistics: statisticsEn,
       referenceExample: referenceExampleEn,

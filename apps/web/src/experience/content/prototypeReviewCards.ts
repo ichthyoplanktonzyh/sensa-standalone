@@ -107,7 +107,7 @@ function toBoundaryReviewSpec(
   };
 }
 
-function toReviewSpec(
+export function toReviewSpec(
   resource: AssessmentResource,
   content: PrototypeIntroductionPackage,
 ): ReviewAssessmentSpec {

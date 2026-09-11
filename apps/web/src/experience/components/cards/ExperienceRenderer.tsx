@@ -1,3 +1,4 @@
+import {cardText} from '../../../i18n/originalCards';
 import { uiClass } from '../../ui/classes';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type {
@@ -132,14 +133,14 @@ function InteractiveExperienceRenderer({
   return (
     <div className={uiClass(`intro-page intro-experience-page${isReplay ? ' is-replay' : ''}`)}>
       <div className={uiClass("intro-experience-heading")}>
-        <span>{isReplay ? '意思连接回看' : '建立一个新意思'}</span>
-        <h1>{isReplay ? '回看刚才的体验' : '先感受一下'}</h1>
+        <span>{isReplay ? cardText('replayTheMeaningConnection') : cardText('buildANewMeaning')}</span>
+        <h1>{isReplay ? cardText('revisitTheExperience') : cardText('experienceItFirst')}</h1>
         {!showTextFallback && <p>{experience.instructionL1}</p>}
       </div>
 
       {showTextFallback && experience.fallbackTextSceneL1 ? (
         <div className={uiClass("intro-text-fallback")} data-render-key={`${experience.renderKey}.text-scene-fallback`}>
-          <span>文字场景</span>
+          <span>{cardText('textScene')}</span>
           <p>{experience.fallbackTextSceneL1}</p>
         </div>
       ) : (
@@ -183,7 +184,7 @@ function InteractiveExperienceRenderer({
           onClick={onPrimaryAction}
         >
           {primaryActionLabel
-            ?? (reopensReveal ? '重新查看 Reveal' : isReplay ? '回到判断结果' : '揭晓这个意思')}
+            ?? (reopensReveal ? cardText('seeTheExpressionAgain') : isReplay ? cardText('returnToYourAnswer') : cardText('revealThisMeaning'))}
           <svg className={uiClass("icon")}>
             <use href={isReplay && !reopensReveal ? '#i-chev-r' : '#i-eye'} />
           </svg>
@@ -194,7 +195,7 @@ function InteractiveExperienceRenderer({
             className={uiClass("intro-text-button")}
             onClick={() => setShowTextFallback((shown) => !shown)}
           >
-            {showTextFallback ? '改用交互呈现' : '改用文字场景'}
+            {showTextFallback ? cardText('useTheInteractiveScene') : cardText('useTheTextScene')}
           </button>
         )}
       </div>
@@ -218,12 +219,12 @@ function TextExperienceRenderer({
   return (
     <div className={uiClass(`intro-page intro-experience-page${isReplay ? ' is-replay' : ''}`)}>
       <div className={uiClass("intro-experience-heading")}>
-        <span>{isReplay ? '意思连接回看' : '建立一个新意思'}</span>
-        <h1>{isReplay ? '回看刚才的体验' : '先感受一下'}</h1>
+        <span>{isReplay ? cardText('replayTheMeaningConnection') : cardText('buildANewMeaning')}</span>
+        <h1>{isReplay ? cardText('revisitTheExperience') : cardText('experienceItFirst')}</h1>
       </div>
 
       <div className={uiClass("intro-text-fallback")} data-render-key={experience.renderKey}>
-        <span>文字场景</span>
+        <span>{cardText('textScene')}</span>
         <p>{experience.sceneL1}</p>
       </div>
 
@@ -234,7 +235,7 @@ function TextExperienceRenderer({
           onClick={onPrimaryAction}
         >
           {primaryActionLabel
-            ?? (reopensReveal ? '重新查看 Reveal' : isReplay ? '回到判断结果' : '揭晓这个意思')}
+            ?? (reopensReveal ? cardText('seeTheExpressionAgain') : isReplay ? cardText('returnToYourAnswer') : cardText('revealThisMeaning'))}
           <svg className={uiClass("icon")}>
             <use href={isReplay && !reopensReveal ? '#i-chev-r' : '#i-eye'} />
           </svg>

@@ -1,3 +1,4 @@
+import {cardText} from '../../../i18n/originalCards';
 import { uiClass } from '../../ui/classes';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { MeaningToFormRecallOutcome } from '../../engine/types';
@@ -22,6 +23,7 @@ function createFirstLetterMask(form: string): string {
 }
 
 export function SensaRecallCard({
+  execution,
   content,
   assessment,
   purpose = 'acquisition',
@@ -35,16 +37,17 @@ export function SensaRecallCard({
 }: RecallCardProps) {
   const isRetention = purpose === 'retention';
   const recall = assessment;
-  const [mode, setMode] = useState<RecallMode>('independent');
+  const [mode, setMode] = useState<RecallMode>(execution?.feedback ? 'result' : execution?.mode ?? 'independent');
   const [answer, setAnswer] = useState('');
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
-  const [outcome, setOutcome] = useState<MeaningToFormRecallOutcome | null>(null);
+  const [outcome, setOutcome] = useState<MeaningToFormRecallOutcome | null>(execution?.feedback ? execution.feedback.correct ? execution.mode : 'miss' : null);
   const [replayingExperience, setReplayingExperience] = useState(false);
   const [pronunciationIndex, setPronunciationIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const resultRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
+    if (execution) return;
     setMode('independent');
     setAnswer('');
     setSelectedChoiceId(null);
@@ -79,18 +82,21 @@ export function SensaRecallCard({
   const activeAccentIsUk = activePronunciation?.accentLocale === 'en-GB';
 
   const finish = (nextOutcome: MeaningToFormRecallOutcome) => {
+    if (execution) { execution.submit(null); return; }
     setOutcome(nextOutcome);
     setMode('result');
     onViewChange();
   };
 
   const requestFirstLetter = () => {
+    if (execution) { execution.hint('first_letter'); return; }
     setMode('first_letter');
     setAnswer('');
     onViewChange();
   };
 
   const openChoices = () => {
+    if (execution) { execution.hint('choice'); return; }
     setMode('choice');
     setAnswer('');
     onViewChange();
@@ -99,6 +105,7 @@ export function SensaRecallCard({
   const submitTextAnswer = (event: FormEvent) => {
     event.preventDefault();
     if (!answer.trim()) return;
+    if (execution) { execution.submit(answer); return; }
     const normalizedAnswer = normalizeForm(answer);
     if (isRetention) {
       onViewChange();
@@ -121,6 +128,7 @@ export function SensaRecallCard({
 
   const submitChoice = () => {
     if (!selectedChoice) return;
+    if (execution) { execution.submit(selectedChoice.id); return; }
     finish(selectedChoice.isTarget ? 'choice' : 'miss');
   };
 
@@ -128,7 +136,7 @@ export function SensaRecallCard({
     ? {
         tone: 'independent',
         marker: '✓',
-        status: '连接闭合',
+        status: cardText('connectionComplete'),
         title: recall.independentSuccessTitleL1,
         body: recall.independentSuccessBodyL1,
       }
@@ -136,7 +144,7 @@ export function SensaRecallCard({
     ? {
         tone: 'supported',
         marker: '↗',
-        status: '借助一点线索',
+        status: cardText('withALittleHelp'),
         title: recall.supportedSuccessTitleL1,
         body: recall.supportedSuccessBodyL1,
       }
@@ -144,21 +152,21 @@ export function SensaRecallCard({
     ? {
         tone: 'supported',
         marker: '↗',
-        status: '从形式中认出',
+        status: cardText('recognizedFromChoices'),
         title: recall.choiceSuccessTitleL1,
         body: recall.choiceSuccessBodyL1,
       }
     : {
         tone: 'repair',
         marker: '•',
-        status: '连接需要修复',
+        status: cardText('theConnectionNeedsRepair'),
         title: recall.repairTitleL1,
         body: recall.repairBodyL1,
       };
 
   const playPronunciation = () => {
     if (!activePronunciation?.audioUrl) {
-      toast('当前学习包没有可用发音');
+      toast(cardText('thisPackageHasNoAvailablePronunciation'));
       return;
     }
     const accent = activeAccentIsUk ? 'uk' : 'us';
@@ -171,10 +179,10 @@ export function SensaRecallCard({
       const nextIndex = (pronunciationIndex + 1) % content.pronunciations.length;
       const nextIsUk = content.pronunciations[nextIndex]?.accentLocale === 'en-GB';
       setPronunciationIndex(nextIndex);
-      toast(`正在播放${activeAccentIsUk ? '英式' : '美式'}发音；下次为${nextIsUk ? '英式' : '美式'}`);
+      toast(cardText('playingNext',{accent:activeAccentIsUk ? cardText('british') : cardText('american'),next:nextIsUk ? cardText('british') : cardText('american')}));
       return;
     }
-    toast(`正在播放${activeAccentIsUk ? '英式' : '美式'}发音`);
+    toast(cardText('playing',{accent:activeAccentIsUk ? cardText('british') : cardText('american')}));
   };
 
   if (replayingExperience) {
@@ -196,18 +204,18 @@ export function SensaRecallCard({
       data-assessment-task-key={assessment.taskKey}
     >
       <header className={uiClass("sensa-recall-heading")}>
-        <span>{isRetention ? '长期复习 · 独立取回' : '主动取回'}</span>
+        <span>{isRetention ? cardText('reviewIndependentRecall') : cardText('activeRecall')}</span>
         <h1>
           {isRetention
-            ? '从意思想起英文'
-            : mode === 'result' ? '英文已经浮现' : '让英文浮现'}
+            ? cardText('recallTheEnglishExpression')
+            : mode === 'result' ? cardText('theEnglishExpressionIsHere') : cardText('bringTheExpressionToMind')}
         </h1>
       </header>
 
-      <section className={uiClass("sensa-recall-cue")} aria-label="要取回的意思">
-        <span>从这层意思出发</span>
+      <section className={uiClass("sensa-recall-cue")} aria-label={cardText('meaningToRecall')}>
+        <span>{cardText('startFromThisMeaning')}</span>
         <p>{recall.cueL1}</p>
-        <div className={uiClass("sensa-recall-trace")} aria-label="意思中的关键线索">
+        <div className={uiClass("sensa-recall-trace")} aria-label={cardText('keyMeaningCues')}>
           {recall.cueFeatureLabelsL1.map((label) => (
             <span key={label}>{label}</span>
           ))}
@@ -219,12 +227,12 @@ export function SensaRecallCard({
           {mode === 'first_letter' && (
             <div className={uiClass("sensa-recall-support-state")} role="status" aria-live="polite">
               <span aria-hidden="true">↗</span>
-              <p><strong>第一个字母已经出现</strong>这次会进入修复，稍后再独立取回</p>
+              <p><strong>{cardText('theFirstLetterIsShown')}</strong>{cardText('repairThisConnectionThenRecallItIndependentlyLater')}</p>
             </div>
           )}
-          <label htmlFor="sensa-meaning-to-form-answer">写下对应的英文形式</label>
+          <label htmlFor="sensa-meaning-to-form-answer">{cardText('writeTheEnglishExpression')}</label>
           {mode === 'first_letter' && (
-            <div className={uiClass("sensa-recall-mask")} aria-label={`首字母提示 ${recall.primaryForm[0]}`}>
+            <div className={uiClass("sensa-recall-mask")} aria-label={cardText('firstLetter',{letter:recall.primaryForm[0]})}>
               {createFirstLetterMask(recall.primaryForm)}
             </div>
           )}
@@ -244,7 +252,7 @@ export function SensaRecallCard({
             {answer && (
               <button
                 type="button"
-                aria-label="清空输入"
+                aria-label={cardText('clearInput')}
                 onClick={() => {
                   setAnswer('');
                   inputRef.current?.focus();
@@ -255,13 +263,13 @@ export function SensaRecallCard({
             )}
           </div>
           <div className={uiClass("sensa-recall-primary-actions")}>
-            <button type="submit" disabled={!answer.trim()}>确认</button>
+            <button type="submit" disabled={!answer.trim()}>{cardText('confirm')}</button>
             <button
               type="button"
               onClick={() => {
                 if (isRetention) {
                   onViewChange();
-                  onComplete('miss', null);
+                  if (execution) execution.submit(null); else onComplete('miss', null);
                   return;
                 }
                 if (mode === 'independent') requestFirstLetter();
@@ -269,8 +277,8 @@ export function SensaRecallCard({
               }}
             >
               {isRetention
-                ? '想不起来，进入修复'
-                : mode === 'independent' ? '给我一点线索' : '从几个词里找'}
+                ? cardText('iCannotRecallItBeginRepair')
+                : mode === 'independent' ? cardText('giveMeAClue') : cardText('showSomeWords')}
             </button>
           </div>
         </form>
@@ -280,9 +288,9 @@ export function SensaRecallCard({
         <section className={uiClass("sensa-recall-choice-stage")}>
           <div className={uiClass("sensa-recall-support-state")} role="status" aria-live="polite">
             <span aria-hidden="true">↗</span>
-            <p><strong>答案范围已经缩小</strong>现在只需找到对应形式</p>
+            <p><strong>{cardText('theChoicesAreNarrowedDown')}</strong>{cardText('findTheMatchingForm')}</p>
           </div>
-          <div className={uiClass("sensa-recall-choice-list")} role="radiogroup" aria-label="选择英文形式">
+          <div className={uiClass("sensa-recall-choice-list")} role="radiogroup" aria-label={cardText('chooseTheEnglishForm')}>
             {recall.choiceOptions.map((option) => {
               const selected = option.id === selectedChoiceId;
               return (
@@ -301,8 +309,8 @@ export function SensaRecallCard({
             })}
           </div>
           <div className={uiClass("sensa-recall-primary-actions")}>
-            <button type="button" disabled={!selectedChoice} onClick={submitChoice}>确认</button>
-            <button type="button" onClick={() => finish('miss')}>直接揭示</button>
+            <button type="button" disabled={!selectedChoice} onClick={submitChoice}>{cardText('confirm')}</button>
+            <button type="button" onClick={() => finish('miss')}>{cardText('revealTheAnswer')}</button>
           </div>
         </section>
       )}
@@ -326,9 +334,9 @@ export function SensaRecallCard({
             <button
               type="button"
               onClick={playPronunciation}
-              aria-label={`播放${activeAccentIsUk ? '英式' : '美式'}发音`}
+              aria-label={cardText('play',{accent:activeAccentIsUk ? cardText('british') : cardText('american'),ipa:''})}
             >
-              <span>{activeAccentIsUk ? '英' : '美'}</span>
+              <span>{activeAccentIsUk ? cardText('uk') : cardText('us')}</span>
               <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-vol" /></svg>
             </button>
           </div>
@@ -346,20 +354,16 @@ export function SensaRecallCard({
               }}
             >
               <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-eye" /></svg>
-              <span>回到经验连接</span>
+              <span>{cardText('returnToTheExperience2')}</span>
               <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-r" /></svg>
             </button>
           )}
-          <div className={uiClass("sensa-recall-resource-strip")} aria-label="当前意思的辅助内容">
+          <div className={uiClass("sensa-recall-resource-strip")} aria-label={cardText('resourcesForThisMeaning')}>
             <button type="button" onClick={onOpenExample}>
-              <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-bookopen" /></svg>
-              例句
-            </button>
+              <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-bookopen" /></svg>{cardText('examples')}</button>
             <i aria-hidden="true" />
             <button type="button" onClick={() => onOpenDictionary(recall.primaryForm)}>
-              <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-search" /></svg>
-              词典
-            </button>
+              <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-search" /></svg>{cardText('dictionary')}</button>
           </div>
         </section>
       )}
@@ -375,8 +379,8 @@ export function SensaRecallCard({
 
       {mode === 'result' && outcome && (
         <footer className={uiClass("sensa-recall-footer")}>
-          <button type="button" onClick={() => onComplete(outcome, null)}>
-            {outcome === 'independent' ? '继续学习' : '继续，稍后再取回'}
+          <button type="button" onClick={() => execution ? execution.continue() : onComplete(outcome, null)}>
+            {outcome === 'independent' ? cardText('continueLearning') : cardText('continueAndRecallAgainLater')}
           </button>
         </footer>
       )}

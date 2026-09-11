@@ -1,3 +1,5 @@
+import {cardText} from '../../../i18n/originalCards';
+import type { CardExecution } from './CardExecution';
 import { uiClass } from '../../ui/classes';
 import { useEffect, useMemo, useState } from 'react';
 import type { NovelTransferAssessmentResource } from '../../content/assessmentResources';
@@ -17,6 +19,7 @@ import { useImmediateDictionaryLookup } from '../useImmediateDictionaryLookup';
 import { ExperienceRenderer } from './ExperienceRenderer';
 
 export interface NovelTransferCardProps {
+  execution?: CardExecution;
   content: PrototypeIntroductionPackage;
   /** Exact Transfer Assessment Resource selected by the current Action. */
   assessment: NovelTransferAssessmentResource;
@@ -85,6 +88,7 @@ function TransferSceneVisual({
 }
 
 export function NovelTransferCard({
+  execution,
   content,
   assessment,
   purpose = 'acquisition',
@@ -105,13 +109,14 @@ export function NovelTransferCard({
   }
   const isRetention = purpose === 'retention';
   const scenario = assessment.scenario;
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
-  const [uncertain, setUncertain] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(execution?.feedback?.answer || null);
+  const [submitted, setSubmitted] = useState(!!execution?.feedback);
+  const [uncertain, setUncertain] = useState(!!execution?.feedback && !execution.feedback.answer);
   const [replayingExperience, setReplayingExperience] = useState(false);
   const { activeLookup, openLookup, clearLookup } = useImmediateDictionaryLookup();
 
   useEffect(() => {
+    if (execution) return;
     setSelectedId(null);
     setSubmitted(false);
     setUncertain(false);
@@ -132,7 +137,7 @@ export function NovelTransferCard({
   const feedbackTitle = succeeded
     ? scenario.successTitleL1
     : uncertain
-    ? '先看看这个新场景需要什么'
+    ? cardText('seeWhatThisNewSituationNeeds')
     : selectedOption?.feedbackTitleL1;
   const feedbackBody = succeeded
     ? scenario.successBodyL1
@@ -162,7 +167,7 @@ export function NovelTransferCard({
         }
       : token.cleanWord;
     const entry = await lookupDictionary(input, options);
-    if (!entry) toast('当前词典没有这个词');
+    if (!entry) toast(cardText('thisWordIsNotInTheDictionary'));
     return entry;
   };
 
@@ -177,9 +182,7 @@ export function NovelTransferCard({
           setReplayingExperience(true);
         }}
       >
-        <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-eye" /></svg>
-        对照最初的体验
-        <svg className={uiClass("icon chevron")} aria-hidden="true"><use href="#i-chev-r" /></svg>
+        <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-eye" /></svg>{cardText('compareWithTheOriginalExperience')}<svg className={uiClass("icon chevron")} aria-hidden="true"><use href="#i-chev-r" /></svg>
       </button>
       <button
         type="button"
@@ -188,9 +191,7 @@ export function NovelTransferCard({
           onOpenExample();
         }}
       >
-        <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-bookopen" /></svg>
-        查看学习例句
-        <svg className={uiClass("icon chevron")} aria-hidden="true"><use href="#i-chev-r" /></svg>
+        <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-bookopen" /></svg>{cardText('viewLearningExamples')}<svg className={uiClass("icon chevron")} aria-hidden="true"><use href="#i-chev-r" /></svg>
       </button>
       <button
         type="button"
@@ -199,9 +200,7 @@ export function NovelTransferCard({
           onOpenDictionary(content.lemma);
         }}
       >
-        <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-search" /></svg>
-        查看完整词典
-        <svg className={uiClass("icon chevron")} aria-hidden="true"><use href="#i-chev-r" /></svg>
+        <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-search" /></svg>{cardText('openTheFullDictionary')}<svg className={uiClass("icon chevron")} aria-hidden="true"><use href="#i-chev-r" /></svg>
       </button>
     </div>
   );
@@ -227,18 +226,18 @@ export function NovelTransferCard({
       <header className={uiClass("transfer-heading")}>
         <span>
           {isRetention
-              ? '长期复习 · 新语境迁移'
-              : submitted ? succeeded ? '迁移检验 · 已成立' : '迁移检验 · 需要修复' : '迁移检验 · 未见语境'}
+              ? cardText('reviewTransferToANewContext')
+              : submitted ? succeeded ? cardText('transferCheckEstablished') : cardText('transferCheckNeedsRepair') : cardText('transferCheckUnseenContext')}
         </span>
         <h1>
           {isRetention
-              ? '换个场景，还能认出它吗？'
-              : submitted ? feedbackTitle : '把这个意思带到陌生处'}
+              ? cardText('canYouRecognizeItInANewSituation')
+              : submitted ? feedbackTitle : cardText('takeThisMeaningSomewhereNew')}
         </h1>
         <p>
           {isRetention
-              ? '目标词保持隐藏；先用场景证明这层意思仍能迁移。'
-              : submitted ? feedbackBody : '先判断场景中的关系，目标词会在提交后出现。'}
+              ? cardText('theExpressionStaysHiddenUseTheSituationTo')
+              : submitted ? feedbackBody : cardText('judgeTheRelationshipFirstTheExpressionAppearsAfter')}
         </p>
       </header>
 
@@ -248,16 +247,16 @@ export function NovelTransferCard({
             <div className={uiClass("transfer-scene-label")}>
               <span>{scenario.sceneLabelL1}</span>
               <i aria-hidden="true" />
-              <small>目标词暂隐</small>
+              <small>{cardText('expressionHidden')}</small>
             </div>
             <TransferSceneVisual visualKind={scenario.visualKind} alt={scenario.visualAltL1} />
             <div className={uiClass("transfer-scene-copy")}>
               <div className={uiClass("transfer-scene-l1")}>
-                <span>中文场景</span>
+                <span>{cardText('chineseContext')}</span>
                 <p>{scenario.setupL1}</p>
               </div>
               <div className={uiClass("transfer-scene-l2")}>
-                <span>英文场景 <small>点词可查义</small></span>
+                <span>{cardText('englishContext')}<small>{cardText('tapWordsForDefinitions')}</small></span>
                 <div>
                   {setupClauses.map((clause, clauseIndex) => (
                     <span key={`${scenario.id}:clause:${clauseIndex}`}>
@@ -287,7 +286,7 @@ export function NovelTransferCard({
           </section>
 
           <div className={uiClass("transfer-question-block")}>
-            <span>你的判断</span>
+            <span>{cardText('yourJudgement')}</span>
             <h2 className={uiClass("transfer-question")}>{scenario.questionL1}</h2>
           </div>
 
@@ -320,10 +319,10 @@ export function NovelTransferCard({
                     )}
                   </span>
                   {submitted && option.isCorrect && (
-                    <span className={uiClass("transfer-action-status")} aria-label="符合">✓</span>
+                    <span className={uiClass("transfer-action-status")} aria-label={cardText('fits')}>✓</span>
                   )}
                   {submitted && selected && !option.isCorrect && (
-                    <span className={uiClass("transfer-action-status")} aria-label="不符合">×</span>
+                    <span className={uiClass("transfer-action-status")} aria-label={cardText('doesNotFit')}>×</span>
                   )}
                 </button>
               );
@@ -334,24 +333,24 @@ export function NovelTransferCard({
 
       {submitted && (
         <section className={uiClass(`transfer-feedback ${succeeded ? 'success' : 'repair'}`)} aria-live="polite">
-          <div className={uiClass("transfer-sensa-connection")} aria-label="意思迁移连接">
+          <div className={uiClass("transfer-sensa-connection")} aria-label={cardText('meaningTransfer')}>
             <div>
-              <small>熟悉对象</small>
+              <small>{cardText('familiarObject')}</small>
               <strong>{scenario.sourceObjectL1}</strong>
             </div>
             <span aria-hidden="true"><i />→<i /></span>
             <div>
-              <small>陌生对象</small>
+              <small>{cardText('newObject')}</small>
               <strong>{scenario.targetObjectL1}</strong>
             </div>
-            <p>对象变了，意思结构没有变</p>
+            <p>{cardText('theObjectChangedTheMeaningStructureStayedThe')}</p>
             <ol>
               {scenario.invariantLabelsL1.map((label) => <li key={label}>{label}</li>)}
             </ol>
           </div>
 
           <div className={uiClass("transfer-reveal-example")}>
-            <span>目标表达出现</span>
+            <span>{cardText('expressionRevealed')}</span>
             <div className={uiClass("transfer-reveal-sentence")}>
               <ClickableSentence
                 sentenceHtml={revealHtml}
@@ -370,11 +369,11 @@ export function NovelTransferCard({
               />
             </div>
             <p>{reveal.textL1}</p>
-            <small>点词可查看具体意思</small>
+            <small>{cardText('tapAWordForItsMeaning')}</small>
           </div>
 
           <details className={uiClass("transfer-support-disclosure")} open={!succeeded}>
-            <summary>{succeeded ? '需要回看或查词？' : '先修复这条连接'}</summary>
+            <summary>{succeeded ? cardText('needToReplayOrLookUpAWord') : cardText('repairThisConnectionFirst')}</summary>
             {supportActions}
           </details>
         </section>
@@ -399,14 +398,16 @@ export function NovelTransferCard({
               onClick={() => {
                 clearLookup();
                 onViewChange();
-                if (isRetention) {
+                if (execution) {
+                  execution.submit(selectedOption?.id ?? null);
+                } else if (isRetention) {
                   onComplete(outcome, selectedOption?.id ?? null);
                 } else {
                   setSubmitted(true);
                 }
               }}
             >
-              {isRetention ? '提交这次检验' : '提交判断'}
+              {isRetention ? cardText('submitThisCheck') : cardText('submitYourJudgement')}
             </button>
             <button
               type="button"
@@ -414,7 +415,9 @@ export function NovelTransferCard({
               onClick={() => {
                 clearLookup();
                 onViewChange();
-                if (isRetention) {
+                if (execution) {
+                  execution.submit(null);
+                } else if (isRetention) {
                   onComplete('repair', null);
                 } else {
                   setUncertain(true);
@@ -423,12 +426,12 @@ export function NovelTransferCard({
                 }
               }}
             >
-              {isRetention ? '还判断不了，进入修复' : '还判断不了'}
+              {isRetention ? cardText('iCannotJudgeYetBeginRepair') : cardText('iCannotJudgeYet')}
             </button>
           </div>
         ) : (
-          <button type="button" className={uiClass("fbtn green")} onClick={() => onComplete(outcome, selectedOption?.id ?? null)}>
-            {succeeded ? '完成本次检验' : '先修复，稍后再试'}<i />
+          <button type="button" className={uiClass("fbtn green")} onClick={() => execution ? execution.continue() : onComplete(outcome, selectedOption?.id ?? null)}>
+            {succeeded ? cardText('finishThisCheck') : cardText('repairFirstAndTryAgainLater')}<i />
           </button>
         )}
       </div>

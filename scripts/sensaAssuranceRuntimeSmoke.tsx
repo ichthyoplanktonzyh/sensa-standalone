@@ -331,7 +331,7 @@ async function main() {
   assert.equal(journeyFor(preferenceJourney,'borrow-receive').committedPolicy,'high_assurance');
   assert.equal(container.querySelector('input'),originalInput);
   assert.equal((originalInput as HTMLInputElement).value,'unfinished response');
-  const countSelect=container.querySelector('select:not([aria-label])') as HTMLSelectElement;
+  const countSelect=container.querySelector('option[value="20"]')?.parentElement as HTMLSelectElement;
   await act(async()=>{countSelect.value='20';countSelect.dispatchEvent(new window.Event('change',{bubbles:true}));});
   assert.equal(preferenceCount,20);
   await act(async()=>document.dispatchEvent(new window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));

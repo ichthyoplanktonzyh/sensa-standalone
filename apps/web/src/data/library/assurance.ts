@@ -13,6 +13,8 @@ export type AssuranceState={initialCheckpoint:string;checkpoint:string;mode:'ind
 export const assuranceActionSchema=z.discriminatedUnion('kind',[
  z.object({kind:z.literal('reveal')}).strict(),z.object({kind:z.literal('continue')}).strict(),
  z.object({kind:z.literal('hint'),mode:z.enum(['first_letter','choice'])}).strict(),
+ z.object({kind:z.literal('skip')}).strict(),
+ z.object({kind:z.literal('try_recall'),value:z.string().trim().min(1).max(500)}).strict(),
  z.object({kind:z.literal('answer'),value:z.string().trim().min(1).max(500)}).strict(),
 ]);
 export type AssuranceAction={kind:'assurance';response:z.infer<typeof assuranceActionSchema>};
@@ -41,7 +43,9 @@ export function assuranceView(run:LocalLearningRun,pack:InstalledPackage){
  const resource=introduction?null:replace(materializeAssessmentResource({packageIdentity:{packageKey:session.package.packageId,senseKey:session.package.senseId},content:session.package.content,taskKey:action.taskKey,kind:assessmentKindForCapability(action.capability!),capability:action.capability!},release)) as ReturnType<typeof materializeAssessmentResource>|null;
  const repair=action.intent==='repair'?materializeReviewRepairContent(session.package.content,action.repairResourceRef,release):null;
  if(action.repairResourceRef?.source==='package_declared'&&!repair)throw new Error('localFlow.resourceInvalid');
- return {content:repair??session.package.content,action,introduction,resource,projection:queue.getProjection()};
+ const stepKind=!introduction&&run.assurance!.feedback&&('stepKind' in session||action.stepKind==='review_assessment')?'review_feedback':action.stepKind;
+ if(!stepKind)throw new Error('localFlow.resourceInvalid');
+ return {content:repair?replace(repair) as PrototypeIntroductionPackage:session.package.content,action,stepKind,introduction,resource,projection:queue.getProjection()};
 }
 /** The caller commits response, checkpoint, outcome and schedule together in one transaction. */
 export function transitionAssurance(t:LocalLearningTarget,run:LocalLearningRun,pack:InstalledPackage,raw:AssuranceAction['response'],at:string){
@@ -59,16 +63,22 @@ export function transitionAssurance(t:LocalLearningTarget,run:LocalLearningRun,p
   if(!view.introduction||state.feedback)throw new Error('localFlow.stepChanged');state.revealed=true;
  }else if(response.kind==='hint'){
   if(view.resource?.kind!=='meaning_to_form_recall'||state.feedback||state.mode==='choice')throw new Error('localFlow.stepChanged');state.mode=response.mode;
- }else if(response.kind==='answer'){
+ }else if(response.kind==='answer'||response.kind==='try_recall'||response.kind==='skip'){
   if(!view.resource||state.feedback)throw new Error('localFlow.stepChanged');const r=view.resource;
-  const correct=r.kind==='meaning_to_form_recall'?(state.mode==='choice'?r.choiceOptions.some(o=>o.id===response.value&&o.isTarget):r.acceptedForms.some(f=>f.trim().toLocaleLowerCase()===response.value.toLocaleLowerCase())):r.kind==='novel_context_transfer'?r.scenario.options.some(o=>o.id===response.value&&o.isCorrect):r.options.some(o=>o.id===response.value&&o.isCorrect);
+  const answer=response.kind==='skip'?'':response.value;
+  if(response.kind==='try_recall'&&r.kind!=='meaning_to_form_recall')throw new Error('localFlow.stepChanged');
+  const correct=r.kind==='meaning_to_form_recall'?(state.mode==='choice'?r.choiceOptions.some(o=>o.id===answer&&o.isTarget):r.acceptedForms.some(f=>f.trim().toLocaleLowerCase()===answer.toLocaleLowerCase())):r.kind==='novel_context_transfer'?r.scenario.options.some(o=>o.id===answer&&o.isCorrect):r.options.some(o=>o.id===answer&&o.isCorrect);
+  if(response.kind==='try_recall'&&!correct&&queue instanceof LearnQueue&&state.mode!=='choice'){
+   state.mode=state.mode==='independent'?'first_letter':'choice';
+   return [{kind:'recall_scaffold',taskKey:view.action.taskKey,support:state.mode}];
+  }
   if(queue instanceof LearnQueue){
    switch(view.action.capability){case 'contextual_recognition':queue.completeRecognition(correct);break;case 'meaning_to_form_recall':queue.completeMeaningToFormRecall(correct?state.mode:'miss');break;case 'novel_context_transfer':queue.completeNovelTransfer(correct?'success':'repair');break;case 'boundary_discrimination':queue.completeBoundary(correct);break;default:throw new Error('localFlow.resourceInvalid');}
   }else{
    const session=queue.getCurrentSession()!;const independent=correct&&state.mode==='independent';
-   queue.settle({assessmentId:session.action.taskKey+'.action-assessment',kind:session.assessmentKind,focusDimension:resolveReviewFocusDimension(session.assessmentKind),correct:independent,responseId:response.value,memoryOutcome:resolveReviewMemoryOutcome(session.assessmentKind,independent),evidenceEligible:true});
+   queue.settle({assessmentId:session.action.taskKey+'.action-assessment',kind:session.assessmentKind,focusDimension:resolveReviewFocusDimension(session.assessmentKind),correct:independent,responseId:answer,memoryOutcome:resolveReviewMemoryOutcome(session.assessmentKind,independent),evidenceEligible:true});
   }
-  state.feedback={correct,answer:response.value};effects.push({kind:'assessment',taskKey:view.action.taskKey,capability:view.action.capability,correct,support:state.mode});
+  state.feedback={correct,answer:answer};effects.push({kind:'assessment',taskKey:view.action.taskKey,capability:view.action.capability,correct,support:state.mode});
  }else{
   if(view.introduction){if(!state.revealed)throw new Error('localFlow.stepChanged');if(queue instanceof LearnQueue){queue.settle(true);queue.next();}else{queue.completeRepair();queue.next();}}
   else{if(!state.feedback)throw new Error('localFlow.stepChanged');queue.next();}

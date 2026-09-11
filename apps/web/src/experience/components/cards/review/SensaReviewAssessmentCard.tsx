@@ -1,3 +1,4 @@
+import {cardText} from '../../../../i18n/originalCards';
 import { uiClass } from '../../../ui/classes';
 import { useMemo, useState } from 'react';
 import type {
@@ -84,7 +85,7 @@ function SensaBoundaryAssessment({
 
   const lookupToken = (token: SentenceToken, tokenIdx: number) => {
     if (token.cleanWord.toLocaleLowerCase() === content.lemma.toLocaleLowerCase()) {
-      toast('提交判断后可查看当前词的完整解释');
+      toast(cardText('submitYourAnswerBeforeOpeningThisWordS'));
       return;
     }
     const request: DictionaryLookupRequest = {
@@ -100,7 +101,7 @@ function SensaBoundaryAssessment({
       displayWord: token.cleanWord,
       load: async (signal) => {
         const entry = await lookupDictionary(request, { signal });
-        if (!entry) toast('当前词典没有这个词');
+        if (!entry) toast(cardText('thisWordIsNotInTheDictionary'));
         return entry;
       },
     });
@@ -109,19 +110,19 @@ function SensaBoundaryAssessment({
   return (
     <div className={uiClass("sensa-review-boundary-page")}>
       <header className={uiClass("sensa-review-boundary-heading")}>
-        <span>{purpose === 'acquisition' ? '意思边界 · 独立判断' : '长期复习 · 意思边界'}</span>
-        <h1>相似，但不是同一个视角</h1>
-        <p>只在学习包声明真实混淆关系时，才检查这条边界。</p>
+        <span>{purpose === 'acquisition' ? cardText('meaningBoundaryIndependentJudgement') : cardText('reviewMeaningBoundary')}</span>
+        <h1>{cardText('similarWithADifferentPerspective')}</h1>
+        <p>{cardText('checkThisBoundaryWhenThePackageIdentifiesA')}</p>
       </header>
 
-      <section className={uiClass("sensa-review-boundary-pair")} aria-label="需要区分的两个意思">
+      <section className={uiClass("sensa-review-boundary-pair")} aria-label={cardText('twoMeaningsToDistinguish')}>
         <div>
-          <small>当前意思</small>
+          <small>{cardText('currentMeaning')}</small>
           <strong>{spec.currentSenseL1}</strong>
         </div>
         <span aria-hidden="true"><i />≠<i /></span>
         <div>
-          <small>相邻意思</small>
+          <small>{cardText('relatedMeaning')}</small>
           <strong>{spec.contrastSenseL1}</strong>
         </div>
         <p>{spec.relationLabelL1}</p>
@@ -129,8 +130,8 @@ function SensaBoundaryAssessment({
 
       <section className={uiClass("sensa-review-boundary-context")}>
         <div>
-          <span>边界语境</span>
-          <small>非目标词可点按查义</small>
+          <span>{cardText('boundaryContext')}</span>
+          <small>{cardText('tapOtherWordsForDefinitions')}</small>
         </div>
         <div className={uiClass("sensa-review-boundary-sentence")}>
           <ClickableSentence
@@ -141,12 +142,12 @@ function SensaBoundaryAssessment({
         </div>
         <div className={uiClass("sensa-review-boundary-mask")}>
           <i aria-hidden="true" />
-          <span>译文将在作答后显示</span>
+          <span>{cardText('translationAppearsAfterYourAnswer')}</span>
         </div>
       </section>
 
       <section className={uiClass("sensa-review-boundary-question")}>
-        <span>你的判断</span>
+        <span>{cardText('yourJudgement')}</span>
         <h2>{spec.questionL1}</h2>
         <div role="radiogroup" aria-label={spec.questionL1}>
           {spec.options.map((option, index) => {
@@ -179,9 +180,7 @@ function SensaBoundaryAssessment({
             onViewChange();
             onSubmit(reviewResult(spec, selectedOption.isCorrect, selectedOption.id));
           }}
-        >
-          提交这次检验
-        </button>
+        >{cardText('submitThisCheck')}</button>
       </footer>
 
       {activeLookup && (

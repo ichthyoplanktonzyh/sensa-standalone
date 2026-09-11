@@ -1,3 +1,4 @@
+import {cardText} from '../../i18n/originalCards';
 import { uiClass } from '../ui/classes';
 import {
   useCallback,
@@ -23,7 +24,7 @@ const stripMarkup = (value: string): string => value.replace(/<[^>]*>/g, '').tri
 
 function SyncedMediaSurface({ render }: { render: SyncedExampleMediaRender }) {
   return (
-    <section className="sensa-example-media" aria-label={`${render.providerLabel} 原声片段`}>
+    <section className="sensa-example-media" aria-label={cardText('originalAudio',{provider:render.providerLabel})}>
       {render.kind === 'video' ? (
         <video
           controls
@@ -31,13 +32,11 @@ function SyncedMediaSurface({ render }: { render: SyncedExampleMediaRender }) {
           poster={render.posterUrl}
           src={render.playbackUrl}
           onPlay={() => audioService.stop()}
-        >
-          当前浏览器无法播放这段已审核媒体。
-        </video>
+        >{cardText('thisBrowserCannotPlayThisReviewedMedia')}</video>
       ) : (
         <iframe
           src={render.embedUrl}
-          title={`${render.providerLabel} 原声片段`}
+          title={cardText('originalAudio',{provider:render.providerLabel})}
           allow="autoplay; encrypted-media; picture-in-picture"
           allowFullScreen
           loading="lazy"
@@ -48,7 +47,7 @@ function SyncedMediaSurface({ render }: { render: SyncedExampleMediaRender }) {
         <span>{render.providerLabel}</span>
         {render.rightsLabel && <small>{render.rightsLabel}</small>}
         {render.sourceUrl && (
-          <a href={render.sourceUrl} target="_blank" rel="noreferrer">查看来源</a>
+          <a href={render.sourceUrl} target="_blank" rel="noreferrer">{cardText('viewSource')}</a>
         )}
       </footer>
     </section>
@@ -61,6 +60,7 @@ export function SensaExampleScreen({
   initialSenseIdx = 0,
   initialSentenceIdx = 0,
   sentenceSequence,
+  screenId = 's-example',
   onClose,
   onOpenDict,
   toast,
@@ -71,7 +71,7 @@ export function SensaExampleScreen({
       : [{
           id: curWord.id,
           pos: curWord.senses[0]?.pos || '',
-          text: curWord.senses[0]?.items[0] || '当前意思',
+          text: curWord.senses[0]?.items[0] || cardText('currentMeaning'),
           def: curWord.def,
           sentences: curWord.sentences,
         }]
@@ -171,7 +171,7 @@ export function SensaExampleScreen({
     }
     const text = stripMarkup(sentence.en);
     if (!sentence.audioUrl && curWord.id && !curWord.id.startsWith('w_')) {
-      toast('这条例句暂未提供可播放的已审核音频');
+      toast(cardText('thisExampleHasNoPlayableReviewedAudioYet'));
       return;
     }
 
@@ -184,7 +184,7 @@ export function SensaExampleScreen({
         : audioService.playAudioUrl(sentence.audioUrl, text, 'us')
       : audioService.playSentence(text, 'us');
     void playback.catch(() => {
-      if (playbackToken.current === token) toast('音频播放失败，请重试');
+      if (playbackToken.current === token) toast(cardText('audioCouldNotPlayTryAgain'));
     }).finally(() => {
       if (playbackToken.current === token) setIsPlaying(false);
     });
@@ -199,12 +199,13 @@ export function SensaExampleScreen({
   return (
     <section
       className={`screen sensa-example-screen${active ? ' active' : ''}`}
-      id="s-example"
+      id={screenId}
+      data-screen-layer="0.5"
       data-learning-example="true"
       data-anim="slide"
     >
       <header className="sensa-example-topbar">
-        <button type="button" onClick={close} aria-label="返回学习">
+        <button type="button" onClick={close} aria-label={cardText('returnToLearning')}>
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
         <div>
@@ -219,12 +220,12 @@ export function SensaExampleScreen({
           onClick={() => {
             try {
               const saved = personalContentService.toggleExample(exampleId);
-              toast(saved ? '已收藏这条例句' : '已取消收藏');
+              toast(saved ? cardText('exampleSaved') : cardText('exampleRemovedFromSavedItems'));
             } catch {
-              toast('收藏未能保存，请重试');
+              toast(cardText('couldNotSaveThisExampleTryAgain'));
             }
           }}
-          aria-label={isSaved ? '取消收藏这条例句' : '收藏这条例句'}
+          aria-label={isSaved ? cardText('unsaveThisExample') : cardText('saveThisExample')}
         >
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-star" /></svg>
         </button>
@@ -241,24 +242,24 @@ export function SensaExampleScreen({
             <article className="sensa-example-viewer">
             <div className="sensa-example-source">
               <div>
-                <span>{sentence.sourceKind === 'attested_usage' ? '已审核原声' : '已审核学习例句'}</span>
+                <span>{sentence.sourceKind === 'attested_usage' ? cardText('reviewedAuthenticUsage') : cardText('reviewedLearningExample')}</span>
                 <strong>{sentence.src}</strong>
               </div>
               <small>
                 {sentence.syncedMedia?.providerLabel
-                  ?? (sentence.audioUrl ? '文本 · 静态音频' : '文本')}
+                  ?? (sentence.audioUrl ? cardText('textRecordedAudio') : cardText('text'))}
               </small>
             </div>
 
             {active && sentence.syncedMedia && <SyncedMediaSurface render={sentence.syncedMedia} />}
 
-            <section className="sensa-example-sentence" aria-label="当前例句">
-              <p className="example-lookup-hint">点击句中单词，查看释义</p>
+            <section className="sensa-example-sentence" aria-label={cardText('currentExample')}>
+              <p className="example-lookup-hint">{cardText('tapAWordForItsDefinition')}</p>
               <button
                 type="button"
                 className={`sensa-example-play${isPlaying ? ' is-playing' : ''}`}
                 onClick={playSentence}
-                aria-label={isPlaying ? '停止播放例句' : '播放例句'}
+                aria-label={isPlaying ? cardText('stopExampleAudio') : cardText('playExampleAudio')}
               >
                 {isPlaying ? (
                   <span aria-hidden="true">Ⅱ</span>
@@ -284,7 +285,7 @@ export function SensaExampleScreen({
                       displayWord: token.cleanWord,
                       load: async (signal) => {
                         const entry = await lookupDictionaryEntry(request, { signal });
-                        if (!entry) toast('当前词典没有这个词');
+                        if (!entry) toast(cardText('thisWordIsNotInTheDictionary'));
                         return entry;
                       },
                     });
@@ -298,16 +299,16 @@ export function SensaExampleScreen({
                 aria-expanded={showTranslation}
                 onClick={() => setShowTranslation((visible) => !visible)}
               >
-                {showTranslation ? '隐藏译文' : '显示译文'}
+                {showTranslation ? cardText('hideTranslation') : cardText('showTranslation')}
               </button>
             </section>
 
             <section className="sensa-example-sense-anchor">
-              <span>这句话里的 {curWord.w}</span>
+              <span>{cardText('expressionInThisSentence')}{curWord.w}</span>
               <strong>{sense?.pos} {sense?.text}</strong>
               {sense?.def && (
                 <details>
-                  <summary>查看义项边界</summary>
+                  <summary>{cardText('viewMeaningBoundaries')}</summary>
                   <p>{stripMarkup(sense.def)}</p>
                 </details>
               )}
@@ -316,7 +317,7 @@ export function SensaExampleScreen({
             {(sentence.contextL2 || sentence.contextL1) && (
               <section className={`sensa-example-context${showContext ? ' is-open' : ''}`}>
                 <button type="button" aria-expanded={showContext} onClick={() => setShowContext((visible) => !visible)}>
-                  <span>完整上下文</span>
+                  <span>{cardText('fullContext')}</span>
                   <b aria-hidden="true">{showContext ? '−' : '+'}</b>
                 </button>
                 {showContext && (
@@ -330,16 +331,16 @@ export function SensaExampleScreen({
             </article>
           ) : (
             <div className="sensa-example-unavailable" role="status">
-              <strong>这条学习资源暂时不可用</strong>
-              <p>当前义项没有可显示的已审核例句。</p>
+              <strong>{cardText('thisLearningResourceIsUnavailable')}</strong>
+              <p>{cardText('thisMeaningHasNoReviewedExamplesToDisplay')}</p>
             </div>
           )}
         </ExampleCardCarousel>
       </div>
 
       <footer className="sensa-example-footer">
-        <button type="button" onClick={close}>返回学习</button>
-        <p>查看、播放和收藏不会改变本次学习进度</p>
+        <button type="button" onClick={close}>{cardText('returnToLearning')}</button>
+        <p>{cardText('viewingPlayingAndSavingDoNotChangeLearning')}</p>
       </footer>
 
       {active && activeLookup && (

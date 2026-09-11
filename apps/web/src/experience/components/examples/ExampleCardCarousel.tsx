@@ -1,3 +1,4 @@
+import {cardText} from '../../../i18n/originalCards';
 import { uiClass } from '../../ui/classes';
 import {
   useEffect,
@@ -93,12 +94,12 @@ export function ExampleCardCarousel({
       </div>
 
       {itemCount > 1 && (
-        <nav className={uiClass("sensa-example-pagination")} aria-label="切换例句">
+        <nav className={uiClass("sensa-example-pagination")} aria-label={cardText('switchExample')}>
           <button
             type="button"
             disabled={!hasPrevious}
             onClick={() => onIndexChange(currentIndex - 1)}
-            aria-label="上一条例句"
+            aria-label={cardText('previousExample')}
           >
             <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
           </button>
@@ -109,7 +110,7 @@ export function ExampleCardCarousel({
                 key={itemKeys[index] ?? index}
                 className={uiClass(index === currentIndex ? 'active' : '')}
                 onClick={() => onIndexChange(index)}
-                aria-label={`查看第 ${index + 1} 条例句`}
+                aria-label={cardText('viewExampleNumber',{index:index+1})}
                 aria-current={index === currentIndex ? 'true' : undefined}
               />
             ))}
@@ -119,7 +120,7 @@ export function ExampleCardCarousel({
             type="button"
             disabled={!hasNext}
             onClick={() => onIndexChange(currentIndex + 1)}
-            aria-label="下一条例句"
+            aria-label={cardText('nextExample')}
           >
             <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-r" /></svg>
           </button>

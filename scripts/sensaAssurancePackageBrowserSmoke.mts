@@ -16,7 +16,7 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.SE
 const context=await browser.newContext({viewport:{width:1280,height:900}}),page=await context.newPage();
 page.setDefaultTimeout(10000);
 const subject=id(),errors:string[]=[];let failDownload=false,downloads=0;
-page.on('pageerror',e=>errors.push(e.message));
+page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')console.error('Browser:',m.text());});
 await context.route('**/*',async route=>{
  const u=new URL(route.request().url());
  if(u.origin===origin){await route.continue();return;}
@@ -38,21 +38,36 @@ try{
  const details=page.locator('#s-learning-target');await expect(details.getByRole('heading',{name:'高保证学习',exact:true})).toBeVisible();await expect(details.locator('audio')).toHaveCount(5);
  await details.locator('audio').first().evaluate(async(a:HTMLAudioElement)=>{await a.play();a.pause();if(!Number.isFinite(a.duration)||a.duration<=0)throw Error('Audio did not decode');});
  await details.getByRole('button',{name:'开始 / 继续学习',exact:true}).click();await page.getByRole('button',{name:'确认数量并开始',exact:true}).click();
- const runtime=page.locator('#s-lightweight-runtime');await expect(runtime.getByRole('heading',{name:'建立经验',exact:true})).toBeVisible();await expect(runtime.getByRole('heading',{name:'borrow',exact:true})).toHaveCount(0);
+ const runtime=page.locator('#s-lightweight-runtime');await expect(runtime.getByRole('heading',{name:'先感受一下',exact:true})).toBeVisible();await expect(runtime.getByRole('heading',{name:'borrow',exact:true})).toHaveCount(0);
+ await expect(runtime.locator('[data-assurance-original-cards] .intro-experience-page')).toBeVisible();
  await mkdir('/tmp/sensa-assurance',{recursive:true});await page.screenshot({path:'/tmp/sensa-assurance/experience.png'});
- let steps=0;const gates=new Set();
+ const revealButton=await runtime.getByRole('button',{name:'揭晓这个意思',exact:true}).boundingBox();assert(revealButton&&revealButton.x>=0&&revealButton.x+revealButton.width<=1280);
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:'/tmp/sensa-assurance/experience-mobile.png'});assert(await runtime.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await page.setViewportSize({width:1280,height:900});
+ let steps=0;const gates=new Set();let scaffolded=false,skipped=false,supportsChecked=false;const captured=new Set();
  while(steps++<80){
   const runs=await rows('learningRuns');const run=runs.find(r=>r.assurance&&!r.completedAt)??runs.at(-1);if(run?.completedAt)break;if(!run)throw Error('Missing run');
   const view=assuranceView(run,pack)!;
   if(steps===6){await page.reload();await expect(runtime).toBeVisible();assert.equal((await rows('learningRuns'))[0].revision,run.revision);}
-  if(view.introduction){await runtime.getByRole('button',{name:run.assurance.revealed?'继续检验':'看看如何表达',exact:true}).click();}
-  else if(run.assurance.feedback)await runtime.getByRole('button',{name:'继续',exact:true}).click();
-  else{const r=view.resource!;gates.add(view.action.capability);if(r.kind==='meaning_to_form_recall'){await runtime.getByRole('textbox',{name:'输入表达',exact:true}).fill(r.primaryForm);await runtime.getByRole('button',{name:'提交答案',exact:true}).click();}else{const label=r.kind==='novel_context_transfer'?r.scenario.options.find(o=>o.isCorrect)!.labelL1:r.options.find(o=>o.isCorrect)!.textL1;await runtime.getByRole('button',{name:label,exact:true}).click();}}
+  if(!captured.has(view.stepKind)){captured.add(view.stepKind);await page.screenshot({path:'/tmp/sensa-assurance/'+view.stepKind+'.png'});}
+  assert(await runtime.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
+  if(view.introduction&&run.assurance.revealed&&!supportsChecked){
+   supportsChecked=true;await page.screenshot({path:'/tmp/sensa-assurance/reveal.png'});
+   await runtime.getByRole('button',{name:'回看体验',exact:true}).click();await expect(runtime.getByRole('heading',{name:'先感受一下',exact:true})).toBeVisible();await runtime.getByRole('button',{name:'揭晓这个意思',exact:true}).click();
+   assert.equal((await rows('learningRuns')).find(r=>r.id===run.id).revision,run.revision);
+   await runtime.getByRole('button',{name:'查看完整例句',exact:true}).click();const examples=page.locator('#s-package-example.active');await expect(examples).toBeVisible();await expect(examples.getByText('borrow',{exact:true}).first()).toBeVisible();await examples.getByRole('button',{name:'返回学习',exact:true}).first().click();await expect(examples).toHaveCount(0);assert.equal((await rows('learningRuns')).find(r=>r.id===run.id).revision,run.revision);
+  }
+  if(view.introduction){await runtime.getByRole('button',{name:run.assurance.revealed?(view.action.intent==='repair'?'完成修复，稍后再检验':'继续，让它稍后再出现'):(view.action.intent==='repair'?'重新查看 Reveal':'揭晓这个意思'),exact:true}).click();}
+  else if(run.assurance.feedback)await runtime.getByRole('button',{name:/^(继续学习|继续，稍后再检验|继续，稍后再取回|完成本次检验|先修复，稍后再试|继续复习|返回评测卡目录)$/}).click();
+  else{const r=view.resource!;gates.add(view.action.capability);if(r.kind==='meaning_to_form_recall'){
+   if(run.assurance.mode==='choice'){scaffolded=true;await runtime.getByRole('radio',{name:r.primaryForm,exact:true}).click();await runtime.getByRole('button',{name:'确认',exact:true}).click();}
+   else{await runtime.getByRole('textbox',{name:'写下对应的英文形式',exact:true}).fill(scaffolded?r.primaryForm:'wrong-answer');await runtime.getByRole('button',{name:'确认',exact:true}).click();}
+  }else if(r.kind==='novel_context_transfer'&&!skipped){skipped=true;await runtime.getByRole('button',{name:'还判断不了',exact:true}).click();}else{const label=r.kind==='novel_context_transfer'?r.scenario.options.find(o=>o.isCorrect)!.labelL1:r.options.find(o=>o.isCorrect)!.textL1;await runtime.getByRole('radio').filter({hasText:label}).click();await runtime.getByRole('button',{name:/^(确认判断|提交判断|提交这次检验)$/}).click();}}
   await expect.poll(async()=>((await rows('learningRuns')).find(r=>r.id===run.id)?.revision)).toBe(run.revision+1);
+  if(view.resource?.kind==='meaning_to_form_recall'&&!scaffolded){await page.reload();await expect(runtime).toBeVisible();assert.equal((await rows('learningRuns')).find(r=>r.id===run.id).revision,run.revision+1);}
  }
  await expect(runtime.getByRole('heading',{name:'本次学习已完成',exact:true})).toBeVisible();assert.equal(gates.size,4);assert.equal((await rows('learningTargets')).find(t=>t.expression==='borrow').memoryRevision,1);
  await page.setViewportSize({width:390,height:844});assert(await runtime.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await page.screenshot({path:'/tmp/sensa-assurance/completion-mobile.png'});
- await runtime.getByRole('button',{name:'继续学习',exact:true}).click();await expect(runtime.getByRole('heading',{name:'建立经验',exact:true})).toBeVisible();assert.equal((await rows('learningRuns')).length,2);
- await runtime.getByRole('button',{name:'暂停',exact:true}).click();await page.getByRole('banner').getByLabel('界面语言',{exact:true}).selectOption('en');await page.goto(origin+'/?flow=lightweight');await expect(runtime.getByText('High-assurance learning',{exact:true})).toBeVisible();await expect(runtime.getByRole('heading',{name:'Build experience',exact:true})).toBeVisible();
+ await runtime.getByRole('button',{name:'继续学习',exact:true}).click();await expect(runtime.getByRole('heading',{name:'先感受一下',exact:true})).toBeVisible();assert.equal((await rows('learningRuns')).length,2);
+ await runtime.getByRole('button',{name:'暂停',exact:true}).click();await page.getByRole('banner').getByLabel('界面语言',{exact:true}).selectOption('en');await page.goto(origin+'/?flow=lightweight');await expect(runtime.getByText('High-assurance learning',{exact:true})).toBeVisible();await expect(runtime.getByRole('heading',{name:'Experience it first',exact:true})).toBeVisible();
  assert.deepEqual(errors,[]);console.log('PASS: real assurance bundle/download, audio decode, fixed high-assurance entry, hidden initial expression, four checks, reload, graduation, next target, pause/resume, English and mobile layout. No model calls.');
-}finally{await browser.close();}
+}catch(error){console.error('UI errors:',errors);if(await page.getByRole('button',{name:'Show Error',exact:true}).count()){await page.getByRole('button',{name:'Show Error',exact:true}).click();console.error(await page.locator('body').innerText());}console.error(await page.locator('#s-lightweight-runtime').innerText().catch(()=>''));await page.screenshot({path:'/tmp/sensa-assurance/failure.png'});throw error;}finally{await browser.close();}

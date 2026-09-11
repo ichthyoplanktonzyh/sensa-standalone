@@ -1,11 +1,18 @@
-import {useState} from 'react';
+import {uiClass} from '../ui/classes';
+import {originalStepRendererRegistry,type OriginalStepProps} from '../learningRuntime/originalStepRenderers';
+import type {StepRendererHost} from '../learningRuntime/stepRenderers';
+import type {QuickDictEntry} from '../types';
+import type {CardExecution} from '../components/cards/CardExecution';
+import {toWordPresentation} from '../content/learningCatalog';
+import {ExampleScreen} from '../components/ExampleScreen';
+import {useEffect,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {assuranceContent,assuranceView,type AssuranceAction} from '../../data/library/assurance';
 import type {LocalLearningRun,LocalLearningTarget} from '../../data/library/learning';
 import type {InstalledPackage} from '../../data/library/packages';
 import {RuntimeFrame} from '../components/learning/RuntimeFrame';
-import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
+import {LearningSetupFrame,setupPrimary} from '../components/learning/LearningSetupFrame';
 import type {PrototypeIntroductionPackage} from '../content/learningCatalog';
 function StudyResources({content}:{content:PrototypeIntroductionPackage}){
  return <div className="space-y-6">
@@ -22,38 +29,34 @@ export function AssuranceTarget({active,target,pack,busy,notice,canResume,onBack
   <StudyResources content={template.content}/>
  </LearningSetupFrame>;
 }
-export function AssuranceRuntime(props:{active:boolean;run:LocalLearningRun;target:LocalLearningTarget;pack:InstalledPackage;busy:boolean;notice:string;onAction:(action:AssuranceAction)=>void;onExit:()=>void;onFinish:()=>void}){
- useTranslation();const {run,pack}=props,view=assuranceView(run,pack),state=run.assurance!;
- const [answer,setAnswer]=useState(''),[position,setPosition]=useState(0);
+export type AssuranceSupportHost = Pick<StepRendererHost, 'toast' | 'openDict' | 'openNoteEditor' | 'openSceneEditor' | 'lookupDictionary'>;
+export function AssuranceRuntime(props:{active:boolean;run:LocalLearningRun;target:LocalLearningTarget;pack:InstalledPackage;busy:boolean;notice:string;host:AssuranceSupportHost;onAction:(action:AssuranceAction)=>void;onExit:()=>void;onFinish:()=>void}){
+ useTranslation();
+ const {run,pack,host}=props,view=assuranceView(run,pack),state=run.assurance!;
+ const [exampleIndex,setExampleIndex]=useState<number|null>(null);
+ const resetScroll=()=>{document.getElementById('s-lightweight-runtime')?.scrollTo({top:0});};
+ const [phase,setPhase]=useState<'experience'|'reveal'>(state.revealed?'reveal':'experience');
+ useEffect(resetScroll,[run.id,run.revision]);
  const act=(response:AssuranceAction['response'])=>props.onAction({kind:'assurance',response});
- const resource=view?.resource,content=view?.content;
- const projection=view?.projection.targets[0];const gates=projection&&'gates' in projection?projection.gates:[];const progress=run.completedAt?100:gates.length?100*gates.filter(g=>g.status==='passed').length/gates.length:state.feedback?50:0;
- const options=resource?.kind==='meaning_to_form_recall'?resource.choiceOptions.map(o=>({id:o.id,label:o.textL2,correct:o.isTarget})):resource?.kind==='novel_context_transfer'?resource.scenario.options.map(o=>({id:o.id,label:o.labelL1,correct:o.isCorrect})):resource?.kind==='context_recognition'||resource?.kind==='boundary_contrast'?resource.options.map(o=>({id:o.id,label:o.textL1,correct:o.isCorrect})):[];
+ const content=view?.content,resource=view?.resource;
+ const projection=view?.projection.targets[0];const gates=projection&&'gates' in projection?projection.gates:[];
+ const progress=run.completedAt?100:gates.length?100*gates.filter(g=>g.status==='passed').length/gates.length:state.feedback?50:0;
  const title=run.completedAt?'assuranceCompleted':view?.introduction?'assuranceExperience':view?.action.capability==='contextual_recognition'?'assuranceRecognition':view?.action.capability==='meaning_to_form_recall'?'assuranceRecall':view?.action.capability==='novel_context_transfer'?'assuranceTransfer':'assuranceBoundary';
- const experience=content?.experience,states=experience?.kind==='interaction'?experience.states:[],current=states[position]??states[0];
- return <RuntimeFrame id="s-lightweight-runtime" active={props.active} title={localFlowText('assuranceTitle')} stepLabel={localFlowText(title)} progress={progress} onExit={props.onExit}>
-  <div className="mx-auto max-w-2xl space-y-6">
-   <h1 className="text-2xl font-medium">{localFlowText(title)}</h1>
-   {props.notice&&<p role="alert" className="rounded-xl bg-amber-50 p-4">{localFlowNotice(props.notice)}</p>}
-   {run.completedAt?<><p>{localFlowText('assuranceCompletionHint')}</p><button className={setupPrimary} onClick={props.onFinish}>{localFlowText('assuranceContinueLearning')}</button></>:view&&content&&<fieldset disabled={props.busy} className="min-w-0 space-y-6 disabled:opacity-60">
-    {view.introduction?<>
-     {!state.revealed?<section className="space-y-5 rounded-2xl border border-[#dfe4ed] bg-white p-6">
-      {experience?.kind==='interaction'?<><p className="text-lg leading-8">{experience.instructionL1}</p><label className="block text-sm">{experience.controlLabelL1}<input type="range" min={0} max={Math.max(0,states.length-1)} step={1} value={position} onChange={e=>setPosition(Number(e.target.value))} aria-valuetext={current?.labelL1} className="my-5 block min-h-11 w-full accent-[#303f76]"/></label><p className="font-medium">{current?.labelL1}</p><p className="text-lg leading-8">{current?.feedbackL1}</p></>:<p className="text-lg leading-8">{experience?.sceneL1}</p>}
-      <button className={setupPrimary} onClick={()=>act({kind:'reveal'})}>{localFlowText('assuranceReveal')}</button>
-     </section>:<><p className="text-lg leading-8">{content.experienceSketch.bodyL1}</p><p className="text-sm leading-7">{content.l1Bridge}</p><StudyResources content={content}/><button className={setupPrimary+' w-full'} onClick={()=>act({kind:'continue'})}>{localFlowText('assuranceBeginCheck')}</button></>}
-    </>:resource&&<>
-     <section className="space-y-4 rounded-2xl border border-[#dfe4ed] bg-white p-6">
-      <p className="text-sm text-[#68748d]">{resource.instructionL1}</p>
-      {resource.kind==='meaning_to_form_recall'?<p className="text-xl leading-9">{resource.cueL1}</p>:resource.kind==='novel_context_transfer'?<><p className="text-xl leading-9">{resource.scenario.setupL2}</p><p className="text-sm leading-7">{resource.scenario.setupL1}</p></>:<><p className="text-xl leading-9">{resource.example.textL2}</p><p className="leading-7">{resource.questionL1}</p></>}
-      {!state.feedback&&(resource.kind==='meaning_to_form_recall'&&state.mode!=='choice'?<>
-       {state.mode==='first_letter'&&<p>{localFlowText('assuranceFirstLetter',{letter:resource.primaryForm[0]})}</p>}
-       <form onSubmit={e=>{e.preventDefault();if(answer.trim())act({kind:'answer',value:answer});}} className="space-y-4"><input autoComplete="off" autoCapitalize="none" spellCheck={false} aria-label={localFlowText('assuranceAnswer')} value={answer} onChange={e=>setAnswer(e.target.value)} className="min-h-12 w-full rounded-xl border border-[#bdc8dd] px-4"/><button disabled={!answer.trim()} className={setupPrimary}>{localFlowText('assuranceSubmit')}</button></form>
-       <div className="flex flex-wrap gap-3">{state.mode==='independent'&&<button className={setupButton} onClick={()=>act({kind:'hint',mode:'first_letter'})}>{localFlowText('assuranceHint')}</button>}<button className={setupButton} onClick={()=>act({kind:'hint',mode:'choice'})}>{localFlowText('assuranceChoices')}</button></div>
-      </>:<div className="grid gap-3">{options.map(o=><button key={o.id} className={setupButton+' justify-start py-3 text-left'} onClick={()=>act({kind:'answer',value:o.id})}>{o.label}</button>)}</div>)}
-     </section>
-     {state.feedback&&<section className="space-y-4 rounded-2xl border border-[#bdc8dd] bg-[#eef2fa] p-6" role="status"><h2 className="text-lg font-medium">{localFlowText(state.feedback.correct?(state.mode==='independent'?'assuranceCorrect':'assuranceSupported'):'assuranceRepair')}</h2><p className="text-xl">{resource.kind==='meaning_to_form_recall'?resource.primaryForm:options.find(o=>o.correct)?.label}</p><p className="leading-7">{resource.kind==='meaning_to_form_recall'?(state.feedback.correct?resource.independentSuccessBodyL1:resource.repairBodyL1):resource.kind==='novel_context_transfer'?resource.scenario.options.find(o=>o.id===state.feedback!.answer)?.feedbackBodyL1:resource.options.find(o=>o.id===state.feedback!.answer)?.feedbackBodyL1}</p><button className={setupPrimary} onClick={()=>act({kind:'continue'})}>{localFlowText('assuranceContinue')}</button></section>}
-    </>}
-   </fieldset>}
-  </div>
- </RuntimeFrame>;
+ const next=()=>act({kind:'continue'});
+ const execution:CardExecution={mode:state.mode,feedback:state.feedback,continue:next,hint:mode=>act({kind:'hint',mode}),submit:answer=>act(answer===null?{kind:'skip'}:{kind:resource?.kind==='meaning_to_form_recall'?'try_recall':'answer',value:answer})};
+ const supports=content?{
+  onOpenDictionary:(word:string|QuickDictEntry)=>host.openDict(word),
+  onOpenNote:()=>host.openNoteEditor(content.lemma,content.senseKey,content.guideLabelL1),
+  onOpenScene:(anchorId?:string)=>host.openSceneEditor(content,anchorId),
+  onOpenExample:(index=0)=>setExampleIndex(index),lookupDictionary:host.lookupDictionary,
+  onViewChange:resetScroll,toast:host.toast,
+ }:null;
+ const card=view&&content&&supports?originalStepRendererRegistry.get<OriginalStepProps>(view.stepKind)({content,resource:resource??null,execution,purpose:run.purpose==='initial_learning'?'acquisition':'retention',phase,onPhaseChange:nextPhase=>{if(nextPhase==='reveal'&&!state.revealed)act({kind:'reveal'});else{setPhase(nextPhase);resetScroll();}},supports}):null;
+ return <>
+ <RuntimeFrame id="s-lightweight-runtime" active={props.active} title={localFlowText('assuranceTitle')} stepLabel={localFlowText(title)} progress={progress} onExit={props.onExit}>
+  {props.notice&&<p role="alert" className="mb-6 rounded-xl bg-amber-50 p-4">{localFlowNotice(props.notice)}</p>}
+  {run.completedAt?<div className="space-y-6"><h1 className="text-3xl font-medium">{localFlowText('assuranceCompleted')}</h1><p>{localFlowText('assuranceCompletionHint')}</p><button className={setupPrimary} onClick={props.onFinish}>{localFlowText('assuranceContinueLearning')}</button></div>:<fieldset disabled={props.busy} className={uiClass('#s-learn','relative min-w-0 overflow-visible! disabled:opacity-60 [&_.intro-experience-footer]:translate-x-0! [&_.intro-experience-footer]:left-auto! [&_.intro-experience-footer]:px-0! [&_.lfoot]:translate-x-0! [&_.lfoot]:left-auto! [&_.lfoot]:px-0!')} data-assurance-original-cards>{card}</fieldset>}
+ </RuntimeFrame>
+ {content&&exampleIndex!==null&&<ExampleScreen screenId="s-package-example" active={props.active} curWord={toWordPresentation(content)} initialSentenceIdx={exampleIndex} sentenceSequence={content.learningExamples.map((_,i)=>i)} onClose={()=>setExampleIndex(null)} onOpenDict={host.openDict} onNextWord={()=>setExampleIndex(null)} nextLabel={localFlowText('assuranceContinue')} toast={host.toast}/>}
+ </>;
 }

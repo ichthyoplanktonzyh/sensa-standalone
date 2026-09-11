@@ -1,3 +1,4 @@
+import {cardText} from '../../../i18n/originalCards';
 import { uiClass } from '../../ui/classes';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
@@ -14,6 +15,7 @@ import type { RecognitionCardProps } from './RecognitionCard';
 import { ExperienceRenderer } from './ExperienceRenderer';
 
 export function SensaRecognitionCard({
+  execution,
   content,
   assessment,
   purpose = 'acquisition',
@@ -26,13 +28,14 @@ export function SensaRecognitionCard({
   toast,
 }: RecognitionCardProps) {
   const isRetention = purpose === 'retention';
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(execution?.feedback?.answer ?? null);
+  const [submitted, setSubmitted] = useState(!!execution?.feedback);
   const [replayingExperience, setReplayingExperience] = useState(false);
   const { activeLookup, openLookup, clearLookup } = useImmediateDictionaryLookup();
   const outcomeRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
+    if (execution) return;
     setSelectedId(null);
     setSubmitted(false);
     setReplayingExperience(false);
@@ -77,7 +80,7 @@ export function SensaRecognitionCard({
       clickedSurface: token.text,
     };
     const entry = await lookupDictionary(request, options);
-    if (!entry) toast('当前 Reference 样本没有这个词');
+    if (!entry) toast(cardText('thisWordIsNotInTheCurrentReference'));
     return entry;
   };
 
@@ -100,20 +103,20 @@ export function SensaRecognitionCard({
       data-assessment-task-key={assessment.taskKey}
     >
       <header className={uiClass("sensa-recognition-heading")}>
-        <span>{isRetention ? '长期复习 · 语境判断' : '再次相遇'}</span>
-        <h1>{isRetention ? '这个意思还在吗？' : '只看这一句'}</h1>
+        <span>{isRetention ? cardText('reviewContextRecognition') : cardText('meetItAgain')}</span>
+        <h1>{isRetention ? cardText('isThisMeaningStillThere') : cardText('focusOnThisSentence')}</h1>
         <p>
           {isRetention
-            ? '只根据英文语境独立判断；提交后再看译文和解释。'
+            ? cardText('judgeFromTheEnglishContextFirstTranslationAnd')
             : assessment.instructionL1}
         </p>
       </header>
 
-      <section className={uiClass("sensa-recognition-context")} aria-label="当前判断语境">
+      <section className={uiClass("sensa-recognition-context")} aria-label={cardText('currentContext')}>
         <div className={uiClass("sensa-recognition-context-meta")}>
           <span>{assessment.contextLabelL1}</span>
           <i aria-hidden="true" />
-          <small>{submitted ? '答案已揭示' : '意思暂不揭示'}</small>
+          <small>{submitted ? cardText('answerRevealed') : cardText('meaningHiddenForNow')}</small>
         </div>
         {submitted ? (
           <div className={uiClass("sensa-recognition-sentence is-lookup-enabled")}>
@@ -142,7 +145,7 @@ export function SensaRecognitionCard({
         {submitted && (
           <div className={uiClass("sensa-recognition-translation")}>
             <p>{assessment.example.textL1}</p>
-            <span>现在可以点击句中单词查义</span>
+            <span>{cardText('youCanNowTapWordsForDefinitions')}</span>
           </div>
         )}
       </section>
@@ -171,8 +174,8 @@ export function SensaRecognitionCard({
                   {submitted && option.isCorrect ? '✓' : submitted && isSelected ? '×' : ''}
                 </span>
                 <span>{option.textL1}</span>
-                {submitted && option.isCorrect && <small>符合语境</small>}
-                {submitted && isSelected && !option.isCorrect && <small>你的选择</small>}
+                {submitted && option.isCorrect && <small>{cardText('fitsTheContext')}</small>}
+                {submitted && isSelected && !option.isCorrect && <small>{cardText('yourChoice')}</small>}
               </button>
             );
           })}
@@ -189,12 +192,12 @@ export function SensaRecognitionCard({
           <header>
             <span aria-hidden="true">{isCorrect ? '✓' : '↗'}</span>
             <div>
-              <small>{isCorrect ? '连接成立' : '只修复这一点'}</small>
+              <small>{isCorrect ? cardText('connectionEstablished') : cardText('repairThisPoint')}</small>
               <h3>{feedbackTitle}</h3>
             </div>
           </header>
           <p>{feedbackBody}</p>
-          <div className={uiClass("sensa-recognition-features")} aria-label="这个意思的关键线索">
+          <div className={uiClass("sensa-recognition-features")} aria-label={cardText('keyCuesForThisMeaning')}>
             {assessment.featureLabelsL1.map((label) => <span key={label}>{label}</span>)}
           </div>
           <button
@@ -207,7 +210,7 @@ export function SensaRecognitionCard({
             }}
           >
             <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-eye" /></svg>
-            {isCorrect ? '回看意思连接' : '回到刚才的体验'}
+            {isCorrect ? cardText('replayTheMeaningConnection2') : cardText('returnToTheExperience')}
             <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-r" /></svg>
           </button>
         </section>
@@ -230,18 +233,20 @@ export function SensaRecognitionCard({
             onClick={() => {
               clearLookup();
               onViewChange();
-              if (isRetention) {
+              if (execution) {
+                execution.submit(selectedOption?.id ?? null);
+              } else if (isRetention) {
                 onComplete(isCorrect, selectedOption?.id ?? null);
               } else {
                 setSubmitted(true);
               }
             }}
           >
-            {isRetention ? '提交这次检验' : '确认判断'}
+            {isRetention ? cardText('submitThisCheck') : cardText('confirmYourChoice')}
           </button>
         ) : (
-          <button type="button" onClick={() => onComplete(isCorrect, selectedOption?.id ?? null)}>
-            {isCorrect ? '继续学习' : '继续，稍后再检验'}
+          <button type="button" onClick={() => execution ? execution.continue() : onComplete(isCorrect, selectedOption?.id ?? null)}>
+            {isCorrect ? cardText('continueLearning') : cardText('continueAndCheckAgainLater')}
           </button>
         )}
       </footer>

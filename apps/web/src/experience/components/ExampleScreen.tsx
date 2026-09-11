@@ -2,6 +2,7 @@ import type { Word, QuickDictEntry } from '../types';
 import { SensaExampleScreen } from './SensaExampleScreen';
 
 export interface ExampleScreenProps {
+  screenId?: string;
   active: boolean;
   curWord: Word;
   initialSenseIdx?: number;
