@@ -1,10 +1,24 @@
 {
   "extends": "../../tsconfig.package.json",
-  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
-  "include": ["src/**/*.ts"],
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../../packages/content-validator" },
-    { "path": "../../packages/contracts" },
-    { "path": "../../packages/learning-kernel" }
+    {
+      "path": "../../packages/content-validator"
+    },
+    {
+      "path": "../../packages/contracts"
+    },
+    {
+      "path": "../../packages/learning-kernel"
+    },
+    {
+      "path": "../../packages/model-runtime"
+    }
   ]
 }

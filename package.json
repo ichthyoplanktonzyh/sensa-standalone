@@ -9,14 +9,15 @@
     "packages/contracts",
     "packages/learning-kernel",
     "packages/content-validator",
-    "apps/browser-extension"
+    "apps/browser-extension",
+    "packages/model-runtime"
   ],
   "scripts": {
     "sensa:service-status-smoke": "node --import tsx scripts/sensaServiceStatusSmoke.mts",
     "sensa:acceptance": "node scripts/sensaAcceptance.mjs",
     "sensa:acceptance:check": "node scripts/sensaAcceptance.mjs check",
     "sensa:acceptance:smoke": "node scripts/sensaAcceptanceSmoke.mjs",
-    "build": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/api && npm run build -w @sensa/web && npm --prefix apps/web-next run build && npm run build -w @sensa/browser-extension",
+    "build": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/model-runtime && npm run build -w @sensa/api && npm run build -w @sensa/web && npm --prefix apps/web-next run build && npm run build -w @sensa/browser-extension",
     "typecheck": "tsc -b --pretty false && npm run typecheck -w @sensa/web && npm --prefix apps/web-next run typecheck && npm run typecheck -w @sensa/browser-extension",
     "lint": "npm run typecheck",
     "dev": "npm run dev -w @sensa/api",
@@ -86,7 +87,8 @@
     "sensa:library-backup-smoke": "node --import tsx scripts/sensaPersonalLearningSmoke.mts --backup",
     "sensa:library-backup-browser-smoke": "node --import tsx scripts/sensaOfflineColdStartSmoke.mts --backup",
     "sensa:local-i18n-smoke": "node --import tsx scripts/sensaLocalI18nSmoke.mts",
-    "sensa:expression-chat-browser-smoke": "node --import tsx scripts/sensaExpressionChatBrowserSmoke.mts"
+    "sensa:expression-chat-browser-smoke": "node --import tsx scripts/sensaExpressionChatBrowserSmoke.mts",
+    "sensa:model-execution-smoke": "GENKIT_ENV=prod node --import tsx scripts/sensaModelExecutionSmoke.mts"
   },
   "engines": {
     "node": ">=24"

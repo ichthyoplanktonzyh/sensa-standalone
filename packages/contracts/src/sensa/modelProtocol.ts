@@ -1,0 +1,48 @@
+import {z} from 'zod';
+const part = z.union([z.object({
+  type: z.literal('text'),
+  text: z.string().max(300000)
+}).strict(), z.object({
+  type: z.literal('image_url'),
+  image_url: z.object({
+    url: z.string().max(9 * 1024 * 1024).regex(/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/u)
+  }).strict()
+}).strict()]);
+const message = z.object({
+  role: z.enum(['system', 'user', 'assistant', 'tool']),
+  content: z.union([z.string().max(300000), z.array(part).max(31), z.null()]),
+  tool_call_id: z.string().max(100).optional(),
+  tool_calls: z.array(z.object({
+    id: z.string().max(100),
+    type: z.literal('function'),
+    function: z.object({
+      name: z.string().max(100),
+      arguments: z.string().max(32000)
+    }).strict()
+  }).strict()).max(4).optional()
+}).strict();
+const tool = z.object({
+  type: z.literal('function'),
+  function: z.object({
+    name: z.enum(['lookup_meanings', 'ask_learner', 'propose_meaning', 'read_demand', 'lookup_reference_facts', 'submit_candidate']),
+    description: z.string().max(1000),
+    parameters: z.record(z.string(), z.unknown())
+  }).strict()
+}).strict();
+export const modelTurnInputSchema = z.object({
+  id: z.string().uuid(),
+  purpose: z.enum(['teacher', 'content', 'review']),
+  inputDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  body: z.object({
+    model: z.string().max(100),
+    messages: z.array(message).min(2).max(100),
+    tools: z.array(tool).max(3).optional(),
+    max_tokens: z.number().int().min(1).max(3000),
+    stream: z.literal(false),
+    response_format: z.object({
+      type: z.literal('json_object')
+    }).strict().optional()
+  }).strict()
+}).strict();
+export type ModelTurnInput=z.infer<typeof modelTurnInputSchema>;
+export type ModelTurnBody=ModelTurnInput['body'];

@@ -1,3 +1,4 @@
+import {executeModel} from '../models/executor.js';
 import {defaultReadingAssignments,readingSettingsInputSchema,readingRequestSchema} from '@sensa/contracts/sensa';
 import type {ReadingProvider,ReadingAssignments,ReadingSettingsView,ReadingRequest} from '@sensa/contracts/sensa';
 import type {DatabaseExecutor} from '../../database/index.js';
@@ -6,7 +7,6 @@ import {z} from 'zod';
 import {ConsumerError} from '../access/auth.js';
 import {contentHash} from '../curriculum/targets.js';
 import {stream} from 'hono/streaming';
-import {providerStream} from './providerStream.js';
 
 type Connection=ReadingProvider & {apiKey:string};
 type Settings={providers:Connection[];assignments:ReadingAssignments};
@@ -67,15 +67,8 @@ async function responseText(response:Response,max:number){
 /** Endpoint origin is deployment-controlled; credentials and raw errors never reach the page. */
 export const completeReading:ReadingCompletion=async(connection,messages,json=false,onText)=>{
   allowed(connection.baseUrl);
-  const response=await fetch(connection.baseUrl.replace(/\/$/u,'')+'/chat/completions',{
-    method:'POST',redirect:'error',signal:AbortSignal.timeout(35000),
-    headers:{authorization:'Bearer '+connection.apiKey,'content-type':'application/json'},
-    body:JSON.stringify({model:connection.model,temperature:connection.temperature??0,max_tokens:3000,messages,...(json?{response_format:{type:'json_object'}}:{}),...(onText?{stream:true}:{})}),
-  });
-  if(!response.ok){await response.body?.cancel();throw new ConsumerError(503,response.status===401||response.status===403?'provider_auth_failed':response.status===429?'provider_rate_limited':'provider_unavailable');}
-  if(onText&&response.headers.get('content-type')?.includes('text/event-stream'))return providerStream(response,onText);
-  const data=JSON.parse(await responseText(response,100000));const text=data.choices?.[0]?.message?.content;
-  if(typeof text!=='string'||!text.trim()||text.length>24000||data.choices?.[0]?.finish_reason==='length')throw new ConsumerError(503,'provider_invalid_response');
+  const data=await executeModel(connection,{model:connection.model,max_tokens:3000,stream:false,messages,...(json?{response_format:{type:'json_object' as const}}:{})},{purpose:'reading',signal:AbortSignal.timeout(35000),onText});
+  const text=data.choices[0]?.message.content;if(typeof text!=='string'||!text.trim()||text.length>24000)throw new ConsumerError(503,'provider_invalid_response');
   return text;
 };
 

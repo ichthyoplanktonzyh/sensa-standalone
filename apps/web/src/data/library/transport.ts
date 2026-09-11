@@ -1,3 +1,5 @@
+import {localModelQueue} from './modelExecution';
+import {ModelExecutionError,type ModelExecutionRecord} from '@sensa/contracts/sensa';
 import {z} from 'zod';
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {auth} from '../consumer/client';
@@ -11,6 +13,9 @@ async function abortable<T>(promise:Promise<T>,signal:AbortSignal):Promise<T>{
  return new Promise((resolve,reject)=>{const abort=()=>{signal.removeEventListener('abort',abort);reject(new Error('localFlow.requestTimeout'));};if(signal.aborted){void promise.catch(()=>{});abort();return;}signal.addEventListener('abort',abort,{once:true});promise.then(value=>{signal.removeEventListener('abort',abort);resolve(value);},error=>{signal.removeEventListener('abort',abort);reject(error);});});
 }
 export async function complete(provider:Provider,purpose:Purpose,id:string,messages:ModelMessage[],tools:ModelTool[],signal:AbortSignal){
+ try{return await localModelQueue.run({id,provider:new URL(provider.endpoint).origin,model:provider.model,purpose},signal,(bounded,record)=>completeRequest(provider,purpose,id,messages,tools,bounded,record));}catch(e){if(e instanceof ModelExecutionError)throw new Error(e.code==='model_timeout'?'localFlow.requestTimeout':e.code==='model_cancelled'?'localFlow.requestStopped':'localFlow.modelQueueFull');throw e;}
+}
+async function completeRequest(provider:Provider,purpose:Purpose,id:string,messages:ModelMessage[],tools:ModelTool[],signal:AbortSignal,record:ModelExecutionRecord){
  signal=AbortSignal.any([signal,AbortSignal.timeout(45000)]);
  const images=messages.flatMap(m=>m.images??[]);conversationImagesSchema.parse(images);
  const wireMessages=messages.map(({images,...m})=>images?.length?{...m,content:[...(m.content?[{type:'text',text:m.content}]:[]),...images.map(image=>({type:'image_url',image_url:{url:image.dataUrl}}))]}:m);
@@ -27,7 +32,7 @@ export async function complete(provider:Provider,purpose:Purpose,id:string,messa
  }else{key=await providerCredential(provider);payload={...body,...(base.hostname==='api.deepseek.com'?{thinking:{type:'disabled'}}:{})};}
  const response=await fetch(endpoint,{method:'POST',redirect:'error',credentials:'omit',headers:{authorization:'Bearer '+key,'content-type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.any([signal,AbortSignal.timeout(45000)])});
  if(response.status===401||response.status===403){clearCredential(provider.id);throw new Error('localFlow.providerAccessDenied');}
- if(!response.ok){const error=await response.json().catch(()=>({}));if(error.code==='model_input_too_large')throw new Error('localFlow.modelInputLarge');if(['native_semantic_daily_budget','daily_preparation_limit','reading_daily_budget'].includes(error.code))throw new Error('localFlow.serviceLimit');throw new Error('localFlow.modelUnavailable');}
+ if(!response.ok){const error=await response.json().catch(()=>({}));if(error.code==='model_input_too_large')throw new Error('localFlow.modelInputLarge');if(error.code==='model_timeout'||error.code==='model_cancelled')throw new Error('localFlow.requestTimeout');if(error.code==='model_auth_failed')throw new Error('localFlow.providerAccessDenied');if(error.code==='model_queue_full')throw new Error('localFlow.modelQueueFull');if(error.code==='model_rate_limited')throw new Error('localFlow.modelRateLimited');if(error.code==='model_request_rejected')throw new Error('localFlow.modelRequestRejected');if(error.code==='model_invalid_response')throw new Error('localFlow.modelResponseInvalid');if(['native_semantic_daily_budget','daily_preparation_limit','reading_daily_budget'].includes(error.code))throw new Error('localFlow.serviceLimit');throw new Error('localFlow.modelUnavailable');}
  if(!response.body)throw new Error('localFlow.modelIncomplete');
  const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
  try{for(;;){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>256*1024)throw new Error('localFlow.responseLimit');chunks.push(value);}}finally{await reader.cancel();}
@@ -42,5 +47,6 @@ export async function complete(provider:Provider,purpose:Purpose,id:string,messa
  if(signal.aborted)throw new Error('localFlow.stoppedResult');
  if(value?.choices?.[0]?.finish_reason==='length')throw new Error('localFlow.modelTruncated');
  const parsed=completionSchema.safeParse(value);if(!parsed.success)throw new Error('localFlow.modelResponseInvalid');
+ record.inputTokens=Number.isSafeInteger(value?.usage?.prompt_tokens)?value.usage.prompt_tokens:undefined;record.outputTokens=Number.isSafeInteger(value?.usage?.completion_tokens)?value.usage.completion_tokens:undefined;record.traceId=typeof value?.sensaExecution?.traceId==='string'?value.sensaExecution.traceId:undefined;
  return parsed.data;
 }

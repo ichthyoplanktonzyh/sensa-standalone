@@ -1,3 +1,4 @@
+import 'model_execution_queue.dart';
 import '../l10n/interface_locale.dart';
 import 'provider_auth.dart';
 import 'agent_stream.dart';
@@ -426,12 +427,35 @@ class AgentProviders {
 
 class AgentTransport {
   http.Client? _client;
+  int _generation = 0;
   void cancel() {
+    _generation++;
     _client?.close();
     _client = null;
   }
 
   Future<Map<String, dynamic>> complete(
+    Map<String, dynamic> request,
+    AgentProviders providers,
+    WorldRepository media, {
+    void Function(String)? onPreview,
+  }) async {
+    final generation = _generation;
+    final endpoint = Uri.parse(request['provider']['endpoint'] as String);
+    try {
+      return await nativeModelQueue.run(
+        endpoint.origin,
+        () => _complete(request, providers, media, onPreview: onPreview),
+        cancelled: () => generation != _generation,
+      );
+    } on TimeoutException {
+      throw const AgentFailure('timeout');
+    } on StateError {
+      throw const AgentFailure('network');
+    }
+  }
+
+  Future<Map<String, dynamic>> _complete(
     Map<String, dynamic> request,
     AgentProviders providers,
     WorldRepository media, {

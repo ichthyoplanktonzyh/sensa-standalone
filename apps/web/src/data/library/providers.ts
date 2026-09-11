@@ -1,3 +1,4 @@
+import {localModelQueue} from './modelExecution';
 import {z} from 'zod';
 import {command,readLibrary} from './store';
 export const purposes=['teacher','content','review'] as const;
@@ -30,7 +31,7 @@ export async function setCredential(provider:Provider,key:string){
  credentials.set(provider.id,{revision:provider.revision,key:key.trim()});
 }
 export function hasCredential(provider:Provider){return credentials.get(provider.id)?.revision===provider.revision;}
-export function clearAllCredentials(){credentials.clear();}
+export function clearAllCredentials(){credentials.clear();localModelQueue.clear();}
 export function clearCredential(id:string){credentials.delete(id);}
 export async function deleteProvider(operationId:string,provider:Provider){
  await command({id:operationId,kind:'provider.delete',input:{id:provider.id,revision:provider.revision}},async tx=>{
@@ -78,4 +79,20 @@ export async function setModelReviewEnabled(operationId:string,enabled:boolean,e
 export async function selectedReviewProvider():Promise<Provider|null>{
  const {settings}=await providerSnapshot();
  return settings.modelReviewEnabled===true?selectedProvider('review'):null;
+}
+
+/** Lists models without generating content. Credentials stay on this device. */
+export async function listProviderModels(provider:Provider):Promise<string[]>{
+ if(provider.kind!=='compatible')throw Error('localFlow.purposeUnsupported');
+ const key=await providerCredential(provider);
+ return localModelQueue.run({id:crypto.randomUUID(),provider:new URL(provider.endpoint).origin,model:provider.model,purpose:'probe'},AbortSignal.timeout(15000),async signal=>{
+  const response=await fetch(provider.endpoint+'/models',{headers:{authorization:'Bearer '+key},redirect:'error',credentials:'omit',signal});
+  if(!response.ok)throw Error('localFlow.modelCatalogUnavailable');
+  if(!response.body)throw Error('localFlow.modelCatalogUnavailable');
+  const reader=response.body.getReader();let size=0;const chunks:Uint8Array[]=[];try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>512000)throw Error('localFlow.responseLimit');chunks.push(value);}}finally{await reader.cancel();}
+  const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
+  const data=z.object({data:z.array(z.object({id:z.string().min(1).max(100)})).max(5000)}).parse(JSON.parse(new TextDecoder().decode(bytes)));
+  if((await providerSnapshot()).providers.find(p=>p.id===provider.id)?.revision!==provider.revision)throw Error('localFlow.staleConfigResult');
+  return [...new Set(data.data.map(m=>m.id))].sort();
+ });
 }

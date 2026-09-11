@@ -29,3 +29,6 @@ export * from './consumer/learningPackage.js';
 export * from './contentExecution.js';
 
 export * from './richExperience.js';
+
+export * from "./modelExecution.js";
+export * from './modelProtocol.js';

@@ -14,6 +14,8 @@ await context.route('**/*',async route=>{
  const u=new URL(route.request().url());
  if(u.origin===origin){await route.continue();return;}
  if(u.origin!=='http://127.0.0.1:4399'){await route.abort();return;}
+ if(u.pathname.startsWith('/sensa/'))assert.notEqual(route.request().headers().authorization,'Bearer custom-local-test');
+ if(u.pathname==='/models'){assert.equal(route.request().headers().authorization,'Bearer custom-local-test');await route.fulfill({json:{data:[{id:'fixture-v1'},{id:'fixture-v2'}]}});return;}
  if(u.pathname==='/auth/v1/otp'){await route.fulfill({json:{}});return;}
  if(u.pathname==='/auth/v1/verify'){
   const token=[{}, {sub:subject,exp:Math.floor(Date.now()/1000)+3600},'fixture'].map(v=>Buffer.from(JSON.stringify(v)).toString('base64url')).join('.');
@@ -106,5 +108,14 @@ try{
  await page.getByRole('complementary').getByLabel('Interface language',{exact:true}).selectOption('zh-CN');
  await expect(page.getByRole('button',{name:'加入学习（0）',exact:true})).toBeDisabled();
  await page.screenshot({path:'/tmp/sensa-expression-chat/batch-learning.png',fullPage:true});
+ await page.getByRole('complementary').getByLabel('界面语言',{exact:true}).selectOption('en');await page.goto(origin+'/profile');
+ await expect(page.getByRole('heading',{name:'Model execution activity',exact:true})).toBeVisible();
+ await page.getByText('Advanced · Custom model services',{exact:true}).click();
+ await page.getByLabel('Connection name',{exact:true}).fill('Local fixture');await page.getByLabel('Service URL',{exact:true}).fill('http://127.0.0.1:4399');await page.getByLabel('Model name',{exact:true}).fill('fixture-v1');await page.getByLabel('API key (optional)',{exact:true}).fill('custom-local-test');await page.getByRole('button',{name:'Save connection',exact:true}).click();
+ await page.getByRole('button',{name:'Check connection and list models',exact:true}).click();await expect(page.getByText('Model list loaded. Image and tool capabilities still need task-specific verification.',{exact:true})).toBeVisible();
+ await page.getByRole('combobox',{name:'Model name',exact:true}).selectOption('fixture-v2');await expect.poll(async()=> (await rows('providers'))[0].model).toBe('fixture-v2');
+ assert(!JSON.stringify(await rows('providers')).includes('custom-local-test'));assert(!JSON.stringify(await rows('settings')).includes('custom-local-test'));
+ await page.reload();await page.getByText('Advanced · Custom model services',{exact:true}).click();await expect(page.getByText('No API key set for this page',{exact:true})).toBeVisible();
+ await page.setViewportSize({width:390,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'/tmp/sensa-expression-chat/model-management.png',fullPage:true});
  assert.deepEqual(errors,[]);console.log('PASS: editable rich context, native image generation input, bounded HTML correction, resource preview/drag/click/offline isolation, runtime images/interaction, failed update retention and pinned active-run material; direct chat, text+image wire format, failure/retry and reload without repeats, DeepSeek tool index compatibility, bilingual follow-up, confirmed context/sense/expression, images persisted and no implicit learning enrollment.');
 }catch(error){console.error(await page.locator('body').innerText());console.error(JSON.stringify((await rows('contentAttempts')).map(a=>({status:a.status,steps:a.generationSteps,notice:a.notice})),null,2));throw error;}finally{await browser.close();}
