@@ -87,6 +87,7 @@
     "sensa:library-backup-smoke": "node --import tsx scripts/sensaPersonalLearningSmoke.mts --backup",
     "sensa:library-backup-browser-smoke": "node --import tsx scripts/sensaOfflineColdStartSmoke.mts --backup",
     "sensa:local-i18n-smoke": "node --import tsx scripts/sensaLocalI18nSmoke.mts",
+    "sensa:package-entry-browser-smoke": "node --import tsx scripts/sensaPackageEntryBrowserSmoke.mts",
     "sensa:expression-chat-browser-smoke": "node --import tsx scripts/sensaExpressionChatBrowserSmoke.mts",
     "sensa:model-execution-smoke": "GENKIT_ENV=prod node --import tsx scripts/sensaModelExecutionSmoke.mts"
   },

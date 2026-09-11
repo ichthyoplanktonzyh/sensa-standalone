@@ -2018,8 +2018,8 @@ export default function App() {
             onBack={backMain} onAddLearning={()=>goMain('s-learning-entry')} onOpenTarget={openLocalTarget}/>
 
 
-          {/* 4.2 添加学习内容：三种来源汇入同一学习目标 */}
-          <PackageEntry active={viewMode==='main'&&mainStack.includes('s-learning-entry')} c={packageLearning} onBack={backMain} onPersonal={()=>goMain('s-semantic-world')} onTarget={openLocalTarget}/>
+          {/* 4.2 学习包：列表选择、详情下载与显式加入学习 */}
+          <PackageEntry active={viewMode==='main'&&mainStack.includes('s-learning-entry')} c={packageLearning} onBack={backMain} onLearning={()=>setMainStack(['s-study'])} onTarget={openLocalTarget}/>
 
 
           {/* 4.3 学习目标详情：来源、方式和准备状态分开表达 */}
