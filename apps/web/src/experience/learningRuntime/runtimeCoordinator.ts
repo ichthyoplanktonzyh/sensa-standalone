@@ -1,3 +1,18 @@
+import {localRunBinding} from './localRuntimeBindings';
+import type { LocalLearningRun, LocalLearningTarget } from '../../data/library/learning';
+import type { InstalledPackage } from '../../data/library/packages';
+import { lightweightLocalExecution } from './lightweightInitialProtocol';
+import { assuranceLocalExecution } from '../../data/library/assurance';
+
+/** Storage ports bind existing protocol engines; they do not own another step graph. */
+export interface LocalProtocolExecution {
+  purpose(target: LocalLearningTarget): LearningProtocolPurpose;
+  initialize(target: LocalLearningTarget, pack: InstalledPackage | undefined, purpose: LearningProtocolPurpose, run:LocalLearningRun): Partial<LocalLearningRun>;
+  stepId(run: LocalLearningRun): string;
+  transition(target: LocalLearningTarget, run: LocalLearningRun, pack: InstalledPackage | undefined, action: LocalLearningAction, at: string): unknown;
+  replayStart(target: LocalLearningTarget, pack: InstalledPackage | undefined, saved: LocalLearningRun): LocalLearningRun;
+}
+export type LocalLearningAction = {kind:'reveal'} | {kind:'rate';rating:'again'|'hard'|'good'} | import('../../data/library/assurance').AssuranceAction;
 import { sameContentCapabilitySet } from './contentCapabilities';
 import {
   learningPolicyProfileRegistry,
@@ -29,6 +44,7 @@ export interface RuntimeLaunch<TargetId> {
 }
 
 export interface ProtocolRuntimeAdapter {
+  localExecution?: LocalProtocolExecution;
   adapterId: PrototypeRuntimeAdapterId;
   retentionPriority: number;
   /** 本 Adapter 的长期保持事实存在哪。见 retentionStores.ts。 */
@@ -38,6 +54,7 @@ export interface ProtocolRuntimeAdapter {
 
 const lightweightRuntimeAdapter: ProtocolRuntimeAdapter = {
   adapterId: 'lightweight',
+  localExecution: lightweightLocalExecution,
   retentionPriority: 0,
   retentionStoreId: 'fixed_ladder',
   surfaceFor: (purpose) => purpose === 'initial_learning'
@@ -47,6 +64,7 @@ const lightweightRuntimeAdapter: ProtocolRuntimeAdapter = {
 
 const structuredRuntimeAdapter: ProtocolRuntimeAdapter = {
   adapterId: 'structured',
+  localExecution: assuranceLocalExecution,
   retentionPriority: 1,
   retentionStoreId: 'scheduler_memory',
   surfaceFor: () => 'structured_session',
@@ -86,6 +104,12 @@ export class LearningRuntimeCoordinator<ProfileId extends string> {
     this.#adapters = new Map(adapters.map((adapter) => [adapter.adapterId, adapter]));
   }
 
+  public localExecutionFor(profileId: ProfileId, purpose: LearningProtocolPurpose): LocalProtocolExecution {
+    const execution = this.adapterFor(profileId, purpose).localExecution;
+    if (!execution) throw new Error('This runtime adapter has no local storage binding.');
+    return execution;
+  }
+
   public listAdapters(): readonly ProtocolRuntimeAdapter[] {
     return [...this.#adapters.values()];
   }
@@ -94,7 +118,10 @@ export class LearningRuntimeCoordinator<ProfileId extends string> {
     profileId: ProfileId,
     purpose: LearningProtocolPurpose,
   ): ProtocolRuntimeAdapter {
-    const binding = this.#policyProfiles.get(profileId).protocols[purpose];
+    return this.adapterForBinding(this.#policyProfiles.get(profileId).protocols[purpose]);
+  }
+
+  public adapterForBinding(binding: LearningProtocolBinding): ProtocolRuntimeAdapter {
     const adapter = this.#adapters.get(binding.runtimeAdapterId);
     if (!adapter) throw new Error(`Unknown Protocol Runtime Adapter: ${binding.runtimeAdapterId}`);
     return adapter;
@@ -209,6 +236,7 @@ function sameProtocolBinding(
 ): boolean {
   return left.protocolId === right.protocolId
     && left.protocolVersion === right.protocolVersion
+    && left.localProtocolVersion === right.localProtocolVersion
     && left.runtimeAdapterId === right.runtimeAdapterId
     && left.orchestrationId === right.orchestrationId
     && left.evaluationPolicyId === right.evaluationPolicyId
@@ -233,3 +261,9 @@ function sameOrderedIdentities(left: readonly string[], right: readonly string[]
 export const learningRuntimeCoordinator = new LearningRuntimeCoordinator<PrototypeLearningPolicy>(
   learningPolicyProfileRegistry,
 );
+
+export function localExecutionForRun(run:LocalLearningRun) {
+  const execution=learningRuntimeCoordinator.adapterForBinding(localRunBinding(run)).localExecution;
+  if(!execution)throw new Error('This runtime adapter has no local storage binding.');
+  return execution;
+}

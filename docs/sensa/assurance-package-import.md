@@ -53,3 +53,30 @@
 本地事务检查覆盖声明/撤销后恢复原运行、撤回、重复/迟到提交、单次调度和备份重放。
 没有调用付费模型或部署服务。笔记与场景继续使用原有本机服务，未迁移为
 新语义三元组或加入本地学习库备份；这次恢复入口不代表那部分数据迁移已完成。
+
+## 2026-09-11 执行扩展接线与 FSRS 决策
+
+Owner 确认保留当前真实轻量学习的 FSRS 行为与历史，不恢复旧原型固定档期。
+本地事务的 start/act 与备份重放统一从原 `LearningRuntimeCoordinator` 解析
+Profile → Protocol Binding → Adapter；移除了事务与备份中的方法专用执行分支。
+原 Adapter 增加本地事务端口，端口复用原轻量首次学习 Step graph、
+`LearnQueue` / `ReviewQueue`，不增加队列或编排表。结构化队列从原
+`OrchestrationRegistry` 取得实际编排，作答通过原队列的 settle 入口结算；
+该入口保留提示后回忆的支持等级，不把提示成功当成独立回忆。
+
+原 `RuntimeSurfaceRegistry` 接收本地数据适配组件，删除 PackageRuntime 独立
+Surface 选择表。高保证 Target 专用详情页也已删除，复用原
+`LearningTargetDetailScreen`，保留发布资源和音频。App 的已选方法与偏好从
+Profile 读取，不再根据 assurance 字段选择学习方式。
+
+新运行固定 Profile 版本、完整 Protocol Binding 和调度配置；现有 Profile registry
+可以保留归档版本供重放解析。更新 Profile 时必须保留仍被引用的旧版本定义。
+当前轻量的配置保持 FSRS-6、0.9 retention、空学习/重学短步、关闭 fuzz；
+配置由 Profile 传至既有结算函数。旧记录不补写字段，通过集中兼容入口读取，
+继续得到原调度与事件结果。原型的 fixed_ladder 存储端口作为历史回归实现保留，
+不用于当前本地学习库的 FSRS 事务。
+
+验证新增 Profile 复用现有 Adapter/Surface 后完成首学并转为到期复习资格，
+以及归档版本解析、严格原始动作校验和新旧两种记录格式的重放。
+“配置复用”指复用已有执行能力；全新学习行为仍须实现原有扩展接口。
+四阶段原型尚未绑定当前本地事务端口，本次未将其冒充已交付学习方式。

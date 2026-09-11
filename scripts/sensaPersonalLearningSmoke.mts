@@ -72,7 +72,7 @@ try{
   const password='local-backup-test-password', exported=await api.exportLibraryBackup(password);
   assert.equal(exported.summary.interrupted,1);await api.stopTeacher(id(),inFlightSession.id,(await api.getTeacher(inFlightSession.id)).revision);release!();await assert.rejects(teacherWork);holdTeacher=false;
   const sourceRows=await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));
-  api.validateBackupRows(sourceRows);const invalid=structuredClone(sourceRows);invalid.learningTargets.find((r:any)=>r.value.id===packageTarget).value.memoryRevision++;assert.throws(()=>api.validateBackupRows(invalid));
+  api.validateBackupRows(sourceRows);const legacyRows=structuredClone(sourceRows);for(const {value:r} of legacyRows.learningRuns)for(const key of ['policyProfileId','policyProfileVersion','protocolBinding','schedulingPolicy','lightweight'])delete r[key];for(const {value:t} of legacyRows.learningTargets)delete t.policyProfileId;api.validateBackupRows(legacyRows);const invalid=structuredClone(sourceRows);invalid.learningTargets.find((r:any)=>r.value.id===packageTarget).value.memoryRevision++;assert.throws(()=>api.validateBackupRows(invalid));
 
   assert(!new TextDecoder().decode(exported.file).includes('Private marker'));
   assert.equal((await api.inspectLibraryBackup(exported.file,password)).targets,3);

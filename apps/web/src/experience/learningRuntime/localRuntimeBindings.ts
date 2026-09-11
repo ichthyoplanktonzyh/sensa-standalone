@@ -1,4 +1,5 @@
-import { learningPolicyProfileRegistry, type LearningProtocolPurpose, type PrototypeLearningPolicy } from './policyProfiles';
+import type {LocalLearningTarget,LocalLearningRun} from '../../data/library/learning';
+import { learningPolicyProfileRegistry, type PrototypeLearningPolicy } from './policyProfiles';
 /** Compatibility bindings for already persisted local runs. Never infer a method from its card. */
 export const localRuntimeBindings: Readonly<Record<string, PrototypeLearningPolicy>> = {
   'consumer-initial-v1': 'lightweight',
@@ -12,6 +13,13 @@ export function localRuntimePolicy(protocolVersion: string): PrototypeLearningPo
   learningPolicyProfileRegistry.get(profileId);
   return profileId;
 }
-export function localRuntimeAdapter(protocolVersion: string, purpose: LearningProtocolPurpose): string {
-  return learningPolicyProfileRegistry.get(localRuntimePolicy(protocolVersion)).protocols[purpose].runtimeAdapterId;
+/** Only the pre-policy persisted format needs content-based identification. */
+export function localTargetPolicy(target:Pick<LocalLearningTarget,'policyProfileId'|'assurancePackageKey'>): PrototypeLearningPolicy {
+  return target.policyProfileId ?? (target.assurancePackageKey ? 'high_assurance' : 'lightweight');
+}
+export function localRunPolicy(run:LocalLearningRun): PrototypeLearningPolicy {
+  return run.policyProfileId ?? localRuntimePolicy(run.protocolVersion);
+}
+export function localRunBinding(run:LocalLearningRun) {
+  return run.protocolBinding ?? learningPolicyProfileRegistry.get(localRunPolicy(run),run.policyProfileVersion).protocols[run.purpose];
 }

@@ -1,3 +1,4 @@
+import type {ReactNode} from 'react';
 /**
  * Runtime Surface 的启动登记表。
  *
@@ -86,6 +87,7 @@ export interface RetentionStartOptions {
 }
 
 export interface RuntimeSurfaceDefinition {
+  localRenderer?: (props:never)=>ReactNode;
   readonly surface: PrototypeRuntimeSurface;
   /** 该 surface 运行时占据的全屏 flow。App 由此派生 viewMode。 */
   readonly flow: ShellFlow;
@@ -259,6 +261,17 @@ export class RuntimeSurfaceRegistry {
     const definition = this.#definitions.get(surface);
     if (!definition) throw new Error(`Unknown Runtime Surface: ${surface}`);
     return definition;
+  }
+
+  /** Composition binds data adapters to the already registered surface. */
+  public bindLocalRenderer<T>(surface: PrototypeRuntimeSurface, renderer: (props:T)=>ReactNode): void {
+    this.get(surface).localRenderer=renderer as (props:never)=>ReactNode;
+  }
+
+  public localRenderer<T>(surface: PrototypeRuntimeSurface): (props:T)=>ReactNode {
+    const render=this.get(surface).localRenderer;
+    if(!render)throw new Error(`No local presentation binding for Runtime Surface: ${surface}`);
+    return render as (props:T)=>ReactNode;
   }
 
   /** 该 surface 运行时占据的全屏 flow。 */

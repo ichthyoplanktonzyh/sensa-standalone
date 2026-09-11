@@ -1,3 +1,7 @@
+import {z} from 'zod';
+import type {LocalLearningRun,LocalLearningTarget} from '../../data/library/learning';
+import {consumerRunStepId,transitionConsumerRun,decideConsumerSettlement} from '@sensa/learning-kernel';
+import type {LocalProtocolExecution} from './runtimeCoordinator';
 /**
  * Executable Lightweight Initial Learning protocol.
  *
@@ -349,3 +353,53 @@ export const transitionLightweightInitialProtocol = (
   });
   return Object.freeze({ state: nextState, completedStep });
 };
+
+const localActionSchema=z.discriminatedUnion('kind',[z.object({kind:z.literal('reveal')}).strict(),z.object({kind:z.literal('rate'),rating:z.enum(['again','hard','good'])}).strict()]);
+
+/** Persistence adaptation for the accepted FSRS consumer contract, not a second UI flow. */
+export const lightweightLocalExecution: LocalProtocolExecution = {
+ purpose:target=>target.relearnAt?'relearning':target.completedAt?'retention_review':'initial_learning',
+ initialize:(target,_pack,purpose,run)=>purpose==='initial_learning'?{lightweight:localInitialState(run,target)}:{},
+ stepId:run=>consumerRunStepId(run.id,run.ordinal,run.phase,run.protocolVersion),
+ replayStart:(target,_pack,saved)=>{const run:LocalLearningRun={...saved,phase:'recall',ordinal:1,revision:1,completedAt:null,completionKind:undefined};if(saved.lightweight)run.lightweight=localInitialState(run,target);return run;},
+ transition:(target,run,_pack,action,at)=>{
+  localActionSchema.parse(action);
+  if(action.kind==='assurance'||run.assurance)throw new Error('localFlow.stepChanged');
+  let next: 'recall'|'reveal'|'completed'|'waiting';
+  if(run.purpose==='initial_learning'){
+   const state=run.lightweight??localInitialState(run,target);
+   const current=run.lightweight?state:{...state,currentStepDefinitionId:localPhaseDefinitions[run.phase]};
+   const result=transitionLightweightInitialProtocol(current,action.kind==='reveal'?'reveal_requested':action.rating);
+   if(run.lightweight)run.lightweight=result.state;
+   next=result.state.currentStepDefinitionId===null?'completed':phaseForDefinition(result.state.currentStepDefinitionId);
+  }else next=transitionConsumerRun(run.protocolVersion,run.phase,action);
+  let settlement:unknown=null;
+  if(action.kind==='rate'){
+   const common={retentionTargetId:target.retentionId,protocolVersion:run.protocolVersion,rating:action.rating,occurredAt:new Date(at)};
+   const result=run.purpose==='retention_review'?decideConsumerSettlement({...common,purpose:'retention_review',memory:{revision:String(target.memoryRevision),dueAt:target.memory!.dueAt,schedule:{...target.memory!,cardId:target.retentionId}},trigger:{memoryRevision:String(run.memoryRevision),dueAt:new Date(run.dueAt!)}},run.schedulingPolicy):decideConsumerSettlement({...common,purpose:run.purpose},run.schedulingPolicy);settlement=result;
+   if(result.kind==='study_completion'||result.kind==='review_completed'){target.memory=result.schedule;target.memoryRevision++;if(result.kind==='study_completion')target.completedAt=at;else target.relearnAt=result.nextEligibleAt?.toISOString()??null;}
+   if(result.kind==='wait_relearning')target.relearnAt=result.nextEligibleAt.toISOString();
+   if(result.kind==='relearning_completion')target.relearnAt=null;
+   if(next==='completed'||next==='waiting')run.completionKind=result.kind;
+  }
+  if(next==='completed'||next==='waiting')run.completedAt=at;else run.phase=next;
+  return settlement;
+ },
+};
+
+// Compatibility projection only: the executable Step graph remains the original protocol.
+const localPhaseDefinitions = {recall:LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_ID,reveal:LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_ID};
+const phaseForDefinition=(id:string):'recall'|'reveal'=>{
+ const entry=Object.entries(localPhaseDefinitions).find(([,definitionId])=>definitionId===id);
+ if(!entry)throw new Error('Unknown persisted lightweight step');
+ return entry[0] as 'recall'|'reveal';
+};
+function localInitialState(run:LocalLearningRun,target:LocalLearningTarget){
+ const material=run.material??target.material;
+ return createLightweightInitialProtocolRun({protocolRunId:run.id,retentionTargetId:target.retentionId,learningMaterializationId:material.snapshot.learningMaterializationId,materialResources:material.content.resources});
+}
+export function localLightweightStep(run:LocalLearningRun,target:LocalLearningTarget):LightweightProtocolStepInstance|null{
+ if(run.completedAt)return null;
+ const initial=run.lightweight??localInitialState(run,target);
+ return currentLightweightInitialStep(run.lightweight?initial:{...initial,currentStepDefinitionId:localPhaseDefinitions[run.phase],currentStepOrdinal:run.ordinal});
+}

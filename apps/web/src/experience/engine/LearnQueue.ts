@@ -359,14 +359,16 @@ export class LearnQueue<TContent = unknown> {
   }
 
   /** Boolean-result convenience used by generic controls; state remains gate-scoped. */
-  public settle(ok: boolean): Session<TContent> | null {
+  public settle(ok: boolean, recallOutcome?: Parameters<LearnQueue<TContent>['completeMeaningToFormRecall']>[0]): Session<TContent> | null {
     const action = this.currentSession?.action;
     if (action && isIntroduction(action)) {
       return ok ? this.completeIntroduction() : this.currentSession;
     }
     const capability = action?.capability;
     if (capability === 'contextual_recognition') return this.completeRecognition(ok);
-    if (capability === 'meaning_to_form_recall') return this.completeGate(capability, ok);
+    if (capability === 'meaning_to_form_recall') return recallOutcome === undefined
+      ? this.completeGate(capability, ok)
+      : this.completeMeaningToFormRecall(recallOutcome);
     if (capability === 'novel_context_transfer') return this.completeNovelTransfer(ok ? 'success' : 'repair');
     if (capability === 'boundary_discrimination') return this.completeBoundary(ok);
     return this.currentSession;

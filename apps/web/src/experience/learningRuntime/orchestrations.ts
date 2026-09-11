@@ -20,7 +20,7 @@
  */
 import type { LearningStepIntent } from '../engine/types';
 import type { LearningStepKind } from '../engine/types';
-import type { OrchestrationId } from '../engine/stepOrchestration';
+import { acquisitionOrchestration, retentionOrchestration, type OrchestrationId } from '../engine/stepOrchestration';
 
 export type { OrchestrationId } from '../engine/stepOrchestration';
 
@@ -51,6 +51,8 @@ export interface InitialCompletionContract {
 }
 
 export interface OrchestrationDefinition {
+  readonly acquisitionExecution?: typeof acquisitionOrchestration;
+  readonly retentionExecution?: typeof retentionOrchestration;
   readonly orchestrationId: OrchestrationId;
   /** 这套编排会产出哪些 intent 的 Step。领域闭集，见 `LearningStepIntent`。 */
   readonly stepIntents: readonly LearningStepIntent[];
@@ -97,6 +99,7 @@ const lightweightRetention: OrchestrationDefinition = {
 
 const structuredAcquisition: OrchestrationDefinition = {
   orchestrationId: 'structured_acquisition',
+  acquisitionExecution: acquisitionOrchestration,
   stepIntents: ['instruction', 'assessment', 'repair'],
   requiredStepKinds: [
     'introduction',
@@ -117,6 +120,7 @@ const structuredAcquisition: OrchestrationDefinition = {
 
 const structuredRetention: OrchestrationDefinition = {
   orchestrationId: 'structured_retention',
+  retentionExecution: retentionOrchestration,
   stepIntents: ['assessment', 'repair'],
   requiredStepKinds: ['review_assessment', 'review_feedback', 'review_repair'],
   initialCompletion: null,

@@ -7,7 +7,7 @@ import {
 } from './scheduling.js';
 
 export const consumerSchedulingPolicyVersion = 'sensa-lightweight-scheduling-v1';
-const schedulingPolicy = Object.freeze({
+export const consumerSchedulingPolicy = Object.freeze({
   algorithm: 'fsrs-6' as const,
   desiredRetention: 0.9,
   maximumIntervalDays: 36500,
@@ -68,7 +68,7 @@ export class ConsumerSettlementError extends Error {
  * the attempt, transition and these effects atomically. A decision alone is no fact.
  * Dates, identity and the due trigger are explicit so the same policy runs on-device.
  */
-export function decideConsumerSettlement(input: ConsumerSettlementInput): ConsumerSettlement {
+export function decideConsumerSettlement(input: ConsumerSettlementInput, schedulingPolicy: Parameters<typeof computeReviewSchedule>[1] = consumerSchedulingPolicy): ConsumerSettlement {
   const protocol = input.purpose === 'initial_learning' ? 'consumer-initial-v1'
     : input.purpose === 'retention_review' ? 'consumer-review-v1'
     : input.purpose === 'relearning' ? 'consumer-relearning-v1' : null;

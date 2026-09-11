@@ -1,3 +1,4 @@
+import {consumerSchedulingPolicy, type WorkspaceSchedulerConfig} from '@sensa/learning-kernel';
 import {
   conjoinContentCapabilities,
   type ContentCapabilityReadinessProvider,
@@ -41,6 +42,8 @@ export type PrototypeRuntimeAdapterId = string & {};
 export interface LearningProtocolBinding {
   protocolId: string;
   protocolVersion: string;
+  /** Frozen local wire format; legacy runs keep their recorded identity. */
+  localProtocolVersion?: string;
   runtimeAdapterId: PrototypeRuntimeAdapterId;
   /**
    * 这条 Binding 的 Step 由哪套编排产出。见 orchestrations.ts。
@@ -78,6 +81,8 @@ export interface LearningPolicyPresentation {
 export interface LearningPolicyLifecycleContract<ProfileId extends string = string> {
   readonly evidencePolicyId: string;
   readonly schedulingPolicyId: string;
+  /** Local transaction execution pins this configuration for replay. */
+  readonly schedulingPolicy?: WorkspaceSchedulerConfig;
   readonly learnerVisibleClaimBoundary: string;
   readonly provisioningFallback:
     | { readonly behavior: 'blocked' }
@@ -115,13 +120,19 @@ export class LearningPolicyProfileRegistry<ProfileId extends string> {
   readonly #profiles: readonly LearningPolicyProfileDefinition<ProfileId>[];
   readonly #profilesById: ReadonlyMap<ProfileId, LearningPolicyProfileDefinition<ProfileId>>;
 
-  public constructor(profiles: readonly LearningPolicyProfileDefinition<ProfileId>[]) {
+  public constructor(profiles: readonly LearningPolicyProfileDefinition<ProfileId>[], private readonly archivedProfiles: readonly LearningPolicyProfileDefinition<ProfileId>[] = []) {
     const profileIds = new Set<ProfileId>();
     for (const profile of profiles) {
       if (profileIds.has(profile.profileId)) {
         throw new Error(`Duplicate Learning Policy Profile identity: ${profile.profileId}`);
       }
       profileIds.add(profile.profileId);
+    }
+    const versions = new Set<string>();
+    for (const profile of [...profiles, ...archivedProfiles]) {
+      const identity = JSON.stringify([profile.profileId, profile.profileVersion]);
+      if (versions.has(identity)) throw new Error(`Duplicate Learning Policy Profile version: ${identity}`);
+      versions.add(identity);
     }
     this.#profiles = profiles;
     this.#profilesById = new Map(profiles.map((profile) => [profile.profileId, profile]));
@@ -131,8 +142,9 @@ export class LearningPolicyProfileRegistry<ProfileId extends string> {
     return this.#profiles;
   }
 
-  public get(profileId: ProfileId): LearningPolicyProfileDefinition<ProfileId> {
-    const profile = this.#profilesById.get(profileId);
+  public get(profileId: ProfileId, version?: string): LearningPolicyProfileDefinition<ProfileId> {
+    const current = this.#profilesById.get(profileId);
+    const profile = !version || current?.profileVersion === version ? current : this.archivedProfiles.find(p => p.profileId === profileId && p.profileVersion === version);
     if (!profile) throw new Error(`Unknown Learning Policy Profile: ${profileId}`);
     return profile;
   }
@@ -173,7 +185,7 @@ export class LearningPolicyProfileRegistry<ProfileId extends string> {
 export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
   {
     profileId: 'lightweight',
-    profileVersion: 'lightweight-profile-v2',
+    profileVersion: 'lightweight-profile-v3',
     presentation: {
       label: '轻量学习',
       shortBadge: '更快开始',
@@ -183,7 +195,8 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
     },
     lifecycle: {
       evidencePolicyId: 'lightweight-non-evidentiary-v1',
-      schedulingPolicyId: 'fixed-ladder-v1',
+      schedulingPolicyId: 'sensa-lightweight-scheduling-v1',
+      schedulingPolicy: consumerSchedulingPolicy,
       learnerVisibleClaimBoundary: '只声称已完成学习并安排复习，不声称独立回忆或掌握。',
       provisioningFallback: { behavior: 'blocked' },
       migrationPolicy: 'pin_existing_runs',
@@ -191,6 +204,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
     protocols: {
       initial_learning: {
         protocolId: 'lightweight-study',
+        localProtocolVersion: 'consumer-initial-v1',
         protocolVersion: 'v2',
         runtimeAdapterId: 'lightweight',
         orchestrationId: 'lightweight_study',
@@ -208,6 +222,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
       },
       retention_review: {
         protocolId: 'learner-rated-retention-review',
+        localProtocolVersion: 'consumer-review-v1',
         protocolVersion: 'v1',
         runtimeAdapterId: 'lightweight',
         orchestrationId: 'lightweight_retention',
@@ -222,6 +237,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
       },
       relearning: {
         protocolId: 'lightweight-rebinding',
+        localProtocolVersion: 'consumer-relearning-v1',
         protocolVersion: 'v1',
         runtimeAdapterId: 'lightweight',
         orchestrationId: 'lightweight_retention',
@@ -249,6 +265,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
     lifecycle: {
       evidencePolicyId: 'behavioral-acquisition-evidence-v1',
       schedulingPolicyId: 'fsrs-retention-v1',
+      schedulingPolicy: consumerSchedulingPolicy,
       learnerVisibleClaimBoundary: '只声称满足当前协议的独立行为要求，不声称永久掌握。',
       provisioningFallback: {
         behavior: 'learner_explicit_downgrade',
@@ -259,6 +276,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
     protocols: {
       initial_learning: {
         protocolId: 'structured-acquisition',
+        localProtocolVersion: 'sensa-high-assurance-v1',
         protocolVersion: 'v1',
         runtimeAdapterId: 'structured',
         orchestrationId: 'structured_acquisition',
@@ -281,6 +299,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
       },
       retention_review: {
         protocolId: 'evidence-oriented-retention-review',
+        localProtocolVersion: 'sensa-high-assurance-v1',
         protocolVersion: 'v1',
         runtimeAdapterId: 'structured',
         orchestrationId: 'structured_retention',
@@ -298,6 +317,7 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
       },
       relearning: {
         protocolId: 'targeted-structured-relearning',
+        localProtocolVersion: 'sensa-high-assurance-v1',
         protocolVersion: 'v1',
         runtimeAdapterId: 'structured',
         orchestrationId: 'structured_retention',

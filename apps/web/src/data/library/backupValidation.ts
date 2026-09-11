@@ -1,7 +1,10 @@
-import {validateAssuranceHistory} from './assurance';
+import {localExecutionForRun} from '../../experience/learningRuntime/runtimeCoordinator';
+import {localRunBinding,localRunPolicy,localTargetPolicy} from '../../experience/learningRuntime/localRuntimeBindings';
+import {learningPolicyProfileRegistry} from '../../experience/learningRuntime/policyProfiles';
+import type {LocalLearningRun,LocalLearningTarget,LearningEvent} from './learning';
 import {z} from 'zod';
 import {sensaLearningMaterializationSnapshotSchema,semanticProposalSchema,sensaContentGenerationRequestSchema,sensaMaterialCandidateBundleSchema,canonicalConsumerJson} from '@sensa/contracts/sensa';
-import {consumerRunStepId,transitionConsumerRun,decideConsumerSettlement,stableUuid} from '@sensa/learning-kernel';
+import {stableUuid} from '@sensa/learning-kernel';
 import {libraryTables,type Table} from './store';
 import {validatePackage,packageKey} from './packages';
 import {validateLightweightInitialMaterialization} from '../../experience/learningRuntime/lightweightInitialContent';
@@ -29,33 +32,40 @@ export function validateBackupRows(rows:BackupRows){
  for(const {value:t} of rows.personalLearning){const current=requireRow('meanings',t.meaning.id);const version=(current.contextRevision??1)===(t.meaning.contextRevision??1)?{text:current.context,images:current.contextImages??[]}:current.contextHistory?.find((v:any)=>v.revision===(t.meaning.contextRevision??1));if(!version||version.text!==t.meaning.context||!backupEqual(version.images,t.meaning.contextImages??[]))fail();if(current.senseVersionId!==t.meaning.senseVersionId||current.bindingVersionId!==t.meaning.bindingVersionId||!backupEqual(current.proposal,t.meaning.proposal))fail();if(t.attemptId&&requireRow('contentAttempts',t.attemptId).taskId!==t.id)fail();if(t.status==='ready')requireRow('learningTargets',t.targetId);if(!['waiting','generating','reviewing','failed','rejected','stopped','ready'].includes(t.status))fail();}
  for(const {value:a} of rows.contentAttempts){requireRow('personalLearning',a.taskId);if(a.request)sensaContentGenerationRequestSchema.parse(a.request);if(a.bundle){sensaMaterialCandidateBundleSchema.parse(a.bundle);if(!a.request||a.bundle.contentGenerationRequestId!==a.request.contentGenerationRequestId)fail();}if(a.resumedFrom)requireRow('contentAttempts',a.resumedFrom);}
  for(const {value:t} of rows.learningTargets){
+  learningPolicyProfileRegistry.get(localTargetPolicy(t));
   if(t.declaredMastery!==undefined){z.boolean().parse(t.declaredMastery);uuid.parse(t.declaredMasteryOperationId);const op=JSON.parse(requireRow('operations',t.declaredMasteryOperationId).input);if(op.kind!=='learning.declareMastery'||op.input.targetId!==t.id||op.input.active!==t.declaredMastery)fail();}
   sensaLearningMaterializationSnapshotSchema.parse(t.material.snapshot);validateLightweightInitialMaterialization(t.material);
   const p=t.material.snapshot.provenance;
   if(t.material.snapshot.learnerUserId!==identity.learnerId||t.material.snapshot.learningTargetId!==t.id||t.id!==stableUuid(`sensa-learning-target:${identity.learnerId}:${p.senseVersionId}:${p.bindingVersionId}`)||t.retentionId!==stableUuid(`sensa-retention:${t.id}`))fail();
   if(t.packageKey){const pack=requireRow('packages',t.packageKey);if(!pack.bundle.entries.some((e:any)=>e.senseVersionId===p.senseVersionId&&e.bindingVersionId===p.bindingVersionId&&backupEqual(e.content,t.material.content)))fail();}else{requireRow('meanings',p.meaningId);const attempt=requireRow('contentAttempts',p.attemptId);if(attempt.status!=='ready'||!(attempt.review?.accepted||(attempt.reviewProvider===null&&attempt.review===null&&attempt.validation?.review===null&&attempt.validation?.validations?.length>0&&attempt.validation.validations.every((v:any)=>v.status==='accepted')))||!backupEqual(attempt.validation?.content,t.material.content))fail();}
   if(t.expression!==t.material.content.resources.find((r:any)=>r.materialRoleKey==='target_expression')?.contentPayload.surface||t.meaning!==t.material.content.resources.find((r:any)=>r.materialRoleKey==='sense_confirmation')?.contentPayload.meaning)fail();
-  if(t.assurancePackageKey){const pack=requireRow('packages',t.packageKey);if(!pack.bundle.assurance||!pack.bundle.entries.some((e:any)=>e.assurancePackageKey===t.assurancePackageKey&&e.senseVersionId===p.senseVersionId&&e.bindingVersionId===p.bindingVersionId))fail();validateAssuranceHistory(t,pack,rows.learningRuns.map(r=>r.value).filter(r=>r.targetId===t.id).sort((a,b)=>a.startedAt.localeCompare(b.startedAt)),rows.learningEvents.map(r=>r.value));continue;}
-  if(t.packageKey&&requireRow('packages',t.packageKey).bundle.assurance)fail();
-  // Replay events to check that the saved schedule agrees with its runtime history.
-  let memory:any=null,memoryRevision=0,completedAt:string|null=null,relearnAt:string|null=null,startedAt:string|null=null;
-  const runs=rows.learningRuns.map(r=>r.value).filter(r=>r.targetId===t.id).sort((a,b)=>a.startedAt.localeCompare(b.startedAt));
-  for(const run of runs){timestamp.parse(run.startedAt);if(startedAt===null)startedAt=run.startedAt;const purpose=relearnAt?'relearning':completedAt?'retention_review':'initial_learning';const protocol=purpose==='initial_learning'?'consumer-initial-v1':purpose==='retention_review'?'consumer-review-v1':'consumer-relearning-v1';
-   if(run.purpose!==purpose||run.protocolVersion!==protocol||run.memoryRevision!==memoryRevision||run.dueAt!==(memory?.dueAt.toISOString()??null))fail();
-   if(purpose==='retention_review'&&Date.parse(run.startedAt)<memory.dueAt.getTime()||relearnAt&&Date.parse(run.startedAt)<Date.parse(relearnAt))fail();
-   const events=rows.learningEvents.map(r=>r.value).filter(e=>e.runId===run.id);const byStep=new Map(events.map(e=>[e.detail?.stepId,e]));if(byStep.size!==events.length)fail();
-   let phase:'recall'|'reveal'='recall',ended:string|null=null,kind:string|undefined;
-   for(let ordinal=1;ordinal<=events.length;ordinal++){if(ended)fail();const event=byStep.get(consumerRunStepId(run.id,ordinal,phase,protocol));if(!event||event.targetId!==t.id)fail();timestamp.parse(event.at);if(Date.parse(event.at)<Date.parse(run.startedAt))fail();
-    const action=z.discriminatedUnion('kind',[z.object({kind:z.literal('reveal')}).strict(),z.object({kind:z.literal('rate'),rating:z.enum(['again','hard','good'])}).strict()]).parse(event.detail.action);if(event.kind!==action.kind)fail();const next=transitionConsumerRun(protocol,phase,action);let decision:any=null;
-    if(action.kind==='rate'){const common={retentionTargetId:t.retentionId,protocolVersion:protocol,rating:action.rating,occurredAt:new Date(event.at)};decision=purpose==='retention_review'?decideConsumerSettlement({...common,purpose,memory:{revision:String(memoryRevision),dueAt:memory.dueAt,schedule:{...memory,cardId:t.retentionId}},trigger:{memoryRevision:String(run.memoryRevision),dueAt:new Date(run.dueAt)}}):decideConsumerSettlement({...common,purpose});
-     if(decision.kind==='study_completion'||decision.kind==='review_completed'){memory=decision.schedule;memoryRevision++;if(decision.kind==='study_completion')completedAt=event.at;else relearnAt=decision.nextEligibleAt?.toISOString()??null;}if(decision.kind==='wait_relearning')relearnAt=decision.nextEligibleAt.toISOString();if(decision.kind==='relearning_completion')relearnAt=null;
-    }
-    if(!backupEqual(decision,event.detail.settlement))fail();if(next==='completed'||next==='waiting'){ended=event.at;kind=decision.kind;}else phase=next;
+  if(t.assurancePackageKey){const pack=requireRow('packages',t.packageKey);if(!pack.bundle.assurance||!pack.bundle.entries.some((e:any)=>e.assurancePackageKey===t.assurancePackageKey&&e.senseVersionId===p.senseVersionId&&e.bindingVersionId===p.bindingVersionId))fail();}
+  if(t.packageKey&&requireRow('packages',t.packageKey).bundle.assurance&&!t.assurancePackageKey)fail();
+  // One replay boundary uses the same configured engine as live transactions.
+  const target:LocalLearningTarget={...t,memory:null,memoryRevision:0,completedAt:null,relearnAt:null,startedAt:null};
+  const pack=t.packageKey?requireRow('packages',t.packageKey):undefined;
+  const runs:LocalLearningRun[]=rows.learningRuns.map(r=>r.value).filter(r=>r.targetId===t.id).sort((a,b)=>a.startedAt.localeCompare(b.startedAt));
+  for(const saved of runs){
+   const execution=localExecutionForRun(saved),binding=localRunBinding(saved);
+   const profile=learningPolicyProfileRegistry.get(localRunPolicy(saved),saved.policyProfileVersion);
+   if(saved.protocolBinding&&!backupEqual(saved.protocolBinding,profile.protocols[saved.purpose]))fail();
+   if(saved.schedulingPolicy&&!backupEqual(saved.schedulingPolicy,profile.lifecycle.schedulingPolicy))fail();
+   timestamp.parse(saved.startedAt);
+   if(execution.purpose(target)!==saved.purpose||saved.protocolVersion!==binding.localProtocolVersion||saved.memoryRevision!==target.memoryRevision||saved.dueAt!==(target.memory?.dueAt.toISOString()??null))fail();
+   if(saved.purpose==='retention_review'&&(!target.memory||Date.parse(saved.startedAt)<target.memory.dueAt.getTime())||target.relearnAt&&Date.parse(saved.startedAt)<Date.parse(target.relearnAt))fail();
+   const run=execution.replayStart(target,pack,saved);if(!Object.hasOwn(saved,'completionKind'))delete run.completionKind;target.startedAt??=saved.startedAt;
+   const events:LearningEvent[]=rows.learningEvents.map(r=>r.value).filter(e=>e.runId===saved.id);
+   const byStep=new Map(events.map(e=>[(e.detail as any)?.stepId,e]));if(byStep.size!==events.length)fail();
+   for(let index=0;index<events.length;index++){
+    const event=byStep.get(execution.stepId(run))??fail();if(event.targetId!==target.id||run.completedAt)fail();
+    timestamp.parse(event.at);if(Date.parse(event.at)<Date.parse(run.startedAt))fail();
+    const detail=event.detail as any;if(event.kind!==detail.action?.kind)fail();
+    const settlement=execution.transition(target,run,pack,detail.action,event.at);
+    if(!backupEqual(settlement,detail.settlement))fail();run.ordinal++;run.revision++;
    }
-   if(run.phase!==phase||run.ordinal!==events.length+1||run.revision!==events.length+1||run.completedAt!==ended||run.completionKind!==kind)fail();
-   if(!ended&&runs.at(-1)!==run)fail();
+   if(!backupEqual(run,saved))fail();if(!run.completedAt&&runs.at(-1)!==saved)fail();
   }
-  if(!backupEqual(memory,t.memory)||memoryRevision!==t.memoryRevision||startedAt!==t.startedAt||completedAt!==t.completedAt||relearnAt!==t.relearnAt)fail();
+  for(const key of ['memory','memoryRevision','startedAt','completedAt','relearnAt'] as const)if(!backupEqual(target[key],t[key]))fail();
  }
  for(const {value:r} of rows.learningRuns){requireRow('learningTargets',r.targetId);if(r.material){validateLightweightInitialMaterialization(r.material);if(r.material.snapshot.learningTargetId!==r.targetId||r.material.snapshot.learnerUserId!==identity.learnerId)fail();}}
  for(const {key,value:e} of rows.learningEvents){requireRow('learningRuns',e.runId);const op=JSON.parse(requireRow('operations',key).input);if(op.kind!=='learning.act'||op.input.runId!==e.runId||op.input.at!==e.at||!backupEqual(op.input.action,e.detail.action))fail();}

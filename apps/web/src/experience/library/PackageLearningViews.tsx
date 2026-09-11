@@ -1,8 +1,11 @@
+import {assuranceContent} from '../../data/library/assurance';
 import {cardText} from '../../i18n/originalCards';
 import {RuntimeTools} from '../components/learning/RuntimeTools';
-import {localRuntimeAdapter} from '../learningRuntime/localRuntimeBindings';
+import {localRunBinding,localTargetPolicy} from '../learningRuntime/localRuntimeBindings';
+import {learningRuntimeCoordinator} from '../learningRuntime/runtimeCoordinator';
+import {runtimeSurfaceRegistry} from '../learningRuntime/runtimeSurfaces';
 import type {AssuranceSupportHost} from './AssuranceLearningViews';
-import {AssuranceRuntime,AssuranceTarget} from './AssuranceLearningViews';
+import {AssuranceRuntime,StudyResources} from './AssuranceLearningViews';
 import {LearningResourceDetails} from '../components/learning/LearningResourceDetails';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
@@ -11,14 +14,13 @@ import {useState,useRef,useEffect} from 'react';
 import {ArrowRight,BookOpen,Search,RefreshCw,Upload,Check,Download} from 'lucide-react';
 import {LearningTargetDetailScreen} from '../components/learning/LearningTargetDetailScreen';
 import {LightweightRuntimeStartScreen} from '../components/learning/LightweightRuntimeStartScreen';
-import {LIGHTWEIGHT_EXPERIENCE_RECALL_STEP,LIGHTWEIGHT_EXPRESSION_REVEAL_STEP,type LightweightProtocolStepInstance} from '../learningRuntime/lightweightInitialProtocol';
-import {consumerRunStepId} from '@sensa/learning-kernel';
+import {localLightweightStep} from '../learningRuntime/lightweightInitialProtocol';
 import {packageKey} from '../../data/library/packages';
 import type {LocalLearningTarget} from '../../data/library/learning';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 type Controller=ReturnType<typeof usePackageLearning>;
-export const localTargetView=(t:LocalLearningTarget)=>({targetId:t.id,expression:t.expression,meaning:t.meaning,example:String(t.material.content.resources.find(r=>r.materialRoleKey==='usage_guidance')?.contentPayload.example??''),partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:t.packageKey?'book' as const:'personal_semantic_world' as const,sourceLabel:t.packageKey?localFlowText('downloadedPackages'):localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:t.assurancePackageKey?'high_assurance' as const:'lightweight' as const,lightweightReadiness:{status:'ready' as const,label:localFlowText('downloaded'),detail:localFlowText('resourcesLocal')}});
+export const localTargetView=(t:LocalLearningTarget)=>({targetId:t.id,expression:t.expression,meaning:t.meaning,example:String(t.material.content.resources.find(r=>r.materialRoleKey==='usage_guidance')?.contentPayload.example??''),partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:t.packageKey?'book' as const:'personal_semantic_world' as const,sourceLabel:t.packageKey?localFlowText('downloadedPackages'):localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:localTargetPolicy(t),lightweightReadiness:{status:'ready' as const,label:localFlowText('downloaded'),detail:localFlowText('resourcesLocal')}});
 export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boolean;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void}){
  useTranslation();
  const [selected,setSelected]=useState<string|null>(null),[query,setQuery]=useState(''),[downloadKey,setDownloadKey]=useState<string|null>(null);
@@ -89,20 +91,18 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
 export function PackageTarget({active,target,c,onBack,onHome,onStart,onSource}:{active:boolean;target:LocalLearningTarget;c:Controller;onBack:()=>void;onHome:()=>void;onStart:()=>void;onSource?:()=>void}){
  useTranslation();
  const pack=c.packages.find(p=>p.key===target.packageKey);
- if(target.assurancePackageKey&&pack)return <AssuranceTarget active={active} target={target} pack={pack} busy={c.busy} notice={c.notice} canResume={c.run?.targetId===target.id} onRevokeKnown={()=>void c.declareKnown(target.id,false)} onBack={onBack} onStart={onStart}/>;
- return <LearningTargetDetailScreen active={active} target={localTargetView(target)} selectedPolicy="lightweight" fixedPolicy preparation="ready" committedPolicy={target.startedAt?'lightweight':null} initialCompletionKind={target.completedAt?'study_completion':null} reviewDue={c.due.includes(target)} relearning={!!target.relearnAt} retentionRuntimeState={null} nextReviewLabel={target.memory?.dueAt.toLocaleString(i18n.language)??null} declaredMastery={!!target.declaredMastery} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>{}} onOpenSource={onSource??onBack} onRefreshPreparation={()=>void c.refresh()} onGoHome={onHome} onStartReview={onStart} onContinueRetentionRuntime={onStart} onContinueRuntime={onStart} onRevokeDeclaredMastery={()=>void c.declareKnown(target.id,false)} notice={c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>} actions={<><LearningResourceDetails material={target.material}/>{target.declaredMastery?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.declareKnown(target.id,false)}>{cardText('revokeKnown')}</button>:<button className={setupPrimary} disabled={c.busy||!!target.completedAt&&!c.due.includes(target)&&c.run?.targetId!==target.id} onClick={onStart}>{target.completedAt?localFlowText('startReview'):localFlowText('startLearning')}</button>}</>}/>;
+ const policy=localTargetPolicy(target);
+ const content=pack&&target.assurancePackageKey?assuranceContent(pack,target.assurancePackageKey).template.content:null;
+ return <LearningTargetDetailScreen active={active} target={localTargetView(target)} selectedPolicy={policy} fixedPolicy preparation="ready" committedPolicy={target.startedAt?policy:null} initialCompletionKind={target.completedAt?'study_completion':null} reviewDue={c.due.includes(target)} relearning={!!target.relearnAt} retentionRuntimeState={null} nextReviewLabel={target.memory?.dueAt.toLocaleString(i18n.language)??null} declaredMastery={!!target.declaredMastery} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>{}} onOpenSource={onSource??onBack} onRefreshPreparation={()=>void c.refresh()} onGoHome={onHome} onStartReview={onStart} onContinueRetentionRuntime={onStart} onContinueRuntime={onStart} onRevokeDeclaredMastery={()=>void c.declareKnown(target.id,false)} notice={c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>} actions={<><LearningResourceDetails material={target.material}/>{content&&<StudyResources content={content}/>}{target.declaredMastery?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.declareKnown(target.id,false)}>{cardText('revokeKnown')}</button>:<button className={setupPrimary} disabled={c.busy||!!target.completedAt&&!c.due.includes(target)&&c.run?.targetId!==target.id} onClick={onStart}>{target.completedAt?localFlowText('startReview'):localFlowText('startLearning')}</button>}</>}/>;
 }
 type PackageRuntimeProps={active:boolean;c:Controller;host:AssuranceSupportHost;onExit:()=>void;onFinish:()=>void};
 export function PackageRuntime(props:PackageRuntimeProps){
  const run=props.c.run;
  if(!run)return <LightweightPackageRuntime {...props}/>;
- const Surface=packageRuntimeSurfaces[localRuntimeAdapter(run.protocolVersion,run.purpose)];
- if(!Surface)throw new Error('No local runtime surface for the configured adapter');
+ const surface=learningRuntimeCoordinator.adapterForBinding(localRunBinding(run)).surfaceFor(run.purpose);
+ const Surface=runtimeSurfaceRegistry.localRenderer<PackageRuntimeProps>(surface);
  return <Surface {...props}/>;
 }
-const packageRuntimeSurfaces:Record<string,(props:PackageRuntimeProps)=>React.ReactNode>={
- lightweight:LightweightPackageRuntime,structured:StructuredPackageRuntime,
-};
 function StructuredPackageRuntime({active,c,onExit,onFinish,host}:PackageRuntimeProps){
  const run=c.run,target=c.targets.find(t=>t.id===run?.targetId),pack=c.packages.find(p=>p.key===target?.packageKey);
  if(!run?.assurance||!target||!pack)throw new Error('Missing structured runtime resources');
@@ -114,8 +114,12 @@ function LightweightPackageRuntime({active,c,onExit,onFinish,host}:PackageRuntim
  if(!run||!target)return <LightweightRuntimeStartScreen active={active} target={null} materialization={null} step={null} completed={false} hasNextTarget={false} onExit={onExit} onReveal={()=>{}} onRate={()=>{}} onFinish={onFinish}/>;
  // Reuse the existing role-based card presentations; formal transitions remain in the local core.
  const material=run.material??target.material;
- const definition=run.phase==='recall'?LIGHTWEIGHT_EXPERIENCE_RECALL_STEP:LIGHTWEIGHT_EXPRESSION_REVEAL_STEP;
- const step:LightweightProtocolStepInstance={protocolStepInstanceId:consumerRunStepId(run.id,run.ordinal,run.phase,run.protocolVersion),protocolRunId:run.id,retentionTargetId:target.retentionId,ordinal:run.ordinal,definition,materialBindings:material.content.resources.filter(r=>definition.materialRequirements.some(m=>m.materialRoleKey===r.materialRoleKey)).map(r=>({materialRoleKey:r.materialRoleKey,resourceKey:r.resourceKey,learningMaterializationId:material.snapshot.learningMaterializationId}))};
+ const step=localLightweightStep(run,target);
  const content={senseKey:String(material.snapshot.provenance.senseId),lemma:target.expression,guideLabelL1:target.meaning};
  return <><LightweightRuntimeStartScreen tools={!run.completedAt&&<RuntimeTools content={content} personalContent={run.phase==='reveal'?content:null} showSave={run.phase==='reveal'} onMarkKnown={()=>void c.declareKnown(target.id).then(ok=>{if(ok)onExit();})} onOpenMenuMore={host.onOpenMenuMore} toast={host.toast} busy={c.busy}/>} active={active} target={localTargetView(target)} materialization={material} step={run.completedAt?null:step} completed={!!run.completedAt} hasNextTarget={!!c.nextTarget} onExit={onExit} onReveal={()=>{if(!c.busy)void c.act({kind:'reveal'});}} onRate={rating=>{if(!c.busy)void c.act({kind:'rate',rating});}} onFinish={onFinish} purpose={run.purpose} completionDetail={target.relearnAt?localFlowText('nextRelearning',{date:new Date(target.relearnAt).toLocaleString(i18n.language)}):target.memory?localFlowText('nextReview',{date:target.memory.dueAt.toLocaleString(i18n.language)}):localFlowText('progressSaved')} completionLabel={run.purpose==='initial_learning'?localFlowText('initialCompleted'):run.purpose==='retention_review'?localFlowText('reviewCompleted'):localFlowText('relearningCompleted')}/>{active&&c.notice&&<p role="status" className="fixed bottom-4 left-4 right-4 z-[100] rounded-xl bg-amber-50 p-3">{localFlowNotice(c.notice)}</p>}</>;
 }
+
+// Existing surfaces receive data adapters at composition; no second surface registry.
+runtimeSurfaceRegistry.bindLocalRenderer('lightweight_initial',LightweightPackageRuntime);
+runtimeSurfaceRegistry.bindLocalRenderer('lightweight_retention',LightweightPackageRuntime);
+runtimeSurfaceRegistry.bindLocalRenderer('structured_session',StructuredPackageRuntime);

@@ -1,3 +1,6 @@
+import {LearningRuntimeCoordinator} from '../apps/web/src/experience/learningRuntime/runtimeCoordinator.ts';
+import {LearningPolicyProfileRegistry,learningPolicyProfileRegistry} from '../apps/web/src/experience/learningRuntime/policyProfiles.ts';
+import {RuntimeSurfaceRegistry} from '../apps/web/src/experience/learningRuntime/runtimeSurfaces.ts';
 import {assembleLightweightInitialPresentation} from '../apps/web/src/experience/learningRuntime/lightweightInitialPresentation.ts';
 import {LIGHTWEIGHT_EXPERIENCE_RECALL_STEP,LIGHTWEIGHT_EXPRESSION_REVEAL_STEP} from '../apps/web/src/experience/learningRuntime/lightweightInitialProtocol.ts';
 import assert from 'node:assert/strict';
@@ -31,6 +34,27 @@ try{
  const [targetId]=await enrollPackage(id(),pack.key);await enrollPackage(id(),pack.key);
  assert.equal((await readLearning()).targets.length,1);
  const target=(await readLearning()).targets[0]!;
+ // A new Profile reuses the registered execution engine and Surface without a new page or branch.
+ const base=learningPolicyProfileRegistry.get('lightweight');
+ const variant={...structuredClone(base),profileId:'fixture-reused-profile'};
+ const profiles=new LearningPolicyProfileRegistry([variant], [{...variant,profileVersion:'archived-v1'}]);
+ assert.equal(profiles.get(variant.profileId,'archived-v1').profileVersion,'archived-v1');
+ assert.throws(()=>profiles.get(variant.profileId,'unknown-version'));
+ const coordinator=new LearningRuntimeCoordinator(profiles),surfaces=new RuntimeSurfaceRegistry();
+ const renderer=()=>null;surfaces.bindLocalRenderer(coordinator.surfaceFor(variant.profileId,'initial_learning'),renderer);
+ assert.equal(surfaces.localRenderer(coordinator.surfaceFor(variant.profileId,'initial_learning')),renderer);
+ const engine=coordinator.localExecutionFor(variant.profileId,'initial_learning');
+ const copiedTarget=structuredClone(target);
+ const copiedRun:any={id:id(),targetId:target.id,purpose:'initial_learning',protocolVersion:variant.protocols.initial_learning.localProtocolVersion,protocolBinding:variant.protocols.initial_learning,schedulingPolicy:variant.lifecycle.schedulingPolicy,phase:'recall',ordinal:1,revision:1,startedAt:'2026-09-10T08:00:00.000Z',completedAt:null,memoryRevision:0,dueAt:null,material:target.material};
+ Object.assign(copiedRun,engine.initialize(copiedTarget,pack,'initial_learning',copiedRun));
+ assert.equal(engine.purpose(copiedTarget),'initial_learning');
+ assert.throws(()=>engine.transition(copiedTarget,copiedRun,pack,{kind:'reveal',extra:true} as any,copiedRun.startedAt));
+ engine.transition(copiedTarget,copiedRun,pack,{kind:'reveal'},copiedRun.startedAt);
+ engine.transition(copiedTarget,copiedRun,pack,{kind:'rate',rating:'good'},copiedRun.startedAt);
+ assert(copiedRun.lightweight.progress.completed);
+ assert.equal(copiedTarget.memoryRevision,1);
+ assert.equal(engine.purpose(copiedTarget),'retention_review');
+
  for(const definition of [LIGHTWEIGHT_EXPERIENCE_RECALL_STEP,LIGHTWEIGHT_EXPRESSION_REVEAL_STEP]){
   const presentation=assembleLightweightInitialPresentation({protocolStepInstanceId:id(),protocolRunId:id(),retentionTargetId:target.retentionId,ordinal:1,definition,materialBindings:target.material.content.resources.filter(r=>definition.materialRequirements.some(m=>m.materialRoleKey===r.materialRoleKey)).map(r=>({materialRoleKey:r.materialRoleKey,resourceKey:r.resourceKey,learningMaterializationId:target.material.snapshot.learningMaterializationId}))},target.material);
   if(presentation.kind==='expression_reveal')assert.equal(presentation.slots.expressionPrimary.surface,'borrow');else assert(!JSON.stringify(presentation).includes('borrow'));
