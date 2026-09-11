@@ -81,7 +81,7 @@ try{
  // Optional formal UI integration, with real Supabase SDK and synthetic Auth HTTP only.
  if(process.env.SENSA_LOCAL_WEB_URL){
   const webOrigin=process.env.SENSA_LOCAL_WEB_URL;if(new URL(webOrigin).hostname!=='127.0.0.1')throw Error('Use isolated loopback Web');
-  const ctx=await browser.newContext(),ui=await ctx.newPage();const errors:string[]=[];ui.on('pageerror',e=>errors.push(e.message));
+  const ctx=await browser.newContext(),ui=await ctx.newPage();let accountInitializations=0;const errors:string[]=[];ui.on('pageerror',e=>errors.push(e.message));
   const token=[{}, {sub:subjects[0],exp:Math.floor(Date.now()/1000)+3600},'fixture'].map(x=>Buffer.from(JSON.stringify(x)).toString('base64url')).join('.');
   await ctx.route('**/*',async route=>{
    const req=route.request(),address=new URL(req.url());
@@ -89,6 +89,7 @@ try{
    if(address.pathname.includes('/auth/v1/verify')){await route.fulfill({json:{access_token:token,refresh_token:'fixture-refresh',token_type:'bearer',expires_in:3600,user:{id:subjects[0],email:'sync@sensa.invalid',aud:'authenticated',app_metadata:{},user_metadata:{},created_at:new Date().toISOString()}}});return;}
    const at=address.pathname.indexOf('/sensa/');
    if(at>=0&&address.origin!==webOrigin){const path=address.pathname.slice(at);if(path.startsWith('/sensa/library-sync')||path==='/sensa/web/access/session'){
+    if(path==='/sensa/web/access/session')accountInitializations++;
     const reply=await app.request('http://fixture'+path,{method:req.method(),headers:{authorization:'Bearer first','content-type':'application/json'},...(req.postData()?{body:req.postData()!}: {})});await route.fulfill({status:reply.status,contentType:'application/json',body:await reply.text()});return;
    }await route.fulfill({status:503,json:{code:'fixture_unavailable'}});return;}
    if(address.origin===webOrigin){await route.continue();return;}
@@ -98,6 +99,12 @@ try{
   await expect(ui.getByRole('heading',{name:'账号与设置',exact:true})).toBeVisible({timeout:60000});
   await ui.getByRole('button',{name:/设备与数据/}).click();await expect(ui.getByRole('heading',{name:'账号云同步'})).toBeVisible();await expect(ui.getByText('已同步到账号',{exact:true})).toBeVisible();
   await expect(ui.getByRole('button',{name:'立即同步',exact:true})).toBeEnabled();await expect(ui.getByText('恢复码',{exact:true})).toHaveCount(0);
+  const admittedInitializations=accountInitializations;
+  await ui.evaluate(()=>{for(let i=0;i<3;i++)window.dispatchEvent(new Event('visibilitychange'));});
+  await ui.waitForTimeout(1200);
+  assert.equal(accountInitializations,admittedInitializations,'same-session tab focus must not initialize the account again');
+  await expect(ui.getByRole('heading',{name:'账号云同步'})).toBeVisible();
+  console.log('PASS: repeated Supabase same-session SIGNED_IN events preserve the mounted app and do not restart account initialization.');
   await ui.screenshot({path:'/tmp/sensa-account-cloud-sync.png',fullPage:true});await ui.locator('select:visible').first().selectOption('en');await expect(ui.getByRole('heading',{name:'Account sync',exact:true})).toBeVisible();await expect(ui.getByRole('button',{name:'Sync now',exact:true})).toBeEnabled();await ui.setViewportSize({width:390,height:844});assert(await ui.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await ui.screenshot({path:'/tmp/sensa-account-cloud-sync-en.png',fullPage:true});assert.deepEqual(errors,[]);
   console.log('PASS: formal AccountExperience login restores cloud library and original Profile shows sync status');await ctx.close();
  }

@@ -27,6 +27,7 @@ export default function AccountExperience({children}:{children:ReactNode}){
  const [email,setEmail]=useState(''),[code,setCode]=useState(''),[sent,setSent]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[owner,setOwner]=useState<Owner|null>(null);
  const [retryAt,setRetryAt]=useState(0),[now,setNow]=useState(Date.now());
  const [useCode,setUseCode]=useState(false);const callbackDismissed=useRef(false);
+ const observedAuth=useRef<{subject:string|null;token:string|null}|null>(null);
  const generation=useRef(0),localRef=useRef(false);localRef.current=local;
  const recover=async()=>{
   if(deletionRef.current)return;
@@ -37,7 +38,7 @@ export default function AccountExperience({children}:{children:ReactNode}){
    if(callback==='failed'&&!callbackDismissed.current){setLocal(false);setNotice(localFlowText('emailLinkInvalid'));return;}
    const stored=await readLibrary(async tx=>({owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out'),usable:!!(await tx.get<{revision:number}>('meta','cloud-sync'))?.revision||(await tx.all('drafts')).length>0||(await tx.all('packages')).length>0||(await tx.all('learningTargets')).length>0}));
    if(gen!==generation.current)return;
-   setOwner(stored.owner??null);setOnlineService(false);
+   setOwner(stored.owner??null);
    // Local access uses the already admitted owner. Refreshing an expired online
    // token may wait indefinitely offline; it must not hold the local library gate.
    const cachedSubject=cachedAuthSubject();
@@ -48,7 +49,7 @@ export default function AccountExperience({children}:{children:ReactNode}){
    else if(stored.owner&&stored.identity&&stored.usable){setLocal(true);setReady(true);}
    const session=(await auth?.getSession())?.data.session;
    if(gen!==generation.current)return;
-   if(!session){setLocal(!!stored.identity&&stored.usable&&!stored.signedOut);return;}
+   if(!session){setOnlineService(false);setLocal(!!stored.identity&&stored.usable&&!stored.signedOut);return;}
    if(stored.owner&&stored.owner.subject!==session.user.id){setLocal(false);setNotice(localFlowText('wrongAccount'));return;}
    setLocal(!!stored.identity&&stored.usable&&!stored.signedOut);
    const endpoint=import.meta.env.VITE_SENSA_API_URL;
@@ -57,7 +58,7 @@ export default function AccountExperience({children}:{children:ReactNode}){
    if(gen!==generation.current)return;
    const response=await fetch(endpoint.replace(/\/+$/,'')+'/sensa/web/access/session',{method:'POST',headers:{authorization:'Bearer '+session.access_token,'content-type':'application/json'},body:JSON.stringify({installationId}),signal:AbortSignal.timeout(15000),redirect:'error'});
    if(gen!==generation.current)return;
-   if(!response.ok){const failure=await response.json().catch(()=>({}));if(failure.code==='account_deleted'){await eraseDeletedAccount(session.user.id);setLocal(false);setNotice(localFlowText('deleteDone'));await auth?.signOut({scope:'local'});return;}setNotice(response.status===403?localFlowText('contactSupport'):localFlowText('serviceRetry'));return;}
+   if(!response.ok){setOnlineService(false);const failure=await response.json().catch(()=>({}));if(failure.code==='account_deleted'){await eraseDeletedAccount(session.user.id);setLocal(false);setNotice(localFlowText('deleteDone'));await auth?.signOut({scope:'local'});return;}setNotice(response.status===403?localFlowText('contactSupport'):localFlowText('serviceRetry'));return;}
    const access=z.object({authorized:z.literal(true),accountId:z.string().uuid()}).parse(await response.json());
    if((await auth?.getSession())?.data.session?.user.id!==session.user.id)throw new Error('account changed');
    if(gen!==generation.current)return;
@@ -71,7 +72,16 @@ export default function AccountExperience({children}:{children:ReactNode}){
   }catch{if(gen===generation.current)setNotice(localFlowText('networkRetry'));}
   finally{if(gen===generation.current)setReady(true);}
  };
- useEffect(()=>{void recover();const sub=auth?.onAuthStateChange((event)=>{if(deletionRef.current)return;if(event==='SIGNED_OUT')clearAllCredentials();setOnlineService(false);if(event==='SIGNED_OUT'||event==='SIGNED_IN')setLocal(false);setTimeout(()=>void recover(),0);});const online=()=>void recover();const storage=(event:StorageEvent)=>{if(event.key===null||event.key===authStorageKey)void recover();};window.addEventListener('online',online);window.addEventListener('storage',storage);const timer=setInterval(()=>setNow(Date.now()),1000);return()=>{generation.current++;sub?.data.subscription.unsubscribe();window.removeEventListener('online',online);window.removeEventListener('storage',storage);clearInterval(timer);};},[]);
+ useEffect(()=>{void recover();const sub=auth?.onAuthStateChange((event,session)=>{
+  if(deletionRef.current)return;
+  const next={subject:session?.user.id??null,token:session?.access_token??null},previous=observedAuth.current;
+  // Supabase also emits SIGNED_IN when a tab regains focus. It is not a logout
+  // or a new account; tearing down the app here interrupts extension PKCE.
+  if(previous?.subject===next.subject&&previous.token===next.token&&event!=='USER_UPDATED')return;
+  observedAuth.current=next;
+  if(event==='SIGNED_OUT'||previous&&previous.subject!==next.subject){generation.current++;clearAllCredentials();setOnlineService(false);setLocal(false);}
+  setTimeout(()=>void recover(),0);
+ });const online=()=>void recover();const storage=(event:StorageEvent)=>{if(event.key===null||event.key===authStorageKey)void recover();};window.addEventListener('online',online);window.addEventListener('storage',storage);const timer=setInterval(()=>setNow(Date.now()),1000);return()=>{generation.current++;sub?.data.subscription.unsubscribe();window.removeEventListener('online',online);window.removeEventListener('storage',storage);clearInterval(timer);};},[]);
  useEffect(()=>observeLibrary(()=>{void readLibrary(async tx=>({signedOut:await tx.get('meta','signed-out')})).then(state=>{if(state.signedOut&&localRef.current){generation.current++;clearAllCredentials();setLocal(false);setOnlineService(false);}}).catch(()=>setNotice(localFlowText('localStatusFailed')));}),[]);
  const perform=async(work:()=>Promise<void>)=>{callbackDismissed.current=true;setBusy(true);setNotice('');try{await work();}catch{setNotice(localFlowText('tryLater'));}finally{setBusy(false);}};
  const send=async()=>{if(!auth)return;const {error}=await auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true,emailRedirectTo:emailLinkRedirect()}});if(error){setNotice(error.status===429?localFlowText('otpRateLimit'):localFlowText('emailLinkSendFailed'));return;}setSent(true);setRetryAt(Date.now()+60000);};
