@@ -53,6 +53,8 @@ borrow/lend 及媒体资源见 [学习包指南](assurance-package-import.md)。
 
 `.github/workflows/sensa-trial-database.yml` 使用受保护 `sensa-trial` environment 和完整已审阅 SHA，
 只允许指定隔离项目的 initialize / invite，不部署应用或导入旧学习历史。
+`.github/workflows/sensa-trial-api.yml` 使用同一隔离 environment 和完整已审阅 SHA，只构建、配置并
+发布该项目的 `sensa-api` Function，随后验证公开认证与 CORS 边界；它不发布 Web 或修改账号准入。
 
 - 忽略文件 `apps/api/.env.trial-ci` 保存 `MIGRATION_DATABASE_URL` 与 `SENSA_RUNTIME_DATABASE_URL`。
   `node scripts/release/prepareTrialEnvironment.mjs` 本机检查项目/TLS 并生成或复用运行密码，
