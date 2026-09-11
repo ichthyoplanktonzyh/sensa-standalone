@@ -1,4 +1,5 @@
 import type {
+  SensaRuntimeLearningRelease,
   SensaRuntimeLearningPackage,
   SensaRuntimeSenseRelation,
 } from '@sensa/contracts/sensa';
@@ -10,7 +11,7 @@ import type {
   PrototypeRecognitionOption,
   PrototypeTransferScenarioSpec,
 } from './learningCatalog';
-import { runtimeLearningRelease as installedRelease } from './learningCatalog';
+import { runtimeLearningRelease as defaultRelease } from './learningCatalog';
 import type { ReviewAssessmentKind } from '../review/types';
 
 /** The closed assessment vocabulary exposed by the installed Learning Package. */
@@ -101,6 +102,7 @@ function assertTaskKey(taskKey: string | null | undefined): asserts taskKey is s
 
 function requireInstalledPackage(
   request: AssessmentResourceRequest,
+  installedRelease: SensaRuntimeLearningRelease,
 ): SensaRuntimeLearningPackage {
   const { packageIdentity, content } = request;
   if (
@@ -123,7 +125,7 @@ function requireInstalledPackage(
   return pkg;
 }
 
-function mediaUrl(mediaKey: string | null | undefined): string | null {
+function mediaUrl(mediaKey: string | null | undefined, installedRelease: SensaRuntimeLearningRelease): string | null {
   if (!mediaKey) return null;
   const media = installedRelease.media.find((candidate) => candidate.mediaKey === mediaKey);
   if (!media || media.kind !== 'audio') return null;
@@ -136,6 +138,7 @@ function mediaUrl(mediaKey: string | null | undefined): string | null {
 function projectExample(
   pkg: SensaRuntimeLearningPackage,
   exampleKey: string,
+  installedRelease: SensaRuntimeLearningRelease,
 ): PrototypeLearningExample {
   const example = pkg.examples.find((candidate) => candidate.exampleKey === exampleKey);
   if (!example) {
@@ -150,7 +153,7 @@ function projectExample(
     targetStart: example.target.start,
     targetEnd: example.target.end,
     audioUrl: audioRender?.kind === 'static_audio'
-      ? mediaUrl(audioRender.mediaKey)
+      ? mediaUrl(audioRender.mediaKey, installedRelease)
       : null,
   };
 }
@@ -185,6 +188,7 @@ function requireRelatedBoundarySense(
   pkg: SensaRuntimeLearningPackage,
   relationKey: string,
   content: PrototypeIntroductionPackage,
+  installedRelease: SensaRuntimeLearningRelease,
 ): { relation: SensaRuntimeSenseRelation; relatedPackage: SensaRuntimeLearningPackage } {
   const relation = installedRelease.relations.find((candidate) => candidate.relationKey === relationKey);
   if (!relation) {
@@ -214,12 +218,13 @@ function requireRelatedBoundarySense(
  */
 export function materializeAssessmentResource(
   request: AssessmentResourceRequest,
+  installedRelease: SensaRuntimeLearningRelease = defaultRelease,
 ): AssessmentResource {
   assertTaskKey(request.taskKey);
   if (request.capability) {
     assertAssessmentCapabilityMatchesKind(request.capability, request.kind);
   }
-  const pkg = requireInstalledPackage(request);
+  const pkg = requireInstalledPackage(request, installedRelease);
   const { content, kind } = request;
   const packageKey = request.packageIdentity.packageKey;
 
@@ -237,7 +242,7 @@ export function materializeAssessmentResource(
       packageKey,
       senseKey: request.packageIdentity.senseKey,
       taskKey: task.taskKey,
-      example: projectExample(pkg, task.exampleKey),
+      example: projectExample(pkg, task.exampleKey, installedRelease),
       contextLabelL1: '新语境',
       instructionL1: task.promptL1,
       questionL1: task.questionL1,
@@ -322,7 +327,7 @@ export function materializeAssessmentResource(
         sourceObjectL1: task.connectionSummary.fromLabelL1,
         targetObjectL1: task.connectionSummary.toLabelL1,
         invariantLabelsL1: task.connectionSummary.invariantLabelsL1,
-        revealExample: projectExample(pkg, task.exampleKey),
+        revealExample: projectExample(pkg, task.exampleKey, installedRelease),
       },
     };
   }
@@ -335,7 +340,7 @@ export function materializeAssessmentResource(
       `Action task ${request.taskKey} is not a Boundary resource in ${packageKey}.`,
     );
   }
-  const { relation, relatedPackage } = requireRelatedBoundarySense(pkg, task.relationKey, content);
+  const { relation, relatedPackage } = requireRelatedBoundarySense(pkg, task.relationKey, content, installedRelease);
   const relatedLexeme = installedRelease.lexemes.find((candidate) =>
     candidate.lexemeKey === relatedPackage.identity.lexemeKey
     && candidate.version === relatedPackage.identity.lexemeVersion,
@@ -354,7 +359,7 @@ export function materializeAssessmentResource(
     relationLabelL1: relation.relationType === 'viewpoint_contrast'
       ? '同一临时转移 · 不同动作视角'
       : '真实混淆边界',
-    example: projectExample(pkg, task.exampleKey),
+    example: projectExample(pkg, task.exampleKey, installedRelease),
     questionL1: task.questionL1,
     options: task.options.map((option) => ({
       id: option.optionKey,

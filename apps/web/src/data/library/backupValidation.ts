@@ -1,3 +1,4 @@
+import {validateAssuranceHistory} from './assurance';
 import {z} from 'zod';
 import {sensaLearningMaterializationSnapshotSchema,semanticProposalSchema,sensaContentGenerationRequestSchema,sensaMaterialCandidateBundleSchema,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {consumerRunStepId,transitionConsumerRun,decideConsumerSettlement,stableUuid} from '@sensa/learning-kernel';
@@ -33,6 +34,8 @@ export function validateBackupRows(rows:BackupRows){
   if(t.material.snapshot.learnerUserId!==identity.learnerId||t.material.snapshot.learningTargetId!==t.id||t.id!==stableUuid(`sensa-learning-target:${identity.learnerId}:${p.senseVersionId}:${p.bindingVersionId}`)||t.retentionId!==stableUuid(`sensa-retention:${t.id}`))fail();
   if(t.packageKey){const pack=requireRow('packages',t.packageKey);if(!pack.bundle.entries.some((e:any)=>e.senseVersionId===p.senseVersionId&&e.bindingVersionId===p.bindingVersionId&&backupEqual(e.content,t.material.content)))fail();}else{requireRow('meanings',p.meaningId);const attempt=requireRow('contentAttempts',p.attemptId);if(attempt.status!=='ready'||!(attempt.review?.accepted||(attempt.reviewProvider===null&&attempt.review===null&&attempt.validation?.review===null&&attempt.validation?.validations?.length>0&&attempt.validation.validations.every((v:any)=>v.status==='accepted')))||!backupEqual(attempt.validation?.content,t.material.content))fail();}
   if(t.expression!==t.material.content.resources.find((r:any)=>r.materialRoleKey==='target_expression')?.contentPayload.surface||t.meaning!==t.material.content.resources.find((r:any)=>r.materialRoleKey==='sense_confirmation')?.contentPayload.meaning)fail();
+  if(t.assurancePackageKey){const pack=requireRow('packages',t.packageKey);if(!pack.bundle.assurance||!pack.bundle.entries.some((e:any)=>e.assurancePackageKey===t.assurancePackageKey&&e.senseVersionId===p.senseVersionId&&e.bindingVersionId===p.bindingVersionId))fail();validateAssuranceHistory(t,pack,rows.learningRuns.map(r=>r.value).filter(r=>r.targetId===t.id).sort((a,b)=>a.startedAt.localeCompare(b.startedAt)),rows.learningEvents.map(r=>r.value));continue;}
+  if(t.packageKey&&requireRow('packages',t.packageKey).bundle.assurance)fail();
   // Replay events to check that the saved schedule agrees with its runtime history.
   let memory:any=null,memoryRevision=0,completedAt:string|null=null,relearnAt:string|null=null,startedAt:string|null=null;
   const runs=rows.learningRuns.map(r=>r.value).filter(r=>r.targetId===t.id).sort((a,b)=>a.startedAt.localeCompare(b.startedAt));

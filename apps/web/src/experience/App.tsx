@@ -1986,7 +1986,7 @@ export default function App() {
           />
 
           {/* 4. 我的学习 / 学习偏好 */}
-          <StudyScreen
+          <StudyScreen policySummary={packageLearning.targets.some(t=>t.assurancePackageKey)?localFlowText(packageLearning.targets.every(t=>t.assurancePackageKey)?'assuranceTitle':'mixedLearningMethods'):undefined}
             active={viewMode === 'main' && mainStack.includes('s-study')}
             tab={studyTab}
             onTabChange={setStudyTab}
@@ -2008,7 +2008,7 @@ export default function App() {
           <LearningTargetLibraryScreen active={viewMode==='main'&&mainStack.includes('s-learning-library')}
             targets={Object.fromEntries([...packageLearning.targets.map(t=>[t.id,localTargetView(t)]),...pendingPersonal.map(t=>[t.targetId,pendingPersonalTargetView(t)])])}
             targetIds={[...packageLearning.targets.map(t=>t.id),...pendingPersonal.map(t=>t.targetId)]}
-            policyByTarget={Object.fromEntries([...packageLearning.targets.map(t=>[t.id,'lightweight' as const]),...pendingPersonal.map(t=>[t.targetId,'lightweight' as const])])}
+            policyByTarget={Object.fromEntries([...packageLearning.targets.map(t=>[t.id,t.assurancePackageKey?'high_assurance' as const:'lightweight' as const]),...pendingPersonal.map(t=>[t.targetId,'lightweight' as const])])}
             preparationByTarget={Object.fromEntries([...packageLearning.targets.map(t=>[t.id,'ready' as const]),...pendingPersonal.map(t=>[t.targetId,t.status==='failed'||t.status==='rejected'?'blocked' as const:'preparing' as const])])}
             committedTargetIds={new Set(packageLearning.targets.filter(t=>t.startedAt).map(t=>t.id))}
             completedTargetIds={new Set(packageLearning.targets.filter(t=>t.completedAt).map(t=>t.id))}
@@ -2061,7 +2061,7 @@ export default function App() {
           />
 
           {/* 5.1 轻量首次运行入口：创建运行即提交并锁定 Learning Policy。 */}
-          {quantityTarget&&<LearningPreferencesPanel fixedPolicy defaultPolicy="lightweight" dailyNewCount={quantityChoice} onPolicyChange={()=>{}} onDailyNewCountChange={setQuantityChoice} busy={packageLearning.busy} status={packageLearning.notice&&<p role="status">{packageLearning.notice}</p>} onClose={()=>setQuantityTarget(null)} closeLabel={localFlowText('confirmAndStart')} onConfirm={()=>void packageLearning.confirmQuantity(quantityChoice).then(async ok=>{if(!ok)return;const target=quantityTarget;setQuantityTarget(null);if(await packageLearning.start(target,quantityChoice))setViewMode('lightweight');})}/>}
+          {quantityTarget&&<LearningPreferencesPanel fixedPolicy defaultPolicy={packageLearning.targets.find(t=>t.id===quantityTarget)?.assurancePackageKey?"high_assurance":"lightweight"} dailyNewCount={quantityChoice} onPolicyChange={()=>{}} onDailyNewCountChange={setQuantityChoice} busy={packageLearning.busy} status={packageLearning.notice&&<p role="status">{packageLearning.notice}</p>} onClose={()=>setQuantityTarget(null)} closeLabel={localFlowText('confirmAndStart')} onConfirm={()=>void packageLearning.confirmQuantity(quantityChoice).then(async ok=>{if(!ok)return;const target=quantityTarget;setQuantityTarget(null);if(await packageLearning.start(target,quantityChoice))setViewMode('lightweight');})}/>}
           <PackageRuntime active={viewMode==='lightweight'} c={packageLearning} onExit={returnHome} onFinish={()=>void packageLearning.finish().then(async ok=>{if(!ok)return;if(packageLearning.nextTarget){if(await packageLearning.start(packageLearning.nextTarget.id,dailyNewCount))return;}returnHome();})}/>
 
 

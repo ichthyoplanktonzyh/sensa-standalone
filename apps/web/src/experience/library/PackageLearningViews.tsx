@@ -1,3 +1,4 @@
+import {AssuranceRuntime,AssuranceTarget} from './AssuranceLearningViews';
 import {LearningResourceDetails} from '../components/learning/LearningResourceDetails';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
@@ -13,7 +14,7 @@ import type {LocalLearningTarget} from '../../data/library/learning';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 type Controller=ReturnType<typeof usePackageLearning>;
-export const localTargetView=(t:LocalLearningTarget)=>({targetId:t.id,expression:t.expression,meaning:t.meaning,example:String(t.material.content.resources.find(r=>r.materialRoleKey==='usage_guidance')?.contentPayload.example??''),partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:t.packageKey?'book' as const:'personal_semantic_world' as const,sourceLabel:t.packageKey?localFlowText('downloadedPackages'):localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:'lightweight' as const,lightweightReadiness:{status:'ready' as const,label:localFlowText('downloaded'),detail:localFlowText('resourcesLocal')}});
+export const localTargetView=(t:LocalLearningTarget)=>({targetId:t.id,expression:t.expression,meaning:t.meaning,example:String(t.material.content.resources.find(r=>r.materialRoleKey==='usage_guidance')?.contentPayload.example??''),partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:t.packageKey?'book' as const:'personal_semantic_world' as const,sourceLabel:t.packageKey?localFlowText('downloadedPackages'):localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:t.assurancePackageKey?'high_assurance' as const:'lightweight' as const,lightweightReadiness:{status:'ready' as const,label:localFlowText('downloaded'),detail:localFlowText('resourcesLocal')}});
 export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boolean;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void}){
  useTranslation();
  const [selected,setSelected]=useState<string|null>(null),[query,setQuery]=useState(''),[downloadKey,setDownloadKey]=useState<string|null>(null);
@@ -44,7 +45,7 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
      <progress aria-label={localFlowText('downloadPackage')} max={100} value={c.progress} className="h-2 w-full accent-[#303f76]"/>
      <button className={setupButton} onClick={c.cancelDownload}>{localFlowText('cancelDownload')}</button>
     </>:<>
-     <p className="text-sm leading-6 text-[#68748d]">{localFlowText(item.enrolled?'packageReadyHint':installed?'packageJoinHint':'packageDownloadHint')}</p>
+     <p className="text-sm leading-6 text-[#68748d]">{localFlowText(item.enrolled?'packageReadyHint':installed?.bundle.assurance?'assuranceMethodHint':installed?'packageJoinHint':'packageDownloadHint')}</p>
      <button className={setupPrimary+' w-full sm:w-auto'} disabled={c.busy||(!installed&&!descriptor)} onClick={()=>{if(item.enrolled)onLearning();else if(installed)void c.enroll(installed.key);else if(descriptor){setDownloadKey(item.key);void c.download(descriptor).finally(()=>setDownloadKey(null));}}}>
       {item.enrolled?<ArrowRight size={18}/>:installed?<Check size={18}/>:<Download size={18}/>}{localFlowText(c.busy?'processing':item.enrolled?'packageGoLearning':installed?'enroll':'downloadPackage')}
      </button>
@@ -83,12 +84,15 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
 }
 export function PackageTarget({active,target,c,onBack,onHome,onStart,onSource}:{active:boolean;target:LocalLearningTarget;c:Controller;onBack:()=>void;onHome:()=>void;onStart:()=>void;onSource?:()=>void}){
  useTranslation();
+ const pack=c.packages.find(p=>p.key===target.packageKey);
+ if(target.assurancePackageKey&&pack)return <AssuranceTarget active={active} target={target} pack={pack} busy={c.busy} notice={c.notice} canResume={c.run?.targetId===target.id} onBack={onBack} onStart={onStart}/>;
  return <LearningTargetDetailScreen active={active} target={localTargetView(target)} selectedPolicy="lightweight" fixedPolicy preparation="ready" committedPolicy={target.startedAt?'lightweight':null} initialCompletionKind={target.completedAt?'study_completion':null} reviewDue={c.due.includes(target)} relearning={!!target.relearnAt} retentionRuntimeState={null} nextReviewLabel={target.memory?.dueAt.toLocaleString(i18n.language)??null} declaredMastery={false} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>{}} onOpenSource={onSource??onBack} onRefreshPreparation={()=>void c.refresh()} onGoHome={onHome} onStartReview={onStart} onContinueRetentionRuntime={onStart} onContinueRuntime={onStart} onRevokeDeclaredMastery={()=>{}} notice={c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>} actions={<><LearningResourceDetails material={target.material}/><button className={setupPrimary} disabled={c.busy||!!target.completedAt&&!c.due.includes(target)&&c.run?.targetId!==target.id} onClick={onStart}>{target.completedAt?localFlowText('startReview'):localFlowText('startLearning')}</button></>}/>;
 }
 export function PackageRuntime({active,c,onExit,onFinish}:{active:boolean;c:Controller;onExit:()=>void;onFinish:()=>void}){
  useTranslation();
  const run=c.run,target=c.targets.find(t=>t.id===run?.targetId);
  if(!run||!target)return <LightweightRuntimeStartScreen active={active} target={null} materialization={null} step={null} completed={false} hasNextTarget={false} onExit={onExit} onReveal={()=>{}} onRate={()=>{}} onFinish={onFinish}/>;
+ if(run.assurance){const pack=c.packages.find(p=>p.key===target.packageKey);if(pack)return <AssuranceRuntime key={run.id+':'+run.revision} active={active} run={run} target={target} pack={pack} busy={c.busy} notice={c.notice} onAction={action=>{if(!c.busy)void c.act(action);}} onExit={onExit} onFinish={onFinish}/>;}
  // Reuse the existing role-based card presentations; formal transitions remain in the local core.
  const material=run.material??target.material;
  const definition=run.phase==='recall'?LIGHTWEIGHT_EXPERIENCE_RECALL_STEP:LIGHTWEIGHT_EXPRESSION_REVEAL_STEP;

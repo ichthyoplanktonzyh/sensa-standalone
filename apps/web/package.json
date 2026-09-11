@@ -13,6 +13,7 @@
     "prebuild": "node ../../scripts/prepareWebMedia.mjs"
   },
   "dependencies": {
+    "@sensa/content-validator": "file:../../packages/content-validator",
     "@sensa/contracts": "file:../../packages/contracts",
     "@sensa/learning-kernel": "file:../../packages/learning-kernel",
     "@supabase/supabase-js": "^2.115.0",

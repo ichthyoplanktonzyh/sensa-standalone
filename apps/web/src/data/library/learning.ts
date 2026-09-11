@@ -1,10 +1,11 @@
+import {beginAssurance,transitionAssurance,type AssuranceState,type AssuranceAction} from './assurance';
 import {stableUuid,canonicalJsonDigest,consumerRunStepId,transitionConsumerRun,decideConsumerSettlement,type ReviewSchedule} from '@sensa/learning-kernel';
 import {sensaLearningMaterializationSnapshotSchema,sensaLearningConnectionContractVersion,LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION} from '@sensa/contracts/sensa';
 import {command,readLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
 import {learningOwner,type InstalledPackage} from './packages';
 import {validateLightweightInitialMaterialization,type LightweightInitialLearningMaterialization} from '../../experience/learningRuntime/lightweightInitialContent';
-export type LocalLearningTarget={id:string;retentionId:string;packageKey:string|null;expression:string;meaning:string;material:LightweightInitialLearningMaterialization;createdAt:string;startedAt:string|null;completedAt:string|null;memory:ReviewSchedule|null;memoryRevision:number;relearnAt:string|null};
-export type LocalLearningRun={material?:LightweightInitialLearningMaterialization;id:string;targetId:string;purpose:'initial_learning'|'retention_review'|'relearning';protocolVersion:string;phase:'recall'|'reveal';ordinal:number;revision:number;startedAt:string;completedAt:string|null;memoryRevision:number;dueAt:string|null;completionKind?:string};
+export type LocalLearningTarget={assurancePackageKey?:string;id:string;retentionId:string;packageKey:string|null;expression:string;meaning:string;material:LightweightInitialLearningMaterialization;createdAt:string;startedAt:string|null;completedAt:string|null;memory:ReviewSchedule|null;memoryRevision:number;relearnAt:string|null};
+export type LocalLearningRun={assurance?:AssuranceState;material?:LightweightInitialLearningMaterialization;id:string;targetId:string;purpose:'initial_learning'|'retention_review'|'relearning';protocolVersion:string;phase:'recall'|'reveal';ordinal:number;revision:number;startedAt:string;completedAt:string|null;memoryRevision:number;dueAt:string|null;completionKind?:string};
 export type LearningEvent={id:string;runId:string;targetId:string;kind:string;at:string;detail:unknown};
 export async function enrollPackage(operationId:string,key:string){return command({id:operationId,kind:'learning.enroll',input:{key}},async tx=>{
  const owner=await learningOwner(tx),pack=await tx.get<InstalledPackage>('packages',key);if(!pack)throw new Error('localFlow.downloadFirst');
@@ -13,7 +14,7 @@ export async function enrollPackage(operationId:string,key:string){return comman
   const id=stableUuid(`sensa-learning-target:${owner.learnerId}:${e.senseVersionId}:${e.bindingVersionId}`);ids.push(id);
   if(await tx.get('learningTargets',id))continue;
   const snapshot=sensaLearningMaterializationSnapshotSchema.parse({contractVersion:sensaLearningConnectionContractVersion,learningMaterializationId:stableUuid(`sensa-material:${owner.learnerId}:${key}:${id}`),learnerUserId:owner.learnerId,learningTargetId:id,protocolPurpose:'initial_learning',provisioningPath:'published',contentSchemaVersion:LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION,contentPayload:e.content,contentDigest:canonicalJsonDigest(e.content),validationStatus:'validated',validatorVersion:'sensa-web-package-v1',provenance:{packageId:pack.bundle.id,packageVersion:pack.bundle.version,packageDigest:pack.digest,senseId:e.senseId,senseVersionId:e.senseVersionId,bindingId:e.bindingId,bindingVersionId:e.bindingVersionId},personalAnchorUseGrantIds:[],createdAt:new Date().toISOString()});
-  const target:LocalLearningTarget={id,retentionId:stableUuid(`sensa-retention:${id}`),packageKey:key,expression:e.expression,meaning:e.meaning,material:{snapshot,content:e.content},createdAt:snapshot.createdAt,startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null};
+  const target:LocalLearningTarget={...(e.assurancePackageKey?{assurancePackageKey:e.assurancePackageKey}:{}),id,retentionId:stableUuid(`sensa-retention:${id}`),packageKey:key,expression:e.expression,meaning:e.meaning,material:{snapshot,content:e.content},createdAt:snapshot.createdAt,startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null};
   tx.put('learningTargets',id,target);
  }
  return ids;
@@ -27,18 +28,21 @@ export async function startLearning(operationId:string,targetId:string,dailyLimi
  const active=await tx.get<string>('meta','learning-active');if(active){const run=await tx.get<LocalLearningRun>('learningRuns',active);if(run)return run;}
  const t=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!t)throw new Error('localFlow.enrollFirst');validateLightweightInitialMaterialization(t.material);
  const unfinished=(await tx.all<LocalLearningRun>('learningRuns')).find(r=>r.targetId===targetId&&!r.completedAt);if(unfinished){tx.put('meta','learning-active',unfinished.id);return unfinished;}
- const now=new Date(at),purpose=t.relearnAt?'relearning':t.completedAt?'retention_review':'initial_learning';
+ const now=new Date(at),purpose=t.assurancePackageKey?(t.completedAt?'retention_review':'initial_learning'):t.relearnAt?'relearning':t.completedAt?'retention_review':'initial_learning';
  if(t.relearnAt&&now<new Date(t.relearnAt)||purpose==='retention_review'&&(!t.memory||now<t.memory.dueAt))throw new Error('localFlow.notDue');
  if(purpose==='initial_learning'&&!t.startedAt&&(await tx.all<LocalLearningTarget>('learningTargets')).filter(v=>v.startedAt&&day(new Date(v.startedAt))===day(now)).length>=dailyLimit)throw new Error('localFlow.dailyLimit');
  const run:LocalLearningRun={material:t.material,id:crypto.randomUUID(),targetId,purpose,protocolVersion:purpose==='initial_learning'?'consumer-initial-v1':purpose==='retention_review'?'consumer-review-v1':'consumer-relearning-v1',phase:'recall',ordinal:1,revision:1,startedAt:at,completedAt:null,memoryRevision:t.memoryRevision,dueAt:t.memory?.dueAt.toISOString()??null};
+ if(t.assurancePackageKey){const pack=await tx.get<InstalledPackage>('packages',t.packageKey!);if(!pack)throw new Error('localFlow.resourceInvalid');run.assurance=beginAssurance(t,pack,purpose);run.protocolVersion='sensa-high-assurance-v1';}
  if(!t.startedAt){t.startedAt=at;tx.put('learningTargets',t.id,t);}
  tx.put('learningRuns',run.id,run);tx.put('meta','learning-active',run.id);return run;
 });}
-export async function actLearning(operationId:string,runId:string,revision:number,action:{kind:'reveal'}|{kind:'rate';rating:'again'|'hard'|'good'},at=new Date().toISOString()){return command({id:operationId,kind:'learning.act',input:{runId,revision,action,at}},async tx=>{
+export async function actLearning(operationId:string,runId:string,revision:number,action:{kind:'reveal'}|{kind:'rate';rating:'again'|'hard'|'good'}|AssuranceAction,at=new Date().toISOString()){return command({id:operationId,kind:'learning.act',input:{runId,revision,action,at}},async tx=>{
  await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);
  if(!run||run.revision!==revision||run.completedAt||await tx.get('meta','learning-active')!==runId)throw new Error('localFlow.stepChanged');
  const t=(await tx.get<LocalLearningTarget>('learningTargets',run.targetId))!;
  if(!Number.isFinite(Date.parse(at))||Date.parse(at)<Date.parse(run.startedAt))throw new Error('localFlow.clockChanged');
+ if(run.assurance){if(action.kind!=='assurance'||!t.assurancePackageKey)throw new Error('localFlow.stepChanged');const pack=await tx.get<InstalledPackage>('packages',t.packageKey!);if(!pack)throw new Error('localFlow.resourceInvalid');const settlement=transitionAssurance(t,run,pack,action.response,at);tx.put('learningEvents',operationId,{id:operationId,runId,targetId:t.id,kind:action.kind,at,detail:{stepId:run.id+':'+run.ordinal,action,settlement}} satisfies LearningEvent);run.revision++;run.ordinal++;tx.put('learningRuns',run.id,run);tx.put('learningTargets',t.id,t);return run;}
+ if(action.kind==='assurance'||t.assurancePackageKey)throw new Error('localFlow.stepChanged');
  const stepId=consumerRunStepId(run.id,run.ordinal,run.phase,run.protocolVersion);
  const next=transitionConsumerRun(run.protocolVersion,run.phase,action);let settlement:unknown=null;
  if(action.kind==='rate'){

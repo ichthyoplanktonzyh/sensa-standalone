@@ -1,5 +1,6 @@
+import {validateRuntimeLearningRelease} from '@sensa/content-validator/runtime';
 import {learningPackageSchema,learningPackageDescriptorSchema,type LearningPackageBundle,type LearningPackageDescriptor,canonicalConsumerJson} from '@sensa/contracts/sensa';
-import {canonicalJsonDigest} from '@sensa/learning-kernel';
+import {canonicalJsonDigest,sha256 as syncSha256} from '@sensa/learning-kernel';
 import {command,readLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
 export type InstalledPackage={key:string;digest:string;bundle:LearningPackageBundle;installedAt:string};
 export const packageKey=(p:{id:string;version:string})=>JSON.stringify([p.id,p.version]);
@@ -7,6 +8,14 @@ export async function learningOwner(tx:LibraryTransaction){const identity=await 
 export const sha256=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes as BufferSource)),b=>b.toString(16).padStart(2,'0')).join('');
 export function validatePackage(raw:unknown){
  const bundle=learningPackageSchema.parse(raw);
+ if(bundle.assurance){
+  const {release,audio}=bundle.assurance;
+  if(validateRuntimeLearningRelease(release).issues.length)throw new Error('localFlow.resourceInvalid');
+  if(release.packages.length!==bundle.entries.length||new Set(bundle.entries.map(e=>e.assurancePackageKey)).size!==bundle.entries.length)throw new Error('localFlow.packageMismatch');
+  for(const m of release.media){const data=audio[m.mediaKey];if(m.kind!=='audio'||!data)throw new Error('localFlow.audioIncomplete');const bytes=Uint8Array.from(atob(data.split(',')[1]!),c=>c.charCodeAt(0));if('sha256:'+syncSha256(bytes)!==m.sha256)throw new Error('localFlow.resourceInvalid');}
+  if(Object.keys(audio).length!==release.media.length)throw new Error('localFlow.resourceInvalid');
+  for(const e of bundle.entries){const p=release.packages.find(p=>p.identity.packageKey===e.assurancePackageKey),lexeme=release.lexemes.find(l=>l.lexemeKey===p?.identity.lexemeKey);if(!p||lexeme?.lemma!==e.expression||p.sense.guideLabelL1!==e.meaning)throw new Error('localFlow.packageMismatch');}
+ }else if(bundle.entries.some(e=>e.assurancePackageKey))throw new Error('localFlow.packageMismatch');
  for(const entry of bundle.entries){
   const expression=entry.content.resources.find(r=>r.materialRoleKey==='target_expression')?.contentPayload.surface;
   if(expression!==entry.expression||entry.content.resources.find(r=>r.materialRoleKey==='sense_confirmation')?.contentPayload.meaning!==entry.meaning)throw new Error('localFlow.packageMismatch');

@@ -413,9 +413,9 @@ function rotateRight(value: number, amount: number): number {
   return (value >>> amount) | (value << (32 - amount));
 }
 
-/** Synchronous SHA-256 over UTF-8 bytes, with no platform-specific imports. */
-export function sha256(value: string): string {
-  const input = utf8Bytes(value);
+/** Synchronous SHA-256 over raw bytes or UTF-8 text, with no platform-specific imports. */
+export function sha256(value: string | Uint8Array): string {
+  const input = typeof value === "string" ? utf8Bytes(value) : value;
   const paddedLength = Math.ceil((input.length + 9) / 64) * 64;
   const padded = new Uint8Array(paddedLength);
   padded.set(input);

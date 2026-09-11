@@ -794,11 +794,12 @@ export const PROTOTYPE_LEARNING_PACKAGES: readonly PrototypeLearningPackage[] =
 export function materializeReviewRepairContent(
   content: PrototypeIntroductionPackage,
   resourceRef: RepairResourceReference | null | undefined,
+  release: SensaRuntimeLearningRelease = runtimeLearningRelease,
 ): PrototypeIntroductionPackage | null {
   if (!resourceRef || resourceRef.source !== 'package_declared' || !resourceRef.key) {
     return null;
   }
-  const packageItem = runtimeLearningRelease.packages.find((candidate) =>
+  const packageItem = release.packages.find((candidate) =>
     candidate.identity.packageKey === content.packageKey
     && candidate.identity.senseKey === content.senseKey,
   );
@@ -832,7 +833,7 @@ export function materializeReviewRepairContent(
       };
     }
     case 'sense_features': {
-      const relation = runtimeLearningRelease.relations.find((candidate) =>
+      const relation = release.relations.find((candidate) =>
         candidate.relationKey === resourceRef.key);
       const boundary = content.boundaryContrast;
       if (!relation || !boundary || boundary.relationKey !== resourceRef.key) return null;

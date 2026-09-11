@@ -7,6 +7,7 @@ import { PROTOTYPE_LEARNING_TARGETS, type PrototypeLearningPolicy } from '../lea
 import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
 
 interface StudyScreenProps {
+  policySummary?: string;
   fixedPolicy?: boolean;
   active: boolean;
   status?: ReactNode;
@@ -62,7 +63,7 @@ export const StudyScreen = (props: StudyScreenProps) => {
           <button className="mt-7 block w-full rounded-xl text-left focus-visible:outline-2 focus-visible:outline-[#5268a9]" onClick={()=>props.onOpenPreferences ? props.onOpenPreferences() : props.onTabChange('b')}>
             <span className="text-sm text-[#68748d]">{t('study.daily')}</span><span className="mt-2 flex items-center justify-between gap-3 text-2xl">{t('study.count',{count:props.dailyNewCount})}<ArrowRight size={18}/></span>
           </button>
-          <div className="mt-7 border-t border-[#e3e5ea] pt-6"><p className="text-sm text-[#68748d]">{t('study.method')}</p><p className="mt-2 font-medium">{t('learningPreferences.policies.'+props.defaultPolicy)}</p></div>
+          <div className="mt-7 border-t border-[#e3e5ea] pt-6"><p className="text-sm text-[#68748d]">{t('study.method')}</p><p className="mt-2 font-medium">{props.policySummary??t('learningPreferences.policies.'+props.defaultPolicy)}</p></div>
         </section>
       </div>
       {props.calendar ?? <StudyCalendar/>}

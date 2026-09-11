@@ -71,6 +71,7 @@ Learner/Device Preferences 负责未来呈现选择，Data Control 负责导出/
 | Browser port implementation | [`browser-port-contract.md`](browser-port-contract.md) / [`browser-port-handoff.md`](browser-port-handoff.md) | 参考陪读蛙源码独立实现的 Provider、网页阅读与视频采集纵切；实际测试和未完成兼容范围见交付记录 |
 | Browser port deferred follow-ups | [`browser-port-followups.md`](browser-port-followups.md) | Owner 已结束本轮优化；保存恢复、原位慢轨、真实模型、字幕轨道、偏好记忆及兼容性差距留待回访，尚未实施或排期 |
 | Web local workflow | [`web-local-meaning-workflow.md`](web-local-meaning-workflow.md) | 本机材料、Provider、语言老师到本地学习的整组施工与逐切证据 |
+| Web assurance package | [`assurance-package-import.md`](assurance-package-import.md) | Borrow/lend 高保证包本机导入与开始学习；完整验证见 Web launch audit |
 | Model execution | [`model-execution-handoff.md`](model-execution-handoff.md) | Genkit 默认服务、直连协议/调度、元数据观测与本地验证；插件旧密钥迁移暂缓 |
 | Web launch audit | [`web-launch-readiness.md`](web-launch-readiness.md) | 2026-09-10 Web 优先级、实际代码缺口、发布验收门与账号切换隔离回归 |
 | Release authorization | [`release-authorization.md`](release-authorization.md) | 云端/商店所需具体授权、项目访问和发布前产物 |
