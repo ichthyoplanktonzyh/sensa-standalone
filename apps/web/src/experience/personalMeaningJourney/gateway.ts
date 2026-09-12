@@ -52,10 +52,14 @@ import { cryptoRandomIdPort, isUuid, type RandomIdPort } from './ids';
 import {
   LocalStoragePort,
   StorageUnavailableError,
+  commandLanguages,
   systemClock,
   type ClockPort,
+  type CommandLanguages,
+  type LearnerLanguagePort,
   type StoragePort,
 } from './ports';
+import { languageProfileSnapshot } from '../../data/library/language';
 import {
   StoreCorruptedError,
   loadJourneyState,
@@ -90,8 +94,17 @@ const PSW = 'sensa-personal-semantic-world-v2' as const;
 const REG = 'sensa-semantic-registry-v1' as const;
 const SPEC_SCHEMA = 'sensa-sense-semantic-spec-v1' as const;
 const LEARNER_USER_ID = 'sensa-local-learner';
-const FAMILIAR_LANG = 'zh-CN';
-const TARGET_LANG = 'en';
+
+/**
+ * The learner's stored languages. A command reads this once, before it writes,
+ * so a switch made in another tab cannot split one command's facts across two
+ * target languages.
+ */
+const localLearnerLanguages: LearnerLanguagePort = {
+  async read() {
+    return (await languageProfileSnapshot()).profile;
+  },
+};
 
 type PersonalProvenanceKind =
   SensaPersonalMeaningRevisionSnapshot['provenance']['kind'];
@@ -155,6 +168,7 @@ export interface JourneyGatewayDeps {
   clock: ClockPort;
   ids: RandomIdPort;
   semanticAcceptanceAuthority: SemanticAcceptanceAuthorityPort;
+  languages: LearnerLanguagePort;
 }
 
 /**
@@ -256,6 +270,26 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
 
   private notify(): void {
     this.listeners.forEach((listener) => listener());
+  }
+
+  /**
+   * Commands run one at a time.
+   *
+   * Every command reads the aggregate, awaits the learner's languages, then
+   * publishes what it built. Two commands that both read before either
+   * published would each drop the other's facts. Nothing awaited between
+   * reading and writing before languages were resolved per command, so the
+   * gateway was safe by accident; this gate makes it safe on purpose.
+   */
+  private gate: Promise<unknown> = Promise.resolve();
+
+  private exclusive<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.gate.then(work);
+    this.gate = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   private requireState(): JourneyState {
@@ -480,6 +514,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     record: MeaningJourneyRecord,
     operationId: string,
     block: MaterialBlockInput,
+    familiarLanguageTag: string,
   ): string {
     const now = this.now();
     const anchorId = this.id();
@@ -508,7 +543,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       personalSemanticAnchorId: anchorId,
       revision: 1,
       anchorKind: isImage ? 'image' : 'text',
-      languageTag: isImage ? null : FAMILIAR_LANG,
+      languageTag: isImage ? null : familiarLanguageTag,
       bodyText: isImage ? null : bodyText,
       personalMediaObjectId: isImage ? block.personalMediaObjectId! : null,
       structuredPayload: {},
@@ -525,6 +560,13 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   async createPersonalMeaning(
     input: CreatePersonalMeaningInput,
   ): Promise<CreatePersonalMeaningResult> {
+    return this.exclusive(() => this.writePersonalMeaning(input));
+  }
+
+  private async writePersonalMeaning(
+    input: CreatePersonalMeaningInput,
+  ): Promise<CreatePersonalMeaningResult> {
+
     const replay = this.replay<CreatePersonalMeaningResult>(
       input.operationId,
       'CreatePersonalMeaning',
@@ -535,14 +577,15 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     if (input.familiarExpression && !familiarSurface) {
       throw new Error('熟悉表达不能为空。');
     }
-    if (input.familiarExpression?.languageTag && input.familiarExpression.languageTag !== FAMILIAR_LANG) {
-      throw new Error('首版熟悉表达使用中文（zh-CN）。');
-    }
     const blocks = input.blocks ?? [];
     if (blocks.length === 0 && !familiarSurface) {
       throw new Error('个人意义至少需要一个材料块或一个熟悉表达。');
     }
 
+    // Read once, before any fact exists: the learner's own wording is written
+    // in whatever language they think in, and that language cannot change
+    // halfway through this command.
+    const languages = commandLanguages(await this.deps.languages.read());
     const personalMeaningId = this.id();
     const personalMeaningRevisionId = this.id();
     const now = this.now();
@@ -603,7 +646,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
         // Provisional classification: the composer deliberately does not ask
         // for one, and the model refines it during clarification.
         expressionType: 'phrase',
-        languageTag: FAMILIAR_LANG,
+        languageTag: languages.familiarLanguageTag,
         learnerLanguageRole: 'familiar',
         surfaceForm: familiarSurface,
         normalizedForm: normalizedForm(familiarSurface),
@@ -620,7 +663,13 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       });
     }
     const blockAnchorIds = blocks.map(
-      (block) => this.appendMaterialAnchor(record, input.operationId, block),
+      (block) =>
+        this.appendMaterialAnchor(
+          record,
+          input.operationId,
+          block,
+          languages.familiarLanguageTag,
+        ),
     );
 
     record.personalMeaningRevisions.push({
@@ -655,10 +704,21 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   }
 
   async addMaterialBlock(input: AddMaterialBlockInput): Promise<AddMaterialBlockResult> {
+    return this.exclusive(() => this.writeMaterialBlock(input));
+  }
+
+  private async writeMaterialBlock(input: AddMaterialBlockInput): Promise<AddMaterialBlockResult> {
+
     const replay = this.replay<AddMaterialBlockResult>(input.operationId, 'AddMaterialBlock');
     if (replay) return replay;
     const record = this.requireRecord(input.personalMeaningId);
-    const anchorId = this.appendMaterialAnchor(record, input.operationId, input.block);
+    const languages = commandLanguages(await this.deps.languages.read());
+    const anchorId = this.appendMaterialAnchor(
+      record,
+      input.operationId,
+      input.block,
+      languages.familiarLanguageTag,
+    );
     this.appendMeaningRevision(record, input.operationId, [anchorId]);
     const result = { anchorId };
     this.recordReceipt(input.operationId, 'AddMaterialBlock', result);
@@ -671,6 +731,13 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   async confirmClarification(
     input: ConfirmClarificationInput,
   ): Promise<ConfirmClarificationResult> {
+    return this.exclusive(() => this.writeClarification(input));
+  }
+
+  private async writeClarification(
+    input: ConfirmClarificationInput,
+  ): Promise<ConfirmClarificationResult> {
+
     const replay = this.replay<ConfirmClarificationResult>(
       input.operationId,
       'ConfirmClarification',
@@ -678,6 +745,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     if (replay) return replay;
     const state = this.requireState();
     const record = this.requireRecord(input.personalMeaningId);
+    const languages = commandLanguages(await this.deps.languages.read());
 
     // Validate the whole intent before writing any fact: a rejected step must
     // leave the store exactly as it was.
@@ -775,8 +843,8 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       personalMeaningRevisionId: personalMeaningRevision.personalMeaningRevisionId,
       meaningFocusId,
       meaningFocusRevisionId,
-      familiarLanguageTag: FAMILIAR_LANG,
-      targetLanguageTag: TARGET_LANG,
+      familiarLanguageTag: languages.familiarLanguageTag,
+      targetLanguageTag: languages.targetLanguageTag,
       semanticPolicyVersion: input.semanticPolicyVersion,
       status: 'completed',
       revision: 1,
@@ -1357,9 +1425,10 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
 
   // -- ubiquitous multimodal intake -----------------------------------------
 
-  /** The engine never touches storage or receipts; ids/clock come from the gateway. */
-  private enginePorts(): IntakeEnginePorts {
-    return { newId: () => this.id(), nowIso: () => this.now() };
+  /** The engine never touches storage or receipts; ids, clock and languages
+   * all come from the gateway, which is the only part that reads the profile. */
+  private enginePorts(languages: CommandLanguages): IntakeEnginePorts {
+    return { newId: () => this.id(), nowIso: () => this.now(), languages };
   }
 
   getInboxItems(): SensaIntakeItem[] {
@@ -1371,6 +1440,14 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     operationId: string,
     payload: SensaIntakePayload,
   ): Promise<IngestCommandResult> {
+    return this.exclusive(() => this.runIngest(operationId, payload));
+  }
+
+  private async runIngest(
+    operationId: string,
+    payload: SensaIntakePayload,
+  ): Promise<IngestCommandResult> {
+
     const replay = this.replay<IngestCommandResult>(operationId, 'Ingest');
     if (replay) return replay;
     const state = this.requireState();
@@ -1405,7 +1482,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     const outcome = executeFastTrack(
       state,
       { payload: parsed, operationId, authority: authority! },
-      this.enginePorts(),
+      this.enginePorts(commandLanguages(await this.deps.languages.read())),
     );
     this.state = outcome.nextState;
     this.settleExpressionBinding(
@@ -1429,6 +1506,15 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     intakeId: string,
     resolution: InboxResolutionInput,
   ): Promise<IngestCommandResult> {
+    return this.exclusive(() => this.runInboxResolution(operationId, intakeId, resolution));
+  }
+
+  private async runInboxResolution(
+    operationId: string,
+    intakeId: string,
+    resolution: InboxResolutionInput,
+  ): Promise<IngestCommandResult> {
+
     const replay = this.replay<IngestCommandResult>(operationId, 'ResolveInboxItem');
     if (replay) return replay;
     const state = this.requireState();
@@ -1440,7 +1526,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     const outcome = resolveInboxItemWithSense(
       state,
       { intakeId, sense, operationId, authority },
-      this.enginePorts(),
+      this.enginePorts(commandLanguages(await this.deps.languages.read())),
     );
     this.state = outcome.nextState;
     this.settleExpressionBinding(
@@ -1479,6 +1565,7 @@ export const createJourneyGateway = (
     ids: deps.ids ?? cryptoRandomIdPort,
     semanticAcceptanceAuthority:
       deps.semanticAcceptanceAuthority ?? localSemanticAcceptanceAuthority,
+    languages: deps.languages ?? localLearnerLanguages,
   });
 
 /** Shared browser gateway singleton. */

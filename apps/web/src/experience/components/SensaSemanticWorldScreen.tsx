@@ -2,6 +2,8 @@ import { uiClass } from '../ui/classes';
 import { useEffect, useMemo, useState } from 'react';
 import type { SemanticWorldScreenProps } from './SemanticWorldScreen';
 import { PersonalMeaningComposer } from './PersonalMeaningComposer';
+import { sensaLanguageDisplayName } from '@sensa/contracts/sensa';
+import i18n from '../../i18n';
 import { IntakeInboxDrawer } from './IntakeInboxDrawer';
 import { IntakeSimulatorModal } from './IntakeSimulatorModal';
 import {
@@ -152,15 +154,14 @@ const coverageLabels: Record<SensaSemanticCoverage, string> = {
   overlapping: '部分重叠',
 };
 
-const languageLabels: Record<string, string> = {
-  en: '英语',
-  'zh-CN': '中文（简体）',
-};
+/** A tag outside the catalog is shown as itself: the learner's stored data
+ * outlives the release that named it, and a guessed name would be a lie. */
+const languageLabel = (value: string): string =>
+  sensaLanguageDisplayName(value, i18n.language === 'en' ? 'en' : 'zh-CN');
 
 const expressionTypeLabel = (value: SensaExpressionType): string => expressionTypeLabels[value];
 const relationLabel = (value: SensaExpressionBindingRelation): string => relationLabels[value];
 const coverageLabel = (value: SensaSemanticCoverage): string => coverageLabels[value];
-const languageLabel = (value: string): string => languageLabels[value] ?? `语言 ${value}`;
 
 const graphNodeKindLabels: Record<GraphNodeKind, string> = {
   meaning: '我的经验',

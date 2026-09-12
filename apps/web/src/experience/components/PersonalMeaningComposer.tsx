@@ -230,7 +230,7 @@ export const PersonalMeaningComposer = ({
         operationId: newUuid(),
         blocks: payload,
         familiarExpression: familiarExpression.trim()
-          ? { surfaceForm: familiarExpression.trim(), languageTag: "zh-CN" }
+          ? { surfaceForm: familiarExpression.trim() }
           : undefined,
         startingPoint,
       });

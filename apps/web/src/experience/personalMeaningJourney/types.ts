@@ -273,11 +273,12 @@ export interface CreatePersonalMeaningInput {
   /**
    * The learner's familiar (native-language) wording. No expression type is
    * asked for: classifying "欲言又止" as phrase vs construction is domain work
-   * the model does better, and it is confirmed later, not here.
+   * the model does better, and it is confirmed later, not here. No language is
+   * asked for either: wording a learner writes for themselves is by definition
+   * in their familiar language, and the gateway stamps that from the profile.
    */
   familiarExpression?: {
     surfaceForm: string;
-    languageTag?: 'zh-CN';
   };
   blocks?: MaterialBlockInput[];
   startingPoint?: ClarificationStartingPoint | null;

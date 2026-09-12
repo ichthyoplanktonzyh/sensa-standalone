@@ -30,6 +30,7 @@ import type {
   SensaSenseSemanticSpec,
 } from '@sensa/contracts/sensa';
 import { digestOf } from './digest';
+import type { CommandLanguages } from './ports';
 import type { JourneyState, MeaningJourneyRecord } from './store';
 
 export const LOCAL_SEMANTIC_POLICY_VERSION = 'sensa-semantic-policy-local-v1';
@@ -38,8 +39,6 @@ const PSW = 'sensa-personal-semantic-world-v2' as const;
 const REG = 'sensa-semantic-registry-v1' as const;
 const SPEC_SCHEMA = 'sensa-sense-semantic-spec-v1' as const;
 const LEARNER_USER_ID = 'sensa-local-learner';
-const FAMILIAR_LANG = 'zh-CN';
-const TARGET_LANG = 'en';
 
 type PersonalProvenanceKind =
   SensaPersonalMeaningRevisionSnapshot['provenance']['kind'];
@@ -47,6 +46,10 @@ type PersonalProvenanceKind =
 export interface IntakeEnginePorts {
   newId(): string;
   nowIso(): string;
+  /** A captured expression carries only a role, not a language. The gateway
+   * resolves that role against the learner's profile and pins the pair here,
+   * because this engine performs no IO of its own. */
+  languages: CommandLanguages;
 }
 
 export type IntakeRouteDecision =
@@ -257,7 +260,9 @@ export const executeFastTrack = (
 
   // 2) Target/Familiar Expression Anchor for the captured word.
   const isTargetRole = expression.languageRole === 'target';
-  const languageTag = isTargetRole ? TARGET_LANG : FAMILIAR_LANG;
+  const languageTag = isTargetRole
+    ? ports.languages.targetLanguageTag
+    : ports.languages.familiarLanguageTag;
   const expressionType: SensaExpressionType = expression.expressionTypeHint ?? 'word';
   const expressionAnchorId = ports.newId();
   const expressionAnchorRevisionId = ports.newId();

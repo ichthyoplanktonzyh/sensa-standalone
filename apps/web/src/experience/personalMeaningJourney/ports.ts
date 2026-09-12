@@ -1,3 +1,4 @@
+import type { SensaLanguageProfile } from '@sensa/contracts/sensa';
 import { previewStorage } from '../services/previewStorage';
 /**
  * Low-level ports the Personal Meaning journey gateway depends on. React
@@ -87,3 +88,29 @@ export const createSeededClock = (
     },
   };
 };
+
+/**
+ * The learner's language profile, which decides what a familiar or target
+ * expression is written in.
+ *
+ * It is a port rather than a direct read so a command resolves the languages
+ * once, before it writes anything: a learner switching their active target
+ * language in another tab must not split one command's facts across two
+ * languages.
+ */
+export interface LearnerLanguagePort {
+  read(): Promise<SensaLanguageProfile>;
+}
+
+/** The one language pair a single command is about. */
+export interface CommandLanguages {
+  familiarLanguageTag: string;
+  targetLanguageTag: string;
+}
+
+export const commandLanguages = (
+  profile: SensaLanguageProfile,
+): CommandLanguages => ({
+  familiarLanguageTag: profile.familiarLanguageTag,
+  targetLanguageTag: profile.activeTargetLanguageTag,
+});
