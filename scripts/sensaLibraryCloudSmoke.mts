@@ -38,7 +38,7 @@ try{
  await a.evaluate(()=>(window as any).sync());assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0].revision,1,'lost ACK is idempotent');
  await b.evaluate(()=>(window as any).sync());assert.deepEqual(await b.evaluate(()=>(window as any).core.listDrafts()),[draft]);
  const identities=await Promise.all([a,b].map(p=>p.evaluate(()=>(window as any).core.openLibrary())));assert.equal(identities[0].id,identities[1].id);assert.notEqual(identities[0].deviceId,identities[1].deviceId);
- calls=[];await b.evaluate(()=>(window as any).sync());assert.equal(calls.filter(c=>c.path.includes('/blocks/')&&c.method==='GET').length,0,'unchanged content is reused locally');
+ calls=[];await b.evaluate(()=>(window as any).sync());assert.equal(calls.filter(c=>c.path.endsWith('/blocks/fetch')).length,0,'unchanged content is reused locally without a batch fetch');
  await other.evaluate(()=>(window as any).sync());assert.deepEqual(await other.evaluate(()=>(window as any).core.listDrafts()),[]);
  const hash=(await pool.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 LIMIT 1',[accountId])).rows[0].hash;
  assert.equal((await fetch(origin+'/sensa/library-sync/blocks/'+hash,{headers:{authorization:'Bearer second'}})).status,404,'blocks are account isolated');

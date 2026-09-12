@@ -176,9 +176,15 @@ export async function synchronizeLibrary(request:SyncRequest){
   try{rowsFor(localEntries);rowsFor(uploadEntries);}catch(error){
    if(merged.conflicts.length){await saveState(expected,old=>({...old!,status:'conflict',conflicts:merged.conflicts,error:'library_sync_conflict'}));return;}throw error;
   }
+  // Content equality is not enough here: an older client may have published the
+  // same rows in many smaller blocks. Publish our canonical layout once so later
+  // focus/reload syncs can reuse the locally packed hashes instead of downloading
+  // the legacy layout again.
+  const manifest=await blocks.manifest(uploadEntries);
+  const publicationRequired=!equal(uploadEntries,remote)||!equal(manifest,head.manifest);
   await applyEntries(initial,localEntries,{...state,base:nextBase(remote),revision:head.revision,status:'pending',conflicts:merged.conflicts,pending:undefined});
-  if(!equal(uploadEntries,remote)){
-   const manifest=await blocks.manifest(uploadEntries),pending={operationId:crypto.randomUUID(),baseRevision:head.revision,manifest,entries:uploadEntries,baseEntries:nextBase(uploadEntries)};
+  if(publicationRequired){
+   const pending={operationId:crypto.randomUUID(),baseRevision:head.revision,manifest,entries:uploadEntries,baseEntries:nextBase(uploadEntries)};
    // Persist the complete immutable publication before any upload/commit.
    await saveState(expected,old=>({...old!,pending}));await blocks.upload();
    const published=librarySyncHead.parse(await request('/commit',{operationId:pending.operationId,baseRevision:pending.baseRevision,manifest}));

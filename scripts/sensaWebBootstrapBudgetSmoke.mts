@@ -60,7 +60,9 @@ const repackCloud=(cloud:Cloud,chars:number)=>{
  }
  const next=JSON.stringify({...manifest,rows}),nextHash=digest(next);
  added.set(nextHash,next);
- for(const [hash,data] of added)cloud.blocks.set(hash,data);
+ // Model a genuinely old account: canonical 256K blocks are not already present
+ // on the server and must be uploaded once during layout normalization.
+ cloud.blocks=added;
  cloud.revision+=1;cloud.manifest=[nextHash];
  const refs=[...new Set(rows.flatMap(row=>row.blocks))];
  cloud.published=refs.length;
@@ -215,7 +217,8 @@ try{
  // The account may have been published by the previous client, whose blocks were 32K.
  // Restoring such a library must still be a byte-bounded number of requests.
  repackCloud(cloud,32768);
- log(`   legacy-shaped library: ${cloud.published} blocks / ${Math.round(cloud.publishedBytes/1024)}KiB, revision ${cloud.revision}`);
+ const legacyPublished=cloud.published,legacyPublishedBytes=cloud.publishedBytes,legacyRevision=cloud.revision;
+ log(`   legacy-shaped library: ${legacyPublished} blocks / ${Math.round(legacyPublishedBytes/1024)}KiB, revision ${legacyRevision}`);
 
  log('3/4 measuring the first restore on a new browser');
  const b=await pageContext();
@@ -227,7 +230,6 @@ try{
  await expect(b.page.getByText('正在同步你的学习数据…')).toBeVisible({timeout:SHELL_BUDGET_MS});
  await expect.poll(()=>restoreStatus(b.page),{timeout:RESTORE_BUDGET_MS,message:'account restore never finished'}).toBe('synced');
  const restoreMs=Date.now()-started;
- const bootRequests=[...served];
  /** Wait until the application stops talking to the account service on its own. */
  const settle=async():Promise<boolean>=>{
   const limit=Date.now()+30000;
@@ -240,21 +242,31 @@ try{
   return true;
  };
  const settled=await settle();
+ const bootRequests=[...served];
+ // A later focus is a new sync pass. Once the old layout has been canonicalized it
+ // may read the head, but it must not download the same account blocks again.
+ served.length=0;
+ await b.page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await expect.poll(()=>served.some(entry=>entry.path==='/sensa/library-sync/head'),{timeout:10000,message:'focus did not schedule a sync'}).toBe(true);
+ const repeatSettled=await settle();
+ const repeatRequests=[...served],repeatFetches=repeatRequests.filter(entry=>entry.path==='/sensa/library-sync/blocks/fetch');
  // An idle signed-in tab must not poll the account service. The log is cleared so the
  // quiet window below observes only activity that the untouched application starts.
  served.length=0;
  await b.page.waitForTimeout(IDLE_WINDOW_MS);
  const idleRequests=[...served];
  const requests=bootRequests.filter(entry=>entry.path.startsWith('/sensa/library-sync/'));
- /** Restoring `n` blocks costs the head call, the manifest page and the block pages. */
- /** Restore round trips follow published bytes, not how many blocks hold them. */
- const restoreRequestBudget=Math.ceil(cloud.publishedBytes/librarySyncBlockFetchBytes)+3;
+ const fetchRequests=requests.filter(entry=>entry.path==='/sensa/library-sync/blocks/fetch');
+ /** Restore fetch round trips follow legacy bytes, not how many blocks hold them. */
+ const fetchRequestBudget=Math.ceil(legacyPublishedBytes/librarySyncBlockFetchBytes)+2;
  const restored=await b.page.evaluate(async()=>{const core=await import(/* @vite-ignore */ '/core.js') as any;return (await core.listDrafts()).length;});
  const violations=await b.page.evaluate(()=>(window as any).__cspViolations as string[]);
  await b.context.close();
 
  log(`   App Shell interactive ${shellMs}ms (budget ${SHELL_BUDGET_MS}ms)`);
- log(`   account restore ${restoreMs}ms over ${requests.length} library requests (budget ${restoreRequestBudget})`);
+ log(`   account restore ${restoreMs}ms over ${requests.length} library requests / ${fetchRequests.length} block fetches (fetch budget ${fetchRequestBudget})`);
+ log(`   canonicalized library: ${cloud.published} blocks, revision ${cloud.revision}`);
+ log(`   next focus sync: ${repeatRequests.length} library requests / ${repeatFetches.length} block fetches`);
  log(`   restored drafts ${restored}/${DRAFTS}`);
  log(`   boot service calls: ${JSON.stringify([...new Set(bootRequests.map(entry=>entry.path))])}`);
  log(`   idle ${IDLE_WINDOW_MS}ms service calls: ${idleRequests.length}`);
@@ -265,8 +277,11 @@ try{
  if(violations.length)log('   CSP: '+JSON.stringify(violations.slice(0,4)));
  if(shellMs>SHELL_BUDGET_MS)fail(`App Shell waited for the account restore: ${shellMs}ms > ${SHELL_BUDGET_MS}ms`);
  if(restoreMs>RESTORE_BUDGET_MS)fail(`account restore exceeded its budget: ${restoreMs}ms > ${RESTORE_BUDGET_MS}ms`);
- if(requests.length>restoreRequestBudget)fail(`account restore used ${requests.length} library requests, budget ${restoreRequestBudget} for ${cloud.published} blocks (${[...new Set(requests.map(entry=>entry.path))].join(', ')})`);
- if(requests.filter(entry=>entry.path.includes('/blocks/')).length>Math.ceil(cloud.publishedBytes/librarySyncBlockFetchBytes)+2)fail('block transfer is not byte-batched: one request per block');
+ if(fetchRequests.length>fetchRequestBudget)fail(`account restore used ${fetchRequests.length} block fetches, budget ${fetchRequestBudget} for ${legacyPublished} legacy blocks (${[...new Set(requests.map(entry=>entry.path))].join(', ')})`);
+ if(cloud.revision!==legacyRevision+1)fail(`legacy layout was not normalized exactly once: revision ${legacyRevision} -> ${cloud.revision}`);
+ if(cloud.published>=legacyPublished)fail(`legacy ${legacyPublished}-block layout was not replaced by the canonical layout (${cloud.published} blocks)`);
+ if(!repeatSettled)fail('the focus-triggered verification sync never settled');
+ if(repeatFetches.length)fail(`a later focus re-fetched canonicalized account blocks ${repeatFetches.length} time(s)`);
  if(restored!==DRAFTS)fail(`account restore lost content: ${restored}/${DRAFTS} drafts`);
  if(bootRequests.some(entry=>entry.path==='/sensa/service/status'))fail('rolling service counters are read on boot instead of on demand');
  if(!settled)fail('an untouched account never stopped syncing: sync bookkeeping keeps scheduling another pass');
@@ -276,7 +291,7 @@ try{
 
  log('4/4 result');
  assert.deepEqual(failures,[],'boot budget violations:\n'+failures.join('\n'));
- console.log(`PASS: App Shell stays local-first (${shellMs}ms) while a ${cloud.published}-block account restore completes in ${restoreMs}ms over ${requests.length} requests`);
+ console.log(`PASS: App Shell stays local-first (${shellMs}ms) while a ${legacyPublished}-block legacy account restores in ${restoreMs}ms; the next focus performs ${repeatFetches.length} block fetches`);
 }finally{
  await browser.close();
  await new Promise<void>(resolve=>server.close(()=>resolve()));
