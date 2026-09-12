@@ -15,8 +15,12 @@ export function ProviderPanel(){
  const account=useAccountExperience();
  const [service,setService]=useState<ServiceStatus|null>(null),[serviceError,setServiceError]=useState('');
  const statusGeneration=useRef(0);const [refreshing,setRefreshing]=useState(false),[refreshed,setRefreshed]=useState(false);
+ /** The shell keeps every screen mounted, so mounting is not "the user opened this".
+  * The rolling service counters are read on demand, when the panel is on screen. */
+ const panel=useRef<HTMLDivElement>(null);const [visible,setVisible]=useState(false);
+ useEffect(()=>{const node=panel.current;if(!node)return;const observer=new IntersectionObserver(entries=>setVisible(entries.some(entry=>entry.isIntersecting)));observer.observe(node);return()=>observer.disconnect();},[]);
  const refreshService=async()=>{const gen=++statusGeneration.current;setRefreshing(true);setRefreshed(false);setServiceError('');try{const next=await readServiceStatus();if(gen===statusGeneration.current){setService(next);setRefreshed(true);}}catch(e){if(gen===statusGeneration.current)setServiceError(localFlowErrorKey(e,'modelService.statusFailed'));}finally{if(gen===statusGeneration.current)setRefreshing(false);}};
- useEffect(()=>{if(account.onlineService)void refreshService();else{setService(null);setRefreshing(false);setRefreshed(false);setServiceError('');}return()=>{statusGeneration.current++;};},[account.onlineService,account.email]);
+ useEffect(()=>{if(account.onlineService&&visible)void refreshService();else if(!account.onlineService){setService(null);setRefreshing(false);setRefreshed(false);setServiceError('');}return()=>{statusGeneration.current++;};},[account.onlineService,account.email,visible]);
  const [providers,setProviders]=useState<Provider[]>([]),[settings,setSettings]=useState<ProviderSettings>({revision:0,assignments:{}});
  const [name,setName]=useState(''),[endpoint,setEndpoint]=useState(''),[model,setModel]=useState(''),[kind,setKind]=useState<'compatible'|'sensa'>('compatible'),[key,setKey]=useState('');
  const [catalog,setCatalog]=useState<{provider:Provider;models:string[]}|null>(null);
@@ -24,7 +28,7 @@ export function ProviderPanel(){
  const refresh=async()=>{const snapshot=await providerSnapshot();setProviders(snapshot.providers);setSettings(snapshot.settings);};
  useEffect(()=>{void refresh().catch(()=>setNotice('modelService.readFailed'));},[]);
  const perform=async(work:()=>Promise<unknown>)=>{setBusy(true);setNotice('');try{await work();await refresh();setNotice('modelService.updated');}catch(e){setNotice(localFlowErrorKey(e,'modelService.saveFailed'));}finally{setBusy(false);}};
- return <div className="space-y-8">
+ return <div className="space-y-8" ref={panel}>
   <header><h2 className="text-2xl font-semibold">{t('modelService.title')}</h2><p className="mt-3 leading-7 text-[#68748d]">{t('modelService.intro')}</p><p className="mt-3 text-sm">{account.onlineService?t('modelService.connected'):t('modelService.disconnected')}</p>{!account.onlineService&&<button className={setupButton+feedback} onClick={account.login}>{t('modelService.login')}</button>}{service&&<div className="mt-5 space-y-2"><p>{service.explanationAvailable?t('modelService.available'):t('modelService.unavailable')}</p><p className="text-sm text-[#68748d]">{t('modelService.usage')}</p>{service.usage.map(u=><p key={u.kind}>{({reading:t('modelService.reading'),teacher:t('modelService.teacher'),content:t('modelService.content')})[u.kind]}：{u.used} / {u.limit??'∞'}{u.limit!==null&&u.used>=u.limit?t('modelService.limit'):''}</p>)}</div>}{serviceError&&<p role="status" className="mt-3">{t(serviceError)}</p>}<button className={setupButton+feedback} disabled={refreshing} aria-busy={refreshing} onClick={()=>void refreshService()}>{t(refreshing?'modelService.refreshing':'modelService.refresh')}</button>{refreshed&&!refreshing&&<p role="status" className="mt-3 text-sm text-emerald-700">{t('modelService.refreshed')}</p>}</header>
   {notice&&<p role="status" className="rounded-xl bg-[#edf0f7] p-4">{t(notice)}</p>}
   <details className="rounded-2xl border border-[#e0e5ee] p-5"><summary className="cursor-pointer font-medium">{t('modelService.advanced')}</summary><div className="mt-6 space-y-6"><details className="rounded-xl border border-[#e0e5ee] p-4"><summary className="cursor-pointer font-medium">{t('account.diagnostics')}</summary><div className="mt-4"><ModelExecutionPanel/></div></details>

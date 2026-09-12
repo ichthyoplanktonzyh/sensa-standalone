@@ -1,8 +1,7 @@
 import {createHash} from 'node:crypto';
-import {z} from 'zod';
 import type {Hono} from 'hono';
 import type {DatabaseExecutor} from '../../database/core.js';
-import {librarySyncHash,librarySyncCommit,librarySyncManifest,type LibrarySyncManifest} from '@sensa/contracts/sensa';
+import {librarySyncHash,librarySyncCommit,librarySyncManifest,librarySyncBlockFetch,librarySyncBlockMissing,librarySyncBlockStore,librarySyncBlockStoreChars,type LibrarySyncManifest} from '@sensa/contracts/sensa';
 import {ConsumerError} from '../access/auth.js';
 type Access=<T>(request:Request,work:(db:DatabaseExecutor,a:{accountId:string;installationId?:string;now?:Date})=>Promise<T>)=>Promise<T>;
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
@@ -17,11 +16,21 @@ export function registerLibrarySync(app:Hono,access:Access){
   return librarySyncManifest.parse(JSON.parse(refs.map(r=>byHash.get(r)).join('')));
  }
  app.get('/sensa/library-sync/head',async c=>c.json(await use(c.req.raw,(db,a)=>current(db,a.accountId))));
- app.post('/sensa/library-sync/blocks/missing',async c=>{const input=z.object({hashes:z.array(librarySyncHash).max(500)}).strict().parse(await c.req.json());return c.json(await use(c.req.raw,async(db,a)=>{const found=(await db.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,input.hashes])).rows;const have=new Set(found.map(r=>r.hash));return {missing:input.hashes.filter(h=>!have.has(h))};}));});
- app.post('/sensa/library-sync/blocks',async c=>{const input=z.object({hash:librarySyncHash,data:z.string().max(32000)}).strict().parse(await c.req.json());if(hash(input.data)!==input.hash)throw new ConsumerError(400,'library_sync_hash');return c.json(await use(c.req.raw,async(db,a)=>{await current(db,a.accountId);const prior=(await db.query('SELECT data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[a.accountId,input.hash])).rows[0];if(prior){if(prior.data!==input.data)throw conflict();return {stored:true};}
- // Bounded storage guard, not a product subscription quota. Includes unattached retry blocks.
- const usage=(await db.query('SELECT COALESCE(sum(octet_length(data)),0)::bigint n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[a.accountId])).rows[0];if(Number(usage.n)+Buffer.byteLength(input.data)>256*1024*1024)throw new ConsumerError(413,'library_sync_capacity');
- await db.query('INSERT INTO sensa_consumer.library_cloud_blocks(account_id,hash,data) VALUES($1,$2,$3)',[a.accountId,input.hash,input.data]);return {stored:true};}));});
+ app.post('/sensa/library-sync/blocks/missing',async c=>{const input=librarySyncBlockMissing.parse(await c.req.json());return c.json(await use(c.req.raw,async(db,a)=>{const found=(await db.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,input.hashes])).rows;const have=new Set(found.map(r=>r.hash));return {missing:input.hashes.filter(h=>!have.has(h))};}));});
+ // Restore reads one bounded page of blocks per request, so a first download is a
+ // handful of round trips instead of one HTTP request per content-addressed block.
+ app.post('/sensa/library-sync/blocks/fetch',async c=>{const input=librarySyncBlockFetch.parse(await c.req.json());return c.json(await use(c.req.raw,async(db,a)=>{const rows=(await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,input.hashes])).rows;const byHash=new Map(rows.map(r=>[r.hash as string,r.data as string]));return {blocks:input.hashes.filter(h=>byHash.has(h)).map(h=>({hash:h,data:byHash.get(h)!})),missing:input.hashes.filter(h=>!byHash.has(h))};}));});
+ app.post('/sensa/library-sync/blocks/store',async c=>{const input=librarySyncBlockStore.parse(await c.req.json());if(input.blocks.reduce((total,block)=>total+block.data.length,0)>librarySyncBlockStoreChars)throw new ConsumerError(413,'body_too_large');for(const block of input.blocks)if(hash(block.data)!==block.hash)throw new ConsumerError(400,'library_sync_hash');return c.json(await use(c.req.raw,async(db,a)=>{await current(db,a.accountId);
+  const hashes=input.blocks.map(b=>b.hash);
+  const stored=new Map((await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,hashes])).rows.map(r=>[r.hash as string,r.data as string]));
+  for(const block of input.blocks)if(stored.has(block.hash)&&stored.get(block.hash)!==block.data)throw conflict();
+  const added=input.blocks.filter(b=>!stored.has(b.hash)).reduce((total,b)=>total+Buffer.byteLength(b.data),0);
+  if(added>0){
+   // Bounded storage guard, not a product subscription quota. Includes unattached retry blocks.
+   const usage=(await db.query('SELECT COALESCE(sum(octet_length(data)),0)::bigint n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[a.accountId])).rows[0];if(Number(usage.n)+added>256*1024*1024)throw new ConsumerError(413,'library_sync_capacity');
+   for(const block of input.blocks)if(!stored.has(block.hash))await db.query('INSERT INTO sensa_consumer.library_cloud_blocks(account_id,hash,data) VALUES($1,$2,$3)',[a.accountId,block.hash,block.data]);
+  }
+  return {stored:true};}));});
  app.get('/sensa/library-sync/blocks/:hash',async c=>c.json(await use(c.req.raw,async(db,a)=>{const key=librarySyncHash.parse(c.req.param('hash'));const row=(await db.query('SELECT data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[a.accountId,key])).rows[0];if(!row)throw new ConsumerError(404,'library_sync_missing_block');return {hash:key,data:row.data};})));
  app.post('/sensa/library-sync/commit',async c=>{const input=librarySyncCommit.parse(await c.req.json()),digest=hash(JSON.stringify(input));return c.json(await use(c.req.raw,async(db,a)=>{
   const head=await current(db,a.accountId);

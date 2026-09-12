@@ -66,8 +66,8 @@ Activity 含自己的 revision。此为原设计返回字段的结构化落地�
 
 - `npm run sensa:consumer-checkin-smoke`：账号、目标、首学、复习/重学、签到的共享事务回归。
 - `scripts/sensaConsumerAccountSmoke.mts --intake --semantic --provisioning`：M2 账号/语义/准备边界。
-- `scripts/sensaConsumerAccountSmoke.mts --serve`：loopback 合成 OTP/JWT 夹具；浏览器流程见
-  `scripts/sensaConsumerBrowserSmoke.mts`。不是公网认证或真实邮件服务。
+- `scripts/sensaConsumerAccountSmoke.mts --serve`：loopback 合成 OTP/JWT 夹具，仅用于开发服务调试。
+  旧浏览器流程脚本已在用户流程重新确认前删除；它不是公网认证或真实邮件服务证据。
 - `scripts/sensaConsumerAccountSmoke.mts --crash`：真实子进程 SIGKILL；生成/校验中断等待 lease
   到期后显式重试，ready 丢响应读取原材料。时钟推进与模型是替身，不能当托管灾备验收。
 - `npm run sensa:consumer-settlement-smoke`：Node 与断网 Chrome 相同结算向量。

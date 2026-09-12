@@ -1,5 +1,5 @@
 import {AccountLibrarySync} from './AccountLibrarySync';
-import {syncAccountLibrary} from '../../data/library/cloudSyncService';
+import {CloudSyncNotice} from './CloudSyncNotice';
 import {authorizeExtensionConnection,notifyExtensionSignout} from './extensionConnection';
 import {eraseDeletedAccount} from '../../data/library/dataControl';
 import {AccountDeletion,pendingAccountDeletion} from './AccountDeletion';
@@ -66,8 +66,10 @@ export default function AccountExperience({children}:{children:ReactNode}){
    await command({id:crypto.randomUUID(),kind:'service.connect',input:next},async tx=>{const current=await tx.get<Owner>('meta','service-owner');if(gen!==generation.current)throw new Error('stale login');if(current&&current.subject!==next.subject)throw new Error('account mismatch');tx.put('meta','service-owner',next);tx.put('meta','signed-out',false);return null;});
    if(gen!==generation.current)return;
    await openLibrary();
-   try{await syncAccountLibrary();}catch{if(!stored.usable){setLocal(false);setNotice(localFlowText('serviceRetry'));return;}}
    if(gen!==generation.current)return;
+   // The local library is the product authority. Account cloud restore is a background
+   // adapter: a slow, failed or offline cloud copy must never hold the App Shell closed.
+   // AccountLibrarySync runs the pass and CloudSyncNotice reports its state.
    setOwner(next);setLocal(true);setOnlineService(true);setLoginOpen(false);setNotice('');
   }catch{if(gen===generation.current)setNotice(localFlowText('networkRetry'));}
   finally{if(gen===generation.current)setReady(true);}
@@ -94,7 +96,7 @@ export default function AccountExperience({children}:{children:ReactNode}){
   const destination=new URL(result.redirectUri);destination.searchParams.set('libraryId',(await openLibrary()).id);
   location.assign(destination.toString());
  })}>{localFlowText('connectAccount')}</button><button className={setupButton} onClick={()=>location.assign('/profile')}>{localFlowText('cancel')}</button></main>;
- if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{deleteAccount:()=>{generation.current++;setDeletionOpen(true);},notice:localFlowNotice(notice),email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout:()=>perform(logout)}}><AccountLibrarySync online={onlineService}/>{owner?.accountId&&<ExtensionIntake accountId={owner.accountId} onlineService={onlineService}/>} {children}</AccountContext.Provider>;
+ if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{deleteAccount:()=>{generation.current++;setDeletionOpen(true);},notice:localFlowNotice(notice),email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout:()=>perform(logout)}}><AccountLibrarySync online={onlineService}/>{onlineService&&<CloudSyncNotice/>}{owner?.accountId&&<ExtensionIntake accountId={owner.accountId} onlineService={onlineService}/>} {children}</AccountContext.Provider>;
  // Default Supabase templates send links; custom OTP templates remain supported.
  return <main className="flex min-h-screen items-center justify-center bg-[#fbfbfa] px-6 text-[#242a38]"><form className="w-full max-w-sm space-y-5" onSubmit={e=>{e.preventDefault();void perform(sent?useCode?async()=>{const result=await auth!.verifyOtp({email:email.trim(),token:code.trim(),type:'email'});if(result.error){setNotice(localFlowText('otpInvalid'));return;}await recover();}:recover:send);}}>
   <div className="flex items-center justify-between"><p className="text-sm text-[#68748d]">Sensa</p><LanguageSwitch/></div><h1 className="text-3xl font-semibold">{sent?localFlowText(useCode?'enterOtp':'checkEmailLink'):localFlowText('welcome')}</h1>

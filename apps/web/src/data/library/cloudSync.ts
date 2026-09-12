@@ -1,5 +1,5 @@
-import {librarySyncManifest,librarySyncHead,librarySyncTables,type LibrarySyncManifest,type LibrarySyncHead} from '@sensa/contracts/sensa';
-import {libraryTables,readLibrary,restoreLibraryTransaction,assertCurrentLibrary,type LibraryTransaction,type Table,type LibraryIdentity} from './store';
+import {librarySyncManifest,librarySyncHead,librarySyncTables,librarySyncBlockChars,librarySyncBlockFetchBatch,librarySyncBlockFetchResult,librarySyncBlockMissingResult,librarySyncBlockStore,librarySyncBlockStoreBatch,librarySyncBlockStoreChars,type LibrarySyncManifest,type LibrarySyncHead} from '@sensa/contracts/sensa';
+import {libraryTables,readLibrary,restoreLibraryTransaction,writeLibraryState,assertCurrentLibrary,type LibraryTransaction,type Table,type LibraryIdentity} from './store';
 import {encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {validateBackupRows,type BackupRows} from './backupValidation';
 export type SyncRequest=(path:string,body?:unknown)=>Promise<any>;
@@ -10,6 +10,8 @@ const STATE='cloud-sync';
 const entryId=(r:Pick<Entry,'table'|'key'>)=>JSON.stringify([r.table,r.key]);
 const equal=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
 const hash=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),b=>b.toString(16).padStart(2,'0')).join('');
+/** A restore holds block text in memory before assembling rows; keep that bounded. */
+const TRANSFER_CAP=96*1024*1024;
 const allowed=(table:Table,key:string,value:any)=>librarySyncTables.includes(table as any)&&(table!=='meta'||['identity','learning-active','package-catalog'].includes(key))&&(table!=='settings'||key!=='providers')&&(table!=='operations'||!['service.','provider.'].some(prefix=>JSON.parse(value.input).kind.startsWith(prefix)));
 function normalized(table:Table,key:string,raw:any,identity:LibraryIdentity){
  const value=structuredClone(raw);
@@ -66,7 +68,7 @@ function partitionConflicts(base:Entry[],local:Entry[],remote:Entry[],merged:Ent
 }
 export const readCloudSync=()=>readLibrary(async tx=>{const state=await tx.get<State>('meta',STATE);if(state?.status==='synced'&&!await tx.get('meta','signed-out')){const current=await capture(tx);if(!equal(current.entries,state.base))return {...state,status:'pending' as const};}return state;});
 async function saveState(expected:{owner:Owner;incarnation:string},work:(old:State|undefined)=>State){
- await restoreLibraryTransaction(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');tx.put('meta',STATE,work(await tx.get<State>('meta',STATE)));});
+ await writeLibraryState(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');tx.put('meta',STATE,work(await tx.get<State>('meta',STATE)));});
 }
 async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries:Entry[],state:State){
  const rows=rowsFor(entries);
@@ -87,11 +89,39 @@ async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries
 class Blocks{
  cache=new Map<string,string>();
  constructor(private request:SyncRequest){}
- async pack(text:string){const refs:string[]=[];for(let at=0;at<text.length;at+=32000){const part=text.slice(at,at+32000),id=await hash(part);this.cache.set(id,part);refs.push(id);}return refs;}
- async text(refs:string[]){let text='';for(const id of refs){let data=this.cache.get(id);if(data===undefined){const reply=await this.request('/blocks/'+id);data=reply.data;if(typeof data!=='string'||await hash(data)!==id)throw new Error('library_sync_hash');this.cache.set(id,data);}text+=data;if(text.length>90*1024*1024)throw new Error('library_sync_capacity');}return text;}
- async upload(){const keys=[...this.cache.keys()];for(let at=0;at<keys.length;at+=500){const reply=await this.request('/blocks/missing',{hashes:keys.slice(at,at+500)});if(!Array.isArray(reply.missing)||reply.missing.some((id:string)=>!this.cache.has(id)))throw new Error('library_sync_format');for(const id of reply.missing)await this.request('/blocks',{hash:id,data:this.cache.get(id)});}}
+ async pack(text:string){const refs:string[]=[];for(let at=0;at<text.length;at+=librarySyncBlockChars){const part=text.slice(at,at+librarySyncBlockChars),id=await hash(part);this.cache.set(id,part);refs.push(id);}return refs;}
+ /** One bounded request per page of blocks: a restore costs round trips, not blocks. */
+ async fetch(ids:string[]){
+  const wanted=[...new Set(ids)].filter(id=>!this.cache.has(id));
+  let held=[...this.cache.values()].reduce((size,value)=>size+value.length,0);
+  for(let at=0;at<wanted.length;at+=librarySyncBlockFetchBatch){
+   const reply=librarySyncBlockFetchResult.parse(await this.request('/blocks/fetch',{hashes:wanted.slice(at,at+librarySyncBlockFetchBatch)}));
+   if(reply.missing.length)throw new Error('library_sync_missing_block');
+   for(const block of reply.blocks){if(await hash(block.data)!==block.hash)throw new Error('library_sync_hash');held+=block.data.length;if(held>TRANSFER_CAP)throw new Error('library_sync_capacity');this.cache.set(block.hash,block.data);}
+  }
+  for(const id of ids)if(!this.cache.has(id))throw new Error('library_sync_missing_block');
+ }
+ async text(refs:string[]){let text='';for(const id of refs){const data=this.cache.get(id);if(data===undefined)throw new Error('library_sync_missing_block');text+=data;if(text.length>90*1024*1024)throw new Error('library_sync_capacity');}return text;}
+ async upload(){
+  const keys=[...this.cache.keys()],missing:string[]=[];
+  for(let at=0;at<keys.length;at+=512){const reply=librarySyncBlockMissingResult.parse(await this.request('/blocks/missing',{hashes:keys.slice(at,at+512)}));if(reply.missing.some(id=>!this.cache.has(id)))throw new Error('library_sync_format');missing.push(...reply.missing);}
+  for(let at=0;at<missing.length;){
+   const blocks:{hash:string;data:string}[]=[];let chars=0;
+   while(at<missing.length&&blocks.length<librarySyncBlockStoreBatch){const data=this.cache.get(missing[at])!;if(blocks.length&&chars+data.length>librarySyncBlockStoreChars)break;blocks.push({hash:missing[at],data});chars+=data.length;at++;}
+   librarySyncBlockStore.parse({blocks});await this.request('/blocks/store',{blocks});
+  }
+ }
  async manifest(entries:Entry[]){const identity=decodeBackupValue(entries.find(r=>r.table==='meta'&&r.key==='identity')!.value);const rows:LibrarySyncManifest['rows']=[];let size=0;for(const r of entries){const text=JSON.stringify(r.value);size+=text.length;if(size>64*1024*1024)throw new Error('library_sync_capacity');rows.push({table:r.table,key:r.key,blocks:await this.pack(text)});}return this.pack(JSON.stringify(librarySyncManifest.parse({version:1,libraryId:identity.id,learnerId:identity.learnerId,rows})));}
- async download(head:LibrarySyncHead){if(!head.manifest)return [];const manifest=librarySyncManifest.parse(JSON.parse(await this.text(head.manifest))),entries:Entry[]=[];let size=0;for(const row of manifest.rows){const text=await this.text(row.blocks);size+=text.length;if(size>64*1024*1024)throw new Error('library_sync_capacity');entries.push({table:row.table,key:row.key,value:JSON.parse(text)});}entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));const rows=rowsFor(entries),identity=rows.meta.find(r=>r.key==='identity')!.value;if(identity.id!==manifest.libraryId||identity.learnerId!==manifest.learnerId)throw new Error('library_sync_identity');return entries;}
+ async download(head:LibrarySyncHead){
+  if(!head.manifest)return [];
+  await this.fetch(head.manifest);
+  const manifest=librarySyncManifest.parse(JSON.parse(await this.text(head.manifest)));
+  // Fetch every referenced block once, in pages, before assembling any row.
+  await this.fetch(manifest.rows.flatMap(row=>row.blocks));
+  const entries:Entry[]=[];let size=0;
+  for(const row of manifest.rows){const text=await this.text(row.blocks);size+=text.length;if(size>64*1024*1024)throw new Error('library_sync_capacity');entries.push({table:row.table,key:row.key,value:JSON.parse(text)});}
+  entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));const rows=rowsFor(entries),identity=rows.meta.find(r=>r.key==='identity')!.value;if(identity.id!==manifest.libraryId||identity.learnerId!==manifest.learnerId)throw new Error('library_sync_identity');return entries;
+ }
 }
 /** Injected transport permits offline/idempotency/restore tests without real accounts. */
 export async function synchronizeLibrary(request:SyncRequest){

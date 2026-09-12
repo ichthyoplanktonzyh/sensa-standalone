@@ -110,10 +110,10 @@ Web 与原生包格式不能互相冒充兼容，详见各自导入合同。实�
 
 ## 验证入口
 
-- 个人内容/生成：`sensa:personal-learning-smoke`、`sensa:expression-chat-browser-smoke`。
+- 个人内容/生成：`sensa:personal-learning-smoke`（确定性数据合同）。
 - 包/运行：`sensa:package-learning-smoke`、`sensa:assurance-package-smoke`、`sensa:four-stage-local-smoke`，浏览器入口见学习包指南。
-- 恢复：`sensa:library-backup-smoke`、`sensa:offline-cold-start-smoke`、`sensa:offline-shell-smoke`。
-- 账号/设置：`sensa:email-link-browser-smoke`、`sensa:settings-browser-smoke`、`sensa:local-i18n-smoke`。
+- 恢复：`sensa:library-backup-smoke`、`sensa:offline-shell-smoke`；完整浏览器恢复流程待产品体验确认后重建。
+- 账号/设置：保留 `sensa:local-i18n-smoke` 等确定性检查；邮件登录浏览器流程待确认后重建。
 - 交接：`sensa:web-intake-smoke`；它的 Chrome API 替身不等于真实插件安装验收。
 
 以上均为根 package scripts 的命令名；运行前满足各脚本隔离身份、构建与服务前置，不对 owner 库

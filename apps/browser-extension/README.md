@@ -52,8 +52,8 @@ CI/正式打包需明确设置 `SENSA_EXTENSION_WEB_URL` 和 `SENSA_EXTENSION_AP
 
 普通文字 HTML 已在 Chrome for Testing 151.0.7922.138 / 152.0.7977.82 验证自动插件链及原生 activeTab 同源/跨源矩阵；149 保留历史证据。真实商店热更新尚未验收。
 内置 PDF、受限页、跨域 iframe、文件页和无痕不作支持承诺。
-`npm run sensa:extension-browser-smoke` 使用隔离 profile、实际扩展与本地 fixture。
-它为 fixture origin 附加测试 host 权限，因此不能替代 activeTab 原生工具栏授权实测。
+旧插件浏览器 smoke 已随未确认流程一起删除；重新确认采集体验后再从该体验建立独立 E2E，
+不能从旧脚本恢复产品合同。
 
 `node --import tsx scripts/sensaExtensionDismissSmoke.mts` 检查原位浮层的关闭行为，
 可用 `SENSA_CHROMIUM_PATH` 指定 Chrome。使用实际 content bundle、closed Shadow DOM

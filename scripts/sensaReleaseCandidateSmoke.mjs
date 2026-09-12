@@ -24,7 +24,7 @@ try{
  execFileSync('git',['init','-q'],{cwd:root});execFileSync('git',['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--allow-empty','-qm','fixture'],{cwd:root});
  const sha=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
  const web=join(root,'apps/web/dist'),extension=join(root,'apps/browser-extension/dist');await mkdir(join(web,'assets'),{recursive:true});await mkdir(extension,{recursive:true});
- for(const artifactRoot of candidateRoots.filter(path=>!['apps/web/dist','apps/browser-extension/dist'].includes(path))){const directory=join(root,artifactRoot);await mkdir(directory,{recursive:true});await writeFile(join(directory,'index.js'),'export {};\n');}
+ for(const artifactRoot of candidateRoots.filter(path=>!['apps/web/dist','apps/browser-extension/dist'].includes(path))){const directory=join(root,artifactRoot);await mkdir(directory,{recursive:true});await writeFile(join(directory,'index.js'),'export {};\n//# sourceMappingURL=index.js.map\n');await writeFile(join(directory,'index.js.map'),'{}\n');await writeFile(join(directory,'index.d.ts'),'export {};\n//# sourceMappingURL=index.d.ts.map\n');await writeFile(join(directory,'index.d.ts.map'),'{}\n');}
  await writeFile(join(web,'index.html'),'<html></html>');await writeFile(join(web,'sw.js'),'// fixture');
  await writeFile(join(web,'assets/app.js'),JSON.stringify([env.VITE_SUPABASE_URL,env.VITE_SENSA_API_URL,env.VITE_SUPABASE_PUBLISHABLE_KEY]));
  await writeFile(join(extension,'manifest.json'),JSON.stringify({host_permissions:['https://fixture.supabase.co/*'],content_scripts:[{matches:[env.SENSA_WEB_ORIGIN+'/*']}]}));
@@ -34,6 +34,9 @@ try{
  await writeFile(join(web,'unlisted.js'),'unexpected');assert.throws(verify);await rm(join(web,'unlisted.js'));
  assert.equal(candidate.commit,sha);assert.match(candidate.scope,/Web, browser extension and compiled API/);assert.match(candidate.scope,/ordinary account cloud sync/);assert(candidate.files.every(f=>/^[a-f0-9]{64}$/.test(f.sha256)));
  assert(candidate.files.some(f=>f.path==='apps/api/dist/index.js'));
+ assert(!candidate.files.some(f=>f.path.endsWith('.map')));
+ assert(!String(await readFile(join(root,'apps/api/dist/index.js'))).includes('sourceMappingURL'));
+ assert(!String(await readFile(join(root,'apps/api/dist/index.d.ts'))).includes('sourceMappingURL'));
  assert(!(await readFile(join(root,'release-candidate/manifest.json'),'utf8')).includes(env.VITE_SUPABASE_PUBLISHABLE_KEY));
  await assert.rejects(prepareCandidate(env,root),/HEAD/);
  await writeFile(join(web,'assets/app.js'),'// stale local build');await assert.rejects(prepareCandidate(releaseEnv,root),/rebuild/);

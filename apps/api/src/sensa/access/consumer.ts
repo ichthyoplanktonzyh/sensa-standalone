@@ -32,7 +32,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import {
   consumerVersion, consumerWireVersion, consumerCanonicalizerVersion, canonicalConsumerJson,
-  installationInputSchema, accountContextSchema, planViewSchema, consumerPushSchema,
+  installationInputSchema, accountContextSchema, planViewSchema, consumerPushSchema, librarySyncBlockStoreChars,
   consumerBootstrapSchema, consumerPullSchema,
 } from '@sensa/contracts/sensa';
 import type { QuantityOperation, QuantityResult, PlanView, ConsumerPush, ConsumerOperation } from '@sensa/contracts/sensa';
@@ -199,7 +199,7 @@ async function publish(db:DatabaseExecutor,a:Account,entity:string,snapshot:unkn
 export function createConsumerRoutes(options: {deleteIdentity?:DeleteIdentity;telemetry?:(record:ServiceRequestRecord)=>void;verify?:ConsumerVerifier; transaction?:Transaction;mediaReader?:ConsumerMediaReader;clock?:()=>Date;semanticResolver?:SemanticResolver;contentGenerator?:ContentGenerator;contentReviewer?:ContentReviewer;readingCompletion?:ReadingCompletion} = {}) {
   const clock=options.clock??(()=>new Date());const app=new Hono(); const transaction=options.transaction??unsafeTransaction; const verify=extensionVerifier(options.verify??verifyConsumer,transaction,clock);
   app.use('*',serviceTelemetry(options.telemetry));
-  app.use('*',(c,next)=>bodyLimit({maxSize:c.req.path.endsWith('/sensa/native/agent/turn')?12*1024*1024:256*1024,onError:c=>c.json({code:'body_too_large'},413)})(c,next));
+  app.use('*',(c,next)=>bodyLimit({maxSize:c.req.path.endsWith('/sensa/native/agent/turn')?12*1024*1024:c.req.path.endsWith('/sensa/library-sync/blocks/store')?librarySyncBlockStoreChars+1024*1024:256*1024,onError:c=>c.json({code:'body_too_large'},413)})(c,next));
   app.onError((e,c)=> {
     if(e instanceof ConsumerError)return c.json({code:e.code},e.status);
     if(e instanceof z.ZodError || e instanceof SyntaxError)return c.json({code:'invalid_request'},400);

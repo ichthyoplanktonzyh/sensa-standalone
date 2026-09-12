@@ -1,6 +1,22 @@
 import {z} from 'zod';
 export const librarySyncTables=['meta','drafts','settings','operations','sessions','meanings','identities','packages','learningTargets','learningRuns','learningEvents','personalLearning','contentAttempts'] as const;
 export const librarySyncHash=z.string().regex(/^[a-f0-9]{64}$/);
+/** Content-addressed block size in JavaScript string units. Restoring a library is
+ * a bounded number of block requests, so one block already carries a real payload.
+ * Sized against one captured context image. */
+export const librarySyncBlockChars=262144;
+/** Hashes per block fetch request; bounds one response to `batch * block` characters. */
+export const librarySyncBlockFetchBatch=8;
+/** Blocks per store request. Bounds one request body below the route limit. */
+export const librarySyncBlockStoreBatch=16;
+/** Total block characters accepted in one store request. */
+export const librarySyncBlockStoreChars=3*1024*1024;
+export const librarySyncBlock=z.object({hash:librarySyncHash,data:z.string().max(librarySyncBlockChars)}).strict();
+export const librarySyncBlockFetch=z.object({hashes:z.array(librarySyncHash).min(1).max(librarySyncBlockFetchBatch)}).strict();
+export const librarySyncBlockFetchResult=z.object({blocks:z.array(librarySyncBlock).max(librarySyncBlockFetchBatch),missing:z.array(librarySyncHash).max(librarySyncBlockFetchBatch)}).strict();
+export const librarySyncBlockMissing=z.object({hashes:z.array(librarySyncHash).min(1).max(512)}).strict();
+export const librarySyncBlockMissingResult=z.object({missing:z.array(librarySyncHash).max(512)}).strict();
+export const librarySyncBlockStore=z.object({blocks:z.array(librarySyncBlock).min(1).max(librarySyncBlockStoreBatch)}).strict();
 export const librarySyncRefs=z.array(librarySyncHash).min(1).max(2048);
 export const librarySyncRow=z.object({table:z.enum(librarySyncTables),key:z.string().min(1).max(2000),blocks:librarySyncRefs}).strict();
 export const librarySyncManifest=z.object({version:z.literal(1),libraryId:z.string().uuid(),learnerId:z.string().uuid(),rows:z.array(librarySyncRow).max(200000)}).strict().superRefine((v,c)=>{

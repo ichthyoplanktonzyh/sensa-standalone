@@ -47,6 +47,10 @@ jobs:
       - run: npm run build
       - run: npm run lint
       - run: npm run sensa:edge-check
+      - name: Install Chromium for the boot budget check
+        run: npx playwright install --with-deps chromium
+      - name: Enforce App Shell boot and account restore budget
+        run: npm run sensa:web-bootstrap-budget
       - name: Validate release configuration and telemetry guards
         run: |
           node scripts/sensaReleaseCandidateSmoke.mjs

@@ -16,10 +16,13 @@
 当前首发适配限定托管 Supabase 的 `functions/v1/sensa-api`；其他服务布局需显式修改发布合同。
 没有目标环境时检查失败，不能使用 localhost 或合成配置冒充生产候选。
 
+`npm run sensa:web-bootstrap-budget` 在候选构建上强制启动与恢复预算：外壳不等待账号云同步、
+恢复请求数有界、空闲标签不发请求、无 console 错误与 CSP 违规（含 zod 动态编译路径）。
 `node scripts/release/releaseCandidate.mjs --check` 检查环境；构建后去掉 `--check` 校验 SHA、
 Web 实际嵌入配置与插件目标，生成静态托管响应头和 `release-candidate/manifest.json`。
 清单为 Web、插件、编译 API 及其共享包逐文件记录 SHA-256；正式部署下载并复核同一制品，
-不重新编译。清单不包含模型密钥或公开认证 Key。制品有效期 14 天；生成候选不等于
+不重新编译。候选准备阶段移除 source map 与其引用；清单不包含模型密钥或公开认证 Key。
+制品有效期 14 天；生成候选不等于
 release acceptance 或上线已通过。API 新增 X-Request-ID 和仅含方法、服务分类、状态、耗时的结构化日志，
 不保存 URL/正文/邮箱/令牌/模型内容；真实告警与仪表盘尚待平台配置。
 
@@ -131,7 +134,8 @@ OTP 认证才可发起，token refresh 不算重新认证。事务先撤销账�
 - 插件分发、真实商店权限升级和跨端同步按各自门验收，不从本机 Web 成功推导完成。
 
 检查入口：`sensa:trial-database-smoke`、`sensa:account-service-db-smoke`、
-`sensa:email-link-browser-smoke`、`sensa:offline-shell-smoke` 和相关备份/删除脚本；
+`sensa:web-bootstrap-budget`、`sensa:offline-shell-smoke` 和相关备份/删除脚本；
+账号同步的真实浏览器合同由 `sensa:library-cloud-smoke`（独立 Postgres + 真实浏览器）保留；
 常规使用隔离数据库、合成 Auth/模型，不能据此认定真实托管门通过。目录见 [测试策略](testing-strategy.md)。
 
 旧配置诊断、修复顺序与逐次测试记录保留在 Git `5f962ae41adb723dee34614060db9e41a8d0a4e8` 的原文件，不再作为当前操作步骤。

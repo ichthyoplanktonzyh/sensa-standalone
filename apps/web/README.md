@@ -14,9 +14,10 @@
 其账号独立 IndexedDB/outbox 与旧 API/Postgres 保持原样，不自动迁入新库。
 `preview` 目前也是完整应用入口，不再决定另一套页面。
 
-无成本完整应用回归：`npm run sensa:web-local-journey-smoke`，默认指向隔离 loopback 3014，
-可设置 `SENSA_LOCAL_WEB_URL`。测试使用独立浏览器上下文和确定性模型响应，不应指向 owner 的
-3000 服务。旧账号 smoke 保留独立合成认证与 API 环境检查。
+无成本启动与恢复预算：`npm run sensa:web-bootstrap-budget` 用真实构建产物加同源合成账号服务
+（注入延迟）断言应用外壳不等待账号云同步、恢复请求数有界、空闲标签不发请求、浏览器无 console 错误
+与 CSP 违规；它自己构建到 `.tmp/`，不覆盖 `dist/`。账号同步的完整浏览器/数据库合同保留在
+`npm run sensa:library-cloud-smoke`（需要一次性本地 Postgres）。
 
 当前范围和验收见 [Web 工作流](../../docs/sensa/web-local-meaning-workflow.md)。
 

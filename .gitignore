@@ -52,3 +52,4 @@ content/data/consumer-generations/
 
 # Generated authored package payloads for local acceptance.
 /apps/web/public/learning-packages/
+.tmp/

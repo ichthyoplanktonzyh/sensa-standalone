@@ -3,7 +3,7 @@ import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import type {Plugin} from 'vite';
 /** Only immutable application files; account/API responses and packages are never cached here. */
-export function offlineShell():Plugin{let output='dist';return {configResolved(config){output=resolve(config.root,config.build.outDir);},name:'sensa-offline-shell',apply:'build',async closeBundle(){
+export function offlineShell():Plugin{let output='dist';return {configResolved(config){output=resolve(config.root,config.build.outDir);},name:'sensa-offline-shell',apply:'build',async writeBundle(){
  const assets=(await readdir(resolve(output,'assets'))).filter(n=>!n.endsWith('.map')).map(n=>'/assets/'+n);
  const paths=['/index.html',...assets];const hash=createHash('sha256');for(const path of paths)hash.update(await readFile(resolve(output,'.'+path)));
  const cache='sensa-shell-'+hash.digest('hex').slice(0,20);

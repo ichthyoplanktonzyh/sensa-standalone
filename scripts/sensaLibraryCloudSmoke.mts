@@ -8,6 +8,7 @@ import {build} from 'esbuild';
 import {chromium,expect} from '@playwright/test';
 import pg from 'pg';
 import {createConsumerRoutes} from '../apps/api/src/sensa/access/consumer.ts';
+import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../packages/contracts/src/sensa/librarySync.ts';
 const url=process.env.SENSA_TEST_DATABASE_URL;
 if(!url||new URL(url).hostname!=='127.0.0.1'||!new URL(url).pathname.startsWith('/sensa_m1a_'))throw Error('Disposable loopback database required');
 const pool=new pg.Pool({connectionString:url}),subjects=[crypto.randomUUID(),crypto.randomUUID()],sessions=subjects.map(()=>crypto.randomUUID());
@@ -115,7 +116,10 @@ try{
  const manifest=JSON.parse(head.manifest.map((h:string)=>stored.get(h)).join(''));
  const event=manifest.rows.find((r:any)=>r.table==='learningEvents');event.blocks=manifest.rows.find((r:any)=>r.table==='drafts').blocks;
  const text=JSON.stringify(manifest),refs:string[]=[];
- for(let at=0;at<text.length;at+=32000){const data=text.slice(at,at+32000),hash=createHash('sha256').update(data).digest('hex');refs.push(hash);assert.equal((await post('library-sync/blocks',{hash,data})).status,200);}
+ const rewritten:{hash:string;data:string}[]=[];
+ for(let at=0;at<text.length;at+=librarySyncBlockChars){const data=text.slice(at,at+librarySyncBlockChars);rewritten.push({hash:createHash('sha256').update(data).digest('hex'),data});}
+ refs.push(...rewritten.map(block=>block.hash));
+ for(let at=0;at<rewritten.length;at+=librarySyncBlockStoreBatch)assert.equal((await post('library-sync/blocks/store',{blocks:rewritten.slice(at,at+librarySyncBlockStoreBatch)})).status,200);
  const rejected=await post('library-sync/commit',{operationId:crypto.randomUUID(),baseRevision:head.revision,manifest:refs});assert.equal(rejected.status,409);assert.equal((await rejected.json() as any).code,'library_sync_history');
  assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0].revision,head.revision);
  const deletion=await post('account/deletion',{operationId:crypto.randomUUID(),confirmation:'delete-account'});assert.equal(deletion.status,200);

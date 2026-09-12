@@ -23,8 +23,9 @@ project ref、Cloudflare 项目/域名，以及实际待执行的数据库迁移
 密钥通过平台 Secrets/已有凭据管理配置，不写入聊天、代码、生成包或日志。M2 本地 MP3 不会
 自动变成线上静态对象。发布通过 CI/CD 执行，不从本地 shell 直接部署。
 
-提交 CI、release acceptance、固定候选、部署与监控各自承担独立证据。发布必须引用同一 SHA 的
-成功 acceptance 与 candidate run，不能把提交检查或重复构建替代候选晋级。
+提交 CI、固定候选、部署预览检查与监控各自承担独立证据。当前用户流程尚未完全确认，旧浏览器
+smoke 和 release acceptance 门禁已删除，不能把旧流程断言当成产品合同。发布必须引用同一 SHA
+的成功 candidate run 并取得 owner 对该制品的明确授权，不能在部署阶段重新构建。
 2026-09-11 真实迁移账本已包含 0028/0029，云同步表与受限运行角色权限已复核。
 Cloudflare 试用 Worker 为 `sensa-standalone`，Web origin 为
 `https://sensa-standalone.ichthyoplanktonzyh.workers.dev`。应用发布只通过 GitHub Actions 上传带 SHA
@@ -32,9 +33,10 @@ Cloudflare 试用 Worker 为 `sensa-standalone`，Web origin 为
 候选环境 `web-candidate`、部署环境 `web-production`、监控环境 `web-monitor` 保存各自变量与 Secrets。
 平台账号登录、项目创建或手动配置由 owner 协助，不擅自接管外部平台浏览器。
 
-正式新用户验收必须覆盖 Web 和插件、真实邮件/独立账号删除、两个浏览器恢复、离线补传、
-冲突保留、学习包/图片/音频公网读取及通知接收。图片音频嵌入同步块的本地通过不等于 Storage
-发布；旧 `noteService` 笔记尚未绑定账号，不属于正式库同步，不自动认领或迁移。
+用户流程确认后再建立正式新用户验收，覆盖 Web 和插件、真实邮件/独立账号删除、两个浏览器恢复、
+离线补传、冲突保留、学习包/图片/音频公网读取及通知接收。在此之前这些能力既不由自动化声明通过，
+也不阻塞 owner 明确授权的试用发布。图片音频嵌入同步块的本地通过不等于 Storage 发布；旧
+`noteService` 笔记尚未绑定账号，不属于正式库同步，不自动认领或迁移。
 
 ## Chrome Web Store
 

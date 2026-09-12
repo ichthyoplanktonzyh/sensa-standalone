@@ -1,5 +1,5 @@
 /** Release preparation only: never deploys, migrates, uploads or calls a provider. */
-import {readFile,readdir,writeFile,mkdir} from 'node:fs/promises';
+import {readFile,readdir,writeFile,mkdir,unlink} from 'node:fs/promises';
 import {resolve,relative} from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
@@ -37,6 +37,15 @@ export function validateReleaseEnvironment(env){
  return {webOrigin:web.origin,supabaseOrigin:auth.origin,apiUrl:api.href,commit:env.SENSA_RELEASE_SHA};
 }
 async function files(dir){const entries=await readdir(dir,{withFileTypes:true});return (await Promise.all(entries.map(e=>e.isDirectory()?files(resolve(dir,e.name)):[resolve(dir,e.name)]))).flat();}
+async function removeSourceMaps(dir){
+ for(const path of await files(dir)){
+  if(path.endsWith('.map')){await unlink(path);continue;}
+  if(!path.endsWith('.js')&&!path.endsWith('.css')&&!path.endsWith('.d.ts'))continue;
+  const source=await readFile(path,'utf8');
+  const clean=source.replace(/\n?\/\/[#@] sourceMappingURL=.*?(?:\r?\n|$)/gu,'\n').replace(/\/\*# sourceMappingURL=.*?\*\//gu,'');
+  if(clean!==source)await writeFile(path,clean);
+ }
+}
 export async function prepareCandidate(env,root=process.cwd()){
  const config=validateReleaseEnvironment(env);
  const head=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
@@ -50,18 +59,21 @@ export async function prepareCandidate(env,root=process.cwd()){
  const browserCode=(await Promise.all(browserFiles.map(p=>readFile(p,'utf8')))).join('\n');
  for(const value of [env.VITE_SUPABASE_URL,env.VITE_SENSA_API_URL,env.VITE_SUPABASE_PUBLISHABLE_KEY])if(!browserCode.includes(value))throw new Error('Web bundle does not contain the release configuration; rebuild with the release environment');
  const entries=[];
- for(const rootPath of candidateRoots)for(const path of (await files(resolve(root,rootPath))).sort()){
+ for(const rootPath of candidateRoots){
+  await removeSourceMaps(resolve(root,rootPath));
+  for(const path of (await files(resolve(root,rootPath))).sort()){
   if(path.endsWith('.map')||path.split('/').some(p=>p.startsWith('.env')))throw new Error('Candidate contains source maps or environment files');
   const bytes=await readFile(path);
   // Do not emit matching values: a failed scan must not turn logs into another leak.
   if(/sb_secret_[A-Za-z0-9_-]+/.test(bytes.toString()))throw new Error('Candidate contains a secret key marker');
   entries.push({path:relative(root,path),bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')});
+  }
  }
  const catalogSha256=createHash('sha256').update(await readFile(resolve(root,'release-candidate/catalog.json'))).digest('hex');
- const report={catalogSha256,format:'sensa-release-candidate-v2',...config,createdAt:new Date().toISOString(),scope:'Web, browser extension and compiled API; local-first library with ordinary account cloud sync',acceptance:'requires a successful release acceptance run for the same commit before deployment',files:entries};
+ const report={catalogSha256,format:'sensa-release-candidate-v2',...config,createdAt:new Date().toISOString(),scope:'Web, browser extension and compiled API; local-first library with ordinary account cloud sync',promotion:'requires explicit owner authorization for this exact candidate; user-flow acceptance is deferred until those flows are confirmed',files:entries};
  await mkdir(resolve(root,'release-candidate'),{recursive:true});await writeFile(resolve(root,'release-candidate/manifest.json'),JSON.stringify(report,null,2)+'\n');
  return report;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
- try{if(process.argv.includes('--check')){validateReleaseEnvironment(process.env);console.log('Release configuration validated; no deployment performed.');}else{const r=await prepareCandidate(process.env);console.log(`Prepared ${r.files.length} files for ${r.commit}; hosted/user acceptance remains pending.`);}}catch(e){console.error(e.message);process.exitCode=1;}
+ try{if(process.argv.includes('--check')){validateReleaseEnvironment(process.env);console.log('Release configuration validated; no deployment performed.');}else{const r=await prepareCandidate(process.env);console.log(`Prepared ${r.files.length} files for ${r.commit}; deployment still requires explicit owner authorization.`);}}catch(e){console.error(e.message);process.exitCode=1;}
 }
