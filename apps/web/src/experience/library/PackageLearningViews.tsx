@@ -5,6 +5,7 @@ import {fourStageQueue,fourStageContent,type FourStageAction} from '../../data/l
 import {learningPolicyProfileRegistry} from '../learningRuntime/policyProfiles';
 import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
 import {localRunTargetIds} from '../../data/library/learning';
+import {defaultSensaLanguageProfile} from '@sensa/contracts/sensa';
 import {assuranceContent} from '../../data/library/assurance';
 import {cardText} from '../../i18n/originalCards';
 import {RuntimeTools} from '../components/learning/RuntimeTools';
@@ -27,7 +28,7 @@ import type {LocalLearningTarget} from '../../data/library/learning';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 type Controller=ReturnType<typeof usePackageLearning>;
-export const localTargetView=(t:LocalLearningTarget)=>({targetId:t.id,expression:t.expression,meaning:t.meaning,example:String(t.material.content.resources.find(r=>r.materialRoleKey==='usage_guidance')?.contentPayload.example??''),partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:t.packageKey?'book' as const:'personal_semantic_world' as const,sourceLabel:t.packageKey?localFlowText('downloadedPackages'):localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:localTargetPolicy(t),lightweightReadiness:{status:'ready' as const,label:localFlowText('downloaded'),detail:localFlowText('resourcesLocal')}});
+export const localTargetView=(t:LocalLearningTarget)=>({targetId:t.id,expression:t.expression,meaning:t.meaning,targetLanguageTag:t.targetLanguageTag??defaultSensaLanguageProfile.activeTargetLanguageTag,familiarLanguageTag:t.familiarLanguageTag??defaultSensaLanguageProfile.familiarLanguageTag,example:String(t.material.content.resources.find(r=>r.materialRoleKey==='usage_guidance')?.contentPayload.example??''),partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:t.packageKey?'book' as const:'personal_semantic_world' as const,sourceLabel:t.packageKey?localFlowText('downloadedPackages'):localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:localTargetPolicy(t),lightweightReadiness:{status:'ready' as const,label:localFlowText('downloaded'),detail:localFlowText('resourcesLocal')}});
 export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boolean;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void}){
  useTranslation();
  const [selected,setSelected]=useState<string|null>(null),[query,setQuery]=useState(''),[downloadKey,setDownloadKey]=useState<string|null>(null);

@@ -56,6 +56,11 @@ export interface PrototypeLearningTargetView {
   expressionTypeLabel: string;
   partOfSpeech: string;
   meaning: string;
+  /** The two languages this target's own text is in. They travel with the
+   * target rather than with the runtime, so provisioning cannot stamp one
+   * language's material with another's. */
+  targetLanguageTag: string;
+  familiarLanguageTag: string;
   example: string;
   sourceKind: PrototypeLearningSourceKind;
   sourceLabel: string;
@@ -86,6 +91,8 @@ export const PROTOTYPE_LEARNING_TARGETS: Record<
 > = {
   'borrow-receive': {
     targetId: 'borrow-receive',
+    targetLanguageTag: 'en',
+    familiarLanguageTag: 'zh-CN',
     expression: 'borrow',
     expressionTypeLabel: '单词',
     partOfSpeech: 'verb',
@@ -104,6 +111,8 @@ export const PROTOTYPE_LEARNING_TARGETS: Record<
   },
   'tactful-expression': {
     targetId: 'tactful-expression',
+    targetLanguageTag: 'en',
+    familiarLanguageTag: 'zh-CN',
     expression: 'tactful',
     expressionTypeLabel: '单词',
     partOfSpeech: 'adjective',
@@ -126,6 +135,8 @@ export const PROTOTYPE_LEARNING_TARGETS: Record<
   },
   'lend-give': {
     targetId: 'lend-give',
+    targetLanguageTag: 'en',
+    familiarLanguageTag: 'zh-CN',
     expression: 'lend',
     expressionTypeLabel: '单词',
     partOfSpeech: 'verb',
@@ -242,12 +253,12 @@ export const lightweightContentInputForTarget = (
     senseSourceVersion: 'prototype-sense-v1',
     expression: {
       surface: target.expression,
-      languageTag: 'en',
+      languageTag: target.targetLanguageTag,
       expressionKind: expressionKindFor(target),
     },
     sense: {
       meaning: target.meaning,
-      familiarLanguageTag: 'zh-CN',
+      familiarLanguageTag: target.familiarLanguageTag,
     },
     originExperience: hasAuthoritativeGrounding
       ? {

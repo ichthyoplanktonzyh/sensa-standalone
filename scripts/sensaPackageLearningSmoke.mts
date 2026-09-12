@@ -102,5 +102,19 @@ try{
  const richPresentation=assembleLightweightInitialPresentation({protocolStepInstanceId:id(),protocolRunId:id(),retentionTargetId:richTarget.retentionId,ordinal:1,definition,materialBindings:richTarget.material.content.resources.filter(r=>definition.materialRequirements.some(m=>m.materialRoleKey===r.materialRoleKey)).map(r=>({materialRoleKey:r.materialRoleKey,resourceKey:r.resourceKey,learningMaterializationId:richTarget.material.snapshot.learningMaterializationId}))},richTarget.material);
  assert.equal(richPresentation.kind,'experience_recall');if(richPresentation.kind==='experience_recall'){assert.equal(richPresentation.slots.experienceSketch.images?.length,1);assert(richPresentation.slots.experienceSketch.html?.includes('data-action'));}
  const unsafe=structuredClone(rich);unsafe.id=id();const unsafeCue=unsafe.entries[0]!.content.resources.find(r=>r.materialRoleKey==='experience_recall_cue')!;unsafeCue.contentPayload={scene:'scene',senseFocus:'meaning',html:'<script>fetch("https://example.org")</script>'};unsafeCue.contentDigest=canonicalJsonDigest(unsafeCue.contentPayload);await assert.rejects(installPackage(new TextEncoder().encode(JSON.stringify(unsafe))));
+ // A package names the languages its own text is in, and every target it
+ // enrolls carries them, so material provisioned from a Spanish package can
+ // never be stamped with the English one the product happens to ship.
+ const spanishContent=provisionLightweightInitialContent({learnerUserId:identity.learnerId,learningTargetId:id(),senseId:id(),senseVersionId:id(),senseExpressionBindingId:id(),resolvedLearningPlanRevisionId:'fixture-es-v1',expressionSourceVersion:'fixture-es-v1',senseSourceVersion:'fixture-es-v1',expression:{surface:'tomarse su tiempo',languageTag:'es',expressionKind:'phrase'},sense:{meaning:'从容地花时间做一件事。',familiarLanguageTag:'zh-CN'},originExperience:{source:'other_authoritative_source',sourceVersion:'fixture-es-v1',personalAnchorUseGrantId:null,experience:{scene:'朋友催你快点，你说这件事需要慢慢来。',senseFocus:'从容地花时间',featureLabels:[]}},referenceFacts:[],requestedAt:new Date().toISOString()});
+ assert.equal(spanishContent.status,'ready');if(spanishContent.status!=='ready')throw Error();
+ const spanishBundle={...bundle,id:id(),title:'合成西语验证包',targetLanguage:'es',entries:[{...entry,senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),expression:'tomarse su tiempo',meaning:'从容地花时间做一件事。',content:spanishContent.materialization.content}]};
+ const spanishPack=await installPackage(new TextEncoder().encode(JSON.stringify(spanishBundle)));
+ const [spanishTargetId]=await enrollPackage(id(),spanishPack.key);
+ const learning=await readLearning();
+ assert.equal(learning.targets.find(t=>t.id===spanishTargetId!)!.targetLanguageTag,'es','an enrolled target carries the package language, not the shipped one');
+ assert.equal(learning.targets.find(t=>t.id===spanishTargetId!)!.familiarLanguageTag,'zh-CN');
+ assert.equal(learning.targets.find(t=>t.id===targetId!)!.targetLanguageTag,'en','the English package still enrolls English targets');
+ await assert.rejects(installPackage(new TextEncoder().encode(JSON.stringify({...spanishBundle,id:id(),familiarLanguage:'es'}))),'a package cannot teach the language it explains in');
+
  console.log('PASS: verified download/import, immutable versions, separate enrollment, local initial/review/relearning, replay, stale-step rejection, rollback and pinned content; fake IndexedDB, no browser/model calls.');
 }finally{globalThis.fetch=realFetch;}

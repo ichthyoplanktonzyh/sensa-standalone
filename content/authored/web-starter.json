@@ -2,6 +2,8 @@
   "title": "日常交流：八个具体意思",
   "description": "从借用物品、提醒、推迟安排等日常情境开始。适用于中文母语者的英语轻量学习；文本资源，不包含音频。首发候选，待真实使用评审。",
   "version": "1",
+  "targetLanguage": "en",
+  "familiarLanguage": "zh-CN",
   "entries": [
     {"key":"borrow-temporarily","expression":"borrow","meaning":"暂时使用属于别人的东西，并打算归还。","scene":"下雨时你没有带伞，向同事要了一把，约好明天还给他。"},
     {"key":"lend-temporarily","expression":"lend","meaning":"把自己的东西暂时交给别人使用，并期待对方归还。","scene":"同事没有带伞，你把自己的备用伞给他用，约好明天拿回来。"},
