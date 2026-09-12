@@ -1,7 +1,7 @@
 /** Real Chromium IndexedDB + Hono + disposable Postgres. No model calls or real accounts. */
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {readFile} from 'node:fs/promises';
+import {libraryCloudPackageFixture} from './support/libraryCloudPackageFixture.mts';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {build} from 'esbuild';
@@ -62,7 +62,7 @@ try{
   if((await c.personalLearningSnapshot())[0].status!=='ready')throw Error('personal resources not ready');
  },{accountId,image:draft.images[0]});
  // Actual learning resources (including audio), runtime records and schedule restore/replay.
- const descriptor=JSON.parse(await readFile('release-candidate/assurance-catalog.json','utf8')).items[0];const bytes=Array.from(await readFile('release-candidate/learning-packages/'+descriptor.url.split('/').at(-1)));
+ const {bytes,descriptor}=await libraryCloudPackageFixture();
  const progress=await a.evaluate(async({bytes,descriptor})=>{const c=(window as any).core;const pack=await c.installPackage(new Uint8Array(bytes),descriptor),ids=await c.enrollPackage(crypto.randomUUID(),pack.key);for(const id of ids)await c.selectLocalLearningPolicy(crypto.randomUUID(),id,'interleaved_four_stage');await c.confirmLearningQuantity(crypto.randomUUID(),20);let run=await c.startLearning(crypto.randomUUID(),ids[0],20,'2026-09-11T04:00:00.000Z');let steps=0;while(!run.completedAt&&steps++<60){const session=c.fourStageQueue(run).getCurrentSession();let response:any;if(session.phase==='feedback')response={kind:'continue'};else if(['meaning_choice','sound_choice'].includes(session.presentation)){const target=(await c.readLearning()).targets.find((t:any)=>t.id===session.targetId);const content=c.fourStageContent(target,pack);response={kind:'choice',optionId:content.recognitionAssessment.options.find((o:any)=>o.isCorrect).id};}else response={kind:'self_report',known:true};run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'protocol',response},'2026-09-11T04:00:00.000Z');}if(!run.completedAt)throw Error('runtime incomplete');await c.finishLearning(crypto.randomUUID(),run.id);return JSON.stringify(await c.readLearning());},{bytes,descriptor});
  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());assert.deepEqual(JSON.parse(await b.evaluate(async()=>JSON.stringify(await (window as any).core.readLearning()))),JSON.parse(progress));
  // New context (fresh local DB) obtains a complete usable library and media.
@@ -72,6 +72,7 @@ try{
  await fresh.evaluate(()=>{const w=window as any,original=w.request;w.request=async(path:string,body?:any)=>{if(path==='/blocks/fetch'){if(body.hashes.length>8)throw new Error('invalid_request');const value=await original(path,body);delete value.deferred;return value;}return original(path,body);};});
  await fresh.evaluate(()=>(window as any).sync());assert.deepEqual(JSON.parse(await fresh.evaluate(async()=>JSON.stringify(await (window as any).core.readLearning()))),JSON.parse(progress));
  assert.deepEqual(await fresh.evaluate(()=>(window as any).core.listDrafts()),await a.evaluate(()=>(window as any).core.listDrafts()));
+ assert.deepEqual(await fresh.evaluate(()=>(window as any).core.installedPackages()),await a.evaluate(()=>(window as any).core.installedPackages()),'package resources and embedded audio restore unchanged');
  const backup=await fresh.evaluate(async()=>{const c=(window as any).core;return (await c.exportLibraryBackup('sync-test-backup-password')).summary;});assert.equal(backup.targets,3);assert(backup.events>0);
  assert.equal((await fresh.evaluate(()=>(window as any).core.listMeanings())).length,1);assert.equal((await fresh.evaluate(()=>(window as any).core.personalLearningSnapshot()))[0].status,'ready');
  assert(!(await pool.query('SELECT data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[accountId])).rows.some(r=>r.data.includes('fixture-device-secret')),'BYOK credentials stay device-local');

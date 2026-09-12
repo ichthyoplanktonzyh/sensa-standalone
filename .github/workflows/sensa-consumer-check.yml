@@ -76,6 +76,8 @@ jobs:
           await client.query("CREATE ROLE sensa_ci_test LOGIN PASSWORD 'local-test-only'; GRANT backend_app TO sensa_ci_test; GRANT INSERT, UPDATE ON sensa_consumer.invitations TO sensa_ci_test;");
           await client.end();
           JS
+      - name: Install Chromium for database integration
+        run: npx playwright install --with-deps chromium
       - name: Node and browser database integration
         env:
           SENSA_FIXTURE_DATABASE_URL: ${{ env.DATABASE_URL }}
