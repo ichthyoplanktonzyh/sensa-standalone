@@ -2,9 +2,10 @@ import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 /** Connects the existing product screens to the local library; owns no page layout. */
 import {useEffect,useRef,useState} from 'react';
-import {captureSourceLink} from '@sensa/contracts/sensa';
+import {captureSourceLink,sensaCommandLanguages} from '@sensa/contracts/sensa';
 import {openLibrary,observeLibrary} from '../../data/library/store';
 import {listDrafts,saveDraft,type LocalDraft} from '../../data/library/drafts';
+import {languageProfileSnapshot} from '../../data/library/language';
 import {acceptTeacher,updateMeaningContext,continueTeacher,createTeacher,listMeanings,listTeachers,sayToTeacher,stopTeacher,type LocalMeaning,type TeacherSession} from '../../data/library/teacher';
 import {selectedProvider,type Provider} from '../../data/library/providers';
 import type {ContentScreenSource} from '../components/ContentScreen';
@@ -13,7 +14,7 @@ import {projectLocalWorld} from './projection';
 import type {ConversationImage} from '../../data/library/conversationImages';
 const errorText=(e:unknown)=>e instanceof Error&&e.message.startsWith('localFlow.')?e.message:localFlowText('operationFailed');
 export function useLocalMeaningLibrary(draftId:string|null, active:boolean,startRequest:{id:string;draftId:string}|null=null,onCreated?:(id:string)=>void){
- const {i18n}=useTranslation();
+ useTranslation();
  const [drafts,setDrafts]=useState<LocalDraft[]>([]),[sessions,setSessions]=useState<TeacherSession[]>([]),[meanings,setMeanings]=useState<LocalMeaning[]>([]);
  const [notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[loaded,setLoaded]=useState(false),[recipient,setRecipient]=useState<Provider|null>(null);
  const controller=useRef<AbortController|null>(null);
@@ -31,7 +32,8 @@ export function useLocalMeaningLibrary(draftId:string|null, active:boolean,start
  const source:Pick<ContentScreenSource,'items'|'status'|'reload'|'composer'>={items:projectLocalWorld(drafts,sessions,meanings),status:{ok:loaded,error:localFlowNotice(notice),errorKind:loaded?null:'unavailable'},reload:()=>void refresh().catch(e=>setNotice(errorText(e))),composer:{save:async input=>{const text=input.texts.join('\n\n')||input.familiarExpression;const d=await saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text,familiarExpression:input.familiarExpression,startingPoint:input.startingPoint});await refresh();return d.id;}}};
  const draft=drafts.find(d=>d.id===draftId);
  const session=sessions.filter(s=>s.draftId===draftId&&s.draftRevision===draft?.revision).at(-1);
- const run=async(id=session?.id)=>{if(!id)throw new Error('localFlow.checkSensa');const provider=await selectedProvider('teacher');const c=new AbortController();controller.current=c;try{await continueTeacher(id,provider,c.signal,()=>void refresh(),i18n.resolvedLanguage??'en');}finally{if(controller.current===c)controller.current=null;}};
+ /** The conversation's languages are the learner's, read once per turn. */
+ const run=async(id=session?.id)=>{if(!id)throw new Error('localFlow.checkSensa');const provider=await selectedProvider('teacher');const c=new AbortController();controller.current=c;try{const languages=sensaCommandLanguages((await languageProfileSnapshot()).profile);await continueTeacher(id,provider,c.signal,()=>void refresh(),languages);}finally{if(controller.current===c)controller.current=null;}};
  // Only a user navigation requests the first turn. A reload has no request,
  // and reopening a conversation with prior attempts never resumes it silently.
  useEffect(()=>{

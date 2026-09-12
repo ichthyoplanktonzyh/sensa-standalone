@@ -38,7 +38,7 @@ import type {
   SensaSenseSemanticSpec,
   SensaSenseVersionSnapshot,
 } from '@sensa/contracts/sensa';
-import { sensaIntakePayloadSchema, sensaIntakeSenseSchema } from '@sensa/contracts/sensa';
+import { sensaCommandLanguages, sensaIntakePayloadSchema, sensaIntakeSenseSchema } from '@sensa/contracts/sensa';
 import {
   createInboxItem,
   dismissInboxItem,
@@ -52,7 +52,6 @@ import { cryptoRandomIdPort, isUuid, type RandomIdPort } from './ids';
 import {
   LocalStoragePort,
   StorageUnavailableError,
-  commandLanguages,
   systemClock,
   type ClockPort,
   type CommandLanguages,
@@ -585,7 +584,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     // Read once, before any fact exists: the learner's own wording is written
     // in whatever language they think in, and that language cannot change
     // halfway through this command.
-    const languages = commandLanguages(await this.deps.languages.read());
+    const languages = sensaCommandLanguages(await this.deps.languages.read());
     const personalMeaningId = this.id();
     const personalMeaningRevisionId = this.id();
     const now = this.now();
@@ -712,7 +711,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     const replay = this.replay<AddMaterialBlockResult>(input.operationId, 'AddMaterialBlock');
     if (replay) return replay;
     const record = this.requireRecord(input.personalMeaningId);
-    const languages = commandLanguages(await this.deps.languages.read());
+    const languages = sensaCommandLanguages(await this.deps.languages.read());
     const anchorId = this.appendMaterialAnchor(
       record,
       input.operationId,
@@ -745,7 +744,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     if (replay) return replay;
     const state = this.requireState();
     const record = this.requireRecord(input.personalMeaningId);
-    const languages = commandLanguages(await this.deps.languages.read());
+    const languages = sensaCommandLanguages(await this.deps.languages.read());
 
     // Validate the whole intent before writing any fact: a rejected step must
     // leave the store exactly as it was.
@@ -1482,7 +1481,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     const outcome = executeFastTrack(
       state,
       { payload: parsed, operationId, authority: authority! },
-      this.enginePorts(commandLanguages(await this.deps.languages.read())),
+      this.enginePorts(sensaCommandLanguages(await this.deps.languages.read())),
     );
     this.state = outcome.nextState;
     this.settleExpressionBinding(
@@ -1526,7 +1525,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     const outcome = resolveInboxItemWithSense(
       state,
       { intakeId, sense, operationId, authority },
-      this.enginePorts(commandLanguages(await this.deps.languages.read())),
+      this.enginePorts(sensaCommandLanguages(await this.deps.languages.read())),
     );
     this.state = outcome.nextState;
     this.settleExpressionBinding(

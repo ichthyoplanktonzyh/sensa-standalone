@@ -257,6 +257,10 @@ export const createRealSemanticAgent = (): SemanticAgentPort => ({
         learnerEditedTracks: input.learnerEditedTracks,
         focusLocked: input.focusLocked,
         mode: input.mode,
+        // The agent writes an expression and an explanation in two different
+        // languages. Sending them is what lets the server stop assuming the
+        // English/Chinese pair; it decides nothing about the interface.
+        languages: input.languages,
       }),
     });
     if ((response.headers.get('content-type') ?? '').includes('text/event-stream')) {

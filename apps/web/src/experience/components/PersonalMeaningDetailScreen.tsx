@@ -39,6 +39,7 @@ import {
 } from '../personalMeaningJourney';
 import { newUuid } from '../personalMeaningJourney/ids';
 import { createRealSemanticAgent } from '../personalMeaningJourney/realSemanticAgent';
+import { languageProfileSnapshot } from '../../data/library/language';
 import {
   loadSemanticAgentSession,
   newSemanticAgentSession,
@@ -55,10 +56,11 @@ import type {
   SemanticAgentTurnMode,
   WorkingSetTrack,
 } from '../personalMeaningJourney/semanticAgent';
-import type {
-  SensaExpressionBindingRelation,
-  SensaExpressionType,
-  SensaSemanticCoverage,
+import {
+  sensaCommandLanguages,
+  type SensaExpressionBindingRelation,
+  type SensaExpressionType,
+  type SensaSemanticCoverage,
 } from '@sensa/contracts/sensa';
 
 export interface MeaningConversationController {
@@ -431,6 +433,9 @@ const PreviewPersonalMeaningDetailScreen = ({
           learnerEditedTracks: baseSession.learnerEditedTracks,
           focusLocked: baseSession.focusLocked,
           mode,
+          // Resolved once per turn from the learner's profile; the interface
+          // language is not consulted.
+          languages: sensaCommandLanguages((await languageProfileSnapshot()).profile),
         },
         (delta) => {
           pendingRef.current += delta;

@@ -108,6 +108,25 @@ export function sensaLearnerLocale(familiarLanguageTag: string): string {
 }
 
 /**
+ * The one language pair a single operation is about.
+ *
+ * An operation resolves this once, before it writes anything or calls a model:
+ * a learner switching their active target language in another tab must not
+ * split one operation's facts, prompts or material across two languages.
+ */
+export interface SensaCommandLanguages {
+  familiarLanguageTag: string;
+  targetLanguageTag: string;
+}
+
+export const sensaCommandLanguages = (
+  profile: SensaLanguageProfile,
+): SensaCommandLanguages => ({
+  familiarLanguageTag: profile.familiarLanguageTag,
+  targetLanguageTag: profile.activeTargetLanguageTag,
+});
+
+/**
  * One familiar language and the target languages being learned.
  *
  * `activeTargetLanguageTag` is the language the action surfaces act on — today's

@@ -1,12 +1,13 @@
 /** Actual Intake, teacher, provisioning and runtime functions; fake IDB and bounded model transport. */
 import assert from 'node:assert/strict';
+import {makeRequest,requestLanguages,generationSystem,independentReviewSystem,SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND} from '@sensa/contracts/sensa';
 import {indexedDB,IDBFactory} from 'fake-indexeddb';
 import {build} from 'esbuild';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
-const compiled=await build({stdin:{contents:['store','intake','teacher','providers','personalLearning','learning','drafts','backup','packages','backupValidation','dataControl'].map(n=>`export * from './apps/web/src/data/library/${n}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':'{}'}});
+const compiled=await build({stdin:{contents:['store','intake','teacher','providers','personalLearning','learning','drafts','backup','packages','backupValidation','dataControl','language'].map(n=>`export * from './apps/web/src/data/library/${n}';`).join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':'{}'}});
 Object.assign(globalThis,{indexedDB,window:new EventTarget(),location:{origin:'http://127.0.0.1:9998'},BroadcastChannel:undefined});
 const temp=await mkdtemp(join(tmpdir(),'sensa-personal-'));await writeFile(join(temp,'core.mjs'),compiled.outputFiles[0]!.text);
 const api=await import(pathToFileURL(join(temp,'core.mjs')).href);
@@ -23,10 +24,13 @@ const realFetch=globalThis.fetch;globalThis.fetch=async(_url,input)=>{const body
  value={model:'fixture',choices:[{finish_reason:'stop',message:{content:JSON.stringify(result)}}]};}
  return new Response(JSON.stringify(value),{headers:{'content-type':'application/json'}});};
 const prepare=async(meaningId:string)=>api.preparePersonal(meaningId,provider,await api.selectedReviewProvider(),new AbortController().signal,()=>{});
+/** The learner's pair: the shipped one here, so recorded material keeps the
+ * shape production already has while the seam itself is exercised. */
+const languages={familiarLanguageTag:'zh-CN',targetLanguageTag:'en'};
 assert.equal(await api.selectedReviewProvider(),null);
 
 try{
- const slow=raw();await api.receiveWebIntake(accountId,slow);await assert.rejects(api.enrollPersonal(id(),slow.operationId,false));const draft=await api.readLibrary((tx:any)=>tx.get('drafts',slow.operationId));let session=await api.createTeacher(id(),draft);await api.continueTeacher(session.id,provider,new AbortController().signal,()=>{});session=await api.getTeacher(session.id);assert.equal(session.status,'waiting');await api.sayToTeacher(id(),session.id,session.revision,'是的，需要归还。');await api.continueTeacher(session.id,provider,new AbortController().signal,()=>{});session=await api.getTeacher(session.id);assert.equal(session.status,'proposal');assert.equal((await api.readLearning()).targets.length,0);
+ const slow=raw();await api.receiveWebIntake(accountId,slow);await assert.rejects(api.enrollPersonal(id(),slow.operationId,false));const draft=await api.readLibrary((tx:any)=>tx.get('drafts',slow.operationId));let session=await api.createTeacher(id(),draft);await api.continueTeacher(session.id,provider,new AbortController().signal,()=>{},languages);session=await api.getTeacher(session.id);assert.equal(session.status,'waiting');await api.sayToTeacher(id(),session.id,session.revision,'是的，需要归还。');await api.continueTeacher(session.id,provider,new AbortController().signal,()=>{},languages);session=await api.getTeacher(session.id);assert.equal(session.status,'proposal');assert.equal((await api.readLearning()).targets.length,0);
  const meaning=await api.acceptTeacher(id(),session.id,session.revision);assert.equal((await api.personalLearningSnapshot()).length,0);await api.enrollPersonal(id(),meaning.id,false);await api.enrollPersonal(id(),meaning.id,false);assert.equal((await api.personalLearningSnapshot()).length,1);assert.equal((await api.readLearning()).targets.length,0);
  const defaultBefore=calls.length;mode='leak';await prepare(meaning.id);
  assert.equal(calls.length-defaultBefore,3,'Rejected candidates exhaust the bounded generator feedback loop without model review');
@@ -68,7 +72,7 @@ try{
   packageRun=await api.actLearning(id(),packageRun.id,packageRun.revision,{kind:'reveal'},due);packageRun=await api.actLearning(id(),packageRun.id,packageRun.revision,{kind:'rate',rating:'again'},due);await api.finishLearning(id(),packageRun.id);
   const relearnAt=(await api.readLearning()).targets.find((t:any)=>t.id===packageTarget).relearnAt;packageRun=await api.startLearning(id(),packageTarget,20,relearnAt);packageRun=await api.actLearning(id(),packageRun.id,packageRun.revision,{kind:'reveal'},relearnAt);
   const inFlightDraft=await api.saveDraft(id(),{id:id(),expectedRevision:0,text:'An interrupted clarification'}),inFlightSession=await api.createTeacher(id(),inFlightDraft);
-  holdTeacher=true;const teacherArrived=new Promise<void>(resolve=>{arrived=resolve;});const teacherWork=api.continueTeacher(inFlightSession.id,provider,new AbortController().signal,()=>{});await teacherArrived;
+  holdTeacher=true;const teacherArrived=new Promise<void>(resolve=>{arrived=resolve;});const teacherWork=api.continueTeacher(inFlightSession.id,provider,new AbortController().signal,()=>{},languages);await teacherArrived;
   const password='local-backup-test-password', exported=await api.exportLibraryBackup(password);
   assert.equal(exported.summary.interrupted,1);await api.stopTeacher(id(),inFlightSession.id,(await api.getTeacher(inFlightSession.id)).revision);release!();await assert.rejects(teacherWork);holdTeacher=false;
   const sourceRows=await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));
@@ -118,5 +122,37 @@ try{
   console.log('PASS: local erasure preview CAS, full transaction rollback, stale-page and late-download fences, new empty library and backup restore.');
   console.log('PASS: encrypted backup, wrong password/corruption, account and occupied-library guards, transaction rollback, fresh-library restore, preserved runtime dates/facts and new device identity.');
  }
+ // The clarification and content prompts name the learner's languages instead of
+ // the pair the product shipped first. The interface language is not consulted.
+ {
+  await api.addTargetLanguage(id(),'es');
+  await api.setActiveTargetLanguage(id(),'es');
+  const spanish={familiarLanguageTag:'zh-CN',targetLanguageTag:'es'};
+  const talk=raw();await api.receiveWebIntake(accountId,talk);
+  const talkDraft=await api.readLibrary((tx:any)=>tx.get('drafts',talk.operationId));
+  const talkSession=await api.createTeacher(id(),talkDraft);
+  const before=calls.length;
+  await api.continueTeacher(talkSession.id,provider,new AbortController().signal,()=>{},spanish);
+  const turn=calls.slice(before).find((body:any)=>body.tools);
+  const systemPrompt=String(turn.messages[0].content);
+  assert(systemPrompt.includes('natural Spanish expression'),'the clarification prompt names the target language the learner is learning');
+  assert(!systemPrompt.includes('natural English expression'),'the shipped target language is not baked into the prompt');
+  assert(systemPrompt.includes('in Chinese (Simplified).'),'the explanation language is the familiar language, named separately from the target language');
+  assert(!/Respond in/u.test(systemPrompt),'the interface language no longer decides what the model writes in');
+  // A proposal in the wrong language is refused rather than recorded as a
+  // meaning whose language contradicts its own material.
+  const mismatched=await api.getTeacher(talkSession.id);
+  assert.equal(mismatched.status,'proposal');
+  await assert.rejects(api.acceptTeacher(id(),talkSession.id,mismatched.revision),/localFlow\.expressionLanguageChanged/u);
+
+  const request=await makeRequest({id:id(),learner_user_id:accountId,learning_target_id:id(),fixed_input:{targetLanguageTag:'es',familiarLanguageTag:'zh-CN',senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),planRevision:'fixture:1',expression:'tomar prestado',expressionKind:'phrase',meaning:'临时取得他人物品，并预期归还。',prototype:'一个人向同伴借用物品。',demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND}},id(),new Date());
+  assert.deepEqual(requestLanguages(request),spanish,'the frozen request is where a sense’s languages are read back from, not the live profile');
+  assert(generationSystem(true,spanish).includes('转述为中文（简体）释义'),'the personal prompt names the familiar language in the language it is written in');
+  assert(generationSystem(true,spanish).includes('绝不出现西班牙语目标表达'),'the personal prompt names the target language too, so leakage in that language is refused');
+  assert(generationSystem(false,spanish).includes('Chinese (Simplified) recall cue'),'the generic English prompt names the familiar language in English');
+  assert(generationSystem(false,spanish).includes('the Spanish target'),'the generic English prompt names the target language in English');
+  assert(independentReviewSystem(spanish).includes('Spanish target-expression leakage'),'the independent reviewer is told which language counts as leakage');
+ }
  console.log('PASS: slow Intake/clarification/acceptance, fast acceptance, explicit membership/consent, separate generation/review, rejected material blocked, saved-candidate retry, cancellation fencing, atomic publication rollback and shared local runtime. Fake IDB/HTTP; no paid models.');
+ console.log('PASS: clarification and content prompts name the learner’s target and familiar languages from the profile and the frozen request, refuse a proposal in the wrong language, and never consult the interface language.');
 }finally{globalThis.fetch=realFetch;await rm(temp,{recursive:true,force:true});}

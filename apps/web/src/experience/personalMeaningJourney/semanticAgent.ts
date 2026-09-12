@@ -18,6 +18,7 @@
  */
 
 import type {
+  SensaCommandLanguages,
   SensaExpressionBindingRelation,
   SensaExpressionType,
   SensaSemanticCoverage,
@@ -145,6 +146,13 @@ export interface SemanticAgentTurnInput {
    * consolidate — the model only says it is ready, in prose.
    */
   mode: SemanticAgentTurnMode;
+  /**
+   * The languages this turn is about. The agent proposes an expression in the
+   * target language and explains the sense in the familiar language, so the
+   * caller resolves the learner's profile once per turn and hands it over.
+   * The interface language is not part of this and never reaches the model.
+   */
+  languages: SensaCommandLanguages;
 }
 
 export type SemanticAgentTurnMode = 'chat' | 'consolidate';

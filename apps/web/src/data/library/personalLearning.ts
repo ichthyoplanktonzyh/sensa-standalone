@@ -1,7 +1,7 @@
 import {generateLearningCandidate,type ContentGenerationStep} from './contentGenerationLoop';
 import {z} from 'zod';
 import {stableUuid} from '@sensa/learning-kernel';
-import {makeRequest,validateBundle,modelFacts,independentReviewSystem,SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,canonicalConsumerJson,type SensaContentGenerationRequest,type SensaMaterialCandidateBundle,type ContentReviewer} from '@sensa/contracts/sensa';
+import {makeRequest,validateBundle,modelFacts,independentReviewSystem,requestLanguages,SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,canonicalConsumerJson,type SensaContentGenerationRequest,type SensaMaterialCandidateBundle,type ContentReviewer} from '@sensa/contracts/sensa';
 import {command,readLibrary,type LibraryTransaction} from './store';
 import {learningOwner} from './packages';
 import {commitPersonalMaterial,type LocalLearningTarget} from './learning';
@@ -56,7 +56,7 @@ export async function preparePersonal(id:string,contentProvider:Provider,reviewP
   let {request,bundle,grant}=begun.attempt;const m=begun.task.meaning;
   if(!request||!bundle){
    grant=begun.task.useContext?{id:crypto.randomUUID(),contextDigest:await digest({text:m.context,images:m.contextImages??[]}),recipients:[...new Set([contentProvider.endpoint,...(reviewProvider?[reviewProvider.endpoint]:[])])]}:null;
-   request=await makeRequest({id,learner_user_id:begun.owner.learnerId,learning_target_id:begun.task.targetId,fixed_input:{senseId:m.senseId,senseVersionId:m.senseVersionId,bindingId:m.bindingId,bindingVersionId:m.bindingVersionId,planRevision:begun.task.planRevision,expression:m.proposal.expression.surface,expressionKind:m.proposal.expression.type==='word'?'word':'phrase',meaning:m.proposal.semanticSpec.coreMeaningFocus,prototype:m.proposal.semanticSpec.prototypeScenes[0].summary,...(grant?{anchor:{sentence:m.context,images:m.contextImages??[],contextVersion:grant.contextDigest,grantId:grant.id}}:{}),demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND}},attemptId,new Date());
+   request=await makeRequest({id,learner_user_id:begun.owner.learnerId,learning_target_id:begun.task.targetId,fixed_input:{...(m.targetLanguageTag?{targetLanguageTag:m.targetLanguageTag}:{}),...(m.familiarLanguageTag?{familiarLanguageTag:m.familiarLanguageTag}:{}),senseId:m.senseId,senseVersionId:m.senseVersionId,bindingId:m.bindingId,bindingVersionId:m.bindingVersionId,planRevision:begun.task.planRevision,expression:m.proposal.expression.surface,expressionKind:m.proposal.expression.type==='word'?'word':'phrase',meaning:m.proposal.semanticSpec.coreMeaningFocus,prototype:m.proposal.semanticSpec.prototypeScenes[0].summary,...(grant?{anchor:{sentence:m.context,images:m.contextImages??[],contextVersion:grant.contextDigest,grantId:grant.id}}:{}),demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND}},attemptId,new Date());
    request={...request,attemptBudget:{...request.attemptBudget,maxModelTurns:3}};
    await save(async(_tx,_task,a)=>{a.request=request;a.grant=grant;});
    bundle=await generateLearningCandidate(request,contentProvider,!!grant,runSignal,async step=>{await save(async(_tx,_task,a)=>{a.generationSteps=[...(a.generationSteps??[]),step];});});
@@ -65,7 +65,7 @@ export async function preparePersonal(id:string,contentProvider:Provider,reviewP
   let review:ContentAttempt['review']=null;
   if(reviewProvider){
   const {images:reviewImages,...reviewCue}=bundle.candidates.find(c=>c.materialRoleKey==='experience_recall_cue')!.contentPayload;
-  const reviewed=await complete(reviewProvider,'review',crypto.randomUUID(),[{role:'system',content:independentReviewSystem+' The candidate may use attached context images and offline declarative HTML to evoke experience. Judge the combined content. scene may be empty when images or interaction convey it. No image OCR or cropping requirement is imposed.'},{role:'user',images:reviewImages as import('./conversationImages').ConversationImage[]|undefined,content:JSON.stringify({facts:modelFacts(request),cue:reviewCue})}],[],runSignal);
+  const reviewed=await complete(reviewProvider,'review',crypto.randomUUID(),[{role:'system',content:independentReviewSystem(requestLanguages(request))+' The candidate may use attached context images and offline declarative HTML to evoke experience. Judge the combined content. scene may be empty when images or interaction convey it. No image OCR or cropping requirement is imposed.'},{role:'user',images:reviewImages as import('./conversationImages').ConversationImage[]|undefined,content:JSON.stringify({facts:modelFacts(request),cue:reviewCue})}],[],runSignal);
   const message=reviewed.choices[0]!.message;if(message.tool_calls?.length)throw new Error('localFlow.reviewToolDenied');
   review={...z.object({accepted:z.boolean(),reason:z.string().max(2000)}).strict().parse(JSON.parse(message.content??'null')),provider:reviewProvider.id,model:reviewed.model};
   }

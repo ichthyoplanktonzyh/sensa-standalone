@@ -1,4 +1,4 @@
-import type { SensaLanguageProfile } from '@sensa/contracts/sensa';
+import type { SensaLanguageProfile, SensaCommandLanguages } from '@sensa/contracts/sensa';
 import { previewStorage } from '../services/previewStorage';
 /**
  * Low-level ports the Personal Meaning journey gateway depends on. React
@@ -102,15 +102,7 @@ export interface LearnerLanguagePort {
   read(): Promise<SensaLanguageProfile>;
 }
 
-/** The one language pair a single command is about. */
-export interface CommandLanguages {
-  familiarLanguageTag: string;
-  targetLanguageTag: string;
-}
-
-export const commandLanguages = (
-  profile: SensaLanguageProfile,
-): CommandLanguages => ({
-  familiarLanguageTag: profile.familiarLanguageTag,
-  targetLanguageTag: profile.activeTargetLanguageTag,
-});
+/** The one language pair a single command is about. The pair itself belongs to
+ * the language profile, so it is defined there and used by every surface that
+ * has to name a language, not only this journey. */
+export type CommandLanguages = SensaCommandLanguages;

@@ -2,9 +2,13 @@ import {z} from 'zod';
 import {captureSnapshotSchema} from './intake.js';
 import {sensaSenseSemanticSpecSchema,sensaExpressionTypeSchema} from '../semanticRegistry.js';
 const id=z.string().uuid(),instant=z.string().datetime({offset:true});
+// The proposed expression is written in the target language of the operation
+// that asked for it, so the language is a tag rather than a literal. The
+// consumer that issued the lookup knows which language it asked for and is the
+// one that can reject a mismatch; this schema only refuses an empty tag.
 export const semanticProposalSchema=z.object({
  explanation:z.string().trim().min(1).max(2000),semanticSpec:sensaSenseSemanticSpecSchema,
- expression:z.object({surface:z.string().trim().min(1).max(2000),type:sensaExpressionTypeSchema,language:z.literal('en')}).strict(),
+ expression:z.object({surface:z.string().trim().min(1).max(2000),type:sensaExpressionTypeSchema,language:z.string().trim().min(1).max(35)}).strict(),
 }).strict().superRefine((v,c)=>{if(v.semanticSpec.openQuestions.length)c.addIssue({code:'custom',message:'Unresolved questions cannot form an acceptable proposal'});if(JSON.stringify(v).length>16000)c.addIssue({code:'custom',message:'Proposal too large'});});
 export const semanticClarificationSchema=z.object({previousLookupId:id,text:z.string().trim().min(1).max(2000)}).strict();
 export const meaningFocusSchema=z.object({id,constructionId:id,previousLookupId:id,text:z.string().trim().min(1).max(2000)}).strict();
