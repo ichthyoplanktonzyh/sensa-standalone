@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import type {Hono} from 'hono';
 import type {DatabaseExecutor} from '../../database/core.js';
-import {librarySyncHash,librarySyncCommit,librarySyncManifest,librarySyncBlockFetch,librarySyncBlockMissing,librarySyncBlockStore,librarySyncBlockStoreChars,type LibrarySyncManifest} from '@sensa/contracts/sensa';
+import {librarySyncHash,librarySyncCommit,librarySyncManifest,librarySyncBlockFetch,librarySyncBlockFetchBytes,librarySyncBlockMissing,librarySyncBlockStore,librarySyncBlockStoreChars,type LibrarySyncManifest} from '@sensa/contracts/sensa';
 import {ConsumerError} from '../access/auth.js';
 type Access=<T>(request:Request,work:(db:DatabaseExecutor,a:{accountId:string;installationId?:string;now?:Date})=>Promise<T>)=>Promise<T>;
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
@@ -10,6 +10,8 @@ export function registerLibrarySync(app:Hono,access:Access){
  app.use('/sensa/library-sync/*',async(c,next)=>{c.header('Cache-Control','no-store');await next();});
  const use:Access=(request,work)=>access(request,(db,a)=>{if(a.installationId)throw new ConsumerError(403,'web_authorization_required');return work(db,a);});
  const current=async(db:DatabaseExecutor,id:string)=>{await db.query('INSERT INTO sensa_consumer.library_cloud(account_id) VALUES($1) ON CONFLICT DO NOTHING',[id]);return (await db.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1 FOR UPDATE',[id])).rows[0]!;};
+ /** Published history is compared by stored content, so a client may repack its blocks. */
+ const rowContent=async(db:DatabaseExecutor,id:string,refs:string[]):Promise<string>=>{const rows=(await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[id,refs])).rows;const byHash=new Map(rows.map(r=>[r.hash as string,r.data as string]));if(refs.some(r=>!byHash.has(r)))throw conflict('library_sync_missing_block');const digest=createHash('sha256');for(const ref of refs)digest.update(byHash.get(ref)!);return digest.digest('hex');};
  async function manifest(db:DatabaseExecutor,id:string,refs:string[]):Promise<LibrarySyncManifest>{
   const blocks=(await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[id,refs])).rows;
   const byHash=new Map(blocks.map(b=>[b.hash,b.data]));if(refs.some(r=>!byHash.has(r)))throw conflict('library_sync_missing_block');
@@ -19,7 +21,22 @@ export function registerLibrarySync(app:Hono,access:Access){
  app.post('/sensa/library-sync/blocks/missing',async c=>{const input=librarySyncBlockMissing.parse(await c.req.json());return c.json(await use(c.req.raw,async(db,a)=>{const found=(await db.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,input.hashes])).rows;const have=new Set(found.map(r=>r.hash));return {missing:input.hashes.filter(h=>!have.has(h))};}));});
  // Restore reads one bounded page of blocks per request, so a first download is a
  // handful of round trips instead of one HTTP request per content-addressed block.
- app.post('/sensa/library-sync/blocks/fetch',async c=>{const input=librarySyncBlockFetch.parse(await c.req.json());return c.json(await use(c.req.raw,async(db,a)=>{const rows=(await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,input.hashes])).rows;const byHash=new Map(rows.map(r=>[r.hash as string,r.data as string]));return {blocks:input.hashes.filter(h=>byHash.has(h)).map(h=>({hash:h,data:byHash.get(h)!})),missing:input.hashes.filter(h=>!byHash.has(h))};}));});
+ app.post('/sensa/library-sync/blocks/fetch',async c=>{const input=librarySyncBlockFetch.parse(await c.req.json());return c.json(await use(c.req.raw,async(db,a)=>{
+  // Select the page from inexpensive lengths before loading block bodies. Otherwise a
+  // 512-hash request could materialize roughly 128 MiB just to return a 4 MiB page.
+  const measured=(await db.query('SELECT hash,octet_length(data)::int bytes FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,input.hashes])).rows;
+  const sizes=new Map(measured.map(r=>[r.hash as string,Number(r.bytes)]));
+  // A restore is bounded by bytes per response, so a library stored as many small
+  // blocks (an older client) costs the same number of round trips as a packed one.
+  const selected:string[]=[],missing:string[]=[],deferred:string[]=[];let bytes=0;
+  for(const hash of input.hashes){const size=sizes.get(hash);if(size===undefined){missing.push(hash);continue;}if(selected.length&&bytes+size>librarySyncBlockFetchBytes){deferred.push(hash);continue;}selected.push(hash);bytes+=size;}
+  const rows=selected.length?(await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,selected])).rows:[];
+  const byHash=new Map(rows.map(r=>[r.hash as string,r.data as string]));
+  if(selected.some(hash=>!byHash.has(hash)))throw conflict('library_sync_missing_block');
+  const blocks=selected.map(hash=>({hash,data:byHash.get(hash)!}));
+  // Omit an empty deferred page so an already-open client using the previous strict
+  // response schema can keep syncing while the Web and API release rolls forward.
+  return deferred.length?{blocks,missing,deferred}:{blocks,missing};}));});
  app.post('/sensa/library-sync/blocks/store',async c=>{const input=librarySyncBlockStore.parse(await c.req.json());if(input.blocks.reduce((total,block)=>total+block.data.length,0)>librarySyncBlockStoreChars)throw new ConsumerError(413,'body_too_large');for(const block of input.blocks)if(hash(block.data)!==block.hash)throw new ConsumerError(400,'library_sync_hash');return c.json(await use(c.req.raw,async(db,a)=>{await current(db,a.accountId);
   const hashes=input.blocks.map(b=>b.hash);
   const stored=new Map((await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,hashes])).rows.map(r=>[r.hash as string,r.data as string]));
@@ -44,7 +61,9 @@ export function registerLibrarySync(app:Hono,access:Access){
   if(head.manifest){const old=await manifest(db,a.accountId,head.manifest);if(old.libraryId!==next.libraryId||old.learnerId!==next.learnerId)throw conflict('library_sync_identity');
    const byKey=new Map(next.rows.map(r=>[JSON.stringify([r.table,r.key]),r]));
    // Learning facts are never silently deleted or rewritten by snapshot publication.
-   for(const row of old.rows)if(row.table==='learningEvents'||row.table==='operations'){const replacement=byKey.get(JSON.stringify([row.table,row.key]));if(!replacement||JSON.stringify(row.blocks)!==JSON.stringify(replacement.blocks))throw conflict('library_sync_history');}
+   for(const row of old.rows)if(row.table==='learningEvents'||row.table==='operations'){const replacement=byKey.get(JSON.stringify([row.table,row.key]));if(!replacement)throw conflict('library_sync_history');
+    // Repacking the same published history is allowed; changing its content is not.
+    if(JSON.stringify(row.blocks)!==JSON.stringify(replacement.blocks)&&await rowContent(db,a.accountId,row.blocks)!==await rowContent(db,a.accountId,replacement.blocks))throw conflict('library_sync_history');}
   }
   const revision=head.revision+1;
   await db.query('UPDATE sensa_consumer.library_cloud SET revision=$2,manifest=$3::jsonb,updated_at=now() WHERE account_id=$1',[a.accountId,revision,JSON.stringify(input.manifest)]);

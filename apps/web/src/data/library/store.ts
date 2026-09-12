@@ -20,13 +20,15 @@ function open(){
 }
 const result=<T>(request:IDBRequest<T>)=>new Promise<T>((resolve,reject)=>{request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
 export class LibraryTransaction {
+ /** A transaction that changes nothing must not announce a change to its listeners. */
+ wrote=false;
  constructor(private tx:IDBTransaction){}
  get<T>(table:Table,key:IDBValidKey){return result(this.tx.objectStore(table).get(key)) as Promise<T|undefined>;}
  entries(table:Table){const store=this.tx.objectStore(table);return Promise.all([result(store.getAllKeys()),result(store.getAll())]).then(([keys,values])=>keys.map((key,i)=>({key,value:values[i]})));}
  all<T>(table:Table){return result(this.tx.objectStore(table).getAll()) as Promise<T[]>;}
- put(table:Table,key:IDBValidKey,value:unknown){this.tx.objectStore(table).put(value,key);}
- clear(table:Table){this.tx.objectStore(table).clear();}
- delete(table:Table,key:IDBValidKey){this.tx.objectStore(table).delete(key);}
+ put(table:Table,key:IDBValidKey,value:unknown){this.wrote=true;this.tx.objectStore(table).put(value,key);}
+ clear(table:Table){this.wrote=true;this.tx.objectStore(table).clear();}
+ delete(table:Table,key:IDBValidKey){this.wrote=true;this.tx.objectStore(table).delete(key);}
 }
 /** Only local IDB requests belong in work; network and hashing must finish before entry. */
 async function transaction<T>(mode:IDBTransactionMode,work:(tx:LibraryTransaction)=>Promise<T>,kind:'content'|'state'='content'):Promise<T>{
@@ -35,8 +37,9 @@ async function transaction<T>(mode:IDBTransactionMode,work:(tx:LibraryTransactio
   let tx:IDBTransaction;
   try{tx=db.transaction([...libraryTables],mode);}catch{reject(new Error('localFlow.storageUnavailable'));return;}
   let value:T,failed:unknown;
+  const library=new LibraryTransaction(tx);
   tx.oncomplete=()=>{
-   if(mode==='readwrite'){
+   if(mode==='readwrite'&&library.wrote){
     // Sync bookkeeping is not learner content. It announces itself separately so the
     // change that published it cannot schedule the next sync pass.
     if(kind==='state')window.dispatchEvent(new Event('sensa-sync-state-changed'));
@@ -46,7 +49,7 @@ async function transaction<T>(mode:IDBTransactionMode,work:(tx:LibraryTransactio
   };
   const fail=()=>{const cause=failed??tx.error;reject(cause instanceof DOMException&&cause.name==='QuotaExceededError'?new Error('localFlow.storageFull'):cause??new Error('localFlow.storageWrite'));};
   tx.onerror=fail;tx.onabort=fail;
-  work(new LibraryTransaction(tx)).then(v=>{value=v;},e=>{failed=e;try{tx.abort();}catch{reject(e);}});
+  work(library).then(v=>{value=v;},e=>{failed=e;try{tx.abort();}catch{reject(e);}});
  });
 }
 /** Reserved for validated full-library restore; it remains one transaction. */

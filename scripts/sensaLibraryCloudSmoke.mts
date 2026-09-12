@@ -66,7 +66,11 @@ try{
  const progress=await a.evaluate(async({bytes,descriptor})=>{const c=(window as any).core;const pack=await c.installPackage(new Uint8Array(bytes),descriptor),ids=await c.enrollPackage(crypto.randomUUID(),pack.key);for(const id of ids)await c.selectLocalLearningPolicy(crypto.randomUUID(),id,'interleaved_four_stage');await c.confirmLearningQuantity(crypto.randomUUID(),20);let run=await c.startLearning(crypto.randomUUID(),ids[0],20,'2026-09-11T04:00:00.000Z');let steps=0;while(!run.completedAt&&steps++<60){const session=c.fourStageQueue(run).getCurrentSession();let response:any;if(session.phase==='feedback')response={kind:'continue'};else if(['meaning_choice','sound_choice'].includes(session.presentation)){const target=(await c.readLearning()).targets.find((t:any)=>t.id===session.targetId);const content=c.fourStageContent(target,pack);response={kind:'choice',optionId:content.recognitionAssessment.options.find((o:any)=>o.isCorrect).id};}else response={kind:'self_report',known:true};run=await c.actLearning(crypto.randomUUID(),run.id,run.revision,{kind:'protocol',response},'2026-09-11T04:00:00.000Z');}if(!run.completedAt)throw Error('runtime incomplete');await c.finishLearning(crypto.randomUUID(),run.id);return JSON.stringify(await c.readLearning());},{bytes,descriptor});
  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());assert.deepEqual(JSON.parse(await b.evaluate(async()=>JSON.stringify(await (window as any).core.readLearning()))),JSON.parse(progress));
  // New context (fresh local DB) obtains a complete usable library and media.
- const fresh=await client(accountId);await fresh.evaluate(()=>(window as any).sync());assert.deepEqual(JSON.parse(await fresh.evaluate(async()=>JSON.stringify(await (window as any).core.readLearning()))),JSON.parse(progress));
+ const fresh=await client(accountId);
+ // A new Web bundle may briefly meet the previous API during a rolling release.
+ // That API accepts eight hashes and omits the deferred field.
+ await fresh.evaluate(()=>{const w=window as any,original=w.request;w.request=async(path:string,body?:any)=>{if(path==='/blocks/fetch'){if(body.hashes.length>8)throw new Error('invalid_request');const value=await original(path,body);delete value.deferred;return value;}return original(path,body);};});
+ await fresh.evaluate(()=>(window as any).sync());assert.deepEqual(JSON.parse(await fresh.evaluate(async()=>JSON.stringify(await (window as any).core.readLearning()))),JSON.parse(progress));
  assert.deepEqual(await fresh.evaluate(()=>(window as any).core.listDrafts()),await a.evaluate(()=>(window as any).core.listDrafts()));
  const backup=await fresh.evaluate(async()=>{const c=(window as any).core;return (await c.exportLibraryBackup('sync-test-backup-password')).summary;});assert.equal(backup.targets,3);assert(backup.events>0);
  assert.equal((await fresh.evaluate(()=>(window as any).core.listMeanings())).length,1);assert.equal((await fresh.evaluate(()=>(window as any).core.personalLearningSnapshot()))[0].status,'ready');
@@ -109,18 +113,31 @@ try{
   await ui.screenshot({path:'/tmp/sensa-account-cloud-sync.png',fullPage:true});await ui.locator('select:visible').first().selectOption('en');await expect(ui.getByRole('heading',{name:'Account sync',exact:true})).toBeVisible();await expect(ui.getByRole('button',{name:'Sync now',exact:true})).toBeEnabled();await ui.setViewportSize({width:390,height:844});assert(await ui.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await ui.screenshot({path:'/tmp/sensa-account-cloud-sync-en.png',fullPage:true});assert.deepEqual(errors,[]);
   console.log('PASS: formal AccountExperience login restores cloud library and original Profile shows sync status');await ctx.close();
  }
- // Server rejects a new snapshot that rewrites an already published learning fact.
+ // Repacking published history into different block sizes is a transport detail, not a rewrite.
+ const stored=new Map<string,string>();
+ const refresh=async()=>{const rows=(await pool.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[accountId])).rows;stored.clear();for(const row of rows)stored.set(row.hash,row.data);};
+ await refresh();
  const post=async(path:string,body:unknown)=>fetch(origin+'/sensa/'+path,{method:'POST',headers:{authorization:'Bearer first','content-type':'application/json'},body:JSON.stringify(body)});
- const head=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0];
- const stored=new Map((await pool.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[accountId])).rows.map(r=>[r.hash,r.data]));
- const manifest=JSON.parse(head.manifest.map((h:string)=>stored.get(h)).join(''));
+ const readHead=async()=>{const row=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0];const refs=row.manifest as string[];const blocks=new Map((await pool.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[accountId,refs])).rows.map(r=>[r.hash,r.data]));if(refs.some(h=>!blocks.has(h)))throw Error('head manifest references a missing block');return {revision:Number(row.revision),manifest:JSON.parse(refs.map(h=>blocks.get(h)).join(''))};};
+ const publish=async(manifest:any,baseRevision:number,chunk:number)=>{
+  const rewritten=new Map<string,string>();
+  for(const row of manifest.rows){const text=row.blocks.map((h:string)=>stored.get(h)).join(''),refs:string[]=[];
+   for(let at=0;at<text.length;at+=chunk){const data=text.slice(at,at+chunk),hash=createHash('sha256').update(data).digest('hex');rewritten.set(hash,data);refs.push(hash);}
+   if(!refs.length){const hash=createHash('sha256').update('').digest('hex');rewritten.set(hash,'');refs.push(hash);}
+   row.blocks=refs;}
+  const text=JSON.stringify(manifest),refs:string[]=[];
+  for(let at=0;at<text.length;at+=chunk){const data=text.slice(at,at+chunk),hash=createHash('sha256').update(data).digest('hex');rewritten.set(hash,data);refs.push(hash);}
+  const blocks=[...rewritten].map(([hash,data])=>({hash,data}));
+  for(let at=0;at<blocks.length;at+=librarySyncBlockStoreBatch)assert.equal((await post('library-sync/blocks/store',{blocks:blocks.slice(at,at+librarySyncBlockStoreBatch)})).status,200);
+  return post('library-sync/commit',{operationId:crypto.randomUUID(),baseRevision,manifest:refs});};
+ let head=await readHead();
+ const priorRevision=head.revision;
+ const repacked=await publish(JSON.parse(JSON.stringify(head.manifest)),priorRevision,8192);assert.equal(repacked.status,200,'repacking published history must be accepted');
+ head=await readHead();assert.equal(head.revision,priorRevision+1);await refresh();
+ // Server rejects a new snapshot that rewrites an already published learning fact.
+ const manifest=JSON.parse(JSON.stringify(head.manifest));
  const event=manifest.rows.find((r:any)=>r.table==='learningEvents');event.blocks=manifest.rows.find((r:any)=>r.table==='drafts').blocks;
- const text=JSON.stringify(manifest),refs:string[]=[];
- const rewritten:{hash:string;data:string}[]=[];
- for(let at=0;at<text.length;at+=librarySyncBlockChars){const data=text.slice(at,at+librarySyncBlockChars);rewritten.push({hash:createHash('sha256').update(data).digest('hex'),data});}
- refs.push(...rewritten.map(block=>block.hash));
- for(let at=0;at<rewritten.length;at+=librarySyncBlockStoreBatch)assert.equal((await post('library-sync/blocks/store',{blocks:rewritten.slice(at,at+librarySyncBlockStoreBatch)})).status,200);
- const rejected=await post('library-sync/commit',{operationId:crypto.randomUUID(),baseRevision:head.revision,manifest:refs});assert.equal(rejected.status,409);assert.equal((await rejected.json() as any).code,'library_sync_history');
+ const rejected=await publish(manifest,head.revision,librarySyncBlockChars);assert.equal(rejected.status,409);assert.equal((await rejected.json() as any).code,'library_sync_history');
  assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0].revision,head.revision);
  const deletion=await post('account/deletion',{operationId:crypto.randomUUID(),confirmation:'delete-account'});assert.equal(deletion.status,200);
  for(const table of ['library_cloud','library_cloud_blocks','library_cloud_commits'])assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.'+table+' WHERE account_id=$1',[accountId])).rows[0].n,0);

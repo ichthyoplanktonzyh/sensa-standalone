@@ -1,4 +1,4 @@
-import {librarySyncManifest,librarySyncHead,librarySyncTables,librarySyncBlockChars,librarySyncBlockFetchBatch,librarySyncBlockFetchResult,librarySyncBlockMissingResult,librarySyncBlockStore,librarySyncBlockStoreBatch,librarySyncBlockStoreChars,type LibrarySyncManifest,type LibrarySyncHead} from '@sensa/contracts/sensa';
+import {librarySyncManifest,librarySyncHead,librarySyncTables,librarySyncBlockChars,librarySyncBlockFetchHashes,librarySyncBlockFetchResult,librarySyncBlockMissingResult,librarySyncBlockStore,librarySyncBlockStoreBatch,librarySyncBlockStoreChars,type LibrarySyncManifest,type LibrarySyncHead} from '@sensa/contracts/sensa';
 import {libraryTables,readLibrary,restoreLibraryTransaction,writeLibraryState,assertCurrentLibrary,type LibraryTransaction,type Table,type LibraryIdentity} from './store';
 import {encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {validateBackupRows,type BackupRows} from './backupValidation';
@@ -83,21 +83,38 @@ async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries
    if(row.table==='operations'&&row.key==='00000000-0000-4000-8000-000000000001')value={...value,result:{...value.result,deviceId:current.identity.deviceId}};
    tx.put(row.table,row.key,value);
   }
-  tx.put('meta',STATE,state);
  });
+ // The baseline and progress are sync bookkeeping, not learner content. Writing them in
+ // a content transaction would announce a local edit and schedule another sync pass.
+ await writeLibraryState(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');tx.put('meta',STATE,state);});
 }
 class Blocks{
  cache=new Map<string,string>();
  constructor(private request:SyncRequest){}
  async pack(text:string){const refs:string[]=[];for(let at=0;at<text.length;at+=librarySyncBlockChars){const part=text.slice(at,at+librarySyncBlockChars),id=await hash(part);this.cache.set(id,part);refs.push(id);}return refs;}
- /** One bounded request per page of blocks: a restore costs round trips, not blocks. */
+ /** One request per byte-budgeted page: the cost of a restore follows library size,
+  *  not how many blocks an older client happened to split it into. */
  async fetch(ids:string[]){
-  const wanted=[...new Set(ids)].filter(id=>!this.cache.has(id));
-  let held=[...this.cache.values()].reduce((size,value)=>size+value.length,0);
-  for(let at=0;at<wanted.length;at+=librarySyncBlockFetchBatch){
-   const reply=librarySyncBlockFetchResult.parse(await this.request('/blocks/fetch',{hashes:wanted.slice(at,at+librarySyncBlockFetchBatch)}));
+  const pending=[...new Set(ids)].filter(id=>!this.cache.has(id));
+  let held=[...this.cache.values()].reduce((size,value)=>size+value.length,0),rounds=0,pageSize=librarySyncBlockFetchHashes;
+  for(let at=0;at<pending.length;){
+   if(++rounds>4096)throw new Error('library_sync_format');
+   const page=pending.slice(at,at+pageSize);
+   let raw:unknown;
+   try{raw=await this.request('/blocks/fetch',{hashes:page});}
+   catch(error){
+    // During a rolling release the previous API accepts only eight hashes. Keep the
+    // new client functional until the byte-paged endpoint reaches that deployment.
+    if(pageSize>8&&error instanceof Error&&error.message==='invalid_request'){pageSize=8;continue;}
+    throw error;
+   }
+   const reply=librarySyncBlockFetchResult.parse(raw);
    if(reply.missing.length)throw new Error('library_sync_missing_block');
    for(const block of reply.blocks){if(await hash(block.data)!==block.hash)throw new Error('library_sync_hash');held+=block.data.length;if(held>TRANSFER_CAP)throw new Error('library_sync_capacity');this.cache.set(block.hash,block.data);}
+   if(!reply.blocks.length&&reply.deferred.length)throw new Error('library_sync_format');
+   at+=page.length;
+   // The response is bounded by bytes, so anything it could not carry is re-queued.
+   for(const id of reply.deferred)if(!this.cache.has(id))pending.push(id);
   }
   for(const id of ids)if(!this.cache.has(id))throw new Error('library_sync_missing_block');
  }

@@ -5,15 +5,17 @@ export const librarySyncHash=z.string().regex(/^[a-f0-9]{64}$/);
  * a bounded number of block requests, so one block already carries a real payload.
  * Sized against one captured context image. */
 export const librarySyncBlockChars=262144;
-/** Hashes per block fetch request; bounds one response to `batch * block` characters. */
-export const librarySyncBlockFetchBatch=8;
+/** Hashes one fetch request may ask for; the response is bounded by bytes, not by this. */
+export const librarySyncBlockFetchHashes=512;
+/** UTF-8 payload bytes one fetch response may carry, so paging follows bytes instead of block count. */
+export const librarySyncBlockFetchBytes=4*1024*1024;
 /** Blocks per store request. Bounds one request body below the route limit. */
 export const librarySyncBlockStoreBatch=16;
 /** Total block characters accepted in one store request. */
 export const librarySyncBlockStoreChars=3*1024*1024;
 export const librarySyncBlock=z.object({hash:librarySyncHash,data:z.string().max(librarySyncBlockChars)}).strict();
-export const librarySyncBlockFetch=z.object({hashes:z.array(librarySyncHash).min(1).max(librarySyncBlockFetchBatch)}).strict();
-export const librarySyncBlockFetchResult=z.object({blocks:z.array(librarySyncBlock).max(librarySyncBlockFetchBatch),missing:z.array(librarySyncHash).max(librarySyncBlockFetchBatch)}).strict();
+export const librarySyncBlockFetch=z.object({hashes:z.array(librarySyncHash).min(1).max(librarySyncBlockFetchHashes)}).strict();
+export const librarySyncBlockFetchResult=z.object({blocks:z.array(librarySyncBlock).max(librarySyncBlockFetchHashes),missing:z.array(librarySyncHash).max(librarySyncBlockFetchHashes),deferred:z.array(librarySyncHash).max(librarySyncBlockFetchHashes).default([])}).strict();
 export const librarySyncBlockMissing=z.object({hashes:z.array(librarySyncHash).min(1).max(512)}).strict();
 export const librarySyncBlockMissingResult=z.object({missing:z.array(librarySyncHash).max(512)}).strict();
 export const librarySyncBlockStore=z.object({blocks:z.array(librarySyncBlock).min(1).max(librarySyncBlockStoreBatch)}).strict();

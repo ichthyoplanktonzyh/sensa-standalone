@@ -19,7 +19,7 @@ import {mkdir,readFile,rm} from 'node:fs/promises';
 import {extname,join,resolve} from 'node:path';
 import {build as esbuild} from 'esbuild';
 import {chromium,expect} from '@playwright/test';
-import {librarySyncBlockFetchBatch,librarySyncBlockStoreChars} from '../packages/contracts/src/sensa/librarySync.ts';
+import {librarySyncBlockFetchBytes,librarySyncBlockStoreChars} from '../packages/contracts/src/sensa/librarySync.ts';
 
 const root=process.cwd();
 const output=resolve(root,'.tmp/web-bootstrap-budget');
@@ -43,9 +43,29 @@ function jwt(expSeconds:number){const encode=(value:unknown)=>Buffer.from(JSON.s
 const delay=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
 const digest=(text:string)=>createHash('sha256').update(text).digest('hex');
 
-type Cloud={blocks:Map<string,string>;revision:number;manifest:string[]|null;commits:Map<string,string>;published:number};
+type Cloud={blocks:Map<string,string>;revision:number;manifest:string[]|null;commits:Map<string,string>;published:number;publishedBytes:number};
 const clouds=new Map<string,Cloud>();
-const cloudFor=(account:string):Cloud=>{const existing=clouds.get(account);if(existing)return existing;const created:Cloud={blocks:new Map(),revision:0,manifest:null,commits:new Map(),published:0};clouds.set(account,created);return created;};
+const cloudFor=(account:string):Cloud=>{const existing=clouds.get(account);if(existing)return existing;const created:Cloud={blocks:new Map(),revision:0,manifest:null,commits:new Map(),published:0,publishedBytes:0};clouds.set(account,created);return created;};
+/** Repack a published library into smaller blocks, the way the previous client stored it.
+ *  Restoring it must still cost a byte-bounded number of round trips. */
+const repackCloud=(cloud:Cloud,chars:number)=>{
+ if(!cloud.manifest)throw Error('nothing to repack');
+ const manifest=JSON.parse(cloud.blocks.get(cloud.manifest[0]!)!) as {rows:{table:string;key:string;blocks:string[]}[]};
+ const added=new Map<string,string>(),rows:{table:string;key:string;blocks:string[]}[]=[];
+ for(const row of manifest.rows){
+  const text=row.blocks.map(hash=>cloud.blocks.get(hash)!).join(''),refs:string[]=[];
+  for(let at=0;at<text.length;at+=chars){const part=text.slice(at,at+chars),hash=digest(part);added.set(hash,part);refs.push(hash);}
+  rows.push({table:row.table,key:row.key,blocks:refs.length?refs:[digest('')]});
+  if(!refs.length)added.set(digest(''),'');
+ }
+ const next=JSON.stringify({...manifest,rows}),nextHash=digest(next);
+ added.set(nextHash,next);
+ for(const [hash,data] of added)cloud.blocks.set(hash,data);
+ cloud.revision+=1;cloud.manifest=[nextHash];
+ const refs=[...new Set(rows.flatMap(row=>row.blocks))];
+ cloud.published=refs.length;
+ cloud.publishedBytes=refs.reduce((total,hash)=>total+Buffer.byteLength(cloud.blocks.get(hash)??''),0);
+};
 
 /** The production security policy, so a blocked dynamic-code path fails here. */
 const productionCsp=await (async()=>{
@@ -83,8 +103,9 @@ const server=createServer(async(request,response)=>{
    }
    if(url.pathname==='/sensa/library-sync/blocks/fetch'){
     const input=await body() as {hashes:string[]};
-    const blocks=input.hashes.filter(hash=>cloud.blocks.has(hash)).map(hash=>({hash,data:cloud.blocks.get(hash)!}));
-    json({blocks,missing:input.hashes.filter(hash=>!cloud.blocks.has(hash))});return;
+    const blocks:{hash:string;data:string}[]=[],missing:string[]=[],deferred:string[]=[];let bytes=0;
+    for(const hash of input.hashes){const data=cloud.blocks.get(hash);if(data===undefined){missing.push(hash);continue;}const size=Buffer.byteLength(data);if(blocks.length&&bytes+size>librarySyncBlockFetchBytes){deferred.push(hash);continue;}blocks.push({hash,data});bytes+=size;}
+    json(deferred.length?{blocks,missing,deferred}:{blocks,missing});return;
    }
    if(url.pathname==='/sensa/library-sync/blocks/store'){
     const input=await body() as {blocks:{hash:string;data:string}[]};
@@ -108,7 +129,9 @@ const server=createServer(async(request,response)=>{
     cloud.revision+=1;cloud.manifest=input.manifest;cloud.commits.set(input.operationId,String(cloud.revision));
     // The committed manifest is the account baseline: it defines the restore cost.
     const committed=JSON.parse(cloud.blocks.get(input.manifest[0]!)??'{"rows":[]}') as {rows:{blocks:string[]}[]};
-    cloud.published=new Set(committed.rows.flatMap(row=>row.blocks)).size;
+    const publishedRefs=[...new Set(committed.rows.flatMap(row=>row.blocks))];
+    cloud.published=publishedRefs.length;
+    cloud.publishedBytes=publishedRefs.reduce((total,hash)=>total+Buffer.byteLength(cloud.blocks.get(hash)??''),0);
     json({revision:cloud.revision,manifest:cloud.manifest});return;
    }
    json({code:'not_found'},404);return;
@@ -186,8 +209,13 @@ try{
  // Uploaded blocks are not a published library: wait for the committed manifest,
  // otherwise the next browser legitimately restores an empty account.
  await expect.poll(()=>cloud.published,{timeout:180000,message:'account library was never published'}).toBeGreaterThanOrEqual(MINIMUM_PUBLISHED_BLOCKS);
- log(`   durable account library: ${cloud.published} published blocks of ${cloud.blocks.size} stored, revision ${cloud.revision}`);
+ log(`   durable account library: ${cloud.published} published blocks / ${Math.round(cloud.publishedBytes/1024)}KiB, revision ${cloud.revision}`);
  await a.context.close();
+
+ // The account may have been published by the previous client, whose blocks were 32K.
+ // Restoring such a library must still be a byte-bounded number of requests.
+ repackCloud(cloud,32768);
+ log(`   legacy-shaped library: ${cloud.published} blocks / ${Math.round(cloud.publishedBytes/1024)}KiB, revision ${cloud.revision}`);
 
  log('3/4 measuring the first restore on a new browser');
  const b=await pageContext();
@@ -219,7 +247,8 @@ try{
  const idleRequests=[...served];
  const requests=bootRequests.filter(entry=>entry.path.startsWith('/sensa/library-sync/'));
  /** Restoring `n` blocks costs the head call, the manifest page and the block pages. */
- const restoreRequestBudget=Math.ceil(cloud.published/librarySyncBlockFetchBatch)+3;
+ /** Restore round trips follow published bytes, not how many blocks hold them. */
+ const restoreRequestBudget=Math.ceil(cloud.publishedBytes/librarySyncBlockFetchBytes)+3;
  const restored=await b.page.evaluate(async()=>{const core=await import(/* @vite-ignore */ '/core.js') as any;return (await core.listDrafts()).length;});
  const violations=await b.page.evaluate(()=>(window as any).__cspViolations as string[]);
  await b.context.close();
@@ -237,7 +266,7 @@ try{
  if(shellMs>SHELL_BUDGET_MS)fail(`App Shell waited for the account restore: ${shellMs}ms > ${SHELL_BUDGET_MS}ms`);
  if(restoreMs>RESTORE_BUDGET_MS)fail(`account restore exceeded its budget: ${restoreMs}ms > ${RESTORE_BUDGET_MS}ms`);
  if(requests.length>restoreRequestBudget)fail(`account restore used ${requests.length} library requests, budget ${restoreRequestBudget} for ${cloud.published} blocks (${[...new Set(requests.map(entry=>entry.path))].join(', ')})`);
- if(requests.filter(entry=>entry.path.includes('/blocks/')).length>Math.ceil(cloud.published/librarySyncBlockFetchBatch)+2)fail('block transfer is not batched: one request per block');
+ if(requests.filter(entry=>entry.path.includes('/blocks/')).length>Math.ceil(cloud.publishedBytes/librarySyncBlockFetchBytes)+2)fail('block transfer is not byte-batched: one request per block');
  if(restored!==DRAFTS)fail(`account restore lost content: ${restored}/${DRAFTS} drafts`);
  if(bootRequests.some(entry=>entry.path==='/sensa/service/status'))fail('rolling service counters are read on boot instead of on demand');
  if(!settled)fail('an untouched account never stopped syncing: sync bookkeeping keeps scheduling another pass');
