@@ -40,7 +40,7 @@ jobs:
       SENSA_TEST_INITIAL: '1'
       SENSA_TEST_RETENTION: '1'
       SENSA_TEST_CHECKIN: '1'
-      SENSA_ACCEPTANCE_ARTIFACT_DIR: ${{ runner.temp }}/sensa-connected-acceptance
+      SENSA_ACCEPTANCE_ARTIFACT_DIR: /tmp/sensa-connected-acceptance
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -121,7 +121,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      SENSA_ACCEPTANCE_ARTIFACT_DIR: ${{ runner.temp }}/sensa-local-acceptance
+      SENSA_ACCEPTANCE_ARTIFACT_DIR: /tmp/sensa-local-acceptance
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
