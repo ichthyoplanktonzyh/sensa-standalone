@@ -155,6 +155,11 @@ export interface ContextualSenseResolution {
   confidence?: number;
   /** Present only when a model actually produced the closed-set decision. */
   modelId?: string;
+  /** The selected sense rendered in the learner's familiar language. It is a
+   * display layer over a provider-owned definition, never a revision of it: the
+   * provider's own wording stays in `ReferenceSense.definitionL2`, and the
+   * rendering is recorded here so it keeps the model that produced it. */
+  glossL1?: string;
 }
 
 /**

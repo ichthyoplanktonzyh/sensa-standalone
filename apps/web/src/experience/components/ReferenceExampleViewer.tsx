@@ -4,15 +4,21 @@ import { setupButton, setupPrimary } from './learning/LearningSetupFrame';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ReferenceExample,
+  ReferenceRelease,
   ReferenceSense,
 } from '../reference/referenceDictionary';
 import { resolveLookupLemma } from '../reference/resolveClickedLemma';
+import { sensaLanguage, type SensaLanguage } from '@sensa/contracts/sensa';
 import { ExampleCardCarousel } from './examples/ExampleCardCarousel';
 
 export interface ReferenceExampleDeck {
   headword: string;
   forms: readonly string[];
   sense: ReferenceSense;
+  /** The release the example came from. Its target language is what the
+   * occurrence highlighting folds and lemmatizes against; a deck without it
+   * would fall back to English rules over another language's text. */
+  release: ReferenceRelease;
 }
 
 interface ReferenceExampleViewerProps {
@@ -30,25 +36,31 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#039;');
 }
 
-/** Highlight only an occurrence that the contextual lemmatizer resolves. */
+/** Highlight only an occurrence that the contextual lemmatizer resolves.
+ *
+ * Tokens keep every letter of every script, so a Spanish `niño` is one word
+ * instead of `ni` and `o`, and case folding follows the example's own language.
+ * `language` absent keeps the historical English behavior. */
 export function emphasizeReferenceExample(
   example: ReferenceExample,
   headword: string,
   forms: readonly string[],
+  language?: SensaLanguage,
 ): string {
-  const normalizedHeadword = headword.toLocaleLowerCase('en-US');
+  const locale = language?.speechLocale ?? 'en-US';
+  const normalizedHeadword = headword.toLocaleLowerCase(locale);
   const knownForms = new Set(
-    [headword, ...forms].map((form) => form.toLocaleLowerCase('en-US')),
+    [headword, ...forms].map((form) => form.toLocaleLowerCase(locale)),
   );
   // Reference text is plain text, not the learning viewer's markup format.
   // Match against the original string so punctuation and literal tags keep exact offsets.
-  const tokens = [...example.textL2.matchAll(/[a-zA-Z0-9]+(?:['’][a-zA-Z0-9]+)?/g)].map(match => ({
+  const tokens = [...example.textL2.matchAll(/[\p{L}\p{M}\p{N}]+(?:['’][\p{L}\p{M}\p{N}]+)?/gu)].map(match => ({
     cleanWord: match[0].replace(/['’]/g, "'"),
     charStart: match.index,
     charEnd: match.index + match[0].length,
   }));
   const target = tokens.find((token) => {
-    const surface = token.cleanWord.toLocaleLowerCase('en-US');
+    const surface = token.cleanWord.toLocaleLowerCase(locale);
     if (knownForms.has(surface)) return true;
     return resolveLookupLemma({
       rawClickedForm: token.cleanWord,
@@ -57,7 +69,7 @@ export function emphasizeReferenceExample(
       clickedStart: token.charStart,
       clickedEnd: token.charEnd,
       clickedSurface: example.textL2.slice(token.charStart, token.charEnd),
-    }).lemma === normalizedHeadword;
+    }, language).lemma === normalizedHeadword;
   });
   if (!target) return escapeHtml(example.textL2);
   return [
@@ -84,7 +96,12 @@ export function ReferenceExampleViewer({ active, deck, onClose }: ReferenceExamp
   const identity = deck ? JSON.stringify([deck.headword, deck.sense.referenceSenseId, examples.map(item => item.exampleId)]) : '';
   const example = examples[Math.min(exampleIndex, Math.max(0, examples.length - 1))] ?? null;
   const sentenceHtml = useMemo(() => example && deck
-    ? emphasizeReferenceExample(example, deck.headword, deck.forms) : '', [deck, example]);
+    ? emphasizeReferenceExample(
+        example,
+        deck.headword,
+        deck.forms,
+        sensaLanguage(deck.release.targetLanguage),
+      ) : '', [deck, example]);
 
   useEffect(() => {
     if (!identity || identity === lastIdentity.current) return;

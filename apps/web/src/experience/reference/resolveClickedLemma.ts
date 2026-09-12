@@ -1,4 +1,5 @@
 import nlp from 'compromise';
+import type { SensaLanguage } from '@sensa/contracts/sensa';
 import type { DictionaryLookupInput, DictionaryLookupRequest } from '../types';
 
 export type EnglishPartOfSpeech =
@@ -28,12 +29,16 @@ interface CompromiseTermGroup {
   terms?: CompromiseTerm[];
 }
 
-function normalizeLookupForm(rawWord: string): string {
+/** Keeps every letter of every script instead of the Latin-only range, so a
+ * clicked Spanish `niño` or Japanese `ありがとう` reaches the dictionary as
+ * itself. Case folding follows the headword's own language, because Turkish
+ * dotted `İ` and German `ß` do not fold the way English does. */
+function normalizeLookupForm(rawWord: string, language?: SensaLanguage): string {
   return rawWord
     .trim()
     .replace(/[’]/g, "'")
-    .replace(/^[^a-zA-Z'-]+|[^a-zA-Z'-]+$/g, '')
-    .toLocaleLowerCase('en-US');
+    .replace(/^[^\p{L}\p{M}'-]+|[^\p{L}\p{M}'-]+$/gu, '')
+    .toLocaleLowerCase(language?.speechLocale ?? 'en-US');
 }
 
 function partOfSpeech(tags: readonly string[]): EnglishPartOfSpeech {
@@ -69,10 +74,24 @@ function resolveFromDocument(
   clickedEnd: number,
   surface: string,
   strategy: ClickedLemmaResolution['strategy'],
+  language?: SensaLanguage,
 ): ClickedLemmaResolution {
-  const normalizedSurface = normalizeLookupForm(surface);
+  const normalizedSurface = normalizeLookupForm(surface, language);
   if (!normalizedSurface) {
     return { surface, lemma: '', partOfSpeech: 'other', tags: [], strategy: 'surface' };
+  }
+
+  /** The lemma engine is English-only. Running it over another language would
+   * tag and inflect by English rules and answer a word the learner did not
+   * click, so a non-English occurrence keeps its surface form and says so. */
+  if (language && language.wiktionaryCode !== 'en') {
+    return {
+      surface: normalizedSurface,
+      lemma: normalizedSurface,
+      partOfSpeech: 'other',
+      tags: [],
+      strategy: 'surface',
+    };
   }
 
   const document = nlp(text);
@@ -124,15 +143,22 @@ function isValidContextualInput(request: DictionaryLookupRequest): boolean {
   return request.textL2.slice(request.clickedStart, request.clickedEnd) === request.clickedSurface;
 }
 
-/** Resolve one clicked occurrence before any dictionary provider is called. */
-export function resolveLookupLemma(input: DictionaryLookupInput): ClickedLemmaResolution {
+/** Resolve one clicked occurrence before any dictionary provider is called.
+ *
+ * `language` is the target language the occurrence belongs to. An unplaced
+ * language keeps the historical English behavior, because every release the
+ * product has already shipped is an English one. */
+export function resolveLookupLemma(
+  input: DictionaryLookupInput,
+  language?: SensaLanguage,
+): ClickedLemmaResolution {
   if (typeof input === 'string') {
-    const surface = normalizeLookupForm(input);
-    return resolveFromDocument(surface, 0, surface.length, surface, 'standalone_nlp');
+    const surface = normalizeLookupForm(input, language);
+    return resolveFromDocument(surface, 0, surface.length, surface, 'standalone_nlp', language);
   }
 
   if (!isValidContextualInput(input)) {
-    const surface = normalizeLookupForm(input.rawClickedForm);
+    const surface = normalizeLookupForm(input.rawClickedForm, language);
     return {
       surface,
       lemma: surface,
@@ -148,5 +174,6 @@ export function resolveLookupLemma(input: DictionaryLookupInput): ClickedLemmaRe
     input.clickedEnd,
     input.clickedSurface,
     'contextual_nlp',
+    language,
   );
 }

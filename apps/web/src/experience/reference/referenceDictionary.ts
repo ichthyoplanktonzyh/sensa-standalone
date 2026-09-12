@@ -11,15 +11,23 @@ export interface ReferenceRelease {
   releaseId: string;
   provider: string;
   edition: string;
-  targetLanguage: 'en';
-  learnerLocale: 'zh-CN';
+  /** The language of the headword and its senses. A release names one target
+   * language, so a lookup for another language is another release, never the
+   * same one relabelled. */
+  targetLanguage: string;
+  /** The language the learner reads the entry in. It follows the familiar
+   * language rather than the interface language. */
+  learnerLocale: string;
   rightsLabel: string;
   status: ReferenceReleaseStatus;
 }
 
 export interface ReferencePronunciation {
   pronunciationId: string;
-  accent: 'en-US' | 'en-GB';
+  /** An accent id within the headword's language — `en-US`/`en-GB` for English,
+   * the language tag itself when the source names no region. It is only ever
+   * evidence the provider returned; no accent is guessed from spelling. */
+  accent: string;
   ipa: string;
   audioUrl?: string;
 }

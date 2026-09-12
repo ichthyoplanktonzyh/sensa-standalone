@@ -1,5 +1,7 @@
 import {useTranslation} from 'react-i18next';
 import {cardText} from '../../i18n/originalCards';
+import i18n from '../../i18n';
+import { sensaLanguageDisplayName } from '@sensa/contracts/sensa';
 import { uiClass } from '../ui/classes';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { QuickDictEntry, Word } from '../types';
@@ -50,8 +52,13 @@ function selectedSenseId(result: ReferenceLookupResult | null): string | undefin
     : undefined;
 }
 
+/** English keeps its two named variants. Every other accent id is the language
+ * the provider's evidence actually belongs to, so it is shown as that language's
+ * name instead of being relabelled as an English variant. */
 function accentLabel(accent: ReferencePronunciation['accent']): string {
-  return accent === 'en-GB' ? cardText('british') : cardText('american');
+  if (accent === 'en-GB') return cardText('british');
+  if (accent === 'en-US') return cardText('american');
+  return sensaLanguageDisplayName(accent, i18n.language === 'en' ? 'en' : 'zh-CN');
 }
 
 function partOfSpeechGroups(senses: readonly ReferenceSense[]): Array<{
@@ -222,11 +229,12 @@ export function ReferenceDictionaryScreen({
   };
 
   const openExamples = (sense: ReferenceSense) => {
-    if (!entry || !(sense.examples?.length)) return;
+    if (!entry || !result || !(sense.examples?.length)) return;
     onOpenExamples({
       headword: entry.headword,
       forms: entry.forms ?? [entry.headword],
       sense,
+      release: result.release,
     });
   };
 
