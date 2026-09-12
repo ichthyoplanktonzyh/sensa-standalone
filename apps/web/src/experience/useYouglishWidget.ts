@@ -129,7 +129,10 @@ interface UseYouglishWidgetOptions {
   mountRef: React.RefObject<HTMLDivElement | null>;
   /** The word to search. Sense-agnostic: only the surface form is used. */
   query: string | undefined;
-  lang?: string;
+  /** The language the clips must be in, named the way the provider names it.
+   * Required: the provider defaults to English, which is the one answer that is
+   * wrong for every learner who is not studying English. */
+  lang: string;
   accent?: string;
   /**
    * YouGlish component bitmask. Bit 0 (1) is their search box, bit 3 (8) is the
@@ -144,7 +147,7 @@ interface UseYouglishWidgetOptions {
 export const useYouglishWidget = ({
   mountRef,
   query,
-  lang = 'english',
+  lang,
   accent,
   components = 8,
   active,

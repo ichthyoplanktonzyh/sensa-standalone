@@ -3,6 +3,8 @@ import { ArrowLeft, Play, Pause, SkipBack, SkipForward, RotateCcw, ExternalLink 
 import { useTranslation } from 'react-i18next';
 import type { PracticeScopeTarget } from '../practiceScope';
 import { useYouglishWidget } from '../useYouglishWidget';
+import { useLanguageProfile } from '../library/useLanguageProfile';
+import { clipAccentsFor, clipLanguageFor, speechLocaleFor } from '../services/speechLanguage';
 import { practiceButton, practiceSurface } from './SensaFreePracticeScreen';
 export interface YouGlishListeningScreenProps {
  active:boolean;targets:readonly PracticeScopeTarget[];onBack:()=>void;toast:(message:string)=>void;
@@ -15,13 +17,19 @@ export const YouGlishListeningScreen=(props:YouGlishListeningScreenProps)=>{
 };
 function ListeningPlayer({targets,onBack,retry}:YouGlishListeningScreenProps&{retry:()=>void}) {
  const {t}=useTranslation();
- const listenable=useMemo(()=>{const seen=new Set<string>();return targets.filter(target=>{const form=target.expression.surfaceForm.trim().toLocaleLowerCase('en');if(!form||seen.has(form))return false;seen.add(form);return true;});},[targets]);
+ const {profile}=useLanguageProfile();
+ const languageTag=profile.activeTargetLanguageTag;
+ const accents=clipAccentsFor(languageTag);
+ const listableLocale=speechLocaleFor(languageTag);
+ const listenable=useMemo(()=>{const seen=new Set<string>();return targets.filter(target=>{const form=target.expression.surfaceForm.trim().toLocaleLowerCase(listableLocale);if(!form||seen.has(form))return false;seen.add(form);return true;});},[targets,listableLocale]);
  const [targetId,setTargetId]=useState(listenable[0]?.targetId??'');
  const current=listenable.find(target=>target.targetId===targetId)??listenable[0];
  const [accent,setAccent]=useState('all');
  const [rate,setRate]=useState(1);
+ // A filter the target language does not offer is never sent to the provider.
+ const activeAccent=accents.includes(accent)?accent:'all';
  const mountRef=useRef<HTMLDivElement>(null);
- const widget=useYouglishWidget({mountRef,components:0,query:current?.expression.surfaceForm,accent:accent==='all'?undefined:accent,active:!!current});
+ const widget=useYouglishWidget({mountRef,components:0,query:current?.expression.surfaceForm,lang:clipLanguageFor(languageTag),accent:activeAccent==='all'?undefined:activeAccent,active:!!current});
  const ready=widget.status==='ready';
  useEffect(()=>{if(ready)widget.setSpeed(rate);},[ready,rate,widget.setSpeed]);
  return <main className="mx-auto w-full max-w-[1040px] px-4 py-5 sm:px-8 sm:py-8 lg:px-10">
@@ -38,8 +46,8 @@ function ListeningPlayer({targets,onBack,retry}:YouGlishListeningScreenProps&{re
    </div>
    <div className="overflow-hidden rounded-[20px] border border-[#e1e5ec] bg-white shadow-[0_12px_40px_-24px_rgba(32,39,56,0.3)] sm:rounded-3xl">
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 sm:px-6">
-     <span className="text-xs text-[#788398]">{t('practice.accent')}</span>
-     <div className="flex flex-wrap gap-1" role="group" aria-label={t('practice.accent')}>{['all','us','uk','aus','ca','ie'].map(code=><button key={code} aria-pressed={accent===code} onClick={()=>setAccent(code)} className={`min-h-10 rounded-lg px-3 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-[#5268a9] ${accent===code?'bg-[#edf0f7] font-medium text-[#303f76]':'text-[#788398] hover:bg-[#f5f6f8]'}`}>{t('practice.accents.'+code)}</button>)}</div>
+     {accents.length>1&&<><span className="text-xs text-[#788398]">{t('practice.accent')}</span>
+     <div className="flex flex-wrap gap-1" role="group" aria-label={t('practice.accent')}>{accents.map(code=><button key={code} aria-pressed={activeAccent===code} onClick={()=>setAccent(code)} className={`min-h-10 rounded-lg px-3 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-[#5268a9] ${activeAccent===code?'bg-[#edf0f7] font-medium text-[#303f76]':'text-[#788398] hover:bg-[#f5f6f8]'}`}>{t('practice.accents.'+code)}</button>)}</div></>}
     </div>
     <div className="relative aspect-video overflow-hidden bg-[#202738]">
      {/* Caption events come from the API subscription. Keep provider-owned UI

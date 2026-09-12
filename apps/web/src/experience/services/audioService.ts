@@ -1,4 +1,5 @@
 import { learningCatalog } from '../content/learningCatalog';
+import { activeSpeechLanguage } from './speechLanguage';
 
 export interface AudioPlaybackOptions {
   playbackRate?: number;
@@ -88,23 +89,35 @@ class AudioService {
 
   /**
    * 播放单词发音
-   * @param word 目标英文单词
-   * @param type 'us' 美式发音 (默认) | 'uk' 英式发音
+   * @param word 目标语言单词
+   * @param type 'us' 美式发音 (默认) | 'uk' 英式发音；仅英语有意义
+   *
+   * The language is the learner's active target language, read per playback. For
+   * English nothing changes. Another language has no packaged media and no
+   * English dictionary voice that could pronounce it, so it goes straight to the
+   * device synthesizer with its own locale instead of a URL that would answer
+   * with an English reading of a foreign word.
    */
-  public playWord(
+  public async playWord(
     word: string,
     type: 'us' | 'uk' = 'us',
     options: AudioPlaybackOptions = {},
   ): Promise<void> {
-    const cleanWord = word.trim().toLowerCase();
-    if (!cleanWord) return Promise.resolve();
+    const { speechLocale } = await activeSpeechLanguage();
+    const english = speechLocale.startsWith('en');
+    const cleanWord = word.trim().toLocaleLowerCase(speechLocale);
+    if (!cleanWord) return;
     const packagedUrl = learningCatalog.resolvePronunciationAudioUrl(
       cleanWord,
-      type === 'uk' ? 'en-GB' : 'en-US',
+      english ? (type === 'uk' ? 'en-GB' : 'en-US') : speechLocale,
     );
     if (packagedUrl) {
       return this.playAudioAsset(packagedUrl, cleanWord, type, false, options);
     }
+    // Another language has no packaged media and no English resource that could
+    // pronounce it, so it speaks with its own locale instead of a URL that would
+    // answer with an English reading of a foreign word.
+    if (!english) return this.playSpeechSynthesis(cleanWord, type, options);
     const typeCode = type === 'uk' ? 1 : 2;
     const audioUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(cleanWord)}&type=${typeCode}`;
     return this.playAudioUrl(audioUrl, cleanWord, type, options);
@@ -134,13 +147,19 @@ class AudioService {
     return this.playAudioAsset(audioUrl, label, type, false, options);
   }
 
-  private playAudioAsset(
+  private async playAudioAsset(
     audioUrl: string,
     fallbackText: string,
     type: 'us' | 'uk',
     allowSpeechFallback: boolean,
     options: AudioPlaybackOptions,
   ): Promise<void> {
+    // The fallback voice speaks the learner's target language, so it is resolved
+    // only where a fallback is actually possible; a package asset that must fail
+    // closed never waits on the library.
+    const speechLocale = allowSpeechFallback
+      ? (await activeSpeechLanguage()).speechLocale
+      : undefined;
     return new Promise((resolve) => {
       this.stop();
       const audio = new Audio(audioUrl);
@@ -165,7 +184,7 @@ class AudioService {
           this.currentAudio = null;
         }
         // Keep the same Promise open while the fallback voice finishes.
-        void this.startSpeechSynthesis(fallbackText, type, options).then(finish);
+        void this.startSpeechSynthesis(fallbackText, type, options, speechLocale).then(finish);
       };
 
       this.currentPlaybackResolve = finish;
@@ -182,41 +201,45 @@ class AudioService {
    * 播放整句或短语发音（智能优选高质量人声）
    * The returned Promise resolves at the end of speech or when stop() cancels it.
    */
-  public playSentence(
+  public async playSentence(
     sentence: string,
     type: 'us' | 'uk' = 'us',
     options: AudioPlaybackOptions = {},
   ): Promise<void> {
-    if (!sentence) return Promise.resolve();
+    if (!sentence) return;
+    const { speechLocale } = await activeSpeechLanguage();
+    const english = speechLocale.startsWith('en');
     const packagedUrl = learningCatalog.resolveExampleAudioUrl(
       sentence,
-      type === 'uk' ? 'en-GB' : 'en-US',
+      english ? (type === 'uk' ? 'en-GB' : 'en-US') : speechLocale,
     );
     if (packagedUrl) {
       return this.playAudioAsset(packagedUrl, sentence, type, false, options);
     }
     this.stop();
-    return this.startSpeechSynthesis(sentence, type, options);
+    return this.startSpeechSynthesis(sentence, type, options, speechLocale);
   }
 
   /**
    * 基于 Web Speech API 的高品质语音合成（优选高分真人自然音色）
    * Existing callers may ignore the returned Promise.
    */
-  public playSpeechSynthesis(
+  public async playSpeechSynthesis(
     text: string,
     type: 'us' | 'uk' = 'us',
     options: AudioPlaybackOptions = {},
   ): Promise<void> {
-    if (!text) return Promise.resolve();
+    if (!text) return;
+    const { speechLocale } = await activeSpeechLanguage();
     this.stop();
-    return this.startSpeechSynthesis(text, type, options);
+    return this.startSpeechSynthesis(text, type, options, speechLocale);
   }
 
   private startSpeechSynthesis(
     text: string,
     type: 'us' | 'uk',
     options: AudioPlaybackOptions = {},
+    speechLocale = 'en-US',
   ): Promise<void> {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return Promise.resolve();
 
@@ -239,28 +262,38 @@ class AudioService {
       this.currentSpeechCancel = cancel;
       utterance.onend = finish;
       utterance.onerror = finish;
-      utterance.lang = type === 'uk' ? 'en-GB' : 'en-US';
+      // A learner reads the target language, so the voice has to be one: asking
+      // for English over Spanish text is a wrong pronunciation presented as the
+      // word's. The accent only chooses between the two locales English has.
+      const locale = speechLocale.startsWith('en')
+        ? (type === 'uk' ? 'en-GB' : 'en-US')
+        : speechLocale;
+      utterance.lang = locale;
       utterance.rate = normalizedPlaybackRate(options.playbackRate) * 0.92;
       utterance.pitch = 1.0;
 
       const voices = synthesis.getVoices();
       if (voices && voices.length > 0) {
-        const langPrefix = type === 'uk' ? 'en-GB' : 'en-US';
+        const normalize = (lang: string) => lang.replace('_', '-');
+        const primary = locale.split('-')[0]!;
+        const pools = [
+          voices.filter((voice) => normalize(voice.lang).startsWith(locale)),
+          voices.filter((voice) => normalize(voice.lang).startsWith(primary)),
+        ];
+        const pool = pools[0]!.length > 0 ? pools[0]! : pools[1]!;
         // 优先匹配高质量自然人声库（如 Apple Samantha / Ava / Alex / Daniel, Google US English, Microsoft Natural）
-        const preferredVoice =
-          voices.find(
-            (voice) =>
-              (voice.lang === langPrefix || voice.lang.replace('_', '-').startsWith(langPrefix)) &&
-              (voice.name.includes('Natural') ||
+        const preferredVoice = locale.startsWith('en')
+          ? pool.find(
+              (voice) =>
+                voice.name.includes('Natural') ||
                 voice.name.includes('Google') ||
                 voice.name.includes('Samantha') ||
                 voice.name.includes('Ava') ||
                 voice.name.includes('Karen') ||
                 voice.name.includes('Daniel') ||
-                voice.name.includes('Alex'))
-          ) ||
-          voices.find((voice) => voice.lang.startsWith('en-US')) ||
-          voices.find((voice) => voice.lang.startsWith('en'));
+                voice.name.includes('Alex'),
+            ) ?? pool[0]
+          : pool[0];
 
         if (preferredVoice) {
           utterance.voice = preferredVoice;
