@@ -1,14 +1,17 @@
 import {localModelQueue} from './modelExecution';
 import {z} from 'zod';
 import {command,readLibrary} from './store';
-export const purposes=['teacher','content','review'] as const;
+export const purposes=['teacher','content','review','reference'] as const;
 export type Purpose=typeof purposes[number];
-export const purposeLabels:Record<Purpose,string>={teacher:'localFlow.purposeTeacher',content:'localFlow.purposeContent',review:'localFlow.purposeReview'};
+export const purposeLabels:Record<Purpose,string>={teacher:'localFlow.purposeTeacher',content:'localFlow.purposeContent',review:'localFlow.purposeReview',reference:'localFlow.purposeReference'};
 const endpointSchema=z.string().trim().url().transform(value=>value.replace(/\/+$/u,'')).refine(value=>{
  const url=new URL(value);return !url.username&&!url.password&&!url.search&&!url.hash&&(url.protocol==='https:'||(url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname)));
 },'localFlow.endpointInvalid');
 export const providerInputSchema=z.object({id:z.string().uuid(),expectedRevision:z.number().int().min(0),name:z.string().trim().min(1).max(80),kind:z.enum(['compatible','sensa']),endpoint:endpointSchema,model:z.string().trim().min(1).max(100)}).strict();
 export type Provider={id:string;revision:number;name:string;kind:'compatible'|'sensa';endpoint:string;model:string};
+/** Where a request for this connection actually runs. A locally stored `compatible`
+ * connection is answered in this page; the Sensa service answers everything else. */
+export const executionOf=(provider:Provider):'device'|'service'=>provider.kind==='sensa'?'service':'device';
 export type ProviderSettings={modelReviewEnabled?:boolean;revision:number;assignments:Partial<Record<Purpose,string>>};
 // Never persisted or synchronized. A config revision change invalidates its credential.
 const credentials=new Map<string,{revision:number;key:string}>();
@@ -85,7 +88,7 @@ export async function selectedReviewProvider():Promise<Provider|null>{
 export async function listProviderModels(provider:Provider):Promise<string[]>{
  if(provider.kind!=='compatible')throw Error('localFlow.purposeUnsupported');
  const key=await providerCredential(provider);
- return localModelQueue.run({id:crypto.randomUUID(),provider:new URL(provider.endpoint).origin,model:provider.model,purpose:'probe'},AbortSignal.timeout(15000),async signal=>{
+ return localModelQueue.run({id:crypto.randomUUID(),provider:new URL(provider.endpoint).origin,model:provider.model,purpose:'probe',execution:'device'},AbortSignal.timeout(15000),async signal=>{
   const response=await fetch(provider.endpoint+'/models',{headers:{authorization:'Bearer '+key},redirect:'error',credentials:'omit',signal});
   if(!response.ok)throw Error('localFlow.modelCatalogUnavailable');
   if(!response.body)throw Error('localFlow.modelCatalogUnavailable');

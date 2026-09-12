@@ -86,9 +86,12 @@ export function canonicalConsumerJson(value: unknown): string {
   throw new Error('Invalid canonical JSON value');
 }
 
-/** Read-only online service access and actual rolling request counters. */
+/** Read-only online service access and actual rolling request counters.
+ * One entry per billed purpose: reading and reference are per-interaction and
+ * abundant; teacher and content are per-turn and scarce. */
+export const serviceUsageKinds=['reading','reference','teacher','content'] as const;
 export const serviceStatusSchema=z.object({
   authorized:z.literal(true),explanationAvailable:z.boolean(),checkedAt:z.string().datetime(),windowHours:z.literal(24),
-  usage:z.array(z.object({kind:z.enum(['reading','teacher','content']),used:z.number().int().nonnegative(),limit:z.number().int().positive().nullable()}).strict()).length(3),
+  usage:z.array(z.object({kind:z.enum(serviceUsageKinds),used:z.number().int().nonnegative(),limit:z.number().int().positive().nullable()}).strict()).length(serviceUsageKinds.length),
 }).strict();
 export type ServiceStatus=z.infer<typeof serviceStatusSchema>;

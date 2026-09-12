@@ -41,7 +41,9 @@ function view(revision:number,settings:Settings):ReadingSettingsView {
   return {revision,providers:settings.providers.map(({apiKey,...p})=>({...p,keyConfigured:!!apiKey})),
     assignments:settings.assignments,configured:/^[a-f0-9]{64}$/iu.test(process.env.SENSA_PROVIDER_VAULT_KEY??''),allowedOrigins:origins()};
 }
-export function selectReadingConnection(settings:Settings,feature:keyof ReadingAssignments):Connection {
+/** Resolves the account connection for any assigned purpose — reading features and
+ * Web model purposes share one registry, so a configured key serves both. */
+export function selectConnection(settings:Settings,feature:keyof ReadingAssignments):Connection {
   const id=settings.assignments[feature];
   if(id){const found=settings.providers.find(p=>p.id===id&&p.enabled);if(!found)throw new ConsumerError(409,'provider_unavailable');allowed(found.baseUrl);return found;}
   if(process.env.SENSA_MANAGED_MODELS_PAUSED==='1')throw new ConsumerError(503,'managed_models_paused');
@@ -51,10 +53,16 @@ export function selectReadingConnection(settings:Settings,feature:keyof ReadingA
   };
   throw new ConsumerError(409,'provider_not_configured');
 }
-export async function activeMeaningConnection(db:DatabaseExecutor,a:Scope){return selectReadingConnection((await readSettings(db,a)).settings,'meaning');}
+/** Reads the account settings once and returns a per-purpose selector. The model
+ * turn route resolves its connection only once it knows the requested purpose. */
+export async function connectionSelector(db:DatabaseExecutor,a:Scope):Promise<(feature:keyof ReadingAssignments)=>Connection>{
+  const {settings}=await readSettings(db,a);
+  return feature=>selectConnection(settings,feature);
+}
+export async function activeMeaningConnection(db:DatabaseExecutor,a:Scope){return selectConnection((await readSettings(db,a)).settings,'meaning');}
 export async function configuredMeaningConnection(db:DatabaseExecutor,a:Scope):Promise<Connection|null>{
   const {settings}=await readSettings(db,a);
-  return settings.assignments.meaning?selectReadingConnection(settings,'meaning'):null;
+  return settings.assignments.meaning?selectConnection(settings,'meaning'):null;
 }
 async function responseText(response:Response,max:number){
   if(!response.body)throw new ConsumerError(503,'provider_invalid_response');
@@ -84,7 +92,12 @@ export function registerReadingRoutes(app:Hono,withScope:WithScope,completion:Re
         const apiKey=p.apiKey??previous?.apiKey;if(!apiKey)throw new ConsumerError(400,'provider_key_required');
         return {...p,apiKey};
       });
-      const settings:Settings={providers,assignments:input.assignments};
+      // Providers are replaced wholesale (every surface echoes the full list), but
+      // assignments merge: a reading-only client must not clear a model purpose.
+      // A merged assignment whose connection is gone is dropped rather than left dangling.
+      const assignments:{[feature:string]:string|null|undefined}={...old.settings.assignments,...input.assignments};
+      for(const feature of Object.keys(assignments)){const id=assignments[feature];if(id&&!providers.some(p=>p.id===id&&p.enabled))delete assignments[feature];}
+      const settings:Settings={providers,assignments:assignments as Settings['assignments']};
       const encrypted=await seal(settings,a.account_id);
       await db.query('INSERT INTO sensa_consumer.reading_settings(account_id,encrypted_settings,updated_at) VALUES($1,$2,$3) ON CONFLICT(account_id) DO UPDATE SET encrypted_settings=$2,revision=reading_settings.revision+1,updated_at=$3',[a.account_id,encrypted,a.now]);
       return view(old.revision+1,settings);
@@ -114,7 +127,7 @@ export function registerReadingRoutes(app:Hono,withScope:WithScope,completion:Re
       const active=(await db.query("SELECT count(*)::int AS n FROM sensa_consumer.reading_requests WHERE account_id=$1 AND status='running' AND created_at>$2",[a.account_id,new Date(a.now.getTime()-45000)])).rows[0]!.n;
       if(active>=3)throw new ConsumerError(409,'reading_busy');
       const {settings}=await readSettings(db,a);
-      const connection='providerId' in input?settings.providers.find(p=>p.id===input.providerId&&p.enabled):selectReadingConnection(settings,input.feature);
+      const connection='providerId' in input?settings.providers.find(p=>p.id===input.providerId&&p.enabled):selectConnection(settings,input.feature);
       if(!connection)throw new ConsumerError(404,'provider_not_found');allowed(connection.baseUrl);
       await db.query("INSERT INTO sensa_consumer.reading_requests(account_id,id,input_digest,status,created_at) VALUES($1,$2,$3,'running',$4)",[a.account_id,input.id,digest,a.now]);
       return {existing:null,connection};

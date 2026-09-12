@@ -31,7 +31,7 @@ const tool = z.object({
 }).strict();
 export const modelTurnInputSchema = z.object({
   id: z.string().uuid(),
-  purpose: z.enum(['teacher', 'content', 'review']),
+  purpose: z.enum(['teacher', 'content', 'review', 'reference']),
   inputDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   body: z.object({
     model: z.string().max(100),

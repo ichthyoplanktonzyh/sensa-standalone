@@ -12,13 +12,25 @@ import {
   type ReferenceSense,
 } from './referenceDictionary';
 import { resolveLookupLemma } from './resolveClickedLemma';
+import { complete } from '../../data/library/transport';
+import { selectedProvider } from '../../data/library/providers';
 
 const WIKT_API_ORIGIN = 'https://api.wiktapi.dev';
 const FREE_DICTIONARY_API_ORIGIN = 'https://api.dictionaryapi.dev';
-const GEMINI_API_ORIGIN = 'https://generativelanguage.googleapis.com';
 
-export const GEMINI_CONTEXTUAL_MODEL_ID = 'gemini-3.5-flash-lite';
-const GEMINI_RESOLVER_VERSION = 'sensa.reference-wsd.gemini-3.5-flash-lite.v1';
+/** Protocol version of the closed-set word-sense decision. It deliberately does not
+ * name a model: whichever provider answers is reported separately as `modelId`. */
+const RESOLVER_VERSION = 'sensa.reference-wsd.v2';
+/** The WSD prompt and the closed candidate set, as one system instruction. */
+const RESOLVER_SYSTEM = [
+  'You are a strict English word-sense disambiguator.',
+  'Select only from the supplied referenceSenseId values. Never write or revise a definition.',
+  'Use the exact clicked occurrence and the whole sentence. If one candidate is not clearly better, return ambiguous.',
+  'Return JSON only, in exactly one of these shapes:',
+  '{"status":"selected","referenceSenseId":"one supplied id","confidence":0.0}',
+  '{"status":"ambiguous","candidateReferenceSenseIds":["supplied id"],"confidence":0.0}',
+  '{"status":"unresolved","confidence":0.0}',
+].join('\n');
 const CONTEXTUAL_CONFIDENCE_THRESHOLD = 0.6;
 
 interface LookupOptions {
@@ -96,14 +108,6 @@ interface FreeDictionaryEntryPayload {
   phonetics?: FreeDictionaryPhoneticPayload[];
   meanings?: FreeDictionaryMeaningPayload[];
   sourceUrls?: string[];
-}
-
-interface GeminiResponsePayload {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{ text?: string; thought?: boolean }>;
-    };
-  }>;
 }
 
 interface ModelDecisionPayload {
@@ -444,17 +448,12 @@ function fallbackResolution(entry: ReferenceEntry): ContextualSenseResolution {
   return entry.senses.length > 1
     ? {
         status: 'ambiguous',
-        resolverVersion: `${GEMINI_RESOLVER_VERSION}.unavailable`,
+        resolverVersion: `${RESOLVER_VERSION}.unavailable`,
       }
     : {
         status: 'unresolved',
-        resolverVersion: `${GEMINI_RESOLVER_VERSION}.unavailable`,
+        resolverVersion: `${RESOLVER_VERSION}.unavailable`,
       };
-}
-
-function geminiApiKey(): string | null {
-  const value = import.meta.env?.VITE_GEMINI_API_KEY;
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 function parseModelDecision(rawText: string): ModelDecisionPayload | null {
@@ -472,9 +471,12 @@ function confidenceFromDecision(decision: ModelDecisionPayload): number {
   return Math.max(0, Math.min(1, decision.confidence));
 }
 
+/** A decision is only usable when it names one of the closed candidate ids, and it
+ * keeps the answering model so a stored resolution can be traced to what produced it. */
 function validateModelDecision(
   decision: ModelDecisionPayload,
   closedSenseIds: ReadonlySet<string>,
+  modelId: string,
 ): ContextualSenseResolution {
   const confidence = confidenceFromDecision(decision);
   if (
@@ -486,17 +488,17 @@ function validateModelDecision(
       return {
         status: 'model_confident',
         referenceSenseId: decision.referenceSenseId,
-        resolverVersion: GEMINI_RESOLVER_VERSION,
+        resolverVersion: RESOLVER_VERSION,
         confidence,
-        modelId: GEMINI_CONTEXTUAL_MODEL_ID,
+        modelId,
       };
     }
     return {
       status: 'ambiguous',
       candidateReferenceSenseIds: [decision.referenceSenseId],
-      resolverVersion: GEMINI_RESOLVER_VERSION,
+      resolverVersion: RESOLVER_VERSION,
       confidence,
-      modelId: GEMINI_CONTEXTUAL_MODEL_ID,
+      modelId,
     };
   }
 
@@ -507,21 +509,27 @@ function validateModelDecision(
     return {
       status: candidates.length > 0 ? 'ambiguous' : 'unresolved',
       candidateReferenceSenseIds: candidates.length > 0 ? candidates : undefined,
-      resolverVersion: GEMINI_RESOLVER_VERSION,
+      resolverVersion: RESOLVER_VERSION,
       confidence,
-      modelId: GEMINI_CONTEXTUAL_MODEL_ID,
+      modelId,
     };
   }
 
   return {
     status: 'unresolved',
-    resolverVersion: GEMINI_RESOLVER_VERSION,
+    resolverVersion: RESOLVER_VERSION,
     confidence,
-    modelId: GEMINI_CONTEXTUAL_MODEL_ID,
+    modelId,
   };
 }
 
-async function resolveWithGemini(
+/** Closed-set word-sense decision through the model management boundary.
+ *
+ * The `reference` purpose decides the provider: an assigned local connection runs in
+ * this page, otherwise the Sensa service resolves it with the account's own connection
+ * or the managed default. Either way this function owns only the decision protocol —
+ * never a provider endpoint, a credential or a model id. */
+async function resolveWithModel(
   request: DictionaryLookupRequest,
   entry: ReferenceEntry,
   signal?: AbortSignal,
@@ -529,12 +537,10 @@ async function resolveWithGemini(
   if (!isValidContextualRequest(request)) {
     return {
       status: 'unresolved',
-      resolverVersion: `${GEMINI_RESOLVER_VERSION}.invalid-request`,
+      resolverVersion: `${RESOLVER_VERSION}.invalid-request`,
     };
   }
 
-  const apiKey = geminiApiKey();
-  if (!apiKey) return fallbackResolution(entry);
   const closedSenseIds = new Set(entry.senses.map((sense) => sense.referenceSenseId));
   const candidates = entry.senses.map((sense) => ({
     referenceSenseId: sense.referenceSenseId,
@@ -543,46 +549,35 @@ async function resolveWithGemini(
     labels: sense.labels ?? [],
     examples: (sense.examples ?? []).slice(0, 2).map((example) => example.textL2),
   }));
-  const prompt = [
-    'You are a strict English word-sense disambiguator.',
-    'Select only from the supplied referenceSenseId values. Never write or revise a definition.',
-    'Use the exact clicked occurrence and the whole sentence. If one candidate is not clearly better, return ambiguous.',
-    'Return JSON only, in exactly one of these shapes:',
-    '{"status":"selected","referenceSenseId":"one supplied id","confidence":0.0}',
-    '{"status":"ambiguous","candidateReferenceSenseIds":["supplied id"],"confidence":0.0}',
-    '{"status":"unresolved","confidence":0.0}',
-    `Sentence: ${JSON.stringify(request.textL2)}`,
-    `Clicked occurrence: ${JSON.stringify(request.clickedSurface)}`,
-    `Resolved dictionary headword: ${JSON.stringify(entry.headword)}`,
-    `Character span: [${request.clickedStart}, ${request.clickedEnd})`,
-    `Candidates: ${JSON.stringify(candidates)}`,
-  ].join('\n');
 
   try {
-    const url = `${GEMINI_API_ORIGIN}/v1beta/models/${GEMINI_CONTEXTUAL_MODEL_ID}:generateContent`;
-    const response = await fetchJson<GeminiResponsePayload>(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          thinkingConfig: {
-            thinkingLevel: 'MINIMAL',
-          },
+    const provider = await selectedProvider('reference');
+    const completion = await complete(
+      provider,
+      'reference',
+      crypto.randomUUID(),
+      [
+        { role: 'system', content: RESOLVER_SYSTEM },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            sentence: request.textL2,
+            clickedOccurrence: request.clickedSurface,
+            headword: entry.headword,
+            span: [request.clickedStart, request.clickedEnd],
+            candidates,
+          }),
         },
-      }),
-    }, signal, 12000);
-    const rawText = response.data?.candidates?.[0]?.content?.parts
-      ?.filter((part) => part.thought !== true)
-      ?.map((part) => part.text ?? '')
-      .join('') ?? '';
-    const decision = parseModelDecision(rawText);
-    return decision ? validateModelDecision(decision, closedSenseIds) : fallbackResolution(entry);
+      ],
+      [],
+      signal ?? AbortSignal.timeout(12000),
+    );
+    const decision = parseModelDecision(completion.choices[0]?.message.content ?? '');
+    return decision
+      ? validateModelDecision(decision, closedSenseIds, completion.model)
+      : fallbackResolution(entry);
   } catch (error) {
+    // A stopped lookup stays stopped; every other failure leaves the entry as it was.
     if (signal?.aborted) throw error;
     return fallbackResolution(entry);
   }
@@ -593,7 +588,7 @@ async function resolveContextualReference(
   result: ReferenceLookupResult,
   signal?: AbortSignal,
 ): Promise<ContextualSenseResolution> {
-  return resolveWithGemini(request, result.entry, signal);
+  return resolveWithModel(request, result.entry, signal);
 }
 
 /**

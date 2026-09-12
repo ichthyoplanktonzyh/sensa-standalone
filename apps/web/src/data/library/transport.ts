@@ -13,7 +13,7 @@ async function abortable<T>(promise:Promise<T>,signal:AbortSignal):Promise<T>{
  return new Promise((resolve,reject)=>{const abort=()=>{signal.removeEventListener('abort',abort);reject(new Error('localFlow.requestTimeout'));};if(signal.aborted){void promise.catch(()=>{});abort();return;}signal.addEventListener('abort',abort,{once:true});promise.then(value=>{signal.removeEventListener('abort',abort);resolve(value);},error=>{signal.removeEventListener('abort',abort);reject(error);});});
 }
 export async function complete(provider:Provider,purpose:Purpose,id:string,messages:ModelMessage[],tools:ModelTool[],signal:AbortSignal){
- try{return await localModelQueue.run({id,provider:new URL(provider.endpoint).origin,model:provider.model,purpose},signal,(bounded,record)=>completeRequest(provider,purpose,id,messages,tools,bounded,record));}catch(e){if(e instanceof ModelExecutionError)throw new Error(e.code==='model_timeout'?'localFlow.requestTimeout':e.code==='model_cancelled'?'localFlow.requestStopped':'localFlow.modelQueueFull');throw e;}
+ try{return await localModelQueue.run({id,provider:new URL(provider.endpoint).origin,model:provider.model,purpose,execution:'device'},signal,(bounded,record)=>completeRequest(provider,purpose,id,messages,tools,bounded,record));}catch(e){if(e instanceof ModelExecutionError)throw new Error(e.code==='model_timeout'?'localFlow.requestTimeout':e.code==='model_cancelled'?'localFlow.requestStopped':'localFlow.modelQueueFull');throw e;}
 }
 async function completeRequest(provider:Provider,purpose:Purpose,id:string,messages:ModelMessage[],tools:ModelTool[],signal:AbortSignal,record:ModelExecutionRecord){
  signal=AbortSignal.any([signal,AbortSignal.timeout(45000)]);

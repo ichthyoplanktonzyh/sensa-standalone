@@ -13,7 +13,7 @@
 | `packages/contracts` | Web、扩展与 API 共享协议 |
 | `packages/learning-kernel` | 学习与调度纯规则 |
 | `packages/content-validator` | 学习资源发布校验 |
-| `packages/model-runtime` | 默认与兼容模型执行适配 |
+| `packages/model-runtime` | 服务端与 Edge 的模型执行适配（Genkit flow、队列、提供方重试） |
 | `db/migrations` | 生产数据库的前向迁移 |
 | `content` | 内容 schema、prompt、制作与校验工具 |
 
@@ -38,7 +38,11 @@
 
 ## 模型与内容边界
 
-默认模型请求通过 Sensa API 和 `packages/model-runtime`。Web 自定义服务配置只保存非密钥信息；用户密钥停留在当前页面内存，不进入个人库同步。扩展的服务端连接凭据使用部署密钥保护，不进入扩展 storage、日志或版本库。
+所有模型需求都经过同一个模型管理边界：每个用途（澄清 `teacher`、材料 `content`、审核 `review`、词义判定 `reference`、网页阅读 `reading`）都要声明用途与执行位置，再交给该位置的执行器。执行器只有两个，一个进程一个：设备侧 `apps/web/src/data/library/transport.ts` 与 `modelExecution.ts`，服务侧 `packages/model-runtime` 的 Genkit flow。这两处之外，任何代码都不得命名模型端点或引入提供方 SDK；`scripts/sensaModelManagementSmoke.mts` 在快速测试中做静态检查。
+
+提供方只有两种：Sensa 服务与用户自填的连接。用户连接按保存位置决定执行位置。存在本机库 `providers` 表的连接在本页执行，密钥只保留在页面内存，不进个人库同步，请求由这台设备直接发出。存在账号侧的连接由部署密钥加密保管、在服务端执行；账号级连接登记处是 `db/migrations/0021_sensa_browser_reading.sql` 的 `reading_settings` 表，扩展与 Web 共用同一份，因此一个密钥只需配置一次。两种位置只差两点：本机连接可使用任意 HTTPS 地址与本机 HTTP 服务，但需要对方允许跨域，且不计入服务端用量；账号连接受部署白名单限制（`SENSA_READING_ALLOWED_ORIGINS`），并计入服务端用量。用途指派每次只属于一个登记处，切换用途即清除另一处。
+
+`reference` 用途默认由 Sensa 服务承担，并带独立预算池：`sensa_consumer.reference_usage`，上限 `SENSA_REFERENCE_DAILY_LIMIT`（默认 300），不占用 `teacher`/`content` 的每轮额度（`sensa_consumer.native_semantic_usage`，`modelDailyLimit=30`）。参考词典数据源（`api.wiktapi.dev`、`api.dictionaryapi.dev`）与浏览器语音、`dict.youdao.com` 音频不是模型提供方，不在本边界内。
 
 模型输出只是候选。语义接受、学习资源校验、加入学习和运行时结算仍由对应应用与领域模块完成。常规测试使用替身，不调用付费模型或 TTS。
 

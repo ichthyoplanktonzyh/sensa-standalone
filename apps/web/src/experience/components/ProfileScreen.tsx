@@ -51,8 +51,8 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
     if (!props.localLibrary || !props.active) return;
     let live = true;
     const refresh = () => void providerSnapshot().then(({providers, settings}) => {
-      if (live) setModelNames([...new Set(['teacher','content'].map(purpose => {
-        const id = settings.assignments[purpose as 'teacher'|'content'];
+      if (live) setModelNames([...new Set(['teacher','content','review','reference'].map(purpose => {
+        const id = settings.assignments[purpose as 'teacher'|'content'|'review'|'reference'];
         const provider = providers.find(item => item.id === id);
         return provider ? provider.name + ' · ' + provider.model : t('modelService.default');
       }))]);

@@ -18,14 +18,25 @@ async function digest(value:unknown){
 
 export const completeModelTurn:ModelTurnCompletion=(connection,body,signal,meta)=>{
   const model=connection.id==='00000000-0000-4000-8000-000000000001'
-    ?(meta.purpose==='review'?process.env.SENSA_REVIEW_MODEL??process.env.SENSA_CONTENT_MODEL:meta.purpose==='content'?process.env.SENSA_CONTENT_MODEL:process.env.SENSA_SEMANTIC_MODEL)
+    ?(meta.purpose==='review'?process.env.SENSA_REVIEW_MODEL??process.env.SENSA_CONTENT_MODEL
+      :meta.purpose==='content'?process.env.SENSA_CONTENT_MODEL
+      :meta.purpose==='reference'?process.env.SENSA_REFERENCE_MODEL??process.env.SENSA_SEMANTIC_MODEL
+      :process.env.SENSA_SEMANTIC_MODEL)
     :undefined;
   return executeModel({...connection,model:model??connection.model},body,{signal,id:meta.id,purpose:meta.purpose});
 };
 
+/** Tool exposure per purpose. A purpose absent here is a bug, not a permissive default. */
+const purposeTools:Record<Input['purpose'],string[]>={
+  teacher:['lookup_meanings','ask_learner','propose_meaning'],
+  content:['read_demand','lookup_reference_facts','submit_candidate'],
+  review:[],
+  reference:[],
+};
+
 export function createModelTurnRoutes(options:{
-  authorize:(request:Request)=>Promise<Connection>;
-  reserve:(request:Request,input:{id:string;inputDigest:string})=>Promise<void>;
+  authorize:(request:Request)=>Promise<{select:(purpose:Input['purpose'])=>Connection}>;
+  reserve:(request:Request,input:{id:string;inputDigest:string;purpose:Input['purpose']})=>Promise<void>;
   complete?:ModelTurnCompletion;
 }){
   const app=new Hono();
@@ -33,16 +44,19 @@ export function createModelTurnRoutes(options:{
   app.onError((error,c)=>c.json({code:error instanceof ConsumerError?error.code:error instanceof z.ZodError||error instanceof SyntaxError?'invalid_request':'provider_unavailable'},error instanceof ConsumerError?error.status:error instanceof z.ZodError||error instanceof SyntaxError?400:503));
   app.post('/turn',async c=>{
     c.header('Cache-Control','no-store');
-    const connection=await options.authorize(c.req.raw);
+    // The session is verified before the body is read; the connection is resolved
+    // only once the purpose is known, because each purpose has its own assignment.
+    const scope=await options.authorize(c.req.raw);
     const input=modelTurnInputSchema.parse(await c.req.json());
     const {inputDigest,...payload}=input;
     if(await digest(payload)!==inputDigest)throw new ConsumerError(400,'input_digest_mismatch');
     const textBody=JSON.stringify({...input.body,messages:input.body.messages.map(message=>({...message,content:Array.isArray(message.content)?message.content.map(part=>part.type==='image_url'?{type:'image_url'}:part):message.content}))});
     if(new TextEncoder().encode(textBody).length>256*1024)throw new ConsumerError(413,'model_input_too_large');
     const names=input.body.tools?.map(tool=>tool.function.name)??[];
-    const allowed=input.purpose==='teacher'?['lookup_meanings','ask_learner','propose_meaning']:input.purpose==='content'?['read_demand','lookup_reference_facts','submit_candidate']:[];
+    const allowed=purposeTools[input.purpose];
     if(names.some(name=>!allowed.includes(name))||new Set(names).size!==names.length)throw new ConsumerError(400,'unapproved_tool');
     await options.reserve(c.req.raw,input);
+    const connection=scope.select(input.purpose);
     const controller=new AbortController();
     const abort=()=>controller.abort();
     c.req.raw.signal.addEventListener('abort',abort);

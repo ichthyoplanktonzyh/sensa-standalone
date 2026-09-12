@@ -12,7 +12,7 @@ import {generateContent,reviewContent} from '../provisioning/material.js';
 import type {ContentGenerator,ContentReviewer} from '../provisioning/material.js';
 import {beginLookup,readLookup,finishLookup,acceptSemantic,listMeanings} from '../personal/semantic.js';
 import {resolveSemantic,semanticResolverFor} from '../personal/semanticResolver.js';
-import {registerReadingRoutes,activeMeaningConnection,readingDailyLimit} from '../reading/service.js';
+import {registerReadingRoutes,activeMeaningConnection,connectionSelector,readingDailyLimit} from '../reading/service.js';
 import type {ReadingCompletion} from '../reading/service.js';
 import type {SemanticResolver} from '../personal/semanticResolver.js';
 import {semanticLookupInputSchema} from '@sensa/contracts/sensa';
@@ -39,6 +39,9 @@ import { ConsumerError, verifyConsumer } from './auth.js';
 import type { ConsumerVerifier, ConsumerPrincipal } from './auth.js';
 
 const modelDailyLimit=30;
+/** Reference resolution runs once per looked-up word, so it has its own pool: the
+ * per-turn budget would otherwise be exhausted in minutes by normal reading. */
+const referenceDailyLimit=()=>{const n=Number(process.env.SENSA_REFERENCE_DAILY_LIMIT);return Number.isInteger(n)&&n>0?n:300;};
 type Account = { account_id: string; learner_user_id: string; epoch: string; feed_head: string; time_zone: string; session_id: string; now:Date;authorizedInstallationId?:string };
 type Transaction = <T>(work: (db: DatabaseExecutor) => Promise<T>) => Promise<T>;
 const uuid = z.string().uuid();
@@ -205,14 +208,18 @@ export function createConsumerRoutes(options: {deleteIdentity?:DeleteIdentity;te
   registerLibrarySync(app,async(request,work)=>{const identity=await verify(request);return transaction(async db=>{const a=await account(db,identity,undefined,false,clock());return work(db,{accountId:a.account_id,installationId:identity.installationId,now:a.now});});});
   registerReadingRoutes(app,async(request,work)=>{const identity=await verify(request);return transaction(async db=>work(db,await account(db,identity,undefined,false,clock())));},options.readingCompletion);
   app.route('/sensa/model',createModelTurnRoutes({
-    authorize:async request=>{const identity=await verify(request);return transaction(async db=>activeMeaningConnection(db,await account(db,identity,undefined,false,clock())));},
+    // Each purpose resolves its own account connection; the session is verified first.
+    authorize:async request=>{const identity=await verify(request);return transaction(async db=>({select:await connectionSelector(db,await account(db,identity,undefined,false,clock()))}));},
     reserve:async(request,input)=>{const identity=await verify(request);await transaction(async db=>{
       const a=await account(db,identity,undefined,false,clock());
-      const old=(await db.query('SELECT input_digest FROM sensa_consumer.native_semantic_usage WHERE account_id=$1 AND request_id=$2',[a.account_id,input.id])).rows[0];
+      const reference=input.purpose==='reference';
+      const table=reference?'sensa_consumer.reference_usage':'sensa_consumer.native_semantic_usage';
+      const limit=reference?referenceDailyLimit():modelDailyLimit;
+      const old=(await db.query(`SELECT input_digest FROM ${table} WHERE account_id=$1 AND request_id=$2`,[a.account_id,input.id])).rows[0];
       if(old)throw new ConsumerError(409,'model_request_consumed');
-      const count=(await db.query('SELECT count(*)::int AS n FROM sensa_consumer.native_semantic_usage WHERE account_id=$1 AND created_at>$2',[a.account_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
-      if(process.env.SENSA_UNLIMITED_MODEL_USAGE!=='true'&&count>=modelDailyLimit)throw new ConsumerError(409,'model_daily_budget');
-      await db.query('INSERT INTO sensa_consumer.native_semantic_usage VALUES($1,$2,$3,$4)',[a.account_id,input.id,input.inputDigest,a.now]);
+      const count=(await db.query(`SELECT count(*)::int AS n FROM ${table} WHERE account_id=$1 AND created_at>$2`,[a.account_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
+      if(process.env.SENSA_UNLIMITED_MODEL_USAGE!=='true'&&count>=limit)throw new ConsumerError(409,'model_daily_budget');
+      await db.query(`INSERT INTO ${table} VALUES($1,$2,$3,$4)`,[a.account_id,input.id,input.inputDigest,a.now]);
     });},
     complete:options.modelTurnCompletion,
   }));
@@ -231,12 +238,13 @@ export function createConsumerRoutes(options: {deleteIdentity?:DeleteIdentity;te
       const a=await account(db,identity,undefined,false,clock());
       const since=new Date(a.now.getTime()-86400000);
       const reading=Number((await db.query('SELECT count(*)::int AS n FROM sensa_consumer.reading_requests WHERE account_id=$1 AND created_at>$2',[a.account_id,since])).rows[0]!.n);
+      const reference=Number((await db.query('SELECT count(*)::int AS n FROM sensa_consumer.reference_usage WHERE account_id=$1 AND created_at>$2',[a.account_id,since])).rows[0]!.n);
       const teacher=Number((await db.query('SELECT count(*)::int AS n FROM sensa_consumer.semantic_lookups WHERE learner_user_id=$1 AND created_at>$2',[a.learner_user_id,since])).rows[0]!.n);
       const content=Number((await db.query('SELECT count(*)::int AS n FROM sensa_consumer.provisioning_attempts p JOIN sensa_consumer.provisioning_tasks t ON t.id=p.task_id WHERE t.learner_user_id=$1 AND p.started_at>$2',[a.learner_user_id,since])).rows[0]!.n);
       let explanationAvailable=false;
       try{await activeMeaningConnection(db,a);explanationAvailable=true;}catch(e){if(!(e instanceof ConsumerError))throw e;}
       return {authorized:true,explanationAvailable,checkedAt:a.now.toISOString(),windowHours:24,
-        usage:[{kind:'reading',used:reading,limit:process.env.SENSA_UNLIMITED_MODEL_USAGE==='true'?null:readingDailyLimit},{kind:'teacher',used:teacher,limit:process.env.SENSA_UNLIMITED_MODEL_USAGE==='true'?null:modelDailyLimit},{kind:'content',used:content,limit:process.env.SENSA_UNLIMITED_MODEL_USAGE==='true'?null:modelDailyLimit}]};
+        usage:[{kind:'reading',used:reading,limit:process.env.SENSA_UNLIMITED_MODEL_USAGE==='true'?null:readingDailyLimit},{kind:'reference',used:reference,limit:process.env.SENSA_UNLIMITED_MODEL_USAGE==='true'?null:referenceDailyLimit()},{kind:'teacher',used:teacher,limit:process.env.SENSA_UNLIMITED_MODEL_USAGE==='true'?null:modelDailyLimit},{kind:'content',used:content,limit:process.env.SENSA_UNLIMITED_MODEL_USAGE==='true'?null:modelDailyLimit}]};
     });
     c.header('Cache-Control','no-store');return c.json(result);
   });
