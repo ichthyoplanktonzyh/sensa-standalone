@@ -1,4 +1,4 @@
-name: Sensa release candidate (no deployment)
+name: Sensa deep release validation (no deployment)
 on:
   workflow_dispatch:
     inputs:

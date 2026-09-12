@@ -1,15 +1,14 @@
-name: Promote Sensa release candidate
+name: Deploy Sensa production
+run-name: Deploy Sensa ${{ inputs.release_sha || github.sha }}
 on:
   workflow_dispatch:
     inputs:
-      candidate_run_id:
-        description: Successful release candidate workflow run ID
-        required: true
       release_sha:
-        description: Full reviewed Git commit SHA
-        required: true
+        description: Full main commit SHA; leave blank to deploy the selected workflow revision
+        required: false
+        type: string
       owner_accepted:
-        description: Owner accepts this exact candidate and authorizes production deployment
+        description: Authorize this exact revision for production deployment
         type: boolean
         required: true
         default: false
@@ -20,16 +19,115 @@ concurrency:
   group: sensa-web-production
   cancel-in-progress: false
 jobs:
-  deploy:
+  gate:
     if: inputs.owner_accepted
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    outputs:
+      release_sha: ${{ steps.release.outputs.sha }}
+    env:
+      SENSA_RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
+    steps:
+      - name: Require green main CI for this revision
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'JS'
+          import {appendFileSync} from 'node:fs';
+          const env=process.env,sha=env.SENSA_RELEASE_SHA??'';
+          if(!/^[a-f0-9]{40}$/.test(sha)||!env.GH_TOKEN||!env.GITHUB_REPOSITORY)throw Error('Full release SHA and GitHub Actions identity required');
+          const endpoint=new URL(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/actions/workflows/sensa-consumer-check.yml/runs`);
+          for(const [key,value] of Object.entries({branch:'main',event:'push',head_sha:sha,per_page:'10'}))endpoint.searchParams.set(key,value);
+          for(let attempt=0;attempt<56;attempt++){
+            const response=await fetch(endpoint,{headers:{authorization:`Bearer ${env.GH_TOKEN}`,accept:'application/vnd.github+json','x-github-api-version':'2026-03-10'}});
+            if(!response.ok)throw Error(`Cannot verify Sensa CI (${response.status})`);
+            const payload=await response.json(),run=payload.workflow_runs?.find(candidate=>candidate.head_sha===sha&&candidate.head_branch==='main'&&candidate.event==='push');
+            if(run?.conclusion==='success'){
+              appendFileSync(env.GITHUB_OUTPUT,`sha=${sha}\n`);
+              console.log(`Verified green Sensa CI run ${run.id} for ${sha}.`);
+              process.exit(0);
+            }
+            if(run?.status==='completed')throw Error(`Sensa CI run ${run.id} concluded ${run.conclusion}`);
+            if(attempt===55)throw Error('Sensa CI did not complete for this exact main commit within 14 minutes');
+            console.log(run?`Waiting for Sensa CI run ${run.id} (${run.status})...`:'Waiting for the main CI run to appear...');
+            await new Promise(resolve=>setTimeout(resolve,15000));
+          }
+          JS
+
+  build:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: web-candidate
+    env:
+      SENSA_RELEASE_SHA: ${{ needs.gate.outputs.release_sha }}
+      VITE_SENSA_MODE: production
+      SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SENSA_API_URL: ${{ vars.VITE_SENSA_API_URL }}
+      SENSA_EXTENSION_WEB_URL: ${{ vars.SENSA_WEB_ORIGIN }}
+      SENSA_EXTENSION_API_URL: ${{ vars.VITE_SENSA_API_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+      - name: Verify exact revision
+        run: node scripts/release/verifyRevision.mjs
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Refuse incomplete or unsafe release configuration
+        run: node scripts/release/releaseCandidate.mjs --check
+      - name: Build the production delivery surface once
+        run: |
+          npm run build -w @sensa/learning-kernel
+          npm run build -w @sensa/contracts
+          npm run build -w @sensa/content-validator
+          npm run build -w @sensa/model-runtime
+          npm run build -w @sensa/intake-transport
+          npm run build -w @sensa/api
+          npm run build -w @sensa/web
+          npm run build -w @sensa/browser-extension
+      - name: Build authored starter learning package
+        env:
+          SENSA_PACKAGE_OUTPUT: apps/web/dist/learning-packages
+        run: node --import tsx scripts/release/buildStarterPackage.mts
+      - name: Prepare and verify the fixed delivery artifact
+        run: |
+          node scripts/release/releaseCandidate.mjs
+          node scripts/release/verifyCandidate.mjs
+      - name: Validate Cloudflare bundle without deployment
+        run: npx wrangler versions upload --dry-run --strict
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sensa-production-${{ needs.gate.outputs.release_sha }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            apps/web/dist/
+            apps/browser-extension/dist/
+            apps/api/dist/
+            packages/contracts/dist/
+            packages/learning-kernel/dist/
+            packages/content-validator/dist/
+            packages/model-runtime/dist/
+            packages/intake-transport/dist/
+            release-candidate/manifest.json
+            release-candidate/catalog.json
+
+  deploy:
+    needs: [gate, build]
     environment:
       name: web-production
       url: ${{ vars.SENSA_WEB_ORIGIN }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      SENSA_RELEASE_SHA: ${{ inputs.release_sha }}
-      CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      SENSA_RELEASE_SHA: ${{ needs.gate.outputs.release_sha }}
       SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
       VITE_SENSA_API_URL: ${{ vars.VITE_SENSA_API_URL }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
@@ -38,27 +136,30 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.release_sha }}
+          ref: ${{ needs.gate.outputs.release_sha }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
           cache: npm
-      - name: Verify release candidate provenance
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/release/verifyPromotion.mjs
+      - run: npm ci
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: sensa-release-candidate-${{ inputs.release_sha }}
-          run-id: ${{ inputs.candidate_run_id }}
-          github-token: ${{ github.token }}
+          name: sensa-production-${{ needs.gate.outputs.release_sha }}
           path: .
-      - run: node scripts/release/verifyCandidate.mjs
-      - run: npm ci
+      - name: Verify artifact and production target
+        run: |
+          node scripts/release/verifyCandidate.mjs
+          node --input-type=module <<'JS'
+          const env=process.env,project=env.SUPABASE_PROJECT_REF??'';
+          if(env.CLOUDFLARE_WORKER_NAME!=='sensa-standalone')throw Error('Cloudflare Worker target mismatch');
+          let api;try{api=new URL(env.VITE_SENSA_API_URL);}catch{throw Error('Production API URL required');}
+          if(!/^[a-z0-9]{20}$/.test(project)||api.hostname!==`${project}.supabase.co`||api.pathname.replace(/\/$/,'')!=='/functions/v1/sensa-api')throw Error('Supabase target mismatch');
+          console.log('Verified production Supabase and Cloudflare targets.');
+          JS
       - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
         with:
           version: 2.117.0
-      - name: Apply reviewed forward migrations
+      - name: Apply pending forward migrations
         env:
           MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
         run: |
@@ -69,7 +170,7 @@ jobs:
           } catch { console.error('Migration database must match the approved Supabase project and require TLS.');process.exit(1); }
           JS
           npm run db:migrate
-      - name: Reconcile production Auth redirects
+      - name: Keep production Auth redirects aligned
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node scripts/release/supabaseAuthConfig.mjs --apply
@@ -111,7 +212,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: sensa-release-evidence-${{ inputs.release_sha }}
+          name: sensa-release-evidence-${{ needs.gate.outputs.release_sha }}
           retention-days: 30
           if-no-files-found: warn
           path: |

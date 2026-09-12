@@ -4,26 +4,32 @@
 产品工作状态见 [当前阶段](current-stage.md)，个人内容、资源与运行见 [Web 工作流](web-local-meaning-workflow.md)。
 首发交付 Web＋浏览器插件，需接通普通账号同步与其他浏览器恢复；原生、E2EE、恢复码和设备批准不作为前置。
 普通账号全库同步已通过本地真实浏览器与数据库验证；隔离项目已通过 CI/CD 应用 `0028_sensa_encrypted_intake.sql`
-与 `0029_sensa_library_sync.sql`，仍需发布并验收相应 API/Web。
+与 `0029_sensa_library_sync.sql`，相应 API/Web 已通过 CI/CD 发布，真实 owner 流程继续验收。
 旧加密采集测试不能替代此项真实环境验收。个人试用不等于公开部署。云端操作必须走 CI/CD，
 对应授权见 [发布约定](release-authorization.md)。
 
-## 候选与监控边界
+## 日常发布、深度验证与监控边界
 
-`.github/workflows/sensa-web-candidate.yml` 只接受完整 SHA，生成固定候选包，不部署、迁移或
-上传商店。GitHub `web-candidate` environment 配置公开变量：`SENSA_WEB_ORIGIN`、
-`VITE_SUPABASE_URL`、`VITE_SUPABASE_PUBLISHABLE_KEY`、`VITE_SENSA_API_URL`。
+`.github/workflows/sensa-web-deploy.yml` 是唯一日常应用发布入口。手动运行时可填完整 main SHA，留空则使用
+所选 workflow revision，并必须勾选 owner 生产授权。build job 先校验该 SHA 的 main Sensa CI 已成功，
+若 CI 尚在运行则自动等待最多 14 分钟，CI 失败或超时就不触碰生产。
+再使用 `web-candidate` 环境的公开变量构建一次固定制品：`SENSA_WEB_ORIGIN`、`VITE_SUPABASE_URL`、
+`VITE_SUPABASE_PUBLISHABLE_KEY`、`VITE_SENSA_API_URL`。该制品在同一 workflow run 内传给 `web-production` deploy job，
+无需候选 run ID，部署时不重新构建。
+
+`.github/workflows/sensa-web-candidate.yml` 是里程碑/高风险改动的可选深度验证：只接受完整 SHA，生成固定验证包，
+运行 App Shell/云恢复预算，不部署、迁移或上传商店，也不是日常发布前置。
 当前首发适配限定托管 Supabase 的 `functions/v1/sensa-api`；其他服务布局需显式修改发布合同。
 没有目标环境时检查失败，不能使用 localhost 或合成配置冒充生产候选。
 
-`npm run sensa:web-bootstrap-budget` 在候选构建上强制启动与恢复预算：外壳不等待账号云同步、
+`npm run sensa:web-bootstrap-budget` 在深度验证构建上强制启动与恢复预算：外壳不等待账号云同步、
 恢复请求数有界、空闲标签不发请求、无 console 错误与 CSP 违规（含 zod 动态编译路径）。
 `node scripts/release/releaseCandidate.mjs --check` 检查环境；构建后去掉 `--check` 校验 SHA、
 Web 实际嵌入配置与插件目标，生成静态托管响应头和 `release-candidate/manifest.json`。
 清单为 Web、插件、编译 API 及其共享包逐文件记录 SHA-256；正式部署下载并复核同一制品，
 不重新编译。候选准备阶段移除 source map 与其引用；清单不包含模型密钥或公开认证 Key。
-制品有效期 14 天；生成候选不等于
-release acceptance 或上线已通过。API 新增 X-Request-ID 和仅含方法、服务分类、状态、耗时的结构化日志，
+日常发布的中间制品保留 7 天，深度验证制品保留 14 天；生成制品不等于
+用户流程验收或上线已通过。API 新增 X-Request-ID 和仅含方法、服务分类、状态、耗时的结构化日志，
 不保存 URL/正文/邮箱/令牌/模型内容；真实告警与仪表盘尚待平台配置。
 
 ## 本地真实服务配置
@@ -57,7 +63,7 @@ borrow/lend 及媒体资源见 [学习包指南](assurance-package-import.md)。
 
 `.github/workflows/sensa-trial-database.yml` 使用 `sensa-trial` environment 和完整已审阅 SHA，
 只允许指定隔离项目的 initialize / invite，不部署应用或导入旧学习历史。API 不再保留第二条独立
-试用部署工作流；应用部署统一走已接受候选的生产晋级流程，避免配置、catalog 和实际版本分叉。
+试用部署工作流；应用部署统一走单次生产 workflow 内的固定制品传递，避免配置、catalog 和实际版本分叉。
 
 - 忽略文件 `apps/api/.env.trial-ci` 保存 `MIGRATION_DATABASE_URL` 与 `SENSA_RUNTIME_DATABASE_URL`。
   `node scripts/release/prepareTrialEnvironment.mjs` 本机检查项目/TLS 并生成或复用运行密码，
@@ -77,11 +83,9 @@ borrow/lend 及媒体资源见 [学习包指南](assurance-package-import.md)。
 - Web 托管使用 Cloudflare Worker `sensa-standalone`，地址为
   `https://sensa-standalone.ichthyoplanktonzyh.workers.dev`。仓库 `wrangler.jsonc` 与 GitHub Actions
   是配置和部署权威；普通 `main` 推送不会发布，Cloudflare Builds 不作为第二发布入口。
-- `release acceptance`：手动指定完整 SHA，分组运行账号/同步、离线/删除/备份、插件与完整应用旅程。
-- `web-candidate`：手动指定完整 SHA，只构建一次；包含 Web、插件、编译 API、catalog 和摘要。
-- `web-production`：手动填写同一 SHA 的成功 candidate run ID、成功 acceptance run ID 和 owner
-  验收确认。流水线拒绝目标、来源或摘要不一致。GitHub Free 私有仓库当前无法启用 branch
-  protection/required reviewers，因此双 run 来源校验与显式授权输入是仓库内强制门。
+- `web-production`：日常发布只需一次手动 workflow；校验精确 main SHA 的成功 CI，一次构建、同 run 传递制品，
+  然后迁移、API 部署、Worker 预览与生产提升。owner 勾选是对该 SHA 的显式生产授权。
+- `web-candidate`：可选深度验证，手动指定完整 SHA；包含 Web、插件、编译 API、catalog、摘要与重型浏览器预算，不自动部署。
 - `sensa-auth-config`：生产认证回调的独立修复入口，只接受完整 SHA 和显式授权；它把 Supabase
   Auth `Site URL` 设为正式 Web origin，并把 Redirect URL allow list 收敛为该 origin 下的路径。
   正式发布也执行同一脚本，避免平台配置重新漂移到 localhost。
@@ -96,8 +100,8 @@ borrow/lend 及媒体资源见 [学习包指南](assurance-package-import.md)。
   环境用于账号删除，不进入 Web。真实 Auth SMTP 与 bucket 策略在项目中配置并验证。
 - 公共文本包可随已验收 Web 资产发布；私有/音频媒体按 Storage 授权合同
   独立验收，不能把现有 Storage 适配误称为本次真实媒体发布已通过。
-- 首发自动配置为受邀访问。Web 回滚使用发布证据中的上一 Cloudflare version ID；API 回滚仍以
-  上一份已验收候选重新晋级。数据库只使用向前兼容迁移。整体回滚优先重新发布上一份已验收
+- 首发自动配置为受邀访问。Web 回滚使用发布证据中的上一 Cloudflare version ID；API 回滚以
+  上一份已通过 main CI 的 SHA 重新运行单次发布流程。数据库只使用向前兼容迁移。整体回滚优先重新发布上一份已验收
   Web/API 版本，保留已应用迁移；**不能回滚至不识别账号删除 lifecycle 的 API**。紧急时先暂停默认模型或关闭 API，
   不删除/重建学习数据。数据库恢复必须另行批准且验证删除屏障仍存在，避免备份恢复复活账号。
 - 仓库变量 `SENSA_MONITOR_ENABLED=true` 才启用小时监控；`web-monitor` 放只读

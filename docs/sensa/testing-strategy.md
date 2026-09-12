@@ -10,15 +10,16 @@
 | 通道 | 触发 | 内容 | 发布作用 |
 | --- | --- | --- | --- |
 | `Sensa CI` | PR、`main` push | `typecheck/build/lint`、Deno compile、快速无浏览器检查；独立 Postgres/API 集成 Job | 提交反馈；取消同分支过期运行 |
-| `Sensa release candidate` | 手动指定完整 SHA | 生产配置检查、一次完整构建、App Shell 启动与恢复预算（`npm run sensa:web-bootstrap-budget`）、API Edge check、候选摘要与所有部署产物摘要 | 产生唯一可晋级制品，不部署 |
-| `Promote Sensa release candidate` | 手动指定 SHA、candidate run、owner 授权 | 校验候选来源，迁移、API 部署、Worker 预览版本、生产提升和公网检查 | 唯一应用发布入口 |
+| `Sensa deep release validation` | 里程碑或高风险改动时手动指定完整 SHA | 生产配置检查、完整构建、App Shell 启动与恢复预算（`npm run sensa:web-bootstrap-budget`）、API Edge check 与全交付摘要 | 产生深度证据，不部署，不是日常发布前置 |
+| `Deploy Sensa production` | 手动选择 main 修订/可选完整 SHA，勾选 owner 授权 | 复用该 SHA 已通过的 main CI；带生产配置构建一次并在同一 run 内传递；迁移、API、Worker 预览/提升和公网检查 | 唯一应用发布入口，无手工 candidate run ID |
 | `Web operational checks` | 每小时及手动 | 公网静态/API 边界与只读聚合阈值 | 上线后运行监测 |
 
 提交检查只保留已确定、无外部账号、无真实浏览器进程且能快速定位失败的工程与数据合同。
-与产品流程无关的工程门必须留在发布路径上，不能因为“体验还未确认”一起撤掉：
+与产品流程无关的工程门必须留在 CI 或发布路径上，不能因为“体验还未确认”一起撤掉。
 `npm run sensa:web-bootstrap-budget` 用真实构建产物 + 合成账号服务（注入延迟）断言
 App Shell 不等待账号云同步、恢复请求数有界、空闲标签不发请求、浏览器无 console 错误与 CSP 违规，
-它约束的是启动与网络边界，不冻结任何页面流程。
+它约束的是启动与网络边界，不冻结任何页面流程。修改启动、账号同步或 Service Worker 时必须定向运行；
+里程碑时由深度验证 workflow 重跑，不在每次已有 main CI 证据的日常部署里重复。
 真实 Chromium、独立浏览器 profile、Service Worker 冷启动、账号删除、备份恢复和插件采集依赖
 尚未完全确认的用户流程；2026-09-12 已删除旧的混合 browser smoke 与 release acceptance 工作流。
 确认每条体验后再从该体验建立独立 E2E，不能从旧脚本恢复产品合同。
@@ -99,7 +100,7 @@ HTTP、签名和凭据沙盒。混合选择原生组与可运行组会在任何�
 | 小改动 | 运行受影响规则或交互测试；失败保存诊断并修复，不靠重复运行碰绿 |
 | 完成纵向用例 | 主要成功/失败/恢复路径 + 持久化断言，相关语言检查；根级 typecheck/build/lint；checkpoint |
 | 完成正式 UI 整组 | 最终入口的跨模块旅程，macOS/Android 各自结果、独立冷恢复，响应式和键盘检查，再实际体验走查 |
-| Web 发布 | 固定 SHA 的 candidate 成功，owner 授权同一制品；预览与公网工程检查通过后完成 |
+| Web 发布 | 固定 main SHA 的 Sensa CI 成功，owner 在单次发布 workflow 授权；同一 run 的固定制品通过预览与公网检查后完成 |
 | 扩平台 | 实际安装包、OS 交互、目标设备；真实网站兼容；经授权的小规模 Provider 实况。云端仍走 CI/CD |
 
 已经通过且后续修改不影响的用例无需反复全量执行。选择依据记录在交付中；未验证的平台明确保留。
