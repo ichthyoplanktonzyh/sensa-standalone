@@ -5,10 +5,12 @@ import {LocalDataControlPanel} from './LocalDataControlPanel';
 import {LibraryBackupPanel} from './LibraryBackupPanel';
 import {useAccountExperience} from '../account/AccountExperience';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowRight, ArrowLeft, BookOpen, SlidersHorizontal, UserRound, RefreshCw, Database, Cpu, Info } from 'lucide-react';
+import { ArrowRight, ArrowLeft, BookOpen, SlidersHorizontal, UserRound, RefreshCw, Database, Cpu, Info, Languages } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitch } from '../../i18n/LanguageSwitch';
 import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
+import { LanguagePanelHost, languageSummary } from './language/LanguagePanel';
+import { useLanguageProfile } from '../library/useLanguageProfile';
 import type { PrototypeLearningPolicy } from '../learningJourney/prototypeLearning';
 
 interface ProfileScreenProps {
@@ -61,6 +63,9 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
     return () => {live = false; stop();};
   }, [props.active, props.localLibrary, i18n.language]);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [languagesOpen, setLanguagesOpen] = useState(false);
+  const language = useLanguageProfile();
+  const languageNote = t('account.languagesNote');
   const [online, setOnline] = useState(() => navigator.onLine);
   const [offlineShell,setOfflineShell]=useState(document.documentElement.dataset.offlineShell??'development');
   useEffect(()=>{const update=()=>setOfflineShell(document.documentElement.dataset.offlineShell??'development');window.addEventListener('sensa-offline-shell',update);return()=>window.removeEventListener('sensa-offline-shell',update);},[]);
@@ -70,7 +75,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
     catch { setBytes(null); }
   };
   useEffect(() => {
-    if (!props.active) { setPreferencesOpen(false); setPage('home'); return; }
+    if (!props.active) { setPreferencesOpen(false); setLanguagesOpen(false); setPage('home'); return; }
     if (!props.account&&!props.localLibrary) refreshStorage();
     const updateNetwork = () => setOnline(navigator.onLine);
     updateNetwork();
@@ -129,6 +134,9 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
           <h2 id="account-preferences" className="mb-4 text-lg font-medium">{t('account.preferences')}</h2>
           <div className="divide-y divide-[#e3e5ea] rounded-2xl border border-[#e3e5ea] bg-white px-5 sm:px-6">
             <div className="flex min-h-20 flex-wrap items-center justify-between gap-3 py-3"><span className="text-sm">{t('account.language')}</span><LanguageSwitch/></div>
+            <button id="account-languages" onClick={() => setLanguagesOpen(true)} className="flex min-h-24 w-full items-center gap-4 py-5 text-left hover:text-[#5268a9] focus-visible:outline-2 focus-visible:outline-[#5268a9]">
+              <Languages size={19} className="shrink-0 text-[#788398]"/><span className="flex-1"><span className="block text-sm font-medium">{t('account.languages')}</span><span className="mt-1 block text-xs leading-5 text-[#788398]">{language.saved ? languageSummary(language.profile, i18n.language) : languageNote}</span></span><ArrowRight size={17}/>
+            </button>
             <button id="account-learning-preferences" onClick={() => props.onOpenPreferences ? props.onOpenPreferences() : setPreferencesOpen(true)} className="flex min-h-24 w-full items-center gap-4 py-5 text-left hover:text-[#5268a9] focus-visible:outline-2 focus-visible:outline-[#5268a9]">
               <SlidersHorizontal size={19} className="shrink-0 text-[#788398]"/><span className="flex-1"><span className="block text-sm font-medium">{t('account.learning')}</span><span className="mt-1 block text-xs leading-5 text-[#788398]">{t(props.fixedLearningPolicy?'account.dailyLearningNote':'account.learningNote')}</span></span><ArrowRight size={17}/>
             </button>
@@ -173,5 +181,6 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
       </div>
     </main>
     {props.active && preferencesOpen && <LearningPreferencesPanel fixedPolicy={props.fixedLearningPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('account.done')}/>}
+    {props.active && languagesOpen && <LanguagePanelHost onClose={() => setLanguagesOpen(false)}/>}
   </section>;
 };

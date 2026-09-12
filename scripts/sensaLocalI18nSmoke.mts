@@ -7,6 +7,7 @@ import {parse} from '@babel/parser';
 import {libraryBackupZh,libraryBackupEn,modelServiceZh,modelServiceEn} from '../apps/web/src/i18n/localLibrary.ts';
 import {localFlowZh,localFlowEn} from '../apps/web/src/i18n/localFlow.ts';
 import {accountZh,accountEn} from '../apps/web/src/i18n/account.ts';
+import {languagesZh,languagesEn} from '../apps/web/src/i18n/languages.ts';
 import i18n from '../apps/web/src/i18n/index.ts';
 import {localFlowNotice} from '../apps/web/src/i18n/localFlowText.ts';
 function parity(a:any,b:any,path=''){
@@ -17,7 +18,7 @@ function parity(a:any,b:any,path=''){
   const placeholders=(s:string)=>[...s.matchAll(/\{\{(.*?)\}\}/gu)].map(m=>m[1]).sort();assert.deepEqual(placeholders(a[key]),placeholders(b[key]),path+'.'+key);
  }
 }
-parity(fourStageZh,fourStageEn);parity(originalCardsZh,originalCardsEn);parity(libraryBackupZh,libraryBackupEn);parity(modelServiceZh,modelServiceEn);parity(localFlowZh,localFlowEn);parity(accountZh,accountEn);
+parity(fourStageZh,fourStageEn);parity(originalCardsZh,originalCardsEn);parity(libraryBackupZh,libraryBackupEn);parity(modelServiceZh,modelServiceEn);parity(localFlowZh,localFlowEn);parity(accountZh,accountEn);parity(languagesZh,languagesEn);
 const folders=['apps/web/src/data/library','apps/web/src/experience/library'];
 const files=(await Promise.all(folders.map(async d=>(await readdir(d)).filter(f=>/\.tsx?$/u.test(f)).map(f=>d+'/'+f)))).flat();
 files.push(...['App.tsx','account/AccountExperience.tsx','account/AccountDeletion.tsx','account/ExtensionIntake.tsx','components/ProfileScreen.tsx','components/ProviderPanel.tsx','components/ModelExecutionPanel.tsx','components/LibraryBackupPanel.tsx','components/LocalDataControlPanel.tsx','components/ExpressionChatInput.tsx','components/learning/RichExperience.tsx','components/learning/LearningResourceDetails.tsx','components/PersonalMeaningComposer.tsx','components/PersonalMeaningDetailScreen.tsx','components/StudyScreen.tsx','components/learning/LearningPreferencesPanel.tsx','components/learning/LightweightRuntimeStartScreen.tsx'].map(p=>'apps/web/src/experience/'+p));
