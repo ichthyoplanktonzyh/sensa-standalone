@@ -251,7 +251,7 @@ export default function App() {
   // 剩余展示版本对照开关由 presentationStore 持有：写在侧栏、读在各屏。
   const dictionaryPresentation = usePresentationStore((state) => state.dictionary);
 
-  /* ---------- 我的内容读取投影与下钻目标 ---------- */
+  /* ---------- 我的语义世界读取投影与下钻目标 ---------- */
   /**
    * 下钻目标由 URL 描述，而不是 useState 持有的对象。此前
    * selectedContentSense 存的是整个 PracticeSenseItem，深链接因此只能打开
@@ -1888,7 +1888,7 @@ export default function App() {
             onSelectScope={selectScope}
           />
 
-          {/* 3. 我的内容 */}
+          {/* 3. 我的语义世界 */}
           <ContentScreen
             localLibrary={localLibrary.source}
             bulkLearning={(items,list)=><BatchPersonalLearning items={items} meanings={localLibrary.meanings} c={personalLearning}>{list}</BatchPersonalLearning>}
@@ -1934,7 +1934,7 @@ export default function App() {
             toast={toast}
           />
 
-          {/* 3.2 我的内容清单：学习、收藏与笔记读取投影 */}
+          {/* 3.2 我的语义世界清单：学习、收藏与笔记读取投影 */}
           <ContentLibraryScreen
             active={viewMode === 'main' && mainStack.includes('s-content-library')}
             section={contentSection}

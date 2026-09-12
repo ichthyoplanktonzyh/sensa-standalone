@@ -44,7 +44,7 @@ Semantic Acceptance 可以来自 learner 的直接操作，也可以来自在明
 Agent。浏览、学习历史、未获授权的模型推断、收藏或推荐只能产生 Intake 或创建建议，不能静默增加
 成员。
 
-这里的 Personal Semantic World 是 learner-owned 领域仓库，不等于产品中同名的“我的词义世界”
+这里的 Personal Semantic World 是 learner-owned 领域仓库，不等于产品中同名的“我的语义世界”
 页面。该页面主要是仓库的读取、治理与学习交接控制面：呈现已经进入的 contextual meanings，处理
 Inbox 例外，检查/纠正来源与解析，撤销误收，并显式提交 Add-to-Learning。页面不是第二个事实 owner，
 也不是创建 Personal Meaning 的必经入口。
@@ -144,7 +144,7 @@ Semantic Intake 是浏览器插件、移动端分享、桌面助手、拍照/语
 但正式 Personal Semantic World membership 必须在二者补齐并接受后才创建。
 
 主应用内的手动创建只是上述端口之一，不拥有更高的领域地位。正常摄取可以在 learner 阅读、工作、
-交流或使用 Agent 的原位完成，不要求先打开“我的词义世界”页面；任何获授权端口都必须提交同一种
+交流或使用 Agent 的原位完成，不要求先打开“我的语义世界”页面；任何获授权端口都必须提交同一种
 幂等 Intake/commit 语义，并由同一个 Personal Semantic World authority 接纳。端口差异只影响可获得
 的 Context、交互方式、acceptance provenance 与 capability，不产生另一套 Personal Meaning。
 
@@ -185,7 +185,7 @@ Inbox 是 Personal Semantic World 产品表面的收货区，但在领域上不�
 处理可以使用轻量候选选择或 LLM Sense Construction；在三元组闭合前，中断状态继续留在 Inbox/
 construction draft，不得通过伪造 Focus、Proposal 或 Confirmation 提前创建完整 Personal Meaning。
 
-因此，“我的词义世界”产品表面的主要职责不是要求 learner 在应用内重复录入，而是让外部 Intake 的
+因此，“我的语义世界”产品表面的主要职责不是要求 learner 在应用内重复录入，而是让外部 Intake 的
 结果可理解、可纠正、可撤销并可交给 Learning。它可以提供补充性的应用内捕获入口，但不能让其他
 端口依赖页面状态、组件生命周期或本地表单才能完成相同领域操作。
 
@@ -334,9 +334,9 @@ Intake/Construction draft 可以长期保持未确认 Sense 或没有自然的�
   lifecycle 相互独立，任何一侧的删除/进度都不能暗中改写另一侧；
 - Personal Semantic World 的每个正式成员都必须固定真实 Context、被定位的 Expression、
   teaching-sufficient stable Sense Version 与兼容 Binding；未闭合材料属于 Intake Inbox；
-- 创建 Personal Meaning 不得以打开“我的词义世界”页面为前提；应用内表单、浏览器/移动/桌面端口
+- 创建 Personal Meaning 不得以打开“我的语义世界”页面为前提；应用内表单、浏览器/移动/桌面端口
   与 authorized Agent 都必须汇入同一幂等 Intake/commit authority；
-- “我的词义世界”页面是 Personal Semantic World、Inbox、provenance 与 learning projection 的读取/
+- “我的语义世界”页面是 Personal Semantic World、Inbox、provenance 与 learning projection 的读取/
   控制面，不拥有第二份 semantic state，也不能绕过真实领域 owner 写入；
 - 只有 learner 的直接 Semantic Acceptance 或其显式授权的 delegated acceptance 才能增加 Personal
   Semantic World membership；delegated acceptance 无需额外二次确认，但必须保存 grant/actor provenance；

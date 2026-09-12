@@ -206,7 +206,7 @@ const projectSemanticSense = (
 };
 
 /**
- * Build the My Content read projections from the currently installed Package
+ * Build the My Semantic World read projections from the currently installed Package
  * practice inventory. Legacy word-level facts remain in their own storage
  * namespace and are intentionally not promoted into the formal projection.
  */

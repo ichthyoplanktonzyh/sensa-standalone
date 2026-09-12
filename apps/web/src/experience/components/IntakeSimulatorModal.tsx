@@ -4,7 +4,7 @@ import { uiClass } from '../ui/classes';
  *
  * 三个场景直接调用 gateway.ingest，与真实分享面板共用同一条契约校验与
  * 双轨分流路径：
- * 1. 网页划词快轨——三要素齐全且义项已确认，秒级直通词义世界；
+ * 1. 网页划词快轨——三要素齐全且义项已确认，秒级直通语义世界；
  * 2. 随手划词慢轨——不选义项，进入待处理材料盒（待确认词义）；
  * 3. 多模态随手拍——照片 + 文字、不圈词，进入待处理材料盒（待圈定表达）。
  */
@@ -35,7 +35,7 @@ const SCENARIOS: Record<Scenario, {
 }> = {
   web_fast: {
     label: '网页划词快轨',
-    hint: '三要素齐全且义项已确认 → 秒级直通词义世界',
+    hint: '三要素齐全且义项已确认 → 秒级直通语义世界',
     route: '快轨：捕获即物化，无需 AI 澄清',
     sentence: 'The library will loan the atlas to students for one week.',
     word: 'loan',
@@ -150,7 +150,7 @@ export const IntakeSimulatorModal = ({
     try {
       const result = await gateway.ingest(payload.intakeOperationId, payload);
       if (result.route === 'fast_track') {
-        toast('已捕获：秒级直通词义世界');
+        toast('已捕获：秒级直通语义世界');
         onFastTracked(result.personalMeaningId);
       } else if (result.route === 'inbox') {
         toast('已捕获：进入待处理材料盒');

@@ -110,7 +110,7 @@ export const PROTOTYPE_LEARNING_TARGETS: Record<
     meaning: '表达真实意见，同时照顾对方感受，避免不必要的难堪。',
     example: 'She gave a tactful answer without hiding the problem.',
     sourceKind: 'personal_semantic_world',
-    sourceLabel: '从我的词义世界加入',
+    sourceLabel: '从我的语义世界加入',
     runtimeSenseId: null,
     personalExperienceGrounding: {
       scene: '同事的方案有明显问题，我指出了问题，但没有让他在会上难堪。',

@@ -189,7 +189,7 @@ const targetsFromPersonalMeanings = (
           },
           provenance: {
             sourceId: PERSONAL_SEMANTIC_WORLD_SCOPE_ID,
-            sourceLabel: '我的词义世界',
+            sourceLabel: '我的语义世界',
           },
         });
       }
@@ -230,8 +230,8 @@ export const resolvePracticeScopeCatalog = ({
     ? {
         resolverVersion: PRACTICE_SCOPE_RESOLVER_VERSION,
         sourceId: PERSONAL_SEMANTIC_WORLD_SCOPE_ID,
-        sourceLabel: '我的词义世界',
-        title: '我的词义世界',
+        sourceLabel: '我的语义世界',
+        title: '我的语义世界',
         targets: selectedPersonalTargets,
       }
     : {
@@ -258,7 +258,7 @@ export const resolvePracticeScopeCatalog = ({
       },
       {
         sourceId: PERSONAL_SEMANTIC_WORLD_SCOPE_ID,
-        title: '我的词义世界',
+        title: '我的语义世界',
         subtitle: '已确认的意思与表达',
         targets: personalTargets,
         selectedTargetCount: normalizedSelection.sourceId === PERSONAL_SEMANTIC_WORLD_SCOPE_ID

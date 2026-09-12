@@ -27,8 +27,8 @@ export const resources = {
       nav: {
         home: "今日",
         learning: "我的学习",
-        content: "我的内容",
-        world: "词义世界",
+        content: "我的语义世界",
+        world: "语义世界",
         practice: "练习",
         settings: "账号与设置",
         label: "主要导航",
@@ -76,8 +76,8 @@ export const resources = {
       nav: {
         home: "Today",
         learning: "My learning",
-        content: "My content",
-        world: "My meanings",
+        content: "My semantic world",
+        world: "Semantic world",
         practice: "Practice",
         settings: "Account & settings",
         label: "Main navigation",

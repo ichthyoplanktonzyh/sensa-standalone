@@ -27,7 +27,7 @@ export const ContentComingSoonScreen = ({ active, kind, onBack }: ContentComingS
   return (
     <section className={uiClass(`screen content-coming-screen${active ? ' active' : ''}`, "#s-content-coming")} id="s-content-coming" data-anim="slide">
       <header className={uiClass("content-nav")}>
-        <button className={uiClass("content-nav-back")} onClick={onBack} aria-label="返回我的内容">
+        <button className={uiClass("content-nav-back")} onClick={onBack} aria-label="返回我的语义世界">
           <svg className={uiClass("icon")}><use href="#i-chev-l" /></svg>
         </button>
         <h1>{page.title}</h1>

@@ -60,11 +60,11 @@ const BaselineSemanticWorldScreen = ({ active, onBack, onOpenSense }: SemanticWo
   return (
     <section className={uiClass(`screen semantic-world-screen${active ? ' active' : ''}`, "#s-semantic-world")} id="s-semantic-world" data-anim="slide">
       <header className={uiClass("content-nav semantic-nav")}>
-        <button className={uiClass("content-nav-back")} onClick={onBack} aria-label="返回我的内容">
+        <button className={uiClass("content-nav-back")} onClick={onBack} aria-label="返回我的语义世界">
           <svg className={uiClass("icon")}><use href="#i-chev-l" /></svg>
         </button>
-        <h1>我的词义世界</h1>
-        <button className={uiClass("semantic-info")} aria-label="关于词义世界" title="这是学习事实的个人投影">i</button>
+        <h1>我的语义世界</h1>
+        <button className={uiClass("semantic-info")} aria-label="关于语义世界" title="这是学习事实的个人投影">i</button>
       </header>
 
       <div className={uiClass("content-page-body semantic-body")}>
@@ -83,7 +83,7 @@ const BaselineSemanticWorldScreen = ({ active, onBack, onOpenSense }: SemanticWo
           </div>
         </section>
 
-        <div className={uiClass("semantic-view-switch")} role="tablist" aria-label="词义世界视图">
+        <div className={uiClass("semantic-view-switch")} role="tablist" aria-label="语义世界视图">
           <button className={uiClass(view === 'field' ? 'on' : '')} onClick={() => setView('field')} role="tab" aria-selected={view === 'field'}>
             状态视图
           </button>
@@ -95,7 +95,7 @@ const BaselineSemanticWorldScreen = ({ active, onBack, onOpenSense }: SemanticWo
         {projection.semanticSenses.length === 0 ? (
           <div className={uiClass("semantic-empty-field")}>
             <span className={uiClass("semantic-orbit")} aria-hidden="true"><i /><i /><i /></span>
-            <h3>这里会慢慢长出你的词义世界</h3>
+            <h3>这里会慢慢长出你的语义世界</h3>
             <p>完成具体意思的学习后，系统会按事实显示它正在形成、已经建立或需要巩固。</p>
           </div>
         ) : view === 'field' ? (

@@ -412,7 +412,7 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 
 ### Personal Content
 
-- “我的词义世界”页面是读取、治理与 Add-to-Learning 交接控制面，不是 Personal Semantic World 的
+- “我的语义世界”页面是读取、治理与 Add-to-Learning 交接控制面，不是 Personal Semantic World 的
   第二个 store 或唯一 command source；应用内手动创建只是一个普通 Semantic Intake Port；
 - Personal Semantic World membership 只来自 learner 的直接 Semantic Acceptance 或其明确授权的
   delegated acceptance；浏览、历史、无写入授权的 LLM 推断、收藏与推荐都不能静默创建成员；

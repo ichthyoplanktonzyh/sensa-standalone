@@ -1436,12 +1436,12 @@ export const SensaSemanticWorldScreen = ({
           type="button"
           className={uiClass("personal-world-v2__back")}
           onClick={section === 'home' ? onBack : returnFromSection}
-          aria-label={section === 'home' ? '返回我的内容' : '返回我的词义世界首页'}
+          aria-label={section === 'home' ? '返回我的语义世界' : '返回我的语义世界首页'}
         >
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
         <div className={uiClass("personal-world-v2__nav-title")}>
-          <h1>{section === 'home' ? '我的词义世界' : section === 'expressions' ? '我的表达' : '全部意思'}</h1>
+          <h1>{section === 'home' ? '我的语义世界' : section === 'expressions' ? '我的表达' : '全部意思'}</h1>
         </div>
         <div className={uiClass("personal-world-v2__nav-actions")}>
           <button
@@ -1491,7 +1491,7 @@ export const SensaSemanticWorldScreen = ({
           <>
             <div className={uiClass("personal-world-v2__search")}>
               <span className={uiClass("personal-world-v2__search-icon")} aria-hidden="true">⌕</span>
-              <label htmlFor="personal-world-search" className={uiClass("personal-world-v2__visually-hidden")}>搜索我的词义世界</label>
+              <label htmlFor="personal-world-search" className={uiClass("personal-world-v2__visually-hidden")}>搜索我的语义世界</label>
               <input
                 id="personal-world-search"
                 type="search"
@@ -1504,7 +1504,7 @@ export const SensaSemanticWorldScreen = ({
               )}
             </div>
             <div className={uiClass("personal-world-v2__controls")}>
-              <div className={uiClass("personal-world-v2__view-tabs")} role="tablist" aria-label="词义世界呈现方式">
+              <div className={uiClass("personal-world-v2__view-tabs")} role="tablist" aria-label="语义世界呈现方式">
                 <button type="button" role="tab" aria-selected={view === 'list'} className={uiClass(view === 'list' ? 'is-active' : '')} onClick={() => setView('list')}>清单</button>
                 <button type="button" role="tab" aria-selected={view === 'expanded'} className={uiClass(view === 'expanded' ? 'is-active' : '')} onClick={() => setView('expanded')}>展开</button>
                 <button type="button" role="tab" aria-selected={view === 'graph'} className={uiClass(view === 'graph' ? 'is-active' : '')} onClick={() => setView('graph')}>图谱</button>
