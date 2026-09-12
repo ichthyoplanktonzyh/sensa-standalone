@@ -23,12 +23,13 @@ project ref、Cloudflare 项目/域名，以及实际待执行的数据库迁移
 密钥通过平台 Secrets/已有凭据管理配置，不写入聊天、代码、生成包或日志。M2 本地 MP3 不会
 自动变成线上静态对象。发布通过 CI/CD 执行，不从本地 shell 直接部署。
 
-现有 no-cost 检查、Web＋插件候选、部署与监控流水线仍需在目标环境实测。
+提交 CI、release acceptance、固定候选、部署与监控各自承担独立证据。发布必须引用同一 SHA 的
+成功 acceptance 与 candidate run，不能把提交检查或重复构建替代候选晋级。
 2026-09-11 真实迁移账本已包含 0028/0029，云同步表与受限运行角色权限已复核。
 Cloudflare 试用 Worker 为 `sensa-standalone`，Web origin 为
-`https://sensa-standalone.ichthyoplanktonzyh.workers.dev`；生产监听专用
-`codex/cloudflare-trial` 分支。应用发布仍需以实际构建与公网 smoke 为证据。
-候选环境 `web-candidate`、部署环境 `web-production`、监控环境 `web-monitor` 及配置仍需接通。
+`https://sensa-standalone.ichthyoplanktonzyh.workers.dev`。应用发布只通过 GitHub Actions 上传带 SHA
+标识的 Cloudflare version、验证预览并提升到生产；Cloudflare 仓库构建不承担第二套生产发布。
+候选环境 `web-candidate`、部署环境 `web-production`、监控环境 `web-monitor` 保存各自变量与 Secrets。
 平台账号登录、项目创建或手动配置由 owner 协助，不擅自接管外部平台浏览器。
 
 正式新用户验收必须覆盖 Web 和插件、真实邮件/独立账号删除、两个浏览器恢复、离线补传、

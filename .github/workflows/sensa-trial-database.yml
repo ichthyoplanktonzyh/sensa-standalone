@@ -29,11 +29,12 @@ jobs:
     if: inputs.owner_authorized
     environment: sensa-trial
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       SUPABASE_PROJECT_REF: kwwmukqzlxxsnviyhwmr
       NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/infra/certs/supabase-prod-ca-2021.crt
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.release_sha }}
       - name: Verify reviewed revision
@@ -44,7 +45,7 @@ jobs:
           import {execFileSync} from 'node:child_process';
           if(!/^[a-f0-9]{40}$/.test(process.env.REVIEWED_SHA??'')||execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()!==process.env.REVIEWED_SHA)throw Error('Reviewed full SHA required');
           JS
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
           cache: npm

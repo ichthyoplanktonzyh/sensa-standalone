@@ -3,6 +3,23 @@
 2026-09-09，owner 已确认：日常功能验证以程序自动化为主，整组完成集中做平台与体验验收。
 本文落实该约定，不改变领域规则、迁移范围或生产发布门。当前正式原生 UI 仍未完成。
 
+## 自动化执行通道
+
+测试名称不决定证据层级，执行通道由成本、依赖和失败影响决定：
+
+| 通道 | 触发 | 内容 | 发布作用 |
+| --- | --- | --- | --- |
+| `Sensa CI` | PR、`main` push | `typecheck/build/lint`、Deno compile、快速无浏览器 smoke；独立 Postgres/API 集成 Job | 提交反馈；取消同分支过期运行 |
+| `Sensa release acceptance` | 手动指定完整 SHA | 三个并行浏览器 Job：连接账号/离线冲突/插件采集，跨浏览器恢复/删除/备份，完整本机应用旅程 | 正式发布必须引用同一 SHA 的成功 run ID |
+| `Sensa release candidate` | 手动指定完整 SHA | 生产配置检查、一次完整构建、API Edge check、候选摘要与所有部署产物摘要 | 产生唯一可晋级制品，不部署 |
+| `Promote accepted Sensa release` | 手动指定 SHA、candidate run、acceptance run | 校验双重来源，迁移、API 部署、Worker 预览版本、生产提升和公网 smoke | 唯一应用发布入口 |
+| `Web operational checks` | 每小时及手动 | 公网静态/API 边界与只读聚合阈值 | 上线后运行监测 |
+
+快速 smoke 只保留确定、无外部账号、无真实浏览器进程且能快速定位失败的检查。真实 Chromium、
+独立浏览器 profile、Service Worker 冷启动、账号删除、备份恢复和插件采集均属于 release acceptance；
+它们的旧脚本名可能仍含 `Smoke`，但不再进入提交级 smoke 通道。浏览器 Job 无自动重试，失败时上传
+自己的日志和截图；修复根因后重新运行整个指定 SHA 的 acceptance，不能靠重复运行碰绿。
+
 ## 层级按真实边界划分
 
 | 层级 | 证明的事情 | 不能由此推出 |
@@ -79,7 +96,8 @@ HTTP、签名和凭据沙盒。混合选择原生组与可运行组会在任何�
 | 小改动 | 运行受影响规则或交互测试；失败保存诊断并修复，不靠重复运行碰绿 |
 | 完成纵向用例 | 主要成功/失败/恢复路径 + 持久化断言，相关语言检查；根级 typecheck/build/lint；checkpoint |
 | 完成正式 UI 整组 | 最终入口的跨模块旅程，macOS/Android 各自结果、独立冷恢复，响应式和键盘检查，再实际体验走查 |
-| 发布/扩平台 | 实际安装包、OS 交互、目标设备；真实网站兼容；经授权的小规模 Provider 实况。云端仍走 CI/CD |
+| Web 发布 | 固定 SHA 的 release acceptance 与 candidate 均成功，再按原制品晋级；公网 smoke 通过后完成 |
+| 扩平台 | 实际安装包、OS 交互、目标设备；真实网站兼容；经授权的小规模 Provider 实况。云端仍走 CI/CD |
 
 已经通过且后续修改不影响的用例无需反复全量执行。选择依据记录在交付中；未验证的平台明确保留。
 真实 Provider/TTS 测试与常规无成本回归分离，不能把旧样本质量记录当成本轮新结果。

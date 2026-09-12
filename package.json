@@ -15,11 +15,13 @@
   ],
   "scripts": {
     "sensa:service-status-smoke": "node --import tsx scripts/sensaServiceStatusSmoke.mts",
+    "sensa:auth-config-smoke": "node scripts/sensaSupabaseAuthConfigSmoke.mjs",
     "sensa:acceptance": "node scripts/sensaAcceptance.mjs",
     "sensa:acceptance:check": "node scripts/sensaAcceptance.mjs check",
     "sensa:acceptance:smoke": "node scripts/sensaAcceptanceSmoke.mjs",
     "build": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/model-runtime && npm run build -w @sensa/intake-transport && npm run build -w @sensa/api && npm run build -w @sensa/web && npm --prefix apps/web-next run build && npm run build -w @sensa/browser-extension",
     "build:cloudflare": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/model-runtime && npm run build -w @sensa/intake-transport && npm run build -w @sensa/web",
+    "build:api": "npm run build -w @sensa/learning-kernel && npm run build -w @sensa/contracts && npm run build -w @sensa/content-validator && npm run build -w @sensa/model-runtime && npm run build -w @sensa/intake-transport && npm run build -w @sensa/api",
     "typecheck": "tsc -b --pretty false && npm run typecheck -w @sensa/web && npm --prefix apps/web-next run typecheck && npm run typecheck -w @sensa/browser-extension",
     "lint": "npm run typecheck",
     "dev": "npm run dev -w @sensa/api",
@@ -113,6 +115,6 @@
     "fake-indexeddb": "^6.2.5",
     "tsx": "^4.20.0",
     "typescript": "^7.0.0",
-    "wrangler": "4.130.0"
+    "wrangler": "4.131.1"
   }
 }

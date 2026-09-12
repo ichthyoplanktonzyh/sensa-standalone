@@ -3,6 +3,7 @@
   "name": "sensa-standalone",
   "compatibility_date": "2026-09-11",
   "compatibility_flags": ["nodejs_compat"],
+  "preview_urls": true,
   "assets": {
     "directory": "./apps/web/dist",
     "not_found_handling": "single-page-application"

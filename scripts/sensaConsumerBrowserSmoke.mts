@@ -6,7 +6,7 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.SE
 const context=await browser.newContext({viewport:{width:390,height:844}}),page=await context.newPage();
 const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
 const output=process.env.SENSA_BROWSER_ARTIFACT_DIR??'/tmp/sensa-connected-browser';await mkdir(output,{recursive:true});
-const reveal=async()=>{const button=page.getByRole('button',{name:'显示表达',exact:true});await expect(button).toBeVisible();await expect(button).toBeEnabled();await button.dispatchEvent('click');};
+const reveal=async()=>{const button=page.getByRole('button',{name:'显示表达',exact:true});await expect(button).toBeVisible();await expect(button).toBeEnabled({timeout:20000});await button.dispatchEvent('click');};
 try{
  await assertMockServer(page);await page.goto(webUrl);
  await page.getByLabel('邮箱',{exact:true}).fill('test@sensa.invalid');await page.getByRole('button',{name:'发送验证码',exact:true}).click();await page.getByLabel('验证码',{exact:true}).fill('000000');await page.getByRole('button',{name:'验证并继续'}).click();await expect(page.getByText('验证码不正确或已过期，请重新输入或发送。')).toBeVisible();

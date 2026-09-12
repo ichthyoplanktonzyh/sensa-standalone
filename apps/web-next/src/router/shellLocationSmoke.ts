@@ -136,19 +136,28 @@ const everyParam: ShellParams = {
   policyTarget: 'lend-give',
   worldAction: 'create',
 };
+// This scenario is reused by the formal Web shell. The prototype opens world
+// actions on s-semantic-world; the formal Web also owns its extension inbox on
+// s-content. The product-specific entry is verified separately, while this
+// matrix checks that nested sheets keep only their own params plus their live
+// parent's declared params.
+const contentParams = retainParamsForStack(everyParam, ['s-content']).worldAction
+  ? ['worldAction']
+  : [];
+const withinContent = (...keys: string[]): readonly string[] => [...contentParams, ...keys];
 const retention: ReadonlyArray<readonly [readonly string[], readonly string[]]> = [
   [[], []],
-  [['s-content'], []],
+  [['s-content'], withinContent()],
   [['s-semantic-world'], ['worldAction']],
   [['s-content', 's-semantic-world'], ['worldAction']],
-  [['s-content', 's-content-sense'], ['senseId']],
-  [['s-content', 's-content-library'], ['section']],
-  [['s-content', 's-content-example'], ['exampleId']],
-  [['s-content', 's-content-coming'], ['coming']],
+  [['s-content', 's-content-sense'], withinContent('senseId')],
+  [['s-content', 's-content-library'], withinContent('section')],
+  [['s-content', 's-content-example'], withinContent('exampleId')],
+  [['s-content', 's-content-coming'], withinContent('coming')],
   [['s-personal-meaning'], ['meaningId', 'focusId']],
   [['s-confirmed-sense'], ['meaningId', 'focusId']],
   [['s-expression-binding'], ['meaningId', 'focusId']],
-  [['s-content', 's-content-sense', 's-content-example'], ['senseId', 'exampleId']],
+  [['s-content', 's-content-sense', 's-content-example'], withinContent('senseId', 'exampleId')],
   [['s-study', 's-learning-target'], ['targetId']],
   [['s-study', 's-learning-policy'], ['policyTarget']],
   // 从某个 Target 打开学习方式：两个 sheet 同时在栈上，两个 param 都活着。

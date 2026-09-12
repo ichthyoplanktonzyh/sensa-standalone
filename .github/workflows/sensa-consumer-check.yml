@@ -1,13 +1,71 @@
-name: Sensa consumer checks
+name: Sensa CI
 on:
   pull_request:
   push:
     branches: [main]
 permissions:
   contents: read
+concurrency:
+  group: sensa-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  SENSA_EXTENSION_LEGACY_WEB: '1'
+  SENSA_EXTENSION_WEB_URL: http://127.0.0.1:3001
+  VITE_SENSA_MODE: legacy-account
+  VITE_SUPABASE_URL: http://127.0.0.1:4319
+  VITE_SUPABASE_PUBLISHABLE_KEY: local-browser-test-key
+  VITE_SENSA_API_URL: http://127.0.0.1:4319
 jobs:
-  account:
+  static-smoke:
+    name: Static, build and fast smoke
     runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web-next/package-lock.json
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+      - run: npm ci
+      - run: npm ci --prefix apps/web-next
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+      - name: Lint
+        run: npm run lint
+      - name: Edge compile check
+        run: npm run sensa:edge-check
+      - name: Fast service and release contract smoke
+        run: |
+          npm run sensa:service-status-smoke
+          npm run sensa:model-execution-smoke
+          node scripts/sensaReleaseCandidateSmoke.mjs
+          node scripts/sensaSupabaseAuthConfigSmoke.mjs
+          node --import tsx scripts/sensaTelemetrySmoke.mts
+          node --import tsx scripts/sensaModelBudgetSmoke.mts
+      - name: Fast local data and application smoke
+        run: |
+          npm run sensa:package-learning-smoke
+          npm run sensa:offline-shell-smoke
+          npm run sensa:personal-learning-smoke
+          npm run sensa:web-intake-smoke
+          npm run sensa:encrypted-intake-smoke
+          npm run sensa:local-i18n-smoke
+          npm run sensa:web-ui-smoke
+      - name: Acceptance catalog integrity
+        run: npm run sensa:acceptance:check && npm run sensa:acceptance:smoke
+
+  database-integration:
+    name: PostgreSQL and API integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:17
@@ -19,30 +77,23 @@ jobs:
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      SENSA_EXTENSION_LEGACY_WEB: '1'
-      SENSA_EXTENSION_WEB_URL: http://127.0.0.1:3001
-      VITE_SENSA_MODE: legacy-account
-      # Compile the authenticated UI too; these are synthetic loopback test values.
-      VITE_SUPABASE_URL: http://127.0.0.1:4319
-      VITE_SUPABASE_PUBLISHABLE_KEY: local-browser-test-key
-      VITE_SENSA_API_URL: http://127.0.0.1:4319
       DATABASE_URL: postgresql://postgres:local-ci-only@127.0.0.1:5432/sensa_m1a_ci
+      SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
           cache: npm
-      - uses: denoland/setup-deno@v2
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: v2.x
       - run: npm ci
-      - run: npm ci --prefix apps/web-next
-      - run: npm run typecheck && npm run build && npm run lint
-      - run: npm run db:migrate
-      - name: Isolated trial initializer (disposable local database)
+      - run: npm run build:api
+      - name: Disposable migration and role bootstrap
         run: npm run sensa:trial-database-smoke
-      - name: Restricted test principal (disposable CI database only)
+      - run: npm run db:migrate
+      - name: Create restricted test principal
         run: |
           node --input-type=module <<'JS'
           import pg from 'pg';
@@ -55,80 +106,17 @@ jobs:
         run: |
           node --import tsx scripts/support/consumerTargetFixture.mts --write
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/sensa-m1b-fixture.sql
-      - run: node --import tsx scripts/sensaConsumerAccountSmoke.mts --targets --initial --retention --checkin --intake --semantic --provisioning
-        env:
-          SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci
-      - name: Real API process crash recovery (no providers)
-        run: node --import tsx scripts/sensaConsumerAccountSmoke.mts --crash
-        env:
-          SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci
-      - name: Validate opt-in provider trial inputs without calls
-        run: node --import tsx scripts/sensaRealProviderTrial.mts --validate
-      - run: npm run sensa:edge-check
-      - run: deno run --allow-env --allow-net --allow-read --allow-sys --config supabase/functions/sensa-api/deno.json scripts/sensaConsumerAccountSmoke.mts --targets --initial --retention --checkin --intake --semantic --provisioning
-        env:
-          SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci
-
-      - name: Service access and usage contract (no browser or model calls)
-        run: npm run sensa:service-status-smoke && npm run sensa:model-execution-smoke
-      - name: Account and extension intake closure (no browser or model calls)
-        env:
-          SENSA_TEST_DATABASE_URL: postgresql://postgres:local-ci-only@127.0.0.1:5432/sensa_m1a_ci
-        run: npm run sensa:account-service-db-smoke && npm run sensa:web-intake-smoke
-      - name: Local package learning and offline shell (no browser or model calls)
-        run: npm run sensa:package-learning-smoke && npm run sensa:offline-shell-smoke && npm run sensa:personal-learning-smoke && npm run sensa:library-backup-smoke
-      - name: Local Web translation coverage
-        run: npm run sensa:local-i18n-smoke
-      - name: Install test browser
-        run: npx playwright install --with-deps chromium
-      - name: Email link sign-in (real SDK PKCE, synthetic mail and Auth)
-        run: npm run sensa:email-link-browser-smoke
-      - name: Production offline cold start (isolated Chromium processes and synthetic account/catalog)
-        run: npm run sensa:offline-cold-start-smoke
-      - name: Complete Intake to personal learning in production UI (synthetic providers)
-        run: npm run sensa:personal-intake-browser-smoke
-      - name: Account deletion transaction and old-credential barrier
+      - name: Node API protocol and crash recovery
+        run: |
+          node --import tsx scripts/sensaConsumerAccountSmoke.mts --targets --initial --retention --checkin --intake --semantic --provisioning
+          node --import tsx scripts/sensaConsumerAccountSmoke.mts --crash
+      - name: Edge API protocol
+        run: deno run --allow-env --allow-net --allow-read --allow-sys --config supabase/functions/sensa-api/deno.json scripts/sensaConsumerAccountSmoke.mts --targets --initial --retention --checkin --intake --semantic --provisioning
+      - name: Database account, intake and deletion boundaries
         env:
           SENSA_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
-        run: node --import tsx scripts/sensaAccountDeletionSmoke.mts
-      - name: Browser upgrade rollback and offline recovery
-        run: node --import tsx scripts/sensaLibraryUpgradeSmoke.mts && node --import tsx scripts/sensaOfflineColdStartSmoke.mts --upgrade
-      - name: Account deletion full UI (synthetic identity service)
-        run: node --import tsx scripts/sensaOfflineColdStartSmoke.mts --deletion
-      - name: Release configuration and privacy-safe telemetry guards
-        run: node scripts/sensaReleaseCandidateSmoke.mjs && node --import tsx scripts/sensaTelemetrySmoke.mts && node --import tsx scripts/sensaModelBudgetSmoke.mts
-      - name: Encrypted library backup and fresh browser recovery
-        run: npm run sensa:library-backup-browser-smoke
-      - name: Cross-tab account isolation (synthetic HTTP, real browser storage)
-        run: npm run sensa:web-account-isolation-smoke
-      - name: Full production-preview browser journey (synthetic local services)
-        env:
-          SENSA_TEST_DATABASE_URL: postgresql://sensa_ci_test:local-test-only@127.0.0.1:5432/sensa_m1a_ci
-          SENSA_TEST_CURRICULUM: '1'
-          SENSA_TEST_INITIAL: '1'
-          SENSA_TEST_RETENTION: '1'
-          SENSA_TEST_CHECKIN: '1'
         run: |
-          node --import tsx scripts/sensaConsumerAccountSmoke.mts --targets --serve > /tmp/sensa-api.log 2>&1 &
-          api_pid=$!
-          npm run preview -w @sensa/web -- --port 3001 > /tmp/sensa-web.log 2>&1 &
-          web_pid=$!
-          trap 'kill "$api_pid" "$web_pid" 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 40); do
-            if curl -s http://127.0.0.1:4319/auth/v1/otp >/dev/null && curl -fsS http://127.0.0.1:3001 >/dev/null; then break; fi
-            sleep 0.5
-          done
-          npm run sensa:consumer-browser-smoke
-
-
-      - name: Complete application account and managed-service journey
-        run: |
-          VITE_SENSA_MODE=production VITE_SUPABASE_URL=http://127.0.0.1:4399 VITE_SUPABASE_PUBLISHABLE_KEY=synthetic-test-key VITE_SENSA_API_URL=http://127.0.0.1:4399 npm run build -w @sensa/web
-          VITE_SENSA_MODE=production npm run preview -w @sensa/web -- --port 3014 > /tmp/sensa-full-app.log 2>&1 &
-          full_app_pid=$!
-          trap 'kill "$full_app_pid" 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 40); do
-            if curl -fsS http://127.0.0.1:3014 >/dev/null; then break; fi
-            sleep 0.5
-          done
-          npm run sensa:web-local-journey-smoke && npm run sensa:expression-chat-browser-smoke
+          npm run sensa:account-service-db-smoke
+          node --import tsx scripts/sensaAccountDeletionSmoke.mts
+      - name: Validate opt-in provider inputs without calls
+        run: node --import tsx scripts/sensaRealProviderTrial.mts --validate

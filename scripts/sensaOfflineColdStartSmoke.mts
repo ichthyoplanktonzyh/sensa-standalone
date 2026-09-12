@@ -1,4 +1,4 @@
-import {candidateCsp} from './release/webCandidate.mjs';
+import {candidateCsp} from './release/releaseCandidate.mjs';
 /** Real production UI, Chromium processes, SW and disk IDB; synthetic HTTP account/catalog only. */
 import assert from 'node:assert/strict';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';

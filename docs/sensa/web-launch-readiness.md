@@ -10,16 +10,17 @@
 
 ## 候选与监控边界
 
-新增 `.github/workflows/sensa-web-candidate.yml`：只生成固定 SHA 的候选包，不部署、迁移或
+`.github/workflows/sensa-web-candidate.yml` 只接受完整 SHA，生成固定候选包，不部署、迁移或
 上传商店。GitHub `web-candidate` environment 配置公开变量：`SENSA_WEB_ORIGIN`、
 `VITE_SUPABASE_URL`、`VITE_SUPABASE_PUBLISHABLE_KEY`、`VITE_SENSA_API_URL`。
 当前首发适配限定托管 Supabase 的 `functions/v1/sensa-api`；其他服务布局需显式修改发布合同。
 没有目标环境时检查失败，不能使用 localhost 或合成配置冒充生产候选。
 
-`node scripts/release/webCandidate.mjs --check` 检查环境；构建后去掉 `--check` 校验 SHA、
+`node scripts/release/releaseCandidate.mjs --check` 检查环境；构建后去掉 `--check` 校验 SHA、
 Web 实际嵌入配置与插件目标，生成静态托管响应头和 `release-candidate/manifest.json`。
-清单包含文件 SHA-256，不包含模型密钥或公开认证 Key。制品有效期 14 天；生成候选不等于
-测试或上线已通过。API 新增 X-Request-ID 和仅含方法、服务分类、状态、耗时的结构化日志，
+清单为 Web、插件、编译 API 及其共享包逐文件记录 SHA-256；正式部署下载并复核同一制品，
+不重新编译。清单不包含模型密钥或公开认证 Key。制品有效期 14 天；生成候选不等于
+release acceptance 或上线已通过。API 新增 X-Request-ID 和仅含方法、服务分类、状态、耗时的结构化日志，
 不保存 URL/正文/邮箱/令牌/模型内容；真实告警与仪表盘尚待平台配置。
 
 ## 本地真实服务配置
@@ -51,10 +52,9 @@ borrow/lend 及媒体资源见 [学习包指南](assurance-package-import.md)。
 
 ## 隔离数据库初始化
 
-`.github/workflows/sensa-trial-database.yml` 使用受保护 `sensa-trial` environment 和完整已审阅 SHA，
-只允许指定隔离项目的 initialize / invite，不部署应用或导入旧学习历史。
-`.github/workflows/sensa-trial-api.yml` 使用同一隔离 environment 和完整已审阅 SHA，只构建、配置并
-发布该项目的 `sensa-api` Function，随后验证公开认证与 CORS 边界；它不发布 Web 或修改账号准入。
+`.github/workflows/sensa-trial-database.yml` 使用 `sensa-trial` environment 和完整已审阅 SHA，
+只允许指定隔离项目的 initialize / invite，不部署应用或导入旧学习历史。API 不再保留第二条独立
+试用部署工作流；应用部署统一走已接受候选的生产晋级流程，避免配置、catalog 和实际版本分叉。
 
 - 忽略文件 `apps/api/.env.trial-ci` 保存 `MIGRATION_DATABASE_URL` 与 `SENSA_RUNTIME_DATABASE_URL`。
   `node scripts/release/prepareTrialEnvironment.mjs` 本机检查项目/TLS 并生成或复用运行密码，
@@ -71,12 +71,20 @@ borrow/lend 及媒体资源见 [学习包指南](assurance-package-import.md)。
 
 ## 部署与回滚
 
-- 隔离 Web 托管复用 Cloudflare Worker `sensa-standalone`，地址为
-  `https://sensa-standalone.ichthyoplanktonzyh.workers.dev`。它使用 Workers Static Assets、
-  `codex/cloudflare-trial` 生产分支和仓库固定的 `wrangler.jsonc`；普通 `main` 推送不自动发布。
-- `web-candidate`：只生成制品。公开变量见本页前文；包含已编译包目录、catalog 摘要与文件摘要。
-- `web-production`：手动填写已成功候选 run ID、完整 SHA、owner 已验收确认；应开启 GitHub
-  environment required reviewers。拒绝目标或摘要不一致。实际执行必须有对应发布授权，不从旧日志推断已部署。
+- Web 托管使用 Cloudflare Worker `sensa-standalone`，地址为
+  `https://sensa-standalone.ichthyoplanktonzyh.workers.dev`。仓库 `wrangler.jsonc` 与 GitHub Actions
+  是配置和部署权威；普通 `main` 推送不会发布，Cloudflare Builds 不作为第二发布入口。
+- `release acceptance`：手动指定完整 SHA，分组运行账号/同步、离线/删除/备份、插件与完整应用旅程。
+- `web-candidate`：手动指定完整 SHA，只构建一次；包含 Web、插件、编译 API、catalog 和摘要。
+- `web-production`：手动填写同一 SHA 的成功 candidate run ID、成功 acceptance run ID 和 owner
+  验收确认。流水线拒绝目标、来源或摘要不一致。GitHub Free 私有仓库当前无法启用 branch
+  protection/required reviewers，因此双 run 来源校验与显式授权输入是仓库内强制门。
+- `sensa-auth-config`：生产认证回调的独立修复入口，只接受完整 SHA 和显式授权；它把 Supabase
+  Auth `Site URL` 设为正式 Web origin，并把 Redirect URL allow list 收敛为该 origin 下的路径。
+  正式发布也执行同一脚本，避免平台配置重新漂移到 localhost。
+- Cloudflare 先执行 `versions upload --strict` 创建带 SHA tag 的未上线版本，在版本预览地址验证
+  静态路由和 Service Worker，再把该 version ID 提升到 100% 流量；发布证据保留 30 天，包含
+  candidate manifest、Cloudflare version ID 和 Wrangler 结构化输出。生产提升后再验证 API 鉴权/CORS。
 - Secrets：独立 `MIGRATION_DATABASE_URL` 与受限 `SENSA_RUNTIME_DATABASE_URL`、
   `SUPABASE_ACCESS_TOKEN`、`DEEPSEEK_API_KEY`、`SENSA_PROVIDER_VAULT_KEY`、
   `CLOUDFLARE_API_TOKEN`。公开项目变量另含 Supabase ref、Cloudflare account/Worker。正式流水线
@@ -85,8 +93,9 @@ borrow/lend 及媒体资源见 [学习包指南](assurance-package-import.md)。
   环境用于账号删除，不进入 Web。真实 Auth SMTP 与 bucket 策略在项目中配置并验证。
 - 公共文本包可随已验收 Web 资产发布；私有/音频媒体按 Storage 授权合同
   独立验收，不能把现有 Storage 适配误称为本次真实媒体发布已通过。
-- 首发自动配置为受邀访问。回滚优先重新发布上一份已验收 Web/API 版本，保留已应用的向前兼容
-  迁移；**不能回滚至不识别账号删除 lifecycle 的 API**。紧急时先暂停默认模型或关闭 API，
+- 首发自动配置为受邀访问。Web 回滚使用发布证据中的上一 Cloudflare version ID；API 回滚仍以
+  上一份已验收候选重新晋级。数据库只使用向前兼容迁移。整体回滚优先重新发布上一份已验收
+  Web/API 版本，保留已应用迁移；**不能回滚至不识别账号删除 lifecycle 的 API**。紧急时先暂停默认模型或关闭 API，
   不删除/重建学习数据。数据库恢复必须另行批准且验证删除屏障仍存在，避免备份恢复复活账号。
 - 仓库变量 `SENSA_MONITOR_ENABLED=true` 才启用小时监控；`web-monitor` 放只读
   `MONITOR_DATABASE_URL` 和公开 URL。检查公网、超过一小时的删除 pending 及每日总请求阈值，
@@ -94,7 +103,7 @@ borrow/lend 及媒体资源见 [学习包指南](assurance-package-import.md)。
   暂停，不清空本机学习资料。
 
 发布方式参考 [Supabase 官方 CI 文档](https://supabase.com/docs/guides/functions/examples/github-actions)
-与 [Cloudflare 官方 Direct Upload CI 文档](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/)。
+与 [Cloudflare Workers Versions & Deployments](https://developers.cloudflare.com/workers/versions-and-deployments/)。
 
 ## 账号删除与恢复屏障
 
