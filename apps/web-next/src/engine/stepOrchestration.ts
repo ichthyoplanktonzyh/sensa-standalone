@@ -7,8 +7,8 @@
  *
  *     有没有待修复的依据？没有 → 出下一步；有 → 出这一步的定向修复。
  *
- * `learning-extensibility-architecture.md` §4 把这个二分定为插件作者要实现的
- * 全部内容：**新增一种模式时只实现 `fresh` 与 `repair` 两个入口**，不必回答
+ * 这个 seam 把二分收敛为插件作者要实现的全部内容：
+ * **新增一种模式时只实现 `fresh` 与 `repair` 两个入口**，不必回答
  * "我的 relearning 协议是什么"——relearning 复用 acquisition 的编排机制，
  * 正如 Anki 的 relearning steps 复用 learning steps。
  *
