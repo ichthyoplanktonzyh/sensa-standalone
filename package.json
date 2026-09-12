@@ -44,12 +44,12 @@
     "node": ">=24"
   },
   "devDependencies": {
-    "@babel/parser": "7.29.8",
+    "@babel/parser": "8.0.4",
     "@playwright/test": "^1.63.0",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.5.0",
     "esbuild": "0.28.2",
     "fake-indexeddb": "^6.2.5",
-    "tsx": "^4.20.0",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.0",
     "wrangler": "4.131.1"
   }
