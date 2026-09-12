@@ -64,7 +64,7 @@ storage.sensa={version:1,active:accountId,accounts:{[accountId]:{accountId,insta
 const session:Record<string,unknown>={modes:{1:{accountId}}};
 const noopEvent={addListener:()=>{}};
 let exchangeCalls=0;const opened:string[]=[];
-const chromeMock={identity:{getRedirectURL:()=> 'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/sensa'},storage:{local:{...(globalThis as any).chrome.storage.local,setAccessLevel:async()=>{}},session:{get:async(key:string)=>structuredClone({[key]:session[key]}),set:async(value:unknown)=>Object.assign(session,structuredClone(value))}},runtime:{id:'fixture',getURL:(path:string)=>'chrome-extension://fixture/'+path,onMessage:{addListener:(fn:unknown)=>{listener=fn;}}},tabs:{create:async({url}:{url:string})=>{opened.push(url);},onUpdated:noopEvent,onRemoved:noopEvent,sendMessage:async()=>{}},alarms:{create:()=>{},onAlarm:noopEvent}};
+const chromeMock={identity:{getRedirectURL:()=> 'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/sensa'},storage:{local:{...(globalThis as any).chrome.storage.local,setAccessLevel:async()=>{}},session:{get:async(key:string)=>structuredClone({[key]:session[key]}),set:async(value:unknown)=>Object.assign(session,structuredClone(value))}},runtime:{id:'fixture',getURL:(path:string)=>'chrome-extension://fixture/'+path,onMessage:{addListener:(fn:unknown)=>{listener=fn;}}},tabs:{create:async({url}:{url:string})=>{opened.push(url);return {id:20};},update:async(id:number,{url}:{url:string})=>{assert.equal(id,20);opened.push(url);return {id,url};},onUpdated:noopEvent,onRemoved:noopEvent,sendMessage:async()=>{}},alarms:{create:()=>{},onAlarm:noopEvent}};
 const bundle=await build({entryPoints:['apps/browser-extension/src/background.ts'],bundle:true,write:false,format:'iife',platform:'browser',define:{SENSA_WEB_URL:JSON.stringify('http://127.0.0.1:3000'),SENSA_API_URL:JSON.stringify('http://127.0.0.1:4319')}});
 vm.runInNewContext(bundle.outputFiles[0]!.text,{chrome:chromeMock,crypto,btoa,URL,TextEncoder,TextDecoder,AbortSignal,setTimeout,clearTimeout,console,fetch:async(url:string,init:RequestInit)=>{assert.equal(url,'http://127.0.0.1:4319/sensa/extension/exchange');const body=JSON.parse(String(init.body));assert.equal(body.code,'fixture-code');assert.equal(body.verifier,(session as any).expectedVerifier);exchangeCalls++;return {ok:true,json:async()=>({accountId,token:'fixture-renewed-token',expiresAt:new Date(Date.now()+86400000).toISOString()})};}});
 const message=(input:unknown,sender:unknown)=>new Promise<any>(resolve=>listener(input,sender,resolve));
@@ -120,6 +120,35 @@ assert.deepEqual(storage.sensaWebIntake,queueBeforeReconnect);
 assert.ok((await message(connect,appSender)).value.authorization);
 storage.sensa=storeBeforeReconnect;session.sensaWebConnect=null;
 console.log('PASS: explicit reconnect recovers a different active account without clearing or reassigning queued captures.');
+// A production login can explicitly replace an old development-library binding.
+const oldQueue=structuredClone(storage.sensaWebIntake),oldStore=structuredClone(storage.sensa);
+await queueWeb(accountId,{...request,operationId:crypto.randomUUID()});
+const preservedQueue=structuredClone(storage.sensaWebIntake),newLibrary=crypto.randomUUID();
+const reconnectRequest={...connect,libraryId:newLibrary},loginSender={id:'fixture',url:'chrome-extension://fixture/popup.html'},loginTab={...appSender,tab:{id:20}};
+assert.equal((await message(reconnectRequest,appSender)).error,'library_mismatch');
+await message({kind:'login'},loginSender);
+assert.equal(opened.at(-2),'about:blank');assert.equal(opened.at(-1),'http://127.0.0.1:3000/profile');
+assert.equal((await message(reconnectRequest,appSender)).error,'library_mismatch','another tab cannot consume explicit reconnect');
+const explicit=(session as any).sensaExplicitReconnect;
+explicit.expires=Date.now()-1;
+assert.equal((await message(reconnectRequest,loginTab)).error,'library_mismatch','expired reconnect cannot change library');
+explicit.expires=Date.now()+120000;
+const rebind=(await message(reconnectRequest,loginTab)).value.authorization;
+assert.ok(rebind);assert.equal((storage.sensa as any).accounts[accountId].webLibraryId,library.id,'binding stays unchanged until exchange succeeds');
+session.expectedVerifier=(session as any).sensaWebConnect.verifier;
+assert.equal((await message({...reconnectRequest,kind:'web-connect-complete',receipt:{redirectUri:rebind.redirectUri+'?state='+rebind.state+'&code=fixture-code'}},loginTab)).value.connected,true);
+assert.equal((storage.sensa as any).accounts[accountId].webLibraryId,newLibrary);
+assert.equal(session.sensaExplicitReconnect,null);
+assert.deepEqual(storage.sensaWebIntake,preservedQueue,'old-library requests and receipts are preserved byte-for-byte');
+assert.equal((await pendingWeb(accountId,newLibrary)).length,0,'old-library requests are not silently transferred');
+assert.equal((await message(connect,appSender)).error,'library_mismatch','automatic rebinding stays blocked');
+// The explicit Web reconnect button is scoped to the requesting account, library and tab.
+await message({kind:'web-connect-reset',accountId,libraryId:library.id},appSender);
+assert.equal((await message(connect,loginTab)).error,'library_mismatch');
+assert.ok((await message(connect,appSender)).value.authorization);
+storage.sensa=oldStore;storage.sensaWebIntake=oldQueue;session.sensaWebConnect=null;session.sensaExplicitReconnect=null;
+console.log('PASS: explicit login and Web reconnect recover changed libraries with tab/expiry guards; original queues and receipts remain isolated.');
+
 assert.equal((await message({kind:'web-session-ended',accountId:other},appSender)).value.disconnected,false);
 assert.equal((await message({kind:'web-session-ended',accountId},appSender)).value.disconnected,true);
 assert.equal((storage.sensa as any).active,null);assert.equal((storage.sensa as any).accounts[accountId].token,'disconnected');

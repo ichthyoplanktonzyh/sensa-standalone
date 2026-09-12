@@ -67,7 +67,8 @@ async function responseText(response:Response,max:number){
 /** Endpoint origin is deployment-controlled; credentials and raw errors never reach the page. */
 export const completeReading:ReadingCompletion=async(connection,messages,json=false,onText)=>{
   allowed(connection.baseUrl);
-  const data=await executeModel(connection,{model:connection.model,max_tokens:3000,stream:false,messages,...(json?{response_format:{type:'json_object' as const}}:{})},{purpose:'reading',signal:AbortSignal.timeout(35000),onText});
+  let accumulated='';
+  const data=await executeModel(connection,{model:connection.model,max_tokens:3000,stream:false,messages,...(json?{response_format:{type:'json_object' as const}}:{})},{purpose:'reading',signal:AbortSignal.timeout(35000),onText:onText?async delta=>{accumulated+=delta;await onText(accumulated);}:undefined});
   const text=data.choices[0]?.message.content;if(typeof text!=='string'||!text.trim()||text.length>24000)throw new ConsumerError(503,'provider_invalid_response');
   return text;
 };

@@ -31,11 +31,13 @@ async function webConnect(message:any,sender:chrome.runtime.MessageSender){
   if((await chrome.storage.local.get('sensaAutoConnectPaused')).sensaAutoConnectPaused)return {paused:true};
   const old=store.accounts[accountId];
   if(store.active&&store.active!==accountId)throw new Error('account_mismatch');
-  if(old?.webLibraryId&&old.webLibraryId!==libraryId)throw new Error('library_mismatch');
+  const reconnect=(await chrome.storage.session.get('sensaExplicitReconnect')).sensaExplicitReconnect as {tabId:number;expires:number;accountId?:string;libraryId?:string}|undefined;
+  const explicitReconnect=!!reconnect&&reconnect.tabId===sender.tab!.id&&reconnect.expires>Date.now()&&(!reconnect.accountId||reconnect.accountId===accountId)&&(!reconnect.libraryId||reconnect.libraryId===libraryId);
+  if(old?.webLibraryId&&old.webLibraryId!==libraryId&&!explicitReconnect)throw new Error('library_mismatch');
   if(message.kind==='web-connect-prepare'){
    const inflight=(await chrome.storage.session.get('sensaWebConnect')).sensaWebConnect as {expires?:number}|null;
    if(inflight?.expires&&inflight.expires>Date.now())return {paused:true};
-   if(store.active===accountId&&old?.expiresAt&&Date.parse(old.expiresAt)>Date.now()+3600000)return {connected:true};
+   if(store.active===accountId&&old?.webLibraryId===libraryId&&old?.expiresAt&&Date.parse(old.expiresAt)>Date.now()+3600000)return {connected:true};
    const installationId=old?.installationId??crypto.randomUUID();
    const verifier=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');
    const state=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');
@@ -53,7 +55,7 @@ async function webConnect(message:any,sender:chrome.runtime.MessageSender){
   const credential=z.object({token:z.string().min(1),accountId:z.string().uuid(),expiresAt:z.string().datetime()}).parse(await request('/sensa/extension/exchange',{code:destination.searchParams.get('code'),installationId:pending.installationId,state:pending.state,verifier:pending.verifier}));
   if(credential.accountId!==accountId)throw new Error('account_mismatch');
   store.accounts[accountId]={...old,accountId,installationId:pending.installationId,webLibraryId:libraryId,token:credential.token,expiresAt:credential.expiresAt,queue:old?.queue??[],recent:old?.recent??[],savedOperations:old?.savedOperations??{}};
-  const changed=store.active!==accountId;store.active=accountId;await persist(store);if(changed)await stopAllReading();
+  const changed=store.active!==accountId;store.active=accountId;await persist(store);await chrome.storage.session.set({sensaExplicitReconnect:null});if(changed)await stopAllReading();
   return {connected:true};
  });
 }
@@ -66,7 +68,7 @@ async function reconnectWeb(discardForAccount?:string){return locked(async()=>{
  }
  store.active=null;await persist(store);
  await chrome.storage.local.set({sensaAutoConnectPaused:false});
- await chrome.storage.session.set({sensaWebConnect:null});await stopAllReading();
+ await chrome.storage.session.set({sensaWebConnect:null,sensaExplicitReconnect:null});await stopAllReading();
  // Account-owned queues and credentials stay under their original account.
 });}
 async function activeScope(){return (await load()).active;}
@@ -82,7 +84,8 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   z.string().uuid().parse(message.accountId);z.string().uuid().parse(message.libraryId);
   const choice=z.object({discardPending:z.boolean()}).optional().parse(message.receipt);
   const previous=(await load()).active;
-  await reconnectWeb(choice?.discardPending&&previous&&previous!==message.accountId?previous:undefined);return {reset:true};
+  await reconnectWeb(choice?.discardPending&&previous&&previous!==message.accountId?previous:undefined);
+  await chrome.storage.session.set({sensaExplicitReconnect:{tabId:sender.tab.id,accountId:message.accountId,libraryId:message.libraryId,expires:Date.now()+120000}});return {reset:true};
  }
  if(['web-connect-prepare','web-connect-complete'].includes(message.kind))return webConnect(message,sender);
  if(['web-intake-pull','web-intake-ack'].includes(message.kind)){
@@ -142,7 +145,14 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  }
  if(!isPopup)throw new Error('unsupported_message');
  if(message.kind==='status'){const [tab]=await chrome.tabs.query({active:true,currentWindow:true});const readingModes=await modes();if(tab?.id&&readingModes[tab.id]?.accountId===await activeScope()){try{await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});await chrome.tabs.sendMessage(tab.id,{kind:'reading',enabled:true,accountId:readingModes[tab.id].accountId,preferences:await readingPreferences()});await chrome.action.setBadgeText({tabId:tab.id,text:''});}catch{/* Preserve intent until the user grants this page. */}}}
- if(message.kind==='login'){await chrome.storage.local.set({sensaAutoConnectPaused:false});await reconnectWeb();await chrome.tabs.create({url:new URL('/profile',webUrl).href});}
+ if(message.kind==='login'){
+  await reconnectWeb();
+  // Bind explicit reconnect to the tab we open before its bridge can request authorization.
+  const tab=await chrome.tabs.create({url:'about:blank'});
+  if(!tab.id)throw new Error('authorization_cancelled');
+  await chrome.storage.session.set({sensaExplicitReconnect:{tabId:tab.id,expires:Date.now()+120000}});
+  await chrome.tabs.update(tab.id,{url:new URL('/profile',webUrl).href});
+ }
  if(message.kind==='disconnect')await locked(async()=>{const store=await load();store.active=null;await chrome.storage.local.set({sensaAutoConnectPaused:true});await chrome.storage.session.set({sensaWebConnect:null});await persist(store);await stopAllReading();});
  if(message.kind==='toggle'){const scope=await activeScope();if(!scope)throw new Error('authentication_required');const [tab]=await chrome.tabs.query({active:true,currentWindow:true});if(!tab.id||!tab.url||!/^https?:/u.test(tab.url))throw new Error('unsupported_page');const readingModes=await modes();readingModes[tab.id]={accountId:scope};await chrome.storage.session.set({modes:readingModes});await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});await chrome.tabs.sendMessage(tab.id,{kind:'reading',enabled:true,accountId:scope,preferences:await readingPreferences()});}
  if(message.kind==='stop'){const [tab]=await chrome.tabs.query({active:true,currentWindow:true});if(tab.id){const readingModes=await modes();delete readingModes[tab.id];await chrome.storage.session.set({modes:readingModes});await chrome.tabs.sendMessage(tab.id,{kind:'reading',enabled:false}).catch(()=>undefined);}}

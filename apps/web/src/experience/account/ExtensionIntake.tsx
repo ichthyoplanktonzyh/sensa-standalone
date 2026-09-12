@@ -46,15 +46,16 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
     const requests=z.array(localIntakeRequestSchema).max(10).parse(await bridge('web-intake-pull',accountId,library.id,controller.signal));
     for(const request of requests){
      if(controller.signal.aborted)return;
-     const receipt=await receiveWebIntake(accountId,request);
+     let receipt;
+     try{receipt=await receiveWebIntake(accountId,request);}catch{if(!controller.signal.aborted){setReconnectNeeded(false);setError(localFlowText('intakeStorageFailed'));}return;}
      if(controller.signal.aborted)return;
      await bridge('web-intake-ack',accountId,library.id,controller.signal,receipt);
     }
     setError('');setReconnectNeeded(false);
-   }catch(e){if(!controller.signal.aborted&&!(e instanceof Error&&['extension_unavailable','authentication_required'].includes(e.message))){const mismatch=e instanceof Error&&e.message==='account_mismatch';setReconnectNeeded(mismatch);setError(mismatch?localFlowText('extensionAccountMismatch'):localFlowText('intakeStorageFailed'));}}
+   }catch(e){if(!controller.signal.aborted&&!(e instanceof Error&&['extension_unavailable','authentication_required'].includes(e.message))){const code=e instanceof Error?e.message:'';const mismatch=['account_mismatch','library_mismatch'].includes(code);setReconnectNeeded(mismatch);setError(code==='library_mismatch'?localFlowText('extensionLibraryMismatch'):code==='account_mismatch'?localFlowText('extensionAccountMismatch'):localFlowText('extensionReconnectFailed'));}}
    finally{running=false;}
   };
   void receive();const stop=observeLibrary(()=>void receive());const timer=setInterval(()=>void receive(),5000);return()=>{controller.abort();clearInterval(timer);stop();};
  },[accountId,onlineService,attempt]);
- return error?<div role="status" className="fixed bottom-20 left-4 right-4 z-50 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm"><p>{localFlowNotice(error)}</p>{reconnectNeeded&&onlineService&&<><button type="button" disabled={connecting} onClick={()=>void reconnect()} className="mt-2 rounded-lg border border-slate-400 bg-white px-4 py-2 font-medium text-slate-900 disabled:opacity-50">{localFlowText(connecting?'extensionConnecting':'extensionReconnect')}</button><button type="button" disabled={connecting} onClick={()=>void reconnect(true)} className="ml-2 mt-2 rounded-lg border border-red-400 bg-white px-4 py-2 font-medium text-red-800 disabled:opacity-50">{localFlowText('extensionDiscardReconnect')}</button></>}</div>:null;
+ return error?<div role="status" className="fixed bottom-20 left-4 right-4 z-50 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm"><p>{localFlowNotice(error)}</p>{reconnectNeeded&&onlineService&&<><button type="button" disabled={connecting} onClick={()=>void reconnect()} className="mt-2 rounded-lg border border-slate-400 bg-white px-4 py-2 font-medium text-slate-900 disabled:opacity-50">{localFlowText(connecting?'extensionConnecting':'extensionReconnect')}</button><button type="button" hidden={error===localFlowText('extensionLibraryMismatch')} disabled={connecting} onClick={()=>void reconnect(true)} className="ml-2 mt-2 rounded-lg border border-red-400 bg-white px-4 py-2 font-medium text-red-800 disabled:opacity-50">{localFlowText('extensionDiscardReconnect')}</button></>}</div>:null;
 }
