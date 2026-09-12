@@ -15,19 +15,13 @@
  *
  *   /                              main shell, empty stack
  *   /study/learning-library        stack = [s-study, s-learning-library]
- *   /study/learning-library?flow=study   same stack, learning flow on top
+ *   /study/learning-library?flow=lightweight   same stack, learning flow on top
  *
  * Sheet ids carry an `s-` prefix in the DOM (`id="s-academy"`); the URL drops
  * it, so a path segment is the bare sheet name.
  */
 
-export type ShellFlow =
-  | 'study'
-  | 'lightweight'
-  | 'lightweightReview'
-  | 'fourStage'
-  | 'fourStageReview'
-  | 'finish';
+export type ShellFlow = 'lightweight';
 
 /** `viewMode` as App has always spelled it: 'main' plus the four flows. */
 export type ViewMode = 'main' | ShellFlow;
@@ -50,7 +44,6 @@ export const KNOWN_SHEET_IDS = [
   's-expression-binding',
   's-learning-entry',
   's-learning-library',
-  's-learning-policy',
   's-learning-target',
   's-personal-meaning',
   's-practice-scope',
@@ -94,14 +87,7 @@ const toSheetId = (segment: string, parentSheetId: string | undefined): string |
   return KNOWN_SHEET_ID_SET.has(standalone) ? standalone : undefined;
 };
 
-const FLOWS: readonly ShellFlow[] = [
-  'study',
-  'lightweight',
-  'lightweightReview',
-  'fourStage',
-  'fourStageReview',
-  'finish',
-];
+const FLOWS: readonly ShellFlow[] = ['lightweight'];
 
 const isFlow = (value: unknown): value is ShellFlow =>
   typeof value === 'string' && (FLOWS as readonly string[]).includes(value);
@@ -151,7 +137,6 @@ export interface ShellParams {
   readonly meaningId?: string;
   readonly focusId?: string;
   readonly targetId?: string;
-  readonly policyTarget?: string;
   readonly worldAction?: string;
 }
 
@@ -163,7 +148,6 @@ export const SHELL_PARAM_KEYS = [
   'meaningId',
   'focusId',
   'targetId',
-  'policyTarget',
   'worldAction',
 ] as const satisfies readonly (keyof ShellParams)[];
 
@@ -183,10 +167,6 @@ const SHEET_PARAM_OWNERS: Readonly<Record<string, readonly (keyof ShellParams)[]
   's-expression-binding': ['meaningId', 'focusId'],
   's-learning-target': ['targetId'],
   's-semantic-world': ['worldAction'],
-  // The policy sheet is reached both from a single Target and from the study
-  // screen's default-policy entry. Its own param says which: present means
-  // "editing this Target's policy", absent means "editing the default".
-  's-learning-policy': ['policyTarget'],
 };
 
 /** Read the navigation params a search object carries, ignoring anything else. */

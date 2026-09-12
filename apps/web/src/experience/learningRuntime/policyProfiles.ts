@@ -42,7 +42,7 @@ export type PrototypeRuntimeAdapterId = string & {};
 export interface LearningProtocolBinding {
   protocolId: string;
   protocolVersion: string;
-  /** Frozen local wire format; legacy runs keep their recorded identity. */
+  /** Frozen local wire format pinned by every new Run. */
   localProtocolVersion?: string;
   runtimeAdapterId: PrototypeRuntimeAdapterId;
   /**
@@ -143,6 +143,11 @@ export class LearningPolicyProfileRegistry<ProfileId extends string> {
     return this.#profiles;
   }
 
+  /** Current choices plus archived versions that existing Runs may still replay. */
+  public listVersions():readonly LearningPolicyProfileDefinition<ProfileId>[] {
+    return [...this.#profiles,...this.archivedProfiles];
+  }
+
   public get(profileId: ProfileId, version?: string): LearningPolicyProfileDefinition<ProfileId> {
     const current = this.#profilesById.get(profileId);
     const profile = !version || current?.profileVersion === version ? current : this.archivedProfiles.find(p => p.profileId === profileId && p.profileVersion === version);
@@ -159,8 +164,9 @@ export class LearningPolicyProfileRegistry<ProfileId extends string> {
   public resolve(
     profileId: ProfileId,
     contentReadiness: ContentCapabilityReadinessProvider,
+    profileVersion?:string,
   ): ResolvedLearningPlan<ProfileId> {
-    const profile = this.get(profileId);
+    const profile = this.get(profileId,profileVersion);
     const purposes = Object.fromEntries(
       LEARNING_PROTOCOL_PURPOSES.map((purpose) => {
         const binding = profile.protocols[purpose];
@@ -234,7 +240,10 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
         memoryOutcomePolicyId: 'learner-rated-graded-v1',
         checkpointDefinitionIds: [],
         contentRequirement: ['compact_learning_material'],
-        contentDemands: [],
+        contentDemands: [{
+          contentDemandKey: LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_KEY,
+          definitionVersion: LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_VERSION,
+        }],
       },
       relearning: {
         protocolId: 'lightweight-rebinding',
@@ -249,7 +258,10 @@ export const PROTOTYPE_LEARNING_POLICY_PROFILES = [
         memoryOutcomePolicyId: null,
         checkpointDefinitionIds: [],
         contentRequirement: ['compact_learning_material'],
-        contentDemands: [],
+        contentDemands: [{
+          contentDemandKey: LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_KEY,
+          definitionVersion: LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_VERSION,
+        }],
       },
     },
   },

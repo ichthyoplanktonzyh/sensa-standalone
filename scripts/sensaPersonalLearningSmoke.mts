@@ -59,7 +59,10 @@ try{
  const updatedTarget=(await api.readLearning()).targets.find((t:any)=>t.id===previousTarget.id);
  assert.equal(updatedTarget.memoryRevision,previousTarget.memoryRevision);assert.deepEqual(updatedTarget.memory,previousTarget.memory);assert.notEqual(updatedTarget.material.snapshot.learningMaterializationId,previousTarget.material.snapshot.learningMaterializationId);
  assert.equal(updatedTarget.material.content.resources.find((r:any)=>r.materialRoleKey==='experience_recall_cue').contentPayload.images.length,1);
- assert.equal((await api.readLearning()).runs.find((r:any)=>r.targetId===previousTarget.id).material.snapshot.learningMaterializationId,previousTarget.material.snapshot.learningMaterializationId);
+ const pinnedRun=(await api.readLearning()).runs.find((r:any)=>r.targetId===previousTarget.id);
+ assert.notEqual(pinnedRun.participants[previousTarget.id].material.snapshot.learningMaterializationId,updatedTarget.material.snapshot.learningMaterializationId,'A Run owns its purpose-specific Materialization identity');
+ assert.equal(pinnedRun.participants[previousTarget.id].material.snapshot.contentDigest,previousTarget.material.snapshot.contentDigest,'A later Target refresh cannot rewrite the Run material bytes');
+ assert.deepEqual(pinnedRun.participants[previousTarget.id].resolvedPlan.learningMaterializationIds,[pinnedRun.participants[previousTarget.id].material.snapshot.learningMaterializationId]);
  if(process.argv.includes('--backup')){
   // Include published resources, review/relearning history and a resumable reveal step.
   await api.finishLearning(id(),run.id);
@@ -76,7 +79,7 @@ try{
   const password='local-backup-test-password', exported=await api.exportLibraryBackup(password);
   assert.equal(exported.summary.interrupted,1);await api.stopTeacher(id(),inFlightSession.id,(await api.getTeacher(inFlightSession.id)).revision);release!();await assert.rejects(teacherWork);holdTeacher=false;
   const sourceRows=await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));
-  api.validateBackupRows(sourceRows);const legacyRows=structuredClone(sourceRows);for(const {value:r} of legacyRows.learningRuns)for(const key of ['policyProfileId','policyProfileVersion','protocolBinding','schedulingPolicy','lightweight'])delete r[key];for(const {value:t} of legacyRows.learningTargets)delete t.policyProfileId;api.validateBackupRows(legacyRows);const invalid=structuredClone(sourceRows);invalid.learningTargets.find((r:any)=>r.value.id===packageTarget).value.memoryRevision++;assert.throws(()=>api.validateBackupRows(invalid));
+  api.validateBackupRows(sourceRows);const invalid=structuredClone(sourceRows);invalid.learningTargets.find((r:any)=>r.value.id===packageTarget).value.memoryRevision++;assert.throws(()=>api.validateBackupRows(invalid));
 
   assert(!new TextDecoder().decode(exported.file).includes('Private marker'));
   assert.equal((await api.inspectLibraryBackup(exported.file,password)).targets,3);
@@ -113,9 +116,11 @@ try{
   await assert.rejects(restored.clearLocalLibrary(confirmed),/storageFull/);restored.LibraryTransaction.prototype.clear=originalClear;
   assert.equal((await restored.readLearning()).targets.length,3);
   const lateBytes=new TextEncoder().encode(JSON.stringify(pack.bundle)),lateDescriptor={id:pack.bundle.id,version:pack.bundle.version,title:pack.bundle.title,description:'fixture',entryCount:1,byteLength:lateBytes.length,sha256:await restored.sha256(lateBytes),url:'https://fixture.invalid/package.json'};
+  const modelFetch=globalThis.fetch;
   let releaseDownload!:()=>void;globalThis.fetch=async()=>{await new Promise<void>(resolve=>{releaseDownload=resolve;});return new Response(lateBytes);};
   const late=restored.downloadPackage(lateDescriptor,new AbortController().signal,()=>{});
   await restored.clearLocalLibrary(confirmed);releaseDownload();await assert.rejects(late,/libraryReplaced/);await assert.rejects(restored.openLibrary(),/libraryReplaced/);
+  globalThis.fetch=modelFetch;
   assert.equal((await restored.readLearning()).targets.length,0);assert.equal((await restored.readLearning()).events.length,0);
   const empty=await import(pathToFileURL(join(temp,'core.mjs')).href+'?cleared');assert.notEqual((await empty.openLibrary()).id,library.id);assert.equal((await empty.inspectLocalClear()).pending,0);
   await empty.restoreLibraryBackup(exported.file,password);

@@ -262,9 +262,9 @@ export interface FourStageReviewCandidate<TargetId extends string> {
 }
 
 /**
- * One due Review emits one graded Outcome. A forgotten Target is requeued as
- * Relearning; its later checks can complete repair but cannot emit a second
- * Outcome for the original due Review.
+ * One due Review emits one graded Outcome. Review and Relearning are different
+ * Protocol Purposes, so a forgotten Review is not requeued inside this Run.
+ * A later Relearning Run may requeue its own failed repair check.
  */
 export class InterleavedFourStageReviewQueue<TargetId extends string> {
   #pending: Array<{ targetId: TargetId; mode: 'review' | 'relearning' }>;
@@ -344,9 +344,9 @@ export class InterleavedFourStageReviewQueue<TargetId extends string> {
       }
       this.#outcomes.set(session.targetId, memoryOutcome);
     }
-    if (answer === 'forgotten') {
+    if (answer === 'forgotten' && session.mode === 'relearning') {
       this.#pending.push({ targetId: session.targetId, mode: 'relearning' });
-    } else {
+    } else if (answer !== 'forgotten') {
       this.#completed.add(session.targetId);
     }
     this.#current = { ...session, phase: 'feedback', answer, memoryOutcome };

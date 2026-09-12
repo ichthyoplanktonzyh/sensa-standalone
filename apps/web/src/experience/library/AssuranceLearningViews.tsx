@@ -9,7 +9,7 @@ import {ExampleScreen} from '../components/ExampleScreen';
 import {useEffect,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
-import {assuranceContent,assuranceView,type AssuranceAction} from '../../data/library/assurance';
+import {assuranceContent,assuranceView,localAssuranceState,type AssuranceAction} from '../../data/library/assurance';
 import type {LocalLearningRun,LocalLearningTarget} from '../../data/library/learning';
 import type {InstalledPackage} from '../../data/library/packages';
 import {AssuranceSummary} from '../components/learning/AssuranceSummary';
@@ -25,7 +25,7 @@ export function StudyResources({content}:{content:PrototypeIntroductionPackage})
 export type AssuranceSupportHost = Pick<StepRendererHost, 'toast' | 'openDict' | 'openNoteEditor' | 'openSceneEditor' | 'lookupDictionary'> & Pick<RuntimeToolsProps, 'onOpenMenuMore'>;
 export function AssuranceRuntime(props:{active:boolean;run:LocalLearningRun;target:LocalLearningTarget;pack:InstalledPackage;busy:boolean;notice:string;host:AssuranceSupportHost;onMarkKnown:()=>void;onAction:(action:AssuranceAction)=>void;onExit:()=>void;onFinish:()=>void}){
  useTranslation();
- const {run,pack,host}=props,view=assuranceView(run,pack),state=run.assurance!;
+ const {run,pack,host}=props,view=assuranceView(run,pack),state=localAssuranceState(run);
  const [exampleIndex,setExampleIndex]=useState<number|null>(null);
  const resetScroll=()=>{document.getElementById('s-lightweight-runtime')?.scrollTo({top:0});};
  const [phase,setPhase]=useState<'experience'|'reveal'>(state.revealed?'reveal':'experience');

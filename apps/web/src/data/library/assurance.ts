@@ -1,16 +1,26 @@
-import type {LocalProtocolExecution} from '../../experience/learningRuntime/runtimeCoordinator';
+import {
+ createLocalProtocolState,
+ readLocalProtocolState,
+ resetLocalRunParticipantsForReplay,
+ type LocalLearningRun,
+ type LocalLearningTarget,
+ type LocalProtocolExecution,
+ type LocalProtocolAuditEffect,
+ type LocalProtocolSettlementIntent,
+ type LocalProtocolTransition,
+} from '../../experience/learningRuntime/localProtocol';
 /** High-assurance execution adapter. Raw responses are evaluated against pinned resources. */
 import {z} from 'zod';
-import {consumerSchedulingPolicy,computeReviewSchedule,createEmptyReviewableCardScheduleState} from '@sensa/learning-kernel';
 import {LearnQueue} from '../../experience/engine/LearnQueue';
 import {ReviewQueue,type ReviewRuntimeEffect} from '../../experience/engine/ReviewQueue';
-import {bindPackageToRetentionTarget} from '../../experience/engine/types';
+import {bindPackageToRetentionTarget,type RelearningCycle} from '../../experience/engine/types';
 import {installLearningRelease,materializeReviewRepairContent,type PrototypeIntroductionPackage} from '../../experience/content/learningCatalog';
 import {materializeAssessmentResource,assessmentKindForCapability} from '../../experience/content/assessmentResources';
 import {resolveReviewMemoryOutcome,resolveReviewFocusDimension} from '../../experience/review/types';
 import type {InstalledPackage} from './packages';
-import type {LocalLearningRun,LocalLearningTarget} from './learning';
 export type AssuranceState={initialCheckpoint:string;checkpoint:string;mode:'independent'|'first_letter'|'choice';revealed:boolean;feedback:{correct:boolean;answer:string}|null};
+const auditPayload=(value:unknown):unknown=>JSON.parse(JSON.stringify(value));
+export const localAssuranceState=(run:LocalLearningRun)=>readLocalProtocolState<AssuranceState>(run,'structured');
 export const assuranceActionSchema=z.discriminatedUnion('kind',[
  z.object({kind:z.literal('undo')}).strict(),z.object({kind:z.literal('reveal')}).strict(),z.object({kind:z.literal('continue')}).strict(),
  z.object({kind:z.literal('hint'),mode:z.enum(['first_letter','choice'])}).strict(),
@@ -19,7 +29,7 @@ export const assuranceActionSchema=z.discriminatedUnion('kind',[
  z.object({kind:z.literal('answer'),value:z.string().trim().min(1).max(500)}).strict(),
 ]);
 export type AssuranceAction={kind:'assurance';response:z.infer<typeof assuranceActionSchema>};
-import {orchestrationRegistry} from '../../experience/learningRuntime/orchestrations';
+import {initialCompletionContractOf,orchestrationRegistry} from '../../experience/learningRuntime/orchestrations';
 import {localRunBinding,localTargetPolicy} from '../../experience/learningRuntime/localRuntimeBindings';
 import {learningPolicyProfileRegistry} from '../../experience/learningRuntime/policyProfiles';
 export function assuranceContent(pack:InstalledPackage,key:string){
@@ -35,14 +45,23 @@ export function beginAssurance(t:LocalLearningTarget,pack:InstalledPackage,purpo
  const binding=run?localRunBinding(run):learningPolicyProfileRegistry.get(localTargetPolicy(t)).protocols[purpose];
  const orchestration=orchestrationRegistry.get(binding.orchestrationId);
  if(purpose==='initial_learning'?!orchestration.acquisitionExecution:!orchestration.retentionExecution)throw new Error('localFlow.resourceInvalid');
- const queue=purpose==='initial_learning'?new LearnQueue([bound],{minGap:0},orchestration.acquisitionExecution):new ReviewQueue([{package:bound,dueAt:t.memory!.dueAt.getTime(),reps:t.memory!.reps,lapses:t.memory!.lapses,phase:'retaining'}],{},{minGap:0},orchestration.retentionExecution);
+ const queue=purpose==='initial_learning'
+  ?new LearnQueue([bound],{minGap:0},orchestration.acquisitionExecution)
+  :new ReviewQueue([purpose==='retention_review'
+   ?{package:bound,dueAt:t.memory!.dueAt.getTime(),reps:t.memory!.reps,lapses:t.memory!.lapses,phase:'retaining'}
+   :{package:bound,dueAt:t.memory!.dueAt.getTime(),reps:t.memory!.reps,lapses:t.memory!.lapses,phase:'relearning',relearning:relearningCycleFor(t)}],{},{minGap:0},orchestration.retentionExecution);
  const checkpoint=queue.exportCheckpoint();return {initialCheckpoint:checkpoint,checkpoint,mode:'independent',revealed:false,feedback:null};
 }
+function relearningCycleFor(target:LocalLearningTarget):RelearningCycle{
+ const cycle=target.relearningState as RelearningCycle|null;
+ if(!cycle||cycle.retentionTargetId!==target.retentionId||cycle.stage!=='repair_pending'&&cycle.stage!=='retest_pending')throw new Error('localFlow.resourceInvalid');
+ return structuredClone(cycle);
+}
 function queueFor(run:LocalLearningRun,onEffect?:(effect:ReviewRuntimeEffect<PrototypeIntroductionPackage>)=>void){
- if(!run.assurance)throw new Error('localFlow.resourceInvalid');
+ const state=localAssuranceState(run);
  const orchestration=orchestrationRegistry.get(localRunBinding(run).orchestrationId);
  if(run.purpose==='initial_learning'?!orchestration.acquisitionExecution:!orchestration.retentionExecution)throw new Error('localFlow.resourceInvalid');
- return run.purpose==='initial_learning'?LearnQueue.restoreCheckpoint<PrototypeIntroductionPackage>(run.assurance.checkpoint,orchestration.acquisitionExecution):ReviewQueue.restoreCheckpoint<PrototypeIntroductionPackage>(run.assurance.checkpoint,{onEffect},orchestration.retentionExecution);
+ return run.purpose==='initial_learning'?LearnQueue.restoreCheckpoint<PrototypeIntroductionPackage>(state.checkpoint,orchestration.acquisitionExecution):ReviewQueue.restoreCheckpoint<PrototypeIntroductionPackage>(state.checkpoint,{onEffect},orchestration.retentionExecution);
 }
 export function assuranceView(run:LocalLearningRun,pack:InstalledPackage){
  const queue=queueFor(run),session=queue.getCurrentSession();if(!session)return null;
@@ -51,26 +70,35 @@ export function assuranceView(run:LocalLearningRun,pack:InstalledPackage){
  const resource=introduction?null:replace(materializeAssessmentResource({packageIdentity:{packageKey:session.package.packageId,senseKey:session.package.senseId},content:session.package.content,taskKey:action.taskKey,kind:assessmentKindForCapability(action.capability!),capability:action.capability!},release)) as ReturnType<typeof materializeAssessmentResource>|null;
  const repair=action.intent==='repair'?materializeReviewRepairContent(session.package.content,action.repairResourceRef,release):null;
  if(action.repairResourceRef?.source==='package_declared'&&!repair)throw new Error('localFlow.resourceInvalid');
- const stepKind=!introduction&&run.assurance!.feedback&&('stepKind' in session||action.stepKind==='review_assessment')?'review_feedback':action.stepKind;
+ const stepKind=!introduction&&localAssuranceState(run).feedback&&('stepKind' in session||action.stepKind==='review_assessment')?'review_feedback':action.stepKind;
  if(!stepKind)throw new Error('localFlow.resourceInvalid');
  return {content:repair?replace(repair) as PrototypeIntroductionPackage:session.package.content,action,stepKind,introduction,resource,projection:queue.getProjection()};
 }
 /** The caller commits response, checkpoint, outcome and schedule together in one transaction. */
-export function transitionAssurance(t:LocalLearningTarget,run:LocalLearningRun,pack:InstalledPackage,raw:AssuranceAction['response'],at:string){
- const response=assuranceActionSchema.parse(raw),state=run.assurance!,view=assuranceView(run,pack);if(!view)throw new Error('localFlow.stepChanged');
- const effects:unknown[]=[];
+export function transitionAssurance(t:LocalLearningTarget,run:LocalLearningRun,pack:InstalledPackage,raw:unknown,at:string):LocalProtocolTransition{
+ const response=assuranceActionSchema.parse(raw),state=localAssuranceState(run),view=assuranceView(run,pack);if(!view)throw new Error('localFlow.stepChanged');
+ const effects:LocalProtocolAuditEffect[]=[];
+ let settlement:LocalProtocolSettlementIntent|null=null;
+ let evaluation:ReturnType<LocalProtocolExecution['unsafeTransition']>['evaluation']=null;
  const queue=queueFor(run,effect=>{
-  effects.push(effect);
+  effects.push({kind:'review_engine_effect',payload:auditPayload(effect)});
   if(effect.type==='retention_outcome'){
-   if(t.memoryRevision!==run.memoryRevision||t.memory?.dueAt.toISOString()!==run.dueAt)throw new Error('localFlow.stepChanged');
+   if(run.purpose!=='retention_review')throw new Error('localFlow.stepChanged');
    const grade=effect.result.memoryOutcome?.grade;if(!grade)throw new Error('localFlow.resourceInvalid');
-   t.memory=computeReviewSchedule({...t.memory!,cardId:t.retentionId},run.schedulingPolicy??consumerSchedulingPolicy,grade==='again'?0:grade==='hard'?1:grade==='easy'?3:2,new Date(at));t.memoryRevision++;t.relearnAt=effect.relearningCycle?at:null;
+   settlement={kind:'memory_outcome',schedulerEligibility:'due_review',evaluationId:effect.result.assessmentId,outcome:effect.result.memoryOutcome!,relearning:effect.relearningCycle?{nextEligibleAt:at,state:effect.relearningCycle}:null};
+   run.targetCompletions[t.id]={at,kind:'review_completed'};
+  }else{
+   if(run.purpose!=='relearning')throw new Error('localFlow.stepChanged');
+   settlement=effect.event==='retest_passed'
+    ?{kind:'relearning_completion',protocolOutcome:'independent_retest_passed',evidenceLevel:'behavioral',evidenceIds:[]}
+    :{kind:'relearning_progress',nextEligibleAt:at,state:effect.cycle};
+   if(effect.event==='retest_passed')run.targetCompletions[t.id]={at,kind:'relearning_completion'};
   }
  });
  if(response.kind==='undo'){
   if(!(queue instanceof LearnQueue)||view.introduction||!queue.undo())throw new Error('localFlow.stepChanged');
   state.feedback=null;state.revealed=false;state.mode='independent';
-  effects.push({kind:'undo'});
+  effects.push({kind:'undo',payload:null});
  }else if(response.kind==='reveal'){
   if(!view.introduction||state.feedback)throw new Error('localFlow.stepChanged');state.revealed=true;
  }else if(response.kind==='hint'){
@@ -82,7 +110,10 @@ export function transitionAssurance(t:LocalLearningTarget,run:LocalLearningRun,p
   const correct=r.kind==='meaning_to_form_recall'?(state.mode==='choice'?r.choiceOptions.some(o=>o.id===answer&&o.isTarget):r.acceptedForms.some(f=>f.trim().toLocaleLowerCase()===answer.toLocaleLowerCase())):r.kind==='novel_context_transfer'?r.scenario.options.some(o=>o.id===answer&&o.isCorrect):r.options.some(o=>o.id===answer&&o.isCorrect);
   if(response.kind==='try_recall'&&!correct&&queue instanceof LearnQueue&&state.mode!=='choice'){
    state.mode=state.mode==='independent'?'first_letter':'choice';
-   return [{kind:'recall_scaffold',taskKey:view.action.taskKey,support:state.mode}];
+   // This response only reveals progressively stronger support. The learner has
+   // not submitted the final checkpoint attempt yet, so it cannot create a
+   // formal Observation, Evidence, or Progression decision.
+   return {protocolEffects:[{kind:'recall_scaffold',payload:{taskKey:view.action.taskKey,support:state.mode}}],evaluation:null,settlement:null};
   }
   if(queue instanceof LearnQueue){
    queue.settle(correct,correct?state.mode:'miss');
@@ -90,34 +121,42 @@ export function transitionAssurance(t:LocalLearningTarget,run:LocalLearningRun,p
    const session=queue.getCurrentSession()!;const independent=correct&&state.mode==='independent';
    queue.settle({assessmentId:session.action.taskKey+'.action-assessment',kind:session.assessmentKind,focusDimension:resolveReviewFocusDimension(session.assessmentKind),correct:independent,responseId:answer,memoryOutcome:resolveReviewMemoryOutcome(session.assessmentKind,independent),evidenceEligible:true});
   }
-  state.feedback={correct,answer:answer};effects.push({kind:'assessment',taskKey:view.action.taskKey,capability:view.action.capability,correct,support:state.mode});
+  state.feedback={correct,answer:answer};effects.push({kind:'assessment',payload:{taskKey:view.action.taskKey,capability:view.action.capability,correct,support:state.mode}});
+  const initialCheckpoint=run.purpose==='initial_learning'?`structured-acquisition:${view.action.capability}`:null;
+  const independent=state.mode==='independent';
+  evaluation={actionIntent:'assessment',observation:{kind:initialCheckpoint?(correct&&independent?'checkpoint_satisfied':'checkpoint_not_satisfied'):settlement?'protocol_completed':'practice_completed',checkpointId:initialCheckpoint,valid:true,result:{correct,responseKind:response.kind,support:state.mode}},evidenceCandidates:independent?[{basis:String(view.action.capability),polarity:correct?'positive':'negative',capabilityObjectiveIds:[String(view.action.capability)]}]:[]};
  }else{
   if(view.introduction){if(!state.revealed)throw new Error('localFlow.stepChanged');if(queue instanceof LearnQueue){queue.settle(true);queue.next();}else{queue.completeRepair();queue.next();}}
-  else{if(!state.feedback)throw new Error('localFlow.stepChanged');queue.next();}
+  else{if(!state.feedback)throw new Error('localFlow.stepChanged');if(run.purpose!=='retention_review')queue.next();}
   state.feedback=null;state.revealed=false;state.mode='independent';
-  if(queue.isDone()){
-   run.completedAt=at;run.completionKind=run.purpose==='initial_learning'?'study_completion':'review_completed';
-   if(run.purpose==='initial_learning'){if(!(queue instanceof LearnQueue)||!queue.getGraduatedRetentionTargetIds().includes(t.retentionId))throw new Error('localFlow.resourceInvalid');t.completedAt=at;t.memory=computeReviewSchedule(createEmptyReviewableCardScheduleState(t.retentionId),run.schedulingPolicy??consumerSchedulingPolicy,2,new Date(at));t.memoryRevision++;effects.push({kind:'acquisition_graduation',basis:'all_required_gates',schedule:t.memory});}
-   t.relearnAt=null;
+  if(run.purpose==='retention_review'||queue.isDone()){
+   run.completedAt=at;run.completionKind=run.purpose==='initial_learning'?'acquisition_graduation':run.purpose==='retention_review'?'review_completed':'relearning_completion';
+   if(run.purpose==='initial_learning'){
+    if(!(queue instanceof LearnQueue)||!queue.getGraduatedRetentionTargetIds().includes(t.retentionId))throw new Error('localFlow.resourceInvalid');
+    const completion=initialCompletionContractOf(orchestrationRegistry.get(localRunBinding(run).orchestrationId));
+    settlement={kind:'initial_learning_completion',completion,evidenceIds:[]};
+    run.targetCompletions[t.id]={at,kind:completion.completionKind};
+    effects.push({kind:'acquisition_graduation',payload:{basis:'all_required_gates'}});
+   }
   }
  }
- state.checkpoint=queue.exportCheckpoint();return effects;
+ state.checkpoint=queue.exportCheckpoint();run.protocolState.value=state;return {protocolEffects:effects,evaluation,settlement};
 }
 
 /** Bind the original structured queue to the application's transaction boundary. */
 export const assuranceLocalExecution: LocalProtocolExecution = {
- purpose:target=>target.completedAt?'retention_review':'initial_learning',
- initialize:(target,pack,purpose,run)=>{if(!pack)throw new Error('localFlow.resourceInvalid');return {assurance:beginAssurance(target,pack,purpose,run)};},
+ initialize:(target,pack,purpose,run)=>{if(!pack)throw new Error('localFlow.resourceInvalid');return createLocalProtocolState('structured',beginAssurance(target,pack,purpose,run));},
  stepId:run=>run.id+':'+run.ordinal,
- transition:(target,run,pack,action,at)=>{
-  if(!pack||action.kind!=='assurance'||!run.assurance)throw new Error('localFlow.stepChanged');
+ unsafeTransition:(target,run,pack,action,at)=>{
+  if(!pack||action.kind!=='assurance')throw new Error('localFlow.stepChanged');
   return transitionAssurance(target,run,pack,action.response,at);
  },
  replayStart:(target,pack,saved)=>{
-  if(!pack||!saved.assurance)throw new Error('libraryBackup.errors.inconsistent');
+  if(!pack)throw new Error('libraryBackup.errors.inconsistent');
+  const savedState=localAssuranceState(saved);
   const fresh=beginAssurance(target,pack,saved.purpose,saved);
   const normalize=(v:any):any=>Array.isArray(v)?v.filter(x=>!(Array.isArray(x)&&x[0]==='startTime')).map(normalize):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).filter(([k])=>k!=='startTime').map(([k,x])=>[k,normalize(x)])):v;
-  if(JSON.stringify(normalize(JSON.parse(fresh.checkpoint)))!==JSON.stringify(normalize(JSON.parse(saved.assurance.initialCheckpoint))))throw new Error('libraryBackup.errors.inconsistent');
-  return {...saved,revision:1,ordinal:1,completedAt:null,completionKind:undefined,assurance:{...fresh,checkpoint:saved.assurance.initialCheckpoint,initialCheckpoint:saved.assurance.initialCheckpoint}};
+  if(JSON.stringify(normalize(JSON.parse(fresh.checkpoint)))!==JSON.stringify(normalize(JSON.parse(savedState.initialCheckpoint))))throw new Error('libraryBackup.errors.inconsistent');
+  return {...saved,revision:1,ordinal:1,completedAt:null,completionKind:undefined,targetCompletions:{},participants:resetLocalRunParticipantsForReplay(saved),protocolState:createLocalProtocolState('structured',{...fresh,checkpoint:savedState.initialCheckpoint,initialCheckpoint:savedState.initialCheckpoint})};
  },
 };

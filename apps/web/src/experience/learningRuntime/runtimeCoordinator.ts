@@ -1,24 +1,30 @@
 import {fourStageLocalExecution} from '../../data/library/fourStage';
-import {localRunBinding} from './localRuntimeBindings';
-import type { LocalLearningRun, LocalLearningTarget } from '../../data/library/learning';
-import type { InstalledPackage } from '../../data/library/packages';
+import {localRunBinding,localTargetPolicy} from './localRuntimeBindings';
 import { lightweightLocalExecution } from './lightweightInitialProtocol';
 import { assuranceLocalExecution } from '../../data/library/assurance';
-
-/** Storage ports bind existing protocol engines; they do not own another step graph. */
-export interface LocalProtocolExecution {
-  readonly cohort?: boolean;
-  validate?(target:LocalLearningTarget,pack:InstalledPackage|undefined):void;
-  activeTargetId?(run:LocalLearningRun):string;
-  purpose(target: LocalLearningTarget): LearningProtocolPurpose;
-  initialize(target: LocalLearningTarget, pack: InstalledPackage | undefined, purpose: LearningProtocolPurpose, run:LocalLearningRun): Partial<LocalLearningRun>;
-  stepId(run: LocalLearningRun): string;
-  transition(target: LocalLearningTarget, run: LocalLearningRun, pack: InstalledPackage | undefined, action: LocalLearningAction, at: string): unknown;
-  replayStart(target: LocalLearningTarget, pack: InstalledPackage | undefined, saved: LocalLearningRun): LocalLearningRun;
-}
-export type LocalLearningAction = {kind:'reveal'} | {kind:'rate';rating:'again'|'hard'|'good'} | import('../../data/library/assurance').AssuranceAction | {kind:'protocol';response:unknown};
+import type {
+  LocalLearningRun,
+  LocalLearningResource,
+  LocalLearningTarget,
+  LocalProtocolExecutionBinding,
+  LocalProtocolExecution,
+  LocalProtocolPlugin,
+  LocalProtocolPluginManifest,
+} from './localProtocol';
+import {assertLocalTargetMaterialIdentity,localLearningPurpose,localProtocolPluginContractVersion} from './localProtocol';
+import {canonicalJsonDigest} from '@sensa/learning-kernel';
+import {validateLightweightInitialMaterialization} from './lightweightInitialContent';
+export type {
+  LocalLearningAction,
+  LocalLearningRun,
+  LocalLearningTarget,
+  LocalProtocolExecution,
+  LocalProtocolSettlementIntent,
+  LocalProtocolTransition,
+} from './localProtocol';
 import { sameContentCapabilitySet } from './contentCapabilities';
 import {
+  LEARNING_PROTOCOL_PURPOSES,
   learningPolicyProfileRegistry,
   type LearningPolicyProfileRegistry,
   type LearningProtocolBinding,
@@ -29,7 +35,7 @@ import {
 import type { OrchestrationId } from './orchestrations';
 import type { RetentionStoreId } from './retentionStores';
 
-/** 对扩展开放；可用 surface 由 RuntimeSurfaceRegistry 在 composition root 闭合。 */
+/** 对扩展开放；可用 surface 由 Web composition root 的呈现注册表闭合。 */
 export type PrototypeRuntimeSurface = string & {};
 
 export interface RuntimePlanningCandidate<TargetId, ProfileId extends string> {
@@ -48,7 +54,7 @@ export interface RuntimeLaunch<TargetId> {
 }
 
 export interface ProtocolRuntimeAdapter {
-  localExecution?: LocalProtocolExecution;
+  localPlugin?: LocalProtocolPlugin;
   adapterId: PrototypeRuntimeAdapterId;
   retentionPriority: number;
   /** 本 Adapter 的长期保持事实存在哪。见 retentionStores.ts。 */
@@ -56,11 +62,29 @@ export interface ProtocolRuntimeAdapter {
   surfaceFor(purpose: LearningProtocolPurpose): PrototypeRuntimeSurface;
 }
 
+const localExecutionBindings=(adapterId:PrototypeRuntimeAdapterId):LocalProtocolExecutionBinding[]=>{
+ const seen=new Set<string>();
+ return learningPolicyProfileRegistry.listVersions().flatMap(profile=>LEARNING_PROTOCOL_PURPOSES.flatMap(purpose=>{
+  const binding=profile.protocols[purpose];
+  if(binding.runtimeAdapterId!==adapterId||!binding.localProtocolVersion)return [];
+  const result={purpose,protocolId:binding.protocolId,protocolVersion:binding.protocolVersion,localProtocolVersion:binding.localProtocolVersion};
+  const key=JSON.stringify(result);
+  if(seen.has(key))return [];
+  seen.add(key);
+  return [result];
+ }));
+};
+
+const localPlugin=(pluginId:string,displayName:string,adapterId:PrototypeRuntimeAdapterId,execution:LocalProtocolExecution):LocalProtocolPlugin=>({
+ manifest:{contractVersion:localProtocolPluginContractVersion,pluginId,pluginVersion:'v1',displayName,runtimeAdapterId:adapterId,bindings:localExecutionBindings(adapterId)},
+ execution,
+});
+
 const lightweightRuntimeAdapter: ProtocolRuntimeAdapter = {
   adapterId: 'lightweight',
-  localExecution: lightweightLocalExecution,
+  localPlugin:localPlugin('sensa.protocol.lightweight','Sensa Lightweight Protocol','lightweight',lightweightLocalExecution),
   retentionPriority: 0,
-  retentionStoreId: 'fixed_ladder',
+  retentionStoreId: 'scheduler_memory',
   surfaceFor: (purpose) => purpose === 'initial_learning'
     ? 'lightweight_initial'
     : 'lightweight_retention',
@@ -68,7 +92,7 @@ const lightweightRuntimeAdapter: ProtocolRuntimeAdapter = {
 
 const structuredRuntimeAdapter: ProtocolRuntimeAdapter = {
   adapterId: 'structured',
-  localExecution: assuranceLocalExecution,
+  localPlugin:localPlugin('sensa.protocol.structured','Sensa Structured Protocol','structured',assuranceLocalExecution),
   retentionPriority: 1,
   retentionStoreId: 'scheduler_memory',
   surfaceFor: () => 'structured_session',
@@ -76,7 +100,7 @@ const structuredRuntimeAdapter: ProtocolRuntimeAdapter = {
 
 const interleavedFourStageRuntimeAdapter: ProtocolRuntimeAdapter = {
   adapterId: 'interleaved_four_stage',
-  localExecution: fourStageLocalExecution,
+  localPlugin:localPlugin('sensa.protocol.interleaved-four-stage','Sensa Interleaved Four-stage Protocol','interleaved_four_stage',fourStageLocalExecution),
   retentionPriority: 1,
   retentionStoreId: 'scheduler_memory',
   surfaceFor: (purpose) => purpose === 'initial_learning'
@@ -93,6 +117,7 @@ export const PROTOCOL_RUNTIME_ADAPTERS = [
 export class LearningRuntimeCoordinator<ProfileId extends string> {
   readonly #policyProfiles: LearningPolicyProfileRegistry<ProfileId>;
   readonly #adapters: ReadonlyMap<PrototypeRuntimeAdapterId, ProtocolRuntimeAdapter>;
+  readonly #localPlugins:ReadonlyMap<string,LocalProtocolPlugin>;
 
   public constructor(
     policyProfiles: LearningPolicyProfileRegistry<ProfileId>,
@@ -100,23 +125,59 @@ export class LearningRuntimeCoordinator<ProfileId extends string> {
   ) {
     this.#policyProfiles = policyProfiles;
     const adapterIds = new Set<PrototypeRuntimeAdapterId>();
+    const pluginIds=new Set<string>(),localPlugins=new Map<string,LocalProtocolPlugin>();
     for (const adapter of adapters) {
       if (adapterIds.has(adapter.adapterId)) {
         throw new Error(`Duplicate Protocol Runtime Adapter identity: ${adapter.adapterId}`);
       }
       adapterIds.add(adapter.adapterId);
+      const plugin=adapter.localPlugin;
+      if(plugin){
+        const manifest=plugin.manifest;
+        if(manifest.contractVersion!==localProtocolPluginContractVersion||manifest.runtimeAdapterId!==adapter.adapterId||!manifest.pluginId.trim()||!manifest.pluginVersion.trim()||!manifest.bindings.length)throw new Error(`Invalid local Protocol plugin for ${adapter.adapterId}.`);
+        const pluginId=JSON.stringify([manifest.pluginId,manifest.pluginVersion]);
+        if(pluginIds.has(pluginId))throw new Error(`Duplicate local Protocol plugin: ${pluginId}`);
+        pluginIds.add(pluginId);
+        for(const binding of manifest.bindings){
+          if(!binding.protocolId.trim()||!binding.protocolVersion.trim()||!binding.localProtocolVersion.trim())throw new Error(`Invalid local Protocol binding in ${pluginId}`);
+          const key=localExecutionBindingKey(adapter.adapterId,binding);
+          if(localPlugins.has(key))throw new Error(`Duplicate local Protocol execution binding: ${key}`);
+          localPlugins.set(key,plugin);
+        }
+      }
     }
     this.#adapters = new Map(adapters.map((adapter) => [adapter.adapterId, adapter]));
+    this.#localPlugins=localPlugins;
+    for(const profile of this.#policyProfiles.list())for(const purpose of LEARNING_PROTOCOL_PURPOSES){
+      const binding=profile.protocols[purpose];
+      if(binding.localProtocolVersion&&!this.#localPlugins.has(localExecutionBindingKey(binding.runtimeAdapterId,{purpose,protocolId:binding.protocolId,protocolVersion:binding.protocolVersion,localProtocolVersion:binding.localProtocolVersion})))throw new Error(`No exact local Protocol plugin binding: ${profile.profileId}/${purpose}`);
+    }
   }
 
   public localExecutionFor(profileId: ProfileId, purpose: LearningProtocolPurpose): LocalProtocolExecution {
-    const execution = this.adapterFor(profileId, purpose).localExecution;
-    if (!execution) throw new Error('This runtime adapter has no local storage binding.');
-    return execution;
+    return this.localExecutionForBinding(this.#policyProfiles.get(profileId).protocols[purpose],purpose);
+  }
+
+  public localExecutionForBinding(binding:LearningProtocolBinding,purpose:LearningProtocolPurpose):LocalProtocolExecution{
+    if(!binding.localProtocolVersion)throw new Error('This Protocol has no local wire version.');
+    const plugin=this.#localPlugins.get(localExecutionBindingKey(binding.runtimeAdapterId,{purpose,protocolId:binding.protocolId,protocolVersion:binding.protocolVersion,localProtocolVersion:binding.localProtocolVersion}));
+    if(!plugin)throw new Error(`No exact local Protocol plugin binding: ${binding.protocolId}@${binding.protocolVersion}/${binding.localProtocolVersion}`);
+    return plugin.execution;
   }
 
   public listAdapters(): readonly ProtocolRuntimeAdapter[] {
     return [...this.#adapters.values()];
+  }
+
+  /** Agent/tooling discovery surface; executable capabilities stay private. */
+  public listLocalProtocolPlugins(): readonly LocalProtocolPluginManifest[] {
+    const unique=new Map<string,LocalProtocolPluginManifest>();
+    for(const plugin of this.#localPlugins.values()){
+      const manifest=plugin.manifest;
+      const key=JSON.stringify([manifest.pluginId,manifest.pluginVersion]);
+      if(!unique.has(key))unique.set(key,structuredClone(manifest));
+    }
+    return Object.freeze([...unique.values()].map(manifest=>Object.freeze({...manifest,bindings:Object.freeze([...manifest.bindings])})));
   }
 
   public adapterFor(
@@ -204,6 +265,19 @@ export class LearningRuntimeCoordinator<ProfileId extends string> {
   public planRetention<TargetId>(
     candidates: readonly RuntimePlanningCandidate<TargetId, ProfileId>[],
   ): readonly RuntimeLaunch<TargetId>[] {
+    return this.planOngoing('retention_review', candidates);
+  }
+
+  public planRelearning<TargetId>(
+    candidates: readonly RuntimePlanningCandidate<TargetId, ProfileId>[],
+  ): readonly RuntimeLaunch<TargetId>[] {
+    return this.planOngoing('relearning', candidates);
+  }
+
+  private planOngoing<TargetId>(
+    purpose: Extract<LearningProtocolPurpose, 'retention_review' | 'relearning'>,
+    candidates: readonly RuntimePlanningCandidate<TargetId, ProfileId>[],
+  ): readonly RuntimeLaunch<TargetId>[] {
     const launches = [...this.#adapters.values()]
       .sort((left, right) => left.retentionPriority - right.retentionPriority)
       .flatMap((adapter) => {
@@ -213,7 +287,7 @@ export class LearningRuntimeCoordinator<ProfileId extends string> {
         }> = [];
         candidates.forEach((candidate) => {
           if (!candidate.ready || !candidate.executable) return;
-          const protocol = this.#policyProfiles.get(candidate.profileId).protocols.retention_review;
+          const protocol = this.#policyProfiles.get(candidate.profileId).protocols[purpose];
           if (protocol.runtimeAdapterId !== adapter.adapterId) return;
           const group = protocolGroups.find((candidateGroup) =>
             sameProtocolBinding(candidateGroup.protocol, protocol));
@@ -224,10 +298,10 @@ export class LearningRuntimeCoordinator<ProfileId extends string> {
           protocolGroups.push({ protocol, targetIds: [candidate.targetId] });
         });
         return protocolGroups.map(({ protocol, targetIds }) => ({
-              purpose: 'retention_review',
+              purpose,
               protocol,
               adapterId: adapter.adapterId,
-              surface: adapter.surfaceFor('retention_review'),
+              surface: adapter.surfaceFor(purpose),
               targetIds,
             } satisfies RuntimeLaunch<TargetId>));
       });
@@ -267,8 +341,70 @@ export const learningRuntimeCoordinator = new LearningRuntimeCoordinator<Prototy
   learningPolicyProfileRegistry,
 );
 
+type LocalTargetExecutionReadinessBase=Readonly<{
+  purpose:LearningProtocolPurpose;
+  profileId:PrototypeLearningPolicy;
+  profileVersion:string;
+  materializationIds:readonly string[];
+  reason:string|null;
+}>;
+export type LocalTargetExecutionReadiness=
+ | LocalTargetExecutionReadinessBase&Readonly<{status:'ready';binding:LearningProtocolBinding;reason:null}>
+ | LocalTargetExecutionReadinessBase&Readonly<{status:'blocked';binding:null}>;
+
+/**
+ * One authoritative admission probe for UI, planning and Run construction.
+ * It checks immutable identity, validated bytes, exact Policy/Profile versions,
+ * purpose-specific content requirements and the selected execution adapter.
+ */
+export function inspectLocalTargetReadiness(
+  target:LocalLearningTarget,
+  resource:LocalLearningResource|undefined,
+  purpose:LearningProtocolPurpose=localLearningPurpose(target),
+):LocalTargetExecutionReadiness{
+ const profileId=localTargetPolicy(target);
+ try{
+  assertLocalTargetMaterialIdentity(target);
+  validateLightweightInitialMaterialization(target.material);
+  if(
+   target.material.snapshot.validationStatus!=='validated'
+   || target.material.snapshot.contentDigest!==canonicalJsonDigest(target.material.content)
+  )throw new Error('material_validation_failed');
+  const profile=learningPolicyProfileRegistry.get(profileId,target.committedPolicy?.profileVersion);
+  const binding=profile.protocols[purpose];
+  if(!binding.localProtocolVersion||!profile.lifecycle.schedulingPolicy)throw new Error('incomplete_binding');
+  const structuredProvisioned=!!resource&&!!target.assurancePackageKey;
+  const resolved=learningPolicyProfileRegistry.resolve(profileId,capabilityId=>{
+   const provisioned=capabilityId==='compact_learning_material'
+    || capabilityId==='structured_learning_package'&&structuredProvisioned;
+   return {view:{status:provisioned?'ready':'blocked',label:provisioned?'ready':'blocked',detail:provisioned?'content_validated':'content_unavailable'},provisioned,materializationId:provisioned?target.material.snapshot.learningMaterializationId:null};
+  },profile.profileVersion).purposes[purpose];
+  if(!resolved.provisioned||resolved.readiness.status!=='ready')throw new Error('content_unavailable');
+  learningRuntimeCoordinator.localExecutionForBinding(binding,purpose).validate?.(target,resource);
+  return Object.freeze({status:'ready',purpose,profileId,profileVersion:profile.profileVersion,binding,materializationIds:Object.freeze([...resolved.materializationIds]),reason:null});
+ }catch(error){
+  return Object.freeze({status:'blocked',purpose,profileId,profileVersion:target.committedPolicy?.profileVersion??'',binding:null,materializationIds:Object.freeze([]),reason:error instanceof Error?error.message:'content_unavailable'});
+ }
+}
+
+export function requireLocalTargetReadiness(
+ target:LocalLearningTarget,
+ resource:LocalLearningResource|undefined,
+ purpose:LearningProtocolPurpose=localLearningPurpose(target),
+):Extract<LocalTargetExecutionReadiness,{status:'ready'}>{
+ const readiness=inspectLocalTargetReadiness(target,resource,purpose);
+ if(readiness.status!=='ready'||!readiness.binding)throw new Error('localFlow.resourceInvalid');
+ return readiness;
+}
+
 export function localExecutionForRun(run:LocalLearningRun) {
-  const execution=learningRuntimeCoordinator.adapterForBinding(localRunBinding(run)).localExecution;
-  if(!execution)throw new Error('This runtime adapter has no local storage binding.');
-  return execution;
+  if (
+    run.protocolState.adapterId !== run.protocolBinding.runtimeAdapterId
+    || run.protocolVersion !== run.protocolBinding.localProtocolVersion
+  ) throw new Error('localFlow.resourceInvalid');
+  return learningRuntimeCoordinator.localExecutionForBinding(localRunBinding(run),run.purpose);
+}
+
+function localExecutionBindingKey(adapterId:PrototypeRuntimeAdapterId,binding:LocalProtocolExecutionBinding):string{
+ return JSON.stringify([adapterId,binding.purpose,binding.protocolId,binding.protocolVersion,binding.localProtocolVersion]);
 }

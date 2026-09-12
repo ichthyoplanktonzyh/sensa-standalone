@@ -1,7 +1,15 @@
 import {z} from 'zod';
-import type {LocalLearningRun,LocalLearningTarget} from '../../data/library/learning';
-import {consumerRunStepId,transitionConsumerRun,decideConsumerSettlement} from '@sensa/learning-kernel';
-import type {LocalProtocolExecution} from './runtimeCoordinator';
+import {consumerRunStepId,transitionConsumerRun} from '@sensa/learning-kernel';
+import {
+  createLocalProtocolState,
+  readLocalProtocolState,
+  resetLocalRunParticipantsForReplay,
+  type LocalLearningRun,
+  type LocalLearningTarget,
+  type LocalProtocolExecution,
+} from './localProtocol';
+import {initialCompletionContractOf,orchestrationRegistry} from './orchestrations';
+import {localRunBinding} from './localRuntimeBindings';
 /**
  * Executable Lightweight Initial Learning protocol.
  *
@@ -355,39 +363,56 @@ export const transitionLightweightInitialProtocol = (
 };
 
 const localActionSchema=z.discriminatedUnion('kind',[z.object({kind:z.literal('reveal')}).strict(),z.object({kind:z.literal('rate'),rating:z.enum(['again','hard','good'])}).strict()]);
+type LocalLightweightProtocolState={phase:'recall'|'reveal';initial:LightweightInitialProtocolRunState|null};
+const localState=(run:LocalLearningRun)=>readLocalProtocolState<LocalLightweightProtocolState>(run,'lightweight');
+export const localLightweightPhase=(run:LocalLearningRun)=>localState(run).phase;
 
-/** Persistence adaptation for the accepted FSRS consumer contract, not a second UI flow. */
+/** Persistence adapter. Protocols emit settlement intent; only the library settlement module writes memory. */
 export const lightweightLocalExecution: LocalProtocolExecution = {
- purpose:target=>target.relearnAt?'relearning':target.completedAt?'retention_review':'initial_learning',
- initialize:(target,_pack,purpose,run)=>purpose==='initial_learning'?{lightweight:localInitialState(run,target)}:{},
- stepId:run=>consumerRunStepId(run.id,run.ordinal,run.phase,run.protocolVersion),
- replayStart:(target,_pack,saved)=>{const run:LocalLearningRun={...saved,phase:'recall',ordinal:1,revision:1,completedAt:null,completionKind:undefined};if(saved.lightweight)run.lightweight=localInitialState(run,target);return run;},
- transition:(target,run,_pack,action,at)=>{
+ initialize:(target,_pack,purpose,run)=>createLocalProtocolState('lightweight',{phase:'recall',initial:purpose==='initial_learning'?localInitialState(run,target):null} satisfies LocalLightweightProtocolState),
+ stepId:run=>consumerRunStepId(run.id,run.ordinal,localState(run).phase,run.protocolVersion),
+ replayStart:(target,_pack,saved)=>{const run:LocalLearningRun={...saved,ordinal:1,revision:1,completedAt:null,completionKind:undefined,targetCompletions:{},participants:resetLocalRunParticipantsForReplay(saved),protocolState:createLocalProtocolState('lightweight',{phase:'recall',initial:null} satisfies LocalLightweightProtocolState)};if(saved.purpose==='initial_learning')localState(run).initial=localInitialState(run,target);return run;},
+ unsafeTransition:(target,run,_pack,action,at)=>{
   localActionSchema.parse(action);
-  if(action.kind!=='reveal'&&action.kind!=='rate'||run.assurance)throw new Error('localFlow.stepChanged');
+  if(action.kind!=='reveal'&&action.kind!=='rate')throw new Error('localFlow.stepChanged');
+  const state=localState(run);
   let next: 'recall'|'reveal'|'completed'|'waiting';
+  let evaluation:ReturnType<LocalProtocolExecution['unsafeTransition']>['evaluation']=null;
   if(run.purpose==='initial_learning'){
-   const state=run.lightweight??localInitialState(run,target);
-   const current=run.lightweight?state:{...state,currentStepDefinitionId:localPhaseDefinitions[run.phase]};
-   const result=transitionLightweightInitialProtocol(current,action.kind==='reveal'?'reveal_requested':action.rating);
-   if(run.lightweight)run.lightweight=result.state;
+   if(!state.initial)throw new Error('localFlow.resourceInvalid');
+   const result=transitionLightweightInitialProtocol(state.initial,action.kind==='reveal'?'reveal_requested':action.rating);
+   state.initial=result.state;
    next=result.state.currentStepDefinitionId===null?'completed':phaseForDefinition(result.state.currentStepDefinitionId);
-  }else next=transitionConsumerRun(run.protocolVersion,run.phase,action);
-  let settlement:unknown=null;
+   if(action.kind==='rate')evaluation={actionIntent:'instruction',observation:{kind:result.completedStep.observation.kind,checkpointId:result.completedStep.observation.checkpointId,valid:true,result:{rating:action.rating}},evidenceCandidates:[]};
+  }else next=transitionConsumerRun(run.protocolVersion,state.phase,action);
+  let settlement:ReturnType<LocalProtocolExecution['unsafeTransition']>['settlement']=null;
   if(action.kind==='rate'){
-   const common={retentionTargetId:target.retentionId,protocolVersion:run.protocolVersion,rating:action.rating,occurredAt:new Date(at)};
-   const result=run.purpose==='retention_review'?decideConsumerSettlement({...common,purpose:'retention_review',memory:{revision:String(target.memoryRevision),dueAt:target.memory!.dueAt,schedule:{...target.memory!,cardId:target.retentionId}},trigger:{memoryRevision:String(run.memoryRevision),dueAt:new Date(run.dueAt!)}},run.schedulingPolicy):decideConsumerSettlement({...common,purpose:run.purpose},run.schedulingPolicy);settlement=result;
-   if(result.kind==='study_completion'||result.kind==='review_completed'){target.memory=result.schedule;target.memoryRevision++;if(result.kind==='study_completion')target.completedAt=at;else target.relearnAt=result.nextEligibleAt?.toISOString()??null;}
-   if(result.kind==='wait_relearning')target.relearnAt=result.nextEligibleAt.toISOString();
-   if(result.kind==='relearning_completion')target.relearnAt=null;
-   if(next==='completed'||next==='waiting')run.completionKind=result.kind;
+   if(run.purpose==='initial_learning'&&next==='completed'){
+    const completion=initialCompletionContractOf(orchestrationRegistry.get(localRunBinding(run).orchestrationId));
+    settlement={kind:'initial_learning_completion',completion,evidenceIds:[]};
+    run.completionKind=completion.completionKind;
+   }else if(run.purpose==='retention_review'){
+    const nextEligibleAt=action.rating==='again'?new Date(new Date(at).getTime()+10*60*1000).toISOString():null;
+    settlement={kind:'memory_outcome',schedulerEligibility:'due_review',evaluationId:`${consumerRunStepId(run.id,run.ordinal,state.phase,run.protocolVersion)}:evaluation`,outcome:{basis:'learner_rated',grade:action.rating,evidenceLevel:'self_report',evidenceIds:[]},relearning:nextEligibleAt?{nextEligibleAt,state:null}:null};
+    run.completionKind='review_completed';
+   }else if(next==='waiting'){
+    settlement={kind:'relearning_progress',nextEligibleAt:new Date(new Date(at).getTime()+10*60*1000).toISOString(),state:null};
+    run.completionKind='wait_relearning';
+   }else{
+    settlement={kind:'relearning_completion',protocolOutcome:'lightweight_rebinding_completed',evidenceLevel:'non_evidentiary',evidenceIds:[]};
+    run.completionKind='relearning_completion';
+   }
+   if(run.purpose!=='initial_learning')evaluation={actionIntent:'assessment',observation:{kind:next==='waiting'?'practice_completed':'protocol_completed',checkpointId:null,valid:true,result:{learnerRating:action.rating}},evidenceCandidates:[]};
   }
-  if(next==='completed'||next==='waiting')run.completedAt=at;else run.phase=next;
-  return settlement;
+  if(next==='completed'||next==='waiting'){
+   run.completedAt=at;
+   if(next==='completed')run.targetCompletions[target.id]={at,kind:run.completionKind??'protocol_completed'};
+  }else state.phase=next;
+  run.protocolState.value=state;
+  return {protocolEffects:[],evaluation,settlement};
  },
 };
 
-// Compatibility projection only: the executable Step graph remains the original protocol.
 const localPhaseDefinitions = {recall:LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_ID,reveal:LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_ID};
 const phaseForDefinition=(id:string):'recall'|'reveal'=>{
  const entry=Object.entries(localPhaseDefinitions).find(([,definitionId])=>definitionId===id);
@@ -395,11 +420,13 @@ const phaseForDefinition=(id:string):'recall'|'reveal'=>{
  return entry[0] as 'recall'|'reveal';
 };
 function localInitialState(run:LocalLearningRun,target:LocalLearningTarget){
- const material=run.material??target.material;
- return createLightweightInitialProtocolRun({protocolRunId:run.id,retentionTargetId:target.retentionId,learningMaterializationId:material.snapshot.learningMaterializationId,materialResources:material.content.resources});
+ const participant=run.participants[target.id];
+ if(!participant)throw new Error('localFlow.resourceInvalid');
+ return createLightweightInitialProtocolRun({protocolRunId:participant.protocolRunId,retentionTargetId:target.retentionId,learningMaterializationId:participant.material.snapshot.learningMaterializationId,materialResources:participant.material.content.resources});
 }
 export function localLightweightStep(run:LocalLearningRun,target:LocalLearningTarget):LightweightProtocolStepInstance|null{
  if(run.completedAt)return null;
- const initial=run.lightweight??localInitialState(run,target);
- return currentLightweightInitialStep(run.lightweight?initial:{...initial,currentStepDefinitionId:localPhaseDefinitions[run.phase],currentStepOrdinal:run.ordinal});
+ const state=localState(run);
+ const initial=state.initial??localInitialState(run,target);
+ return currentLightweightInitialStep(state.initial?initial:{...initial,currentStepDefinitionId:localPhaseDefinitions[state.phase],currentStepOrdinal:run.ordinal});
 }

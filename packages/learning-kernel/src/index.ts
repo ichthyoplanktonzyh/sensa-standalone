@@ -2,6 +2,7 @@ export * from "./runtime/browserSafe.js";
 export * from "./runtime/completionPolicy.js";
 export * from "./runtime/memoryOutcome.js";
 export * from "./runtime/protocolProgression.js";
+export * from "./runtime/retentionScheduling.js";
 export * from "./runtime/executableLearningCapabilities.js";
 export * from "./runtime/executableLearningCapabilityVocabulary.js";
 export * from "./runtime/semanticPolicy.js";

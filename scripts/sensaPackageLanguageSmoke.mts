@@ -82,7 +82,7 @@ try{
   assert.equal(spanishInput.sense.familiarLanguageTag,'fr','the familiar language travels with the target too');
 
   // An enrolled package target carries the package's languages.
-  const localTarget={id:'fixture',retentionId:'fixture-retention',packageKey:'fixture-package',expression:'tomarse su tiempo',meaning:'从容地花时间做一件事。',targetLanguageTag:'es',familiarLanguageTag:'zh-CN',material:{snapshot:{},content:{resources:[]}},createdAt:'2026-09-01T00:00:00.000Z',startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null};
+  const localTarget={id:'fixture',retentionId:'fixture-retention',packageKey:'fixture-package',expression:'tomarse su tiempo',meaning:'从容地花时间做一件事。',policyAssignment:{assignmentId:'fixture-assignment',revision:1,scope:'system_default',profileId:'lightweight',assignedByOperationId:'fixture-operation',assignedAt:'2026-09-01T00:00:00.000Z',provenance:{}},committedPolicy:null,targetLanguageTag:'es',familiarLanguageTag:'zh-CN',material:{snapshot:{},content:{resources:[]}},createdAt:'2026-09-01T00:00:00.000Z',startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null,relearningState:null};
   const localView=api.localTargetView(localTarget as never);
   assert.equal(localView.targetLanguageTag,'es','an enrolled target view names the package language');
   assert.equal(localView.familiarLanguageTag,'zh-CN');

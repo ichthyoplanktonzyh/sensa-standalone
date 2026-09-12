@@ -751,8 +751,14 @@ export const sensaSchedulingHandoffSchema = z
     contractVersion: z.literal(sensaLearningConnectionContractVersion),
     schedulingHandoffId: uuid,
     learnerUserId: nonEmpty,
+    learningTargetId: uuid,
     retentionTargetId: uuid,
     initialLearningCompletionId: uuid,
+    profileId: nonEmpty,
+    profileVersion: nonEmpty,
+    protocolId: nonEmpty,
+    protocolVersion: nonEmpty,
+    learningMaterializationIds: z.array(uuid).min(1),
     initializationBasis: sensaSchedulingHandoffBasisSchema,
     evidenceLevel: sensaLearningEvidenceLevelSchema,
     evidenceIds: z.array(uuid),
@@ -760,6 +766,21 @@ export const sensaSchedulingHandoffSchema = z
     initializerVersion: nonEmpty,
     learnerVisibleClaimBoundary: nonEmpty,
     createdAt: timestamp,
+  })
+  .strict();
+
+export const sensaRelearningCompletionSchema = z
+  .object({
+    contractVersion: z.literal(sensaLearningConnectionContractVersion),
+    relearningCompletionId: uuid,
+    learnerUserId: nonEmpty,
+    learningTargetId: uuid,
+    retentionTargetId: uuid,
+    protocolRunId: uuid,
+    protocolOutcome: nonEmpty,
+    evidenceLevel: sensaLearningEvidenceLevelSchema,
+    evidenceIds: z.array(uuid),
+    completedAt: timestamp,
   })
   .strict();
 
@@ -873,6 +894,9 @@ export type SensaInitialLearningCompletion = z.infer<
 >;
 export type SensaSchedulingHandoff = z.infer<
   typeof sensaSchedulingHandoffSchema
+>;
+export type SensaRelearningCompletion = z.infer<
+  typeof sensaRelearningCompletionSchema
 >;
 export type SensaMemoryOutcomeBasis = z.infer<
   typeof sensaMemoryOutcomeBasisSchema

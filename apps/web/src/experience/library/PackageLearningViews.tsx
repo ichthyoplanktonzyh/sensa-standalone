@@ -2,33 +2,41 @@ import {InterleavedFourStageRuntimeScreen} from '../components/learning/Interlea
 import {InterleavedFourStageReviewScreen} from '../components/learning/InterleavedFourStageReviewScreen';
 import {InterleavedFourStageQueue,InterleavedFourStageReviewQueue} from '../learningRuntime/interleavedFourStageProtocol';
 import {fourStageQueue,fourStageContent,type FourStageAction} from '../../data/library/fourStage';
-import {learningPolicyProfileRegistry} from '../learningRuntime/policyProfiles';
+import {LEARNING_PROTOCOL_PURPOSES,learningPolicyProfileRegistry,type LearningProtocolPurpose,type PrototypeRuntimeAdapterId} from '../learningRuntime/policyProfiles';
 import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
 import {localRunTargetIds} from '../../data/library/learning';
 import {defaultSensaLanguageProfile} from '@sensa/contracts/sensa';
-import {assuranceContent} from '../../data/library/assurance';
+import {assuranceContent,localAssuranceState} from '../../data/library/assurance';
 import {cardText} from '../../i18n/originalCards';
 import {RuntimeTools} from '../components/learning/RuntimeTools';
 import {localRunBinding,localTargetPolicy} from '../learningRuntime/localRuntimeBindings';
 import {learningRuntimeCoordinator} from '../learningRuntime/runtimeCoordinator';
-import {runtimeSurfaceRegistry} from '../learningRuntime/runtimeSurfaces';
+import {
+ LocalRuntimePresentationRegistry,
+ immutablePresentationSnapshot,
+ localRuntimePresentationContractVersion,
+ localRuntimePresentationRequest,
+ type LocalRuntimePresentationBinding,
+ type LocalRuntimePresentationPlugin,
+} from '../learningRuntime/localRuntimePresentations';
 import type {AssuranceSupportHost} from './AssuranceLearningViews';
 import {AssuranceRuntime,StudyResources} from './AssuranceLearningViews';
 import {LearningResourceDetails} from '../components/learning/LearningResourceDetails';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import i18n from '../../i18n/index';
-import {useState,useRef,useEffect} from 'react';
+import {useState,useRef,useEffect,useMemo} from 'react';
 import {ArrowRight,BookOpen,Search,RefreshCw,Upload,Check,Download} from 'lucide-react';
 import {LearningTargetDetailScreen} from '../components/learning/LearningTargetDetailScreen';
 import {LightweightRuntimeStartScreen} from '../components/learning/LightweightRuntimeStartScreen';
-import {localLightweightStep} from '../learningRuntime/lightweightInitialProtocol';
-import {packageKey} from '../../data/library/packages';
-import type {LocalLearningTarget} from '../../data/library/learning';
+import {localLightweightPhase,localLightweightStep} from '../learningRuntime/lightweightInitialProtocol';
+import {packageKey,type InstalledPackage} from '../../data/library/packages';
+import type {LocalLearningRun,LocalLearningTarget} from '../../data/library/learning';
+import type {LocalLearningAction} from '../learningRuntime/localProtocol';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 type Controller=ReturnType<typeof usePackageLearning>;
-export const localTargetView=(t:LocalLearningTarget)=>({targetId:t.id,expression:t.expression,meaning:t.meaning,targetLanguageTag:t.targetLanguageTag??defaultSensaLanguageProfile.activeTargetLanguageTag,familiarLanguageTag:t.familiarLanguageTag??defaultSensaLanguageProfile.familiarLanguageTag,example:String(t.material.content.resources.find(r=>r.materialRoleKey==='usage_guidance')?.contentPayload.example??''),partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:t.packageKey?'book' as const:'personal_semantic_world' as const,sourceLabel:t.packageKey?localFlowText('downloadedPackages'):localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:localTargetPolicy(t),lightweightReadiness:{status:'ready' as const,label:localFlowText('downloaded'),detail:localFlowText('resourcesLocal')}});
+export const localTargetView=(t:LocalLearningTarget,readiness:'ready'|'blocked'='ready')=>({targetId:t.id,expression:t.expression,meaning:t.meaning,targetLanguageTag:t.targetLanguageTag??defaultSensaLanguageProfile.activeTargetLanguageTag,familiarLanguageTag:t.familiarLanguageTag??defaultSensaLanguageProfile.familiarLanguageTag,example:String(t.material.content.resources.find(r=>r.materialRoleKey==='usage_guidance')?.contentPayload.example??''),partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:t.packageKey?'book' as const:'personal_semantic_world' as const,sourceLabel:t.packageKey?localFlowText('downloadedPackages'):localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:localTargetPolicy(t),lightweightReadiness:{status:readiness,label:readiness==='ready'?localFlowText('downloaded'):localFlowText('prepareResources'),detail:readiness==='ready'?localFlowText('resourcesLocal'):localFlowText('resourceInvalid')}});
 export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boolean;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void}){
  useTranslation();
  const [selected,setSelected]=useState<string|null>(null),[query,setQuery]=useState(''),[downloadKey,setDownloadKey]=useState<string|null>(null);
@@ -101,58 +109,127 @@ export function PackageTarget({active,target,c,onBack,onHome,onStart,onSource}:{
  const pack=c.packages.find(p=>p.key===target.packageKey);
  const policy=localTargetPolicy(target);
  const [editingPolicy,setEditingPolicy]=useState(false);
+ const readiness=c.readinessByTarget[target.id]??'blocked';
  const canSelectPolicy=!!target.assurancePackageKey&&!target.startedAt;
  const content=pack&&target.assurancePackageKey?assuranceContent(pack,target.assurancePackageKey).template.content:null;
- return <><LearningTargetDetailScreen active={active} target={localTargetView(target)} selectedPolicy={policy} fixedPolicy={!canSelectPolicy} preparation="ready" committedPolicy={target.startedAt?policy:null} initialCompletionKind={target.completedAt?'study_completion':null} reviewDue={c.due.includes(target)} relearning={!!target.relearnAt} retentionRuntimeState={null} nextReviewLabel={target.memory?.dueAt.toLocaleString(i18n.language)??null} declaredMastery={!!target.declaredMastery} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>setEditingPolicy(true)} onOpenSource={onSource??onBack} onRefreshPreparation={()=>void c.refresh()} onGoHome={onHome} onStartReview={onStart} onContinueRetentionRuntime={onStart} onContinueRuntime={onStart} onRevokeDeclaredMastery={()=>void c.declareKnown(target.id,false)} notice={c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>} actions={<><LearningResourceDetails material={target.material}/>{content&&<StudyResources content={content}/>}{target.declaredMastery?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.declareKnown(target.id,false)}>{cardText('revokeKnown')}</button>:<button className={setupPrimary} disabled={c.busy||!!target.completedAt&&!c.due.includes(target)&&(!c.run||!localRunTargetIds(c.run).includes(target.id))} onClick={onStart}>{target.completedAt?localFlowText('startReview'):localFlowText('startLearning')}</button>}</>}/>{editingPolicy&&canSelectPolicy&&<LearningPreferencesPanel closeLabel={i18n.t('learningPreferences.finishSelection')} allowedPolicies={learningPolicyProfileRegistry.list().filter(p=>p.localSelectable).map(p=>p.profileId)} showDailyQuantity={false} defaultPolicy={policy} dailyNewCount={c.dailyLimit??20} onDailyNewCountChange={()=>{}} onPolicyChange={value=>{void c.selectPolicy(target.id,value);}} busy={c.busy} status={c.notice&&<p role="status">{c.notice}</p>} onClose={()=>setEditingPolicy(false)}/>}</>;
+ return <><LearningTargetDetailScreen active={active} target={localTargetView(target,readiness)} selectedPolicy={policy} fixedPolicy={!canSelectPolicy} preparation={readiness} committedPolicy={target.committedPolicy?policy:null} initialCompletionKind={target.completedAt?'study_completion':null} reviewDue={c.due.includes(target)} relearning={!!target.relearnAt} retentionRuntimeState={null} nextReviewLabel={target.memory?.dueAt.toLocaleString(i18n.language)??null} declaredMastery={!!target.declaredMastery} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>setEditingPolicy(true)} onOpenSource={onSource??onBack} onRefreshPreparation={()=>void c.refresh()} onGoHome={onHome} onStartReview={onStart} onContinueRetentionRuntime={onStart} onContinueRuntime={onStart} onRevokeDeclaredMastery={()=>void c.declareKnown(target.id,false)} notice={c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>} actions={<><LearningResourceDetails material={target.material}/>{content&&<StudyResources content={content}/>}{target.declaredMastery?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.declareKnown(target.id,false)}>{cardText('revokeKnown')}</button>:<button className={setupPrimary} disabled={c.busy||readiness!=='ready'||!!target.completedAt&&!c.due.includes(target)&&(!c.run||!localRunTargetIds(c.run).includes(target.id))} onClick={onStart}>{target.completedAt?localFlowText('startReview'):localFlowText('startLearning')}</button>}</>}/>{editingPolicy&&canSelectPolicy&&<LearningPreferencesPanel closeLabel={i18n.t('learningPreferences.finishSelection')} allowedPolicies={learningPolicyProfileRegistry.list().filter(p=>p.localSelectable).map(p=>p.profileId)} showDailyQuantity={false} defaultPolicy={policy} dailyNewCount={c.dailyLimit??20} onDailyNewCountChange={()=>{}} onPolicyChange={value=>{void c.selectPolicy(target.id,value);}} busy={c.busy} status={c.notice&&<p role="status">{c.notice}</p>} onClose={()=>setEditingPolicy(false)}/>}</>;
 }
 type PackageRuntimeProps={active:boolean;c:Controller;host:AssuranceSupportHost;onExit:()=>void;onFinish:()=>void};
+type RuntimePresentationProps={
+ active:boolean;
+ run:LocalLearningRun;
+ targets:readonly LocalLearningTarget[];
+ packages:readonly InstalledPackage[];
+ busy:boolean;
+ notice:string;
+ hasNextTarget:boolean;
+ host:Partial<AssuranceSupportHost>;
+ dispatch:(action:LocalLearningAction)=>void;
+ declareMastery:(targetId:string,active?:boolean)=>Promise<unknown>;
+ onExit:()=>void;
+ onFinish:()=>void;
+};
 export function PackageRuntime(props:PackageRuntimeProps){
  const run=props.c.run;
- if(!run)return <LightweightPackageRuntime {...props}/>;
+ const snapshot=useMemo(()=>immutablePresentationSnapshot({
+  run:run!,
+  targets:run?props.c.targets.filter(target=>localRunTargetIds(run).includes(target.id)):[],
+  packages:run?props.c.packages.filter(pack=>props.c.targets.some(target=>localRunTargetIds(run).includes(target.id)&&target.packageKey===pack.key)):[],
+ }),[run,props.c.targets,props.c.packages]);
+ if(!run)return <LightweightRuntimeStartScreen active={props.active} target={null} materialization={null} step={null} completed={false} hasNextTarget={false} onExit={props.onExit} onReveal={()=>{}} onRate={()=>{}} onFinish={props.onFinish}/>;
  const surface=learningRuntimeCoordinator.adapterForBinding(localRunBinding(run)).surfaceFor(run.purpose);
- const Surface=runtimeSurfaceRegistry.localRenderer<PackageRuntimeProps>(surface);
- return <Surface {...props}/>;
+ const request=localRuntimePresentationRequest(run,surface);
+ const plugin=localRuntimePresentationRegistry.resolve(request);
+ const Surface=plugin.render;
+ const capabilities=new Set(plugin.manifest.capabilities);
+ const host:Partial<AssuranceSupportHost>={
+  ...(capabilities.has('toast')?{toast:props.host.toast}:{}),
+  ...(capabilities.has('dictionary')?{openDict:props.host.openDict,lookupDictionary:props.host.lookupDictionary}:{}),
+  ...(capabilities.has('notes')?{openNoteEditor:props.host.openNoteEditor}:{}),
+  ...(capabilities.has('personal_scenes')?{openSceneEditor:props.host.openSceneEditor}:{}),
+  ...(capabilities.has('personal_content_menu')?{onOpenMenuMore:props.host.onOpenMenuMore}:{}),
+ };
+ const declareMastery=capabilities.has('declared_mastery')
+  ?(targetId:string,active=true)=>props.c.declareKnown(targetId,active)
+  :async()=>{throw new Error('Presentation plugin did not declare declared_mastery.');};
+ return <Surface active={props.active} {...snapshot} busy={props.c.busy} notice={props.c.notice} hasNextTarget={!!props.c.nextTarget} host={host} dispatch={action=>{if(!props.c.busy)void props.c.act(action);}} declareMastery={declareMastery} onExit={props.onExit} onFinish={props.onFinish}/>;
 }
-function StructuredPackageRuntime({active,c,onExit,onFinish,host}:PackageRuntimeProps){
- const run=c.run,target=c.targets.find(t=>t.id===run?.targetId),pack=c.packages.find(p=>p.key===target?.packageKey);
- if(!run?.assurance||!target||!pack)throw new Error('Missing structured runtime resources');
- return <AssuranceRuntime host={host} key={run.id+':'+run.revision} active={active} run={run} target={target} pack={pack} busy={c.busy} notice={c.notice} onMarkKnown={()=>void c.declareKnown(target.id).then(ok=>{if(ok)onExit();})} onAction={action=>{if(!c.busy)void c.act(action);}} onExit={onExit} onFinish={onFinish}/>;
+function requireHost(host:Partial<AssuranceSupportHost>,capability:string):AssuranceSupportHost{
+ if(!host.toast||!host.openDict||!host.openNoteEditor||!host.openSceneEditor||!host.lookupDictionary||!host.onOpenMenuMore)throw new Error(`Presentation capability ${capability} is unavailable.`);
+ return host as AssuranceSupportHost;
 }
-function LightweightPackageRuntime({active,c,onExit,onFinish,host}:PackageRuntimeProps){
+function StructuredPackageRuntime({active,run,targets,packages,busy,notice,dispatch,declareMastery,onExit,onFinish,host}:RuntimePresentationProps){
+ const target=targets.find(t=>t.id===run.targetId),pack=packages.find(p=>p.key===target?.packageKey);
+ if(!target||!pack)throw new Error('Missing structured runtime resources');
+ localAssuranceState(run);
+ return <AssuranceRuntime host={requireHost(host,'structured_support')} key={run.id+':'+run.revision} active={active} run={run} target={target} pack={pack} busy={busy} notice={notice} onMarkKnown={()=>void declareMastery(target.id).then(ok=>{if(ok)onExit();})} onAction={dispatch} onExit={onExit} onFinish={onFinish}/>;
+}
+function LightweightPackageRuntime({active,run,targets,busy,notice,hasNextTarget,dispatch,declareMastery,onExit,onFinish,host}:RuntimePresentationProps){
  useTranslation();
- const run=c.run,target=c.targets.find(t=>t.id===run?.targetId);
- if(!run||!target)return <LightweightRuntimeStartScreen active={active} target={null} materialization={null} step={null} completed={false} hasNextTarget={false} onExit={onExit} onReveal={()=>{}} onRate={()=>{}} onFinish={onFinish}/>;
+ const target=targets.find(t=>t.id===run.targetId);
+ if(!target)throw new Error('Missing lightweight runtime target');
  // Reuse the existing role-based card presentations; formal transitions remain in the local core.
- const material=run.material??target.material;
+ const material=run.participants[target.id]?.material;
+ if(!material)throw new Error('Missing pinned learning material');
+ const phase=localLightweightPhase(run);
  const step=localLightweightStep(run,target);
  const content={senseKey:String(material.snapshot.provenance.senseId),lemma:target.expression,guideLabelL1:target.meaning};
- return <><LightweightRuntimeStartScreen tools={!run.completedAt&&<RuntimeTools content={content} personalContent={run.phase==='reveal'?content:null} showSave={run.phase==='reveal'} onMarkKnown={()=>void c.declareKnown(target.id).then(ok=>{if(ok)onExit();})} onOpenMenuMore={host.onOpenMenuMore} toast={host.toast} busy={c.busy}/>} active={active} target={localTargetView(target)} materialization={material} step={run.completedAt?null:step} completed={!!run.completedAt} hasNextTarget={!!c.nextTarget} onExit={onExit} onReveal={()=>{if(!c.busy)void c.act({kind:'reveal'});}} onRate={rating=>{if(!c.busy)void c.act({kind:'rate',rating});}} onFinish={onFinish} purpose={run.purpose} completionDetail={target.relearnAt?localFlowText('nextRelearning',{date:new Date(target.relearnAt).toLocaleString(i18n.language)}):target.memory?localFlowText('nextReview',{date:target.memory.dueAt.toLocaleString(i18n.language)}):localFlowText('progressSaved')} completionLabel={run.purpose==='initial_learning'?localFlowText('initialCompleted'):run.purpose==='retention_review'?localFlowText('reviewCompleted'):localFlowText('relearningCompleted')}/>{active&&c.notice&&<p role="status" className="fixed bottom-4 left-4 right-4 z-[100] rounded-xl bg-amber-50 p-3">{localFlowNotice(c.notice)}</p>}</>;
+ const lightweightHost=host as Pick<AssuranceSupportHost,'onOpenMenuMore'|'toast'>;
+ if(!lightweightHost.onOpenMenuMore||!lightweightHost.toast)throw new Error('Presentation capability lightweight_support is unavailable.');
+ return <><LightweightRuntimeStartScreen tools={!run.completedAt&&<RuntimeTools content={content} personalContent={phase==='reveal'?content:null} showSave={phase==='reveal'} onMarkKnown={()=>void declareMastery(target.id).then(ok=>{if(ok)onExit();})} onOpenMenuMore={lightweightHost.onOpenMenuMore} toast={lightweightHost.toast} busy={busy}/>} active={active} target={localTargetView(target)} materialization={material} step={run.completedAt?null:step} completed={!!run.completedAt} hasNextTarget={hasNextTarget} onExit={onExit} onReveal={()=>dispatch({kind:'reveal'})} onRate={rating=>dispatch({kind:'rate',rating})} onFinish={onFinish} purpose={run.purpose} completionDetail={target.relearnAt?localFlowText('nextRelearning',{date:new Date(target.relearnAt).toLocaleString(i18n.language)}):target.memory?localFlowText('nextReview',{date:target.memory.dueAt.toLocaleString(i18n.language)}):localFlowText('progressSaved')} completionLabel={run.purpose==='initial_learning'?localFlowText('initialCompleted'):run.purpose==='retention_review'?localFlowText('reviewCompleted'):localFlowText('relearningCompleted')}/>{active&&notice&&<p role="status" className="fixed bottom-4 left-4 right-4 z-[100] rounded-xl bg-amber-50 p-3">{localFlowNotice(notice)}</p>}</>;
 }
 
-// Existing surfaces receive data adapters at composition; no second surface registry.
-runtimeSurfaceRegistry.bindLocalRenderer('lightweight_initial',LightweightPackageRuntime);
-runtimeSurfaceRegistry.bindLocalRenderer('lightweight_retention',LightweightPackageRuntime);
-runtimeSurfaceRegistry.bindLocalRenderer('structured_session',StructuredPackageRuntime);
-
-function fourStagePresentation(c:Controller){
- const run=c.run;if(!run)throw new Error('Missing runtime');
+function fourStagePresentation(props:RuntimePresentationProps){
+ const {run}=props;
  const queue=fourStageQueue(run),session=queue.getCurrentSession();
- const target=c.targets.find(t=>t.id===session?.targetId);
- const pack=c.packages.find(p=>p.key===target?.packageKey);
+ const target=props.targets.find(t=>t.id===session?.targetId);
+ const pack=props.packages.find(p=>p.key===target?.packageKey);
  const content=target?fourStageContent(target,pack):null;
  return {run,queue,session,content,target:target&&content?{expression:target.expression,meaning:target.meaning,example:content.learningExamples[0]?.textL2??'',partOfSpeech:''}:null};
 }
-function FourStageInitialPackageRuntime({active,c,onExit,onFinish}:PackageRuntimeProps){
- const {queue,target,content}=fourStagePresentation(c);
+function FourStageInitialPackageRuntime(props:RuntimePresentationProps){
+ const {active,busy,notice,dispatch,onExit,onFinish}=props;
+ const {queue,target,content}=fourStagePresentation(props);
  if(!(queue instanceof InterleavedFourStageQueue))throw new Error('Invalid initial queue');
- const act=(response:FourStageAction['response'])=>{if(!c.busy)void c.act({kind:'protocol',response});};
- return <InterleavedFourStageRuntimeScreen active={active} targetIds={[]} onExit={onExit} onFinish={onFinish} onComplete={()=>{}} execution={{session:queue.getCurrentSession(),projection:queue.getProjection(),target,content,busy:c.busy,notice:c.notice&&<p role="alert">{c.notice}</p>,onChoice:optionId=>act({kind:'choice',optionId}),onSelfReport:known=>act({kind:'self_report',known}),onContinue:()=>act({kind:'continue'})}}/>;
+ const act=(response:FourStageAction['response'])=>dispatch({kind:'protocol',response});
+ return <InterleavedFourStageRuntimeScreen active={active} targetIds={[]} onExit={onExit} onFinish={onFinish} onComplete={()=>{}} execution={{session:queue.getCurrentSession(),projection:queue.getProjection(),target,content,busy,notice:notice&&<p role="alert">{notice}</p>,onChoice:optionId=>act({kind:'choice',optionId}),onSelfReport:known=>act({kind:'self_report',known}),onContinue:()=>act({kind:'continue'})}}/>;
 }
-function FourStageReviewPackageRuntime({active,c,onExit,onFinish}:PackageRuntimeProps){
- const {run,queue,target}=fourStagePresentation(c);
+function FourStageReviewPackageRuntime(props:RuntimePresentationProps){
+ const {active,busy,notice,dispatch,onExit,onFinish}=props;
+ const {run,queue,target}=fourStagePresentation(props);
  if(!(queue instanceof InterleavedFourStageReviewQueue))throw new Error('Invalid review queue');
- const act=(response:FourStageAction['response'])=>{if(!c.busy)void c.act({kind:'protocol',response});};
- return <InterleavedFourStageReviewScreen active={active} targetIds={[]} relearningTargetIds={new Set()} onExit={onExit} onFinish={onFinish} onMemoryOutcome={()=>{}} onRelearningComplete={()=>{}} execution={{session:queue.getCurrentSession(),target,done:!!run.completedAt,targetCount:localRunTargetIds(run).length,busy:c.busy,notice:c.notice&&<p role="alert">{c.notice}</p>,onAnswer:answer=>act({kind:'review',answer}),onContinue:()=>act({kind:'continue'})}}/>;
+ const act=(response:FourStageAction['response'])=>dispatch({kind:'protocol',response});
+ return <InterleavedFourStageReviewScreen active={active} targetIds={[]} relearningTargetIds={new Set()} onExit={onExit} onFinish={onFinish} onMemoryOutcome={()=>{}} onRelearningComplete={()=>{}} execution={{session:queue.getCurrentSession(),target,done:!!run.completedAt,targetCount:localRunTargetIds(run).length,busy,notice:notice&&<p role="alert">{notice}</p>,onAnswer:answer=>act({kind:'review',answer}),onContinue:()=>act({kind:'continue'})}}/>;
 }
-runtimeSurfaceRegistry.bindLocalRenderer('interleaved_four_stage',FourStageInitialPackageRuntime);
-runtimeSurfaceRegistry.bindLocalRenderer('interleaved_four_stage_review',FourStageReviewPackageRuntime);
+
+const presentationBindings=(adapterId:PrototypeRuntimeAdapterId,purposes:readonly LearningProtocolPurpose[]=LEARNING_PROTOCOL_PURPOSES):LocalRuntimePresentationBinding[]=>{
+ const seen=new Set<string>();
+ return learningPolicyProfileRegistry.listVersions().flatMap(profile=>purposes.flatMap(purpose=>{
+  const binding=profile.protocols[purpose];
+  if(binding.runtimeAdapterId!==adapterId||!binding.localProtocolVersion)return [];
+  const presentationBinding={surface:learningRuntimeCoordinator.adapterForBinding(binding).surfaceFor(purpose),runtimeAdapterId:adapterId,purpose,protocolId:binding.protocolId,protocolVersion:binding.protocolVersion,localProtocolVersion:binding.localProtocolVersion} satisfies LocalRuntimePresentationBinding;
+  const key=JSON.stringify(presentationBinding);
+  if(seen.has(key))return [];
+  seen.add(key);
+  return [presentationBinding];
+ }));
+};
+
+const lightweightPresentationPlugin:LocalRuntimePresentationPlugin<RuntimePresentationProps>={
+ manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.lightweight',pluginVersion:'v1',displayName:'Sensa Lightweight Runtime',capabilities:['toast','personal_content_menu','declared_mastery'],bindings:presentationBindings('lightweight')},
+ render:LightweightPackageRuntime,
+};
+const structuredPresentationPlugin:LocalRuntimePresentationPlugin<RuntimePresentationProps>={
+ manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.structured',pluginVersion:'v1',displayName:'Sensa Structured Runtime',capabilities:['toast','dictionary','notes','personal_scenes','personal_content_menu','declared_mastery'],bindings:presentationBindings('structured')},
+ render:StructuredPackageRuntime,
+};
+const fourStagePresentationPlugin:LocalRuntimePresentationPlugin<RuntimePresentationProps>={
+ manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.interleaved-four-stage',pluginVersion:'v1',displayName:'Sensa Interleaved Four-stage Runtime',capabilities:[],bindings:presentationBindings('interleaved_four_stage')},
+ render:props=>props.run.purpose==='initial_learning'?<FourStageInitialPackageRuntime {...props}/>:<FourStageReviewPackageRuntime {...props}/>,
+};
+
+export const localRuntimePresentationRegistry=new LocalRuntimePresentationRegistry<RuntimePresentationProps>([
+ lightweightPresentationPlugin,
+ structuredPresentationPlugin,
+ fourStagePresentationPlugin,
+]);

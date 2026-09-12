@@ -1,4 +1,3 @@
-import type {ReactNode} from 'react';
 /**
  * Runtime Surface 的启动登记表。
  *
@@ -22,8 +21,14 @@ import type {ReactNode} from 'react';
  * 见 retentionStores.ts。
  */
 import type { PrototypeLearningTargetId } from '../learningJourney/prototypeLearning';
-import type { ShellFlow } from '../router/shellLocation';
 import type { PrototypeRuntimeSurface, RuntimeLaunch } from './runtimeCoordinator';
+
+type LegacyRuntimeFlow =
+  | 'study'
+  | 'lightweight'
+  | 'lightweightReview'
+  | 'fourStage'
+  | 'fourStageReview';
 
 export type RuntimeLaunchForTargets = RuntimeLaunch<PrototypeLearningTargetId>;
 
@@ -38,7 +43,7 @@ export type RuntimeLaunchForTargets = RuntimeLaunch<PrototypeLearningTargetId>;
 export interface RuntimeSurfaceContext {
   readonly toast: (message: string) => void;
   /** 切换全屏 flow（App 的 viewMode）。 */
-  readonly showFlow: (flow: ShellFlow) => void;
+  readonly showFlow: (flow: LegacyRuntimeFlow) => void;
   /** 把流程模式切到 review（App 的 flowMode）；structured 的复习呈现依赖它。 */
   readonly enterReviewMode: () => void;
   /** 提交并锁定这批 Target 的 Learning Policy。 */
@@ -87,10 +92,9 @@ export interface RetentionStartOptions {
 }
 
 export interface RuntimeSurfaceDefinition {
-  localRenderer?: (props:never)=>ReactNode;
   readonly surface: PrototypeRuntimeSurface;
   /** 该 surface 运行时占据的全屏 flow。App 由此派生 viewMode。 */
-  readonly flow: ShellFlow;
+  readonly flow: LegacyRuntimeFlow;
   /** 启动一次首次学习运行；false 表示未创建。 */
   readonly startInitial: (
     ctx: RuntimeSurfaceContext,
@@ -263,19 +267,8 @@ export class RuntimeSurfaceRegistry {
     return definition;
   }
 
-  /** Composition binds data adapters to the already registered surface. */
-  public bindLocalRenderer<T>(surface: PrototypeRuntimeSurface, renderer: (props:T)=>ReactNode): void {
-    this.get(surface).localRenderer=renderer as (props:never)=>ReactNode;
-  }
-
-  public localRenderer<T>(surface: PrototypeRuntimeSurface): (props:T)=>ReactNode {
-    const render=this.get(surface).localRenderer;
-    if(!render)throw new Error(`No local presentation binding for Runtime Surface: ${surface}`);
-    return render as (props:T)=>ReactNode;
-  }
-
   /** 该 surface 运行时占据的全屏 flow。 */
-  public flowFor(surface: PrototypeRuntimeSurface): ShellFlow {
+  public flowFor(surface: PrototypeRuntimeSurface): LegacyRuntimeFlow {
     return this.get(surface).flow;
   }
 }

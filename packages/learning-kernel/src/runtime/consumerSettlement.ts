@@ -1,10 +1,14 @@
 import { transitionConsumerRun } from './consumerInitial.js';
 import {
-  computeReviewSchedule,
-  createEmptyReviewableCardScheduleState,
   type ReviewableCardScheduleState,
   type ReviewSchedule,
 } from './scheduling.js';
+import {
+  initializeRetentionMemory,
+  scheduleMemoryOutcome,
+  RetentionSchedulingError,
+} from './retentionScheduling.js';
+import type { WorkspaceSchedulerConfig } from './workspaceConfig.js';
 
 export const consumerSchedulingPolicyVersion = 'sensa-lightweight-scheduling-v1';
 export const consumerSchedulingPolicy = Object.freeze({
@@ -68,7 +72,7 @@ export class ConsumerSettlementError extends Error {
  * the attempt, transition and these effects atomically. A decision alone is no fact.
  * Dates, identity and the due trigger are explicit so the same policy runs on-device.
  */
-export function decideConsumerSettlement(input: ConsumerSettlementInput, schedulingPolicy: Parameters<typeof computeReviewSchedule>[1] = consumerSchedulingPolicy): ConsumerSettlement {
+export function decideConsumerSettlement(input: ConsumerSettlementInput, schedulingPolicy: WorkspaceSchedulerConfig = consumerSchedulingPolicy): ConsumerSettlement {
   const protocol = input.purpose === 'initial_learning' ? 'consumer-initial-v1'
     : input.purpose === 'retention_review' ? 'consumer-review-v1'
     : input.purpose === 'relearning' ? 'consumer-relearning-v1' : null;
@@ -83,7 +87,11 @@ export function decideConsumerSettlement(input: ConsumerSettlementInput, schedul
     return {
       kind: 'study_completion', evidenceLevel: 'non_evidentiary', handoffBasis: 'protocol_completion',
       // Both hard and good complete initial study; neither is a due-review rating.
-      schedule: computeReviewSchedule(createEmptyReviewableCardScheduleState(input.retentionTargetId), schedulingPolicy, 2, input.occurredAt),
+      schedule: initializeRetentionMemory(
+        input.retentionTargetId,
+        schedulingPolicy,
+        input.occurredAt,
+      ).schedule,
     };
   }
   if (input.purpose === 'relearning') {
@@ -91,16 +99,35 @@ export function decideConsumerSettlement(input: ConsumerSettlementInput, schedul
       : { kind: 'relearning_completion', evidenceLevel: 'non_evidentiary' };
   }
   const { memory, trigger } = input;
-  if (memory.revision !== trigger.memoryRevision || memory.dueAt.getTime() !== trigger.dueAt.getTime()) {
-    throw new ConsumerSettlementError('stale_due');
+  let schedule: ReviewSchedule;
+  try {
+    schedule = scheduleMemoryOutcome({
+      memory: {
+        retentionTargetId: input.retentionTargetId,
+        revision: Number(memory.revision),
+        dueAt: memory.dueAt,
+        schedule: memory.schedule,
+      },
+      trigger: {
+        kind: 'due_review',
+        memoryRevision: Number(trigger.memoryRevision),
+        dueAt: trigger.dueAt,
+      },
+      outcome: { grade: input.rating },
+      occurredAt: input.occurredAt,
+    }, schedulingPolicy).schedule;
+  } catch (error) {
+    if (error instanceof RetentionSchedulingError) {
+      const code = error.code === 'invalid_identity' || error.code === 'invalid_revision'
+        ? 'memory_mismatch'
+        : error.code;
+      throw new ConsumerSettlementError(code);
+    }
+    throw error;
   }
-  if (memory.schedule.cardId !== input.retentionTargetId) throw new ConsumerSettlementError('memory_mismatch');
-  if (!Number.isFinite(memory.dueAt.getTime()) || input.occurredAt < memory.dueAt
-    || !memory.schedule.fsrsLastReviewedAt || !Number.isFinite(memory.schedule.fsrsLastReviewedAt.getTime())
-    || input.occurredAt < memory.schedule.fsrsLastReviewedAt) throw new ConsumerSettlementError('clock_untrusted');
   return {
     kind: 'review_completed', evidenceLevel: 'self_report', outcomeBasis: 'learner_rated', rating: input.rating,
-    schedule: computeReviewSchedule(memory.schedule, schedulingPolicy, input.rating === 'again' ? 0 : input.rating === 'hard' ? 1 : 2, input.occurredAt),
+    schedule,
     nextEligibleAt: input.rating === 'again' ? retryAt() : null,
   };
 }
