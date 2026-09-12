@@ -9,9 +9,8 @@ concurrency:
   group: sensa-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 env:
-  SENSA_EXTENSION_LEGACY_WEB: '1'
   SENSA_EXTENSION_WEB_URL: http://127.0.0.1:3001
-  VITE_SENSA_MODE: legacy-account
+  VITE_SENSA_MODE: production
   VITE_SUPABASE_URL: http://127.0.0.1:4319
   VITE_SUPABASE_PUBLISHABLE_KEY: local-browser-test-key
   VITE_SENSA_API_URL: http://127.0.0.1:4319
@@ -26,41 +25,18 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            apps/web-next/package-lock.json
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: v2.x
       - run: npm ci
-      - run: npm ci --prefix apps/web-next
       - name: Typecheck
         run: npm run typecheck
       - name: Build
         run: npm run build
-      - name: Lint
-        run: npm run lint
       - name: Edge compile check
-        run: npm run sensa:edge-check
-      - name: Fast service and release contract smoke
-        run: |
-          npm run sensa:service-status-smoke
-          npm run sensa:model-execution-smoke
-          node scripts/sensaReleaseCandidateSmoke.mjs
-          node scripts/sensaSupabaseAuthConfigSmoke.mjs
-          node --import tsx scripts/sensaTelemetrySmoke.mts
-          node --import tsx scripts/sensaModelBudgetSmoke.mts
-      - name: Fast local data and application smoke
-        run: |
-          npm run sensa:package-learning-smoke
-          npm run sensa:offline-shell-smoke
-          npm run sensa:personal-learning-smoke
-          npm run sensa:web-intake-smoke
-          npm run sensa:encrypted-intake-smoke
-          npm run sensa:local-i18n-smoke
-          npm run sensa:web-ui-smoke
-      - name: Acceptance catalog integrity
-        run: npm run sensa:acceptance:check && npm run sensa:acceptance:smoke
+        run: npm run test:edge
+      - name: Fast production-path smoke suite
+        run: npm test
 
   database-integration:
     name: PostgreSQL and API integration
@@ -90,8 +66,6 @@ jobs:
           deno-version: v2.x
       - run: npm ci
       - run: npm run build:api
-      - name: Disposable migration and role bootstrap
-        run: npm run sensa:trial-database-smoke
       - run: npm run db:migrate
       - name: Create restricted test principal
         run: |
@@ -102,21 +76,12 @@ jobs:
           await client.query("CREATE ROLE sensa_ci_test LOGIN PASSWORD 'local-test-only'; GRANT backend_app TO sensa_ci_test; GRANT INSERT, UPDATE ON sensa_consumer.invitations TO sensa_ci_test;");
           await client.end();
           JS
-      - name: Seed isolated curriculum fixtures
-        run: |
-          node --import tsx scripts/support/consumerTargetFixture.mts --write
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/sensa-m1b-fixture.sql
-      - name: Node API protocol and crash recovery
-        run: |
-          node --import tsx scripts/sensaConsumerAccountSmoke.mts --targets --initial --retention --checkin --intake --semantic --provisioning
-          node --import tsx scripts/sensaConsumerAccountSmoke.mts --crash
+      - name: Node and browser database integration
+        env:
+          SENSA_FIXTURE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          SENSA_ADMIN_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: npm run test:db
       - name: Edge API protocol
         run: deno run --allow-env --allow-net --allow-read --allow-sys --config supabase/functions/sensa-api/deno.json scripts/sensaConsumerAccountSmoke.mts --targets --initial --retention --checkin --intake --semantic --provisioning
-      - name: Database account, intake and deletion boundaries
-        env:
-          SENSA_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
-        run: |
-          npm run sensa:account-service-db-smoke
-          node --import tsx scripts/sensaAccountDeletionSmoke.mts
       - name: Validate opt-in provider inputs without calls
         run: node --import tsx scripts/sensaRealProviderTrial.mts --validate

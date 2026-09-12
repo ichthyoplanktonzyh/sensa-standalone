@@ -43,7 +43,6 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
       await bridge('web-connect-complete',accountId,library.id,controller.signal,result);
      }
     }
-    await bridge('web-delivery-config',accountId,library.id,controller.signal,null);
     const requests=z.array(localIntakeRequestSchema).max(10).parse(await bridge('web-intake-pull',accountId,library.id,controller.signal));
     for(const request of requests){
      if(controller.signal.aborted)return;

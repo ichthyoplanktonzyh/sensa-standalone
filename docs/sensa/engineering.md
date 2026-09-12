@@ -14,11 +14,10 @@
 | `packages/learning-kernel` | 学习与调度纯规则 |
 | `packages/content-validator` | 学习资源发布校验 |
 | `packages/model-runtime` | 默认与兼容模型执行适配 |
-| `packages/intake-transport` | 采集传输协议 |
 | `db/migrations` | 生产数据库的前向迁移 |
 | `content` | 内容 schema、prompt、制作与校验工具 |
 
-`apps/sensa_native`、`crates` 和 `apps/web-next` 只保留现有代码，不参与当前产品开发、验收或发布规划。除非 owner 明确恢复该范围，不在这些目录继续迁移或新增能力。
+`apps/sensa_native` 和 `crates` 只保留现有代码，不参与当前产品开发、验收或发布规划。除非 owner 明确恢复该范围，不在这些目录继续迁移或新增能力。
 
 ## 数据与同步
 
@@ -64,7 +63,7 @@ MIGRATION_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/sensa_m1a_
   node --import tsx scripts/db-migrate.ts
 
 SENSA_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/sensa_m1a_test \
-  npm run sensa:library-cloud-smoke
+  npm run test:db
 ```
 
 测试数据库名称和地址必须满足相应脚本的隔离检查，不能指向 owner 或生产数据库。
@@ -74,21 +73,19 @@ SENSA_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/sensa_m1a
 先运行覆盖改动边界的检查，再运行交付基线：
 
 ```sh
-npm run typecheck
-npm run build
-npm run lint
+npm run check
 ```
 
 Web 启动、账号恢复和空闲网络预算：
 
 ```sh
-npm run sensa:web-bootstrap-budget
+npm run test:browser
 ```
 
 本机库、API、PostgreSQL 和浏览器同步合同：
 
 ```sh
-npm run sensa:library-cloud-smoke
+npm run test:db
 ```
 
 扩展构建与无付费交互检查：
@@ -99,7 +96,7 @@ node --import tsx scripts/sensaBrowserPortSmoke.mts
 node --import tsx scripts/sensaExtensionPopupSmoke.mts
 ```
 
-`scripts/acceptance/catalog.mjs` 是现有测试资产索引，不是功能完成表。脚本成功只能证明它声明的边界；真实账号、真实 Provider、浏览器商店和生产环境需要各自的验收证据。
+脚本成功只能证明它覆盖的边界；真实账号、真实 Provider、浏览器商店和生产环境需要各自的验收证据。
 
 ## CI 与生产发布
 

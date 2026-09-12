@@ -1,5 +1,5 @@
 /**
- * Unified Planner 在 web-next 原型里的每日新学数量边界。
+ * Unified Planner 的每日新学数量边界。
  *
  * preset/Profile/Protocol 不出现在这个接口里：它们拿到 Planner 选好的 Target 后
  * 才开始工作。`initialPlannedAt` 是 Planner 已经为该 Target 占用过当日名额的事实；

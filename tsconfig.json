@@ -26,9 +26,6 @@
     },
     {
       "path": "./packages/model-runtime"
-    },
-    {
-      "path": "./packages/intake-transport"
     }
   ]
 }

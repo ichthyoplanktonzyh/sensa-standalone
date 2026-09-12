@@ -22,7 +22,7 @@ if(!url || !['127.0.0.1','localhost'].includes(new URL(url).hostname) || !new UR
 const pool=new pg.Pool({connectionString:url,max:4});
 const issuer='http://127.0.0.1:4319/auth/v1';
 const keys=await generateKeyPair('ES256');const jwk=await exportJWK(keys.publicKey);jwk.kid='local-smoke';jwk.alg='ES256';
-let injectCheckInFailure=false;let injectDecisionFailure=false;let injectFailure=false;let hideMedia=false;let testNow=new Date();
+let injectCheckInFailure=false;let injectDecisionFailure=false;let injectFailure=false;let hideMedia=false;let testNow=new Date(),modelTurns=0;
 async function transaction<T>(work:(db:DatabaseExecutor)=>Promise<T>):Promise<T> {
   const client=await pool.connect();await client.query('BEGIN');
   try {
@@ -43,7 +43,7 @@ async function token(sub=subject,session=crypto.randomUUID(),aud='authenticated'
 let mediaUnavailable=false;
 const mediaReader=async(digest:string)=>{if(mediaUnavailable)return null;try{const bytes=await readFile(process.env.SENSA_TEST_MEDIA_DIR?process.env.SENSA_TEST_MEDIA_DIR+'/'+digest+'.mp3':'/tmp/sensa-m1b-tactful.mp3');return createHash('sha256').update(bytes).digest('hex')===digest?bytes:null;}catch{return null;}};
 const app=new Hono();app.use('*',cors({origin:['http://127.0.0.1:3001','http://localhost:3001'],allowHeaders:['authorization','content-type','apikey','x-client-info','x-supabase-api-version','x-installation-id']}));
-app.route('',createConsumerRoutes({verify:createConsumerVerifier(issuer,createLocalJWKSet({keys:[jwk]})),transaction,mediaReader,semanticResolver:mockSemanticResolver,contentGenerator:mockContentGenerator,contentReviewer:mockContentReviewer,clock:()=>testNow}));
+app.route('',createConsumerRoutes({verify:createConsumerVerifier(issuer,createLocalJWKSet({keys:[jwk]})),transaction,mediaReader,semanticResolver:mockSemanticResolver,contentGenerator:mockContentGenerator,contentReviewer:mockContentReviewer,clock:()=>testNow,modelTurnCompletion:async()=>{modelTurns++;return {model:'fixture',choices:[{finish_reason:'stop',message:{content:'fixture'}}]};}}));
 const bearer=await token();const install=crypto.randomUUID();
 async function request(path:string,body?:unknown,bearerToken=bearer){
   const response=await app.request(path,{method:body===undefined?'GET':'POST',headers:{authorization:'Bearer '+bearerToken,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
@@ -62,6 +62,11 @@ assert.throws(()=>canonicalConsumerJson(-0));assert.throws(()=>canonicalConsumer
 assert.equal((await initialize(crypto.randomUUID(),await token(crypto.randomUUID()))).status,403);
 assert.equal((await initialize(crypto.randomUUID(),await token(subject,crypto.randomUUID(),'wrong'))).status,401);
 const inits=await Promise.all([initialize(),initialize()]);assert.equal(inits[0].status,200);assert.equal(inits[0].body.data.accountId,inits[1].body.data.accountId);
+process.env.SENSA_SEMANTIC_PROVIDER='deepseek';process.env.DEEPSEEK_API_KEY='fixture-never-sent';
+const modelTurn={id:crypto.randomUUID(),purpose:'teacher' as const,body:{model:'sensa-managed',messages:[{role:'system' as const,content:'fixture'},{role:'user' as const,content:'fixture'}],max_tokens:100,stream:false as const}};
+const modelDigest=createHash('sha256').update(canonicalConsumerJson(modelTurn)).digest('hex');
+const modelResult=await request('/sensa/model/turn',{...modelTurn,inputDigest:modelDigest});assert.equal(modelResult.status,200,JSON.stringify(modelResult.body));assert.equal(modelTurns,1);
+const duplicateModel=await request('/sensa/model/turn',{...modelTurn,inputDigest:modelDigest});assert.equal(duplicateModel.status,409);assert.equal(duplicateModel.body.code,'model_request_consumed');assert.equal(modelTurns,1);
 assert.equal(inits[0].body.data.quantityConfirmed,false);const boot=await bootstrap();
 assert.equal((await push(boot,[],await token(crypto.randomUUID()))).status,403);
 assert.equal((await push({...boot,scopeEpoch:'2'},[])).status,409);

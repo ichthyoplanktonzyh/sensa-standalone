@@ -12,7 +12,6 @@
     "esbuild": "^0.28.2"
   },
   "dependencies": {
-    "@sensa/contracts": "0.1.0",
-    "@sensa/intake-transport": "file:../../packages/intake-transport"
+    "@sensa/contracts": "0.1.0"
   }
 }

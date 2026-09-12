@@ -63,7 +63,7 @@ try{
  await expect.poll(readingPanel).not.toBeNull();
  const panel=await readingPanel();
  await cdp.send('Runtime.callFunctionOn',{objectId:panel!,functionDeclaration:'function(){Array.from(this.querySelectorAll("button")).find(b=>b.textContent==="保存…").click();}'});
- await cdp.send('Runtime.callFunctionOn',{objectId:panel!,functionDeclaration:'function(){Array.from(this.querySelectorAll("button")).find(b=>b.textContent==="保存待处理").click();}'});
+ await cdp.send('Runtime.callFunctionOn',{objectId:panel!,functionDeclaration:'function(){Array.from(this.querySelectorAll("button")).find(b=>["保存待处理","Save for clarification"].includes(b.textContent)).click();}'});
  await expect.poll(()=>page.evaluate(()=>(window as any).fixture.calls.some((c:any)=>c.kind==='save'))).toBe(true);
  const save=await page.evaluate(()=>(window as any).fixture.calls.find((c:any)=>c.kind==='save'));
  captureSnapshotSchema.parse(save.snapshot);expect(save.snapshot.expression.text).toBe('took');expect(save.snapshot.source.video).toEqual({platform:'youtube',videoId:'abcdefghijk',startMs:12500,endMs:15500});

@@ -9,7 +9,7 @@ import {chromium,expect} from '@playwright/test';
 import pg from 'pg';
 import {createConsumerRoutes} from '../apps/api/src/sensa/access/consumer.ts';
 import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../packages/contracts/src/sensa/librarySync.ts';
-const url=process.env.SENSA_TEST_DATABASE_URL;
+const url=process.env.SENSA_ADMIN_TEST_DATABASE_URL??process.env.SENSA_TEST_DATABASE_URL;
 if(!url||new URL(url).hostname!=='127.0.0.1'||!new URL(url).pathname.startsWith('/sensa_m1a_'))throw Error('Disposable loopback database required');
 const pool=new pg.Pool({connectionString:url}),subjects=[crypto.randomUUID(),crypto.randomUUID()],sessions=subjects.map(()=>crypto.randomUUID());
 process.env.SENSA_REGISTRATION_POLICY='registered';

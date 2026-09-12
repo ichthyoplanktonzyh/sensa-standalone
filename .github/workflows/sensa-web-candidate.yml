@@ -33,24 +33,19 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            apps/web-next/package-lock.json
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: v2.x
       - run: npm ci
-      - run: npm ci --prefix apps/web-next
       - name: Refuse incomplete or unsafe release configuration
         run: node scripts/release/releaseCandidate.mjs --check
       - run: npm run typecheck
       - run: npm run build
-      - run: npm run lint
-      - run: npm run sensa:edge-check
+      - run: npm run test:edge
       - name: Install Chromium for the boot budget check
         run: npx playwright install --with-deps chromium
       - name: Enforce App Shell boot and account restore budget
-        run: npm run sensa:web-bootstrap-budget
+        run: npm run test:browser
       - name: Validate release configuration and telemetry guards
         run: |
           node scripts/sensaReleaseCandidateSmoke.mjs
@@ -77,6 +72,5 @@ jobs:
             packages/learning-kernel/dist/
             packages/content-validator/dist/
             packages/model-runtime/dist/
-            packages/intake-transport/dist/
             release-candidate/manifest.json
             release-candidate/catalog.json

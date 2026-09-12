@@ -28,8 +28,7 @@
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.3",
     "zod": "^4.4.3",
-    "zustand": "^5.0.15",
-    "@sensa/intake-transport": "file:../../packages/intake-transport"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@types/react": "^19.1.10",

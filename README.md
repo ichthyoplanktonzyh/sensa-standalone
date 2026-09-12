@@ -2,7 +2,7 @@
 
 Sensa is a sense-first language-learning product. This repository contains the production Web application, browser extension, API, shared domain/runtime packages, content tooling and deployment configuration.
 
-Native clients and `apps/web-next` are paused. They are not part of current feature planning or release work.
+Native clients are paused. They are not part of current feature planning or release work.
 
 ## Development
 
@@ -19,10 +19,9 @@ Public browser configuration belongs in `apps/web/.env.local`; start from `apps/
 Common checks:
 
 ```sh
-npm run typecheck
-npm run build
-npm run lint
-npm run sensa:web-bootstrap-budget
+npm run check
+npm run test:edge
+npm run test:browser
 ```
 
 Database-backed checks use a disposable PostgreSQL database and the migration command documented in [engineering.md](docs/sensa/engineering.md).

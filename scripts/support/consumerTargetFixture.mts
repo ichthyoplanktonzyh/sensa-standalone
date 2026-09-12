@@ -1,6 +1,7 @@
 // Deterministic synthetic curriculum for isolated tests; never a production publisher.
 import {createHash} from 'node:crypto';
-import {readFile,writeFile} from 'node:fs/promises';
+import {readFile} from 'node:fs/promises';
+import pg from 'pg';
 import {canonicalConsumerJson,SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,sensaLightweightInitialMaterializationContentSchema} from '@sensa/contracts/sensa';
 const id=(n:number)=>`b1000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const hash=(x:unknown)=>createHash('sha256').update(canonicalConsumerJson(x)).digest('hex');
@@ -37,4 +38,9 @@ export async function fixtureSql(){
  }
  commands.push('COMMIT;');return commands.join('\n');
 }
-if(process.argv.includes('--write')){await writeFile('/tmp/sensa-m1b-fixture.sql',await fixtureSql());console.log('Wrote isolated fixture SQL to /tmp/sensa-m1b-fixture.sql');}
+if(process.argv.includes('--apply')){
+ const url=process.env.SENSA_FIXTURE_DATABASE_URL??process.env.SENSA_ADMIN_TEST_DATABASE_URL??process.env.SENSA_TEST_DATABASE_URL;
+ if(!url||!['127.0.0.1','localhost'].includes(new URL(url).hostname)||!new URL(url).pathname.startsWith('/sensa_m1a_'))throw new Error('An isolated loopback sensa_m1a_ fixture database is required');
+ const client=new pg.Client({connectionString:url});await client.connect();
+ try{await client.query(await fixtureSql());console.log('Applied isolated curriculum fixtures.');}finally{await client.end();}
+}

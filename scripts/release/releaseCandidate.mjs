@@ -13,7 +13,6 @@ export const candidateRoots=[
  'packages/learning-kernel/dist',
  'packages/content-validator/dist',
  'packages/model-runtime/dist',
- 'packages/intake-transport/dist',
 ];
 export function validateReleaseEnvironment(env){
  const errors=[];
@@ -31,7 +30,6 @@ export function validateReleaseEnvironment(env){
  for(const name of Object.keys(env))if(name.startsWith('VITE_')&&!allowed.has(name))errors.push(`${name}: unexpected browser-exposed variable`);
  if(env.SENSA_EXTENSION_WEB_URL!==web?.origin)errors.push('SENSA_EXTENSION_WEB_URL: must match Web origin');
  if(env.SENSA_EXTENSION_API_URL!==env.VITE_SENSA_API_URL)errors.push('SENSA_EXTENSION_API_URL: must match API URL');
- if(env.SENSA_EXTENSION_LEGACY_WEB==='1')errors.push('SENSA_EXTENSION_LEGACY_WEB: legacy bridge cannot ship');
  if(!/^[a-f0-9]{40}$/.test(env.SENSA_RELEASE_SHA??''))errors.push('SENSA_RELEASE_SHA: full Git commit required');
  if(errors.length)throw new Error(errors.join('\n'));
  return {webOrigin:web.origin,supabaseOrigin:auth.origin,apiUrl:api.href,commit:env.SENSA_RELEASE_SHA};
