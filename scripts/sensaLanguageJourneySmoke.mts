@@ -1,18 +1,17 @@
 /**
- * The language pair a journey command records.
+ * The pinned language context a journey command records.
  *
  * A captured expression states the language it is in; which side of the
- * learner's boundary that language sits on comes from their profile, resolved
+ * operation's roles that language fills comes from its context, resolved
  * once per command. This guards the three places that decide it: the pure intake
- * engine, which is handed the pair and refuses a language the pair cannot place,
+ * engine, which is handed the context and refuses a language it cannot place,
  * the gateway, which stamps the learner's own wording, and the route decision,
  * which must send an unplaceable language to the Inbox instead of defaulting it
- * onto one side. Values are the profile's, never a constant that happens to
- * match the shipped pair.
+ * onto one side. Expression Anchors themselves keep only the exact Language Tag.
  */
 import assert from 'node:assert/strict';
 import {
-  sensaIntakePayloadSchema,type SensaIntakePayload,type SensaLanguageProfile,
+  sensaIntakePayloadSchema,type SensaIntakePayload,type SensaPinnedLanguageContext,
 } from '@sensa/contracts/sensa';
 import {emptyJourneyState,JOURNEY_STORE_KEY} from '../apps/web/src/experience/personalMeaningJourney/store.ts';
 import {executeFastTrack} from '../apps/web/src/experience/personalMeaningJourney/intakeEngine.ts';
@@ -49,56 +48,54 @@ const run=(payload:SensaIntakePayload,languages:CommandLanguages)=>{
   );
 };
 
-const spanish:CommandLanguages={familiarLanguageTag:'zh-CN',targetLanguageTag:'es'};
-const english:CommandLanguages={familiarLanguageTag:'zh-CN',targetLanguageTag:'en'};
+const spanish:CommandLanguages={supportLanguageTag:'zh-CN',targetLanguageTag:'es'};
+const english:CommandLanguages={supportLanguageTag:'zh-CN',targetLanguageTag:'en'};
 
 const targetInSpanish=run(fastTrackPayload('Ella se tomó su tiempo.','se tomó','es'),spanish);
 assert.equal(targetInSpanish.bindingInput.languageTag,'es','a target expression keeps the language it was captured in, not a fixed English');
 assert.equal(targetInSpanish.bindingCandidate.languageTag,'es');
 const targetInEnglish=run(fastTrackPayload('She took her time.','took','en'),english);
-assert.equal(targetInEnglish.bindingInput.languageTag,'en','the same capture under an English profile records English');
+assert.equal(targetInEnglish.bindingInput.languageTag,'en','the same capture under an English context records English');
 
 const record=targetInSpanish.record;
 const expressionRevision=record.personalExpressionAnchorRevisions[0]!;
 assert.equal(expressionRevision.languageTag,'es','the stored expression anchor carries the target language');
-assert.equal(expressionRevision.learnerLanguageRole,'target');
 assert.equal(expressionRevision.surfaceForm,'se tomó');
 
-const familiarRun=run(fastTrackPayload('他想说又停住了，最后欲言又止。','欲言又止','ja'),{familiarLanguageTag:'ja',targetLanguageTag:'fr'});
-assert.equal(familiarRun.bindingInput.languageTag,'ja','a familiar expression takes the familiar language, even when it is not the shipped one');
-const familiarRevision=familiarRun.record.personalExpressionAnchorRevisions[0]!;
-assert.equal(familiarRevision.languageTag,'ja');
-assert.equal(familiarRevision.learnerLanguageRole,'familiar');
+const supportRun=run(fastTrackPayload('他想说又停住了，最后欲言又止。','欲言又止','ja'),{supportLanguageTag:'ja',targetLanguageTag:'fr'});
+assert.equal(supportRun.bindingInput.languageTag,'ja','a support-language capture keeps its absolute language instead of being relabeled');
+const supportRevision=supportRun.record.personalExpressionAnchorRevisions[0]!;
+assert.equal(supportRevision.languageTag,'ja');
+assert.equal('learnerLanguageRole' in supportRevision,false,'an Expression Anchor does not store a learner-relative role');
 
-// A learner's own wording is stamped from the profile, and no caller can claim
-// a language for it: the seam that let the UI disagree with the profile is gone.
-let profile:SensaLanguageProfile={familiarLanguageTag:'ko',targetLanguageTags:['it'],activeTargetLanguageTag:'it'};
+// New material resolves the active context once and records the exact language.
+let context:SensaPinnedLanguageContext={supportLanguageTag:'ko',targetLanguageTag:'it'};
 const storage=new MemoryStoragePort();
-const gateway=createJourneyGateway({storage,clock:createSeededClock(),languages:{read:async()=>profile}});
+const gateway=createJourneyGateway({storage,clock:createSeededClock(),languages:{read:async()=>context}});
 await gateway.createPersonalMeaning({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'雨后的巷子'}],familiarExpression:{surfaceForm:'欲言又止'}});
 const stored=JSON.parse(storage.read(JOURNEY_STORE_KEY)!) as any;
 const saved=()=>JSON.parse(storage.read(JOURNEY_STORE_KEY)!) as any;
 const written=stored.meanings[0].personalExpressionAnchorRevisions;
-assert.equal(written.length,1,'the familiar wording becomes its own expression anchor');
-assert.equal(written[0].languageTag,'ko','the learner’s own wording is recorded in their familiar language');
-assert.equal(written[0].learnerLanguageRole,'familiar');
+assert.equal(written.length,1,'the learner wording becomes its own expression anchor');
+assert.equal(written[0].languageTag,'ko','the learner wording uses this operation’s Support Language');
+assert.equal('learnerLanguageRole' in written[0],false);
 const blockAnchors=stored.meanings[0].personalSemanticAnchorRevisions;
 assert.equal(blockAnchors.length,1);
-assert.equal(blockAnchors[0].languageTag,'ko','a text block is the learner’s own wording too, and carries the same familiar language');
+assert.equal(blockAnchors[0].languageTag,'ko','a text block carries the same operation-scoped Support Language');
 assert.equal(blockAnchors[0].bodyText,'雨后的巷子');
 
-// A later command re-reads the profile: it follows the learner rather than the
+// A later independent command resolves the current context again rather than
 // language that happened to be stored on the record first.
-profile={familiarLanguageTag:'zh-CN',targetLanguageTags:['es'],activeTargetLanguageTag:'es'};
+context={supportLanguageTag:'zh-CN',targetLanguageTag:'es'};
 await gateway.addMaterialBlock({operationId:crypto.randomUUID(),personalMeaningId:stored.meanings[0].personalMeaning.personalMeaningId,block:{kind:'text',bodyText:'雨停了'}});
 const after=saved();
-assert.deepEqual(after.meanings[0].personalSemanticAnchorRevisions.map((revision:any)=>revision.languageTag),['ko','zh-CN'],'a block appended after a language change follows the profile, not the language recorded earlier');
+assert.deepEqual(after.meanings[0].personalSemanticAnchorRevisions.map((revision:any)=>revision.languageTag),['ko','zh-CN'],'a later block uses its own resolved context without rewriting the earlier Anchor');
 
-// Resolving the profile is asynchronous, so two captures can now overlap where
+// Resolving the context is asynchronous, so two captures can overlap where
 // they previously could not. A command that read the aggregate before the
 // other published would drop it, so commands are gated.
-const slowProfile:SensaLanguageProfile={familiarLanguageTag:'zh-CN',targetLanguageTags:['en'],activeTargetLanguageTag:'en'};
-const slowLanguages={read:async()=>{await new Promise(resolve=>setTimeout(resolve,1));return slowProfile;}};
+const slowContext:SensaPinnedLanguageContext={supportLanguageTag:'zh-CN',targetLanguageTag:'en'};
+const slowLanguages={read:async()=>{await new Promise(resolve=>setTimeout(resolve,1));return slowContext;}};
 const raceStorage=new MemoryStoragePort();
 const raceGateway=createJourneyGateway({storage:raceStorage,clock:createSeededClock(),languages:slowLanguages});
 const captures=[
@@ -108,10 +105,10 @@ const captures=[
 const receipts=await Promise.all(captures.map(payload=>raceGateway.ingest(payload.intakeOperationId,payload)));
 assert.deepEqual(receipts.map(receipt=>receipt.route),['fast_track','fast_track']);
 const raced=JSON.parse(raceStorage.read(JOURNEY_STORE_KEY)!) as any;
-assert.equal(raced.meanings.length,2,'two captures that overlap while the profile is read both survive');
+assert.equal(raced.meanings.length,2,'two captures that overlap while the active context is read both survive');
 assert.equal(raced.meanings.filter((meaning:any)=>meaning.personalMeaning.status==='active').length,2);
 
-// A capture in a language the pair cannot place is undecided, not guessed. Both
+// A capture in a language the operation cannot place is undecided, not guessed. Both
 // a third language and an undetermined one reach the Inbox as `pending_language`
 // even though every other fast-track condition is satisfied, because neither can
 // be stamped onto a side of this learner's boundary.
@@ -123,4 +120,4 @@ const waiting=(JSON.parse(raceStorage.read(JOURNEY_STORE_KEY)!) as any).inboxIte
 assert.deepEqual(waiting.map((item:any)=>item.status),['pending_language','pending_language'],'an unplaceable or undetermined language waits for the learner instead of being filed under a side');
 assert.equal(raced.meanings.length,2,'neither waiting capture grew the semantic world');
 
-console.log('PASS: the route decision, the intake engine and the journey gateway take every expression language from the capture and resolve its side against the learner’s profile; familiar and target roles resolve independently, and a language the pair cannot place waits as pending_language instead of being guessed onto a side. Pure engine and in-memory store; no browser, network or model.');
+console.log('PASS: Intake preserves absolute Expression-Anchor Language Tags, resolves contextual Target/Support roles only at the operation boundary, and leaves an unknown or unrelated language pending instead of coercing it. Pure engine and in-memory store; no browser, network or model.');

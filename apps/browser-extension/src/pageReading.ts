@@ -58,7 +58,7 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
   /** The learner's own language, learned from the first answer that names it, so
    * the translations this panel writes are labelled with the language they are
    * actually in rather than with the one this panel's own buttons are written in. */
-  let familiarLanguage:string|null=null;
+  let supportLanguage:string|null=null;
   const cache=new Map<string,string>();
   const requests=new Map<string,Promise<string>>();
   let hovered:HTMLElement|null=null,scanTimer:ReturnType<typeof setTimeout>|null=null;
@@ -147,10 +147,10 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
       // about the paragraph in hand.
       if(!item.forced){
         const reader=await readerLanguage(item.text,pageLanguage());
-        if(reader)familiarLanguage=reader.familiarLanguageTag;
+        if(reader)supportLanguage=reader.supportLanguageTag;
         if(reader?.alreadyReadable){item.state='skipped';return;}
       }
-      if(familiarLanguage)item.translation.setAttribute('lang',familiarLanguage);
+      if(supportLanguage)item.translation.setAttribute('lang',supportLanguage);
       placeholder=setTimeout(()=>{if(item.state==='running'&&!item.translation.textContent){item.translation.textContent='正在翻译…';item.translation.setAttribute('aria-busy','true');}},200);
       item.source.after(item.translation);feedback();
       const translated=await translationFor(item.text,item.context);

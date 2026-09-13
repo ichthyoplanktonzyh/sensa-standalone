@@ -68,7 +68,7 @@ export async function captureSelection(range:Range,scope:'sentence'|'block'='sen
   const captured=captureText(range);
   if(!captured)return null;
   const {text,from,to}=captured;
-  const {language,languageSource}=await detectCaptureLanguage(text);
+  const {language,languageSource,languageConfidence}=await detectCaptureLanguage(text);
   let left=0,right=text.length;
   if(scope==='sentence'){
     const segments=Array.from(new Intl.Segmenter(language??undefined,{granularity:'sentence'}).segment(text));
@@ -78,6 +78,6 @@ export async function captureSelection(range:Range,scope:'sentence'|'block'='sen
   }
   const sentence=text.slice(left,right);
   if(sentence.length>12000)return null;
-  return {sentence,language,languageSource,expression:{text:text.slice(from,to),start:Array.from(text.slice(left,from)).length,end:Array.from(text.slice(left,to)).length},
+  return {sentence,language,languageSource,languageConfidence,expression:{text:text.slice(from,to),start:Array.from(text.slice(left,from)).length,end:Array.from(text.slice(left,to)).length},
     source:{url:location.href,title:document.title.slice(0,1000),capturedAt:new Date().toISOString()}};
 }

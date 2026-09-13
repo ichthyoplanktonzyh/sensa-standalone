@@ -30,9 +30,8 @@ const statusLabels: Record<SensaIntakeItem['status'], string> = {
   get pending_sense() { return uiText('confirmMeaning'); },
   get pending_expression() { return uiText('selectExpression'); },
   get pending_acceptance() { return uiText('readyForAcceptance'); },
-  // The material names a language that is neither the learner's target nor their
-  // familiar language, so the gap is not one of the three above: it needs the
-  // learner to say what that language is to them.
+  // The material names a language not placed in the current operation, so the
+  // learner must decide which contextual role it has here.
   get pending_language() { return uiText('unplacedLanguage'); },
 };
 

@@ -4,7 +4,7 @@
  * read this text?" — and the answer is assembled from three things that live in
  * three places: what language the text is in (a detector), what the surface says
  * its text is (a declaration), and what that language means to this learner (the
- * published pair). This runs the real background bundle for the middle two and
+ * published Route context). This runs the real background bundle for the middle two and
  * the real content-side helper for the whole round trip, so the envelope the
  * background answers in is exercised rather than assumed: reading the payload
  * from the wrong depth is what silently turned every detected language into
@@ -14,9 +14,11 @@ import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import vm from 'node:vm';
 import {franc} from 'franc';
-import {sensaLanguageRoleForTag} from '@sensa/contracts/sensa';
+import {sensaLanguageRolesForTag} from '@sensa/contracts/sensa';
 
-let listener:any,storage:Record<string,unknown>={readingLanguages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'}},asleep=false;
+const routeContext=(supportLanguageTag:string,targetLanguageTag:string)=>({supportLanguageTag,targetLanguageTag,languageRouteId:'00000000-0000-4000-8000-000000000099',languageRouteRevision:1});
+const routeCollection=(supportLanguageTag:string,targetLanguageTag:string)=>({revision:1,routes:[{id:routeContext(supportLanguageTag,targetLanguageTag).languageRouteId,revision:1,targetLanguageTag,defaultSupportLanguageTag:supportLanguageTag,status:'active'}]});
+let listener:any,storage:Record<string,unknown>={readingLanguageRoutes:routeCollection('zh-CN','en'),readingActiveLanguageRouteId:routeContext('zh-CN','en').languageRouteId},asleep=false;
 const chromeMock={
   storage:{local:{get:async(key:string)=>structuredClone({[key]:storage[key]}),set:async(value:Record<string,unknown>)=>{Object.assign(storage,structuredClone(value));},setAccessLevel:async()=>{}},session:{get:async()=>({}),set:async()=>{}}},
   runtime:{id:'fixture',getURL:(path:string)=>'chrome-extension://fixture/'+path,onMessage:{addListener:(fn:unknown)=>{listener=fn;}}},
@@ -43,20 +45,21 @@ const page=(lang:string)=>({documentElement:{lang}} as Pick<Document,'documentEl
 const english='She took her time and looked up at the sky before answering the question that had been waiting for her all afternoon.';
 const chinese='这段话本身就是学习者已经能读的语言，把它再翻译一遍没有任何意义，所以这一整段都不应该被送去翻译，也不该占用今天的学习额度。';
 const spanish='Ella se tomó su tiempo y miró al cielo antes de responder a la pregunta que había estado esperando toda la tarde.';
-// English is the language this product ships as a target, and a detector left to
-// itself answers `sco` for it — an answer no release can place, which is how an
-// English capture came back carrying no language at all. Asked which of the
-// languages this release supports the text is in, it answers.
+// The detector stays open-set. Its imperfect Scots observation for this English
+// fixture is retained with confidence instead of coerced to a supported tag.
 assert.equal(franc(english),'sco','if this ever stops being true, the candidate list is no longer earning its place');
-assert.deepEqual(await detectCaptureLanguage(english),{language:'en',languageSource:'detector'});
-assert.deepEqual(await detectCaptureLanguage(chinese),{language:'zh-CN',languageSource:'detector'});
-assert.deepEqual(await detectCaptureLanguage(spanish),{language:'es',languageSource:'detector'});
+const detectedEnglish=await detectCaptureLanguage(english);
+assert.equal(detectedEnglish.language,'sco');assert.equal(detectedEnglish.languageSource,'detector');assert(detectedEnglish.languageConfidence!>0);
+const detectedChinese=await detectCaptureLanguage(chinese);
+assert.deepEqual(detectedChinese,{language:'zh-CN',languageSource:'detector',languageConfidence:1});
+const detectedSpanish=await detectCaptureLanguage(spanish);
+assert.equal(detectedSpanish.language,'es');assert.equal(detectedSpanish.languageSource,'detector');assert(detectedSpanish.languageConfidence!>0);
 
 // What the learner already reads: their own language, and nothing else. The
 // third language is not theirs to skip — it is still worth translating.
-assert.deepEqual(await readerLanguage(english),{familiarLanguageTag:'zh-CN',alreadyReadable:false});
-assert.deepEqual(await readerLanguage(chinese),{familiarLanguageTag:'zh-CN',alreadyReadable:true});
-assert.deepEqual(await readerLanguage(spanish),{familiarLanguageTag:'zh-CN',alreadyReadable:false});
+assert.deepEqual(await readerLanguage(english),{supportLanguageTag:'zh-CN',alreadyReadable:false});
+assert.deepEqual(await readerLanguage(chinese),{supportLanguageTag:'zh-CN',alreadyReadable:true});
+assert.deepEqual(await readerLanguage(spanish),{supportLanguageTag:'zh-CN',alreadyReadable:false});
 
 // Text too short to detect is answered by the surface it came from, which is the
 // only evidence there is: a short paragraph of a page that declares Chinese is a
@@ -71,32 +74,32 @@ assert.equal((await readerLanguage(short)).alreadyReadable,false,'nothing to go 
 assert.equal((await readerLanguage(english,'zh-CN')).alreadyReadable,false,'a claim about the page is not a claim about the paragraph');
 
 // The other direction: a learner reading English.
-assert.deepEqual(await chrome.storage.local.set({readingLanguages:{familiarLanguageTag:'en',targetLanguageTag:'zh-CN'}}).then(()=>readerLanguage(chinese)),{familiarLanguageTag:'en',alreadyReadable:false});
-assert.deepEqual(await readerLanguage(english),{familiarLanguageTag:'en',alreadyReadable:true});
-storage.readingLanguages={familiarLanguageTag:'zh-CN',targetLanguageTag:'en'};
+assert.deepEqual(await chrome.storage.local.set({readingLanguageRoutes:routeCollection('en','es')}).then(()=>readerLanguage(chinese)),{supportLanguageTag:'en',alreadyReadable:false});
+assert.deepEqual(await readerLanguage(english),{supportLanguageTag:'en',alreadyReadable:false},'an unsupported detector observation is not coerced to English merely because the Route supports English');
+storage.readingLanguageRoutes=routeCollection('zh-CN','en');
 
 // A surface the learner is reading for a language nobody has published a pair
 // for falls back to the pair the product ships, the same one the library uses.
-storage.readingLanguages=undefined;
-assert.deepEqual(await readerLanguage(english),{familiarLanguageTag:'zh-CN',alreadyReadable:false});
-storage.readingLanguages={familiarLanguageTag:'es',targetLanguageTag:'es'};
-assert.equal((await readerLanguage(chinese)).familiarLanguageTag,'zh-CN','a pair that says one language is both sides of the boundary is not a pair');
-storage.readingLanguages={familiarLanguageTag:'zh-CN',targetLanguageTag:'en'};
+storage.readingLanguageRoutes=undefined;
+assert.deepEqual(await readerLanguage(english),{supportLanguageTag:'zh-CN',alreadyReadable:false});
+storage.readingLanguageRoutes=routeCollection('es','es');
+assert.equal((await readerLanguage(chinese)).supportLanguageTag,'es','the same language may be both Target and Support');
+storage.readingLanguageRoutes=routeCollection('zh-CN','en');
 
 // A worker that is not there withholds the skip, never the translation, and the
 // capture still falls back to what the page declares.
 asleep=true;
 assert.equal(await readerLanguage(chinese),null);
 assert.equal(await readerLanguage(short,'zh-CN'),null);
-assert.deepEqual(await detectCaptureLanguage(english),{language:null,languageSource:null});
-assert.deepEqual(await detectCaptureLanguage(short),{language:null,languageSource:null});
+assert.deepEqual(await detectCaptureLanguage(english),{language:null,languageSource:null,languageConfidence:null});
+assert.deepEqual(await detectCaptureLanguage(short),{language:null,languageSource:null,languageConfidence:null});
 asleep=false;
 
 // The role helper the background decides with, stated where it is used: the pair
-// is the boundary, and the familiar side is what a translation would duplicate.
-assert.equal(sensaLanguageRoleForTag('zh-CN',{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'}),'familiar');
-assert.equal(sensaLanguageRoleForTag('en',{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'}),'target');
-assert.equal(sensaLanguageRoleForTag('es',{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'}),null);
-assert.equal(declaredCaptureLanguage(page('zh-Hans-CN')).language,'zh-CN','a declaration with subtags still places on the catalog');
+// is the boundary, and the Support side is what a translation would duplicate.
+assert.deepEqual(sensaLanguageRolesForTag('zh-CN',{supportLanguageTag:'zh-CN',targetLanguageTag:'en'}),['support']);
+assert.deepEqual(sensaLanguageRolesForTag('en',{supportLanguageTag:'zh-CN',targetLanguageTag:'en'}),['target']);
+assert.deepEqual(sensaLanguageRolesForTag('es',{supportLanguageTag:'zh-CN',targetLanguageTag:'en'}),[]);
+assert.deepEqual(declaredCaptureLanguage(page('zh-Hans-CN')),{language:'zh-Hans-CN',languageSource:'declared',languageConfidence:1},'a declaration keeps its exact canonical tag');
 
-console.log('PASS: the learner\'s own language is what a reading surface skips — detected per text, inherited from a declaration only when text is too short to detect, never inferred from the interface or the page as a whole, and never allowed to withhold a translation when the answer cannot be had. Real background handler, real detector, real published pair.');
+console.log('PASS: reading skips only exact Support-Language observations, preserves unsupported detector answers and confidence, keeps exact declared tags, permits same-language Target/Support, and never withholds a translation when the answer is uncertain.');

@@ -1,4 +1,4 @@
-import {captureSnapshotSchema,sensaLanguageForDeclaredTag} from '@sensa/contracts/sensa';
+import {captureSnapshotSchema,sensaCanonicalLanguageTag} from '@sensa/contracts/sensa';
 import type {CaptureSnapshot} from '@sensa/contracts/sensa';
 import {runReading,readingError} from './readingClient';
 import {parseYoutubeCaptions,parseSubtitleFile} from './subtitleCues';
@@ -124,7 +124,7 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
     const reader:ReaderLanguage|null=await readerLanguage('',captionLanguage.language);
     if(!valid()||generation!==run)return;
     trackReadable=reader?.alreadyReadable===true;
-    if(reader)translated.setAttribute('lang',reader.familiarLanguageTag);
+    if(reader)translated.setAttribute('lang',reader.supportLanguageTag);
   }
   function tick(){
     if(!valid())return;
@@ -156,8 +156,8 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
       if(response.error)throw new Error(response.error);if(!valid()||generation!==run)return;
       const data=response.value;
       const track=typeof data?.language==='string'?data.language:'';
-      const placed=track?sensaLanguageForDeclaredTag(track):undefined;
-      captionLanguage=placed?{language:placed.tag,languageSource:'declared'}:declaredCaptureLanguage();
+      const declared=track?sensaCanonicalLanguageTag(track):null;
+      captionLanguage=declared?{language:declared,languageSource:'declared',languageConfidence:1}:declaredCaptureLanguage();
       cues=data?.json?parseYoutubeCaptions(data.json,captionLanguage.language??undefined):[];
       await placeLanguages(generation);
       if(!valid()||generation!==run)return;

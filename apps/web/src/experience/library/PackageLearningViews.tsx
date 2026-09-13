@@ -5,12 +5,11 @@ import {fourStageQueue,fourStageContent,type FourStageAction} from '../../learni
 import {learningPolicyProfileRegistry} from '../../learning/runtime/policyProfiles';
 import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
 import {localRunTargetIds} from '../../data/library/learning';
-import {defaultSensaLanguageProfile} from '@sensa/contracts/sensa';
 import {assuranceContent,localAssuranceState} from '../../learning/protocols/assurance';
 import {cardText} from '../../i18n/originalCards';
 import {RuntimeTools} from '../components/learning/RuntimeTools';
 import {localRunBinding,localTargetPolicy} from '../../learning/runtime/localRuntimeBindings';
-import {learningRuntimeCoordinator} from '../../learning/runtime/runtimeCoordinator';
+import {learningRuntimeCoordinator,localExecutionForRun} from '../../learning/runtime/runtimeCoordinator';
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
 import {
  LocalRuntimePresentationRegistry,
@@ -33,18 +32,19 @@ import {LightweightRuntimeStartScreen} from '../components/learning/LightweightR
 import {localLightweightPhase,localLightweightStep} from '../../learning/runtime/lightweightInitialProtocol';
 import {packageKey,type InstalledPackage} from '../../data/library/packages';
 import type {LocalLearningRun,LocalLearningTarget} from '../../data/library/learning';
-import type {LocalLearningAction} from '../../learning/runtime/localProtocol';
+import {localProtocolActiveTargetId,localProtocolStepId,type LocalCurriculumMembership,type LocalExecutableLearningTarget,type LocalLearningAction} from '../../learning/runtime/localProtocol';
+import {localCurriculumMeaning,localExecutableTargetForParticipant,localLastPresentedMaterial,localPresentedMaterial} from '../../learning/runtime/localCurriculum';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 type Controller=ReturnType<typeof usePackageLearning>;
-export const localTargetView=(t:LocalLearningTarget,readiness:'ready'|'blocked'='ready')=>({targetId:t.id,expression:t.expression,meaning:t.meaning,targetLanguageTag:t.targetLanguageTag??defaultSensaLanguageProfile.activeTargetLanguageTag,familiarLanguageTag:t.familiarLanguageTag??defaultSensaLanguageProfile.familiarLanguageTag,example:String(t.material.content.resources.find(r=>r.materialRoleKey==='usage_guidance')?.contentPayload.example??''),partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:t.packageKey?'book' as const:'personal_semantic_world' as const,sourceLabel:t.packageKey?localFlowText('downloadedPackages'):localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:localTargetPolicy(t),lightweightReadiness:{status:readiness,label:readiness==='ready'?localFlowText('downloaded'):localFlowText('prepareResources'),detail:readiness==='ready'?localFlowText('resourcesLocal'):localFlowText('resourceInvalid')}});
+export const localTargetView=(t:LocalLearningTarget,membership:LocalCurriculumMembership,readiness:'ready'|'blocked'='ready')=>({targetId:t.id,expression:t.expression,meaning:localCurriculumMeaning(membership),targetLanguageTag:t.targetLanguageTag,supportLanguageTag:membership.languageContext.supportLanguageTag,example:String(membership.material.content.resources.find(r=>r.materialRoleKey==='usage_guidance')?.contentPayload.example??''),partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:membership.packageKey?'book' as const:'personal_semantic_world' as const,sourceLabel:membership.packageKey?localFlowText('downloadedPackages'):localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:localTargetPolicy(t),lightweightReadiness:{status:readiness,label:readiness==='ready'?localFlowText('downloaded'):localFlowText('prepareResources'),detail:readiness==='ready'?localFlowText('resourcesLocal'):localFlowText('resourceInvalid')}});
 export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boolean;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void}){
  useTranslation();
  const [selected,setSelected]=useState<string|null>(null),[query,setQuery]=useState(''),[downloadKey,setDownloadKey]=useState<string|null>(null);
  const importInput=useRef<HTMLInputElement>(null),heading=useRef<HTMLHeadingElement>(null);
  useEffect(()=>{if(!active)setSelected(null);},[active]);
  useEffect(()=>{if(active)heading.current?.focus({preventScroll:true});},[selected,active]);
- const enrolledFor=(p:Controller['packages'][number])=>p.bundle.entries.map(e=>c.targets.find(t=>e.senseVersionId===t.material.snapshot.provenance.senseVersionId&&e.bindingVersionId===t.material.snapshot.provenance.bindingVersionId));
+ const enrolledFor=(p:Controller['packages'][number])=>p.bundle.entries.map(e=>c.targets.find(t=>e.senseVersionId===t.identity.senseVersionId&&e.bindingVersionId===t.identity.bindingVersionId&&c.membershipByTarget[t.id]?.packageKey===p.key));
  const items=new Map(c.catalog.map(d=>[packageKey(d),{key:packageKey(d),title:d.title,description:d.description,count:d.entryCount,installed:false,enrolled:false}]));
  for(const p of c.packages)items.set(p.key,{key:p.key,title:p.bundle.title,description:items.get(p.key)?.description??'',count:p.bundle.entries.length,installed:true,enrolled:enrolledFor(p).every(Boolean)});
  const installed=c.packages.find(p=>p.key===selected),descriptor=c.catalog.find(d=>packageKey(d)===selected),item=selected?items.get(selected):undefined;
@@ -107,20 +107,22 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
 }
 export function PackageTarget({active,target,c,onBack,onHome,onStart,onSource}:{active:boolean;target:LocalLearningTarget;c:Controller;onBack:()=>void;onHome:()=>void;onStart:()=>void;onSource?:()=>void}){
  useTranslation();
- const pack=c.packages.find(p=>p.key===target.packageKey);
+ const membership=c.membershipByTarget[target.id];
+ if(!membership)throw new Error('localFlow.routeMembershipMissing');
+ const pack=c.packages.find(p=>p.key===membership.packageKey);
  const policy=localTargetPolicy(target);
  const [editingPolicy,setEditingPolicy]=useState(false);
  const readiness=c.readinessByTarget[target.id]??'blocked';
- const canSelectPolicy=!!target.assurancePackageKey&&!target.startedAt;
- const content=pack&&target.assurancePackageKey?assuranceContent(pack,target.assurancePackageKey).template.content:null;
+ const canSelectPolicy=!!membership.assurancePackageKey&&!target.startedAt;
+ const content=pack&&membership.assurancePackageKey?assuranceContent(pack,membership.assurancePackageKey).template.content:null;
  const declaredMastery=hasDeclaredMasteryOverride(target);
- return <><LearningTargetDetailScreen active={active} target={localTargetView(target,readiness)} selectedPolicy={policy} fixedPolicy={!canSelectPolicy} preparation={readiness} committedPolicy={target.committedPolicy?policy:null} initialCompletionKind={target.completedAt?'study_completion':null} reviewDue={c.due.includes(target)} relearning={!!target.relearnAt} retentionRuntimeState={null} nextReviewLabel={target.memory?.dueAt.toLocaleString(i18n.language)??null} declaredMastery={declaredMastery} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>setEditingPolicy(true)} onOpenSource={onSource??onBack} onRefreshPreparation={()=>void c.refresh()} onGoHome={onHome} onStartReview={onStart} onContinueRetentionRuntime={onStart} onContinueRuntime={onStart} onRevokeDeclaredMastery={()=>void c.declareKnown(target.id,false)} notice={c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>} actions={<><LearningResourceDetails material={target.material}/>{content&&<StudyResources content={content}/>}{declaredMastery?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.declareKnown(target.id,false)}>{cardText('revokeKnown')}</button>:<button className={setupPrimary} disabled={c.busy||readiness!=='ready'||!!target.completedAt&&!c.due.includes(target)&&(!c.run||!localRunTargetIds(c.run).includes(target.id))} onClick={onStart}>{target.completedAt?localFlowText('startReview'):localFlowText('startLearning')}</button>}</>}/>{editingPolicy&&canSelectPolicy&&<LearningPreferencesPanel closeLabel={i18n.t('learningPreferences.finishSelection')} allowedPolicies={learningPolicyProfileRegistry.list().filter(p=>p.localSelectable).map(p=>p.profileId)} showDailyQuantity={false} defaultPolicy={policy} dailyNewCount={c.dailyLimit??20} onDailyNewCountChange={()=>{}} onPolicyChange={value=>{void c.selectPolicy(target.id,value);}} busy={c.busy} status={c.notice&&<p role="status">{c.notice}</p>} onClose={()=>setEditingPolicy(false)}/>}</>;
+ return <><LearningTargetDetailScreen active={active} target={localTargetView(target,membership,readiness)} selectedPolicy={policy} fixedPolicy={!canSelectPolicy} preparation={readiness} committedPolicy={target.committedPolicy?policy:null} initialCompletionKind={target.completedAt?'study_completion':null} reviewDue={c.due.includes(target)} relearning={!!target.relearnAt} retentionRuntimeState={null} nextReviewLabel={target.memory?.dueAt.toLocaleString(i18n.language)??null} declaredMastery={declaredMastery} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>setEditingPolicy(true)} onOpenSource={onSource??onBack} onRefreshPreparation={()=>void c.refresh()} onGoHome={onHome} onStartReview={onStart} onContinueRetentionRuntime={onStart} onContinueRuntime={onStart} onRevokeDeclaredMastery={()=>void c.declareKnown(target.id,false)} notice={c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>} actions={<><LearningResourceDetails material={membership.material}/>{content&&<StudyResources content={content}/>}{declaredMastery?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.declareKnown(target.id,false)}>{cardText('revokeKnown')}</button>:<button className={setupPrimary} disabled={c.busy||readiness!=='ready'||!!target.completedAt&&!c.due.includes(target)&&(!c.run||!localRunTargetIds(c.run).includes(target.id))} onClick={onStart}>{target.completedAt?localFlowText('startReview'):localFlowText('startLearning')}</button>}</>}/>{editingPolicy&&canSelectPolicy&&<LearningPreferencesPanel closeLabel={i18n.t('learningPreferences.finishSelection')} allowedPolicies={learningPolicyProfileRegistry.list().filter(p=>p.localSelectable).map(p=>p.profileId)} showDailyQuantity={false} defaultPolicy={policy} dailyNewCount={c.dailyLimit??20} onDailyNewCountChange={()=>{}} onPolicyChange={value=>{void c.selectPolicy(target.id,value);}} busy={c.busy} status={c.notice&&<p role="status">{c.notice}</p>} onClose={()=>setEditingPolicy(false)}/>}</>;
 }
 type PackageRuntimeProps={active:boolean;c:Controller;host:AssuranceSupportHost;onExit:()=>void;onFinish:()=>void};
 type RuntimePresentationProps={
  active:boolean;
  run:LocalLearningRun;
- targets:readonly LocalLearningTarget[];
+ targets:readonly LocalExecutableLearningTarget[];
  packages:readonly InstalledPackage[];
  busy:boolean;
  notice:string;
@@ -133,11 +135,16 @@ type RuntimePresentationProps={
 };
 export function PackageRuntime(props:PackageRuntimeProps){
  const run=props.c.run;
- const snapshot=useMemo(()=>immutablePresentationSnapshot({
-  run:run!,
-  targets:run?props.c.targets.filter(target=>localRunTargetIds(run).includes(target.id)):[],
-  packages:run?props.c.packages.filter(pack=>props.c.targets.some(target=>localRunTargetIds(run).includes(target.id)&&target.packageKey===pack.key)):[],
- }),[run,props.c.targets,props.c.packages]);
+ const snapshot=useMemo(()=>{
+  if(!run)return immutablePresentationSnapshot({run:run!,targets:[],packages:[]});
+  const execution=localExecutionForRun(run),activeTargetId=localProtocolActiveTargetId(execution,run),stepId=run.completedAt?null:localProtocolStepId(execution,run);
+  const targets=props.c.targets.filter(target=>localRunTargetIds(run).includes(target.id)).map(target=>{
+   const participant=run.participants[target.id]!;
+   const material=run.completedAt?localLastPresentedMaterial(participant):target.id===activeTargetId&&stepId?localPresentedMaterial(participant,stepId):participant.material;
+   return localExecutableTargetForParticipant(target,participant,material);
+  });
+  return immutablePresentationSnapshot({run,targets,packages:props.c.packages.filter(pack=>targets.some(target=>target.packageKey===pack.key))});
+ },[run,props.c.targets,props.c.packages]);
  if(!run)return <LightweightRuntimeStartScreen active={props.active} target={null} materialization={null} step={null} completed={false} hasNextTarget={false} onExit={props.onExit} onReveal={()=>{}} onRate={()=>{}} onFinish={props.onFinish}/>;
  const surface=learningRuntimeCoordinator.adapterForBinding(localRunBinding(run)).surfaceFor(run.purpose);
  const request=localRuntimePresentationRequest(run,surface);
@@ -171,14 +178,13 @@ function LightweightPackageRuntime({active,run,targets,busy,notice,hasNextTarget
  const target=targets.find(t=>t.id===run.targetId);
  if(!target)throw new Error('Missing lightweight runtime target');
  // Reuse the existing role-based card presentations; formal transitions remain in the local core.
- const material=run.participants[target.id]?.material;
- if(!material)throw new Error('Missing pinned learning material');
+ const material=target.material;
  const phase=localLightweightPhase(run);
- const step=localLightweightStep(run,target);
+ const step=localLightweightStep(run,target,material);
  const content={senseKey:String(material.snapshot.provenance.senseId),lemma:target.expression,guideLabelL1:target.meaning};
  const lightweightHost=host as Pick<AssuranceSupportHost,'onOpenMenuMore'|'toast'>;
  if(!lightweightHost.onOpenMenuMore||!lightweightHost.toast)throw new Error('Presentation capability lightweight_support is unavailable.');
- return <><LightweightRuntimeStartScreen tools={!run.completedAt&&<RuntimeTools content={content} personalContent={phase==='reveal'?content:null} showSave={phase==='reveal'} onMarkKnown={()=>void declareMastery(target.id).then(ok=>{if(ok)onExit();})} onOpenMenuMore={lightweightHost.onOpenMenuMore} toast={lightweightHost.toast} busy={busy}/>} active={active} target={localTargetView(target)} materialization={material} step={run.completedAt?null:step} completed={!!run.completedAt} hasNextTarget={hasNextTarget} onExit={onExit} onReveal={()=>dispatch({kind:'reveal'})} onRate={rating=>dispatch({kind:'rate',rating})} onFinish={onFinish} purpose={run.purpose} completionDetail={target.relearnAt?localFlowText('nextRelearning',{date:new Date(target.relearnAt).toLocaleString(i18n.language)}):target.memory?localFlowText('nextReview',{date:target.memory.dueAt.toLocaleString(i18n.language)}):localFlowText('progressSaved')} completionLabel={run.purpose==='initial_learning'?localFlowText('initialCompleted'):run.purpose==='retention_review'?localFlowText('reviewCompleted'):localFlowText('relearningCompleted')}/>{active&&notice&&<p role="status" className="fixed bottom-4 left-4 right-4 z-[100] rounded-xl bg-amber-50 p-3">{localFlowNotice(notice)}</p>}</>;
+ return <><LightweightRuntimeStartScreen tools={!run.completedAt&&<RuntimeTools content={content} personalContent={phase==='reveal'?content:null} showSave={phase==='reveal'} onMarkKnown={()=>void declareMastery(target.id).then(ok=>{if(ok)onExit();})} onOpenMenuMore={lightweightHost.onOpenMenuMore} toast={lightweightHost.toast} busy={busy}/>} active={active} target={localTargetView(target,target.curriculumMembership)} materialization={material} step={run.completedAt?null:step} completed={!!run.completedAt} hasNextTarget={hasNextTarget} onExit={onExit} onReveal={()=>dispatch({kind:'reveal'})} onRate={rating=>dispatch({kind:'rate',rating})} onFinish={onFinish} purpose={run.purpose} completionDetail={target.relearnAt?localFlowText('nextRelearning',{date:new Date(target.relearnAt).toLocaleString(i18n.language)}):target.memory?localFlowText('nextReview',{date:target.memory.dueAt.toLocaleString(i18n.language)}):localFlowText('progressSaved')} completionLabel={run.purpose==='initial_learning'?localFlowText('initialCompleted'):run.purpose==='retention_review'?localFlowText('reviewCompleted'):localFlowText('relearningCompleted')}/>{active&&notice&&<p role="status" className="fixed bottom-4 left-4 right-4 z-[100] rounded-xl bg-amber-50 p-3">{localFlowNotice(notice)}</p>}</>;
 }
 
 function fourStagePresentation(props:RuntimePresentationProps){

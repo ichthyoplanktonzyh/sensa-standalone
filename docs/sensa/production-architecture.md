@@ -5,7 +5,7 @@
 [ADR 0003](../adr/0003-three-client-local-facts.md) 确认主应用均在本地执行学习，共享领域事实、版本与合并规则。事实与当前投影分离，保留固定评价/结算历史；学习历史保持可追溯；普通账号同步允许服务端读取业务数据，但服务端不重新执行学习协议或结算学习结果。
 
 > 状态：Canonical domain model  
-> 更新日期：2026-09-09
+> 更新日期：2026-09-13
 
 本文是 Sensa 领域对象、聚合边界和全局不变量的主入口。术语定义以
 [`../../CONTEXT.md`](../../CONTEXT.md) 为准；资源细节和运行行为分别由
@@ -118,9 +118,10 @@ Direct stable Sense selection ─┐            │
 Saved Sense / Contextual Lookup├─Add-to-Learning──▶ Supplemental Curriculum
 Confirmed Personal Alignment ──┘            │
                                             │
-Learner ──configures──▶ Study Plan ─────────┤
-             │                              │
-             └── Learning Policy Assignment─┤
+Learner ──owns──▶ Language Learning Route[]
+                         ├── Target Language + default Support Language
+                         └── route-scoped Study Plan ────────────────┤
+                                      └── Learning Policy Assignment─┤
                                             ▼
                                   Study Scope Revision
                                             ├──▶ Resolved Learning Plan[]
@@ -154,6 +155,7 @@ Learning Session ──contains──▶ Sense Encounter
 
 Learning Target ──resolves durable identity──▶ Retention Target
         │
+        ├── applicable Language Learning Route revision
         ├── Effective Learning Policy
         │
         └── content/runtime capabilities
@@ -312,11 +314,17 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
   direct stable-Sense selection 与 accepted complete Personal Meaning Alignment 都可以提供 Learning Entry
   Provenance，并在同一 Learning Target/Retention Target 处汇合；
 - direct entry 仍必须固定 stable Sensa Sense/Version 与 target Sense Expression Binding；裸 Lexeme、
-  未对齐 Reference Sense 或任意 L2 字符串不能绕过 Sense-first target resolution；
-- Study Plan 是 learner 的正式学习安排，组合 Book Enrollment、Supplemental Curriculum、Learning
+  未对齐 Reference Sense 或任意 target-language 字符串不能绕过 Sense-first target resolution；
+- Language Learning Route 是 learner-owned 的方向性学习安排，固定一个 Target Language、一个可与其
+  相同的 default Support Language 和一个 route-scoped Study Plan；同一 Learner 可以拥有多条 active、
+  paused 或 archived Routes，领域不由此推导全局母语或 proficiency；
+- pause/archive Route 只改变后续 Planning 与默认选择，不删除 Personal Content、Curriculum history、
+  Learning Target、Retention Target、Protocol facts、Evidence 或 FSRS；恢复时沿既有身份继续；
+- Study Plan 是一条 Route 内的正式学习安排，组合 Book Enrollment、Supplemental Curriculum、Learning
   Policy Assignments 与每日新 Sense 上限；它不再等同于一个 Book Version；
 - Book Enrollment 固定一个不可变 Book Version 与一个已解析 Book Range，mode 为
-  `active | maintenance | paused`；同一 learner 最多有一个可以引入新 Sense 的 active Enrollment；
+  `active | maintenance | paused`；同一 Route 最多有一个可以引入新 Sense 的 active Enrollment，且其
+  target-language scope 必须与 Route 兼容；
 - `active` 提供新 Sense 并继续既有学习，`maintenance` 不再引入新 Sense，但继续已开始的
   Protocol Run/Relearning 与 due Review，`paused` 完全退出 Planning 但不删除任何进度；
 - 切换词书默认把旧 Enrollment 转为 `maintenance`、把目标 Enrollment 转为 `active`。以后切回时
@@ -326,6 +334,8 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 - Supplemental Curriculum 是 learner-owned、ordered 的 Learning Target 补充课程，不是 Book、
   Saved list 或 Personal Collection；同一 Retention Target 可以有多个来源，但只进入一次有效
   Study Scope；同一 Sense 的不同 target expressions 是不同成员；
+- 每个 Study Scope Revision 固定所属 Route revision；同一 Retention Target 即使出现在多个兼容 Route
+  中也只保留一份正式进度和 FSRS Memory State，Route-specific content/plan 不得复制学习结果；
 - Learning Policy Assignment 可以位于 learner default、Curriculum source 或 Retention Target override；
   Effective Learning Policy 按 `target > Curriculum > learner > system` 解析，并保存 Profile/version 与
   decision provenance；
@@ -336,7 +346,8 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
   新的不可变 Study Scope Revision；正在进行的 Session 固定旧 revision，不被静默改队；
 - 默认课程策略可以错开同一 Lexeme 的多个新 Sense；只有明确的边界教学才应主动并置；
 - UI 可以展示 Lexeme 数与 Sense 数，但不能把 sibling Senses 合成一个课程成员；
-- Add-to-Learning Intent 是进入 Curriculum 的显式 learner request；Curriculum 决定如何接纳或拒绝，
+- Add-to-Learning Intent 是让 target 进入一条显式 Language Learning Route 的 Curriculum request；
+  Curriculum 先校验 target Binding 与 Route Target Language 兼容，再决定如何接纳或拒绝，
   但不能修改已发布 Book Version，也不能把收藏本身解释成该 request。Intent 目标已在有效范围时
   必须幂等返回 `already_in_scope`；合法 target/policy 被接纳后立即创建 Supplemental Membership，
   内容准备随后推进 plan readiness。若当前 Policy 无法通过 published、on-demand 或 hybrid 路径
@@ -348,7 +359,7 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 
 ### Lexical Reference
 
-- Reference Release 固定来源、版本、locale、license、Reference Lexical Units、Reference Senses 与
+- Reference Release 固定来源、版本、entry/render Language Tags、license、Reference Lexical Units、Reference Senses 与
   可公开的 Lexical Enrichment；搜索索引只是可重建投影，不是权威内容；
 - Reference Lexicon 的覆盖面可以大于 Learning Catalog。Reference-only meaning 可以被搜索和浏览，
   但不能拥有 Learner Sense Progress，也不能直接进入 Curriculum；
@@ -419,8 +430,11 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
   中可定位的 Expression Anchor，以及一个指向 teaching-sufficient stable Sense Version 与兼容 Binding
   的 active Alignment；Meaning Focus 为零到多个的可选解析桥梁；
 - Personal Semantic Anchor 可以承载受支持的文本、图片、音频、场景或其他个人经验。Personal
-  Expression Anchor 必须保存 expression type、language、familiar/target role、provenance 与
-  verification status；由 Intake 产生时还必须保存字符 span、媒体区域或等价 occurrence locator；
+  Expression Anchor 必须保存 expression type、Language Tag、provenance 与 verification status；由
+  Intake 产生时还必须保存字符 span、媒体区域或等价 occurrence locator。target/support/input/output
+  role 只在 Route 或操作上下文中成立，不进入 Anchor identity；
+- Semantic Intake 保存 declared、detected 或 learner-confirmed Language Observation；未知、暂不支持或
+  不属于 Active Route 的捕获继续作为未放置 Intake，不得依据当前 Route 强制重标语言；
 - Personal Meaning Alignment 可以直接由 Context + located Expression 的可靠解析支撑，只在必要时
   引用 Meaning Focus。不得从 Sense definition 合成 Focus，也不得为快轨伪造未发生的 Sense
   Construction、Proposal 或对话；
@@ -449,10 +463,11 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
   Sense Progress、其他 Personal Content 与 Practice history 的派生读取模型；
 - 它可以表达有限区域中的“正在形成、已经建立、需要巩固、待探索”以及已审核 Sense Relations；
 - 它可以把 Personal Meaning/Meaning Focus 作为 learner-owned 起点，把 Personal Semantic Anchor、
-  Personal Expression Anchor、reviewed Experience、Sense specification、L1 Bridge 与 pinned L2
-  forms 作为 provenance 可区分的结构；
-- L1 Bridge、Personal Anchor、L2 lemma 与视觉节点都不能取代 stable Sense identity；word、Usage
-  Pattern 与完整 Example/utterance 必须保持各自 typed content identity，不能压成通用字符串；
+  Personal Expression Anchor、reviewed Experience、Sense specification、Support-Language Bridge 与 pinned
+  target-language forms 作为 provenance 可区分的结构；
+- Support-Language Bridge、Personal Anchor、target-language lemma 与视觉节点都不能取代 stable Sense
+  identity；word、Usage Pattern 与完整 Example/utterance 必须保持各自 typed content identity，不能压成
+  通用字符串；
 - 它不拥有 progress，不把图布局或推断距离宣称为 learner 的真实语义结构；
 - Projection 中选择的 Field、节点或集合可以成为 Practice Scope，但不能直接创建正式学习结果。
 - Personal Semantic Region 与 Personal Meaning 属于 learner-owned source records，可以被 Projection
@@ -498,16 +513,19 @@ Protocol Outcome。
 
 ### Account、Preferences 与 Data Control
 
-- Account 是认证访问与生命周期聚合，V1 恰好关联一个 Learner；Learner 独立拥有 Study Plan、
+- Account 是认证访问与生命周期聚合，V1 恰好关联一个 Learner；Learner 独立拥有 Language Learning
+  Routes、route-scoped Study Plans、
   Progress、Personal Content 与 Learner Preference；
 - Account Session 是登录授权，不是 Learning Session。退出某个 Session 不删除 Account、Learner 或
   学习事实；认证凭据由 identity provider 管理，Sensa 不把密码当作领域数据；
 - Account lifecycle 至少区分 `active | deletion_pending | deleted`。进入 deletion pending 后不得继续
   创建 learner operations，并必须使旧 Account Sessions 与 Replicas 失去写入资格；
-- Learner Preference 是显式 typed fields + revision，不是任意 key-value bag。发音口音与例句译文
+- Learner Preference 是显式 typed fields + revision，不是任意 key-value bag。按 exact Language Tag
+  作用域的发音口音、按 Input/Output Language Tags 作用域的 Language-Pair Glossary Entry 与例句译文
   默认状态属于 learner-scoped preference；它们跨设备同步并只影响未来呈现或 approved asset choice；
 - Device Preference 属于具体 Device Installation。autoplay、theme、reduced-motion override、播放速度
-  与音量等本机行为不进入 learner progress，也不要求跨设备一致；系统级无障碍设置优先；
+  与音量、Interface Locale、surface-scoped Active Route Selection 等本机行为不进入 learner progress，
+  也不要求跨设备一致；系统级无障碍设置优先；
 - 每日新 Sense 上限、Book、Range、Enrollment mode 与 Learning Policy Assignment 属于 Study
   Plan/Curriculum；Settings Surface 可以导航过去，但不能把它们复制进普通 Preference；Notification
   Preference 是独立的 Later 能力；
@@ -523,8 +541,8 @@ Protocol Outcome。
 
 ## 4. Protocol-driven connection 与长期保持
 
-Learning Protocol 定义一次“如何建立、检查、加强或恢复 Sense ↔ L2 表达连接”的可复现过程。每个
-Protocol Run 固定 `initial_learning | retention_review | relearning` 中一个 purpose，并通过 Protocol
+Learning Protocol 定义一次“如何建立、检查、加强或恢复 Sense ↔ target-language 表达连接”的可复现
+过程。每个 Protocol Run 固定 `initial_learning | retention_review | relearning` 中一个 purpose，并通过 Protocol
 Steps 组织材料角色、交互、结果资格与 transition。领域模型至少接受 Lightweight 与 Structured 两种
 协议 family；具体可用性由当前 stage/PRD 决定，领域模型不把任一 family 固定为唯一入口。协议和
 内容来源分别选择，不能把某个 Package 结构、固定卡片数或页面顺序硬编码成唯一学习方式。
@@ -623,8 +641,9 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 
 1. **Account & Access Module**：拥有 Account、Account Session、identity-provider binding 与 Account
    lifecycle；它授权 LearnerScope，但不拥有学习事实；
-2. **Preference Module**：拥有 versioned Learner Preference；各客户端独立拥有 Device Preference，
-   并按显式 precedence 解析系统设置、本机 override 与 learner defaults；
+2. **Preference Module**：拥有 versioned Learner Preference；各客户端独立拥有包含 Interface Locale 与
+   surface-scoped Active Route Selection 的 Device Preference，并按显式 precedence 解析系统设置、本机
+   override 与 learner defaults；
 3. **Data Control Module**：拥有 Data Export/Delete Request 的幂等、授权、状态与审计生命周期，并
    协调 Account、learner-owned stores 与 Replica invalidation；
 4. **Catalog Module**：读取已发布、已固定的 Book、Sense Learning Package、Semantic Field、
@@ -632,12 +651,14 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 5. **Lexical Reference Module**：解析 Example + character span，读取 version-pinned Reference entry、
    Lexical Occurrence 与 Contextual Sense Resolution，并生成可重建搜索/详情读取模型；它不拥有
    learner progress，也不自由生成词典释义；
-6. **Curriculum Module**：拥有 Study Plan、Book Enrollment/Range、Supplemental Curriculum、
+6. **Curriculum Module**：拥有 Language Learning Route、route-scoped Study Plan、Book Enrollment/Range、
+   Supplemental Curriculum、
    Add-to-Learning Intent、Learning Entry Provenance、Learning Policy Assignment 与 Study Scope
    Revision；它接纳 Book、direct stable-Sense 与 personal-first bridge，保证 source provenance、去重、
    Policy scope/precedence、切换和范围变更不修改 published Book membership 或 learner progress；
 7. **Semantic Intake Module**：接收浏览器、移动端、桌面端与 authorized Agent 的 port-neutral Context
-   捕获，拥有 Intake Inbox、完整性分流、幂等 ingest 与 direct/delegated acceptance authority audit；
+   捕获，拥有 Language Observation、Intake Inbox、完整性分流、幂等 ingest 与 direct/delegated
+   acceptance authority audit；
    它只把完整且获有效授权的 Context–Expression–Sense resolution 提交给 Personal Semantic World，
    不创建 Curriculum Membership、Learning Target 或 learner progress，也不依赖任何主应用页面状态；
 8. **Personal Semantic World Module**：拥有 Personal Meaning、optional Meaning Focus、Personal Semantic
@@ -654,7 +675,8 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 11. **Free Practice Module**：解析 Practice Brief、Scope、primary Area 与 Activity Definition，保存
    Practice Turn、Observation、Feedback 与 optional Artifact；它可以读取 Learning Target、Personal
    Semantic World 与获准资源，但不调用正式 Learning Kernel 的证据、结算或调度接口；
-12. **Content Provisioning Module**：按 Resolved Learning Plan 将固定 Learning Target 通过 published、
+12. **Content Provisioning Module**：按 Resolved Learning Plan 将固定 Learning Target 与 Pinned Language
+   Context 通过 published、
    on-demand 或 hybrid 路径解析为 capability/readiness result 和通过合同校验的不可变 Learning
    Materialization；它拥有 Provisioning Batch、Content Provisioning Task、Content Agent Attempt、
    Material Candidate Bundle、独立 validation/admission 与 assembly。Learning Content LLM 及其获准工具
@@ -684,15 +706,31 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
    与 next due 初始化和更新的唯一接口；
 21. **Sensa Sync Module**：传输本地已提交的版本化记录与内容寻址数据块，维护幂等、清单和收敛状态，但不解释或重新结算学习事实；
 22. **Media Module**：验证不可变媒体引用并提供授权下载。
+23. **Language Context Module**：从显式 operation roles、正式学习 Route 或当前 surface 的 Active Route
+    Selection 解析并冻结 Pinned Language Context；pre-route semantic work 不因此创建 Curriculum Route，
+    本模块也不从 Route 推断捕获内容语言或把 target/support role 写回 Expression；
+24. **Language Support Resolver**：按 exact Language Tag 与 speech、reference、translation、content
+    或 renderer capability 返回 exact support、显式 fallback 或 unavailable；它不改写任何语言事实。
 
 ## 6. 全局不变量
 
-- Sense identity 不能退化成词头下没有稳定身份的一行中文释义，也不能只用一个 L2 字符串代替
-  可复现的意义边界；
+- Sense identity 不能退化成词头下没有稳定身份的一行 support-language 释义，也不能只用一个
+  target-language 字符串代替可复现的意义边界；
 - Account 与 Learner 是不同身份；V1 一对一不允许把认证、Profile、Workspace 或登录 Session 混入
   Learner Sense Progress；
 - Settings Surface 不是聚合；每项写操作必须到达 Account、Preference、Curriculum、Device 或 Data
   Control 的真实 owner，不能维护第二份通用 settings state；
+- Language Learning Route 固定 Target Language、可与其相同的 default Support Language 和 route-scoped
+  Study Plan；Learner 可以拥有多条 Route，但领域不据此建立全局母语、唯一 Familiar Language 或
+  known-language/proficiency 事实；
+- Active Route Selection、Interface Locale、Target/Support Language 与单次操作的 Input/Output Language
+  是不同事实；选择变化只影响后续操作，不能重绑 active Session、Content Provisioning Task 或
+  Sense Construction；
+- Language Tag 与 Language Observation 必须保留 script/region variant 和 provenance；能力目录或
+  Active Route 不能把未知、unsupported 或 route-external 内容重标成另一种语言；
+- Learning Session、Sense Construction 和其他语言相关长操作必须固定 Pinned Language Context；正式
+  Learning Session 必须固定 Route revision，pre-route semantic work 可以只固定显式 operation roles；
+  同一 Retention Target 跨兼容 Route 仍只有一份正式进度和 FSRS Memory State；
 - Learner Preference 必须 typed、versioned、跨设备收敛；Device Preference 只在本机生效。两者都
   不能回写 Action/Attempt/Evidence/Outcome、Gate、5D、FSRS 或历史资源引用；
 - 每日新 Sense 上限、Book、Range、Enrollment mode 与 Learning Policy Assignment 不是普通 Preference；
@@ -735,8 +773,8 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 - Personal Content 删除/组织与 Curriculum/Progress 生命周期独立；桥接后任一侧操作不得级联删除或
   伪造另一侧事实，Personal Anchor 只可作为显式授权的可选 scaffold；
 - Learner Semantic Projection 只能从权威事实重建，不能成为第二份 progress 或“脑内掌握度”；
-- Learner Semantic Projection 中的 L1/L2 呈现必须保留 reviewed、learner-authored 与 form-level
-  provenance；L1 标签和 L2 lemma 都不能被写回为 Sense 或 progress identity；
+- Learner Semantic Projection 中的 support/target-language 呈现必须保留 reviewed、learner-authored 与
+  form-level provenance；support-language 标签和 target-language lemma 都不能被写回为 Sense 或 progress identity；
 - 创建或编辑 Personal Semantic Region、Personal Meaning、Meaning Focus、Personal Semantic Anchor
   与 Personal Expression Anchor 只改变 Personal Content；它们不产生 Evidence、5D、Acquisition
   Graduation 或 FSRS Memory State，也不能暗中提交 Add-to-Learning Intent；

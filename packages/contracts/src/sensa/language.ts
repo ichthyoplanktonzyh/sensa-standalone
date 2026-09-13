@@ -1,27 +1,20 @@
 import {z} from 'zod';
 
 /**
- * The languages Sensa can carry, and the learner's standing choice among them.
+ * Languages are facts; the part they play is contextual.
  *
- * Three language axes stay independent and must never be collapsed:
- *
- * - the interface language (`sensaInterfaceLanguages`), which decides the copy a
- *   learner reads and nothing about content;
- * - the familiar language, which is the language the learner already thinks in
- *   and writes personal expressions with;
- * - the target languages, which are the languages learned expressions belong to.
- *
- * One learner has exactly one familiar language and any number of target
- * languages; every expression anchor, learning target and content release names
- * one of them explicitly instead of assuming a fixed pair.
+ * Interface Locale only chooses product copy. A Language Learning Route assigns
+ * Target and Support roles. A concrete transformation may additionally assign
+ * Input and Output roles. None of those roles is an intrinsic property of a
+ * learner or a language, and Target and Support may name the same language.
  */
 
-export const sensaInterfaceLanguages = ['zh-CN', 'en'] as const;
-export type SensaInterfaceLanguage = typeof sensaInterfaceLanguages[number];
-export const sensaInterfaceLanguageSchema = z.enum(sensaInterfaceLanguages);
+export const sensaInterfaceLocales = ['zh-CN', 'en'] as const;
+export type SensaInterfaceLocale = typeof sensaInterfaceLocales[number];
+export const sensaInterfaceLocaleSchema = z.enum(sensaInterfaceLocales);
 
-/** Which side of a learner's own language boundary an expression sits on. */
-export const sensaLanguageRoleSchema = z.enum(['familiar', 'target']);
+/** A role a language plays in one route or operation, never a learner trait. */
+export const sensaLanguageRoleSchema = z.enum(['target', 'support', 'input', 'output']);
 export type SensaLanguageRole = z.infer<typeof sensaLanguageRoleSchema>;
 
 /**
@@ -33,7 +26,19 @@ export type SensaLanguageRole = z.infer<typeof sensaLanguageRoleSchema>;
  * caller's job, so an unplaced language costs the learner that language instead
  * of the whole capture.
  */
-export const sensaLanguageTagSchema = z.string().trim().min(1).max(35);
+export function sensaCanonicalLanguageTag(value:string):string|null {
+  try {
+    return Intl.getCanonicalLocales(value.trim())[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** A canonical BCP-47 Language Tag. Canonical spelling prevents two identities
+ * such as `en-us` and `en-US` while preserving meaningful variants. */
+export const sensaLanguageTagSchema = z.string().trim().min(1).max(35).superRefine((tag,context)=>{
+  if(sensaCanonicalLanguageTag(tag)!==tag)context.addIssue({code:'custom',message:'language tag must be canonical BCP-47'});
+});
 
 export type SensaLanguage = {
   /** BCP-47 primary tag. This is the tag stored on every expression anchor and
@@ -54,7 +59,7 @@ export type SensaLanguage = {
   /** Name per interface language. A language name is product copy, but the list
    * of languages is product data; keeping both here stops the Web application
    * and the extension from each inventing their own table. */
-  readonly names: Readonly<Record<SensaInterfaceLanguage, string>>;
+  readonly names: Readonly<Record<SensaInterfaceLocale, string>>;
   readonly script: string;
   readonly direction: 'ltr' | 'rtl';
   /** Locale the browser speech synthesizer is asked for. It is deliberately not
@@ -73,8 +78,8 @@ export type SensaLanguage = {
    * language; absent evidence is shown as absent, never guessed or synthesized
    * from spelling. */
   readonly ipa: boolean;
-  /** Whether the learner may choose this language as a target language. Every
-   * listed language can be chosen as a familiar language. */
+  /** Whether the learner may choose this language as a Target Language. Every
+   * listed language can be chosen as a Support Language. */
   readonly asTarget: boolean;
 };
 
@@ -125,8 +130,9 @@ export function sensaLanguageForIso6393(code: string): SensaLanguage | undefined
  * Portuguese, while `yue` places on nothing and stays undetermined.
  */
 export function sensaLanguageForDeclaredTag(tag: string): SensaLanguage | undefined {
-  const normalized = tag.trim().toLowerCase();
-  if (!normalized) return undefined;
+  const canonical=sensaCanonicalLanguageTag(tag);
+  if(!canonical)return undefined;
+  const normalized = canonical.toLowerCase();
   const exact = sensaLanguages.find(language => language.tag.toLowerCase() === normalized);
   if (exact) return exact;
   const primary = normalized.split('-')[0]!;
@@ -135,6 +141,37 @@ export function sensaLanguageForDeclaredTag(tag: string): SensaLanguage | undefi
 
 export function sensaLanguage(tag: string): SensaLanguage | undefined {
   return sensaLanguages.find(language => language.tag === tag);
+}
+
+/**
+ * A capability never answers a request by changing the requested Language Tag.
+ * `effectiveLanguageTag` only names the implementation resource that will be
+ * used. Callers continue to persist and display `requestedLanguageTag`.
+ */
+export const sensaLanguageSupportResolutionSchema=z.discriminatedUnion('status',[
+  z.object({status:z.literal('exact'),requestedLanguageTag:sensaLanguageTagSchema,effectiveLanguageTag:sensaLanguageTagSchema}).strict(),
+  z.object({status:z.literal('fallback'),requestedLanguageTag:sensaLanguageTagSchema,effectiveLanguageTag:sensaLanguageTagSchema}).strict(),
+  z.object({status:z.literal('unavailable'),requestedLanguageTag:sensaLanguageTagSchema,effectiveLanguageTag:z.null()}).strict(),
+]);
+export type SensaLanguageSupportResolution=z.infer<typeof sensaLanguageSupportResolutionSchema>;
+
+/**
+ * Resolve one requested tag against the exact resources an adapter carries.
+ * A primary-language resource may be used as an explicit fallback for a more
+ * specific tag, but never for another primary language.
+ */
+export function sensaResolveLanguageSupport(
+  requestedLanguageTag:string,
+  supportedLanguageTags:readonly string[]=sensaLanguages.map(language=>language.tag),
+):SensaLanguageSupportResolution {
+  const requested=sensaLanguageTagSchema.parse(requestedLanguageTag);
+  const supported=supportedLanguageTags.map(tag=>sensaLanguageTagSchema.parse(tag));
+  if(supported.includes(requested))return {status:'exact',requestedLanguageTag:requested,effectiveLanguageTag:requested};
+  const requestedPrimary=requested.split('-')[0]!.toLowerCase();
+  const fallback=supported.find(tag=>tag.split('-')[0]!.toLowerCase()===requestedPrimary);
+  return fallback
+    ?{status:'fallback',requestedLanguageTag:requested,effectiveLanguageTag:fallback}
+    :{status:'unavailable',requestedLanguageTag:requested,effectiveLanguageTag:null};
 }
 
 export function sensaLanguageForRole(role: SensaLanguageRole): readonly SensaLanguage[] {
@@ -152,41 +189,52 @@ export function sensaLanguageForRole(role: SensaLanguageRole): readonly SensaLan
  * neither side — and every caller must decide what to do with it rather than
  * receive a default.
  */
-export function sensaLanguageRoleForTag(
+export function sensaLanguageRolesForTag(
   tag: string | null,
-  languages: SensaCommandLanguages,
-): SensaLanguageRole | null {
-  if (!tag) return null;
-  if (tag === languages.targetLanguageTag) return 'target';
-  if (tag === languages.familiarLanguageTag) return 'familiar';
-  return null;
+  languages: SensaPinnedLanguageContext,
+): readonly SensaLanguageRole[] {
+  if (!tag) return [];
+  const roles:SensaLanguageRole[]=[];
+  if (tag === languages.targetLanguageTag) roles.push('target');
+  if (tag === languages.supportLanguageTag) roles.push('support');
+  return roles;
 }
 
 /** An unknown tag is named by itself rather than hidden: the learner's stored
  * data outlives the release catalog that produced it. */
-export function sensaLanguageDisplayName(tag: string, interfaceLanguage: SensaInterfaceLanguage): string {
-  const language = sensaLanguage(tag);
+export function sensaLanguageDisplayName(tag: string, interfaceLocale: SensaInterfaceLocale): string {
+  const language = sensaLanguageForDeclaredTag(tag);
   if (!language) return tag;
-  return interfaceLanguage === 'zh-CN' ? language.names['zh-CN'] : language.names.en;
+  return interfaceLocale === 'zh-CN' ? language.names['zh-CN'] : language.names.en;
 }
 
-/** Every expression the learner reads back is explained in their familiar
- * language, so the reviewed access-path locale follows the familiar language
+/** Every expression the learner reads back is explained in its support
+ * language, so the reviewed access-path locale follows the support language
  * instead of the interface language. */
-export function sensaLearnerLocale(familiarLanguageTag: string): string {
-  return familiarLanguageTag;
+export function sensaLearnerLocale(supportLanguageTag: string): string {
+  return supportLanguageTag;
 }
 
 /**
- * The one language pair a single operation is about.
+ * The immutable language roles resolved for one operation or Session.
  *
- * An operation resolves this once, before it writes anything or calls a model:
- * a learner switching their active target language in another tab must not
- * split one operation's facts, prompts or material across two languages.
+ * Formal learning includes the Route id and revision. Pre-route semantic work
+ * pins Target and Support without manufacturing a Route. Input and Output are
+ * intentionally absent: they belong to a particular transformation inside the
+ * operation, not to the Route itself.
  */
-export interface SensaCommandLanguages {
-  familiarLanguageTag: string;
+export interface SensaPinnedLanguageContext {
   targetLanguageTag: string;
+  supportLanguageTag: string;
+  languageRouteId?:string;
+  languageRouteRevision?:number;
+}
+
+/** A formal-learning or active-surface context always identifies the exact
+ * Route revision it was resolved from. */
+export interface SensaFormalPinnedLanguageContext extends SensaPinnedLanguageContext {
+  languageRouteId:string;
+  languageRouteRevision:number;
 }
 
 /**
@@ -199,107 +247,101 @@ export interface SensaCommandLanguages {
  * language no model was told about.
  */
 export const sensaLanguageNameableTagSchema = sensaLanguageTagSchema.refine(
-  tag => sensaLanguage(tag) !== undefined,
+  tag => sensaLanguageForDeclaredTag(tag) !== undefined,
   { message: 'this release cannot name that language' },
 );
 
 /**
  * The pinned pair as it crosses a boundary.
  *
- * Unlike the stored profile, this REQUIRES both tags to be placeable in the
- * catalog. A profile is data a learner already owns, so an earlier release's tag
- * must stay readable; a command is a request made now, and one naming a language
- * this release cannot name is a caller's mistake — most visibly, a prompt cannot
- * tell a model to answer in a language nobody can name.
+ * Both tags must be placeable in the current catalog. A captured observation
+ * can preserve a tag this release cannot place, but an operation request cannot:
+ * a model prompt must be able to name the languages it is talking about.
  */
-export const sensaCommandLanguagesSchema = z
+export const sensaPinnedLanguageContextSchema = z
   .object({
-    familiarLanguageTag: sensaLanguageNameableTagSchema,
     targetLanguageTag: sensaLanguageNameableTagSchema,
+    supportLanguageTag: sensaLanguageNameableTagSchema,
+    languageRouteId:z.string().uuid().optional(),
+    languageRouteRevision:z.number().int().positive().optional(),
   })
   .strict()
   .superRefine((value, context) => {
-    if (value.familiarLanguageTag === value.targetLanguageTag) {
-      context.addIssue({ code: 'custom', message: 'a language cannot be both familiar and the target of one operation' });
+    if ((value.languageRouteId===undefined)!==(value.languageRouteRevision===undefined)) {
+      context.addIssue({ code: 'custom', message: 'a formal language context pins both route id and revision' });
     }
-  });
+  })
+  .transform(({languageRouteId,languageRouteRevision,...languages})=>({
+    ...languages,
+    ...(languageRouteId===undefined?{}:{languageRouteId,languageRouteRevision:languageRouteRevision!}),
+  }));
+
+export const sensaFormalPinnedLanguageContextSchema=z.object({
+  targetLanguageTag:sensaLanguageNameableTagSchema,
+  supportLanguageTag:sensaLanguageNameableTagSchema,
+  languageRouteId:z.string().uuid(),
+  languageRouteRevision:z.number().int().positive(),
+}).strict();
 
 /** What a language is called inside a model prompt, which is written in English
  * whatever the learner reads. A prompt names both languages of the pair rather
  * than describing a fixed one, so a model is never told the wrong pair. */
 export function sensaLanguagePromptName(tag: string): string {
-  return sensaLanguage(tag)?.names.en ?? tag;
+  return sensaLanguageForDeclaredTag(tag)?.names.en ?? tag;
 }
 
-export const sensaCommandLanguages = (
-  profile: SensaLanguageProfile,
-): SensaCommandLanguages => ({
-  familiarLanguageTag: profile.familiarLanguageTag,
-  targetLanguageTag: profile.activeTargetLanguageTag,
+export const sensaLanguageRouteStatusSchema=z.enum(['active','paused','archived']);
+export type SensaLanguageRouteStatus=z.infer<typeof sensaLanguageRouteStatusSchema>;
+
+/** A learner-owned direction of formal study. Its Study Plan is route-scoped in
+ * the Curriculum module; this contract owns only the route identity and roles. */
+export const sensaLanguageLearningRouteSchema=z.object({
+  id:z.string().uuid(),
+  revision:z.number().int().positive(),
+  targetLanguageTag:sensaLanguageNameableTagSchema,
+  defaultSupportLanguageTag:sensaLanguageNameableTagSchema,
+  status:sensaLanguageRouteStatusSchema,
+}).strict();
+export type SensaLanguageLearningRoute=z.infer<typeof sensaLanguageLearningRouteSchema>;
+
+export const sensaLanguageRouteCollectionSchema=z.object({
+  revision:z.number().int().positive(),
+  routes:z.array(sensaLanguageLearningRouteSchema).min(1).max(16),
+}).strict().superRefine((value,context)=>{
+  if(new Set(value.routes.map(route=>route.id)).size!==value.routes.length){
+    context.addIssue({code:'custom',message:'language route ids must be distinct'});
+  }
+  if(!value.routes.some(route=>route.status==='active')){
+    context.addIssue({code:'custom',message:'at least one language route must be active'});
+  }
 });
+export type SensaLanguageRouteCollection=z.infer<typeof sensaLanguageRouteCollectionSchema>;
 
-/**
- * One familiar language and the target languages being learned.
- *
- * `activeTargetLanguageTag` is the language the action surfaces act on — today's
- * queue, a learning run, a daily limit — while read surfaces still show every
- * target language. Choosing a second target language therefore never changes the
- * meaning of an existing count; it only adds a surface the learner can switch to.
- *
- * The stored shape is deliberately not an enum of the catalog: a profile written
- * before the catalog changed must stay readable, and `resolveLanguageProfile`
- * drops what it cannot place instead of discarding the rest.
- */
-export const sensaLanguageProfileSchema = z
-  .object({
-    familiarLanguageTag: sensaLanguageTagSchema,
-    targetLanguageTags: z.array(sensaLanguageTagSchema).min(1).max(8),
-    activeTargetLanguageTag: sensaLanguageTagSchema,
-  })
-  .strict()
-  .superRefine((value, context) => {
-    if (value.familiarLanguageTag === value.activeTargetLanguageTag) {
-      context.addIssue({code:'custom', message:'a language cannot be both familiar and the active target language'});
-    }
-    if (new Set(value.targetLanguageTags).size !== value.targetLanguageTags.length) {
-      context.addIssue({code:'custom', message:'target languages must be distinct'});
-    }
-    if (!value.targetLanguageTags.includes(value.activeTargetLanguageTag)) {
-      context.addIssue({code:'custom', message:'the active target language must be one of the target languages'});
-    }
-    if (value.targetLanguageTags.includes(value.familiarLanguageTag)) {
-      context.addIssue({code:'custom', message:'the familiar language must not also be a target language'});
-    }
-  });
-export type SensaLanguageProfile = z.infer<typeof sensaLanguageProfileSchema>;
+/** Active Route Selection is device/surface preference, not learner progress. */
+export const sensaActiveRouteSelectionSchema=z.object({
+  surface:z.string().trim().min(1).max(64),
+  languageRouteId:z.string().uuid(),
+}).strict();
+export type SensaActiveRouteSelection=z.infer<typeof sensaActiveRouteSelectionSchema>;
 
-/** The pair the product has always shipped: a Chinese-speaking learner of
- * English. Nothing is migrated onto it; it is only what a library with no saved
- * profile yet is read as. */
-export const defaultSensaLanguageProfile: SensaLanguageProfile = {
-  familiarLanguageTag: 'zh-CN',
-  targetLanguageTags: ['en'],
-  activeTargetLanguageTag: 'en',
+export const defaultSensaLanguageRoute:SensaLanguageLearningRoute={
+  id:'00000000-0000-4000-8000-000000000001',
+  revision:1,
+  targetLanguageTag:'en',
+  defaultSupportLanguageTag:'zh-CN',
+  status:'active',
 };
 
-/** Drops tags this release no longer carries, then repairs the parts that depend
- * on them, and answers the default only when nothing placeable remains.
- *
- * The schema deliberately accepts any tag, because a profile written by an
- * earlier release is still a profile; placing a tag against the catalog is this
- * function's job, so a retired language costs the learner that language instead
- * of the whole profile. */
-export function resolveLanguageProfile(raw: unknown): SensaLanguageProfile {
-  const record = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
-  const placeable = (value: unknown): value is string => typeof value === 'string' && sensaLanguage(value) !== undefined;
-  const familiarLanguageTag = placeable(record.familiarLanguageTag) ? record.familiarLanguageTag : defaultSensaLanguageProfile.familiarLanguageTag;
-  const stored = Array.isArray(record.targetLanguageTags) ? record.targetLanguageTags.filter(placeable).filter(tag => sensaLanguage(tag)?.asTarget === true) : [];
-  /** Deduplicated, excluding the familiar language, and bounded here rather than
-   * only in the schema so the returned value always parses. */
-  const targetLanguageTags = [...new Set(stored)].filter(tag => tag !== familiarLanguageTag).slice(0, 8);
-  if (targetLanguageTags.length === 0) return defaultSensaLanguageProfile;
-  const activeTargetLanguageTag = placeable(record.activeTargetLanguageTag) && targetLanguageTags.includes(record.activeTargetLanguageTag)
-    ? record.activeTargetLanguageTag
-    : targetLanguageTags[0]!;
-  return {familiarLanguageTag, targetLanguageTags, activeTargetLanguageTag};
+export const defaultSensaLanguageRouteCollection:SensaLanguageRouteCollection={
+  revision:1,
+  routes:[defaultSensaLanguageRoute],
+};
+
+export function sensaPinnedLanguageContext(route:SensaLanguageLearningRoute):SensaFormalPinnedLanguageContext {
+  return sensaFormalPinnedLanguageContextSchema.parse({
+    targetLanguageTag:route.targetLanguageTag,
+    supportLanguageTag:route.defaultSupportLanguageTag,
+    languageRouteId:route.id,
+    languageRouteRevision:route.revision,
+  });
 }

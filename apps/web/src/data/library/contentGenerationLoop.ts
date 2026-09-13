@@ -9,7 +9,7 @@ export async function generateLearningCandidate(request:SensaContentGenerationRe
  // switch mid-preparation must not change the language of material for a sense
  // that was accepted in another one.
  const languages=requestLanguages(request);
- const cue=sensaLanguageDisplayName(languages.familiarLanguageTag,'en');
+ const cue=sensaLanguageDisplayName(languages.supportLanguageTag,'en');
  const richInstructions=' You may reference supplied images with imageIds (array of supplied IDs); never invent or reproduce image bytes. You may add html for a useful offline interaction. HTML is declarative only: no scripts, event handlers, links, forms, external media or stylesheets. Use inline style, button data-action=toggle data-target=ID with an element id=ID to show/hide it; data-action=increment with data-target=ID to increment its text; draggable=true elements and data-dropzone containers for drag and drop. Do not include the target expression in visible text. Use only the supplied context as personal evidence. scene may be empty when images or HTML carry the experience. Output JSON {scene,senseFocus,imageIds?,html?}.';
  const messages:ModelMessage[]=[{role:'system',content:generationSystem(personal,languages)+richInstructions},{role:'user',content:JSON.stringify(modelFacts(request)),...(images.length?{images}:{})}];
  const bounded=AbortSignal.any([signal,AbortSignal.timeout(request.attemptBudget.timeoutMs)]);

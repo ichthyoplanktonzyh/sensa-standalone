@@ -39,7 +39,7 @@ import {
 } from '../personalMeaningJourney';
 import { newUuid } from '../personalMeaningJourney/ids';
 import { createRealSemanticAgent } from '../personalMeaningJourney/realSemanticAgent';
-import { languageProfileSnapshot } from '../../data/library/language';
+import { languageRoutesSnapshot } from '../../data/library/language';
 import {
   loadSemanticAgentSession,
   newSemanticAgentSession,
@@ -57,7 +57,6 @@ import type {
   WorkingSetTrack,
 } from '../personalMeaningJourney/semanticAgent';
 import {
-  sensaCommandLanguages,
   type SensaExpressionBindingRelation,
   type SensaExpressionType,
   type SensaSemanticCoverage,
@@ -418,7 +417,8 @@ const PreviewPersonalMeaningDetailScreen = ({
     const messages = learnerMessage
       ? [...baseSession.messages, learnerMessage]
       : [...baseSession.messages];
-    const waiting = { ...baseSession, messages };
+    const languageContext=baseSession.languageContext??(await languageRoutesSnapshot()).context;
+    const waiting = { ...baseSession, messages,languageContext };
     commit(waiting);
     setBusy(true);
     setError('');
@@ -433,9 +433,7 @@ const PreviewPersonalMeaningDetailScreen = ({
           learnerEditedTracks: baseSession.learnerEditedTracks,
           focusLocked: baseSession.focusLocked,
           mode,
-          // Resolved once per turn from the learner's profile; the interface
-          // language is not consulted.
-          languages: sensaCommandLanguages((await languageProfileSnapshot()).profile),
+          languages:languageContext,
         },
         (delta) => {
           pendingRef.current += delta;
@@ -530,6 +528,7 @@ const PreviewPersonalMeaningDetailScreen = ({
       const result = await gateway.confirmClarification({
         operationId: newUuid(),
         personalMeaningId: detail.personalMeaningId,
+        languageContext:session.languageContext??(await languageRoutesSnapshot()).context,
         focus: {
           statement: focus.statement,
           distinguishingNotes: focus.distinguishingNotes,

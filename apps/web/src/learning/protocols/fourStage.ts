@@ -6,7 +6,7 @@ import {
  readLocalProtocolState,
  type LocalLearningRun,
  type LocalLearningResource,
- type LocalLearningTarget,
+ type LocalExecutableLearningTarget,
  type LocalProtocolExecution,
  type LocalProtocolAuditEffect,
  type LocalProtocolSettlementIntent,
@@ -25,7 +25,7 @@ export const fourStageActionSchema=z.object({kind:z.literal('protocol'),response
 export type FourStageAction=z.infer<typeof fourStageActionSchema>;
 export type FourStageState={checkpoint:string};
 
-export function fourStageContent(target:LocalLearningTarget,pack:LocalLearningResource|undefined){
+export function fourStageContent(target:LocalExecutableLearningTarget,pack:LocalLearningResource|undefined){
  if(!pack||!target.assurancePackageKey)throw new Error('localFlow.resourceInvalid');
  const content=assuranceContent(pack,target.assurancePackageKey).template.content;
  const options=content.recognitionAssessment.options;

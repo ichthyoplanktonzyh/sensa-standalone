@@ -281,6 +281,10 @@ export const derivePersonalMeaningPhase = (
 };
 
 const buildAnchorViews = (record: MeaningJourneyRecord) => {
+  const boundRevisions=new Set([
+    ...record.bindingConfirmations.map(fact=>fact.personalExpressionAnchorRevisionId),
+    ...record.semanticAcceptances.map(fact=>fact.personalExpressionAnchorRevisionId),
+  ]);
   const familiar: JourneyFamiliarAnchorView[] = record.personalExpressionAnchors
     .filter((anchor) => anchor.status === 'active')
     .flatMap((anchor) => {
@@ -289,7 +293,7 @@ const buildAnchorViews = (record: MeaningJourneyRecord) => {
           candidate.personalExpressionAnchorId === anchor.personalExpressionAnchorId
           && candidate.revision === anchor.currentRevision,
       );
-      return revision && revision.learnerLanguageRole === 'familiar'
+      return revision && !boundRevisions.has(revision.personalExpressionAnchorRevisionId)
         ? [{
             anchorId: anchor.personalExpressionAnchorId,
             kind: 'familiar_expression' as const,

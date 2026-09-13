@@ -31,7 +31,7 @@ export function useReadingGlossary(){
  const perform=async(work:()=>Promise<unknown>)=>{setBusy(true);setNotice('');try{await work();await refresh();setNotice(localFlowText('glossarySaved'));}catch{setNotice(localFlowText('glossarySaveFailed'));}finally{setBusy(false);}};
  return {
   glossary:state?.glossary??[],saved:state?.saved??false,busy,notice:localFlowNotice(notice),
-  add:(term:string,rendering:string)=>perform(()=>setReadingGlossaryEntry(crypto.randomUUID(),term,rendering)),
-  remove:(term:string)=>perform(()=>removeReadingGlossaryEntry(crypto.randomUUID(),term)),
+  add:(inputLanguageTag:string,outputLanguageTag:string,term:string,rendering:string)=>perform(()=>setReadingGlossaryEntry(crypto.randomUUID(),inputLanguageTag,outputLanguageTag,term,rendering)),
+  remove:(inputLanguageTag:string,outputLanguageTag:string,term:string)=>perform(()=>removeReadingGlossaryEntry(crypto.randomUUID(),inputLanguageTag,outputLanguageTag,term)),
  };
 }

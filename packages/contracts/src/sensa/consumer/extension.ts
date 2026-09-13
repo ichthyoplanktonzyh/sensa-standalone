@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {sensaCommandLanguagesSchema} from '../language.js';
+import {sensaFormalPinnedLanguageContextSchema,sensaLanguageRouteCollectionSchema} from '../language.js';
 import {sensaReadingGlossarySchema} from './reading.js';
 import {localIntakeReceiptSchema,localIntakeRequestSchema} from './localIntake.js';
 
@@ -104,11 +104,9 @@ export const sensaBridgeRequestSchema=z.discriminatedUnion('kind',[
   z.object({...libraryRequest,kind:z.literal('web-connect-reset'),receipt:z.object({discardPending:z.boolean()}).strict()}).strict(),
   /** The Web session ended, so the account's credentials and reading state go. */
   z.object({...pageRequest,kind:z.literal('web-session-ended')}).strict(),
-  /** The pair this library reads with. The extension cannot read the library, so
-   * it is told the pair rather than keeping an editable copy of it; both tags
-   * must be languages this release can name, because the pair becomes the prompt
-   * that translates a page. */
-  z.object({...libraryRequest,kind:z.literal('web-language-profile'),languages:sensaCommandLanguagesSchema}).strict(),
+  /** The learner-owned Routes. The extension keeps its own surface-scoped
+   * Active Route Selection while Web remains the only Route editor. */
+  z.object({...libraryRequest,kind:z.literal('web-language-routes'),routes:sensaLanguageRouteCollectionSchema}).strict(),
   /** The learner's own glossary, which every reading request carries. Published
    * the same way and for the same reason as the pair: the library owns it, and
    * this is the copy the reading surfaces will hand to the service. */
@@ -138,7 +136,7 @@ export const sensaBridgeResponseSchemas={
   'web-connect-complete':z.object({connected:z.literal(true)}).strict(),
   'web-connect-reset':z.object({reset:z.literal(true)}).strict(),
   'web-session-ended':z.object({disconnected:z.boolean()}).strict(),
-  'web-language-profile':sensaCommandLanguagesSchema,
+  'web-language-routes':sensaFormalPinnedLanguageContextSchema,
   'web-reading-glossary':sensaReadingGlossarySchema,
 } satisfies Record<SensaBridgeKind,z.ZodType>;
 

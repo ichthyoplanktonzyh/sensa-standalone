@@ -3,6 +3,7 @@ import {
  readLocalProtocolState,
  type LocalLearningRun,
  type LocalLearningResource,
+ type LocalExecutableLearningTarget,
  type LocalLearningTarget,
  type LocalProtocolExecution,
  type LocalProtocolAuditEffect,
@@ -40,7 +41,7 @@ export function assuranceContent(pack:LocalLearningResource,key:string){
  const template=installLearningRelease(release).getPackage(key);if(!template)throw new Error('localFlow.resourceInvalid');
  return {template:replace(template) as typeof template,release,replace};
 }
-export function beginAssurance(t:LocalLearningTarget,pack:LocalLearningResource,purpose:LocalLearningRun['purpose'],run?:LocalLearningRun):AssuranceState{
+export function beginAssurance(t:LocalExecutableLearningTarget,pack:LocalLearningResource,purpose:LocalLearningRun['purpose'],run?:LocalLearningRun):AssuranceState{
  const {template}=assuranceContent(pack,t.assurancePackageKey!);const bound=bindPackageToRetentionTarget(template,t.retentionId);
  const binding=run?localRunBinding(run):learningPolicyProfileRegistry.get(localTargetPolicy(t)).protocols[purpose];
  const orchestration=orchestrationRegistry.get(binding.orchestrationId);
@@ -75,7 +76,7 @@ export function assuranceView(run:LocalLearningRun,pack:LocalLearningResource){
  return {content:repair?replace(repair) as RuntimeLearningContent:session.package.content,action,stepKind,introduction,resource,projection:queue.getProjection()};
 }
 /** The caller commits response, checkpoint, outcome and schedule together in one transaction. */
-export function transitionAssurance(t:LocalLearningTarget,run:LocalLearningRun,pack:LocalLearningResource,raw:unknown,at:string):LocalProtocolTransitionIntent{
+export function transitionAssurance(t:LocalExecutableLearningTarget,run:LocalLearningRun,pack:LocalLearningResource,raw:unknown,at:string):LocalProtocolTransitionIntent{
  const response=assuranceActionSchema.parse(raw),state=localAssuranceState(run),view=assuranceView(run,pack);if(!view)throw new Error('localFlow.stepChanged');
  const effects:LocalProtocolAuditEffect[]=[];
  let settlement:LocalProtocolSettlementIntent|null=null;

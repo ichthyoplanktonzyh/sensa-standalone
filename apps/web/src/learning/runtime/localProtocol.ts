@@ -1,5 +1,6 @@
 import type {
   LearningPackageBundle,
+  SensaFormalPinnedLanguageContext,
   SensaLearningMaterializationSnapshot,
   SensaLightweightInitialMaterializationContent,
 } from '@sensa/contracts/sensa';
@@ -26,9 +27,22 @@ export interface LocalLearningTargetIdentity {
   readonly senseExpressionBindingId:string;
   readonly bindingVersionId:string;
   readonly targetLanguageTag:string;
-  readonly familiarLanguageTag:string;
-  readonly learnerLocale:string;
-  readonly curriculumProvenance:Readonly<Record<string,unknown>>;
+}
+
+/** One independent Curriculum source inside one Language Learning Route.
+ * Support Language and material belong here, never to Learning Target identity. */
+export interface LocalCurriculumMembership {
+  readonly id:string;
+  readonly revision:number;
+  readonly languageContext:SensaFormalPinnedLanguageContext;
+  readonly sourceKind:'sense_learning_package'|'personal_meaning_alignment';
+  readonly provenance:Readonly<Record<string,unknown>>;
+  readonly packageKey:string|null;
+  readonly assurancePackageKey?:string;
+  readonly material:LocalLearningMaterialization;
+  readonly createdByOperationId:string;
+  readonly createdAt:string;
+  readonly updatedAt:string;
 }
 
 export interface LocalLearningPolicyAssignment {
@@ -71,17 +85,16 @@ export interface LocalLearningTarget {
   id: string;
   retentionId: string;
   identity:LocalLearningTargetIdentity;
-  packageKey: string | null;
+  curriculumMemberships:LocalCurriculumMembership[];
   expression: string;
-  meaning: string;
   policyAssignment:LocalLearningPolicyAssignment;
   committedPolicy:LocalCommittedLearningPolicy|null;
   /** Active learner-owned exclusions from planning; never learning evidence. */
   planningOverrides:TargetPlanningOverride[];
-  assurancePackageKey?: string;
-  targetLanguageTag?: string;
-  familiarLanguageTag?: string;
-  material: LocalLearningMaterialization;
+  targetLanguageTag: string;
+  /** The Route that consumed the one-time initial-learning quota. Progress is
+   * still shared when other compatible Routes later include this Target. */
+  introducedLanguageRouteId:string|null;
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
@@ -91,6 +104,16 @@ export interface LocalLearningTarget {
   /** Protocol-owned repair state. The scheduler never interprets this value. */
   relearningState: unknown | null;
 }
+
+/** Detached adapter input resolved from a Target plus one Curriculum membership. */
+export type LocalExecutableLearningTarget=LocalLearningTarget&{
+  readonly curriculumMembership:LocalCurriculumMembership;
+  readonly packageKey:string|null;
+  readonly assurancePackageKey?:string;
+  readonly supportLanguageTag:string;
+  readonly meaning:string;
+  readonly material:LocalLearningMaterialization;
+};
 
 export type LocalProtocolStartReason = Readonly<{
   kind:'initial_learning_ready'|'due_review'|'relearning_ready';
@@ -110,9 +133,15 @@ export interface LocalProtocolOutcomePermissions {
 
 export interface LocalLearningRunParticipant {
   protocolRunId:string;
+  curriculumMembershipId:string;
+  languageContext:SensaFormalPinnedLanguageContext;
   startReason:LocalProtocolStartReason;
   outcomePermissions:LocalProtocolOutcomePermissions;
+  /** Material selected when the Run plan was resolved. It remains the plan's
+   * immutable baseline, while each presented Step records the compatible
+   * material revision the learner actually saw. */
   material: LocalLearningMaterialization;
+  presentedMaterials:Record<string,LocalLearningMaterialization>;
   policyCommitment:LocalCommittedLearningPolicy;
   resolvedPlan:LocalResolvedLearningPlanSnapshot;
   progress:ProtocolProgressState;
@@ -139,6 +168,7 @@ export interface LocalLearningRun {
   targetIds: string[];
   participants: Record<string, LocalLearningRunParticipant>;
   targetCompletions: Record<string, { at: string; kind: string }>;
+  languageContext:SensaFormalPinnedLanguageContext;
   purpose: LearningProtocolPurpose;
   policyProfileId: LearningPolicyId;
   policyProfileVersion: string;
@@ -171,6 +201,15 @@ export type LocalLearningRunLifecycleEvent =
       kind:'resumed_after_planning_override';
       operationId:string;
       interruptionEventId:string;
+      at:string;
+    }>
+  | Readonly<{
+      eventId:string;
+      kind:'current_step_material_refreshed';
+      operationId:string;
+      targetId:string;
+      stepId:string;
+      materializationId:string;
       at:string;
     }>;
 
@@ -307,10 +346,10 @@ export interface LocalProtocolEvaluationFacts {
 /** Storage port for a versioned Protocol implementation. It cannot write retention state. */
 export interface LocalProtocolExecution {
   readonly cohort?: boolean;
-  validate?(target: LocalLearningTarget, resource: LocalLearningResource | undefined): void;
+  validate?(target: LocalExecutableLearningTarget, resource: LocalLearningResource | undefined): void;
   activeTargetId?(run: LocalLearningRun): string;
   initialize(
-    target: LocalLearningTarget,
+    target: LocalExecutableLearningTarget,
     resource: LocalLearningResource | undefined,
     purpose: LearningProtocolPurpose,
     run: LocalLearningRun,
@@ -318,14 +357,14 @@ export interface LocalProtocolExecution {
   stepId(run: LocalLearningRun): string;
   /** Adapter-internal reducer. Call executeLocalProtocolTransition, never this directly. */
   unsafeTransition(
-    target: LocalLearningTarget,
+    target: LocalExecutableLearningTarget,
     run: LocalLearningRun,
     resource: LocalLearningResource | undefined,
     action: LocalLearningAction,
     at: string,
   ): LocalProtocolTransitionIntent;
   replayState(
-    target: LocalLearningTarget,
+    target: LocalExecutableLearningTarget,
     resource: LocalLearningResource | undefined,
     saved: LocalLearningRun,
   ): LocalProtocolState;
@@ -367,7 +406,7 @@ export const localLearningPurpose = (target: LocalLearningTarget): LearningProto
 /** A materialization can vary by Run, but it cannot redefine Target identity. */
 export function assertLocalTargetMaterialIdentity(
   target:LocalLearningTarget,
-  material:LocalLearningMaterialization=target.material,
+  material:LocalLearningMaterialization,
 ):void{
   const provenance=material.snapshot.provenance;
   if(
@@ -402,6 +441,7 @@ const runContractProjection=(run:LocalLearningRun)=>({
  learnerVisibleClaimBoundary:run.learnerVisibleClaimBoundary,
  ordinal:run.ordinal,revision:run.revision,startedAt:run.startedAt,
  completedAt:run.completedAt,completionKind:run.completionKind,
+ lifecycleEvents:run.lifecycleEvents,
 });
 
 const sameValue=(left:unknown,right:unknown):boolean=>JSON.stringify(left)===JSON.stringify(right);
@@ -459,7 +499,7 @@ const assertLocalProtocolState=(state:LocalProtocolState,adapterId:RuntimeAdapte
 /** Run a plugin resource probe without exposing the caller's live objects. */
 export function validateLocalProtocolResources(
  execution:LocalProtocolExecution,
- target:LocalLearningTarget,
+ target:LocalExecutableLearningTarget,
  resource:LocalLearningResource|undefined,
 ):void{
  execution.validate?.(structuredClone(target),resource?structuredClone(resource):undefined);
@@ -468,7 +508,7 @@ export function validateLocalProtocolResources(
 /** Initialize only the opaque plugin slot; the Session envelope stays kernel-owned. */
 export function initializeLocalProtocolState(input:Readonly<{
  execution:LocalProtocolExecution;
- target:LocalLearningTarget;
+ target:LocalExecutableLearningTarget;
  resource:LocalLearningResource|undefined;
  purpose:LearningProtocolPurpose;
  run:LocalLearningRun;
@@ -500,7 +540,7 @@ export function localProtocolStepId(execution:LocalProtocolExecution,run:LocalLe
 /** Replay resets formal facts in the kernel and asks the plugin only for opaque state. */
 export function replayLocalProtocolRun(input:Readonly<{
  execution:LocalProtocolExecution;
- target:LocalLearningTarget;
+ target:LocalExecutableLearningTarget;
  resource:LocalLearningResource|undefined;
  saved:LocalLearningRun;
 }>):LocalLearningRun{
@@ -535,7 +575,7 @@ export function replayLocalProtocolRun(input:Readonly<{
  */
 export function executeLocalProtocolTransition(input:Readonly<{
  execution:LocalProtocolExecution;
- target:LocalLearningTarget;
+ target:LocalExecutableLearningTarget;
  run:LocalLearningRun;
  resource:LocalLearningResource|undefined;
  action:LocalLearningAction;
@@ -584,7 +624,7 @@ export function materializeLocalProtocolEvaluation(input:Readonly<{
  operationId:string;
  stepKey:string;
  at:string;
- target:LocalLearningTarget;
+ target:LocalExecutableLearningTarget;
  run:LocalLearningRun;
  action:LocalLearningAction;
  evaluation:LocalProtocolEvaluationIntent|null;
@@ -614,8 +654,8 @@ export function materializeLocalProtocolEvaluation(input:Readonly<{
  });
  participant.progress=progression.state;
  const effects=Object.freeze([...progression.decision.effects]);
- return Object.freeze({
-  step:Object.freeze({protocolStepInstanceId,protocolRunId,stepKey:input.stepKey,ordinal:input.run.ordinal,purpose:input.run.purpose,learningMaterializationIds:Object.freeze([...participant.resolvedPlan.learningMaterializationIds])}),
+  return Object.freeze({
+   step:Object.freeze({protocolStepInstanceId,protocolRunId,stepKey:input.stepKey,ordinal:input.run.ordinal,purpose:input.run.purpose,learningMaterializationIds:Object.freeze([input.target.material.snapshot.learningMaterializationId])}),
   action:Object.freeze({actionId,protocolStepInstanceId,protocolRunId,actionIntent:input.evaluation.actionIntent,kind:input.action.kind,issuedAt:input.at}),
   attempt:Object.freeze({attemptId,actionId,protocolRunId,learnerUserId:input.target.identity.learnerUserId,learningTargetId:input.target.id,response:structuredClone(input.action),submittedAt:input.at}),
   observation:Object.freeze({observationId,attemptId,actionId,protocolRunId,kind:input.evaluation.observation.kind,checkpointId:input.evaluation.observation.checkpointId,valid:input.evaluation.observation.valid,result:structuredClone(input.evaluation.observation.result),evidenceIds,observedAt:input.at}),
@@ -648,7 +688,7 @@ export function reduceLocalProtocolAction(input:Readonly<{
  stepKey:string;
  at:string;
  execution:LocalProtocolExecution;
- target:LocalLearningTarget;
+ target:LocalExecutableLearningTarget;
  run:LocalLearningRun;
  resource:LocalLearningResource|undefined;
  action:LocalLearningAction;

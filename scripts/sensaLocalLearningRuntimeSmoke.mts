@@ -19,6 +19,8 @@ import {
   fourStageQueue,
 } from '../apps/web/src/learning/protocols/fourStage.ts';
 import {lightweightSchedulingPolicy,initializeRetentionMemory,scheduleMemoryOutcome} from '@sensa/learning-kernel';
+import {defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
+import {localExecutableTargetForParticipant} from '../apps/web/src/learning/runtime/localCurriculum.ts';
 
 Object.assign(globalThis, {
   indexedDB,
@@ -27,6 +29,7 @@ Object.assign(globalThis, {
 });
 
 const id = () => crypto.randomUUID();
+const languageContext=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
 const schedulerTarget=id(),schedulerStart=new Date('2026-09-01T00:00:00.000Z');
 const initialized=initializeRetentionMemory(schedulerTarget,lightweightSchedulingPolicy,schedulerStart);
 const beforeDue=new Date(schedulerStart.getTime()+60_000);
@@ -41,9 +44,9 @@ await command({id:id(),kind:'fixture.owner',input:{}},async tx=>{
 
 const fixture = await libraryCloudPackageFixture();
 const pack = await installPackage(new Uint8Array(fixture.bytes), fixture.descriptor);
-const targetIds = await enrollPackage(id(), pack.key);
+const targetIds = await enrollPackage(id(), pack.key,languageContext);
 assert.equal(targetIds.length, 2);
-await confirmLearningQuantity(id(), 20);
+await confirmLearningQuantity(id(),languageContext,20);
 
 async function act(run:LocalLearningRun, response:unknown, at:string) {
   return actLearning(id(),run.id,run.revision,{kind:'assurance',response} as any,at);
@@ -79,8 +82,8 @@ async function driveAssurance(
 }
 
 const assuranceTargetId=targetIds[0]!;
-await selectLocalLearningPolicy(id(),assuranceTargetId,'high_assurance');
-let run=await startLearning(id(),assuranceTargetId,20,'2026-09-11T04:00:00.000Z');
+await selectLocalLearningPolicy(id(),assuranceTargetId,languageContext,'high_assurance');
+let run=await startLearning(id(),assuranceTargetId,languageContext,20,'2026-09-11T04:00:00.000Z');
 run=await driveAssurance(run,'2026-09-11T04:00:00.000Z');
 await finishLearning(id(),run.id);
 let state=await readLearning(),target=state.targets.find(item=>item.id===assuranceTargetId)!;
@@ -101,7 +104,7 @@ const assuranceCompletion=state.events.find(event=>event.runId===run.id&&event.d
 if(assuranceCompletion.kind!=='initial_learning_completion')throw new Error('missing assurance completion');
 assert.deepEqual(new Set(assuranceCompletion.handoff.evidenceIds),new Set(assuranceEvidenceIds),'Scheduling Handoff references accumulated Evidence instead of a UI claim');
 
-run=await startLearning(id(),assuranceTargetId,20,target.memory!.dueAt.toISOString());
+run=await startLearning(id(),assuranceTargetId,languageContext,20,target.memory!.dueAt.toISOString());
 assert.equal(run.purpose,'retention_review');
 run=await driveAssurance(run,target.memory!.dueAt.toISOString(),true);
 await finishLearning(id(),run.id);
@@ -112,7 +115,7 @@ assert(target.relearningState);
 assert.equal(state.events.filter(event=>event.runId===run.id&&event.detail.transition.retention?.kind==='memory_outcome').length,1);
 
 const assuranceReviewRevision=target.memoryRevision;
-run=await startLearning(id(),assuranceTargetId,20,target.relearnAt!);
+run=await startLearning(id(),assuranceTargetId,languageContext,20,target.relearnAt!);
 assert.equal(run.purpose,'relearning');
 run=await driveAssurance(run,target.relearnAt!);
 await finishLearning(id(),run.id);
@@ -123,7 +126,7 @@ assert.equal(state.events.filter(event=>event.runId===run.id&&event.detail.trans
 assert.equal(state.events.filter(event=>event.runId===run.id&&event.detail.transition.retention?.kind==='relearning_completion').length,1);
 
 const fourStageTargetId=targetIds[1]!;
-await selectLocalLearningPolicy(id(),fourStageTargetId,'interleaved_four_stage');
+await selectLocalLearningPolicy(id(),fourStageTargetId,languageContext,'interleaved_four_stage');
 
 async function driveFourStage(initial:LocalLearningRun,at:string,reviewAnswer:'known'|'forgotten'='known'){
   let current=initial,steps=0;
@@ -135,7 +138,7 @@ async function driveFourStage(initial:LocalLearningRun,at:string,reviewAnswer:'k
     else if('presentation' in session){
       if(session.presentation==='meaning_choice'||session.presentation==='sound_choice'){
         const currentTarget=(await readLearning()).targets.find(item=>item.id===session.targetId)!;
-        const content=fourStageContent(currentTarget,pack);
+        const content=fourStageContent(localExecutableTargetForParticipant(currentTarget,run.participants[currentTarget.id]!),pack);
         response={kind:'choice',optionId:content.recognitionAssessment.options.find(option=>option.isCorrect)!.id};
       }else response={kind:'self_report',known:true};
     }else response={kind:'review',answer:session.mode==='review'?reviewAnswer:'known'};
@@ -145,12 +148,12 @@ async function driveFourStage(initial:LocalLearningRun,at:string,reviewAnswer:'k
   return current;
 }
 
-run=await startLearning(id(),fourStageTargetId,20,'2026-09-12T04:00:00.000Z');
+run=await startLearning(id(),fourStageTargetId,languageContext,20,'2026-09-12T04:00:00.000Z');
 run=await driveFourStage(run,'2026-09-12T04:00:00.000Z');
 await finishLearning(id(),run.id);
 state=await readLearning();target=state.targets.find(item=>item.id===fourStageTargetId)!;
 assert.equal(target.memoryRevision,1);
-run=await startLearning(id(),fourStageTargetId,20,target.memory!.dueAt.toISOString());
+run=await startLearning(id(),fourStageTargetId,languageContext,20,target.memory!.dueAt.toISOString());
 assert.equal(run.purpose,'retention_review');
 run=await driveFourStage(run,target.memory!.dueAt.toISOString(),'forgotten');
 await finishLearning(id(),run.id);
@@ -160,7 +163,7 @@ assert(target.relearnAt);
 assert.equal(state.events.filter(event=>event.runId===run.id&&event.detail.transition.retention?.kind==='memory_outcome').length,1);
 
 const fourStageReviewRevision=target.memoryRevision;
-run=await startLearning(id(),fourStageTargetId,20,target.relearnAt!);
+run=await startLearning(id(),fourStageTargetId,languageContext,20,target.relearnAt!);
 assert.equal(run.purpose,'relearning');
 run=await driveFourStage(run,target.relearnAt!);
 await finishLearning(id(),run.id);

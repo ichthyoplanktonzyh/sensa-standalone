@@ -20,7 +20,7 @@ const compiled=await build({
   stdin:{
     contents:[
       `export {audioService} from './apps/web/src/experience/services/audioService';`,
-      `export {speechLocaleFor,clipAccentsFor,clipLanguageFor,activeSpeechLanguage} from './apps/web/src/experience/services/speechLanguage';`,
+      `export {speechLocaleFor,clipAccentsFor,clipLanguageFor,activeSpeechLanguage,spokenLanguageSupport} from './apps/web/src/experience/services/speechLanguage';`,
       ...['store','language'].map(n=>`export * from './apps/web/src/data/library/${n}';`),
     ].join('\n'),
     resolveDir:process.cwd(),
@@ -98,12 +98,15 @@ try{
     assert.deepEqual(api.clipAccentsFor(language.tag),language.wiktionaryCode==='en'?['all','us','uk','aus','ca','ie']:['all'],`${language.tag} only offers accent filters its corpus has`);
   }
   assert.equal(api.clipLanguageFor('zh-CN'),'chinese','a catalog name carrying its script still names the corpus language');
-  assert.equal(api.clipLanguageFor('xx-unknown'),'english','an unplaceable language keeps the historical corpus rather than inventing one');
+  assert.equal(api.spokenLanguageSupport('en-US').status,'fallback','a regional tag uses an explicit catalog fallback without changing its identity');
+  assert.equal(api.speechLocaleFor('en-US'),'en-US');
+  assert.equal(api.spokenLanguageSupport('xx-unknown').status,'unavailable');
+  assert.throws(()=>api.clipLanguageFor('xx-unknown'),/languageCapabilityUnavailable/u,'an unplaceable language is unavailable rather than silently becoming English');
 
   // The shipped pair: English, and the two English accents still choose between
   // the locales English actually has.
   const shipped=await api.activeSpeechLanguage();
-  assert.equal(shipped.languageTag,'en','the profile decides before anything is stored');
+  assert.equal(shipped.languageTag,'en','the shipped active Route decides before anything is stored');
   assert.equal(shipped.speechLocale,'en-US');
   await api.audioService.playSpeechSynthesis('hello','us');
   assert.equal(spoken.at(-1)!.lang,'en-US');
@@ -118,8 +121,9 @@ try{
 
   // Choosing Spanish changes what every later playback speaks, with no call site
   // passing a language.
-  await api.addTargetLanguage(id(),'es');
-  await api.setActiveTargetLanguage(id(),'es');
+  const englishRoute=(await api.languageRoutesSnapshot()).activeRoute;
+  const spanishRoute=await api.addLanguageRoute(id(),'es','zh-CN');
+  await api.setActiveLanguageRoute(id(),spanishRoute.id);
   assert.equal((await api.activeSpeechLanguage()).speechLocale,'es-ES');
 
   const playedBefore=played.length;
@@ -139,7 +143,7 @@ try{
   assert.equal(spoken.at(-1)!.lang,'es-ES','the fallback voice follows the target language too');
 
   // Back to English: nothing about the switch is cached past a playback.
-  await api.setActiveTargetLanguage(id(),'en');
+  await api.setActiveLanguageRoute(id(),englishRoute.id);
   await api.audioService.playSpeechSynthesis('hello','us');
   assert.equal(spoken.at(-1)!.lang,'en-US','the next playback belongs to the newly chosen language');
 

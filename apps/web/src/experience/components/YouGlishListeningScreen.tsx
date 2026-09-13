@@ -3,7 +3,7 @@ import { ArrowLeft, Play, Pause, SkipBack, SkipForward, RotateCcw, ExternalLink 
 import { useTranslation } from 'react-i18next';
 import type { PracticeScopeTarget } from '../practiceScope';
 import { useYouglishWidget } from '../useYouglishWidget';
-import { useLanguageProfile } from '../library/useLanguageProfile';
+import { useLanguageRoutes } from '../library/useLanguageRoutes';
 import { clipAccentsFor, clipLanguageFor, speechLocaleFor } from '../services/speechLanguage';
 import { practiceButton, practiceSurface } from './SensaFreePracticeScreen';
 export interface YouGlishListeningScreenProps {
@@ -17,8 +17,8 @@ export const YouGlishListeningScreen=(props:YouGlishListeningScreenProps)=>{
 };
 function ListeningPlayer({targets,onBack,retry}:YouGlishListeningScreenProps&{retry:()=>void}) {
  const {t}=useTranslation();
- const {profile}=useLanguageProfile();
- const languageTag=profile.activeTargetLanguageTag;
+ const {activeRoute}=useLanguageRoutes();
+ const languageTag=activeRoute.targetLanguageTag;
  const accents=clipAccentsFor(languageTag);
  const listableLocale=speechLocaleFor(languageTag);
  const listenable=useMemo(()=>{const seen=new Set<string>();return targets.filter(target=>{const form=target.expression.surfaceForm.trim().toLocaleLowerCase(listableLocale);if(!form||seen.has(form))return false;seen.add(form);return true;});},[targets,listableLocale]);

@@ -29,7 +29,7 @@ import type {
   SensaSemanticAcceptanceFact,
   SensaSenseSemanticSpec,
 } from '@sensa/contracts/sensa';
-import { sensaLanguageRoleForTag } from '@sensa/contracts/sensa';
+import { sensaLanguageRolesForTag } from '@sensa/contracts/sensa';
 import { digestOf } from './digest';
 import type { CommandLanguages } from './ports';
 import type { JourneyState, MeaningJourneyRecord } from './store';
@@ -125,9 +125,10 @@ export const evaluateIntakeRoute = (
     return { route: 'rejected', reason: '摄取材料缺少可用的上下文内容。' };
   }
   const hasExpression = hasLocatedExpression(payload);
-  const hasPlacedLanguage =
-    sensaLanguageRoleForTag(payload.expression?.languageTag ?? null, languages)
-    !== null;
+  const hasPlacedLanguage = sensaLanguageRolesForTag(
+    payload.expression?.languageTag ?? null,
+    languages,
+  ).length>0;
   const hasResolvedSense =
     payload.sense != null
     && payload.sense.resolutionStatus === 'resolved'
@@ -272,18 +273,14 @@ export const executeFastTrack = (
     source: payload.context.source,
   };
 
-  // 2) Target/Familiar Expression Anchor for the captured word. The capture
-  //    states the language it is in; this pins it to the side of the learner's
-  //    boundary that the operation is about. A tag the pair cannot place never
+  // 2) Expression Anchor for the captured word. The capture states the exact
+  //    language it is in. A tag this operation cannot place never
   //    reaches here — `evaluateIntakeRoute` sends it to the Inbox as
   //    `pending_language` — so the throw is a guard, not a fallback.
-  const languageRole = sensaLanguageRoleForTag(expression.languageTag, ports.languages);
-  if (!languageRole) {
+  if (sensaLanguageRolesForTag(expression.languageTag,ports.languages).length===0) {
     throw new Error('这条摄取材料的语言不在本次操作的语对中。');
   }
-  const languageTag = languageRole === 'target'
-    ? ports.languages.targetLanguageTag
-    : ports.languages.familiarLanguageTag;
+  const languageTag = expression.languageTag!;
   const expressionType: SensaExpressionType = expression.expressionTypeHint ?? 'word';
   const expressionAnchorId = ports.newId();
   const expressionAnchorRevisionId = ports.newId();
@@ -377,7 +374,6 @@ export const executeFastTrack = (
     revision: 1,
     expressionType,
     languageTag,
-    learnerLanguageRole: languageRole,
     surfaceForm: expression.surfaceForm.trim(),
     normalizedForm: normalizedForm(expression.surfaceForm),
     contextAnchorRevisionId: semanticAnchorRevisionId,

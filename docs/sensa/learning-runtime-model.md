@@ -1,7 +1,7 @@
 # Sensa Learning Runtime Model
 
 > 状态：Canonical runtime domain model  
-> 更新日期：2026-09-05
+> 更新日期：2026-09-13
 
 本文定义 Content Provisioning、Learning Protocol Run、Protocol Step Instance、Unified Planning、Session、
 Encounter、Card Presentation、Observation/Evidence/Transition、Scheduling Handoff、FSRS、Lexical Reference、Preferences 与 Account/Data Control 的运行
@@ -12,9 +12,11 @@ format 属于后续版本化实现合同。
 ## 1. 运行链
 
 ```text
-Book Enrollment + Supplemental Curriculum
-                         │
-Study Plan ──▶ Study Scope Revision + Learner Sense Progress
+Language Learning Route
+        ├── Target Language + default Support Language
+        └── route-scoped Study Plan
+                    ├── Book Enrollment + Supplemental Curriculum
+                    └── Study Scope Revision + Learner Sense Progress
                          │
 Session intent ──────────┤
                          ▼
@@ -67,7 +69,8 @@ Session intent ──────────┤
 Planning 只从 ready plan 中决定此刻处理哪个 Sense 与哪类工作；Effective Learning Policy 根据
 learner/Curriculum assignment 协调三个 purpose 的方法、内容保证与 scheduler policy，Resolved Learning
 Plan 再把 target、policy 和当前 capability 解析为 purpose-specific protocol/provisioning readiness。
-Content Provisioning 将固定 target 解析为不可变 materialization；Learning Protocol 固定
+Content Provisioning 将固定 target 解析为不可变 materialization；Run 固定计划解析时的材料基线，
+每个 Protocol Step Instance 再固定其实际采用的兼容 materialization；Learning Protocol 固定
 `initial_learning | retention_review | relearning` purpose，并由
 Protocol Step 决定材料如何组织、当前 Encounter 允许做什么、产生何种结果以及下一步。成功的正式
 Initial Learning 必须产生 Initial Learning Completion 与 Scheduling Handoff；Retention Review 只通过
@@ -114,11 +117,15 @@ fsrsMemoryState: optional
 fsrsInitializationBasis: optional
 ```
 
+Language Learning Route 与 Support Language 不进入该身份。同一个 target binding 即使从多条兼容 Route
+进入，也只拥有一份 Retention Target、Protocol history 与 FSRS Memory State；Route-specific plan 或
+materialization 可以不同，但不能复制学习结果。
+
 这些状态职责不同：
 
 - `phase` 决定该 Retention Target 属于哪类 Planning inventory；
-- active Protocol Run 决定当前使用哪个版本化学习协议、固定 purpose 与 materialization；
-- active Protocol Step Instance 保存本次材料角色绑定、交互/判分合同、结果资格与 transition state；
+- active Protocol Run 决定当前使用哪个版本化学习协议、固定 purpose、材料兼容边界与计划材料基线；
+- active Protocol Step Instance 保存实际采用的 materialization、材料角色绑定、交互/判分合同、结果资格与 transition state；
 - Gate progress 与 5D State 只属于 Structured Acquisition；前者决定当前 Cycle 是否满足毕业条件，
   后者是跨 Cycle、跨 Session 的诊断投影；
 - Declared Mastery 是独立、可撤销的 learner 声明；
@@ -140,10 +147,12 @@ Learner Sense Progress 是从同一 Sense 的全部 Retention Targets 与 Sense-
 ## 3. Learning Protocol Run
 
 每个正式学习过程固定一个 `protocolId + protocolVersion`、`purpose`、Learning Target、Effective
-Learning Policy Profile/version、Resolved Learning Plan revision、Learning Materialization、开始原因和允许的 Outcome。`purpose` 是封闭枚举：
+Learning Policy Profile/version、Resolved Learning Plan revision、材料兼容边界、计划材料基线、开始原因和允许的 Outcome。`purpose` 是封闭枚举：
 `initial_learning | retention_review | relearning`。一个 run 只能有一个 purpose，不能用同一 run
-同时表示首次学习、到期复习和失败后的再学习。内容来源不能隐式决定协议，协议也不能在 run 中途
-静默更换 materialization。协议迁移必须创建新 run 并保留旧事实。
+同时表示首次学习、到期复习和失败后的再学习。内容来源不能隐式决定协议。相同 Curriculum
+Membership、Learning Target、Route 与 Target/Support Language pair 下的新材料版本，可以供尚未接受
+Action 的当前或未来 Step 重新解析；它不能更换 source、语言方向、协议或已操作 Step 的材料。
+协议迁移必须创建新 run 并保留旧事实。
 
 Learning Policy Profile 可以为三个 purpose 分别选择 Protocol family，但不创建跨多个 purpose 的单一
 Run。第一次正式 Run 创建时同时建立 Retention Target 的 Committed Learning Policy；从该时刻开始，
@@ -164,7 +173,8 @@ Unified Planner 决定哪些 Target 进入本次运行。
 
 ### Lightweight Initial Learning Protocol
 
-Lightweight Study 允许使用紧凑教学内容、示例和可选 retrieval 建立或加强 Sense ↔ L2 表达连接。
+Lightweight Study 允许使用紧凑教学内容、示例和可选 retrieval 建立或加强 Sense ↔ target-language
+表达连接。
 当首次学习合同步骤成功完成时产生 Study Completion 与 Lightweight Study Outcome，并在同一成功
 边界显式创建 `basis=protocol_completion` 的 Scheduling Handoff。它不创建 Gate pass、5D projection 或
 Acquisition Graduation，也不向 learner 宣称已经掌握。
@@ -237,8 +247,8 @@ Outcome 必须携带 scheduler-stable grade `again | hard | good | easy`，并�
 
 ### Relearning Protocol
 
-Relearning 在失败或明显变弱的 Memory Outcome 已经落账后恢复 Sense ↔ L2 连接。协议可以是轻量
-re-binding，也可以是上述 Structured Relearning；只有后者创建 Acquisition Cycle。Relearning 成功
+Relearning 在失败或明显变弱的 Memory Outcome 已经落账后恢复 Sense ↔ target-language 连接。协议
+可以是轻量 re-binding，也可以是上述 Structured Relearning；只有后者创建 Acquisition Cycle。Relearning 成功
 产生 Relearning Completion，将 phase 返回 `retaining`，但不创建 Scheduling Handoff、不重建 FSRS，
 也不再次更新触发它的 due Review。Protocol Version 可以把指定的独立重学评价声明为
 scheduler-eligible；此时每次评价产生自己的 Memory Outcome 并最多推进一次 FSRS。
@@ -246,7 +256,8 @@ Relearning Completion 本身不是 Memory Outcome，也不自动改变 due。
 
 ## 4. Curriculum lifecycle、Study Scope 与每日额度
 
-Study Plan 是 learner 的正式学习安排，而不是 Book 的别名。它组合：
+Study Plan 是一条 Language Learning Route 内的正式学习安排，而不是 Book 的别名。Route 固定 Target
+Language 与可相同的 default Support Language；一个 Learner 可以拥有多条独立 Route。Study Plan 组合：
 
 ```text
 one active Book Enrollment
@@ -257,6 +268,10 @@ daily new-Sense limit
 current Study Scope Revision
 ```
 
+Route 的 `active | paused | archived` 只控制后续选择、导航与 Planning eligibility。pause/archive 不删除
+Study Plan、Curriculum、Personal Content、Retention Target、Protocol history、Evidence 或 FSRS；恢复后
+沿既有身份继续。Active Route Selection 不是 Route status，也不能伪造其状态。
+
 ### Book Enrollment 与换词书
 
 Book Enrollment 固定一个不可变 Book Version、一个已解析 Book Range 与 mode：
@@ -266,7 +281,7 @@ Book Enrollment 固定一个不可变 Book Version、一个已解析 Book Range 
 - `maintenance`：不再引入新 Sense，但继续已经开始的 Protocol Run/Relearning 与 due Review；
 - `paused`：该 Enrollment 暂时不向任何正式 Planning inventory 提供候选，但不删除事实。
 
-同一 learner 最多有一个 `active` Book Enrollment。换词书默认将旧 Enrollment 转为
+同一 Route 最多有一个 `active` Book Enrollment。换词书默认将旧 Enrollment 转为
 `maintenance`，并激活目标 Book Version 的 Enrollment；learner 可以再显式暂停旧 Enrollment。
 切换、暂停和恢复都不删除 Learner Sense Progress、Protocol Run、Evidence 或 FSRS State，也不把
 任何协议冒充完成。切回旧词书时依据保留的 Retention Target 状态继续。
@@ -287,9 +302,10 @@ Range 不删除已发生的学习，也不把已经开始的 Sense 变回 `new`�
 
 ### Supplemental Curriculum 与 Add-to-Learning
 
-Supplemental Curriculum 是 learner-owned、ordered 的正式 Learning Target 来源。Membership 固定
-stable Sense 和 target Sense Expression Binding，不是 Saved record、Personal Collection membership 或 Book
-membership。Add-to-Learning 被接纳后立即创建 Membership；其 Resolved Learning Plan 可以处于
+Supplemental Curriculum 是 Language Learning Route 内 learner-owned、ordered 的正式 Learning Target
+来源。Membership 固定 Route revision、stable Sense 和 target Sense Expression Binding，不是 Saved
+record、Personal Collection membership 或 Book membership。Add-to-Learning 只有在 Binding Language
+Tag 与 Route Target Language 兼容时才被接纳并创建 Membership；其 Resolved Learning Plan 可以处于
 `preparing | ready | blocked`，因此 Curriculum membership 与当前可执行性不是同一个事实。每个 Study
 Scope Revision 保存固定 Learning Target、Effective Learning Policy、Resolved Learning Plan 与
 provisioning/protocol references；只有 `ready` plan 可以进入正式 Planning，Session/Encounter 再冻结
@@ -306,14 +322,16 @@ Add-to-Learning Intent 的接纳结果至少区分：
 - `already_in_scope`：目标已由 active/maintenance Enrollment 或现有 Membership 覆盖，不重复加入，
   同时返回现有 Effective Learning Policy 与 plan readiness；
 - `invalid_target`：没有 stable Sense/Version 或合法 target binding，不创建 Membership；
+- `route_language_mismatch`：target Binding 的 Language Tag 与所选 Route Target Language 不兼容，保留
+  target 与 Route 并要求显式选择，不创建 Membership；
 - `unsupported_policy`：指定 Profile 不适用于该 target/source 且无法解析合法 Assignment，不创建 Membership；
 - `declared_mastery_conflict`：存在 active Declared Mastery，必须由 learner 独立撤销后再接纳。
 
-接纳按 `target validation → policy-assignment validation → Declared Mastery conflict → existing scope →
-create membership + initial plan` 求值；因此一个已在 Book 中但同时被声明“已会”的 Sense 仍先返回
-conflict，不能用 `already_in_scope` 掩盖恢复学习所需的显式意图。内容生成、完整 protocol capability
-检查和 Materialization 发生在接纳后的 Learning Plan resolution/provisioning 阶段；失败将 plan 标记为
-带原因的 `blocked`，不删除 Membership，也不伪造 Runtime progress。
+接纳按 `target validation → route-language validation → policy-assignment validation → Declared Mastery
+conflict → existing scope → create membership + initial plan` 求值；因此一个已在 Book 中但同时被声明
+“已会”的 Sense 仍先返回 conflict，不能用 `already_in_scope` 掩盖恢复学习所需的显式意图。内容生成、
+完整 protocol capability 检查和 Materialization 发生在接纳后的 Learning Plan resolution/provisioning
+阶段；失败将 plan 标记为带原因的 `blocked`，不删除 Membership，也不伪造 Runtime progress。
 
 ### Learning Policy Assignment 与 Plan readiness
 
@@ -394,7 +412,8 @@ Provisioning Batch 是多个 Task 的非原子调度/观测容器。一个 Task 
 
 ### Study Scope Revision 与每日额度
 
-Study Scope 是 mode-aware、source-aware、policy-resolved 的去重 scope snapshot：active Enrollment 提供
+Study Scope 是固定一条 Language Learning Route revision、mode-aware、source-aware、policy-resolved
+的去重 scope snapshot：active Enrollment 提供
 当前 Range 的新 Sense 与既有工作，maintenance Enrollment 只提供已经开始或进入长期保持的 Sense，
 paused Enrollment 不提供候选，active Supplemental Membership 提供对应 Learning Target。每个成员同时保留
 Curriculum source 与 Learning Entry Provenance、Effective Learning Policy、Resolved Learning Plan 与已解析 target/provisioning/protocol reference，
@@ -404,9 +423,15 @@ Protocol Run 和一个 FSRS State；同一 Sense 的不同 target expressions �
 换词书、调整 Range、切换 Enrollment mode、接纳或移除 Supplemental Membership 都产生新的不可变
 Study Scope Revision。
 
-Learning Session 固定开始时的 Study Scope Revision。Curriculum 变更从后续 Session 生效，不能
+Learning Session 固定开始时的 Study Scope Revision 与 Pinned Language Context。Curriculum、Route 或
+Active Route Selection 变更从后续 Session 生效，不能
 静默改变正在进行的 Encounter 或队列；如果产品允许在 active Session 中修改 Plan，必须先明确
 结束/中断该 Session，而不是把它重绑定到新 Scope。
+
+同一 Curriculum Membership 在固定 Target 与语言方向内发布新的不可变 Learning Materialization，
+不属于 Scope 重绑定。当前 Step 尚未接受 Action 时，Runtime 可以用新版替换其绑定并使旧界面 revision
+失效；未来 Step 在成为 current 时解析最新版。Action 一旦被接受，事件必须记录实际 materialization，
+后续发布不能改写该 Step、Attempt、Observation、Evidence、Outcome 或备份重放结果。
 
 Learning Session 从 Study Plan/Scope 启动，不依赖 Personal Semantic World 页面、Personal Meaning 或
 Sense Construction Session。personal-first provenance 只说明目标来源，不能成为 open/resume 的隐含前置条件。
@@ -434,7 +459,14 @@ Curriculum 只提供这些事实摘要，不据此生成维度处方、欠账或
 
 ## 5. Learning Session 与 Session intent
 
-Learning Session 是一次有开始和结束边界的用户活动容器。它固定 intent 与 Study Scope Revision：
+Learning Session 是一次有开始和结束边界的用户活动容器。它固定 intent、Study Scope Revision 与
+Pinned Language Context：
+
+Pinned Language Context 固定 Route revision、Target Language 与 Support Language；具体 Step/Action
+再声明 Input Language 与 Output Language。阅读中的 target-language input 与 support-language explanation、
+反向写作中的 support-language prompt 与 target-language output 因而不会改变 Route 的方向。Session
+开始后的 Active Route Selection 或 Interface Locale 变化不能重绑 Session、Encounter 或已发生 Action
+的资源。只有上述同一 Membership 与固定语言方向内的材料新版，才能刷新尚未操作的 Step。
 
 ### `mixed`
 
@@ -553,8 +585,8 @@ Personal Content 保存 learner 直接或通过明确授权委托创建的事实
   标题或一段富文本充当整个 aggregate；
 - Personal Semantic Anchor 绑定 Personal Meaning 而不是直接冒充 Sense 内容。同一经验素材可以直接
   支撑 Context–Expression–Sense resolution，也可以在必要时被多个 Meaning Focus 引用；
-- Personal Expression Anchor 固定 language、expression type、learner-relative familiar/target role、
-  provenance 与 verification status；
+- Personal Expression Anchor 固定 exact Language Tag、expression type、provenance 与 verification
+  status；target/support/input/output role 只属于 Route 或操作上下文；
 - Sense Construction Session 只在普通 Contextual Sense Resolution 不足时固定 Intake/Meaning draft、
   optional Meaning Focus、模型/policy provenance 与提议历史。原始聊天可以用于继续对话和审计，
   但只有被有效 Semantic Acceptance 接受的 Focus/Sense Proposal 才进入权威领域状态；
@@ -610,14 +642,16 @@ Session/Encounter，也不产生 Encounter Outcome。
 
 LLM 不可用、超时或 learner 离开对话时，Personal Meaning 与已保存 Anchors 仍然有效；未确认
 Proposal 不能被后台任务自动确认。已有 Sense 的相似检索是 confirmation 后或并行的可选治理步骤，
-没有命中不阻止新 Sense 创建。首版运行 profile 固定中文 familiar language 与英语 target language；
-未来增加其他 L1/L2 时必须新增 language-scoped expression/alignment facts，不能重解释现有中英记录。
+没有命中不阻止新 Sense 创建。每个 Sense Construction Session 固定 Pinned Language Context；具体
+delivery profile 可以限制可选 Route 或语言 capability，但不得重解释既有 language-scoped
+Expression/Alignment facts，也不得用 Active Route Selection 强制重标捕获内容。
 
 ## 8. Free Practice
 
 Free Practice 是独立的语言使用与泛化运行时，不是宽松版 Learning Protocol，也不是第三种 Learning
-Session intent。它可以读取 Learning Target、Personal Semantic World 中完整的 Context–Expression–Sense、
-Practice Scope 与获准资源，但不能写入正式学习的证据、进度或调度状态。
+Session intent。语言相关的 Free Practice Session 同样固定 Pinned Language Context。它可以读取
+Learning Target、Personal Semantic World 中完整的 Context–Expression–Sense、Practice Scope 与获准
+资源，但不能写入正式学习的证据、进度或调度状态。
 
 听、说、读、写是稳定的 learner-facing **Practice Area**。它们来自 receptive/productive ×
 sound/written 的组织矩阵，但不是四个运行引擎、mastery dimensions、分数或 Gate：
@@ -769,6 +803,10 @@ Protocol Step Instance 是一个 Protocol Run 中某个 Step 的可重放执行�
 version、material role bindings、interaction/grader contract、result eligibility、transition state 与
 已经形成的结果。一个 Step 可以通过多个 Encounter 完成；一个 Encounter 也必须只服务于一个 Step
 Instance，不能把几个不同结果资格的 Step 偷偷合成一次评价。
+
+Step Instance 成为 current 时解析最新兼容的不可变 Learning Materialization。若 learner 尚未提交任何
+Action，同一 Membership 的新材料版本可以刷新当前绑定，同时写入可重放的 Run lifecycle fact 并使旧
+UI revision 失效；Action 被接受后，Step 的 materialization 和 role bindings 即成为不可变历史。
 
 Sense Encounter 是对一个 learner、一个 Retention Target 及其 Sense、一个 Step purpose 和一组不可变版本的一次计划接触。
 它保存 Study Scope Revision、Curriculum source/Learning Entry Provenance、Learning Materialization、Learning
@@ -1041,8 +1079,8 @@ Preference 不使用任意 key-value merge。每个字段固定 owner、type、d
 
 | owner | baseline fields | effect boundary |
 | --- | --- | --- |
-| Learner Preference | pronunciation accent、Example L1 default visibility | 跨设备同步；从下一次适用的资源选择或呈现开始生效 |
-| Device Preference | autoplay、theme、reduced-motion override、playback rate/volume | 只在本机生效；系统无障碍设置优先 |
+| Learner Preference | Language-Tag-scoped pronunciation accent、Input/Output-scoped Language-Pair Glossary Entry、Example support-language default visibility | 跨设备同步；从下一次适用的资源选择或呈现开始生效 |
+| Device Preference | Interface Locale、surface-scoped Active Route Selection、autoplay、theme、reduced-motion override、playback rate/volume | 只在本机生效；系统无障碍设置优先 |
 | Study Plan/Curriculum | daily new-Sense limit、Book、Range、Enrollment mode、Learning Policy Assignment | 通过 Curriculum operation/revision 生效，不经过普通 Preference |
 | Notification Preference（Later） | reminder permission/schedule/time zone | 独立 permission 与 delivery contract，不混入学习证据 |
 

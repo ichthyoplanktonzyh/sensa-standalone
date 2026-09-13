@@ -1,27 +1,35 @@
 import {useEffect,useState} from 'react';
 import {X,Plus,Trash2} from 'lucide-react';
 import {useTranslation} from 'react-i18next';
-import {sensaReadingGlossaryLimits,type SensaReadingGlossary} from '@sensa/contracts/sensa';
+import {sensaLanguageDisplayName,sensaLanguages,sensaReadingGlossaryForPair,sensaReadingGlossaryLimits,type SensaReadingGlossary} from '@sensa/contracts/sensa';
 import {useReadingGlossary} from '../../library/useReadingGlossary';
+import {useLanguageRoutes} from '../../library/useLanguageRoutes';
 import {runtimePrimary} from '../learning/RuntimeFrame';
 
 interface Props {
   glossary:SensaReadingGlossary;
   busy:boolean;
   notice:string;
-  onAdd:(term:string,rendering:string)=>void;
-  onRemove:(term:string)=>void;
+  initialInputLanguageTag:string;
+  initialOutputLanguageTag:string;
+  onAdd:(inputLanguageTag:string,outputLanguageTag:string,term:string,rendering:string)=>void;
+  onRemove:(inputLanguageTag:string,outputLanguageTag:string,term:string)=>void;
   onClose:()=>void;
 }
 
 /** Words the learner wants to read their own way are a standing choice, like the
  * language pair: one panel, reachable from the settings page, rather than an
  * editor attached to every translation. */
-export function GlossaryPanel({glossary,busy,notice,onAdd,onRemove,onClose}:Props){
-  const {t}=useTranslation();
+export function GlossaryPanel({glossary,busy,notice,initialInputLanguageTag,initialOutputLanguageTag,onAdd,onRemove,onClose}:Props){
+  const {t,i18n}=useTranslation();
   const [term,setTerm]=useState(''),[rendering,setRendering]=useState('');
-  const full=glossary.length>=sensaReadingGlossaryLimits.entries;
+  const [inputLanguageTag,setInputLanguageTag]=useState(initialInputLanguageTag),[outputLanguageTag,setOutputLanguageTag]=useState(initialOutputLanguageTag);
+  const visible=sensaReadingGlossaryForPair(glossary,inputLanguageTag,outputLanguageTag);
+  const pairFull=visible.length>=sensaReadingGlossaryLimits.entriesPerPair;
+  const totalFull=glossary.length>=sensaReadingGlossaryLimits.totalEntries;
+  const full=pairFull||totalFull;
   const addable=!busy&&!full&&term.trim().length>0&&rendering.trim().length>0;
+  const locale=i18n.language==='en'?'en':'zh-CN';
   useEffect(()=>{
     const escape=(event:KeyboardEvent)=>{
       if(event.key==='Escape'){event.preventDefault();event.stopPropagation();onClose();}
@@ -38,13 +46,25 @@ export function GlossaryPanel({glossary,busy,notice,onAdd,onRemove,onClose}:Prop
       </header>
       <div className="space-y-7 overflow-y-auto px-6 py-7">
         <p className="text-xs leading-6 text-[#788398]">{t('glossary.intro')}</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-xs text-[#788398]">{t('glossary.inputLanguage')}
+            <select value={inputLanguageTag} disabled={busy} onChange={event=>setInputLanguageTag(event.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-[#dce3ef] bg-white px-4 text-sm text-[#303f76]">
+              {sensaLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {sensaLanguageDisplayName(language.tag,locale)}</option>)}
+            </select>
+          </label>
+          <label className="text-xs text-[#788398]">{t('glossary.outputLanguage')}
+            <select value={outputLanguageTag} disabled={busy} onChange={event=>setOutputLanguageTag(event.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-[#dce3ef] bg-white px-4 text-sm text-[#303f76]">
+              {sensaLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {sensaLanguageDisplayName(language.tag,locale)}</option>)}
+            </select>
+          </label>
+        </div>
         <section>
-          {glossary.length===0
+          {visible.length===0
             ? <p className="rounded-xl border border-[#e0e5ee] bg-white px-4 py-6 text-sm text-[#788398]">{t('glossary.empty')}</p>
             : <ul className="rounded-xl border border-[#e0e5ee] bg-white px-4">
-                {glossary.map(entry=><li key={entry.term} className="flex min-h-16 flex-wrap items-center gap-3 border-b border-[#e0e5ee] py-3 last:border-b-0">
+                {visible.map(entry=><li key={entry.term} className="flex min-h-16 flex-wrap items-center gap-3 border-b border-[#e0e5ee] py-3 last:border-b-0">
                   <span className="min-w-0 flex-1 text-sm"><span className="block truncate font-medium text-[#303f76]">{entry.term}</span><span className="block truncate text-xs text-[#788398]">{entry.rendering}</span></span>
-                  <button type="button" disabled={busy} onClick={()=>onRemove(entry.term)} aria-label={t('glossary.removeLabel',{term:entry.term})}
+                  <button type="button" disabled={busy} onClick={()=>onRemove(inputLanguageTag,outputLanguageTag,entry.term)} aria-label={t('glossary.removeLabel',{term:entry.term})}
                     className="grid size-11 shrink-0 place-items-center rounded-lg text-[#68748d] hover:bg-[#edf0f7] focus-visible:outline-2 focus-visible:outline-[#5268a9] disabled:opacity-40"><Trash2 size={17}/></button>
                 </li>)}
               </ul>}
@@ -59,9 +79,9 @@ export function GlossaryPanel({glossary,busy,notice,onAdd,onRemove,onClose}:Prop
               <input value={rendering} disabled={busy||full} maxLength={sensaReadingGlossaryLimits.rendering} onChange={event=>setRendering(event.target.value)}
                 className="mt-2 min-h-12 w-full rounded-xl border border-[#dce3ef] bg-white px-4 text-sm text-[#303f76]"/></label>
           </div>
-          <button type="button" disabled={!addable} onClick={()=>{onAdd(term,rendering);setTerm('');setRendering('');}}
+          <button type="button" disabled={!addable} onClick={()=>{onAdd(inputLanguageTag,outputLanguageTag,term,rendering);setTerm('');setRendering('');}}
             className="mt-3 inline-flex min-h-12 items-center gap-2 rounded-xl border border-[#dce3ef] bg-white px-4 text-sm text-[#303f76] hover:bg-[#edf0f7] focus-visible:outline-2 focus-visible:outline-[#5268a9] disabled:opacity-40"><Plus size={16}/>{t('glossary.addAction')}</button>
-          <p className="mt-2 text-xs leading-6 text-[#788398]">{full?t('glossary.limit',{count:sensaReadingGlossaryLimits.entries}):t('glossary.hint')}</p>
+          <p className="mt-2 text-xs leading-6 text-[#788398]">{totalFull?t('glossary.totalLimit',{count:sensaReadingGlossaryLimits.totalEntries}):pairFull?t('glossary.limit',{count:sensaReadingGlossaryLimits.entriesPerPair}):t('glossary.hint')}</p>
         </section>
         {notice&&<p role="status" className="rounded-lg bg-[#edf1fa] p-4 text-sm text-[#303f76]">{notice}</p>}
       </div>
@@ -75,5 +95,6 @@ export function GlossaryPanel({glossary,busy,notice,onAdd,onRemove,onClose}:Prop
 /** The panel owns its own glossary read, so the settings page only renders it. */
 export function GlossaryPanelHost({onClose}:{onClose:()=>void}){
   const {glossary,busy,notice,add,remove}=useReadingGlossary();
-  return <GlossaryPanel glossary={glossary} busy={busy} notice={notice} onAdd={(term,rendering)=>void add(term,rendering)} onRemove={term=>void remove(term)} onClose={onClose}/>;
+  const {activeRoute}=useLanguageRoutes();
+  return <GlossaryPanel glossary={glossary} busy={busy} notice={notice} initialInputLanguageTag={activeRoute.targetLanguageTag} initialOutputLanguageTag={activeRoute.defaultSupportLanguageTag} onAdd={(input,output,term,rendering)=>void add(input,output,term,rendering)} onRemove={(input,output,term)=>void remove(input,output,term)} onClose={onClose}/>;
 }

@@ -1,7 +1,7 @@
 # Sensa 语义获取模型
 
 > 状态：Canonical theory model  
-> 更新日期：2026-09-05
+> 更新日期：2026-09-13
 > 证据级别：产品理论与可检验假设，尚无真实用户效果结论
 
 本文解释 Sensa 为什么按 Sense 组织学习，并完整定义高保证的 **Structured Acquisition Protocol**：
@@ -15,24 +15,26 @@ Gates 的情况下进入长期调度；一旦产品声称 Structured Acquisition
 
 ## 1. 核心学习对象
 
-Sensa 不把学习建模为 `词头 → 中文标签 → 固定题型`，也不把 L2 形式直接绑定到一个 L1 词。
+Sensa 不把学习建模为 `词头 → support-language 标签 → 固定题型`，也不把 target-language 形式
+直接绑定到一个 support-language 词。
 目标是形成可在干扰后双向取回、并能迁移到新语境的连接：
 
 ```text
 learner 已有或新构建的经验/概念结构
                     ⇅
-   Personal Meaning / Anchor / familiar expression
+   Personal Meaning / Anchor / support-language expression
                     ⇅
-       一个已确认 Sense ⇄ 可识别、可提取的 L2 词形与声音
+       一个已确认 Sense ⇄ 可识别、可提取的 target-language 词形与声音
 ```
 
-这里的经验或概念结构不等于 L1 符号。L1 词、短语或自然语言说明只是学习者进入熟悉经验与概念
-边界的 access path；Personal Semantic Anchor 是 learner 自己建立的另一条 access path。它们都
+这里的经验或概念结构不等于 Support Language 符号。Support Language 中的词、短语或自然语言说明
+只是学习者进入已有经验与概念边界的 access path；Personal Semantic Anchor 是 learner 自己建立的
+另一条 access path。它们都
 不能取代 confirmed stable Sense identity，也不能自动成为目标语言的正确边界。
 
-不同语言共同体可能以不同方式切分、凸显或组合相近经验，因此 L1 Bridge 必须允许表达“一词多义、
-多词近似、覆盖更宽、更窄、部分重合或没有自然一词对应”。习得目标是把 L2 形式连接到当前
-Sense 所固定的意义边界，而不是记住一个可逆的 L1/L2 等号。
+不同语言共同体可能以不同方式切分、凸显或组合相近经验，因此 Support-Language Bridge 必须允许
+表达“一词多义、多词近似、覆盖更宽、更窄、部分重合或没有自然一词对应”。习得目标是把
+target-language 形式连接到当前 Sense 所固定的意义边界，而不是记住一个可逆的跨语言等号。
 
 同一个 Lexeme 可以承载多个 Sense。学习者能理解其中一个意思，不能证明其他意思已经获得；
 能在熟悉例句里认出词形，也不能证明换一个语境仍能理解或主动取回。
@@ -64,8 +66,8 @@ Target 何时需要再次被检验；它不决定当前检验语义识别、主�
 
 ## 3. Acquisition Profile 与 Required Capabilities
 
-Acquisition Profile 是 Structured Acquisition Protocol 下，一个 Learning Target 面向 target language 与
-learner locale 的内容诊断。它固定 Sense 边界与 target expression，并描述：
+Acquisition Profile 是 Structured Acquisition Protocol 下，一个 Learning Target 面向 Target Language 与
+Pinned Language Context 的内容诊断。它固定 Sense 边界与 target expression，并描述：
 
 - minimum sufficient experience；
 - distinguishing features 与真实 confusion targets；
@@ -86,7 +88,7 @@ Objective、内容资源或固定页面。Structured Acquisition 的当前
 
 | Gate family | 核心方向 | 要排除的假阳性 |
 | --- | --- | --- |
-| Contextual Recognition | Form + familiar/basic Context → Sense | 只认词头或选择宽泛中文标签 |
+| Contextual Recognition | Form + support/basic Context → Sense | 只认词头或选择宽泛的 support-language 标签 |
 | Meaning-to-form Recall | Sense → Form | 只会被动认出，不能主动取回 |
 | Novel-context Transfer | unseen Context + Form → Sense | 只记住教学例句 |
 | Boundary（条件性） | target Sense ↔ real neighbor | 用大致相关代替准确边界 |
@@ -109,7 +111,7 @@ Gate 只能由有效、可判定且不泄露答案的行为解决。揭示后的
 
 | 维度 | 领域含义 | 典型缺口 |
 | --- | --- | --- |
-| Grounding | 目标 Sense 已连接到足够具体的经验或概念结构 | 只记中文标签，没有语义直觉 |
+| Grounding | 目标 Sense 已连接到足够具体的经验或概念结构 | 只记 support-language 标签，没有语义直觉 |
 | Boundary | 能区分该 Sense 与相邻或易混概念 | 理解大致方向，但边界混淆 |
 | Form Mapping | Sense 与拼写、声音及合法形式之间可双向连接 | 理解意思却认不出或想不起词形 |
 | Retrieval | 在没有直接答案提示时能够取回目标连接 | 阅读时认识，主动回忆失败 |
@@ -165,17 +167,17 @@ Learner Semantic Projection 把 learner 主动建立的 Personal Semantic World�
 Projection 的 learner-facing 表达应保留三种来源不同的层，而不是把其中任意一层冒充完整意义：
 
 1. reviewed Experience、Sense specification 与 Sense Relations 提供可审核的意义和边界依据；
-2. L1 Bridge 与 learner-authored Anchor/Note 提供进入该意义的熟悉通道，并保持 reviewed 与
+2. Support-Language Bridge 与 learner-authored Anchor/Note 提供进入该意义的支持通道，并保持 reviewed 与
    personal provenance 可区分；
 3. pinned Lexeme forms、声音及其他 approved language resources 提供目标语言表达。
 
-产品可以把这种关系表现为“L2 符号锚定在意义/经验地表上”，但“地表”只是读取模型的表达隐喻，
-不是新的权威 aggregate、可直接存储的 learner 心理对象或第二份 progress。L1 文本不能成为节点
-identity，L2 lemma 也不能取代 Sense identity；一个 L1 标签可以通向多个 L2 Senses，一个 L2
-Sense 也可以需要多个 L1 片段或完整场景才能充分接近。
+产品可以把这种关系表现为“target-language 符号锚定在意义/经验地表上”，但“地表”只是读取模型的
+表达隐喻，不是新的权威 aggregate、可直接存储的 learner 心理对象或第二份 progress。support-language
+文本不能成为节点 identity，target-language lemma 也不能取代 Sense identity；一个 support-language
+标签可以通向多个 Senses，一个 Sense 也可以需要多个语言片段或完整场景才能充分接近。
 
-第一版 Projection 可以只把 Lexeme 的 word form 作为主要 L2 符号，但领域模型不能把未来表达
-压平成一个通用字符串。word/inflected form 仍属于 Lexeme，短语或构式由 Usage Pattern 等 typed
+某一 delivery profile 可以只把 Lexeme 的 word form 作为主要 target-language 符号，但领域模型不能把
+未来表达压平成一个通用字符串。word/inflected form 仍属于 Lexeme，短语或构式由 Usage Pattern 等 typed
 resources 表达，完整句子或 utterance 实现一个场景或命题，并通过 exact occurrence 连接具体
 Sense。句子不能仅因含有目标词就被建模为贴在该 Sense 上的同类标签。
 
@@ -200,7 +202,7 @@ Personal Semantic Anchors 用场景、图像、声音、叙述或动作让它可
 Anchors 保存其中被定位的 typed forms。Meaning Focus 只在 Context 仍有多个可能 intended Sense 时
 把丰富经验收敛到当前关心侧面，可以完全不存在。任何一层都不能单独冒充公共 Sense。
 
-创建路径可以从个人经验、一个熟悉语言表达或一个目标语言表达开始。普通 Contextual Sense
+创建路径可以从个人经验或任意语言表达开始。普通 Contextual Sense
 Resolution 足以确定教学所需 Sense 时直接走快轨；只有它不足时，LLM 才通过 Sense Construction
 帮助 learner 提炼 optional Focus、识别同一场景的多个可能焦点、提出边界问题，并生成 Sense
 Proposal。该过程不是从封闭公共 Sense 库中选择唯一答案；现有 Sense 检索只是一种可选复用与治理
@@ -212,9 +214,9 @@ Expression、grant/actor 和全部 provenance；后续相似性发现只能建�
 broader/narrower 或对比关系，不能静默改写已经确认
 的语义边界。确认对话、模型置信度和接受按钮都不构成 Acquisition Evidence。
 
-同一个经验可以产生多个 Meaning Focus，例如一次借伞事件中的接收视角与给予视角。一个 L1 表达
-也可以通向多个目标语言 Senses，多个 L1 片段则可以共同接近一个 Sense。系统必须允许拆分、保留
-重叠和承认没有自然一词对应，不能生成 `L1 = L2` 的翻译等号。
+同一个经验可以产生多个 Meaning Focus，例如一次借伞事件中的接收视角与给予视角。一个语言表达
+也可以通向多个 Senses，多个语言片段则可以共同接近一个 Sense。系统必须允许拆分、保留重叠和
+承认没有自然一词对应，不能生成跨语言翻译等号。
 
 个人建构与正式学习保持显式边界：提交完整 Personal Meaning、编辑 optional Focus/Anchor、接受
 Sense resolution、确认 Sense Expression Binding、提交 Add-to-Learning Intent 和准备学习内容是不同
@@ -225,8 +227,9 @@ Learning Plan 为当前 purpose 解析出合法 Protocol、published/on-demand/h
 Learning Materialization，并达到 `ready` 后，Unified Planner 才能把它纳入正式学习运行。
 
 完整对象、确认门、多语言边界和代表性旅程由
-[`personal-semantic-world-model.md`](personal-semantic-world-model.md) 裁决。首版固定中文为 familiar
-language、英语为 target language；这是交付边界，不是长期领域模型中的一对一翻译约束。
+[`personal-semantic-world-model.md`](personal-semantic-world-model.md) 裁决。具体运行固定一条
+Language Learning Route 与 Pinned Language Context；任何交付版本对语言组合的限制都不能成为
+长期领域模型中的一对一翻译约束。
 
 Saved Sense、Saved Example、Sense Note 与 Personal Collection 只表达关注、创作与组织行为；它们
 既不证明 learner 已获得目标意义，也不证明目标仍然陌生。Add-to-Learning 必须是另一个显式意图。

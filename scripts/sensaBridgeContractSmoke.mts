@@ -26,6 +26,9 @@ const api='http://127.0.0.1:4319';
 const accountId=crypto.randomUUID();
 const libraryId=crypto.randomUUID();
 const installationId=crypto.randomUUID();
+const routeContext={supportLanguageTag:'zh-CN',targetLanguageTag:'en',languageRouteId:crypto.randomUUID(),languageRouteRevision:3};
+const route={id:routeContext.languageRouteId,revision:routeContext.languageRouteRevision,targetLanguageTag:routeContext.targetLanguageTag,defaultSupportLanguageTag:routeContext.supportLanguageTag,status:'active' as const};
+const routeCollection={revision:3,routes:[route]};
 /** Injected exactly as `build.mjs` injects it: the page-scoped script carries no
  * schema, so the list it enforces comes from the contract at build time. */
 const bridgeDefine=(kinds:readonly string[])=>JSON.stringify({request:sensaBridgeRequestChannel,response:sensaBridgeResponseChannel,maxIdLength:sensaBridgeMaxRequestIdLength,kinds});
@@ -111,10 +114,12 @@ assert.equal(await fromPage({...request('web-intake-pull'),id:''}),'silent','a r
 assert.equal(await fromPage({...request('web-intake-pull'),id:'x'.repeat(sensaBridgeMaxRequestIdLength+1)}),'silent','an unbounded id is not taken');
 assert.equal((await fromPage(request('reading-run'))).error,'unsupported_message','a page cannot reach the extension\'s other features through the bridge');
 assert.equal((await fromPage(request('web-intake-pull',{glossary:['a term']}))).error,'unsupported_message','a field the protocol does not declare is refused, not dropped');
-assert.equal((await fromPage(request('web-language-profile'))).error,'unsupported_message','a payload the protocol requires cannot be omitted');
-assert.equal((await fromPage(request('web-language-profile',{languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en',extra:true}}))).error,'unsupported_message','a payload is as strict as the request');
-assert.equal((await fromPage(request('web-language-profile',{languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'zh-CN'}}))).error,'unsupported_message','one language is not a pair');
-assert.equal((await fromPage(request('web-language-profile',{languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'klingon'}}))).error,'unsupported_message','a language this release cannot name cannot be translated into');
+assert.equal((await fromPage(request('web-language-routes'))).error,'unsupported_message','a payload the protocol requires cannot be omitted');
+assert.equal((await fromPage(request('web-language-routes',{routes:{...routeCollection,extra:true}}))).error,'unsupported_message','a payload is as strict as the request');
+const immersionRoute={...route,targetLanguageTag:'zh-CN'};
+const immersionContext={...routeContext,targetLanguageTag:'zh-CN'};
+assert.deepEqual(sensaBridgeValue('web-language-routes',await fromPage(request('web-language-routes',{routes:{revision:4,routes:[immersionRoute]}}))),immersionContext,'one language may play both Target and Support roles');
+assert.equal((await fromPage(request('web-language-routes',{routes:{revision:4,routes:[{...route,targetLanguageTag:'klingon'}]}}))).error,'unsupported_message','a language this release cannot name cannot be translated into');
 assert.equal((await fromPage(request('web-connect-reset'))).error,'unsupported_message','discarding unsent captures is a decision, not a default');
 assert.equal(await fromPage(request('web-intake-pull'),{origin:otherWeb}),'silent','an event posted from another origin is not this bridge');
 assert.equal(await fromPage(request('web-intake-pull'),{source:{}}),'silent','an event from another window is not this bridge');
@@ -144,23 +149,25 @@ console.log('PASS: the boundary refuses another channel, window or origin, an un
 // ── phase 2: every declared kind, through the real forwarder and handler ─────
 Object.assign(globalThis,{chrome:chromeMock});
 const {queueWeb,pendingWeb}=await import('../apps/browser-extension/src/webDestination.ts');
-const snapshot={sentence:'Slow mornings suit her.',language:'en',languageSource:'detector',source:{url:web+'/article',title:'An article',capturedAt:new Date().toISOString()},expression:{text:'suit',start:14,end:18}};
-const queued=localIntakeRequestSchema.parse({version:'sensa-intake-v1',libraryId,clientId:installationId,operationId:crypto.randomUUID(),snapshot,resolution:null,acceptance:null});
+const snapshot={sentence:'Slow mornings suit her.',language:'en',languageSource:'detector',languageConfidence:.9,source:{url:web+'/article',title:'An article',capturedAt:new Date().toISOString()},expression:{text:'suit',start:14,end:18}};
+const queued=localIntakeRequestSchema.parse({version:'sensa-intake-v1',libraryId,clientId:installationId,operationId:crypto.randomUUID(),languageContext:{targetLanguageTag:'en',supportLanguageTag:'zh-CN'},snapshot,resolution:null,acceptance:null});
 await queueWeb(accountId,queued);
 const digest=createHash('sha256').update(canonicalConsumerJson(queued)).digest('hex');
 const receipt={version:'sensa-intake-v1',libraryId,clientId:installationId,operationId:queued.operationId,requestDigest:digest,status:'pending',entityId:crypto.randomUUID(),committedAt:new Date().toISOString()};
 
-const published=await fromPage(request('web-language-profile',{languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'}}));
-assert.deepEqual(sensaBridgeValue('web-language-profile',published),{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'},'the published pair is answered as published');
-assert.deepEqual(storage.readingLanguages,{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'},'the pair the extension holds is the published one');
+const published=await fromPage(request('web-language-routes',{routes:routeCollection}));
+assert.deepEqual(sensaBridgeValue('web-language-routes',published),routeContext,'publishing the Route collection answers the extension’s selected context');
+assert.deepEqual(storage.readingLanguageRoutes,routeCollection,'the extension holds the Web-owned Route collection');
+assert.equal(storage.readingActiveLanguageRouteId,route.id,'the extension keeps its own active Route selection');
 assert.deepEqual(sensaBridgeValue('web-intake-pull',await fromPage(request('web-intake-pull'))),[queued],'the page receives the capture the way the contracts describe it');
 assert.equal((await fromPage(request('web-intake-ack',{receipt:{...receipt,libraryId:crypto.randomUUID()}}))).error,'library_mismatch','a receipt for another library is the reconnect case, not a format error');
 assert.equal((await fromPage(request('web-intake-ack',{receipt:{...receipt,requestDigest:'0'.repeat(64)}}))).error,'web_invalid_receipt','a receipt the ledger cannot vouch for is refused by the ledger');
 assert.equal(sensaBridgeValue('web-intake-ack',await fromPage(request('web-intake-ack',{receipt}))).acknowledged,true,'a receipt that matches is acknowledged');
 assert.deepEqual(sensaBridgeValue('web-intake-pull',await fromPage(request('web-intake-pull'))),[],'an acknowledged capture is not handed over again');
-assert.deepEqual(sensaBridgeValue('web-reading-glossary',await fromPage(request('web-reading-glossary',{glossary:[{term:'prompt',rendering:'提示词'}]}))),[{term:'prompt',rendering:'提示词'}],'the published glossary is answered as published');
-assert.deepEqual(storage.readingGlossary,[{term:'prompt',rendering:'提示词'}],'the glossary the extension holds is the published one');
-assert.equal((await fromPage(request('web-reading-glossary',{glossary:[{term:'prompt',rendering:'提示词'},{term:'Prompt',rendering:'提示'}]}))).error,'unsupported_message','two renderings for one term is not a glossary');
+const pairGlossary=[{inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'prompt',rendering:'提示词'}];
+assert.deepEqual(sensaBridgeValue('web-reading-glossary',await fromPage(request('web-reading-glossary',{glossary:pairGlossary}))),pairGlossary,'the published pair glossary is answered as published');
+assert.deepEqual(storage.readingGlossary,pairGlossary,'the glossary the extension holds is the published one');
+assert.equal((await fromPage(request('web-reading-glossary',{glossary:[...pairGlossary,{...pairGlossary[0],term:'Prompt',rendering:'提示'}]}))).error,'unsupported_message','two renderings for one term inside one pair is not a glossary');
 const authorization=sensaBridgeValue('web-connect-prepare',await fromPage(request('web-connect-prepare'))).authorization;
 assert.ok(authorization,'a connection with none in flight is offered an authorization');
 assert.equal(authorization!.redirectUri,'https://'+'a'.repeat(32)+'.chromiumapp.org/sensa');
@@ -174,7 +181,7 @@ assert.equal(sensaBridgeValue('web-session-ended',await fromPage({channel:sensaB
 assert.equal((storage.sensa as any).active,null,'sign-out drops the active connection');
 assert.equal(sensaBridgeValue('web-connect-reset',await fromPage(request('web-connect-reset',{receipt:{discardPending:false}}))).reset,true,'a reconnect is answered');
 assert.deepEqual(await pendingWeb(accountId,libraryId),[],'a reconnect keeps delivered receipts');
-console.log('PASS: every declared kind is served through the real forwarder and handler — published pair and glossary, pull and acknowledgement, PKCE prepare and its refusals, account-scoped sign-out and reconnect — and each answer parses as the contracts describe it.');
+console.log('PASS: every declared kind is served through the real forwarder and handler — published Route context and glossary, pull and acknowledgement, PKCE prepare and its refusals, account-scoped sign-out and reconnect — and each answer parses as the contracts describe it.');
 
 // ── phase 3: one declaration, read by all three ends ─────────────────────────
 /** What a caller may send for each kind, checked by the compiler against the
@@ -186,8 +193,8 @@ const payloads:{[K in SensaBridgeKind]:SensaBridgePayload<K>}={
   'web-connect-complete':{receipt:{redirectUri:'https://'+'a'.repeat(32)+'.chromiumapp.org/sensa'}},
   'web-connect-reset':{receipt:{discardPending:false}},
   'web-session-ended':{},
-  'web-language-profile':{languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'}},
-  'web-reading-glossary':{glossary:[{term:'prompt',rendering:'提示词'}]},
+  'web-language-routes':{routes:routeCollection},
+  'web-reading-glossary':{glossary:pairGlossary},
 };
 assert.deepEqual(Object.keys(payloads).sort(),[...sensaBridgeKinds].sort(),'every kind has exactly one payload shape, and no kind is missing one');
 assert.deepEqual(Object.keys(sensaBridgeResponseSchemas).sort(),[...sensaBridgeKinds].sort(),'every kind has exactly one declared answer');
@@ -212,7 +219,7 @@ const narrowBundle=await bundle('apps/browser-extension/src/webBridge.ts',{SENSA
 vm.runInContext(narrowBundle.outputFiles[0]!.text,narrowContext);
 const narrowWindow=vm.runInContext('window',narrowContext) as unknown;
 const sendToNarrowPage=(data:unknown)=>{for(const listener of narrowListeners)listener({source:narrowWindow,origin:web,data});};
-sendToNarrowPage(request('web-language-profile',{languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'}}));
+sendToNarrowPage(request('web-language-routes',{routes:routeCollection}));
 assert.equal(narrowAnswers[0]?.error,'unsupported_message','a kind the injected list does not have is answered as unsupported, instead of waiting for an extension that will not reply');
 assert.equal(narrowSends,0,'and it never reaches the extension');
 sendToNarrowPage(request('web-intake-pull'));

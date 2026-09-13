@@ -1,20 +1,21 @@
-import {sensaLanguageForDeclaredTag, sensaLanguageForIso6393} from '@sensa/contracts/sensa';
+import {sensaCanonicalLanguageTag,sensaLanguageForIso6393} from '@sensa/contracts/sensa';
 import type {CaptureLanguageSource} from '@sensa/contracts/sensa';
 
 /**
  * What language a piece of captured text is in, and how that was worked out.
  *
  * Naming the language is a statement about the text. What it means for a
- * learner — their target language, their familiar language, or neither — is not
- * this client's to decide, because only the library holds the language profile.
+ * learner — a Target Language, a Support Language, both, or neither — is not
+ * this client's to decide, because only the library holds the active Route.
  * So `null` travels all the way there instead of being filled in with a default.
  */
 export interface CaptureLanguage {
   language: string | null;
   languageSource: CaptureLanguageSource | null;
+  languageConfidence:number|null;
 }
 
-export const unknownCaptureLanguage: CaptureLanguage = {language: null, languageSource: null};
+export const unknownCaptureLanguage: CaptureLanguage = {language: null, languageSource: null,languageConfidence:null};
 
 /**
  * Below this many characters a detector is reading trigrams that Spanish and
@@ -28,7 +29,7 @@ export const minDetectableCharacters = 10;
 export const maxDetectableCharacters = 512;
 
 /**
- * Below this many characters, "does this learner already read this?" is not a
+ * Below this many characters, "does this already match the Support Language?" is not a
  * question a detector can answer safely: trigram statistics are what tells
  * Spanish from Portuguese, and a short sample of two related languages reads the
  * same to them. Text this short inherits the language of the surface it sits on
@@ -36,24 +37,24 @@ export const maxDetectableCharacters = 512;
  */
 export const minSkimmableCharacters = 50;
 
-/** Who a reading surface is writing for: the learner's own language, and whether
- * the text in hand is already in it. */
+/** Which Support Language a reading surface is rendering into, and whether the
+ * text in hand is already in that exact language. */
 export interface ReaderLanguage {
-  familiarLanguageTag: string;
+  supportLanguageTag: string;
   alreadyReadable: boolean;
 }
 
 /**
- * What this learner already reads, and whether this text is part of it.
+ * Whether this text already matches the current Route's Support Language.
  *
- * Text in the learner's own language gains nothing from being translated into
+ * Text in the Route's Support Language gains nothing from being translated into
  * that same language, and asking the model to say so would spend a request and a
  * share of the daily budget to hand a paragraph back unchanged. So the question
  * is asked before the request is made — and asked here, of the background, which
- * is the only side that holds the pair the Web application published. A content
- * script can say what language text is in; what that language means to this
- * learner is not its to work out, so the answer comes back as an answer about
- * the learner rather than as the pair itself.
+ * is the only side that holds the selected Route from the collection the Web
+ * application published. A content script can say what language text is in;
+ * it cannot infer what that language means for this operation, so the answer is
+ * about the Route rather than a claim about languages the learner knows.
  *
  * `surfaceLanguage` is the language of the surface the text came from — a page's
  * own declaration, a caption track's code — and answers for text too short for a
@@ -65,8 +66,8 @@ export async function readerLanguage(text: string, surfaceLanguage: string | nul
   try {
     const response = await chrome.runtime.sendMessage({kind: 'reading-language', text: text.slice(0, maxDetectableCharacters), surfaceLanguage});
     const answer = response?.value;
-    if (typeof answer?.familiarLanguageTag !== 'string') return null;
-    return {familiarLanguageTag: answer.familiarLanguageTag, alreadyReadable: answer.alreadyReadable === true};
+    if (typeof answer?.supportLanguageTag !== 'string') return null;
+    return {supportLanguageTag: answer.supportLanguageTag, alreadyReadable: answer.alreadyReadable === true};
   } catch {
     // A service worker that is asleep, or an extension reloaded under a live
     // page, is not a reason to withhold a translation the learner asked for:
@@ -81,8 +82,8 @@ export async function readerLanguage(text: string, surfaceLanguage: string | nul
 export function declaredCaptureLanguage(root: Pick<Document, 'documentElement'> = document): CaptureLanguage {
   const declared = root.documentElement?.lang?.trim();
   if (!declared) return unknownCaptureLanguage;
-  const language = sensaLanguageForDeclaredTag(declared);
-  return language ? {language: language.tag, languageSource: 'declared'} : unknownCaptureLanguage;
+  const language=sensaCanonicalLanguageTag(declared);
+  return language?{language,languageSource:'declared',languageConfidence:1}:unknownCaptureLanguage;
 }
 
 /**
@@ -104,10 +105,10 @@ export async function detectCaptureLanguage(text: string): Promise<CaptureLangua
       // a response that never arrived is not mistaken for a detector that found
       // nothing.
       const response = await chrome.runtime.sendMessage({kind: 'detect-language', text: sample});
-      const code = response?.value?.language;
-      if (typeof code === 'string') {
-        const language = sensaLanguageForIso6393(code);
-        if (language) return {language: language.tag, languageSource: 'detector'};
+      const observation=response?.value?.language;
+      if(observation&&typeof observation.code==='string'&&typeof observation.confidence==='number'){
+        const language=sensaLanguageForIso6393(observation.code)?.tag??sensaCanonicalLanguageTag(observation.code);
+        if(language)return {language,languageSource:'detector',languageConfidence:observation.confidence};
       }
     } catch {
       // A sleeping service worker or a reloading extension is not a reason to

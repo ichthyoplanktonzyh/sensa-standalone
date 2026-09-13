@@ -47,9 +47,8 @@ export const sensaIntakeItemStatusSchema = z.enum([
   "pending_sense",
   "pending_expression",
   "pending_acceptance",
-  /** The material names a language that is neither this learner's target nor
-   * their familiar language, so no expression anchor can be stamped with a
-   * side. The item waits on the learner deciding what that language is to them,
+  /** The material names a language that is not placed in the current operation,
+   * so the item waits on the learner deciding what role that language has here,
    * which is a different question from the other three and must not be reported
    * as one of them. */
   "pending_language",
@@ -78,7 +77,7 @@ export const sensaIntakeContextSchema = z
  * The captured expression, and the language it is actually in.
  *
  * A tag rather than a side of the learner's boundary: only the library holds the
- * language profile, so a capture that named a side would be choosing one it
+ * active Route, so a capture that named a side would be choosing one it
  * cannot see. `null` means nothing established a language, which routes the item
  * to `pending_language` rather than letting a default decide for the learner.
  */

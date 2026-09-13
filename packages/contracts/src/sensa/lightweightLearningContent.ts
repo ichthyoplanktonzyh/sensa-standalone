@@ -30,7 +30,7 @@ export const sensaLightweightExpressionSnapshotSchema = z
 export const sensaLightweightSenseSnapshotSchema = z
   .object({
     meaning: nonEmpty,
-    familiarLanguageTag: nonEmpty,
+    supportLanguageTag: nonEmpty,
   })
   .strict();
 

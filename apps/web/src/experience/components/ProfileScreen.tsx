@@ -12,7 +12,7 @@ import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
 import { LanguagePanelHost, languageSummary } from './language/LanguagePanel';
 import { GlossaryPanelHost } from './language/GlossaryPanel';
 import { useReadingGlossary } from '../library/useReadingGlossary';
-import { useLanguageProfile } from '../library/useLanguageProfile';
+import { useLanguageRoutes } from '../library/useLanguageRoutes';
 import type { LearningPolicyId } from '../../learning/runtime/policyProfiles';
 
 interface ProfileScreenProps {
@@ -68,7 +68,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
   const [languagesOpen, setLanguagesOpen] = useState(false);
   const [glossaryOpen, setGlossaryOpen] = useState(false);
   const glossary = useReadingGlossary();
-  const language = useLanguageProfile();
+  const language = useLanguageRoutes();
   const languageNote = t('account.languagesNote');
   const [online, setOnline] = useState(() => navigator.onLine);
   const [offlineShell,setOfflineShell]=useState(document.documentElement.dataset.offlineShell??'development');
@@ -139,7 +139,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
           <div className="divide-y divide-[#e3e5ea] rounded-2xl border border-[#e3e5ea] bg-white px-5 sm:px-6">
             <div className="flex min-h-20 flex-wrap items-center justify-between gap-3 py-3"><span className="text-sm">{t('account.language')}</span><LanguageSwitch/></div>
             <button id="account-languages" onClick={() => setLanguagesOpen(true)} className="flex min-h-24 w-full items-center gap-4 py-5 text-left hover:text-[#5268a9] focus-visible:outline-2 focus-visible:outline-[#5268a9]">
-              <Languages size={19} className="shrink-0 text-[#788398]"/><span className="flex-1"><span className="block text-sm font-medium">{t('account.languages')}</span><span className="mt-1 block text-xs leading-5 text-[#788398]">{language.saved ? languageSummary(language.profile, i18n.language) : languageNote}</span></span><ArrowRight size={17}/>
+              <Languages size={19} className="shrink-0 text-[#788398]"/><span className="flex-1"><span className="block text-sm font-medium">{t('account.languages')}</span><span className="mt-1 block text-xs leading-5 text-[#788398]">{language.saved ? languageSummary(language.collection,language.activeRoute,i18n.language) : languageNote}</span></span><ArrowRight size={17}/>
             </button>
             <button id="account-glossary" onClick={() => setGlossaryOpen(true)} className="flex min-h-24 w-full items-center gap-4 py-5 text-left hover:text-[#5268a9] focus-visible:outline-2 focus-visible:outline-[#5268a9]">
               <NotebookPen size={19} className="shrink-0 text-[#788398]"/><span className="flex-1"><span className="block text-sm font-medium">{t('glossary.row')}</span><span className="mt-1 block text-xs leading-5 text-[#788398]">{glossary.saved ? (glossary.glossary.length > 0 ? t('glossary.rowSummary',{count:glossary.glossary.length}) : t('glossary.rowEmpty')) : t('glossary.rowNote')}</span></span><ArrowRight size={17}/>

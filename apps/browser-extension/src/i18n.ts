@@ -22,6 +22,7 @@ const messages={
  siteDisabled:['已关闭本站阅读：{site}。','Reading is off on {site}.'],siteEnabled:['已恢复本站阅读：{site}。','Reading is on {site} again.'],
  siteUnavailable:['此页面没有可设置的站点。','This page has no site to set.'],site_disabled:['本站已关闭阅读，可在插件里恢复。','Reading is off on this site. Turn it back on from the extension.'],
  reading:['开始 / 继续阅读','Start / continue reading'],stop:['关闭当前页阅读','Stop reading on this page'],open:['打开我的语义世界','Open My Semantic World'],options:['阅读与模型设置','Reading and model settings'],
+ currentRoute:['当前阅读路线','Current reading route'],routeOption:['{target} · {support}辅助','{target} · support: {support}'],selectingRoute:['正在切换阅读路线…','Switching reading route…'],routeSelected:['阅读路线已切换。','Reading route changed.'],unknown_language_route:['这条学习路线已不可用，请在 Sensa 设置中检查。','This learning route is no longer available. Check Sensa settings.'],
  advanced:['高级设置','Advanced settings'],disconnect:['断开插件连接','Disconnect extension'],sync:['检查保存结果','Check saved content'],
  recent:['最近保存','Recently saved'],empty:['暂无最近保存的内容。','No recently saved content.'],guestEmpty:['登录后查看最近保存的内容。','Sign in to see recently saved content.'],count:['{count} 条','{count} items'],
  working:['正在处理…','Working…'],starting:['正在开启当前页阅读模式…','Starting reading mode…'],stopping:['正在关闭当前页阅读模式…','Stopping reading mode…'],checkingSave:['正在检查保存结果…','Checking saved content…'],disconnecting:['正在断开连接…','Disconnecting…'],

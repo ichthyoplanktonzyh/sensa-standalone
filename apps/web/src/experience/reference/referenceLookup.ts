@@ -14,12 +14,11 @@ import {
 import { resolveLookupLemma } from './resolveClickedLemma';
 import { complete } from '../../data/library/transport';
 import { selectedProvider } from '../../data/library/providers';
-import { languageProfileSnapshot } from '../../data/library/language';
+import { languageRoutesSnapshot } from '../../data/library/language';
 import {
-  sensaCommandLanguages,
-  sensaLanguage,
+  sensaLanguageForDeclaredTag,
   sensaLexiconEdition,
-  type SensaCommandLanguages,
+  type SensaPinnedLanguageContext,
   type SensaLanguage,
 } from '@sensa/contracts/sensa';
 
@@ -44,17 +43,17 @@ const RESOLVER_VERSION = 'sensa.reference-wsd.v2';
  * The languages are named because the same prompt now serves every target
  * language: without them a model asked about a Spanish occurrence would still
  * be told it is disambiguating English and would read the candidates as English
- * words. The familiar-language rendering is a display layer requested in the
+ * words. The Support-Language rendering is a display layer requested in the
  * same round — the closed candidate set and the ban on revising a definition
  * are unchanged. */
-function resolverSystem(language: SensaLanguage, familiarLanguageTag: string): string {
+function resolverSystem(language: SensaLanguage, supportLanguageTag: string): string {
   const target = language.names.en;
-  const familiar = sensaLanguage(familiarLanguageTag)?.names.en ?? familiarLanguageTag;
+  const support = sensaLanguageForDeclaredTag(supportLanguageTag)?.names.en ?? supportLanguageTag;
   return [
     `You are a strict ${target} (${language.tag}) word-sense disambiguator.`,
     'Select only from the supplied referenceSenseId values. Never write or revise a definition.',
     'Use the exact clicked occurrence and the whole sentence. If one candidate is not clearly better, return ambiguous.',
-    `When you select one sense, also render that sense in ${familiar} (${familiarLanguageTag}) as a short gloss the learner reads instead of the ${target} wording. Translate; do not add, narrow or contradict anything the definition did not say.`,
+    `When you select one sense, also render that sense in ${support} (${supportLanguageTag}) as a short gloss the learner reads instead of the ${target} wording. Translate; do not add, narrow or contradict anything the definition did not say.`,
     'Return JSON only, in exactly one of these shapes:',
     '{"status":"selected","referenceSenseId":"one supplied id","confidence":0.0,"glossL1":"one short sentence in the learner language"}',
     '{"status":"ambiguous","candidateReferenceSenseIds":["supplied id"],"confidence":0.0}',
@@ -68,14 +67,14 @@ interface LookupOptions {
   /** The language pair this lookup is about. Absent means the learner's stored
    * profile, read once before any provider call so a language switch in another
    * tab cannot split one lookup across two languages. */
-  languages?: SensaCommandLanguages;
+  languages?: SensaPinnedLanguageContext;
 }
 
 /** Everything a provider needs to answer in the right language, resolved once
  * per lookup and never re-read from storage mid-flight. */
 interface ReferenceLookupContext {
   readonly language: SensaLanguage;
-  readonly familiarLanguageTag: string;
+  readonly supportLanguageTag: string;
 }
 
 interface ReferenceDictionaryProvider {
@@ -239,13 +238,13 @@ async function fetchJson<T>(
   }
 }
 
-function makeWiktRelease(language: SensaLanguage, familiarLanguageTag: string): ReferenceRelease {
+function makeWiktRelease(language: SensaLanguage, supportLanguageTag: string): ReferenceRelease {
   return Object.freeze({
-    releaseId: `wiktapi.${sensaLexiconEdition}-wiktionary.${language.wiktionaryCode}-${familiarLanguageTag}.current.prototype`,
+    releaseId: `wiktapi.${sensaLexiconEdition}-wiktionary.${language.wiktionaryCode}-${supportLanguageTag}.current.prototype`,
     provider: `WiktAPI · ${sensaLexiconEdition} Wiktionary · ${language.names.en}`,
     edition: '公开实时快照',
     targetLanguage: language.tag,
-    learnerLocale: familiarLanguageTag,
+    learnerLocale: supportLanguageTag,
     rightsLabel: 'Wiktionary 内容遵循 CC BY-SA；当前实时源仅用于 MVP，生产版需固定快照',
     status: 'prototype',
   });
@@ -320,7 +319,7 @@ function normalizeWiktEntry(
   definitions: WiktDefinitionsPayload,
   pronunciations: WiktPronunciationsPayload | null,
   language: SensaLanguage,
-  familiarLanguageTag: string,
+  supportLanguageTag: string,
 ): ReferenceLookupResult | null {
   const headword = normalizeLookupWord(definitions.word ?? rawWord, language);
   if (!headword) return null;
@@ -346,7 +345,7 @@ function normalizeWiktEntry(
   }
 
   if (senses.length === 0) return null;
-  const release = makeWiktRelease(language, familiarLanguageTag);
+  const release = makeWiktRelease(language, supportLanguageTag);
   return {
     release,
     entry: {
@@ -368,7 +367,7 @@ const wiktApiProvider: ReferenceDictionaryProvider = {
   providerId: 'wiktapi',
   serves: () => true,
   async lookup(rawWord, context, signal) {
-    const { language, familiarLanguageTag } = context;
+    const { language, supportLanguageTag } = context;
     const word = normalizeLookupWord(rawWord, language);
     if (!word) return null;
     const encodedWord = encodeURIComponent(word);
@@ -385,17 +384,17 @@ const wiktApiProvider: ReferenceDictionaryProvider = {
     const pronunciations = pronunciationsResult.status === 'fulfilled'
       ? pronunciationsResult.value.data
       : null;
-    return normalizeWiktEntry(rawWord, definitionsResult.value.data, pronunciations, language, familiarLanguageTag);
+    return normalizeWiktEntry(rawWord, definitionsResult.value.data, pronunciations, language, supportLanguageTag);
   },
 };
 
-function makeFreeDictionaryRelease(language: SensaLanguage, familiarLanguageTag: string): ReferenceRelease {
+function makeFreeDictionaryRelease(language: SensaLanguage, supportLanguageTag: string): ReferenceRelease {
   return Object.freeze({
-    releaseId: `free-dictionary-api.${language.wiktionaryCode}-${familiarLanguageTag}.current.prototype`,
+    releaseId: `free-dictionary-api.${language.wiktionaryCode}-${supportLanguageTag}.current.prototype`,
     provider: `Free Dictionary API · ${language.names.en}`,
     edition: '公开实时结果',
     targetLanguage: language.tag,
-    learnerLocale: familiarLanguageTag,
+    learnerLocale: supportLanguageTag,
     rightsLabel: '聚合词典结果；具体授权与来源以条目返回的 sourceUrls 为准',
     status: 'prototype',
   });
@@ -405,7 +404,7 @@ function normalizeFreeDictionaryEntry(
   rawWord: string,
   payload: FreeDictionaryEntryPayload[],
   language: SensaLanguage,
-  familiarLanguageTag: string,
+  supportLanguageTag: string,
 ): ReferenceLookupResult | null {
   const sourceEntry = payload[0];
   const headword = normalizeLookupWord(sourceEntry?.word ?? rawWord, language);
@@ -457,7 +456,7 @@ function normalizeFreeDictionaryEntry(
     });
   }
 
-  const release = makeFreeDictionaryRelease(language, familiarLanguageTag);
+  const release = makeFreeDictionaryRelease(language, supportLanguageTag);
   return {
     release,
     entry: {
@@ -484,7 +483,7 @@ const freeDictionaryProvider: ReferenceDictionaryProvider = {
     const url = `${FREE_DICTIONARY_API_ORIGIN}/api/v2/entries/en/${encodeURIComponent(word)}`;
     const response = await fetchJson<FreeDictionaryEntryPayload[]>(url, {}, signal, 4500);
     return response.data
-      ? normalizeFreeDictionaryEntry(rawWord, response.data, context.language, context.familiarLanguageTag)
+      ? normalizeFreeDictionaryEntry(rawWord, response.data, context.language, context.supportLanguageTag)
       : null;
   },
 };
@@ -508,13 +507,13 @@ function wiktRestText(value: string | undefined): string | null {
   );
 }
 
-function makeWiktRestRelease(language: SensaLanguage, familiarLanguageTag: string): ReferenceRelease {
+function makeWiktRestRelease(language: SensaLanguage, supportLanguageTag: string): ReferenceRelease {
   return Object.freeze({
-    releaseId: `wiktionary-rest.${sensaLexiconEdition}-wiktionary.${language.wiktionaryCode}-${familiarLanguageTag}.current.prototype`,
+    releaseId: `wiktionary-rest.${sensaLexiconEdition}-wiktionary.${language.wiktionaryCode}-${supportLanguageTag}.current.prototype`,
     provider: `Wiktionary REST · ${sensaLexiconEdition} Wiktionary · ${language.names.en}`,
     edition: '公开实时结果',
     targetLanguage: language.tag,
-    learnerLocale: familiarLanguageTag,
+    learnerLocale: supportLanguageTag,
     rightsLabel: 'Wiktionary 内容遵循 CC BY-SA 4.0；当前实时源仅用于 MVP，生产版需固定快照',
     status: 'prototype',
   });
@@ -524,7 +523,7 @@ function normalizeWiktRestEntry(
   rawWord: string,
   payload: WiktRestPayload,
   language: SensaLanguage,
-  familiarLanguageTag: string,
+  supportLanguageTag: string,
 ): ReferenceLookupResult | null {
   const headword = normalizeLookupWord(rawWord, language);
   if (!headword) return null;
@@ -557,7 +556,7 @@ function normalizeWiktRestEntry(
   }
 
   if (senses.length === 0) return null;
-  const release = makeWiktRestRelease(language, familiarLanguageTag);
+  const release = makeWiktRestRelease(language, supportLanguageTag);
   return {
     release,
     entry: {
@@ -584,7 +583,7 @@ const wiktRestProvider: ReferenceDictionaryProvider = {
     const url = `${WIKTIONARY_REST_ORIGIN}/api/rest_v1/page/definition/${encodeURIComponent(word)}`;
     const response = await fetchJson<WiktRestPayload>(url, {}, signal);
     return response.data
-      ? normalizeWiktRestEntry(rawWord, response.data, context.language, context.familiarLanguageTag)
+      ? normalizeWiktRestEntry(rawWord, response.data, context.language, context.supportLanguageTag)
       : null;
   },
 };
@@ -779,12 +778,12 @@ async function resolveWithModel(
       'reference',
       crypto.randomUUID(),
       [
-        { role: 'system', content: resolverSystem(context.language, context.familiarLanguageTag) },
+        { role: 'system', content: resolverSystem(context.language, context.supportLanguageTag) },
         {
           role: 'user',
           content: JSON.stringify({
             targetLanguage: context.language.tag,
-            familiarLanguage: context.familiarLanguageTag,
+            supportLanguage: context.supportLanguageTag,
             sentence: request.textL2,
             clickedOccurrence: request.clickedSurface,
             headword: entry.headword,
@@ -816,7 +815,7 @@ async function resolveContextualReference(
   return resolveWithModel(request, result.entry, context, signal);
 }
 
-/** Projects the recorded familiar-language rendering onto the selected sense for
+/** Projects the recorded Support-Language rendering onto the selected sense for
  * display. The provider's entry is not rewritten: the selected sense is returned
  * as a copy carrying `glossL1` — the field the screens already prefer — while
  * `definitionL2` keeps the provider's own wording underneath it. A rendering the
@@ -841,11 +840,11 @@ function projectLearnerGloss(
  * The app's sole live Reference boundary. Contextual calls return the online
  * dictionary entry and the closed-set WSD decision as one result.
  *
- * The learner's language pair is resolved once, before the first provider call,
+ * The operation's language context is resolved once, before the first provider call,
  * and every part of the answer belongs to it: the provider group, the release
  * metadata, the cache entry and the prompt the decision is made under. A tag
  * this release cannot place has no provider group, and a language the catalog
- * carries only as a familiar language is never a target, so both answer nothing
+ * does not support as a Target Language is never queried, so both answer nothing
  * — answering in another language would look exactly like a successful lookup.
  */
 export async function lookupReference(
@@ -853,11 +852,11 @@ export async function lookupReference(
   options: LookupOptions = {},
 ): Promise<ReferenceLookupResult | null> {
   const languages = options.languages
-    ?? sensaCommandLanguages((await languageProfileSnapshot()).profile);
-  const language = sensaLanguage(languages.targetLanguageTag);
+    ?? (await languageRoutesSnapshot()).context;
+  const language = sensaLanguageForDeclaredTag(languages.targetLanguageTag);
   if (!language?.asTarget) return null;  const context: ReferenceLookupContext = {
     language,
-    familiarLanguageTag: languages.familiarLanguageTag,
+    supportLanguageTag: languages.supportLanguageTag,
   };
 
   const lemmaResolution = resolveLookupLemma(input, language);

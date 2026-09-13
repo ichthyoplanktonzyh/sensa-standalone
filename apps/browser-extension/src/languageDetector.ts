@@ -1,21 +1,7 @@
-import {franc} from 'franc';
-import {sensaLanguages} from '@sensa/contracts/sensa';
+import {francAll} from 'franc';
 
 /**
- * The ISO 639-3 codes this release can place, which is also the only set a
- * detector is allowed to choose from.
- *
- * Left open, the detector answers `sco` for plain English — Scots and English
- * share enough trigrams that a paragraph of one reads as the other — and an
- * answer no release can place is the same as no answer at all. Handing it the
- * catalog turns "which of six thousand languages is this?" into "which of the
- * languages we support is this?", which is the question actually being asked and
- * the one it answers correctly.
- */
-const detectable = sensaLanguages.map(language => language.iso6393);
-
-/**
- * The ISO 639-3 code a local detector answers for `text`, or nothing.
+ * The open-set ISO 639-3 observation a local detector answers, or nothing.
  *
  * `franc` reads trigram statistics, which is why it runs in the background
  * service worker rather than in the content script: its tables are a quarter of
@@ -23,12 +9,12 @@ const detectable = sensaLanguages.map(language => language.iso6393);
  * content script messages this worker instead, and the answer travels back as a
  * plain code.
  *
- * The answer is deliberately NOT placed against the catalog here —
- * `sensaLanguageForIso6393` does that at the caller, so this module stays a
- * detector and never becomes a second language table. The catalog above is a
- * candidate list, not a table: nothing here reads a name, a role or a script.
+ * Confidence is the separation from the runner-up, not a manufactured
+ * probability. Most importantly, the candidate set is not restricted to what
+ * this release supports: an unsupported observation stays unsupported.
  */
-export function detectIso6393(text: string): string | null {
-  const code = franc(text, {only: detectable});
-  return code === 'und' ? null : code;
+export function detectIso6393(text: string):{code:string;confidence:number}|null {
+  const [first,second]=francAll(text);
+  if(!first||first[0]==='und')return null;
+  return {code:first[0],confidence:Math.max(0,Math.min(1,first[1]-(second?.[1]??0)))};
 }

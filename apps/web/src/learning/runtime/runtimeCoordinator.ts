@@ -5,6 +5,7 @@ import { assuranceLocalExecution } from '../protocols/assurance';
 import type {
   LocalLearningRun,
   LocalLearningResource,
+  LocalCurriculumMembership,
   LocalLearningTarget,
   LocalProtocolExecutionBinding,
   LocalProtocolExecution,
@@ -12,6 +13,7 @@ import type {
   LocalProtocolPluginManifest,
 } from './localProtocol';
 import {assertLocalTargetMaterialIdentity,localLearningPurpose,localProtocolPluginContractVersion,validateLocalProtocolResources} from './localProtocol';
+import {localExecutableTarget} from './localCurriculum';
 import {canonicalJsonDigest} from '@sensa/learning-kernel';
 import {validateLightweightInitialMaterialization} from './lightweightInitialContent';
 export type {
@@ -344,28 +346,31 @@ export type LocalTargetExecutionReadiness=
  */
 export function inspectLocalTargetReadiness(
   target:LocalLearningTarget,
+  membership:LocalCurriculumMembership|undefined,
   resource:LocalLearningResource|undefined,
   purpose:LearningProtocolPurpose=localLearningPurpose(target),
 ):LocalTargetExecutionReadiness{
  const profileId=localTargetPolicy(target);
  try{
-  assertLocalTargetMaterialIdentity(target);
-  validateLightweightInitialMaterialization(target.material);
+  if(!membership)throw new Error('route_membership_missing');
+  const executable=localExecutableTarget(target,membership);
+  assertLocalTargetMaterialIdentity(target,membership.material);
+  validateLightweightInitialMaterialization(membership.material);
   if(
-   target.material.snapshot.validationStatus!=='validated'
-   || target.material.snapshot.contentDigest!==canonicalJsonDigest(target.material.content)
+   membership.material.snapshot.validationStatus!=='validated'
+   || membership.material.snapshot.contentDigest!==canonicalJsonDigest(membership.material.content)
   )throw new Error('material_validation_failed');
   const profile=learningPolicyProfileRegistry.get(profileId,target.committedPolicy?.profileVersion);
   const binding=profile.protocols[purpose];
   if(!binding.localProtocolVersion||!profile.lifecycle.schedulingPolicy)throw new Error('incomplete_binding');
-  const structuredProvisioned=!!resource&&!!target.assurancePackageKey;
+  const structuredProvisioned=!!resource&&!!membership.assurancePackageKey;
   const resolved=learningPolicyProfileRegistry.resolve(profileId,capabilityId=>{
    const provisioned=capabilityId==='compact_learning_material'
     || capabilityId==='structured_learning_package'&&structuredProvisioned;
-   return {view:{status:provisioned?'ready':'blocked',label:provisioned?'ready':'blocked',detail:provisioned?'content_validated':'content_unavailable'},provisioned,materializationId:provisioned?target.material.snapshot.learningMaterializationId:null};
+   return {view:{status:provisioned?'ready':'blocked',label:provisioned?'ready':'blocked',detail:provisioned?'content_validated':'content_unavailable'},provisioned,materializationId:provisioned?membership.material.snapshot.learningMaterializationId:null};
   },profile.profileVersion).purposes[purpose];
   if(!resolved.provisioned||resolved.readiness.status!=='ready')throw new Error('content_unavailable');
-  validateLocalProtocolResources(learningRuntimeCoordinator.localExecutionForBinding(binding,purpose),target,resource);
+  validateLocalProtocolResources(learningRuntimeCoordinator.localExecutionForBinding(binding,purpose),executable,resource);
   return Object.freeze({status:'ready',purpose,profileId,profileVersion:profile.profileVersion,binding,materializationIds:Object.freeze([...resolved.materializationIds]),reason:null});
  }catch(error){
   return Object.freeze({status:'blocked',purpose,profileId,profileVersion:target.committedPolicy?.profileVersion??'',binding:null,materializationIds:Object.freeze([]),reason:error instanceof Error?error.message:'content_unavailable'});
@@ -374,10 +379,11 @@ export function inspectLocalTargetReadiness(
 
 export function requireLocalTargetReadiness(
  target:LocalLearningTarget,
+ membership:LocalCurriculumMembership|undefined,
  resource:LocalLearningResource|undefined,
  purpose:LearningProtocolPurpose=localLearningPurpose(target),
 ):Extract<LocalTargetExecutionReadiness,{status:'ready'}>{
- const readiness=inspectLocalTargetReadiness(target,resource,purpose);
+ const readiness=inspectLocalTargetReadiness(target,membership,resource,purpose);
  if(readiness.status!=='ready'||!readiness.binding)throw new Error('localFlow.resourceInvalid');
  return readiness;
 }

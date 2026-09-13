@@ -5,7 +5,7 @@ import type { LearningRecordKind, LearningRecordView } from '../learningJourney/
 import { localRecordDate, projectLearningStatistics, type StatisticsRange } from '../learningJourney/learningStatistics';
 import { sensaLanguageDisplayName } from '@sensa/contracts/sensa';
 import i18n from '../../i18n';
-import { useLanguageProfile } from '../library/useLanguageProfile';
+import { useLanguageRoutes } from '../library/useLanguageRoutes';
 import { inLanguageScope, languagesPresent, resolveLanguageScope } from '../library/languageScope';
 import { LearningSetupFrame, setupButton } from './learning/LearningSetupFrame';
 
@@ -24,13 +24,11 @@ export const StatsScreen = ({active,records,onBack,onOpenTarget}:StatsScreenProp
   const [end,setEnd]=useState(()=>localRecordDate(new Date()));
   const [kind,setKind]=useState<'all'|LearningRecordKind>('all');
   const [limit,setLimit]=useState(20);
-  const {profile}=useLanguageProfile();
-  /** The languages the saved records are actually in. A record written before
-   * the language profile existed carries none and is counted under the pair the
-   * product has always shipped. */
+  const {activeRoute}=useLanguageRoutes();
+  /** The exact languages the saved records are actually in. */
   const languages=useMemo(()=>languagesPresent(records.map(record=>record.languageTag)),[records]);
   const [languageChoice,setLanguageChoice]=useState<string|null>(null);
-  const languageScope=resolveLanguageScope(languageChoice,languages,profile.activeTargetLanguageTag);
+  const languageScope=resolveLanguageScope(languageChoice,languages,activeRoute.targetLanguageTag);
   /** Records in two languages are never added together: the sum describes the
    * learning of neither language. A scope of one language counts that language,
    * and the cross-language view breaks the counts down instead of merging. */

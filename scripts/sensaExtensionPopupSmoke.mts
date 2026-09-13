@@ -9,7 +9,8 @@ try {
  await page.setContent((await readFile('apps/browser-extension/dist/popup.html','utf8')).replace('<script src="popup.js"></script>',''));
  await page.addScriptTag({content:'window.__name = (value) => value;'});
  await page.evaluate(()=>{
-  const fixture={calls:[] as {kind:string;enabled?:boolean}[],finish:null as null|((value:unknown)=>void)};
+  const route={id:'fixture-route',revision:1,targetLanguageTag:'en',defaultSupportLanguageTag:'zh-CN',status:'active'};
+  const fixture={calls:[] as {kind:string;enabled?:boolean}[],finish:null as null|((value:unknown)=>void),status:(value:Record<string,unknown>)=>({value:{destination:'web-local',rule:null,language:{collection:{routes:[route]},context:{languageRouteId:route.id,languageRouteRevision:route.revision,targetLanguageTag:route.targetLanguageTag,supportLanguageTag:route.defaultSupportLanguageTag}},...value}})};
   Object.assign(window,{fixture,chrome:{runtime:{sendMessage:(message:{kind:string})=>{
    fixture.calls.push(message);
    return new Promise(resolve=>{fixture.finish=resolve;});
@@ -18,10 +19,11 @@ try {
  await page.addScriptTag({path:resolve('apps/browser-extension/dist/popup.js')});
  const status=page.getByRole('status');
  const complete=async(error?:string,account=true)=>page.evaluate(({error,account})=>{
-  (window as any).fixture.finish(error?{error}:{value:{accountId:account?'fixture-account':null,pending:0,errors:[],recent:[]}});
+  const fixture=(window as any).fixture;fixture.finish(error?{error}:fixture.status({accountId:account?'fixture-account':null,pending:0,errors:[],recent:[]}));
  },{error,account});
  await expect(status).toHaveText('正在检查账号…');await expect(page.locator('#login')).toBeDisabled();
  await complete();await expect(status).toContainText('已登录 Sensa');
+ await expect(page.locator('#language-route')).toHaveValue('fixture-route');await expect(page.locator('#language-route')).toHaveAttribute('aria-label','当前阅读路线');
  await expect(page.getByRole('heading',{name:'最近保存'})).toBeVisible();
  await expect(page.locator('#recent-empty')).toHaveText('暂无最近保存的内容。');
  await page.locator('summary').click();
@@ -48,7 +50,7 @@ try {
  await page.setViewportSize({width:352,height:600});
  await page.locator('#sync').click();
  await page.evaluate(()=>{
-  (window as any).fixture.finish({value:{accountId:'fixture-account',pending:0,errors:[],recent:Array.from({length:20},(_,i)=>({id:'fixture-'+i,status:'saved',snapshot:{expression:{text:i===0?'a very long expression '.repeat(20):'expression '+i}}}))}});
+  const fixture=(window as any).fixture;fixture.finish(fixture.status({accountId:'fixture-account',pending:0,errors:[],recent:Array.from({length:20},(_,i)=>({id:'fixture-'+i,status:'saved',snapshot:{expression:{text:i===0?'a very long expression '.repeat(20):'expression '+i}}}))}));
  });
  await expect(page.locator('#recent a')).toHaveCount(20);
  await expect(page.locator('#recent-count')).toHaveText('20 条');
@@ -58,7 +60,7 @@ try {
  expect(geometry.contentWidth).toBeLessThanOrEqual(geometry.width);
  await page.locator('#recent').focus();await page.keyboard.press('End');
  await expect.poll(()=>page.locator('#recent').evaluate(element=>element.scrollTop)).toBeGreaterThan(0);
- await expect(page.locator('#recent a').last()).toHaveAttribute('href',/intake=fixture-19$/);
+ await expect(page.locator('#recent a').last()).toHaveAttribute('href',/meaningId=fixture-19$/);
  await page.screenshot({path:'/tmp/sensa-recent-many.png',fullPage:true});
  await page.locator('#disconnect').click();await complete(undefined,false);
  await expect(page.locator('#recent a')).toHaveCount(0);await expect(page.locator('#recent-count')).toHaveText('0 条');
@@ -71,7 +73,7 @@ try {
  // re-reads the status, so the switch's own answer and that read both complete.
  await expect(page.locator('#site')).toBeHidden();
  await page.locator('#sync').click();
- await page.evaluate(()=>{(window as any).fixture.finish({value:{accountId:null,pending:0,errors:[],recent:[],rule:{site:'example.com',disabled:false}}});});
+ await page.evaluate(()=>{const fixture=(window as any).fixture;fixture.finish(fixture.status({accountId:null,pending:0,errors:[],recent:[],rule:{site:'example.com',disabled:false}}));});
  await expect(page.locator('#site')).toBeVisible();
  await expect(page.locator('#site')).toHaveText('Turn reading off on this site');
  await page.locator('#site').click();
@@ -80,7 +82,7 @@ try {
  expect(switched.enabled).toBe(false);
  await page.evaluate(()=>{(window as any).fixture.finish({value:{site:'example.com',disabled:true,disabledSites:['example.com']}});});
  await page.waitForTimeout(50);
- await page.evaluate(()=>{(window as any).fixture.finish({value:{accountId:null,pending:0,errors:[],recent:[],rule:{site:'example.com',disabled:true}}});});
+ await page.evaluate(()=>{const fixture=(window as any).fixture;fixture.finish(fixture.status({accountId:null,pending:0,errors:[],recent:[],rule:{site:'example.com',disabled:true}}));});
  await expect(page.locator('#site')).toHaveText('Turn reading back on here');
  await expect(status).toContainText('Reading is off on example.com.');
  await expect(page.locator('#site')).toBeEnabled();

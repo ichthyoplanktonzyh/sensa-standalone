@@ -19,11 +19,11 @@ export async function commitWebIntake(tx:LibraryTransaction,accountId:string,req
  const proposal=request.resolution?.proposal??null;
  if(proposal){
   const accepted=!!request.acceptance;
-  const session:TeacherSession={id:crypto.randomUUID(),draftId,draftRevision:1,revision:1,input:draft.text,sourceExpression:proposal.expression.surface,messages:[],status:accepted?'accepted':'proposal',question:null,candidate:proposal,requests:0,toolCount:0,seenCalls:[],lease:null,provenance:[],meaningId:null};
+  const session:TeacherSession={id:crypto.randomUUID(),draftId,draftRevision:1,revision:1,languageContext:request.languageContext,input:draft.text,sourceExpression:proposal.expression.surface,messages:[],status:accepted?'accepted':'proposal',question:null,candidate:proposal,requests:0,toolCount:0,seenCalls:[],lease:null,provenance:[],meaningId:null};
   if(accepted){
    let identity=await tx.get<Pick<LocalMeaning,'senseId'|'senseVersionId'|'bindingId'|'bindingVersionId'>>('identities',identityDigest!);
    if(!identity){identity={senseId:crypto.randomUUID(),senseVersionId:crypto.randomUUID(),bindingId:crypto.randomUUID(),bindingVersionId:crypto.randomUUID()};tx.put('identities',identityDigest!,identity);}
-   const meaning:LocalMeaning={id:crypto.randomUUID(),draftId,draftRevision:1,context:draft.text,proposal,...identity,contextAnchorId:crypto.randomUUID(),expressionAnchorId:crypto.randomUUID(),alignmentId:crypto.randomUUID(),acceptanceId:crypto.randomUUID(),acceptedAt:now,sessionId:session.id};
+   const meaning:LocalMeaning={id:crypto.randomUUID(),draftId,draftRevision:1,context:draft.text,proposal,supportLanguageTag:request.languageContext.supportLanguageTag,targetLanguageTag:request.languageContext.targetLanguageTag,...identity,contextAnchorId:crypto.randomUUID(),expressionAnchorId:crypto.randomUUID(),alignmentId:crypto.randomUUID(),acceptanceId:crypto.randomUUID(),acceptedAt:now,sessionId:session.id};
    session.meaningId=meaning.id;tx.put('meanings',meaning.id,meaning);
   }
   tx.put('sessions',session.id,session);

@@ -1,7 +1,7 @@
 # Sensa 学习连接模型
 
 > 状态：Canonical domain model
-> 更新日期：2026-09-05
+> 更新日期：2026-09-13
 
 本文定义一个 confirmed Sense 与目标语言表达的连接如何取得内容、选择学习方式、形成不同强度的
 结果并交给长期调度。个人意义与 Sense 确认由
@@ -27,6 +27,7 @@ Retention Target
 Learning Policy Assignment
       ↓ resolve
 Effective Learning Policy
+      × applicable Language Learning Route revision
       ↓
 Resolved Learning Plan(preparing | ready | blocked)
       ↓ ready
@@ -46,11 +47,11 @@ personal-first learning 则沿完整 Context–Expression–Sense Personal Meani
 同一类目标。Meaning Focus 可以不存在。三类入口在 Learning Target 处汇合，都保存 Learning Entry
 Provenance，但 provenance 不进入 target/retention identity。
 
-直接学习仍然是 Sense-first：一个裸 Lexeme、L2 字符串或未对齐的 Reference Sense 不能成为 Learning
-Target。用户可以不创建 Personal Meaning，但系统仍必须解析并固定具体 stable Sense、Sense Version
-与 target Sense Expression Binding。
+直接学习仍然是 Sense-first：一个裸 Lexeme、target-language 字符串或未对齐的 Reference Sense 不能
+成为 Learning Target。用户可以不创建 Personal Meaning，但系统仍必须解析并固定具体 stable Sense、
+Sense Version 与 target Sense Expression Binding。
 
-## 2. 九个正交问题
+## 2. 十个正交问题
 
 一个 Target 的 learner-specific “课程”由 Resolved Learning Plan 表达，而不是把 Target 本身变成课程。
 该 Plan 必须保持四个方面可独立演化：**目标**（Learning Target + Capability Objectives）、**内容**
@@ -68,7 +69,9 @@ Transition/Outcome）。实施与评价再跨两个时间尺度运行：短期 A
 6. **怎样评价并推进**：Observation 如何成为 Evidence，Checkpoint 如何结算，失败如何 repair/reset；
 7. **当前是否可执行**：target、objectives、policy、content 和 runtime capability 能否解析出 ready plan；
 8. **哪个连接独立保持**：Learning Target 解析到哪个稳定 Retention Target；
-9. **怎样连接长期调度**：Initial Learning 如何 Handoff、Review 和合法 Relearning
+9. **在哪条语言路线中执行**：固定哪个 Language Learning Route revision，并解析本次 Target、Support、
+   Input 与 Output Language 角色；
+10. **怎样连接长期调度**：Initial Learning 如何 Handoff、Review 和合法 Relearning
    evaluation 如何产生各自不可变的 Memory Outcome。
 
 Learning Policy、Sense Learning Package、Learning Protocol、Learning Evidence 与 FSRS 不能再合并为一个概念。
@@ -90,7 +93,7 @@ content 支持。Learning Policy 可以协调选择这些正交对象，但不�
 Learning Target 至少固定：
 
 - stable Sense identity 与 Sense Version；
-- target language；
+- target Language Tag；
 - primary target Sense Expression Binding 及所需 form version；
 - learner、Curriculum provenance 与 Learning Entry Provenance。
 
@@ -99,6 +102,27 @@ Learning Protocol 在创建 Protocol Run 时与 target 绑定；它不属于 tar
 
 Personal Meaning 与 Personal Anchors 可以作为来源或 learner-authorized scaffold，但不成为 target
 identity。
+
+### Language Learning Route 与语言上下文
+
+Language Learning Route 固定一个 Target Language、一个可与其相同的 default Support Language，以及
+一个 route-scoped Study Plan。它表达 learner 当前希望在什么支持语言环境中习得哪一种语言，而不是
+声明全局母语、唯一 Familiar Language 或 proficiency。一个 Learner 可以同时拥有多条 active、paused
+或 archived Routes。
+
+Learning Target 仍以 stable Sense 与 target Sense Expression Binding 表达“学什么”。Curriculum
+Membership、Study Scope Revision 与 Resolved Learning Plan 另外固定适用 Route revision，并校验
+Binding 的 exact Language Tag 与 Route Target Language 兼容。Support Language、Interface Locale 和
+Active Route Selection 都不进入 Retention Target identity；改变它们不得复制或重置正式进度。
+
+Session、Sense Construction、Content Provisioning Task 与其他跨多步操作在开始时解析 Pinned Language
+Context。阅读、解释与写作再按各自意图声明 Input/Output Language；例如 target-language 阅读可以输出
+support-language 解释，反向写作则以 support-language prompt 要求 target-language output。后续 Active
+Route Selection 只影响新操作，不得重绑已经开始的工作。
+
+同一个 Retention Target 可以从多个兼容 Route 或 Curriculum source 进入，但仍只有一份 Protocol
+history、Evidence 与 FSRS Memory State。若 Target Language 或 target Binding 真正改变，则产生新的
+Learning/Retention Target；只改变 Support Language 不会宣称建立了新的记忆连接。
 
 ### 独立入口与 Personal Semantic World bridge
 
@@ -151,19 +175,20 @@ Learning Capability Objective 说明 learner 希望形成的可观察表现，�
 共同输入。普通 Protocol Checkpoint、Acquisition Gate、诊断维度或题型变化不自动成为新的能力目标；
 只有 learner-valued、合同稳定、表现可持续分离且有独立调度价值的目标才扩展 retention scope。
 
-Learner Sense Progress 因此只是一个 Sense 下多个 Retention Targets 的 roll-up。首版每个英语
-Sense 只选定一个 primary target binding，因而实际只产生一个 Retention Target；这是交付约束，
-不是把 learner × Sense 当成永久 scheduler identity 的理论结论。
+Learner Sense Progress 因此只是一个 Sense 下多个 Retention Targets 的 roll-up。某一 delivery profile
+可以为一个 Sense 只选定一个 primary target binding，因而实际只产生一个 Retention Target；这是交付
+约束，不是把 learner × Sense 当成永久 scheduler identity 的理论结论。
 
 ## 4. Learning Policy 与 Resolved Learning Plan
 
 ### Add-to-Learning 与准备边界
 
-Add-to-Learning 表达“把这条稳定连接纳入正式学习”，不是“内容已经准备完成”或“立即开始一次
-Protocol Run”。Curriculum 在 stable target、合法显式/继承 Policy Assignment、Declared Mastery conflict
-与 existing-scope 检查通过后接纳 Intent，创建 Supplemental Membership；随后才解析 Effective Learning
-Policy、Resolved Learning Plan 和实际 Content Provisioning。Book membership 作为另一个 Curriculum
-来源进入同一套 Policy/Plan resolution。
+Add-to-Learning 表达“把这条稳定连接纳入一条明确 Language Learning Route 的正式学习”，不是“内容
+已经准备完成”或“立即开始一次 Protocol Run”。Curriculum 先校验 target Binding 与 Route Target
+Language 兼容，再在 stable target、合法显式/继承 Policy Assignment、Declared Mastery conflict 与
+existing-scope 检查通过后接纳 Intent，创建 route-scoped Supplemental Membership；随后才解析
+Effective Learning Policy、Resolved Learning Plan 和实际 Content Provisioning。Book membership 作为
+同一 Route 内的另一个 Curriculum 来源进入同一套 Policy/Plan resolution。
 
 因此，暂时缺少 content、grader、客户端或 protocol capability 是 plan readiness/blocked reason，
 不是删除已经接纳 learner intent 的理由。只有 invalid target、unsupported policy assignment、显式
@@ -301,9 +326,10 @@ Sense Learning Package 是这种路径的可复用 bundle。
 
 ### On-demand Learning Content
 
-On-demand content 在固定 Learning Target、Effective Learning Policy 与当前 purpose Protocol 后，根据
-learner 当前需要生成。生成可以读取 confirmed Sense、target expression、中文 access path、Protocol requirements、允许的历史与 learner
-明确授权的 Personal Anchors，但不得重新解释或改变 Sense boundary。
+On-demand content 在固定 Learning Target、Effective Learning Policy、Pinned Language Context 与当前
+purpose Protocol 后，根据 learner 当前需要生成。生成可以读取 confirmed Sense、target expression、
+support-language access path、Protocol requirements、允许的历史与 learner 明确授权的 Personal Anchors，
+但不得重新解释或改变 Sense boundary。
 
 它适合：
 
@@ -735,12 +761,13 @@ Semantic LLM 的确认结果不能顺带成为学习内容；Content LLM 不能�
 Personal Anchors 只有在 learner 明确授权后才可作为 on-demand generation input。生成的公共或共享
 内容不得泄露姓名、图片、录音、原始叙述或其他 private data。
 
-## 13. 中文 L1、英语 L2 的轻量 Policy 示例
+## 13. `zh-Hans → en` Route 的轻量 Policy 示例
 
 一个可选的轻量组合为：
 
 ```text
-confirmed English-oriented Sense
+Language Learning Route (`target=en`, `support=zh-Hans`)
+× confirmed English-oriented Sense
 × primary English expression
 × on-demand LLM Content Provisioning
 × Lightweight Initial Learning Protocol
@@ -806,6 +833,14 @@ origin=`relearning` 的 Memory Outcome。两者都不覆盖 forgotten Outcome。
 - Personal Semantic World commit 与 Add-to-Learning 是不同意图和权限，即使一个获授权 Agent 在一次
   用户请求中连续执行二者，也必须留下两个独立、幂等、可审计事实；
 - Learning Entry Provenance 只记录来源，不改变 Learning/Retention Target identity；同一连接跨来源去重；
+- Language Learning Route 固定 Target Language、可与其相同的 default Support Language 与 route-scoped
+  Study Plan；Learner 可拥有多条 Route，但不由此产生全局母语或 known-language/proficiency 事实；
+- Curriculum Membership、Study Scope Revision 与 Resolved Learning Plan 固定适用 Route revision；
+  target binding 必须与 Route 兼容，而 Support Language 与 Interface Locale 不进入 Retention identity；
+- Session、Sense Construction 与 Content Provisioning Task 固定 Pinned Language Context；Input/Output
+  Language 由操作意图决定，Active Route Selection 的后续变化不得重绑进行中的操作；
+- 同一 Retention Target 跨兼容 Route 仍共享一份正式进度、Evidence 与 FSRS State；只改变 Support
+  Language 不创建新的记忆身份；
 - Personal Content lifecycle 不删除或重写 Curriculum Membership、Protocol history、Evidence 或 FSRS；
 - Entry Provenance 与 Learning Policy 正交；来源可以影响推荐/readiness，但不得静默决定或降级 Policy；
 - Learning Policy Profile 是显式、版本化、可审计的 Protocol/Policy 命名组合，不是普通呈现

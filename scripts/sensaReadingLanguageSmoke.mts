@@ -3,8 +3,8 @@
  *
  * The service is told the pair by each request rather than remembering one, so
  * this guards the three consequences of that: the prompt names the languages the
- * request actually carried, an explanation is asked for in the learner's
- * familiar language while a translation is rendered into it, and a pair this
+ * request actually carried, an explanation is asked for in the operation's
+ * Support Language while a translation is rendered into it, and a context this
  * release cannot name is refused instead of being passed to a model as a bare
  * code. It also guards the idempotency property that makes a request id safe to
  * retry: the digest covers the pair, so the same id under another pair is a
@@ -31,39 +31,45 @@ const base={id:'2f1c5f5c-3a1f-4f5e-9d6b-7c8a9b0c1d2e',text:'She took her time.',
 
 // The shipped pair still works, and it is named from the request rather than
 // from a constant that happens to match it.
-const shipped=readingRequestSchema.parse({...base,feature:'selection',languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'en'});
+const shipped=readingRequestSchema.parse({...base,feature:'selection',languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'en'});
 assert.match(readingSystemPrompt(shipped),/into natural Chinese \(Simplified\)/,'the catalog names Simplified Chinese unambiguously, which is also what a prompt should say');
 assert.match(readingSystemPrompt(shipped),/quoted English text/,'a translation names the text’s language when the caller established one');
 
 // The defect this replaced: the service used to translate into Chinese and
 // explain in Chinese whatever the learner was reading.
-const japanese=readingRequestSchema.parse({...base,feature:'selection',languages:{familiarLanguageTag:'ja',targetLanguageTag:'id'},sourceLanguageTag:'id'});
+const japanese=readingRequestSchema.parse({...base,feature:'selection',languages:{supportLanguageTag:'ja',targetLanguageTag:'id'},sourceLanguageTag:'id'});
 const japanesePrompt=readingSystemPrompt(japanese);
 assert.match(japanesePrompt,/into natural Japanese/);
 assert.match(japanesePrompt,/quoted Indonesian text/);
 assert(!/Chinese|English/u.test(japanesePrompt),'a prompt must not name a language the request did not carry');
 
-// An explanation is read by the learner, so it comes back in their familiar
+// An explanation is read by the learner, so it comes back in the Support
 // language, while the prompt still tells the model which language is being
 // learned — that contrast is what makes an explanation useful.
-const explanation=readingRequestSchema.parse({...base,feature:'action',text:'take one’s time',languages:{familiarLanguageTag:'fr',targetLanguageTag:'de'},sourceLanguageTag:'de'});
+const explanation=readingRequestSchema.parse({...base,feature:'action',text:'take one’s time',languages:{supportLanguageTag:'fr',targetLanguageTag:'de'},sourceLanguageTag:'de'});
 const explanationPrompt=readingSystemPrompt(explanation);
 assert.match(explanationPrompt,/learner of German/);
 assert.match(explanationPrompt,/explain in French/);
 assert(!/Chinese|English/u.test(explanationPrompt));
 
-// A translation of text already in the learner's familiar language is the one
+// A translation of text already in the operation's Support Language is the one
 // instruction that would tell a model to translate a language into itself, so
 // the prompt still names both honestly and the decision to skip it belongs to
 // the caller that knows the text.
-const familiarText=readingRequestSchema.parse({...base,feature:'page',languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'zh-CN'});
+const familiarText=readingRequestSchema.parse({...base,feature:'page',languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'zh-CN'});
 assert.match(readingSystemPrompt(familiarText),/quoted Chinese \(Simplified\) text into natural Chinese \(Simplified\)/);
+
+// A page may contain a third observed language. It remains a fact about this
+// input and does not mutate either role in the Route.
+const thirdLanguage=readingRequestSchema.parse({...base,feature:'selection',text:'Elle prend son temps.',languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'fr'});
+assert.match(readingSystemPrompt(thirdLanguage),/quoted French text into natural Chinese \(Simplified\)/);
+assert.equal(thirdLanguage.languages.targetLanguageTag,'en');
 
 // What the request carries beside the text is evidence, not a second thing to
 // translate: a model told only "here is some context" may hand back a
 // translation of the context as well, and a cue or a paragraph on its own is
 // exactly the case that needs the surrounding text.
-const withContext=readingRequestSchema.parse({...base,feature:'page',text:'her time.',context:'She took her time.\nThey looked up at the sky.',languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'en'});
+const withContext=readingRequestSchema.parse({...base,feature:'page',text:'her time.',context:'She took her time.\nThey looked up at the sky.',languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'en'});
 assert.match(readingSystemPrompt(withContext),/surrounding text from the same document/);
 assert.match(readingSystemPrompt(withContext),/never material of its own to translate/);
 assert.notEqual(await contentHash(withContext),await contentHash({...withContext,context:''}),'context is part of what was asked, so a retry under different context is a different request');
@@ -71,7 +77,7 @@ assert.notEqual(await contentHash(withContext),await contentHash({...withContext
 // The learner's own words win over the model's: the glossary travels with the
 // request, is stated as data rather than as prose, and is part of what was asked,
 // so editing it makes the same request id a different question.
-const glossed=readingRequestSchema.parse({...base,feature:'page',languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'en',glossary:[{term:'prompt',rendering:'提示词'}]});
+const glossed=readingRequestSchema.parse({...base,feature:'page',languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'en',glossary:[{inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'prompt',rendering:'提示词'}]});
 const glossedPrompt=readingSystemPrompt(glossed);
 assert.match(glossedPrompt,/glossary of their own word choices/);
 assert.match(glossedPrompt,/"term":"prompt","rendering":"提示词"/,'a glossary is stated as data, so a term of the learner’s own cannot be read as prompt structure');
@@ -85,38 +91,39 @@ assert.notEqual(await contentHash(glossed),await contentHash({...glossed,glossar
 // met into their own language; this one takes the sentence they wrote in that
 // language and produces the one they are learning, so a prompt that got the
 // direction from the pair the wrong way round would hand back their own words.
-const writing=readingRequestSchema.parse({...base,feature:'writing',text:'我把会议改到了周四。',context:'Subject: Thursday sync',languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'}});
+const writing=readingRequestSchema.parse({...base,feature:'writing',text:'我把会议改到了周四。',context:'Subject: Thursday sync',languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'en'}});
 const writingPrompt=readingSystemPrompt(writing);
-assert.match(writingPrompt,/learner's own Chinese \(Simplified\) text into natural English/);
+assert.match(writingPrompt,/Chinese \(Simplified\) input text into natural English/);
 assert.match(writingPrompt,/do not answer a question it asks/,'the learner’s text may be a question they are asking someone else, and it is not the model’s to answer');
 assert.match(writingPrompt,/keep its meaning, tone and register/);
 assert(!/into natural Chinese/u.test(writingPrompt),'writing must not translate into the learner’s own language, which is what translation does');
-assert.match(readingSystemPrompt(readingRequestSchema.parse({...writing,glossary:[{term:'prompt',rendering:'提示词'}]})),/use the other side/,'a glossary is read in whichever direction the operation runs');
+assert.match(readingSystemPrompt(readingRequestSchema.parse({...writing,glossary:[{inputLanguageTag:'zh-CN',outputLanguageTag:'en',term:'提示词',rendering:'prompt'}]})),/use the other side/,'a glossary is read in whichever direction the operation runs');
+assert.equal(readingRequestSchema.safeParse({...writing,glossary:[{inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'prompt',rendering:'提示词'}]}).success,false,'a glossary for another direction cannot leak into this request');
 
 // The task lives in the prompt, not in a default instruction the learner would
 // read: an instruction written in one language is wrong for every other one.
-assert.equal(readingRequestSchema.parse({...base,feature:'action',languages:{familiarLanguageTag:'ko',targetLanguageTag:'it'}}).instruction,'');
-assert.match(readingSystemPrompt(readingRequestSchema.parse({...base,feature:'action',languages:{familiarLanguageTag:'ko',targetLanguageTag:'it'}})),/otherwise explain how the quoted expression is used in this context/);
+assert.equal(readingRequestSchema.parse({...base,feature:'action',languages:{supportLanguageTag:'ko',targetLanguageTag:'it'}}).instruction,'');
+assert.match(readingSystemPrompt(readingRequestSchema.parse({...base,feature:'action',languages:{supportLanguageTag:'ko',targetLanguageTag:'it'}})),/otherwise explain how the quoted expression is used in this context/);
 
 // An unestablished language is a supported answer: the prompt says "the quoted
 // text" rather than naming a language nobody observed.
-const undetermined=readingRequestSchema.parse({...base,feature:'selection',languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'}});
+const undetermined=readingRequestSchema.parse({...base,feature:'selection',languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'en'}});
 assert.equal(undetermined.sourceLanguageTag,null);
 assert.match(readingSystemPrompt(undetermined),/Translate the quoted text into natural Chinese \(Simplified\)/);
 
-// A pair is a pair: one language on both sides, and a language this release
-// cannot name, are both refused at the boundary.
+// Target and Support may be the same; an unnameable language is still refused.
 const refuses=(label:string,value:unknown)=>assert.equal(readingRequestSchema.safeParse(value).success,false,label);
-refuses('one language cannot be both sides',{...base,feature:'selection',languages:{familiarLanguageTag:'en',targetLanguageTag:'en'}});
-refuses('a language the catalog cannot name cannot be asked for',{...base,feature:'selection',languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'yue'}});
+const immersion=readingRequestSchema.parse({...base,feature:'selection',languages:{supportLanguageTag:'en',targetLanguageTag:'en'},sourceLanguageTag:'en'});
+assert.match(readingSystemPrompt(immersion),/English text into natural English/);
+refuses('a language the catalog cannot name cannot be asked for',{...base,feature:'selection',languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'yue'}});
 refuses('a missing pair is not a defaulted one',{...base,feature:'selection'});
-refuses('an unplaceable text language is refused too',{...base,feature:'selection',languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'yue'});
+refuses('an unplaceable text language is refused too',{...base,feature:'selection',languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'yue'});
 
 // Idempotency: the request digest covers the pair, so a retry under another pair
 // can never replay the previous language's answer.
-const englishPair=readingRequestSchema.parse({...base,feature:'selection',languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'en'});
-const spanishPair=readingRequestSchema.parse({...base,feature:'selection',languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'es'},sourceLanguageTag:'es'});
+const englishPair=readingRequestSchema.parse({...base,feature:'selection',languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'en'});
+const spanishPair=readingRequestSchema.parse({...base,feature:'selection',languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'es'},sourceLanguageTag:'es'});
 assert.notEqual(await contentHash(englishPair),await contentHash(spanishPair),'the same request id under a different pair must digest differently');
 assert.equal(await contentHash(englishPair),await contentHash({...englishPair}),'the same request must digest the same');
 
-console.log('PASS: the reading service builds every prompt from the pair the request carries — translation into the learner’s familiar language naming the text’s own language, explanation in the familiar language while naming the one being learned — refuses a pair or a text language this release cannot name, and digests the pair so a retry cannot replay another language’s answer. Context travels as evidence about the text rather than as a second thing to translate, and is digested with it. Pure prompt and schema; no provider call.');
+console.log('PASS: the reading service builds every prompt from its pinned context, keeps third-language input observational, scopes glossary entries to the concrete direction, supports immersion, refuses unnameable tags, and digests the context. Pure prompt and schema; no provider call.');

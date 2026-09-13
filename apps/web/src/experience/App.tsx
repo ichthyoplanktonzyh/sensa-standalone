@@ -3,8 +3,8 @@ import {composeLocalLearningRuntime} from './learningRuntime/runtimeComposition'
 import {BatchPersonalLearning} from './library/BatchPersonalLearning';
 import {localFlowText} from '../i18n/localFlowText';
 import {usePersonalLearning} from './library/usePersonalLearning';
-import {useLanguageProfile} from './library/useLanguageProfile';
-import {defaultSensaLanguageProfile,sensaLanguageDisplayName} from '@sensa/contracts/sensa';
+import {useLanguageRoutes} from './library/useLanguageRoutes';
+import {sensaLanguageDisplayName} from '@sensa/contracts/sensa';
 import i18n from '../i18n';
 import {
   PersonalLearningControls,
@@ -93,16 +93,14 @@ export default function App() {
 
   const packageLearning=usePackageLearning(viewMode==='main'&&mainStack.includes('s-learning-entry'));
   const personalLearning=usePersonalLearning();
-  const {profile:languageProfile}=useLanguageProfile();
-  /** A meaning prepared before the language profile existed is read as the pair
-   * the product has always shipped. */
-  const meaningLanguage=(task:(typeof personalLearning.tasks)[number])=>task.meaning.targetLanguageTag??defaultSensaLanguageProfile.activeTargetLanguageTag;
-  const pendingPersonal=[...new Map(personalLearning.tasks.filter(t=>!packageLearning.targets.some(target=>target.id===t.targetId)).map(t=>[t.targetId,t])).values()];
+  const {activeRoute}=useLanguageRoutes();
+  const pendingPersonal=personalLearning.tasks.filter(task=>!packageLearning.targets.some(target=>target.id===task.targetId&&target.curriculumMemberships.some(membership=>membership.id===task.curriculumMembershipId)));
   /** What the learner is learning now: the queue, today's new items and the
    * counts beside them. The lists that browse everything keep every language. */
-  const activePendingPersonal=pendingPersonal.filter(task=>meaningLanguage(task)===languageProfile.activeTargetLanguageTag);
-  const selectedPersonalTask=pendingPersonal.find(t=>t.targetId===params.targetId);
-  const localSelectedTarget=packageLearning.targets.find(t=>t.id===params.targetId);
+  const activePendingPersonal=pendingPersonal.filter(task=>task.languageContext.languageRouteId===activeRoute.id);
+  const selectedPersonalTask=activePendingPersonal.find(t=>t.targetId===params.targetId);
+  const localSelectedTarget=packageLearning.activeTargets.find(t=>t.id===params.targetId);
+  const localSelectedMembership=localSelectedTarget?packageLearning.membershipByTarget[localSelectedTarget.id]:undefined;
   const openLocalTarget=(id:string)=>goMain('s-learning-target',{targetId:id});
   /* ---------- 自由练习范围：typed sources → learner selection → resolved scope ---------- */
   const { catalog: practiceScopeCatalog, selectScope } = usePracticeScope();
@@ -421,7 +419,7 @@ export default function App() {
             onPolicyChange={()=>{}}
             defaultPolicy="lightweight" fixedPolicy
             learningTargetCount={packageLearning.activeTargets.length+activePendingPersonal.length}
-            languageLabel={sensaLanguageDisplayName(languageProfile.activeTargetLanguageTag,i18n.language==='en'?'en':'zh-CN')}
+            languageLabel={sensaLanguageDisplayName(activeRoute.targetLanguageTag,i18n.language==='en'?'en':'zh-CN')}
             readyInitialCount={packageLearning.initialReady.length}
             reviewCount={packageLearning.due.length}
             dailyNewCount={dailyNewCount}
@@ -432,14 +430,14 @@ export default function App() {
 
           {/* 4.1 Target 库：主页只保留入口，具体内容在此展开 */}
           <LearningTargetLibraryScreen active={viewMode==='main'&&mainStack.includes('s-learning-library')}
-            targets={Object.fromEntries([...packageLearning.targets.map(t=>[t.id,localTargetView(t,packageLearning.readinessByTarget[t.id]??'blocked')]),...pendingPersonal.map(t=>[t.targetId,pendingPersonalTargetView(t)])])}
-            targetIds={[...packageLearning.targets.map(t=>t.id),...pendingPersonal.map(t=>t.targetId)]}
-            policyByTarget={Object.fromEntries([...packageLearning.targets.map(t=>[t.id,localTargetPolicy(t)]),...pendingPersonal.map(t=>[t.targetId,'lightweight' as const])])}
-            preparationByTarget={Object.fromEntries([...packageLearning.targets.map(t=>[t.id,packageLearning.readinessByTarget[t.id]??'blocked']),...pendingPersonal.map(t=>[t.targetId,t.status==='failed'||t.status==='rejected'?'blocked' as const:'preparing' as const])])}
-            committedTargetIds={new Set(packageLearning.targets.filter(t=>t.startedAt).map(t=>t.id))}
-            completedTargetIds={new Set(packageLearning.targets.filter(t=>t.completedAt).map(t=>t.id))}
+            targets={Object.fromEntries([...packageLearning.activeTargets.map(t=>[t.id,localTargetView(t,packageLearning.membershipByTarget[t.id]!,packageLearning.readinessByTarget[t.id]??'blocked')]),...activePendingPersonal.map(t=>[t.targetId,pendingPersonalTargetView(t)])])}
+            targetIds={[...packageLearning.activeTargets.map(t=>t.id),...activePendingPersonal.map(t=>t.targetId)]}
+            policyByTarget={Object.fromEntries([...packageLearning.activeTargets.map(t=>[t.id,localTargetPolicy(t)]),...activePendingPersonal.map(t=>[t.targetId,'lightweight' as const])])}
+            preparationByTarget={Object.fromEntries([...packageLearning.activeTargets.map(t=>[t.id,packageLearning.readinessByTarget[t.id]??'blocked']),...activePendingPersonal.map(t=>[t.targetId,t.status==='failed'||t.status==='rejected'?'blocked' as const:'preparing' as const])])}
+            committedTargetIds={new Set(packageLearning.activeTargets.filter(t=>t.startedAt).map(t=>t.id))}
+            completedTargetIds={new Set(packageLearning.activeTargets.filter(t=>t.completedAt).map(t=>t.id))}
             reviewDueTargetIds={new Set(packageLearning.due.map(t=>t.id))}
-            relearningTargetIds={new Set(packageLearning.targets.filter(t=>t.relearnAt).map(t=>t.id))}
+            relearningTargetIds={new Set(packageLearning.activeTargets.filter(t=>t.relearnAt).map(t=>t.id))}
             reviewingTargetIds={new Set()} relearningRepairTargetIds={new Set()} relearningRetestTargetIds={new Set()} declaredMasteryTargetIds={new Set()}
             onBack={backMain} onAddLearning={()=>goMain('s-learning-entry')} onOpenTarget={openLocalTarget}/>
 
@@ -449,7 +447,7 @@ export default function App() {
 
 
           {/* 4.3 学习目标详情：来源、方式和准备状态分开表达 */}
-          {localSelectedTarget&&<PackageTarget active={viewMode==='main'&&mainStack.includes('s-learning-target')} target={localSelectedTarget} c={packageLearning} onSource={()=>{const m=localLibrary.meanings.find(m=>m.id===localSelectedTarget.material.snapshot.provenance.meaningId);if(m)openPersonalMeaning(m.draftId);else backMain();}} onBack={backMain} onHome={resetMain} onStart={()=>void startLocalLearning(localSelectedTarget.id)}/>}
+          {localSelectedTarget&&localSelectedMembership&&<PackageTarget active={viewMode==='main'&&mainStack.includes('s-learning-target')} target={localSelectedTarget} c={packageLearning} onSource={()=>{const m=localLibrary.meanings.find(m=>m.id===localSelectedMembership.material.snapshot.provenance.meaningId);if(m)openPersonalMeaning(m.draftId);else backMain();}} onBack={backMain} onHome={resetMain} onStart={()=>void startLocalLearning(localSelectedTarget.id)}/>}
           {selectedPersonalTask&&<PersonalPreparationTarget task={selectedPersonalTask} c={personalLearning} onSource={()=>openPersonalMeaning(selectedPersonalTask.meaning.draftId)} active={viewMode==='main'&&mainStack.includes('s-learning-target')} onBack={backMain} onHome={resetMain} onStart={id=>void startLocalLearning(id)}/>}
           {!localSelectedTarget&&!selectedPersonalTask&&viewMode==='main'&&mainStack.includes('s-learning-target')&&<LearningSetupFrame id="s-learning-target" active title={localFlowText('learningTarget')} onBack={backMain}><p role="status">{packageLearning.loaded?localFlowText('targetMissing'):localFlowText('targetLoading')}</p></LearningSetupFrame>}
 

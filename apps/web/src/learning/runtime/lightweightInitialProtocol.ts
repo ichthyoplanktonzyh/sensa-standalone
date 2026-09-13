@@ -3,6 +3,7 @@ import {lightweightProtocolStepId,transitionLightweightProtocol} from '@sensa/le
 import {
   createLocalProtocolState,
   readLocalProtocolState,
+  type LocalLearningMaterialization,
   type LocalLearningRun,
   type LocalLearningTarget,
   type LocalProtocolExecution,
@@ -414,14 +415,15 @@ const phaseForDefinition=(id:string):'recall'|'reveal'=>{
  if(!entry)throw new Error('Unknown persisted lightweight step');
  return entry[0] as 'recall'|'reveal';
 };
-function localInitialState(run:LocalLearningRun,target:LocalLearningTarget){
+function localInitialState(run:LocalLearningRun,target:LocalLearningTarget,material?:LocalLearningMaterialization){
  const participant=run.participants[target.id];
  if(!participant)throw new Error('localFlow.resourceInvalid');
- return createLightweightInitialProtocolRun({protocolRunId:participant.protocolRunId,retentionTargetId:target.retentionId,learningMaterializationId:participant.material.snapshot.learningMaterializationId,materialResources:participant.material.content.resources});
+ const selected=material??participant.material;
+ return createLightweightInitialProtocolRun({protocolRunId:participant.protocolRunId,retentionTargetId:target.retentionId,learningMaterializationId:selected.snapshot.learningMaterializationId,materialResources:selected.content.resources});
 }
-export function localLightweightStep(run:LocalLearningRun,target:LocalLearningTarget):LightweightProtocolStepInstance|null{
+export function localLightweightStep(run:LocalLearningRun,target:LocalLearningTarget,material?:LocalLearningMaterialization):LightweightProtocolStepInstance|null{
  if(run.completedAt)return null;
  const state=localState(run);
- const initial=state.initial??localInitialState(run,target);
- return currentLightweightInitialStep(state.initial?initial:{...initial,currentStepDefinitionId:localPhaseDefinitions[state.phase],currentStepOrdinal:run.ordinal});
+ const selected=localInitialState(run,target,material),initial=state.initial?{...state.initial,learningMaterializationId:selected.learningMaterializationId,materialBindings:selected.materialBindings}:{...selected,currentStepDefinitionId:localPhaseDefinitions[state.phase],currentStepOrdinal:run.ordinal};
+ return currentLightweightInitialStep(initial);
 }

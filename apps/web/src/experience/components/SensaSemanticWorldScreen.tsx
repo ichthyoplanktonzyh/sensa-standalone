@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { SemanticWorldScreenProps } from './SemanticWorldScreen';
 import { PersonalMeaningComposer } from './PersonalMeaningComposer';
 import { sensaLanguageDisplayName } from '@sensa/contracts/sensa';
-import { useLanguageProfile } from '../library/useLanguageProfile';
+import { useLanguageRoutes } from '../library/useLanguageRoutes';
 import { inLanguageScope, languagesPresent, meaningLanguageTags, resolveLanguageScope } from '../library/languageScope';
 import i18n from '../../i18n';
 import { IntakeInboxDrawer } from './IntakeInboxDrawer';
@@ -1398,7 +1398,7 @@ export const SensaSemanticWorldScreen = ({
   const { items, status } = useJourneyWorld();
   const inboxItems = useJourneyInbox();
   const meanings = useMemo(() => items.map(worldMeaningFor), [items]);
-  const { profile } = useLanguageProfile();
+  const { activeRoute } = useLanguageRoutes();
   /** The languages a meaning's connected expressions are written in. A meaning
    * can hold more than one — the same sense connected to an English expression
    * and to a Spanish one — so it answers with every language it contains
@@ -1415,7 +1415,7 @@ export const SensaSemanticWorldScreen = ({
   const languageScope = resolveLanguageScope(
     languageChoice,
     presentLanguages,
-    profile.activeTargetLanguageTag,
+    activeRoute.targetLanguageTag,
   );
   /** A meaning is in scope when it holds the scoped language at all — the same
    * sense connected to two languages is reachable from both. */

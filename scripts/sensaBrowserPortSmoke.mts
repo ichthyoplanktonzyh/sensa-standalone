@@ -35,8 +35,8 @@ try{
        // The detector and the learner's own language, stood in for: this text is
        // Chinese and this learner already reads Chinese. What the background
        // really answers is exercised against the real handler in the intake smoke.
-       if(message.kind==='detect-language')return {value:{language:/\p{Script=Han}/u.test(message.text??'')?'cmn':'eng'}};
-       if(message.kind==='reading-language')return {value:{familiarLanguageTag:'zh-CN',alreadyReadable:/\p{Script=Han}/u.test(message.text??'')||message.surfaceLanguage==='zh-CN'}};
+       if(message.kind==='detect-language')return {value:{language:{code:/\p{Script=Han}/u.test(message.text??'')?'cmn':'eng',confidence:.99}}};
+       if(message.kind==='reading-language')return {value:{supportLanguageTag:'zh-CN',alreadyReadable:/\p{Script=Han}/u.test(message.text??'')||message.surfaceLanguage==='zh-CN'}};
        // What the learner is writing goes the other way: the request says so, and
        // the panel is the only thing that can put an answer in the field.
        if(message.kind==='reading-run'&&message.input.feature==='writing')return {value:{status:'ready',text:'I moved the meeting to Thursday.'}};

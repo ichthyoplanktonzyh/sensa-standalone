@@ -23,10 +23,11 @@ export const captureSnapshotSchema=z.object({
    * short selection on a page that declares no language genuinely has no known
    * language, and stamping the learner's target language on it would file the
    * capture under a language nobody observed. Whoever holds the language
-   * profile decides what a tag means; the capture only says what it is.
+   * context decides what a tag means; the capture only says what it is.
    */
   language:sensaLanguageTagSchema.nullable(),
   languageSource:captureLanguageSourceSchema.nullable(),
+  languageConfidence:z.number().min(0).max(1).nullable(),
   source:z.object({url:sourceUrl.nullable(),title:z.string().max(1000),capturedAt:z.string().datetime({offset:true}),
     video:z.object({platform:z.literal('youtube'),videoId:z.string().regex(/^[a-zA-Z0-9_-]{11}$/u),startMs:z.number().int().min(0).max(86400000),endMs:z.number().int().min(0).max(86400000)}).strict().optional(),
   }).strict(),
@@ -34,7 +35,7 @@ export const captureSnapshotSchema=z.object({
 }).strict().superRefine((value,ctx)=>{
   // A capture knows a language and how it knows it, or it knows neither. One
   // without the other is a claim with no basis or a basis with no claim.
-  if((value.language===null)!==(value.languageSource===null))ctx.addIssue({code:'custom',message:'A language and its source are decided together',path:['languageSource']});
+  if((value.language===null)!==(value.languageSource===null)||(value.language===null)!==(value.languageConfidence===null))ctx.addIssue({code:'custom',message:'A language, source and confidence are decided together',path:['languageSource']});
   const e=value.expression;if(e&&(e.end<=e.start||Array.from(value.sentence).slice(e.start,e.end).join('')!==e.text||e.end>Array.from(value.sentence).length))ctx.addIssue({code:'custom',message:'Invalid code point occurrence',path:['expression']});
   const video=value.source.video;if(video){const url=value.source.url?new URL(value.source.url):null;const id=url?.pathname==='/watch'?url.searchParams.get('v'):url?.pathname.match(/^\/(?:shorts|embed)\/([^/]+)$/u)?.[1];if(!url||!['www.youtube.com','youtube.com','m.youtube.com','www.youtube-nocookie.com'].includes(url.hostname)||id!==video.videoId||video.endMs<video.startMs)ctx.addIssue({code:'custom',message:'Invalid video source',path:['source','video']});}
 });

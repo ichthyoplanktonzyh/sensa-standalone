@@ -34,6 +34,7 @@ export const newSemanticAgentSession = (
 ): SemanticAgentSession => ({
   personalMeaningId,
   threadId,
+  languageContext:null,
   messages: [],
   workingSet: emptyWorkingSet(),
   learnerEditedTracks: [],

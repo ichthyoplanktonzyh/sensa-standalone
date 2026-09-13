@@ -89,8 +89,8 @@ globalThis.fetch=async(url:string|URL|Request,init?:RequestInit)=>{
   throw new Error('unexpected request: '+href);
 };
 
-const spanish={familiarLanguageTag:'zh-CN',targetLanguageTag:'es'};
-const english={familiarLanguageTag:'zh-CN',targetLanguageTag:'en'};
+const spanish={supportLanguageTag:'zh-CN',targetLanguageTag:'es'};
+const english={supportLanguageTag:'zh-CN',targetLanguageTag:'en'};
 
 try{
   const library=await api.openLibrary(),accountId=id();
@@ -104,7 +104,7 @@ try{
   const spanishResult=await api.lookupReference('hola',{languages:spanish});
   assert.ok(spanishResult,'a Spanish lookup answers');
   assert.equal(spanishResult.release.targetLanguage,'es','the release belongs to the target language, not to English');
-  assert.equal(spanishResult.release.learnerLocale,'zh-CN','the release locale follows the familiar language');
+  assert.equal(spanishResult.release.learnerLocale,'zh-CN','the release locale follows the Support Language');
   assert.ok(spanishResult.release.provider.includes('Spanish'),'the release names the language the entry is in');
   assert.equal(spanishResult.entry.senses[0]!.definitionL2,'hello, hi, hey');
   assert.equal(spanishResult.entry.pronunciations[0]?.accent,'es','a non-English recording is never relabelled as an English accent');
@@ -129,11 +129,11 @@ try{
   assert.ok(!prompt.system.includes('strict English'),'the English-only instruction is gone');
   assert.ok(prompt.system.includes('Chinese (Simplified) (zh-CN)'),'the resolver is told which language to render the gloss in');
   assert.equal(prompt.user.targetLanguage,'es');
-  assert.equal(prompt.user.familiarLanguage,'zh-CN');
+  assert.equal(prompt.user.supportLanguage,'zh-CN');
   assert.equal(prompt.user.sentence,'¡Hola! ¿Cómo estás?','the clicked sentence travels unchanged');
 
   assert.equal(contextual.contextualResolution?.status,'model_confident');
-  assert.equal(contextual.contextualResolution?.glossL1,'打招呼用语','the familiar-language rendering is recorded with the decision');
+  assert.equal(contextual.contextualResolution?.glossL1,'打招呼用语','the Support-Language rendering is recorded with the decision');
   assert.equal(contextual.contextualResolution?.modelId,'fixture','the rendering keeps the model that produced it');
   const selectedSense=contextual.entry.senses.find((sense:any)=>sense.referenceSenseId===contextual.contextualResolution?.referenceSenseId);
   assert.equal(selectedSense.glossL1,'打招呼用语','the selected sense carries the rendering for display');
@@ -154,7 +154,7 @@ try{
 
   // The cache is keyed by language: the same spelling in two languages is two entries.
   const beforeCache=requested.length;
-  const frenchResult=await api.lookupReference('hola',{languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'fr'}});
+  const frenchResult=await api.lookupReference('hola',{languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'fr'}});
   assert.ok(requested.slice(beforeCache).some(href=>href.includes('lang=fr')),'a second language is fetched instead of answered from the first language cache');
   assert.equal(frenchResult?.release.targetLanguage,'fr','the cached Spanish entry never answers a French lookup');
   assert.equal(frenchResult?.entry.senses[0]?.definitionL2,'bonjour');
@@ -164,7 +164,7 @@ try{
   await api.lookupReference('niño',{languages:spanish});
   assert.ok(requested.some(href=>href.includes('ni%C3%B1o')),'a Spanish headword reaches the provider with its own characters');
   groups['ja:ありがとう']={pos:'intj',glosses:['thank you']};
-  await api.lookupReference('ありがとう',{languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'ja'}});
+  await api.lookupReference('ありがとう',{languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'ja'}});
   assert.ok(requested.some(href=>href.includes(encodeURIComponent('ありがとう'))),'a Japanese headword is not normalized away');
 
   // The official endpoint answers a language the aggregators do not carry, and
@@ -196,22 +196,25 @@ try{
 
   // A target language this release cannot place answers nothing at all.
   const beforeUnknown=requested.length;
-  assert.equal(await api.lookupReference('hola',{languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'xx-unknown'}}),null,'an unplaceable language cannot be answered in another language');
-  assert.equal(await api.lookupReference('hola',{languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'zh-CN'}}),null,'a language that is only ever familiar cannot be a target');
+  assert.equal(await api.lookupReference('hola',{languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'xx-unknown'}}),null,'an unplaceable language cannot be answered in another language');
+  assert.equal(await api.lookupReference('hola',{languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'zh-CN'}}),null,'a language that this release cannot teach as a Target Language reaches no provider');
   assert.equal(requested.length,beforeUnknown,'an unplaceable language reaches no provider');
 
-  // With no explicit pair the learner's stored profile decides, which is what
+  // With no explicit context the learner's active Route decides, which is what
   // every existing call site relies on.
-  await api.addTargetLanguage(id(),'de');
-  await api.setActiveTargetLanguage(id(),'de');
+  const germanRoute=await api.addLanguageRoute(id(),'de','zh-CN');
+  await api.setActiveLanguageRoute(id(),germanRoute.id);
   groups['de:wasser']={pos:'noun',glosses:['water']};
   const profileDriven=await api.lookupReference('Wasser');
-  assert.ok(requested.some(href=>href.includes('lang=de')),'the default pair comes from the stored profile');
+  assert.ok(requested.some(href=>href.includes('lang=de')),'the default context comes from the active Route');
   assert.equal(profileDriven?.release.targetLanguage,'de');
   assert.equal(profileDriven?.release.learnerLocale,'zh-CN');
-  assert.deepEqual((await api.languageProfileSnapshot()).profile,{familiarLanguageTag:'zh-CN',targetLanguageTags:['en','de'],activeTargetLanguageTag:'de'});
+  const routeSnapshot=await api.languageRoutesSnapshot();
+  assert.equal(routeSnapshot.activeRoute.id,germanRoute.id);
+  assert.deepEqual(routeSnapshot.context,{targetLanguageTag:'de',supportLanguageTag:'zh-CN',languageRouteId:germanRoute.id,languageRouteRevision:1});
+  assert.deepEqual(routeSnapshot.collection.routes.map((route:any)=>[route.targetLanguageTag,route.defaultSupportLanguageTag,route.status]),[['en','zh-CN','active'],['de','zh-CN','active']]);
 
-  console.log('PASS: Reference lookups are scoped to the learner language pair — provider group, cache identity, prompt languages and the familiar-language rendering all follow it, and an unplaceable language answers nothing.');
+  console.log('PASS: Reference lookups are scoped to the pinned language context — provider group, cache identity, prompt languages and the Support-Language rendering all follow it, and an unplaceable language answers nothing.');
 }finally{
   globalThis.fetch=realFetch;
   await rm(temp,{recursive:true,force:true});

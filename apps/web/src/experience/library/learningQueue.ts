@@ -1,20 +1,18 @@
-import { defaultSensaLanguageProfile } from '@sensa/contracts/sensa';
 import type { LocalLearningTarget } from '../../data/library/learning';
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
+import {localTargetInRoute} from '../../learning/runtime/localCurriculum';
 
 /**
  * What the learner is asked to learn right now.
  *
- * Today's queue and today's new items belong to the language being learned now.
- * The daily limit does not: it is one account-wide quantity, so switching
- * language cannot buy a second allowance of new items for the same day. Both
- * rules are decided here rather than in the hook that renders them, because the
- * second one is easy to break by scoping one line too many.
+ * Queue membership and the daily-new budget both belong to one Language Route.
+ * Learning progress remains attached to the shared Learning Target, while the
+ * route decides whether that Target belongs in this curriculum today.
  */
 
 export interface LearningQueueInput {
   readonly targets: readonly LocalLearningTarget[];
-  readonly activeLanguageTag: string;
+  readonly languageRouteId: string;
   readonly readiness: Readonly<Record<string, 'ready' | 'blocked'>>;
   readonly clock: number;
   readonly dailyLimit: number | undefined;
@@ -25,18 +23,12 @@ export interface LearningQueue {
   readonly activeTargets: readonly LocalLearningTarget[];
   /** The review queue, in the language being learned. */
   readonly due: readonly LocalLearningTarget[];
-  /** Today's new items, in the language being learned and within what is left of
-   * the account's daily allowance. */
+  /** Today's new items within this Route's Study Plan allowance. */
   readonly initialReady: readonly LocalLearningTarget[];
-  /** Counted across every language on purpose: the limit is the account's. */
+  /** Counted only when this Route introduced the Target. */
   readonly startedToday: number;
   readonly remaining: number;
 }
-
-/** A target written before the language profile existed is read as the pair the
- * product has always shipped, never as no language. */
-export const targetLanguageTag = (target: LocalLearningTarget): string =>
-  target.targetLanguageTag ?? defaultSensaLanguageProfile.activeTargetLanguageTag;
 
 const needsReviewAt = (target: LocalLearningTarget, clock: number): number | null => {
   if (target.relearnAt) {
@@ -48,12 +40,12 @@ const needsReviewAt = (target: LocalLearningTarget, clock: number): number | nul
 
 export function resolveLearningQueue({
   targets,
-  activeLanguageTag,
+  languageRouteId,
   readiness,
   clock,
   dailyLimit,
 }: LearningQueueInput): LearningQueue {
-  const activeTargets = targets.filter((target) => targetLanguageTag(target) === activeLanguageTag);
+  const activeTargets = targets.filter((target) => localTargetInRoute(target,languageRouteId));
   const due = activeTargets
     .filter((target) => !hasDeclaredMasteryOverride(target) && readiness[target.id] === 'ready')
     .filter((target) => {
@@ -61,7 +53,9 @@ export function resolveLearningQueue({
       return dueAt !== null && dueAt <= clock;
     });
   const startedToday = targets.filter((target) =>
-    target.startedAt && new Date(target.startedAt).toDateString() === new Date(clock).toDateString()).length;
+    target.introducedLanguageRouteId===languageRouteId
+    && target.startedAt
+    && new Date(target.startedAt).toDateString() === new Date(clock).toDateString()).length;
   const remaining = Math.max(0, (dailyLimit ?? 20) - startedToday);
   const initialReady = [
     ...activeTargets.filter((target) => !hasDeclaredMasteryOverride(target) && !target.completedAt && target.startedAt && readiness[target.id] === 'ready'),

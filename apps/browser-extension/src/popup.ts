@@ -1,17 +1,26 @@
 import {webUrl} from './config';
 import {t,errorText,extensionLanguage,type MessageKey} from './i18n';
+import {sensaLanguageDisplayName} from '@sensa/contracts/sensa';
 const status=document.querySelector<HTMLParagraphElement>('#status')!;
 const buttons=Array.from(document.querySelectorAll<HTMLButtonElement>('button'));
+const routeSelect=document.querySelector<HTMLSelectElement>('#language-route')!;
 document.documentElement.lang=extensionLanguage();
 for(const element of document.querySelectorAll<HTMLElement>('[data-i18n]'))element.textContent=t(element.dataset.i18n as MessageKey);
+for(const element of document.querySelectorAll<HTMLElement>('[data-i18n-label]'))element.setAttribute('aria-label',t(element.dataset.i18nLabel as MessageKey));
 const progress:Record<string,MessageKey>={status:'checking',login:'loggingIn',toggle:'starting',stop:'stopping',sync:'checkingSave',disconnect:'disconnecting'};
 const success:Record<string,MessageKey>={login:'loggingIn',toggle:'started',stop:'stopped',sync:'checked',disconnect:'disconnected'};
 let busy=false;
 async function act(kind:string){
- if(busy)return;busy=true;buttons.forEach(b=>{b.disabled=true;});status.textContent=t(progress[kind]??'working');status.setAttribute('aria-busy','true');
+ if(busy)return;busy=true;buttons.forEach(b=>{b.disabled=true;});routeSelect.disabled=true;status.textContent=t(progress[kind]??'working');status.setAttribute('aria-busy','true');
  try{
   const response=await chrome.runtime.sendMessage({kind});if(response.error)throw new Error(response.error);
   const v=response.value;
+  routeSelect.replaceChildren();
+  for(const route of v.language.collection.routes.filter((item:{status:string})=>item.status==='active')){
+   const option=document.createElement('option');option.value=route.id;
+   option.textContent=t('routeOption',{target:sensaLanguageDisplayName(route.targetLanguageTag,extensionLanguage()),support:sensaLanguageDisplayName(route.defaultSupportLanguageTag,extensionLanguage())});
+   option.selected=route.id===v.language.context.languageRouteId;routeSelect.append(option);
+  }
   document.getElementById('login')!.textContent=t(v.accountId?'account':'login');
   status.textContent=t(v.accountId?'connected':'guest');
   if(v.pending)status.textContent+='\n'+t('pending',{count:v.pending});
@@ -26,7 +35,14 @@ async function act(kind:string){
   const empty=document.getElementById('recent-empty')!;empty.hidden=v.recent.length>0;empty.textContent=t(v.accountId?'empty':'guestEmpty');
   rule=v.rule??null;siteButton.hidden=!rule;if(rule)siteButton.textContent=t(rule.disabled?'siteEnable':'siteDisable');
  }catch(e){status.textContent=errorText(e);}
- finally{busy=false;buttons.forEach(b=>{b.disabled=false;});status.setAttribute('aria-busy','false');}
+ finally{busy=false;buttons.forEach(b=>{b.disabled=false;});routeSelect.disabled=false;status.setAttribute('aria-busy','false');}
+}
+routeSelect.addEventListener('change',()=>void actRoute(routeSelect.value));
+async function actRoute(routeId:string){
+ if(busy)return;busy=true;buttons.forEach(button=>{button.disabled=true;});routeSelect.disabled=true;status.textContent=t('selectingRoute');status.setAttribute('aria-busy','true');
+ try{const response=await chrome.runtime.sendMessage({kind:'select-language-route',routeId});if(response.error)throw new Error(response.error);status.textContent=t('routeSelected');}
+ catch(error){status.textContent=errorText(error);}
+ finally{busy=false;buttons.forEach(button=>{button.disabled=false;});routeSelect.disabled=false;status.setAttribute('aria-busy','false');await act('status');}
 }
 for(const id of ['login','toggle','stop','sync','disconnect'])document.getElementById(id)!.addEventListener('click',()=>void act(id));
 /**

@@ -3,6 +3,7 @@ import {
   sensaExpressionTypeSchema,
   sensaSenseSemanticSpecSchema,
 } from "./semanticRegistry.js";
+import {sensaPinnedLanguageContextSchema} from './language.js';
 
 export const sensaPersonalSemanticWorldContractVersion =
   "sensa-personal-semantic-world-v2" as const;
@@ -22,11 +23,6 @@ export const sensaPersonalProvenanceKindSchema = z.enum([
   "llm_suggested",
   "reviewed",
   "imported",
-]);
-
-export const sensaLearnerLanguageRoleSchema = z.enum([
-  "familiar",
-  "target",
 ]);
 
 export const sensaPersonalAnchorKindSchema = z.enum([
@@ -290,7 +286,6 @@ export const sensaPersonalExpressionAnchorRevisionSnapshotSchema = z
     revision: positiveInteger,
     expressionType: sensaExpressionTypeSchema,
     languageTag: nonEmpty,
-    learnerLanguageRole: sensaLearnerLanguageRoleSchema,
     surfaceForm: nonEmpty,
     normalizedForm: nonEmpty,
     contextAnchorRevisionId: uuid.nullable(),
@@ -345,8 +340,7 @@ export const sensaSenseConstructionSnapshotSchema = z
     personalMeaningRevisionId: uuid,
     meaningFocusId: uuid,
     meaningFocusRevisionId: uuid,
-    familiarLanguageTag: nonEmpty,
-    targetLanguageTag: nonEmpty,
+    languageContext:sensaPinnedLanguageContextSchema,
     semanticPolicyVersion: nonEmpty,
     status: sensaSenseConstructionStatusSchema,
     revision: positiveInteger,

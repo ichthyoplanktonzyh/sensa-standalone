@@ -1,4 +1,4 @@
-import type { SensaLanguageProfile, SensaCommandLanguages } from '@sensa/contracts/sensa';
+import type { SensaPinnedLanguageContext } from '@sensa/contracts/sensa';
 import { previewStorage } from '../services/previewStorage';
 /**
  * Low-level ports the Personal Meaning journey gateway depends on. React
@@ -90,8 +90,7 @@ export const createSeededClock = (
 };
 
 /**
- * The learner's language profile, which decides what a familiar or target
- * expression is written in.
+ * Resolves the active Route into a context for a new operation.
  *
  * It is a port rather than a direct read so a command resolves the languages
  * once, before it writes anything: a learner switching their active target
@@ -99,10 +98,7 @@ export const createSeededClock = (
  * languages.
  */
 export interface LearnerLanguagePort {
-  read(): Promise<SensaLanguageProfile>;
+  read(): Promise<SensaPinnedLanguageContext>;
 }
 
-/** The one language pair a single command is about. The pair itself belongs to
- * the language profile, so it is defined there and used by every surface that
- * has to name a language, not only this journey. */
-export type CommandLanguages = SensaCommandLanguages;
+export type CommandLanguages = SensaPinnedLanguageContext;

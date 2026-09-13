@@ -3,7 +3,7 @@ import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useState} from 'react';
 import {sensaBridgeRequestChannel,sensaBridgeResponseChannel,sensaBridgeValue,type SensaBridgeKind,type SensaBridgePayload,type SensaBridgeValue} from '@sensa/contracts/sensa';
-import {languageProfileSnapshot} from '../../data/library/language';
+import {languageRoutesSnapshot} from '../../data/library/language';
 import {readingGlossarySnapshot} from '../../data/library/glossary';
 import {openLibrary,observeLibrary} from '../../data/library/store';
 import {receiveWebIntake} from '../../data/library/intake';
@@ -55,15 +55,10 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
       await bridge('web-connect-complete',accountId,library.id,controller.signal,{receipt:result});
      }
     }
-    // The language profile is this library's and nowhere else's, so the extension
-    // can only be told it: it decides which language a reading request is
-    // translated into, and a stale copy would translate the wrong way. This loop
-    // already re-runs whenever the library changes, so publishing here keeps the
-    // extension's copy equal to the profile it comes from instead of letting it
-    // drift into a second one. The ACTIVE target language is published because
-    // reading is an action surface, and action surfaces act on the active one.
-    const {profile}=await languageProfileSnapshot();
-    await bridge('web-language-profile',accountId,library.id,controller.signal,{languages:{familiarLanguageTag:profile.familiarLanguageTag,targetLanguageTag:profile.activeTargetLanguageTag}});
+    // Reading is a separate product surface. Publish the learner-owned Routes;
+    // the extension keeps its own device selection and cannot edit Route facts.
+    const {collection}=await languageRoutesSnapshot();
+    await bridge('web-language-routes',accountId,library.id,controller.signal,{routes:collection});
     // The glossary the learner wrote is published the same way and for the same
     // reason: it is their own words, the extension cannot read the library, and a
     // reading prompt that named a stale copy would be using words they edited

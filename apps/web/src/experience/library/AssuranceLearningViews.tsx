@@ -10,7 +10,8 @@ import {useEffect,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {assuranceContent,assuranceView,localAssuranceState,type AssuranceAction} from '../../learning/protocols/assurance';
-import type {LocalLearningRun,LocalLearningTarget} from '../../data/library/learning';
+import type {LocalLearningRun} from '../../data/library/learning';
+import type {LocalExecutableLearningTarget} from '../../learning/runtime/localProtocol';
 import type {InstalledPackage} from '../../data/library/packages';
 import {AssuranceSummary} from '../components/learning/AssuranceSummary';
 import type {RuntimeLearningContent} from '../../learning/content/learningCatalog';
@@ -23,7 +24,7 @@ export function StudyResources({content}:{content:RuntimeLearningContent}){
  </div>;
 }
 export type AssuranceSupportHost = Pick<StepRendererHost, 'toast' | 'openDict' | 'openNoteEditor' | 'openSceneEditor' | 'lookupDictionary'> & Pick<RuntimeToolsProps, 'onOpenMenuMore'>;
-export function AssuranceRuntime(props:{active:boolean;run:LocalLearningRun;target:LocalLearningTarget;pack:InstalledPackage;busy:boolean;notice:string;host:AssuranceSupportHost;onMarkKnown:()=>void;onAction:(action:AssuranceAction)=>void;onExit:()=>void;onFinish:()=>void}){
+export function AssuranceRuntime(props:{active:boolean;run:LocalLearningRun;target:LocalExecutableLearningTarget;pack:InstalledPackage;busy:boolean;notice:string;host:AssuranceSupportHost;onMarkKnown:()=>void;onAction:(action:AssuranceAction)=>void;onExit:()=>void;onFinish:()=>void}){
  useTranslation();
  const {run,pack,host}=props,view=assuranceView(run,pack),state=localAssuranceState(run);
  const [exampleIndex,setExampleIndex]=useState<number|null>(null);

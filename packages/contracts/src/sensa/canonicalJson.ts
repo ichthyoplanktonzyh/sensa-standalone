@@ -1,7 +1,7 @@
 /** Canonical JSON for persisted operation identities and content digests. */
 export function canonicalConsumerJson(value:unknown):string{
   if(value===null||typeof value==='boolean'||typeof value==='string')return JSON.stringify(value);
-  if(typeof value==='number'&&Number.isSafeInteger(value)&&!Object.is(value,-0))return String(value);
+  if(typeof value==='number'&&Number.isFinite(value)&&!Object.is(value,-0))return JSON.stringify(value);
   if(Array.isArray(value))return '['+value.map(canonicalConsumerJson).join(',')+']';
   if(typeof value==='object'&&Object.getPrototypeOf(value)===Object.prototype){
     const object=value as Record<string,unknown>;

@@ -38,7 +38,7 @@ import type {
   SensaSenseSemanticSpec,
   SensaSenseVersionSnapshot,
 } from '@sensa/contracts/sensa';
-import { sensaCommandLanguages, sensaIntakePayloadSchema, sensaIntakeSenseSchema } from '@sensa/contracts/sensa';
+import { sensaIntakePayloadSchema, sensaIntakeSenseSchema, sensaPinnedLanguageContextSchema } from '@sensa/contracts/sensa';
 import {
   createInboxItem,
   dismissInboxItem,
@@ -58,7 +58,7 @@ import {
   type LearnerLanguagePort,
   type StoragePort,
 } from './ports';
-import { languageProfileSnapshot } from '../../data/library/language';
+import { languageRoutesSnapshot } from '../../data/library/language';
 import {
   StoreCorruptedError,
   loadJourneyState,
@@ -101,7 +101,7 @@ const LEARNER_USER_ID = 'sensa-local-learner';
  */
 const localLearnerLanguages: LearnerLanguagePort = {
   async read() {
-    return (await languageProfileSnapshot()).profile;
+    return (await languageRoutesSnapshot()).context;
   },
 };
 
@@ -397,10 +397,15 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     ) ?? null;
   }
 
-  private activeFamiliarAnchors(record: MeaningJourneyRecord) {
-    return this.activeExpressionAnchors(record).filter((anchor) =>
-      this.currentExpressionAnchorRevision(record, anchor)?.learnerLanguageRole === 'familiar',
-    );
+  private activeSourceExpressionAnchors(record: MeaningJourneyRecord) {
+    const boundRevisions=new Set([
+      ...record.bindingConfirmations.map(fact=>fact.personalExpressionAnchorRevisionId),
+      ...record.semanticAcceptances.map(fact=>fact.personalExpressionAnchorRevisionId),
+    ]);
+    return this.activeExpressionAnchors(record).filter((anchor) => {
+      const revision=this.currentExpressionAnchorRevision(record,anchor);
+      return revision!==null&&!boundRevisions.has(revision.personalExpressionAnchorRevisionId);
+    });
   }
 
   private activeExperienceAnchors(record: MeaningJourneyRecord) {
@@ -408,7 +413,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   }
 
   private displayLabel(record: MeaningJourneyRecord): string | null {
-    const familiar = this.activeFamiliarAnchors(record)
+    const familiar = this.activeSourceExpressionAnchors(record)
       .map((anchor) => record.personalExpressionAnchorRevisions.find(
         (revision) =>
           revision.personalExpressionAnchorId === anchor.personalExpressionAnchorId
@@ -513,7 +518,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     record: MeaningJourneyRecord,
     operationId: string,
     block: MaterialBlockInput,
-    familiarLanguageTag: string,
+    supportLanguageTag: string,
   ): string {
     const now = this.now();
     const anchorId = this.id();
@@ -542,7 +547,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       personalSemanticAnchorId: anchorId,
       revision: 1,
       anchorKind: isImage ? 'image' : 'text',
-      languageTag: isImage ? null : familiarLanguageTag,
+      languageTag: isImage ? null : supportLanguageTag,
       bodyText: isImage ? null : bodyText,
       personalMediaObjectId: isImage ? block.personalMediaObjectId! : null,
       structuredPayload: {},
@@ -581,10 +586,9 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       throw new Error('个人意义至少需要一个材料块或一个熟悉表达。');
     }
 
-    // Read once, before any fact exists: the learner's own wording is written
-    // in whatever language they think in, and that language cannot change
-    // halfway through this command.
-    const languages = sensaCommandLanguages(await this.deps.languages.read());
+    // Read once, before any fact exists: this creation operation uses one
+    // resolved language context throughout.
+    const languages = await this.deps.languages.read();
     const personalMeaningId = this.id();
     const personalMeaningRevisionId = this.id();
     const now = this.now();
@@ -645,8 +649,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
         // Provisional classification: the composer deliberately does not ask
         // for one, and the model refines it during clarification.
         expressionType: 'phrase',
-        languageTag: languages.familiarLanguageTag,
-        learnerLanguageRole: 'familiar',
+        languageTag: languages.supportLanguageTag,
         surfaceForm: familiarSurface,
         normalizedForm: normalizedForm(familiarSurface),
         contextAnchorRevisionId: null,
@@ -667,7 +670,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
           record,
           input.operationId,
           block,
-          languages.familiarLanguageTag,
+          languages.supportLanguageTag,
         ),
     );
 
@@ -711,12 +714,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     const replay = this.replay<AddMaterialBlockResult>(input.operationId, 'AddMaterialBlock');
     if (replay) return replay;
     const record = this.requireRecord(input.personalMeaningId);
-    const languages = sensaCommandLanguages(await this.deps.languages.read());
+    const languages = await this.deps.languages.read();
     const anchorId = this.appendMaterialAnchor(
       record,
       input.operationId,
       input.block,
-      languages.familiarLanguageTag,
+      languages.supportLanguageTag,
     );
     this.appendMeaningRevision(record, input.operationId, [anchorId]);
     const result = { anchorId };
@@ -744,7 +747,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     if (replay) return replay;
     const state = this.requireState();
     const record = this.requireRecord(input.personalMeaningId);
-    const languages = sensaCommandLanguages(await this.deps.languages.read());
+    const languages = sensaPinnedLanguageContextSchema.parse(input.languageContext);
 
     // Validate the whole intent before writing any fact: a rejected step must
     // leave the store exactly as it was.
@@ -842,8 +845,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       personalMeaningRevisionId: personalMeaningRevision.personalMeaningRevisionId,
       meaningFocusId,
       meaningFocusRevisionId,
-      familiarLanguageTag: languages.familiarLanguageTag,
-      targetLanguageTag: languages.targetLanguageTag,
+      languageContext:languages,
       semanticPolicyVersion: input.semanticPolicyVersion,
       status: 'completed',
       revision: 1,
@@ -1310,7 +1312,6 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
         revision: 1,
         expressionType: input.expressionType,
         languageTag: input.languageTag,
-        learnerLanguageRole: 'target',
         surfaceForm: input.surfaceForm,
         normalizedForm: form,
         contextAnchorRevisionId: null,
@@ -1461,7 +1462,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     // the write: whether the captured language sits on a side of the learner's
     // boundary IS that decision, so reading the profile afterwards would let one
     // operation route on one profile and write under another.
-    const languages = sensaCommandLanguages(await this.deps.languages.read());
+    const languages = await this.deps.languages.read();
     const decision = evaluateIntakeRoute(parsed, languages);
     if (decision.route === 'rejected') {
       const result: IngestResult = { route: 'rejected', reason: decision.reason };
@@ -1530,7 +1531,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     const outcome = resolveInboxItemWithSense(
       state,
       { intakeId, sense, operationId, authority },
-      this.enginePorts(sensaCommandLanguages(await this.deps.languages.read())),
+      this.enginePorts(await this.deps.languages.read()),
     );
     this.state = outcome.nextState;
     this.settleExpressionBinding(

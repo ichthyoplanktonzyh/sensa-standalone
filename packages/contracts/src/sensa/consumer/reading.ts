@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {sensaLanguageNameableTagSchema,sensaCommandLanguagesSchema} from '../language.js';
+import {sensaLanguageNameableTagSchema,sensaPinnedLanguageContextSchema} from '../language.js';
 
 /**
  * What a reading connection can be asked to do.
@@ -68,14 +68,32 @@ export const readingModelsRequestSchema=z.object({providerId:z.string().uuid()})
 /** What a glossary is allowed to be, in one place: the schema that accepts one,
  * the editor that writes one and the surface that publishes one all read these
  * numbers, so the limit the learner meets is the limit the request carries. */
-export const sensaReadingGlossaryLimits={entries:50,term:80,rendering:160} as const;
+export const sensaReadingGlossaryLimits={entriesPerPair:50,totalEntries:200,term:80,rendering:160} as const;
 export const sensaReadingGlossaryEntrySchema=z.object({
+  inputLanguageTag:sensaLanguageNameableTagSchema,
+  outputLanguageTag:sensaLanguageNameableTagSchema,
   term:z.string().trim().min(1).max(sensaReadingGlossaryLimits.term),
   rendering:z.string().trim().min(1).max(sensaReadingGlossaryLimits.rendering),
 }).strict();
-export const sensaReadingGlossarySchema=z.array(sensaReadingGlossaryEntrySchema).max(sensaReadingGlossaryLimits.entries).superRefine((entries,context)=>{
-  if(new Set(entries.map(entry=>entry.term.toLowerCase())).size!==entries.length)context.addIssue({code:'custom',message:'a glossary lists each term once'});
+export const sensaReadingGlossarySchema=z.array(sensaReadingGlossaryEntrySchema).max(sensaReadingGlossaryLimits.totalEntries).superRefine((entries,context)=>{
+  const keys=entries.map(entry=>[entry.inputLanguageTag,entry.outputLanguageTag,entry.term.toLocaleLowerCase(entry.inputLanguageTag)].join('\u0000'));
+  if(new Set(keys).size!==entries.length)context.addIssue({code:'custom',message:'a glossary lists each term once per language pair'});
+  const pairCounts=new Map<string,number>();
+  for(const entry of entries){
+    const pair=[entry.inputLanguageTag,entry.outputLanguageTag].join('\u0000');
+    pairCounts.set(pair,(pairCounts.get(pair)??0)+1);
+  }
+  if([...pairCounts.values()].some(count=>count>sensaReadingGlossaryLimits.entriesPerPair))context.addIssue({code:'custom',message:'a language pair has too many glossary entries'});
 });
+
+/** Only entries for the concrete transformation cross the reading seam. */
+export function sensaReadingGlossaryForPair(
+  glossary:SensaReadingGlossary,
+  inputLanguageTag:string,
+  outputLanguageTag:string,
+):SensaReadingGlossary {
+  return glossary.filter(entry=>entry.inputLanguageTag===inputLanguageTag&&entry.outputLanguageTag===outputLanguageTag);
+}
 
 /**
  * One reading operation, in the learner's own two languages.
@@ -89,17 +107,29 @@ export const sensaReadingGlossarySchema=z.array(sensaReadingGlossaryEntrySchema)
  *
  * `sourceLanguageTag` is the language of `text` when the caller established one,
  * which is a statement about the text and not a third member of the pair: the
- * text a learner quotes is usually their target language, but a familiar-language
+ * text a learner quotes is usually their Target Language, but a Support-Language
  * quote is a real capture too.
  */
 export const readingRequestSchema = z.object({
   id:z.string().uuid(), feature:z.enum(['selection','page','subtitles','action','writing']),
   text:z.string().trim().min(1).max(12000), context:z.string().max(12000).default(''),
   instruction:z.string().trim().max(2000).default(''),
-  languages:sensaCommandLanguagesSchema,
+  languages:sensaPinnedLanguageContextSchema,
   sourceLanguageTag:sensaLanguageNameableTagSchema.nullable().default(null),
   glossary:sensaReadingGlossarySchema.default([]),
-}).strict();
+}).strict().superRefine((request,context)=>{
+  const inputLanguageTag=request.feature==='writing'
+    ?request.languages.supportLanguageTag
+    :request.sourceLanguageTag??request.languages.targetLanguageTag;
+  const outputLanguageTag=request.feature==='writing'
+    ?request.languages.targetLanguageTag
+    :request.languages.supportLanguageTag;
+  request.glossary.forEach((entry,index)=>{
+    if(entry.inputLanguageTag!==inputLanguageTag||entry.outputLanguageTag!==outputLanguageTag){
+      context.addIssue({code:'custom',path:['glossary',index],message:'a reading request carries only the glossary for its concrete language transformation'});
+    }
+  });
+});
 export type ReadingProvider = z.infer<typeof readingProviderSchema>;
 export type ReadingAssignments = z.infer<typeof readingAssignmentsSchema>;
 export type ReadingRequest = z.infer<typeof readingRequestSchema>;

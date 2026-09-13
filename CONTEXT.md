@@ -1,7 +1,7 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-09-08
+> Updated: 2026-09-13
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
@@ -21,6 +21,17 @@ that establish, check, strengthen or restore that connection across long-term re
 
 ## Content language
 
+**Language Tag**:
+A preserved, canonical BCP-47 language identity for content and expressions, including
+a known script, region or other variant. Capability fallback may interpret a tag but
+never rewrites the original language fact.
+
+**Language Observation**:
+A provenance-bearing statement that a captured item or located expression uses a
+Language Tag, or that its language remains unresolved. It preserves source and any
+applicable confidence; a declaration, detector result and learner confirmation are
+different evidence and none is inferred from the active learning route alone.
+
 **Lexeme**:  
 The form-level aggregate that owns a lemma, pronunciation and legal forms. It
 is a shared lookup and presentation identity, not a learning or review identity.
@@ -29,7 +40,8 @@ is a shared lookup and presentation identity, not a learning or review identity.
 A stable, addressable meaning distinction that a language community can
 reproduce through one or more expressions. It can come from curated content or
 confirmed on-demand Sense Construction; it is not a word, translation label or
-learner's private experience.
+learner's private experience. It has no learner-relative Target or Support Language
+role and may bind expressions across languages only when the semantic boundary holds.
 
 **Sense Version**:  
 The immutable semantic contract for one Sense, including its focus, boundary
@@ -76,9 +88,9 @@ of learning content.
 
 **Learning Target**:
 The fixed object of one formal learning intent: a stable Sense Version, target
-language expression binding, learner language/locale context and required scope.
-It says what connection is being learned, not where content comes from or how it
-will be taught.
+language expression binding, learner and required scope. It says what connection is
+being learned, not which support language, interface locale, content source or
+teaching method happens to be used.
 
 **Learning Capability Objective（能力目标）**:
 A versioned statement of the observable performance sought for one Learning Target.
@@ -210,9 +222,11 @@ an LLM generated it successfully.
 
 **Learning Materialization**:
 The immutable, protocol-ready content snapshot resolved from published,
-on-demand or hybrid sources for one learning run. It pins the effective policy/plan
-and Protocol versions; Actions and outcomes cite this snapshot rather than mutable
-prompts or a live model response.
+on-demand or hybrid sources for a Learning Protocol Run or one of its Step Instances.
+The Run keeps the materialization used to resolve its plan as a baseline; each Step
+records the compatible materialization actually presented. Actions and outcomes cite
+that Step snapshot rather than mutable prompts, a live model response or today's
+Curriculum pointer.
 
 **Learning Protocol**:
 A versioned method contract that declares required content roles, allowed
@@ -273,9 +287,10 @@ A reviewed, learner-facing compact reminder of an Experience Sketch used after
 grounding or during repair. It is neither the authoring Sketch itself nor proof
 that the learner reconstructed the experience.
 
-**L1 Bridge**:
-A reviewed learner-locale access path that activates familiar concepts and marks
-important L1/L2 coverage differences. It is a scaffold, not the Sense itself, a
+**Support-Language Bridge**:
+A reviewed access path with a declared Language Tag that activates existing concepts
+and marks important support/target-language coverage differences. It is used only
+when compatible with the Pinned Language Context and is not the Sense itself, a
 translation identity or an assessment answer.
 
 **Learning Example / Study Example**:  
@@ -407,37 +422,54 @@ Learning Evidence or an assessment asset.
 
 ## Learner language
 
-**Familiar Language / Target Language（L1 / L2）**:
-Learner-relative roles for languages used to access an existing meaning and to
-acquire a new expression connection. They are not intrinsic language properties
-and do not imply one-to-one translation.
+**Target Language / Support Language**:
+Roles inside one Language Learning Route or an explicit language-dependent operation:
+the Target Language is being acquired or sought, while the Support Language is used
+for explanations, prompts and access paths. They are not intrinsic learner or language
+properties, may be the same language and do not imply one-to-one translation.
+_Avoid_: global familiar language, L1/L2 as permanent language identities
+
+**Language Learning Route**:
+A learner-owned directional arrangement for acquiring one Target Language with one
+default Support Language and one route-scoped Study Plan. A Learner may keep multiple
+active, paused or archived Routes without declaring a global native language or a
+proficiency model; target bindings match its exact Target Language Tag unless the
+Route explicitly admits a named variant.
+
+**Active Route Selection**:
+The route selected on one product surface or Device Installation for future
+language-dependent operations. It does not modify the Route, reclassify captured
+content or rebind an operation already in progress.
 
 **Study Plan**:  
-A learner's active formal-learning arrangement. It combines one active Book
-Enrollment, optional Supplemental Curriculum, formal Learning Policy Assignments
-and a daily new-Sense limit, but does not select the current learning action.
+A learner's active formal-learning arrangement within one Language Learning Route.
+It combines one active Book Enrollment, optional Supplemental Curriculum, formal
+Learning Policy Assignments and a daily new-Sense limit, but does not select the
+current learning action.
 
 **Book Enrollment**:  
 A learner's relationship to one immutable Book Version and a resolved Book
-Range. Its mode is `active`, `maintenance` or `paused`; at most one Enrollment
-may introduce new Senses at a time.
+Range inside one Language Learning Route. Its mode is `active`, `maintenance`
+or `paused`; at most one Enrollment per Route may introduce new Senses at a time.
 
 **Book Range**:  
 The stable selection of Book Version members eligible for future Introduction.
 Changing it does not erase progress or silently stop already-started learning.
 
 **Supplemental Curriculum / Supplemental Membership**:  
-The learner-owned ordered curriculum of formal Learning Targets explicitly
-accepted through Add-to-Learning. A Membership may remain while its Resolved
-Learning Plan is preparing or blocked; it is neither a Book, a Personal Collection
-nor a Saved list and is not runtime-eligible until ready.
+The route-scoped, learner-owned ordered curriculum of formal Learning Targets
+explicitly accepted through Add-to-Learning. A Membership may remain while its
+Resolved Learning Plan is preparing or blocked; it is neither a Book, a Personal
+Collection nor a Saved list and is not runtime-eligible until ready.
 
 **Study Scope / Study Scope Revision**:  
-The resolved, mode-aware set of Learning Targets currently in formal Curriculum
-scope, de-duplicated by Retention Target and carrying source, Effective Learning
-Policy and plan-readiness provenance in an immutable revision. Only purpose-ready
-members are executable; a Session pins one revision so later changes cannot silently
-alter work already in progress.
+The resolved, mode-aware set of Learning Targets currently in one Language Learning
+Route, de-duplicated by Retention Target and carrying source, Effective Learning Policy
+and plan-readiness provenance in an immutable revision. Only purpose-ready members are
+executable; a Session pins one revision so later changes cannot silently alter work
+already acted on. A newer material revision for the same Curriculum Membership,
+Learning Target and pinned language pair may still be resolved for a current
+not-yet-acted or future Step without rebinding the Session scope.
 
 **Learner Sense Progress**:  
 The learner-by-Sense roll-up over all Retention Targets and explicitly Sense-
@@ -583,9 +615,9 @@ merely to satisfy storage shape.
 **Personal Expression Anchor**:
 
 A typed word, phrase, construction or utterance that helps the learner access or
-tentatively express a Personal Meaning. It records language, learner-relative
-familiar/target role, provenance and verification status; it is not a translation
-identity or proof of learning.
+tentatively express a Personal Meaning. It records its Language Tag, provenance and
+verification status but acquires target, support, input or output roles only when a
+Route or operation uses it; it is not a translation identity or proof of learning.
 
 **Personal Meaning Alignment**:
 
@@ -599,8 +631,8 @@ A learner-named ordered organization of Sense and Example targets, plus one type
 reference placing a target in it. It is independent of saving, Books and Semantic Fields.
 
 **Add-to-Learning Intent**:  
-An explicit learner request to admit a resolved Learning Target into formal
-Curriculum planning under an explicit or inherited Learning Policy. Curriculum may
+An explicit learner request to admit a resolved Learning Target into one Language
+Learning Route's formal Curriculum planning under an explicit or inherited Learning Policy. Curriculum may
 accept it into Supplemental Curriculum with a preparing, ready or blocked plan,
 report its Retention Target already in scope or reject an invalid/conflicting request;
 the Intent is distinct from saving, collection membership and Free Practice.
@@ -612,8 +644,20 @@ The service that selects among due Review, ready protocol work and eligible new
 Retention-Target work while respecting Study Plan and the pinned Learning Protocol.
 
 **Learning Session**:  
-A bounded period of learner activity containing ordered Encounters. Its intent
-is `mixed` or `review_only`; it is not itself a learning or FSRS result.
+A bounded period of learner activity containing ordered Encounters. It pins one
+Study Scope Revision and one Pinned Language Context; its intent is `mixed` or
+`review_only`, and it is not itself a learning or FSRS result.
+
+**Pinned Language Context**:
+The immutable Language Tags and contextual roles resolved when a language-dependent
+operation or Session begins, including a Language Learning Route revision when the
+operation belongs to formal learning. Pre-route semantic work may pin explicit roles
+without creating a Route; later selection changes affect only future operations.
+
+**Input Language / Output Language**:
+Roles of content in one transformation or interaction, such as target-language text
+to a support-language explanation or the reverse writing direction. They are not
+synonyms for Target Language and Support Language.
 
 **Mixed Session**:  
 The primary daily-learning mode in which all eligible work families may be
@@ -650,7 +694,10 @@ feedback or repair. Intent determines result eligibility; visual form does not.
 
 **Protocol Step Instance**:
 The learner-specific execution of one Protocol Step inside a Protocol Run. It
-records pinned material bindings, state and transition result for replay/resume.
+resolves the latest compatible immutable material when it becomes current. Its
+material bindings may be refreshed while it has no accepted learner Action; once an
+Action is accepted, those bindings, state and transition result are pinned for
+replay/resume.
 
 **Learning Action**:  
 The intended intervention materialized from immutable resources. A UI may
@@ -815,9 +862,10 @@ devices. It does not own semantic acceptance, learning outcomes or permission to
 
 **Account / Learner**:  
 Account is the authenticated access and lifecycle identity; Learner is the
-learning identity that owns plans, progress, personal content and learner-scoped
-preferences. Ownership and use of a local Personal Learning Library do not require
-an online Account; linking an Account does not merge these identities.
+learning identity that owns Language Learning Routes, route-scoped plans, progress,
+personal content and learner-scoped preferences. Ownership and use of a local Personal
+Learning Library do not require an online Account; linking an Account does not merge
+these identities.
 
 **Account Session**:  
 One authorized login session for an Account. It grants online service access and is
@@ -828,10 +876,19 @@ A typed, versioned choice that follows one Learner across devices and influences
 future presentation or approved asset selection. It is not a Study Plan setting,
 learning policy, Evidence or progress.
 
+**Language-Pair Glossary Entry**:
+A learner-owned rendering preference scoped by exact Input Language and Output
+Language Tags. It influences future explanation or translation rendering but is not
+a Sense, a reversible translation identity or evidence that either expression is known.
+
 **Device Installation / Device Preference**:  
 One learner-visible installation and its local presentation choices, such as
 autoplay, theme or playback behavior. A Device Installation may use a Replica
 for transport, but the Replica is not the product identity.
+
+**Interface Locale**:
+The locale used to present one product surface. It is a Device or surface preference,
+not a Target Language, Support Language, captured-content fact or learning result.
 
 **Sync Health**:  
 A derived, read-only view of pending local work, connectivity, installed content
@@ -879,9 +936,16 @@ meaning creates neither fact.
 
 **Preference scope, explicit ownership**:  
 Learner Preferences sync, Device Preferences remain local, and Curriculum owns
-daily limits, Books, ranges and Learning Policy Assignments. Changing any
-presentation preference or learning policy never rewrites learning history,
-active Protocol facts or derived mastery state.
+Language Learning Routes, route-scoped Study Plans, daily limits, Books, ranges and
+Learning Policy Assignments. Changing an Interface Locale, Active Route Selection,
+presentation preference or learning policy never rewrites learning history, active
+Protocol facts or derived mastery state.
+
+**Language Support Resolution**:
+The versioned result of resolving speech, reference, translation, content or renderer
+capability for an exact Language Tag: exact support, explicit fallback or unavailable.
+It never relabels captured content, Expression Anchors or learner-owned facts as
+another language.
 
 **Standalone Product Boundary**:  
 The Sensa product covers selected Sense content, Learning Protocols, retention,

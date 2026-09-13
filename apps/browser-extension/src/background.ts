@@ -1,11 +1,11 @@
 import {queueWeb,pendingWeb,acknowledgeWeb,webStatus,discardPendingWeb,webOperationStatus} from './webDestination';
 import {z} from 'zod';
-import {captureSnapshotSchema,sensaLanguageForDeclaredTag,sensaLanguageForIso6393,sensaLanguageRoleForTag,sensaBridgeRequestChannel,sensaBridgeRequestSchema,sensaExtensionCredentialSchema,type SensaBridgeRequest,type SensaBridgeRequestOf,type SensaExtensionAuthorization,type SensaExtensionExchange} from '@sensa/contracts/sensa';
+import {captureSnapshotSchema,sensaLanguageForDeclaredTag,sensaLanguageForIso6393,sensaReadingGlossaryForPair,sensaBridgeRequestChannel,sensaBridgeRequestSchema,sensaExtensionCredentialSchema,type SensaBridgeRequest,type SensaBridgeRequestOf,type SensaExtensionAuthorization,type SensaExtensionExchange} from '@sensa/contracts/sensa';
 import {webUrl,apiUrl} from './config';
 import {detectIso6393} from './languageDetector';
 import {maxDetectableCharacters,minSkimmableCharacters} from './language';
 import {readYoutubePlayer} from './youtubePlayer';
-import {readingLanguages,readingPreferences,saveReadingPreferences,readingSiteOf,publishReadingLanguages,readingGlossary,publishReadingGlossary} from './preferences';
+import {readingLanguageContext,readingLanguageRouteSnapshot,selectReadingLanguageRoute,readingPreferences,saveReadingPreferences,readingSiteOf,publishReadingLanguageRoutes,readingGlossary,publishReadingGlossary} from './preferences';
 type Mode={accountId:string};
 const accountSchema=z.object({expiresAt:z.string().datetime().optional(),webLibraryId:z.string().uuid().optional(),accountId:z.string().uuid(),installationId:z.string().uuid(),token:z.string().min(1),queue:z.array(z.unknown()).default([]),recent:z.array(z.unknown()).default([]),savedOperations:z.record(z.string(),z.unknown()).default({})}).passthrough();
 const storeSchema=z.object({version:z.literal(1).default(1),active:z.string().uuid().nullable(),accounts:z.record(z.string(),accountSchema)}).strict();
@@ -105,7 +105,13 @@ async function stopReadingIn(tabId:number){
  * connection, and their bodies are strictly those questions. Adding the learner's
  * languages to them was a body the service refused.
  */
-async function readingInput(input:unknown){return {...input as Record<string,unknown>,languages:await readingLanguages(),glossary:await readingGlossary()};}
+async function readingInput(input:unknown){
+ const request=input as Record<string,unknown>,languages=await readingLanguageContext();
+ const writing=request.feature==='writing';
+ const inputLanguageTag=writing?languages.supportLanguageTag:typeof request.sourceLanguageTag==='string'?request.sourceLanguageTag:languages.targetLanguageTag;
+ const outputLanguageTag=writing?languages.targetLanguageTag:languages.supportLanguageTag;
+ return {...request,languages,glossary:sensaReadingGlossaryForPair(await readingGlossary(),inputLanguageTag,outputLanguageTag)};
+}
 
 /**
  * Every request the Web page bridge can make, served in one place.
@@ -121,10 +127,9 @@ async function serveWebBridge(request:SensaBridgeRequest,sender:chrome.runtime.M
  switch(request.kind){
   case 'web-connect-prepare':
   case 'web-connect-complete':return webConnect(request,sender);
-  // The Web application owns the language profile; this only accepts its
-  // publication, so no other page can retarget which language the learner's
-  // reading is translated into.
-  case 'web-language-profile':return locked(()=>publishReadingLanguages(request.languages));
+  // The Web application owns Route facts. The extension accepts the collection
+  // while preserving its own surface-scoped selection when it remains valid.
+  case 'web-language-routes':return locked(()=>publishReadingLanguageRoutes(request.routes));
   case 'web-reading-glossary':return locked(()=>publishReadingGlossary(request.glossary));
   case 'web-session-ended':return locked(async()=>{
    const store=await load();
@@ -160,7 +165,8 @@ async function status(){
  const [tab]=await chrome.tabs.query({active:true,currentWindow:true}),site=readingSiteOf(tab?.url);
  const rule=site?{site,disabled:(await readingPreferences()).disabledSites.includes(site)}:null;
  const base=a?{accountId:a.accountId,destination:'web-local',...await webStatus(a.accountId)}:{accountId:null,pending:0,errors:[],recent:[]};
- return {...base,rule};
+ const language=await readingLanguageRouteSnapshot();
+ return {...base,rule,language};
 }
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  if(sender.id!==chrome.runtime.id)return;
@@ -187,11 +193,13 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  // kept out of reach of content scripts, so a reading surface asks a question
  // about the learner and gets an answer about the learner, not the profile.
  if(message.kind==='reading-language'){
-  const pair=await readingLanguages();
+  const pair=await readingLanguageContext();
   const text=typeof message.text==='string'?message.text.trim().slice(0,maxDetectableCharacters):'';
-  const detected=text.length>=minSkimmableCharacters?sensaLanguageForIso6393(detectIso6393(text)??''):undefined;
+  const observation=text.length>=minSkimmableCharacters?detectIso6393(text):null;
+  const detected=observation?sensaLanguageForIso6393(observation.code):undefined;
   const surface=typeof message.surfaceLanguage==='string'?sensaLanguageForDeclaredTag(message.surfaceLanguage):undefined;
-  return {familiarLanguageTag:pair.familiarLanguageTag,alreadyReadable:sensaLanguageRoleForTag((detected??surface)?.tag??null,pair)==='familiar'};
+  const observedTag=observation?(detected?.tag??observation.code):surface?.tag;
+  return {supportLanguageTag:pair.supportLanguageTag,alreadyReadable:observedTag===pair.supportLanguageTag};
  }
 
  if(['reading-settings','reading-settings-save','reading-test','reading-models','reading-run','youtube-captions'].includes(message.kind)){
@@ -246,7 +254,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
     snapshot=item.snapshot;resolution={kind:'proposal' as const,proposal:item.proposal};
    }
    snapshot=captureSnapshotSchema.parse(snapshot);if(snapshot.source.url!==sender.url)throw new Error('source_mismatch');
-   const queued=await queueWeb(a.accountId,{version:'sensa-intake-v1',libraryId:a.webLibraryId,clientId:a.installationId,operationId:message.operationId,snapshot,resolution,acceptance:message.kind==='accept'?{kind:'direct',consent:'accept_context_expression_sense',authorization:'browser:explicit_accept_button'}:null});
+   const queued=await queueWeb(a.accountId,{version:'sensa-intake-v1',libraryId:a.webLibraryId,clientId:a.installationId,operationId:message.operationId,languageContext:await readingLanguageContext(),snapshot,resolution,acceptance:message.kind==='accept'?{kind:'direct',consent:'accept_context_expression_sense',authorization:'browser:explicit_accept_button'}:null});
    return queued;
   });
  }
@@ -261,6 +269,10 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  }
  if(!isPopup)throw new Error('unsupported_message');
  if(message.kind==='status'){const [tab]=await chrome.tabs.query({active:true,currentWindow:true});const readingModes=await modes();if(tab?.id&&readingModes[tab.id]?.accountId===await activeScope()){try{await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});await chrome.tabs.sendMessage(tab.id,{kind:'reading',enabled:true,accountId:readingModes[tab.id].accountId,preferences:await readingPreferences()});await chrome.action.setBadgeText({tabId:tab.id,text:''});}catch{/* Preserve intent until the user grants this page. */}}}
+ if(message.kind==='select-language-route'){
+  if(typeof message.routeId!=='string')throw new Error('unknown_language_route');
+  await selectReadingLanguageRoute(message.routeId);
+ }
  if(message.kind==='login'){
   await reconnectWeb();
   // Bind explicit reconnect to the tab we open before its bridge can request authorization.

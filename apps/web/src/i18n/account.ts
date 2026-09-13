@@ -3,7 +3,7 @@ export const accountZh = {
 
   localWeb: {"current": "当前账号", "connected": "已连接账号", "check": "检查在线服务", "login": "登录 Sensa", "logout": "退出账号", "synced": "已同步", "cloudNote": "学习记录按当前账号保存在本机，并与服务器同步。", "localNote": "内容和学习进度先保存在当前浏览器。清除网站数据前，请确认账号同步已完成。", "controls": "导出与账号删除暂未开放。", "syncResults": "检查同步结果", "signout": "退出登录", "pendingLogout": "请先同步本机请求，再退出登录。", "privacy": "个人内容按账号保存。待同步的操作仍在本机，请确认同步完成后再清除网站数据。原文用于生成学习提示需要单独授权，可在对应意思中撤销。", "offlineFailed": "离线启动准备失败，已有资料仍保留，可联网后重新打开。", "pending": "{{count}} 项待同步"},
   title:'账号与设置', account:'账号', local:'本机使用', identity:'尚未连接账号', identityNote:'当前学习与内容保存在此浏览器，暂不跨设备同步。',
-  preferences:'使用偏好', language:'界面语言', languages:'我的语言', languagesNote:'熟悉语言、目标语言与当前学习的语言', learning:'学习偏好', learningNote:'学习方式与每日新学数量', plan:'学习计划', planNote:'学习内容与最近记录',
+  preferences:'使用偏好', language:'界面语言', languages:'语言路线', languagesNote:'目标语言、默认辅助语言与当前路线', learning:'学习偏好', learningNote:'学习方式与每日新学数量', plan:'学习计划', planNote:'学习内容与最近记录',
   data:'设备与数据', network:'网络连接', online:'已连接网络', offline:'当前离线', sync:'云端同步', unavailable:'尚未接入',
   storage:'本机学习与设置数据', storageNote:'浏览器存储估算，不含本机内容库与下载媒体。', refresh:'刷新用量', unknown:'暂时无法读取',
   controls:'账号登录、云端同步、数据导出与删除将在账号服务接入后开放。',
@@ -16,7 +16,7 @@ export const accountEn = {
 
   localWeb: {"current": "Current account", "connected": "Account connected", "check": "Check online services", "login": "Sign in to Sensa", "logout": "Sign out", "synced": "Synced", "cloudNote": "Learning history is saved locally for this account and synced with the server.", "localNote": "Content and learning progress are saved in this browser first. Check that account sync has finished before clearing website data.", "controls": "Export and account deletion are not available yet.", "syncResults": "Check sync status", "signout": "Sign out", "pendingLogout": "Sync pending changes before signing out.", "privacy": "Personal content is saved for your account. Sync pending changes before clearing website data. Permission to use source content can be revoked on the relevant meaning.", "offlineFailed": "Offline setup failed. Your content is safe; reconnect and reopen the app to try again.", "pending": "{{count}} pending changes"},
   title:'Account & settings', account:'Account', local:'On this device', identity:'No account connected', identityNote:'Learning and content are saved in this browser. Cross-device sync is not available yet.',
-  preferences:'Preferences', language:'Interface language', languages:'My languages', languagesNote:'Familiar language, target languages and the active one', learning:'Learning preferences', learningNote:'Learning method and daily new meanings', plan:'Learning plan', planNote:'Learning content and recent records',
+  preferences:'Preferences', language:'Interface language', languages:'Language routes', languagesNote:'Target languages, default support languages, and the active route', learning:'Learning preferences', learningNote:'Learning method and daily new meanings', plan:'Learning plan', planNote:'Learning content and recent records',
   data:'Device & data', network:'Network connection', online:'Connected to network', offline:'Offline', sync:'Cloud sync', unavailable:'Not connected yet',
   storage:'Local learning & settings data', storageNote:'Estimated browser storage; excludes the local content library and downloaded media.', refresh:'Refresh usage', unknown:'Unable to read',
   controls:'Sign-in, cloud sync, data export and deletion will be available when account services are connected.',

@@ -1,67 +1,122 @@
 import {
-  defaultSensaLanguageProfile,resolveLanguageProfile,sensaLanguage,sensaLanguageProfileSchema,
-  type SensaLanguageProfile,
+  defaultSensaLanguageRouteCollection,
+  sensaFormalPinnedLanguageContextSchema,
+  sensaLanguageForDeclaredTag,
+  sensaLanguageLearningRouteSchema,
+  sensaLanguageRouteCollectionSchema,
+  sensaPinnedLanguageContext,
+  type SensaLanguageRouteCollection,
+  type SensaLanguageRouteStatus,
+  type SensaFormalPinnedLanguageContext,
 } from '@sensa/contracts/sensa';
 import {command,readLibrary,type LibraryTransaction} from './store';
 
-/** One key, one profile. The learner's languages are account state, not content:
- * they ride the same settings table as the daily limit, so an installation that
- * signs in reads the languages its owner already chose. */
-const PROFILE_KEY='language-profile';
+/** Routes are learner-owned and sync with the library. The active choice is a
+ * Web-device preference and lives in `meta`, which cloud sync deliberately does
+ * not replicate except for its small allow-list. */
+const ROUTES_KEY='language-learning-routes';
+const ACTIVE_ROUTE_KEY='active-language-route:web';
 
-/** A library with no saved profile is the pair the product has always shipped.
- * Nothing is written here: absence stays absence until the learner chooses. */
-export const languageProfileSnapshot=()=>readLibrary(async tx=>{
- const stored=await tx.get<unknown>('settings',PROFILE_KEY);
- return {profile:resolveLanguageProfile(stored??defaultSensaLanguageProfile),saved:stored!==undefined};
-});
+export const readLanguageRoutes=async(tx:LibraryTransaction):Promise<SensaLanguageRouteCollection>=>{
+  const stored=await tx.get<unknown>('settings',ROUTES_KEY);
+  return stored===undefined?defaultSensaLanguageRouteCollection:sensaLanguageRouteCollectionSchema.parse(stored);
+};
 
-export async function readLanguageProfile(tx:LibraryTransaction):Promise<SensaLanguageProfile>{
-  return resolveLanguageProfile(await tx.get<unknown>('settings',PROFILE_KEY)??defaultSensaLanguageProfile);
+const selectable=(collection:SensaLanguageRouteCollection)=>collection.routes.filter(route=>route.status==='active');
+
+async function resolveActiveRoute(tx:LibraryTransaction,collection:SensaLanguageRouteCollection){
+  const selectedId=await tx.get<string>('meta',ACTIVE_ROUTE_KEY);
+  return selectable(collection).find(route=>route.id===selectedId)??selectable(collection)[0]??null;
 }
 
-export async function writeLanguageProfile(tx:LibraryTransaction,profile:SensaLanguageProfile){
-  const parsed=sensaLanguageProfileSchema.parse(profile);
-  tx.put('settings',PROFILE_KEY,parsed);
+export const languageRoutesSnapshot=()=>readLibrary(async tx=>{
+  const collection=await readLanguageRoutes(tx);
+  const activeRoute=await resolveActiveRoute(tx,collection);
+  if(!activeRoute)throw new Error('localFlow.noActiveLanguageRoute');
+  return {collection,activeRoute,context:sensaPinnedLanguageContext(activeRoute),saved:await tx.get('settings',ROUTES_KEY)!==undefined};
+});
+
+/** Resolve once at an operation boundary; callers keep this returned value for
+ * the lifetime of that operation instead of consulting the active route again. */
+export const activeLanguageContextSnapshot=async():Promise<SensaFormalPinnedLanguageContext>=>
+  (await languageRoutesSnapshot()).context;
+
+/** A formal command may use any live Route, but it must name its current
+ * revision and exact pair. This prevents a stale dialog from silently binding
+ * new Curriculum work after the Route changed. */
+export async function requireLanguageRouteContext(tx:LibraryTransaction,context:SensaFormalPinnedLanguageContext){
+  const parsed=sensaFormalPinnedLanguageContextSchema.parse(context);
+  const collection=await readLanguageRoutes(tx);
+  const route=collection.routes.find(value=>value.id===parsed.languageRouteId&&value.status==='active');
+  if(!route)throw new Error('localFlow.unknownLanguageRoute');
+  if(route.revision!==parsed.languageRouteRevision||route.targetLanguageTag!==parsed.targetLanguageTag||route.defaultSupportLanguageTag!==parsed.supportLanguageTag)throw new Error('localFlow.languageRouteChanged');
+  return route;
+}
+
+async function writeRoutes(tx:LibraryTransaction,collection:SensaLanguageRouteCollection){
+  const parsed=sensaLanguageRouteCollectionSchema.parse(collection);
+  tx.put('settings',ROUTES_KEY,parsed);
   return parsed;
 }
 
-/** Only languages this release can actually learn enter the ledger; a tag the
- * catalog does not carry is refused here rather than written and ignored. */
-function requireTargetLanguage(tag:string){
- if(sensaLanguage(tag)?.asTarget!==true)throw new Error('localFlow.unknownTargetLanguage');
- return tag;
+function requireRouteLanguages(targetLanguageTag:string,defaultSupportLanguageTag:string){
+  const target=sensaLanguageForDeclaredTag(targetLanguageTag);
+  const support=sensaLanguageForDeclaredTag(defaultSupportLanguageTag);
+  if(target?.asTarget!==true)throw new Error('localFlow.unknownTargetLanguage');
+  if(!support)throw new Error('localFlow.unknownSupportLanguage');
+  return sensaLanguageLearningRouteSchema.parse({
+    id:crypto.randomUUID(),revision:1,targetLanguageTag,defaultSupportLanguageTag,status:'active',
+  });
 }
 
-/** Adding a target language is not switching to it; the active language only
- * moves when the learner says so. */
-export function addTargetLanguage(operationId:string,tag:string){
- return command({id:operationId,kind:'language.addTarget',input:{tag}},async tx=>{
-  requireTargetLanguage(tag);
-  const current=await readLanguageProfile(tx);
-  if(current.targetLanguageTags.includes(tag))return current;
-  return writeLanguageProfile(tx,{...current,targetLanguageTags:[...current.targetLanguageTags,tag]});
- });
+export function addLanguageRoute(operationId:string,targetLanguageTag:string,defaultSupportLanguageTag:string){
+  return command({id:operationId,kind:'languageRoute.add',input:{targetLanguageTag,defaultSupportLanguageTag}},async tx=>{
+    const proposed=requireRouteLanguages(targetLanguageTag,defaultSupportLanguageTag);
+    const current=await readLanguageRoutes(tx);
+    const duplicate=current.routes.find(route=>route.status!=='archived'&&route.targetLanguageTag===targetLanguageTag&&route.defaultSupportLanguageTag===defaultSupportLanguageTag);
+    if(duplicate)return duplicate;
+    const archived=current.routes.find(route=>route.status==='archived'&&route.targetLanguageTag===targetLanguageTag&&route.defaultSupportLanguageTag===defaultSupportLanguageTag);
+    const route=archived?{...archived,status:'active' as const,revision:archived.revision+1}:proposed;
+    const routes=archived?current.routes.map(value=>value.id===route.id?route:value):[...current.routes,route];
+    await writeRoutes(tx,{revision:current.revision+1,routes});
+    return route;
+  });
 }
 
-export function removeTargetLanguage(operationId:string,tag:string){
- return command({id:operationId,kind:'language.removeTarget',input:{tag}},async tx=>{
-  const current=await readLanguageProfile(tx);
-  const remaining=current.targetLanguageTags.filter(value=>value!==tag);
-  if(remaining.length===current.targetLanguageTags.length)return current;
-  // The last target language cannot be removed: a learner with no target
-  // language has no action surface, and the profile schema forbids it.
-  if(remaining.length===0)throw new Error('localFlow.lastTargetLanguage');
-  return writeLanguageProfile(tx,{...current,targetLanguageTags:remaining,
-    activeTargetLanguageTag:current.activeTargetLanguageTag===tag?remaining[0]!:current.activeTargetLanguageTag});
- });
+export function updateLanguageRouteSupport(operationId:string,routeId:string,defaultSupportLanguageTag:string){
+  return command({id:operationId,kind:'languageRoute.support',input:{routeId,defaultSupportLanguageTag}},async tx=>{
+    if(!sensaLanguageForDeclaredTag(defaultSupportLanguageTag))throw new Error('localFlow.unknownSupportLanguage');
+    const current=await readLanguageRoutes(tx),route=current.routes.find(value=>value.id===routeId);
+    if(!route||route.status==='archived')throw new Error('localFlow.unknownLanguageRoute');
+    if(route.defaultSupportLanguageTag===defaultSupportLanguageTag)return route;
+    if(current.routes.some(value=>value.id!==routeId&&value.status!=='archived'&&value.targetLanguageTag===route.targetLanguageTag&&value.defaultSupportLanguageTag===defaultSupportLanguageTag))throw new Error('localFlow.duplicateLanguageRoute');
+    const next={...route,defaultSupportLanguageTag,revision:route.revision+1};
+    await writeRoutes(tx,{revision:current.revision+1,routes:current.routes.map(value=>value.id===routeId?next:value)});
+    return next;
+  });
 }
 
-export function setActiveTargetLanguage(operationId:string,tag:string){
- return command({id:operationId,kind:'language.setActiveTarget',input:{tag}},async tx=>{
-  const current=await readLanguageProfile(tx);
-  if(!current.targetLanguageTags.includes(tag))throw new Error('localFlow.unknownTargetLanguage');
-  if(current.activeTargetLanguageTag===tag)return current;
-  return writeLanguageProfile(tx,{...current,activeTargetLanguageTag:tag});
- });
+export function setLanguageRouteStatus(operationId:string,routeId:string,status:SensaLanguageRouteStatus){
+  return command({id:operationId,kind:'languageRoute.status',input:{routeId,status}},async tx=>{
+    const current=await readLanguageRoutes(tx),route=current.routes.find(value=>value.id===routeId);
+    if(!route)throw new Error('localFlow.unknownLanguageRoute');
+    if(route.status===status)return route;
+    const next={...route,status,revision:route.revision+1};
+    const routes=current.routes.map(value=>value.id===routeId?next:value);
+    if(!routes.some(value=>value.status==='active'))throw new Error('localFlow.lastLanguageRoute');
+    await writeRoutes(tx,{revision:current.revision+1,routes});
+    if(await tx.get<string>('meta',ACTIVE_ROUTE_KEY)===routeId&&status!=='active'){
+      tx.put('meta',ACTIVE_ROUTE_KEY,routes.find(value=>value.status==='active')!.id);
+    }
+    return next;
+  });
+}
+
+export function setActiveLanguageRoute(operationId:string,routeId:string){
+  return command({id:operationId,kind:'languageRoute.select',input:{routeId}},async tx=>{
+    const current=await readLanguageRoutes(tx),route=current.routes.find(value=>value.id===routeId&&value.status==='active');
+    if(!route)throw new Error('localFlow.unknownLanguageRoute');
+    tx.put('meta',ACTIVE_ROUTE_KEY,route.id);
+    return route;
+  });
 }

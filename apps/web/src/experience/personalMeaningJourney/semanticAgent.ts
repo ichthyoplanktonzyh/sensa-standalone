@@ -18,7 +18,7 @@
  */
 
 import type {
-  SensaCommandLanguages,
+  SensaPinnedLanguageContext,
   SensaExpressionBindingRelation,
   SensaExpressionType,
   SensaSemanticCoverage,
@@ -148,11 +148,11 @@ export interface SemanticAgentTurnInput {
   mode: SemanticAgentTurnMode;
   /**
    * The languages this turn is about. The agent proposes an expression in the
-   * target language and explains the sense in the familiar language, so the
-   * caller resolves the learner's profile once per turn and hands it over.
+   * Target Language and explains the sense in the Support Language, so the
+   * caller pins the active Route context once per turn and hands it over.
    * The interface language is not part of this and never reaches the model.
    */
-  languages: SensaCommandLanguages;
+  languages: SensaPinnedLanguageContext;
 }
 
 export type SemanticAgentTurnMode = 'chat' | 'consolidate';
@@ -183,6 +183,8 @@ export interface ClarificationOutcome {
 export interface SemanticAgentSession {
   personalMeaningId: string;
   threadId: string;
+  /** Fixed on the first turn and reused until this thread ends. */
+  languageContext:SensaPinnedLanguageContext|null;
   messages: SemanticAgentMessage[];
   workingSet: SemanticAgentWorkingSet;
   learnerEditedTracks: WorkingSetTrack[];

@@ -1,6 +1,6 @@
-/** The languages a learning target carries into provisioning.
+/** The languages a Curriculum membership carries into provisioning.
  *
- * A learning package, an enrolled target and a prepared personal meaning each
+ * A learning package, a route membership and a prepared personal meaning each
  * name the two languages their own text is in. The runtime used to stamp the
  * shipped English pair on whatever it was handed, so material prepared from a
  * Spanish meaning was materialized as English. This exercises the real schema,
@@ -46,51 +46,41 @@ try{
     learnerUserId:id(),learningTargetId:id(),senseId:id(),senseVersionId:id(),senseExpressionBindingId:id(),
     resolvedLearningPlanRevisionId:'fixture-es-v1',expressionSourceVersion:'fixture-es-v1',senseSourceVersion:'fixture-es-v1',
     expression:{surface:'tomarse su tiempo',languageTag:'es',expressionKind:'phrase'},
-    sense:{meaning:'从容地花时间做一件事。',familiarLanguageTag:'zh-CN'},
+    sense:{meaning:'从容地花时间做一件事。',supportLanguageTag:'zh-CN'},
     originExperience:{source:'other_authoritative_source',sourceVersion:'fixture-es-v1',personalAnchorUseGrantId:null,experience:{scene:'朋友催你快点，你说这件事需要慢慢来。',senseFocus:'从容地花时间',featureLabels:[]}},
     referenceFacts:[],requestedAt:'2026-09-01T00:00:00.000Z',
   });
   assert.equal(material.status,'ready');
   const entry={senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),expression:'tomarse su tiempo',meaning:'从容地花时间做一件事。',content:material.materialization.content};
-  const pack=(over:Record<string,unknown>={})=>({format:'sensa-learning-package-v1',id:id(),version:'1',title:'合成西语验证包',targetLanguage:'es',familiarLanguage:'zh-CN',entries:[entry],...over});
+  const pack=(over:Record<string,unknown>={})=>({format:'sensa-learning-package-v1',id:id(),version:'1',title:'合成西语验证包',targetLanguage:'es',supportLanguage:'zh-CN',entries:[entry],...over});
 
-  // A package says which languages its own text is in. One that teaches the
-  // language it explains in is malformed, not a native-speaker learner.
+  // A package says which languages its own text is in; the two roles may be
+  // filled by the same absolute language.
   const spanish=learningPackageSchema.safeParse(pack());
   assert.equal(spanish.success,true,JSON.stringify(spanish.error?.issues));
   assert.equal((spanish.data as {targetLanguage:string}).targetLanguage,'es');
-  const equal=learningPackageSchema.safeParse(pack({familiarLanguage:'es'}));
-  assert.equal(equal.success,false,'a package cannot teach the language it explains in');
-  assert.ok(equal.error!.issues.some(issue=>issue.message.includes('must differ')),'the rejection names the language rule');
+  const equal=learningPackageSchema.safeParse(pack({supportLanguage:'es'}));
+  assert.equal(equal.success,true,'an immersion package may use one language for Target and Support');
   assert.equal(learningPackageSchema.safeParse(pack({targetLanguage:'   '})).success,false,'a blank language tag is not a language');
 
   // The authored starter resource names its own languages, so the release
   // builder reads data instead of asserting English.
-  const authored=JSON.parse(await readFile('content/authored/web-starter.json','utf8')) as {targetLanguage:string;familiarLanguage:string};
+  const authored=JSON.parse(await readFile('content/authored/web-starter.json','utf8')) as {targetLanguage:string;supportLanguage:string};
   assert.equal(authored.targetLanguage,'en');
-  assert.equal(authored.familiarLanguage,'zh-CN');
-  assert.notEqual(authored.targetLanguage,authored.familiarLanguage);
+  assert.equal(authored.supportLanguage,'zh-CN');
+  assert.notEqual(authored.targetLanguage,authored.supportLanguage);
 
-  // An enrolled package target carries the package's languages.
-  const localTarget={id:'fixture',retentionId:'fixture-retention',packageKey:'fixture-package',expression:'tomarse su tiempo',meaning:'从容地花时间做一件事。',policyAssignment:{assignmentId:'fixture-assignment',revision:1,scope:'system_default',profileId:'lightweight',assignedByOperationId:'fixture-operation',assignedAt:'2026-09-01T00:00:00.000Z',provenance:{}},committedPolicy:null,targetLanguageTag:'es',familiarLanguageTag:'zh-CN',material:{snapshot:{},content:{resources:[]}},createdAt:'2026-09-01T00:00:00.000Z',startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null,relearningState:null};
-  const localView=api.localTargetView(localTarget as never);
+  // The Target owns the target language; its Route membership owns Support.
+  const membership={packageKey:'fixture-package',languageContext:{languageRouteId:id(),languageRouteRevision:1,targetLanguageTag:'es',supportLanguageTag:'zh-CN'},material:material.materialization};
+  const localTarget={id:'fixture',retentionId:'fixture-retention',curriculumMemberships:[membership],expression:'tomarse su tiempo',policyAssignment:{assignmentId:'fixture-assignment',revision:1,scope:'system_default',profileId:'lightweight',assignedByOperationId:'fixture-operation',assignedAt:'2026-09-01T00:00:00.000Z',provenance:{}},committedPolicy:null,planningOverrides:[],targetLanguageTag:'es',introducedLanguageRouteId:null,createdAt:'2026-09-01T00:00:00.000Z',startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null,relearningState:null};
+  const localView=api.localTargetView(localTarget as never,membership as never);
   assert.equal(localView.targetLanguageTag,'es','an enrolled target view names the package language');
-  assert.equal(localView.familiarLanguageTag,'zh-CN');
-  // A target written before the language profile existed is read as the shipped
-  // pair rather than as an empty language.
-  const legacyView=api.localTargetView({...localTarget,targetLanguageTag:undefined,familiarLanguageTag:undefined} as never);
-  assert.equal(legacyView.targetLanguageTag,'en');
-  assert.equal(legacyView.familiarLanguageTag,'zh-CN');
-
+  assert.equal(localView.supportLanguageTag,'zh-CN');
   // A prepared personal meaning carries the languages it was accepted in.
-  const personalView=api.pendingPersonalTargetView({targetId:'fixture-personal',meaning:{targetLanguageTag:'ja',familiarLanguageTag:'zh-CN',proposal:{expression:{surface:'ありがとう'},semanticSpec:{coreMeaningFocus:'表达感谢。'}}},notice:''} as never);
+  const personalView=api.pendingPersonalTargetView({targetId:'fixture-personal',languageContext:{languageRouteId:id(),languageRouteRevision:1,targetLanguageTag:'ja',supportLanguageTag:'zh-CN'},meaning:{proposal:{expression:{surface:'ありがとう'},semanticSpec:{coreMeaningFocus:'表达感谢。'}}},notice:''} as never);
   assert.equal(personalView.targetLanguageTag,'ja','a personal target view names the language its meaning was accepted in');
-  assert.equal(personalView.familiarLanguageTag,'zh-CN');
-  const legacyPersonal=api.pendingPersonalTargetView({targetId:'fixture-personal',meaning:{proposal:{expression:{surface:'borrow'},semanticSpec:{coreMeaningFocus:'临时取得。'}}},notice:''} as never);
-  assert.equal(legacyPersonal.targetLanguageTag,'en','a meaning accepted before the profile existed reads as the shipped pair');
-  assert.equal(legacyPersonal.familiarLanguageTag,'zh-CN');
-
-  console.log('PASS: a learning package, an enrolled target and a prepared personal meaning each carry their own two languages into provisioning, and only a record older than the language profile reads as the shipped pair.');
+  assert.equal(personalView.supportLanguageTag,'zh-CN');
+  console.log('PASS: a learning package, a Route-scoped Curriculum membership and a prepared personal meaning carry explicit Target and Support Languages into provisioning; missing language data is never relabelled with defaults.');
 }finally{
   await rm(temp,{recursive:true,force:true});
 }

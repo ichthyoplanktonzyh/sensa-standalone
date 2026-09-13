@@ -1,10 +1,9 @@
 import {sensaReadingGlossarySchema,type SensaReadingGlossary} from '@sensa/contracts/sensa';
 import {command,readLibrary,type LibraryTransaction} from './store';
 
-/** One key, one glossary. Which words a learner wants to read is learner state,
- * not a device setting: it rides the same settings table as the language profile,
- * so it syncs with the account and the reading surfaces of every installation
- * read the same one. */
+/** One learner-owned collection, with every entry scoped to its exact
+ * Input/Output Language pair. It syncs with the account; reading surfaces
+ * receive the collection but send only the active operation's pair. */
 const GLOSSARY_KEY='reading-glossary';
 
 /** A library with no glossary has none. Nothing is written until the learner
@@ -37,20 +36,19 @@ export async function writeReadingGlossary(tx:LibraryTransaction,glossary:SensaR
  * renderings for one word is not a preference the reader could honour, and a term
  * that jumped to the end of the list while being corrected would look like a
  * second entry. */
-export function setReadingGlossaryEntry(operationId:string,term:string,rendering:string){
- return command({id:operationId,kind:'reading.setGlossaryEntry',input:{term,rendering}},async tx=>{
-  const current=await readReadingGlossary(tx),listed=current.findIndex(entry=>entry.term.toLowerCase()===term.toLowerCase());
-  const next=sensaReadingGlossarySchema.parse(listed<0?[...current,{term,rendering}]:current.map((entry,index)=>index===listed?{term,rendering}:entry));
+export function setReadingGlossaryEntry(operationId:string,inputLanguageTag:string,outputLanguageTag:string,term:string,rendering:string){
+ return command({id:operationId,kind:'reading.setGlossaryEntry',input:{inputLanguageTag,outputLanguageTag,term,rendering}},async tx=>{
+  const current=await readReadingGlossary(tx),listed=current.findIndex(entry=>entry.inputLanguageTag===inputLanguageTag&&entry.outputLanguageTag===outputLanguageTag&&entry.term.toLocaleLowerCase(inputLanguageTag)===term.toLocaleLowerCase(inputLanguageTag));
+  const value={inputLanguageTag,outputLanguageTag,term,rendering};
+  const next=sensaReadingGlossarySchema.parse(listed<0?[...current,value]:current.map((entry,index)=>index===listed?value:entry));
   return writeReadingGlossary(tx,next);
  });
 }
 
-export function removeReadingGlossaryEntry(operationId:string,term:string){
- return command({id:operationId,kind:'reading.removeGlossaryEntry',input:{term}},async tx=>{
+export function removeReadingGlossaryEntry(operationId:string,inputLanguageTag:string,outputLanguageTag:string,term:string){
+ return command({id:operationId,kind:'reading.removeGlossaryEntry',input:{inputLanguageTag,outputLanguageTag,term}},async tx=>{
   const current=await readReadingGlossary(tx);
-  // Matched the way it is written, so a term the learner capitalised differently
-  // is still the term they are removing.
-  const next=current.filter(entry=>entry.term.toLowerCase()!==term.toLowerCase());
+  const next=current.filter(entry=>entry.inputLanguageTag!==inputLanguageTag||entry.outputLanguageTag!==outputLanguageTag||entry.term.toLocaleLowerCase(inputLanguageTag)!==term.toLocaleLowerCase(inputLanguageTag));
   if(next.length===current.length)return current;
   return writeReadingGlossary(tx,next);
  });

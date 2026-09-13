@@ -1,7 +1,7 @@
 # Sense Learning Resource Model
 
 > 状态：Canonical resource model  
-> 更新日期：2026-09-05
+> 更新日期：2026-09-13
 
 本文定义 Sensa 如何通过 Published、On-demand 或 Hybrid 路径为一个固定 Learning Target 提供学习
 资源，以及这些资源如何在一次 Learning Protocol Run 前冻结为 Learning Materialization。它同时
@@ -16,7 +16,8 @@ Learning Policy Profile、purpose-specific Protocol 与其他适用 Policy/Profi
 
 - **Published Learning Content**：来自不可变 Content Release，通常由 Sense Learning Package 承载，
   适合复用、离线安装、审核和高保证 assessment；
-- **On-demand Learning Content**：在 stable Sense、target expression、Effective Learning Policy、learner locale 与 protocol 已固定
+- **On-demand Learning Content**：在 stable Sense、target expression、Effective Learning Policy、
+  Pinned Language Context 与 protocol 已固定
   后按需生成，适合个人语义世界中的长尾目标与轻量学习；
 - **Hybrid**：复用 published 语义/词形/例句等基础事实，再为本次 target 补充按需生成的教学材料。
 
@@ -83,7 +84,7 @@ word、phrase、construction、utterance 共用这一组 role identity，缺少�
 复杂的 On-demand 供给可以由 Content Agent Attempt 编排，但 Agent 不是资源 authority 或 admission
 boundary。一次 Attempt 只能处理一个 Content Provisioning Task，并固定以下输入：
 
-- Learning Target、Sense Version、target Expression Binding 与 locale；
+- Learning Target、Sense Version、target Expression Binding 与 Pinned Language Context；
 - Effective Learning Policy、purpose-specific Protocol 与 exact Content Demand；
 - 初始 Content Context Artifacts，包括获得明确 use grant 的原始文字或图片场景；
 - closed tool catalog、每个工具的版本/权限、调用与成本预算、超时和终止条件；
@@ -124,7 +125,7 @@ Sense Learning Package 固定：
 
 - 一个稳定 Sense 的 Sense Version；
 - 一个 primary target Sense Expression Binding，以及它引用的 Lexeme/form version；
-- target language 与 learner locale；
+- target Language Tag，以及每项 learner-facing resource 的 Language Tag 与适用 Support Language；
 - Acquisition Profile 与 Required Capability Set；
 - 同一 Content Release 中获准发布的资源引用；
 - 可审计的 source、generator、review、omission 和 media provenance。
@@ -136,9 +137,9 @@ Release 发布后不可原位修改。语言事实、源文本、媒体或 Requi
 
 一个可发布 Package 在领域上组合六类事实，但不要求数据库或传输合同把它们内嵌在一条记录中：
 
-1. **Package contract**：Sense/target expression/form 版本、locale、Acquisition Profile、Required
-   Capability Set 与发布版本；
-2. **Semantic specification**：learner-facing gloss、精确定义、L1 Bridge、核心语义特征、必要
+1. **Package contract**：Sense/target expression/form 版本、language-context applicability、Acquisition
+   Profile、Required Capability Set 与发布版本；
+2. **Semantic specification**：learner-facing gloss、精确定义、Support-Language Bridge、核心语义特征、必要
    Usage Pattern 与真实 confusion targets；
 3. **Form binding**：通过 pinned Sense Expression Binding 与 Lexeme/form version 取得 word、phrase、
    pronunciation 与合法 realizations，并声明当前 Recall grading 所需的 form 规则；
@@ -170,7 +171,7 @@ Package 引用 Lexeme Version，不为每个 Sense 复制词形库存。共享�
 
 Reference Lexicon 是独立于 Learning Catalog 的宽覆盖查询语料。一个 Reference Release 至少固定：
 
-- source/provider、edition、target language、learner locale、license 与 attribution；
+- source/provider、edition、entry Language Tags、support-language render scope、license 与 attribution；
 - stable Reference Lexical Units、它们的 forms/POS，以及有序 Reference Senses；
 - 每个 Reference Sense 的 source-backed definition、usage labels、examples 与 relation references；
 - 可公开的 Lexical Enrichment、资源可见性、review status 与内容 digest；
@@ -209,7 +210,7 @@ Contextual Sense Resolution provenance 为 `authored_target`。存在 reviewed S
 occurrence 在内容生产时按以下闭集流程预计算：
 
 1. 从 token、lemma、POS、morphology、collocation 与 multiword expression 生成 Reference candidates；
-2. 只在候选 Reference Sense IDs 中，结合 `text_l2/context_l2`、审核过的 L1 translation/context、
+2. 只在候选 Reference Sense IDs 中，结合 exact expression/context、审核过的 support-language render、
    definition 和 source examples 排序；
 3. 按版本化阈值保存 `reviewed | model_confident | ambiguous | unresolved`，以及 resolver/model/version；
 4. target、ambiguous、高风险或会影响 Add-to-Learning 的 occurrence 进入人工审核。
@@ -252,8 +253,10 @@ Note 变成 Reference Release 内容，reference-only meaning 也不会凭空获
 - **Experience Render**：对一个 Sketch 的 approved text、image、animation 或 interaction 实现；
 - **Experience Recap**：供 Reveal 与 repair 使用的 reviewed learner-facing 简明回顾；它概括同一个
   Sketch，但不是把内部作者规格直接展示给 learner；
-- **L1 Bridge**：用自然中文接住已有概念，并指出 L1/L2 覆盖差异；
-- **Learning Example**：拥有 exact target occurrence、Sense Version binding、双语语境与审核
+- **Support-Language Bridge**：声明自己的 Support Language，用它接住已有概念并指出
+  support/target-language 覆盖差异；只有与 Pinned Language Context 兼容时才可进入 Materialization；
+- **Learning Example**：拥有 exact target occurrence、Sense Version binding、target-language Context、
+  optional support-language render 与审核
   provenance 的不可变例句；Study Example 是它获准承担的首次 binding 或 repair role；
 - **Sense identity display facts**：label、part of speech 与准确义项说明；
 - **Usage Pattern**：有来源支持且对该 Sense 必要的构式、搭配或使用限制。
@@ -355,7 +358,8 @@ Structured Acquisition 的 Gate policy、protected assessment inventory、正确
 
 ### Learning Example、Attested Usage 与 Example Render
 
-Learning Example 的语义身份独立于它如何显示。它固定不可变 L2 context、L1 translation/context、
+Learning Example 的语义身份独立于它如何显示。它固定不可变 target-language Context、optional
+support-language render、
 exact target occurrence、目标 Sense Version、source/review provenance 与获准 roles。Study、repair、
 review、free-practice 或 assessment 是显式角色；角色不会因某个页面碰巧读取它而改变。
 
@@ -383,7 +387,7 @@ Sense: sustain · verb · 使某种状态、活动或过程持续下去
 Semantic specification:
   - 已有活动存在减弱或停止的可能
   - 持续投入条件、力量或资源，使它跨越一段时间继续
-  - L1 Bridge 明确它不覆盖所有中文“保持”
+  - `zh-Hans` Support-Language Bridge 明确它不覆盖所有中文“保持”
 Form binding:
   - Lexeme sustain；合法 forms 包含 sustain/sustains/sustained/sustaining
 Teaching:
@@ -493,8 +497,10 @@ Curriculum 可以先接纳 stable Learning Target 与合法 Learning Policy Assi
   自由生成内容都不能把 blocked target 冒充成 ready 学习；
 - 高保证 Learning Policy 缺少 required assessment/novelty/grader capability 时不得静默使用轻量内容；
   只有 learner 显式改变 Policy Assignment 后，才能按新 Profile 重新解析 plan；
-- Content Release 更新不改变已经开始的 Session/Encounter；下一 Scope Revision 可以显式解析新
-  Package 或创建新 materialization，但必须保留此前 Curriculum provenance 与学习事实。
+- Published Package/Content Release 的版本升级不改变已经开始的 Session/Encounter，必须由下一
+  Scope Revision 显式接纳；learner-owned Personal Membership 可以在固定 Learning Target、Route 与
+  Target/Support Language pair 内发布新的不可变 materialization，供尚未操作的当前或未来 Step 使用。
+  两种路径都必须保留此前 Curriculum provenance、已操作 Step 的 materialization 与学习事实。
 
 Free Practice 可以复用 Expression form/pronunciation、Sense display facts、Experience、Study Example、
 Usage Pattern、Sense Relation、Personal Semantic Anchor 与已获准媒体，也可以通过获准 provider 在
@@ -635,12 +641,21 @@ scene domain、construction、disambiguating cue、collocations 和 variation no
 
 ## 11. 资源质量不变量
 
-- Experience Sketch 不出现目标英文词或合法变形，也不退化为词典定义；
+- Learning Materialization 与 Content Provisioning Task 必须固定 Pinned Language Context；后续 Active
+  Route Selection 或 Support Language 变化只能产生新的 Task/Materialization，不能改写已有内容；
+- 每个 Expression、Context、Bridge、Example render 与媒体派生必须保存 exact Language Tag；script、
+  region 或 voice fallback 必须显式记录，不能重写源语言事实；
+- language support resolution 只能返回 exact support、approved fallback 或 unavailable；缺少 speech、
+  reference、translation、content 或 renderer capability 不得把内容重标成另一种语言或伪造资源；
+- Language-Pair Glossary Entry 只能影响与其 exact Input/Output Language Tags 匹配的未来 Candidate 或
+  render；同形 term 不得跨 Route 或语言方向全局覆盖，也不得作为 Sense/translation truth；
+- Experience Sketch 不出现 target expression 或合法变形，也不退化为词典定义；
 - Experience Sketch 与 Render 必须分离：Sketch 固定媒介无关的教学意图，Render 固定一种已审核
   呈现；Text Experience Render 必须是可独立建立经验的场景而非说明，renderer fallback 不得改变
   目标 Sense 或教学约束；
-- L1 Bridge 使用自然中文，明确必要的跨语言范围差异；
-- Example 必须自然表达目标 Sense，target form/span 可确定性核验，双语语义一致；
+- Support-Language Bridge 使用其声明的 Support Language，明确必要的跨语言范围差异；
+- Example 必须自然表达目标 Sense，target form/span 可确定性核验；存在 support-language render 时，
+  两侧语义必须一致；
 - Attested Usage 必须固定真实 source/rights、exact clip/context、target occurrence 与 approved
   contextual Sense assignment；word-level timeline 必须与 transcript 和 target token 一致；
 - 外部媒体 Render 不得成为 Required Gate 的唯一资源路径；不可用时只能使用 approved fallback
@@ -655,8 +670,9 @@ scene domain、construction、disambiguating cue、collocations 和 variation no
   冒充 Reference Sense 或已发布 Package；
 - On-demand 内容必须在 learner 使用前冻结为带 digest 的 Learning Materialization，记录 target、
   Effective Learning Policy/plan revision、protocol、generator/policy provenance 与验证结果；任何
-  response 之后都不得重新生成并替换 prompt、
-  answer、grader 或反馈依据；
+  Action 被接受之后都不得重新生成并替换该 Step 的 prompt、answer、grader 或反馈依据；未接受 Action
+  的 current/future Step 只能切换到同一 Curriculum Membership、Learning Target 与固定语言方向下
+  另一个已验证、不可变的 materialization；
 - 原始多模态场景及其解析结果必须固定 identity、digest、media type、source、rights/use grant 与用途；
   原始个人媒体不能因被 Agent 看见而自动成为 learner-visible material；
 - Content Agent Attempt 只能处理一个固定 Content Provisioning Task 并调用其 closed tool catalog；
@@ -711,7 +727,7 @@ scene domain、construction、disambiguating cue、collocations 和 variation no
 ## 12. Delivery profile 与迁移边界
 
 当前 `sensa-package-validator-v3` 是 **Published Structured Acquisition Package** 的兼容合同：它仍以
-exactly 1 Experience Sketch、exactly 1 L1 Bridge、
+exactly 1 Experience Sketch、exactly 1 Support-Language Bridge、
 3 study + at least 3 quiz Examples、Lexeme pronunciation 和三条 study audio 作为兼容门禁，并
 要求 required Boundary 拥有 Relation-backed executable asset。
 

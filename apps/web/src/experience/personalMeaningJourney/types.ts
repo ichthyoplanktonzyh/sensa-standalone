@@ -12,6 +12,7 @@ import type {
   SensaExpressionType,
   SensaIntakeSense,
   SensaPersonalMeaningAlignmentSnapshot,
+  SensaPinnedLanguageContext,
   SensaSemanticCoverage,
   SensaSenseProposalSnapshot,
 } from '@sensa/contracts/sensa';
@@ -271,11 +272,11 @@ export interface MaterialBlockInput {
 export interface CreatePersonalMeaningInput {
   operationId: string;
   /**
-   * The learner's familiar (native-language) wording. No expression type is
+   * The learner's starting wording. No expression type is
    * asked for: classifying "欲言又止" as phrase vs construction is domain work
    * the model does better, and it is confirmed later, not here. No language is
-   * asked for either: wording a learner writes for themselves is by definition
-   * in their familiar language, and the gateway stamps that from the profile.
+   * asked for either: the gateway pins the operation's Input Language from its
+   * language context rather than treating the wording as a learner trait.
    */
   familiarExpression?: {
     surfaceForm: string;
@@ -314,6 +315,8 @@ export interface CreatePersonalMeaningResult {
 export interface ConfirmClarificationInput {
   operationId: string;
   personalMeaningId: string;
+  /** The context pinned by this clarification Session. */
+  languageContext:SensaPinnedLanguageContext;
   focus: {
     statement: string;
     distinguishingNotes: string[];

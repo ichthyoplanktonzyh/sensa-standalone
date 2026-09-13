@@ -1,9 +1,11 @@
 import {z} from 'zod';
 import {captureSnapshotSchema} from './intake.js';
 import {semanticProposalSchema} from './semantic.js';
+import {sensaPinnedLanguageContextSchema} from '../language.js';
 const id=z.string().uuid();
 export const localIntakeRequestSchema=z.object({
  version:z.literal('sensa-intake-v1'),libraryId:id,clientId:id,operationId:id,
+ languageContext:sensaPinnedLanguageContextSchema,
  snapshot:captureSnapshotSchema,
  resolution:z.discriminatedUnion('kind',[
   z.object({kind:z.literal('proposal'),proposal:semanticProposalSchema}).strict(),

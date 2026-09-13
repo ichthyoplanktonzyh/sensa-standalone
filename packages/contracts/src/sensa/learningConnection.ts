@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {sensaFormalPinnedLanguageContextSchema} from './language.js';
 
 export const sensaLearningConnectionContractVersion =
   "sensa-learning-connection-v2" as const;
@@ -471,10 +472,7 @@ export const sensaLearningTargetSnapshotSchema = z
     senseVersionId: uuid,
     senseExpressionBindingId: uuid,
     bindingVersionId: uuid,
-    familiarLanguageTag: nonEmpty,
     targetLanguageTag: nonEmpty,
-    learnerLocale: nonEmpty,
-    curriculumProvenance: jsonObject,
     createdByOperationId: uuid,
     createdAt: timestamp,
   })
@@ -551,6 +549,25 @@ export const sensaLearningMaterializationSnapshotSchema = z
     createdAt: timestamp,
   })
   .strict();
+
+/** A Target can participate in more than one route-specific Curriculum. The
+ * Membership owns source, Support Language and material selection; none of
+ * those values change the Target or Retention identity. */
+export const sensaCurriculumMembershipSnapshotSchema=z.object({
+  contractVersion:z.literal(sensaLearningConnectionContractVersion),
+  curriculumMembershipId:uuid,
+  revision:positiveInteger,
+  learningTargetId:uuid,
+  languageContext:sensaFormalPinnedLanguageContextSchema,
+  sourceKind:z.enum(['sense_learning_package','personal_meaning_alignment']),
+  sourceProvenance:jsonObject,
+  packageKey:nonEmpty.nullable(),
+  assurancePackageKey:nonEmpty.optional(),
+  learningMaterializationId:uuid,
+  createdByOperationId:uuid,
+  createdAt:timestamp,
+  updatedAt:timestamp,
+}).strict();
 
 export const sensaRetentionTargetKeySchema = z
   .object({
@@ -858,6 +875,9 @@ export type SensaRetentionTargetStatus = z.infer<
 >;
 export type SensaLearningTargetSnapshot = z.infer<
   typeof sensaLearningTargetSnapshotSchema
+>;
+export type SensaCurriculumMembershipSnapshot=z.infer<
+  typeof sensaCurriculumMembershipSnapshotSchema
 >;
 export type SensaRetentionTargetSnapshot = z.infer<
   typeof sensaRetentionTargetSnapshotSchema

@@ -13,7 +13,7 @@ export interface LearningTargetPresentation {
   partOfSpeech:string;
   meaning:string;
   targetLanguageTag:string;
-  familiarLanguageTag:string;
+  supportLanguageTag:string;
   example:string;
   sourceKind:LearningSourceKind;
   sourceLabel:string;

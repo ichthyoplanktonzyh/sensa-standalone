@@ -1,5 +1,5 @@
-import { defaultSensaLanguageProfile, sensaLanguage } from '@sensa/contracts/sensa';
-import { languageProfileSnapshot } from '../../data/library/language';
+import {defaultSensaLanguageRoute,sensaLanguage,sensaLanguages,sensaResolveLanguageSupport,type SensaLanguageSupportResolution} from '@sensa/contracts/sensa';
+import { languageRoutesSnapshot } from '../../data/library/language';
 
 /**
  * The language spoken media is produced in.
@@ -15,8 +15,18 @@ import { languageProfileSnapshot } from '../../data/library/language';
 /** The locale device speech synthesis is asked for. A synthesizer matches an
  * installed voice by locale, so a bare language subtag finds nothing on most
  * systems; the catalog carries the locale that does. */
+export function spokenLanguageSupport(languageTag:string):SensaLanguageSupportResolution {
+  return sensaResolveLanguageSupport(languageTag,sensaLanguages.map(language=>language.tag));
+}
+
+function supportedLanguage(languageTag:string){
+  const resolution=spokenLanguageSupport(languageTag);
+  if(resolution.status==='unavailable'||!resolution.effectiveLanguageTag)throw new Error('localFlow.languageCapabilityUnavailable');
+  return sensaLanguage(resolution.effectiveLanguageTag)!;
+}
+
 export function speechLocaleFor(languageTag: string): string {
-  return sensaLanguage(languageTag)?.speechLocale ?? 'en-US';
+  return supportedLanguage(languageTag).speechLocale;
 }
 
 /**
@@ -31,9 +41,9 @@ export async function activeSpeechLanguage(): Promise<{
   languageTag: string;
   speechLocale: string;
 }> {
-  let languageTag = defaultSensaLanguageProfile.activeTargetLanguageTag;
+  let languageTag = defaultSensaLanguageRoute.targetLanguageTag;
   try {
-    languageTag = (await languageProfileSnapshot()).profile.activeTargetLanguageTag;
+    languageTag = (await languageRoutesSnapshot()).activeRoute.targetLanguageTag;
   } catch {
     // Storage is unavailable; the shipped pair is still a real language.
   }
@@ -44,7 +54,7 @@ export async function activeSpeechLanguage(): Promise<{
  * English's are known here. Another language offers no accent filter rather than
  * a row of English ones that would return nothing. */
 export function clipAccentsFor(languageTag: string): readonly string[] {
-  return sensaLanguage(languageTag)?.wiktionaryCode === 'en'
+  return supportedLanguage(languageTag).wiktionaryCode === 'en'
     ? ['all', 'us', 'uk', 'aus', 'ca', 'ie']
     : ['all'];
 }
@@ -53,6 +63,6 @@ export function clipAccentsFor(languageTag: string): readonly string[] {
  * name of Chinese carries its script in parentheses, so only the leading word is
  * used; every other catalog name is already the single word the provider wants. */
 export function clipLanguageFor(languageTag: string): string {
-  const name = sensaLanguage(languageTag)?.names.en ?? 'English';
+  const name = supportedLanguage(languageTag).names.en;
   return name.split(/[\s(]/u)[0]!.toLocaleLowerCase('en');
 }

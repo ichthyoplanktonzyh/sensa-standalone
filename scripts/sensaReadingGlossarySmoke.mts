@@ -33,26 +33,27 @@ try{
  const op=()=>crypto.randomUUID();
 
  assert.deepEqual(await glossary.readingGlossarySnapshot(),{glossary:[],saved:false},'a learner who has written no terms has no glossary, and nothing is written for them');
- await glossary.setReadingGlossaryEntry(op(),'prompt','提示词');
- await glossary.setReadingGlossaryEntry(op(),'token','令牌');
- assert.deepEqual((await glossary.readingGlossarySnapshot()).glossary,[{term:'prompt',rendering:'提示词'},{term:'token',rendering:'令牌'}]);
+ await glossary.setReadingGlossaryEntry(op(),'en','zh-CN','prompt','提示词');
+ await glossary.setReadingGlossaryEntry(op(),'en','zh-CN','token','令牌');
+ await glossary.setReadingGlossaryEntry(op(),'zh-CN','en','prompt','prompt');
+ assert.deepEqual((await glossary.readingGlossarySnapshot()).glossary,[{inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'prompt',rendering:'提示词'},{inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'token',rendering:'令牌'},{inputLanguageTag:'zh-CN',outputLanguageTag:'en',term:'prompt',rendering:'prompt'}]);
  assert.equal((await glossary.readingGlossarySnapshot()).saved,true);
  // One word, one rendering: writing it again corrects the entry rather than
  // leaving the reader to choose between two answers, and the case of the word
  // the learner typed is not a second word.
- const corrected=await glossary.setReadingGlossaryEntry(op(),'Prompt','提示');
- assert.deepEqual(corrected,[{term:'Prompt',rendering:'提示'},{term:'token',rendering:'令牌'}],'a term already listed is corrected, not duplicated');
- await assert.rejects(()=>glossary.setReadingGlossaryEntry(op(),' '.repeat(3),'提示'),'a blank term is not a term');
- await assert.rejects(()=>glossary.setReadingGlossaryEntry(op(),'x'.repeat(sensaReadingGlossaryLimits.term+1),'y'),'a term longer than the limit the schema states is refused');
- const removed=await glossary.removeReadingGlossaryEntry(op(),'TOKEN');
- assert.deepEqual(removed,[{term:'Prompt',rendering:'提示'}],'a term is removed by the word, not by the capitalisation it was typed with');
- assert.deepEqual(await glossary.removeReadingGlossaryEntry(op(),'token'),removed,'removing a term that is not listed changes nothing');
+ const corrected=await glossary.setReadingGlossaryEntry(op(),'en','zh-CN','Prompt','提示');
+ assert.deepEqual(corrected.slice(0,2),[{inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'Prompt',rendering:'提示'},{inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'token',rendering:'令牌'}],'a term already listed in the pair is corrected, not duplicated');
+ await assert.rejects(()=>glossary.setReadingGlossaryEntry(op(),'en','zh-CN',' '.repeat(3),'提示'),'a blank term is not a term');
+ await assert.rejects(()=>glossary.setReadingGlossaryEntry(op(),'en','zh-CN','x'.repeat(sensaReadingGlossaryLimits.term+1),'y'),'a term longer than the limit the schema states is refused');
+ const removed=await glossary.removeReadingGlossaryEntry(op(),'en','zh-CN','TOKEN');
+ assert.deepEqual(removed,[{inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'Prompt',rendering:'提示'},{inputLanguageTag:'zh-CN',outputLanguageTag:'en',term:'prompt',rendering:'prompt'}],'a term is removed only from its pair and without case sensitivity');
+ assert.deepEqual(await glossary.removeReadingGlossaryEntry(op(),'en','zh-CN','token'),removed,'removing a term that is not listed changes nothing');
  // A stored value this release cannot read is no glossary: the learner is not
  // locked out of reading by an entry an older release allowed.
  assert.deepEqual(glossary.readGlossary([{term:'a',rendering:'b'},{term:'a',rendering:'c'}]),[],'an unreadable stored glossary reads as none');
  assert.deepEqual(glossary.readGlossary(undefined),[]);
- assert.deepEqual(sensaReadingGlossarySchema.safeParse(Array.from({length:sensaReadingGlossaryLimits.entries+1},(_,i)=>({term:'t'+i,rendering:'r'}))).success,false,'the limit is the schema’s, so the editor and the publication cannot disagree with it');
- console.log('PASS: the learner’s glossary is library state — written once per term, corrected rather than duplicated, removable by the word itself, and an unreadable copy is no glossary rather than a failure.');
+ assert.deepEqual(sensaReadingGlossarySchema.safeParse(Array.from({length:sensaReadingGlossaryLimits.entriesPerPair+1},(_,i)=>({inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'t'+i,rendering:'r'}))).success,false,'the per-pair limit is the schema’s, so the editor and the publication cannot disagree with it');
+ console.log('PASS: the learner’s glossary is route-pair state — the same term may differ across pairs, correction/removal stays inside one pair, and unreadable data is no glossary rather than a failure.');
 }finally{await rm(root,{recursive:true,force:true});}
 
 // ── the wire: what the extension asks the service ────────────────────────────
@@ -61,7 +62,8 @@ const web='http://127.0.0.1:3000';
 const pageUrl=web+'/article';
 const accountId=crypto.randomUUID();
 const libraryId=crypto.randomUUID();
-const stored={readingLanguages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'},readingGlossary:[{term:'prompt',rendering:'提示词'}]};
+const defaultRoute={id:'00000000-0000-4000-8000-000000000001',revision:1,targetLanguageTag:'en',defaultSupportLanguageTag:'zh-CN',status:'active'};
+const stored={readingLanguageRoutes:{revision:1,routes:[defaultRoute]},readingActiveLanguageRouteId:defaultRoute.id,readingGlossary:[{inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'prompt',rendering:'提示词'}]};
 const storage:Record<string,unknown>={sensa:{version:1,active:accountId,accounts:{[accountId]:{accountId,installationId:crypto.randomUUID(),webLibraryId:libraryId,token:'fixture-token',queue:[],recent:[],savedOperations:{}}}}};
 const session:Record<string,unknown>={modes:{1:{accountId}}};
 const sent:{url:string;body:unknown}[]=[];
@@ -99,23 +101,23 @@ await settled();
 assert.equal(sent.length,1,'a streamed reading reaches the service');
 const streamed=sent[0]!;
 assert.equal(streamed.url,'/sensa/reading/stream');
-assert.deepEqual(streamed.body,{...reading,languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'},glossary:[{term:'prompt',rendering:'提示词'}]},'the streamed request carries the learner’s pair and glossary, which the surface never saw');
+assert.deepEqual(streamed.body,{...reading,languages:{supportLanguageTag:'zh-CN',targetLanguageTag:'en',languageRouteId:defaultRoute.id,languageRouteRevision:1},glossary:[{inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'prompt',rendering:'提示词'}]},'the streamed request carries the pinned Route context and only the glossary for this transformation');
 const plain=await fromPage({kind:'reading-run',input:{...reading,id:crypto.randomUUID()}});
 assert.equal(plain.value.status,'ready');
 assert.equal(sent[1]!.url,'/sensa/reading/run');
 assert.deepEqual(sent[1]!.body,{...sent[0]!.body,id:(sent[1]!.body as any).id},'both ways a reading leaves the extension ask the same question');
-assert.deepEqual((sent[1]!.body as any).glossary,[{term:'prompt',rendering:'提示词'}],'the glossary is the learner’s own stored copy, not the reader’s guess');
+assert.deepEqual((sent[1]!.body as any).glossary,[{inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'prompt',rendering:'提示词'}],'the glossary is the learner’s own pair-scoped copy, not the reader’s guess');
 // The service reads exactly these bodies: this is the schema its routes parse.
 assert.ok(readingRequestSchema.safeParse(streamed.body).success,'the streaming route must accept the body the port path sends');
 assert.ok(readingRequestSchema.safeParse(sent[1]!.body).success,'the run route must accept the body the message path sends');
 // With nothing published the request still asks a question the service accepts:
 // the shipped pair and no glossary, rather than fields the service has no room for.
-delete (stored as any).readingLanguages;delete (stored as any).readingGlossary;
+delete (stored as any).readingLanguageRoutes;delete (stored as any).readingActiveLanguageRouteId;delete (stored as any).readingGlossary;
 const unpublished=await fromPage({kind:'reading-run',input:{...reading,id:crypto.randomUUID()}});
 assert.equal(unpublished.error,undefined);
-assert.deepEqual((sent[2]!.body as any).languages,{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'},'an installation the Web application has not published to still reads with the shipped pair');
+assert.deepEqual((sent[2]!.body as any).languages,{supportLanguageTag:'zh-CN',targetLanguageTag:'en',languageRouteId:'00000000-0000-4000-8000-000000000001',languageRouteRevision:1},'an installation the Web application has not published to still reads with the shipped Route context');
 assert.deepEqual((sent[2]!.body as any).glossary,[],'and with no glossary, because the learner has not written one');
-(stored as any).readingLanguages={familiarLanguageTag:'zh-CN',targetLanguageTag:'en'};(stored as any).readingGlossary=[{term:'prompt',rendering:'提示词'}];
+(stored as any).readingLanguageRoutes={revision:1,routes:[defaultRoute]};(stored as any).readingActiveLanguageRouteId=defaultRoute.id;(stored as any).readingGlossary=[{inputLanguageTag:'en',outputLanguageTag:'zh-CN',term:'prompt',rendering:'提示词'}];
 
 const test=await fromPage({kind:'reading-test',input:{id:crypto.randomUUID(),providerId:crypto.randomUUID()}},{id:'fixture',url:'chrome-extension://fixture/options.html'});
 assert.equal(test.error,undefined);
@@ -131,9 +133,9 @@ assert.equal('languages' in (testBody as object),false,'a connection question ha
 // and completing it would be answering a question nobody asked.
 const lookupHandler={message:null as any};
 connectListener({name:'sensa-lookup-stream',sender:{id:'fixture',tab:{id:1},url:pageUrl},onDisconnect:{addListener:()=>{}},onMessage:{addListener:(fn:any)=>{lookupHandler.message=fn;}},postMessage:()=>{},disconnect:()=>{}});
-const lookup={id:crypto.randomUUID(),snapshot:{sentence:'She took her time.',language:'en',languageSource:'detector',source:{url:pageUrl,title:'An article',capturedAt:new Date().toISOString()},expression:null}};
+const lookup={id:crypto.randomUUID(),snapshot:{sentence:'She took her time.',language:'en',languageSource:'detector',languageConfidence:.9,source:{url:pageUrl,title:'An article',capturedAt:new Date().toISOString()},expression:null}};
 lookupHandler.message({accountId,pageUrl,input:lookup});
 await new Promise(resolve=>setTimeout(resolve,50));
 const lookupBody=sent.find(entry=>entry.url==='/sensa/semantic/lookups/stream')!.body;
 assert.deepEqual(lookupBody,lookup,'a lookup body is the capture it was given, with nothing added');
-console.log('PASS: every reading the extension sends carries the learner’s pair and glossary on both paths, the two connection requests carry only their own question, a lookup body is left exactly as the page built it, and each body is one the service’s own schema accepts.');
+console.log('PASS: every reading the extension sends carries the pinned Route context and learner glossary on both paths, the two connection requests carry only their own question, a lookup body is left exactly as the page built it, and each body is one the service’s own schema accepts.');

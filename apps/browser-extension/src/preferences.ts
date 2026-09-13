@@ -1,33 +1,49 @@
-import {sensaReadingGlossarySchema,type SensaReadingGlossary} from '@sensa/contracts/sensa';
+import {
+  defaultSensaLanguageRoute,
+  defaultSensaLanguageRouteCollection,
+  sensaFormalPinnedLanguageContextSchema,
+  sensaLanguageRouteCollectionSchema,
+  sensaPinnedLanguageContext,
+  sensaReadingGlossarySchema,
+  type SensaFormalPinnedLanguageContext,
+  type SensaLanguageRouteCollection,
+  type SensaReadingGlossary,
+} from '@sensa/contracts/sensa';
 /**
- * The learner's two languages, as published by the Web application.
+ * The learner's Route collection, as published by the Web application.
  *
- * The profile's source of truth is the learner's local library, which this
- * extension cannot read, so the Web application publishes it here through the
- * same bridge it uses to hand over captures. The extension never edits this: an
- * editable second copy is how two surfaces come to disagree about which language
- * a learner is studying.
+ * The Route source of truth is the learner's local library, which this
+ * extension cannot read, so the Web application publishes the collection here.
+ * The extension edits only its own Active Route Selection; Route languages,
+ * status and revisions remain Web-owned.
  */
-export type ReadingLanguages={familiarLanguageTag:string;targetLanguageTag:string};
-/** The pair the product ships, used only while nothing has been published yet —
- * the same answer the library gives for a library with no saved profile. */
-export const defaultReadingLanguages:ReadingLanguages={familiarLanguageTag:'zh-CN',targetLanguageTag:'en'};
-const languageTag=(value:unknown,fallback:string)=>typeof value==='string'&&value.trim()&&value.trim().length<=35?value.trim():fallback;
-export async function readingLanguages():Promise<ReadingLanguages>{
- const stored=(await chrome.storage.local.get('readingLanguages')).readingLanguages as Record<string,unknown>|undefined;
- if(!stored||typeof stored!=='object')return defaultReadingLanguages;
- const familiar=languageTag(stored.familiarLanguageTag,defaultReadingLanguages.familiarLanguageTag);
- const target=languageTag(stored.targetLanguageTag,defaultReadingLanguages.targetLanguageTag);
- // One language cannot be both sides of the boundary, so a published pair that
- // says so is not a pair and the shipped one stands.
- return familiar===target?defaultReadingLanguages:{familiarLanguageTag:familiar,targetLanguageTag:target};
+export type ReadingLanguageContext=SensaFormalPinnedLanguageContext;
+export const defaultReadingLanguageContext:ReadingLanguageContext=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
+async function readingLanguageRoutes():Promise<SensaLanguageRouteCollection>{
+ const parsed=sensaLanguageRouteCollectionSchema.safeParse((await chrome.storage.local.get('readingLanguageRoutes')).readingLanguageRoutes);
+ return parsed.success?parsed.data:defaultSensaLanguageRouteCollection;
 }
-export async function publishReadingLanguages(value:unknown):Promise<ReadingLanguages>{
- const raw=value&&typeof value==='object'?value as Record<string,unknown>:{};
- const next={familiarLanguageTag:languageTag(raw.familiarLanguageTag,defaultReadingLanguages.familiarLanguageTag),targetLanguageTag:languageTag(raw.targetLanguageTag,defaultReadingLanguages.targetLanguageTag)};
- if(next.familiarLanguageTag===next.targetLanguageTag)throw new Error('invalid_languages');
- await chrome.storage.local.set({readingLanguages:next});
- return next;
+export async function readingLanguageContext():Promise<ReadingLanguageContext>{
+ const routes=await readingLanguageRoutes(),selected=(await chrome.storage.local.get('readingActiveLanguageRouteId')).readingActiveLanguageRouteId;
+ const route=routes.routes.find(item=>item.id===selected&&item.status==='active')??routes.routes.find(item=>item.status==='active')??defaultSensaLanguageRoute;
+ return sensaPinnedLanguageContext(route);
+}
+export async function readingLanguageRouteSnapshot(){
+ const collection=await readingLanguageRoutes(),context=await readingLanguageContext();
+ return {collection,context};
+}
+export async function publishReadingLanguageRoutes(value:unknown):Promise<ReadingLanguageContext>{
+ const collection=sensaLanguageRouteCollectionSchema.parse(value),selected=(await chrome.storage.local.get('readingActiveLanguageRouteId')).readingActiveLanguageRouteId;
+ const route=collection.routes.find(item=>item.id===selected&&item.status==='active')??collection.routes.find(item=>item.status==='active')!;
+ const context=sensaFormalPinnedLanguageContextSchema.parse(sensaPinnedLanguageContext(route));
+ await chrome.storage.local.set({readingLanguageRoutes:collection,readingActiveLanguageRouteId:route.id});
+ return context;
+}
+export async function selectReadingLanguageRoute(routeId:string):Promise<ReadingLanguageContext>{
+ const collection=await readingLanguageRoutes(),route=collection.routes.find(item=>item.id===routeId&&item.status==='active');
+ if(!route)throw new Error('unknown_language_route');
+ await chrome.storage.local.set({readingActiveLanguageRouteId:route.id});
+ return sensaPinnedLanguageContext(route);
 }
 /**
  * The learner's glossary, as published by the Web application.
