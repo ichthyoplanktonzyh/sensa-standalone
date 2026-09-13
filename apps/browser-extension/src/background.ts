@@ -2,6 +2,7 @@ import {queueWeb,pendingWeb,acknowledgeWeb,webStatus,discardPendingWeb,webOperat
 import {z} from 'zod';
 import {captureSnapshotSchema} from '@sensa/contracts/sensa';
 import {webUrl,apiUrl} from './config';
+import {detectIso6393} from './languageDetector';
 import {readYoutubePlayer} from './youtubePlayer';
 import {readingPreferences} from './preferences';
 type Mode={accountId:string};
@@ -78,6 +79,11 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  const isPopup=sender.url===chrome.runtime.getURL('popup.html');
  const isOptions=sender.url===chrome.runtime.getURL('options.html');
  const work=async()=>{
+ // Language detection is pure local computation on text the caller already has,
+ // so it needs no account and no page: the content script sends a sample and
+ // gets a code back. It lives here because the detector's tables are far larger
+ // than anything a content script should carry into every page.
+ if(message.kind==='detect-language'){const text=typeof message.text==='string'?message.text.slice(0,2048):'';return {language:text?detectIso6393(text):null};}
  if(message.kind==='web-session-ended'){if(!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin||!sender.tab)throw new Error('unsupported_message');return locked(async()=>{const store=await load();if(!store.active||store.active!==message.accountId)return {disconnected:false};const a=store.accounts[store.active];a.token='disconnected';a.expiresAt=new Date(0).toISOString();store.active=null;await persist(store);await chrome.storage.session.set({sensaWebConnect:null});await stopAllReading();return {disconnected:true};});}
  if(message.kind==='web-connect-reset'){
   if(!sender.tab?.id||!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin)throw new Error('unsupported_message');

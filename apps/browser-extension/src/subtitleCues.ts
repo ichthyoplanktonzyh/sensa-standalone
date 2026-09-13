@@ -3,12 +3,19 @@ export type Cue={text:string;start:number;end:number};
 type Piece=Cue & {join?:string};
 const finite=(value:unknown):value is number=>typeof value==='number'&&Number.isFinite(value);
 
-/** Sentence boundaries may split timed pieces, never the inside of an untimed row. */
-export function groupSubtitlePieces(input:Piece[]):Cue[]{
+/**
+ * Sentence boundaries may split timed pieces, never the inside of an untimed row.
+ *
+ * `language` is the language the captions are actually in. The abbreviation
+ * guard below stays English-specific on purpose: it exists for the one language
+ * whose captions are dense with `Dr.` and `St.`, and applying it elsewhere would
+ * drop boundaries no other language's punctuation justifies.
+ */
+export function groupSubtitlePieces(input:Piece[],language?:string):Cue[]{
   const pieces=input.filter(c=>c.text.trim()&&c.text.length<=12000&&finite(c.start)&&finite(c.end)&&c.start>=0&&c.end>c.start&&c.end<=86400).sort((a,b)=>a.start-b.start).slice(0,60000);
   let text='';
   const spans=pieces.map(piece=>{const join=text?(piece.join??' '):'';text+=join;const offset=text.length;text+=piece.text;return {piece,offset};});
-  const boundaries=Array.from(new Intl.Segmenter('en',{granularity:'sentence'}).segment(text),part=>part.index+part.segment.trimEnd().length)
+  const boundaries=Array.from(new Intl.Segmenter(language,{granularity:'sentence'}).segment(text),part=>part.index+part.segment.trimEnd().length)
     .filter(end=>!/(?:\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St)\.|\b[A-Z]\.)$/u.test(text.slice(Math.max(0,end-16),end)));
   const cues:Cue[]=[];let buffer:Cue|null=null,previousOffset=0,boundary=0;
   for(const {piece,offset} of spans){
@@ -26,7 +33,7 @@ export function groupSubtitlePieces(input:Piece[]):Cue[]{
   return cues.map(c=>({...c,text:c.text.trim()})).filter(c=>c.text&&c.end>c.start);
 }
 
-export function parseYoutubeCaptions(text:string):Cue[]{
+export function parseYoutubeCaptions(text:string,language?:string):Cue[]{
   const data=JSON.parse(text);
   if(!Array.isArray(data.events))throw new Error('invalid_subtitles');
   type Event={tStartMs:number;dDurationMs?:number;wWinId?:number;segs?:{utf8?:string;tOffsetMs?:number}[]};
@@ -54,10 +61,10 @@ export function parseYoutubeCaptions(text:string):Cue[]{
       pieces.push({text:segment.text.trim(),start:segment.start/1000,end:until/1000,join});
     }
   }
-  return groupSubtitlePieces(pieces);
+  return groupSubtitlePieces(pieces,language);
 }
 
-export function parseSubtitleFile(text:string):Cue[]{
+export function parseSubtitleFile(text:string,language?:string):Cue[]{
   const seconds=(stamp:string)=>stamp.replace(',','.').split(':').map(Number).reduce((total,n)=>total*60+n,0);
   const cues:Cue[]=[];
   for(const block of text.replace(/\r/gu,'').split(/\n\s*\n/u)){
@@ -66,5 +73,5 @@ export function parseSubtitleFile(text:string):Cue[]{
     const plain=new DOMParser().parseFromString(lines.slice(index+1).join('\n'),'text/html').body.textContent??'';
     cues.push({text:plain.trim(),start:seconds(match[1]),end:seconds(match[2])});
   }
-  return groupSubtitlePieces(cues);
+  return groupSubtitlePieces(cues,language);
 }

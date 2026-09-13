@@ -29,6 +29,7 @@ import type {
   SensaSemanticAcceptanceFact,
   SensaSenseSemanticSpec,
 } from '@sensa/contracts/sensa';
+import { sensaLanguageRoleForTag } from '@sensa/contracts/sensa';
 import { digestOf } from './digest';
 import type { CommandLanguages } from './ports';
 import type { JourneyState, MeaningJourneyRecord } from './store';
@@ -46,9 +47,10 @@ type PersonalProvenanceKind =
 export interface IntakeEnginePorts {
   newId(): string;
   nowIso(): string;
-  /** A captured expression carries only a role, not a language. The gateway
-   * resolves that role against the learner's profile and pins the pair here,
-   * because this engine performs no IO of its own. */
+  /** The pair this operation is about, pinned once by the gateway before any
+   * route decision. A captured expression states its own language; whether that
+   * language sits on a side of this learner's boundary is a question only the
+   * profile can answer, and this engine performs no IO of its own. */
   languages: CommandLanguages;
 }
 
@@ -100,13 +102,20 @@ const hasLocatedExpression = (payload: SensaIntakePayload): boolean => {
 
 /**
  * Mechanical route decision. Fast track needs all three elements with an
- * resolved sense and a verified acceptance request. The captured text or
- * referenced media becomes the prototype scene. Pure-audio payloads
- * are rejected for this milestone: the contract keeps the enum, the local
- * media store has no audio support yet.
+ * expression whose language this learner's boundary can place, a resolved sense
+ * and a verified acceptance request. The captured text or referenced media
+ * becomes the prototype scene. Pure-audio payloads are rejected for this
+ * milestone: the contract keeps the enum, the local media store has no audio
+ * support yet.
+ *
+ * The language comes before the sense because it is the more fundamental gap: a
+ * resolved sense for material in a language this operation is not about still
+ * cannot be written, so reporting `pending_sense` there would name the wrong
+ * thing to fix.
  */
 export const evaluateIntakeRoute = (
   payload: SensaIntakePayload,
+  languages: CommandLanguages,
 ): IntakeRouteDecision => {
   if (payload.context.modality === 'audio') {
     return { route: 'rejected', reason: '本地原型暂不支持纯音频材料。' };
@@ -116,14 +125,18 @@ export const evaluateIntakeRoute = (
     return { route: 'rejected', reason: '摄取材料缺少可用的上下文内容。' };
   }
   const hasExpression = hasLocatedExpression(payload);
+  const hasPlacedLanguage =
+    sensaLanguageRoleForTag(payload.expression?.languageTag ?? null, languages)
+    !== null;
   const hasResolvedSense =
     payload.sense != null
     && payload.sense.resolutionStatus === 'resolved'
     && payload.sense.definitionSummary.trim().length > 0;
-  if (hasExpression && hasResolvedSense && payload.acceptanceRequest) {
+  if (hasExpression && hasPlacedLanguage && hasResolvedSense && payload.acceptanceRequest) {
     return { route: 'fast_track' };
   }
   if (!hasExpression) return { route: 'inbox', status: 'pending_expression' };
+  if (!hasPlacedLanguage) return { route: 'inbox', status: 'pending_language' };
   if (!hasResolvedSense) return { route: 'inbox', status: 'pending_sense' };
   return {
     route: 'inbox',
@@ -144,8 +157,9 @@ export const createInboxItem = (
   payload: SensaIntakePayload,
   intakeId: string,
   nowIso: string,
+  languages: CommandLanguages,
 ): SensaIntakeItem => {
-  const decision = evaluateIntakeRoute(payload);
+  const decision = evaluateIntakeRoute(payload, languages);
   if (decision.route !== 'inbox') {
     throw new Error('这条摄取材料不应该进入待处理材料盒。');
   }
@@ -227,7 +241,7 @@ export const executeFastTrack = (
   },
   ports: IntakeEnginePorts,
 ): FastTrackOutcome => {
-  const decision = evaluateIntakeRoute(input.payload);
+  const decision = evaluateIntakeRoute(input.payload, ports.languages);
   if (decision.route !== 'fast_track') {
     throw new Error('这条摄取材料不满足快轨条件。');
   }
@@ -258,9 +272,16 @@ export const executeFastTrack = (
     source: payload.context.source,
   };
 
-  // 2) Target/Familiar Expression Anchor for the captured word.
-  const isTargetRole = expression.languageRole === 'target';
-  const languageTag = isTargetRole
+  // 2) Target/Familiar Expression Anchor for the captured word. The capture
+  //    states the language it is in; this pins it to the side of the learner's
+  //    boundary that the operation is about. A tag the pair cannot place never
+  //    reaches here — `evaluateIntakeRoute` sends it to the Inbox as
+  //    `pending_language` — so the throw is a guard, not a fallback.
+  const languageRole = sensaLanguageRoleForTag(expression.languageTag, ports.languages);
+  if (!languageRole) {
+    throw new Error('这条摄取材料的语言不在本次操作的语对中。');
+  }
+  const languageTag = languageRole === 'target'
     ? ports.languages.targetLanguageTag
     : ports.languages.familiarLanguageTag;
   const expressionType: SensaExpressionType = expression.expressionTypeHint ?? 'word';
@@ -356,7 +377,7 @@ export const executeFastTrack = (
     revision: 1,
     expressionType,
     languageTag,
-    learnerLanguageRole: isTargetRole ? 'target' : 'familiar',
+    learnerLanguageRole: languageRole,
     surfaceForm: expression.surfaceForm.trim(),
     normalizedForm: normalizedForm(expression.surfaceForm),
     contextAnchorRevisionId: semanticAnchorRevisionId,

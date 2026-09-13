@@ -1457,7 +1457,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     if (parsed.intakeOperationId !== operationId) {
       throw new Error('ingest 的 operationId 必须与载荷的 intakeOperationId 一致。');
     }
-    const decision = evaluateIntakeRoute(parsed);
+    // The pair is pinned once, before the route decision rather than only before
+    // the write: whether the captured language sits on a side of the learner's
+    // boundary IS that decision, so reading the profile afterwards would let one
+    // operation route on one profile and write under another.
+    const languages = sensaCommandLanguages(await this.deps.languages.read());
+    const decision = evaluateIntakeRoute(parsed, languages);
     if (decision.route === 'rejected') {
       const result: IngestResult = { route: 'rejected', reason: decision.reason };
       this.recordReceipt(operationId, 'Ingest', result);
@@ -1465,7 +1470,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       return { ...result, replayed: false };
     }
     if (decision.route === 'inbox') {
-      const item = createInboxItem(parsed, this.id(), this.now());
+      const item = createInboxItem(parsed, this.id(), this.now(), languages);
       state.inboxItems.push(item);
       const result: IngestResult = { route: 'inbox', intakeId: item.intakeId };
       this.recordReceipt(operationId, 'Ingest', result);
@@ -1481,7 +1486,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     const outcome = executeFastTrack(
       state,
       { payload: parsed, operationId, authority: authority! },
-      this.enginePorts(sensaCommandLanguages(await this.deps.languages.read())),
+      this.enginePorts(languages),
     );
     this.state = outcome.nextState;
     this.settleExpressionBinding(

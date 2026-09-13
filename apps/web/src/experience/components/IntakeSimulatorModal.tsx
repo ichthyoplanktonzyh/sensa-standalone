@@ -185,7 +185,9 @@ export const IntakeSimulatorModal = ({
       source: { ...WEB_SOURCE },
       expression: {
         surfaceForm,
-        languageRole: 'target',
+        // The simulated scenario is an English article, so naming English is a
+        // fact about this fixture rather than an assumption about the learner.
+        languageTag: 'en',
         occurrence: spanStart >= 0
           ? { kind: 'text_span', start: spanStart, end: spanStart + surfaceForm.length }
           : null,

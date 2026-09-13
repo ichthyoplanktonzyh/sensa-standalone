@@ -202,6 +202,7 @@ export const contentUiZh = {
   confirmMeaning: "待确认词义",
   selectExpression: "待圈定表达",
   readyForAcceptance: "待接纳",
+  unplacedLanguage: "待定语言",
   meaningConfirmedAndSaved: "已确认词义，材料已收进语义世界",
   thisMaterialStillNeedsClarificationTryAnother:
     "这条材料还不能结案，请换一个义项试试。",
@@ -474,6 +475,7 @@ export const contentUiEn = {
   confirmMeaning: "Confirm meaning",
   selectExpression: "Select expression",
   readyForAcceptance: "Ready for acceptance",
+  unplacedLanguage: "Language undecided",
   meaningConfirmedAndSaved: "Meaning confirmed and saved",
   thisMaterialStillNeedsClarificationTryAnother:
     "This material still needs clarification. Try another meaning.",

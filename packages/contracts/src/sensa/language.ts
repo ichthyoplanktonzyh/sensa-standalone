@@ -24,11 +24,30 @@ export const sensaInterfaceLanguageSchema = z.enum(sensaInterfaceLanguages);
 export const sensaLanguageRoleSchema = z.enum(['familiar', 'target']);
 export type SensaLanguageRole = z.infer<typeof sensaLanguageRoleSchema>;
 
+/**
+ * Any BCP-47-shaped tag, without placing it against the catalog.
+ *
+ * Deliberately not an enum of `sensaLanguages`: a tag written by an earlier
+ * release, or detected on a page in a language this release does not curate, is
+ * still the learner's own material. Placing the tag against the catalog is the
+ * caller's job, so an unplaced language costs the learner that language instead
+ * of the whole capture.
+ */
+export const sensaLanguageTagSchema = z.string().trim().min(1).max(35);
+
 export type SensaLanguage = {
   /** BCP-47 primary tag. This is the tag stored on every expression anchor and
    * every learning target, so it never carries a regional variant the content
    * pipeline cannot produce. */
   readonly tag: string;
+  /** ISO 639-3 code, the vocabulary language detectors answer in.
+   *
+   * Detection runs in the extension, before any library is reachable, and only
+   * the catalog can say which of the tags above a detected code means — the
+   * same reason `wiktionaryCode` lives here. Two languages may share a script
+   * and still need different codes; a code with no entry is a language this
+   * release cannot name, and is reported as undetermined rather than guessed. */
+  readonly iso6393: string;
   /** Name in the language itself, shown beside the interface-language name so a
    * learner recognises their own language before reading a translation of it. */
   readonly endonym: string;
@@ -68,25 +87,51 @@ export const sensaLexiconEdition = 'en' as const;
  * languages the product actually carries are enumerated here rather than
  * inferred from a request. */
 export const sensaLanguages: readonly SensaLanguage[] = [
-  {tag:'zh-CN', endonym:'中文（简体）', names:{'zh-CN':'中文（简体）', en:'Chinese (Simplified)'}, script:'Hans', direction:'ltr', speechLocale:'zh-CN', wiktionaryCode:'zh', ipa:false, asTarget:false},
-  {tag:'en', endonym:'English', names:{'zh-CN':'英语', en:'English'}, script:'Latn', direction:'ltr', speechLocale:'en-US', wiktionaryCode:'en', ipa:true, asTarget:true},
-  {tag:'ja', endonym:'日本語', names:{'zh-CN':'日语', en:'Japanese'}, script:'Jpan', direction:'ltr', speechLocale:'ja-JP', wiktionaryCode:'ja', ipa:false, asTarget:true},
-  {tag:'ko', endonym:'한국어', names:{'zh-CN':'韩语', en:'Korean'}, script:'Kore', direction:'ltr', speechLocale:'ko-KR', wiktionaryCode:'ko', ipa:false, asTarget:true},
-  {tag:'es', endonym:'Español', names:{'zh-CN':'西班牙语', en:'Spanish'}, script:'Latn', direction:'ltr', speechLocale:'es-ES', wiktionaryCode:'es', ipa:false, asTarget:true},
-  {tag:'fr', endonym:'Français', names:{'zh-CN':'法语', en:'French'}, script:'Latn', direction:'ltr', speechLocale:'fr-FR', wiktionaryCode:'fr', ipa:false, asTarget:true},
-  {tag:'de', endonym:'Deutsch', names:{'zh-CN':'德语', en:'German'}, script:'Latn', direction:'ltr', speechLocale:'de-DE', wiktionaryCode:'de', ipa:false, asTarget:true},
-  {tag:'ru', endonym:'Русский', names:{'zh-CN':'俄语', en:'Russian'}, script:'Cyrl', direction:'ltr', speechLocale:'ru-RU', wiktionaryCode:'ru', ipa:false, asTarget:true},
-  {tag:'it', endonym:'Italiano', names:{'zh-CN':'意大利语', en:'Italian'}, script:'Latn', direction:'ltr', speechLocale:'it-IT', wiktionaryCode:'it', ipa:false, asTarget:true},
-  {tag:'pt', endonym:'Português', names:{'zh-CN':'葡萄牙语', en:'Portuguese'}, script:'Latn', direction:'ltr', speechLocale:'pt-BR', wiktionaryCode:'pt', ipa:false, asTarget:true},
-  {tag:'ar', endonym:'العربية', names:{'zh-CN':'阿拉伯语', en:'Arabic'}, script:'Arab', direction:'rtl', speechLocale:'ar-SA', wiktionaryCode:'ar', ipa:false, asTarget:true},
-  {tag:'hi', endonym:'हिन्दी', names:{'zh-CN':'印地语', en:'Hindi'}, script:'Deva', direction:'ltr', speechLocale:'hi-IN', wiktionaryCode:'hi', ipa:false, asTarget:true},
-  {tag:'th', endonym:'ไทย', names:{'zh-CN':'泰语', en:'Thai'}, script:'Thai', direction:'ltr', speechLocale:'th-TH', wiktionaryCode:'th', ipa:false, asTarget:true},
-  {tag:'vi', endonym:'Tiếng Việt', names:{'zh-CN':'越南语', en:'Vietnamese'}, script:'Latn', direction:'ltr', speechLocale:'vi-VN', wiktionaryCode:'vi', ipa:false, asTarget:true},
-  {tag:'id', endonym:'Bahasa Indonesia', names:{'zh-CN':'印尼语', en:'Indonesian'}, script:'Latn', direction:'ltr', speechLocale:'id-ID', wiktionaryCode:'id', ipa:false, asTarget:true},
-  {tag:'tr', endonym:'Türkçe', names:{'zh-CN':'土耳其语', en:'Turkish'}, script:'Latn', direction:'ltr', speechLocale:'tr-TR', wiktionaryCode:'tr', ipa:false, asTarget:true},
-  {tag:'nl', endonym:'Nederlands', names:{'zh-CN':'荷兰语', en:'Dutch'}, script:'Latn', direction:'ltr', speechLocale:'nl-NL', wiktionaryCode:'nl', ipa:false, asTarget:true},
-  {tag:'pl', endonym:'Polski', names:{'zh-CN':'波兰语', en:'Polish'}, script:'Latn', direction:'ltr', speechLocale:'pl-PL', wiktionaryCode:'pl', ipa:false, asTarget:true},
+  {tag:'zh-CN', iso6393:'cmn', endonym:'中文（简体）', names:{'zh-CN':'中文（简体）', en:'Chinese (Simplified)'}, script:'Hans', direction:'ltr', speechLocale:'zh-CN', wiktionaryCode:'zh', ipa:false, asTarget:false},
+  {tag:'en', iso6393:'eng', endonym:'English', names:{'zh-CN':'英语', en:'English'}, script:'Latn', direction:'ltr', speechLocale:'en-US', wiktionaryCode:'en', ipa:true, asTarget:true},
+  {tag:'ja', iso6393:'jpn', endonym:'日本語', names:{'zh-CN':'日语', en:'Japanese'}, script:'Jpan', direction:'ltr', speechLocale:'ja-JP', wiktionaryCode:'ja', ipa:false, asTarget:true},
+  {tag:'ko', iso6393:'kor', endonym:'한국어', names:{'zh-CN':'韩语', en:'Korean'}, script:'Kore', direction:'ltr', speechLocale:'ko-KR', wiktionaryCode:'ko', ipa:false, asTarget:true},
+  {tag:'es', iso6393:'spa', endonym:'Español', names:{'zh-CN':'西班牙语', en:'Spanish'}, script:'Latn', direction:'ltr', speechLocale:'es-ES', wiktionaryCode:'es', ipa:false, asTarget:true},
+  {tag:'fr', iso6393:'fra', endonym:'Français', names:{'zh-CN':'法语', en:'French'}, script:'Latn', direction:'ltr', speechLocale:'fr-FR', wiktionaryCode:'fr', ipa:false, asTarget:true},
+  {tag:'de', iso6393:'deu', endonym:'Deutsch', names:{'zh-CN':'德语', en:'German'}, script:'Latn', direction:'ltr', speechLocale:'de-DE', wiktionaryCode:'de', ipa:false, asTarget:true},
+  {tag:'ru', iso6393:'rus', endonym:'Русский', names:{'zh-CN':'俄语', en:'Russian'}, script:'Cyrl', direction:'ltr', speechLocale:'ru-RU', wiktionaryCode:'ru', ipa:false, asTarget:true},
+  {tag:'it', iso6393:'ita', endonym:'Italiano', names:{'zh-CN':'意大利语', en:'Italian'}, script:'Latn', direction:'ltr', speechLocale:'it-IT', wiktionaryCode:'it', ipa:false, asTarget:true},
+  {tag:'pt', iso6393:'por', endonym:'Português', names:{'zh-CN':'葡萄牙语', en:'Portuguese'}, script:'Latn', direction:'ltr', speechLocale:'pt-BR', wiktionaryCode:'pt', ipa:false, asTarget:true},
+  {tag:'ar', iso6393:'arb', endonym:'العربية', names:{'zh-CN':'阿拉伯语', en:'Arabic'}, script:'Arab', direction:'rtl', speechLocale:'ar-SA', wiktionaryCode:'ar', ipa:false, asTarget:true},
+  {tag:'hi', iso6393:'hin', endonym:'हिन्दी', names:{'zh-CN':'印地语', en:'Hindi'}, script:'Deva', direction:'ltr', speechLocale:'hi-IN', wiktionaryCode:'hi', ipa:false, asTarget:true},
+  {tag:'th', iso6393:'tha', endonym:'ไทย', names:{'zh-CN':'泰语', en:'Thai'}, script:'Thai', direction:'ltr', speechLocale:'th-TH', wiktionaryCode:'th', ipa:false, asTarget:true},
+  {tag:'vi', iso6393:'vie', endonym:'Tiếng Việt', names:{'zh-CN':'越南语', en:'Vietnamese'}, script:'Latn', direction:'ltr', speechLocale:'vi-VN', wiktionaryCode:'vi', ipa:false, asTarget:true},
+  {tag:'id', iso6393:'ind', endonym:'Bahasa Indonesia', names:{'zh-CN':'印尼语', en:'Indonesian'}, script:'Latn', direction:'ltr', speechLocale:'id-ID', wiktionaryCode:'id', ipa:false, asTarget:true},
+  {tag:'tr', iso6393:'tur', endonym:'Türkçe', names:{'zh-CN':'土耳其语', en:'Turkish'}, script:'Latn', direction:'ltr', speechLocale:'tr-TR', wiktionaryCode:'tr', ipa:false, asTarget:true},
+  {tag:'nl', iso6393:'nld', endonym:'Nederlands', names:{'zh-CN':'荷兰语', en:'Dutch'}, script:'Latn', direction:'ltr', speechLocale:'nl-NL', wiktionaryCode:'nl', ipa:false, asTarget:true},
+  {tag:'pl', iso6393:'pol', endonym:'Polski', names:{'zh-CN':'波兰语', en:'Polish'}, script:'Latn', direction:'ltr', speechLocale:'pl-PL', wiktionaryCode:'pl', ipa:false, asTarget:true},
 ];
+
+/** The catalog entry a language detector's answer names, or nothing when this
+ * release cannot place that code. Detection never invents a tag: an unplaceable
+ * answer is undetermined, which the caller reports as such. */
+export function sensaLanguageForIso6393(code: string): SensaLanguage | undefined {
+  return sensaLanguages.find(language => language.iso6393 === code);
+}
+
+/**
+ * The catalog entry a declared tag names — a page's `lang` attribute, a subtitle
+ * track's code — or nothing when this release cannot place it.
+ *
+ * A declaration carries subtags the catalog does not: `en-US` is the English
+ * entry and `zh-Hans` is Simplified Chinese, so an exact tag is tried first and
+ * the primary subtag second. Nothing is inferred from a region the catalog has
+ * no entry for: `pt-PT` places on Portuguese because the catalog carries
+ * Portuguese, while `yue` places on nothing and stays undetermined.
+ */
+export function sensaLanguageForDeclaredTag(tag: string): SensaLanguage | undefined {
+  const normalized = tag.trim().toLowerCase();
+  if (!normalized) return undefined;
+  const exact = sensaLanguages.find(language => language.tag.toLowerCase() === normalized);
+  if (exact) return exact;
+  const primary = normalized.split('-')[0]!;
+  return sensaLanguages.find(language => language.tag.toLowerCase().split('-')[0] === primary);
+}
 
 export function sensaLanguage(tag: string): SensaLanguage | undefined {
   return sensaLanguages.find(language => language.tag === tag);
@@ -94,6 +139,27 @@ export function sensaLanguage(tag: string): SensaLanguage | undefined {
 
 export function sensaLanguageForRole(role: SensaLanguageRole): readonly SensaLanguage[] {
   return role === 'target' ? sensaLanguages.filter(language => language.asTarget) : sensaLanguages;
+}
+
+/**
+ * Which side of the operation's own language boundary a captured tag sits on,
+ * or nothing when the tag is not part of that boundary at all.
+ *
+ * A capture says what language it is; this says what that means here. The two
+ * are separate because only the library holds the profile, so a sender that
+ * stamped a role would be choosing a side it cannot see. `null` is a real
+ * answer — a learner reading a third language captures material that belongs to
+ * neither side — and every caller must decide what to do with it rather than
+ * receive a default.
+ */
+export function sensaLanguageRoleForTag(
+  tag: string | null,
+  languages: SensaCommandLanguages,
+): SensaLanguageRole | null {
+  if (!tag) return null;
+  if (tag === languages.targetLanguageTag) return 'target';
+  if (tag === languages.familiarLanguageTag) return 'familiar';
+  return null;
 }
 
 /** An unknown tag is named by itself rather than hidden: the learner's stored
@@ -144,9 +210,9 @@ export const sensaCommandLanguages = (
  */
 export const sensaLanguageProfileSchema = z
   .object({
-    familiarLanguageTag: z.string().trim().min(1).max(35),
-    targetLanguageTags: z.array(z.string().trim().min(1).max(35)).min(1).max(8),
-    activeTargetLanguageTag: z.string().trim().min(1).max(35),
+    familiarLanguageTag: sensaLanguageTagSchema,
+    targetLanguageTags: z.array(sensaLanguageTagSchema).min(1).max(8),
+    activeTargetLanguageTag: sensaLanguageTagSchema,
   })
   .strict()
   .superRefine((value, context) => {

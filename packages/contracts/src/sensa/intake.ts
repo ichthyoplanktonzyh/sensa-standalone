@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { sensaLanguageTagSchema } from "./language.js";
+import type { SensaLanguageRole } from "./language.js";
 import { sensaExpressionTypeSchema } from "./semanticRegistry.js";
 import { sensaExpressionOccurrenceLocatorSchema } from "./personalSemanticWorld.js";
 
@@ -41,12 +43,16 @@ export const sensaIntakeAcceptanceRequestSchema = z.discriminatedUnion(
   ],
 );
 
-export const sensaIntakeLanguageRoleSchema = z.enum(["target", "familiar"]);
-
 export const sensaIntakeItemStatusSchema = z.enum([
   "pending_sense",
   "pending_expression",
   "pending_acceptance",
+  /** The material names a language that is neither this learner's target nor
+   * their familiar language, so no expression anchor can be stamped with a
+   * side. The item waits on the learner deciding what that language is to them,
+   * which is a different question from the other three and must not be reported
+   * as one of them. */
+  "pending_language",
 ]);
 
 export const sensaIntakeSourceMetaSchema = z
@@ -68,10 +74,18 @@ export const sensaIntakeContextSchema = z
   })
   .strict();
 
+/**
+ * The captured expression, and the language it is actually in.
+ *
+ * A tag rather than a side of the learner's boundary: only the library holds the
+ * language profile, so a capture that named a side would be choosing one it
+ * cannot see. `null` means nothing established a language, which routes the item
+ * to `pending_language` rather than letting a default decide for the learner.
+ */
 export const sensaIntakeExpressionSchema = z
   .object({
     surfaceForm: nonEmpty,
-    languageRole: sensaIntakeLanguageRoleSchema,
+    languageTag: sensaLanguageTagSchema.nullable(),
     occurrence: sensaExpressionOccurrenceLocatorSchema.nullable(),
     expressionTypeHint: sensaExpressionTypeSchema.nullable(),
   })
@@ -154,9 +168,7 @@ export type SensaIntakeSenseResolutionStatus = z.infer<
 export type SensaIntakeAcceptanceRequest = z.infer<
   typeof sensaIntakeAcceptanceRequestSchema
 >;
-export type SensaIntakeLanguageRole = z.infer<
-  typeof sensaIntakeLanguageRoleSchema
->;
+export type SensaIntakeLanguageRole = SensaLanguageRole;
 export type SensaIntakeItemStatus = z.infer<typeof sensaIntakeItemStatusSchema>;
 export type SensaIntakeSourceMeta = z.infer<typeof sensaIntakeSourceMetaSchema>;
 export type SensaIntakeContext = z.infer<typeof sensaIntakeContextSchema>;

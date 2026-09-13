@@ -14,7 +14,7 @@ const {receiveWebIntake}=await import('../apps/web/src/data/library/intake.ts');
 const library=await openLibrary(),accountId=crypto.randomUUID(),other=crypto.randomUUID();
 const owner=async(signedOut=false)=>command({id:crypto.randomUUID(),kind:'fixture.owner',input:{signedOut}},async tx=>{tx.put('meta','service-owner',{subject:accountId,accountId});tx.put('meta','signed-out',signedOut);});
 await owner();
-const snapshot={sentence:'She took her time.',language:'en',source:{url:'https://example.org/article',title:'An article',capturedAt:new Date().toISOString()},expression:{text:'took',start:4,end:8}};
+const snapshot={sentence:'She took her time.',language:'en',languageSource:'detector',source:{url:'https://example.org/article',title:'An article',capturedAt:new Date().toISOString()},expression:{text:'took',start:4,end:8}};
 const proposal={explanation:'这里表示花时间。',expression:{surface:'took',type:'word',language:'en'},semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'花费时间',prototypeScenes:[{summary:'一个人从容完成一件事。',participantRoles:['行动者'],states:['时间充足'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]}};
 const raw={version:'sensa-intake-v1',libraryId:library.id,clientId:crypto.randomUUID(),operationId:crypto.randomUUID(),snapshot,resolution:null,acceptance:null};
 const request=localIntakeRequestSchema.parse(raw);

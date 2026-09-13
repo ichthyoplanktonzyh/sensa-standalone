@@ -58,16 +58,23 @@ if (!installed.__sensaCaptureInstalled) {
       close();
     }
   });
-  function selected(keyboard = false) {
+  async function selected(keyboard = false) {
     if (suspended || !enabled || !accountId || preferences.disabledSites.includes(location.hostname)) return;
     const selection = getSelection();
     if (!selection || selection.isCollapsed || !selection.rangeCount) return;
     const range = selection.getRangeAt(0).cloneRange();
-    const snapshot = captureSelection(range);
-    if (!snapshot) return;
-    close();
     const owner = accountId;
-    const wider=captureSelection(range,'block');
+    const stillWanted = () => !suspended && enabled && accountId === owner && !preferences.disabledSites.includes(location.hostname);
+    // Detection is asynchronous, so the reading mode may have been switched off
+    // or the account changed while it ran; the panel is only opened for a
+    // selection that is still wanted.
+    const snapshot = await captureSelection(range);
+    if (!snapshot || !stillWanted()) return;
+    close();
+    // The wider capture is cut from the same frozen range, so the block context
+    // cannot disagree with the sentence about what language it is in.
+    const wider = await captureSelection(range, 'block');
+    if (!stillWanted()) return;
     current = showReadingPanel({snapshot, contextAlternative:wider?{...wider,source:snapshot.source}:undefined, range, accountId: owner, close,
       isAuthorized: () => enabled && accountId === owner, keyboard,preferences});
   }

@@ -1,7 +1,9 @@
-import {captureSnapshotSchema} from '@sensa/contracts/sensa';
+import {captureSnapshotSchema,sensaLanguageForDeclaredTag} from '@sensa/contracts/sensa';
 import type {CaptureSnapshot} from '@sensa/contracts/sensa';
 import {runReading,readingError} from './readingClient';
 import {parseYoutubeCaptions,parseSubtitleFile} from './subtitleCues';
+import {declaredCaptureLanguage,detectCaptureLanguage,unknownCaptureLanguage} from './language';
+import type {CaptureLanguage} from './language';
 import type {Cue} from './subtitleCues';
 export function youtubeId(){if(!['www.youtube.com','youtube.com','m.youtube.com','www.youtube-nocookie.com'].includes(location.hostname))return null;const u=new URL(location.href);const id=u.pathname==='/watch'?u.searchParams.get('v'):u.pathname.match(/^\/(?:shorts|embed)\/([^/]+)$/u)?.[1];return id&&/^[a-zA-Z0-9_-]{11}$/u.test(id)?id:null;}
 export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,onSelection:(snapshot:CaptureSnapshot,range:Range)=>void,continuity?:{autoLoad:boolean;onLoaded:()=>void}){
@@ -9,11 +11,15 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
   const host=document.createElement('div');host.dataset.sensaUi='youtube';
   host.style.cssText='position:fixed;left:20px;bottom:20px;width:min(640px,calc(100vw - 40px));z-index:2147483646';
   const root=host.attachShadow({mode:'open'});
-  root.innerHTML=`<style>:host{font:14px/1.6 system-ui;color:#242a38}section{background:#fbfbfa;border:1px solid #b9c4d9;border-radius:12px;padding:12px;box-shadow:0 5px 24px #0003;max-height:42vh;overflow:auto}button,select{font:inherit;border:1px solid #bac5da;background:white;color:#303f76;border-radius:7px;min-height:36px;padding:4px 8px;margin:3px;cursor:pointer}button:disabled{opacity:.6}button:focus-visible,select:focus-visible{outline:3px solid #5268a9}p{margin:7px 0;white-space:pre-wrap;overflow-wrap:anywhere}.caption{font-size:19px;line-height:1.65;user-select:text;cursor:text}.translation{color:#405176}.status{font-size:12px;color:#66758c}input{max-width:100%}header{display:flex;justify-content:space-between;align-items:center}section.collapsed> :not(header){display:none}</style><section aria-label="Sensa 视频阅读"><header><strong>YouTube · Sensa 阅读</strong><button data-action="collapse">收起</button></header><div><button data-action="load">加载英文字幕</button><button data-action="pause">暂停 / 固定字幕</button><button data-action="play">继续播放</button><button data-action="previous">上一句</button><button data-action="replay">重听本句</button><button data-action="next">下一句</button></div><p class="caption" aria-label="当前原字幕"></p><p class="translation" aria-label="当前字幕译文"></p><div><button data-action="translate">翻译本句</button><label>字幕显示 <select aria-label="字幕显示"><option value="original">原文</option><option value="bilingual">双语（自动翻译）</option><option value="translation">仅译文（自动翻译）</option></select></label></div><p class="status" role="status">加载英文字幕后，选择表达即可解释与保存；选择时暂停视频。</p><details><summary>使用自己的英文字幕</summary><p>没有可读取字幕时，可加载当前视频的英文 VTT / SRT 文件。云端 AI 转录尚未接入。</p><input type="file" accept=".vtt,.srt" aria-label="加载英文字幕文件"></details></section>`;
+  root.innerHTML=`<style>:host{font:14px/1.6 system-ui;color:#242a38}section{background:#fbfbfa;border:1px solid #b9c4d9;border-radius:12px;padding:12px;box-shadow:0 5px 24px #0003;max-height:42vh;overflow:auto}button,select{font:inherit;border:1px solid #bac5da;background:white;color:#303f76;border-radius:7px;min-height:36px;padding:4px 8px;margin:3px;cursor:pointer}button:disabled{opacity:.6}button:focus-visible,select:focus-visible{outline:3px solid #5268a9}p{margin:7px 0;white-space:pre-wrap;overflow-wrap:anywhere}.caption{font-size:19px;line-height:1.65;user-select:text;cursor:text}.translation{color:#405176}.status{font-size:12px;color:#66758c}input{max-width:100%}header{display:flex;justify-content:space-between;align-items:center}section.collapsed> :not(header){display:none}</style><section aria-label="Sensa 视频阅读"><header><strong>YouTube · Sensa 阅读</strong><button data-action="collapse">收起</button></header><div><button data-action="load">加载字幕</button><button data-action="pause">暂停 / 固定字幕</button><button data-action="play">继续播放</button><button data-action="previous">上一句</button><button data-action="replay">重听本句</button><button data-action="next">下一句</button></div><p class="caption" aria-label="当前原字幕"></p><p class="translation" aria-label="当前字幕译文"></p><div><button data-action="translate">翻译本句</button><label>字幕显示 <select aria-label="字幕显示"><option value="original">原文</option><option value="bilingual">双语（自动翻译）</option><option value="translation">仅译文（自动翻译）</option></select></label></div><p class="status" role="status">加载字幕后，选择表达即可解释与保存；选择时暂停视频。</p><details><summary>使用自己的字幕文件</summary><p>没有可读取字幕时，可加载当前视频的 VTT / SRT 字幕文件。云端 AI 转录尚未接入。</p><input type="file" accept=".vtt,.srt" aria-label="加载字幕文件"></details></section>`;
   document.documentElement.append(host);
   const original=root.querySelector<HTMLElement>('.caption')!,translated=root.querySelector<HTMLElement>('.translation')!,status=root.querySelector<HTMLElement>('.status')!;
   const display=root.querySelector('select')!;
   let cues:Cue[]=[],current:Cue|null=null,pinned=false,disposed=false,loading=false,run=0;
+  /** The language the loaded captions are actually in. A subtitle track states its
+   * own code and a file the learner loads is detected from its own text, so the
+   * captured sentence and the translation beside it never assume English. */
+  let captionLanguage:CaptureLanguage=unknownCaptureLanguage;
   const translations=new Map<string,string>(),errors=new Map<string,string>();
   type TranslationJob={cue:Cue;generation:number;manual:boolean};
   let pending:TranslationJob|null=null,running:TranslationJob|null=null;
@@ -80,18 +86,22 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
     if(!original.contains(range.startContainer)||!original.contains(range.endContainer))return;
     const prefix=document.createRange();prefix.selectNodeContents(original);prefix.setEnd(range.startContainer,range.startOffset);
     const text=range.toString(),start=Array.from(prefix.toString()).length;
-    const snapshot=captureSnapshotSchema.safeParse({sentence:current.text,language:'en',expression:{text,start,end:start+Array.from(text).length},source:{url:location.href,title:document.title.slice(0,1000),capturedAt:new Date().toISOString(),video:{platform:'youtube',videoId:id,startMs:Math.round(current.start*1000),endMs:Math.round(current.end*1000)}}});
+    const snapshot=captureSnapshotSchema.safeParse({sentence:current.text,...captionLanguage,expression:{text,start,end:start+Array.from(text).length},source:{url:location.href,title:document.title.slice(0,1000),capturedAt:new Date().toISOString(),video:{platform:'youtube',videoId:id,startMs:Math.round(current.start*1000),endMs:Math.round(current.end*1000)}}});
     if(snapshot.success)onSelection(snapshot.data,range);
   });
   async function load(){
     if(loading||!valid())return;resetCues();loading=true;loadButton.disabled=true;
-    status.textContent='正在读取当前视频的英文字幕…';const generation=run;
+    status.textContent='正在读取当前视频的字幕…';const generation=run;
     try{
       const response=await chrome.runtime.sendMessage({kind:'youtube-captions',accountId,pageUrl:location.href,videoId:id});
       if(response.error)throw new Error(response.error);if(!valid()||generation!==run)return;
-      const data=response.value;cues=data?.json?parseYoutubeCaptions(data.json):[];
+      const data=response.value;
+      const track=typeof data?.language==='string'?data.language:'';
+      const placed=track?sensaLanguageForDeclaredTag(track):undefined;
+      captionLanguage=placed?{language:placed.tag,languageSource:'declared'}:declaredCaptureLanguage();
+      cues=data?.json?parseYoutubeCaptions(data.json,captionLanguage.language??undefined):[];
       if(cues.length)continuity?.onLoaded();
-      status.textContent=cues.length?`已加载 ${cues.length} 段英文字幕。选择文字即可解释与保存。`:data?.error==='live_unsupported'?'当前直播字幕尚不支持。':'未找到可读取的英文字幕。可检查视频字幕设置，或加载自己的字幕文件。';
+      status.textContent=cues.length?`已加载 ${cues.length} 段字幕（${captionLanguage.language??'语言未定'}）。选择文字即可解释与保存。`:data?.error==='live_unsupported'?'当前直播字幕尚不支持。':'未找到可读取的字幕。可检查视频字幕设置，或加载自己的字幕文件。';
       tick();renderTranslation();
     }catch{if(valid()&&generation===run)status.textContent='字幕读取失败，请重试或加载自己的字幕文件。';}
     finally{if(valid()&&generation===run){loading=false;loadButton.disabled=false;}}
@@ -107,8 +117,8 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
     const file=(event.target as HTMLInputElement).files?.[0];if(!file)return;
     if(file.size>2000000){status.textContent='字幕文件超过 2 MB，请选择较小的文件。';return;}
     resetCues();loading=false;loadButton.disabled=false;const generation=run;
-    try{const parsed=parseSubtitleFile(await file.text());if(!valid()||generation!==run)return;if(!parsed.length)throw new Error('invalid_subtitles');cues=parsed;status.textContent=`已加载 ${cues.length} 段字幕，请确认它们对应当前视频。`;tick();renderTranslation();}
-    catch{if(valid()&&generation===run)status.textContent='无法读取字幕，请使用有效的英文 VTT / SRT 文件。';}
+    try{const contents=await file.text();captionLanguage=await detectCaptureLanguage(contents);const parsed=parseSubtitleFile(contents,captionLanguage.language??undefined);if(!valid()||generation!==run)return;if(!parsed.length)throw new Error('invalid_subtitles');cues=parsed;status.textContent=`已加载 ${cues.length} 段字幕，请确认它们对应当前视频。`;tick();renderTranslation();}
+    catch{if(valid()&&generation===run)status.textContent='无法读取字幕，请使用有效的 VTT / SRT 文件。';}
   });
   // Native player controls must resume following too, not just our own button.
   const resumed=(event:Event)=>{if(event.target===video()&&valid()){pinned=false;status.textContent='已恢复字幕跟随。';tick();}};

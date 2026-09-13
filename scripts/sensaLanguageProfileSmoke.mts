@@ -14,7 +14,8 @@ import {build} from 'esbuild';
 import {IDBFactory} from 'fake-indexeddb';
 import {
   defaultSensaLanguageProfile,resolveLanguageProfile,sensaLanguage,sensaLanguageDisplayName,
-  sensaLanguageForRole,sensaLanguageProfileSchema,sensaLanguages,sensaLearnerLocale,
+  sensaLanguageForDeclaredTag,sensaLanguageForIso6393,sensaLanguageForRole,sensaLanguageProfileSchema,
+  sensaLanguageRoleForTag,sensaLanguages,sensaLearnerLocale,
   sensaInterfaceLanguages,
 } from '@sensa/contracts/sensa';
 
@@ -24,6 +25,42 @@ assert.equal(sensaLanguage('zh-CN')?.asTarget,false,'Chinese is a familiar langu
 assert.equal(sensaLanguage('en')?.asTarget,true);
 assert(sensaLanguageForRole('target').length>=10,'the target list must cover the common languages the product promises');
 assert(!sensaLanguageForRole('target').some(language=>language.tag==='zh-CN'));
+
+// The detector answers in ISO 639-3 and the library stores BCP-47, so the
+// catalog is the only thing that can join them. Two languages sharing a code
+// would make a detector's answer ambiguous, and a code that is not three
+// lowercase letters is not a code.
+const isoCodes=sensaLanguages.map(language=>language.iso6393);
+assert.equal(new Set(isoCodes).size,isoCodes.length,'two languages sharing one detector code would make every detection ambiguous');
+for(const language of sensaLanguages)assert.match(language.iso6393,/^[a-z]{3}$/u,`${language.tag} needs a lowercase ISO 639-3 code`);
+
+// An answer the catalog cannot place stays unplaced rather than borrowing a
+// neighbouring language: this is the same rule that keeps a third language out
+// of the learner's pair, applied one step earlier.
+assert.equal(sensaLanguageForIso6393('spa')?.tag,'es');
+assert.equal(sensaLanguageForIso6393('yue'),undefined,'Cantonese is a real code this release does not carry, so it must not resolve to Chinese');
+assert.equal(sensaLanguageForIso6393('und'),undefined,'an undetermined answer is not a language');
+assert.equal(sensaLanguageForIso6393('eng')?.tag,'en');
+assert.equal(sensaLanguageForIso6393('ENG'),undefined,'the catalog matches the detector vocabulary exactly, in its own case');
+
+// A declaration carries subtags the catalog does not, so the primary subtag is
+// the fallback — but never a guess between two entries of the same family.
+assert.equal(sensaLanguageForDeclaredTag('en')?.tag,'en');
+assert.equal(sensaLanguageForDeclaredTag('en-US')?.tag,'en');
+assert.equal(sensaLanguageForDeclaredTag('EN-gb')?.tag,'en');
+assert.equal(sensaLanguageForDeclaredTag('zh')?.tag,'zh-CN','the bare zh of a declaration names the catalog Chinese entry');
+assert.equal(sensaLanguageForDeclaredTag('zh-Hans-CN')?.tag,'zh-CN');
+assert.equal(sensaLanguageForDeclaredTag('yue')?.tag,undefined,'an uncurated declaration is unplaced, not rounded to a relative');
+assert.equal(sensaLanguageForDeclaredTag('')?.tag,undefined);
+
+// The side a capture sits on is the library's answer, never the sender's, and a
+// language outside the pair has no side at all rather than a default one.
+const pair={familiarLanguageTag:'zh-CN',targetLanguageTag:'en'};
+assert.equal(sensaLanguageRoleForTag('en',pair),'target');
+assert.equal(sensaLanguageRoleForTag('zh-CN',pair),'familiar');
+assert.equal(sensaLanguageRoleForTag('fr',pair),null,'a third language belongs to neither side');
+assert.equal(sensaLanguageRoleForTag(null,pair),null,'an undetermined language belongs to neither side');
+
 for(const language of sensaLanguages){
   assert(language.endonym.trim(),`${language.tag} needs an endonym`);
   assert(language.speechLocale.length>=2,`${language.tag} needs a speech locale`);
@@ -103,5 +140,5 @@ try{
  // another entry in the same list.
  const twoTargets=await language.addTargetLanguage(op(),'ja');
  assert.deepEqual(twoTargets.targetLanguageTags,['en','fr','ja']);
- console.log('PASS: the language catalog is complete and unambiguous, a stored profile survives catalog changes, and adding, switching and removing target languages leave the active choice and the command ledger consistent. Fake IndexedDB; browser storage is exercised by the Web smokes.');
+ console.log('PASS: the language catalog is complete and unambiguous — a detector code and a declared tag each place against exactly one entry — a stored profile survives catalog changes, adding, switching and removing target languages leave the active choice and the command ledger consistent, and the side a captured language sits on is resolved by the pair rather than named by the sender. Fake IndexedDB; browser storage is exercised by the Web smokes.');
 }finally{await rm(root,{recursive:true,force:true});}

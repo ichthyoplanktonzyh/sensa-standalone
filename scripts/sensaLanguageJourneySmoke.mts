@@ -1,12 +1,14 @@
 /**
  * The language pair a journey command records.
  *
- * A captured expression carries only a role — familiar or target — so the
- * language it is written in comes from the learner's profile, resolved once per
- * command. This guards the two places that decide it: the pure intake engine,
- * which is handed the pair, and the gateway, which stamps the learner's own
- * wording. Values are the profile's, never a constant that happens to match the
- * shipped pair.
+ * A captured expression states the language it is in; which side of the
+ * learner's boundary that language sits on comes from their profile, resolved
+ * once per command. This guards the three places that decide it: the pure intake
+ * engine, which is handed the pair and refuses a language the pair cannot place,
+ * the gateway, which stamps the learner's own wording, and the route decision,
+ * which must send an unplaceable language to the Inbox instead of defaulting it
+ * onto one side. Values are the profile's, never a constant that happens to
+ * match the shipped pair.
  */
 import assert from 'node:assert/strict';
 import {
@@ -20,9 +22,9 @@ import type {CommandLanguages} from '../apps/web/src/experience/personalMeaningJ
 
 const localAuthority={verify:(request:any)=>request.mode==='learner_direct'?{mode:'learner_direct',actorId:'sensa-local-learner'}:{mode:'delegated_agent',actorId:request.actorId,authorizationGrantId:request.authorizationGrantId}};
 
-/** One located target-language expression with a resolved sense, which is
- * exactly what the fast track needs. */
-function fastTrackPayload(text:string,surfaceForm:string,languageRole:'target'|'familiar'):SensaIntakePayload{
+/** One located expression with a resolved sense and a verified acceptance —
+ * everything the fast track needs except a language its pair can place. */
+function fastTrackPayload(text:string,surfaceForm:string,languageTag:string|null):SensaIntakePayload{
   // The located expression must actually occur in the captured context, so the
   // span is derived from the text instead of asserted alongside it.
   const start=text.indexOf(surfaceForm);
@@ -32,7 +34,7 @@ function fastTrackPayload(text:string,surfaceForm:string,languageRole:'target'|'
     intakeOperationId:crypto.randomUUID(),
     capturedAt:'2026-09-01T00:00:00.000Z',
     context:{modality:'text',textSegment:text,mediaReferenceIds:[],source:null},
-    expression:{surfaceForm,languageRole,occurrence:{kind:'text_span',start,end:start+surfaceForm.length},expressionTypeHint:'phrase'},
+    expression:{surfaceForm,languageTag,occurrence:{kind:'text_span',start,end:start+surfaceForm.length},expressionTypeHint:'phrase'},
     sense:{senseKey:null,resolutionStatus:'resolved',definitionSummary:'从容地花时间做一件事',wordingSource:'llm_suggested',candidates:[]},
     acceptanceRequest:{mode:'learner_direct'},
   });
@@ -50,10 +52,10 @@ const run=(payload:SensaIntakePayload,languages:CommandLanguages)=>{
 const spanish:CommandLanguages={familiarLanguageTag:'zh-CN',targetLanguageTag:'es'};
 const english:CommandLanguages={familiarLanguageTag:'zh-CN',targetLanguageTag:'en'};
 
-const targetInSpanish=run(fastTrackPayload('Ella se tomó su tiempo.','se tomó','target'),spanish);
-assert.equal(targetInSpanish.bindingInput.languageTag,'es','a target expression takes the active target language, not a fixed English');
+const targetInSpanish=run(fastTrackPayload('Ella se tomó su tiempo.','se tomó','es'),spanish);
+assert.equal(targetInSpanish.bindingInput.languageTag,'es','a target expression keeps the language it was captured in, not a fixed English');
 assert.equal(targetInSpanish.bindingCandidate.languageTag,'es');
-const targetInEnglish=run(fastTrackPayload('She took her time.','took','target'),english);
+const targetInEnglish=run(fastTrackPayload('She took her time.','took','en'),english);
 assert.equal(targetInEnglish.bindingInput.languageTag,'en','the same capture under an English profile records English');
 
 const record=targetInSpanish.record;
@@ -62,7 +64,7 @@ assert.equal(expressionRevision.languageTag,'es','the stored expression anchor c
 assert.equal(expressionRevision.learnerLanguageRole,'target');
 assert.equal(expressionRevision.surfaceForm,'se tomó');
 
-const familiarRun=run(fastTrackPayload('他想说又停住了，最后欲言又止。','欲言又止','familiar'),{familiarLanguageTag:'ja',targetLanguageTag:'fr'});
+const familiarRun=run(fastTrackPayload('他想说又停住了，最后欲言又止。','欲言又止','ja'),{familiarLanguageTag:'ja',targetLanguageTag:'fr'});
 assert.equal(familiarRun.bindingInput.languageTag,'ja','a familiar expression takes the familiar language, even when it is not the shipped one');
 const familiarRevision=familiarRun.record.personalExpressionAnchorRevisions[0]!;
 assert.equal(familiarRevision.languageTag,'ja');
@@ -100,8 +102,8 @@ const slowLanguages={read:async()=>{await new Promise(resolve=>setTimeout(resolv
 const raceStorage=new MemoryStoragePort();
 const raceGateway=createJourneyGateway({storage:raceStorage,clock:createSeededClock(),languages:slowLanguages});
 const captures=[
-  fastTrackPayload('She took her time.','took','target'),
-  fastTrackPayload('He broke the ice.','broke','target'),
+  fastTrackPayload('She took her time.','took','en'),
+  fastTrackPayload('He broke the ice.','broke','en'),
 ];
 const receipts=await Promise.all(captures.map(payload=>raceGateway.ingest(payload.intakeOperationId,payload)));
 assert.deepEqual(receipts.map(receipt=>receipt.route),['fast_track','fast_track']);
@@ -109,4 +111,16 @@ const raced=JSON.parse(raceStorage.read(JOURNEY_STORE_KEY)!) as any;
 assert.equal(raced.meanings.length,2,'two captures that overlap while the profile is read both survive');
 assert.equal(raced.meanings.filter((meaning:any)=>meaning.personalMeaning.status==='active').length,2);
 
-console.log('PASS: the intake engine and the journey gateway take every expression language from the learner’s profile; familiar and target roles resolve independently and a captured target expression records the active target language. Pure engine and in-memory store; no browser, network or model.');
+// A capture in a language the pair cannot place is undecided, not guessed. Both
+// a third language and an undetermined one reach the Inbox as `pending_language`
+// even though every other fast-track condition is satisfied, because neither can
+// be stamped onto a side of this learner's boundary.
+const third=fastTrackPayload('Il a pris son temps.','a pris','fr');
+assert.equal((await raceGateway.ingest(third.intakeOperationId,third)).route,'inbox');
+const undetermined=fastTrackPayload('She took her time.','took',null);
+assert.equal((await raceGateway.ingest(undetermined.intakeOperationId,undetermined)).route,'inbox');
+const waiting=(JSON.parse(raceStorage.read(JOURNEY_STORE_KEY)!) as any).inboxItems;
+assert.deepEqual(waiting.map((item:any)=>item.status),['pending_language','pending_language'],'an unplaceable or undetermined language waits for the learner instead of being filed under a side');
+assert.equal(raced.meanings.length,2,'neither waiting capture grew the semantic world');
+
+console.log('PASS: the route decision, the intake engine and the journey gateway take every expression language from the capture and resolve its side against the learner’s profile; familiar and target roles resolve independently, and a language the pair cannot place waits as pending_language instead of being guessed onto a side. Pure engine and in-memory store; no browser, network or model.');
