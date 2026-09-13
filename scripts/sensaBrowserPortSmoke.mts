@@ -12,7 +12,7 @@ try{
    const url=new URL(route.request().url());
    if(url.pathname==='/api/timedtext'){captionRequest=url;return emptyCaptions?route.fulfill({body:''}):route.fulfill({json:cues});}
    if(url.pathname==='/watch')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>Video fixture</title><div id="movie_player" class="html5-video-player"><video class="html5-main-video"></video></div><p id="text">She took her time.</p><button id="outside">Outside</button>'});
-   if(url.pathname==='/article')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>Article fixture</title><main style="margin:60px;font:22px system-ui"><p id="paragraph">She <a href="#example">took</a> her time.</p><p contenteditable="true">Do not translate editable text.</p></main>'});
+   if(url.pathname==='/article')return route.fulfill({contentType:'text/html; charset=utf-8',body:'<!doctype html><title>Article fixture</title><main style="margin:60px;font:22px system-ui"><p id="paragraph">She <a href="#example">took</a> her time.</p><p id="chinese">这段话本身就是学习者能读的语言，不该被翻译。</p><p contenteditable="true">Do not translate editable text.</p></main>'});
    return route.abort();
  });
  async function install(){
@@ -22,6 +22,11 @@ try{
      Object.assign(window,{fixture,chrome:{runtime:{onMessage:{addListener:(handler:any)=>fixture.receive=handler},sendMessage:async(message:any)=>{
        fixture.calls.push(message);
        if(message.kind==='youtube-captions')return {value:await (window as any).readPlayer(message.videoId)};
+       // The detector and the learner's own language, stood in for: this text is
+       // Chinese and this learner already reads Chinese. What the background
+       // really answers is exercised against the real handler in the intake smoke.
+       if(message.kind==='detect-language')return {value:{language:/\p{Script=Han}/u.test(message.text??'')?'cmn':'eng'}};
+       if(message.kind==='reading-language')return {value:{familiarLanguageTag:'zh-CN',alreadyReadable:/\p{Script=Han}/u.test(message.text??'')||message.surfaceLanguage==='zh-CN'}};
        if(message.kind==='reading-run'){if(fixture.delay)return new Promise(resolve=>{fixture.pending=resolve;});return {value:{status:'ready',text:'她不慌不忙地做事。'}};}
        return {value:{savedLocally:true}};
      }}}});
@@ -31,12 +36,24 @@ try{
    await page.evaluate(()=>(window as any).fixture.receive({kind:'reading',enabled:true,accountId:'fixture-account'}));
  }
  await page.goto('https://example.com/article');await install();
+ const readings=()=>page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-run').length);
+ const asked=()=>page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-language').length);
  await page.getByRole('button',{name:'翻译页面',exact:true}).click();
  await expect(page.locator('[data-sensa-ui="translation"]')).toHaveText('她不慌不忙地做事。');
- expect(await page.evaluate(()=>(window as any).fixture.calls.length)).toBe(1);
+ // The page holds two paragraphs worth translating and one the learner can
+ // already read: both are asked about, and only the one that needs it is asked
+ // for a translation.
+ expect(await asked()).toBe(2);expect(await readings()).toBe(1);
+ await expect(page.locator('#chinese + [data-sensa-ui="translation"]')).toHaveCount(0);
+ await expect(page.locator('[data-sensa-ui="page"] p')).toContainText('跳过 1 段你已能读的文字');
  await page.getByRole('button',{name:'仅译文',exact:true}).click();await expect(page.locator('#paragraph')).toBeHidden();
  await page.getByRole('button',{name:'恢复原文',exact:true}).click();await expect(page.locator('#paragraph')).toBeVisible();await page.locator('#paragraph a').click();expect(await page.evaluate(()=>(window as any).fixture.clicks)).toBe(1);
- await page.getByRole('button',{name:'翻译页面',exact:true}).click();await expect(page.locator('[data-sensa-ui="translation"]')).toHaveText('她不慌不忙地做事。');expect(await page.evaluate(()=>(window as any).fixture.calls.length)).toBe(1);await page.getByRole('button',{name:'恢复原文',exact:true}).click();
+ await page.getByRole('button',{name:'翻译页面',exact:true}).click();await expect(page.locator('[data-sensa-ui="translation"]')).toHaveText('她不慌不忙地做事。');expect(await readings()).toBe(1);await page.getByRole('button',{name:'恢复原文',exact:true}).click();
+ // Pointing at a paragraph and asking for it is a request, and a request is never skipped.
+ await page.getByRole('button',{name:'翻译页面',exact:true}).click();await page.hover('#chinese');
+ await page.keyboard.press('Alt+t');
+ await expect(page.locator('#chinese + [data-sensa-ui="translation"]')).toHaveText('她不慌不忙地做事。');
+ expect(await readings()).toBe(2);await page.getByRole('button',{name:'恢复原文',exact:true}).click();
  await page.evaluate(()=>{(window as any).fixture.delay=true;document.querySelector('#paragraph')!.firstChild!.textContent='He ';});await page.getByRole('button',{name:'翻译页面',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>!!(window as any).fixture.pending)).toBe(true);await page.getByRole('button',{name:'恢复原文',exact:true}).click();
  await page.evaluate(()=>(window as any).fixture.pending({value:{status:'ready',text:'迟到译文'}}));await expect(page.locator('[data-sensa-ui="translation"]')).toHaveCount(0);
@@ -50,7 +67,7 @@ try{
    player.getAudioTrack=()=>({captionTracks:[{vssId:'.ar',url:'https://www.youtube.com/api/timedtext?v=abcdefghijk&lang=ar&pot=fixture-proof'}]});
    Object.defineProperty(document.querySelector('video'),'currentTime',{value:13,writable:true});
  });
- await install();await page.getByRole('button',{name:'加载英文字幕',exact:true}).click();
+ await install();await page.getByRole('button',{name:'加载字幕',exact:true}).click();
  await expect(page.getByLabel('当前原字幕',{exact:true})).toHaveText('She took her time.');
  expect(captionRequest?.searchParams.get('lang')).toBe('en');expect(captionRequest?.searchParams.get('signature')).toBe('selected-track');expect(captionRequest?.searchParams.get('pot')).toBe('fixture-proof');expect(captionRequest?.searchParams.get('fmt')).toBe('json3');
  await page.getByRole('button',{name:'翻译本句',exact:true}).click();await expect(page.getByLabel('当前字幕译文',{exact:true})).toHaveText('她不慌不忙地做事。');
@@ -68,8 +85,21 @@ try{
  const save=await page.evaluate(()=>(window as any).fixture.calls.find((c:any)=>c.kind==='save'));
  captureSnapshotSchema.parse(save.snapshot);expect(save.snapshot.expression.text).toBe('took');expect(save.snapshot.source.video).toEqual({platform:'youtube',videoId:'abcdefghijk',startMs:12500,endMs:15500});
  await page.keyboard.press('Escape');await page.getByRole('button',{name:'下一句',exact:true}).click();await expect(caption).toHaveText('They looked up at the sky.');
+ // A subtitle file in the learner's own language is a track they can already
+ // read: the panel says so and stops translating it on its own, while the button
+ // that asks for one cue by name still translates it.
+ await page.locator('input[type=file]').setInputFiles({name:'lesson.vtt',mimeType:'text/vtt',buffer:Buffer.from('WEBVTT\n\n00:00:12.500 --> 00:00:15.500\n她从容地花了些时间。\n')});
+ await expect(page.getByText('这就是你已能读的语言，自动翻译已跳过',{exact:false})).toBeVisible();
+ await page.evaluate(()=>{document.querySelector('video')!.currentTime=13;});await page.waitForTimeout(400);
+ await expect(page.getByLabel('当前原字幕',{exact:true})).toHaveText('她从容地花了些时间。');
+ const readCaptions=await readings();
+ await page.getByLabel('字幕显示',{exact:true}).selectOption('bilingual');await page.waitForTimeout(400);
+ await expect(page.getByLabel('当前字幕译文',{exact:true})).toHaveText('');
+ expect(await readings()).toBe(readCaptions);
+ await page.getByRole('button',{name:'翻译本句',exact:true}).click();await expect(page.getByLabel('当前字幕译文',{exact:true})).toHaveText('她不慌不忙地做事。');
+ expect(await readings()).toBe(readCaptions+1);await page.getByLabel('字幕显示',{exact:true}).selectOption('original');
  await page.screenshot({path:'/tmp/sensa-browser-video.png'});
- emptyCaptions=true;await page.getByRole('button',{name:'加载英文字幕',exact:true}).click();await expect(caption).toHaveText('');await expect(page.getByText('未找到可读取的英文字幕。可检查视频字幕设置，或加载自己的字幕文件。',{exact:true})).toBeVisible();
+ emptyCaptions=true;await page.getByRole('button',{name:'加载字幕',exact:true}).click();await expect(caption).toHaveText('');await expect(page.getByText('未找到可读取的字幕。可检查视频字幕设置，或加载自己的字幕文件。',{exact:true})).toBeVisible();
  await page.evaluate(()=>{history.pushState({},'', '/watch?v=lmnopqrstuv');document.dispatchEvent(new Event('yt-navigate-start'));});
  await expect(page.getByLabel('当前原字幕',{exact:true})).toHaveCount(0);
  await page.evaluate(()=>(window as any).fixture.receive({kind:'reading',enabled:false}));await expect(page.locator('[data-sensa-ui]')).toHaveCount(0);
@@ -99,6 +129,6 @@ try{
  await settingsPage.getByRole('button',{name:'测试已保存连接',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('连接成功');
  await settingsPage.evaluate(()=>(window as any).settingsFixture.conflict=true);await settingsPage.getByRole('button',{name:'保存模型设置',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('另一处更新');
  await settingsPage.screenshot({path:'/tmp/sensa-browser-settings.png',fullPage:true});
- console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, main-world caption reader, subtitle selection with timestamped save, seek, SPA cleanup, reading shutdown. Network fixtures only.');
+ console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, seek, SPA cleanup, reading shutdown. Network fixtures only.');
  console.log('PASS: actual settings UI save/reload, feature assignment, explicit test/model fetch, cleared password field, no secret in browser storage, conflict feedback.');
 }finally{await browser.close();}

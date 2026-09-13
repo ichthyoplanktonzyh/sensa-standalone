@@ -2,8 +2,8 @@ import {captureSnapshotSchema,sensaLanguageForDeclaredTag} from '@sensa/contract
 import type {CaptureSnapshot} from '@sensa/contracts/sensa';
 import {runReading,readingError} from './readingClient';
 import {parseYoutubeCaptions,parseSubtitleFile} from './subtitleCues';
-import {declaredCaptureLanguage,detectCaptureLanguage,unknownCaptureLanguage} from './language';
-import type {CaptureLanguage} from './language';
+import {declaredCaptureLanguage,detectCaptureLanguage,readerLanguage,unknownCaptureLanguage} from './language';
+import type {CaptureLanguage,ReaderLanguage} from './language';
 import type {Cue} from './subtitleCues';
 export function youtubeId(){if(!['www.youtube.com','youtube.com','m.youtube.com','www.youtube-nocookie.com'].includes(location.hostname))return null;const u=new URL(location.href);const id=u.pathname==='/watch'?u.searchParams.get('v'):u.pathname.match(/^\/(?:shorts|embed)\/([^/]+)$/u)?.[1];return id&&/^[a-zA-Z0-9_-]{11}$/u.test(id)?id:null;}
 export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,onSelection:(snapshot:CaptureSnapshot,range:Range)=>void,continuity?:{autoLoad:boolean;onLoaded:()=>void}){
@@ -20,6 +20,10 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
    * own code and a file the learner loads is detected from its own text, so the
    * captured sentence and the translation beside it never assume English. */
   let captionLanguage:CaptureLanguage=unknownCaptureLanguage;
+  /** Whether these captions are already in the learner's own language, asked
+   * once per track: a caption track is one language for the whole of it, so one
+   * answer covers every cue, unlike a page whose paragraphs can differ. */
+  let trackReadable=false;
   const translations=new Map<string,string>(),errors=new Map<string,string>();
   type TranslationJob={cue:Cue;generation:number;manual:boolean};
   let pending:TranslationJob|null=null,running:TranslationJob|null=null;
@@ -49,6 +53,9 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
     const key=keyOf(cue);
     if(translations.has(key)||matches(running,cue)||matches(pending,cue)){renderTranslation();return;}
     if(!manual&&errors.has(key)){renderTranslation();return;}
+    // Automatic translation is what a track in the learner's own language does
+    // not need; asking for it by name still gets it.
+    if(!manual&&trackReadable){renderTranslation();return;}
     errors.delete(key);pending={cue,generation:run,manual};renderTranslation();void drainTranslations();
   }
   async function drainTranslations(){
@@ -66,7 +73,23 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
       finally{running=null;if(valid())renderTranslation();}
     }
   }
-  function resetCues(){run++;pending=null;cues=[];pinned=false;translations.clear();errors.clear();show(null);renderTranslation();}
+  function resetCues(){run++;pending=null;cues=[];pinned=false;trackReadable=false;translations.clear();errors.clear();original.removeAttribute('lang');translated.removeAttribute('lang');show(null);renderTranslation();}
+  /**
+   * Labels the two lines this panel writes, and asks whether the learner needs
+   * the second one at all.
+   *
+   * The caption line is labelled with the language the track or the file
+   * actually is, and the translation line with the learner's own language, which
+   * only the background knows. Neither is left to inherit the surrounding page's
+   * language, which is what the video site happens to be written in.
+   */
+  async function placeLanguages(generation:number){
+    if(captionLanguage.language)original.setAttribute('lang',captionLanguage.language);
+    const reader:ReaderLanguage|null=await readerLanguage('',captionLanguage.language);
+    if(!valid()||generation!==run)return;
+    trackReadable=reader?.alreadyReadable===true;
+    if(reader)translated.setAttribute('lang',reader.familiarLanguageTag);
+  }
   function tick(){
     if(!valid())return;
     const fullscreen=document.fullscreenElement;if(fullscreen&&!fullscreen.contains(host))fullscreen.append(host);else if(!fullscreen&&host.parentElement!==document.documentElement)document.documentElement.append(host);
@@ -100,8 +123,10 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
       const placed=track?sensaLanguageForDeclaredTag(track):undefined;
       captionLanguage=placed?{language:placed.tag,languageSource:'declared'}:declaredCaptureLanguage();
       cues=data?.json?parseYoutubeCaptions(data.json,captionLanguage.language??undefined):[];
+      await placeLanguages(generation);
+      if(!valid()||generation!==run)return;
       if(cues.length)continuity?.onLoaded();
-      status.textContent=cues.length?`已加载 ${cues.length} 段字幕（${captionLanguage.language??'语言未定'}）。选择文字即可解释与保存。`:data?.error==='live_unsupported'?'当前直播字幕尚不支持。':'未找到可读取的字幕。可检查视频字幕设置，或加载自己的字幕文件。';
+      status.textContent=cues.length?(trackReadable?`已加载 ${cues.length} 段字幕（${captionLanguage.language??'语言未定'}）。这就是你已能读的语言，自动翻译已跳过；仍可按「翻译本句」。`:`已加载 ${cues.length} 段字幕（${captionLanguage.language??'语言未定'}）。选择文字即可解释与保存。`):data?.error==='live_unsupported'?'当前直播字幕尚不支持。':'未找到可读取的字幕。可检查视频字幕设置，或加载自己的字幕文件。';
       tick();renderTranslation();
     }catch{if(valid()&&generation===run)status.textContent='字幕读取失败，请重试或加载自己的字幕文件。';}
     finally{if(valid()&&generation===run){loading=false;loadButton.disabled=false;}}
@@ -117,7 +142,7 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
     const file=(event.target as HTMLInputElement).files?.[0];if(!file)return;
     if(file.size>2000000){status.textContent='字幕文件超过 2 MB，请选择较小的文件。';return;}
     resetCues();loading=false;loadButton.disabled=false;const generation=run;
-    try{const contents=await file.text();captionLanguage=await detectCaptureLanguage(contents);const parsed=parseSubtitleFile(contents,captionLanguage.language??undefined);if(!valid()||generation!==run)return;if(!parsed.length)throw new Error('invalid_subtitles');cues=parsed;status.textContent=`已加载 ${cues.length} 段字幕，请确认它们对应当前视频。`;tick();renderTranslation();}
+    try{const contents=await file.text();captionLanguage=await detectCaptureLanguage(contents);const parsed=parseSubtitleFile(contents,captionLanguage.language??undefined);if(!valid()||generation!==run)return;if(!parsed.length)throw new Error('invalid_subtitles');cues=parsed;await placeLanguages(generation);if(!valid()||generation!==run)return;status.textContent=`已加载 ${cues.length} 段字幕，请确认它们对应当前视频。${trackReadable?'这就是你已能读的语言，自动翻译已跳过；仍可按「翻译本句」。':''}`;tick();renderTranslation();}
     catch{if(valid()&&generation===run)status.textContent='无法读取字幕，请使用有效的 VTT / SRT 文件。';}
   });
   // Native player controls must resume following too, not just our own button.

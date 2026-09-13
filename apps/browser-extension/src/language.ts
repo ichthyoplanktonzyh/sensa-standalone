@@ -27,6 +27,55 @@ export const minDetectableCharacters = 10;
  * has not already seen and only widens the message to the service worker. */
 export const maxDetectableCharacters = 512;
 
+/**
+ * Below this many characters, "does this learner already read this?" is not a
+ * question a detector can answer safely: trigram statistics are what tells
+ * Spanish from Portuguese, and a short sample of two related languages reads the
+ * same to them. Text this short inherits the language of the surface it sits on
+ * instead of being sent for a coin flip.
+ */
+export const minSkimmableCharacters = 50;
+
+/** Who a reading surface is writing for: the learner's own language, and whether
+ * the text in hand is already in it. */
+export interface ReaderLanguage {
+  familiarLanguageTag: string;
+  alreadyReadable: boolean;
+}
+
+/**
+ * What this learner already reads, and whether this text is part of it.
+ *
+ * Text in the learner's own language gains nothing from being translated into
+ * that same language, and asking the model to say so would spend a request and a
+ * share of the daily budget to hand a paragraph back unchanged. So the question
+ * is asked before the request is made — and asked here, of the background, which
+ * is the only side that holds the pair the Web application published. A content
+ * script can say what language text is in; what that language means to this
+ * learner is not its to work out, so the answer comes back as an answer about
+ * the learner rather than as the pair itself.
+ *
+ * `surfaceLanguage` is the language of the surface the text came from — a page's
+ * own declaration, a caption track's code — and answers for text too short for a
+ * detector to speak for itself. `null` means nothing could place the text, and
+ * text nothing can place is not skipped: the learner gets a translation they did
+ * not need rather than missing one they did.
+ */
+export async function readerLanguage(text: string, surfaceLanguage: string | null = null): Promise<ReaderLanguage | null> {
+  try {
+    const response = await chrome.runtime.sendMessage({kind: 'reading-language', text: text.slice(0, maxDetectableCharacters), surfaceLanguage});
+    const answer = response?.value;
+    if (typeof answer?.familiarLanguageTag !== 'string') return null;
+    return {familiarLanguageTag: answer.familiarLanguageTag, alreadyReadable: answer.alreadyReadable === true};
+  } catch {
+    // A service worker that is asleep, or an extension reloaded under a live
+    // page, is not a reason to withhold a translation the learner asked for:
+    // translating everything is the safe direction, and its only cost is a
+    // translation that was not needed.
+    return null;
+  }
+}
+
 /** The material's own declaration, placed against the catalog. Cheapest
  * evidence, and the last resort for text too short to detect. */
 export function declaredCaptureLanguage(root: Pick<Document, 'documentElement'> = document): CaptureLanguage {
@@ -50,9 +99,14 @@ export async function detectCaptureLanguage(text: string): Promise<CaptureLangua
   const sample = text.trim().slice(0, maxDetectableCharacters);
   if (sample.length >= minDetectableCharacters) {
     try {
-      const answer = await chrome.runtime.sendMessage({kind: 'detect-language', text: sample});
-      if (typeof answer?.language === 'string') {
-        const language = sensaLanguageForIso6393(answer.language);
+      // The background answers inside the envelope it uses for every other
+      // message — `{value}` or `{error}` — so the code is read from `value`, and
+      // a response that never arrived is not mistaken for a detector that found
+      // nothing.
+      const response = await chrome.runtime.sendMessage({kind: 'detect-language', text: sample});
+      const code = response?.value?.language;
+      if (typeof code === 'string') {
+        const language = sensaLanguageForIso6393(code);
         if (language) return {language: language.tag, languageSource: 'detector'};
       }
     } catch {

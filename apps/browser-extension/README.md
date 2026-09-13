@@ -16,8 +16,9 @@ npm run build -w @sensa/browser-extension
 
 ```sh
 node --import tsx scripts/sensaBrowserPortSmoke.mts
-node --import tsx scripts/sensaExtensionDismissSmoke.mts
 node --import tsx scripts/sensaExtensionPopupSmoke.mts
 ```
+
+阅读面的语言规则：正在读的文字是什么语言，由文字自己决定（本地检测优先，页面声明与字幕轨代码兜底，检测只在本版本语言目录内选择）；学习者需要哪种语言，由 Web 应用发布的语对决定，扩展不持有也不编辑它。学习者已经能读的文字不会被自动翻译——页面按段判断（一篇文章可以引用第二门语言），字幕按轨判断（一条字幕轨只有一种语言）——而显式请求（划词、`Alt + T`、「翻译本句」）从不跳过。
 
 这些检查使用本地或受控替身，不证明真实第三方站点、浏览器商店安装或真实模型质量。

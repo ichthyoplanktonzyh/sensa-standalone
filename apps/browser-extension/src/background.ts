@@ -1,8 +1,9 @@
 import {queueWeb,pendingWeb,acknowledgeWeb,webStatus,discardPendingWeb,webOperationStatus} from './webDestination';
 import {z} from 'zod';
-import {captureSnapshotSchema} from '@sensa/contracts/sensa';
+import {captureSnapshotSchema,sensaLanguageForDeclaredTag,sensaLanguageForIso6393,sensaLanguageRoleForTag} from '@sensa/contracts/sensa';
 import {webUrl,apiUrl} from './config';
 import {detectIso6393} from './languageDetector';
+import {maxDetectableCharacters,minSkimmableCharacters} from './language';
 import {readYoutubePlayer} from './youtubePlayer';
 import {readingLanguages,readingPreferences,publishReadingLanguages} from './preferences';
 type Mode={accountId:string};
@@ -84,6 +85,17 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  // gets a code back. It lives here because the detector's tables are far larger
  // than anything a content script should carry into every page.
  if(message.kind==='detect-language'){const text=typeof message.text==='string'?message.text.slice(0,2048):'';return {language:text?detectIso6393(text):null};}
+ // What the learner already reads, answered here rather than in the page's
+ // context because the pair lives here and only here: the published profile is
+ // kept out of reach of content scripts, so a reading surface asks a question
+ // about the learner and gets an answer about the learner, not the profile.
+ if(message.kind==='reading-language'){
+  const pair=await readingLanguages();
+  const text=typeof message.text==='string'?message.text.trim().slice(0,maxDetectableCharacters):'';
+  const detected=text.length>=minSkimmableCharacters?sensaLanguageForIso6393(detectIso6393(text)??''):undefined;
+  const surface=typeof message.surfaceLanguage==='string'?sensaLanguageForDeclaredTag(message.surfaceLanguage):undefined;
+  return {familiarLanguageTag:pair.familiarLanguageTag,alreadyReadable:sensaLanguageRoleForTag((detected??surface)?.tag??null,pair)==='familiar'};
+ }
  if(message.kind==='web-language-profile'){
   // The Web application owns the language profile; this only accepts its
   // publication. The origin and tab checks are the same ones that guard every

@@ -1,8 +1,8 @@
 import {runReading,readingError} from './readingClient';
-import {declaredCaptureLanguage} from './language';
+import {declaredCaptureLanguage,readerLanguage} from './language';
 const blocks='p,li,blockquote,td,th,dt,dd,h1,h2,h3,h4,h5,h6,figcaption,div';
 const excluded='input,textarea,select,button,nav,pre,code,script,style,[contenteditable]:not([contenteditable="false"]),[translate="no"],[data-sensa-ui]';
-type Item={source:HTMLElement;text:string;translation:HTMLElement;hidden:boolean;state:'waiting'|'running'|'ready'|'failed'};
+type Item={source:HTMLElement;text:string;translation:HTMLElement;hidden:boolean;state:'waiting'|'running'|'ready'|'failed'|'skipped';forced:boolean};
 /** Original nodes stay owned by the host page; we only insert/remove our translations. */
 export function createPageReading(accountId:string,isAuthorized:()=>boolean){
   const host=document.createElement('div');host.dataset.sensaUi='page';
@@ -13,6 +13,10 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
   const status=root.querySelector('p')!;
   const retry=root.querySelector<HTMLButtonElement>('[data-action="retry"]')!;
   const items=new Map<HTMLElement,Item>();let active=false,disposed=false,only=false,generation=0,running=0;
+  /** The learner's own language, learned from the first answer that names it, so
+   * the translations this panel writes are labelled with the language they are
+   * actually in rather than with the one this panel's own buttons are written in. */
+  let familiarLanguage:string|null=null;
   const cache=new Map<string,string>();
   const requests=new Map<string,Promise<string>>();
   let hovered:HTMLElement|null=null,scanTimer:ReturnType<typeof setTimeout>|null=null;
@@ -22,12 +26,23 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
   function reveal(item:Item){if(item.source.dataset.sensaHidden===marker)delete item.source.dataset.sensaHidden;item.hidden=false;}
   function restoreItem(item:Item){reveal(item);item.translation.remove();visibility.unobserve(item.source);}
   function eligible(element:HTMLElement){return !element.closest(excluded)&&!element.querySelector(excluded.replace(',code',''))&&!element.querySelector(blocks)&&element.getClientRects().length>0;}
-  function add(element:HTMLElement){
-    if(items.has(element)||!eligible(element)||!nearby(element))return;
-    const text=element.textContent??'';if(text.trim().length<2||text.length>12000||!/[a-z]{2}/iu.test(text))return;
+  function add(element:HTMLElement,forced=false){
+    const existing=items.get(element);
+    if(existing){
+      // An explicit request outranks an automatic decision: a paragraph this
+      // panel decided the learner can already read is translated when the
+      // learner points at it and asks.
+      if(forced&&existing.state==='skipped'){existing.forced=true;existing.state='waiting';void drain();}
+      return;
+    }
+    if(!eligible(element)||!nearby(element))return;
+    const text=element.textContent??'';
+    // Two letters of any script, not two Latin ones: a page in Japanese, Thai or
+    // Arabic is readable on the same terms as an English one, and a Latin-only
+    // test quietly refused to translate whole languages.
+    if(text.trim().length<2||text.length>12000||!/\p{L}{2}/u.test(text))return;
     const translation=document.createElement('div');translation.dataset.sensaUi='translation';translation.style.cssText='white-space:pre-wrap;line-height:1.7;padding:8px 0;color:#405176;font-family:system-ui';
-    translation.setAttribute('lang','zh-CN');
-    const item:Item={source:element,text,translation,hidden:false,state:'waiting'};items.set(element,item);visibility.observe(element);
+    const item:Item={source:element,text,translation,hidden:false,state:'waiting',forced};items.set(element,item);visibility.observe(element);
   }
   function nearby(source:HTMLElement){const rect=source.getBoundingClientRect();return rect.bottom>=-200&&rect.top<=innerHeight+200;}
   function scan(){
@@ -36,14 +51,15 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
       if(!source.isConnected||source.textContent!==item.text){restoreItem(item);items.delete(source);}
       else if(item.state==='waiting'&&!nearby(source)){visibility.unobserve(source);items.delete(source);}
     }
-    if(active)document.querySelectorAll<HTMLElement>(blocks).forEach(add);
+    if(active)document.querySelectorAll<HTMLElement>(blocks).forEach(element=>add(element));
     drain();
   }
   function feedback(){
     if(!valid())return;
-    const ready=[...items.values()].filter(i=>i.state==='ready').length,failed=[...items.values()].filter(i=>i.state==='failed');
+    const values=[...items.values()];
+    const ready=values.filter(i=>i.state==='ready').length,skipped=values.filter(i=>i.state==='skipped').length,failed=values.filter(i=>i.state==='failed');
     retry.hidden=failed.length===0;
-    status.textContent=`已翻译 ${ready} 段${running?' · 正在翻译…':''}${failed.length?` · ${failed.length} 段失败，可重试`:active?'；滚动时继续。':''}`;
+    status.textContent=`已翻译 ${ready} 段${skipped?` · 跳过 ${skipped} 段你已能读的文字（Alt + T 仍可翻译）`:''}${running?' · 正在翻译…':''}${failed.length?` · ${failed.length} 段失败，可重试`:active?'；滚动时继续。':''}`;
   }
   function setMode(item:Item){if(item.state!=='ready')return;if(only&&!item.hidden){item.source.dataset.sensaHidden=marker;item.hidden=true;}else if(!only&&item.hidden)reveal(item);}
   function drain(){
@@ -55,11 +71,11 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
   /**
    * The language this page declares, or nothing when it declares none.
    *
-   * Read once per surface instead of once per paragraph: a page states its
-   * language about itself, and asking a detector about every paragraph of a long
-   * article would cost a message each to answer a question the document already
-   * answered. Paragraph-level detection is what a target-language skip needs,
-   * and that is a separate decision from labelling this page's text.
+   * Read once per surface instead of once per paragraph: it is not the answer
+   * for a paragraph — paragraphs of a page that quotes another language are in
+   * that other language, which is why each one is asked about on its own — but
+   * it is what a paragraph too short to detect inherits, and it is what this
+   * panel tells the request the quoted text is in.
    */
   const pageLanguage=()=>declaredCaptureLanguage().language;
   async function translationFor(text:string){
@@ -73,8 +89,17 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
     try{return await request;}finally{if(requests.get(text)===request)requests.delete(text);}
   }
   async function translateItem(item:Item,run:number){
-    item.translation.textContent='正在翻译…';item.translation.setAttribute('aria-busy','true');item.source.after(item.translation);feedback();
     try{
+      // Asked per paragraph, not per page: an article that quotes another
+      // language holds paragraphs in two of them, and skipping is a decision
+      // about the paragraph in hand.
+      if(!item.forced){
+        const reader=await readerLanguage(item.text,pageLanguage());
+        if(reader)familiarLanguage=reader.familiarLanguageTag;
+        if(reader?.alreadyReadable){item.state='skipped';return;}
+      }
+      if(familiarLanguage)item.translation.setAttribute('lang',familiarLanguage);
+      item.translation.textContent='正在翻译…';item.translation.setAttribute('aria-busy','true');item.source.after(item.translation);feedback();
       const translated=await translationFor(item.text);
       if(!valid()||run!==generation||items.get(item.source)!==item||!item.source.isConnected||item.source.textContent!==item.text){item.translation.remove();return;}
       cache.delete(item.text);cache.set(item.text,translated);if(cache.size>150)cache.delete(cache.keys().next().value!);
@@ -92,7 +117,11 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
   root.querySelector('[data-action="restore"]')!.addEventListener('click',restore);
   retry.addEventListener('click',()=>{for(const item of items.values())if(item.state==='failed'&&nearby(item.source))item.state='waiting';drain();});
   const mouse=(e:MouseEvent)=>{const target=e.target instanceof Element?e.target:null;hovered=target?.closest<HTMLElement>(blocks)??null;};
-  const key=(e:KeyboardEvent)=>{if(!e.altKey||e.code!=='KeyT'||e.repeat||(e.target instanceof Element&&e.target.closest(excluded)))return;if(hovered&&valid()){e.preventDefault();add(hovered);void drain();}};
+  // What a shortcut must not interrupt is typing. Focus resting on one of this
+  // panel's own buttons is not typing, and it is where focus lands after every
+  // click here — so the panel's own chrome is not part of this guard.
+  const typing='input,textarea,select,[contenteditable]:not([contenteditable="false"])';
+  const key=(e:KeyboardEvent)=>{if(!e.altKey||e.code!=='KeyT'||e.repeat||(e.target instanceof Element&&e.target.closest(typing)))return;if(hovered&&valid()){e.preventDefault();add(hovered,true);void drain();}};
   const scheduleScan=()=>{if(scanTimer||!valid())return;scanTimer=setTimeout(()=>{scanTimer=null;scan();},150);};
   const scroll=()=>{if(active)scheduleScan();else drain();};
   document.addEventListener('pointerover',mouse);document.addEventListener('keydown',key);document.addEventListener('scroll',scroll,true);
