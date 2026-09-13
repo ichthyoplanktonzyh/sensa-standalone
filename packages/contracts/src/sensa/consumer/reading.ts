@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {sensaLanguageNameableTagSchema,sensaCommandLanguagesSchema} from '../language.js';
 
 export const readingFeatures = ['selection','page','subtitles','action','meaning'] as const;
 export const readingFeatureSchema = z.enum(readingFeatures);
@@ -30,10 +31,27 @@ export const readingSettingsInputSchema = z.object({
   if(new Set(v.providers.map(p=>p.id)).size!==v.providers.length)c.addIssue({code:'custom',message:'Duplicate provider'});
   for(const id of Object.values(v.assignments))if(id&&!v.providers.some(p=>p.id===id&&p.enabled))c.addIssue({code:'custom',message:'Provider unavailable'});
 });
+/**
+ * One reading operation, in the learner's own two languages.
+ *
+ * The pair travels with the request rather than being read from an account
+ * setting, because the profile lives in the learner's local library and this
+ * service is a capability, not a fact store: it is told which two languages the
+ * operation is about and it must not remember a pair of its own. The request
+ * digest covers the whole input, so the same request id under a different pair
+ * is a conflict instead of a replay of the other language's answer.
+ *
+ * `sourceLanguageTag` is the language of `text` when the caller established one,
+ * which is a statement about the text and not a third member of the pair: the
+ * text a learner quotes is usually their target language, but a familiar-language
+ * quote is a real capture too.
+ */
 export const readingRequestSchema = z.object({
   id:z.string().uuid(), feature:z.enum(['selection','page','subtitles','action']),
   text:z.string().trim().min(1).max(12000), context:z.string().max(12000).default(''),
   instruction:z.string().trim().max(2000).default(''),
+  languages:sensaCommandLanguagesSchema,
+  sourceLanguageTag:sensaLanguageNameableTagSchema.nullable().default(null),
 }).strict();
 export type ReadingProvider = z.infer<typeof readingProviderSchema>;
 export type ReadingAssignments = z.infer<typeof readingAssignmentsSchema>;

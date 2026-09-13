@@ -58,7 +58,7 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
       if(job.generation!==run||job.cue!==current||(!job.manual&&display.value==='original'))continue;
       running=job;renderTranslation();const key=keyOf(job.cue);
       try{
-        const text=await runReading(accountId,'subtitles',job.cue.text,'','',crypto.randomUUID(),partial=>{if(valid()&&job.generation===run&&current===job.cue)translated.textContent=partial;});
+        const text=await runReading(accountId,'subtitles',job.cue.text,'','',crypto.randomUUID(),partial=>{if(valid()&&job.generation===run&&current===job.cue)translated.textContent=partial;},undefined,captionLanguage.language);
         if(valid()&&job.generation===run){
           translations.set(key,text);if(translations.size>150)translations.delete(translations.keys().next().value!);
         }

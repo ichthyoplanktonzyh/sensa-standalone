@@ -26,8 +26,14 @@ function portRequest<T>(name:string,payload:unknown,progress:(text:string)=>void
     port.postMessage(payload);
   });
 }
-export async function runReading(accountId:string,feature:ReadingRequest['feature'],text:string,context='',instruction='',id=crypto.randomUUID(),progress?:(text:string)=>void,signal?:AbortSignal):Promise<string>{
-  const payload={accountId,pageUrl:location.href,input:{id,feature,text,context,instruction}};
+/**
+ * `sourceLanguageTag` is the language of `text` when this side established one,
+ * or `null` when it did not. The learner's own pair is added by the background,
+ * which is the only side that holds it, so a caller states what it observed and
+ * never guesses which pair the request is about.
+ */
+export async function runReading(accountId:string,feature:ReadingRequest['feature'],text:string,context='',instruction='',id=crypto.randomUUID(),progress?:(text:string)=>void,signal?:AbortSignal,sourceLanguageTag:string|null=null):Promise<string>{
+  const payload={accountId,pageUrl:location.href,input:{id,feature,text,context,instruction,sourceLanguageTag}};
   let result:{status:string;text?:string;error?:string};
   if(progress&&typeof chrome.runtime.connect==='function')result=await portRequest('sensa-reading-stream',payload,progress,signal);
   else{const response=await chrome.runtime.sendMessage({kind:'reading-run',...payload});if(response.error)throw new Error(response.error);result=response.value;}

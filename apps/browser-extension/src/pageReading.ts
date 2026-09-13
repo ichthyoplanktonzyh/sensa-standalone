@@ -1,4 +1,5 @@
 import {runReading,readingError} from './readingClient';
+import {declaredCaptureLanguage} from './language';
 const blocks='p,li,blockquote,td,th,dt,dd,h1,h2,h3,h4,h5,h6,figcaption,div';
 const excluded='input,textarea,select,button,nav,pre,code,script,style,[contenteditable]:not([contenteditable="false"]),[translate="no"],[data-sensa-ui]';
 type Item={source:HTMLElement;text:string;translation:HTMLElement;hidden:boolean;state:'waiting'|'running'|'ready'|'failed'};
@@ -51,6 +52,16 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
     const waiting=[...items.values()].filter(i=>i.state==='waiting'&&i.source.isConnected&&nearby(i.source)).sort((a,b)=>Math.abs(a.source.getBoundingClientRect().top)-Math.abs(b.source.getBoundingClientRect().top));
     while(running<2&&waiting.length){const item=waiting.shift()!;item.state='running';running++;void translateItem(item,generation);}
   }
+  /**
+   * The language this page declares, or nothing when it declares none.
+   *
+   * Read once per surface instead of once per paragraph: a page states its
+   * language about itself, and asking a detector about every paragraph of a long
+   * article would cost a message each to answer a question the document already
+   * answered. Paragraph-level detection is what a target-language skip needs,
+   * and that is a separate decision from labelling this page's text.
+   */
+  const pageLanguage=()=>declaredCaptureLanguage().language;
   async function translationFor(text:string){
     const cached=cache.get(text);if(cached!==undefined)return cached;
     const existing=requests.get(text);if(existing)return existing;
@@ -58,7 +69,7 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
     const request=runReading(accountId,'page',text,'','',crypto.randomUUID(),partial=>{
       if(!valid()||run!==generation)return;
       for(const item of items.values())if(item.text===text&&item.state==='running'&&item.source.isConnected&&item.source.textContent===text)item.translation.textContent=partial;
-    });requests.set(text,request);
+    },undefined,pageLanguage());requests.set(text,request);
     try{return await request;}finally{if(requests.get(text)===request)requests.delete(text);}
   }
   async function translateItem(item:Item,run:number){

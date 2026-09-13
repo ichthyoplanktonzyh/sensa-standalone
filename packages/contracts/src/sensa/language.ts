@@ -189,6 +189,48 @@ export interface SensaCommandLanguages {
   targetLanguageTag: string;
 }
 
+/**
+ * A tag this release can name, for any value about to enter a model prompt.
+ *
+ * Stricter than `sensaLanguageTagSchema` on purpose: a capture keeps a language
+ * this release does not curate, because the material is the learner's either
+ * way, but a request to run a model over it cannot — a prompt has to name the
+ * language it is talking about, and a code passed through as itself is a
+ * language no model was told about.
+ */
+export const sensaLanguageNameableTagSchema = sensaLanguageTagSchema.refine(
+  tag => sensaLanguage(tag) !== undefined,
+  { message: 'this release cannot name that language' },
+);
+
+/**
+ * The pinned pair as it crosses a boundary.
+ *
+ * Unlike the stored profile, this REQUIRES both tags to be placeable in the
+ * catalog. A profile is data a learner already owns, so an earlier release's tag
+ * must stay readable; a command is a request made now, and one naming a language
+ * this release cannot name is a caller's mistake — most visibly, a prompt cannot
+ * tell a model to answer in a language nobody can name.
+ */
+export const sensaCommandLanguagesSchema = z
+  .object({
+    familiarLanguageTag: sensaLanguageNameableTagSchema,
+    targetLanguageTag: sensaLanguageNameableTagSchema,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.familiarLanguageTag === value.targetLanguageTag) {
+      context.addIssue({ code: 'custom', message: 'a language cannot be both familiar and the target of one operation' });
+    }
+  });
+
+/** What a language is called inside a model prompt, which is written in English
+ * whatever the learner reads. A prompt names both languages of the pair rather
+ * than describing a fixed one, so a model is never told the wrong pair. */
+export function sensaLanguagePromptName(tag: string): string {
+  return sensaLanguage(tag)?.names.en ?? tag;
+}
+
 export const sensaCommandLanguages = (
   profile: SensaLanguageProfile,
 ): SensaCommandLanguages => ({

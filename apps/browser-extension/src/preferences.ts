@@ -1,3 +1,33 @@
+/**
+ * The learner's two languages, as published by the Web application.
+ *
+ * The profile's source of truth is the learner's local library, which this
+ * extension cannot read, so the Web application publishes it here through the
+ * same bridge it uses to hand over captures. The extension never edits this: an
+ * editable second copy is how two surfaces come to disagree about which language
+ * a learner is studying.
+ */
+export type ReadingLanguages={familiarLanguageTag:string;targetLanguageTag:string};
+/** The pair the product ships, used only while nothing has been published yet —
+ * the same answer the library gives for a library with no saved profile. */
+export const defaultReadingLanguages:ReadingLanguages={familiarLanguageTag:'zh-CN',targetLanguageTag:'en'};
+const languageTag=(value:unknown,fallback:string)=>typeof value==='string'&&value.trim()&&value.trim().length<=35?value.trim():fallback;
+export async function readingLanguages():Promise<ReadingLanguages>{
+ const stored=(await chrome.storage.local.get('readingLanguages')).readingLanguages as Record<string,unknown>|undefined;
+ if(!stored||typeof stored!=='object')return defaultReadingLanguages;
+ const familiar=languageTag(stored.familiarLanguageTag,defaultReadingLanguages.familiarLanguageTag);
+ const target=languageTag(stored.targetLanguageTag,defaultReadingLanguages.targetLanguageTag);
+ // One language cannot be both sides of the boundary, so a published pair that
+ // says so is not a pair and the shipped one stands.
+ return familiar===target?defaultReadingLanguages:{familiarLanguageTag:familiar,targetLanguageTag:target};
+}
+export async function publishReadingLanguages(value:unknown):Promise<ReadingLanguages>{
+ const raw=value&&typeof value==='object'?value as Record<string,unknown>:{};
+ const next={familiarLanguageTag:languageTag(raw.familiarLanguageTag,defaultReadingLanguages.familiarLanguageTag),targetLanguageTag:languageTag(raw.targetLanguageTag,defaultReadingLanguages.targetLanguageTag)};
+ if(next.familiarLanguageTag===next.targetLanguageTag)throw new Error('invalid_languages');
+ await chrome.storage.local.set({readingLanguages:next});
+ return next;
+}
 export type ReadingPreferences={actionName:string;actionPrompt:string;disabledSites:string[]};
 export const defaultPreferences:ReadingPreferences={actionName:'用法辨析',actionPrompt:'解释选中表达在当前语境中的用法，指出容易混淆的意思，并给出一个简短例句。',disabledSites:[]};
 export async function readingPreferences():Promise<ReadingPreferences>{

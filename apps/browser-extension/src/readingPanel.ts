@@ -172,7 +172,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
     if(!mayAct())return;expand();const run=++assistanceRun;assistance.hidden=false;assistance.textContent='正在处理…';
     assistanceController?.abort();assistanceController=new AbortController();
     assistance.setAttribute('aria-busy','true');translate.disabled=custom.disabled=true;
-    try{const text=await runReading(accountId,feature,expression?.text??snapshot.sentence,snapshot.sentence,input.preferences?.actionPrompt??defaultPreferences.actionPrompt,crypto.randomUUID(),partial=>{if(alive()&&run===assistanceRun)assistance.textContent=partial;},assistanceController.signal);if(alive()&&run===assistanceRun)assistance.textContent=text;}
+    try{const text=await runReading(accountId,feature,expression?.text??snapshot.sentence,snapshot.sentence,input.preferences?.actionPrompt??defaultPreferences.actionPrompt,crypto.randomUUID(),partial=>{if(alive()&&run===assistanceRun)assistance.textContent=partial;},assistanceController.signal,snapshot.language);if(alive()&&run===assistanceRun)assistance.textContent=text;}
     catch(e){if(alive()&&run===assistanceRun)assistance.textContent=readingError(e);}
     finally{if(alive()&&run===assistanceRun){translate.disabled=custom.disabled=false;assistance.removeAttribute('aria-busy');layout();}}
   }

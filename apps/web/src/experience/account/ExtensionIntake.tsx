@@ -4,9 +4,15 @@ import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useState} from 'react';
 import {z} from 'zod';
 import {localIntakeRequestSchema} from '@sensa/contracts/sensa';
+import {languageProfileSnapshot} from '../../data/library/language';
 import {openLibrary,observeLibrary} from '../../data/library/store';
 import {receiveWebIntake} from '../../data/library/intake';
-function bridge(kind:string,accountId:string,libraryId:string,signal:AbortSignal,receipt?:unknown):Promise<unknown>{
+/**
+ * One round trip on the page bridge. `extra` carries whatever the message kind
+ * needs — a receipt for an acknowledgement, the published pair for a language
+ * profile — so a new kind does not need a new parameter here.
+ */
+function bridge(kind:string,accountId:string,libraryId:string,signal:AbortSignal,extra:Record<string,unknown>={}):Promise<unknown>{
  return new Promise((resolve,reject)=>{
   const id=crypto.randomUUID();
   const finish=(error?:string,value?:unknown)=>{clearTimeout(timer);window.removeEventListener('message',listener);signal.removeEventListener('abort',abort);if(error)reject(new Error(error));else resolve(value);};
@@ -15,7 +21,7 @@ function bridge(kind:string,accountId:string,libraryId:string,signal:AbortSignal
   const timer=setTimeout(()=>finish('extension_unavailable'),15000);
   window.addEventListener('message',listener);signal.addEventListener('abort',abort,{once:true});
   if(signal.aborted){abort();return;}
-  window.postMessage({channel:'sensa-web-intake-request',id,kind,accountId,libraryId,receipt},location.origin);
+  window.postMessage({channel:'sensa-web-intake-request',id,kind,accountId,libraryId,...extra},location.origin);
  });
 }
 /** Receives only explicitly saved extension requests into the existing content screens. */
@@ -25,7 +31,7 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
  const [reconnectNeeded,setReconnectNeeded]=useState(false),[connecting,setConnecting]=useState(false),[attempt,setAttempt]=useState(0);
  const reconnect=async(discardPending=false)=>{
   setConnecting(true);const controller=new AbortController();
-  try{await bridge('web-connect-reset',accountId,(await openLibrary()).id,controller.signal,{discardPending});setError('');setReconnectNeeded(false);setAttempt(n=>n+1);}
+  try{await bridge('web-connect-reset',accountId,(await openLibrary()).id,controller.signal,{receipt:{discardPending}});setError('');setReconnectNeeded(false);setAttempt(n=>n+1);}
   catch{setError(localFlowText('extensionReconnectFailed'));}
   finally{setConnecting(false);}
  };
@@ -40,16 +46,25 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
      if(connection.paused)return;
      if(connection.authorization){
       const result=await authorizeExtensionConnection(connection.authorization,controller.signal);
-      await bridge('web-connect-complete',accountId,library.id,controller.signal,result);
+      await bridge('web-connect-complete',accountId,library.id,controller.signal,{receipt:result});
      }
     }
+    // The language profile is this library's and nowhere else's, so the extension
+    // can only be told it: it decides which language a reading request is
+    // translated into, and a stale copy would translate the wrong way. This loop
+    // already re-runs whenever the library changes, so publishing here keeps the
+    // extension's copy equal to the profile it comes from instead of letting it
+    // drift into a second one. The ACTIVE target language is published because
+    // reading is an action surface, and action surfaces act on the active one.
+    const {profile}=await languageProfileSnapshot();
+    await bridge('web-language-profile',accountId,library.id,controller.signal,{languages:{familiarLanguageTag:profile.familiarLanguageTag,targetLanguageTag:profile.activeTargetLanguageTag}});
     const requests=z.array(localIntakeRequestSchema).max(10).parse(await bridge('web-intake-pull',accountId,library.id,controller.signal));
     for(const request of requests){
      if(controller.signal.aborted)return;
      let receipt;
      try{receipt=await receiveWebIntake(accountId,request);}catch{if(!controller.signal.aborted){setReconnectNeeded(false);setError(localFlowText('intakeStorageFailed'));}return;}
      if(controller.signal.aborted)return;
-     await bridge('web-intake-ack',accountId,library.id,controller.signal,receipt);
+     await bridge('web-intake-ack',accountId,library.id,controller.signal,{receipt});
     }
     setError('');setReconnectNeeded(false);
    }catch(e){if(!controller.signal.aborted&&!(e instanceof Error&&['extension_unavailable','authentication_required'].includes(e.message))){const code=e instanceof Error?e.message:'';const mismatch=['account_mismatch','library_mismatch'].includes(code);setReconnectNeeded(mismatch);setError(code==='library_mismatch'?localFlowText('extensionLibraryMismatch'):code==='account_mismatch'?localFlowText('extensionAccountMismatch'):localFlowText('extensionReconnectFailed'));}}

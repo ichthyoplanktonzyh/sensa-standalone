@@ -4,7 +4,7 @@ import {captureSnapshotSchema} from '@sensa/contracts/sensa';
 import {webUrl,apiUrl} from './config';
 import {detectIso6393} from './languageDetector';
 import {readYoutubePlayer} from './youtubePlayer';
-import {readingPreferences} from './preferences';
+import {readingLanguages,readingPreferences,publishReadingLanguages} from './preferences';
 type Mode={accountId:string};
 const accountSchema=z.object({expiresAt:z.string().datetime().optional(),webLibraryId:z.string().uuid().optional(),accountId:z.string().uuid(),installationId:z.string().uuid(),token:z.string().min(1),queue:z.array(z.unknown()).default([]),recent:z.array(z.unknown()).default([]),savedOperations:z.record(z.string(),z.unknown()).default({})}).passthrough();
 const storeSchema=z.object({version:z.literal(1).default(1),active:z.string().uuid().nullable(),accounts:z.record(z.string(),accountSchema)}).strict();
@@ -84,6 +84,14 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  // gets a code back. It lives here because the detector's tables are far larger
  // than anything a content script should carry into every page.
  if(message.kind==='detect-language'){const text=typeof message.text==='string'?message.text.slice(0,2048):'';return {language:text?detectIso6393(text):null};}
+ if(message.kind==='web-language-profile'){
+  // The Web application owns the language profile; this only accepts its
+  // publication. The origin and tab checks are the same ones that guard every
+  // other Web message, so no other page can retarget which language the
+  // learner's reading is translated into.
+  if(!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin||!sender.tab)throw new Error('unsupported_message');
+  return locked(()=>publishReadingLanguages(message.languages));
+ }
  if(message.kind==='web-session-ended'){if(!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin||!sender.tab)throw new Error('unsupported_message');return locked(async()=>{const store=await load();if(!store.active||store.active!==message.accountId)return {disconnected:false};const a=store.accounts[store.active];a.token='disconnected';a.expiresAt=new Date(0).toISOString();store.active=null;await persist(store);await chrome.storage.session.set({sensaWebConnect:null});await stopAllReading();return {disconnected:true};});}
  if(message.kind==='web-connect-reset'){
   if(!sender.tab?.id||!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin)throw new Error('unsupported_message');
@@ -117,7 +125,8 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
      result=(await chrome.scripting.executeScript({target:{tabId:sender.tab!.id!},world:'MAIN',func:readYoutubePlayer,args:[message.videoId]}))[0]?.result;
    }else{
      const path=message.kind==='reading-run'?'run':message.kind==='reading-test'?'test':message.kind==='reading-models'?'models':'settings';
-     result=await request('/sensa/reading/'+path,message.kind==='reading-settings'?undefined:message.input,a!.token);
+     const body=message.kind==='reading-settings'?undefined:{...message.input,languages:await readingLanguages()};
+     result=await request('/sensa/reading/'+path,body,a!.token);
    }
    if(a&&(await load()).active!==a.accountId)throw new Error('account_mismatch');
    return message.kind==='reading-settings'?{...result,accountId:a!.accountId}:result;
