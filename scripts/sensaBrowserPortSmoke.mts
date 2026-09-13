@@ -22,8 +22,14 @@ try{
      // A stand-in device synthesizer: what matters is which language the panel
      // asks a voice for, and a headless browser cannot be heard.
      const speechFixture={spoken:[] as any[],finishEnd:null as any};
+     // Every text an inserted translation ever had, in order: the difference
+     // between a tool that flashes "translating" and one that answers is only
+     // visible in the sequence.
+     const translationFixture={texts:[] as string[]};
+     const seen=new WeakMap<Element,string>();
+     new MutationObserver(()=>{for(const element of document.querySelectorAll('[data-sensa-ui="translation"]')){const text=element.textContent??'';if(seen.get(element)!==text){seen.set(element,text);translationFixture.texts.push(text);}}}).observe(document.body,{childList:true,subtree:true,characterData:true});
      const voices=[{name:'Samantha',lang:'en-US',localService:true},{name:'Ting-Ting',lang:'zh-CN',localService:true}];
-     Object.assign(window,{fixture,speechFixture,SpeechSynthesisUtterance:class{constructor(public text:string){}},chrome:{runtime:{onMessage:{addListener:(handler:any)=>fixture.receive=handler},sendMessage:async(message:any)=>{
+     Object.assign(window,{fixture,speechFixture,translationFixture,SpeechSynthesisUtterance:class{constructor(public text:string){}},chrome:{runtime:{onMessage:{addListener:(handler:any)=>fixture.receive=handler},sendMessage:async(message:any)=>{
        fixture.calls.push(message);
        if(message.kind==='youtube-captions')return {value:await (window as any).readPlayer(message.videoId)};
        // The detector and the learner's own language, stood in for: this text is
@@ -59,6 +65,10 @@ try{
  // read: every one is asked about, and only the ones that need it are asked for a
  // translation.
  expect(await asked()).toBe(3);expect(await readings()).toBe(2);
+ // An answer that arrives immediately is not announced as work in progress: the
+ // whole page answered from the cache, and the learner saw translations, not a
+ // flash of "translating".
+ expect(await page.evaluate(()=>(window as any).translationFixture.texts)).not.toContain('正在翻译…');
  await expect(page.locator('#chinese + [data-sensa-ui="translation"]')).toHaveCount(0);
  // The panel's first status line is the one that reports translation; the one
  // under it belongs to reading the page aloud.
@@ -86,7 +96,10 @@ try{
  expect(addedRun.input.context).not.toContain('她不慌不忙地做事。');
  await page.getByRole('button',{name:'恢复原文',exact:true}).click();
  await page.evaluate(()=>{(window as any).fixture.delay=true;document.querySelector('#paragraph')!.firstChild!.textContent='He ';});await page.getByRole('button',{name:'翻译页面',exact:true}).click();
- await expect.poll(()=>page.evaluate(()=>!!(window as any).fixture.pending)).toBe(true);await page.getByRole('button',{name:'恢复原文',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>!!(window as any).fixture.pending)).toBe(true);
+ // And an answer the learner is genuinely waiting for does say so.
+ await expect.poll(()=>page.evaluate(()=>(window as any).translationFixture.texts.includes('正在翻译…'))).toBe(true);
+ await page.getByRole('button',{name:'恢复原文',exact:true}).click();
  await page.evaluate(()=>(window as any).fixture.pending({value:{status:'ready',text:'迟到译文'}}));await expect(page.locator('[data-sensa-ui="translation"]')).toHaveCount(0);
  await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')));await expect(page.locator('[data-sensa-ui]')).toHaveCount(0);
  await page.waitForTimeout(600);await expect(page.locator('[data-sensa-ui]')).toHaveCount(0);
@@ -236,6 +249,6 @@ try{
  await settingsPage.getByRole('button',{name:'测试已保存连接',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('连接成功');
  await settingsPage.evaluate(()=>(window as any).settingsFixture.conflict=true);await settingsPage.getByRole('button',{name:'保存模型设置',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('另一处更新');
  await settingsPage.screenshot({path:'/tmp/sensa-browser-settings.png',fullPage:true});
- console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, every translation asked for with what its text sits in and never with a translation the panel wrote itself, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, a cue spoken in the language of its track, seek, SPA cleanup, a site rule written from the page and reading shut down by it, a sentence the learner is writing translated the other way and inserted only when they ask, and the page read aloud block by block in each block\'s own language. Network fixtures only.');
+ console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, every translation asked for with what its text sits in and never with a translation the panel wrote itself, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, a cue spoken in the language of its track, seek, SPA cleanup, a site rule written from the page and reading shut down by it, a sentence the learner is writing translated the other way and inserted only when they ask, the page read aloud block by block in each block\'s own language, a quick answer that is never announced as work in progress, and a slow one that is. Network fixtures only.');
  console.log('PASS: actual settings UI save/reload, feature assignment, explicit test/model fetch, cleared password field, no secret in browser storage, conflict feedback.');
 }finally{await browser.close();}

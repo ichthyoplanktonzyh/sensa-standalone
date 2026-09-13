@@ -131,6 +131,16 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
     try{return await request;}finally{if(requests.get(text)===request)requests.delete(text);}
   }
   async function translateItem(item:Item,run:number){
+    /**
+     * Inserted at once so the page does not jump, but the placeholder waits.
+     *
+     * A page of short paragraphs answers from the cache in milliseconds, and a
+     * learner watching a sentence arrive does not need to be told it is being
+     * worked on for two frames — the flash is what makes a fast tool look slow.
+     * The text is only written if nothing has arrived meanwhile, because a
+     * streamed answer starts writing into this same element.
+     */
+    let placeholder:ReturnType<typeof setTimeout>|null=null;
     try{
       // Asked per paragraph, not per page: an article that quotes another
       // language holds paragraphs in two of them, and skipping is a decision
@@ -141,7 +151,8 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
         if(reader?.alreadyReadable){item.state='skipped';return;}
       }
       if(familiarLanguage)item.translation.setAttribute('lang',familiarLanguage);
-      item.translation.textContent='正在翻译…';item.translation.setAttribute('aria-busy','true');item.source.after(item.translation);feedback();
+      placeholder=setTimeout(()=>{if(item.state==='running'&&!item.translation.textContent){item.translation.textContent='正在翻译…';item.translation.setAttribute('aria-busy','true');}},200);
+      item.source.after(item.translation);feedback();
       const translated=await translationFor(item.text,item.context);
       if(!valid()||run!==generation||items.get(item.source)!==item||!item.source.isConnected||item.source.textContent!==item.text){item.translation.remove();return;}
       cache.delete(item.text);cache.set(item.text,translated);if(cache.size>150)cache.delete(cache.keys().next().value!);
@@ -149,6 +160,7 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
     }catch(e){
       if(valid()&&run===generation&&items.get(item.source)===item&&item.source.isConnected&&item.source.textContent===item.text){item.state='failed';item.translation.textContent=readingError(e);}
     }finally{
+      if(placeholder!==null)clearTimeout(placeholder);
       running--;item.translation.removeAttribute('aria-busy');
       if(valid()){if(items.size)feedback();drain();}
     }
