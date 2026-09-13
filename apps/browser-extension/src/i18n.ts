@@ -34,6 +34,11 @@ const messages={
  lookupFailed:['暂时无法解释，请重试或保存待处理。','Explanation failed. Retry or save for clarification.'],networkFailed:['无法连接 Sensa 服务，请检查网络和服务地址。','Cannot connect to Sensa. Check the network and service address.'],
  timeout:['解释请求超时，请重试。','The explanation timed out. Try again.'],model_auth_failed:['模型服务授权失败，请检查模型设置。','Model authorization failed. Check model settings.'],model_rate_limited:['模型服务繁忙，请稍后重试。','The model service is busy. Try again shortly.'],model_invalid_response:['模型返回的解释格式不正确，请重试。','The model returned an invalid explanation. Try again.'],
  saveAction:['保存到我的语义世界','Save to My Semantic World'],saving:['正在保存…','Saving…'],savedPending:['已暂存在插件。打开同一浏览器中的 Sensa 收件箱即可接收。','Saved in the extension. Open the Sensa inbox in this browser to receive it.'],savedDone:['已保存到我的语义世界。','Saved to My Semantic World.'],
+ readAloud:['朗读','Read aloud'],readingAloud:['停止朗读','Stop reading aloud'],
+ speechNoLanguage:['这段文字的语言尚未确定，暂时无法朗读。','This text has no established language, so it cannot be read aloud yet.'],
+ speechNoVoice:['当前浏览器没有可用的{language}本机语音。解释和保存仍可使用。','No installed {language} voice is available in this browser. Explanation and saving still work.'],
+ speechUnavailable:['当前浏览器不支持语音合成。解释和保存仍可使用。','This browser has no speech synthesis. Explanation and saving still work.'],
+ speechFailed:['朗读未完成，请重试。','Reading aloud did not finish. Try again.'],
 } as const;
 export type MessageKey=keyof typeof messages;
 export const extensionLanguage=()=>navigator.language.toLowerCase().startsWith('zh')?'zh-CN':'en';

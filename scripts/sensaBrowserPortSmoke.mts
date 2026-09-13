@@ -19,7 +19,11 @@ try{
    await page.addScriptTag({content:'window.__name=value=>value; window.readPlayer='+readYoutubePlayer.toString()+';'});
    await page.evaluate(()=>{
      const fixture={calls:[] as any[],pending:null as any,delay:false,receive:null as any,clicks:0};
-     Object.assign(window,{fixture,chrome:{runtime:{onMessage:{addListener:(handler:any)=>fixture.receive=handler},sendMessage:async(message:any)=>{
+     // A stand-in device synthesizer: what matters is which language the panel
+     // asks a voice for, and a headless browser cannot be heard.
+     const speechFixture={spoken:[] as any[]};
+     const voices=[{name:'Samantha',lang:'en-US',localService:true},{name:'Ting-Ting',lang:'zh-CN',localService:true}];
+     Object.assign(window,{fixture,speechFixture,SpeechSynthesisUtterance:class{constructor(public text:string){}},chrome:{runtime:{onMessage:{addListener:(handler:any)=>fixture.receive=handler},sendMessage:async(message:any)=>{
        fixture.calls.push(message);
        if(message.kind==='youtube-captions')return {value:await (window as any).readPlayer(message.videoId)};
        // The detector and the learner's own language, stood in for: this text is
@@ -30,6 +34,9 @@ try{
        if(message.kind==='reading-run'){if(fixture.delay)return new Promise(resolve=>{fixture.pending=resolve;});return {value:{status:'ready',text:'她不慌不忙地做事。'}};}
        return {value:{savedLocally:true}};
      }}}});
+     // The real window exposes speechSynthesis as a read-only accessor, so the
+     // stand-in is defined rather than assigned.
+     Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{getVoices:()=>voices,addEventListener:()=>{},removeEventListener:()=>{},cancel:()=>{},speak:(utterance:any)=>speechFixture.spoken.push({text:utterance.text,lang:utterance.lang,rate:Number(utterance.rate.toFixed(3)),voice:utterance.voice?.name??''})}});
      document.querySelector('#paragraph a')?.addEventListener('click',e=>{e.preventDefault();fixture.clicks++;});
    });
    await page.addScriptTag({path:resolve('apps/browser-extension/dist/content.js')});
@@ -38,6 +45,7 @@ try{
  await page.goto('https://example.com/article');await install();
  const readings=()=>page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-run').length);
  const asked=()=>page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-language').length);
+ const speechSpoken=()=>page.evaluate(()=>(window as any).speechFixture.spoken as any[]);
  await page.getByRole('button',{name:'翻译页面',exact:true}).click();
  await expect(page.locator('#paragraph + [data-sensa-ui="translation"]')).toHaveText('她不慌不忙地做事。');
  // The page holds three blocks worth translating and one the learner can already
@@ -103,6 +111,13 @@ try{
  const save=await page.evaluate(()=>(window as any).fixture.calls.find((c:any)=>c.kind==='save'));
  captureSnapshotSchema.parse(save.snapshot);expect(save.snapshot.expression.text).toBe('took');expect(save.snapshot.source.video).toEqual({platform:'youtube',videoId:'abcdefghijk',startMs:12500,endMs:15500});
  await page.keyboard.press('Escape');await page.getByRole('button',{name:'下一句',exact:true}).click();await expect(caption).toHaveText('They looked up at the sky.');
+ // Reading a cue aloud uses the track own language: an English track is read
+ // with an English voice, never with whichever language is being studied.
+ await page.getByRole('button',{name:'朗读本句',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>((window as any).speechFixture.spoken as any[]).length)).toBe(1);
+ expect(await page.evaluate(()=>((window as any).speechFixture.spoken as any[])[0])).toEqual({text:'They looked up at the sky.',lang:'en-US',rate:0.92,voice:'Samantha'});
+ await page.getByRole('button',{name:'停止朗读',exact:true}).click();
+ await expect(page.getByRole('button',{name:'朗读本句',exact:true})).toBeVisible();
  // A subtitle file in the learner's own language is a track they can already
  // read: the panel says so and stops translating it on its own, while the button
  // that asks for one cue by name still translates it.
@@ -147,6 +162,6 @@ try{
  await settingsPage.getByRole('button',{name:'测试已保存连接',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('连接成功');
  await settingsPage.evaluate(()=>(window as any).settingsFixture.conflict=true);await settingsPage.getByRole('button',{name:'保存模型设置',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('另一处更新');
  await settingsPage.screenshot({path:'/tmp/sensa-browser-settings.png',fullPage:true});
- console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, every translation asked for with what its text sits in and never with a translation the panel wrote itself, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, seek, SPA cleanup, reading shutdown. Network fixtures only.');
+ console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, every translation asked for with what its text sits in and never with a translation the panel wrote itself, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, a cue spoken in the language of its track, seek, SPA cleanup, reading shutdown. Network fixtures only.');
  console.log('PASS: actual settings UI save/reload, feature assignment, explicit test/model fetch, cleared password field, no secret in browser storage, conflict feedback.');
 }finally{await browser.close();}

@@ -34,7 +34,7 @@ if (!installed.__sensaCaptureInstalled) {
     if(pageUrl===location.href)return;close();stopSurfaces();pageUrl=location.href;const owner=accountId;
     const isAuthorized=()=>!suspended&&enabled&&accountId===owner&&!preferences.disabledSites.includes(location.hostname);
     pageSurface=createPageReading(owner,isAuthorized);
-    videoSurface=createYoutubeReading(owner,isAuthorized,(snapshot,range)=>{close();current=showReadingPanel({snapshot,range,accountId:owner,close,isAuthorized,keyboard:false,preferences});},{autoLoad:subtitlesRequested,onLoaded:()=>{subtitlesRequested=true;}});
+    videoSurface=createYoutubeReading(owner,isAuthorized,(snapshot,range)=>{close();current=showReadingPanel({snapshot,range,accountId:owner,close,isAuthorized,keyboard:false,preferences});},{autoLoad:subtitlesRequested,onLoaded:()=>{subtitlesRequested=true;}},preferences);
   }
   chrome.runtime.onMessage.addListener(message => {
     if (message.kind !== 'reading') return;

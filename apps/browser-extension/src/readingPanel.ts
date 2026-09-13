@@ -3,6 +3,8 @@ import type {CaptureSnapshot} from '@sensa/contracts/sensa';
 import {captureSourceLink} from '@sensa/contracts/sensa';
 import {runReading,runLookup,readingError} from './readingClient';
 import {defaultPreferences} from './preferences';
+import {detectCaptureLanguage} from './language';
+import {speakText,speechFailureText} from './speech';
 import type {ReadingPreferences} from './preferences';
 
 interface ReadingPanelInput {
@@ -76,7 +78,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
   toolbar.setAttribute('role', 'group');
   toolbar.setAttribute('aria-label', '选中文字的操作');
   const lookup = button('句中解释', () => { expand(); void explain(); });
-  const speak = button('朗读', () => readAloud());
+  const speak = button(t('readAloud'), () => readAloud());
   const preview = button('保存…', () => expand());
   const translate = button('翻译', () => void assist('selection'));
   const custom = button(input.preferences?.actionName??defaultPreferences.actionName, () => void assist('action'));
@@ -157,7 +159,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
   let saved = false;
   let savedOperation:string|undefined;
   let deliveryTimer:ReturnType<typeof setTimeout>|undefined;
-  let utterance: SpeechSynthesisUtterance | null = null;
+  let speaking: (() => void) | null = null;
   let assistanceRun=0;
   let lookupId = crypto.randomUUID();
   let saveId = crypto.randomUUID();
@@ -318,37 +320,43 @@ export function showReadingPanel(input: ReadingPanelInput) {
     deliveryTimer=setTimeout(()=>void checkDelivery(),2000);
   }
   function stopSpeech() {
-    if (utterance) {
-      utterance.onend = utterance.onerror = null;
-      window.speechSynthesis.cancel();
-      utterance = null;
-    }
-    speak.textContent = '朗读';
+    speaking?.();
+    speaking = null;
+    speak.textContent = t('readAloud');
     speak.setAttribute('aria-pressed', 'false');
   }
-  function readAloud() {
+  /**
+   * Read the quoted text in the language it is written in.
+   *
+   * The capture states that language when it could, and a detector is asked when
+   * it could not: a voice is chosen by the language of the text, and this is the
+   * one place that can still find it out. Nothing is spoken in a language nobody
+   * established — a word read with the wrong voice is a wrong pronunciation
+   * presented as the word's, which is what asking for English always did.
+   */
+  async function readAloud() {
     if (!mayAct()) return;
-    if (utterance) { stopSpeech(); return; }
-    // Installed browser/system voices only; no provider or paid TTS request.
-    const voice = window.speechSynthesis?.getVoices().find(item => item.localService && /^en(?:-|_)/iu.test(item.lang));
-    if (!voice) {
+    if (speaking) { stopSpeech(); return; }
+    const text = expression?.text ?? snapshot.sentence;
+    let languageTag = snapshot.language;
+    if (!languageTag) {
+      const detected = await detectCaptureLanguage(text);
+      if (!alive()) return;
+      languageTag = detected.language;
+    }
+    const attempt = await speakText(text, languageTag, {
+      rate: input.preferences?.speechRate ?? defaultPreferences.speechRate,
+      onEnd: () => { if (!disposed) stopSpeech(); },
+    });
+    if (!alive()) { if (attempt.ok) attempt.stop(); return; }
+    if (!attempt.ok) {
       expand();
-      feedback.textContent = '当前浏览器没有可用的本机英语语音。解释和保存仍可使用。';
+      feedback.textContent = speechFailureText(attempt);
       return;
     }
-    utterance = new SpeechSynthesisUtterance(expression?.text ?? snapshot.sentence);
-    utterance.voice = voice;
-    utterance.lang = voice.lang;
-    utterance.onend = () => { utterance = null; speak.textContent = '朗读'; speak.setAttribute('aria-pressed', 'false'); };
-    utterance.onerror = () => {
-      utterance = null;
-      speak.textContent = '朗读';
-      speak.setAttribute('aria-pressed', 'false');
-      if (alive()) { expand(); feedback.textContent = '朗读未完成，请重试。'; }
-    };
-    speak.textContent = '停止朗读';
+    speaking = attempt.stop;
+    speak.textContent = t('readingAloud');
     speak.setAttribute('aria-pressed', 'true');
-    window.speechSynthesis.speak(utterance);
   }
   let dragStart: {id: number; x: number; y: number; left: number; top: number} | null = null;
   drag.addEventListener('pointerdown', event => {

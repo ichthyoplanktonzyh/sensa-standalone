@@ -3,15 +3,18 @@ import type {CaptureSnapshot} from '@sensa/contracts/sensa';
 import {runReading,readingError} from './readingClient';
 import {parseYoutubeCaptions,parseSubtitleFile} from './subtitleCues';
 import {declaredCaptureLanguage,detectCaptureLanguage,readerLanguage,unknownCaptureLanguage} from './language';
+import {speakText,speechFailureText} from './speech';
+import {defaultPreferences} from './preferences';
+import type {ReadingPreferences} from './preferences';
 import type {CaptureLanguage,ReaderLanguage} from './language';
 import type {Cue} from './subtitleCues';
 export function youtubeId(){if(!['www.youtube.com','youtube.com','m.youtube.com','www.youtube-nocookie.com'].includes(location.hostname))return null;const u=new URL(location.href);const id=u.pathname==='/watch'?u.searchParams.get('v'):u.pathname.match(/^\/(?:shorts|embed)\/([^/]+)$/u)?.[1];return id&&/^[a-zA-Z0-9_-]{11}$/u.test(id)?id:null;}
-export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,onSelection:(snapshot:CaptureSnapshot,range:Range)=>void,continuity?:{autoLoad:boolean;onLoaded:()=>void}){
+export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,onSelection:(snapshot:CaptureSnapshot,range:Range)=>void,continuity?:{autoLoad:boolean;onLoaded:()=>void},preferences?:ReadingPreferences){
   const id=youtubeId();if(!id)return null;
   const host=document.createElement('div');host.dataset.sensaUi='youtube';
   host.style.cssText='position:fixed;left:20px;bottom:20px;width:min(640px,calc(100vw - 40px));z-index:2147483646';
   const root=host.attachShadow({mode:'open'});
-  root.innerHTML=`<style>:host{font:14px/1.6 system-ui;color:#242a38}section{background:#fbfbfa;border:1px solid #b9c4d9;border-radius:12px;padding:12px;box-shadow:0 5px 24px #0003;max-height:42vh;overflow:auto}button,select{font:inherit;border:1px solid #bac5da;background:white;color:#303f76;border-radius:7px;min-height:36px;padding:4px 8px;margin:3px;cursor:pointer}button:disabled{opacity:.6}button:focus-visible,select:focus-visible{outline:3px solid #5268a9}p{margin:7px 0;white-space:pre-wrap;overflow-wrap:anywhere}.caption{font-size:19px;line-height:1.65;user-select:text;cursor:text}.translation{color:#405176}.status{font-size:12px;color:#66758c}input{max-width:100%}header{display:flex;justify-content:space-between;align-items:center}section.collapsed> :not(header){display:none}</style><section aria-label="Sensa 视频阅读"><header><strong>YouTube · Sensa 阅读</strong><button data-action="collapse">收起</button></header><div><button data-action="load">加载字幕</button><button data-action="pause">暂停 / 固定字幕</button><button data-action="play">继续播放</button><button data-action="previous">上一句</button><button data-action="replay">重听本句</button><button data-action="next">下一句</button></div><p class="caption" aria-label="当前原字幕"></p><p class="translation" aria-label="当前字幕译文"></p><div><button data-action="translate">翻译本句</button><label>字幕显示 <select aria-label="字幕显示"><option value="original">原文</option><option value="bilingual">双语（自动翻译）</option><option value="translation">仅译文（自动翻译）</option></select></label></div><p class="status" role="status">加载字幕后，选择表达即可解释与保存；选择时暂停视频。</p><details><summary>使用自己的字幕文件</summary><p>没有可读取字幕时，可加载当前视频的 VTT / SRT 字幕文件。云端 AI 转录尚未接入。</p><input type="file" accept=".vtt,.srt" aria-label="加载字幕文件"></details></section>`;
+  root.innerHTML=`<style>:host{font:14px/1.6 system-ui;color:#242a38}section{background:#fbfbfa;border:1px solid #b9c4d9;border-radius:12px;padding:12px;box-shadow:0 5px 24px #0003;max-height:42vh;overflow:auto}button,select{font:inherit;border:1px solid #bac5da;background:white;color:#303f76;border-radius:7px;min-height:36px;padding:4px 8px;margin:3px;cursor:pointer}button:disabled{opacity:.6}button:focus-visible,select:focus-visible{outline:3px solid #5268a9}p{margin:7px 0;white-space:pre-wrap;overflow-wrap:anywhere}.caption{font-size:19px;line-height:1.65;user-select:text;cursor:text}.translation{color:#405176}.status{font-size:12px;color:#66758c}input{max-width:100%}header{display:flex;justify-content:space-between;align-items:center}section.collapsed> :not(header){display:none}</style><section aria-label="Sensa 视频阅读"><header><strong>YouTube · Sensa 阅读</strong><button data-action="collapse">收起</button></header><div><button data-action="load">加载字幕</button><button data-action="pause">暂停 / 固定字幕</button><button data-action="play">继续播放</button><button data-action="previous">上一句</button><button data-action="replay">重听本句</button><button data-action="speak">朗读本句</button><button data-action="next">下一句</button></div><p class="caption" aria-label="当前原字幕"></p><p class="translation" aria-label="当前字幕译文"></p><div><button data-action="translate">翻译本句</button><label>字幕显示 <select aria-label="字幕显示"><option value="original">原文</option><option value="bilingual">双语（自动翻译）</option><option value="translation">仅译文（自动翻译）</option></select></label></div><p class="status" role="status">加载字幕后，选择表达即可解释与保存；选择时暂停视频。</p><details><summary>使用自己的字幕文件</summary><p>没有可读取字幕时，可加载当前视频的 VTT / SRT 字幕文件。云端 AI 转录尚未接入。</p><input type="file" accept=".vtt,.srt" aria-label="加载字幕文件"></details></section>`;
   document.documentElement.append(host);
   const original=root.querySelector<HTMLElement>('.caption')!,translated=root.querySelector<HTMLElement>('.translation')!,status=root.querySelector<HTMLElement>('.status')!;
   const display=root.querySelector('select')!;
@@ -27,6 +30,10 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
   const translations=new Map<string,string>(),errors=new Map<string,string>();
   type TranslationJob={cue:Cue;generation:number;manual:boolean};
   let pending:TranslationJob|null=null,running:TranslationJob|null=null;
+  /** How to stop the current reading, or nothing when this panel is silent. */
+  let speaking:(()=>void)|null=null;
+  /** This panel writes its own labels in one language, as its neighbours do. */
+  const speakLabel='朗读本句';
   const translateButton=root.querySelector<HTMLButtonElement>('[data-action="translate"]')!;
   const loadButton=root.querySelector<HTMLButtonElement>('[data-action="load"]')!;
   const video=()=>document.querySelector<HTMLVideoElement>('video.html5-main-video')??document.querySelector<HTMLVideoElement>('video');
@@ -85,7 +92,24 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
       finally{running=null;if(valid())renderTranslation();}
     }
   }
-  function resetCues(){run++;pending=null;cues=[];pinned=false;trackReadable=false;translations.clear();errors.clear();original.removeAttribute('lang');translated.removeAttribute('lang');show(null);renderTranslation();}
+  function resetCues(){run++;pending=null;cues=[];pinned=false;trackReadable=false;stopSpeaking();translations.clear();errors.clear();original.removeAttribute('lang');translated.removeAttribute('lang');show(null);renderTranslation();}
+  function stopSpeaking(){speaking?.();speaking=null;root.querySelector('[data-action="speak"]')!.textContent=speakLabel;}
+  /**
+   * Read the cue aloud in the track's own language.
+   *
+   * The video's own audio is the better pronunciation when it can be heard; this
+   * is for when it cannot — muted, unclear, or worth hearing more slowly — and it
+   * is the browser's own voice, so nothing is sent anywhere. A track whose
+   * language this release cannot place is not read aloud in some other language.
+   */
+  async function speakCue(){
+    if(!valid()||!current)return;
+    if(speaking){stopSpeaking();return;}
+    const attempt=await speakText(current.text,captionLanguage.language,{rate:preferences?.speechRate??defaultPreferences.speechRate,onEnd:()=>{if(!disposed)stopSpeaking();}});
+    if(!valid()){if(attempt.ok)attempt.stop();return;}
+    if(!attempt.ok){status.textContent=speechFailureText(attempt);return;}
+    speaking=attempt.stop;root.querySelector('[data-action="speak"]')!.textContent='停止朗读';
+  }
   /**
    * Labels the two lines this panel writes, and asks whether the learner needs
    * the second one at all.
@@ -145,6 +169,7 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
   }
   root.querySelector('[data-action="load"]')!.addEventListener('click',()=>void load());
   root.querySelector('[data-action="pause"]')!.addEventListener('click',pause);
+  root.querySelector('[data-action="speak"]')!.addEventListener('click',()=>void speakCue());
   root.querySelector('[data-action="play"]')!.addEventListener('click',()=>{pinned=false;void video()?.play().catch(()=>{status.textContent='请使用视频播放器的播放按钮继续。';});tick();});
   for(const [action,delta] of [['previous',-1],['next',1],['replay',0]] as const)root.querySelector(`[data-action="${action}"]`)!.addEventListener('click',()=>{const index=current?cues.indexOf(current):-1;const cue=cues[Math.max(0,index+delta)];const element=video();if(!cue||!element)return;pause();element.currentTime=cue.start;show(cue);});
   translateButton.addEventListener('click',()=>{translated.hidden=false;if(current)queueTranslation(current,true);});
@@ -165,5 +190,5 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
   renderTranslation();
   const timer=setInterval(tick,250);
   if(continuity?.autoLoad)void load();
-  return {host,destroy(){disposed=true;run++;pending=null;clearInterval(timer);document.removeEventListener('play',resumed,true);document.removeEventListener('seeked',seeked,true);host.remove();}};
+  return {host,destroy(){disposed=true;run++;pending=null;stopSpeaking();clearInterval(timer);document.removeEventListener('play',resumed,true);document.removeEventListener('seeked',seeked,true);host.remove();}};
 }

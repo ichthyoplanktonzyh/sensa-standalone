@@ -61,11 +61,13 @@ document.getElementById('save')!.onclick=()=>void perform(async()=>{
 document.getElementById('preferences')!.onclick=()=>void perform(async()=>{
   const disabledSites=value('disabled-sites').split(/\s+/u).filter(Boolean).map(s=>s.toLowerCase());
   if(disabledSites.length>100||disabledSites.some(s=>!/^([a-z0-9-]+\.)*[a-z0-9-]+$/u.test(s)))throw new Error('invalid_sites');
-  await chrome.storage.local.set({readingPreferences:{actionName:value('action-name')||'阅读动作',actionPrompt:value('action-prompt'),disabledSites}});feedback.textContent='本机偏好已保存，重新开启页面阅读后生效。';
+  const speechRate=Number(value('speech-rate'));
+  if(!Number.isFinite(speechRate)||speechRate<0.5||speechRate>2)throw new Error('invalid_speech_rate');
+  await chrome.storage.local.set({readingPreferences:{actionName:value('action-name')||'阅读动作',actionPrompt:value('action-prompt'),disabledSites,speechRate}});feedback.textContent='本机偏好已保存，重新开启页面阅读后生效。';
 });
 document.getElementById('account')!.onclick=()=>void chrome.tabs.create({url:new URL('/profile',webUrl).toString()});
 async function serviceStatus(){const target=document.getElementById('service-status')!;try{const result=await message('service-status');target.textContent=result.authorized?`账号已连接。${result.explanationAvailable?'解释服务可用。':'解释服务暂不可用。'} 最近 24 小时：`+result.usage.map((u:{kind:string;used:number;limit:number})=>`${({reading:'网页阅读',teacher:'澄清与解析',content:'材料准备'} as Record<string,string>)[u.kind]} ${u.used}/${u.limit}`).join('；'):'请从插件弹窗登录 Sensa。';}catch(e){target.textContent=readingError(e);}}
 document.getElementById('service-reload')!.onclick=()=>void serviceStatus();
 document.getElementById('advanced')!.addEventListener('toggle',()=>{if((document.getElementById('advanced') as HTMLDetailsElement).open&&!current)void perform(reload);});
 void serviceStatus();
-void perform(async()=>{const prefs=await readingPreferences();(document.getElementById('action-name') as HTMLInputElement).value=prefs.actionName;(document.getElementById('action-prompt') as HTMLTextAreaElement).value=prefs.actionPrompt;(document.getElementById('disabled-sites') as HTMLTextAreaElement).value=prefs.disabledSites.join('\n');feedback.textContent='阅读偏好已加载。自定义模型服务可在高级设置中调整。';});
+void perform(async()=>{const prefs=await readingPreferences();(document.getElementById('action-name') as HTMLInputElement).value=prefs.actionName;(document.getElementById('action-prompt') as HTMLTextAreaElement).value=prefs.actionPrompt;(document.getElementById('disabled-sites') as HTMLTextAreaElement).value=prefs.disabledSites.join('\n');(document.getElementById('speech-rate') as HTMLInputElement).value=String(prefs.speechRate);feedback.textContent='阅读偏好已加载。自定义模型服务可在高级设置中调整。';});
