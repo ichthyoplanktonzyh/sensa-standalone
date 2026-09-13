@@ -1,6 +1,7 @@
 import { previewStorage } from './services/previewStorage';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useJourneyWorld } from './personalMeaningJourney/usePersonalMeaningJourney';
+import { useLanguageProfile } from './library/useLanguageProfile';
 import {
   CURRENT_STUDY_SCOPE_ID,
   DEFAULT_PRACTICE_SCOPE_SELECTION,
@@ -55,10 +56,15 @@ export interface PracticeScopeState {
  */
 export const usePracticeScope = (): PracticeScopeState => {
   const { items: personalMeanings } = useJourneyWorld();
+  const { profile } = useLanguageProfile();
   const [selection, setSelection] = useState<PracticeScopeSelection>(readSelection);
   const catalog = useMemo(
-    () => resolvePracticeScopeCatalog({ selection, personalMeanings }),
-    [personalMeanings, selection],
+    () => resolvePracticeScopeCatalog({
+      selection,
+      personalMeanings,
+      activeLanguageTag: profile.activeTargetLanguageTag,
+    }),
+    [personalMeanings, profile.activeTargetLanguageTag, selection],
   );
   const normalizedKey = selectionKey(catalog.selection);
 

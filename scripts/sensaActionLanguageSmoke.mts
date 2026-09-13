@@ -1,0 +1,101 @@
+/** What the learner is asked to learn, and what the daily limit is the limit of.
+ *
+ * The queue follows the language being learned now; the daily limit is one
+ * account-wide quantity. Scoping one line too many would let a learner switch
+ * language and be handed a second allowance of new items in the same day, so
+ * both rules are exercised here against the real record shape.
+ */
+import assert from 'node:assert/strict';
+import {resolveLearningQueue, targetLanguageTag} from '../apps/web/src/experience/library/learningQueue.ts';
+import {resolvePracticeScopeCatalog, CURRENT_STUDY_SCOPE_ID, PERSONAL_SEMANTIC_WORLD_SCOPE_ID} from '../apps/web/src/experience/practiceScope.ts';
+import type { LocalLearningTarget } from '../apps/web/src/data/library/learning.ts';
+
+const at=(hours:number)=>new Date(2026,8,20,hours).toISOString();
+const clock=new Date(2026,8,20,21).getTime();
+
+const target=(over:Partial<LocalLearningTarget>&{id:string}):LocalLearningTarget=>({
+  retentionId:'retention-'+over.id,packageKey:null,expression:'expression-'+over.id,meaning:'meaning-'+over.id,
+  material:{snapshot:{},content:{resources:[]}} as never,createdAt:at(8),startedAt:null,completedAt:null,
+  memory:null,memoryRevision:0,relearnAt:null,...over});
+
+const ready={} as Record<string,'ready'|'blocked'>;
+const targets=[
+  // English: two due for review, one already started today, one untouched.
+  target({id:'en-due',targetLanguageTag:'en',memory:{dueAt:new Date(clock-3600_000)} as never,completedAt:at(8),startedAt:at(8)}),
+  target({id:'en-due-2',targetLanguageTag:'en',memory:{dueAt:new Date(clock-7200_000)} as never,completedAt:at(8),startedAt:at(8)}),
+  target({id:'en-new',targetLanguageTag:'en'}),
+  // Spanish: one due, two untouched.
+  target({id:'es-due',targetLanguageTag:'es',memory:{dueAt:new Date(clock-60_000)} as never,completedAt:at(8),startedAt:at(8)}),
+  target({id:'es-new-1',targetLanguageTag:'es'}),
+  target({id:'es-new-2',targetLanguageTag:'es'}),
+  // A target written before the language profile existed.
+  target({id:'legacy'}),
+];
+for(const item of targets)ready[item.id]='ready';
+
+// The language being learned now decides the queue.
+const spanish=resolveLearningQueue({targets,activeLanguageTag:'es',readiness:ready,clock,dailyLimit:20});
+assert.deepEqual(spanish.activeTargets.map(t=>t.id),['es-due','es-new-1','es-new-2'],'the queue holds the language being learned now');
+assert.deepEqual(spanish.due.map(t=>t.id),['es-due'],'the review queue is that language only');
+assert.deepEqual(spanish.initialReady.map(t=>t.id),['es-new-1','es-new-2'],'today\'s new items are that language only');
+assert.ok(!spanish.due.some(t=>t.targetLanguageTag==='en'),'another language is never handed to the queue');
+
+// A target written before the profile existed is read as the shipped pair.
+assert.equal(targetLanguageTag(targets.find(t=>t.id==='legacy')!),'en');
+const english=resolveLearningQueue({targets,activeLanguageTag:'en',readiness:ready,clock,dailyLimit:20});
+assert.deepEqual(english.activeTargets.map(t=>t.id),['en-due','en-due-2','en-new','legacy'],'an untagged target is learned as the shipped pair');
+assert.deepEqual(english.due.map(t=>t.id),['en-due','en-due-2']);
+
+// The daily limit is the account's, counted across every language.
+const usedUp=resolveLearningQueue({targets,activeLanguageTag:'es',readiness:ready,clock,dailyLimit:4});
+assert.equal(usedUp.startedToday,3,'every language counts towards the same daily allowance');
+assert.equal(usedUp.remaining,1);
+assert.deepEqual(usedUp.initialReady.map(t=>t.id),['es-new-1'],'the allowance left is what the active language may use');
+const noneLeft=resolveLearningQueue({targets,activeLanguageTag:'es',readiness:ready,clock,dailyLimit:3});
+assert.equal(noneLeft.remaining,0);
+assert.deepEqual(noneLeft.initialReady.map(t=>t.id),[],'switching language cannot buy more new items today');
+assert.deepEqual(noneLeft.due.map(t=>t.id),['es-due'],'review is not limited by the new-item allowance');
+
+// A blocked or already-declared target is never queued.
+const blocked={...ready,'es-due':'blocked','es-new-1':'blocked'} as Record<string,'ready'|'blocked'>;
+const filtered=resolveLearningQueue({targets,activeLanguageTag:'es',readiness:blocked,clock,dailyLimit:20});
+assert.deepEqual(filtered.due.map(t=>t.id),[],'a target whose material is not ready is not queued');
+assert.deepEqual(filtered.initialReady.map(t=>t.id),['es-new-2']);
+const declared=resolveLearningQueue({targets:targets.map(t=>t.id==='es-new-2'?{...t,declaredMastery:true}:t),activeLanguageTag:'es',readiness:ready,clock,dailyLimit:20});
+assert.deepEqual(declared.initialReady.map(t=>t.id),['es-new-1'],'a meaning the learner says they already know is not queued');
+
+// Free Practice offers the expressions of the language being learned now.
+const meaning=(id:string,languageTag:string)=>({
+  personalMeaningId:id,primaryLabel:id,regionId:null,regionName:null,phase:'sense_confirmed',
+  familiarExpressions:[],semanticAnchors:[],confirmedSenseCount:1,confirmedExpressionCount:1,updatedAt:Date.parse(at(9)),
+  detail:{
+    personalMeaningId:id,shortId:id,displayLabel:id,learnerIntentNote:null,phase:'sense_confirmed',
+    familiarAnchors:[],experienceAnchors:[],materialBlocks:[],startingPoint:null,focuses:[],createdAt:at(9),updatedAt:at(9),
+    directAlignments:[{
+      personalMeaningAlignmentId:'alignment-'+id,basisKind:'contextual_resolution',status:'active',
+      senseId:'sense-'+id,senseVersionId:'sense-version-'+id,senseShortId:'s',senseVersionShortId:'sv',senseVersionNumber:1,
+      origin:'learner_direct',reviewStatus:'confirmed',resolution:'create_new',coreMeaningFocus:'sense '+id,
+      semanticSpec:null,semanticSpecVersion:null,semanticPolicyVersion:null,generator:null,
+      expressionCandidates:[],unresolvedQuestions:[],
+      confirmedBindings:[{
+        expressionBindingConfirmationId:'confirmation-'+id,senseVersionId:'sense-version-'+id,
+        expressionVersionId:'expression-version-'+id,bindingVersionId:'binding-'+id,
+        expressionType:'word',surfaceForm:'expression-'+id,languageTag,relation:'exact',semanticCoverage:'full',
+      }],
+    }],
+  },
+}) as never;
+const personalMeanings=[meaning('es-1','es'),meaning('en-1','en')];
+const personalOnly={sourceId:PERSONAL_SEMANTIC_WORLD_SCOPE_ID,targetIds:['personal:alignment-es-1:binding-es-1','personal:alignment-en-1:binding-en-1']} as never;
+const spanishScope=resolvePracticeScopeCatalog({selection:personalOnly,personalMeanings,activeLanguageTag:'es'});
+assert.deepEqual(spanishScope.currentScope.targets.map(t=>t.expression.languageTag),['es'],'practice offers the language being learned now');
+assert.deepEqual(spanishScope.selection,{sourceId:PERSONAL_SEMANTIC_WORLD_SCOPE_ID,targetIds:['personal:alignment-es-1:binding-es-1']},'a selection that survives the language only keeps its own language');
+const englishScope=resolvePracticeScopeCatalog({selection:personalOnly,personalMeanings,activeLanguageTag:'en'});
+assert.deepEqual(englishScope.currentScope.targets.map(t=>t.expression.languageTag),['en']);
+// The shipped study list is an English catalogue, so it is offered to an
+// English learner and is honestly empty for anyone else.
+const studyFor=(tag:string)=>resolvePracticeScopeCatalog({selection:{sourceId:CURRENT_STUDY_SCOPE_ID} as never,personalMeanings:[],activeLanguageTag:tag,studyItems:[{wordId:'w',senseId:'s',word:'borrow',meaning:'临时取得。',phonetic:'/ˈbɒrəʊ/'} as never]});
+assert.equal(studyFor('en').currentScope.targets.length,1,'an English learner keeps the shipped study list');
+assert.equal(studyFor('es').currentScope.targets.length,0,'another language is not offered an English study list');
+
+console.log('PASS: the queue, the new-item allowance and Free Practice follow the language being learned now, while the daily limit stays one account-wide quantity that switching language cannot multiply.');

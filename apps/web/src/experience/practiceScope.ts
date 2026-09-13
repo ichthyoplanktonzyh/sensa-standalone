@@ -96,6 +96,11 @@ export interface PracticeScopeInput {
   readonly personalMeanings: readonly JourneyWorldItemView[];
   readonly studyItems?: readonly PracticeSenseItem[];
   readonly studyTitle?: string;
+  /** The language being learned now. Free Practice is an action surface, so it
+   * offers the expressions of that language: practising a language the learner
+   * is not currently learning is not a smaller version of this screen, it is a
+   * different one. */
+  readonly activeLanguageTag?: string;
 }
 
 export const DEFAULT_PRACTICE_SCOPE_SELECTION: PracticeScopeSelection = {
@@ -212,9 +217,12 @@ export const resolvePracticeScopeCatalog = ({
   personalMeanings,
   studyItems = PRACTICE_SENSES,
   studyTitle = 'COCA 20000 (上)',
+  activeLanguageTag,
 }: PracticeScopeInput): PracticeScopeCatalog => {
-  const studyTargets = targetsFromStudyScope(studyItems);
-  const personalTargets = targetsFromPersonalMeanings(personalMeanings);
+  const inLanguage = (target: PracticeScopeTarget) =>
+    !activeLanguageTag || target.expression.languageTag === activeLanguageTag;
+  const studyTargets = targetsFromStudyScope(studyItems).filter(inLanguage);
+  const personalTargets = targetsFromPersonalMeanings(personalMeanings).filter(inLanguage);
   const personalById = new Map(personalTargets.map((target) => [target.targetId, target] as const));
   const selectedPersonalTargetIds = selection.sourceId === PERSONAL_SEMANTIC_WORLD_SCOPE_ID
     ? uniqueTargetIds(selection.targetIds).filter((targetId) => personalById.has(targetId))

@@ -22,6 +22,9 @@ interface StudyScreenProps {
   onPolicyChange: (policy: PrototypeLearningPolicy) => void;
   defaultPolicy: PrototypeLearningPolicy;
   learningTargetCount: number;
+  /** The language the counts and the queue act on. The daily limit is the
+   * account's, so it is named separately from the language counts. */
+  languageLabel: string;
   readyInitialCount: number;
   reviewCount: number;
   dailyNewCount: number;
@@ -49,6 +52,7 @@ export const StudyScreen = (props: StudyScreenProps) => {
         <section className="flex flex-col rounded-3xl bg-[#edf0f7] p-6 sm:p-8">
           <div className="flex items-center gap-2 text-sm text-[#68748d]"><BookOpen size={18}/>{t('study.scope')}</div>
           <h2 className="mt-5 text-3xl font-medium tracking-tight">{props.learningTargetCount?t('study.count',{count:props.learningTargetCount}):t('study.empty')}</h2>
+          <p className="mt-2 text-xs text-[#788398]">{t('study.currentLanguage',{language:props.languageLabel})}</p>
           {!props.learningTargetCount&&<p className="mt-3 text-sm text-[#68748d]">{t('study.emptyHint')}</p>}
           <dl className="my-7 grid grid-cols-2 divide-x divide-[#d8dfea]">
             {([['ready',props.readyInitialCount],['review',props.reviewCount]] as const).map(([key,value])=><div key={key} className="last:pl-6"><dt className="text-sm text-[#68748d]">{t('study.'+key)}</dt><dd className="mt-2 text-2xl tabular-nums">{value.toLocaleString(i18n.language)}</dd></div>)}
@@ -63,6 +67,7 @@ export const StudyScreen = (props: StudyScreenProps) => {
           <button className="mt-7 block w-full rounded-xl text-left focus-visible:outline-2 focus-visible:outline-[#5268a9]" onClick={()=>props.onOpenPreferences ? props.onOpenPreferences() : props.onTabChange('b')}>
             <span className="text-sm text-[#68748d]">{t('study.daily')}</span><span className="mt-2 flex items-center justify-between gap-3 text-2xl">{t('study.count',{count:props.dailyNewCount})}<ArrowRight size={18}/></span>
           </button>
+          <p className="mt-3 text-xs leading-6 text-[#788398]">{t('study.dailyNote')}</p>
           <div className="mt-7 border-t border-[#e3e5ea] pt-6"><p className="text-sm text-[#68748d]">{t('study.method')}</p><p className="mt-2 font-medium">{props.policySummary??t('learningPreferences.policies.'+props.defaultPolicy)}</p></div>
         </section>
       </div>

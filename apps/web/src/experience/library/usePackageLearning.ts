@@ -1,4 +1,6 @@
 import {useTranslation} from 'react-i18next';
+import {useLanguageProfile} from './useLanguageProfile';
+import {resolveLearningQueue} from './learningQueue';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useRef,useState} from 'react';
 import {defaultSensaLanguageProfile,learningPackageCatalogSchema,type LearningPackageDescriptor} from '@sensa/contracts/sensa';
@@ -31,15 +33,13 @@ export function usePackageLearning(entryOpen:boolean){
   }catch{if(gen===generation.current)setNotice(localFlowText('catalogFailed'));}finally{clearTimeout(sessionTimer);if(gen===generation.current)setCatalogBusy(false);}
  };
  useEffect(()=>{if(entryOpen)void reloadCatalog();},[entryOpen]);
+ const {profile}=useLanguageProfile();
  const run=runs.find(r=>r.id===activeId)??null;
  const records:LearningRecordView[]=runs.filter(r=>r.completedAt&&r.completionKind!=='wait_relearning').flatMap(r=>localRunTargetIds(r).map(targetId=>({recordId:r.id+':'+targetId,targetId,expression:targets.find(t=>t.id===targetId)?.expression??'',languageTag:targets.find(t=>t.id===targetId)?.targetLanguageTag??defaultSensaLanguageProfile.activeTargetLanguageTag,meaning:targets.find(t=>t.id===targetId)?.meaning,occurredAt:r.targetCompletions?.[targetId]?.at??r.completedAt!,kind:r.purpose,label:r.purpose==='initial_learning'?localFlowText('initialRecord'):r.purpose==='retention_review'?localFlowText('reviewRecord'):localFlowText('relearningRecord'),detail:localFlowText('localRecord')}))).sort((a,b)=>b.occurredAt.localeCompare(a.occurredAt));
  const readinessByTarget=Object.fromEntries(targets.map(target=>[target.id,inspectLocalTargetReadiness(target,target.packageKey?packages.find(pack=>pack.key===target.packageKey):undefined).status])) as Readonly<Record<string,'ready'|'blocked'>>;
- const due=targets.filter(t=>!t.declaredMastery&&readinessByTarget[t.id]==='ready').filter(t=>t.relearnAt?Date.parse(t.relearnAt)<=clock:t.memory&&t.memory.dueAt.getTime()<=clock);
- const startedToday=targets.filter(t=>t.startedAt&&new Date(t.startedAt).toDateString()===new Date(clock).toDateString()).length;
- const remaining=Math.max(0,(dailyLimit??20)-startedToday);
- const initialReady=[...targets.filter(t=>!t.declaredMastery&&!t.completedAt&&t.startedAt&&readinessByTarget[t.id]==='ready'),...targets.filter(t=>!t.declaredMastery&&!t.completedAt&&!t.startedAt&&readinessByTarget[t.id]==='ready').slice(0,remaining)];
+ const {activeTargets,due,initialReady}=resolveLearningQueue({targets,activeLanguageTag:profile.activeTargetLanguageTag,readiness:readinessByTarget,clock,dailyLimit});
  const nextTarget=[...due,...initialReady].find(t=>!run||!localRunTargetIds(run).includes(t.id));
- return {nextTarget,initialReady,readinessByTarget,packages,catalog,targets,runs,run,records,due,notice:localFlowNotice(notice),busy,progress,loaded,catalogBusy,reloadCatalog,refresh,dailyLimit,confirmQuantity:(n:number)=>perform(()=>confirmLearningQuantity(crypto.randomUUID(),n)),
+ return {nextTarget,initialReady,readinessByTarget,packages,catalog,targets,activeTargets,runs,run,records,due,notice:localFlowNotice(notice),busy,progress,loaded,catalogBusy,reloadCatalog,refresh,dailyLimit,confirmQuantity:(n:number)=>perform(()=>confirmLearningQuantity(crypto.randomUUID(),n)),
   download:(d:LearningPackageDescriptor)=>perform(async()=>{const c=new AbortController();transfer.current=c;try{setProgress(0);return await downloadPackage(d,AbortSignal.any([c.signal,AbortSignal.timeout(120000)]),n=>setProgress(Math.round(100*n/d.byteLength)));}finally{if(transfer.current===c)transfer.current=null;}}),
   cancelDownload:()=>transfer.current?.abort(),importFile:(file:File)=>perform(async()=>{if(file.size>8*1024*1024)throw new Error('localFlow.packageTooLarge');return installPackage(new Uint8Array(await file.arrayBuffer()));}),
   selectPolicy:(targetId:string,profileId:Parameters<typeof selectLocalLearningPolicy>[2])=>perform(()=>selectLocalLearningPolicy(crypto.randomUUID(),targetId,profileId)),

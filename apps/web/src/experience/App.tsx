@@ -2,6 +2,9 @@ import {localRunPolicy,localTargetPolicy} from './learningRuntime/localRuntimeBi
 import {BatchPersonalLearning} from './library/BatchPersonalLearning';
 import {localFlowText} from '../i18n/localFlowText';
 import {usePersonalLearning} from './library/usePersonalLearning';
+import {useLanguageProfile} from './library/useLanguageProfile';
+import {defaultSensaLanguageProfile,sensaLanguageDisplayName} from '@sensa/contracts/sensa';
+import i18n from '../i18n';
 import {
   PersonalLearningControls,
   PersonalPreparationTarget,
@@ -85,7 +88,14 @@ export default function App() {
 
   const packageLearning=usePackageLearning(viewMode==='main'&&mainStack.includes('s-learning-entry'));
   const personalLearning=usePersonalLearning();
+  const {profile:languageProfile}=useLanguageProfile();
+  /** A meaning prepared before the language profile existed is read as the pair
+   * the product has always shipped. */
+  const meaningLanguage=(task:(typeof personalLearning.tasks)[number])=>task.meaning.targetLanguageTag??defaultSensaLanguageProfile.activeTargetLanguageTag;
   const pendingPersonal=[...new Map(personalLearning.tasks.filter(t=>!packageLearning.targets.some(target=>target.id===t.targetId)).map(t=>[t.targetId,t])).values()];
+  /** What the learner is learning now: the queue, today's new items and the
+   * counts beside them. The lists that browse everything keep every language. */
+  const activePendingPersonal=pendingPersonal.filter(task=>meaningLanguage(task)===languageProfile.activeTargetLanguageTag);
   const selectedPersonalTask=pendingPersonal.find(t=>t.targetId===params.targetId);
   const localSelectedTarget=packageLearning.targets.find(t=>t.id===params.targetId);
   const openLocalTarget=(id:string)=>goMain('s-learning-target',{targetId:id});
@@ -405,7 +415,8 @@ export default function App() {
             onOpenTarget={openLocalTarget}
             onPolicyChange={()=>{}}
             defaultPolicy="lightweight" fixedPolicy
-            learningTargetCount={packageLearning.targets.length+pendingPersonal.length}
+            learningTargetCount={packageLearning.activeTargets.length+activePendingPersonal.length}
+            languageLabel={sensaLanguageDisplayName(languageProfile.activeTargetLanguageTag,i18n.language==='en'?'en':'zh-CN')}
             readyInitialCount={packageLearning.initialReady.length}
             reviewCount={packageLearning.due.length}
             dailyNewCount={dailyNewCount}
