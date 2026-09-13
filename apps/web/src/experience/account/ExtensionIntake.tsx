@@ -4,6 +4,7 @@ import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useState} from 'react';
 import {sensaBridgeRequestChannel,sensaBridgeResponseChannel,sensaBridgeValue,type SensaBridgeKind,type SensaBridgePayload,type SensaBridgeValue} from '@sensa/contracts/sensa';
 import {languageProfileSnapshot} from '../../data/library/language';
+import {readingGlossarySnapshot} from '../../data/library/glossary';
 import {openLibrary,observeLibrary} from '../../data/library/store';
 import {receiveWebIntake} from '../../data/library/intake';
 /**
@@ -63,6 +64,12 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
     // reading is an action surface, and action surfaces act on the active one.
     const {profile}=await languageProfileSnapshot();
     await bridge('web-language-profile',accountId,library.id,controller.signal,{languages:{familiarLanguageTag:profile.familiarLanguageTag,targetLanguageTag:profile.activeTargetLanguageTag}});
+    // The glossary the learner wrote is published the same way and for the same
+    // reason: it is their own words, the extension cannot read the library, and a
+    // reading prompt that named a stale copy would be using words they edited
+    // away.
+    const {glossary}=await readingGlossarySnapshot();
+    await bridge('web-reading-glossary',accountId,library.id,controller.signal,{glossary});
     const requests=await bridge('web-intake-pull',accountId,library.id,controller.signal,{});
     for(const request of requests){
      if(controller.signal.aborted)return;

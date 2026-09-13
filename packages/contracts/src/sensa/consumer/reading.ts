@@ -31,6 +31,41 @@ export const readingSettingsInputSchema = z.object({
   if(new Set(v.providers.map(p=>p.id)).size!==v.providers.length)c.addIssue({code:'custom',message:'Duplicate provider'});
   for(const id of Object.values(v.assignments))if(id&&!v.providers.some(p=>p.id===id&&p.enabled))c.addIssue({code:'custom',message:'Provider unavailable'});
 });
+
+/**
+ * The two requests that are about a connection rather than about a reading.
+ *
+ * They are declared here, beside the reading request, because the extension is
+ * their client and the service is their reader: a surface that sent the learner's
+ * pair with a model test would be sending a body this service refuses, and the
+ * learner would be told their connection failed when it was their client that was
+ * wrong. Strict on purpose — a connection question has exactly these fields.
+ */
+export const readingTestRequestSchema=z.object({id:z.string().uuid(),providerId:z.string().uuid()}).strict();
+export const readingModelsRequestSchema=z.object({providerId:z.string().uuid()}).strict();
+/**
+ * The learner's own renderings for the words they care about.
+ *
+ * A glossary is not an instruction and not a definition: it is the learner
+ * saying which word they want to read. So it is part of the operation's input —
+ * and therefore part of its digest, because asking again with a different
+ * glossary is asking a different question — and bounded, because it travels
+ * inside every prompt of every paragraph the learner reads. One term is listed
+ * once: two renderings for the same word is not a preference, it is a
+ * contradiction the model would have to resolve on its own.
+ */
+/** What a glossary is allowed to be, in one place: the schema that accepts one,
+ * the editor that writes one and the surface that publishes one all read these
+ * numbers, so the limit the learner meets is the limit the request carries. */
+export const sensaReadingGlossaryLimits={entries:50,term:80,rendering:160} as const;
+export const sensaReadingGlossaryEntrySchema=z.object({
+  term:z.string().trim().min(1).max(sensaReadingGlossaryLimits.term),
+  rendering:z.string().trim().min(1).max(sensaReadingGlossaryLimits.rendering),
+}).strict();
+export const sensaReadingGlossarySchema=z.array(sensaReadingGlossaryEntrySchema).max(sensaReadingGlossaryLimits.entries).superRefine((entries,context)=>{
+  if(new Set(entries.map(entry=>entry.term.toLowerCase())).size!==entries.length)context.addIssue({code:'custom',message:'a glossary lists each term once'});
+});
+
 /**
  * One reading operation, in the learner's own two languages.
  *
@@ -52,10 +87,13 @@ export const readingRequestSchema = z.object({
   instruction:z.string().trim().max(2000).default(''),
   languages:sensaCommandLanguagesSchema,
   sourceLanguageTag:sensaLanguageNameableTagSchema.nullable().default(null),
+  glossary:sensaReadingGlossarySchema.default([]),
 }).strict();
 export type ReadingProvider = z.infer<typeof readingProviderSchema>;
 export type ReadingAssignments = z.infer<typeof readingAssignmentsSchema>;
 export type ReadingRequest = z.infer<typeof readingRequestSchema>;
+export type SensaReadingGlossaryEntry = z.infer<typeof sensaReadingGlossaryEntrySchema>;
+export type SensaReadingGlossary = z.infer<typeof sensaReadingGlossarySchema>;
 export type ReadingSettingsInput = z.infer<typeof readingSettingsInputSchema>;
 export type ReadingSettingsView = {
   revision:number; providers:(ReadingProvider & {keyConfigured:boolean})[];

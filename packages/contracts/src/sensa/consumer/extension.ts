@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {sensaCommandLanguagesSchema} from '../language.js';
+import {sensaReadingGlossarySchema} from './reading.js';
 import {localIntakeReceiptSchema,localIntakeRequestSchema} from './localIntake.js';
 
 /**
@@ -108,6 +109,10 @@ export const sensaBridgeRequestSchema=z.discriminatedUnion('kind',[
    * must be languages this release can name, because the pair becomes the prompt
    * that translates a page. */
   z.object({...libraryRequest,kind:z.literal('web-language-profile'),languages:sensaCommandLanguagesSchema}).strict(),
+  /** The learner's own glossary, which every reading request carries. Published
+   * the same way and for the same reason as the pair: the library owns it, and
+   * this is the copy the reading surfaces will hand to the service. */
+  z.object({...libraryRequest,kind:z.literal('web-reading-glossary'),glossary:sensaReadingGlossarySchema}).strict(),
 ]);
 
 /**
@@ -134,6 +139,7 @@ export const sensaBridgeResponseSchemas={
   'web-connect-reset':z.object({reset:z.literal(true)}).strict(),
   'web-session-ended':z.object({disconnected:z.boolean()}).strict(),
   'web-language-profile':sensaCommandLanguagesSchema,
+  'web-reading-glossary':sensaReadingGlossarySchema,
 } satisfies Record<SensaBridgeKind,z.ZodType>;
 
 /** The two things a bridge turn can come back as. The error member carries the

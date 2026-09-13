@@ -1,3 +1,4 @@
+import {sensaReadingGlossarySchema,type SensaReadingGlossary} from '@sensa/contracts/sensa';
 /**
  * The learner's two languages, as published by the Web application.
  *
@@ -27,6 +28,26 @@ export async function publishReadingLanguages(value:unknown):Promise<ReadingLang
  if(next.familiarLanguageTag===next.targetLanguageTag)throw new Error('invalid_languages');
  await chrome.storage.local.set({readingLanguages:next});
  return next;
+}
+/**
+ * The learner's glossary, as published by the Web application.
+ *
+ * Same rule as the pair: the library owns it, this holds the copy it was told,
+ * and nothing here edits it. Every reading request carries it, so a prompt names
+ * the learner's own renderings rather than whatever the model would have chosen.
+ * A copy this release cannot read is no glossary — the reader is not blocked by
+ * it — and the publication itself is refused, so a Web application speaking a
+ * shape this release does not have learns that instead of silently losing the
+ * learner's words.
+ */
+export async function readingGlossary():Promise<SensaReadingGlossary>{
+ const parsed=sensaReadingGlossarySchema.safeParse((await chrome.storage.local.get('readingGlossary')).readingGlossary??[]);
+ return parsed.success?parsed.data:[];
+}
+export async function publishReadingGlossary(value:unknown):Promise<SensaReadingGlossary>{
+ const parsed=sensaReadingGlossarySchema.parse(value);
+ await chrome.storage.local.set({readingGlossary:parsed});
+ return parsed;
 }
 export type ReadingPreferences={actionName:string;actionPrompt:string;disabledSites:string[];speechRate:number};
 export const defaultPreferences:ReadingPreferences={actionName:'用法辨析',actionPrompt:'解释选中表达在当前语境中的用法，指出容易混淆的意思，并给出一个简短例句。',disabledSites:[],speechRate:1};

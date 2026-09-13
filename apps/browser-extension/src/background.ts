@@ -5,7 +5,7 @@ import {webUrl,apiUrl} from './config';
 import {detectIso6393} from './languageDetector';
 import {maxDetectableCharacters,minSkimmableCharacters} from './language';
 import {readYoutubePlayer} from './youtubePlayer';
-import {readingLanguages,readingPreferences,publishReadingLanguages} from './preferences';
+import {readingLanguages,readingPreferences,publishReadingLanguages,readingGlossary,publishReadingGlossary} from './preferences';
 type Mode={accountId:string};
 const accountSchema=z.object({expiresAt:z.string().datetime().optional(),webLibraryId:z.string().uuid().optional(),accountId:z.string().uuid(),installationId:z.string().uuid(),token:z.string().min(1),queue:z.array(z.unknown()).default([]),recent:z.array(z.unknown()).default([]),savedOperations:z.record(z.string(),z.unknown()).default({})}).passthrough();
 const storeSchema=z.object({version:z.literal(1).default(1),active:z.string().uuid().nullable(),accounts:z.record(z.string(),accountSchema)}).strict();
@@ -83,6 +83,23 @@ async function reconnectWeb(discardForAccount?:string){return locked(async()=>{
 async function activeScope(){return (await load()).active;}
 
 /**
+ * A reading request, completed with the learner's own state.
+ *
+ * A surface states what it observed — the text, what it sits in, the language it
+ * recognised — and the pair and the glossary are added here, in the one context a
+ * page cannot read. Both ways a reading leaves this extension go through this
+ * function: the streaming port and the plain message. A request that reached the
+ * service without the pair would be refused for naming no languages, and refused
+ * for every paragraph the learner reads, which is what a second place to add them
+ * had already produced.
+ *
+ * A model test and a model list are not reading requests: they ask about a
+ * connection, and their bodies are strictly those questions. Adding the learner's
+ * languages to them was a body the service refused.
+ */
+async function readingInput(input:unknown){return {...input as Record<string,unknown>,languages:await readingLanguages(),glossary:await readingGlossary()};}
+
+/**
  * Every request the Web page bridge can make, served in one place.
  *
  * A page is a caller and never a source of truth: the account and library it
@@ -100,6 +117,7 @@ async function serveWebBridge(request:SensaBridgeRequest,sender:chrome.runtime.M
   // publication, so no other page can retarget which language the learner's
   // reading is translated into.
   case 'web-language-profile':return locked(()=>publishReadingLanguages(request.languages));
+  case 'web-reading-glossary':return locked(()=>publishReadingGlossary(request.glossary));
   case 'web-session-ended':return locked(async()=>{
    const store=await load();
    if(!store.active||store.active!==request.accountId)return {disconnected:false};
@@ -175,7 +193,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
      result=(await chrome.scripting.executeScript({target:{tabId:sender.tab!.id!},world:'MAIN',func:readYoutubePlayer,args:[message.videoId]}))[0]?.result;
    }else{
      const path=message.kind==='reading-run'?'run':message.kind==='reading-test'?'test':message.kind==='reading-models'?'models':'settings';
-     const body=message.kind==='reading-settings'?undefined:{...message.input,languages:await readingLanguages()};
+     const body=message.kind==='reading-settings'?undefined:message.kind==='reading-run'?await readingInput(message.input):message.input;
      result=await apiRequest('/sensa/reading/'+path,body,a!.token);
    }
    if(a&&(await load()).active!==a.accountId)throw new Error('account_mismatch');
@@ -242,7 +260,10 @@ chrome.runtime.onConnect?.addListener(port=>{
    async function authorize(){const current=await load(),mode=(await modes())[sender!.tab!.id!];if(!a||current.active!==a.accountId||current.accounts[a.accountId]?.token!==a.token||mode?.accountId!==await activeScope()||message.accountId!==await activeScope())throw new Error('account_mismatch');}
    await authorize();
    if(meaning&&captureSnapshotSchema.parse(message.input?.snapshot).source.url!==sender.url)throw new Error('source_mismatch');
-   const response=await serviceFetch(apiUrl+(meaning?'/sensa/semantic/lookups/stream':'/sensa/reading/stream'),{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+a!.token},body:JSON.stringify(message.input),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(45000)])});
+   // A lookup stream carries a capture; a reading stream is a reading request and
+   // is completed here, the same way the plain path completes one.
+   const body=meaning?message.input:await readingInput(message.input);
+   const response=await serviceFetch(apiUrl+(meaning?'/sensa/semantic/lookups/stream':'/sensa/reading/stream'),{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+a!.token},body:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(45000)])});
    if(!response.ok){const data=await response.json();throw new Error(data.code??'provider_unavailable');}
    if(!response.body)throw new Error('provider_invalid_response');
    const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',bytes=0,finished=false;

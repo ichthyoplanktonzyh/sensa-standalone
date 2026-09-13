@@ -8,7 +8,8 @@
  * release cannot name is refused instead of being passed to a model as a bare
  * code. It also guards the idempotency property that makes a request id safe to
  * retry: the digest covers the pair, so the same id under another pair is a
- * conflict rather than the other language's answer replayed.
+ * conflict rather than the other language's answer replayed. The learner's own
+ * glossary rides the same way: it is stated as data, and it is digested too.
  */
 import assert from 'node:assert/strict';
 import {readingRequestSchema} from '@sensa/contracts/sensa';
@@ -55,6 +56,19 @@ const withContext=readingRequestSchema.parse({...base,feature:'page',text:'her t
 assert.match(readingSystemPrompt(withContext),/surrounding text from the same document/);
 assert.match(readingSystemPrompt(withContext),/never material of its own to translate/);
 assert.notEqual(await contentHash(withContext),await contentHash({...withContext,context:''}),'context is part of what was asked, so a retry under different context is a different request');
+
+// The learner's own words win over the model's: the glossary travels with the
+// request, is stated as data rather than as prose, and is part of what was asked,
+// so editing it makes the same request id a different question.
+const glossed=readingRequestSchema.parse({...base,feature:'page',languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'en',glossary:[{term:'prompt',rendering:'提示词'}]});
+const glossedPrompt=readingSystemPrompt(glossed);
+assert.match(glossedPrompt,/glossary of their own word choices/);
+assert.match(glossedPrompt,/"term":"prompt","rendering":"提示词"/,'a glossary is stated as data, so a term of the learner’s own cannot be read as prompt structure');
+assert.match(glossedPrompt,/never an instruction about the task/);
+assert.match(glossedPrompt,/not part of the text/,'a glossary is a preference about wording, not material to translate');
+assert.match(readingSystemPrompt(readingRequestSchema.parse({...glossed,feature:'action'})),/提示词/,'an explanation is written in the learner’s words too');
+assert(!/glossary/u.test(readingSystemPrompt(shipped)),'a learner who wrote no glossary is not told about one');
+assert.notEqual(await contentHash(glossed),await contentHash({...glossed,glossary:[]}),'the glossary is part of the question, so the same id under a different one is a conflict');
 
 // The task lives in the prompt, not in a default instruction the learner would
 // read: an instruction written in one language is wrong for every other one.

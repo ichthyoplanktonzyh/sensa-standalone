@@ -1,0 +1,48 @@
+/** Copy for the learner's own glossary. The terms and their renderings are the
+ * learner's, never this file's: nothing here is a default entry, because a
+ * glossary the product shipped would be the product choosing the learner's
+ * words for them. */
+export const glossaryZh = {
+  row:'我的术语表',
+  rowNote:'指定某些词要用你自己的说法翻译',
+  rowSummary:'{{count}} 条',
+  rowEmpty:'还没添加术语',
+  title:'我的术语表',
+  close:'关闭',
+  done:'完成',
+  intro:'在这里写下你希望看到的译法。阅读时遇到这些词，Sensa 会优先使用你写的说法，而不是它自己的选择。',
+  term:'原文里的词',
+  rendering:'你希望看到的说法',
+  add:'添加一条',
+  addAction:'添加',
+  remove:'删除',
+  removeLabel:'删除「{{term}}」',
+  empty:'术语表是空的。不写任何条目时，翻译按模型自己的用词。',
+  limit:'最多 {{count}} 条。超过上限时请先删除一些。',
+  hint:'术语表只影响用词，不会改变意思，也不保证模型每次都照做；已经翻好的内容不会自动重译。',
+  saved:'术语表已保存。',
+  failed:'暂时无法保存这条术语，请重试。',
+  summary:'{{term}} → {{rendering}}',
+};
+export const glossaryEn = {
+  row:'My glossary',
+  rowNote:'Say which words should be rendered your way',
+  rowSummary:'{{count}} entries',
+  rowEmpty:'No terms yet',
+  title:'My glossary',
+  close:'Close',
+  done:'Done',
+  intro:'Write down the renderings you want to read. When these words appear in your reading, Sensa prefers your wording over its own.',
+  term:'Word in the text',
+  rendering:'The rendering you want',
+  add:'Add an entry',
+  addAction:'Add',
+  remove:'Delete',
+  removeLabel:'Delete “{{term}}”',
+  empty:'The glossary is empty. With no entries, translation uses the model’s own wording.',
+  limit:'Up to {{count}} entries. Delete some before adding more.',
+  hint:'The glossary affects wording only: it cannot change meaning and cannot promise the model follows it. Text that is already translated is not translated again on its own.',
+  saved:'Glossary saved.',
+  failed:'That entry could not be saved. Try again.',
+  summary:'{{term}} → {{rendering}}',
+};

@@ -158,6 +158,9 @@ assert.equal((await fromPage(request('web-intake-ack',{receipt:{...receipt,libra
 assert.equal((await fromPage(request('web-intake-ack',{receipt:{...receipt,requestDigest:'0'.repeat(64)}}))).error,'web_invalid_receipt','a receipt the ledger cannot vouch for is refused by the ledger');
 assert.equal(sensaBridgeValue('web-intake-ack',await fromPage(request('web-intake-ack',{receipt}))).acknowledged,true,'a receipt that matches is acknowledged');
 assert.deepEqual(sensaBridgeValue('web-intake-pull',await fromPage(request('web-intake-pull'))),[],'an acknowledged capture is not handed over again');
+assert.deepEqual(sensaBridgeValue('web-reading-glossary',await fromPage(request('web-reading-glossary',{glossary:[{term:'prompt',rendering:'提示词'}]}))),[{term:'prompt',rendering:'提示词'}],'the published glossary is answered as published');
+assert.deepEqual(storage.readingGlossary,[{term:'prompt',rendering:'提示词'}],'the glossary the extension holds is the published one');
+assert.equal((await fromPage(request('web-reading-glossary',{glossary:[{term:'prompt',rendering:'提示词'},{term:'Prompt',rendering:'提示'}]}))).error,'unsupported_message','two renderings for one term is not a glossary');
 const authorization=sensaBridgeValue('web-connect-prepare',await fromPage(request('web-connect-prepare'))).authorization;
 assert.ok(authorization,'a connection with none in flight is offered an authorization');
 assert.equal(authorization!.redirectUri,'https://'+'a'.repeat(32)+'.chromiumapp.org/sensa');
@@ -171,7 +174,7 @@ assert.equal(sensaBridgeValue('web-session-ended',await fromPage({channel:sensaB
 assert.equal((storage.sensa as any).active,null,'sign-out drops the active connection');
 assert.equal(sensaBridgeValue('web-connect-reset',await fromPage(request('web-connect-reset',{receipt:{discardPending:false}}))).reset,true,'a reconnect is answered');
 assert.deepEqual(await pendingWeb(accountId,libraryId),[],'a reconnect keeps delivered receipts');
-console.log('PASS: every declared kind is served through the real forwarder and handler — published pair, pull and acknowledgement, PKCE prepare and its refusals, account-scoped sign-out and reconnect — and each answer parses as the contracts describe it.');
+console.log('PASS: every declared kind is served through the real forwarder and handler — published pair and glossary, pull and acknowledgement, PKCE prepare and its refusals, account-scoped sign-out and reconnect — and each answer parses as the contracts describe it.');
 
 // ── phase 3: one declaration, read by all three ends ─────────────────────────
 /** What a caller may send for each kind, checked by the compiler against the
@@ -184,10 +187,11 @@ const payloads:{[K in SensaBridgeKind]:SensaBridgePayload<K>}={
   'web-connect-reset':{receipt:{discardPending:false}},
   'web-session-ended':{},
   'web-language-profile':{languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'}},
+  'web-reading-glossary':{glossary:[{term:'prompt',rendering:'提示词'}]},
 };
 assert.deepEqual(Object.keys(payloads).sort(),[...sensaBridgeKinds].sort(),'every kind has exactly one payload shape, and no kind is missing one');
 assert.deepEqual(Object.keys(sensaBridgeResponseSchemas).sort(),[...sensaBridgeKinds].sort(),'every kind has exactly one declared answer');
-assert.equal(sensaBridgeKinds.length,7);
+assert.equal(sensaBridgeKinds.length,8);
 for(const kind of sensaBridgeKinds){
   const built:Record<string,unknown>={channel:sensaBridgeRequestChannel,id:crypto.randomUUID(),kind,accountId,...payloads[kind] as Record<string,unknown>};
   if(kind!=='web-session-ended')built.libraryId=libraryId;
