@@ -19,11 +19,27 @@ function preceding(element:Element,selector:string):string{
   }
   return '';
 }
+/**
+ * What a piece of text is sitting in: the page's title, the heading that governs
+ * it, and the text just before it.
+ *
+ * A translator shown one paragraph — or one sentence a learner is writing — has to
+ * guess what a pronoun points at and which sense of a word is meant, and these
+ * three are the cheapest evidence that it is not guessing. One rule for both
+ * surfaces, because it is one question: a form field's surroundings are the
+ * document around it, exactly as a paragraph's are. Bounded because they are paid
+ * for by the learner's own connection, and the text nearest the element is the
+ * part that matters.
+ */
+export function surroundingText(element:HTMLElement){
+ return [document.title.trim().slice(0,200),preceding(element,'h1,h2,h3,h4,h5,h6').trim().slice(0,200),preceding(element,'p,li,blockquote,td,figcaption,label').trim().slice(-500)].filter(Boolean).join('\n').slice(0,1200);
+}
+
 /** Original nodes stay owned by the host page; we only insert/remove our translations. */
 export function createPageReading(accountId:string,isAuthorized:()=>boolean){
   const host=document.createElement('div');host.dataset.sensaUi='page';
   host.style.cssText='position:fixed;right:16px;bottom:16px;z-index:2147483646';
-  const root=host.attachShadow({mode:'open'});root.innerHTML=`<style>:host{font:13px/1.5 system-ui;color:#242a38}section{max-width:320px;padding:10px;background:#fbfbfa;border:1px solid #bbc5da;border-radius:12px;box-shadow:0 4px 20px #0002}button{font:inherit;min-height:36px;background:white;color:#303f76;border:1px solid #bcc7df;border-radius:7px;padding:5px 9px;margin:3px;cursor:pointer}p{margin:6px;overflow-wrap:anywhere}button:focus-visible{outline:3px solid #5268a9}</style><section aria-label="Sensa 网页阅读"><strong>Sensa 阅读</strong><div><button data-action="translate">翻译页面</button><button data-action="mode">仅译文</button><button data-action="restore">恢复原文</button><button data-action="retry" hidden>重试失败段落</button><button data-action="site">本站不再开启阅读</button></div><p role="status">Alt + T 翻译鼠标所在段落</p></section>`;
+  const root=host.attachShadow({mode:'open'});root.innerHTML=`<style>:host{font:13px/1.5 system-ui;color:#242a38}section{max-width:320px;padding:10px;background:#fbfbfa;border:1px solid #bbc5da;border-radius:12px;box-shadow:0 4px 20px #0002}button{font:inherit;min-height:36px;background:white;color:#303f76;border:1px solid #bcc7df;border-radius:7px;padding:5px 9px;margin:3px;cursor:pointer}p{margin:6px;overflow-wrap:anywhere}button:focus-visible{outline:3px solid #5268a9}</style><section aria-label="Sensa 网页阅读"><strong>Sensa 阅读</strong><div><button data-action="translate">翻译页面</button><button data-action="mode">仅译文</button><button data-action="restore">恢复原文</button><button data-action="retry" hidden>重试失败段落</button><button data-action="site">本站不再开启阅读</button></div><p role="status">Alt + T 翻译鼠标所在段落 · 在输入框里则翻译你写的内容</p></section>`;
   document.documentElement.append(host);
   const marker=crypto.randomUUID(),hideStyle=document.createElement('style');hideStyle.dataset.sensaUi='translation-style';hideStyle.textContent=`[data-sensa-hidden="${marker}"]{display:none!important}`;document.documentElement.append(hideStyle);
   const status=root.querySelector('p')!;
@@ -58,7 +74,7 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
     // test quietly refused to translate whole languages.
     if(text.trim().length<2||text.length>12000||!/\p{L}{2}/u.test(text))return;
     const translation=document.createElement('div');translation.dataset.sensaUi='translation';translation.style.cssText='white-space:pre-wrap;line-height:1.7;padding:8px 0;color:#405176;font-family:system-ui';
-    const item:Item={source:element,text,context:contextFor(element),translation,hidden:false,state:'waiting',forced};items.set(element,item);visibility.observe(element);
+    const item:Item={source:element,text,context:surroundingText(element),translation,hidden:false,state:'waiting',forced};items.set(element,item);visibility.observe(element);
   }
   function nearby(source:HTMLElement){const rect=source.getBoundingClientRect();return rect.bottom>=-200&&rect.top<=innerHeight+200;}
   function scan(){
@@ -94,18 +110,6 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
    * panel tells the request the quoted text is in.
    */
   const pageLanguage=()=>declaredCaptureLanguage().language;
-  /**
-   * What the paragraph is sitting in: the page's title, the heading that governs
-   * it, and the text just before it.
-   *
-   * A translator shown one paragraph has to guess what a pronoun points at and
-   * which sense of a word is meant, and these three are the cheapest evidence
-   * that it is not guessing. Bounded because they are paid for by the learner's
-   * own connection, and the text nearest the paragraph is the part that matters.
-   */
-  function contextFor(element:HTMLElement){
-    return [document.title.trim().slice(0,200),preceding(element,'h1,h2,h3,h4,h5,h6').trim().slice(0,200),preceding(element,'p,li,blockquote,td,figcaption').trim().slice(-500)].filter(Boolean).join('\n').slice(0,1200);
-  }
   async function translationFor(text:string,context:string){
     const cached=cache.get(text);if(cached!==undefined)return cached;
     const existing=requests.get(text);if(existing)return existing;

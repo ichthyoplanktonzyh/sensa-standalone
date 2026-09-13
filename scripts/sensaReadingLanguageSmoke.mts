@@ -12,9 +12,20 @@
  * glossary rides the same way: it is stated as data, and it is digested too.
  */
 import assert from 'node:assert/strict';
-import {readingRequestSchema} from '@sensa/contracts/sensa';
+import {readingAssignmentsSchema,readingFeatures,readingRequestSchema} from '@sensa/contracts/sensa';
 import {readingSystemPrompt} from '../apps/api/src/sensa/reading/service.ts';
 import {contentHash} from '../apps/api/src/sensa/shared/contentHash.ts';
+
+// Every feature the reading service offers needs two things: a key in the
+// assignment map, so a learner can point it at a connection, and a place in the
+// request's own enum, so a caller can ask for it. `meaning` is the one feature
+// that lives elsewhere — it is served by the lookup route — and it is the one
+// this leaves out on purpose. A map written out again somewhere else is the
+// defect this guards: the Web application kept its own copy and stopped parsing
+// every account's model settings the day a feature was added here.
+for(const feature of readingFeatures)assert.ok(feature in readingAssignmentsSchema.shape,`${feature} needs an assignment of its own`);
+assert.deepEqual([...readingRequestSchema.shape.feature.options].sort(),readingFeatures.filter(feature=>feature!=='meaning').sort(),
+ 'the reading route serves exactly the features a request can name, apart from the one served by the lookup route');
 
 const base={id:'2f1c5f5c-3a1f-4f5e-9d6b-7c8a9b0c1d2e',text:'She took her time.','context':'','instruction':''};
 
@@ -69,6 +80,18 @@ assert.match(glossedPrompt,/not part of the text/,'a glossary is a preference ab
 assert.match(readingSystemPrompt(readingRequestSchema.parse({...glossed,feature:'action'})),/提示词/,'an explanation is written in the learner’s words too');
 assert(!/glossary/u.test(readingSystemPrompt(shipped)),'a learner who wrote no glossary is not told about one');
 assert.notEqual(await contentHash(glossed),await contentHash({...glossed,glossary:[]}),'the glossary is part of the question, so the same id under a different one is a conflict');
+
+// Writing runs the other way. Every other feature renders something the learner
+// met into their own language; this one takes the sentence they wrote in that
+// language and produces the one they are learning, so a prompt that got the
+// direction from the pair the wrong way round would hand back their own words.
+const writing=readingRequestSchema.parse({...base,feature:'writing',text:'我把会议改到了周四。',context:'Subject: Thursday sync',languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'}});
+const writingPrompt=readingSystemPrompt(writing);
+assert.match(writingPrompt,/learner's own Chinese \(Simplified\) text into natural English/);
+assert.match(writingPrompt,/do not answer a question it asks/,'the learner’s text may be a question they are asking someone else, and it is not the model’s to answer');
+assert.match(writingPrompt,/keep its meaning, tone and register/);
+assert(!/into natural Chinese/u.test(writingPrompt),'writing must not translate into the learner’s own language, which is what translation does');
+assert.match(readingSystemPrompt(readingRequestSchema.parse({...writing,glossary:[{term:'prompt',rendering:'提示词'}]})),/use the other side/,'a glossary is read in whichever direction the operation runs');
 
 // The task lives in the prompt, not in a default instruction the learner would
 // read: an instruction written in one language is wrong for every other one.

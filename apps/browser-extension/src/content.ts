@@ -2,6 +2,7 @@ import {captureSelection} from './selection';
 import {showReadingPanel} from './readingPanel';
 import {createPageReading} from './pageReading';
 import {createYoutubeReading} from './youtubeReading';
+import {createInputTranslation} from './inputTranslation';
 import {defaultPreferences} from './preferences';
 import type {ReadingPreferences} from './preferences';
 
@@ -16,6 +17,7 @@ if (!installed.__sensaCaptureInstalled) {
   let preferences:ReadingPreferences=defaultPreferences;
   let pageSurface:ReturnType<typeof createPageReading>|null=null;
   let videoSurface:ReturnType<typeof createYoutubeReading>=null;
+  let writingSurface:ReturnType<typeof createInputTranslation>|null=null;
   let pageUrl='';
   let subtitlesRequested=false;
   let current: ReturnType<typeof showReadingPanel> | null = null;
@@ -28,12 +30,13 @@ if (!installed.__sensaCaptureInstalled) {
     current?.destroy();
     current = null;
   };
-  function stopSurfaces(){pageSurface?.destroy();videoSurface?.destroy();pageSurface=null;videoSurface=null;pageUrl='';}
+  function stopSurfaces(){pageSurface?.destroy();videoSurface?.destroy();writingSurface?.destroy();pageSurface=null;videoSurface=null;writingSurface=null;pageUrl='';}
   function startSurfaces(){
     if(suspended||navigating||!enabled||!accountId||preferences.disabledSites.includes(location.hostname)){stopSurfaces();return;}
     if(pageUrl===location.href)return;close();stopSurfaces();pageUrl=location.href;const owner=accountId;
     const isAuthorized=()=>!suspended&&enabled&&accountId===owner&&!preferences.disabledSites.includes(location.hostname);
     pageSurface=createPageReading(owner,isAuthorized);
+    writingSurface=createInputTranslation(owner,isAuthorized);
     videoSurface=createYoutubeReading(owner,isAuthorized,(snapshot,range)=>{close();current=showReadingPanel({snapshot,range,accountId:owner,close,isAuthorized,keyboard:false,preferences});},{autoLoad:subtitlesRequested,onLoaded:()=>{subtitlesRequested=true;}},preferences);
   }
   chrome.runtime.onMessage.addListener(message => {

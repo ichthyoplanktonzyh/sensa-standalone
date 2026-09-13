@@ -12,7 +12,7 @@ try{
    const url=new URL(route.request().url());
    if(url.pathname==='/api/timedtext'){captionRequest=url;return emptyCaptions?route.fulfill({body:''}):route.fulfill({json:cues});}
    if(url.pathname==='/watch')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>Video fixture</title><div id="movie_player" class="html5-video-player"><video class="html5-main-video"></video></div><p id="text">She took her time.</p><button id="outside">Outside</button>'});
-   if(url.pathname==='/article')return route.fulfill({contentType:'text/html; charset=utf-8',body:'<!doctype html><title>Article fixture</title><main style="margin:60px;font:22px system-ui"><h2 id="heading">Slow mornings</h2><p id="paragraph">She <a href="#example">took</a> her time.</p><p id="chinese">这段话本身就是学习者能读的语言，不该被翻译。</p><p contenteditable="true">Do not translate editable text.</p></main>'});
+   if(url.pathname==='/article')return route.fulfill({contentType:'text/html; charset=utf-8',body:'<!doctype html><title>Article fixture</title><main style="margin:60px;font:22px system-ui"><h2 id="heading">Slow mornings</h2><p id="paragraph">She <a href="#example">took</a> her time.</p><p id="chinese">这段话本身就是学习者能读的语言，不该被翻译。</p><p contenteditable="true">Do not translate editable text.</p><form><label for="reply">Reply</label><textarea id="reply" rows="3"></textarea><input id="subject" type="text"><input id="secret" type="password"><input id="locked" type="text" readonly value="Fixed"></form></main>'});
    return route.abort();
  });
  async function install(){
@@ -31,6 +31,9 @@ try{
        // really answers is exercised against the real handler in the intake smoke.
        if(message.kind==='detect-language')return {value:{language:/\p{Script=Han}/u.test(message.text??'')?'cmn':'eng'}};
        if(message.kind==='reading-language')return {value:{familiarLanguageTag:'zh-CN',alreadyReadable:/\p{Script=Han}/u.test(message.text??'')||message.surfaceLanguage==='zh-CN'}};
+       // What the learner is writing goes the other way: the request says so, and
+       // the panel is the only thing that can put an answer in the field.
+       if(message.kind==='reading-run'&&message.input.feature==='writing')return {value:{status:'ready',text:'I moved the meeting to Thursday.'}};
        if(message.kind==='reading-run'){if(fixture.delay)return new Promise(resolve=>{fixture.pending=resolve;});return {value:{status:'ready',text:'她不慌不忙地做事。'}};}
        // The site switch: the real background writes the rule from the tab's own
        // hostname and then turns reading off for that tab, which is why the panel
@@ -91,6 +94,36 @@ try{
  await page.getByRole('button',{name:'本站不再开启阅读',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-site').map((c:any)=>c.enabled))).toEqual([false]);
  await expect(page.locator('[data-sensa-ui]')).toHaveCount(0);
+ // Writing in a field runs the other way: the learner's own sentence goes to the
+ // service as a writing request, with what they are replying to as its context,
+ // and nothing is inserted until they say so. Reading mode is back on, because the
+ // site rule the check above wrote turned it off for this tab, and the delay the
+ // late-result check left switched on.
+ await page.evaluate(()=>{const fixture=(window as any).fixture;fixture.delay=false;fixture.receive({kind:'reading',enabled:true,accountId:'fixture-account'});});
+ await expect(page.locator('[data-sensa-ui="page"]')).toHaveCount(1);
+ await page.locator('#reply').fill('我把会议改到了周四。');
+ await page.locator('#reply').press('Alt+t');
+ await expect(page.locator('[data-sensa-ui="writing"] div')).toHaveText('I moved the meeting to Thursday.');
+ const writingRun=await page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-run'&&c.input.feature==='writing').at(-1));
+ expect(writingRun.input.text).toBe('我把会议改到了周四。');
+ expect(writingRun.input.context).toContain('Article fixture');
+ expect(await page.locator('#reply').inputValue()).toBe('我把会议改到了周四。');
+ await page.locator('[data-sensa-ui="writing"] button[data-action="replace"]').click();
+ expect(await page.locator('#reply').inputValue()).toBe('I moved the meeting to Thursday.');
+ await expect(page.locator('[data-sensa-ui="writing"]')).toHaveCount(0);
+ // A field the learner cannot write in is not read at all: a password is never a
+ // sentence, and a read-only field is not theirs to change.
+ const beforeSecret=await page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-run').length);
+ await page.locator('#secret').fill('hunter2');await page.locator('#secret').press('Alt+t');
+ await page.locator('#locked').focus();await page.locator('#locked').press('Alt+t');
+ expect(await page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-run').length)).toBe(beforeSecret);
+ await expect(page.locator('[data-sensa-ui="writing"]')).toHaveCount(0);
+ // Escaping out of a panel leaves the field exactly as the learner typed it.
+ await page.locator('#reply').fill('这是一句还没翻译的话。');await page.locator('#reply').press('Alt+t');
+ await expect(page.locator('[data-sensa-ui="writing"] div')).toHaveText('I moved the meeting to Thursday.');
+ await page.keyboard.press('Escape');
+ await expect(page.locator('[data-sensa-ui="writing"]')).toHaveCount(0);
+ expect(await page.locator('#reply').inputValue()).toBe('这是一句还没翻译的话。');
  await page.goto('https://www.youtube.com/watch?v=abcdefghijk');
  await page.evaluate(()=>{
    const player=document.querySelector('#movie_player') as any;
@@ -171,6 +204,6 @@ try{
  await settingsPage.getByRole('button',{name:'测试已保存连接',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('连接成功');
  await settingsPage.evaluate(()=>(window as any).settingsFixture.conflict=true);await settingsPage.getByRole('button',{name:'保存模型设置',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('另一处更新');
  await settingsPage.screenshot({path:'/tmp/sensa-browser-settings.png',fullPage:true});
- console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, every translation asked for with what its text sits in and never with a translation the panel wrote itself, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, a cue spoken in the language of its track, seek, SPA cleanup, a site rule written from the page and reading shut down by it. Network fixtures only.');
+ console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, every translation asked for with what its text sits in and never with a translation the panel wrote itself, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, a cue spoken in the language of its track, seek, SPA cleanup, a site rule written from the page and reading shut down by it, and a sentence the learner is writing translated the other way and inserted only when they ask. Network fixtures only.');
  console.log('PASS: actual settings UI save/reload, feature assignment, explicit test/model fetch, cleared password field, no secret in browser storage, conflict feedback.');
 }finally{await browser.close();}

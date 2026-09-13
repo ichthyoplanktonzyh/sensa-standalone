@@ -1,7 +1,17 @@
 import {z} from 'zod';
 import {sensaLanguageNameableTagSchema,sensaCommandLanguagesSchema} from '../language.js';
 
-export const readingFeatures = ['selection','page','subtitles','action','meaning'] as const;
+/**
+ * What a reading connection can be asked to do.
+ *
+ * `writing` is the one that runs the other way: the other features explain or
+ * translate something the learner met, while this produces the target language
+ * from what the learner wrote themselves. It is listed here because it is the
+ * same operation in every other respect — one pair, one connection, one budget,
+ * one streamed answer — and a learner who wants a different model for producing
+ * their own sentences assigns one here.
+ */
+export const readingFeatures = ['selection','page','subtitles','action','meaning','writing'] as const;
 export const readingFeatureSchema = z.enum(readingFeatures);
 /** Purposes the Web application assigns to an account connection. They share one
  * account-level connection registry with reading, so a key is configured once.
@@ -20,6 +30,7 @@ export const readingProviderSchema = z.object({
 export const readingAssignmentsSchema = z.object({
   selection:z.string().uuid().nullable(), page:z.string().uuid().nullable(),
   subtitles:z.string().uuid().nullable(), action:z.string().uuid().nullable(), meaning:z.string().uuid().nullable(),
+  writing:z.string().uuid().nullable(),
   teacher:z.string().uuid().nullable().optional(), content:z.string().uuid().nullable().optional(),
   review:z.string().uuid().nullable().optional(), reference:z.string().uuid().nullable().optional(),
 }).strict();
@@ -82,7 +93,7 @@ export const sensaReadingGlossarySchema=z.array(sensaReadingGlossaryEntrySchema)
  * quote is a real capture too.
  */
 export const readingRequestSchema = z.object({
-  id:z.string().uuid(), feature:z.enum(['selection','page','subtitles','action']),
+  id:z.string().uuid(), feature:z.enum(['selection','page','subtitles','action','writing']),
   text:z.string().trim().min(1).max(12000), context:z.string().max(12000).default(''),
   instruction:z.string().trim().max(2000).default(''),
   languages:sensaCommandLanguagesSchema,
@@ -99,4 +110,4 @@ export type ReadingSettingsView = {
   revision:number; providers:(ReadingProvider & {keyConfigured:boolean})[];
   assignments:ReadingAssignments; configured:boolean; allowedOrigins:string[];
 };
-export const defaultReadingAssignments:ReadingAssignments = {selection:null,page:null,subtitles:null,action:null,meaning:null};
+export const defaultReadingAssignments:ReadingAssignments = {selection:null,page:null,subtitles:null,action:null,meaning:null,writing:null};

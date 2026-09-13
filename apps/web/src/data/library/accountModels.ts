@@ -1,6 +1,7 @@
 import {z} from 'zod';
 import {auth} from '../account/auth';
 import type {Purpose} from './providers';
+import {readingAssignmentsSchema} from '@sensa/contracts/sensa';
 
 /** Account-hosted model connections. A connection saved here keeps its credential in
  * the deployment vault, so its requests execute on the service, not in this page.
@@ -14,12 +15,10 @@ const connectionSchema=z.object({
  model:z.string().trim().min(1).max(160),enabled:z.boolean(),temperature:z.number().min(0).max(2).optional(),
  keyConfigured:z.boolean(),
 }).strict();
-const assignmentsSchema=z.object({
- selection:z.string().uuid().nullable(),page:z.string().uuid().nullable(),subtitles:z.string().uuid().nullable(),
- action:z.string().uuid().nullable(),meaning:z.string().uuid().nullable(),
- teacher:z.string().uuid().nullable().optional(),content:z.string().uuid().nullable().optional(),
- review:z.string().uuid().nullable().optional(),reference:z.string().uuid().nullable().optional(),
-}).strict();
+/** The service's own shape for this map, read from the contracts rather than
+ * written out again: a fourth copy of it is how this page stopped parsing every
+ * setting the day a reading feature was added. */
+const assignmentsSchema=readingAssignmentsSchema;
 const viewSchema=z.object({
  revision:z.number().int().nonnegative(),providers:z.array(connectionSchema).max(12),
  assignments:assignmentsSchema,configured:z.boolean(),allowedOrigins:z.array(z.string()).max(50),

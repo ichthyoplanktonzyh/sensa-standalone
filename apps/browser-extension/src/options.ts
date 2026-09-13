@@ -6,7 +6,7 @@ import {defaultPreferences,readingPreferences,saveReadingPreferences} from './pr
 const feedback=document.querySelector<HTMLElement>('#feedback')!;
 const providers=document.querySelector<HTMLElement>('#providers')!;
 const assignments=document.querySelector<HTMLElement>('#assignments')!;
-const labels={selection:'划词翻译',page:'网页翻译',subtitles:'视频字幕',action:'自定义阅读动作',meaning:'句中意义解释'};
+const labels:Record<(typeof readingFeatures)[number],string>={selection:'划词翻译',page:'网页翻译',subtitles:'视频字幕',action:'自定义阅读动作',meaning:'句中意义解释',writing:'输入框翻译'};
 let current:(ReadingSettingsView & {accountId:string})|null=null;
 let busy=false;
 function value(id:string){return (document.getElementById(id) as HTMLInputElement).value.trim();}
