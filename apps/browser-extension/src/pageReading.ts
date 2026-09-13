@@ -221,7 +221,7 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
       if(!language)continue;
       element.setAttribute('data-sensa-speaking','');element.scrollIntoView({block:'center'});
       speechStatus.textContent=`正在朗读第 ${index+1}/${queue.length} 段：${text.slice(0,40)}${text.length>40?'…':''}`;
-      const attempt=await speakText(text,language,{rate:preferences.speechRate,onEnd:()=>finish?.()});
+      const attempt=await speakText(text,language,{rate:preferences.speechRate,voice:preferences.speechVoice,onEnd:()=>finish?.()});
       if(run!==speechRun)return;
       if(!attempt.ok){speechStatus.textContent=speechFailureText(attempt);stopReadingAloud();return;}
       speaking=attempt;

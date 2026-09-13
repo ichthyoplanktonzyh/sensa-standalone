@@ -65,7 +65,7 @@ document.getElementById('preferences')!.onclick=()=>void perform(async()=>{
   // One writer for these preferences: this page and a page's own site switch save
   // through the same function, so a rule written here is one the other can read
   // back. It normalises the sites and refuses a line it cannot represent.
-  await saveReadingPreferences({actionName:value('action-name'),actionPrompt:value('action-prompt')||defaultPreferences.actionPrompt,disabledSites,speechRate});
+  await saveReadingPreferences({actionName:value('action-name'),actionPrompt:value('action-prompt')||defaultPreferences.actionPrompt,disabledSites,speechRate,speechVoice:value('speech-voice')});
   feedback.textContent='本机偏好已保存，重新开启页面阅读后生效。';
 });
 document.getElementById('account')!.onclick=()=>void chrome.tabs.create({url:new URL('/profile',webUrl).toString()});
@@ -73,4 +73,20 @@ async function serviceStatus(){const target=document.getElementById('service-sta
 document.getElementById('service-reload')!.onclick=()=>void serviceStatus();
 document.getElementById('advanced')!.addEventListener('toggle',()=>{if((document.getElementById('advanced') as HTMLDetailsElement).open&&!current)void perform(reload);});
 void serviceStatus();
-void perform(async()=>{const prefs=await readingPreferences();(document.getElementById('action-name') as HTMLInputElement).value=prefs.actionName;(document.getElementById('action-prompt') as HTMLTextAreaElement).value=prefs.actionPrompt;(document.getElementById('disabled-sites') as HTMLTextAreaElement).value=prefs.disabledSites.join('\n');(document.getElementById('speech-rate') as HTMLInputElement).value=String(prefs.speechRate);feedback.textContent='阅读偏好已加载。自定义模型服务可在高级设置中调整。';});
+/**
+ * The voices this machine has, listed as they are named here: a voice belongs to
+ * a device, so the list cannot come from anywhere else and a name chosen on
+ * another machine means nothing on this one. The list arrives asynchronously in
+ * Chrome, so it is filled on the event as well as on the first read.
+ */
+function showVoices(selected=''){
+  const select=document.getElementById('speech-voice') as HTMLSelectElement;
+  const keep=selected||select.value;
+  const voices=typeof speechSynthesis==='undefined'?[]:speechSynthesis.getVoices();
+  select.replaceChildren(new Option('自动选择（按文字语言）',''));
+  for(const voice of voices)select.add(new Option(`${voice.name} · ${voice.lang}`,voice.name));
+  if(keep&&!voices.some(voice=>voice.name===keep))select.add(new Option(`${keep}（本机没有这个音色）`,keep));
+  select.value=keep;
+}
+if(typeof speechSynthesis!=='undefined')speechSynthesis.addEventListener?.('voiceschanged',()=>showVoices());
+void perform(async()=>{const prefs=await readingPreferences();(document.getElementById('action-name') as HTMLInputElement).value=prefs.actionName;(document.getElementById('action-prompt') as HTMLTextAreaElement).value=prefs.actionPrompt;(document.getElementById('disabled-sites') as HTMLTextAreaElement).value=prefs.disabledSites.join('\n');(document.getElementById('speech-rate') as HTMLInputElement).value=String(prefs.speechRate);showVoices(prefs.speechVoice);feedback.textContent='阅读偏好已加载。自定义模型服务可在高级设置中调整。';});

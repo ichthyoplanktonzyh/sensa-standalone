@@ -227,7 +227,9 @@ try{
  await settingsPage.route('**/*',route=>route.request().url()==='https://example.com/settings'?route.fulfill({contentType:'text/html',body:settingsHtml}):route.abort());await settingsPage.goto('https://example.com/settings');
  await settingsPage.evaluate('window.__name=value=>value');
  await settingsPage.evaluate(()=>{
-   const fixture={local:{} as Record<string,unknown>,lastInput:null as any,conflict:false,settings:{revision:0,providers:[] as any[],assignments:{selection:null,page:null,subtitles:null,action:null,meaning:null},configured:true,allowedOrigins:['https://api.deepseek.com'],accountId:'fixture-account'}};
+   // A voice and a rate this machine already has stored, so the page has to read
+   // them back rather than show its defaults.
+   const fixture={local:{readingPreferences:{actionName:'用法辨析',actionPrompt:'解释用法。',disabledSites:['old.example.com'],speechRate:1.25,speechVoice:'Samantha'}} as Record<string,unknown>,lastInput:null as any,conflict:false,settings:{revision:0,providers:[] as any[],assignments:{selection:null,page:null,subtitles:null,action:null,meaning:null},configured:true,allowedOrigins:['https://api.deepseek.com'],accountId:'fixture-account'}};
    Object.assign(window,{settingsFixture:fixture,chrome:{storage:{local:{get:async()=>fixture.local,set:async(value:any)=>Object.assign(fixture.local,value)}},runtime:{sendMessage:async(message:any)=>{
      if(message.kind==='service-status')return {value:{authorized:true,explanationAvailable:true,usage:[{kind:'reading',used:0,limit:300}]}};
      if(message.kind==='reading-settings')return {value:structuredClone(fixture.settings)};
@@ -239,6 +241,7 @@ try{
      return {value:{status:'ready',text:'OK'}};
    }}}});
  });
+ await settingsPage.evaluate(()=>{Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{getVoices:()=>[{name:'Samantha',lang:'en-US',localService:true},{name:'Ting-Ting',lang:'zh-CN',localService:true}],addEventListener:()=>undefined,removeEventListener:()=>undefined,cancel:()=>undefined,speak:()=>undefined}});});
  await settingsPage.addScriptTag({path:resolve('apps/browser-extension/dist/options.js')});await expect(settingsPage.locator('#service-status')).toContainText('账号已连接');await expect(settingsPage.getByRole('button',{name:'添加连接',exact:true})).not.toBeVisible();await settingsPage.getByText('高级设置 · 自定义模型服务',{exact:true}).click();await expect(settingsPage.locator('#feedback')).toHaveText('模型设置已加载。');
  await settingsPage.getByRole('button',{name:'添加连接',exact:true}).click();await settingsPage.getByLabel('API Key',{exact:true}).fill('fixture-secret-key');
  await settingsPage.getByLabel('模型标识',{exact:true}).fill('fixture-model');await settingsPage.getByLabel('划词翻译',{exact:true}).selectOption({label:'DeepSeek'});await settingsPage.getByRole('button',{name:'保存模型设置',exact:true}).click();
@@ -248,7 +251,16 @@ try{
  await settingsPage.getByRole('button',{name:'获取已保存连接的模型列表',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('已获取 2 个模型');
  await settingsPage.getByRole('button',{name:'测试已保存连接',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('连接成功');
  await settingsPage.evaluate(()=>(window as any).settingsFixture.conflict=true);await settingsPage.getByRole('button',{name:'保存模型设置',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('另一处更新');
+ // The reading voice is the learner's to choose among the voices this device has
+ // — and the choices are the device's, so the page reads them from the browser.
+ await expect(settingsPage.getByLabel('朗读语速',{exact:true})).toHaveValue('1.25');
+ await expect(settingsPage.locator('#speech-voice')).toHaveValue('Samantha');
+ await expect(settingsPage.locator('#speech-voice option')).toHaveCount(3);
+ await settingsPage.locator('#speech-voice').selectOption('Ting-Ting');
+ await settingsPage.getByRole('button',{name:'保存本机偏好',exact:true}).click();
+ await expect(settingsPage.locator('#feedback')).toContainText('本机偏好已保存');
+ expect(await settingsPage.evaluate(()=>(window as any).settingsFixture.local.readingPreferences)).toMatchObject({speechVoice:'Ting-Ting',speechRate:1.25});
  await settingsPage.screenshot({path:'/tmp/sensa-browser-settings.png',fullPage:true});
  console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, every translation asked for with what its text sits in and never with a translation the panel wrote itself, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, a cue spoken in the language of its track, seek, SPA cleanup, a site rule written from the page and reading shut down by it, a sentence the learner is writing translated the other way and inserted only when they ask, the page read aloud block by block in each block\'s own language, a quick answer that is never announced as work in progress, and a slow one that is. Network fixtures only.');
- console.log('PASS: actual settings UI save/reload, feature assignment, explicit test/model fetch, cleared password field, no secret in browser storage, conflict feedback.');
+ console.log('PASS: actual settings UI save/reload, feature assignment, explicit test/model fetch, cleared password field, no secret in browser storage, conflict feedback, and a reading voice chosen from this device\'s own voices.');
 }finally{await browser.close();}

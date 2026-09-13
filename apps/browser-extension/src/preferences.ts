@@ -49,8 +49,8 @@ export async function publishReadingGlossary(value:unknown):Promise<SensaReading
  await chrome.storage.local.set({readingGlossary:parsed});
  return parsed;
 }
-export type ReadingPreferences={actionName:string;actionPrompt:string;disabledSites:string[];speechRate:number};
-export const defaultPreferences:ReadingPreferences={actionName:'用法辨析',actionPrompt:'解释选中表达在当前语境中的用法，指出容易混淆的意思，并给出一个简短例句。',disabledSites:[],speechRate:1};
+export type ReadingPreferences={actionName:string;actionPrompt:string;disabledSites:string[];speechRate:number;speechVoice:string};
+export const defaultPreferences:ReadingPreferences={actionName:'用法辨析',actionPrompt:'解释选中表达在当前语境中的用法，指出容易混淆的意思，并给出一个简短例句。',disabledSites:[],speechRate:1,speechVoice:''};
 /** Out-of-range rather than merely odd: the speaking side clamps to the same
  * range, so a stored number outside it is a number nothing will use. */
 const speechRate=(value:unknown)=>typeof value==='number'&&Number.isFinite(value)?Math.min(2,Math.max(0.5,value)):defaultPreferences.speechRate;
@@ -76,6 +76,10 @@ export async function readingPreferences():Promise<ReadingPreferences>{
   return {actionName:typeof raw?.actionName==='string'?raw.actionName.slice(0,24):defaultPreferences.actionName,
     actionPrompt:typeof raw?.actionPrompt==='string'?raw.actionPrompt.slice(0,2000):defaultPreferences.actionPrompt,
     speechRate:speechRate(raw?.speechRate),
+    // An empty name means the same as a name this machine does not have: the
+    // reader chooses. A voice belongs to a device, so a name chosen on another
+    // one is not a preference this device can honour.
+    speechVoice:typeof raw?.speechVoice==='string'?raw.speechVoice.trim().slice(0,100):'',
     // A stored rule this release cannot read is dropped from the rules it is
     // read with: a learner whose settings page was hand-edited keeps reading.
     disabledSites:Array.isArray(raw?.disabledSites)?raw.disabledSites.map(readingSiteHost).filter((site):site is string=>site!==null).slice(0,100):[]};
@@ -98,6 +102,7 @@ export async function saveReadingPreferences(value:unknown):Promise<ReadingPrefe
     actionName:typeof raw.actionName==='string'?(raw.actionName.trim().slice(0,24)||defaultPreferences.actionName):defaultPreferences.actionName,
     actionPrompt:typeof raw.actionPrompt==='string'?raw.actionPrompt.slice(0,2000):defaultPreferences.actionPrompt,
     speechRate:speechRate(raw.speechRate),
+    speechVoice:typeof raw.speechVoice==='string'?raw.speechVoice.trim().slice(0,100):'',
     disabledSites:[...new Set(sites as string[])],
   };
   await chrome.storage.local.set({readingPreferences:next});

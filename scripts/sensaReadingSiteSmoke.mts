@@ -40,7 +40,7 @@ await saveReadingPreferences({...preferences,disabledSites:['example.com']});
 assert.equal((storage.readingPreferences as any).speechRate,1);
 await assert.rejects(()=>saveReadingPreferences({...preferences,disabledSites:['https://example.com']}),/invalid_sites/u,'a rule this release cannot represent is refused rather than dropped');
 await saveReadingPreferences({actionName:'   ',actionPrompt:'',disabledSites:[]});
-assert.deepEqual(storage.readingPreferences,{actionName:'用法辨析',actionPrompt:'',disabledSites:[],speechRate:1},'an empty name falls back to the shipped one; an empty prompt is a prompt the learner cleared');
+assert.deepEqual(storage.readingPreferences,{actionName:'用法辨析',actionPrompt:'',disabledSites:[],speechRate:1,speechVoice:''},'an empty name falls back to the shipped one; an empty prompt is a prompt the learner cleared');
 
 // ── the real background ─────────────────────────────────────────────────────
 const web='http://127.0.0.1:3000';

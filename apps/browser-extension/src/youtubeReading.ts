@@ -105,7 +105,7 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
   async function speakCue(){
     if(!valid()||!current)return;
     if(speaking){stopSpeaking();return;}
-    const attempt=await speakText(current.text,captionLanguage.language,{rate:preferences?.speechRate??defaultPreferences.speechRate,onEnd:()=>{if(!disposed)stopSpeaking();}});
+    const attempt=await speakText(current.text,captionLanguage.language,{rate:preferences?.speechRate??defaultPreferences.speechRate,voice:preferences?.speechVoice,onEnd:()=>{if(!disposed)stopSpeaking();}});
     if(!valid()){if(attempt.ok)attempt.stop();return;}
     if(!attempt.ok){status.textContent=speechFailureText(attempt);return;}
     speaking=attempt.stop;root.querySelector('[data-action="speak"]')!.textContent='停止朗读';

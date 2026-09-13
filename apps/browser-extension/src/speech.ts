@@ -74,12 +74,33 @@ function voicesFor(locale: string, voices: SpeechSynthesisVoice[]): SpeechSynthe
   return installed.filter(voice => normalize(voice.lang).split('-')[0] === primary);
 }
 
-/** Among voices that can pronounce the language, prefer the ones whose names say
- * they are the higher-quality engines rather than whichever the browser listed
+/**
+ * Which of the voices that can pronounce this language to use.
+ *
+ * A voice the learner chose wins when it is one of them: they hear these words
+ * every day, and a name they picked is a better answer than any heuristic here.
+ * It is not applied across languages — a voice chosen for Spanish cannot
+ * pronounce Japanese, and using it anyway would be the wrong pronunciation this
+ * module exists to avoid — so a chosen name that is not in this language's pool
+ * is ignored rather than obeyed. Otherwise the preference is for engines whose
+ * own names say they are the better ones, over whichever the browser listed
  * first. The Web application additionally names its preferred Apple voices for
- * English; this surface takes what the platform offers. */
+ * English; this surface takes what the platform offers.
+ */
 const preferred = (pool: SpeechSynthesisVoice[]) =>
   pool.find(voice => voice.name.includes('Natural') || voice.name.includes('Google')) ?? pool[0]!;
+
+/**
+ * The learner's own choice, when this machine has it for this language.
+ *
+ * Matched by language rather than by locale: someone who chose a British English
+ * voice for English meant English, and the automatic preference for the exact
+ * locale is a guess this choice replaces. It is still not applied across
+ * languages, because a voice that cannot pronounce the words is the wrong
+ * pronunciation however it was chosen.
+ */
+const chosenVoice = (locale: string, voices: SpeechSynthesisVoice[], name: string) =>
+  name ? voicesFor(locale.split('-')[0]!, voices).find(voice => voice.name === name) : undefined;
 
 /**
  * Speak `text` in the language it is written in, or say why it cannot be spoken.
@@ -88,17 +109,18 @@ const preferred = (pool: SpeechSynthesisVoice[]) =>
  * learner something, and "no voice for this language" and "this text has no
  * known language" are different things to tell them.
  */
-export async function speakText(text: string, languageTag: string | null, options: {rate?: number; onEnd?: () => void} = {}): Promise<SpeechAttempt> {
+export async function speakText(text: string, languageTag: string | null, options: {rate?: number; voice?: string; onEnd?: () => void} = {}): Promise<SpeechAttempt> {
   if (!text.trim() || typeof window === 'undefined' || !('speechSynthesis' in window)) return {ok: false, reason: 'unsupported', languageTag};
   const locale = speechLocaleFor(languageTag);
   if (!locale) return {ok: false, reason: 'no_language', languageTag};
-  const pool = voicesFor(locale, await readyVoices());
+  const voices = await readyVoices();
+  const pool = voicesFor(locale, voices);
   if (!pool.length) return {ok: false, reason: 'no_voice', languageTag};
   const synthesis = window.speechSynthesis;
   synthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = locale;
-  utterance.voice = preferred(pool);
+  utterance.voice = chosenVoice(locale, voices, options.voice?.trim() ?? '') ?? preferred(pool);
   utterance.rate = speechRate(options.rate);
   utterance.pitch = 1;
   let finished = false;

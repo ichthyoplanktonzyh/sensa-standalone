@@ -346,6 +346,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
     }
     const attempt = await speakText(text, languageTag, {
       rate: input.preferences?.speechRate ?? defaultPreferences.speechRate,
+      voice: input.preferences?.speechVoice,
       onEnd: () => { if (!disposed) stopSpeech(); },
     });
     if (!alive()) { if (attempt.ok) attempt.stop(); return; }

@@ -5,7 +5,8 @@
  * Chinese sentence was read with an English accent. This drives the real module
  * against a stand-in synthesizer, because what matters is not that a sound came
  * out but which language it was asked for: a word read with the wrong voice is a
- * wrong pronunciation presented as the word's.
+ * wrong pronunciation presented as the word's. A learner's own voice choice is
+ * honoured where it can pronounce the language and ignored where it cannot.
  */
 import assert from 'node:assert/strict';
 
@@ -79,6 +80,19 @@ const missing = await speakText('Ella se tomó su tiempo.', 'es');
 assert.deepEqual(missing, {ok: false, reason: 'no_voice', languageTag: 'es'});
 if (missing.ok) throw new Error('unreachable');
 assert.match(speechFailureText(missing), /西班牙语/, 'the message names the voice that is missing');
+
+// A voice the learner chose is used when it can pronounce this language, and not
+// otherwise: using a Spanish voice for Japanese because it is the chosen one
+// would be exactly the wrong pronunciation this module refuses to produce.
+installed = [voice('Samantha', 'en-US'), voice('Daniel', 'en-GB'), voice('Mónica', 'es-ES')];
+spoken = [];
+const chosen = await speakText('She took her time.', 'en', {rate: 1, voice: 'Daniel'});
+assert.equal(chosen.ok, true);
+assert.deepEqual(spoken, [{text: 'She took her time.', lang: 'en-US', rate: 0.92, voice: 'Daniel'}], 'a chosen voice that can pronounce the language is the one used');
+await speakText('Ella se tomó su tiempo.', 'es', {rate: 1, voice: 'Daniel'});
+assert.equal(spoken[1]!.voice, 'Mónica', 'a voice chosen for another language is ignored rather than obeyed');
+await speakText('Ella se tomó su tiempo.', 'es', {rate: 1, voice: 'Voice That Is Not Here'});
+assert.equal(spoken[2]!.voice, 'Mónica', 'a name this machine does not have falls back to the platform choice');
 
 // A text whose language nobody established is not read aloud in some other
 // language, and it says which situation this is.
