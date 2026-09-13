@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import type { SemanticWorldScreenProps } from './SemanticWorldScreen';
 import { PersonalMeaningComposer } from './PersonalMeaningComposer';
 import { sensaLanguageDisplayName } from '@sensa/contracts/sensa';
+import { useLanguageProfile } from '../library/useLanguageProfile';
+import { inLanguageScope, languagesPresent, meaningLanguageTags, resolveLanguageScope } from '../library/languageScope';
 import i18n from '../../i18n';
 import { IntakeInboxDrawer } from './IntakeInboxDrawer';
 import { IntakeSimulatorModal } from './IntakeSimulatorModal';
@@ -1396,7 +1398,34 @@ export const SensaSemanticWorldScreen = ({
   const { items, status } = useJourneyWorld();
   const inboxItems = useJourneyInbox();
   const meanings = useMemo(() => items.map(worldMeaningFor), [items]);
-  const expressions = useMemo(() => expressionsFor(meanings), [meanings]);
+  const { profile } = useLanguageProfile();
+  /** The languages a meaning's connected expressions are written in. A meaning
+   * can hold more than one — the same sense connected to an English expression
+   * and to a Spanish one — so it answers with every language it contains
+   * instead of being filed under one. */
+  const meaningLanguages = (meaning: WorldMeaningView): string[] => meaningLanguageTags([
+    ...meaning.focuses.flatMap((focus) => focus.alignment?.bindings ?? []),
+    ...meaning.directAlignments.flatMap((direct) => direct.alignment.bindings),
+  ]);
+  const presentLanguages = useMemo(
+    () => languagesPresent(meanings.flatMap(meaningLanguages)),
+    [meanings],
+  );
+  const [languageChoice, setLanguageChoice] = useState<string | null>(null);
+  const languageScope = resolveLanguageScope(
+    languageChoice,
+    presentLanguages,
+    profile.activeTargetLanguageTag,
+  );
+  /** A meaning is in scope when it holds the scoped language at all — the same
+   * sense connected to two languages is reachable from both. */
+  const meetsLanguageScope = (meaning: WorldMeaningView) =>
+    languageScope === 'all' || meaningLanguages(meaning).includes(languageScope);
+  const scopedMeanings = useMemo(
+    () => meanings.filter(meetsLanguageScope),
+    [meanings, languageScope],
+  );
+  const scopedExpressions = useMemo(() => expressionsFor(scopedMeanings), [scopedMeanings]);
 
   useEffect(() => {
     if (!active || initialAction !== 'create') return;
@@ -1404,14 +1433,14 @@ export const SensaSemanticWorldScreen = ({
     setComposerOpen(true);
   }, [active, initialAction]);
 
-  const visibleMeanings = useMemo(() => meanings.filter((meaning) => {
+  const visibleMeanings = useMemo(() => scopedMeanings.filter((meaning) => {
     const matchesFilter = filter === 'all'
       || (filter === 'continue' && meaning.senseFormation.phase !== 'sense_confirmed')
       || (filter === 'binding'
         && (meaning.expressionBinding.phase === 'pending' || meaning.expressionBinding.phase === 'partial'))
       || (filter === 'complete' && meaning.expressionBinding.phase === 'bound');
     return matchesFilter && meaningMatchesQuery(meaning, search);
-  }), [filter, meanings, search]);
+  }), [filter, scopedMeanings, search]);
 
   const emptyMode = meanings.length === 0 ? 'world' : 'filtered';
   const openMeaning = (personalMeaningId: string, meaningFocusId?: string) =>
@@ -1467,12 +1496,36 @@ export const SensaSemanticWorldScreen = ({
       </header>
 
       <div className={uiClass("personal-world-v2__body")}>
+        {status.ok && presentLanguages.length > 1 && (
+          <div className={uiClass("personal-world-v2__filters is-language")} role="group" aria-label="按语言查看我的语义世界">
+            {presentLanguages.map((tag) => (
+              <button
+                type="button"
+                key={tag}
+                className={uiClass(`personal-world-v2__filter is-language${languageScope === tag ? ' is-active' : ''}`)}
+                aria-pressed={languageScope === tag}
+                onClick={() => setLanguageChoice(tag)}
+              >
+                <span>{languageLabel(tag)}</span>
+                <small>{meanings.filter((meaning) => meaningLanguages(meaning).includes(tag)).length}</small>
+              </button>
+            ))}
+            <button
+              type="button"
+              className={uiClass(`personal-world-v2__filter is-language${languageChoice === 'all' ? ' is-active' : ''}`)}
+              aria-pressed={languageChoice === 'all'}
+              onClick={() => setLanguageChoice('all')}
+            >
+              <span>全部语言</span><small>{meanings.length}</small>
+            </button>
+          </div>
+        )}
         {!status.ok ? (
           <WorldErrorState error={status.error} onReload={() => gateway.reload()} />
         ) : section === 'home' ? (
           <WorldHome
             meanings={meanings}
-            expressions={expressions}
+            expressions={scopedExpressions}
             inboxCount={inboxItems.length}
             onOpenInbox={() => setInboxOpen(true)}
             onCreate={() => setComposerOpen(true)}
@@ -1483,7 +1536,7 @@ export const SensaSemanticWorldScreen = ({
           />
         ) : section === 'expressions' ? (
           <ExpressionLibrary
-            expressions={expressions}
+            expressions={scopedExpressions}
             search={expressionSearch}
             onSearch={setExpressionSearch}
             onOpen={onOpenConfirmedSense}
@@ -1512,10 +1565,10 @@ export const SensaSemanticWorldScreen = ({
               </div>
               <div className={uiClass("personal-world-v2__filters")} role="group" aria-label="按下一步筛选 Personal Meaning">
                 {([
-                  { key: 'all' as const, label: '全部', count: meanings.length },
-                  { key: 'continue' as const, label: '待继续', count: meanings.filter((meaning) => meaning.senseFormation.phase !== 'sense_confirmed').length },
-                  { key: 'binding' as const, label: '待绑定表达', count: meanings.filter((meaning) => meaning.expressionBinding.phase === 'pending' || meaning.expressionBinding.phase === 'partial').length },
-                  { key: 'complete' as const, label: '已连接', count: meanings.filter((meaning) => meaning.expressionBinding.phase === 'bound').length },
+                  { key: 'all' as const, label: '全部', count: scopedMeanings.length },
+                  { key: 'continue' as const, label: '待继续', count: scopedMeanings.filter((meaning) => meaning.senseFormation.phase !== 'sense_confirmed').length },
+                  { key: 'binding' as const, label: '待绑定表达', count: scopedMeanings.filter((meaning) => meaning.expressionBinding.phase === 'pending' || meaning.expressionBinding.phase === 'partial').length },
+                  { key: 'complete' as const, label: '已连接', count: scopedMeanings.filter((meaning) => meaning.expressionBinding.phase === 'bound').length },
                 ]).map((option) => (
                   <button
                     type="button"

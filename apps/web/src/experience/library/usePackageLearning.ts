@@ -1,7 +1,7 @@
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useRef,useState} from 'react';
-import {learningPackageCatalogSchema,type LearningPackageDescriptor} from '@sensa/contracts/sensa';
+import {defaultSensaLanguageProfile,learningPackageCatalogSchema,type LearningPackageDescriptor} from '@sensa/contracts/sensa';
 import {auth} from '../../data/consumer/client';
 import {openLibrary,observeLibrary,readLibrary,command} from '../../data/library/store';
 import {installedPackages,downloadPackage,installPackage,type InstalledPackage} from '../../data/library/packages';
@@ -32,7 +32,7 @@ export function usePackageLearning(entryOpen:boolean){
  };
  useEffect(()=>{if(entryOpen)void reloadCatalog();},[entryOpen]);
  const run=runs.find(r=>r.id===activeId)??null;
- const records:LearningRecordView[]=runs.filter(r=>r.completedAt&&r.completionKind!=='wait_relearning').flatMap(r=>localRunTargetIds(r).map(targetId=>({recordId:r.id+':'+targetId,targetId,expression:targets.find(t=>t.id===targetId)?.expression??'',meaning:targets.find(t=>t.id===targetId)?.meaning,occurredAt:r.targetCompletions?.[targetId]?.at??r.completedAt!,kind:r.purpose,label:r.purpose==='initial_learning'?localFlowText('initialRecord'):r.purpose==='retention_review'?localFlowText('reviewRecord'):localFlowText('relearningRecord'),detail:localFlowText('localRecord')}))).sort((a,b)=>b.occurredAt.localeCompare(a.occurredAt));
+ const records:LearningRecordView[]=runs.filter(r=>r.completedAt&&r.completionKind!=='wait_relearning').flatMap(r=>localRunTargetIds(r).map(targetId=>({recordId:r.id+':'+targetId,targetId,expression:targets.find(t=>t.id===targetId)?.expression??'',languageTag:targets.find(t=>t.id===targetId)?.targetLanguageTag??defaultSensaLanguageProfile.activeTargetLanguageTag,meaning:targets.find(t=>t.id===targetId)?.meaning,occurredAt:r.targetCompletions?.[targetId]?.at??r.completedAt!,kind:r.purpose,label:r.purpose==='initial_learning'?localFlowText('initialRecord'):r.purpose==='retention_review'?localFlowText('reviewRecord'):localFlowText('relearningRecord'),detail:localFlowText('localRecord')}))).sort((a,b)=>b.occurredAt.localeCompare(a.occurredAt));
  const readinessByTarget=Object.fromEntries(targets.map(target=>[target.id,inspectLocalTargetReadiness(target,target.packageKey?packages.find(pack=>pack.key===target.packageKey):undefined).status])) as Readonly<Record<string,'ready'|'blocked'>>;
  const due=targets.filter(t=>!t.declaredMastery&&readinessByTarget[t.id]==='ready').filter(t=>t.relearnAt?Date.parse(t.relearnAt)<=clock:t.memory&&t.memory.dueAt.getTime()<=clock);
  const startedToday=targets.filter(t=>t.startedAt&&new Date(t.startedAt).toDateString()===new Date(clock).toDateString()).length;

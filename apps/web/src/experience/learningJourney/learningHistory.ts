@@ -19,6 +19,10 @@ export interface LearningRecordView {
   readonly targetId: string;
   readonly meaning?: string;
   readonly expression: string;
+  /** The language the learned expression is in. Every producer names one: a
+   * record whose target was written before the language profile existed names
+   * the pair the product has always shipped rather than no language at all. */
+  readonly languageTag: string;
   readonly occurredAt: string;
   readonly kind: LearningRecordKind;
   readonly label: string;
@@ -60,6 +64,7 @@ export const projectLearningHistory = (
         recordId: `${targetId}:initial:${journey.initialCompletion.completedAt}`,
         targetId,
         expression: target.expression,
+        languageTag: target.targetLanguageTag,
         occurredAt: journey.initialCompletion.completedAt,
         kind: 'initial_learning',
         label: '首次学习',
@@ -73,6 +78,7 @@ export const projectLearningHistory = (
         recordId: `${targetId}:lightweight-review:${lightweightReviewedAt}`,
         targetId,
         expression: target.expression,
+        languageTag: target.targetLanguageTag,
         occurredAt: lightweightReviewedAt,
         kind: 'retention_review',
         label: '保持复习',
@@ -86,6 +92,7 @@ export const projectLearningHistory = (
         recordId: `${targetId}:structured-review:${structuredReviewedAt}`,
         targetId,
         expression: target.expression,
+        languageTag: target.targetLanguageTag,
         occurredAt: structuredReviewedAt,
         kind: 'retention_review',
         label: '保持复习',
@@ -99,6 +106,7 @@ export const projectLearningHistory = (
         recordId: `${targetId}:relearning:${relearningCompletedAt}`,
         targetId,
         expression: target.expression,
+        languageTag: target.targetLanguageTag,
         occurredAt: relearningCompletedAt,
         kind: 'relearning',
         label: '巩固完成',

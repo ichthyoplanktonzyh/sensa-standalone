@@ -9,6 +9,8 @@ export const statisticsZh = {
   noRecords:'还没有可用的学习记录',noRecordsHint:'完成学习后，可用记录会显示在这里。',reset:'查看全部记录',
   meaning:'表达',time:'完成时间',more:'显示更多记录',
   limits:'暂不展示学习时长、正确率或掌握率：当前记录没有提供可靠依据。首次学习完成不等于已经掌握。',
+  languageScope:'按语言查看学习记录',allLanguages:'全部语言',language:'语言',
+  languageNote:'不同语言的记录分别计数：把两种语言加在一起得不到任何一个语言的学习量。',
 };
 export const statisticsEn = {
   title:'Learning statistics',intro:'Look back at completed learning',
@@ -21,4 +23,6 @@ export const statisticsEn = {
   noRecords:'No learning records available yet',noRecordsHint:'Available records will appear here after you complete learning.',reset:'View all records',
   meaning:'Expression',time:'Completed at',more:'Show more records',
   limits:'Duration, accuracy and mastery rates are not shown because these records do not provide a reliable basis. Completing initial learning does not mean mastery.',
+  languageScope:'View learning records by language',allLanguages:'All languages',language:'Language',
+  languageNote:'Records in different languages are counted separately: adding two languages together describes the learning of neither.',
 };
