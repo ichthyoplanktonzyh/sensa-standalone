@@ -1,5 +1,7 @@
 import {runReading,readingError} from './readingClient';
-import {declaredCaptureLanguage,readerLanguage} from './language';
+import {declaredCaptureLanguage,detectCaptureLanguage,readerLanguage} from './language';
+import {speakText,speechFailureText} from './speech';
+import {defaultPreferences,type ReadingPreferences} from './preferences';
 const blocks='p,li,blockquote,td,th,dt,dd,h1,h2,h3,h4,h5,h6,figcaption,div';
 const excluded='input,textarea,select,button,nav,pre,code,script,style,[contenteditable]:not([contenteditable="false"]),[translate="no"],[data-sensa-ui]';
 type Item={source:HTMLElement;text:string;context:string;translation:HTMLElement;hidden:boolean;state:'waiting'|'running'|'ready'|'failed'|'skipped';forced:boolean};
@@ -36,15 +38,23 @@ export function surroundingText(element:HTMLElement){
 }
 
 /** Original nodes stay owned by the host page; we only insert/remove our translations. */
-export function createPageReading(accountId:string,isAuthorized:()=>boolean){
+/** The reading preferences belong to the tab, not to this surface: the content
+ * script is told them when reading is switched on and rebuilds these surfaces when
+ * they change, so reading a whole page aloud speaks at the rate the learner set
+ * without asking storage again for each paragraph. */
+export function createPageReading(accountId:string,isAuthorized:()=>boolean,preferences:ReadingPreferences=defaultPreferences){
   const host=document.createElement('div');host.dataset.sensaUi='page';
   host.style.cssText='position:fixed;right:16px;bottom:16px;z-index:2147483646';
-  const root=host.attachShadow({mode:'open'});root.innerHTML=`<style>:host{font:13px/1.5 system-ui;color:#242a38}section{max-width:320px;padding:10px;background:#fbfbfa;border:1px solid #bbc5da;border-radius:12px;box-shadow:0 4px 20px #0002}button{font:inherit;min-height:36px;background:white;color:#303f76;border:1px solid #bcc7df;border-radius:7px;padding:5px 9px;margin:3px;cursor:pointer}p{margin:6px;overflow-wrap:anywhere}button:focus-visible{outline:3px solid #5268a9}</style><section aria-label="Sensa 网页阅读"><strong>Sensa 阅读</strong><div><button data-action="translate">翻译页面</button><button data-action="mode">仅译文</button><button data-action="restore">恢复原文</button><button data-action="retry" hidden>重试失败段落</button><button data-action="site">本站不再开启阅读</button></div><p role="status">Alt + T 翻译鼠标所在段落 · 在输入框里则翻译你写的内容</p></section>`;
+  const root=host.attachShadow({mode:'open'});root.innerHTML=`<style>:host{font:13px/1.5 system-ui;color:#242a38}section{max-width:320px;padding:10px;background:#fbfbfa;border:1px solid #bbc5da;border-radius:12px;box-shadow:0 4px 20px #0002}button{font:inherit;min-height:36px;background:white;color:#303f76;border:1px solid #bcc7df;border-radius:7px;padding:5px 9px;margin:3px;cursor:pointer}p{margin:6px;overflow-wrap:anywhere}button:focus-visible{outline:3px solid #5268a9}</style><section aria-label="Sensa 网页阅读"><strong>Sensa 阅读</strong><div><button data-action="translate">翻译页面</button><button data-action="mode">仅译文</button><button data-action="restore">恢复原文</button><button data-action="retry" hidden>重试失败段落</button><button data-action="site">本站不再开启阅读</button><button data-action="speak">朗读本页</button></div><p role="status">Alt + T 翻译鼠标所在段落 · 在输入框里则翻译你写的内容</p><p role="status" data-sensa-speech hidden></p></section>`;
   document.documentElement.append(host);
-  const marker=crypto.randomUUID(),hideStyle=document.createElement('style');hideStyle.dataset.sensaUi='translation-style';hideStyle.textContent=`[data-sensa-hidden="${marker}"]{display:none!important}`;document.documentElement.append(hideStyle);
+  const marker=crypto.randomUUID(),hideStyle=document.createElement('style');hideStyle.dataset.sensaUi='translation-style';hideStyle.textContent=`[data-sensa-hidden="${marker}"]{display:none!important}[data-sensa-speaking]{outline:2px solid #5268a9;outline-offset:3px;border-radius:4px}`;document.documentElement.append(hideStyle);
   const status=root.querySelector('p')!;
+  const speechStatus=root.querySelector<HTMLParagraphElement>('[data-sensa-speech]')!;
   const retry=root.querySelector<HTMLButtonElement>('[data-action="retry"]')!;
+  const speak=root.querySelector<HTMLButtonElement>('[data-action="speak"]')!;
   const items=new Map<HTMLElement,Item>();let active=false,disposed=false,only=false,generation=0,running=0;
+  /** Read-aloud state: what is speaking now, how to end it, and which run this is. */
+  let speaking:{stop:()=>void}|null=null,finish:(()=>void)|null=null,speechRun=0,reading=false;
   /** The learner's own language, learned from the first answer that names it, so
    * the translations this panel writes are labelled with the language they are
    * actually in rather than with the one this panel's own buttons are written in. */
@@ -154,6 +164,70 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
    * this site now, not because this button hid itself. A refusal is shown rather
    * than swallowed — a browser page has no site to write a rule about.
    */
+  /**
+   * Reading the whole page aloud.
+   *
+   * The blocks are the ones this panel translates, minus the containers: `div` is
+   * in that selector for translation, where the panel is bounded by what the
+   * learner can see, but a container and the paragraphs inside it would be read
+   * twice — and hearing a sentence twice is harder to mistake for a quirk of the
+   * page than seeing it twice. Editable regions are left out for the same reason
+   * the reader does not translate them: they are the learner's own writing area,
+   * not the document.
+   *
+   * Each block is spoken in the language it is written in, detected per block,
+   * because one page can quote another language; the block is highlighted and
+   * scrolled to while it is read. Text nothing can place is passed over, and if
+   * nothing on the page can be placed — or the device has no voice for the
+   * language — the learner is told which of those it is rather than left with a
+   * button that did nothing.
+   */
+  function spokenBlocks():HTMLElement[]{
+    return [...document.querySelectorAll<HTMLElement>(blocks)].filter(element=>{
+      if(element.closest('[data-sensa-ui]')||element.closest(excluded)||element.isContentEditable)return false;
+      if(element.querySelector(blocks))return false;
+      const text=(element.textContent??'').trim();
+      return text.length>=2&&text.length<=12000&&/\p{L}{2}/u.test(text);
+    });
+  }
+  /** The language of one block: what the detector says, and the page's own
+   * declaration only for text too short to detect — the order the skip rule uses,
+   * because a sentence quoted in another language deserves its own voice. */
+  async function spokenLanguage(text:string){
+    return (await detectCaptureLanguage(text))?.language ?? pageLanguage();
+  }
+  async function readAloud(){
+    const queue=spokenBlocks();
+    if(!queue.length){speechStatus.hidden=false;speechStatus.textContent='这一页没有可朗读的文字。';return;}
+    const run=++speechRun;
+    reading=true;speak.textContent='停止朗读';speechStatus.hidden=false;
+    for(let index=0;index<queue.length;index++){
+      if(run!==speechRun)return;
+      const element=queue[index]!,text=(element.textContent??'').trim();
+      const language=await spokenLanguage(text);
+      if(run!==speechRun)return;
+      if(!language)continue;
+      element.setAttribute('data-sensa-speaking','');element.scrollIntoView({block:'center'});
+      speechStatus.textContent=`正在朗读第 ${index+1}/${queue.length} 段：${text.slice(0,40)}${text.length>40?'…':''}`;
+      const attempt=await speakText(text,language,{rate:preferences.speechRate,onEnd:()=>finish?.()});
+      if(run!==speechRun)return;
+      if(!attempt.ok){speechStatus.textContent=speechFailureText(attempt);stopReadingAloud();return;}
+      speaking=attempt;
+      await new Promise<void>(resolve=>{finish=resolve;});
+      speaking=null;finish=null;
+      element.removeAttribute('data-sensa-speaking');
+    }
+    if(run===speechRun)stopReadingAloud('本页朗读完毕。');
+  }
+  /** Stopping clears the highlight with the speech: a page left with one paragraph
+   * outlined looks like something is still happening. */
+  function stopReadingAloud(message=''){
+    speechRun++;reading=false;speaking?.stop();speaking=null;finish=null;
+    for(const element of document.querySelectorAll('[data-sensa-speaking]'))element.removeAttribute('data-sensa-speaking');
+    speak.textContent='朗读本页';
+    speechStatus.hidden=message==='';speechStatus.textContent=message;
+  }
+  speak.addEventListener('click',()=>{if(reading)stopReadingAloud();else void readAloud();});
   root.querySelector('[data-action="site"]')!.addEventListener('click',()=>{void chrome.runtime.sendMessage({kind:'reading-site',enabled:false}).then(response=>{
     // Nothing is said on success: the background turns reading off for this tab,
     // so this panel is removed, and that is the answer. A refusal is said here,
@@ -176,5 +250,5 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
     if(records.some(record=>!owned(record.target)&&(record.type==='characterData'||[...record.addedNodes,...record.removedNodes].some(node=>!owned(node)))))scheduleScan();
   });
   observer.observe(document.body,{childList:true,subtree:true,characterData:true});
-  return {host,destroy(){disposed=true;restore();cache.clear();observer.disconnect();visibility.disconnect();if(scanTimer)clearTimeout(scanTimer);document.removeEventListener('pointerover',mouse);document.removeEventListener('keydown',key);document.removeEventListener('scroll',scroll,true);host.remove();hideStyle.remove();}};
+  return {host,destroy(){disposed=true;restore();cache.clear();observer.disconnect();visibility.disconnect();if(scanTimer)clearTimeout(scanTimer);document.removeEventListener('pointerover',mouse);document.removeEventListener('keydown',key);document.removeEventListener('scroll',scroll,true);stopReadingAloud();host.remove();hideStyle.remove();}};
 }

@@ -35,7 +35,7 @@ if (!installed.__sensaCaptureInstalled) {
     if(suspended||navigating||!enabled||!accountId||preferences.disabledSites.includes(location.hostname)){stopSurfaces();return;}
     if(pageUrl===location.href)return;close();stopSurfaces();pageUrl=location.href;const owner=accountId;
     const isAuthorized=()=>!suspended&&enabled&&accountId===owner&&!preferences.disabledSites.includes(location.hostname);
-    pageSurface=createPageReading(owner,isAuthorized);
+    pageSurface=createPageReading(owner,isAuthorized,preferences);
     writingSurface=createInputTranslation(owner,isAuthorized);
     videoSurface=createYoutubeReading(owner,isAuthorized,(snapshot,range)=>{close();current=showReadingPanel({snapshot,range,accountId:owner,close,isAuthorized,keyboard:false,preferences});},{autoLoad:subtitlesRequested,onLoaded:()=>{subtitlesRequested=true;}},preferences);
   }

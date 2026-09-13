@@ -21,7 +21,7 @@ try{
      const fixture={calls:[] as any[],pending:null as any,delay:false,receive:null as any,clicks:0};
      // A stand-in device synthesizer: what matters is which language the panel
      // asks a voice for, and a headless browser cannot be heard.
-     const speechFixture={spoken:[] as any[]};
+     const speechFixture={spoken:[] as any[],finishEnd:null as any};
      const voices=[{name:'Samantha',lang:'en-US',localService:true},{name:'Ting-Ting',lang:'zh-CN',localService:true}];
      Object.assign(window,{fixture,speechFixture,SpeechSynthesisUtterance:class{constructor(public text:string){}},chrome:{runtime:{onMessage:{addListener:(handler:any)=>fixture.receive=handler},sendMessage:async(message:any)=>{
        fixture.calls.push(message);
@@ -43,7 +43,7 @@ try{
      }}}});
      // The real window exposes speechSynthesis as a read-only accessor, so the
      // stand-in is defined rather than assigned.
-     Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{getVoices:()=>voices,addEventListener:()=>{},removeEventListener:()=>{},cancel:()=>{},speak:(utterance:any)=>speechFixture.spoken.push({text:utterance.text,lang:utterance.lang,rate:Number(utterance.rate.toFixed(3)),voice:utterance.voice?.name??''})}});
+     Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{getVoices:()=>voices,addEventListener:()=>{},removeEventListener:()=>{},cancel:()=>{},speak:(utterance:any)=>{speechFixture.spoken.push({text:utterance.text,lang:utterance.lang,rate:Number(utterance.rate.toFixed(3)),voice:utterance.voice?.name??''});speechFixture.finishEnd=()=>utterance.onend?.();}}});
      document.querySelector('#paragraph a')?.addEventListener('click',e=>{e.preventDefault();fixture.clicks++;});
    });
    await page.addScriptTag({path:resolve('apps/browser-extension/dist/content.js')});
@@ -60,7 +60,9 @@ try{
  // translation.
  expect(await asked()).toBe(3);expect(await readings()).toBe(2);
  await expect(page.locator('#chinese + [data-sensa-ui="translation"]')).toHaveCount(0);
- await expect(page.locator('[data-sensa-ui="page"] p')).toContainText('跳过 1 段你已能读的文字');
+ // The panel's first status line is the one that reports translation; the one
+ // under it belongs to reading the page aloud.
+ await expect(page.locator('[data-sensa-ui="page"] p').first()).toContainText('跳过 1 段你已能读的文字');
  // A translation is asked for with what the paragraph sits in — the page's title,
  // the heading above it, the text before it — because the model is not guessing.
  const paragraphRun=await page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-run').find((c:any)=>c.input.text==='She took her time.'));
@@ -100,6 +102,36 @@ try{
  // site rule the check above wrote turned it off for this tab, and the delay the
  // late-result check left switched on.
  await page.evaluate(()=>{const fixture=(window as any).fixture;fixture.delay=false;fixture.receive({kind:'reading',enabled:true,accountId:'fixture-account'});});
+ // Reading the page aloud speaks each block in the language it is written in,
+ // in document order, and highlights the one being read: the learner follows the
+ // page rather than guessing where the voice is.
+ await page.evaluate(()=>{const speech=(window as any).speechFixture;speech.spoken.length=0;});
+ await page.getByRole('button',{name:'朗读本页',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).speechFixture.spoken.length)).toBe(1);
+ const first=await page.evaluate(()=>(window as any).speechFixture.spoken[0]);
+ expect(first.text).toBe('Slow mornings');expect(first.lang).toBe('en-US');
+ await expect(page.locator('#heading')).toHaveAttribute('data-sensa-speaking','');
+ await page.evaluate(()=>(window as any).speechFixture.finishEnd());
+ await expect.poll(()=>page.evaluate(()=>(window as any).speechFixture.spoken.length)).toBe(2);
+ const second=await page.evaluate(()=>(window as any).speechFixture.spoken[1]);
+ // The paragraph's first word was edited by the late-result check above, so this
+ // also proves the reading follows the page as it is now, not as it was.
+ expect(second.text).toBe('He took her time.');
+ await expect(page.locator('#heading')).not.toHaveAttribute('data-sensa-speaking','');
+ // The page quotes a second language, and it is read with a voice for that
+ // language: one page read with one declared voice is not the rule here.
+ await page.evaluate(()=>(window as any).speechFixture.finishEnd());
+ await expect.poll(()=>page.evaluate(()=>(window as any).speechFixture.spoken.length)).toBe(3);
+ expect((await page.evaluate(()=>(window as any).speechFixture.spoken[2])).text).toBe('A second thought about the afternoon.');
+ await page.evaluate(()=>(window as any).speechFixture.finishEnd());
+ await expect.poll(()=>page.evaluate(()=>(window as any).speechFixture.spoken.length)).toBe(4);
+ const quoted=await page.evaluate(()=>(window as any).speechFixture.spoken[3]);
+ expect(quoted.lang).toBe('zh-CN');expect(quoted.voice).toBe('Ting-Ting');
+ await page.getByRole('button',{name:'停止朗读',exact:true}).click();
+ await expect(page.locator('[data-sensa-speaking]')).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as any).speechFixture.spoken.length)).toBe(4);
+ await expect(page.getByRole('button',{name:'朗读本页',exact:true})).toBeVisible();
+
  await expect(page.locator('[data-sensa-ui="page"]')).toHaveCount(1);
  await page.locator('#reply').fill('我把会议改到了周四。');
  await page.locator('#reply').press('Alt+t');
@@ -204,6 +236,6 @@ try{
  await settingsPage.getByRole('button',{name:'测试已保存连接',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('连接成功');
  await settingsPage.evaluate(()=>(window as any).settingsFixture.conflict=true);await settingsPage.getByRole('button',{name:'保存模型设置',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('另一处更新');
  await settingsPage.screenshot({path:'/tmp/sensa-browser-settings.png',fullPage:true});
- console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, every translation asked for with what its text sits in and never with a translation the panel wrote itself, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, a cue spoken in the language of its track, seek, SPA cleanup, a site rule written from the page and reading shut down by it, and a sentence the learner is writing translated the other way and inserted only when they ask. Network fixtures only.');
+ console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, every translation asked for with what its text sits in and never with a translation the panel wrote itself, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, a cue spoken in the language of its track, seek, SPA cleanup, a site rule written from the page and reading shut down by it, a sentence the learner is writing translated the other way and inserted only when they ask, and the page read aloud block by block in each block\'s own language. Network fixtures only.');
  console.log('PASS: actual settings UI save/reload, feature assignment, explicit test/model fetch, cleared password field, no secret in browser storage, conflict feedback.');
 }finally{await browser.close();}
