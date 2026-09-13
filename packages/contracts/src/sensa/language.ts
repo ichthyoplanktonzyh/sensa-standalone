@@ -46,8 +46,12 @@ export type SensaLanguage = {
    * carries every language, so a target language is a group lookup and never a
    * separate host. */
   readonly wiktionaryCode: string;
-  /** Whether the current release carries pronunciation evidence for this
-   * language. Absent evidence is shown as absent, never guessed or synthesized
+  /** Whether the curated release carries pronunciation evidence for this
+   * language, which today means English only.
+   *
+   * It does not gate what a learner is shown. A live lookup displays the
+   * pronunciation the provider actually returned for that word, in any
+   * language; absent evidence is shown as absent, never guessed or synthesized
    * from spelling. */
   readonly ipa: boolean;
   /** Whether the learner may choose this language as a target language. Every
