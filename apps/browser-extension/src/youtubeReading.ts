@@ -32,6 +32,18 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
   const video=()=>document.querySelector<HTMLVideoElement>('video.html5-main-video')??document.querySelector<HTMLVideoElement>('video');
   const valid=()=>!disposed&&isAuthorized()&&youtubeId()===id;
   const keyOf=(cue:Cue)=>`${cue.start}:${cue.end}:${cue.text}`;
+  /**
+   * What the cue is sitting in: the video's title and the cues on either side.
+   *
+   * A subtitle cue is a fragment of something being said, and a translator shown
+   * one fragment alone is guessing at what it continues. The neighbours are the
+   * cheapest evidence that it is not guessing, and they are not to be translated
+   * themselves.
+   */
+  function contextFor(cue:Cue){
+    const index=cues.indexOf(cue);
+    return [document.title.trim().slice(0,200),cues[index-1]?.text??'',cues[index+1]?.text??''].map(part=>part.trim()).filter(Boolean).join('\n').slice(0,1200);
+  }
   const matches=(job:TranslationJob|null,cue:Cue|null)=>Boolean(cue&&job?.generation===run&&job.cue===cue);
   function renderTranslation(){
     const key=current?keyOf(current):'',busy=matches(running,current)||matches(pending,current);
@@ -65,7 +77,7 @@ export function createYoutubeReading(accountId:string,isAuthorized:()=>boolean,o
       if(job.generation!==run||job.cue!==current||(!job.manual&&display.value==='original'))continue;
       running=job;renderTranslation();const key=keyOf(job.cue);
       try{
-        const text=await runReading(accountId,'subtitles',job.cue.text,'','',crypto.randomUUID(),partial=>{if(valid()&&job.generation===run&&current===job.cue)translated.textContent=partial;},undefined,captionLanguage.language);
+        const text=await runReading(accountId,'subtitles',job.cue.text,contextFor(job.cue),'',crypto.randomUUID(),partial=>{if(valid()&&job.generation===run&&current===job.cue)translated.textContent=partial;},undefined,captionLanguage.language);
         if(valid()&&job.generation===run){
           translations.set(key,text);if(translations.size>150)translations.delete(translations.keys().next().value!);
         }

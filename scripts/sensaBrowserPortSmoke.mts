@@ -12,7 +12,7 @@ try{
    const url=new URL(route.request().url());
    if(url.pathname==='/api/timedtext'){captionRequest=url;return emptyCaptions?route.fulfill({body:''}):route.fulfill({json:cues});}
    if(url.pathname==='/watch')return route.fulfill({contentType:'text/html',body:'<!doctype html><title>Video fixture</title><div id="movie_player" class="html5-video-player"><video class="html5-main-video"></video></div><p id="text">She took her time.</p><button id="outside">Outside</button>'});
-   if(url.pathname==='/article')return route.fulfill({contentType:'text/html; charset=utf-8',body:'<!doctype html><title>Article fixture</title><main style="margin:60px;font:22px system-ui"><p id="paragraph">She <a href="#example">took</a> her time.</p><p id="chinese">这段话本身就是学习者能读的语言，不该被翻译。</p><p contenteditable="true">Do not translate editable text.</p></main>'});
+   if(url.pathname==='/article')return route.fulfill({contentType:'text/html; charset=utf-8',body:'<!doctype html><title>Article fixture</title><main style="margin:60px;font:22px system-ui"><h2 id="heading">Slow mornings</h2><p id="paragraph">She <a href="#example">took</a> her time.</p><p id="chinese">这段话本身就是学习者能读的语言，不该被翻译。</p><p contenteditable="true">Do not translate editable text.</p></main>'});
    return route.abort();
  });
  async function install(){
@@ -39,21 +39,35 @@ try{
  const readings=()=>page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-run').length);
  const asked=()=>page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-language').length);
  await page.getByRole('button',{name:'翻译页面',exact:true}).click();
- await expect(page.locator('[data-sensa-ui="translation"]')).toHaveText('她不慌不忙地做事。');
- // The page holds two paragraphs worth translating and one the learner can
- // already read: both are asked about, and only the one that needs it is asked
- // for a translation.
- expect(await asked()).toBe(2);expect(await readings()).toBe(1);
+ await expect(page.locator('#paragraph + [data-sensa-ui="translation"]')).toHaveText('她不慌不忙地做事。');
+ // The page holds three blocks worth translating and one the learner can already
+ // read: every one is asked about, and only the ones that need it are asked for a
+ // translation.
+ expect(await asked()).toBe(3);expect(await readings()).toBe(2);
  await expect(page.locator('#chinese + [data-sensa-ui="translation"]')).toHaveCount(0);
  await expect(page.locator('[data-sensa-ui="page"] p')).toContainText('跳过 1 段你已能读的文字');
+ // A translation is asked for with what the paragraph sits in — the page's title,
+ // the heading above it, the text before it — because the model is not guessing.
+ const paragraphRun=await page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-run').find((c:any)=>c.input.text==='She took her time.'));
+ expect(paragraphRun.input.context).toContain('Article fixture');expect(paragraphRun.input.context).toContain('Slow mornings');
+ expect(paragraphRun.input.context).not.toContain('她不慌不忙地做事。');
  await page.getByRole('button',{name:'仅译文',exact:true}).click();await expect(page.locator('#paragraph')).toBeHidden();
  await page.getByRole('button',{name:'恢复原文',exact:true}).click();await expect(page.locator('#paragraph')).toBeVisible();await page.locator('#paragraph a').click();expect(await page.evaluate(()=>(window as any).fixture.clicks)).toBe(1);
- await page.getByRole('button',{name:'翻译页面',exact:true}).click();await expect(page.locator('[data-sensa-ui="translation"]')).toHaveText('她不慌不忙地做事。');expect(await readings()).toBe(1);await page.getByRole('button',{name:'恢复原文',exact:true}).click();
+ await page.getByRole('button',{name:'翻译页面',exact:true}).click();await expect(page.locator('#paragraph + [data-sensa-ui="translation"]')).toHaveText('她不慌不忙地做事。');expect(await readings()).toBe(2);await page.getByRole('button',{name:'恢复原文',exact:true}).click();
  // Pointing at a paragraph and asking for it is a request, and a request is never skipped.
  await page.getByRole('button',{name:'翻译页面',exact:true}).click();await page.hover('#chinese');
  await page.keyboard.press('Alt+t');
  await expect(page.locator('#chinese + [data-sensa-ui="translation"]')).toHaveText('她不慌不忙地做事。');
- expect(await readings()).toBe(2);await page.getByRole('button',{name:'恢复原文',exact:true}).click();
+ expect(await readings()).toBe(3);await page.getByRole('button',{name:'恢复原文',exact:true}).click();
+ // A paragraph that arrives later sits after the translation this panel inserted:
+ // the context sent for it is the paragraph above, never our own translation.
+ await page.getByRole('button',{name:'翻译页面',exact:true}).click();
+ await page.evaluate(()=>{const added=document.createElement('p');added.id='added';added.textContent='A second thought about the afternoon.';document.querySelector('#chinese')!.before(added);});
+ await expect(page.locator('#added + [data-sensa-ui="translation"]')).toHaveText('她不慌不忙地做事。');
+ const addedRun=await page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-run').find((c:any)=>c.input.text==='A second thought about the afternoon.'));
+ expect(addedRun.input.context).toContain('She took her time.');expect(addedRun.input.context).toContain('Slow mornings');
+ expect(addedRun.input.context).not.toContain('她不慌不忙地做事。');
+ await page.getByRole('button',{name:'恢复原文',exact:true}).click();
  await page.evaluate(()=>{(window as any).fixture.delay=true;document.querySelector('#paragraph')!.firstChild!.textContent='He ';});await page.getByRole('button',{name:'翻译页面',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>!!(window as any).fixture.pending)).toBe(true);await page.getByRole('button',{name:'恢复原文',exact:true}).click();
  await page.evaluate(()=>(window as any).fixture.pending({value:{status:'ready',text:'迟到译文'}}));await expect(page.locator('[data-sensa-ui="translation"]')).toHaveCount(0);
@@ -71,6 +85,10 @@ try{
  await expect(page.getByLabel('当前原字幕',{exact:true})).toHaveText('She took her time.');
  expect(captionRequest?.searchParams.get('lang')).toBe('en');expect(captionRequest?.searchParams.get('signature')).toBe('selected-track');expect(captionRequest?.searchParams.get('pot')).toBe('fixture-proof');expect(captionRequest?.searchParams.get('fmt')).toBe('json3');
  await page.getByRole('button',{name:'翻译本句',exact:true}).click();await expect(page.getByLabel('当前字幕译文',{exact:true})).toHaveText('她不慌不忙地做事。');
+ // A cue is a fragment of a conversation, so it is translated with what it is
+ // sitting in: the video's title and the cue that follows it.
+ const cueRun=await page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-run').find((c:any)=>c.input.text==='She took her time.'));
+ expect(cueRun.input.context).toContain('Video fixture');expect(cueRun.input.context).toContain('They looked up at the sky.');
  const caption=page.getByLabel('当前原字幕',{exact:true});
  // Actual mouse selection across the word in the subtitle shadow root.
  const points=await caption.evaluate(element=>{const node=element.firstChild!;const range=document.createRange();range.setStart(node,4);range.setEnd(node,8);const r=range.getBoundingClientRect();return {x:r.left,y:r.top+r.height/2,width:r.width};});
@@ -129,6 +147,6 @@ try{
  await settingsPage.getByRole('button',{name:'测试已保存连接',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('连接成功');
  await settingsPage.evaluate(()=>(window as any).settingsFixture.conflict=true);await settingsPage.getByRole('button',{name:'保存模型设置',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('另一处更新');
  await settingsPage.screenshot({path:'/tmp/sensa-browser-settings.png',fullPage:true});
- console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, seek, SPA cleanup, reading shutdown. Network fixtures only.');
+ console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, every translation asked for with what its text sits in and never with this panel's own output, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, seek, SPA cleanup, reading shutdown. Network fixtures only.');
  console.log('PASS: actual settings UI save/reload, feature assignment, explicit test/model fetch, cleared password field, no secret in browser storage, conflict feedback.');
 }finally{await browser.close();}

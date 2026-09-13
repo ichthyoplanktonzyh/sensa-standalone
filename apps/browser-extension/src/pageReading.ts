@@ -2,7 +2,23 @@ import {runReading,readingError} from './readingClient';
 import {declaredCaptureLanguage,readerLanguage} from './language';
 const blocks='p,li,blockquote,td,th,dt,dd,h1,h2,h3,h4,h5,h6,figcaption,div';
 const excluded='input,textarea,select,button,nav,pre,code,script,style,[contenteditable]:not([contenteditable="false"]),[translate="no"],[data-sensa-ui]';
-type Item={source:HTMLElement;text:string;translation:HTMLElement;hidden:boolean;state:'waiting'|'running'|'ready'|'failed'|'skipped';forced:boolean};
+type Item={source:HTMLElement;text:string;context:string;translation:HTMLElement;hidden:boolean;state:'waiting'|'running'|'ready'|'failed'|'skipped';forced:boolean};
+/**
+ * The nearest text before `element` that matches `selector`.
+ *
+ * Looks past this panel's own inserted translations, or the paragraph above
+ * would hand its translation over as the context for the next one, and looks up
+ * through ancestors, so a paragraph nested in a section still sees the heading
+ * above the section.
+ */
+function preceding(element:Element,selector:string):string{
+  for(let node:Element|null=element;node;node=node.parentElement){
+    for(let sibling=node.previousElementSibling;sibling;sibling=sibling.previousElementSibling){
+      if(!sibling.matches('[data-sensa-ui]')&&sibling.matches(selector))return sibling.textContent??'';
+    }
+  }
+  return '';
+}
 /** Original nodes stay owned by the host page; we only insert/remove our translations. */
 export function createPageReading(accountId:string,isAuthorized:()=>boolean){
   const host=document.createElement('div');host.dataset.sensaUi='page';
@@ -42,7 +58,7 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
     // test quietly refused to translate whole languages.
     if(text.trim().length<2||text.length>12000||!/\p{L}{2}/u.test(text))return;
     const translation=document.createElement('div');translation.dataset.sensaUi='translation';translation.style.cssText='white-space:pre-wrap;line-height:1.7;padding:8px 0;color:#405176;font-family:system-ui';
-    const item:Item={source:element,text,translation,hidden:false,state:'waiting',forced};items.set(element,item);visibility.observe(element);
+    const item:Item={source:element,text,context:contextFor(element),translation,hidden:false,state:'waiting',forced};items.set(element,item);visibility.observe(element);
   }
   function nearby(source:HTMLElement){const rect=source.getBoundingClientRect();return rect.bottom>=-200&&rect.top<=innerHeight+200;}
   function scan(){
@@ -78,11 +94,23 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
    * panel tells the request the quoted text is in.
    */
   const pageLanguage=()=>declaredCaptureLanguage().language;
-  async function translationFor(text:string){
+  /**
+   * What the paragraph is sitting in: the page's title, the heading that governs
+   * it, and the text just before it.
+   *
+   * A translator shown one paragraph has to guess what a pronoun points at and
+   * which sense of a word is meant, and these three are the cheapest evidence
+   * that it is not guessing. Bounded because they are paid for by the learner's
+   * own connection, and the text nearest the paragraph is the part that matters.
+   */
+  function contextFor(element:HTMLElement){
+    return [document.title.trim().slice(0,200),preceding(element,'h1,h2,h3,h4,h5,h6').trim().slice(0,200),preceding(element,'p,li,blockquote,td,figcaption').trim().slice(-500)].filter(Boolean).join('\n').slice(0,1200);
+  }
+  async function translationFor(text:string,context:string){
     const cached=cache.get(text);if(cached!==undefined)return cached;
     const existing=requests.get(text);if(existing)return existing;
     const run=generation;
-    const request=runReading(accountId,'page',text,'','',crypto.randomUUID(),partial=>{
+    const request=runReading(accountId,'page',text,context,'',crypto.randomUUID(),partial=>{
       if(!valid()||run!==generation)return;
       for(const item of items.values())if(item.text===text&&item.state==='running'&&item.source.isConnected&&item.source.textContent===text)item.translation.textContent=partial;
     },undefined,pageLanguage());requests.set(text,request);
@@ -100,7 +128,7 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
       }
       if(familiarLanguage)item.translation.setAttribute('lang',familiarLanguage);
       item.translation.textContent='正在翻译…';item.translation.setAttribute('aria-busy','true');item.source.after(item.translation);feedback();
-      const translated=await translationFor(item.text);
+      const translated=await translationFor(item.text,item.context);
       if(!valid()||run!==generation||items.get(item.source)!==item||!item.source.isConnected||item.source.textContent!==item.text){item.translation.remove();return;}
       cache.delete(item.text);cache.set(item.text,translated);if(cache.size>150)cache.delete(cache.keys().next().value!);
       item.translation.textContent=translated;item.state='ready';setMode(item);

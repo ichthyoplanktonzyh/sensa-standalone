@@ -47,6 +47,15 @@ assert(!/Chinese|English/u.test(explanationPrompt));
 const familiarText=readingRequestSchema.parse({...base,feature:'page',languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'zh-CN'});
 assert.match(readingSystemPrompt(familiarText),/quoted Chinese \(Simplified\) text into natural Chinese \(Simplified\)/);
 
+// What the request carries beside the text is evidence, not a second thing to
+// translate: a model told only "here is some context" may hand back a
+// translation of the context as well, and a cue or a paragraph on its own is
+// exactly the case that needs the surrounding text.
+const withContext=readingRequestSchema.parse({...base,feature:'page',text:'her time.',context:'She took her time.\nThey looked up at the sky.',languages:{familiarLanguageTag:'zh-CN',targetLanguageTag:'en'},sourceLanguageTag:'en'});
+assert.match(readingSystemPrompt(withContext),/surrounding text from the same document/);
+assert.match(readingSystemPrompt(withContext),/never material of its own to translate/);
+assert.notEqual(await contentHash(withContext),await contentHash({...withContext,context:''}),'context is part of what was asked, so a retry under different context is a different request');
+
 // The task lives in the prompt, not in a default instruction the learner would
 // read: an instruction written in one language is wrong for every other one.
 assert.equal(readingRequestSchema.parse({...base,feature:'action',languages:{familiarLanguageTag:'ko',targetLanguageTag:'it'}}).instruction,'');
@@ -73,4 +82,4 @@ const spanishPair=readingRequestSchema.parse({...base,feature:'selection',langua
 assert.notEqual(await contentHash(englishPair),await contentHash(spanishPair),'the same request id under a different pair must digest differently');
 assert.equal(await contentHash(englishPair),await contentHash({...englishPair}),'the same request must digest the same');
 
-console.log('PASS: the reading service builds every prompt from the pair the request carries — translation into the learner’s familiar language naming the text’s own language, explanation in the familiar language while naming the one being learned — refuses a pair or a text language this release cannot name, and digests the pair so a retry cannot replay another language’s answer. Pure prompt and schema; no provider call.');
+console.log('PASS: the reading service builds every prompt from the pair the request carries — translation into the learner’s familiar language naming the text’s own language, explanation in the familiar language while naming the one being learned — refuses a pair or a text language this release cannot name, and digests the pair so a retry cannot replay another language’s answer. Context travels as evidence about the text rather than as a second thing to translate, and is digested with it. Pure prompt and schema; no provider call.');
