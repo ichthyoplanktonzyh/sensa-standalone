@@ -6,14 +6,14 @@ import type {
   MeaningToFormRecallAssessmentResource,
   NovelTransferAssessmentResource,
   RecognitionAssessmentResource,
-} from '../../../content/assessmentResources';
-import type { PrototypeIntroductionPackage } from '../../../content/learningCatalog';
+} from '../../../../learning/content/assessmentResources';
+import type { RuntimeLearningContent } from '../../../../learning/content/learningCatalog';
 import type {
   ReviewAssessmentResult,
   ReviewAssessmentSpec,
   ReviewBoundaryContrastSpec,
-} from '../../../review/types';
-import { resolveReviewMemoryOutcome } from '../../../review/types';
+} from '../../../../learning/review/types';
+import { resolveReviewMemoryOutcome } from '../../../../learning/review/types';
 import type {
   DictionaryLookup,
   DictionaryLookupRequest,
@@ -28,7 +28,7 @@ import { RecallCard } from '../RecallCard';
 import { NovelTransferCard } from '../NovelTransferCard';
 
 export interface SensaReviewAssessmentCardProps {
-  content: PrototypeIntroductionPackage;
+  content: RuntimeLearningContent;
   spec: ReviewAssessmentSpec;
   /** The same taskKey-resolved resource used to build spec. */
   assessmentResource: AssessmentResource;

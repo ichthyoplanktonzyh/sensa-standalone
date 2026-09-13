@@ -1,7 +1,7 @@
 import {cardText} from '../../../i18n/originalCards';
 import { uiClass } from '../../ui/classes';
 import { useEffect, useRef, useState } from 'react';
-import type { PrototypeIntroductionPackage } from '../../content/learningCatalog';
+import type { RuntimeLearningContent } from '../../../learning/content/learningCatalog';
 import type {
   DictionaryLookup,
   DictionaryLookupOptions,
@@ -18,7 +18,7 @@ import { ExperienceRenderer } from './ExperienceRenderer';
 export type IntroductionPhase = 'experience' | 'reveal';
 
 interface IntroductionCardProps {
-  content: PrototypeIntroductionPackage;
+  content: RuntimeLearningContent;
   phase: IntroductionPhase;
   mode?: 'introduction' | 'repair_replay';
   repairPurpose?: 'acquisition' | 'retention';

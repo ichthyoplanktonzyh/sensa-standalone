@@ -3,7 +3,7 @@ use sensa_library::{Command, CommandAction, Snapshot, execute_at, open_library};
 use serde_json::Value;
 fn release() -> String {
     include_str!(
-        "../../../apps/web/src/experience/content/releases/golden-learning-release-v1.json"
+        "../../../apps/web/src/learning/content/releases/golden-learning-release-v1.json"
     )
     .into()
 }

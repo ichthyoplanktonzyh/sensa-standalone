@@ -1,6 +1,6 @@
 import type {ReactNode} from 'react';
 import {z} from 'zod';
-import type {LocalLearningRun} from './localProtocol';
+import type {LocalLearningRun} from '../../learning/runtime/localProtocol';
 
 export const localRuntimePresentationContractVersion='sensa-local-runtime-presentation-v1' as const;
 

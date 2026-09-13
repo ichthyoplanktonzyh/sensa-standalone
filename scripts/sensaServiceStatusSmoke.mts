@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {createConsumerRoutes} from '../apps/api/src/sensa/access/consumer.ts';
 import {ConsumerError} from '../apps/api/src/sensa/access/auth.ts';
-import {serviceStatusSchema} from '../packages/contracts/src/sensa/consumer/account.ts';
+import {serviceStatusSchema} from '../packages/contracts/src/sensa/serviceStatus.ts';
 const ids={a:crypto.randomUUID(),b:crypto.randomUUID()};let active=ids.a;let revoked=false;const calls:string[]=[];
 const saved={provider:process.env.SENSA_SEMANTIC_PROVIDER,key:process.env.DEEPSEEK_API_KEY,catalog:process.env.SENSA_PACKAGE_CATALOG_JSON,unlimited:process.env.SENSA_UNLIMITED_MODEL_USAGE};
 const app=createConsumerRoutes({clock:()=>new Date('2026-09-10T12:00:00Z'),verify:async req=>{if(!req.headers.has('authorization'))throw new ConsumerError(401,'authentication_required');active=req.headers.get('authorization')==='Bearer a'?ids.a:ids.b;return {issuer:'fixture',subject:active,sessionId:active,email:null};},transaction:async work=>work({query:async(sql:string,args:unknown[])=>{
@@ -12,7 +12,7 @@ const app=createConsumerRoutes({clock:()=>new Date('2026-09-10T12:00:00Z'),verif
  if(sql.includes('sessions'))return {rows:[{id:active,revoked:false}],rowCount:1};
  assert.equal(args[0],active);
  if(sql.includes('reading_settings'))return {rows:[],rowCount:0};
- if(sql.includes('count(*)')){assert.equal((args[1] as Date).toISOString(),'2026-09-09T12:00:00.000Z');return {rows:[{n:active===ids.a?4:2}],rowCount:1};}
+ if(sql.includes('count(*)')){assert.equal((args.at(-1) as Date).toISOString(),'2026-09-09T12:00:00.000Z');return {rows:[{n:active===ids.a?4:2}],rowCount:1};}
  throw new Error('Unexpected SQL');
  }} as any)});
 try{

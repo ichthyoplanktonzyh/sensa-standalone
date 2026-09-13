@@ -1,20 +1,20 @@
 import {LearnScreen} from '../components/LearnScreen';
 import type {RuntimeToolsProps} from '../components/learning/RuntimeTools';
-import {toReviewSpec} from '../content/prototypeReviewCards';
-import {resolveReviewMemoryOutcome} from '../review/types';
+import {toReviewSpec} from '../../learning/content/reviewCards';
+import {resolveReviewMemoryOutcome} from '../../learning/review/types';
 import type {StepRendererHost} from '../learningRuntime/stepRenderers';
 import type {CardExecution} from '../components/cards/CardExecution';
-import {toWordPresentation} from '../content/learningCatalog';
+import {toWordPresentation} from '../learningPresentation';
 import {ExampleScreen} from '../components/ExampleScreen';
 import {useEffect,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
-import {assuranceContent,assuranceView,localAssuranceState,type AssuranceAction} from '../../data/library/assurance';
+import {assuranceContent,assuranceView,localAssuranceState,type AssuranceAction} from '../../learning/protocols/assurance';
 import type {LocalLearningRun,LocalLearningTarget} from '../../data/library/learning';
 import type {InstalledPackage} from '../../data/library/packages';
 import {AssuranceSummary} from '../components/learning/AssuranceSummary';
-import type {PrototypeIntroductionPackage} from '../content/learningCatalog';
-export function StudyResources({content}:{content:PrototypeIntroductionPackage}){
+import type {RuntimeLearningContent} from '../../learning/content/learningCatalog';
+export function StudyResources({content}:{content:RuntimeLearningContent}){
  return <div className="space-y-6">
   <div><h2 className="text-3xl font-medium">{content.lemma}</h2><p className="mt-3 text-lg">{content.guideLabelL1}</p><p className="mt-3 text-sm leading-7 text-[#68748d]">{content.definitionL2}</p></div>
   <section className="space-y-3"><h3 className="font-medium">{localFlowText('assurancePronunciation')}</h3>{content.pronunciations.map(p=><div key={p.accentLocale} className="rounded-xl border border-[#dfe4ed] p-4"><p className="mb-3 text-sm">{p.accentLocale} · {p.ipa}</p>{p.audioUrl&&<audio controls preload="none" src={p.audioUrl} aria-label={localFlowText('assuranceAudio',{label:p.accentLocale})} className="w-full max-w-full"/>}</div>)}</section>
@@ -39,7 +39,7 @@ export function AssuranceRuntime(props:{active:boolean;run:LocalLearningRun;targ
  const spec=resource&&content?toReviewSpec(resource,content):null;
  const result=spec&&state.feedback?{assessmentId:spec.id,kind:spec.kind,focusDimension:spec.focusDimension,correct:state.feedback.correct,responseId:state.feedback.answer||null,memoryOutcome:run.purpose==='initial_learning'?null:resolveReviewMemoryOutcome(spec.kind,state.feedback.correct),evidenceEligible:run.purpose!=='initial_learning'&&spec.evidenceEligible}:null;
  return <>
- {run.completedAt?<AssuranceSummary id="s-lightweight-runtime" active={props.active} review={run.purpose!=='initial_learning'} completed={[props.target.id]} declared={[]} targetPresentation={()=>props.target} continueLabel={localFlowText('assuranceContinueLearning')} onExit={props.onFinish}/>:view&&content&&<LearnScreen screenId="s-lightweight-runtime" hasTask active={props.active} isBehind={exampleIndex!==null} curWord={toWordPresentation(content)} stage={view.stepKind} step={view.action.ordinal} groupSize={view.action.totalTarget} introductionContent={content} repairContent={view.action.intent==='repair'?content:null} introductionPosition={1} introductionTotal={1} reviewAssessmentPurpose={run.purpose==='initial_learning'?'acquisition':'retention'} onExit={props.onExit} onUndo={()=>act({kind:'undo'})} onMarkKnown={props.onMarkKnown} onOpenMenuMore={host.onOpenMenuMore} reviewAssessmentKind={resource?.kind??null} reviewAssessmentTaskKey={resource?.taskKey??null} assessmentPackageIdentity={null} reviewAssessmentResult={result} repairResourceRef={view.action.repairResourceRef??null} host={runtimeHost} execution={execution} preparedAssessmentResource={resource??null} controlledPhase={phase} onControlledPhaseChange={nextPhase=>{if(nextPhase==='reveal'&&!state.revealed)act({kind:'reveal'});else{setPhase(nextPhase);resetScroll();}}} busy={props.busy} notice={props.notice&&<p role="alert" className="mb-6 rounded-xl bg-amber-50 p-4">{localFlowNotice(props.notice)}</p>}/>}
+ {run.completedAt?<AssuranceSummary id="s-lightweight-runtime" active={props.active} review={run.purpose!=='initial_learning'} completed={[props.target.id]} declared={[]} targetPresentation={()=>props.target} continueLabel={localFlowText('assuranceContinueLearning')} onExit={props.onFinish}/>:view&&content&&<LearnScreen screenId="s-lightweight-runtime" hasTask active={props.active} isBehind={exampleIndex!==null} curWord={toWordPresentation(content)} stage={view.stepKind} step={view.action.ordinal} groupSize={view.action.totalTarget} introductionContent={content} repairContent={view.action.intent==='repair'?content:null} introductionPosition={1} introductionTotal={1} reviewAssessmentPurpose={run.purpose==='initial_learning'?'acquisition':'retention'} onExit={props.onExit} onUndo={()=>act({kind:'undo'})} onMarkKnown={props.onMarkKnown} onOpenMenuMore={host.onOpenMenuMore} reviewAssessmentKind={resource?.kind??null} reviewAssessmentResult={result} repairResourceRef={view.action.repairResourceRef??null} host={runtimeHost} execution={execution} preparedAssessmentResource={resource??null} controlledPhase={phase} onControlledPhaseChange={nextPhase=>{if(nextPhase==='reveal'&&!state.revealed)act({kind:'reveal'});else{setPhase(nextPhase);resetScroll();}}} busy={props.busy} notice={props.notice&&<p role="alert" className="mb-6 rounded-xl bg-amber-50 p-4">{localFlowNotice(props.notice)}</p>}/>}
  {content&&exampleIndex!==null&&<ExampleScreen screenId="s-package-example" active={props.active} curWord={toWordPresentation(content)} initialSentenceIdx={exampleIndex} sentenceSequence={content.learningExamples.map((_,i)=>i)} onClose={()=>setExampleIndex(null)} onOpenDict={host.openDict} onNextWord={()=>setExampleIndex(null)} nextLabel={localFlowText('assuranceContinue')} toast={host.toast}/>}
  </>;
 }

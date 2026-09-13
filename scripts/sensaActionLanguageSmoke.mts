@@ -15,6 +15,7 @@ const clock=new Date(2026,8,20,21).getTime();
 
 const target=(over:Partial<LocalLearningTarget>&{id:string}):LocalLearningTarget=>({
   retentionId:'retention-'+over.id,packageKey:null,expression:'expression-'+over.id,meaning:'meaning-'+over.id,
+  planningOverrides:[],
   material:{snapshot:{},content:{resources:[]}} as never,createdAt:at(8),startedAt:null,completedAt:null,
   memory:null,memoryRevision:0,relearnAt:null,...over});
 
@@ -61,7 +62,7 @@ const blocked={...ready,'es-due':'blocked','es-new-1':'blocked'} as Record<strin
 const filtered=resolveLearningQueue({targets,activeLanguageTag:'es',readiness:blocked,clock,dailyLimit:20});
 assert.deepEqual(filtered.due.map(t=>t.id),[],'a target whose material is not ready is not queued');
 assert.deepEqual(filtered.initialReady.map(t=>t.id),['es-new-2']);
-const declared=resolveLearningQueue({targets:targets.map(t=>t.id==='es-new-2'?{...t,declaredMastery:true}:t),activeLanguageTag:'es',readiness:ready,clock,dailyLimit:20});
+const declared=resolveLearningQueue({targets:targets.map(t=>t.id==='es-new-2'?{...t,planningOverrides:[{kind:'declared_mastery',source:'learner',operationId:'fixture',createdAt:at(9)}]}:t),activeLanguageTag:'es',readiness:ready,clock,dailyLimit:20});
 assert.deepEqual(declared.initialReady.map(t=>t.id),['es-new-1'],'a meaning the learner says they already know is not queued');
 
 // Free Practice offers the expressions of the language being learned now.

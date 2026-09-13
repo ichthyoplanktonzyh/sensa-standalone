@@ -21,8 +21,6 @@ export async function requestAccountDeletion(db:DatabaseExecutor,identity:Consum
  const session=(await db.query('SELECT revoked FROM sensa_consumer.sessions WHERE account_id=$1 AND provider_session_id=$2',[a.account_id,identity.sessionId])).rows[0];
  if(!session||session.revoked||a.lifecycle!=='active')throw new ConsumerError(401,'access_revoked');
  if(!identity.authenticatedAt||now.getTime()-identity.authenticatedAt*1000>300000||identity.authenticatedAt*1000>now.getTime()+30000)throw new ConsumerError(403,'reauthentication_required');
- // Never erase a migration-era learning store via the Web-local erasure path.
- if((await db.query('SELECT 1 FROM sensa_consumer.installations WHERE account_id=$1 LIMIT 1',[a.account_id])).rows.length||(await db.query('SELECT 1 FROM sensa_consumer.learner_scopes WHERE learner_user_id=$1 LIMIT 1',[a.learner_user_id])).rows.length)throw new ConsumerError(409,'legacy_account_erasure_required');
  await db.query('INSERT INTO sensa_consumer.account_deletions(account_id,operation_id,requested_at) VALUES($1,$2,$3)',[a.account_id,operationId,now]);
  await db.query("UPDATE sensa_consumer.accounts SET lifecycle='deletion_pending',epoch=epoch+1 WHERE account_id=$1",[a.account_id]);
  await db.query('UPDATE sensa_consumer.sessions SET revoked=true WHERE account_id=$1',[a.account_id]);

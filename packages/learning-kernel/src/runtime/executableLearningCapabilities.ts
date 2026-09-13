@@ -1,8 +1,20 @@
-import type { SensaAcquisitionPrimitive } from "./browserSafe.js";
 import {
   sensaExecutableLearningCapabilityResolverVersion,
   type SensaExecutableLearningCapabilityResolverVersion,
 } from "./executableLearningCapabilityVocabulary.js";
+
+export type SensaAcquisitionPrimitive =
+  | "visual_grounding"
+  | "motion_grounding"
+  | "spatial_relation"
+  | "causal_sequence"
+  | "temporal_sequence"
+  | "social_micro_scenario"
+  | "introspective_scenario"
+  | "contrast_pair"
+  | "counterexample"
+  | "contextual_variation"
+  | "production_cue";
 
 export const sensaExecutableLearningCapabilityCodes = Object.freeze([
   "grounding_experience",

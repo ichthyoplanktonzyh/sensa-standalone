@@ -1,5 +1,5 @@
 import {z} from 'zod';
-export const librarySyncTables=['meta','drafts','settings','operations','sessions','meanings','identities','packages','learningTargets','learningRuns','learningEvents','personalLearning','contentAttempts'] as const;
+export const librarySyncTables=['meta','drafts','settings','operations','sessions','meanings','identities','packages','learningTargets','learningRuns','learningEvents','personalLearning','contentAttempts','annotations'] as const;
 export const librarySyncHash=z.string().regex(/^[a-f0-9]{64}$/);
 /** Content-addressed block size in JavaScript string units. Restoring a library is
  * a bounded number of block requests, so one block already carries a real payload.

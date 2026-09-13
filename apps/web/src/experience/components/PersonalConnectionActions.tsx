@@ -2,11 +2,10 @@ import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
 import { uiClass } from '../ui/classes';
 import { useEffect, useState } from 'react';
-import { noteService } from '../services/noteService';
 import {
-  personalContentService,
+  contentAnnotations,
   type PersonalSemanticAnchor,
-} from '../services/personalContentService';
+} from '../../data/library/contentAnnotations';
 
 interface PersonalConnectionActionsProps {
   senseId: string;
@@ -32,17 +31,12 @@ export function PersonalConnectionActions({
   useEffect(() => {
     const refresh = () => {
       setState({
-        note: noteService.getSenseNote(senseId),
-        anchors: personalContentService.getSemanticAnchors(senseId),
+        note: contentAnnotations.getSenseNote(senseId),
+        anchors: contentAnnotations.getSemanticAnchors(senseId),
       });
     };
     refresh();
-    const unsubscribeNotes = noteService.subscribe(refresh);
-    const unsubscribeAnchors = personalContentService.subscribe(refresh);
-    return () => {
-      unsubscribeNotes();
-      unsubscribeAnchors();
-    };
+    return contentAnnotations.subscribe(refresh);
   }, [senseId]);
 
   const hasNote = state.note.trim().length > 0;

@@ -3,7 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { ArrowRight, BookOpen, Plus, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { LearningRecordKind, LearningRecordView } from '../learningJourney/learningHistory';
-import { PROTOTYPE_LEARNING_TARGETS, type PrototypeLearningPolicy } from '../learningJourney/prototypeLearning';
+import type { LearningPolicyId } from '../../learning/runtime/policyProfiles';
 import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
 
 interface StudyScreenProps {
@@ -19,8 +19,8 @@ interface StudyScreenProps {
   onOpenTargetLibrary: () => void;
   onOpenStats: () => void;
   onOpenTarget: (id: string) => void;
-  onPolicyChange: (policy: PrototypeLearningPolicy) => void;
-  defaultPolicy: PrototypeLearningPolicy;
+  onPolicyChange: (policy: LearningPolicyId) => void;
+  defaultPolicy: LearningPolicyId;
   learningTargetCount: number;
   /** The language the counts and the queue act on. The daily limit is the
    * account's, so it is named separately from the language counts. */
@@ -81,7 +81,7 @@ export const StudyScreen = (props: StudyScreenProps) => {
         <p className="mt-3 text-xs leading-6 text-[#788398]">{t('study.historyNote')}</p>
         {records.length===0?<div className="py-16 text-center"><p className="font-medium">{t(props.learningRecords.length?'study.noMatches':'study.noRecords')}</p>{!props.learningRecords.length&&<p className="mt-2 text-sm text-[#788398]">{t('study.noRecordsHint')}</p>}</div>:<ol className="mt-5 divide-y divide-[#e3e5ea]">
           {records.slice(0,limit).map(record=><li key={record.recordId}><button className="flex w-full flex-wrap items-center gap-4 rounded-lg py-5 text-left hover:bg-[#f2f4f8] focus-visible:outline-2 focus-visible:outline-[#5268a9] sm:flex-nowrap" onClick={()=>props.onOpenTarget(record.targetId)}>
-            <span className="min-w-0 flex-1"><strong className="font-medium">{record.expression}</strong><span className="mt-1 block text-sm text-[#68748d]">{record.meaning ?? PROTOTYPE_LEARNING_TARGETS[record.targetId as keyof typeof PROTOTYPE_LEARNING_TARGETS]?.meaning ?? record.detail}</span></span>
+            <span className="min-w-0 flex-1"><strong className="font-medium">{record.expression}</strong><span className="mt-1 block text-sm text-[#68748d]">{record.meaning ?? record.detail}</span></span>
             <span className="rounded-md bg-[#edf0f7] px-2 py-1 text-xs text-[#546582]">{t('study.'+record.kind)}</span>
             <time className="w-full text-xs tabular-nums text-[#788398] sm:w-auto" dateTime={record.occurredAt}>{new Intl.DateTimeFormat(i18n.language,{dateStyle:'medium',timeStyle:'short'}).format(new Date(record.occurredAt))}</time><ArrowRight className="hidden shrink-0 text-[#788398] sm:block" size={16}/>
           </button></li>)}

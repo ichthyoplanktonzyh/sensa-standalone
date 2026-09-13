@@ -135,7 +135,7 @@ Learner Sense Progress 是从同一 Sense 的全部 Retention Targets 与 Sense-
 权威 roll-up。它可以回答“这个 Sense 有哪些表达正在学、哪些需要复习”，但不能把
 不同 target expressions 的 phase、Protocol Run、Evidence 或 FSRS State 压成一份可写状态。
 
-客户端可以保存乐观预览，但不能直接声明这些权威投影。
+界面可以保存乐观预览，但不能绕过本地 Learning Runtime 直接声明这些权威投影。
 
 ## 3. Learning Protocol Run
 
@@ -843,7 +843,7 @@ response、correctness、latency、使用的 support/reveal、learner rating、g
 
 ### Learning Evidence
 
-服务端根据有效 Observation 与固定 Evidence Rule 派生 Evidence。Evidence 只陈述行为，不等于 Gate、
+本地 Learning Runtime 根据有效 Observation 与固定 Evidence Rule 派生 Evidence。Evidence 只陈述行为，不等于 Gate、
 5D level 或 FSRS rating。被动展示、播放、acknowledgement、停留时长、无效响应、自报理解与
 Product Event 不产生学习 Evidence。
 
@@ -998,6 +998,18 @@ Sense-level 操作一致：
 - revocation 后依据未篡改的 phase/Protocol Run/Memory State 恢复资格；
 - declaration 为 active 时 learner 仍可将其 Sense 放入 Practice Scope；任何 Practice fact 都不撤销声明。
 
+实现上，active declaration 必须保存为 Target 上结构化的 `TargetPlanningOverride`，而不是散落在
+Protocol/Queue 内部的布尔状态。首版 override 固定 `kind = declared_mastery`、`source = learner`、
+创建它的 operation identity 与时间；数组中存在该 kind 即表示 active，撤销则删除 active override，
+而 operation ledger 保留声明与撤销历史。
+
+若声明命中 active Run，Runtime 必须在同一事务中写入
+`interrupted_by_planning_override` lifecycle fact、推进 Run revision 并撤销 active pointer。恢复资格本身
+不伪造 Run 已恢复；learner 再次明确启动时才写入与原 interruption identity 配对的
+`resumed_after_planning_override` fact。Lifecycle fact 与 Protocol Action/Event 分离，因此两者都不能携带
+Attempt、Evaluation、Evidence、Settlement 或 Memory Outcome。若一个 Run envelope 含多个 Target，任一
+成员的 active override 暂停整个 envelope；首版不在运行中静默删改 participant 或重写编排状态。
+
 ## 16. Account、Preferences 与 Data Control lifecycle
 
 Settings Surface 组合多个 owner 的读取和命令，不存在一个可以整体覆盖的 `settings` aggregate：
@@ -1034,9 +1046,9 @@ Preference 不使用任意 key-value merge。每个字段固定 owner、type、d
 | Study Plan/Curriculum | daily new-Sense limit、Book、Range、Enrollment mode、Learning Policy Assignment | 通过 Curriculum operation/revision 生效，不经过普通 Preference |
 | Notification Preference（Later） | reminder permission/schedule/time zone | 独立 permission 与 delivery contract，不混入学习证据 |
 
-Learner Preference update 使用 expected revision 并通过 learner-scoped sync 收敛；并发不同值不能静默
-last-write-wins，服务端返回 authoritative revision。Device Preference 不进 learner outbox，也不要求
-其他设备收敛。
+Learner Preference update 使用 expected revision 并作为本地版本化事实提交；账号同步只传输提交记录，
+并发不同值不能静默 last-write-wins，合并必须产生可解释的 authoritative revision。Device Preference
+不进入账号同步，也不要求其他设备收敛。
 
 会改变 immutable asset 选择的 Learner Preference，例如 pronunciation accent，只对下一次尚未物化的
 Action/Encounter 生效；active Action 保留已经固定的 asset。纯 presentation setting 可以立即改变
@@ -1046,13 +1058,13 @@ autoplay 还必须服从当前 Action 的 asset role/answer-leak contract，没�
 
 ### Sync Health 与本机数据
 
-Sync Health 由 connectivity、pending/rejected outbox operations、last successful push/pull、installed
-content/media 与 bootstrap requirement 派生。用户可以发起 retry、download、repair 或 Local Data
+Sync Health 由 connectivity、pending/rejected local commits、last successful upload/download、installed
+content/media 与 recovery requirement 派生。用户可以发起 retry、download、repair 或 Local Data
 Clearance，但不能直接写 `synced=true`。
 
-sign-out 或 Local Data Clearance 遇到 pending outbox 时必须先尝试同步；若无法同步，只能保留本机
-数据，或由 learner 明确确认丢弃列出的 pending operations。Local Data Clearance 清除安装内容、
-media cache 与本地 learner replica 后可重新 bootstrap，但不能创建任何服务端 delete/tombstone。
+sign-out 或 Local Data Clearance 遇到 pending local commits 时必须先尝试同步；若无法同步，只能保留本机
+数据，或由 learner 明确确认丢弃列出的提交。Local Data Clearance 清除安装内容、media cache 与本地
+学习库后可从账号副本恢复，但不能创建任何服务端 delete/tombstone。
 
 ### Data Export 与 Account Deletion
 
@@ -1081,64 +1093,41 @@ operation；它不能复用 Local Data Clearance 或 Account Deletion 语义。
 
 ## 17. 离线与同步边界
 
-客户端先把原始学习操作写入本地 outbox，再执行 `push → pull`。服务端验证 learner scope、
-Session intent、Study Scope revision、Cycle/Gate revision、版本、内容引用与 Attempt identity，随后
-派生权威投影。
-网络失败只让操作保持 pending，不能把本地乐观 Gate 或 Graduation 冒充服务端事实。
+主应用先在本地领域事务中验证 learner、目标、固定内容、Protocol/Policy version、Attempt identity 与
+当前 revision，再原子地产生 Attempt、Observation、Evidence、Transition、Completion、Handoff、
+Memory Outcome、Scheduling Decision 及相应投影。断网不会降低这些规则，也不会阻止已有内容的学习、
+复习、重学、恢复或 FSRS 调度。
 
-Sync entity、cursor、canonicalization 与冲突响应由版本化 Sync contract 定义，不属于本领域模型。
+普通账号同步以本地已经提交的版本化记录为输入，传输清单和内容寻址数据块。服务端可以保存并返回
+账号副本，但不得重新运行 Protocol、重新评分、重算 FSRS，或把同步成功本身变成学习事实。下载记录
+必须先通过摘要、引用与可重放性校验，再由本地库在提交时合并；同步记账不得触发第二次业务结算。
 
-Curriculum、Personal Content 与 Free Practice 必须使用各自 learner-scoped operation、identity、
-revision、tombstone 与幂等规则；它们不能复用 learning attempt/encounter operation 以绕过正式
-验证。Book switch、Range change、Enrollment mode change、Add-to-Learning acceptance 与
-Supplemental removal、Learning Policy Assignment change 的并发冲突必须返回 authoritative Study
-Plan/Scope revision，
-不能让两个设备各自维护一份“当前词书”或有效范围。
+Curriculum、Personal Content、正式 Learning Runtime 与 Free Practice 使用各自的 identity、revision、
+tombstone 和幂等规则。界面、模型输出、导入器与同步适配器只能提交各模块允许的 command/fact，不能
+直接制造 Effective Learning Policy、Plan readiness、Evidence、Completion、Memory State、掌握百分比
+或 `synced=true`。并发冲突必须产生可解释的 revision/merge 结果，不能静默 last-write-wins。
 
-客户端可以提交带受支持 source reference 的 Add-to-Learning Intent 与 Learning Policy Assignment
-operation，但不能伪造 reviewed Alignment/published Book provenance，也不能直接声明
-Effective Learning Policy、Resolved Learning Plan readiness、blocked reason 或 `ready=true`；这些都是
-服务端根据固定 Profile、content/runtime capability 与 authoritative revisions 解析出的事实。
+Learner Preference 作为版本化本地事实参与账号同步；Device Preference 留在当前设备。Account
+lifecycle 与 Data Control Request 仍需在线重新授权，不能借学习库同步绕过。Account Deletion 删除
+云端账号与同步副本；本机学习库清除是独立、显式的 Local Data Clearance。
 
-Note、Anchor 与 Collection 的文本/顺序冲突必须返回 authoritative revision，而不是静默采用
-last-write-wins。Learner Semantic Projection 通过 pull/read model 重建，客户端不能直接上传
-节点状态、掌握百分比或图布局为权威事实。
+Sync record、manifest、block canonicalization、容量限制与冲突响应由版本化 Sync contract 定义，不属于
+学习运行时本身。
 
-Learner Preference 使用独立 versioned operation 与 revision，经 `push → pull` 跨设备收敛；Device
-Preference 留在当前 Device Installation。Account lifecycle 与 Data Control Request 不得借 learner
-outbox 绕过在线重新授权。服务端 account-deletion barrier 必须优先于任何旧 cursor/bootstrap，确保
-deleted Account 的离线 Replica 不能重新建立 LearnerScope 或回放历史 operation。
+## 18. 当前实现边界
 
-## 18. 现有实现迁移边界
+当前生产 Web 的学习权威位于本机：`apps/web/src/experience/learningRuntime` 负责 Protocol/Policy/评价
+与运行协调，`packages/learning-kernel` 提供可复用的纯规则，`apps/web/src/data/library` 在 IndexedDB
+事务中保存并恢复个人事实、运行、结果与 FSRS 状态。Card/页面只是 renderer，不能直接写入成功、
+证据或调度状态。
 
-当前 `runtime-rule-packet-v2.md` 与 `curriculum-runtime-contract.md` 仍描述 pre-redesign vertical
-slice：Study Plan 只能固定一个 Book Version，Introduction 后的首次 retrieval 即初始化 FSRS，
-Planner 主要使用 `new/due`，Encounter 可以在一次接触内连续 Boundary、retrieval、repair 与
-retry。这些合同是现有事实与历史重放输入，不能覆盖本文新 canonical model。
+Hono/Edge 不是 Learning Runtime。它只提供账号和扩展授权、学习包目录/下载、普通账号 Library Cloud
+Sync、在线模型、阅读/语义查询及账号删除等可选在线能力；这些能力可以提供候选内容或运输已提交
+记录，但不能拥有 Protocol Run、Encounter、Completion、Memory Outcome 或 FSRS 结算。
 
-实现新模型必须发布新的 Runtime Rule Packet、Curriculum/Runtime persistence contract 与 Sync
-contract version，迁移或丢弃当前 first-user 测试进度，并验证 Learning Materialization、Protocol
-Purpose、Learning Entry Provenance、Learning Policy Profile/Assignment、Effective Learning Policy、Resolved Learning Plan readiness、
-Protocol Step Instance、Initial Learning Completion、Scheduling Handoff、Relearning Completion、
-Learning Observation、Protocol Checkpoint、Progress Reset、graded Memory Outcome、Scheduling Decision、
-Retention Target isolation、one-review-one-FSRS-update 与 auditable relearning-outcome 不变量。
-Structured Acquisition 启用时再额外验证
-Acquisition Cycle、Gate、Evidence 与 Graduation 不变量。
+服务端旧 Consumer Runtime 及其 Planning/Encounter/replica vertical slice 已退出当前实现；数据库通过
+前向迁移删除对应运行、课程副本、内容生成任务与调度表，不保留旧数据兼容路径。以后增加新的
+Protocol/Profile 只能扩展本地运行时原语、版本化合同和重放验证，不能重新引入服务端学习权威。
 
-现有合同同样没有 Book Enrollment/Range mode、Supplemental Curriculum/Membership、Study Scope
-Revision、Learning Entry Provenance、Learning Policy Profile/Assignment、Effective Learning Policy、Resolved Learning Plan readiness、
-Semantic Field、Saved Sense/Example、Sense Note、Personal Semantic Anchor、Personal
-Collection/Membership、完整 Add-to-Learning decision、Free Practice Session/Activity/Turn/Observation/
-Feedback/Artifact 或
-Learner Semantic Projection，也没有 Reference Release/Reference Sense、Sense Alignment、全句 Lexical
-Occurrence annotation、Contextual Sense Resolution 或 Contextual Lookup API 的 production 语义。在对应
-新合同完成前，当前 `/me` 中混合 profile、`selectedWorkspaceId` 与单一
-`reviewReactionAnimationsEnabled` 的形状只能作为 compatibility bootstrap read model，不能定义最终
-Account 或 Preference aggregate；
-客户端不得把原型的换词书、局部范围、星标加入学习、笔记、集合、旧版随身听/听写/拼写或语义图
-状态当作真实产品事实，也不得把基于 token regex 与静态词表的弹窗称为上下文词典。
-
-现有合同同样没有 Account lifecycle/Session management、typed Learner Preference revision、明确的
-Device Preference、Sync Health read model、Local Data Clearance 或 Data Control Request 状态机。真实
-Cognito、导出、删除及 deletion barrier 完成前，不能把本地 auth、清空 IndexedDB 或一个 `/me`
-response 冒充 production Account/Data Control 能力。
+当前交付范围只保证 Web。暂停的原生客户端代码与历史参考文档不定义现行实现，也不能作为 Web
+运行时、离线能力或同步合同的验收证据。

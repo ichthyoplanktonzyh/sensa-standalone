@@ -11,7 +11,7 @@ import { LanguageSwitch } from '../../i18n/LanguageSwitch';
 import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
 import { LanguagePanelHost, languageSummary } from './language/LanguagePanel';
 import { useLanguageProfile } from '../library/useLanguageProfile';
-import type { PrototypeLearningPolicy } from '../learningJourney/prototypeLearning';
+import type { LearningPolicyId } from '../../learning/runtime/policyProfiles';
 
 interface ProfileScreenProps {
   fixedLearningPolicy?: boolean;
@@ -22,9 +22,9 @@ interface ProfileScreenProps {
   localLibrary?: boolean;
   onOpenPreferences?: () => void;
   onGoStudyPlan: () => void;
-  defaultPolicy: PrototypeLearningPolicy;
+  defaultPolicy: LearningPolicyId;
   dailyNewCount: number;
-  onPolicyChange: (policy: PrototypeLearningPolicy) => void;
+  onPolicyChange: (policy: LearningPolicyId) => void;
   onDailyNewCountChange: (count: number) => void;
 }
 

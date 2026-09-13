@@ -6,14 +6,14 @@ import type {
   MeaningToFormRecallAssessmentResource,
   NovelTransferAssessmentResource,
   RecognitionAssessmentResource,
-} from '../../../content/assessmentResources';
-import type { PrototypeIntroductionPackage } from '../../../content/learningCatalog';
+} from '../../../../learning/content/assessmentResources';
+import type { RuntimeLearningContent } from '../../../../learning/content/learningCatalog';
 import type {
   ReviewAssessmentResult,
   ReviewAssessmentSpec,
   ReviewChoiceOption,
   ReviewExampleExcerpt,
-} from '../../../review/types';
+} from '../../../../learning/review/types';
 import type {
   DictionaryLookup,
   DictionaryLookupOptions,
@@ -32,7 +32,7 @@ import {
 
 interface SensaReviewFeedbackCardProps {
   purpose?: 'acquisition'|'retention';
-  content: PrototypeIntroductionPackage;
+  content: RuntimeLearningContent;
   spec: ReviewAssessmentSpec;
   assessmentResource: AssessmentResource;
   result: ReviewAssessmentResult;

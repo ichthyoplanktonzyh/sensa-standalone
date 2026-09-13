@@ -1,4 +1,4 @@
-import {auth} from '../consumer/client';
+import {auth} from '../account/auth';
 import {readLibrary} from './store';
 import {synchronizeLibrary} from './cloudSync';
 let running:Promise<void>|undefined;

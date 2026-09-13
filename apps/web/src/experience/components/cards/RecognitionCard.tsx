@@ -1,17 +1,17 @@
 import type { CardExecution } from './CardExecution';
-import type { PrototypeIntroductionPackage } from '../../content/learningCatalog';
+import type { RuntimeLearningContent } from '../../../learning/content/learningCatalog';
 import type {
   DictionaryLookup,
   QuickDictEntry,
 } from '../../types';
-import type { RecognitionAssessmentResource } from '../../content/assessmentResources';
+import type { RecognitionAssessmentResource } from '../../../learning/content/assessmentResources';
 import { SensaRecognitionCard } from './SensaRecognitionCard';
 
 export type AssessmentPurpose = 'acquisition' | 'retention';
 
 export interface RecognitionCardProps {
   execution?: CardExecution;
-  content: PrototypeIntroductionPackage;
+  content: RuntimeLearningContent;
   /** Exact Assessment Resource selected by the current Action. */
   assessment: RecognitionAssessmentResource;
   purpose?: AssessmentPurpose;

@@ -1,5 +1,5 @@
 import {serviceStatusSchema} from '@sensa/contracts/sensa';
-import {auth} from '../consumer/client';
+import {auth} from '../account/auth';
 export async function readServiceStatus(){
  const session=(await auth?.getSession())?.data.session;
  if(!session)throw new Error('localFlow.statusLogin');

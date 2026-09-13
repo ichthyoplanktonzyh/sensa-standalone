@@ -1,7 +1,7 @@
 import {cardText} from '../../../i18n/originalCards';
 import { uiClass } from '../../ui/classes';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import type { MeaningToFormRecallOutcome } from '../../engine/types';
+import type { MeaningToFormRecallOutcome } from '../../../learning/engine/types';
 import { audioService } from '../../services/audioService';
 import { PersonalConnectionActions } from '../PersonalConnectionActions';
 import type { RecallCardProps } from './RecallCard';

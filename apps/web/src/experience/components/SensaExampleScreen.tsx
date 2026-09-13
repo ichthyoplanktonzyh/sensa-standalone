@@ -1,4 +1,5 @@
 import {cardText} from '../../i18n/originalCards';
+import { contentAnnotations } from '../../data/library/contentAnnotations';
 import { uiClass } from '../ui/classes';
 import {
   useCallback,
@@ -12,7 +13,6 @@ import type {
   SyncedExampleMediaRender,
 } from '../types';
 import { audioService } from '../services/audioService';
-import { personalContentService } from '../services/personalContentService';
 import { lookupDictionaryEntry } from '../services/quickDict';
 import { ClickableSentence } from './ClickableSentence';
 import type { ExampleScreenProps } from './ExampleScreen';
@@ -102,7 +102,7 @@ export function SensaExampleScreen({
   const sentence = sentences[sentenceIndex] ?? sentences[0] ?? null;
   const exampleId = sentence?.exampleId
     ?? `${curWord.id ?? curWord.w}:example:${senseIndex}:${sentence ? availableSentences.indexOf(sentence) : initialSentenceIdx}`;
-  const isSaved = personalContentService.isExampleSaved(exampleId);
+  const isSaved = contentAnnotations.isExampleSaved(exampleId);
   const hasPrevious = sentenceIndex > 0;
   const hasNext = sentenceIndex < sentences.length - 1;
 
@@ -136,7 +136,7 @@ export function SensaExampleScreen({
   }, [active, clearLookup, initialSenseIdx, initialSentenceIdx, senseDetails.length, sequenceIdentity, stopPlayback, wordIdentity]);
 
   useEffect(
-    () => personalContentService.subscribe(() => {
+    () => contentAnnotations.subscribe(() => {
       setPersonalContentRevision((revision) => revision + 1);
     }),
     [],
@@ -217,14 +217,14 @@ export function SensaExampleScreen({
           className={isSaved ? 'is-saved' : ''}
           disabled={!sentence}
           aria-pressed={isSaved}
-          onClick={() => {
+          onClick={() => { void (async () => {
             try {
-              const saved = personalContentService.toggleExample(exampleId);
+              const saved = await contentAnnotations.toggleExample(exampleId);
               toast(saved ? cardText('exampleSaved') : cardText('exampleRemovedFromSavedItems'));
             } catch {
               toast(cardText('couldNotSaveThisExampleTryAgain'));
             }
-          }}
+          })(); }}
           aria-label={isSaved ? cardText('unsaveThisExample') : cardText('saveThisExample')}
         >
           <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-star" /></svg>

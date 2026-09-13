@@ -22,8 +22,7 @@ const compiled=await build({
     contents:[
       `export {localTargetView} from './apps/web/src/experience/library/PackageLearningViews';`,
       `export {pendingPersonalTargetView} from './apps/web/src/experience/library/PersonalLearningControls';`,
-      `export {lightweightContentInputForTarget,PROTOTYPE_LEARNING_TARGETS} from './apps/web/src/experience/learningJourney/prototypeLearning';`,
-      `export {provisionLightweightInitialContent} from './apps/web/src/experience/learningRuntime/lightweightInitialContent';`,
+      `export {provisionLightweightInitialContent} from './apps/web/src/learning/runtime/lightweightInitialContent';`,
     ].join('\n'),
     resolveDir:process.cwd(),
   },
@@ -71,15 +70,6 @@ try{
   assert.equal(authored.targetLanguage,'en');
   assert.equal(authored.familiarLanguage,'zh-CN');
   assert.notEqual(authored.targetLanguage,authored.familiarLanguage);
-
-  // Provisioning takes the languages from the target rather than from a constant.
-  const borrow=api.lightweightContentInputForTarget(api.PROTOTYPE_LEARNING_TARGETS['borrow-receive']);
-  assert.equal(borrow.expression.languageTag,'en','the shipped prototype target keeps its own language');
-  assert.equal(borrow.sense.familiarLanguageTag,'zh-CN');
-  const spanishTarget={...api.PROTOTYPE_LEARNING_TARGETS['borrow-receive'],targetId:'fixture-es',targetLanguageTag:'es',familiarLanguageTag:'fr'};
-  const spanishInput=api.lightweightContentInputForTarget(spanishTarget as never);
-  assert.equal(spanishInput.expression.languageTag,'es','a target in another language is provisioned in that language');
-  assert.equal(spanishInput.sense.familiarLanguageTag,'fr','the familiar language travels with the target too');
 
   // An enrolled package target carries the package's languages.
   const localTarget={id:'fixture',retentionId:'fixture-retention',packageKey:'fixture-package',expression:'tomarse su tiempo',meaning:'从容地花时间做一件事。',policyAssignment:{assignmentId:'fixture-assignment',revision:1,scope:'system_default',profileId:'lightweight',assignedByOperationId:'fixture-operation',assignedAt:'2026-09-01T00:00:00.000Z',provenance:{}},committedPolicy:null,targetLanguageTag:'es',familiarLanguageTag:'zh-CN',material:{snapshot:{},content:{resources:[]}},createdAt:'2026-09-01T00:00:00.000Z',startedAt:null,completedAt:null,memory:null,memoryRevision:0,relearnAt:null,relearningState:null};

@@ -74,6 +74,8 @@ try{
   const due=(await api.readLearning()).targets.find((t:any)=>t.id===packageTarget).memory.dueAt.toISOString();packageRun=await api.startLearning(id(),packageTarget,20,due);
   packageRun=await api.actLearning(id(),packageRun.id,packageRun.revision,{kind:'reveal'},due);packageRun=await api.actLearning(id(),packageRun.id,packageRun.revision,{kind:'rate',rating:'again'},due);await api.finishLearning(id(),packageRun.id);
   const relearnAt=(await api.readLearning()).targets.find((t:any)=>t.id===packageTarget).relearnAt;packageRun=await api.startLearning(id(),packageTarget,20,relearnAt);packageRun=await api.actLearning(id(),packageRun.id,packageRun.revision,{kind:'reveal'},relearnAt);
+  await api.setLocalDeclaredMastery(id(),packageTarget,true,relearnAt);
+  const interruptedRun=(await api.readLearning()).runs.find((r:any)=>r.id===packageRun.id);assert.equal(interruptedRun.lifecycleEvents.at(-1).kind,'interrupted_by_planning_override');assert.equal((await api.readLearning()).active,undefined);
   const inFlightDraft=await api.saveDraft(id(),{id:id(),expectedRevision:0,text:'An interrupted clarification'}),inFlightSession=await api.createTeacher(id(),inFlightDraft);
   holdTeacher=true;const teacherArrived=new Promise<void>(resolve=>{arrived=resolve;});const teacherWork=api.continueTeacher(inFlightSession.id,provider,new AbortController().signal,()=>{},languages);await teacherArrived;
   const password='local-backup-test-password', exported=await api.exportLibraryBackup(password);
@@ -106,6 +108,7 @@ try{
   assert.equal((await restored.getTeacher(inFlightSession.id)).status,'stopped');assert.equal(restored.hasCredential(provider),false);
   const identity=await restored.openLibrary();assert.equal(identity.id,library.id);assert.equal(identity.learnerId,library.learnerId);assert.equal(identity.deviceId,fresh.deviceId);assert.notEqual(identity.deviceId,library.deviceId);
   await assert.rejects(restored.restoreLibraryBackup(exported.file,password),/libraryBackup.errors.occupied/);
+  await restored.setLocalDeclaredMastery(id(),packageTarget,false,relearnAt);packageRun=await restored.startLearning(id(),packageTarget,20,relearnAt);assert.equal(packageRun.lifecycleEvents.at(-1).kind,'resumed_after_planning_override');
   await restored.actLearning(id(),packageRun.id,packageRun.revision,{kind:'rate',rating:'good'},relearnAt);
   await restored.exportLibraryBackup(password);
   const preview=await restored.inspectLocalClear();

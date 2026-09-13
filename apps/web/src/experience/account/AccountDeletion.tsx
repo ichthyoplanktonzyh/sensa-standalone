@@ -1,6 +1,6 @@
 import {useRef,useState} from 'react';
 import {useTranslation} from 'react-i18next';
-import {auth} from '../../data/consumer/client';
+import {auth} from '../../data/account/auth';
 import {eraseDeletedAccount} from '../../data/library/dataControl';
 import {readLibrary} from '../../data/library/store';
 import {setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';

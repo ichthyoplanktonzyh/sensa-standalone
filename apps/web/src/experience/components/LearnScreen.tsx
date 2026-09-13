@@ -7,29 +7,18 @@ import { uiClass } from "../ui/classes";
 import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
 import type { Word } from "../types";
 import type { IntroductionPhase } from "./cards/IntroductionCard";
-import {
-  materializeReviewRepairContent,
-  type PrototypeIntroductionPackage,
-} from "../content/learningCatalog";
-import {
-  materializeAssessmentResource,
-  type AssessmentPackageIdentity,
-  type AssessmentResource,
-} from "../content/assessmentResources";
-import { buildPrototypeReviewAssessment } from "../content/prototypeReviewCards";
-import type {
-  LearningStepKind,
-  RepairResourceReference,
-} from "../engine/types";
+import type { RuntimeLearningContent } from "../../learning/content/learningCatalog";
+import type { AssessmentResource } from "../../learning/content/assessmentResources";
+import type { LearningStepKind, RepairResourceReference } from "../../learning/engine/types";
 import type {
   ReviewAssessmentKind,
   ReviewAssessmentResult,
-} from "../review/types";
+} from "../../learning/review/types";
 import {
   stepRendererRegistry,
   type StepRendererHost,
 } from "../learningRuntime/stepRenderers";
-import { toReviewSpec } from "../content/prototypeReviewCards";
+import { toReviewSpec } from "../../learning/content/reviewCards";
 
 /**
  * 队列驱动 Step 的宿主屏：工具栏、进度与卡片视口。
@@ -46,7 +35,7 @@ interface LearnScreenProps {
   busy?: boolean;
   notice?: ReactNode;
   execution?: CardExecution;
-  preparedAssessmentResource?: AssessmentResource | null;
+  preparedAssessmentResource: AssessmentResource | null;
   controlledPhase?: IntroductionPhase;
   onControlledPhaseChange?: (phase: IntroductionPhase) => void;
   hasTask: boolean;
@@ -57,9 +46,9 @@ interface LearnScreenProps {
   stage: LearningStepKind;
   step: number;
   groupSize: number;
-  introductionContent: PrototypeIntroductionPackage | null;
-  /** App 侧已物化的修复内容；为空时由讲解包按 resourceRef 现场物化。 */
-  repairContent: PrototypeIntroductionPackage | null;
+  introductionContent: RuntimeLearningContent | null;
+  /** Runtime 已从固定 Release 物化的修复内容。 */
+  repairContent: RuntimeLearningContent | null;
   introductionPosition: number;
   introductionTotal: number;
   reviewAssessmentPurpose: "acquisition" | "retention";
@@ -68,8 +57,6 @@ interface LearnScreenProps {
   onMarkKnown: () => void;
   onOpenMenuMore: RuntimeToolsProps['onOpenMenuMore'];
   reviewAssessmentKind: ReviewAssessmentKind | null;
-  reviewAssessmentTaskKey: string | null;
-  assessmentPackageIdentity: AssessmentPackageIdentity | null;
   reviewAssessmentResult: ReviewAssessmentResult | null;
   repairResourceRef: RepairResourceReference | null;
   /** 卡片要的宿主能力与完成回调，合同见 learningRuntime/stepRenderers.tsx。 */
@@ -95,8 +82,6 @@ export const LearnScreen = ({
   onMarkKnown,
   onOpenMenuMore,
   reviewAssessmentKind,
-  reviewAssessmentTaskKey,
-  assessmentPackageIdentity,
   reviewAssessmentResult,
   repairResourceRef,
   host,
@@ -119,17 +104,7 @@ export const LearnScreen = ({
   }, [curWord.id, introductionContent?.senseKey]);
 
   const isIntroduction = stage === "introduction" && !!introductionContent;
-  const repairContent = useMemo(
-    () =>
-      stage === "review_repair" && introductionContent
-        ? (preparedRepairContent ??
-          materializeReviewRepairContent(
-            introductionContent,
-            repairResourceRef,
-          ))
-        : null,
-    [introductionContent, preparedRepairContent, repairResourceRef, stage],
-  );
+  const repairContent = stage === "review_repair" ? preparedRepairContent : null;
   const isRepair = stage === "review_repair" && !!repairContent;
   const isReviewAssessment =
     stage === "review_assessment" &&
@@ -148,14 +123,6 @@ export const LearnScreen = ({
     (isIntroduction || isRepair) && introductionPhase === "reveal";
   const isExperienceHidden =
     isIntroduction && introductionPhase === "experience";
-  const learningAssessmentKind =
-    stage === "recognition"
-      ? ("context_recognition" as const)
-      : stage === "recall"
-        ? ("meaning_to_form_recall" as const)
-        : stage === "transfer"
-          ? ("novel_context_transfer" as const)
-          : null;
   const personalMenuContent = isIntroductionReveal
     ? introductionContent
     : isRepair
@@ -167,55 +134,12 @@ export const LearnScreen = ({
     current: Math.min(step, groupSize),
     total: groupSize,
   });
-  const assessmentResource = useMemo<AssessmentResource | null>(() => {
-    if (preparedAssessmentResource !== undefined) return preparedAssessmentResource;
-    const kind =
-      isReviewAssessment || isReviewFeedback
-        ? reviewAssessmentKind
-        : learningAssessmentKind;
-    const needsAssessment =
-      isReviewAssessment || isReviewFeedback || learningAssessmentKind !== null;
-    if (!needsAssessment) return null;
-    if (
-      !kind ||
-      !introductionContent ||
-      !reviewAssessmentTaskKey ||
-      !assessmentPackageIdentity
-    ) {
-      throw new Error(
-        "Formal assessment stage is missing its selected Action resource.",
-      );
-    }
-    return materializeAssessmentResource({
-      packageIdentity: assessmentPackageIdentity,
-      content: introductionContent,
-      taskKey: reviewAssessmentTaskKey,
-      kind,
-    });
-  }, [
-    preparedAssessmentResource,
-    assessmentPackageIdentity,
-    introductionContent,
-    isReviewAssessment,
-    isReviewFeedback,
-    learningAssessmentKind,
-    reviewAssessmentKind,
-    reviewAssessmentTaskKey,
-  ]);
-  const reviewSpec = useMemo(() => {
-    if (preparedAssessmentResource !== undefined) return preparedAssessmentResource && introductionContent ? toReviewSpec(preparedAssessmentResource, introductionContent) : null;
-    if (
-      !introductionContent ||
-      !reviewAssessmentKind ||
-      !reviewAssessmentTaskKey
-    )
-      return null;
-    return buildPrototypeReviewAssessment(
-      introductionContent,
-      reviewAssessmentKind,
-      reviewAssessmentTaskKey,
-    );
-  }, [preparedAssessmentResource, introductionContent, reviewAssessmentKind, reviewAssessmentTaskKey]);
+  const assessmentResource: AssessmentResource | null = preparedAssessmentResource;
+  const reviewSpec = useMemo(() => (
+    assessmentResource && introductionContent
+      ? toReviewSpec(assessmentResource, introductionContent)
+      : null
+  ), [assessmentResource, introductionContent]);
 
   const scrollToTop = () => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;

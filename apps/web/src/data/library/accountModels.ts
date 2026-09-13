@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {auth} from '../consumer/client';
+import {auth} from '../account/auth';
 import type {Purpose} from './providers';
 
 /** Account-hosted model connections. A connection saved here keeps its credential in

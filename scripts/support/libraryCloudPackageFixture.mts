@@ -2,10 +2,10 @@
 import {readFile} from 'node:fs/promises';
 import {stableUuid,canonicalJsonDigest} from '@sensa/learning-kernel';
 import {validateRuntimeLearningRelease} from '@sensa/content-validator/runtime';
-import {provisionLightweightInitialContent} from '../../apps/web/src/experience/learningRuntime/lightweightInitialContent.ts';
+import {provisionLightweightInitialContent} from '../../apps/web/src/learning/runtime/lightweightInitialContent.ts';
 import {validatePackage,sha256} from '../../apps/web/src/data/library/packages.ts';
 export async function libraryCloudPackageFixture(){
-const release=JSON.parse(await readFile(new URL('../../apps/web/src/experience/content/releases/golden-learning-release-v1.json',import.meta.url),'utf8'));
+const release=JSON.parse(await readFile(new URL('../../apps/web/src/learning/content/releases/golden-learning-release-v1.json',import.meta.url),'utf8'));
 const words=new Set(['borrow','lend']);release.packages=release.packages.filter((p:any)=>words.has(p.identity.lexemeKey));release.lexemes=release.lexemes.filter((l:any)=>words.has(l.lexemeKey));
 const senses=new Set(release.packages.map((p:any)=>p.identity.senseKey));release.relations=release.relations.filter((r:any)=>senses.has(r.sourceSenseKey)&&senses.has(r.targetSenseKey));release.media=release.media.filter((m:any)=>[...words].some(w=>m.mediaKey.startsWith(w+'.')));
 // Audio bytes only exercise digest, storage and restoration, not playback quality.

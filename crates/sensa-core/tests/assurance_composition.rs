@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 #[test]
 fn a_pinned_progression_binding_changes_actual_failure_behavior_and_survives_restore() {
     let release: Value = serde_json::from_str(include_str!(
-        "../../../apps/web/src/experience/content/releases/golden-learning-release-v1.json"
+        "../../../apps/web/src/learning/content/releases/golden-learning-release-v1.json"
     ))
     .unwrap();
     let p = &release["packages"][0];

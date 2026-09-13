@@ -1,6 +1,7 @@
 import type { SenseDetail, Sentence, Word } from './types';
 import { WORDS } from './data';
-import { PROTOTYPE_LEARNING_PACKAGES, toWordPresentation } from './content/learningCatalog';
+import { BUNDLED_LEARNING_PACKAGES } from '../learning/content/bundledLearningContent';
+import { toWordPresentation } from './learningPresentation';
 
 /**
  * A small, read-only projection used by the free-practice prototype.
@@ -158,7 +159,7 @@ export const LEGACY_PRACTICE_SENSES = flattenPracticeSenses(WORDS);
  * use their stable package/sense IDs.
  */
 const packagePracticeExample = (
-  pkg: (typeof PROTOTYPE_LEARNING_PACKAGES)[number],
+  pkg: (typeof BUNDLED_LEARNING_PACKAGES)[number],
 ): (typeof pkg.content.learningExamples)[number] | undefined => {
   const grants = pkg.content.practiceManifest?.grants ?? [];
   // The manifest is authoritative. Prefer the approved Portable Listening
@@ -169,7 +170,7 @@ const packagePracticeExample = (
   return pkg.content.learningExamples.find((example) => resourceKeys.includes(example.exampleKey));
 };
 
-export const RUNTIME_PRACTICE_SENSES: PracticeSenseItem[] = PROTOTYPE_LEARNING_PACKAGES.flatMap((pkg) => {
+export const RUNTIME_PRACTICE_SENSES: PracticeSenseItem[] = BUNDLED_LEARNING_PACKAGES.flatMap((pkg) => {
   const example = packagePracticeExample(pkg);
   if (!example) return [];
   return [{

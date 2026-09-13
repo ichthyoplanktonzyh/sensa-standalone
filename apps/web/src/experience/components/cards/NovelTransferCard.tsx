@@ -2,9 +2,9 @@ import {cardText} from '../../../i18n/originalCards';
 import type { CardExecution } from './CardExecution';
 import { uiClass } from '../../ui/classes';
 import { useEffect, useMemo, useState } from 'react';
-import type { NovelTransferAssessmentResource } from '../../content/assessmentResources';
-import type { PrototypeIntroductionPackage } from '../../content/learningCatalog';
-import type { NovelTransferOutcome } from '../../engine/types';
+import type { NovelTransferAssessmentResource } from '../../../learning/content/assessmentResources';
+import type { RuntimeLearningContent } from '../../../learning/content/learningCatalog';
+import type { NovelTransferOutcome } from '../../../learning/engine/types';
 import type {
   DictionaryLookup,
   DictionaryLookupOptions,
@@ -20,7 +20,7 @@ import { ExperienceRenderer } from './ExperienceRenderer';
 
 export interface NovelTransferCardProps {
   execution?: CardExecution;
-  content: PrototypeIntroductionPackage;
+  content: RuntimeLearningContent;
   /** Exact Transfer Assessment Resource selected by the current Action. */
   assessment: NovelTransferAssessmentResource;
   purpose?: 'acquisition' | 'retention';
@@ -64,7 +64,7 @@ function TransferSceneVisual({
   visualKind,
   alt,
 }: {
-  visualKind: PrototypeIntroductionPackage['novelTransfer']['scenarios'][number]['visualKind'];
+  visualKind: RuntimeLearningContent['novelTransfer']['scenarios'][number]['visualKind'];
   alt: string;
 }) {
   const normalizedKind = visualKind.replace(/_/g, '-');

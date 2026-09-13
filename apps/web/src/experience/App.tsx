@@ -1,4 +1,5 @@
-import {localRunPolicy,localTargetPolicy} from './learningRuntime/localRuntimeBindings';
+import {localRunPolicy,localTargetPolicy} from '../learning/runtime/localRuntimeBindings';
+import {composeLocalLearningRuntime} from './learningRuntime/runtimeComposition';
 import {BatchPersonalLearning} from './library/BatchPersonalLearning';
 import {localFlowText} from '../i18n/localFlowText';
 import {usePersonalLearning} from './library/usePersonalLearning';
@@ -17,6 +18,7 @@ import {
   PackageTarget,
   PackageRuntime,
   localTargetView,
+  localRuntimePresentationRegistry,
 } from './library/PackageLearningViews';
 import type {AssuranceSupportHost} from './library/AssuranceLearningViews';
 import {useLocalMeaningLibrary} from './library/useLocalMeaningLibrary';
@@ -25,8 +27,8 @@ import {LearningPreferencesPanel} from './components/learning/LearningPreference
 import {useTranslation} from 'react-i18next';
 import {uiClass} from './ui/classes';
 import {useState,useCallback,useMemo} from 'react';
+import {contentAnnotations} from '../data/library/contentAnnotations';
 import {lookupDictionaryEntry} from './services/quickDict';
-import {personalContentService} from './services/personalContentService';
 import {IconSprite} from './components/IconSprite';
 import {HomeScreen} from './components/HomeScreen';
 import {AcademyScreen} from './components/AcademyScreen';
@@ -65,7 +67,10 @@ import {useShellNavigation} from './router/useShellNavigation';
 import {usePresentationStore} from './stores/presentationStore';
 import {useOverlayStore} from './stores/overlayStore';
 
+const localLearningRuntimeComposition=composeLocalLearningRuntime(localRuntimePresentationRegistry);
+
 export default function App() {
+  void localLearningRuntimeComposition;
   const { t } = useTranslation();
   const [learningPreferencesOpen,setLearningPreferencesOpen]=useState(false);
   const closeLearningPreferences=useCallback(()=>{
@@ -207,7 +212,7 @@ export default function App() {
   const closeMenus = useOverlayStore((state) => state.closeMenus);
 
   const menuPersonalAnchors = menuPersonalContent
-    ? personalContentService.getSemanticAnchors(menuPersonalContent.senseKey)
+    ? contentAnnotations.getSemanticAnchors(menuPersonalContent.senseKey)
     : [];
 
   /* ---------- Learning Runtime composition ---------- */

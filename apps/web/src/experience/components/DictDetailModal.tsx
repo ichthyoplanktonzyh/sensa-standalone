@@ -1,9 +1,9 @@
 import { uiClass } from '../ui/classes';
 import { useState, useEffect, type MouseEvent } from 'react';
+import { contentAnnotations } from '../../data/library/contentAnnotations';
 import type { Word, QuickDictEntry } from '../types';
 import { WORDS } from '../data';
 import { lookupWord } from '../services/quickDict';
-import { noteService } from '../services/noteService';
 import { audioService } from '../services/audioService';
 
 interface DictDetailModalProps {
@@ -50,9 +50,9 @@ export const DictDetailModal = ({
   // 监听该词的笔记变化
   useEffect(() => {
     if (wordStr) {
-      setUserNote(noteService.getNote(wordStr));
-      const unsub = noteService.subscribe(() => {
-        setUserNote(noteService.getNote(wordStr));
+      setUserNote(contentAnnotations.getNote(wordStr));
+      const unsub = contentAnnotations.subscribe(() => {
+        setUserNote(contentAnnotations.getNote(wordStr));
       });
       return unsub;
     }
@@ -87,13 +87,17 @@ export const DictDetailModal = ({
     toast(next ? `已收藏 "${wordStr}"` : `已取消收藏 "${wordStr}"`);
   };
 
-  const handleAddNote = () => {
+  const handleAddNote = async () => {
     if (!userNote.trim()) {
       toast('请输入笔记内容');
       return;
     }
-    noteService.setNote(wordStr, userNote.trim());
-    toast('已保存笔记');
+    try {
+      await contentAnnotations.setNote(wordStr, userNote.trim());
+      toast('已保存笔记');
+    } catch {
+      toast('保存笔记失败，请重试');
+    }
   };
 
   return (

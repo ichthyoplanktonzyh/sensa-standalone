@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "node -e \"const fs=require('node:fs');fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('tsconfig.tsbuildinfo',{force:true})\"",
     "build": "tsc -p tsconfig.json",
     "dev": "node --env-file-if-exists=.env --import tsx/esm --watch src/server.ts",
     "start": "node --env-file-if-exists=.env dist/server.js"

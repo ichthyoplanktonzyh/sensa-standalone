@@ -11,10 +11,6 @@ import { queryWithUserScope } from "./database/index.js";
 import { HttpError, createPublicHttpErrorDetails, createPublicHttpErrorMessage } from "./shared/errors.js";
 import { createSensaCatalogRoutes } from "./routes/sensaCatalog.js";
 import { createSensaPinnedContentRoutes } from "./routes/sensaPinnedContent.js";
-import { createSensaPlanningRoutes } from "./routes/sensaPlanning.js";
-import { createSensaEncounterRoutes } from "./routes/sensaEncounter.js";
-import { createSensaMediaRoutes } from "./routes/sensaMedia.js";
-import { createSensaSyncRoutes } from "./routes/sensaSync.js";
 import { readSensaApiEnvironment } from "./server/environment.js";
 import { loadRequestContextFromRequest } from "./server/requestContext.js";
 
@@ -36,33 +32,19 @@ const sensaRoutes = [
   "GET /sensa/content-releases/:contentReleaseId/items",
   "GET /workspaces/:workspaceId/sensa/study-plans/:studyPlanId/content/manifest",
   "GET /workspaces/:workspaceId/sensa/study-plans/:studyPlanId/content/items",
-  "POST /workspaces/:workspaceId/sensa/study-plans",
-  "POST /workspaces/:workspaceId/sensa/learning-sessions/start-or-resume",
-  "POST /workspaces/:workspaceId/sensa/learning-sessions/:learningSessionId/plan-next",
-  "POST /workspaces/:workspaceId/sensa/sense-encounters/:encounterId/open",
-  "POST /workspaces/:workspaceId/sensa/sense-encounters/:encounterId/attempts",
-  "POST /workspaces/:workspaceId/sensa/sense-encounters/:encounterId/interrupt",
-  "POST /workspaces/:workspaceId/sensa/sync/bootstrap",
-  "POST /workspaces/:workspaceId/sensa/sync/push",
-  "POST /workspaces/:workspaceId/sensa/sync/pull",
-  "GET /workspaces/:workspaceId/sensa/sense-encounters/:senseEncounterId/actions/:learningActionId/assets/:learningAssetId/download-url",
 ] as const;
 
 function createSensaRouteGroup(allowedOrigins: ReadonlyArray<string>): Hono<AppEnv> {
   const group = new Hono<AppEnv>();
   group.route("", createSensaCatalogRoutes());
   group.route("", createSensaPinnedContentRoutes({ allowedOrigins }));
-  group.route("", createSensaPlanningRoutes({ allowedOrigins }));
-  group.route("", createSensaEncounterRoutes({ allowedOrigins }));
-  group.route("", createSensaMediaRoutes({ allowedOrigins }));
-  group.route("", createSensaSyncRoutes({ allowedOrigins }));
   return group;
 }
 
 function discoveryPayload(): Readonly<Record<string, unknown>> {
   return {
     ...sensaApiIdentity,
-    status: "sensa-backend-vertical-slice",
+    status: "sensa-online-services",
     routes: {
       health: "/health",
       me: "/me",

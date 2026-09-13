@@ -1,4 +1,4 @@
-import { learningCatalog } from '../content/learningCatalog';
+import { bundledLearningCatalog } from '../../learning/content/bundledLearningContent';
 import { activeSpeechLanguage } from './speechLanguage';
 
 export interface AudioPlaybackOptions {
@@ -107,7 +107,7 @@ class AudioService {
     const english = speechLocale.startsWith('en');
     const cleanWord = word.trim().toLocaleLowerCase(speechLocale);
     if (!cleanWord) return;
-    const packagedUrl = learningCatalog.resolvePronunciationAudioUrl(
+    const packagedUrl = bundledLearningCatalog.resolvePronunciationAudioUrl(
       cleanWord,
       english ? (type === 'uk' ? 'en-GB' : 'en-US') : speechLocale,
     );
@@ -209,7 +209,7 @@ class AudioService {
     if (!sentence) return;
     const { speechLocale } = await activeSpeechLanguage();
     const english = speechLocale.startsWith('en');
-    const packagedUrl = learningCatalog.resolveExampleAudioUrl(
+    const packagedUrl = bundledLearningCatalog.resolveExampleAudioUrl(
       sentence,
       english ? (type === 'uk' ? 'en-GB' : 'en-US') : speechLocale,
     );

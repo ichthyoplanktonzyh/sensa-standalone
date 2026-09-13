@@ -24,8 +24,8 @@ import type {
   LocalProtocolAuditEffect,
   LocalLearningRun,
   LocalLearningTarget,
-} from '../../experience/learningRuntime/localProtocol';
-import { initialCompletionContractOf, orchestrationRegistry } from '../../experience/learningRuntime/orchestrations';
+} from '../../learning/runtime/localProtocol';
+import { initialCompletionContractOf, orchestrationRegistry } from '../../learning/runtime/orchestrations';
 
 export type LocalRetentionSettlement =
   | Readonly<{

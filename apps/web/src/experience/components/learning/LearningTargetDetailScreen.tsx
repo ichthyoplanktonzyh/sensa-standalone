@@ -1,21 +1,22 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, Clock3, LockKeyhole, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { PrototypeLearningPolicy, PrototypeLearningReadiness, PrototypeLearningTargetView } from '../../learningJourney/prototypeLearning';
-import type { RetentionRuntimeTargetStatus } from '../../engine/ReviewQueue';
-import type { InitialLearningCompletionKind } from '../../learningRuntime/orchestrations';
+import type { LearningPolicyId, LearningReadiness } from '../../../learning/runtime/policyProfiles';
+import type {LearningTargetPresentation} from '../../library/learningPresentation';
+import type { RetentionRuntimeTargetStatus } from '../../../learning/engine/ReviewQueue';
+import type { InitialLearningCompletionKind } from '../../../learning/runtime/orchestrations';
 import { LearningSetupFrame, setupButton, setupPrimary } from './LearningSetupFrame';
 
 interface LearningTargetDetailScreenProps {
   active: boolean;
   screenId?: string;
-  target: Omit<PrototypeLearningTargetView, 'targetId'> & {targetId: string};
+  target: LearningTargetPresentation;
   actions?: import('react').ReactNode;
   notice?: import('react').ReactNode;
   fixedPolicy?: boolean;
-  selectedPolicy: PrototypeLearningPolicy;
-  preparation: PrototypeLearningReadiness;
-  committedPolicy: PrototypeLearningPolicy | null;
+  selectedPolicy: LearningPolicyId;
+  preparation: LearningReadiness;
+  committedPolicy: LearningPolicyId | null;
   initialCompletionKind: InitialLearningCompletionKind | null;
   reviewDue: boolean;
   relearning: boolean;

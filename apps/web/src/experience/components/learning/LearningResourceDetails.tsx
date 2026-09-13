@@ -1,6 +1,6 @@
 import {useTranslation} from 'react-i18next';
 import {localFlowText} from '../../../i18n/localFlowText';
-import type {LightweightInitialLearningMaterialization} from '../../learningRuntime/lightweightInitialContent';
+import type {LightweightInitialLearningMaterialization} from '../../../learning/runtime/lightweightInitialContent';
 import {RichExperience} from './RichExperience';
 const kinds:Record<string,Parameters<typeof localFlowText>[0]>={word:'resourceWord',phrase:'resourcePhrase',construction:'resourceConstruction',utterance:'resourceUtterance'};
 const labels:Record<string,Parameters<typeof localFlowText>[0]>={experience_recall_cue:'resourceExperience',recall_support:'resourceHint',target_expression:'resourceExpression',sense_confirmation:'resourceMeaning',pronunciation:'resourcePronunciation',language_structure:'resourceStructure',usage_guidance:'resourceUsage',scene_bridge:'resourceBridge'};

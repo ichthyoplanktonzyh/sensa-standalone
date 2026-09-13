@@ -2,10 +2,10 @@ import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
 import { uiClass } from '../ui/classes';
 import { useEffect, useState } from 'react';
+import { contentAnnotations } from '../../data/library/contentAnnotations';
 import { exampleIdForSense } from '../contentProjection';
 import type { PracticeSenseItem } from '../practiceData';
 import { audioService } from '../services/audioService';
-import { personalContentService } from '../services/personalContentService';
 
 interface ContentExampleDetailScreenProps {
   active: boolean;
@@ -30,18 +30,22 @@ export const ContentExampleDetailScreen = ({
     if (!item) return;
     setShowTranslation(true);
     const exampleId = exampleIdForSense(item);
-    const refresh = () => setSaved(personalContentService.isExampleSaved(exampleId));
+    const refresh = () => setSaved(contentAnnotations.isExampleSaved(exampleId));
     refresh();
-    return personalContentService.subscribe(refresh);
+    return contentAnnotations.subscribe(refresh);
   }, [item]);
 
   if (!item) return null;
   const exampleId = exampleIdForSense(item);
 
-  const toggleSaved = () => {
-    const next = personalContentService.toggleExample(exampleId);
-    setSaved(next);
-    toast(next ? uiText('exampleSaved') : uiText('exampleRemovedFromSaved'));
+  const toggleSaved = async () => {
+    try {
+      const next = await contentAnnotations.toggleExample(exampleId);
+      setSaved(next);
+      toast(next ? uiText('exampleSaved') : uiText('exampleRemovedFromSaved'));
+    } catch {
+      toast(uiText('saveFailed'));
+    }
   };
 
   return (
@@ -51,7 +55,7 @@ export const ContentExampleDetailScreen = ({
           <svg className={uiClass("icon")}><use href="#i-chev-l" /></svg>
         </button>
         <h1>{uiText('learningExample')}</h1>
-        <button className={uiClass(`content-save-button${saved ? ' on' : ''}`)} onClick={toggleSaved} aria-pressed={saved} aria-label={saved ? uiText('unsaveExample') : uiText('saveExample')}>
+        <button className={uiClass(`content-save-button${saved ? ' on' : ''}`)} onClick={() => void toggleSaved()} aria-pressed={saved} aria-label={saved ? uiText('unsaveExample') : uiText('saveExample')}>
           <svg className={uiClass("icon")}><use href="#i-star" /></svg>
         </button>
       </header>
@@ -72,7 +76,7 @@ export const ContentExampleDetailScreen = ({
           <svg className={uiClass("icon")}><use href={showTranslation ? '#i-eye-lashes' : '#i-eye'} /></svg>
           <span>{showTranslation ? uiText('hideTranslation') : uiText('showTranslation')}</span>
         </button>
-        <button onClick={toggleSaved} className={uiClass(saved ? 'on' : '')}>
+        <button onClick={() => void toggleSaved()} className={uiClass(saved ? 'on' : '')}>
           <svg className={uiClass("icon")}><use href="#i-star" /></svg>
           <span>{saved ? uiText('saved') : uiText('saveExample')}</span>
         </button>

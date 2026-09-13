@@ -13,12 +13,12 @@ import {
   startLearning,
   type LocalLearningRun,
 } from '../apps/web/src/data/library/learning.ts';
-import { assuranceView, localAssuranceState } from '../apps/web/src/data/library/assurance.ts';
+import { assuranceView, localAssuranceState } from '../apps/web/src/learning/protocols/assurance.ts';
 import {
   fourStageContent,
   fourStageQueue,
-} from '../apps/web/src/data/library/fourStage.ts';
-import {consumerSchedulingPolicy,initializeRetentionMemory,scheduleMemoryOutcome} from '@sensa/learning-kernel';
+} from '../apps/web/src/learning/protocols/fourStage.ts';
+import {lightweightSchedulingPolicy,initializeRetentionMemory,scheduleMemoryOutcome} from '@sensa/learning-kernel';
 
 Object.assign(globalThis, {
   indexedDB,
@@ -28,11 +28,11 @@ Object.assign(globalThis, {
 
 const id = () => crypto.randomUUID();
 const schedulerTarget=id(),schedulerStart=new Date('2026-09-01T00:00:00.000Z');
-const initialized=initializeRetentionMemory(schedulerTarget,consumerSchedulingPolicy,schedulerStart);
+const initialized=initializeRetentionMemory(schedulerTarget,lightweightSchedulingPolicy,schedulerStart);
 const beforeDue=new Date(schedulerStart.getTime()+60_000);
 const memory={retentionTargetId:schedulerTarget,revision:initialized.resultingMemoryRevision,dueAt:initialized.schedule.dueAt,schedule:{...initialized.schedule,cardId:schedulerTarget}};
-assert.throws(()=>scheduleMemoryOutcome({memory,trigger:{kind:'due_review',memoryRevision:1,dueAt:initialized.schedule.dueAt},outcome:{grade:'good'},occurredAt:beforeDue},consumerSchedulingPolicy),'a due Review cannot run before its due trigger');
-const independent= scheduleMemoryOutcome({memory,trigger:{kind:'independent_relearning_evaluation',memoryRevision:1,evaluationId:id()},outcome:{grade:'good'},occurredAt:beforeDue},consumerSchedulingPolicy);
+assert.throws(()=>scheduleMemoryOutcome({memory,trigger:{kind:'due_review',memoryRevision:1,dueAt:initialized.schedule.dueAt},outcome:{grade:'good'},occurredAt:beforeDue},lightweightSchedulingPolicy),'a due Review cannot run before its due trigger');
+const independent= scheduleMemoryOutcome({memory,trigger:{kind:'independent_relearning_evaluation',memoryRevision:1,evaluationId:id()},outcome:{grade:'good'},occurredAt:beforeDue},lightweightSchedulingPolicy);
 assert.equal(independent.resultingMemoryRevision,2,'an explicitly eligible independent Relearning evaluation advances Memory without impersonating a due Review');
 await openLibrary();
 await command({id:id(),kind:'fixture.owner',input:{}},async tx=>{

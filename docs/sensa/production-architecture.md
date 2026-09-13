@@ -1,8 +1,8 @@
 # Sensa 生产领域架构
 
-> 2026-09-11 首发修订：以 [ADR 0001](../adr/0001-local-library-optional-encrypted-sync.md) 的“本地优先＋普通账号云同步”为准。当前只交付 Web；原生及三端验证不阻塞首发，E2EE、恢复码和设备批准不再是首发要求。下文相关旧设计或实现记录不作为新发布合同。
+> 以 [ADR 0001](../adr/0001-local-library-optional-encrypted-sync.md) 的“本地优先＋普通账号云同步”为准。当前只交付 Web；原生及三端验证不阻塞首发，E2EE、恢复码和设备批准不再是首发要求。
 
-2026-09-09 目标架构增量：[ADR 0003](../adr/0003-three-client-local-facts.md) 确认 Web/桌面/移动均本地执行，共享领域事实、版本与合并规则。事实与当前投影分离，保留固定评价/结算历史；学习历史保持可追溯；首发普通账号同步允许服务端读取业务数据，见 ADR 0001。施工边界和未完成规则见 [事实模型蓝图](personal-library-fact-model.md)。下文旧服务器专属条款用于迁移对照。
+[ADR 0003](../adr/0003-three-client-local-facts.md) 确认主应用均在本地执行学习，共享领域事实、版本与合并规则。事实与当前投影分离，保留固定评价/结算历史；学习历史保持可追溯；普通账号同步允许服务端读取业务数据，但服务端不重新执行学习协议或结算学习结果。
 
 > 状态：Canonical domain model  
 > 更新日期：2026-09-09
@@ -27,9 +27,7 @@ Intake 负责现场获取/处理，Web、桌面和移动主应用负责整理/�
 ## 1. 产品组成
 
 2026-09-08 目标架构修订已确认：[本地优先与普通账号云同步](../adr/0001-local-library-optional-encrypted-sync.md)。
-个人事实归属完整本地学习库，领域逻辑须支持本地执行；同步服务器保存账号隔离的持久副本，允许读取业务数据。公共资源分发、账号与按需在线服务分别保留。
-已启动共用结算规则提取，完整本地库尚未接入；本文后续服务器专属执行位置及在线 Account 绑定条款需逐项修订，不再作为
-新目标的前提。领域身份、校验、接受与学习分离、Outcome/FSRS 幂等等业务不变量继续适用。
+个人事实归属完整本地学习库，领域逻辑在本地执行；同步服务器保存账号隔离的持久副本，允许读取业务数据。公共资源分发、账号与按需在线服务分别保留。Web 已接入本地学习库与 TypeScript Learning Runtime；领域身份、校验、接受与学习分离、Outcome/FSRS 幂等等业务不变量由本地领域事务执行。
 
 ### 完整产品形态（不以首发范围裁剪）
 
@@ -73,11 +71,10 @@ Focus 可选；快慢轨都不降低 Context–Sense–Expression 的完整性�
 调用云端模型仍需联网；离线新生成能力取决于另行提供的本地模型，不包含在“已有资料完全本地使用”
 的承诺中。服务端允许读取同步内容；本地学习仍由既有领域执行层结算，同步不得重复结算。
 
-技术职责上，Flutter 主应用包含界面、本地应用/领域执行与 SQLite 持久化，并非仅渲染 Hono 返回的
-投影。Hono 继续作为现有云端 HTTP 服务框架，承载在线能力；本地学习不要求启动或连接 Hono。
-Owner 已确认 [Flutter/Dart + Rust 本地核心、TypeScript 浏览器/云端](../adr/0002-flutter-rust-local-core.md)。
-现有 TypeScript Kernel 作为迁移对照，Rust 经原生桥接供 Flutter 调用；各平台的实际构建、离线与恢复
-需分别验收，不能把浏览器测试当作原生平台证据。
+技术职责上，主应用包含界面、本地应用/领域执行与本地持久化，并非仅渲染 Hono 返回的投影。Hono
+只承载在线能力；本地学习不要求启动或连接 Hono。当前 Web 使用 TypeScript Learning Runtime 与
+IndexedDB。本地原生实现已暂停；未来恢复时，各平台的实际构建、离线与恢复仍须分别验收，不能把
+浏览器测试当作原生平台证据。
 
 ### 领域层职责
 
@@ -90,7 +87,7 @@ Sensa 由三个职责独立的层组成：
   Protocol Step/Checkpoint、Attempt→Observation→Evidence→Transition、协议特定进度、Initial Learning
   Completion、graded Memory Outcome、Scheduling Decision 与 Scheduling Handoff；
 - **Production Base**：本地库持久化与恢复、设备/可选账号身份、Sensa Sync、公共资源交付和在线服务适配。
-  Flutter 本地使用 SQLite；浏览器存储与宿主约束按迁移用例验收。Postgres 保留在线服务及迁移前实现用途。
+  浏览器存储与宿主约束按迁移用例验收。Postgres 只保留账号、云同步、资源目录与按需在线服务数据。
 
 Product Shell 不定义学习证据或毕业条件。Learning Kernel 不拥有账号、网络同步或媒体字节。
 Production Base 不决定一个 Sense 应当如何被理解或当前应当使用哪种学习干预。
@@ -493,6 +490,12 @@ Declared Mastery（界面可显示为“熟”）是 learner 对一个 Retention
 资格，不伪造 Gate pass、Acquisition Graduation、Attempt、Evidence、5D 或 FSRS 结果。Sense-level
 界面操作必须明示其覆盖的目标表达集；首版每个 Sense 只有一个 primary target。
 
+Web 本地运行时将该声明保存为 Library 中 Target 的结构化 `TargetPlanningOverride`。声明若命中 active
+Run，同一 IndexedDB command 同时写入 Run interruption lifecycle fact 并清除 active pointer；撤销只
+恢复 Target 的计划资格，下一次显式 start 才写入 matching resume fact。Protocol Queue 不保存第二份
+Declared Mastery 状态，presentation plugin 只能请求 host 执行该 learner command，不能把它结算成
+Protocol Outcome。
+
 ### Account、Preferences 与 Data Control
 
 - Account 是认证访问与生命周期聚合，V1 恰好关联一个 Learner；Learner 独立拥有 Study Plan、
@@ -679,7 +682,7 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 20. **FsrsAdapter**：按 Retention Target 消费有效 Scheduling Handoff 与来自 Review 或合法
    Relearning evaluation 的 graded Memory Outcome，产生 Scheduling Decision，是 FSRS Memory State
    与 next due 初始化和更新的唯一接口；
-21. **Sensa Sync Module**：拥有 learner-scoped operation、幂等、change feed、cursor 和 bootstrap；
+21. **Sensa Sync Module**：传输本地已提交的版本化记录与内容寻址数据块，维护幂等、清单和收敛状态，但不解释或重新结算学习事实；
 22. **Media Module**：验证不可变媒体引用并提供授权下载。
 
 ## 6. 全局不变量
@@ -696,7 +699,7 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
   改变学习计划或学习方式必须产生真实 Curriculum operation/revision；
 - sign-out、Local Data Clearance、learning-history reset 与 Account deletion 不能互相替代；有 pending
   outbox 时不得静默清除本机数据，旧 Replica 也不得在 Account deletion 后复活数据；
-- Sync Health 只能从连接、outbox、content installation 与服务端 convergence 事实派生，不能由客户端
+- Sync Health 只能从连接、待同步本地提交、content installation 与服务端 convergence 事实派生，不能由界面
   直接声明“已同步”；
 - Reference Sense 与 Sensa Sense 是不同身份；词典覆盖不能自动扩张 Curriculum 或 learner progress；
 - Contextual Lookup 必须固定 Example + exact span + Reference Release；没有可靠解析时不得假装知道
@@ -777,7 +780,7 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 - Published 内容不可变，修订通过新 version/release 完成；On-demand 内容在一次 run 开始前必须
   冻结为 Learning Materialization，response 发生后不得重新生成并替换题目、答案或评分依据；
 - Attempt、Observation 与 Evidence 是追加事实；正式评价沿 `Attempt → Observation → Evidence（若合格）
-  → Transition Decision` 推进，Gate、Checkpoint credit、5D 与 FSRS 是服务端权威投影；
+  → Transition Decision` 推进，Gate、Checkpoint credit、5D 与 FSRS 由本地 Learning Runtime 在同一权威事务中派生；
 - Progression Policy 只能产生内核声明的受约束 effects；Progress Reset 只使显式 scope 内当前 credit
   失效，不删除 Attempt、Observation、Evidence 或历史 Transition；
 - Completion 只能由版本化 Completion Policy 基于当前有效状态推导，不能由 Card、队列为空或客户端
@@ -816,7 +819,7 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 - Personal Semantic Anchor 只能作为 learner-controlled scaffold，不能成为发布事实、答案依据、
   assessment asset 或 Learning Evidence；
 - Content Release 更新不能静默替换 Saved Example，也不能删除稳定 Sense 上的 Note/Anchor；
-- 客户端可以离线先写原始操作，但不能把派生进度声明为服务端事实；
+- 界面与同步适配器可以提交原始操作，但不能绕过本地 Learning Runtime 直接声明派生进度；
 - Progression、Completion、Handoff、Memory Outcome 与 Scheduling transition 必须原子、幂等；
 - Cards、Decks、generic flashcard sync、Workspace 产品入口和历史实验不属于 Sensa 领域。
 

@@ -2,10 +2,10 @@ import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
 import { uiClass } from '../ui/classes';
 import { useState, useEffect, useRef } from 'react';
+import { contentAnnotations } from '../../data/library/contentAnnotations';
 import type { Word, QuickDictEntry } from '../types';
 import { WORDS } from '../data';
 import { lookupWord } from '../services/quickDict';
-import { noteService } from '../services/noteService';
 
 interface NoteEditorModalProps {
   active: boolean;
@@ -64,7 +64,7 @@ export const NoteEditorModal = ({
   // 每次打开或单词变化时加载当前笔记内容
   useEffect(() => {
     if (active && wordStr) {
-      const existing = senseId ? noteService.getSenseNote(senseId) : noteService.getNote(wordStr);
+      const existing = senseId ? contentAnnotations.getSenseNote(senseId) : contentAnnotations.getNote(wordStr);
       setNoteText(existing);
       const focusTimer = window.setTimeout(() => {
         if (textareaRef.current) {
@@ -79,14 +79,16 @@ export const NoteEditorModal = ({
 
   if (!active || !wordData) return null;
 
-  const handleSave = () => {
-    if (senseId) noteService.setSenseNote(senseId, noteText);
-    else noteService.setNote(wordStr, noteText);
-    toast(uiText('noteSaved'));
-    if (onSave) {
-      onSave(noteText);
+  const handleSave = async () => {
+    try {
+      if (senseId) await contentAnnotations.setSenseNote(senseId, noteText);
+      else await contentAnnotations.setNote(wordStr, noteText);
+      toast(uiText('noteSaved'));
+      if (onSave) onSave(noteText);
+      onClose();
+    } catch {
+      toast(uiText('saveFailed'));
     }
-    onClose();
   };
 
   return (
@@ -105,7 +107,7 @@ export const NoteEditorModal = ({
 
             <h2>{uiText('myNotes')}</h2>
           </div>
-          <button type="button" onClick={handleSave} aria-label={uiText('saveNote')}>
+          <button type="button" onClick={() => void handleSave()} aria-label={uiText('saveNote')}>
             <svg className={uiClass("icon")}><use href="#i-chk-simple" /></svg>
           </button>
         </header>

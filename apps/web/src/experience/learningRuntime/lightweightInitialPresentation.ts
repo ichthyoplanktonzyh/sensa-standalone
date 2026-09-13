@@ -24,13 +24,13 @@ import {
   lightweightMaterializedResourcesForRole,
   validateLightweightInitialMaterialization,
   type LightweightInitialLearningMaterialization,
-} from './lightweightInitialContent';
+} from '../../learning/runtime/lightweightInitialContent';
 import {
   LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
   LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND,
   LIGHTWEIGHT_INITIAL_STEP_DEFINITIONS,
   type LightweightProtocolStepInstance,
-} from './lightweightInitialProtocol';
+} from '../../learning/runtime/lightweightInitialProtocol';
 
 export { LIGHTWEIGHT_INITIAL_MATERIAL_ROLES };
 export type LightweightInitialMaterialRole = SensaLightweightInitialMaterialRole;

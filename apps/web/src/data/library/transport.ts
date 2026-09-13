@@ -2,7 +2,7 @@ import {localModelQueue} from './modelExecution';
 import {ModelExecutionError,type ModelExecutionRecord} from '@sensa/contracts/sensa';
 import {z} from 'zod';
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
-import {auth} from '../consumer/client';
+import {auth} from '../account/auth';
 import {clearCredential,providerCredential,providerSnapshot,type Provider,type Purpose} from './providers';
 import {conversationImagesSchema,type ConversationImage} from './conversationImages';
 export type ModelMessage={role:'system'|'user'|'assistant'|'tool';content:string|null;images?:ConversationImage[];tool_call_id?:string;tool_calls?:{id:string;type:'function';function:{name:string;arguments:string}}[]};

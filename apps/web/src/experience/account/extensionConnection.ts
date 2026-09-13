@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {auth} from '../../data/consumer/client';
+import {auth} from '../../data/account/auth';
 const authorizationSchema=z.object({installationId:z.string().uuid(),state:z.string().regex(/^[A-Za-z0-9_-]{43,128}$/u),challenge:z.string().regex(/^[A-Za-z0-9_-]{43}$/u),redirectUri:z.string().regex(/^https:\/\/[a-p]{32}\.chromiumapp\.org\/sensa$/u)}).strict();
 /** Exchange authority stays on the API; the Web forwards only a one-time code. */
 export async function authorizeExtensionConnection(input:unknown,signal:AbortSignal,expectedSubject?:string){

@@ -1,18 +1,20 @@
-import {localExecutionForRun} from '../../experience/learningRuntime/runtimeCoordinator';
-import {localRunBinding,localRunPolicy,localTargetPolicy} from '../../experience/learningRuntime/localRuntimeBindings';
-import {learningPolicyProfileRegistry} from '../../experience/learningRuntime/policyProfiles';
+import {localExecutionForRun} from '../../learning/runtime/runtimeCoordinator';
+import {localRunBinding,localRunPolicy,localTargetPolicy} from '../../learning/runtime/localRuntimeBindings';
+import {learningPolicyProfileRegistry} from '../../learning/runtime/policyProfiles';
 import {localRunTargetIds,type LocalLearningRun,type LocalLearningTarget,type LearningEvent} from './learning';
 import {z} from 'zod';
 import {sensaLearningMaterializationSnapshotSchema,semanticProposalSchema,sensaContentGenerationRequestSchema,sensaMaterialCandidateBundleSchema,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {stableUuid} from '@sensa/learning-kernel';
 import {libraryTables,type Table} from './store';
 import {validatePackage,packageKey} from './packages';
-import {validateLightweightInitialMaterialization} from '../../experience/learningRuntime/lightweightInitialContent';
+import {validateLightweightInitialMaterialization} from '../../learning/runtime/lightweightInitialContent';
 import {providerInputSchema} from './providers';
 import {conversationImagesSchema} from './conversationImages';
 import {backupEqual} from './backupCodec';
 import {applyLocalProtocolTransition} from './learningSettlement';
-import {localLearningPurpose,localProtocolOutcomePermissions,reduceLocalProtocolAction} from '../../experience/learningRuntime/localProtocol';
+import {localLearningPurpose,localProtocolActiveTargetId,localProtocolOutcomePermissions,localProtocolStepId,localRunOpenPlanningInterruption,reduceLocalProtocolAction,replayLocalProtocolRun,validateLocalProtocolResources} from '../../learning/runtime/localProtocol';
+import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
+import type {ContentAnnotation} from './contentAnnotations';
 export type BackupRows=Record<Table,{key:string;value:any}[]>;
 const uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
 const identitySchema=z.object({id:uuid,learnerId:uuid,deviceId:uuid,createdAt:timestamp,schemaVersion:z.literal(1)}).strict();
@@ -33,6 +35,14 @@ export function validateBackupRows(rows:BackupRows){
  for(const {key,value:op} of rows.operations){uuid.parse(key);if(typeof op?.input!=='string')fail();const input=JSON.parse(op.input);if(canonicalConsumerJson(input)!==op.input||typeof input.kind!=='string'||input.kind.startsWith('service.'))fail();timestamp.parse(op.committedAt);}
  for(const {value:t} of rows.personalLearning){const current=requireRow('meanings',t.meaning.id);const version=(current.contextRevision??1)===(t.meaning.contextRevision??1)?{text:current.context,images:current.contextImages??[]}:current.contextHistory?.find((v:any)=>v.revision===(t.meaning.contextRevision??1));if(!version||version.text!==t.meaning.context||!backupEqual(version.images,t.meaning.contextImages??[]))fail();if(current.senseVersionId!==t.meaning.senseVersionId||current.bindingVersionId!==t.meaning.bindingVersionId||!backupEqual(current.proposal,t.meaning.proposal))fail();if(t.attemptId&&requireRow('contentAttempts',t.attemptId).taskId!==t.id)fail();if(t.status==='ready')requireRow('learningTargets',t.targetId);if(!['waiting','generating','reviewing','failed','rejected','stopped','ready'].includes(t.status))fail();}
  for(const {value:a} of rows.contentAttempts){requireRow('personalLearning',a.taskId);if(a.request)sensaContentGenerationRequestSchema.parse(a.request);if(a.bundle){sensaMaterialCandidateBundleSchema.parse(a.bundle);if(!a.request||a.bundle.contentGenerationRequestId!==a.request.contentGenerationRequestId)fail();}if(a.resumedFrom)requireRow('contentAttempts',a.resumedFrom);}
+ for(const {key,value:a} of rows.annotations as {key:string;value:ContentAnnotation}[]){
+  if(!a||a.id!==key||!['word_note','sense_note','saved_sense','saved_example','semantic_anchor'].includes(a.kind))fail();
+  if(a.kind==='word_note'){z.string().min(1).max(500).parse(a.word);z.string().min(1).max(1000).parse(a.body);z.number().int().nonnegative().parse(a.updatedAt);}
+  if(a.kind==='sense_note'){z.string().min(1).max(2000).parse(a.senseId);z.string().min(1).max(1000).parse(a.body);z.number().int().nonnegative().parse(a.updatedAt);}
+  if(a.kind==='saved_sense'){z.string().min(1).max(2000).parse(a.senseId);z.number().int().nonnegative().parse(a.createdAt);}
+  if(a.kind==='saved_example'){z.string().min(1).max(2000).parse(a.exampleId);z.number().int().nonnegative().parse(a.createdAt);}
+  if(a.kind==='semantic_anchor'){uuid.parse(a.anchorId);z.string().min(1).max(2000).parse(a.senseId);z.string().max(1000).parse(a.body);z.number().int().nonnegative().parse(a.createdAt);z.number().int().nonnegative().parse(a.updatedAt);z.array(z.object({mediaId:uuid,kind:z.literal('image'),dataUrl:z.string().startsWith('data:image/').max(8*1024*1024),mimeType:z.string().min(1).max(200),fileName:z.string().min(1).max(500),altText:z.string().max(80)}).strict()).max(3).parse(a.media);if(!a.body.trim()&&!a.media.length)fail();}
+ }
  for(const {value:t} of rows.learningTargets){
   learningPolicyProfileRegistry.get(localTargetPolicy(t));
   const assignment=t.policyAssignment;
@@ -41,7 +51,8 @@ export function validateBackupRows(rows:BackupRows){
   for(const field of identityFields)z.string().min(1).parse(t.identity[field]);
   if(t.identity.learnerUserId!==identity.learnerId||t.identity.senseId!==t.material.snapshot.provenance.senseId||t.identity.senseVersionId!==t.material.snapshot.provenance.senseVersionId||t.identity.senseExpressionBindingId!==t.material.snapshot.provenance.bindingId||t.identity.bindingVersionId!==t.material.snapshot.provenance.bindingVersionId)fail();
   if(t.committedPolicy){const commitment=t.committedPolicy;uuid.parse(commitment.commitmentId);uuid.parse(commitment.committedByProtocolRunId);z.number().int().positive().parse(commitment.revision);timestamp.parse(commitment.committedAt);const profile=learningPolicyProfileRegistry.get(commitment.profileId,commitment.profileVersion);if(!t.startedAt||commitment.assignmentId!==assignment.assignmentId||commitment.assignmentRevision!==assignment.revision||profile.profileId!==commitment.profileId)fail();}else if(t.startedAt)fail();
-  if(t.declaredMastery!==undefined){z.boolean().parse(t.declaredMastery);uuid.parse(t.declaredMasteryOperationId);const op=JSON.parse(requireRow('operations',t.declaredMasteryOperationId).input);if(op.kind!=='learning.declareMastery'||op.input.targetId!==t.id||op.input.active!==t.declaredMastery)fail();}
+  z.array(z.object({kind:z.literal('declared_mastery'),source:z.literal('learner'),operationId:uuid,createdAt:timestamp}).strict()).max(1).parse(t.planningOverrides);
+  for(const override of t.planningOverrides){const op=JSON.parse(requireRow('operations',override.operationId).input);if(op.kind!=='learning.declareMastery'||op.input.targetId!==t.id||op.input.active!==true||op.input.at!==override.createdAt)fail();}
   sensaLearningMaterializationSnapshotSchema.parse(t.material.snapshot);validateLightweightInitialMaterialization(t.material);
   const p=t.material.snapshot.provenance;
   if(t.material.snapshot.learnerUserId!==identity.learnerId||t.material.snapshot.learningTargetId!==t.id||t.id!==stableUuid(`sensa-learning-target:${identity.learnerId}:${p.senseVersionId}:${p.bindingVersionId}`)||t.retentionId!==stableUuid(`sensa-retention:${t.id}`))fail();
@@ -57,6 +68,20 @@ export function validateBackupRows(rows:BackupRows){
  const knownProtocolRunIds=new Set<string>();
  for(const saved of runs){
   const ids=localRunTargetIds(saved);
+  if(!Array.isArray(saved.lifecycleEvents))fail();
+  let openInterruption:ReturnType<typeof localRunOpenPlanningInterruption>=null;
+  for(const event of saved.lifecycleEvents){
+   uuid.parse(event.eventId);uuid.parse(event.operationId);timestamp.parse(event.at);if(Date.parse(event.at)<Date.parse(saved.startedAt))fail();
+   const op=JSON.parse(requireRow('operations',event.operationId).input);
+   if(event.kind==='interrupted_by_planning_override'){
+    if(openInterruption||event.overrideKind!=='declared_mastery'||!ids.includes(event.targetId)||op.kind!=='learning.declareMastery'||op.input.targetId!==event.targetId||op.input.active!==true||op.input.at!==event.at)fail();
+    openInterruption=event;
+   }else if(event.kind==='resumed_after_planning_override'){
+    if(!openInterruption||event.interruptionEventId!==openInterruption.eventId||op.kind!=='learning.start'||op.input.at!==event.at||!ids.includes(op.input.targetId))fail();
+    openInterruption=null;
+   }else fail();
+  }
+  if(localRunOpenPlanningInterruption(saved)?.eventId!==openInterruption?.eventId)fail();
   if(!ids.length||new Set(ids).size!==ids.length||!ids.includes(saved.targetId)||!Object.keys(saved.targetCompletions).every(id=>ids.includes(id)))fail();
   const execution=localExecutionForRun(saved),binding=localRunBinding(saved);
   const profile=learningPolicyProfileRegistry.get(localRunPolicy(saved),saved.policyProfileVersion);
@@ -85,16 +110,16 @@ export function validateBackupRows(rows:BackupRows){
    if(saved.purpose==='retention_review'&&(!target.memory||Date.parse(saved.startedAt)<target.memory.dueAt.getTime())||target.relearnAt&&Date.parse(saved.startedAt)<Date.parse(target.relearnAt))fail();
    target.startedAt??=saved.startedAt;
    const pack=target.packageKey?requireRow('packages',target.packageKey):undefined;
-   execution.validate?.(target,pack);
+   validateLocalProtocolResources(execution,target,pack);
   }
   const primary=targets.get(saved.targetId)??fail();
-  let run=execution.replayStart(primary,primary.packageKey?requireRow('packages',primary.packageKey):undefined,saved);
+  let run=replayLocalProtocolRun({execution,target:primary,resource:primary.packageKey?requireRow('packages',primary.packageKey):undefined,saved});
   if(!Object.hasOwn(saved,'completionKind'))delete run.completionKind;
   const events:LearningEvent[]=rows.learningEvents.map(r=>r.value).filter(e=>e.runId===saved.id);
   const byStep=new Map(events.map(e=>[(e.detail as any)?.stepId,e]));if(byStep.size!==events.length)fail();
   for(let index=0;index<events.length;index++){
-   const event=byStep.get(execution.stepId(run))??fail();
-   const targetId=execution.activeTargetId?.(run)??run.targetId;
+   const event=byStep.get(localProtocolStepId(execution,run))??fail();
+   const targetId=localProtocolActiveTargetId(execution,run);
    if(!ids.includes(targetId)||event.targetId!==targetId||run.completedAt)fail();
    const target=targets.get(targetId)??fail();
    timestamp.parse(event.at);if(Date.parse(event.at)<Date.parse(run.startedAt))fail();
@@ -111,12 +136,12 @@ export function validateBackupRows(rows:BackupRows){
  for(const {key,value:e} of rows.learningEvents){
   const eventRun=requireRow('learningRuns',e.runId),op=JSON.parse(requireRow('operations',key).input);if(op.kind!=='learning.act'||op.input.runId!==e.runId||op.input.at!==e.at||!backupEqual(op.input.action,e.detail.action))fail();
   const facts=e.detail.formalEvaluation;if(facts){
-   for(const id of [facts.step.protocolStepInstanceId,facts.step.protocolRunId,facts.action.actionId,facts.attempt.attemptId,facts.observation.observationId,facts.transitionDecision.transitionDecisionId])uuid.parse(id);
-   if(facts.step.protocolRunId!==eventRun.participants[e.targetId]?.protocolRunId||facts.action.protocolStepInstanceId!==facts.step.protocolStepInstanceId||facts.attempt.actionId!==facts.action.actionId||facts.observation.attemptId!==facts.attempt.attemptId||facts.transitionDecision.observationId!==facts.observation.observationId||!backupEqual(facts.observation.evidenceIds,facts.evidence.map((v:any)=>v.learningEvidenceId)))fail();
+   for(const id of [facts.step.protocolStepInstanceId,facts.step.protocolRunId,facts.action.actionId,facts.attempt.attemptId,facts.observation.observationId,facts.evaluation.evaluationId,facts.transitionDecision.transitionDecisionId])uuid.parse(id);
+   if(facts.step.protocolRunId!==eventRun.participants[e.targetId]?.protocolRunId||facts.action.protocolStepInstanceId!==facts.step.protocolStepInstanceId||facts.attempt.actionId!==facts.action.actionId||facts.observation.attemptId!==facts.attempt.attemptId||facts.evaluation.observationId!==facts.observation.observationId||facts.evaluation.protocolRunId!==facts.step.protocolRunId||facts.evaluation.evaluationPolicyId!==eventRun.protocolBinding.evaluationPolicyId||facts.transitionDecision.observationId!==facts.observation.observationId||!backupEqual(facts.observation.evidenceIds,facts.evidence.map((v:any)=>v.learningEvidenceId)))fail();
    for(const evidence of facts.evidence){uuid.parse(evidence.learningEvidenceId);if(evidence.observationId!==facts.observation.observationId||evidence.attemptId!==facts.attempt.attemptId||evidence.protocolRunId!==facts.step.protocolRunId||evidence.learningTargetId!==e.targetId)fail();}
   }
  }
- const active=maps.meta.get('learning-active');if(active)requireRow('learningRuns',active);if(active&&localRunTargetIds(requireRow('learningRuns',active)).some(id=>requireRow('learningTargets',id).declaredMastery))fail();for(const {key,value:r} of rows.learningRuns)if(!r.completedAt&&key!==active&&!localRunTargetIds(r).some(id=>requireRow('learningTargets',id).declaredMasteryOperationId))fail();
+ const active=maps.meta.get('learning-active');if(active)requireRow('learningRuns',active);if(active&&(localRunOpenPlanningInterruption(requireRow('learningRuns',active))||localRunTargetIds(requireRow('learningRuns',active)).some(id=>hasDeclaredMasteryOverride(requireRow('learningTargets',id)))))fail();for(const {key,value:r} of rows.learningRuns)if(!r.completedAt&&key!==active&&!localRunOpenPlanningInterruption(r))fail();
  const quantity=maps.settings.get('learning-daily-limit');if(quantity!==undefined)z.number().int().min(1).max(100).parse(quantity);
  return identity;
 }

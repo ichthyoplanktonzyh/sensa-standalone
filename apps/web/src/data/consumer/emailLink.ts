@@ -1,4 +1,4 @@
-import {auth} from './client';
+import {auth} from '../account/auth';
 
 const callbackKeys=['code','error','error_code','error_description','access_token','refresh_token','expires_in','expires_at','token_type','type'];
 

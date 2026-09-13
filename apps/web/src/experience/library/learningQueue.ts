@@ -1,5 +1,6 @@
 import { defaultSensaLanguageProfile } from '@sensa/contracts/sensa';
 import type { LocalLearningTarget } from '../../data/library/learning';
+import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
 
 /**
  * What the learner is asked to learn right now.
@@ -54,7 +55,7 @@ export function resolveLearningQueue({
 }: LearningQueueInput): LearningQueue {
   const activeTargets = targets.filter((target) => targetLanguageTag(target) === activeLanguageTag);
   const due = activeTargets
-    .filter((target) => !target.declaredMastery && readiness[target.id] === 'ready')
+    .filter((target) => !hasDeclaredMasteryOverride(target) && readiness[target.id] === 'ready')
     .filter((target) => {
       const dueAt = needsReviewAt(target, clock);
       return dueAt !== null && dueAt <= clock;
@@ -63,8 +64,8 @@ export function resolveLearningQueue({
     target.startedAt && new Date(target.startedAt).toDateString() === new Date(clock).toDateString()).length;
   const remaining = Math.max(0, (dailyLimit ?? 20) - startedToday);
   const initialReady = [
-    ...activeTargets.filter((target) => !target.declaredMastery && !target.completedAt && target.startedAt && readiness[target.id] === 'ready'),
-    ...activeTargets.filter((target) => !target.declaredMastery && !target.completedAt && !target.startedAt && readiness[target.id] === 'ready').slice(0, remaining),
+    ...activeTargets.filter((target) => !hasDeclaredMasteryOverride(target) && !target.completedAt && target.startedAt && readiness[target.id] === 'ready'),
+    ...activeTargets.filter((target) => !hasDeclaredMasteryOverride(target) && !target.completedAt && !target.startedAt && readiness[target.id] === 'ready').slice(0, remaining),
   ];
   return { activeTargets, due, initialReady, startedToday, remaining };
 }

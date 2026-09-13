@@ -3,7 +3,7 @@ import {completeReading} from '../reading/service.js';
 import type {ReadingCompletion} from '../reading/service.js';
 import {semanticProposalSchema} from '@sensa/contracts/sensa';
 import type {CaptureSnapshot,SemanticProposal} from '@sensa/contracts/sensa';
-export type SemanticResolution={proposal:SemanticProposal|null;provider:string;model:string;policyVersion?:'consumer-semantic-v4'};
+export type SemanticResolution={proposal:SemanticProposal|null;provider:string;model:string;policyVersion?:'sensa-semantic-v4'};
 export type SemanticResolver=(snapshot:CaptureSnapshot,focus?:{text:string}|null,onExplanation?:(text:string)=>Promise<void>)=>Promise<SemanticResolution>;
 /** Model output proposes only. This adapter cannot access SQL, acceptance, curriculum or runtime. */
 export function semanticResolverFor(connection:Parameters<ReadingCompletion>[0],complete:ReadingCompletion=completeReading):SemanticResolver { return async(snapshot,focus,onExplanation)=>{
@@ -18,7 +18,7 @@ Return {"proposal":null} if the occurrence is unsupported or two materially dist
 Otherwise return JSON {proposal:{explanation:string,expression:{surface:string,type:word|phrase|construction|sentence|utterance_strategy,language:"en"},semanticSpec:{schemaVersion:"sensa-sense-semantic-spec-v1",coreMeaningFocus:string,prototypeScenes:[{summary:string,participantRoles:string[],states:string[],directionOrCausality:string|null}],includedCases:string[],excludedCases:string[],neighborContrasts:[{label:string,distinction:string}],openQuestions:[]}}}.
 The explanation should connect this occurrence to its meaning. surface must match the selected text exactly. The semantic spec must be abstract and reproducible: generic participant roles, no source names, locations, personal details, URLs or verbatim private sentences. Keep the scope at the supported meaning, without claiming all instances share incidental properties from this source. Use Chinese explanations and semantic descriptions. Do not generate focus records, learning materials, acceptance, progress or IDs. Model output is only a proposal for the learner to accept.`},{role:'user',content:JSON.stringify({sentence:snapshot.sentence,expression:snapshot.expression,language:snapshot.language,learnerFocus:focus?.text??null})}],true,onExplanation?async partial=>{const text=explanationPreview(partial);if(text)await onExplanation(text);}:undefined);
  const raw=JSON.parse(body);
- return {proposal:raw?.proposal===null?null:semanticProposalSchema.parse(raw?.proposal),provider:connection.name,policyVersion:'consumer-semantic-v4',model:connection.model};
+ return {proposal:raw?.proposal===null?null:semanticProposalSchema.parse(raw?.proposal),provider:connection.name,policyVersion:'sensa-semantic-v4',model:connection.model};
 };}
 export const resolveSemantic:SemanticResolver=async(snapshot,focus,onExplanation)=>{
  if(process.env.SENSA_SEMANTIC_PROVIDER!=='deepseek'||!process.env.DEEPSEEK_API_KEY)throw new Error('provider_unavailable');

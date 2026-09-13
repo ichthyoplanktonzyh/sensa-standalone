@@ -10,7 +10,7 @@ import {z} from 'zod';
 import {ExtensionIntake} from './ExtensionIntake';
 import {createContext,useContext,useEffect,useRef,useState,type ReactNode} from 'react';
 import {clearAllCredentials} from '../../data/library/providers';
-import {auth,cachedAuthSubject,authStorageKey} from '../../data/consumer/client';
+import {auth,cachedAuthSubject,authStorageKey} from '../../data/account/auth';
 import {completeEmailLink,emailLinkRedirect} from '../../data/consumer/emailLink';
 import {command,readLibrary,openLibrary,observeLibrary} from '../../data/library/store';
 import {setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';

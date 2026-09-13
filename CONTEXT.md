@@ -675,10 +675,11 @@ interaction/grader contract, including correctness, latency, support use or lear
 It is input to evaluation, not itself Evidence, progress or a scheduler result.
 
 **Learning Evidence**:  
-The server-derived evidentiary statement from a valid Learning Observation under a
-pinned Evidence Rule. Exposure, audio playback, acknowledgement and self-reported
-understanding are not Evidence; a lawful protocol may still use them as non-evidentiary
-completion or scheduling basis.
+The authoritative evidentiary statement derived by the local Learning Runtime from a
+valid Learning Observation under a pinned Evidence Rule. Presentation code, sync and
+model output cannot declare it. Exposure, audio playback, acknowledgement and
+self-reported understanding are not Evidence; a lawful protocol may still use them as
+non-evidentiary completion or scheduling basis.
 
 **Protocol Checkpoint**:
 A protocol-local evaluative milestone that references one or more Learning Capability
@@ -849,7 +850,7 @@ any future learning-history reset.
 **Local Data Clearance**:  
 A device-scoped removal of installed content, media and local replica data after
 pending work is resolved or explicitly discarded. It does not delete Account or
-server-side Learner data.
+account-synced or online-service data.
 
 ## Transport language
 

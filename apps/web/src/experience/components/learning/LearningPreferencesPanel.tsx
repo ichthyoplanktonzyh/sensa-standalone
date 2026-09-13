@@ -3,21 +3,21 @@ import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitch } from '../../../i18n/LanguageSwitch';
-import { learningPolicyProfileRegistry } from '../../learningRuntime/policyProfiles';
-import type { PrototypeLearningPolicy } from '../../learningJourney/prototypeLearning';
+import { learningPolicyProfileRegistry } from '../../../learning/runtime/policyProfiles';
+import type { LearningPolicyId } from '../../../learning/runtime/policyProfiles';
 import { runtimePrimary } from './RuntimeFrame';
 
 interface Props {
-  allowedPolicies?:readonly PrototypeLearningPolicy[];
+  allowedPolicies?:readonly LearningPolicyId[];
   showDailyQuantity?:boolean;
   onConfirm?:()=>void;
   closeLabel?: string;
   fixedPolicy?: boolean;
   busy?: boolean;
   status?: import('react').ReactNode;
-  defaultPolicy: PrototypeLearningPolicy;
+  defaultPolicy: LearningPolicyId;
   dailyNewCount: number;
-  onPolicyChange: (policy:PrototypeLearningPolicy)=>void;
+  onPolicyChange: (policy:LearningPolicyId)=>void;
   onDailyNewCountChange: (count:number)=>void;
   onClose: ()=>void;
 }

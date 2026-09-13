@@ -3,14 +3,14 @@ import { useTranslation } from "react-i18next";
 import { Check, ArrowRight } from "lucide-react";
 import { RuntimeFrame, runtimePrimary } from "./RuntimeFrame";
 import { useMemo } from "react";
-import type { PrototypeLearningTargetView } from "../../learningJourney/prototypeLearning";
+import type {LearningTargetPresentation} from '../../library/learningPresentation';
 import { assembleLightweightInitialPresentation } from "../../learningRuntime/lightweightInitialPresentation";
-import type { LightweightInitialLearningMaterialization } from "../../learningRuntime/lightweightInitialContent";
+import type { LightweightInitialLearningMaterialization } from "../../../learning/runtime/lightweightInitialContent";
 import {
   LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
   type LightweightInitialRating,
   type LightweightProtocolStepInstance,
-} from "../../learningRuntime/lightweightInitialProtocol";
+} from "../../../learning/runtime/lightweightInitialProtocol";
 import {
   stepRendererRegistry,
   type LightweightInitialStepRendererProps,
@@ -22,7 +22,7 @@ interface LightweightRuntimeStartScreenProps {
   readonly completionLabel?: string;
   readonly completionDetail?: string;
   readonly active: boolean;
-  readonly target: (Omit<PrototypeLearningTargetView, "targetId"> & {targetId:string}) | null;
+  readonly target:LearningTargetPresentation|null;
   readonly materialization: LightweightInitialLearningMaterialization | null;
   readonly step: LightweightProtocolStepInstance | null;
   readonly completed: boolean;

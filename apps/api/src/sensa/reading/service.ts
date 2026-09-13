@@ -5,7 +5,7 @@ import type {DatabaseExecutor} from '../../database/index.js';
 import type {Hono} from 'hono';
 import {z} from 'zod';
 import {ConsumerError} from '../access/auth.js';
-import {contentHash} from '../curriculum/targets.js';
+import {contentHash} from '../shared/contentHash.js';
 import {stream} from 'hono/streaming';
 
 type Connection=ReadingProvider & {apiKey:string};

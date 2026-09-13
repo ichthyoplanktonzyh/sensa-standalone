@@ -2,11 +2,10 @@ import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
 import { uiClass } from '../ui/classes';
 import { useEffect, useMemo, useState } from 'react';
+import { contentAnnotations } from '../../data/library/contentAnnotations';
 import { semanticStatusLabel, type SemanticStatus } from '../contentProjection';
 import { PRACTICE_SENSES, type PracticeSenseItem } from '../practiceData';
 import { audioService } from '../services/audioService';
-import { noteService } from '../services/noteService';
-import { personalContentService } from '../services/personalContentService';
 import { useContentProjection } from '../useContentProjection';
 
 interface ContentSenseDetailScreenProps {
@@ -38,16 +37,11 @@ export const ContentSenseDetailScreen = ({
   useEffect(() => {
     if (!item) return;
     const refresh = () => {
-      setSaved(personalContentService.isSenseSaved(item.senseId));
-      setNote(noteService.getSenseNote(item.senseId));
+      setSaved(contentAnnotations.isSenseSaved(item.senseId));
+      setNote(contentAnnotations.getSenseNote(item.senseId));
     };
     refresh();
-    const unsubscribeSaved = personalContentService.subscribe(refresh);
-    const unsubscribeNotes = noteService.subscribe(refresh);
-    return () => {
-      unsubscribeSaved();
-      unsubscribeNotes();
-    };
+    return contentAnnotations.subscribe(refresh);
   }, [item]);
 
   const siblings = useMemo(() => item
@@ -59,10 +53,14 @@ export const ContentSenseDetailScreen = ({
 
   if (!item) return null;
 
-  const toggleSaved = () => {
-    const next = personalContentService.toggleSense(item.senseId);
-    setSaved(next);
-    toast(next ? uiText('meaningSaved') : uiText('meaningRemovedFromSaved'));
+  const toggleSaved = async () => {
+    try {
+      const next = await contentAnnotations.toggleSense(item.senseId);
+      setSaved(next);
+      toast(next ? uiText('meaningSaved') : uiText('meaningRemovedFromSaved'));
+    } catch {
+      toast(uiText('saveFailed'));
+    }
   };
 
   return (
@@ -72,7 +70,7 @@ export const ContentSenseDetailScreen = ({
           <svg className={uiClass("icon")}><use href="#i-chev-l" /></svg>
         </button>
         <span className={uiClass("content-detail-kicker")}>{uiText('meaning3')}</span>
-        <button className={uiClass(`content-save-button${saved ? ' on' : ''}`)} onClick={toggleSaved} aria-pressed={saved} aria-label={saved ? uiText('unsaveThisMeaning') : uiText('saveThisMeaning')}>
+        <button className={uiClass(`content-save-button${saved ? ' on' : ''}`)} onClick={() => void toggleSaved()} aria-pressed={saved} aria-label={saved ? uiText('unsaveThisMeaning') : uiText('saveThisMeaning')}>
           <svg className={uiClass("icon")}><use href="#i-star" /></svg>
         </button>
       </header>

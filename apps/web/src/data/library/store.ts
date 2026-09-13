@@ -1,14 +1,14 @@
 /** Production local-library storage. Separate from account replicas and preview data. */
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 export const libraryDatabaseName='sensa:local-library:v1';
-export const libraryTables=['meta','drafts','providers','settings','operations','sessions','meanings','identities','packages','learningTargets','learningRuns','learningEvents','personalLearning','contentAttempts'] as const;
+export const libraryTables=['meta','drafts','providers','settings','operations','sessions','meanings','identities','packages','learningTargets','learningRuns','learningEvents','personalLearning','contentAttempts','annotations'] as const;
 export type Table=typeof libraryTables[number];
 let connection:Promise<IDBDatabase>|undefined;
 let sessionIncarnation:string|undefined;
 function open(){
  if(!connection){
   connection=new Promise<IDBDatabase>((resolve,reject)=>{
-   const request=indexedDB.open(libraryDatabaseName,3);
+   const request=indexedDB.open(libraryDatabaseName,4);
    request.onupgradeneeded=()=>{for(const table of libraryTables)if(!request.result.objectStoreNames.contains(table))request.result.createObjectStore(table);};
    request.onerror=()=>reject(new Error('localFlow.storageOpen'));
    request.onblocked=()=>reject(new Error('localFlow.closeOldTabs'));

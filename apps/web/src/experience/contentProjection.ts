@@ -1,15 +1,13 @@
-import type { FSRSItem } from './services/fsrs';
-import { noteService } from './services/noteService';
-import { personalContentService } from './services/personalContentService';
-import { storageService } from './services/storageService';
+import type { ReviewSchedule } from '@sensa/learning-kernel';
+import { contentAnnotations } from '../data/library/contentAnnotations';
 import type { SensaExpressionType } from '@sensa/contracts/sensa';
-import {
-  PROTOTYPE_PACKAGE_BY_SENSE,
-  type PrototypeIntroductionPackage,
-} from './content/learningCatalog';
+import type { RuntimeLearningContent } from '../learning/content/learningCatalog';
+import { BUNDLED_PACKAGE_BY_SENSE } from '../learning/content/bundledLearningContent';
 import { PRACTICE_SENSES, type PracticeSenseItem } from './practiceData';
 import { journeyGateway } from './personalMeaningJourney/gateway';
 import type { PersonalMeaningJourneyPhase } from './personalMeaningJourney/types';
+import type { LocalLearningTarget } from '../learning/runtime/localProtocol';
+import {hasDeclaredMasteryOverride} from '../learning/runtime/targetPlanningOverrides';
 
 export const CONTENT_SECTION_IDS = [
   'recent',
@@ -151,33 +149,36 @@ const unambiguousSense = (id: string): PracticeSenseItem | undefined => {
 export const contentSenseForId = (senseId: string): PracticeSenseItem | null =>
   sensesById.get(senseId) ?? null;
 
-const semanticStatusFor = (item: FSRSItem, now: number): SemanticStatus => {
-  if (item.state === 'relearning' || item.due <= new Date(now).setHours(23, 59, 59, 999)) {
+const semanticStatusFor = (schedule: ReviewSchedule, now: number): SemanticStatus => {
+  if (
+    schedule.fsrsCardState === 'relearning'
+    || schedule.dueAt.getTime() <= new Date(now).setHours(23, 59, 59, 999)
+  ) {
     return 'reinforce';
   }
-  if (item.reps >= 3 && item.stability >= 3) return 'established';
+  if (schedule.reps >= 3 && schedule.fsrsStability >= 3) return 'established';
   return 'forming';
 };
 
-const experiencePreviewFor = (content: PrototypeIntroductionPackage): string => {
+const experiencePreviewFor = (content: RuntimeLearningContent): string => {
   if (content.experience.kind === 'text') return content.experience.sceneL1;
   return content.experience.fallbackTextSceneL1 ?? content.experience.stageCaptionL1;
 };
 
 const projectSemanticSense = (
-  content: PrototypeIntroductionPackage,
-  state: FSRSItem,
+  content: RuntimeLearningContent,
+  schedule: ReviewSchedule,
   now: number,
 ): SemanticSenseItem => {
-  const anchors = personalContentService.getSemanticAnchors(content.senseKey);
+  const anchors = contentAnnotations.getSemanticAnchors(content.senseKey);
   const latestAnchor = anchors[0] ?? null;
   const latestMedia = latestAnchor?.media[0] ?? null;
-  const note = noteService.getSenseNote(content.senseKey).trim();
+  const note = contentAnnotations.getSenseNote(content.senseKey).trim();
 
   return {
     senseId: content.senseKey,
-    status: semanticStatusFor(state, now),
-    lastReview: state.lastReview,
+    status: semanticStatusFor(schedule, now),
+    lastReview: schedule.fsrsLastReviewedAt.getTime(),
     ground: {
       labelL1: content.guideLabelL1,
       bridgeL1: content.l1Bridge,
@@ -206,27 +207,34 @@ const projectSemanticSense = (
 };
 
 /**
- * Build the My Semantic World read projections from the currently installed Package
- * practice inventory. Legacy word-level facts remain in their own storage
- * namespace and are intentionally not promoted into the formal projection.
+ * Build My Content and My Semantic World from the authoritative local Library.
+ * Only committed Memory State and explicit declared-mastery facts can create
+ * learned/known projections. Browsing the bundled practice catalog never does.
  */
-export const buildContentProjection = (): ContentProjectionSnapshot => {
-  const fsrsItems = storageService.getFSRSItems();
+export const buildContentProjection = (
+  targets: readonly LocalLearningTarget[] = [],
+): ContentProjectionSnapshot => {
   const now = Date.now();
 
-  const learnedWithState = Object.values(fsrsItems)
-    .map((state) => {
-      const item = unambiguousSense(state.memoryKey);
-      return item ? { item, state } : undefined;
+  const learnedWithState = targets
+    .flatMap((target) => {
+      if (!target.memory) return [];
+      const item = unambiguousSense(target.identity.senseId);
+      return item ? [{ item, target, schedule: target.memory }] : [];
     })
-    .filter((entry): entry is { item: PracticeSenseItem; state: FSRSItem } => !!entry)
-    .sort((left, right) => right.state.lastReview - left.state.lastReview);
+    .sort((left, right) => (
+      right.schedule.fsrsLastReviewedAt.getTime()
+      - left.schedule.fsrsLastReviewedAt.getTime()
+    ))
+    .filter((entry, index, all) => (
+      all.findIndex((candidate) => candidate.item.senseId === entry.item.senseId) === index
+    ));
 
   const learned = learnedWithState.map((entry) => entry.item);
-  const semanticSenses = Object.values(fsrsItems)
-    .flatMap((state) => {
-      const pkg = PROTOTYPE_PACKAGE_BY_SENSE.get(state.memoryKey);
-      return pkg ? [projectSemanticSense(pkg.content, state, now)] : [];
+  const semanticSenses = learnedWithState
+    .flatMap(({ target, schedule }) => {
+      const pkg = BUNDLED_PACKAGE_BY_SENSE.get(target.identity.senseId);
+      return pkg ? [projectSemanticSense(pkg.content, schedule, now)] : [];
     })
     .sort((left, right) => right.lastReview - left.lastReview);
   // v2 Personal Meanings are not assigned to legacy prototype regions. Keep
@@ -256,20 +264,19 @@ export const buildContentProjection = (): ContentProjectionSnapshot => {
     confirmedExpressionCount: item.confirmedExpressionCount,
     updatedAt: Date.parse(item.updatedAt),
   }));
-  const knownWords = storageService.getKnownWords();
-  const known = PRACTICE_SENSES.filter((item) => {
-    const wordSenses = sensesByWord.get(item.word.toLowerCase()) || [];
-    return wordSenses.length === 1 && knownWords.has(item.word.toLowerCase());
-  });
+  const declaredMasterySenseIds = new Set(
+    targets.filter(hasDeclaredMasteryOverride).map((target) => target.identity.senseId),
+  );
+  const known = PRACTICE_SENSES.filter((item) => declaredMasterySenseIds.has(item.senseId));
 
-  const savedSenseIds = personalContentService.getSavedSenseIds();
-  const savedExampleIds = personalContentService.getSavedExampleIds();
+  const savedSenseIds = contentAnnotations.getSavedSenseIds();
+  const savedExampleIds = contentAnnotations.getSavedExampleIds();
   const savedSenses = PRACTICE_SENSES.filter((item) => savedSenseIds.has(item.senseId));
   const savedExamples = PRACTICE_SENSES
     .map((sense) => ({ exampleId: exampleIdForSense(sense), sense }))
     .filter((item) => savedExampleIds.has(item.exampleId));
 
-  const senseNotes: ContentNoteItem[] = Object.entries(noteService.getAllSenseNotes())
+  const senseNotes: ContentNoteItem[] = Object.entries(contentAnnotations.getAllSenseNotes())
     .flatMap(([senseId, body]) => {
       const sense = sensesById.get(senseId);
       if (!sense || !body.trim()) return [];
@@ -283,7 +290,7 @@ export const buildContentProjection = (): ContentProjectionSnapshot => {
       }];
     });
 
-  const legacyNotes = Object.entries(noteService.getAllNotes())
+  const legacyNotes = Object.entries(contentAnnotations.getAllNotes())
     .filter(([, body]) => body.trim().length > 0)
     .map(([word, body]) => {
       const candidates = sensesByWord.get(word.toLowerCase()) || [];

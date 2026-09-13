@@ -4,7 +4,7 @@ import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {stableUuid} from '@sensa/learning-kernel';
 import {learningPackageSchema,learningPackageDescriptorSchema} from '@sensa/contracts/sensa';
-import {provisionLightweightInitialContent} from '../../apps/web/src/experience/learningRuntime/lightweightInitialContent.ts';
+import {provisionLightweightInitialContent} from '../../apps/web/src/learning/runtime/lightweightInitialContent.ts';
 const source=JSON.parse(await readFile('content/authored/web-starter.json','utf8')) as {
  title:string;description:string;version:string;
  /** The languages the authored text is in. They belong to the resource rather

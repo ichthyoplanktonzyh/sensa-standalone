@@ -1,5 +1,5 @@
 export const contentUiZh = {
-  noteSaved: "笔记已保存", noteFor: "{{word}} 的笔记", saveNote: "保存笔记", notePrompt: "我的理解", notePlaceholder: "写下自己的理解、联想或提醒…", noteScope: "当前意思的笔记",
+  noteSaved: "笔记已保存", saveFailed: "保存失败，请重试", noteFor: "{{word}} 的笔记", saveNote: "保存笔记", notePrompt: "我的理解", notePlaceholder: "写下自己的理解、联想或提醒…", noteScope: "当前意思的笔记",
   viewContextCount: "查看我的场景，共 {{count}} 个",
   word: "单词",
   phrase: "短语",
@@ -259,7 +259,7 @@ export const contentUiZh = {
   notes: "我的笔记",
 };
 export const contentUiEn = {
-  noteSaved: "Note saved", noteFor: "Note for {{word}}", saveNote: "Save note", notePrompt: "My understanding", notePlaceholder: "Add your understanding, associations or reminders…", noteScope: "Note on this meaning",
+  noteSaved: "Note saved", saveFailed: "Could not save. Please try again", noteFor: "Note for {{word}}", saveNote: "Save note", notePrompt: "My understanding", notePlaceholder: "Add your understanding, associations or reminders…", noteScope: "Note on this meaning",
   viewContextCount: "View my contexts ({{count}})",
   word: "Word",
   phrase: "Phrase",

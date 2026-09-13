@@ -31,10 +31,10 @@ import type {
   MeaningToFormRecallOutcome,
   NovelTransferOutcome,
   RepairResourceReference,
-} from '../engine/types';
+} from '../../learning/engine/types';
 import type { Word, QuickDictEntry, DictionaryLookup } from '../types';
-import type { PrototypeIntroductionPackage } from '../content/learningCatalog';
-import type { AssessmentResource } from '../content/assessmentResources';
+import type { RuntimeLearningContent } from '../../learning/content/learningCatalog';
+import type { AssessmentResource } from '../../learning/content/assessmentResources';
 import { IntroductionCard, type IntroductionPhase } from '../components/cards/IntroductionCard';
 import { RecognitionCard } from '../components/cards/RecognitionCard';
 import { RecallCard } from '../components/cards/RecallCard';
@@ -49,11 +49,11 @@ import type {
 import type {
   LightweightInitialRating,
   LightweightProtocolStepInstance,
-} from './lightweightInitialProtocol';
+} from '../../learning/runtime/lightweightInitialProtocol';
 import type {
   ReviewAssessmentResult,
   ReviewAssessmentSpec,
-} from '../review/types';
+} from '../../learning/review/types';
 
 /**
  * 宿主提供给卡片的能力面。
@@ -96,9 +96,9 @@ export interface StepRendererProps {
   readonly ordinal: number;
   readonly curWord: Word;
   /** 讲解包投影：讲解/识别/回想/迁移/评测共用它作为内容面。 */
-  readonly content: PrototypeIntroductionPackage | null;
+  readonly content: RuntimeLearningContent | null;
   /** 宿主屏物化好的修复内容（含 resourceRef 现场物化的回退）。 */
-  readonly repairContent: PrototypeIntroductionPackage | null;
+  readonly repairContent: RuntimeLearningContent | null;
   readonly repairResourceRef: RepairResourceReference | null;
   /** 讲解与修复回放共用的相位，由宿主屏持有。 */
   readonly phase: IntroductionPhase;

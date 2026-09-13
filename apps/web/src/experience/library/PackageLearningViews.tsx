@@ -1,16 +1,17 @@
 import {InterleavedFourStageRuntimeScreen} from '../components/learning/InterleavedFourStageRuntimeScreen';
 import {InterleavedFourStageReviewScreen} from '../components/learning/InterleavedFourStageReviewScreen';
-import {InterleavedFourStageQueue,InterleavedFourStageReviewQueue} from '../learningRuntime/interleavedFourStageProtocol';
-import {fourStageQueue,fourStageContent,type FourStageAction} from '../../data/library/fourStage';
-import {LEARNING_PROTOCOL_PURPOSES,learningPolicyProfileRegistry,type LearningProtocolPurpose,type PrototypeRuntimeAdapterId} from '../learningRuntime/policyProfiles';
+import {InterleavedFourStageQueue,InterleavedFourStageReviewQueue} from '../../learning/runtime/interleavedFourStageProtocol';
+import {fourStageQueue,fourStageContent,type FourStageAction} from '../../learning/protocols/fourStage';
+import {learningPolicyProfileRegistry} from '../../learning/runtime/policyProfiles';
 import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
 import {localRunTargetIds} from '../../data/library/learning';
 import {defaultSensaLanguageProfile} from '@sensa/contracts/sensa';
-import {assuranceContent,localAssuranceState} from '../../data/library/assurance';
+import {assuranceContent,localAssuranceState} from '../../learning/protocols/assurance';
 import {cardText} from '../../i18n/originalCards';
 import {RuntimeTools} from '../components/learning/RuntimeTools';
-import {localRunBinding,localTargetPolicy} from '../learningRuntime/localRuntimeBindings';
-import {learningRuntimeCoordinator} from '../learningRuntime/runtimeCoordinator';
+import {localRunBinding,localTargetPolicy} from '../../learning/runtime/localRuntimeBindings';
+import {learningRuntimeCoordinator} from '../../learning/runtime/runtimeCoordinator';
+import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
 import {
  LocalRuntimePresentationRegistry,
  immutablePresentationSnapshot,
@@ -29,10 +30,10 @@ import {useState,useRef,useEffect,useMemo} from 'react';
 import {ArrowRight,BookOpen,Search,RefreshCw,Upload,Check,Download} from 'lucide-react';
 import {LearningTargetDetailScreen} from '../components/learning/LearningTargetDetailScreen';
 import {LightweightRuntimeStartScreen} from '../components/learning/LightweightRuntimeStartScreen';
-import {localLightweightPhase,localLightweightStep} from '../learningRuntime/lightweightInitialProtocol';
+import {localLightweightPhase,localLightweightStep} from '../../learning/runtime/lightweightInitialProtocol';
 import {packageKey,type InstalledPackage} from '../../data/library/packages';
 import type {LocalLearningRun,LocalLearningTarget} from '../../data/library/learning';
-import type {LocalLearningAction} from '../learningRuntime/localProtocol';
+import type {LocalLearningAction} from '../../learning/runtime/localProtocol';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 type Controller=ReturnType<typeof usePackageLearning>;
@@ -112,7 +113,8 @@ export function PackageTarget({active,target,c,onBack,onHome,onStart,onSource}:{
  const readiness=c.readinessByTarget[target.id]??'blocked';
  const canSelectPolicy=!!target.assurancePackageKey&&!target.startedAt;
  const content=pack&&target.assurancePackageKey?assuranceContent(pack,target.assurancePackageKey).template.content:null;
- return <><LearningTargetDetailScreen active={active} target={localTargetView(target,readiness)} selectedPolicy={policy} fixedPolicy={!canSelectPolicy} preparation={readiness} committedPolicy={target.committedPolicy?policy:null} initialCompletionKind={target.completedAt?'study_completion':null} reviewDue={c.due.includes(target)} relearning={!!target.relearnAt} retentionRuntimeState={null} nextReviewLabel={target.memory?.dueAt.toLocaleString(i18n.language)??null} declaredMastery={!!target.declaredMastery} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>setEditingPolicy(true)} onOpenSource={onSource??onBack} onRefreshPreparation={()=>void c.refresh()} onGoHome={onHome} onStartReview={onStart} onContinueRetentionRuntime={onStart} onContinueRuntime={onStart} onRevokeDeclaredMastery={()=>void c.declareKnown(target.id,false)} notice={c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>} actions={<><LearningResourceDetails material={target.material}/>{content&&<StudyResources content={content}/>}{target.declaredMastery?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.declareKnown(target.id,false)}>{cardText('revokeKnown')}</button>:<button className={setupPrimary} disabled={c.busy||readiness!=='ready'||!!target.completedAt&&!c.due.includes(target)&&(!c.run||!localRunTargetIds(c.run).includes(target.id))} onClick={onStart}>{target.completedAt?localFlowText('startReview'):localFlowText('startLearning')}</button>}</>}/>{editingPolicy&&canSelectPolicy&&<LearningPreferencesPanel closeLabel={i18n.t('learningPreferences.finishSelection')} allowedPolicies={learningPolicyProfileRegistry.list().filter(p=>p.localSelectable).map(p=>p.profileId)} showDailyQuantity={false} defaultPolicy={policy} dailyNewCount={c.dailyLimit??20} onDailyNewCountChange={()=>{}} onPolicyChange={value=>{void c.selectPolicy(target.id,value);}} busy={c.busy} status={c.notice&&<p role="status">{c.notice}</p>} onClose={()=>setEditingPolicy(false)}/>}</>;
+ const declaredMastery=hasDeclaredMasteryOverride(target);
+ return <><LearningTargetDetailScreen active={active} target={localTargetView(target,readiness)} selectedPolicy={policy} fixedPolicy={!canSelectPolicy} preparation={readiness} committedPolicy={target.committedPolicy?policy:null} initialCompletionKind={target.completedAt?'study_completion':null} reviewDue={c.due.includes(target)} relearning={!!target.relearnAt} retentionRuntimeState={null} nextReviewLabel={target.memory?.dueAt.toLocaleString(i18n.language)??null} declaredMastery={declaredMastery} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>setEditingPolicy(true)} onOpenSource={onSource??onBack} onRefreshPreparation={()=>void c.refresh()} onGoHome={onHome} onStartReview={onStart} onContinueRetentionRuntime={onStart} onContinueRuntime={onStart} onRevokeDeclaredMastery={()=>void c.declareKnown(target.id,false)} notice={c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>} actions={<><LearningResourceDetails material={target.material}/>{content&&<StudyResources content={content}/>}{declaredMastery?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.declareKnown(target.id,false)}>{cardText('revokeKnown')}</button>:<button className={setupPrimary} disabled={c.busy||readiness!=='ready'||!!target.completedAt&&!c.due.includes(target)&&(!c.run||!localRunTargetIds(c.run).includes(target.id))} onClick={onStart}>{target.completedAt?localFlowText('startReview'):localFlowText('startLearning')}</button>}</>}/>{editingPolicy&&canSelectPolicy&&<LearningPreferencesPanel closeLabel={i18n.t('learningPreferences.finishSelection')} allowedPolicies={learningPolicyProfileRegistry.list().filter(p=>p.localSelectable).map(p=>p.profileId)} showDailyQuantity={false} defaultPolicy={policy} dailyNewCount={c.dailyLimit??20} onDailyNewCountChange={()=>{}} onPolicyChange={value=>{void c.selectPolicy(target.id,value);}} busy={c.busy} status={c.notice&&<p role="status">{c.notice}</p>} onClose={()=>setEditingPolicy(false)}/>}</>;
 }
 type PackageRuntimeProps={active:boolean;c:Controller;host:AssuranceSupportHost;onExit:()=>void;onFinish:()=>void};
 type RuntimePresentationProps={
@@ -192,39 +194,44 @@ function FourStageInitialPackageRuntime(props:RuntimePresentationProps){
  const {queue,target,content}=fourStagePresentation(props);
  if(!(queue instanceof InterleavedFourStageQueue))throw new Error('Invalid initial queue');
  const act=(response:FourStageAction['response'])=>dispatch({kind:'protocol',response});
- return <InterleavedFourStageRuntimeScreen active={active} targetIds={[]} onExit={onExit} onFinish={onFinish} onComplete={()=>{}} execution={{session:queue.getCurrentSession(),projection:queue.getProjection(),target,content,busy,notice:notice&&<p role="alert">{notice}</p>,onChoice:optionId=>act({kind:'choice',optionId}),onSelfReport:known=>act({kind:'self_report',known}),onContinue:()=>act({kind:'continue'})}}/>;
+ return <InterleavedFourStageRuntimeScreen active={active} onExit={onExit} onFinish={onFinish} execution={{session:queue.getCurrentSession(),projection:queue.getProjection(),target,content,busy,notice:notice&&<p role="alert">{notice}</p>,onChoice:optionId=>act({kind:'choice',optionId}),onSelfReport:known=>act({kind:'self_report',known}),onContinue:()=>act({kind:'continue'})}}/>;
 }
 function FourStageReviewPackageRuntime(props:RuntimePresentationProps){
  const {active,busy,notice,dispatch,onExit,onFinish}=props;
  const {run,queue,target}=fourStagePresentation(props);
  if(!(queue instanceof InterleavedFourStageReviewQueue))throw new Error('Invalid review queue');
  const act=(response:FourStageAction['response'])=>dispatch({kind:'protocol',response});
- return <InterleavedFourStageReviewScreen active={active} targetIds={[]} relearningTargetIds={new Set()} onExit={onExit} onFinish={onFinish} onMemoryOutcome={()=>{}} onRelearningComplete={()=>{}} execution={{session:queue.getCurrentSession(),target,done:!!run.completedAt,targetCount:localRunTargetIds(run).length,busy,notice:notice&&<p role="alert">{notice}</p>,onAnswer:answer=>act({kind:'review',answer}),onContinue:()=>act({kind:'continue'})}}/>;
+ return <InterleavedFourStageReviewScreen active={active} onExit={onExit} onFinish={onFinish} execution={{session:queue.getCurrentSession(),target,done:!!run.completedAt,targetCount:localRunTargetIds(run).length,busy,notice:notice&&<p role="alert">{notice}</p>,onAnswer:answer=>act({kind:'review',answer}),onContinue:()=>act({kind:'continue'})}}/>;
 }
 
-const presentationBindings=(adapterId:PrototypeRuntimeAdapterId,purposes:readonly LearningProtocolPurpose[]=LEARNING_PROTOCOL_PURPOSES):LocalRuntimePresentationBinding[]=>{
- const seen=new Set<string>();
- return learningPolicyProfileRegistry.listVersions().flatMap(profile=>purposes.flatMap(purpose=>{
-  const binding=profile.protocols[purpose];
-  if(binding.runtimeAdapterId!==adapterId||!binding.localProtocolVersion)return [];
-  const presentationBinding={surface:learningRuntimeCoordinator.adapterForBinding(binding).surfaceFor(purpose),runtimeAdapterId:adapterId,purpose,protocolId:binding.protocolId,protocolVersion:binding.protocolVersion,localProtocolVersion:binding.localProtocolVersion} satisfies LocalRuntimePresentationBinding;
-  const key=JSON.stringify(presentationBinding);
-  if(seen.has(key))return [];
-  seen.add(key);
-  return [presentationBinding];
- }));
-};
+const LIGHTWEIGHT_PRESENTATION_BINDINGS=Object.freeze([
+ {surface:'lightweight_initial',runtimeAdapterId:'lightweight',purpose:'initial_learning',protocolId:'lightweight-study',protocolVersion:'v2',localProtocolVersion:'sensa-lightweight-initial-v1'},
+ {surface:'lightweight_retention',runtimeAdapterId:'lightweight',purpose:'retention_review',protocolId:'learner-rated-retention-review',protocolVersion:'v1',localProtocolVersion:'sensa-lightweight-review-v1'},
+ {surface:'lightweight_retention',runtimeAdapterId:'lightweight',purpose:'relearning',protocolId:'lightweight-rebinding',protocolVersion:'v1',localProtocolVersion:'sensa-lightweight-relearning-v1'},
+] as const satisfies readonly LocalRuntimePresentationBinding[]);
+
+const STRUCTURED_PRESENTATION_BINDINGS=Object.freeze([
+ {surface:'structured_session',runtimeAdapterId:'structured',purpose:'initial_learning',protocolId:'structured-acquisition',protocolVersion:'v1',localProtocolVersion:'sensa-high-assurance-v1'},
+ {surface:'structured_session',runtimeAdapterId:'structured',purpose:'retention_review',protocolId:'evidence-oriented-retention-review',protocolVersion:'v1',localProtocolVersion:'sensa-high-assurance-v1'},
+ {surface:'structured_session',runtimeAdapterId:'structured',purpose:'relearning',protocolId:'targeted-structured-relearning',protocolVersion:'v1',localProtocolVersion:'sensa-high-assurance-v1'},
+] as const satisfies readonly LocalRuntimePresentationBinding[]);
+
+const FOUR_STAGE_PRESENTATION_BINDINGS=Object.freeze([
+ {surface:'interleaved_four_stage',runtimeAdapterId:'interleaved_four_stage',purpose:'initial_learning',protocolId:'interleaved-four-stage-acquisition',protocolVersion:'v1',localProtocolVersion:'sensa-four-stage-v1'},
+ {surface:'interleaved_four_stage_review',runtimeAdapterId:'interleaved_four_stage',purpose:'retention_review',protocolId:'interleaved-four-stage-retention',protocolVersion:'v1',localProtocolVersion:'sensa-four-stage-v1'},
+ {surface:'interleaved_four_stage_review',runtimeAdapterId:'interleaved_four_stage',purpose:'relearning',protocolId:'interleaved-four-stage-relearning',protocolVersion:'v1',localProtocolVersion:'sensa-four-stage-v1'},
+] as const satisfies readonly LocalRuntimePresentationBinding[]);
 
 const lightweightPresentationPlugin:LocalRuntimePresentationPlugin<RuntimePresentationProps>={
- manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.lightweight',pluginVersion:'v1',displayName:'Sensa Lightweight Runtime',capabilities:['toast','personal_content_menu','declared_mastery'],bindings:presentationBindings('lightweight')},
+ manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.lightweight',pluginVersion:'v1',displayName:'Sensa Lightweight Runtime',capabilities:['toast','personal_content_menu','declared_mastery'],bindings:[...LIGHTWEIGHT_PRESENTATION_BINDINGS]},
  render:LightweightPackageRuntime,
 };
 const structuredPresentationPlugin:LocalRuntimePresentationPlugin<RuntimePresentationProps>={
- manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.structured',pluginVersion:'v1',displayName:'Sensa Structured Runtime',capabilities:['toast','dictionary','notes','personal_scenes','personal_content_menu','declared_mastery'],bindings:presentationBindings('structured')},
+ manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.structured',pluginVersion:'v1',displayName:'Sensa Structured Runtime',capabilities:['toast','dictionary','notes','personal_scenes','personal_content_menu','declared_mastery'],bindings:[...STRUCTURED_PRESENTATION_BINDINGS]},
  render:StructuredPackageRuntime,
 };
 const fourStagePresentationPlugin:LocalRuntimePresentationPlugin<RuntimePresentationProps>={
- manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.interleaved-four-stage',pluginVersion:'v1',displayName:'Sensa Interleaved Four-stage Runtime',capabilities:[],bindings:presentationBindings('interleaved_four_stage')},
+ manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.interleaved-four-stage',pluginVersion:'v1',displayName:'Sensa Interleaved Four-stage Runtime',capabilities:[],bindings:[...FOUR_STAGE_PRESENTATION_BINDINGS]},
  render:props=>props.run.purpose==='initial_learning'?<FourStageInitialPackageRuntime {...props}/>:<FourStageReviewPackageRuntime {...props}/>,
 };
 

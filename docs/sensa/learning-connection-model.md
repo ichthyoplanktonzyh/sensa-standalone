@@ -856,7 +856,7 @@ origin=`relearning` 的 Memory Outcome。两者都不覆盖 forgotten Outcome。
 - 一次 due Review 最多产生一个带规范 `again | hard | good | easy` grade 的 Memory Outcome 并推进
   一次 FSRS revision；grade、basis 与 evidence level 必须分离，不能先压成 Boolean 再猜测；
 - Memory State 与 next due 只能由 scheduler 根据有效 Handoff/Memory Outcome 更新；Protocol、preset、
-  Card 与客户端不能直接写入；
+  Card renderer、界面与同步适配器不能直接写入；
 - Relearning Completion 不重评原 Review、不重新初始化 FSRS，也不自动构成 scheduler input；
 - 只有 Protocol Version 显式声明的独立 Relearning evaluation 才能产生新 Memory Outcome，
   且不得改写或重复应用触发它的 Review Outcome；

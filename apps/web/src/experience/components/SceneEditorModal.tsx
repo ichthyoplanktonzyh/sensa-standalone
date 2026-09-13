@@ -1,11 +1,11 @@
 import {useTranslation} from 'react-i18next';
 import {cardText} from '../../i18n/originalCards';
+import {
+  contentAnnotations,
+  type PersonalSemanticAnchorMedia,
+} from '../../data/library/contentAnnotations';
 import { uiClass } from '../ui/classes';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import {
-  personalContentService,
-  type PersonalSemanticAnchorMedia,
-} from '../services/personalContentService';
 
 interface SceneEditorModalProps {
   active: boolean;
@@ -22,10 +22,7 @@ const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 const MAX_IMAGE_EDGE = 1280;
 
 const createMediaId = (): string => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `scene_media_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  return crypto.randomUUID();
 };
 
 const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
@@ -82,7 +79,7 @@ export function SceneEditorModal({
 
   useEffect(() => {
     if (!active || !senseId) return;
-    const existing = anchorId ? personalContentService.getSemanticAnchor(anchorId) : null;
+    const existing = anchorId ? contentAnnotations.getSemanticAnchor(anchorId) : null;
     setBody(existing?.body ?? '');
     setMedia(existing?.media ?? []);
     const focusTimer = window.setTimeout(() => textareaRef.current?.focus(), 180);
@@ -119,19 +116,21 @@ export function SceneEditorModal({
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!body.trim() && media.length === 0) {
       toast(cardText('sceneRequired'));
       return;
     }
-    personalContentService.saveSemanticAnchor({
-      senseId,
-      anchorId,
-      body,
-      media,
-    });
-    toast(cardText('sceneSaved'));
-    onClose();
+    setProcessing(true);
+    try {
+      await contentAnnotations.saveSemanticAnchor({ senseId, anchorId, body, media });
+      toast(cardText('sceneSaved'));
+      onClose();
+    } catch {
+      toast(cardText('sceneImageFailed'));
+    } finally {
+      setProcessing(false);
+    }
   };
 
   return (
@@ -145,7 +144,7 @@ export function SceneEditorModal({
 
             <h2>{cardText('sceneTitle')}</h2>
           </div>
-          <button type="button" onClick={handleSave} aria-label={cardText('sceneSave')}>
+          <button type="button" disabled={processing} onClick={() => void handleSave()} aria-label={cardText('sceneSave')}>
             <svg className={uiClass("icon")}><use href="#i-chk-simple" /></svg>
           </button>
         </header>

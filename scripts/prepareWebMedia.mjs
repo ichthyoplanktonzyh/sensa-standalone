@@ -11,7 +11,7 @@ if(process.env.VITE_SENSA_MODE==='production'){
 }
 
 const root=fileURLToPath(new URL('../',import.meta.url));
-const release=JSON.parse(await readFile(path.join(root,'apps/web/src/experience/content/releases/golden-learning-release-v1.json'),'utf8'));
+const release=JSON.parse(await readFile(path.join(root,'apps/web/src/learning/content/releases/golden-learning-release-v1.json'),'utf8'));
 const source=path.resolve(root,process.env.SENSA_WEB_MEDIA_ROOT??'content/data/media/audio');
 const output=path.join(root,'apps/web/public/golden-audio');
 const assets=await Promise.all(release.media.filter(item=>item.kind==='audio').map(async item=>{

@@ -1,9 +1,5 @@
 import { Check, ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import {
-  PROTOTYPE_LEARNING_TARGETS,
-  type PrototypeLearningTargetId,
-} from "../../learningJourney/prototypeLearning";
 import { RuntimeFrame, runtimePrimary } from "./RuntimeFrame";
 
 export function AssuranceSummary({
@@ -23,7 +19,7 @@ export function AssuranceSummary({
   completed: readonly string[];
   repaired?: readonly string[];
   declared: readonly string[];
-  targetPresentation?: (id:string)=>{expression:string;meaning:string};
+  targetPresentation: (id:string)=>{expression:string;meaning:string};
   continueLabel?: string;
   onExit: () => void;
 }) {
@@ -71,10 +67,10 @@ export function AssuranceSummary({
             >
               <div>
                 <strong className="text-xl font-medium">
-                  {(targetPresentation ? targetPresentation(id) : PROTOTYPE_LEARNING_TARGETS[id as PrototypeLearningTargetId]).expression}
+                  {targetPresentation(id).expression}
                 </strong>
                 <p className="mt-2 text-sm leading-6 text-[#788398]">
-                  {(targetPresentation ? targetPresentation(id) : PROTOTYPE_LEARNING_TARGETS[id as PrototypeLearningTargetId]).meaning}
+                  {targetPresentation(id).meaning}
                 </p>
               </div>
               <span className="shrink-0 text-xs text-[#68748d]">

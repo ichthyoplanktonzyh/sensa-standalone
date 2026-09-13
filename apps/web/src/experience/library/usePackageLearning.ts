@@ -4,12 +4,12 @@ import {resolveLearningQueue} from './learningQueue';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useRef,useState} from 'react';
 import {defaultSensaLanguageProfile,learningPackageCatalogSchema,type LearningPackageDescriptor} from '@sensa/contracts/sensa';
-import {auth} from '../../data/consumer/client';
+import {auth} from '../../data/account/auth';
 import {openLibrary,observeLibrary,readLibrary,command} from '../../data/library/store';
 import {installedPackages,downloadPackage,installPackage,type InstalledPackage} from '../../data/library/packages';
 import {localRunTargetIds,selectLocalLearningPolicy,setLocalDeclaredMastery,readLearning,enrollPackage,startLearning,actLearning,finishLearning,confirmLearningQuantity,type LocalLearningTarget,type LocalLearningRun} from '../../data/library/learning';
 import type {LearningRecordView} from '../learningJourney/learningHistory';
-import {inspectLocalTargetReadiness} from '../learningRuntime/runtimeCoordinator';
+import {inspectLocalTargetReadiness} from '../../learning/runtime/runtimeCoordinator';
 export function usePackageLearning(entryOpen:boolean){
  useTranslation();
  const [packages,setPackages]=useState<InstalledPackage[]>([]),[catalog,setCatalog]=useState<LearningPackageDescriptor[]>([]),[targets,setTargets]=useState<LocalLearningTarget[]>([]),[runs,setRuns]=useState<LocalLearningRun[]>([]),[activeId,setActiveId]=useState<string|undefined>();

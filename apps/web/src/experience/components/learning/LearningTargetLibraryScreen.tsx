@@ -2,15 +2,15 @@ import { useState } from 'react';
 import { ArrowLeft, ArrowRight, Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { studyButton } from '../StudyScreen';
-import { PROTOTYPE_LEARNING_TARGETS, type PrototypeLearningPolicy, type PrototypeLearningReadiness } from '../../learningJourney/prototypeLearning';
+import type {LearningPolicyId,LearningReadiness} from '../../../learning/runtime/policyProfiles';
 
 interface LearningTargetLibraryScreenProps {
   active: boolean;
-  targets?: Readonly<Record<string, {expression: string; meaning: string; sourceKind: string}>>;
+  targets: Readonly<Record<string, {expression: string; meaning: string; sourceKind: string}>>;
   targetIds: readonly string[];
-  /** 生效方式与准备状态由 journeyState 算好传入——优先级规则只应有一份。 */
-  policyByTarget: Readonly<Record<string, PrototypeLearningPolicy>>;
-  preparationByTarget: Readonly<Record<string, PrototypeLearningReadiness>>;
+  /** Effective policy and readiness are projected from the persisted local Target. */
+  policyByTarget: Readonly<Record<string, LearningPolicyId>>;
+  preparationByTarget: Readonly<Record<string, LearningReadiness>>;
   committedTargetIds: ReadonlySet<string>;
   completedTargetIds: ReadonlySet<string>;
   reviewDueTargetIds: ReadonlySet<string>;
@@ -42,7 +42,9 @@ export const LearningTargetLibraryScreen = (props: LearningTargetLibraryScreenPr
     const group: Filter = ['declared', 'completed'].includes(state) ? 'complete'
       : ['review-due', 'relearning', 'relearning-repair', 'relearning-retest', 'reviewing'].includes(state) ? 'review'
       : state === 'committed' ? 'active' : 'new';
-    return { id, target: props.targets?.[id] ?? PROTOTYPE_LEARNING_TARGETS[id as keyof typeof PROTOTYPE_LEARNING_TARGETS], state, group };
+    const target=props.targets[id];
+    if(!target)throw new Error(`Missing Learning Target presentation: ${id}`);
+    return { id, target, state, group };
   });
   const visible = items.filter(item => (filter === 'all' || item.group === filter)
     && `${item.target.expression} ${item.target.meaning}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));

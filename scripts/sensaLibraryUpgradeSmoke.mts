@@ -1,4 +1,4 @@
-/** Existing v2 IndexedDB records must survive the production v3 opening. */
+/** Existing v2 IndexedDB records must survive the production v4 opening. */
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -17,6 +17,7 @@ try{
  const file=join(root,'store.mjs');await build({entryPoints:['apps/web/src/data/library/store.ts'],outfile:file,bundle:true,platform:'browser',format:'esm',logLevel:'silent'});const store=await import(pathToFileURL(file).href);
  assert.deepEqual(await store.openLibrary(),identity);assert.deepEqual(await store.readLibrary((tx:any)=>tx.all('drafts')),[draft]);
  assert.deepEqual(await store.readLibrary((tx:any)=>tx.all('learningEvents')),[]);
+ assert.deepEqual(await store.readLibrary((tx:any)=>tx.all('annotations')),[]);
  assert.equal((await store.readLibrary((tx:any)=>tx.all('operations'))).length,1);
- console.log('PASS: real production v2-to-v3 opening preserves source records, identity and operation ledger while creating new learning stores. Fake IndexedDB; browser SW upgrade is checked separately.');
+ console.log('PASS: real production v2-to-v4 opening preserves source records, identity and operation ledger while creating learning and annotation stores. Fake IndexedDB; browser SW upgrade is checked separately.');
 }finally{await rm(root,{recursive:true,force:true});}

@@ -2,13 +2,13 @@ import {cardText} from '../../../i18n/originalCards';
 import { uiClass } from '../../ui/classes';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type {
-  PrototypeInteractionExperience,
-  PrototypeIntroductionPackage,
-  PrototypeTextExperience,
-} from '../../content/learningCatalog';
+  InteractionExperience,
+  RuntimeLearningContent,
+  TextExperience,
+} from '../../../learning/content/learningCatalog';
 
 interface ExperienceRendererProps {
-  experience: PrototypeIntroductionPackage['experience'];
+  experience: RuntimeLearningContent['experience'];
   mode: 'introduction' | 'replay';
   replayAction?: 'return' | 'reveal';
   primaryActionLabel?: string;
@@ -19,7 +19,7 @@ function ExperienceStage({
   experience,
   activeIndex,
 }: {
-  experience: PrototypeInteractionExperience;
+  experience: InteractionExperience;
   activeIndex: number;
 }) {
   if (experience.rendererVariant === 'physical_threshold') {
@@ -98,7 +98,7 @@ function ExperienceStage({
 }
 
 interface InteractiveExperienceRendererProps extends Omit<ExperienceRendererProps, 'experience'> {
-  experience: PrototypeInteractionExperience;
+  experience: InteractionExperience;
 }
 
 function InteractiveExperienceRenderer({
@@ -204,7 +204,7 @@ function InteractiveExperienceRenderer({
 }
 
 interface TextExperienceRendererProps extends Omit<ExperienceRendererProps, 'experience'> {
-  experience: PrototypeTextExperience;
+  experience: TextExperience;
 }
 
 function TextExperienceRenderer({

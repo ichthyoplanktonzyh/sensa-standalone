@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ExpressionRevealCardPresentation } from "../../../learningRuntime/lightweightInitialPresentation";
-import type { LightweightInitialRating } from "../../../learningRuntime/lightweightInitialProtocol";
+import type { LightweightInitialRating } from "../../../../learning/runtime/lightweightInitialProtocol";
 import { RuntimeRating } from "../../learning/RuntimeRating";
 interface ExpressionRevealCardProps {
   readonly initial?: boolean;

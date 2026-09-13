@@ -8,7 +8,7 @@
 | --- | --- |
 | `apps/web` | 生产 React 界面、本机 IndexedDB 学习库、账号与云同步 |
 | `apps/browser-extension` | 网页/字幕阅读、采集、解释与 Web 交接 |
-| `apps/api` | Hono 服务实现及本地运行入口 |
+| `apps/api` | Hono 可选在线服务实现及本地开发入口；不执行学习协议 |
 | `supabase/functions/sensa-api` | 生产 Edge Function 入口 |
 | `packages/contracts` | Web、扩展与 API 共享协议 |
 | `packages/learning-kernel` | 学习与调度纯规则 |
@@ -22,6 +22,9 @@
 ## 数据与同步
 
 生产 Web 的个人学习库位于 IndexedDB `sensa:local-library:v1`。UI 通过本机应用层事务修改它，不直接写派生学习结果。账号副本、旧 consumer 存储和预览数据与该库保持隔离。
+
+学习运行时只在 Web 本机执行：目标选择、Protocol/Policy、步骤、评价、Completion、Memory Outcome 与
+FSRS 都由本地领域事务结算。Hono/Edge 不创建或推进学习 Run，也不重新计算从云同步取回的学习事实。
 
 普通账号云同步以本机已提交记录为输入。云端保存版本化清单和按内容寻址的数据块；下载按响应字节预算分页，客户端消费服务端返回的 deferred 列表。学习操作与学习事件的历史内容不可被重写。
 
@@ -42,7 +45,7 @@
 
 提供方只有两种：Sensa 服务与用户自填的连接。用户连接按保存位置决定执行位置。存在本机库 `providers` 表的连接在本页执行，密钥只保留在页面内存，不进个人库同步，请求由这台设备直接发出。存在账号侧的连接由部署密钥加密保管、在服务端执行；账号级连接登记处是 `db/migrations/0021_sensa_browser_reading.sql` 的 `reading_settings` 表，扩展与 Web 共用同一份，因此一个密钥只需配置一次。两种位置只差两点：本机连接可使用任意 HTTPS 地址与本机 HTTP 服务，但需要对方允许跨域，且不计入服务端用量；账号连接受部署白名单限制（`SENSA_READING_ALLOWED_ORIGINS`），并计入服务端用量。用途指派每次只属于一个登记处，切换用途即清除另一处。
 
-`reference` 用途默认由 Sensa 服务承担，并带独立预算池：`sensa_consumer.reference_usage`，上限 `SENSA_REFERENCE_DAILY_LIMIT`（默认 300），不占用 `teacher`/`content` 的每轮额度（`sensa_consumer.native_semantic_usage`，`modelDailyLimit=30`）。参考词典数据源（`api.wiktapi.dev`、`api.dictionaryapi.dev`）与浏览器语音、`dict.youdao.com` 音频不是模型提供方，不在本边界内。
+`reference` 用途默认由 Sensa 服务承担，并带独立预算池：`sensa_consumer.reference_usage`，上限 `SENSA_REFERENCE_DAILY_LIMIT`（默认 300）。`teacher` 使用 `sensa_consumer.native_semantic_usage`，`content`/`review` 使用 `sensa_consumer.native_content_usage`；后三者的默认上限均由 `modelDailyLimit=30` 控制。参考词典数据源（`api.wiktapi.dev`、`api.dictionaryapi.dev`）与浏览器语音、`dict.youdao.com` 音频不是模型提供方，不在本边界内。
 
 模型输出只是候选。语义接受、学习资源校验、加入学习和运行时结算仍由对应应用与领域模块完成。常规测试使用替身，不调用付费模型或 TTS。
 
