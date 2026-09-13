@@ -2,26 +2,31 @@ import {authorizeExtensionConnection} from './extensionConnection';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useState} from 'react';
-import {z} from 'zod';
-import {localIntakeRequestSchema} from '@sensa/contracts/sensa';
+import {sensaBridgeRequestChannel,sensaBridgeResponseChannel,sensaBridgeValue,type SensaBridgeKind,type SensaBridgePayload,type SensaBridgeValue} from '@sensa/contracts/sensa';
 import {languageProfileSnapshot} from '../../data/library/language';
 import {openLibrary,observeLibrary} from '../../data/library/store';
 import {receiveWebIntake} from '../../data/library/intake';
 /**
- * One round trip on the page bridge. `extra` carries whatever the message kind
- * needs — a receipt for an acknowledgement, the published pair for a language
- * profile — so a new kind does not need a new parameter here.
+ * One round trip on the page bridge.
+ *
+ * The protocol is declared once in the contracts, and this is the only thing on
+ * this side that speaks it: the kind decides both the payload a caller may send
+ * and the answer it receives, so a field the extension does not know, or an
+ * answer read as the wrong shape, is a type error here rather than a request that
+ * quietly does less than it says.
  */
-function bridge(kind:string,accountId:string,libraryId:string,signal:AbortSignal,extra:Record<string,unknown>={}):Promise<unknown>{
+function bridge<K extends SensaBridgeKind>(kind:K,accountId:string,libraryId:string,signal:AbortSignal,payload:SensaBridgePayload<K>):Promise<SensaBridgeValue<K>>{
  return new Promise((resolve,reject)=>{
   const id=crypto.randomUUID();
-  const finish=(error?:string,value?:unknown)=>{clearTimeout(timer);window.removeEventListener('message',listener);signal.removeEventListener('abort',abort);if(error)reject(new Error(error));else resolve(value);};
-  const listener=(event:MessageEvent)=>{if(event.source===window&&event.origin===location.origin&&event.data?.channel==='sensa-web-intake-response'&&event.data.id===id)finish(event.data.error,event.data.value);};
+  // The whole answer goes to the contracts, which unwrap the envelope and throw
+  // the extension's own code: a mismatch and an outage read differently above.
+  const finish=(error?:string,response?:unknown)=>{clearTimeout(timer);window.removeEventListener('message',listener);signal.removeEventListener('abort',abort);if(error)reject(new Error(error));else try{resolve(sensaBridgeValue(kind,response));}catch(e){reject(e);}};
+  const listener=(event:MessageEvent)=>{if(event.source===window&&event.origin===location.origin&&event.data?.channel===sensaBridgeResponseChannel&&event.data.id===id)finish(undefined,event.data);};
   const abort=()=>finish('interrupted');
   const timer=setTimeout(()=>finish('extension_unavailable'),15000);
   window.addEventListener('message',listener);signal.addEventListener('abort',abort,{once:true});
   if(signal.aborted){abort();return;}
-  window.postMessage({channel:'sensa-web-intake-request',id,kind,accountId,libraryId,...extra},location.origin);
+  window.postMessage({channel:sensaBridgeRequestChannel,id,kind,accountId,libraryId,...payload},location.origin);
  });
 }
 /** Receives only explicitly saved extension requests into the existing content screens. */
@@ -42,7 +47,7 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
    try{
     const library=await openLibrary();
     if(onlineService){
-     const connection=z.object({connected:z.boolean().optional(),paused:z.boolean().optional(),authorization:z.object({installationId:z.string().uuid(),state:z.string(),challenge:z.string(),redirectUri:z.string().url()}).optional()}).parse(await bridge('web-connect-prepare',accountId,library.id,controller.signal));
+     const connection=await bridge('web-connect-prepare',accountId,library.id,controller.signal,{});
      if(connection.paused)return;
      if(connection.authorization){
       const result=await authorizeExtensionConnection(connection.authorization,controller.signal);
@@ -58,7 +63,7 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
     // reading is an action surface, and action surfaces act on the active one.
     const {profile}=await languageProfileSnapshot();
     await bridge('web-language-profile',accountId,library.id,controller.signal,{languages:{familiarLanguageTag:profile.familiarLanguageTag,targetLanguageTag:profile.activeTargetLanguageTag}});
-    const requests=z.array(localIntakeRequestSchema).max(10).parse(await bridge('web-intake-pull',accountId,library.id,controller.signal));
+    const requests=await bridge('web-intake-pull',accountId,library.id,controller.signal,{});
     for(const request of requests){
      if(controller.signal.aborted)return;
      let receipt;

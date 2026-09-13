@@ -1,6 +1,6 @@
 import {queueWeb,pendingWeb,acknowledgeWeb,webStatus,discardPendingWeb,webOperationStatus} from './webDestination';
 import {z} from 'zod';
-import {captureSnapshotSchema,sensaLanguageForDeclaredTag,sensaLanguageForIso6393,sensaLanguageRoleForTag} from '@sensa/contracts/sensa';
+import {captureSnapshotSchema,sensaLanguageForDeclaredTag,sensaLanguageForIso6393,sensaLanguageRoleForTag,sensaBridgeRequestChannel,sensaBridgeRequestSchema,sensaExtensionCredentialSchema,type SensaBridgeRequest,type SensaBridgeRequestOf,type SensaExtensionAuthorization,type SensaExtensionExchange} from '@sensa/contracts/sensa';
 import {webUrl,apiUrl} from './config';
 import {detectIso6393} from './languageDetector';
 import {maxDetectableCharacters,minSkimmableCharacters} from './language';
@@ -23,20 +23,20 @@ async function modes():Promise<Record<number,Mode>>{const raw=(await chrome.stor
 async function stopAllReading(){const active=(await chrome.storage.session.get('modes')).modes??{};await chrome.storage.session.set({modes:{}});await Promise.all(Object.keys(active).map(id=>chrome.tabs.sendMessage(Number(id),{kind:'reading',enabled:false}).catch(()=>undefined)));}
 async function persist(store:Store){await chrome.storage.local.set({sensa:store});}
 async function serviceFetch(url:string,init:RequestInit){try{return await fetch(url,init);}catch(error){throw new Error(error instanceof Error&&['AbortError','TimeoutError'].includes(error.name)?'TimeoutError':'network_failed');}}
-async function request(path:string,body:unknown,token?:string){const response=await serviceFetch(apiUrl+path,{method:body===undefined?'GET':'POST',headers:{'content-type':'application/json',...(token?{authorization:'Bearer '+token}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(45000)});const data=await response.json();if(!response.ok)throw new Error(data.code??'temporarily_unavailable');return data;}
+async function apiRequest(path:string,body:unknown,token?:string){const response=await serviceFetch(apiUrl+path,{method:body===undefined?'GET':'POST',headers:{'content-type':'application/json',...(token?{authorization:'Bearer '+token}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(45000)});const data=await response.json();if(!response.ok)throw new Error(data.code??'temporarily_unavailable');return data;}
 // A short-lived, tab-bound PKCE request. The Web never receives the verifier or
 // extension credential; its existing session only authorizes a one-time code.
-async function webConnect(message:any,sender:chrome.runtime.MessageSender){
- if(!sender.tab?.id||!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin)throw new Error('unsupported_message');
+// The origin and tab this request came from are already checked by the bridge.
+async function webConnect(request:SensaBridgeRequestOf<'web-connect-prepare'|'web-connect-complete'>,sender:chrome.runtime.MessageSender){
  return locked(async()=>{
-  const store=await load(),accountId=z.string().uuid().parse(message.accountId),libraryId=z.string().uuid().parse(message.libraryId);
+  const store=await load(),accountId=request.accountId,libraryId=request.libraryId;
   if((await chrome.storage.local.get('sensaAutoConnectPaused')).sensaAutoConnectPaused)return {paused:true};
   const old=store.accounts[accountId];
   if(store.active&&store.active!==accountId)throw new Error('account_mismatch');
   const reconnect=(await chrome.storage.session.get('sensaExplicitReconnect')).sensaExplicitReconnect as {tabId:number;expires:number;accountId?:string;libraryId?:string}|undefined;
   const explicitReconnect=!!reconnect&&reconnect.tabId===sender.tab!.id&&reconnect.expires>Date.now()&&(!reconnect.accountId||reconnect.accountId===accountId)&&(!reconnect.libraryId||reconnect.libraryId===libraryId);
   if(old?.webLibraryId&&old.webLibraryId!==libraryId&&!explicitReconnect)throw new Error('library_mismatch');
-  if(message.kind==='web-connect-prepare'){
+  if(request.kind==='web-connect-prepare'){
    const inflight=(await chrome.storage.session.get('sensaWebConnect')).sensaWebConnect as {expires?:number}|null;
    if(inflight?.expires&&inflight.expires>Date.now())return {paused:true};
    if(store.active===accountId&&old?.webLibraryId===libraryId&&old?.expiresAt&&Date.parse(old.expiresAt)>Date.now()+3600000)return {connected:true};
@@ -47,14 +47,21 @@ async function webConnect(message:any,sender:chrome.runtime.MessageSender){
    const challenge=btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replace(/=+$/u,'');
    const redirectUri=chrome.identity.getRedirectURL('sensa');
    await chrome.storage.session.set({sensaWebConnect:{tabId:sender.tab!.id,accountId,libraryId,installationId,verifier,state,redirectUri,expires:Date.now()+120000}});
-   return {authorization:{installationId,state,challenge,redirectUri}};
+   const authorization:SensaExtensionAuthorization={installationId,state,challenge,redirectUri};
+   return {authorization};
   }
   const pending=z.object({tabId:z.number(),accountId:z.string().uuid(),libraryId:z.string().uuid(),installationId:z.string().uuid(),verifier:z.string(),state:z.string(),redirectUri:z.string().url(),expires:z.number()}).nullable().parse((await chrome.storage.session.get('sensaWebConnect')).sensaWebConnect??null);
   if(!pending||pending.tabId!==sender.tab!.id||pending.accountId!==accountId||pending.libraryId!==libraryId||pending.expires<Date.now())throw new Error('authorization_expired');
-  const destination=new URL(z.string().url().parse(message.receipt?.redirectUri));
+  const destination=new URL(request.receipt.redirectUri);
   if(destination.origin+destination.pathname!==pending.redirectUri||destination.searchParams.get('state')!==pending.state)throw new Error('authorization_invalid');
+  // A redirect that carries no code is not an authorization result, whatever its
+  // state says: refusing it here names the failure instead of sending the API a
+  // request it can only answer with a schema error.
+  const code=destination.searchParams.get('code');
+  if(!code)throw new Error('authorization_invalid');
   await chrome.storage.session.set({sensaWebConnect:null});
-  const credential=z.object({token:z.string().min(1),accountId:z.string().uuid(),expiresAt:z.string().datetime()}).parse(await request('/sensa/extension/exchange',{code:destination.searchParams.get('code'),installationId:pending.installationId,state:pending.state,verifier:pending.verifier}));
+  const exchange:SensaExtensionExchange={code,installationId:pending.installationId,state:pending.state,verifier:pending.verifier};
+  const credential=sensaExtensionCredentialSchema.parse(await apiRequest('/sensa/extension/exchange',exchange));
   if(credential.accountId!==accountId)throw new Error('account_mismatch');
   store.accounts[accountId]={...old,accountId,installationId:pending.installationId,webLibraryId:libraryId,token:credential.token,expiresAt:credential.expiresAt,queue:old?.queue??[],recent:old?.recent??[],savedOperations:old?.savedOperations??{}};
   const changed=store.active!==accountId;store.active=accountId;await persist(store);await chrome.storage.session.set({sensaExplicitReconnect:null});if(changed)await stopAllReading();
@@ -74,12 +81,70 @@ async function reconnectWeb(discardForAccount?:string){return locked(async()=>{
  // Account-owned queues and credentials stay under their original account.
 });}
 async function activeScope(){return (await load()).active;}
+
+/**
+ * Every request the Web page bridge can make, served in one place.
+ *
+ * A page is a caller and never a source of truth: the account and library it
+ * names are checked against the connection this installation actually holds. The
+ * origin and tab checks live here once, because they are the same for all of
+ * these requests — the bridge runs in a content script on the configured Sensa
+ * origin, and no other page may reach any of it.
+ */
+async function serveWebBridge(request:SensaBridgeRequest,sender:chrome.runtime.MessageSender){
+ if(!sender.tab?.id||!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin)throw new Error('unsupported_message');
+ switch(request.kind){
+  case 'web-connect-prepare':
+  case 'web-connect-complete':return webConnect(request,sender);
+  // The Web application owns the language profile; this only accepts its
+  // publication, so no other page can retarget which language the learner's
+  // reading is translated into.
+  case 'web-language-profile':return locked(()=>publishReadingLanguages(request.languages));
+  case 'web-session-ended':return locked(async()=>{
+   const store=await load();
+   if(!store.active||store.active!==request.accountId)return {disconnected:false};
+   const a=store.accounts[store.active];a.token='disconnected';a.expiresAt=new Date(0).toISOString();store.active=null;
+   await persist(store);await chrome.storage.session.set({sensaWebConnect:null});await stopAllReading();
+   return {disconnected:true};
+  });
+  case 'web-connect-reset':{
+   // The one request allowed to name a library other than the bound one: it is
+   // the learner's explicit decision, and the connection it opens is offered to
+   // the tab that asked rather than to whichever tab connects next.
+   const previous=(await load()).active;
+   await reconnectWeb(request.receipt.discardPending&&previous&&previous!==request.accountId?previous:undefined);
+   await chrome.storage.session.set({sensaExplicitReconnect:{tabId:sender.tab.id,accountId:request.accountId,libraryId:request.libraryId,expires:Date.now()+120000}});
+   return {reset:true};
+  }
+  case 'web-intake-pull':
+  case 'web-intake-ack':{
+   const store=await load(),a=store.active?store.accounts[store.active]:null;
+   if(!a)throw new Error('authentication_required');
+   if(request.accountId!==a.accountId)throw new Error('account_mismatch');
+   if(request.kind==='web-intake-ack'){
+    if(request.receipt.libraryId!==request.libraryId)throw new Error('library_mismatch');
+    return acknowledgeWeb(a.accountId,request.receipt);
+   }
+   return pendingWeb(a.accountId,request.libraryId);
+  }
+ }
+}
 async function status(){const store=await load(),a=store.active?store.accounts[store.active]:null;return a?{accountId:a.accountId,destination:'web-local',...await webStatus(a.accountId)}:{accountId:null,pending:0,errors:[],recent:[]};}
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  if(sender.id!==chrome.runtime.id)return;
  const isPopup=sender.url===chrome.runtime.getURL('popup.html');
  const isOptions=sender.url===chrome.runtime.getURL('options.html');
  const work=async()=>{
+ // The Web page bridge is one protocol, declared once in the contracts. A
+ // message announcing its channel is parsed here, before anything else is even
+ // considered, so a kind, a field or a library binding the protocol does not
+ // have never reaches a handler — and a request that does not parse is refused
+ // rather than falling through to be mistaken for an extension-internal message.
+ if(message?.channel===sensaBridgeRequestChannel){
+  const bridge=sensaBridgeRequestSchema.safeParse(message);
+  if(!bridge.success)throw new Error('unsupported_message');
+  return serveWebBridge(bridge.data,sender);
+ }
  // Language detection is pure local computation on text the caller already has,
  // so it needs no account and no page: the content script sends a sample and
  // gets a code back. It lives here because the detector's tables are far larger
@@ -96,33 +161,6 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   const surface=typeof message.surfaceLanguage==='string'?sensaLanguageForDeclaredTag(message.surfaceLanguage):undefined;
   return {familiarLanguageTag:pair.familiarLanguageTag,alreadyReadable:sensaLanguageRoleForTag((detected??surface)?.tag??null,pair)==='familiar'};
  }
- if(message.kind==='web-language-profile'){
-  // The Web application owns the language profile; this only accepts its
-  // publication. The origin and tab checks are the same ones that guard every
-  // other Web message, so no other page can retarget which language the
-  // learner's reading is translated into.
-  if(!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin||!sender.tab)throw new Error('unsupported_message');
-  return locked(()=>publishReadingLanguages(message.languages));
- }
- if(message.kind==='web-session-ended'){if(!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin||!sender.tab)throw new Error('unsupported_message');return locked(async()=>{const store=await load();if(!store.active||store.active!==message.accountId)return {disconnected:false};const a=store.accounts[store.active];a.token='disconnected';a.expiresAt=new Date(0).toISOString();store.active=null;await persist(store);await chrome.storage.session.set({sensaWebConnect:null});await stopAllReading();return {disconnected:true};});}
- if(message.kind==='web-connect-reset'){
-  if(!sender.tab?.id||!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin)throw new Error('unsupported_message');
-  z.string().uuid().parse(message.accountId);z.string().uuid().parse(message.libraryId);
-  const choice=z.object({discardPending:z.boolean()}).optional().parse(message.receipt);
-  const previous=(await load()).active;
-  await reconnectWeb(choice?.discardPending&&previous&&previous!==message.accountId?previous:undefined);
-  await chrome.storage.session.set({sensaExplicitReconnect:{tabId:sender.tab.id,accountId:message.accountId,libraryId:message.libraryId,expires:Date.now()+120000}});return {reset:true};
- }
- if(['web-connect-prepare','web-connect-complete'].includes(message.kind))return webConnect(message,sender);
- if(['web-intake-pull','web-intake-ack'].includes(message.kind)){
-  if(!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin||!sender.tab)throw new Error('unsupported_message');
-  const store=await load(),a=store.active?store.accounts[store.active]:null;
-  if(!a)throw new Error('authentication_required');
-  if(message.accountId!==a.accountId)throw new Error('account_mismatch');
-  const libraryId=z.string().uuid().parse(message.libraryId);
-  if(message.kind==='web-intake-ack'){if(message.receipt?.libraryId!==libraryId)throw new Error('library_mismatch');return acknowledgeWeb(a.accountId,message.receipt);}
-  return pendingWeb(a.accountId,libraryId);
- }
 
  if(['reading-settings','reading-settings-save','reading-test','reading-models','reading-run','youtube-captions'].includes(message.kind)){
    const store=await load(),a=store.active?store.accounts[store.active]:null;
@@ -138,12 +176,12 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
    }else{
      const path=message.kind==='reading-run'?'run':message.kind==='reading-test'?'test':message.kind==='reading-models'?'models':'settings';
      const body=message.kind==='reading-settings'?undefined:{...message.input,languages:await readingLanguages()};
-     result=await request('/sensa/reading/'+path,body,a!.token);
+     result=await apiRequest('/sensa/reading/'+path,body,a!.token);
    }
    if(a&&(await load()).active!==a.accountId)throw new Error('account_mismatch');
    return message.kind==='reading-settings'?{...result,accountId:a!.accountId}:result;
  }
- if((isOptions||isPopup)&&message.kind==='service-status'){const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a)throw new Error('authentication_required');const result=await request('/sensa/service/status',undefined,a.token);if((await load()).active!==a.accountId)throw new Error('account_mismatch');return result;}
+ if((isOptions||isPopup)&&message.kind==='service-status'){const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a)throw new Error('authentication_required');const result=await apiRequest('/sensa/service/status',undefined,a.token);if((await load()).active!==a.accountId)throw new Error('account_mismatch');return result;}
  if(isOptions&&message.kind==='status')return status();
  if(['save','accept'].includes(message.kind)&&sender.tab){
   return locked(async()=>{
@@ -161,7 +199,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
    return queued;
   });
  }
- if(message.kind==='lookup'&&sender.tab){const snapshot=captureSnapshotSchema.parse(message.snapshot);const readingModes=await modes();const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a||message.accountId!==await activeScope()||readingModes[sender.tab!.id!]?.accountId!==await activeScope()||snapshot.source.url!==sender.url)throw new Error('authentication_required');const result=await request('/sensa/semantic/lookups',{id:message.lookupId,snapshot},a.token);await rememberLookup(sender,message.lookupId,snapshot,result,message.accountId);return result;}
+ if(message.kind==='lookup'&&sender.tab){const snapshot=captureSnapshotSchema.parse(message.snapshot);const readingModes=await modes();const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a||message.accountId!==await activeScope()||readingModes[sender.tab!.id!]?.accountId!==await activeScope()||snapshot.source.url!==sender.url)throw new Error('authentication_required');const result=await apiRequest('/sensa/semantic/lookups',{id:message.lookupId,snapshot},a.token);await rememberLookup(sender,message.lookupId,snapshot,result,message.accountId);return result;}
  if(['open-inbox','save-status'].includes(message.kind)&&sender.tab){
   const store=await load(),a=store.active?store.accounts[store.active]:null,mode=(await modes())[sender.tab.id!];
   if(!a||message.accountId!==a.accountId||mode?.accountId!==a.accountId)throw new Error('account_mismatch');

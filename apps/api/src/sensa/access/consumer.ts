@@ -13,7 +13,8 @@ import {registerLibrarySync} from '../library/sync.js';
 import {ensureAdmission} from './admission.js';
 import {ConsumerError,verifyConsumer,type ConsumerPrincipal,type ConsumerVerifier} from './auth.js';
 import {assertDeletionConfigured,finishAccountDeletion,requestAccountDeletion,type DeleteIdentity} from './deletion.js';
-import {authorizeExtension,exchangeExtension,extensionAuthorizationSchema,extensionExchangeSchema,extensionVerifier} from './extension.js';
+import {authorizeExtension,exchangeExtension,extensionVerifier} from './extension.js';
+import {sensaExtensionAuthorizationSchema,sensaExtensionExchangeSchema} from '@sensa/contracts/sensa';
 import {serviceTelemetry,type ServiceRequestRecord} from './telemetry.js';
 
 const modelDailyLimit=30;
@@ -126,11 +127,11 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
   app.post('/sensa/extension/authorize',async context=>{
     const identity=await verify(context.req.raw);
     if(identity.installationId)throw new ConsumerError(403,'web_authorization_required');
-    const input=extensionAuthorizationSchema.parse(await context.req.json());
+    const input=sensaExtensionAuthorizationSchema.parse(await context.req.json());
     return context.json(await transaction(async db=>authorizeExtension(db,await account(db,identity,false,false,clock()),input)));
   });
   app.post('/sensa/extension/exchange',async context=>{
-    const input=extensionExchangeSchema.parse(await context.req.json());
+    const input=sensaExtensionExchangeSchema.parse(await context.req.json());
     return context.json(await transaction(db=>exchangeExtension(db,input,clock())));
   });
 

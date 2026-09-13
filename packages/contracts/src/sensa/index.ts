@@ -16,6 +16,7 @@ export * from './consumer/semantic.js';
 export * from './consumer/reading.js';
 export * from './consumer/localIntake.js';
 export * from './consumer/learningPackage.js';
+export * from './consumer/extension.js';
 export * from './contentExecution.js';
 
 export * from './richExperience.js';

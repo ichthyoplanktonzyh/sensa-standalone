@@ -1,7 +1,7 @@
 /** Real queue and receiver code, fake IndexedDB/storage adapters. No browser/network/model. */
 import assert from 'node:assert/strict';
 import {indexedDB} from 'fake-indexeddb';
-import {localIntakeRequestSchema,canonicalConsumerJson} from '@sensa/contracts/sensa';
+import {localIntakeRequestSchema,canonicalConsumerJson,sensaBridgeRequestChannel} from '@sensa/contracts/sensa';
 import {createHash} from 'node:crypto';
 import {build} from 'esbuild';
 import vm from 'node:vm';
@@ -67,7 +67,11 @@ let exchangeCalls=0;const opened:string[]=[];
 const chromeMock={identity:{getRedirectURL:()=> 'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/sensa'},storage:{local:{...(globalThis as any).chrome.storage.local,setAccessLevel:async()=>{}},session:{get:async(key:string)=>structuredClone({[key]:session[key]}),set:async(value:unknown)=>Object.assign(session,structuredClone(value))}},runtime:{id:'fixture',getURL:(path:string)=>'chrome-extension://fixture/'+path,onMessage:{addListener:(fn:unknown)=>{listener=fn;}}},tabs:{create:async({url}:{url:string})=>{opened.push(url);return {id:20};},update:async(id:number,{url}:{url:string})=>{assert.equal(id,20);opened.push(url);return {id,url};},onUpdated:noopEvent,onRemoved:noopEvent,sendMessage:async()=>{}},alarms:{create:()=>{},onAlarm:noopEvent}};
 const bundle=await build({entryPoints:['apps/browser-extension/src/background.ts'],bundle:true,write:false,format:'iife',platform:'browser',define:{SENSA_WEB_URL:JSON.stringify('http://127.0.0.1:3000'),SENSA_API_URL:JSON.stringify('http://127.0.0.1:4319')}});
 vm.runInNewContext(bundle.outputFiles[0]!.text,{chrome:chromeMock,crypto,btoa,URL,TextEncoder,TextDecoder,AbortSignal,setTimeout,clearTimeout,console,fetch:async(url:string,init:RequestInit)=>{assert.equal(url,'http://127.0.0.1:4319/sensa/extension/exchange');const body=JSON.parse(String(init.body));assert.equal(body.code,'fixture-code');assert.equal(body.verifier,(session as any).expectedVerifier);exchangeCalls++;return {ok:true,json:async()=>({accountId,token:'fixture-renewed-token',expiresAt:new Date(Date.now()+86400000).toISOString()})};}});
-const message=(input:unknown,sender:unknown)=>new Promise<any>(resolve=>listener(input,sender,resolve));
+/** A Web message as the page actually sends one: the bridge's envelope is part of
+ * the protocol, so this smoke speaks it rather than assuming the handlers are
+ * reachable without it. Extension-internal messages carry no channel and are
+ * passed through untouched. */
+const message=(input:any,sender:unknown)=>new Promise<any>(resolve=>listener(typeof input?.kind==='string'&&input.kind.startsWith('web-')?{channel:sensaBridgeRequestChannel,id:crypto.randomUUID(),...input}:input,sender,resolve));
 const source={id:'fixture',url:snapshot.source.url,tab:{id:1}};
 const another=crypto.randomUUID();
 assert.equal((await message({kind:'save',accountId,operationId:another,snapshot},{...source,url:'https://evil.invalid'})).error,'source_mismatch');
@@ -112,8 +116,8 @@ const storeBeforeReconnect=structuredClone(storage.sensa) as any;
 (storage.sensa as any).accounts[other]={...(storage.sensa as any).accounts[accountId],accountId:other};
 (storage.sensa as any).active=other;
 const queueBeforeReconnect=structuredClone(storage.sensaWebIntake);
-assert.equal((await message({kind:'web-connect-reset',accountId,libraryId:library.id},source)).error,'unsupported_message');
-assert.equal((await message({kind:'web-connect-reset',accountId,libraryId:library.id},appSender)).value.reset,true);
+assert.equal((await message({kind:'web-connect-reset',accountId,libraryId:library.id,receipt:{discardPending:false}},source)).error,'unsupported_message');
+assert.equal((await message({kind:'web-connect-reset',accountId,libraryId:library.id,receipt:{discardPending:false}},appSender)).value.reset,true);
 assert.equal((storage.sensa as any).active,null);
 assert.ok((storage.sensa as any).accounts[other]);
 assert.deepEqual(storage.sensaWebIntake,queueBeforeReconnect);
@@ -143,7 +147,7 @@ assert.deepEqual(storage.sensaWebIntake,preservedQueue,'old-library requests and
 assert.equal((await pendingWeb(accountId,newLibrary)).length,0,'old-library requests are not silently transferred');
 assert.equal((await message(connect,appSender)).error,'library_mismatch','automatic rebinding stays blocked');
 // The explicit Web reconnect button is scoped to the requesting account, library and tab.
-await message({kind:'web-connect-reset',accountId,libraryId:library.id},appSender);
+await message({kind:'web-connect-reset',accountId,libraryId:library.id,receipt:{discardPending:false}},appSender);
 assert.equal((await message(connect,loginTab)).error,'library_mismatch');
 assert.ok((await message(connect,appSender)).value.authorization);
 storage.sensa=oldStore;storage.sensaWebIntake=oldQueue;session.sensaWebConnect=null;session.sensaExplicitReconnect=null;
