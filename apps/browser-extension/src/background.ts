@@ -5,7 +5,7 @@ import {webUrl,apiUrl} from './config';
 import {detectIso6393} from './languageDetector';
 import {maxDetectableCharacters,minSkimmableCharacters} from './language';
 import {readYoutubePlayer} from './youtubePlayer';
-import {readingLanguages,readingPreferences,publishReadingLanguages,readingGlossary,publishReadingGlossary} from './preferences';
+import {readingLanguages,readingPreferences,saveReadingPreferences,readingSiteOf,publishReadingLanguages,readingGlossary,publishReadingGlossary} from './preferences';
 type Mode={accountId:string};
 const accountSchema=z.object({expiresAt:z.string().datetime().optional(),webLibraryId:z.string().uuid().optional(),accountId:z.string().uuid(),installationId:z.string().uuid(),token:z.string().min(1),queue:z.array(z.unknown()).default([]),recent:z.array(z.unknown()).default([]),savedOperations:z.record(z.string(),z.unknown()).default({})}).passthrough();
 const storeSchema=z.object({version:z.literal(1).default(1),active:z.string().uuid().nullable(),accounts:z.record(z.string(),accountSchema)}).strict();
@@ -82,6 +82,14 @@ async function reconnectWeb(discardForAccount?:string){return locked(async()=>{
 });}
 async function activeScope(){return (await load()).active;}
 
+/** Reading off for one tab: the mode goes and the page is told, so a surface that
+ * is already on screen disappears instead of waiting for a reload. */
+async function stopReadingIn(tabId:number){
+ const readingModes=await modes();delete readingModes[tabId];
+ await chrome.storage.session.set({modes:readingModes});
+ await chrome.tabs.sendMessage(tabId,{kind:'reading',enabled:false}).catch(()=>undefined);
+}
+
 /**
  * A reading request, completed with the learner's own state.
  *
@@ -147,7 +155,13 @@ async function serveWebBridge(request:SensaBridgeRequest,sender:chrome.runtime.M
   }
  }
 }
-async function status(){const store=await load(),a=store.active?store.accounts[store.active]:null;return a?{accountId:a.accountId,destination:'web-local',...await webStatus(a.accountId)}:{accountId:null,pending:0,errors:[],recent:[]};}
+async function status(){
+ const store=await load(),a=store.active?store.accounts[store.active]:null;
+ const [tab]=await chrome.tabs.query({active:true,currentWindow:true}),site=readingSiteOf(tab?.url);
+ const rule=site?{site,disabled:(await readingPreferences()).disabledSites.includes(site)}:null;
+ const base=a?{accountId:a.accountId,destination:'web-local',...await webStatus(a.accountId)}:{accountId:null,pending:0,errors:[],recent:[]};
+ return {...base,rule};
+}
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  if(sender.id!==chrome.runtime.id)return;
  const isPopup=sender.url===chrome.runtime.getURL('popup.html');
@@ -199,6 +213,25 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
    if(a&&(await load()).active!==a.accountId)throw new Error('account_mismatch');
    return message.kind==='reading-settings'?{...result,accountId:a!.accountId}:result;
  }
+ // The learner's rule for one site, from the page they are reading or from the
+ // popup. The site is never taken from the message: it is the hostname of the tab
+ // that asked — or of the active tab, when the popup asked — so no page can write
+ // a rule about another site. Turning reading off stops it in that tab as well,
+ // because a rule that only took effect on the next page load would leave the
+ // page the learner is looking at reading as if nothing had happened.
+ if(message.kind==='reading-site'){
+  if(typeof message.enabled!=='boolean')throw new Error('invalid_request');
+  const [active]=await chrome.tabs.query({active:true,currentWindow:true});
+  const tab=sender.tab?.id?sender.tab:active;
+  const site=readingSiteOf(tab?.url);
+  if(!tab?.id||!site)throw new Error('unsupported_page');
+  const preferences=await readingPreferences();
+  const disabledSites=message.enabled?preferences.disabledSites.filter(value=>value!==site):[...new Set([...preferences.disabledSites,site])].slice(0,100);
+  const changed=disabledSites.length!==preferences.disabledSites.length||disabledSites.some((value,index)=>value!==preferences.disabledSites[index]);
+  if(changed)await saveReadingPreferences({...preferences,disabledSites});
+  if(!message.enabled)await stopReadingIn(tab.id);
+  return {site,disabled:!message.enabled,disabledSites:changed?disabledSites:preferences.disabledSites};
+ }
  if((isOptions||isPopup)&&message.kind==='service-status'){const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a)throw new Error('authentication_required');const result=await apiRequest('/sensa/service/status',undefined,a.token);if((await load()).active!==a.accountId)throw new Error('account_mismatch');return result;}
  if(isOptions&&message.kind==='status')return status();
  if(['save','accept'].includes(message.kind)&&sender.tab){
@@ -237,11 +270,22 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   await chrome.tabs.update(tab.id,{url:new URL('/profile',webUrl).href});
  }
  if(message.kind==='disconnect')await locked(async()=>{const store=await load();store.active=null;await chrome.storage.local.set({sensaAutoConnectPaused:true});await chrome.storage.session.set({sensaWebConnect:null});await persist(store);await stopAllReading();});
- if(message.kind==='toggle'){const scope=await activeScope();if(!scope)throw new Error('authentication_required');const [tab]=await chrome.tabs.query({active:true,currentWindow:true});if(!tab.id||!tab.url||!/^https?:/u.test(tab.url))throw new Error('unsupported_page');const readingModes=await modes();readingModes[tab.id]={accountId:scope};await chrome.storage.session.set({modes:readingModes});await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});await chrome.tabs.sendMessage(tab.id,{kind:'reading',enabled:true,accountId:scope,preferences:await readingPreferences()});}
- if(message.kind==='stop'){const [tab]=await chrome.tabs.query({active:true,currentWindow:true});if(tab.id){const readingModes=await modes();delete readingModes[tab.id];await chrome.storage.session.set({modes:readingModes});await chrome.tabs.sendMessage(tab.id,{kind:'reading',enabled:false}).catch(()=>undefined);}}
+ if(message.kind==='toggle'){
+  const scope=await activeScope();if(!scope)throw new Error('authentication_required');
+  const [tab]=await chrome.tabs.query({active:true,currentWindow:true});if(!tab.id||!tab.url||!/^https?:/u.test(tab.url))throw new Error('unsupported_page');
+  // A rule the learner wrote is not a suggestion the toolbar can override: the
+  // popup offers to lift it instead, so pressing this button either reads the
+  // page or says why it will not.
+  const site=readingSiteOf(tab.url);
+  if(site&&(await readingPreferences()).disabledSites.includes(site))throw new Error('site_disabled');const readingModes=await modes();readingModes[tab.id]={accountId:scope};await chrome.storage.session.set({modes:readingModes});await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});await chrome.tabs.sendMessage(tab.id,{kind:'reading',enabled:true,accountId:scope,preferences:await readingPreferences()});}
+ if(message.kind==='stop'){const [tab]=await chrome.tabs.query({active:true,currentWindow:true});if(tab.id)await stopReadingIn(tab.id);}
  return status();};void work().then(value=>respond({value}),error=>respond({error:error instanceof Error?error.message:'failed'}));return true;
 });
-chrome.tabs.onUpdated.addListener((id,change)=>{if(change.status!=='complete')return;void (async()=>{const readingModes=await modes();if(!readingModes[id]||readingModes[id].accountId!==await activeScope())return;try{await chrome.scripting.executeScript({target:{tabId:id},files:['content.js']});await chrome.tabs.sendMessage(id,{kind:'reading',enabled:true,accountId:readingModes[id].accountId,preferences:await readingPreferences()});await chrome.action.setBadgeText({tabId:id,text:''});}catch{await chrome.action.setBadgeText({tabId:id,text:'继续'});await chrome.action.setTitle({tabId:id,title:'点一次 Sensa 图标，继续当前网站的阅读模式'});}})().catch(()=>undefined);});
+chrome.tabs.onUpdated.addListener((id,change)=>{if(change.status!=='complete')return;void (async()=>{const readingModes=await modes();if(!readingModes[id]||readingModes[id].accountId!==await activeScope())return;
+ // A site the learner turned reading off for is not injected into at all: the
+ // content script would refuse to start, and reaching it every page load is work
+ // for an answer that never changes.
+ const rule=readingSiteOf(change.url??'');if(rule&&(await readingPreferences()).disabledSites.includes(rule))return;try{await chrome.scripting.executeScript({target:{tabId:id},files:['content.js']});await chrome.tabs.sendMessage(id,{kind:'reading',enabled:true,accountId:readingModes[id].accountId,preferences:await readingPreferences()});await chrome.action.setBadgeText({tabId:id,text:''});}catch{await chrome.action.setBadgeText({tabId:id,text:'继续'});await chrome.action.setTitle({tabId:id,title:'点一次 Sensa 图标，继续当前网站的阅读模式'});}})().catch(()=>undefined);});
 chrome.tabs.onRemoved.addListener(id=>{void locked(async()=>{const readingModes=await modes();delete readingModes[id];await chrome.storage.session.set({modes:readingModes});}).catch(()=>undefined);});
 void chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
 

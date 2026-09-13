@@ -2,7 +2,7 @@ import {webUrl} from './config';
 import {readingFeatures,defaultReadingAssignments} from '@sensa/contracts/sensa';
 import type {ReadingSettingsView,ReadingSettingsInput} from '@sensa/contracts/sensa';
 import {readingError} from './readingClient';
-import {readingPreferences} from './preferences';
+import {defaultPreferences,readingPreferences,saveReadingPreferences} from './preferences';
 const feedback=document.querySelector<HTMLElement>('#feedback')!;
 const providers=document.querySelector<HTMLElement>('#providers')!;
 const assignments=document.querySelector<HTMLElement>('#assignments')!;
@@ -59,11 +59,14 @@ document.getElementById('save')!.onclick=()=>void perform(async()=>{
   const result=await message('reading-settings-save',input);current={...result,accountId:current.accountId};render();feedback.textContent='模型设置已保存。密钥已从表单清除。';
 });
 document.getElementById('preferences')!.onclick=()=>void perform(async()=>{
-  const disabledSites=value('disabled-sites').split(/\s+/u).filter(Boolean).map(s=>s.toLowerCase());
-  if(disabledSites.length>100||disabledSites.some(s=>!/^([a-z0-9-]+\.)*[a-z0-9-]+$/u.test(s)))throw new Error('invalid_sites');
+  const disabledSites=value('disabled-sites').split(/\s+/u).filter(Boolean);
   const speechRate=Number(value('speech-rate'));
   if(!Number.isFinite(speechRate)||speechRate<0.5||speechRate>2)throw new Error('invalid_speech_rate');
-  await chrome.storage.local.set({readingPreferences:{actionName:value('action-name')||'阅读动作',actionPrompt:value('action-prompt'),disabledSites,speechRate}});feedback.textContent='本机偏好已保存，重新开启页面阅读后生效。';
+  // One writer for these preferences: this page and a page's own site switch save
+  // through the same function, so a rule written here is one the other can read
+  // back. It normalises the sites and refuses a line it cannot represent.
+  await saveReadingPreferences({actionName:value('action-name'),actionPrompt:value('action-prompt')||defaultPreferences.actionPrompt,disabledSites,speechRate});
+  feedback.textContent='本机偏好已保存，重新开启页面阅读后生效。';
 });
 document.getElementById('account')!.onclick=()=>void chrome.tabs.create({url:new URL('/profile',webUrl).toString()});
 async function serviceStatus(){const target=document.getElementById('service-status')!;try{const result=await message('service-status');target.textContent=result.authorized?`账号已连接。${result.explanationAvailable?'解释服务可用。':'解释服务暂不可用。'} 最近 24 小时：`+result.usage.map((u:{kind:string;used:number;limit:number})=>`${({reading:'网页阅读',teacher:'澄清与解析',content:'材料准备'} as Record<string,string>)[u.kind]} ${u.used}/${u.limit}`).join('；'):'请从插件弹窗登录 Sensa。';}catch(e){target.textContent=readingError(e);}}

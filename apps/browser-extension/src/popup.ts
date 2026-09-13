@@ -24,9 +24,37 @@ async function act(kind:string){
   }
   document.getElementById('recent-count')!.textContent=t('count',{count:v.recent.length});
   const empty=document.getElementById('recent-empty')!;empty.hidden=v.recent.length>0;empty.textContent=t(v.accountId?'empty':'guestEmpty');
+  rule=v.rule??null;siteButton.hidden=!rule;if(rule)siteButton.textContent=t(rule.disabled?'siteEnable':'siteDisable');
  }catch(e){status.textContent=errorText(e);}
  finally{busy=false;buttons.forEach(b=>{b.disabled=false;});status.setAttribute('aria-busy','false');}
 }
 for(const id of ['login','toggle','stop','sync','disconnect'])document.getElementById(id)!.addEventListener('click',()=>void act(id));
+/**
+ * The site switch: the one control that has to be reachable from a page the
+ * learner has already turned reading off on. Its label states the rule that is in
+ * force and the click applies the other one, so the button never has to be
+ * guessed at; a page that has no site — a browser page, a file — hides it.
+ */
+const siteButton=document.getElementById('site') as HTMLButtonElement;
+let rule:{site:string;disabled:boolean}|null=null;
+siteButton.addEventListener('click',()=>void (async()=>{
+ if(busy||!rule)return;busy=true;buttons.forEach(b=>{b.disabled=true;});status.setAttribute('aria-busy','true');
+ let message='';
+ try{
+  // The label states the rule in force and the click asks for the opposite of
+  // it: a rule that is on is being turned off, and one that is off is being
+  // lifted — which is why the request carries the current disabled state as the
+  // enabled it wants.
+  const response=await chrome.runtime.sendMessage({kind:'reading-site',enabled:rule.disabled});
+  if(response.error)throw new Error(response.error);
+  const v=response.value;
+  message=t(v.disabled?'siteDisabled':'siteEnabled',{site:v.site});
+ }catch(e){message=errorText(e);}
+ finally{busy=false;siteButton.disabled=false;}
+ // Re-reads the status first: the switch changes what the toggle button would do,
+ // and the message about the rule is prepended to whatever the status says.
+ await act('status');
+ status.textContent=message+'\n'+status.textContent;
+})());
 document.getElementById('open-web')!.addEventListener('click',()=>void chrome.tabs.create({url:new URL('/content?worldAction=inbox',webUrl).href}));
 void act('status');document.getElementById('options')?.addEventListener('click',()=>void chrome.runtime.openOptionsPage());

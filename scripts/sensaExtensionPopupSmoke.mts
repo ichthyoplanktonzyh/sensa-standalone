@@ -9,9 +9,9 @@ try {
  await page.setContent((await readFile('apps/browser-extension/dist/popup.html','utf8')).replace('<script src="popup.js"></script>',''));
  await page.addScriptTag({content:'window.__name = (value) => value;'});
  await page.evaluate(()=>{
-  const fixture={calls:[] as string[],finish:null as null|((value:unknown)=>void)};
+  const fixture={calls:[] as {kind:string;enabled?:boolean}[],finish:null as null|((value:unknown)=>void)};
   Object.assign(window,{fixture,chrome:{runtime:{sendMessage:(message:{kind:string})=>{
-   fixture.calls.push(message.kind);
+   fixture.calls.push(message);
    return new Promise(resolve=>{fixture.finish=resolve;});
   }}}});
  });
@@ -65,5 +65,26 @@ try {
  await expect(page.locator('#recent-empty')).toHaveText('登录后查看最近保存的内容。');
  await page.evaluate(()=>Object.defineProperty(navigator,'language',{value:'en',configurable:true}));
  await page.locator('#sync').click();await complete(undefined,false);await expect(status).toContainText('Not signed in to Sensa');await expect(page.locator('#recent-empty')).toHaveText('Sign in to see recently saved content.');
- console.log('PASS: all popup actions show pending/success/error feedback, prevent duplicate clicks and restore controls; no network calls.');
+ // The switch that has to be reachable from a page the learner turned reading off
+ // for: hidden where there is no site, and it states the rule in force in the
+ // learner's language while its click applies the other one. Lifting a rule also
+ // re-reads the status, so the switch's own answer and that read both complete.
+ await expect(page.locator('#site')).toBeHidden();
+ await page.locator('#sync').click();
+ await page.evaluate(()=>{(window as any).fixture.finish({value:{accountId:null,pending:0,errors:[],recent:[],rule:{site:'example.com',disabled:false}}});});
+ await expect(page.locator('#site')).toBeVisible();
+ await expect(page.locator('#site')).toHaveText('Turn reading off on this site');
+ await page.locator('#site').click();
+ const switched=await page.evaluate(()=>(window as any).fixture.calls.at(-1));
+ expect(switched.kind).toBe('reading-site');
+ expect(switched.enabled).toBe(false);
+ await page.evaluate(()=>{(window as any).fixture.finish({value:{site:'example.com',disabled:true,disabledSites:['example.com']}});});
+ await page.waitForTimeout(50);
+ await page.evaluate(()=>{(window as any).fixture.finish({value:{accountId:null,pending:0,errors:[],recent:[],rule:{site:'example.com',disabled:true}}});});
+ await expect(page.locator('#site')).toHaveText('Turn reading back on here');
+ await expect(status).toContainText('Reading is off on example.com.');
+ await expect(page.locator('#site')).toBeEnabled();
+ await page.locator('#site').click();
+ expect((await page.evaluate(()=>(window as any).fixture.calls.at(-1))).enabled).toBe(true);
+ console.log('PASS: all popup actions show pending/success/error feedback, prevent duplicate clicks and restore controls, and the site switch states the rule in force while applying the other one; no network calls.');
 } finally {await browser.close();}

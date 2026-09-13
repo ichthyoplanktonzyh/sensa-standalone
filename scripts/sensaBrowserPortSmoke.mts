@@ -32,6 +32,10 @@ try{
        if(message.kind==='detect-language')return {value:{language:/\p{Script=Han}/u.test(message.text??'')?'cmn':'eng'}};
        if(message.kind==='reading-language')return {value:{familiarLanguageTag:'zh-CN',alreadyReadable:/\p{Script=Han}/u.test(message.text??'')||message.surfaceLanguage==='zh-CN'}};
        if(message.kind==='reading-run'){if(fixture.delay)return new Promise(resolve=>{fixture.pending=resolve;});return {value:{status:'ready',text:'她不慌不忙地做事。'}};}
+       // The site switch: the real background writes the rule from the tab's own
+       // hostname and then turns reading off for that tab, which is why the panel
+       // in this page goes away instead of the button merely hiding itself.
+       if(message.kind==='reading-site'){setTimeout(()=>fixture.receive({kind:'reading',enabled:false}),0);return {value:{site:location.hostname,disabled:true,disabledSites:[location.hostname]}};}
        return {value:{savedLocally:true}};
      }}}});
      // The real window exposes speechSynthesis as a read-only accessor, so the
@@ -82,6 +86,11 @@ try{
  await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')));await expect(page.locator('[data-sensa-ui]')).toHaveCount(0);
  await page.waitForTimeout(600);await expect(page.locator('[data-sensa-ui]')).toHaveCount(0);
  await page.evaluate(()=>window.dispatchEvent(new Event('pageshow')));await expect(page.getByRole('button',{name:'翻译页面',exact:true})).toBeVisible();
+ // The page's own switch: one click writes the learner's rule about this site, and
+ // reading stops here because the rule now says so.
+ await page.getByRole('button',{name:'本站不再开启阅读',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).fixture.calls.filter((c:any)=>c.kind==='reading-site').map((c:any)=>c.enabled))).toEqual([false]);
+ await expect(page.locator('[data-sensa-ui]')).toHaveCount(0);
  await page.goto('https://www.youtube.com/watch?v=abcdefghijk');
  await page.evaluate(()=>{
    const player=document.querySelector('#movie_player') as any;
@@ -162,6 +171,6 @@ try{
  await settingsPage.getByRole('button',{name:'测试已保存连接',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('连接成功');
  await settingsPage.evaluate(()=>(window as any).settingsFixture.conflict=true);await settingsPage.getByRole('button',{name:'保存模型设置',exact:true}).click();await expect(settingsPage.locator('#feedback')).toContainText('另一处更新');
  await settingsPage.screenshot({path:'/tmp/sensa-browser-settings.png',fullPage:true});
- console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, every translation asked for with what its text sits in and never with a translation the panel wrote itself, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, a cue spoken in the language of its track, seek, SPA cleanup, reading shutdown. Network fixtures only.');
+ console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, every translation asked for with what its text sits in and never with a translation the panel wrote itself, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, a cue spoken in the language of its track, seek, SPA cleanup, a site rule written from the page and reading shut down by it. Network fixtures only.');
  console.log('PASS: actual settings UI save/reload, feature assignment, explicit test/model fetch, cleared password field, no secret in browser storage, conflict feedback.');
 }finally{await browser.close();}

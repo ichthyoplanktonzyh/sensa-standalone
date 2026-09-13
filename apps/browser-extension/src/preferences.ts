@@ -54,11 +54,52 @@ export const defaultPreferences:ReadingPreferences={actionName:'用法辨析',ac
 /** Out-of-range rather than merely odd: the speaking side clamps to the same
  * range, so a stored number outside it is a number nothing will use. */
 const speechRate=(value:unknown)=>typeof value==='number'&&Number.isFinite(value)?Math.min(2,Math.max(0.5,value)):defaultPreferences.speechRate;
+/** A site rule is a hostname and nothing else: no scheme, no port, no path, so
+ * the rule a learner writes in the settings page is the rule a page can match. */
+export function readingSiteHost(value:unknown):string|null{
+  if(typeof value!=='string')return null;
+  const host=value.trim().toLowerCase();
+  return /^([a-z0-9-]+\.)*[a-z0-9-]+$/u.test(host)?host:null;
+}
+/** The site a page belongs to, or none when it has none: `chrome://`, `file://`
+ * and extension pages are not sites a reading rule could be about. */
+export function readingSiteOf(url:unknown):string|null{
+  if(typeof url!=='string')return null;
+  try{
+    const parsed=new URL(url);
+    return parsed.protocol==='http:'||parsed.protocol==='https:'?readingSiteHost(parsed.hostname):null;
+  }catch{return null;}
+}
 export async function readingPreferences():Promise<ReadingPreferences>{
   const stored=(await chrome.storage.local.get('readingPreferences')).readingPreferences;
   const raw=stored&&typeof stored==='object'?stored as Record<string,unknown>:{};
   return {actionName:typeof raw?.actionName==='string'?raw.actionName.slice(0,24):defaultPreferences.actionName,
     actionPrompt:typeof raw?.actionPrompt==='string'?raw.actionPrompt.slice(0,2000):defaultPreferences.actionPrompt,
     speechRate:speechRate(raw?.speechRate),
-    disabledSites:Array.isArray(raw?.disabledSites)?raw.disabledSites.filter((s:unknown)=>typeof s==='string').slice(0,100):[]};
+    // A stored rule this release cannot read is dropped from the rules it is
+    // read with: a learner whose settings page was hand-edited keeps reading.
+    disabledSites:Array.isArray(raw?.disabledSites)?raw.disabledSites.map(readingSiteHost).filter((site):site is string=>site!==null).slice(0,100):[]};
+}
+/**
+ * The one writer for reading preferences.
+ *
+ * The settings page and the page's own site switch both save through it, so a
+ * value one of them writes is a value the other reads back the same way. It
+ * refuses what it cannot represent instead of dropping it: a settings page that
+ * quietly discarded a mistyped line would leave the learner believing a rule
+ * exists.
+ */
+export async function saveReadingPreferences(value:unknown):Promise<ReadingPreferences>{
+  const raw=value&&typeof value==='object'?value as Record<string,unknown>:{};
+  const requested=Array.isArray(raw.disabledSites)?raw.disabledSites:[];
+  const sites=requested.map(readingSiteHost);
+  if(requested.length>100||sites.some(site=>site===null))throw new Error('invalid_sites');
+  const next:ReadingPreferences={
+    actionName:typeof raw.actionName==='string'?(raw.actionName.trim().slice(0,24)||defaultPreferences.actionName):defaultPreferences.actionName,
+    actionPrompt:typeof raw.actionPrompt==='string'?raw.actionPrompt.slice(0,2000):defaultPreferences.actionPrompt,
+    speechRate:speechRate(raw.speechRate),
+    disabledSites:[...new Set(sites as string[])],
+  };
+  await chrome.storage.local.set({readingPreferences:next});
+  return next;
 }

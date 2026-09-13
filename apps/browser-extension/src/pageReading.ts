@@ -23,7 +23,7 @@ function preceding(element:Element,selector:string):string{
 export function createPageReading(accountId:string,isAuthorized:()=>boolean){
   const host=document.createElement('div');host.dataset.sensaUi='page';
   host.style.cssText='position:fixed;right:16px;bottom:16px;z-index:2147483646';
-  const root=host.attachShadow({mode:'open'});root.innerHTML=`<style>:host{font:13px/1.5 system-ui;color:#242a38}section{max-width:320px;padding:10px;background:#fbfbfa;border:1px solid #bbc5da;border-radius:12px;box-shadow:0 4px 20px #0002}button{font:inherit;min-height:36px;background:white;color:#303f76;border:1px solid #bcc7df;border-radius:7px;padding:5px 9px;margin:3px;cursor:pointer}p{margin:6px;overflow-wrap:anywhere}button:focus-visible{outline:3px solid #5268a9}</style><section aria-label="Sensa 网页阅读"><strong>Sensa 阅读</strong><div><button data-action="translate">翻译页面</button><button data-action="mode">仅译文</button><button data-action="restore">恢复原文</button><button data-action="retry" hidden>重试失败段落</button></div><p role="status">Alt + T 翻译鼠标所在段落</p></section>`;
+  const root=host.attachShadow({mode:'open'});root.innerHTML=`<style>:host{font:13px/1.5 system-ui;color:#242a38}section{max-width:320px;padding:10px;background:#fbfbfa;border:1px solid #bbc5da;border-radius:12px;box-shadow:0 4px 20px #0002}button{font:inherit;min-height:36px;background:white;color:#303f76;border:1px solid #bcc7df;border-radius:7px;padding:5px 9px;margin:3px;cursor:pointer}p{margin:6px;overflow-wrap:anywhere}button:focus-visible{outline:3px solid #5268a9}</style><section aria-label="Sensa 网页阅读"><strong>Sensa 阅读</strong><div><button data-action="translate">翻译页面</button><button data-action="mode">仅译文</button><button data-action="restore">恢复原文</button><button data-action="retry" hidden>重试失败段落</button><button data-action="site">本站不再开启阅读</button></div><p role="status">Alt + T 翻译鼠标所在段落</p></section>`;
   document.documentElement.append(host);
   const marker=crypto.randomUUID(),hideStyle=document.createElement('style');hideStyle.dataset.sensaUi='translation-style';hideStyle.textContent=`[data-sensa-hidden="${marker}"]{display:none!important}`;document.documentElement.append(hideStyle);
   const status=root.querySelector('p')!;
@@ -144,6 +144,18 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean){
   root.querySelector('[data-action="mode"]')!.addEventListener('click',()=>{only=!only;root.querySelector('[data-action="mode"]')!.textContent=only?'双语显示':'仅译文';for(const item of items.values())setMode(item);});
   root.querySelector('[data-action="restore"]')!.addEventListener('click',restore);
   retry.addEventListener('click',()=>{for(const item of items.values())if(item.state==='failed'&&nearby(item.source))item.state='waiting';drain();});
+  /**
+   * The rule is written by the background, from this tab's own hostname, and it
+   * stops reading here as well: the panel goes away because reading is off on
+   * this site now, not because this button hid itself. A refusal is shown rather
+   * than swallowed — a browser page has no site to write a rule about.
+   */
+  root.querySelector('[data-action="site"]')!.addEventListener('click',()=>{void chrome.runtime.sendMessage({kind:'reading-site',enabled:false}).then(response=>{
+    // Nothing is said on success: the background turns reading off for this tab,
+    // so this panel is removed, and that is the answer. A refusal is said here,
+    // because there is no other place it would appear.
+    if(response?.error)status.textContent=readingError(new Error(response.error));
+  },()=>{status.textContent=readingError(new Error('unsupported_page'));});});
   const mouse=(e:MouseEvent)=>{const target=e.target instanceof Element?e.target:null;hovered=target?.closest<HTMLElement>(blocks)??null;};
   // What a shortcut must not interrupt is typing. Focus resting on one of this
   // panel's own buttons is not typing, and it is where focus lands after every
