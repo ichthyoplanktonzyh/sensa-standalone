@@ -53,8 +53,10 @@ Sensa 发布的学习包 → 下载到本地 → 显式加入学习 ──┘
 ```
 
 Owner 明确将面向 Agent 的端口纳入完整采集蓝图。Agent 可以在用户授权范围内提交固定上下文、
-Expression、来源及 Sense 候选，经过同一快慢轨和库交接合同；直接确认或受委托确认仍遵守
-Semantic Acceptance 规则，采集本身不隐含加入学习。端口协议与接入顺序另行确定，当前未实现。
+Expression、来源及 Sense，经过同一快慢轨和库交接合同；用户在当前 Agent 会话中
+明确要求保存可构成 delegated Semantic Acceptance，无需独立 grant id 或第二次 Sensa 确认。
+采集本身不隐含加入学习。端口无关 payload、远程投递邮箱与 Web 本地消费器已建立；
+具体 Agent 产品的 OAuth、MCP、skill 或本地 CLI 适配器是后续接入面。
 
 未确认 Sense 的材料保存在 Intake Inbox；完整 Personal Meaning 才进入语义世界的稳定意义集合。
 Focus 可选；快慢轨都不降低 Context–Sense–Expression 的完整性要求。
@@ -66,8 +68,9 @@ Focus 可选；快慢轨都不降低 Context–Sense–Expression 的完整性�
 账号、同步订阅或 Sensa 后端。主应用必须能离线启动和恢复；具体格式不因参考 Obsidian 而承诺
 全部使用 Markdown，也不引入通用 Card/Deck 模型。
 
-服务端承担四类可选能力：普通账号云同步；公共学习资源目录与下载；在线 LLM 澄清/解释/材料生成；
-支撑这些服务的账号、授权、订阅与用量。LLM 是主要在线智能能力，不能成为本地学习的隐式前提。
+服务端承担五类可选能力：普通账号云同步；远程 Intake 持久投递；公共学习资源目录与下载；
+在线 LLM 澄清/解释/材料生成；支撑这些服务的账号、授权、订阅与用量。LLM 是主要在线智能能力，
+不能成为本地学习的隐式前提。
 调用云端模型仍需联网；离线新生成能力取决于另行提供的本地模型，不包含在“已有资料完全本地使用”
 的承诺中。服务端允许读取同步内容；本地学习仍由既有领域执行层结算，同步不得重复结算。
 
@@ -75,6 +78,12 @@ Focus 可选；快慢轨都不降低 Context–Sense–Expression 的完整性�
 只承载在线能力；本地学习不要求启动或连接 Hono。当前 Web 使用 TypeScript Learning Runtime 与
 IndexedDB。本地原生实现已暂停；未来恢复时，各平台的实际构建、离线与恢复仍须分别验收，不能把
 浏览器测试当作原生平台证据。
+
+云端备份与 Sync 分开建模。Sync 解决多设备当前状态收敛，不保证能退回到某个未损坏的
+历史时点。未来 Account Backup 以不可变、完整且可独立验证的 Recovery Point 为单位，
+首先提供 account-assisted recovery，服务可读取备份并协助恢复；zero-knowledge 作为未来模式。
+当前仅固定 backup manifest/recovery point 合同和模块边界，不实现备份路由、存储、调度、恢复 UI，
+也不把现有 Sync 状态宣称为备份成功。
 
 ### 领域层职责
 
@@ -193,10 +202,12 @@ Learning Target ──resolves durable identity──▶ Retention Target
 ```text
 Browser / Mobile / Desktop / authorized Agent Intake Ports
                               │
+        本机适配器直达 │ 远程账号邮箱（queued ≠ applied）
+                              │
                               ▼
                        Semantic Intake
                               │
-          ┌── incomplete / unresolved / deferred ──▶ Intake Inbox
+          ┌── missing facts / unresolved / deferred ──▶ Intake Inbox
           │                                           │ resolve
           └── complete Context + Expression + Sense ◀─┘
                               │
@@ -424,7 +435,8 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
   第二个 store 或唯一 command source；应用内手动创建只是一个普通 Semantic Intake Port；
 - Personal Semantic World membership 只来自 learner 的直接 Semantic Acceptance 或其明确授权的
   delegated acceptance；浏览、历史、无写入授权的 LLM 推断、收藏与推荐都不能静默创建成员；
-- Semantic Intake 至少携带真实 Context；Expression、Sense 或 acceptance 不完整时留在 Intake Inbox。
+- Semantic Intake 允许 Context、Expression、Sense 或 acceptance 缺失，缺失时留在 Intake Inbox。
+  接收端只做合同结构与事实存在性校验，不重新判断调用方给出的 Context 是否充足；
   Inbox 是接收/处理状态，不是正式 Personal Semantic World membership；
 - Personal Meaning 是 learner-owned 稳定 identity，并至少拥有一个 Context Anchor、一个在 Context
   中可定位的 Expression Anchor，以及一个指向 teaching-sufficient stable Sense Version 与兼容 Binding
@@ -433,16 +445,20 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
   Expression Anchor 必须保存 expression type、Language Tag、provenance 与 verification status；由
   Intake 产生时还必须保存字符 span、媒体区域或等价 occurrence locator。target/support/input/output
   role 只在 Route 或操作上下文中成立，不进入 Anchor identity；
-- Semantic Intake 保存 declared、detected 或 learner-confirmed Language Observation；未知、暂不支持或
-  不属于 Active Route 的捕获继续作为未放置 Intake，不得依据当前 Route 强制重标语言；
+- Semantic Intake 保存 declared、detected 或 learner-confirmed Language Observation；未知语言使相关
+  Expression 事实留待补齐，暂不支持或不属于 Active Route 不是拒绝理由，也不得依据
+  当前 Route 强制重标语言；
 - Personal Meaning Alignment 可以直接由 Context + located Expression 的可靠解析支撑，只在必要时
   引用 Meaning Focus。不得从 Sense definition 合成 Focus，也不得为快轨伪造未发生的 Sense
   Construction、Proposal 或对话；
 - Sense Proposal 属于可修改的 Sense Construction 过程，不是 Sense。只有有效 direct/delegated
   Semantic Acceptance 才可复用或创建 stable Sense + Sense Version + Personal Meaning Alignment，且
   不得覆盖原始 Context 与 acceptance provenance；
-- Agent 在明确 learner grant 下调用正式 commit operation 可以直接产生 delegated acceptance，无需
-  第二次第一方确认；actor、grant、resolver 与提交内容必须可审计，payload 自报布尔值不构成 authority；
+- Agent 在当前会话收到 learner 的明确保存请求，或持有持续授权时，调用正式 commit
+  operation 可直接产生 delegated acceptance，无需第二次第一方确认；actor、basis、可选的
+  authorization reference、resolver 与提交内容必须可审计。一次性明确请求不强制 grant id；
+- Remote Intake Delivery 使用账号范围和已登记本地 library 解析目的地，Agent 不在 payload
+  中指定 library。云端只对合同、幂等与投递负责，不执行语义完整性判断或 Personal Meaning 写入；
 - Saved Sense 指向稳定 Sense identity 并保留保存时 Sense Version provenance；Saved Example 指向
   exact immutable Example，不能在内容更新后静默替换；
 - 每个 learner × Sense 最多存在一份 current Sense Note；Note 具有独立 revision，与 Saved Sense
@@ -473,7 +489,8 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 - Personal Semantic Region 与 Personal Meaning 属于 learner-owned source records，可以被 Projection
   展示，但不能自行修改 published Semantic Field、Sense Relation 或 progress；
 - Personal Meaning Alignment 必须显式保留 resolution/acceptance provenance。模型输出本身不能
-  静默升级为 acceptance；只有独立 direct operation 或持有 learner grant 的 delegated commit 才能
+  静默升级为 acceptance；只有独立 direct operation 或基于明确用户请求/持续授权的 delegated
+  commit 才能
   产生该事实。确认后的 Sense Expression Binding 也不能冒充 reviewed
   Learning Package resource；
 - 未闭合到 stable Sense + target binding 的 Intake/Construction draft 或 Meaning Focus 不能成为
@@ -656,11 +673,12 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
    Add-to-Learning Intent、Learning Entry Provenance、Learning Policy Assignment 与 Study Scope
    Revision；它接纳 Book、direct stable-Sense 与 personal-first bridge，保证 source provenance、去重、
    Policy scope/precedence、切换和范围变更不修改 published Book membership 或 learner progress；
-7. **Semantic Intake Module**：接收浏览器、移动端、桌面端与 authorized Agent 的 port-neutral Context
-   捕获，拥有 Language Observation、Intake Inbox、完整性分流、幂等 ingest 与 direct/delegated
+7. **Semantic Intake Module**：接收浏览器、移动端、桌面端与 authorized Agent 的 port-neutral Intake
+   payload，拥有 Language Observation、Intake Inbox、机械完整性分流、幂等 ingest 与 direct/delegated
    acceptance authority audit；
    它只把完整且获有效授权的 Context–Expression–Sense resolution 提交给 Personal Semantic World，
-   不创建 Curriculum Membership、Learning Target 或 learner progress，也不依赖任何主应用页面状态；
+   不判断调用方给出的 Context 是否语义充足，不创建 Curriculum Membership、Learning Target 或 learner
+   progress，也不依赖任何主应用页面状态；
 8. **Personal Semantic World Module**：拥有 Personal Meaning、optional Meaning Focus、Personal Semantic
    Anchor、Personal Expression Anchor、Personal Meaning Alignment，以及 Saved Sense/Example、Sense
    Note、Personal Collection 与 typed Membership 的 learner-scoped 事实及同步生命周期；它可以提交
@@ -711,6 +729,12 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
     本模块也不从 Route 推断捕获内容语言或把 target/support role 写回 Expression；
 24. **Language Support Resolver**：按 exact Language Tag 与 speech、reference、translation、content
     或 renderer capability 返回 exact support、显式 fallback 或 unavailable；它不改写任何语言事实。
+25. **Remote Intake Delivery Module**：以认证账号解析唯一已登记的本地 library，持久保存 canonical Intake
+    mailbox item，拥有 `queued | applied` 回执、拉取/确认和 operation-id 幂等；它不读取或裁决语义内容，
+    也不把入队伪装成本地提交。
+26. **Account Backup Port**：定义 immutable Recovery Point manifest、完整性摘要、library/learner/schema
+    identity 与 `account_assisted | zero_knowledge` 恢复模式。当前只有端口和合同，没有生产 route、store、
+    scheduler 或 restore workflow；未来实现不能复用 Sync cursor 冒充 Recovery Point。
 
 ## 6. 全局不变量
 
@@ -762,8 +786,15 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
   浏览器/移动/桌面扩展与 authorized Agent 都通过同一幂等 Intake/commit authority 收敛；
 - Personal Semantic World Surface 只能组合权威 facts 与可重建 projections，并发出显式 commands；它
   不是 aggregate、第二份 semantic store 或外部端口的必经网关；
-- Semantic Acceptance 可以由 learner 直接执行，也可以由 Agent 在明确 learner grant 下委托执行；
-  二者 membership 效力相同而 provenance 不同，委托调用无需二次确认；
+- Semantic Acceptance 可以由 learner 直接执行，也可以由 Agent 基于当前明确请求或持续授权
+  委托执行；二者 membership 效力相同而 provenance 不同，委托调用无需二次确认，
+  一次性明确请求不强制独立 grant id；
+- Intake 接收端以 Context、Expression、Sense 和 acceptance 的存在性分流；语义充足性由产生者
+  负责，接收端不重新调用模型审查；
+- 同一 Intake operation id 只能绑定同一份 canonical payload；完全相同的重试返回同一回执，
+  不同内容必须报冲突；
+- Remote Intake Delivery 的 `queued` 不等于本地 `applied`；Sync 收敛也不等于备份可恢复性。
+  只有已完整存储并验证的 immutable Recovery Point 才能被称为备份；
 - Meaning Focus 是可选的 Context→Sense 解析桥梁，不是 Personal Meaning、Alignment 或快轨不变量；
   不得从 Sense definition 合成伪 Focus，或为完整摄取伪造未发生的 Construction/Proposal 链；
 - Formal Learning 不依赖 Personal Semantic World；Book、direct stable-Sense 与 personal-first entry 在

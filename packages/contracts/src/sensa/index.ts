@@ -6,6 +6,8 @@ export * from "./runtimeLearningRelease.js";
 export * from "./semanticRegistry.js";
 export * from "./personalSemanticWorld.js";
 export * from "./intake.js";
+export * from "./intakeDelivery.js";
+export * from "./accountBackup.js";
 export * from "./learningConnection.js";
 export * from "./learningContent.js";
 export * from "./lightweightLearningContent.js";

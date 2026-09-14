@@ -39,6 +39,26 @@ FSRS 都由本地领域事务结算。Hono/Edge 不创建或推进学习 Run，�
 - `apps/web/src/data/library/cloudSync.ts`
 - `apps/web/src/data/library/store.ts`
 
+Intake 的语义 payload 只声明一次：`packages/contracts/src/sensa/intake.ts`。它不携带运输目的地，
+接收端仅按 Context、Expression、Sense 和 acceptance 的存在性走快/慢轨，不用模型评审
+调用方已经提供的 Context 是否充足。表达的 canonical form 与 Context 中的 exact occurrence 分开，
+例如可以保存 `back out` 并定位原文中的 `backed out`。当前 Web 本地 authority 在
+`apps/web/src/experience/personalMeaningJourney/gateway.ts` 中幂等提交，相同 operation id 若改变载荷则报冲突。
+
+远程投递的 transport envelope 由 `packages/contracts/src/sensa/intakeDelivery.ts` 定义。
+`apps/api/src/sensa/library/intakeDelivery.ts` 使用受认证账号和该账号唯一启用的 library channel
+决定目的地，不允许 Agent 从 payload 选择 library。它只持久 mailbox item 并返回 `queued`；
+`apps/web/src/experience/account/RemoteIntakeDelivery.tsx` 在账号恢复完成后登记当前库，在初始加载、
+恢复联网或窗口获得焦点时拉取，由本地 gateway 提交后回传 `applied` 及具体快轨/Inbox
+结果。空闲页面不轮询。未来 OAuth、MCP、skill 或本地 CLI 只是这两份合同之上的适配器，
+不可另建一套 Intake 语义。数据库的账号/库隔离、唯一启用 channel 和 mailbox 存储由
+`db/migrations/0028_sensa_encrypted_intake.sql` 与 `db/migrations/0032_sensa_intake_delivery.sql` 提供。
+
+云端备份当前只有 `packages/contracts/src/sensa/accountBackup.ts` 的架构端口。它固定 immutable Recovery
+Point manifest、摘要、大小、library/learner/schema identity 与 `account_assisted | zero_knowledge`
+模式；仓库目前没有 backup route、store、scheduler 或 restore workflow。现有 account sync 仍是收敛服务，
+不得在代码或 UI 中当作已实现备份。
+
 Web 页面与扩展之间的桥也只声明一次：`packages/contracts/src/sensa/consumer/extension.ts` 同时声明握手（授权、交换、凭据）与页面桥（每种请求的载荷、每种应答的形状）。Web 应用按它构造请求并校验应答，`apps/browser-extension/src/background.ts` 在分发前解析每条桥消息——未声明的 kind 或字段一律拒绝，不再静默丢弃；页面侧的 `webBridge.ts` 是每个 Sensa 页面都会加载的内容脚本，因此不带 schema，它的两个频道名、id 上限与 kind 白名单由 `apps/browser-extension/build.mjs` 在构建时从同一份声明注入。授权这一轮同样共用：API 路由与 Web 前置校验读同一组 schema。`scripts/sensaBridgeContractSmoke.mts` 在快速测试里把真实 forwarder 与真实 background 装进同一台假浏览器，逐 kind 走一遍。
 
 ## 模型与内容边界

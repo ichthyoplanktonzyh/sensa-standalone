@@ -8,6 +8,7 @@ import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {z} from 'zod';
 import {ExtensionIntake} from './ExtensionIntake';
+import {RemoteIntakeDelivery} from './RemoteIntakeDelivery';
 import {createContext,useContext,useEffect,useRef,useState,type ReactNode} from 'react';
 import {clearAllCredentials} from '../../data/library/providers';
 import {auth,cachedAuthSubject,authStorageKey} from '../../data/account/auth';
@@ -96,7 +97,7 @@ export default function AccountExperience({children}:{children:ReactNode}){
   const destination=new URL(result.redirectUri);destination.searchParams.set('libraryId',(await openLibrary()).id);
   location.assign(destination.toString());
  })}>{localFlowText('connectAccount')}</button><button className={setupButton} onClick={()=>location.assign('/profile')}>{localFlowText('cancel')}</button></main>;
- if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{deleteAccount:()=>{generation.current++;setDeletionOpen(true);},notice:localFlowNotice(notice),email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout:()=>perform(logout)}}><AccountLibrarySync online={onlineService}/>{onlineService&&<CloudSyncNotice/>}{owner?.accountId&&<ExtensionIntake accountId={owner.accountId} onlineService={onlineService}/>} {children}</AccountContext.Provider>;
+ if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{deleteAccount:()=>{generation.current++;setDeletionOpen(true);},notice:localFlowNotice(notice),email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout:()=>perform(logout)}}><AccountLibrarySync online={onlineService}/>{onlineService&&<><CloudSyncNotice/><RemoteIntakeDelivery online/></>}{owner?.accountId&&<ExtensionIntake accountId={owner.accountId} onlineService={onlineService}/>} {children}</AccountContext.Provider>;
  // Default Supabase templates send links; custom OTP templates remain supported.
  return <main className="flex min-h-screen items-center justify-center bg-[#fbfbfa] px-6 text-[#242a38]"><form className="w-full max-w-sm space-y-5" onSubmit={e=>{e.preventDefault();void perform(sent?useCode?async()=>{const result=await auth!.verifyOtp({email:email.trim(),token:code.trim(),type:'email'});if(result.error){setNotice(localFlowText('otpInvalid'));return;}await recover();}:recover:send);}}>
   <div className="flex items-center justify-between"><p className="text-sm text-[#68748d]">Sensa</p><LanguageSwitch/></div><h1 className="text-3xl font-semibold">{sent?localFlowText(useCode?'enterOtp':'checkEmailLink'):localFlowText('welcome')}</h1>

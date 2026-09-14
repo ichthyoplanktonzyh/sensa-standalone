@@ -142,7 +142,7 @@ export interface PersonalMeaningJourneyGateway {
     input: ConfirmExpressionBindingInput,
   ): Promise<ConfirmExpressionBindingResult>;
 
-  /** Ubiquitous intake: route one capture payload onto the fast track, the Inbox, or rejection. */
+  /** Ubiquitous intake: route one structurally valid payload onto the fast track or Inbox. */
   ingest(
     operationId: string,
     payload: SensaIntakePayload,
@@ -171,9 +171,9 @@ export interface JourneyGatewayDeps {
 }
 
 /**
- * Verifies that an intake acceptance request is backed by an authenticated
- * learner action or a real delegated grant. Payload data alone is never
- * authority to mutate the Personal Semantic World.
+ * Converts transport-authenticated acceptance provenance into the stored
+ * authority fact. Transport adapters decide which connected caller may invoke
+ * the command; this port does not repeat the learner's semantic decision.
  */
 export interface SemanticAcceptanceAuthorityPort {
   verify(request: SensaIntakeAcceptanceRequest): SensaSemanticAcceptanceAuthority;
@@ -184,7 +184,12 @@ const localSemanticAcceptanceAuthority: SemanticAcceptanceAuthorityPort = {
     if (request.mode === 'learner_direct') {
       return { mode: 'learner_direct', actorId: LEARNER_USER_ID };
     }
-    throw new Error('当前本地端口没有可验证的 Agent 委托授权。');
+    return {
+      mode: 'delegated_agent',
+      actorId: request.actorId,
+      basis: request.basis,
+      authorizationReference: request.authorizationReference,
+    };
   },
 };
 
@@ -345,11 +350,20 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     return this.deps.clock.nowIso();
   }
 
-  private receipt(operationId: string, command: string): CommandReceipt | null {
+  private receipt(
+    operationId: string,
+    command: string,
+    requestDigest?: string,
+  ): CommandReceipt | null {
     const found = this.requireState().commandReceipts.find(
       (candidate) => candidate.operationId === operationId,
     );
-    if (found && found.command !== command) {
+    if (found && (
+      found.command !== command
+      || (requestDigest !== undefined
+        && found.requestDigest !== undefined
+        && found.requestDigest !== requestDigest)
+    )) {
       throw new Error('这个 operationId 已用于另一个个人意义操作。');
     }
     return found ?? null;
@@ -359,12 +373,18 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     operationId: string,
     command: string,
     result: Record<string, string | number | boolean | null>,
+    requestDigest?: string,
   ): void {
-    this.requireState().commandReceipts.push({ operationId, command, result });
+    this.requireState().commandReceipts.push({
+      operationId,
+      command,
+      result,
+      ...(requestDigest === undefined ? {} : { requestDigest }),
+    });
   }
 
-  private replay<T>(operationId: string, command: string): T | null {
-    const found = this.receipt(operationId, command);
+  private replay<T>(operationId: string, command: string, requestDigest?: string): T | null {
+    const found = this.receipt(operationId, command, requestDigest);
     return found ? ({ ...found.result, replayed: true } as T) : null;
   }
 
@@ -1425,10 +1445,9 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
 
   // -- ubiquitous multimodal intake -----------------------------------------
 
-  /** The engine never touches storage or receipts; ids, clock and languages
-   * all come from the gateway, which is the only part that reads the profile. */
-  private enginePorts(languages: CommandLanguages): IntakeEnginePorts {
-    return { newId: () => this.id(), nowIso: () => this.now(), languages };
+  /** The engine never touches storage or receipts; ids and clock come from the gateway. */
+  private enginePorts(): IntakeEnginePorts {
+    return { newId: () => this.id(), nowIso: () => this.now() };
   }
 
   getInboxItems(): SensaIntakeItem[] {
@@ -1447,39 +1466,28 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     operationId: string,
     payload: SensaIntakePayload,
   ): Promise<IngestCommandResult> {
-
-    const replay = this.replay<IngestCommandResult>(operationId, 'Ingest');
-    if (replay) return replay;
-    const state = this.requireState();
     // Boundary validation: the capture payload must satisfy the intake
     // contract before the engine sees it, and the transport idempotency key
     // must be the command's receipt key.
     const parsed = sensaIntakePayloadSchema.parse(payload);
-    if (parsed.intakeOperationId !== operationId) {
-      throw new Error('ingest 的 operationId 必须与载荷的 intakeOperationId 一致。');
+    if (parsed.operationId !== operationId) {
+      throw new Error('ingest 的 operationId 必须与载荷的 operationId 一致。');
     }
-    // The pair is pinned once, before the route decision rather than only before
-    // the write: whether the captured language sits on a side of the learner's
-    // boundary IS that decision, so reading the profile afterwards would let one
-    // operation route on one profile and write under another.
-    const languages = await this.deps.languages.read();
-    const decision = evaluateIntakeRoute(parsed, languages);
-    if (decision.route === 'rejected') {
-      const result: IngestResult = { route: 'rejected', reason: decision.reason };
-      this.recordReceipt(operationId, 'Ingest', result);
-      this.persist();
-      return { ...result, replayed: false };
-    }
+    const requestDigest = digestOf(parsed);
+    const replay = this.replay<IngestCommandResult>(operationId, 'Ingest', requestDigest);
+    if (replay) return replay;
+    const state = this.requireState();
+    const decision = evaluateIntakeRoute(parsed);
     if (decision.route === 'inbox') {
-      const item = createInboxItem(parsed, this.id(), this.now(), languages);
+      const item = createInboxItem(parsed, this.id(), this.now());
       state.inboxItems.push(item);
-      const result: IngestResult = { route: 'inbox', intakeId: item.intakeId };
-      this.recordReceipt(operationId, 'Ingest', result);
+      const result: IngestResult = { route: 'inbox', intakeId: item.intakeId, status: item.status };
+      this.recordReceipt(operationId, 'Ingest', result, requestDigest);
       this.persist();
       return { ...result, replayed: false };
     }
     const authority = this.deps.semanticAcceptanceAuthority.verify(
-      parsed.acceptanceRequest!,
+      parsed.acceptance!,
     );
     // Fast track: the engine materializes the whole Personal Meaning record
     // atomically; the shared binding core then settles the registry
@@ -1487,7 +1495,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     const outcome = executeFastTrack(
       state,
       { payload: parsed, operationId, authority: authority! },
-      this.enginePorts(languages),
+      this.enginePorts(),
     );
     this.state = outcome.nextState;
     this.settleExpressionBinding(
@@ -1501,7 +1509,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       route: 'fast_track',
       personalMeaningId: outcome.personalMeaningId,
     };
-    this.recordReceipt(operationId, 'Ingest', result);
+    this.recordReceipt(operationId, 'Ingest', result, requestDigest);
     this.persist();
     return { ...result, replayed: false };
   }
@@ -1531,7 +1539,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     const outcome = resolveInboxItemWithSense(
       state,
       { intakeId, sense, operationId, authority },
-      this.enginePorts(await this.deps.languages.read()),
+      this.enginePorts(),
     );
     this.state = outcome.nextState;
     this.settleExpressionBinding(

@@ -545,24 +545,27 @@ activity. It is neither an authoritative progress aggregate nor a literal model
 of the learner's mind.
 
 **Semantic Intake**:
-A port-neutral capture of a real context together with any Expression and Sense
-information currently available. Text selection, image/audio capture, first-party
-extensions and learner-authorized Agents all submit through this boundary. An Intake
-may be incomplete and does not become Personal Semantic World membership by itself.
+A port-neutral request carrying any Context, Expression, Sense and Semantic Acceptance
+facts currently available. Text selection, image/audio capture, first-party extensions
+and learner-authorized Agents all submit through this boundary. Missing facts send the
+request to the slow track. A receiver validates structure and presence only; it does
+not re-judge whether a producer-supplied Context is semantically sufficient. An Intake
+does not become Personal Semantic World membership by itself.
 
 **Intake Inbox Item**:
-A learner-owned unresolved Semantic Intake awaiting an Expression selection, a
-teaching-sufficient Sense resolution, valid acceptance authority or an explicit
-decision to discard it. The Inbox is the receiving area of the Personal Semantic
-World surface, not part of its stable semantic inventory.
+A learner-owned unresolved Semantic Intake awaiting Context, an Expression selection,
+a teaching-sufficient Sense resolution, valid acceptance authority or an explicit
+decision to discard it. The Inbox is the receiving area of the Personal Semantic World
+surface, not part of its stable semantic inventory.
 
 **Semantic Acceptance**:
 The auditable authority by which a complete Context–Expression–Sense resolution is
 committed to the Personal Semantic World. Acceptance may be performed directly by
-the learner or by an Agent acting under an explicit learner delegation; provenance
-must distinguish the two, but delegated acceptance does not require a second
-first-party confirmation. Acceptance is not content review, Add-to-Learning or
-Learning Evidence.
+the learner or by an Agent acting on an explicit request or standing authorization;
+provenance must distinguish these bases, but delegated acceptance does not require a
+second first-party confirmation. A one-shot request in the current Agent conversation
+does not require a separately issued grant id. Semantic Acceptance is distinct from
+transport authentication, content review, Add-to-Learning and Learning Evidence.
 
 **Personal Semantic World（个人语义世界）**:
 The learner-owned set of complete Personal Meanings committed through valid direct
@@ -858,7 +861,33 @@ and cannot create another scheduling contribution for the same due Review.
 
 **Sensa Sync**:
 An optional service that synchronizes a Personal Learning Library across the learner's
-devices. It does not own semantic acceptance, learning outcomes or permission to use the local library.
+devices. It does not own semantic acceptance, learning outcomes or permission to use
+the local library, and convergence alone is not a historical backup guarantee.
+
+**Remote Intake Delivery**:
+An account-scoped durable mailbox that carries one canonical Semantic Intake from a
+remote authenticated caller to the learner's registered local library. The online
+service validates the contract and queues the request but does not resolve Sense,
+judge Context sufficiency or write Personal Semantic World facts.
+
+**Intake Delivery Receipt**:
+The idempotent transport result for one Remote Intake Delivery. `queued` means the
+online mailbox durably accepted the request; `applied` means the destination local
+library committed it to either the fast track or Intake Inbox. A queued receipt must
+never be presented as local save success.
+
+**Account Backup**:
+An optional recovery service that stores independently verifiable, immutable recovery
+generations for a Personal Learning Library. The first planned mode is account-assisted
+recovery, in which Sensa can operate the backup and restore path; a future zero-knowledge
+mode may encrypt data so that only the learner can recover it. Account Backup is not
+Remote Intake Delivery or multi-device synchronization.
+
+**Account Backup Recovery Point**:
+One complete, immutable backup generation identified by its library, learner, schema,
+checkpoint, predecessor, digest and size. A recovery point is only valid after the
+service has stored and verified its complete payload; a sync cursor or pending upload
+is not a recovery point.
 
 **Account / Learner**:  
 Account is the authenticated access and lifecycle identity; Learner is the

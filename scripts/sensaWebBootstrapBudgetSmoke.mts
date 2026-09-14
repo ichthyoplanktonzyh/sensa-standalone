@@ -35,6 +35,8 @@ const MINIMUM_PUBLISHED_BLOCKS=20;
 const DRAFTS=8,IMAGES_PER_DRAFT=4;
 const SUBJECT='8b1f4c1e-9d5a-4c34-9c3a-9f1d0d1a1c11';
 const ACCOUNT='4f2a7b60-1c6e-4a52-8f0b-6d3c2a9e5b21';
+const REMOTE_OPERATION='45466b13-66db-4d57-a393-bc2946873152';
+const REMOTE_QUEUED_AT='2026-09-13T08:00:00.000Z';
 const storageKeySuffix='-auth-token';
 const failures:string[]=[];
 const log=(message:string)=>console.log(message);
@@ -45,6 +47,9 @@ const digest=(text:string)=>createHash('sha256').update(text).digest('hex');
 
 type Cloud={blocks:Map<string,string>;revision:number;manifest:string[]|null;commits:Map<string,string>;published:number;publishedBytes:number};
 const clouds=new Map<string,Cloud>();
+let intakeLibraryId:string|null=null;
+let remoteDeliveryAvailable=false,remoteAcknowledgement:any=null;
+const remoteSubmission={contractVersion:'sensa-intake-delivery-v1',client:{clientId:'19ba48d1-03af-489e-a352-a16f05a03d5c',kind:'agent',label:'Codex'},intake:{contractVersion:'sensa-intake-v3',operationId:REMOTE_OPERATION,capturedAt:REMOTE_QUEUED_AT,context:{modality:'text',textSegment:'I backed out.',mediaReferenceIds:[],languageTag:'en',source:{client:'codex',url:null,title:'GPT Live conversation',sourceReferenceId:'conversation-1',domSelector:null,paragraphContext:null}},expression:{surfaceForm:'back out',languageTag:'en',occurrence:{surfaceForm:'backed out',locator:{kind:'text_span',start:2,end:12}},expressionTypeHint:'phrase'},sense:{senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'原本准备做某事，后来决定退出或取消',prototypeScenes:[{summary:'I backed out.',participantRoles:[],states:[],directionOrCausality:null}],includedCases:['I backed out.'],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'llm_suggested'},acceptance:{mode:'delegated_agent',actorId:'codex',basis:'explicit_user_request',authorizationReference:null}}};
 const cloudFor=(account:string):Cloud=>{const existing=clouds.get(account);if(existing)return existing;const created:Cloud={blocks:new Map(),revision:0,manifest:null,commits:new Map(),published:0,publishedBytes:0};clouds.set(account,created);return created;};
 /** Repack a published library into smaller blocks, the way the previous client stored it.
  *  Restoring it must still cost a byte-bounded number of round trips. */
@@ -95,6 +100,23 @@ const server=createServer(async(request,response)=>{
   if(url.pathname==='/favicon.ico'){response.writeHead(204);response.end();return;}
   if(url.pathname==='/auth/v1/user'){json({id:SUBJECT,aud:'authenticated',email:'fixture@sensa.invalid',app_metadata:{},user_metadata:{},created_at:new Date().toISOString()});return;}
   if(url.pathname==='/sensa/web/access/session'){json({authorized:true,accountId:ACCOUNT});return;}
+  if(url.pathname==='/sensa/intake/channel'){
+   const input=await body() as {libraryId:string};
+   if(intakeLibraryId&&intakeLibraryId!==input.libraryId){json({code:'intake_destination_conflict'},409);return;}
+   intakeLibraryId=input.libraryId;
+   json({registered:true,libraryId:input.libraryId});return;
+  }
+  if(url.pathname==='/sensa/intake/deliveries/pull'){
+   const input=await body() as {libraryId:string};
+   if(input.libraryId!==intakeLibraryId){json({code:'library_mismatch'},409);return;}
+   json({deliveries:remoteDeliveryAvailable&&!remoteAcknowledgement?[{deliveryId:REMOTE_OPERATION,libraryId:input.libraryId,queuedAt:REMOTE_QUEUED_AT,submission:remoteSubmission}]:[]});return;
+  }
+  if(url.pathname==='/sensa/intake/deliveries/ack'){
+   const input=await body() as any;
+   if(input.libraryId!==intakeLibraryId||input.deliveryId!==REMOTE_OPERATION){json({code:'library_mismatch'},409);return;}
+   remoteAcknowledgement=input;
+   json({contractVersion:'sensa-intake-delivery-v1',deliveryId:REMOTE_OPERATION,operationId:REMOTE_OPERATION,deliveryState:'applied',queuedAt:REMOTE_QUEUED_AT,appliedAt:input.appliedAt,result:input.result});return;
+  }
   if(url.pathname==='/sensa/library-sync'||url.pathname.startsWith('/sensa/library-sync/')){
    await delay(SERVICE_LATENCY_MS);
    const cloud=cloudFor(ACCOUNT);
@@ -221,6 +243,7 @@ try{
  log(`   legacy-shaped library: ${legacyPublished} blocks / ${Math.round(legacyPublishedBytes/1024)}KiB, revision ${legacyRevision}`);
 
  log('3/4 measuring the first restore on a new browser');
+ remoteDeliveryAvailable=true;
  const b=await pageContext();
  served.length=0;
  const started=Date.now();
@@ -229,6 +252,7 @@ try{
  const shellMs=Date.now()-started;
  await expect(b.page.getByText('正在同步你的学习数据…')).toBeVisible({timeout:SHELL_BUDGET_MS});
  await expect.poll(()=>restoreStatus(b.page),{timeout:RESTORE_BUDGET_MS,message:'account restore never finished'}).toBe('synced');
+ await expect.poll(()=>remoteAcknowledgement?.result?.route,{timeout:15000,message:'remote Intake was not applied and acknowledged'}).toBe('fast_track');
  const restoreMs=Date.now()-started;
  /** Wait until the application stops talking to the account service on its own. */
  const settle=async():Promise<boolean>=>{
@@ -260,6 +284,10 @@ try{
  /** Restore fetch round trips follow legacy bytes, not how many blocks hold them. */
  const fetchRequestBudget=Math.ceil(legacyPublishedBytes/librarySyncBlockFetchBytes)+2;
  const restored=await b.page.evaluate(async()=>{const core=await import(/* @vite-ignore */ '/core.js') as any;return (await core.listDrafts()).length;});
+ const remoteMeaning=await b.page.evaluate(()=>{
+  const state=JSON.parse(localStorage.getItem('sensa:web-ui:v1:sensa_personal_meaning_journey_v3')??'null');
+  return state?.meanings?.find((meaning:any)=>meaning.personalExpressionAnchorRevisions?.some((revision:any)=>revision.surfaceForm==='back out'))??null;
+ });
  const violations=await b.page.evaluate(()=>(window as any).__cspViolations as string[]);
  await b.context.close();
 
@@ -268,6 +296,7 @@ try{
  log(`   canonicalized library: ${cloud.published} blocks, revision ${cloud.revision}`);
  log(`   next focus sync: ${repeatRequests.length} library requests / ${repeatFetches.length} block fetches`);
  log(`   restored drafts ${restored}/${DRAFTS}`);
+ log(`   remote Intake ${remoteAcknowledgement?.result?.route??'missing'} / ${remoteMeaning?'stored':'missing'}`);
  log(`   boot service calls: ${JSON.stringify([...new Set(bootRequests.map(entry=>entry.path))])}`);
  log(`   idle ${IDLE_WINDOW_MS}ms service calls: ${idleRequests.length}`);
  const fail=(message:string)=>failures.push(message);
@@ -283,6 +312,7 @@ try{
  if(!repeatSettled)fail('the focus-triggered verification sync never settled');
  if(repeatFetches.length)fail(`a later focus re-fetched canonicalized account blocks ${repeatFetches.length} time(s)`);
  if(restored!==DRAFTS)fail(`account restore lost content: ${restored}/${DRAFTS} drafts`);
+ if(!remoteMeaning)fail('the remote Agent Intake was acknowledged without a local Personal Meaning');
  if(bootRequests.some(entry=>entry.path==='/sensa/service/status'))fail('rolling service counters are read on boot instead of on demand');
  if(!settled)fail('an untouched account never stopped syncing: sync bookkeeping keeps scheduling another pass');
  if(idleRequests.length)fail(`an untouched tab made ${idleRequests.length} service calls: ${[...new Set(idleRequests.map(entry=>entry.path))].join(', ')}`);

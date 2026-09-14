@@ -27,12 +27,10 @@ interface IntakeInboxDrawerProps {
 }
 
 const statusLabels: Record<SensaIntakeItem['status'], string> = {
+  get pending_context() { return uiText('addContext'); },
   get pending_sense() { return uiText('confirmMeaning'); },
   get pending_expression() { return uiText('selectExpression'); },
   get pending_acceptance() { return uiText('readyForAcceptance'); },
-  // The material names a language not placed in the current operation, so the
-  // learner must decide which contextual role it has here.
-  get pending_language() { return uiText('unplacedLanguage'); },
 };
 
 interface DisambiguationOption {
@@ -49,18 +47,10 @@ const disambiguationOptions = (item: SensaIntakeItem): DisambiguationOption[] =>
   if (item.status !== 'pending_sense' && item.status !== 'pending_acceptance') return [];
   const sense = item.payload.sense;
   if (!sense) return [];
-  const options: DisambiguationOption[] = [
-    { senseKey: sense.senseKey, definitionSummary: sense.definitionSummary },
-  ];
-  for (const candidate of sense.candidates) {
-    if (candidate.definitionSummary !== sense.definitionSummary) {
-      options.push({
-        senseKey: candidate.senseKey,
-        definitionSummary: candidate.definitionSummary,
-      });
-    }
-  }
-  return options;
+  return [{
+    senseKey: sense.senseKey,
+    definitionSummary: sense.semanticSpec.coreMeaningFocus,
+  }];
 };
 
 export const IntakeInboxDrawer = ({
@@ -90,10 +80,8 @@ export const IntakeInboxDrawer = ({
     try {
       const sense: SensaIntakeSense = {
         senseKey: option.senseKey,
-        resolutionStatus: 'resolved',
-        definitionSummary: option.definitionSummary,
+        semanticSpec: item.payload.sense!.semanticSpec,
         wordingSource: item.payload.sense?.wordingSource ?? 'learner_authored',
-        candidates: [],
       };
       const result = await gateway.resolveInboxItem(newUuid(), item.intakeId, { sense });
       toast(result.route === 'fast_track'
@@ -107,7 +95,7 @@ export const IntakeInboxDrawer = ({
   };
 
   const summon = async (item: SensaIntakeItem) => {
-    const text = item.payload.context.textSegment?.trim();
+    const text = item.payload.context?.textSegment?.trim();
     if (!text) return;
     setBusyId(item.intakeId);
     try {
@@ -166,9 +154,9 @@ export const IntakeInboxDrawer = ({
           {items.map((item) => {
             const busy = busyId === item.intakeId || busyId != null;
             const options = disambiguationOptions(item);
-            const source = item.payload.context.source;
-            const mediaCount = item.payload.context.mediaReferenceIds.length;
-            const hasText = Boolean(item.payload.context.textSegment?.trim());
+            const source = item.payload.context?.source;
+            const mediaCount = item.payload.context?.mediaReferenceIds.length ?? 0;
+            const hasText = Boolean(item.payload.context?.textSegment?.trim());
             return (
               <article className={uiClass("intake-card")} key={item.intakeId}>
                 <header className={uiClass("intake-card__head")}>

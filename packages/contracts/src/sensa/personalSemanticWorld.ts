@@ -106,9 +106,19 @@ export const sensaSemanticAcceptanceAuthoritySchema = z.discriminatedUnion(
       .object({
         mode: z.literal("delegated_agent"),
         actorId: nonEmpty,
-        authorizationGrantId: uuid,
+        basis: z.enum(["explicit_user_request", "standing_authorization"]),
+        authorizationReference: nonEmpty.nullable(),
       })
-      .strict(),
+      .strict()
+      .superRefine((value, context) => {
+        if (value.basis === "standing_authorization" && value.authorizationReference === null) {
+          context.addIssue({
+            code: "custom",
+            message: "standing authorization requires a reference",
+            path: ["authorizationReference"],
+          });
+        }
+      }),
   ],
 );
 

@@ -10,7 +10,7 @@ import { uiClass } from '../ui/classes';
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { SensaIntakePayload } from '@sensa/contracts/sensa';
+import type { SensaIntakeContext, SensaIntakePayload, SensaIntakeSense } from '@sensa/contracts/sensa';
 import { newUuid } from '../personalMeaningJourney/ids';
 import { useJourneyGateway } from '../personalMeaningJourney';
 import { storeImageFile } from '../personalMeaningJourney/mediaStore';
@@ -64,6 +64,7 @@ const WEB_SOURCE = {
   client: 'web-clipper-simulator',
   url: 'https://www.theatlantic.com/family/archive/2026/08/what-we-keep/697512/',
   title: 'The Atlantic',
+  sourceReferenceId: null,
   domSelector: 'article > p:nth-child(4)',
   paragraphContext: null,
 } as const;
@@ -79,6 +80,25 @@ const LOAN_SENSES = [
     definitionSummary: '借出一笔钱或财物，之后要还',
   },
 ];
+
+const resolvedSense = (sense: typeof LOAN_SENSES[number], scene: string): SensaIntakeSense => ({
+  senseKey: sense.senseKey,
+  semanticSpec: {
+    schemaVersion: 'sensa-sense-semantic-spec-v1',
+    coreMeaningFocus: sense.definitionSummary,
+    prototypeScenes: [{
+      summary: scene,
+      participantRoles: [],
+      states: [],
+      directionOrCausality: null,
+    }],
+    includedCases: [scene],
+    excludedCases: [],
+    neighborContrasts: [],
+    openQuestions: [],
+  },
+  wordingSource: 'learner_authored',
+});
 
 export const IntakeSimulatorModal = ({
   open,
@@ -121,25 +141,27 @@ export const IntakeSimulatorModal = ({
   };
 
   const buildPayload = (input: {
-    modality: SensaIntakePayload['context']['modality'];
+    modality: SensaIntakeContext['modality'];
     textSegment: string | null;
     mediaReferenceIds: string[];
-    source: SensaIntakePayload['context']['source'];
+    languageTag: SensaIntakeContext['languageTag'];
+    source: SensaIntakeContext['source'];
     expression: SensaIntakePayload['expression'];
     sense: SensaIntakePayload['sense'];
   }): SensaIntakePayload => ({
-    contractVersion: 'sensa-intake-v2',
-    intakeOperationId: newUuid(),
+    contractVersion: 'sensa-intake-v3',
+    operationId: newUuid(),
     capturedAt: new Date().toISOString(),
     context: {
       modality: input.modality,
       textSegment: input.textSegment,
       mediaReferenceIds: input.mediaReferenceIds,
+      languageTag: input.languageTag,
       source: input.source,
     },
     expression: input.expression,
     sense: input.sense,
-    acceptanceRequest: input.sense?.resolutionStatus === 'resolved'
+    acceptance: input.sense
       ? { mode: 'learner_direct' }
       : null,
   });
@@ -148,15 +170,13 @@ export const IntakeSimulatorModal = ({
     setBusy(true);
     setError('');
     try {
-      const result = await gateway.ingest(payload.intakeOperationId, payload);
+      const result = await gateway.ingest(payload.operationId, payload);
       if (result.route === 'fast_track') {
         toast('已捕获：秒级直通语义世界');
         onFastTracked(result.personalMeaningId);
       } else if (result.route === 'inbox') {
         toast('已捕获：进入待处理材料盒');
         handleClose();
-      } else {
-        setError(result.reason);
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '摄取失败，请重试。');
@@ -182,6 +202,7 @@ export const IntakeSimulatorModal = ({
       modality: 'text',
       textSegment: text,
       mediaReferenceIds: [],
+      languageTag: 'en',
       source: { ...WEB_SOURCE },
       expression: {
         surfaceForm,
@@ -189,19 +210,11 @@ export const IntakeSimulatorModal = ({
         // fact about this fixture rather than an assumption about the learner.
         languageTag: 'en',
         occurrence: spanStart >= 0
-          ? { kind: 'text_span', start: spanStart, end: spanStart + surfaceForm.length }
+          ? { surfaceForm, locator: { kind: 'text_span', start: spanStart, end: spanStart + surfaceForm.length } }
           : null,
         expressionTypeHint: 'word',
       },
-      sense: sense
-        ? {
-          senseKey: sense.senseKey,
-          resolutionStatus: 'resolved',
-          definitionSummary: sense.definitionSummary,
-          wordingSource: 'learner_authored',
-          candidates: [],
-        }
-        : null,
+      sense: sense ? resolvedSense(sense, text) : null,
     }));
   };
 
@@ -234,6 +247,7 @@ export const IntakeSimulatorModal = ({
       modality: text ? 'mixed' : 'image',
       textSegment: text || null,
       mediaReferenceIds: [photoId],
+      languageTag: text ? 'zh-CN' : null,
       source: null,
       expression: null,
       sense: null,

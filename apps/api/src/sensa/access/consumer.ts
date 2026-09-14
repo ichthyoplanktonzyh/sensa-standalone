@@ -10,6 +10,7 @@ import {beginLookup,finishLookup,readLookup} from '../personal/semantic.js';
 import {semanticResolverFor,type SemanticResolver} from '../personal/semanticResolver.js';
 import {activeMeaningConnection,connectionSelector,readingDailyLimit,registerReadingRoutes,type ReadingCompletion} from '../reading/service.js';
 import {registerLibrarySync} from '../library/sync.js';
+import {registerIntakeDelivery} from '../library/intakeDelivery.js';
 import {ensureAdmission} from './admission.js';
 import {ConsumerError,verifyConsumer,type ConsumerPrincipal,type ConsumerVerifier} from './auth.js';
 import {assertDeletionConfigured,finishAccountDeletion,requestAccountDeletion,type DeleteIdentity} from './deletion.js';
@@ -82,6 +83,13 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
   });
 
   registerLibrarySync(app,async(request,work)=>{
+    const identity=await verify(request);
+    return transaction(async db=>{
+      const current=await account(db,identity,false,false,clock());
+      return work(db,{accountId:current.account_id,installationId:identity.installationId,now:current.now});
+    });
+  });
+  registerIntakeDelivery(app,async(request,work)=>{
     const identity=await verify(request);
     return transaction(async db=>{
       const current=await account(db,identity,false,false,clock());

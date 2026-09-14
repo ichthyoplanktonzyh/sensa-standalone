@@ -142,8 +142,14 @@ LLM 只给出一个 target-language 单词不构成 Sense Proposal。词是 Sens
 ## 4. 泛在 Semantic Intake 与快慢轨
 
 Semantic Intake 是浏览器插件、移动端分享、桌面助手、拍照/语音入口或 learner-authorized Agent
-共同使用的端口无关边界。Context 是 Intake 的必要事实；Expression 与 Sense 可以在捕获时缺失，
-但正式 Personal Semantic World membership 必须在二者补齐并接受后才创建。
+共同使用的端口无关边界。Intake 可以携带 Context、Expression、Sense 和
+Semantic Acceptance 中当前已经拥有的任意事实；缺失的部分进入 Inbox 后再澄清。
+只有 Context–Expression–Sense 闭合且完成有效接受时，才创建正式 Personal Semantic World
+membership。
+
+接收端不判断调用者提供的 Context 在语义上是否“足够”，也不为此再调用模型。
+这个判断由捕获当下的 learner 或 Agent 完成；接收端只做字段存在性、类型、定位关系
+与大小上限等结构校验。“有 Context”与“Context 质量好”不是同一个接收端状态。
 
 主应用内的手动创建只是上述端口之一，不拥有更高的领域地位。正常摄取可以在 learner 阅读、工作、
 交流或使用 Agent 的原位完成，不要求先打开“我的语义世界”页面；任何获授权端口都必须提交同一种
@@ -151,7 +157,7 @@ Semantic Intake 是浏览器插件、移动端分享、桌面助手、拍照/语
 的 Context、交互方式、acceptance provenance 与 capability，不产生另一套 Personal Meaning。
 
 ```text
-外部 Context 捕获
+外部捕获 / Agent 整理
       │
       ├── Context + Expression + teaching-sufficient Sense
       │                    + valid Semantic Acceptance
@@ -159,7 +165,7 @@ Semantic Intake 是浏览器插件、移动端分享、桌面助手、拍照/语
       │                              ▼ fast track
       │                     complete Personal Meaning
       │
-      └── 缺 Expression / Sense / acceptance / 主动延后
+      └── 缺 Context / Expression / Sense / acceptance / 主动延后
                                      │
                                      ▼ slow track
                                Intake Inbox Item
@@ -175,13 +181,23 @@ Semantic Intake 是浏览器插件、移动端分享、桌面助手、拍照/语
 
 快轨不是绕过确认，而是把解析展示和 acceptance 压缩在摄取端完成。第一方界面的保存动作可以构成
 direct acceptance；获授权 Agent 调用正式 commit operation 可以构成 delegated acceptance。二者具有
-相同 membership 效力但必须保留不同 provenance。调用者任意填写的 `userConfirmed=true` 一类字段
-本身不构成权限事实；真正的 authority 来自受认证 principal、授权 grant、operation 语义与审计记录。
+相同 membership 效力但必须保留不同 provenance。用户在当前 Agent 会话中明确要求“帮我保存”
+就是一次 delegated acceptance 的 basis，无需先创建独立 grant id，也无需到 Sensa 再确认一次。
+传输权限由连接或账号认证负责，语义接受由 payload 中的 acceptance provenance 负责，两者不得混为
+一个“是否允许调用 API”的布尔值。
 
 委托授权可以是一次性的，也可以是持续规则。learner 选择持续授权即接受更低摩擦伴随的误收成本；
-系统应提供可撤销 grant、最近写入审计、幂等操作、可恢复移除及合理限额，而不是强迫每次二次确认。
+持续规则应保存可撤销的 authorization reference；一次性明确请求只保存 actor 和 basis。
+系统还应提供最近写入审计、幂等操作、可恢复移除及合理限额，而不是强迫每次二次确认。
 提交到 Personal Semantic World 与提交 Add-to-Learning 是两种独立权限；Agent 获得前者不自动获得
 后者。
+
+远程 Agent 不能访问用户设备时，使用同一 Semantic Intake payload 经账号范围内的
+Remote Intake Delivery 投递。提交不携带由 Agent 指定的 library id；受认证账号与用户已
+登记的本地 library 共同决定目的地。云端只保存幂等邮箱项，本地 authority 取回后用
+同一 operation id 执行快/慢轨，再回传实际结果。`queued` 只代表云端已收到；只有
+`applied` 才代表本地库已经创建 Personal Meaning 或 Intake Inbox Item。这条邮箱链路不是
+云端语义库，也不是备份。
 
 Inbox 是 Personal Semantic World 产品表面的收货区，但在领域上不是稳定 semantic inventory。慢轨
 处理可以使用轻量候选选择或 LLM Sense Construction；在三元组闭合前，中断状态继续留在 Inbox/
@@ -364,7 +380,12 @@ Intake/Construction draft 可以长期保持未确认 Sense 或没有自然的�
 - “我的语义世界”页面是 Personal Semantic World、Inbox、provenance 与 learning projection 的读取/
   控制面，不拥有第二份 semantic state，也不能绕过真实领域 owner 写入；
 - 只有 learner 的直接 Semantic Acceptance 或其显式授权的 delegated acceptance 才能增加 Personal
-  Semantic World membership；delegated acceptance 无需额外二次确认，但必须保存 grant/actor provenance；
+  Semantic World membership；delegated acceptance 无需额外二次确认，但必须保存 actor 与
+  `explicit_user_request | standing_authorization` basis，只有持续授权强制保存 authorization reference；
+- Intake 接收端只以 Context、Expression、Sense 和 acceptance 的结构存在性分流，不用模型
+  二次评估调用方已确认的 Context 充足性或 Sense 质量；
+- 远程投递的 `queued` 与本地提交的 `applied` 是两个事实；不得把邮箱入队、设备间 Sync
+  收敛或尚未验证的上传宣称为本地已保存或可恢复备份；
 - Personal Meaning、Sense 与 Expression 保持不同 identity；
 - Meaning Focus 是可选解析桥梁，不是 Personal Meaning、Alignment 或快轨的必要字段；不得从 Sense
   definition 合成伪 Focus，也不得为快轨伪造零轮 Sense Construction/Proposal 链；
@@ -377,8 +398,9 @@ Intake/Construction draft 可以长期保持未确认 Sense 或没有自然的�
   不得永久写入 Personal Expression Anchor identity；
 - Learner 可以拥有多条 Language Learning Routes，且 Target Language 可以与 Support Language 相同；
   领域模型不从 Route 推导全局母语、唯一 Familiar Language 或 known-language/proficiency 事实；
-- Semantic Intake 必须保留声明、检测或 learner 确认的 Language Observation provenance；未知、暂不支持
-  或不属于 Active Route 的捕获保持未放置状态，不得被强制重标为当前 Target/Support Language；
+- Semantic Intake 必须保留声明、检测或 learner 确认的 Language Observation provenance；未知语言
+  使相关 Expression 事实保持待补齐，暂不支持或不属于 Active Route 不是 Intake 拒绝理由，
+  也不得被强制重标为当前 Target/Support Language；
 - 已开始的 Sense Construction 与其他语言相关操作固定 Pinned Language Context；Active Route Selection
   的改变只影响后续操作；
 - 正式记忆身份是 learner-specific Sense–target-expression 连接，不是 Personal Meaning、
@@ -397,5 +419,6 @@ Context 与 Sense、Expression 的关联。用户可修改 Context，修订不�
 Sense–Expression 身份，不重置学习事实。原始澄清资料与 Context 修订历史保留。
 
 Context 修订不自动替换学习资源。用户明确请求资源更新后，生成使用该次固定的
-Context 版本；失败保留原可用资源，成功产生新 Materialization。已开始的学习
-继续使用其开始时固定的资源，后续学习可使用更新后的资源。
+Context 版本；失败保留原可用资源，成功产生新 Materialization。已开始的学习中，
+已经发生的操作继续固定当时资源；尚未操作的当前步骤和后续步骤可以在目标、路线与课程
+成员关系兼容时使用已发布的最新资源。

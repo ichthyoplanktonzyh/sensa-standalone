@@ -89,6 +89,8 @@ export interface SenseRegistryState {
 export interface CommandReceipt {
   operationId: string;
   command: string;
+  /** Present for commands whose idempotency key must also bind exact input. */
+  requestDigest?: string;
   /** Small stable result payload needed for exact replay. */
   result: Record<string, string | number | boolean | null>;
 }

@@ -7,12 +7,11 @@
  * command, hands the engine the current aggregate plus id/clock ports, applies
  * the returned state, records the CommandReceipt and persists.
  *
- * Dual-track routing:
- * - Fast track: context + located expression + a teaching-sufficient sense +
- *   verified acceptance materialize into a complete PersonalMeaning (Anchor
- *   + Expression + direct Sense Alignment + Binding) in one atomic step.
- * - Slow track: anything missing goes to the Inbox as a draft item waiting for
- *   an expression occurrence, a resolved Sense or Semantic Acceptance.
+ * Dual-track routing is deliberately mechanical:
+ * - Fast track: Context + complete Expression + Sense + Acceptance.
+ * - Slow track: the first missing fact names the Inbox status.
+ * The producer (a person or model) owns semantic sufficiency. This receiver
+ * never scores the Context, re-runs a model or second-guesses the supplied Sense.
  */
 
 import type {
@@ -27,18 +26,14 @@ import type {
   SensaPersonalMeaningRevisionSnapshot,
   SensaSemanticAcceptanceAuthority,
   SensaSemanticAcceptanceFact,
-  SensaSenseSemanticSpec,
 } from '@sensa/contracts/sensa';
-import { sensaLanguageRolesForTag } from '@sensa/contracts/sensa';
 import { digestOf } from './digest';
-import type { CommandLanguages } from './ports';
 import type { JourneyState, MeaningJourneyRecord } from './store';
 
 export const LOCAL_SEMANTIC_POLICY_VERSION = 'sensa-semantic-policy-local-v1';
 
 const PSW = 'sensa-personal-semantic-world-v2' as const;
 const REG = 'sensa-semantic-registry-v1' as const;
-const SPEC_SCHEMA = 'sensa-sense-semantic-spec-v1' as const;
 const LEARNER_USER_ID = 'sensa-local-learner';
 
 type PersonalProvenanceKind =
@@ -47,17 +42,11 @@ type PersonalProvenanceKind =
 export interface IntakeEnginePorts {
   newId(): string;
   nowIso(): string;
-  /** The pair this operation is about, pinned once by the gateway before any
-   * route decision. A captured expression states its own language; whether that
-   * language sits on a side of this learner's boundary is a question only the
-   * profile can answer, and this engine performs no IO of its own. */
-  languages: CommandLanguages;
 }
 
 export type IntakeRouteDecision =
   | { route: 'fast_track' }
-  | { route: 'inbox'; status: SensaIntakeItemStatus }
-  | { route: 'rejected'; reason: string };
+  | { route: 'inbox'; status: SensaIntakeItemStatus };
 
 export interface FastTrackOutcome {
   nextState: JourneyState;
@@ -87,69 +76,28 @@ const truncateWithEllipsis = (text: string, max: number): string =>
 const normalizedForm = (surfaceForm: string): string =>
   surfaceForm.trim().toLocaleLowerCase();
 
-const hasLocatedExpression = (payload: SensaIntakePayload): boolean => {
+const hasCompleteExpression = (payload: SensaIntakePayload): boolean => {
   const expression = payload.expression;
-  const occurrence = expression?.occurrence;
-  if (!expression || !occurrence) return false;
-  if (occurrence.kind === 'media_region') {
-    return payload.context.mediaReferenceIds.includes(occurrence.mediaReferenceId);
-  }
-  const text = payload.context.textSegment;
-  if (!text || occurrence.end > text.length) return false;
-  return normalizedForm(text.slice(occurrence.start, occurrence.end))
-    === normalizedForm(expression.surfaceForm);
+  return Boolean(expression?.languageTag && expression.occurrence);
 };
 
 /**
- * Mechanical route decision. Fast track needs all three elements with an
- * expression whose language this learner's boundary can place, a resolved sense
- * and a verified acceptance request. The captured text or referenced media
- * becomes the prototype scene. Pure-audio payloads are rejected for this
- * milestone: the contract keeps the enum, the local media store has no audio
- * support yet.
- *
- * The language comes before the sense because it is the more fundamental gap: a
- * resolved sense for material in a language this operation is not about still
- * cannot be written, so reporting `pending_sense` there would name the wrong
- * thing to fix.
+ * Presence is the entire route decision. Shape contradictions are contract
+ * errors before this function runs; semantic adequacy is not a receiver concern.
  */
-export const evaluateIntakeRoute = (
-  payload: SensaIntakePayload,
-  languages: CommandLanguages,
-): IntakeRouteDecision => {
-  if (payload.context.modality === 'audio') {
-    return { route: 'rejected', reason: '本地原型暂不支持纯音频材料。' };
-  }
-  const text = payload.context.textSegment?.trim() ?? '';
-  if (!text && payload.context.mediaReferenceIds.length === 0) {
-    return { route: 'rejected', reason: '摄取材料缺少可用的上下文内容。' };
-  }
-  const hasExpression = hasLocatedExpression(payload);
-  const hasPlacedLanguage = sensaLanguageRolesForTag(
-    payload.expression?.languageTag ?? null,
-    languages,
-  ).length>0;
-  const hasResolvedSense =
-    payload.sense != null
-    && payload.sense.resolutionStatus === 'resolved'
-    && payload.sense.definitionSummary.trim().length > 0;
-  if (hasExpression && hasPlacedLanguage && hasResolvedSense && payload.acceptanceRequest) {
-    return { route: 'fast_track' };
-  }
-  if (!hasExpression) return { route: 'inbox', status: 'pending_expression' };
-  if (!hasPlacedLanguage) return { route: 'inbox', status: 'pending_language' };
-  if (!hasResolvedSense) return { route: 'inbox', status: 'pending_sense' };
-  return {
-    route: 'inbox',
-    status: 'pending_acceptance',
-  };
+export const evaluateIntakeRoute = (payload: SensaIntakePayload): IntakeRouteDecision => {
+  if (!payload.context) return { route: 'inbox', status: 'pending_context' };
+  if (!hasCompleteExpression(payload)) return { route: 'inbox', status: 'pending_expression' };
+  if (!payload.sense) return { route: 'inbox', status: 'pending_sense' };
+  if (!payload.acceptance) return { route: 'inbox', status: 'pending_acceptance' };
+  return { route: 'fast_track' };
 };
 
 /** One-line list summary for the Inbox card. */
 export const summarizeIntakeContext = (payload: SensaIntakePayload): string => {
-  const text = payload.context.textSegment?.trim() ?? '';
+  const text = payload.context?.textSegment?.trim() ?? '';
   if (text) return truncateWithEllipsis(text, 42);
-  if (payload.context.mediaReferenceIds.length > 0) return '（图片材料）';
+  if (payload.context?.mediaReferenceIds.length) return '（媒体材料）';
   return '（空白材料）';
 };
 
@@ -158,14 +106,13 @@ export const createInboxItem = (
   payload: SensaIntakePayload,
   intakeId: string,
   nowIso: string,
-  languages: CommandLanguages,
 ): SensaIntakeItem => {
-  const decision = evaluateIntakeRoute(payload, languages);
+  const decision = evaluateIntakeRoute(payload);
   if (decision.route !== 'inbox') {
     throw new Error('这条摄取材料不应该进入待处理材料盒。');
   }
   return {
-    contractVersion: 'sensa-intake-v2',
+    contractVersion: 'sensa-intake-v3',
     intakeId,
     status: decision.status,
     summaryView: summarizeIntakeContext(payload),
@@ -208,8 +155,8 @@ export const resolveInboxItemWithSense = (
   if (!item) throw new Error('找不到这条待处理材料。');
   const payload: SensaIntakePayload = {
     ...item.payload,
-    sense: { ...input.sense, resolutionStatus: 'resolved' },
-    acceptanceRequest: { mode: 'learner_direct' },
+    sense: input.sense,
+    acceptance: { mode: 'learner_direct' },
   };
   const outcome = executeFastTrack(
     state,
@@ -242,17 +189,19 @@ export const executeFastTrack = (
   },
   ports: IntakeEnginePorts,
 ): FastTrackOutcome => {
-  const decision = evaluateIntakeRoute(input.payload, ports.languages);
+  const decision = evaluateIntakeRoute(input.payload);
   if (decision.route !== 'fast_track') {
     throw new Error('这条摄取材料不满足快轨条件。');
   }
   const { payload, operationId, authority } = input;
+  const context = payload.context!;
   const sense = payload.sense!;
   const expression = payload.expression!;
-  const textSegment = payload.context.textSegment?.trim() ?? '';
+  const occurrence = expression.occurrence!;
+  const textSegment = context.textSegment?.trim() ?? '';
   const contextSummary = textSegment
-    || payload.context.source?.title
-    || '图像材料';
+    || context.source?.title
+    || '媒体材料';
   const now = ports.nowIso();
 
   // Provenance mapping is mechanical: the wording source travels unchanged
@@ -267,19 +216,16 @@ export const executeFastTrack = (
   const semanticAnchorId = ports.newId();
   const semanticAnchorRevisionId = ports.newId();
   const contextAnchorProvenanceKind: PersonalProvenanceKind =
-    payload.context.source ? 'imported' : 'learner_authored';
+    context.source ? 'imported' : 'learner_authored';
   const structuredPayload: Record<string, unknown> = {
-    mediaReferenceIds: [...payload.context.mediaReferenceIds],
-    source: payload.context.source,
+    mediaReferenceIds: [...context.mediaReferenceIds],
+    source: context.source,
+    languageTag: context.languageTag,
+    occurrenceSurfaceForm: occurrence.surfaceForm,
   };
 
-  // 2) Expression Anchor for the captured word. The capture states the exact
-  //    language it is in. A tag this operation cannot place never
-  //    reaches here — `evaluateIntakeRoute` sends it to the Inbox as
-  //    `pending_language` — so the throw is a guard, not a fallback.
-  if (sensaLanguageRolesForTag(expression.languageTag,ports.languages).length===0) {
-    throw new Error('这条摄取材料的语言不在本次操作的语对中。');
-  }
+  // 2) Expression Anchor. The absolute language comes from the producer; the
+  // receiver does not compare it with a current learning Route.
   const languageTag = expression.languageTag!;
   const expressionType: SensaExpressionType = expression.expressionTypeHint ?? 'word';
   const expressionAnchorId = ports.newId();
@@ -289,29 +235,11 @@ export const executeFastTrack = (
   //    resolution. No Focus, Construction or Proposal is invented.
   const semanticAcceptanceId = ports.newId();
 
-  const buildSemanticSpec = (): SensaSenseSemanticSpec => ({
-    schemaVersion: SPEC_SCHEMA,
-    coreMeaningFocus: sense.definitionSummary.trim(),
-    // The captured context sentence becomes the single prototype scene.
-    prototypeScenes: [
-      {
-        summary: contextSummary,
-        participantRoles: [],
-        states: [],
-        directionOrCausality: null,
-      },
-    ],
-    includedCases: [contextSummary],
-    excludedCases: [],
-    neighborContrasts: [],
-    openQuestions: [],
-  });
-
   // 4) Sense resolution: reuse an existing registry Sense by key first; only
   //    register a new learner-confirmed SenseVersion when nothing matches.
   const senseKey =
     sense.senseKey?.trim()
-    || `intake-${digestOf(sense.definitionSummary.trim()).slice(0, 24)}`;
+    || `intake-${digestOf(sense.semanticSpec).slice(0, 24)}`;
   const existingSense = state.registry.senses.find(
     (candidate) => candidate.senseKey === senseKey,
   );
@@ -349,7 +277,7 @@ export const executeFastTrack = (
           versionNumber: 1,
           origin: 'learner_confirmed',
           semanticPolicyVersion: LOCAL_SEMANTIC_POLICY_VERSION,
-          semanticSpec: buildSemanticSpec(),
+          semanticSpec: sense.semanticSpec,
           provenance: {
             sourceKind: 'learner_confirmed',
             sourceReferenceIds: [semanticAcceptanceId],
@@ -377,7 +305,7 @@ export const executeFastTrack = (
     surfaceForm: expression.surfaceForm.trim(),
     normalizedForm: normalizedForm(expression.surfaceForm),
     contextAnchorRevisionId: semanticAnchorRevisionId,
-    occurrence: expression.occurrence,
+    occurrence: occurrence.locator,
     provenanceKind,
     // The accepted tuple is tracked by the Semantic Acceptance fact.
     verificationStatus: 'learner_confirmed',
@@ -436,8 +364,8 @@ export const executeFastTrack = (
         personalSemanticAnchorRevisionId: semanticAnchorRevisionId,
         personalSemanticAnchorId: semanticAnchorId,
         revision: 1,
-        anchorKind: textSegment ? 'text' : 'image',
-        languageTag: null,
+        anchorKind: textSegment ? 'text' : context.modality === 'audio' ? 'audio' : 'image',
+        languageTag: context.languageTag,
         bodyText: textSegment || null,
         personalMediaObjectId: null,
         structuredPayload,
@@ -479,7 +407,7 @@ export const executeFastTrack = (
         authority,
         personalSemanticAnchorRevisionId: semanticAnchorRevisionId,
         personalExpressionAnchorRevisionId: expressionAnchorRevisionId,
-        expressionOccurrence: expression.occurrence!,
+        expressionOccurrence: occurrence.locator,
         resolution,
         senseId,
         senseVersionId,
@@ -489,10 +417,10 @@ export const executeFastTrack = (
             : sense.wordingSource === 'llm_suggested'
               ? 'language_model'
               : 'external_tool',
-          provider: payload.context.source?.client ?? 'sensa-local-intake',
+          provider: context.source?.client ?? 'sensa-local-intake',
           model: null,
           policyVersion: LOCAL_SEMANTIC_POLICY_VERSION,
-          sourceReferenceIds: [payload.intakeOperationId],
+          sourceReferenceIds: [payload.operationId],
         },
         acceptedAt: now,
       },
