@@ -58,8 +58,6 @@ async function nativeIntakeRequest(message:unknown){
 async function webConnect(request:SensaBridgeRequestOf<'web-connect-prepare'|'web-connect-complete'>,sender:chrome.runtime.MessageSender){
  return locked(async()=>{
   const store=await load(),accountId=request.accountId,libraryId=request.libraryId;
-  const interactive=(await chrome.storage.session.get('sensaInteractiveLogin')).sensaInteractiveLogin as {state?:string;expires?:number}|null;
-  if(interactive?.expires&&interactive.expires>Date.now())return {paused:true};
   if((await chrome.storage.local.get('sensaAutoConnectPaused')).sensaAutoConnectPaused)return {paused:true};
   const old=store.accounts[accountId];
   if(store.active&&store.active!==accountId)throw new Error('account_mismatch');
@@ -106,33 +104,24 @@ async function reconnectWeb(discardForAccount?:string){return locked(async()=>{
  // Account-owned queues and credentials stay under their original account.
 });}
 async function loginThroughWeb(){
- const before=await load(),previous=before.active?before.accounts[before.active]:Object.values(before.accounts)[0];
- const installationId=previous?.installationId??crypto.randomUUID();
  await reconnectWeb();
- const {verifier,authorization}=await pkceAuthorization(installationId);
- await chrome.storage.session.set({sensaInteractiveLogin:{state:authorization.state,expires:Date.now()+120000}});
- try{
-  const destination=new URL('/profile',webUrl);
-  destination.searchParams.set('extension','connect');
-  destination.searchParams.set('installationId',authorization.installationId);
-  destination.searchParams.set('state',authorization.state);
-  destination.searchParams.set('challenge',authorization.challenge);
-  destination.searchParams.set('redirectUri',authorization.redirectUri);
-  let returned:string|undefined;
-  try{returned=await chrome.identity.launchWebAuthFlow({url:destination.href,interactive:true});}
-  catch{throw new Error('authorization_cancelled');}
-  if(!returned)throw new Error('authorization_cancelled');
-  const callback=new URL(returned);
-  if(callback.origin+callback.pathname!==authorization.redirectUri||callback.searchParams.get('state')!==authorization.state)throw new Error('authorization_invalid');
-  const code=callback.searchParams.get('code'),libraryId=z.string().uuid().parse(callback.searchParams.get('libraryId'));
-  if(!code)throw new Error('authorization_invalid');
-  const exchange:SensaExtensionExchange={code,installationId,state:authorization.state,verifier};
-  const credential=sensaExtensionCredentialSchema.parse(await apiRequest('/sensa/extension/exchange',exchange));
-  await locked(async()=>{const store=await load(),old=store.accounts[credential.accountId];store.accounts[credential.accountId]={...old,accountId:credential.accountId,installationId,webLibraryId:libraryId,token:credential.token,expiresAt:credential.expiresAt,queue:old?.queue??[],recent:old?.recent??[],savedOperations:old?.savedOperations??{}};store.active=credential.accountId;await persist(store);});
- }finally{
-  const current=(await chrome.storage.session.get('sensaInteractiveLogin')).sensaInteractiveLogin as {state?:string}|null;
-  if(current?.state===authorization.state)await chrome.storage.session.set({sensaInteractiveLogin:null});
+ // The user's Sensa session lives in the ordinary Web origin. Chrome's identity
+ // flow runs in an auth web view, which cannot be treated as that already-open
+ // product tab. Open the real Web application and let its existing page bridge
+ // perform the same tab-bound PKCE exchange used by automatic reconnect.
+ const pattern=new URL('/*',webUrl).href;
+ const openTabs=await chrome.tabs.query({url:pattern});
+ const existing=openTabs.find(tab=>tab.active&&tab.id)??openTabs.find(tab=>tab.id);
+ if(existing?.id){
+  await chrome.storage.session.set({sensaExplicitReconnect:{tabId:existing.id,expires:Date.now()+600000}});
+  await chrome.tabs.update(existing.id,{active:true});
+  await chrome.tabs.reload(existing.id);
+  return;
  }
+ const tab=await chrome.tabs.create({url:'about:blank'});
+ if(!tab.id)throw new Error('authorization_cancelled');
+ await chrome.storage.session.set({sensaExplicitReconnect:{tabId:tab.id,expires:Date.now()+600000}});
+ await chrome.tabs.update(tab.id,{url:new URL('/profile',webUrl).href});
 }
 async function activeScope(){return (await load()).active;}
 

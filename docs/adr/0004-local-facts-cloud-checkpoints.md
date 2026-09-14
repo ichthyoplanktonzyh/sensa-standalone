@@ -16,9 +16,11 @@ status: accepted
 同步以本机内容版本和已确认基线判断是否仍有待传输事实，不能用一个可被并发写入错误清除的布尔值。
 同步期间发生的新提交必须留给后续 Checkpoint。
 
-云端 Checkpoint 保存当前领域事实、不可改写的学习事件和跨设备重试所需的紧凑幂等回执。仅用于本机
-命令返回的完整结果不作为永久云端历史反复传输；相同媒体按内容摘要复用传输块。压缩传输记录不得
-删除或重写 Personal Library Fact 或 Learning Event。
+云端 Checkpoint 保存当前领域事实和不可改写的学习事件，不保存 Device Operation Ledger。命令输入、
+返回值和本机提交时间只服务当前设备上的重试，不作为永久云端历史；Learning Event 必须由自身事实
+完成验证和重放。Remote Intake 的跨设备防重从已经同步的 canonical Intake 领域事实重建本地回执，
+并由独立邮箱 Receipt 确认投递。相同媒体按内容摘要复用传输块；传输优化不得删除或重写 Personal
+Library Fact 或 Learning Event。
 
 Remote Intake Delivery 是独立邮箱；它只等待本机账号库身份稳定，不能自行启动整库同步，也不能因为
 一次空邮箱或网络失败显示“内容仍在队列”之类未经事实支持的全局提示。

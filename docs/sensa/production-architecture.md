@@ -90,8 +90,10 @@ Focus 可选；快慢轨都不降低 Context–Sense–Expression 的完整性�
 Sync 的产品单位是 Cloud Checkpoint：所有操作先提交本机事实，云端在静置、连续使用上限、学习会话
 完成、页面进入后台、重新联网或用户主动要求时批量收敛。账号接通后的首次拉取在后台执行，不阻塞
 应用外壳和已有本机资料；普通前台恢复只在云端检查过期时拉取。同步使用本机内容版本与已确认基线，
-不能用一个布尔 dirty 标记吞掉同步期间的新提交。完整本机命令返回值不是云端历史；传输层保存紧凑
-幂等回执，并让相同媒体内容复用同一组摘要块。Learning Event 与其原始 operation input 仍不可改写。
+不能用一个布尔 dirty 标记吞掉同步期间的新提交。Device Operation Ledger 只负责当前设备上的命令
+幂等和原结果返回，不是 Personal Library Fact，也不进入 Cloud Checkpoint。跨设备 Intake 防重由已保存
+的 Intake 领域事实和 Remote Intake Delivery Receipt 共同完成；Learning Event 自身保存不可改写的
+动作、解释与结算事实，不依赖原始 operation input 才能恢复。相同媒体内容复用同一组摘要块。
 
 ### 领域层职责
 

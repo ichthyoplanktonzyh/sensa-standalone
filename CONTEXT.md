@@ -881,6 +881,11 @@ A durable, provenance-bearing record of accepted content, a learner decision or 
 learning event and its pinned interpretation. Reconciliation preserves its history;
 it is distinct from a pending command and the current projection of the library.
 
+**Device Operation Ledger（设备操作账本）**:
+A device-local record used to make command retries idempotent and return the original
+same-device result. It is execution bookkeeping rather than a Personal Library Fact,
+so it does not enter Cloud Checkpoints or establish cross-device learning history.
+
 **Learning Reconciliation Decision（学习合并裁决）**:
 An auditable, versioned determination of how concurrent learning histories contribute
 to the effective learning state and schedule. It preserves the original histories
@@ -895,7 +900,8 @@ the local library, and convergence alone is not a historical backup guarantee.
 An account-scoped, eventually consistent copy of locally committed Personal Library
 Facts for continuing on another device. A Cloud Checkpoint is produced after meaningful
 local milestones or bounded inactivity rather than acknowledging each local operation;
-it is neither the local commit nor an immutable Account Backup Recovery Point.
+it excludes the Device Operation Ledger and is neither the local commit nor an immutable
+Account Backup Recovery Point.
 
 **Remote Intake Delivery**:
 An account-scoped durable mailbox that carries one canonical Semantic Intake from a

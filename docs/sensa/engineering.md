@@ -36,9 +36,12 @@ Sensa 标签页会提示先关闭旧页面，而不是打开竞争连接。UI �
 学习运行时只在 Web 本机执行：目标选择、Protocol/Policy、步骤、评价、Completion、Memory Outcome 与
 FSRS 都由本地领域事务结算。Hono/Edge 不创建或推进学习 Run，也不重新计算从云同步取回的学习事实。
 
-普通账号云同步以本机已提交记录为输入。云端保存版本化清单和按内容寻址的数据块；下载按响应字节预算分页，客户端消费服务端返回的 deferred 列表。Learning Event 及其引用的原始 operation input
-不可被重写；只服务于本机命令返回的 operation result 在云端规范化为紧凑回执。同一份 base64 媒体
-按内容边界切块，使重复引用复用摘要块，而不是随每条操作结果重复上传。
+普通账号云同步以本机已提交的 Personal Library Facts 为输入。云端保存版本化清单和按内容寻址的数据块；
+下载按响应字节预算分页，客户端消费服务端返回的 deferred 列表。`operations` 是 Device Operation Ledger，
+只用于同一设备上的命令幂等，不进入同步清单；Learning Event 直接以自身 Action、Materialization、
+Evaluation 与 Transition 数据完成不可改写验证和重放。Remote Intake 重投可从 Draft 保存的 canonical
+Intake 重建本地结果，不需要同步完整命令输入或返回值。同一份 base64 媒体按内容边界切块，使重复引用
+复用摘要块。
 新 Checkpoint 成功提交后，服务端只回收旧清单曾引用且新清单不再引用的块；另一设备尚未提交的上传
 不在这次回收范围内。
 

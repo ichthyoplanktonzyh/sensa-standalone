@@ -33,7 +33,7 @@ const RESTORE_BUDGET_MS=90000;
 /** The fixture library only has to be heavy enough that per-block requests are fatal. */
 const MINIMUM_PUBLISHED_BLOCKS=8;
 const DRAFTS=14,IMAGES_PER_DRAFT=2;
-const MINIMUM_LEGACY_BYTES=12*1024*1024;
+const MINIMUM_LEGACY_BYTES=4*1024*1024;
 const SUBJECT='8b1f4c1e-9d5a-4c34-9c3a-9f1d0d1a1c11';
 const ACCOUNT='4f2a7b60-1c6e-4a52-8f0b-6d3c2a9e5b21';
 const REMOTE_OPERATION='45466b13-66db-4d57-a393-bc2946873152';
@@ -59,12 +59,13 @@ const cloudFor=(account:string):Cloud=>{const existing=clouds.get(account);if(ex
  *  Restoring it must still cost a byte-bounded number of round trips. */
 const repackCloud=(cloud:Cloud,chars:number)=>{
  if(!cloud.manifest)throw Error('nothing to repack');
- const manifest=JSON.parse(cloud.blocks.get(cloud.manifest[0]!)!) as {rows:{table:string;key:string;blocks:string[]}[]};
+ const manifest=JSON.parse(cloud.blocks.get(cloud.manifest[0]!)!) as {version:number;rows:{table:string;key:string;blocks:string[]}[]};
+ if(manifest.version!==2||manifest.rows.some(row=>row.table==='operations'))throw Error('current Checkpoint carried the device operation ledger');
  const added=new Map<string,string>(),rows:{table:string;key:string;blocks:string[]}[]=[];
  for(const [rowIndex,row] of manifest.rows.entries()){
   const text=row.blocks.map(hash=>cloud.blocks.get(hash)!).join(''),refs:string[]=[];
-  // Historical operation snapshots placed the same media after different amounts of
-  // growing JSON, so their fixed-size chunk alignment drifted from row to row.
+  // Historical row-by-row layouts placed the same embedded media after different
+  // amounts of JSON, so their fixed-size chunk alignment drifted from row to row.
   const rowChars=chars-(rowIndex%29)*211;
   for(let at=0;at<text.length;at+=rowChars){const part=text.slice(at,at+rowChars),hash=digest(part);added.set(hash,part);refs.push(hash);}
   rows.push({table:row.table,key:row.key,blocks:refs.length?refs:[digest('')]});

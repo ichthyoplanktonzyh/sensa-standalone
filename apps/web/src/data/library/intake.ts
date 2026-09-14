@@ -1,4 +1,4 @@
-import {canonicalConsumerJson,localIntakeRequestSchema,type LocalIntakeReceipt,type LocalIntakeRequest} from '@sensa/contracts/sensa';
+import {canonicalConsumerJson,localIntakeReceiptSchema,localIntakeRequestSchema,type LocalIntakeReceipt,type LocalIntakeRequest} from '@sensa/contracts/sensa';
 import {command,readLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
 import type {LocalDraft} from './drafts';
 import type {LocalMeaning,TeacherSession} from './teacher';
@@ -32,7 +32,15 @@ export async function commitWebIntake(tx:LibraryTransaction,accountId:string,req
 }
 export async function receiveWebIntake(accountId:string,raw:unknown){
  const request=localIntakeRequestSchema.parse(raw);
- await readLibrary(tx=>authorize(tx,accountId,request.libraryId));
+ if(request.resolution?.kind==='local_binding')throw new Error('unsupported_resolution');
  const requestDigest=await hash(request),identityDigest=request.resolution?.kind==='proposal'?await hash({semanticSpec:request.resolution.proposal.semanticSpec,expression:request.resolution.proposal.expression}):null;
+ const existing=await readLibrary(async tx=>{await authorize(tx,accountId,request.libraryId);return {draft:await tx.get<LocalDraft>('drafts',request.operationId),operation:await tx.get('operations',request.operationId)};});
+ // A Cloud Checkpoint restores the canonical Intake draft, not the source device's
+ // command ledger. Derive the acknowledgement from that domain fact when a remote
+ // delivery is retried after restore; a changed payload remains a hard conflict.
+ if(existing.draft&&!existing.operation){
+  if(!existing.draft.intake||canonicalConsumerJson(existing.draft.intake)!==canonicalConsumerJson(request))throw new Error('operation_conflict');
+  return localIntakeReceiptSchema.parse({version:'sensa-intake-v1',libraryId:request.libraryId,clientId:request.clientId,operationId:request.operationId,requestDigest,status:request.resolution?.kind==='proposal'&&request.acceptance?'confirmed':'pending',entityId:request.operationId,committedAt:existing.draft.updatedAt});
+ }
  return command({id:request.operationId,kind:'intake.receive',input:{accountId,request}},tx=>commitWebIntake(tx,accountId,request,requestDigest,identityDigest));
 }

@@ -10,11 +10,6 @@ export function registerLibrarySync(app:Hono,access:Access){
  app.use('/sensa/library-sync/*',async(c,next)=>{c.header('Cache-Control','no-store');await next();});
  const use:Access=(request,work)=>access(request,(db,a)=>{if(a.installationId)throw new ConsumerError(403,'web_authorization_required');return work(db,a);});
  const current=async(db:DatabaseExecutor,id:string)=>{await db.query('INSERT INTO sensa_consumer.library_cloud(account_id) VALUES($1) ON CONFLICT DO NOTHING',[id]);return (await db.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1 FOR UPDATE',[id])).rows[0]!;};
- /** Published history is compared by stored content, so a client may repack its blocks. */
- const wireFields=(text:string):Map<string,unknown>|null=>{try{const value=JSON.parse(text);if(!Array.isArray(value)||value[0]!=='object'||!Array.isArray(value[1]))return null;const fields=new Map<string,unknown>();for(const pair of value[1]){if(!Array.isArray(pair)||pair.length!==2||typeof pair[0]!=='string'||fields.has(pair[0]))return null;fields.set(pair[0],pair[1]);}return fields;}catch{return null;}};
- /** Only the redundant result may be replaced by a compact receipt. The original
-  * canonical operation input and commit time remain immutable. */
- const validOperationCompaction=(before:string,after:string):boolean=>{const old=wireFields(before),next=wireFields(after);if(!old||!next||!old.has('input')||!old.has('committedAt')||!next.has('input')||!next.has('committedAt'))return false;const encodedInput=old.get('input');if(!Array.isArray(encodedInput)||encodedInput[0]!=='string'||typeof encodedInput[1]!=='string')return false;try{if(['library.create','intake.receive'].includes(JSON.parse(encodedInput[1]).kind))return false;}catch{return false;}return JSON.stringify(encodedInput)===JSON.stringify(next.get('input'))&&JSON.stringify(old.get('committedAt'))===JSON.stringify(next.get('committedAt'))&&JSON.stringify(next.get('result'))==='["null"]'&&JSON.stringify(next.get('cloudReceipt'))==='["boolean",true]';};
  async function manifest(db:DatabaseExecutor,id:string,refs:string[]):Promise<LibrarySyncManifest>{
   const blocks=(await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[id,refs])).rows;
   const byHash=new Map(blocks.map(b=>[b.hash,b.data]));if(refs.some(r=>!byHash.has(r)))throw conflict('library_sync_missing_block');
@@ -64,9 +59,10 @@ export function registerLibrarySync(app:Hono,access:Access){
   let retiredRefs:string[]=[];
   if(head.manifest){const old=await manifest(db,a.accountId,head.manifest);if(old.libraryId!==next.libraryId||old.learnerId!==next.learnerId)throw conflict('library_sync_identity');
    const byKey=new Map(next.rows.map(r=>[JSON.stringify([r.table,r.key]),r]));
-   // Load all protected history blocks once. A real library can contain hundreds of
-   // operations, so per-row round trips would make a safe compaction unreasonably slow.
-   const protectedRows=old.rows.filter(row=>row.table==='learningEvents'||row.table==='operations').map(row=>{const replacement=byKey.get(JSON.stringify([row.table,row.key]));if(!replacement)throw conflict('library_sync_history');return {row,replacement};});
+   // Learning Events are durable Personal Library Facts and therefore append-only.
+   // A version 1 head may also contain the retired device operation ledger; its
+   // absence from a version 2 replacement is an intentional one-way migration.
+   const protectedRows=old.rows.filter(row=>row.table==='learningEvents').map(row=>{const replacement=byKey.get(JSON.stringify([row.table,row.key]));if(!replacement)throw conflict('library_sync_history');return {row,replacement};});
    const changedProtected=protectedRows.filter(({row,replacement})=>JSON.stringify(row.blocks)!==JSON.stringify(replacement.blocks));
    const historyRefs=[...new Set(changedProtected.flatMap(({row,replacement})=>[...row.blocks,...replacement.blocks]))],historyBlocks=new Map<string,string>();
    if(historyRefs.length)for(const block of (await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,historyRefs])).rows)historyBlocks.set(block.hash as string,block.data as string);
@@ -74,10 +70,8 @@ export function registerLibrarySync(app:Hono,access:Access){
    const historyText=(refs:string[])=>refs.map(ref=>historyBlocks.get(ref)!).join('');
    // Learning facts are never silently deleted or rewritten by snapshot publication.
    for(const {row,replacement} of changedProtected){
-    // Repacking identical content is transport-only. Operation results may additionally
-    // shrink to a receipt while the original input remains immutable.
     const before=historyText(row.blocks),after=historyText(replacement.blocks);
-    if(hash(before)!==hash(after)&&(row.table!=='operations'||!validOperationCompaction(before,after)))throw conflict('library_sync_history');}
+    if(hash(before)!==hash(after))throw conflict('library_sync_history');}
    const nextRefs=new Set([...input.manifest,...refs]);retiredRefs=[...new Set([...head.manifest,...old.rows.flatMap(row=>row.blocks)])].filter(ref=>!nextRefs.has(ref));
   }
   const revision=head.revision+1;

@@ -74,7 +74,7 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
      await bridge('web-intake-ack',accountId,library.id,controller.signal,{receipt});
     }
     setError('');setReconnectNeeded(false);
-   }catch(e){if(!controller.signal.aborted&&!(e instanceof Error&&['extension_unavailable','authentication_required'].includes(e.message))){const code=e instanceof Error?e.message:'';const mismatch=['account_mismatch','library_mismatch'].includes(code);setReconnectNeeded(mismatch);setError(code==='library_mismatch'?localFlowText('extensionLibraryMismatch'):code==='account_mismatch'?localFlowText('extensionAccountMismatch'):localFlowText('extensionReconnectFailed'));}}
+   }catch(e){if(!controller.signal.aborted){const code=e instanceof Error?e.message:'';const mismatch=['account_mismatch','library_mismatch'].includes(code);if(mismatch){setReconnectNeeded(true);setError(code==='library_mismatch'?localFlowText('extensionLibraryMismatch'):localFlowText('extensionAccountMismatch'));}}}
    finally{running=false;}
   };
   void receive();const stop=observeLibrary(()=>void receive());const timer=setInterval(()=>void receive(),5000);return()=>{controller.abort();clearInterval(timer);stop();};

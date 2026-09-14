@@ -1141,8 +1141,10 @@ Memory Outcome、Scheduling Decision 及相应投影。断网不会降低这些�
 必须先通过摘要、引用与可重放性校验，再由本地库在提交时合并；同步记账不得触发第二次业务结算。
 本机提交是当前设备上的保存结果；账号副本是延迟形成的 Cloud Checkpoint，不参与逐操作确认。
 Checkpoint 以本机内容版本与已确认基线判断待同步事实，同步期间产生的新版本必须保留到下一次传输。
-操作日志中的完整返回值不是学习事实；云端只需保留跨设备重试需要的紧凑回执，但不得压缩或改写
-Learning Event 及其引用的原始 operation input。
+Device Operation Ledger 中的命令输入和返回值都不是学习事实，只留在产生它们的设备上。Learning Event
+必须自身携带验证与重放所需的 Action、时间、Materialization、Evaluation 和 Transition 引用，云端不得
+压缩或改写它，也不得要求原始 operation input 才能验证或恢复。跨设备 Intake 重试从已保存的 Intake
+领域事实重建结果，并由独立 Remote Intake Delivery Receipt 保证邮箱投递幂等。
 
 Curriculum、Personal Content、正式 Learning Runtime 与 Free Practice 使用各自的 identity、revision、
 tombstone 和幂等规则。界面、模型输出、导入器与同步适配器只能提交各模块允许的 command/fact，不能

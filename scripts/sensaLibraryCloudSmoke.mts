@@ -141,20 +141,21 @@ try{
  const priorRevision=head.revision;
  const repacked=await publish(JSON.parse(JSON.stringify(head.manifest)),priorRevision,8192);assert.equal(repacked.status,200,'repacking published history must be accepted');
  head=await readHead();assert.equal(head.revision,priorRevision+1);await refresh();
- // A deployed pre-checkpoint client stored full, growing command results. Simulate one
- // such published operation, then verify the new client can converge it to a compact
- // receipt without gaining permission to change the canonical input.
+ assert.equal(head.manifest.version,2);assert.equal(head.manifest.rows.some((row:any)=>row.table==='operations'),false,'new Checkpoints must not contain the device ledger');
+ // A deployed version 1 client stored the complete, growing command ledger. Simulate
+ // such a head, then verify one current sync drops the row and retires its blocks while
+ // leaving each browser's local ledger untouched.
  const fullOperation=await a.evaluate(async()=>{const c=(window as any).core,rows=await c.readLibrary((tx:any)=>tx.entries('operations'));const row=rows.find((candidate:any)=>JSON.parse(candidate.value.input).kind==='learning.act');if(!row)throw Error('learning operation missing');return {key:row.key,value:c.encodeBackupValue(row.value)};});
- const legacyManifest=JSON.parse(JSON.stringify(head.manifest)),legacyOperation=legacyManifest.rows.find((row:any)=>row.table==='operations'&&row.key===fullOperation.key);assert(legacyOperation,'published learning operation missing');
+ const legacyManifest={...JSON.parse(JSON.stringify(head.manifest)),version:1};
  const staged=new Map<string,string>();
  const stage=(text:string)=>{const refs:string[]=[];for(let at=0;at<text.length;at+=librarySyncBlockChars){const data=text.slice(at,at+librarySyncBlockChars),key=createHash('sha256').update(data).digest('hex');staged.set(key,data);refs.push(key);}return refs;};
- legacyOperation.blocks=stage(JSON.stringify(fullOperation.value));const legacyManifestRefs=stage(JSON.stringify(legacyManifest));
+ const legacyOperationRefs=stage(JSON.stringify(fullOperation.value));legacyManifest.rows.push({table:'operations',key:fullOperation.key,blocks:legacyOperationRefs});const legacyManifestRefs=stage(JSON.stringify(legacyManifest));
  for(const [key,data] of staged)await pool.query('INSERT INTO sensa_consumer.library_cloud_blocks(account_id,hash,data) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[accountId,key,data]);
  const injectedRevision=head.revision+1;await pool.query('UPDATE sensa_consumer.library_cloud SET revision=$2,manifest=$3::jsonb WHERE account_id=$1',[accountId,injectedRevision,JSON.stringify(legacyManifestRefs)]);
- await fresh.evaluate(()=>(window as any).sync());assert.equal((await fresh.evaluate(()=>(window as any).core.readCloudSync())).status,'pending','restored full operation should leave its normalized receipt pending');
  await fresh.evaluate(()=>(window as any).sync());assert.equal((await fresh.evaluate(()=>(window as any).core.readCloudSync())).status,'synced');
- head=await readHead();await refresh();const compactRow=head.manifest.rows.find((row:any)=>row.table==='operations'&&row.key===fullOperation.key),localOperation=await fresh.evaluate(async key=>{const c=(window as any).core;return c.readLibrary((tx:any)=>tx.get('operations',key));},fullOperation.key);assert.notEqual(localOperation.result,null,'same-device operation result was unnecessarily discarded');assert(compactRow,'compacted operation missing from cloud manifest');
- const compactCloudWire=JSON.parse(compactRow.blocks.map((key:string)=>stored.get(key)).join('')),compactCloudValue=await fresh.evaluate(value=>(window as any).core.decodeBackupValue(value),compactCloudWire);assert.equal(compactCloudValue.cloudReceipt,true,'cloud operation did not publish a compact receipt');assert.equal(compactCloudValue.result,null);
+ head=await readHead();await refresh();const localRestoredOperation=await fresh.evaluate(async key=>{const c=(window as any).core;return c.readLibrary((tx:any)=>tx.get('operations',key));},fullOperation.key),sourceOperation=await a.evaluate(async key=>{const c=(window as any).core;return c.readLibrary((tx:any)=>tx.get('operations',key));},fullOperation.key);
+ assert.equal(head.manifest.version,2);assert.equal(head.manifest.rows.some((row:any)=>row.table==='operations'),false,'version 1 ledger row survived migration');assert.equal(localRestoredOperation,undefined,'a remote device ledger was imported locally');assert.notEqual(sourceOperation?.result,null,'the source device ledger was modified by sync');
+ for(const ref of legacyOperationRefs)assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[accountId,ref])).rows[0].n,0,'retired operation block was not reclaimed');
  // Server rejects a new snapshot that rewrites an already published learning fact.
  const manifest=JSON.parse(JSON.stringify(head.manifest));
  const event=manifest.rows.find((r:any)=>r.table==='learningEvents');event.blocks=manifest.rows.find((r:any)=>r.table==='drafts').blocks;
@@ -163,6 +164,6 @@ try{
  const deletion=await post('account/deletion',{operationId:crypto.randomUUID(),confirmation:'delete-account'});assert.equal(deletion.status,200);
  for(const table of ['library_cloud','library_cloud_blocks','library_cloud_commits'])assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.'+table+' WHERE account_id=$1',[accountId])).rows[0].n,0);
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud WHERE account_id=$1',[otherId])).rows[0].n,1);
- console.log('PASS: server rejects history rewrite; account deletion removes cloud state, blocks and receipts without affecting another account');
+ console.log('PASS: version 2 removes legacy operation-ledger blocks, preserves immutable learning history, and account deletion removes cloud state without affecting another account');
  console.log('PASS: real browser + Postgres sync, lost ACK, offline merge, conflict preservation, image/audio and full learning restore, account isolation, backup, signout');
 }finally{await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));await pool.end();}
