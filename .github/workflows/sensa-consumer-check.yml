@@ -10,6 +10,7 @@ concurrency:
   cancel-in-progress: true
 env:
   SENSA_EXTENSION_WEB_URL: http://127.0.0.1:3001
+  SENSA_EXTENSION_API_URL: http://127.0.0.1:4319
   VITE_SENSA_MODE: production
   VITE_SUPABASE_URL: http://127.0.0.1:4319
   VITE_SUPABASE_PUBLISHABLE_KEY: local-browser-test-key

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { sensaIntakeDeliveryContractVersion } from "@sensa/contracts/sensa";
 
 import {
@@ -6,9 +6,8 @@ import {
   pullIntakeDeliveries,
   registerIntakeDeliveryChannel,
 } from "../../data/library/intakeDelivery";
-import { openLibrary } from "../../data/library/store";
-import { syncAccountLibrary } from "../../data/library/cloudSyncService";
-import { localFlowText } from "../../i18n/localFlowText";
+import { readCloudSync } from "../../data/library/cloudSync";
+import { observeCloudSyncState, openLibrary } from "../../data/library/store";
 import { useJourneyGateway } from "../personalMeaningJourney";
 
 let activeRun: Promise<void> | undefined;
@@ -20,7 +19,6 @@ let activeRun: Promise<void> | undefined;
  */
 export function RemoteIntakeDelivery({ online }: { online: boolean }) {
   const gateway = useJourneyGateway();
-  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!online) return;
@@ -28,7 +26,10 @@ export function RemoteIntakeDelivery({ online }: { online: boolean }) {
     const run = async () => {
       if (activeRun) return activeRun;
       const work = async () => {
-        await syncAccountLibrary();
+        // The mailbox never starts a full-library transfer. Wait until the account
+        // adapter has settled which library identity this browser owns.
+        const sync = await readCloudSync();
+        if (!sync?.revision || !["synced", "pending"].includes(sync.status)) return;
         const libraryId = (await openLibrary()).id;
         await registerIntakeDeliveryChannel(libraryId);
         for (let page = 0; page < 5; page++) {
@@ -48,25 +49,25 @@ export function RemoteIntakeDelivery({ online }: { online: boolean }) {
           }
           if (deliveries.length < 20) break;
         }
-        if (active) setFailed(false);
       };
       activeRun = work().finally(() => { activeRun = undefined; });
       return activeRun;
     };
-    const attempt = () => { void run().catch(() => { if (active) setFailed(true); }); };
+    const attempt = () => { void run().catch(() => {}); };
+    const visible = () => { if (document.visibilityState === "visible") attempt(); };
     attempt();
+    const stop = observeCloudSyncState(attempt);
     window.addEventListener("online", attempt);
     window.addEventListener("focus", attempt);
+    document.addEventListener("visibilitychange", visible);
     return () => {
       active = false;
+      stop();
       window.removeEventListener("online", attempt);
       window.removeEventListener("focus", attempt);
+      document.removeEventListener("visibilitychange", visible);
     };
   }, [gateway, online]);
 
-  return failed ? (
-    <div role="status" className="fixed bottom-20 left-4 right-4 z-50 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm">
-      {localFlowText("remoteIntakeFailed")}
-    </div>
-  ) : null;
+  return null;
 }

@@ -88,15 +88,17 @@ function defaultConnectionDirectory(libraryId) {
 }
 
 function defaultManifestDirectory(browser) {
-  if (!['chrome', 'edge'].includes(browser)) throw new Error('unsupported_browser');
+  if (!['chrome', 'edge', 'chromium'].includes(browser)) throw new Error('unsupported_browser');
   if (process.platform === 'darwin') {
     return browser === 'edge'
       ? join(homedir(), 'Library', 'Application Support', 'Microsoft Edge', 'NativeMessagingHosts')
-      : join(homedir(), 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts');
+      : browser === 'chromium'
+        ? join(homedir(), 'Library', 'Application Support', 'Chromium', 'NativeMessagingHosts')
+        : join(homedir(), 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts');
   }
   if (process.platform === 'linux') {
     const config = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
-    return join(config, browser === 'edge' ? 'microsoft-edge' : 'google-chrome', 'NativeMessagingHosts');
+    return join(config, browser === 'edge' ? 'microsoft-edge' : browser === 'chromium' ? 'chromium' : 'google-chrome', 'NativeMessagingHosts');
   }
   throw new Error('unsupported_platform');
 }
@@ -172,6 +174,7 @@ function installCodexSkill(config, skillSource, exampleSource, requestedDirector
     executable: resolve(dirname(config.queuePath), 'sensa-intake.mjs'),
     config: resolve(dirname(config.queuePath), 'connection.json'),
     libraryId: config.libraryId,
+    label: config.label,
   };
   const installed = `${skillSource.slice(0, frontmatterEnd + 5)}\n## Installed connection\n\nUse this connection unless the user supplies another:\n\n\`\`\`json\n${JSON.stringify(connection, null, 2)}\n\`\`\`\n${skillSource.slice(frontmatterEnd + 5)}`;
   privateWrite(skillPath, installed, existsSync(skillPath));
@@ -188,7 +191,7 @@ async function setup() {
   if (!isUuid(libraryId)) throw new Error('invalid_library_id');
   if (!label || [...label].length > 100) throw new Error('invalid_label');
   if (!/^[a-p]{32}$/u.test(extensionId)) throw new Error('invalid_extension_id');
-  if (browser && !['chrome', 'edge'].includes(browser)) throw new Error('unsupported_browser');
+  if (browser && !['chrome', 'edge', 'chromium'].includes(browser)) throw new Error('unsupported_browser');
   if (!['darwin', 'linux'].includes(process.platform)) {
     throw new Error('unsupported_platform');
   }
@@ -417,7 +420,7 @@ function frameWrite(value) {
 async function run() {
   if (args.includes('--setup')) return console.log(JSON.stringify({ value: await setup() }));
   if (args.includes('--help')) {
-    console.log('Sensa local Agent intake\nSetup: node sensa-intake.mjs --setup --library-id UUID --extension CHROME_ID (--browser chrome|edge | --manifest-dir PATH) [--assets-base-url URL]\nCall: sensa-intake.mjs --config connection.json [--allow-accept] < request.json\nJSON actions: hello, submit, receipt. Native host actions: pull, ack.');
+    console.log('Sensa local Agent intake\nSetup: node sensa-intake.mjs --setup --library-id UUID --extension CHROME_ID (--browser chrome|edge|chromium | --manifest-dir PATH) [--assets-base-url URL]\nCall: sensa-intake.mjs --config connection.json [--allow-accept] < request.json\nJSON actions: hello, submit, receipt. Native host actions: pull, ack.');
     return;
   }
   const native = args.some((value) => value.startsWith('chrome-extension://'));

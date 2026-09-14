@@ -8,9 +8,9 @@
 npm run build -w @sensa/browser-extension
 ```
 
-本机开发可在 Chrome 扩展开发者模式加载 `apps/browser-extension/dist`。重新构建后需要重新加载扩展，并刷新已经打开的 Sensa 页面。
+生产扩展在 Chrome 开发者模式加载 `apps/browser-extension/dist`。重新构建后需要重新加载扩展，并刷新已经打开的 Sensa 页面。本机预览由 `npm run dev:sensa` 或 `npm run preview:sensa` 单独生成并加载 `apps/browser-extension/dist-local`，不会覆盖生产扩展。
 
-正式构建必须设置 `SENSA_EXTENSION_WEB_URL` 和 `SENSA_EXTENSION_API_URL`；非 loopback 地址必须使用 HTTPS。模型密钥不得进入扩展 bundle 或 storage，`dist/` 不提交 Git。
+正式构建必须同时设置 `SENSA_EXTENSION_WEB_URL` 和 `SENSA_EXTENSION_API_URL`；非 loopback 地址必须使用 HTTPS。没有设置目标的仓库构建只把编译检查产物写入 `.tmp/browser-extension-build`，绝不改写可能已被 Chrome 加载的 `dist`。模型密钥不得进入扩展 bundle 或 storage，`dist/` 不提交 Git。
 
 无付费交互检查：
 

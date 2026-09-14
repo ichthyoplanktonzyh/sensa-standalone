@@ -1,5 +1,4 @@
 import {AccountLibrarySync} from './AccountLibrarySync';
-import {CloudSyncNotice} from './CloudSyncNotice';
 import {authorizeExtensionConnection,notifyExtensionSignout} from './extensionConnection';
 import {eraseDeletedAccount} from '../../data/library/dataControl';
 import {AccountDeletion,pendingAccountDeletion} from './AccountDeletion';
@@ -26,11 +25,13 @@ export default function AccountExperience({children}:{children:ReactNode}){
  useTranslation();
  const [deletionOpen,setDeletionOpen]=useState(()=>!!pendingAccountDeletion());const deletionRef=useRef(deletionOpen);deletionRef.current=deletionOpen;
  const [ready,setReady]=useState(false),[local,setLocal]=useState(false),[loginOpen,setLoginOpen]=useState(false),[onlineService,setOnlineService]=useState(false);
+ const [webSession,setWebSession]=useState<'checking'|'present'|'absent'>('checking');
  const [email,setEmail]=useState(''),[code,setCode]=useState(''),[sent,setSent]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[owner,setOwner]=useState<Owner|null>(null);
  const [retryAt,setRetryAt]=useState(0),[now,setNow]=useState(Date.now());
  const [useCode,setUseCode]=useState(false);const callbackDismissed=useRef(false);
  const observedAuth=useRef<{subject:string|null;token:string|null}|null>(null);
  const generation=useRef(0),localRef=useRef(false);localRef.current=local;
+ const extension=new URLSearchParams(location.search),extensionRequest=extension.get('extension')==='connect';
  const recover=async()=>{
   if(deletionRef.current)return;
   const gen=++generation.current;
@@ -48,15 +49,23 @@ export default function AccountExperience({children}:{children:ReactNode}){
     setLocal(false);setNotice(localFlowText('accountUnreadable'));return;
    }
    if(stored.signedOut){setLocal(false);setReady(true);}
-   else if(stored.owner&&stored.identity&&stored.usable){setLocal(true);setReady(true);}
+   else if(stored.owner&&stored.identity&&stored.usable){setLocal(true);if(!extensionRequest)setReady(true);}
    const session=(await auth?.getSession())?.data.session;
    if(gen!==generation.current)return;
-   if(!session){setOnlineService(false);setLocal(!!stored.identity&&stored.usable&&!stored.signedOut);return;}
+   if(!session){setWebSession('absent');setOnlineService(false);setLocal(!!stored.identity&&stored.usable&&!stored.signedOut);return;}
+   setWebSession('present');
    if(stored.owner&&stored.owner.subject!==session.user.id){setLocal(false);setNotice(localFlowText('wrongAccount'));return;}
-   setLocal(!!stored.identity&&stored.usable&&!stored.signedOut);
+   // A valid account session may open the local product before the online admission
+   // request completes. The account id is added later and only gates online services.
+   const provisional:Owner={...stored.owner,subject:session.user.id,email:session.user.email??stored.owner?.email??''};
+   if(!stored.owner||stored.signedOut||stored.owner.email!==provisional.email)await command({id:crypto.randomUUID(),kind:'service.local-access',input:{subject:provisional.subject}},async tx=>{const current=await tx.get<Owner>('meta','service-owner');if(current&&current.subject!==provisional.subject)throw new Error('account mismatch');tx.put('meta','service-owner',provisional);tx.put('meta','signed-out',false);return null;});
+   if(gen!==generation.current)return;
+   await openLibrary();
+   if(gen!==generation.current)return;
+   setOwner(provisional);setLocal(true);if(!extensionRequest)setReady(true);setLoginOpen(false);
    const endpoint=import.meta.env.VITE_SENSA_API_URL;
    if(!endpoint){setNotice(localFlowText('onlineUnavailable'));return;}
-   const installationId=await command({id:crypto.randomUUID(),kind:'service.installation',input:{}},async tx=>{const existing=await tx.get<string>('meta','service-installation');if(existing)return existing;const id=crypto.randomUUID();tx.put('meta','service-installation',id);return id;});
+   const installationId=await readLibrary(tx=>tx.get<string>('meta','service-installation'))??await command({id:crypto.randomUUID(),kind:'service.installation',input:{}},async tx=>{const existing=await tx.get<string>('meta','service-installation');if(existing)return existing;const id=crypto.randomUUID();tx.put('meta','service-installation',id);return id;});
    if(gen!==generation.current)return;
    const response=await fetch(endpoint.replace(/\/+$/,'')+'/sensa/web/access/session',{method:'POST',headers:{authorization:'Bearer '+session.access_token,'content-type':'application/json'},body:JSON.stringify({installationId}),signal:AbortSignal.timeout(15000),redirect:'error'});
    if(gen!==generation.current)return;
@@ -65,13 +74,17 @@ export default function AccountExperience({children}:{children:ReactNode}){
    if((await auth?.getSession())?.data.session?.user.id!==session.user.id)throw new Error('account changed');
    if(gen!==generation.current)return;
    const next={subject:session.user.id,email:session.user.email??'',accountId:access.accountId};
-   await command({id:crypto.randomUUID(),kind:'service.connect',input:next},async tx=>{const current=await tx.get<Owner>('meta','service-owner');if(gen!==generation.current)throw new Error('stale login');if(current&&current.subject!==next.subject)throw new Error('account mismatch');tx.put('meta','service-owner',next);tx.put('meta','signed-out',false);return null;});
+   const currentOwner=await readLibrary(tx=>tx.get<Owner>('meta','service-owner'));
+   if(currentOwner?.subject!==next.subject||currentOwner.accountId!==next.accountId||currentOwner.email!==next.email)await command({id:crypto.randomUUID(),kind:'service.connect',input:next},async tx=>{const current=await tx.get<Owner>('meta','service-owner');if(gen!==generation.current)throw new Error('stale login');if(current&&current.subject!==next.subject)throw new Error('account mismatch');tx.put('meta','service-owner',next);tx.put('meta','signed-out',false);return null;});
    if(gen!==generation.current)return;
-   await openLibrary();
-   if(gen!==generation.current)return;
+   if(extensionRequest){
+    const result=await authorizeExtensionConnection({installationId:extension.get('installationId'),state:extension.get('state'),challenge:extension.get('challenge'),redirectUri:extension.get('redirectUri')},AbortSignal.timeout(15000),next.subject);
+    const destination=new URL(result.redirectUri);destination.searchParams.set('libraryId',(await openLibrary()).id);
+    location.assign(destination.toString());return;
+   }
    // The local library is the product authority. Account cloud restore is a background
    // adapter: a slow, failed or offline cloud copy must never hold the App Shell closed.
-   // AccountLibrarySync runs the pass and CloudSyncNotice reports its state.
+   // AccountLibrarySync runs the pass; status is available in account settings.
    setOwner(next);setLocal(true);setOnlineService(true);setLoginOpen(false);setNotice('');
   }catch{if(gen===generation.current)setNotice(localFlowText('networkRetry'));}
   finally{if(gen===generation.current)setReady(true);}
@@ -83,7 +96,7 @@ export default function AccountExperience({children}:{children:ReactNode}){
   // or a new account; tearing down the app here interrupts extension PKCE.
   if(previous?.subject===next.subject&&previous.token===next.token&&event!=='USER_UPDATED')return;
   observedAuth.current=next;
-  if(event==='SIGNED_OUT'||previous&&previous.subject!==next.subject){generation.current++;clearAllCredentials();setOnlineService(false);setLocal(false);}
+  if(event==='SIGNED_OUT'||previous&&previous.subject!==next.subject){generation.current++;clearAllCredentials();setWebSession(event==='SIGNED_OUT'?'absent':'checking');setOnlineService(false);setLocal(false);}
   setTimeout(()=>void recover(),0);
  });const online=()=>void recover();const storage=(event:StorageEvent)=>{if(event.key===null||event.key===authStorageKey)void recover();};window.addEventListener('online',online);window.addEventListener('storage',storage);const timer=setInterval(()=>setNow(Date.now()),1000);return()=>{generation.current++;sub?.data.subscription.unsubscribe();window.removeEventListener('online',online);window.removeEventListener('storage',storage);clearInterval(timer);};},[]);
  useEffect(()=>observeLibrary(()=>{void readLibrary(async tx=>({signedOut:await tx.get('meta','signed-out')})).then(state=>{if(state.signedOut&&localRef.current){generation.current++;clearAllCredentials();setLocal(false);setOnlineService(false);}}).catch(()=>setNotice(localFlowText('localStatusFailed')));}),[]);
@@ -91,14 +104,9 @@ export default function AccountExperience({children}:{children:ReactNode}){
  const send=async()=>{if(!auth)return;const {error}=await auth.signInWithOtp({email:email.trim(),options:{shouldCreateUser:true,emailRedirectTo:emailLinkRedirect()}});if(error){setNotice(error.status===429?localFlowText('otpRateLimit'):localFlowText('emailLinkSendFailed'));return;}setSent(true);setRetryAt(Date.now()+60000);};
  const logout=async()=>{notifyExtensionSignout(owner?.accountId);clearAllCredentials();await command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async tx=>{tx.put('meta','signed-out',true);return null;});generation.current++;setLocal(false);setOnlineService(false);setLoginOpen(false);setSent(false);setCode('');setUseCode(false);const result=await auth?.signOut({scope:'local'});if(result?.error)setNotice(localFlowText('signoutIncomplete'));};
  if(deletionOpen)return <AccountDeletion onClose={()=>{location.assign('/profile');}}/>;
- if(!ready)return <main role="status" className="grid min-h-screen place-content-center">{localFlowText('loadingSensa')}</main>;
- const extension=new URLSearchParams(location.search);
- if(local&&onlineService&&extension.get('extension')==='connect')return <main className="mx-auto max-w-lg space-y-5 p-8"><LanguageSwitch/><h1 className="text-2xl">{localFlowText('connectExtension')}</h1><p>{localFlowText('currentAccount')}{owner?.email}</p><p>{localFlowText('extensionConsent')}</p>{notice&&<p role="status">{localFlowNotice(notice)}</p>}<button className={setupPrimary} disabled={busy} onClick={()=>void perform(async()=>{
-  const result=await authorizeExtensionConnection({installationId:extension.get('installationId'),state:extension.get('state'),challenge:extension.get('challenge'),redirectUri:extension.get('redirectUri')},AbortSignal.timeout(15000),owner?.subject);
-  const destination=new URL(result.redirectUri);destination.searchParams.set('libraryId',(await openLibrary()).id);
-  location.assign(destination.toString());
- })}>{localFlowText('connectAccount')}</button><button className={setupButton} onClick={()=>location.assign('/profile')}>{localFlowText('cancel')}</button></main>;
- if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{deleteAccount:()=>{generation.current++;setDeletionOpen(true);},notice:localFlowNotice(notice),email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout:()=>perform(logout)}}><AccountLibrarySync online={onlineService}/><LocalAgentIntake/>{onlineService&&<><CloudSyncNotice/><RemoteIntakeDelivery online/></>}{owner?.accountId&&<ExtensionIntake accountId={owner.accountId} onlineService={onlineService}/>} {children}</AccountContext.Provider>;
+ if(!ready)return <main role="status" className="grid min-h-screen place-content-center">{localFlowText(extensionRequest?'extensionConnecting':'loadingSensa')}</main>;
+ if(extensionRequest&&webSession==='present')return <main className="grid min-h-screen place-content-center gap-4 p-8 text-center"><p role="status">{notice?localFlowNotice(notice):localFlowText('extensionConnecting')}</p>{notice&&<div className="flex justify-center gap-2"><button className={setupPrimary} disabled={busy} onClick={()=>void perform(recover)}>{localFlowText('extensionRetry')}</button><button className={setupButton} onClick={()=>location.assign('/profile')}>{localFlowText('cancel')}</button></div>}</main>;
+ if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{deleteAccount:()=>{generation.current++;setDeletionOpen(true);},notice:localFlowNotice(notice),email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout:()=>perform(logout)}}><AccountLibrarySync online={onlineService}/><LocalAgentIntake/>{onlineService&&<RemoteIntakeDelivery online/>}{owner?.accountId&&<ExtensionIntake accountId={owner.accountId} onlineService={onlineService}/>} {children}</AccountContext.Provider>;
  // Default Supabase templates send links; custom OTP templates remain supported.
  return <main className="flex min-h-screen items-center justify-center bg-[#fbfbfa] px-6 text-[#242a38]"><form className="w-full max-w-sm space-y-5" onSubmit={e=>{e.preventDefault();void perform(sent?useCode?async()=>{const result=await auth!.verifyOtp({email:email.trim(),token:code.trim(),type:'email'});if(result.error){setNotice(localFlowText('otpInvalid'));return;}await recover();}:recover:send);}}>
   <div className="flex items-center justify-between"><p className="text-sm text-[#68748d]">Sensa</p><LanguageSwitch/></div><h1 className="text-3xl font-semibold">{sent?localFlowText(useCode?'enterOtp':'checkEmailLink'):localFlowText('welcome')}</h1>

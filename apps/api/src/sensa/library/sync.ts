@@ -11,7 +11,10 @@ export function registerLibrarySync(app:Hono,access:Access){
  const use:Access=(request,work)=>access(request,(db,a)=>{if(a.installationId)throw new ConsumerError(403,'web_authorization_required');return work(db,a);});
  const current=async(db:DatabaseExecutor,id:string)=>{await db.query('INSERT INTO sensa_consumer.library_cloud(account_id) VALUES($1) ON CONFLICT DO NOTHING',[id]);return (await db.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1 FOR UPDATE',[id])).rows[0]!;};
  /** Published history is compared by stored content, so a client may repack its blocks. */
- const rowContent=async(db:DatabaseExecutor,id:string,refs:string[]):Promise<string>=>{const rows=(await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[id,refs])).rows;const byHash=new Map(rows.map(r=>[r.hash as string,r.data as string]));if(refs.some(r=>!byHash.has(r)))throw conflict('library_sync_missing_block');const digest=createHash('sha256');for(const ref of refs)digest.update(byHash.get(ref)!);return digest.digest('hex');};
+ const wireFields=(text:string):Map<string,unknown>|null=>{try{const value=JSON.parse(text);if(!Array.isArray(value)||value[0]!=='object'||!Array.isArray(value[1]))return null;const fields=new Map<string,unknown>();for(const pair of value[1]){if(!Array.isArray(pair)||pair.length!==2||typeof pair[0]!=='string'||fields.has(pair[0]))return null;fields.set(pair[0],pair[1]);}return fields;}catch{return null;}};
+ /** Only the redundant result may be replaced by a compact receipt. The original
+  * canonical operation input and commit time remain immutable. */
+ const validOperationCompaction=(before:string,after:string):boolean=>{const old=wireFields(before),next=wireFields(after);if(!old||!next||!old.has('input')||!old.has('committedAt')||!next.has('input')||!next.has('committedAt'))return false;const encodedInput=old.get('input');if(!Array.isArray(encodedInput)||encodedInput[0]!=='string'||typeof encodedInput[1]!=='string')return false;try{if(['library.create','intake.receive'].includes(JSON.parse(encodedInput[1]).kind))return false;}catch{return false;}return JSON.stringify(encodedInput)===JSON.stringify(next.get('input'))&&JSON.stringify(old.get('committedAt'))===JSON.stringify(next.get('committedAt'))&&JSON.stringify(next.get('result'))==='["null"]'&&JSON.stringify(next.get('cloudReceipt'))==='["boolean",true]';};
  async function manifest(db:DatabaseExecutor,id:string,refs:string[]):Promise<LibrarySyncManifest>{
   const blocks=(await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[id,refs])).rows;
   const byHash=new Map(blocks.map(b=>[b.hash,b.data]));if(refs.some(r=>!byHash.has(r)))throw conflict('library_sync_missing_block');
@@ -58,15 +61,31 @@ export function registerLibrarySync(app:Hono,access:Access){
   const refs=[...new Set(next.rows.flatMap(r=>r.blocks))];
   const present=(await db.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,refs])).rows;
   if(present.length!==refs.length)throw conflict('library_sync_missing_block');
+  let retiredRefs:string[]=[];
   if(head.manifest){const old=await manifest(db,a.accountId,head.manifest);if(old.libraryId!==next.libraryId||old.learnerId!==next.learnerId)throw conflict('library_sync_identity');
    const byKey=new Map(next.rows.map(r=>[JSON.stringify([r.table,r.key]),r]));
+   // Load all protected history blocks once. A real library can contain hundreds of
+   // operations, so per-row round trips would make a safe compaction unreasonably slow.
+   const protectedRows=old.rows.filter(row=>row.table==='learningEvents'||row.table==='operations').map(row=>{const replacement=byKey.get(JSON.stringify([row.table,row.key]));if(!replacement)throw conflict('library_sync_history');return {row,replacement};});
+   const changedProtected=protectedRows.filter(({row,replacement})=>JSON.stringify(row.blocks)!==JSON.stringify(replacement.blocks));
+   const historyRefs=[...new Set(changedProtected.flatMap(({row,replacement})=>[...row.blocks,...replacement.blocks]))],historyBlocks=new Map<string,string>();
+   if(historyRefs.length)for(const block of (await db.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,historyRefs])).rows)historyBlocks.set(block.hash as string,block.data as string);
+   if(historyRefs.some(ref=>!historyBlocks.has(ref)))throw conflict('library_sync_missing_block');
+   const historyText=(refs:string[])=>refs.map(ref=>historyBlocks.get(ref)!).join('');
    // Learning facts are never silently deleted or rewritten by snapshot publication.
-   for(const row of old.rows)if(row.table==='learningEvents'||row.table==='operations'){const replacement=byKey.get(JSON.stringify([row.table,row.key]));if(!replacement)throw conflict('library_sync_history');
-    // Repacking the same published history is allowed; changing its content is not.
-    if(JSON.stringify(row.blocks)!==JSON.stringify(replacement.blocks)&&await rowContent(db,a.accountId,row.blocks)!==await rowContent(db,a.accountId,replacement.blocks))throw conflict('library_sync_history');}
+   for(const {row,replacement} of changedProtected){
+    // Repacking identical content is transport-only. Operation results may additionally
+    // shrink to a receipt while the original input remains immutable.
+    const before=historyText(row.blocks),after=historyText(replacement.blocks);
+    if(hash(before)!==hash(after)&&(row.table!=='operations'||!validOperationCompaction(before,after)))throw conflict('library_sync_history');}
+   const nextRefs=new Set([...input.manifest,...refs]);retiredRefs=[...new Set([...head.manifest,...old.rows.flatMap(row=>row.blocks)])].filter(ref=>!nextRefs.has(ref));
   }
   const revision=head.revision+1;
   await db.query('UPDATE sensa_consumer.library_cloud SET revision=$2,manifest=$3::jsonb,updated_at=now() WHERE account_id=$1',[a.accountId,revision,JSON.stringify(input.manifest)]);
-  await db.query('INSERT INTO sensa_consumer.library_cloud_commits(account_id,operation_id,request_digest,revision) VALUES($1,$2,$3,$4)',[a.accountId,input.operationId,digest,revision]);return {revision,manifest:input.manifest};
+  await db.query('INSERT INTO sensa_consumer.library_cloud_commits(account_id,operation_id,request_digest,revision) VALUES($1,$2,$3,$4)',[a.accountId,input.operationId,digest,revision]);
+  // Sync retains one converged account Checkpoint, not historical snapshots. Delete only
+  // blocks referenced by the retired head, so another device's uncommitted upload is safe.
+  if(retiredRefs.length)await db.query('DELETE FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[a.accountId,retiredRefs]);
+  return {revision,manifest:input.manifest};
  }));});
 }

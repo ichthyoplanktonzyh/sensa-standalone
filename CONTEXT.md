@@ -864,6 +864,12 @@ An optional service that synchronizes a Personal Learning Library across the lea
 devices. It does not own semantic acceptance, learning outcomes or permission to use
 the local library, and convergence alone is not a historical backup guarantee.
 
+**Cloud Checkpoint（云端检查点）**:
+An account-scoped, eventually consistent copy of locally committed Personal Library
+Facts for continuing on another device. A Cloud Checkpoint is produced after meaningful
+local milestones or bounded inactivity rather than acknowledging each local operation;
+it is neither the local commit nor an immutable Account Backup Recovery Point.
+
 **Remote Intake Delivery**:
 An account-scoped durable mailbox that carries one canonical Semantic Intake from a
 remote authenticated caller to the learner's registered local library. The online

@@ -1,5 +1,6 @@
 /** Narrow test bridge compiled only for the real-browser delivery smoke. */
 import { listDrafts, saveDraft } from './data/library/drafts';
+import { readCloudSync } from './data/library/cloudSync';
 import { openLibrary, readLibrary, readLibraryStorageDiagnostics } from './data/library/store';
 import { JOURNEY_STORE_KEY, type JourneyState } from './experience/personalMeaningJourney/store';
 
@@ -33,15 +34,19 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
   window.__sensaBrowserSmoke = {
     async seedDrafts(drafts, images) {
       await openLibrary();
+      // Reuse one real-sized image under differently shaped rows. Canonical sync should
+      // upload its media chunks once; legacy fixed-width repacking expands near the
+      // logical size and exercises a production-sized restore.
+      const sharedImage = randomDataUrl(180_000);
       for (let index = 0; index < drafts; index++) {
         await saveDraft(crypto.randomUUID(), {
           id: crypto.randomUUID(),
           expectedRevision: 0,
-          text: `fixture context ${index}`,
+          text: `fixture context ${index} ${'x'.repeat(index * 137)}`,
           images: Array.from({ length: images }, (_, image) => ({
             id: crypto.randomUUID(),
             name: `fixture-${index}-${image}.jpg`,
-            dataUrl: randomDataUrl(180_000),
+            dataUrl: sharedImage,
           })),
         });
       }
@@ -51,8 +56,7 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       return (await listDrafts()).length;
     },
     async syncStatus() {
-      return (await readLibrary((tx) => tx.get<{ status?: string }>('meta', 'cloud-sync')))
-        ?.status ?? 'none';
+      return (await readCloudSync())?.status ?? 'none';
     },
     async semanticWorldContainsExpression(surfaceForm) {
       const raw = await readLibrary((tx) => tx.get<string>('semanticWorld', JOURNEY_STORE_KEY));

@@ -1,5 +1,5 @@
 export type LocalAgentPlatform = 'macos' | 'linux';
-export type LocalAgentBrowser = 'chrome' | 'edge';
+export type LocalAgentBrowser = 'chrome' | 'edge' | 'chromium';
 
 export type LocalAgentEnvironment = {
   platform: LocalAgentPlatform;
@@ -14,9 +14,11 @@ export function detectLocalAgentEnvironment(userAgent: string): LocalAgentEnviro
         : null;
   const browser: LocalAgentBrowser | null = /Edg\//u.test(userAgent)
     ? 'edge'
-    : /Chrome\/|Chromium\//u.test(userAgent)
-      ? 'chrome'
-      : null;
+    : /Chromium\//u.test(userAgent)
+      ? 'chromium'
+      : /Chrome\//u.test(userAgent)
+        ? 'chrome'
+        : null;
   return platform && browser ? { platform, browser } : null;
 }
 
@@ -28,6 +30,7 @@ export function localAgentSetupCommand(input: {
   libraryId: string;
   extensionId: string;
   environment: LocalAgentEnvironment;
+  label?: string;
 }): string {
   const base = new URL('/integrations/', input.origin).href;
   const executableUrl = new URL('sensa-intake.mjs', base).href;
@@ -38,6 +41,7 @@ export function localAgentSetupCommand(input: {
     '--extension', input.extensionId,
     '--browser', input.environment.browser,
     '--assets-base-url', base,
+    ...(input.label ? ['--label', input.label] : []),
   ];
   const quotedFlags = flags.map(shellQuote).join(' ');
   return `sensa_setup="\${TMPDIR:-/tmp}/${fileName}"; curl -fsSL ${shellQuote(executableUrl)} -o "$sensa_setup" && node "$sensa_setup" ${quotedFlags}`;

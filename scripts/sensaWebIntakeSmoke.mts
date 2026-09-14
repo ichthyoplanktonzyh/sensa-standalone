@@ -63,10 +63,10 @@ let listener:any;
 storage.sensa={version:1,active:accountId,accounts:{[accountId]:{accountId,installationId:request.clientId,webLibraryId:library.id,token:'fixture-extension-token',queue:[],recent:[],savedOperations:{}}}};
 const session:Record<string,unknown>={modes:{1:{accountId}}};
 const noopEvent={addListener:()=>{}};
-let exchangeCalls=0;const opened:string[]=[];
-const chromeMock={identity:{getRedirectURL:()=> 'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/sensa'},storage:{local:{...(globalThis as any).chrome.storage.local,setAccessLevel:async()=>{}},session:{get:async(key:string)=>structuredClone({[key]:session[key]}),set:async(value:unknown)=>Object.assign(session,structuredClone(value))}},runtime:{id:'fixture',getURL:(path:string)=>'chrome-extension://fixture/'+path,onMessage:{addListener:(fn:unknown)=>{listener=fn;}}},tabs:{create:async({url}:{url:string})=>{opened.push(url);return {id:20};},update:async(id:number,{url}:{url:string})=>{assert.equal(id,20);opened.push(url);return {id,url};},onUpdated:noopEvent,onRemoved:noopEvent,sendMessage:async()=>{}},alarms:{create:()=>{},onAlarm:noopEvent}};
+let exchangeCalls=0,interactiveLibraryId=library.id;const opened:string[]=[];
+const chromeMock={identity:{getRedirectURL:()=> 'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/sensa',launchWebAuthFlow:async({url}:{url:string})=>{opened.push(url);const requestUrl=new URL(url),redirect=requestUrl.searchParams.get('redirectUri')!;(session as any).expectedChallenge=requestUrl.searchParams.get('challenge');return redirect+'?state='+requestUrl.searchParams.get('state')+'&code=fixture-code&libraryId='+interactiveLibraryId;}},storage:{local:{...(globalThis as any).chrome.storage.local,setAccessLevel:async()=>{}},session:{get:async(key:string)=>structuredClone({[key]:session[key]}),set:async(value:unknown)=>Object.assign(session,structuredClone(value))}},runtime:{id:'fixture',getURL:(path:string)=>'chrome-extension://fixture/'+path,onMessage:{addListener:(fn:unknown)=>{listener=fn;}}},tabs:{query:async()=>[{id:1,url:snapshot.source.url}],create:async({url}:{url:string})=>{opened.push(url);return {id:20};},update:async(id:number,{url}:{url:string})=>{assert.equal(id,20);opened.push(url);return {id,url};},onUpdated:noopEvent,onRemoved:noopEvent,sendMessage:async()=>{}},alarms:{create:()=>{},onAlarm:noopEvent}};
 const bundle=await build({entryPoints:['apps/browser-extension/src/background.ts'],bundle:true,write:false,format:'iife',platform:'browser',define:{SENSA_WEB_URL:JSON.stringify('http://127.0.0.1:3000'),SENSA_API_URL:JSON.stringify('http://127.0.0.1:4319')}});
-vm.runInNewContext(bundle.outputFiles[0]!.text,{chrome:chromeMock,crypto,btoa,URL,TextEncoder,TextDecoder,AbortSignal,setTimeout,clearTimeout,console,fetch:async(url:string,init:RequestInit)=>{assert.equal(url,'http://127.0.0.1:4319/sensa/extension/exchange');const body=JSON.parse(String(init.body));assert.equal(body.code,'fixture-code');assert.equal(body.verifier,(session as any).expectedVerifier);exchangeCalls++;return {ok:true,json:async()=>({accountId,token:'fixture-renewed-token',expiresAt:new Date(Date.now()+86400000).toISOString()})};}});
+vm.runInNewContext(bundle.outputFiles[0]!.text,{chrome:chromeMock,crypto,btoa,URL,TextEncoder,TextDecoder,AbortSignal,setTimeout,clearTimeout,console,fetch:async(url:string,init:RequestInit)=>{assert.equal(url,'http://127.0.0.1:4319/sensa/extension/exchange');const body=JSON.parse(String(init.body));assert.equal(body.code,'fixture-code');if((session as any).expectedChallenge){assert.equal(Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(body.verifier))).toString('base64url'),(session as any).expectedChallenge);delete (session as any).expectedChallenge;}else assert.equal(body.verifier,(session as any).expectedVerifier);exchangeCalls++;return {ok:true,json:async()=>({accountId,token:'fixture-renewed-token',expiresAt:new Date(Date.now()+86400000).toISOString()})};}});
 /** A Web message as the page actually sends one: the bridge's envelope is part of
  * the protocol, so this smoke speaks it rather than assuming the handlers are
  * reachable without it. Extension-internal messages carry no channel and are
@@ -130,19 +130,10 @@ await queueWeb(accountId,{...request,operationId:crypto.randomUUID()});
 const preservedQueue=structuredClone(storage.sensaWebIntake),newLibrary=crypto.randomUUID();
 const reconnectRequest={...connect,libraryId:newLibrary},loginSender={id:'fixture',url:'chrome-extension://fixture/popup.html'},loginTab={...appSender,tab:{id:20}};
 assert.equal((await message(reconnectRequest,appSender)).error,'library_mismatch');
-await message({kind:'login'},loginSender);
-assert.equal(opened.at(-2),'about:blank');assert.equal(opened.at(-1),'http://127.0.0.1:3000/profile');
-assert.equal((await message(reconnectRequest,appSender)).error,'library_mismatch','another tab cannot consume explicit reconnect');
-const explicit=(session as any).sensaExplicitReconnect;
-explicit.expires=Date.now()-1;
-assert.equal((await message(reconnectRequest,loginTab)).error,'library_mismatch','expired reconnect cannot change library');
-explicit.expires=Date.now()+120000;
-const rebind=(await message(reconnectRequest,loginTab)).value.authorization;
-assert.ok(rebind);assert.equal((storage.sensa as any).accounts[accountId].webLibraryId,library.id,'binding stays unchanged until exchange succeeds');
-session.expectedVerifier=(session as any).sensaWebConnect.verifier;
-assert.equal((await message({...reconnectRequest,kind:'web-connect-complete',receipt:{redirectUri:rebind.redirectUri+'?state='+rebind.state+'&code=fixture-code'}},loginTab)).value.connected,true);
+interactiveLibraryId=newLibrary;assert.equal((await message({kind:'login'},loginSender)).error,undefined);
+const loginUrl=new URL(opened.at(-1)!);assert.equal(loginUrl.origin+loginUrl.pathname,'http://127.0.0.1:3000/profile');assert.equal(loginUrl.searchParams.get('extension'),'connect');assert.ok(loginUrl.searchParams.get('challenge'));assert.equal(loginUrl.searchParams.has('verifier'),false);
 assert.equal((storage.sensa as any).accounts[accountId].webLibraryId,newLibrary);
-assert.equal(session.sensaExplicitReconnect,null);
+assert.equal((storage.sensa as any).active,accountId);assert.equal(session.sensaInteractiveLogin,null);assert.equal(exchangeCalls,2);
 assert.deepEqual(storage.sensaWebIntake,preservedQueue,'old-library requests and receipts are preserved byte-for-byte');
 assert.equal((await pendingWeb(accountId,newLibrary)).length,0,'old-library requests are not silently transferred');
 assert.equal((await message(connect,appSender)).error,'library_mismatch','automatic rebinding stays blocked');

@@ -65,6 +65,7 @@ export function LocalAgentPanel() {
     libraryId: state.libraryId,
     extensionId: state.status.extensionId,
     environment,
+    label: import.meta.env.VITE_SENSA_LOCAL_AGENT_LABEL,
   }) : null;
   const copy = async () => {
     if (!command) return;

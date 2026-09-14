@@ -1,11 +1,12 @@
 import {librarySyncManifest,librarySyncHead,librarySyncTables,librarySyncBlockChars,librarySyncBlockFetchHashes,librarySyncBlockFetchResult,librarySyncBlockMissingResult,librarySyncBlockStore,librarySyncBlockStoreBatch,librarySyncBlockStoreChars,type LibrarySyncManifest,type LibrarySyncHead} from '@sensa/contracts/sensa';
-import {libraryTables,readLibrary,restoreLibraryTransaction,writeLibraryState,assertCurrentLibrary,type LibraryTransaction,type Table,type LibraryIdentity} from './store';
+import {libraryTables,readLibrary,readLocalLibraryRevision,restoreLibraryTransaction,writeLibraryState,assertCurrentLibrary,type LibraryTransaction,type Table,type LibraryIdentity} from './store';
 import {backupEqual,encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {validateBackupRows,type BackupRows} from './backupValidation';
 export type SyncRequest=(path:string,body?:unknown)=>Promise<any>;
 type Entry={table:typeof librarySyncTables[number];key:string;value:unknown};
 type Owner={subject:string;accountId:string};
-type State={owner:Owner;incarnation:string;base:Entry[];revision:number;pending?:{operationId:string;baseRevision:number;manifest:string[];entries:Entry[];baseEntries?:Entry[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];lastSyncedAt?:string;error?:string};
+export type CloudSyncState={owner:Owner;incarnation:string;base:Entry[];revision:number;syncedLocalRevision?:number;pending?:{operationId:string;baseRevision:number;manifest:string[];entries:Entry[];baseEntries?:Entry[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string};
+type State=CloudSyncState;
 const STATE='cloud-sync';
 const entryId=(r:Pick<Entry,'table'|'key'>)=>JSON.stringify([r.table,r.key]);
 const equal=backupEqual;
@@ -18,6 +19,12 @@ function normalized(table:Table,key:string,raw:any,identity:LibraryIdentity){
  // Library identity is shared; a browser installation keeps its own device identity.
  if(table==='meta'&&key==='identity')value.deviceId=identity.id;
  if(table==='operations'&&key==='00000000-0000-4000-8000-000000000001')value.result.deviceId=identity.id;
+ // Local commands retain their full result for same-device retries. The account copy
+ // only needs a compact receipt unless another client can actually replay the command.
+ if(table==='operations'){
+  const kind=JSON.parse(value.input).kind;
+  if(!['library.create','intake.receive'].includes(kind)){value.result=null;value.cloudReceipt=true;}
+ }
  // Process leases cannot be resumed in another browser. Do not transport live ownership.
  if(table==='sessions'&&value.status==='inflight'){value.status='stopped';value.lease=null;}
  if(table==='personalLearning'&&['generating','reviewing'].includes(value.status)){value.status='failed';value.leaseUntil=0;value.notice='localFlow.restoredPreparation';}
@@ -33,7 +40,7 @@ async function capture(tx:LibraryTransaction){
   if(allowed(table,row.key,row.value))entries.push({table:table as Entry['table'],key:row.key,value:encodeBackupValue(normalized(table,row.key,row.value,identity))});
  }
  entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));
- return {owner,incarnation,identity,entries,state:await tx.get<State>('meta',STATE)};
+ return {owner,incarnation,identity,entries,localRevision:await readLocalLibraryRevision(tx),state:await tx.get<State>('meta',STATE)};
 }
 function rowsFor(entries:Entry[]):BackupRows{
  const rows=Object.fromEntries(libraryTables.map(t=>[t,[]])) as unknown as BackupRows;
@@ -66,7 +73,7 @@ function partitionConflicts(base:Entry[],local:Entry[],remote:Entry[],merged:Ent
  const select=(unblocked:Entry[],held:Entry[])=>[...unblocked.filter(r=>!blocked.has(entryId(r))),...held.filter(r=>blocked.has(entryId(r)))].sort((a,b)=>entryId(a).localeCompare(entryId(b)));
  return {local:select(merged,local),upload:select(merged,remote),base:(published:Entry[])=>select(published,base)};
 }
-export const readCloudSync=()=>readLibrary(async tx=>{const state=await tx.get<State>('meta',STATE);if(state?.status==='synced'&&!await tx.get('meta','signed-out')){const current=await capture(tx);if(!equal(current.entries,state.base))return {...state,status:'pending' as const};}return state;});
+export const readCloudSync=()=>readLibrary(async tx=>{const state=await tx.get<State>('meta',STATE);if(state?.status==='syncing'&&(!state.syncStartedAt||Date.now()-Date.parse(state.syncStartedAt)>120000))return {...state,status:'pending' as const,syncStartedAt:undefined};if(state?.status==='synced'&&!await tx.get('meta','signed-out')){const localRevision=await readLocalLibraryRevision(tx);if(localRevision!==state.syncedLocalRevision){const current=await capture(tx);if(!equal(current.entries,state.base))return {...state,status:'pending' as const};}}return state;});
 async function saveState(expected:{owner:Owner;incarnation:string},work:(old:State|undefined)=>State){
  await writeLibraryState(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');tx.put('meta',STATE,work(await tx.get<State>('meta',STATE)));});
 }
@@ -91,7 +98,8 @@ async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries
 class Blocks{
  cache=new Map<string,string>();
  constructor(private request:SyncRequest){}
- async pack(text:string){const refs:string[]=[];for(let at=0;at<text.length;at+=librarySyncBlockChars){const part=text.slice(at,at+librarySyncBlockChars),id=await hash(part);this.cache.set(id,part);refs.push(id);}return refs;}
+ private async packSegment(segment:string,refs:string[]){for(let at=0;at<segment.length;at+=librarySyncBlockChars){const part=segment.slice(at,at+librarySyncBlockChars),id=await hash(part);this.cache.set(id,part);refs.push(id);}}
+ async pack(text:string){const refs:string[]=[];let at=0;const media=/data:(?:image|audio)\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/giu;for(const match of text.matchAll(media)){const start=match.index??0;await this.packSegment(text.slice(at,start),refs);await this.packSegment(match[0],refs);at=start+match[0].length;}await this.packSegment(text.slice(at),refs);return refs;}
  /** One request per byte-budgeted page: the cost of a restore follows library size,
   *  not how many blocks an older client happened to split it into. */
  async fetch(ids:string[]){
@@ -153,7 +161,7 @@ export async function synchronizeLibrary(request:SyncRequest){
  };
  const blocks=new Blocks(request);
  try{
-  await saveState(expected,old=>({...old??defaults,status:'syncing',error:undefined}));
+  await saveState(expected,old=>({...old??defaults,status:'syncing',syncStartedAt:new Date().toISOString(),error:undefined}));
   // Pending publication survives a lost HTTP acknowledgement and is retried verbatim.
   let state=await readCloudSync()??defaults;
   if(state.pending){
@@ -191,9 +199,10 @@ export async function synchronizeLibrary(request:SyncRequest){
    await saveState(expected,old=>({...old!,base:nextBase(uploadEntries),revision:published.revision,pending:undefined,lastSyncedAt:new Date().toISOString()}));
   }
   const current=await readLibrary(capture);
-  await saveState(expected,old=>({...old!,status:merged.conflicts.length?'conflict':equal(current.entries,old!.base)?'synced':'pending',lastSyncedAt:new Date().toISOString(),error:undefined}));
+  const completedAt=new Date().toISOString(),converged=equal(current.entries,current.state!.base);
+  await saveState(expected,old=>({...old!,status:merged.conflicts.length?'conflict':converged?'synced':'pending',syncedLocalRevision:converged?current.localRevision:old!.syncedLocalRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined}));
  }catch(error){const message=error instanceof Error?error.message:'library_sync_failed';
-  await saveState(expected,old=>({...old??defaults,status:['library_sync_conflict','library_sync_identity','library_sync_history','libraryBackup.errors.inconsistent'].includes(message)?'conflict':navigator.onLine?'failed':'offline',error:message})).catch(()=>{});
+  await saveState(expected,old=>({...old??defaults,status:message==='library_sync_local_changed'?'pending':['library_sync_conflict','library_sync_identity','library_sync_history','libraryBackup.errors.inconsistent'].includes(message)?'conflict':navigator.onLine?'failed':'offline',syncStartedAt:undefined,error:message})).catch(()=>{});
   throw error;
  }
 }

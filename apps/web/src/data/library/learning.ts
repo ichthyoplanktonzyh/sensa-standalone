@@ -3,7 +3,7 @@ import {localTargetPolicy} from '../../learning/runtime/localRuntimeBindings';
 import {learningPolicyProfileRegistry,type LearningPolicyId} from '../../learning/runtime/policyProfiles';
 import {stableUuid,canonicalJsonDigest} from '@sensa/learning-kernel';
 import {sensaFormalPinnedLanguageContextSchema,sensaLearningMaterializationSnapshotSchema,sensaLearningConnectionContractVersion,LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
-import {command,readLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
+import {command,readLibrary,requestCloudCheckpoint,type LibraryTransaction,type LibraryIdentity} from './store';
 import {learningOwner,type InstalledPackage} from './packages';
 import {validateLightweightInitialMaterialization,type LightweightInitialLearningMaterialization} from '../../learning/runtime/lightweightInitialContent';
 import {
@@ -230,7 +230,7 @@ export async function actLearning(operationId:string,runId:string,revision:numbe
  nextRun.ordinal++;nextRun.revision++;if(!nextRun.completedAt)await bindCurrentStepMaterial(tx,nextRun,at);tx.put('learningRuns',nextRun.id,nextRun);tx.put('learningTargets',applied.target.id,applied.target);
  tx.put('learningEvents',operationId,{id:operationId,runId,targetId:t.id,kind:action.kind,at,detail:{stepId,materializationId:presentedMaterial.snapshot.learningMaterializationId,action,formalEvaluation:executed.facts,transition:applied.record}} satisfies LearningEvent);return nextRun;
 });}
-export async function finishLearning(operationId:string,runId:string){return command({id:operationId,kind:'learning.finish',input:{runId}},async tx=>{await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);if(!run?.completedAt)throw new Error('localFlow.finishFirst');if(await tx.get('meta','learning-active')===runId)tx.delete('meta','learning-active');return true;});}
+export async function finishLearning(operationId:string,runId:string){const result=await command({id:operationId,kind:'learning.finish',input:{runId}},async tx=>{await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);if(!run?.completedAt)throw new Error('localFlow.finishFirst');if(await tx.get('meta','learning-active')===runId)tx.delete('meta','learning-active');return true;});requestCloudCheckpoint();return result;}
 
 /** The same runtime target is committed only after independent material validation. */
 export async function commitPersonalMaterial(tx:LibraryTransaction,owner:LibraryIdentity,meaning:import('./teacher').LocalMeaning,languageContext:SensaFormalPinnedLanguageContext,content:LightweightInitialLearningMaterialization['content'],attemptId:string,grantId:string|null,replace=false){

@@ -24,6 +24,14 @@ async function stopAllReading(){const active=(await chrome.storage.session.get('
 async function persist(store:Store){await chrome.storage.local.set({sensa:store});}
 async function serviceFetch(url:string,init:RequestInit){try{return await fetch(url,init);}catch(error){throw new Error(error instanceof Error&&['AbortError','TimeoutError'].includes(error.name)?'TimeoutError':'network_failed');}}
 async function apiRequest(path:string,body:unknown,token?:string){const response=await serviceFetch(apiUrl+path,{method:body===undefined?'GET':'POST',headers:{'content-type':'application/json',...(token?{authorization:'Bearer '+token}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(45000)});const data=await response.json();if(!response.ok)throw new Error(data.code??'temporarily_unavailable');return data;}
+async function pkceAuthorization(installationId:string){
+ const verifier=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');
+ const state=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');
+ const bytes=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier)));
+ const challenge=btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replace(/=+$/u,'');
+ const redirectUri=chrome.identity.getRedirectURL('sensa');
+ return {verifier,authorization:{installationId,state,challenge,redirectUri} satisfies SensaExtensionAuthorization};
+}
 const nativeReplySchema=z.union([
  z.object({value:z.unknown()}).strict(),
  z.object({error:z.string().min(1).max(100)}).strict(),
@@ -50,6 +58,8 @@ async function nativeIntakeRequest(message:unknown){
 async function webConnect(request:SensaBridgeRequestOf<'web-connect-prepare'|'web-connect-complete'>,sender:chrome.runtime.MessageSender){
  return locked(async()=>{
   const store=await load(),accountId=request.accountId,libraryId=request.libraryId;
+  const interactive=(await chrome.storage.session.get('sensaInteractiveLogin')).sensaInteractiveLogin as {state?:string;expires?:number}|null;
+  if(interactive?.expires&&interactive.expires>Date.now())return {paused:true};
   if((await chrome.storage.local.get('sensaAutoConnectPaused')).sensaAutoConnectPaused)return {paused:true};
   const old=store.accounts[accountId];
   if(store.active&&store.active!==accountId)throw new Error('account_mismatch');
@@ -61,13 +71,8 @@ async function webConnect(request:SensaBridgeRequestOf<'web-connect-prepare'|'we
    if(inflight?.expires&&inflight.expires>Date.now())return {paused:true};
    if(store.active===accountId&&old?.webLibraryId===libraryId&&old?.expiresAt&&Date.parse(old.expiresAt)>Date.now()+3600000)return {connected:true};
    const installationId=old?.installationId??crypto.randomUUID();
-   const verifier=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');
-   const state=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');
-   const bytes=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier)));
-   const challenge=btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replace(/=+$/u,'');
-   const redirectUri=chrome.identity.getRedirectURL('sensa');
-   await chrome.storage.session.set({sensaWebConnect:{tabId:sender.tab!.id,accountId,libraryId,installationId,verifier,state,redirectUri,expires:Date.now()+120000}});
-   const authorization:SensaExtensionAuthorization={installationId,state,challenge,redirectUri};
+   const {verifier,authorization}=await pkceAuthorization(installationId);
+   await chrome.storage.session.set({sensaWebConnect:{tabId:sender.tab!.id,accountId,libraryId,installationId,verifier,state:authorization.state,redirectUri:authorization.redirectUri,expires:Date.now()+120000}});
    return {authorization};
   }
   const pending=z.object({tabId:z.number(),accountId:z.string().uuid(),libraryId:z.string().uuid(),installationId:z.string().uuid(),verifier:z.string(),state:z.string(),redirectUri:z.string().url(),expires:z.number()}).nullable().parse((await chrome.storage.session.get('sensaWebConnect')).sensaWebConnect??null);
@@ -100,6 +105,35 @@ async function reconnectWeb(discardForAccount?:string){return locked(async()=>{
  await chrome.storage.session.set({sensaWebConnect:null,sensaExplicitReconnect:null});await stopAllReading();
  // Account-owned queues and credentials stay under their original account.
 });}
+async function loginThroughWeb(){
+ const before=await load(),previous=before.active?before.accounts[before.active]:Object.values(before.accounts)[0];
+ const installationId=previous?.installationId??crypto.randomUUID();
+ await reconnectWeb();
+ const {verifier,authorization}=await pkceAuthorization(installationId);
+ await chrome.storage.session.set({sensaInteractiveLogin:{state:authorization.state,expires:Date.now()+120000}});
+ try{
+  const destination=new URL('/profile',webUrl);
+  destination.searchParams.set('extension','connect');
+  destination.searchParams.set('installationId',authorization.installationId);
+  destination.searchParams.set('state',authorization.state);
+  destination.searchParams.set('challenge',authorization.challenge);
+  destination.searchParams.set('redirectUri',authorization.redirectUri);
+  let returned:string|undefined;
+  try{returned=await chrome.identity.launchWebAuthFlow({url:destination.href,interactive:true});}
+  catch{throw new Error('authorization_cancelled');}
+  if(!returned)throw new Error('authorization_cancelled');
+  const callback=new URL(returned);
+  if(callback.origin+callback.pathname!==authorization.redirectUri||callback.searchParams.get('state')!==authorization.state)throw new Error('authorization_invalid');
+  const code=callback.searchParams.get('code'),libraryId=z.string().uuid().parse(callback.searchParams.get('libraryId'));
+  if(!code)throw new Error('authorization_invalid');
+  const exchange:SensaExtensionExchange={code,installationId,state:authorization.state,verifier};
+  const credential=sensaExtensionCredentialSchema.parse(await apiRequest('/sensa/extension/exchange',exchange));
+  await locked(async()=>{const store=await load(),old=store.accounts[credential.accountId];store.accounts[credential.accountId]={...old,accountId:credential.accountId,installationId,webLibraryId:libraryId,token:credential.token,expiresAt:credential.expiresAt,queue:old?.queue??[],recent:old?.recent??[],savedOperations:old?.savedOperations??{}};store.active=credential.accountId;await persist(store);});
+ }finally{
+  const current=(await chrome.storage.session.get('sensaInteractiveLogin')).sensaInteractiveLogin as {state?:string}|null;
+  if(current?.state===authorization.state)await chrome.storage.session.set({sensaInteractiveLogin:null});
+ }
+}
 async function activeScope(){return (await load()).active;}
 
 /** Reading off for one tab: the mode goes and the page is told, so a surface that
@@ -308,12 +342,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   await selectReadingLanguageRoute(message.routeId);
  }
  if(message.kind==='login'){
-  await reconnectWeb();
-  // Bind explicit reconnect to the tab we open before its bridge can request authorization.
-  const tab=await chrome.tabs.create({url:'about:blank'});
-  if(!tab.id)throw new Error('authorization_cancelled');
-  await chrome.storage.session.set({sensaExplicitReconnect:{tabId:tab.id,expires:Date.now()+120000}});
-  await chrome.tabs.update(tab.id,{url:new URL('/profile',webUrl).href});
+  await loginThroughWeb();
  }
  if(message.kind==='disconnect')await locked(async()=>{const store=await load();store.active=null;await chrome.storage.local.set({sensaAutoConnectPaused:true});await chrome.storage.session.set({sensaWebConnect:null});await persist(store);await stopAllReading();});
  if(message.kind==='toggle'){

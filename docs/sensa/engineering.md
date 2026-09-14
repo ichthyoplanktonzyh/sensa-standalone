@@ -36,9 +36,18 @@ Sensa 标签页会提示先关闭旧页面，而不是打开竞争连接。UI �
 学习运行时只在 Web 本机执行：目标选择、Protocol/Policy、步骤、评价、Completion、Memory Outcome 与
 FSRS 都由本地领域事务结算。Hono/Edge 不创建或推进学习 Run，也不重新计算从云同步取回的学习事实。
 
-普通账号云同步以本机已提交记录为输入。云端保存版本化清单和按内容寻址的数据块；下载按响应字节预算分页，客户端消费服务端返回的 deferred 列表。学习操作与学习事件的历史内容不可被重写。
+普通账号云同步以本机已提交记录为输入。云端保存版本化清单和按内容寻址的数据块；下载按响应字节预算分页，客户端消费服务端返回的 deferred 列表。Learning Event 及其引用的原始 operation input
+不可被重写；只服务于本机命令返回的 operation result 在云端规范化为紧凑回执。同一份 base64 媒体
+按内容边界切块，使重复引用复用摘要块，而不是随每条操作结果重复上传。
+新 Checkpoint 成功提交后，服务端只回收旧清单曾引用且新清单不再引用的块；另一设备尚未提交的上传
+不在这次回收范围内。
 
-同步记账和业务内容使用不同事件：只有真实业务写入广播内容变化，单纯更新同步状态不能再次触发内容同步。同步由账号接通、本机内容变化、恢复联网或窗口重新获得焦点触发；空闲标签不使用定时轮询。服务用量和其他在线状态按需读取。
+同步记账和业务内容使用不同事件：只有真实业务写入广播内容变化，单纯更新同步状态不能再次触发
+内容同步。本机写入立即完成并形成新的内容版本；存在待同步版本时，停止操作两分钟、连续使用五分钟、
+完成学习会话、页面隐藏、恢复联网或手动操作触发 Checkpoint。页面回到前台只在最近云端检查超过
+五分钟时拉取。账号接通后在后台执行首次拉取；无待同步版本且检查未过期时没有整库请求。
+Remote Intake Delivery 在账号库身份稳定后独立拉取，不主动启动整库同步。服务用量和其他在线状态
+按需读取。
 
 下载内容在应用前验证摘要、引用和运行时可重放性，并在提交事务时重新检查账号、库和本机版本。冲突不得覆盖同步期间出现的新修改；无法自动合并时保留失败状态和明确重试入口。
 
@@ -65,7 +74,7 @@ Journey gateway 提交；只有本机事务成功后才写回 `applied` receipt�
 `app.sensa.intake` host manifest。
 
 设置页的“本机 Agent”通过 `web-native-intake-status` 读取扩展 id 和 host 的 library binding，UI 只显示
-连接状态与必要动作。它按当前浏览器生成一条命令，自动选择 macOS 或 Linux 上 Chrome/Edge
+连接状态与必要动作。它按当前浏览器生成一条命令，自动选择 macOS 或 Linux 上 Chrome/Edge/Chromium
 的 Native Messaging 注册位置，从同一 Web release 的 `/integrations/` 下载 CLI、skill 和 wire example，
 并将带有确定 executable/config 路径的 managed `sensa-intake` skill 安装到 Codex。集成资产不进入离线
 App Shell，使用 `no-cache` 保证安装内容与当前发布对齐；已有非 Sensa-managed 同名 skill 不会被覆盖。
@@ -97,7 +106,7 @@ Point manifest、摘要、大小、library/learner/schema identity 与 `account_
 模式；仓库目前没有 backup route、store、scheduler 或 restore workflow。现有 account sync 仍是收敛服务，
 不得在代码或 UI 中当作已实现备份。
 
-Web 页面与扩展之间的桥也只声明一次：`packages/contracts/src/sensa/consumer/extension.ts` 同时声明握手（授权、交换、凭据）与页面桥（每种请求的载荷、每种应答的形状）。Web 应用按它构造请求并校验应答，`apps/browser-extension/src/background.ts` 在分发前解析每条桥消息——未声明的 kind 或字段一律拒绝，不再静默丢弃；页面侧的 `webBridge.ts` 是每个 Sensa 页面都会加载的内容脚本，因此不带 schema，它的两个频道名、id 上限与 kind 白名单由 `apps/browser-extension/build.mjs` 在构建时从同一份声明注入。授权这一轮同样共用：API 路由与 Web 前置校验读同一组 schema。`scripts/sensaBridgeContractSmoke.mts` 在快速测试里把真实 forwarder 与真实 background 装进同一台假浏览器，逐 kind 走一遍。
+Web 页面与扩展之间的桥也只声明一次：`packages/contracts/src/sensa/consumer/extension.ts` 同时声明握手（授权、交换、凭据）与页面桥（每种请求的载荷、每种应答的形状）。Web 应用按它构造请求并校验应答，`apps/browser-extension/src/background.ts` 在分发前解析每条桥消息——未声明的 kind 或字段一律拒绝，不再静默丢弃；页面侧的 `webBridge.ts` 是每个 Sensa 页面都会加载的内容脚本，因此不带 schema，它的两个频道名、id 上限与 kind 白名单由 `apps/browser-extension/build.mjs` 在构建时从同一份声明注入。授权这一轮同样共用：API 路由与 Web 前置校验读同一组 schema。Web 页面在后台自动续接普通连接；插件中的显式登录则使用 Chrome Identity Web Auth Flow 打开带 PKCE challenge 的短时入口。已有 Web Session 自动签发一次性 code；没有 Session 才显示登录，登录完成后继续原请求。verifier 和最终扩展 credential 始终只在扩展后台，另一账号或资料库的队列不会随连接迁移。`scripts/sensaBridgeContractSmoke.mts` 在快速测试里把真实 forwarder 与真实 background 装进同一台假浏览器，逐 kind 走一遍。
 
 ## 模型与内容边界
 
@@ -119,11 +128,57 @@ Web 页面与扩展之间的桥也只声明一次：`packages/contracts/src/sens
 
 ```sh
 npm install
-npm run api:dev
-npm run web:dev
+npm run dev:sensa
 ```
 
-Web 公共配置从 `apps/web/.env.example` 复制到 `apps/web/.env.local`。API 私有配置从 `apps/api/.env.example` 复制到 `apps/api/.env`。远程数据库连接必须使用受限运行角色并要求 TLS；迁移凭据只用于迁移。
+`dev:sensa` 是日常人工验收入口。它在固定的 `http://127.0.0.1:3000` 启动完整 Web，提供热更新，
+并管理以下本机边界：
+
+- `sensa-local-postgres` PostgreSQL 17 容器，只绑定 `127.0.0.1:55434`；
+- `http://127.0.0.1:4319` 的本地 Auth、API、账号云同步与远程 Intake 服务；
+- `.sensa-local/browser-dev` 中的专用浏览器资料，不读取日常浏览器或生产站点的存储；
+- 指向本地 Web/API 的开发扩展，自动加载到验收浏览器；
+- 一个自动登录的 `local@sensa.invalid` 测试身份。退出后如需重新检查登录界面，验证码固定为
+  `123456`，不会发送邮件。
+
+启动器会先移除继承环境中的 `VITE_*`、Supabase、Provider、Cloudflare 和生产数据库变量，
+Vite 的 `sensa-local` mode 也从独立空目录读取环境文件，并拒绝非 loopback 的 Auth/API URL。
+本地服务将托管模型保持暂停；要验收真实生成，可以在产品设置中显式配置设备侧 Provider，不能从生产环境继承密钥。
+
+发布前使用真正的 production build 做第二次人工验收：
+
+```sh
+npm run preview:sensa
+```
+
+它构建压缩后的 Web 和 Service Worker，再从 `http://127.0.0.1:4173` 提供服务。
+开发和发布前预览使用不同 Origin、OPFS SQLite 与浏览器资料，因此不会相互覆盖，更不会读取
+生产 Origin 的语义世界。两个入口都复用同一个本地账号数据库；关闭专用浏览器窗口或按
+`Ctrl+C` 会停止 Web/API 子进程，数据库容器保留以加快下次启动。
+
+需要清空所有本地验收数据时，先关闭上述入口，再运行：
+
+```sh
+npm run reset:sensa
+```
+
+该命令只重建固定名称的本地测试数据库并删除 `.sensa-local` 下的开发、预览浏览器资料。
+它不访问生产环境。浏览器扩展和本机 Agent 会把 localhost 资料库视为独立连接；在设置里的
+“本机 Agent”重新运行连接命令后，Codex Skill 的连接标签会明确显示 `Local development` 或
+`Local preview`。回到线上资料库时，重新运行线上页面的连接命令即可切回。
+
+无界面的完整本地链路检查为：
+
+```sh
+npm run test:local-preview
+```
+
+它会启动同一组本地边界，在专用无头浏览器中验证自动登录、SQLite WASM + OPFS 持久化与
+Web/API loopback 约束，然后自动退出；不调用模型或 TTS。
+
+原始的 `api:dev`、`web:dev` 和 `web:preview` 只用于单模块调试，不构成安全、完整的产品验收环境。
+Web 公共配置示例位于 `apps/web/.env.example`，API 私有配置示例位于 `apps/api/.env.example`；
+它们用于显式的真实服务调试，不会被上述受管入口读取。远程数据库连接必须使用受限运行角色并要求 TLS；迁移凭据只用于迁移。
 
 需要数据库的本地检查使用一次性 PostgreSQL 17 数据库，例如：
 
@@ -157,7 +212,9 @@ npm run test:browser
 npm run test:db
 ```
 
-扩展构建与无付费交互检查：
+扩展构建与无付费交互检查：生产扩展只在同时提供 `SENSA_EXTENSION_WEB_URL` 与
+`SENSA_EXTENSION_API_URL` 时写入 `apps/browser-extension/dist`；没有目标的仓库构建把编译检查产物写入
+`.tmp/browser-extension-build`。本机预览则使用 `apps/browser-extension/dist-local`，三者不能互相覆盖。
 
 ```sh
 npm run build -w @sensa/browser-extension

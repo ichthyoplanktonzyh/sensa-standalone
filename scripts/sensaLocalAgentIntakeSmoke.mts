@@ -68,6 +68,7 @@ try {
   const installedSkill = readFileSync(join(skillDirectory, 'SKILL.md'), 'utf8');
   assert.ok(installedSkill.includes(JSON.stringify(executable)));
   assert.ok(installedSkill.includes(JSON.stringify(configPath)));
+  assert.ok(installedSkill.includes('"label": "Codex"'));
   assert.deepEqual(
     JSON.parse(readFileSync(join(skillDirectory, 'request-example.json'), 'utf8')),
     JSON.parse(readFileSync(resolve('integrations/codex/sensa-intake/request-example.json'), 'utf8')),
@@ -197,8 +198,10 @@ try {
   assert.deepEqual(applied.output.value.receipt, receipt);
 
   const macChrome = detectLocalAgentEnvironment('Mozilla/5.0 (Macintosh) Chrome/140.0 Safari/537.36');
+  const macChromium = detectLocalAgentEnvironment('Mozilla/5.0 (Macintosh) Chromium/140.0 Safari/537.36');
   const linuxEdge = detectLocalAgentEnvironment('Mozilla/5.0 (X11; Linux x86_64) Chrome/140.0 Edg/140.0');
   assert.deepEqual(macChrome, { platform: 'macos', browser: 'chrome' });
+  assert.deepEqual(macChromium, { platform: 'macos', browser: 'chromium' });
   assert.deepEqual(linuxEdge, { platform: 'linux', browser: 'edge' });
   assert.equal(detectLocalAgentEnvironment('Mozilla/5.0 (Windows NT 10.0) Chrome/140.0'), null);
   assert.equal(detectLocalAgentEnvironment('Mozilla/5.0 (Macintosh) Firefox/142.0'), null);
@@ -207,10 +210,12 @@ try {
     libraryId,
     extensionId,
     environment: macChrome!,
+    label: 'Codex · Local development',
   });
   assert.match(command, /https:\/\/sensa\.example\.com\/integrations\/sensa-intake\.mjs/u);
   assert.match(command, /--assets-base-url/u);
   assert.match(command, /--browser' 'chrome'/u);
+  assert.match(command, /--label' 'Codex · Local development'/u);
 
   console.log('PASS: one copied setup command installs the managed Codex skill and an idempotent local connection; the CLI durably queues one accepted v3 Intake, and only the committed Web receipt marks it applied.');
 } finally {

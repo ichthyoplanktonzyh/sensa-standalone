@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {candidateRoots,validateReleaseEnvironment,prepareCandidate} from './release/releaseCandidate.mjs';
+import {extensionBuildConfig} from '../apps/browser-extension/buildConfig.mjs';
 const workerConfig=JSON.parse(await readFile(new URL('../wrangler.jsonc',import.meta.url),'utf8'));
 assert.equal(workerConfig.name,'sensa-standalone');
 assert.equal(workerConfig.assets.directory,'./apps/web/dist');
 assert.equal(workerConfig.assets.not_found_handling,'single-page-application');
+const targetlessExtension=extensionBuildConfig({});
+assert.equal(targetlessExtension.output,'../../.tmp/browser-extension-build');
+assert.equal(new URL(targetlessExtension.web).hostname,'extension-build.invalid');
+assert.throws(()=>extensionBuildConfig({SENSA_EXTENSION_WEB_URL:'http://127.0.0.1:3001'}));
+const releaseExtension=extensionBuildConfig({SENSA_EXTENSION_WEB_URL:'https://learn.example.com',SENSA_EXTENSION_API_URL:'https://fixture.supabase.co/functions/v1/sensa-api'});
+assert.equal(releaseExtension.output,'dist');
+assert.equal(releaseExtension.web,'https://learn.example.com');
 const staticHeaders=await readFile(new URL('../apps/web/public/_headers',import.meta.url),'utf8');
 assert.match(staticHeaders,/Content-Security-Policy:/);
 assert.match(staticHeaders,/\/sw\.js\n  Cache-Control: no-cache/);

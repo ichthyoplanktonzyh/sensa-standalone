@@ -1139,6 +1139,10 @@ Memory Outcome、Scheduling Decision 及相应投影。断网不会降低这些�
 普通账号同步以本地已经提交的版本化记录为输入，传输清单和内容寻址数据块。服务端可以保存并返回
 账号副本，但不得重新运行 Protocol、重新评分、重算 FSRS，或把同步成功本身变成学习事实。下载记录
 必须先通过摘要、引用与可重放性校验，再由本地库在提交时合并；同步记账不得触发第二次业务结算。
+本机提交是当前设备上的保存结果；账号副本是延迟形成的 Cloud Checkpoint，不参与逐操作确认。
+Checkpoint 以本机内容版本与已确认基线判断待同步事实，同步期间产生的新版本必须保留到下一次传输。
+操作日志中的完整返回值不是学习事实；云端只需保留跨设备重试需要的紧凑回执，但不得压缩或改写
+Learning Event 及其引用的原始 operation input。
 
 Curriculum、Personal Content、正式 Learning Runtime 与 Free Practice 使用各自的 identity、revision、
 tombstone 和幂等规则。界面、模型输出、导入器与同步适配器只能提交各模块允许的 command/fact，不能

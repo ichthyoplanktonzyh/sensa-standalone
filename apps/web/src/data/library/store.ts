@@ -13,6 +13,8 @@ import {
 export const libraryDatabaseName = "sensa-local-library-v1.sqlite3";
 export const libraryTables = sqliteLibraryTables;
 export type Table = SqliteLibraryTable;
+export const localLibraryRevisionKey = "local-content-revision";
+export const cloudCheckpointRequestEvent = "sensa-cloud-checkpoint-requested";
 
 let sessionIncarnation: string | undefined;
 let serial: Promise<unknown> = Promise.resolve();
@@ -146,6 +148,10 @@ async function transaction<T>(
     const library = new LibraryTransaction(mode, adapter);
     const value = await work(library);
     if (mode === "readwrite" && library.wrote) {
+      if (kind === "content") {
+        const revision = await library.get<number>("meta", localLibraryRevisionKey) ?? 0;
+        library.put("meta", localLibraryRevisionKey, revision + 1);
+      }
       const mutation = library.mutation();
       await storageCall(() => adapter.commit(mutation));
       if (kind === "state") window.dispatchEvent(new Event("sensa-sync-state-changed"));
@@ -171,6 +177,14 @@ export const writeLibraryState = <T>(work: (tx: LibraryTransaction) => Promise<T
 export const readLibrary = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>
   transaction("readonly", work);
 
+export const readLocalLibraryRevision = (tx: LibraryTransaction): Promise<number> =>
+  tx.get<number>("meta", localLibraryRevisionKey).then((value) => value ?? 0);
+
+/** A meaningful product milestone asks the account adapter for an early Checkpoint. */
+export function requestCloudCheckpoint(): void {
+  window.dispatchEvent(new Event(cloudCheckpointRequestEvent));
+}
+
 /** A cleared/restored library fences every command from an older page instance. */
 export async function assertCurrentLibrary(tx: LibraryTransaction): Promise<string> {
   const current = await tx.get<string>("meta", "local-incarnation") ?? "initial";
@@ -189,9 +203,12 @@ export async function command<T>(
   const input = canonicalConsumerJson({ kind: op.kind, input: op.input });
   return transaction("readwrite", async (tx) => {
     await assertCurrentLibrary(tx);
-    const prior = await tx.get<{ input: string; result: T }>("operations", op.id);
+    const prior = await tx.get<{ input: string; result: T; cloudReceipt?: true }>("operations", op.id);
     if (prior) {
       if (prior.input !== input) throw new Error("localFlow.operationConflict");
+      // Restored domain facts already contain this command's effects. A compact cloud
+      // receipt must prevent duplicate execution without pretending to carry its result.
+      if (prior.cloudReceipt) throw new Error("localFlow.operationAlreadyApplied");
       return prior.result;
     }
     const value = await work(tx);
@@ -245,6 +262,11 @@ export function observeCloudSync(listener: () => void): () => void {
     window.removeEventListener("sensa-sync-state-changed", listener);
     stop();
   };
+}
+
+export function observeCloudSyncState(listener: () => void): () => void {
+  window.addEventListener("sensa-sync-state-changed", listener);
+  return () => window.removeEventListener("sensa-sync-state-changed", listener);
 }
 
 export async function readLibraryStorageDiagnostics(): Promise<SqliteStorageDiagnostics> {
