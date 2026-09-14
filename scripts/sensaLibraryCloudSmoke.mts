@@ -4,9 +4,10 @@ import {createHash} from 'node:crypto';
 import {libraryCloudPackageFixture} from './support/libraryCloudPackageFixture.mts';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
-import {build} from 'esbuild';
+import {resolve} from 'node:path';
 import {chromium,expect} from '@playwright/test';
 import pg from 'pg';
+import {build as viteBuild} from 'vite';
 import {createConsumerRoutes} from '../apps/api/src/sensa/access/consumer.ts';
 import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../packages/contracts/src/sensa/librarySync.ts';
 const url=process.env.SENSA_ADMIN_TEST_DATABASE_URL??process.env.SENSA_TEST_DATABASE_URL;
@@ -14,9 +15,14 @@ if(!url||new URL(url).hostname!=='127.0.0.1'||!new URL(url).pathname.startsWith(
 const pool=new pg.Pool({connectionString:url}),subjects=[crypto.randomUUID(),crypto.randomUUID()],sessions=subjects.map(()=>crypto.randomUUID());
 process.env.SENSA_REGISTRATION_POLICY='registered';
 const app=createConsumerRoutes({deleteIdentity:async()=>{},telemetry:()=>{},verify:async r=>{const index=r.headers.get('authorization')==='Bearer second'?1:0;return {issuer:'https://fixture.supabase.co/auth/v1',subject:subjects[index],sessionId:sessions[index],email:'sync@sensa.invalid',authenticatedAt:Math.floor(Date.now()/1000)};},transaction:async work=>{const db=await pool.connect();await db.query('BEGIN');try{await db.query('SET LOCAL ROLE backend_app');const value=await work(db);await db.query('COMMIT');return value;}catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}}});
-const bundle=await build({stdin:{contents:[...['store','cloudSync','intake','teacher','providers','personalLearning','drafts','packages','learning','language','backup','backupValidation'].map(n=>`export * from './apps/web/src/data/library/${n}';`),`export * from './apps/web/src/learning/protocols/fourStage';`,`export * from './apps/web/src/learning/runtime/localCurriculum';`].join('\n'),resolveDir:process.cwd()},bundle:true,format:'esm',write:false,define:{'import.meta.env':'{}'}});
+const built=await viteBuild({
+ configFile:false,root:process.cwd(),logLevel:'silent',base:'/',
+ build:{write:false,target:'es2022',rollupOptions:{preserveEntrySignatures:'strict',input:resolve('scripts/support/libraryCloudBrowserEntry.ts'),output:{entryFileNames:'core.js',chunkFileNames:'assets/[name]-[hash].js',assetFileNames:'assets/[name]-[hash][extname]'}}},
+});
+if(Array.isArray(built))throw Error('Expected one browser integration bundle');
+const browserFiles=new Map(built.output.map(file=>[file.fileName,file.type==='chunk'?file.code:file.source]));
 let calls:{path:string;method:string}[]=[];
-const server=createServer(async(req,res)=>{const path=req.url??'/';if(path==='/core.js'){res.setHeader('content-type','text/javascript');res.end(bundle.outputFiles[0]!.text);return;}if(!path.startsWith('/sensa/')){res.setHeader('content-type','text/html');res.end('<!doctype html><title>Library sync integration</title>');return;}const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(chunk);const body=Buffer.concat(chunks);calls.push({path,method:req.method??'GET'});const response=await app.request('http://fixture'+path,{method:req.method,headers:{authorization:req.headers.authorization??'Bearer first','content-type':'application/json'},...(body.length?{body}: {})});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));});
+const server=createServer(async(req,res)=>{const path=req.url??'/',assetPath=path.split('?')[0]!.replace(/^\//,'');const asset=browserFiles.get(assetPath);if(asset!==undefined){res.setHeader('content-type',assetPath.endsWith('.wasm')?'application/wasm':'text/javascript');res.end(typeof asset==='string'?asset:Buffer.from(asset));return;}if(!path.startsWith('/sensa/')){res.setHeader('content-type','text/html');res.end('<!doctype html><title>Library sync integration</title>');return;}const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(chunk);const body=Buffer.concat(chunks);calls.push({path,method:req.method??'GET'});const response=await app.request('http://fixture'+path,{method:req.method,headers:{authorization:req.headers.authorization??'Bearer first','content-type':'application/json'},...(body.length?{body}: {})});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));});
 server.listen(0,'127.0.0.1');await once(server,'listening');const origin=`http://127.0.0.1:${(server.address() as any).port}`;
 const browser=await chromium.launch({headless:true,executablePath:process.env.SENSA_CHROMIUM_PATH});
 async function account(token='first'){const response=await fetch(origin+'/sensa/web/access/session',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({installationId:crypto.randomUUID()})});assert.equal(response.status,200);return (await response.json() as any).accountId;}
