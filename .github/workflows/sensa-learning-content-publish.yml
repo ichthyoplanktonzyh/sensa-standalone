@@ -1,0 +1,90 @@
+name: Publish Sensa learning content
+run-name: Publish learning content from ${{ inputs.release_sha }}
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Full green main commit SHA containing the authored release
+        required: true
+        type: string
+      owner_accepted:
+        description: Publish the immutable Book releases and promote this Registry
+        required: true
+        default: false
+        type: boolean
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: sensa-learning-content-production
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: inputs.owner_accepted
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: learning-content-production
+    env:
+      SENSA_RELEASE_SHA: ${{ inputs.release_sha }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
+      SENSA_PACKAGE_BUCKET: sensa-learning-content
+      SENSA_PACKAGE_OUTPUT: .tmp/learning-content/releases
+      SENSA_PACKAGE_CATALOG: release-candidate/catalog.json
+      SENSA_PACKAGE_BASE_URL: ${{ vars.VITE_SUPABASE_URL }}/storage/v1/object/public/sensa-learning-content/releases/
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.release_sha }}
+      - name: Require an exact green main revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'JS'
+          const env=process.env,sha=env.SENSA_RELEASE_SHA??'';
+          if(!/^[a-f0-9]{40}$/.test(sha)||!env.GH_TOKEN||!env.GITHUB_REPOSITORY)throw Error('Full release SHA and GitHub Actions identity required');
+          const commit=await fetch(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/commits/${sha}`,{headers:{authorization:`Bearer ${env.GH_TOKEN}`,accept:'application/vnd.github+json','x-github-api-version':'2026-03-10'}});
+          if(!commit.ok||(await commit.json()).sha!==sha)throw Error('Learning content revision is unavailable');
+          const runsUrl=new URL(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/actions/workflows/sensa-consumer-check.yml/runs`);
+          for(const [key,value] of Object.entries({branch:'main',event:'push',head_sha:sha,per_page:'10'}))runsUrl.searchParams.set(key,value);
+          const runs=await fetch(runsUrl,{headers:{authorization:`Bearer ${env.GH_TOKEN}`,accept:'application/vnd.github+json','x-github-api-version':'2026-03-10'}});
+          const run=(await runs.json()).workflow_runs?.find(candidate=>candidate.head_sha===sha&&candidate.head_branch==='main'&&candidate.event==='push');
+          if(!runs.ok||run?.conclusion!=='success')throw Error('Learning content publication requires a successful main CI run for the exact revision');
+          JS
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Build and validate the immutable Registry candidate
+        run: |
+          npm run build -w @sensa/learning-kernel
+          npm run build -w @sensa/contracts
+          node --import tsx scripts/release/buildStarterPackage.mts
+          node --import tsx scripts/sensaLearningRegistrySmoke.mts
+      - name: Upload releases, verify public bytes, and prepare promotion
+        env:
+          SENSA_CONTENT_PUBLISH: 'true'
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          SENSA_REGISTRY_ENV_OUTPUT: ${{ runner.temp }}/sensa-learning-registry.env
+        run: node scripts/release/publishLearningRegistry.mjs
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
+        with:
+          version: 2.117.0
+      - name: Promote the verified Registry snapshot
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          trap 'rm -f "$RUNNER_TEMP/sensa-learning-registry.env"' EXIT
+          supabase secrets set --env-file "$RUNNER_TEMP/sensa-learning-registry.env" --project-ref "$SUPABASE_PROJECT_REF"
+      - name: Preserve publication evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sensa-learning-content-${{ inputs.release_sha }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            release-candidate/catalog.json
+            release-candidate/learning-content-publication.json

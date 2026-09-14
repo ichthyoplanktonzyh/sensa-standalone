@@ -368,8 +368,29 @@ the runtime's closed Action/renderer vocabulary. It describes executable
 capabilities, not authored content or learner progress.
 
 **Book / Book Version**:  
-An ordered, immutable curriculum of selected Senses. The product may group and
-count them by Lexeme, but a Lexeme is not silently substituted for membership.
+A Book is the stable identity of an authored learning work. Each Book Version
+is an ordered, immutable curriculum of selected Senses and their primary target
+bindings, fixed to a Content Release. The product may group and count them by
+Lexeme, but a Lexeme is not silently substituted for membership.
+
+**Book Release Bundle**:
+A transport artifact containing the validated delivery snapshots of the Sense
+Learning Packages in one immutable Book Version for one exact Target/Support
+Language pair. It may contain many targets but is not itself one Sense Learning
+Package, a learner curriculum or a progress identity.
+
+**Learning Content Registry / Registry Revision**:
+An immutable, content-addressed discovery snapshot listing the currently public
+Book Release for each stable Book and exact Target/Support Language pair. A new
+publication creates a new Revision after all referenced Bundles are readable;
+it never overwrites an earlier Registry or Bundle.
+
+**Book Release Installation / Book Update Application**:
+Installation verifies and stores one immutable Book Release Bundle on a Device
+without changing Curriculum. Application is the learner's explicit acceptance
+of that Book Version for future Study Scope revisions. Applying a newer Version
+supersedes the older Version's future membership without deleting its Bundles,
+Learning Targets, Sessions, Evidence or Retention state.
 
 **Sense Relation**:  
 A reviewed, versioned semantic relationship between two Senses, such as a real

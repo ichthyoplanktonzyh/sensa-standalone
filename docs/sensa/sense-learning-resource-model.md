@@ -153,6 +153,28 @@ Release 发布后不可原位修改。语言事实、源文本、媒体或 Requi
 Package 是以上版本化资源的不可变发布清单。它不拥有 learner exposure、Gate progress、Session
 顺序或 FSRS，也不把共享 Lexeme facts、Reference Lexicon 或个人内容复制成 Sense 私有事实。
 
+### 1.5 Book 发布与分发
+
+面向用户持续发布的是稳定 **Book** 的新 **Book Version**，不是覆盖同名 JSON，也不是把一本书
+误建模为一个 Sense Learning Package。一个 Book Version 固定有序 membership、primary target
+binding 与 Content Release；用于下载的 **Book Release Bundle** 只是在一个精确 Target/Support
+Language pair 下聚合这些 Package delivery snapshots 的传输制品，不创造新的学习身份。
+
+**Learning Content Registry** 是不可变、按 digest 寻址的发现快照。一次发布必须先上传并公开验证
+所有 Bundle，再上传引用它们的新 Registry Revision，最后才把服务端发现指针提升到该 Revision。
+已发布 Registry、Bundle 与对象路径都不能原位覆盖；失败时旧 Registry 继续完整可用。
+
+发现、安装与加入课程是三个不同动作：
+
+- 客户端可低频后台检查 Registry，并立即展示本机缓存；发现新版不改变课程；
+- 下载只校验 digest、大小、合同和语言方向并保存不可变 Bundle，不创建 Learning Target 或进度；
+- learner 显式“应用更新”后，新的 Book Version 才进入下一 Study Scope Revision；已开始 Session
+  继续固定旧 membership 与 materialization；
+- 新旧版本保持相同 Sense Version 与 Binding Version 的成员复用同一 Learning Target、Retention
+  Target、Evidence 和 FSRS state；纯材料修订通过新的 Content Release/materialization 表达；
+- 新增成员只在应用后进入未来 Introduction；删除成员只退出未来 Planning，旧 Bundle、membership、
+  已开始学习与历史事实继续可重放；若 Sense 或 Binding 的语义身份变化，则创建新的 Learning Target。
+
 ## 2. Lexeme 级共享资源
 
 同一 Lexeme 的多个 Sense 共享：
@@ -497,8 +519,10 @@ Curriculum 可以先接纳 stable Learning Target 与合法 Learning Policy Assi
   自由生成内容都不能把 blocked target 冒充成 ready 学习；
 - 高保证 Learning Policy 缺少 required assessment/novelty/grader capability 时不得静默使用轻量内容；
   只有 learner 显式改变 Policy Assignment 后，才能按新 Profile 重新解析 plan；
-- Published Package/Content Release 的版本升级不改变已经开始的 Session/Encounter，必须由下一
-  Scope Revision 显式接纳；learner-owned Personal Membership 可以在固定 Learning Target、Route 与
+- Published Package/Content Release 或 Book Version 的升级不改变已经开始的 Session/Encounter，
+  下载新版也不产生课程效果，必须由 learner 显式应用并由下一 Scope Revision 接纳；Book 新旧版本
+  中保持相同 Sense/Binding Version 的成员沿用 Retention state，被删除成员只退出未来 Planning。
+  learner-owned Personal Membership 可以在固定 Learning Target、Route 与
   Target/Support Language pair 内发布新的不可变 materialization，供尚未操作的当前或未来 Step 使用。
   两种路径都必须保留此前 Curriculum provenance、已操作 Step 的 materialization 与学习事实。
 

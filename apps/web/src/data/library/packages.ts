@@ -1,9 +1,13 @@
 import {validateRuntimeLearningRelease} from '@sensa/content-validator/runtime';
-import {learningPackageSchema,learningPackageDescriptorSchema,type LearningPackageBundle,type LearningPackageDescriptor,canonicalConsumerJson} from '@sensa/contracts/sensa';
+import {learningPackageSchema,learningPackageDescriptorSchema,learningBundleBookId,learningBundleBookVersionId,learningBundleVersionLabel,learningBundleTitle,learningDescriptorBookId,learningDescriptorBookVersionId,learningDescriptorVersionLabel,learningDescriptorTitle,type LearningPackageBundle,type LearningPackageDescriptor,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {canonicalJsonDigest,sha256 as syncSha256} from '@sensa/learning-kernel';
 import {command,readLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
 export type InstalledPackage={key:string;digest:string;bundle:LearningPackageBundle;installedAt:string};
-export const packageKey=(p:{id:string;version:string})=>JSON.stringify([p.id,p.version]);
+export const packageKey=(value:LearningPackageBundle|LearningPackageDescriptor)=>{
+ const bookVersionId='entries' in value?learningBundleBookVersionId(value):learningDescriptorBookVersionId(value);
+ if(bookVersionId&&'targetLanguage' in value&&'supportLanguage' in value)return JSON.stringify(['book-version',bookVersionId,value.targetLanguage,value.supportLanguage]);
+ return JSON.stringify(['entries' in value?learningBundleBookId(value):learningDescriptorBookId(value),'entries' in value?learningBundleVersionLabel(value):learningDescriptorVersionLabel(value)]);
+};
 export async function learningOwner(tx:LibraryTransaction){const identity=await tx.get<LibraryIdentity>('meta','identity');if(!identity||!await tx.get('meta','service-owner')||await tx.get('meta','signed-out'))throw new Error('localFlow.originalAccount');return identity;}
 export const sha256=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes as BufferSource)),b=>b.toString(16).padStart(2,'0')).join('');
 export function validatePackage(raw:unknown){
@@ -28,9 +32,9 @@ export function validatePackage(raw:unknown){
  return bundle;
 }
 export async function installPackage(bytes:Uint8Array,descriptor?:LearningPackageDescriptor,signal?:AbortSignal){
- if(bytes.length>8*1024*1024)throw new Error('localFlow.packageTooLarge');
+ if(bytes.length>64*1024*1024)throw new Error('localFlow.packageTooLarge');
  const digest=await sha256(bytes),bundle=validatePackage(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)));
- if(descriptor){const d=learningPackageDescriptorSchema.parse(descriptor);if(bytes.length!==d.byteLength||digest!==d.sha256||bundle.id!==d.id||bundle.version!==d.version||bundle.entries.length!==d.entryCount)throw new Error('localFlow.catalogMismatch');}
+ if(descriptor){const d=learningPackageDescriptorSchema.parse(descriptor);if(bytes.length!==d.byteLength||digest!==d.sha256||learningBundleBookId(bundle)!==learningDescriptorBookId(d)||learningBundleBookVersionId(bundle)!==learningDescriptorBookVersionId(d)||learningBundleVersionLabel(bundle)!==learningDescriptorVersionLabel(d)||learningBundleTitle(bundle)!==learningDescriptorTitle(d)||bundle.targetLanguage!==('targetLanguage' in d?d.targetLanguage:bundle.targetLanguage)||bundle.supportLanguage!==('supportLanguage' in d?d.supportLanguage:bundle.supportLanguage)||bundle.entries.length!==d.entryCount||'format' in d&&(bundle.format!=='sensa-book-release-bundle-v1'||bundle.book.bookKey!==d.book.bookKey||bundle.contentRelease.contentReleaseId!==d.contentRelease.contentReleaseId||bundle.contentRelease.versionNumber!==d.contentRelease.versionNumber||bundle.contentRelease.schemaVersion!==d.contentRelease.schemaVersion||bundle.publishedAt!==d.publishedAt||bundle.changeSummary!==d.changeSummary))throw new Error('localFlow.catalogMismatch');}
  return command({id:crypto.randomUUID(),kind:'package.install',input:{key:packageKey(bundle),digest}},async tx=>{
   await learningOwner(tx);if(signal?.aborted)throw new Error('localFlow.downloadCancelled');const key=packageKey(bundle),old=await tx.get<InstalledPackage>('packages',key);
   if(old){if(canonicalConsumerJson(old.bundle)!==canonicalConsumerJson(bundle))throw new Error('localFlow.packageVersionChanged');return old;}

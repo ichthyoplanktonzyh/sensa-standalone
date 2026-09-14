@@ -49,7 +49,7 @@ React Web 保持既有平台定位和迁移验证价值；不能把阶段性的 
                        ↓
           本地初学 → 本地复习/重学 → 本地记录与调度
 
-Sensa 发布的学习包 → 下载到本地 → 显式加入学习 ──┘
+不可变 Registry → Book Release Bundle → 下载到本地 → 显式加入/应用更新 ──┘
 ```
 
 Owner 明确将面向 Agent 的端口纳入完整采集蓝图。Agent 可以在用户授权范围内提交固定上下文、
@@ -325,6 +325,10 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 - Sense Relation 是同一 release 中经过审核的两个 Sense 之间的语义事实；
 - Semantic Field Version 用有限、可审核的 Senses 与 Relations 表达局部意义邻域，不决定课程顺序；
 - Content Release、Package 与 Book Version 发布后不原位修改。
+- Book Release Bundle 是一个 Book Version 在精确 Target/Support Language pair 下的传输制品，
+  可以聚合多个 Sense Learning Package snapshot，但不取代单目标 Package 的领域身份；
+- Learning Content Registry 只负责发现当前公开版本。Bundle 先按 digest 上传并验证，Registry
+  Revision 后发布并作为唯一可变发现指针的目标；Registry、Bundle 与对象路径本身都不可覆盖。
 
 ### Curriculum
 
@@ -675,7 +679,8 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 3. **Data Control Module**：拥有 Data Export/Delete Request 的幂等、授权、状态与审计生命周期，并
    协调 Account、learner-owned stores 与 Replica invalidation；
 4. **Catalog Module**：读取已发布、已固定的 Book、Sense Learning Package、Semantic Field、
-   Reference Release、Reference Sense、Sense Alignment 与 Lexical Enrichment；
+   Reference Release、Reference Sense、Sense Alignment 与 Lexical Enrichment；其分发适配器读取
+   immutable Learning Content Registry，验证并安装 Book Release Bundle，但不拥有 Enrollment 或进度；
 5. **Lexical Reference Module**：解析 Example + character span，读取 version-pinned Reference entry、
    Lexical Occurrence 与 Contextual Sense Resolution，并生成可重建搜索/详情读取模型；它不拥有
    learner progress，也不自由生成词典释义；
@@ -790,6 +795,9 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
   Learner Sense Progress；它们只在新的 Study Scope Revision 中改变 Planning eligibility；
 - Study Scope 变更不能静默改变 active Session；Session/Encounter 必须保留用于计划它们的 Scope
   revision 与 Curriculum provenance；
+- Registry 更新发现、Book Release 下载与 Book Version 应用必须分离；后台检查不改变 Curriculum，
+  下载不等于加入学习，只有 learner 显式应用才产生新的 Study Scope。未改变 Sense/Binding identity
+  的成员保留 Retention state，删除成员只退出未来 Planning，旧 Session 和历史继续引用旧 release；
 - Semantic Field 是有限、版本化的内容邻域，不是 Book、学习路径或通用人类 ontology；
 - Personal Semantic World 只接纳具备真实 Context、located Expression、teaching-sufficient stable Sense/
   Binding 与有效 Semantic Acceptance 的完整 Personal Meaning；未闭合 Intake 留在 Inbox；

@@ -1,17 +1,20 @@
 {
   "title": "日常交流：八个具体意思",
   "description": "从借用物品、提醒、推迟安排等日常情境开始。适用于中文母语者的英语轻量学习；文本资源，不包含音频。首发候选，待真实使用评审。",
-  "version": "1",
+  "bookKey": "daily-exchanges",
+  "versionNumber": 1,
+  "publishedAt": "2026-09-10T00:00:00.000Z",
+  "changeSummary": "首次发布。",
   "targetLanguage": "en",
   "supportLanguage": "zh-CN",
   "entries": [
-    {"key":"borrow-temporarily","expression":"borrow","meaning":"暂时使用属于别人的东西，并打算归还。","scene":"下雨时你没有带伞，向同事要了一把，约好明天还给他。"},
-    {"key":"lend-temporarily","expression":"lend","meaning":"把自己的东西暂时交给别人使用，并期待对方归还。","scene":"同事没有带伞，你把自己的备用伞给他用，约好明天拿回来。"},
-    {"key":"remind-person","expression":"remind","meaning":"让某人重新想起可能忘记的事情。","scene":"朋友明早要赶火车，担心忘记带证件，请你在出门前再说一声。"},
-    {"key":"postpone-event","expression":"postpone","meaning":"把原定的活动或事情改到更晚的时间。","scene":"原定周六的野餐遇到大雨，大家决定改到下周再去。"},
-    {"key":"confirm-arrangement","expression":"confirm","meaning":"核实或明确表示一项安排或信息是确定的。","scene":"你记得会议是下午三点，但想再向组织者核实一次，避免记错时间。"},
-    {"key":"recommend-option","expression":"recommend","meaning":"因为认为某个选择合适或有用，建议别人采用。","scene":"朋友第一次来这座城市，请你介绍一家你吃过、觉得很好的餐厅。"},
-    {"key":"available-free","expression":"available","meaning":"在某个时间没有其他安排，可以参与或提供帮助。","scene":"你想约同事明天下午讨论项目，需要先问他那个时间有没有空。"},
-    {"key":"run-out-supply","expression":"run out of","meaning":"把某种原有的东西用完，以至于没有剩余。","scene":"你正准备打印最后一页，打印机里的纸却一张也没有了，需要去补充。"}
+    {"key":"borrow-temporarily","senseVersion":1,"bindingVersion":1,"expression":"borrow","meaning":"暂时使用属于别人的东西，并打算归还。","scene":"下雨时你没有带伞，向同事要了一把，约好明天还给他。"},
+    {"key":"lend-temporarily","senseVersion":1,"bindingVersion":1,"expression":"lend","meaning":"把自己的东西暂时交给别人使用，并期待对方归还。","scene":"同事没有带伞，你把自己的备用伞给他用，约好明天拿回来。"},
+    {"key":"remind-person","senseVersion":1,"bindingVersion":1,"expression":"remind","meaning":"让某人重新想起可能忘记的事情。","scene":"朋友明早要赶火车，担心忘记带证件，请你在出门前再说一声。"},
+    {"key":"postpone-event","senseVersion":1,"bindingVersion":1,"expression":"postpone","meaning":"把原定的活动或事情改到更晚的时间。","scene":"原定周六的野餐遇到大雨，大家决定改到下周再去。"},
+    {"key":"confirm-arrangement","senseVersion":1,"bindingVersion":1,"expression":"confirm","meaning":"核实或明确表示一项安排或信息是确定的。","scene":"你记得会议是下午三点，但想再向组织者核实一次，避免记错时间。"},
+    {"key":"recommend-option","senseVersion":1,"bindingVersion":1,"expression":"recommend","meaning":"因为认为某个选择合适或有用，建议别人采用。","scene":"朋友第一次来这座城市，请你介绍一家你吃过、觉得很好的餐厅。"},
+    {"key":"available-free","senseVersion":1,"bindingVersion":1,"expression":"available","meaning":"在某个时间没有其他安排，可以参与或提供帮助。","scene":"你想约同事明天下午讨论项目，需要先问他那个时间有没有空。"},
+    {"key":"run-out-supply","senseVersion":1,"bindingVersion":1,"expression":"run out of","meaning":"把某种原有的东西用完，以至于没有剩余。","scene":"你正准备打印最后一页，打印机里的纸却一张也没有了，需要去补充。"}
   ]
 }

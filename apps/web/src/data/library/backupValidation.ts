@@ -60,7 +60,7 @@ export function validateBackupRows(rows:BackupRows){
   for(const override of t.planningOverrides){const op=JSON.parse(requireRow('operations',override.operationId).input);if(op.kind!=='learning.declareMastery'||op.input.targetId!==t.id||op.input.active!==true||op.input.at!==override.createdAt)fail();}
   if(!Array.isArray(t.curriculumMemberships)||!t.curriculumMemberships.length||new Set(t.curriculumMemberships.map((membership:any)=>membership.id)).size!==t.curriculumMemberships.length)fail();
   for(const membership of t.curriculumMemberships){
-   uuid.parse(membership.id);z.number().int().positive().parse(membership.revision);uuid.parse(membership.createdByOperationId);requireRow('operations',membership.createdByOperationId);timestamp.parse(membership.createdAt);timestamp.parse(membership.updatedAt);if(Date.parse(membership.updatedAt)<Date.parse(membership.createdAt))fail();
+   uuid.parse(membership.id);z.number().int().positive().parse(membership.revision);if(membership.status!==undefined&&!['active','superseded'].includes(membership.status))fail();uuid.parse(membership.createdByOperationId);requireRow('operations',membership.createdByOperationId);timestamp.parse(membership.createdAt);timestamp.parse(membership.updatedAt);if(Date.parse(membership.updatedAt)<Date.parse(membership.createdAt))fail();
    const context=validateLanguageContext(membership.languageContext);if(context.targetLanguageTag!==t.targetLanguageTag)fail();
    sensaLearningMaterializationSnapshotSchema.parse(membership.material.snapshot);validateLightweightInitialMaterialization(membership.material);
    const p=membership.material.snapshot.provenance;

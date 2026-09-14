@@ -12,7 +12,7 @@ import {installPackage,downloadPackage,sha256} from '../apps/web/src/data/librar
 import {enrollPackage,readLearning,startLearning,actLearning,finishLearning,confirmLearningQuantity,setLocalDeclaredMastery} from '../apps/web/src/data/library/learning.ts';
 import {createLocalProtocolProgress,executeLocalProtocolTransition,reduceLocalProtocolAction,localLearningPurpose,localProtocolOutcomePermissions,localRunOpenPlanningInterruption} from '../apps/web/src/learning/runtime/localProtocol.ts';
 import {hasDeclaredMasteryOverride} from '../apps/web/src/learning/runtime/targetPlanningOverrides.ts';
-import {localCurriculumMeaning,localExecutableTarget} from '../apps/web/src/learning/runtime/localCurriculum.ts';
+import {localCurriculumMeaning,localCurriculumMembershipForContext,localExecutableTarget} from '../apps/web/src/learning/runtime/localCurriculum.ts';
 import {addLanguageRoute,setActiveLanguageRoute} from '../apps/web/src/data/library/language.ts';
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
 const identity=await openLibrary();await command({id:crypto.randomUUID(),kind:'fixture.owner',input:{}},async tx=>{tx.put('meta','service-owner',{subject:crypto.randomUUID()});});
@@ -198,5 +198,27 @@ try{
  assert.equal(localCurriculumMeaning(shared.curriculumMemberships.find(item=>item.languageContext.supportLanguageTag==='ja')!),'一時的に借りて、後で返す。');
  assert.equal(shared.retentionId,target.retentionId,'both Route memberships share Retention identity');
 
- console.log('PASS: verified download/import, immutable versions, separate enrollment, declared-mastery interruption/resume without evidence or FSRS writes, local initial/review/relearning, replay, stale-step rejection, rollback and pinned content; memory storage Adapter, no browser/model calls.');
+ // A downloaded Book Version is applied explicitly. Stable target identities
+ // retain progress, removed members leave future planning, and an open Session
+ // stays pinned to the Membership and material with which it began.
+ const bookId=id(),retained={...entry,senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id()},removed={...entry,senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id()};
+ const release=(versionNumber:number,bookVersionId:string,contentReleaseId:string,entries:typeof bundle.entries,changeSummary:string)=>({format:'sensa-book-release-bundle-v1' as const,book:{bookId,bookKey:'update-smoke',bookVersionId,versionNumber,title:'更新验证书',description:'验证不可变版本的应用语义。'},contentRelease:{contentReleaseId,versionNumber,schemaVersion:'sensa-consumer-content-v1'},targetLanguage:'en',supportLanguage:'zh-CN',publishedAt:`2026-09-${10+versionNumber}T00:00:00.000Z`,changeSummary,entries});
+ const firstBookVersion=id(),firstContentRelease=id(),firstRelease=release(1,firstBookVersion,firstContentRelease,[retained,removed],'首次发布');
+ const firstBytes=new TextEncoder().encode(JSON.stringify(firstRelease)),firstInstalled=await installPackage(firstBytes),[retainedId,removedId]=await enrollPackage(id(),firstInstalled.key,languageContext);
+ const beforeUpdate=(await readLearning()).targets.find(item=>item.id===retainedId!)!,beforeMembership=localCurriculumMembershipForContext(beforeUpdate,languageContext)!;
+ await confirmLearningQuantity(id(),languageContext,20);const updateRun=await startLearning(id(),retainedId!,languageContext,20,'2026-09-12T08:00:00.000Z');
+ assert.equal(updateRun.participants[retainedId!]!.curriculumMembershipId,beforeMembership.id);
+ const retainedV2=structuredClone(retained),recallCue=retainedV2.content.resources.find(resource=>resource.materialRoleKey==='experience_recall_cue')!;
+ recallCue.contentPayload={...(recallCue.contentPayload as Record<string,unknown>),images:[{id:id(),name:'new-context.jpg',dataUrl:'data:image/jpeg;base64,/9j/2Q=='}]};recallCue.contentDigest=canonicalJsonDigest(recallCue.contentPayload);
+ const added={...entry,senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id()},secondBookVersion=id(),secondContentRelease=id(),secondRelease=release(2,secondBookVersion,secondContentRelease,[retainedV2,added],'补充场景图片并调整范围');
+ const secondInstalled=await installPackage(new TextEncoder().encode(JSON.stringify(secondRelease)));const [sameRetainedId,addedId]=await enrollPackage(id(),secondInstalled.key,languageContext);
+ assert.equal(sameRetainedId,retainedId,'unchanged Sense and Binding versions preserve the Learning Target');
+ const afterApply=await readLearning(),retainedTarget=afterApply.targets.find(item=>item.id===retainedId!)!,removedTarget=afterApply.targets.find(item=>item.id===removedId!)!,addedTarget=afterApply.targets.find(item=>item.id===addedId!)!,currentMembership=localCurriculumMembershipForContext(retainedTarget,languageContext)!;
+ assert.equal(retainedTarget.retentionId,beforeUpdate.retentionId);assert.equal(retainedTarget.memoryRevision,beforeUpdate.memoryRevision);assert.equal(currentMembership.packageKey,secondInstalled.key);assert.equal(currentMembership.provenance.bookVersionId,secondBookVersion);assert.equal(beforeMembership.status,'active');assert.equal(retainedTarget.curriculumMemberships.find(item=>item.id===beforeMembership.id)?.status,'superseded');
+ assert.equal(localCurriculumMembershipForContext(removedTarget,languageContext),undefined,'a removed member leaves future planning without deleting its target or history');assert(localCurriculumMembershipForContext(addedTarget,languageContext));
+ const stillOpen=(await readLearning()).runs.find(item=>item.id===updateRun.id)!;assert.equal(stillOpen.participants[retainedId!]!.curriculumMembershipId,beforeMembership.id);assert.equal(stillOpen.participants[retainedId!]!.material.snapshot.provenance.bookVersionId,firstBookVersion);assert.equal(currentMembership.material.snapshot.provenance.bookVersionId,secondBookVersion);
+ const japaneseRelease={...secondRelease,supportLanguage:'ja',entries:[{...retainedV2,meaning:'一時的に借りて、後で返す。',content:japaneseMaterial.materialization.content}]};const japaneseBookInstalled=await installPackage(new TextEncoder().encode(JSON.stringify(japaneseRelease)));
+ assert.notEqual(japaneseBookInstalled.key,secondInstalled.key,'the same Book Version can install separate exact language-pair Bundles');await enrollPackage(id(),japaneseBookInstalled.key,japaneseContext);const multilingualTarget=(await readLearning()).targets.find(item=>item.id===retainedId!)!;assert(localCurriculumMembershipForContext(multilingualTarget,languageContext));assert(localCurriculumMembershipForContext(multilingualTarget,japaneseContext));
+
+ console.log('PASS: verified download/import, immutable Book updates, explicit enrollment, progress preservation, removed-member planning, open-Session pinning, declared-mastery interruption/resume, local learning/replay and rollback; memory storage Adapter, no browser/model calls.');
 }finally{globalThis.fetch=realFetch;}

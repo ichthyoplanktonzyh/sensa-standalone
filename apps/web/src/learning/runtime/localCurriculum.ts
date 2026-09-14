@@ -9,6 +9,7 @@ import type {
 
 const samePair=(left:SensaFormalPinnedLanguageContext,right:SensaFormalPinnedLanguageContext)=>
   left.targetLanguageTag===right.targetLanguageTag&&left.supportLanguageTag===right.supportLanguageTag;
+const active=(membership:LocalCurriculumMembership)=>membership.status!=='superseded';
 
 /** Membership survives later Route revisions, while material remains usable
  * only when its pinned pair still matches the current Route. */
@@ -17,18 +18,18 @@ export function localCurriculumMembershipForContext(
   context:SensaFormalPinnedLanguageContext,
 ):LocalCurriculumMembership|undefined {
   return [...target.curriculumMemberships].reverse().find(membership=>
-    membership.languageContext.languageRouteId===context.languageRouteId&&samePair(membership.languageContext,context));
+    active(membership)&&membership.languageContext.languageRouteId===context.languageRouteId&&samePair(membership.languageContext,context));
 }
 
 export function localCurriculumMembershipForRoute(
   target:LocalLearningTarget,
   languageRouteId:string,
 ):LocalCurriculumMembership|undefined {
-  return [...target.curriculumMemberships].reverse().find(membership=>membership.languageContext.languageRouteId===languageRouteId);
+  return [...target.curriculumMemberships].reverse().find(membership=>active(membership)&&membership.languageContext.languageRouteId===languageRouteId);
 }
 
 export function localTargetInRoute(target:LocalLearningTarget,languageRouteId:string):boolean {
-  return target.curriculumMemberships.some(membership=>membership.languageContext.languageRouteId===languageRouteId);
+  return target.curriculumMemberships.some(membership=>active(membership)&&membership.languageContext.languageRouteId===languageRouteId);
 }
 
 export function localCurriculumMeaning(membership:LocalCurriculumMembership):string {

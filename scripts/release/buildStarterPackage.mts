@@ -1,33 +1,51 @@
-/** Authored public text resources; no model calls or learner data. */
-import {readFile,writeFile,mkdir} from 'node:fs/promises';
-import {resolve} from 'node:path';
+/** Build one immutable Registry snapshot from an explicit set of authored Books.
+ * The historic filename remains a release-workflow entry point; its output is
+ * no longer a legacy multi-entry "Sense package". */
+import {readFile,writeFile,mkdir,readdir} from 'node:fs/promises';
+import {dirname,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {stableUuid} from '@sensa/learning-kernel';
-import {learningPackageSchema,learningPackageDescriptorSchema} from '@sensa/contracts/sensa';
+import {bookReleaseBundleSchema,bookReleaseDescriptorSchema,learningContentRegistrySchema} from '@sensa/contracts/sensa';
 import {provisionLightweightInitialContent} from '../../apps/web/src/learning/runtime/lightweightInitialContent.ts';
-const source=JSON.parse(await readFile('content/authored/web-starter.json','utf8')) as {
- title:string;description:string;version:string;
- /** The languages the authored text is in. They belong to the resource rather
-  * than to this script, so authoring another language's starter resource is a
-  * data change and cannot silently inherit this one's languages. */
+
+type Source={
+ bookKey:string;title:string;description:string;versionNumber:number;publishedAt:string;changeSummary:string;
  targetLanguage:string;supportLanguage:string;
- entries:{key:string;expression:string;meaning:string;scene:string}[];
+ entries:{key:string;senseVersion:number;bindingVersion:number;expression:string;meaning:string;scene:string}[];
 };
-if(!source.targetLanguage?.trim())throw Error('Authored resource must name its target language');
-if(!source.supportLanguage?.trim())throw Error('Authored resource must name its Support Language');
-if(source.targetLanguage===source.supportLanguage)throw Error('Authored resource cannot teach the language it explains in');
+
+const configuredSources=process.env.SENSA_BOOK_RELEASE_SOURCES?.trim();
+const sourcePaths=configuredSources?configuredSources.split(',').map(value=>value.trim()).filter(Boolean):(await readdir('content/authored',{withFileTypes:true})).filter(entry=>entry.isFile()&&entry.name.endsWith('.json')).map(entry=>'content/authored/'+entry.name);
+if(!sourcePaths.length||new Set(sourcePaths).size!==sourcePaths.length)throw Error('Explicit unique authored Book release sources required');
 const origin=new URL(process.env.SENSA_WEB_ORIGIN??'https://candidate.invalid');
 if(origin.protocol!=='https:'&&!(origin.protocol==='http:'&&['127.0.0.1','localhost'].includes(origin.hostname)))throw Error('HTTPS origin required');
-const packageId=stableUuid('sensa:authored:daily-exchanges'),owner=stableUuid('sensa:publisher');
-const entries=source.entries.map(e=>{
- const senseId=stableUuid('sensa:starter:sense:'+e.key),senseVersionId=stableUuid('sensa:starter:sense:'+e.key+':'+source.version),bindingId=stableUuid('sensa:starter:binding:'+e.key),bindingVersionId=stableUuid('sensa:starter:binding:'+e.key+':'+source.version);
- const result=provisionLightweightInitialContent({learnerUserId:owner,learningTargetId:stableUuid('sensa:starter:target:'+e.key),senseId,senseVersionId,senseExpressionBindingId:bindingId,resolvedLearningPlanRevisionId:'authored-starter-v1',expressionSourceVersion:source.version,senseSourceVersion:source.version,expression:{surface:e.expression,languageTag:source.targetLanguage,expressionKind:e.expression.includes(' ')?'phrase':'word'},sense:{meaning:e.meaning,supportLanguageTag:source.supportLanguage},originExperience:{source:'other_authoritative_source',sourceVersion:source.version,personalAnchorUseGrantId:null,experience:{scene:e.scene,senseFocus:e.meaning,featureLabels:[]}},referenceFacts:[],requestedAt:'2026-09-10T00:00:00Z'});
- if(result.status!=='ready')throw Error('Authored resource failed material validation: '+e.key);
- return {senseId,senseVersionId,bindingId,bindingVersionId,expression:e.expression,meaning:e.meaning,content:result.materialization.content};
-});
-const pack=learningPackageSchema.parse({format:'sensa-learning-package-v1',id:packageId,version:source.version,title:source.title,targetLanguage:source.targetLanguage,supportLanguage:source.supportLanguage,entries});
-const bytes=Buffer.from(JSON.stringify(pack)),sha256=createHash('sha256').update(bytes).digest('hex'),name=`${packageId}-${sha256}.json`;
-const folder=resolve(process.env.SENSA_PACKAGE_OUTPUT??'release-candidate/learning-packages');await mkdir(folder,{recursive:true});await writeFile(resolve(folder,name),bytes);
-const descriptor=learningPackageDescriptorSchema.parse({id:pack.id,version:pack.version,title:pack.title,description:source.description,entryCount:entries.length,byteLength:bytes.length,sha256,url:new URL('/learning-packages/'+name,origin).href});
-await mkdir('release-candidate',{recursive:true});await writeFile('release-candidate/catalog.json',JSON.stringify({items:[descriptor]},null,2)+'\n');
-console.log(`Built ${entries.length} authored text entries; material/package validation passed. No audio, provider calls or user acceptance claimed.`);
+const defaultBase=new URL('/learning-packages/',origin),base=new URL(process.env.SENSA_PACKAGE_BASE_URL??defaultBase);
+if(base.username||base.password||base.search||base.hash||!(base.protocol==='https:'||base.protocol==='http:'&&['127.0.0.1','localhost'].includes(base.hostname)))throw Error('Safe package base URL required');
+if(!base.pathname.endsWith('/'))base.pathname+='/'
+const folder=resolve(process.env.SENSA_PACKAGE_OUTPUT??'release-candidate/learning-packages'),catalogOutput=resolve(process.env.SENSA_PACKAGE_CATALOG_OUTPUT??'release-candidate/catalog.json'),owner=stableUuid('sensa:publisher'),descriptors=[];
+let totalEntries=0;
+
+for(const path of sourcePaths.sort()){
+ const source=JSON.parse(await readFile(path,'utf8')) as Source;
+ if(!source.bookKey?.trim()||!Number.isInteger(source.versionNumber)||source.versionNumber<1||!Number.isFinite(Date.parse(source.publishedAt)))throw Error(`Invalid authored Book identity: ${path}`);
+ if(!source.targetLanguage?.trim())throw Error('Authored resource must name its target language');
+ if(!source.supportLanguage?.trim())throw Error('Authored resource must name its Support Language');
+ if(!source.entries?.length||new Set(source.entries.map(entry=>entry.key)).size!==source.entries.length)throw Error(`Authored Book must contain unique entry keys: ${path}`);
+ const bookId=stableUuid('sensa:book:'+source.bookKey),bookVersionId=stableUuid(`sensa:book:${source.bookKey}:version:${source.versionNumber}`),contentReleaseId=stableUuid(`sensa:content-release:${source.bookKey}:version:${source.versionNumber}`);
+ const entries=source.entries.map(entry=>{
+  if(!Number.isInteger(entry.senseVersion)||entry.senseVersion<1||!Number.isInteger(entry.bindingVersion)||entry.bindingVersion<1)throw Error(`Entry versions must be positive: ${entry.key}`);
+  const senseId=stableUuid('sensa:starter:sense:'+entry.key),senseVersionId=stableUuid(`sensa:starter:sense:${entry.key}:version:${entry.senseVersion}`),bindingId=stableUuid('sensa:starter:binding:'+entry.key),bindingVersionId=stableUuid(`sensa:starter:binding:${entry.key}:version:${entry.bindingVersion}`);
+  const result=provisionLightweightInitialContent({learnerUserId:owner,learningTargetId:stableUuid('sensa:starter:target:'+entry.key),senseId,senseVersionId,senseExpressionBindingId:bindingId,resolvedLearningPlanRevisionId:`authored:${source.bookKey}:${source.versionNumber}`,expressionSourceVersion:String(entry.bindingVersion),senseSourceVersion:String(entry.senseVersion),expression:{surface:entry.expression,languageTag:source.targetLanguage,expressionKind:entry.expression.includes(' ')?'phrase':'word'},sense:{meaning:entry.meaning,supportLanguageTag:source.supportLanguage},originExperience:{source:'other_authoritative_source',sourceVersion:String(source.versionNumber),personalAnchorUseGrantId:null,experience:{scene:entry.scene,senseFocus:entry.meaning,featureLabels:[]}},referenceFacts:[],requestedAt:source.publishedAt});
+  if(result.status!=='ready')throw Error('Authored resource failed material validation: '+entry.key);
+  return {senseId,senseVersionId,bindingId,bindingVersionId,expression:entry.expression,meaning:entry.meaning,content:result.materialization.content};
+ });
+ const bundle=bookReleaseBundleSchema.parse({format:'sensa-book-release-bundle-v1',book:{bookId,bookKey:source.bookKey,bookVersionId,versionNumber:source.versionNumber,title:source.title,description:source.description},contentRelease:{contentReleaseId,versionNumber:source.versionNumber,schemaVersion:'sensa-consumer-content-v1'},targetLanguage:source.targetLanguage,supportLanguage:source.supportLanguage,publishedAt:source.publishedAt,changeSummary:source.changeSummary,entries});
+ const bytes=Buffer.from(JSON.stringify(bundle)),sha256=createHash('sha256').update(bytes).digest('hex'),name=`${bookId}/${bookVersionId}/${sha256}.json`,file=resolve(folder,name);
+ await mkdir(dirname(file),{recursive:true});await writeFile(file,bytes);
+ descriptors.push(bookReleaseDescriptorSchema.parse({format:'sensa-book-release-descriptor-v1',book:bundle.book,contentRelease:bundle.contentRelease,targetLanguage:bundle.targetLanguage,supportLanguage:bundle.supportLanguage,publishedAt:bundle.publishedAt,changeSummary:bundle.changeSummary,entryCount:entries.length,byteLength:bytes.length,sha256,url:new URL(name,base).href}));
+ totalEntries+=entries.length;
+}
+
+const publishedAt=descriptors.map(item=>item.publishedAt).sort().at(-1)!,registryWithoutRevision={format:'sensa-learning-content-registry-v1' as const,publishedAt,items:descriptors},revision=createHash('sha256').update(JSON.stringify(registryWithoutRevision)).digest('hex'),registry=learningContentRegistrySchema.parse({...registryWithoutRevision,revision});
+await mkdir(dirname(catalogOutput),{recursive:true});await writeFile(catalogOutput,JSON.stringify(registry,null,2)+'\n');
+console.log(`Built ${descriptors.length} Book release(s) with ${totalEntries} authored text entries; material, bundle and Registry validation passed. No audio, provider calls, publication or user acceptance claimed.`);

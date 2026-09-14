@@ -228,7 +228,7 @@ node --import tsx scripts/sensaExtensionPopupSmoke.mts
 
 `.github/workflows/sensa-consumer-check.yml` 在 pull request 和 `main` push 时运行 `Sensa CI`。它执行静态检查、构建、快速 smoke 以及 PostgreSQL/API 集成。
 
-日常生产发布只有一个入口：`.github/workflows/sensa-web-deploy.yml`。发布流程：
+应用的日常生产发布只有一个入口：`.github/workflows/sensa-web-deploy.yml`。发布流程：
 
 1. 接收一个完整的 `main` commit SHA，并要求当次 owner 授权；
 2. 等待该 SHA 的 `Sensa CI` 成功；
@@ -249,11 +249,35 @@ gh workflow run sensa-web-deploy.yml \
 
 `.github/workflows/sensa-web-candidate.yml` 是可选的深度验证，不是日常发布前置。`.github/workflows/sensa-web-monitor.yml` 负责已启用环境的定时公网和聚合阈值检查。
 
+学习内容拥有独立于应用版本的发布入口 `.github/workflows/sensa-learning-content-publish.yml`。它接收
+一个完整且已通过 `main` CI 的 commit SHA，并要求当次 owner 授权；随后从 `content/authored/*.json`
+构建不可变 Book Release Bundle，执行无网络 Registry smoke，把 Bundle 上传到 Supabase Storage 的
+content-addressed 路径并逐一校验公网 bytes，最后上传 immutable Registry Revision。只有以上步骤全部
+成功后，工作流才把 API 的 `SENSA_PACKAGE_REGISTRY_URL` 提升到新 Revision。它不重新部署 Web、
+不覆盖既有对象，也不把下载解释为 learner 已应用更新。
+
+```sh
+gh workflow run sensa-learning-content-publish.yml \
+  -f release_sha=<FULL_MAIN_SHA> \
+  -f owner_accepted=true
+```
+
+一个 authored Book release 必须显式给出 `bookKey`、正整数 `versionNumber`、`publishedAt`、
+`changeSummary`，并为每个条目分别固定 `senseVersion` 与 `bindingVersion`。`content/authored/` 默认
+为每个稳定 Book 与精确语言方向保留一个当前 source，历史版本由 Git revision 固定；构建器自动纳入
+该目录的 JSON source。Book/Content Release 升级不自动抬升后两者；只有语义或表达 Binding 身份
+真实变化时才增加对应版本。因此纯材料更新可以
+保留 Learning Target 与 Retention state。`SENSA_BOOK_RELEASE_SOURCES` 可用逗号列出一次 Registry
+发布包含的全部当前 Book release source；同一 Registry 不允许同一 Book 与精确语言方向出现两个版本。
+
 所有生产部署都从 CI/CD 执行，不从本地 shell 调用 Provider 部署命令。迁移保持前向兼容；回滚 Web 版本时不能假设数据库也会回滚。
 
 ## 配置与安全
 
 - 生产浏览器变量放在 GitHub environment variables；Provider token、数据库 URL 和 vault key 放在 environment secrets。
+- `learning-content-production` environment 保存公开的 `SUPABASE_PROJECT_REF`、`VITE_SUPABASE_URL`、
+  `SENSA_WEB_ORIGIN`，以及只供发布使用的 `SUPABASE_SECRET_KEY` 与 `SUPABASE_ACCESS_TOKEN`；前者不得
+  进入浏览器构建或发布报告。Registry URL 是公开配置，但只能由受保护工作流提升。
 - `.env`、密钥、owner 数据、生成媒体和测试报告不得提交。
 - 本地和 CI 测试使用合成身份、隔离数据库和受控网络依赖。
 - 任何会产生费用的真实 Provider 调用，以及任何生产 push/deploy，都需要当次明确授权。

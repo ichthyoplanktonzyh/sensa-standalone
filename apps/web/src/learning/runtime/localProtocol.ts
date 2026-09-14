@@ -34,6 +34,10 @@ export interface LocalLearningTargetIdentity {
 export interface LocalCurriculumMembership {
   readonly id:string;
   readonly revision:number;
+  /** Superseded Book memberships stay addressable for Run replay but no longer
+   * place their target in the current Route plan. Missing means active for
+   * libraries written before Book release updates existed. */
+  readonly status?:'active'|'superseded';
   readonly languageContext:SensaFormalPinnedLanguageContext;
   readonly sourceKind:'sense_learning_package'|'personal_meaning_alignment';
   readonly provenance:Readonly<Record<string,unknown>>;

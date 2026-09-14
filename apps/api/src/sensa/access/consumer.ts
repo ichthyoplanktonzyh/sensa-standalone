@@ -1,4 +1,4 @@
-import {learningPackageCatalogSchema,librarySyncBlockStoreChars,semanticLookupInputSchema} from '@sensa/contracts/sensa';
+import {librarySyncBlockStoreChars,semanticLookupInputSchema} from '@sensa/contracts/sensa';
 import {Hono} from 'hono';
 import {bodyLimit} from 'hono/body-limit';
 import {stream} from 'hono/streaming';
@@ -17,6 +17,7 @@ import {assertDeletionConfigured,finishAccountDeletion,requestAccountDeletion,ty
 import {authorizeExtension,exchangeExtension,extensionVerifier} from './extension.js';
 import {sensaExtensionAuthorizationSchema,sensaExtensionExchangeSchema} from '@sensa/contracts/sensa';
 import {serviceTelemetry,type ServiceRequestRecord} from './telemetry.js';
+import {readLearningContentRegistry} from './learningContentRegistry.js';
 
 const modelDailyLimit=30;
 const uuid=z.string().uuid();
@@ -127,8 +128,13 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
   app.get('/sensa/packages',async context=>{
     const identity=await verify(context.req.raw);
     await transaction(db=>account(db,identity,false,false,clock()));
-    const catalog=learningPackageCatalogSchema.parse(JSON.parse(process.env.SENSA_PACKAGE_CATALOG_JSON??'{"items":[]}'));
-    context.header('Cache-Control','no-store');
+    const catalog=await readLearningContentRegistry();
+    if('format' in catalog){
+      const etag=`"${catalog.revision}"`;
+      context.header('ETag',etag);
+      context.header('Cache-Control','private, max-age=300');
+      if(context.req.header('if-none-match')===etag)return new Response(null,{status:304,headers:{ETag:etag,'Cache-Control':'private, max-age=300'}});
+    }else context.header('Cache-Control','no-store');
     return context.json(catalog);
   });
 

@@ -59,6 +59,36 @@ domain definition of Example.
 No scene-domain or construction diversity quota is enforced. Those fields remain
 descriptive metadata required by the current V2 wire shape.
 
+## Web Book release delivery
+
+The small reviewed Web sources in `content/authored/` are explicit immutable Book
+releases. Each source names a stable `bookKey`, positive `versionNumber`, publication
+time, learner-facing change summary, exact Target/Support languages, and a separate
+`senseVersion` and `bindingVersion` for every entry. Raising the Book version alone does
+not change a Learning Target: semantic or primary-expression identity changes must be
+declared by raising the corresponding entry version.
+
+Build one Registry candidate without publishing anything:
+
+```sh
+npm run build -w @sensa/learning-kernel
+npm run build -w @sensa/contracts
+node --import tsx scripts/release/buildStarterPackage.mts
+node --import tsx scripts/sensaLearningRegistrySmoke.mts
+```
+
+The builder writes content-addressed Book Release Bundles and one immutable
+`release-candidate/catalog.json` Registry snapshot. Generated bundles and Registry files
+remain ignored build artifacts. By default it includes every JSON source in
+`content/authored/`; that directory keeps one current source for each stable Book and exact
+language pair, while Git history retains prior authored versions. A bounded custom build may
+override the list with comma-separated `SENSA_BOOK_RELEASE_SOURCES` paths.
+
+Production publication is only through the protected
+`sensa-learning-content-publish.yml` workflow: it uploads and verifies every Bundle,
+publishes the Registry last, and then promotes the API's public Registry URL. It makes no
+model or TTS calls and never overwrites an existing object.
+
 ## Layout
 
 ```text
