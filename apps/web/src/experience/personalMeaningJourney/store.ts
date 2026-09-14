@@ -170,10 +170,10 @@ const asJourneyState = (parsed: unknown): JourneyState => {
   return parsed as unknown as JourneyState;
 };
 
-export const loadJourneyState = (storage: StoragePort): JourneyState => {
+export const loadJourneyState = async (storage: StoragePort): Promise<JourneyState> => {
   let raw: string | null;
   try {
-    raw = storage.read(JOURNEY_STORE_KEY);
+    raw = await storage.read(JOURNEY_STORE_KEY);
   } catch (cause) {
     if (cause instanceof StorageUnavailableError) throw cause;
     throw new StoreCorruptedError('无法读取本机的个人意义数据。', cause);
@@ -188,9 +188,12 @@ export const loadJourneyState = (storage: StoragePort): JourneyState => {
   return asJourneyState(parsed);
 };
 
-export const saveJourneyState = (storage: StoragePort, state: JourneyState): void => {
+export const saveJourneyState = async (
+  storage: StoragePort,
+  state: JourneyState,
+): Promise<void> => {
   try {
-    storage.write(JOURNEY_STORE_KEY, JSON.stringify(state));
+    await storage.write(JOURNEY_STORE_KEY, JSON.stringify(state));
   } catch (cause) {
     if (cause instanceof StorageUnavailableError) throw cause;
     throw new StoreCorruptedError('无法保存本机的个人意义数据。', cause);

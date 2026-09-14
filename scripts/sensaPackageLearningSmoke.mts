@@ -4,21 +4,18 @@ import {LocalRuntimePresentationRegistry,localRuntimePresentationContractVersion
 import {assembleLightweightInitialPresentation} from '../apps/web/src/experience/learningRuntime/lightweightInitialPresentation.ts';
 import {LIGHTWEIGHT_EXPERIENCE_RECALL_STEP,LIGHTWEIGHT_EXPRESSION_REVEAL_STEP,localLightweightPhase} from '../apps/web/src/learning/runtime/lightweightInitialProtocol.ts';
 import assert from 'node:assert/strict';
-import {indexedDB} from 'fake-indexeddb';
 import {canonicalJsonDigest} from '@sensa/learning-kernel';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext,sensaInitialLearningCompletionSchema,sensaSchedulingHandoffSchema,sensaMemoryOutcomeSnapshotSchema,sensaSchedulingDecisionSchema,sensaRelearningCompletionSchema} from '@sensa/contracts/sensa';
 import {provisionLightweightInitialContent} from '../apps/web/src/learning/runtime/lightweightInitialContent.ts';
-import {libraryDatabaseName,openLibrary,command,readLibrary,LibraryTransaction} from '../apps/web/src/data/library/store.ts';
+import {openLibrary,command,readLibrary,LibraryTransaction} from '../apps/web/src/data/library/store.ts';
 import {installPackage,downloadPackage,sha256} from '../apps/web/src/data/library/packages.ts';
 import {enrollPackage,readLearning,startLearning,actLearning,finishLearning,confirmLearningQuantity,setLocalDeclaredMastery} from '../apps/web/src/data/library/learning.ts';
 import {createLocalProtocolProgress,executeLocalProtocolTransition,reduceLocalProtocolAction,localLearningPurpose,localProtocolOutcomePermissions,localRunOpenPlanningInterruption} from '../apps/web/src/learning/runtime/localProtocol.ts';
 import {hasDeclaredMasteryOverride} from '../apps/web/src/learning/runtime/targetPlanningOverrides.ts';
 import {localCurriculumMeaning,localExecutableTarget} from '../apps/web/src/learning/runtime/localCurriculum.ts';
 import {addLanguageRoute,setActiveLanguageRoute} from '../apps/web/src/data/library/language.ts';
-Object.assign(globalThis,{indexedDB,window:new EventTarget(),BroadcastChannel:undefined});
-// Upgrade the previous library in place without replacing owner drafts.
-await new Promise<void>((resolve,reject)=>{const r=indexedDB.open(libraryDatabaseName,1);r.onupgradeneeded=()=>{for(const name of ['meta','drafts','providers','settings','operations','sessions','meanings','identities'])r.result.createObjectStore(name);r.transaction!.objectStore('drafts').put({text:'preserved owner draft'},'existing');};r.onerror=()=>reject(r.error);r.onsuccess=()=>{r.result.close();resolve();};});
-const identity=await openLibrary();assert.deepEqual(await readLibrary(tx=>tx.get('drafts','existing')),{text:'preserved owner draft'});await command({id:crypto.randomUUID(),kind:'fixture.owner',input:{}},async tx=>{tx.put('meta','service-owner',{subject:crypto.randomUUID()});});
+Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
+const identity=await openLibrary();await command({id:crypto.randomUUID(),kind:'fixture.owner',input:{}},async tx=>{tx.put('meta','service-owner',{subject:crypto.randomUUID()});});
 const id=()=>crypto.randomUUID();
 const languageContext=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
 const result=provisionLightweightInitialContent({learnerUserId:identity.learnerId,learningTargetId:id(),senseId:id(),senseVersionId:id(),senseExpressionBindingId:id(),resolvedLearningPlanRevisionId:'fixture-v1',expressionSourceVersion:'fixture-v1',senseSourceVersion:'fixture-v1',expression:{surface:'borrow',languageTag:'en',expressionKind:'word'},sense:{meaning:'临时取得他人物品，并预期归还。',supportLanguageTag:'zh-CN'},originExperience:{source:'other_authoritative_source',sourceVersion:'fixture-v1',personalAnchorUseGrantId:null,experience:{scene:'下雨了，你向同事要一把伞，约好明天归还。',senseFocus:'临时取得他人的物品',featureLabels:[]}},referenceFacts:[],requestedAt:new Date().toISOString()});
@@ -201,5 +198,5 @@ try{
  assert.equal(localCurriculumMeaning(shared.curriculumMemberships.find(item=>item.languageContext.supportLanguageTag==='ja')!),'一時的に借りて、後で返す。');
  assert.equal(shared.retentionId,target.retentionId,'both Route memberships share Retention identity');
 
- console.log('PASS: verified download/import, immutable versions, separate enrollment, declared-mastery interruption/resume without evidence or FSRS writes, local initial/review/relearning, replay, stale-step rejection, rollback and pinned content; fake IndexedDB, no browser/model calls.');
+ console.log('PASS: verified download/import, immutable versions, separate enrollment, declared-mastery interruption/resume without evidence or FSRS writes, local initial/review/relearning, replay, stale-step rejection, rollback and pinned content; memory storage Adapter, no browser/model calls.');
 }finally{globalThis.fetch=realFetch;}

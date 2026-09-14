@@ -1,4 +1,4 @@
-/** Real queue and receiver code, fake IndexedDB/storage adapters. No browser/network/model. */
+/** Real queue and receiver code, in-memory storage adapter. No browser/network/model. */
 import assert from 'node:assert/strict';
 import {indexedDB} from 'fake-indexeddb';
 import {localIntakeRequestSchema,canonicalConsumerJson,sensaBridgeRequestChannel} from '@sensa/contracts/sensa';
@@ -89,7 +89,7 @@ assert.equal((await message({kind:'open-inbox',accountId,operationId:another},so
 assert.equal(opened[0],'http://127.0.0.1:3000/content?worldAction=inbox');
 assert.equal((await message({kind:'save-status',accountId:other,operationId:another},source)).error,'account_mismatch');
 assert.equal((await webStatus(accountId)).pending,0);
-console.log('PASS: extension queue → local IndexedDB transaction → receipt; slow/fast routes, replay, rollback, ack failure, account/library/signout isolation and preserved source/consent. No browser/network/model calls.');
+console.log('PASS: extension queue → local library transaction → receipt; slow/fast routes, replay, rollback, ack failure, account/library/signout isolation and preserved source/consent. No browser/network/model calls.');
 
 const connect={kind:'web-connect-prepare',accountId,libraryId:library.id};
 assert.equal((await message(connect,source)).error,'unsupported_message');

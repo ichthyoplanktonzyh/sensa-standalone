@@ -55,8 +55,9 @@ Sensa 发布的学习包 → 下载到本地 → 显式加入学习 ──┘
 Owner 明确将面向 Agent 的端口纳入完整采集蓝图。Agent 可以在用户授权范围内提交固定上下文、
 Expression、来源及 Sense，经过同一快慢轨和库交接合同；用户在当前 Agent 会话中
 明确要求保存可构成 delegated Semantic Acceptance，无需独立 grant id 或第二次 Sensa 确认。
-采集本身不隐含加入学习。端口无关 payload、远程投递邮箱与 Web 本地消费器已建立；
-具体 Agent 产品的 OAuth、MCP、skill 或本地 CLI 适配器是后续接入面。
+采集本身不隐含加入学习。端口无关 payload、远程投递邮箱与 Web 本地消费器已建立；Codex skill 与
+本机 CLI 已通过 Native Messaging 接入当前 Web 库，设置页提供按当前库与浏览器生成的一次性安装命令；
+具体 Agent 产品的 OAuth 与 MCP 仍是后续接入面。
 
 未确认 Sense 的材料保存在 Intake Inbox；完整 Personal Meaning 才进入语义世界的稳定意义集合。
 Focus 可选；快慢轨都不降低 Context–Sense–Expression 的完整性要求。
@@ -76,7 +77,8 @@ Focus 可选；快慢轨都不降低 Context–Sense–Expression 的完整性�
 
 技术职责上，主应用包含界面、本地应用/领域执行与本地持久化，并非仅渲染 Hono 返回的投影。Hono
 只承载在线能力；本地学习不要求启动或连接 Hono。当前 Web 使用 TypeScript Learning Runtime 与
-IndexedDB。本地原生实现已暂停；未来恢复时，各平台的实际构建、离线与恢复仍须分别验收，不能把
+运行在专用 Worker、持久化到 OPFS 的 SQLite WASM；应用层通过 `LibraryTransaction` 提交，本机
+数据库只允许一个页面生命周期 owner。本地原生实现已暂停；未来恢复时，各平台的实际构建、离线与恢复仍须分别验收，不能把
 浏览器测试当作原生平台证据。
 
 云端备份与 Sync 分开建模。Sync 解决多设备当前状态收敛，不保证能退回到某个未损坏的
@@ -457,6 +459,9 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 - Agent 在当前会话收到 learner 的明确保存请求，或持有持续授权时，调用正式 commit
   operation 可直接产生 delegated acceptance，无需第二次第一方确认；actor、basis、可选的
   authorization reference、resolver 与提交内容必须可审计。一次性明确请求不强制 grant id；
+- Local Agent Intake 把固定 `libraryId` 的 CLI transport queue 经浏览器扩展 Native Messaging
+  交给 Web；CLI 不直接访问 OPFS。只有 Web 的正式 commit 成功才回写 applied receipt，queued 不等于
+  已进入 Personal Semantic World，并且该本机路径不要求账号；
 - Remote Intake Delivery 使用账号范围和已登记本地 library 解析目的地，Agent 不在 payload
   中指定 library。云端只对合同、幂等与投递负责，不执行语义完整性判断或 Personal Meaning 写入；
 - Saved Sense 指向稳定 Sense identity 并保留保存时 Sense Version provenance；Saved Example 指向
@@ -523,7 +528,7 @@ Declared Mastery（界面可显示为“熟”）是 learner 对一个 Retention
 界面操作必须明示其覆盖的目标表达集；首版每个 Sense 只有一个 primary target。
 
 Web 本地运行时将该声明保存为 Library 中 Target 的结构化 `TargetPlanningOverride`。声明若命中 active
-Run，同一 IndexedDB command 同时写入 Run interruption lifecycle fact 并清除 active pointer；撤销只
+Run，同一 SQLite command 同时写入 Run interruption lifecycle fact 并清除 active pointer；撤销只
 恢复 Target 的计划资格，下一次显式 start 才写入 matching resume fact。Protocol Queue 不保存第二份
 Declared Mastery 状态，presentation plugin 只能请求 host 执行该 learner command，不能把它结算成
 Protocol Outcome。

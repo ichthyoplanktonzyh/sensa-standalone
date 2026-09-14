@@ -24,6 +24,26 @@ async function stopAllReading(){const active=(await chrome.storage.session.get('
 async function persist(store:Store){await chrome.storage.local.set({sensa:store});}
 async function serviceFetch(url:string,init:RequestInit){try{return await fetch(url,init);}catch(error){throw new Error(error instanceof Error&&['AbortError','TimeoutError'].includes(error.name)?'TimeoutError':'network_failed');}}
 async function apiRequest(path:string,body:unknown,token?:string){const response=await serviceFetch(apiUrl+path,{method:body===undefined?'GET':'POST',headers:{'content-type':'application/json',...(token?{authorization:'Bearer '+token}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(45000)});const data=await response.json();if(!response.ok)throw new Error(data.code??'temporarily_unavailable');return data;}
+const nativeReplySchema=z.union([
+ z.object({value:z.unknown()}).strict(),
+ z.object({error:z.string().min(1).max(100)}).strict(),
+]);
+const nativeHelloSchema=z.object({
+ intakeContractVersion:z.literal('sensa-intake-v3'),
+ deliveryContractVersion:z.literal('sensa-local-agent-intake-v1'),
+ libraryId:z.string().uuid(),clientId:z.string().uuid(),label:z.string().trim().min(1).max(100),
+}).strict();
+async function nativeIntakeRequest(message:unknown){
+ if(typeof chrome.runtime.sendNativeMessage!=='function')throw new Error('native_host_unavailable');
+ try{
+  const reply=nativeReplySchema.parse(await chrome.runtime.sendNativeMessage('app.sensa.intake',message as object));
+  if('error' in reply)throw new Error(reply.error);
+  return reply.value;
+ }catch(error){
+  if(error instanceof Error&&/^(native_|invalid_|library_|operation_|receipt_)/u.test(error.message))throw error;
+  throw new Error('native_host_unavailable');
+ }
+}
 // A short-lived, tab-bound PKCE request. The Web never receives the verifier or
 // extension credential; its existing session only authorizes a one-time code.
 // The origin and tab this request came from are already checked by the bridge.
@@ -125,6 +145,20 @@ async function readingInput(input:unknown){
 async function serveWebBridge(request:SensaBridgeRequest,sender:chrome.runtime.MessageSender){
  if(!sender.tab?.id||!sender.url||new URL(sender.url).origin!==new URL(webUrl).origin)throw new Error('unsupported_message');
  switch(request.kind){
+  case 'web-native-intake-status':{
+   try{
+    const host=nativeHelloSchema.parse(await nativeIntakeRequest({kind:'hello'}));
+    return {extensionId:chrome.runtime.id,state:host.libraryId===request.libraryId?'connected':'different_library',clientLabel:host.label};
+   }catch(error){
+    if(error instanceof Error&&error.message==='native_host_unavailable')return {extensionId:chrome.runtime.id,state:'setup_required',clientLabel:null};
+    throw error;
+   }
+  }
+  case 'web-native-intake-pull':return nativeIntakeRequest({kind:'pull',libraryId:request.libraryId,limit:10});
+  case 'web-native-intake-ack':{
+   if(request.receipt.libraryId!==request.libraryId)throw new Error('library_mismatch');
+   return nativeIntakeRequest({kind:'ack',receipt:request.receipt});
+  }
   case 'web-connect-prepare':
   case 'web-connect-complete':return webConnect(request,sender);
   // The Web application owns Route facts. The extension accepts the collection

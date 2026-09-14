@@ -1,4 +1,4 @@
-/** Real Chromium IndexedDB + Hono + disposable Postgres. No model calls or real accounts. */
+/** Real Chromium local library + Hono + disposable Postgres. No model calls or real accounts. */
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {libraryCloudPackageFixture} from './support/libraryCloudPackageFixture.mts';

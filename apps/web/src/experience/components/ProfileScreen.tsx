@@ -3,9 +3,10 @@ import {providerSnapshot} from '../../data/library/providers';
 import {observeLibrary} from '../../data/library/store';
 import {LocalDataControlPanel} from './LocalDataControlPanel';
 import {LibraryBackupPanel} from './LibraryBackupPanel';
+import {LocalAgentPanel} from './LocalAgentPanel';
 import {useAccountExperience} from '../account/AccountExperience';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowRight, ArrowLeft, BookOpen, SlidersHorizontal, UserRound, RefreshCw, Database, Cpu, Info, Languages, NotebookPen } from 'lucide-react';
+import { ArrowRight, ArrowLeft, BookOpen, SlidersHorizontal, UserRound, RefreshCw, Database, Cpu, Info, Languages, NotebookPen, Bot } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitch } from '../../i18n/LanguageSwitch';
 import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
@@ -45,7 +46,7 @@ export function localPreviewBytes(storage: Storage): number {
 export const ProfileScreen = (props: ProfileScreenProps) => {
   const { t, i18n } = useTranslation();
   const serviceAccount=useAccountExperience();
-  const [page, setPage] = useState<'home'|'security'|'preferences'|'models'|'data'|'backup'|'storage'|'support'>('home');
+  const [page, setPage] = useState<'home'|'security'|'preferences'|'models'|'agent'|'data'|'backup'|'storage'|'support'>('home');
   const openPage = (next: typeof page) => {
     setPage(next);
     requestAnimationFrame(() => { document.getElementById('s-profile')?.scrollTo(0, 0); document.getElementById('settings-heading')?.focus(); });
@@ -101,7 +102,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
     style: 'unit', unit: bytes >= 1024 * 1024 ? 'megabyte' : 'kilobyte', maximumFractionDigits: 1,
   }).format(bytes / (bytes >= 1024 * 1024 ? 1024 * 1024 : 1024));
   const button = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#cbd3e1] bg-white px-4 py-2 text-sm font-medium text-[#405780] hover:bg-[#edf0f7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5268a9] disabled:opacity-50';
-  const labels = {home:'account.title', security:'account.security', preferences:'account.preferences', models:'account.models', data:'account.data', backup:'libraryBackup.title', storage:'account.storageActions', support:'account.support'};
+  const labels = {home:'account.title', security:'account.security', preferences:'account.preferences', models:'account.models', agent:'account.agent', data:'account.data', backup:'libraryBackup.title', storage:'account.storageActions', support:'account.support'};
   const row = (destination: typeof page, label: string, note: string, icon: ReactNode) => <button id={'settings-'+destination} onClick={() => openPage(destination)} className="flex min-h-24 w-full items-center gap-4 rounded-2xl border border-[#d8deea] bg-white p-5 text-left shadow-sm transition-colors hover:border-[#91a3c5] hover:bg-[#f3f5fa] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5268a9]">
     <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#edf0f7] text-[#5268a9]">{icon}</span><span className="min-w-0 flex-1"><span className="block text-base font-medium">{t(label)}</span><span className="mt-1 block break-words text-sm leading-6 text-[#68748d]">{note}</span></span><ArrowRight aria-hidden="true" size={18} className="shrink-0 text-[#5268a9]"/>
   </button>;
@@ -119,6 +120,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
         {row('security','account.security',props.account?.email ?? serviceAccount.email ?? t('account.identity'),<UserRound size={20}/>)}
         {row('preferences','account.preferences',t('account.preferencesSummary'),<SlidersHorizontal size={20}/>)}
         {props.modelSettings&&row('models','account.models',modelNames.join(' / ') || t('account.modelsSummary'),<Cpu size={20}/>)}
+        {props.localLibrary&&row('agent','account.agent',t('account.agentSummary'),<Bot size={20}/>)}
         {row('data','account.data',t('account.dataSummary'),<Database size={20}/>)}
         {row('support','account.support',t('account.supportSummary'),<Info size={20}/>)}
       </div>
@@ -175,6 +177,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
       </div>
       {props.localLibrary&&<><div hidden={page!=='backup'}><LibraryBackupPanel/></div><div hidden={page!=='storage'}><LocalDataControlPanel/></div></>}
       <section hidden={page!=='models'} aria-label={t('modelService.title')}>{props.modelSettings}</section>
+      {props.localLibrary&&page==='agent'&&<LocalAgentPanel/>}
       <div hidden={page!=='support'}>
       <section aria-labelledby="account-support" className="mt-10">
         <h2 id="account-support" className="mb-4 text-lg font-medium">{t('account.support')}</h2>

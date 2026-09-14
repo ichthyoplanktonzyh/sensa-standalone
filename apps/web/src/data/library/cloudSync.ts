@@ -1,6 +1,6 @@
 import {librarySyncManifest,librarySyncHead,librarySyncTables,librarySyncBlockChars,librarySyncBlockFetchHashes,librarySyncBlockFetchResult,librarySyncBlockMissingResult,librarySyncBlockStore,librarySyncBlockStoreBatch,librarySyncBlockStoreChars,type LibrarySyncManifest,type LibrarySyncHead} from '@sensa/contracts/sensa';
 import {libraryTables,readLibrary,restoreLibraryTransaction,writeLibraryState,assertCurrentLibrary,type LibraryTransaction,type Table,type LibraryIdentity} from './store';
-import {encodeBackupValue,decodeBackupValue} from './backupCodec';
+import {backupEqual,encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {validateBackupRows,type BackupRows} from './backupValidation';
 export type SyncRequest=(path:string,body?:unknown)=>Promise<any>;
 type Entry={table:typeof librarySyncTables[number];key:string;value:unknown};
@@ -8,7 +8,7 @@ type Owner={subject:string;accountId:string};
 type State={owner:Owner;incarnation:string;base:Entry[];revision:number;pending?:{operationId:string;baseRevision:number;manifest:string[];entries:Entry[];baseEntries?:Entry[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];lastSyncedAt?:string;error?:string};
 const STATE='cloud-sync';
 const entryId=(r:Pick<Entry,'table'|'key'>)=>JSON.stringify([r.table,r.key]);
-const equal=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
+const equal=backupEqual;
 const hash=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),b=>b.toString(16).padStart(2,'0')).join('');
 /** A restore holds block text in memory before assembling rows; keep that bounded. */
 const TRANSFER_CAP=96*1024*1024;

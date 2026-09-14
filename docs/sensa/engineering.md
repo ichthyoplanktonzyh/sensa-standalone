@@ -6,7 +6,7 @@
 
 | 路径 | 职责 |
 | --- | --- |
-| `apps/web` | 生产 React 界面、本机 IndexedDB 学习库、账号与云同步 |
+| `apps/web` | 生产 React 界面、本机 SQLite WASM 学习库、账号与云同步 |
 | `apps/browser-extension` | 网页/字幕阅读、采集、解释与 Web 交接 |
 | `apps/api` | Hono 可选在线服务实现及本地开发入口；不执行学习协议 |
 | `supabase/functions/sensa-api` | 生产 Edge Function 入口 |
@@ -21,7 +21,17 @@
 
 ## 数据与同步
 
-生产 Web 的个人学习库位于 IndexedDB `sensa:local-library:v1`。UI 通过本机应用层事务修改它，不直接写派生学习结果。账号副本、旧 consumer 存储和预览数据与该库保持隔离。
+生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v1.sqlite3`，持久化在浏览器
+Origin Private File System。SQLite 在专用 Worker 中运行，使用不要求页面启用跨源隔离的
+`opfs-sahpool` VFS；应用用页面生命周期 Web Lock 保证同一时间只有一个数据库 owner，因此第二个
+Sensa 标签页会提示先关闭旧页面，而不是打开竞争连接。UI 只通过本机 `LibraryTransaction` 修改它，
+不直接执行 SQL，也不写派生学习结果。Node 测试使用相同事务接口的内存 Adapter；浏览器交付必须
+另验真实 OPFS。当前版本不读取或迁移旧 IndexedDB 数据。
+
+旧 Web 应用层的逻辑表与新版 Personal Semantic World Journey 共用这一物理事务 authority；Journey
+聚合保存在 `semanticWorld` 逻辑表中，不再写预览 `localStorage`。Journey 自己拥有领域事实、
+快慢轨和 operation receipt，SQLite Adapter 只拥有原子读写。账号副本、界面偏好和其他
+`localStorage` 状态不能充当个人学习库的第二权威。
 
 学习运行时只在 Web 本机执行：目标选择、Protocol/Policy、步骤、评价、Completion、Memory Outcome 与
 FSRS 都由本地领域事务结算。Hono/Edge 不创建或推进学习 Run，也不重新计算从云同步取回的学习事实。
@@ -45,12 +55,40 @@ Intake 的语义 payload 只声明一次：`packages/contracts/src/sensa/intake.
 例如可以保存 `back out` 并定位原文中的 `backed out`。当前 Web 本地 authority 在
 `apps/web/src/experience/personalMeaningJourney/gateway.ts` 中幂等提交，相同 operation id 若改变载荷则报冲突。
 
+本机 Agent 投递由 `integrations/codex/sensa-intake/sensa-intake.mjs` 提供。安装时它固定一个
+`libraryId` 与 Agent client identity；每次提交只把 v3 Intake 幂等写入独立的 transport queue
+SQLite，不读取或直写 Web 的 OPFS 数据库。Sensa Web 打开、恢复可见或获得焦点时，
+`apps/web/src/experience/account/LocalAgentIntake.tsx` 经浏览器扩展 Native Messaging 拉取队列，交给同一个
+Journey gateway 提交；只有本机事务成功后才写回 `applied` receipt。CLI 返回 `queued` 仅表示本机队列已
+持久化，不能显示成已进入语义世界。本机投递不要求账号，队列 envelope 与 receipt 由
+`packages/contracts/src/sensa/localAgentIntake.ts` 定义；扩展需要 `nativeMessaging` 权限并安装
+`app.sensa.intake` host manifest。
+
+设置页的“本机 Agent”通过 `web-native-intake-status` 读取扩展 id 和 host 的 library binding，UI 只显示
+连接状态与必要动作。它按当前浏览器生成一条命令，自动选择 macOS 或 Linux 上 Chrome/Edge
+的 Native Messaging 注册位置，从同一 Web release 的 `/integrations/` 下载 CLI、skill 和 wire example，
+并将带有确定 executable/config 路径的 managed `sensa-intake` skill 安装到 Codex。集成资产不进入离线
+App Shell，使用 `no-cache` 保证安装内容与当前发布对齐；已有非 Sensa-managed 同名 skill 不会被覆盖。
+重复运行相同命令保留原 client identity 与 transport queue。
+
+开发者仍可绕过图形入口直接运行：
+
+```sh
+node integrations/codex/sensa-intake/sensa-intake.mjs --setup \
+  --library-id <CURRENT_LIBRARY_UUID> --label Codex \
+  --directory <NEW_PRIVATE_CONNECTION_DIRECTORY> \
+  --extension <CHROMIUM_EXTENSION_ID> \
+  --manifest-dir <BROWSER_NATIVE_MESSAGING_HOST_DIRECTORY>
+```
+
+生成的 `connection.json` 是 Agent 选择目的库的连接文件；请求不能逐条改投其他库。
+
 远程投递的 transport envelope 由 `packages/contracts/src/sensa/intakeDelivery.ts` 定义。
 `apps/api/src/sensa/library/intakeDelivery.ts` 使用受认证账号和该账号唯一启用的 library channel
 决定目的地，不允许 Agent 从 payload 选择 library。它只持久 mailbox item 并返回 `queued`；
 `apps/web/src/experience/account/RemoteIntakeDelivery.tsx` 在账号恢复完成后登记当前库，在初始加载、
 恢复联网或窗口获得焦点时拉取，由本地 gateway 提交后回传 `applied` 及具体快轨/Inbox
-结果。空闲页面不轮询。未来 OAuth、MCP、skill 或本地 CLI 只是这两份合同之上的适配器，
+结果。空闲页面不轮询。Codex skill 已使用同一 v3 payload；未来 OAuth 或 MCP 只能是相同合同上的适配器，
 不可另建一套 Intake 语义。数据库的账号/库隔离、唯一启用 channel 和 mailbox 存储由
 `db/migrations/0028_sensa_encrypted_intake.sql` 与 `db/migrations/0032_sensa_intake_delivery.sql` 提供。
 

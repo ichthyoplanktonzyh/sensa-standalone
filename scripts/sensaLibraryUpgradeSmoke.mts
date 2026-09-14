@@ -1,23 +1,76 @@
-/** Existing v2 IndexedDB records must survive the production v4 opening. */
+/** SQLite storage kernel: typed values, transactions and operation replay. */
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
-import {pathToFileURL} from 'node:url';
-import {build} from 'esbuild';
-import {IDBFactory} from 'fake-indexeddb';
-import {canonicalConsumerJson} from '@sensa/contracts/sensa';
-const root=await mkdtemp(join(tmpdir(),'sensa-library-upgrade-'));
-const factory=new IDBFactory();Object.assign(globalThis,{indexedDB:factory,window:new EventTarget(),BroadcastChannel:undefined});
-const identity={id:crypto.randomUUID(),learnerId:crypto.randomUUID(),deviceId:crypto.randomUUID(),createdAt:'2026-09-09T00:00:00Z',schemaVersion:1};
-const draft={id:crypto.randomUUID(),text:'preserved source',revision:1};
-try{
- const old=await new Promise<IDBDatabase>((resolve,reject)=>{const r=factory.open('sensa:local-library:v1',2);r.onupgradeneeded=()=>{for(const name of ['meta','drafts','providers','settings','operations','sessions','meanings','identities'])r.result.createObjectStore(name);};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
- await new Promise<void>((resolve,reject)=>{const tx=old.transaction(['meta','drafts','operations'],'readwrite');tx.objectStore('meta').put(identity,'identity');tx.objectStore('drafts').put(draft,draft.id);tx.objectStore('operations').put({input:canonicalConsumerJson({kind:'library.create',input:{}}),result:identity,committedAt:identity.createdAt},'00000000-0000-4000-8000-000000000001');tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});old.close();
- const file=join(root,'store.mjs');await build({entryPoints:['apps/web/src/data/library/store.ts'],outfile:file,bundle:true,platform:'browser',format:'esm',logLevel:'silent'});const store=await import(pathToFileURL(file).href);
- assert.deepEqual(await store.openLibrary(),identity);assert.deepEqual(await store.readLibrary((tx:any)=>tx.all('drafts')),[draft]);
- assert.deepEqual(await store.readLibrary((tx:any)=>tx.all('learningEvents')),[]);
- assert.deepEqual(await store.readLibrary((tx:any)=>tx.all('annotations')),[]);
- assert.equal((await store.readLibrary((tx:any)=>tx.all('operations'))).length,1);
- console.log('PASS: real production v2-to-v4 opening preserves source records, identity and operation ledger while creating learning and annotation stores. Fake IndexedDB; browser SW upgrade is checked separately.');
-}finally{await rm(root,{recursive:true,force:true});}
+
+Object.assign(globalThis, { window: new EventTarget(), BroadcastChannel: undefined });
+
+const store = await import('../apps/web/src/data/library/store.ts');
+const identity = await store.openLibrary();
+assert.equal(identity.schemaVersion, 1);
+
+const operationId = crypto.randomUUID();
+const result = await store.command(
+  { id: operationId, kind: 'fixture.sqlite', input: { revision: 1 } },
+  async (tx) => {
+    tx.put('drafts', 'typed', {
+      createdAt: new Date('2026-09-14T00:00:00.000Z'),
+      optional: undefined,
+    });
+    return { committed: true };
+  },
+);
+assert.deepEqual(result, { committed: true });
+const typed = await store.readLibrary((tx) => tx.get<any>('drafts', 'typed'));
+assert(typed.createdAt instanceof Date);
+assert.equal(typed.createdAt.toISOString(), '2026-09-14T00:00:00.000Z');
+assert.equal('optional' in typed, true);
+assert.equal(typed.optional, undefined);
+
+const replayed = await store.command(
+  { id: operationId, kind: 'fixture.sqlite', input: { revision: 1 } },
+  async () => ({ committed: false }),
+);
+assert.deepEqual(replayed, result);
+await assert.rejects(
+  store.command(
+    { id: operationId, kind: 'fixture.sqlite', input: { revision: 2 } },
+    async () => ({ committed: false }),
+  ),
+  /operationConflict/,
+);
+
+await assert.rejects(
+  store.restoreLibraryTransaction(async (tx) => {
+    tx.put('drafts', 'rolled-back', { text: 'must not survive' });
+    throw new Error('fixture abort');
+  }),
+  /fixture abort/,
+);
+assert.equal(await store.readLibrary((tx) => tx.get('drafts', 'rolled-back')), undefined);
+
+const diagnostics = await store.readLibraryStorageDiagnostics();
+assert.deepEqual(
+  { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
+  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 1 },
+);
+
+const [{ default: sqlite3InitModule }, { SqliteRecordDatabase }] = await Promise.all([
+  import('@sqlite.org/sqlite-wasm'),
+  import('../apps/web/src/data/library/sqliteDatabase.ts'),
+]);
+const sqlite3 = await sqlite3InitModule();
+const database = new SqliteRecordDatabase(
+  sqlite3,
+  new sqlite3.oo1.DB(':memory:', 'c'),
+  'memory',
+);
+database.initialize();
+database.commit({
+  clears: [],
+  deletes: [],
+  puts: [{ table: 'semanticWorld', key: 'journey', encodedValue: '{"version":1}' }],
+});
+assert.equal(database.get('semanticWorld', 'journey'), '{"version":1}');
+assert.match(database.diagnostics().sqliteVersion, /^3\./u);
+database.close();
+
+console.log('PASS: the library adapter preserves typed values, commits atomically, replays exact operations and rejects conflicts; the SQLite WASM kernel validates and stores the semantic-world row. Browser OPFS is checked separately.');

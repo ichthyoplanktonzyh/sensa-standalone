@@ -50,7 +50,6 @@ import {
 import { digestOf } from './digest';
 import { cryptoRandomIdPort, isUuid, type RandomIdPort } from './ids';
 import {
-  LocalStoragePort,
   StorageUnavailableError,
   systemClock,
   type ClockPort,
@@ -58,6 +57,7 @@ import {
   type LearnerLanguagePort,
   type StoragePort,
 } from './ports';
+import { LibraryJourneyStoragePort } from './libraryStorage';
 import { languageRoutesSnapshot } from '../../data/library/language';
 import {
   StoreCorruptedError,
@@ -239,14 +239,16 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   private readonly usedIds = new Set<string>();
   private status: JourneyGatewayStatus = { ok: true, error: null, errorKind: null };
   private readonly listeners = new Set<() => void>();
+  private ready: Promise<void>;
 
   constructor(private readonly deps: JourneyGatewayDeps) {
-    this.load();
+    this.ready = this.load();
+    void this.ready.finally(() => this.notify());
   }
 
-  private load(): void {
+  private async load(): Promise<void> {
     try {
-      const state = loadJourneyState(this.deps.storage);
+      const state = await loadJourneyState(this.deps.storage);
       this.rememberIds(state);
       this.state = state;
       this.status = { ok: true, error: null, errorKind: null };
@@ -259,8 +261,8 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   }
 
   reload(): void {
-    this.load();
-    this.notify();
+    this.ready = this.gate.then(() => this.load());
+    void this.ready.finally(() => this.notify());
   }
 
   getStatus(): JourneyGatewayStatus {
@@ -288,7 +290,10 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   private gate: Promise<unknown> = Promise.resolve();
 
   private exclusive<T>(work: () => Promise<T>): Promise<T> {
-    const run = this.gate.then(work);
+    const run = this.gate.then(async () => {
+      await this.ready;
+      return work();
+    });
     this.gate = run.then(
       () => undefined,
       () => undefined,
@@ -303,10 +308,10 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     return this.state;
   }
 
-  private persist(): void {
+  private async persist(): Promise<void> {
     const state = this.requireState();
     try {
-      saveJourneyState(this.deps.storage, state);
+      await saveJourneyState(this.deps.storage, state);
       this.lastPersistedState = cloneJourneyState(state);
       this.status = { ok: true, error: null, errorKind: null };
     } catch (cause) {
@@ -721,7 +726,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       familiarExpressionAnchorId,
     };
     this.recordReceipt(input.operationId, 'CreatePersonalMeaning', result);
-    this.persist();
+    await this.persist();
     return { ...result, replayed: false };
   }
 
@@ -744,7 +749,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     this.appendMeaningRevision(record, input.operationId, [anchorId]);
     const result = { anchorId };
     this.recordReceipt(input.operationId, 'AddMaterialBlock', result);
-    this.persist();
+    await this.persist();
     return { ...result, replayed: false };
   }
 
@@ -1083,7 +1088,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       expressionConfirmed,
     };
     this.recordReceipt(input.operationId, 'ConfirmClarification', result);
-    this.persist();
+    await this.persist();
     return { ...result, replayed: false };
   }
 
@@ -1439,7 +1444,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       senseConfirmation?.senseProposalVersionId ?? null,
     );
     this.recordReceipt(input.operationId, 'ConfirmExpressionBinding', result);
-    this.persist();
+    await this.persist();
     return { ...result, replayed: false };
   }
 
@@ -1483,7 +1488,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       state.inboxItems.push(item);
       const result: IngestResult = { route: 'inbox', intakeId: item.intakeId, status: item.status };
       this.recordReceipt(operationId, 'Ingest', result, requestDigest);
-      this.persist();
+      await this.persist();
       return { ...result, replayed: false };
     }
     const authority = this.deps.semanticAcceptanceAuthority.verify(
@@ -1510,7 +1515,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       personalMeaningId: outcome.personalMeaningId,
     };
     this.recordReceipt(operationId, 'Ingest', result, requestDigest);
-    this.persist();
+    await this.persist();
     return { ...result, replayed: false };
   }
 
@@ -1554,18 +1559,22 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       personalMeaningId: outcome.personalMeaningId,
     };
     this.recordReceipt(operationId, 'ResolveInboxItem', result);
-    this.persist();
+    await this.persist();
     return { ...result, replayed: false };
   }
 
   async dismissInboxItem(operationId: string, intakeId: string): Promise<void> {
+    return this.exclusive(() => this.writeInboxDismissal(operationId, intakeId));
+  }
+
+  private async writeInboxDismissal(operationId: string, intakeId: string): Promise<void> {
     const found = this.receipt(operationId, 'DismissInboxItem');
     if (found) return;
     const state = this.requireState();
     // Pure removal; throws when the item is unknown, before any write.
     this.state = dismissInboxItem(state, intakeId);
     this.recordReceipt(operationId, 'DismissInboxItem', { intakeId });
-    this.persist();
+    await this.persist();
   }
 }
 
@@ -1573,7 +1582,7 @@ export const createJourneyGateway = (
   deps: Partial<JourneyGatewayDeps> = {},
 ): PersonalMeaningJourneyGateway =>
   new JourneyGatewayImpl({
-    storage: deps.storage ?? new LocalStoragePort(),
+    storage: deps.storage ?? new LibraryJourneyStoragePort(),
     clock: deps.clock ?? systemClock,
     ids: deps.ids ?? cryptoRandomIdPort,
     semanticAcceptanceAuthority:

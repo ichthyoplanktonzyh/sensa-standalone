@@ -4,7 +4,7 @@ import {resolve,relative} from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
-export const candidateCsp="default-src 'self'; script-src 'self' https://youglish.com https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src https://youglish.com https://www.youtube.com https://www.youtube-nocookie.com; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+export const candidateCsp="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://youglish.com https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src https://youglish.com https://www.youtube.com https://www.youtube-nocookie.com; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 export const candidateRoots=[
  'apps/web/dist',
  'apps/browser-extension/dist',
@@ -52,7 +52,8 @@ export async function prepareCandidate(env,root=process.cwd()){
  await readFile(resolve(dist,'index.html'));await readFile(resolve(dist,'sw.js'));
  const manifest=JSON.parse(await readFile(resolve(extension,'manifest.json'),'utf8'));
  if(!manifest.host_permissions.includes(new URL(config.apiUrl).origin+'/*')||!manifest.content_scripts.some(s=>s.matches.includes(config.webOrigin+'/*')))throw new Error('Extension does not target release services');
- await writeFile(resolve(dist,'_headers'),`/*\n  Content-Security-Policy: ${candidateCsp}\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: DENY\n  Permissions-Policy: camera=(), geolocation=()\n/sw.js\n  Cache-Control: no-cache\n/index.html\n  Cache-Control: no-cache\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n`);
+ if(!manifest.permissions?.includes('nativeMessaging'))throw new Error('Extension lacks the local Agent intake permission');
+ await writeFile(resolve(dist,'_headers'),`/*\n  Content-Security-Policy: ${candidateCsp}\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: DENY\n  Permissions-Policy: camera=(), geolocation=()\n/sw.js\n  Cache-Control: no-cache\n/index.html\n  Cache-Control: no-cache\n/integrations/*\n  Cache-Control: no-cache\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n`);
  const browserFiles=(await files(resolve(dist,'assets'))).filter(p=>p.endsWith('.js'));
  const browserCode=(await Promise.all(browserFiles.map(p=>readFile(p,'utf8')))).join('\n');
  for(const value of [env.VITE_SUPABASE_URL,env.VITE_SENSA_API_URL,env.VITE_SUPABASE_PUBLISHABLE_KEY])if(!browserCode.includes(value))throw new Error('Web bundle does not contain the release configuration; rebuild with the release environment');

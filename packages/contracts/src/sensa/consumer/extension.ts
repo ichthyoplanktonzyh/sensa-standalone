@@ -2,6 +2,7 @@ import {z} from 'zod';
 import {sensaFormalPinnedLanguageContextSchema,sensaLanguageRouteCollectionSchema} from '../language.js';
 import {sensaReadingGlossarySchema} from './reading.js';
 import {localIntakeReceiptSchema,localIntakeRequestSchema} from './localIntake.js';
+import {sensaLocalAgentConnectionStatusSchema,sensaLocalAgentIntakeDeliverySchema,sensaLocalAgentIntakeReceiptSchema} from '../localAgentIntake.js';
 
 /**
  * Everything the Web application and the browser extension say to each other.
@@ -78,6 +79,7 @@ const pageRequest={
   accountId:z.string().uuid(),
 };
 const libraryRequest={...pageRequest,libraryId:z.string().uuid()};
+const localLibraryRequest={channel:z.literal(sensaBridgeRequestChannel),id:requestId,libraryId:z.string().uuid()};
 
 /**
  * Every request a Web page may make of the extension.
@@ -89,6 +91,10 @@ const libraryRequest={...pageRequest,libraryId:z.string().uuid()};
  * does not have to have a library open to do it.
  */
 export const sensaBridgeRequestSchema=z.discriminatedUnion('kind',[
+  /** Local Agent CLI deliveries need a library destination, not an account. */
+  z.object({...localLibraryRequest,kind:z.literal('web-native-intake-status')}).strict(),
+  z.object({...localLibraryRequest,kind:z.literal('web-native-intake-pull')}).strict(),
+  z.object({...localLibraryRequest,kind:z.literal('web-native-intake-ack'),receipt:sensaLocalAgentIntakeReceiptSchema}).strict(),
   /** Captures this library has not received yet, oldest first. */
   z.object({...libraryRequest,kind:z.literal('web-intake-pull')}).strict(),
   /** The page's record that it committed a capture. The extension keeps it as an
@@ -126,6 +132,9 @@ export const sensaBridgeKinds=sensaBridgeRequestSchema.options.map(option=>optio
 
 /** An answer, once the envelope says a handler produced one. */
 export const sensaBridgeResponseSchemas={
+  'web-native-intake-status':sensaLocalAgentConnectionStatusSchema,
+  'web-native-intake-pull':z.array(sensaLocalAgentIntakeDeliverySchema).max(10),
+  'web-native-intake-ack':z.object({acknowledged:z.literal(true)}).strict(),
   'web-intake-pull':z.array(localIntakeRequestSchema).max(10),
   'web-intake-ack':z.object({acknowledged:z.literal(true)}).strict(),
   'web-connect-prepare':z.object({

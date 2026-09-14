@@ -1,26 +1,57 @@
 {
-  "version": "sensa-intake-v1",
-  "libraryId": "00000000-0000-4000-8000-000000000001",
-  "clientId": "00000000-0000-4000-8000-000000000002",
-  "operationId": "00000000-0000-4000-8000-000000000003",
-  "snapshot": {
-    "sentence": "May I borrow your umbrella?",
-    "language": "en",
-    "source": {"url": null, "title": "User-provided conversation", "capturedAt": "2026-09-09T00:00:00Z"},
-    "expression": {"text": "borrow", "start": 6, "end": 12}
-  },
-  "resolution": {
-    "kind": "proposal",
-    "proposal": {
-      "explanation": "临时借来使用，之后归还。",
-      "expression": {"surface": "borrow", "type": "word", "language": "en"},
+  "kind": "submit",
+  "intake": {
+    "contractVersion": "sensa-intake-v3",
+    "operationId": "00000000-0000-4000-8000-000000000003",
+    "capturedAt": "2026-09-14T08:00:00.000Z",
+    "context": {
+      "modality": "text",
+      "textSegment": "I backed out.",
+      "mediaReferenceIds": [],
+      "languageTag": "en",
+      "source": {
+        "client": "codex",
+        "url": null,
+        "title": "GPT Live conversation",
+        "sourceReferenceId": "conversation-1",
+        "domSelector": null,
+        "paragraphContext": null
+      }
+    },
+    "expression": {
+      "surfaceForm": "back out",
+      "languageTag": "en",
+      "occurrence": {
+        "surfaceForm": "backed out",
+        "locator": { "kind": "text_span", "start": 2, "end": 12 }
+      },
+      "expressionTypeHint": "phrase"
+    },
+    "sense": {
+      "senseKey": null,
       "semanticSpec": {
         "schemaVersion": "sensa-sense-semantic-spec-v1",
-        "coreMeaningFocus": "临时取得别人的物品供自己使用，之后归还",
-        "prototypeScenes": [{"summary": "向朋友借伞，使用后归还。", "participantRoles": [], "states": [], "directionOrCausality": null}],
-        "includedCases": [], "excludedCases": [], "neighborContrasts": [], "openQuestions": []
-      }
+        "coreMeaningFocus": "原本准备做某事，后来决定退出或取消",
+        "prototypeScenes": [
+          {
+            "summary": "I backed out.",
+            "participantRoles": [],
+            "states": [],
+            "directionOrCausality": null
+          }
+        ],
+        "includedCases": ["I backed out."],
+        "excludedCases": [],
+        "neighborContrasts": [],
+        "openQuestions": []
+      },
+      "wordingSource": "llm_suggested"
+    },
+    "acceptance": {
+      "mode": "delegated_agent",
+      "actorId": "codex",
+      "basis": "explicit_user_request",
+      "authorizationReference": null
     }
-  },
-  "acceptance": null
+  }
 }

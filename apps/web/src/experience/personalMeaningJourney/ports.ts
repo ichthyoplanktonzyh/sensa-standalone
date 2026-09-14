@@ -1,18 +1,15 @@
 import type { SensaPinnedLanguageContext } from '@sensa/contracts/sensa';
-import { previewStorage } from '../services/previewStorage';
 /**
  * Low-level ports the Personal Meaning journey gateway depends on. React
- * components never read or write `localStorage` directly; they talk to the
- * gateway, and the gateway talks to these injectable ports. This keeps the
- * journey testable (the smoke injects an in-memory store and a fixed clock) and
- * keeps a clean seam for a future server-backed implementation.
+ * components never read or write persistence directly; they talk to the
+ * gateway, and the gateway talks to these injectable ports.
  */
 
-/** A namespaced key/value string store (the browser adapter wraps localStorage). */
+/** A namespaced asynchronous string store. */
 export interface StoragePort {
-  read(key: string): string | null;
-  write(key: string, value: string): void;
-  remove(key: string): void;
+  read(key: string): Promise<string | null>;
+  write(key: string, value: string): Promise<void>;
+  remove(key: string): Promise<void>;
 }
 
 /** A monotonic ISO-8601 clock (with offset) so facts carry stable timestamps. */
@@ -24,45 +21,19 @@ export const systemClock: ClockPort = {
   nowIso: () => new Date().toISOString(),
 };
 
-/**
- * Browser localStorage adapter. It surfaces read/parse failures to the caller
- * rather than silently swallowing them, so the UI can show an honest,
- * recoverable error instead of pretending the store is empty.
- */
-export class LocalStoragePort implements StoragePort {
-  read(key: string): string | null {
-    if (typeof window === 'undefined' || !window.localStorage) {
-      throw new StorageUnavailableError('本机存储在当前环境不可用。');
-    }
-    return previewStorage.getItem(key);
-  }
-
-  write(key: string, value: string): void {
-    if (typeof window === 'undefined' || !window.localStorage) {
-      throw new StorageUnavailableError('本机存储在当前环境不可用，无法保存。');
-    }
-    previewStorage.setItem(key, value);
-  }
-
-  remove(key: string): void {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    previewStorage.removeItem(key);
-  }
-}
-
 /** An in-memory store for the deterministic smoke and non-browser contexts. */
 export class MemoryStoragePort implements StoragePort {
   private readonly map = new Map<string, string>();
 
-  read(key: string): string | null {
+  async read(key: string): Promise<string | null> {
     return this.map.has(key) ? (this.map.get(key) as string) : null;
   }
 
-  write(key: string, value: string): void {
+  async write(key: string, value: string): Promise<void> {
     this.map.set(key, value);
   }
 
-  remove(key: string): void {
+  async remove(key: string): Promise<void> {
     this.map.delete(key);
   }
 }

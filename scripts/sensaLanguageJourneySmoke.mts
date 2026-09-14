@@ -67,8 +67,8 @@ let context:SensaPinnedLanguageContext={supportLanguageTag:'ko',targetLanguageTa
 const storage=new MemoryStoragePort();
 const gateway=createJourneyGateway({storage,clock:createSeededClock(),languages:{read:async()=>context}});
 await gateway.createPersonalMeaning({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'雨后的巷子'}],familiarExpression:{surfaceForm:'欲言又止'}});
-const stored=JSON.parse(storage.read(JOURNEY_STORE_KEY)!) as any;
-const saved=()=>JSON.parse(storage.read(JOURNEY_STORE_KEY)!) as any;
+const stored=JSON.parse((await storage.read(JOURNEY_STORE_KEY))!) as any;
+const saved=async()=>JSON.parse((await storage.read(JOURNEY_STORE_KEY))!) as any;
 const written=stored.meanings[0].personalExpressionAnchorRevisions;
 assert.equal(written.length,1,'the learner wording becomes its own expression anchor');
 assert.equal(written[0].languageTag,'ko','the learner wording uses this operation’s Support Language');
@@ -82,7 +82,7 @@ assert.equal(blockAnchors[0].bodyText,'雨后的巷子');
 // language that happened to be stored on the record first.
 context={supportLanguageTag:'zh-CN',targetLanguageTag:'es'};
 await gateway.addMaterialBlock({operationId:crypto.randomUUID(),personalMeaningId:stored.meanings[0].personalMeaning.personalMeaningId,block:{kind:'text',bodyText:'雨停了'}});
-const after=saved();
+const after=await saved();
 assert.deepEqual(after.meanings[0].personalSemanticAnchorRevisions.map((revision:any)=>revision.languageTag),['ko','zh-CN'],'a later block uses its own resolved context without rewriting the earlier Anchor');
 
 // Two captures may arrive together from a batch-oriented Agent. Commands stay
@@ -103,7 +103,7 @@ await assert.rejects(
   /operationId/,
   'one operation id cannot silently replay a different Intake payload',
 );
-const raced=JSON.parse(raceStorage.read(JOURNEY_STORE_KEY)!) as any;
+const raced=JSON.parse((await raceStorage.read(JOURNEY_STORE_KEY))!) as any;
 assert.equal(raced.meanings.length,2,'two captures that overlap while the active context is read both survive');
 assert.equal(raced.meanings.filter((meaning:any)=>meaning.personalMeaning.status==='active').length,2);
 
@@ -116,9 +116,9 @@ const undetermined=fastTrackPayload('She took her time.','took',null);
 assert.equal((await raceGateway.ingest(undetermined.operationId,undetermined)).route,'inbox');
 const withoutContext={...fastTrackPayload('She backed out.','backed out','en','back out'),operationId:crypto.randomUUID(),context:null,expression:null};
 assert.equal((await raceGateway.ingest(withoutContext.operationId,withoutContext)).route,'inbox');
-const waiting=(JSON.parse(raceStorage.read(JOURNEY_STORE_KEY)!) as any).inboxItems;
+const waiting=(JSON.parse((await raceStorage.read(JOURNEY_STORE_KEY))!) as any).inboxItems;
 assert.deepEqual(waiting.map((item:any)=>item.status),['pending_expression','pending_context']);
-const noContextMeaning=(JSON.parse(raceStorage.read(JOURNEY_STORE_KEY)!) as any).meanings.find((meaning:any)=>meaning.personalExpressionAnchorRevisions[0]?.surfaceForm==='back out');
+const noContextMeaning=(JSON.parse((await raceStorage.read(JOURNEY_STORE_KEY))!) as any).meanings.find((meaning:any)=>meaning.personalExpressionAnchorRevisions[0]?.surfaceForm==='back out');
 assert.equal(noContextMeaning,undefined,'the no-context fixture remains in the Inbox');
 
 console.log('PASS: Intake preserves absolute language tags, ignores the active learning Route, accepts canonical/observed expression forms, and mechanically routes missing facts. Pure engine and in-memory store; no browser, network or model.');

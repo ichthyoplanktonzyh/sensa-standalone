@@ -1155,7 +1155,7 @@ Sync record、manifest、block canonicalization、容量限制与冲突响应由
 ## 18. 当前实现边界
 
 当前生产 Web 的学习权威位于本机：`apps/web/src/experience/learningRuntime` 负责 Protocol/Policy/评价
-与运行协调，`packages/learning-kernel` 提供可复用的纯规则，`apps/web/src/data/library` 在 IndexedDB
+与运行协调，`packages/learning-kernel` 提供可复用的纯规则，`apps/web/src/data/library` 在 SQLite WASM
 事务中保存并恢复个人事实、运行、结果与 FSRS 状态。Card/页面只是 renderer，不能直接写入成功、
 证据或调度状态。
 

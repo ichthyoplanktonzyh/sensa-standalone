@@ -35,7 +35,7 @@ const projectionStore = (() => {
       targets = learning.targets;
       publish();
     } catch {
-      // Account/bootstrap surfaces can mount before IndexedDB is available.
+      // Account/bootstrap surfaces can mount before the local SQLite library is available.
       // Keep the last valid projection; the next Library event retries it.
     }
   };
