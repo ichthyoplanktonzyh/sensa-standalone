@@ -6,7 +6,19 @@ const entrySchema=z.object({accountId:z.string().uuid(),request:localIntakeReque
 type Entry=z.infer<typeof entrySchema>;
 let serial:Promise<unknown>=Promise.resolve();
 function locked<T>(work:()=>Promise<T>){const next=serial.catch(()=>undefined).then(work);serial=next;return next;}
-async function load(){return z.array(entrySchema).parse((await chrome.storage.local.get('sensaWebIntake')).sensaWebIntake??[]);}
+/**
+ * The owner confirmed there is no legacy Intake compatibility boundary. Remove
+ * records that predate the current contract while retaining every current item;
+ * they are an extension delivery queue, not the authoritative Web library.
+ */
+async function load():Promise<Entry[]>{
+ const stored=(await chrome.storage.local.get('sensaWebIntake')).sensaWebIntake;
+ if(stored===undefined)return [];
+ if(!Array.isArray(stored)){await persist([]);return [];}
+ const entries=stored.flatMap(value=>{const parsed=entrySchema.safeParse(value);return parsed.success?[parsed.data]:[];});
+ if(entries.length!==stored.length)await persist(entries);
+ return entries;
+}
 async function persist(entries:Entry[]){await chrome.storage.local.set({sensaWebIntake:entries});}
 export async function queueWeb(accountId:string,raw:LocalIntakeRequest){return locked(async()=>{
  const request=localIntakeRequestSchema.parse(raw);

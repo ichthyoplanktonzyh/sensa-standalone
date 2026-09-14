@@ -72,7 +72,7 @@ const noopEvent={addListener:()=>{}};
 const chromeMock:any={
  storage:{local:{get:async(key:string)=>structuredClone({[key]:key in stored?(stored as any)[key]:storage[key]}),set:async(value:unknown)=>{Object.assign(storage,structuredClone(value));},setAccessLevel:async()=>{}},session:{get:async(key:string)=>structuredClone({[key]:session[key]}),set:async(value:unknown)=>{Object.assign(session,structuredClone(value));}}},
  runtime:{id:'fixture',getURL:(path:string)=>'chrome-extension://fixture/'+path,onMessage:{addListener:(fn:any)=>{messageListener=fn;}},onConnect:{addListener:(fn:any)=>{connectListener=fn;}},sendMessage:async()=>{}},
- tabs:{create:async()=>({id:20}),update:async(id:number)=>({id}),query:async()=>[],sendMessage:async()=>{},onUpdated:noopEvent,onRemoved:noopEvent},
+ tabs:{get:async(id:number)=>({id,url:pageUrl}),create:async()=>({id:20}),update:async(id:number)=>({id}),query:async()=>[],sendMessage:async()=>{},onUpdated:noopEvent,onRemoved:noopEvent},
  identity:{getRedirectURL:(path:string)=>'https://'+'a'.repeat(32)+'.chromiumapp.org/'+path},
  alarms:{create:()=>{},onAlarm:noopEvent},
 };
@@ -95,7 +95,7 @@ const settled=(ms=50)=>new Promise(resolve=>setTimeout(resolve,ms));
 // input onward and never added the pair the service requires, so every reading
 // surface — which is what uses this port — asked a question the service refused.
 const portHandler={message:null as any};
-connectListener({name:'sensa-reading-stream',sender:{id:'fixture',tab:{id:1},url:pageUrl},onDisconnect:{addListener:()=>{}},onMessage:{addListener:(fn:any)=>{portHandler.message=fn;}},postMessage:()=>{},disconnect:()=>{}});
+connectListener({name:'sensa-reading-stream',sender:{id:'fixture',tab:{id:1},url:web+'/previous-route'},onDisconnect:{addListener:()=>{}},onMessage:{addListener:(fn:any)=>{portHandler.message=fn;}},postMessage:()=>{},disconnect:()=>{}});
 portHandler.message({accountId,pageUrl,input:reading});
 await settled();
 assert.equal(sent.length,1,'a streamed reading reaches the service');
@@ -132,7 +132,7 @@ assert.equal('languages' in (testBody as object),false,'a connection question ha
 // The other port on this channel is not a reading: a lookup streams a capture,
 // and completing it would be answering a question nobody asked.
 const lookupHandler={message:null as any};
-connectListener({name:'sensa-lookup-stream',sender:{id:'fixture',tab:{id:1},url:pageUrl},onDisconnect:{addListener:()=>{}},onMessage:{addListener:(fn:any)=>{lookupHandler.message=fn;}},postMessage:()=>{},disconnect:()=>{}});
+connectListener({name:'sensa-lookup-stream',sender:{id:'fixture',tab:{id:1},url:web+'/previous-route'},onDisconnect:{addListener:()=>{}},onMessage:{addListener:(fn:any)=>{lookupHandler.message=fn;}},postMessage:()=>{},disconnect:()=>{}});
 const lookup={id:crypto.randomUUID(),snapshot:{sentence:'She took her time.',language:'en',languageSource:'detector',languageConfidence:.9,source:{url:pageUrl,title:'An article',capturedAt:new Date().toISOString()},expression:null}};
 lookupHandler.message({accountId,pageUrl,input:lookup});
 await new Promise(resolve=>setTimeout(resolve,50));

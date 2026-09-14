@@ -103,6 +103,24 @@ async function reconnectWeb(discardForAccount?:string){return locked(async()=>{
  await chrome.storage.session.set({sensaWebConnect:null,sensaExplicitReconnect:null});await stopAllReading();
  // Account-owned queues and credentials stay under their original account.
 });}
+/**
+ * The Web library is one origin-owned SQLite database. Reuse its existing tab
+ * instead of opening a competing OPFS connection that can strand the new tab on
+ * the account gate while the already-open product remains healthy.
+ */
+async function openWebPath(path:string){
+ const url=new URL(path,webUrl).href,pattern=new URL('/*',webUrl).href;
+ const openTabs=await chrome.tabs.query({url:pattern});
+ const existing=openTabs.find(tab=>tab.active&&tab.id)??openTabs.find(tab=>tab.id);
+ if(existing?.id){await chrome.tabs.update(existing.id,{active:true,url});return;}
+ await chrome.tabs.create({url});
+}
+function webContentPath(raw:unknown){
+ if(raw===undefined)return '/content?worldAction=inbox';
+ const target=new URL(z.string().max(2048).parse(raw),webUrl);
+ if(target.origin!==new URL(webUrl).origin||!['/content','/content/personal-meaning'].includes(target.pathname)||target.hash)throw new Error('unsupported_message');
+ return target.pathname+target.search;
+}
 async function loginThroughWeb(){
  await reconnectWeb();
  // The user's Sensa session lives in the ordinary Web origin. Chrome's identity
@@ -124,6 +142,22 @@ async function loginThroughWeb(){
  await chrome.tabs.update(tab.id,{url:new URL('/profile',webUrl).href});
 }
 async function activeScope(){return (await load()).active;}
+
+/**
+ * `MessageSender.url` identifies the document that opened the extension
+ * connection. On a single-page application that document may have navigated
+ * since then, while the selection snapshot correctly contains the current URL.
+ * The active-tab grant lets the background read the tab's live URL, which is the
+ * authority for page-bound reading and capture requests.
+ */
+async function currentPageUrl(sender:chrome.runtime.MessageSender){
+ if(!sender.tab?.id)throw new Error('unsupported_page');
+ const tab=await chrome.tabs.get(sender.tab.id);
+ if(!tab.url||!/^https?:/u.test(tab.url))throw new Error('unsupported_page');
+ return tab.url;
+}
+
+function errorCode(error:unknown){return error instanceof z.ZodError?'invalid_request':error instanceof Error?error.message:'failed';}
 
 /** Reading off for one tab: the mode goes and the page is told, so a surface that
  * is already on screen disappears instead of waiting for a reload. */
@@ -264,7 +298,8 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
    if(!a&&message.kind!=='youtube-captions')throw new Error('authentication_required');
    if(message.kind==='reading-run'||message.kind==='youtube-captions'){
      const mode=(await modes())[sender.tab?.id??-1];
-     if(!sender.tab?.id||mode?.accountId!==await activeScope()||message.accountId!==await activeScope()||sender.url!==message.pageUrl)throw new Error('account_mismatch');
+     if(!sender.tab?.id||mode?.accountId!==await activeScope()||message.accountId!==await activeScope())throw new Error('account_mismatch');
+     if(await currentPageUrl(sender)!==message.pageUrl)throw new Error('source_mismatch');
    }else if(!isOptions||message.accountId&&message.accountId!==a!.accountId)throw new Error('unsupported_message');
    let result;
    if(message.kind==='youtube-captions'){
@@ -304,24 +339,25 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
    const store=await load(),a=store.active?store.accounts[store.active]:null,mode=(await modes())[sender.tab!.id!];
    if(!a||a.accountId!==message.accountId||mode?.accountId!==a.accountId)throw new Error('account_mismatch');
    if(!a.webLibraryId)throw new Error('web_reconnect_required');
+   const pageUrl=await currentPageUrl(sender);
    let snapshot=message.snapshot,resolution=null;
    if(message.kind==='accept'){
     const cached=(await chrome.storage.session.get('sensaLookups')).sensaLookups as Record<string,any>??{},item=cached[message.lookupId];
-    if(!item||item.scope!==a.accountId||item.tabId!==sender.tab!.id||item.pageUrl!==sender.url)throw new Error('lookup_unavailable');
+    if(!item||item.scope!==a.accountId||item.tabId!==sender.tab!.id||item.pageUrl!==pageUrl)throw new Error('lookup_unavailable');
     snapshot=item.snapshot;resolution={kind:'proposal' as const,proposal:item.proposal};
    }
-   snapshot=captureSnapshotSchema.parse(snapshot);if(snapshot.source.url!==sender.url)throw new Error('source_mismatch');
+   snapshot=captureSnapshotSchema.parse(snapshot);if(snapshot.source.url!==pageUrl)throw new Error('source_mismatch');
    const queued=await queueWeb(a.accountId,{version:'sensa-intake-v1',libraryId:a.webLibraryId,clientId:a.installationId,operationId:message.operationId,languageContext:await readingLanguageContext(),snapshot,resolution,acceptance:message.kind==='accept'?{kind:'direct',consent:'accept_context_expression_sense',authorization:'browser:explicit_accept_button'}:null});
    return queued;
   });
  }
- if(message.kind==='lookup'&&sender.tab){const snapshot=captureSnapshotSchema.parse(message.snapshot);const readingModes=await modes();const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a||message.accountId!==await activeScope()||readingModes[sender.tab!.id!]?.accountId!==await activeScope()||snapshot.source.url!==sender.url)throw new Error('authentication_required');const result=await apiRequest('/sensa/semantic/lookups',{id:message.lookupId,snapshot},a.token);await rememberLookup(sender,message.lookupId,snapshot,result,message.accountId);return result;}
+ if(message.kind==='lookup'&&sender.tab){const snapshot=captureSnapshotSchema.parse(message.snapshot);const readingModes=await modes();const store=await load(),a=store.active?store.accounts[store.active]:null;if(!a||message.accountId!==await activeScope()||readingModes[sender.tab!.id!]?.accountId!==await activeScope())throw new Error('authentication_required');if(snapshot.source.url!==await currentPageUrl(sender))throw new Error('source_mismatch');const result=await apiRequest('/sensa/semantic/lookups',{id:message.lookupId,snapshot},a.token);await rememberLookup(sender,message.lookupId,snapshot,result,message.accountId);return result;}
  if(['open-inbox','save-status'].includes(message.kind)&&sender.tab){
   const store=await load(),a=store.active?store.accounts[store.active]:null,mode=(await modes())[sender.tab.id!];
   if(!a||message.accountId!==a.accountId||mode?.accountId!==a.accountId)throw new Error('account_mismatch');
   const operationId=z.string().uuid().parse(message.operationId);
   const result=await webOperationStatus(a.accountId,operationId);
-  if(message.kind==='open-inbox')await chrome.tabs.create({url:new URL('/content?worldAction=inbox',webUrl).href});
+  if(message.kind==='open-inbox')await openWebPath('/content?worldAction=inbox');
   return result;
  }
  if(!isPopup)throw new Error('unsupported_message');
@@ -333,6 +369,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  if(message.kind==='login'){
   await loginThroughWeb();
  }
+ if(message.kind==='open-web')await openWebPath(webContentPath(message.path));
  if(message.kind==='disconnect')await locked(async()=>{const store=await load();store.active=null;await chrome.storage.local.set({sensaAutoConnectPaused:true});await chrome.storage.session.set({sensaWebConnect:null});await persist(store);await stopAllReading();});
  if(message.kind==='toggle'){
   const scope=await activeScope();if(!scope)throw new Error('authentication_required');
@@ -343,7 +380,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   const site=readingSiteOf(tab.url);
   if(site&&(await readingPreferences()).disabledSites.includes(site))throw new Error('site_disabled');const readingModes=await modes();readingModes[tab.id]={accountId:scope};await chrome.storage.session.set({modes:readingModes});await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});await chrome.tabs.sendMessage(tab.id,{kind:'reading',enabled:true,accountId:scope,preferences:await readingPreferences()});}
  if(message.kind==='stop'){const [tab]=await chrome.tabs.query({active:true,currentWindow:true});if(tab.id)await stopReadingIn(tab.id);}
- return status();};void work().then(value=>respond({value}),error=>respond({error:error instanceof Error?error.message:'failed'}));return true;
+ return status();};void work().then(value=>respond({value}),error=>respond({error:errorCode(error)}));return true;
 });
 chrome.tabs.onUpdated.addListener((id,change)=>{if(change.status!=='complete')return;void (async()=>{const readingModes=await modes();if(!readingModes[id]||readingModes[id].accountId!==await activeScope())return;
  // A site the learner turned reading off for is not injected into at all: the
@@ -363,11 +400,12 @@ chrome.runtime.onConnect?.addListener(port=>{
  port.onMessage.addListener(message=>{
   if(started)return;started=true;
   void(async()=>{
-   if(sender?.id!==chrome.runtime.id||!sender.tab?.id||sender.url!==message.pageUrl)throw new Error('authentication_required');
+   if(sender?.id!==chrome.runtime.id||!sender.tab?.id)throw new Error('authentication_required');
+   if(await currentPageUrl(sender)!==message.pageUrl)throw new Error('source_mismatch');
    const store=await load(),a=store.active?store.accounts[store.active]:null;
    async function authorize(){const current=await load(),mode=(await modes())[sender!.tab!.id!];if(!a||current.active!==a.accountId||current.accounts[a.accountId]?.token!==a.token||mode?.accountId!==await activeScope()||message.accountId!==await activeScope())throw new Error('account_mismatch');}
    await authorize();
-   if(meaning&&captureSnapshotSchema.parse(message.input?.snapshot).source.url!==sender.url)throw new Error('source_mismatch');
+   if(meaning&&captureSnapshotSchema.parse(message.input?.snapshot).source.url!==message.pageUrl)throw new Error('source_mismatch');
    // A lookup stream carries a capture; a reading stream is a reading request and
    // is completed here, the same way the plain path completes one.
    const body=meaning?message.input:await readingInput(message.input);
@@ -383,7 +421,7 @@ chrome.runtime.onConnect?.addListener(port=>{
      port.postMessage(frame);if(frame.type!=='partial'){finished=true;return;}
     }
    }if(!finished&&!closed)throw new Error('reading_interrupted');}finally{await reader.cancel().catch(()=>undefined);}
-  })().catch(error=>{if(!closed)port.postMessage({type:'error',error:error instanceof Error?error.message:'provider_unavailable'});});
+  })().catch(error=>{if(!closed)port.postMessage({type:'error',error:errorCode(error)});});
  });
 });
 
@@ -391,7 +429,8 @@ async function rememberLookup(sender:chrome.runtime.MessageSender,id:string,snap
  if(result?.status!=='ready'||!result.proposal)return;
  if(await activeScope()!==scope)throw new Error('account_mismatch');
  const store:Record<string,any>=(await chrome.storage.session.get('sensaLookups')).sensaLookups as Record<string,any>??{};
- store[id]={scope,tabId:sender.tab?.id,pageUrl:sender.url,snapshot:captureSnapshotSchema.parse(snapshot),proposal:result.proposal};
+ const parsed=captureSnapshotSchema.parse(snapshot);
+ store[id]={scope,tabId:sender.tab?.id,pageUrl:parsed.source.url,snapshot:parsed,proposal:result.proposal};
  const keys=Object.keys(store);for(const key of keys.slice(0,Math.max(0,keys.length-100)))delete store[key];
  await chrome.storage.session.set({sensaLookups:store});
 }

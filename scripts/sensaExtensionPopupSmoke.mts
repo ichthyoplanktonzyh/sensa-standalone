@@ -13,6 +13,7 @@ try {
   const fixture={calls:[] as {kind:string;enabled?:boolean}[],finish:null as null|((value:unknown)=>void),status:(value:Record<string,unknown>)=>({value:{destination:'web-local',rule:null,language:{collection:{routes:[route]},context:{languageRouteId:route.id,languageRouteRevision:route.revision,targetLanguageTag:route.targetLanguageTag,supportLanguageTag:route.defaultSupportLanguageTag}},...value}})};
   Object.assign(window,{fixture,chrome:{runtime:{sendMessage:(message:{kind:string})=>{
    fixture.calls.push(message);
+   if(message.kind==='open-web')return Promise.resolve({value:{}});
    return new Promise(resolve=>{fixture.finish=resolve;});
   }}}});
  });
@@ -61,6 +62,8 @@ try {
  await page.locator('#recent').focus();await page.keyboard.press('End');
  await expect.poll(()=>page.locator('#recent').evaluate(element=>element.scrollTop)).toBeGreaterThan(0);
  await expect(page.locator('#recent a').last()).toHaveAttribute('href',/meaningId=fixture-19$/);
+ await page.locator('#recent a').last().click();
+ expect(await page.evaluate(()=>(window as any).fixture.calls.at(-1))).toEqual({kind:'open-web',path:'/content?worldAction=inbox&meaningId=fixture-19'});
  await page.screenshot({path:'/tmp/sensa-recent-many.png',fullPage:true});
  await page.locator('#disconnect').click();await complete(undefined,false);
  await expect(page.locator('#recent a')).toHaveCount(0);await expect(page.locator('#recent-count')).toHaveText('0 条');

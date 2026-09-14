@@ -67,7 +67,7 @@ storage.sensa={version:1,active:accountId,accounts:{[accountId]:{accountId,insta
 const session:Record<string,unknown>={modes:{1:{accountId}}};
 const noopEvent={addListener:()=>{}};
 let exchangeCalls=0;const opened:string[]=[],activated:number[]=[],reloaded:number[]=[];
-const chromeMock={identity:{getRedirectURL:()=> 'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/sensa'},storage:{local:{...(globalThis as any).chrome.storage.local,setAccessLevel:async()=>{}},session:{get:async(key:string)=>structuredClone({[key]:session[key]}),set:async(value:unknown)=>Object.assign(session,structuredClone(value))}},runtime:{id:'fixture',getURL:(path:string)=>'chrome-extension://fixture/'+path,onMessage:{addListener:(fn:unknown)=>{listener=fn;}}},tabs:{query:async(query:{url?:string})=>query.url?[{id:20,url:'http://127.0.0.1:3000/profile',active:true}]:[{id:1,url:snapshot.source.url}],create:async({url}:{url:string})=>{opened.push(url);return {id:20};},update:async(id:number,input:{url?:string;active?:boolean})=>{assert.equal(id,20);if(input.url)opened.push(input.url);if(input.active)activated.push(id);return {id,...input};},reload:async(id:number)=>{reloaded.push(id);},onUpdated:noopEvent,onRemoved:noopEvent,sendMessage:async()=>{}},alarms:{create:()=>{},onAlarm:noopEvent}};
+const chromeMock={identity:{getRedirectURL:()=> 'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/sensa'},storage:{local:{...(globalThis as any).chrome.storage.local,setAccessLevel:async()=>{}},session:{get:async(key:string)=>structuredClone({[key]:session[key]}),set:async(value:unknown)=>Object.assign(session,structuredClone(value))}},runtime:{id:'fixture',getURL:(path:string)=>'chrome-extension://fixture/'+path,onMessage:{addListener:(fn:unknown)=>{listener=fn;}}},tabs:{get:async(id:number)=>({id,url:snapshot.source.url}),query:async(query:{url?:string})=>query.url?[{id:20,url:'http://127.0.0.1:3000/profile',active:true}]:[{id:1,url:snapshot.source.url}],create:async({url}:{url:string})=>{opened.push(url);return {id:20};},update:async(id:number,input:{url?:string;active?:boolean})=>{assert.equal(id,20);if(input.url)opened.push(input.url);if(input.active)activated.push(id);return {id,...input};},reload:async(id:number)=>{reloaded.push(id);},onUpdated:noopEvent,onRemoved:noopEvent,sendMessage:async()=>{}},alarms:{create:()=>{},onAlarm:noopEvent}};
 const bundle=await build({entryPoints:['apps/browser-extension/src/background.ts'],bundle:true,write:false,format:'iife',platform:'browser',define:{SENSA_WEB_URL:JSON.stringify('http://127.0.0.1:3000'),SENSA_API_URL:JSON.stringify('http://127.0.0.1:4319')}});
 vm.runInNewContext(bundle.outputFiles[0]!.text,{chrome:chromeMock,crypto,btoa,URL,TextEncoder,TextDecoder,AbortSignal,setTimeout,clearTimeout,console,fetch:async(url:string,init:RequestInit)=>{assert.equal(url,'http://127.0.0.1:4319/sensa/extension/exchange');const body=JSON.parse(String(init.body));assert.equal(body.code,'fixture-code');if((session as any).expectedChallenge){assert.equal(Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(body.verifier))).toString('base64url'),(session as any).expectedChallenge);delete (session as any).expectedChallenge;}else assert.equal(body.verifier,(session as any).expectedVerifier);exchangeCalls++;return {ok:true,json:async()=>({accountId,token:'fixture-renewed-token',expiresAt:new Date(Date.now()+86400000).toISOString()})};}});
 /** A Web message as the page actually sends one: the bridge's envelope is part of
@@ -75,9 +75,11 @@ vm.runInNewContext(bundle.outputFiles[0]!.text,{chrome:chromeMock,crypto,btoa,UR
  * reachable without it. Extension-internal messages carry no channel and are
  * passed through untouched. */
 const message=(input:any,sender:unknown)=>new Promise<any>(resolve=>listener(typeof input?.kind==='string'&&input.kind.startsWith('web-')?{channel:sensaBridgeRequestChannel,id:crypto.randomUUID(),...input}:input,sender,resolve));
-const source={id:'fixture',url:snapshot.source.url,tab:{id:1}};
+// `sender.url` is the document URL from when the content script connected. A
+// same-origin SPA may since have changed route; the live Tab URL is authoritative.
+const source={id:'fixture',url:'https://example.org/previous-route',tab:{id:1}};
 const another=crypto.randomUUID();
-assert.equal((await message({kind:'save',accountId,operationId:another,snapshot},{...source,url:'https://evil.invalid'})).error,'source_mismatch');
+assert.equal((await message({kind:'save',accountId,operationId:another,snapshot:{...snapshot,source:{...snapshot.source,url:'https://evil.invalid'}}},source)).error,'source_mismatch');
 assert.equal((await message({kind:'save',accountId,operationId:another,snapshot},source)).value.destination,'web');
 assert.equal((await message({kind:'web-intake-pull',accountId,libraryId:library.id},source)).error,'unsupported_message');
 const appSender={id:'fixture',url:'http://127.0.0.1:3000/content',tab:{id:2}};
@@ -90,6 +92,7 @@ assert.equal((await message({kind:'web-intake-ack',accountId,libraryId:library.i
 assert.equal((await message({kind:'save-status',accountId,operationId:another},source)).value.committed,true);
 assert.equal((await message({kind:'open-inbox',accountId,operationId:another},source)).value.committed,true);
 assert.equal(opened[0],'http://127.0.0.1:3000/content?worldAction=inbox');
+assert.deepEqual(activated,[20],'opening the semantic world reuses its existing Web tab');
 assert.equal((await message({kind:'save-status',accountId:other,operationId:another},source)).error,'account_mismatch');
 assert.equal((await webStatus(accountId)).pending,0);
 console.log('PASS: extension queue → local library transaction → receipt; slow/fast routes, replay, rollback, ack failure, account/library/signout isolation and preserved source/consent. No browser/network/model calls.');
@@ -135,7 +138,7 @@ const reconnectRequest={...connect,libraryId:newLibrary},loginSender={id:'fixtur
 assert.equal((await message(reconnectRequest,appSender)).error,'library_mismatch');
 assert.equal((await message({kind:'login'},loginSender)).error,undefined);
 assert.equal(opened.length,1,'an existing Sensa tab is reused instead of opening a competing local-library tab');
-assert.deepEqual(activated,[20]);assert.deepEqual(reloaded,[20]);
+assert.deepEqual(activated,[20,20]);assert.deepEqual(reloaded,[20]);
 const loginPrepared=(await message(reconnectRequest,loginTab)).value;assert.ok(loginPrepared.authorization.challenge);
 const loginPending=(session as any).sensaWebConnect;session.expectedVerifier=loginPending.verifier;
 const loginRedirect=loginPrepared.authorization.redirectUri+'?state='+loginPrepared.authorization.state+'&code=fixture-code';
@@ -145,6 +148,23 @@ assert.equal((storage.sensa as any).active,accountId);assert.equal(session.sensa
 assert.deepEqual(storage.sensaWebIntake,preservedQueue,'old-library requests and receipts are preserved byte-for-byte');
 assert.equal((await pendingWeb(accountId,newLibrary)).length,0,'old-library requests are not silently transferred');
 assert.equal((await message(connect,appSender)).error,'library_mismatch','automatic rebinding stays blocked');
+assert.equal((await message({kind:'open-web'},loginSender)).error,undefined);
+assert.equal(opened.at(-1),'http://127.0.0.1:3000/content?worldAction=inbox');
+assert.equal((await message({kind:'open-web',path:'/content?worldAction=inbox&meaningId='+another},loginSender)).error,undefined);
+assert.equal(opened.at(-1),'http://127.0.0.1:3000/content?worldAction=inbox&meaningId='+another);
+assert.equal((await message({kind:'open-web',path:'https://evil.invalid/content'},loginSender)).error,'unsupported_message');
+// The extension queue has no legacy compatibility contract. Records that cannot
+// satisfy the current Intake schema are removed without touching current items.
+const queueAfterLogin=structuredClone(storage.sensaWebIntake),opaqueRecord={legacy:'obsolete queue record'};
+storage.sensaWebIntake=[opaqueRecord];
+const currentCapture={...request,libraryId:newLibrary,operationId:crypto.randomUUID()};
+await queueWeb(accountId,currentCapture);
+const resilientStatus=(await message({kind:'status'},loginSender)).value;
+assert.equal(resilientStatus.accountId,accountId);assert.deepEqual(Array.from(resilientStatus.errors),[]);
+assert.equal((storage.sensaWebIntake as unknown[]).some(item=>JSON.stringify(item)===JSON.stringify(opaqueRecord)),false);
+assert.equal((await pendingWeb(accountId,newLibrary)).length,1);
+assert.equal(await discardPendingWeb(accountId),1);assert.deepEqual(storage.sensaWebIntake,[]);
+storage.sensaWebIntake=queueAfterLogin;
 // The explicit Web reconnect button is scoped to the requesting account, library and tab.
 await message({kind:'web-connect-reset',accountId,libraryId:library.id,receipt:{discardPending:false}},appSender);
 assert.equal((await message(connect,loginTab)).error,'library_mismatch');

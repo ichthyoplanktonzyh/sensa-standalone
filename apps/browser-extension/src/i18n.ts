@@ -30,11 +30,12 @@ const messages={
  pending:['{count} 项已暂存在插件，等待交付到我的语义世界。','{count} items saved in the extension, awaiting delivery to My Semantic World.'],
  saved:['已保存到我的语义世界 · ','Saved to My Semantic World · '],inbox:['已保存待处理 · ','Saved for clarification · '],removed:['已移出 · ','Removed · '],text:['文字材料','Text'],
  failed:['暂时无法完成，已保存的内容仍保留。','Could not complete this action. Saved content is preserved.'],
+ invalid_request:['无法读取这个选区，请重新选择。','Could not read this selection. Select it again.'],source_mismatch:['页面内容已变化，请重新选择。','The page changed. Select the content again.'],
  authentication_required:['请登录 Sensa 后重试。','Sign in to Sensa and try again.'],access_revoked:['登录授权已失效，请重新登录 Sensa。','Authorization expired. Sign in to Sensa again.'],
  account_mismatch:['账户已变化，请核对当前账户后重新连接。','The account changed. Check the current account and reconnect.'],library_mismatch:['接收库不一致，原记录不会转移到其他库。','The receiving library differs. Existing items will not be transferred to another library.'],
  unsupported_page:['此页面不支持采集，请打开普通网页。','Capture is unavailable on this page. Open a regular web page.'],authorization_cancelled:['登录已取消。','Sign-in cancelled.'],
  authorization_expired:['连接授权已过期，请重试。','Connection authorization expired. Try again.'],web_reconnect_required:['请登录 Sensa 以恢复接收。','Sign in to Sensa to reconnect.'],
- client_update_required:['请更新插件，原记录已保留。','Update the extension. Existing content is preserved.'],web_queue_full:['插件暂存已满，请打开 Sensa 完成交付。','The extension queue is full. Open Sensa to complete delivery.'],
+ client_update_required:['请更新插件，原记录已保留。','Update the extension. Existing content is preserved.'],extension_reload_required:['插件已更新，请刷新当前页面后继续。','The extension was updated. Refresh this page to continue.'],web_queue_full:['插件暂存已满，请打开 Sensa 完成交付。','The extension queue is full. Open Sensa to complete delivery.'],
  lookupFailed:['暂时无法解释，请重试或保存待处理。','Explanation failed. Retry or save for clarification.'],networkFailed:['无法连接 Sensa 服务，请检查网络和服务地址。','Cannot connect to Sensa. Check the network and service address.'],
  timeout:['解释请求超时，请重试。','The explanation timed out. Try again.'],model_auth_failed:['模型服务授权失败，请检查模型设置。','Model authorization failed. Check model settings.'],model_rate_limited:['模型服务繁忙，请稍后重试。','The model service is busy. Try again shortly.'],model_invalid_response:['模型返回的解释格式不正确，请重试。','The model returned an invalid explanation. Try again.'],
  saveAction:['保存到我的语义世界','Save to My Semantic World'],saving:['正在保存…','Saving…'],savedPending:['已暂存在插件。打开同一浏览器中的 Sensa 收件箱即可接收。','Saved in the extension. Open the Sensa inbox in this browser to receive it.'],savedDone:['已保存到我的语义世界。','Saved to My Semantic World.'],
@@ -47,4 +48,4 @@ const messages={
 export type MessageKey=keyof typeof messages;
 export const extensionLanguage=()=>navigator.language.toLowerCase().startsWith('zh')?'zh-CN':'en';
 export function t(key:MessageKey,values:Record<string,string|number>={}){let value:string=messages[key][extensionLanguage()==='zh-CN'?0:1];for(const [name,item] of Object.entries(values))value=value.replaceAll('{'+name+'}',String(item));return value;}
-export function errorText(error:unknown){const code=error instanceof Error?error.message:String(error);return code in messages?t(code as MessageKey):t(code==='Failed to fetch'||code==='network_failed'?'networkFailed':code==='model_cancelled'||code==='TimeoutError'?'timeout':code==='provider_invalid_response'?'model_invalid_response':'failed');}
+export function errorText(error:unknown){const code=error instanceof Error?error.message:String(error);return code in messages?t(code as MessageKey):/Extension context invalidated|Receiving end does not exist/iu.test(code)?t('extension_reload_required'):t(code==='Failed to fetch'||code==='network_failed'?'networkFailed':code==='model_cancelled'||code==='TimeoutError'?'timeout':code==='provider_invalid_response'?'model_invalid_response':'failed');}
