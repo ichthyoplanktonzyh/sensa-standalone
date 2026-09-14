@@ -5,7 +5,7 @@ import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
-import {bookReleaseBundleSchema,learningContentRegistrySchema} from '@sensa/contracts/sensa';
+import {bookReleaseBundleSchema,bookReleaseDescriptorSchema,learningContentRegistrySchema,maxPublishedBookReleaseBytes} from '@sensa/contracts/sensa';
 import {clearLearningContentRegistryCache,readLearningContentRegistry} from '../apps/api/src/sensa/access/learningContentRegistry.ts';
 
 const digest=(bytes:Uint8Array|string)=>createHash('sha256').update(bytes).digest('hex');
@@ -20,6 +20,8 @@ try{
  const {revision,...withoutRevision}=registry;assert.equal(revision,digest(JSON.stringify(withoutRevision)));
  const descriptor=registry.items[0]!,relative=`${descriptor.book.bookId}/${descriptor.book.bookVersionId}/${descriptor.sha256}.json`,bundleBytes=await readFile(join(releases,relative)),bundle=bookReleaseBundleSchema.parse(JSON.parse(bundleBytes.toString('utf8')));
  assert.equal(descriptor.url,new URL(relative,base).href);assert.equal(descriptor.byteLength,bundleBytes.length);assert.equal(descriptor.sha256,digest(bundleBytes));assert.equal(bundle.book.bookId,descriptor.book.bookId);assert.equal(bundle.book.bookVersionId,descriptor.book.bookVersionId);assert.equal(bundle.contentRelease.contentReleaseId,descriptor.contentRelease.contentReleaseId);
+ assert.equal(bookReleaseDescriptorSchema.parse({...descriptor,byteLength:maxPublishedBookReleaseBytes}).byteLength,maxPublishedBookReleaseBytes);
+ assert.throws(()=>bookReleaseDescriptorSchema.parse({...descriptor,byteLength:maxPublishedBookReleaseBytes+1}),/Too big/);
  const repeatCatalog=join(root,'catalog-repeat.json'),repeatReleases=join(root,'repeat');
  const repeat=spawnSync(process.execPath,['--import','tsx',resolve('scripts/release/buildStarterPackage.mts')],{cwd:resolve('.'),encoding:'utf8',env:{...process.env,SENSA_PACKAGE_OUTPUT:repeatReleases,SENSA_PACKAGE_CATALOG_OUTPUT:repeatCatalog,SENSA_PACKAGE_BASE_URL:base,SENSA_WEB_ORIGIN:'https://app.example.test'}});
  assert.equal(repeat.status,0,repeat.stderr||repeat.stdout);assert.equal((await readFile(repeatCatalog)).toString('utf8'),catalogBytes.toString('utf8'),'the same authored release must rebuild byte-for-byte');

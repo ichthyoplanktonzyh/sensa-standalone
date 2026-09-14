@@ -6,6 +6,7 @@ import {sensaExpressionBindingRelationSchema,sensaExpressionTypeSchema,sensaSema
 
 const id=z.string().uuid(),label=z.string().trim().min(1).max(500),digest=z.string().regex(/^[a-f0-9]{64}$/u),timestamp=z.string().datetime({offset:true});
 const deliveryUrl=z.string().url().refine(value=>{const u=new URL(value);return !u.username&&!u.password&&(u.protocol==='https:'||u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname));});
+export const maxPublishedBookReleaseBytes=50*1024*1024;
 export const publishedLearningSemanticFactsSchema=z.object({
  senseKey:label,senseVersionNumber:z.number().int().positive(),semanticPolicyVersion:label,semanticSpec:sensaSenseSemanticSpecSchema,
  expressionId:id,expressionVersionId:id,expressionType:sensaExpressionTypeSchema,expressionVersionNumber:z.number().int().positive(),expressionStructure:z.record(z.string(),z.unknown()),
@@ -56,7 +57,7 @@ export const bookReleaseDescriptorSchema=z.object({
  contentRelease:z.object({contentReleaseId:id,versionNumber:z.number().int().positive(),schemaVersion:label}).strict(),
  targetLanguage:sensaLanguageTagSchema,supportLanguage:sensaLanguageTagSchema,
  publishedAt:timestamp,changeSummary:z.string().trim().max(2000),
- entryCount:z.number().int().min(1).max(1000),byteLength:z.number().int().min(1).max(64*1024*1024),sha256:digest,url:deliveryUrl,
+ entryCount:z.number().int().min(1).max(1000),byteLength:z.number().int().min(1).max(maxPublishedBookReleaseBytes),sha256:digest,url:deliveryUrl,
 }).strict();
 
 export const learningPackageDescriptorSchema=z.union([bookReleaseDescriptorSchema,legacyLearningPackageDescriptorSchema]);

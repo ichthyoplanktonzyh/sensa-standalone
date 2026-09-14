@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {dirname,resolve} from 'node:path';
 import {createClient} from '@supabase/supabase-js';
-import {learningContentRegistrySchema} from '@sensa/contracts/sensa';
+import {learningContentRegistrySchema,maxPublishedBookReleaseBytes} from '@sensa/contracts/sensa';
 
 const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
 const required=name=>{const value=process.env[name]?.trim();if(!value)throw Error(`${name} is required`);return value;};
@@ -27,7 +27,7 @@ if(sha256(Buffer.from(JSON.stringify(registrySnapshot)))!==revision)throw Error(
 const client=createClient(supabaseUrl.href,secret,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
 let bucketResult=await client.storage.getBucket(bucket);
 if(bucketResult.error){
- const created=await client.storage.createBucket(bucket,{public:true,allowedMimeTypes:['application/json'],fileSizeLimit:64*1024*1024});
+ const created=await client.storage.createBucket(bucket,{public:true,allowedMimeTypes:['application/json'],fileSizeLimit:maxPublishedBookReleaseBytes});
  if(created.error)throw Error('Learning content bucket is unavailable');
  bucketResult=await client.storage.getBucket(bucket);
 }
