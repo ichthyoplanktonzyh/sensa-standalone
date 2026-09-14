@@ -32,10 +32,11 @@ import {localCurriculumMembershipForContext,localExecutableTarget,localExecutabl
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
 import {applyLocalProtocolTransition,type LocalLearningTransitionRecord} from './learningSettlement';
 import {requireLanguageRouteContext} from './language';
+import {personalLearningSceneRowId,type PersonalLearningScene} from './contentAnnotations';
 
 export {localRunTargetIds};
 export type {LocalLearningRun,LocalLearningTarget};
-export type LearningEvent={id:string;runId:string;targetId:string;kind:string;at:string;detail:{stepId:string;materializationId:string;action:LocalLearningAction;formalEvaluation:LocalProtocolEvaluationFacts|null;transition:LocalLearningTransitionRecord}};
+export type LearningEvent={id:string;runId:string;targetId:string;kind:string;at:string;detail:{stepId:string;materializationId:string;personalLearningScene:{sceneId:string;revisionId:string;revision:number}|null;action:LocalLearningAction;formalEvaluation:LocalProtocolEvaluationFacts|null;transition:LocalLearningTransitionRecord}};
 export type LocalStudyPlan={languageRouteId:string;routeRevision:number;revision:number;dailyNewSenseLimit:number;updatedAt:string};
 
 const STUDY_PLANS_KEY='language-route-study-plans';
@@ -234,6 +235,9 @@ export async function actLearning(operationId:string,runId:string,revision:numbe
  const stepId=localProtocolStepId(execution,run),participant=run.participants[activeTargetId]!,presentedMaterial=participant.presentedMaterials[stepId];
  if(!presentedMaterial)throw new Error('localFlow.resourceInvalid');
  const executable=localExecutableTargetForParticipant(t,participant,presentedMaterial);
+ const scene=await tx.get<PersonalLearningScene>('annotations',personalLearningSceneRowId(t.id,participant.languageContext.languageRouteId));
+ const sceneRevision=scene?.revisions.find(candidate=>candidate.revision===scene.currentRevision);
+ const personalLearningScene=scene&&sceneRevision?{sceneId:scene.sceneId,revisionId:sceneRevision.revisionId,revision:sceneRevision.revision}:null;
  if(hasDeclaredMasteryOverride(t)||localRunOpenPlanningInterruption(run))throw new Error('localFlow.stepChanged');
  if(!Number.isFinite(Date.parse(at))||Date.parse(at)<Date.parse(run.startedAt))throw new Error('localFlow.clockChanged');
  const pack=executable.packageKey?await tx.get<InstalledPackage>('packages',executable.packageKey):undefined;validateLocalProtocolResources(execution,executable,pack);
@@ -241,7 +245,7 @@ export async function actLearning(operationId:string,runId:string,revision:numbe
  const nextRun=executed.run;
  const applied=applyLocalProtocolTransition({operationId,stepId,at,target:t,run:nextRun,transition:executed.transition});
  nextRun.ordinal++;nextRun.revision++;if(!nextRun.completedAt)await bindCurrentStepMaterial(tx,nextRun,at);tx.put('learningRuns',nextRun.id,nextRun);tx.put('learningTargets',applied.target.id,applied.target);
- tx.put('learningEvents',operationId,{id:operationId,runId,targetId:t.id,kind:action.kind,at,detail:{stepId,materializationId:presentedMaterial.snapshot.learningMaterializationId,action,formalEvaluation:executed.facts,transition:applied.record}} satisfies LearningEvent);return nextRun;
+ tx.put('learningEvents',operationId,{id:operationId,runId,targetId:t.id,kind:action.kind,at,detail:{stepId,materializationId:presentedMaterial.snapshot.learningMaterializationId,personalLearningScene,action,formalEvaluation:executed.facts,transition:applied.record}} satisfies LearningEvent);return nextRun;
 });}
 export async function finishLearning(operationId:string,runId:string){const result=await command({id:operationId,kind:'learning.finish',input:{runId}},async tx=>{await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);if(!run?.completedAt)throw new Error('localFlow.finishFirst');if(await tx.get('meta','learning-active')===runId)tx.delete('meta','learning-active');return true;});requestCloudCheckpoint();return result;}
 

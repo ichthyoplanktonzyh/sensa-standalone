@@ -5,13 +5,13 @@ import {readFile,writeFile,mkdir,readdir} from 'node:fs/promises';
 import {dirname,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {stableUuid} from '@sensa/learning-kernel';
-import {bookReleaseBundleSchema,bookReleaseDescriptorSchema,learningContentRegistrySchema} from '@sensa/contracts/sensa';
+import {bookReleaseBundleSchema,bookReleaseDescriptorSchema,learningContentRegistrySchema,sensaSenseSemanticSpecSchema,type SensaSenseSemanticSpec} from '@sensa/contracts/sensa';
 import {provisionLightweightInitialContent} from '../../apps/web/src/learning/runtime/lightweightInitialContent.ts';
 
 type Source={
  bookKey:string;title:string;description:string;versionNumber:number;publishedAt:string;changeSummary:string;
  targetLanguage:string;supportLanguage:string;
- entries:{key:string;senseVersion:number;bindingVersion:number;expression:string;meaning:string;scene:string}[];
+ entries:{key:string;senseVersion:number;bindingVersion:number;expression:string;meaning:string;scene:string;semanticSpec:SensaSenseSemanticSpec}[];
 };
 
 const configuredSources=process.env.SENSA_BOOK_RELEASE_SOURCES?.trim();
@@ -34,10 +34,10 @@ for(const path of sourcePaths.sort()){
  const bookId=stableUuid('sensa:book:'+source.bookKey),bookVersionId=stableUuid(`sensa:book:${source.bookKey}:version:${source.versionNumber}`),contentReleaseId=stableUuid(`sensa:content-release:${source.bookKey}:version:${source.versionNumber}`);
  const entries=source.entries.map(entry=>{
   if(!Number.isInteger(entry.senseVersion)||entry.senseVersion<1||!Number.isInteger(entry.bindingVersion)||entry.bindingVersion<1)throw Error(`Entry versions must be positive: ${entry.key}`);
-  const senseId=stableUuid('sensa:starter:sense:'+entry.key),senseVersionId=stableUuid(`sensa:starter:sense:${entry.key}:version:${entry.senseVersion}`),bindingId=stableUuid('sensa:starter:binding:'+entry.key),bindingVersionId=stableUuid(`sensa:starter:binding:${entry.key}:version:${entry.bindingVersion}`);
+  const semanticSpec=sensaSenseSemanticSpecSchema.parse(entry.semanticSpec),senseId=stableUuid('sensa:starter:sense:'+entry.key),senseVersionId=stableUuid(`sensa:starter:sense:${entry.key}:version:${entry.senseVersion}`),expressionKey=`${source.targetLanguage}:${entry.expression.trim().toLocaleLowerCase()}`,expressionId=stableUuid('sensa:starter:expression:'+expressionKey),expressionVersionId=stableUuid(`sensa:starter:expression:${expressionKey}:version:${entry.bindingVersion}`),bindingId=stableUuid('sensa:starter:binding:'+entry.key),bindingVersionId=stableUuid(`sensa:starter:binding:${entry.key}:version:${entry.bindingVersion}`);
   const result=provisionLightweightInitialContent({learnerUserId:owner,learningTargetId:stableUuid('sensa:starter:target:'+entry.key),senseId,senseVersionId,senseExpressionBindingId:bindingId,resolvedLearningPlanRevisionId:`authored:${source.bookKey}:${source.versionNumber}`,expressionSourceVersion:String(entry.bindingVersion),senseSourceVersion:String(entry.senseVersion),expression:{surface:entry.expression,languageTag:source.targetLanguage,expressionKind:entry.expression.includes(' ')?'phrase':'word'},sense:{meaning:entry.meaning,supportLanguageTag:source.supportLanguage},originExperience:{source:'other_authoritative_source',sourceVersion:String(source.versionNumber),personalAnchorUseGrantId:null,experience:{scene:entry.scene,senseFocus:entry.meaning,featureLabels:[]}},referenceFacts:[],requestedAt:source.publishedAt});
   if(result.status!=='ready')throw Error('Authored resource failed material validation: '+entry.key);
-  return {senseId,senseVersionId,bindingId,bindingVersionId,expression:entry.expression,meaning:entry.meaning,content:result.materialization.content};
+  return {senseId,senseVersionId,bindingId,bindingVersionId,expression:entry.expression,meaning:entry.meaning,content:result.materialization.content,semantic:{senseKey:entry.key,senseVersionNumber:entry.senseVersion,semanticPolicyVersion:'sensa-editorial-starter-v1',semanticSpec,expressionId,expressionVersionId,expressionType:entry.expression.includes(' ')?'phrase' as const:'word' as const,expressionVersionNumber:entry.bindingVersion,expressionStructure:{},bindingVersionNumber:entry.bindingVersion,relation:'realizes' as const,semanticCoverage:'exact' as const,registerLabel:null,usageConstraints:[]}};
  });
  const bundle=bookReleaseBundleSchema.parse({format:'sensa-book-release-bundle-v1',book:{bookId,bookKey:source.bookKey,bookVersionId,versionNumber:source.versionNumber,title:source.title,description:source.description},contentRelease:{contentReleaseId,versionNumber:source.versionNumber,schemaVersion:'sensa-consumer-content-v1'},targetLanguage:source.targetLanguage,supportLanguage:source.supportLanguage,publishedAt:source.publishedAt,changeSummary:source.changeSummary,entries});
  const bytes=Buffer.from(JSON.stringify(bundle)),sha256=createHash('sha256').update(bytes).digest('hex'),name=`${bookId}/${bookVersionId}/${sha256}.json`,file=resolve(folder,name);

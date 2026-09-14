@@ -14,7 +14,7 @@ import {backupEqual} from './backupCodec';
 import {applyLocalProtocolTransition} from './learningSettlement';
 import {localLearningPurpose,localProtocolActiveTargetId,localProtocolOutcomePermissions,localProtocolStepId,localRunOpenPlanningInterruption,reduceLocalProtocolAction,replayLocalProtocolRun,validateLocalProtocolResources} from '../../learning/runtime/localProtocol';
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
-import type {ContentAnnotation} from './contentAnnotations';
+import {personalLearningSceneRowId,type ContentAnnotation} from './contentAnnotations';
 import {localExecutableTargetForParticipant} from '../../learning/runtime/localCurriculum';
 export type BackupRows=Record<Table,{key:string;value:any}[]>;
 const uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
@@ -41,12 +41,20 @@ export function validateBackupRows(rows:BackupRows){
  for(const {value:t} of rows.personalLearning){const current=requireRow('meanings',t.meaningId);if(current.id!==t.meaning.id)fail();const context=validateLanguageContext(t.languageContext);if(current.targetLanguageTag!==context.targetLanguageTag||t.id!==stableUuid(`sensa-personal-learning:${t.meaningId}:${context.languageRouteId}`))fail();uuid.parse(t.curriculumMembershipId);const version=(current.contextRevision??1)===(t.meaning.contextRevision??1)?{text:current.context,images:current.contextImages??[]}:current.contextHistory?.find((v:any)=>v.revision===(t.meaning.contextRevision??1));if(!version||version.text!==t.meaning.context||!backupEqual(version.images,t.meaning.contextImages??[]))fail();if(current.senseVersionId!==t.meaning.senseVersionId||current.bindingVersionId!==t.meaning.bindingVersionId||!backupEqual(current.proposal,t.meaning.proposal))fail();if(t.attemptId&&requireRow('contentAttempts',t.attemptId).taskId!==t.id)fail();if(t.status==='ready'&&!requireRow('learningTargets',t.targetId).curriculumMemberships.some((membership:any)=>membership.id===t.curriculumMembershipId))fail();if(!['waiting','generating','reviewing','failed','rejected','stopped','ready'].includes(t.status))fail();}
  for(const {value:a} of rows.contentAttempts){requireRow('personalLearning',a.taskId);if(a.request)sensaContentGenerationRequestSchema.parse(a.request);if(a.bundle){sensaMaterialCandidateBundleSchema.parse(a.bundle);if(!a.request||a.bundle.contentGenerationRequestId!==a.request.contentGenerationRequestId)fail();}if(a.resumedFrom)requireRow('contentAttempts',a.resumedFrom);}
  for(const {key,value:a} of rows.annotations as {key:string;value:ContentAnnotation}[]){
-  if(!a||a.id!==key||!['word_note','sense_note','saved_sense','saved_example','semantic_anchor'].includes(a.kind))fail();
+  if(!a||a.id!==key||!['word_note','sense_note','saved_sense','saved_example','semantic_anchor','learning_scene'].includes(a.kind))fail();
   if(a.kind==='word_note'){z.string().min(1).max(500).parse(a.word);z.string().min(1).max(1000).parse(a.body);z.number().int().nonnegative().parse(a.updatedAt);}
   if(a.kind==='sense_note'){z.string().min(1).max(2000).parse(a.senseId);z.string().min(1).max(1000).parse(a.body);z.number().int().nonnegative().parse(a.updatedAt);}
   if(a.kind==='saved_sense'){z.string().min(1).max(2000).parse(a.senseId);z.number().int().nonnegative().parse(a.createdAt);}
   if(a.kind==='saved_example'){z.string().min(1).max(2000).parse(a.exampleId);z.number().int().nonnegative().parse(a.createdAt);}
   if(a.kind==='semantic_anchor'){uuid.parse(a.anchorId);z.string().min(1).max(2000).parse(a.senseId);z.string().max(1000).parse(a.body);z.number().int().nonnegative().parse(a.createdAt);z.number().int().nonnegative().parse(a.updatedAt);z.array(z.object({mediaId:uuid,kind:z.literal('image'),dataUrl:z.string().startsWith('data:image/').max(8*1024*1024),mimeType:z.string().min(1).max(200),fileName:z.string().min(1).max(500),altText:z.string().max(80)}).strict()).max(3).parse(a.media);if(!a.body.trim()&&!a.media.length)fail();}
+  if(a.kind==='learning_scene'){
+   uuid.parse(a.sceneId);uuid.parse(a.learningTargetId);uuid.parse(a.languageRouteId);uuid.parse(a.senseId);uuid.parse(a.senseVersionId);uuid.parse(a.bindingVersionId);z.number().int().positive().parse(a.currentRevision);z.number().int().nonnegative().parse(a.createdAt);z.number().int().nonnegative().parse(a.updatedAt);
+   const target=requireRow('learningTargets',a.learningTargetId),membershipIds=new Set(target.curriculumMemberships.filter((membership:any)=>membership.languageContext.languageRouteId===a.languageRouteId).map((membership:any)=>membership.id));
+   if(target.identity.senseId!==a.senseId||target.identity.senseVersionId!==a.senseVersionId||target.identity.bindingVersionId!==a.bindingVersionId||a.revisions.length!==a.currentRevision||new Set(a.revisions.map((revision:any)=>revision.revisionId)).size!==a.revisions.length)fail();
+   for(const [index,revision] of a.revisions.entries()){uuid.parse(revision.revisionId);if(revision.revision!==index+1||!membershipIds.has(revision.curriculumMembershipId))fail();z.string().max(1000).parse(revision.body);z.number().int().nonnegative().parse(revision.createdAt);z.array(z.object({mediaId:uuid,kind:z.literal('image'),dataUrl:z.string().startsWith('data:image/').max(8*1024*1024),mimeType:z.string().min(1).max(200),fileName:z.string().min(1).max(500),altText:z.string().max(80)}).strict()).max(3).parse(revision.media);if(!revision.body.trim()&&!revision.media.length)fail();}
+   if((a.acceptedRevisionId===null)!==(a.acceptedPersonalMeaningId===null)||a.acceptedRevisionId!==null&&!a.revisions.some((revision:any)=>revision.revisionId===a.acceptedRevisionId))fail();
+   if(a.acceptedPersonalMeaningId!==null)uuid.parse(a.acceptedPersonalMeaningId);
+  }
  }
  for(const {value:t} of rows.learningTargets){
   learningPolicyProfileRegistry.get(localTargetPolicy(t));
@@ -157,7 +165,12 @@ export function validateBackupRows(rows:BackupRows){
    if(!ids.includes(targetId)||event.targetId!==targetId||run.completedAt)fail();
    const target=targets.get(targetId)??fail(),participant=run.participants[targetId]??fail();
    timestamp.parse(event.at);if(Date.parse(event.at)<Date.parse(run.startedAt))fail();
-   const detail=event.detail as any,presented=participant.presentedMaterials[detail.stepId]??fail();if(event.kind!==detail.action?.kind||detail.materializationId!==presented.snapshot.learningMaterializationId)fail();
+   const detail=event.detail as any,presented=participant.presentedMaterials[detail.stepId]??fail();if(event.kind!==detail.action?.kind||detail.materializationId!==presented.snapshot.learningMaterializationId||!Object.hasOwn(detail,'personalLearningScene'))fail();
+   if(detail.personalLearningScene!==null){
+    const scene=requireRow('annotations',personalLearningSceneRowId(targetId,participant.languageContext.languageRouteId));
+    const pinned=z.object({sceneId:uuid,revisionId:uuid,revision:z.number().int().positive()}).strict().parse(detail.personalLearningScene),sceneRevision=scene.kind==='learning_scene'&&scene.sceneId===pinned.sceneId?scene.revisions.find((candidate:any)=>candidate.revisionId===pinned.revisionId):undefined;
+    if(!sceneRevision||sceneRevision.revision!==pinned.revision||sceneRevision.createdAt>Date.parse(event.at))fail();
+   }
    const executable=localExecutableTargetForParticipant(target,participant,presented);
    const executed=reduceLocalProtocolAction({operationId:event.id,stepKey:detail.stepId,execution,target:executable,run,resource:executable.packageKey?requireRow('packages',executable.packageKey):undefined,action:detail.action,at:event.at});
    const applied=applyLocalProtocolTransition({operationId:event.id,stepId:detail.stepId,at:event.at,target,run:executed.run,transition:executed.transition});

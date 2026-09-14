@@ -5,6 +5,7 @@ import {
   type PersonalSemanticAnchorMedia,
 } from '../../data/library/contentAnnotations';
 import { uiClass } from '../ui/classes';
+import type { LearningSceneEditorTarget } from '../stores/overlayStore';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 
 interface SceneEditorModalProps {
@@ -13,6 +14,7 @@ interface SceneEditorModalProps {
   word: string;
   senseMeaning: string;
   anchorId?: string;
+  learningTarget?: LearningSceneEditorTarget;
   onClose: () => void;
   toast: (message: string) => void;
 }
@@ -67,6 +69,7 @@ export function SceneEditorModal({
   word,
   senseMeaning,
   anchorId,
+  learningTarget,
   onClose,
   toast,
 }: SceneEditorModalProps) {
@@ -79,12 +82,23 @@ export function SceneEditorModal({
 
   useEffect(() => {
     if (!active || !senseId) return;
-    const existing = anchorId ? contentAnnotations.getSemanticAnchor(anchorId) : null;
-    setBody(existing?.body ?? '');
-    setMedia(existing?.media ?? []);
+    const learningScene = learningTarget
+      ? contentAnnotations.getLearningScene(
+          learningTarget.learningTargetId,
+          learningTarget.languageRouteId,
+        )
+      : null;
+    const learningRevision = learningScene
+      ? contentAnnotations.getLearningSceneRevision(learningScene)
+      : null;
+    const existing = !learningTarget && anchorId
+      ? contentAnnotations.getSemanticAnchor(anchorId)
+      : null;
+    setBody(learningRevision?.body ?? existing?.body ?? '');
+    setMedia(learningRevision?.media ?? existing?.media ?? []);
     const focusTimer = window.setTimeout(() => textareaRef.current?.focus(), 180);
     return () => window.clearTimeout(focusTimer);
-  }, [active, anchorId, senseId]);
+  }, [active, anchorId, learningTarget, senseId]);
 
   if (!active || !senseId) return null;
 
@@ -123,7 +137,16 @@ export function SceneEditorModal({
     }
     setProcessing(true);
     try {
-      await contentAnnotations.saveSemanticAnchor({ senseId, anchorId, body, media });
+      if (learningTarget) {
+        await contentAnnotations.saveLearningScene({
+          operationId: crypto.randomUUID(),
+          ...learningTarget,
+          body,
+          media,
+        });
+      } else {
+        await contentAnnotations.saveSemanticAnchor({ senseId, anchorId, body, media });
+      }
       toast(cardText('sceneSaved'));
       onClose();
     } catch {
@@ -150,7 +173,7 @@ export function SceneEditorModal({
         </header>
 
         <div className={uiClass("scene-editor-sense-pill")}>
-          <strong>{word}</strong>
+          {!learningTarget && <strong>{word}</strong>}
           <span>{senseMeaning}</span>
         </div>
 

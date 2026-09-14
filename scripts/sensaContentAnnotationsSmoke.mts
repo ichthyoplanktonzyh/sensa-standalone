@@ -53,8 +53,40 @@ try {
   });
   assert.equal(annotation.getSemanticAnchor(anchorId)?.senseId, 'sense:river');
 
+  const target = {
+    learningTargetId: crypto.randomUUID(),
+    languageRouteId: crypto.randomUUID(),
+    curriculumMembershipId: crypto.randomUUID(),
+    senseId: crypto.randomUUID(),
+    senseVersionId: crypto.randomUUID(),
+    bindingVersionId: crypto.randomUUID(),
+  };
+  const firstScene = await annotation.saveLearningScene({
+    operationId: crypto.randomUUID(),
+    ...target,
+    body: 'The plate on my breakfast table.',
+    media: [],
+  });
+  const unchangedScene = await annotation.saveLearningScene({
+    operationId: crypto.randomUUID(),
+    ...target,
+    body: 'The plate on my breakfast table.',
+    media: [],
+  });
+  assert.equal(unchangedScene.currentRevision, 1, 'saving identical scene content does not invent a revision');
+  const secondScene = await annotation.saveLearningScene({
+    operationId: crypto.randomUUID(),
+    ...target,
+    body: 'The blue plate on my breakfast table.',
+    media: [],
+  });
+  assert.equal(secondScene.currentRevision, 2);
+  assert.equal(secondScene.sceneId, firstScene.sceneId);
+  await annotation.markLearningSceneAccepted({operationId:crypto.randomUUID(),sceneId:secondScene.sceneId,revisionId:secondScene.revisions[1].revisionId,personalMeaningId:crypto.randomUUID()});
+  assert.equal(annotation.getLearningScene(target.learningTargetId,target.languageRouteId)?.acceptedRevisionId,secondScene.revisions[1].revisionId);
+
   const rows = await api.readLibrary((tx: any) => tx.all('annotations'));
-  assert.equal(rows.length, 4);
+  assert.equal(rows.length, 5);
   assert(rows.every((row: any) => row.kind !== 'saved_sense'));
   console.log('PASS: notes, saved content and personal scenes share the authoritative local Library.');
 } finally {

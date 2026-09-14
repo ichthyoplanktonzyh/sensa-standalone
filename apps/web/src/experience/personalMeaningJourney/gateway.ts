@@ -36,9 +36,10 @@ import type {
   SensaSenseExpressionBindingVersionSnapshot,
   SensaSenseProposalVersionSnapshot,
   SensaSenseSemanticSpec,
+  SensaSenseSnapshot,
   SensaSenseVersionSnapshot,
 } from '@sensa/contracts/sensa';
-import { sensaIntakePayloadSchema, sensaIntakeSenseSchema, sensaPinnedLanguageContextSchema } from '@sensa/contracts/sensa';
+import { publishedLearningSemanticFactsSchema, sensaIntakePayloadSchema, sensaIntakeSenseSchema, sensaPinnedLanguageContextSchema } from '@sensa/contracts/sensa';
 import {
   createInboxItem,
   dismissInboxItem,
@@ -87,6 +88,8 @@ import type {
   JourneyListItemView,
   JourneyWorldItemView,
   MaterialBlockInput,
+  PublishedLearningSceneAcceptanceInput,
+  PublishedLearningSceneAcceptanceResult,
 } from './types';
 
 const PSW = 'sensa-personal-semantic-world-v2' as const;
@@ -147,6 +150,11 @@ export interface PersonalMeaningJourneyGateway {
     operationId: string,
     payload: SensaIntakePayload,
   ): Promise<IngestCommandResult>;
+
+  /** Direct acceptance of a learner scene against semantic facts pinned by a published target. */
+  acceptPublishedLearningScene(
+    input: PublishedLearningSceneAcceptanceInput,
+  ): Promise<PublishedLearningSceneAcceptanceResult>;
 
   /** Slow-track draft materials waiting for learner confirmation. */
   getInboxItems(): SensaIntakeItem[];
@@ -299,6 +307,19 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       () => undefined,
     );
     return run;
+  }
+
+  /** Stage compound cross-aggregate commands so validation failures cannot
+   * leave unpublished registry facts visible in memory. */
+  private async withStateTransaction<T>(work: () => Promise<T>): Promise<T> {
+    const before = this.requireState();
+    this.state = cloneJourneyState(before);
+    try {
+      return await work();
+    } catch (cause) {
+      this.state = before;
+      throw cause;
+    }
   }
 
   private requireState(): JourneyState {
@@ -1131,6 +1152,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       semanticCoverage: SensaSemanticCoverage;
     },
     senseProposalVersionId: string | null,
+    pinned?: {
+      expressionId: string;
+      expressionVersionId: string;
+      senseExpressionBindingId: string;
+      bindingVersionId: string;
+    },
   ): {
     expressionBindingConfirmationId: string;
     personalExpressionAnchorRevisionId: string;
@@ -1148,25 +1175,34 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       ? candidate.provenanceKind ?? 'llm_suggested'
       : 'learner_authored';
     const form = normalizedForm(input.surfaceForm);
-    const existingExpression = state.registry.expressions.find((expression) =>
-      expression.expressionType === input.expressionType
-      && expression.languageTag === input.languageTag
-      && state.registry.expressionVersions.some(
-        (version) =>
-          version.expressionId === expression.expressionId
-          && version.normalizedForm === form,
-      ),
-    );
+    const existingExpression = pinned
+      ? state.registry.expressions.find((expression) => expression.expressionId === pinned.expressionId)
+      : state.registry.expressions.find((expression) =>
+          expression.expressionType === input.expressionType
+          && expression.languageTag === input.languageTag
+          && state.registry.expressionVersions.some(
+            (version) =>
+              version.expressionId === expression.expressionId
+              && version.normalizedForm === form,
+          ),
+        );
     let expression: SensaExpressionSnapshot;
     let expressionVersion: SensaExpressionVersionSnapshot;
     const now = this.now();
+    if (pinned && !existingExpression) {
+      throw new Error('固定的已发布 Expression 不存在。');
+    }
     if (existingExpression) {
       expression = existingExpression;
       expressionVersion = state.registry.expressionVersions.find(
-        (version) =>
-          version.expressionId === expression.expressionId
-          && version.normalizedForm === form,
+        (version) => pinned
+          ? version.expressionVersionId === pinned.expressionVersionId
+          : version.expressionId === expression.expressionId && version.normalizedForm === form,
       )!;
+      if (!expressionVersion || expression.expressionType !== input.expressionType
+        || expression.languageTag !== input.languageTag || expressionVersion.normalizedForm !== form) {
+        throw new Error('固定的已发布 Expression Version 与学习目标不一致。');
+      }
     } else {
       const expressionId = this.id();
       const expressionVersionId = this.id();
@@ -1199,23 +1235,36 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       state.registry.expressionVersions.push(expressionVersion);
     }
 
-    const existingBinding = state.registry.bindings.find(
-      (binding) =>
-        binding.senseId === alignment.senseId
-        && binding.expressionId === expression.expressionId
-        && binding.relation === input.relation,
-    );
+    const existingBinding = pinned
+      ? state.registry.bindings.find((binding) => binding.senseExpressionBindingId === pinned.senseExpressionBindingId)
+      : state.registry.bindings.find(
+          (binding) =>
+            binding.senseId === alignment.senseId
+            && binding.expressionId === expression.expressionId
+            && binding.relation === input.relation,
+        );
     let binding: SensaSenseExpressionBindingSnapshot;
     let bindingVersion: SensaSenseExpressionBindingVersionSnapshot | undefined;
+    if (pinned && !existingBinding) {
+      throw new Error('固定的已发布 Binding 不存在。');
+    }
     if (existingBinding) {
       binding = existingBinding;
       bindingVersion = state.registry.bindingVersions.find(
-        (version) =>
-          version.senseExpressionBindingId === binding.senseExpressionBindingId
-          && version.senseVersionId === input.senseVersionId
-          && version.expressionVersionId === expressionVersion.expressionVersionId
-          && version.semanticCoverage === input.semanticCoverage,
+        (version) => pinned
+          ? version.bindingVersionId === pinned.bindingVersionId
+          : version.senseExpressionBindingId === binding.senseExpressionBindingId
+            && version.senseVersionId === input.senseVersionId
+            && version.expressionVersionId === expressionVersion.expressionVersionId
+            && version.semanticCoverage === input.semanticCoverage,
       );
+      if (pinned && (!bindingVersion || binding.senseId !== alignment.senseId
+        || binding.expressionId !== expression.expressionId || binding.relation !== input.relation
+        || bindingVersion.senseVersionId !== input.senseVersionId
+        || bindingVersion.expressionVersionId !== expressionVersion.expressionVersionId
+        || bindingVersion.semanticCoverage !== input.semanticCoverage)) {
+        throw new Error('固定的已发布 Binding Version 与学习目标不一致。');
+      }
       if (!bindingVersion) {
         const nextVersion = binding.currentVersionNumber + 1;
         const nextBindingVersionId = this.id();
@@ -1446,6 +1495,350 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     this.recordReceipt(input.operationId, 'ConfirmExpressionBinding', result);
     await this.persist();
     return { ...result, replayed: false };
+  }
+
+  // -- published learning scene acceptance --------------------------------
+
+  private installPublishedLearningFacts(input: PublishedLearningSceneAcceptanceInput): void {
+    const state = this.requireState();
+    const semantic = publishedLearningSemanticFactsSchema.parse(input.semantic);
+    const { source, target } = input;
+    for (const value of [
+      source.bookId, source.bookVersionId, source.contentReleaseId,
+      target.learningTargetId, target.curriculumMembershipId, target.senseId,
+      target.senseVersionId, target.bindingId, target.bindingVersionId,
+      semantic.expressionId, semantic.expressionVersionId,
+    ]) if (!isUuid(value)) throw new Error('学习包语义身份无效。');
+    if (!Number.isFinite(Date.parse(source.publishedAt)) || !target.expression.trim()
+      || !target.targetLanguageTag.trim()) throw new Error('学习包语义来源无效。');
+
+    const sourceReferenceIds = [source.contentReleaseId, source.bookVersionId, source.packageKey];
+    const semanticProvenance = {
+      sourceKind: 'published_release' as const,
+      sourceReferenceIds,
+      generator: null,
+    };
+    const senseVersion: SensaSenseVersionSnapshot = {
+      contractVersion: REG,
+      senseVersionId: target.senseVersionId,
+      senseId: target.senseId,
+      versionNumber: semantic.senseVersionNumber,
+      origin: 'published_release',
+      semanticPolicyVersion: semantic.semanticPolicyVersion,
+      semanticSpec: structuredClone(semantic.semanticSpec),
+      provenance: semanticProvenance,
+      reviewStatus: 'reviewed',
+      contentReleaseId: source.contentReleaseId,
+      createdAt: source.publishedAt,
+    };
+    const expressionVersion: SensaExpressionVersionSnapshot = {
+      contractVersion: REG,
+      expressionVersionId: semantic.expressionVersionId,
+      expressionId: semantic.expressionId,
+      versionNumber: semantic.expressionVersionNumber,
+      surfaceForm: target.expression.trim(),
+      normalizedForm: normalizedForm(target.expression),
+      structure: structuredClone(semantic.expressionStructure),
+      provenance: semanticProvenance,
+      createdAt: source.publishedAt,
+    };
+    const bindingVersion: SensaSenseExpressionBindingVersionSnapshot = {
+      contractVersion: REG,
+      bindingVersionId: target.bindingVersionId,
+      senseExpressionBindingId: target.bindingId,
+      versionNumber: semantic.bindingVersionNumber,
+      senseVersionId: target.senseVersionId,
+      expressionVersionId: semantic.expressionVersionId,
+      semanticCoverage: semantic.semanticCoverage,
+      registerLabel: semantic.registerLabel,
+      usageConstraints: [...semantic.usageConstraints],
+      provenance: semanticProvenance,
+      reviewStatus: 'reviewed',
+      createdAt: source.publishedAt,
+    };
+
+    const existingSenseByKey = state.registry.senses.find((fact) => fact.senseKey === semantic.senseKey);
+    if (existingSenseByKey && existingSenseByKey.senseId !== target.senseId) {
+      throw new Error('学习包 Sense key 与本机语义注册表冲突。');
+    }
+    const existingSense = state.registry.senses.find((fact) => fact.senseId === target.senseId);
+    if (existingSense) {
+      if (existingSense.senseKey !== semantic.senseKey) throw new Error('学习包 Sense identity 冲突。');
+      if (semantic.senseVersionNumber > existingSense.currentVersionNumber) {
+        existingSense.currentVersionNumber = semantic.senseVersionNumber;
+        existingSense.currentSenseVersionId = target.senseVersionId;
+      }
+    } else {
+      state.registry.senses.push({
+        contractVersion: REG,
+        senseId: target.senseId,
+        senseKey: semantic.senseKey,
+        currentSenseVersionId: target.senseVersionId,
+        currentVersionNumber: semantic.senseVersionNumber,
+        createdAt: source.publishedAt,
+      } satisfies SensaSenseSnapshot);
+    }
+    const existingSenseVersion = state.registry.senseVersions.find((fact) => fact.senseVersionId === target.senseVersionId);
+    if (existingSenseVersion) {
+      if (digestOf({senseId:existingSenseVersion.senseId,versionNumber:existingSenseVersion.versionNumber,semanticPolicyVersion:existingSenseVersion.semanticPolicyVersion,semanticSpec:existingSenseVersion.semanticSpec,reviewStatus:existingSenseVersion.reviewStatus})
+        !== digestOf({senseId:senseVersion.senseId,versionNumber:senseVersion.versionNumber,semanticPolicyVersion:senseVersion.semanticPolicyVersion,semanticSpec:senseVersion.semanticSpec,reviewStatus:senseVersion.reviewStatus})) throw new Error('学习包 Sense Version 冲突。');
+    } else state.registry.senseVersions.push(senseVersion);
+
+    const existingExpression = state.registry.expressions.find((fact) => fact.expressionId === semantic.expressionId);
+    if (existingExpression) {
+      if (existingExpression.expressionType !== semantic.expressionType
+        || existingExpression.languageTag !== target.targetLanguageTag) throw new Error('学习包 Expression identity 冲突。');
+      if (semantic.expressionVersionNumber > existingExpression.currentVersionNumber) {
+        existingExpression.currentVersionNumber = semantic.expressionVersionNumber;
+        existingExpression.currentExpressionVersionId = semantic.expressionVersionId;
+      }
+    } else {
+      state.registry.expressions.push({
+        contractVersion: REG,
+        expressionId: semantic.expressionId,
+        expressionType: semantic.expressionType,
+        languageTag: target.targetLanguageTag,
+        lexemeId: null,
+        currentExpressionVersionId: semantic.expressionVersionId,
+        currentVersionNumber: semantic.expressionVersionNumber,
+        createdAt: source.publishedAt,
+      });
+    }
+    const existingExpressionVersion = state.registry.expressionVersions.find((fact) => fact.expressionVersionId === semantic.expressionVersionId);
+    if (existingExpressionVersion) {
+      if (digestOf({expressionId:existingExpressionVersion.expressionId,versionNumber:existingExpressionVersion.versionNumber,surfaceForm:existingExpressionVersion.surfaceForm,normalizedForm:existingExpressionVersion.normalizedForm,structure:existingExpressionVersion.structure})
+        !== digestOf({expressionId:expressionVersion.expressionId,versionNumber:expressionVersion.versionNumber,surfaceForm:expressionVersion.surfaceForm,normalizedForm:expressionVersion.normalizedForm,structure:expressionVersion.structure})) throw new Error('学习包 Expression Version 冲突。');
+    } else state.registry.expressionVersions.push(expressionVersion);
+
+    const existingBinding = state.registry.bindings.find((fact) => fact.senseExpressionBindingId === target.bindingId);
+    if (existingBinding) {
+      if (existingBinding.senseId !== target.senseId
+        || existingBinding.expressionId !== semantic.expressionId
+        || existingBinding.relation !== semantic.relation) throw new Error('学习包 Binding identity 冲突。');
+      if (semantic.bindingVersionNumber > existingBinding.currentVersionNumber) {
+        existingBinding.currentVersionNumber = semantic.bindingVersionNumber;
+        existingBinding.currentBindingVersionId = target.bindingVersionId;
+      }
+    } else {
+      state.registry.bindings.push({
+        contractVersion: REG,
+        senseExpressionBindingId: target.bindingId,
+        senseId: target.senseId,
+        expressionId: semantic.expressionId,
+        relation: semantic.relation,
+        currentBindingVersionId: target.bindingVersionId,
+        currentVersionNumber: semantic.bindingVersionNumber,
+        createdAt: source.publishedAt,
+      });
+    }
+    const existingBindingVersion = state.registry.bindingVersions.find((fact) => fact.bindingVersionId === target.bindingVersionId);
+    if (existingBindingVersion) {
+      if (digestOf({senseExpressionBindingId:existingBindingVersion.senseExpressionBindingId,versionNumber:existingBindingVersion.versionNumber,senseVersionId:existingBindingVersion.senseVersionId,expressionVersionId:existingBindingVersion.expressionVersionId,semanticCoverage:existingBindingVersion.semanticCoverage,registerLabel:existingBindingVersion.registerLabel,usageConstraints:existingBindingVersion.usageConstraints,reviewStatus:existingBindingVersion.reviewStatus})
+        !== digestOf({senseExpressionBindingId:bindingVersion.senseExpressionBindingId,versionNumber:bindingVersion.versionNumber,senseVersionId:bindingVersion.senseVersionId,expressionVersionId:bindingVersion.expressionVersionId,semanticCoverage:bindingVersion.semanticCoverage,registerLabel:bindingVersion.registerLabel,usageConstraints:bindingVersion.usageConstraints,reviewStatus:bindingVersion.reviewStatus})) throw new Error('学习包 Binding Version 冲突。');
+    } else state.registry.bindingVersions.push(bindingVersion);
+  }
+
+  private learningSceneAnchorRevision(
+    anchorId: string,
+    revision: number,
+    input: PublishedLearningSceneAcceptanceInput,
+    revisionId = this.id(),
+  ) {
+    const now = this.now();
+    return {
+      contractVersion: PSW,
+      personalSemanticAnchorRevisionId: revisionId,
+      personalSemanticAnchorId: anchorId,
+      revision,
+      anchorKind: 'scene' as const,
+      languageTag: null,
+      bodyText: input.scene.body.trim() || null,
+      personalMediaObjectId: null,
+      structuredPayload: {
+        learningScene: {
+          sceneId: input.scene.sceneId,
+          revisionId: input.scene.revisionId,
+          revision: input.scene.revision,
+          learningTargetId: input.target.learningTargetId,
+          curriculumMembershipId: input.target.curriculumMembershipId,
+        },
+        media: structuredClone(input.scene.media),
+        publishedSource: structuredClone(input.source),
+      },
+      provenance: {
+        kind: 'learner_authored' as const,
+        sourceReferenceIds: [input.scene.revisionId, input.source.contentReleaseId],
+        createdByOperationId: input.operationId,
+      },
+      createdAt: now,
+    };
+  }
+
+  async acceptPublishedLearningScene(
+    input: PublishedLearningSceneAcceptanceInput,
+  ): Promise<PublishedLearningSceneAcceptanceResult> {
+    return this.exclusive(async () => {
+      const requestDigest = digestOf(input);
+      const replay = this.replay<PublishedLearningSceneAcceptanceResult>(
+        input.operationId,
+        'AcceptPublishedLearningScene',
+        requestDigest,
+      );
+      if (replay) return replay;
+      if (!isUuid(input.operationId) || !isUuid(input.scene.sceneId)
+        || !isUuid(input.scene.revisionId) || input.scene.revision < 1
+        || !Number.isFinite(input.scene.createdAt)
+        || (!input.scene.body.trim() && input.scene.media.length === 0)) {
+        throw new Error('个人场景版本无效。');
+      }
+      return this.withStateTransaction(async () => {
+        this.installPublishedLearningFacts(input);
+
+      const recordForScene = input.existingPersonalMeaningId
+        ? this.requireRecord(input.existingPersonalMeaningId)
+        : this.requireState().meanings.find((candidate) => (
+            candidate.personalMeaning.status === 'active'
+            && candidate.personalSemanticAnchorRevisions.some((revision) => (
+              (revision.structuredPayload.learningScene as {sceneId?:string}|undefined)?.sceneId
+                === input.scene.sceneId
+            ))
+          ));
+      if (recordForScene) {
+        const record = recordForScene;
+        if (record.personalMeaning.status !== 'active') throw new Error('个人意义已不可更新。');
+        const alignment = record.alignments.find((candidate) => (
+          candidate.status === 'active'
+          && candidate.senseId === input.target.senseId
+          && candidate.senseVersionId === input.target.senseVersionId
+        ));
+        if (!alignment || !record.bindingConfirmations.some((confirmation) => (
+          confirmation.senseVersionId === input.target.senseVersionId
+          && confirmation.bindingVersionId === input.target.bindingVersionId
+        ))) throw new Error('个人场景不能更新到另一个意思或表达。');
+        const currentRevision = record.personalSemanticAnchorRevisions.find((candidate) => (
+          (candidate.structuredPayload.learningScene as {sceneId?:string}|undefined)?.sceneId === input.scene.sceneId
+        ));
+        if (!currentRevision) throw new Error('找不到已接受的个人场景。');
+        const anchor = record.personalSemanticAnchors.find((candidate) => (
+          candidate.personalSemanticAnchorId === currentRevision.personalSemanticAnchorId
+        ));
+        if (!anchor) throw new Error('找不到已接受的个人场景。');
+        const nextRevision = this.learningSceneAnchorRevision(
+          anchor.personalSemanticAnchorId,
+          anchor.currentRevision + 1,
+          input,
+        );
+        anchor.currentRevision = nextRevision.revision;
+        anchor.updatedAt = nextRevision.createdAt;
+        record.personalSemanticAnchorRevisions.push(nextRevision);
+        record.personalMeaning.updatedAt = nextRevision.createdAt;
+        const result = {
+          personalMeaningId: record.personalMeaning.personalMeaningId,
+          personalSemanticAnchorId: anchor.personalSemanticAnchorId,
+          personalSemanticAnchorRevisionId: nextRevision.personalSemanticAnchorRevisionId,
+        };
+        this.recordReceipt(input.operationId, 'AcceptPublishedLearningScene', result, requestDigest);
+        await this.persist();
+        return { ...result, replayed: false };
+      }
+
+      const payload = sensaIntakePayloadSchema.parse({
+        contractVersion: 'sensa-intake-v3',
+        operationId: input.operationId,
+        capturedAt: new Date(input.scene.createdAt).toISOString(),
+        context: {
+          modality: input.scene.body.trim()
+            ? input.scene.media.length ? 'mixed' : 'text'
+            : 'image',
+          textSegment: input.scene.body.trim() || null,
+          mediaReferenceIds: input.scene.media.map((item) => item.mediaId),
+          languageTag: null,
+          source: {
+            client: 'sensa-learning-runtime',
+            url: null,
+            title: input.source.title,
+            sourceReferenceId: input.scene.revisionId,
+            domSelector: null,
+            paragraphContext: null,
+          },
+        },
+        expression: {
+          surfaceForm: input.target.expression,
+          languageTag: input.target.targetLanguageTag,
+          occurrence: {
+            surfaceForm: input.target.expression,
+            locator: {
+              kind: 'learning_target',
+              learningTargetId: input.target.learningTargetId,
+              curriculumMembershipId: input.target.curriculumMembershipId,
+            },
+          },
+          expressionTypeHint: input.semantic.expressionType,
+        },
+        sense: {
+          senseKey: input.semantic.senseKey,
+          semanticSpec: input.semantic.semanticSpec,
+          wordingSource: 'reviewed',
+        },
+        acceptance: { mode: 'learner_direct' },
+      });
+      const state = this.requireState();
+      const authority = this.deps.semanticAcceptanceAuthority.verify(payload.acceptance!);
+      const outcome = executeFastTrack(
+        state,
+        {
+          payload,
+          operationId: input.operationId,
+          authority,
+          pinnedSense: {
+            senseId: input.target.senseId,
+            senseVersionId: input.target.senseVersionId,
+          },
+        },
+        this.enginePorts(),
+      );
+      this.state = outcome.nextState;
+      const anchor = outcome.record.personalSemanticAnchors[0]!;
+      const originalAnchorRevisionId = outcome.record.personalSemanticAnchorRevisions[0]!.personalSemanticAnchorRevisionId;
+      const anchorRevision = this.learningSceneAnchorRevision(
+        anchor.personalSemanticAnchorId,
+        1,
+        input,
+        originalAnchorRevisionId,
+      );
+      outcome.record.personalSemanticAnchorRevisions = [anchorRevision];
+      outcome.record.personalMeaningRevisions[0] = {
+        ...outcome.record.personalMeaningRevisions[0]!,
+        displayLabel: input.target.expression,
+        provenance: {
+          kind: 'learner_authored',
+          sourceReferenceIds: [input.scene.revisionId, input.source.contentReleaseId],
+          createdByOperationId: input.operationId,
+        },
+      };
+      this.settleExpressionBinding(
+        outcome.record,
+        outcome.alignment,
+        outcome.bindingCandidate,
+        { operationId: input.operationId, ...outcome.bindingInput },
+        null,
+        {
+          expressionId: input.semantic.expressionId,
+          expressionVersionId: input.semantic.expressionVersionId,
+          senseExpressionBindingId: input.target.bindingId,
+          bindingVersionId: input.target.bindingVersionId,
+        },
+      );
+      const result = {
+        personalMeaningId: outcome.personalMeaningId,
+        personalSemanticAnchorId: anchor.personalSemanticAnchorId,
+        personalSemanticAnchorRevisionId: anchorRevision.personalSemanticAnchorRevisionId,
+      };
+      this.recordReceipt(input.operationId, 'AcceptPublishedLearningScene', result, requestDigest);
+      await this.persist();
+      return { ...result, replayed: false };
+      });
+    });
   }
 
   // -- ubiquitous multimodal intake -----------------------------------------

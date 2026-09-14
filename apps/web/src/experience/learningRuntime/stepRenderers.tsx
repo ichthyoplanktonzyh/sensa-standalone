@@ -1,4 +1,5 @@
 import type { RuntimePersonalContent } from '../stores/overlayStore';
+import type { LearningSceneEditorTarget } from '../stores/overlayStore';
 import type { CardExecution } from '../components/cards/CardExecution';
 /**
  * Step renderer 注册表：`stepKind → 组件`。
@@ -46,6 +47,7 @@ import { ExpressionRevealCard } from '../components/cards/lightweight/Expression
 import type {
   LightweightInitialCardPresentation,
 } from './lightweightInitialPresentation';
+import type { PersonalLearningSceneRevision } from '../../data/library/contentAnnotations';
 import type {
   LightweightInitialRating,
   LightweightProtocolStepInstance,
@@ -74,6 +76,7 @@ export interface StepRendererHost {
   readonly openSceneEditor: (
     content: RuntimePersonalContent,
     anchorId?: string,
+    learningTarget?: LearningSceneEditorTarget,
   ) => void;
   readonly lookupDictionary: DictionaryLookup;
   readonly completeIntroduction: () => void;
@@ -120,6 +123,10 @@ export interface LightweightInitialStepRendererProps {
   readonly presentation: LightweightInitialCardPresentation;
   readonly onReveal: () => void;
   readonly onRate: (rating: LightweightInitialRating) => void;
+  readonly personalScene?: PersonalLearningSceneRevision | null;
+  readonly onOpenPersonalScene?: () => void;
+  readonly semanticWorldState?: 'available' | 'update' | 'saved' | 'saving' | null;
+  readonly onSaveToSemanticWorld?: () => void;
 }
 
 export type StepRenderer<TProps = StepRendererProps> = (props: TProps) => ReactNode;
@@ -339,6 +346,8 @@ const renderLightweightExperienceRecall = (
     <ExperienceRecallCard
       key={props.step.protocolStepInstanceId}
       presentation={props.presentation}
+      personalScene={props.personalScene}
+      onOpenPersonalScene={props.onOpenPersonalScene}
       onReveal={props.onReveal}
     />
   );
@@ -354,6 +363,10 @@ const renderLightweightExpressionReveal = (
     <ExpressionRevealCard
       key={props.step.protocolStepInstanceId}
       presentation={props.presentation}
+      personalScene={props.personalScene}
+      onOpenPersonalScene={props.onOpenPersonalScene}
+      semanticWorldState={props.semanticWorldState}
+      onSaveToSemanticWorld={props.onSaveToSemanticWorld}
       onRate={props.onRate}
     />
   );

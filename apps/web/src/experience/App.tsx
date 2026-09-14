@@ -247,8 +247,8 @@ export default function App() {
     toast,
     openDict:openDictModal,
     openNoteEditor,
-    openSceneEditor:(content,anchorId)=>{
-      setSceneEditorTarget({content,anchorId});
+    openSceneEditor:(content,anchorId,learningTarget)=>{
+      setSceneEditorTarget({content,anchorId,learningTarget});
     },
     lookupDictionary:lookupDictionaryEntry,
     onOpenMenuMore:(event,content)=>{
@@ -522,6 +522,7 @@ export default function App() {
             word={sceneEditorTarget?.content.lemma ?? ''}
             senseMeaning={sceneEditorTarget?.content.guideLabelL1 ?? ''}
             anchorId={sceneEditorTarget?.anchorId}
+            learningTarget={sceneEditorTarget?.learningTarget}
             onClose={closeSceneEditor}
             toast={toast}
           />

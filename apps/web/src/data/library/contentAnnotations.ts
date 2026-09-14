@@ -21,6 +21,34 @@ export interface PersonalSemanticAnchor {
   updatedAt: number;
 }
 
+export interface PersonalLearningSceneRevision {
+  revisionId: string;
+  revision: number;
+  curriculumMembershipId: string;
+  body: string;
+  media: PersonalSemanticAnchorMedia[];
+  createdAt: number;
+}
+
+/** Learner-owned runtime scaffold. It becomes a Personal Semantic Anchor only
+ * after a separate Semantic Acceptance command. */
+export interface PersonalLearningScene {
+  id: string;
+  kind: 'learning_scene';
+  sceneId: string;
+  learningTargetId: string;
+  languageRouteId: string;
+  senseId: string;
+  senseVersionId: string;
+  bindingVersionId: string;
+  currentRevision: number;
+  revisions: PersonalLearningSceneRevision[];
+  acceptedRevisionId: string | null;
+  acceptedPersonalMeaningId: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type ContentAnnotation =
   | Readonly<{
       id: string;
@@ -48,11 +76,14 @@ export type ContentAnnotation =
       exampleId: string;
       createdAt: number;
     }>
-  | PersonalSemanticAnchor;
+  | PersonalSemanticAnchor
+  | PersonalLearningScene;
 
 const wordKey = (word: string) => word.trim().toLocaleLowerCase();
 const rowId = (kind: ContentAnnotation['kind'], subject: string) =>
   `${kind}:${encodeURIComponent(subject)}`;
+export const personalLearningSceneRowId = (learningTargetId: string, languageRouteId: string) =>
+  rowId('learning_scene', `${learningTargetId}:${languageRouteId}`);
 
 let rows: readonly ContentAnnotation[] = [];
 let loadRevision = 0;
@@ -183,6 +214,108 @@ async function saveSemanticAnchor(input: Readonly<{
   return saved;
 }
 
+async function saveLearningScene(input: Readonly<{
+  operationId: string;
+  learningTargetId: string;
+  languageRouteId: string;
+  curriculumMembershipId: string;
+  senseId: string;
+  senseVersionId: string;
+  bindingVersionId: string;
+  body: string;
+  media: readonly PersonalSemanticAnchorMedia[];
+}>) {
+  const body = input.body.trim();
+  if (!body && input.media.length === 0) throw new Error('localFlow.annotationInvalid');
+  const id = personalLearningSceneRowId(input.learningTargetId, input.languageRouteId);
+  const scene = await command({
+    id: input.operationId,
+    kind: 'annotation.learning_scene.save',
+    input: {
+      learningTargetId: input.learningTargetId,
+      languageRouteId: input.languageRouteId,
+      curriculumMembershipId: input.curriculumMembershipId,
+      senseId: input.senseId,
+      senseVersionId: input.senseVersionId,
+      bindingVersionId: input.bindingVersionId,
+      contentDigest: canonicalJsonDigest({ body, media: input.media }),
+    },
+  }, async (tx) => {
+    const current = await tx.get<PersonalLearningScene>('annotations', id);
+    if (current && (
+      current.learningTargetId !== input.learningTargetId
+      || current.languageRouteId !== input.languageRouteId
+      || current.senseId !== input.senseId
+      || current.senseVersionId !== input.senseVersionId
+      || current.bindingVersionId !== input.bindingVersionId
+    )) throw new Error('localFlow.annotationInvalid');
+    const currentValue = current?.revisions.find((revision) => (
+      revision.revision === current.currentRevision
+    ));
+    if (currentValue && canonicalJsonDigest({ body: currentValue.body, media: currentValue.media })
+      === canonicalJsonDigest({ body, media: input.media })) return current;
+    const now = Date.now();
+    const revision: PersonalLearningSceneRevision = {
+      revisionId: crypto.randomUUID(),
+      revision: (current?.currentRevision ?? 0) + 1,
+      curriculumMembershipId: input.curriculumMembershipId,
+      body,
+      media: structuredClone(input.media) as PersonalSemanticAnchorMedia[],
+      createdAt: now,
+    };
+    const next: PersonalLearningScene = {
+      id,
+      kind: 'learning_scene',
+      sceneId: current?.sceneId ?? crypto.randomUUID(),
+      learningTargetId: input.learningTargetId,
+      languageRouteId: input.languageRouteId,
+      senseId: input.senseId,
+      senseVersionId: input.senseVersionId,
+      bindingVersionId: input.bindingVersionId,
+      currentRevision: revision.revision,
+      revisions: [...(current?.revisions ?? []), revision],
+      acceptedRevisionId: current?.acceptedRevisionId ?? null,
+      acceptedPersonalMeaningId: current?.acceptedPersonalMeaningId ?? null,
+      createdAt: current?.createdAt ?? now,
+      updatedAt: now,
+    };
+    tx.put('annotations', id, next);
+    return next;
+  });
+  await reload();
+  return scene;
+}
+
+async function markLearningSceneAccepted(input: Readonly<{
+  operationId: string;
+  sceneId: string;
+  revisionId: string;
+  personalMeaningId: string;
+}>) {
+  const result = await command({
+    id: input.operationId,
+    kind: 'annotation.learning_scene.accepted',
+    input,
+  }, async (tx) => {
+    const current = (await tx.all<PersonalLearningScene>('annotations')).find((candidate) => (
+      candidate.kind === 'learning_scene' && candidate.sceneId === input.sceneId
+    ));
+    if (!current || !current.revisions.some((revision) => revision.revisionId === input.revisionId)) {
+      throw new Error('localFlow.annotationInvalid');
+    }
+    const next: PersonalLearningScene = {
+      ...current,
+      acceptedRevisionId: input.revisionId,
+      acceptedPersonalMeaningId: input.personalMeaningId,
+      updatedAt: Date.now(),
+    };
+    tx.put('annotations', next.id, next);
+    return next;
+  });
+  await reload();
+  return result;
+}
+
 export const contentAnnotations = {
   subscribe,
   getNote(word: string) {
@@ -222,4 +355,12 @@ export const contentAnnotations = {
     return find('semantic_anchor', rowId('semantic_anchor', anchorId)) ?? null;
   },
   saveSemanticAnchor,
+  getLearningScene(learningTargetId: string, languageRouteId: string) {
+    return find('learning_scene', personalLearningSceneRowId(learningTargetId, languageRouteId)) ?? null;
+  },
+  getLearningSceneRevision(scene: PersonalLearningScene) {
+    return scene.revisions.find((revision) => revision.revision === scene.currentRevision) ?? null;
+  },
+  saveLearningScene,
+  markLearningSceneAccepted,
 };

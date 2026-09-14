@@ -90,6 +90,16 @@ export const sensaExpressionOccurrenceLocatorSchema = z.discriminatedUnion(
       .refine((value) => value.y + value.height <= 1, {
         message: "media region exceeds vertical bounds",
       }),
+    /** The exact target expression presented beside a learner-owned scene in
+     * a formal learning surface. The referenced target and membership are the
+     * occurrence location; the learner's scene text need not repeat the form. */
+    z
+      .object({
+        kind: z.literal("learning_target"),
+        learningTargetId: uuid,
+        curriculumMembershipId: uuid,
+      })
+      .strict(),
   ],
 );
 

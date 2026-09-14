@@ -313,6 +313,33 @@ const buildAnchorViews = (record: MeaningJourneyRecord) => {
           && candidate.revision === anchor.currentRevision,
       );
       if (!revision) return [];
+      const sceneMedia = revision.anchorKind === 'scene' && Array.isArray(revision.structuredPayload.media)
+        ? revision.structuredPayload.media.flatMap((value) => {
+            if (!value || typeof value !== 'object') return [];
+            const media = value as Record<string, unknown>;
+            return typeof media.mediaId === 'string' && typeof media.dataUrl === 'string'
+              && typeof media.mimeType === 'string'
+              ? [{ mediaId: media.mediaId, dataUrl: media.dataUrl, mimeType: media.mimeType }]
+              : [];
+          })
+        : [];
+      const body = revision.bodyText ? [{
+        anchorId: anchor.personalSemanticAnchorId,
+        kind: 'text' as const,
+        bodyText: revision.bodyText,
+        personalMediaObjectId: null,
+        revision: revision.revision,
+      }] : [];
+      const media = sceneMedia.map((item) => ({
+        anchorId: `${anchor.personalSemanticAnchorId}:${item.mediaId}`,
+        kind: 'image' as const,
+        bodyText: null,
+        personalMediaObjectId: null,
+        inlineDataUrl: item.dataUrl,
+        inlineMimeType: item.mimeType,
+        revision: revision.revision,
+      }));
+      if (revision.anchorKind === 'scene') return [...body, ...media];
       return [{
         anchorId: anchor.personalSemanticAnchorId,
         kind: revision.anchorKind === 'image' ? ('image' as const) : ('text' as const),

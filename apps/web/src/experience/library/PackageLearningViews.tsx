@@ -27,7 +27,8 @@ import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import i18n from '../../i18n/index';
 import {useState,useRef,useEffect,useMemo} from 'react';
 import {ArrowRight,BookOpen,Search,RefreshCw,Upload,Check,Download} from 'lucide-react';
-import {learningBundleBookId,learningBundleVersionNumber,learningBundleTitle,learningBundleDescription,learningDescriptorBookId,learningDescriptorVersionNumber,learningDescriptorTitle,learningDescriptorDescription} from '@sensa/contracts/sensa';
+import {learningBundleBookId,learningBundleBookVersionId,learningBundleContentReleaseId,learningBundleVersionNumber,learningBundleTitle,learningBundleDescription,learningDescriptorBookId,learningDescriptorVersionNumber,learningDescriptorTitle,learningDescriptorDescription} from '@sensa/contracts/sensa';
+import {stableUuid} from '@sensa/learning-kernel';
 import {LearningTargetDetailScreen} from '../components/learning/LearningTargetDetailScreen';
 import {LightweightRuntimeStartScreen} from '../components/learning/LightweightRuntimeStartScreen';
 import {localLightweightPhase,localLightweightStep} from '../../learning/runtime/lightweightInitialProtocol';
@@ -37,6 +38,8 @@ import {localProtocolActiveTargetId,localProtocolStepId,type LocalCurriculumMemb
 import {localCurriculumMeaning,localExecutableTargetForParticipant,localLastPresentedMaterial,localPresentedMaterial} from '../../learning/runtime/localCurriculum';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
+import {contentAnnotations} from '../../data/library/contentAnnotations';
+import {useJourneyGateway} from '../personalMeaningJourney';
 type Controller=ReturnType<typeof usePackageLearning>;
 export const localTargetView=(t:LocalLearningTarget,membership:LocalCurriculumMembership,readiness:'ready'|'blocked'='ready')=>({targetId:t.id,expression:t.expression,meaning:localCurriculumMeaning(membership),targetLanguageTag:t.targetLanguageTag,supportLanguageTag:membership.languageContext.supportLanguageTag,example:String(membership.material.content.resources.find(r=>r.materialRoleKey==='usage_guidance')?.contentPayload.example??''),partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:membership.packageKey?'book' as const:'personal_semantic_world' as const,sourceLabel:membership.packageKey?localFlowText('downloadedPackages'):localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:localTargetPolicy(t),lightweightReadiness:{status:readiness,label:readiness==='ready'?localFlowText('downloaded'):localFlowText('prepareResources'),detail:readiness==='ready'?localFlowText('resourcesLocal'):localFlowText('resourceInvalid')}});
 export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boolean;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void}){
@@ -184,8 +187,11 @@ function StructuredPackageRuntime({active,run,targets,packages,busy,notice,dispa
  localAssuranceState(run);
  return <AssuranceRuntime host={requireHost(host,'structured_support')} key={run.id+':'+run.revision} active={active} run={run} target={target} pack={pack} busy={busy} notice={notice} onMarkKnown={()=>void declareMastery(target.id).then(ok=>{if(ok)onExit();})} onAction={dispatch} onExit={onExit} onFinish={onFinish}/>;
 }
-function LightweightPackageRuntime({active,run,targets,busy,notice,hasNextTarget,dispatch,declareMastery,onExit,onFinish,host}:RuntimePresentationProps){
+function LightweightPackageRuntime({active,run,targets,packages,busy,notice,hasNextTarget,dispatch,declareMastery,onExit,onFinish,host}:RuntimePresentationProps){
  useTranslation();
+ const journeyGateway=useJourneyGateway();
+ const [,setAnnotationRevision]=useState(0),[savingWorld,setSavingWorld]=useState(false);
+ useEffect(()=>contentAnnotations.subscribe(()=>setAnnotationRevision(value=>value+1)),[]);
  const target=targets.find(t=>t.id===run.targetId);
  if(!target)throw new Error('Missing lightweight runtime target');
  // Reuse the existing role-based card presentations; formal transitions remain in the local core.
@@ -193,9 +199,27 @@ function LightweightPackageRuntime({active,run,targets,busy,notice,hasNextTarget
  const phase=localLightweightPhase(run);
  const step=localLightweightStep(run,target,material);
  const content={senseKey:String(material.snapshot.provenance.senseId),lemma:target.expression,guideLabelL1:target.meaning};
- const lightweightHost=host as Pick<AssuranceSupportHost,'onOpenMenuMore'|'toast'>;
- if(!lightweightHost.onOpenMenuMore||!lightweightHost.toast)throw new Error('Presentation capability lightweight_support is unavailable.');
- return <><LightweightRuntimeStartScreen tools={!run.completedAt&&<RuntimeTools content={content} personalContent={phase==='reveal'?content:null} showSave={phase==='reveal'} onMarkKnown={()=>void declareMastery(target.id).then(ok=>{if(ok)onExit();})} onOpenMenuMore={lightweightHost.onOpenMenuMore} toast={lightweightHost.toast} busy={busy}/>} active={active} target={localTargetView(target,target.curriculumMembership)} materialization={material} step={run.completedAt?null:step} completed={!!run.completedAt} hasNextTarget={hasNextTarget} onExit={onExit} onReveal={()=>dispatch({kind:'reveal'})} onRate={rating=>dispatch({kind:'rate',rating})} onFinish={onFinish} purpose={run.purpose} completionDetail={target.relearnAt?localFlowText('nextRelearning',{date:new Date(target.relearnAt).toLocaleString(i18n.language)}):target.memory?localFlowText('nextReview',{date:target.memory.dueAt.toLocaleString(i18n.language)}):localFlowText('progressSaved')} completionLabel={run.purpose==='initial_learning'?localFlowText('initialCompleted'):run.purpose==='retention_review'?localFlowText('reviewCompleted'):localFlowText('relearningCompleted')}/>{active&&notice&&<p role="status" className="fixed bottom-4 left-4 right-4 z-[100] rounded-xl bg-amber-50 p-3">{localFlowNotice(notice)}</p>}</>;
+ const lightweightHost=host as Pick<AssuranceSupportHost,'onOpenMenuMore'|'openSceneEditor'|'toast'>;
+ if(!lightweightHost.onOpenMenuMore||!lightweightHost.openSceneEditor||!lightweightHost.toast)throw new Error('Presentation capability lightweight_support is unavailable.');
+ const scene=contentAnnotations.getLearningScene(target.id,target.curriculumMembership.languageContext.languageRouteId),sceneRevision=scene?contentAnnotations.getLearningSceneRevision(scene):null;
+ const pack=target.packageKey?packages.find(candidate=>candidate.key===target.packageKey):undefined;
+ const bookBundle=pack?.bundle.format==='sensa-book-release-bundle-v1'?pack.bundle:null;
+ const entry=bookBundle?.entries.find(candidate=>candidate.senseVersionId===target.identity.senseVersionId&&candidate.bindingVersionId===target.identity.bindingVersionId);
+ const canAccept=!!scene&&!!sceneRevision&&!!pack&&!!bookBundle&&!!entry;
+ const worldState=!canAccept?null:savingWorld?'saving':scene.acceptedRevisionId===sceneRevision.revisionId?'saved':scene.acceptedPersonalMeaningId?'update':'available';
+ const openPersonalScene=()=>lightweightHost.openSceneEditor(content,undefined,{learningTargetId:target.id,languageRouteId:target.curriculumMembership.languageContext.languageRouteId,curriculumMembershipId:target.curriculumMembership.id,senseId:target.identity.senseId,senseVersionId:target.identity.senseVersionId,bindingVersionId:target.identity.bindingVersionId});
+ const acceptPersonalScene=async()=>{
+  if(!canAccept||!scene||!sceneRevision||!pack||!bookBundle||!entry)return;
+  const bookVersionId=learningBundleBookVersionId(bookBundle),contentReleaseId=learningBundleContentReleaseId(bookBundle);
+  if(!bookVersionId||!contentReleaseId)return;
+  setSavingWorld(true);
+  try{
+   const operationId=stableUuid(`learning-scene-semantic-acceptance:${sceneRevision.revisionId}`),result=await journeyGateway.acceptPublishedLearningScene({operationId,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,source:{packageKey:pack.key,bookId:learningBundleBookId(bookBundle),bookVersionId,contentReleaseId,publishedAt:bookBundle.publishedAt,title:learningBundleTitle(bookBundle)},target:{learningTargetId:target.id,curriculumMembershipId:target.curriculumMembership.id,senseId:target.identity.senseId,senseVersionId:target.identity.senseVersionId,bindingId:target.identity.senseExpressionBindingId,bindingVersionId:target.identity.bindingVersionId,expression:target.expression,targetLanguageTag:target.targetLanguageTag},semantic:entry.semantic,scene:{...sceneRevision,sceneId:scene.sceneId}});
+   await contentAnnotations.markLearningSceneAccepted({operationId:stableUuid(`learning-scene-semantic-link:${sceneRevision.revisionId}`),sceneId:scene.sceneId,revisionId:sceneRevision.revisionId,personalMeaningId:result.personalMeaningId});
+   lightweightHost.toast(i18n.t('runtime.semanticWorldSaved'));
+  }catch{lightweightHost.toast(i18n.t('runtime.semanticWorldSaveFailed'));}finally{setSavingWorld(false);}
+ };
+ return <><LightweightRuntimeStartScreen tools={!run.completedAt&&<RuntimeTools content={content} personalContent={phase==='reveal'?content:null} showSave={phase==='reveal'} onMarkKnown={()=>void declareMastery(target.id).then(ok=>{if(ok)onExit();})} onOpenMenuMore={lightweightHost.onOpenMenuMore} toast={lightweightHost.toast} busy={busy||savingWorld}/>} active={active} target={localTargetView(target,target.curriculumMembership)} materialization={material} step={run.completedAt?null:step} completed={!!run.completedAt} hasNextTarget={hasNextTarget} onExit={onExit} onReveal={()=>dispatch({kind:'reveal'})} onRate={rating=>dispatch({kind:'rate',rating})} onFinish={onFinish} personalScene={sceneRevision} onOpenPersonalScene={run.purpose==='initial_learning'?openPersonalScene:undefined} semanticWorldState={phase==='reveal'?worldState:null} onSaveToSemanticWorld={acceptPersonalScene} purpose={run.purpose} completionDetail={target.relearnAt?localFlowText('nextRelearning',{date:new Date(target.relearnAt).toLocaleString(i18n.language)}):target.memory?localFlowText('nextReview',{date:target.memory.dueAt.toLocaleString(i18n.language)}):localFlowText('progressSaved')} completionLabel={run.purpose==='initial_learning'?localFlowText('initialCompleted'):run.purpose==='retention_review'?localFlowText('reviewCompleted'):localFlowText('relearningCompleted')}/>{active&&notice&&<p role="status" className="fixed bottom-4 left-4 right-4 z-[100] rounded-xl bg-amber-50 p-3">{localFlowNotice(notice)}</p>}</>;
 }
 
 function fourStagePresentation(props:RuntimePresentationProps){
@@ -240,7 +264,7 @@ const FOUR_STAGE_PRESENTATION_BINDINGS=Object.freeze([
 ] as const satisfies readonly LocalRuntimePresentationBinding[]);
 
 const lightweightPresentationPlugin:LocalRuntimePresentationPlugin<RuntimePresentationProps>={
- manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.lightweight',pluginVersion:'v1',displayName:'Sensa Lightweight Runtime',capabilities:['toast','personal_content_menu','declared_mastery'],bindings:[...LIGHTWEIGHT_PRESENTATION_BINDINGS]},
+ manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.lightweight',pluginVersion:'v1',displayName:'Sensa Lightweight Runtime',capabilities:['toast','personal_scenes','personal_content_menu','declared_mastery'],bindings:[...LIGHTWEIGHT_PRESENTATION_BINDINGS]},
  render:LightweightPackageRuntime,
 };
 const structuredPresentationPlugin:LocalRuntimePresentationPlugin<RuntimePresentationProps>={

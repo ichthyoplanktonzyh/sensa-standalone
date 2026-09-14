@@ -826,6 +826,13 @@ origin=`relearning` 的 Memory Outcome。两者都不覆盖 forgotten Outcome。
 
 - Formal Learning 可以由 Book、direct stable-Sense selection 或 personal-first bridge 独立进入；Personal
   Semantic World 不是前置条件，Learning 也不反向创建 Personal Meaning；
+- learner 可以为一个 Learning Target 在当前 Language Learning Route 中建立 revisioned Personal Learning
+  Scene。它是 optional scaffold，不替换 Package required resources，不改变 Learning Target、Protocol、
+  Evidence 或 Retention；当前尚未操作的 Step 可以读取最新版，Action 必须固定实际呈现的 revision；
+- 从已解析的 Package target 把当前 Personal Learning Scene 存入 Personal Semantic World 是独立的
+  direct Semantic Acceptance：复用 Package 固定的 Sense Version 与 target Binding，不经过 Sense
+  Construction，也不产生新的 Learning Target。后续 scene revision 只有再次明确提交才更新该 Personal
+  Meaning；
 - 所有入口都必须固定 stable Sense/Version 与 target binding；裸词、未对齐 Reference Sense 或 Personal
   Meaning 本身不能成为 Learning Target；
 - personal-first bridge 可以来自 direct 或 delegated Semantic Acceptance，但只接受已经闭合的

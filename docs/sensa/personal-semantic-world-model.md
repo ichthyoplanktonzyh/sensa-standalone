@@ -83,6 +83,18 @@ Meaning 可以被 learner 重新进入。它说明“这个意义对我如何有
 评分答案或成功 Evidence。它必须保留来源与捕获 provenance；同一素材可以直接支撑一个已解析
 Context–Expression–Sense 关系，也可以在需要时被多个 Meaning Focus 复用。
 
+学习运行时中的 Personal Learning Scene 先属于 learner-owned learning scaffold，而不是尚未接受的
+Personal Meaning。它按 Learning Target + Language Learning Route 保持一份 current scene，并以不可变
+revision 保存文字、图片和当时的 Curriculum provenance；相同目标应用新版 Book 后仍可沿用，换到
+另一条 Route 则不会自动共享。用户明确执行“存入我的语义世界”时，当前 revision 与运行时已经固定的
+Sense Version、target Binding 和 Expression presentation 一起构成 direct Semantic Acceptance，随后才
+创建完整 Personal Meaning。接收方不得再次调用模型判断这个场景是否充足。
+
+Personal Learning Scene 与其已经接受的 Personal Meaning 各自演进。修改 scene 只创建新的 scene
+revision，不自动改写已接受的 Personal Semantic Anchor；用户可以再次明确提交当前 revision，以更新
+同一个 Personal Meaning 的 Anchor revision。移除 Book、结束学习或删除学习来源不能删除 Personal
+Meaning；删除 Personal Meaning 也不改变 Learning Target、Retention、Protocol history 或 scene history。
+
 ### Personal Expression Anchor
 
 Personal Expression Anchor 是带类型和 Language Tag 的个人符号锚点。它可以是任意语言中的词、

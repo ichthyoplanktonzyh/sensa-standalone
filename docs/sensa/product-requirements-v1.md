@@ -93,6 +93,16 @@ library id、extension id、manifest 路径或 Intake 协议说明。已连接�
 删除条目退出未来计划；身份未变的目标保留原进度与复习状态。已开始的会话继续固定旧版材料与来源，
 旧版及历史不被删除；Sense 或表达 Binding 身份变化时按新目标处理。
 
+学习 Package target 的首次经验步骤允许用户添加或编辑“我的场景”（文字与图片）。场景按当前
+Learning Target + Route 保存，下一次打开立即显示；学习包提供的必需经验资源仍保留为发布内容，
+个人场景以清楚标识的私有 scaffold 呈现。编辑只生成新 revision，不改写已经操作的 Step，也不产生
+Evidence、完成状态或调度变化。
+
+表达揭示后，已有个人场景时显示“存入我的语义世界”。该按钮是一次明确的 direct Semantic
+Acceptance：使用 Package 已固定的 Sense Version、target Binding 与当前 scene revision 直接创建完整
+Personal Meaning，不进入澄清流程，也不创建第二个 Learning Target。场景后续有修改时显示可再次更新，
+未修改时只显示真实的已存入状态。学习来源和 Personal Meaning 的删除、更新与进度互不级联。
+
 未开始且支持多种方法的目标可以选择学习方法；已经开始的目标继续原方法和历史，不做静默迁移。不同方法可以有不同步骤，但共享相同的目标、事实和调度边界。
 
 ### 学习与复习

@@ -13,6 +13,7 @@ import type {
   SensaIntakeSense,
   SensaPersonalMeaningAlignmentSnapshot,
   SensaPinnedLanguageContext,
+  PublishedLearningSemanticFacts,
   SensaSemanticCoverage,
   SensaSenseProposalSnapshot,
 } from '@sensa/contracts/sensa';
@@ -65,6 +66,9 @@ export interface JourneyMaterialBlockView {
   kind: MaterialBlockKind;
   bodyText: string | null;
   personalMediaObjectId: string | null;
+  /** Inline learner media carried by an accepted Learning Scene revision. */
+  inlineDataUrl?: string | null;
+  inlineMimeType?: string | null;
   revision: number;
 }
 
@@ -389,3 +393,49 @@ export interface InboxResolutionInput {
  * the gateway adds the shared `replayed` flag like every other command.
  */
 export type IngestCommandResult = IngestResult & { replayed: boolean };
+
+export interface PublishedLearningSceneAcceptanceInput {
+  operationId: string;
+  existingPersonalMeaningId: string | null;
+  source: {
+    packageKey: string;
+    bookId: string;
+    bookVersionId: string;
+    contentReleaseId: string;
+    publishedAt: string;
+    title: string;
+  };
+  target: {
+    learningTargetId: string;
+    curriculumMembershipId: string;
+    senseId: string;
+    senseVersionId: string;
+    bindingId: string;
+    bindingVersionId: string;
+    expression: string;
+    targetLanguageTag: string;
+  };
+  semantic: PublishedLearningSemanticFacts;
+  scene: {
+    sceneId: string;
+    revisionId: string;
+    revision: number;
+    body: string;
+    media: Array<{
+      mediaId: string;
+      kind: 'image';
+      dataUrl: string;
+      mimeType: string;
+      fileName: string;
+      altText: string;
+    }>;
+    createdAt: number;
+  };
+}
+
+export interface PublishedLearningSceneAcceptanceResult {
+  personalMeaningId: string;
+  personalSemanticAnchorId: string;
+  personalSemanticAnchorRevisionId: string;
+  replayed: boolean;
+}

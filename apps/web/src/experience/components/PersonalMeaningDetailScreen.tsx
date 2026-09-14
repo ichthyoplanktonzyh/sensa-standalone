@@ -122,8 +122,8 @@ const materialFor = (detail: JourneyDetailView): SemanticAgentMaterial => ({
       blockId: block.anchorId,
       kind: block.kind,
       bodyText: block.bodyText,
-      mediaDataUrl: media?.dataUrl ?? null,
-      mediaMimeType: media?.mimeType ?? null,
+      mediaDataUrl: block.inlineDataUrl ?? media?.dataUrl ?? null,
+      mediaMimeType: block.inlineMimeType ?? media?.mimeType ?? null,
     };
   }),
   familiarExpression: detail.familiarAnchors[0]?.surfaceForm ?? null,
@@ -686,7 +686,7 @@ const PreviewPersonalMeaningDetailScreen = ({
             block.kind === 'image' ? (
               <img
                 key={block.anchorId}
-                src={getMedia(block.personalMediaObjectId ?? '')?.dataUrl ?? ''}
+                src={block.inlineDataUrl ?? getMedia(block.personalMediaObjectId ?? '')?.dataUrl ?? ''}
                 alt={uiText('contextImage')}
               />
             ) : (

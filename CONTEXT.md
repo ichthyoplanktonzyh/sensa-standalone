@@ -1,7 +1,7 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-09-13
+> Updated: 2026-09-14
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
@@ -598,6 +598,12 @@ into Curriculum, but is neither a learning prerequisite nor a progress owner.
 **Personal Content**:  
 The learner-owned references, annotations and organization they intentionally
 create. It excludes inferred progress, activity history and semantic projections.
+
+**Personal Learning Scene**:
+A revisioned learner-owned Context attached to one Learning Target within one Language
+Learning Route for use as an optional private learning scaffold. It does not become a
+Personal Meaning or Personal Semantic Anchor until explicit Semantic Acceptance, and
+it is never Learning Evidence or published content.
 
 **Saved Sense / Saved Example**:  
 A learner's reversible personal reference to a stable Sense or an exact immutable

@@ -15,6 +15,7 @@ import {
   stepRendererRegistry,
   type LightweightInitialStepRendererProps,
 } from "../../learningRuntime/stepRenderers";
+import type { PersonalLearningSceneRevision } from '../../../data/library/contentAnnotations';
 
 interface LightweightRuntimeStartScreenProps {
   readonly tools?: import('react').ReactNode;
@@ -31,6 +32,10 @@ interface LightweightRuntimeStartScreenProps {
   readonly onReveal: () => void;
   readonly onRate: (rating: LightweightInitialRating) => void;
   readonly onFinish: () => void;
+  readonly personalScene?: PersonalLearningSceneRevision | null;
+  readonly onOpenPersonalScene?: () => void;
+  readonly semanticWorldState?: 'available' | 'update' | 'saved' | 'saving' | null;
+  readonly onSaveToSemanticWorld?: () => void;
 }
 /**
  * Lightweight Initial Runtime shell.
@@ -53,6 +58,10 @@ export const LightweightRuntimeStartScreen = ({
   onReveal,
   onRate,
   onFinish,
+  personalScene,
+  onOpenPersonalScene,
+  semanticWorldState,
+  onSaveToSemanticWorld,
 }: LightweightRuntimeStartScreenProps) => {
   const { t } = useTranslation();
   const presentation = useMemo(
@@ -69,6 +78,10 @@ export const LightweightRuntimeStartScreen = ({
         )({
           step,
           presentation,
+          personalScene,
+          onOpenPersonalScene,
+          semanticWorldState,
+          onSaveToSemanticWorld,
           onReveal,
           onRate,
         })

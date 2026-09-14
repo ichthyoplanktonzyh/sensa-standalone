@@ -42,4 +42,6 @@ export type {
   ConfirmClarificationResult,
   ConfirmExpressionBindingInput,
   ConfirmExpressionBindingResult,
+  PublishedLearningSceneAcceptanceInput,
+  PublishedLearningSceneAcceptanceResult,
 } from './types';

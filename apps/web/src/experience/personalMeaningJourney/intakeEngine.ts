@@ -186,6 +186,9 @@ export const executeFastTrack = (
     payload: SensaIntakePayload;
     operationId: string;
     authority: SensaSemanticAcceptanceAuthority;
+    /** First-party learning adoption pins an already published version rather
+     * than following the registry aggregate's current-version pointer. */
+    pinnedSense?: { senseId: string; senseVersionId: string };
   },
   ports: IntakeEnginePorts,
 ): FastTrackOutcome => {
@@ -247,7 +250,21 @@ export const executeFastTrack = (
   let senseVersionId: string;
   let resolution: SensaSemanticAcceptanceFact['resolution'];
   let registry = state.registry;
-  if (existingSense) {
+  if (input.pinnedSense) {
+    const pinnedSense = state.registry.senses.find(
+      (candidate) => candidate.senseId === input.pinnedSense!.senseId,
+    );
+    const pinnedVersion = state.registry.senseVersions.find(
+      (candidate) => candidate.senseVersionId === input.pinnedSense!.senseVersionId,
+    );
+    if (!pinnedSense || pinnedSense.senseKey !== senseKey
+      || !pinnedVersion || pinnedVersion.senseId !== pinnedSense.senseId) {
+      throw new Error('固定的已发布 Sense Version 不存在。');
+    }
+    senseId = pinnedSense.senseId;
+    senseVersionId = pinnedVersion.senseVersionId;
+    resolution = 'reuse_existing';
+  } else if (existingSense) {
     senseId = existingSense.senseId;
     senseVersionId = existingSense.currentSenseVersionId;
     resolution = 'reuse_existing';

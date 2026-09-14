@@ -4,7 +4,7 @@ import {LocalRuntimePresentationRegistry,localRuntimePresentationContractVersion
 import {assembleLightweightInitialPresentation} from '../apps/web/src/experience/learningRuntime/lightweightInitialPresentation.ts';
 import {LIGHTWEIGHT_EXPERIENCE_RECALL_STEP,LIGHTWEIGHT_EXPRESSION_REVEAL_STEP,localLightweightPhase} from '../apps/web/src/learning/runtime/lightweightInitialProtocol.ts';
 import assert from 'node:assert/strict';
-import {canonicalJsonDigest} from '@sensa/learning-kernel';
+import {canonicalJsonDigest,stableUuid} from '@sensa/learning-kernel';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext,sensaInitialLearningCompletionSchema,sensaSchedulingHandoffSchema,sensaMemoryOutcomeSnapshotSchema,sensaSchedulingDecisionSchema,sensaRelearningCompletionSchema} from '@sensa/contracts/sensa';
 import {provisionLightweightInitialContent} from '../apps/web/src/learning/runtime/lightweightInitialContent.ts';
 import {openLibrary,command,readLibrary,LibraryTransaction} from '../apps/web/src/data/library/store.ts';
@@ -14,6 +14,7 @@ import {createLocalProtocolProgress,executeLocalProtocolTransition,reduceLocalPr
 import {hasDeclaredMasteryOverride} from '../apps/web/src/learning/runtime/targetPlanningOverrides.ts';
 import {localCurriculumMeaning,localCurriculumMembershipForContext,localExecutableTarget} from '../apps/web/src/learning/runtime/localCurriculum.ts';
 import {addLanguageRoute,setActiveLanguageRoute} from '../apps/web/src/data/library/language.ts';
+import {contentAnnotations} from '../apps/web/src/data/library/contentAnnotations.ts';
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
 const identity=await openLibrary();await command({id:crypto.randomUUID(),kind:'fixture.owner',input:{}},async tx=>{tx.put('meta','service-owner',{subject:crypto.randomUUID()});});
 const id=()=>crypto.randomUUID();
@@ -93,6 +94,9 @@ try{
  assert.equal(run.participants[targetId!].resolvedPlan.readiness,'ready');
  assert.equal(run.participants[targetId!].resolvedPlan.protocolBinding.protocolVersion,run.protocolBinding.protocolVersion);
  assert.equal((await startLearning(id(),targetId!,languageContext,20,at)).id,run.id);
+ const realDateNow=Date.now;Date.now=()=>Date.parse(at);
+ const learningScene=await contentAnnotations.saveLearningScene({operationId:id(),learningTargetId:target.id,languageRouteId:languageContext.languageRouteId,curriculumMembershipId:target.curriculumMemberships[0]!.id,senseId:target.identity.senseId,senseVersionId:target.identity.senseVersionId,bindingVersionId:target.identity.bindingVersionId,body:'我在雨天向同事借了这把伞。',media:[]});
+ Date.now=realDateNow;
  const declaration=id();await setLocalDeclaredMastery(declaration,targetId!,true,at);
  let paused=await readLearning();const pausedTarget=paused.targets.find(item=>item.id===targetId!)!,pausedRun=paused.runs.find(item=>item.id===run.id)!;
  assert(hasDeclaredMasteryOverride(pausedTarget));assert.equal(paused.active,undefined);assert.equal(pausedTarget.memory,null);assert.equal(pausedTarget.memoryRevision,0);assert.equal(paused.events.length,0);
@@ -103,6 +107,7 @@ try{
  run=await startLearning(id(),targetId!,languageContext,20,at);assert.equal(run.id,pausedRun.id);assert.equal(run.lifecycleEvents.length,2);assert.equal(localRunOpenPlanningInterruption(run),null);assert.equal((await readLearning()).events.length,0);assert.equal((await readLearning()).targets.find(item=>item.id===targetId!)!.memory,null);
  await assert.rejects(actLearning(id(),run.id,run.revision,{kind:'rate',rating:'good'},at));
  const reveal=id(),revealRevision=run.revision;run=await actLearning(reveal,run.id,revealRevision,{kind:'reveal'},at);
+ assert.deepEqual((await readLearning()).events.find(event=>event.id===reveal)!.detail.personalLearningScene,{sceneId:learningScene.sceneId,revisionId:learningScene.revisions[0]!.revisionId,revision:1},'the action pins the exact learner scene revision used by the runtime');
  assert.equal(localLightweightPhase((await readLearning()).runs[0]!),'reveal');
  assert.equal((await actLearning(reveal,run.id,revealRevision,{kind:'reveal'},at)).revision,run.revision);
  const original=LibraryTransaction.prototype.put;
@@ -202,7 +207,7 @@ try{
  // retain progress, removed members leave future planning, and an open Session
  // stays pinned to the Membership and material with which it began.
  const bookId=id(),retained={...entry,senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id()},removed={...entry,senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id()};
- const release=(versionNumber:number,bookVersionId:string,contentReleaseId:string,entries:typeof bundle.entries,changeSummary:string)=>({format:'sensa-book-release-bundle-v1' as const,book:{bookId,bookKey:'update-smoke',bookVersionId,versionNumber,title:'更新验证书',description:'验证不可变版本的应用语义。'},contentRelease:{contentReleaseId,versionNumber,schemaVersion:'sensa-consumer-content-v1'},targetLanguage:'en',supportLanguage:'zh-CN',publishedAt:`2026-09-${10+versionNumber}T00:00:00.000Z`,changeSummary,entries});
+ const release=(versionNumber:number,bookVersionId:string,contentReleaseId:string,entries:typeof bundle.entries,changeSummary:string)=>({format:'sensa-book-release-bundle-v1' as const,book:{bookId,bookKey:'update-smoke',bookVersionId,versionNumber,title:'更新验证书',description:'验证不可变版本的应用语义。'},contentRelease:{contentReleaseId,versionNumber,schemaVersion:'sensa-consumer-content-v1'},targetLanguage:'en',supportLanguage:'zh-CN',publishedAt:`2026-09-${10+versionNumber}T00:00:00.000Z`,changeSummary,entries:entries.map(item=>({...item,semantic:{senseKey:`fixture:${item.senseId}`,senseVersionNumber:1,semanticPolicyVersion:'fixture-v1',semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1' as const,coreMeaningFocus:item.meaning,prototypeScenes:[{summary:item.meaning,participantRoles:[],states:[],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]},expressionId:stableUuid(`fixture-expression:${item.bindingId}`),expressionVersionId:stableUuid(`fixture-expression-version:${item.bindingVersionId}`),expressionType:'word' as const,expressionVersionNumber:1,expressionStructure:{},bindingVersionNumber:1,relation:'realizes' as const,semanticCoverage:'exact' as const,registerLabel:null,usageConstraints:[]}}))});
  const firstBookVersion=id(),firstContentRelease=id(),firstRelease=release(1,firstBookVersion,firstContentRelease,[retained,removed],'首次发布');
  const firstBytes=new TextEncoder().encode(JSON.stringify(firstRelease)),firstInstalled=await installPackage(firstBytes),[retainedId,removedId]=await enrollPackage(id(),firstInstalled.key,languageContext);
  const beforeUpdate=(await readLearning()).targets.find(item=>item.id===retainedId!)!,beforeMembership=localCurriculumMembershipForContext(beforeUpdate,languageContext)!;
@@ -217,7 +222,7 @@ try{
  assert.equal(retainedTarget.retentionId,beforeUpdate.retentionId);assert.equal(retainedTarget.memoryRevision,beforeUpdate.memoryRevision);assert.equal(currentMembership.packageKey,secondInstalled.key);assert.equal(currentMembership.provenance.bookVersionId,secondBookVersion);assert.equal(beforeMembership.status,'active');assert.equal(retainedTarget.curriculumMemberships.find(item=>item.id===beforeMembership.id)?.status,'superseded');
  assert.equal(localCurriculumMembershipForContext(removedTarget,languageContext),undefined,'a removed member leaves future planning without deleting its target or history');assert(localCurriculumMembershipForContext(addedTarget,languageContext));
  const stillOpen=(await readLearning()).runs.find(item=>item.id===updateRun.id)!;assert.equal(stillOpen.participants[retainedId!]!.curriculumMembershipId,beforeMembership.id);assert.equal(stillOpen.participants[retainedId!]!.material.snapshot.provenance.bookVersionId,firstBookVersion);assert.equal(currentMembership.material.snapshot.provenance.bookVersionId,secondBookVersion);
- const japaneseRelease={...secondRelease,supportLanguage:'ja',entries:[{...retainedV2,meaning:'一時的に借りて、後で返す。',content:japaneseMaterial.materialization.content}]};const japaneseBookInstalled=await installPackage(new TextEncoder().encode(JSON.stringify(japaneseRelease)));
+ const japaneseRelease={...secondRelease,supportLanguage:'ja',entries:[{...secondRelease.entries[0]!,meaning:'一時的に借りて、後で返す。',content:japaneseMaterial.materialization.content}]};const japaneseBookInstalled=await installPackage(new TextEncoder().encode(JSON.stringify(japaneseRelease)));
  assert.notEqual(japaneseBookInstalled.key,secondInstalled.key,'the same Book Version can install separate exact language-pair Bundles');await enrollPackage(id(),japaneseBookInstalled.key,japaneseContext);const multilingualTarget=(await readLearning()).targets.find(item=>item.id===retainedId!)!;assert(localCurriculumMembershipForContext(multilingualTarget,languageContext));assert(localCurriculumMembershipForContext(multilingualTarget,japaneseContext));
 
  console.log('PASS: verified download/import, immutable Book updates, explicit enrollment, progress preservation, removed-member planning, open-Session pinning, declared-mastery interruption/resume, local learning/replay and rollback; memory storage Adapter, no browser/model calls.');

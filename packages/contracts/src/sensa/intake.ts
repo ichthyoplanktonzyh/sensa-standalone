@@ -173,6 +173,7 @@ export const sensaIntakePayloadSchema = z
       }
       return;
     }
+    if (locator.kind === "learning_target") return;
     const text = value.context.textSegment;
     if (!text || locator.end > text.length
       || text.slice(locator.start, locator.end) !== occurrence.surfaceForm) {

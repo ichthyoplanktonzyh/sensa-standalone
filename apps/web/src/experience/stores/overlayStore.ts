@@ -30,6 +30,16 @@ export interface ExampleSheet {
 export interface SceneEditorTarget {
   readonly content: RuntimePersonalContent;
   readonly anchorId?: string;
+  readonly learningTarget?: LearningSceneEditorTarget;
+}
+
+export interface LearningSceneEditorTarget {
+  readonly learningTargetId: string;
+  readonly languageRouteId: string;
+  readonly curriculumMembershipId: string;
+  readonly senseId: string;
+  readonly senseVersionId: string;
+  readonly bindingVersionId: string;
 }
 
 export interface OverlayState {

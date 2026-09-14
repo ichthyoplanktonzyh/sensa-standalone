@@ -611,6 +611,13 @@ Personal Content 不进入 Content Release，也不成为 Sense Learning Package
 - Personal Collection 只保存指向 stable Sense 或 exact Example 的 typed references 与 learner
   ordering，不依赖 Saved record，也不复制 Package、Example 或 Semantic Field 内容。
 
+Personal Learning Scene 是 Personal Content 中面向运行时的一层。它在一个 Learning Target + Route 下
+保存 current revision 和完整历史；Book 更新不覆盖它，另一个 Route 也不隐式复用它。Protocol 可以把
+当前 revision 作为 optional scaffold 呈现，但每次 Action 都必须记录实际使用的 scene revision，过去的
+Step 不跟随 current pointer 变化。把 current revision 存入 Personal Semantic World 是另一条显式命令，
+它复用 Package 交付的完整 Sense/Expression/Binding semantic snapshots，并建立或更新 learner-owned
+Personal Meaning；Package 本身及其 Content Release 保持不变。
+
 Anchor 只有在 learner 明确允许、Personal Meaning Alignment 已确认、目标 Sense 一致且
 Practice/Action contract 接受 personal scaffold 时才可以被引用。它不能满足 Required Asset
 Manifest、替代 reviewed Experience、成为 grading key、构成 novel assessment 或产生 Learning
