@@ -4,12 +4,12 @@ name: Sensa Web Design System
 description: Stable semantic interface rules shared by Sensa's first-party, curated skins.
 colors:
   primary: "{colors.accent}"
-  paper: "#F8F9F5"
-  ink: "#243E36"
-  muted: "#63756C"
-  line: "#DFE7DF"
-  accent: "#28694F"
-  sage: "#EDF2E8"
+  paper: "#F6F5F0"
+  ink: "#2D342C"
+  muted: "#62695E"
+  line: "#DEDFD5"
+  accent: "#4B603D"
+  sage: "#ECEEE5"
   clay: "#B56A42"
 typography:
   sans:
@@ -35,7 +35,7 @@ The semantic contract is the boundary between product UI and a skin. Product com
 
 The initial catalog contains two deliberately distinct adapters:
 
-- **Sensa Quiet:** warm paper, deep green ink, sage support surfaces, and restrained clay accents. It is the calm editorial default and is grounded in the named palette above.
+- **Sensa Quiet:** mineral paper, near-neutral ink and olive actions. Open reading space, light navigation and unboxed content rows keep the next action easy to find. Sage supports selection; clay remains a sparse decorative accent.
 - **Sensa Clear:** a cooler, crisper product skin with higher visual separation and reduced decorative warmth. It must implement the same semantic roles and component states as Quiet.
 
 Both skins must support light and dark color modes. Skin, color mode, and text size are independent device preferences. Changing any of them applies immediately without remounting the application or losing route, draft, selection, scroll, or learning-runtime state.
@@ -53,6 +53,8 @@ Every mapping must remain legible in both light and dark modes. Color may reinfo
 ## Typography
 
 The sans family is the dependable product face for navigation, controls, metadata, and continuous UI reading. The editorial family is an optional, purposeful voice for language material and reflective moments; it is not a decorative substitute for hierarchy.
+
+Quiet uses the product face for learning quantities as well as controls. Quantities remain tabular, modest in scale and paired with their labels and units; they do not take visual precedence over the learner's next action. Target-language material retains the separate language face when its content role calls for it.
 
 Typography is expressed through semantic roles rather than page-local font sizes. At minimum, the product distinguishes display, page title, section title, body, supporting body, control label, metadata, learning expression, learning sense, and support-language text. Expression, sense, and support language must remain visually distinguishable without relying only on color.
 
@@ -86,6 +88,8 @@ Depth is primarily communicated through surface tone, borders, and clear contain
 
 Shape is semantic: controls, fields, cards, overlays, and pill-like selections use distinct roles. A skin may make those roles quieter or crisper, but it must map every role consistently and preserve hit targets, focus outlines, content fit, and control recognition.
 
+Quiet controls have gently rounded corners (0.625rem), contained cards use 0.875rem, and overlays use 1.25rem. Open page sections use spacing and a fine dividing rule instead of a raised card. Desktop navigation marks the current destination with an underline as well as color; mobile navigation retains a selected surface and touch-sized targets.
+
 ## Assets
 
 The executable `sensa-skin-assets-v1` contract lets product code request curated semantic roles instead of selecting a Skin-specific file or glyph. Its initial roles cover the brand mark and primary shell destinations: home, semantic world, learning, practice, and settings. `SensaBrandMark` and `SensaSkinIcon` resolve those roles through the active build-time adapter; Clear retains the established utility glyphs while Quiet may use a more editorial set. Accessible names and action meaning remain on the product control, not inside a decorative asset.
@@ -110,6 +114,7 @@ The first reusable React boundary includes `SensaAction`, `SensaChoice`, `SensaF
 - **Input, Textarea, Search, and Choice controls:** preserve labels, help and error relationships, keyboard behavior, entered values, and validation state.
 - **Navigation, Tabs, Dialog, Sheet, Toast, and Popover:** preserve destination, selection, focus management, dismissal, and announcement behavior.
 - **Sense, Expression, Context, Learning Target, Book, Package, Scene, and Review components:** preserve the domain object's identity and field order. Presentation cannot manufacture learning evidence, outcomes, schedules, or successful sync state.
+- **Quiet domain presentation:** a next-action invitation leads with the current task, supporting explanation and explicit action; a learning summary pairs modest quantities with labels and a management link; a content entry is an open row with a recognizable icon, title, supporting description and destination cue. Source information remains supporting context, and preparation or failure states stay adjacent to the action they explain. Context, expression and sense retain distinct roles rather than becoming interchangeable card titles.
 - **Learning runtime:** preserve the stage protocol, prompt, response affordance, reveal, rating choices, feedback, progress, and completion semantics. A skin cannot turn a different workflow into the same named stage.
 
 A component must expose meaningful semantic slots and states. New component styling belongs in the shared primitive or domain component; page-local color and radius literals are not a supported extension mechanism.

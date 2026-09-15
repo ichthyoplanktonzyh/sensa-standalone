@@ -2,34 +2,34 @@
 html[data-sensa-skin="quiet"] {
   --sensa-font-product: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --sensa-font-language: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  --sensa-surface-canvas: #f8f9f5;
-  --sensa-surface-subtle: #edf2e8;
-  --sensa-surface-panel: #ffffff;
-  --sensa-surface-raised: #ffffff;
-  --sensa-surface-selected: #e2ece4;
+  --sensa-surface-canvas: #f6f5f0;
+  --sensa-surface-subtle: #eceee5;
+  --sensa-surface-panel: #fdfcf8;
+  --sensa-surface-raised: #fffefa;
+  --sensa-surface-selected: #e4e9db;
   --sensa-surface-media: #18352f;
-  --sensa-fg-primary: #243e36;
-  --sensa-fg-secondary: #63756c;
-  --sensa-fg-tertiary: #708078;
+  --sensa-fg-primary: #2d342c;
+  --sensa-fg-secondary: #62695e;
+  --sensa-fg-tertiary: #6f756a;
   --sensa-fg-inverse: #ffffff;
   --sensa-fg-on-media: #f4f6f1;
-  --sensa-border-subtle: #dfe7df;
-  --sensa-border-strong: #b8c9bd;
-  --sensa-action-primary: #28694f;
-  --sensa-action-primary-hover: #1f5741;
+  --sensa-border-subtle: #dedfd5;
+  --sensa-border-strong: #bdc4b3;
+  --sensa-action-primary: #4b603d;
+  --sensa-action-primary-hover: #394d2d;
   --sensa-action-on-primary: #ffffff;
-  --sensa-focus: #3f8066;
-  --sensa-selection: #d8e8dd;
-  --sensa-accent-soft: #edf2e8;
+  --sensa-focus: #526d3e;
+  --sensa-selection: #dfe8d2;
+  --sensa-accent-soft: #eceee5;
   --sensa-feedback-success: #2f7357;
   --sensa-feedback-warning: #8a5a18;
   --sensa-feedback-danger: #a43f3f;
   --sensa-overlay: rgb(20 35 29 / 34%);
   --sensa-progress: #6d9b84;
   --sensa-decorative: #b56a42;
-  --sensa-radius-control: 0.75rem;
-  --sensa-radius-card: 1rem;
-  --sensa-radius-overlay: 1.5rem;
+  --sensa-radius-control: 0.625rem;
+  --sensa-radius-card: 0.875rem;
+  --sensa-radius-overlay: 1.25rem;
   --sensa-shadow-raised: 0 1px 2px rgb(20 35 29 / 6%), 0 8px 24px rgb(20 35 29 / 5%);
   --sensa-shadow-overlay: 0 24px 70px rgb(20 35 29 / 24%);
 
@@ -129,9 +129,9 @@ html[data-sensa-skin="quiet"] {
   --sensa-layout-shell-chrome-border: var(--sensa-border-subtle);
   --sensa-layout-shell-chrome-shadow: none;
   --sensa-layout-shell-sidebar-width: 15rem;
-  --sensa-layout-shell-bar-size: 4.75rem;
+  --sensa-layout-shell-bar-size: 5.5rem;
   --sensa-layout-shell-mobile-navigation-size: 4.75rem;
-  --sensa-layout-shell-chrome-inset: clamp(1rem, 3vw, 2rem);
+  --sensa-layout-shell-chrome-inset: clamp(1.25rem, 4vw, 4rem);
   --sensa-layout-shell-navigation-gap: 0.375rem;
   --sensa-layout-runtime-canvas: var(--sensa-surface-canvas);
   --sensa-layout-runtime-header-background: color-mix(in srgb, var(--sensa-surface-canvas) 94%, transparent);
@@ -202,25 +202,25 @@ html[data-sensa-skin="quiet"] {
 }
 
 html[data-sensa-skin="quiet"][data-sensa-color-mode="dark"] {
-  --sensa-surface-canvas: #151b18;
-  --sensa-surface-subtle: #222d27;
-  --sensa-surface-panel: #1d2621;
-  --sensa-surface-raised: #26312b;
-  --sensa-surface-selected: #294237;
+  --sensa-surface-canvas: #1c211b;
+  --sensa-surface-subtle: #282f24;
+  --sensa-surface-panel: #232920;
+  --sensa-surface-raised: #30372b;
+  --sensa-surface-selected: #38472e;
   --sensa-surface-media: #0e1713;
-  --sensa-fg-primary: #eef4f0;
-  --sensa-fg-secondary: #b2c1b9;
-  --sensa-fg-tertiary: #93a39b;
+  --sensa-fg-primary: #f0f1e8;
+  --sensa-fg-secondary: #bec5b5;
+  --sensa-fg-tertiary: #a0aa95;
   --sensa-fg-inverse: #172019;
   --sensa-fg-on-media: #edf4ef;
-  --sensa-border-subtle: #34453c;
-  --sensa-border-strong: #52685b;
-  --sensa-action-primary: #80c6a8;
-  --sensa-action-primary-hover: #98d4b9;
-  --sensa-action-on-primary: #122119;
-  --sensa-focus: #a4ddc3;
-  --sensa-selection: #355b49;
-  --sensa-accent-soft: #294237;
+  --sensa-border-subtle: #3c4535;
+  --sensa-border-strong: #5a684f;
+  --sensa-action-primary: #bbcf9d;
+  --sensa-action-primary-hover: #cfdfb6;
+  --sensa-action-on-primary: #202b17;
+  --sensa-focus: #c9dda9;
+  --sensa-selection: #455b33;
+  --sensa-accent-soft: #303c27;
   --sensa-feedback-success: #77c79f;
   --sensa-feedback-warning: #e8bd73;
   --sensa-feedback-danger: #f09b9b;
@@ -232,10 +232,10 @@ html[data-sensa-skin="quiet"][data-sensa-color-mode="dark"] {
 }
 
 .sensa-skin-swatch[data-sensa-skin-preview="quiet"] {
-  --preview-paper: #f8f9f5;
-  --preview-ink: #243e36;
-  --preview-line: #dfe7df;
-  --preview-accent: #28694f;
+  --preview-paper: #f6f5f0;
+  --preview-ink: #2d342c;
+  --preview-line: #dedfd5;
+  --preview-accent: #4b603d;
   --preview-support: #b56a42;
 }
 
@@ -455,4 +455,34 @@ html[data-sensa-skin="quiet"] [data-sensa-overlay-layout="sheet"] [data-sensa-sl
 html[data-sensa-skin="quiet"] [data-sensa-overlay-layout="popover"] > [data-sensa-slot="backdrop"] {
   align-items: flex-start;
   justify-content: flex-end;
+}
+
+/* Quiet's Today composition uses the existing page and component anatomy. */
+html[data-sensa-skin="quiet"] .sensa-today {
+  --sensa-workspace-content: 74rem;
+  --sensa-workspace-inline-inset: clamp(1.5rem, 5vw, 4rem);
+  --sensa-workspace-block-start: clamp(2.5rem, 6vw, 5rem);
+  --sensa-workspace-header-gap: 2.5rem;
+}
+html[data-sensa-skin="quiet"] .sensa-today-heading h1 { font-size: 2rem; }
+html[data-sensa-skin="quiet"] .sensa-today-learning {
+  padding: clamp(2rem, 4vw, 3.5rem) 0;
+  border-inline: 0;
+  border-radius: 0;
+  background: transparent;
+}
+html[data-sensa-skin="quiet"] .sensa-today-invitation h2 { font-size: clamp(1.875rem, 3.2vw, 2.75rem); line-height: 1.45; font-weight: 450; }
+html[data-sensa-skin="quiet"] .sensa-today-hint { margin-top: 1.25rem; }
+html[data-sensa-skin="quiet"] .sensa-today-actions { margin-top: 2.25rem; }
+html[data-sensa-skin="quiet"] .sensa-today-discover { margin-top: 2.5rem; }
+html[data-sensa-skin="quiet"] .sensa-today-entries { border-top: 0; }
+html[data-sensa-skin="quiet"] .sensa-today-entry { min-height: 7rem; }
+html[data-sensa-skin="quiet"] [data-sensa-shell-brand-word] { font-weight: 550; letter-spacing: -0.03em; }
+html[data-sensa-skin="quiet"] [data-sensa-shell-navigation-item][data-selected] { box-shadow: inset 0 -2px var(--sensa-action-primary); }
+@media (min-width: 64rem) {
+  html[data-sensa-skin="quiet"] .sensa-today-learning { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(15rem, 1fr); gap: 3rem; align-items: center; }
+  html[data-sensa-skin="quiet"] .sensa-today-plan { margin-top: 0; padding: 1.5rem 0 1.5rem 2rem; border-top: 0; border-inline-start: 1px solid var(--sensa-border-subtle); }
+  html[data-sensa-skin="quiet"] .sensa-today-entries { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3rem; }
+  html[data-sensa-skin="quiet"] [data-sensa-shell-navigation-item] { border-radius: 0; min-height: 3rem; }
+  html[data-sensa-skin="quiet"] [data-sensa-shell-navigation-item][data-selected] { background: transparent; }
 }

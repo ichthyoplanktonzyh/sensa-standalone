@@ -6,7 +6,7 @@ export const appearanceZh = {
   textSize: "文字大小",
   immediate: "更改会立即应用，不会中断当前页面或学习进度。",
   skins: {
-    quiet: { name: "Sensa Quiet", description: "温暖、安静的纸张与深绿色调。" },
+    quiet: { name: "Sensa Quiet", description: "柔和的纸白、橄榄绿与舒展的阅读空间。" },
     clear: { name: "Sensa Clear", description: "清晰、克制的冷色与更明确的层次。" },
   },
   modes: { system: "跟随系统", light: "浅色", dark: "深色" },
@@ -21,7 +21,7 @@ export const appearanceEn = {
   textSize: "Text size",
   immediate: "Changes apply immediately without interrupting this page or your learning progress.",
   skins: {
-    quiet: { name: "Sensa Quiet", description: "Warm, quiet paper with deep green tones." },
+    quiet: { name: "Sensa Quiet", description: "Soft paper, olive accents and room to read." },
     clear: { name: "Sensa Clear", description: "Cool, restrained color with clearer separation." },
   },
   modes: { system: "System", light: "Light", dark: "Dark" },

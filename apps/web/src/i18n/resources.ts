@@ -45,6 +45,9 @@ export const resources = {
       language: { label: "界面语言", zh: "简体中文", en: "English" },
       home: {
         title: "今天",
+        readyTitle: "从一个意思开始。",
+        beginTitle: "你想表达什么？",
+        reviewTitle: "再遇见学过的意思。",
         plan: "今日学习",
         new: "待新学",
         review: "待复习",
@@ -97,6 +100,9 @@ export const resources = {
       language: { label: "Interface language", zh: "简体中文", en: "English" },
       home: {
         title: "Today",
+        readyTitle: "Begin with a meaning.",
+        beginTitle: "What would you like to express?",
+        reviewTitle: "Return to meanings you’ve met.",
         plan: "Your learning",
         new: "New",
         review: "To review",
