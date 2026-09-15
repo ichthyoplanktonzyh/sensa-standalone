@@ -1,7 +1,7 @@
 # Sense Learning Resource Model
 
 > 状态：Canonical resource model  
-> 更新日期：2026-09-13
+> 更新日期：2026-09-15
 
 本文定义 Sensa 如何通过 Published、On-demand 或 Hybrid 路径为一个固定 Learning Target 提供学习
 资源，以及这些资源如何在一次 Learning Protocol Run 前冻结为 Learning Materialization。它同时
@@ -665,7 +665,8 @@ scene domain、construction、disambiguating cue、collocations 和 variation no
 - Practice Turn、Practice Observation、Practice Feedback 与 Practice Artifact；
 - Declared Mastery；
 - Reference search ranking、lookup presentation grouping 与未预计算 occurrence 的临时 candidate order；
-- Learner/Device Preference resolution、autoplay、theme、translation default visibility 与 playback behavior。
+- Learner/Device Preference resolution、Appearance Preference、autoplay、translation default visibility
+  与 playback behavior。
 
 干扰项若表达真实语义边界，语义内容必须来自已审核 Relation/Boundary 资源；运行时只能决定
 确定性的选取和顺序，不能自由编造一个似是而非的相邻 Sense。
@@ -747,8 +748,9 @@ scene domain、construction、disambiguating cue、collocations 和 variation no
   且 Sense Expression Binding 不能只保存无类型、无 language/provenance 的字符串；
 - Learner Preference 只能在 approved alternatives 中选择未来资源，例如可用 accent；找不到匹配项时
   使用版本化 fallback 或诚实 unavailable，不能修改 Package 或绕过 Required Asset Manifest；
-- Device Preference 只控制本机呈现；autoplay、译文默认状态、theme、animation 与 playback behavior
-  都不能改变 asset role、novelty、Attempt contract 或 Evidence eligibility；
+- Device Preference 只控制本机呈现；Sensa Skin、color mode、文字大小、autoplay、译文默认状态、
+  animation 与 playback behavior 都不能改变 asset role、Slot disclosure、novelty、Attempt contract 或
+  Evidence eligibility；Skin 自带的装饰或插图不能冒充 Learning Materialization 资源、教学内容或答案；
 - Card、页面与 Deck 都不是资源 identity、Retention Target 或学习聚合；改变 Card 数量、
   阶段拆分或 renderer 不得改变
   Protocol Step 的结果资格、历史事实或 scheduler 语义；

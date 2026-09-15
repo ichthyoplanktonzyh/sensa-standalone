@@ -42,13 +42,13 @@ export function AssuranceSummary({
       progress={100}
       onExit={onExit}
     >
-      <span className="mb-7 inline-flex size-14 items-center justify-center rounded-full bg-[#e9eef8] text-[#5268a9]">
+      <span className="mb-7 inline-flex size-14 items-center justify-center rounded-full bg-accent-soft text-action-primary">
         <Check size={25} />
       </span>
       <h1 className="text-3xl font-medium">
         {t(review ? "assurance.reviewDone" : "assurance.initialDone")}
       </h1>
-      <p className="mt-4 text-sm text-[#788398]">
+      <p className="mt-4 text-sm text-fg-secondary">
         {t(
           review
             ? "assurance.reviewedCount"
@@ -58,7 +58,7 @@ export function AssuranceSummary({
           { count },
         )}
       </p>
-      <div className="mt-9 divide-y divide-[#e0e5ee] border-y border-[#e0e5ee]">
+      <div className="mt-9 divide-y divide-border-subtle border-y border-border-subtle">
         {groups.flatMap((group) =>
           group.ids.map((id) => (
             <div
@@ -66,14 +66,14 @@ export function AssuranceSummary({
               className="flex items-center justify-between gap-6 py-6"
             >
               <div>
-                <strong className="text-xl font-medium">
+                <strong className="font-language text-xl font-medium">
                   {targetPresentation(id).expression}
                 </strong>
-                <p className="mt-2 text-sm leading-6 text-[#788398]">
+                <p className="mt-2 text-sm leading-6 text-fg-secondary">
                   {targetPresentation(id).meaning}
                 </p>
               </div>
-              <span className="shrink-0 text-xs text-[#68748d]">
+              <span className="shrink-0 text-xs text-fg-tertiary">
                 {group.label}
               </span>
             </div>
@@ -81,7 +81,7 @@ export function AssuranceSummary({
         )}
       </div>
       {declared.length > 0 && (
-        <p className="mt-4 text-xs text-[#788398]">
+        <p className="mt-4 text-xs text-fg-tertiary">
           {t("assurance.declaredHint")}
         </p>
       )}

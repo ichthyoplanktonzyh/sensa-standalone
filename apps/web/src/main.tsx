@@ -5,9 +5,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
 import { router } from "./experience/router/router";
+import { initializeAppearance } from "./experience/appearance/store";
 import "./theme.css";
 import './experience/components/examples/learningExample.css';
 
+initializeAppearance();
 createRoot(document.getElementById("root")!).render(<StrictMode><RouterProvider router={router} /></StrictMode>);
 if(import.meta.env.PROD&&'serviceWorker' in navigator){
  const status=(value:string)=>{document.documentElement.dataset.offlineShell=value;window.dispatchEvent(new Event('sensa-offline-shell'));};

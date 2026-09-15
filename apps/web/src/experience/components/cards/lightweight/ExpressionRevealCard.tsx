@@ -38,15 +38,15 @@ export function ExpressionRevealCard({
       aria-live="polite"
       aria-labelledby="lightweight-expression-reveal-title"
     >
-      <p className="mb-5 text-xs text-[#7c879a]">{t("runtime.compare")}</p>
+      <p className="mb-5 text-metadata text-fg-tertiary">{t("runtime.compare")}</p>
       <h1
         id="lightweight-expression-reveal-title"
-        className="break-words text-5xl font-medium leading-tight tracking-tight text-[#2b3854] sm:text-6xl"
+        className="break-words font-language text-learning-expression font-medium tracking-tight text-action-primary sm:text-6xl"
       >
         {expressionPrimary.surface}
       </h1>
       {languageStructure && (
-        <p className="mt-4 text-sm text-[#7d879a]">
+        <p className="mt-4 text-learning-support text-fg-tertiary">
           {[
             languageStructure.expressionTypeLabel,
             languageStructure.partOfSpeech,
@@ -55,9 +55,9 @@ export function ExpressionRevealCard({
             .join(" · ")}
         </p>
       )}
-      <p className="mt-7 text-xl leading-8">{senseConfirmation.meaning}</p>
+      <p className="mt-7 text-learning-sense">{senseConfirmation.meaning}</p>
       {pronunciation && (
-        <div className="mt-5 space-y-3 text-sm text-[#7d879a]">
+        <div className="mt-5 space-y-3 text-learning-support text-fg-tertiary">
           <span>
             {[pronunciation.accentLabel, pronunciation.phoneticNotation]
               .filter(Boolean)
@@ -77,12 +77,12 @@ export function ExpressionRevealCard({
         </div>
       )}
       {usageGuidance && (
-        <blockquote className="mt-8 rounded-xl border border-[#e1e6ef] bg-white p-6 text-lg leading-8 text-[#4d5e7a]">
+        <blockquote className="mt-8 rounded-card border border-border-subtle bg-surface-panel p-6 text-lg leading-8 text-fg-secondary shadow-raised">
           {usageGuidance.example}
         </blockquote>
       )}
       {sceneBridge && (
-        <details className="mt-6 text-sm text-[#79859a]">
+        <details className="mt-6 text-learning-support text-fg-secondary">
           <summary className="min-h-11 cursor-pointer py-3">
             {t("runtime.context")}
           </summary>
@@ -95,7 +95,7 @@ export function ExpressionRevealCard({
             <button
               type="button"
               onClick={onOpenPersonalScene}
-              className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#cbd3e2] bg-white px-4 text-sm text-[#405276] hover:bg-[#edf0f7]"
+              className="inline-flex min-h-11 items-center justify-center rounded-control border border-border-strong bg-surface-panel px-4 text-sm text-action-primary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
             >
               {t(personalScene ? "runtime.editMyScene" : "runtime.addMyScene")}
             </button>
@@ -105,7 +105,7 @@ export function ExpressionRevealCard({
               type="button"
               disabled={semanticWorldState === 'saved' || semanticWorldState === 'saving'}
               onClick={onSaveToSemanticWorld}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[#cbd3e2] bg-white px-4 text-sm text-[#405276] hover:bg-[#edf0f7] disabled:cursor-default disabled:opacity-70"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-control border border-border-strong bg-surface-panel px-4 text-sm text-action-primary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus disabled:cursor-default disabled:opacity-70"
             >
               {semanticWorldState === 'saved' && <Check size={17}/>}
               {t(semanticWorldState === 'saved' ? "runtime.savedToSemanticWorld" : semanticWorldState === 'saving' ? "runtime.savingToSemanticWorld" : semanticWorldState === 'update' ? "runtime.updateSemanticWorld" : "runtime.saveToSemanticWorld")}

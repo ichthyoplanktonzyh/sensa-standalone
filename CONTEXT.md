@@ -951,12 +951,37 @@ a Sense, a reversible translation identity or evidence that either expression is
 
 **Device Installation / Device Preference**:  
 One learner-visible installation and its local presentation choices, such as
-autoplay, theme or playback behavior. A Device Installation may use a Replica
+autoplay, Appearance Preference or playback behavior. A Device Installation may use a Replica
 for transport, but the Replica is not the product identity.
 
 **Interface Locale**:
 The locale used to present one product surface. It is a Device or surface preference,
 not a Target Language, Support Language, captured-content fact or learning result.
+
+**Semantic Design Contract（语义设计合同）**:
+The shared presentation contract that names UI roles such as primary text, surfaces,
+actions, selection and feedback, and defines their typography, visual hierarchy and
+accessibility constraints. It separates those roles from a particular palette or
+style. It does not select learning resources, authorize disclosure or define a
+Learning Protocol or Card Presentation Slot.
+
+**Sensa Skin / Skin Plugin（Sensa 皮肤 / 皮肤插件）**:
+An identifiable, versioned, Sensa-curated implementation of the Semantic Design
+Contract for supported product surfaces. A Skin may supply colors, typography,
+shapes, elevation, icons, illustration, component presentation recipes and constrained
+density, decorative or motion choices; it does not own product navigation, learning
+content, actions, input state or learner facts. An admitted Skin supplies a complete
+appearance for every supported surface and resolved color mode. Only Skins admitted through Sensa's
+design, code-review and product-release governance are selectable. External authorship
+does not grant runtime installation or permission to execute third-party code or
+replace pages.
+
+**Appearance Preference（外观偏好）**:
+A Device Preference with independent choices for Sensa Skin, color mode
+(`light | dark | system`) and reading preferences such as text size. A Skin switch
+preserves the other choices and remains subordinate to accessibility requirements.
+Its resolved appearance is presentation state, not a Learning Policy Assignment,
+Learning Materialization, Learning Event or synchronization result.
 
 **Sync Health**:  
 A derived, read-only view of pending local work, connectivity, installed content

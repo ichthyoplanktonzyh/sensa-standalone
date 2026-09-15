@@ -48,26 +48,26 @@ export const LearningTargetLibraryScreen = (props: LearningTargetLibraryScreenPr
   });
   const visible = items.filter(item => (filter === 'all' || item.group === filter)
     && `${item.target.expression} ${item.target.meaning}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-  return <section id="s-learning-library" className={`screen absolute inset-0 z-20 overflow-y-auto bg-[#fbfbfa] text-[#222631] ${props.active ? 'active' : 'invisible pointer-events-none'}`}>
+  return <section id="s-learning-library" className={`screen absolute inset-0 z-20 overflow-y-auto bg-surface-canvas font-product text-fg-primary ${props.active ? 'active' : 'invisible pointer-events-none'}`}>
     <main className="mx-auto max-w-[1280px] px-6 py-8 sm:px-10 lg:px-14 lg:py-14">
-      <button className={`${studyButton} -ml-4 text-[#68748d]`} onClick={props.onBack}><ArrowLeft size={18}/>{t('study.back')}</button>
+      <button className={`${studyButton} -ml-4 text-fg-secondary`} onClick={props.onBack}><ArrowLeft size={18}/>{t('study.back')}</button>
       <header className="mb-9 mt-5 flex flex-wrap items-center justify-between gap-4">
-        <div><h1 className="text-3xl font-medium tracking-tight">{t('study.library')}</h1><p className="mt-3 text-sm text-[#68748d]">{t('study.count', { count: items.length })}</p></div>
-        <button className={`${studyButton} bg-[#2f3b70] text-white`} onClick={props.onAddLearning}><Plus size={17}/>{t('study.add')}</button>
+        <div><h1 className="text-3xl font-medium tracking-tight">{t('study.library')}</h1><p className="mt-3 text-sm text-fg-secondary">{t('study.count', { count: items.length })}</p></div>
+        <button className={`${studyButton} bg-action-primary text-action-on-primary hover:bg-action-primary-hover`} onClick={props.onAddLearning}><Plus size={17}/>{t('study.add')}</button>
       </header>
       <div className="flex flex-wrap gap-3">
-        <label className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-xl border border-[#e3e5ea] bg-white px-4"><Search size={18} className="shrink-0 text-[#788398]"/><input value={query} onChange={event => setQuery(event.target.value)} aria-label={t('study.search')} placeholder={t('study.search')} className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"/></label>
-        <select aria-label={t('study.status')} value={filter} onChange={event => setFilter(event.target.value as Filter)} className="min-h-12 max-w-full rounded-xl border border-[#e3e5ea] bg-white px-4 text-sm">
+        <label className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-control border border-border-subtle bg-surface-panel px-4 focus-within:outline-2 focus-within:outline-focus"><Search size={18} className="shrink-0 text-fg-tertiary"/><input value={query} onChange={event => setQuery(event.target.value)} aria-label={t('study.search')} placeholder={t('study.search')} className="min-w-0 flex-1 bg-transparent py-3 text-sm text-fg-primary outline-none"/></label>
+        <select aria-label={t('study.status')} value={filter} onChange={event => setFilter(event.target.value as Filter)} className="min-h-12 max-w-full rounded-control border border-border-subtle bg-surface-panel px-4 text-sm focus-visible:outline-2 focus-visible:outline-focus">
           {(['all','new','active','review','complete'] as const).map(value => <option key={value} value={value}>{t('study.filters.' + value)}</option>)}
         </select>
       </div>
-      <ul className="mt-6 divide-y divide-[#e3e5ea]">
-        {visible.map(({id, target, state}) => <li key={id}><button onClick={() => props.onOpenTarget(id)} className="flex w-full items-center gap-4 rounded-xl py-6 text-left hover:bg-[#f0f2f7] focus-visible:outline-2 focus-visible:outline-[#5268a9]">
-          <span className="min-w-0 flex-1"><strong className="text-xl font-medium">{target.expression}</strong><span className="mt-2 block text-sm text-[#68748d]">{target.meaning}</span><span className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[#788398]"><span className="rounded-md bg-[#edf0f7] px-2 py-1 text-[#546582]">{t('study.states.' + state)}</span><span>{t('study.sources.' + target.sourceKind)}</span><span>{t('learningPreferences.policies.' + props.policyByTarget[id])}</span></span></span>
-          <ArrowRight size={18} className="shrink-0 text-[#788398]"/>
+      <ul className="mt-6 divide-y divide-border-subtle">
+        {visible.map(({id, target, state}) => <li key={id}><button onClick={() => props.onOpenTarget(id)} className="flex w-full items-center gap-4 rounded-control py-6 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus">
+          <span className="min-w-0 flex-1"><strong className="font-language text-xl font-medium">{target.expression}</strong><span className="mt-2 block text-sm text-fg-secondary">{target.meaning}</span><span className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-fg-tertiary"><span className="rounded-control bg-surface-selected px-2 py-1 text-action-primary">{t('study.states.' + state)}</span><span>{t('study.sources.' + target.sourceKind)}</span><span>{t('learningPreferences.policies.' + props.policyByTarget[id])}</span></span></span>
+          <ArrowRight size={18} className="shrink-0 text-fg-tertiary"/>
         </button></li>)}
       </ul>
-      {!visible.length && <p className="py-20 text-center text-sm text-[#788398]">{t(items.length ? 'study.noMatches' : 'study.empty')}</p>}
+      {!visible.length && <p className="py-20 text-center text-sm text-fg-tertiary">{t(items.length ? 'study.noMatches' : 'study.empty')}</p>}
     </main>
   </section>;
 };

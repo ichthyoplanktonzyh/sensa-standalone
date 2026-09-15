@@ -25,14 +25,14 @@ export function RuntimeRating({
           type="button"
           key={id}
           onClick={() => onRate(id)}
-          className={`flex min-h-20 items-center gap-4 rounded-xl border px-5 py-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5268a9] sm:min-h-28 sm:flex-col sm:items-start sm:gap-3 ${id === "good" ? "border-[#c5cfe4] bg-[#edf1f9] text-[#344775]" : "border-[#e0e5ee] bg-white text-[#66738b] hover:bg-[#f3f5f9]"}`}
+          className={`flex min-h-20 items-center gap-4 rounded-card border px-5 py-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:min-h-28 sm:flex-col sm:items-start sm:gap-3 ${id === "good" ? "border-border-strong bg-surface-selected text-action-primary" : "border-border-subtle bg-surface-panel text-fg-secondary hover:bg-surface-subtle"}`}
         >
           <Icon size={17} strokeWidth={1.5} />
           <span>
             <strong className="block text-sm font-medium">
               {t(`runtime.ratings.${id}`)}
             </strong>
-            <span className="mt-1.5 block text-xs text-[#7b8597]">
+            <span className="mt-1.5 block text-xs text-fg-tertiary">
               {t(
                 initial
                   ? `runtime.initialRating.${id}`

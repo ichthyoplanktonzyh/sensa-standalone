@@ -5,7 +5,7 @@
 [ADR 0003](../adr/0003-three-client-local-facts.md) 确认主应用均在本地执行学习，共享领域事实、版本与合并规则。事实与当前投影分离，保留固定评价/结算历史；学习历史保持可追溯；普通账号同步允许服务端读取业务数据，但服务端不重新执行学习协议或结算学习结果。
 
 > 状态：Canonical domain model  
-> 更新日期：2026-09-13
+> 更新日期：2026-09-15
 
 本文是 Sensa 领域对象、聚合边界和全局不变量的主入口。术语定义以
 [`../../CONTEXT.md`](../../CONTEXT.md) 为准；资源细节和运行行为分别由
@@ -110,6 +110,26 @@ Sensa 由三个职责独立的层组成：
 
 Product Shell 不定义学习证据或毕业条件。Learning Kernel 不拥有账号、网络同步或媒体字节。
 Production Base 不决定一个 Sense 应当如何被理解或当前应当使用哪种学习干预。
+
+### Semantic Design Contract 与 Sensa Skin
+
+Product Shell 通过同一 Semantic Design Contract 命名 surface、text、action、selection、feedback、
+learning focus 等呈现角色，并固定视觉层级、交互可发现性与无障碍约束。具体 Sensa Skin 是该合同的
+版本化呈现实现，可以改变颜色、字体、形状、层级、图标、插画、组件视觉配方以及受约束的密度、装饰
+与动效；它不能改变产品信息架构、页面和 Card 的行为、允许的 Action、输入状态、内容披露规则或任何
+learner fact。系统必须以文字、结构或图标等非颜色信号继续表达成功、失败、选中和可操作状态。
+
+可选择的 Skin catalog 由 Sensa 策展并随经过审核的产品 release 交付。Skin 可以由 Sensa 或外部作者
+创作，但外部来源必须先经过 Sensa 的设计、代码审查与发布治理，不能因“插件化”而获得任意运行时安装、
+执行第三方代码或替换页面的权限。同一 release 内的每个 Skin 都服从同一 Semantic Design Contract；
+每个已收录 Skin 必须为全部支持的 product surfaces 与解析后的 light/dark color scheme 提供完整呈现。
+Skin adapter 是 Product Shell 内部的可替换呈现模块，不成为领域聚合或第三方扩展市场。
+
+Appearance Preference 独立选择 Skin、`light | dark | system` color mode 与文字大小等阅读偏好。切换
+Skin 可以立即重绘当前界面，但必须保留其他 Appearance Preference、当前导航、输入与 Runtime 状态，
+不得创建 Learning Event、使 Materialization 或 Action 失效，也不得显示不存在的成功或同步状态。
+系统级无障碍设置优先；所选 Skin 缺失或不再受当前 release 支持时，产品回退到完整可用的默认 Skin，
+但不改写 learner-owned data。
 
 Personal Semantic World Surface 不等于 Personal Semantic World Module。前者主要组合 Intake Inbox、
 stable personal meanings、provenance、learning readiness/progress projections 与显式操作；后者才拥有
@@ -557,9 +577,10 @@ Protocol Outcome。
 - Learner Preference 是显式 typed fields + revision，不是任意 key-value bag。按 exact Language Tag
   作用域的发音口音、按 Input/Output Language Tags 作用域的 Language-Pair Glossary Entry 与例句译文
   默认状态属于 learner-scoped preference；它们跨设备同步并只影响未来呈现或 approved asset choice；
-- Device Preference 属于具体 Device Installation。autoplay、theme、reduced-motion override、播放速度
-  与音量、Interface Locale、surface-scoped Active Route Selection 等本机行为不进入 learner progress，
-  也不要求跨设备一致；系统级无障碍设置优先；
+- Device Preference 属于具体 Device Installation。Appearance Preference 分别选择 Sensa Skin、color
+  mode 与文字大小等阅读偏好；autoplay、reduced-motion override、播放速度与音量、Interface Locale、
+  surface-scoped Active Route Selection 等本机行为同样不进入 learner progress，也不要求跨设备一致；
+  系统级无障碍设置优先；
 - 每日新 Sense 上限、Book、Range、Enrollment mode 与 Learning Policy Assignment 属于 Study
   Plan/Curriculum；Settings Surface 可以导航过去，但不能把它们复制进普通 Preference；Notification
   Preference 是独立的 Later 能力；

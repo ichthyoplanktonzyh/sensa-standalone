@@ -16,12 +16,14 @@ import { contentUiZh, contentUiEn } from "./contentUi";
 import { contentZh, contentEn, composerZh, composerEn } from "./content";
 import { languagesZh, languagesEn } from "./languages";
 import { glossaryZh, glossaryEn } from "./glossary";
+import { appearanceZh, appearanceEn } from "./appearance";
 export const resources = {
   "zh-CN": {
     translation: {
       fourStage:fourStageZh, originalCards: originalCardsZh, cloudSync:cloudSyncZh,localFlow: localFlowZh, libraryBackup: libraryBackupZh, modelService: modelServiceZh, learningSetup: learningSetupZh, practice: practiceZh, account: accountZh, study: studyZh, learningPreferences: learningPreferencesZh, runtime: runtimeZh, assurance: assuranceZh,
       languages: languagesZh,
       glossary: glossaryZh,
+      appearance: appearanceZh,
       content: contentZh,
       statistics: statisticsZh,
       referenceExample: referenceExampleZh,
@@ -73,6 +75,7 @@ export const resources = {
       fourStage:fourStageEn, originalCards: originalCardsEn, cloudSync:cloudSyncEn,localFlow: localFlowEn, libraryBackup: libraryBackupEn, modelService: modelServiceEn, learningSetup: learningSetupEn, practice: practiceEn, account: accountEn, study: studyEn, learningPreferences: learningPreferencesEn, runtime: runtimeEn, assurance: assuranceEn,
       languages: languagesEn,
       glossary: glossaryEn,
+      appearance: appearanceEn,
       content: contentEn,
       statistics: statisticsEn,
       referenceExample: referenceExampleEn,

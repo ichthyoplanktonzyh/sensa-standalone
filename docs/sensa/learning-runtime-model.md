@@ -1,7 +1,7 @@
 # Sensa Learning Runtime Model
 
 > 状态：Canonical runtime domain model  
-> 更新日期：2026-09-13
+> 更新日期：2026-09-15
 
 本文定义 Content Provisioning、Learning Protocol Run、Protocol Step Instance、Unified Planning、Session、
 Encounter、Card Presentation、Observation/Evidence/Transition、Scheduling Handoff、FSRS、Lexical Reference、Preferences 与 Account/Data Control 的运行
@@ -855,6 +855,13 @@ disclosure 与缺失/溢出处理；Assembly Policy 把 Materialization 中已�
 Experience Recall 的任何 Slot 都不得包含 target expression；Expression Reveal 则始终具有 expression
 主区与 Sense 确认区，其余发音、语言结构、用法和场景回扣区域均可选。
 
+Card 与页面 renderer 通过 Semantic Design Contract 暴露稳定的呈现角色，再由当前 Sensa Skin 提供
+具体视觉实现。Skin 可以改变 typography、surface、shape、elevation、icon、illustration、component
+recipe 与受约束的 density/motion，但不能增删或重排具有 disclosure、interaction 或 result 语义的
+Slot，不能隐藏当前 Action 必需的信息或 control，也不能改变 answer contract、Attempt eligibility、
+Evidence 或 Transition。进行中的 Run 切换 Skin 只重绘 presentation；它不创建 Run lifecycle fact，
+不更换 Materialization，也不重置 learner input 或当前 Card phase。
+
 ## 11. Action、Attempt、Observation、Evidence 与 Transition
 
 ### Learning Action
@@ -1080,7 +1087,7 @@ Preference 不使用任意 key-value merge。每个字段固定 owner、type、d
 | owner | baseline fields | effect boundary |
 | --- | --- | --- |
 | Learner Preference | Language-Tag-scoped pronunciation accent、Input/Output-scoped Language-Pair Glossary Entry、Example support-language default visibility | 跨设备同步；从下一次适用的资源选择或呈现开始生效 |
-| Device Preference | Interface Locale、surface-scoped Active Route Selection、autoplay、theme、reduced-motion override、playback rate/volume | 只在本机生效；系统无障碍设置优先 |
+| Device Preference | Interface Locale、surface-scoped Active Route Selection、Appearance Preference（Sensa Skin、color mode、文字大小）、autoplay、reduced-motion override、playback rate/volume | 只在本机生效；系统无障碍设置优先 |
 | Study Plan/Curriculum | daily new-Sense limit、Book、Range、Enrollment mode、Learning Policy Assignment | 通过 Curriculum operation/revision 生效，不经过普通 Preference |
 | Notification Preference（Later） | reminder permission/schedule/time zone | 独立 permission 与 delivery contract，不混入学习证据 |
 
@@ -1090,9 +1097,10 @@ Learner Preference update 使用 expected revision 并作为本地版本化事�
 
 会改变 immutable asset 选择的 Learner Preference，例如 pronunciation accent，只对下一次尚未物化的
 Action/Encounter 生效；active Action 保留已经固定的 asset。纯 presentation setting 可以立即改变
-当前视图，但不得改变 Action identity、answer contract、Attempt eligibility 或 Evidence。autoplay、
-译文默认显示、theme、animation 与 playback behavior 永远不能自行产生 exposure Evidence；译文或
-autoplay 还必须服从当前 Action 的 asset role/answer-leak contract，没有授权内容时 Preference 不生效。
+当前视图，但不得改变 Action identity、answer contract、Attempt eligibility 或 Evidence。切换 Sensa
+Skin、color mode、文字大小、animation、autoplay、译文默认显示与 playback behavior 永远不能自行产生
+exposure Evidence；译文或 autoplay 还必须服从当前 Action 的 asset role/answer-leak contract，没有
+授权内容时 Preference 不生效。
 
 ### Sync Health 与本机数据
 

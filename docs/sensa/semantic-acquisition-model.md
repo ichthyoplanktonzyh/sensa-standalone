@@ -1,7 +1,7 @@
 # Sensa 语义获取模型
 
 > 状态：Canonical theory model  
-> 更新日期：2026-09-13
+> 更新日期：2026-09-15
 > 证据级别：产品理论与可检验假设，尚无真实用户效果结论
 
 本文解释 Sensa 为什么按 Sense 组织学习，并完整定义高保证的 **Structured Acquisition Protocol**：
@@ -303,9 +303,10 @@ Protocol Step 如何组织材料、Planner 如何穿插 Encounter、Policy 如�
 如何更新 Gate 与 5D。Card Presentation 只负责渲染当前 Step，不属于本文的 Gate、Cycle 或 learner
 progress identity。
 
-Learner/Device Preferences 可以降低呈现摩擦，例如选择口音、译文默认状态、autoplay 或动画，但它们
-不是学习理论变量：Preference 不能重新定义 Sense、Required Capability、Gate、Evidence rule、5D
-或 FSRS，也不能把播放/展开变成学习成功。learner 选择会改变 assessment 或毕业要求的模式时，必须
+Learner/Device Preferences 可以降低呈现摩擦，例如选择口音、译文默认状态、autoplay、动画或通过
+Appearance Preference 选择 Sensa Skin、color mode 与文字大小，但它们不是学习理论变量：Skin 与其他
+Preference 都不能重新定义 Sense、Required Capability、Gate、Evidence rule、5D 或 FSRS，也不能把
+播放、展开或视觉反馈变成学习成功。learner 选择会改变 assessment 或毕业要求的模式时，必须
 使用显式、可审计的 Learning Policy Profile 与 Assignment；高保证 Profile 解析到 Structured
 Acquisition，轻量 Profile 解析到其他 purpose-specific Protocol，二者都不能伪装成普通 Settings 开关。
 

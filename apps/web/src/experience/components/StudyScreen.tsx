@@ -31,7 +31,7 @@ interface StudyScreenProps {
   learningRecords: readonly LearningRecordView[];
   onDailyNewCountChange: (count: number) => void;
 }
-export const studyButton = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5268a9]';
+export const studyButton = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-control px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
 export const StudyScreen = (props: StudyScreenProps) => {
   const {t,i18n}=useTranslation();
   const [filter,setFilter]=useState<'all'|LearningRecordKind>('all');

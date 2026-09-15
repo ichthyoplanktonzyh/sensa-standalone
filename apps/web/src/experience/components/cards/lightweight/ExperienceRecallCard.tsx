@@ -26,19 +26,19 @@ export function ExperienceRecallCard({
       >
         {t("runtime.recallPrompt")}
       </h1>
-      <div className="rounded-2xl border border-[#e0e5ee] bg-white p-7 sm:p-10">
-        <span className="text-xs text-[#8390a6]">{t(personalScene ? "runtime.myScene" : "runtime.context")}</span>
-        <blockquote className="mt-5 text-xl leading-[1.9] text-[#313c50] sm:text-2xl">
+      <div className="rounded-card border border-border-subtle bg-surface-panel p-7 shadow-raised sm:p-10">
+        <span className="text-metadata text-fg-tertiary">{t(personalScene ? "runtime.myScene" : "runtime.context")}</span>
+        <blockquote className="mt-5 text-xl leading-[1.9] text-fg-primary sm:text-2xl">
           {personalScene
             ? <RichExperience scene={personalScene.body} images={personalScene.media.map((image) => ({id:image.mediaId,name:image.fileName,dataUrl:image.dataUrl}))}/>
             : <RichExperience scene={experienceSketch.scene} images={experienceSketch.images} html={experienceSketch.html}/>}
         </blockquote>
-        <p className="mt-7 border-t border-[#e8ebf2] pt-5 text-sm leading-7 text-[#7a859a]">
+        <p className="mt-7 border-t border-border-subtle pt-5 text-learning-support text-fg-secondary">
           {experienceSketch.senseFocus}
         </p>
-        {onOpenPersonalScene && <button type="button" className="mt-5 min-h-11 rounded-lg border border-[#cbd3e2] bg-white px-4 text-sm text-[#526181] hover:bg-[#edf0f7]" onClick={onOpenPersonalScene}>{t(personalScene ? "runtime.editMyScene" : "runtime.addMyScene")}</button>}
+        {onOpenPersonalScene && <button type="button" className="mt-5 min-h-11 rounded-control border border-border-strong bg-surface-panel px-4 text-sm text-action-primary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" onClick={onOpenPersonalScene}>{t(personalScene ? "runtime.editMyScene" : "runtime.addMyScene")}</button>}
       </div>
-      {personalScene && <details className="mt-4 rounded-xl border border-[#e0e5ee] bg-white px-5 py-3 text-sm text-[#79859a]"><summary className="min-h-11 cursor-pointer py-3">{t("runtime.packageScene")}</summary><div className="pb-3"><RichExperience scene={experienceSketch.scene} images={experienceSketch.images} html={experienceSketch.html}/></div></details>}
+      {personalScene && <details className="mt-4 rounded-card border border-border-subtle bg-surface-panel px-5 py-3 text-sm text-fg-secondary"><summary className="min-h-11 cursor-pointer py-3">{t("runtime.packageScene")}</summary><div className="pb-3"><RichExperience scene={experienceSketch.scene} images={experienceSketch.images} html={experienceSketch.html}/></div></details>}
       {auxiliaryCues.length > 0 && (
         <div
           className="mt-5 flex flex-wrap gap-2"
@@ -47,7 +47,7 @@ export function ExperienceRecallCard({
           {auxiliaryCues.map((c) => (
             <span
               key={c}
-              className="rounded-full bg-[#edf0f6] px-3 py-2 text-xs text-[#768198]"
+              className="rounded-pill bg-surface-subtle px-3 py-2 text-xs text-fg-secondary"
             >
               {c}
             </span>
@@ -55,7 +55,7 @@ export function ExperienceRecallCard({
         </div>
       )}
       <div className="mt-9 flex flex-col items-center gap-5">
-        <p className="text-sm text-[#7b8597]">{t("runtime.thinkFirst")}</p>
+        <p className="text-sm text-fg-secondary">{t("runtime.thinkFirst")}</p>
         <button
           type="button"
           onClick={onReveal}
