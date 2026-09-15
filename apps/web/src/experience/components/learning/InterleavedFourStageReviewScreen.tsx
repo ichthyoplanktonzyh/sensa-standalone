@@ -1,6 +1,6 @@
 import type {FourStageTargetPresentation} from './InterleavedFourStageRuntimeScreen';
 import {useTranslation} from 'react-i18next';
-import { fadeScreenClass } from '../../ui/primitives';
+import { SensaPageLayout } from '../../ui/SensaPageLayouts';
 import {
   type FourStageReviewAnswer,
   type FourStageReviewSession,
@@ -37,21 +37,39 @@ export function InterleavedFourStageReviewScreen({
   };
 
   const target=execution.target;
+  const progressValue = execution.targetCount > 0
+    ? Math.round(
+        (Math.min(
+          execution.targetCount,
+          Math.max(0, session?.ordinal ?? (done ? execution.targetCount : 0)),
+        ) / execution.targetCount) * 100,
+      )
+    : 0;
 
   return (
-    <section
-      className={`${fadeScreenClass(active, 'z-40')} flex flex-col overflow-hidden`}
+    <SensaPageLayout
+      family="learning-runtime"
+      className={`screen z-40 transition-opacity duration-300 motion-reduce:transition-none ${active ? 'active visible pointer-events-auto opacity-100' : 'invisible pointer-events-none opacity-0'}`}
       id="s-four-stage-review-runtime"
       data-anim="fade"
       aria-hidden={!active}
-    >
-      <header className="relative z-[1] grid min-h-20 grid-cols-[2.75rem_1fr_auto] items-center gap-3 border-b border-border-subtle bg-surface-canvas/95 px-6 py-4">
-        <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-xl text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" disabled={execution.busy} type="button" onClick={onExit} aria-label={t('fourStage.exitReview')}>×</button>
-        <div className="flex flex-col"><small className="text-metadata text-fg-tertiary">{t('fourStage.reviewTitle')}</small><strong className="text-control-label">{session ? session.ordinal : t('fourStage.done')}</strong></div>
-        <span className="rounded-pill bg-accent-soft px-3 py-1 text-metadata font-semibold text-fg-secondary">{t('fourStage.schedule')}</span>
-      </header>
-
-      <main className="relative z-[1] mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-y-auto px-6 py-8 [scrollbar-width:thin] sm:px-10">
+      regions={{
+        header: (
+          <>
+            <div className="flex flex-col"><small className="text-metadata text-fg-tertiary">{t('fourStage.reviewTitle')}</small><strong className="text-control-label">{session ? session.ordinal : t('fourStage.done')}</strong></div>
+            <span className="rounded-pill bg-accent-soft px-3 py-1 text-metadata font-semibold text-fg-secondary">{t('fourStage.schedule')}</span>
+          </>
+        ),
+        tools: <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-xl text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" disabled={execution.busy} type="button" onClick={onExit} aria-label={t('fourStage.exitReview')}>×</button>,
+        progress: (
+          <div role="progressbar" aria-label={t('runtime.progress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressValue}>
+            <svg className="h-full w-full" viewBox="0 0 100 1" preserveAspectRatio="none" aria-hidden="true">
+              <rect width={progressValue} height="1" className="fill-progress" />
+            </svg>
+          </div>
+        ),
+        primary: (
+          <>
         {execution.notice}
         {session && target && session.phase === 'assessment' && (
           <section className="flex min-h-full flex-1 flex-col items-center text-center">
@@ -99,7 +117,9 @@ export function InterleavedFourStageReviewScreen({
             <button className="mt-8 min-h-12 w-full rounded-control bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus" disabled={execution.busy} type="button" onClick={onFinish}>{t('fourStage.finish')}</button>
           </section>
         )}
-      </main>
-    </section>
+          </>
+        ),
+      }}
+    />
   );
 }

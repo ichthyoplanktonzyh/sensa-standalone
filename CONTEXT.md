@@ -1,7 +1,7 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-09-14
+> Updated: 2026-09-15
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
@@ -14,6 +14,10 @@ that establish, check, strengthen or restore that connection across long-term re
 **Intake Surface**: An entry for capturing and processing information where it is encountered. It may complete explanation and valid Semantic Acceptance locally in the interaction, or hand off unfinished work with its source and acceptance state.
 
 **Main Application**: A complete user application for organizing personal meanings, continuing clarification, managing learning and running learning activities. Web, desktop and mobile are main application surfaces; they may also host Intake.
+
+**Product Semantics**: The invariant meaning and behavior of the product across presentation choices: its information architecture, available capabilities, route and Action meaning, business flow, data and state, disclosure rules, logical reading and focus order, and accessibility behavior. Product Semantics determine what exists, what it does and when it happens.
+
+**Sensa Skin**: A learner-selectable, Sensa-curated presentation profile for the same Product Semantics. It may change spatial layout, responsive presentation, visual language, component form, iconography, illustration and motion, but never the existence or meaning of a capability, route, Action, datum, learner fact or workflow transition.
 
 **Online Service**: Account, entitlement, resource, model and synchronization support used by the product. An online service is distinct from a main application and does not own a learner's local learning facts.
 
@@ -968,13 +972,14 @@ Learning Protocol or Card Presentation Slot.
 **Sensa Skin / Skin Plugin（Sensa 皮肤 / 皮肤插件）**:
 An identifiable, versioned, Sensa-curated implementation of the Semantic Design
 Contract for supported product surfaces. A Skin may supply colors, typography,
-shapes, elevation, icons, illustration, component presentation recipes and constrained
-density, decorative or motion choices; it does not own product navigation, learning
-content, actions, input state or learner facts. An admitted Skin supplies a complete
-appearance for every supported surface and resolved color mode. Only Skins admitted through Sensa's
-design, code-review and product-release governance are selectable. External authorship
-does not grant runtime installation or permission to execute third-party code or
-replace pages.
+shapes, elevation, icons, illustration, component presentation recipes, spatial page
+layout, responsive presentation and constrained density, decorative or motion choices;
+it does not own product navigation, route identity, learning content, actions, input
+state, logical reading/focus order or learner facts. An admitted Skin supplies a
+complete appearance for every supported surface and resolved color mode. Only Skins
+admitted through Sensa's design, code-review and product-release governance are
+selectable. External authorship does not grant runtime installation or permission to
+execute third-party code or replace Product Shell renderers.
 
 **Appearance Preference（外观偏好）**:
 A Device Preference with independent choices for Sensa Skin, color mode

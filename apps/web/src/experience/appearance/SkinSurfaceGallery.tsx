@@ -12,6 +12,7 @@ import {
   SensaOverlayFrame,
   SensaSurface,
 } from "../ui/SensaComponents";
+import { SensaPageLayout } from "../ui/SensaPageLayouts";
 
 const sectionTitle = "mb-4 text-section-title font-semibold";
 const specimenGrid = "grid gap-4 md:grid-cols-2 xl:grid-cols-3";
@@ -147,6 +148,59 @@ export function SkinSurfaceGallery() {
               </SensaLearningSurface>
             ))}
           </div>
+        </SensaSurface>
+
+        <SensaSurface as="section" variant="card">
+          <h2 className={sectionTitle}>Page layout contract</h2>
+          <p className="mb-4 max-w-3xl text-body-support text-fg-secondary">
+            One semantic region tree, arranged by the active Skin. Change the Skin above to compare Quiet’s centered reading flow with Clear’s wide-screen sidebar topology.
+          </p>
+          <SensaPageLayout
+            family="learning-runtime"
+            mode="specimen"
+            aria-label="Learning runtime layout specimen"
+            regions={{
+              header: (
+                <>
+                  <span className="text-metadata uppercase tracking-wide text-fg-tertiary">Learning runtime</span>
+                  <strong className="text-control-label">Meaning recall</strong>
+                </>
+              ),
+              tools: <SensaAction variant="quiet">Pause</SensaAction>,
+              progress: (
+                <div role="progressbar" aria-label="Fixture progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={42}>
+                  <svg className="h-full w-full" viewBox="0 0 100 1" preserveAspectRatio="none" aria-hidden="true">
+                    <rect width="42" height="1" className="fill-progress" />
+                  </svg>
+                </div>
+              ),
+              primary: (
+                <SensaLearningSurface variant="prompt">
+                  <span {...componentSlot<"learning">("eyebrow")}>Primary region</span>
+                  <strong {...componentSlot<"learning">("expression")}>take your time</strong>
+                  <span {...componentSlot<"learning">("sense")}>同一语义内容，不同空间表达</span>
+                  <SensaField
+                    label="State-preservation probe"
+                    help="Browser validation keeps this value connected while switching Skin."
+                    inputProps={{ id: "skin-layout-state-probe", defaultValue: "Uncommitted learner input" }}
+                  />
+                </SensaLearningSurface>
+              ),
+              supporting: (
+                <div>
+                  <strong className="text-control-label">Supporting region</strong>
+                  <p className="mt-2 text-body-support text-fg-secondary">May move beside or below primary content; when supplied by Product Shell, Skin cannot remove it.</p>
+                </div>
+              ),
+              feedback: <SensaFeedback variant="info">Presentation fixture; no result is recorded.</SensaFeedback>,
+              controls: (
+                <>
+                  <SensaAction variant="secondary">Review</SensaAction>
+                  <SensaAction variant="primary">Continue</SensaAction>
+                </>
+              ),
+            }}
+          />
         </SensaSurface>
 
         <SensaSurface as="section" variant="card">

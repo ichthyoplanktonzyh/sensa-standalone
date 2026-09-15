@@ -16,19 +16,34 @@ import {
   componentSkinContractVersion,
   componentTokenCatalog,
 } from "../apps/web/src/experience/appearance/componentContract.ts";
+import {
+  pageLayoutContractVersion,
+  pageLayoutFamilyContract,
+  pageLayoutTokenCatalog,
+} from "../apps/web/src/experience/appearance/pageLayoutContract.ts";
 
 assert.deepEqual(skinCatalog.map(({ id }) => id), ["quiet", "clear"]);
 assert.equal(new Set(skinCatalog.map(({ id }) => id)).size, skinCatalog.length);
 for (const skin of skinCatalog) {
   assert.equal(skin.semanticContractVersion, semanticDesignContractVersion);
   assert.equal(skin.componentContractVersion, componentSkinContractVersion);
+  assert.equal(skin.pageLayoutContractVersion, pageLayoutContractVersion);
   assert.match(skin.version, /^\d+\.\d+\.\d+$/u);
   assert.deepEqual(skin.capabilities.colorModes, ["light", "dark"]);
   assert.deepEqual(skin.capabilities.textSizes, ["standard", "large"]);
   assert.equal(skin.capabilities.iconSet, "lucide");
+  assert.deepEqual(skin.capabilities.pageLayouts, ["learning-runtime"]);
 }
 assert.deepEqual(colorModeCatalog, ["system", "light", "dark"]);
 assert.deepEqual(textSizeCatalog, ["standard", "large"]);
+for (const [family, contract] of Object.entries(pageLayoutFamilyContract)) {
+  assert.deepEqual(
+    contract.logicalOrder,
+    [...contract.requiredRegions, ...contract.optionalRegions],
+    `${family} logical order must keep required regions before optional presentation regions`,
+  );
+  assert.equal(new Set(contract.logicalOrder).size, contract.logicalOrder.length, `${family} repeats a semantic region`);
+}
 assert.deepEqual(parseAppearancePreference(null), defaultAppearancePreference);
 assert.deepEqual(parseAppearancePreference("not-json"), defaultAppearancePreference);
 assert.deepEqual(
@@ -96,6 +111,16 @@ for (const skin of skinCatalog) {
   for (const token of componentTokenCatalog) {
     assert(style.includes(`--sensa-component-${token}:`), `${skin.id} does not implement component token ${token}`);
   }
+  for (const token of pageLayoutTokenCatalog) {
+    assert(style.includes(`--sensa-layout-${token}:`), `${skin.id} does not implement layout token ${token}`);
+  }
+  for (const family of Object.keys(pageLayoutFamilyContract)) {
+    assert(style.includes(`data-sensa-page-layout="${family}"`), `${skin.id} does not implement page layout ${family}`);
+  }
+  assert(
+    !/\b(?:display\s*:\s*none|visibility\s*:\s*hidden|content-visibility\s*:\s*hidden)\b/iu.test(style),
+    `${skin.id} hides a contracted page region`,
+  );
   assert(style.includes(`data-sensa-skin-preview="${skin.id}"`), `${skin.id} does not implement its catalog preview`);
   for (const [mode, palette] of [["light", lightPalette], ["dark", darkPalette]] as const) {
     assert(
@@ -139,6 +164,25 @@ for (const token of componentTokenCatalog) {
 for (const [family, variants] of Object.entries(componentFamilyContract)) {
   assert(componentStyles.includes(`data-sensa-component="${family}"`), `component family ${family} has no shared style`);
   assert(variants.length > 0, `component family ${family} has no variants`);
+}
+
+const pageLayoutStyles = await readFile(
+  new URL("../apps/web/src/experience/appearance/pageLayoutStyles.css", import.meta.url),
+  "utf8",
+);
+assert(theme.includes("./experience/appearance/pageLayoutStyles.css"), "page layout contract styles are not imported");
+const declaredLayoutTokens = new Set<string>(pageLayoutTokenCatalog);
+for (const [, token] of pageLayoutStyles.matchAll(/var\(--sensa-layout-([a-z0-9-]+)\)/gu)) {
+  assert(declaredLayoutTokens.has(token), `page layout styles reference undeclared token ${token}`);
+}
+for (const token of pageLayoutTokenCatalog) {
+  assert(
+    `${pageLayoutStyles}\n${[...skinStyles.values()].join("\n")}`.includes(`var(--sensa-layout-${token})`),
+    `page layout token ${token} has no consumer`,
+  );
+}
+for (const family of Object.keys(pageLayoutFamilyContract)) {
+  assert(pageLayoutStyles.includes(`data-sensa-page-layout="${family}"`), `page layout family ${family} has no shared implementation`);
 }
 
 const migratedSurfaces = [
@@ -316,6 +360,10 @@ const componentPrimitives = await readFile(
   new URL("../apps/web/src/experience/ui/SensaComponents.tsx", import.meta.url),
   "utf8",
 );
+const pageLayoutPrimitives = await readFile(
+  new URL("../apps/web/src/experience/ui/SensaPageLayouts.tsx", import.meta.url),
+  "utf8",
+);
 for (const variants of Object.values(componentFamilyContract)) {
   for (const variant of variants) {
     assert(
@@ -325,7 +373,23 @@ for (const variants of Object.values(componentFamilyContract)) {
   }
 }
 assert(gallery.includes("no learning event or outcome is created"));
+for (const [family, contract] of Object.entries(pageLayoutFamilyContract)) {
+  assert(gallery.includes(`family="${family}"`), `Skin Lab does not cover page layout ${family}`);
+  for (const region of contract.logicalOrder) {
+    assert(pageLayoutPrimitives.includes(`"${region}"`), `page layout renderer omits region ${family}/${region}`);
+  }
+}
+for (const path of [
+  "components/LearnScreen.tsx",
+  "components/learning/RuntimeFrame.tsx",
+  "components/learning/InterleavedFourStageRuntimeScreen.tsx",
+  "components/learning/InterleavedFourStageReviewScreen.tsx",
+] as const) {
+  const runtime = await readFile(new URL(path, experienceRoot), "utf8");
+  assert(runtime.includes("<SensaPageLayout"), `${path} does not consume the page layout seam`);
+  assert(!runtime.includes("data-sensa-page-layout"), `${path} bypasses the page layout interface`);
+}
 
 console.log(
-  "PASS: curated semantic and component contracts, complete light/dark adapters, AA core contrast, dev-only Skin Lab coverage, early bootstrap, retired recipe runtime, and semantic-only Web presentation sources.",
+  "PASS: curated semantic, component and page-layout contracts, complete light/dark/layout adapters, AA core contrast, Skin Lab coverage, production runtime adoption, early bootstrap, retired recipe runtime, and semantic-only Web presentation sources.",
 );

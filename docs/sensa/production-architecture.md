@@ -131,7 +131,20 @@ slot / state`，其中首版覆盖 action、field、surface、selection、overla
 `--sensa-component-*` token。Quiet 与 Clear adapter 各自完整提供这些 token，因而可以独立改变组件形状、
 密度、层级与动效性格，但 Product Component 不读取 Skin ID 来选择 renderer、文案或业务分支。
 
-每个已收录 Skin 由 build-time manifest 声明 Semantic/Component Contract 兼容版本，以及受审核的
+Component Skin Contract 之上是 Page Semantic Contract 与 Page Layout Contract。Product Shell 先声明同一
+页面必须存在和在当前产品状态下允许出现的 semantic regions，以及它们的 route、Action、disclosure、
+DOM、逻辑阅读/焦点顺序与无障碍行为；Layout module 再把这些 region 暴露给当前 Skin adapter。Skin 可以
+改变 region 的空间位置、分栏、最大宽度、sidebar/dock 呈现和 responsive reflow，但不能增删、复制或
+替换 Product Shell 已解析的 region，也不能通过视觉重排改变它们的逻辑或披露顺序。Skin 不提供任意
+React 页面 renderer；页面数据、事件处理和状态生命周期始终留在 Product Shell。
+
+`sensa-page-layout-v1` 首先固定 `learning-runtime` family：`header / tools / progress / primary` 是必需
+region，`supporting / feedback / controls` 只由产品状态决定是否存在，全部按该逻辑顺序生成同一 DOM tree。
+Quiet adapter 将它呈现为居中的阅读流；Clear adapter 在宽屏使用 sidebar 与 supporting column，在窄屏
+回到线性 reflow。正式学习 Runtime 通过同一个 Layout module 提交 region 内容，切换 Skin 不重建
+renderer、learner input、Runtime phase 或事件处理器。
+
+每个已收录 Skin 由 build-time manifest 声明 Semantic/Component/Page Layout Contract 兼容版本，以及受审核的
 color mode、text size、density、motion 与 icon-set capabilities；静态 catalog 不接受 URL、包名或可执行
 第三方代码。开发态 `/?skin-lab=1` 提供不读取账号或 learner data 的 Surface Gallery，覆盖全部 component
 family/variant，并通过 Skin × color mode × text size × responsive width 矩阵验证 token 完整性、触控尺寸、

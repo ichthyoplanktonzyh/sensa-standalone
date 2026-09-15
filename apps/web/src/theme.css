@@ -2,6 +2,7 @@
 @import "./experience/appearance/skins/quiet.css";
 @import "./experience/appearance/skins/clear.css";
 @import "./experience/appearance/componentStyles.css";
+@import "./experience/appearance/pageLayoutStyles.css";
 @source "./experience";
 
 @theme inline {

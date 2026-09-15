@@ -1,4 +1,5 @@
 import { componentSkinContractVersion } from "./componentContract";
+import { pageLayoutContractVersion } from "./pageLayoutContract";
 
 export const semanticDesignContractVersion = "sensa-semantic-design-v2" as const;
 
@@ -46,6 +47,7 @@ export interface SensaSkinPlugin {
   readonly version: string;
   readonly semanticContractVersion: typeof semanticDesignContractVersion;
   readonly componentContractVersion: typeof componentSkinContractVersion;
+  readonly pageLayoutContractVersion: typeof pageLayoutContractVersion;
   readonly nameKey: string;
   readonly descriptionKey: string;
   readonly capabilities: {
@@ -54,5 +56,6 @@ export interface SensaSkinPlugin {
     readonly density: "comfortable" | "compact";
     readonly motion: "gentle" | "direct";
     readonly iconSet: "lucide";
+    readonly pageLayouts: readonly ["learning-runtime"];
   };
 }

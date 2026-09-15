@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import type { CardExecution } from "./cards/CardExecution";
 import { RuntimeTools, type RuntimeToolsProps } from "./learning/RuntimeTools";
 import { RuntimeFrame } from "./learning/RuntimeFrame";
-import { fadeScreenClass, iconClass } from "../ui/primitives";
+import { iconClass } from "../ui/primitives";
+import { SensaPageLayout } from "../ui/SensaPageLayouts";
 import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
 import type { Word } from "../types";
 import type { IntroductionPhase } from "./cards/IntroductionCard";
@@ -134,6 +135,9 @@ export const LearnScreen = ({
     current: Math.min(step, groupSize),
     total: groupSize,
   });
+  const progressValue = groupSize > 0
+    ? Math.round((Math.min(step, groupSize) / groupSize) * 100)
+    : 0;
   const assessmentResource: AssessmentResource | null = preparedAssessmentResource;
   const reviewSpec = useMemo(() => (
     assessmentResource && introductionContent
@@ -150,37 +154,56 @@ export const LearnScreen = ({
     <button className="mt-8 min-h-12 rounded-control bg-action-primary px-6 text-sm text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus" onClick={onExit}>{t('assurance.back')}</button>
   </RuntimeFrame>;
   return (
-    <section id={screenId} data-anim="fade" aria-hidden={!active || isBehind} className={`${fadeScreenClass(active && !isBehind, 'z-30')} flex flex-col overflow-hidden ${isIntroductionReveal ? 'is-intro-reveal' : ''}`}>
-      <div className="h-4" />
-      <div className="flex min-h-16 items-center gap-2 border-b border-border-subtle bg-surface-canvas/95 px-5 py-3 sm:px-8">
-        <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" onClick={onExit} aria-label={t('runtime.pause')}><svg className={iconClass} width="26" height="26" aria-hidden="true"><use href="#i-chev-l"/></svg></button>
+    <SensaPageLayout
+      id={screenId}
+      family="learning-runtime"
+      data-anim="fade"
+      aria-hidden={!active || isBehind}
+      className={`screen z-30 transition-opacity duration-300 motion-reduce:transition-none ${active && !isBehind ? 'active visible pointer-events-auto opacity-100' : 'invisible pointer-events-none opacity-0'} ${isIntroductionReveal ? 'is-intro-reveal' : ''}`}
+      regions={{
+        header: (
         <span className={`text-control-label font-semibold text-fg-primary ${isIntroduction ? 'rounded-pill bg-accent-soft px-3 py-1 text-fg-secondary' : ''}`} id="lhProg">{stepLabel ?? progressLabel}</span>
-        <div className="ml-auto flex items-center gap-2"><RuntimeTools content={introductionContent} personalContent={personalMenuContent} showSave={!isExperienceHidden}
-          onUndo={!isIntroduction && !isReviewStage ? onUndo : undefined} canUndo={step > 1} onMarkKnown={onMarkKnown}
-          onOpenMenuMore={onOpenMenuMore} toast={host.toast} busy={busy}/></div>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:thin]" id={screenId === 's-learn' ? 'lScroll' : undefined} ref={scrollRef}>
-        {notice}
-        <fieldset disabled={busy} className="min-w-0 border-0 p-0 disabled:opacity-60" data-assurance-original-cards>
-        {active && !isBehind && stepRendererRegistry.get(stage)({
-          execution,
-          stepKind: stage,
-          ordinal: step,
-          curWord,
-          content: introductionContent,
-          repairContent,
-          repairResourceRef,
-          phase: introductionPhase,
-          onPhaseChange: setIntroductionPhase,
-          assessmentResource,
-          reviewSpec,
-          reviewAssessmentResult,
-          purpose: reviewAssessmentPurpose,
-          onCardViewChange: scrollToTop,
-          host,
-        })}
-        </fieldset>
-      </div>
-    </section>
+        ),
+        tools: (
+          <>
+            <button className="grid size-11 shrink-0 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" onClick={onExit} aria-label={t('runtime.pause')}><svg className={iconClass} width="26" height="26" aria-hidden="true"><use href="#i-chev-l"/></svg></button>
+            <RuntimeTools content={introductionContent} personalContent={personalMenuContent} showSave={!isExperienceHidden}
+              onUndo={!isIntroduction && !isReviewStage ? onUndo : undefined} canUndo={step > 1} onMarkKnown={onMarkKnown}
+              onOpenMenuMore={onOpenMenuMore} toast={host.toast} busy={busy}/>
+          </>
+        ),
+        progress: (
+          <div role="progressbar" aria-label={t('runtime.progress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressValue}>
+            <svg className="h-full w-full" viewBox="0 0 100 1" preserveAspectRatio="none" aria-hidden="true">
+              <rect width={progressValue} height="1" className="fill-progress" />
+            </svg>
+          </div>
+        ),
+        primary: (
+          <div className="flex h-full min-h-0 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:thin]" id={screenId === 's-learn' ? 'lScroll' : undefined} ref={scrollRef}>
+            {notice}
+            <fieldset disabled={busy} className="min-w-0 border-0 p-0 disabled:opacity-60" data-assurance-original-cards>
+            {active && !isBehind && stepRendererRegistry.get(stage)({
+              execution,
+              stepKind: stage,
+              ordinal: step,
+              curWord,
+              content: introductionContent,
+              repairContent,
+              repairResourceRef,
+              phase: introductionPhase,
+              onPhaseChange: setIntroductionPhase,
+              assessmentResource,
+              reviewSpec,
+              reviewAssessmentResult,
+              purpose: reviewAssessmentPurpose,
+              onCardViewChange: scrollToTop,
+              host,
+            })}
+            </fieldset>
+          </div>
+        ),
+      }}
+    />
   );
 };

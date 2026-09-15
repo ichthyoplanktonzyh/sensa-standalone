@@ -116,6 +116,20 @@ html[data-sensa-skin="quiet"] {
   --sensa-component-motion-duration: 180ms;
   --sensa-component-motion-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
   --sensa-component-motion-press-scale: 0.985;
+  --sensa-layout-runtime-canvas: var(--sensa-surface-canvas);
+  --sensa-layout-runtime-header-background: color-mix(in srgb, var(--sensa-surface-canvas) 94%, transparent);
+  --sensa-layout-runtime-header-border: var(--sensa-border-subtle);
+  --sensa-layout-runtime-header-min-size: 5rem;
+  --sensa-layout-runtime-primary-max-width: 53.75rem;
+  --sensa-layout-runtime-primary-inline-inset: clamp(1.5rem, 4vw, 2.5rem);
+  --sensa-layout-runtime-primary-block-inset: clamp(2.25rem, 6vw, 3.5rem);
+  --sensa-layout-runtime-region-gap: 1.5rem;
+  --sensa-layout-runtime-supporting-width: 53.75rem;
+  --sensa-layout-runtime-controls-background: var(--sensa-surface-canvas);
+  --sensa-layout-runtime-controls-border: var(--sensa-border-subtle);
+  --sensa-layout-runtime-progress-track: var(--sensa-surface-subtle);
+  --sensa-layout-runtime-progress-size: 0.125rem;
+  --sensa-layout-runtime-sidebar-shadow: none;
 }
 
 html[data-sensa-skin="quiet"][data-sensa-color-mode="dark"] {
@@ -154,4 +168,71 @@ html[data-sensa-skin="quiet"][data-sensa-color-mode="dark"] {
   --preview-line: #dfe7df;
   --preview-accent: #28694f;
   --preview-support: #b56a42;
+}
+
+:root [data-sensa-page-layout="learning-runtime"],
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto var(--sensa-layout-runtime-progress-size) minmax(0, 1fr) auto auto auto;
+  grid-template-areas:
+    "header tools"
+    "progress progress"
+    "primary primary"
+    "supporting supporting"
+    "feedback feedback"
+    "controls controls";
+}
+
+:root [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="header"],
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="header"] {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding-left: var(--sensa-layout-runtime-primary-inline-inset);
+  border-bottom: 1px solid var(--sensa-layout-runtime-header-border);
+}
+
+:root [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="tools"],
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="tools"] {
+  grid-area: tools;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding-right: var(--sensa-layout-runtime-primary-inline-inset);
+  border-bottom: 1px solid var(--sensa-layout-runtime-header-border);
+}
+
+:root [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="progress"],
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="progress"] {
+  grid-area: progress;
+}
+
+:root [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="primary"],
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="primary"] {
+  grid-area: primary;
+}
+
+:root [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="supporting"],
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="supporting"] {
+  grid-area: supporting;
+  justify-self: center;
+}
+
+:root [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="feedback"],
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="feedback"] {
+  grid-area: feedback;
+  width: 100%;
+  max-width: var(--sensa-layout-runtime-primary-max-width);
+  justify-self: center;
+}
+
+:root [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="controls"],
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="controls"] {
+  grid-area: controls;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sensa-layout-runtime-region-gap);
+  border-top: 1px solid var(--sensa-layout-runtime-controls-border);
 }

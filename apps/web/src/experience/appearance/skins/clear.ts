@@ -1,11 +1,13 @@
 import { componentSkinContractVersion } from "../componentContract";
+import { pageLayoutContractVersion } from "../pageLayoutContract";
 import { semanticDesignContractVersion, type SensaSkinPlugin } from "../skinContract";
 
 export const clearSkin = {
   id: "clear",
-  version: "2.0.0",
+  version: "2.1.0",
   semanticContractVersion: semanticDesignContractVersion,
   componentContractVersion: componentSkinContractVersion,
+  pageLayoutContractVersion,
   nameKey: "appearance.skins.clear.name",
   descriptionKey: "appearance.skins.clear.description",
   capabilities: {
@@ -14,5 +16,6 @@ export const clearSkin = {
     density: "compact",
     motion: "direct",
     iconSet: "lucide",
+    pageLayouts: ["learning-runtime"],
   },
 } as const satisfies SensaSkinPlugin;

@@ -115,6 +115,20 @@ html[data-sensa-skin="clear"] {
   --sensa-component-motion-duration: 120ms;
   --sensa-component-motion-easing: cubic-bezier(0.2, 0, 0, 1);
   --sensa-component-motion-press-scale: 0.99;
+  --sensa-layout-runtime-canvas: var(--sensa-surface-canvas);
+  --sensa-layout-runtime-header-background: var(--sensa-surface-panel);
+  --sensa-layout-runtime-header-border: var(--sensa-border-strong);
+  --sensa-layout-runtime-header-min-size: 4.5rem;
+  --sensa-layout-runtime-primary-max-width: 62rem;
+  --sensa-layout-runtime-primary-inline-inset: clamp(1.25rem, 3vw, 2.25rem);
+  --sensa-layout-runtime-primary-block-inset: clamp(1.75rem, 4vw, 2.75rem);
+  --sensa-layout-runtime-region-gap: 1rem;
+  --sensa-layout-runtime-supporting-width: 21rem;
+  --sensa-layout-runtime-controls-background: var(--sensa-surface-panel);
+  --sensa-layout-runtime-controls-border: var(--sensa-border-strong);
+  --sensa-layout-runtime-progress-track: var(--sensa-surface-subtle);
+  --sensa-layout-runtime-progress-size: 0.25rem;
+  --sensa-layout-runtime-sidebar-shadow: var(--sensa-shadow-raised);
 }
 
 html[data-sensa-skin="clear"][data-sensa-color-mode="dark"] {
@@ -153,4 +167,106 @@ html[data-sensa-skin="clear"][data-sensa-color-mode="dark"] {
   --preview-line: #e0e5ee;
   --preview-accent: #303f76;
   --preview-support: #788398;
+}
+
+html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"] {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto var(--sensa-layout-runtime-progress-size) minmax(0, 1fr) auto auto auto;
+  grid-template-areas:
+    "header tools"
+    "progress progress"
+    "primary primary"
+    "supporting supporting"
+    "feedback feedback"
+    "controls controls";
+}
+
+html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="header"] {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-left: var(--sensa-layout-runtime-primary-inline-inset);
+  border-bottom: 1px solid var(--sensa-layout-runtime-header-border);
+}
+
+html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="tools"] {
+  grid-area: tools;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.375rem;
+  padding-right: var(--sensa-layout-runtime-primary-inline-inset);
+  border-bottom: 1px solid var(--sensa-layout-runtime-header-border);
+}
+
+html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="progress"] {
+  grid-area: progress;
+}
+
+html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="primary"] {
+  grid-area: primary;
+}
+
+html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="supporting"] {
+  grid-area: supporting;
+  justify-self: center;
+}
+
+html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="feedback"] {
+  grid-area: feedback;
+}
+
+html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="controls"] {
+  grid-area: controls;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sensa-layout-runtime-region-gap);
+  border-top: 1px solid var(--sensa-layout-runtime-controls-border);
+}
+
+@media (min-width: 64rem) {
+  html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"] {
+    grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr) minmax(16rem, var(--sensa-layout-runtime-supporting-width));
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "header progress progress"
+      "header primary supporting"
+      "tools controls feedback";
+  }
+
+  html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="header"] {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: var(--sensa-layout-runtime-primary-block-inset) var(--sensa-layout-runtime-primary-inline-inset);
+    border-right: 1px solid var(--sensa-layout-runtime-header-border);
+    border-bottom: 0;
+    box-shadow: var(--sensa-layout-runtime-sidebar-shadow);
+  }
+
+  html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="tools"] {
+    align-items: flex-start;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: var(--sensa-layout-runtime-region-gap) var(--sensa-layout-runtime-primary-inline-inset);
+    border-right: 1px solid var(--sensa-layout-runtime-header-border);
+    border-top: 1px solid var(--sensa-layout-runtime-header-border);
+    border-bottom: 0;
+    box-shadow: var(--sensa-layout-runtime-sidebar-shadow);
+  }
+
+  html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"]:not(:has(> [data-sensa-page-region="supporting"])) > [data-sensa-page-region="primary"] {
+    grid-column: 2 / -1;
+  }
+
+  html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="supporting"] {
+    align-self: stretch;
+    padding: var(--sensa-layout-runtime-primary-block-inset) var(--sensa-layout-runtime-region-gap);
+    border-left: 1px solid var(--sensa-layout-runtime-header-border);
+    background: var(--sensa-surface-subtle);
+  }
+
+  html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="feedback"] {
+    border-left: 1px solid var(--sensa-layout-runtime-header-border);
+  }
 }

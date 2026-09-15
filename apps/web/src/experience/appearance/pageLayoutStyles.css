@@ -1,0 +1,75 @@
+[data-sensa-page-layout="learning-runtime"] {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--sensa-layout-runtime-canvas);
+  color: var(--sensa-fg-primary);
+  font-family: var(--sensa-font-product);
+  isolation: isolate;
+}
+
+[data-sensa-page-layout="learning-runtime"][data-sensa-layout-mode="viewport"] {
+  position: absolute;
+  inset: 0;
+}
+
+[data-sensa-page-layout="learning-runtime"][data-sensa-layout-mode="specimen"] {
+  position: relative;
+  min-height: 38rem;
+  border: 1px solid var(--sensa-border-strong);
+  border-radius: var(--sensa-radius-overlay);
+  box-shadow: var(--sensa-shadow-raised);
+}
+
+[data-sensa-page-family="learning-runtime"] {
+  min-width: 0;
+  min-height: 0;
+}
+
+[data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="header"],
+[data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="tools"] {
+  min-height: var(--sensa-layout-runtime-header-min-size);
+  border-color: var(--sensa-layout-runtime-header-border);
+  background: var(--sensa-layout-runtime-header-background);
+}
+
+[data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="progress"] {
+  height: var(--sensa-layout-runtime-progress-size);
+  background: var(--sensa-layout-runtime-progress-track);
+}
+
+[data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="progress"] > [role="progressbar"] {
+  width: 100%;
+  height: 100%;
+}
+
+[data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="primary"] {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--sensa-layout-runtime-primary-max-width);
+  margin-inline: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--sensa-layout-runtime-primary-block-inset) var(--sensa-layout-runtime-primary-inline-inset);
+  scrollbar-width: thin;
+}
+
+[data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="supporting"],
+[data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="feedback"],
+[data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="controls"] {
+  padding: var(--sensa-layout-runtime-region-gap) var(--sensa-layout-runtime-primary-inline-inset);
+}
+
+[data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="supporting"] {
+  width: 100%;
+  max-width: var(--sensa-layout-runtime-supporting-width);
+  overflow: auto;
+}
+
+[data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="controls"] {
+  padding-bottom: max(var(--sensa-layout-runtime-region-gap), env(safe-area-inset-bottom));
+  border-color: var(--sensa-layout-runtime-controls-border);
+  background: var(--sensa-layout-runtime-controls-background);
+}

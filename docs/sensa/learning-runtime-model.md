@@ -857,8 +857,9 @@ Experience Recall 的任何 Slot 都不得包含 target expression；Expression 
 
 Card 与页面 renderer 通过 Semantic Design Contract 暴露稳定的呈现角色，再由当前 Sensa Skin 提供
 具体视觉实现。Skin 可以改变 typography、surface、shape、elevation、icon、illustration、component
-recipe 与受约束的 density/motion，但不能增删或重排具有 disclosure、interaction 或 result 语义的
-Slot，不能隐藏当前 Action 必需的信息或 control，也不能改变 answer contract、Attempt eligibility、
+recipe、空间布局、responsive presentation 与受约束的 density/motion；它可以重新安排 Slot 的视觉
+位置，但不能增删 Slot，也不能改变具有 disclosure、interaction 或 result 语义的逻辑顺序、DOM/焦点
+顺序或可达性，不能隐藏当前 Action 必需的信息或 control，也不能改变 answer contract、Attempt eligibility、
 Evidence 或 Transition。进行中的 Run 切换 Skin 只重绘 presentation；它不创建 Run lifecycle fact，
 不更换 Materialization，也不重置 learner input 或当前 Card phase。
 

@@ -6,6 +6,10 @@ import {
   componentFamilyContract,
   componentTokenCatalog,
 } from "../apps/web/src/experience/appearance/componentContract.ts";
+import {
+  pageLayoutFamilyContract,
+  pageLayoutTokenCatalog,
+} from "../apps/web/src/experience/appearance/pageLayoutContract.ts";
 
 const root = process.cwd();
 const port = 43100 + (process.pid % 1000);
@@ -58,6 +62,7 @@ try {
     assert(response?.ok(), "Skin Lab did not serve");
     await page.locator("[data-sensa-skin-lab]").waitFor({ state: "visible" });
     const appearanceControls = page.getByLabel("Appearance controls");
+    const layoutSpecimen = page.locator('[data-sensa-page-layout="learning-runtime"][data-sensa-layout-mode="specimen"]');
 
     for (const family of Object.keys(componentFamilyContract)) {
       assert(
@@ -65,16 +70,33 @@ try {
         `Skin Lab does not render the ${family} family`,
       );
     }
+    for (const [family, contract] of Object.entries(pageLayoutFamilyContract)) {
+      const layout = page.locator(`[data-sensa-page-layout="${family}"][data-sensa-layout-mode="specimen"]`);
+      assert.equal(await layout.count(), 1, `Skin Lab does not render exactly one ${family} layout specimen`);
+      const regionOrder = await layout.locator(":scope > [data-sensa-page-region]").evaluateAll(
+        (elements) => elements.map((element) => element.getAttribute("data-sensa-page-region")),
+      );
+      assert.deepEqual(regionOrder, [...contract.logicalOrder], `${family} DOM regions do not follow logical order`);
+    }
 
     const quietRadius = await page.locator('[data-sensa-component="action"]').first().evaluate(
       (element) => getComputedStyle(element).borderRadius,
     );
+    const probe = page.locator("#skin-layout-state-probe");
+    await probe.fill("Preserved across layout adapters");
+    const probeHandle = await probe.elementHandle();
+    assert(probeHandle, "layout state probe is missing");
+    const quietGrid = await layoutSpecimen.evaluate((element) => getComputedStyle(element).gridTemplateColumns);
     await appearanceControls.getByRole("button", { name: "Clear", exact: true }).click();
     await page.locator('html[data-sensa-skin="clear"]').waitFor();
     const clearRadius = await page.locator('[data-sensa-component="action"]').first().evaluate(
       (element) => getComputedStyle(element).borderRadius,
     );
     assert.notEqual(quietRadius, clearRadius, "Quiet and Clear resolve to the same component shape");
+    const clearGrid = await layoutSpecimen.evaluate((element) => getComputedStyle(element).gridTemplateColumns);
+    assert.notEqual(quietGrid, clearGrid, "Quiet and Clear resolve to the same wide-screen page topology");
+    assert.equal(await probe.inputValue(), "Preserved across layout adapters", "Skin switch discarded uncommitted input");
+    assert(await probeHandle.evaluate((element) => element.isConnected), "Skin switch remounted the semantic region tree");
 
     for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 }]) {
       await page.setViewportSize(viewport);
@@ -88,23 +110,41 @@ try {
             await page.locator(
               `html[data-sensa-skin="${expectedSkin}"][data-sensa-color-mode="${mode}"][data-sensa-text-size="${textSize}"]`,
             ).waitFor();
-            const result = await page.evaluate(({ tokens }) => {
+            const result = await page.evaluate(({ componentTokens, layoutTokens }) => {
               const rootStyle = getComputedStyle(document.documentElement);
               const action = document.querySelector<HTMLElement>('[data-sensa-component="action"]')!;
               const choice = document.querySelector<HTMLElement>('[data-sensa-component="selection"][data-sensa-variant="choice"]')!;
+              const layout = document.querySelector<HTMLElement>('[data-sensa-page-layout="learning-runtime"][data-sensa-layout-mode="specimen"]')!;
+              const renderedRegions = [...layout.querySelectorAll<HTMLElement>(":scope > [data-sensa-page-region]")];
               const bodyWidth = document.documentElement.scrollWidth - document.documentElement.clientWidth;
               return {
-                missingTokens: tokens.filter((token) => !rootStyle.getPropertyValue(`--sensa-component-${token}`).trim()),
+                missingComponentTokens: componentTokens.filter((token) => !rootStyle.getPropertyValue(`--sensa-component-${token}`).trim()),
+                missingLayoutTokens: layoutTokens.filter((token) => !rootStyle.getPropertyValue(`--sensa-layout-${token}`).trim()),
                 actionHeight: action.getBoundingClientRect().height,
                 choiceHeight: choice.getBoundingClientRect().height,
                 horizontalOverflow: bodyWidth,
+                layoutOverflow: layout.scrollWidth - layout.clientWidth,
+                hiddenRegions: renderedRegions
+                  .filter((region) => {
+                    const style = getComputedStyle(region);
+                    return style.display === "none" || style.visibility === "hidden";
+                  })
+                  .map((region) => region.dataset.sensaPageRegion),
+                regionOrder: renderedRegions.map((region) => region.dataset.sensaPageRegion),
                 fontSize: rootStyle.fontSize,
               };
-            }, { tokens: [...componentTokenCatalog] });
-            assert.deepEqual(result.missingTokens, [], `${skin}/${mode}/${textSize} has unresolved component tokens`);
+            }, {
+              componentTokens: [...componentTokenCatalog],
+              layoutTokens: [...pageLayoutTokenCatalog],
+            });
+            assert.deepEqual(result.missingComponentTokens, [], `${skin}/${mode}/${textSize} has unresolved component tokens`);
+            assert.deepEqual(result.missingLayoutTokens, [], `${skin}/${mode}/${textSize} has unresolved layout tokens`);
             assert(result.actionHeight >= 44, `${skin}/${mode}/${textSize} action target is below 44px`);
             assert(result.choiceHeight >= 44, `${skin}/${mode}/${textSize} choice target is below 44px`);
             assert(result.horizontalOverflow <= 1, `${skin}/${mode}/${textSize} overflows at ${viewport.width}px`);
+            assert(result.layoutOverflow <= 1, `${skin}/${mode}/${textSize} layout overflows at ${viewport.width}px`);
+            assert.deepEqual(result.hiddenRegions, [], `${skin}/${mode}/${textSize} hides semantic regions`);
+            assert.deepEqual(result.regionOrder, [...pageLayoutFamilyContract["learning-runtime"].logicalOrder]);
             assert.equal(result.fontSize, textSize === "large" ? "18px" : "16px");
           }
         }
@@ -118,6 +158,7 @@ try {
     await page.keyboard.press("Tab");
     const outline = await page.locator(":focus-visible").evaluate((element) => getComputedStyle(element).outlineStyle);
     assert.notEqual(outline, "none", "keyboard focus is not visibly styled");
+    assert.equal(await probe.inputValue(), "Preserved across layout adapters", "appearance matrix discarded input state");
     assert.deepEqual(runtimeErrors, [], "Skin Lab emitted browser errors");
     await context.close();
   } finally {
@@ -133,4 +174,4 @@ try {
   }
 }
 
-console.log("PASS: Skin Lab renders every component family across skin, color-mode, text-size and responsive matrices.");
+console.log("PASS: Skin Lab preserves one semantic region tree while component and page-layout adapters vary across skin, color-mode, text-size and responsive matrices.");
