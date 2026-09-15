@@ -3,6 +3,7 @@
 @import "./quiet-runtime.css";
 @import "./quiet-study.css";
 @import "./quiet-practice.css";
+@import "./quiet-settings.css";
 
 :root,
 html[data-sensa-skin="quiet"] {

@@ -1,0 +1,83 @@
+/* Settings read as a directory. Service status and destructive confirmations
+   keep their own semantic feedback, never an optimistic visual substitute. */
+html[data-sensa-skin="quiet"] .sensa-account-entry {
+  padding-block: clamp(2rem, 8vh, 5rem);
+}
+
+html[data-sensa-skin="quiet"] .sensa-account-entry form {
+  max-width: 28rem;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+
+html[data-sensa-skin="quiet"] .sensa-account-entry h1 {
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+html[data-sensa-skin="quiet"] #s-profile button[id^="settings-"] {
+  border: 0;
+  border-bottom: 1px solid var(--sensa-border-subtle);
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  padding-inline: 0;
+  padding-block: 1.5rem;
+}
+
+html[data-sensa-skin="quiet"] #s-profile button[id^="settings-"]:hover {
+  background: var(--sensa-surface-subtle);
+}
+
+html[data-sensa-skin="quiet"] #s-profile :is(section, form, [role="status"], [role="alert"]) {
+  overflow-wrap: anywhere;
+}
+
+html[data-sensa-skin="quiet"] .sensa-appearance-settings {
+  box-shadow: none;
+  border-radius: var(--sensa-radius-card);
+}
+
+html[data-sensa-skin="quiet"] .sensa-appearance-settings fieldset {
+  min-width: 0;
+}
+
+html[data-sensa-skin="quiet"] .sensa-appearance-settings [role="radio"] {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+html[data-sensa-skin="quiet"] .sensa-model-settings :is(article, form) {
+  box-shadow: none;
+  border-radius: var(--sensa-radius-card);
+}
+
+html[data-sensa-skin="quiet"] .sensa-model-settings :is(input, select, label) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+html[data-sensa-skin="quiet"] .sensa-model-settings li > div {
+  min-width: min(12.5rem, 100%);
+}
+
+html[data-sensa-skin="quiet"] #s-profile label:has(input[type="checkbox"]) {
+  min-height: 2.75rem;
+  align-items: center;
+  line-height: 1.7;
+}
+
+html[data-sensa-skin="quiet"] .sensa-language-settings article {
+  border-radius: var(--sensa-radius-control);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 40rem) {
+  html[data-sensa-skin="quiet"] .sensa-appearance-settings [role="radiogroup"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html[data-sensa-skin="quiet"] #s-profile section[aria-labelledby="local-clear-heading"] div:has(> button) {
+    flex-wrap: wrap;
+  }
+}

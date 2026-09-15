@@ -56,7 +56,7 @@ export function LanguagePanel({collection,activeRoute,busy,notice,onAdd,onUpdate
     document.addEventListener('keydown',escape,true);
     return()=>document.removeEventListener('keydown',escape,true);
   },[onClose]);
-  return <SensaOverlayLayout variant="sheet" measure="compact" className="z-[150]" labelledBy="languages-title" onDismiss={onClose} dismissOnBackdrop regions={{
+  return <SensaOverlayLayout variant="sheet" measure="compact" className="sensa-language-settings z-[150]" labelledBy="languages-title" onDismiss={onClose} dismissOnBackdrop regions={{
     header: <div className="flex items-center justify-between">
         <h2 id="languages-title" className="text-lg font-medium">{t('languages.title')}</h2>
         <button autoFocus type="button" className="grid size-11 place-items-center rounded-control text-fg-secondary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus" onClick={onClose} aria-label={t('languages.close')}><X size={20}/></button>

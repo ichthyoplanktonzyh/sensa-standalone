@@ -133,7 +133,7 @@ export function ProviderPanel(){
   setCatalog(null);
  });
 
- return <div className="space-y-8" ref={panel}>
+ return <div className="sensa-model-settings space-y-8" ref={panel}>
   <header className="space-y-4">
    <div className={`${card} space-y-4`}>
     <div className="flex flex-wrap items-center justify-between gap-3">

@@ -19,7 +19,7 @@ export function AppearanceSettings() {
       as="section"
       variant="raised"
       aria-labelledby="appearance-heading"
-      className="sm:p-6"
+      className="sensa-appearance-settings sm:p-6"
     >
       <div className="flex items-start gap-3">
         <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-control bg-surface-subtle text-action-primary">
