@@ -3,6 +3,7 @@ import {
   pageLayoutAttributes,
   pageRegionAttributes,
   type PageLayoutMode,
+  type WorkspacePageMeasure,
 } from "../appearance/pageLayoutContract";
 import { classNames } from "./primitives";
 
@@ -29,6 +30,18 @@ export interface SensaApplicationShellLayoutProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
   readonly mode?: PageLayoutMode;
   readonly regions: ApplicationShellRegions;
+}
+
+export interface WorkspacePageRegions {
+  readonly header: ReactNode;
+  readonly primary: ReactNode;
+}
+
+export interface SensaWorkspacePageLayoutProps
+  extends Omit<HTMLAttributes<HTMLElement>, "children"> {
+  readonly measure?: WorkspacePageMeasure;
+  readonly mode?: PageLayoutMode;
+  readonly regions: WorkspacePageRegions;
 }
 
 /**
@@ -59,6 +72,31 @@ export const SensaApplicationShellLayout = forwardRef<
     </div>
   );
 });
+
+/**
+ * Owns page measure, gutters, and region rhythm for ordinary scrollable
+ * workspaces while callers retain all product state and content semantics.
+ */
+export function SensaWorkspacePageLayout({
+  measure = "standard",
+  mode = "viewport",
+  regions,
+  className,
+  ...props
+}: SensaWorkspacePageLayoutProps) {
+  const primaryTag = mode === "viewport" ? "main" : "div";
+  return (
+    <section
+      {...props}
+      {...pageLayoutAttributes("workspace-page", mode)}
+      data-sensa-layout-measure={measure}
+      className={classNames(className)}
+    >
+      <header {...pageRegionAttributes("workspace-page", "header")}>{regions.header}</header>
+      {createElement(primaryTag, pageRegionAttributes("workspace-page", "primary"), regions.primary)}
+    </section>
+  );
+}
 
 export interface SensaLearningRuntimeLayoutProps
   extends Omit<HTMLAttributes<HTMLElement>, "children"> {

@@ -139,6 +139,22 @@ html[data-sensa-skin="quiet"] {
   --sensa-layout-runtime-progress-track: var(--sensa-surface-subtle);
   --sensa-layout-runtime-progress-size: 0.125rem;
   --sensa-layout-runtime-sidebar-shadow: none;
+  --sensa-layout-workspace-canvas: var(--sensa-surface-canvas);
+  --sensa-layout-workspace-content-narrow: 55rem;
+  --sensa-layout-workspace-content-standard: 68rem;
+  --sensa-layout-workspace-content-wide: 76rem;
+  --sensa-layout-workspace-inline-inset-narrow: clamp(1.5rem, 5vw, 3rem);
+  --sensa-layout-workspace-inline-inset-standard: clamp(1.5rem, 6vw, 4.5rem);
+  --sensa-layout-workspace-inline-inset-wide: clamp(1.5rem, 5vw, 4rem);
+  --sensa-layout-workspace-block-start-narrow: clamp(2.25rem, 5vw, 3.5rem);
+  --sensa-layout-workspace-block-start-standard: clamp(2.5rem, 6vw, 4.5rem);
+  --sensa-layout-workspace-block-start-wide: clamp(2.25rem, 5vw, 4rem);
+  --sensa-layout-workspace-block-end-narrow: 3.5rem;
+  --sensa-layout-workspace-block-end-standard: 4.5rem;
+  --sensa-layout-workspace-block-end-wide: 4rem;
+  --sensa-layout-workspace-header-gap-narrow: 2rem;
+  --sensa-layout-workspace-header-gap-standard: clamp(2.25rem, 5vw, 3.5rem);
+  --sensa-layout-workspace-header-gap-wide: 2.75rem;
 }
 
 html[data-sensa-skin="quiet"][data-sensa-color-mode="dark"] {
@@ -354,4 +370,9 @@ html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [dat
   justify-content: flex-end;
   gap: var(--sensa-layout-runtime-region-gap);
   border-top: 1px solid var(--sensa-layout-runtime-controls-border);
+}
+
+:root [data-sensa-page-layout="workspace-page"],
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="workspace-page"] {
+  scrollbar-color: var(--sensa-border-strong) transparent;
 }

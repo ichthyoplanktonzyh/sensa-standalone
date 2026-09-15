@@ -13,7 +13,7 @@ import {
   SensaOverlayFrame,
   SensaSurface,
 } from "../ui/SensaComponents";
-import { SensaApplicationShellLayout, SensaPageLayout } from "../ui/SensaPageLayouts";
+import { SensaApplicationShellLayout, SensaPageLayout, SensaWorkspacePageLayout } from "../ui/SensaPageLayouts";
 
 const sectionTitle = "mb-4 text-section-title font-semibold";
 const specimenGrid = "grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3";
@@ -272,6 +272,36 @@ export function SkinSurfaceGallery() {
                   <SensaAction variant="secondary">Review</SensaAction>
                   <SensaAction variant="primary">Continue</SensaAction>
                 </>
+              ),
+            }}
+          />
+        </SensaSurface>
+
+        <SensaSurface as="section" variant="card">
+          <h2 className={sectionTitle}>Workspace page layout contract</h2>
+          <p className="mb-4 max-w-3xl text-body-support text-fg-secondary">
+            Home, learning overview, and settings keep one product-owned header and primary workspace while the active Skin owns measure, gutters, and vertical rhythm.
+          </p>
+          <SensaWorkspacePageLayout
+            mode="specimen"
+            measure="wide"
+            data-sensa-contract-specimen="full"
+            aria-label="Workspace page layout specimen"
+            regions={{
+              header: (
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <span className="text-metadata uppercase tracking-wide text-fg-tertiary">Workspace header</span>
+                    <h3 className="mt-2 text-page-title font-semibold">Today</h3>
+                  </div>
+                  <SensaAction variant="secondary">Preferences</SensaAction>
+                </div>
+              ),
+              primary: (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <SensaSurface variant="raised"><strong>Primary workspace</strong><p className="mt-2 text-body-support text-fg-secondary">Product state and content remain mounted.</p></SensaSurface>
+                  <SensaSurface variant="card"><strong>Supporting content</strong><p className="mt-2 text-body-support text-fg-secondary">Skin controls the shared page frame only.</p></SensaSurface>
+                </div>
               ),
             }}
           />

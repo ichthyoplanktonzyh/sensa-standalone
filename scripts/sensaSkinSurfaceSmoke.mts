@@ -248,4 +248,4 @@ try {
   }
 }
 
-console.log("PASS: Skin Lab preserves stable application-shell and learning-runtime region trees while adapters vary across skin, color-mode, text-size and responsive matrices.");
+console.log("PASS: Skin Lab preserves every contracted page-region tree while adapters vary across skin, color-mode, text-size and responsive matrices.");

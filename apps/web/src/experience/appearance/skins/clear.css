@@ -138,6 +138,22 @@ html[data-sensa-skin="clear"] {
   --sensa-layout-runtime-progress-track: var(--sensa-surface-subtle);
   --sensa-layout-runtime-progress-size: 0.25rem;
   --sensa-layout-runtime-sidebar-shadow: var(--sensa-shadow-raised);
+  --sensa-layout-workspace-canvas: var(--sensa-surface-canvas);
+  --sensa-layout-workspace-content-narrow: 60rem;
+  --sensa-layout-workspace-content-standard: 72.5rem;
+  --sensa-layout-workspace-content-wide: 80rem;
+  --sensa-layout-workspace-inline-inset-narrow: clamp(1.25rem, 4vw, 2.5rem);
+  --sensa-layout-workspace-inline-inset-standard: clamp(1.5rem, 5vw, 4rem);
+  --sensa-layout-workspace-inline-inset-wide: clamp(1.5rem, 4vw, 3.5rem);
+  --sensa-layout-workspace-block-start-narrow: clamp(2rem, 4vw, 3rem);
+  --sensa-layout-workspace-block-start-standard: clamp(2rem, 5vw, 4rem);
+  --sensa-layout-workspace-block-start-wide: clamp(2rem, 4vw, 3.5rem);
+  --sensa-layout-workspace-block-end-narrow: 3rem;
+  --sensa-layout-workspace-block-end-standard: 4rem;
+  --sensa-layout-workspace-block-end-wide: 3.5rem;
+  --sensa-layout-workspace-header-gap-narrow: 1.75rem;
+  --sensa-layout-workspace-header-gap-standard: clamp(2rem, 4vw, 3rem);
+  --sensa-layout-workspace-header-gap-wide: 2.5rem;
 }
 
 html[data-sensa-skin="clear"][data-sensa-color-mode="dark"] {
@@ -374,6 +390,10 @@ html[data-sensa-skin="clear"] [data-sensa-page-layout="learning-runtime"] > [dat
   justify-content: flex-end;
   gap: var(--sensa-layout-runtime-region-gap);
   border-top: 1px solid var(--sensa-layout-runtime-controls-border);
+}
+
+html[data-sensa-skin="clear"] [data-sensa-page-layout="workspace-page"] {
+  scrollbar-color: var(--sensa-border-strong) transparent;
 }
 
 @media (min-width: 64rem) {

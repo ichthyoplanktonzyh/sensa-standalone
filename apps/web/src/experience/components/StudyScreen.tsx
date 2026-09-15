@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { LearningRecordKind, LearningRecordView } from '../learningJourney/learningHistory';
 import type { LearningPolicyId } from '../../learning/runtime/policyProfiles';
 import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
+import { SensaWorkspacePageLayout } from '../ui/SensaPageLayouts';
 
 interface StudyScreenProps {
   policySummary?: string;
@@ -41,12 +42,17 @@ export const StudyScreen = (props: StudyScreenProps) => {
     props.onTabChange('a');
     requestAnimationFrame(()=>document.getElementById('study-preferences-button')?.focus());
   };
-  return <section id="s-study" className={`screen absolute inset-0 z-10 overflow-y-auto bg-surface-canvas font-product text-fg-primary ${props.active?'active':'invisible pointer-events-none'}`}>
-    <main className="mx-auto max-w-[1280px] px-6 py-8 sm:px-10 lg:px-14 lg:py-14">
-      <header className="mb-10 flex flex-wrap items-center justify-between gap-4">
+  return <>
+    <SensaWorkspacePageLayout
+      id="s-study"
+      measure="wide"
+      className={`screen z-10 ${props.active?'active':'invisible pointer-events-none'}`}
+      regions={{
+        header: <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-3xl font-medium tracking-tight lg:text-4xl">{t('study.title')}</h1>
         <button id="study-preferences-button" className={`${studyButton} border border-border-subtle bg-surface-panel hover:bg-surface-selected`} onClick={()=>props.onOpenPreferences ? props.onOpenPreferences() : props.onTabChange('b')}><SlidersHorizontal size={17}/>{t('study.preferences')}</button>
-      </header>
+        </div>,
+        primary: <>
       {props.status}
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <section className="flex flex-col rounded-overlay bg-surface-subtle p-6 sm:p-8">
@@ -88,7 +94,9 @@ export const StudyScreen = (props: StudyScreenProps) => {
         </ol>}
         {records.length>limit&&<button className={`${studyButton} mt-4 border border-border-subtle`} onClick={()=>setLimit(value=>value+10)}>{t('study.more')}</button>}
       </section>
-    </main>
+        </>,
+      }}
+    />
     {props.active&&props.tab==='b'&&<LearningPreferencesPanel fixedPolicy={props.fixedPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('study.done')}/>}
-  </section>;
+  </>;
 };

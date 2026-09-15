@@ -15,9 +15,15 @@ export const pageLayoutFamilyContract = {
     optionalRegions: ["supporting", "feedback", "controls"],
     logicalOrder: ["header", "tools", "progress", "primary", "supporting", "feedback", "controls"],
   },
+  "workspace-page": {
+    requiredRegions: ["header", "primary"],
+    optionalRegions: [],
+    logicalOrder: ["header", "primary"],
+  },
 } as const;
 
 export const pageLayoutModeCatalog = ["viewport", "specimen"] as const;
+export const workspacePageMeasureCatalog = ["narrow", "standard", "wide"] as const;
 
 export const pageLayoutTokenCatalog = [
   "shell-canvas",
@@ -43,10 +49,27 @@ export const pageLayoutTokenCatalog = [
   "runtime-progress-track",
   "runtime-progress-size",
   "runtime-sidebar-shadow",
+  "workspace-canvas",
+  "workspace-content-narrow",
+  "workspace-content-standard",
+  "workspace-content-wide",
+  "workspace-inline-inset-narrow",
+  "workspace-inline-inset-standard",
+  "workspace-inline-inset-wide",
+  "workspace-block-start-narrow",
+  "workspace-block-start-standard",
+  "workspace-block-start-wide",
+  "workspace-block-end-narrow",
+  "workspace-block-end-standard",
+  "workspace-block-end-wide",
+  "workspace-header-gap-narrow",
+  "workspace-header-gap-standard",
+  "workspace-header-gap-wide",
 ] as const;
 
 export type PageLayoutFamily = keyof typeof pageLayoutFamilyContract;
 export type PageLayoutMode = (typeof pageLayoutModeCatalog)[number];
+export type WorkspacePageMeasure = (typeof workspacePageMeasureCatalog)[number];
 export type PageLayoutToken = (typeof pageLayoutTokenCatalog)[number];
 
 type FamilyContract<Family extends PageLayoutFamily> = (typeof pageLayoutFamilyContract)[Family];

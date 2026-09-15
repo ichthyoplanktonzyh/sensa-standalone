@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ArrowRight, ArrowUpRight, BookOpen, Plus, RotateCcw, MessageSquareText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { SensaWorkspacePageLayout } from '../ui/SensaPageLayouts';
 
 interface HomeScreenProps {
   active: boolean;
@@ -27,13 +28,16 @@ export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview
   const dateLabel = new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric', weekday: 'long' }).format(date);
   const focus = 'focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus';
 
-  return <section id="s-home" className={`screen absolute inset-0 z-5 overflow-y-auto bg-surface-canvas font-product text-fg-primary ${active ? 'active' : 'invisible pointer-events-none'}`}>
-    <main className="mx-auto w-full max-w-[1160px] px-6 pb-12 pt-8 sm:px-10 lg:px-16 lg:pb-16 lg:pt-16">
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-3 lg:mb-12">
+  return <SensaWorkspacePageLayout
+    id="s-home"
+    measure="standard"
+    className={`screen z-5 ${active ? 'active' : 'invisible pointer-events-none'}`}
+    regions={{
+      header: <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-4xl font-medium tracking-[-0.04em] lg:text-5xl">{t('home.title')}</h1>
         <time dateTime={`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`} className="pb-1 text-xs text-fg-tertiary sm:text-sm">{dateLabel}</time>
-      </header>
-
+      </div>,
+      primary: <>
       {status}
       <section aria-labelledby="today-learning-title" className="overflow-hidden rounded-card border border-border-subtle bg-surface-panel shadow-raised">
         <div className="flex items-center justify-between gap-4 border-b border-border-subtle px-6 py-5 sm:px-9">
@@ -73,6 +77,7 @@ export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview
           </button>)}
         </div>
       </section>
-    </main>
-  </section>;
+      </>,
+    }}
+  />;
 }

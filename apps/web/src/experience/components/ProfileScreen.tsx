@@ -16,6 +16,7 @@ import { useReadingGlossary } from '../library/useReadingGlossary';
 import { useLanguageRoutes } from '../library/useLanguageRoutes';
 import type { LearningPolicyId } from '../../learning/runtime/policyProfiles';
 import { AppearanceSettings } from '../appearance/AppearanceSettings';
+import { SensaWorkspacePageLayout } from '../ui/SensaPageLayouts';
 
 interface ProfileScreenProps {
   fixedLearningPolicy?: boolean;
@@ -107,10 +108,17 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
   const row = (destination: typeof page, label: string, note: string, icon: ReactNode) => <button id={'settings-'+destination} onClick={() => openPage(destination)} className="flex min-h-24 w-full items-center gap-4 rounded-card border border-border-subtle bg-surface-panel p-5 text-left shadow-raised transition-colors hover:border-border-strong hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
     <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-control bg-surface-subtle text-action-primary">{icon}</span><span className="min-w-0 flex-1"><span className="block text-base font-medium">{t(label)}</span><span className="mt-1 block break-words text-sm leading-6 text-fg-secondary">{note}</span></span><ArrowRight aria-hidden="true" size={18} className="shrink-0 text-action-primary"/>
   </button>;
-  return <section id="s-profile" className={`screen absolute inset-0 z-10 overflow-y-auto bg-surface-canvas font-product text-fg-primary ${props.active ? 'active' : 'invisible pointer-events-none'}`}>
-    <main className="mx-auto max-w-[960px] px-5 py-8 sm:px-10 lg:py-12">
+  return <>
+    <SensaWorkspacePageLayout
+      id="s-profile"
+      measure="narrow"
+      className={`screen z-10 ${props.active ? 'active' : 'invisible pointer-events-none'}`}
+      regions={{
+        header: <>
       {page !== 'home' && <button className={button+' mb-6'} onClick={() => openPage(page==='backup'||page==='storage'?'data':'home')}><ArrowLeft size={17}/>{t(page==='backup'||page==='storage'?'account.data':'account.title')}</button>}
-      <h1 id="settings-heading" tabIndex={-1} className="mb-7 text-3xl font-medium tracking-tight outline-none">{t(labels[page])}</h1>
+      <h1 id="settings-heading" tabIndex={-1} className="text-3xl font-medium tracking-tight outline-none">{t(labels[page])}</h1>
+        </>,
+        primary: <>
       {page==='home'&&<>
       <section aria-labelledby="account-identity" className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4 rounded-overlay bg-surface-subtle p-6 sm:p-8">
         <span aria-hidden="true" className="grid size-14 shrink-0 place-items-center rounded-card bg-surface-panel text-action-primary"><UserRound size={25}/></span>
@@ -193,9 +201,11 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
         </div>
       </section>
       </div>
-    </main>
+        </>,
+      }}
+    />
     {props.active && preferencesOpen && <LearningPreferencesPanel fixedPolicy={props.fixedLearningPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('account.done')}/>}
     {props.active && languagesOpen && <LanguagePanelHost onClose={() => setLanguagesOpen(false)}/>}
     {props.active && glossaryOpen && <GlossaryPanelHost onClose={() => setGlossaryOpen(false)}/>}
-  </section>;
+  </>;
 };

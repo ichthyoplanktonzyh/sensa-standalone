@@ -70,6 +70,8 @@ The executable `sensa-page-layout-v1` contract starts with the `learning-runtime
 
 The `application-shell` family exposes one logical `brand`, `navigation`, `utilities`, and `viewport` tree. The viewport is invariant; Product Shell omits the three chrome regions during a focused learning flow without remounting the viewport or screen stack. On wide screens Quiet arranges the chrome as a horizontal top bar while Clear uses a vertical sidebar. At narrow widths both adapt the same navigation DOM to a touch-sized bottom bar, retain the top brand and utilities, and honor safe-area insets. Route selection, available sections, focus restoration, and screen visibility remain WebShell behavior rather than Skin behavior.
 
+The `workspace-page` family provides the ordinary scrollable frame used by Today, Learning overview, and Account & Settings. Product code supplies `header` followed by `primary`; a reviewed `narrow`, `standard`, or `wide` measure hint describes content needs without prescribing pixels. Each Skin adapter resolves that hint into its own page measure, responsive gutters, block insets, and header rhythm. Screen state, headings, controls, status messages, and internal domain composition remain in the product-owned regions.
+
 ## Elevation & Depth
 
 Depth is primarily communicated through surface tone, borders, and clear containment. Shadows are supporting cues for overlays and genuinely raised controls, not a default decoration on every card. A skin may alter shadow softness and contrast while preserving the same stacking, modality, focus, and dismissal behavior.

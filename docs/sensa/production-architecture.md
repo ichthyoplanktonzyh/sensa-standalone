@@ -150,6 +150,11 @@ renderer、learner input、Runtime phase 或事件处理器。
 排成左侧纵向栏；窄屏都将同一 navigation 重排到底部并保留触控尺寸与 safe area。当前 section、route、
 可用导航项、焦点恢复和 screen 可见性仍由 `WebShell` 决定，Skin 不复制导航 DOM 或生成 route。
 
+`workspace-page` family 固定普通滚动工作区的 `header / primary` 顺序，并提供 `narrow / standard / wide`
+语义 measure hint。Today、学习总览与账号设置只提交标题、操作、状态和领域内容；Skin adapter 决定各
+measure 的最大宽度、responsive gutter、上下 inset 与 header rhythm。该 hint 不携带像素值，也不允许
+Product Screen 重新接管页面 frame，因此切换 Skin 时原 screen、表单与内部导航状态保持挂载。
+
 每个已收录 Skin 由 build-time manifest 声明 Semantic/Component/Page Layout Contract 兼容版本，以及受审核的
 color mode、text size、density、motion 与 icon-set capabilities；静态 catalog 不接受 URL、包名或可执行
 第三方代码。开发态 `/?skin-lab=1` 提供不读取账号或 learner data 的 Surface Gallery，覆盖全部 component
