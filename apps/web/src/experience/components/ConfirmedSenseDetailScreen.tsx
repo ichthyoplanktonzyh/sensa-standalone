@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
-import { uiClass } from '../ui/classes';
 /**
  * Read-only endpoint for Meaning Formation.
  *
@@ -20,6 +19,12 @@ import type {
   SensaExpressionBindingRelation,
   SensaSemanticCoverage,
 } from '@sensa/contracts/sensa';
+import {
+  contentNavigationBackClass,
+  contentNavigationClass,
+  iconClass,
+  slideScreenClass,
+} from '../ui/primitives';
 
 export interface ConfirmedSenseDetailScreenProps {
   active: boolean;
@@ -56,10 +61,10 @@ const languageLabel = (languageTag: string): string =>
 const shortId = (id: string): string => id.split('-')[0].toUpperCase();
 
 const unavailableCopy = (reason: string) => (
-  <div className={uiClass("csd-unavailable")} role="alert">
-    <span className={uiClass("csd-unavailable-mark")} aria-hidden="true">!</span>
-    <h2>{uiText('unableToOpen')}</h2>
-    <p>{reason}</p>
+  <div className="rounded-card border border-dashed border-border-strong bg-surface-panel p-8 text-center" role="alert">
+    <span className="mx-auto grid size-9 place-items-center rounded-full bg-accent-soft font-bold text-feedback-warning" aria-hidden="true">!</span>
+    <h2 className="mt-4 text-section-title font-semibold">{uiText('unableToOpen')}</h2>
+    <p className="mt-2 text-body-support leading-6 text-fg-secondary">{reason}</p>
   </div>
 );
 
@@ -74,9 +79,9 @@ const SpecList = ({
 }) => {
   if (items.length === 0) return null;
   return (
-    <section className={uiClass(`csd-spec-list is-${tone}`)}>
-      <h3>{title}</h3>
-      <ul>
+    <section className={`rounded-control p-3 ${tone === 'exclude' ? 'bg-surface-subtle text-feedback-danger' : tone === 'include' ? 'bg-accent-soft text-feedback-success' : 'bg-surface-subtle text-fg-secondary'}`}>
+      <h3 className="text-metadata font-bold uppercase tracking-wide">{title}</h3>
+      <ul className="mt-2 list-disc space-y-1 pl-4 text-body-support leading-6 text-fg-secondary">
         {items.map((item) => <li key={item}>{item}</li>)}
       </ul>
     </section>
@@ -92,40 +97,40 @@ const SenseSpec = ({
   version: number | null;
   unresolvedQuestions: readonly string[];
 }) => (
-  <details className={uiClass("csd-section csd-spec-details is-standalone")}>
-      <summary>{uiText('scenesAndBoundaries')}<span>v{version ?? '1'}</span></summary>
-      <div className={uiClass("csd-spec-details-body")}>
+  <details className="group rounded-card border border-border-subtle bg-surface-panel px-5 shadow-raised">
+      <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 text-control-label font-semibold text-fg-primary marker:hidden after:text-lg after:text-fg-tertiary after:content-['＋'] group-open:after:content-['−'] [&::-webkit-details-marker]:hidden">{uiText('scenesAndBoundaries')}<span className="text-metadata font-medium text-fg-tertiary">v{version ?? '1'}</span></summary>
+      <div className="pb-5">
         {spec.prototypeScenes.map((scene, index) => (
-          <article className={uiClass("csd-prototype-scene")} key={`${scene.summary}-${index}`}>
-            <small>{uiText('typicalScene')}{spec.prototypeScenes.length > 1 ? ` ${index + 1}` : ''}</small>
-            <h3>{scene.summary}</h3>
-            <dl>
+          <article className="mt-3 rounded-control border border-border-subtle bg-surface-subtle p-4" key={`${scene.summary}-${index}`}>
+            <small className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{uiText('typicalScene')}{spec.prototypeScenes.length > 1 ? ` ${index + 1}` : ''}</small>
+            <h3 className="mt-2 text-body font-semibold leading-6">{scene.summary}</h3>
+            <dl className="mt-3 space-y-2 text-body-support">
               {scene.participantRoles.length > 0 && (
-                <div><dt>{uiText('participants')}</dt><dd>{scene.participantRoles.join(' / ')}</dd></div>
+                <div className="grid grid-cols-[5rem_1fr] gap-3"><dt className="text-fg-tertiary">{uiText('participants')}</dt><dd className="text-fg-secondary">{scene.participantRoles.join(' / ')}</dd></div>
               )}
               {scene.states.length > 0 && (
-                <div><dt>{uiText('state')}</dt><dd>{scene.states.join('；')}</dd></div>
+                <div className="grid grid-cols-[5rem_1fr] gap-3"><dt className="text-fg-tertiary">{uiText('state')}</dt><dd className="text-fg-secondary">{scene.states.join('；')}</dd></div>
               )}
               {scene.directionOrCausality && (
-                <div><dt>{uiText('directionCausality')}</dt><dd>{scene.directionOrCausality}</dd></div>
+                <div className="grid grid-cols-[5rem_1fr] gap-3"><dt className="text-fg-tertiary">{uiText('directionCausality')}</dt><dd className="text-fg-secondary">{scene.directionOrCausality}</dd></div>
               )}
             </dl>
           </article>
         ))}
 
-        <div className={uiClass("csd-spec-columns")}>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <SpecList title={uiText('includes')} items={spec.includedCases} tone="include" />
           <SpecList title={uiText('excludes')} items={spec.excludedCases} tone="exclude" />
         </div>
 
         {spec.neighborContrasts.length > 0 && (
-          <section className={uiClass("csd-neighbors")}>
-            <h3>{uiText('distinctionsFromNearbyMeanings')}</h3>
-            <ul>
+          <section className="mt-4 border-t border-dashed border-border-subtle pt-4">
+            <h3 className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{uiText('distinctionsFromNearbyMeanings')}</h3>
+            <ul className="mt-3 space-y-3">
               {spec.neighborContrasts.map((contrast) => (
-                <li key={contrast.label}>
-                  <b>{contrast.label}</b>
-                  <span>{contrast.distinction}</span>
+                <li className="flex flex-col gap-1" key={contrast.label}>
+                  <b className="text-body-support text-fg-primary">{contrast.label}</b>
+                  <span className="text-body-support leading-6 text-fg-secondary">{contrast.distinction}</span>
                 </li>
               ))}
             </ul>
@@ -133,9 +138,9 @@ const SenseSpec = ({
         )}
 
         {spec.openQuestions.length > 0 || unresolvedQuestions.length > 0 ? (
-          <section className={uiClass("csd-open-questions")}>
-            <h3>{uiText('remainingQuestions')}</h3>
-            <ul>
+          <section className="mt-4 border-t border-dashed border-border-subtle pt-4">
+            <h3 className="text-metadata font-bold uppercase tracking-wide text-feedback-warning">{uiText('remainingQuestions')}</h3>
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-body-support leading-6 text-fg-secondary">
               {[...spec.openQuestions, ...unresolvedQuestions].map((question, index) => (
                 <li key={`${question}-${index}`}>{question}</li>
               ))}
@@ -149,28 +154,28 @@ const SenseSpec = ({
 const BindingSummary = ({ alignment }: { alignment: JourneyAlignmentView }) => {
   const hasBindings = alignment.confirmedBindings.length > 0;
   return (
-    <section className={uiClass(`csd-section csd-binding-summary${hasBindings ? ' is-bound' : ''}`)} aria-labelledby="csd-binding-heading">
-      <header className={uiClass("csd-section-head")}>
+    <section className={`rounded-card border bg-surface-panel p-5 shadow-raised ${hasBindings ? 'border-border-strong' : 'border-border-subtle'}`} aria-labelledby="csd-binding-heading">
+      <header className="flex items-start justify-between gap-4">
         <div>
-          <small>{uiText('targetExpression')}</small>
-          <h2 id="csd-binding-heading">{uiText('connectedExpressions')}</h2>
+          <small className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{uiText('targetExpression')}</small>
+          <h2 className="mt-1 text-section-title font-semibold" id="csd-binding-heading">{uiText('connectedExpressions')}</h2>
         </div>
-        <span className={uiClass("csd-fact-pill")}>{hasBindings ? uiText('connected') : uiText('pending')}</span>
+        <span className="rounded-pill bg-accent-soft px-3 py-1 text-metadata font-bold text-fg-secondary">{hasBindings ? uiText('connected') : uiText('pending')}</span>
       </header>
       {hasBindings ? (
-        <ul className={uiClass("csd-binding-list")}>
+        <ul className="mt-4 space-y-3">
           {alignment.confirmedBindings.map((binding) => (
-            <li key={binding.bindingVersionId}>
-              <div>
-                <strong>{binding.surfaceForm}</strong>
-                <span>{expressionTypeLabels[binding.expressionType]} · {languageLabel(binding.languageTag)}</span>
+            <li className="rounded-control border border-border-subtle bg-accent-soft p-4" key={binding.bindingVersionId}>
+              <div className="flex flex-wrap items-baseline gap-2">
+                <strong className="font-language text-lg text-fg-primary">{binding.surfaceForm}</strong>
+                <span className="text-metadata text-fg-secondary">{expressionTypeLabels[binding.expressionType]} · {languageLabel(binding.languageTag)}</span>
               </div>
-              <small>{relationLabels[binding.relation]} · {coverageLabels[binding.semanticCoverage]}</small>
+              <small className="mt-2 block text-metadata text-fg-secondary">{relationLabels[binding.relation]} · {coverageLabels[binding.semanticCoverage]}</small>
             </li>
           ))}
         </ul>
       ) : (
-        <div className={uiClass("csd-binding-empty")}>
+        <div className="mt-4 rounded-control bg-surface-subtle p-4 text-body-support text-fg-secondary">
           <b>{uiText('noTargetExpressionConfirmedYet')}</b>
         </div>
       )}
@@ -200,10 +205,10 @@ export const ConfirmedSenseDetailScreen = ({
 
   const body = !status.ok
     ? (
-      <div className={uiClass("csd-error")} role="alert">
-        <b>{uiText('unableToLoadYourMeanings')}</b>
-        <p>{status.error ?? uiText('localMeaningDataIsUnavailable')}</p>
-        <button type="button" onClick={onBack}>{uiText('back')}</button>
+      <div className="rounded-card border border-dashed border-feedback-danger bg-surface-panel p-7 text-center" role="alert">
+        <b className="text-body text-feedback-danger">{uiText('unableToLoadYourMeanings')}</b>
+        <p className="mt-2 text-body-support leading-6 text-fg-secondary">{status.error ?? uiText('localMeaningDataIsUnavailable')}</p>
+        <button className="mt-4 min-h-11 rounded-control border border-border-strong bg-surface-panel px-4 text-control-label font-semibold text-fg-primary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={onBack}>{uiText('back')}</button>
       </div>
     )
     : !personalMeaningId || !meaningFocusId
@@ -214,21 +219,21 @@ export const ConfirmedSenseDetailScreen = ({
           ? unavailableCopy(uiText('theSemanticSpecificationIsMissingThisMeaning'))
           : (
             <>
-              <section className={uiClass("csd-hero")}>
-                <span className={uiClass("csd-confirm-mark")} aria-hidden="true">✓</span>
-                <small>{alignment.confirmedBindings.length > 0 ? uiText('expressionConnected') : uiText('confirmedMeaning')}</small>
-                <h2>{alignment.semanticSpec.coreMeaningFocus}</h2>
-                <p>{focus ? uiText('fromFocus', { focus: focus.statement }) : uiText('resolvedDirectlyFromTheExpressionInThis')}</p>
+              <section className="rounded-card border border-border-subtle bg-surface-panel p-6 shadow-raised">
+                <span className="mb-4 grid size-9 place-items-center rounded-control bg-accent-soft font-bold text-feedback-success" aria-hidden="true">✓</span>
+                <small className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{alignment.confirmedBindings.length > 0 ? uiText('expressionConnected') : uiText('confirmedMeaning')}</small>
+                <h2 className="mt-2 text-page-title font-semibold leading-tight">{alignment.semanticSpec.coreMeaningFocus}</h2>
+                <p className="mt-3 text-body-support leading-7 text-fg-secondary">{focus ? uiText('fromFocus', { focus: focus.statement }) : uiText('resolvedDirectlyFromTheExpressionInThis')}</p>
               </section>
 
-              <section className={uiClass("csd-next-step")}>
-                <div className={uiClass("csd-actions")}>
+              <section className="rounded-card border border-border-subtle bg-surface-panel p-5">
+                <div className="flex flex-col gap-3">
                   {focus && alignment.expressionCandidates.length > 0 && (
-                    <button type="button" className={uiClass("csd-primary")} onClick={onOpenBinding}>
+                    <button type="button" className="min-h-12 rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" onClick={onOpenBinding}>
                       {alignment.confirmedBindings.length > 0 ? uiText('viewOrChangeExpression') : uiText('connectAnExpression')} <span aria-hidden="true">→</span>
                     </button>
                   )}
-                  <button type="button" onClick={onBack}>{uiText('backToMyContent3')}</button>
+                  <button className="min-h-12 rounded-control border border-border-strong bg-surface-panel px-5 text-control-label font-semibold text-fg-primary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={onBack}>{uiText('backToMyContent3')}</button>
                 </div>
               </section>
 
@@ -237,12 +242,12 @@ export const ConfirmedSenseDetailScreen = ({
                 version={alignment.semanticSpecVersion}
                 unresolvedQuestions={alignment.unresolvedQuestions}
               />
-              <details className={uiClass("csd-identity-details")}>
-                <summary>{uiText('sourceDetails')}</summary>
-                <p>
+              <details className="group rounded-card border border-border-subtle bg-surface-panel px-5 text-metadata text-fg-tertiary">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between font-semibold text-fg-secondary after:text-lg after:content-['＋'] group-open:after:content-['−'] [&::-webkit-details-marker]:hidden">{uiText('sourceDetails')}</summary>
+                <p className="mb-2 break-words">
                   ID {shortId(alignment.senseId)} · v{alignment.senseVersionNumber ?? '1'}
                 </p>
-                <p>
+                <p className="mb-4 break-words">
                   {uiText('source')}{alignment.origin}
                   {alignment.generator ? ` · ${alignment.generator.provider} / ${alignment.generator.model}` : ''}
                 </p>
@@ -254,18 +259,19 @@ export const ConfirmedSenseDetailScreen = ({
   return (
     <section
       ref={screenRef}
-      className={uiClass(`screen confirmed-sense-detail-screen${active ? ' active' : ''}`, "#s-confirmed-sense")}
+      className={slideScreenClass(active)}
       id="s-confirmed-sense"
       data-anim="slide"
+      aria-hidden={!active}
     >
-      <header className={uiClass("content-nav csd-nav")}>
-        <button type="button" className={uiClass("content-nav-back")} onClick={onBack} aria-label={uiText('back2')}>
-          <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
+      <header className={contentNavigationClass}>
+        <button type="button" className={contentNavigationBackClass} onClick={onBack} aria-label={uiText('back2')}>
+          <svg className={iconClass} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
         <h1>{uiText('confirmedMeaning')}</h1>
         <span />
       </header>
-      <div className={uiClass("content-page-body csd-body")}>{body}</div>
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-6 py-8 pb-12 sm:px-10">{body}</div>
     </section>
   );
 };

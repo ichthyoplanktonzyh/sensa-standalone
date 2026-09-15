@@ -1,4 +1,3 @@
-import { uiClass } from '../ui/classes';
 import { useMemo, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import type { SentenceToken } from '../types';
 import { tokenizeSentence } from '../utils/sentenceTokenizer';
@@ -21,11 +20,11 @@ export const ClickableSentence = ({
   const { tokens } = useMemo(() => tokenizeSentence(sentenceHtml), [sentenceHtml]);
 
   return (
-    <div className={uiClass(`clickable-sentence ${className}`)}>
+    <div className={`clickable-sentence inline leading-inherit ${className}`}>
       {tokens.map((token, idx) => {
         if (!token.isWord) {
           return (
-            <span key={token.id} className={uiClass("tok-sep")}>
+            <span key={token.id} className="tok-sep">
               {token.text}
             </span>
           );
@@ -36,23 +35,23 @@ export const ClickableSentence = ({
         const isTarget = token.isTarget;
 
         const classNames = [
-          'tok-word',
-          isTarget ? 'tok-target' : '',
-          isSelected ? 'tok-selected' : '',
-          isPlaying ? 'tok-playing' : '',
+          'tok-word inline min-h-8 rounded-control border-0 bg-transparent px-0.5 font-inherit text-inherit transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus motion-reduce:transition-none',
+          isTarget ? 'tok-target font-semibold text-action-primary' : '',
+          isSelected ? 'tok-selected bg-surface-selected' : '',
+          isPlaying ? 'tok-playing bg-accent-soft text-action-primary' : '',
         ]
           .filter(Boolean)
           .join(' ');
 
         if (!onWordClick) {
-          return <span key={token.id} className={uiClass(classNames)}>{token.text}</span>;
+          return <span key={token.id} className={classNames}>{token.text}</span>;
         }
 
         return (
           <button
             type="button"
             key={token.id}
-            className={uiClass(classNames)}
+            className={`${classNames} cursor-pointer hover:bg-surface-subtle`}
             onPointerDown={(e: ReactPointerEvent<HTMLButtonElement>) => {
               e.stopPropagation();
             }}

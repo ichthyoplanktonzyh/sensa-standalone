@@ -65,7 +65,7 @@ export function LearningPreferencesPanel({allowedPolicies,showDailyQuantity=true
         </label>}
         {showDailyQuantity&&<p className="text-xs leading-6 text-fg-tertiary">{t('learningPreferences.future')}</p>}
         {status}
-        {error&&<p role="alert" className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{t('runtime.saveError')}</p>}
+        {error&&<p role="alert" className="rounded-control bg-accent-soft p-4 text-sm text-feedback-danger">{t('runtime.saveError')}</p>}
       </div>
       <footer className="mt-auto shrink-0 border-t border-border-subtle px-6 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <button type="button" disabled={busy} className={`${runtimePrimary} w-full`} onClick={onConfirm??onClose}>{closeLabel ?? t('learningPreferences.resume')}</button>

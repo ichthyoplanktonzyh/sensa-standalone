@@ -1,5 +1,4 @@
 import {cardText} from '../../../../i18n/originalCards';
-import { uiClass } from '../../../ui/classes';
 import { useMemo, useState } from 'react';
 import type {
   AssessmentResource,
@@ -108,48 +107,48 @@ function SensaBoundaryAssessment({
   };
 
   return (
-    <div className={uiClass("sensa-review-boundary-page")}>
-      <header className={uiClass("sensa-review-boundary-heading")}>
-        <span>{purpose === 'acquisition' ? cardText('meaningBoundaryIndependentJudgement') : cardText('reviewMeaningBoundary')}</span>
-        <h1>{cardText('similarWithADifferentPerspective')}</h1>
-        <p>{cardText('checkThisBoundaryWhenThePackageIdentifiesA')}</p>
+    <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-6 py-8 text-fg-primary sm:px-10">
+      <header>
+        <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{purpose === 'acquisition' ? cardText('meaningBoundaryIndependentJudgement') : cardText('reviewMeaningBoundary')}</span>
+        <h1 className="mt-3 text-page-title font-semibold">{cardText('similarWithADifferentPerspective')}</h1>
+        <p className="mt-3 text-body-support leading-6 text-fg-secondary">{cardText('checkThisBoundaryWhenThePackageIdentifiesA')}</p>
       </header>
 
-      <section className={uiClass("sensa-review-boundary-pair")} aria-label={cardText('twoMeaningsToDistinguish')}>
-        <div>
-          <small>{cardText('currentMeaning')}</small>
-          <strong>{spec.currentSenseL1}</strong>
+      <section className="mt-6 grid grid-cols-[1fr_auto_1fr] items-stretch gap-3 rounded-card border border-border-subtle bg-surface-panel p-4" aria-label={cardText('twoMeaningsToDistinguish')}>
+        <div className="flex flex-col gap-2 rounded-control bg-accent-soft p-3">
+          <small className="text-metadata text-fg-tertiary">{cardText('currentMeaning')}</small>
+          <strong className="text-body-support">{spec.currentSenseL1}</strong>
         </div>
-        <span aria-hidden="true"><i />≠<i /></span>
-        <div>
-          <small>{cardText('relatedMeaning')}</small>
-          <strong>{spec.contrastSenseL1}</strong>
+        <span className="grid place-items-center text-fg-tertiary" aria-hidden="true">≠</span>
+        <div className="flex flex-col gap-2 rounded-control bg-surface-subtle p-3">
+          <small className="text-metadata text-fg-tertiary">{cardText('relatedMeaning')}</small>
+          <strong className="text-body-support">{spec.contrastSenseL1}</strong>
         </div>
-        <p>{spec.relationLabelL1}</p>
+        <p className="col-span-3 text-center text-metadata text-fg-secondary">{spec.relationLabelL1}</p>
       </section>
 
-      <section className={uiClass("sensa-review-boundary-context")}>
-        <div>
-          <span>{cardText('boundaryContext')}</span>
-          <small>{cardText('tapOtherWordsForDefinitions')}</small>
+      <section className="mt-6 rounded-card border border-border-subtle bg-surface-panel p-5">
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-control-label font-semibold">{cardText('boundaryContext')}</span>
+          <small className="text-metadata text-fg-tertiary">{cardText('tapOtherWordsForDefinitions')}</small>
         </div>
-        <div className={uiClass("sensa-review-boundary-sentence")}>
+        <div className="mt-5 font-language text-xl leading-9">
           <ClickableSentence
             sentenceHtml={emphasizeTarget(spec)}
             activeTokenIdx={activeLookup?.tokenIdx ?? null}
             onWordClick={lookupToken}
           />
         </div>
-        <div className={uiClass("sensa-review-boundary-mask")}>
-          <i aria-hidden="true" />
+        <div className="mt-5 flex min-h-11 items-center gap-2 rounded-control bg-surface-subtle px-4 text-metadata text-fg-secondary">
+          <i className="size-2 rounded-full bg-progress" aria-hidden="true" />
           <span>{cardText('translationAppearsAfterYourAnswer')}</span>
         </div>
       </section>
 
-      <section className={uiClass("sensa-review-boundary-question")}>
-        <span>{cardText('yourJudgement')}</span>
-        <h2>{spec.questionL1}</h2>
-        <div role="radiogroup" aria-label={spec.questionL1}>
+      <section className="mt-7">
+        <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{cardText('yourJudgement')}</span>
+        <h2 className="mt-2 text-section-title font-semibold">{spec.questionL1}</h2>
+        <div className="mt-4 grid gap-3" role="radiogroup" aria-label={spec.questionL1}>
           {spec.options.map((option, index) => {
             const selected = option.id === selectedId;
             return (
@@ -157,21 +156,22 @@ function SensaBoundaryAssessment({
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                className={uiClass(selected ? 'is-selected' : '')}
+                className={`grid min-h-14 grid-cols-[2rem_1fr_1rem] items-center gap-3 rounded-control border p-3 text-left focus-visible:outline-2 focus-visible:outline-focus ${selected ? 'border-border-strong bg-surface-selected' : 'border-border-subtle bg-surface-panel hover:bg-surface-subtle'}`}
                 key={option.id}
                 onClick={() => setSelectedId(option.id)}
               >
-                <span aria-hidden="true">{String.fromCharCode(65 + index)}</span>
-                <strong>{option.labelL1}</strong>
-                <i aria-hidden="true" />
+                <span className="grid size-8 place-items-center rounded-control bg-accent-soft text-metadata font-bold text-action-primary" aria-hidden="true">{String.fromCharCode(65 + index)}</span>
+                <strong className="text-body-support">{option.labelL1}</strong>
+                <i className={`size-3 rounded-full border ${selected ? 'border-action-primary bg-action-primary' : 'border-border-strong'}`} aria-hidden="true" />
               </button>
             );
           })}
         </div>
       </section>
 
-      <footer className={uiClass("sensa-review-boundary-footer")}>
+      <footer className="mt-auto pt-8">
         <button
+          className="min-h-12 w-full rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-45"
           type="button"
           disabled={!selectedOption}
           onClick={() => {

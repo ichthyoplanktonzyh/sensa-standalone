@@ -3,7 +3,8 @@ import type {ConversationImage} from '../../data/library/conversationImages';
 import {localFlowText} from '../../i18n/localFlowText';
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
-import { uiClass } from '../ui/classes';
+import { classNames } from '../ui/primitives';
+import './PersonalMeaningDetailScreen.css';
 /**
  * The AI clarification workspace.
  *
@@ -157,25 +158,25 @@ const FocusCard = ({
   onChange: (next: AgentFocusCandidate) => void;
   onDone: () => void;
 }) => (
-  <article className={uiClass("pmw-card")}>
+  <article className={classNames("pmw-card")}>
     <header>
       <small>{uiText('meaningFocus')}</small>
       {!editing && <button type="button" onClick={onEdit}>{uiText('edit')}</button>}
     </header>
     {editing ? (
-      <div className={uiClass("pmw-edit")}>
+      <div className={classNames("pmw-edit")}>
         <textarea
           value={focus.statement}
           rows={2}
           onChange={(event) => onChange({ ...focus, statement: event.target.value })}
         />
-        <button type="button" className={uiClass("pmw-edit-done")} onClick={onDone}>{uiText('done')}</button>
+        <button type="button" className={classNames("pmw-edit-done")} onClick={onDone}>{uiText('done')}</button>
       </div>
     ) : (
       <>
-        <b className={uiClass("pmw-card-lead")}>{focus.statement}</b>
+        <b className={classNames("pmw-card-lead")}>{focus.statement}</b>
         {focus.distinguishingNotes.length > 0 && (
-          <p className={uiClass("pmw-card-note")}>{focus.distinguishingNotes[0]}</p>
+          <p className={classNames("pmw-card-note")}>{focus.distinguishingNotes[0]}</p>
         )}
       </>
     )}
@@ -195,25 +196,25 @@ const SenseCard = ({
   onChange: (next: AgentSenseCandidate) => void;
   onDone: () => void;
 }) => (
-  <article className={uiClass("pmw-card")}>
+  <article className={classNames("pmw-card")}>
     <header>
       <small>{uiText('meaning')}</small>
       {!editing && <button type="button" onClick={onEdit}>{uiText('edit')}</button>}
     </header>
     {editing ? (
-      <div className={uiClass("pmw-edit")}>
+      <div className={classNames("pmw-edit")}>
         <textarea
           value={sense.coreMeaningFocus}
           rows={2}
           onChange={(event) => onChange({ ...sense, coreMeaningFocus: event.target.value })}
         />
-        <button type="button" className={uiClass("pmw-edit-done")} onClick={onDone}>{uiText('done')}</button>
+        <button type="button" className={classNames("pmw-edit-done")} onClick={onDone}>{uiText('done')}</button>
       </div>
     ) : (
       <>
-        <b className={uiClass("pmw-card-lead")}>{sense.coreMeaningFocus}</b>
+        <b className={classNames("pmw-card-lead")}>{sense.coreMeaningFocus}</b>
         {sense.prototypeScenes[0] && (
-          <p className={uiClass("pmw-card-note")}>{sense.prototypeScenes[0].summary}</p>
+          <p className={classNames("pmw-card-note")}>{sense.prototypeScenes[0].summary}</p>
         )}
       </>
     )}
@@ -241,37 +242,37 @@ const ExpressionsCard = ({
   if (!active && candidates.length === 0) return null;
 
   return (
-    <article className={uiClass("pmw-card")}>
+    <article className={classNames("pmw-card")}>
       <header>
         <small>{uiText('targetExpression')}{candidates.length > 1 ? uiText('candidateCount', { count: candidates.length }) : ''}</small>
         {!editing && active && <button type="button" onClick={onEdit}>{uiText('edit')}</button>}
       </header>
       {editing && active ? (
-        <div className={uiClass("pmw-edit")}>
+        <div className={classNames("pmw-edit")}>
           <input
             value={active.surfaceForm}
             onChange={(event) => onChange({ ...active, surfaceForm: event.target.value })}
           />
-          <button type="button" className={uiClass("pmw-edit-done")} onClick={onDone}>{uiText('done')}</button>
+          <button type="button" className={classNames("pmw-edit-done")} onClick={onDone}>{uiText('done')}</button>
         </div>
       ) : (
-        <div className={uiClass("pmw-expr-candidates")}>
+        <div className={classNames("pmw-expr-candidates")}>
           {candidates.map((cand) => {
             const isChosen = (selected?.surfaceForm ?? candidates[0]?.surfaceForm) === cand.surfaceForm;
             return (
               <button
                 key={cand.surfaceForm}
                 type="button"
-                className={uiClass(`pmw-expr-pill${isChosen ? ' is-selected' : ''}`)}
+                className={classNames(`pmw-expr-pill${isChosen ? ' is-selected' : ''}`)}
                 onClick={() => onSelect(cand)}
               >
-                <span className={uiClass("pmw-expr-radio")} aria-hidden="true">{isChosen ? '✓' : ''}</span>
-                <div className={uiClass("pmw-expr-info")}>
-                  <div className={uiClass("pmw-expr-title")}>
-                    <b className={uiClass("pmw-surface")}>{cand.surfaceForm}</b>
-                    <span className={uiClass("pmw-expr-tag")}>{expressionTypeLabels[cand.expressionType]}</span>
+                <span className={classNames("pmw-expr-radio")} aria-hidden="true">{isChosen ? '✓' : ''}</span>
+                <div className={classNames("pmw-expr-info")}>
+                  <div className={classNames("pmw-expr-title")}>
+                    <b className={classNames("pmw-surface")}>{cand.surfaceForm}</b>
+                    <span className={classNames("pmw-expr-tag")}>{expressionTypeLabels[cand.expressionType]}</span>
                   </div>
-                  {cand.rationale && <p className={uiClass("pmw-expr-why")}>{cand.rationale}</p>}
+                  {cand.rationale && <p className={classNames("pmw-expr-why")}>{cand.rationale}</p>}
                 </div>
               </button>
             );
@@ -640,18 +641,18 @@ const PreviewPersonalMeaningDetailScreen = ({
   ) && !busy;
 
   const body = !status.ok ? (
-    <div className={uiClass("pmw-error")} role="alert">
+    <div className={classNames("pmw-error")} role="alert">
       <b>{uiText('unableToReadThisMaterial')}</b>
       <p>{status.error}</p>
     </div>
   ) : !detail || !session ? (
-    <div className={uiClass("pmw-empty")}>{uiText('thisMaterialWasNotFound')}</div>
+    <div className={classNames("pmw-empty")}>{uiText('thisMaterialWasNotFound')}</div>
   ) : allConfirmed ? (
-    <div className={uiClass("pmw-done")}>
-      <span className={uiClass("pmw-done-mark")} aria-hidden="true">✓</span>
+    <div className={classNames("pmw-done")}>
+      <span className={classNames("pmw-done-mark")} aria-hidden="true">✓</span>
       <h2>{uiText('meaningConfirmed')}</h2>
       <p>{uiText('savedToYourMeanings')}</p>
-      <div className={uiClass("pmw-done-facts")}>
+      <div className={classNames("pmw-done-facts")}>
         <article><small>{uiText('focus')}</small><b>{confirmedFocus?.statement}</b></article>
         <article><small>{uiText('meaning2')}</small><b>{alignment?.coreMeaningFocus}</b></article>
         <article>
@@ -664,8 +665,8 @@ const PreviewPersonalMeaningDetailScreen = ({
           </span>
         </article>
       </div>
-      <div className={uiClass("pmw-done-actions")}>
-        <button type="button" className={uiClass("pmw-primary")} onClick={startAnotherThread}>
+      <div className={classNames("pmw-done-actions")}>
+        <button type="button" className={classNames("pmw-primary")} onClick={startAnotherThread}>
           {uiText('exploreAnotherAspectOfThisExperience')}</button>
         <button
           type="button"
@@ -681,7 +682,7 @@ const PreviewPersonalMeaningDetailScreen = ({
   ) : (
     <>
       {materialOpen && (
-        <section className={uiClass("pmw-material")} aria-label={uiText('contextForThisConversation')}>
+        <section className={classNames("pmw-material")} aria-label={uiText('contextForThisConversation')}>
           {detail.materialBlocks.map((block) => (
             block.kind === 'image' ? (
               <img
@@ -694,7 +695,7 @@ const PreviewPersonalMeaningDetailScreen = ({
             )
           ))}
           {detail.familiarAnchors.map((anchor) => (
-            <p key={anchor.anchorId} className={uiClass("pmw-material-familiar")}>
+            <p key={anchor.anchorId} className={classNames("pmw-material-familiar")}>
               <small>{uiText('chineseExpression')}</small>{anchor.surfaceForm}
             </p>
           ))}
@@ -712,23 +713,23 @@ const PreviewPersonalMeaningDetailScreen = ({
         </section>
       )}
 
-      <div className={uiClass("pmw-transcript")} ref={transcriptRef} aria-live="polite">
+      <div className={classNames("pmw-transcript")} ref={transcriptRef} aria-live="polite">
         {session.messages.map((item) => (
-          <div key={item.messageId} className={uiClass(`pmw-message is-${item.role}`)}>
+          <div key={item.messageId} className={classNames(`pmw-message is-${item.role}`)}>
             {item.role === 'assistant' && (
-              <span className={uiClass("pmw-avatar")} aria-hidden="true">✦</span>
+              <span className={classNames("pmw-avatar")} aria-hidden="true">✦</span>
             )}
             <div><p>{item.body}</p></div>
           </div>
         ))}
         {busy && (
           <div
-            className={uiClass(`pmw-message is-assistant${streamingText ? ' is-streaming' : ' is-thinking'}`)}
+            className={classNames(`pmw-message is-assistant${streamingText ? ' is-streaming' : ' is-thinking'}`)}
           >
-            <span className={uiClass("pmw-avatar")} aria-hidden="true">✦</span>
+            <span className={classNames("pmw-avatar")} aria-hidden="true">✦</span>
             <div>
               {streamingText ? (
-                <p>{streamingText}<i className={uiClass("pmw-caret")} aria-hidden="true" /></p>
+                <p>{streamingText}<i className={classNames("pmw-caret")} aria-hidden="true" /></p>
               ) : (
                 <p><i /><i /><i /></p>
               )}
@@ -738,7 +739,7 @@ const PreviewPersonalMeaningDetailScreen = ({
       </div>
 
       {error && (
-        <div className={uiClass("pmw-inline-error")} role="alert">
+        <div className={classNames("pmw-inline-error")} role="alert">
           <span>{error}</span>
           <button
             type="button"
@@ -749,11 +750,11 @@ const PreviewPersonalMeaningDetailScreen = ({
         </div>
       )}
 
-      <div className={uiClass("pmw-dock-bar")}>
-        <div className={uiClass("pmw-dock-chips")}>
+      <div className={classNames("pmw-dock-bar")}>
+        <div className={classNames("pmw-dock-chips")}>
           <button
             type="button"
-            className={uiClass(`pmw-dock-chip is-${focusStatus.tone}`)}
+            className={classNames(`pmw-dock-chip is-${focusStatus.tone}`)}
             onClick={() => setPanelOpen(true)}
             aria-label={uiText('viewFocus')}
           >
@@ -762,7 +763,7 @@ const PreviewPersonalMeaningDetailScreen = ({
           </button>
           <button
             type="button"
-            className={uiClass(`pmw-dock-chip is-${senseStatus.tone}`)}
+            className={classNames(`pmw-dock-chip is-${senseStatus.tone}`)}
             onClick={() => setPanelOpen(true)}
             aria-label={uiText('viewMeaning')}
           >
@@ -771,7 +772,7 @@ const PreviewPersonalMeaningDetailScreen = ({
           </button>
           <button
             type="button"
-            className={uiClass(`pmw-dock-chip is-${expressionStatus.tone}`)}
+            className={classNames(`pmw-dock-chip is-${expressionStatus.tone}`)}
             onClick={() => setPanelOpen(true)}
             aria-label={uiText('viewExpression')}
           >
@@ -784,10 +785,10 @@ const PreviewPersonalMeaningDetailScreen = ({
           </button>
         </div>
 
-        <div className={uiClass("pmw-dock-actions")}>
+        <div className={classNames("pmw-dock-actions")}>
           <button
             type="button"
-            className={uiClass("pmw-dock-organize")}
+            className={classNames("pmw-dock-organize")}
             disabled={busy}
             onClick={() => void runTurn(session, undefined, 'consolidate')}
             title={uiText('summarizeTheCurrentUnderstanding')}
@@ -797,7 +798,7 @@ const PreviewPersonalMeaningDetailScreen = ({
             alignment!.expressionCandidates.length === 0 ? null : (
               <button
                 type="button"
-                className={uiClass("pmw-dock-confirm is-ready")}
+                className={classNames("pmw-dock-confirm is-ready")}
                 disabled={!canConfirmExpressionOnly}
                 onClick={() => void confirmExpressionOnly()}
               >
@@ -806,7 +807,7 @@ const PreviewPersonalMeaningDetailScreen = ({
           ) : (
             <button
               type="button"
-              className={uiClass(`pmw-dock-confirm${session.readyToConfirm ? ' is-ready' : ''}`)}
+              className={classNames(`pmw-dock-confirm${session.readyToConfirm ? ' is-ready' : ''}`)}
               disabled={!canConfirm}
               onClick={() => {
                 setIncludeExpression(Boolean(working.expression));
@@ -818,7 +819,7 @@ const PreviewPersonalMeaningDetailScreen = ({
         </div>
       </div>
 
-      <form className={uiClass("pmw-composer")} onSubmit={submit}>
+      <form className={classNames("pmw-composer")} onSubmit={submit}>
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -838,9 +839,9 @@ const PreviewPersonalMeaningDetailScreen = ({
       </form>
 
       {panelOpen && (
-        <div className={uiClass("pmw-preview-layer")} onMouseDown={() => setPanelOpen(false)}>
+        <div className={classNames("pmw-preview-layer")} onMouseDown={() => setPanelOpen(false)}>
           <section
-            className={uiClass("pmw-preview-sheet")}
+            className={classNames("pmw-preview-sheet")}
             role="dialog"
             aria-modal="true"
             aria-label={uiText('currentUnderstanding')}
@@ -850,9 +851,9 @@ const PreviewPersonalMeaningDetailScreen = ({
               <h2>{uiText('currentUnderstanding')}</h2>
               <button type="button" onClick={() => setPanelOpen(false)} aria-label={uiText('close')}>×</button>
             </header>
-            <div className={uiClass("pmw-preview-body")}>
+            <div className={classNames("pmw-preview-body")}>
               {senseConfirmed && (
-                <p className={uiClass("pmw-panel-note")}>
+                <p className={classNames("pmw-panel-note")}>
                   {uiText('theFocusAndMeaningAreConfirmedYou')}</p>
               )}
               {working.focus && !senseConfirmed && (
@@ -885,13 +886,13 @@ const PreviewPersonalMeaningDetailScreen = ({
                 />
               )}
               {!working.focus && !working.sense && candidatesList.length === 0 && (
-                <p className={uiClass("pmw-panel-empty")}>{uiText('tellUsMoreAboutYourContextOr')}</p>
+                <p className={classNames("pmw-panel-empty")}>{uiText('tellUsMoreAboutYourContextOr')}</p>
               )}
             </div>
             <footer>
               <button
                 type="button"
-                className={uiClass("pmw-primary")}
+                className={classNames("pmw-primary")}
                 disabled={!canConfirm}
                 onClick={() => {
                   setPanelOpen(false);
@@ -907,9 +908,9 @@ const PreviewPersonalMeaningDetailScreen = ({
       )}
 
       {reviewOpen && working.focus && working.sense && (
-        <div className={uiClass("pmw-review-layer")} onMouseDown={() => setReviewOpen(false)}>
+        <div className={classNames("pmw-review-layer")} onMouseDown={() => setReviewOpen(false)}>
           <section
-            className={uiClass("pmw-review")}
+            className={classNames("pmw-review")}
             role="dialog"
             aria-modal="true"
             aria-labelledby="pmw-review-title"
@@ -920,22 +921,22 @@ const PreviewPersonalMeaningDetailScreen = ({
               <button type="button" onClick={() => setReviewOpen(false)} aria-label={uiText('keepTalking')}>×</button>
             </header>
 
-            <div className={uiClass("pmw-review-body")}>
-              <article className={uiClass("pmw-review-card")}>
+            <div className={classNames("pmw-review-body")}>
+              <article className={classNames("pmw-review-card")}>
                 <header><small>{uiText('focus')}</small><em>{uiText('confirmTogether')}</em></header>
                 <b>{working.focus.statement}</b>
               </article>
 
-              <article className={uiClass("pmw-review-card")}>
+              <article className={classNames("pmw-review-card")}>
                 <header><small>{uiText('meaning2')}</small><em>{uiText('confirmTogether')}</em></header>
                 <b>{working.sense.coreMeaningFocus}</b>
               </article>
 
-              <article className={uiClass(`pmw-review-card${includeExpression ? '' : ' is-deferred'}`)}>
+              <article className={classNames(`pmw-review-card${includeExpression ? '' : ' is-deferred'}`)}>
                 <header>
                   <small>{uiText('targetExpression')}{candidatesList.length > 1 ? uiText('candidateCount', { count: candidatesList.length }) : ''}</small>
                   {working.expression ? (
-                    <label className={uiClass("pmw-review-toggle")}>
+                    <label className={classNames("pmw-review-toggle")}>
                       <input
                         type="checkbox"
                         checked={includeExpression}
@@ -946,21 +947,21 @@ const PreviewPersonalMeaningDetailScreen = ({
                   ) : <em>{uiText('noCandidatesYet')}</em>}
                 </header>
                 {working.expression ? (
-                  <div className={uiClass("pmw-review-candidates")}>
+                  <div className={classNames("pmw-review-candidates")}>
                     {candidatesList.map((cand) => {
                       const isChosen = (working.expression?.surfaceForm ?? candidatesList[0]?.surfaceForm) === cand.surfaceForm;
                       return (
                         <button
                           key={cand.surfaceForm}
                           type="button"
-                          className={uiClass(`pmw-review-cand-item${isChosen ? ' is-chosen' : ''}`)}
+                          className={classNames(`pmw-review-cand-item${isChosen ? ' is-chosen' : ''}`)}
                           onClick={() => editTrack('expression', cand)}
                         >
-                          <span className={uiClass("pmw-review-radio")} aria-hidden="true">{isChosen ? '✓' : ''}</span>
-                          <div className={uiClass("pmw-review-cand-copy")}>
+                          <span className={classNames("pmw-review-radio")} aria-hidden="true">{isChosen ? '✓' : ''}</span>
+                          <div className={classNames("pmw-review-cand-copy")}>
                             <div>
-                              <b className={uiClass("pmw-surface")}>{cand.surfaceForm}</b>
-                              <span className={uiClass("pmw-expr-tag")}>{expressionTypeLabels[cand.expressionType]}</span>
+                              <b className={classNames("pmw-surface")}>{cand.surfaceForm}</b>
+                              <span className={classNames("pmw-expr-tag")}>{expressionTypeLabels[cand.expressionType]}</span>
                             </div>
                             {cand.rationale && <small>{cand.rationale}</small>}
                           </div>
@@ -975,14 +976,14 @@ const PreviewPersonalMeaningDetailScreen = ({
             </div>
 
             <footer>
-              <p className={uiClass("pmw-review-consequence")}>
+              <p className={classNames("pmw-review-consequence")}>
                 {uiText('confirmationSavesThisToYourMeanings')}{working.expression && includeExpression ? uiText('andConnectsTheExpression') : uiText('youCanConnectAnExpressionLater')}。
               </p>
-              {error && <p className={uiClass("pmw-review-error")} role="alert">{error}</p>}
-              <div className={uiClass("pmw-review-actions")}>
+              {error && <p className={classNames("pmw-review-error")} role="alert">{error}</p>}
+              <div className={classNames("pmw-review-actions")}>
                 <button
                   type="button"
-                  className={uiClass("pmw-primary")}
+                  className={classNames("pmw-primary")}
                   disabled={busy}
                   onClick={() => void confirm()}
                 >
@@ -1003,13 +1004,13 @@ const PreviewPersonalMeaningDetailScreen = ({
 
 /** One existing workspace frame for both persisted and preview controllers. */
 function MeaningWorkspaceFrame({active,onBack,materialOpen,onToggleMaterial,screenRef,children,title}:{active:boolean;onBack:()=>void;materialOpen:boolean;onToggleMaterial:()=>void;screenRef?:import('react').Ref<HTMLElement>;title?:string;children:import('react').ReactNode}){
- return <section ref={screenRef} className={uiClass(`screen pmw-screen${active?' active':''}`, '#s-personal-meaning')} id="s-personal-meaning" data-anim="slide">
+ return <section ref={screenRef} className={classNames(`screen pmw-screen${active?' active':''}`, '#s-personal-meaning')} id="s-personal-meaning" data-anim="slide">
   <div className="ml-auto flex h-full w-full flex-col bg-surface-raised text-fg-primary shadow-overlay lg:max-w-[860px]">
-   <header className={uiClass('content-nav pmw-nav')}>
-    <button className={uiClass('content-nav-back')} onClick={onBack} aria-label={uiText('backToMyContent2')}><svg className={uiClass('icon')}><use href="#i-chev-l"/></svg></button>
+   <header className={classNames('content-nav pmw-nav')}>
+    <button className={classNames('content-nav-back')} onClick={onBack} aria-label={uiText('backToMyContent2')}><svg className={classNames('icon')}><use href="#i-chev-l"/></svg></button>
     <h1>{title??uiText('clarifyYourMeaning')}</h1>
-    <button type="button" className={uiClass(`pmw-material-toggle${materialOpen?' is-open':''}`)} onClick={onToggleMaterial} aria-expanded={materialOpen}>{uiText('context')}</button>
-   </header><div className={uiClass('pmw-shell')}>{children}</div>
+    <button type="button" className={classNames(`pmw-material-toggle${materialOpen?' is-open':''}`)} onClick={onToggleMaterial} aria-expanded={materialOpen}>{uiText('context')}</button>
+   </header><div className={classNames('pmw-shell')}>{children}</div>
   </div>
  </section>;
 }
@@ -1034,17 +1035,17 @@ function ConnectedMeaningConversation({active,onBack,conversation:c,learningCont
   </div>
  </MeaningWorkspaceFrame>;
  return <MeaningWorkspaceFrame title={localFlowText('findExpression')} active={active} onBack={onBack} materialOpen={materialOpen} onToggleMaterial={()=>setMaterialOpen(v=>!v)}>
-  {materialOpen&&<section className={uiClass('pmw-material')} aria-label={uiText('contextForThisConversation')}><p>{c.material}</p></section>}
+  {materialOpen&&<section className={classNames('pmw-material')} aria-label={uiText('contextForThisConversation')}><p>{c.material}</p></section>}
   <p className="px-5 text-xs">{c.source?.url&&<a href={c.source.url} target="_blank" rel="noreferrer">{localFlowText('viewSource')}{c.source.title||c.source.url}</a>}</p>
 
-  <div ref={transcript} className={uiClass('pmw-transcript')} aria-live="polite">
-   {(c.material||c.images?.length)?<div className={uiClass('pmw-message is-learner')}><div>{c.material&&<p>{c.material}</p>}{c.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-2 max-h-64 max-w-full rounded-control object-contain"/>)}</div></div>:<div className="mx-auto max-w-md px-6 py-10 text-center"><h2 className="text-lg font-medium">{localFlowText('chatWelcome')}</h2><p className="mt-3 text-sm leading-6 text-fg-secondary">{localFlowText('chatWelcomeHint')}</p></div>}
-   {c.messages.map((m,i)=><div key={i} className={uiClass(`pmw-message is-${m.role}`)}>{m.role==='assistant'&&<span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span>}<div>{m.body&&<p>{m.body}</p>}{m.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-2 max-h-64 max-w-full rounded-xl object-contain"/>)}</div></div>)}
-   {c.busy&&<div className={uiClass('pmw-message is-assistant is-thinking')}><span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span><div><p role="status">{localFlowText('clarificationWorking')}</p></div></div>}
-   {c.accepted&&<div className={uiClass('pmw-done')}><span className={uiClass('pmw-done-mark')}>✓</span><h2>{localFlowText('meaningConfirmed')}</h2><p>{localFlowText('savedLocally')}</p></div>}
+  <div ref={transcript} className={classNames('pmw-transcript')} aria-live="polite">
+   {(c.material||c.images?.length)?<div className={classNames('pmw-message is-learner')}><div>{c.material&&<p>{c.material}</p>}{c.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-2 max-h-64 max-w-full rounded-control object-contain"/>)}</div></div>:<div className="mx-auto max-w-md px-6 py-10 text-center"><h2 className="text-lg font-medium">{localFlowText('chatWelcome')}</h2><p className="mt-3 text-sm leading-6 text-fg-secondary">{localFlowText('chatWelcomeHint')}</p></div>}
+   {c.messages.map((m,i)=><div key={i} className={classNames(`pmw-message is-${m.role}`)}>{m.role==='assistant'&&<span className={classNames('pmw-avatar')} aria-hidden="true">✦</span>}<div>{m.body&&<p>{m.body}</p>}{m.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-2 max-h-64 max-w-full rounded-xl object-contain"/>)}</div></div>)}
+   {c.busy&&<div className={classNames('pmw-message is-assistant is-thinking')}><span className={classNames('pmw-avatar')} aria-hidden="true">✦</span><div><p role="status">{localFlowText('clarificationWorking')}</p></div></div>}
+   {c.accepted&&<div className={classNames('pmw-done')}><span className={classNames('pmw-done-mark')}>✓</span><h2>{localFlowText('meaningConfirmed')}</h2><p>{localFlowText('savedLocally')}</p></div>}
   </div>
   {c.accepted&&learningControls}
-  {c.notice&&<div className={uiClass('pmw-inline-error')} role="status">{c.notice}</div>}
+  {c.notice&&<div className={classNames('pmw-inline-error')} role="status">{c.notice}</div>}
   {candidate&&!c.accepted&&<section className="mx-4 mb-3 rounded-card border border-border-subtle bg-surface-panel p-4 sm:mx-6" aria-label={localFlowText('expressionCandidate')}>
    <h2 className="text-xl font-semibold">{candidate.expression}</h2><p className="mt-2 text-sm">{candidate.meaning}</p>
    <p className="mt-3 text-sm leading-6 text-fg-secondary">{localFlowText('myContext')}{candidate.context}</p>
@@ -1052,7 +1053,7 @@ function ConnectedMeaningConversation({active,onBack,conversation:c,learningCont
   </section>}
   <div className="mx-6 mb-2 flex gap-3">
    {c.canContinue&&!c.accepted&&<button className="inline-flex min-h-11 items-center rounded-control border border-border-strong bg-surface-subtle px-4 text-sm text-fg-secondary focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-40" disabled={c.busy} onClick={()=>void c.onContinue()}>{localFlowText('continueConversation')}</button>}
-   {c.busy&&<button className={uiClass('pmw-dock-organize')} onClick={c.onStop}>{localFlowText('stopRequest')}</button>}
+   {c.busy&&<button className={classNames('pmw-dock-organize')} onClick={c.onStop}>{localFlowText('stopRequest')}</button>}
   </div>
   {!c.accepted&&<ExpressionChatInput busy={c.busy} onSend={c.onSend}/>}
  </MeaningWorkspaceFrame>;

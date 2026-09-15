@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { CardExecution } from "./cards/CardExecution";
 import { RuntimeTools, type RuntimeToolsProps } from "./learning/RuntimeTools";
 import { RuntimeFrame } from "./learning/RuntimeFrame";
-import { uiClass } from "../ui/classes";
+import { fadeScreenClass, iconClass } from "../ui/primitives";
 import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
 import type { Word } from "../types";
 import type { IntroductionPhase } from "./cards/IntroductionCard";
@@ -150,16 +150,16 @@ export const LearnScreen = ({
     <button className="mt-8 min-h-12 rounded-control bg-action-primary px-6 text-sm text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus" onClick={onExit}>{t('assurance.back')}</button>
   </RuntimeFrame>;
   return (
-    <section id={screenId} data-anim="fade" className={uiClass(`screen${active && !isBehind ? ' active' : ''}${isBehind ? ' behind' : ''}${isIntroductionReveal ? ' is-intro-reveal' : ''}`, '#s-learn')}>
-      <div className={uiClass('h-sp')}/>
-      <div className={uiClass('lh')}>
-        <button onClick={onExit} aria-label={t('runtime.pause')}><svg className={uiClass('icon')} width="26" height="26"><use href="#i-chev-l"/></svg></button>
-        <span className={uiClass(`prog-n${isIntroduction ? ' sense-progress' : ''}`, '#lhProg')}>{stepLabel ?? progressLabel}</span>
-        <div className={uiClass('tools')}><RuntimeTools content={introductionContent} personalContent={personalMenuContent} showSave={!isExperienceHidden}
+    <section id={screenId} data-anim="fade" aria-hidden={!active || isBehind} className={`${fadeScreenClass(active && !isBehind, 'z-30')} flex flex-col overflow-hidden ${isIntroductionReveal ? 'is-intro-reveal' : ''}`}>
+      <div className="h-4" />
+      <div className="flex min-h-16 items-center gap-2 border-b border-border-subtle bg-surface-canvas/95 px-5 py-3 sm:px-8">
+        <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" onClick={onExit} aria-label={t('runtime.pause')}><svg className={iconClass} width="26" height="26" aria-hidden="true"><use href="#i-chev-l"/></svg></button>
+        <span className={`text-control-label font-semibold text-fg-primary ${isIntroduction ? 'rounded-pill bg-accent-soft px-3 py-1 text-fg-secondary' : ''}`} id="lhProg">{stepLabel ?? progressLabel}</span>
+        <div className="ml-auto flex items-center gap-2"><RuntimeTools content={introductionContent} personalContent={personalMenuContent} showSave={!isExperienceHidden}
           onUndo={!isIntroduction && !isReviewStage ? onUndo : undefined} canUndo={step > 1} onMarkKnown={onMarkKnown}
           onOpenMenuMore={onOpenMenuMore} toast={host.toast} busy={busy}/></div>
       </div>
-      <div className={uiClass('lscroll', '#lScroll')} id={screenId === 's-learn' ? 'lScroll' : undefined} ref={scrollRef}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:thin]" id={screenId === 's-learn' ? 'lScroll' : undefined} ref={scrollRef}>
         {notice}
         <fieldset disabled={busy} className="min-w-0 border-0 p-0 disabled:opacity-60" data-assurance-original-cards>
         {active && !isBehind && stepRendererRegistry.get(stage)({

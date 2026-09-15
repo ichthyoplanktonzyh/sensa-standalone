@@ -2,7 +2,7 @@ import {useTranslation} from 'react-i18next';
 import {cardText} from '../../i18n/originalCards';
 import i18n from '../../i18n';
 import { sensaLanguageDisplayName } from '@sensa/contracts/sensa';
-import { uiClass } from '../ui/classes';
+import { iconClass, slideScreenClass } from '../ui/primitives';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { QuickDictEntry, Word } from '../types';
 import { audioService } from '../services/audioService';
@@ -85,27 +85,27 @@ function SenseRow({
 }) {
   const examples = sense.examples ?? [];
   return (
-    <article className={uiClass(`reference-dictionary-sense${isContextual ? ' is-contextual' : ''}`)}>
-      <div className={uiClass("reference-dictionary-sense-copy")}>
-        {isContextual && <span className={uiClass("reference-dictionary-current-label")}>{cardText('dictCurrent')}</span>}
-        <p lang={sense.glossL1 ? undefined : 'en'}>
+    <article className={`grid gap-4 rounded-card border p-5 sm:grid-cols-[1fr_auto] ${isContextual ? 'border-border-strong bg-surface-selected' : 'border-border-subtle bg-surface-panel'}`}>
+      <div className="min-w-0">
+        {isContextual && <span className="mb-3 inline-flex rounded-pill bg-accent-soft px-3 py-1 text-metadata font-semibold text-action-primary">{cardText('dictCurrent')}</span>}
+        <p className="text-body leading-7" lang={sense.glossL1 ? undefined : 'en'}>
           {sense.glossL1 ?? sense.definitionL2 ?? cardText('dictDefinitionMissing')}
         </p>
-        {sense.glossL1 && sense.definitionL2 && <small lang="en">{sense.definitionL2}</small>}
+        {sense.glossL1 && sense.definitionL2 && <small className="mt-2 block text-body-support leading-6 text-fg-secondary" lang="en">{sense.definitionL2}</small>}
         {sense.labels && sense.labels.length > 0 && (
-          <div className={uiClass("reference-dictionary-labels")}>
-            {sense.labels.map((label) => <span key={label}>{label}</span>)}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {sense.labels.map((label) => <span className="rounded-pill bg-surface-subtle px-2 py-1 text-metadata text-fg-secondary" key={label}>{label}</span>)}
           </div>
         )}
       </div>
       {examples.length > 0 && (
         <button
           type="button"
-          className={uiClass("reference-dictionary-examples-button")}
+          className="inline-flex min-h-11 items-center gap-2 self-center rounded-control border border-border-subtle bg-transparent px-3 text-control-label font-semibold text-action-primary hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-focus"
           onClick={() => onOpenExamples(sense)}
         >
           <span>{cardText('dictExamples',{count:examples.length})}</span>
-          <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-r" /></svg>
+          <svg className={iconClass} aria-hidden="true"><use href="#i-chev-r" /></svg>
         </button>
       )}
     </article>
@@ -240,23 +240,24 @@ export function ReferenceDictionaryScreen({
 
   return (
     <section
-      className={uiClass(`screen reference-dictionary-screen${active ? ' active' : ''}`, "#s-reference-dictionary")}
+      className={`${slideScreenClass(active, 'z-[90]')} flex flex-col overflow-hidden`}
       id="s-reference-dictionary"
       data-screen-layer="1"
       data-anim="slide"
       aria-hidden={!active}
     >
-      <header className={uiClass("reference-dictionary-header")}>
-        <button type="button" onClick={onClose} aria-label={cardText('dictBack')}>
-          <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
+      <header className="grid min-h-20 shrink-0 grid-cols-[2.75rem_1fr_2.75rem] items-center gap-3 border-b border-border-subtle bg-surface-canvas/95 px-6 py-4">
+        <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={onClose} aria-label={cardText('dictBack')}>
+          <svg className={iconClass} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
-        <h1>{cardText('dictionary')}</h1>
+        <h1 className="text-center text-section-title font-semibold">{cardText('dictionary')}</h1>
         <i aria-hidden="true" />
       </header>
 
-      <form className={uiClass("reference-dictionary-search")} onSubmit={handleSearchSubmit} role="search">
-        <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-search" /></svg>
+      <form className="mx-auto mt-5 flex min-h-12 w-[calc(100%-3rem)] max-w-4xl shrink-0 items-center gap-3 rounded-control border border-border-strong bg-surface-panel px-4 focus-within:outline-2 focus-within:outline-focus sm:w-[calc(100%-5rem)]" onSubmit={handleSearchSubmit} role="search">
+        <svg className={`${iconClass} text-fg-tertiary`} aria-hidden="true"><use href="#i-search" /></svg>
         <input
+          className="min-w-0 flex-1 bg-transparent text-body text-fg-primary outline-none placeholder:text-fg-tertiary"
           ref={searchInputRef}
           type="search"
           value={query}
@@ -266,49 +267,49 @@ export function ReferenceDictionaryScreen({
           autoComplete="off"
           spellCheck={false}
         />
-        <button type="submit">{cardText('dictSubmit')}</button>
+        <button className="min-h-10 rounded-control border-0 bg-action-primary px-4 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover" type="submit">{cardText('dictSubmit')}</button>
       </form>
 
-      <div className={uiClass("reference-dictionary-scroll")}>
+      <div className="mx-auto min-h-0 w-full max-w-4xl flex-1 overflow-y-auto px-6 py-7 [scrollbar-width:thin] sm:px-10">
         {isLoading ? (
-          <div className={uiClass("reference-dictionary-state")} role="status">
-            <i aria-hidden="true" />
-            <strong>{cardText('dictLoading')}</strong>
+          <div className="flex min-h-64 flex-col items-center justify-center text-center" role="status">
+            <i className="mb-4 size-4 animate-pulse rounded-full bg-progress motion-reduce:animate-none" aria-hidden="true" />
+            <strong className="text-body text-fg-secondary">{cardText('dictLoading')}</strong>
           </div>
         ) : !entry ? (
-          <div className={uiClass("reference-dictionary-state")} role="status">
-            <strong>{cardText(lookupError ?? 'dictMissing')}</strong>
-            <p>{cardText('dictRetry')}</p>
+          <div className="flex min-h-64 flex-col items-center justify-center text-center" role="status">
+            <strong className="text-body text-feedback-danger">{cardText(lookupError ?? 'dictMissing')}</strong>
+            <p className="mt-2 text-body-support text-fg-secondary">{cardText('dictRetry')}</p>
           </div>
         ) : (
           <>
-            <section className={uiClass("reference-dictionary-identity")} aria-label={cardText('dictIdentity')}>
-              <h2>{entry.headword}</h2>
+            <section className="border-b border-border-subtle pb-7" aria-label={cardText('dictIdentity')}>
+              <h2 className="font-language text-5xl font-semibold">{entry.headword}</h2>
               {showLemmaRelation && (
-                <p className={uiClass("reference-dictionary-lemma-relation")}>
+                <p className="mt-4 flex items-center gap-2 text-body-support text-fg-secondary">
                   <span>{clickedSurface}</span>
-                  <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-r" /></svg>
+                  <svg className={iconClass} aria-hidden="true"><use href="#i-chev-r" /></svg>
                   <strong>{entry.headword}</strong>
                 </p>
               )}
               {entry.pronunciations.length > 0 && (
-                <div className={uiClass("reference-dictionary-pronunciations")}>
+                <div className="mt-5 flex flex-wrap gap-3">
                   {entry.pronunciations.map((pronunciation) => (
                     pronunciation.audioUrl ? (
                       <button
                         type="button"
                         key={pronunciation.pronunciationId}
-                        className={uiClass(playingPronunciationId === pronunciation.pronunciationId ? 'is-playing' : '')}
+                        className={`inline-flex min-h-11 items-center gap-2 rounded-control border-0 px-4 text-control-label font-semibold focus-visible:outline-2 focus-visible:outline-focus ${playingPronunciationId === pronunciation.pronunciationId ? 'bg-action-primary text-action-on-primary' : 'bg-accent-soft text-action-primary hover:bg-surface-selected'}`}
                         onClick={() => handleSpeak(pronunciation)}
                       >
                         <span>{accentLabel(pronunciation.accent)}</span>
-                        <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-vol-fill" /></svg>
-                        {pronunciation.ipa && <i>{pronunciation.ipa}</i>}
+                        <svg className={iconClass} aria-hidden="true"><use href="#i-vol-fill" /></svg>
+                        {pronunciation.ipa && <i className="font-language not-italic">{pronunciation.ipa}</i>}
                       </button>
                     ) : (
-                      <div key={pronunciation.pronunciationId}>
+                      <div className="inline-flex min-h-11 items-center gap-2 rounded-control bg-surface-subtle px-4 text-body-support text-fg-secondary" key={pronunciation.pronunciationId}>
                         <span>{accentLabel(pronunciation.accent)}</span>
-                        {pronunciation.ipa && <i>{pronunciation.ipa}</i>}
+                        {pronunciation.ipa && <i className="font-language not-italic">{pronunciation.ipa}</i>}
                       </div>
                     )
                   ))}
@@ -317,21 +318,21 @@ export function ReferenceDictionaryScreen({
             </section>
 
             {contextualSense && (
-              <section className={uiClass("reference-dictionary-section is-current")}>
-                <h2>{cardText('dictCurrent')}</h2>
-                <div className={uiClass("reference-dictionary-pos-heading")}>
+              <section className="mt-8">
+                <h2 className="text-section-title font-semibold">{cardText('dictCurrent')}</h2>
+                <div className="mb-3 mt-5 flex items-center justify-between text-metadata font-bold uppercase tracking-wide text-fg-tertiary">
                   <span>{contextualSense.partOfSpeech}</span>
                 </div>
                 <SenseRow sense={contextualSense} isContextual onOpenExamples={openExamples} />
               </section>
             )}
 
-            <section className={uiClass("reference-dictionary-section")}>
-              <h2>{contextualSense ? cardText('dictOther') : cardText('dictAll')}</h2>
-              <div className={uiClass("reference-dictionary-groups")}>
+            <section className="mt-8">
+              <h2 className="text-section-title font-semibold">{contextualSense ? cardText('dictOther') : cardText('dictAll')}</h2>
+              <div className="mt-5 space-y-7">
                 {senseGroups.map((group) => (
-                  <section key={group.partOfSpeech} className={uiClass("reference-dictionary-group")}>
-                    <div className={uiClass("reference-dictionary-pos-heading")}>
+                  <section key={group.partOfSpeech} className="space-y-3">
+                    <div className="flex items-center justify-between text-metadata font-bold uppercase tracking-wide text-fg-tertiary">
                       <span>{group.partOfSpeech}</span>
                       <small>{cardText('dictSenses',{count:group.senses.length})}</small>
                     </div>
@@ -349,32 +350,32 @@ export function ReferenceDictionaryScreen({
             </section>
 
             {entry.forms && entry.forms.length > 1 && (
-              <section className={uiClass("reference-dictionary-section reference-dictionary-forms")}>
-                <h2>{cardText('dictForms')}</h2>
-                <div>{entry.forms.map((form) => <span key={form}>{form}</span>)}</div>
+              <section className="mt-8 border-t border-border-subtle pt-7">
+                <h2 className="text-section-title font-semibold">{cardText('dictForms')}</h2>
+                <div className="mt-4 flex flex-wrap gap-2">{entry.forms.map((form) => <span className="rounded-pill bg-accent-soft px-3 py-1 text-body-support text-fg-secondary" key={form}>{form}</span>)}</div>
               </section>
             )}
 
             {((entry.usageNotes?.length ?? 0) > 0
               || (entry.morphology?.length ?? 0) > 0
               || (entry.etymology?.length ?? 0) > 0) && (
-              <section className={uiClass("reference-dictionary-section reference-dictionary-notes")}>
-                <h2>{cardText('dictAdditional')}</h2>
+              <section className="mt-8 border-t border-border-subtle pt-7">
+                <h2 className="text-section-title font-semibold">{cardText('dictAdditional')}</h2>
                 {[...(entry.usageNotes ?? []), ...(entry.morphology ?? []), ...(entry.etymology ?? [])]
                   .map((note) => (
-                    <details key={note.noteId}>
-                      <summary>{note.title}</summary>
-                      <p>{note.bodyL1}</p>
-                      <small>{note.sourceLabel}</small>
+                    <details className="mt-3 rounded-control border border-border-subtle bg-surface-panel px-4" key={note.noteId}>
+                      <summary className="flex min-h-12 cursor-pointer items-center font-semibold">{note.title}</summary>
+                      <p className="pb-3 text-body-support leading-6 text-fg-secondary">{note.bodyL1}</p>
+                      <small className="block pb-4 text-metadata text-fg-tertiary">{note.sourceLabel}</small>
                     </details>
                   ))}
               </section>
             )}
 
-            <footer className={uiClass("reference-dictionary-source")}>
-              <strong>{result?.release.provider}</strong>
-              <p>{entry.attribution}</p>
-              <small>{result?.release.rightsLabel}</small>
+            <footer className="mt-10 border-t border-border-subtle pt-6 text-metadata leading-5 text-fg-tertiary">
+              <strong className="text-fg-secondary">{result?.release.provider}</strong>
+              <p className="mt-2">{entry.attribution}</p>
+              <small className="mt-1 block">{result?.release.rightsLabel}</small>
             </footer>
           </>
         )}

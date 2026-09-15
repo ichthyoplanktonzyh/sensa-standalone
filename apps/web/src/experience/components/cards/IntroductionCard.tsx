@@ -1,5 +1,4 @@
 import {cardText} from '../../../i18n/originalCards';
-import { uiClass } from '../../ui/classes';
 import { useEffect, useRef, useState } from 'react';
 import type { RuntimeLearningContent } from '../../../learning/content/learningCatalog';
 import type {
@@ -164,67 +163,65 @@ export function IntroductionCard({
     const nextIsUk = nextPronunciation?.accentLocale === 'en-GB';
 
     return (
-      <div className={uiClass(`intro-reveal-page is-compact${isRepairReplay ? ' is-review-replay' : ''}`)}>
-        <div className={uiClass("intro-reveal-field")} aria-hidden="true">
-          <i /><i /><i />
-        </div>
+      <div className="relative mx-auto flex min-h-full w-full max-w-3xl flex-col overflow-hidden px-6 py-8 text-fg-primary sm:px-10">
 
         {isRepairReplay && (
-          <div className={uiClass("intro-review-replay-context")} role="status">
-            <span aria-hidden="true">↺</span>
-            <p><strong>{repairContext.title}</strong>{repairContext.body}</p>
+          <div className="mb-6 flex items-start gap-3 rounded-control bg-accent-soft p-4" role="status">
+            <span className="text-feedback-warning" aria-hidden="true">↺</span>
+            <p className="text-body-support leading-6 text-fg-secondary"><strong className="mr-1 text-fg-primary">{repairContext.title}</strong>{repairContext.body}</p>
           </div>
         )}
 
-        <header className={uiClass("intro-reveal-identity intro-reveal-identity-compact")}>
-          <div className={uiClass("intro-reveal-form-row")}>
-            <h1 ref={revealHeadingRef} tabIndex={-1}>{content.lemma}</h1>
+        <header>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h1 className="font-language text-learning-expression font-semibold" ref={revealHeadingRef} tabIndex={-1}>{content.lemma}</h1>
             {activePronunciation && (
-              <div className={uiClass("intro-reveal-pronunciations is-combined")}>
+              <div>
                 <button
+                  className="inline-flex min-h-11 items-center gap-2 rounded-control border-0 bg-accent-soft px-4 text-control-label font-semibold text-action-primary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus"
                   type="button"
                   onClick={() => playPronunciation(pronunciationIndex, true)}
                   aria-label={cardText('play',{accent:activeIsUk ? cardText('british') : cardText('american'),ipa:activePronunciation.ipa})}
                   title={cardText('playTapAgainToSwitchAccent')}
                 >
                   <span>{activeIsUk ? cardText('uk') : cardText('us')}</span>
-                  <b>{activePronunciation.ipa}</b>
+                  <b className="font-language font-medium">{activePronunciation.ipa}</b>
                   <SoundIcon />
                 </button>
               </div>
             )}
           </div>
 
-          <div className={uiClass("intro-reveal-sense intro-reveal-sense-compact")}>
+          <div className="mt-5 flex items-start justify-between gap-4 border-b border-border-subtle pb-6">
             <div>
-              <span>{content.partOfSpeech}</span>
-              <h2>{content.guideLabelL1}</h2>
+              <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{content.partOfSpeech}</span>
+              <h2 className="mt-2 text-section-title font-semibold">{content.guideLabelL1}</h2>
             </div>
             <button
               type="button"
-              className={uiClass("intro-compact-recap")}
+              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-control border border-border-subtle bg-surface-panel px-3 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
               onClick={() => onPhaseChange('experience')}
             >
               <ReplayIcon />{cardText('replayExperience')}</button>
           </div>
         </header>
 
-        <section className={uiClass("intro-reveal-bridge intro-reveal-bridge-compact")} aria-labelledby="intro-reveal-bridge-title">
-          <span className={uiClass("intro-reveal-section-label", "#intro-reveal-bridge-title")} id="intro-reveal-bridge-title">{cardText('coreMeaning')}</span>
-          <p>{content.l1Bridge}</p>
+        <section className="mt-6 rounded-card bg-accent-soft p-5" aria-labelledby="intro-reveal-bridge-title">
+          <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary" id="intro-reveal-bridge-title">{cardText('coreMeaning')}</span>
+          <p className="mt-3 text-body leading-7 text-fg-primary">{content.l1Bridge}</p>
         </section>
 
         {primaryPattern?.usageRestriction && (
-          <section className={uiClass("intro-compact-boundary")} aria-label={cardText('usageBoundariesForThisSense')}>
-            <span>{cardText('boundary')}</span>
-            <p>{primaryPattern.usageRestriction}</p>
+          <section className="mt-4 rounded-control border border-border-subtle bg-surface-panel p-4" aria-label={cardText('usageBoundariesForThisSense')}>
+            <span className="text-metadata font-bold uppercase tracking-wide text-feedback-warning">{cardText('boundary')}</span>
+            <p className="mt-2 text-body-support leading-6 text-fg-secondary">{primaryPattern.usageRestriction}</p>
           </section>
         )}
 
-        <section className={uiClass("intro-reveal-example intro-reveal-example-compact")} aria-labelledby="intro-reveal-example-title">
-          <div className={uiClass("intro-reveal-example-head")}>
-            <span className={uiClass("intro-reveal-section-label", "#intro-reveal-example-title")} id="intro-reveal-example-title">{cardText('putItInASentence')}</span>
-            <div>
+        <section className="mt-6 rounded-card border border-border-subtle bg-surface-panel p-5" aria-labelledby="intro-reveal-example-title">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary" id="intro-reveal-example-title">{cardText('putItInASentence')}</span>
+            <div className="flex gap-2 [&_button]:grid [&_button]:size-11 [&_button]:place-items-center [&_button]:rounded-control [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-action-primary [&_button]:hover:bg-accent-soft [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-focus">
               {example.audioUrl && (
                 <button
                   type="button"
@@ -242,7 +239,7 @@ export function IntroductionCard({
               </button>
             </div>
           </div>
-          <div className={uiClass("intro-reveal-example-l2")}>
+          <div className="mt-4 font-language text-xl leading-9">
             <ClickableSentence
               sentenceHtml={exampleHtml}
               activeTokenIdx={activeLookup?.tokenIdx ?? null}
@@ -260,20 +257,20 @@ export function IntroductionCard({
               }}
             />
           </div>
-          <p>{example.textL1}</p>
+          <p className="mt-4 text-body-support leading-6 text-fg-secondary">{example.textL1}</p>
         </section>
 
         {primaryPattern && (
-          <details className={uiClass("intro-compact-more")}>
-            <summary>{cardText('moreUsage')}</summary>
-            <div>
-              <p className={uiClass("intro-compact-full-bridge")}>{content.l1Bridge}</p>
-              <strong>{primaryPattern.canonicalPattern}</strong>
+          <details className="mt-5 rounded-card border border-border-subtle bg-surface-panel px-5">
+            <summary className="flex min-h-12 cursor-pointer items-center text-control-label font-semibold text-fg-secondary">{cardText('moreUsage')}</summary>
+            <div className="pb-5">
+              <p className="text-body-support leading-6 text-fg-secondary">{content.l1Bridge}</p>
+              <strong className="mt-4 block font-language text-lg">{primaryPattern.canonicalPattern}</strong>
               {(primaryPattern.registerLabel || primaryPattern.domainLabel) && (
-                <small>{primaryPattern.registerLabel ?? primaryPattern.domainLabel}</small>
+                <small className="mt-2 block text-metadata text-fg-tertiary">{primaryPattern.registerLabel ?? primaryPattern.domainLabel}</small>
               )}
               {visibleCollocations.length > 0 && (
-                <div className={uiClass("intro-reveal-collocations")} aria-label={cardText('relatedExamples')}>
+                <div className="mt-4 flex flex-wrap gap-2 [&>*]:min-h-10 [&>*]:rounded-control [&>*]:border [&>*]:border-border-subtle [&>*]:bg-surface-subtle [&>*]:px-3 [&>*]:text-control-label [&>*]:text-fg-secondary" aria-label={cardText('relatedExamples')}>
                   {visibleCollocations.map((collocation) => collocation.exampleIndex >= 0 ? (
                     <button
                       type="button"
@@ -288,7 +285,7 @@ export function IntroductionCard({
                 </div>
               )}
               {primaryPattern.usageRestriction && (
-                <p className={uiClass("intro-compact-more-boundary")}>{primaryPattern.usageRestriction}</p>
+                <p className="mt-4 rounded-control bg-accent-soft p-3 text-body-support leading-6 text-fg-secondary">{primaryPattern.usageRestriction}</p>
               )}
             </div>
           </details>
@@ -301,8 +298,8 @@ export function IntroductionCard({
           variant="compact"
         />
 
-        <footer className={uiClass("intro-reveal-footer intro-reveal-footer-compact")}>
-          <button type="button" className={uiClass("intro-reveal-continue")} onClick={onComplete}>
+        <footer className="mt-auto pt-8">
+          <button type="button" className="flex min-h-14 w-full items-center justify-between rounded-control border-0 bg-action-primary px-5 text-body font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus" onClick={onComplete}>
             <span>{continuationLabel}</span>
             <ArrowIcon />
           </button>

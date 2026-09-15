@@ -1,4 +1,3 @@
-import { uiClass } from '../ui/classes';
 /**
  * 摄取模拟器（仅本地原型的演示浮层）。
  *
@@ -259,65 +258,66 @@ export const IntakeSimulatorModal = ({
   const active = SCENARIOS[scenario];
 
   return (
-    <div className={uiClass("intake-layer")} onMouseDown={handleClose}>
+    <div className="fixed inset-0 z-[120] flex items-stretch justify-end bg-overlay" onMouseDown={handleClose}>
       <section
-        className={uiClass("intake-sim")}
+        className="flex h-full w-full max-w-xl flex-col bg-surface-canvas text-fg-primary shadow-overlay"
         role="dialog"
         aria-modal="true"
         aria-labelledby="intake-sim-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className={uiClass("intake-drawer__grip")} aria-hidden="true" />
-        <header className={uiClass("intake-drawer__head")}>
+        <header className="flex min-h-20 items-center justify-between gap-4 border-b border-border-subtle px-6 py-4">
           <div>
-            <small>仅本地原型</small>
-            <h2 id="intake-sim-title">摄取模拟器</h2>
+            <small className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">仅本地原型</small>
+            <h2 className="mt-1 text-section-title font-semibold" id="intake-sim-title">摄取模拟器</h2>
           </div>
-          <button type="button" onClick={handleClose} aria-label="关闭">×</button>
+          <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-xl text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={handleClose} aria-label="关闭">×</button>
         </header>
 
-        <div className={uiClass("intake-sim__body")}>
-          <div className={uiClass("intake-sim__scenarios")} role="tablist" aria-label="选择摄取模拟场景">
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <div className="grid grid-cols-3 rounded-control bg-surface-subtle p-1" role="tablist" aria-label="选择摄取模拟场景">
             {(Object.keys(SCENARIOS) as Scenario[]).map((key) => (
               <button
                 type="button"
                 key={key}
                 role="tab"
                 aria-selected={scenario === key}
-                className={uiClass(scenario === key ? 'is-active' : '')}
+                className={`min-h-11 rounded-control border-0 px-2 text-control-label font-semibold focus-visible:outline-2 focus-visible:outline-focus ${scenario === key ? 'bg-surface-panel text-action-primary shadow-raised' : 'bg-transparent text-fg-secondary'}`}
                 onClick={() => switchScenario(key)}
               >
                 {SCENARIOS[key].label}
               </button>
             ))}
           </div>
-          <p className={uiClass("intake-sim__hint")}>{active.hint}</p>
+          <p className="mt-5 text-body-support leading-6 text-fg-secondary">{active.hint}</p>
 
           {scenario !== 'photo' ? (
-            <div className={uiClass("intake-sim__form")}>
-              <label className={uiClass("intake-sim__field")}>
-                <span>网页里的句子</span>
+            <div className="mt-6 grid gap-5">
+              <label className="grid gap-2">
+                <span className="text-control-label font-semibold">网页里的句子</span>
                 <textarea
+                  className="min-h-32 w-full resize-y rounded-control border border-border-strong bg-surface-panel p-3 text-body text-fg-primary focus-visible:outline-2 focus-visible:outline-focus"
                   value={sentence}
                   onChange={(event) => setSentence(event.target.value)}
                   rows={3}
                 />
               </label>
-              <label className={uiClass("intake-sim__field")}>
-                <span>圈出的词</span>
+              <label className="grid gap-2">
+                <span className="text-control-label font-semibold">圈出的词</span>
                 <input
+                  className="min-h-12 w-full rounded-control border border-border-strong bg-surface-panel px-3 text-body text-fg-primary focus-visible:outline-2 focus-visible:outline-focus"
                   value={word}
                   onChange={(event) => setWord(event.target.value)}
                   placeholder="在这句话里点选或输入一个词"
                 />
               </label>
               {scenario === 'web_fast' && (
-                <fieldset className={uiClass("intake-sim__senses")}>
-                  <legend>匹配义项（确认后走快轨）</legend>
+                <fieldset className="grid gap-2 rounded-card border border-border-subtle p-4">
+                  <legend className="px-2 text-control-label font-semibold">匹配义项（确认后走快轨）</legend>
                   {LOAN_SENSES.map((option, index) => (
                     <label
                       key={option.definitionSummary}
-                      className={uiClass(senseIndex === index ? 'is-selected' : '')}
+                      className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-control border p-3 text-body-support ${senseIndex === index ? 'border-border-strong bg-surface-selected' : 'border-border-subtle bg-surface-panel'}`}
                     >
                       <input
                         type="radio"
@@ -330,17 +330,17 @@ export const IntakeSimulatorModal = ({
                   ))}
                 </fieldset>
               )}
-              <p className={uiClass("intake-sim__route")}>{active.route}</p>
+              <p className="rounded-control bg-accent-soft p-3 text-metadata leading-5 text-fg-secondary">{active.route}</p>
             </div>
           ) : (
-            <div className={uiClass("intake-sim__form")}>
-              <div className={uiClass("intake-sim__field")}>
-                <span>随手拍的照片<small>选填，可用模拟照片</small></span>
-                <div className={uiClass("intake-sim__photo")}>
+            <div className="mt-6 grid gap-5">
+              <div className="grid gap-2">
+                <span className="text-control-label font-semibold">随手拍的照片<small className="ml-2 font-normal text-fg-tertiary">选填，可用模拟照片</small></span>
+                <div className="flex flex-wrap gap-3 [&_button]:min-h-11 [&_button]:rounded-control [&_button]:border [&_button]:border-border-strong [&_button]:bg-surface-panel [&_button]:px-4 [&_button]:text-control-label [&_button]:font-semibold [&_button]:text-fg-secondary [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-focus">
                   <button type="button" onClick={() => fileRef.current?.click()}>选择照片</button>
                   <button type="button" onClick={useSimulatedPhoto}>用模拟照片</button>
                   {photoId && !photoPreview && (
-                    <span className={uiClass("intake-sim__photo-name")}>已用模拟照片</span>
+                    <span className="self-center text-metadata text-fg-secondary">已用模拟照片</span>
                   )}
                   <input
                     ref={fileRef}
@@ -354,28 +354,29 @@ export const IntakeSimulatorModal = ({
                   />
                 </div>
                 {photoPreview && (
-                  <img className={uiClass("intake-sim__preview")} src={photoPreview} alt="随手拍的照片" />
+                  <img className="mt-3 aspect-video w-full rounded-card object-cover" src={photoPreview} alt="随手拍的照片" />
                 )}
               </div>
-              <label className={uiClass("intake-sim__field")}>
-                <span>当时想记下的一句话<small>选填</small></span>
+              <label className="grid gap-2">
+                <span className="text-control-label font-semibold">当时想记下的一句话<small className="ml-2 font-normal text-fg-tertiary">选填</small></span>
                 <input
+                  className="min-h-12 w-full rounded-control border border-border-strong bg-surface-panel px-3 text-body text-fg-primary focus-visible:outline-2 focus-visible:outline-focus"
                   value={caption}
                   onChange={(event) => setCaption(event.target.value)}
                   placeholder="例如：图书馆的借阅台"
                 />
               </label>
-              <p className={uiClass("intake-sim__route")}>{active.route}</p>
+              <p className="rounded-control bg-accent-soft p-3 text-metadata leading-5 text-fg-secondary">{active.route}</p>
             </div>
           )}
 
-          {error && <p className={uiClass("intake-sim__error")} role="alert">{error}</p>}
+          {error && <p className="mt-5 rounded-control border border-feedback-danger bg-surface-panel p-3 text-body-support text-feedback-danger" role="alert">{error}</p>}
         </div>
 
-        <footer className={uiClass("intake-sim__foot")}>
+        <footer className="border-t border-border-subtle p-4">
           <button
             type="button"
-            className={uiClass("intake-sim__primary")}
+            className="min-h-12 w-full rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45"
             disabled={busy}
             onClick={() => void (scenario === 'photo' ? submitPhotoCapture() : submitWordCapture())}
           >

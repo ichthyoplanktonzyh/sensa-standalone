@@ -1,4 +1,5 @@
-import { uiClass } from '../ui/classes';
+import { classNames } from '../ui/primitives';
+import './SensaSemanticWorldScreen.css';
 import { useEffect, useMemo, useState } from 'react';
 import type { SemanticWorldScreenProps } from './SemanticWorldScreen';
 import { PersonalMeaningComposer } from './PersonalMeaningComposer';
@@ -409,24 +410,24 @@ const bindingIcon = (phase: BindingPhase) => {
 };
 
 const StatusMark = ({ phase }: { phase: MeaningPhase }) => (
-  <span className={uiClass(`personal-world-v2__status-mark is-${phase}`)} aria-hidden="true">
+  <span className={classNames(`personal-world-v2__status-mark is-${phase}`)} aria-hidden="true">
     {senseFormationIcon(phase)}
   </span>
 );
 
 const BindingStatusMark = ({ phase }: { phase: BindingPhase }) => (
-  <span className={uiClass(`personal-world-v2__status-mark is-binding-${phase}`)} aria-hidden="true">
+  <span className={classNames(`personal-world-v2__status-mark is-binding-${phase}`)} aria-hidden="true">
     {bindingIcon(phase)}
   </span>
 );
 
 const StatusAxes = ({ meaning }: { meaning: WorldMeaningView }) => (
-  <div className={uiClass("personal-world-v2__status-axes")} aria-label="状态">
-    <span className={uiClass(`personal-world-v2__axis is-sense-${meaning.senseFormation.phase}`)}>
+  <div className={classNames("personal-world-v2__status-axes")} aria-label="状态">
+    <span className={classNames(`personal-world-v2__axis is-sense-${meaning.senseFormation.phase}`)}>
       <small>意思</small>
       <b><StatusMark phase={meaning.senseFormation.phase} />{senseFormationLabels[meaning.senseFormation.phase]}</b>
     </span>
-    <span className={uiClass(`personal-world-v2__axis is-binding-${meaning.expressionBinding.phase}`)}>
+    <span className={classNames(`personal-world-v2__axis is-binding-${meaning.expressionBinding.phase}`)}>
       <small>表达</small>
       <b><BindingStatusMark phase={meaning.expressionBinding.phase} />{expressionBindingLabels[meaning.expressionBinding.phase]}</b>
     </span>
@@ -434,13 +435,13 @@ const StatusAxes = ({ meaning }: { meaning: WorldMeaningView }) => (
 );
 
 const CompactStatus = ({ meaning }: { meaning: WorldMeaningView }) => (
-  <div className={uiClass("personal-world-v2__compact-status")} aria-label="当前进度">
-    <span className={uiClass(`is-sense-${meaning.senseFormation.phase}`)}>
+  <div className={classNames("personal-world-v2__compact-status")} aria-label="当前进度">
+    <span className={classNames(`is-sense-${meaning.senseFormation.phase}`)}>
       <StatusMark phase={meaning.senseFormation.phase} />
       {senseFormationLabels[meaning.senseFormation.phase]}
     </span>
     {meaning.expressionBinding.phase !== 'not_ready' && (
-      <span className={uiClass(`is-binding-${meaning.expressionBinding.phase}`)}>
+      <span className={classNames(`is-binding-${meaning.expressionBinding.phase}`)}>
         <BindingStatusMark phase={meaning.expressionBinding.phase} />
         {expressionBindingLabels[meaning.expressionBinding.phase]}
       </span>
@@ -449,14 +450,14 @@ const CompactStatus = ({ meaning }: { meaning: WorldMeaningView }) => (
 );
 
 const AnchorChips = ({ meaning }: { meaning: WorldMeaningView }) => (
-  <div className={uiClass("personal-world-v2__anchors")} aria-label="锚点">
+  <div className={classNames("personal-world-v2__anchors")} aria-label="锚点">
     {meaning.experienceAnchors.map((anchor) => (
-      <span className={uiClass("personal-world-v2__anchor-chip is-experience")} key={anchor.anchorId}>
+      <span className={classNames("personal-world-v2__anchor-chip is-experience")} key={anchor.anchorId}>
         {anchor.surfaceForm}
       </span>
     ))}
     {meaning.familiarExpressions.map((anchor) => (
-      <span className={uiClass("personal-world-v2__anchor-chip is-expression")} key={anchor.anchorId}>
+      <span className={classNames("personal-world-v2__anchor-chip is-expression")} key={anchor.anchorId}>
         {anchor.surfaceForm}
       </span>
     ))}
@@ -464,19 +465,19 @@ const AnchorChips = ({ meaning }: { meaning: WorldMeaningView }) => (
 );
 
 const ProposalBranch = ({ proposal }: { proposal: ProposalBranch }) => (
-  <div className={uiClass("personal-world-v2__proposal")} aria-label="建议意思">
-    <header className={uiClass("personal-world-v2__branch-header")}>
-      <span className={uiClass("personal-world-v2__branch-symbol is-proposal")} aria-hidden="true">?</span>
+  <div className={classNames("personal-world-v2__proposal")} aria-label="建议意思">
+    <header className={classNames("personal-world-v2__branch-header")}>
+      <span className={classNames("personal-world-v2__branch-symbol is-proposal")} aria-hidden="true">?</span>
       <span>
         <b>建议的意思</b>
       </span>
       <em>待确认</em>
     </header>
 
-    {proposal.core && <p className={uiClass("personal-world-v2__proposal-core")}>{proposal.core}</p>}
+    {proposal.core && <p className={classNames("personal-world-v2__proposal-core")}>{proposal.core}</p>}
 
     {proposal.candidates.length > 0 && (
-      <div className={uiClass("personal-world-v2__candidate-row")}>
+      <div className={classNames("personal-world-v2__candidate-row")}>
         <small>表达候选</small>
         <div>
           {proposal.candidates.map((candidate) => <span key={candidate}>{candidate}</span>)}
@@ -487,24 +488,24 @@ const ProposalBranch = ({ proposal }: { proposal: ProposalBranch }) => (
 );
 
 const AlignmentBranch = ({ alignment }: { alignment: AlignmentBranch }) => (
-  <div className={uiClass("personal-world-v2__alignment")} aria-label="已确认意思">
-    <header className={uiClass("personal-world-v2__branch-header")}>
-      <span className={uiClass("personal-world-v2__branch-symbol is-alignment")} aria-hidden="true">✓</span>
+  <div className={classNames("personal-world-v2__alignment")} aria-label="已确认意思">
+    <header className={classNames("personal-world-v2__branch-header")}>
+      <span className={classNames("personal-world-v2__branch-symbol is-alignment")} aria-hidden="true">✓</span>
       <span>
         <b>已确认意思</b>
       </span>
       <em>已确认</em>
     </header>
 
-    <div className={uiClass("personal-world-v2__sense-block")}>
+    <div className={classNames("personal-world-v2__sense-block")}>
       <strong>{alignment.sense}</strong>
     </div>
 
     {alignment.bindings.length > 0 ? (
-      <div className={uiClass("personal-world-v2__binding-list")}>
+      <div className={classNames("personal-world-v2__binding-list")}>
         {alignment.bindings.map((binding) => (
-          <div className={uiClass("personal-world-v2__binding")} key={binding.bindingVersionId}>
-            <div className={uiClass("personal-world-v2__binding-line")}>
+          <div className={classNames("personal-world-v2__binding")} key={binding.bindingVersionId}>
+            <div className={classNames("personal-world-v2__binding-line")}>
               <strong>{binding.surfaceForm}</strong>
               <span>{expressionTypeLabel(binding.expressionType)} · {languageLabel(binding.languageTag)}</span>
             </div>
@@ -513,8 +514,8 @@ const AlignmentBranch = ({ alignment }: { alignment: AlignmentBranch }) => (
         ))}
       </div>
     ) : (
-      <div className={uiClass("personal-world-v2__focus-next")}>
-        <span className={uiClass("personal-world-v2__next-dash")} aria-hidden="true" />
+      <div className={classNames("personal-world-v2__focus-next")}>
+        <span className={classNames("personal-world-v2__next-dash")} aria-hidden="true" />
         <span><b>表达尚未绑定</b><small>可以继续选择目标语言表达</small></span>
       </div>
     )}
@@ -523,9 +524,9 @@ const AlignmentBranch = ({ alignment }: { alignment: AlignmentBranch }) => (
 );
 
 const FocusBranch = ({ focus }: { focus: FocusWorldView }) => (
-  <article className={uiClass(`personal-world-v2__focus is-${focus.state}`)}>
-    <header className={uiClass("personal-world-v2__focus-header")}>
-      <span className={uiClass("personal-world-v2__focus-marker")} aria-hidden="true" />
+  <article className={classNames(`personal-world-v2__focus is-${focus.state}`)}>
+    <header className={classNames("personal-world-v2__focus-header")}>
+      <span className={classNames("personal-world-v2__focus-marker")} aria-hidden="true" />
       <span>
         <b>关注的侧面</b>
       </span>
@@ -540,8 +541,8 @@ const FocusBranch = ({ focus }: { focus: FocusWorldView }) => (
     {focus.proposal && <ProposalBranch proposal={focus.proposal} />}
     {focus.alignment && <AlignmentBranch alignment={focus.alignment} />}
     {!focus.proposal && !focus.alignment && (
-      <div className={uiClass("personal-world-v2__focus-next")}>
-        <span className={uiClass("personal-world-v2__next-dash")} aria-hidden="true" />
+      <div className={classNames("personal-world-v2__focus-next")}>
+        <span className={classNames("personal-world-v2__next-dash")} aria-hidden="true" />
         <span>
           <b>{focus.state === 'clarifying' ? '侧面待确认' : '正在澄清意思'}</b>
           <small>{focus.state === 'clarifying' ? '可以和 AI 确认是否聚焦这个侧面' : '可以继续补充场景与用法'}</small>
@@ -562,28 +563,28 @@ const MeaningConstellation = ({
 }) => {
   const primaryAction = meaningPrimaryAction(meaning);
   return (
-  <article className={uiClass(`personal-world-v2__meaning-card is-${meaning.senseFormation.phase}`)}>
-    <header className={uiClass("personal-world-v2__meaning-header")}>
-      <div className={uiClass("personal-world-v2__meaning-number")}>{meaning.number}</div>
-      <div className={uiClass("personal-world-v2__meaning-title")}>
+  <article className={classNames(`personal-world-v2__meaning-card is-${meaning.senseFormation.phase}`)}>
+    <header className={classNames("personal-world-v2__meaning-header")}>
+      <div className={classNames("personal-world-v2__meaning-number")}>{meaning.number}</div>
+      <div className={classNames("personal-world-v2__meaning-title")}>
         <h3>{meaning.anchor}</h3>
       </div>
       <StatusAxes meaning={meaning} />
     </header>
 
-    <div className={uiClass("personal-world-v2__anchor-ground")}>
+    <div className={classNames("personal-world-v2__anchor-ground")}>
       <AnchorChips meaning={meaning} />
     </div>
 
     {meaning.focuses.length > 0 ? (
-      <div className={uiClass("personal-world-v2__focuses")} aria-label="关注侧面">
+      <div className={classNames("personal-world-v2__focuses")} aria-label="关注侧面">
         {meaning.focuses.map((focus) => (
           <div key={focus.id}>
             <FocusBranch focus={focus} />
             {focus.alignment && (
               <button
                 type="button"
-                className={uiClass("personal-world-v2__focus-open-sense")}
+                className={classNames("personal-world-v2__focus-open-sense")}
                 onClick={() => onOpenConfirmedSense(focus.id)}
               >
                 查看已确认意思 <span aria-hidden="true">→</span>
@@ -593,12 +594,12 @@ const MeaningConstellation = ({
         ))}
       </div>
     ) : meaning.directAlignments.length > 0 ? (
-      <div className={uiClass("personal-world-v2__focuses")} aria-label="语境中已解析的意思">
+      <div className={classNames("personal-world-v2__focuses")} aria-label="语境中已解析的意思">
         {meaning.directAlignments.map((direct) => (
           <div key={direct.id}>
-            <article className={uiClass("personal-world-v2__focus is-accepted")}>
-              <header className={uiClass("personal-world-v2__focus-header")}>
-                <span className={uiClass("personal-world-v2__focus-marker")} aria-hidden="true" />
+            <article className={classNames("personal-world-v2__focus is-accepted")}>
+              <header className={classNames("personal-world-v2__focus-header")}>
+                <span className={classNames("personal-world-v2__focus-marker")} aria-hidden="true" />
                 <span><b>由当前语境直接确定</b></span>
                 <em>无需 Focus</em>
               </header>
@@ -606,7 +607,7 @@ const MeaningConstellation = ({
             </article>
             <button
               type="button"
-              className={uiClass("personal-world-v2__focus-open-sense")}
+              className={classNames("personal-world-v2__focus-open-sense")}
               onClick={() => onOpenConfirmedSense(direct.id)}
             >
               查看已确认意思 <span aria-hidden="true">→</span>
@@ -615,15 +616,15 @@ const MeaningConstellation = ({
         ))}
       </div>
     ) : (
-      <div className={uiClass("personal-world-v2__unclarified")}>
-        <span className={uiClass("personal-world-v2__unclarified-orbit")} aria-hidden="true"><i /><i /><i /></span>
+      <div className={classNames("personal-world-v2__unclarified")}>
+        <span className={classNames("personal-world-v2__unclarified-orbit")} aria-hidden="true"><i /><i /><i /></span>
         <span><b>尚未开始澄清</b><small>下一步可以从这段经验中说出：你真正在意的是什么？</small></span>
       </div>
     )}
 
     <button
       type="button"
-      className={uiClass("personal-world-v2__meaning-open")}
+      className={classNames("personal-world-v2__meaning-open")}
       onClick={() => {
         if (primaryAction.opensConfirmedSense && primaryAction.meaningFocusId) {
           onOpenConfirmedSense(primaryAction.meaningFocusId);
@@ -895,8 +896,8 @@ const EmptyWorldState = ({
   mode: 'world' | 'filtered';
   onCreate: () => void;
 }) => (
-  <div className={uiClass("personal-world-v2__empty")} role="status">
-    <span className={uiClass("personal-world-v2__empty-mark")} aria-hidden="true">⌕</span>
+  <div className={classNames("personal-world-v2__empty")} role="status">
+    <span className={classNames("personal-world-v2__empty-mark")} aria-hidden="true">⌕</span>
     <b>{mode === 'world' ? '还没有保存的 Personal Meaning' : '没有匹配当前搜索或筛选的项目'}</b>
     <p>
       {mode === 'world'
@@ -904,7 +905,7 @@ const EmptyWorldState = ({
         : '你的其他 Personal Meaning 仍然保留；可以清除搜索或更换状态筛选。'}
     </p>
     {mode === 'world' && (
-      <button type="button" className={uiClass("personal-world-v2__empty-action")} onClick={onCreate}>
+      <button type="button" className={classNames("personal-world-v2__empty-action")} onClick={onCreate}>
         创建个人意义
       </button>
     )}
@@ -918,11 +919,11 @@ const WorldErrorState = ({
   error: string | null;
   onReload: () => void;
 }) => (
-  <div className={uiClass("personal-world-v2__empty")} role="alert">
-    <span className={uiClass("personal-world-v2__empty-mark")} aria-hidden="true">!</span>
+  <div className={classNames("personal-world-v2__empty")} role="alert">
+    <span className={classNames("personal-world-v2__empty-mark")} aria-hidden="true">!</span>
     <b>个人意义世界暂时无法读取</b>
     <p>{error || '本机个人意义数据不可用。'}</p>
-    <button type="button" className={uiClass("personal-world-v2__empty-action")} onClick={onReload}>
+    <button type="button" className={classNames("personal-world-v2__empty-action")} onClick={onReload}>
       重新读取
     </button>
   </div>
@@ -957,24 +958,24 @@ const GraphView = ({
 
   if (meanings.length === 0) {
     return (
-      <div className={uiClass("personal-world-v2__graph-view")} aria-label="图谱视图">
+      <div className={classNames("personal-world-v2__graph-view")} aria-label="图谱视图">
         <EmptyWorldState mode={emptyMode} onCreate={onCreate} />
       </div>
     );
   }
 
   return (
-    <div className={uiClass("personal-world-v2__graph-view")} aria-label="图谱视图">
-      <div className={uiClass("personal-world-v2__graph-toolbar")}>
+    <div className={classNames("personal-world-v2__graph-view")} aria-label="图谱视图">
+      <div className={classNames("personal-world-v2__graph-toolbar")}>
         <span><b>关系图谱</b><small>{graph.nodes.length} 个节点 · {graph.edges.length} 条关联</small></span>
-        <div className={uiClass("personal-world-v2__graph-zoom")} role="group" aria-label="图谱缩放">
+        <div className={classNames("personal-world-v2__graph-zoom")} role="group" aria-label="图谱缩放">
           <button
             type="button"
             onClick={() => setZoom((current) => Math.max(.75, current - .25))}
             aria-label="缩小图谱"
             disabled={zoom <= .75}
           >−</button>
-          <output className={uiClass("personal-world-v2__graph-zoom-value")} aria-live="polite">{Math.round(zoom * 100)}%</output>
+          <output className={classNames("personal-world-v2__graph-zoom-value")} aria-live="polite">{Math.round(zoom * 100)}%</output>
           <button
             type="button"
             onClick={() => setZoom((current) => Math.min(1.25, current + .25))}
@@ -984,19 +985,19 @@ const GraphView = ({
         </div>
       </div>
 
-      <div className={uiClass("personal-world-v2__graph-viewport")} tabIndex={0} aria-label="可滚动的关系图谱画布">
+      <div className={classNames("personal-world-v2__graph-viewport")} tabIndex={0} aria-label="可滚动的关系图谱画布">
         <div
-          className={uiClass("personal-world-v2__graph-stage")}
+          className={classNames("personal-world-v2__graph-stage")}
           style={{ width: `${GRAPH_CANVAS_WIDTH * zoom}px`, height: `${graph.canvasHeight * zoom}px` }}
         >
           <div
-            className={uiClass("personal-world-v2__graph-canvas")}
+            className={classNames("personal-world-v2__graph-canvas")}
             style={{ width: `${GRAPH_CANVAS_WIDTH}px`, height: `${graph.canvasHeight}px`, transform: `scale(${zoom})` }}
           >
-            <div className={uiClass("personal-world-v2__graph-column-labels")} aria-hidden="true">
+            <div className={classNames("personal-world-v2__graph-column-labels")} aria-hidden="true">
               <span>我的经验</span><span>关注方向</span><span>建议 / 已确认意思</span><span>表达形式</span>
             </div>
-            <svg className={uiClass("personal-world-v2__graph-edges")} viewBox={`0 0 ${GRAPH_CANVAS_WIDTH} ${graph.canvasHeight}`} aria-hidden="true">
+            <svg className={classNames("personal-world-v2__graph-edges")} viewBox={`0 0 ${GRAPH_CANVAS_WIDTH} ${graph.canvasHeight}`} aria-hidden="true">
               <defs>
                 <marker id="personal-world-v2-arrow-focus" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8 z" fill="var(--sensa-decorative)" /></marker>
                 <marker id="personal-world-v2-arrow-proposal" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8 z" fill="var(--sensa-feedback-warning)" /></marker>
@@ -1010,14 +1011,14 @@ const GraphView = ({
                 const labelX = (from.x + to.x) / 2;
                 const labelY = (from.y + to.y) / 2 - 7;
                 return (
-                  <g key={edge.id} className={uiClass(`personal-world-v2__graph-edge is-${edge.relation}${edgeIsActive ? '' : ' is-dimmed'}`)}>
+                  <g key={edge.id} className={classNames(`personal-world-v2__graph-edge is-${edge.relation}${edgeIsActive ? '' : ' is-dimmed'}`)}>
                     <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} markerEnd={`url(#personal-world-v2-arrow-${edge.relation})`} />
                     <text x={labelX} y={labelY}>{edge.label}</text>
                   </g>
                 );
               })}
             </svg>
-            <div className={uiClass("personal-world-v2__graph-nodes")}>
+            <div className={classNames("personal-world-v2__graph-nodes")}>
               {graph.nodes.map((node) => {
                 const position = graph.positions.get(node.id)!;
                 const isSelected = selectedNode?.id === node.id;
@@ -1026,13 +1027,13 @@ const GraphView = ({
                   <button
                     type="button"
                     key={node.id}
-                    className={uiClass(`personal-world-v2__graph-node is-${node.kind}${isSelected ? ' is-selected' : ''}${isDimmed ? ' is-dimmed' : ''}`)}
+                    className={classNames(`personal-world-v2__graph-node is-${node.kind}${isSelected ? ' is-selected' : ''}${isDimmed ? ' is-dimmed' : ''}`)}
                     style={{ left: `${position.x}px`, top: `${position.y}px` }}
                     aria-label={`${graphNodeKindLabels[node.kind]}：${node.label}。${node.subtitle}`}
                     aria-pressed={isSelected}
                     onClick={() => setSelectedNodeId((current) => (current === node.id ? null : node.id))}
                   >
-                    <span className={uiClass("personal-world-v2__graph-node-kind")}>{node.subtitle}</span>
+                    <span className={classNames("personal-world-v2__graph-node-kind")}>{node.subtitle}</span>
                     <strong>{node.label}</strong>
                   </button>
                 );
@@ -1042,15 +1043,15 @@ const GraphView = ({
         </div>
       </div>
 
-      <div className={uiClass("personal-world-v2__graph-key")} aria-label="图例">
-        <span className={uiClass("is-meaning")}>经验</span>
-        <span className={uiClass("is-focus")}>关注点</span>
-        <span className={uiClass("is-proposal")}>建议意思</span>
-        <span className={uiClass("is-confirmed")}>已确认意思</span>
-        <span className={uiClass("is-expression")}>表达绑定</span>
+      <div className={classNames("personal-world-v2__graph-key")} aria-label="图例">
+        <span className={classNames("is-meaning")}>经验</span>
+        <span className={classNames("is-focus")}>关注点</span>
+        <span className={classNames("is-proposal")}>建议意思</span>
+        <span className={classNames("is-confirmed")}>已确认意思</span>
+        <span className={classNames("is-expression")}>表达绑定</span>
       </div>
 
-      <div className={uiClass("personal-world-v2__graph-selection")} aria-live="polite">
+      <div className={classNames("personal-world-v2__graph-selection")} aria-live="polite">
         {selectedNode ? (
           <>
             <span>当前选中 · {graphNodeKindLabels[selectedNode.kind]}</span>
@@ -1058,7 +1059,7 @@ const GraphView = ({
             {selectedNode.detail && <p>{selectedNode.detail}</p>}
             <button
               type="button"
-              className={uiClass("personal-world-v2__graph-inspector-action")}
+              className={classNames("personal-world-v2__graph-inspector-action")}
               onClick={() => {
                 if (selectedNode.meaningFocusId && selectedNode.opensConfirmedSense) {
                   onOpenConfirmedSense(selectedNode.personalMeaningId, selectedNode.meaningFocusId);
@@ -1093,8 +1094,8 @@ const ExpandedView = ({
   onOpen: (personalMeaningId: string, meaningFocusId?: string) => void;
   onOpenConfirmedSense: (personalMeaningId: string, meaningFocusId: string) => void;
 }) => (
-  <div className={uiClass("personal-world-v2__expanded-view")} aria-label="展开视图">
-    <div className={uiClass("personal-world-v2__constellations")}>
+  <div className={classNames("personal-world-v2__expanded-view")} aria-label="展开视图">
+    <div className={classNames("personal-world-v2__constellations")}>
       {meanings.length > 0
         ? meanings.map((meaning) => (
           <MeaningConstellation
@@ -1124,8 +1125,8 @@ const ListView = ({
   onOpen: (personalMeaningId: string, meaningFocusId?: string) => void;
   onOpenConfirmedSense: (personalMeaningId: string, meaningFocusId: string) => void;
 }) => (
-  <div className={uiClass("personal-world-v2__list-view")} aria-label="清单视图">
-    <div className={uiClass("personal-world-v2__list-card")}>
+  <div className={classNames("personal-world-v2__list-view")} aria-label="清单视图">
+    <div className={classNames("personal-world-v2__list-card")}>
       {meanings.length === 0 ? <EmptyWorldState mode={emptyMode} onCreate={onCreate} /> : meanings.map((meaning) => {
         const primaryAction = preferBinding && meaning.expressionBinding.nextFocusId
           ? {
@@ -1140,23 +1141,23 @@ const ListView = ({
           (alignment) => alignment.id === primaryAction.meaningFocusId,
         ) ?? meaning.directAlignments[0];
         return (
-        <article className={uiClass("personal-world-v2__list-item")} key={meaning.id}>
+        <article className={classNames("personal-world-v2__list-item")} key={meaning.id}>
           <header>
-            <div className={uiClass("personal-world-v2__meaning-number")}>{meaning.number}</div>
-            <div className={uiClass("personal-world-v2__meaning-title")}>
+            <div className={classNames("personal-world-v2__meaning-number")}>{meaning.number}</div>
+            <div className={classNames("personal-world-v2__meaning-title")}>
               <h3>{meaning.anchor}</h3>
             </div>
             <CompactStatus meaning={meaning} />
           </header>
 
-          <div className={uiClass("personal-world-v2__list-next")}>
+          <div className={classNames("personal-world-v2__list-next")}>
             <small>{nextFocus ? '当前侧面' : directAlignment ? '语境中已确定' : '下一步'}</small>
             <strong>{nextFocus?.label ?? directAlignment?.label ?? '从这段经验中选择一个侧面开始'}</strong>
             {meaning.focuses.length > 1 && <span>另有 {meaning.focuses.length - 1} 个侧面</span>}
           </div>
           <button
             type="button"
-            className={uiClass("personal-world-v2__meaning-open")}
+            className={classNames("personal-world-v2__meaning-open")}
             onClick={() => {
               if (primaryAction.opensConfirmedSense && primaryAction.meaningFocusId) {
                 onOpenConfirmedSense(meaning.id, primaryAction.meaningFocusId);
@@ -1184,30 +1185,30 @@ const ExpressionRows = ({
   compact?: boolean;
   onOpen: (personalMeaningId: string, meaningFocusId: string) => void;
 }) => (
-  <div className={uiClass(`personal-world-v2__expression-rows${compact ? ' is-compact' : ''}`)}>
+  <div className={classNames(`personal-world-v2__expression-rows${compact ? ' is-compact' : ''}`)}>
     {expressions.map((expression) => (
       <button
         type="button"
-        className={uiClass("personal-world-v2__expression-row")}
+        className={classNames("personal-world-v2__expression-row")}
         key={expression.id}
         onClick={() => onOpen(expression.personalMeaningId, expression.meaningFocusId)}
       >
-        <span className={uiClass("personal-world-v2__expression-word")}>{expression.surfaceForm}</span>
-        <span className={uiClass("personal-world-v2__expression-meta")}>
+        <span className={classNames("personal-world-v2__expression-word")}>{expression.surfaceForm}</span>
+        <span className={classNames("personal-world-v2__expression-meta")}>
           {expressionTypeLabel(expression.expressionType)} · {languageLabel(expression.languageTag)}
         </span>
         {!compact && (
-          <span className={uiClass("personal-world-v2__expression-sense")}>
+          <span className={classNames("personal-world-v2__expression-sense")}>
             <small>表达的意思</small>
             <b>{expression.sense}</b>
           </span>
         )}
         {!compact && (
-          <span className={uiClass("personal-world-v2__expression-source")}>
+          <span className={classNames("personal-world-v2__expression-source")}>
             来自：{expression.source}
           </span>
         )}
-        <span className={uiClass("personal-world-v2__expression-foot")}>
+        <span className={classNames("personal-world-v2__expression-foot")}>
           <em>{compact ? '已连接' : `${relationLabel(expression.relation)} · ${coverageLabel(expression.semanticCoverage)}`}</em>
           <i aria-hidden="true">→</i>
         </span>
@@ -1248,28 +1249,28 @@ const WorldHome = ({
   return (
     <>
       {inboxCount > 0 && (
-        <button type="button" className={uiClass("personal-world-v2__inbox-entry")} onClick={onOpenInbox}>
-          <span className={uiClass("personal-world-v2__inbox-copy")}>
+        <button type="button" className={classNames("personal-world-v2__inbox-entry")} onClick={onOpenInbox}>
+          <span className={classNames("personal-world-v2__inbox-copy")}>
             <b>待处理材料</b>
             <small>你有 {inboxCount} 条生活与阅读中捕获的表达</small>
           </span>
-          <span className={uiClass("personal-world-v2__inbox-count")} aria-hidden="true">{inboxCount}</span>
+          <span className={classNames("personal-world-v2__inbox-count")} aria-hidden="true">{inboxCount}</span>
         </button>
       )}
-      <section className={uiClass("personal-world-v2__intro is-home")}>
-        <div className={uiClass("personal-world-v2__intro-copy")}>
+      <section className={classNames("personal-world-v2__intro is-home")}>
+        <div className={classNames("personal-world-v2__intro-copy")}>
           <h2>从一个真实经验开始</h2>
           <p>把场景里还说不清的意思，慢慢变成稳定的表达。</p>
         </div>
-        <button type="button" className={uiClass("personal-world-v2__create")} onClick={onCreate}>
-          <span className={uiClass("personal-world-v2__create-symbol")} aria-hidden="true">＋</span>
+        <button type="button" className={classNames("personal-world-v2__create")} onClick={onCreate}>
+          <span className={classNames("personal-world-v2__create-symbol")} aria-hidden="true">＋</span>
           <span><b>记录一个场景或经验</b><small>也可以从熟悉表达开始</small></span>
-          <span className={uiClass("personal-world-v2__create-arrow")} aria-hidden="true">→</span>
+          <span className={classNames("personal-world-v2__create-arrow")} aria-hidden="true">→</span>
         </button>
       </section>
 
-      <section className={uiClass("personal-world-v2__home-section")}>
-        <header className={uiClass("personal-world-v2__home-heading")}>
+      <section className={classNames("personal-world-v2__home-section")}>
+        <header className={classNames("personal-world-v2__home-heading")}>
           <div>
             <small>正在形成</small>
             <h2>继续一个意思</h2>
@@ -1288,20 +1289,20 @@ const WorldHome = ({
             onOpenConfirmedSense={onOpenConfirmedSense}
           />
         ) : (
-          <div className={uiClass("personal-world-v2__home-empty")}>
+          <div className={classNames("personal-world-v2__home-empty")}>
             <span aria-hidden="true">✓</span>
             <p>{meanings.length > 0 ? '当前没有需要继续形成的内容' : '记录第一个场景后，会从这里继续'}</p>
           </div>
         )}
         {activeMeanings.length > visibleActiveMeanings.length && (
-          <button type="button" className={uiClass("personal-world-v2__home-more")} onClick={onBrowseMeanings}>
+          <button type="button" className={classNames("personal-world-v2__home-more")} onClick={onBrowseMeanings}>
             还有 {activeMeanings.length - visibleActiveMeanings.length} 个意思待继续 <span aria-hidden="true">→</span>
           </button>
         )}
       </section>
 
-      <section className={uiClass("personal-world-v2__home-section is-expressions")}>
-        <header className={uiClass("personal-world-v2__home-heading")}>
+      <section className={classNames("personal-world-v2__home-section is-expressions")}>
+        <header className={classNames("personal-world-v2__home-heading")}>
           <div>
             <small>形成的结果</small>
             <h2>我的表达</h2>
@@ -1317,7 +1318,7 @@ const WorldHome = ({
             onOpen={onOpenConfirmedSense}
           />
         ) : (
-          <div className={uiClass("personal-world-v2__home-empty is-expression")}>
+          <div className={classNames("personal-world-v2__home-empty is-expression")}>
             <span aria-hidden="true">↗</span>
             <p>澄清意思并连接表达后，会出现在这里</p>
           </div>
@@ -1347,14 +1348,14 @@ const ExpressionLibrary = ({
   ].join(' ').toLocaleLowerCase().includes(normalizedSearch));
 
   return (
-    <section className={uiClass("personal-world-v2__expression-library")}>
-      <header className={uiClass("personal-world-v2__library-heading")}>
+    <section className={classNames("personal-world-v2__expression-library")}>
+      <header className={classNames("personal-world-v2__library-heading")}>
         <h2>我的表达</h2>
         <p>已经稳定下来的词义与表达。</p>
       </header>
-      <div className={uiClass("personal-world-v2__search")}>
-        <span className={uiClass("personal-world-v2__search-icon")} aria-hidden="true">⌕</span>
-        <label htmlFor="personal-world-expression-search" className={uiClass("personal-world-v2__visually-hidden")}>搜索我的表达</label>
+      <div className={classNames("personal-world-v2__search")}>
+        <span className={classNames("personal-world-v2__search-icon")} aria-hidden="true">⌕</span>
+        <label htmlFor="personal-world-expression-search" className={classNames("personal-world-v2__visually-hidden")}>搜索我的表达</label>
         <input
           id="personal-world-expression-search"
           type="search"
@@ -1363,13 +1364,13 @@ const ExpressionLibrary = ({
           placeholder="搜索表达、意思或来源场景"
         />
         {search && (
-          <button type="button" className={uiClass("personal-world-v2__search-clear")} onClick={() => onSearch('')} aria-label="清除搜索">×</button>
+          <button type="button" className={classNames("personal-world-v2__search-clear")} onClick={() => onSearch('')} aria-label="清除搜索">×</button>
         )}
       </div>
       {visibleExpressions.length > 0 ? (
         <ExpressionRows expressions={visibleExpressions} onOpen={onOpen} />
       ) : (
-        <div className={uiClass("personal-world-v2__home-empty is-expression")}>
+        <div className={classNames("personal-world-v2__home-empty is-expression")}>
           <span aria-hidden="true">↗</span>
           <p>{expressions.length > 0 ? '没有匹配的表达' : '还没有完成 Binding 的表达'}</p>
         </div>
@@ -1457,52 +1458,52 @@ export const SensaSemanticWorldScreen = ({
 
   return (
     <section
-      className={uiClass(`screen semantic-world-screen personal-world-v2${active ? ' active' : ''}`, "#s-semantic-world")}
+      className={classNames(`screen semantic-world-screen personal-world-v2${active ? ' active' : ''}`, "#s-semantic-world")}
       id="s-semantic-world"
       data-anim="slide"
     >
-      <header className={uiClass("personal-world-v2__nav")}>
+      <header className={classNames("personal-world-v2__nav")}>
         <button
           type="button"
-          className={uiClass("personal-world-v2__back")}
+          className={classNames("personal-world-v2__back")}
           onClick={section === 'home' ? onBack : returnFromSection}
           aria-label={section === 'home' ? '返回我的语义世界' : '返回我的语义世界首页'}
         >
-          <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
+          <svg className={classNames("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
-        <div className={uiClass("personal-world-v2__nav-title")}>
+        <div className={classNames("personal-world-v2__nav-title")}>
           <h1>{section === 'home' ? '我的语义世界' : section === 'expressions' ? '我的表达' : '全部意思'}</h1>
         </div>
-        <div className={uiClass("personal-world-v2__nav-actions")}>
+        <div className={classNames("personal-world-v2__nav-actions")}>
           <button
             type="button"
-            className={uiClass(`personal-world-v2__nav-intake${inboxItems.length > 0 ? ' has-items' : ''}`)}
+            className={classNames(`personal-world-v2__nav-intake${inboxItems.length > 0 ? ' has-items' : ''}`)}
             onClick={() => setInboxOpen(true)}
             aria-label={`待处理材料盒，${inboxItems.length} 条待处理`}
           >
-            <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-mail" /></svg>
-            {inboxItems.length > 0 && <span className={uiClass("personal-world-v2__nav-intake-badge")}>{inboxItems.length}</span>}
+            <svg className={classNames("icon")} aria-hidden="true"><use href="#i-mail" /></svg>
+            {inboxItems.length > 0 && <span className={classNames("personal-world-v2__nav-intake-badge")}>{inboxItems.length}</span>}
           </button>
           <button
             type="button"
-            className={uiClass("personal-world-v2__nav-simulate")}
+            className={classNames("personal-world-v2__nav-simulate")}
             onClick={() => setSimulatorOpen(true)}
             aria-label="打开多模态摄取模拟器"
           >
-            <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-penplus" /></svg>
+            <svg className={classNames("icon")} aria-hidden="true"><use href="#i-penplus" /></svg>
           </button>
-          <span className={uiClass("personal-world-v2__nav-mark")} aria-hidden="true">◌</span>
+          <span className={classNames("personal-world-v2__nav-mark")} aria-hidden="true">◌</span>
         </div>
       </header>
 
-      <div className={uiClass("personal-world-v2__body")}>
+      <div className={classNames("personal-world-v2__body")}>
         {status.ok && presentLanguages.length > 1 && (
-          <div className={uiClass("personal-world-v2__filters is-language")} role="group" aria-label="按语言查看我的语义世界">
+          <div className={classNames("personal-world-v2__filters is-language")} role="group" aria-label="按语言查看我的语义世界">
             {presentLanguages.map((tag) => (
               <button
                 type="button"
                 key={tag}
-                className={uiClass(`personal-world-v2__filter is-language${languageScope === tag ? ' is-active' : ''}`)}
+                className={classNames(`personal-world-v2__filter is-language${languageScope === tag ? ' is-active' : ''}`)}
                 aria-pressed={languageScope === tag}
                 onClick={() => setLanguageChoice(tag)}
               >
@@ -1512,7 +1513,7 @@ export const SensaSemanticWorldScreen = ({
             ))}
             <button
               type="button"
-              className={uiClass(`personal-world-v2__filter is-language${languageChoice === 'all' ? ' is-active' : ''}`)}
+              className={classNames(`personal-world-v2__filter is-language${languageChoice === 'all' ? ' is-active' : ''}`)}
               aria-pressed={languageChoice === 'all'}
               onClick={() => setLanguageChoice('all')}
             >
@@ -1543,9 +1544,9 @@ export const SensaSemanticWorldScreen = ({
           />
         ) : (
           <>
-            <div className={uiClass("personal-world-v2__search")}>
-              <span className={uiClass("personal-world-v2__search-icon")} aria-hidden="true">⌕</span>
-              <label htmlFor="personal-world-search" className={uiClass("personal-world-v2__visually-hidden")}>搜索我的语义世界</label>
+            <div className={classNames("personal-world-v2__search")}>
+              <span className={classNames("personal-world-v2__search-icon")} aria-hidden="true">⌕</span>
+              <label htmlFor="personal-world-search" className={classNames("personal-world-v2__visually-hidden")}>搜索我的语义世界</label>
               <input
                 id="personal-world-search"
                 type="search"
@@ -1554,16 +1555,16 @@ export const SensaSemanticWorldScreen = ({
                 placeholder="搜索经验、Focus、表达或 Sense"
               />
               {search && (
-                <button type="button" className={uiClass("personal-world-v2__search-clear")} onClick={() => setSearch('')} aria-label="清除搜索">×</button>
+                <button type="button" className={classNames("personal-world-v2__search-clear")} onClick={() => setSearch('')} aria-label="清除搜索">×</button>
               )}
             </div>
-            <div className={uiClass("personal-world-v2__controls")}>
-              <div className={uiClass("personal-world-v2__view-tabs")} role="tablist" aria-label="语义世界呈现方式">
-                <button type="button" role="tab" aria-selected={view === 'list'} className={uiClass(view === 'list' ? 'is-active' : '')} onClick={() => setView('list')}>清单</button>
-                <button type="button" role="tab" aria-selected={view === 'expanded'} className={uiClass(view === 'expanded' ? 'is-active' : '')} onClick={() => setView('expanded')}>展开</button>
-                <button type="button" role="tab" aria-selected={view === 'graph'} className={uiClass(view === 'graph' ? 'is-active' : '')} onClick={() => setView('graph')}>图谱</button>
+            <div className={classNames("personal-world-v2__controls")}>
+              <div className={classNames("personal-world-v2__view-tabs")} role="tablist" aria-label="语义世界呈现方式">
+                <button type="button" role="tab" aria-selected={view === 'list'} className={classNames(view === 'list' ? 'is-active' : '')} onClick={() => setView('list')}>清单</button>
+                <button type="button" role="tab" aria-selected={view === 'expanded'} className={classNames(view === 'expanded' ? 'is-active' : '')} onClick={() => setView('expanded')}>展开</button>
+                <button type="button" role="tab" aria-selected={view === 'graph'} className={classNames(view === 'graph' ? 'is-active' : '')} onClick={() => setView('graph')}>图谱</button>
               </div>
-              <div className={uiClass("personal-world-v2__filters")} role="group" aria-label="按下一步筛选 Personal Meaning">
+              <div className={classNames("personal-world-v2__filters")} role="group" aria-label="按下一步筛选 Personal Meaning">
                 {([
                   { key: 'all' as const, label: '全部', count: scopedMeanings.length },
                   { key: 'continue' as const, label: '待继续', count: scopedMeanings.filter((meaning) => meaning.senseFormation.phase !== 'sense_confirmed').length },
@@ -1573,7 +1574,7 @@ export const SensaSemanticWorldScreen = ({
                   <button
                     type="button"
                     key={option.key}
-                    className={uiClass(`personal-world-v2__filter is-${option.key}${filter === option.key ? ' is-active' : ''}`)}
+                    className={classNames(`personal-world-v2__filter is-${option.key}${filter === option.key ? ' is-active' : ''}`)}
                     aria-pressed={filter === option.key}
                     onClick={() => setFilter(option.key)}
                   >

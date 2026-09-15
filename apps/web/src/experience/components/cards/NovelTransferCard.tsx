@@ -1,6 +1,6 @@
 import {cardText} from '../../../i18n/originalCards';
 import type { CardExecution } from './CardExecution';
-import { uiClass } from '../../ui/classes';
+import { iconClass } from '../../ui/primitives';
 import { useEffect, useMemo, useState } from 'react';
 import type { NovelTransferAssessmentResource } from '../../../learning/content/assessmentResources';
 import type { RuntimeLearningContent } from '../../../learning/content/learningCatalog';
@@ -71,18 +71,16 @@ function TransferSceneVisual({
   const visualFamily = visualFamilyForKind(normalizedKind);
   return (
     <div
-      className={uiClass(`transfer-scene-visual visual-${normalizedKind} visual-${visualFamily}`)}
+      className={`relative min-h-56 overflow-hidden rounded-card bg-surface-subtle visual-${normalizedKind} visual-${visualFamily}`}
       role="img"
       aria-label={alt}
     >
-      <span className={uiClass("transfer-scene-glow")} aria-hidden="true" />
-      <span className={uiClass("transfer-scene-ground")} aria-hidden="true" />
-      <span className={uiClass("transfer-scene-subject subject-a")} aria-hidden="true" />
-      <span className={uiClass("transfer-scene-subject subject-b")} aria-hidden="true" />
-      <span className={uiClass("transfer-scene-tool")} aria-hidden="true" />
-      <i className={uiClass("transfer-scene-mark mark-a")} aria-hidden="true" />
-      <i className={uiClass("transfer-scene-mark mark-b")} aria-hidden="true" />
-      <i className={uiClass("transfer-scene-mark mark-c")} aria-hidden="true" />
+      <span className="absolute inset-x-0 bottom-10 h-px bg-border-strong" aria-hidden="true" />
+      <span className="absolute bottom-10 left-1/4 size-14 rounded-full border border-border-strong bg-surface-panel" aria-hidden="true" />
+      <span className="absolute bottom-10 right-1/4 size-14 rounded-full border border-border-strong bg-surface-panel" aria-hidden="true" />
+      <span className="absolute bottom-16 left-1/2 h-2 w-1/3 -translate-x-1/2 rounded-pill bg-decorative" aria-hidden="true" />
+      <i className="absolute left-1/3 top-12 size-2 rounded-full bg-progress" aria-hidden="true" />
+      <i className="absolute right-1/3 top-16 size-2 rounded-full bg-action-primary" aria-hidden="true" />
     </div>
   );
 }
@@ -172,35 +170,37 @@ export function NovelTransferCard({
   };
 
   const supportActions = (
-    <div className={uiClass("transfer-support-actions")}>
+    <div className="grid gap-3 py-4">
       <button
         type="button"
-        className={uiClass(succeeded ? '' : 'emphasized')}
+        className={`grid min-h-12 grid-cols-[1.5rem_1fr_1.5rem] items-center gap-3 rounded-control border px-4 text-left text-control-label font-semibold focus-visible:outline-2 focus-visible:outline-focus ${succeeded ? 'border-border-subtle bg-surface-panel text-fg-primary' : 'border-border-strong bg-accent-soft text-action-primary'}`}
         onClick={() => {
           clearLookup();
           onViewChange();
           setReplayingExperience(true);
         }}
       >
-        <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-eye" /></svg>{cardText('compareWithTheOriginalExperience')}<svg className={uiClass("icon chevron")} aria-hidden="true"><use href="#i-chev-r" /></svg>
+        <svg className={iconClass} aria-hidden="true"><use href="#i-eye" /></svg>{cardText('compareWithTheOriginalExperience')}<svg className={iconClass} aria-hidden="true"><use href="#i-chev-r" /></svg>
       </button>
       <button
+        className="grid min-h-12 grid-cols-[1.5rem_1fr_1.5rem] items-center gap-3 rounded-control border border-border-subtle bg-surface-panel px-4 text-left text-control-label font-semibold text-fg-primary focus-visible:outline-2 focus-visible:outline-focus"
         type="button"
         onClick={() => {
           clearLookup();
           onOpenExample();
         }}
       >
-        <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-bookopen" /></svg>{cardText('viewLearningExamples')}<svg className={uiClass("icon chevron")} aria-hidden="true"><use href="#i-chev-r" /></svg>
+        <svg className={iconClass} aria-hidden="true"><use href="#i-bookopen" /></svg>{cardText('viewLearningExamples')}<svg className={iconClass} aria-hidden="true"><use href="#i-chev-r" /></svg>
       </button>
       <button
+        className="grid min-h-12 grid-cols-[1.5rem_1fr_1.5rem] items-center gap-3 rounded-control border border-border-subtle bg-surface-panel px-4 text-left text-control-label font-semibold text-fg-primary focus-visible:outline-2 focus-visible:outline-focus"
         type="button"
         onClick={() => {
           clearLookup();
           onOpenDictionary(content.lemma);
         }}
       >
-        <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-search" /></svg>{cardText('openTheFullDictionary')}<svg className={uiClass("icon chevron")} aria-hidden="true"><use href="#i-chev-r" /></svg>
+        <svg className={iconClass} aria-hidden="true"><use href="#i-search" /></svg>{cardText('openTheFullDictionary')}<svg className={iconClass} aria-hidden="true"><use href="#i-chev-r" /></svg>
       </button>
     </div>
   );
@@ -220,21 +220,21 @@ export function NovelTransferCard({
 
   return (
     <div
-      className={uiClass("transfer-page is-sensa")}
+      className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-6 py-8 text-fg-primary sm:px-10"
       data-assessment-task-key={assessment.taskKey}
     >
-      <header className={uiClass("transfer-heading")}>
-        <span>
+      <header>
+        <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">
           {isRetention
               ? cardText('reviewTransferToANewContext')
               : submitted ? succeeded ? cardText('transferCheckEstablished') : cardText('transferCheckNeedsRepair') : cardText('transferCheckUnseenContext')}
         </span>
-        <h1>
+        <h1 className="mt-3 text-page-title font-semibold">
           {isRetention
               ? cardText('canYouRecognizeItInANewSituation')
               : submitted ? feedbackTitle : cardText('takeThisMeaningSomewhereNew')}
         </h1>
-        <p>
+        <p className="mt-3 text-body-support leading-6 text-fg-secondary">
           {isRetention
               ? cardText('theExpressionStaysHiddenUseTheSituationTo')
               : submitted ? feedbackBody : cardText('judgeTheRelationshipFirstTheExpressionAppearsAfter')}
@@ -243,21 +243,21 @@ export function NovelTransferCard({
 
       {!submitted && (
         <>
-          <section className={uiClass("transfer-scene-card")} aria-label={scenario.sceneLabelL1}>
-            <div className={uiClass("transfer-scene-label")}>
+          <section className="mt-6 overflow-hidden rounded-card border border-border-subtle bg-surface-panel" aria-label={scenario.sceneLabelL1}>
+            <div className="flex items-center gap-2 px-5 py-4 text-metadata text-fg-tertiary">
               <span>{scenario.sceneLabelL1}</span>
-              <i aria-hidden="true" />
+              <i className="size-1.5 rounded-full bg-progress" aria-hidden="true" />
               <small>{cardText('expressionHidden')}</small>
             </div>
             <TransferSceneVisual visualKind={scenario.visualKind} alt={scenario.visualAltL1} />
-            <div className={uiClass("transfer-scene-copy")}>
-              <div className={uiClass("transfer-scene-l1")}>
-                <span>{cardText('chineseContext')}</span>
-                <p>{scenario.setupL1}</p>
+            <div className="grid gap-4 p-5 sm:grid-cols-2">
+              <div className="rounded-control bg-accent-soft p-4">
+                <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{cardText('chineseContext')}</span>
+                <p className="mt-3 text-body-support leading-6">{scenario.setupL1}</p>
               </div>
-              <div className={uiClass("transfer-scene-l2")}>
-                <span>{cardText('englishContext')}<small>{cardText('tapWordsForDefinitions')}</small></span>
-                <div>
+              <div className="rounded-control bg-surface-subtle p-4">
+                <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{cardText('englishContext')}<small className="ml-2 font-normal">{cardText('tapWordsForDefinitions')}</small></span>
+                <div className="mt-3 space-y-2 font-language text-body leading-7">
                   {setupClauses.map((clause, clauseIndex) => (
                     <span key={`${scenario.id}:clause:${clauseIndex}`}>
                       <ClickableSentence
@@ -285,44 +285,38 @@ export function NovelTransferCard({
             </div>
           </section>
 
-          <div className={uiClass("transfer-question-block")}>
-            <span>{cardText('yourJudgement')}</span>
-            <h2 className={uiClass("transfer-question")}>{scenario.questionL1}</h2>
+          <div className="mt-7">
+            <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{cardText('yourJudgement')}</span>
+            <h2 className="mt-2 text-section-title font-semibold">{scenario.questionL1}</h2>
           </div>
 
-          <div className={uiClass("transfer-actions")} role="radiogroup" aria-label={scenario.questionL1}>
+          <div className="mt-4 grid gap-3" role="radiogroup" aria-label={scenario.questionL1}>
             {scenario.options.map((option, index) => {
               const selected = option.id === selectedId;
-              const classes = ['transfer-action'];
-              if (!submitted && selected) classes.push('selected');
-              if (submitted && option.isCorrect) classes.push('right');
-              if (submitted && selected && !option.isCorrect) classes.push('wrong');
-              if (submitted && !option.isCorrect && !selected) classes.push('mute');
-
               return (
                 <button
                   type="button"
                   role="radio"
                   aria-checked={selected}
                   disabled={submitted}
-                  className={uiClass(classes.join(' '))}
+                  className={`grid min-h-14 grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-control border p-3 text-left focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-100 ${selected ? 'border-border-strong bg-surface-selected' : 'border-border-subtle bg-surface-panel hover:bg-surface-subtle'}`}
                   key={option.id}
                   onClick={() => setSelectedId(option.id)}
                 >
-                  <span className={uiClass("transfer-action-index")} aria-hidden="true">
+                  <span className="grid size-8 place-items-center rounded-control bg-accent-soft text-metadata font-bold text-action-primary" aria-hidden="true">
                     {String.fromCharCode(65 + index)}
                   </span>
-                  <span className={uiClass("transfer-action-copy")}>
-                    <strong>{option.labelL1}</strong>
+                  <span className="flex flex-col gap-1">
+                    <strong className="text-body-support">{option.labelL1}</strong>
                     {(submitted && (selected || option.isCorrect)) && (
                       <small>{option.detailL1}</small>
                     )}
                   </span>
                   {submitted && option.isCorrect && (
-                    <span className={uiClass("transfer-action-status")} aria-label={cardText('fits')}>✓</span>
+                    <span className="font-bold text-feedback-success" aria-label={cardText('fits')}>✓</span>
                   )}
                   {submitted && selected && !option.isCorrect && (
-                    <span className={uiClass("transfer-action-status")} aria-label={cardText('doesNotFit')}>×</span>
+                    <span className="font-bold text-feedback-danger" aria-label={cardText('doesNotFit')}>×</span>
                   )}
                 </button>
               );
@@ -332,26 +326,26 @@ export function NovelTransferCard({
       )}
 
       {submitted && (
-        <section className={uiClass(`transfer-feedback ${succeeded ? 'success' : 'repair'}`)} aria-live="polite">
-          <div className={uiClass("transfer-sensa-connection")} aria-label={cardText('meaningTransfer')}>
-            <div>
-              <small>{cardText('familiarObject')}</small>
+        <section className="mt-6" aria-live="polite">
+          <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-3 rounded-card border border-border-subtle bg-surface-panel p-4" aria-label={cardText('meaningTransfer')}>
+            <div className="flex flex-col gap-2 rounded-control bg-accent-soft p-3">
+              <small className="text-metadata text-fg-tertiary">{cardText('familiarObject')}</small>
               <strong>{scenario.sourceObjectL1}</strong>
             </div>
-            <span aria-hidden="true"><i />→<i /></span>
-            <div>
-              <small>{cardText('newObject')}</small>
+            <span className="grid place-items-center text-fg-tertiary" aria-hidden="true">→</span>
+            <div className="flex flex-col gap-2 rounded-control bg-surface-subtle p-3">
+              <small className="text-metadata text-fg-tertiary">{cardText('newObject')}</small>
               <strong>{scenario.targetObjectL1}</strong>
             </div>
-            <p>{cardText('theObjectChangedTheMeaningStructureStayedThe')}</p>
-            <ol>
-              {scenario.invariantLabelsL1.map((label) => <li key={label}>{label}</li>)}
+            <p className="col-span-3 text-body-support leading-6 text-fg-secondary">{cardText('theObjectChangedTheMeaningStructureStayedThe')}</p>
+            <ol className="col-span-3 flex flex-wrap gap-2">
+              {scenario.invariantLabelsL1.map((label) => <li className="rounded-pill bg-accent-soft px-3 py-1 text-metadata text-fg-secondary" key={label}>{label}</li>)}
             </ol>
           </div>
 
-          <div className={uiClass("transfer-reveal-example")}>
-            <span>{cardText('expressionRevealed')}</span>
-            <div className={uiClass("transfer-reveal-sentence")}>
+          <div className="mt-5 rounded-card border border-border-subtle bg-surface-panel p-5">
+            <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{cardText('expressionRevealed')}</span>
+            <div className="mt-4 font-language text-xl leading-9">
               <ClickableSentence
                 sentenceHtml={revealHtml}
                 activeTokenIdx={activeLookup?.tokenIdx ?? null}
@@ -368,12 +362,12 @@ export function NovelTransferCard({
                 }}
               />
             </div>
-            <p>{reveal.textL1}</p>
-            <small>{cardText('tapAWordForItsMeaning')}</small>
+            <p className="mt-4 text-body-support leading-6 text-fg-secondary">{reveal.textL1}</p>
+            <small className="mt-2 block text-metadata text-fg-tertiary">{cardText('tapAWordForItsMeaning')}</small>
           </div>
 
-          <details className={uiClass("transfer-support-disclosure")} open={!succeeded}>
-            <summary>{succeeded ? cardText('needToReplayOrLookUpAWord') : cardText('repairThisConnectionFirst')}</summary>
+          <details className="mt-5 rounded-card border border-border-subtle bg-surface-panel px-5" open={!succeeded}>
+            <summary className="flex min-h-12 cursor-pointer items-center text-control-label font-semibold text-fg-secondary">{succeeded ? cardText('needToReplayOrLookUpAWord') : cardText('repairThisConnectionFirst')}</summary>
             {supportActions}
           </details>
         </section>
@@ -388,12 +382,12 @@ export function NovelTransferCard({
         />
       )}
 
-      <div className={uiClass("lfoot transfer-footer", "#lFoot")} id="lFoot">
+      <div className="mt-auto pt-8" id="lFoot">
         {!submitted ? (
-          <div className={uiClass("transfer-submit-stack")}>
+          <div className="grid gap-3">
             <button
               type="button"
-              className={uiClass("transfer-submit-button")}
+              className="min-h-12 w-full rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45"
               disabled={!selectedOption}
               onClick={() => {
                 clearLookup();
@@ -411,7 +405,7 @@ export function NovelTransferCard({
             </button>
             <button
               type="button"
-              className={uiClass("transfer-uncertain-button")}
+              className="min-h-11 w-full rounded-control border-0 bg-transparent px-4 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
               onClick={() => {
                 clearLookup();
                 onViewChange();
@@ -430,8 +424,8 @@ export function NovelTransferCard({
             </button>
           </div>
         ) : (
-          <button type="button" className={uiClass("fbtn green")} onClick={() => execution ? execution.continue() : onComplete(outcome, selectedOption?.id ?? null)}>
-            {succeeded ? cardText('finishThisCheck') : cardText('repairFirstAndTryAgainLater')}<i />
+          <button type="button" className="min-h-12 w-full rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus" onClick={() => execution ? execution.continue() : onComplete(outcome, selectedOption?.id ?? null)}>
+            {succeeded ? cardText('finishThisCheck') : cardText('repairFirstAndTryAgainLater')}
           </button>
         )}
       </div>

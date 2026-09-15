@@ -82,7 +82,7 @@ export function LocalAgentIntake() {
   }, [gateway]);
 
   return failed ? (
-    <div role="status" className="fixed bottom-20 left-4 right-4 z-50 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm">
+    <div role="status" className="fixed bottom-20 left-4 right-4 z-50 rounded-control border border-feedback-warning bg-accent-soft p-3 text-sm text-feedback-warning">
       {localFlowText('intakeStorageFailed')}
     </div>
   ) : null;

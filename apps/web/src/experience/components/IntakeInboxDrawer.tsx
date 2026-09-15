@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
-import { uiClass } from '../ui/classes';
 /**
  * 待处理材料盒（Inbox）抽屉。
  *
@@ -130,25 +129,24 @@ export const IntakeInboxDrawer = ({
   if (!open) return null;
 
   return (
-    <div className={uiClass("intake-layer")} onMouseDown={onClose}>
+    <div className="fixed inset-0 z-[120] flex items-stretch justify-end bg-overlay" onMouseDown={onClose}>
       <section
-        className={uiClass("intake-drawer")}
+        className="flex h-full w-full max-w-xl flex-col bg-surface-canvas text-fg-primary shadow-overlay"
         role="dialog"
         aria-modal="true"
         aria-labelledby="intake-drawer-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className={uiClass("intake-drawer__grip")} aria-hidden="true" />
-        <header className={uiClass("intake-drawer__head")}>
+        <header className="flex min-h-20 items-center justify-between gap-4 border-b border-border-subtle px-6 py-4">
           <div>
-            <small>{uiText('inbox')}</small>
-            <h2 id="intake-drawer-title">{uiText('inboxCount', { count: items.length + drafts.length })}</h2>
+            <small className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{uiText('inbox')}</small>
+            <h2 className="mt-1 text-section-title font-semibold" id="intake-drawer-title">{uiText('inboxCount', { count: items.length + drafts.length })}</h2>
           </div>
-          <button type="button" onClick={onClose} aria-label={uiText('close')}>×</button>
+          <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-xl text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={onClose} aria-label={uiText('close')}>×</button>
         </header>
 
-        <div className={uiClass("intake-drawer__body")}>
-          <p className={uiClass("intake-drawer__hint")}>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <p className="mb-5 text-body-support leading-6 text-fg-secondary">
             {uiText('capturedMaterialAwaitingYourConfirmation')}</p>
           {drafts.map(item => <button key={item.personalMeaningId} type="button" onClick={()=>onOpenDraft?.(item.personalMeaningId)} className="mb-4 block w-full rounded-card border border-border-subtle bg-surface-panel p-5 text-left focus-visible:outline-2 focus-visible:outline-focus"><span className="text-xs text-fg-tertiary">{uiText('continueDraft')}</span><strong className="mt-3 block text-sm font-medium leading-6">{item.experienceAnchors[0]?.surfaceForm || item.familiarAnchors[0]?.surfaceForm || item.primaryLabel}</strong></button>)}
           {items.map((item) => {
@@ -158,26 +156,27 @@ export const IntakeInboxDrawer = ({
             const mediaCount = item.payload.context?.mediaReferenceIds.length ?? 0;
             const hasText = Boolean(item.payload.context?.textSegment?.trim());
             return (
-              <article className={uiClass("intake-card")} key={item.intakeId}>
-                <header className={uiClass("intake-card__head")}>
-                  <span className={uiClass(`intake-card__status is-${item.status}`)}>
+              <article className="mb-4 rounded-card border border-border-subtle bg-surface-panel p-5" key={item.intakeId}>
+                <header className="flex items-center justify-between gap-3">
+                  <span className="rounded-pill bg-accent-soft px-3 py-1 text-metadata font-semibold text-fg-secondary">
                     {statusLabels[item.status]}
                   </span>
                   {mediaCount > 0 && (
-                    <span className={uiClass("intake-card__media")}>
+                    <span className="text-metadata text-fg-tertiary">
                       <span aria-hidden="true">🖼</span> {uiText('includes2')}{mediaCount} {uiText('images')}</span>
                   )}
                 </header>
-                <p className={uiClass("intake-card__summary")}>{item.summaryView}</p>
+                <p className="mt-4 text-body leading-7 text-fg-primary">{item.summaryView}</p>
                 {source && (
-                  <p className={uiClass("intake-card__source")}>
+                  <p className="mt-3 break-words text-metadata leading-5 text-fg-tertiary">
                     {uiText('webSource')}{source.title ?? source.url ?? uiText('unknownSource')}
                   </p>
                 )}
                 {options.length > 0 && (
-                  <div className={uiClass("intake-card__options")} role="group" aria-label={uiText('chooseAMeaningToConfirm')}>
+                  <div className="mt-4 grid gap-2" role="group" aria-label={uiText('chooseAMeaningToConfirm')}>
                     {options.map((option, index) => (
                       <button
+                        className="min-h-12 rounded-control border border-border-subtle bg-surface-subtle px-4 text-left text-body-support text-fg-secondary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus"
                         type="button"
                         key={`${option.definitionSummary}-${index}`}
                         disabled={busy}
@@ -188,17 +187,17 @@ export const IntakeInboxDrawer = ({
                     ))}
                   </div>
                 )}
-                <footer className={uiClass("intake-card__actions")}>
+                <footer className="mt-5 flex flex-wrap gap-3">
                   <button
                     type="button"
-                    className={uiClass("intake-card__summon")}
+                    className="min-h-12 rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus"
                     disabled={busy || !hasText}
                     onClick={() => void summon(item)}
                   >
                     {uiText('clarify')}</button>
                   <button
                     type="button"
-                    className={uiClass("intake-card__discard")}
+                    className="min-h-12 rounded-control border border-border-strong bg-surface-panel px-5 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
                     disabled={busy}
                     onClick={() => void discard(item)}
                   >
@@ -208,9 +207,9 @@ export const IntakeInboxDrawer = ({
             );
           })}
           {items.length === 0 && drafts.length === 0 && (
-            <div className={uiClass("intake-drawer__empty")}>
-              <span aria-hidden="true">✓</span>
-              <p>{uiText('yourInboxIsEmpty')}</p>
+            <div className="flex min-h-64 flex-col items-center justify-center text-center">
+              <span className="mb-4 grid size-14 place-items-center rounded-card bg-accent-soft text-xl font-bold text-feedback-success" aria-hidden="true">✓</span>
+              <p className="text-body-support text-fg-secondary">{uiText('yourInboxIsEmpty')}</p>
             </div>
           )}
         </div>

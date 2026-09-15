@@ -1,5 +1,5 @@
 import {cardText} from '../../../i18n/originalCards';
-import { uiClass } from '../../ui/classes';
+import { iconClass } from '../../ui/primitives';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { MeaningToFormRecallOutcome } from '../../../learning/engine/types';
 import { audioService } from '../../services/audioService';
@@ -200,44 +200,45 @@ export function SensaRecallCard({
 
   return (
     <div
-      className={uiClass(`sensa-recall-page is-${mode}`)}
+      className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-6 py-8 text-fg-primary sm:px-10"
       data-assessment-task-key={assessment.taskKey}
     >
-      <header className={uiClass("sensa-recall-heading")}>
-        <span>{isRetention ? cardText('reviewIndependentRecall') : cardText('activeRecall')}</span>
-        <h1>
+      <header>
+        <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{isRetention ? cardText('reviewIndependentRecall') : cardText('activeRecall')}</span>
+        <h1 className="mt-3 text-page-title font-semibold">
           {isRetention
             ? cardText('recallTheEnglishExpression')
             : mode === 'result' ? cardText('theEnglishExpressionIsHere') : cardText('bringTheExpressionToMind')}
         </h1>
       </header>
 
-      <section className={uiClass("sensa-recall-cue")} aria-label={cardText('meaningToRecall')}>
-        <span>{cardText('startFromThisMeaning')}</span>
-        <p>{recall.cueL1}</p>
-        <div className={uiClass("sensa-recall-trace")} aria-label={cardText('keyMeaningCues')}>
+      <section className="mt-6 rounded-card border border-border-subtle bg-surface-panel p-5" aria-label={cardText('meaningToRecall')}>
+        <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{cardText('startFromThisMeaning')}</span>
+        <p className="mt-3 text-body leading-7">{recall.cueL1}</p>
+        <div className="mt-4 flex flex-wrap gap-2" aria-label={cardText('keyMeaningCues')}>
           {recall.cueFeatureLabelsL1.map((label) => (
-            <span key={label}>{label}</span>
+            <span className="rounded-pill bg-accent-soft px-3 py-1 text-metadata text-fg-secondary" key={label}>{label}</span>
           ))}
         </div>
       </section>
 
       {(mode === 'independent' || mode === 'first_letter') && (
-        <form className={uiClass("sensa-recall-form")} onSubmit={submitTextAnswer}>
+        <form className="mt-7" onSubmit={submitTextAnswer}>
           {mode === 'first_letter' && (
-            <div className={uiClass("sensa-recall-support-state")} role="status" aria-live="polite">
-              <span aria-hidden="true">↗</span>
-              <p><strong>{cardText('theFirstLetterIsShown')}</strong>{cardText('repairThisConnectionThenRecallItIndependentlyLater')}</p>
+            <div className="mb-5 flex items-start gap-3 rounded-control bg-accent-soft p-4" role="status" aria-live="polite">
+              <span className="text-feedback-warning" aria-hidden="true">↗</span>
+              <p className="text-body-support leading-6 text-fg-secondary"><strong className="mr-1 text-fg-primary">{cardText('theFirstLetterIsShown')}</strong>{cardText('repairThisConnectionThenRecallItIndependentlyLater')}</p>
             </div>
           )}
           <label htmlFor="sensa-meaning-to-form-answer">{cardText('writeTheEnglishExpression')}</label>
           {mode === 'first_letter' && (
-            <div className={uiClass("sensa-recall-mask")} aria-label={cardText('firstLetter',{letter:recall.primaryForm[0]})}>
+            <div className="mt-4 font-language text-2xl tracking-widest text-action-primary" aria-label={cardText('firstLetter',{letter:recall.primaryForm[0]})}>
               {createFirstLetterMask(recall.primaryForm)}
             </div>
           )}
-          <div className={uiClass("sensa-recall-input")}>
+          <div className="relative mt-3">
             <input
+              className="min-h-14 w-full rounded-control border border-border-strong bg-surface-panel px-4 pr-12 font-language text-xl text-fg-primary placeholder:text-fg-tertiary focus-visible:outline-2 focus-visible:outline-focus"
               ref={inputRef}
               id="sensa-meaning-to-form-answer"
               type="text"
@@ -251,6 +252,7 @@ export function SensaRecallCard({
             />
             {answer && (
               <button
+                className="absolute right-2 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
                 type="button"
                 aria-label={cardText('clearInput')}
                 onClick={() => {
@@ -262,9 +264,10 @@ export function SensaRecallCard({
               </button>
             )}
           </div>
-          <div className={uiClass("sensa-recall-primary-actions")}>
-            <button type="submit" disabled={!answer.trim()}>{cardText('confirm')}</button>
+          <div className="mt-5 grid gap-3 sm:grid-cols-[1.5fr_1fr] [&_button]:min-h-12 [&_button]:rounded-control [&_button]:px-4 [&_button]:text-control-label [&_button]:font-semibold [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-focus">
+            <button className="border-0 bg-action-primary text-action-on-primary hover:bg-action-primary-hover disabled:opacity-45" type="submit" disabled={!answer.trim()}>{cardText('confirm')}</button>
             <button
+              className="border border-border-strong bg-surface-panel text-fg-secondary hover:bg-surface-subtle"
               type="button"
               onClick={() => {
                 if (isRetention) {
@@ -285,12 +288,12 @@ export function SensaRecallCard({
       )}
 
       {mode === 'choice' && (
-        <section className={uiClass("sensa-recall-choice-stage")}>
-          <div className={uiClass("sensa-recall-support-state")} role="status" aria-live="polite">
-            <span aria-hidden="true">↗</span>
-            <p><strong>{cardText('theChoicesAreNarrowedDown')}</strong>{cardText('findTheMatchingForm')}</p>
+        <section className="mt-7">
+          <div className="mb-5 flex items-start gap-3 rounded-control bg-accent-soft p-4" role="status" aria-live="polite">
+            <span className="text-feedback-warning" aria-hidden="true">↗</span>
+            <p className="text-body-support leading-6 text-fg-secondary"><strong className="mr-1 text-fg-primary">{cardText('theChoicesAreNarrowedDown')}</strong>{cardText('findTheMatchingForm')}</p>
           </div>
-          <div className={uiClass("sensa-recall-choice-list")} role="radiogroup" aria-label={cardText('chooseTheEnglishForm')}>
+          <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label={cardText('chooseTheEnglishForm')}>
             {recall.choiceOptions.map((option) => {
               const selected = option.id === selectedChoiceId;
               return (
@@ -298,19 +301,19 @@ export function SensaRecallCard({
                   type="button"
                   role="radio"
                   aria-checked={selected}
-                  className={uiClass(selected ? 'is-selected' : '')}
+                  className={`flex min-h-14 items-center justify-between gap-3 rounded-control border p-4 text-left font-language text-lg focus-visible:outline-2 focus-visible:outline-focus ${selected ? 'border-border-strong bg-surface-selected text-action-primary' : 'border-border-subtle bg-surface-panel hover:bg-surface-subtle'}`}
                   key={option.id}
                   onClick={() => setSelectedChoiceId(option.id)}
                 >
                   <span>{option.textL2}</span>
-                  <i aria-hidden="true" />
+                  <i className={`size-3 rounded-full border ${selected ? 'border-action-primary bg-action-primary' : 'border-border-strong'}`} aria-hidden="true" />
                 </button>
               );
             })}
           </div>
-          <div className={uiClass("sensa-recall-primary-actions")}>
-            <button type="button" disabled={!selectedChoice} onClick={submitChoice}>{cardText('confirm')}</button>
-            <button type="button" onClick={() => finish('miss')}>{cardText('revealTheAnswer')}</button>
+          <div className="mt-5 grid gap-3 sm:grid-cols-[1.5fr_1fr]">
+            <button className="min-h-12 rounded-control border-0 bg-action-primary px-4 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" type="button" disabled={!selectedChoice} onClick={submitChoice}>{cardText('confirm')}</button>
+            <button className="min-h-12 rounded-control border border-border-strong bg-surface-panel px-4 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={() => finish('miss')}>{cardText('revealTheAnswer')}</button>
           </div>
         </section>
       )}
@@ -319,51 +322,51 @@ export function SensaRecallCard({
         <section
           ref={resultRef}
           tabIndex={-1}
-          className={uiClass(`sensa-recall-result is-${feedback.tone}`)}
+          className="mt-7 rounded-card border border-border-subtle bg-surface-panel p-5"
           aria-live="polite"
         >
-          <div className={uiClass("sensa-recall-result-status")}>
-            <span aria-hidden="true">{feedback.marker}</span>
-            <small>{feedback.status}</small>
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-control bg-accent-soft text-lg font-bold text-feedback-success" aria-hidden="true">{feedback.marker}</span>
+            <small className="text-control-label font-semibold text-fg-secondary">{feedback.status}</small>
           </div>
-          <div className={uiClass("sensa-recall-form-reveal")}>
+          <div className="mt-5 flex items-center justify-between gap-4 rounded-control bg-surface-subtle p-4">
             <div>
-              <h2>{recall.primaryForm}</h2>
-              <p>{activePronunciation?.ipa ?? content.ipa}</p>
+              <h2 className="font-language text-3xl font-semibold">{recall.primaryForm}</h2>
+              <p className="mt-1 font-language text-body-support text-fg-secondary">{activePronunciation?.ipa ?? content.ipa}</p>
             </div>
             <button
+              className="inline-flex min-h-11 items-center gap-2 rounded-control border-0 bg-accent-soft px-3 text-control-label font-semibold text-action-primary focus-visible:outline-2 focus-visible:outline-focus"
               type="button"
               onClick={playPronunciation}
               aria-label={cardText('play',{accent:activeAccentIsUk ? cardText('british') : cardText('american'),ipa:''})}
             >
               <span>{activeAccentIsUk ? cardText('uk') : cardText('us')}</span>
-              <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-vol" /></svg>
+              <svg className={iconClass} aria-hidden="true"><use href="#i-vol" /></svg>
             </button>
           </div>
-          <div className={uiClass("sensa-recall-result-copy")}>
-            <h3>{feedback.title}</h3>
-            <p>{feedback.body}</p>
+          <div className="mt-5">
+            <h3 className="text-section-title font-semibold">{feedback.title}</h3>
+            <p className="mt-2 text-body-support leading-6 text-fg-secondary">{feedback.body}</p>
           </div>
           {outcome !== 'independent' && (
             <button
               type="button"
-              className={uiClass("sensa-recall-repair-action")}
+              className="mt-5 grid min-h-12 w-full grid-cols-[1.5rem_1fr_1.5rem] items-center gap-3 rounded-control border border-border-strong bg-accent-soft px-4 text-control-label font-semibold text-action-primary focus-visible:outline-2 focus-visible:outline-focus"
               onClick={() => {
                 onViewChange();
                 setReplayingExperience(true);
               }}
             >
-              <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-eye" /></svg>
+              <svg className={iconClass} aria-hidden="true"><use href="#i-eye" /></svg>
               <span>{cardText('returnToTheExperience2')}</span>
-              <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-r" /></svg>
+              <svg className={iconClass} aria-hidden="true"><use href="#i-chev-r" /></svg>
             </button>
           )}
-          <div className={uiClass("sensa-recall-resource-strip")} aria-label={cardText('resourcesForThisMeaning')}>
+          <div className="mt-5 grid grid-cols-2 divide-x divide-border-subtle border-t border-border-subtle pt-4 [&_button]:inline-flex [&_button]:min-h-11 [&_button]:items-center [&_button]:justify-center [&_button]:gap-2 [&_button]:border-0 [&_button]:bg-transparent [&_button]:text-control-label [&_button]:font-semibold [&_button]:text-fg-secondary [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-focus" aria-label={cardText('resourcesForThisMeaning')}>
             <button type="button" onClick={onOpenExample}>
-              <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-bookopen" /></svg>{cardText('examples')}</button>
-            <i aria-hidden="true" />
+              <svg className={iconClass} aria-hidden="true"><use href="#i-bookopen" /></svg>{cardText('examples')}</button>
             <button type="button" onClick={() => onOpenDictionary(recall.primaryForm)}>
-              <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-search" /></svg>{cardText('dictionary')}</button>
+              <svg className={iconClass} aria-hidden="true"><use href="#i-search" /></svg>{cardText('dictionary')}</button>
           </div>
         </section>
       )}
@@ -378,8 +381,8 @@ export function SensaRecallCard({
       )}
 
       {mode === 'result' && outcome && (
-        <footer className={uiClass("sensa-recall-footer")}>
-          <button type="button" onClick={() => execution ? execution.continue() : onComplete(outcome, null)}>
+        <footer className="mt-auto pt-8">
+          <button className="min-h-12 w-full rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={() => execution ? execution.continue() : onComplete(outcome, null)}>
             {outcome === 'independent' ? cardText('continueLearning') : cardText('continueAndRecallAgainLater')}
           </button>
         </footer>

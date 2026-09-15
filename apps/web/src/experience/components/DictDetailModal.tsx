@@ -1,10 +1,11 @@
-import { uiClass } from '../ui/classes';
+import { classNames } from '../ui/primitives';
 import { useState, useEffect, type MouseEvent } from 'react';
 import { contentAnnotations } from '../../data/library/contentAnnotations';
 import type { Word, QuickDictEntry } from '../types';
 import { WORDS } from '../data';
 import { lookupWord } from '../services/quickDict';
 import { audioService } from '../services/audioService';
+import './DictDetailModal.css';
 
 interface DictDetailModalProps {
   active: boolean;
@@ -101,30 +102,30 @@ export const DictDetailModal = ({
   };
 
   return (
-    <div className={uiClass(`dict-modal-backdrop${active ? ' active' : ''}`)} onClick={onClose}>
+    <div className={classNames(`dict-modal-backdrop${active ? ' active' : ''}`)} onClick={onClose}>
       <div
-        className={uiClass("dict-modal-sheet")}
+        className={classNames("dict-modal-sheet")}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
         {/* 顶部中央拖拽条与右上角序号 */}
-        <div className={uiClass("dict-sheet-handle-bar")}>
-          <div className={uiClass("dict-drag-pill")} />
-          <span className={uiClass("dict-pg-label")}>1.</span>
+        <div className={classNames("dict-sheet-handle-bar")}>
+          <div className={classNames("dict-drag-pill")} />
+          <span className={classNames("dict-pg-label")}>1.</span>
         </div>
 
         {/* 单词主体 Header */}
-        <div className={uiClass("dict-sheet-head")}>
-          <div className={uiClass("dict-head-top")}>
-            <h1 className={uiClass("dict-head-word")}>{wordStr}</h1>
+        <div className={classNames("dict-sheet-head")}>
+          <div className={classNames("dict-head-top")}>
+            <h1 className={classNames("dict-head-word")}>{wordStr}</h1>
             <button
-              className={uiClass(`dict-star-btn${isStarred ? ' on' : ''}`)}
+              className={classNames(`dict-star-btn${isStarred ? ' on' : ''}`)}
               onClick={handleToggleStar}
               aria-label="收藏单词"
             >
               <svg
-                className={uiClass("icon")}
+                className={classNames("icon")}
                 style={{
                   width: 24,
                   height: 24,
@@ -138,98 +139,98 @@ export const DictDetailModal = ({
           </div>
 
           {/* 音标发音行 */}
-          <div className={uiClass("dict-ph-row")} onClick={handleSpeak} title="点击朗读">
-            <span className={uiClass(`dict-accent-pill${isPlayingAudio ? ' playing' : ''}`)}>
+          <div className={classNames("dict-ph-row")} onClick={handleSpeak} title="点击朗读">
+            <span className={classNames(`dict-accent-pill${isPlayingAudio ? ' playing' : ''}`)}>
               美
-              <svg className={uiClass("icon")} style={{ width: 13, height: 13, marginLeft: 2 }}>
+              <svg className={classNames("icon")} style={{ width: 13, height: 13, marginLeft: 2 }}>
                 <use href="#i-vol-fill" />
               </svg>
             </span>
-            <span className={uiClass("dict-ph-text")}>{phonetic}</span>
+            <span className={classNames("dict-ph-text")}>{phonetic}</span>
           </div>
 
           {/* 简明释义行 */}
-          <div className={uiClass("dict-brief-def")}>{briefDef}</div>
+          <div className={classNames("dict-brief-def")}>{briefDef}</div>
         </div>
 
         {/* 多维横向 Tab 栏：柯林斯 | 例句 | 派生 | 词根 | 近义 | 真题 | 笔记 */}
-        <div className={uiClass("dict-tab-bar-wrap")}>
-          <div className={uiClass("dict-tab-bar")}>
+        <div className={classNames("dict-tab-bar-wrap")}>
+          <div className={classNames("dict-tab-bar")}>
             {TABS.map((tab) => (
               <button
                 key={tab}
-                className={uiClass(`dict-tab-item${tab === activeTab ? ' on' : ''}`)}
+                className={classNames(`dict-tab-item${tab === activeTab ? ' on' : ''}`)}
                 onClick={() => setActiveTab(tab)}
               >
                 <span>{tab}</span>
-                {tab === activeTab && <i className={uiClass("dict-tab-line")} />}
+                {tab === activeTab && <i className={classNames("dict-tab-line")} />}
               </button>
             ))}
           </div>
         </div>
 
         {/* Tab 滚动内容区域 */}
-        <div className={uiClass("dict-tab-content-body")}>
+        <div className={classNames("dict-tab-content-body")}>
           {/* ================= 1. 柯林斯 Tab (1:1 截图还原) ================= */}
           {activeTab === '柯林斯' && (
-            <div className={uiClass("dict-pane dict-pane-collins")}>
+            <div className={classNames("dict-pane dict-pane-collins")}>
               {/* 红色柯林斯图书封面与授权介绍 */}
-              <div className={uiClass("collins-auth-card")}>
-                <div className={uiClass("collins-book-cover")}>
-                  <div className={uiClass("collins-book-spine")} />
-                  <div className={uiClass("collins-book-sub")}>Collins</div>
-                  <div className={uiClass("collins-book-mid")}>ENGLISH-CHINESE</div>
-                  <div className={uiClass("collins-book-title")}>柯林斯<br />英汉双解<br />大词典</div>
+              <div className={classNames("collins-auth-card")}>
+                <div className={classNames("collins-book-cover")}>
+                  <div className={classNames("collins-book-spine")} />
+                  <div className={classNames("collins-book-sub")}>Collins</div>
+                  <div className={classNames("collins-book-mid")}>ENGLISH-CHINESE</div>
+                  <div className={classNames("collins-book-title")}>柯林斯<br />英汉双解<br />大词典</div>
                 </div>
-                <div className={uiClass("collins-auth-info")}>
-                  <h3 className={uiClass("collins-auth-title")}>《柯林斯英汉双解大词典》</h3>
-                  <p className={uiClass("collins-auth-desc")}>
+                <div className={classNames("collins-auth-info")}>
+                  <h3 className={classNames("collins-auth-title")}>《柯林斯英汉双解大词典》</h3>
+                  <p className={classNames("collins-auth-desc")}>
                     由哈珀·柯林斯出版社授权，不背单词团队倾力制作。
                   </p>
                 </div>
               </div>
 
               {/* 四大核心特色列表 */}
-              <div className={uiClass("collins-features-list")}>
-                <div className={uiClass("collins-feature-item")}>
-                  <span className={uiClass("feature-dot")}>◎</span>
+              <div className={classNames("collins-features-list")}>
+                <div className={classNames("collins-feature-item")}>
+                  <span className={classNames("feature-dot")}>◎</span>
                   <span>20万词条，包含大量的派生词、短语和习语</span>
                 </div>
-                <div className={uiClass("collins-feature-item")}>
-                  <span className={uiClass("feature-dot")}>◎</span>
+                <div className={classNames("collins-feature-item")}>
+                  <span className={classNames("feature-dot")}>◎</span>
                   <span>3000词汇就看得懂的英文释义和精准的中文释义</span>
                 </div>
-                <div className={uiClass("collins-feature-item")}>
-                  <span className={uiClass("feature-dot")}>◎</span>
+                <div className={classNames("collins-feature-item")}>
+                  <span className={classNames("feature-dot")}>◎</span>
                   <span>6万来源于 Bank of English 的真实例句</span>
                 </div>
-                <div className={uiClass("collins-feature-item")}>
-                  <span className={uiClass("feature-dot")}>◎</span>
+                <div className={classNames("collins-feature-item")}>
+                  <span className={classNames("feature-dot")}>◎</span>
                   <span>特别标注词频和四六级、专业四八级词汇</span>
                 </div>
               </div>
 
               {/* 核心知识点全新呈现 标语 */}
-              <div className={uiClass("collins-promo-hero")}>
-                <h2 className={uiClass("promo-title-orange")}>核心知识点全新呈现</h2>
-                <h2 className={uiClass("promo-title-black")}>海量词汇全方位透析</h2>
+              <div className={classNames("collins-promo-hero")}>
+                <h2 className={classNames("promo-title-orange")}>核心知识点全新呈现</h2>
+                <h2 className={classNames("promo-title-black")}>海量词汇全方位透析</h2>
               </div>
 
               {/* 词典条目深度透析卡片 */}
-              <div className={uiClass("collins-entry-preview")}>
-                <div className={uiClass("collins-preview-hd")}>
-                  <span className={uiClass("c-entry-word")}>{wordStr}</span>
-                  <div className={uiClass("c-entry-meta")}>
-                    <span className={uiClass("c-stars")}>★★★★★</span>
-                    <span className={uiClass("c-tag")}>CET4</span>
-                    <span className={uiClass("c-tag")}>TEM4</span>
+              <div className={classNames("collins-entry-preview")}>
+                <div className={classNames("collins-preview-hd")}>
+                  <span className={classNames("c-entry-word")}>{wordStr}</span>
+                  <div className={classNames("c-entry-meta")}>
+                    <span className={classNames("c-stars")}>★★★★★</span>
+                    <span className={classNames("c-tag")}>CET4</span>
+                    <span className={classNames("c-tag")}>TEM4</span>
                   </div>
                 </div>
-                <div className={uiClass("collins-preview-def-box")}>
-                  <p className={uiClass("c-en-def")}>
+                <div className={classNames("collins-preview-def-box")}>
+                  <p className={classNames("c-en-def")}>
                     {fullWord?.def || `Used to connect words of the same part of speech, clauses, or sentences.`}
                   </p>
-                  <p className={uiClass("c-zh-def")}>
+                  <p className={classNames("c-zh-def")}>
                     {briefDef}
                   </p>
                 </div>
@@ -239,7 +240,7 @@ export const DictDetailModal = ({
 
           {/* ================= 2. 例句 Tab ================= */}
           {activeTab === '例句' && (
-            <div className={uiClass("dict-pane dict-pane-sentences")}>
+            <div className={classNames("dict-pane dict-pane-sentences")}>
               {(fullWord?.sentences || [
                 {
                   src: '原声语境',
@@ -248,21 +249,21 @@ export const DictDetailModal = ({
                   zh: `我们需要理解这个词在实际场景中的用法。`,
                 },
               ]).map((sent, idx) => (
-                <div key={idx} className={uiClass("dict-sent-card")}>
-                  <div className={uiClass("dict-sent-src")}>
+                <div key={idx} className={classNames("dict-sent-card")}>
+                  <div className={classNames("dict-sent-src")}>
                     <span>{sent.src}</span>
                     <button
-                      className={uiClass("dict-sent-audio-btn")}
+                      className={classNames("dict-sent-audio-btn")}
                       onClick={() => {
                         audioService.playSentence(sent.en.replace(/<[^>]*>/g, ''), 'us');
                       }}
                       aria-label="朗读例句"
                     >
-                      <svg className={uiClass("icon")} style={{ width: 14, height: 14 }}><use href="#i-vol-fill" /></svg>
+                      <svg className={classNames("icon")} style={{ width: 14, height: 14 }}><use href="#i-vol-fill" /></svg>
                     </button>
                   </div>
-                  <div className={uiClass("dict-sent-en")} dangerouslySetInnerHTML={{ __html: sent.en }} />
-                  <div className={uiClass("dict-sent-zh")}>{sent.zh}</div>
+                  <div className={classNames("dict-sent-en")} dangerouslySetInnerHTML={{ __html: sent.en }} />
+                  <div className={classNames("dict-sent-zh")}>{sent.zh}</div>
                 </div>
               ))}
             </div>
@@ -270,14 +271,14 @@ export const DictDetailModal = ({
 
           {/* ================= 3. 派生 Tab ================= */}
           {activeTab === '派生' && (
-            <div className={uiClass("dict-pane dict-pane-mnemo")}>
+            <div className={classNames("dict-pane dict-pane-mnemo")}>
               {(fullWord?.mnemo?.['派生'] || [
                 [`${wordStr}ly`, 'adv. 派生形式'],
                 [`${wordStr}ness`, 'n. 状态，性质'],
               ]).map(([k, d], idx) => (
-                <div key={idx} className={uiClass("dict-mnemo-row")}>
-                  <span className={uiClass("m-key")}>{k}</span>
-                  <span className={uiClass("m-desc")}>{d}</span>
+                <div key={idx} className={classNames("dict-mnemo-row")}>
+                  <span className={classNames("m-key")}>{k}</span>
+                  <span className={classNames("m-desc")}>{d}</span>
                 </div>
               ))}
             </div>
@@ -285,13 +286,13 @@ export const DictDetailModal = ({
 
           {/* ================= 4. 词根 Tab ================= */}
           {activeTab === '词根' && (
-            <div className={uiClass("dict-pane dict-pane-mnemo")}>
+            <div className={classNames("dict-pane dict-pane-mnemo")}>
               {(fullWord?.mnemo?.['词根'] || [
                 [`${wordStr.slice(0, 3)}-`, '词根说明：源自古印欧语，表基础关联'],
               ]).map(([k, d], idx) => (
-                <div key={idx} className={uiClass("dict-mnemo-row")}>
-                  <span className={uiClass("m-key")}>{k}</span>
-                  <span className={uiClass("m-desc")}>{d}</span>
+                <div key={idx} className={classNames("dict-mnemo-row")}>
+                  <span className={classNames("m-key")}>{k}</span>
+                  <span className={classNames("m-desc")}>{d}</span>
                 </div>
               ))}
             </div>
@@ -299,14 +300,14 @@ export const DictDetailModal = ({
 
           {/* ================= 5. 近义 Tab ================= */}
           {activeTab === '近义' && (
-            <div className={uiClass("dict-pane dict-pane-mnemo")}>
+            <div className={classNames("dict-pane dict-pane-mnemo")}>
               {(fullWord?.mnemo?.['近义'] || [
                 ['plus', 'prep./n. 加上，此外'],
                 ['together with', '短语 与……一起'],
               ]).map(([k, d], idx) => (
-                <div key={idx} className={uiClass("dict-mnemo-row")}>
-                  <span className={uiClass("m-key")}>{k}</span>
-                  <span className={uiClass("m-desc")}>{d}</span>
+                <div key={idx} className={classNames("dict-mnemo-row")}>
+                  <span className={classNames("m-key")}>{k}</span>
+                  <span className={classNames("m-desc")}>{d}</span>
                 </div>
               ))}
             </div>
@@ -314,67 +315,67 @@ export const DictDetailModal = ({
 
           {/* ================= 6. 真题 Tab ================= */}
           {activeTab === '真题' && (
-            <div className={uiClass("dict-pane dict-pane-exam")}>
-              <div className={uiClass("dict-exam-tag-hd")}>
-                <span className={uiClass("exam-freq-pill")}>历年真题出现 48 次</span>
-                <span className={uiClass("exam-type-pill")}>CET-4 / CET-6 / 考研英语</span>
+            <div className={classNames("dict-pane dict-pane-exam")}>
+              <div className={classNames("dict-exam-tag-hd")}>
+                <span className={classNames("exam-freq-pill")}>历年真题出现 48 次</span>
+                <span className={classNames("exam-type-pill")}>CET-4 / CET-6 / 考研英语</span>
               </div>
-              <div className={uiClass("dict-sent-card")}>
-                <div className={uiClass("dict-sent-src")}>
+              <div className={classNames("dict-sent-card")}>
+                <div className={classNames("dict-sent-src")}>
                   <span>2022年12月 大学英语四级真题</span>
                 </div>
-                <div className={uiClass("dict-sent-en")}>
+                <div className={classNames("dict-sent-en")}>
                   The study shows a strong correlation between healthy lifestyle <b>and</b> academic performance.
                 </div>
-                <div className={uiClass("dict-sent-zh")}>研究表明，健康的生活方式与学业表现之间存在密切联系。</div>
+                <div className={classNames("dict-sent-zh")}>研究表明，健康的生活方式与学业表现之间存在密切联系。</div>
               </div>
-              <div className={uiClass("dict-sent-card")}>
-                <div className={uiClass("dict-sent-src")}>
+              <div className={classNames("dict-sent-card")}>
+                <div className={classNames("dict-sent-src")}>
                   <span>2021年 全国硕士研究生入学统一考试</span>
                 </div>
-                <div className={uiClass("dict-sent-en")}>
+                <div className={classNames("dict-sent-en")}>
                   Technological innovations <b>and</b> environmental policies must go hand in hand.
                 </div>
-                <div className={uiClass("dict-sent-zh")}>技术创新与环境政策必须齐头并进。</div>
+                <div className={classNames("dict-sent-zh")}>技术创新与环境政策必须齐头并进。</div>
               </div>
             </div>
           )}
 
           {/* ================= 7. 笔记 Tab ================= */}
           {activeTab === '笔记' && (
-            <div className={uiClass("dict-pane dict-pane-notes")}>
-              <div className={uiClass("dict-note-input-box")}>
+            <div className={classNames("dict-pane dict-pane-notes")}>
+              <div className={classNames("dict-note-input-box")}>
                 <textarea
-                  className={uiClass("dict-note-textarea")}
+                  className={classNames("dict-note-textarea")}
                   placeholder="写下你对该词的专属助记、考点笔记或联想…"
                   value={userNote}
                   onChange={(e) => setUserNote(e.target.value)}
                   rows={3}
                 />
-                <div className={uiClass("dict-note-act")}>
-                  <button className={uiClass("dict-note-submit-btn")} onClick={handleAddNote}>
+                <div className={classNames("dict-note-act")}>
+                  <button className={classNames("dict-note-submit-btn")} onClick={handleAddNote}>
                     保存笔记
                   </button>
                 </div>
               </div>
 
-              <div className={uiClass("dict-notes-list")}>
+              <div className={classNames("dict-notes-list")}>
                 {userNote ? (
-                  <div className={uiClass("dict-note-item user-note")}>
-                    <div className={uiClass("note-hd")}>
-                      <span className={uiClass("note-author")}>我的专属笔记</span>
-                      <span className={uiClass("note-time")}>已保存</span>
+                  <div className={classNames("dict-note-item user-note")}>
+                    <div className={classNames("note-hd")}>
+                      <span className={classNames("note-author")}>我的专属笔记</span>
+                      <span className={classNames("note-time")}>已保存</span>
                     </div>
-                    <p className={uiClass("note-content")}>{userNote}</p>
+                    <p className={classNames("note-content")}>{userNote}</p>
                   </div>
                 ) : null}
 
-                <div className={uiClass("dict-note-item community-note")}>
-                  <div className={uiClass("note-hd")}>
-                    <span className={uiClass("note-author")}>精选助记 · 考霸笔记</span>
-                    <span className={uiClass("note-badge")}>精选</span>
+                <div className={classNames("dict-note-item community-note")}>
+                  <div className={classNames("note-hd")}>
+                    <span className={classNames("note-author")}>精选助记 · 考霸笔记</span>
+                    <span className={classNames("note-badge")}>精选</span>
                   </div>
-                  <p className={uiClass("note-content")}>
+                  <p className={classNames("note-content")}>
                     💡 记忆技巧：结合经典影视句型进行高频情境记忆，重点关注该词与介词的固定句型搭配。
                   </p>
                 </div>
@@ -385,12 +386,12 @@ export const DictDetailModal = ({
 
         {/* 底部右下角悬浮关闭按钮 (Floating Close Action Button) */}
         <button
-          className={uiClass("dict-fab-close-btn")}
+          className={classNames("dict-fab-close-btn")}
           onClick={onClose}
           aria-label="关闭词典详情"
           title="关闭"
         >
-          <svg className={uiClass("icon")} style={{ width: 22, height: 22 }}>
+          <svg className={classNames("icon")} style={{ width: 22, height: 22 }}>
             <use href="#i-close" />
           </svg>
         </button>

@@ -1,5 +1,5 @@
 import {cardText} from '../../../../i18n/originalCards';
-import { uiClass } from '../../../ui/classes';
+import { iconClass } from '../../../ui/primitives';
 import { useMemo, useState } from 'react';
 import type {
   AssessmentResource,
@@ -205,23 +205,23 @@ export function SensaReviewFeedbackCard({
   }
 
   return (
-    <div className={uiClass(`sensa-review-feedback-page ${result.correct ? 'is-success' : 'is-repair'}`)}>
-      <header className={uiClass("sensa-review-feedback-heading")}>
-        <span>{cardText(purpose==='acquisition'?'checkRecorded':'reviewResultRecorded')}</span>
-        <div className={uiClass("sensa-review-feedback-mark")} aria-hidden="true">
+    <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-6 py-8 text-fg-primary sm:px-10">
+      <header>
+        <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{cardText(purpose==='acquisition'?'checkRecorded':'reviewResultRecorded')}</span>
+        <div className={`mt-5 grid size-14 place-items-center rounded-card text-2xl font-bold ${result.correct ? 'bg-accent-soft text-feedback-success' : 'bg-surface-subtle text-feedback-warning'}`} aria-hidden="true">
           {result.correct ? '✓' : '↗'}
         </div>
-        <h1>{feedback.title}</h1>
-        <p>{feedback.body}</p>
+        <h1 className="mt-5 text-page-title font-semibold">{feedback.title}</h1>
+        <p className="mt-3 text-body-support leading-7 text-fg-secondary">{feedback.body}</p>
       </header>
 
-      <section className={uiClass("sensa-review-observation")} aria-label={cardText('reviewResult')}>
-        <div>
-          <small>{cardText('thisCheckCovered')}</small>
-          <strong>{result.focusDimension}</strong>
+      <section className="mt-6 rounded-card border border-border-subtle bg-surface-panel p-5" aria-label={cardText('reviewResult')}>
+        <div className="flex items-center justify-between gap-4">
+          <small className="text-metadata text-fg-tertiary">{cardText('thisCheckCovered')}</small>
+          <strong className="text-body-support">{result.focusDimension}</strong>
         </div>
-        <span>{outcomeLabel(result)}</span>
-        <p>
+        <span className="mt-3 inline-flex rounded-pill bg-accent-soft px-3 py-1 text-metadata font-semibold text-fg-secondary">{outcomeLabel(result)}</span>
+        <p className="mt-3 text-body-support leading-6 text-fg-secondary">
           {purpose==='acquisition'?cardText('initialCheckHint'):result.evidenceEligible
             ? result.correct
               ? cardText('thisReviewHasBeenScheduled')
@@ -231,36 +231,36 @@ export function SensaReviewFeedbackCard({
       </section>
 
       {!result.correct && spec.kind === 'meaning_to_form_recall' && (
-        <section className={uiClass("sensa-review-form-repair")}>
-          <span>{cardText('reconnectToThisMeaning')}</span>
-          <strong>{spec.primaryForm}</strong>
-          <p>{content.l1Bridge}</p>
+        <section className="mt-6 rounded-card border border-border-subtle bg-accent-soft p-5">
+          <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{cardText('reconnectToThisMeaning')}</span>
+          <strong className="mt-3 block font-language text-2xl text-action-primary">{spec.primaryForm}</strong>
+          <p className="mt-2 text-body-support text-fg-secondary">{content.l1Bridge}</p>
         </section>
       )}
 
       {!result.correct && spec.kind === 'boundary_contrast' && (
-        <section className={uiClass("sensa-review-boundary-repair")}>
-          <div><small>{cardText('currentMeaning')}</small><strong>{spec.currentSenseL1}</strong></div>
-          <span aria-hidden="true">≠</span>
-          <div><small>{cardText('relatedMeaning')}</small><strong>{spec.contrastSenseL1}</strong></div>
+        <section className="mt-6 grid grid-cols-[1fr_auto_1fr] items-stretch gap-3 rounded-card border border-border-subtle bg-surface-panel p-4">
+          <div className="flex flex-col gap-2 rounded-control bg-accent-soft p-3"><small className="text-metadata text-fg-tertiary">{cardText('currentMeaning')}</small><strong className="text-body-support">{spec.currentSenseL1}</strong></div>
+          <span className="grid place-items-center text-fg-tertiary" aria-hidden="true">≠</span>
+          <div className="flex flex-col gap-2 rounded-control bg-surface-subtle p-3"><small className="text-metadata text-fg-tertiary">{cardText('relatedMeaning')}</small><strong className="text-body-support">{spec.contrastSenseL1}</strong></div>
         </section>
       )}
 
       {spec.kind === 'novel_context_transfer' && (
-        <section className={uiClass("sensa-review-transfer-trace")}>
-          <span>{cardText('theSituationChangedWhatStayedTheSame')}</span>
-          <div>
-            {spec.scenario.invariantLabelsL1.map((label) => <i key={label}>{label}</i>)}
+        <section className="mt-6 rounded-card border border-border-subtle bg-surface-panel p-5">
+          <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{cardText('theSituationChangedWhatStayedTheSame')}</span>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {spec.scenario.invariantLabelsL1.map((label) => <i className="rounded-pill bg-accent-soft px-3 py-1 text-metadata not-italic text-fg-secondary" key={label}>{label}</i>)}
           </div>
         </section>
       )}
 
-      <section className={uiClass("sensa-review-reveal-example")}>
-        <div>
-          <span>{spec.kind === 'novel_context_transfer' ? cardText('returnToTheEnglishExpression') : cardText('revisitTheContext')}</span>
-          <small>{cardText('youCanNowTapWordsForDefinitions2')}</small>
+      <section className="mt-6 rounded-card border border-border-subtle bg-surface-panel p-5">
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-control-label font-semibold">{spec.kind === 'novel_context_transfer' ? cardText('returnToTheEnglishExpression') : cardText('revisitTheContext')}</span>
+          <small className="text-metadata text-fg-tertiary">{cardText('youCanNowTapWordsForDefinitions2')}</small>
         </div>
-        <div className={uiClass("sensa-review-feedback-sentence")}>
+        <div className="mt-5 font-language text-xl leading-9">
           <ClickableSentence
             sentenceHtml={emphasizeTarget(revealedExample)}
             activeTokenIdx={activeLookup?.tokenIdx ?? null}
@@ -276,32 +276,32 @@ export function SensaReviewFeedbackCard({
             }}
           />
         </div>
-        <p>{revealedExample.textL1}</p>
+        <p className="mt-4 text-body-support leading-6 text-fg-secondary">{revealedExample.textL1}</p>
       </section>
 
-      <div className={uiClass("sensa-review-feedback-actions")}>
+      <div className="mt-6 grid gap-3">
         <button
           type="button"
-          className={uiClass(!result.correct ? 'is-emphasized' : '')}
+          className={`grid min-h-12 grid-cols-[1.5rem_1fr_1.5rem] items-center gap-3 rounded-control border px-4 text-left text-control-label font-semibold focus-visible:outline-2 focus-visible:outline-focus ${!result.correct ? 'border-border-strong bg-accent-soft text-action-primary' : 'border-border-subtle bg-surface-panel text-fg-primary hover:bg-surface-subtle'}`}
           onClick={() => {
             clearLookup();
             onViewChange();
             setReplayPhase('experience');
           }}
         >
-          <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-eye" /></svg>
+          <svg className={iconClass} aria-hidden="true"><use href="#i-eye" /></svg>
           <span>{result.correct ? cardText('replayTheMeaningConnection2') : cardText('rebuildThisMeaning')}</span>
-          <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-r" /></svg>
+          <svg className={iconClass} aria-hidden="true"><use href="#i-chev-r" /></svg>
         </button>
-        <button type="button" onClick={onOpenExample}>
-          <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-bookopen" /></svg>
+        <button className="grid min-h-12 grid-cols-[1.5rem_1fr_1.5rem] items-center gap-3 rounded-control border border-border-subtle bg-surface-panel px-4 text-left text-control-label font-semibold text-fg-primary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={onOpenExample}>
+          <svg className={iconClass} aria-hidden="true"><use href="#i-bookopen" /></svg>
           <span>{cardText('viewLearningExamples')}</span>
-          <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-r" /></svg>
+          <svg className={iconClass} aria-hidden="true"><use href="#i-chev-r" /></svg>
         </button>
-        <button type="button" onClick={() => onOpenDictionary(content.lemma)}>
-          <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-search" /></svg>
+        <button className="grid min-h-12 grid-cols-[1.5rem_1fr_1.5rem] items-center gap-3 rounded-control border border-border-subtle bg-surface-panel px-4 text-left text-control-label font-semibold text-fg-primary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={() => onOpenDictionary(content.lemma)}>
+          <svg className={iconClass} aria-hidden="true"><use href="#i-search" /></svg>
           <span>{cardText('openTheFullDictionary')}</span>
-          <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-r" /></svg>
+          <svg className={iconClass} aria-hidden="true"><use href="#i-chev-r" /></svg>
         </button>
       </div>
 
@@ -312,8 +312,8 @@ export function SensaReviewFeedbackCard({
         variant="compact"
       />
 
-      <footer className={uiClass("sensa-review-feedback-footer")}>
-        <button type="button" onClick={onContinue}>
+      <footer className="mt-auto pt-8">
+        <button className="min-h-12 w-full rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={onContinue}>
           {purpose==='acquisition'?cardText('continueLearning'):cardText('continueReview')}
         </button>
       </footer>

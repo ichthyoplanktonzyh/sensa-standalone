@@ -1,11 +1,16 @@
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
-import { uiClass } from '../ui/classes';
 import { useEffect, useMemo, useState } from 'react';
 import { contentAnnotations } from '../../data/library/contentAnnotations';
 import { semanticStatusLabel, type SemanticStatus } from '../contentProjection';
 import { PRACTICE_SENSES, type PracticeSenseItem } from '../practiceData';
 import { audioService } from '../services/audioService';
+import {
+  contentNavigationBackClass,
+  contentNavigationClass,
+  iconClass,
+  slideScreenClass,
+} from '../ui/primitives';
 import { useContentProjection } from '../useContentProjection';
 
 interface ContentSenseDetailScreenProps {
@@ -64,89 +69,89 @@ export const ContentSenseDetailScreen = ({
   };
 
   return (
-    <section className={uiClass(`screen content-detail-screen${active ? ' active' : ''}`, "#s-content-sense")} id="s-content-sense" data-anim="slide">
-      <header className={uiClass("content-nav content-detail-nav")}>
-        <button className={uiClass("content-nav-back")} onClick={onBack} aria-label={uiText('back2')}>
-          <svg className={uiClass("icon")}><use href="#i-chev-l" /></svg>
+    <section className={slideScreenClass(active)} id="s-content-sense" data-anim="slide" aria-hidden={!active}>
+      <header className={contentNavigationClass}>
+        <button className={contentNavigationBackClass} onClick={onBack} aria-label={uiText('back2')}>
+          <svg className={iconClass} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
-        <span className={uiClass("content-detail-kicker")}>{uiText('meaning3')}</span>
-        <button className={uiClass(`content-save-button${saved ? ' on' : ''}`)} onClick={() => void toggleSaved()} aria-pressed={saved} aria-label={saved ? uiText('unsaveThisMeaning') : uiText('saveThisMeaning')}>
-          <svg className={uiClass("icon")}><use href="#i-star" /></svg>
+        <span className="text-center text-section-title font-medium">{uiText('meaning3')}</span>
+        <button className={`grid size-11 place-items-center justify-self-end rounded-control border-0 focus-visible:outline-2 focus-visible:outline-focus ${saved ? 'bg-accent-soft text-action-primary' : 'bg-transparent text-fg-secondary hover:bg-surface-subtle'}`} onClick={() => void toggleSaved()} aria-pressed={saved} aria-label={saved ? uiText('unsaveThisMeaning') : uiText('saveThisMeaning')}>
+          <svg className={`${iconClass} ${saved ? 'fill-current' : ''}`} aria-hidden="true"><use href="#i-star" /></svg>
         </button>
       </header>
 
-      <div className={uiClass("content-page-body sense-detail-body")}>
-        <section className={uiClass("sense-detail-hero")}>
-          <div className={uiClass("sense-detail-wordline")}>
-            <h1>{item.word}</h1>
-            <span>{item.pos}</span>
+      <div className="mx-auto w-full max-w-4xl px-6 py-8 pb-12 sm:px-10">
+        <section className="border-b border-border-subtle pb-8 pt-3">
+          <div className="flex flex-wrap items-baseline gap-3">
+            <h1 className="font-language text-5xl font-medium">{item.word}</h1>
+            <span className="rounded-pill bg-accent-soft px-3 py-1 text-metadata font-semibold text-fg-secondary">{item.pos}</span>
           </div>
-          <div className={uiClass("sense-detail-phonetic")}>
-            <button onClick={() => void audioService.playWord(item.word, 'us')} aria-label={uiText('playUsPronunciation')}>
-              <svg className={uiClass("icon")}><use href="#i-vol" /></svg>{uiText('us')}</button>
-            <span>{item.phonetic}</span>
+          <div className="mt-4 flex items-center gap-3 text-body-support text-fg-secondary">
+            <button className="inline-flex min-h-11 items-center gap-2 rounded-control bg-accent-soft px-3 text-control-label font-semibold text-action-primary focus-visible:outline-2 focus-visible:outline-focus" onClick={() => void audioService.playWord(item.word, 'us')} aria-label={uiText('playUsPronunciation')}>
+              <svg className={iconClass} aria-hidden="true"><use href="#i-vol" /></svg>{uiText('us')}</button>
+            <span className="font-language">{item.phonetic}</span>
           </div>
-          <p className={uiClass("sense-detail-meaning")}>{item.meaning}</p>
+          <p className="mt-5 text-xl leading-8 text-fg-secondary">{item.meaning}</p>
           {semanticState && (
-            <span className={uiClass(`semantic-status-pill sense-detail-status status-${semanticState}`)}>
+            <span className="mt-4 inline-flex rounded-pill bg-surface-selected px-3 py-1 text-metadata font-semibold text-fg-secondary">
               {semanticStatusLabel[semanticState as SemanticStatus]}
             </span>
           )}
         </section>
 
-        <section className={uiClass("sense-detail-section")}>
-          <div className={uiClass("sense-section-heading")}>
-            <span>{uiText('learningExample')}</span>
-            <button onClick={() => onOpenExample(item)}>{uiText('viewDetails')}</button>
+        <section className="mt-8">
+          <div className="mb-3 flex items-center justify-between gap-4">
+            <span className="text-section-title font-semibold">{uiText('learningExample')}</span>
+            <button className="min-h-11 rounded-control px-3 text-control-label font-semibold text-action-primary hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-focus" onClick={() => onOpenExample(item)}>{uiText('viewDetails')}</button>
           </div>
-          <div className={uiClass("sense-example-card")}>
-            <button className={uiClass("sense-example-open")} onClick={() => onOpenExample(item)}>
-              <span className={uiClass("sense-example-source")}>{item.example.sourceLabel}</span>
-              <strong>{item.example.text}</strong>
-              {item.example.translation && <small>{item.example.translation}</small>}
+          <div className="grid grid-cols-[1fr_3.5rem] overflow-hidden rounded-card border border-border-subtle bg-surface-panel">
+            <button className="min-w-0 border-0 bg-transparent p-5 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" onClick={() => onOpenExample(item)}>
+              <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{item.example.sourceLabel}</span>
+              <strong className="mt-3 block font-language text-lg leading-7">{item.example.text}</strong>
+              {item.example.translation && <small className="mt-2 block text-body-support leading-6 text-fg-secondary">{item.example.translation}</small>}
             </button>
-            <button className={uiClass("sense-example-play")} onClick={() => {
+            <button className="grid min-h-14 place-items-center border-0 border-l border-border-subtle bg-transparent text-action-primary hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-focus" onClick={() => {
               void audioService.playSentence(item.example.text, 'us');
             }} aria-label={uiText('playLearningExample')}>
-              <svg className={uiClass("icon")}><use href="#i-vol" /></svg>
+              <svg className={iconClass} aria-hidden="true"><use href="#i-vol" /></svg>
             </button>
           </div>
         </section>
 
-        <section className={uiClass("sense-detail-section")}>
-          <div className={uiClass("sense-section-heading")}><span>{uiText('myAnnotations')}</span></div>
-          <button className={uiClass("sense-note-card")} onClick={() => onEditNote(item)}>
-            <span className={uiClass("sense-note-icon")}><svg className={uiClass("icon")}><use href="#i-pen" /></svg></span>
-            <span>
-              <b>{note ? uiText('myNotes') : uiText('writeANoteOnThisMeaning')}</b>
-              <small>{note || uiText('addYourUnderstandingAssociationsOrReminders')}</small>
+        <section className="mt-8">
+          <div className="mb-3 text-section-title font-semibold"><span>{uiText('myAnnotations')}</span></div>
+          <button className="grid w-full grid-cols-[2.75rem_1fr_auto] items-center gap-3 rounded-card border border-border-subtle bg-surface-panel p-5 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" onClick={() => onEditNote(item)}>
+            <span className="grid size-11 place-items-center rounded-control bg-accent-soft text-action-primary"><svg className={iconClass} aria-hidden="true"><use href="#i-pen" /></svg></span>
+            <span className="flex min-w-0 flex-col gap-1">
+              <b className="text-body">{note ? uiText('myNotes') : uiText('writeANoteOnThisMeaning')}</b>
+              <small className="line-clamp-2 text-body-support text-fg-secondary">{note || uiText('addYourUnderstandingAssociationsOrReminders')}</small>
             </span>
-            <svg className={uiClass("chev")}><use href="#i-chev-r" /></svg>
+            <svg className="size-4 text-fg-tertiary" aria-hidden="true"><use href="#i-chev-r" /></svg>
           </button>
         </section>
 
         {siblings.length > 0 && (
-          <section className={uiClass("sense-detail-section")}>
-            <div className={uiClass("sense-section-heading")}><span>{uiText('otherMeaningsOfThisWord')}</span><em>{siblings.length}</em></div>
-            <div className={uiClass("sense-sibling-card")}>
+          <section className="mt-8">
+            <div className="mb-3 flex items-center justify-between text-section-title font-semibold"><span>{uiText('otherMeaningsOfThisWord')}</span><em className="rounded-pill bg-accent-soft px-3 py-1 text-metadata not-italic text-fg-secondary">{siblings.length}</em></div>
+            <div className="overflow-hidden rounded-card border border-border-subtle bg-surface-panel">
               {siblings.map((sibling) => (
-                <button key={sibling.senseId} onClick={() => onOpenSense(sibling)}>
-                  <span><em>{sibling.pos}</em>{sibling.meaning}</span>
-                  <svg className={uiClass("chev")}><use href="#i-chev-r" /></svg>
+                <button className="flex min-h-14 w-full items-center justify-between gap-4 border-0 bg-transparent p-4 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus [&+button]:border-t [&+button]:border-border-subtle" key={sibling.senseId} onClick={() => onOpenSense(sibling)}>
+                  <span className="text-body-support"><em className="mr-2 text-metadata not-italic text-fg-tertiary">{sibling.pos}</em>{sibling.meaning}</span>
+                  <svg className="size-4 shrink-0 text-fg-tertiary" aria-hidden="true"><use href="#i-chev-r" /></svg>
                 </button>
               ))}
             </div>
           </section>
         )}
 
-        <div className={uiClass("sense-detail-actions")}>
-          <button onClick={() => onOpenDictionary(item)}>
-            <svg className={uiClass("icon")}><use href="#i-bookopen" /></svg>
-            <span><b>{uiText('openDictionary')}</b><small>{uiText('fullEntryAndRelatedContent')}</small></span>
+        <div className="mt-8 grid gap-3 sm:grid-cols-2">
+          <button className="grid min-h-16 grid-cols-[2rem_1fr] items-center gap-3 rounded-control border border-border-subtle bg-surface-panel p-4 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" onClick={() => onOpenDictionary(item)}>
+            <svg className={iconClass} aria-hidden="true"><use href="#i-bookopen" /></svg>
+            <span className="flex flex-col gap-1"><b className="text-control-label">{uiText('openDictionary')}</b><small className="text-metadata text-fg-secondary">{uiText('fullEntryAndRelatedContent')}</small></span>
           </button>
-          <button className={uiClass("is-later")} onClick={() => toast(uiText('addingToLearningIsNotAvailableYet'))}>
-            <svg className={uiClass("icon")}><use href="#i-relearn" /></svg>
-            <span><b>{uiText('addToLearning')}</b><small>{uiText('notAvailableYet')}</small></span>
+          <button className="grid min-h-16 grid-cols-[2rem_1fr] items-center gap-3 rounded-control border border-border-subtle bg-surface-panel p-4 text-left text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" onClick={() => toast(uiText('addingToLearningIsNotAvailableYet'))}>
+            <svg className={iconClass} aria-hidden="true"><use href="#i-relearn" /></svg>
+            <span className="flex flex-col gap-1"><b className="text-control-label">{uiText('addToLearning')}</b><small className="text-metadata text-fg-tertiary">{uiText('notAvailableYet')}</small></span>
           </button>
         </div>
       </div>

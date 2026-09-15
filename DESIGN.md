@@ -86,14 +86,14 @@ Components have stable anatomy, behavior, state, and accessibility semantics. Sk
 
 A component must expose meaningful semantic slots and states. New component styling belongs in the shared primitive or domain component; page-local color and radius literals are not a supported extension mechanism.
 
-The legacy `uiClass` recipe runtime is a bounded migration seam, not part of the skin contract. Its content presentation bridge and scoped style sources must consume semantic roles only. A surface graduates from the seam when its stable layout and state selectors move into the owning component or scoped semantic stylesheet, the appearance smoke covers it, and its now-unreferenced recipe keys are deleted. New product surfaces must not add recipe keys or private page palettes.
+The former `uiClass` recipe runtime has been retired. Stable layout and state selectors now live in their owning component or a scoped semantic stylesheet, and the appearance smoke rejects any return to the registry pattern. New product surfaces must not add recipe registries, private page palettes, or behavioral branches keyed to a skin.
 
 ## Do's and Don'ts
 
 - Do build components against semantic tokens and verify them in every shipped skin, both color modes, supported text sizes, and relevant responsive widths.
 - Do keep focus visible, status understandable without color, contrast at least WCAG AA for normal text, and motion compatible with reduced-motion preferences.
 - Do treat Quiet and Clear as two adapters of one product contract; a feature must work identically after switching between them.
-- Do migrate legacy recipes by a verified product surface and delete only keys proven to have no remaining consumer.
+- Do keep each migrated product surface covered by the appearance smoke as its presentation evolves.
 - Do fall back to the default skin and mode when a stored preference is missing, invalid, or no longer shipped.
 - Don't hard-code palette values inside product components or couple behavior to a skin identifier.
 - Don't let a skin replace routes, component anatomy, learning stages, data fields, event meaning, persistence, or network behavior.

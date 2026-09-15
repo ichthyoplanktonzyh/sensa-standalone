@@ -1,18 +1,6 @@
 @import "tailwindcss";
 @source "./experience";
 
-@theme {
-  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  --font-editorial: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  --color-paper: #f8f9f5;
-  --color-ink: #243e36;
-  --color-muted: #63756c;
-  --color-line: #dfe7df;
-  --color-accent: #28694f;
-  --color-sage: #edf2e8;
-  --color-clay: #b56a42;
-}
-
 @theme inline {
   --font-product: var(--sensa-font-product);
   --font-language: var(--sensa-font-language);

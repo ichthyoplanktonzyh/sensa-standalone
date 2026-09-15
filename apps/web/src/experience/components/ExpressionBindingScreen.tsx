@@ -1,6 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
-import { uiClass } from '../ui/classes';
+import {
+  contentNavigationBackClass,
+  contentNavigationClass,
+  iconClass,
+  slideScreenClass,
+} from '../ui/primitives';
 /**
  * Independent Sense → target-expression binding journey.
  *
@@ -69,10 +74,10 @@ const coverageDescriptions: Record<SensaSemanticCoverage, string> = {
 };
 
 const unavailable = (title: string, reason: string) => (
-  <div className={uiClass("ebs-unavailable")} role="alert">
-    <span aria-hidden="true">!</span>
-    <h2>{title}</h2>
-    <p>{reason}</p>
+  <div className="rounded-card border border-dashed border-border-strong bg-surface-panel p-8 text-center" role="alert">
+    <span className="mx-auto grid size-9 place-items-center rounded-full bg-accent-soft font-bold text-feedback-warning" aria-hidden="true">!</span>
+    <h2 className="mt-4 text-section-title font-semibold">{title}</h2>
+    <p className="mt-2 text-body-support leading-6 text-fg-secondary">{reason}</p>
   </div>
 );
 
@@ -85,20 +90,16 @@ const CandidateRow = ({
   selected: boolean;
   onSelect: () => void;
 }) => (
-  <li className={uiClass([
-    'ebs-candidate',
-    selected ? 'is-selected' : '',
-    candidate.bindingStatus ? `is-${candidate.bindingStatus}` : '',
-  ].filter(Boolean).join(' '))}>
-    <button type="button" aria-pressed={selected} onClick={onSelect}>
-      <span className={uiClass("ebs-candidate-radio")} aria-hidden="true" />
-      <span className={uiClass("ebs-candidate-copy")}>
-        <strong>{candidate.surfaceForm}</strong>
-        <small>{expressionTypeLabels[candidate.expressionType]} · {candidate.languageTag}</small>
-        <em>{candidate.rationale}</em>
+  <li className={`overflow-hidden rounded-card border ${selected ? 'border-border-strong bg-surface-selected' : 'border-border-subtle bg-surface-panel'}`}>
+    <button className="grid min-h-16 w-full grid-cols-[1rem_1fr_auto] items-start gap-3 border-0 bg-transparent p-4 text-left focus-visible:outline-2 focus-visible:outline-focus" type="button" aria-pressed={selected} onClick={onSelect}>
+      <span className={`mt-1 size-3 rounded-full border ${selected ? 'border-action-primary bg-action-primary' : 'border-border-strong'}`} aria-hidden="true" />
+      <span className="flex min-w-0 flex-col gap-1">
+        <strong className="font-language text-lg">{candidate.surfaceForm}</strong>
+        <small className="text-metadata text-fg-tertiary">{expressionTypeLabels[candidate.expressionType]} · {candidate.languageTag}</small>
+        <em className="text-body-support leading-6 text-fg-secondary not-italic">{candidate.rationale}</em>
       </span>
-      {candidate.bindingStatus === 'confirmed' && <span className={uiClass("ebs-candidate-state")}>{uiText('connectionConfirmed')}</span>}
-      {candidate.bindingStatus === 'used' && <span className={uiClass("ebs-candidate-state")}>{uiText('alreadyConnected')}</span>}
+      {candidate.bindingStatus === 'confirmed' && <span className="rounded-pill bg-accent-soft px-2 py-1 text-metadata text-feedback-success">{uiText('connectionConfirmed')}</span>}
+      {candidate.bindingStatus === 'used' && <span className="rounded-pill bg-surface-subtle px-2 py-1 text-metadata text-fg-secondary">{uiText('alreadyConnected')}</span>}
     </button>
   </li>
 );
@@ -197,10 +198,10 @@ export const ExpressionBindingScreen = ({
 
   const body = !status.ok
     ? (
-      <div className={uiClass("ebs-error")} role="alert">
-        <b>{uiText('unableToLoadYourMeanings')}</b>
-        <p>{status.error ?? uiText('localMeaningDataIsUnavailable')}</p>
-        <button type="button" onClick={onBack}>{uiText('back')}</button>
+      <div className="rounded-card border border-feedback-danger bg-surface-panel p-6 text-center" role="alert">
+        <b className="text-feedback-danger">{uiText('unableToLoadYourMeanings')}</b>
+        <p className="mt-2 text-body-support text-fg-secondary">{status.error ?? uiText('localMeaningDataIsUnavailable')}</p>
+        <button className="mt-4 min-h-11 rounded-control border border-border-strong bg-surface-panel px-4 text-control-label font-semibold" type="button" onClick={onBack}>{uiText('back')}</button>
       </div>
     )
     : !personalMeaningId || !meaningFocusId
@@ -211,28 +212,27 @@ export const ExpressionBindingScreen = ({
           ? unavailable(uiText('noExpressionToConfirmYet'), uiText('thisMeaningHasNoCandidateExpressionsYet'))
           : (
               <>
-                <section className={uiClass("ebs-hero")}>
-                  <span className={uiClass("ebs-hero-mark")} aria-hidden="true">↗</span>
-                  <h2>{uiText('howWouldYouExpressIt')}</h2>
-                  <p>{alignment.semanticSpec?.coreMeaningFocus ?? focus.statement}</p>
+                <section className="border-b border-border-subtle pb-7 pt-3">
+                  <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{uiText('howWouldYouExpressIt')}</span>
+                  <h2 className="mt-3 text-page-title font-semibold">{alignment.semanticSpec?.coreMeaningFocus ?? focus.statement}</h2>
                 </section>
 
-                <ol className={uiClass("ebs-stepper")} aria-label={uiText('expressionConnectionSteps')}>
+                <ol className="my-6 grid grid-cols-3 gap-2" aria-label={uiText('expressionConnectionSteps')}>
                   {(['candidate', 'form', 'relation'] as const).map((step, index) => (
-                    <li key={step} className={uiClass(bindingStep === step ? 'is-current' : '')}>
-                      <span>{index + 1}</span>
-                      <small>{index === 0 ? uiText('chooseExpression') : index === 1 ? uiText('confirmForm') : uiText('confirmRelation')}</small>
+                    <li key={step} className={`flex flex-col items-center gap-2 rounded-control p-3 text-center ${bindingStep === step ? 'bg-accent-soft text-action-primary' : 'bg-surface-subtle text-fg-secondary'}`}>
+                      <span className="grid size-7 place-items-center rounded-full border border-current text-metadata font-bold">{index + 1}</span>
+                      <small className="text-metadata font-semibold">{index === 0 ? uiText('chooseExpression') : index === 1 ? uiText('confirmForm') : uiText('confirmRelation')}</small>
                     </li>
                   ))}
                 </ol>
 
                 {bindingStep === 'candidate' && (
-                  <section className={uiClass("ebs-section")} aria-labelledby="ebs-candidate-heading">
-                    <header className={uiClass("ebs-section-head")}>
-                      <div><h2 id="ebs-candidate-heading">{uiText('chooseAnExpression')}</h2></div>
-                      <span>{candidates.length} {uiText('items')}</span>
+                  <section className="rounded-card border border-border-subtle bg-surface-panel p-5" aria-labelledby="ebs-candidate-heading">
+                    <header className="flex items-center justify-between gap-4">
+                      <div><h2 className="text-section-title font-semibold" id="ebs-candidate-heading">{uiText('chooseAnExpression')}</h2></div>
+                      <span className="rounded-pill bg-accent-soft px-3 py-1 text-metadata text-fg-secondary">{candidates.length} {uiText('items')}</span>
                     </header>
-                    <ul className={uiClass("ebs-candidates")}>
+                    <ul className="mt-4 grid gap-3">
                       {candidates.map((candidate) => (
                         <CandidateRow
                           key={candidate.candidateId}
@@ -249,54 +249,55 @@ export const ExpressionBindingScreen = ({
                         />
                       ))}
                     </ul>
-                    <div className={uiClass("ebs-actions")}>
-                      <button type="button" className={uiClass("ebs-primary")} disabled={!selectedCandidate} onClick={() => setBindingStep('form')}>
+                    <div className="mt-5">
+                      <button type="button" className="min-h-12 w-full rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" disabled={!selectedCandidate} onClick={() => setBindingStep('form')}>
                         {uiText('continue')}<span aria-hidden="true">→</span>
                       </button>
                     </div>
                   </section>
                 )}
 
-                <form className={uiClass("ebs-form")} onSubmit={submit}>
-                  {bindingStep === 'form' && <section className={uiClass("ebs-section")} aria-labelledby="ebs-form-heading">
-                    <header className={uiClass("ebs-section-head")}>
-                      <div><h2 id="ebs-form-heading">{uiText('confirmSpellingAndType')}</h2></div>
+                <form onSubmit={submit}>
+                  {bindingStep === 'form' && <section className="rounded-card border border-border-subtle bg-surface-panel p-5" aria-labelledby="ebs-form-heading">
+                    <header>
+                      <div><h2 className="text-section-title font-semibold" id="ebs-form-heading">{uiText('confirmSpellingAndType')}</h2></div>
                     </header>
-                    <label className={uiClass("ebs-field")}>
-                      <span>{uiText('expressionForm')}</span>
+                    <label className="mt-5 grid gap-2">
+                      <span className="text-control-label font-semibold">{uiText('expressionForm')}</span>
                       <input
+                        className="min-h-12 rounded-control border border-border-strong bg-surface-panel px-3 text-body text-fg-primary focus-visible:outline-2 focus-visible:outline-focus"
                         required
                         value={surfaceForm}
                         onChange={(event) => setSurfaceForm(event.target.value)}
                         placeholder={uiText('enterTheEnglishExpressionToConfirm')}
                       />
                     </label>
-                    <label className={uiClass("ebs-field")}>
-                      <span>{uiText('expressionType')}</span>
-                      <select value={expressionType} onChange={(event) => setExpressionType(event.target.value as SensaExpressionType)}>
+                    <label className="mt-5 grid gap-2">
+                      <span className="text-control-label font-semibold">{uiText('expressionType')}</span>
+                      <select className="min-h-12 rounded-control border border-border-strong bg-surface-panel px-3 text-body text-fg-primary focus-visible:outline-2 focus-visible:outline-focus" value={expressionType} onChange={(event) => setExpressionType(event.target.value as SensaExpressionType)}>
                         {(Object.keys(expressionTypeLabels) as SensaExpressionType[]).map((type) => (
                           <option key={type} value={type}>{expressionTypeLabels[type]}</option>
                         ))}
                       </select>
                     </label>
-                    <div className={uiClass("ebs-actions")}>
-                      <button type="button" className={uiClass("ebs-primary")} disabled={!surfaceForm.trim()} onClick={() => setBindingStep('relation')}>
+                    <div className="mt-5 grid gap-3">
+                      <button type="button" className="min-h-12 rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" disabled={!surfaceForm.trim()} onClick={() => setBindingStep('relation')}>
                         {uiText('continue')}<span aria-hidden="true">→</span>
                       </button>
-                      <button type="button" onClick={() => setBindingStep('candidate')}>{uiText('backToExpressions')}</button>
+                      <button className="min-h-11 rounded-control border-0 bg-transparent px-4 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle" type="button" onClick={() => setBindingStep('candidate')}>{uiText('backToExpressions')}</button>
                     </div>
                   </section>}
 
-                  {formError && <p className={uiClass("ebs-form-error")} role="alert">{formError}</p>}
+                  {formError && <p className="mt-4 rounded-control border border-feedback-danger bg-surface-panel p-3 text-body-support text-feedback-danger" role="alert">{formError}</p>}
 
-                  {bindingStep === 'relation' && <section className={uiClass("ebs-section")} aria-labelledby="ebs-relation-heading">
-                    <header className={uiClass("ebs-section-head")}>
-                      <div><h2 id="ebs-relation-heading">{uiText('howDoesItExpressThisMeaning')}</h2></div>
+                  {bindingStep === 'relation' && <section className="rounded-card border border-border-subtle bg-surface-panel p-5" aria-labelledby="ebs-relation-heading">
+                    <header>
+                      <div><h2 className="text-section-title font-semibold" id="ebs-relation-heading">{uiText('howDoesItExpressThisMeaning')}</h2></div>
                     </header>
-                    <fieldset className={uiClass("ebs-choice-set")}>
-                      <legend>{uiText('relation')}</legend>
+                    <fieldset className="mt-5 grid gap-2 border-0 p-0">
+                      <legend className="mb-2 text-control-label font-semibold">{uiText('relation')}</legend>
                       {(Object.keys(relationLabels) as SensaExpressionBindingRelation[]).map((value) => (
-                        <label key={value} className={uiClass(relation === value ? 'is-selected' : '')}>
+                        <label key={value} className={`flex min-h-14 cursor-pointer items-start gap-3 rounded-control border p-3 ${relation === value ? 'border-border-strong bg-surface-selected' : 'border-border-subtle bg-surface-panel'}`}>
                           <input
                             type="radio"
                             name="binding-relation"
@@ -304,14 +305,14 @@ export const ExpressionBindingScreen = ({
                             checked={relation === value}
                             onChange={() => setRelation(value)}
                           />
-                          <span><b>{relationLabels[value]}</b><small>{relationDescriptions[value]}</small></span>
+                          <span className="flex flex-col gap-1"><b className="text-body-support">{relationLabels[value]}</b><small className="text-metadata leading-5 text-fg-secondary">{relationDescriptions[value]}</small></span>
                         </label>
                       ))}
                     </fieldset>
-                    <fieldset className={uiClass("ebs-choice-set")}>
-                      <legend>{uiText('semanticCoverage')}</legend>
+                    <fieldset className="mt-5 grid gap-2 border-0 p-0">
+                      <legend className="mb-2 text-control-label font-semibold">{uiText('semanticCoverage')}</legend>
                       {(Object.keys(coverageLabels) as SensaSemanticCoverage[]).map((value) => (
-                        <label key={value} className={uiClass(semanticCoverage === value ? 'is-selected' : '')}>
+                        <label key={value} className={`flex min-h-14 cursor-pointer items-start gap-3 rounded-control border p-3 ${semanticCoverage === value ? 'border-border-strong bg-surface-selected' : 'border-border-subtle bg-surface-panel'}`}>
                           <input
                             type="radio"
                             name="semantic-coverage"
@@ -319,22 +320,22 @@ export const ExpressionBindingScreen = ({
                             checked={semanticCoverage === value}
                             onChange={() => setSemanticCoverage(value)}
                           />
-                          <span><b>{coverageLabels[value]}</b><small>{coverageDescriptions[value]}</small></span>
+                          <span className="flex flex-col gap-1"><b className="text-body-support">{coverageLabels[value]}</b><small className="text-metadata leading-5 text-fg-secondary">{coverageDescriptions[value]}</small></span>
                         </label>
                       ))}
                     </fieldset>
                     {(!relation || !semanticCoverage) && (
-                      <p className={uiClass("ebs-selection-hint")}>{uiText('selectBothARelationAndACoverage')}</p>
+                      <p className="mt-4 text-metadata text-fg-tertiary">{uiText('selectBothARelationAndACoverage')}</p>
                     )}
-                    <div className={uiClass("ebs-actions")}>
+                    <div className="mt-5 grid gap-3">
                       <button
                         type="submit"
-                        className={uiClass("ebs-primary")}
+                        className="min-h-12 rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45"
                         disabled={busy || !selectedCandidate || !surfaceForm.trim() || !relation || !semanticCoverage}
                       >
                         {busy ? uiText('confirming') : uiText('confirmThisExpression')} <span aria-hidden="true">→</span>
                       </button>
-                      <button type="button" disabled={busy} onClick={() => setBindingStep('form')}>{uiText('backToForm')}</button>
+                      <button className="min-h-11 rounded-control border-0 bg-transparent px-4 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle" type="button" disabled={busy} onClick={() => setBindingStep('form')}>{uiText('backToForm')}</button>
                     </div>
                   </section>}
                 </form>
@@ -344,18 +345,19 @@ export const ExpressionBindingScreen = ({
   return (
     <section
       ref={screenRef}
-      className={uiClass(`screen expression-binding-screen${active ? ' active' : ''}`, "#s-expression-binding")}
+      className={slideScreenClass(active)}
       id="s-expression-binding"
       data-anim="slide"
+      aria-hidden={!active}
     >
-      <header className={uiClass("content-nav ebs-nav")}>
-        <button type="button" className={uiClass("content-nav-back")} onClick={onBack} aria-label={uiText('backToConfirmedMeaning')}>
-          <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
+      <header className={contentNavigationClass}>
+        <button type="button" className={contentNavigationBackClass} onClick={onBack} aria-label={uiText('backToConfirmedMeaning')}>
+          <svg className={iconClass} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
         <h1>{uiText('connectAnExpression')}</h1>
         <span />
       </header>
-      <div className={uiClass("content-page-body ebs-body")}>{body}</div>
+      <div className="mx-auto w-full max-w-4xl px-6 py-8 pb-12 sm:px-10">{body}</div>
     </section>
   );
 };

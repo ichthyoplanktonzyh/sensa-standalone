@@ -25,7 +25,7 @@ import {useLocalMeaningLibrary} from './library/useLocalMeaningLibrary';
 import {ProviderPanel} from './components/ProviderPanel';
 import {LearningPreferencesPanel} from './components/learning/LearningPreferencesPanel';
 import {useTranslation} from 'react-i18next';
-import {uiClass} from './ui/classes';
+import {iconClass} from './ui/primitives';
 import {useState,useCallback,useMemo} from 'react';
 import {contentAnnotations} from '../data/library/contentAnnotations';
 import {lookupDictionaryEntry} from './services/quickDict';
@@ -529,18 +529,18 @@ export default function App() {
 
           {/* 全局遮罩与菜单 */}
           <div
-            className={uiClass(`mask${menuMoreOpen || menuBookOpen ? ' on' : ''}`, "#mask")}
+            className={`fixed inset-0 z-[70] bg-overlay transition-opacity motion-reduce:transition-none ${menuMoreOpen || menuBookOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`}
             id="mask"
             onClick={closeMenus}
           />
 
           {/* 学习页右上角菜单 */}
-          <div className={uiClass(`menu${menuMoreOpen ? ' on' : ''}`, "#menu-more")} id="menu-more">
+          <div className={`fixed right-5 top-20 z-[80] min-w-64 overflow-hidden rounded-overlay border border-border-subtle bg-surface-raised p-2 text-fg-primary shadow-overlay transition-[opacity,transform,visibility] motion-reduce:transition-none [&>button]:flex [&>button]:min-h-12 [&>button]:w-full [&>button]:items-center [&>button]:gap-3 [&>button]:rounded-control [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:text-left [&>button]:text-control-label [&>button]:hover:bg-surface-subtle [&>button]:focus-visible:outline-2 [&>button]:focus-visible:outline-focus ${menuMoreOpen ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-2 opacity-0'}`} id="menu-more">
             {menuPersonalContent && (
               <>
-                <div className={uiClass("menu-personal-context")}>
-                  <span>{t('assurance.currentMeaning')}</span>
-                  <strong>{menuPersonalContent.lemma}</strong>
+                <div className="mb-2 rounded-control bg-accent-soft p-3">
+                  <span className="block text-metadata text-fg-tertiary">{t('assurance.currentMeaning')}</span>
+                  <strong className="mt-1 block font-language text-lg text-action-primary">{menuPersonalContent.lemma}</strong>
                   <small>{menuPersonalContent.guideLabelL1}</small>
                 </div>
                 <button
@@ -550,7 +550,7 @@ export default function App() {
                     openNoteEditor(content.lemma, content.senseKey, content.guideLabelL1);
                   }}
                 >
-                  <svg className={uiClass("icon")}><use href="#i-pen" /></svg>{t('assurance.note')}
+                  <svg className={iconClass} aria-hidden="true"><use href="#i-pen" /></svg>{t('assurance.note')}
                 </button>
                 <button
                   onClick={() => {
@@ -560,7 +560,7 @@ export default function App() {
                     setSceneEditorTarget({ content, anchorId });
                   }}
                 >
-                  <svg className={uiClass("icon")}><use href="#i-bulb" /></svg>
+                  <svg className={iconClass} aria-hidden="true"><use href="#i-bulb" /></svg>
                   {t('assurance.personalScene')}
                 </button>
                 {menuPersonalAnchors.length > 0 && (
@@ -571,11 +571,11 @@ export default function App() {
                       setSceneEditorTarget({ content });
                     }}
                   >
-                    <svg className={uiClass("icon")}><use href="#i-penplus" /></svg>{t('assurance.addScene')}
+                    <svg className={iconClass} aria-hidden="true"><use href="#i-penplus" /></svg>{t('assurance.addScene')}
                   </button>
                 )}
-                <button onClick={()=>{const content=menuPersonalContent;closeMenus();openDictModal(content.lemma);}}><svg className={uiClass("icon")}><use href="#i-search" /></svg>{t('originalCards.dictionary')}</button>
-                <div className={uiClass("menu-section-divider")} />
+                <button onClick={()=>{const content=menuPersonalContent;closeMenus();openDictModal(content.lemma);}}><svg className={iconClass} aria-hidden="true"><use href="#i-search" /></svg>{t('originalCards.dictionary')}</button>
+                <div className="my-2 border-t border-border-subtle" />
               </>
             )}
             <button
@@ -584,7 +584,7 @@ export default function App() {
                 setLearningPreferencesOpen(true);
               }}
             >
-              <svg className={uiClass("icon")}><use href="#i-sliders" /></svg>{t('assurance.preferences')}
+              <svg className={iconClass} aria-hidden="true"><use href="#i-sliders" /></svg>{t('assurance.preferences')}
             </button>
           </div>
 
@@ -597,21 +597,21 @@ export default function App() {
           />}
 
           {/* 词书设置菜单 */}
-          <div className={uiClass(`menu${menuBookOpen ? ' on' : ''}`, "#menu-book")} id="menu-book">
+          <div className={`fixed right-5 top-20 z-[80] min-w-64 overflow-hidden rounded-overlay border border-border-subtle bg-surface-raised p-2 text-fg-primary shadow-overlay transition-[opacity,transform,visibility] motion-reduce:transition-none [&>button]:flex [&>button]:min-h-12 [&>button]:w-full [&>button]:items-center [&>button]:gap-3 [&>button]:rounded-control [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:text-left [&>button]:text-control-label [&>button]:hover:bg-surface-subtle [&>button]:focus-visible:outline-2 [&>button]:focus-visible:outline-focus ${menuBookOpen ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-2 opacity-0'}`} id="menu-book">
             <button onClick={() => { closeMenus(); toast(localFlowText('chooseRangeHint')); }}>
-              <svg className={uiClass("icon")}><use href="#i-filter" /></svg>{localFlowText('chooseRange')}</button>
+              <svg className={iconClass} aria-hidden="true"><use href="#i-filter" /></svg>{localFlowText('chooseRange')}</button>
             <button onClick={() => { closeMenus(); setMainStack(['s-study', 's-learning-library']); }}>
-              <svg className={uiClass("icon")}><use href="#i-list" /></svg>{localFlowText('viewContent')}</button>
+              <svg className={iconClass} aria-hidden="true"><use href="#i-list" /></svg>{localFlowText('viewContent')}</button>
             <button onClick={() => { closeMenus(); toast(localFlowText('downloadingWords')); }}>
-              <svg className={uiClass("icon")}><use href="#i-dl" /></svg>{localFlowText('downloadWords')}</button>
+              <svg className={iconClass} aria-hidden="true"><use href="#i-dl" /></svg>{localFlowText('downloadWords')}</button>
             <button onClick={() => { closeMenus(); toast(localFlowText('resetBookWarning')); }}>
-              <svg className={uiClass("icon")}><use href="#i-relearn" /></svg>{localFlowText('relearnBook')}</button>
+              <svg className={iconClass} aria-hidden="true"><use href="#i-relearn" /></svg>{localFlowText('relearnBook')}</button>
             <button disabled>
-              <svg className={uiClass("icon")}><use href="#i-refresh" /></svg>{localFlowText('updateBook')}</button>
+              <svg className={iconClass} aria-hidden="true"><use href="#i-refresh" /></svg>{localFlowText('updateBook')}</button>
           </div>
 
           {/* 全局 Toast 提示 */}
-          <div className={uiClass(`toast${toastMsg ? ' on' : ''}`, "#toast")} id="toast">
+          <div className={`fixed bottom-6 left-1/2 z-[150] max-w-[calc(100%-3rem)] -translate-x-1/2 rounded-control bg-fg-primary px-5 py-3 text-center text-control-label text-surface-canvas shadow-overlay transition-[opacity,transform,visibility] motion-reduce:transition-none ${toastMsg ? 'visible translate-y-0 opacity-100' : 'invisible translate-y-2 opacity-0'}`} id="toast" role="status" aria-live="polite">
             {toastMsg}
           </div>
       </WebShell>

@@ -4,7 +4,7 @@ import {
   contentAnnotations,
   type PersonalSemanticAnchorMedia,
 } from '../../data/library/contentAnnotations';
-import { uiClass } from '../ui/classes';
+import { iconClass } from '../ui/primitives';
 import type { LearningSceneEditorTarget } from '../stores/overlayStore';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 
@@ -157,28 +157,29 @@ export function SceneEditorModal({
   };
 
   return (
-    <div className={uiClass(`scene-editor-backdrop${active ? ' active' : ''}`)}>
-      <div className={uiClass("scene-editor-sheet")} role="dialog" aria-modal="true" aria-label={cardText('sceneFor',{word})}>
-        <header className={uiClass("scene-editor-header")}>
-          <button type="button" onClick={onClose} aria-label={cardText('sceneClose')}>
-            <svg className={uiClass("icon")}><use href="#i-close" /></svg>
+    <div className={`fixed inset-0 z-[120] items-end justify-center bg-overlay p-0 sm:items-center sm:p-6 ${active ? 'flex' : 'hidden'}`} aria-hidden={!active}>
+      <div className="flex h-full max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-none bg-surface-canvas text-fg-primary shadow-overlay sm:h-auto sm:max-h-[min(52rem,calc(100vh-3rem))] sm:rounded-overlay" role="dialog" aria-modal="true" aria-label={cardText('sceneFor',{word})}>
+        <header className="grid min-h-20 grid-cols-[2.75rem_1fr_2.75rem] items-center gap-3 border-b border-border-subtle px-6 py-4">
+          <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={onClose} aria-label={cardText('sceneClose')}>
+            <svg className={iconClass} aria-hidden="true"><use href="#i-close" /></svg>
           </button>
           <div>
 
-            <h2>{cardText('sceneTitle')}</h2>
+            <h2 className="text-center text-section-title font-semibold">{cardText('sceneTitle')}</h2>
           </div>
-          <button type="button" disabled={processing} onClick={() => void handleSave()} aria-label={cardText('sceneSave')}>
-            <svg className={uiClass("icon")}><use href="#i-chk-simple" /></svg>
+          <button className="grid size-11 place-items-center rounded-control border-0 bg-action-primary text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" type="button" disabled={processing} onClick={() => void handleSave()} aria-label={cardText('sceneSave')}>
+            <svg className={iconClass} aria-hidden="true"><use href="#i-chk-simple" /></svg>
           </button>
         </header>
 
-        <div className={uiClass("scene-editor-sense-pill")}>
-          {!learningTarget && <strong>{word}</strong>}
-          <span>{senseMeaning}</span>
+        <div className="mx-6 mt-5 flex flex-wrap items-baseline gap-2 rounded-control bg-accent-soft px-4 py-3">
+          {!learningTarget && <strong className="font-language text-lg text-action-primary">{word}</strong>}
+          <span className="text-body-support text-fg-secondary">{senseMeaning}</span>
         </div>
 
-        <div className={uiClass("scene-editor-canvas")}>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
           <textarea
+            className="min-h-40 w-full resize-y rounded-card border border-border-strong bg-surface-panel p-4 text-body leading-7 text-fg-primary placeholder:text-fg-tertiary focus-visible:outline-2 focus-visible:outline-focus"
             ref={textareaRef}
             value={body}
             maxLength={1000}
@@ -187,18 +188,20 @@ export function SceneEditorModal({
           />
 
           {media.length > 0 && (
-            <div className={uiClass("scene-editor-media-grid")}>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
               {media.map((item) => (
-                <div className={uiClass("scene-editor-media-item")} key={item.mediaId}>
-                  <img src={item.dataUrl} alt={item.altText || cardText('sceneImage')} />
+                <div className="relative overflow-hidden rounded-card border border-border-subtle bg-surface-panel p-3" key={item.mediaId}>
+                  <img className="aspect-video w-full rounded-control object-cover" src={item.dataUrl} alt={item.altText || cardText('sceneImage')} />
                   <button
+                    className="absolute right-5 top-5 grid size-10 place-items-center rounded-control border-0 bg-surface-raised text-fg-secondary shadow-raised focus-visible:outline-2 focus-visible:outline-focus"
                     type="button"
                     onClick={() => setMedia((current) => current.filter((candidate) => candidate.mediaId !== item.mediaId))}
                     aria-label={cardText('sceneRemove',{name:item.fileName})}
                   >
-                    <svg className={uiClass("icon")}><use href="#i-close" /></svg>
+                    <svg className={iconClass} aria-hidden="true"><use href="#i-close" /></svg>
                   </button>
                   <input
+                    className="mt-3 min-h-11 w-full rounded-control border border-border-subtle bg-surface-canvas px-3 text-body-support text-fg-primary placeholder:text-fg-tertiary focus-visible:outline-2 focus-visible:outline-focus"
                     value={item.altText}
                     maxLength={80}
                     onChange={(event) => {
@@ -215,17 +218,17 @@ export function SceneEditorModal({
             </div>
           )}
 
-          <div className={uiClass("scene-editor-canvas-footer")}>
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <button
               type="button"
-              className={uiClass("scene-editor-upload")}
+              className="inline-flex min-h-11 items-center gap-2 rounded-control border border-border-strong bg-surface-panel px-4 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
               onClick={() => fileInputRef.current?.click()}
               disabled={processing || media.length >= MAX_IMAGES}
             >
-              <svg className={uiClass("icon")}><use href="#i-gearpic" /></svg>
+              <svg className={iconClass} aria-hidden="true"><use href="#i-gearpic" /></svg>
               {processing ? cardText('sceneProcessing') : cardText('sceneAddImage')}
             </button>
-            <span>{body.length}/1000 · {cardText('sceneCount',{count:media.length,max:MAX_IMAGES})}</span>
+            <span className="text-metadata text-fg-tertiary">{body.length}/1000 · {cardText('sceneCount',{count:media.length,max:MAX_IMAGES})}</span>
           </div>
         </div>
 
@@ -238,7 +241,7 @@ export function SceneEditorModal({
           onChange={handleImageInput}
         />
 
-        <p className={uiClass("scene-editor-privacy")}>
+        <p className="border-t border-border-subtle px-6 py-4 text-center text-metadata leading-5 text-fg-tertiary">
           {cardText('scenePrivacy')}
         </p>
       </div>

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import {
   colorModeCatalog,
   defaultAppearancePreference,
@@ -126,6 +126,7 @@ for (const role of colorRoles) {
 }
 
 const migratedSurfaces = [
+  "apps/web/src/experience/App.tsx",
   "apps/web/src/experience/ui/WebShell.tsx",
   "apps/web/src/experience/account/AccountExperience.tsx",
   "apps/web/src/experience/components/HomeScreen.tsx",
@@ -136,6 +137,23 @@ const migratedSurfaces = [
   "apps/web/src/experience/components/ContentScreen.tsx",
   "apps/web/src/experience/components/ContentWorkspace.tsx",
   "apps/web/src/experience/components/ContentLibraryScreen.tsx",
+  "apps/web/src/experience/components/ContentComingSoonScreen.tsx",
+  "apps/web/src/experience/components/ContentExampleDetailScreen.tsx",
+  "apps/web/src/experience/components/ContentSenseDetailScreen.tsx",
+  "apps/web/src/experience/components/ConfirmedSenseDetailScreen.tsx",
+  "apps/web/src/experience/components/ClickableSentence.tsx",
+  "apps/web/src/experience/components/DictDetailModal.tsx",
+  "apps/web/src/experience/components/ExpressionBindingScreen.tsx",
+  "apps/web/src/experience/components/IntakeInboxDrawer.tsx",
+  "apps/web/src/experience/components/IntakeSimulatorModal.tsx",
+  "apps/web/src/experience/components/LearnScreen.tsx",
+  "apps/web/src/experience/components/PersonalConnectionActions.tsx",
+  "apps/web/src/experience/components/PersonalMeaningDetailScreen.tsx",
+  "apps/web/src/experience/components/QuickDictPopup.tsx",
+  "apps/web/src/experience/components/ReferenceDictionaryScreen.tsx",
+  "apps/web/src/experience/components/SceneEditorModal.tsx",
+  "apps/web/src/experience/components/SemanticWorldScreen.tsx",
+  "apps/web/src/experience/components/SensaSemanticWorldScreen.tsx",
   "apps/web/src/experience/components/SensaFreePracticeScreen.tsx",
   "apps/web/src/experience/components/PracticeScopeScreen.tsx",
   "apps/web/src/experience/components/language/LanguagePanel.tsx",
@@ -164,7 +182,16 @@ const migratedSurfaces = [
   "apps/web/src/experience/components/learning/RuntimeTools.tsx",
   "apps/web/src/experience/components/learning/LearningPreferencesPanel.tsx",
   "apps/web/src/experience/components/learning/LightweightRuntimeStartScreen.tsx",
+  "apps/web/src/experience/components/learning/InterleavedFourStageRuntimeScreen.tsx",
+  "apps/web/src/experience/components/learning/InterleavedFourStageReviewScreen.tsx",
   "apps/web/src/experience/components/learning/AssuranceSummary.tsx",
+  "apps/web/src/experience/components/cards/ExperienceRenderer.tsx",
+  "apps/web/src/experience/components/cards/IntroductionCard.tsx",
+  "apps/web/src/experience/components/cards/NovelTransferCard.tsx",
+  "apps/web/src/experience/components/cards/SensaRecallCard.tsx",
+  "apps/web/src/experience/components/cards/SensaRecognitionCard.tsx",
+  "apps/web/src/experience/components/cards/review/SensaReviewAssessmentCard.tsx",
+  "apps/web/src/experience/components/cards/review/SensaReviewFeedbackCard.tsx",
   "apps/web/src/experience/components/cards/lightweight/ExperienceRecallCard.tsx",
   "apps/web/src/experience/components/cards/lightweight/ExpressionRevealCard.tsx",
 ] as const;
@@ -175,11 +202,14 @@ for (const path of migratedSurfaces) {
     !/data-sensa-skin|dataset\.sensaSkin|\bskin(?:Id)?\s*(?:===?|:)\s*["'](?:quiet|clear)["']/iu.test(source),
     `${path} couples product behavior to a skin`,
   );
+  assert(!/\buiClass\s*\(/u.test(source), `${path} uses the retired recipe runtime`);
 }
 
 const migratedStyleSources = [
-  "apps/web/src/experience/ui/classes.ts",
-  "apps/web/src/experience/ui/contentStyles.ts",
+  "apps/web/src/experience/ui/primitives.ts",
+  "apps/web/src/experience/components/DictDetailModal.css",
+  "apps/web/src/experience/components/PersonalMeaningDetailScreen.css",
+  "apps/web/src/experience/components/SensaSemanticWorldScreen.css",
   "apps/web/src/experience/components/examples/learningExample.css",
 ] as const;
 for (const path of migratedStyleSources) {
@@ -196,9 +226,66 @@ for (const path of migratedStyleSources) {
   }
 }
 
+for (const path of [
+  "apps/web/src/experience/ui/classes.ts",
+  "apps/web/src/experience/ui/contentStyles.ts",
+  "apps/web/src/experience/ui/recipes.ts",
+] as const) {
+  await assert.rejects(access(new URL(`../${path}`, import.meta.url)), `${path} must remain retired`);
+}
+
+async function presentationSources(directory: URL, prefix = ""): Promise<string[]> {
+  const paths: string[] = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = `${prefix}${entry.name}`;
+    if (entry.isDirectory()) {
+      paths.push(...await presentationSources(new URL(`${entry.name}/`, directory), `${path}/`));
+    } else if (/\.(?:css|ts|tsx)$/u.test(entry.name)) {
+      paths.push(path);
+    }
+  }
+  return paths;
+}
+
+const experienceRoot = new URL("../apps/web/src/experience/", import.meta.url);
+for (const path of await presentationSources(experienceRoot)) {
+  const source = await readFile(new URL(path, experienceRoot), "utf8");
+  assert(!/(?<!&)#[0-9a-f]{3,8}\b/iu.test(source), `${path} bypasses the semantic color contract`);
+  assert(!/\b(?:rgb|hsl|oklch)a?\(/iu.test(source), `${path} contains a color-function literal`);
+  assert(
+    !/\b(?:bg-white|text-white|bg-black|text-black|(?:bg|text|border|outline|ring|divide|accent)-(?:red|amber|slate|gray|zinc|neutral|stone|orange|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-[0-9]+)\b/iu.test(source),
+    `${path} uses a palette-specific utility`,
+  );
+  assert(!/\buiClass\s*\(|(?:^|["'])\.\.\/ui\/classes(?:["']|$)/mu.test(source), `${path} revives the retired recipe runtime`);
+  if (!path.startsWith("appearance/")) {
+    assert(
+      !/data-sensa-skin|dataset\.sensaSkin|\bskin(?:Id)?\s*(?:===?|:)\s*["'](?:quiet|clear)["']/iu.test(source),
+      `${path} couples product behavior to a skin`,
+    );
+  }
+}
+
+for (const [componentPath, stylesheetPath, ownedSelector] of [
+  ["components/DictDetailModal.tsx", "components/DictDetailModal.css", /^(?:dict-|collins-|c-|feature-|promo-|exam-|note-|m-)/u],
+  ["components/PersonalMeaningDetailScreen.tsx", "components/PersonalMeaningDetailScreen.css", /^pmw-/u],
+  ["components/SensaSemanticWorldScreen.tsx", "components/SensaSemanticWorldScreen.css", /^personal-world-v2/u],
+] as const) {
+  const component = await readFile(new URL(componentPath, experienceRoot), "utf8");
+  const stylesheet = await readFile(new URL(stylesheetPath, experienceRoot), "utf8");
+  const selectors = new Set<string>();
+  for (const match of component.matchAll(/classNames\((?:`([^`]*)`|["']([^"']*)["'])/gu)) {
+    for (const token of (match[1] || match[2] || "").replace(/\$\{[^}]*\}/gu, "").split(/\s+/u)) {
+      if (ownedSelector.test(token)) selectors.add(token);
+    }
+  }
+  for (const selector of selectors) {
+    assert(stylesheet.includes(`.${selector}`), `${componentPath} selector ${selector} is missing from its scoped stylesheet`);
+  }
+}
+
 const entry = await readFile(new URL("../apps/web/src/main.tsx", import.meta.url), "utf8");
 assert(entry.indexOf("initializeAppearance();") < entry.indexOf("createRoot("));
 
 console.log(
-  "PASS: curated appearance contract, safe fallback, complete light/dark adapters, AA core contrast, early bootstrap, and semantic-only migrated components and style sources.",
+  "PASS: curated appearance contract, safe fallback, complete light/dark adapters, AA core contrast, early bootstrap, retired recipe runtime, and semantic-only Web presentation sources.",
 );
