@@ -2,6 +2,7 @@
 @import "./quiet-intake.css";
 @import "./quiet-runtime.css";
 @import "./quiet-study.css";
+@import "./quiet-practice.css";
 
 :root,
 html[data-sensa-skin="quiet"] {

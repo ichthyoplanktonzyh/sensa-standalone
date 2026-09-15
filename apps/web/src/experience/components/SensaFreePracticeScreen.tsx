@@ -15,7 +15,7 @@ export const SensaFreePracticeScreen=({active,onOpenPracticeScope,onOpenRealWorl
    <span className="min-w-0 flex-1"><span className="text-xs text-fg-secondary">{t('practice.scope')} · {t('practice.sources.'+practiceScope.sourceId)}</span><strong className="mt-3 block text-xl font-medium">{forms.slice(0,4).join(' · ')||t('practice.empty')}{forms.length>4?' …':''}</strong></span>
    <span className="flex items-center gap-3 text-sm text-fg-secondary">{t('practice.count',{count:practiceScope.targets.length})}<ArrowRight size={18}/></span>
   </button>
-  <div className="grid gap-5 md:grid-cols-2">{resolvePracticeActivities(practiceScope).map(activity=>{
+  <div className="sensa-practice-activities grid gap-5 md:grid-cols-2">{resolvePracticeActivities(practiceScope).map(activity=>{
    const Icon=icons[activity.primaryArea],available=activity.status==='available';
    return <button key={activity.id} disabled={!available} onClick={onOpenRealWorldListening} className={`flex min-h-60 flex-col items-start rounded-overlay border p-7 text-left focus-visible:outline-2 focus-visible:outline-focus ${available?'border-border-strong bg-surface-panel hover:border-focus':'border-border-subtle bg-surface-subtle text-fg-tertiary'}`}>
     <span className="flex w-full items-center justify-between"><Icon size={24}/><span className="text-xs">{t('practice.areas.'+activity.primaryArea)}</span></span>

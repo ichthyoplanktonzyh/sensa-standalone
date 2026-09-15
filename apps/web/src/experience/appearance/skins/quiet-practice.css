@@ -1,0 +1,75 @@
+/* Availability is supplied by the practice inventory, never by the skin. */
+html[data-sensa-skin="quiet"] :is(#s-academy, #s-practice-scope) main {
+  max-width: 72rem;
+  padding-block: clamp(2rem, 5vw, 4rem);
+}
+
+html[data-sensa-skin="quiet"] #s-academy main > button {
+  border-radius: 0;
+  border-block: 1px solid var(--sensa-border-strong);
+  background: transparent;
+  padding-inline: 0;
+  overflow-wrap: anywhere;
+}
+
+html[data-sensa-skin="quiet"] .sensa-practice-activities {
+  gap: 0 clamp(1.5rem, 4vw, 3rem);
+}
+
+html[data-sensa-skin="quiet"] .sensa-practice-activities > button {
+  min-height: 14rem;
+  border: 0;
+  border-bottom: 1px solid var(--sensa-border-subtle);
+  border-radius: 0;
+  padding-inline: 0;
+  background: transparent;
+  overflow-wrap: anywhere;
+}
+
+html[data-sensa-skin="quiet"] .sensa-practice-activities > button:not(:disabled):hover {
+  background: var(--sensa-surface-subtle);
+}
+
+html[data-sensa-skin="quiet"] #s-practice-scope li {
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+
+html[data-sensa-skin="quiet"] #s-real-world-listening :is(select, [role="group"] button) {
+  min-height: 2.75rem;
+  max-width: 100%;
+}
+
+html[data-sensa-skin="quiet"] #s-real-world-listening main > div {
+  box-shadow: none;
+}
+
+html[data-sensa-skin="quiet"] #s-real-world-listening footer {
+  font-size: 0.8125rem;
+}
+
+html[data-sensa-skin="quiet"] #s-reference-dictionary article {
+  border-radius: var(--sensa-radius-control);
+  padding: clamp(1rem, 3vw, 1.5rem);
+  overflow-wrap: anywhere;
+}
+
+html[data-sensa-skin="quiet"] #s-reference-dictionary h2 {
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+html[data-sensa-skin="quiet"] #s-reference-example article {
+  border-radius: var(--sensa-radius-card);
+  box-shadow: none;
+}
+
+html[data-sensa-skin="quiet"] #s-reference-example article > section {
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+}
+
+@media (max-width: 40rem) {
+  html[data-sensa-skin="quiet"] #s-real-world-listening main > div > div > div:has(> button) {
+    flex-wrap: wrap;
+  }
+}
