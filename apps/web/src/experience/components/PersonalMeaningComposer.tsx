@@ -20,6 +20,7 @@ import { newUuid } from "../personalMeaningJourney/ids";
 import { useJourneyGateway } from "../personalMeaningJourney";
 import type { MaterialBlockInput } from "../personalMeaningJourney";
 import { type ClarificationStartingPoint } from "../personalMeaningJourney/semanticAgent";
+import { SensaOverlayLayout } from "../ui/SensaComponents";
 import {
   getMedia,
   removeMedia,
@@ -265,18 +266,15 @@ export const PersonalMeaningComposer = ({
   const action =
     "inline-flex min-h-11 items-center justify-center gap-2 rounded-control px-4 text-sm disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-focus";
   return (
-    <div
-      className="fixed inset-0 z-[110] flex justify-end bg-overlay"
-      onMouseDown={handleClose}
-    >
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="pmc-title"
-        onMouseDown={(event) => event.stopPropagation()}
-        className="flex h-full w-full flex-col bg-surface-raised text-fg-primary shadow-overlay sm:max-w-xl"
-      >
-        <header className="flex items-center justify-between border-b border-border-subtle px-6 py-5 sm:px-8">
+    <SensaOverlayLayout
+      variant="sheet"
+      measure="standard"
+      className="z-[110]"
+      labelledBy="pmc-title"
+      onDismiss={handleClose}
+      dismissOnBackdrop
+      regions={{
+        header: <div className="flex items-center justify-between">
           <h2 id="pmc-title" className="text-xl font-medium">
             {t("composer.title")}
           </h2>
@@ -288,8 +286,8 @@ export const PersonalMeaningComposer = ({
           >
             <X size={20} />
           </button>
-        </header>
-        <div className="flex-1 overflow-y-auto px-6 py-8 sm:px-8">
+        </div>,
+        primary: <div>
           <div className="space-y-4">
             {blocks.map((block, index) => (
               <div
@@ -401,8 +399,8 @@ export const PersonalMeaningComposer = ({
               {localFlowNotice(error)}
             </p>
           )}
-        </div>
-        <footer className="flex gap-3 border-t border-border-subtle bg-surface-panel px-6 py-5 sm:px-8">
+        </div>,
+        controls: <div className="flex gap-3">
           <button
             className={`${action} flex-1 bg-action-primary text-action-on-primary hover:bg-action-primary-hover`}
             disabled={!canSave || busy}
@@ -417,8 +415,8 @@ export const PersonalMeaningComposer = ({
           >
             {t("composer.save")}
           </button>
-        </footer>
-      </section>
-    </div>
+        </div>,
+      }}
+    />
   );
 };

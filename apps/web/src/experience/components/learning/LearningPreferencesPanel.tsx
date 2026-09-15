@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { LanguageSwitch } from '../../../i18n/LanguageSwitch';
 import { learningPolicyProfileRegistry } from '../../../learning/runtime/policyProfiles';
 import type { LearningPolicyId } from '../../../learning/runtime/policyProfiles';
+import { SensaOverlayLayout } from '../../ui/SensaComponents';
 import { runtimePrimary } from './RuntimeFrame';
 
 interface Props {
@@ -35,14 +36,12 @@ export function LearningPreferencesPanel({allowedPolicies,showDailyQuantity=true
     try {action();setError(false);} catch {setError(true);}
   };
   const counts=[...new Set([5,10,15,20,30,dailyNewCount])].sort((a,b)=>a-b);
-  return <div className="fixed inset-0 z-[150] flex items-end justify-end bg-overlay sm:items-stretch" onClick={event=>{if(event.target===event.currentTarget)onClose();}}>
-    <section role="dialog" aria-modal="true" aria-labelledby="learning-preferences-title"
-      className="flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-overlay bg-surface-canvas text-fg-primary shadow-overlay sm:h-full sm:max-h-none sm:max-w-md sm:rounded-none">
-      <header className="flex shrink-0 items-center justify-between border-b border-border-subtle px-6 py-5">
+  return <SensaOverlayLayout variant="sheet" measure="compact" className="z-[150]" labelledBy="learning-preferences-title" onDismiss={onClose} dismissOnBackdrop regions={{
+    header: <div className="flex items-center justify-between">
         <h2 id="learning-preferences-title" className="text-lg font-medium">{t(showDailyQuantity?'learningPreferences.title':'learningSetup.method')}</h2>
         <button autoFocus type="button" className="grid size-11 place-items-center rounded-control text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" onClick={onClose} aria-label={t('learningPreferences.close')}><X size={20}/></button>
-      </header>
-      <div className="space-y-7 overflow-y-auto px-6 py-7">
+      </div>,
+    primary: <div className="space-y-7">
         {showDailyQuantity&&<div className="flex items-center justify-between gap-4">
           <span className="text-sm font-medium">{t('language.label')}</span><LanguageSwitch/>
         </div>}
@@ -66,10 +65,8 @@ export function LearningPreferencesPanel({allowedPolicies,showDailyQuantity=true
         {showDailyQuantity&&<p className="text-xs leading-6 text-fg-tertiary">{t('learningPreferences.future')}</p>}
         {status}
         {error&&<p role="alert" className="rounded-control bg-accent-soft p-4 text-sm text-feedback-danger">{t('runtime.saveError')}</p>}
-      </div>
-      <footer className="mt-auto shrink-0 border-t border-border-subtle px-6 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+      </div>,
+    controls:
         <button type="button" disabled={busy} className={`${runtimePrimary} w-full`} onClick={onConfirm??onClose}>{closeLabel ?? t('learningPreferences.resume')}</button>
-      </footer>
-    </section>
-  </div>;
+  }} />;
 }

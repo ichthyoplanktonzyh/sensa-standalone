@@ -5,6 +5,7 @@ import {
   type PersonalSemanticAnchorMedia,
 } from '../../data/library/contentAnnotations';
 import { iconClass } from '../ui/primitives';
+import { SensaOverlayLayout } from '../ui/SensaComponents';
 import type { LearningSceneEditorTarget } from '../stores/overlayStore';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 
@@ -157,9 +158,8 @@ export function SceneEditorModal({
   };
 
   return (
-    <div className={`fixed inset-0 z-[120] items-end justify-center bg-overlay p-0 sm:items-center sm:p-6 ${active ? 'flex' : 'hidden'}`} aria-hidden={!active}>
-      <div className="flex h-full max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-none bg-surface-canvas text-fg-primary shadow-overlay sm:h-auto sm:max-h-[min(52rem,calc(100vh-3rem))] sm:rounded-overlay" role="dialog" aria-modal="true" aria-label={cardText('sceneFor',{word})}>
-        <header className="grid min-h-20 grid-cols-[2.75rem_1fr_2.75rem] items-center gap-3 border-b border-border-subtle px-6 py-4">
+    <SensaOverlayLayout variant="dialog" measure="wide" className={`z-[120] ${active ? '' : 'hidden'}`} aria-hidden={!active} label={cardText('sceneFor',{word})} regions={{
+      header: <div className="grid min-h-12 grid-cols-[2.75rem_1fr_2.75rem] items-center gap-3">
           <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={onClose} aria-label={cardText('sceneClose')}>
             <svg className={iconClass} aria-hidden="true"><use href="#i-close" /></svg>
           </button>
@@ -170,8 +170,8 @@ export function SceneEditorModal({
           <button className="grid size-11 place-items-center rounded-control border-0 bg-action-primary text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" type="button" disabled={processing} onClick={() => void handleSave()} aria-label={cardText('sceneSave')}>
             <svg className={iconClass} aria-hidden="true"><use href="#i-chk-simple" /></svg>
           </button>
-        </header>
-
+        </div>,
+      primary: <div>
         <div className="mx-6 mt-5 flex flex-wrap items-baseline gap-2 rounded-control bg-accent-soft px-4 py-3">
           {!learningTarget && <strong className="font-language text-lg text-action-primary">{word}</strong>}
           <span className="text-body-support text-fg-secondary">{senseMeaning}</span>
@@ -244,7 +244,7 @@ export function SceneEditorModal({
         <p className="border-t border-border-subtle px-6 py-4 text-center text-metadata leading-5 text-fg-tertiary">
           {cardText('scenePrivacy')}
         </p>
-      </div>
-    </div>
+      </div>,
+    }} />
   );
 }

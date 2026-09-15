@@ -354,11 +354,21 @@ export function SkinSurfaceGallery() {
         </SensaSurface>
 
         <SensaSurface as="section" variant="card">
-          <h2 className={sectionTitle}>Overlays</h2>
+          <h2 className={sectionTitle}>Overlay layout contract</h2>
+          <p className="mb-4 max-w-3xl text-body-support text-fg-secondary">
+            Product code supplies dialog semantics, state, and dismissal behavior. The active Skin arranges the stable header, primary, and controls regions.
+          </p>
           <div className={specimenGrid}>
             {(["dialog", "sheet", "popover"] as const).map((variant) => (
-              <SensaOverlayFrame key={variant} variant={variant} title={`${variant} frame`}>
-                Static anatomy preview. Focus management and dismissal remain owned by the product component.
+              <SensaOverlayFrame
+                key={variant}
+                variant={variant}
+                title={`${variant} frame`}
+                data-sensa-contract-specimen="full"
+                controls={<SensaAction variant="primary">Done</SensaAction>}
+              >
+                <p>Static anatomy preview. Focus management and dismissal remain owned by the product component.</p>
+                {variant === "dialog" && <SensaField className="mt-4" label="Overlay state-preservation probe" inputProps={{ id: "skin-overlay-state-probe", defaultValue: "Persistent overlay input" }} />}
               </SensaOverlayFrame>
             ))}
           </div>

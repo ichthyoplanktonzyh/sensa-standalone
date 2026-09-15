@@ -1,9 +1,16 @@
-import { createElement, useId, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
+import { createElement, useId, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type Ref } from "react";
 import {
   componentAttributes,
   componentSlot,
   type ComponentVariant,
 } from "../appearance/componentContract";
+import {
+  overlayLayoutAttributes,
+  overlayRegionAttributes,
+  type OverlayLayoutFamily,
+  type OverlayLayoutMeasure,
+  type OverlayLayoutMode,
+} from "../appearance/overlayLayoutContract";
 import { classNames } from "./primitives";
 
 export interface SensaActionProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -140,21 +147,115 @@ export function SensaNavigation({ variant = "bar", className, ...props }: SensaN
   );
 }
 
+export interface SensaOverlayLayoutRegions {
+  readonly header?: ReactNode;
+  readonly primary: ReactNode;
+  readonly controls?: ReactNode;
+}
+
+export interface SensaOverlayLayoutProps extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
+  readonly variant: OverlayLayoutFamily;
+  readonly mode?: OverlayLayoutMode;
+  readonly measure?: OverlayLayoutMeasure;
+  readonly regions: SensaOverlayLayoutRegions;
+  readonly label?: string;
+  readonly labelledBy?: string;
+  readonly panelRef?: Ref<HTMLElement>;
+  readonly dismissOnBackdrop?: boolean;
+  readonly onDismiss?: () => void;
+}
+
+/**
+ * Stable overlay anatomy shared by product surfaces and Skin Lab fixtures.
+ * Product code owns state, focus policy and dismissal semantics; the active Skin
+ * owns the backdrop, panel geometry and semantic-region arrangement.
+ */
+export function SensaOverlayLayout({
+  variant,
+  mode = "viewport",
+  measure = "standard",
+  regions,
+  label,
+  labelledBy,
+  panelRef,
+  dismissOnBackdrop = false,
+  onDismiss,
+  className,
+  ...props
+}: SensaOverlayLayoutProps) {
+  const generatedTitleId = useId();
+  const titleId = regions.header ? (labelledBy ?? generatedTitleId) : labelledBy;
+
+  return (
+    <div
+      {...props}
+      {...componentAttributes("overlay", variant)}
+      {...overlayLayoutAttributes(variant, mode)}
+      data-sensa-overlay-measure={measure}
+      className={classNames(className)}
+    >
+      <div
+        {...componentSlot<"overlay">("backdrop")}
+        onMouseDown={(event) => {
+          if (dismissOnBackdrop && event.target === event.currentTarget) onDismiss?.();
+        }}
+      >
+        <section
+          ref={panelRef}
+          {...componentSlot<"overlay">("panel")}
+          role="dialog"
+          aria-modal={mode === "viewport" && variant !== "popover" ? true : undefined}
+          aria-label={titleId ? undefined : label}
+          aria-labelledby={titleId}
+        >
+          {regions.header && (
+            <header
+              {...componentSlot<"overlay">("header")}
+              {...overlayRegionAttributes(variant, "header")}
+              id={labelledBy ? undefined : titleId}
+            >
+              {regions.header}
+            </header>
+          )}
+          <div
+            {...componentSlot<"overlay">("body")}
+            {...overlayRegionAttributes(variant, "primary")}
+          >
+            {regions.primary}
+          </div>
+          {regions.controls && (
+            <footer
+              {...componentSlot<"overlay">("footer")}
+              {...overlayRegionAttributes(variant, "controls")}
+            >
+              {regions.controls}
+            </footer>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
 export interface SensaOverlayFrameProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
   readonly variant: ComponentVariant<"overlay">;
   readonly title: ReactNode;
+  readonly controls?: ReactNode;
 }
 
-export function SensaOverlayFrame({ variant, title, className, children, ...props }: SensaOverlayFrameProps) {
+export function SensaOverlayFrame({ variant, title, controls, className, children, ...props }: SensaOverlayFrameProps) {
   return (
-    <div {...props} {...componentAttributes("overlay", variant)} className={classNames(className)}>
-      <div {...componentSlot<"overlay">("backdrop")}>
-        <div {...componentSlot<"overlay">("panel")}>
-          <strong {...componentSlot<"overlay">("header")}>{title}</strong>
-          <div {...componentSlot<"overlay">("body")} className="mt-2 text-sm text-fg-secondary">{children}</div>
-        </div>
-      </div>
-    </div>
+    <SensaOverlayLayout
+      {...props}
+      variant={variant}
+      mode="specimen"
+      regions={{
+        header: <strong>{title}</strong>,
+        primary: <div className="text-sm text-fg-secondary">{children}</div>,
+        controls,
+      }}
+      className={classNames(className)}
+    />
   );
 }
 

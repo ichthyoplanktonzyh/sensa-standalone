@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import type { QuickDictEntry } from '../types';
 import { audioService } from '../services/audioService';
 import { useDictionaryPresentation } from './DictionaryPresentationContext';
+import { SensaOverlayLayout } from '../ui/SensaComponents';
 
 interface QuickDictPopupProps {
   entry: QuickDictEntry;
@@ -44,13 +45,8 @@ function BaselineQuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDi
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-overlay p-0 sm:items-center sm:p-6" onClick={onClose}>
-      <div
-        className="w-full max-w-lg overflow-hidden rounded-t-overlay border border-border-subtle bg-surface-raised text-fg-primary shadow-overlay sm:rounded-overlay"
-        aria-busy={isLoading}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-center justify-between gap-4 border-b border-border-subtle px-6 py-5">
+    <SensaOverlayLayout variant="dialog" measure="compact" className="z-[100]" label={`快速查词：${entry.word}`} onDismiss={onClose} dismissOnBackdrop aria-busy={isLoading} regions={{
+      header: <div className="flex items-center justify-between gap-4">
           <span className="font-language text-2xl font-semibold">{entry.word}</span>
           <button
             className={`grid size-11 place-items-center rounded-control border-0 focus-visible:outline-2 focus-visible:outline-focus ${isStarred ? 'bg-accent-soft text-decorative' : 'bg-transparent text-fg-secondary hover:bg-surface-subtle'}`}
@@ -65,8 +61,8 @@ function BaselineQuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDi
               <use href="#i-star" />
             </svg>
           </button>
-        </div>
-
+        </div>,
+      primary: <div>
         <button className="flex min-h-12 w-full items-center gap-3 border-0 bg-transparent px-6 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" onClick={handlePlayAudio} title="点击朗读单词">
           <span className={`inline-flex items-center rounded-pill px-3 py-1 text-metadata font-semibold ${isPlaying ? 'bg-action-primary text-action-on-primary' : 'bg-accent-soft text-action-primary'}`}>
             美
@@ -90,8 +86,8 @@ function BaselineQuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDi
             </div>
           ))}
         </div>
-
-        <div className="border-t border-border-subtle p-4">
+      </div>,
+      controls:
           <button
             className="flex min-h-12 w-full items-center justify-center gap-2 rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus"
             onClick={handleDetailClick}
@@ -102,9 +98,7 @@ function BaselineQuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDi
               <use href="#i-chev-r" />
             </svg>
           </button>
-        </div>
-      </div>
-    </div>
+    }} />
   );
 }
 
@@ -156,22 +150,14 @@ function SensaQuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDictP
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-overlay p-0 sm:items-center sm:p-6" onClick={onClose}>
-      <section
-        className="flex max-h-full w-full max-w-lg flex-col overflow-hidden rounded-t-overlay border border-border-subtle bg-surface-raised text-fg-primary shadow-overlay sm:max-h-[min(44rem,calc(100vh-3rem))] sm:rounded-overlay"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="sensa-reference-quick-title"
-        aria-busy={isLoading}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="flex min-h-20 items-center justify-between gap-4 border-b border-border-subtle px-6 py-4">
+    <SensaOverlayLayout variant="dialog" measure="compact" className="z-[100]" labelledBy="sensa-reference-quick-title" onDismiss={onClose} dismissOnBackdrop aria-busy={isLoading} regions={{
+      header: <div className="flex min-h-12 items-center justify-between gap-4">
           <h2 className="font-language text-2xl font-semibold" id="sensa-reference-quick-title">{entry.word}</h2>
           <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" ref={closeButtonRef} type="button" onClick={onClose} aria-label="关闭快速查词">
             <svg className={iconClass} aria-hidden="true"><use href="#i-close" /></svg>
           </button>
-        </header>
-
+        </div>,
+      primary: <div>
         <div className="px-6 pt-5">
           <button
             type="button"
@@ -212,15 +198,13 @@ function SensaQuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDictP
             </p>
           )}
         </div>
-
-        <footer className="border-t border-border-subtle p-4">
+      </div>,
+      controls:
           <button className="flex min-h-12 w-full items-center justify-center gap-2 rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" type="button" onClick={handleDetailClick} disabled={isLoading || hasError}>
             {isLoading ? '正在查询…' : hasError ? '暂不可用' : '查看详细释义'}
             <svg className={iconClass} aria-hidden="true"><use href="#i-chev-r" /></svg>
           </button>
-        </footer>
-      </section>
-    </div>
+    }} />
   );
 }
 

@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import type { SensaIntakeItem, SensaIntakeSense } from '@sensa/contracts/sensa';
 import { newUuid } from '../personalMeaningJourney/ids';
 import { type JourneyWorldItemView, useJourneyGateway } from '../personalMeaningJourney';
+import { SensaOverlayLayout } from '../ui/SensaComponents';
 
 interface IntakeInboxDrawerProps {
   open: boolean;
@@ -129,23 +130,15 @@ export const IntakeInboxDrawer = ({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-stretch justify-end bg-overlay" onMouseDown={onClose}>
-      <section
-        className="flex h-full w-full max-w-xl flex-col bg-surface-canvas text-fg-primary shadow-overlay"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="intake-drawer-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header className="flex min-h-20 items-center justify-between gap-4 border-b border-border-subtle px-6 py-4">
+    <SensaOverlayLayout variant="sheet" measure="standard" className="z-[120]" labelledBy="intake-drawer-title" onDismiss={onClose} dismissOnBackdrop regions={{
+      header: <div className="flex min-h-12 items-center justify-between gap-4">
           <div>
             <small className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{uiText('inbox')}</small>
             <h2 className="mt-1 text-section-title font-semibold" id="intake-drawer-title">{uiText('inboxCount', { count: items.length + drafts.length })}</h2>
           </div>
           <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-xl text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={onClose} aria-label={uiText('close')}>×</button>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+        </div>,
+      primary: <div>
           <p className="mb-5 text-body-support leading-6 text-fg-secondary">
             {uiText('capturedMaterialAwaitingYourConfirmation')}</p>
           {drafts.map(item => <button key={item.personalMeaningId} type="button" onClick={()=>onOpenDraft?.(item.personalMeaningId)} className="mb-4 block w-full rounded-card border border-border-subtle bg-surface-panel p-5 text-left focus-visible:outline-2 focus-visible:outline-focus"><span className="text-xs text-fg-tertiary">{uiText('continueDraft')}</span><strong className="mt-3 block text-sm font-medium leading-6">{item.experienceAnchors[0]?.surfaceForm || item.familiarAnchors[0]?.surfaceForm || item.primaryLabel}</strong></button>)}
@@ -212,8 +205,7 @@ export const IntakeInboxDrawer = ({
               <p className="text-body-support text-fg-secondary">{uiText('yourInboxIsEmpty')}</p>
             </div>
           )}
-        </div>
-      </section>
-    </div>
+        </div>,
+    }} />
   );
 };

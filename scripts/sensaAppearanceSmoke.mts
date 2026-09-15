@@ -21,6 +21,11 @@ import {
   pageLayoutFamilyContract,
   pageLayoutTokenCatalog,
 } from "../apps/web/src/experience/appearance/pageLayoutContract.ts";
+import {
+  overlayLayoutContractVersion,
+  overlayLayoutFamilyContract,
+  overlayLayoutTokenCatalog,
+} from "../apps/web/src/experience/appearance/overlayLayoutContract.ts";
 
 assert.deepEqual(skinCatalog.map(({ id }) => id), ["quiet", "clear"]);
 assert.equal(new Set(skinCatalog.map(({ id }) => id)).size, skinCatalog.length);
@@ -28,11 +33,13 @@ for (const skin of skinCatalog) {
   assert.equal(skin.semanticContractVersion, semanticDesignContractVersion);
   assert.equal(skin.componentContractVersion, componentSkinContractVersion);
   assert.equal(skin.pageLayoutContractVersion, pageLayoutContractVersion);
+  assert.equal(skin.overlayLayoutContractVersion, overlayLayoutContractVersion);
   assert.match(skin.version, /^\d+\.\d+\.\d+$/u);
   assert.deepEqual(skin.capabilities.colorModes, ["light", "dark"]);
   assert.deepEqual(skin.capabilities.textSizes, ["standard", "large"]);
   assert.equal(skin.capabilities.iconSet, "lucide");
   assert.deepEqual(skin.capabilities.pageLayouts, Object.keys(pageLayoutFamilyContract));
+  assert.deepEqual(skin.capabilities.overlayLayouts, Object.keys(overlayLayoutFamilyContract));
 }
 assert.deepEqual(colorModeCatalog, ["system", "light", "dark"]);
 assert.deepEqual(textSizeCatalog, ["standard", "large"]);
@@ -43,6 +50,14 @@ for (const [family, contract] of Object.entries(pageLayoutFamilyContract)) {
     `${family} logical order must contain every declared region exactly once`,
   );
   assert.equal(new Set(contract.logicalOrder).size, contract.logicalOrder.length, `${family} repeats a semantic region`);
+}
+for (const [family, contract] of Object.entries(overlayLayoutFamilyContract)) {
+  assert.deepEqual(
+    [...contract.logicalOrder].sort(),
+    [...contract.requiredRegions, ...contract.optionalRegions].sort(),
+    `${family} logical order must contain every declared overlay region exactly once`,
+  );
+  assert.equal(new Set(contract.logicalOrder).size, contract.logicalOrder.length, `${family} repeats an overlay region`);
 }
 assert.deepEqual(parseAppearancePreference(null), defaultAppearancePreference);
 assert.deepEqual(parseAppearancePreference("not-json"), defaultAppearancePreference);
@@ -114,8 +129,14 @@ for (const skin of skinCatalog) {
   for (const token of pageLayoutTokenCatalog) {
     assert(style.includes(`--sensa-layout-${token}:`), `${skin.id} does not implement layout token ${token}`);
   }
+  for (const token of overlayLayoutTokenCatalog) {
+    assert(style.includes(`--sensa-overlay-layout-${token}:`), `${skin.id} does not implement overlay layout token ${token}`);
+  }
   for (const family of Object.keys(pageLayoutFamilyContract)) {
     assert(style.includes(`data-sensa-page-layout="${family}"`), `${skin.id} does not implement page layout ${family}`);
+  }
+  for (const family of Object.keys(overlayLayoutFamilyContract)) {
+    assert(style.includes(`data-sensa-overlay-layout="${family}"`), `${skin.id} does not implement overlay layout ${family}`);
   }
   assert(
     !/\b(?:display\s*:\s*none|visibility\s*:\s*hidden|content-visibility\s*:\s*hidden)\b/iu.test(style),
@@ -183,6 +204,22 @@ for (const token of pageLayoutTokenCatalog) {
 }
 for (const family of Object.keys(pageLayoutFamilyContract)) {
   assert(pageLayoutStyles.includes(`data-sensa-page-layout="${family}"`), `page layout family ${family} has no shared implementation`);
+}
+
+const overlayLayoutStyles = await readFile(
+  new URL("../apps/web/src/experience/appearance/overlayLayoutStyles.css", import.meta.url),
+  "utf8",
+);
+assert(theme.includes("./experience/appearance/overlayLayoutStyles.css"), "overlay layout contract styles are not imported");
+const declaredOverlayLayoutTokens = new Set<string>(overlayLayoutTokenCatalog);
+for (const [, token] of overlayLayoutStyles.matchAll(/var\(--sensa-overlay-layout-([a-z0-9-]+)\)/gu)) {
+  assert(declaredOverlayLayoutTokens.has(token), `overlay layout styles reference undeclared token ${token}`);
+}
+for (const token of overlayLayoutTokenCatalog) {
+  assert(overlayLayoutStyles.includes(`var(--sensa-overlay-layout-${token})`), `overlay layout token ${token} has no consumer`);
+}
+for (const family of Object.keys(overlayLayoutFamilyContract)) {
+  assert(overlayLayoutStyles.includes(`data-sensa-overlay-layout="${family}"`), `overlay layout family ${family} has no shared implementation`);
 }
 
 const migratedSurfaces = [
@@ -364,6 +401,7 @@ const pageLayoutPrimitives = await readFile(
   new URL("../apps/web/src/experience/ui/SensaPageLayouts.tsx", import.meta.url),
   "utf8",
 );
+const overlayLayoutPrimitives = componentPrimitives;
 for (const variants of Object.values(componentFamilyContract)) {
   for (const variant of variants) {
     assert(
@@ -385,6 +423,12 @@ for (const [family, contract] of Object.entries(pageLayoutFamilyContract)) {
   assert(gallery.includes(specimenCall), `Skin Lab does not cover page layout ${family}`);
   for (const region of contract.logicalOrder) {
     assert(pageLayoutPrimitives.includes(`"${region}"`), `page layout renderer omits region ${family}/${region}`);
+  }
+}
+for (const [family, contract] of Object.entries(overlayLayoutFamilyContract)) {
+  assert(gallery.includes(`"${family}"`), `Skin Lab does not cover overlay layout ${family}`);
+  for (const region of contract.logicalOrder) {
+    assert(overlayLayoutPrimitives.includes(`"${region}"`), `overlay layout renderer omits region ${family}/${region}`);
   }
 }
 for (const path of [
@@ -430,7 +474,24 @@ for (const path of [
 const webShell = await readFile(new URL("ui/WebShell.tsx", experienceRoot), "utf8");
 assert(webShell.includes("<SensaApplicationShellLayout"), "WebShell does not consume the application-shell layout seam");
 assert(!webShell.includes("data-sensa-page-layout"), "WebShell bypasses the page layout interface");
+for (const path of [
+  "components/ContentWorkspace.tsx",
+  "components/IntakeInboxDrawer.tsx",
+  "components/IntakeSimulatorModal.tsx",
+  "components/PersonalMeaningComposer.tsx",
+  "components/NoteEditorModal.tsx",
+  "components/QuickDictPopup.tsx",
+  "components/SceneEditorModal.tsx",
+  "components/language/LanguagePanel.tsx",
+  "components/language/GlossaryPanel.tsx",
+  "components/learning/LearningPreferencesPanel.tsx",
+  "components/examples/LearningExampleLookup.tsx",
+] as const) {
+  const overlay = await readFile(new URL(path, experienceRoot), "utf8");
+  assert(overlay.includes("<SensaOverlayLayout"), `${path} does not consume the overlay layout seam`);
+  assert(!overlay.includes('className="fixed inset-0'), `${path} still owns viewport overlay geometry`);
+}
 
 console.log(
-  "PASS: curated semantic, component and page-layout contracts, complete light/dark/layout adapters, AA core contrast, Skin Lab coverage, production runtime adoption, early bootstrap, retired recipe runtime, and semantic-only Web presentation sources.",
+  "PASS: curated semantic, component, page-layout and overlay-layout contracts, complete adapters, AA core contrast, Skin Lab coverage, production adoption, early bootstrap, retired recipe runtime, and semantic-only Web presentation sources.",
 );

@@ -181,6 +181,15 @@ html[data-sensa-skin="clear"] {
   --sensa-layout-detail-header-min-size: 5rem;
   --sensa-layout-detail-panel-width: 53.75rem;
   --sensa-layout-detail-panel-shadow: var(--sensa-shadow-overlay);
+  --sensa-overlay-layout-viewport-inset: clamp(1rem, 3vw, 2rem);
+  --sensa-overlay-layout-panel-compact: 28rem;
+  --sensa-overlay-layout-panel-standard: 36rem;
+  --sensa-overlay-layout-panel-wide: 42rem;
+  --sensa-overlay-layout-panel-max-block-size: min(52rem, calc(100dvh - 3rem));
+  --sensa-overlay-layout-sheet-max-block-size: 90dvh;
+  --sensa-overlay-layout-header-inset: 1.25rem 1.5rem;
+  --sensa-overlay-layout-primary-inset: 1.75rem 1.5rem;
+  --sensa-overlay-layout-controls-inset: 1.25rem;
 }
 
 html[data-sensa-skin="clear"][data-sensa-color-mode="dark"] {
@@ -429,6 +438,19 @@ html[data-sensa-skin="clear"] [data-sensa-page-layout="collection-browser"] {
 
 html[data-sensa-skin="clear"] [data-sensa-page-layout="detail-workspace"] {
   scrollbar-color: var(--sensa-border-strong) transparent;
+}
+
+html[data-sensa-skin="clear"] [data-sensa-overlay-layout="dialog"] > [data-sensa-slot="backdrop"] {
+  padding: max(var(--sensa-overlay-layout-viewport-inset), 2rem);
+}
+
+html[data-sensa-skin="clear"] [data-sensa-overlay-layout="sheet"] [data-sensa-slot="panel"] {
+  max-width: var(--sensa-overlay-layout-panel-standard);
+}
+
+html[data-sensa-skin="clear"] [data-sensa-overlay-layout="popover"] [data-sensa-slot="panel"] {
+  max-width: var(--sensa-overlay-layout-panel-compact);
+  border-radius: var(--sensa-radius-control);
 }
 
 @media (min-width: 64rem) {

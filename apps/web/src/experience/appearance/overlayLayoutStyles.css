@@ -1,0 +1,110 @@
+[data-sensa-overlay-layout] {
+  position: fixed;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  isolation: isolate;
+}
+
+[data-sensa-overlay-layout][data-sensa-overlay-mode="specimen"] {
+  position: relative;
+  min-height: 22rem;
+  overflow: hidden;
+  border: 1px solid var(--sensa-border-strong);
+  border-radius: var(--sensa-radius-overlay);
+}
+
+[data-sensa-overlay-layout][data-sensa-overlay-mode="container"] {
+  position: absolute;
+}
+
+[data-sensa-overlay-layout] > [data-sensa-slot="backdrop"] {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--sensa-overlay-layout-viewport-inset);
+  border-radius: 0;
+  background: var(--sensa-component-overlay-backdrop);
+}
+
+[data-sensa-overlay-layout] [data-sensa-slot="panel"] {
+  display: flex;
+  width: 100%;
+  max-width: var(--sensa-overlay-layout-panel-standard);
+  max-height: var(--sensa-overlay-layout-panel-max-block-size);
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--sensa-component-overlay-border);
+  border-radius: var(--sensa-component-overlay-radius);
+  background: var(--sensa-component-overlay-background);
+  color: var(--sensa-fg-primary);
+  box-shadow: var(--sensa-component-overlay-shadow);
+}
+
+[data-sensa-overlay-layout][data-sensa-overlay-measure="compact"] [data-sensa-slot="panel"] {
+  max-width: var(--sensa-overlay-layout-panel-compact);
+}
+
+[data-sensa-overlay-layout][data-sensa-overlay-measure="wide"] [data-sensa-slot="panel"] {
+  max-width: var(--sensa-overlay-layout-panel-wide);
+}
+
+[data-sensa-overlay-layout="dialog"] > [data-sensa-slot="backdrop"],
+[data-sensa-overlay-layout="popover"] > [data-sensa-slot="backdrop"] {
+  align-items: center;
+  justify-content: center;
+}
+
+[data-sensa-overlay-layout="sheet"] > [data-sensa-slot="backdrop"] {
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 0;
+}
+
+[data-sensa-overlay-layout="sheet"] [data-sensa-slot="panel"] {
+  max-height: var(--sensa-overlay-layout-sheet-max-block-size);
+  border-radius: var(--sensa-component-overlay-radius) var(--sensa-component-overlay-radius) 0 0;
+}
+
+[data-sensa-overlay-layout="popover"][data-sensa-overlay-mode="specimen"] > [data-sensa-slot="backdrop"] {
+  background: transparent;
+}
+
+[data-sensa-overlay-layout] [data-sensa-overlay-region] {
+  min-width: 0;
+}
+
+[data-sensa-overlay-layout] [data-sensa-overlay-region="header"] {
+  flex: 0 0 auto;
+  padding: var(--sensa-overlay-layout-header-inset);
+  border-bottom: 1px solid var(--sensa-component-overlay-border);
+}
+
+[data-sensa-overlay-layout] [data-sensa-overlay-region="primary"] {
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--sensa-overlay-layout-primary-inset);
+  scrollbar-width: thin;
+}
+
+[data-sensa-overlay-layout] [data-sensa-overlay-region="controls"] {
+  flex: 0 0 auto;
+  padding: var(--sensa-overlay-layout-controls-inset);
+  padding-bottom: max(var(--sensa-overlay-layout-controls-inset), env(safe-area-inset-bottom));
+  border-top: 1px solid var(--sensa-component-overlay-border);
+}
+
+@media (min-width: 40rem) {
+  [data-sensa-overlay-layout="sheet"] > [data-sensa-slot="backdrop"] {
+    align-items: stretch;
+  }
+
+  [data-sensa-overlay-layout="sheet"] [data-sensa-slot="panel"] {
+    max-height: none;
+    border-radius: 0;
+  }
+}

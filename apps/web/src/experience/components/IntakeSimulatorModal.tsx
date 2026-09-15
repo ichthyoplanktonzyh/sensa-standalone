@@ -13,6 +13,7 @@ import type { SensaIntakeContext, SensaIntakePayload, SensaIntakeSense } from '@
 import { newUuid } from '../personalMeaningJourney/ids';
 import { useJourneyGateway } from '../personalMeaningJourney';
 import { storeImageFile } from '../personalMeaningJourney/mediaStore';
+import { SensaOverlayLayout } from '../ui/SensaComponents';
 
 interface IntakeSimulatorModalProps {
   open: boolean;
@@ -258,23 +259,15 @@ export const IntakeSimulatorModal = ({
   const active = SCENARIOS[scenario];
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-stretch justify-end bg-overlay" onMouseDown={handleClose}>
-      <section
-        className="flex h-full w-full max-w-xl flex-col bg-surface-canvas text-fg-primary shadow-overlay"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="intake-sim-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header className="flex min-h-20 items-center justify-between gap-4 border-b border-border-subtle px-6 py-4">
+    <SensaOverlayLayout variant="sheet" measure="standard" className="z-[120]" labelledBy="intake-sim-title" onDismiss={handleClose} dismissOnBackdrop regions={{
+      header: <div className="flex min-h-12 items-center justify-between gap-4">
           <div>
             <small className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">仅本地原型</small>
             <h2 className="mt-1 text-section-title font-semibold" id="intake-sim-title">摄取模拟器</h2>
           </div>
           <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-xl text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={handleClose} aria-label="关闭">×</button>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+        </div>,
+      primary: <div>
           <div className="grid grid-cols-3 rounded-control bg-surface-subtle p-1" role="tablist" aria-label="选择摄取模拟场景">
             {(Object.keys(SCENARIOS) as Scenario[]).map((key) => (
               <button
@@ -371,9 +364,8 @@ export const IntakeSimulatorModal = ({
           )}
 
           {error && <p className="mt-5 rounded-control border border-feedback-danger bg-surface-panel p-3 text-body-support text-feedback-danger" role="alert">{error}</p>}
-        </div>
-
-        <footer className="border-t border-border-subtle p-4">
+        </div>,
+      controls:
           <button
             type="button"
             className="min-h-12 w-full rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45"
@@ -382,8 +374,6 @@ export const IntakeSimulatorModal = ({
           >
             {busy ? '正在捕获…' : active.action}
           </button>
-        </footer>
-      </section>
-    </div>
+    }} />
   );
 };

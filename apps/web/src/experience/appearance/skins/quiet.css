@@ -182,6 +182,15 @@ html[data-sensa-skin="quiet"] {
   --sensa-layout-detail-header-min-size: 5.25rem;
   --sensa-layout-detail-panel-width: 50rem;
   --sensa-layout-detail-panel-shadow: var(--sensa-shadow-overlay);
+  --sensa-overlay-layout-viewport-inset: clamp(1rem, 4vw, 2.5rem);
+  --sensa-overlay-layout-panel-compact: 27rem;
+  --sensa-overlay-layout-panel-standard: 35rem;
+  --sensa-overlay-layout-panel-wide: 44rem;
+  --sensa-overlay-layout-panel-max-block-size: min(50rem, calc(100dvh - 3rem));
+  --sensa-overlay-layout-sheet-max-block-size: 92dvh;
+  --sensa-overlay-layout-header-inset: 1.375rem 1.75rem;
+  --sensa-overlay-layout-primary-inset: 2rem 1.75rem;
+  --sensa-overlay-layout-controls-inset: 1.375rem 1.75rem;
 }
 
 html[data-sensa-skin="quiet"][data-sensa-color-mode="dark"] {
@@ -422,4 +431,20 @@ html[data-sensa-skin="quiet"] [data-sensa-page-layout="detail-workspace"] {
 :root [data-sensa-page-layout="detail-workspace"][data-sensa-layout-header="bar"] > [data-sensa-page-region="header"],
 html[data-sensa-skin="quiet"] [data-sensa-page-layout="detail-workspace"][data-sensa-layout-header="bar"] > [data-sensa-page-region="header"] {
   backdrop-filter: blur(0.875rem);
+}
+
+:root [data-sensa-overlay-layout="dialog"] [data-sensa-slot="panel"],
+html[data-sensa-skin="quiet"] [data-sensa-overlay-layout="dialog"] [data-sensa-slot="panel"] {
+  max-width: var(--sensa-overlay-layout-panel-standard);
+}
+
+:root [data-sensa-overlay-layout="sheet"] [data-sensa-slot="panel"],
+html[data-sensa-skin="quiet"] [data-sensa-overlay-layout="sheet"] [data-sensa-slot="panel"] {
+  max-width: var(--sensa-overlay-layout-panel-standard);
+}
+
+:root [data-sensa-overlay-layout="popover"] > [data-sensa-slot="backdrop"],
+html[data-sensa-skin="quiet"] [data-sensa-overlay-layout="popover"] > [data-sensa-slot="backdrop"] {
+  align-items: flex-start;
+  justify-content: flex-end;
 }

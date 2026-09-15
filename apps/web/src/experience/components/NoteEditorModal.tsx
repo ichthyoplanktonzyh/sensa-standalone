@@ -5,6 +5,7 @@ import { contentAnnotations } from '../../data/library/contentAnnotations';
 import type { Word, QuickDictEntry } from '../types';
 import { WORDS } from '../data';
 import { lookupWord } from '../services/quickDict';
+import { SensaOverlayLayout } from '../ui/SensaComponents';
 
 interface NoteEditorModalProps {
   active: boolean;
@@ -91,14 +92,8 @@ export const NoteEditorModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-stretch justify-end bg-overlay p-0">
-      <div
-        className="flex h-full max-h-full w-full max-w-xl flex-col overflow-y-auto bg-surface-canvas p-6 text-fg-primary shadow-overlay sm:p-8"
-        role="dialog"
-        aria-modal="true"
-        aria-label={uiText('noteFor', { word: wordStr })}
-      >
-        <header className="mb-4 grid shrink-0 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center border-b border-border-subtle pb-5 text-center [&>button]:grid [&>button]:size-11 [&>button]:place-items-center [&>button]:rounded-control [&>button]:bg-accent-soft [&>button]:text-fg-secondary [&>button]:transition-colors [&>button:hover]:bg-surface-selected [&>button:focus-visible]:outline-2 [&>button:focus-visible]:outline-offset-3 [&>button:focus-visible]:outline-focus motion-reduce:[&>button]:transition-none">
+    <SensaOverlayLayout variant="sheet" measure="standard" className="z-[120]" label={uiText('noteFor', { word: wordStr })} regions={{
+      header: <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center text-center [&>button]:grid [&>button]:size-11 [&>button]:place-items-center [&>button]:rounded-control [&>button]:bg-accent-soft [&>button]:text-fg-secondary [&>button]:transition-colors [&>button:hover]:bg-surface-selected [&>button:focus-visible]:outline-2 [&>button:focus-visible]:outline-offset-3 [&>button:focus-visible]:outline-focus motion-reduce:[&>button]:transition-none">
           <button type="button" onClick={onClose} aria-label={uiText('close')}>
             <svg className="size-5 shrink-0" aria-hidden="true"><use href="#i-close" /></svg>
           </button>
@@ -108,8 +103,8 @@ export const NoteEditorModal = ({
           <button type="button" onClick={() => void handleSave()} aria-label={uiText('saveNote')}>
             <svg className="size-5 shrink-0" aria-hidden="true"><use href="#i-chk-simple" /></svg>
           </button>
-        </header>
-
+        </div>,
+      primary: <div className="flex min-h-full flex-col">
         <div className="mb-5 flex max-w-full items-baseline self-center gap-2 border-y border-border-subtle py-6">
           <strong className="font-language text-page-title font-semibold text-fg-primary">{wordStr}</strong>
           {briefDef && <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-body-support text-fg-tertiary">{briefDef}</span>}
@@ -131,7 +126,7 @@ export const NoteEditorModal = ({
             <b className="font-semibold text-fg-secondary">{noteText.length}/1000</b>
           </footer>
         </main>
-      </div>
-    </div>
+      </div>,
+    }} />
   );
 };

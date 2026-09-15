@@ -10,6 +10,10 @@ import {
   pageLayoutFamilyContract,
   pageLayoutTokenCatalog,
 } from "../apps/web/src/experience/appearance/pageLayoutContract.ts";
+import {
+  overlayLayoutFamilyContract,
+  overlayLayoutTokenCatalog,
+} from "../apps/web/src/experience/appearance/overlayLayoutContract.ts";
 
 const root = process.cwd();
 const port = 43100 + (process.pid % 1000);
@@ -68,6 +72,9 @@ try {
     const layoutOrders = Object.fromEntries(
       Object.entries(pageLayoutFamilyContract).map(([family, contract]) => [family, [...contract.logicalOrder]]),
     );
+    const overlayOrders = Object.fromEntries(
+      Object.entries(overlayLayoutFamilyContract).map(([family, contract]) => [family, [...contract.logicalOrder]]),
+    );
 
     for (const family of Object.keys(componentFamilyContract)) {
       assert(
@@ -82,6 +89,14 @@ try {
         (elements) => elements.map((element) => element.getAttribute("data-sensa-page-region")),
       );
       assert.deepEqual(regionOrder, [...contract.logicalOrder], `${family} DOM regions do not follow logical order`);
+    }
+    for (const [family, contract] of Object.entries(overlayLayoutFamilyContract)) {
+      const layout = page.locator(`[data-sensa-overlay-layout="${family}"][data-sensa-contract-specimen="full"]`);
+      assert.equal(await layout.count(), 1, `Skin Lab does not render exactly one ${family} overlay specimen`);
+      const regionOrder = await layout.locator('[data-sensa-slot="panel"] > [data-sensa-overlay-region]').evaluateAll(
+        (elements) => elements.map((element) => element.getAttribute("data-sensa-overlay-region")),
+      );
+      assert.deepEqual(regionOrder, [...contract.logicalOrder], `${family} overlay DOM regions do not follow logical order`);
     }
     await expect(focusedShellSpecimen.getByText("Focused viewport remains visible without application chrome.")).toBeVisible();
     const focusedGeometry = await focusedShellSpecimen.evaluate((shell) => {
@@ -104,12 +119,16 @@ try {
     );
     const runtimeProbe = page.locator("#skin-layout-state-probe");
     const shellProbe = page.locator("#skin-shell-state-probe");
+    const overlayProbe = page.locator("#skin-overlay-state-probe");
     await runtimeProbe.fill("Preserved across runtime layout adapters");
     await shellProbe.fill("Preserved across shell layout adapters");
+    await overlayProbe.fill("Preserved across overlay layout adapters");
     const runtimeProbeHandle = await runtimeProbe.elementHandle();
     const shellProbeHandle = await shellProbe.elementHandle();
+    const overlayProbeHandle = await overlayProbe.elementHandle();
     assert(runtimeProbeHandle, "runtime layout state probe is missing");
     assert(shellProbeHandle, "shell layout state probe is missing");
+    assert(overlayProbeHandle, "overlay layout state probe is missing");
     const quietGrid = await layoutSpecimen.evaluate((element) => getComputedStyle(element).gridTemplateColumns);
     const quietShellGrid = await shellSpecimen.evaluate((element) => getComputedStyle(element).gridTemplateColumns);
     await appearanceControls.getByRole("button", { name: "Clear", exact: true }).click();
@@ -154,8 +173,10 @@ try {
     }, "Clear application shell drifted from the deployed sidebar geometry");
     assert.equal(await runtimeProbe.inputValue(), "Preserved across runtime layout adapters", "Skin switch discarded runtime input");
     assert.equal(await shellProbe.inputValue(), "Preserved across shell layout adapters", "Skin switch discarded shell input");
+    assert.equal(await overlayProbe.inputValue(), "Preserved across overlay layout adapters", "Skin switch discarded overlay input");
     assert(await runtimeProbeHandle.evaluate((element) => element.isConnected), "Skin switch remounted the runtime region tree");
     assert(await shellProbeHandle.evaluate((element) => element.isConnected), "Skin switch remounted the shell region tree");
+    assert(await overlayProbeHandle.evaluate((element) => element.isConnected), "Skin switch remounted the overlay region tree");
 
     for (const viewport of [
       { width: 320, height: 568 },
@@ -174,7 +195,7 @@ try {
             await page.locator(
               `html[data-sensa-skin="${expectedSkin}"][data-sensa-color-mode="${mode}"][data-sensa-text-size="${textSize}"]`,
             ).waitFor();
-            const result = await page.evaluate(({ componentTokens, layoutTokens, layoutOrders }) => {
+            const result = await page.evaluate(({ componentTokens, layoutTokens, overlayTokens, layoutOrders, overlayOrders }) => {
               const rootStyle = getComputedStyle(document.documentElement);
               const action = document.querySelector<HTMLElement>('[data-sensa-component="action"]')!;
               const choice = document.querySelector<HTMLElement>('[data-sensa-component="selection"][data-sensa-variant="choice"]')!;
@@ -182,6 +203,7 @@ try {
               return {
                 missingComponentTokens: componentTokens.filter((token) => !rootStyle.getPropertyValue(`--sensa-component-${token}`).trim()),
                 missingLayoutTokens: layoutTokens.filter((token) => !rootStyle.getPropertyValue(`--sensa-layout-${token}`).trim()),
+                missingOverlayTokens: overlayTokens.filter((token) => !rootStyle.getPropertyValue(`--sensa-overlay-layout-${token}`).trim()),
                 actionHeight: action.getBoundingClientRect().height,
                 choiceHeight: choice.getBoundingClientRect().height,
                 horizontalOverflow: bodyWidth,
@@ -201,15 +223,35 @@ try {
                     regionOrder: renderedRegions.map((region) => region.dataset.sensaPageRegion),
                   };
                 }),
+                overlays: Object.entries(overlayOrders).map(([family, logicalOrder]) => {
+                  const layout = document.querySelector<HTMLElement>(`[data-sensa-overlay-layout="${family}"][data-sensa-contract-specimen="full"]`)!;
+                  const panel = layout.querySelector<HTMLElement>('[data-sensa-slot="panel"]')!;
+                  const renderedRegions = [...panel.querySelectorAll<HTMLElement>(":scope > [data-sensa-overlay-region]")];
+                  return {
+                    family,
+                    logicalOrder,
+                    overflow: layout.scrollWidth - layout.clientWidth,
+                    hiddenRegions: renderedRegions
+                      .filter((region) => {
+                        const style = getComputedStyle(region);
+                        return style.display === "none" || style.visibility === "hidden";
+                      })
+                      .map((region) => region.dataset.sensaOverlayRegion),
+                    regionOrder: renderedRegions.map((region) => region.dataset.sensaOverlayRegion),
+                  };
+                }),
                 fontSize: rootStyle.fontSize,
               };
             }, {
               componentTokens: [...componentTokenCatalog],
               layoutTokens: [...pageLayoutTokenCatalog],
+              overlayTokens: [...overlayLayoutTokenCatalog],
               layoutOrders,
+              overlayOrders,
             });
             assert.deepEqual(result.missingComponentTokens, [], `${skin}/${mode}/${textSize} has unresolved component tokens`);
             assert.deepEqual(result.missingLayoutTokens, [], `${skin}/${mode}/${textSize} has unresolved layout tokens`);
+            assert.deepEqual(result.missingOverlayTokens, [], `${skin}/${mode}/${textSize} has unresolved overlay layout tokens`);
             assert(result.actionHeight >= 44, `${skin}/${mode}/${textSize} action target is below 44px`);
             assert(result.choiceHeight >= 44, `${skin}/${mode}/${textSize} choice target is below 44px`);
             assert(result.horizontalOverflow <= 1, `${skin}/${mode}/${textSize} overflows at ${viewport.width}px`);
@@ -217,6 +259,11 @@ try {
               assert(layout.overflow <= 1, `${skin}/${mode}/${textSize} ${layout.family} overflows at ${viewport.width}px`);
               assert.deepEqual(layout.hiddenRegions, [], `${skin}/${mode}/${textSize} hides ${layout.family} semantic regions`);
               assert.deepEqual(layout.regionOrder, layout.logicalOrder, `${skin}/${mode}/${textSize} reorders ${layout.family} regions`);
+            }
+            for (const overlay of result.overlays) {
+              assert(overlay.overflow <= 1, `${skin}/${mode}/${textSize} ${overlay.family} overlay overflows at ${viewport.width}px`);
+              assert.deepEqual(overlay.hiddenRegions, [], `${skin}/${mode}/${textSize} hides ${overlay.family} overlay regions`);
+              assert.deepEqual(overlay.regionOrder, overlay.logicalOrder, `${skin}/${mode}/${textSize} reorders ${overlay.family} overlay regions`);
             }
             assert.equal(result.fontSize, textSize === "large" ? "18px" : "16px");
           }
@@ -233,6 +280,7 @@ try {
     assert.notEqual(outline, "none", "keyboard focus is not visibly styled");
     assert.equal(await runtimeProbe.inputValue(), "Preserved across runtime layout adapters", "appearance matrix discarded runtime input state");
     assert.equal(await shellProbe.inputValue(), "Preserved across shell layout adapters", "appearance matrix discarded shell input state");
+    assert.equal(await overlayProbe.inputValue(), "Preserved across overlay layout adapters", "appearance matrix discarded overlay input state");
     assert.deepEqual(runtimeErrors, [], "Skin Lab emitted browser errors");
     await context.close();
   } finally {
@@ -248,4 +296,4 @@ try {
   }
 }
 
-console.log("PASS: Skin Lab preserves every contracted page-region tree while adapters vary across skin, color-mode, text-size and responsive matrices.");
+console.log("PASS: Skin Lab preserves every contracted page and overlay region tree while adapters vary across skin, color-mode, text-size and responsive matrices.");

@@ -1,4 +1,4 @@
-import {ContentHeader} from './ContentWorkspace';
+import {ContentDrawer,ContentHeader} from './ContentWorkspace';
 import { MeaningGraphView } from "./MeaningGraphView";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -411,29 +411,7 @@ function ContentScreenView({
         }}
       />
       {adding && (
-        <div
-          className="fixed inset-0 z-[100] flex justify-end bg-overlay"
-          onMouseDown={() => setAdding(false)}
-        >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="add-content-title"
-            onMouseDown={(e) => e.stopPropagation()}
-            className="h-full w-full bg-surface-raised p-6 text-fg-primary shadow-overlay sm:max-w-lg sm:p-9"
-          >
-            <header className="mb-10 flex items-center justify-between">
-              <h2 id="add-content-title" className="text-xl font-medium">
-                {t("content.add")}
-              </h2>
-              <button
-                className={button}
-                aria-label={t("content.close")}
-                onClick={() => setAdding(false)}
-              >
-                <X size={20} />
-              </button>
-            </header>
+        <ContentDrawer title={t("content.add")} onClose={() => setAdding(false)}>
             {[
               {
                 title: onStartConversation?"findExpression":"record",
@@ -473,8 +451,7 @@ function ContentScreenView({
                 <ArrowRight size={16} />
               </button>
             ))}
-          </section>
-        </div>
+        </ContentDrawer>
       )}
       <PersonalMeaningComposer
         persistence={source.composer}

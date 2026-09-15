@@ -973,7 +973,7 @@ Learning Protocol or Card Presentation Slot.
 An identifiable, versioned, Sensa-curated implementation of the Semantic Design
 Contract for supported product surfaces. A Skin may supply colors, typography,
 shapes, elevation, icons, illustration, component presentation recipes, spatial page
-layout, responsive presentation and constrained density, decorative or motion choices;
+layout, overlay layout, responsive presentation and constrained density, decorative or motion choices;
 it does not own product navigation, route identity, learning content, actions, input
 state, logical reading/focus order or learner facts. An admitted Skin supplies a
 complete appearance for every supported surface and resolved color mode. Only Skins

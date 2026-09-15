@@ -9,6 +9,7 @@ import {
   type SensaLanguageRouteCollection,
 } from '@sensa/contracts/sensa';
 import {useLanguageRoutes} from '../../library/useLanguageRoutes';
+import {SensaOverlayLayout} from '../../ui/SensaComponents';
 import {runtimePrimary} from '../learning/RuntimeFrame';
 
 function languageNames(tag:string,interfaceLocale:string){
@@ -55,13 +56,12 @@ export function LanguagePanel({collection,activeRoute,busy,notice,onAdd,onUpdate
     document.addEventListener('keydown',escape,true);
     return()=>document.removeEventListener('keydown',escape,true);
   },[onClose]);
-  return <div className="fixed inset-0 z-[150] flex items-end justify-end bg-overlay sm:items-stretch" onClick={event=>{if(event.target===event.currentTarget)onClose();}}>
-    <section role="dialog" aria-modal="true" aria-labelledby="languages-title" className="flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-overlay bg-surface-raised text-fg-primary shadow-overlay sm:h-full sm:max-h-none sm:max-w-md sm:rounded-none">
-      <header className="flex shrink-0 items-center justify-between border-b border-border-subtle px-6 py-5">
+  return <SensaOverlayLayout variant="sheet" measure="compact" className="z-[150]" labelledBy="languages-title" onDismiss={onClose} dismissOnBackdrop regions={{
+    header: <div className="flex items-center justify-between">
         <h2 id="languages-title" className="text-lg font-medium">{t('languages.title')}</h2>
         <button autoFocus type="button" className="grid size-11 place-items-center rounded-control text-fg-secondary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus" onClick={onClose} aria-label={t('languages.close')}><X size={20}/></button>
-      </header>
-      <div className="space-y-7 overflow-y-auto px-6 py-7">
+      </div>,
+    primary: <div className="space-y-7">
         <section>
           <h3 className="text-sm font-medium">{t('languages.routes')}</h3>
           <p className="mt-2 text-xs leading-6 text-fg-tertiary">{t('languages.routesNote')}</p>
@@ -110,10 +110,9 @@ export function LanguagePanel({collection,activeRoute,busy,notice,onAdd,onUpdate
           <div className="mt-3 space-y-2">{archived.map(route=>{const target=languageNames(route.targetLanguageTag,locale);return <div key={route.id} className="flex items-center gap-3 rounded-card border border-border-subtle bg-surface-panel px-4 py-3 text-sm"><span className="min-w-0 flex-1 truncate">{target.name}</span><button type="button" disabled={busy} onClick={()=>onRestore(route.id)} className="inline-flex min-h-11 items-center gap-2 rounded-control px-3 text-action-primary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus"><RotateCcw size={16}/>{t('languages.restore')}</button></div>;})}</div>
         </section>}
         {notice&&<p role="status" className="rounded-control bg-accent-soft p-4 text-sm text-action-primary">{notice}</p>}
-      </div>
-      <footer className="mt-auto shrink-0 border-t border-border-subtle px-6 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]"><button type="button" disabled={busy} className={`${runtimePrimary} w-full`} onClick={onClose}>{t('languages.done')}</button></footer>
-    </section>
-  </div>;
+      </div>,
+    controls: <button type="button" disabled={busy} className={`${runtimePrimary} w-full`} onClick={onClose}>{t('languages.done')}</button>,
+  }} />;
 }
 
 export function LanguagePanelHost({onClose}:{onClose:()=>void}){

@@ -4,6 +4,7 @@ import {useTranslation} from 'react-i18next';
 import {sensaLanguageDisplayName,sensaLanguages,sensaReadingGlossaryForPair,sensaReadingGlossaryLimits,type SensaReadingGlossary} from '@sensa/contracts/sensa';
 import {useReadingGlossary} from '../../library/useReadingGlossary';
 import {useLanguageRoutes} from '../../library/useLanguageRoutes';
+import {SensaOverlayLayout} from '../../ui/SensaComponents';
 import {runtimePrimary} from '../learning/RuntimeFrame';
 
 interface Props {
@@ -37,14 +38,12 @@ export function GlossaryPanel({glossary,busy,notice,initialInputLanguageTag,init
     document.addEventListener('keydown',escape,true);
     return ()=>document.removeEventListener('keydown',escape,true);
   },[onClose]);
-  return <div className="fixed inset-0 z-[150] flex items-end justify-end bg-overlay sm:items-stretch" onClick={event=>{if(event.target===event.currentTarget)onClose();}}>
-    <section role="dialog" aria-modal="true" aria-labelledby="glossary-title"
-      className="flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-overlay bg-surface-raised text-fg-primary shadow-overlay sm:h-full sm:max-h-none sm:max-w-md sm:rounded-none">
-      <header className="flex shrink-0 items-center justify-between border-b border-border-subtle px-6 py-5">
+  return <SensaOverlayLayout variant="sheet" measure="compact" className="z-[150]" labelledBy="glossary-title" onDismiss={onClose} dismissOnBackdrop regions={{
+    header: <div className="flex items-center justify-between">
         <h2 id="glossary-title" className="text-lg font-medium">{t('glossary.title')}</h2>
         <button autoFocus type="button" className="grid size-11 place-items-center rounded-control text-fg-secondary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus" onClick={onClose} aria-label={t('glossary.close')}><X size={20}/></button>
-      </header>
-      <div className="space-y-7 overflow-y-auto px-6 py-7">
+      </div>,
+    primary: <div className="space-y-7">
         <p className="text-xs leading-6 text-fg-tertiary">{t('glossary.intro')}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-xs text-fg-tertiary">{t('glossary.inputLanguage')}
@@ -84,12 +83,10 @@ export function GlossaryPanel({glossary,busy,notice,initialInputLanguageTag,init
           <p className="mt-2 text-xs leading-6 text-fg-tertiary">{totalFull?t('glossary.totalLimit',{count:sensaReadingGlossaryLimits.totalEntries}):pairFull?t('glossary.limit',{count:sensaReadingGlossaryLimits.entriesPerPair}):t('glossary.hint')}</p>
         </section>
         {notice&&<p role="status" className="rounded-control bg-accent-soft p-4 text-sm text-action-primary">{notice}</p>}
-      </div>
-      <footer className="mt-auto shrink-0 border-t border-border-subtle px-6 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+      </div>,
+    controls:
         <button type="button" disabled={busy} className={`${runtimePrimary} w-full`} onClick={onClose}>{t('glossary.done')}</button>
-      </footer>
-    </section>
-  </div>;
+  }} />;
 }
 
 /** The panel owns its own glossary read, so the settings page only renders it. */

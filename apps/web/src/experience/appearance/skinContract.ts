@@ -1,5 +1,6 @@
 import { componentSkinContractVersion } from "./componentContract";
 import { pageLayoutContractVersion, type PageLayoutFamily } from "./pageLayoutContract";
+import { overlayLayoutContractVersion, type OverlayLayoutFamily } from "./overlayLayoutContract";
 
 export const semanticDesignContractVersion = "sensa-semantic-design-v2" as const;
 
@@ -48,6 +49,7 @@ export interface SensaSkinPlugin {
   readonly semanticContractVersion: typeof semanticDesignContractVersion;
   readonly componentContractVersion: typeof componentSkinContractVersion;
   readonly pageLayoutContractVersion: typeof pageLayoutContractVersion;
+  readonly overlayLayoutContractVersion: typeof overlayLayoutContractVersion;
   readonly nameKey: string;
   readonly descriptionKey: string;
   readonly capabilities: {
@@ -57,5 +59,6 @@ export interface SensaSkinPlugin {
     readonly motion: "gentle" | "direct";
     readonly iconSet: "lucide";
     readonly pageLayouts: readonly PageLayoutFamily[];
+    readonly overlayLayouts: readonly OverlayLayoutFamily[];
   };
 }

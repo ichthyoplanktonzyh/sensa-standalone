@@ -166,7 +166,13 @@ Sense、Expression Binding、收藏的 Sense/Example 详情、Learning Target se
 `narrow / wide` page measure、header treatment，并把经批准的同一工作区呈现为 page 或 edge panel，但不得
 改变 route、browser history、focus restoration 或底层工作状态。
 
-每个已收录 Skin 由 build-time manifest 声明 Semantic/Component/Page Layout Contract 兼容版本，以及受审核的
+独立的 `sensa-overlay-layout-v1` 覆盖 `dialog / sheet / popover`，不把临时弹层伪装成 page route。三类弹层
+共享 `header / primary / controls` 逻辑顺序，其中只有 `primary` 必需；Product Component 决定弹层是否存在、
+modality、label、focus lifecycle、Escape/backdrop dismiss policy、校验与 Action，`SensaOverlayLayout` 只暴露
+稳定 DOM seam。Skin adapter 可以解析 panel measure、viewport 或 containing-block placement、safe area、滚动
+与 responsive sheet/dialog geometry，但不能删去 controls、改变关闭语义或把弹层变成新的导航流程。
+
+每个已收录 Skin 由 build-time manifest 声明 Semantic/Component/Page Layout/Overlay Layout Contract 兼容版本，以及受审核的
 color mode、text size、density、motion 与 icon-set capabilities；静态 catalog 不接受 URL、包名或可执行
 第三方代码。开发态 `/?skin-lab=1` 提供不读取账号或 learner data 的 Surface Gallery，覆盖全部 component
 family/variant，并通过 Skin × color mode × text size × responsive width 矩阵验证 token 完整性、触控尺寸、

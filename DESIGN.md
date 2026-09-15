@@ -76,6 +76,8 @@ The `collection-browser` family fixes the logical sequence `header`, optional `n
 
 The `detail-workspace` family deliberately exposes only `header` and `primary`, keeping the interface deep rather than turning every subsection into a layout slot. Confirmed senses, expression binding, saved sense/example details, learning-target setup, and Personal Meaning conversation workspaces use this family. Product code owns back/dismiss behavior and all detail composition; a Skin resolves narrow or wide page measure, header treatment, and whether an approved workspace is presented as a full page or edge panel. Page/panel presentation changes never alter route, browser history, focus restoration, or the underlying editor/conversation state.
 
+The separate `sensa-overlay-layout-v1` contract covers `dialog`, `sheet`, and `popover` without treating them as page routes. Each overlay keeps one logical `header / primary / controls` tree; only `primary` is always required. Product components own whether an overlay exists, its modality, labels, focus lifecycle, Escape/backdrop policy, validation, and actions. `SensaOverlayLayout` supplies the stable DOM seam, while a Skin resolves panel measure, viewport or containing-block placement, safe-area insets, scrolling, and responsive sheet/dialog geometry. A Skin cannot turn a dismissible panel into navigation, remove controls, or change an operation's consequences.
+
 ## Elevation & Depth
 
 Depth is primarily communicated through surface tone, borders, and clear containment. Shadows are supporting cues for overlays and genuinely raised controls, not a default decoration on every card. A skin may alter shadow softness and contrast while preserving the same stacking, modality, focus, and dismissal behavior.
@@ -90,7 +92,7 @@ Components have stable anatomy, behavior, state, and accessibility semantics. Sk
 
 The executable `sensa-component-skin-v1` contract exposes eight component families: `action`, `field`, `surface`, `selection`, `overlay`, `feedback`, `navigation`, and `learning`. A product component declares only its family, approved variant, semantic slots, and state. Shared component CSS maps that stable anatomy to `--sensa-component-*` tokens; Quiet and Clear independently implement every token. Product code must never ask which Skin is active in order to select markup, copy, data, or behavior.
 
-The first reusable React boundary includes `SensaAction`, `SensaChoice`, `SensaField`, `SensaSurface`, `SensaFeedback`, `SensaNavigation`, `SensaOverlayFrame`, and `SensaLearningSurface`. Their data attributes are an internal styling protocol, not a public third-party extension API. Domain components may compose these primitives or expose the same contract directly when their anatomy is richer.
+The first reusable React boundary includes `SensaAction`, `SensaChoice`, `SensaField`, `SensaSurface`, `SensaFeedback`, `SensaNavigation`, `SensaOverlayLayout`, `SensaOverlayFrame`, and `SensaLearningSurface`. Their data attributes are an internal styling protocol, not a public third-party extension API. Domain components may compose these primitives or expose the same contract directly when their anatomy is richer.
 
 - **Button and IconButton:** preserve label, icon meaning, disabled/loading behavior, focus, hit target, and primary/secondary hierarchy.
 - **Input, Textarea, Search, and Choice controls:** preserve labels, help and error relationships, keyboard behavior, entered values, and validation state.
@@ -100,11 +102,11 @@ The first reusable React boundary includes `SensaAction`, `SensaChoice`, `SensaF
 
 A component must expose meaningful semantic slots and states. New component styling belongs in the shared primitive or domain component; page-local color and radius literals are not a supported extension mechanism.
 
-Each curated adapter is a versioned build-time manifest. It declares compatibility with the semantic, component, and page-layout contracts plus reviewed capabilities for light/dark modes, text sizes, density, motion character, icon set, and implemented layout families. The static registry is the only shipped catalog; there is no URL, package name, or executable-code field that could become an unreviewed runtime loader.
+Each curated adapter is a versioned build-time manifest. It declares compatibility with the semantic, component, page-layout, and overlay-layout contracts plus reviewed capabilities for light/dark modes, text sizes, density, motion character, icon set, and implemented layout families. The static registry is the only shipped catalog; there is no URL, package name, or executable-code field that could become an unreviewed runtime loader.
 
 The former `uiClass` recipe runtime has been retired. Stable layout and state selectors now live in their owning component or a scoped semantic stylesheet, and the appearance smoke rejects any return to the registry pattern. New product surfaces must not add recipe registries, private page palettes, or behavioral branches keyed to a skin.
 
-In development, `/?skin-lab=1` opens the data-free Skin Lab instead of the product router. It renders every contracted component family/variant and page-layout family with explicit fixture copy. Browser validation runs the Lab across every shipped Skin, light/dark mode, standard/large text, and mobile/desktop widths; it also checks semantic-region identity and order, state preservation, token resolution, minimum control targets, keyboard focus, overflow, and runtime errors. The Lab is gated by `import.meta.env.DEV` and is not a production route.
+In development, `/?skin-lab=1` opens the data-free Skin Lab instead of the product router. It renders every contracted component family/variant, page-layout family, and overlay-layout family with explicit fixture copy. Browser validation runs the Lab across every shipped Skin, light/dark mode, standard/large text, and mobile/desktop widths; it also checks semantic-region identity and order, state preservation, token resolution, minimum control targets, keyboard focus, overflow, and runtime errors. The Lab is gated by `import.meta.env.DEV` and is not a production route.
 
 ## Do's and Don'ts
 

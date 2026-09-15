@@ -4,6 +4,7 @@ import { Volume2, X, ArrowUpRight } from 'lucide-react';
 import type { QuickDictEntry } from '../../types';
 import { audioService } from '../../services/audioService';
 import { setupButton, setupPrimary } from '../learning/LearningSetupFrame';
+import { SensaOverlayLayout } from '../../ui/SensaComponents';
 
 /** Learning-only lookup presentation. The exact contextual result passes to detail unchanged. */
 export function LearningExampleLookup({ entry, onClose, onViewDetail, toast }: {
@@ -56,14 +57,12 @@ export function LearningExampleLookup({ entry, onClose, onViewDetail, toast }: {
     }
   };
 
-  return <div className="absolute inset-0 z-[120] flex items-end justify-center bg-overlay sm:items-center sm:p-6" onClick={onClose}>
-    <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={loading}
-      className="max-h-[85%] w-full max-w-lg overflow-y-auto rounded-t-overlay bg-surface-raised p-6 text-fg-primary shadow-overlay sm:rounded-overlay sm:p-8"
-      onClick={event => event.stopPropagation()}>
-      <header className="flex items-start justify-between gap-4">
+  return <SensaOverlayLayout variant="dialog" mode="container" measure="compact" className="z-[120]" labelledBy={titleId} panelRef={dialog} onDismiss={onClose} dismissOnBackdrop aria-busy={loading} regions={{
+    header: <div className="flex items-start justify-between gap-4">
         <div><p className="text-xs text-fg-secondary">{cardText('lookUpAWord')}</p><h2 id={titleId} className="mt-2 break-words text-2xl font-medium">{entry.word}</h2></div>
         <button type="button" className={setupButton + ' size-11 px-0 hover:bg-surface-selected'} aria-label={cardText('closeWordLookup')} onClick={onClose}><X size={20}/></button>
-      </header>
+      </div>,
+    primary: <div>
       {!loading && !failed && <button type="button" onClick={() => void play()} className={setupButton + ' mt-4 bg-surface-selected text-action-primary'} aria-label={playing ? cardText('stopPronunciation') : cardText('playAmerican',{word:entry.word})}><Volume2 size={18}/>{playing ? cardText('stopPronunciation') : cardText('americanPhonetic',{ipa:entry.phonetic})}</button>}
       <div className="my-6 space-y-3" aria-label={cardText('briefDefinitions')}>
         {(loading || failed) && <p role="status" className="rounded-card bg-surface-subtle p-4 text-sm leading-7 text-fg-secondary">{entry.lookupMessage}{failed && cardText('closeAndTapTheWordToTryAgain')}</p>}
@@ -73,8 +72,10 @@ export function LearningExampleLookup({ entry, onClose, onViewDetail, toast }: {
         </div>)}
         {!loading && !failed && entry.senses.length === 0 && <p role="status" className="text-sm text-fg-secondary">{cardText('noBriefDefinitionIsAvailableOpenTheFull')}</p>}
       </div>
+    </div>,
+    controls: <div>
       <button type="button" className={setupPrimary + ' w-full'} disabled={loading || failed || !onViewDetail} onClick={() => onViewDetail?.(entry)}>{cardText('viewFullDefinition')}<ArrowUpRight size={18}/></button>
       <p className="mt-3 text-center text-xs text-fg-secondary">{cardText('wordLookupDoesNotChangeLearningProgress')}</p>
-    </section>
-  </div>;
+    </div>,
+  }} />;
 }
