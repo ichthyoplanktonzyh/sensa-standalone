@@ -86,7 +86,7 @@ export function ExampleCardCarousel({
         onPointerCancel={finishPointerGesture}
         style={{
           transform: `translateX(${dragOffset * 0.16}px)`,
-          transition: isDragging ? 'none' : 'transform 220ms cubic-bezier(.16,1,.3,1)',
+          transition: isDragging ? 'none' : 'transform var(--sensa-motion-duration-component) var(--sensa-motion-easing-enter)',
         }}
       >
         {children}

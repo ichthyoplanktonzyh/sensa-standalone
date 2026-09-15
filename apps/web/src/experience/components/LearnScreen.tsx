@@ -159,7 +159,7 @@ export const LearnScreen = ({
       family="learning-runtime"
       data-anim="fade"
       aria-hidden={!active || isBehind}
-      className={`screen z-30 transition-opacity duration-300 motion-reduce:transition-none ${active && !isBehind ? 'active visible pointer-events-auto opacity-100' : 'invisible pointer-events-none opacity-0'} ${isIntroductionReveal ? 'is-intro-reveal' : ''}`}
+      className={`screen sensa-motion-screen sensa-motion-screen-fade z-30 ${active && !isBehind ? 'active visible pointer-events-auto opacity-100' : 'invisible pointer-events-none opacity-0'} ${isIntroductionReveal ? 'is-intro-reveal' : ''}`}
       regions={{
         header: (
         <span className={`text-control-label font-semibold text-fg-primary ${isIntroduction ? 'rounded-pill bg-accent-soft px-3 py-1 text-fg-secondary' : ''}`} id="lhProg">{stepLabel ?? progressLabel}</span>

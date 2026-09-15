@@ -1,15 +1,19 @@
 import { componentSkinContractVersion } from "../componentContract";
 import { pageLayoutContractVersion } from "../pageLayoutContract";
 import { overlayLayoutContractVersion } from "../overlayLayoutContract";
+import { skinAssetContractVersion } from "../assetContract";
+import { motionContractVersion } from "../motionContract";
 import { semanticDesignContractVersion, type SensaSkinPlugin } from "../skinContract";
 
 export const quietSkin = {
   id: "quiet",
-  version: "2.6.0",
+  version: "3.0.0",
   semanticContractVersion: semanticDesignContractVersion,
   componentContractVersion: componentSkinContractVersion,
   pageLayoutContractVersion,
   overlayLayoutContractVersion,
+  assetContractVersion: skinAssetContractVersion,
+  motionContractVersion,
   nameKey: "appearance.skins.quiet.name",
   descriptionKey: "appearance.skins.quiet.description",
   capabilities: {
@@ -17,7 +21,7 @@ export const quietSkin = {
     textSizes: ["standard", "large"],
     density: "comfortable",
     motion: "gentle",
-    iconSet: "lucide",
+    assetSet: "quiet-editorial",
     pageLayouts: ["application-shell", "learning-runtime", "workspace-page", "collection-browser", "detail-workspace"],
     overlayLayouts: ["dialog", "sheet", "popover"],
   },

@@ -172,11 +172,21 @@ modality、label、focus lifecycle、Escape/backdrop dismiss policy、校验与 
 稳定 DOM seam。Skin adapter 可以解析 panel measure、viewport 或 containing-block placement、safe area、滚动
 与 responsive sheet/dialog geometry，但不能删去 controls、改变关闭语义或把弹层变成新的导航流程。
 
-每个已收录 Skin 由 build-time manifest 声明 Semantic/Component/Page Layout/Overlay Layout Contract 兼容版本，以及受审核的
-color mode、text size、density、motion 与 icon-set capabilities；静态 catalog 不接受 URL、包名或可执行
-第三方代码。开发态 `/?skin-lab=1` 提供不读取账号或 learner data 的 Surface Gallery，覆盖全部 component
-family/variant，并通过 Skin × color mode × text size × responsive width 矩阵验证 token 完整性、触控尺寸、
-keyboard focus、overflow 与 runtime error。该入口不成为 production route。
+`sensa-skin-assets-v1` 让 Product Component 只请求 brand mark 与主导航等 semantic asset role，由当前 build-time
+adapter 解析 glyph、stroke 与 mark construction。Action label、destination 与无障碍名称仍由 Product Shell
+提供；asset set 没有远端 URL、package name 或 runtime loader，且必须完整实现当前 release 的全部 role。
+
+`sensa-motion-v1` 为 instant feedback、component state、screen transition 与 overlay 提供 semantic duration、
+easing 与 distance token。Skin 可在已审核范围内呈现 gentle 或 direct motion profile，但触发条件、状态提交、
+focus lifecycle 与业务事件时序仍由 Product Component 决定；`prefers-reduced-motion` 必须折叠全部 contracted
+motion，而不改变内容、操作或当前状态。
+
+每个已收录 Skin 由 build-time manifest 声明 Semantic/Component/Page Layout/Overlay Layout/Asset/Motion Contract
+兼容版本，以及受审核的 color mode、text size、density、motion profile、asset set 与 layout capabilities；静态
+catalog 不接受 URL、包名或可执行第三方代码。开发态 `/?skin-lab=1` 提供不读取账号或 learner data 的 Surface
+Gallery，覆盖全部 component family/variant、layout family 与 asset role，并通过 Skin × color mode × text size ×
+responsive width 矩阵验证 token/asset 完整性、reduced motion、触控尺寸、keyboard focus、overflow 与 runtime
+error。该入口不成为 production route。
 
 需要在所有 color mode 中保持暗色的媒体舞台，必须使用成对的 `surface-media` / `fg-on-media`
 角色；它们只服务于 provider video、媒体不可用占位和直接覆盖在舞台上的控制，不得替代普通 panel

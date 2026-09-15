@@ -10,7 +10,8 @@
   visibility: hidden;
   pointer-events: none;
   transform: translateX(100%);
-  transition: transform 280ms ease, visibility 280ms ease;
+  transition: transform var(--sensa-motion-duration-screen) var(--sensa-motion-easing-standard),
+    visibility var(--sensa-motion-duration-screen) var(--sensa-motion-easing-exit);
 }
 
 .personal-world-v2.active {
@@ -1244,7 +1245,9 @@
   pointer-events: auto;
   cursor: pointer;
   transform: translate(-50%, -50%);
-  transition: opacity 180ms ease, transform 180ms ease, border-color 180ms ease;
+  transition: opacity var(--sensa-motion-duration-component) var(--sensa-motion-easing-standard),
+    transform var(--sensa-motion-duration-component) var(--sensa-motion-easing-standard),
+    border-color var(--sensa-motion-duration-component) var(--sensa-motion-easing-standard);
 }
 
 .personal-world-v2__graph-node:hover {

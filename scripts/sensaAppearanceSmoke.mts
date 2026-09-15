@@ -26,6 +26,16 @@ import {
   overlayLayoutFamilyContract,
   overlayLayoutTokenCatalog,
 } from "../apps/web/src/experience/appearance/overlayLayoutContract.ts";
+import {
+  skinAssetContractVersion,
+  skinAssetRoleCatalog,
+  skinAssetSetCatalog,
+} from "../apps/web/src/experience/appearance/assetContract.ts";
+import {
+  motionContractVersion,
+  motionProfileCatalog,
+  motionTokenCatalog,
+} from "../apps/web/src/experience/appearance/motionContract.ts";
 
 assert.deepEqual(skinCatalog.map(({ id }) => id), ["quiet", "clear"]);
 assert.equal(new Set(skinCatalog.map(({ id }) => id)).size, skinCatalog.length);
@@ -34,13 +44,21 @@ for (const skin of skinCatalog) {
   assert.equal(skin.componentContractVersion, componentSkinContractVersion);
   assert.equal(skin.pageLayoutContractVersion, pageLayoutContractVersion);
   assert.equal(skin.overlayLayoutContractVersion, overlayLayoutContractVersion);
+  assert.equal(skin.assetContractVersion, skinAssetContractVersion);
+  assert.equal(skin.motionContractVersion, motionContractVersion);
   assert.match(skin.version, /^\d+\.\d+\.\d+$/u);
   assert.deepEqual(skin.capabilities.colorModes, ["light", "dark"]);
   assert.deepEqual(skin.capabilities.textSizes, ["standard", "large"]);
-  assert.equal(skin.capabilities.iconSet, "lucide");
+  assert(skinAssetSetCatalog.includes(skin.capabilities.assetSet));
+  assert(motionProfileCatalog.includes(skin.capabilities.motion));
   assert.deepEqual(skin.capabilities.pageLayouts, Object.keys(pageLayoutFamilyContract));
   assert.deepEqual(skin.capabilities.overlayLayouts, Object.keys(overlayLayoutFamilyContract));
+  for (const forbidden of ["url", "package", "loader", "renderer"]) {
+    assert(!(forbidden in skin), `${skin.id} manifest exposes forbidden runtime field ${forbidden}`);
+  }
 }
+assert.equal(new Set(skinCatalog.map((skin) => skin.capabilities.assetSet)).size, skinCatalog.length);
+assert.equal(new Set(skinCatalog.map((skin) => skin.capabilities.motion)).size, skinCatalog.length);
 assert.deepEqual(colorModeCatalog, ["system", "light", "dark"]);
 assert.deepEqual(textSizeCatalog, ["standard", "large"]);
 for (const [family, contract] of Object.entries(pageLayoutFamilyContract)) {
@@ -132,6 +150,9 @@ for (const skin of skinCatalog) {
   for (const token of overlayLayoutTokenCatalog) {
     assert(style.includes(`--sensa-overlay-layout-${token}:`), `${skin.id} does not implement overlay layout token ${token}`);
   }
+  for (const token of motionTokenCatalog) {
+    assert(style.includes(`--sensa-motion-${token}:`), `${skin.id} does not implement motion token ${token}`);
+  }
   for (const family of Object.keys(pageLayoutFamilyContract)) {
     assert(style.includes(`data-sensa-page-layout="${family}"`), `${skin.id} does not implement page layout ${family}`);
   }
@@ -174,6 +195,7 @@ const componentStyles = await readFile(
   "utf8",
 );
 const declaredSemanticRoles = new Set<string>(semanticFoundationRoleCatalog);
+for (const token of motionTokenCatalog) declaredSemanticRoles.add(`motion-${token}`);
 assert(theme.includes("./experience/appearance/componentStyles.css"), "component contract styles are not imported");
 const declaredComponentTokens = new Set<string>(componentTokenCatalog);
 for (const [, token] of componentStyles.matchAll(/var\(--sensa-component-([a-z0-9-]+)\)/gu)) {
@@ -220,6 +242,33 @@ for (const token of overlayLayoutTokenCatalog) {
 }
 for (const family of Object.keys(overlayLayoutFamilyContract)) {
   assert(overlayLayoutStyles.includes(`data-sensa-overlay-layout="${family}"`), `overlay layout family ${family} has no shared implementation`);
+}
+
+const assetStyles = await readFile(
+  new URL("../apps/web/src/experience/appearance/assetStyles.css", import.meta.url),
+  "utf8",
+);
+const motionStyles = await readFile(
+  new URL("../apps/web/src/experience/appearance/motionStyles.css", import.meta.url),
+  "utf8",
+);
+const skinAssetsSource = await readFile(
+  new URL("../apps/web/src/experience/appearance/SensaSkinAssets.tsx", import.meta.url),
+  "utf8",
+);
+assert(theme.includes("./experience/appearance/assetStyles.css"), "asset contract styles are not imported");
+assert(theme.includes("./experience/appearance/motionStyles.css"), "motion contract styles are not imported");
+for (const token of motionTokenCatalog) {
+  assert(
+    `${motionStyles}\n${[...skinStyles.values()].join("\n")}`.includes(`var(--sensa-motion-${token})`),
+    `motion token ${token} has no consumer`,
+  );
+}
+for (const role of skinAssetRoleCatalog) {
+  assert(
+    `${assetStyles}\n${skinAssetsSource}`.includes(role),
+    `asset role ${role} has no presentation consumer`,
+  );
 }
 
 const migratedSurfaces = [
@@ -363,6 +412,10 @@ for (const path of await presentationSources(experienceRoot)) {
       `${path} couples product behavior to a skin`,
     );
   }
+  if (path.endsWith(".tsx") && path !== "ui/SensaComponents.tsx") {
+    assert(!/role=["']dialog["']/u.test(source), `${path} bypasses SensaOverlayLayout dialog semantics`);
+    assert(!/data-sensa-overlay-layout/u.test(source), `${path} bypasses the overlay layout interface`);
+  }
 }
 
 for (const [componentPath, stylesheetPath, ownedSelector] of [
@@ -474,12 +527,20 @@ for (const path of [
 const webShell = await readFile(new URL("ui/WebShell.tsx", experienceRoot), "utf8");
 assert(webShell.includes("<SensaApplicationShellLayout"), "WebShell does not consume the application-shell layout seam");
 assert(!webShell.includes("data-sensa-page-layout"), "WebShell bypasses the page layout interface");
+assert(webShell.includes("<SensaBrandMark"), "WebShell does not consume the curated brand asset seam");
+for (const role of skinAssetRoleCatalog.filter((role) => role !== "brand-mark")) {
+  assert(webShell.includes(role), `WebShell does not request the ${role} asset role`);
+}
+assert(!webShell.includes("from 'lucide-react'"), "WebShell selects concrete Skin glyphs directly");
 for (const path of [
+  "App.tsx",
   "components/ContentWorkspace.tsx",
+  "components/DictDetailModal.tsx",
   "components/IntakeInboxDrawer.tsx",
   "components/IntakeSimulatorModal.tsx",
   "components/PersonalMeaningComposer.tsx",
   "components/NoteEditorModal.tsx",
+  "components/PersonalMeaningDetailScreen.tsx",
   "components/QuickDictPopup.tsx",
   "components/SceneEditorModal.tsx",
   "components/language/LanguagePanel.tsx",
@@ -491,7 +552,28 @@ for (const path of [
   assert(overlay.includes("<SensaOverlayLayout"), `${path} does not consume the overlay layout seam`);
   assert(!overlay.includes('className="fixed inset-0'), `${path} still owns viewport overlay geometry`);
 }
+for (const path of [
+  "components/ContentLibraryScreen.tsx",
+  "components/LearnScreen.tsx",
+  "components/learning/InterleavedFourStageRuntimeScreen.tsx",
+  "components/learning/InterleavedFourStageReviewScreen.tsx",
+] as const) {
+  const screen = await readFile(new URL(path, experienceRoot), "utf8");
+  assert(screen.includes("sensa-motion-screen"), `${path} does not consume the Skin motion seam`);
+  assert(!screen.includes("duration-300"), `${path} still hard-codes screen duration`);
+}
+const appShellSource = await readFile(new URL("App.tsx", experienceRoot), "utf8");
+assert(appShellSource.includes('variant="popover"'), "App transient menus do not consume the overlay Skin seam");
+assert(!appShellSource.includes('id="mask"'), "App retains a parallel page-owned overlay backdrop");
+for (const path of [
+  "components/PersonalMeaningDetailScreen.css",
+  "components/SensaSemanticWorldScreen.css",
+] as const) {
+  const style = await readFile(new URL(path, experienceRoot), "utf8");
+  assert(!/\b(?:180|220|280|300)ms\b/u.test(style), `${path} hard-codes a migrated motion duration`);
+}
+assert(!theme.includes("--home-"), "retired Home compatibility variables remain in the theme");
 
 console.log(
-  "PASS: curated semantic, component, page-layout and overlay-layout contracts, complete adapters, AA core contrast, Skin Lab coverage, production adoption, early bootstrap, retired recipe runtime, and semantic-only Web presentation sources.",
+  "PASS: curated semantic, component, page/overlay layout, asset and motion contracts; complete adapters, AA core contrast, state-safe Skin Lab coverage, production adoption, early bootstrap and hardened semantic-only Web presentation sources.",
 );

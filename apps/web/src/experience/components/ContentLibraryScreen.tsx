@@ -104,7 +104,7 @@ export const ContentLibraryScreen = ({
 
   return (
     <SensaCollectionBrowserLayout
-      className={`z-[27] transition-[transform,opacity,visibility] duration-300 motion-reduce:transition-none ${active ? 'visible pointer-events-auto translate-x-0' : 'invisible pointer-events-none translate-x-full'}`}
+      className={`sensa-motion-screen sensa-motion-screen-slide z-[27] ${active ? 'visible pointer-events-auto translate-x-0' : 'invisible pointer-events-none translate-x-full'}`}
       id="s-content-library"
       data-anim="slide"
       aria-hidden={!active}

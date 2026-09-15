@@ -53,6 +53,7 @@ import {NoteEditorModal} from './components/NoteEditorModal';
 import {SceneEditorModal} from './components/SceneEditorModal';
 import {StatsScreen} from './components/StatsScreen';
 import {WebShell} from './ui/WebShell';
+import {SensaOverlayLayout} from './ui/SensaComponents';
 import type {PracticeSenseItem} from './practiceData';
 import {usePracticeScope} from './usePracticeScope';
 import type {ResolvedPracticeScope} from './practiceScope';
@@ -527,15 +528,9 @@ export default function App() {
             toast={toast}
           />
 
-          {/* 全局遮罩与菜单 */}
-          <div
-            className={`fixed inset-0 z-[70] bg-overlay transition-opacity motion-reduce:transition-none ${menuMoreOpen || menuBookOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`}
-            id="mask"
-            onClick={closeMenus}
-          />
-
           {/* 学习页右上角菜单 */}
-          <div className={`fixed right-5 top-20 z-[80] min-w-64 overflow-hidden rounded-overlay border border-border-subtle bg-surface-raised p-2 text-fg-primary shadow-overlay transition-[opacity,transform,visibility] motion-reduce:transition-none [&>button]:flex [&>button]:min-h-12 [&>button]:w-full [&>button]:items-center [&>button]:gap-3 [&>button]:rounded-control [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:text-left [&>button]:text-control-label [&>button]:hover:bg-surface-subtle [&>button]:focus-visible:outline-2 [&>button]:focus-visible:outline-focus ${menuMoreOpen ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-2 opacity-0'}`} id="menu-more">
+          {menuMoreOpen && <SensaOverlayLayout variant="popover" measure="compact" className="z-[80]" id="menu-more" label={t('assurance.preferences')} onDismiss={closeMenus} dismissOnBackdrop regions={{primary:
+          <div className="p-2 [&>button]:flex [&>button]:min-h-12 [&>button]:w-full [&>button]:items-center [&>button]:gap-3 [&>button]:rounded-control [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:text-left [&>button]:text-control-label [&>button]:hover:bg-surface-subtle [&>button]:focus-visible:outline-2 [&>button]:focus-visible:outline-focus">
             {menuPersonalContent && (
               <>
                 <div className="mb-2 rounded-control bg-accent-soft p-3">
@@ -586,7 +581,7 @@ export default function App() {
             >
               <svg className={iconClass} aria-hidden="true"><use href="#i-sliders" /></svg>{t('assurance.preferences')}
             </button>
-          </div>
+          </div>}} />}
 
           {learningPreferencesOpen && viewMode==='lightweight' && <LearningPreferencesPanel
             fixedPolicy busy={packageLearning.busy}
@@ -597,7 +592,8 @@ export default function App() {
           />}
 
           {/* 词书设置菜单 */}
-          <div className={`fixed right-5 top-20 z-[80] min-w-64 overflow-hidden rounded-overlay border border-border-subtle bg-surface-raised p-2 text-fg-primary shadow-overlay transition-[opacity,transform,visibility] motion-reduce:transition-none [&>button]:flex [&>button]:min-h-12 [&>button]:w-full [&>button]:items-center [&>button]:gap-3 [&>button]:rounded-control [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:text-left [&>button]:text-control-label [&>button]:hover:bg-surface-subtle [&>button]:focus-visible:outline-2 [&>button]:focus-visible:outline-focus ${menuBookOpen ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-2 opacity-0'}`} id="menu-book">
+          {menuBookOpen && <SensaOverlayLayout variant="popover" measure="compact" className="z-[80]" id="menu-book" label={localFlowText('chooseRange')} onDismiss={closeMenus} dismissOnBackdrop regions={{primary:
+          <div className="p-2 [&>button]:flex [&>button]:min-h-12 [&>button]:w-full [&>button]:items-center [&>button]:gap-3 [&>button]:rounded-control [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:text-left [&>button]:text-control-label [&>button]:hover:bg-surface-subtle [&>button]:focus-visible:outline-2 [&>button]:focus-visible:outline-focus">
             <button onClick={() => { closeMenus(); toast(localFlowText('chooseRangeHint')); }}>
               <svg className={iconClass} aria-hidden="true"><use href="#i-filter" /></svg>{localFlowText('chooseRange')}</button>
             <button onClick={() => { closeMenus(); setMainStack(['s-study', 's-learning-library']); }}>
@@ -608,10 +604,10 @@ export default function App() {
               <svg className={iconClass} aria-hidden="true"><use href="#i-relearn" /></svg>{localFlowText('relearnBook')}</button>
             <button disabled>
               <svg className={iconClass} aria-hidden="true"><use href="#i-refresh" /></svg>{localFlowText('updateBook')}</button>
-          </div>
+          </div>}} />}
 
           {/* 全局 Toast 提示 */}
-          <div className={`fixed bottom-6 left-1/2 z-[150] max-w-[calc(100%-3rem)] -translate-x-1/2 rounded-control bg-fg-primary px-5 py-3 text-center text-control-label text-surface-canvas shadow-overlay transition-[opacity,transform,visibility] motion-reduce:transition-none ${toastMsg ? 'visible translate-y-0 opacity-100' : 'invisible translate-y-2 opacity-0'}`} id="toast" role="status" aria-live="polite">
+          <div className={`sensa-motion-popover fixed bottom-6 left-1/2 z-[150] max-w-[calc(100%-3rem)] -translate-x-1/2 rounded-control bg-fg-primary px-5 py-3 text-center text-control-label text-surface-canvas shadow-overlay ${toastMsg ? 'visible translate-y-0 opacity-100' : 'invisible translate-y-2 opacity-0'}`} id="toast" role="status" aria-live="polite">
             {toastMsg}
           </div>
       </WebShell>

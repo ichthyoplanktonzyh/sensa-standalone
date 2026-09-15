@@ -4,6 +4,8 @@
 @import "./experience/appearance/componentStyles.css";
 @import "./experience/appearance/pageLayoutStyles.css";
 @import "./experience/appearance/overlayLayoutStyles.css";
+@import "./experience/appearance/assetStyles.css";
+@import "./experience/appearance/motionStyles.css";
 @source "./experience";
 
 @theme inline {
@@ -74,22 +76,6 @@ body {
 
 ::selection {
   background: var(--sensa-selection);
-}
-
-/* Compatibility bridge for the approved Home slice while its recipes are decomposed. */
-html #s-home.sensa-home {
-  --home-ink: var(--sensa-fg-primary);
-  --home-muted: var(--sensa-fg-secondary);
-  --home-line: var(--sensa-border-subtle);
-  --home-teal: var(--sensa-action-primary);
-  --home-teal-deep: var(--sensa-action-primary-hover);
-  --home-clay: var(--sensa-decorative);
-  background: var(--sensa-surface-canvas);
-  color: var(--sensa-fg-primary);
-}
-
-html[data-sensa-skin="clear"] .sensa-home-field {
-  opacity: 0.28;
 }
 
 .sensa-skin-swatch {

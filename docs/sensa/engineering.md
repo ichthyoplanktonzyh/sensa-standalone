@@ -209,8 +209,8 @@ Web 启动、账号恢复和空闲网络预算：
 npm run test:browser
 ```
 
-只验证开发态 Skin Lab 的 Semantic/Component/Page Layout contract，以及 Skin × color mode × text size ×
-responsive width 矩阵时，可以先运行无账号、无 provider 的聚焦检查：
+只验证开发态 Skin Lab 的 Semantic/Component/Page/Overlay Layout、Asset 与 Motion contract，以及 Skin ×
+color mode × text size × responsive width、reduced-motion 矩阵时，可以先运行无账号、无 provider 的聚焦检查：
 
 ```sh
 npm run test:skin

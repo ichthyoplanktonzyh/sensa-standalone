@@ -1,0 +1,59 @@
+.transition-colors,
+.transition-opacity,
+.transition-transform,
+.transition-all,
+[class*="transition-["] {
+  transition-duration: var(--sensa-motion-duration-component);
+  transition-timing-function: var(--sensa-motion-easing-standard);
+}
+
+.sensa-motion-screen {
+  transition-property: transform, opacity, visibility;
+  transition-duration: var(--sensa-motion-duration-screen);
+  transition-timing-function: var(--sensa-motion-easing-standard);
+}
+
+.sensa-motion-screen-fade {
+  transition-timing-function: var(--sensa-motion-easing-enter);
+}
+
+.sensa-motion-popover {
+  transition: opacity var(--sensa-motion-duration-instant) var(--sensa-motion-easing-standard),
+    transform var(--sensa-motion-duration-component) var(--sensa-motion-easing-enter),
+    visibility var(--sensa-motion-duration-component) var(--sensa-motion-easing-exit);
+}
+
+[data-sensa-overlay-layout]:not([data-sensa-overlay-mode="specimen"]) > [data-sensa-slot="backdrop"] {
+  transition: opacity var(--sensa-motion-duration-overlay) var(--sensa-motion-easing-enter);
+}
+
+[data-sensa-overlay-layout]:not([data-sensa-overlay-mode="specimen"]) [data-sensa-slot="panel"] {
+  transition: opacity var(--sensa-motion-duration-overlay) var(--sensa-motion-easing-enter),
+    transform var(--sensa-motion-duration-overlay) var(--sensa-motion-easing-enter);
+}
+
+@starting-style {
+  [data-sensa-overlay-layout]:not([data-sensa-overlay-mode="specimen"]) > [data-sensa-slot="backdrop"] {
+    opacity: 0;
+  }
+
+  [data-sensa-overlay-layout]:not([data-sensa-overlay-mode="specimen"]) [data-sensa-slot="panel"] {
+    opacity: 0;
+    transform: translateY(var(--sensa-motion-distance-overlay));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sensa-motion-screen,
+  .sensa-motion-popover,
+  .transition-colors,
+  .transition-opacity,
+  .transition-transform,
+  .transition-all,
+  [class*="transition-["],
+  [data-sensa-overlay-layout] > [data-sensa-slot="backdrop"],
+  [data-sensa-overlay-layout] [data-sensa-slot="panel"] {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}

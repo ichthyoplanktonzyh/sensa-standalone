@@ -1,6 +1,8 @@
 import { componentSkinContractVersion } from "./componentContract";
 import { pageLayoutContractVersion, type PageLayoutFamily } from "./pageLayoutContract";
 import { overlayLayoutContractVersion, type OverlayLayoutFamily } from "./overlayLayoutContract";
+import { skinAssetContractVersion, type SkinAssetSet } from "./assetContract";
+import { motionContractVersion, type MotionProfile } from "./motionContract";
 
 export const semanticDesignContractVersion = "sensa-semantic-design-v2" as const;
 
@@ -50,14 +52,16 @@ export interface SensaSkinPlugin {
   readonly componentContractVersion: typeof componentSkinContractVersion;
   readonly pageLayoutContractVersion: typeof pageLayoutContractVersion;
   readonly overlayLayoutContractVersion: typeof overlayLayoutContractVersion;
+  readonly assetContractVersion: typeof skinAssetContractVersion;
+  readonly motionContractVersion: typeof motionContractVersion;
   readonly nameKey: string;
   readonly descriptionKey: string;
   readonly capabilities: {
     readonly colorModes: readonly ["light", "dark"];
     readonly textSizes: readonly ["standard", "large"];
     readonly density: "comfortable" | "compact";
-    readonly motion: "gentle" | "direct";
-    readonly iconSet: "lucide";
+    readonly motion: MotionProfile;
+    readonly assetSet: SkinAssetSet;
     readonly pageLayouts: readonly PageLayoutFamily[];
     readonly overlayLayouts: readonly OverlayLayoutFamily[];
   };

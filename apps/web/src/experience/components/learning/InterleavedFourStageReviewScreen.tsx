@@ -49,7 +49,7 @@ export function InterleavedFourStageReviewScreen({
   return (
     <SensaPageLayout
       family="learning-runtime"
-      className={`screen z-40 transition-opacity duration-300 motion-reduce:transition-none ${active ? 'active visible pointer-events-auto opacity-100' : 'invisible pointer-events-none opacity-0'}`}
+      className={`screen sensa-motion-screen sensa-motion-screen-fade z-40 ${active ? 'active visible pointer-events-auto opacity-100' : 'invisible pointer-events-none opacity-0'}`}
       id="s-four-stage-review-runtime"
       data-anim="fade"
       aria-hidden={!active}

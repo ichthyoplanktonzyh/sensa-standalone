@@ -86,6 +86,18 @@ Depth is primarily communicated through surface tone, borders, and clear contain
 
 Shape is semantic: controls, fields, cards, overlays, and pill-like selections use distinct roles. A skin may make those roles quieter or crisper, but it must map every role consistently and preserve hit targets, focus outlines, content fit, and control recognition.
 
+## Assets
+
+The executable `sensa-skin-assets-v1` contract lets product code request curated semantic roles instead of selecting a Skin-specific file or glyph. Its initial roles cover the brand mark and primary shell destinations: home, semantic world, learning, practice, and settings. `SensaBrandMark` and `SensaSkinIcon` resolve those roles through the active build-time adapter; Clear retains the established utility glyphs while Quiet may use a more editorial set. Accessible names and action meaning remain on the product control, not inside a decorative asset.
+
+Asset sets are bundled, reviewed code with no remote URL or runtime package field. A Skin can change a glyph, mark construction, illustration, stroke character, or other visual asset only when the role remains recognizable and every supported role is present. It cannot use an asset swap to add a destination, imply unavailable state, or change an action's semantics.
+
+## Motion
+
+The executable `sensa-motion-v1` contract defines semantic timing and easing tokens for instant feedback, component state changes, screen transitions, and overlays. Quiet resolves those tokens to a gentler cadence; Clear uses a shorter, more direct cadence. Shared motion primitives consume the tokens for mounted screen stacks, scrims, popovers, overlay entry, and existing component transitions. Product code still owns whether a transition occurs, its state boundary, event timing, focus lifecycle, and the moment an operation becomes committed.
+
+Motion should explain continuity or state change, remain interruptible, and prefer opacity and transforms over layout animation. It must never delay a business action, conceal required content, manufacture progress, or become the only indication that state changed. `prefers-reduced-motion: reduce` collapses every contracted transition while preserving the same content and interaction state.
+
 ## Components
 
 Components have stable anatomy, behavior, state, and accessibility semantics. Skins provide visual recipes only.
@@ -102,11 +114,11 @@ The first reusable React boundary includes `SensaAction`, `SensaChoice`, `SensaF
 
 A component must expose meaningful semantic slots and states. New component styling belongs in the shared primitive or domain component; page-local color and radius literals are not a supported extension mechanism.
 
-Each curated adapter is a versioned build-time manifest. It declares compatibility with the semantic, component, page-layout, and overlay-layout contracts plus reviewed capabilities for light/dark modes, text sizes, density, motion character, icon set, and implemented layout families. The static registry is the only shipped catalog; there is no URL, package name, or executable-code field that could become an unreviewed runtime loader.
+Each curated adapter is a versioned build-time manifest. It declares compatibility with the semantic, component, page-layout, overlay-layout, asset, and motion contracts plus reviewed capabilities for light/dark modes, text sizes, density, motion profile, asset set, and implemented layout families. The static registry is the only shipped catalog; there is no URL, package name, or executable-code field that could become an unreviewed runtime loader.
 
 The former `uiClass` recipe runtime has been retired. Stable layout and state selectors now live in their owning component or a scoped semantic stylesheet, and the appearance smoke rejects any return to the registry pattern. New product surfaces must not add recipe registries, private page palettes, or behavioral branches keyed to a skin.
 
-In development, `/?skin-lab=1` opens the data-free Skin Lab instead of the product router. It renders every contracted component family/variant, page-layout family, and overlay-layout family with explicit fixture copy. Browser validation runs the Lab across every shipped Skin, light/dark mode, standard/large text, and mobile/desktop widths; it also checks semantic-region identity and order, state preservation, token resolution, minimum control targets, keyboard focus, overflow, and runtime errors. The Lab is gated by `import.meta.env.DEV` and is not a production route.
+In development, `/?skin-lab=1` opens the data-free Skin Lab instead of the product router. It renders every contracted component family/variant, page-layout family, overlay-layout family, and curated asset role with explicit fixture copy. Browser validation runs the Lab across every shipped Skin, light/dark mode, standard/large text, and mobile/desktop widths; it also checks semantic-region identity and order, state preservation, token and asset resolution, reduced-motion behavior, minimum control targets, keyboard focus, overflow, and runtime errors. The Lab is gated by `import.meta.env.DEV` and is not a production route.
 
 ## Do's and Don'ts
 

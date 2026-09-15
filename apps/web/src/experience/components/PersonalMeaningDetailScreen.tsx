@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
 import { classNames } from '../ui/primitives';
 import { SensaDetailWorkspaceLayout } from '../ui/SensaPageLayouts';
+import { SensaOverlayLayout } from '../ui/SensaComponents';
 import './PersonalMeaningDetailScreen.css';
 /**
  * The AI clarification workspace.
@@ -840,19 +841,12 @@ const PreviewPersonalMeaningDetailScreen = ({
       </form>
 
       {panelOpen && (
-        <div className={classNames("pmw-preview-layer")} onMouseDown={() => setPanelOpen(false)}>
-          <section
-            className={classNames("pmw-preview-sheet")}
-            role="dialog"
-            aria-modal="true"
-            aria-label={uiText('currentUnderstanding')}
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <header>
+        <SensaOverlayLayout variant="sheet" mode="container" measure="standard" className="z-20" label={uiText('currentUnderstanding')} onDismiss={() => setPanelOpen(false)} dismissOnBackdrop regions={{
+          header: <div className={classNames("pmw-overlay-header")}>
               <h2>{uiText('currentUnderstanding')}</h2>
               <button type="button" onClick={() => setPanelOpen(false)} aria-label={uiText('close')}>×</button>
-            </header>
-            <div className={classNames("pmw-preview-body")}>
+            </div>,
+          primary: <div className={classNames("pmw-preview-body")}>
               {senseConfirmed && (
                 <p className={classNames("pmw-panel-note")}>
                   {uiText('theFocusAndMeaningAreConfirmedYou')}</p>
@@ -889,8 +883,8 @@ const PreviewPersonalMeaningDetailScreen = ({
               {!working.focus && !working.sense && candidatesList.length === 0 && (
                 <p className={classNames("pmw-panel-empty")}>{uiText('tellUsMoreAboutYourContextOr')}</p>
               )}
-            </div>
-            <footer>
+            </div>,
+          controls: <div className={classNames("pmw-preview-controls")}>
               <button
                 type="button"
                 className={classNames("pmw-primary")}
@@ -903,26 +897,18 @@ const PreviewPersonalMeaningDetailScreen = ({
               >
                 {uiText('reviewAndConfirm')}</button>
               <button type="button" onClick={() => setPanelOpen(false)}>{uiText('keepTalking')}</button>
-            </footer>
-          </section>
-        </div>
+            </div>,
+        }} />
       )}
 
       {reviewOpen && working.focus && working.sense && (
-        <div className={classNames("pmw-review-layer")} onMouseDown={() => setReviewOpen(false)}>
-          <section
-            className={classNames("pmw-review")}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="pmw-review-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <header>
+        <SensaOverlayLayout variant="sheet" mode="container" measure="standard" className="z-20" labelledBy="pmw-review-title" onDismiss={() => setReviewOpen(false)} dismissOnBackdrop regions={{
+          header: <div className={classNames("pmw-overlay-header")}>
               <h2 id="pmw-review-title">{uiText('confirmTheseDetails')}</h2>
               <button type="button" onClick={() => setReviewOpen(false)} aria-label={uiText('keepTalking')}>×</button>
-            </header>
+            </div>,
 
-            <div className={classNames("pmw-review-body")}>
+          primary: <div className={classNames("pmw-review-body")}>
               <article className={classNames("pmw-review-card")}>
                 <header><small>{uiText('focus')}</small><em>{uiText('confirmTogether')}</em></header>
                 <b>{working.focus.statement}</b>
@@ -974,9 +960,9 @@ const PreviewPersonalMeaningDetailScreen = ({
                   <p>{uiText('noSuitableEnglishExpressionYetYouCan')}</p>
                 )}
               </article>
-            </div>
+            </div>,
 
-            <footer>
+          controls: <div className={classNames("pmw-review-controls")}>
               <p className={classNames("pmw-review-consequence")}>
                 {uiText('confirmationSavesThisToYourMeanings')}{working.expression && includeExpression ? uiText('andConnectsTheExpression') : uiText('youCanConnectAnExpressionLater')}。
               </p>
@@ -993,9 +979,8 @@ const PreviewPersonalMeaningDetailScreen = ({
                 <button type="button" disabled={busy} onClick={() => setReviewOpen(false)}>
                   {uiText('keepTalking2')}</button>
               </div>
-            </footer>
-          </section>
-        </div>
+            </div>,
+        }} />
       )}
     </>
   );

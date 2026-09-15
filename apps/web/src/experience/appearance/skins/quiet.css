@@ -113,8 +113,16 @@ html[data-sensa-skin="quiet"] {
   --sensa-component-learning-assessment-border: var(--sensa-border-strong);
   --sensa-component-learning-completion-background: color-mix(in srgb, var(--sensa-feedback-success) 10%, var(--sensa-surface-panel));
   --sensa-component-learning-completion-border: color-mix(in srgb, var(--sensa-feedback-success) 36%, var(--sensa-border-subtle));
-  --sensa-component-motion-duration: 180ms;
-  --sensa-component-motion-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --sensa-motion-duration-instant: 100ms;
+  --sensa-motion-duration-component: 180ms;
+  --sensa-motion-duration-screen: 280ms;
+  --sensa-motion-duration-overlay: 240ms;
+  --sensa-motion-easing-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --sensa-motion-easing-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --sensa-motion-easing-exit: cubic-bezier(0.4, 0, 1, 1);
+  --sensa-motion-distance-overlay: 0.75rem;
+  --sensa-component-motion-duration: var(--sensa-motion-duration-component);
+  --sensa-component-motion-easing: var(--sensa-motion-easing-standard);
   --sensa-component-motion-press-scale: 0.985;
   --sensa-layout-shell-canvas: var(--sensa-surface-canvas);
   --sensa-layout-shell-chrome-background: color-mix(in srgb, var(--sensa-surface-canvas) 94%, transparent);

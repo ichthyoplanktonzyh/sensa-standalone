@@ -5,6 +5,7 @@ import type { Word, QuickDictEntry } from '../types';
 import { WORDS } from '../data';
 import { lookupWord } from '../services/quickDict';
 import { audioService } from '../services/audioService';
+import { SensaOverlayLayout } from '../ui/SensaComponents';
 import './DictDetailModal.css';
 
 interface DictDetailModalProps {
@@ -102,13 +103,7 @@ export const DictDetailModal = ({
   };
 
   return (
-    <div className={classNames(`dict-modal-backdrop${active ? ' active' : ''}`)} onClick={onClose}>
-      <div
-        className={classNames("dict-modal-sheet")}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
+    <SensaOverlayLayout variant="dialog" measure="wide" className={classNames(`dict-modal-backdrop${active ? ' active' : ''}`)} label={wordStr} onDismiss={onClose} dismissOnBackdrop regions={{primary: <>
         {/* 顶部中央拖拽条与右上角序号 */}
         <div className={classNames("dict-sheet-handle-bar")}>
           <div className={classNames("dict-drag-pill")} />
@@ -395,7 +390,6 @@ export const DictDetailModal = ({
             <use href="#i-close" />
           </svg>
         </button>
-      </div>
-    </div>
+    </>}} />
   );
 };

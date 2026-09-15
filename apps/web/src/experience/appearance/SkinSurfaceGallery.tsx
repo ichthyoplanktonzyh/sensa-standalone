@@ -1,6 +1,7 @@
 import { Check, CircleAlert, CircleCheck, Info, Moon, Sun } from "lucide-react";
 import type { CSSProperties } from "react";
 import { componentSlot } from "./componentContract";
+import { skinIconRoleCatalog } from "./assetContract";
 import { colorModeCatalog, skinCatalog, textSizeCatalog, type ColorModePreference, type TextSizePreference } from "./contract";
 import { updateAppearancePreference, useAppearancePreference } from "./store";
 import {
@@ -14,6 +15,7 @@ import {
   SensaSurface,
 } from "../ui/SensaComponents";
 import { SensaApplicationShellLayout, SensaCollectionBrowserLayout, SensaDetailWorkspaceLayout, SensaPageLayout, SensaWorkspacePageLayout } from "../ui/SensaPageLayouts";
+import { SensaBrandMark, SensaSkinIcon } from "./SensaSkinAssets";
 
 const sectionTitle = "mb-4 text-section-title font-semibold";
 const specimenGrid = "grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3";
@@ -132,6 +134,18 @@ export function SkinSurfaceGallery() {
               </SensaNavigation>
             </div>
           </Specimen>
+
+          <Specimen title="Curated assets">
+            <div className="flex flex-wrap items-center gap-4" aria-label="Skin asset roles">
+              <SensaBrandMark />
+              {skinIconRoleCatalog.map((role) => (
+                <span className="grid size-11 place-items-center rounded-control bg-surface-subtle" title={role} key={role}>
+                  <SensaSkinIcon role={role} aria-hidden size={20} />
+                </span>
+              ))}
+              <span data-sensa-motion-probe className="sensa-motion-popover rounded-control bg-accent-soft px-3 py-2 text-metadata text-fg-secondary">motion tokens</span>
+            </div>
+          </Specimen>
         </div>
 
         <SensaSurface as="section" variant="raised">
@@ -164,7 +178,7 @@ export function SkinSurfaceGallery() {
               chrome: {
                 brand: (
                   <button type="button" data-sensa-shell-brand-action aria-label="Fixture home">
-                    <span data-sensa-shell-brand-mark aria-hidden="true"><i/><i/></span>
+                    <SensaBrandMark />
                     <span data-sensa-shell-brand-word>sensa</span>
                   </button>
                 ),
@@ -176,7 +190,7 @@ export function SkinSurfaceGallery() {
                   >
                     {['Home', 'Meanings', 'Learning'].map((label, index) => (
                       <button type="button" data-sensa-shell-navigation-item data-selected={index === 0 ? '' : undefined} key={label}>
-                        <span data-sensa-shell-item-icon aria-hidden>{index + 1}</span>
+                        <span data-sensa-shell-item-icon><SensaSkinIcon role={skinIconRoleCatalog[index]} aria-hidden size={18} /></span>
                         <span data-sensa-shell-item-label>{label}</span>
                       </button>
                     ))}

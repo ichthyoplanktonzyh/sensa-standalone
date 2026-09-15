@@ -1,17 +1,17 @@
 import { presentScreen, foregroundScreen } from './screenInteraction';
-import { BookOpen, House, Layers3, Settings2, Compass } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitch } from '../../i18n/LanguageSwitch';
 import { useModalFocus } from './useModalFocus';
 import { SensaApplicationShellLayout } from './SensaPageLayouts';
+import { SensaBrandMark, SensaSkinIcon } from '../appearance/SensaSkinAssets';
 
 const sections = [
-  { id: 's-home', label: 'nav.home', icon: House },
-  { id: 's-content', label: 'nav.content', icon: BookOpen },
-  { id: 's-study', label: 'nav.learning', icon: Layers3 },
-  { id: 's-academy', label: 'nav.practice', icon: Compass },
+  { id: 's-home', label: 'nav.home', iconRole: 'navigation-home' },
+  { id: 's-content', label: 'nav.content', iconRole: 'navigation-world' },
+  { id: 's-study', label: 'nav.learning', iconRole: 'navigation-learning' },
+  { id: 's-academy', label: 'nav.practice', iconRole: 'navigation-practice' },
 ] as const;
 
 export function WebShell({ children, current, focused, onNavigate, availableSections }: {
@@ -48,7 +48,7 @@ export function WebShell({ children, current, focused, onNavigate, availableSect
     : current.startsWith('s-content') ? 's-content' : current;
   const brand = (
     <button type="button" data-sensa-shell-brand-action onClick={() => onNavigate('s-home')} aria-label={t('nav.homeLabel')}>
-      <span data-sensa-shell-brand-mark aria-hidden="true"><i/><i/></span>
+      <SensaBrandMark />
       <span data-sensa-shell-brand-word>sensa</span>
     </button>
   );
@@ -58,7 +58,7 @@ export function WebShell({ children, current, focused, onNavigate, availableSect
       aria-label={t('nav.label')}
       style={{ '--sensa-shell-navigation-count': visibleSections.length } as CSSProperties}
     >
-      {visibleSections.map(({id,label,icon:Icon}) => (
+      {visibleSections.map(({id,label,iconRole}) => (
         <button
           type="button"
           data-sensa-shell-navigation-item
@@ -67,7 +67,7 @@ export function WebShell({ children, current, focused, onNavigate, availableSect
           onClick={() => onNavigate(id)}
           aria-current={selectedSection === id ? 'page' : undefined}
         >
-          <span data-sensa-shell-item-icon><Icon aria-hidden="true" size={18} strokeWidth={1.5}/></span>
+          <span data-sensa-shell-item-icon><SensaSkinIcon role={iconRole} aria-hidden="true" size={18}/></span>
           <span data-sensa-shell-item-label>{t(label)}</span>
         </button>
       ))}
@@ -83,7 +83,7 @@ export function WebShell({ children, current, focused, onNavigate, availableSect
         aria-current={current === 's-profile' ? 'page' : undefined}
         aria-label={t('nav.settings')}
       >
-        <Settings2 aria-hidden="true" size={18} strokeWidth={1.5}/>
+        <SensaSkinIcon role="navigation-settings" aria-hidden="true" size={18}/>
         <span data-sensa-shell-utility-label>{t('nav.settings')}</span>
       </button>
       <LanguageSwitch/>

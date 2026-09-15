@@ -1,27 +1,14 @@
 .dict-modal-backdrop {
-  position: fixed;
-  inset: 0;
   z-index: 95;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-top: 2rem;
-  background: var(--sensa-overlay);
-  backdrop-filter: blur(6px);
 }
 
-.dict-modal-sheet {
+.dict-modal-backdrop [data-sensa-overlay-region="primary"] {
   position: relative;
   display: flex;
-  width: min(100%, 64rem);
-  height: min(92dvh, 56rem);
+  min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--sensa-border-subtle);
-  border-radius: var(--sensa-radius-overlay) var(--sensa-radius-overlay) 0 0;
-  background: var(--sensa-surface-canvas);
-  color: var(--sensa-fg-primary);
-  box-shadow: var(--sensa-shadow-overlay);
+  padding: 0;
 }
 
 .dict-sheet-handle-bar {
@@ -100,7 +87,7 @@
   color: var(--sensa-feedback-warning);
 }
 
-.dict-modal-sheet .icon {
+.dict-modal-backdrop .icon {
   width: 1.25rem;
   height: 1.25rem;
   fill: none;
@@ -485,23 +472,14 @@
   box-shadow: var(--sensa-shadow-overlay);
 }
 
-.dict-modal-sheet button:focus-visible,
-.dict-modal-sheet [tabindex]:focus-visible,
+.dict-modal-backdrop button:focus-visible,
+.dict-modal-backdrop [tabindex]:focus-visible,
 .dict-ph-row:focus-visible {
   outline: 2px solid var(--sensa-focus);
   outline-offset: 3px;
 }
 
 @media (min-width: 640px) {
-  .dict-modal-backdrop {
-    align-items: center;
-    padding: 2rem;
-  }
-
-  .dict-modal-sheet {
-    border-radius: var(--sensa-radius-overlay);
-  }
-
   .dict-sheet-handle-bar {
     display: none;
   }
@@ -519,12 +497,5 @@
 
   .collins-auth-card {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .dict-modal-backdrop,
-  .dict-modal-sheet {
-    transition: none;
   }
 }

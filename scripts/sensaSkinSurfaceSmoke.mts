@@ -14,6 +14,8 @@ import {
   overlayLayoutFamilyContract,
   overlayLayoutTokenCatalog,
 } from "../apps/web/src/experience/appearance/overlayLayoutContract.ts";
+import { skinAssetRoleCatalog } from "../apps/web/src/experience/appearance/assetContract.ts";
+import { motionTokenCatalog } from "../apps/web/src/experience/appearance/motionContract.ts";
 
 const root = process.cwd();
 const port = 43100 + (process.pid % 1000);
@@ -82,6 +84,12 @@ try {
         `Skin Lab does not render the ${family} family`,
       );
     }
+    for (const role of skinAssetRoleCatalog) {
+      assert(
+        await page.locator(`[data-sensa-skin-asset="${role}"]`).count() > 0,
+        `Skin Lab does not render the ${role} asset role`,
+      );
+    }
     for (const [family, contract] of Object.entries(pageLayoutFamilyContract)) {
       const layout = page.locator(`[data-sensa-page-layout="${family}"][data-sensa-contract-specimen="full"]`);
       assert.equal(await layout.count(), 1, `Skin Lab does not render exactly one ${family} layout specimen`);
@@ -120,15 +128,21 @@ try {
     const runtimeProbe = page.locator("#skin-layout-state-probe");
     const shellProbe = page.locator("#skin-shell-state-probe");
     const overlayProbe = page.locator("#skin-overlay-state-probe");
+    const assetProbe = page.locator('[data-sensa-skin-asset="brand-mark"]').first();
+    const motionProbe = page.locator("[data-sensa-motion-probe]");
     await runtimeProbe.fill("Preserved across runtime layout adapters");
     await shellProbe.fill("Preserved across shell layout adapters");
     await overlayProbe.fill("Preserved across overlay layout adapters");
     const runtimeProbeHandle = await runtimeProbe.elementHandle();
     const shellProbeHandle = await shellProbe.elementHandle();
     const overlayProbeHandle = await overlayProbe.elementHandle();
+    const assetProbeHandle = await assetProbe.elementHandle();
     assert(runtimeProbeHandle, "runtime layout state probe is missing");
     assert(shellProbeHandle, "shell layout state probe is missing");
     assert(overlayProbeHandle, "overlay layout state probe is missing");
+    assert(assetProbeHandle, "skin asset probe is missing");
+    assert.equal(await assetProbe.getAttribute("data-sensa-asset-set"), "quiet-editorial");
+    const quietMotionDuration = await motionProbe.evaluate((element) => getComputedStyle(element).transitionDuration);
     const quietGrid = await layoutSpecimen.evaluate((element) => getComputedStyle(element).gridTemplateColumns);
     const quietShellGrid = await shellSpecimen.evaluate((element) => getComputedStyle(element).gridTemplateColumns);
     await appearanceControls.getByRole("button", { name: "Clear", exact: true }).click();
@@ -141,6 +155,9 @@ try {
     const clearShellGrid = await shellSpecimen.evaluate((element) => getComputedStyle(element).gridTemplateColumns);
     assert.notEqual(quietGrid, clearGrid, "Quiet and Clear resolve to the same wide-screen page topology");
     assert.notEqual(quietShellGrid, clearShellGrid, "Quiet and Clear resolve to the same wide-screen shell topology");
+    assert.equal(await assetProbe.getAttribute("data-sensa-asset-set"), "clear-utility", "Skin switch did not resolve the Clear asset set");
+    const clearMotionDuration = await motionProbe.evaluate((element) => getComputedStyle(element).transitionDuration);
+    assert.notEqual(quietMotionDuration, clearMotionDuration, "Quiet and Clear resolve to the same motion cadence");
     const clearShellBaseline = await shellSpecimen.evaluate((shell) => {
       const shellRect = shell.getBoundingClientRect();
       const brandMark = shell.querySelector<HTMLElement>("[data-sensa-shell-brand-mark]")!;
@@ -177,6 +194,7 @@ try {
     assert(await runtimeProbeHandle.evaluate((element) => element.isConnected), "Skin switch remounted the runtime region tree");
     assert(await shellProbeHandle.evaluate((element) => element.isConnected), "Skin switch remounted the shell region tree");
     assert(await overlayProbeHandle.evaluate((element) => element.isConnected), "Skin switch remounted the overlay region tree");
+    assert(await assetProbeHandle.evaluate((element) => element.isConnected), "Skin switch remounted the asset seam");
 
     for (const viewport of [
       { width: 320, height: 568 },
@@ -195,7 +213,7 @@ try {
             await page.locator(
               `html[data-sensa-skin="${expectedSkin}"][data-sensa-color-mode="${mode}"][data-sensa-text-size="${textSize}"]`,
             ).waitFor();
-            const result = await page.evaluate(({ componentTokens, layoutTokens, overlayTokens, layoutOrders, overlayOrders }) => {
+            const result = await page.evaluate(({ componentTokens, layoutTokens, overlayTokens, motionTokens, layoutOrders, overlayOrders }) => {
               const rootStyle = getComputedStyle(document.documentElement);
               const action = document.querySelector<HTMLElement>('[data-sensa-component="action"]')!;
               const choice = document.querySelector<HTMLElement>('[data-sensa-component="selection"][data-sensa-variant="choice"]')!;
@@ -204,6 +222,7 @@ try {
                 missingComponentTokens: componentTokens.filter((token) => !rootStyle.getPropertyValue(`--sensa-component-${token}`).trim()),
                 missingLayoutTokens: layoutTokens.filter((token) => !rootStyle.getPropertyValue(`--sensa-layout-${token}`).trim()),
                 missingOverlayTokens: overlayTokens.filter((token) => !rootStyle.getPropertyValue(`--sensa-overlay-layout-${token}`).trim()),
+                missingMotionTokens: motionTokens.filter((token) => !rootStyle.getPropertyValue(`--sensa-motion-${token}`).trim()),
                 actionHeight: action.getBoundingClientRect().height,
                 choiceHeight: choice.getBoundingClientRect().height,
                 horizontalOverflow: bodyWidth,
@@ -246,12 +265,14 @@ try {
               componentTokens: [...componentTokenCatalog],
               layoutTokens: [...pageLayoutTokenCatalog],
               overlayTokens: [...overlayLayoutTokenCatalog],
+              motionTokens: [...motionTokenCatalog],
               layoutOrders,
               overlayOrders,
             });
             assert.deepEqual(result.missingComponentTokens, [], `${skin}/${mode}/${textSize} has unresolved component tokens`);
             assert.deepEqual(result.missingLayoutTokens, [], `${skin}/${mode}/${textSize} has unresolved layout tokens`);
             assert.deepEqual(result.missingOverlayTokens, [], `${skin}/${mode}/${textSize} has unresolved overlay layout tokens`);
+            assert.deepEqual(result.missingMotionTokens, [], `${skin}/${mode}/${textSize} has unresolved motion tokens`);
             assert(result.actionHeight >= 44, `${skin}/${mode}/${textSize} action target is below 44px`);
             assert(result.choiceHeight >= 44, `${skin}/${mode}/${textSize} choice target is below 44px`);
             assert(result.horizontalOverflow <= 1, `${skin}/${mode}/${textSize} overflows at ${viewport.width}px`);
@@ -281,6 +302,13 @@ try {
     assert.equal(await runtimeProbe.inputValue(), "Preserved across runtime layout adapters", "appearance matrix discarded runtime input state");
     assert.equal(await shellProbe.inputValue(), "Preserved across shell layout adapters", "appearance matrix discarded shell input state");
     assert.equal(await overlayProbe.inputValue(), "Preserved across overlay layout adapters", "appearance matrix discarded overlay input state");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const reducedMotionDuration = await page.locator("[data-sensa-motion-probe]").evaluate((element) => (
+      getComputedStyle(element).transitionDuration
+        .split(",")
+        .map((value) => Number.parseFloat(value) * (value.includes("ms") ? 1 : 1000))
+    ));
+    assert(reducedMotionDuration.every((duration) => duration <= 0.01), "reduced-motion preference did not collapse Skin motion");
     assert.deepEqual(runtimeErrors, [], "Skin Lab emitted browser errors");
     await context.close();
   } finally {
@@ -296,4 +324,4 @@ try {
   }
 }
 
-console.log("PASS: Skin Lab preserves every contracted page and overlay region tree while adapters vary across skin, color-mode, text-size and responsive matrices.");
+console.log("PASS: Skin Lab preserves contracted regions and state while layout, asset and motion adapters vary across skin, color-mode, text-size, responsive and reduced-motion matrices.");

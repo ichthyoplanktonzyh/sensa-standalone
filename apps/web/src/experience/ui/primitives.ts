@@ -26,10 +26,10 @@ export const contentNavigationBackClass =
   "grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary transition-colors hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus motion-reduce:transition-none";
 
 const screenBaseClass =
-  "absolute inset-0 h-full w-full overflow-x-hidden overflow-y-auto bg-surface-canvas font-product text-fg-primary transition-[transform,opacity,visibility] duration-300 [scrollbar-width:thin] focus-visible:outline-focus motion-reduce:transition-none";
+  "sensa-motion-screen absolute inset-0 h-full w-full overflow-x-hidden overflow-y-auto bg-surface-canvas font-product text-fg-primary [scrollbar-width:thin] focus-visible:outline-focus";
 
 export const slideScreenClass = (active: boolean, layer = "z-[27]"): string =>
-  `${screenBaseClass} ${layer} ${active ? "visible pointer-events-auto translate-x-0" : "invisible pointer-events-none translate-x-full"}`;
+  `${screenBaseClass} sensa-motion-screen-slide ${layer} ${active ? "visible pointer-events-auto translate-x-0" : "invisible pointer-events-none translate-x-full"}`;
 
 export const fadeScreenClass = (active: boolean, layer = "z-10"): string =>
-  `${screenBaseClass} ${layer} ${active ? "visible pointer-events-auto opacity-100" : "invisible pointer-events-none opacity-0"}`;
+  `${screenBaseClass} sensa-motion-screen-fade ${layer} ${active ? "visible pointer-events-auto opacity-100" : "invisible pointer-events-none opacity-0"}`;
