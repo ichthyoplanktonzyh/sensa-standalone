@@ -117,6 +117,17 @@ The first reusable React boundary includes `SensaAction`, `SensaChoice`, `SensaF
 - **Quiet domain presentation:** a next-action invitation leads with the current task, supporting explanation and explicit action; a learning summary pairs modest quantities with labels and a management link; a content entry is an open row with a recognizable icon, title, supporting description and destination cue. Source information remains supporting context, and preparation or failure states stay adjacent to the action they explain. Context, expression and sense retain distinct roles rather than becoming interchangeable card titles.
 - **Learning runtime:** preserve the stage protocol, prompt, response affordance, reveal, rating choices, feedback, progress, and completion semantics. A skin cannot turn a different workflow into the same named stage.
 
+Quiet's domain adapters extend this shared grammar across the production surfaces:
+
+- Semantic World and learning libraries use open, divided rows; long expressions and source labels wrap without obscuring state or destination.
+- Intake and meaning conversations keep context, proposed meaning and accepted meaning distinct. Reading width and paragraph rhythm take priority over decorative message bubbles.
+- Learning uses a reading desk: context precedes the disclosed expression, supporting examples are inset with a rule, and rating controls occupy a separate decision area. On narrow screens, tools move below the header without changing DOM order or disclosure timing.
+- My Learning separates curriculum, readiness and recorded activity. Counts remain modest, records remain language-scoped, and preparation controls retain consent, retry and cancellation.
+- Free practice is a directory of real capabilities, including explicitly unavailable activities. Reference lookup and example viewing remain reference activities, not learning evidence.
+- Settings use a divided directory, with bounded forms for model connections and explicit service feedback. Authentication, data removal, route selection and appearance retain their existing state and confirmation boundaries.
+
+These domain rules live in the scoped `quiet-*.css` adapters imported by `quiet.css`; they use existing semantic tokens, add no new product state and do not affect Clear. Small screens, large text and dark mode must retain all content and controls. Browser checks measure layout and state continuity independently of visual screenshot review.
+
 A component must expose meaningful semantic slots and states. New component styling belongs in the shared primitive or domain component; page-local color and radius literals are not a supported extension mechanism.
 
 Each curated adapter is a versioned build-time manifest. It declares compatibility with the semantic, component, page-layout, overlay-layout, asset, and motion contracts plus reviewed capabilities for light/dark modes, text sizes, density, motion profile, asset set, and implemented layout families. The static registry is the only shipped catalog; there is no URL, package name, or executable-code field that could become an unreviewed runtime loader.

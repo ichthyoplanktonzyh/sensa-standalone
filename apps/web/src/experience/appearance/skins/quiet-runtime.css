@@ -1,17 +1,17 @@
 /* A reading desk: context first, then expression, then a deliberate rating.
    Disclosure, assessment evidence and runtime transitions remain owned by React. */
-html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] {
+html:root[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] {
   --sensa-layout-runtime-primary-max-width: 52rem;
 }
 
-html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="header"] {
+html:root[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="header"] {
   flex-wrap: wrap;
   row-gap: 0.25rem;
   padding-block: 0.75rem;
   overflow-wrap: anywhere;
 }
 
-html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="tools"] {
+html:root[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="tools"] {
   flex-wrap: wrap;
   max-width: 100%;
   padding-block: 0.5rem;
@@ -56,13 +56,13 @@ html[data-sensa-skin="quiet"] .sensa-runtime-rating button span span {
 }
 
 @media (max-width: 40rem) {
-  html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] {
+  html:root[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto var(--sensa-layout-runtime-progress-size) minmax(0, 1fr) auto auto auto;
     grid-template-areas: "header" "tools" "progress" "primary" "supporting" "feedback" "controls";
   }
 
-  html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="tools"] {
+  html:root[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="tools"] {
     justify-content: flex-start;
     padding-inline: var(--sensa-layout-runtime-primary-inline-inset);
   }

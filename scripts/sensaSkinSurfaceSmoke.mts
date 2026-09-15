@@ -218,7 +218,11 @@ try {
               const action = document.querySelector<HTMLElement>('[data-sensa-component="action"]')!;
               const choice = document.querySelector<HTMLElement>('[data-sensa-component="selection"][data-sensa-variant="choice"]')!;
               const bodyWidth = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+              const runtime = document.querySelector<HTMLElement>('[data-sensa-page-layout="learning-runtime"][data-sensa-contract-specimen="full"]')!;
+              const runtimeHeader = runtime.querySelector<HTMLElement>('[data-sensa-page-region="header"]')!.getBoundingClientRect();
+              const runtimeTools = runtime.querySelector<HTMLElement>('[data-sensa-page-region="tools"]')!.getBoundingClientRect();
               return {
+                runtimeToolsBelowHeader: runtimeTools.top >= runtimeHeader.bottom - 1,
                 missingComponentTokens: componentTokens.filter((token) => !rootStyle.getPropertyValue(`--sensa-component-${token}`).trim()),
                 missingLayoutTokens: layoutTokens.filter((token) => !rootStyle.getPropertyValue(`--sensa-layout-${token}`).trim()),
                 missingOverlayTokens: overlayTokens.filter((token) => !rootStyle.getPropertyValue(`--sensa-overlay-layout-${token}`).trim()),
@@ -276,6 +280,9 @@ try {
             assert(result.actionHeight >= 44, `${skin}/${mode}/${textSize} action target is below 44px`);
             assert(result.choiceHeight >= 44, `${skin}/${mode}/${textSize} choice target is below 44px`);
             assert(result.horizontalOverflow <= 1, `${skin}/${mode}/${textSize} overflows at ${viewport.width}px`);
+            if (skin === "Quiet" && viewport.width < 640) {
+              assert(result.runtimeToolsBelowHeader, `Quiet/${mode}/${textSize} tools collide with the mobile runtime header`);
+            }
             for (const layout of result.layouts) {
               assert(layout.overflow <= 1, `${skin}/${mode}/${textSize} ${layout.family} overflows at ${viewport.width}px`);
               assert.deepEqual(layout.hiddenRegions, [], `${skin}/${mode}/${textSize} hides ${layout.family} semantic regions`);
