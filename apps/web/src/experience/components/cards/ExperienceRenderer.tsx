@@ -124,7 +124,7 @@ function InteractiveExperienceRenderer({
   const range = experience.maximum - experience.minimum;
   const progress = range > 0 ? ((force - experience.minimum) / range) * 100 : 0;
   const rangeStyle: CSSProperties = {
-    background: `linear-gradient(90deg, #e57a3f 0%, #e57a3f ${progress}%, rgba(55, 66, 70, .14) ${progress}%, rgba(55, 66, 70, .14) 100%)`,
+    background: `linear-gradient(90deg, var(--sensa-decorative) 0%, var(--sensa-decorative) ${progress}%, var(--sensa-border-subtle) ${progress}%, var(--sensa-border-subtle) 100%)`,
   };
   const activeIndex = experience.states.findIndex((state) => state.value === currentState.value);
   const isReplay = mode === 'replay';

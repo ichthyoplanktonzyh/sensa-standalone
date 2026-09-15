@@ -1,5 +1,4 @@
 import {cardText} from '../../../i18n/originalCards';
-import { uiClass } from '../../ui/classes';
 import {
   useEffect,
   useRef,
@@ -80,7 +79,7 @@ export function ExampleCardCarousel({
   return (
     <>
       <div
-        className={uiClass(`example-card-carousel${className ? ` ${className}` : ''}`)}
+        className={`example-card-carousel${className ? ` ${className}` : ''}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={finishPointerGesture}
@@ -94,21 +93,21 @@ export function ExampleCardCarousel({
       </div>
 
       {itemCount > 1 && (
-        <nav className={uiClass("sensa-example-pagination")} aria-label={cardText('switchExample')}>
+        <nav className="sensa-example-pagination mt-3 grid min-h-14 grid-cols-[3rem_minmax(0,1fr)_3rem] items-center gap-2 [&>button]:grid [&>button]:size-11 [&>button]:place-items-center [&>button]:rounded-pill [&>button]:border [&>button]:border-border-subtle [&>button]:bg-surface-panel [&>button]:text-action-primary [&>button]:transition-colors [&>button:hover]:bg-surface-subtle [&>button:disabled]:cursor-default [&>button:disabled]:opacity-30 [&>button:last-child]:justify-self-end [&>div]:flex [&>div]:items-center [&>div]:justify-center [&>div]:gap-2 [&>div>button]:size-2 [&>div>button]:rounded-pill [&>div>button]:bg-progress [&>div>button]:opacity-45 [&>div>button]:transition-[transform,opacity,background-color] [&>div>button.active]:scale-125 [&>div>button.active]:bg-action-primary [&>div>button.active]:opacity-100 [&>div>span]:ml-2 [&>div>span]:text-metadata [&>div>span]:text-fg-tertiary motion-reduce:[&_*]:transition-none" aria-label={cardText('switchExample')}>
           <button
             type="button"
             disabled={!hasPrevious}
             onClick={() => onIndexChange(currentIndex - 1)}
             aria-label={cardText('previousExample')}
           >
-            <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
+            <svg className="size-5 shrink-0" aria-hidden="true"><use href="#i-chev-l" /></svg>
           </button>
           <div>
             {Array.from({ length: itemCount }, (_, index) => (
               <button
                 type="button"
                 key={itemKeys[index] ?? index}
-                className={uiClass(index === currentIndex ? 'active' : '')}
+                className={index === currentIndex ? 'active' : ''}
                 onClick={() => onIndexChange(index)}
                 aria-label={cardText('viewExampleNumber',{index:index+1})}
                 aria-current={index === currentIndex ? 'true' : undefined}
@@ -122,7 +121,7 @@ export function ExampleCardCarousel({
             onClick={() => onIndexChange(currentIndex + 1)}
             aria-label={cardText('nextExample')}
           >
-            <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-r" /></svg>
+            <svg className="size-5 shrink-0" aria-hidden="true"><use href="#i-chev-r" /></svg>
           </button>
         </nav>
       )}

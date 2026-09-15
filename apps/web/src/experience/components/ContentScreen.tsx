@@ -54,7 +54,7 @@ interface ContentScreenProps {
 type Category = "personal" | "learning" | "markers";
 type Filter = "all" | "continue" | "binding" | "complete";
 const button =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3c51ad] disabled:opacity-50";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-control px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-50";
 const labelFor = (item: JourneyWorldItemView) =>
   item.detail.directAlignments[0]?.confirmedBindings[0]?.surfaceForm ||
   item.experienceAnchors[0]?.surfaceForm ||
@@ -175,16 +175,16 @@ function ContentScreenView({
   const empty = (
     <div className="py-20 text-center" role="status">
       <MessageSquareText
-        className="mx-auto mb-5 text-[#9299ac]"
+        className="mx-auto mb-5 text-fg-tertiary"
         size={28}
         strokeWidth={1.3}
       />
-      <p className="text-sm text-[#6d7380]">
+      <p className="text-sm text-fg-secondary">
         {t(query ? "content.noResults" : "content.empty")}
       </p>
       {!query && category === "personal" && (
         <button
-          className={`${button} mt-5 text-[#34477d]`}
+          className={`${button} mt-5 text-action-primary`}
           onClick={() => onStartConversation?onStartConversation():setComposerOpen(true)}
         >
           <Plus size={16} />
@@ -194,26 +194,26 @@ function ContentScreenView({
     </div>
   );
   const personalList=(
-            <div className="divide-y divide-[#e7e9ef] border-y border-[#e7e9ef]">
+            <div className="divide-y divide-border-subtle border-y border-border-subtle">
               {visible.map((item) => (
                 <button
                   key={item.personalMeaningId}
                   onClick={() => open(item.personalMeaningId)}
-                  className={`flex w-full items-center gap-5 px-2 py-6 text-left hover:bg-[#f3f4f7] ${selected === item.personalMeaningId ? "bg-[#f0f2f8]" : ""}`}
+                  className={`flex w-full items-center gap-5 rounded-control px-2 py-6 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus ${selected === item.personalMeaningId ? "bg-surface-selected" : ""}`}
                 >
-                  <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-[#e1e4eb] bg-white text-[#697494]">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-control border border-border-subtle bg-surface-panel text-fg-secondary">
                     <MessageSquareText size={18} strokeWidth={1.5} />
                   </span>
                   <span className="min-w-0 flex-1">
                     <strong className="block truncate text-sm font-medium">
                       {labelFor(item)}
                     </strong>
-                    <span className="mt-2 block text-xs text-[#798191]">
+                    <span className="mt-2 block text-xs text-fg-tertiary">
                       {t(`content.phase.${item.senseFormation.phase}`)} ·{" "}
                       {t(`content.expression.${item.expressionBinding.phase}`)}
                     </span>
                   </span>
-                  <ArrowUpRight size={16} className="shrink-0 text-[#7c8597]" />
+                  <ArrowUpRight size={16} className="shrink-0 text-fg-tertiary" />
                 </button>
               ))}
             </div>
@@ -221,20 +221,20 @@ function ContentScreenView({
   return (
     <section
       id={screenId}
-      className={`screen absolute inset-0 z-10 overflow-y-auto bg-[#fbfbfa] text-[#222631] ${active ? "active" : "invisible pointer-events-none"}`}
+      className={`screen absolute inset-0 z-10 overflow-y-auto bg-surface-canvas font-product text-fg-primary ${active ? "active" : "invisible pointer-events-none"}`}
     >
       <main className="mx-auto max-w-[1280px] px-6 py-8 sm:px-10 lg:px-14 lg:py-14">
         {notice}<ContentHeader inboxCount={inbox.length+drafts.length} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/>
         <nav
           aria-label={t("content.categories")}
-          className="mb-7 flex gap-6 overflow-x-auto border-b border-[#e1e4eb]"
+          className="mb-7 flex gap-6 overflow-x-auto border-b border-border-subtle"
         >
           {(["personal", "learning", "markers"] as const).map((id) => (
             <button
               key={id}
               aria-current={category === id ? "page" : undefined}
               onClick={() => setCategory(id)}
-              className={`min-h-12 shrink-0 border-b-2 px-1 text-sm ${category === id ? "border-[#3d4f89] font-medium text-[#303e73]" : "border-transparent text-[#757b88]"}`}
+              className={`min-h-12 shrink-0 border-b-2 px-1 text-sm focus-visible:outline-2 focus-visible:outline-focus ${category === id ? "border-action-primary font-medium text-action-primary" : "border-transparent text-fg-secondary"}`}
             >
               {t(`content.${id}`)}
             </button>
@@ -243,9 +243,9 @@ function ContentScreenView({
         {category === "personal" && next && (
           <button
             onClick={() => open(next.personalMeaningId)}
-            className="mb-6 flex w-full items-center gap-4 rounded-xl bg-[#eef0f6] px-5 py-4 text-left text-sm"
+            className="mb-6 flex w-full items-center gap-4 rounded-card bg-surface-subtle px-5 py-4 text-left text-sm focus-visible:outline-2 focus-visible:outline-focus"
           >
-            <span className="shrink-0 text-[#59678f]">
+            <span className="shrink-0 text-fg-secondary">
               {t("content.continue")}
             </span>
             <span className="min-w-0 flex-1 truncate">{labelFor(next)}</span>
@@ -254,8 +254,8 @@ function ContentScreenView({
         )}
         {category !== "markers" && (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-            <label className="flex min-h-11 w-full items-center gap-3 rounded-lg border border-[#e1e4eb] bg-white px-3 sm:max-w-sm">
-              <Search size={17} className="shrink-0 text-[#8a91a0]" />
+            <label className="flex min-h-11 w-full items-center gap-3 rounded-control border border-border-subtle bg-surface-panel px-3 focus-within:outline-2 focus-within:outline-focus sm:max-w-sm">
+              <Search size={17} className="shrink-0 text-fg-tertiary" />
               <input
                 aria-label={t("content.search")}
                 placeholder={t("content.search")}
@@ -274,13 +274,13 @@ function ContentScreenView({
             </label>
             {category === "personal" && (
               <div
-                className="flex rounded-lg border border-[#e1e4eb] bg-white p-1"
+                className="flex rounded-control border border-border-subtle bg-surface-panel p-1"
                 role="group"
                 aria-label={t("content.view")}
               >
                 {(["list", "world"] as const).map((id) => (
                   <button
-                    className={`${button} min-h-9 ${view === id ? "bg-[#edf0f7] text-[#34477d]" : "text-[#757b88]"}`}
+                    className={`${button} min-h-9 ${view === id ? "bg-surface-selected text-action-primary" : "text-fg-secondary"}`}
                     aria-pressed={view === id}
                     key={id}
                     onClick={() => setView(id)}
@@ -304,7 +304,7 @@ function ContentScreenView({
                 key={id}
                 aria-pressed={filter === id}
                 onClick={() => setFilter(id)}
-                className={`rounded-full px-3 py-2 text-xs ${filter === id ? "bg-[#e7ebf5] text-[#34477d]" : "text-[#737b8b] hover:bg-[#f0f1f4]"}`}
+                className={`rounded-pill px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-focus ${filter === id ? "bg-surface-selected text-action-primary" : "text-fg-secondary hover:bg-surface-subtle"}`}
               >
                 {t(`content.${id}`)}
               </button>
@@ -313,7 +313,7 @@ function ContentScreenView({
         )}
         {category === "personal" &&
           (!status.ok ? (
-            <div role="alert" className="rounded-xl border border-red-200 p-6">
+            <div role="alert" className="rounded-card border border-feedback-danger p-6 text-feedback-danger">
               <p>{t("content.loadError")}</p>
               <button className={button} onClick={source.reload}>
                 {t("content.retry")}
@@ -334,23 +334,23 @@ function ContentScreenView({
           ))}
         {category === "learning" &&
           (learning.length ? (
-            <div className="divide-y divide-[#e7e9ef] border-y border-[#e7e9ef]">
+            <div className="divide-y divide-border-subtle border-y border-border-subtle">
               {learning.map((item) => (
                 <button
                   key={item.senseId}
                   onClick={() => onOpenSense(item.senseId)}
-                  className="flex w-full items-center gap-5 py-6 text-left hover:bg-[#f3f4f7]"
+                  className="flex w-full items-center gap-5 rounded-control py-6 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
                 >
-                  <BookOpen size={20} className="text-[#74809d]" />
+                  <BookOpen size={20} className="text-fg-secondary" />
                   <span className="flex-1">
                     <strong className="text-lg font-medium">
                       {item.expression.formL2}
                     </strong>
-                    <span className="mt-1 block text-sm text-[#7b8291]">
+                    <span className="mt-1 block text-sm text-fg-secondary">
                       {item.ground.labelL1}
                     </span>
                   </span>
-                  <span className="text-xs text-[#65718d]">
+                  <span className="text-xs text-fg-secondary">
                     {t(`content.learningStatus.${item.status}`)}
                   </span>
                   <ArrowUpRight size={16} />
@@ -387,15 +387,15 @@ function ContentScreenView({
               <button
                 key={id}
                 onClick={() => onOpenSection(id)}
-                className="rounded-xl border border-[#e1e5ed] bg-white p-6 text-left hover:border-[#aeb9d2]"
+                className="rounded-card border border-border-subtle bg-surface-panel p-6 text-left transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-focus"
               >
                 <Icon
                   size={22}
                   strokeWidth={1.5}
-                  className="mb-6 text-[#637294]"
+                  className="mb-6 text-fg-secondary"
                 />
                 <span className="block text-sm">{t(`content.${label}`)}</span>
-                <strong className="mt-3 block text-3xl font-normal text-[#68748e]">
+                <strong className="mt-3 block text-3xl font-normal text-action-primary">
                   {fmt(count)}
                 </strong>
               </button>
@@ -405,7 +405,7 @@ function ContentScreenView({
       </main>
       {adding && (
         <div
-          className="fixed inset-0 z-[100] flex justify-end bg-[#1f2937]/20"
+          className="fixed inset-0 z-[100] flex justify-end bg-overlay"
           onMouseDown={() => setAdding(false)}
         >
           <section
@@ -413,7 +413,7 @@ function ContentScreenView({
             aria-modal="true"
             aria-labelledby="add-content-title"
             onMouseDown={(e) => e.stopPropagation()}
-            className="h-full w-full bg-[#fbfbfa] p-6 shadow-xl sm:max-w-lg sm:p-9"
+            className="h-full w-full bg-surface-raised p-6 text-fg-primary shadow-overlay sm:max-w-lg sm:p-9"
           >
             <header className="mb-10 flex items-center justify-between">
               <h2 id="add-content-title" className="text-xl font-medium">
@@ -448,18 +448,18 @@ function ContentScreenView({
                   setAdding(false);
                   action();
                 }}
-                className="mb-4 flex w-full items-center gap-5 rounded-xl border border-[#e1e5ed] bg-white p-6 text-left hover:border-[#aab5d1]"
+                className="mb-4 flex w-full items-center gap-5 rounded-card border border-border-subtle bg-surface-panel p-6 text-left transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-focus"
               >
                 <Icon
                   size={23}
                   strokeWidth={1.4}
-                  className="shrink-0 text-[#5c6b92]"
+                  className="shrink-0 text-fg-secondary"
                 />
                 <span className="flex-1">
                   <strong className="text-sm font-medium">
                     {t(`content.${title}`)}
                   </strong>
-                  <span className="mt-2 block text-xs leading-5 text-[#788194]">
+                  <span className="mt-2 block text-xs leading-5 text-fg-tertiary">
                     {t(`content.${hint}`)}
                   </span>
                 </span>

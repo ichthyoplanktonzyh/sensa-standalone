@@ -46,7 +46,9 @@ Both skins must support light and dark color modes. Skin, color mode, and text s
 
 The named palette in the frontmatter is the approved foundation for Sensa Quiet. Paper is the quiet canvas, ink is the core reading color, muted supports secondary information, line separates without dominating, accent identifies primary interaction, sage provides gentle grouping and selection, and clay is a sparse warm signal.
 
-Runtime components must consume semantic color roles rather than these palette names. Each shipped skin provides a complete mapping for canvas, subtle and raised surfaces, selected surfaces, primary/secondary/tertiary/inverse text, subtle/strong borders, primary action and hover, focus, selection, overlay, and success/warning/danger feedback.
+Runtime components must consume semantic color roles rather than these palette names. Each shipped skin provides a complete mapping for canvas, subtle and raised surfaces, selected surfaces, the always-dark media stage and its on-media foreground, primary/secondary/tertiary/inverse text, subtle/strong borders, primary action and hover, focus, selection, overlay, and success/warning/danger feedback.
+
+The media stage is a paired semantic exception: `surface-media` remains dark in every color mode and `fg-on-media` remains light. It is reserved for provider video, unavailable-media placeholders, and controls rendered directly over that stage; ordinary panels and inverse actions must not reuse it.
 
 Every mapping must remain legible in both light and dark modes. Color may reinforce status or selection, but it cannot be their only signal; text, iconography, shape, or position must carry the same meaning. System accessibility preferences take priority over skin decoration.
 
@@ -84,11 +86,14 @@ Components have stable anatomy, behavior, state, and accessibility semantics. Sk
 
 A component must expose meaningful semantic slots and states. New component styling belongs in the shared primitive or domain component; page-local color and radius literals are not a supported extension mechanism.
 
+The legacy `uiClass` recipe runtime is a bounded migration seam, not part of the skin contract. Its content presentation bridge and scoped style sources must consume semantic roles only. A surface graduates from the seam when its stable layout and state selectors move into the owning component or scoped semantic stylesheet, the appearance smoke covers it, and its now-unreferenced recipe keys are deleted. New product surfaces must not add recipe keys or private page palettes.
+
 ## Do's and Don'ts
 
 - Do build components against semantic tokens and verify them in every shipped skin, both color modes, supported text sizes, and relevant responsive widths.
 - Do keep focus visible, status understandable without color, contrast at least WCAG AA for normal text, and motion compatible with reduced-motion preferences.
 - Do treat Quiet and Clear as two adapters of one product contract; a feature must work identically after switching between them.
+- Do migrate legacy recipes by a verified product surface and delete only keys proven to have no remaining consumer.
 - Do fall back to the default skin and mode when a stored preference is missing, invalid, or no longer shipped.
 - Don't hard-code palette values inside product components or couple behavior to a skin identifier.
 - Don't let a skin replace routes, component anatomy, learning stages, data fields, event meaning, persistence, or network behavior.

@@ -998,10 +998,10 @@ const GraphView = ({
             </div>
             <svg className={uiClass("personal-world-v2__graph-edges")} viewBox={`0 0 ${GRAPH_CANVAS_WIDTH} ${graph.canvasHeight}`} aria-hidden="true">
               <defs>
-                <marker id="personal-world-v2-arrow-focus" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8 z" fill="#9e875e" /></marker>
-                <marker id="personal-world-v2-arrow-proposal" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8 z" fill="#b28d4e" /></marker>
-                <marker id="personal-world-v2-arrow-alignment" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8 z" fill="#3e7b63" /></marker>
-                <marker id="personal-world-v2-arrow-binding" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8 z" fill="#5f746a" /></marker>
+                <marker id="personal-world-v2-arrow-focus" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8 z" fill="var(--sensa-decorative)" /></marker>
+                <marker id="personal-world-v2-arrow-proposal" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8 z" fill="var(--sensa-feedback-warning)" /></marker>
+                <marker id="personal-world-v2-arrow-alignment" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8 z" fill="var(--sensa-action-primary)" /></marker>
+                <marker id="personal-world-v2-arrow-binding" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8 z" fill="var(--sensa-fg-secondary)" /></marker>
               </defs>
               {graph.edges.map((edge) => {
                 const from = graph.positions.get(edge.from)!;

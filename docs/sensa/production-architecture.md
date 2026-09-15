@@ -125,6 +125,15 @@ learner fact。系统必须以文字、结构或图标等非颜色信号继续�
 每个已收录 Skin 必须为全部支持的 product surfaces 与解析后的 light/dark color scheme 提供完整呈现。
 Skin adapter 是 Product Shell 内部的可替换呈现模块，不成为领域聚合或第三方扩展市场。
 
+需要在所有 color mode 中保持暗色的媒体舞台，必须使用成对的 `surface-media` / `fg-on-media`
+角色；它们只服务于 provider video、媒体不可用占位和直接覆盖在舞台上的控制，不得替代普通 panel
+或 action inverse。每个 Skin 必须同时实现该角色对并满足正文对比度要求。
+
+现有 `uiClass` / `recipes.ts` 只作为待迁移 Web 表面的兼容边界，不是 Skin API，也不得承接新的页面私有
+调色板。迁移以完整 product surface 为单位：稳定布局和状态选择器进入所属组件或受作用域约束的语义
+样式源，Appearance smoke 固定其不得绕过合同，确认无消费者后再删除对应 recipe key。兼容边界中的
+`contentStyles.ts` 与已迁移 scoped CSS 同样只能消费 Semantic Design Contract 角色。
+
 Appearance Preference 独立选择 Skin、`light | dark | system` color mode 与文字大小等阅读偏好。切换
 Skin 可以立即重绘当前界面，但必须保留其他 Appearance Preference、当前导航、输入与 Runtime 状态，
 不得创建 Learning Event、使 Materialization 或 Action 失效，也不得显示不存在的成功或同步状态。

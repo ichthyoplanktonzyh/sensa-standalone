@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
-import { uiClass } from '../ui/classes';
 import { useState, useEffect, useRef } from 'react';
 import { contentAnnotations } from '../../data/library/contentAnnotations';
 import type { Word, QuickDictEntry } from '../types';
@@ -92,48 +91,46 @@ export const NoteEditorModal = ({
   };
 
   return (
-    <div className={uiClass(`personal-note-backdrop${active ? ' active' : ''}`)}>
+    <div className="fixed inset-0 z-[120] flex items-stretch justify-end bg-overlay p-0">
       <div
-        className={uiClass("personal-note-sheet")}
+        className="flex h-full max-h-full w-full max-w-xl flex-col overflow-y-auto bg-surface-canvas p-6 text-fg-primary shadow-overlay sm:p-8"
         role="dialog"
         aria-modal="true"
         aria-label={uiText('noteFor', { word: wordStr })}
       >
-        <header className={uiClass("personal-note-header")}>
+        <header className="mb-4 grid shrink-0 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center border-b border-border-subtle pb-5 text-center [&>button]:grid [&>button]:size-11 [&>button]:place-items-center [&>button]:rounded-control [&>button]:bg-accent-soft [&>button]:text-fg-secondary [&>button]:transition-colors [&>button:hover]:bg-surface-selected [&>button:focus-visible]:outline-2 [&>button:focus-visible]:outline-offset-3 [&>button:focus-visible]:outline-focus motion-reduce:[&>button]:transition-none">
           <button type="button" onClick={onClose} aria-label={uiText('close')}>
-            <svg className={uiClass("icon")}><use href="#i-close" /></svg>
+            <svg className="size-5 shrink-0" aria-hidden="true"><use href="#i-close" /></svg>
           </button>
           <div>
-
-            <h2>{uiText('myNotes')}</h2>
+            <h2 className="text-section-title font-medium">{uiText('myNotes')}</h2>
           </div>
           <button type="button" onClick={() => void handleSave()} aria-label={uiText('saveNote')}>
-            <svg className={uiClass("icon")}><use href="#i-chk-simple" /></svg>
+            <svg className="size-5 shrink-0" aria-hidden="true"><use href="#i-chk-simple" /></svg>
           </button>
         </header>
 
-        <div className={uiClass("personal-note-sense")}>
-          <strong>{wordStr}</strong>
-          {briefDef && <span>{briefDef}</span>}
+        <div className="mb-5 flex max-w-full items-baseline self-center gap-2 border-y border-border-subtle py-6">
+          <strong className="font-language text-page-title font-semibold text-fg-primary">{wordStr}</strong>
+          {briefDef && <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-body-support text-fg-tertiary">{briefDef}</span>}
         </div>
 
-        <main className={uiClass("personal-note-canvas")}>
-          <label htmlFor="personal-sense-note">{uiText('notePrompt')}</label>
+        <main className="flex min-h-[385px] flex-1 flex-col rounded-card border border-border-subtle bg-surface-panel p-5">
+          <label className="text-control-label font-semibold text-fg-secondary" htmlFor="personal-sense-note">{uiText('notePrompt')}</label>
           <textarea
             id="personal-sense-note"
             ref={textareaRef}
+            className="mt-3 min-h-56 flex-1 resize-none bg-transparent text-body text-fg-primary outline-none placeholder:text-fg-tertiary focus-visible:rounded-control focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
             placeholder={uiText('notePlaceholder')}
             value={noteText}
             maxLength={1000}
             onChange={(e) => setNoteText(e.target.value)}
           />
-          <footer>
+          <footer className="flex items-center justify-between border-t border-border-subtle pt-3 text-metadata text-fg-tertiary">
             <span>{uiText('noteScope')}</span>
-            <b>{noteText.length}/1000</b>
+            <b className="font-semibold text-fg-secondary">{noteText.length}/1000</b>
           </footer>
         </main>
-
-
       </div>
     </div>
   );

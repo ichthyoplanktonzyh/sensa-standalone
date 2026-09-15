@@ -2,7 +2,7 @@ export const IconSprite = () => (
   <svg style={{ display: 'none' }} xmlns="http://www.w3.org/2000/svg">
     <symbol id="i-cap" viewBox="0 0 24 24"><path d="M2 8.5 12 4l10 4.5-10 4.5L2 8.5Z"/><path d="M6 10.6V16c0 1.4 2.7 2.8 6 2.8s6-1.4 6-2.8v-5.4"/></symbol>
     <symbol id="i-desk" viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="13" rx="2.5"/><path d="M3 11h18M9.5 8.5V4.6h5v3.9"/></symbol>
-    <symbol id="i-gearpic" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="3"/><path d="m6 16 3.6-4 3 3.2L15 13l3 3.2"/><circle cx="17.5" cy="17" r="3.4" fill="currentColor" stroke="none"/><circle cx="17.5" cy="17" r="1.2" fill="#fff" stroke="none"/></symbol>
+    <symbol id="i-gearpic" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="3"/><path d="m6 16 3.6-4 3 3.2L15 13l3 3.2"/><circle cx="17.5" cy="17" r="3.4" fill="currentColor" stroke="none"/><circle cx="17.5" cy="17" r="1.2" fill="var(--sensa-fg-inverse)" stroke="none"/></symbol>
     <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 9.5h17M8 3.5v3M16 3.5v3"/><circle cx="8.6" cy="14.6" r=".9" fill="currentColor" stroke="none"/><circle cx="12" cy="14.6" r=".9" fill="currentColor" stroke="none"/><circle cx="15.4" cy="14.6" r=".9" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
     <symbol id="i-chev-l" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>

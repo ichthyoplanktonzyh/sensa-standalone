@@ -150,7 +150,7 @@ export const IntakeInboxDrawer = ({
         <div className={uiClass("intake-drawer__body")}>
           <p className={uiClass("intake-drawer__hint")}>
             {uiText('capturedMaterialAwaitingYourConfirmation')}</p>
-          {drafts.map(item => <button key={item.personalMeaningId} type="button" onClick={()=>onOpenDraft?.(item.personalMeaningId)} className="mb-4 block w-full rounded-xl border border-[#e1e5ed] bg-white p-5 text-left"><span className="text-xs text-[#75809a]">{uiText('continueDraft')}</span><strong className="mt-3 block text-sm font-medium leading-6">{item.experienceAnchors[0]?.surfaceForm || item.familiarAnchors[0]?.surfaceForm || item.primaryLabel}</strong></button>)}
+          {drafts.map(item => <button key={item.personalMeaningId} type="button" onClick={()=>onOpenDraft?.(item.personalMeaningId)} className="mb-4 block w-full rounded-card border border-border-subtle bg-surface-panel p-5 text-left focus-visible:outline-2 focus-visible:outline-focus"><span className="text-xs text-fg-tertiary">{uiText('continueDraft')}</span><strong className="mt-3 block text-sm font-medium leading-6">{item.experienceAnchors[0]?.surfaceForm || item.familiarAnchors[0]?.surfaceForm || item.primaryLabel}</strong></button>)}
           {items.map((item) => {
             const busy = busyId === item.intakeId || busyId != null;
             const options = disambiguationOptions(item);

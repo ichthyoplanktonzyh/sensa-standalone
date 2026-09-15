@@ -1,52 +1,51 @@
 /* Scoped to the learning viewer: Reference, notes and scene editors keep their presentation. */
-:is(#s-example, #s-package-example)[data-learning-example] { position:absolute; inset:0; z-index:34; display:flex; flex-direction:column; overflow:hidden; background:#fbfbfa; color:#242a38; }
+:is(#s-example, #s-package-example)[data-learning-example] { position:absolute; inset:0; z-index:34; display:flex; flex-direction:column; overflow:hidden; background:var(--sensa-surface-canvas); color:var(--sensa-fg-primary); }
 :is(#s-example, #s-package-example)[data-learning-example]:not(.active) { visibility:hidden; pointer-events:none; }
 :is(#s-example, #s-package-example)[data-learning-example] button { cursor:pointer; }
 :is(#s-example, #s-package-example)[data-learning-example] button:disabled { opacity:.45; cursor:not-allowed; }
-:is(#s-example, #s-package-example)[data-learning-example] :is(button, summary, a):focus-visible { outline:2px solid #5268a9; outline-offset:3px; }
-:is(#s-example, #s-package-example) .sensa-example-topbar { display:grid; grid-template-columns:44px minmax(0,1fr) 44px; gap:16px; align-items:center; flex-shrink:0; padding:16px 24px; border-bottom:1px solid #e1e5ed; }
+:is(#s-example, #s-package-example)[data-learning-example] :is(button, summary, a):focus-visible { outline:2px solid var(--sensa-focus); outline-offset:3px; }
+:is(#s-example, #s-package-example) .sensa-example-topbar { display:grid; grid-template-columns:44px minmax(0,1fr) 44px; gap:16px; align-items:center; flex-shrink:0; padding:16px 24px; border-bottom:1px solid var(--sensa-border-subtle); }
 :is(#s-example, #s-package-example) .sensa-example-topbar>div { text-align:center; min-width:0; }
 :is(#s-example, #s-package-example) .sensa-example-topbar strong { display:block; font-size:20px; font-weight:600; overflow-wrap:anywhere; }
-:is(#s-example, #s-package-example) .sensa-example-topbar span { display:block; margin-top:4px; font-size:14px; color:#68748d; }
-:is(#s-example, #s-package-example) .sensa-example-topbar button { display:grid; place-items:center; width:44px; height:44px; border:0; border-radius:12px; background:transparent; color:#5268a9; }
-:is(#s-example, #s-package-example) .sensa-example-topbar button:hover, :is(#s-example, #s-package-example) .is-saved { background:#edf0f7; }
+:is(#s-example, #s-package-example) .sensa-example-topbar span { display:block; margin-top:4px; font-size:14px; color:var(--sensa-fg-secondary); }
+:is(#s-example, #s-package-example) .sensa-example-topbar button { display:grid; place-items:center; width:44px; height:44px; border:0; border-radius:var(--sensa-radius-control); background:transparent; color:var(--sensa-action-primary); }
+:is(#s-example, #s-package-example) .sensa-example-topbar button:hover, :is(#s-example, #s-package-example) .is-saved { background:var(--sensa-accent-soft); }
 :is(#s-example, #s-package-example) .is-saved svg { fill:currentColor; }
-:is(#s-example, #s-package-example) .icon { width:22px; height:22px; }
 :is(#s-example, #s-package-example) .sensa-example-scroll { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:24px; }
 :is(#s-example, #s-package-example) .example-card-carousel, :is(#s-example, #s-package-example) .sensa-example-pagination, :is(#s-example, #s-package-example) .sensa-example-unavailable { max-width:768px; margin-inline:auto; }
-:is(#s-example, #s-package-example) .sensa-example-viewer { overflow:hidden; border:1px solid #e1e5ed; border-radius:24px; background:white; }
-:is(#s-example, #s-package-example) .sensa-example-source { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; padding:20px 24px; border-bottom:1px solid #e1e5ed; color:#68748d; font-size:12px; }
+:is(#s-example, #s-package-example) .sensa-example-viewer { overflow:hidden; border:1px solid var(--sensa-border-subtle); border-radius:var(--sensa-radius-overlay); background:var(--sensa-surface-panel); }
+:is(#s-example, #s-package-example) .sensa-example-source { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; padding:20px 24px; border-bottom:1px solid var(--sensa-border-subtle); color:var(--sensa-fg-secondary); font-size:12px; }
 :is(#s-example, #s-package-example) .sensa-example-source strong { display:block; margin-top:4px; font-weight:500; }
 :is(#s-example, #s-package-example) .sensa-example-sentence { padding:24px; }
-:is(#s-example, #s-package-example) .example-lookup-hint { margin:0 0 16px; font-size:12px; color:#68748d; }
-:is(#s-example, #s-package-example) .sensa-example-play { display:grid; place-items:center; width:48px; height:48px; margin-bottom:24px; border:0; border-radius:16px; color:#303f76; background:#edf0f7; }
-:is(#s-example, #s-package-example) .sensa-example-play.is-playing { background:#303f76; color:white; }
+:is(#s-example, #s-package-example) .example-lookup-hint { margin:0 0 16px; font-size:12px; color:var(--sensa-fg-secondary); }
+:is(#s-example, #s-package-example) .sensa-example-play { display:grid; place-items:center; width:48px; height:48px; margin-bottom:24px; border:0; border-radius:var(--sensa-radius-card); color:var(--sensa-action-primary); background:var(--sensa-accent-soft); }
+:is(#s-example, #s-package-example) .sensa-example-play.is-playing { background:var(--sensa-action-primary); color:var(--sensa-action-on-primary); }
 :is(#s-example, #s-package-example) .sensa-example-l2 { font-size:clamp(24px,3vw,32px); line-height:1.7; overflow-wrap:anywhere; }
-:is(#s-example, #s-package-example) .sensa-example-l2 .tok-word { min-height:44px; border-radius:6px; }
-:is(#s-example, #s-package-example) .sensa-example-l2 .tok-target { color:#303f76; font-weight:600; }
-:is(#s-example, #s-package-example) .sensa-example-l2 .tok-selected, :is(#s-example, #s-package-example) .sensa-example-l2 .tok-word:hover { background:#edf0f7; }
-:is(#s-example, #s-package-example) .sensa-example-l1 { margin-top:24px; padding-left:16px; border-left:2px solid #dce2f0; font-size:16px; line-height:1.7; color:#68748d; }
-:is(#s-example, #s-package-example) .sensa-example-translation { min-height:44px; margin-top:12px; border:0; background:transparent; color:#5268a9; font-size:14px; }
-:is(#s-example, #s-package-example) .sensa-example-sense-anchor { margin:0 24px 24px; padding:24px; border-radius:16px; background:#edf0f7; color:#303f76; }
+:is(#s-example, #s-package-example) .sensa-example-l2 .tok-word { min-height:44px; border-radius:var(--sensa-radius-control); }
+:is(#s-example, #s-package-example) .sensa-example-l2 .tok-target { color:var(--sensa-action-primary); font-weight:600; }
+:is(#s-example, #s-package-example) .sensa-example-l2 .tok-selected, :is(#s-example, #s-package-example) .sensa-example-l2 .tok-word:hover { background:var(--sensa-accent-soft); }
+:is(#s-example, #s-package-example) .sensa-example-l1 { margin-top:24px; padding-left:16px; border-left:2px solid var(--sensa-border-subtle); font-size:16px; line-height:1.7; color:var(--sensa-fg-secondary); }
+:is(#s-example, #s-package-example) .sensa-example-translation { min-height:44px; margin-top:12px; border:0; background:transparent; color:var(--sensa-action-primary); font-size:14px; }
+:is(#s-example, #s-package-example) .sensa-example-sense-anchor { margin:0 24px 24px; padding:24px; border-radius:var(--sensa-radius-card); background:var(--sensa-accent-soft); color:var(--sensa-action-primary); }
 :is(#s-example, #s-package-example) .sensa-example-sense-anchor>span { display:block; font-size:12px; }
 :is(#s-example, #s-package-example) .sensa-example-sense-anchor>strong { display:block; margin-top:8px; font-size:18px; font-weight:600; }
 :is(#s-example, #s-package-example) .sensa-example-sense-anchor details { margin-top:12px; font-size:14px; line-height:1.7; }
 :is(#s-example, #s-package-example) .sensa-example-sense-anchor summary { min-height:44px; padding-block:12px; cursor:pointer; }
-:is(#s-example, #s-package-example) .sensa-example-context { margin:0 24px 24px; border-top:1px solid #e1e5ed; font-size:14px; line-height:1.7; }
-:is(#s-example, #s-package-example) .sensa-example-context button { display:flex; width:100%; min-height:48px; align-items:center; justify-content:space-between; border:0; background:transparent; color:#5268a9; }
-:is(#s-example, #s-package-example) .sensa-example-context small { display:block; margin-top:12px; color:#68748d; }
-:is(#s-example, #s-package-example) .sensa-example-media { margin:24px; overflow:hidden; border-radius:16px; background:#edf0f7; }
+:is(#s-example, #s-package-example) .sensa-example-context { margin:0 24px 24px; border-top:1px solid var(--sensa-border-subtle); font-size:14px; line-height:1.7; }
+:is(#s-example, #s-package-example) .sensa-example-context button { display:flex; width:100%; min-height:48px; align-items:center; justify-content:space-between; border:0; background:transparent; color:var(--sensa-action-primary); }
+:is(#s-example, #s-package-example) .sensa-example-context small { display:block; margin-top:12px; color:var(--sensa-fg-secondary); }
+:is(#s-example, #s-package-example) .sensa-example-media { margin:24px; overflow:hidden; border-radius:var(--sensa-radius-card); background:var(--sensa-surface-subtle); }
 :is(#s-example, #s-package-example) .sensa-example-media :is(video,iframe) { display:block; width:100%; aspect-ratio:16/9; border:0; }
 :is(#s-example, #s-package-example) .sensa-example-media footer { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px; font-size:12px; }
-:is(#s-example, #s-package-example) .sensa-example-media a { display:inline-flex; align-items:center; min-height:44px; color:#303f76; text-decoration:underline; }
+:is(#s-example, #s-package-example) .sensa-example-media a { display:inline-flex; align-items:center; min-height:44px; color:var(--sensa-action-primary); text-decoration:underline; }
 :is(#s-example, #s-package-example) .sensa-example-pagination { margin-top:24px; }
 :is(#s-example, #s-package-example) .sensa-example-pagination>div { flex-wrap:wrap; }
-:is(#s-example, #s-package-example) .sensa-example-pagination>div>button { width:44px; height:44px; border-radius:12px; background:radial-gradient(circle,#aab5d0 3px,transparent 4px); }
-:is(#s-example, #s-package-example) .sensa-example-pagination>div>button.active { transform:none; background:radial-gradient(circle,#303f76 4px,transparent 5px); }
-:is(#s-example, #s-package-example) .sensa-example-footer { flex-shrink:0; padding:16px 24px max(16px,env(safe-area-inset-bottom)); border-top:1px solid #e1e5ed; text-align:center; }
-:is(#s-example, #s-package-example) .sensa-example-footer button { width:100%; max-width:768px; min-height:48px; border:0; border-radius:12px; background:#303f76; color:white; font-size:14px; }
-:is(#s-example, #s-package-example) .sensa-example-footer p { margin-top:12px; font-size:12px; color:#68748d; }
-:is(#s-example, #s-package-example) .sensa-example-unavailable { padding:32px; text-align:center; border:1px dashed #dce2f0; border-radius:24px; }
-:is(#s-example, #s-package-example) .sensa-example-unavailable p { margin-top:12px; color:#68748d; }
+:is(#s-example, #s-package-example) .sensa-example-pagination>div>button { width:44px; height:44px; border-radius:var(--sensa-radius-control); background:radial-gradient(circle,var(--sensa-progress) 3px,transparent 4px); }
+:is(#s-example, #s-package-example) .sensa-example-pagination>div>button.active { transform:none; background:radial-gradient(circle,var(--sensa-action-primary) 4px,transparent 5px); }
+:is(#s-example, #s-package-example) .sensa-example-footer { flex-shrink:0; padding:16px 24px max(16px,env(safe-area-inset-bottom)); border-top:1px solid var(--sensa-border-subtle); text-align:center; }
+:is(#s-example, #s-package-example) .sensa-example-footer button { width:100%; max-width:768px; min-height:48px; border:0; border-radius:var(--sensa-radius-control); background:var(--sensa-action-primary); color:var(--sensa-action-on-primary); font-size:14px; }
+:is(#s-example, #s-package-example) .sensa-example-footer p { margin-top:12px; font-size:12px; color:var(--sensa-fg-secondary); }
+:is(#s-example, #s-package-example) .sensa-example-unavailable { padding:32px; text-align:center; border:1px dashed var(--sensa-border-strong); border-radius:var(--sensa-radius-overlay); }
+:is(#s-example, #s-package-example) .sensa-example-unavailable p { margin-top:12px; color:var(--sensa-fg-secondary); }
 @media (min-width:640px) { :is(#s-example, #s-package-example) .sensa-example-scroll { padding:40px; } :is(#s-example, #s-package-example) .sensa-example-sentence { padding:32px; } }
 @media (prefers-reduced-motion:reduce) { :is(#s-example, #s-package-example) .example-card-carousel { transition:none !important; } }

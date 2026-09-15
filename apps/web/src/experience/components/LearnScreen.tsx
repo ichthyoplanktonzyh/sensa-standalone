@@ -147,7 +147,7 @@ export const LearnScreen = ({
 
   if(!hasTask) return <RuntimeFrame id={screenId} active={active&&!isBehind} title={t('assurance.title')} stepLabel="" progress={0} onExit={onExit}>
     <h1 className="text-2xl font-medium">{t('assurance.noTask')}</h1>
-    <button className="mt-8 min-h-12 rounded-xl bg-[#303f76] px-6 text-sm text-white" onClick={onExit}>{t('assurance.back')}</button>
+    <button className="mt-8 min-h-12 rounded-control bg-action-primary px-6 text-sm text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus" onClick={onExit}>{t('assurance.back')}</button>
   </RuntimeFrame>;
   return (
     <section id={screenId} data-anim="fade" className={uiClass(`screen${active && !isBehind ? ' active' : ''}${isBehind ? ' behind' : ''}${isIntroductionReveal ? ' is-intro-reveal' : ''}`, '#s-learn')}>

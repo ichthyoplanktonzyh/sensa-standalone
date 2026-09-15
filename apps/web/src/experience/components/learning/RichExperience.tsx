@@ -26,5 +26,5 @@ export function offlineInteractionDocument(html:string){
 }
 export function RichExperience({scene,images,html}:{scene:string;images?:readonly SensaContextImage[];html?:string}){
  useTranslation();const srcDoc=useMemo(()=>html?offlineInteractionDocument(html):undefined,[html]);
- return <div className="space-y-4">{scene&&<p className="whitespace-pre-wrap leading-8">{scene}</p>}{images?.map(image=><img key={image.id} src={image.dataUrl} alt={localFlowText('contextImage')} className="max-h-96 w-full rounded-xl object-contain"/>)}{srcDoc&&<iframe title={localFlowText('interactiveExperience')} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={srcDoc} className="h-80 w-full rounded-xl border border-[#dfe4ed] bg-white"/>}</div>;
+ return <div className="space-y-4">{scene&&<p className="whitespace-pre-wrap leading-8">{scene}</p>}{images?.map(image=><img key={image.id} src={image.dataUrl} alt={localFlowText('contextImage')} className="max-h-96 w-full rounded-control object-contain"/>)}{srcDoc&&<iframe title={localFlowText('interactiveExperience')} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={srcDoc} className="h-80 w-full rounded-control border border-border-subtle bg-surface-panel"/>}</div>;
 }

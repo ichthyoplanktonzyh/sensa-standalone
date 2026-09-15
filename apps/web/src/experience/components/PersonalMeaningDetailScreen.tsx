@@ -1004,7 +1004,7 @@ const PreviewPersonalMeaningDetailScreen = ({
 /** One existing workspace frame for both persisted and preview controllers. */
 function MeaningWorkspaceFrame({active,onBack,materialOpen,onToggleMaterial,screenRef,children,title}:{active:boolean;onBack:()=>void;materialOpen:boolean;onToggleMaterial:()=>void;screenRef?:import('react').Ref<HTMLElement>;title?:string;children:import('react').ReactNode}){
  return <section ref={screenRef} className={uiClass(`screen pmw-screen${active?' active':''}`, '#s-personal-meaning')} id="s-personal-meaning" data-anim="slide">
-  <div className="ml-auto flex h-full w-full flex-col bg-[#fbfbfa] shadow-xl lg:max-w-[860px]">
+  <div className="ml-auto flex h-full w-full flex-col bg-surface-raised text-fg-primary shadow-overlay lg:max-w-[860px]">
    <header className={uiClass('content-nav pmw-nav')}>
     <button className={uiClass('content-nav-back')} onClick={onBack} aria-label={uiText('backToMyContent2')}><svg className={uiClass('icon')}><use href="#i-chev-l"/></svg></button>
     <h1>{title??uiText('clarifyYourMeaning')}</h1>
@@ -1022,15 +1022,15 @@ function ConnectedMeaningConversation({active,onBack,conversation:c,learningCont
  if(c.accepted&&candidate)return <MeaningWorkspaceFrame title={localFlowText('savedExpression')} active={active} onBack={onBack} materialOpen={false} onToggleMaterial={()=>setMaterialOpen(v=>!v)}>
   <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
    <article className="space-y-5 py-5" aria-label={localFlowText('expressionDetails')}>
-    <div><p className="text-sm text-[#68748d]">{uiText('expression')}</p><h2 className="mt-2 text-3xl font-semibold">{candidate.expression}</h2></div>
-    <div><h3 className="text-sm text-[#68748d]">{uiText('meaning2')}</h3><p className="mt-2 whitespace-pre-wrap leading-7">{candidate.meaning}</p></div>
-    <div><h3 className="text-sm text-[#68748d]">{localFlowText('context')}</h3><p className="mt-2 whitespace-pre-wrap leading-7">{candidate.context}</p>{c.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-3 max-h-64 max-w-full rounded-xl object-contain"/>)}</div>
+    <div><p className="text-sm text-fg-secondary">{uiText('expression')}</p><h2 className="mt-2 text-3xl font-semibold">{candidate.expression}</h2></div>
+    <div><h3 className="text-sm text-fg-secondary">{uiText('meaning2')}</h3><p className="mt-2 whitespace-pre-wrap leading-7">{candidate.meaning}</p></div>
+    <div><h3 className="text-sm text-fg-secondary">{localFlowText('context')}</h3><p className="mt-2 whitespace-pre-wrap leading-7">{candidate.context}</p>{c.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-3 max-h-64 max-w-full rounded-control object-contain"/>)}</div>
    </article>
-   {c.onUpdateContext&&<button className="mb-4 rounded-lg border border-[#bdc8dd] bg-[#eef2fa] px-4 py-3" onClick={()=>setEditing(v=>!v)}>{localFlowText(editing?'cancelEdit':'editContext')}</button>}
+   {c.onUpdateContext&&<button className="mb-4 rounded-control border border-border-strong bg-surface-subtle px-4 py-3 focus-visible:outline-2 focus-visible:outline-focus" onClick={()=>setEditing(v=>!v)}>{localFlowText(editing?'cancelEdit':'editContext')}</button>}
    {editing&&<ExpressionChatInput busy={c.busy} initialText={candidate.context} inputLabel={localFlowText('context')} inputHint={localFlowText('context')} initialImages={c.images??[]} submitLabel={localFlowText('saveContext')} onSend={async(text,images)=>{await c.onUpdateContext!(text,images);setEditing(false);}}/>}
    {c.notice&&<p role="status">{c.notice}</p>}
    {learningControls}
-   <details className="mt-5" open={materialOpen||undefined}><summary className="cursor-pointer py-3 text-sm text-[#68748d]">{localFlowText('conversationHistory')}</summary><div className="space-y-4 text-sm leading-7"><p>{c.material}</p>{c.messages.map((m,i)=><div key={i}><p>{m.body}</p>{m.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="max-h-64 max-w-full"/>)}</div>)}</div></details>
+   <details className="mt-5" open={materialOpen||undefined}><summary className="cursor-pointer py-3 text-sm text-fg-secondary">{localFlowText('conversationHistory')}</summary><div className="space-y-4 text-sm leading-7"><p>{c.material}</p>{c.messages.map((m,i)=><div key={i}><p>{m.body}</p>{m.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="max-h-64 max-w-full"/>)}</div>)}</div></details>
   </div>
  </MeaningWorkspaceFrame>;
  return <MeaningWorkspaceFrame title={localFlowText('findExpression')} active={active} onBack={onBack} materialOpen={materialOpen} onToggleMaterial={()=>setMaterialOpen(v=>!v)}>
@@ -1038,20 +1038,20 @@ function ConnectedMeaningConversation({active,onBack,conversation:c,learningCont
   <p className="px-5 text-xs">{c.source?.url&&<a href={c.source.url} target="_blank" rel="noreferrer">{localFlowText('viewSource')}{c.source.title||c.source.url}</a>}</p>
 
   <div ref={transcript} className={uiClass('pmw-transcript')} aria-live="polite">
-   {(c.material||c.images?.length)?<div className={uiClass('pmw-message is-learner')}><div>{c.material&&<p>{c.material}</p>}{c.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-2 max-h-64 max-w-full rounded-xl object-contain"/>)}</div></div>:<div className="mx-auto max-w-md px-6 py-10 text-center"><h2 className="text-lg font-medium">{localFlowText('chatWelcome')}</h2><p className="mt-3 text-sm leading-6 text-[#68748d]">{localFlowText('chatWelcomeHint')}</p></div>}
+   {(c.material||c.images?.length)?<div className={uiClass('pmw-message is-learner')}><div>{c.material&&<p>{c.material}</p>}{c.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-2 max-h-64 max-w-full rounded-control object-contain"/>)}</div></div>:<div className="mx-auto max-w-md px-6 py-10 text-center"><h2 className="text-lg font-medium">{localFlowText('chatWelcome')}</h2><p className="mt-3 text-sm leading-6 text-fg-secondary">{localFlowText('chatWelcomeHint')}</p></div>}
    {c.messages.map((m,i)=><div key={i} className={uiClass(`pmw-message is-${m.role}`)}>{m.role==='assistant'&&<span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span>}<div>{m.body&&<p>{m.body}</p>}{m.images?.map(image=><img key={image.id} src={image.dataUrl} alt={image.name} className="mt-2 max-h-64 max-w-full rounded-xl object-contain"/>)}</div></div>)}
    {c.busy&&<div className={uiClass('pmw-message is-assistant is-thinking')}><span className={uiClass('pmw-avatar')} aria-hidden="true">✦</span><div><p role="status">{localFlowText('clarificationWorking')}</p></div></div>}
    {c.accepted&&<div className={uiClass('pmw-done')}><span className={uiClass('pmw-done-mark')}>✓</span><h2>{localFlowText('meaningConfirmed')}</h2><p>{localFlowText('savedLocally')}</p></div>}
   </div>
   {c.accepted&&learningControls}
   {c.notice&&<div className={uiClass('pmw-inline-error')} role="status">{c.notice}</div>}
-  {candidate&&!c.accepted&&<section className="mx-4 mb-3 rounded-2xl border border-[#d9deea] bg-white p-4 sm:mx-6" aria-label={localFlowText('expressionCandidate')}>
+  {candidate&&!c.accepted&&<section className="mx-4 mb-3 rounded-card border border-border-subtle bg-surface-panel p-4 sm:mx-6" aria-label={localFlowText('expressionCandidate')}>
    <h2 className="text-xl font-semibold">{candidate.expression}</h2><p className="mt-2 text-sm">{candidate.meaning}</p>
-   <p className="mt-3 text-sm leading-6 text-[#68748d]">{localFlowText('myContext')}{candidate.context}</p>
-   <button className="mt-4 min-h-11 rounded-xl bg-[#3c5087] px-5 text-sm text-white disabled:opacity-40" disabled={c.busy} onClick={()=>void c.onConfirm().catch(()=>{})}>{localFlowText('saveExpression')}</button>
+   <p className="mt-3 text-sm leading-6 text-fg-secondary">{localFlowText('myContext')}{candidate.context}</p>
+   <button className="mt-4 min-h-11 rounded-control bg-action-primary px-5 text-sm text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-40" disabled={c.busy} onClick={()=>void c.onConfirm().catch(()=>{})}>{localFlowText('saveExpression')}</button>
   </section>}
   <div className="mx-6 mb-2 flex gap-3">
-   {c.canContinue&&!c.accepted&&<button className="inline-flex min-h-11 items-center rounded-xl border border-[#bdc8dd] bg-[#eef2fa] px-4 text-sm text-[#59678f] disabled:opacity-40" disabled={c.busy} onClick={()=>void c.onContinue()}>{localFlowText('continueConversation')}</button>}
+   {c.canContinue&&!c.accepted&&<button className="inline-flex min-h-11 items-center rounded-control border border-border-strong bg-surface-subtle px-4 text-sm text-fg-secondary focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-40" disabled={c.busy} onClick={()=>void c.onContinue()}>{localFlowText('continueConversation')}</button>}
    {c.busy&&<button className={uiClass('pmw-dock-organize')} onClick={c.onStop}>{localFlowText('stopRequest')}</button>}
   </div>
   {!c.accepted&&<ExpressionChatInput busy={c.busy} onSend={c.onSend}/>}

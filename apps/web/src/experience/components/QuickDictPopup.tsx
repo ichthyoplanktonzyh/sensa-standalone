@@ -63,8 +63,8 @@ function BaselineQuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDi
               style={{
                 width: 22,
                 height: 22,
-                fill: isStarred ? '#f2701c' : 'none',
-                stroke: isStarred ? '#f2701c' : '#71717a',
+                fill: isStarred ? 'var(--sensa-decorative)' : 'none',
+                stroke: isStarred ? 'var(--sensa-decorative)' : 'var(--sensa-fg-secondary)',
               }}
             >
               <use href="#i-star" />

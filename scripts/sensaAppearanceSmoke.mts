@@ -42,10 +42,12 @@ const colorRoles = [
   "surface-panel",
   "surface-raised",
   "surface-selected",
+  "surface-media",
   "fg-primary",
   "fg-secondary",
   "fg-tertiary",
   "fg-inverse",
+  "fg-on-media",
   "border-subtle",
   "border-strong",
   "action-primary",
@@ -107,6 +109,10 @@ for (const selector of selectors) {
     contrast(colorValue(palette, "fg-secondary"), colorValue(palette, "surface-canvas")) >= 4.5,
     `${selector} secondary text contrast is below WCAG AA`,
   );
+  assert(
+    contrast(colorValue(palette, "fg-on-media"), colorValue(palette, "surface-media")) >= 4.5,
+    `${selector} media text contrast is below WCAG AA`,
+  );
   for (const action of ["action-primary", "action-primary-hover"]) {
     assert(
       contrast(colorValue(palette, "action-on-primary"), colorValue(palette, action)) >= 4.5,
@@ -115,7 +121,7 @@ for (const selector of selectors) {
   }
 }
 
-for (const role of colorRoles.filter((role) => role !== "decorative")) {
+for (const role of colorRoles) {
   assert(theme.includes(`--color-${role}: var(--sensa-${role});`), `Tailwind does not expose ${role}`);
 }
 
@@ -124,6 +130,31 @@ const migratedSurfaces = [
   "apps/web/src/experience/account/AccountExperience.tsx",
   "apps/web/src/experience/components/HomeScreen.tsx",
   "apps/web/src/experience/components/ProfileScreen.tsx",
+  "apps/web/src/experience/components/StudyScreen.tsx",
+  "apps/web/src/experience/components/StudyCalendar.tsx",
+  "apps/web/src/experience/components/StatsScreen.tsx",
+  "apps/web/src/experience/components/ContentScreen.tsx",
+  "apps/web/src/experience/components/ContentWorkspace.tsx",
+  "apps/web/src/experience/components/ContentLibraryScreen.tsx",
+  "apps/web/src/experience/components/SensaFreePracticeScreen.tsx",
+  "apps/web/src/experience/components/PracticeScopeScreen.tsx",
+  "apps/web/src/experience/components/language/LanguagePanel.tsx",
+  "apps/web/src/experience/components/language/GlossaryPanel.tsx",
+  "apps/web/src/experience/components/ProviderPanel.tsx",
+  "apps/web/src/experience/components/YouGlishListeningScreen.tsx",
+  "apps/web/src/experience/components/ReferenceExampleViewer.tsx",
+  "apps/web/src/experience/components/SensaExampleScreen.tsx",
+  "apps/web/src/experience/components/examples/LearningExampleLookup.tsx",
+  "apps/web/src/experience/components/examples/ExampleCardCarousel.tsx",
+  "apps/web/src/experience/components/MeaningGraphView.tsx",
+  "apps/web/src/experience/components/PersonalMeaningComposer.tsx",
+  "apps/web/src/experience/components/NoteEditorModal.tsx",
+  "apps/web/src/experience/components/LibraryBackupPanel.tsx",
+  "apps/web/src/experience/components/LocalAgentPanel.tsx",
+  "apps/web/src/experience/components/LocalDataControlPanel.tsx",
+  "apps/web/src/experience/components/ModelExecutionPanel.tsx",
+  "apps/web/src/experience/components/ExpressionChatInput.tsx",
+  "apps/web/src/experience/components/CloudSyncPanel.tsx",
   "apps/web/src/experience/components/learning/RuntimeFrame.tsx",
   "apps/web/src/experience/components/learning/RuntimeRating.tsx",
   "apps/web/src/experience/components/learning/LearningSetupFrame.tsx",
@@ -139,13 +170,35 @@ const migratedSurfaces = [
 ] as const;
 for (const path of migratedSurfaces) {
   const source = await readFile(new URL(`../${path}`, import.meta.url), "utf8");
-  assert(!/#[0-9a-f]{3,8}/iu.test(source), `${path} bypasses the semantic color contract`);
-  assert(!/data-sensa-skin|\bquiet\b|\bclear\b/iu.test(source), `${path} couples product behavior to a skin`);
+  assert(!/(?<!&)#[0-9a-f]{3,8}\b/iu.test(source), `${path} bypasses the semantic color contract`);
+  assert(
+    !/data-sensa-skin|dataset\.sensaSkin|\bskin(?:Id)?\s*(?:===?|:)\s*["'](?:quiet|clear)["']/iu.test(source),
+    `${path} couples product behavior to a skin`,
+  );
+}
+
+const migratedStyleSources = [
+  "apps/web/src/experience/ui/classes.ts",
+  "apps/web/src/experience/ui/contentStyles.ts",
+  "apps/web/src/experience/components/examples/learningExample.css",
+] as const;
+for (const path of migratedStyleSources) {
+  const source = await readFile(new URL(`../${path}`, import.meta.url), "utf8");
+  assert(!/(?<!&)#[0-9a-f]{3,8}\b/iu.test(source), `${path} contains a palette literal`);
+  assert(!/\b(?:rgb|hsl|oklch)a?\(/iu.test(source), `${path} contains a color-function literal`);
+  assert(
+    !/\b(?:bg-(?:white|paper|accent)(?!-)|text-(?:white|ink)(?!-)|border-line(?!-)|outline-accent(?!-))/iu.test(source),
+    `${path} uses a legacy palette utility`,
+  );
+  assert(!/var\(--content-/iu.test(source), `${path} recreates a private content palette`);
+  for (const [, role] of source.matchAll(/var\(--sensa-([a-z0-9-]+)\)/giu)) {
+    assert(theme.includes(`--sensa-${role}:`), `${path} references unknown semantic role ${role}`);
+  }
 }
 
 const entry = await readFile(new URL("../apps/web/src/main.tsx", import.meta.url), "utf8");
 assert(entry.indexOf("initializeAppearance();") < entry.indexOf("createRoot("));
 
 console.log(
-  "PASS: curated appearance contract, safe fallback, complete light/dark adapters, AA core contrast, early bootstrap and semantic-only vertical slice.",
+  "PASS: curated appearance contract, safe fallback, complete light/dark adapters, AA core contrast, early bootstrap, and semantic-only migrated components and style sources.",
 );

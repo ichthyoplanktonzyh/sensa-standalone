@@ -18,11 +18,11 @@ import {
 import {setupButton,setupPrimary} from './learning/LearningSetupFrame';
 import {Cpu,RefreshCw,Server} from 'lucide-react';
 
-const feedback=' transition-colors hover:bg-[#e6ebf5] active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5268a9] disabled:cursor-not-allowed disabled:opacity-50';
-const field='mt-2 block min-h-11 w-full rounded-xl border border-[#cbd1df] bg-white p-3';
-const card='rounded-2xl border border-[#e0e5ee] p-5';
-const chipBase='inline-flex w-fit items-center gap-1.5 rounded-full border px-3 py-1 text-xs';
-const hintText='text-sm leading-6 text-[#68748d]';
+const feedback=' transition-colors hover:bg-surface-selected active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-50';
+const field='mt-2 block min-h-11 w-full rounded-control border border-border-strong bg-surface-panel p-3 focus-visible:outline-2 focus-visible:outline-focus';
+const card='rounded-card border border-border-subtle p-5';
+const chipBase='inline-flex w-fit items-center gap-1.5 rounded-pill border px-3 py-1 text-xs';
+const hintText='text-sm leading-6 text-fg-secondary';
 /** One hint per purpose: what the person is doing when this purpose is used. */
 const purposeHints:Record<Purpose,string>={
  teacher:'modelService.purposeTeacherHint',content:'modelService.purposeContentHint',
@@ -36,9 +36,9 @@ type Owner={kind:'default'}|{kind:'local';provider:Provider}|{kind:'account';con
 
 function OwnerChip({owner}:{owner:Owner}){
  const {t}=useTranslation();
- if(owner.kind==='default')return <span className={`${chipBase} border-[#cfd7e6] bg-[#edf0f7] text-[#303f76]`}><Server size={13} aria-hidden="true"/>{t('modelService.default')}</span>;
- if(owner.kind==='local')return <span className={`${chipBase} border-[#bdc8dd] bg-[#eef2fa] text-[#546582]`}><Cpu size={13} aria-hidden="true"/>{owner.provider.name}</span>;
- return <span className={`${chipBase} border-[#bdc8dd] bg-white text-[#303f76]`}><Server size={13} aria-hidden="true"/>{owner.connection.name}</span>;
+ if(owner.kind==='default')return <span className={`${chipBase} border-border-strong bg-accent-soft text-action-primary`}><Server size={13} aria-hidden="true"/>{t('modelService.default')}</span>;
+ if(owner.kind==='local')return <span className={`${chipBase} border-border-strong bg-surface-subtle text-fg-secondary`}><Cpu size={13} aria-hidden="true"/>{owner.provider.name}</span>;
+ return <span className={`${chipBase} border-border-strong bg-surface-panel text-action-primary`}><Server size={13} aria-hidden="true"/>{owner.connection.name}</span>;
 }
 
 /** Add or update one connection. The group it is submitted to decides where the key lives. */
@@ -147,13 +147,13 @@ export function ProviderPanel(){
       {account.onlineService&&<button className={setupButton+feedback} disabled={refreshing} aria-busy={refreshing} onClick={()=>void refreshService()}><RefreshCw size={16} aria-hidden="true"/>{t(refreshing?'modelService.refreshing':'modelService.refresh')}</button>}
      </div>
     </div>
-    {refreshed&&!refreshing&&<p role="status" className="text-sm text-emerald-700">{t('modelService.refreshed')}</p>}
-    {service&&<div className="space-y-3 border-t border-[#e0e5ee] pt-4">
+    {refreshed&&!refreshing&&<p role="status" className="text-sm text-feedback-success">{t('modelService.refreshed')}</p>}
+    {service&&<div className="space-y-3 border-t border-border-subtle pt-4">
      <h2 className="text-sm font-medium">{t('modelService.usageTitle')}</h2>
      <ul className="grid gap-2 sm:grid-cols-2">
-      {service.usage.map(entry=><li key={entry.kind} className="flex items-baseline justify-between gap-3 rounded-xl bg-[#edf0f7] px-4 py-3 text-sm">
+      {service.usage.map(entry=><li key={entry.kind} className="flex items-baseline justify-between gap-3 rounded-control bg-surface-subtle px-4 py-3 text-sm">
        <span>{t(usageLabels[entry.kind])}</span>
-       <span className={entry.limit!==null&&entry.used>=entry.limit?'text-[#8a4b2f]':'text-[#546582]'}>{entry.used} / {entry.limit??'∞'}{entry.limit!==null&&entry.used>=entry.limit?` · ${t('modelService.limit')}`:''}</span>
+       <span className={entry.limit!==null&&entry.used>=entry.limit?'text-feedback-warning':'text-fg-secondary'}>{entry.used} / {entry.limit??'∞'}{entry.limit!==null&&entry.used>=entry.limit?` · ${t('modelService.limit')}`:''}</span>
       </li>)}
      </ul>
      <p className={hintText}>{t('modelService.usageNote')}</p>
@@ -161,7 +161,7 @@ export function ProviderPanel(){
    </div>
   </header>
 
-  {notice&&<p role="status" className="rounded-xl bg-[#edf0f7] p-4">{t(notice)}</p>}
+  {notice&&<p role="status" className="rounded-control bg-accent-soft p-4">{t(notice)}</p>}
 
   <section className="space-y-4" aria-labelledby="model-owners">
    <div><h2 id="model-owners" className="text-lg font-medium">{t('modelService.providers')}</h2></div>
@@ -201,8 +201,8 @@ export function ProviderPanel(){
     {localConnections.length===0&&!addLocal&&<p className={hintText}>{t('modelService.localEmpty')}</p>}
     {localConnections.map(provider=><article key={provider.id} className={card}>
      <h4 className="font-medium">{provider.name} · {provider.model}</h4>
-     <p className="mt-2 break-all text-sm text-[#68748d]">{provider.endpoint}</p>
-     <p className="mt-2 flex flex-wrap items-center gap-3 text-sm">{provider.kind==='sensa'?t('modelService.accountCredential'):hasCredential(provider)?t('modelService.keyPresent'):t('modelService.keyAbsent')}<span className={`${chipBase} border-[#cfd7e6] text-[#546582]`}>{t(executionOf(provider)==='device'?'modelService.executionDevice':'modelService.executionService')}</span></p>
+     <p className="mt-2 break-all text-sm text-fg-secondary">{provider.endpoint}</p>
+     <p className="mt-2 flex flex-wrap items-center gap-3 text-sm">{provider.kind==='sensa'?t('modelService.accountCredential'):hasCredential(provider)?t('modelService.keyPresent'):t('modelService.keyAbsent')}<span className={`${chipBase} border-border-strong text-fg-secondary`}>{t(executionOf(provider)==='device'?'modelService.executionDevice':'modelService.executionService')}</span></p>
      <div className="mt-3 flex flex-wrap gap-2">
       {provider.kind==='compatible'&&<>
        <button className={setupButton+feedback} disabled={busy} onClick={()=>void perform(async()=>{setCatalog({kind:'local',provider,models:await listProviderModels(provider)});})}>{t('modelService.modelList')}</button>
@@ -212,7 +212,7 @@ export function ProviderPanel(){
       <button className={setupButton+feedback} disabled={busy} onClick={()=>void perform(()=>deleteProvider(crypto.randomUUID(),provider))}>{t('modelService.remove')}</button>
      </div>
     </article>)}
-    {catalog&&<section className="space-y-3 rounded-2xl border border-[#bdc8dd] p-5"><h4>{catalog.kind==='local'?catalog.provider.name:catalog.connection.name}</h4>
+    {catalog&&<section className="space-y-3 rounded-card border border-border-strong p-5"><h4>{catalog.kind==='local'?catalog.provider.name:catalog.connection.name}</h4>
      <label className="block text-sm">{t('modelService.model')}<select className={field} value={catalog.kind==='local'?catalog.provider.model:catalog.connection.model} disabled={busy} onChange={event=>void applyModel(event.target.value)}>{[catalog.kind==='local'?catalog.provider.model:catalog.connection.model,...catalog.models.filter(model=>model!==(catalog.kind==='local'?catalog.provider.model:catalog.connection.model))].map(model=><option key={model} value={model}>{model}</option>)}</select></label>
      <button className={setupButton} onClick={()=>setCatalog(null)}>{t('modelService.cancel')}</button></section>}
     {selected&&<form className={card} onSubmit={event=>{event.preventDefault();void perform(async()=>{await setCredential(selected,credential);setKeyInput('');setSelected(null);});}}>
@@ -232,8 +232,8 @@ export function ProviderPanel(){
     {account.onlineService&&accountLoaded&&accountModels?.vaultConfigured&&accountConnections.length===0&&!addAccount&&<p className={hintText}>{t('modelService.accountEmpty')}</p>}
     {accountConnections.map(connection=><article key={connection.id} className={card}>
      <h4 className="font-medium">{connection.name} · {connection.model}</h4>
-     <p className="mt-2 break-all text-sm text-[#68748d]">{connection.baseUrl}</p>
-     <p className="mt-2 flex flex-wrap items-center gap-3 text-sm">{connection.keyConfigured?t('modelService.keyConfigured'):t('modelService.keyAbsent')}<span className={`${chipBase} border-[#cfd7e6] text-[#546582]`}>{t('modelService.executionService')}</span></p>
+     <p className="mt-2 break-all text-sm text-fg-secondary">{connection.baseUrl}</p>
+     <p className="mt-2 flex flex-wrap items-center gap-3 text-sm">{connection.keyConfigured?t('modelService.keyConfigured'):t('modelService.keyAbsent')}<span className={`${chipBase} border-border-strong text-fg-secondary`}>{t('modelService.executionService')}</span></p>
      <div className="mt-3 flex flex-wrap gap-2">
       <button className={setupButton+feedback} disabled={busy} onClick={()=>void perform(async()=>{setCatalog({kind:'account',connection,models:await listAccountConnectionModels(connection.id)});})}>{t('modelService.modelList')}</button>
       <button className={setupButton+feedback} disabled={busy} onClick={()=>setEditing(connection)}>{t('modelService.updateAccount')}</button>
@@ -245,7 +245,7 @@ export function ProviderPanel(){
    </div>
   </section>
 
-  <details className="rounded-2xl border border-[#e0e5ee] p-5">
+  <details className="rounded-card border border-border-subtle p-5">
    <summary className="cursor-pointer font-medium">{t('modelService.diagnostics')}</summary>
    <div className="mt-4"><ModelExecutionPanel/></div>
   </details>

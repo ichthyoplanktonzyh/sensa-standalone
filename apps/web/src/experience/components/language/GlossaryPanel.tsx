@@ -37,55 +37,55 @@ export function GlossaryPanel({glossary,busy,notice,initialInputLanguageTag,init
     document.addEventListener('keydown',escape,true);
     return ()=>document.removeEventListener('keydown',escape,true);
   },[onClose]);
-  return <div className="fixed inset-0 z-[150] flex items-end justify-end bg-[#202738]/30 sm:items-stretch" onClick={event=>{if(event.target===event.currentTarget)onClose();}}>
+  return <div className="fixed inset-0 z-[150] flex items-end justify-end bg-overlay sm:items-stretch" onClick={event=>{if(event.target===event.currentTarget)onClose();}}>
     <section role="dialog" aria-modal="true" aria-labelledby="glossary-title"
-      className="flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-[#fbfbfa] shadow-2xl sm:h-full sm:max-h-none sm:max-w-md sm:rounded-none">
-      <header className="flex shrink-0 items-center justify-between border-b border-[#e0e5ee] px-6 py-5">
+      className="flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-overlay bg-surface-raised text-fg-primary shadow-overlay sm:h-full sm:max-h-none sm:max-w-md sm:rounded-none">
+      <header className="flex shrink-0 items-center justify-between border-b border-border-subtle px-6 py-5">
         <h2 id="glossary-title" className="text-lg font-medium">{t('glossary.title')}</h2>
-        <button autoFocus type="button" className="grid size-11 place-items-center rounded-lg text-[#68748d] hover:bg-[#edf0f7]" onClick={onClose} aria-label={t('glossary.close')}><X size={20}/></button>
+        <button autoFocus type="button" className="grid size-11 place-items-center rounded-control text-fg-secondary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus" onClick={onClose} aria-label={t('glossary.close')}><X size={20}/></button>
       </header>
       <div className="space-y-7 overflow-y-auto px-6 py-7">
-        <p className="text-xs leading-6 text-[#788398]">{t('glossary.intro')}</p>
+        <p className="text-xs leading-6 text-fg-tertiary">{t('glossary.intro')}</p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-xs text-[#788398]">{t('glossary.inputLanguage')}
-            <select value={inputLanguageTag} disabled={busy} onChange={event=>setInputLanguageTag(event.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-[#dce3ef] bg-white px-4 text-sm text-[#303f76]">
+          <label className="text-xs text-fg-tertiary">{t('glossary.inputLanguage')}
+            <select value={inputLanguageTag} disabled={busy} onChange={event=>setInputLanguageTag(event.target.value)} className="mt-2 min-h-12 w-full rounded-control border border-border-strong bg-surface-panel px-4 text-sm text-action-primary focus-visible:outline-2 focus-visible:outline-focus">
               {sensaLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {sensaLanguageDisplayName(language.tag,locale)}</option>)}
             </select>
           </label>
-          <label className="text-xs text-[#788398]">{t('glossary.outputLanguage')}
-            <select value={outputLanguageTag} disabled={busy} onChange={event=>setOutputLanguageTag(event.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-[#dce3ef] bg-white px-4 text-sm text-[#303f76]">
+          <label className="text-xs text-fg-tertiary">{t('glossary.outputLanguage')}
+            <select value={outputLanguageTag} disabled={busy} onChange={event=>setOutputLanguageTag(event.target.value)} className="mt-2 min-h-12 w-full rounded-control border border-border-strong bg-surface-panel px-4 text-sm text-action-primary focus-visible:outline-2 focus-visible:outline-focus">
               {sensaLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {sensaLanguageDisplayName(language.tag,locale)}</option>)}
             </select>
           </label>
         </div>
         <section>
           {visible.length===0
-            ? <p className="rounded-xl border border-[#e0e5ee] bg-white px-4 py-6 text-sm text-[#788398]">{t('glossary.empty')}</p>
-            : <ul className="rounded-xl border border-[#e0e5ee] bg-white px-4">
-                {visible.map(entry=><li key={entry.term} className="flex min-h-16 flex-wrap items-center gap-3 border-b border-[#e0e5ee] py-3 last:border-b-0">
-                  <span className="min-w-0 flex-1 text-sm"><span className="block truncate font-medium text-[#303f76]">{entry.term}</span><span className="block truncate text-xs text-[#788398]">{entry.rendering}</span></span>
+            ? <p className="rounded-card border border-border-subtle bg-surface-panel px-4 py-6 text-sm text-fg-tertiary">{t('glossary.empty')}</p>
+            : <ul className="rounded-card border border-border-subtle bg-surface-panel px-4">
+                {visible.map(entry=><li key={entry.term} className="flex min-h-16 flex-wrap items-center gap-3 border-b border-border-subtle py-3 last:border-b-0">
+                  <span className="min-w-0 flex-1 text-sm"><span className="block truncate font-medium text-action-primary">{entry.term}</span><span className="block truncate text-xs text-fg-tertiary">{entry.rendering}</span></span>
                   <button type="button" disabled={busy} onClick={()=>onRemove(inputLanguageTag,outputLanguageTag,entry.term)} aria-label={t('glossary.removeLabel',{term:entry.term})}
-                    className="grid size-11 shrink-0 place-items-center rounded-lg text-[#68748d] hover:bg-[#edf0f7] focus-visible:outline-2 focus-visible:outline-[#5268a9] disabled:opacity-40"><Trash2 size={17}/></button>
+                    className="grid size-11 shrink-0 place-items-center rounded-control text-fg-secondary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-40"><Trash2 size={17}/></button>
                 </li>)}
               </ul>}
         </section>
-        <section className="border-t border-[#e0e5ee] pt-6">
+        <section className="border-t border-border-subtle pt-6">
           <h3 className="text-sm font-medium">{t('glossary.add')}</h3>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="text-xs text-[#788398]">{t('glossary.term')}
+            <label className="text-xs text-fg-tertiary">{t('glossary.term')}
               <input value={term} disabled={busy||full} maxLength={sensaReadingGlossaryLimits.term} onChange={event=>setTerm(event.target.value)}
-                className="mt-2 min-h-12 w-full rounded-xl border border-[#dce3ef] bg-white px-4 text-sm text-[#303f76]"/></label>
-            <label className="text-xs text-[#788398]">{t('glossary.rendering')}
+                className="mt-2 min-h-12 w-full rounded-control border border-border-strong bg-surface-panel px-4 text-sm text-action-primary focus-visible:outline-2 focus-visible:outline-focus"/></label>
+            <label className="text-xs text-fg-tertiary">{t('glossary.rendering')}
               <input value={rendering} disabled={busy||full} maxLength={sensaReadingGlossaryLimits.rendering} onChange={event=>setRendering(event.target.value)}
-                className="mt-2 min-h-12 w-full rounded-xl border border-[#dce3ef] bg-white px-4 text-sm text-[#303f76]"/></label>
+                className="mt-2 min-h-12 w-full rounded-control border border-border-strong bg-surface-panel px-4 text-sm text-action-primary focus-visible:outline-2 focus-visible:outline-focus"/></label>
           </div>
           <button type="button" disabled={!addable} onClick={()=>{onAdd(inputLanguageTag,outputLanguageTag,term,rendering);setTerm('');setRendering('');}}
-            className="mt-3 inline-flex min-h-12 items-center gap-2 rounded-xl border border-[#dce3ef] bg-white px-4 text-sm text-[#303f76] hover:bg-[#edf0f7] focus-visible:outline-2 focus-visible:outline-[#5268a9] disabled:opacity-40"><Plus size={16}/>{t('glossary.addAction')}</button>
-          <p className="mt-2 text-xs leading-6 text-[#788398]">{totalFull?t('glossary.totalLimit',{count:sensaReadingGlossaryLimits.totalEntries}):pairFull?t('glossary.limit',{count:sensaReadingGlossaryLimits.entriesPerPair}):t('glossary.hint')}</p>
+            className="mt-3 inline-flex min-h-12 items-center gap-2 rounded-control border border-border-strong bg-surface-panel px-4 text-sm text-action-primary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-40"><Plus size={16}/>{t('glossary.addAction')}</button>
+          <p className="mt-2 text-xs leading-6 text-fg-tertiary">{totalFull?t('glossary.totalLimit',{count:sensaReadingGlossaryLimits.totalEntries}):pairFull?t('glossary.limit',{count:sensaReadingGlossaryLimits.entriesPerPair}):t('glossary.hint')}</p>
         </section>
-        {notice&&<p role="status" className="rounded-lg bg-[#edf1fa] p-4 text-sm text-[#303f76]">{notice}</p>}
+        {notice&&<p role="status" className="rounded-control bg-accent-soft p-4 text-sm text-action-primary">{notice}</p>}
       </div>
-      <footer className="mt-auto shrink-0 border-t border-[#e0e5ee] px-6 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+      <footer className="mt-auto shrink-0 border-t border-border-subtle px-6 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <button type="button" disabled={busy} className={`${runtimePrimary} w-full`} onClick={onClose}>{t('glossary.done')}</button>
       </footer>
     </section>

@@ -128,8 +128,8 @@ export const DictDetailModal = ({
                 style={{
                   width: 24,
                   height: 24,
-                  fill: isStarred ? '#f2701c' : 'none',
-                  stroke: isStarred ? '#f2701c' : '#71717a',
+                  fill: isStarred ? 'var(--sensa-decorative)' : 'none',
+                  stroke: isStarred ? 'var(--sensa-decorative)' : 'var(--sensa-fg-secondary)',
                 }}
               >
                 <use href="#i-star" />

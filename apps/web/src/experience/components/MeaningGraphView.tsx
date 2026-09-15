@@ -73,19 +73,19 @@ export function MeaningGraphView({
       ? onOpenConfirmedSense(node.meaningId, node.focusId)
       : onOpenMeaning(node.meaningId, node.focusId);
   const toolbarButton =
-    "grid size-10 place-items-center rounded-lg text-[#64718d] hover:bg-[#edf0f7] focus-visible:outline-2 focus-visible:outline-[#3c51ad]";
+    "grid size-10 place-items-center rounded-control text-fg-secondary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus";
   return (
     <section
-      className="overflow-hidden rounded-2xl border border-[#e0e4ec] bg-white"
+      className="overflow-hidden rounded-card border border-border-subtle bg-surface-panel"
       aria-label={t("content.graph.title")}
     >
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5e8ef] px-4 py-3">
-        <div className="flex flex-wrap gap-3 text-xs text-[#788194]">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
+        <div className="flex flex-wrap gap-3 text-xs text-fg-tertiary">
           {(["context", "focus", "sense", "expression"] as const).map(
             (kind) => (
               <span key={kind} className="flex items-center gap-1.5">
                 <i
-                  className={`size-2 rounded-full ${kind === "context" ? "bg-[#929cad]" : kind === "focus" ? "bg-[#b3a1c9]" : kind === "sense" ? "bg-[#798cbb]" : "bg-[#405580]"}`}
+                  className={`size-2 rounded-pill ${kind === "context" ? "bg-fg-tertiary" : kind === "focus" ? "bg-decorative" : kind === "sense" ? "bg-progress" : "bg-action-primary"}`}
                 />
                 {t(`content.graph.${kind}`)}
               </span>
@@ -100,7 +100,7 @@ export function MeaningGraphView({
           >
             <Minus size={16} />
           </button>
-          <span className="w-12 text-center text-xs tabular-nums text-[#788194]">
+          <span className="w-12 text-center text-xs tabular-nums text-fg-tertiary">
             {Math.round(camera.zoom * 100)}%
           </span>
           <button
@@ -122,7 +122,7 @@ export function MeaningGraphView({
       <svg
         ref={svg}
         viewBox="0 0 1000 580"
-        className="h-[440px] w-full touch-none bg-[#f8f9fc] select-none sm:h-[540px]"
+        className="h-[440px] w-full touch-none bg-surface-subtle select-none sm:h-[540px]"
         aria-label={t("content.graph.canvas")}
         onPointerDown={(e) => {
           if ((e.target as Element).closest("[data-node]")) return;
@@ -163,7 +163,7 @@ export function MeaningGraphView({
                 key={`${edge.from}:${edge.to}`}
                 d={`M ${a.x + 230} ${a.y} C ${a.x + 265} ${a.y}, ${b.x - 35} ${b.y}, ${b.x} ${b.y}`}
                 fill="none"
-                stroke="#b9c4d9"
+                stroke="var(--sensa-border-strong)"
                 strokeWidth="1.5"
               />
             );
@@ -177,7 +177,7 @@ export function MeaningGraphView({
               tabIndex={0}
               aria-label={`${t(`content.graph.${node.kind}`)}: ${node.label}`}
               aria-pressed={selected?.id === node.id}
-              className="cursor-pointer outline-none [&:focus-visible>rect]:stroke-[#3c51ad] [&:focus-visible>rect]:stroke-[3]"
+              className="cursor-pointer outline-none [&:focus-visible>rect]:stroke-focus [&:focus-visible>rect]:stroke-[3]"
               onClick={() => select(node)}
               onDoubleClick={() => open(node)}
               onKeyDown={(e) => {
@@ -193,18 +193,18 @@ export function MeaningGraphView({
                 rx="10"
                 fill={
                   selected?.id === node.id
-                    ? "#e9eef9"
+                    ? "var(--sensa-surface-selected)"
                     : node.kind === "expression"
-                      ? "#edf1f8"
-                      : "white"
+                      ? "var(--sensa-accent-soft)"
+                      : "var(--sensa-surface-panel)"
                 }
-                stroke={selected?.id === node.id ? "#657fab" : "#d4dce9"}
+                stroke={selected?.id === node.id ? "var(--sensa-focus)" : "var(--sensa-border-strong)"}
                 strokeWidth={selected?.id === node.id ? 2 : 1}
               />
-              <text x="14" y="20" fill="#8290a7" fontSize="10">
+              <text x="14" y="20" fill="var(--sensa-fg-tertiary)" fontSize="10">
                 {t(`content.graph.${node.kind}`)}
               </text>
-              <text x="14" y="44" fill="#354461" fontSize="13">
+              <text x="14" y="44" fill="var(--sensa-fg-primary)" fontSize="13">
                 {node.label.length > 25
                   ? `${node.label.slice(0, 24)}…`
                   : node.label}
@@ -214,14 +214,14 @@ export function MeaningGraphView({
           ))}
         </g>
       </svg>
-      <footer className="flex min-h-20 items-center justify-between gap-4 border-t border-[#e5e8ef] px-5 py-4">
-        <p className="min-w-0 text-sm leading-6 text-[#64718d]">
+      <footer className="flex min-h-20 items-center justify-between gap-4 border-t border-border-subtle px-5 py-4">
+        <p className="min-w-0 text-sm leading-6 text-fg-secondary">
           {selected?.label ?? t("content.graph.hint")}
         </p>
         {selected && (
           <button
             onClick={() => open(selected)}
-            className="flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-sm text-[#344779]"
+            className="flex min-h-11 shrink-0 items-center gap-2 rounded-control px-3 text-sm text-action-primary focus-visible:outline-2 focus-visible:outline-focus"
           >
             {t("content.graph.open")}
             <ArrowUpRight size={16} />

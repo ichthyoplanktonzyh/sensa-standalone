@@ -1,4 +1,4 @@
-export const semanticDesignContractVersion = "sensa-semantic-design-v1" as const;
+export const semanticDesignContractVersion = "sensa-semantic-design-v2" as const;
 
 export interface SensaSkinPlugin {
   readonly id: string;
@@ -11,14 +11,14 @@ export interface SensaSkinPlugin {
 export const skinCatalog = [
   {
     id: "quiet",
-    version: "1.0.0",
+    version: "1.1.0",
     contractVersion: semanticDesignContractVersion,
     nameKey: "appearance.skins.quiet.name",
     descriptionKey: "appearance.skins.quiet.description",
   },
   {
     id: "clear",
-    version: "1.0.0",
+    version: "1.1.0",
     contractVersion: semanticDesignContractVersion,
     nameKey: "appearance.skins.clear.name",
     descriptionKey: "appearance.skins.clear.description",

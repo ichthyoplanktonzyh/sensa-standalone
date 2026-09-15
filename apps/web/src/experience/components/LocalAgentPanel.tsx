@@ -72,7 +72,7 @@ export function LocalAgentPanel() {
     try { await copyText(command); setCopied(true); }
     catch { setCopied(false); setState({ phase: 'failed' }); }
   };
-  const button = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#cbd3e1] bg-white px-4 py-2 text-sm font-medium text-[#405780] hover:bg-[#edf0f7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5268a9] disabled:opacity-50';
+  const button = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-control border border-border-strong bg-surface-panel px-4 py-2 text-sm font-medium text-action-primary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-50';
 
   const status = state.phase === 'checking'
     ? t('account.agentChecking')
@@ -86,16 +86,16 @@ export function LocalAgentPanel() {
             ? t('account.agentDifferentLibrary')
             : t('account.agentSetupRequired');
 
-  return <section className="rounded-2xl border border-[#d8deea] bg-white p-5 sm:p-6">
+  return <section className="rounded-card border border-border-subtle bg-surface-panel p-5 sm:p-6">
     <div className="flex items-center gap-3">
-      {state.phase === 'available' && state.status.state === 'connected' && <CheckCircle2 aria-hidden="true" size={20} className="text-emerald-700"/>}
-      <p role="status" aria-live="polite" className="text-sm text-[#4d5c75]">{status}</p>
+      {state.phase === 'available' && state.status.state === 'connected' && <CheckCircle2 aria-hidden="true" size={20} className="text-feedback-success"/>}
+      <p role="status" aria-live="polite" className="text-sm text-fg-secondary">{status}</p>
     </div>
-    {needsSetup && !environment && <p className="mt-4 text-sm text-[#68748d]">{t('account.agentUnsupported')}</p>}
+    {needsSetup && !environment && <p className="mt-4 text-sm text-fg-secondary">{t('account.agentUnsupported')}</p>}
     <div className="mt-5 flex flex-wrap gap-3">
       {command && <button className={button} onClick={() => void copy()}><Copy aria-hidden="true" size={16}/>{t(copied ? 'account.agentCopied' : 'account.agentCopySetup')}</button>}
       <button className={button} disabled={state.phase === 'checking'} onClick={() => { setCopied(false); void check(); }}><RefreshCw aria-hidden="true" size={16}/>{t('account.agentRetry')}</button>
     </div>
-    {command && copied && <p className="mt-3 text-xs text-[#788398]">{t('account.agentRunCommand')}</p>}
+    {command && copied && <p className="mt-3 text-xs text-fg-tertiary">{t('account.agentRunCommand')}</p>}
   </section>;
 }

@@ -1,6 +1,5 @@
 import {cardText} from '../../i18n/originalCards';
 import { contentAnnotations } from '../../data/library/contentAnnotations';
-import { uiClass } from '../ui/classes';
 import {
   useCallback,
   useEffect,
@@ -206,7 +205,7 @@ export function SensaExampleScreen({
     >
       <header className="sensa-example-topbar">
         <button type="button" onClick={close} aria-label={cardText('returnToLearning')}>
-          <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-chev-l" /></svg>
+          <svg className="size-[1.375rem] shrink-0" aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
         <div>
           <strong>{curWord.w}</strong>
@@ -227,7 +226,7 @@ export function SensaExampleScreen({
           })(); }}
           aria-label={isSaved ? cardText('unsaveThisExample') : cardText('saveThisExample')}
         >
-          <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-star" /></svg>
+          <svg className="size-[1.375rem] shrink-0" aria-hidden="true"><use href="#i-star" /></svg>
         </button>
       </header>
 
@@ -264,7 +263,7 @@ export function SensaExampleScreen({
                 {isPlaying ? (
                   <span aria-hidden="true">Ⅱ</span>
                 ) : (
-                  <svg className={uiClass("icon")} aria-hidden="true"><use href="#i-vol" /></svg>
+                  <svg className="size-[1.375rem] shrink-0" aria-hidden="true"><use href="#i-vol" /></svg>
                 )}
               </button>
               <div className="sensa-example-l2">
