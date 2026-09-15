@@ -2,6 +2,8 @@ import { createElement, forwardRef, type HTMLAttributes, type ReactNode } from "
 import {
   pageLayoutAttributes,
   pageRegionAttributes,
+  type CollectionBrowserHeader,
+  type CollectionBrowserMeasure,
   type PageLayoutMode,
   type WorkspacePageMeasure,
 } from "../appearance/pageLayoutContract";
@@ -42,6 +44,21 @@ export interface SensaWorkspacePageLayoutProps
   readonly measure?: WorkspacePageMeasure;
   readonly mode?: PageLayoutMode;
   readonly regions: WorkspacePageRegions;
+}
+
+export interface CollectionBrowserRegions {
+  readonly header: ReactNode;
+  readonly navigation?: ReactNode;
+  readonly controls: ReactNode;
+  readonly collection: ReactNode;
+}
+
+export interface SensaCollectionBrowserLayoutProps
+  extends Omit<HTMLAttributes<HTMLElement>, "children"> {
+  readonly headerStyle?: CollectionBrowserHeader;
+  readonly measure?: CollectionBrowserMeasure;
+  readonly mode?: PageLayoutMode;
+  readonly regions: CollectionBrowserRegions;
 }
 
 /**
@@ -94,6 +111,36 @@ export function SensaWorkspacePageLayout({
     >
       <header {...pageRegionAttributes("workspace-page", "header")}>{regions.header}</header>
       {createElement(primaryTag, pageRegionAttributes("workspace-page", "primary"), regions.primary)}
+    </section>
+  );
+}
+
+/**
+ * Keeps collection navigation, query controls, and results in one stable DOM
+ * tree while a Skin owns their responsive page frame.
+ */
+export function SensaCollectionBrowserLayout({
+  headerStyle = "flow",
+  measure = "wide",
+  mode = "viewport",
+  regions,
+  className,
+  ...props
+}: SensaCollectionBrowserLayoutProps) {
+  return (
+    <section
+      {...props}
+      {...pageLayoutAttributes("collection-browser", mode)}
+      data-sensa-layout-header={headerStyle}
+      data-sensa-layout-measure={measure}
+      className={classNames(className)}
+    >
+      <header {...pageRegionAttributes("collection-browser", "header")}>{regions.header}</header>
+      {regions.navigation !== undefined && (
+        <nav {...pageRegionAttributes("collection-browser", "navigation")}>{regions.navigation}</nav>
+      )}
+      <div {...pageRegionAttributes("collection-browser", "controls")}>{regions.controls}</div>
+      <main {...pageRegionAttributes("collection-browser", "collection")}>{regions.collection}</main>
     </section>
   );
 }

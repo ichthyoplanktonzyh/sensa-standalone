@@ -8,6 +8,7 @@ import {
 } from '../contentProjection';
 import type { PracticeSenseItem } from '../practiceData';
 import { useContentProjection } from '../useContentProjection';
+import { SensaCollectionBrowserLayout } from '../ui/SensaPageLayouts';
 
 interface ContentLibraryScreenProps {
   active: boolean;
@@ -102,22 +103,22 @@ export const ContentLibraryScreen = ({
   const filteredTotal = filteredSenses.length + filteredExamples.length + filteredNotes.length;
 
   return (
-    <section
-      className={`absolute inset-0 z-[27] h-full w-full overflow-y-auto bg-surface-canvas text-fg-primary transition-[transform,opacity,visibility] duration-300 motion-reduce:transition-none ${active ? 'visible pointer-events-auto translate-x-0' : 'invisible pointer-events-none translate-x-full'}`}
+    <SensaCollectionBrowserLayout
+      className={`z-[27] transition-[transform,opacity,visibility] duration-300 motion-reduce:transition-none ${active ? 'visible pointer-events-auto translate-x-0' : 'invisible pointer-events-none translate-x-full'}`}
       id="s-content-library"
       data-anim="slide"
       aria-hidden={!active}
-    >
-      <header className="sticky top-0 z-10 grid min-h-20 grid-cols-[2.75rem_1fr_2.75rem] items-center gap-3 border-b border-border-subtle bg-surface-canvas/95 px-6 py-4 backdrop-blur">
+      headerStyle="bar"
+      measure="narrow"
+      regions={{
+        header: <div className="grid min-h-20 grid-cols-[2.75rem_1fr_2.75rem] items-center gap-3 py-4">
         <button className="grid size-11 place-items-center rounded-control text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" onClick={onBack} aria-label={uiText('backToMyContent4')}>
           <svg className="size-5 shrink-0" aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
         <h1 className="text-center text-section-title font-medium">{meta.title}</h1>
         <span className="grid min-w-9 place-items-center justify-self-end rounded-pill bg-accent-soft px-2 py-1 text-metadata font-semibold text-fg-secondary">{total}</span>
-      </header>
-
-      <div className="mx-auto w-full max-w-4xl px-6 py-8 pb-12 sm:px-10">
-        <label className="mb-7 flex min-h-12 items-center gap-3 rounded-control border border-border-subtle bg-surface-panel px-3 focus-within:border-border-strong">
+      </div>,
+        controls: <label className="flex min-h-12 items-center gap-3 rounded-control border border-border-subtle bg-surface-panel px-3 focus-within:border-border-strong">
           <svg className="size-5 shrink-0 text-fg-tertiary" aria-hidden="true"><use href="#i-search" /></svg>
           <input
             className="min-w-0 flex-1 bg-transparent text-body-support text-fg-primary outline-none placeholder:text-fg-tertiary"
@@ -127,9 +128,8 @@ export const ContentLibraryScreen = ({
             aria-label={uiText('searchSection', { section: meta.title })}
           />
           {query && <button type="button" className="grid size-9 place-items-center rounded-control text-fg-secondary hover:bg-surface-subtle" onClick={() => setQuery('')} aria-label={uiText('clearSearch')}>×</button>}
-        </label>
-
-        {filteredTotal === 0 ? (
+        </label>,
+        collection: filteredTotal === 0 ? (
           query ? (
             <div className="flex min-h-60 flex-col items-center justify-center p-9 text-center text-fg-secondary">
               <span className="mb-4 grid size-15 place-items-center rounded-card bg-accent-soft text-2xl text-action-primary" aria-hidden="true">⌕</span>
@@ -189,8 +189,8 @@ export const ContentLibraryScreen = ({
               </button>
             ))}
           </div>
-        )}
-      </div>
-    </section>
+        ),
+      }}
+    />
   );
 };

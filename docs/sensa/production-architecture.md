@@ -155,6 +155,11 @@ renderer、learner input、Runtime phase 或事件处理器。
 measure 的最大宽度、responsive gutter、上下 inset 与 header rhythm。该 hint 不携带像素值，也不允许
 Product Screen 重新接管页面 frame，因此切换 Skin 时原 screen、表单与内部导航状态保持挂载。
 
+`collection-browser` family 固定 `header / navigation? / controls / collection` 的逻辑序列，供我的语义世界、
+收藏内容清单和 Learning Target library 共用。Product Screen 决定分类、搜索/筛选状态、result identity、
+空态/错误态和行操作；Skin adapter 只解析 `narrow / wide` measure、region rhythm、responsive gutter 与
+flow/bar header treatment。布局切换不得触发重新取数、改变筛选、选择或 collection ordering。
+
 每个已收录 Skin 由 build-time manifest 声明 Semantic/Component/Page Layout Contract 兼容版本，以及受审核的
 color mode、text size、density、motion 与 icon-set capabilities；静态 catalog 不接受 URL、包名或可执行
 第三方代码。开发态 `/?skin-lab=1` 提供不读取账号或 learner data 的 Surface Gallery，覆盖全部 component

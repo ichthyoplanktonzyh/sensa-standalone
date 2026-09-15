@@ -155,6 +155,19 @@ html[data-sensa-skin="quiet"] {
   --sensa-layout-workspace-header-gap-narrow: 2rem;
   --sensa-layout-workspace-header-gap-standard: clamp(2.25rem, 5vw, 3.5rem);
   --sensa-layout-workspace-header-gap-wide: 2.75rem;
+  --sensa-layout-collection-canvas: var(--sensa-surface-canvas);
+  --sensa-layout-collection-content-narrow: 52rem;
+  --sensa-layout-collection-content-wide: 74rem;
+  --sensa-layout-collection-inline-inset-narrow: clamp(1.5rem, 5vw, 3rem);
+  --sensa-layout-collection-inline-inset-wide: clamp(1.5rem, 5vw, 4rem);
+  --sensa-layout-collection-block-start: clamp(2.25rem, 5vw, 4rem);
+  --sensa-layout-collection-block-end: 4rem;
+  --sensa-layout-collection-region-gap: 1.75rem;
+  --sensa-layout-collection-header-background: color-mix(in srgb, var(--sensa-surface-canvas) 94%, transparent);
+  --sensa-layout-collection-header-border: var(--sensa-border-subtle);
+  --sensa-layout-collection-header-min-size: 5.25rem;
+  --sensa-layout-collection-header-shadow: none;
+  --sensa-layout-collection-bar-inline-inset: clamp(1.5rem, 4vw, 2rem);
 }
 
 html[data-sensa-skin="quiet"][data-sensa-color-mode="dark"] {
@@ -375,4 +388,14 @@ html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [dat
 :root [data-sensa-page-layout="workspace-page"],
 html[data-sensa-skin="quiet"] [data-sensa-page-layout="workspace-page"] {
   scrollbar-color: var(--sensa-border-strong) transparent;
+}
+
+:root [data-sensa-page-layout="collection-browser"],
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="collection-browser"] {
+  scrollbar-color: var(--sensa-border-strong) transparent;
+}
+
+:root [data-sensa-page-layout="collection-browser"][data-sensa-layout-header="bar"] > [data-sensa-page-region="header"],
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="collection-browser"][data-sensa-layout-header="bar"] > [data-sensa-page-region="header"] {
+  backdrop-filter: blur(0.875rem);
 }

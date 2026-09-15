@@ -72,6 +72,8 @@ The `application-shell` family exposes one logical `brand`, `navigation`, `utili
 
 The `workspace-page` family provides the ordinary scrollable frame used by Today, Learning overview, and Account & Settings. Product code supplies `header` followed by `primary`; a reviewed `narrow`, `standard`, or `wide` measure hint describes content needs without prescribing pixels. Each Skin adapter resolves that hint into its own page measure, responsive gutters, block insets, and header rhythm. Screen state, headings, controls, status messages, and internal domain composition remain in the product-owned regions.
 
+The `collection-browser` family fixes the logical sequence `header`, optional `navigation`, `controls`, and `collection`. It is used by My Semantic World, saved-content collections, and the learning-target library. Product code owns category selection, search/filter state, result identity, empty/error states, and row actions; Skin adapters resolve narrow or wide measures, region rhythm, responsive gutters, and either an in-flow or contained-page header treatment. Switching presentation cannot refetch, filter, select, or reorder collection data.
+
 ## Elevation & Depth
 
 Depth is primarily communicated through surface tone, borders, and clear containment. Shadows are supporting cues for overlays and genuinely raised controls, not a default decoration on every card. A skin may alter shadow softness and contrast while preserving the same stacking, modality, focus, and dismissal behavior.

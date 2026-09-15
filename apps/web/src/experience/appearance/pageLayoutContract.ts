@@ -20,10 +20,17 @@ export const pageLayoutFamilyContract = {
     optionalRegions: [],
     logicalOrder: ["header", "primary"],
   },
+  "collection-browser": {
+    requiredRegions: ["header", "controls", "collection"],
+    optionalRegions: ["navigation"],
+    logicalOrder: ["header", "navigation", "controls", "collection"],
+  },
 } as const;
 
 export const pageLayoutModeCatalog = ["viewport", "specimen"] as const;
 export const workspacePageMeasureCatalog = ["narrow", "standard", "wide"] as const;
+export const collectionBrowserMeasureCatalog = ["narrow", "wide"] as const;
+export const collectionBrowserHeaderCatalog = ["flow", "bar"] as const;
 
 export const pageLayoutTokenCatalog = [
   "shell-canvas",
@@ -65,11 +72,26 @@ export const pageLayoutTokenCatalog = [
   "workspace-header-gap-narrow",
   "workspace-header-gap-standard",
   "workspace-header-gap-wide",
+  "collection-canvas",
+  "collection-content-narrow",
+  "collection-content-wide",
+  "collection-inline-inset-narrow",
+  "collection-inline-inset-wide",
+  "collection-block-start",
+  "collection-block-end",
+  "collection-region-gap",
+  "collection-header-background",
+  "collection-header-border",
+  "collection-header-min-size",
+  "collection-header-shadow",
+  "collection-bar-inline-inset",
 ] as const;
 
 export type PageLayoutFamily = keyof typeof pageLayoutFamilyContract;
 export type PageLayoutMode = (typeof pageLayoutModeCatalog)[number];
 export type WorkspacePageMeasure = (typeof workspacePageMeasureCatalog)[number];
+export type CollectionBrowserMeasure = (typeof collectionBrowserMeasureCatalog)[number];
+export type CollectionBrowserHeader = (typeof collectionBrowserHeaderCatalog)[number];
 export type PageLayoutToken = (typeof pageLayoutTokenCatalog)[number];
 
 type FamilyContract<Family extends PageLayoutFamily> = (typeof pageLayoutFamilyContract)[Family];

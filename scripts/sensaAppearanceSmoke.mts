@@ -378,6 +378,7 @@ for (const [family, contract] of Object.entries(pageLayoutFamilyContract)) {
     "application-shell": "<SensaApplicationShellLayout",
     "learning-runtime": 'family="learning-runtime"',
     "workspace-page": "<SensaWorkspacePageLayout",
+    "collection-browser": "<SensaCollectionBrowserLayout",
   } as Record<string, string>)[family];
   assert(specimenCall, `appearance smoke does not know the ${family} layout renderer`);
   assert(gallery.includes(specimenCall), `Skin Lab does not cover page layout ${family}`);
@@ -393,6 +394,15 @@ for (const path of [
   const workspace = await readFile(new URL(path, experienceRoot), "utf8");
   assert(workspace.includes("<SensaWorkspacePageLayout"), `${path} does not consume the workspace page seam`);
   assert(!workspace.includes('className="mx-auto max-w-['), `${path} still owns the workspace page measure`);
+}
+for (const path of [
+  "components/ContentScreen.tsx",
+  "components/ContentLibraryScreen.tsx",
+  "components/learning/LearningTargetLibraryScreen.tsx",
+] as const) {
+  const collection = await readFile(new URL(path, experienceRoot), "utf8");
+  assert(collection.includes("<SensaCollectionBrowserLayout"), `${path} does not consume the collection browser seam`);
+  assert(!collection.includes('className="mx-auto max-w-['), `${path} still owns the collection browser measure`);
 }
 for (const path of [
   "components/LearnScreen.tsx",

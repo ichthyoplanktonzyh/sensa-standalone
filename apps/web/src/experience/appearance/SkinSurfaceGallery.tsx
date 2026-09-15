@@ -13,7 +13,7 @@ import {
   SensaOverlayFrame,
   SensaSurface,
 } from "../ui/SensaComponents";
-import { SensaApplicationShellLayout, SensaPageLayout, SensaWorkspacePageLayout } from "../ui/SensaPageLayouts";
+import { SensaApplicationShellLayout, SensaCollectionBrowserLayout, SensaPageLayout, SensaWorkspacePageLayout } from "../ui/SensaPageLayouts";
 
 const sectionTitle = "mb-4 text-section-title font-semibold";
 const specimenGrid = "grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3";
@@ -301,6 +301,29 @@ export function SkinSurfaceGallery() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <SensaSurface variant="raised"><strong>Primary workspace</strong><p className="mt-2 text-body-support text-fg-secondary">Product state and content remain mounted.</p></SensaSurface>
                   <SensaSurface variant="card"><strong>Supporting content</strong><p className="mt-2 text-body-support text-fg-secondary">Skin controls the shared page frame only.</p></SensaSurface>
+                </div>
+              ),
+            }}
+          />
+        </SensaSurface>
+
+        <SensaSurface as="section" variant="card">
+          <h2 className={sectionTitle}>Collection browser layout contract</h2>
+          <p className="mb-4 max-w-3xl text-body-support text-fg-secondary">
+            Navigation, query controls, and results keep their product semantics while each Skin resolves the browser measure and responsive region rhythm.
+          </p>
+          <SensaCollectionBrowserLayout
+            mode="specimen"
+            measure="narrow"
+            data-sensa-contract-specimen="full"
+            aria-label="Collection browser layout specimen"
+            regions={{
+              header: <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-page-title font-semibold">My meanings</h3><SensaAction variant="primary">Add</SensaAction></div>,
+              navigation: <div className="flex gap-5 border-b border-border-subtle"><strong className="py-3 text-action-primary">Personal</strong><span className="py-3 text-fg-secondary">Learning</span></div>,
+              controls: <SensaField label="Search this collection" inputProps={{ placeholder: "Expression or meaning" }} />,
+              collection: (
+                <div className="divide-y divide-border-subtle border-y border-border-subtle">
+                  {["take your time", "make room", "hold that thought"].map((label) => <div className="py-5" key={label}><strong>{label}</strong><p className="mt-1 text-body-support text-fg-secondary">Static collection fixture</p></div>)}
                 </div>
               ),
             }}

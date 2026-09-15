@@ -26,6 +26,7 @@ import {
 } from "../personalMeaningJourney";
 import { PersonalMeaningComposer } from "./PersonalMeaningComposer";
 import { IntakeInboxDrawer } from "./IntakeInboxDrawer";
+import { SensaCollectionBrowserLayout } from "../ui/SensaPageLayouts";
 
 export interface ContentScreenSource {
   items: JourneyWorldItemView[];
@@ -219,15 +220,16 @@ function ContentScreenView({
             </div>
   );
   return (
-    <section
-      id={screenId}
-      className={`screen absolute inset-0 z-10 overflow-y-auto bg-surface-canvas font-product text-fg-primary ${active ? "active" : "invisible pointer-events-none"}`}
-    >
-      <main className="mx-auto max-w-[1280px] px-6 py-8 sm:px-10 lg:px-14 lg:py-14">
-        {notice}<ContentHeader inboxCount={inbox.length+drafts.length} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/>
-        <nav
+    <>
+      <SensaCollectionBrowserLayout
+        id={screenId}
+        measure="wide"
+        className={`screen z-10 ${active ? "active" : "invisible pointer-events-none"}`}
+        regions={{
+          header: <>{notice}<ContentHeader inboxCount={inbox.length+drafts.length} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/></>,
+          navigation: <div
           aria-label={t("content.categories")}
-          className="mb-7 flex gap-6 overflow-x-auto border-b border-border-subtle"
+          className="flex gap-6 overflow-x-auto border-b border-border-subtle"
         >
           {(["personal", "learning", "markers"] as const).map((id) => (
             <button
@@ -239,7 +241,8 @@ function ContentScreenView({
               {t(`content.${id}`)}
             </button>
           ))}
-        </nav>
+        </div>,
+          controls: <>
         {category === "personal" && next && (
           <button
             onClick={() => open(next.personalMeaningId)}
@@ -253,7 +256,7 @@ function ContentScreenView({
           </button>
         )}
         {category !== "markers" && (
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <label className="flex min-h-11 w-full items-center gap-3 rounded-control border border-border-subtle bg-surface-panel px-3 focus-within:outline-2 focus-within:outline-focus sm:max-w-sm">
               <Search size={17} className="shrink-0 text-fg-tertiary" />
               <input
@@ -295,7 +298,7 @@ function ContentScreenView({
         )}
         {category === "personal" && (
           <div
-            className="mb-6 flex flex-wrap gap-2"
+            className="mt-6 flex flex-wrap gap-2"
             role="group"
             aria-label={t("content.filter")}
           >
@@ -311,6 +314,8 @@ function ContentScreenView({
             ))}
           </div>
         )}
+          </>,
+          collection: <>
         {category === "personal" &&
           (!status.ok ? (
             <div role="alert" className="rounded-card border border-feedback-danger p-6 text-feedback-danger">
@@ -402,7 +407,9 @@ function ContentScreenView({
             ))}
           </div>
         )}
-      </main>
+          </>,
+        }}
+      />
       {adding && (
         <div
           className="fixed inset-0 z-[100] flex justify-end bg-overlay"
@@ -494,6 +501,6 @@ function ContentScreenView({
         }}
         toast={toast}
       />
-    </section>
+    </>
   );
 }
