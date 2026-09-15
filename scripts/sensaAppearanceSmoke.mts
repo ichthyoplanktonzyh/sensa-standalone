@@ -5,16 +5,27 @@ import {
   defaultAppearancePreference,
   parseAppearancePreference,
   resolveAppearance,
+  semanticColorRoleCatalog,
   semanticDesignContractVersion,
+  semanticFoundationRoleCatalog,
   skinCatalog,
   textSizeCatalog,
 } from "../apps/web/src/experience/appearance/contract.ts";
+import {
+  componentFamilyContract,
+  componentSkinContractVersion,
+  componentTokenCatalog,
+} from "../apps/web/src/experience/appearance/componentContract.ts";
 
 assert.deepEqual(skinCatalog.map(({ id }) => id), ["quiet", "clear"]);
 assert.equal(new Set(skinCatalog.map(({ id }) => id)).size, skinCatalog.length);
 for (const skin of skinCatalog) {
-  assert.equal(skin.contractVersion, semanticDesignContractVersion);
+  assert.equal(skin.semanticContractVersion, semanticDesignContractVersion);
+  assert.equal(skin.componentContractVersion, componentSkinContractVersion);
   assert.match(skin.version, /^\d+\.\d+\.\d+$/u);
+  assert.deepEqual(skin.capabilities.colorModes, ["light", "dark"]);
+  assert.deepEqual(skin.capabilities.textSizes, ["standard", "large"]);
+  assert.equal(skin.capabilities.iconSet, "lucide");
 }
 assert.deepEqual(colorModeCatalog, ["system", "light", "dark"]);
 assert.deepEqual(textSizeCatalog, ["standard", "large"]);
@@ -36,46 +47,19 @@ assert.equal(
 );
 
 const theme = await readFile(new URL("../apps/web/src/theme.css", import.meta.url), "utf8");
-const colorRoles = [
-  "surface-canvas",
-  "surface-subtle",
-  "surface-panel",
-  "surface-raised",
-  "surface-selected",
-  "surface-media",
-  "fg-primary",
-  "fg-secondary",
-  "fg-tertiary",
-  "fg-inverse",
-  "fg-on-media",
-  "border-subtle",
-  "border-strong",
-  "action-primary",
-  "action-primary-hover",
-  "action-on-primary",
-  "focus",
-  "selection",
-  "accent-soft",
-  "feedback-success",
-  "feedback-warning",
-  "feedback-danger",
-  "overlay",
-  "progress",
-  "decorative",
-] as const;
-const selectors = [
-  ":root",
-  'html[data-sensa-skin="clear"]',
-  'html[data-sensa-color-mode="dark"]',
-  'html[data-sensa-skin="clear"][data-sensa-color-mode="dark"]',
-] as const;
+const skinStyles = new Map(
+  await Promise.all(skinCatalog.map(async (skin) => [
+    skin.id,
+    await readFile(new URL(`../apps/web/src/experience/appearance/skins/${skin.id}.css`, import.meta.url), "utf8"),
+  ] as const)),
+);
 
-function block(selector: string): string {
-  const start = theme.indexOf(`${selector} {`);
+function block(source: string, selector: string): string {
+  const start = source.indexOf(`${selector} {`);
   assert.notEqual(start, -1, `missing palette block ${selector}`);
-  const end = theme.indexOf("}", start);
+  const end = source.indexOf("}", start);
   assert.notEqual(end, -1, `unclosed palette block ${selector}`);
-  return theme.slice(start, end);
+  return source.slice(start, end);
 }
 
 function colorValue(source: string, role: string): string {
@@ -96,33 +80,65 @@ function contrast(foreground: string, background: string): number {
   return (values[0] + 0.05) / (values[1] + 0.05);
 }
 
-for (const selector of selectors) {
-  const palette = block(selector);
-  for (const role of colorRoles) {
-    assert(palette.includes(`--sensa-${role}:`), `${selector} does not implement ${role}`);
+for (const skin of skinCatalog) {
+  const style = skinStyles.get(skin.id)!;
+  const lightSelector = `html[data-sensa-skin="${skin.id}"]`;
+  const darkSelector = `html[data-sensa-skin="${skin.id}"][data-sensa-color-mode="dark"]`;
+  const lightPalette = block(style, lightSelector);
+  const darkPalette = block(style, darkSelector);
+  assert(theme.includes(`./experience/appearance/skins/${skin.id}.css`), `${skin.id} adapter is not imported`);
+  for (const role of semanticFoundationRoleCatalog) {
+    assert(lightPalette.includes(`--sensa-${role}:`), `${lightSelector} does not implement ${role}`);
   }
-  assert(
-    contrast(colorValue(palette, "fg-primary"), colorValue(palette, "surface-canvas")) >= 4.5,
-    `${selector} primary text contrast is below WCAG AA`,
-  );
-  assert(
-    contrast(colorValue(palette, "fg-secondary"), colorValue(palette, "surface-canvas")) >= 4.5,
-    `${selector} secondary text contrast is below WCAG AA`,
-  );
-  assert(
-    contrast(colorValue(palette, "fg-on-media"), colorValue(palette, "surface-media")) >= 4.5,
-    `${selector} media text contrast is below WCAG AA`,
-  );
-  for (const action of ["action-primary", "action-primary-hover"]) {
+  for (const role of semanticColorRoleCatalog) {
+    assert(darkPalette.includes(`--sensa-${role}:`), `${darkSelector} does not implement ${role}`);
+  }
+  for (const token of componentTokenCatalog) {
+    assert(style.includes(`--sensa-component-${token}:`), `${skin.id} does not implement component token ${token}`);
+  }
+  assert(style.includes(`data-sensa-skin-preview="${skin.id}"`), `${skin.id} does not implement its catalog preview`);
+  for (const [mode, palette] of [["light", lightPalette], ["dark", darkPalette]] as const) {
     assert(
-      contrast(colorValue(palette, "action-on-primary"), colorValue(palette, action)) >= 4.5,
-      `${selector} ${action} contrast is below WCAG AA`,
+      contrast(colorValue(palette, "fg-primary"), colorValue(palette, "surface-canvas")) >= 4.5,
+      `${skin.id} ${mode} primary text contrast is below WCAG AA`,
     );
+    assert(
+      contrast(colorValue(palette, "fg-secondary"), colorValue(palette, "surface-canvas")) >= 4.5,
+      `${skin.id} ${mode} secondary text contrast is below WCAG AA`,
+    );
+    assert(
+      contrast(colorValue(palette, "fg-on-media"), colorValue(palette, "surface-media")) >= 4.5,
+      `${skin.id} ${mode} media text contrast is below WCAG AA`,
+    );
+    for (const action of ["action-primary", "action-primary-hover"]) {
+      assert(
+        contrast(colorValue(palette, "action-on-primary"), colorValue(palette, action)) >= 4.5,
+        `${skin.id} ${mode} ${action} contrast is below WCAG AA`,
+      );
+    }
   }
 }
 
-for (const role of colorRoles) {
+for (const role of semanticColorRoleCatalog) {
   assert(theme.includes(`--color-${role}: var(--sensa-${role});`), `Tailwind does not expose ${role}`);
+}
+
+const componentStyles = await readFile(
+  new URL("../apps/web/src/experience/appearance/componentStyles.css", import.meta.url),
+  "utf8",
+);
+const declaredSemanticRoles = new Set<string>(semanticFoundationRoleCatalog);
+assert(theme.includes("./experience/appearance/componentStyles.css"), "component contract styles are not imported");
+const declaredComponentTokens = new Set<string>(componentTokenCatalog);
+for (const [, token] of componentStyles.matchAll(/var\(--sensa-component-([a-z0-9-]+)\)/gu)) {
+  assert(declaredComponentTokens.has(token), `component styles reference undeclared token ${token}`);
+}
+for (const token of componentTokenCatalog) {
+  assert(componentStyles.includes(`var(--sensa-component-${token})`), `component token ${token} has no consumer`);
+}
+for (const [family, variants] of Object.entries(componentFamilyContract)) {
+  assert(componentStyles.includes(`data-sensa-component="${family}"`), `component family ${family} has no shared style`);
+  assert(variants.length > 0, `component family ${family} has no variants`);
 }
 
 const migratedSurfaces = [
@@ -222,7 +238,7 @@ for (const path of migratedStyleSources) {
   );
   assert(!/var\(--content-/iu.test(source), `${path} recreates a private content palette`);
   for (const [, role] of source.matchAll(/var\(--sensa-([a-z0-9-]+)\)/giu)) {
-    assert(theme.includes(`--sensa-${role}:`), `${path} references unknown semantic role ${role}`);
+    assert(declaredSemanticRoles.has(role), `${path} references unknown semantic role ${role}`);
   }
 }
 
@@ -250,8 +266,11 @@ async function presentationSources(directory: URL, prefix = ""): Promise<string[
 const experienceRoot = new URL("../apps/web/src/experience/", import.meta.url);
 for (const path of await presentationSources(experienceRoot)) {
   const source = await readFile(new URL(path, experienceRoot), "utf8");
-  assert(!/(?<!&)#[0-9a-f]{3,8}\b/iu.test(source), `${path} bypasses the semantic color contract`);
-  assert(!/\b(?:rgb|hsl|oklch)a?\(/iu.test(source), `${path} contains a color-function literal`);
+  const isSkinAdapter = path.startsWith("appearance/skins/") && path.endsWith(".css");
+  if (!isSkinAdapter) {
+    assert(!/(?<!&)#[0-9a-f]{3,8}\b/iu.test(source), `${path} bypasses the semantic color contract`);
+    assert(!/\b(?:rgb|hsl|oklch)a?\(/iu.test(source), `${path} contains a color-function literal`);
+  }
   assert(
     !/\b(?:bg-white|text-white|bg-black|text-black|(?:bg|text|border|outline|ring|divide|accent)-(?:red|amber|slate|gray|zinc|neutral|stone|orange|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-[0-9]+)\b/iu.test(source),
     `${path} uses a palette-specific utility`,
@@ -285,7 +304,28 @@ for (const [componentPath, stylesheetPath, ownedSelector] of [
 
 const entry = await readFile(new URL("../apps/web/src/main.tsx", import.meta.url), "utf8");
 assert(entry.indexOf("initializeAppearance();") < entry.indexOf("createRoot("));
+assert(entry.includes("import.meta.env.DEV"));
+assert(entry.includes('get("skin-lab") === "1"'));
+assert(entry.includes('import("./experience/appearance/SkinSurfaceGallery")'));
+
+const gallery = await readFile(
+  new URL("../apps/web/src/experience/appearance/SkinSurfaceGallery.tsx", import.meta.url),
+  "utf8",
+);
+const componentPrimitives = await readFile(
+  new URL("../apps/web/src/experience/ui/SensaComponents.tsx", import.meta.url),
+  "utf8",
+);
+for (const variants of Object.values(componentFamilyContract)) {
+  for (const variant of variants) {
+    assert(
+      `${gallery}\n${componentPrimitives}`.includes(`"${variant}"`),
+      `Skin Lab does not cover variant ${variant}`,
+    );
+  }
+}
+assert(gallery.includes("no learning event or outcome is created"));
 
 console.log(
-  "PASS: curated appearance contract, safe fallback, complete light/dark adapters, AA core contrast, early bootstrap, retired recipe runtime, and semantic-only Web presentation sources.",
+  "PASS: curated semantic and component contracts, complete light/dark adapters, AA core contrast, dev-only Skin Lab coverage, early bootstrap, retired recipe runtime, and semantic-only Web presentation sources.",
 );

@@ -10,7 +10,16 @@ import "./theme.css";
 import './experience/components/examples/learningExample.css';
 
 initializeAppearance();
-createRoot(document.getElementById("root")!).render(<StrictMode><RouterProvider router={router} /></StrictMode>);
+const root = createRoot(document.getElementById("root")!);
+const skinLabRequested = import.meta.env.DEV && new URLSearchParams(window.location.search).get("skin-lab") === "1";
+
+if (skinLabRequested) {
+  void import("./experience/appearance/SkinSurfaceGallery").then(({ SkinSurfaceGallery }) => {
+    root.render(<StrictMode><SkinSurfaceGallery /></StrictMode>);
+  });
+} else {
+  root.render(<StrictMode><RouterProvider router={router} /></StrictMode>);
+}
 if(import.meta.env.PROD&&'serviceWorker' in navigator){
  const status=(value:string)=>{document.documentElement.dataset.offlineShell=value;window.dispatchEvent(new Event('sensa-offline-shell'));};
  status('preparing');

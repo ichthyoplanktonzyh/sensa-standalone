@@ -21,8 +21,6 @@ omitted:
     reason: The executable semantic contract owns spacing roles; a numeric product-wide scale has not yet been approved.
   - section: rounded
     reason: Shape values vary by curated skin and are exposed through semantic component roles.
-  - section: components
-    reason: Component anatomy and behavior are fixed in prose while skin-specific recipes remain executable code.
 ---
 
 # Sensa Web Design System
@@ -78,6 +76,10 @@ Shape is semantic: controls, fields, cards, overlays, and pill-like selections u
 
 Components have stable anatomy, behavior, state, and accessibility semantics. Skins provide visual recipes only.
 
+The executable `sensa-component-skin-v1` contract exposes eight component families: `action`, `field`, `surface`, `selection`, `overlay`, `feedback`, `navigation`, and `learning`. A product component declares only its family, approved variant, semantic slots, and state. Shared component CSS maps that stable anatomy to `--sensa-component-*` tokens; Quiet and Clear independently implement every token. Product code must never ask which Skin is active in order to select markup, copy, data, or behavior.
+
+The first reusable React boundary includes `SensaAction`, `SensaChoice`, `SensaField`, `SensaSurface`, `SensaFeedback`, `SensaNavigation`, `SensaOverlayFrame`, and `SensaLearningSurface`. Their data attributes are an internal styling protocol, not a public third-party extension API. Domain components may compose these primitives or expose the same contract directly when their anatomy is richer.
+
 - **Button and IconButton:** preserve label, icon meaning, disabled/loading behavior, focus, hit target, and primary/secondary hierarchy.
 - **Input, Textarea, Search, and Choice controls:** preserve labels, help and error relationships, keyboard behavior, entered values, and validation state.
 - **Navigation, Tabs, Dialog, Sheet, Toast, and Popover:** preserve destination, selection, focus management, dismissal, and announcement behavior.
@@ -86,7 +88,11 @@ Components have stable anatomy, behavior, state, and accessibility semantics. Sk
 
 A component must expose meaningful semantic slots and states. New component styling belongs in the shared primitive or domain component; page-local color and radius literals are not a supported extension mechanism.
 
+Each curated adapter is a versioned build-time manifest. It declares compatibility with both the semantic and component contracts plus reviewed capabilities for light/dark modes, text sizes, density, motion character, and icon set. The static registry is the only shipped catalog; there is no URL, package name, or executable-code field that could become an unreviewed runtime loader.
+
 The former `uiClass` recipe runtime has been retired. Stable layout and state selectors now live in their owning component or a scoped semantic stylesheet, and the appearance smoke rejects any return to the registry pattern. New product surfaces must not add recipe registries, private page palettes, or behavioral branches keyed to a skin.
+
+In development, `/?skin-lab=1` opens the data-free Skin Lab instead of the product router. It renders every contracted family and variant with explicit fixture copy. Browser validation runs the Lab across every shipped Skin, light/dark mode, standard/large text, and mobile/desktop widths; it also checks token resolution, minimum control targets, keyboard focus, overflow, and runtime errors. The Lab is gated by `import.meta.env.DEV` and is not a production route.
 
 ## Do's and Don'ts
 

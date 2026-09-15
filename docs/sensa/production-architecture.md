@@ -125,6 +125,18 @@ learner fact。系统必须以文字、结构或图标等非颜色信号继续�
 每个已收录 Skin 必须为全部支持的 product surfaces 与解析后的 light/dark color scheme 提供完整呈现。
 Skin adapter 是 Product Shell 内部的可替换呈现模块，不成为领域聚合或第三方扩展市场。
 
+Semantic Design Contract 之下还有版本化的 Component Skin Contract。组件只声明稳定的 `family / variant /
+slot / state`，其中首版覆盖 action、field、surface、selection、overlay、feedback、navigation 与 learning；
+共享组件实现固定 anatomy、DOM/ARIA、keyboard、loading/disabled/invalid 等行为，再消费
+`--sensa-component-*` token。Quiet 与 Clear adapter 各自完整提供这些 token，因而可以独立改变组件形状、
+密度、层级与动效性格，但 Product Component 不读取 Skin ID 来选择 renderer、文案或业务分支。
+
+每个已收录 Skin 由 build-time manifest 声明 Semantic/Component Contract 兼容版本，以及受审核的
+color mode、text size、density、motion 与 icon-set capabilities；静态 catalog 不接受 URL、包名或可执行
+第三方代码。开发态 `/?skin-lab=1` 提供不读取账号或 learner data 的 Surface Gallery，覆盖全部 component
+family/variant，并通过 Skin × color mode × text size × responsive width 矩阵验证 token 完整性、触控尺寸、
+keyboard focus、overflow 与 runtime error。该入口不成为 production route。
+
 需要在所有 color mode 中保持暗色的媒体舞台，必须使用成对的 `surface-media` / `fg-on-media`
 角色；它们只服务于 provider video、媒体不可用占位和直接覆盖在舞台上的控制，不得替代普通 panel
 或 action inverse。每个 Skin 必须同时实现该角色对并满足正文对比度要求。

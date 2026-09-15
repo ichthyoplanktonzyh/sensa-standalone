@@ -1,34 +1,16 @@
-export const semanticDesignContractVersion = "sensa-semantic-design-v2" as const;
+export {
+  semanticDesignContractVersion,
+  semanticColorRoleCatalog,
+  semanticFoundationRoleCatalog,
+  type SensaSkinPlugin,
+} from "./skinContract";
+export { skinCatalog, skinById, type SkinId } from "./skins/registry";
 
-export interface SensaSkinPlugin {
-  readonly id: string;
-  readonly version: string;
-  readonly contractVersion: typeof semanticDesignContractVersion;
-  readonly nameKey: string;
-  readonly descriptionKey: string;
-}
-
-export const skinCatalog = [
-  {
-    id: "quiet",
-    version: "1.1.0",
-    contractVersion: semanticDesignContractVersion,
-    nameKey: "appearance.skins.quiet.name",
-    descriptionKey: "appearance.skins.quiet.description",
-  },
-  {
-    id: "clear",
-    version: "1.1.0",
-    contractVersion: semanticDesignContractVersion,
-    nameKey: "appearance.skins.clear.name",
-    descriptionKey: "appearance.skins.clear.description",
-  },
-] as const satisfies readonly SensaSkinPlugin[];
+import { skinCatalog, type SkinId } from "./skins/registry";
 
 export const colorModeCatalog = ["system", "light", "dark"] as const;
 export const textSizeCatalog = ["standard", "large"] as const;
 
-export type SkinId = (typeof skinCatalog)[number]["id"];
 export type ColorModePreference = (typeof colorModeCatalog)[number];
 export type TextSizePreference = (typeof textSizeCatalog)[number];
 export type ResolvedColorMode = Exclude<ColorModePreference, "system">;

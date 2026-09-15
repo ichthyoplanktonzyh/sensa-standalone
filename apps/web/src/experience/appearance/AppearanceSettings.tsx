@@ -9,18 +9,17 @@ import {
   type TextSizePreference,
 } from "./contract";
 import { updateAppearancePreference, useAppearancePreference } from "./store";
-
-const choice =
-  "relative min-h-12 rounded-control border border-border-subtle bg-surface-panel px-4 py-3 text-left text-sm transition-colors hover:border-border-strong hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
-const selectedChoice = "border-border-strong bg-surface-selected text-action-primary";
+import { SensaChoice, SensaSurface } from "../ui/SensaComponents";
 
 export function AppearanceSettings() {
   const { t } = useTranslation();
   const preference = useAppearancePreference();
   return (
-    <section
+    <SensaSurface
+      as="section"
+      variant="raised"
       aria-labelledby="appearance-heading"
-      className="rounded-card border border-border-subtle bg-surface-panel p-5 shadow-raised sm:p-6"
+      className="sm:p-6"
     >
       <div className="flex items-start gap-3">
         <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-control bg-surface-subtle text-action-primary">
@@ -38,13 +37,13 @@ export function AppearanceSettings() {
           {skinCatalog.map((skin) => {
             const selected = preference.skin === skin.id;
             return (
-              <button
+              <SensaChoice
                 key={skin.id}
-                type="button"
                 role="radio"
                 aria-checked={selected}
+                selected={selected}
                 onClick={() => updateAppearancePreference({ skin: skin.id as SkinId })}
-                className={`${choice} min-h-24 ${selected ? selectedChoice : ""}`}
+                className="min-h-24 w-full text-left"
               >
                 <span className="mb-3 flex items-center gap-2" aria-hidden="true">
                   <span className="sensa-skin-swatch" data-sensa-skin-preview={skin.id}>
@@ -54,7 +53,7 @@ export function AppearanceSettings() {
                 </span>
                 <strong className="block font-medium">{t(skin.nameKey)}</strong>
                 <span className="mt-1 block text-xs leading-5 text-fg-secondary">{t(skin.descriptionKey)}</span>
-              </button>
+              </SensaChoice>
             );
           })}
         </div>
@@ -65,16 +64,16 @@ export function AppearanceSettings() {
           <legend className="text-sm font-medium">{t("appearance.colorMode")}</legend>
           <div className="mt-3 grid grid-cols-3 gap-2" role="radiogroup">
             {colorModeCatalog.map((mode) => (
-              <button
+              <SensaChoice
                 key={mode}
-                type="button"
                 role="radio"
                 aria-checked={preference.colorMode === mode}
+                selected={preference.colorMode === mode}
                 onClick={() => updateAppearancePreference({ colorMode: mode as ColorModePreference })}
-                className={`${choice} text-center ${preference.colorMode === mode ? selectedChoice : ""}`}
+                className="w-full justify-center text-center"
               >
                 {t(`appearance.modes.${mode}`)}
-              </button>
+              </SensaChoice>
             ))}
           </div>
         </fieldset>
@@ -82,21 +81,21 @@ export function AppearanceSettings() {
           <legend className="text-sm font-medium">{t("appearance.textSize")}</legend>
           <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup">
             {textSizeCatalog.map((size) => (
-              <button
+              <SensaChoice
                 key={size}
-                type="button"
                 role="radio"
                 aria-checked={preference.textSize === size}
+                selected={preference.textSize === size}
                 onClick={() => updateAppearancePreference({ textSize: size as TextSizePreference })}
-                className={`${choice} text-center ${preference.textSize === size ? selectedChoice : ""}`}
+                className="w-full justify-center text-center"
               >
                 {t(`appearance.textSizes.${size}`)}
-              </button>
+              </SensaChoice>
             ))}
           </div>
         </fieldset>
       </div>
       <p className="mt-5 text-xs leading-5 text-fg-tertiary">{t("appearance.immediate")}</p>
-    </section>
+    </SensaSurface>
   );
 }
