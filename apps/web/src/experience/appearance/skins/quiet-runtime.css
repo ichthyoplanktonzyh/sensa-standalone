@@ -1,0 +1,69 @@
+/* A reading desk: context first, then expression, then a deliberate rating.
+   Disclosure, assessment evidence and runtime transitions remain owned by React. */
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] {
+  --sensa-layout-runtime-primary-max-width: 52rem;
+}
+
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="header"] {
+  flex-wrap: wrap;
+  row-gap: 0.25rem;
+  padding-block: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="tools"] {
+  flex-wrap: wrap;
+  max-width: 100%;
+  padding-block: 0.5rem;
+}
+
+html[data-sensa-skin="quiet"] :is(.sensa-experience-recall, .sensa-expression-reveal, [data-assessment-task-key]) {
+  overflow-wrap: anywhere;
+}
+
+html[data-sensa-skin="quiet"] .sensa-experience-recall > div:first-of-type {
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  box-shadow: none;
+  border-inline: 0;
+  border-radius: 0;
+}
+
+html[data-sensa-skin="quiet"] .sensa-expression-reveal > blockquote {
+  border: 0;
+  border-inline-start: 3px solid var(--sensa-border-strong);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+html[data-sensa-skin="quiet"] .sensa-expression-reveal audio {
+  min-height: 2.75rem;
+}
+
+html[data-sensa-skin="quiet"] .sensa-runtime-rating {
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--sensa-border-subtle);
+}
+
+html[data-sensa-skin="quiet"] .sensa-runtime-rating button {
+  box-shadow: none;
+  min-width: 0;
+}
+
+html[data-sensa-skin="quiet"] .sensa-runtime-rating button span span {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 40rem) {
+  html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto var(--sensa-layout-runtime-progress-size) minmax(0, 1fr) auto auto auto;
+    grid-template-areas: "header" "tools" "progress" "primary" "supporting" "feedback" "controls";
+  }
+
+  html[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="tools"] {
+    justify-content: flex-start;
+    padding-inline: var(--sensa-layout-runtime-primary-inline-inset);
+  }
+}

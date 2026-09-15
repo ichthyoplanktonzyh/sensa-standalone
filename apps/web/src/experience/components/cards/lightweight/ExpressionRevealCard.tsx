@@ -34,7 +34,7 @@ export function ExpressionRevealCard({
     sceneBridge,
   } = presentation.slots;
   return (
-    <section
+    <section className="sensa-expression-reveal"
       aria-live="polite"
       aria-labelledby="lightweight-expression-reveal-title"
     >

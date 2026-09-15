@@ -10,7 +10,7 @@ export function RuntimeRating({
   const { t } = useTranslation();
   return (
     <div
-      className="mt-9 grid grid-cols-1 gap-3 sm:grid-cols-3"
+      className="sensa-runtime-rating mt-9 grid grid-cols-1 gap-3 sm:grid-cols-3"
       role="group"
       aria-label={t("runtime.rating")}
     >

@@ -19,7 +19,7 @@ export function ExperienceRecallCard({
   const { t } = useTranslation();
   const { experienceSketch, auxiliaryCues } = presentation.slots;
   return (
-    <section aria-labelledby="lightweight-experience-recall-title">
+    <section className="sensa-experience-recall" aria-labelledby="lightweight-experience-recall-title">
       <h1
         id="lightweight-experience-recall-title"
         className="mb-8 text-2xl font-medium leading-10 tracking-tight sm:text-3xl"
