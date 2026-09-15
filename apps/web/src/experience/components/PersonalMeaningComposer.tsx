@@ -269,7 +269,7 @@ export const PersonalMeaningComposer = ({
     <SensaOverlayLayout
       variant="sheet"
       measure="standard"
-      className="z-[110]"
+      className="sensa-context-composer z-[110]"
       labelledBy="pmc-title"
       onDismiss={handleClose}
       dismissOnBackdrop
@@ -304,7 +304,7 @@ export const PersonalMeaningComposer = ({
                     }
                     placeholder={t("composer.placeholder")}
                     rows={index === 0 ? 8 : 3}
-                    className="w-full resize-y bg-transparent pr-5 text-base leading-8 outline-none disabled:opacity-50"
+                    className="w-full resize-y bg-transparent pr-10 text-base leading-8 outline-none focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-50"
                     disabled={busy}
                   />
                 ) : (
@@ -316,7 +316,7 @@ export const PersonalMeaningComposer = ({
                 )}
                 {blocks.length > 1 && (
                   <button
-                    className="absolute top-2 right-2 grid size-9 place-items-center rounded-control text-fg-tertiary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus"
+                    className="absolute top-2 right-2 grid size-11 place-items-center rounded-control text-fg-tertiary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus"
                     disabled={busy}
                     onClick={() => removeBlock(block.localId)}
                     aria-label={t("composer.remove")}

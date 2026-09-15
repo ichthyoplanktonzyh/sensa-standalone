@@ -1,0 +1,46 @@
+/* Context remains readable alongside the conversation and explicit acceptance. */
+html[data-sensa-skin="quiet"] .pmw-screen { --sensa-layout-detail-panel-width: 56rem; }
+html[data-sensa-skin="quiet"] .pmw-screen .content-nav { background: var(--sensa-surface-canvas); }
+html[data-sensa-skin="quiet"] .pmw-screen .content-nav h1 { font-weight: 500; }
+html[data-sensa-skin="quiet"] .pmw-transcript { gap: 1.5rem; padding: 2rem; scroll-padding-block: 1.5rem; }
+html[data-sensa-skin="quiet"] .pmw-message { max-width: min(92%, 42rem); }
+html[data-sensa-skin="quiet"] .pmw-message > div { box-shadow: none; padding: 1rem 1.25rem; }
+html[data-sensa-skin="quiet"] .pmw-message p { font-size: 1rem; line-height: 1.85; overflow-wrap: anywhere; }
+html[data-sensa-skin="quiet"] .pmw-message.is-assistant > div { background: transparent; border-color: transparent; padding-top: 0.25rem; }
+html[data-sensa-skin="quiet"] .pmw-avatar { background: var(--sensa-accent-soft); color: var(--sensa-action-primary); }
+html[data-sensa-skin="quiet"] .pmw-material { max-height: min(30dvh, 20rem); padding: 1.25rem 2rem; line-height: 1.8; }
+html[data-sensa-skin="quiet"] .pmw-material-familiar { border-left-width: 1px; }
+html[data-sensa-skin="quiet"] .pmw-dock-chip { min-height: 3.5rem; }
+html[data-sensa-skin="quiet"] .pmw-dock-chip small { font-size: 0.75rem; letter-spacing: normal; font-weight: 500; }
+html[data-sensa-skin="quiet"] .pmw-dock-chip b { font-size: 0.875rem; }
+html[data-sensa-skin="quiet"] :is(.pmw-card, .pmw-review-card, .pmw-done-facts article) { padding: 1.25rem; box-shadow: none; }
+html[data-sensa-skin="quiet"] :is(.pmw-card-lead, .pmw-surface) { font-size: 1.375rem; line-height: 1.6; overflow-wrap: anywhere; }
+html[data-sensa-skin="quiet"] :is(.pmw-expr-tag, .pmw-expr-why, .pmw-review-cand-copy small) { font-size: 0.8125rem; line-height: 1.7; }
+html[data-sensa-skin="quiet"] :is(.pmw-dock-actions, .pmw-review-actions, .pmw-preview-controls) { flex-wrap: wrap; }
+html[data-sensa-skin="quiet"] .pmw-shell > form { flex-shrink: 0; padding: 1rem; margin-bottom: max(1rem, env(safe-area-inset-bottom)); }
+html[data-sensa-skin="quiet"] .pmw-shell > form:focus-within { outline: 2px solid var(--sensa-focus); outline-offset: 2px; }
+html[data-sensa-skin="quiet"] .pmw-shell > form textarea { font-size: 1rem; line-height: 1.75; }
+html[data-sensa-skin="quiet"] .pmw-shell > form .relative > button { min-width: 2.75rem; min-height: 2.75rem; }
+html[data-sensa-skin="quiet"] .pmw-inline-error { flex-wrap: wrap; line-height: 1.7; }
+html[data-sensa-skin="quiet"] :is(.sensa-context-composer, .sensa-intake-inbox, .sensa-note-editor) { --sensa-overlay-layout-panel-standard: 42rem; }
+html[data-sensa-skin="quiet"] .sensa-context-composer textarea { line-height: 1.9; }
+html[data-sensa-skin="quiet"] .sensa-context-composer summary { min-height: 2.75rem; color: var(--sensa-fg-secondary); }
+html[data-sensa-skin="quiet"] .sensa-context-composer fieldset label { min-height: 2.75rem; }
+html[data-sensa-skin="quiet"] .sensa-intake-inbox [data-sensa-overlay-region="primary"] article { padding: 1.5rem 0; border-inline: 0; border-top: 0; border-radius: 0; background: transparent; }
+html[data-sensa-skin="quiet"] .sensa-intake-inbox article header { flex-wrap: wrap; }
+html[data-sensa-skin="quiet"] .sensa-intake-inbox article p { overflow-wrap: anywhere; }
+html[data-sensa-skin="quiet"] .sensa-note-editor main { min-height: min(45dvh, 24rem); border: 0; border-radius: 0; padding-inline: 0; }
+html[data-sensa-skin="quiet"] .sensa-note-editor textarea { min-height: 12rem; line-height: 1.9; }
+html[data-sensa-skin="quiet"] .sensa-note-editor [data-sensa-overlay-region="primary"] > div > div { flex-wrap: wrap; align-self: stretch; }
+html[data-sensa-skin="quiet"] .sensa-scene-editor [data-sensa-slot="panel"] { max-width: var(--sensa-overlay-layout-panel-wide); }
+html[data-sensa-skin="quiet"] #s-expression-binding form { display: grid; gap: 1.5rem; }
+html[data-sensa-skin="quiet"] #s-expression-binding form > section { padding: 1.5rem; box-shadow: none; }
+html[data-sensa-skin="quiet"] #s-expression-binding label { line-height: 1.7; }
+@media (max-width: 40rem) {
+  html[data-sensa-skin="quiet"] .pmw-transcript { padding: 1.25rem; }
+  html[data-sensa-skin="quiet"] .pmw-message { max-width: 100%; gap: 0.375rem; }
+  html[data-sensa-skin="quiet"] .pmw-message > div { padding: 0.875rem; }
+  html[data-sensa-skin="quiet"] .pmw-material { padding-inline: 1.25rem; }
+  html[data-sensa-skin="quiet"] .sensa-intake-inbox article footer > button { flex: 1 1 10rem; }
+  html[data-sensa-skin="quiet"] .sensa-context-composer [data-sensa-overlay-region="controls"] > div { flex-wrap: wrap; }
+}

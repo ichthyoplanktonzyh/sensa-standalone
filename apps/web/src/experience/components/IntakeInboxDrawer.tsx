@@ -130,7 +130,7 @@ export const IntakeInboxDrawer = ({
   if (!open) return null;
 
   return (
-    <SensaOverlayLayout variant="sheet" measure="standard" className="z-[120]" labelledBy="intake-drawer-title" onDismiss={onClose} dismissOnBackdrop regions={{
+    <SensaOverlayLayout variant="sheet" measure="standard" className="sensa-intake-inbox z-[120]" labelledBy="intake-drawer-title" onDismiss={onClose} dismissOnBackdrop regions={{
       header: <div className="flex min-h-12 items-center justify-between gap-4">
           <div>
             <small className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{uiText('inbox')}</small>

@@ -1,4 +1,5 @@
 @import "./quiet-world.css";
+@import "./quiet-intake.css";
 
 :root,
 html[data-sensa-skin="quiet"] {

@@ -92,7 +92,7 @@ export const NoteEditorModal = ({
   };
 
   return (
-    <SensaOverlayLayout variant="sheet" measure="standard" className="z-[120]" label={uiText('noteFor', { word: wordStr })} regions={{
+    <SensaOverlayLayout variant="sheet" measure="standard" className="sensa-note-editor z-[120]" label={uiText('noteFor', { word: wordStr })} regions={{
       header: <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center text-center [&>button]:grid [&>button]:size-11 [&>button]:place-items-center [&>button]:rounded-control [&>button]:bg-accent-soft [&>button]:text-fg-secondary [&>button]:transition-colors [&>button:hover]:bg-surface-selected [&>button:focus-visible]:outline-2 [&>button:focus-visible]:outline-offset-3 [&>button:focus-visible]:outline-focus motion-reduce:[&>button]:transition-none">
           <button type="button" onClick={onClose} aria-label={uiText('close')}>
             <svg className="size-5 shrink-0" aria-hidden="true"><use href="#i-close" /></svg>

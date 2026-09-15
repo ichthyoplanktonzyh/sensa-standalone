@@ -158,7 +158,7 @@ export function SceneEditorModal({
   };
 
   return (
-    <SensaOverlayLayout variant="dialog" measure="wide" className={`z-[120] ${active ? '' : 'hidden'}`} aria-hidden={!active} label={cardText('sceneFor',{word})} regions={{
+    <SensaOverlayLayout variant="dialog" measure="wide" className={`sensa-scene-editor z-[120] ${active ? '' : 'hidden'}`} aria-hidden={!active} label={cardText('sceneFor',{word})} regions={{
       header: <div className="grid min-h-12 grid-cols-[2.75rem_1fr_2.75rem] items-center gap-3">
           <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={onClose} aria-label={cardText('sceneClose')}>
             <svg className={iconClass} aria-hidden="true"><use href="#i-close" /></svg>
@@ -191,9 +191,9 @@ export function SceneEditorModal({
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               {media.map((item) => (
                 <div className="relative overflow-hidden rounded-card border border-border-subtle bg-surface-panel p-3" key={item.mediaId}>
-                  <img className="aspect-video w-full rounded-control object-cover" src={item.dataUrl} alt={item.altText || cardText('sceneImage')} />
+                  <img className="aspect-video w-full rounded-control object-contain" src={item.dataUrl} alt={item.altText || cardText('sceneImage')} />
                   <button
-                    className="absolute right-5 top-5 grid size-10 place-items-center rounded-control border-0 bg-surface-raised text-fg-secondary shadow-raised focus-visible:outline-2 focus-visible:outline-focus"
+                    className="absolute right-5 top-5 grid size-11 place-items-center rounded-control border-0 bg-surface-raised text-fg-secondary shadow-raised focus-visible:outline-2 focus-visible:outline-focus"
                     type="button"
                     onClick={() => setMedia((current) => current.filter((candidate) => candidate.mediaId !== item.mediaId))}
                     aria-label={cardText('sceneRemove',{name:item.fileName})}
