@@ -1,4 +1,5 @@
 import { Check, CircleAlert, CircleCheck, Info, Moon, Sun } from "lucide-react";
+import type { CSSProperties } from "react";
 import { componentSlot } from "./componentContract";
 import { colorModeCatalog, skinCatalog, textSizeCatalog, type ColorModePreference, type TextSizePreference } from "./contract";
 import { updateAppearancePreference, useAppearancePreference } from "./store";
@@ -12,10 +13,10 @@ import {
   SensaOverlayFrame,
   SensaSurface,
 } from "../ui/SensaComponents";
-import { SensaPageLayout } from "../ui/SensaPageLayouts";
+import { SensaApplicationShellLayout, SensaPageLayout } from "../ui/SensaPageLayouts";
 
 const sectionTitle = "mb-4 text-section-title font-semibold";
-const specimenGrid = "grid gap-4 md:grid-cols-2 xl:grid-cols-3";
+const specimenGrid = "grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3";
 
 function Specimen({ title, children }: { readonly title: string; readonly children: React.ReactNode }) {
   return (
@@ -30,10 +31,10 @@ export function SkinSurfaceGallery() {
   const preference = useAppearancePreference();
   return (
     <main data-sensa-skin-lab className="min-h-screen bg-surface-canvas px-4 py-6 text-fg-primary sm:px-8 lg:px-12">
-      <div className="mx-auto grid max-w-7xl gap-6">
-        <header className="flex flex-col gap-4 border-b border-border-subtle pb-6 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-metadata font-semibold uppercase tracking-[0.12em] text-fg-tertiary">Development-only surface</p>
+      <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)] gap-6">
+        <header className="flex min-w-0 flex-col gap-4 border-b border-border-subtle pb-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <p className="break-words text-metadata font-semibold uppercase tracking-[0.12em] text-fg-tertiary">Development-only surface</p>
             <h1 className="mt-2 text-page-title font-semibold">Sensa Skin Lab</h1>
             <p className="mt-2 max-w-2xl text-body-support text-fg-secondary">
               Component contract preview. Examples below are presentation fixtures only and do not represent learner state, evidence, progress, or sync results.
@@ -151,13 +152,86 @@ export function SkinSurfaceGallery() {
         </SensaSurface>
 
         <SensaSurface as="section" variant="card">
-          <h2 className={sectionTitle}>Page layout contract</h2>
+          <h2 className={sectionTitle}>Application shell layout contract</h2>
+          <p className="mb-4 max-w-3xl text-body-support text-fg-secondary">
+            Product Shell owns one brand, navigation, utilities, and viewport tree. Quiet presents a wide-screen top bar; Clear presents a sidebar; both adapt to touch-sized mobile chrome.
+          </p>
+          <SensaApplicationShellLayout
+            mode="specimen"
+            data-sensa-contract-specimen="full"
+            aria-label="Application shell layout specimen"
+            regions={{
+              chrome: {
+                brand: (
+                  <button type="button" data-sensa-shell-brand-action aria-label="Fixture home">
+                    <span data-sensa-shell-brand-mark aria-hidden="true"><i/><i/></span>
+                    <span data-sensa-shell-brand-word>sensa</span>
+                  </button>
+                ),
+                navigation: (
+                  <nav
+                    data-sensa-shell-navigation
+                    aria-label="Fixture primary navigation"
+                    style={{ '--sensa-shell-navigation-count': 3 } as CSSProperties}
+                  >
+                    {['Home', 'Meanings', 'Learning'].map((label, index) => (
+                      <button type="button" data-sensa-shell-navigation-item data-selected={index === 0 ? '' : undefined} key={label}>
+                        <span data-sensa-shell-item-icon aria-hidden>{index + 1}</span>
+                        <span data-sensa-shell-item-label>{label}</span>
+                      </button>
+                    ))}
+                  </nav>
+                ),
+                utilities: (
+                  <div data-sensa-shell-utilities>
+                    <button type="button" data-sensa-shell-utility-action>
+                      <span aria-hidden>⚙</span>
+                      <span data-sensa-shell-utility-label>Settings</span>
+                    </button>
+                  </div>
+                ),
+              },
+              viewport: (
+                <div className="absolute inset-0 overflow-auto p-5 sm:p-8">
+                  <SensaSurface variant="raised" className="mx-auto max-w-2xl">
+                    <span className="text-metadata uppercase tracking-wide text-fg-tertiary">Viewport region</span>
+                    <h3 className="mt-2 text-section-title font-semibold">The route and screen stack remain Product Shell state.</h3>
+                    <p className="mt-2 text-body-support text-fg-secondary">Only the surrounding spatial composition changes with the active Skin.</p>
+                    <SensaField
+                      className="mt-5"
+                      label="Shell state-preservation probe"
+                      help="Browser validation keeps this DOM node connected while switching Skin."
+                      inputProps={{ id: "skin-shell-state-probe", defaultValue: "Persistent shell input" }}
+                    />
+                  </SensaSurface>
+                </div>
+              ),
+            }}
+          />
+          <SensaApplicationShellLayout
+            mode="specimen"
+            data-sensa-shell-focus-probe
+            style={{ minHeight: "10rem" }}
+            aria-label="Focused application shell specimen"
+            regions={{
+              viewport: (
+                <div className="absolute inset-0 grid place-items-center p-5 text-center text-body-support">
+                  Focused viewport remains visible without application chrome.
+                </div>
+              ),
+            }}
+          />
+        </SensaSurface>
+
+        <SensaSurface as="section" variant="card">
+          <h2 className={sectionTitle}>Learning runtime layout contract</h2>
           <p className="mb-4 max-w-3xl text-body-support text-fg-secondary">
             One semantic region tree, arranged by the active Skin. Change the Skin above to compare Quiet’s centered reading flow with Clear’s wide-screen sidebar topology.
           </p>
           <SensaPageLayout
             family="learning-runtime"
             mode="specimen"
+            data-sensa-contract-specimen="full"
             aria-label="Learning runtime layout specimen"
             regions={{
               header: (

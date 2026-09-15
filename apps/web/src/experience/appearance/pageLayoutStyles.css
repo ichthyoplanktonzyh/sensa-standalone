@@ -1,3 +1,172 @@
+[data-sensa-page-layout="application-shell"] {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  background: var(--sensa-layout-shell-canvas);
+  color: var(--sensa-fg-primary);
+  font-family: var(--sensa-font-product);
+  isolation: isolate;
+}
+
+[data-sensa-page-layout="application-shell"][data-sensa-layout-mode="viewport"] {
+  position: fixed;
+  inset: 0;
+}
+
+[data-sensa-page-layout="application-shell"][data-sensa-layout-mode="specimen"] {
+  position: relative;
+  min-height: 34rem;
+  border: 1px solid var(--sensa-border-strong);
+  border-radius: var(--sensa-radius-overlay);
+  box-shadow: var(--sensa-shadow-raised);
+}
+
+[data-sensa-page-layout="application-shell"] > [data-sensa-page-region] {
+  min-width: 0;
+  min-height: 0;
+}
+
+[data-sensa-page-layout="application-shell"] > [data-sensa-page-region="brand"],
+[data-sensa-page-layout="application-shell"] > [data-sensa-page-region="navigation"],
+[data-sensa-page-layout="application-shell"] > [data-sensa-page-region="utilities"] {
+  z-index: 2;
+  border-color: var(--sensa-layout-shell-chrome-border);
+  background: var(--sensa-layout-shell-chrome-background);
+}
+
+[data-sensa-page-layout="application-shell"] > [data-sensa-page-region="viewport"] {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  background: var(--sensa-layout-shell-canvas);
+  isolation: isolate;
+}
+
+[data-sensa-page-layout="application-shell"]:not(:has(> [data-sensa-page-region="navigation"])) > [data-sensa-page-region="viewport"] {
+  grid-area: 1 / 1;
+}
+
+[data-sensa-shell-brand-action],
+[data-sensa-shell-navigation-item],
+[data-sensa-shell-utility-action] {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: var(--sensa-radius-control);
+  background: transparent;
+  color: var(--sensa-fg-secondary);
+  cursor: pointer;
+}
+
+[data-sensa-shell-brand-action]:focus-visible,
+[data-sensa-shell-navigation-item]:focus-visible,
+[data-sensa-shell-utility-action]:focus-visible {
+  outline: 2px solid var(--sensa-focus);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  [data-sensa-shell-navigation-item]:hover,
+  [data-sensa-shell-utility-action]:hover {
+    background: var(--sensa-surface-selected);
+    color: var(--sensa-fg-primary);
+  }
+}
+
+[data-sensa-shell-navigation-item][data-selected],
+[data-sensa-shell-utility-action][data-selected] {
+  background: var(--sensa-surface-selected);
+  color: var(--sensa-action-primary);
+  font-weight: 600;
+}
+
+[data-sensa-shell-brand-action] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--sensa-fg-primary);
+  text-align: left;
+}
+
+[data-sensa-shell-brand-mark] {
+  display: flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+[data-sensa-shell-brand-mark] > i {
+  display: block;
+  width: 0.375rem;
+  border-radius: 999px;
+  transform: rotate(-25deg);
+}
+
+[data-sensa-shell-brand-mark] > i:first-child {
+  height: 1.25rem;
+  background: var(--sensa-action-primary);
+}
+
+[data-sensa-shell-brand-mark] > i:last-child {
+  height: 1.75rem;
+  background: var(--sensa-progress);
+}
+
+[data-sensa-shell-brand-word] {
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.06em;
+}
+
+[data-sensa-shell-navigation-item] {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.75rem;
+  padding-inline: 0.875rem;
+  text-align: left;
+  transition: color var(--sensa-component-motion-duration) var(--sensa-component-motion-easing),
+    background-color var(--sensa-component-motion-duration) var(--sensa-component-motion-easing);
+}
+
+[data-sensa-shell-item-icon] {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+[data-sensa-shell-item-label],
+[data-sensa-shell-utility-label] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-sensa-shell-utility-label] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+[data-sensa-shell-utilities],
+[data-sensa-shell-utility-action] {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+[data-sensa-shell-utility-action] {
+  padding-inline: 0.75rem;
+}
+
 [data-sensa-page-layout="learning-runtime"] {
   display: grid;
   min-width: 0;

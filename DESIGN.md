@@ -68,6 +68,8 @@ An overlay-like presentation remains the same page only when route, browser hist
 
 The executable `sensa-page-layout-v1` contract starts with the `learning-runtime` family. Product Shell always provides `header`, `tools`, `progress`, and `primary` in that logical DOM order, then may provide `supporting`, `feedback`, and `controls` when product state calls for them. `SensaPageLayout` renders this one semantic tree. Quiet arranges it as a centered reading flow; Clear uses a wide-screen sidebar and supporting column while returning to a linear topology at narrow widths. Both adapters implement the same layout tokens and neither can supply executable page code.
 
+The `application-shell` family exposes one logical `brand`, `navigation`, `utilities`, and `viewport` tree. The viewport is invariant; Product Shell omits the three chrome regions during a focused learning flow without remounting the viewport or screen stack. On wide screens Quiet arranges the chrome as a horizontal top bar while Clear uses a vertical sidebar. At narrow widths both adapt the same navigation DOM to a touch-sized bottom bar, retain the top brand and utilities, and honor safe-area insets. Route selection, available sections, focus restoration, and screen visibility remain WebShell behavior rather than Skin behavior.
+
 ## Elevation & Depth
 
 Depth is primarily communicated through surface tone, borders, and clear containment. Shadows are supporting cues for overlays and genuinely raised controls, not a default decoration on every card. A skin may alter shadow softness and contrast while preserving the same stacking, modality, focus, and dismissal behavior.

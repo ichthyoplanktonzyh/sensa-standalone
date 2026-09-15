@@ -478,7 +478,7 @@ export default function App() {
           {quantityTarget&&quantityTargetRecord&&(
             <LearningPreferencesPanel fixedPolicy defaultPolicy={localTargetPolicy(quantityTargetRecord)} dailyNewCount={quantityChoice} onPolicyChange={()=>{}} onDailyNewCountChange={setQuantityChoice} busy={packageLearning.busy} status={packageLearning.notice&&<p role="status">{packageLearning.notice}</p>} onClose={()=>setQuantityTarget(null)} closeLabel={localFlowText('confirmAndStart')} onConfirm={()=>void packageLearning.confirmQuantity(quantityChoice).then(async ok=>{if(!ok)return;const target=quantityTarget;setQuantityTarget(null);if(await packageLearning.start(target,quantityChoice))setViewMode('lightweight');})}/>
           )}
-          <PackageRuntime host={packageRuntimeHost} active={viewMode==='lightweight'} c={packageLearning} onExit={returnHome} onFinish={()=>void packageLearning.finish().then(async ok=>{if(!ok)return;if(packageLearning.nextTarget){if(await packageLearning.start(packageLearning.nextTarget.id,dailyNewCount))return;}returnHome();})}/>
+          <PackageRuntime host={packageRuntimeHost} active={viewMode==='lightweight'} c={packageLearning} onExit={returnHome} onFinish={()=>void (async()=>{const next=packageLearning.nextTarget;if(next){await packageLearning.continueWith(next.id,dailyNewCount);return;}if(await packageLearning.finish())returnHome();})()}/>
 
 
           {/* 8. Lexical Reference；原始词义面板保留为 baseline */}

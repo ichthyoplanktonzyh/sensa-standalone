@@ -153,8 +153,8 @@ export async function enrollPackage(operationId:string,key:string,languageContex
 export const readLearning=()=>readLibrary(async tx=>({targets:await tx.all<LocalLearningTarget>('learningTargets'),runs:await tx.all<LocalLearningRun>('learningRuns'),events:await tx.all<LearningEvent>('learningEvents'),active:await tx.get<string>('meta','learning-active'),studyPlans:await readStudyPlans(tx)}));
 export async function confirmLearningQuantity(operationId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number){return command({id:operationId,kind:'learning.quantity',input:{languageContext,dailyLimit}},async tx=>{await learningOwner(tx);const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100)throw new Error('localFlow.quantityRange');const plans=await readStudyPlans(tx),previous=plans[context.languageRouteId];plans[context.languageRouteId]={languageRouteId:context.languageRouteId,routeRevision:context.languageRouteRevision,revision:(previous?.revision??0)+1,dailyNewSenseLimit:dailyLimit,updatedAt:new Date().toISOString()};tx.put('settings',STUDY_PLANS_KEY,plans);return true;});}
 const day=(date:Date)=>`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-export async function startLearning(operationId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at=new Date().toISOString()){return command({id:operationId,kind:'learning.start',input:{targetId,languageContext,dailyLimit,at}},async tx=>{
- await learningOwner(tx);const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100||!Number.isFinite(Date.parse(at)))throw new Error('localFlow.confirmQuantity');
+async function startLearningInTransaction(tx:LibraryTransaction,operationId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at:string):Promise<LocalLearningRun>{
+ const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100||!Number.isFinite(Date.parse(at)))throw new Error('localFlow.confirmQuantity');
  const plan=(await readStudyPlans(tx))[context.languageRouteId];if(plan?.dailyNewSenseLimit!==dailyLimit)throw new Error('localFlow.confirmNewQuantity');
  const active=await tx.get<string>('meta','learning-active');if(active){const run=await tx.get<LocalLearningRun>('learningRuns',active);if(run)return run;}
  const t=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!t)throw new Error('localFlow.enrollFirst');if(hasDeclaredMasteryOverride(t))throw new Error('localFlow.stepChanged');
@@ -224,7 +224,8 @@ export async function startLearning(operationId:string,targetId:string,languageC
  await bindCurrentStepMaterial(tx,run,at);
  for(const participant of participants)if(!participant.startedAt){participant.startedAt=at;participant.introducedLanguageRouteId=context.languageRouteId;tx.put('learningTargets',participant.id,participant);}
  tx.put('learningRuns',run.id,run);tx.put('meta','learning-active',run.id);return run;
-});}
+}
+export async function startLearning(operationId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at=new Date().toISOString()){return command({id:operationId,kind:'learning.start',input:{targetId,languageContext,dailyLimit,at}},async tx=>{await learningOwner(tx);return startLearningInTransaction(tx,operationId,targetId,languageContext,dailyLimit,at);});}
 export async function actLearning(operationId:string,runId:string,revision:number,action:LocalLearningAction,at=new Date().toISOString()){return command({id:operationId,kind:'learning.act',input:{runId,revision,action,at}},async tx=>{
  await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);
  if(!run||run.revision!==revision||run.completedAt||await tx.get('meta','learning-active')!==runId)throw new Error('localFlow.stepChanged');
@@ -248,6 +249,18 @@ export async function actLearning(operationId:string,runId:string,revision:numbe
  tx.put('learningEvents',operationId,{id:operationId,runId,targetId:t.id,kind:action.kind,at,detail:{stepId,materializationId:presentedMaterial.snapshot.learningMaterializationId,personalLearningScene,action,formalEvaluation:executed.facts,transition:applied.record}} satisfies LearningEvent);return nextRun;
 });}
 export async function finishLearning(operationId:string,runId:string){const result=await command({id:operationId,kind:'learning.finish',input:{runId}},async tx=>{await learningOwner(tx);const run=await tx.get<LocalLearningRun>('learningRuns',runId);if(!run?.completedAt)throw new Error('localFlow.finishFirst');if(await tx.get('meta','learning-active')===runId)tx.delete('meta','learning-active');return true;});requestCloudCheckpoint();return result;}
+/** Complete one Run and start its successor as one published library state.
+ * Observers must never see an empty active-Run gap while the learner is moving
+ * directly to the next target. */
+export async function continueLearning(operationId:string,runId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at=new Date().toISOString()){
+ const result=await command({id:operationId,kind:'learning.continue',input:{runId,targetId,languageContext,dailyLimit,at}},async tx=>{
+  await learningOwner(tx);
+  const completed=await tx.get<LocalLearningRun>('learningRuns',runId);if(!completed?.completedAt)throw new Error('localFlow.finishFirst');
+  if(await tx.get('meta','learning-active')===runId)tx.delete('meta','learning-active');
+  return startLearningInTransaction(tx,operationId,targetId,languageContext,dailyLimit,at);
+ });
+ requestCloudCheckpoint();return result;
+}
 
 /** The same runtime target is committed only after independent material validation. */
 export async function commitPersonalMaterial(tx:LibraryTransaction,owner:LibraryIdentity,meaning:import('./teacher').LocalMeaning,languageContext:SensaFormalPinnedLanguageContext,content:LightweightInitialLearningMaterialization['content'],attemptId:string,grantId:string|null,replace=false){

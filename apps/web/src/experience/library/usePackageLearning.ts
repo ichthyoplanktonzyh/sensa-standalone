@@ -7,7 +7,7 @@ import {learningPackageCatalogSchema,type LearningPackageDescriptor} from '@sens
 import {auth} from '../../data/account/auth';
 import {openLibrary,observeLibrary,readLibrary,writeLibraryState} from '../../data/library/store';
 import {installedPackages,downloadPackage,installPackage,type InstalledPackage} from '../../data/library/packages';
-import {localRunTargetIds,selectLocalLearningPolicy,setLocalDeclaredMastery,readLearning,enrollPackage,startLearning,actLearning,finishLearning,confirmLearningQuantity,type LocalLearningTarget,type LocalLearningRun} from '../../data/library/learning';
+import {localRunTargetIds,selectLocalLearningPolicy,setLocalDeclaredMastery,readLearning,enrollPackage,startLearning,actLearning,finishLearning,continueLearning,confirmLearningQuantity,type LocalLearningTarget,type LocalLearningRun} from '../../data/library/learning';
 import type {LearningRecordView} from '../learningJourney/learningHistory';
 import {inspectLocalTargetReadiness} from '../../learning/runtime/runtimeCoordinator';
 import {localCurriculumMembershipForContext,localLastPresentedMaterial} from '../../learning/runtime/localCurriculum';
@@ -51,6 +51,7 @@ export function usePackageLearning(entryOpen:boolean){
   start:(id:string,limit:number)=>perform(()=>startLearning(crypto.randomUUID(),id,languageContext,limit)),
   act:(action:Parameters<typeof actLearning>[3])=>run?perform(()=>actLearning(crypto.randomUUID(),run.id,run.revision,action)):Promise.resolve(null),
   declareKnown:(id:string,active=true)=>perform(()=>setLocalDeclaredMastery(crypto.randomUUID(),id,active)),
+  continueWith:(id:string,limit:number)=>run?perform(()=>continueLearning(crypto.randomUUID(),run.id,id,languageContext,limit)):Promise.resolve(null),
   finish:()=>run?perform(()=>finishLearning(crypto.randomUUID(),run.id)):Promise.resolve(null),
  };
 }

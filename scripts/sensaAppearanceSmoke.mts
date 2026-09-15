@@ -32,15 +32,15 @@ for (const skin of skinCatalog) {
   assert.deepEqual(skin.capabilities.colorModes, ["light", "dark"]);
   assert.deepEqual(skin.capabilities.textSizes, ["standard", "large"]);
   assert.equal(skin.capabilities.iconSet, "lucide");
-  assert.deepEqual(skin.capabilities.pageLayouts, ["learning-runtime"]);
+  assert.deepEqual(skin.capabilities.pageLayouts, Object.keys(pageLayoutFamilyContract));
 }
 assert.deepEqual(colorModeCatalog, ["system", "light", "dark"]);
 assert.deepEqual(textSizeCatalog, ["standard", "large"]);
 for (const [family, contract] of Object.entries(pageLayoutFamilyContract)) {
   assert.deepEqual(
-    contract.logicalOrder,
-    [...contract.requiredRegions, ...contract.optionalRegions],
-    `${family} logical order must keep required regions before optional presentation regions`,
+    [...contract.logicalOrder].sort(),
+    [...contract.requiredRegions, ...contract.optionalRegions].sort(),
+    `${family} logical order must contain every declared region exactly once`,
   );
   assert.equal(new Set(contract.logicalOrder).size, contract.logicalOrder.length, `${family} repeats a semantic region`);
 }
@@ -374,7 +374,10 @@ for (const variants of Object.values(componentFamilyContract)) {
 }
 assert(gallery.includes("no learning event or outcome is created"));
 for (const [family, contract] of Object.entries(pageLayoutFamilyContract)) {
-  assert(gallery.includes(`family="${family}"`), `Skin Lab does not cover page layout ${family}`);
+  const specimenCall = family === "application-shell"
+    ? "<SensaApplicationShellLayout"
+    : `family="${family}"`;
+  assert(gallery.includes(specimenCall), `Skin Lab does not cover page layout ${family}`);
   for (const region of contract.logicalOrder) {
     assert(pageLayoutPrimitives.includes(`"${region}"`), `page layout renderer omits region ${family}/${region}`);
   }
@@ -389,6 +392,9 @@ for (const path of [
   assert(runtime.includes("<SensaPageLayout"), `${path} does not consume the page layout seam`);
   assert(!runtime.includes("data-sensa-page-layout"), `${path} bypasses the page layout interface`);
 }
+const webShell = await readFile(new URL("ui/WebShell.tsx", experienceRoot), "utf8");
+assert(webShell.includes("<SensaApplicationShellLayout"), "WebShell does not consume the application-shell layout seam");
+assert(!webShell.includes("data-sensa-page-layout"), "WebShell bypasses the page layout interface");
 
 console.log(
   "PASS: curated semantic, component and page-layout contracts, complete light/dark/layout adapters, AA core contrast, Skin Lab coverage, production runtime adoption, early bootstrap, retired recipe runtime, and semantic-only Web presentation sources.",

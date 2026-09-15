@@ -144,6 +144,12 @@ Quiet adapter 将它呈现为居中的阅读流；Clear adapter 在宽屏使用 
 回到线性 reflow。正式学习 Runtime 通过同一个 Layout module 提交 region 内容，切换 Skin 不重建
 renderer、learner input、Runtime phase 或事件处理器。
 
+同一合同的 `application-shell` family 固定 `brand / navigation / utilities / viewport` 的逻辑顺序，其中
+`viewport` 始终存在，前三个 chrome region 只在 Product Shell 判定为普通主界面时存在；专注学习流程仍
+保留同一 viewport 与已挂载 screen stack。Quiet adapter 在宽屏把 chrome 排成顶部横向栏，Clear adapter
+排成左侧纵向栏；窄屏都将同一 navigation 重排到底部并保留触控尺寸与 safe area。当前 section、route、
+可用导航项、焦点恢复和 screen 可见性仍由 `WebShell` 决定，Skin 不复制导航 DOM 或生成 route。
+
 每个已收录 Skin 由 build-time manifest 声明 Semantic/Component/Page Layout Contract 兼容版本，以及受审核的
 color mode、text size、density、motion 与 icon-set capabilities；静态 catalog 不接受 URL、包名或可执行
 第三方代码。开发态 `/?skin-lab=1` 提供不读取账号或 learner data 的 Surface Gallery，覆盖全部 component

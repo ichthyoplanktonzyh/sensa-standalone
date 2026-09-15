@@ -7,9 +7,9 @@ import assert from 'node:assert/strict';
 import {canonicalJsonDigest,stableUuid} from '@sensa/learning-kernel';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext,sensaInitialLearningCompletionSchema,sensaSchedulingHandoffSchema,sensaMemoryOutcomeSnapshotSchema,sensaSchedulingDecisionSchema,sensaRelearningCompletionSchema} from '@sensa/contracts/sensa';
 import {provisionLightweightInitialContent} from '../apps/web/src/learning/runtime/lightweightInitialContent.ts';
-import {openLibrary,command,readLibrary,LibraryTransaction} from '../apps/web/src/data/library/store.ts';
+import {openLibrary,command,readLibrary,observeLibrary,LibraryTransaction} from '../apps/web/src/data/library/store.ts';
 import {installPackage,downloadPackage,sha256} from '../apps/web/src/data/library/packages.ts';
-import {enrollPackage,readLearning,startLearning,actLearning,finishLearning,confirmLearningQuantity,setLocalDeclaredMastery} from '../apps/web/src/data/library/learning.ts';
+import {enrollPackage,readLearning,startLearning,actLearning,finishLearning,continueLearning,confirmLearningQuantity,setLocalDeclaredMastery} from '../apps/web/src/data/library/learning.ts';
 import {createLocalProtocolProgress,executeLocalProtocolTransition,reduceLocalProtocolAction,localLearningPurpose,localProtocolOutcomePermissions,localRunOpenPlanningInterruption} from '../apps/web/src/learning/runtime/localProtocol.ts';
 import {hasDeclaredMasteryOverride} from '../apps/web/src/learning/runtime/targetPlanningOverrides.ts';
 import {localCurriculumMeaning,localCurriculumMembershipForContext,localExecutableTarget} from '../apps/web/src/learning/runtime/localCurriculum.ts';
@@ -224,6 +224,18 @@ try{
  const stillOpen=(await readLearning()).runs.find(item=>item.id===updateRun.id)!;assert.equal(stillOpen.participants[retainedId!]!.curriculumMembershipId,beforeMembership.id);assert.equal(stillOpen.participants[retainedId!]!.material.snapshot.provenance.bookVersionId,firstBookVersion);assert.equal(currentMembership.material.snapshot.provenance.bookVersionId,secondBookVersion);
  const japaneseRelease={...secondRelease,supportLanguage:'ja',entries:[{...secondRelease.entries[0]!,meaning:'一時的に借りて、後で返す。',content:japaneseMaterial.materialization.content}]};const japaneseBookInstalled=await installPackage(new TextEncoder().encode(JSON.stringify(japaneseRelease)));
  assert.notEqual(japaneseBookInstalled.key,secondInstalled.key,'the same Book Version can install separate exact language-pair Bundles');await enrollPackage(id(),japaneseBookInstalled.key,japaneseContext);const multilingualTarget=(await readLearning()).targets.find(item=>item.id===retainedId!)!;assert(localCurriculumMembershipForContext(multilingualTarget,languageContext));assert(localCurriculumMembershipForContext(multilingualTarget,japaneseContext));
+
+ // Continuing a learning journey must never publish the empty active-Run state
+ // between the completed word and its successor; that state renders the
+ // runtime's unavailable fallback for a frame.
+ let completedUpdateRun=await actLearning(id(),updateRun.id,updateRun.revision,{kind:'reveal'},'2026-09-12T08:00:00.000Z');
+ completedUpdateRun=await actLearning(id(),completedUpdateRun.id,completedUpdateRun.revision,{kind:'rate',rating:'good'},'2026-09-12T08:00:00.000Z');
+ assert(completedUpdateRun.completedAt);
+ const activeSnapshots:Array<string|undefined>=[],snapshotReads:Promise<void>[]=[];
+ const stopObserving=observeLibrary(()=>{snapshotReads.push(readLearning().then(snapshot=>{activeSnapshots.push(snapshot.active);}));});
+ const continuedRun=await continueLearning(id(),completedUpdateRun.id,addedId!,languageContext,20,'2026-09-12T08:00:00.000Z');
+ await Promise.all(snapshotReads);stopObserving();
+ assert.deepEqual(activeSnapshots,[continuedRun.id],'the next-word transition published an empty active Run and exposed the unavailable fallback');
 
  console.log('PASS: verified download/import, immutable Book updates, explicit enrollment, progress preservation, removed-member planning, open-Session pinning, declared-mastery interruption/resume, local learning/replay and rollback; memory storage Adapter, no browser/model calls.');
 }finally{globalThis.fetch=realFetch;}

@@ -19,6 +19,7 @@ import {mkdir,readFile,rm} from 'node:fs/promises';
 import {extname,join,resolve} from 'node:path';
 import {chromium,expect} from '@playwright/test';
 import {librarySyncBlockFetchBytes,librarySyncBlockStoreChars} from '../packages/contracts/src/sensa/librarySync.ts';
+import {pageLayoutFamilyContract} from '../apps/web/src/experience/appearance/pageLayoutContract.ts';
 
 const root=process.cwd();
 const output=resolve(root,'.tmp/web-bootstrap-budget');
@@ -211,6 +212,15 @@ async function pageContext(authenticated=true){
  const errors=await instrument(page,authenticated);
  return {context,page,errors};
 }
+const assertApplicationShell=async(page:import('@playwright/test').Page)=>{
+ const shell=page.locator('[data-sensa-page-layout="application-shell"][data-sensa-layout-mode="viewport"]');
+ await expect(shell).toBeVisible({timeout:SHELL_BUDGET_MS});
+ const regions=await shell.locator(':scope > [data-sensa-page-region]').evaluateAll(
+  elements=>elements.map(element=>element.getAttribute('data-sensa-page-region')),
+ );
+ assert.deepEqual(regions,[...pageLayoutFamilyContract['application-shell'].logicalOrder],'production WebShell changed application-shell region order');
+ assert.equal(await shell.locator(':scope > [data-sensa-page-region="navigation"] nav').count(),1,'production WebShell duplicated primary navigation');
+};
 /** Read the durable restore state through the production LibraryTransaction seam. */
 const restoreStatus=(page:import('@playwright/test').Page)=>page.evaluate(
  ()=>window.__sensaBrowserSmoke?.syncStatus()??Promise.resolve('unavailable'),
@@ -251,6 +261,7 @@ try{
  await a.page.reload({waitUntil:'domcontentloaded'});
  try{await expect(a.page.getByRole('navigation').first()).toBeVisible({timeout:SHELL_BUDGET_MS});}
  catch(error){log('   phase A startup calls: '+JSON.stringify(served));log('   phase A startup rejected: '+JSON.stringify(rejected));log('   phase A startup console: '+JSON.stringify(a.errors));throw error;}
+ await assertApplicationShell(a.page);
  const cloud=cloudFor(ACCOUNT);
  // Uploaded blocks are not a published library: wait for the committed manifest,
  // otherwise the next browser legitimately restores an empty account.
@@ -295,6 +306,7 @@ try{
  const started=Date.now();
  await b.page.goto(origin,{waitUntil:'domcontentloaded'});
  await expect(b.page.getByRole('navigation').first()).toBeVisible({timeout:SHELL_BUDGET_MS});
+ await assertApplicationShell(b.page);
  const shellMs=Date.now()-started;
  await expect(b.page.getByText('正在同步你的学习数据…')).toHaveCount(0);
  await expect(b.page.getByText('远程投递暂未送达本机。内容仍保留在投递队列中；联网后重新聚焦应用即可重试。')).toHaveCount(0);

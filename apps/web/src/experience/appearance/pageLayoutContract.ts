@@ -5,6 +5,11 @@
 export const pageLayoutContractVersion = "sensa-page-layout-v1" as const;
 
 export const pageLayoutFamilyContract = {
+  "application-shell": {
+    requiredRegions: ["viewport"],
+    optionalRegions: ["brand", "navigation", "utilities"],
+    logicalOrder: ["brand", "navigation", "utilities", "viewport"],
+  },
   "learning-runtime": {
     requiredRegions: ["header", "tools", "progress", "primary"],
     optionalRegions: ["supporting", "feedback", "controls"],
@@ -15,6 +20,15 @@ export const pageLayoutFamilyContract = {
 export const pageLayoutModeCatalog = ["viewport", "specimen"] as const;
 
 export const pageLayoutTokenCatalog = [
+  "shell-canvas",
+  "shell-chrome-background",
+  "shell-chrome-border",
+  "shell-chrome-shadow",
+  "shell-sidebar-width",
+  "shell-bar-size",
+  "shell-mobile-navigation-size",
+  "shell-chrome-inset",
+  "shell-navigation-gap",
   "runtime-canvas",
   "runtime-header-background",
   "runtime-header-border",
