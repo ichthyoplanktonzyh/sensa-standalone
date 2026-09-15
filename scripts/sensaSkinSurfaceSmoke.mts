@@ -122,6 +122,36 @@ try {
     const clearShellGrid = await shellSpecimen.evaluate((element) => getComputedStyle(element).gridTemplateColumns);
     assert.notEqual(quietGrid, clearGrid, "Quiet and Clear resolve to the same wide-screen page topology");
     assert.notEqual(quietShellGrid, clearShellGrid, "Quiet and Clear resolve to the same wide-screen shell topology");
+    const clearShellBaseline = await shellSpecimen.evaluate((shell) => {
+      const shellRect = shell.getBoundingClientRect();
+      const brandMark = shell.querySelector<HTMLElement>("[data-sensa-shell-brand-mark]")!;
+      const navigationItem = shell.querySelector<HTMLElement>("[data-sensa-shell-navigation-item]")!;
+      const navigation = shell.querySelector<HTMLElement>("[data-sensa-shell-navigation]")!;
+      const utilitiesRegion = shell.querySelector<HTMLElement>(':scope > [data-sensa-page-region="utilities"]')!;
+      const utilities = shell.querySelector<HTMLElement>("[data-sensa-shell-utilities]")!;
+      const utilityAction = shell.querySelector<HTMLElement>("[data-sensa-shell-utility-action]")!;
+      const navigationRect = shell.querySelector<HTMLElement>(':scope > [data-sensa-page-region="navigation"]')!.getBoundingClientRect();
+      return {
+        sidebarWidth: Math.round(navigationRect.right - shellRect.left),
+        brandInset: Math.round(brandMark.getBoundingClientRect().left - shellRect.left),
+        navigationInset: Math.round(navigationItem.getBoundingClientRect().left - shellRect.left),
+        navigationGap: getComputedStyle(navigation).gap,
+        utilitiesInset: Math.round(utilities.getBoundingClientRect().left - shellRect.left),
+        utilityActionHeight: Math.round(utilityAction.getBoundingClientRect().height),
+        utilitiesRegionBorderWidth: getComputedStyle(utilitiesRegion).borderTopWidth,
+        utilitiesBorderWidth: getComputedStyle(utilities).borderTopWidth,
+      };
+    });
+    assert.deepEqual(clearShellBaseline, {
+      sidebarWidth: 225,
+      brandInset: 33,
+      navigationInset: 17,
+      navigationGap: "6px",
+      utilitiesInset: 17,
+      utilityActionHeight: 48,
+      utilitiesRegionBorderWidth: "0px",
+      utilitiesBorderWidth: "1px",
+    }, "Clear application shell drifted from the deployed sidebar geometry");
     assert.equal(await runtimeProbe.inputValue(), "Preserved across runtime layout adapters", "Skin switch discarded runtime input");
     assert.equal(await shellProbe.inputValue(), "Preserved across shell layout adapters", "Skin switch discarded shell input");
     assert(await runtimeProbeHandle.evaluate((element) => element.isConnected), "Skin switch remounted the runtime region tree");
