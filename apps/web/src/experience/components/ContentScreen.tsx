@@ -200,7 +200,7 @@ function ContentScreenView({
                 <button
                   key={item.personalMeaningId}
                   onClick={() => open(item.personalMeaningId)}
-                  className={`flex w-full items-center gap-5 rounded-control px-2 py-6 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus ${selected === item.personalMeaningId ? "bg-surface-selected" : ""}`}
+                  className={`sensa-world-row flex w-full items-center gap-5 rounded-control px-2 py-6 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus ${selected === item.personalMeaningId ? "bg-surface-selected" : ""}`}
                 >
                   <span className="grid size-10 shrink-0 place-items-center rounded-control border border-border-subtle bg-surface-panel text-fg-secondary">
                     <MessageSquareText size={18} strokeWidth={1.5} />
@@ -209,6 +209,7 @@ function ContentScreenView({
                     <strong className="block truncate text-sm font-medium">
                       {labelFor(item)}
                     </strong>
+                    {item.primaryLabel !== labelFor(item) && <span className="sensa-world-context mt-2 block line-clamp-2 text-sm leading-6 text-fg-secondary">{item.primaryLabel}</span>}
                     <span className="mt-2 block text-xs text-fg-tertiary">
                       {t(`content.phase.${item.senseFormation.phase}`)} ·{" "}
                       {t(`content.expression.${item.expressionBinding.phase}`)}
@@ -224,7 +225,7 @@ function ContentScreenView({
       <SensaCollectionBrowserLayout
         id={screenId}
         measure="wide"
-        className={`screen z-10 ${active ? "active" : "invisible pointer-events-none"}`}
+        className={`screen sensa-world z-10 ${active ? "active" : "invisible pointer-events-none"}`}
         regions={{
           header: <>{notice}<ContentHeader inboxCount={inbox.length+drafts.length} onInbox={()=>setInboxOpen(true)} onAdd={()=>setAdding(true)}/></>,
           navigation: <div
@@ -268,6 +269,7 @@ function ContentScreenView({
               />
               {query && (
                 <button
+                  className="grid size-11 shrink-0 place-items-center rounded-control focus-visible:outline-2 focus-visible:outline-focus"
                   aria-label={t("content.clear")}
                   onClick={() => setQuery("")}
                 >
@@ -307,7 +309,7 @@ function ContentScreenView({
                 key={id}
                 aria-pressed={filter === id}
                 onClick={() => setFilter(id)}
-                className={`rounded-pill px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-focus ${filter === id ? "bg-surface-selected text-action-primary" : "text-fg-secondary hover:bg-surface-subtle"}`}
+                className={`min-h-11 rounded-pill px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-focus ${filter === id ? "bg-surface-selected text-action-primary" : "text-fg-secondary hover:bg-surface-subtle"}`}
               >
                 {t(`content.${id}`)}
               </button>

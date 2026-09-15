@@ -1,0 +1,47 @@
+/* Personal collections: expression first, meaning and provenance beneath it. */
+html[data-sensa-skin="quiet"] .sensa-world {
+  --sensa-layout-collection-content-wide: 76rem;
+  --sensa-layout-collection-region-gap: 1.5rem;
+}
+html[data-sensa-skin="quiet"] .sensa-world > [data-sensa-page-region="header"] h1 {
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  font-weight: 500;
+  letter-spacing: normal;
+  text-wrap: balance;
+}
+html[data-sensa-skin="quiet"] .sensa-world > [data-sensa-page-region="navigation"] { margin-top: 2rem; }
+html[data-sensa-skin="quiet"] .sensa-world [aria-pressed="true"] { font-weight: 600; }
+html[data-sensa-skin="quiet"] .sensa-world-row { padding: 1.5rem 1rem; align-items: flex-start; border-radius: 0; }
+html[data-sensa-skin="quiet"] .sensa-world-row > span:first-child { background: transparent; border: 0; color: var(--sensa-action-primary); }
+html[data-sensa-skin="quiet"] .sensa-world-row strong { font-size: 1.125rem; line-height: 1.6; white-space: normal; overflow-wrap: anywhere; }
+html[data-sensa-skin="quiet"] .sensa-world-row > svg { margin-top: 0.5rem; }
+html[data-sensa-skin="quiet"] .sensa-world-context { max-width: 65ch; }
+html[data-sensa-skin="quiet"] .sensa-world-row .text-xs { font-size: 0.8125rem; color: var(--sensa-fg-secondary); }
+html[data-sensa-skin="quiet"] .sensa-meaning-graph { box-shadow: none; }
+html[data-sensa-skin="quiet"] .sensa-meaning-graph > header { padding: 1rem; }
+html[data-sensa-skin="quiet"] .sensa-meaning-graph > svg { background: var(--sensa-surface-canvas); }
+html[data-sensa-skin="quiet"] #s-content-library [data-sensa-page-region="collection"] button { padding-block: 1.5rem; }
+html[data-sensa-skin="quiet"] #s-content-library [data-sensa-page-region="collection"] button > span:nth-child(2) > span:first-child { flex-wrap: wrap; font-weight: 500; }
+html[data-sensa-skin="quiet"] #s-content-library [data-sensa-page-region="collection"] .whitespace-nowrap { white-space: normal; overflow-wrap: anywhere; }
+html[data-sensa-skin="quiet"] :is(#s-confirmed-sense, #s-expression-binding, #s-content-sense, #s-content-example) {
+  --sensa-layout-detail-content-narrow: 58rem;
+  --sensa-layout-detail-region-gap: 2rem;
+}
+html[data-sensa-skin="quiet"] #s-confirmed-sense [data-sensa-page-region="primary"] > div { gap: 1.5rem; }
+html[data-sensa-skin="quiet"] #s-confirmed-sense .shadow-raised { box-shadow: none; }
+html[data-sensa-skin="quiet"] #s-confirmed-sense h2 { font-weight: 500; text-wrap: balance; }
+html[data-sensa-skin="quiet"] #s-confirmed-sense details > summary { min-height: 3.5rem; gap: 1rem; }
+html[data-sensa-skin="quiet"] #s-confirmed-sense li { line-height: 1.8; }
+html[data-sensa-skin="quiet"] #s-content-sense h1 { font-size: clamp(2.5rem, 5vw, 3.5rem); line-height: 1.25; overflow-wrap: anywhere; }
+html[data-sensa-skin="quiet"] #s-content-sense [data-sensa-page-region="primary"] > section { margin-top: 2rem; }
+html[data-sensa-skin="quiet"] #s-content-example article { background: var(--sensa-surface-panel); color: var(--sensa-fg-primary); border: 1px solid var(--sensa-border-subtle); border-radius: var(--sensa-radius-card); box-shadow: none; }
+html[data-sensa-skin="quiet"] #s-content-example article :is(p, span) { color: var(--sensa-fg-secondary); }
+html[data-sensa-skin="quiet"] #s-content-example article :is(span, button) { border-color: var(--sensa-border-strong); }
+html[data-sensa-skin="quiet"] #s-content-example article button { color: var(--sensa-action-primary); }
+html[data-sensa-skin="quiet"] #s-content-example blockquote { font-size: clamp(1.5rem, 3vw, 2rem); line-height: 1.7; overflow-wrap: anywhere; }
+@media (max-width: 40rem) {
+  html[data-sensa-skin="quiet"] .sensa-world-row { gap: 0.75rem; padding-inline: 0; }
+  html[data-sensa-skin="quiet"] #s-confirmed-sense dl > div { grid-template-columns: minmax(0, 1fr); gap: 0.25rem; }
+  html[data-sensa-skin="quiet"] #s-content-example [data-sensa-page-region="primary"] > button { grid-template-columns: minmax(0, 1fr) auto; }
+  html[data-sensa-skin="quiet"] #s-content-example [data-sensa-page-region="primary"] > button > span:first-child { grid-column: 1 / -1; }
+}

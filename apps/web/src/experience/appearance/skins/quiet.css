@@ -1,3 +1,5 @@
+@import "./quiet-world.css";
+
 :root,
 html[data-sensa-skin="quiet"] {
   --sensa-font-product: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;

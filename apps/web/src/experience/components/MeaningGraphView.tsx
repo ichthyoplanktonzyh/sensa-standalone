@@ -73,10 +73,10 @@ export function MeaningGraphView({
       ? onOpenConfirmedSense(node.meaningId, node.focusId)
       : onOpenMeaning(node.meaningId, node.focusId);
   const toolbarButton =
-    "grid size-10 place-items-center rounded-control text-fg-secondary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus";
+    "grid size-11 place-items-center rounded-control text-fg-secondary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus";
   return (
     <section
-      className="overflow-hidden rounded-card border border-border-subtle bg-surface-panel"
+      className="sensa-meaning-graph overflow-hidden rounded-card border border-border-subtle bg-surface-panel"
       aria-label={t("content.graph.title")}
     >
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
