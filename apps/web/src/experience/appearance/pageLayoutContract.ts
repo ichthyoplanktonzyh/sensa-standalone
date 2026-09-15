@@ -25,12 +25,20 @@ export const pageLayoutFamilyContract = {
     optionalRegions: ["navigation"],
     logicalOrder: ["header", "navigation", "controls", "collection"],
   },
+  "detail-workspace": {
+    requiredRegions: ["header", "primary"],
+    optionalRegions: [],
+    logicalOrder: ["header", "primary"],
+  },
 } as const;
 
 export const pageLayoutModeCatalog = ["viewport", "specimen"] as const;
 export const workspacePageMeasureCatalog = ["narrow", "standard", "wide"] as const;
 export const collectionBrowserMeasureCatalog = ["narrow", "wide"] as const;
 export const collectionBrowserHeaderCatalog = ["flow", "bar"] as const;
+export const detailWorkspaceMeasureCatalog = ["narrow", "wide"] as const;
+export const detailWorkspaceHeaderCatalog = ["flow", "bar"] as const;
+export const detailWorkspacePresentationCatalog = ["page", "panel"] as const;
 
 export const pageLayoutTokenCatalog = [
   "shell-canvas",
@@ -85,6 +93,20 @@ export const pageLayoutTokenCatalog = [
   "collection-header-min-size",
   "collection-header-shadow",
   "collection-bar-inline-inset",
+  "detail-canvas",
+  "detail-panel-background",
+  "detail-content-narrow",
+  "detail-content-wide",
+  "detail-inline-inset-narrow",
+  "detail-inline-inset-wide",
+  "detail-block-start",
+  "detail-block-end",
+  "detail-region-gap",
+  "detail-header-background",
+  "detail-header-border",
+  "detail-header-min-size",
+  "detail-panel-width",
+  "detail-panel-shadow",
 ] as const;
 
 export type PageLayoutFamily = keyof typeof pageLayoutFamilyContract;
@@ -92,6 +114,9 @@ export type PageLayoutMode = (typeof pageLayoutModeCatalog)[number];
 export type WorkspacePageMeasure = (typeof workspacePageMeasureCatalog)[number];
 export type CollectionBrowserMeasure = (typeof collectionBrowserMeasureCatalog)[number];
 export type CollectionBrowserHeader = (typeof collectionBrowserHeaderCatalog)[number];
+export type DetailWorkspaceMeasure = (typeof detailWorkspaceMeasureCatalog)[number];
+export type DetailWorkspaceHeader = (typeof detailWorkspaceHeaderCatalog)[number];
+export type DetailWorkspacePresentation = (typeof detailWorkspacePresentationCatalog)[number];
 export type PageLayoutToken = (typeof pageLayoutTokenCatalog)[number];
 
 type FamilyContract<Family extends PageLayoutFamily> = (typeof pageLayoutFamilyContract)[Family];

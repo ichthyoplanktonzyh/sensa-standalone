@@ -160,6 +160,12 @@ Product Screen 重新接管页面 frame，因此切换 Skin 时原 screen、表�
 空态/错误态和行操作；Skin adapter 只解析 `narrow / wide` measure、region rhythm、responsive gutter 与
 flow/bar header treatment。布局切换不得触发重新取数、改变筛选、选择或 collection ordering。
 
+`detail-workspace` family 有意只暴露 `header / primary`，避免把每个详情子区都变成浅层 layout slot。已确认
+Sense、Expression Binding、收藏的 Sense/Example 详情、Learning Target setup 与 Personal Meaning 对话工作区
+共用该 seam；Product Screen 保留 back/dismiss、详情组合、编辑与对话状态。Skin adapter 可解析
+`narrow / wide` page measure、header treatment，并把经批准的同一工作区呈现为 page 或 edge panel，但不得
+改变 route、browser history、focus restoration 或底层工作状态。
+
 每个已收录 Skin 由 build-time manifest 声明 Semantic/Component/Page Layout Contract 兼容版本，以及受审核的
 color mode、text size、density、motion 与 icon-set capabilities；静态 catalog 不接受 URL、包名或可执行
 第三方代码。开发态 `/?skin-lab=1` 提供不读取账号或 learner data 的 Surface Gallery，覆盖全部 component

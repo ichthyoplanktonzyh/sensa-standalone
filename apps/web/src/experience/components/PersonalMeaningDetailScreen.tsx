@@ -4,6 +4,7 @@ import {localFlowText} from '../../i18n/localFlowText';
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
 import { classNames } from '../ui/primitives';
+import { SensaDetailWorkspaceLayout } from '../ui/SensaPageLayouts';
 import './PersonalMeaningDetailScreen.css';
 /**
  * The AI clarification workspace.
@@ -1004,15 +1005,21 @@ const PreviewPersonalMeaningDetailScreen = ({
 
 /** One existing workspace frame for both persisted and preview controllers. */
 function MeaningWorkspaceFrame({active,onBack,materialOpen,onToggleMaterial,screenRef,children,title}:{active:boolean;onBack:()=>void;materialOpen:boolean;onToggleMaterial:()=>void;screenRef?:import('react').Ref<HTMLElement>;title?:string;children:import('react').ReactNode}){
- return <section ref={screenRef} className={classNames(`screen pmw-screen${active?' active':''}`, '#s-personal-meaning')} id="s-personal-meaning" data-anim="slide">
-  <div className="ml-auto flex h-full w-full flex-col bg-surface-raised text-fg-primary shadow-overlay lg:max-w-[860px]">
-   <header className={classNames('content-nav pmw-nav')}>
+ return <SensaDetailWorkspaceLayout
+  ref={screenRef}
+  className={classNames(`screen pmw-screen${active?' active':''}`, '#s-personal-meaning')}
+  id="s-personal-meaning"
+  data-anim="slide"
+  presentation="panel"
+  regions={{
+   header: <div className={classNames('content-nav pmw-nav')}>
     <button className={classNames('content-nav-back')} onClick={onBack} aria-label={uiText('backToMyContent2')}><svg className={classNames('icon')}><use href="#i-chev-l"/></svg></button>
     <h1>{title??uiText('clarifyYourMeaning')}</h1>
     <button type="button" className={classNames(`pmw-material-toggle${materialOpen?' is-open':''}`)} onClick={onToggleMaterial} aria-expanded={materialOpen}>{uiText('context')}</button>
-   </header><div className={classNames('pmw-shell')}>{children}</div>
-  </div>
- </section>;
+   </div>,
+   primary: <div className={classNames('pmw-shell')}>{children}</div>,
+  }}
+ />;
 }
 function ConnectedMeaningConversation({active,onBack,conversation:c,learningControls}:PersonalMeaningDetailScreenProps & {conversation:MeaningConversationController}){
  useTranslation();

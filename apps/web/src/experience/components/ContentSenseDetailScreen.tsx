@@ -12,6 +12,7 @@ import {
   slideScreenClass,
 } from '../ui/primitives';
 import { useContentProjection } from '../useContentProjection';
+import { SensaDetailWorkspaceLayout } from '../ui/SensaPageLayouts';
 
 interface ContentSenseDetailScreenProps {
   active: boolean;
@@ -69,8 +70,13 @@ export const ContentSenseDetailScreen = ({
   };
 
   return (
-    <section className={slideScreenClass(active)} id="s-content-sense" data-anim="slide" aria-hidden={!active}>
-      <header className={contentNavigationClass}>
+    <SensaDetailWorkspaceLayout
+      className={slideScreenClass(active)}
+      id="s-content-sense"
+      data-anim="slide"
+      aria-hidden={!active}
+      regions={{
+        header: <div className={contentNavigationClass}>
         <button className={contentNavigationBackClass} onClick={onBack} aria-label={uiText('back2')}>
           <svg className={iconClass} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
@@ -78,9 +84,9 @@ export const ContentSenseDetailScreen = ({
         <button className={`grid size-11 place-items-center justify-self-end rounded-control border-0 focus-visible:outline-2 focus-visible:outline-focus ${saved ? 'bg-accent-soft text-action-primary' : 'bg-transparent text-fg-secondary hover:bg-surface-subtle'}`} onClick={() => void toggleSaved()} aria-pressed={saved} aria-label={saved ? uiText('unsaveThisMeaning') : uiText('saveThisMeaning')}>
           <svg className={`${iconClass} ${saved ? 'fill-current' : ''}`} aria-hidden="true"><use href="#i-star" /></svg>
         </button>
-      </header>
+      </div>,
 
-      <div className="mx-auto w-full max-w-4xl px-6 py-8 pb-12 sm:px-10">
+        primary: <div>
         <section className="border-b border-border-subtle pb-8 pt-3">
           <div className="flex flex-wrap items-baseline gap-3">
             <h1 className="font-language text-5xl font-medium">{item.word}</h1>
@@ -154,7 +160,8 @@ export const ContentSenseDetailScreen = ({
             <span className="flex flex-col gap-1"><b className="text-control-label">{uiText('addToLearning')}</b><small className="text-metadata text-fg-tertiary">{uiText('notAvailableYet')}</small></span>
           </button>
         </div>
-      </div>
-    </section>
+      </div>,
+      }}
+    />
   );
 };

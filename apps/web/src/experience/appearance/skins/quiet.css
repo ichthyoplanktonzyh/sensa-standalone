@@ -168,6 +168,20 @@ html[data-sensa-skin="quiet"] {
   --sensa-layout-collection-header-min-size: 5.25rem;
   --sensa-layout-collection-header-shadow: none;
   --sensa-layout-collection-bar-inline-inset: clamp(1.5rem, 4vw, 2rem);
+  --sensa-layout-detail-canvas: var(--sensa-surface-canvas);
+  --sensa-layout-detail-panel-background: var(--sensa-surface-raised);
+  --sensa-layout-detail-content-narrow: 52rem;
+  --sensa-layout-detail-content-wide: 60rem;
+  --sensa-layout-detail-inline-inset-narrow: clamp(1.5rem, 5vw, 3rem);
+  --sensa-layout-detail-inline-inset-wide: clamp(1.5rem, 5vw, 3.25rem);
+  --sensa-layout-detail-block-start: clamp(2rem, 5vw, 3rem);
+  --sensa-layout-detail-block-end: 3.5rem;
+  --sensa-layout-detail-region-gap: 2.25rem;
+  --sensa-layout-detail-header-background: color-mix(in srgb, var(--sensa-surface-canvas) 94%, transparent);
+  --sensa-layout-detail-header-border: var(--sensa-border-subtle);
+  --sensa-layout-detail-header-min-size: 5.25rem;
+  --sensa-layout-detail-panel-width: 50rem;
+  --sensa-layout-detail-panel-shadow: var(--sensa-shadow-overlay);
 }
 
 html[data-sensa-skin="quiet"][data-sensa-color-mode="dark"] {
@@ -397,5 +411,15 @@ html[data-sensa-skin="quiet"] [data-sensa-page-layout="collection-browser"] {
 
 :root [data-sensa-page-layout="collection-browser"][data-sensa-layout-header="bar"] > [data-sensa-page-region="header"],
 html[data-sensa-skin="quiet"] [data-sensa-page-layout="collection-browser"][data-sensa-layout-header="bar"] > [data-sensa-page-region="header"] {
+  backdrop-filter: blur(0.875rem);
+}
+
+:root [data-sensa-page-layout="detail-workspace"],
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="detail-workspace"] {
+  scrollbar-color: var(--sensa-border-strong) transparent;
+}
+
+:root [data-sensa-page-layout="detail-workspace"][data-sensa-layout-header="bar"] > [data-sensa-page-region="header"],
+html[data-sensa-skin="quiet"] [data-sensa-page-layout="detail-workspace"][data-sensa-layout-header="bar"] > [data-sensa-page-region="header"] {
   backdrop-filter: blur(0.875rem);
 }

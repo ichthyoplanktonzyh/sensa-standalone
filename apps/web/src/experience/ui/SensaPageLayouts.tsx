@@ -4,6 +4,9 @@ import {
   pageRegionAttributes,
   type CollectionBrowserHeader,
   type CollectionBrowserMeasure,
+  type DetailWorkspaceHeader,
+  type DetailWorkspaceMeasure,
+  type DetailWorkspacePresentation,
   type PageLayoutMode,
   type WorkspacePageMeasure,
 } from "../appearance/pageLayoutContract";
@@ -59,6 +62,20 @@ export interface SensaCollectionBrowserLayoutProps
   readonly measure?: CollectionBrowserMeasure;
   readonly mode?: PageLayoutMode;
   readonly regions: CollectionBrowserRegions;
+}
+
+export interface DetailWorkspaceRegions {
+  readonly header: ReactNode;
+  readonly primary: ReactNode;
+}
+
+export interface SensaDetailWorkspaceLayoutProps
+  extends Omit<HTMLAttributes<HTMLElement>, "children"> {
+  readonly headerStyle?: DetailWorkspaceHeader;
+  readonly measure?: DetailWorkspaceMeasure;
+  readonly mode?: PageLayoutMode;
+  readonly presentation?: DetailWorkspacePresentation;
+  readonly regions: DetailWorkspaceRegions;
 }
 
 /**
@@ -144,6 +161,38 @@ export function SensaCollectionBrowserLayout({
     </section>
   );
 }
+
+/**
+ * Presents the same detail header and primary content as either a page or an
+ * edge panel without giving Skin adapters control of route or dismissal.
+ */
+export const SensaDetailWorkspaceLayout = forwardRef<
+  HTMLElement,
+  SensaDetailWorkspaceLayoutProps
+>(function SensaDetailWorkspaceLayout({
+  headerStyle = "bar",
+  measure = "narrow",
+  mode = "viewport",
+  presentation = "page",
+  regions,
+  className,
+  ...props
+}, ref) {
+  return (
+    <section
+      {...props}
+      {...pageLayoutAttributes("detail-workspace", mode)}
+      data-sensa-layout-header={headerStyle}
+      data-sensa-layout-measure={measure}
+      data-sensa-layout-presentation={presentation}
+      className={classNames(className)}
+      ref={ref}
+    >
+      <header {...pageRegionAttributes("detail-workspace", "header")}>{regions.header}</header>
+      <div {...pageRegionAttributes("detail-workspace", "primary")}>{regions.primary}</div>
+    </section>
+  );
+});
 
 export interface SensaLearningRuntimeLayoutProps
   extends Omit<HTMLAttributes<HTMLElement>, "children"> {

@@ -74,6 +74,8 @@ The `workspace-page` family provides the ordinary scrollable frame used by Today
 
 The `collection-browser` family fixes the logical sequence `header`, optional `navigation`, `controls`, and `collection`. It is used by My Semantic World, saved-content collections, and the learning-target library. Product code owns category selection, search/filter state, result identity, empty/error states, and row actions; Skin adapters resolve narrow or wide measures, region rhythm, responsive gutters, and either an in-flow or contained-page header treatment. Switching presentation cannot refetch, filter, select, or reorder collection data.
 
+The `detail-workspace` family deliberately exposes only `header` and `primary`, keeping the interface deep rather than turning every subsection into a layout slot. Confirmed senses, expression binding, saved sense/example details, learning-target setup, and Personal Meaning conversation workspaces use this family. Product code owns back/dismiss behavior and all detail composition; a Skin resolves narrow or wide page measure, header treatment, and whether an approved workspace is presented as a full page or edge panel. Page/panel presentation changes never alter route, browser history, focus restoration, or the underlying editor/conversation state.
+
 ## Elevation & Depth
 
 Depth is primarily communicated through surface tone, borders, and clear containment. Shadows are supporting cues for overlays and genuinely raised controls, not a default decoration on every card. A skin may alter shadow softness and contrast while preserving the same stacking, modality, focus, and dismissal behavior.

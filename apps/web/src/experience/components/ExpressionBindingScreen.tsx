@@ -6,6 +6,7 @@ import {
   iconClass,
   slideScreenClass,
 } from '../ui/primitives';
+import { SensaDetailWorkspaceLayout } from '../ui/SensaPageLayouts';
 /**
  * Independent Sense → target-expression binding journey.
  *
@@ -343,21 +344,22 @@ export const ExpressionBindingScreen = ({
             );
 
   return (
-    <section
+    <SensaDetailWorkspaceLayout
       ref={screenRef}
       className={slideScreenClass(active)}
       id="s-expression-binding"
       data-anim="slide"
       aria-hidden={!active}
-    >
-      <header className={contentNavigationClass}>
+      regions={{
+        header: <div className={contentNavigationClass}>
         <button type="button" className={contentNavigationBackClass} onClick={onBack} aria-label={uiText('backToConfirmedMeaning')}>
           <svg className={iconClass} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
         <h1>{uiText('connectAnExpression')}</h1>
         <span />
-      </header>
-      <div className="mx-auto w-full max-w-4xl px-6 py-8 pb-12 sm:px-10">{body}</div>
-    </section>
+      </div>,
+        primary: <div>{body}</div>,
+      }}
+    />
   );
 };

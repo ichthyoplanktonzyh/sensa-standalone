@@ -11,6 +11,7 @@ import {
   iconClass,
   slideScreenClass,
 } from '../ui/primitives';
+import { SensaDetailWorkspaceLayout } from '../ui/SensaPageLayouts';
 
 interface ContentExampleDetailScreenProps {
   active: boolean;
@@ -54,8 +55,13 @@ export const ContentExampleDetailScreen = ({
   };
 
   return (
-    <section className={slideScreenClass(active)} id="s-content-example" data-anim="slide" aria-hidden={!active}>
-      <header className={contentNavigationClass}>
+    <SensaDetailWorkspaceLayout
+      className={slideScreenClass(active)}
+      id="s-content-example"
+      data-anim="slide"
+      aria-hidden={!active}
+      regions={{
+        header: <div className={contentNavigationClass}>
         <button className={contentNavigationBackClass} onClick={onBack} aria-label={uiText('back2')}>
           <svg className={iconClass} aria-hidden="true"><use href="#i-chev-l" /></svg>
         </button>
@@ -63,9 +69,9 @@ export const ContentExampleDetailScreen = ({
         <button className={`grid size-11 place-items-center justify-self-end rounded-control border-0 transition-colors focus-visible:outline-2 focus-visible:outline-focus ${saved ? 'bg-accent-soft text-action-primary' : 'bg-transparent text-fg-secondary hover:bg-surface-subtle'}`} onClick={() => void toggleSaved()} aria-pressed={saved} aria-label={saved ? uiText('unsaveExample') : uiText('saveExample')}>
           <svg className={`${iconClass} ${saved ? 'fill-current' : ''}`} aria-hidden="true"><use href="#i-star" /></svg>
         </button>
-      </header>
+      </div>,
 
-      <div className="mx-auto w-full max-w-4xl px-6 pt-8 sm:px-10">
+        primary: <div>
         <article className="rounded-overlay bg-surface-media px-7 py-9 text-fg-on-media shadow-raised sm:px-10 sm:py-12">
           <span className="inline-flex rounded-pill border border-fg-on-media/20 px-3 py-1 text-metadata tracking-wide text-fg-on-media/75">{item.example.sourceLabel}</span>
           <blockquote className="mt-8 font-language text-learning-expression leading-relaxed">{item.example.text}</blockquote>
@@ -74,9 +80,8 @@ export const ContentExampleDetailScreen = ({
             <svg className={iconClass} aria-hidden="true"><use href="#i-vol" /></svg>
           {uiText('playExample')}</button>
         </article>
-      </div>
 
-      <div className="mx-auto mt-4 grid w-[calc(100%-3rem)] max-w-[calc(56rem-5rem)] grid-cols-2 divide-x divide-border-subtle overflow-hidden rounded-card border border-border-subtle bg-surface-panel sm:w-[calc(100%-5rem)]">
+      <div className="mt-4 grid w-full grid-cols-2 divide-x divide-border-subtle overflow-hidden rounded-card border border-border-subtle bg-surface-panel">
         <button className="flex min-h-14 items-center justify-center gap-2 text-control-label text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" onClick={() => setShowTranslation((visible) => !visible)}>
           <svg className={iconClass} aria-hidden="true"><use href={showTranslation ? '#i-eye-lashes' : '#i-eye'} /></svg>
           <span>{showTranslation ? uiText('hideTranslation') : uiText('showTranslation')}</span>
@@ -87,11 +92,13 @@ export const ContentExampleDetailScreen = ({
         </button>
       </div>
 
-      <button className="mx-auto mt-4 grid w-[calc(100%-3rem)] max-w-[calc(56rem-5rem)] grid-cols-[auto_1fr_auto] items-center gap-4 rounded-card border border-border-subtle bg-surface-panel p-5 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:w-[calc(100%-5rem)]" onClick={() => onOpenSense(item)}>
+      <button className="mt-4 grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 rounded-card border border-border-subtle bg-surface-panel p-5 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" onClick={() => onOpenSense(item)}>
         <span className="font-language text-2xl font-semibold text-action-primary">{item.word}</span>
         <span className="flex min-w-0 flex-col gap-1 text-fg-secondary"><b className="text-body-support text-fg-primary">{item.pos} {item.meaning}</b><small className="text-metadata">{uiText('viewThisExampleSMeaning')}</small></span>
         <svg className="size-4 shrink-0 text-fg-tertiary" aria-hidden="true"><use href="#i-chev-r" /></svg>
       </button>
-    </section>
+      </div>,
+      }}
+    />
   );
 };

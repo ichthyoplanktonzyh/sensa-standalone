@@ -13,7 +13,7 @@ import {
   SensaOverlayFrame,
   SensaSurface,
 } from "../ui/SensaComponents";
-import { SensaApplicationShellLayout, SensaCollectionBrowserLayout, SensaPageLayout, SensaWorkspacePageLayout } from "../ui/SensaPageLayouts";
+import { SensaApplicationShellLayout, SensaCollectionBrowserLayout, SensaDetailWorkspaceLayout, SensaPageLayout, SensaWorkspacePageLayout } from "../ui/SensaPageLayouts";
 
 const sectionTitle = "mb-4 text-section-title font-semibold";
 const specimenGrid = "grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3";
@@ -325,6 +325,29 @@ export function SkinSurfaceGallery() {
                 <div className="divide-y divide-border-subtle border-y border-border-subtle">
                   {["take your time", "make room", "hold that thought"].map((label) => <div className="py-5" key={label}><strong>{label}</strong><p className="mt-1 text-body-support text-fg-secondary">Static collection fixture</p></div>)}
                 </div>
+              ),
+            }}
+          />
+        </SensaSurface>
+
+        <SensaSurface as="section" variant="card">
+          <h2 className={sectionTitle}>Detail workspace layout contract</h2>
+          <p className="mb-4 max-w-3xl text-body-support text-fg-secondary">
+            Product navigation and detail content stay mounted while a Skin may present the workspace as a measured page or a contained edge panel.
+          </p>
+          <SensaDetailWorkspaceLayout
+            mode="specimen"
+            measure="narrow"
+            data-sensa-contract-specimen="full"
+            aria-label="Detail workspace layout specimen"
+            regions={{
+              header: <div className="flex items-center justify-between gap-3 px-5 py-4"><SensaAction variant="quiet">Back</SensaAction><strong>Meaning detail</strong><span aria-hidden>☆</span></div>,
+              primary: (
+                <SensaSurface variant="raised">
+                  <span className="text-metadata uppercase tracking-wide text-fg-tertiary">Confirmed meaning</span>
+                  <h3 className="mt-3 font-language text-learning-expression">take your time</h3>
+                  <p className="mt-3 text-body-support text-fg-secondary">One stable detail tree; only its page frame changes.</p>
+                </SensaSurface>
               ),
             }}
           />
