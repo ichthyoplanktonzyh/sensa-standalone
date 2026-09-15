@@ -1,0 +1,71 @@
+/* Curriculum, readiness and recorded activity are separate, real projections. */
+html[data-sensa-skin="quiet"] .sensa-study-overview {
+  gap: clamp(1.5rem, 4vw, 3rem);
+}
+
+html[data-sensa-skin="quiet"] .sensa-study-overview > section {
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--sensa-border-strong);
+  padding-inline: 0;
+  background: transparent;
+}
+
+html[data-sensa-skin="quiet"] #s-learning-library li > button {
+  padding-inline: 1rem;
+  border-radius: 0;
+  overflow-wrap: anywhere;
+}
+
+html[data-sensa-skin="quiet"] #s-learning-library li strong {
+  font-size: 1.5rem;
+  line-height: 1.5;
+}
+
+html[data-sensa-skin="quiet"] :is(#s-learning-entry, .sensa-target-detail) {
+  overflow-wrap: anywhere;
+}
+
+html[data-sensa-skin="quiet"] .sensa-target-detail > aside {
+  min-width: 0;
+  box-shadow: none;
+  border-radius: var(--sensa-radius-card);
+  padding: clamp(1.25rem, 3vw, 2rem);
+}
+
+html[data-sensa-skin="quiet"] .sensa-preparation {
+  margin-inline: 0;
+  border-inline: 0;
+  border-radius: 0;
+  padding-inline: 0;
+  line-height: 1.7;
+}
+
+html[data-sensa-skin="quiet"] .sensa-preparation label {
+  min-height: 2.75rem;
+  align-items: center;
+}
+
+html[data-sensa-skin="quiet"] #s-stats dl > div {
+  border: 0;
+  border-top: 1px solid var(--sensa-border-subtle);
+  border-radius: 0;
+  background: transparent;
+  padding-inline: 0;
+}
+
+html[data-sensa-skin="quiet"] .sensa-learning-preferences :is(label, [data-sensa-overlay-region="header"] > div) {
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+@media (max-width: 40rem) {
+  html[data-sensa-skin="quiet"] #s-stats ol li button {
+    flex-wrap: wrap;
+  }
+
+  html[data-sensa-skin="quiet"] #s-stats ol li time {
+    flex-basis: 100%;
+    text-align: start;
+  }
+}

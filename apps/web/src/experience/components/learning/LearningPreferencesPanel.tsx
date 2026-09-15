@@ -36,7 +36,7 @@ export function LearningPreferencesPanel({allowedPolicies,showDailyQuantity=true
     try {action();setError(false);} catch {setError(true);}
   };
   const counts=[...new Set([5,10,15,20,30,dailyNewCount])].sort((a,b)=>a-b);
-  return <SensaOverlayLayout variant="sheet" measure="compact" className="z-[150]" labelledBy="learning-preferences-title" onDismiss={onClose} dismissOnBackdrop regions={{
+  return <SensaOverlayLayout variant="sheet" measure="compact" className="sensa-learning-preferences z-[150]" labelledBy="learning-preferences-title" onDismiss={onClose} dismissOnBackdrop regions={{
     header: <div className="flex items-center justify-between">
         <h2 id="learning-preferences-title" className="text-lg font-medium">{t(showDailyQuantity?'learningPreferences.title':'learningSetup.method')}</h2>
         <button autoFocus type="button" className="grid size-11 place-items-center rounded-control text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" onClick={onClose} aria-label={t('learningPreferences.close')}><X size={20}/></button>

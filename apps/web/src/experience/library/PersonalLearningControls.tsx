@@ -13,7 +13,7 @@ export function PersonalLearningControls({meaning,c,onStart}:{meaning:LocalMeani
  const task=c.tasks.find(t=>t.meaningId===meaning.id&&t.languageContext.languageRouteId===c.languageContext.languageRouteId);const [useContext,setUseContext]=useState(task?.useContext??false);const target=c.targets.find(t=>t.id===task?.targetId);const membership=target&&task?target.curriculumMemberships.find(candidate=>candidate.id===task.curriculumMembershipId):undefined;const stale=!!task&&((task.meaning.contextRevision??1)!==(meaning.contextRevision??1)||task.languageContext.languageRouteRevision!==c.languageContext.languageRouteRevision||task.languageContext.supportLanguageTag!==c.languageContext.supportLanguageTag);
  useEffect(()=>{if(task)setUseContext(task.useContext);},[task?.id,task?.useContext]);
  const running=!!task&&['generating','reviewing'].includes(task.status)&&task.leaseUntil>c.clock;
- return <section className="mx-5 my-4 space-y-3 rounded-2xl border border-border-subtle p-5" aria-label={localFlowText('personalPreparation')}>
+ return <section className="sensa-preparation mx-5 my-4 space-y-3 rounded-2xl border border-border-subtle p-5" aria-label={localFlowText('personalPreparation')}>
   <h3 className="font-medium">{localFlowText(task?.status==='ready'?'learningReady':task?'learningPreparation':'learningChoice')}</h3>
   <p className="text-sm text-fg-secondary">{localFlowText('fixedLightweight')}</p>
   {(!task||!!target)&&<label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={useContext} onChange={e=>setUseContext(e.target.checked)}/>{localFlowText('sourceConsent')}</label>}

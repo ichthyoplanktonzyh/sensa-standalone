@@ -70,7 +70,7 @@ export const LearningTargetDetailScreen=(props:LearningTargetDetailScreenProps)=
   const StatusIcon=preparation==='blocked'&&!committed&&!completed?AlertCircle
     : preparation==='preparing'&&!committed&&!completed?Clock3:CheckCircle2;
   return <LearningSetupFrame id={props.screenId??"s-learning-target"} active={props.active} onBack={props.onBack} title={t('learningSetup.target')}>
-    <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="sensa-target-detail grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
       <section className="min-w-0">
         <span className="inline-flex rounded-pill bg-surface-selected px-3 py-1.5 text-xs font-medium text-action-primary">{t('learningSetup.'+(props.isAdded?'added':'beforeAdd'))}</span>
         <div className="mt-6 flex flex-wrap items-baseline gap-4"><h2 className="break-words font-language text-4xl font-medium tracking-tight sm:text-5xl">{target.expression}</h2><span className="text-sm text-fg-tertiary">{target.partOfSpeech}</span></div>

@@ -54,7 +54,7 @@ export const StudyScreen = (props: StudyScreenProps) => {
         </div>,
         primary: <>
       {props.status}
-      <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+      <div className="sensa-study-overview grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <section className="flex flex-col rounded-overlay bg-surface-subtle p-6 sm:p-8">
           <div className="flex items-center gap-2 text-sm text-fg-secondary"><BookOpen size={18}/>{t('study.scope')}</div>
           <h2 className="mt-5 text-3xl font-medium tracking-tight">{props.learningTargetCount?t('study.count',{count:props.learningTargetCount}):t('study.empty')}</h2>
