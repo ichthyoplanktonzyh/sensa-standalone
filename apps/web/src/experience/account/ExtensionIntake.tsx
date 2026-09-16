@@ -2,11 +2,16 @@ import {authorizeExtensionConnection} from './extensionConnection';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useState} from 'react';
-import {sensaBridgeRequestChannel,sensaBridgeResponseChannel,sensaBridgeValue,type SensaBridgeKind,type SensaBridgePayload,type SensaBridgeValue} from '@sensa/contracts/sensa';
+import {canonicalConsumerJson,sensaBridgeRequestChannel,sensaBridgeResponseChannel,sensaBridgeValue,type SensaBridgeKind,type SensaBridgePayload,type SensaBridgeValue} from '@sensa/contracts/sensa';
 import {languageRoutesSnapshot} from '../../data/library/language';
 import {readingGlossarySnapshot} from '../../data/library/glossary';
 import {openLibrary,observeLibrary} from '../../data/library/store';
-import {receiveWebIntake} from '../../data/library/intake';
+import {useJourneyGateway} from '../personalMeaningJourney';
+
+const digest = async (value: unknown): Promise<string> => Array.from(
+ new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonicalConsumerJson(value)))),
+ byte=>byte.toString(16).padStart(2,'0'),
+).join('');
 /**
  * One round trip on the page bridge.
  *
@@ -33,6 +38,7 @@ function bridge<K extends SensaBridgeKind>(kind:K,accountId:string,libraryId:str
 /** Receives only explicitly saved extension requests into the existing content screens. */
 export function ExtensionIntake({accountId,onlineService=false}:{accountId:string;onlineService?:boolean}){
  useTranslation();
+ const gateway=useJourneyGateway();
  const [error,setError]=useState('');
  const [reconnectNeeded,setReconnectNeeded]=useState(false),[connecting,setConnecting]=useState(false),[attempt,setAttempt]=useState(0);
  const reconnect=async(discardPending=false)=>{
@@ -69,7 +75,10 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
     for(const request of requests){
      if(controller.signal.aborted)return;
      let receipt;
-     try{receipt=await receiveWebIntake(accountId,request);}catch{if(!controller.signal.aborted){setReconnectNeeded(false);setError(localFlowText('intakeStorageFailed'));}return;}
+     try{
+      const {replayed:_replayed,...result}=await gateway.ingest(request.intake.operationId,request.intake);
+      receipt={contractVersion:'sensa-browser-intake-delivery-v1' as const,libraryId:request.libraryId,clientId:request.clientId,operationId:request.intake.operationId,requestDigest:await digest(request),result,appliedAt:new Date().toISOString()};
+     }catch{if(!controller.signal.aborted){setReconnectNeeded(false);setError(localFlowText('intakeStorageFailed'));}return;}
      if(controller.signal.aborted)return;
      await bridge('web-intake-ack',accountId,library.id,controller.signal,{receipt});
     }
@@ -78,6 +87,6 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
    finally{running=false;}
   };
   void receive();const stop=observeLibrary(()=>void receive());const timer=setInterval(()=>void receive(),5000);return()=>{controller.abort();clearInterval(timer);stop();};
- },[accountId,onlineService,attempt]);
+ },[accountId,onlineService,attempt,gateway]);
  return error?<div role="status" className="fixed bottom-20 left-4 right-4 z-50 rounded-xl border border-feedback-warning bg-accent-soft p-3 text-sm"><p>{localFlowNotice(error)}</p>{reconnectNeeded&&onlineService&&<><button type="button" disabled={connecting} onClick={()=>void reconnect()} className="mt-2 rounded-lg border border-border-strong bg-surface-panel px-4 py-2 font-medium text-fg-primary disabled:opacity-50">{localFlowText(connecting?'extensionConnecting':'extensionReconnect')}</button><button type="button" hidden={error===localFlowText('extensionLibraryMismatch')} disabled={connecting} onClick={()=>void reconnect(true)} className="ml-2 mt-2 rounded-lg border border-feedback-danger bg-surface-panel px-4 py-2 font-medium text-feedback-danger disabled:opacity-50">{localFlowText('extensionDiscardReconnect')}</button></>}</div>:null;
 }

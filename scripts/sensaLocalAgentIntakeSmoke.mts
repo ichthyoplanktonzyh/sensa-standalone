@@ -138,6 +138,13 @@ try {
         openQuestions: [],
       },
       wordingSource: 'llm_suggested',
+      resolutionProvenance: {
+        resolverKind: 'language_model',
+        provider: 'codex',
+        model: 'gpt-5',
+        policyVersion: 'sensa-agent-intake-v1',
+        sourceReferenceIds: ['conversation-1'],
+      },
     },
     acceptance: {
       mode: 'delegated_agent',

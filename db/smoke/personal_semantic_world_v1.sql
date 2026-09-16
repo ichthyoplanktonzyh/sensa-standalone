@@ -440,6 +440,7 @@ INSERT INTO sensa.personal_meaning_alignments (
   personal_meaning_revision_id,
   meaning_focus_id,
   meaning_focus_revision_id,
+  basis_kind,
   sense_id,
   sense_version_id,
   sense_proposal_confirmation_id
@@ -451,9 +452,199 @@ INSERT INTO sensa.personal_meaning_alignments (
   '10000000-0000-4000-8000-000000000014',
   '10000000-0000-4000-8000-000000000015',
   '10000000-0000-4000-8000-000000000017',
+  'sense_construction',
   '10000000-0000-4000-8000-000000000002',
   '10000000-0000-4000-8000-000000000003',
   '10000000-0000-4000-8000-000000000031'
+);
+
+-- A clear Context does not manufacture a Meaning Focus. Construction,
+-- Proposal, confirmation and Alignment all preserve that absence explicitly.
+INSERT INTO sensa.sense_constructions (
+  sense_construction_id,
+  workspace_id,
+  learner_user_id,
+  personal_meaning_id,
+  personal_meaning_revision_id,
+  meaning_focus_id,
+  meaning_focus_revision_id,
+  familiar_language_tag,
+  target_language_tag,
+  semantic_policy_version,
+  created_by_operation_id
+) VALUES (
+  '10000000-0000-4000-8000-000000000052',
+  '10000000-0000-4000-8000-000000000001',
+  'psw-smoke-learner',
+  '10000000-0000-4000-8000-000000000012',
+  '10000000-0000-4000-8000-000000000014',
+  NULL,
+  NULL,
+  'zh-Hans',
+  'en',
+  'sensa-semantic-policy-v3',
+  '10000000-0000-4000-8000-000000000053'
+);
+INSERT INTO sensa.sense_proposals (
+  sense_proposal_id,
+  sense_construction_id,
+  workspace_id,
+  learner_user_id
+) VALUES (
+  '10000000-0000-4000-8000-000000000054',
+  '10000000-0000-4000-8000-000000000052',
+  '10000000-0000-4000-8000-000000000001',
+  'psw-smoke-learner'
+);
+INSERT INTO sensa.sense_proposal_versions (
+  sense_proposal_version_id,
+  sense_proposal_id,
+  workspace_id,
+  learner_user_id,
+  version,
+  meaning_focus_revision_id,
+  semantic_spec,
+  expression_candidates,
+  semantic_policy_version,
+  generator_provenance
+) VALUES (
+  '10000000-0000-4000-8000-000000000055',
+  '10000000-0000-4000-8000-000000000054',
+  '10000000-0000-4000-8000-000000000001',
+  'psw-smoke-learner',
+  1,
+  NULL,
+  '{"schemaVersion":"sensa-sense-semantic-spec-v1"}'::jsonb,
+  '[{"surfaceForm":"borrow","languageTag":"en","expressionType":"word"}]'::jsonb,
+  'sensa-semantic-policy-v3',
+  '{"provider":"smoke","model":"smoke","promptVersion":"v1"}'::jsonb
+);
+INSERT INTO sensa.sense_proposal_confirmations (
+  sense_proposal_confirmation_id,
+  operation_id,
+  workspace_id,
+  learner_user_id,
+  sense_proposal_version_id,
+  meaning_focus_revision_id,
+  resolution,
+  sense_id,
+  sense_version_id,
+  confirmed_at
+) VALUES (
+  '10000000-0000-4000-8000-000000000056',
+  '10000000-0000-4000-8000-000000000057',
+  '10000000-0000-4000-8000-000000000001',
+  'psw-smoke-learner',
+  '10000000-0000-4000-8000-000000000055',
+  NULL,
+  'reuse_existing',
+  '10000000-0000-4000-8000-000000000002',
+  '10000000-0000-4000-8000-000000000003',
+  now()
+);
+INSERT INTO sensa.personal_meaning_alignments (
+  personal_meaning_alignment_id,
+  workspace_id,
+  learner_user_id,
+  personal_meaning_id,
+  personal_meaning_revision_id,
+  meaning_focus_id,
+  meaning_focus_revision_id,
+  basis_kind,
+  sense_id,
+  sense_version_id,
+  sense_proposal_confirmation_id
+) VALUES (
+  '10000000-0000-4000-8000-000000000058',
+  '10000000-0000-4000-8000-000000000001',
+  'psw-smoke-learner',
+  '10000000-0000-4000-8000-000000000012',
+  '10000000-0000-4000-8000-000000000014',
+  NULL,
+  NULL,
+  'sense_construction',
+  '10000000-0000-4000-8000-000000000002',
+  '10000000-0000-4000-8000-000000000003',
+  '10000000-0000-4000-8000-000000000056'
+);
+
+-- A complete Intake can enter through the same Personal Meaning authority
+-- without inventing a Construction, Proposal or Focus. The entry surface is
+-- provenance inside the acceptance; it is not an Alignment type.
+INSERT INTO sensa.semantic_acceptances (
+  semantic_acceptance_id,
+  operation_id,
+  workspace_id,
+  learner_user_id,
+  authority,
+  personal_semantic_anchor_revision_id,
+  personal_expression_anchor_revision_id,
+  expression_occurrence,
+  resolution,
+  sense_id,
+  sense_version_id,
+  resolution_provenance,
+  accepted_at
+) VALUES (
+  '10000000-0000-4000-8000-000000000080',
+  '10000000-0000-4000-8000-000000000081',
+  '10000000-0000-4000-8000-000000000001',
+  'psw-smoke-learner',
+  '{"mode":"learner_direct"}'::jsonb,
+  '10000000-0000-4000-8000-000000000022',
+  '10000000-0000-4000-8000-000000000025',
+  '{"kind":"text_span","start":29,"end":35}'::jsonb,
+  'reuse_existing',
+  '10000000-0000-4000-8000-000000000002',
+  '10000000-0000-4000-8000-000000000003',
+  '{"resolverKind":"external_tool","provider":"browser-extension","sourceReferenceIds":["capture-1"]}'::jsonb,
+  now()
+);
+
+INSERT INTO sensa.personal_meaning_alignments (
+  personal_meaning_alignment_id,
+  workspace_id,
+  learner_user_id,
+  personal_meaning_id,
+  personal_meaning_revision_id,
+  meaning_focus_id,
+  meaning_focus_revision_id,
+  basis_kind,
+  sense_id,
+  sense_version_id,
+  semantic_acceptance_id
+) VALUES (
+  '10000000-0000-4000-8000-000000000082',
+  '10000000-0000-4000-8000-000000000001',
+  'psw-smoke-learner',
+  '10000000-0000-4000-8000-000000000012',
+  '10000000-0000-4000-8000-000000000014',
+  NULL,
+  NULL,
+  'contextual_resolution',
+  '10000000-0000-4000-8000-000000000002',
+  '10000000-0000-4000-8000-000000000003',
+  '10000000-0000-4000-8000-000000000080'
+);
+
+INSERT INTO sensa.personal_meaning_alignment_events (
+  personal_meaning_alignment_event_id,
+  personal_meaning_alignment_id,
+  workspace_id,
+  learner_user_id,
+  ordinal,
+  event_type,
+  operation_id,
+  occurred_at
+) VALUES (
+  '10000000-0000-4000-8000-000000000083',
+  '10000000-0000-4000-8000-000000000082',
+  '10000000-0000-4000-8000-000000000001',
+  'psw-smoke-learner',
+  1,
+  'confirmed',
+  '10000000-0000-4000-8000-000000000084',
+  now()
 );
 INSERT INTO sensa.personal_meaning_alignment_events (
   personal_meaning_alignment_event_id,
@@ -681,6 +872,14 @@ BEGIN
   END IF;
   IF (SELECT count(*) FROM sensa.learning_materializations WHERE validation_status = 'validated') <> 1 THEN
     RAISE EXCEPTION 'Validated Learning Materialization was not created';
+  END IF;
+  IF (
+    SELECT count(*)
+    FROM sensa.personal_meaning_alignments
+    WHERE basis_kind = 'contextual_resolution'
+      AND semantic_acceptance_id IS NOT NULL
+  ) <> 1 THEN
+    RAISE EXCEPTION 'Complete Intake did not create a contextual-resolution Alignment';
   END IF;
 END;
 $$;

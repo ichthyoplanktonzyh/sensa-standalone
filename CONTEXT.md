@@ -575,7 +575,10 @@ facts currently available. Text selection, image/audio capture, first-party exte
 and learner-authorized Agents all submit through this boundary. Missing facts send the
 request to the slow track. A receiver validates structure and presence only; it does
 not re-judge whether a producer-supplied Context is semantically sufficient. An Intake
-does not become Personal Semantic World membership by itself.
+does not become Personal Semantic World membership by itself. Context acquisition
+provenance, Sense-resolution provenance and Semantic Acceptance authority are three
+orthogonal facts: an entry surface may carry all three, but its client kind is never a
+routing rule or a Personal Meaning identity component.
 
 **Intake Inbox Item**:
 A learner-owned unresolved Semantic Intake awaiting Context, an Expression selection,

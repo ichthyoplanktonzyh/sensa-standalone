@@ -6,6 +6,7 @@ import {
   sensaSenseSemanticSpecSchema,
 } from "./semanticRegistry.js";
 import { sensaExpressionOccurrenceLocatorSchema } from "./personalSemanticWorld.js";
+import { sensaSemanticResolutionProvenanceSchema } from "./personalSemanticWorld.js";
 
 /**
  * The port-neutral contract spoken by first-party surfaces, local agent
@@ -137,6 +138,9 @@ export const sensaIntakeSenseSchema = z
     senseKey: nonEmpty.max(500).nullable(),
     semanticSpec: sensaSenseSemanticSpecSchema,
     wordingSource: sensaIntakeWordingSourceSchema,
+    /** Who resolved the Sense. This is independent from both Context source
+     * and the direct/delegated authority that accepts the final tuple. */
+    resolutionProvenance: sensaSemanticResolutionProvenanceSchema,
   })
   .strict();
 
@@ -217,8 +221,6 @@ export const sensaIntakeResultSchema = z.discriminatedUnion("route", [
 export type SensaIntakeModality = z.infer<typeof sensaIntakeModalitySchema>;
 export type SensaIntakeWordingSource = z.infer<typeof sensaIntakeWordingSourceSchema>;
 export type SensaIntakeAcceptance = z.infer<typeof sensaIntakeAcceptanceSchema>;
-/** Compatibility name for current gateway imports. */
-export type SensaIntakeAcceptanceRequest = SensaIntakeAcceptance;
 export type SensaIntakeItemStatus = z.infer<typeof sensaIntakeItemStatusSchema>;
 export type SensaIntakeSourceMeta = z.infer<typeof sensaIntakeSourceMetaSchema>;
 export type SensaIntakeContext = z.infer<typeof sensaIntakeContextSchema>;

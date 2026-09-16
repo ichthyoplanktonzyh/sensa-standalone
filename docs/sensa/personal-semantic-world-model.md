@@ -195,6 +195,9 @@ membership。
 direct acceptance；获授权 Agent 调用正式 commit operation 可以构成 delegated acceptance。二者具有
 相同 membership 效力但必须保留不同 provenance。用户在当前 Agent 会话中明确要求“帮我保存”
 就是一次 delegated acceptance 的 basis，无需先创建独立 grant id，也无需到 Sensa 再确认一次。
+入口来源、Sense 解析来源与 acceptance authority 是三组正交事实：浏览器只可能是 Context 的捕获入口，
+不因此成为 Sense resolver；Agent 也只有在实际完成解析或获得委托接受时，才分别出现在对应 provenance
+中。任何一组 provenance 都不得产生入口专属的快慢轨、Personal Meaning 或 Alignment。
 传输权限由连接或账号认证负责，语义接受由 payload 中的 acceptance provenance 负责，两者不得混为
 一个“是否允许调用 API”的布尔值。
 

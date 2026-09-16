@@ -358,8 +358,8 @@ export const sensaSenseConstructionSnapshotSchema = z
     learnerUserId: nonEmpty,
     personalMeaningId: uuid,
     personalMeaningRevisionId: uuid,
-    meaningFocusId: uuid,
-    meaningFocusRevisionId: uuid,
+    meaningFocusId: uuid.nullable(),
+    meaningFocusRevisionId: uuid.nullable(),
     languageContext:sensaPinnedLanguageContextSchema,
     semanticPolicyVersion: nonEmpty,
     status: sensaSenseConstructionStatusSchema,
@@ -367,7 +367,15 @@ export const sensaSenseConstructionSnapshotSchema = z
     createdAt: timestamp,
     updatedAt: timestamp,
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if ((value.meaningFocusId === null) !== (value.meaningFocusRevisionId === null)) {
+      context.addIssue({
+        code: "custom",
+        message: "meaning focus and its revision must be present together",
+      });
+    }
+  });
 
 export const sensaSenseConstructionTurnSchema = z
   .object({
@@ -409,7 +417,7 @@ export const sensaSenseProposalVersionSnapshotSchema = z
     senseProposalVersionId: uuid,
     senseProposalId: uuid,
     version: positiveInteger,
-    meaningFocusRevisionId: uuid,
+    meaningFocusRevisionId: uuid.nullable(),
     semanticSpec: sensaSenseSemanticSpecSchema,
     expressionCandidates: z.array(
       z
@@ -445,7 +453,7 @@ export const sensaConfirmSenseProposalFactSchema = z
     operationId: uuid,
     learnerUserId: nonEmpty,
     senseProposalVersionId: uuid,
-    meaningFocusRevisionId: uuid,
+    meaningFocusRevisionId: uuid.nullable(),
     resolution: z.enum(["create_new", "reuse_existing"]),
     senseId: uuid,
     senseVersionId: uuid,
@@ -491,8 +499,8 @@ export const sensaPersonalMeaningAlignmentBasisSchema =
     z
       .object({
         kind: z.literal("sense_construction"),
-        meaningFocusId: uuid,
-        meaningFocusRevisionId: uuid,
+        meaningFocusId: uuid.nullable(),
+        meaningFocusRevisionId: uuid.nullable(),
         senseProposalConfirmationId: uuid,
       })
       .strict(),
@@ -502,7 +510,17 @@ export const sensaPersonalMeaningAlignmentBasisSchema =
         semanticAcceptanceId: uuid,
       })
       .strict(),
-  ]);
+  ]).superRefine((value, context) => {
+    if (
+      value.kind === "sense_construction"
+      && ((value.meaningFocusId === null) !== (value.meaningFocusRevisionId === null))
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "meaning focus and its revision must be present together",
+      });
+    }
+  });
 
 export const sensaPersonalMeaningAlignmentSnapshotSchema = z
   .object({

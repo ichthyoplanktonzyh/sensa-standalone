@@ -28,7 +28,7 @@ function fastTrackPayload(text:string,observedForm:string,languageTag:string|nul
     capturedAt:'2026-09-01T00:00:00.000Z',
     context:{modality:'text',textSegment:text,mediaReferenceIds:[],languageTag,source:null},
     expression:{surfaceForm:rememberedForm,languageTag,occurrence:{surfaceForm:observedForm,locator:{kind:'text_span',start,end:start+observedForm.length}},expressionTypeHint:'phrase'},
-    sense:{senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'从容地花时间做一件事',prototypeScenes:[{summary:text,participantRoles:[],states:[],directionOrCausality:null}],includedCases:[text],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'llm_suggested'},
+    sense:{senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'从容地花时间做一件事',prototypeScenes:[{summary:text,participantRoles:[],states:[],directionOrCausality:null}],includedCases:[text],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'llm_suggested',resolutionProvenance:{resolverKind:'language_model',provider:'fixture',model:'fixture',policyVersion:'fixture-v1',sourceReferenceIds:['language-journey-smoke']}},
     acceptance:{mode:'learner_direct'},
   });
 }
@@ -62,28 +62,31 @@ const inflectedRun=run(fastTrackPayload('She backed out at the last minute.','ba
 assert.equal(inflectedRun.record.personalExpressionAnchorRevisions[0]!.surfaceForm,'back out','the remembered form may differ from the observed occurrence');
 assert.equal(inflectedRun.record.personalSemanticAnchorRevisions[0]!.structuredPayload.occurrenceSurfaceForm,'backed out');
 
-// New material resolves the active context once and records the exact language.
+// Web creation remains an Inbox clarification draft. Only one final confirmation
+// atomically creates a complete, learnable Personal Meaning.
 let context:SensaPinnedLanguageContext={supportLanguageTag:'ko',targetLanguageTag:'it'};
 const storage=new MemoryStoragePort();
 const gateway=createJourneyGateway({storage,clock:createSeededClock(),languages:{read:async()=>context}});
-await gateway.createPersonalMeaning({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'雨后的巷子'}],familiarExpression:{surfaceForm:'欲言又止'}});
-const stored=JSON.parse((await storage.read(JOURNEY_STORE_KEY))!) as any;
+const draft=await gateway.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'雨后的巷子'}],familiarExpression:{surfaceForm:'欲言又止'},startingPoint:'from_expression'});
+let stored=JSON.parse((await storage.read(JOURNEY_STORE_KEY))!) as any;
 const saved=async()=>JSON.parse((await storage.read(JOURNEY_STORE_KEY))!) as any;
-const written=stored.meanings[0].personalExpressionAnchorRevisions;
-assert.equal(written.length,1,'the learner wording becomes its own expression anchor');
-assert.equal(written[0].languageTag,'ko','the learner wording uses this operation’s Support Language');
-assert.equal('learnerLanguageRole' in written[0],false);
-const blockAnchors=stored.meanings[0].personalSemanticAnchorRevisions;
-assert.equal(blockAnchors.length,1);
-assert.equal(blockAnchors[0].languageTag,'ko','a text block carries the same operation-scoped Support Language');
-assert.equal(blockAnchors[0].bodyText,'雨后的巷子');
-
-// A later independent command resolves the current context again rather than
-// language that happened to be stored on the record first.
+assert.equal(stored.meanings.length,0,'saving material does not create a partial Personal Meaning');
+assert.equal(stored.inboxItems.length,1);assert.equal(gateway.getWorldItems().length,0);
+assert.equal(gateway.getClarificationDraft(draft.intakeId)?.startingPoint,'from_expression');
 context={supportLanguageTag:'zh-CN',targetLanguageTag:'es'};
-await gateway.addMaterialBlock({operationId:crypto.randomUUID(),personalMeaningId:stored.meanings[0].personalMeaning.personalMeaningId,block:{kind:'text',bodyText:'雨停了'}});
-const after=await saved();
-assert.deepEqual(after.meanings[0].personalSemanticAnchorRevisions.map((revision:any)=>revision.languageTag),['ko','zh-CN'],'a later block uses its own resolved context without rewriting the earlier Anchor');
+await gateway.addClarificationMaterial(crypto.randomUUID(),draft.intakeId,{kind:'text',bodyText:'雨停了'});
+assert.equal((await saved()).meanings.length,0,'editing the slow-track draft still does not leak it into the world');
+const clarifiedContext=gateway.getClarificationDraft(draft.intakeId)!.context!;
+const completed=await gateway.completeClarificationDraft({operationId:crypto.randomUUID(),intakeId:draft.intakeId,context:clarifiedContext,languageContext:{supportLanguageTag:'ko',targetLanguageTag:'it'},focus:null,sense:{proposedSenseKey:'hesitate-to-speak',coreMeaningFocus:'想说某件事却因为犹豫而停住',prototypeScenes:[{summary:'一个人准备开口，犹豫后停住。',participantRoles:['说话者'],states:['准备开口','犹豫'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[],unresolvedQuestions:[]},expression:{surfaceForm:'esitare a parlare',expressionType:'phrase',languageTag:'it',relation:'realizes',semanticCoverage:'exact'},expressionCandidates:[{surfaceForm:'esitare a parlare',expressionType:'phrase',languageTag:'it',relation:'realizes',semanticCoverage:'exact'}],confirmExpression:true,transcript:[{messageId:crypto.randomUUID(),role:'learner',body:'就是想说但停住的感觉。',occurredAt:'2026-09-01T00:00:01.000Z'}],provenance:{provider:'fixture',model:'fixture',promptVersion:'v1'},semanticPolicyVersion:'fixture-v1'});
+stored=await saved();assert.equal(stored.inboxItems.length,0);assert.equal(stored.clarificationDrafts.length,0);assert.equal(stored.meanings.length,1);
+assert.equal(completed.meaningFocusId,null,'an unambiguous Context completes without manufacturing a Focus');
+assert.equal(stored.meanings[0].focuses.length,0);assert.equal(stored.meanings[0].focusAcceptances.length,0);
+assert.equal(stored.meanings[0].constructions[0].meaningFocusId,null);assert.equal(stored.meanings[0].alignments[0].basis.meaningFocusId,null);
+const written=stored.meanings[0].personalExpressionAnchorRevisions;
+assert.equal(written.at(-1).languageTag,'it','the confirmed expression uses the clarification’s pinned Target Language');
+const blockAnchors=stored.meanings[0].personalSemanticAnchorRevisions;
+assert.equal(blockAnchors.length,1);assert.equal(blockAnchors[0].languageTag,'ko','material uses the clarification’s pinned Support Language, not a later active Route');assert.equal(blockAnchors[0].bodyText,'雨后的巷子\n\n雨停了');
+assert.equal(gateway.getWorldItems().length,1);assert.equal(gateway.getLearningSources(completed.personalMeaningId).length,1,'the atomic result is immediately eligible for the one Add-to-Learning path');
 
 // Two captures may arrive together from a batch-oriented Agent. Commands stay
 // serialized so neither aggregate write drops the other.
@@ -112,13 +115,27 @@ assert.equal(raced.meanings.filter((meaning:any)=>meaning.personalMeaning.status
 // the Expression incomplete, while a missing Context has its own slow-track state.
 const third=fastTrackPayload('Il a pris son temps.','a pris','fr');
 assert.equal((await raceGateway.ingest(third.operationId,third)).route,'fast_track');
+const pendingAcceptance={...fastTrackPayload('They broke the ice.','broke','en'),operationId:crypto.randomUUID(),acceptance:null};
+const acceptanceQueued=await raceGateway.ingest(pendingAcceptance.operationId,pendingAcceptance);
+assert.equal(acceptanceQueued.route,'inbox');
+if(acceptanceQueued.route!=='inbox')throw new Error('fixture must enter Inbox');
+const acceptedLater=await raceGateway.resolveInboxItem(crypto.randomUUID(),acceptanceQueued.intakeId,{sense:pendingAcceptance.sense!});
+assert.equal(acceptedLater.route,'fast_track');
+if(acceptedLater.route!=='fast_track')throw new Error('fixture must commit');
+const acceptedRecord=(JSON.parse((await raceStorage.read(JOURNEY_STORE_KEY))!) as any).meanings.find((meaning:any)=>meaning.personalMeaning.personalMeaningId===acceptedLater.personalMeaningId);
+assert.equal(acceptedRecord.semanticAcceptances[0].resolutionProvenance.provider,'fixture','later learner Acceptance must not rewrite the original Sense resolver');
+assert.equal(acceptedRecord.semanticAcceptances[0].authority.mode,'learner_direct','Acceptance authority remains a separate fact');
 const undetermined=fastTrackPayload('She took her time.','took',null);
 assert.equal((await raceGateway.ingest(undetermined.operationId,undetermined)).route,'inbox');
 const withoutContext={...fastTrackPayload('She backed out.','backed out','en','back out'),operationId:crypto.randomUUID(),context:null,expression:null};
-assert.equal((await raceGateway.ingest(withoutContext.operationId,withoutContext)).route,'inbox');
+const noContextQueued=await raceGateway.ingest(withoutContext.operationId,withoutContext);
+assert.equal(noContextQueued.route,'inbox');
 const waiting=(JSON.parse((await raceStorage.read(JOURNEY_STORE_KEY))!) as any).inboxItems;
 assert.deepEqual(waiting.map((item:any)=>item.status),['pending_expression','pending_context']);
-const noContextMeaning=(JSON.parse((await raceStorage.read(JOURNEY_STORE_KEY))!) as any).meanings.find((meaning:any)=>meaning.personalExpressionAnchorRevisions[0]?.surfaceForm==='back out');
-assert.equal(noContextMeaning,undefined,'the no-context fixture remains in the Inbox');
+assert.equal((JSON.parse((await raceStorage.read(JOURNEY_STORE_KEY))!) as any).meanings.find((meaning:any)=>meaning.personalExpressionAnchorRevisions[0]?.surfaceForm==='back out'),undefined,'a missing Context cannot leak into the semantic world');
+if(noContextQueued.route!=='inbox')throw new Error('fixture must enter Inbox');
+const suppliedContext={modality:'text' as const,textSegment:'I planned to attend, but then changed my mind.',mediaReferenceIds:[],languageTag:'en',source:{client:'sensa-web',url:null,title:'Inbox clarification',sourceReferenceId:noContextQueued.intakeId,domSelector:null,paragraphContext:null}};
+const supplied=await raceGateway.completeClarificationDraft({operationId:crypto.randomUUID(),intakeId:noContextQueued.intakeId,context:suppliedContext,languageContext:slowContext,focus:null,sense:{proposedSenseKey:'back-out',coreMeaningFocus:'原本准备做某事，后来决定退出或取消',prototypeScenes:[{summary:'一个人原先准备参与，之后改变决定。',participantRoles:['行动者'],states:['原计划参与','决定退出'],directionOrCausality:'决定变化导致退出'}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[],unresolvedQuestions:[]},expression:{surfaceForm:'back out',expressionType:'phrase',languageTag:'en',relation:'realizes',semanticCoverage:'exact'},expressionCandidates:[{surfaceForm:'back out',expressionType:'phrase',languageTag:'en',relation:'realizes',semanticCoverage:'exact'}],confirmExpression:true,transcript:[{messageId:crypto.randomUUID(),role:'learner',body:suppliedContext.textSegment,occurredAt:'2026-09-01T00:00:02.000Z'}],provenance:{provider:'fixture',model:'fixture',promptVersion:'v1'},semanticPolicyVersion:'fixture-v1'});
+assert.equal(raceGateway.getLearningSources(supplied.personalMeaningId)[0]?.context.text,suppliedContext.textSegment,'clarification must supply and preserve a formerly missing Context');
 
 console.log('PASS: Intake preserves absolute language tags, ignores the active learning Route, accepts canonical/observed expression forms, and mechanically routes missing facts. Pure engine and in-memory store; no browser, network or model.');

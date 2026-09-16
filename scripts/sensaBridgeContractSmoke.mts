@@ -15,7 +15,7 @@ import {createHash} from 'node:crypto';
 import {build} from 'esbuild';
 import vm from 'node:vm';
 import {
-  canonicalConsumerJson,localIntakeRequestSchema,sensaBridgeKinds,sensaBridgeMaxRequestIdLength,
+  canonicalConsumerJson,sensaBrowserIntakeDeliverySchema,sensaBridgeKinds,sensaBridgeMaxRequestIdLength,
   sensaBridgeRequestChannel,sensaBridgeRequestSchema,sensaBridgeResponseChannel,sensaBridgeResponseSchemas,sensaBridgeValue,
   type SensaBridgeKind,type SensaBridgePayload,
 } from '@sensa/contracts/sensa';
@@ -171,12 +171,14 @@ console.log('PASS: the boundary refuses another channel, window or origin, an un
 // ── phase 2: every declared kind, through the real forwarder and handler ─────
 Object.assign(globalThis,{chrome:chromeMock});
 const {queueWeb,pendingWeb}=await import('../apps/browser-extension/src/webDestination.ts');
+const {browserCaptureToIntake}=await import('../apps/browser-extension/src/semanticIntakeAdapter.ts');
 const snapshot={sentence:'Slow mornings suit her.',language:'en',languageSource:'detector',languageConfidence:.9,source:{url:web+'/article',title:'An article',capturedAt:new Date().toISOString()},expression:{text:'suit',start:14,end:18}};
-const queued=localIntakeRequestSchema.parse({version:'sensa-intake-v1',libraryId,clientId:installationId,operationId:crypto.randomUUID(),languageContext:{targetLanguageTag:'en',supportLanguageTag:'zh-CN'},snapshot,resolution:null,acceptance:null});
+const browserIntake=browserCaptureToIntake(crypto.randomUUID(),snapshot,null);
+const queued=sensaBrowserIntakeDeliverySchema.parse({contractVersion:'sensa-browser-intake-delivery-v1',libraryId,clientId:installationId,intake:browserIntake});
 await queueWeb(accountId,queued);
 const digest=createHash('sha256').update(canonicalConsumerJson(queued)).digest('hex');
-const receipt={version:'sensa-intake-v1',libraryId,clientId:installationId,operationId:queued.operationId,requestDigest:digest,status:'pending',entityId:crypto.randomUUID(),committedAt:new Date().toISOString()};
-const nativeIntake={contractVersion:'sensa-intake-v3' as const,operationId:crypto.randomUUID(),capturedAt:new Date().toISOString(),context:{modality:'text' as const,textSegment:'I backed out.',mediaReferenceIds:[],languageTag:'en' as const,source:{client:'codex',url:null,title:'GPT Live conversation',sourceReferenceId:'conversation-1',domSelector:null,paragraphContext:null}},expression:{surfaceForm:'back out',languageTag:'en' as const,occurrence:{surfaceForm:'backed out',locator:{kind:'text_span' as const,start:2,end:12}},expressionTypeHint:'phrase' as const},sense:{senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1' as const,coreMeaningFocus:'原本准备做某事，后来决定退出或取消',prototypeScenes:[{summary:'I backed out.',participantRoles:[],states:[],directionOrCausality:null}],includedCases:['I backed out.'],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'llm_suggested' as const},acceptance:{mode:'delegated_agent' as const,actorId:'codex',basis:'explicit_user_request' as const,authorizationReference:null}};
+const receipt={contractVersion:'sensa-browser-intake-delivery-v1' as const,libraryId,clientId:installationId,operationId:queued.intake.operationId,requestDigest:digest,result:{route:'inbox' as const,intakeId:crypto.randomUUID(),status:'pending_sense' as const},appliedAt:new Date().toISOString()};
+const nativeIntake={contractVersion:'sensa-intake-v3' as const,operationId:crypto.randomUUID(),capturedAt:new Date().toISOString(),context:{modality:'text' as const,textSegment:'I backed out.',mediaReferenceIds:[],languageTag:'en' as const,source:{client:'codex',url:null,title:'GPT Live conversation',sourceReferenceId:'conversation-1',domSelector:null,paragraphContext:null}},expression:{surfaceForm:'back out',languageTag:'en' as const,occurrence:{surfaceForm:'backed out',locator:{kind:'text_span' as const,start:2,end:12}},expressionTypeHint:'phrase' as const},sense:{senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1' as const,coreMeaningFocus:'原本准备做某事，后来决定退出或取消',prototypeScenes:[{summary:'I backed out.',participantRoles:[],states:[],directionOrCausality:null}],includedCases:['I backed out.'],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'llm_suggested' as const,resolutionProvenance:{resolverKind:'language_model' as const,provider:'codex',model:'fixture',policyVersion:'sensa-agent-intake-v1',sourceReferenceIds:['conversation-1']}},acceptance:{mode:'delegated_agent' as const,actorId:'codex',basis:'explicit_user_request' as const,authorizationReference:null}};
 const nativeDelivery={contractVersion:'sensa-local-agent-intake-v1' as const,libraryId,client:{clientId:installationId,kind:'agent' as const,label:'Codex'},intake:nativeIntake,requestDigest:'a'.repeat(64)};
 const nativeReceipt={contractVersion:'sensa-local-agent-intake-v1' as const,libraryId,clientId:installationId,operationId:nativeIntake.operationId,requestDigest:nativeDelivery.requestDigest,result:{route:'fast_track' as const,personalMeaningId:crypto.randomUUID()},appliedAt:new Date().toISOString()};
 nativeDeliveries=[nativeDelivery];

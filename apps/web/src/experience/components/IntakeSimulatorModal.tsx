@@ -98,6 +98,13 @@ const resolvedSense = (sense: typeof LOAN_SENSES[number], scene: string): SensaI
     openQuestions: [],
   },
   wordingSource: 'learner_authored',
+  resolutionProvenance: {
+    resolverKind: 'learner',
+    provider: 'sensa-intake-simulator',
+    model: null,
+    policyVersion: null,
+    sourceReferenceIds: ['simulated-learner-resolution'],
+  },
 });
 
 export const IntakeSimulatorModal = ({

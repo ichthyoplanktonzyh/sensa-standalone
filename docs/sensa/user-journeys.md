@@ -67,6 +67,22 @@ Intake Inbox / Context–Expression–Sense / Personal Meaning
 Context、完整 Expression、Sense 或 acceptance 中任一事实时，内容仍是 Intake Inbox Item 或澄清草稿，
 不是正式 Personal Meaning。
 
+### 3.1 “快轨 / 慢轨”不是入口类型
+
+快轨与慢轨只是统一接收端对同一个 Semantic Intake 的完整性判定结果，不是浏览器、Agent、Web 或
+未来移动端各自拥有的产品流程：
+
+- 四项事实完整时，接收端原子创建 Personal Meaning；
+- 任一项缺失时，接收端原样保留已知事实并创建 Intake Inbox Item；
+- Inbox 补全后仍调用同一套 Personal Meaning commit authority，不转换成另一种领域对象；最终确认必须携带
+  完整 Context、Expression、Sense 与 Acceptance，缺 Context 的条目可用澄清对话中由用户补充的真实描述完成；
+- 入口名称、客户端类型与 transport envelope 不参与分流，也不进入 Personal Meaning、Alignment 或
+  Learning Target identity。
+
+来源 provenance 只用于回答“这份 Context 从哪里来、谁解析了 Sense、谁以什么权限接受、出现问题时
+如何审计或回到原材料”。它不能决定快慢轨、创建插件专属/Agent 专属的 Meaning，也不能让同一事实走
+不同的 Add-to-Learning 或学习运行时。
+
 ## 4. 跨旅程不变量
 
 所有入口和页面必须共同遵守以下规则：
@@ -214,7 +230,7 @@ Content Provisioning Task
 
 用户在真实网页或字幕中遇到内容时原位理解并保存，不需要先打开 Sensa 页面重复录入。
 
-### 7.2 快轨：解释并确认
+### 7.2 信息完整：解释并确认
 
 ```text
 网页 / 字幕选区
@@ -228,13 +244,13 @@ Content Provisioning Task
 direct Semantic Acceptance
     ↓
 完整 Intake payload
-    ↓ fast track
+    ↓ 接收端判定事实完整
 Personal Meaning
 ```
 
 插件中的明确保存动作构成 direct acceptance，因此 Web 不得要求用户对同一关系再次确认。
 
-### 7.3 慢轨：先保存，之后澄清
+### 7.3 信息不完整：先保存，之后澄清
 
 ```text
 网页 / 字幕选区
@@ -259,8 +275,8 @@ Personal Meaning
 
 ### 7.5 成功出口
 
-- 快轨成功：完整 Personal Meaning，可继续治理或加入学习。
-- 慢轨成功：Inbox Item 保留全部已知事实和来源，等待补全。
+- 完整提交成功：得到完整 Personal Meaning，可继续治理或加入学习。
+- 不完整提交成功：Inbox Item 保留全部已知事实和来源，等待补全。
 - 传输未完成：材料仍在插件持久队列，不宣称已经进入语义世界。
 
 ## 8. 旅程四：从 Agent 进入
@@ -270,7 +286,7 @@ Personal Meaning
 用户在 Codex 等 Agent 中完成真实工作或交流后，直接要求 Agent 把相关 Context、Expression 和 Sense
 整理并保存到 Sensa，而不需要回到 Web 重复录入。
 
-### 8.2 快轨：明确委托保存
+### 8.2 信息完整：明确委托保存
 
 ```text
 用户在 Agent 会话中明确要求“存入我的语义世界”
@@ -293,7 +309,7 @@ Personal Meaning
 当前 Agent 会话中的一次明确请求可以构成 one-shot delegated acceptance basis，不要求额外 grant id，
 也不要求用户回到第一方界面二次确认。系统必须保存 actor、basis 和 provenance。
 
-### 8.3 慢轨：信息不完整
+### 8.3 信息不完整：进入共同 Inbox
 
 ```text
 Agent 提交部分事实
@@ -312,7 +328,7 @@ Agent 提交部分事实
 ```
 
 接收端只校验字段、类型、定位关系和大小限制，不重新判断 Agent 给出的 Context 是否“足够好”，也不
-为了快轨再次调用模型。
+为了直接写入再次调用模型。
 
 ### 8.4 本机 Agent 交付
 
@@ -342,7 +358,7 @@ queued
     ↓ 用户 Web 登录、联网且本机 library identity 已恢复
 Web 拉取同一 canonical payload
     ↓
-本地 authority 执行快轨或慢轨
+本地 authority 按同一完整性规则决定直接写入或 Inbox
     ↓
 applied + 真实结果
 ```
@@ -457,11 +473,9 @@ Retention Review
 | 入口 | 首个正式对象 | 是否必须进入个人语义世界 | 是否自动加入学习 | 进入运行时前的资源路径 |
 | --- | --- | --- | --- | --- |
 | 学习包 | Book Enrollment / Curriculum Membership | 否 | 否，需明确加入/应用 | Published Materialization |
-| Web 原生创建 | Draft / Inbox Item | 是，闭合并接受后 | 否 | On-demand 或 Hybrid |
-| 浏览器快轨 | Personal Meaning | 是 | 否 | 明确加入后 On-demand/Hybrid |
-| 浏览器慢轨 | Intake Inbox Item | 是，补全后 | 否 | 明确加入后 On-demand/Hybrid |
-| Agent 快轨 | Personal Meaning | 是 | 否，需独立授权 | 明确加入后 On-demand/Hybrid |
-| Agent 慢轨 | Intake Inbox Item | 是，补全后 | 否 | 明确加入后 On-demand/Hybrid |
+| Web 原生创建 | 完整则 Personal Meaning；不完整则 Intake Inbox Item | 是，闭合并接受后 | 否 | On-demand 或 Hybrid |
+| 浏览器捕获 | 完整则 Personal Meaning；不完整则 Intake Inbox Item | 是，或补全后 | 否 | 明确加入后 On-demand/Hybrid |
+| Agent 委托 | 完整则 Personal Meaning；不完整则 Intake Inbox Item | 是，或补全后 | 否，需独立授权 | 明确加入后 On-demand/Hybrid |
 | 学习中的我的场景 | Personal Learning Scene | 可选，明确保存后 | 不适用；目标已存在 | 继续使用当前 Learning Target |
 
 ## 13. 当前产品入口与未来扩展
@@ -477,4 +491,4 @@ Retention Review
 
 未来入口可以包括移动端分享、拍照、录音、桌面助手或其他 Agent。新增入口不得创建另一套 Personal
 Meaning、Inbox、Acceptance 或 Add-to-Learning 语义；它只需要提供当前能够取得的 Intake facts，并使用
-同一幂等 Semantic Intake authority 完成快慢轨分流。
+同一幂等 Semantic Intake authority 完成基于事实完整性的直接写入或 Inbox 分流。

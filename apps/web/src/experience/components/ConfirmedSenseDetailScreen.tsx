@@ -5,11 +5,12 @@ import { uiText } from '../../i18n/uiText';
  *
  * This is intentionally separate from the content Sense detail. It reads the
  * exact Personal Meaning → optional Focus → Alignment projection and is the only place
- * from which the independent Expression Binding journey begins. It never
- * creates a Learning Target or enters the learning runtime.
+ * from which the independent Expression Binding journey begins. A complete
+ * Alignment can also be explicitly added to learning through the injected
+ * learning control; the detail screen itself remains a read projection.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import {
   useJourneyDetail,
   type JourneyAlignmentView,
@@ -33,6 +34,7 @@ export interface ConfirmedSenseDetailScreenProps {
   meaningFocusId: string | null;
   onBack: () => void;
   onOpenBinding: () => void;
+  learningControls?: (detail: NonNullable<ReturnType<typeof useJourneyDetail>['detail']>, alignment: JourneyAlignmentView) => ReactNode;
 }
 
 const relationLabels: Record<SensaExpressionBindingRelation, string> = {
@@ -190,6 +192,7 @@ export const ConfirmedSenseDetailScreen = ({
   meaningFocusId,
   onBack,
   onOpenBinding,
+  learningControls,
 }: ConfirmedSenseDetailScreenProps) => {
   useTranslation();
   const screenRef = useRef<HTMLElement>(null);
@@ -254,6 +257,7 @@ export const ConfirmedSenseDetailScreen = ({
                 </p>
               </details>
               {alignment.confirmedBindings.length > 0 && <BindingSummary alignment={alignment} />}
+              {alignment.confirmedBindings.length > 0 && learningControls?.(detail, alignment)}
             </>
           );
 

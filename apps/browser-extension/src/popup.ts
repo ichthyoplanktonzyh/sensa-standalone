@@ -29,7 +29,7 @@ async function act(kind:string){
   const recent=document.querySelector('#recent')!;recent.replaceChildren();
   for(const item of v.recent){const element=document.createElement('a');
    if(element instanceof HTMLAnchorElement){const url=new URL(v.destination==='web-local'?(item.status==='confirmed'?'/content/personal-meaning':'/content?worldAction=inbox'):webUrl,webUrl);url.searchParams.set(v.destination==='web-local'?'meaningId':('acceptanceId'in item||item.meaningId)?'meaning':'intake',item.meaningId??item.id);element.href=url.href;element.addEventListener('click',event=>{event.preventDefault();void chrome.runtime.sendMessage({kind:'open-web',path:url.pathname+url.search});});}
-   element.textContent=t(item.status==='removed'?'removed':item.status==='confirmed'?'saved':'inbox')+(item.snapshot.expression?.text??t('text'));recent.append(element);
+   element.textContent=t(item.status==='removed'?'removed':item.status==='confirmed'?'saved':'inbox')+(item.expression??t('text'));recent.append(element);
   }
   document.getElementById('recent-count')!.textContent=t('count',{count:v.recent.length});
   const empty=document.getElementById('recent-empty')!;empty.hidden=v.recent.length>0;empty.textContent=t(v.accountId?'empty':'guestEmpty');

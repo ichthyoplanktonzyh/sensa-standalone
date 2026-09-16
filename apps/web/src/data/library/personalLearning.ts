@@ -5,44 +5,46 @@ import {makeRequest,validateBundle,modelFacts,independentReviewSystem,requestLan
 import {command,readLibrary,type LibraryTransaction} from './store';
 import {learningOwner} from './packages';
 import {commitPersonalMaterial,type LocalLearningTarget} from './learning';
-import type {LocalMeaning} from './teacher';
-import type {LocalDraft} from './drafts';
+import {
+ personalLearningSourceKey,
+ personalLearningSourceRevision,
+ type PersonalMeaningLearningReference,
+ type PersonalMeaningLearningSource,
+} from './personalLearningSource';
 import {defaultSensaProvider,type Provider,type ProviderSettings} from './providers';
 import {complete,digest} from './transport';
 import {requireLanguageRouteContext} from './language';
-export type PersonalLearning={replacing?:boolean;id:string;meaningId:string;meaning:LocalMeaning;targetId:string;curriculumMembershipId:string;languageContext:SensaFormalPinnedLanguageContext;planRevision:string;useContext:boolean;status:'waiting'|'generating'|'reviewing'|'failed'|'rejected'|'stopped'|'ready';attemptId:string|null;leaseUntil:number;notice:string;createdAt:string};
+export type PersonalLearning={replacing?:boolean;id:string;source:PersonalMeaningLearningReference;targetId:string;curriculumMembershipId:string;languageContext:SensaFormalPinnedLanguageContext;planRevision:string;useContext:boolean;status:'waiting'|'generating'|'reviewing'|'failed'|'rejected'|'stopped'|'ready';attemptId:string|null;leaseUntil:number;notice:string;createdAt:string};
 export type ContentAttempt={generationSteps?:ContentGenerationStep[];id:string;taskId:string;createdAt:string;contentProvider:Provider;reviewProvider:Provider|null;request:SensaContentGenerationRequest|null;bundle:SensaMaterialCandidateBundle|null;review:Awaited<ReturnType<ContentReviewer>>|null;validation:Awaited<ReturnType<typeof validateBundle>>|null;status:string;resumedFrom:string|null;grant:{id:string;contextDigest:string;recipients:string[]}|null};
 export const personalLearningSnapshot=()=>readLibrary(tx=>tx.all<PersonalLearning>('personalLearning'));
-async function currentMeaning(tx:LibraryTransaction,meaning:LocalMeaning){
- const current=await tx.get<LocalMeaning>('meanings',meaning.id),draft=await tx.get<LocalDraft>('drafts',meaning.draftId);
- if(!current||canonicalConsumerJson(current)!==canonicalConsumerJson(meaning)||draft?.revision!==meaning.draftRevision)throw new Error('localFlow.meaningChanged');
-}
-export async function enrollPersonal(operationId:string,meaningId:string,languageContext:SensaFormalPinnedLanguageContext,useContext:boolean){return command({id:operationId,kind:'personal.enroll',input:{meaningId,languageContext,useContext}},async tx=>{
+const currentSource=(task:PersonalLearning,source:PersonalMeaningLearningSource)=>{
+ if(canonicalConsumerJson(task.source)!==canonicalConsumerJson(source.reference))throw new Error('localFlow.meaningChanged');
+};
+export async function enrollPersonal(operationId:string,source:PersonalMeaningLearningSource,languageContext:SensaFormalPinnedLanguageContext,useContext:boolean){return command({id:operationId,kind:'personal.enroll',input:{source:source.reference,languageContext,useContext}},async tx=>{
  const owner=await learningOwner(tx),context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);
- const meaning=await tx.get<LocalMeaning>('meanings',meaningId);if(!meaning)throw new Error('localFlow.confirmMeaning');await currentMeaning(tx,meaning);
- if(meaning.targetLanguageTag!==context.targetLanguageTag)throw new Error('localFlow.routeLanguageMismatch');
- const taskId=stableUuid(`sensa-personal-learning:${meaningId}:${context.languageRouteId}`),existing=await tx.get<PersonalLearning>('personalLearning',taskId);if(existing)return existing;
- const targetId=stableUuid(`sensa-learning-target:${owner.learnerId}:${meaning.senseVersionId}:${meaning.bindingVersionId}`);
- const curriculumMembershipId=stableUuid(`local-curriculum-membership:${targetId}:${context.languageRouteId}:personal_meaning_alignment:${meaning.alignmentId}`);
+ if(source.targetLanguageTag!==context.targetLanguageTag)throw new Error('localFlow.routeLanguageMismatch');
+ const sourceKey=personalLearningSourceKey(source.reference),taskId=stableUuid(`sensa-personal-learning:${sourceKey}:${context.languageRouteId}`),existing=await tx.get<PersonalLearning>('personalLearning',taskId);if(existing){currentSource(existing,source);return existing;}
+ const targetId=stableUuid(`sensa-learning-target:${owner.learnerId}:${source.reference.senseVersionId}:${source.reference.bindingVersionId}`);
+ const curriculumMembershipId=stableUuid(`local-curriculum-membership:${targetId}:${context.languageRouteId}:personal_meaning_alignment:${source.reference.personalMeaningAlignmentId}`);
  const target=await tx.get<LocalLearningTarget>('learningTargets',targetId),ready=target?.curriculumMemberships.some(membership=>membership.id===curriculumMembershipId);
- const task:PersonalLearning={id:taskId,meaningId,meaning,targetId,curriculumMembershipId,languageContext:context,planRevision:crypto.randomUUID(),useContext,status:ready?'ready':'waiting',attemptId:null,leaseUntil:0,notice:'',createdAt:new Date().toISOString()};tx.put('personalLearning',task.id,task);return task;
+ const task:PersonalLearning={id:taskId,source:structuredClone(source.reference),targetId,curriculumMembershipId,languageContext:context,planRevision:crypto.randomUUID(),useContext,status:ready?'ready':'waiting',attemptId:null,leaseUntil:0,notice:'',createdAt:new Date().toISOString()};tx.put('personalLearning',task.id,task);return task;
 });}
 async function checkProvider(tx:LibraryTransaction,purpose:'content'|'review',provider:Provider){const settings=await tx.get<ProviderSettings>('settings','providers');const id=settings?.assignments[purpose]??defaultSensaProvider.id;const current=id===defaultSensaProvider.id?defaultSensaProvider:await tx.get<Provider>('providers',id);if(canonicalConsumerJson(current??null)!==canonicalConsumerJson(provider))throw new Error('localFlow.providerChanged');}
 async function checkReviewPolicy(tx:LibraryTransaction,review:Provider|null){
  const settings=await tx.get<ProviderSettings>('settings','providers');
  if((settings?.modelReviewEnabled===true)!==(review!==null))throw new Error('localFlow.providerChanged');
 }
-async function active(tx:LibraryTransaction,id:string,attemptId:string,content:Provider,review:Provider|null){
+async function active(tx:LibraryTransaction,id:string,attemptId:string,source:PersonalMeaningLearningSource,content:Provider,review:Provider|null){
  const owner=await learningOwner(tx),task=await tx.get<PersonalLearning>('personalLearning',id);
  if(!task||task.attemptId!==attemptId||!['generating','reviewing'].includes(task.status)||task.leaseUntil<Date.now())throw new Error('localFlow.preparationExpired');
- await currentMeaning(tx,task.meaning);await checkReviewPolicy(tx,review);await checkProvider(tx,'content',content);if(review)await checkProvider(tx,'review',review);return {owner,task};
+ currentSource(task,source);await checkReviewPolicy(tx,review);await checkProvider(tx,'content',content);if(review)await checkProvider(tx,'review',review);return {owner,task};
 }
 export async function stopPersonalPreparation(operationId:string,id:string){return command({id:operationId,kind:'personal.stop',input:{id}},async tx=>{await learningOwner(tx);const task=await tx.get<PersonalLearning>('personalLearning',id);if(task&&task.status!=='ready'){task.status='stopped';task.leaseUntil=0;task.notice='localFlow.preparationStopped';tx.put('personalLearning',id,task);if(task.attemptId){const attempt=await tx.get<ContentAttempt>('contentAttempts',task.attemptId);if(attempt){attempt.status='stopped';tx.put('contentAttempts',attempt.id,attempt);}}}return true;});}
 /** Explicit invocation only. Reloading reads saved states and never starts a model request. */
-export async function preparePersonal(id:string,contentProvider:Provider,reviewProvider:Provider|null,signal:AbortSignal,onSaved:()=>void){
+export async function preparePersonal(id:string,source:PersonalMeaningLearningSource,contentProvider:Provider,reviewProvider:Provider|null,signal:AbortSignal,onSaved:()=>void){
  const attemptId=crypto.randomUUID();
  const begun=await command({id:attemptId,kind:'personal.prepare',input:{id,contentProvider,reviewProvider}},async tx=>{
-  const owner=await learningOwner(tx),task=await tx.get<PersonalLearning>('personalLearning',id);if(!task)throw new Error('localFlow.enrollFirst');await currentMeaning(tx,task.meaning);
+  const owner=await learningOwner(tx),task=await tx.get<PersonalLearning>('personalLearning',id);if(!task)throw new Error('localFlow.enrollFirst');currentSource(task,source);
   await checkReviewPolicy(tx,reviewProvider);await checkProvider(tx,'content',contentProvider);if(reviewProvider)await checkProvider(tx,'review',reviewProvider);
   if(task.status==='ready')return null;
   const target=await tx.get<LocalLearningTarget>('learningTargets',task.targetId);
@@ -56,12 +58,12 @@ export async function preparePersonal(id:string,contentProvider:Provider,reviewP
   task.attemptId=attemptId;task.status=reuse?'reviewing':'generating';task.leaseUntil=Date.now()+120000;task.notice='';tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);return {task,attempt,owner};
  });if(!begun)return;onSaved();
  const runSignal=AbortSignal.any([signal,AbortSignal.timeout(100000)]);
- const save=async(work:(tx:LibraryTransaction,task:PersonalLearning,attempt:ContentAttempt)=>Promise<void>)=>command({id:crypto.randomUUID(),kind:'personal.progress',input:{id,attemptId,nonce:crypto.randomUUID()}},async tx=>{const {task}=await active(tx,id,attemptId,contentProvider,reviewProvider);if(runSignal.aborted)throw new Error('localFlow.requestStopped');const attempt=(await tx.get<ContentAttempt>('contentAttempts',attemptId))!;await work(tx,task,attempt);tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);});
+ const save=async(work:(tx:LibraryTransaction,task:PersonalLearning,attempt:ContentAttempt)=>Promise<void>)=>command({id:crypto.randomUUID(),kind:'personal.progress',input:{id,attemptId,nonce:crypto.randomUUID()}},async tx=>{const {task}=await active(tx,id,attemptId,source,contentProvider,reviewProvider);if(runSignal.aborted)throw new Error('localFlow.requestStopped');const attempt=(await tx.get<ContentAttempt>('contentAttempts',attemptId))!;await work(tx,task,attempt);tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);});
  try{
-  let {request,bundle,grant}=begun.attempt;const m=begun.task.meaning;
+  let {request,bundle,grant}=begun.attempt;const m=source;
   if(!request||!bundle){
-   grant=begun.task.useContext?{id:crypto.randomUUID(),contextDigest:await digest({text:m.context,images:m.contextImages??[]}),recipients:[...new Set([contentProvider.endpoint,...(reviewProvider?[reviewProvider.endpoint]:[])])]}:null;
-   request=await makeRequest({id,learner_user_id:begun.owner.learnerId,learning_target_id:begun.task.targetId,fixed_input:{targetLanguageTag:begun.task.languageContext.targetLanguageTag,supportLanguageTag:begun.task.languageContext.supportLanguageTag,senseId:m.senseId,senseVersionId:m.senseVersionId,bindingId:m.bindingId,bindingVersionId:m.bindingVersionId,planRevision:begun.task.planRevision,expression:m.proposal.expression.surface,expressionKind:m.proposal.expression.type==='word'?'word':'phrase',meaning:m.proposal.semanticSpec.coreMeaningFocus,prototype:m.proposal.semanticSpec.prototypeScenes[0].summary,...(grant?{anchor:{sentence:m.context,images:m.contextImages??[],contextVersion:grant.contextDigest,grantId:grant.id}}:{}),demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND}},attemptId,new Date());
+   grant=begun.task.useContext?{id:crypto.randomUUID(),contextDigest:await digest(m.context),recipients:[...new Set([contentProvider.endpoint,...(reviewProvider?[reviewProvider.endpoint]:[])])]}:null;
+   request=await makeRequest({id,learner_user_id:begun.owner.learnerId,learning_target_id:begun.task.targetId,fixed_input:{targetLanguageTag:begun.task.languageContext.targetLanguageTag,supportLanguageTag:begun.task.languageContext.supportLanguageTag,senseId:m.reference.senseId,senseVersionId:m.reference.senseVersionId,bindingId:m.reference.bindingId,bindingVersionId:m.reference.bindingVersionId,planRevision:begun.task.planRevision,expression:m.expression.surfaceForm,expressionKind:m.expression.expressionType==='word'?'word':'phrase',meaning:m.semanticSpec.coreMeaningFocus,prototype:m.semanticSpec.prototypeScenes[0].summary,...(grant?{anchor:{sentence:m.context.text,images:m.context.images,contextVersion:grant.contextDigest,grantId:grant.id}}:{}),demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND}},attemptId,new Date());
    request={...request,attemptBudget:{...request.attemptBudget,maxModelTurns:3}};
    await save(async(_tx,_task,a)=>{a.request=request;a.grant=grant;});
    bundle=await generateLearningCandidate(request,contentProvider,!!grant,runSignal,async step=>{await save(async(_tx,_task,a)=>{a.generationSteps=[...(a.generationSteps??[]),step];});});
@@ -75,18 +77,19 @@ export async function preparePersonal(id:string,contentProvider:Provider,reviewP
   review={...z.object({accepted:z.boolean(),reason:z.string().max(2000)}).strict().parse(JSON.parse(message.content??'null')),provider:reviewProvider.id,model:reviewed.model};
   }
   const checked=await validateBundle(request,bundle,review,new Date());
-  await save(async(tx,task,a)=>{a.review=review;a.validation=checked;task.leaseUntil=0;if(checked.content){await commitPersonalMaterial(tx,begun.owner,task.meaning,task.languageContext,checked.content,attemptId,grant?.id??null,task.replacing);task.replacing=false;task.status='ready';a.status='ready';task.notice='localFlow.materialReady';}else{task.status='rejected';a.status='rejected';task.notice=review?'localFlow.reviewRejected'+review.reason:'localFlow.validationRejected';}});onSaved();
+  await save(async(tx,task,a)=>{a.review=review;a.validation=checked;task.leaseUntil=0;if(checked.content){await commitPersonalMaterial(tx,begun.owner,source,task.languageContext,checked.content,attemptId,grant?.id??null,task.replacing);task.replacing=false;task.status='ready';a.status='ready';task.notice='localFlow.materialReady';}else{task.status='rejected';a.status='rejected';task.notice=review?'localFlow.reviewRejected'+review.reason:'localFlow.validationRejected';}});onSaved();
  }catch(error){
   await command({id:crypto.randomUUID(),kind:'personal.fail',input:{id,attemptId}},async tx=>{const task=await tx.get<PersonalLearning>('personalLearning',id);if(task?.attemptId===attemptId&&['generating','reviewing'].includes(task.status)){task.status='failed';task.leaseUntil=0;task.notice=signal.aborted?'localFlow.preparationInterrupted':error instanceof Error&&error.message.startsWith('localFlow.')?error.message:'localFlow.preparationFailed';tx.put('personalLearning',id,task);const a=await tx.get<ContentAttempt>('contentAttempts',attemptId);if(a){a.status='failed';tx.put('contentAttempts',attemptId,a);}}return null;});onSaved();throw error;
  }
 }
 
-export async function requestPersonalResourceUpdate(operationId:string,taskId:string,languageContext:SensaFormalPinnedLanguageContext,useContext:boolean){return command({id:operationId,kind:'personal.update-resources',input:{taskId,languageContext,useContext}},async tx=>{
+export async function requestPersonalResourceUpdate(operationId:string,taskId:string,source:PersonalMeaningLearningSource,languageContext:SensaFormalPinnedLanguageContext,useContext:boolean){return command({id:operationId,kind:'personal.update-resources',input:{taskId,source:source.reference,languageContext,useContext}},async tx=>{
  await learningOwner(tx);const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);
- const task=await tx.get<PersonalLearning>('personalLearning',taskId),meaning=task?await tx.get<LocalMeaning>('meanings',task.meaningId):undefined;if(!task||!meaning)throw Error('localFlow.enrollFirst');
+ const task=await tx.get<PersonalLearning>('personalLearning',taskId);if(!task)throw Error('localFlow.enrollFirst');
  if(['generating','reviewing'].includes(task.status)&&task.leaseUntil>Date.now())throw Error('localFlow.preparationBusy');
  if(task.languageContext.languageRouteId!==context.languageRouteId)throw Error('localFlow.routeMembershipMissing');
- if(meaning.targetLanguageTag!==context.targetLanguageTag)throw Error('localFlow.routeLanguageMismatch');
- if((task.meaning.contextRevision??1)===(meaning.contextRevision??1)&&task.languageContext.languageRouteRevision===context.languageRouteRevision&&task.languageContext.supportLanguageTag===context.supportLanguageTag)throw Error('localFlow.resourcesUnchanged');
- task.meaning=meaning;task.languageContext=context;task.useContext=useContext;task.replacing=true;task.planRevision=crypto.randomUUID();task.attemptId=null;task.status='waiting';task.notice='';tx.put('personalLearning',task.id,task);return task;
+ if(source.targetLanguageTag!==context.targetLanguageTag)throw Error('localFlow.routeLanguageMismatch');
+ const unchanged=personalLearningSourceRevision(task.source)===personalLearningSourceRevision(source.reference)&&task.languageContext.languageRouteRevision===context.languageRouteRevision&&task.languageContext.supportLanguageTag===context.supportLanguageTag&&task.useContext===useContext;
+ if(unchanged)throw Error('localFlow.resourcesUnchanged');
+ task.source=structuredClone(source.reference);task.languageContext=context;task.useContext=useContext;task.replacing=true;task.planRevision=crypto.randomUUID();task.attemptId=null;task.status='waiting';task.notice='';tx.put('personalLearning',task.id,task);return task;
 });}

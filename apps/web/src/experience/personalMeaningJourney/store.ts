@@ -101,6 +101,11 @@ export interface JourneyState {
   registry: SenseRegistryState;
   /** Slow-track draft materials waiting for learner confirmation. */
   inboxItems: SensaIntakeItem[];
+  /** Conversation-only hints for Inbox drafts; never Personal Meaning facts. */
+  clarificationDrafts: Array<{
+    intakeId: string;
+    startingPoint: ClarificationStartingPoint | null;
+  }>;
   commandReceipts: CommandReceipt[];
 }
 
@@ -125,6 +130,7 @@ export const emptyJourneyState = (): JourneyState => ({
   meanings: [],
   registry: emptyRegistry(),
   inboxItems: [],
+  clarificationDrafts: [],
   commandReceipts: [],
 });
 
@@ -153,6 +159,7 @@ const asJourneyState = (parsed: unknown): JourneyState => {
   }
   requireArray(parsed, 'meanings');
   requireArray(parsed, 'inboxItems');
+  requireArray(parsed, 'clarificationDrafts');
   requireArray(parsed, 'commandReceipts');
   if (!isRecord(parsed.registry)) {
     throw new StoreCorruptedError('本机的语义注册表数据结构损坏。');

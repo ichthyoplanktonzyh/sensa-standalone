@@ -7,7 +7,7 @@ import {useLanguageRoutes} from './library/useLanguageRoutes';
 import {sensaLanguageDisplayName} from '@sensa/contracts/sensa';
 import i18n from '../i18n';
 import {
-  PersonalLearningControls,
+  JourneyAlignmentLearningControls,
   PersonalPreparationTarget,
   pendingPersonalTargetView,
 } from './library/PersonalLearningControls';
@@ -21,7 +21,6 @@ import {
   localRuntimePresentationRegistry,
 } from './library/PackageLearningViews';
 import type {AssuranceSupportHost} from './library/AssuranceLearningViews';
-import {useLocalMeaningLibrary} from './library/useLocalMeaningLibrary';
 import {ProviderPanel} from './components/ProviderPanel';
 import {LearningPreferencesPanel} from './components/learning/LearningPreferencesPanel';
 import {useTranslation} from 'react-i18next';
@@ -130,8 +129,6 @@ export default function App() {
     params.coming === 'collections' ? 'collections' : 'scenes';
   const personalMeaningId = params.meaningId ?? null;
   const meaningFocusId = params.focusId ?? null;
-  const [clarificationStart, setClarificationStart] = useState<{id:string;draftId:string}|null>(null);
-  const localLibrary = useLocalMeaningLibrary(personalMeaningId, viewMode === 'main' && mainStack.includes('s-personal-meaning'), clarificationStart, id=>goMain('s-personal-meaning',{meaningId:id}));
   const selectedContentSense = useMemo(
     () => (params.senseId ? contentSenseForId(params.senseId) : null),
     [params.senseId],
@@ -158,7 +155,6 @@ export default function App() {
     nextPersonalMeaningId: string,
     nextMeaningFocusId?: string,
   ) => {
-    setClarificationStart({id:crypto.randomUUID(),draftId:nextPersonalMeaningId});
     goMain('s-personal-meaning', {
       meaningId: nextPersonalMeaningId,
       focusId: nextMeaningFocusId,
@@ -166,12 +162,18 @@ export default function App() {
   }, [goMain]);
 
   const openConfirmedSense = useCallback((nextPersonalMeaningId: string, nextMeaningFocusId: string) => {
-    if(localLibrary.source.items.some(item=>item.personalMeaningId===nextPersonalMeaningId)){openPersonalMeaning(nextPersonalMeaningId);return;}
     goMain('s-confirmed-sense', {
       meaningId: nextPersonalMeaningId,
       focusId: nextMeaningFocusId,
     });
-  }, [goMain,localLibrary.source.items,openPersonalMeaning]);
+  }, [goMain]);
+
+  const openPersonalLearningSource = useCallback((task:typeof personalLearning.tasks[number]) => {
+    goMain('s-confirmed-sense', {
+      meaningId: task.source.personalMeaningId,
+      focusId: task.source.meaningFocusId ?? task.source.personalMeaningAlignmentId,
+    });
+  }, [goMain]);
 
   const openExpressionBinding = useCallback(() => {
     goMain('s-expression-binding');
@@ -307,9 +309,7 @@ export default function App() {
 
           {/* 3. 我的语义世界 */}
           <ContentScreen
-            localLibrary={localLibrary.source}
-            bulkLearning={(items,list)=><BatchPersonalLearning items={items} meanings={localLibrary.meanings} c={personalLearning}>{list}</BatchPersonalLearning>}
-            onStartConversation={()=>openPersonalMeaning('new')}
+            bulkLearning={(items,list)=><BatchPersonalLearning items={items} c={personalLearning}>{list}</BatchPersonalLearning>}
             active={viewMode === 'main' && (mainStack.includes('s-content') || mainStack.includes('s-semantic-world'))}
             screenId={mainStack.includes('s-semantic-world') ? 's-semantic-world' : 's-content'}
             initialAction={params.worldAction === 'create' || params.worldAction === 'inbox' ? params.worldAction : undefined}
@@ -322,16 +322,14 @@ export default function App() {
           />
 
           {/* 3.1.1 AI 澄清：一段对话收敛 Focus / Sense / Expression，一次确认落三个事实 */}
-          {localLibrary.loaded && (!localLibrary.isLocal || localLibrary.conversation) && <PersonalMeaningDetailScreen
+          <PersonalMeaningDetailScreen
             key={personalMeaningId}
-            conversation={localLibrary.isLocal ? localLibrary.conversation : undefined}
-            learningControls={localLibrary.meaning&&<PersonalLearningControls key={localLibrary.meaning.id} meaning={localLibrary.meaning} c={personalLearning} onStart={id=>void startLocalLearning(id)}/>}
             active={viewMode === 'main' && mainStack.includes('s-personal-meaning')}
             personalMeaningId={personalMeaningId}
             onBack={backMain}
             onOpenConfirmedSense={openConfirmedSense}
             toast={toast}
-          />}
+          />
 
           {/* 3.1.2 已确认 Sense：Meaning Formation 终点与 Binding 入口 */}
           <ConfirmedSenseDetailScreen
@@ -340,6 +338,7 @@ export default function App() {
             meaningFocusId={meaningFocusId}
             onBack={backMain}
             onOpenBinding={openExpressionBinding}
+            learningControls={(detail,alignment)=><JourneyAlignmentLearningControls detail={detail} alignment={alignment} c={personalLearning} onStart={id=>void startLocalLearning(id)}/>}
           />
 
           {/* 3.1.3 独立 Expression Binding：本轮停止在此，不进入学习链 */}
@@ -431,7 +430,7 @@ export default function App() {
 
           {/* 4.1 Target 库：主页只保留入口，具体内容在此展开 */}
           <LearningTargetLibraryScreen active={viewMode==='main'&&mainStack.includes('s-learning-library')}
-            targets={Object.fromEntries([...packageLearning.activeTargets.map(t=>[t.id,localTargetView(t,packageLearning.membershipByTarget[t.id]!,packageLearning.readinessByTarget[t.id]??'blocked')]),...activePendingPersonal.map(t=>[t.targetId,pendingPersonalTargetView(t)])])}
+            targets={Object.fromEntries([...packageLearning.activeTargets.map(t=>[t.id,localTargetView(t,packageLearning.membershipByTarget[t.id]!,packageLearning.readinessByTarget[t.id]??'blocked')]),...activePendingPersonal.map(t=>[t.targetId,pendingPersonalTargetView(t,personalLearning.sourceForTask(t))])])}
             targetIds={[...packageLearning.activeTargets.map(t=>t.id),...activePendingPersonal.map(t=>t.targetId)]}
             policyByTarget={Object.fromEntries([...packageLearning.activeTargets.map(t=>[t.id,localTargetPolicy(t)]),...activePendingPersonal.map(t=>[t.targetId,'lightweight' as const])])}
             preparationByTarget={Object.fromEntries([...packageLearning.activeTargets.map(t=>[t.id,packageLearning.readinessByTarget[t.id]??'blocked']),...activePendingPersonal.map(t=>[t.targetId,t.status==='failed'||t.status==='rejected'?'blocked' as const:'preparing' as const])])}
@@ -448,8 +447,8 @@ export default function App() {
 
 
           {/* 4.3 学习目标详情：来源、方式和准备状态分开表达 */}
-          {localSelectedTarget&&localSelectedMembership&&<PackageTarget active={viewMode==='main'&&mainStack.includes('s-learning-target')} target={localSelectedTarget} c={packageLearning} onSource={()=>{const m=localLibrary.meanings.find(m=>m.id===localSelectedMembership.material.snapshot.provenance.meaningId);if(m)openPersonalMeaning(m.draftId);else backMain();}} onBack={backMain} onHome={resetMain} onStart={()=>void startLocalLearning(localSelectedTarget.id)}/>}
-          {selectedPersonalTask&&<PersonalPreparationTarget task={selectedPersonalTask} c={personalLearning} onSource={()=>openPersonalMeaning(selectedPersonalTask.meaning.draftId)} active={viewMode==='main'&&mainStack.includes('s-learning-target')} onBack={backMain} onHome={resetMain} onStart={id=>void startLocalLearning(id)}/>}
+          {localSelectedTarget&&localSelectedMembership&&<PackageTarget active={viewMode==='main'&&mainStack.includes('s-learning-target')} target={localSelectedTarget} c={packageLearning} onSource={()=>{const provenance=localSelectedMembership.material.snapshot.provenance;if('personalMeaningId' in provenance&&typeof provenance.personalMeaningId==='string')openPersonalMeaning(provenance.personalMeaningId);else backMain();}} onBack={backMain} onHome={resetMain} onStart={()=>void startLocalLearning(localSelectedTarget.id)}/>}
+          {selectedPersonalTask&&<PersonalPreparationTarget task={selectedPersonalTask} c={personalLearning} onSource={()=>openPersonalLearningSource(selectedPersonalTask)} active={viewMode==='main'&&mainStack.includes('s-learning-target')} onBack={backMain} onHome={resetMain} onStart={id=>void startLocalLearning(id)}/>}
           {!localSelectedTarget&&!selectedPersonalTask&&viewMode==='main'&&mainStack.includes('s-learning-target')&&<LearningSetupFrame id="s-learning-target" active title={localFlowText('learningTarget')} onBack={backMain}><p role="status">{packageLearning.loaded?localFlowText('targetMissing'):localFlowText('targetLoading')}</p></LearningSetupFrame>}
 
           {/* 4.5 学习统计概览 (Overview / Stats Screen, 对应图1、图2) */}

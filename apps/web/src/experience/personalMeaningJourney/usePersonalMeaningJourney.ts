@@ -16,6 +16,7 @@ import {
 } from './gateway';
 import type {
   JourneyDetailView,
+  ClarificationDraftView,
   JourneyListItemView,
   JourneyWorldItemView,
 } from './types';
@@ -86,3 +87,10 @@ export const useJourneyDetail = (
 
   return result;
 };
+
+export const useJourneyClarificationDraft = (
+  intakeId: string | null,
+): ClarificationDraftView | null => useGatewaySnapshot(useCallback(
+  () => intakeId ? journeyGateway.getClarificationDraft(intakeId) : null,
+  [intakeId],
+));

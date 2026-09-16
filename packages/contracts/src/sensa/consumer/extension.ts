@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {sensaFormalPinnedLanguageContextSchema,sensaLanguageRouteCollectionSchema} from '../language.js';
 import {sensaReadingGlossarySchema} from './reading.js';
-import {localIntakeReceiptSchema,localIntakeRequestSchema} from './localIntake.js';
+import {sensaBrowserIntakeDeliverySchema,sensaBrowserIntakeReceiptSchema} from '../browserIntake.js';
 import {sensaLocalAgentConnectionStatusSchema,sensaLocalAgentIntakeDeliverySchema,sensaLocalAgentIntakeReceiptSchema} from '../localAgentIntake.js';
 
 /**
@@ -99,7 +99,7 @@ export const sensaBridgeRequestSchema=z.discriminatedUnion('kind',[
   z.object({...libraryRequest,kind:z.literal('web-intake-pull')}).strict(),
   /** The page's record that it committed a capture. The extension keeps it as an
    * idempotency receipt and stops handing that request over. */
-  z.object({...libraryRequest,kind:z.literal('web-intake-ack'),receipt:localIntakeReceiptSchema}).strict(),
+  z.object({...libraryRequest,kind:z.literal('web-intake-ack'),receipt:sensaBrowserIntakeReceiptSchema}).strict(),
   /** Starts a connection for the tab that asked, if it has none. */
   z.object({...libraryRequest,kind:z.literal('web-connect-prepare')}).strict(),
   /** Hands back the redirect the extension's own page came home with. */
@@ -135,7 +135,7 @@ export const sensaBridgeResponseSchemas={
   'web-native-intake-status':sensaLocalAgentConnectionStatusSchema,
   'web-native-intake-pull':z.array(sensaLocalAgentIntakeDeliverySchema).max(10),
   'web-native-intake-ack':z.object({acknowledged:z.literal(true)}).strict(),
-  'web-intake-pull':z.array(localIntakeRequestSchema).max(10),
+  'web-intake-pull':z.array(sensaBrowserIntakeDeliverySchema).max(10),
   'web-intake-ack':z.object({acknowledged:z.literal(true)}).strict(),
   'web-connect-prepare':z.object({
     connected:z.literal(true).optional(),

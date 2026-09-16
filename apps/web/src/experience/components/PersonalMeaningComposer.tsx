@@ -11,8 +11,9 @@ import { Plus, ImagePlus, X } from "lucide-react";
  * those are our domain model, not the learner's, and a separate input for the
  * target expression would quietly imply that filling it in confirms it.
  *
- * Saving here never calls the model. Entering clarification is a second,
- * explicit intent.
+ * Saving here never calls the model and never creates a Personal Meaning. It
+ * creates an Inbox-owned clarification draft; only final confirmation can
+ * atomically materialize the complete Personal Meaning.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -227,7 +228,7 @@ export const PersonalMeaningComposer = ({
           ? { kind: "image", personalMediaObjectId: block.mediaId! }
           : { kind: "text", bodyText: block.bodyText.trim() },
       );
-      const result = await gateway.createPersonalMeaning({
+      const result = await gateway.createClarificationDraft({
         operationId: newUuid(),
         blocks: payload,
         familiarExpression: familiarExpression.trim()
@@ -236,7 +237,7 @@ export const PersonalMeaningComposer = ({
         startingPoint,
       });
       onSaved(t("composer.saved"));
-      return result.personalMeaningId;
+      return result.intakeId;
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : t("composer.saveError"),

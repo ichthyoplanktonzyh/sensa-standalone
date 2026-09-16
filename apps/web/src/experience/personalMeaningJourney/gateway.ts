@@ -6,9 +6,10 @@
  * them to the semantic registry. The AI clarification agent only proposes; it
  * never writes. Every mutation is an explicit learner intent — saving
  * material, appending a block, confirming a clarification thread, or settling
- * the last Expression Binding — and `confirmClarification` records the Focus
- * acceptance, Sense confirmation + Alignment, and optional Binding as
- * independent facts in one all-or-nothing step. UI callers see a small
+ * the last Expression Binding — and `confirmClarification` records Sense
+ * confirmation + Alignment, an optional Focus acceptance when disambiguation
+ * required it, and an optional Binding as independent facts in one
+ * all-or-nothing step. UI callers see a small
  * intent/query interface; they never read storage, the agent session state,
  * or registry internals directly.
  */
@@ -21,7 +22,8 @@ import type {
   SensaExpressionSnapshot,
   SensaExpressionType,
   SensaExpressionVersionSnapshot,
-  SensaIntakeAcceptanceRequest,
+  SensaIntakeAcceptance,
+  SensaIntakeContext,
   SensaIntakeItem,
   SensaIntakePayload,
   SensaMeaningFocusAcceptanceFact,
@@ -39,7 +41,7 @@ import type {
   SensaSenseSnapshot,
   SensaSenseVersionSnapshot,
 } from '@sensa/contracts/sensa';
-import { publishedLearningSemanticFactsSchema, sensaIntakePayloadSchema, sensaIntakeSenseSchema, sensaPinnedLanguageContextSchema } from '@sensa/contracts/sensa';
+import { publishedLearningSemanticFactsSchema, sensaIntakeContextSchema, sensaIntakePayloadSchema, sensaIntakeSenseSchema, sensaPinnedLanguageContextSchema } from '@sensa/contracts/sensa';
 import {
   createInboxItem,
   dismissInboxItem,
@@ -73,6 +75,8 @@ import {
   buildListItemView,
   buildWorldItemView,
 } from './projection';
+import { buildPersonalMeaningLearningSources } from './learningSource';
+import type { PersonalMeaningLearningSource } from '../../data/library/personalLearningSource';
 import type {
   AddMaterialBlockInput,
   AddMaterialBlockResult,
@@ -80,6 +84,10 @@ import type {
   ConfirmClarificationResult,
   ConfirmExpressionBindingInput,
   ConfirmExpressionBindingResult,
+  ClarificationDraftView,
+  CompleteClarificationDraftInput,
+  CompleteClarificationDraftResult,
+  CreateClarificationDraftResult,
   CreatePersonalMeaningInput,
   CreatePersonalMeaningResult,
   IngestCommandResult,
@@ -130,10 +138,28 @@ export interface PersonalMeaningJourneyGateway {
   getListItems(): JourneyListItemView[];
   getWorldItems(): JourneyWorldItemView[];
   getDetail(personalMeaningId: string): JourneyDetailView | null;
+  getClarificationDraft(intakeId: string): ClarificationDraftView | null;
+  /** Complete, learnable Alignment projections; incomplete meanings yield none. */
+  getLearningSources(
+    personalMeaningId: string,
+    personalMeaningAlignmentId?: string,
+  ): PersonalMeaningLearningSource[];
 
-  createPersonalMeaning(
+  /** Create an Inbox-owned clarification draft without creating Personal Meaning facts. */
+  createClarificationDraft(
     input: CreatePersonalMeaningInput,
-  ): Promise<CreatePersonalMeaningResult>;
+  ): Promise<CreateClarificationDraftResult>;
+
+  addClarificationMaterial(
+    operationId: string,
+    intakeId: string,
+    block: MaterialBlockInput,
+  ): Promise<void>;
+
+  /** Atomically materialize the complete clarified tuple and remove its Inbox draft. */
+  completeClarificationDraft(
+    input: CompleteClarificationDraftInput,
+  ): Promise<CompleteClarificationDraftResult>;
 
   addMaterialBlock(input: AddMaterialBlockInput): Promise<AddMaterialBlockResult>;
 
@@ -184,7 +210,7 @@ export interface JourneyGatewayDeps {
  * the command; this port does not repeat the learner's semantic decision.
  */
 export interface SemanticAcceptanceAuthorityPort {
-  verify(request: SensaIntakeAcceptanceRequest): SensaSemanticAcceptanceAuthority;
+  verify(request: SensaIntakeAcceptance): SensaSemanticAcceptanceAuthority;
 }
 
 const localSemanticAcceptanceAuthority: SemanticAcceptanceAuthorityPort = {
@@ -208,6 +234,12 @@ const cloneJourneyState = (state: JourneyState): JourneyState =>
 
 const normalizedForm = (surfaceForm: string): string =>
   surfaceForm.trim().toLocaleLowerCase();
+
+const contextProvenanceKind = (
+  context: SensaIntakeContext | null | undefined,
+): PersonalProvenanceKind => context?.source?.client === 'sensa-web' || !context?.source
+  ? 'learner_authored'
+  : 'imported';
 
 const cleanNotes = (notes: string[] | undefined): string[] =>
   (notes ?? []).map((note) => note.trim()).filter(Boolean);
@@ -537,14 +569,16 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   getListItems(): JourneyListItemView[] {
     if (!this.state) return [];
     return this.state.meanings
-      .filter((record) => record.personalMeaning.status === 'active')
+      .filter((record) => record.personalMeaning.status === 'active'
+        && buildPersonalMeaningLearningSources(record, this.state!.registry).length > 0)
       .map((record) => buildListItemView(record, this.state!.registry));
   }
 
   getWorldItems(): JourneyWorldItemView[] {
     if (!this.state) return [];
     return this.state.meanings
-      .filter((record) => record.personalMeaning.status === 'active')
+      .filter((record) => record.personalMeaning.status === 'active'
+        && buildPersonalMeaningLearningSources(record, this.state!.registry).length > 0)
       .map((record) => buildWorldItemView(record, this.state!.registry));
   }
 
@@ -552,6 +586,46 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     if (!this.state) return null;
     const record = this.findRecord(personalMeaningId);
     return record ? buildDetailView(record, this.state.registry) : null;
+  }
+
+  getClarificationDraft(intakeId: string): ClarificationDraftView | null {
+    if (!this.state) return null;
+    const item = this.state.inboxItems.find((candidate) => candidate.intakeId === intakeId);
+    if (!item) return null;
+    const context = item.payload.context;
+    const metadata = this.state.clarificationDrafts.find(
+      (candidate) => candidate.intakeId === intakeId,
+    );
+    return {
+      intakeId,
+      context: context ? structuredClone(context) : null,
+      materialBlocks: [
+        ...(context?.textSegment ? [{ kind: 'text' as const, bodyText: context.textSegment }] : []),
+        ...(context?.mediaReferenceIds.map((personalMediaObjectId) => ({
+          kind: 'image' as const,
+          personalMediaObjectId,
+        })) ?? []),
+      ],
+      familiarExpression: item.payload.expression?.surfaceForm ?? null,
+      startingPoint: metadata?.startingPoint
+        ?? (item.status === 'pending_context'
+          ? item.payload.expression ? 'from_expression' : 'from_experience'
+          : item.status === 'pending_expression' ? 'from_experience' : 'from_expression'),
+    };
+  }
+
+  getLearningSources(
+    personalMeaningId: string,
+    personalMeaningAlignmentId?: string,
+  ): PersonalMeaningLearningSource[] {
+    if (!this.state) return [];
+    const record = this.findRecord(personalMeaningId);
+    if (!record || record.personalMeaning.status !== 'active') return [];
+    return buildPersonalMeaningLearningSources(
+      record,
+      this.state.registry,
+      personalMeaningAlignmentId,
+    );
   }
 
   // -- material ------------------------------------------------------------
@@ -565,9 +639,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     operationId: string,
     block: MaterialBlockInput,
     supportLanguageTag: string,
-  ): string {
+    intake: SensaIntakePayload | null = null,
+    completedContext: SensaIntakeContext | null = intake?.context ?? null,
+  ): { anchorId: string; anchorRevisionId: string } {
     const now = this.now();
     const anchorId = this.id();
+    const anchorRevisionId = this.id();
     const isImage = block.kind === 'image';
     const bodyText = block.bodyText?.trim() ?? '';
     if (isImage) {
@@ -589,39 +666,165 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     });
     record.personalSemanticAnchorRevisions.push({
       contractVersion: PSW,
-      personalSemanticAnchorRevisionId: this.id(),
+      personalSemanticAnchorRevisionId: anchorRevisionId,
       personalSemanticAnchorId: anchorId,
       revision: 1,
       anchorKind: isImage ? 'image' : 'text',
-      languageTag: isImage ? null : supportLanguageTag,
+      languageTag: isImage ? null : completedContext?.languageTag ?? supportLanguageTag,
       bodyText: isImage ? null : bodyText,
       personalMediaObjectId: isImage ? block.personalMediaObjectId! : null,
-      structuredPayload: {},
+      structuredPayload: intake ? {
+        intake: {
+          contractVersion: intake.contractVersion,
+          operationId: intake.operationId,
+          capturedAt: intake.capturedAt,
+          contextSource: intake.context?.source ?? null,
+          contextLanguageTag: intake.context?.languageTag ?? null,
+          mediaReferenceIds: intake.context?.mediaReferenceIds ?? [],
+          completedContextSource: completedContext?.source ?? null,
+          completedContextLanguageTag: completedContext?.languageTag ?? null,
+          expression: intake.expression,
+          senseCandidate: intake.sense,
+          submittedAcceptance: intake.acceptance,
+        },
+      } : {},
       provenance: {
-        kind: 'learner_authored',
-        sourceReferenceIds: [anchorId],
+        kind: contextProvenanceKind(completedContext),
+        sourceReferenceIds: intake
+          ? [
+              intake.operationId,
+              intake.context?.source?.sourceReferenceId,
+              completedContext?.source?.sourceReferenceId,
+            ]
+            .filter((value): value is string => Boolean(value))
+          : [anchorId],
         createdByOperationId: operationId,
       },
       createdAt: now,
     });
-    return anchorId;
+    return { anchorId, anchorRevisionId };
   }
 
-  async createPersonalMeaning(
+  async createClarificationDraft(
     input: CreatePersonalMeaningInput,
-  ): Promise<CreatePersonalMeaningResult> {
-    return this.exclusive(() => this.writePersonalMeaning(input));
+  ): Promise<CreateClarificationDraftResult> {
+    return this.exclusive(async () => {
+      const replay = this.replay<CreateClarificationDraftResult>(
+        input.operationId,
+        'CreateClarificationDraft',
+      );
+      if (replay) return replay;
+      const blocks = input.blocks ?? [];
+      const text = blocks
+        .filter((block) => block.kind === 'text')
+        .map((block) => block.bodyText?.trim() ?? '')
+        .filter(Boolean)
+        .join('\n\n');
+      const mediaReferenceIds = blocks
+        .filter((block) => block.kind === 'image')
+        .map((block) => block.personalMediaObjectId)
+        .filter((id): id is string => Boolean(id));
+      const familiarExpression = input.familiarExpression?.surfaceForm.trim() ?? '';
+      if (!text && mediaReferenceIds.length === 0 && !familiarExpression) {
+        throw new Error('澄清草稿至少需要一段材料或一个熟悉表达。');
+      }
+      const languages = await this.deps.languages.read();
+      const payload = sensaIntakePayloadSchema.parse({
+        contractVersion: 'sensa-intake-v3',
+        operationId: input.operationId,
+        capturedAt: this.now(),
+        context: text || mediaReferenceIds.length > 0 ? {
+          modality: text ? mediaReferenceIds.length ? 'mixed' : 'text' : 'image',
+          textSegment: text || null,
+          mediaReferenceIds,
+          languageTag: languages.supportLanguageTag,
+          source: {
+            client: 'sensa-web',
+            url: null,
+            title: 'Sensa Web',
+            sourceReferenceId: null,
+            domSelector: null,
+            paragraphContext: null,
+          },
+        } : null,
+        expression: familiarExpression ? {
+          surfaceForm: familiarExpression,
+          languageTag: languages.supportLanguageTag,
+          occurrence: null,
+          expressionTypeHint: null,
+        } : null,
+        sense: null,
+        acceptance: null,
+      });
+      const item = createInboxItem(payload, this.id(), this.now());
+      const state = this.requireState();
+      state.inboxItems.push(item);
+      state.clarificationDrafts.push({
+        intakeId: item.intakeId,
+        startingPoint: input.startingPoint ?? null,
+      });
+      const result = { intakeId: item.intakeId, status: item.status };
+      this.recordReceipt(input.operationId, 'CreateClarificationDraft', result);
+      await this.persist();
+      return { ...result, replayed: false };
+    });
+  }
+
+  async addClarificationMaterial(
+    operationId: string,
+    intakeId: string,
+    block: MaterialBlockInput,
+  ): Promise<void> {
+    return this.exclusive(async () => {
+      if (this.receipt(operationId, 'AddClarificationMaterial')) return;
+      const state = this.requireState();
+      const index = state.inboxItems.findIndex((candidate) => candidate.intakeId === intakeId);
+      if (index < 0) throw new Error('找不到这条澄清草稿。');
+      const item = state.inboxItems[index]!;
+      const languages = await this.deps.languages.read();
+      const existing = item.payload.context;
+      const text = block.kind === 'text' ? block.bodyText?.trim() ?? '' : '';
+      const mediaId = block.kind === 'image' ? block.personalMediaObjectId : null;
+      if (block.kind === 'text' ? !text : !mediaId) throw new Error('新增材料不能为空。');
+      const textSegment = [existing?.textSegment, text].filter(Boolean).join('\n\n') || null;
+      const mediaReferenceIds = [
+        ...(existing?.mediaReferenceIds ?? []),
+        ...(mediaId ? [mediaId] : []),
+      ];
+      const payload = sensaIntakePayloadSchema.parse({
+        ...item.payload,
+        context: {
+          modality: textSegment ? mediaReferenceIds.length ? 'mixed' : 'text' : 'image',
+          textSegment,
+          mediaReferenceIds,
+          languageTag: existing?.languageTag ?? languages.supportLanguageTag,
+          source: existing?.source ?? null,
+        },
+      });
+      state.inboxItems[index] = createInboxItem(payload, item.intakeId, item.createdAt);
+      this.recordReceipt(operationId, 'AddClarificationMaterial', { intakeId });
+      await this.persist();
+    });
   }
 
   private async writePersonalMeaning(
     input: CreatePersonalMeaningInput,
+    options: {
+      persist?: boolean;
+      receipt?: boolean;
+      languageContext?: CommandLanguages;
+      intake?: SensaIntakePayload | null;
+      completedContext?: SensaIntakeContext | null;
+    } = {},
   ): Promise<CreatePersonalMeaningResult> {
-
-    const replay = this.replay<CreatePersonalMeaningResult>(
-      input.operationId,
-      'CreatePersonalMeaning',
-    );
-    if (replay) return replay;
+    const { persist = true, receipt = true } = options;
+    if (receipt) {
+      const replay = this.replay<CreatePersonalMeaningResult>(
+        input.operationId,
+        'CreatePersonalMeaning',
+      );
+      if (replay) return replay;
+    }
     const state = this.requireState();
     const familiarSurface = input.familiarExpression?.surfaceForm.trim() ?? '';
     if (input.familiarExpression && !familiarSurface) {
@@ -634,7 +837,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
 
     // Read once, before any fact exists: this creation operation uses one
     // resolved language context throughout.
-    const languages = await this.deps.languages.read();
+    const languages = options.languageContext ?? await this.deps.languages.read();
     const personalMeaningId = this.id();
     const personalMeaningRevisionId = this.id();
     const now = this.now();
@@ -710,15 +913,66 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
         createdAt: now,
       });
     }
-    const blockAnchorIds = blocks.map(
-      (block) =>
+    const blockAnchors = blocks.map(
+      (block, index) =>
         this.appendMaterialAnchor(
           record,
           input.operationId,
           block,
           languages.supportLanguageTag,
+          index === 0 ? options.intake ?? null : null,
+          index === 0 ? options.completedContext ?? options.intake?.context ?? null : null,
         ),
     );
+
+    // A captured Expression belongs to the same Context even while its Sense
+    // is unresolved. Preserve the exact occurrence as an unverified source
+    // Anchor; learner confirmation later promotes this Anchor instead of
+    // manufacturing a source-less duplicate.
+    const capturedExpression = options.intake?.expression;
+    let capturedExpressionAnchorId: string | null = null;
+    if (
+      capturedExpression?.occurrence
+      && capturedExpression.languageTag
+      && blockAnchors[0]
+    ) {
+      const anchorId = this.id();
+      const anchorRevisionId = this.id();
+      capturedExpressionAnchorId = anchorId;
+      const sourceKind = contextProvenanceKind(
+        options.completedContext ?? options.intake?.context,
+      );
+      record.personalExpressionAnchors.push({
+        contractVersion: PSW,
+        personalExpressionAnchorId: anchorId,
+        personalMeaningId,
+        currentRevision: 1,
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      });
+      record.personalExpressionAnchorRevisions.push({
+        contractVersion: PSW,
+        personalExpressionAnchorRevisionId: anchorRevisionId,
+        personalExpressionAnchorId: anchorId,
+        revision: 1,
+        expressionType: capturedExpression.expressionTypeHint ?? 'word',
+        languageTag: capturedExpression.languageTag,
+        surfaceForm: capturedExpression.surfaceForm,
+        normalizedForm: normalizedForm(capturedExpression.surfaceForm),
+        contextAnchorRevisionId: blockAnchors[0].anchorRevisionId,
+        occurrence: capturedExpression.occurrence.locator,
+        provenanceKind: sourceKind,
+        verificationStatus: 'unverified',
+        provenance: {
+          kind: sourceKind,
+          sourceReferenceIds: [options.intake!.operationId],
+          createdByOperationId: input.operationId,
+        },
+        createdAt: now,
+      });
+    }
 
     record.personalMeaningRevisions.push({
       contractVersion: PSW,
@@ -733,7 +987,8 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
         kind: 'learner_authored',
         sourceReferenceIds: [
           familiarExpressionAnchorId,
-          ...blockAnchorIds,
+          ...blockAnchors.map((anchor) => anchor.anchorId),
+          capturedExpressionAnchorId,
         ].filter((id): id is string => id !== null),
         createdByOperationId: input.operationId,
       },
@@ -746,8 +1001,8 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       personalMeaningRevisionId,
       familiarExpressionAnchorId,
     };
-    this.recordReceipt(input.operationId, 'CreatePersonalMeaning', result);
-    await this.persist();
+    if (receipt) this.recordReceipt(input.operationId, 'CreatePersonalMeaning', result);
+    if (persist) await this.persist();
     return { ...result, replayed: false };
   }
 
@@ -761,7 +1016,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     if (replay) return replay;
     const record = this.requireRecord(input.personalMeaningId);
     const languages = await this.deps.languages.read();
-    const anchorId = this.appendMaterialAnchor(
+    const { anchorId } = this.appendMaterialAnchor(
       record,
       input.operationId,
       input.block,
@@ -784,23 +1039,27 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
 
   private async writeClarification(
     input: ConfirmClarificationInput,
+    options: { persist?: boolean; receipt?: boolean } = {},
   ): Promise<ConfirmClarificationResult> {
-
-    const replay = this.replay<ConfirmClarificationResult>(
-      input.operationId,
-      'ConfirmClarification',
-    );
-    if (replay) return replay;
+    const { persist = true, receipt = true } = options;
+    if (receipt) {
+      const replay = this.replay<ConfirmClarificationResult>(
+        input.operationId,
+        'ConfirmClarification',
+      );
+      if (replay) return replay;
+    }
     const state = this.requireState();
     const record = this.requireRecord(input.personalMeaningId);
     const languages = sensaPinnedLanguageContextSchema.parse(input.languageContext);
 
     // Validate the whole intent before writing any fact: a rejected step must
     // leave the store exactly as it was.
-    const statement = input.focus.statement.trim();
-    if (!statement) throw new Error('表达侧面陈述不能为空。');
-    const notes = cleanNotes(input.focus.distinguishingNotes);
-    const aspectLabel = input.focus.aspectLabel.trim();
+    const focusInput = input.focus ?? null;
+    const statement = focusInput?.statement.trim() ?? '';
+    if (focusInput && !statement) throw new Error('表达侧面陈述不能为空。');
+    const notes = focusInput ? cleanNotes(focusInput.distinguishingNotes) : [];
+    const aspectLabel = focusInput?.aspectLabel.trim() ?? '';
     const senseKey = input.sense.proposedSenseKey.trim();
     if (!senseKey) throw new Error('稳定意思缺少可复用的语义 key。');
     if (!input.sense.coreMeaningFocus.trim()) throw new Error('稳定意思不能为空。');
@@ -835,51 +1094,56 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
           };
         })()
       : null;
+    if (!focusInput && (!expressionInput || !input.confirmExpression)) {
+      throw new Error('无需 Focus 的语义条目必须同时确认 Context、Sense 与 Expression。');
+    }
 
     const now = this.now();
     const personalMeaningRevision = this.latestMeaningRevision(record);
     if (!personalMeaningRevision) throw new Error('个人意义修订不存在，无法确认。');
 
-    // 1) Meaning Focus, born accepted: the learner confirmed this exact
-    //    statement as the aspect they meant.
-    const meaningFocusId = this.id();
-    const meaningFocusRevisionId = this.id();
-    record.focuses.push({
-      contractVersion: PSW,
-      meaningFocusId,
-      personalMeaningId: input.personalMeaningId,
-      splitFromMeaningFocusId: null,
-      currentRevision: 1,
-      acceptedRevision: 1,
-      status: 'active',
-      createdAt: now,
-      updatedAt: now,
-      deletedAt: null,
-    });
-    record.focusRevisions.push({
-      contractVersion: PSW,
-      meaningFocusRevisionId,
-      meaningFocusId,
-      revision: 1,
-      statement,
-      distinguishingNotes: notes,
-      provenance: {
-        kind: 'learner_authored',
-        sourceReferenceIds: [input.personalMeaningId],
-        createdByOperationId: input.operationId,
-      },
-      createdAt: now,
-    });
-    const acceptance: SensaMeaningFocusAcceptanceFact = {
-      contractVersion: PSW,
-      meaningFocusAcceptanceId: this.id(),
-      meaningFocusId,
-      meaningFocusRevisionId,
-      operationId: input.operationId,
-      acceptedAt: now,
-    };
-    record.focusAcceptances.push(acceptance);
-    if (aspectLabel) record.mockState.focusAspectLabels[meaningFocusId] = aspectLabel;
+    // 1) A Meaning Focus exists only when this Context needed an explicit
+    //    aspect boundary. Clear contexts proceed directly to Sense construction.
+    const meaningFocusId = focusInput ? this.id() : null;
+    const meaningFocusRevisionId = focusInput ? this.id() : null;
+    if (focusInput && meaningFocusId && meaningFocusRevisionId) {
+      record.focuses.push({
+        contractVersion: PSW,
+        meaningFocusId,
+        personalMeaningId: input.personalMeaningId,
+        splitFromMeaningFocusId: null,
+        currentRevision: 1,
+        acceptedRevision: 1,
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      });
+      record.focusRevisions.push({
+        contractVersion: PSW,
+        meaningFocusRevisionId,
+        meaningFocusId,
+        revision: 1,
+        statement,
+        distinguishingNotes: notes,
+        provenance: {
+          kind: 'learner_authored',
+          sourceReferenceIds: [input.personalMeaningId],
+          createdByOperationId: input.operationId,
+        },
+        createdAt: now,
+      });
+      const acceptance: SensaMeaningFocusAcceptanceFact = {
+        contractVersion: PSW,
+        meaningFocusAcceptanceId: this.id(),
+        meaningFocusId,
+        meaningFocusRevisionId,
+        operationId: input.operationId,
+        acceptedAt: now,
+      };
+      record.focusAcceptances.push(acceptance);
+      if (aspectLabel) record.mockState.focusAspectLabels[meaningFocusId] = aspectLabel;
+    }
 
     // 2) The transcript becomes the authoritative Construction turns.
     const senseConstructionId = this.id();
@@ -929,7 +1193,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       provider: provenance.provider,
       model: provenance.model,
       promptVersion: provenance.promptVersion,
-      inputDigest: digestOf({ focus: input.focus, transcript: input.transcript }),
+      inputDigest: digestOf({ focus: focusInput, transcript: input.transcript }),
       outputDigest: digestOf(input.sense),
     };
     const semanticSpec = this.buildSemanticSpec(input.sense);
@@ -943,9 +1207,16 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       if (expressionInput && item.surfaceForm === expressionInput.surfaceForm && !chosenCandidateId) {
         chosenCandidateId = id;
       }
+      const capturedRevision = record.personalExpressionAnchorRevisions.find((revision) => (
+        revision.verificationStatus === 'unverified'
+        && revision.languageTag === item.languageTag
+        && revision.expressionType === item.expressionType
+        && revision.surfaceForm === item.surfaceForm
+      ));
       return {
         candidateId: id,
-        personalExpressionAnchorRevisionId: null,
+        personalExpressionAnchorRevisionId:
+          capturedRevision?.personalExpressionAnchorRevisionId ?? null,
         expressionType: item.expressionType,
         languageTag: item.languageTag,
         surfaceForm: item.surfaceForm,
@@ -1085,6 +1356,9 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
           expressionType: expressionInput.expressionType,
           languageTag: expressionInput.languageTag,
           surfaceForm: expressionInput.surfaceForm,
+          personalExpressionAnchorRevisionId: proposalExpressionCandidates.find(
+            (candidate) => candidate.candidateId === candidateId,
+          )?.personalExpressionAnchorRevisionId ?? null,
         },
         {
           operationId: input.operationId,
@@ -1108,9 +1382,74 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       resolution,
       expressionConfirmed,
     };
-    this.recordReceipt(input.operationId, 'ConfirmClarification', result);
-    await this.persist();
+    if (receipt) this.recordReceipt(input.operationId, 'ConfirmClarification', result);
+    if (persist) await this.persist();
     return { ...result, replayed: false };
+  }
+
+  async completeClarificationDraft(
+    input: CompleteClarificationDraftInput,
+  ): Promise<CompleteClarificationDraftResult> {
+    return this.exclusive(async () => {
+      const replay = this.replay<CompleteClarificationDraftResult>(
+        input.operationId,
+        'CompleteClarificationDraft',
+      );
+      if (replay) return replay;
+      if (!input.expression || !input.confirmExpression) {
+        throw new Error('进入我的语义世界前，需要同时确认 Context、Sense 与 Expression。');
+      }
+      return this.withStateTransaction(async () => {
+        const state = this.requireState();
+        const item = state.inboxItems.find((candidate) => candidate.intakeId === input.intakeId);
+        if (!item) throw new Error('找不到这条澄清草稿。');
+        const metadata = state.clarificationDrafts.find(
+          (candidate) => candidate.intakeId === input.intakeId,
+        );
+        const context = sensaIntakeContextSchema.parse(input.context);
+        const blocks: MaterialBlockInput[] = [
+          ...(context?.textSegment
+            ? [{ kind: 'text' as const, bodyText: context.textSegment }]
+            : []),
+          ...(context?.mediaReferenceIds.map((personalMediaObjectId) => ({
+            kind: 'image' as const,
+            personalMediaObjectId,
+          })) ?? []),
+        ];
+        const created = await this.writePersonalMeaning({
+          operationId: input.operationId,
+          blocks,
+          familiarExpression: item.payload.expression?.surfaceForm
+            && !item.payload.expression.occurrence
+            ? { surfaceForm: item.payload.expression.surfaceForm }
+            : undefined,
+          startingPoint: metadata?.startingPoint ?? null,
+        }, {
+          persist: false,
+          receipt: false,
+          languageContext: input.languageContext,
+          intake: item.payload,
+          completedContext: context,
+        });
+        const confirmed = await this.writeClarification({
+          ...input,
+          personalMeaningId: created.personalMeaningId,
+        }, { persist: false, receipt: false });
+        state.inboxItems = state.inboxItems.filter(
+          (candidate) => candidate.intakeId !== input.intakeId,
+        );
+        state.clarificationDrafts = state.clarificationDrafts.filter(
+          (candidate) => candidate.intakeId !== input.intakeId,
+        );
+        const result = {
+          ...confirmed,
+          personalMeaningId: created.personalMeaningId,
+        };
+        this.recordReceipt(input.operationId, 'CompleteClarificationDraft', result);
+        await this.persist();
+        return result;
+      });
+    });
   }
 
   // -- expression binding ---------------------------------------------------
@@ -1141,6 +1480,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       languageTag: string;
       surfaceForm: string;
       provenanceKind?: PersonalProvenanceKind;
+      personalExpressionAnchorRevisionId?: string | null;
     },
     input: {
       operationId: string;
@@ -1345,10 +1685,51 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     let anchorRevision: SensaPersonalExpressionAnchorRevisionSnapshot | null = null;
     let anchor: SensaPersonalExpressionAnchorSnapshot | undefined;
     let createdTargetAnchor = false;
+    if (candidate.personalExpressionAnchorRevisionId) {
+      const captured = record.personalExpressionAnchorRevisions.find(
+        (revision) => revision.personalExpressionAnchorRevisionId
+          === candidate.personalExpressionAnchorRevisionId,
+      );
+      const capturedAnchor = captured && record.personalExpressionAnchors.find(
+        (item) => item.personalExpressionAnchorId === captured.personalExpressionAnchorId
+          && item.status === 'active',
+      );
+      if (
+        captured
+        && capturedAnchor
+        && captured.languageTag === input.languageTag
+        && captured.expressionType === input.expressionType
+        && captured.surfaceForm === input.surfaceForm
+      ) {
+        anchor = capturedAnchor;
+        if (captured.verificationStatus === 'learner_confirmed') {
+          anchorRevision = captured;
+        } else {
+          anchorRevision = {
+            ...captured,
+            personalExpressionAnchorRevisionId: this.id(),
+            revision: capturedAnchor.currentRevision + 1,
+            verificationStatus: 'learner_confirmed',
+            provenance: {
+              ...captured.provenance,
+              sourceReferenceIds: [...new Set([
+                ...captured.provenance.sourceReferenceIds,
+                candidate.candidateId,
+              ])],
+              createdByOperationId: input.operationId,
+            },
+            createdAt: now,
+          };
+          capturedAnchor.currentRevision = anchorRevision.revision;
+          capturedAnchor.updatedAt = now;
+          record.personalExpressionAnchorRevisions.push(anchorRevision);
+        }
+      }
+    }
     // The intake fast track pre-creates the captured expression anchor with
     // this candidate id in its provenance (either language role), so match
     // any active anchor before creating a duplicate.
-    for (const candidateAnchor of this.activeExpressionAnchors(record)) {
+    for (const candidateAnchor of anchorRevision ? [] : this.activeExpressionAnchors(record)) {
       const current = this.expressionAnchorRevisionFor(
         record,
         candidateAnchor.personalExpressionAnchorId,
@@ -1779,6 +2160,13 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
           senseKey: input.semantic.senseKey,
           semanticSpec: input.semantic.semanticSpec,
           wordingSource: 'reviewed',
+          resolutionProvenance: {
+            resolverKind: 'external_tool',
+            provider: 'sensa-published-content',
+            model: null,
+            policyVersion: input.semantic.semanticPolicyVersion,
+            sourceReferenceIds: [input.source.contentReleaseId, input.source.bookVersionId],
+          },
         },
         acceptance: { mode: 'learner_direct' },
       });
@@ -1940,6 +2328,9 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       this.enginePorts(),
     );
     this.state = outcome.nextState;
+    this.requireState().clarificationDrafts = this.requireState().clarificationDrafts.filter(
+      (candidate) => candidate.intakeId !== intakeId,
+    );
     this.settleExpressionBinding(
       outcome.record,
       outcome.alignment,
@@ -1966,6 +2357,9 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     const state = this.requireState();
     // Pure removal; throws when the item is unknown, before any write.
     this.state = dismissInboxItem(state, intakeId);
+    this.requireState().clarificationDrafts = this.requireState().clarificationDrafts.filter(
+      (candidate) => candidate.intakeId !== intakeId,
+    );
     this.recordReceipt(operationId, 'DismissInboxItem', { intakeId });
     await this.persist();
   }

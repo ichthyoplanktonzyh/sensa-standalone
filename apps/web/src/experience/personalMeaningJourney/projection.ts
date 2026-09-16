@@ -138,24 +138,6 @@ const confirmedCandidateIds = (record: MeaningJourneyRecord): Set<string> => {
   return ids;
 };
 
-const focusIdForBinding = (
-  record: MeaningJourneyRecord,
-  binding: MeaningJourneyRecord['bindingConfirmations'][number],
-): string | null => {
-  if (!binding.senseProposalVersionId) return null;
-  const proposalVersion = record.proposalVersions.find(
-    (version) => version.senseProposalVersionId === binding.senseProposalVersionId,
-  );
-  if (!proposalVersion) return null;
-  const proposal = record.proposals.find(
-    (item) => item.senseProposalId === proposalVersion.senseProposalId,
-  );
-  if (!proposal) return null;
-  return record.constructions.find(
-    (construction) => construction.senseConstructionId === proposal.senseConstructionId,
-  )?.meaningFocusId ?? null;
-};
-
 const bindingBelongsToAlignment = (
   record: MeaningJourneyRecord,
   alignment: SensaPersonalMeaningAlignmentSnapshot,
@@ -163,7 +145,13 @@ const bindingBelongsToAlignment = (
 ): boolean => {
   if (binding.senseVersionId !== alignment.senseVersionId) return false;
   if (alignment.basis.kind === 'sense_construction') {
-    return focusIdForBinding(record, binding) === alignment.basis.meaningFocusId;
+    const senseProposalConfirmationId = alignment.basis.senseProposalConfirmationId;
+    const confirmation = record.senseConfirmations.find(
+      (fact) => fact.senseProposalConfirmationId
+        === senseProposalConfirmationId,
+    );
+    return confirmation != null
+      && binding.senseProposalVersionId === confirmation.senseProposalVersionId;
   }
   const semanticAcceptanceId = alignment.basis.semanticAcceptanceId;
   const acceptance = record.semanticAcceptances.find(
@@ -270,7 +258,9 @@ export const derivePersonalMeaningPhase = (
   const phases = record.focuses.map((focus) =>
     deriveFocusPhase(record, focus.meaningFocusId));
   for (const alignment of record.alignments) {
-    if (alignment.status !== 'active' || alignment.basis.kind !== 'contextual_resolution') {
+    const direct = alignment.basis.kind === 'contextual_resolution'
+      || alignment.basis.meaningFocusId === null;
+    if (alignment.status !== 'active' || !direct) {
       continue;
     }
     phases.push(record.bindingConfirmations.some(
@@ -574,7 +564,8 @@ export const buildDetailView = (
     .map((focus) => buildFocusView(record, registry, focus.meaningFocusId))
     .filter((view): view is JourneyFocusView => view !== null);
   const directAlignments = record.alignments
-    .filter((alignment) => alignment.basis.kind === 'contextual_resolution')
+    .filter((alignment) => alignment.basis.kind === 'contextual_resolution'
+      || alignment.basis.meaningFocusId === null)
     .map((alignment) => buildAlignmentView(record, registry, alignment))
     .filter((view): view is JourneyAlignmentView => view !== null);
   const meaningRevision = currentMeaningRevision(record);

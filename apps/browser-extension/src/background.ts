@@ -1,4 +1,5 @@
 import {queueWeb,pendingWeb,acknowledgeWeb,webStatus,discardPendingWeb,webOperationStatus} from './webDestination';
+import {browserCaptureToIntake} from './semanticIntakeAdapter';
 import {z} from 'zod';
 import {captureSnapshotSchema,sensaLanguageForDeclaredTag,sensaLanguageForIso6393,sensaReadingGlossaryForPair,sensaBridgeRequestChannel,sensaBridgeRequestSchema,sensaExtensionCredentialSchema,type SensaBridgeRequest,type SensaBridgeRequestOf,type SensaExtensionAuthorization,type SensaExtensionExchange} from '@sensa/contracts/sensa';
 import {webUrl,apiUrl} from './config';
@@ -340,14 +341,15 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
    if(!a||a.accountId!==message.accountId||mode?.accountId!==a.accountId)throw new Error('account_mismatch');
    if(!a.webLibraryId)throw new Error('web_reconnect_required');
    const pageUrl=await currentPageUrl(sender);
-   let snapshot=message.snapshot,resolution=null;
+   let snapshot=message.snapshot,proposal=null,resolutionProvenance=null;
    if(message.kind==='accept'){
     const cached=(await chrome.storage.session.get('sensaLookups')).sensaLookups as Record<string,any>??{},item=cached[message.lookupId];
     if(!item||item.scope!==a.accountId||item.tabId!==sender.tab!.id||item.pageUrl!==pageUrl)throw new Error('lookup_unavailable');
-    snapshot=item.snapshot;resolution={kind:'proposal' as const,proposal:item.proposal};
+    snapshot=item.snapshot;proposal=item.proposal;resolutionProvenance=item.resolutionProvenance;
    }
    snapshot=captureSnapshotSchema.parse(snapshot);if(snapshot.source.url!==pageUrl)throw new Error('source_mismatch');
-   const queued=await queueWeb(a.accountId,{version:'sensa-intake-v1',libraryId:a.webLibraryId,clientId:a.installationId,operationId:message.operationId,languageContext:await readingLanguageContext(),snapshot,resolution,acceptance:message.kind==='accept'?{kind:'direct',consent:'accept_context_expression_sense',authorization:'browser:explicit_accept_button'}:null});
+   const intake=browserCaptureToIntake(message.operationId,snapshot,proposal,resolutionProvenance);
+   const queued=await queueWeb(a.accountId,{contractVersion:'sensa-browser-intake-delivery-v1',libraryId:a.webLibraryId,clientId:a.installationId,intake});
    return queued;
   });
  }
@@ -430,7 +432,8 @@ async function rememberLookup(sender:chrome.runtime.MessageSender,id:string,snap
  if(await activeScope()!==scope)throw new Error('account_mismatch');
  const store:Record<string,any>=(await chrome.storage.session.get('sensaLookups')).sensaLookups as Record<string,any>??{};
  const parsed=captureSnapshotSchema.parse(snapshot);
- store[id]={scope,tabId:sender.tab?.id,pageUrl:parsed.source.url,snapshot:parsed,proposal:result.proposal};
+ if(!result.provenance)throw new Error('invalid_proposal');
+ store[id]={scope,tabId:sender.tab?.id,pageUrl:parsed.source.url,snapshot:parsed,proposal:result.proposal,resolutionProvenance:{resolverKind:'language_model',provider:result.provenance.provider,model:result.provenance.model,policyVersion:result.provenance.policyVersion,sourceReferenceIds:[id,result.provenance.inputDigest,result.provenance.outputDigest]}};
  const keys=Object.keys(store);for(const key of keys.slice(0,Math.max(0,keys.length-100)))delete store[key];
  await chrome.storage.session.set({sensaLookups:store});
 }

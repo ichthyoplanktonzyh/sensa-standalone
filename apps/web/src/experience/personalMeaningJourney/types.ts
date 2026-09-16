@@ -10,6 +10,7 @@ import type {
   IngestResult,
   SensaExpressionBindingRelation,
   SensaExpressionType,
+  SensaIntakeContext,
   SensaIntakeSense,
   SensaPersonalMeaningAlignmentSnapshot,
   SensaPinnedLanguageContext,
@@ -195,7 +196,7 @@ export interface JourneyDetailView {
   /** The learner's declared conversation stance; never a domain phase. */
   startingPoint: ClarificationStartingPoint | null;
   focuses: JourneyFocusView[];
-  /** Active contextual Sense resolutions that never needed a Meaning Focus. */
+  /** Active Sense resolutions that never needed a Meaning Focus. */
   directAlignments: JourneyAlignmentView[];
   createdAt: string;
   updatedAt: string;
@@ -307,25 +308,54 @@ export interface CreatePersonalMeaningResult {
   replayed: boolean;
 }
 
+/** Inbox-owned material used by clarification before any Personal Meaning exists. */
+export interface ClarificationDraftView {
+  intakeId: string;
+  /** The Context already captured by the entry, or null when clarification must supply it. */
+  context: SensaIntakeContext | null;
+  materialBlocks: MaterialBlockInput[];
+  familiarExpression: string | null;
+  startingPoint: ClarificationStartingPoint | null;
+}
+
+export interface CreateClarificationDraftResult {
+  intakeId: string;
+  status: 'pending_context' | 'pending_expression' | 'pending_sense' | 'pending_acceptance';
+  replayed: boolean;
+}
+
+export type CompleteClarificationDraftInput = Omit<
+  ConfirmClarificationInput,
+  'personalMeaningId'
+> & {
+  intakeId: string;
+  /** The complete Context explicitly carried into the final confirmation. */
+  context: SensaIntakeContext;
+};
+
+export interface CompleteClarificationDraftResult extends ConfirmClarificationResult {
+  personalMeaningId: string;
+}
+
 /**
  * One learner confirmation at the end of a clarification thread.
  *
- * The learner clicks once, but this still records three independent domain
- * facts in order — Focus acceptance, Sense confirmation + Alignment, and
- * optionally the Expression Binding. `expression: null` is the legal, supported
- * "已确认 2 / 3" outcome, not a failure. The gateway applies the whole thing or
- * none of it: a rejected step leaves the store exactly as it was.
+ * The learner clicks once, recording Sense confirmation + Alignment and,
+ * when disambiguation was needed, Focus acceptance. Expression Binding may be
+ * deferred only for an existing meaning; an Inbox draft must be complete before
+ * it can enter the Personal Semantic World. The gateway applies the whole thing
+ * or none of it: a rejected step leaves the store exactly as it was.
  */
 export interface ConfirmClarificationInput {
   operationId: string;
   personalMeaningId: string;
   /** The context pinned by this clarification Session. */
   languageContext:SensaPinnedLanguageContext;
-  focus: {
+  focus?: {
     statement: string;
     distinguishingNotes: string[];
     aspectLabel: string;
-  };
+  } | null;
   sense: Omit<AgentSenseCandidate, 'rationale'>;
   /**
    * The expression candidate on the panel. It is recorded as a Sense Proposal
@@ -343,7 +373,7 @@ export interface ConfirmClarificationInput {
 }
 
 export interface ConfirmClarificationResult {
-  meaningFocusId: string;
+  meaningFocusId: string | null;
   senseId: string;
   senseVersionId: string;
   personalMeaningAlignmentId: string;

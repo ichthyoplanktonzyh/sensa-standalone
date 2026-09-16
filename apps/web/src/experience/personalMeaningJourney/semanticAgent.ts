@@ -1,18 +1,17 @@
 /**
  * The AI clarification agent seam.
  *
- * One conversation produces one working set of three candidates — Focus, Sense
- * and target Expression. The conversation runs as a simplified loop: plain
+ * One conversation produces a Sense and target Expression, plus an optional
+ * Focus only when the Context needs disambiguation. The conversation runs as a simplified loop: plain
  * `chat` turns while the model listens and asks (Phase 1), then a single
  * `consolidate` extraction the learner requests when the model says it is
  * ready (Phase 2), repeatable after corrections. The agent only ever
  * *proposes*: it can never confirm anything. Confirmation is a single explicit
- * learner intent handled by the journey gateway, which still records three
- * independent domain facts.
+ * learner intent handled by the journey gateway.
  *
  * Two things are deliberately kept apart here:
- *  - `focusLocked` steers the model (it is a conversation-level hint, and
- *    writes no domain fact);
+ *  - `focusLocked` steers an optional disambiguation Focus (it is a
+ *    conversation-level hint, and writes no domain fact);
  *  - `ConfirmClarificationInput` writes domain facts (and is never inferred
  *    from the conversation).
  */
@@ -101,9 +100,10 @@ export interface AgentExpressionCandidate {
 }
 
 /**
- * The three candidates currently on the result panel. Co-owned: the model
- * proposes them, the learner may edit any of them by hand, and edited tracks
- * are reported back so the model carries them forward instead of overwriting.
+ * The candidates currently on the result panel. Sense and Expression are the
+ * complete tuple; Focus appears only when the Context needs an explicit aspect
+ * boundary. The model proposes them, the learner may edit them, and edited
+ * tracks are reported back so the model carries them forward.
  */
 export interface SemanticAgentWorkingSet {
   focus: AgentFocusCandidate | null;
@@ -125,7 +125,7 @@ export interface SemanticAgentTurnResult {
   assistantMessage: string;
   workingSet: SemanticAgentWorkingSet;
   /**
-   * The model's signal that the three candidates look clear enough to confirm.
+   * The model's signal that the candidate tuple looks clear enough to confirm.
    * It only promotes the confirm affordance; it never confirms, and the learner
    * may confirm earlier or keep talking past it.
    */
@@ -173,7 +173,8 @@ export interface SemanticAgentPort {
 
 /** What one finished clarification thread left behind, for the done state. */
 export interface ClarificationOutcome {
-  meaningFocusId: string;
+  meaningFocusId: string | null;
+  personalMeaningAlignmentId: string;
   senseConfirmed: boolean;
   expressionConfirmed: boolean;
   confirmedAt: string;

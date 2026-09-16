@@ -19,12 +19,10 @@ import './PersonalMeaningDetailScreen.css';
  * and asks, then「整理一下」— one consolidation the learner requests when the
  * model says it is ready — fills the panel, repeatable after corrections.
  *
- * Two things are deliberately kept apart:
- *  - 「就聊这个」 locks the Focus so the model stops exploring. It writes no
- *    domain fact and is freely reversible.
- *  - 「就确认成这样」 opens the review layer, and the learner's confirm there is
- *    the single intent that writes Focus acceptance, Sense confirmation and
- *    (optionally) the Expression Binding.
+ * A Focus is only proposed when the Context needs an explicit aspect boundary.
+ * The learner's confirmation always writes Sense confirmation and Alignment,
+ * optionally writes Focus acceptance, and may bind the Expression in the same
+ * intent.
  *
  * Confirming does not navigate away. Stopping at "已确认 2 / 3" is a supported
  * resting state, and the conversation stays open so the last fact can be
@@ -36,7 +34,9 @@ import {
 } from 'react';
 import {
   useJourneyDetail,
+  useJourneyClarificationDraft,
   useJourneyGateway,
+  type ClarificationDraftView,
   type JourneyDetailView,
   type JourneyFocusView,
 } from '../personalMeaningJourney';
@@ -62,6 +62,7 @@ import type {
 import {
   type SensaExpressionBindingRelation,
   type SensaExpressionType,
+  type SensaIntakeContext,
   type SensaSemanticCoverage,
 } from '@sensa/contracts/sensa';
 
@@ -132,6 +133,49 @@ const materialFor = (detail: JourneyDetailView): SemanticAgentMaterial => ({
   familiarExpression: detail.familiarAnchors[0]?.surfaceForm ?? null,
   startingPoint: detail.startingPoint,
 });
+
+const materialForDraft = (draft: ClarificationDraftView): SemanticAgentMaterial => ({
+  blocks: draft.materialBlocks.map((block, index) => {
+    const media = block.personalMediaObjectId ? getMedia(block.personalMediaObjectId) : null;
+    return {
+      blockId: block.personalMediaObjectId ?? `draft-text-${index}`,
+      kind: block.kind,
+      bodyText: block.bodyText ?? null,
+      mediaDataUrl: media?.dataUrl ?? null,
+      mediaMimeType: media?.mimeType ?? null,
+    };
+  }),
+  familiarExpression: draft.familiarExpression,
+  startingPoint: draft.startingPoint,
+});
+
+const completedContextForDraft = (
+  draft: ClarificationDraftView,
+  messages: SemanticAgentMessage[],
+  supportLanguageTag: string,
+): SensaIntakeContext | null => {
+  if (draft.context) return structuredClone(draft.context);
+  const textSegment = messages
+    .filter((message) => message.role === 'learner')
+    .map((message) => message.body.trim())
+    .filter(Boolean)
+    .join('\n\n');
+  if (!textSegment) return null;
+  return {
+    modality: 'text',
+    textSegment,
+    mediaReferenceIds: [],
+    languageTag: supportLanguageTag,
+    source: {
+      client: 'sensa-web',
+      url: null,
+      title: 'Inbox clarification',
+      sourceReferenceId: draft.intakeId,
+      domSelector: null,
+      paragraphContext: null,
+    },
+  };
+};
 
 type TrackTone = 'idle' | 'candidate' | 'confirmed';
 
@@ -300,6 +344,11 @@ const PreviewPersonalMeaningDetailScreen = ({
   useTranslation();
   const gateway = useJourneyGateway();
   const { detail, status } = useJourneyDetail(personalMeaningId);
+  const clarificationDraft = useJourneyClarificationDraft(personalMeaningId);
+  const clarificationMaterial = detail
+    ? materialFor(detail)
+    : clarificationDraft ? materialForDraft(clarificationDraft) : null;
+  const draftMode = !detail && clarificationDraft !== null;
   const screenRef = useRef<HTMLElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -398,14 +447,19 @@ const PreviewPersonalMeaningDetailScreen = ({
     });
   }, [busy, session?.messages.length, streamingText]);
 
-  /** The Focus this thread confirmed, if it already did. */
+  /** The optional Focus this thread confirmed, if it needed one. */
   const confirmedFocus: JourneyFocusView | null = useMemo(() => {
     const focusId = session?.outcome?.meaningFocusId;
     if (!detail || !focusId) return null;
     return detail.focuses.find((focus) => focus.meaningFocusId === focusId) ?? null;
   }, [detail, session?.outcome?.meaningFocusId]);
 
-  const alignment = confirmedFocus?.alignment ?? null;
+  const alignment = confirmedFocus?.alignment
+    ?? detail?.directAlignments.find(
+      (candidate) => candidate.personalMeaningAlignmentId
+        === session?.outcome?.personalMeaningAlignmentId,
+    )
+    ?? null;
   const boundExpression = alignment?.confirmedBindings[0] ?? null;
   const allConfirmed = Boolean(boundExpression);
 
@@ -414,7 +468,7 @@ const PreviewPersonalMeaningDetailScreen = ({
     learnerBody?: string,
     mode: SemanticAgentTurnMode = 'chat',
   ) => {
-    if (!detail) return;
+    if (!clarificationMaterial) return;
     lastModeRef.current = mode;
     const learnerMessage = learnerBody?.trim() ? message('learner', learnerBody.trim()) : null;
     const messages = learnerMessage
@@ -430,7 +484,7 @@ const PreviewPersonalMeaningDetailScreen = ({
     try {
       const result = await semanticAgent.turn(
         {
-          material: materialFor(detail),
+          material: clarificationMaterial,
           messages,
           workingSet: baseSession.workingSet,
           learnerEditedTracks: baseSession.learnerEditedTracks,
@@ -470,19 +524,19 @@ const PreviewPersonalMeaningDetailScreen = ({
     } finally {
       setBusy(false);
     }
-  }, [commit, detail]);
+  }, [clarificationMaterial, commit]);
 
   // The first turn follows the declared starting point: a learner who already
   // knows the sense (or has an expression to check) consolidates immediately;
   // an uncertain one opens with a chat question.
   useEffect(() => {
-    if (!active || !detail || !session) return;
+    if (!active || !clarificationMaterial || !session) return;
     if (session.messages.length > 0 || openedThread.current === session.threadId) return;
     openedThread.current = session.threadId;
-    const firstMode: SemanticAgentTurnMode = detail.startingPoint === 'from_sense'
-      || detail.startingPoint === 'from_expression' ? 'consolidate' : 'chat';
+    const firstMode: SemanticAgentTurnMode = clarificationMaterial.startingPoint === 'from_sense'
+      || clarificationMaterial.startingPoint === 'from_expression' ? 'consolidate' : 'chat';
     void runTurn(session, undefined, firstMode);
-  }, [active, detail, runTurn, session]);
+  }, [active, clarificationMaterial, runTurn, session]);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -504,39 +558,54 @@ const PreviewPersonalMeaningDetailScreen = ({
   };
 
   const addImage = async (file: File | undefined) => {
-    if (!file || !detail) return;
+    if (!file || (!detail && !clarificationDraft)) return;
     setError('');
     try {
       const mediaId = newUuid();
       await storeImageFile(mediaId, file, new Date().toISOString());
-      await gateway.addMaterialBlock({
-        operationId: newUuid(),
-        personalMeaningId: detail.personalMeaningId,
-        block: { kind: 'image', personalMediaObjectId: mediaId },
-      });
+      if (detail) {
+        await gateway.addMaterialBlock({
+          operationId: newUuid(),
+          personalMeaningId: detail.personalMeaningId,
+          block: { kind: 'image', personalMediaObjectId: mediaId },
+        });
+      } else {
+        await gateway.addClarificationMaterial(
+          newUuid(),
+          clarificationDraft!.intakeId,
+          { kind: 'image', personalMediaObjectId: mediaId },
+        );
+      }
       toast(uiText('materialAddedForTheNextTurn'));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : uiText('unableToAddThisImage'));
     }
   };
 
-  /** The one intent that writes facts. Three of them, or two, never a partial write. */
+  /** One atomic confirmation; Focus is included only when disambiguation needed it. */
   const confirm = async () => {
-    if (!detail || !session || busy) return;
+    if ((!detail && !clarificationDraft) || !session || busy) return;
     const { focus, sense, expression } = session.workingSet;
-    if (!focus || !sense) return;
+    if (!sense || (draftMode && (!expression || !includeExpression))) return;
     setBusy(true);
     setError('');
     try {
-      const result = await gateway.confirmClarification({
+      const languageContext = session.languageContext
+        ?? (await languageRoutesSnapshot()).context;
+      const completedContext = clarificationDraft
+        ? completedContextForDraft(clarificationDraft, session.messages, languageContext.supportLanguageTag)
+        : null;
+      if (draftMode && !completedContext) {
+        throw new Error(uiText('addContext'));
+      }
+      const clarification = {
         operationId: newUuid(),
-        personalMeaningId: detail.personalMeaningId,
-        languageContext:session.languageContext??(await languageRoutesSnapshot()).context,
-        focus: {
+        languageContext,
+        focus: focus ? {
           statement: focus.statement,
           distinguishingNotes: focus.distinguishingNotes,
           aspectLabel: focus.aspectLabel,
-        },
+        } : null,
         sense: {
           proposedSenseKey: sense.proposedSenseKey,
           coreMeaningFocus: sense.coreMeaningFocus,
@@ -569,18 +638,36 @@ const PreviewPersonalMeaningDetailScreen = ({
           provider: 'unknown', model: 'unknown', promptVersion: 'unknown',
         },
         semanticPolicyVersion: SEMANTIC_POLICY_VERSION,
-      });
+      };
+      const result = draftMode
+        ? await gateway.completeClarificationDraft({
+            ...clarification,
+            intakeId: clarificationDraft!.intakeId,
+            context: completedContext!,
+            confirmExpression: true,
+          })
+        : await gateway.confirmClarification({
+            ...clarification,
+            personalMeaningId: detail!.personalMeaningId,
+          });
       setReviewOpen(false);
       commit({
         ...session,
         outcome: {
           meaningFocusId: result.meaningFocusId,
+          personalMeaningAlignmentId: result.personalMeaningAlignmentId,
           senseConfirmed: true,
           expressionConfirmed: result.expressionConfirmed,
           confirmedAt: new Date().toISOString(),
         },
       });
       toast(result.expressionConfirmed ? uiText('meaningAndExpressionConfirmed') : uiText('meaningConfirmedExpressionStillPending'));
+      if (draftMode) {
+        onOpenConfirmedSense(
+          (result as Awaited<ReturnType<typeof gateway.completeClarificationDraft>>).personalMeaningId,
+          result.meaningFocusId ?? result.personalMeaningAlignmentId,
+        );
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : uiText('unableToConfirmPleaseRetry'));
     } finally {
@@ -637,7 +724,16 @@ const PreviewPersonalMeaningDetailScreen = ({
   const focusStatus = trackTone(Boolean(working.focus), senseConfirmed);
   const senseStatus = trackTone(Boolean(working.sense), senseConfirmed);
   const expressionStatus = trackTone(Boolean(working.expression), allConfirmed);
-  const canConfirm = Boolean(working.focus && working.sense) && !busy;
+  const hasCompleteContext = !draftMode
+    || Boolean(clarificationDraft?.context)
+    || Boolean(session?.messages.some(
+      (message) => message.role === 'learner' && message.body.trim(),
+    ));
+  const canConfirm = Boolean(
+    working.sense
+    && hasCompleteContext
+    && (!draftMode || (working.expression && includeExpression)),
+  ) && !busy;
   const canConfirmExpressionOnly = Boolean(
     working.expression && alignment?.expressionCandidates.length,
   ) && !busy;
@@ -647,7 +743,7 @@ const PreviewPersonalMeaningDetailScreen = ({
       <b>{uiText('unableToReadThisMaterial')}</b>
       <p>{status.error}</p>
     </div>
-  ) : !detail || !session ? (
+  ) : (!detail && !clarificationDraft) || !session ? (
     <div className={classNames("pmw-empty")}>{uiText('thisMaterialWasNotFound')}</div>
   ) : allConfirmed ? (
     <div className={classNames("pmw-done")}>
@@ -655,7 +751,9 @@ const PreviewPersonalMeaningDetailScreen = ({
       <h2>{uiText('meaningConfirmed')}</h2>
       <p>{uiText('savedToYourMeanings')}</p>
       <div className={classNames("pmw-done-facts")}>
-        <article><small>{uiText('focus')}</small><b>{confirmedFocus?.statement}</b></article>
+        {confirmedFocus && (
+          <article><small>{uiText('focus')}</small><b>{confirmedFocus.statement}</b></article>
+        )}
         <article><small>{uiText('meaning2')}</small><b>{alignment?.coreMeaningFocus}</b></article>
         <article>
           <small>{uiText('expression')}</small>
@@ -673,8 +771,8 @@ const PreviewPersonalMeaningDetailScreen = ({
         <button
           type="button"
           onClick={() => onOpenConfirmedSense(
-            detail.personalMeaningId,
-            confirmedFocus!.meaningFocusId,
+            detail!.personalMeaningId,
+            confirmedFocus?.meaningFocusId ?? alignment!.personalMeaningAlignmentId,
           )}
         >
           {uiText('viewConfirmedMeaning')}</button>
@@ -685,7 +783,15 @@ const PreviewPersonalMeaningDetailScreen = ({
     <>
       {materialOpen && (
         <section className={classNames("pmw-material")} aria-label={uiText('contextForThisConversation')}>
-          {detail.materialBlocks.map((block) => (
+          {(detail?.materialBlocks ?? clarificationDraft!.materialBlocks.map((block, index) => ({
+            anchorId: block.personalMediaObjectId ?? `draft-text-${index}`,
+            kind: block.kind,
+            bodyText: block.bodyText ?? null,
+            personalMediaObjectId: block.personalMediaObjectId ?? null,
+            inlineDataUrl: null,
+            inlineMimeType: null,
+            revision: 1,
+          }))).map((block) => (
             block.kind === 'image' ? (
               <img
                 key={block.anchorId}
@@ -696,7 +802,10 @@ const PreviewPersonalMeaningDetailScreen = ({
               <p key={block.anchorId}>{block.bodyText}</p>
             )
           ))}
-          {detail.familiarAnchors.map((anchor) => (
+          {(detail?.familiarAnchors ?? (clarificationDraft?.familiarExpression ? [{
+            anchorId: clarificationDraft.intakeId,
+            surfaceForm: clarificationDraft.familiarExpression,
+          }] : [])).map((anchor) => (
             <p key={anchor.anchorId} className={classNames("pmw-material-familiar")}>
               <small>{uiText('chineseExpression')}</small>{anchor.surfaceForm}
             </p>
@@ -901,7 +1010,7 @@ const PreviewPersonalMeaningDetailScreen = ({
         }} />
       )}
 
-      {reviewOpen && working.focus && working.sense && (
+      {reviewOpen && working.sense && (
         <SensaOverlayLayout variant="sheet" mode="container" measure="standard" className="z-20" labelledBy="pmw-review-title" onDismiss={() => setReviewOpen(false)} dismissOnBackdrop regions={{
           header: <div className={classNames("pmw-overlay-header")}>
               <h2 id="pmw-review-title">{uiText('confirmTheseDetails')}</h2>
@@ -909,10 +1018,12 @@ const PreviewPersonalMeaningDetailScreen = ({
             </div>,
 
           primary: <div className={classNames("pmw-review-body")}>
-              <article className={classNames("pmw-review-card")}>
-                <header><small>{uiText('focus')}</small><em>{uiText('confirmTogether')}</em></header>
-                <b>{working.focus.statement}</b>
-              </article>
+              {working.focus && (
+                <article className={classNames("pmw-review-card")}>
+                  <header><small>{uiText('focus')}</small><em>{uiText('confirmTogether')}</em></header>
+                  <b>{working.focus.statement}</b>
+                </article>
+              )}
 
               <article className={classNames("pmw-review-card")}>
                 <header><small>{uiText('meaning2')}</small><em>{uiText('confirmTogether')}</em></header>
@@ -927,6 +1038,7 @@ const PreviewPersonalMeaningDetailScreen = ({
                       <input
                         type="checkbox"
                         checked={includeExpression}
+                        disabled={draftMode}
                         onChange={(event) => setIncludeExpression(event.target.checked)}
                       />
                       <span>{uiText('confirmTogether')}</span>

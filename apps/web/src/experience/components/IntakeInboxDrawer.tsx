@@ -3,9 +3,9 @@ import { uiText } from '../../i18n/uiText';
 /**
  * 待处理材料盒（Inbox）抽屉。
  *
- * 慢轨摄取材料的处理台：每张卡片呈现原文摘要、来源与附带媒体，轻点候选
- * 义项即走快轨结案落库；「召唤 AI」先把材料建成 Meaning（材料本身成为
- * 澄清会话的语境）再移出 Inbox；「丢弃」直接移除。组件只发意图，所有
+ * 不完整摄取材料的处理台：每张卡片呈现原文摘要、来源与附带媒体，轻点已有
+ * 义项即可直接结案；「召唤 AI」打开 Inbox 草稿的澄清会话，
+ * 只有最终确认才会将完整事实原子加入语义世界；「丢弃」直接移除。所有
  * 写入都经过 gateway 的幂等命令。
  */
 
@@ -21,8 +21,8 @@ interface IntakeInboxDrawerProps {
   onOpenDraft?: (id: string) => void;
   items: SensaIntakeItem[];
   onClose: () => void;
-  /** 召唤 AI 成功后回调：关闭抽屉并打开新 Meaning 的澄清会话。 */
-  onSummoned: (personalMeaningId: string) => void;
+  /** 关闭抽屉并打开这条 Inbox 草稿的澄清会话。 */
+  onSummoned: (intakeId: string) => void;
   toast: (message: string) => void;
 }
 
@@ -78,10 +78,14 @@ export const IntakeInboxDrawer = ({
   const resolve = async (item: SensaIntakeItem, option: DisambiguationOption) => {
     setBusyId(item.intakeId);
     try {
+      const proposedSense = item.payload.sense!;
       const sense: SensaIntakeSense = {
         senseKey: option.senseKey,
-        semanticSpec: item.payload.sense!.semanticSpec,
-        wordingSource: item.payload.sense?.wordingSource ?? 'learner_authored',
+        semanticSpec: structuredClone(proposedSense.semanticSpec),
+        wordingSource: proposedSense.wordingSource,
+        // Selecting the already-resolved Sense is Acceptance, not a second
+        // semantic resolution. Preserve the actual resolver unchanged.
+        resolutionProvenance: structuredClone(proposedSense.resolutionProvenance),
       };
       const result = await gateway.resolveInboxItem(newUuid(), item.intakeId, { sense });
       toast(result.route === 'fast_track'
@@ -95,24 +99,7 @@ export const IntakeInboxDrawer = ({
   };
 
   const summon = async (item: SensaIntakeItem) => {
-    const text = item.payload.context?.textSegment?.trim();
-    if (!text) return;
-    setBusyId(item.intakeId);
-    try {
-      // The captured context becomes the material; the AI interview opens on
-      // it right away, so the item leaves the Inbox in the same gesture.
-      const created = await gateway.createPersonalMeaning({
-        operationId: newUuid(),
-        blocks: [{ kind: 'text', bodyText: text }],
-        startingPoint: item.status === 'pending_expression' ? 'from_experience' : 'from_expression',
-      });
-      await gateway.dismissInboxItem(newUuid(), item.intakeId);
-      onSummoned(created.personalMeaningId);
-    } catch (cause) {
-      toast(cause instanceof Error ? cause.message : uiText('unableToStartClarification'));
-    } finally {
-      setBusyId(null);
-    }
+    onSummoned(item.intakeId);
   };
 
   const discard = async (item: SensaIntakeItem) => {
@@ -147,7 +134,6 @@ export const IntakeInboxDrawer = ({
             const options = disambiguationOptions(item);
             const source = item.payload.context?.source;
             const mediaCount = item.payload.context?.mediaReferenceIds.length ?? 0;
-            const hasText = Boolean(item.payload.context?.textSegment?.trim());
             return (
               <article className="mb-4 rounded-card border border-border-subtle bg-surface-panel p-5" key={item.intakeId}>
                 <header className="flex items-center justify-between gap-3">
@@ -184,7 +170,7 @@ export const IntakeInboxDrawer = ({
                   <button
                     type="button"
                     className="min-h-12 rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus"
-                    disabled={busy || !hasText}
+                    disabled={busy}
                     onClick={() => void summon(item)}
                   >
                     {uiText('clarify')}</button>

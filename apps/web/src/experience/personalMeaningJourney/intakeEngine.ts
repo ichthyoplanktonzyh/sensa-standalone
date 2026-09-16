@@ -219,7 +219,9 @@ export const executeFastTrack = (
   const semanticAnchorId = ports.newId();
   const semanticAnchorRevisionId = ports.newId();
   const contextAnchorProvenanceKind: PersonalProvenanceKind =
-    context.source ? 'imported' : 'learner_authored';
+    context.source?.client === 'sensa-web' || !context.source
+      ? 'learner_authored'
+      : 'imported';
   const structuredPayload: Record<string, unknown> = {
     mediaReferenceIds: [...context.mediaReferenceIds],
     source: context.source,
@@ -428,17 +430,7 @@ export const executeFastTrack = (
         resolution,
         senseId,
         senseVersionId,
-        resolutionProvenance: {
-          resolverKind: sense.wordingSource === 'learner_authored'
-            ? 'learner'
-            : sense.wordingSource === 'llm_suggested'
-              ? 'language_model'
-              : 'external_tool',
-          provider: context.source?.client ?? 'sensa-local-intake',
-          model: null,
-          policyVersion: LOCAL_SEMANTIC_POLICY_VERSION,
-          sourceReferenceIds: [payload.operationId],
-        },
+        resolutionProvenance: structuredClone(sense.resolutionProvenance),
         acceptedAt: now,
       },
     ],

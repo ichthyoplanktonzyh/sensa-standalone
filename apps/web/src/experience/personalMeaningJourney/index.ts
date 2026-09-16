@@ -5,12 +5,17 @@ export type {
   JourneyGatewayStatus,
 } from './gateway';
 export { createJourneyGateway, journeyGateway } from './gateway';
+export type {
+  PersonalMeaningLearningReference,
+  PersonalMeaningLearningSource,
+} from '../../data/library/personalLearningSource';
 export {
   useJourneyGateway,
   useJourneyStatus,
   useJourneyList,
   useJourneyWorld,
   useJourneyDetail,
+  useJourneyClarificationDraft,
   useJourneyInbox,
 } from './usePersonalMeaningJourney';
 export type { JourneyWorldResult } from './usePersonalMeaningJourney';
@@ -33,6 +38,10 @@ export type {
   JourneyMaterialBlockView,
   JourneyFamiliarAnchorView,
   JourneyExperienceAnchorView,
+  ClarificationDraftView,
+  CreateClarificationDraftResult,
+  CompleteClarificationDraftInput,
+  CompleteClarificationDraftResult,
   MaterialBlockInput,
   CreatePersonalMeaningInput,
   CreatePersonalMeaningResult,
