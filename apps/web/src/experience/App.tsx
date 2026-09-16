@@ -55,7 +55,7 @@ import {WebShell} from './ui/WebShell';
 import {SensaOverlayLayout} from './ui/SensaComponents';
 import type {PracticeSenseItem} from './practiceData';
 import {usePracticeScope} from './usePracticeScope';
-import type {ResolvedPracticeScope} from './practiceScope';
+import {createPracticeScopeSnapshot,type PracticeScopeSnapshot} from './practiceScope';
 import {
   contentSenseForId,
   isContentSectionId,
@@ -103,13 +103,22 @@ export default function App() {
   const localSelectedMembership=localSelectedTarget?packageLearning.membershipByTarget[localSelectedTarget.id]:undefined;
   const openLocalTarget=(id:string)=>goMain('s-learning-target',{targetId:id});
   /* ---------- 自由练习范围：typed sources → learner selection → resolved scope ---------- */
-  const { catalog: practiceScopeCatalog, selectScope } = usePracticeScope();
-  const [activePracticeScope, setActivePracticeScope] = useState<ResolvedPracticeScope | null>(null);
+  const practiceStudyTargets = useMemo(() => packageLearning.activeTargets.flatMap((target) => {
+    const membership = packageLearning.membershipByTarget[target.id];
+    return membership ? [{ target, membership }] : [];
+  }), [packageLearning.activeTargets, packageLearning.membershipByTarget]);
+  const { catalog: practiceScopeCatalog, selectScope } = usePracticeScope({
+    studyTargets: practiceStudyTargets,
+    activeLanguageTag: activeRoute.targetLanguageTag,
+  });
+  const [activePracticeScope, setActivePracticeScope] = useState<PracticeScopeSnapshot | null>(null);
   const openRealWorldListening = useCallback(() => {
     const current = practiceScopeCatalog.currentScope;
-    // Pin the resolved target list for this activity run. Later source changes
-    // only affect the next run, never the one already on screen.
-    setActivePracticeScope({ ...current, targets: [...current.targets] });
+    setActivePracticeScope(createPracticeScopeSnapshot(
+      current,
+      crypto.randomUUID(),
+      new Date().toISOString(),
+    ));
     goMain('s-real-world-listening');
   }, [goMain, practiceScopeCatalog.currentScope]);
 

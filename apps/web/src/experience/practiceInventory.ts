@@ -1,4 +1,4 @@
-import type { ResolvedPracticeScope } from './practiceScope';
+import type { PracticeScopeTarget, ResolvedPracticeScope } from './practiceScope';
 
 /** The four stable learner-facing areas. They organise activities, not progress. */
 export type PracticeArea = 'listening' | 'speaking' | 'reading' | 'writing';
@@ -93,6 +93,17 @@ const DELIVERED_ACTIVITY_IDS: ReadonlySet<PracticeActivityId> = new Set([
   'real_world_speech_variation',
 ]);
 
+/** Activity definitions ask for capabilities, never for a source kind. */
+export const practiceTargetSupportsActivity = (
+  target: PracticeScopeTarget,
+  activityId: PracticeActivityId,
+): boolean => {
+  if (activityId === 'real_world_speech_variation') {
+    return target.capabilities.expressionForm;
+  }
+  return target.capabilities.semanticBinding && target.capabilities.context;
+};
+
 /**
  * Resolve the page from the profile and the prototype's actual capabilities.
  * YouGlish is provider-backed, so it only needs an Expression-bearing scope;
@@ -101,13 +112,15 @@ const DELIVERED_ACTIVITY_IDS: ReadonlySet<PracticeActivityId> = new Set([
 export const resolvePracticeActivities = (
   scope: ResolvedPracticeScope,
 ): readonly ResolvedPracticeActivity[] => {
-  const targetCount = scope.targets.length;
-
   return AREA_ORDER.map((area) => {
     const definition = PRACTICE_ACTIVITY_DEFINITIONS.find(
       (candidate) => candidate.primaryArea === area,
     );
     if (!definition) throw new Error(`Missing activity definition for ${area}`);
+
+    const targetCount = scope.targets.filter(
+      (target) => practiceTargetSupportsActivity(target, definition.id),
+    ).length;
 
     const status: PracticeActivityStatus = !DELIVERED_ACTIVITY_IDS.has(definition.id)
       ? 'not_yet_delivered'

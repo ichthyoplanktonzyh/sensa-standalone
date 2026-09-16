@@ -20,6 +20,7 @@ import type {
   JourneyListItemView,
   JourneyWorldItemView,
 } from './types';
+import type { PersonalMeaningLearningSource } from '../../data/library/personalLearningSource';
 
 export const useJourneyGateway = (): PersonalMeaningJourneyGateway => journeyGateway;
 
@@ -64,6 +65,16 @@ export const useJourneyWorld = (): JourneyWorldResult =>
     items: journeyGateway.getWorldItems(),
     status: journeyGateway.getStatus(),
   }), []));
+
+/** Complete, authoritative Personal Meaning sources that may become learning
+ * or Free Practice targets. UI list projections are deliberately not reused. */
+export const useJourneyLearningSources = (): PersonalMeaningLearningSource[] =>
+  useGatewaySnapshot(useCallback(
+    () => journeyGateway.getWorldItems().flatMap(
+      (item) => journeyGateway.getLearningSources(item.personalMeaningId),
+    ),
+    [],
+  ));
 
 export interface JourneyDetailResult {
   detail: JourneyDetailView | null;

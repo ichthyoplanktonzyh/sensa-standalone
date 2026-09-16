@@ -1,7 +1,7 @@
 import { previewStorage } from './services/previewStorage';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useJourneyWorld } from './personalMeaningJourney/usePersonalMeaningJourney';
-import { useLanguageRoutes } from './library/useLanguageRoutes';
+import { useTranslation } from 'react-i18next';
+import { useJourneyLearningSources } from './personalMeaningJourney/usePersonalMeaningJourney';
 import {
   CURRENT_STUDY_SCOPE_ID,
   DEFAULT_PRACTICE_SCOPE_SELECTION,
@@ -9,9 +9,10 @@ import {
   resolvePracticeScopeCatalog,
   type PracticeScopeCatalog,
   type PracticeScopeSelection,
+  type PracticeStudyTarget,
 } from './practiceScope';
 
-const PRACTICE_SCOPE_SELECTION_KEY = 'sensa.free-practice.scope-selection.v1';
+const PRACTICE_SCOPE_SELECTION_KEY = 'sensa.free-practice.scope-selection.v2';
 
 const selectionKey = (selection: PracticeScopeSelection): string =>
   selection.sourceId === CURRENT_STUDY_SCOPE_ID
@@ -50,21 +51,31 @@ export interface PracticeScopeState {
   readonly selectScope: (selection: PracticeScopeSelection) => void;
 }
 
+export interface UsePracticeScopeInput {
+  readonly studyTargets: readonly PracticeStudyTarget[];
+  readonly activeLanguageTag: string;
+}
+
 /**
  * React binding for the Practice Scope Module. The screen learns one selector;
  * source projection, validation, fallback and persistence stay behind it.
  */
-export const usePracticeScope = (): PracticeScopeState => {
-  const { items: personalMeanings } = useJourneyWorld();
-  const { activeRoute } = useLanguageRoutes();
+export const usePracticeScope = ({
+  studyTargets,
+  activeLanguageTag,
+}: UsePracticeScopeInput): PracticeScopeState => {
+  const { t } = useTranslation();
+  const personalMeaningSources = useJourneyLearningSources();
   const [selection, setSelection] = useState<PracticeScopeSelection>(readSelection);
   const catalog = useMemo(
     () => resolvePracticeScopeCatalog({
       selection,
-      personalMeanings,
-      activeLanguageTag: activeRoute.targetLanguageTag,
+      personalMeaningSources,
+      studyTargets,
+      studyTitle: t('practice.currentStudySubtitle'),
+      activeLanguageTag,
     }),
-    [personalMeanings, activeRoute.targetLanguageTag, selection],
+    [personalMeaningSources, studyTargets, t, activeLanguageTag, selection],
   );
   const normalizedKey = selectionKey(catalog.selection);
 

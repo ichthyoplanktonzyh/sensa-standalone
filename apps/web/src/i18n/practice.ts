@@ -1,5 +1,5 @@
 export const practiceZh = {
- title:'自由练习',note:'随时练习，不改变学习进度。',scope:'练习范围',change:'更换范围',back:'返回',empty:'当前没有可练内容',count:'{{count}} 个意思',use:'使用 {{count}} 个意思',choose:'选择内容',all:'全选',clear:'取消全选',
+ title:'自由练习',note:'随时练习，不改变学习进度。',scope:'练习范围',change:'更换范围',back:'返回',empty:'当前没有可练内容',count:'{{count}} 个意思',use:'使用 {{count}} 个意思',choose:'选择内容',all:'全选',clear:'取消全选',currentStudySubtitle:'当前语言中已加入学习的全部内容',
  sources:{current_study:'当前学习内容',personal_semantic_world:'我的语义世界'},
  areas:{listening:'听',speaking:'说',reading:'读',writing:'写'},
  names:{listening:'真实语流泛化',speaking:'情境口语排演',reading:'语境推义',writing:'情境书面表达'},
@@ -9,7 +9,7 @@ export const practiceZh = {
  loading:'正在加载片段…',noClips:'没有找到片段，试试其他口音或表达。',error:'片段加载失败，请重试。',retry:'重新加载',captions:'字幕',captionEmpty:'字幕随播放逐句显示',play:'播放',pause:'暂停',previous:'上一段',next:'下一段',replay:'重播',rewind:'后退 5 秒',forward:'前进 5 秒',speed:'播放速度',results:'{{count}} 个片段',provider:'片段来自 YouGlish',
 };
 export const practiceEn = {
- title:'Free practice',note:'Practice anytime without changing learning progress.',scope:'Practice scope',change:'Change scope',back:'Back',empty:'No practice content yet',count:'{{count}} meanings',use:'Use {{count}} meanings',choose:'Choose content',all:'Select all',clear:'Deselect all',
+ title:'Free practice',note:'Practice anytime without changing learning progress.',scope:'Practice scope',change:'Change scope',back:'Back',empty:'No practice content yet',count:'{{count}} meanings',use:'Use {{count}} meanings',choose:'Choose content',all:'Select all',clear:'Deselect all',currentStudySubtitle:'Everything added to learning in the current language',
  sources:{current_study:'Current learning content',personal_semantic_world:'My semantic world'},
  areas:{listening:'Listen',speaking:'Speak',reading:'Read',writing:'Write'},
  names:{listening:'Real-world speech',speaking:'Scenario rehearsal',reading:'Meaning in context',writing:'Written responses'},
