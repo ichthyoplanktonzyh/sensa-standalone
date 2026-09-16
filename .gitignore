@@ -55,3 +55,6 @@ content/data/consumer-generations/
 .tmp/
 .sensa-local/
 apps/browser-extension/dist-local/
+
+# Local UI review captures are generated during design verification.
+/.impeccable/review/

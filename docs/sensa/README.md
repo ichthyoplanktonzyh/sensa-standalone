@@ -1,6 +1,6 @@
 # Sensa 文档索引
 
-本索引只区分领域、产品和工程三类事实。项目进度、阶段总结、部署记录和临时问题不属于长期文档。
+本索引区分领域、品牌与设计、产品和工程事实。项目进度、阶段总结、部署记录和临时问题不属于长期文档。
 
 ## 领域模型
 
@@ -18,12 +18,20 @@
 
 发生冲突时先以 `CONTEXT.md` 确认术语，再由职责最接近的领域文档裁决。实现结构、页面顺序、测试命令和发布配置不进入领域文档。
 
+## 品牌与设计
+
+- [`brand-foundation.md`](brand-foundation.md)：Sensa 为什么存在、核心品牌命题、公共 Sense 与个人经验的品牌表达边界。
+- [`../../DESIGN.md`](../../DESIGN.md)：当前 Web 语义设计合同、Skin 呈现体系与可执行设计约束。
+
+品牌文档解释领域背后的人本动机，但不能覆盖领域身份或不变量。`DESIGN.md` 中的具体 Skin 方向也不自动成为 Sensa 的品牌身份。
+
 ## 当前产品与工程
 
 - [`product-requirements-v1.md`](product-requirements-v1.md)：当前 Web 产品范围、页面职责、主要旅程和用户可见状态。
+- [`user-journeys.md`](user-journeys.md)：跨 Web、浏览器扩展、Agent、学习包与学习运行时的端到端用户旅程。
 - [`engineering.md`](engineering.md)：当前代码边界、本地开发、数据同步、验证与生产发布方式。
 
-这两份文档只维护当前有效内容，不追加施工日志。完成记录由 Git 和 CI 保存，待办由 issue tracking 保存。
+这些文档只维护当前有效内容，不追加施工日志。完成记录由 Git 和 CI 保存，待办由 issue tracking 保存。
 
 ## 就近操作说明
 

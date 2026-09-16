@@ -1,5 +1,5 @@
-/** Curated presentation assets; no runtime URL or third-party loader is allowed. */
-export const skinAssetContractVersion = "sensa-skin-assets-v1" as const;
+/** Curated Skin-specific assets; fixed product-brand artwork has a separate owner. */
+export const skinAssetContractVersion = "sensa-skin-assets-v2" as const;
 
 export const skinIconRoleCatalog = [
   "navigation-home",
@@ -9,7 +9,7 @@ export const skinIconRoleCatalog = [
   "navigation-settings",
 ] as const;
 
-export const skinAssetRoleCatalog = ["brand-mark", ...skinIconRoleCatalog] as const;
+export const skinAssetRoleCatalog = [...skinIconRoleCatalog] as const;
 export const skinAssetSetCatalog = ["quiet-editorial", "clear-utility"] as const;
 
 export type SkinIconRole = (typeof skinIconRoleCatalog)[number];

@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { LanguageSwitch } from '../../i18n/LanguageSwitch';
 import { useModalFocus } from './useModalFocus';
 import { SensaApplicationShellLayout } from './SensaPageLayouts';
-import { SensaBrandMark, SensaSkinIcon } from '../appearance/SensaSkinAssets';
+import { SensaSkinIcon } from '../appearance/SensaSkinAssets';
+import { SensaLogo } from '../brand/SensaLogo';
 
 const sections = [
   { id: 's-home', label: 'nav.home', iconRole: 'navigation-home' },
@@ -48,8 +49,7 @@ export function WebShell({ children, current, focused, onNavigate, availableSect
     : current.startsWith('s-content') ? 's-content' : current;
   const brand = (
     <button type="button" data-sensa-shell-brand-action onClick={() => onNavigate('s-home')} aria-label={t('nav.homeLabel')}>
-      <SensaBrandMark />
-      <span data-sensa-shell-brand-word>sensa</span>
+      <SensaLogo data-sensa-shell-brand-mark />
     </button>
   );
   const navigation = (

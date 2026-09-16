@@ -2,10 +2,22 @@ import {readdir,readFile,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import type {Plugin} from 'vite';
+
+export const offlineBrandFiles = [
+ '/brand/sensa/v1/svg/lockup/sensa-lockup-horizontal-color.svg',
+ '/brand/sensa/v1/svg/lockup/sensa-lockup-horizontal-reverse.svg',
+ '/brand/sensa/v1/svg/mark/sensa-mark-ink.svg',
+ '/brand/sensa/v1/svg/mark/sensa-mark-reverse.svg',
+ '/brand/sensa/v1/icons/favicon-color.ico',
+ '/brand/sensa/v1/icons/favicon-color.svg',
+ '/brand/sensa/v1/icons/apple-touch-icon.png',
+ '/brand/sensa/v1/icons/safari-pinned-tab.svg',
+] as const;
+
 /** Only immutable application files; account/API responses and packages are never cached here. */
 export function offlineShell():Plugin{let output='dist';return {configResolved(config){output=resolve(config.root,config.build.outDir);},name:'sensa-offline-shell',apply:'build',async writeBundle(){
  const assets=(await readdir(resolve(output,'assets'))).filter(n=>!n.endsWith('.map')).map(n=>'/assets/'+n);
- const paths=['/index.html',...assets];const hash=createHash('sha256');for(const path of paths)hash.update(await readFile(resolve(output,'.'+path)));
+ const paths=['/index.html',...assets,...offlineBrandFiles];const hash=createHash('sha256');for(const path of paths)hash.update(await readFile(resolve(output,'.'+path)));
  const cache='sensa-shell-'+hash.digest('hex').slice(0,20);
  await writeFile(resolve(output,'sw.js'),`const CACHE=${JSON.stringify(cache)},FILES=${JSON.stringify(paths)};
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES))));

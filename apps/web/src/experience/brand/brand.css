@@ -1,0 +1,23 @@
+[data-sensa-brand-logo] {
+  display: block;
+  width: 125px;
+  height: 40px;
+  flex: 0 0 auto;
+  background: center / contain no-repeat url("/brand/sensa/v1/svg/lockup/sensa-lockup-horizontal-color.svg");
+}
+
+html[data-sensa-color-mode="dark"] [data-sensa-brand-logo] {
+  background-image: url("/brand/sensa/v1/svg/lockup/sensa-lockup-horizontal-reverse.svg");
+}
+
+@media (max-width: 23.999rem) {
+  [data-sensa-brand-logo] {
+    width: 32px;
+    height: 32px;
+    background-image: url("/brand/sensa/v1/svg/mark/sensa-mark-ink.svg");
+  }
+
+  html[data-sensa-color-mode="dark"] [data-sensa-brand-logo] {
+    background-image: url("/brand/sensa/v1/svg/mark/sensa-mark-reverse.svg");
+  }
+}

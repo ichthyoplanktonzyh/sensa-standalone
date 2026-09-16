@@ -15,6 +15,8 @@ import {auth,cachedAuthSubject,authStorageKey} from '../../data/account/auth';
 import {completeEmailLink,emailLinkRedirect} from '../../data/consumer/emailLink';
 import {command,readLibrary,openLibrary,observeLibrary} from '../../data/library/store';
 import {setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
+import {LandingPage} from '../landing/LandingPage';
+import {SensaLogo} from '../brand/SensaLogo';
 
 type Access={deleteAccount:()=>void;notice:string;email:string|null;onlineService:boolean;login:()=>void;logout:()=>Promise<void>};
 const AccountContext=createContext<Access>({deleteAccount:()=>{},notice:'',email:null,onlineService:false,login:()=>{},logout:async()=>{}});
@@ -22,7 +24,7 @@ export const useAccountExperience=()=>useContext(AccountContext);
 type Owner={subject:string;email:string;accountId?:string};
 /** Authentication is an online-service boundary, not a consumer sync bootstrap. */
 export default function AccountExperience({children}:{children:ReactNode}){
- useTranslation();
+ const {t}=useTranslation();
  const [deletionOpen,setDeletionOpen]=useState(()=>!!pendingAccountDeletion());const deletionRef=useRef(deletionOpen);deletionRef.current=deletionOpen;
  const [ready,setReady]=useState(false),[local,setLocal]=useState(false),[loginOpen,setLoginOpen]=useState(false),[onlineService,setOnlineService]=useState(false);
  const [webSession,setWebSession]=useState<'checking'|'present'|'absent'>('checking');
@@ -32,6 +34,7 @@ export default function AccountExperience({children}:{children:ReactNode}){
  const observedAuth=useRef<{subject:string|null;token:string|null}|null>(null);
  const generation=useRef(0),localRef=useRef(false);localRef.current=local;
  const extension=new URLSearchParams(location.search),extensionRequest=extension.get('extension')==='connect';
+ const landingPreview=location.pathname==='/welcome';
  const recover=async()=>{
   if(deletionRef.current)return;
   const gen=++generation.current;
@@ -106,10 +109,11 @@ export default function AccountExperience({children}:{children:ReactNode}){
  if(deletionOpen)return <AccountDeletion onClose={()=>{location.assign('/profile');}}/>;
  if(!ready)return <main role="status" className="grid min-h-screen place-content-center">{localFlowText(extensionRequest?'extensionConnecting':'loadingSensa')}</main>;
  if(extensionRequest&&webSession==='present')return <main className="grid min-h-screen place-content-center gap-4 p-8 text-center"><p role="status">{notice?localFlowNotice(notice):localFlowText('extensionConnecting')}</p>{notice&&<div className="flex justify-center gap-2"><button className={setupPrimary} disabled={busy} onClick={()=>void perform(recover)}>{localFlowText('extensionRetry')}</button><button className={setupButton} onClick={()=>location.assign('/profile')}>{localFlowText('cancel')}</button></div>}</main>;
+ if(!loginOpen&&!notice&&(landingPreview||!local&&location.pathname==='/'))return <LandingPage signedIn={local} onEnter={()=>{if(local)location.assign('/');else setLoginOpen(true);}}/>;
  if(local&&!loginOpen&&extension.get('extension')!=='connect')return <AccountContext.Provider value={{deleteAccount:()=>{generation.current++;setDeletionOpen(true);},notice:localFlowNotice(notice),email:owner?.email??null,onlineService,login:()=>setLoginOpen(true),logout:()=>perform(logout)}}><AccountLibrarySync online={onlineService}/><LocalAgentIntake/>{onlineService&&<RemoteIntakeDelivery online/>}{owner?.accountId&&<ExtensionIntake accountId={owner.accountId} onlineService={onlineService}/>} {children}</AccountContext.Provider>;
  // Default Supabase templates send links; custom OTP templates remain supported.
  return <main className="sensa-account-entry flex min-h-screen items-center justify-center bg-surface-canvas px-6 font-product text-fg-primary"><form className="w-full max-w-sm space-y-5" onSubmit={e=>{e.preventDefault();void perform(sent?useCode?async()=>{const result=await auth!.verifyOtp({email:email.trim(),token:code.trim(),type:'email'});if(result.error){setNotice(localFlowText('otpInvalid'));return;}await recover();}:recover:send);}}>
-  <div className="flex items-center justify-between"><p className="text-sm text-fg-secondary">Sensa</p><LanguageSwitch/></div><h1 className="text-3xl font-semibold">{sent?localFlowText(useCode?'enterOtp':'checkEmailLink'):localFlowText('welcome')}</h1>
+  <div className="flex items-center justify-between"><SensaLogo/><LanguageSwitch/></div><h1 className="text-3xl font-semibold">{sent?localFlowText(useCode?'enterOtp':'checkEmailLink'):localFlowText('welcome')}</h1>
   <p className="text-sm leading-6">{sent?localFlowText(useCode?'otpSent':'emailLinkSent',{email}):localFlowText('loginIntro')}</p>
   {!auth?<p role="status">{localFlowText('loginUnavailable')}</p>:<>{sent?useCode&&<label className="block text-sm">{localFlowText('otp')}<input className="mt-2 w-full rounded-control border border-border-strong bg-surface-panel p-3 text-fg-primary focus-visible:outline-2 focus-visible:outline-focus" autoComplete="one-time-code" inputMode="numeric" value={code} onChange={e=>setCode(e.target.value)} required/></label>:<label className="block text-sm">{localFlowText('email')}<input className="mt-2 w-full rounded-control border border-border-strong bg-surface-panel p-3 text-fg-primary focus-visible:outline-2 focus-visible:outline-focus" type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label>}{(!sent||useCode)&&<button className={setupPrimary+' w-full'} disabled={busy}>{busy?localFlowText('processing'):sent?localFlowText('verify'):localFlowText('sendEmailLink')}</button>}</>}
   {notice&&<p role="status">{localFlowNotice(notice)}</p>}
@@ -117,5 +121,6 @@ export default function AccountExperience({children}:{children:ReactNode}){
   <button type="button" className={setupButton} disabled={busy} onClick={()=>void perform(recover)}>{localFlowText('checkLogin')}</button>
   {owner&&<button type="button" className={setupButton} disabled={busy} onClick={()=>void perform(logout)}>{localFlowText('switchAccount')}</button>}
   {local&&extension.get('extension')!=='connect'&&<button type="button" className={setupButton} onClick={()=>setLoginOpen(false)}>{localFlowText('continueLocal')}</button>}
+  {!local&&!sent&&(location.pathname==='/'||landingPreview)&&<button type="button" className={setupButton} onClick={()=>setLoginOpen(false)}>{t('landing.back')}</button>}
  </form></main>;
 }

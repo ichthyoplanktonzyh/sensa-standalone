@@ -172,9 +172,13 @@ modality、label、focus lifecycle、Escape/backdrop dismiss policy、校验与 
 稳定 DOM seam。Skin adapter 可以解析 panel measure、viewport 或 containing-block placement、safe area、滚动
 与 responsive sheet/dialog geometry，但不能删去 controls、改变关闭语义或把弹层变成新的导航流程。
 
-`sensa-skin-assets-v1` 让 Product Component 只请求 brand mark 与主导航等 semantic asset role，由当前 build-time
-adapter 解析 glyph、stroke 与 mark construction。Action label、destination 与无障碍名称仍由 Product Shell
-提供；asset set 没有远端 URL、package name 或 runtime loader，且必须完整实现当前 release 的全部 role。
+固定的 Sensa Logo v1 由 Product Brand 层持有，不属于 Skin asset role。`SensaLogo` 只引用已审核的轮廓 SVG，
+按 color mode 选择 color / reverse 导出，并在最窄壳层使用同源 ink / reverse mark；Skin 不得重画轮廓、
+重新排字或任意换色。Logo 的 home Action、destination 与无障碍名称仍由 Product Shell 提供，图形本身为装饰。
+
+`sensa-skin-assets-v2` 只让 Product Component 请求主导航等 Skin-owned semantic asset role，由当前 build-time
+adapter 解析 glyph 与 stroke。asset set 没有远端 URL、package name 或 runtime loader，且必须完整实现当前
+release 的全部 role；它不能通过资产替换改变 Action 语义或 Sensa 的固定品牌身份。
 
 `sensa-motion-v1` 为 instant feedback、component state、screen transition 与 overlay 提供 semantic duration、
 easing 与 distance token。Skin 可在已审核范围内呈现 gentle 或 direct motion profile，但触发条件、状态提交、

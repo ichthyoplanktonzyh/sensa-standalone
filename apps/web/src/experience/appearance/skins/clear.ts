@@ -7,7 +7,7 @@ import { semanticDesignContractVersion, type SensaSkinPlugin } from "../skinCont
 
 export const clearSkin = {
   id: "clear",
-  version: "3.0.0",
+  version: "3.0.1",
   semanticContractVersion: semanticDesignContractVersion,
   componentContractVersion: componentSkinContractVersion,
   pageLayoutContractVersion,

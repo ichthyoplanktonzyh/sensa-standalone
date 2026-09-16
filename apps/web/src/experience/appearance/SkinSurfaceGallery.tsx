@@ -15,7 +15,8 @@ import {
   SensaSurface,
 } from "../ui/SensaComponents";
 import { SensaApplicationShellLayout, SensaCollectionBrowserLayout, SensaDetailWorkspaceLayout, SensaPageLayout, SensaWorkspacePageLayout } from "../ui/SensaPageLayouts";
-import { SensaBrandMark, SensaSkinIcon } from "./SensaSkinAssets";
+import { SensaSkinIcon } from "./SensaSkinAssets";
+import { SensaLogo } from "../brand/SensaLogo";
 
 const sectionTitle = "mb-4 text-section-title font-semibold";
 const specimenGrid = "grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3";
@@ -136,8 +137,8 @@ export function SkinSurfaceGallery() {
           </Specimen>
 
           <Specimen title="Curated assets">
-            <div className="flex flex-wrap items-center gap-4" aria-label="Skin asset roles">
-              <SensaBrandMark />
+            <div className="flex flex-wrap items-center gap-4" aria-label="Brand and Skin asset roles">
+              <SensaLogo />
               {skinIconRoleCatalog.map((role) => (
                 <span className="grid size-11 place-items-center rounded-control bg-surface-subtle" title={role} key={role}>
                   <SensaSkinIcon role={role} aria-hidden size={20} />
@@ -178,8 +179,7 @@ export function SkinSurfaceGallery() {
               chrome: {
                 brand: (
                   <button type="button" data-sensa-shell-brand-action aria-label="Fixture home">
-                    <SensaBrandMark />
-                    <span data-sensa-shell-brand-word>sensa</span>
+                    <SensaLogo data-sensa-shell-brand-mark />
                   </button>
                 ),
                 navigation: (

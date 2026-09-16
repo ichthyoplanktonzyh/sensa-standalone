@@ -90,12 +90,6 @@
   text-align: left;
 }
 
-[data-sensa-shell-brand-word] {
-  font-size: 1.5rem;
-  font-weight: 650;
-  letter-spacing: -0.06em;
-}
-
 [data-sensa-shell-navigation-item] {
   display: flex;
   min-width: 0;

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { access, readFile, readdir } from "node:fs/promises";
 import {
   colorModeCatalog,
@@ -95,6 +96,27 @@ assert.equal(
 );
 
 const theme = await readFile(new URL("../apps/web/src/theme.css", import.meta.url), "utf8");
+const brandPaletteStyles = await readFile(
+  new URL("../apps/web/src/experience/brand/palette.css", import.meta.url),
+  "utf8",
+);
+const approvedBrandUiColors = {
+  "forest-800": "#2e3a2f",
+  "sage-600": "#7a8a73",
+  "stone-500": "#c9c3a7",
+  "paper-100": "#f6f4ed",
+} as const;
+assert(theme.includes("./experience/brand/palette.css"), "approved brand UI palette is not imported");
+assert(
+  theme.indexOf("./experience/brand/palette.css") < theme.indexOf("./experience/appearance/skins/quiet.css"),
+  "brand UI primitives must load before the Quiet semantic adapter",
+);
+for (const [token, value] of Object.entries(approvedBrandUiColors)) {
+  assert(
+    brandPaletteStyles.includes(`--sensa-brand-${token}: ${value};`),
+    `approved brand UI color ${token} drifted`,
+  );
+}
 const skinStyles = new Map(
   await Promise.all(skinCatalog.map(async (skin) => [
     skin.id,
@@ -111,9 +133,17 @@ function block(source: string, selector: string): string {
 }
 
 function colorValue(source: string, role: string): string {
-  const match = source.match(new RegExp(`--sensa-${role}:\\s*(#[0-9a-f]{6})`, "iu"));
-  assert(match, `missing hex value for ${role}`);
-  return match[1];
+  const declaration = source.match(new RegExp(`--sensa-${role}:\\s*([^;]+);`, "iu"));
+  assert(declaration, `missing color value for ${role}`);
+  const value = declaration[1].trim();
+  if (/^#[0-9a-f]{6}$/iu.test(value)) return value;
+  const reference = value.match(/^var\(--sensa-brand-([a-z0-9-]+)\)$/iu);
+  assert(reference, `unsupported color value ${value} for ${role}`);
+  const primitive = brandPaletteStyles.match(
+    new RegExp(`--sensa-brand-${reference[1]}:\\s*(#[0-9a-f]{6})`, "iu"),
+  );
+  assert(primitive, `missing brand primitive ${reference[1]} for ${role}`);
+  return primitive[1];
 }
 
 function contrast(foreground: string, background: string): number {
@@ -256,7 +286,16 @@ const skinAssetsSource = await readFile(
   new URL("../apps/web/src/experience/appearance/SensaSkinAssets.tsx", import.meta.url),
   "utf8",
 );
+const brandStyles = await readFile(
+  new URL("../apps/web/src/experience/brand/brand.css", import.meta.url),
+  "utf8",
+);
+const brandSource = await readFile(
+  new URL("../apps/web/src/experience/brand/SensaLogo.tsx", import.meta.url),
+  "utf8",
+);
 assert(theme.includes("./experience/appearance/assetStyles.css"), "asset contract styles are not imported");
+assert(theme.includes("./experience/brand/brand.css"), "fixed brand styles are not imported");
 assert(theme.includes("./experience/appearance/motionStyles.css"), "motion contract styles are not imported");
 for (const token of motionTokenCatalog) {
   assert(
@@ -269,6 +308,47 @@ for (const role of skinAssetRoleCatalog) {
     `${assetStyles}\n${skinAssetsSource}`.includes(role),
     `asset role ${role} has no presentation consumer`,
   );
+}
+assert(brandSource.includes("data-sensa-brand-logo"), "fixed brand component has no stable DOM seam");
+assert(!brandSource.includes("useAppearancePreference"), "fixed brand component depends on a Skin preference");
+assert(!brandStyles.includes("filter:"), "fixed brand artwork is recolored with a CSS filter");
+const brandAssetPaths = [
+  "/brand/sensa/v1/svg/lockup/sensa-lockup-horizontal-color.svg",
+  "/brand/sensa/v1/svg/lockup/sensa-lockup-horizontal-reverse.svg",
+  "/brand/sensa/v1/svg/mark/sensa-mark-ink.svg",
+  "/brand/sensa/v1/svg/mark/sensa-mark-reverse.svg",
+  "/brand/sensa/v1/icons/favicon-color.ico",
+  "/brand/sensa/v1/icons/favicon-color.svg",
+  "/brand/sensa/v1/icons/apple-touch-icon.png",
+  "/brand/sensa/v1/icons/safari-pinned-tab.svg",
+] as const;
+const brandAssetDigests: Readonly<Record<(typeof brandAssetPaths)[number], string>> = {
+  "/brand/sensa/v1/svg/lockup/sensa-lockup-horizontal-color.svg": "1da7b915e0e1561fff730d88c45038abfca1fd36df7a0aee50df839891e6e493",
+  "/brand/sensa/v1/svg/lockup/sensa-lockup-horizontal-reverse.svg": "b66538fec24a1f21e75d34fcb0a0652e1d5ba7621bbf92bafb1a3b0363528a1d",
+  "/brand/sensa/v1/svg/mark/sensa-mark-ink.svg": "84492de3236303c8e09fc128d85938a3845e1d0a5357f4c5520d071ff0271052",
+  "/brand/sensa/v1/svg/mark/sensa-mark-reverse.svg": "0cf8ece7f47e7f3cccb28ab50fba31ea381104be43c4582e3fad80d329ed940c",
+  "/brand/sensa/v1/icons/favicon-color.ico": "83707e5875c0194b8557238056d7c0c4a1f204e6a27116cf00ebf03bf58189a6",
+  "/brand/sensa/v1/icons/favicon-color.svg": "858c50a9039355b19881d1e7c589a0cfddab01bf22a7625cbb44634c43282146",
+  "/brand/sensa/v1/icons/apple-touch-icon.png": "a08f229bb743b79123f4b616069f26ca3c6f81ea4b6efe43a4d060e2dff8ce6a",
+  "/brand/sensa/v1/icons/safari-pinned-tab.svg": "039841d7bbad5573093422d6d6aadf182b8351339f1283501a446f96cbaf14cd",
+};
+for (const path of brandAssetPaths) {
+  const sourceUrl = new URL(`../apps/web/public${path}`, import.meta.url);
+  await access(sourceUrl);
+  const bytes = await readFile(sourceUrl);
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), brandAssetDigests[path], `${path} drifted from Sensa Logo v1`);
+  if (path.endsWith(".svg")) {
+    const svg = bytes.toString("utf8");
+    assert(svg.includes("<svg"), `${path} is not SVG artwork`);
+    assert(!/<(?:script|image|text|foreignObject)\b|\bhref=/u.test(svg), `${path} contains a disallowed runtime dependency`);
+  }
+}
+for (const path of brandAssetPaths.filter((path) => path.includes("/svg/"))) {
+  assert(brandStyles.includes(path), `${path} is not consumed by the fixed brand component`);
+}
+const webIndex = await readFile(new URL("../apps/web/index.html", import.meta.url), "utf8");
+for (const path of brandAssetPaths.filter((path) => path.includes("/icons/"))) {
+  assert(webIndex.includes(path), `${path} is not declared as a Web entry asset`);
 }
 
 const migratedSurfaces = [
@@ -397,7 +477,8 @@ const experienceRoot = new URL("../apps/web/src/experience/", import.meta.url);
 for (const path of await presentationSources(experienceRoot)) {
   const source = await readFile(new URL(path, experienceRoot), "utf8");
   const isSkinAdapter = path.startsWith("appearance/skins/") && path.endsWith(".css");
-  if (!isSkinAdapter) {
+  const isBrandPaletteOwner = path === "brand/palette.css";
+  if (!isSkinAdapter && !isBrandPaletteOwner) {
     assert(!/(?<!&)#[0-9a-f]{3,8}\b/iu.test(source), `${path} bypasses the semantic color contract`);
     assert(!/\b(?:rgb|hsl|oklch)a?\(/iu.test(source), `${path} contains a color-function literal`);
   }
@@ -527,8 +608,9 @@ for (const path of [
 const webShell = await readFile(new URL("ui/WebShell.tsx", experienceRoot), "utf8");
 assert(webShell.includes("<SensaApplicationShellLayout"), "WebShell does not consume the application-shell layout seam");
 assert(!webShell.includes("data-sensa-page-layout"), "WebShell bypasses the page layout interface");
-assert(webShell.includes("<SensaBrandMark"), "WebShell does not consume the curated brand asset seam");
-for (const role of skinAssetRoleCatalog.filter((role) => role !== "brand-mark")) {
+assert(webShell.includes("<SensaLogo"), "WebShell does not consume the fixed brand asset seam");
+assert(!webShell.includes("data-sensa-shell-brand-word"), "WebShell still typesets the fixed wordmark with a UI font");
+for (const role of skinAssetRoleCatalog) {
   assert(webShell.includes(role), `WebShell does not request the ${role} asset role`);
 }
 assert(!webShell.includes("from 'lucide-react'"), "WebShell selects concrete Skin glyphs directly");

@@ -3,14 +3,11 @@ version: alpha
 name: Sensa Web Design System
 description: Stable semantic interface rules shared by Sensa's first-party, curated skins.
 colors:
-  primary: "{colors.accent}"
-  paper: "#F6F5F0"
-  ink: "#2D342C"
-  muted: "#62695E"
-  line: "#DEDFD5"
-  accent: "#4B603D"
-  sage: "#ECEEE5"
-  clay: "#B56A42"
+  primary: "{colors.forest}"
+  forest: "#2E3A2F"
+  sage: "#7A8A73"
+  stone: "#C9C3A7"
+  paper: "#F6F4ED"
 typography:
   sans:
     fontFamily: 'Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
@@ -27,13 +24,18 @@ omitted:
 
 ## Overview
 
+Sensa's human motivation and core brand thesis are defined in
+[`docs/sensa/brand-foundation.md`](docs/sensa/brand-foundation.md). This design-system document governs Web
+presentation and Skin contracts; it does not independently establish Sensa's brand story or approve a final visual identity.
+
 Sensa should feel calm, attentive, and precise: a learning environment that keeps the learner focused on meaning rather than on interface chrome. Visual hierarchy must clarify the relationship among an expression, its sense, supporting language, context, and learning state without making the product feel like a dense administration dashboard.
 
 This document defines the stable product-level design contract. Sensa ships a reviewed catalog of first-party skins; it is not a marketplace or an arbitrary runtime extension point. A skin may change presentation, but it must never change navigation, content, available actions, accepted input, learning facts, scheduling, persistence, or sync behavior.
 
 The semantic contract is the boundary between product UI and a skin. Product components consume roles such as canvas, panel, primary text, secondary text, primary action, selection, focus, and feedback. They do not depend on a skin's palette names or hard-coded visual values.
 
-The initial catalog contains two deliberately distinct adapters:
+The initial catalog contains two deliberately distinct working adapters. They validate the Skin architecture and provide
+usable first-party presentation directions; neither adapter is by itself the approved Sensa brand identity:
 
 - **Sensa Quiet:** mineral paper, near-neutral ink and olive actions. Open reading space, light navigation and unboxed content rows keep the next action easy to find. Sage supports selection; clay remains a sparse decorative accent.
 - **Sensa Clear:** a cooler, crisper product skin with higher visual separation and reduced decorative warmth. It must implement the same semantic roles and component states as Quiet.
@@ -42,7 +44,9 @@ Both skins must support light and dark color modes. Skin, color mode, and text s
 
 ## Colors
 
-The named palette in the frontmatter is the approved foundation for Sensa Quiet. Paper is the quiet canvas, ink is the core reading color, muted supports secondary information, line separates without dominating, accent identifies primary interaction, sage provides gentle grouping and selection, and clay is a sparse warm signal.
+The four named colors in the frontmatter are the owner-approved Sensa UI foundation. Forest carries primary ink and high-emphasis interaction, sage supports focus, progress and grouping, stone provides warm structural separation, and paper is the default calm canvas. Quiet maps these anchors plus measured derived steps into the semantic contract; product components remain insulated from the primitive palette through semantic roles.
+
+These four anchors are immutable inputs rather than a complete set of component values. Hover, selected, panel, border and dark-mode colors are explicit derived steps, while success, warning and danger remain separate status ramps so brand color never misrepresents product state. Clear remains an alternate curated Skin and may retain its own complete semantic palette; it does not redefine the Sensa brand anchors.
 
 Runtime components must consume semantic color roles rather than these palette names. Each shipped skin provides a complete mapping for canvas, subtle and raised surfaces, selected surfaces, the always-dark media stage and its on-media foreground, primary/secondary/tertiary/inverse text, subtle/strong borders, primary action and hover, focus, selection, overlay, and success/warning/danger feedback.
 
@@ -92,9 +96,11 @@ Quiet controls have gently rounded corners (0.625rem), contained cards use 0.875
 
 ## Assets
 
-The executable `sensa-skin-assets-v1` contract lets product code request curated semantic roles instead of selecting a Skin-specific file or glyph. Its initial roles cover the brand mark and primary shell destinations: home, semantic world, learning, practice, and settings. `SensaBrandMark` and `SensaSkinIcon` resolve those roles through the active build-time adapter; Clear retains the established utility glyphs while Quiet may use a more editorial set. Accessible names and action meaning remain on the product control, not inside a decorative asset.
+Sensa Logo v1 is fixed product-brand artwork outside the Skin asset contract. `SensaLogo` consumes the approved outlined SVGs: the 40 CSS px horizontal color lockup on ordinary light surfaces, its exported reverse tone in dark mode, and the 32 CSS px ink/reverse mark below 384 CSS px where the full lockup would compete with shell utilities. The active Skin cannot redraw, recolor, typeset or replace its geometry. The containing home Action owns the accessible name; the artwork itself is decorative.
 
-Asset sets are bundled, reviewed code with no remote URL or runtime package field. A Skin can change a glyph, mark construction, illustration, stroke character, or other visual asset only when the role remains recognizable and every supported role is present. It cannot use an asset swap to add a destination, imply unavailable state, or change an action's semantics.
+The executable `sensa-skin-assets-v2` contract covers the primary shell destinations: home, semantic world, learning, practice and settings. `SensaSkinIcon` resolves those semantic roles through the active build-time adapter; Clear retains the established utility glyphs while Quiet may use a more editorial set. Asset sets are bundled, reviewed code with no remote URL or runtime package field. A Skin can change a navigation glyph, illustration, stroke character or other Skin-owned asset only when the role remains recognizable and every supported role is present. It cannot use an asset swap to add a destination, imply unavailable state or change an Action's semantics.
+
+Logo production colors remain artwork inputs and are not sampled or rewritten by UI code. The approved Forest, Sage, Stone and Paper UI anchors enter the product only through the semantic color contract; they do not recolor the Logo or replace the dedicated success, warning and danger roles. Product code must select an exported Logo tone rather than applying CSS filters, blend modes, opacity or ad-hoc fills.
 
 ## Motion
 

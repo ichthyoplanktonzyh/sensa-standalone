@@ -1,0 +1,652 @@
+.sensa-landing {
+  --sensa-surface-canvas: var(--sensa-brand-paper-100);
+  --sensa-surface-subtle: var(--sensa-brand-sage-100);
+  --sensa-surface-panel: var(--sensa-brand-paper-50);
+  --sensa-surface-raised: var(--sensa-brand-paper-0);
+  --sensa-surface-selected: var(--sensa-brand-sage-200);
+  --sensa-fg-primary: var(--sensa-brand-forest-800);
+  --sensa-fg-secondary: var(--sensa-brand-forest-500);
+  --sensa-fg-tertiary: var(--sensa-brand-forest-400);
+  --sensa-border-subtle: var(--sensa-brand-stone-200);
+  --sensa-border-strong: var(--sensa-brand-stone-500);
+  --sensa-focus: var(--sensa-brand-sage-600);
+  min-height: 100dvh;
+  overflow-x: hidden;
+  background: var(--sensa-brand-paper-100);
+  color: var(--sensa-brand-forest-800);
+  color-scheme: light;
+  font-family: var(--sensa-font-product);
+  scroll-behavior: smooth;
+}
+
+.sensa-landing [data-sensa-brand-logo] {
+  background-image: url("/brand/sensa/v1/svg/lockup/sensa-lockup-horizontal-color.svg");
+}
+
+.sensa-landing button,
+.sensa-landing a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sensa-landing button:focus-visible,
+.sensa-landing a:focus-visible,
+.sensa-landing select:focus-visible {
+  outline: 2px solid var(--sensa-brand-sage-600);
+  outline-offset: 4px;
+}
+
+.sensa-landing__skip {
+  position: fixed;
+  z-index: 100;
+  top: 0.75rem;
+  left: 0.75rem;
+  translate: 0 -180%;
+  border-radius: var(--sensa-radius-control);
+  background: var(--sensa-brand-forest-800);
+  color: var(--sensa-brand-paper-100);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  transition: translate var(--sensa-motion-duration-component) var(--sensa-motion-easing-enter);
+}
+
+.sensa-landing__skip:focus {
+  translate: 0;
+}
+
+.sensa-landing__header {
+  display: flex;
+  min-height: 5.75rem;
+  max-width: 90rem;
+  margin-inline: auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 1.25rem clamp(1.25rem, 4vw, 4.5rem);
+  border-bottom: 1px solid var(--sensa-brand-stone-500);
+}
+
+.sensa-landing__brand {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+  align-items: center;
+}
+
+.sensa-landing__navigation,
+.sensa-landing__hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sensa-landing__text-link {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  color: var(--sensa-brand-forest-600);
+  font-size: 0.875rem;
+  text-decoration-color: var(--sensa-brand-stone-500);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.35rem;
+}
+
+.sensa-landing__text-link:hover {
+  color: var(--sensa-brand-forest-800);
+  text-decoration-line: underline;
+}
+
+.sensa-landing__header-action,
+.sensa-landing__primary-action,
+.sensa-landing__closing-action,
+.sensa-landing__secondary-action {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  border: 1px solid transparent;
+  border-radius: var(--sensa-radius-control);
+  padding: 0.75rem 1.15rem;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--sensa-motion-duration-component) var(--sensa-motion-easing-standard), color var(--sensa-motion-duration-component) var(--sensa-motion-easing-standard), border-color var(--sensa-motion-duration-component) var(--sensa-motion-easing-standard), transform var(--sensa-motion-duration-component) var(--sensa-motion-easing-standard);
+}
+
+.sensa-landing__header-action,
+.sensa-landing__primary-action {
+  background: var(--sensa-brand-forest-800);
+  color: var(--sensa-brand-paper-100);
+}
+
+.sensa-landing__header-action:hover,
+.sensa-landing__primary-action:hover {
+  background: var(--sensa-brand-forest-900);
+}
+
+.sensa-landing__header-action:active,
+.sensa-landing__primary-action:active,
+.sensa-landing__closing-action:active,
+.sensa-landing__secondary-action:active {
+  transform: scale(0.96);
+}
+
+.sensa-landing__hero {
+  display: grid;
+  min-height: min(52rem, calc(100svh - 5.75rem));
+  max-width: 90rem;
+  margin-inline: auto;
+  grid-template-columns: minmax(0, 1.08fr) minmax(28rem, 0.92fr);
+  gap: clamp(2.5rem, 6vw, 7rem);
+  align-items: stretch;
+  padding: clamp(3.75rem, 7vw, 7.5rem) clamp(1.25rem, 4vw, 4.5rem) clamp(4.5rem, 8vw, 8rem);
+}
+
+.sensa-landing__hero-copy {
+  display: flex;
+  max-width: 47rem;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.sensa-landing__hero h1 {
+  max-width: 8ch;
+  margin: 0;
+  font-family: var(--sensa-font-language);
+  font-size: clamp(4rem, 7.2vw, 6rem);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+
+.sensa-landing__hero-copy > p {
+  max-width: 42rem;
+  margin: clamp(2rem, 4vw, 3.5rem) 0 0;
+  color: var(--sensa-brand-forest-600);
+  font-size: clamp(1.05rem, 1.45vw, 1.25rem);
+  line-height: 1.85;
+  text-wrap: pretty;
+}
+
+.sensa-landing__hero-actions {
+  flex-wrap: wrap;
+  margin-top: 2.5rem;
+}
+
+.sensa-landing__primary-action,
+.sensa-landing__secondary-action {
+  min-height: 3rem;
+  padding-inline: 1.35rem;
+}
+
+.sensa-landing__secondary-action {
+  border-color: var(--sensa-brand-stone-500);
+  background: transparent;
+  color: var(--sensa-brand-forest-800);
+}
+
+.sensa-landing__secondary-action:hover {
+  background: var(--sensa-brand-sage-100);
+}
+
+.sensa-landing__specimen {
+  position: relative;
+  display: grid;
+  align-content: center;
+  margin: 0;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: var(--sensa-brand-forest-800);
+  color: var(--sensa-brand-paper-100);
+  padding: clamp(2rem, 4vw, 4rem);
+}
+
+.sensa-landing__specimen figcaption {
+  margin-bottom: clamp(2.5rem, 5vw, 4.75rem);
+  color: var(--sensa-brand-stone-500);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.sensa-landing__thread {
+  position: absolute;
+  top: clamp(7.8rem, 16vw, 11rem);
+  bottom: clamp(5rem, 10vw, 7rem);
+  left: clamp(2rem, 4vw, 4rem);
+  width: 1px;
+  transform-origin: top;
+  background: var(--sensa-brand-sage-600);
+}
+
+.sensa-landing__specimen-stage {
+  position: relative;
+  padding-left: clamp(1.75rem, 3vw, 2.75rem);
+}
+
+.sensa-landing__specimen-stage + .sensa-landing__specimen-stage {
+  margin-top: clamp(2rem, 4vw, 3.25rem);
+}
+
+.sensa-landing__specimen-stage::before {
+  position: absolute;
+  top: 0.35rem;
+  left: -0.25rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border: 2px solid var(--sensa-brand-forest-800);
+  border-radius: 9999px;
+  background: var(--sensa-brand-sage-300);
+  content: "";
+}
+
+.sensa-landing__specimen-stage > span {
+  display: block;
+  color: var(--sensa-brand-sage-300);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.sensa-landing__specimen-stage p,
+.sensa-landing__specimen-stage blockquote {
+  max-width: 32rem;
+  margin: 0.65rem 0 0;
+  line-height: 1.75;
+  text-wrap: pretty;
+}
+
+.sensa-landing__specimen-stage[data-stage="context"] p {
+  color: var(--sensa-brand-stone-500);
+}
+
+.sensa-landing__specimen-stage blockquote {
+  font-family: var(--sensa-font-language);
+  font-size: clamp(1.65rem, 3vw, 2.5rem);
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.sensa-landing__specimen-caption {
+  margin: clamp(2.5rem, 5vw, 4rem) 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--sensa-brand-sage-600);
+  color: var(--sensa-brand-stone-500);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.sensa-landing__belief {
+  display: grid;
+  grid-template-columns: minmax(13rem, 0.7fr) minmax(18rem, 1fr);
+  column-gap: clamp(3rem, 9vw, 9rem);
+  row-gap: clamp(3rem, 7vw, 6rem);
+  padding: clamp(5rem, 10vw, 10rem) max(clamp(1.25rem, 6vw, 7rem), calc((100vw - 90rem) / 2 + 4.5rem));
+  border-block: 1px solid var(--sensa-brand-stone-500);
+  background: var(--sensa-brand-stone-500);
+}
+
+.sensa-landing__belief h2,
+.sensa-landing__use h2,
+.sensa-landing__closing h2 {
+  margin: 0;
+  font-family: var(--sensa-font-language);
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+
+.sensa-landing__belief h2 {
+  max-width: 9ch;
+  font-size: clamp(2.5rem, 5vw, 4.75rem);
+}
+
+.sensa-landing__belief-copy {
+  max-width: 42rem;
+}
+
+.sensa-landing__belief-copy p,
+.sensa-landing__use-intro p {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.85;
+  text-wrap: pretty;
+}
+
+.sensa-landing__belief-copy p + p {
+  margin-top: 1.5rem;
+}
+
+.sensa-landing__belief > blockquote {
+  grid-column: 1 / -1;
+  max-width: 19ch;
+  margin: 0;
+  padding-top: clamp(2.5rem, 5vw, 4rem);
+  border-top: 1px solid var(--sensa-brand-forest-800);
+  font-family: var(--sensa-font-language);
+  font-size: clamp(2.75rem, 6vw, 5.5rem);
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+
+.sensa-landing__use {
+  max-width: 90rem;
+  margin-inline: auto;
+  padding: clamp(5rem, 10vw, 10rem) clamp(1.25rem, 4vw, 4.5rem);
+}
+
+.sensa-landing__use-intro {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.8fr) minmax(18rem, 1fr);
+  gap: clamp(3rem, 9vw, 9rem);
+  align-items: end;
+}
+
+.sensa-landing__use h2 {
+  max-width: 10ch;
+  font-size: clamp(2.75rem, 5vw, 5rem);
+}
+
+.sensa-landing__use-intro p {
+  max-width: 40rem;
+  color: var(--sensa-brand-forest-600);
+}
+
+.sensa-landing__steps {
+  margin: clamp(4rem, 8vw, 7rem) 0 0;
+  padding: 0;
+  border-top: 1px solid var(--sensa-brand-stone-500);
+  list-style: none;
+}
+
+.sensa-landing__steps li {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(13rem, 0.65fr) minmax(16rem, 1fr);
+  gap: clamp(1.5rem, 4vw, 5rem);
+  align-items: baseline;
+  padding: clamp(1.75rem, 4vw, 3rem) 0;
+  border-bottom: 1px solid var(--sensa-brand-stone-500);
+}
+
+.sensa-landing__step-number {
+  color: var(--sensa-brand-sage-600);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+.sensa-landing__steps h3,
+.sensa-landing__steps p,
+.sensa-landing__step-heading {
+  margin: 0;
+}
+
+.sensa-landing__step-heading {
+  align-self: start;
+}
+
+.sensa-landing__step-label {
+  display: block;
+  color: var(--sensa-brand-sage-600);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+}
+
+.sensa-landing__steps h3 {
+  margin-top: 0.6rem;
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.sensa-landing__steps p {
+  max-width: 40rem;
+  color: var(--sensa-brand-forest-600);
+  line-height: 1.8;
+  text-wrap: pretty;
+}
+
+.sensa-landing__return {
+  max-width: 42rem;
+  margin: clamp(3rem, 6vw, 5rem) 0 0 auto;
+  font-family: var(--sensa-font-language);
+  font-size: clamp(1.6rem, 3vw, 2.5rem);
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.sensa-landing__closing {
+  display: flex;
+  min-height: 32rem;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: clamp(2.5rem, 8vw, 8rem);
+  padding: clamp(4rem, 8vw, 8rem) max(clamp(1.25rem, 6vw, 7rem), calc((100vw - 90rem) / 2 + 4.5rem));
+  background: var(--sensa-brand-forest-800);
+  color: var(--sensa-brand-paper-100);
+}
+
+.sensa-landing__closing h2 {
+  max-width: 15ch;
+  font-size: clamp(2.75rem, 5.5vw, 5.5rem);
+}
+
+.sensa-landing__closing p {
+  max-width: 36rem;
+  margin: 1.75rem 0 0;
+  color: var(--sensa-brand-stone-500);
+  font-size: 1.05rem;
+  line-height: 1.75;
+}
+
+.sensa-landing__closing-action {
+  flex: 0 0 auto;
+  min-height: 3rem;
+  border-color: var(--sensa-brand-paper-100);
+  background: var(--sensa-brand-paper-100);
+  color: var(--sensa-brand-forest-800);
+}
+
+.sensa-landing__closing-action:hover {
+  border-color: var(--sensa-brand-sage-300);
+  background: var(--sensa-brand-sage-300);
+}
+
+.sensa-landing__footer {
+  display: flex;
+  max-width: 90rem;
+  margin-inline: auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 2rem clamp(1.25rem, 4vw, 4.5rem);
+  color: var(--sensa-brand-forest-600);
+  font-size: 0.8125rem;
+}
+
+.sensa-landing__footer p {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sensa-landing__thread {
+    animation: sensa-landing-thread-in 900ms var(--sensa-motion-easing-enter) 180ms both;
+  }
+
+  .sensa-landing__specimen-stage::before {
+    animation: sensa-landing-point-in 460ms var(--sensa-motion-easing-enter) both;
+  }
+
+  .sensa-landing__specimen-stage[data-stage="sense"]::before {
+    animation-delay: 360ms;
+  }
+
+  .sensa-landing__specimen-stage[data-stage="expression"]::before {
+    animation-delay: 540ms;
+  }
+}
+
+@keyframes sensa-landing-thread-in {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes sensa-landing-point-in {
+  from { opacity: 0; transform: scale(0.35); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (max-width: 62rem) {
+  .sensa-landing__hero {
+    min-height: auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sensa-landing__hero-copy {
+    min-height: min(42rem, calc(100svh - 8rem));
+  }
+
+  .sensa-landing__specimen {
+    min-height: 42rem;
+  }
+
+  .sensa-landing__belief,
+  .sensa-landing__use-intro {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sensa-landing__belief h2,
+  .sensa-landing__use h2 {
+    max-width: 13ch;
+  }
+}
+
+@media (max-width: 44rem) {
+  .sensa-landing__header {
+    min-height: 4.75rem;
+    gap: 1rem;
+    padding-block: 0.75rem;
+  }
+
+  .sensa-landing__navigation {
+    gap: 0.25rem;
+  }
+
+  .sensa-landing__text-link {
+    display: none;
+  }
+
+  .sensa-landing__header-action {
+    padding-inline: 0.9rem;
+    font-size: 0.8125rem;
+  }
+
+  .sensa-landing__hero {
+    gap: 3rem;
+    padding-top: 3.25rem;
+  }
+
+  .sensa-landing__hero-copy {
+    min-height: auto;
+  }
+
+  .sensa-landing__hero h1 {
+    font-size: clamp(3.25rem, 16vw, 4.75rem);
+  }
+
+  .sensa-landing__hero-copy > p {
+    margin-top: 1.75rem;
+    font-size: 1rem;
+    line-height: 1.75;
+  }
+
+  .sensa-landing__hero-actions {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .sensa-landing__primary-action,
+  .sensa-landing__secondary-action {
+    flex: 1 1 100%;
+  }
+
+  .sensa-landing__specimen {
+    min-height: 38rem;
+    padding: 2rem 1.5rem;
+  }
+
+  .sensa-landing__thread {
+    top: 7.7rem;
+    bottom: 5.25rem;
+    left: 1.5rem;
+  }
+
+  .sensa-landing__belief {
+    row-gap: 2.5rem;
+  }
+
+  .sensa-landing__belief > blockquote {
+    font-size: clamp(2.5rem, 13vw, 4rem);
+  }
+
+  .sensa-landing__steps li {
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .sensa-landing__steps p {
+    grid-column: 2;
+  }
+
+  .sensa-landing__closing {
+    min-height: 38rem;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-end;
+  }
+
+  .sensa-landing__closing-action {
+    width: 100%;
+  }
+
+  .sensa-landing__footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 23.999rem) {
+  .sensa-landing [data-sensa-brand-logo] {
+    width: 32px;
+    height: 32px;
+    background-image: url("/brand/sensa/v1/svg/mark/sensa-mark-ink.svg");
+  }
+
+  .sensa-landing__header-action {
+    max-width: 7.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sensa-landing {
+    scroll-behavior: auto;
+  }
+
+  .sensa-landing *,
+  .sensa-landing *::before,
+  .sensa-landing *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

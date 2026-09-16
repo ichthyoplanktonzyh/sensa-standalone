@@ -1,0 +1,24 @@
+:root {
+  /* Owner-approved Sensa UI foundation. Keep these four anchors exact. */
+  --sensa-brand-forest-800: #2e3a2f;
+  --sensa-brand-sage-600: #7a8a73;
+  --sensa-brand-stone-500: #c9c3a7;
+  --sensa-brand-paper-100: #f6f4ed;
+
+  /* Consumed ramp steps derived for semantic UI roles. */
+  --sensa-brand-forest-950: #151b17;
+  --sensa-brand-forest-900: #1f2821;
+  --sensa-brand-forest-850: #252f27;
+  --sensa-brand-forest-700: #354137;
+  --sensa-brand-forest-600: #435145;
+  --sensa-brand-forest-500: #5d665c;
+  --sensa-brand-forest-400: #697166;
+  --sensa-brand-sage-400: #a9b2a6;
+  --sensa-brand-sage-300: #b7c3b3;
+  --sensa-brand-sage-250: #c7d0c4;
+  --sensa-brand-sage-200: #dce1d8;
+  --sensa-brand-sage-100: #e9e9e1;
+  --sensa-brand-stone-200: #e0dccd;
+  --sensa-brand-paper-50: #fbfaf6;
+  --sensa-brand-paper-0: #ffffff;
+}

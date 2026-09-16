@@ -9,31 +9,31 @@
 html[data-sensa-skin="quiet"] {
   --sensa-font-product: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --sensa-font-language: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  --sensa-surface-canvas: #f6f5f0;
-  --sensa-surface-subtle: #eceee5;
-  --sensa-surface-panel: #fdfcf8;
-  --sensa-surface-raised: #fffefa;
-  --sensa-surface-selected: #e4e9db;
-  --sensa-surface-media: #18352f;
-  --sensa-fg-primary: #2d342c;
-  --sensa-fg-secondary: #62695e;
-  --sensa-fg-tertiary: #6f756a;
-  --sensa-fg-inverse: #ffffff;
-  --sensa-fg-on-media: #f4f6f1;
-  --sensa-border-subtle: #dedfd5;
-  --sensa-border-strong: #bdc4b3;
-  --sensa-action-primary: #4b603d;
-  --sensa-action-primary-hover: #394d2d;
-  --sensa-action-on-primary: #ffffff;
-  --sensa-focus: #526d3e;
-  --sensa-selection: #dfe8d2;
-  --sensa-accent-soft: #eceee5;
+  --sensa-surface-canvas: var(--sensa-brand-paper-100);
+  --sensa-surface-subtle: var(--sensa-brand-sage-100);
+  --sensa-surface-panel: var(--sensa-brand-paper-50);
+  --sensa-surface-raised: var(--sensa-brand-paper-0);
+  --sensa-surface-selected: var(--sensa-brand-sage-200);
+  --sensa-surface-media: var(--sensa-brand-forest-800);
+  --sensa-fg-primary: var(--sensa-brand-forest-800);
+  --sensa-fg-secondary: var(--sensa-brand-forest-500);
+  --sensa-fg-tertiary: var(--sensa-brand-forest-400);
+  --sensa-fg-inverse: var(--sensa-brand-paper-100);
+  --sensa-fg-on-media: var(--sensa-brand-paper-100);
+  --sensa-border-subtle: var(--sensa-brand-stone-200);
+  --sensa-border-strong: var(--sensa-brand-stone-500);
+  --sensa-action-primary: var(--sensa-brand-forest-800);
+  --sensa-action-primary-hover: var(--sensa-brand-forest-900);
+  --sensa-action-on-primary: var(--sensa-brand-paper-100);
+  --sensa-focus: var(--sensa-brand-sage-600);
+  --sensa-selection: var(--sensa-brand-sage-200);
+  --sensa-accent-soft: var(--sensa-brand-sage-100);
   --sensa-feedback-success: #2f7357;
   --sensa-feedback-warning: #8a5a18;
   --sensa-feedback-danger: #a43f3f;
-  --sensa-overlay: rgb(20 35 29 / 34%);
-  --sensa-progress: #6d9b84;
-  --sensa-decorative: #b56a42;
+  --sensa-overlay: rgb(46 58 47 / 38%);
+  --sensa-progress: var(--sensa-brand-sage-600);
+  --sensa-decorative: var(--sensa-brand-stone-500);
   --sensa-radius-control: 0.625rem;
   --sensa-radius-card: 0.875rem;
   --sensa-radius-overlay: 1.25rem;
@@ -209,41 +209,41 @@ html[data-sensa-skin="quiet"] {
 }
 
 html[data-sensa-skin="quiet"][data-sensa-color-mode="dark"] {
-  --sensa-surface-canvas: #1c211b;
-  --sensa-surface-subtle: #282f24;
-  --sensa-surface-panel: #232920;
-  --sensa-surface-raised: #30372b;
-  --sensa-surface-selected: #38472e;
-  --sensa-surface-media: #0e1713;
-  --sensa-fg-primary: #f0f1e8;
-  --sensa-fg-secondary: #bec5b5;
-  --sensa-fg-tertiary: #a0aa95;
-  --sensa-fg-inverse: #172019;
-  --sensa-fg-on-media: #edf4ef;
-  --sensa-border-subtle: #3c4535;
-  --sensa-border-strong: #5a684f;
-  --sensa-action-primary: #bbcf9d;
-  --sensa-action-primary-hover: #cfdfb6;
-  --sensa-action-on-primary: #202b17;
-  --sensa-focus: #c9dda9;
-  --sensa-selection: #455b33;
-  --sensa-accent-soft: #303c27;
+  --sensa-surface-canvas: var(--sensa-brand-forest-900);
+  --sensa-surface-subtle: var(--sensa-brand-forest-800);
+  --sensa-surface-panel: var(--sensa-brand-forest-850);
+  --sensa-surface-raised: var(--sensa-brand-forest-700);
+  --sensa-surface-selected: var(--sensa-brand-forest-600);
+  --sensa-surface-media: var(--sensa-brand-forest-950);
+  --sensa-fg-primary: var(--sensa-brand-paper-100);
+  --sensa-fg-secondary: var(--sensa-brand-stone-500);
+  --sensa-fg-tertiary: var(--sensa-brand-sage-400);
+  --sensa-fg-inverse: var(--sensa-brand-forest-800);
+  --sensa-fg-on-media: var(--sensa-brand-paper-100);
+  --sensa-border-subtle: var(--sensa-brand-forest-600);
+  --sensa-border-strong: var(--sensa-brand-sage-600);
+  --sensa-action-primary: var(--sensa-brand-sage-300);
+  --sensa-action-primary-hover: var(--sensa-brand-sage-250);
+  --sensa-action-on-primary: var(--sensa-brand-forest-800);
+  --sensa-focus: var(--sensa-brand-stone-500);
+  --sensa-selection: var(--sensa-brand-forest-600);
+  --sensa-accent-soft: var(--sensa-brand-forest-700);
   --sensa-feedback-success: #77c79f;
   --sensa-feedback-warning: #e8bd73;
   --sensa-feedback-danger: #f09b9b;
   --sensa-overlay: rgb(0 0 0 / 62%);
-  --sensa-progress: #8fc8ae;
-  --sensa-decorative: #dfa07e;
+  --sensa-progress: var(--sensa-brand-sage-400);
+  --sensa-decorative: var(--sensa-brand-stone-500);
   --sensa-shadow-raised: 0 1px 2px rgb(0 0 0 / 24%), 0 10px 30px rgb(0 0 0 / 18%);
   --sensa-shadow-overlay: 0 24px 70px rgb(0 0 0 / 52%);
 }
 
 .sensa-skin-swatch[data-sensa-skin-preview="quiet"] {
-  --preview-paper: #f6f5f0;
-  --preview-ink: #2d342c;
-  --preview-line: #dedfd5;
-  --preview-accent: #4b603d;
-  --preview-support: #b56a42;
+  --preview-paper: var(--sensa-brand-paper-100);
+  --preview-ink: var(--sensa-brand-forest-800);
+  --preview-line: var(--sensa-brand-stone-500);
+  --preview-accent: var(--sensa-brand-sage-600);
+  --preview-support: var(--sensa-brand-stone-500);
 }
 
 :root [data-sensa-page-layout="application-shell"]:has(> [data-sensa-page-region="navigation"]),
@@ -484,7 +484,6 @@ html[data-sensa-skin="quiet"] .sensa-today-actions { margin-top: 2.25rem; }
 html[data-sensa-skin="quiet"] .sensa-today-discover { margin-top: 2.5rem; }
 html[data-sensa-skin="quiet"] .sensa-today-entries { border-top: 0; }
 html[data-sensa-skin="quiet"] .sensa-today-entry { min-height: 7rem; }
-html[data-sensa-skin="quiet"] [data-sensa-shell-brand-word] { font-weight: 550; letter-spacing: -0.03em; }
 html[data-sensa-skin="quiet"] [data-sensa-shell-navigation-item][data-selected] { box-shadow: inset 0 -2px var(--sensa-action-primary); }
 @media (min-width: 64rem) {
   html[data-sensa-skin="quiet"] .sensa-today-learning { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(15rem, 1fr); gap: 3rem; align-items: center; }
