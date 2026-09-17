@@ -47,6 +47,8 @@ export type {
   CreatePersonalMeaningResult,
   AddMaterialBlockInput,
   AddMaterialBlockResult,
+  ReviseContextInput,
+  ReviseContextResult,
   ConfirmClarificationInput,
   ConfirmClarificationResult,
   ConfirmExpressionBindingInput,

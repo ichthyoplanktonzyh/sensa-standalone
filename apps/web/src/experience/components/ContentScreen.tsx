@@ -55,11 +55,6 @@ type Category = "personal" | "learning" | "markers";
 type Filter = "all" | "continue" | "binding" | "complete";
 const button =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-control px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-50";
-const labelFor = (item: JourneyWorldItemView) =>
-  item.detail.directAlignments[0]?.confirmedBindings[0]?.surfaceForm ||
-  item.experienceAnchors[0]?.surfaceForm ||
-  item.familiarAnchors[0]?.surfaceForm ||
-  item.primaryLabel;
 const alignmentBranches = (item: JourneyWorldItemView) => [
   ...item.detail.focuses.map((focus) => ({
     id: focus.meaningFocusId,
@@ -74,6 +69,15 @@ const alignmentBranches = (item: JourneyWorldItemView) => [
     alignment,
   })),
 ];
+const confirmedExpressionFor = (item: JourneyWorldItemView) =>
+  alignmentBranches(item)
+    .flatMap((branch) => branch.alignment?.confirmedBindings ?? [])
+    .at(0)?.surfaceForm ?? null;
+const labelFor = (item: JourneyWorldItemView) =>
+  confirmedExpressionFor(item) ||
+  item.experienceAnchors[0]?.surfaceForm ||
+  item.familiarAnchors[0]?.surfaceForm ||
+  item.primaryLabel;
 const searchText = (item: JourneyWorldItemView) =>
   [
     labelFor(item),
@@ -163,6 +167,7 @@ function ContentScreenView({
     if (
       !focusId &&
       item &&
+      !confirmedExpressionFor(item) &&
       !item.detail.focuses.length &&
       item.detail.directAlignments[0]
     )

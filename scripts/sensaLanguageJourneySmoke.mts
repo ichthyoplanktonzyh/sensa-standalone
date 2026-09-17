@@ -87,6 +87,13 @@ assert.equal(written.at(-1).languageTag,'it','the confirmed expression uses the 
 const blockAnchors=stored.meanings[0].personalSemanticAnchorRevisions;
 assert.equal(blockAnchors.length,1);assert.equal(blockAnchors[0].languageTag,'ko','material uses the clarification’s pinned Support Language, not a later active Route');assert.equal(blockAnchors[0].bodyText,'雨后的巷子\n\n雨停了');
 assert.equal(gateway.getWorldItems().length,1);assert.equal(gateway.getLearningSources(completed.personalMeaningId).length,1,'the atomic result is immediately eligible for the one Add-to-Learning path');
+const acceptedDetail=gateway.getDetail(completed.personalMeaningId)!;
+const acceptedSource=gateway.getLearningSources(completed.personalMeaningId)[0]!;
+const revised=await gateway.reviseContext({operationId:crypto.randomUUID(),personalMeaningId:completed.personalMeaningId,expectedRevision:acceptedDetail.revision,blocks:[{kind:'text',bodyText:'雨停以后，我在巷口想开口却又停下。'}]});
+assert.equal(revised.revision,acceptedDetail.revision+1);
+assert.equal(gateway.getDetail(completed.personalMeaningId)?.materialBlocks[0]?.bodyText,'雨停以后，我在巷口想开口却又停下。','accepted expression details expose the current Context revision');
+assert.equal(gateway.getLearningSources(completed.personalMeaningId)[0]?.context.text,acceptedSource.context.text,'editing Context preserves the originally accepted learning source rather than silently rewriting it');
+await assert.rejects(gateway.reviseContext({operationId:crypto.randomUUID(),personalMeaningId:completed.personalMeaningId,expectedRevision:acceptedDetail.revision,blocks:[{kind:'text',bodyText:'过期页面的覆盖'}]}),/meaningChanged/,'a stale expression detail cannot overwrite a newer Context revision');
 
 // Two captures may arrive together from a batch-oriented Agent. Commands stay
 // serialized so neither aggregate write drops the other.

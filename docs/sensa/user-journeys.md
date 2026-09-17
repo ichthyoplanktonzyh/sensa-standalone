@@ -178,20 +178,21 @@ Retention
 ### 6.2 主流程
 
 ```text
-Web 创建入口
-    ↓
-输入文本 / 图片 / 熟悉表达 / 表达意图
-    ↓
-保存草稿
-    ↓ 用户选择继续澄清
-语义访谈
-    ↓ 补充或确认真实 Context
-    ↓ 定位 Context 中的 Expression
+Sensa 对话入口
+    ↓ 用户直接发送文字 / 图片，或从记录场景进入
+统一澄清 Agent
+    ↓ 每一轮都先理解用户并形成自然的语言老师回复
+    ↓ 同一轮静默判断 Context / Sense / Expression 是否清楚
+    ↓ 仅在复用判断确有需要时检索已有语义世界
     ↓ 解析已有 Sense 或构造 teaching-sufficient Sense Proposal
+    ↓ 提出一个或多个目标语言 Expression
+    ↓ 三者都清楚时显示完整 Context / Sense / Expression 候选
     ↓ 用户明确接受
 完整 Personal Meaning
     ↓
 我的语义世界
+    ↓ 以已确认 Expression 展示；点击进入表达详情，不重新启动澄清
+表达详情（Expression / Sense / 当前 Context；Context 可版本化修订）
     ↓ 用户明确点击“加入学习”
 固定当前 Language Learning Route + Add-to-Learning Intent
     ↓
@@ -204,11 +205,21 @@ Content Provisioning Task
 
 ### 6.3 澄清原则
 
+- Sensa 自身提供一个可从空白开始的对话入口；从记录场景或 Inbox 打开的澄清使用同一个对话工作区，
+  只是预先携带各自已有的文字、图片、来源和候选事实。当前入口只支持文字和图片。
+- 每个用户回合都由同一个有界教师 loop 处理，不以回合数切换模式。模型先理解用户实际要解决的问题，
+  用普通对话回答、解释或提出至多一个真正影响含义的问题。
+- 模型在同一次最终回复中给出隐藏的清晰度判断和可选候选；这是结构化模型输出，不是工具。Context、
+  Sense 和 Expression 全部清楚时才显示完整候选，用户不需要执行“整理”“抽取”或切换表单模式。
+- 澄清不查询外部词汇参考。模型使用自身语言能力；唯一工具是读取用户已有语义世界，并且只在明确意义
+  已经形成、需要判断是否复用时调用。工具活动只保存可审计结果，不保存或展示模型隐藏推理。
 - 语义访谈只澄清会影响真实理解和使用的区别，不要求用户填写内部语义结构。
 - Meaning Focus 是可选解析桥梁；Context 和 Expression 已能确定 intended Sense 时，不应伪造 Focus。
 - 模型只给出一个目标语言单词不构成 Sense Proposal；需要能够支持教学、生成材料和区分必要相邻意义。
 - 只有用户接受当前 Context–Expression–Sense 关系后，才能创建正式 Personal Meaning。
 - 用户关闭或中断澄清时，材料继续作为草稿/Inbox 状态保存，不冒充已确认内容。
+- 已确认的 Expression 是“我的语义世界”的可见主对象；重新打开时进入表达详情。Context 修改是显式的
+  版本化修订，不会自动再次调用澄清 Agent，也不会重写当时的 Sense / Expression 接受事实。
 
 ### 6.4 加入学习和内容准备
 

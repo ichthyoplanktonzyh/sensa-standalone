@@ -4,6 +4,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
+import { loadLocalModelEnvironment } from './sensaLocalModelEnvironment.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const runtimeRoot = join(root, '.sensa-local');
@@ -23,8 +24,9 @@ let stopping = false;
 
 const mode = process.argv[2];
 const smoke = process.argv.includes('--smoke');
+const modelsEnabled = process.argv.includes('--models') || process.env.SENSA_LOCAL_ENABLE_MODELS === '1';
 if (!['dev', 'preview', 'reset'].includes(mode)) {
-  console.error('Usage: node scripts/local/sensaLocal.mjs dev|preview|reset [--smoke]');
+  console.error('Usage: node scripts/local/sensaLocal.mjs dev|preview|reset [--smoke] [--models]');
   process.exit(2);
 }
 if (!['darwin', 'linux'].includes(process.platform)) {
@@ -38,6 +40,11 @@ if (Number(process.versions.node.split('.')[0]) < 24) {
 
 mkdirSync(runtimeRoot, { recursive: true, mode: 0o700 });
 mkdirSync(join(runtimeRoot, 'env'), { recursive: true, mode: 0o700 });
+const modelEnvironment = loadLocalModelEnvironment({
+  root,
+  enabled: modelsEnabled,
+  environment: process.env,
+});
 
 function result(command, args, options = {}) {
   return spawnSync(command, args, {
@@ -284,7 +291,7 @@ async function runLocal() {
       SENSA_LOCAL_SERVICE_PORT: '4319',
       SENSA_LOCAL_WEB_ORIGINS: 'http://127.0.0.1:3000,http://127.0.0.1:4173',
       SENSA_REGISTRATION_POLICY: 'registered',
-      SENSA_MANAGED_MODELS_PAUSED: '1',
+      ...modelEnvironment,
       SENSA_PACKAGE_CATALOG_JSON: catalog,
     },
   });
@@ -306,6 +313,9 @@ async function runLocal() {
   const sessionResponse = await fetch(`${serviceOrigin}/__sensa_local/session`);
   if (!sessionResponse.ok) throw new Error('Could not create the local test session');
   const session = await sessionResponse.json();
+  if (modelsEnabled) {
+    console.warn('Local model opt-in is enabled. Requests use the configured real provider and may incur cost.');
+  }
   const profileName = smoke ? 'browser-smoke' : mode === 'preview' ? 'browser-preview' : 'browser-dev';
   const page = await launchBrowser(webOrigin, join(runtimeRoot, profileName), session);
   if (smoke) {

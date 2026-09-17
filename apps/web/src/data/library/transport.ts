@@ -4,7 +4,8 @@ import {z} from 'zod';
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {auth} from '../account/auth';
 import {clearCredential,providerCredential,providerSnapshot,type Provider,type Purpose} from './providers';
-import {conversationImagesSchema,type ConversationImage} from './conversationImages';
+import type {ConversationImage} from './conversationImages';
+const modelInputImagesSchema=z.array(z.object({id:z.string().uuid(),name:z.string().max(200),dataUrl:z.string().max(9*1024*1024).regex(/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/u)}).strict()).max(4);
 export type ModelMessage={role:'system'|'user'|'assistant'|'tool';content:string|null;images?:ConversationImage[];tool_call_id?:string;tool_calls?:{id:string;type:'function';function:{name:string;arguments:string}}[]};
 export type ModelTool={type:'function';function:{name:string;description:string;parameters:Record<string,unknown>}};
 export const completionSchema=z.object({model:z.string().max(200),choices:z.array(z.object({finish_reason:z.enum(['stop','tool_calls']),message:z.object({content:z.string().max(32000).nullable().optional(),tool_calls:z.array(z.object({id:z.string().min(1).max(100),type:z.literal('function'),function:z.object({name:z.string().max(100),arguments:z.string().max(32000)}).strict()}).strip()).max(4).optional()}).passthrough()}).passthrough()).length(1)}).passthrough();
@@ -12,14 +13,14 @@ export const digest=async(value:unknown)=>Array.from(new Uint8Array(await crypto
 async function abortable<T>(promise:Promise<T>,signal:AbortSignal):Promise<T>{
  return new Promise((resolve,reject)=>{const abort=()=>{signal.removeEventListener('abort',abort);reject(new Error('localFlow.requestTimeout'));};if(signal.aborted){void promise.catch(()=>{});abort();return;}signal.addEventListener('abort',abort,{once:true});promise.then(value=>{signal.removeEventListener('abort',abort);resolve(value);},error=>{signal.removeEventListener('abort',abort);reject(error);});});
 }
-export async function complete(provider:Provider,purpose:Purpose,id:string,messages:ModelMessage[],tools:ModelTool[],signal:AbortSignal){
- try{return await localModelQueue.run({id,provider:new URL(provider.endpoint).origin,model:provider.model,purpose,execution:'device'},signal,(bounded,record)=>completeRequest(provider,purpose,id,messages,tools,bounded,record));}catch(e){if(e instanceof ModelExecutionError)throw new Error(e.code==='model_timeout'?'localFlow.requestTimeout':e.code==='model_cancelled'?'localFlow.requestStopped':'localFlow.modelQueueFull');throw e;}
+export async function complete(provider:Provider,purpose:Purpose,id:string,messages:ModelMessage[],tools:ModelTool[],signal:AbortSignal,responseFormat?:'json_object'){
+ try{return await localModelQueue.run({id,provider:new URL(provider.endpoint).origin,model:provider.model,purpose,execution:'device'},signal,(bounded,record)=>completeRequest(provider,purpose,id,messages,tools,bounded,record,responseFormat));}catch(e){if(e instanceof ModelExecutionError)throw new Error(e.code==='model_timeout'?'localFlow.requestTimeout':e.code==='model_cancelled'?'localFlow.requestStopped':'localFlow.modelQueueFull');throw e;}
 }
-async function completeRequest(provider:Provider,purpose:Purpose,id:string,messages:ModelMessage[],tools:ModelTool[],signal:AbortSignal,record:ModelExecutionRecord){
+async function completeRequest(provider:Provider,purpose:Purpose,id:string,messages:ModelMessage[],tools:ModelTool[],signal:AbortSignal,record:ModelExecutionRecord,responseFormat?:'json_object'){
  signal=AbortSignal.any([signal,AbortSignal.timeout(45000)]);
- const images=messages.flatMap(m=>m.images??[]);conversationImagesSchema.parse(images);
+ const images=messages.flatMap(m=>m.images??[]);modelInputImagesSchema.parse(images);
  const wireMessages=messages.map(({images,...m})=>images?.length?{...m,content:[...(m.content?[{type:'text',text:m.content}]:[]),...images.map(image=>({type:'image_url',image_url:{url:image.dataUrl}}))]}:m);
- const base=new URL(provider.endpoint),body={model:provider.model,messages:wireMessages,...(tools.length?{tools}:{}),max_tokens:3000,stream:false as const,...(purpose!=='teacher'&&!tools.length?{response_format:{type:'json_object' as const}}:{})};
+ const base=new URL(provider.endpoint),body={model:provider.model,messages:wireMessages,...(tools.length?{tools}:{}),max_tokens:3000,stream:false as const,...(responseFormat==='json_object'||(purpose!=='teacher'&&!tools.length)?{response_format:{type:'json_object' as const}}:{})};
  if(messages.length>100||new TextEncoder().encode(JSON.stringify(messages.map(({images,...m})=>m))).length>256*1024)throw new Error('localFlow.conversationSave');
  let endpoint=provider.endpoint+'/chat/completions',payload:unknown=body,key:string,subject:string|undefined;
  if(provider.kind==='sensa'){

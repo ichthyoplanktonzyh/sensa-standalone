@@ -170,6 +170,10 @@ export default function App() {
     });
   }, [goMain]);
 
+  const startSensaConversation = useCallback(() => {
+    goMain('s-personal-meaning', { meaningId: undefined, focusId: undefined });
+  }, [goMain]);
+
   const openConfirmedSense = useCallback((nextPersonalMeaningId: string, nextMeaningFocusId: string) => {
     goMain('s-confirmed-sense', {
       meaningId: nextPersonalMeaningId,
@@ -322,6 +326,7 @@ export default function App() {
             active={viewMode === 'main' && (mainStack.includes('s-content') || mainStack.includes('s-semantic-world'))}
             screenId={mainStack.includes('s-semantic-world') ? 's-semantic-world' : 's-content'}
             initialAction={params.worldAction === 'create' || params.worldAction === 'inbox' ? params.worldAction : undefined}
+            onStartConversation={startSensaConversation}
             onBrowseExisting={() => goMain('s-learning-entry')}
             onOpenPersonalMeaning={openPersonalMeaning}
             onOpenConfirmedSense={openConfirmedSense}
@@ -330,11 +335,12 @@ export default function App() {
             toast={toast}
           />
 
-          {/* 3.1.1 AI 澄清：一段对话收敛 Focus / Sense / Expression，一次确认落三个事实 */}
+          {/* 3.1.1 AI 澄清：各入口共用一段自然对话，收敛 Context / Sense / Expression */}
           <PersonalMeaningDetailScreen
             key={personalMeaningId}
             active={viewMode === 'main' && mainStack.includes('s-personal-meaning')}
             personalMeaningId={personalMeaningId}
+            onConversationCreated={openPersonalMeaning}
             onBack={backMain}
             onOpenConfirmedSense={openConfirmedSense}
             toast={toast}

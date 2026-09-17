@@ -21,15 +21,24 @@ const accepted=await send(teacher);
 assert.equal(accepted.status,200);assert.equal(accepted.headers.get('cache-control'),'no-store');assert.deepEqual(await accepted.json(),{id:teacher.id,inputDigest:createHash('sha256').update(canonicalConsumerJson(teacher)).digest('hex'),response:{model:'fixture',purpose:'teacher',connection:'Teacher'}});
 assert.equal(authorizations,2);assert.equal(reservations,1);assert.equal(completions,1);assert.deepEqual(selected,['teacher']);
 
+// The native clarification teacher may expose only semantic-world lookup.
+const teacherTools={...teacher,id:crypto.randomUUID(),body:{...teacher.body,response_format:{type:'json_object' as const},tools:['lookup_meanings'].map(name=>({type:'function' as const,function:{name,description:name,parameters:{type:'object'}}}))}};
+const toolsAccepted=await send(teacherTools);
+assert.equal(toolsAccepted.status,200);assert.equal(reservations,2);assert.equal(completions,2);assert.deepEqual(selected,['teacher','teacher']);
+
+// A proposal is final model output, not even a recognized executable tool.
+const fakeProposalTool={...teacher,id:crypto.randomUUID(),body:{...teacher.body,tools:[{type:'function' as const,function:{name:'propose_meaning',description:'not a capability',parameters:{type:'object'}}}]}};
+const proposalDenied=await send(fakeProposalTool);assert.equal(proposalDenied.status,400);assert.deepEqual(await proposalDenied.json(),{code:'invalid_request'});assert.equal(reservations,2);assert.equal(completions,2);
+
 // Each purpose resolves its own account connection.
 const reference={id:crypto.randomUUID(),purpose:'reference',body:{model:'sensa-managed',messages:message,max_tokens:400,stream:false,response_format:{type:'json_object'}}};
 const resolved=await send(reference);
-assert.equal(resolved.status,200);assert.deepEqual(selected,['teacher','reference']);assert.equal((await resolved.json() as {response:{connection:string}}).response.connection,'Reference');assert.equal(completions,2);assert.equal(reservations,2);
+assert.equal(resolved.status,200);assert.deepEqual(selected,['teacher','teacher','reference']);assert.equal((await resolved.json() as {response:{connection:string}}).response.connection,'Reference');assert.equal(completions,3);assert.equal(reservations,3);
 
 // A purpose that exposes no tools rejects one, and never reserves.
-const withTool={...reference,id:crypto.randomUUID(),body:{...reference.body,tools:[{type:'function',function:{name:'ask_learner',description:'ask',parameters:{}}}]}};
-const denied=await send(withTool);assert.equal(denied.status,400);assert.deepEqual(await denied.json(),{code:'unapproved_tool'});assert.equal(reservations,2);assert.equal(completions,2);
+const withTool={...reference,id:crypto.randomUUID(),body:{...reference.body,tools:[{type:'function',function:{name:'lookup_meanings',description:'lookup',parameters:{}}}]}};
+const denied=await send(withTool);assert.equal(denied.status,400);assert.deepEqual(await denied.json(),{code:'unapproved_tool'});assert.equal(reservations,3);assert.equal(completions,3);
 
 const mismatch=await app.request('/turn',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...teacher,inputDigest:'0'.repeat(64)})});
-assert.equal(mismatch.status,400);assert.deepEqual(await mismatch.json(),{code:'input_digest_mismatch'});assert.equal(reservations,2);assert.equal(completions,2);
-console.log('PASS: Web model turn validates its digest, resolves a connection per purpose, refuses unapproved tools, reserves once, reauthorizes after completion, and returns no-store. Synthetic provider; no database/network.');
+assert.equal(mismatch.status,400);assert.deepEqual(await mismatch.json(),{code:'input_digest_mismatch'});assert.equal(reservations,3);assert.equal(completions,3);
+console.log('PASS: Web model turn validates its digest, resolves a connection per purpose, permits only semantic-world lookup for clarification, refuses proposal pseudo-tools and unapproved tools, reserves once, reauthorizes after completion, and returns no-store. Synthetic provider; no database/network.');

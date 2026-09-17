@@ -184,6 +184,8 @@ export interface JourneyFocusView {
 export interface JourneyDetailView {
   personalMeaningId: string;
   shortId: string;
+  /** Current optimistic-concurrency revision of this Personal Meaning. */
+  revision: number;
   displayLabel: string | null;
   learnerIntentNote: string | null;
   phase: PersonalMeaningJourneyPhase;
@@ -298,6 +300,20 @@ export interface AddMaterialBlockInput {
 
 export interface AddMaterialBlockResult {
   anchorId: string;
+  replayed: boolean;
+}
+
+/** Replace the current Context while retaining every prior anchor revision. */
+export interface ReviseContextInput {
+  operationId: string;
+  personalMeaningId: string;
+  expectedRevision: number;
+  blocks: MaterialBlockInput[];
+}
+
+export interface ReviseContextResult {
+  personalMeaningRevisionId: string;
+  revision: number;
   replayed: boolean;
 }
 

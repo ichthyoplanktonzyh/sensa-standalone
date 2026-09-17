@@ -1,6 +1,6 @@
 export const contentZh = {
-  findExpression: "找个表达",
-  findExpressionHint: "说说你想表达什么，也可以发送图片",
+  findExpression: "和 Sensa 聊聊",
+  findExpressionHint: "发送文字或图片，一起澄清场景、意思和表达",
   graph: {
     title: "词义图谱",
     context: "场景",
@@ -67,8 +67,8 @@ export const contentZh = {
   },
 };
 export const contentEn = {
-  findExpression: "Find an expression",
-  findExpressionHint: "Tell us what you want to say, or share an image",
+  findExpression: "Talk to Sensa",
+  findExpressionHint: "Share text or images to clarify context, sense, and expression",
   graph: {
     title: "Meaning graph",
     context: "Context",

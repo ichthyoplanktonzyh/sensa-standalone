@@ -177,6 +177,15 @@
   line-height: 1.65;
 }
 
+.pmw-message img {
+  display: block;
+  width: min(100%, 24rem);
+  max-height: 20rem;
+  margin-top: 0.625rem;
+  border-radius: var(--sensa-radius-control);
+  object-fit: contain;
+}
+
 .pmw-message.is-learner,
 .pmw-message.is-user {
   align-self: flex-end;

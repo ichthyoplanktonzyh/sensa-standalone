@@ -28,7 +28,7 @@ export const completeModelTurn:ModelTurnCompletion=(connection,body,signal,meta)
 
 /** Tool exposure per purpose. A purpose absent here is a bug, not a permissive default. */
 const purposeTools:Record<Input['purpose'],string[]>={
-  teacher:['lookup_meanings','ask_learner','propose_meaning'],
+  teacher:['lookup_meanings'],
   content:['read_demand','lookup_reference_facts','submit_candidate'],
   review:[],
   reference:[],

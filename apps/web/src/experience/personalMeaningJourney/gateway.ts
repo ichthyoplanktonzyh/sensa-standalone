@@ -98,6 +98,8 @@ import type {
   MaterialBlockInput,
   PublishedLearningSceneAcceptanceInput,
   PublishedLearningSceneAcceptanceResult,
+  ReviseContextInput,
+  ReviseContextResult,
 } from './types';
 
 const PSW = 'sensa-personal-semantic-world-v2' as const;
@@ -162,6 +164,9 @@ export interface PersonalMeaningJourneyGateway {
   ): Promise<CompleteClarificationDraftResult>;
 
   addMaterialBlock(input: AddMaterialBlockInput): Promise<AddMaterialBlockResult>;
+
+  /** Revise learner-owned Context without changing the confirmed Sense or Binding. */
+  reviseContext(input: ReviseContextInput): Promise<ReviseContextResult>;
 
   confirmClarification(
     input: ConfirmClarificationInput,
@@ -1027,6 +1032,59 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     this.recordReceipt(input.operationId, 'AddMaterialBlock', result);
     await this.persist();
     return { ...result, replayed: false };
+  }
+
+  async reviseContext(input: ReviseContextInput): Promise<ReviseContextResult> {
+    return this.exclusive(() => this.withStateTransaction(async () => {
+      const replay = this.replay<ReviseContextResult>(input.operationId, 'ReviseContext');
+      if (replay) return replay;
+      const record = this.requireRecord(input.personalMeaningId);
+      if (record.personalMeaning.currentRevision !== input.expectedRevision) {
+        throw new Error('localFlow.meaningChanged');
+      }
+      if (input.blocks.length === 0) throw new Error('localFlow.messageRequired');
+      const imageCount = input.blocks.filter((block) => block.kind === 'image').length;
+      if (imageCount > 3) throw new Error('localFlow.sceneImageRequirements');
+
+      // Validate the full replacement before retiring any current anchor.
+      for (const block of input.blocks) {
+        if (block.kind === 'image') {
+          if (!block.personalMediaObjectId || !isUuid(block.personalMediaObjectId)) {
+            throw new Error('图片材料块必须引用本地媒体对象。');
+          }
+        } else if (!block.bodyText?.trim()) {
+          throw new Error('文字材料块不能为空。');
+        }
+      }
+
+      const languages = await this.deps.languages.read();
+      const now = this.now();
+      record.personalSemanticAnchors
+        .filter((anchor) => anchor.status === 'active')
+        .forEach((anchor) => {
+          anchor.status = 'deleted';
+          anchor.updatedAt = now;
+          anchor.deletedAt = now;
+        });
+      const anchorIds = input.blocks.map((block) => this.appendMaterialAnchor(
+        record,
+        input.operationId,
+        block,
+        languages.supportLanguageTag,
+      ).anchorId);
+      const personalMeaningRevisionId = this.appendMeaningRevision(
+        record,
+        input.operationId,
+        anchorIds,
+      );
+      const result = {
+        personalMeaningRevisionId,
+        revision: record.personalMeaning.currentRevision,
+      };
+      this.recordReceipt(input.operationId, 'ReviseContext', result);
+      await this.persist();
+      return { ...result, replayed: false };
+    }));
   }
 
   // -- clarification confirmation ------------------------------------------

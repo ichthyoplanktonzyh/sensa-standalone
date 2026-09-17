@@ -1,13 +1,17 @@
 /**
  * The AI clarification agent seam.
  *
- * One conversation produces a Sense and target Expression, plus an optional
- * Focus only when the Context needs disambiguation. The conversation runs as a simplified loop: plain
- * `chat` turns while the model listens and asks (Phase 1), then a single
- * `consolidate` extraction the learner requests when the model says it is
- * ready (Phase 2), repeatable after corrections. The agent only ever
- * *proposes*: it can never confirm anything. Confirmation is a single explicit
- * learner intent handled by the journey gateway.
+ * One conversation clarifies Context, Sense and target Expression, plus an
+ * optional Focus only when the Context needs disambiguation. Every learner
+ * turn uses the same bounded teacher loop: the model answers naturally, judges
+ * whether Context, Sense and Expression are clear, and may inspect the
+ * learner's existing semantic world when reuse genuinely matters. Its hidden
+ * structured assessment is final-output state, not a fake tool call. There is
+ * no opening-turn exception, extraction mode, or learner-triggered extraction
+ * phase.
+ *
+ * The agent only ever *proposes*: it can never confirm anything. Confirmation
+ * is a separate explicit learner intent handled by the journey gateway.
  *
  * Two things are deliberately kept apart here:
  *  - `focusLocked` steers an optional disambiguation Focus (it is a
@@ -66,7 +70,17 @@ export interface SemanticAgentMessage {
   messageId: string;
   role: 'learner' | 'assistant';
   body: string;
+  /** Locally persisted images that accompanied this learner message. */
+  mediaReferenceIds?: string[];
   occurredAt: string;
+}
+
+/** A concise interpretation of the real-world situation being clarified. */
+export interface AgentContextCandidate {
+  summary: string;
+  salientDetails: string[];
+  unresolvedDetails: string[];
+  rationale: string;
 }
 
 export interface AgentFocusCandidate {
@@ -106,20 +120,37 @@ export interface AgentExpressionCandidate {
  * tracks are reported back so the model carries them forward.
  */
 export interface SemanticAgentWorkingSet {
+  context: AgentContextCandidate | null;
   focus: AgentFocusCandidate | null;
   sense: AgentSenseCandidate | null;
   expression: AgentExpressionCandidate | null;
   expressions?: AgentExpressionCandidate[];
 }
 
-export type WorkingSetTrack = 'focus' | 'sense' | 'expression';
+export type WorkingSetTrack = 'context' | 'focus' | 'sense' | 'expression';
 
 export const emptyWorkingSet = (): SemanticAgentWorkingSet => ({
+  context: null,
   focus: null,
   sense: null,
   expression: null,
   expressions: [],
 });
+
+/** Read-only semantic-world material available to the lookup tool. */
+export interface SemanticAgentKnownMeaning {
+  personalMeaningId: string;
+  senseVersionId: string;
+  coreMeaningFocus: string;
+  expressions: string[];
+}
+
+export interface SemanticAgentStep {
+  stepId: string;
+  tool: 'lookup_meanings' | 'unknown';
+  status: 'completed' | 'failed';
+  summary: string;
+}
 
 export interface SemanticAgentTurnResult {
   assistantMessage: string;
@@ -131,21 +162,20 @@ export interface SemanticAgentTurnResult {
    */
   readyToConfirm: boolean;
   provenance: SemanticLlmProvenance;
+  /** Auditable tool activity only; never hidden chain-of-thought. */
+  steps: SemanticAgentStep[];
 }
 
 export interface SemanticAgentTurnInput {
   material: SemanticAgentMaterial;
   messages: SemanticAgentMessage[];
   workingSet: SemanticAgentWorkingSet;
+  readyToConfirm: boolean;
   learnerEditedTracks: WorkingSetTrack[];
   focusLocked: boolean;
-  /**
-   * The simplified agent loop. `chat` turns are plain conversation (Phase 1:
-   * listen and ask, no panel change); `consolidate` is one structured
-   * extraction that fills the panel (Phase 2). The learner decides when to
-   * consolidate — the model only says it is ready, in prose.
-   */
-  mode: SemanticAgentTurnMode;
+  knownMeanings: SemanticAgentKnownMeaning[];
+  /** Cancels the whole bounded loop, including local reference lookups. */
+  signal?: AbortSignal;
   /**
    * The languages this turn is about. The agent proposes an expression in the
    * Target Language and explains the sense in the Support Language, so the
@@ -154,8 +184,6 @@ export interface SemanticAgentTurnInput {
    */
   languages: SensaPinnedLanguageContext;
 }
-
-export type SemanticAgentTurnMode = 'chat' | 'consolidate';
 
 /**
  * Receives streaming text deltas of the assistant's reply as they arrive.
@@ -192,5 +220,6 @@ export interface SemanticAgentSession {
   focusLocked: boolean;
   readyToConfirm: boolean;
   provenance: SemanticLlmProvenance | null;
+  steps: SemanticAgentStep[];
   outcome: ClarificationOutcome | null;
 }

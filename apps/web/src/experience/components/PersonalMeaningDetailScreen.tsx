@@ -1,6 +1,6 @@
 import {ExpressionChatInput} from './ExpressionChatInput';
 import type {ConversationImage} from '../../data/library/conversationImages';
-import {localFlowText} from '../../i18n/localFlowText';
+import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
 import { classNames } from '../ui/primitives';
@@ -15,9 +15,9 @@ import './PersonalMeaningDetailScreen.css';
  * — it is a basket, not a progress bar, and it never shows "已确认" while the
  * thread is still open.
  *
- * The conversation runs as a simple loop: chat turns while the model listens
- * and asks, then「整理一下」— one consolidation the learner requests when the
- * model says it is ready — fills the panel, repeatable after corrections.
+ * Every learner turn runs a bounded ReAct loop. The agent may inspect existing
+ * meanings, ask for a real distinction, and update Context–Sense–Expression
+ * candidates before replying naturally. There is no separate extraction mode.
  *
  * A Focus is only proposed when the Context needs an explicit aspect boundary.
  * The learner's confirmation always writes Sense confirmation and Alignment,
@@ -30,13 +30,15 @@ import './PersonalMeaningDetailScreen.css';
  */
 
 import {
-  useCallback, useEffect, useMemo, useRef, useState, type FormEvent,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 import {
   useJourneyDetail,
   useJourneyClarificationDraft,
   useJourneyGateway,
+  useJourneyWorld,
   type ClarificationDraftView,
+  type JourneyAlignmentView,
   type JourneyDetailView,
   type JourneyFocusView,
 } from '../personalMeaningJourney';
@@ -51,6 +53,7 @@ import {
 import {
   getMedia,
   MediaStoreFullError,
+  putMedia,
   removeMedia,
   storeImageFile,
 } from '../personalMeaningJourney/mediaStore';
@@ -61,12 +64,12 @@ import {
 } from './useSceneImageInput';
 import type {
   AgentExpressionCandidate,
+  AgentContextCandidate,
   AgentFocusCandidate,
   AgentSenseCandidate,
   SemanticAgentMaterial,
   SemanticAgentMessage,
   SemanticAgentSession,
-  SemanticAgentTurnMode,
   WorkingSetTrack,
 } from '../personalMeaningJourney/semanticAgent';
 import {
@@ -89,12 +92,13 @@ interface PersonalMeaningDetailScreenProps {
   active: boolean;
   personalMeaningId: string | null;
   onBack: () => void;
+  onConversationCreated?: (intakeId: string) => void;
   onOpenConfirmedSense: (personalMeaningId: string, meaningFocusId: string) => void;
   toast: (message: string) => void;
 }
 
 const semanticAgent = createRealSemanticAgent();
-const SEMANTIC_POLICY_VERSION = 'sensa-semantic-policy-agent-loop-v1';
+const SEMANTIC_POLICY_VERSION = 'sensa-semantic-policy-react-v1';
 
 const expressionTypeLabels: Record<SensaExpressionType, string> = {
   get word() { return uiText('word'); },
@@ -120,10 +124,12 @@ const coverageLabels: Record<SensaSemanticCoverage, string> = {
 const message = (
   role: SemanticAgentMessage['role'],
   body: string,
+  mediaReferenceIds: string[] = [],
 ): SemanticAgentMessage => ({
   messageId: newUuid(),
   role,
   body,
+  ...(mediaReferenceIds.length ? { mediaReferenceIds } : {}),
   occurredAt: new Date().toISOString(),
 });
 
@@ -164,19 +170,26 @@ const completedContextForDraft = (
   messages: SemanticAgentMessage[],
   supportLanguageTag: string,
 ): SensaIntakeContext | null => {
-  if (draft.context) return structuredClone(draft.context);
-  const textSegment = messages
+  const conversationText = messages
     .filter((message) => message.role === 'learner')
     .map((message) => message.body.trim())
     .filter(Boolean)
     .join('\n\n');
-  if (!textSegment) return null;
+  const capturedText = draft.context?.textSegment?.trim() ?? '';
+  const textSegment = [capturedText, conversationText]
+    .filter(Boolean)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .join('\n\n');
+  const mediaReferenceIds = draft.materialBlocks
+    .filter((block) => block.kind === 'image' && block.personalMediaObjectId)
+    .map((block) => block.personalMediaObjectId!);
+  if (!textSegment && mediaReferenceIds.length === 0) return null;
   return {
-    modality: 'text',
-    textSegment,
-    mediaReferenceIds: [],
-    languageTag: supportLanguageTag,
-    source: {
+    modality: textSegment ? mediaReferenceIds.length ? 'mixed' : 'text' : 'image',
+    textSegment: textSegment || null,
+    mediaReferenceIds,
+    languageTag: draft.context?.languageTag ?? supportLanguageTag,
+    source: draft.context?.source ?? {
       client: 'sensa-web',
       url: null,
       title: 'Inbox clarification',
@@ -200,6 +213,44 @@ const trackTone = (hasCandidate: boolean, confirmed: boolean): {
 };
 
 // -- editable cards ---------------------------------------------------------
+
+const ContextCard = ({
+  context,
+  editing,
+  onEdit,
+  onChange,
+  onDone,
+}: {
+  context: AgentContextCandidate;
+  editing: boolean;
+  onEdit: () => void;
+  onChange: (next: AgentContextCandidate) => void;
+  onDone: () => void;
+}) => (
+  <article className={classNames("pmw-card")}>
+    <header>
+      <small>{uiText('context')}</small>
+      {!editing && <button type="button" onClick={onEdit}>{uiText('edit')}</button>}
+    </header>
+    {editing ? (
+      <div className={classNames("pmw-edit")}>
+        <textarea
+          value={context.summary}
+          rows={3}
+          onChange={(event) => onChange({ ...context, summary: event.target.value })}
+        />
+        <button type="button" className={classNames("pmw-edit-done")} onClick={onDone}>{uiText('done')}</button>
+      </div>
+    ) : (
+      <>
+        <b className={classNames("pmw-card-lead")}>{context.summary}</b>
+        {context.salientDetails[0] && (
+          <p className={classNames("pmw-card-note")}>{context.salientDetails[0]}</p>
+        )}
+      </>
+    )}
+  </article>
+);
 
 const FocusCard = ({
   focus,
@@ -343,16 +394,215 @@ const ExpressionsCard = ({
 
 export const PersonalMeaningDetailScreen=(props:PersonalMeaningDetailScreenProps)=>props.conversation
  ? <ConnectedMeaningConversation {...props} conversation={props.conversation}/>
- : <PreviewPersonalMeaningDetailScreen {...props}/>;
+ : !props.personalMeaningId && props.onConversationCreated
+   ? <NewMeaningConversationScreen {...props} onConversationCreated={props.onConversationCreated}/>
+   : <PreviewPersonalMeaningDetailScreen {...props}/>;
+
+const persistPreparedImages = (images: ConversationImage[]): string[] => {
+  const stored: string[] = [];
+  try {
+    for (const image of images) {
+      const payload = image.dataUrl.slice(image.dataUrl.indexOf(',') + 1);
+      putMedia({
+        mediaId: image.id,
+        mediaKind: 'image',
+        mimeType: 'image/jpeg',
+        dataUrl: image.dataUrl,
+        sizeBytes: Math.round(payload.length * 0.75),
+        createdAt: new Date().toISOString(),
+      });
+      stored.push(image.id);
+    }
+    return stored;
+  } catch (cause) {
+    stored.forEach(removeMedia);
+    throw cause;
+  }
+};
+
+/**
+ * The checkpoint presentation for an accepted tuple: the expression is now
+ * the object being viewed, not another turn in the clarification Agent.
+ */
+const ConfirmedExpressionDetail = ({
+  detail,
+  focus,
+  alignment,
+  session,
+  contextText,
+  contextImages,
+  busy,
+  error,
+  onSaveContext,
+}: {
+  detail: JourneyDetailView;
+  focus: JourneyFocusView | null;
+  alignment: JourneyAlignmentView;
+  session: SemanticAgentSession;
+  contextText: string;
+  contextImages: ConversationImage[];
+  busy: boolean;
+  error: string;
+  onSaveContext: (text: string, images: ConversationImage[]) => Promise<void>;
+}) => {
+  const [editing, setEditing] = useState(false);
+  const expression = alignment.confirmedBindings[0]!;
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
+      <article className="space-y-5 py-5" aria-label={localFlowText('expressionDetails')}>
+        <div>
+          <p className="text-sm text-fg-secondary">{uiText('expression')}</p>
+          <h2 className="mt-2 text-3xl font-semibold">{expression.surfaceForm}</h2>
+          <p className="mt-2 text-sm text-fg-tertiary">
+            {expressionTypeLabels[expression.expressionType]} · {relationLabels[expression.relation]} ·{' '}
+            {coverageLabels[expression.semanticCoverage]}
+          </p>
+        </div>
+        {focus && (
+          <div>
+            <h3 className="text-sm text-fg-secondary">{uiText('focus')}</h3>
+            <p className="mt-2 whitespace-pre-wrap leading-7">{focus.statement}</p>
+          </div>
+        )}
+        <div>
+          <h3 className="text-sm text-fg-secondary">{uiText('meaning2')}</h3>
+          <p className="mt-2 whitespace-pre-wrap leading-7">{alignment.coreMeaningFocus}</p>
+        </div>
+        <div>
+          <h3 className="text-sm text-fg-secondary">{localFlowText('context')}</h3>
+          {contextText && <p className="mt-2 whitespace-pre-wrap leading-7">{contextText}</p>}
+          {contextImages.map((image) => (
+            <img
+              key={image.id}
+              src={image.dataUrl}
+              alt={image.name}
+              className="mt-3 max-h-64 max-w-full rounded-control object-contain"
+            />
+          ))}
+        </div>
+      </article>
+      <button
+        type="button"
+        className="mb-4 rounded-control border border-border-strong bg-surface-subtle px-4 py-3 focus-visible:outline-2 focus-visible:outline-focus"
+        onClick={() => setEditing((value) => !value)}
+      >
+        {localFlowText(editing ? 'cancelEdit' : 'editContext')}
+      </button>
+      {editing && (
+        <ExpressionChatInput
+          key={`context-${detail.revision}`}
+          busy={busy}
+          initialText={contextText}
+          inputLabel={localFlowText('context')}
+          inputHint={localFlowText('context')}
+          initialImages={contextImages}
+          maxImages={MAX_SCENE_IMAGES}
+          submitLabel={localFlowText('saveContext')}
+          onSend={async (text, images) => {
+            await onSaveContext(text, images);
+            setEditing(false);
+          }}
+        />
+      )}
+      {error && <p className="mb-4 text-sm text-feedback-danger" role="alert">{localFlowNotice(error)}</p>}
+      {session.messages.length > 0 && (
+        <details className="mt-5">
+          <summary className="cursor-pointer py-3 text-sm text-fg-secondary">
+            {localFlowText('conversationHistory')}
+          </summary>
+          <div className="space-y-4 text-sm leading-7">
+            {session.messages.map((item) => (
+              <div key={item.messageId}>
+                {item.body && <p>{item.body}</p>}
+                {item.mediaReferenceIds?.map((mediaId) => {
+                  const media = getMedia(mediaId);
+                  return media
+                    ? <img key={mediaId} src={media.dataUrl} alt={localFlowText('contextImage')} className="max-h-64 max-w-full" />
+                    : null;
+                })}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+};
+
+/** Empty Sensa-native entry. Nothing enters Inbox until the first message. */
+const NewMeaningConversationScreen = ({
+  active,
+  onBack,
+  onConversationCreated,
+}: PersonalMeaningDetailScreenProps & { onConversationCreated: (intakeId: string) => void }) => {
+  useTranslation();
+  const gateway = useJourneyGateway();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const begin = async (body: string, images: ConversationImage[]) => {
+    setBusy(true);
+    setError('');
+    let mediaIds: string[] = [];
+    let draftCreated = false;
+    try {
+      mediaIds = persistPreparedImages(images);
+      const result = await gateway.createClarificationDraft({
+        operationId: newUuid(),
+        blocks: [
+          ...(body.trim() ? [{ kind: 'text' as const, bodyText: body.trim() }] : []),
+          ...mediaIds.map((personalMediaObjectId) => ({
+            kind: 'image' as const,
+            personalMediaObjectId,
+          })),
+        ],
+        startingPoint: null,
+      });
+      draftCreated = true;
+      const session = newSemanticAgentSession(result.intakeId, newUuid());
+      session.messages = [message('learner', body.trim(), mediaIds)];
+      saveSemanticAgentSession(session);
+      onConversationCreated(result.intakeId);
+    } catch (cause) {
+      if (!draftCreated) mediaIds.forEach(removeMedia);
+      setError(cause instanceof Error ? cause.message : uiText('unableToContinueThisConversationPleaseRetry'));
+      throw cause;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <MeaningWorkspaceFrame
+      active={active}
+      onBack={onBack}
+      materialOpen={false}
+      onToggleMaterial={() => undefined}
+      title={localFlowText('sensaConversation')}
+      showMaterialToggle={false}
+    >
+      <div className="flex min-h-0 flex-1 flex-col justify-end">
+        <div className="mx-auto max-w-lg px-6 py-12 text-center">
+          <span className={classNames('pmw-avatar mx-auto mb-5')} aria-hidden="true">✦</span>
+          <h2 className="text-xl font-medium">{localFlowText('chatWelcome')}</h2>
+          <p className="mt-3 text-sm leading-6 text-fg-secondary">{localFlowText('chatWelcomeHint')}</p>
+        </div>
+        {error && <div className={classNames('pmw-inline-error')} role="alert">{localFlowNotice(error)}</div>}
+        <ExpressionChatInput busy={busy} maxImages={MAX_SCENE_IMAGES} onSend={begin}/>
+      </div>
+    </MeaningWorkspaceFrame>
+  );
+};
 const PreviewPersonalMeaningDetailScreen = ({
   active,
   personalMeaningId,
   onBack,
-  onOpenConfirmedSense,
+  onConversationCreated,
   toast,
 }: PersonalMeaningDetailScreenProps) => {
   useTranslation();
   const gateway = useJourneyGateway();
+  const { items: worldItems } = useJourneyWorld();
   const { detail, status } = useJourneyDetail(personalMeaningId);
   const clarificationDraft = useJourneyClarificationDraft(personalMeaningId);
   const clarificationMaterial = detail
@@ -364,15 +614,12 @@ const PreviewPersonalMeaningDetailScreen = ({
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const openedThread = useRef<string | null>(null);
+  const turnAbortRef = useRef<AbortController | null>(null);
   /** Deltas received but not yet typed out, plus the pacer that drips them. */
   const pendingRef = useRef('');
   const pacerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const drainRef = useRef<(() => void) | null>(null);
-  /** The mode of the turn in flight/last attempted, so retry repeats it. */
-  const lastModeRef = useRef<SemanticAgentTurnMode>('chat');
-
   const [session, setSession] = useState<SemanticAgentSession | null>(null);
-  const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   /** The assistant reply as it streams in; blank again once the turn lands. */
   const [streamingText, setStreamingText] = useState('');
@@ -404,10 +651,12 @@ const PreviewPersonalMeaningDetailScreen = ({
 
   /** Stop the typewriter and drop whatever had not been typed out yet. */
   const stopPacer = useCallback(() => {
+    const done = drainRef.current;
     if (pacerRef.current) clearInterval(pacerRef.current);
     pacerRef.current = null;
     drainRef.current = null;
     pendingRef.current = '';
+    done?.();
   }, []);
 
   /**
@@ -441,6 +690,8 @@ const PreviewPersonalMeaningDetailScreen = ({
 
   // A turn still typing when the screen goes away must not leave a live timer.
   useEffect(() => () => {
+    turnAbortRef.current?.abort();
+    turnAbortRef.current = null;
     if (pacerRef.current) clearInterval(pacerRef.current);
     pacerRef.current = null;
     drainRef.current?.();
@@ -461,29 +712,73 @@ const PreviewPersonalMeaningDetailScreen = ({
   }, [busy, session?.messages.length, streamingText]);
 
   /** The optional Focus this thread confirmed, if it needed one. */
-  const confirmedFocus: JourneyFocusView | null = useMemo(() => {
+  const sessionFocus: JourneyFocusView | null = useMemo(() => {
     const focusId = session?.outcome?.meaningFocusId;
     if (!detail || !focusId) return null;
     return detail.focuses.find((focus) => focus.meaningFocusId === focusId) ?? null;
   }, [detail, session?.outcome?.meaningFocusId]);
 
-  const alignment = confirmedFocus?.alignment
+  const sessionAlignment = sessionFocus?.alignment
     ?? detail?.directAlignments.find(
       (candidate) => candidate.personalMeaningAlignmentId
         === session?.outcome?.personalMeaningAlignmentId,
     )
     ?? null;
+  const persistedConfirmed = useMemo(() => {
+    if (!detail) return null;
+    for (const focus of detail.focuses) {
+      if (focus.alignment?.confirmedBindings.length) {
+        return { focus, alignment: focus.alignment };
+      }
+    }
+    const direct = detail.directAlignments.find(
+      (candidate) => candidate.confirmedBindings.length > 0,
+    );
+    return direct ? { focus: null, alignment: direct } : null;
+  }, [detail]);
+  const alignment = persistedConfirmed?.alignment ?? sessionAlignment ?? null;
+  const confirmedFocus = persistedConfirmed?.focus ?? sessionFocus;
   const boundExpression = alignment?.confirmedBindings[0] ?? null;
   const allConfirmed = Boolean(boundExpression);
+  const confirmedContextText = detail?.materialBlocks
+    .filter((block) => block.kind === 'text' && block.bodyText)
+    .map((block) => block.bodyText)
+    .join('\n\n')
+    ?? '';
+  const confirmedContextImages = useMemo<ConversationImage[]>(() => (
+    detail?.materialBlocks.flatMap((block) => {
+      if (block.kind !== 'image') return [];
+      const stored = block.personalMediaObjectId ? getMedia(block.personalMediaObjectId) : null;
+      const dataUrl = block.inlineDataUrl ?? stored?.dataUrl;
+      if (!dataUrl) return [];
+      return [{
+        id: block.personalMediaObjectId ?? newUuid(),
+        name: localFlowText('contextImage'),
+        dataUrl,
+      }];
+    }) ?? []
+  ), [detail]);
+
+  const knownMeanings = useMemo(() => worldItems.flatMap((item) => [
+    ...item.detail.focuses.flatMap((focus) => focus.alignment ? [focus.alignment] : []),
+    ...item.detail.directAlignments,
+  ].map((candidate) => ({
+    personalMeaningId: item.personalMeaningId,
+    senseVersionId: candidate.senseVersionId,
+    coreMeaningFocus: candidate.coreMeaningFocus,
+    expressions: candidate.confirmedBindings.map((binding) => binding.surfaceForm),
+  }))), [worldItems]);
 
   const runTurn = useCallback(async (
     baseSession: SemanticAgentSession,
     learnerBody?: string,
-    mode: SemanticAgentTurnMode = 'chat',
+    learnerMediaReferenceIds: string[] = [],
+    materialOverride?: SemanticAgentMaterial,
   ) => {
     if (!clarificationMaterial) return;
-    lastModeRef.current = mode;
-    const learnerMessage = learnerBody?.trim() ? message('learner', learnerBody.trim()) : null;
+    const learnerMessage = learnerBody?.trim() || learnerMediaReferenceIds.length
+      ? message('learner', learnerBody?.trim() ?? '', learnerMediaReferenceIds)
+      : null;
     const messages = learnerMessage
       ? [...baseSession.messages, learnerMessage]
       : [...baseSession.messages];
@@ -494,16 +789,21 @@ const PreviewPersonalMeaningDetailScreen = ({
     setError('');
     stopPacer();
     setStreamingText('');
+    turnAbortRef.current?.abort();
+    const controller = new AbortController();
+    turnAbortRef.current = controller;
     try {
       const result = await semanticAgent.turn(
         {
-          material: clarificationMaterial,
+          material: materialOverride ?? clarificationMaterial,
           messages,
           workingSet: baseSession.workingSet,
+          readyToConfirm: baseSession.readyToConfirm,
           learnerEditedTracks: baseSession.learnerEditedTracks,
           focusLocked: baseSession.focusLocked,
-          mode,
+          knownMeanings,
           languages:languageContext,
+          signal: controller.signal,
         },
         (delta) => {
           pendingRef.current += delta;
@@ -518,45 +818,139 @@ const PreviewPersonalMeaningDetailScreen = ({
           startPacer();
         });
       }
+      if (controller.signal.aborted) {
+        throw controller.signal.reason ?? new DOMException('Aborted', 'AbortError');
+      }
       setStreamingText('');
       commit({
         ...waiting,
         messages: [...messages, message('assistant', result.assistantMessage)],
-        // Only a consolidation writes panel state; a chat turn is talk, and
-        // talking must never demote a promotion the panel already earned.
-        ...(mode === 'consolidate' ? {
-          workingSet: result.workingSet,
-          readyToConfirm: result.readyToConfirm,
-          provenance: result.provenance,
-        } : {}),
+        workingSet: result.workingSet,
+        readyToConfirm: result.readyToConfirm,
+        provenance: result.provenance,
+        steps: [...waiting.steps, ...result.steps].slice(-40),
       });
     } catch (cause) {
       stopPacer();
       setStreamingText('');
+      setError(controller.signal.aborted
+        ? localFlowText('requestStopped')
+        : cause instanceof Error ? cause.message : uiText('unableToContinueThisConversationPleaseRetry'));
+    } finally {
+      if (turnAbortRef.current === controller) {
+        turnAbortRef.current = null;
+        setBusy(false);
+      }
+    }
+  }, [clarificationMaterial, commit, knownMeanings]);
+
+  const stopTurn = useCallback(() => {
+    turnAbortRef.current?.abort();
+    stopPacer();
+  }, [stopPacer]);
+
+  // Captured material opens in the same agent as an ordinary user message.
+  // The agent decides whether to propose immediately or ask a natural question.
+  useEffect(() => {
+    if (!active || !clarificationMaterial || !session) return;
+    if (allConfirmed) return;
+    if (session.messages.some((item) => item.role === 'assistant')
+      || openedThread.current === session.threadId) return;
+    openedThread.current = session.threadId;
+    void runTurn(session);
+  }, [active, allConfirmed, clarificationMaterial, runTurn, session]);
+
+  const sendConversationMessage = async (body: string, images: ConversationImage[]) => {
+    if (!session || busy || !clarificationMaterial) return;
+    if (images.length === 0) {
+      await runTurn(session, body);
+      return;
+    }
+    setBusy(true);
+    setError('');
+    const mediaIds = persistPreparedImages(images);
+    const attached = new Set<string>();
+    try {
+      for (const mediaId of mediaIds) {
+        if (detail) {
+          await gateway.addMaterialBlock({
+            operationId: newUuid(),
+            personalMeaningId: detail.personalMeaningId,
+            block: { kind: 'image', personalMediaObjectId: mediaId },
+          });
+        } else {
+          await gateway.addClarificationMaterial(
+            newUuid(),
+            clarificationDraft!.intakeId,
+            { kind: 'image', personalMediaObjectId: mediaId },
+          );
+        }
+        attached.add(mediaId);
+      }
+      const extraBlocks = images.map((image) => ({
+        blockId: image.id,
+        kind: 'image' as const,
+        bodyText: null,
+        mediaDataUrl: image.dataUrl,
+        mediaMimeType: 'image/jpeg',
+      }));
+      await runTurn(
+        session,
+        body,
+        mediaIds,
+        { ...clarificationMaterial, blocks: [...clarificationMaterial.blocks, ...extraBlocks] },
+      );
+    } catch (cause) {
+      mediaIds.filter((id) => !attached.has(id)).forEach(removeMedia);
       setError(cause instanceof Error ? cause.message : uiText('unableToContinueThisConversationPleaseRetry'));
+      throw cause;
     } finally {
       setBusy(false);
     }
-  }, [clarificationMaterial, commit]);
+  };
 
-  // The first turn follows the declared starting point: a learner who already
-  // knows the sense (or has an expression to check) consolidates immediately;
-  // an uncertain one opens with a chat question.
-  useEffect(() => {
-    if (!active || !clarificationMaterial || !session) return;
-    if (session.messages.length > 0 || openedThread.current === session.threadId) return;
-    openedThread.current = session.threadId;
-    const firstMode: SemanticAgentTurnMode = clarificationMaterial.startingPoint === 'from_sense'
-      || clarificationMaterial.startingPoint === 'from_expression' ? 'consolidate' : 'chat';
-    void runTurn(session, undefined, firstMode);
-  }, [active, clarificationMaterial, runTurn, session]);
-
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!session || !draft.trim() || busy) return;
-    const body = draft.trim();
-    setDraft('');
-    void runTurn(session, body, 'chat');
+  const saveConfirmedContext = async (body: string, images: ConversationImage[]) => {
+    if (!detail || !session || busy) return;
+    setBusy(true);
+    setError('');
+    const alreadyStored = new Set(
+      images.filter((image) => getMedia(image.id)).map((image) => image.id),
+    );
+    let mediaIds: string[] = [];
+    try {
+      mediaIds = persistPreparedImages(images);
+      await gateway.reviseContext({
+        operationId: newUuid(),
+        personalMeaningId: detail.personalMeaningId,
+        expectedRevision: detail.revision,
+        blocks: [
+          ...(body.trim() ? [{ kind: 'text' as const, bodyText: body.trim() }] : []),
+          ...mediaIds.map((personalMediaObjectId) => ({
+            kind: 'image' as const,
+            personalMediaObjectId,
+          })),
+        ],
+      });
+      commit({
+        ...session,
+        workingSet: {
+          ...session.workingSet,
+          context: {
+            summary: body.trim(),
+            salientDetails: session.workingSet.context?.salientDetails ?? [],
+            unresolvedDetails: [],
+            rationale: session.workingSet.context?.rationale ?? '',
+          },
+        },
+      });
+      toast(localFlowText('savedLocally'));
+    } catch (cause) {
+      mediaIds.filter((id) => !alreadyStored.has(id)).forEach(removeMedia);
+      setError(cause instanceof Error ? cause.message : uiText('unableToContinueThisConversationPleaseRetry'));
+      throw cause;
+    } finally {
+      setBusy(false);
+    }
   };
 
   const editTrack = <T,>(track: WorkingSetTrack, value: T) => {
@@ -701,9 +1095,8 @@ const PreviewPersonalMeaningDetailScreen = ({
       });
       toast(result.expressionConfirmed ? uiText('meaningAndExpressionConfirmed') : uiText('meaningConfirmedExpressionStillPending'));
       if (draftMode) {
-        onOpenConfirmedSense(
+        onConversationCreated?.(
           (result as Awaited<ReturnType<typeof gateway.completeClarificationDraft>>).personalMeaningId,
-          result.meaningFocusId ?? result.personalMeaningAlignmentId,
         );
       }
     } catch (cause) {
@@ -745,21 +1138,12 @@ const PreviewPersonalMeaningDetailScreen = ({
     }
   };
 
-  const startAnotherThread = () => {
-    if (!detail) return;
-    openedThread.current = null;
-    setPanelOpen(false);
-    setEditingTrack(null);
-    setIncludeExpression(true);
-    commit(newSemanticAgentSession(detail.personalMeaningId, newUuid()));
-  };
-
-  const working = session?.workingSet ?? { focus: null, sense: null, expression: null, expressions: [] };
+  const working = session?.workingSet ?? { context: null, focus: null, sense: null, expression: null, expressions: [] };
   const candidatesList = (working.expressions && working.expressions.length > 0)
     ? working.expressions
     : (working.expression ? [working.expression] : []);
   const senseConfirmed = Boolean(alignment);
-  const focusStatus = trackTone(Boolean(working.focus), senseConfirmed);
+  const contextStatus = trackTone(Boolean(working.context), senseConfirmed);
   const senseStatus = trackTone(Boolean(working.sense), senseConfirmed);
   const expressionStatus = trackTone(Boolean(working.expression), allConfirmed);
   const hasCompleteContext = !draftMode
@@ -768,6 +1152,8 @@ const PreviewPersonalMeaningDetailScreen = ({
       (message) => message.role === 'learner' && message.body.trim(),
     ));
   const canConfirm = Boolean(
+    working.context
+    &&
     working.sense
     && hasCompleteContext
     && (!draftMode || (working.expression && includeExpression)),
@@ -783,40 +1169,18 @@ const PreviewPersonalMeaningDetailScreen = ({
     </div>
   ) : (!detail && !clarificationDraft) || !session ? (
     <div className={classNames("pmw-empty")}>{uiText('thisMaterialWasNotFound')}</div>
-  ) : allConfirmed ? (
-    <div className={classNames("pmw-done")}>
-      <span className={classNames("pmw-done-mark")} aria-hidden="true">✓</span>
-      <h2>{uiText('meaningConfirmed')}</h2>
-      <p>{uiText('savedToYourMeanings')}</p>
-      <div className={classNames("pmw-done-facts")}>
-        {confirmedFocus && (
-          <article><small>{uiText('focus')}</small><b>{confirmedFocus.statement}</b></article>
-        )}
-        <article><small>{uiText('meaning2')}</small><b>{alignment?.coreMeaningFocus}</b></article>
-        <article>
-          <small>{uiText('expression')}</small>
-          <b>{boundExpression?.surfaceForm}</b>
-          <span>
-            {expressionTypeLabels[boundExpression!.expressionType]} ·{' '}
-            {relationLabels[boundExpression!.relation]} ·{' '}
-            {coverageLabels[boundExpression!.semanticCoverage]}
-          </span>
-        </article>
-      </div>
-      <div className={classNames("pmw-done-actions")}>
-        <button type="button" className={classNames("pmw-primary")} onClick={startAnotherThread}>
-          {uiText('exploreAnotherAspectOfThisExperience')}</button>
-        <button
-          type="button"
-          onClick={() => onOpenConfirmedSense(
-            detail!.personalMeaningId,
-            confirmedFocus?.meaningFocusId ?? alignment!.personalMeaningAlignmentId,
-          )}
-        >
-          {uiText('viewConfirmedMeaning')}</button>
-        <button type="button" onClick={onBack}>{uiText('backToMyContent')}</button>
-      </div>
-    </div>
+  ) : allConfirmed && detail && alignment ? (
+    <ConfirmedExpressionDetail
+      detail={detail}
+      focus={confirmedFocus}
+      alignment={alignment}
+      session={session}
+      contextText={session.workingSet.context?.summary || confirmedContextText}
+      contextImages={confirmedContextImages}
+      busy={busy}
+      error={error}
+      onSaveContext={saveConfirmedContext}
+    />
   ) : (
     <>
       {materialOpen && (
@@ -828,6 +1192,7 @@ const PreviewPersonalMeaningDetailScreen = ({
           onDragOver={sceneImages.onDragOver}
           onDragLeave={sceneImages.onDragLeave}
           onDrop={sceneImages.onDrop}
+          onPaste={sceneImages.onPaste}
         >
           <p
             role="status"
@@ -922,7 +1287,13 @@ const PreviewPersonalMeaningDetailScreen = ({
             {item.role === 'assistant' && (
               <span className={classNames("pmw-avatar")} aria-hidden="true">✦</span>
             )}
-            <div><p>{item.body}</p></div>
+            <div>
+              {item.body && <p>{item.body}</p>}
+              {item.mediaReferenceIds?.map((mediaId) => {
+                const media = getMedia(mediaId);
+                return media ? <img key={mediaId} src={media.dataUrl} alt={uiText('contextImage')} /> : null;
+              })}
+            </div>
           </div>
         ))}
         {busy && (
@@ -943,11 +1314,11 @@ const PreviewPersonalMeaningDetailScreen = ({
 
       {error && (
         <div className={classNames("pmw-inline-error")} role="alert">
-          <span>{error}</span>
+          <span>{localFlowNotice(error)}</span>
           <button
             type="button"
             disabled={busy}
-            onClick={() => void runTurn(session, undefined, lastModeRef.current)}
+            onClick={() => void runTurn(session)}
           >
             {uiText('retry')}</button>
         </div>
@@ -957,12 +1328,12 @@ const PreviewPersonalMeaningDetailScreen = ({
         <div className={classNames("pmw-dock-chips")}>
           <button
             type="button"
-            className={classNames(`pmw-dock-chip is-${focusStatus.tone}`)}
+            className={classNames(`pmw-dock-chip is-${contextStatus.tone}`)}
             onClick={() => setPanelOpen(true)}
-            aria-label={uiText('viewFocus')}
+            aria-label={uiText('context')}
           >
-            <small>{uiText('focus')}</small>
-            <b>{working.focus ? working.focus.statement : focusStatus.label}</b>
+            <small>{uiText('context')}</small>
+            <b>{working.context ? working.context.summary : contextStatus.label}</b>
           </button>
           <button
             type="button"
@@ -989,14 +1360,6 @@ const PreviewPersonalMeaningDetailScreen = ({
         </div>
 
         <div className={classNames("pmw-dock-actions")}>
-          <button
-            type="button"
-            className={classNames("pmw-dock-organize")}
-            disabled={busy}
-            onClick={() => void runTurn(session, undefined, 'consolidate')}
-            title={uiText('summarizeTheCurrentUnderstanding')}
-          >
-            {uiText('summarize')}</button>
           {senseConfirmed ? (
             alignment!.expressionCandidates.length === 0 ? null : (
               <button
@@ -1022,25 +1385,7 @@ const PreviewPersonalMeaningDetailScreen = ({
         </div>
       </div>
 
-      <form className={classNames("pmw-composer")} onSubmit={submit}>
-        <textarea
-          value={draft}
-          onPaste={sceneImages.onPaste}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault();
-              event.currentTarget.form?.requestSubmit();
-            }
-          }}
-          placeholder={uiText('shareYourUnderstandingExamplesOrQuestions')}
-          rows={2}
-          disabled={imageInputUnavailable}
-        />
-        <button type="submit" disabled={imageInputUnavailable || !draft.trim()} aria-label={uiText('send')}>
-          <span aria-hidden="true">↑</span>
-        </button>
-      </form>
+      <ExpressionChatInput busy={imageInputUnavailable} onStop={busy ? stopTurn : undefined} maxImages={Math.max(0, MAX_SCENE_IMAGES-materialImageCount)} onSend={sendConversationMessage}/>
 
       {panelOpen && (
         <SensaOverlayLayout variant="sheet" mode="container" measure="standard" className="z-20" label={uiText('currentUnderstanding')} onDismiss={() => setPanelOpen(false)} dismissOnBackdrop regions={{
@@ -1052,6 +1397,15 @@ const PreviewPersonalMeaningDetailScreen = ({
               {senseConfirmed && (
                 <p className={classNames("pmw-panel-note")}>
                   {uiText('theFocusAndMeaningAreConfirmedYou')}</p>
+              )}
+              {working.context && !senseConfirmed && (
+                <ContextCard
+                  context={working.context}
+                  editing={editingTrack === 'context'}
+                  onEdit={() => setEditingTrack('context')}
+                  onDone={() => setEditingTrack(null)}
+                  onChange={(next) => editTrack('context', next)}
+                />
               )}
               {working.focus && !senseConfirmed && (
                 <FocusCard
@@ -1082,7 +1436,7 @@ const PreviewPersonalMeaningDetailScreen = ({
                   onChange={(next) => editTrack('expression', next)}
                 />
               )}
-              {!working.focus && !working.sense && candidatesList.length === 0 && (
+              {!working.context && !working.focus && !working.sense && candidatesList.length === 0 && (
                 <p className={classNames("pmw-panel-empty")}>{uiText('tellUsMoreAboutYourContextOr')}</p>
               )}
             </div>,
@@ -1111,6 +1465,12 @@ const PreviewPersonalMeaningDetailScreen = ({
             </div>,
 
           primary: <div className={classNames("pmw-review-body")}>
+              {working.context && (
+                <article className={classNames("pmw-review-card")}>
+                  <header><small>{uiText('context')}</small><em>{uiText('confirmTogether')}</em></header>
+                  <b>{working.context.summary}</b>
+                </article>
+              )}
               {working.focus && (
                 <article className={classNames("pmw-review-card")}>
                   <header><small>{uiText('focus')}</small><em>{uiText('confirmTogether')}</em></header>
@@ -1190,11 +1550,19 @@ const PreviewPersonalMeaningDetailScreen = ({
     </>
   );
 
-  return <MeaningWorkspaceFrame active={active} onBack={onBack} materialOpen={materialOpen} onToggleMaterial={()=>setMaterialOpen(v=>!v)} screenRef={screenRef}>{body}</MeaningWorkspaceFrame>;
+  return <MeaningWorkspaceFrame
+    active={active}
+    onBack={onBack}
+    materialOpen={materialOpen}
+    onToggleMaterial={()=>setMaterialOpen(v=>!v)}
+    screenRef={screenRef}
+    title={allConfirmed ? localFlowText('savedExpression') : undefined}
+    showMaterialToggle={!allConfirmed}
+  >{body}</MeaningWorkspaceFrame>;
 };
 
 /** One existing workspace frame for both persisted and preview controllers. */
-function MeaningWorkspaceFrame({active,onBack,materialOpen,onToggleMaterial,screenRef,children,title}:{active:boolean;onBack:()=>void;materialOpen:boolean;onToggleMaterial:()=>void;screenRef?:import('react').Ref<HTMLElement>;title?:string;children:import('react').ReactNode}){
+function MeaningWorkspaceFrame({active,onBack,materialOpen,onToggleMaterial,screenRef,children,title,showMaterialToggle=true}:{active:boolean;onBack:()=>void;materialOpen:boolean;onToggleMaterial:()=>void;screenRef?:import('react').Ref<HTMLElement>;title?:string;showMaterialToggle?:boolean;children:import('react').ReactNode}){
  return <SensaDetailWorkspaceLayout
   ref={screenRef}
   className={classNames(`screen pmw-screen${active?' active':''}`, '#s-personal-meaning')}
@@ -1205,7 +1573,7 @@ function MeaningWorkspaceFrame({active,onBack,materialOpen,onToggleMaterial,scre
    header: <div className={classNames('content-nav pmw-nav')}>
     <button className={classNames('content-nav-back')} onClick={onBack} aria-label={uiText('backToMyContent2')}><svg className={classNames('icon')}><use href="#i-chev-l"/></svg></button>
     <h1>{title??uiText('clarifyYourMeaning')}</h1>
-    <button type="button" className={classNames(`pmw-material-toggle${materialOpen?' is-open':''}`)} onClick={onToggleMaterial} aria-expanded={materialOpen}>{uiText('context')}</button>
+    {showMaterialToggle?<button type="button" className={classNames(`pmw-material-toggle${materialOpen?' is-open':''}`)} onClick={onToggleMaterial} aria-expanded={materialOpen}>{uiText('context')}</button>:<span/>}
    </div>,
    primary: <div className={classNames('pmw-shell')}>{children}</div>,
   }}

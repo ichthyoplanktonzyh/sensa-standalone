@@ -572,6 +572,7 @@ export const buildDetailView = (
   return {
     personalMeaningId: record.personalMeaning.personalMeaningId,
     shortId: shortId(record.personalMeaning.personalMeaningId),
+    revision: record.personalMeaning.currentRevision,
     displayLabel: meaningRevision?.displayLabel ?? null,
     learnerIntentNote: meaningRevision?.learnerIntentNote ?? null,
     phase: derivePersonalMeaningPhase(record),

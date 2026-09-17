@@ -24,7 +24,7 @@ const message = z.object({
 const tool = z.object({
   type: z.literal('function'),
   function: z.object({
-    name: z.enum(['lookup_meanings', 'ask_learner', 'propose_meaning', 'read_demand', 'lookup_reference_facts', 'submit_candidate']),
+    name: z.enum(['lookup_meanings', 'read_demand', 'lookup_reference_facts', 'submit_candidate']),
     description: z.string().max(1000),
     parameters: z.record(z.string(), z.unknown())
   }).strict()

@@ -41,6 +41,7 @@ export const newSemanticAgentSession = (
   focusLocked: false,
   readyToConfirm: false,
   provenance: null,
+  steps: [],
   outcome: null,
 });
 
@@ -49,7 +50,19 @@ export const loadSemanticAgentSession = (
   newThreadId: () => string,
 ): SemanticAgentSession => {
   const found = readAll()[personalMeaningId];
-  return found ?? newSemanticAgentSession(personalMeaningId, newThreadId());
+  if (!found) return newSemanticAgentSession(personalMeaningId, newThreadId());
+  // Draft conversation state is deliberately soft. Normalize sessions written
+  // by the pre-ReAct prototype instead of making an old localStorage value
+  // crash the new clarification surface.
+  return {
+    ...found,
+    workingSet: {
+      ...emptyWorkingSet(),
+      ...found.workingSet,
+      context: found.workingSet?.context ?? null,
+    },
+    steps: found.steps ?? [],
+  };
 };
 
 export const saveSemanticAgentSession = (session: SemanticAgentSession): void => {
