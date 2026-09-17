@@ -77,6 +77,10 @@ export const localFlowZh = {
 "batchNotAdded":"尚未加入学习",
 
 "dropImages":"松开以添加图片",
+"sceneImageRequirements":"请选择不超过 8 MB 的图片；每个场景最多添加 3 张。",
+"sceneImageCount":"{{count}}/{{max}} 张图片",
+"sceneStorageFull":"本机存储放不下更多场景图片了。可以先删除一些图片，或改用文字描述。",
+"takePhoto":"拍照",
 "resourcesUnchanged":"内容尚未更改，无需更新学习资源。",
 "modelResponseInvalid":"模型返回的内容不完整，请重试。",
 "modelTruncated":"模型回答超出长度限制，请重试。",
@@ -517,6 +521,10 @@ export const localFlowEn: Record<keyof typeof localFlowZh,string> = {
 "batchNotAdded":"Not in learning yet",
 
 "dropImages":"Drop to add images",
+"sceneImageRequirements":"Choose images up to 8 MB; each scene can contain up to 3 images.",
+"sceneImageCount":"{{count}}/{{max}} images",
+"sceneStorageFull":"Local storage cannot hold more scene images. Remove some images or use a text description.",
+"takePhoto":"Camera",
 "resourcesUnchanged":"Content has not changed; learning resources are up to date.",
 "modelResponseInvalid":"The model returned an incomplete response. Please retry.",
 "modelTruncated":"The model response exceeded its length limit. Please retry.",

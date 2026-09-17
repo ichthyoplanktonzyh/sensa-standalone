@@ -1,5 +1,7 @@
 import {useTranslation} from 'react-i18next';
+import {Camera} from 'lucide-react';
 import {cardText} from '../../i18n/originalCards';
+import {localFlowText} from '../../i18n/localFlowText';
 import {
   contentAnnotations,
   type PersonalSemanticAnchorMedia,
@@ -7,7 +9,11 @@ import {
 import { iconClass } from '../ui/primitives';
 import { SensaOverlayLayout } from '../ui/SensaComponents';
 import type { LearningSceneEditorTarget } from '../stores/overlayStore';
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  MAX_SCENE_IMAGES,
+  useSceneImageInput,
+} from './useSceneImageInput';
 
 interface SceneEditorModalProps {
   active: boolean;
@@ -20,8 +26,6 @@ interface SceneEditorModalProps {
   toast: (message: string) => void;
 }
 
-const MAX_IMAGES = 3;
-const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 const MAX_IMAGE_EDGE = 1280;
 
 const createMediaId = (): string => {
@@ -54,13 +58,14 @@ async function compressSceneImage(file: File): Promise<PersonalSemanticAnchorMed
   if (!context) throw new Error('Unable to prepare image.');
   context.drawImage(image, 0, 0, width, height);
 
+  const fileName = file.name.trim() || `scene-photo-${createMediaId()}.jpg`;
   return {
     mediaId: createMediaId(),
     kind: 'image',
     dataUrl: canvas.toDataURL('image/jpeg', 0.82),
     mimeType: 'image/jpeg',
-    fileName: file.name,
-    altText: file.name.replace(/\.[^.]+$/u, ''),
+    fileName,
+    altText: fileName.replace(/\.[^.]+$/u, ''),
   };
 }
 
@@ -77,8 +82,10 @@ export function SceneEditorModal({
   useTranslation();
   const [body, setBody] = useState('');
   const [media, setMedia] = useState<PersonalSemanticAnchorMedia[]>([]);
-  const [processing, setProcessing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [imageError, setImageError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -97,46 +104,47 @@ export function SceneEditorModal({
       : null;
     setBody(learningRevision?.body ?? existing?.body ?? '');
     setMedia(learningRevision?.media ?? existing?.media ?? []);
+    setImageError('');
     const focusTimer = window.setTimeout(() => textareaRef.current?.focus(), 180);
     return () => window.clearTimeout(focusTimer);
   }, [active, anchorId, learningTarget, senseId]);
 
+  const addImageFiles = useCallback(async (files: File[]) => {
+    const additions: PersonalSemanticAnchorMedia[] = [];
+    let failed = false;
+    for (const file of files) {
+      try {
+        additions.push(await compressSceneImage(file));
+      } catch {
+        failed = true;
+      }
+    }
+    if (additions.length > 0) {
+      setMedia((current) => [...current, ...additions].slice(0, MAX_SCENE_IMAGES));
+    }
+    if (failed) throw new Error(cardText('sceneImageFailed'));
+  }, []);
+
+  const sceneImages = useSceneImageInput({
+    disabled: saving,
+    imageCount: media.length,
+    onAddFiles: addImageFiles,
+    onStart: () => setImageError(''),
+    onRejected: () => setImageError(localFlowText('sceneImageRequirements')),
+    onFailed: () => setImageError(cardText('sceneImageFailed')),
+  });
+
+  const unavailable = saving || sceneImages.processing;
+
   if (!active || !senseId) return null;
 
-  const handleImageInput = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.currentTarget.files ?? []);
-    event.currentTarget.value = '';
-    if (files.length === 0) return;
-    if (media.length >= MAX_IMAGES) {
-      toast(cardText('sceneImageLimit'));
-      return;
-    }
-
-    const accepted = files
-      .filter((file) => file.type.startsWith('image/') && file.size <= MAX_SOURCE_BYTES)
-      .slice(0, MAX_IMAGES - media.length);
-    if (accepted.length !== files.length) {
-      toast(cardText('sceneImageLimit'));
-    }
-    if (accepted.length === 0) return;
-
-    setProcessing(true);
-    try {
-      const nextMedia = await Promise.all(accepted.map(compressSceneImage));
-      setMedia((current) => [...current, ...nextMedia].slice(0, MAX_IMAGES));
-    } catch {
-      toast(cardText('sceneImageFailed'));
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   const handleSave = async () => {
+    if (unavailable) return;
     if (!body.trim() && media.length === 0) {
       toast(cardText('sceneRequired'));
       return;
     }
-    setProcessing(true);
+    setSaving(true);
     try {
       if (learningTarget) {
         await contentAnnotations.saveLearningScene({
@@ -153,25 +161,43 @@ export function SceneEditorModal({
     } catch {
       toast(cardText('sceneImageFailed'));
     } finally {
-      setProcessing(false);
+      setSaving(false);
     }
   };
 
   return (
-    <SensaOverlayLayout variant="dialog" measure="wide" className={`sensa-scene-editor z-[120] ${active ? '' : 'hidden'}`} aria-hidden={!active} label={cardText('sceneFor',{word})} regions={{
+    <SensaOverlayLayout variant="dialog" measure="wide" className={`sensa-scene-editor z-[120] ${active ? '' : 'hidden'}`} aria-hidden={!active} label={cardText('sceneFor',{word})} onDismiss={() => { if (!unavailable) onClose(); }} regions={{
       header: <div className="grid min-h-12 grid-cols-[2.75rem_1fr_2.75rem] items-center gap-3">
-          <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={onClose} aria-label={cardText('sceneClose')}>
+          <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" disabled={unavailable} onClick={onClose} aria-label={cardText('sceneClose')}>
             <svg className={iconClass} aria-hidden="true"><use href="#i-close" /></svg>
           </button>
           <div>
 
             <h2 className="text-center text-section-title font-semibold">{cardText('sceneTitle')}</h2>
           </div>
-          <button className="grid size-11 place-items-center rounded-control border-0 bg-action-primary text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" type="button" disabled={processing} onClick={() => void handleSave()} aria-label={cardText('sceneSave')}>
+          <button className="grid size-11 place-items-center rounded-control border-0 bg-action-primary text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" type="button" disabled={unavailable} onClick={() => void handleSave()} aria-label={cardText('sceneSave')}>
             <svg className={iconClass} aria-hidden="true"><use href="#i-chk-simple" /></svg>
           </button>
         </div>,
-      primary: <div>
+      primary: <div
+        onDragOver={sceneImages.onDragOver}
+        onDragLeave={sceneImages.onDragLeave}
+        onDrop={sceneImages.onDrop}
+        data-dragging={sceneImages.dragging}
+        aria-busy={sceneImages.processing || undefined}
+        className="rounded-card data-[dragging=true]:ring-2 data-[dragging=true]:ring-focus"
+      >
+        <p
+          role="status"
+          aria-live="polite"
+          className={sceneImages.dragging
+            ? "pointer-events-none mx-6 mt-5 rounded-control border border-dashed border-border-strong bg-accent-soft p-4 text-center text-body-support text-fg-secondary"
+            : "sr-only"}
+        >
+          {sceneImages.dragging
+            ? localFlowText('dropImages')
+            : sceneImages.processing ? cardText('sceneProcessing') : ''}
+        </p>
         <div className="mx-6 mt-5 flex flex-wrap items-baseline gap-2 rounded-control bg-accent-soft px-4 py-3">
           {!learningTarget && <strong className="font-language text-lg text-action-primary">{word}</strong>}
           <span className="text-body-support text-fg-secondary">{senseMeaning}</span>
@@ -183,8 +209,11 @@ export function SceneEditorModal({
             ref={textareaRef}
             value={body}
             maxLength={1000}
+            aria-label={cardText('scenePlaceholder')}
+            onPaste={sceneImages.onPaste}
             onChange={(event) => setBody(event.currentTarget.value)}
             placeholder={cardText('scenePlaceholder')}
+            disabled={unavailable}
           />
 
           {media.length > 0 && (
@@ -195,6 +224,7 @@ export function SceneEditorModal({
                   <button
                     className="absolute right-5 top-5 grid size-11 place-items-center rounded-control border-0 bg-surface-raised text-fg-secondary shadow-raised focus-visible:outline-2 focus-visible:outline-focus"
                     type="button"
+                    disabled={unavailable}
                     onClick={() => setMedia((current) => current.filter((candidate) => candidate.mediaId !== item.mediaId))}
                     aria-label={cardText('sceneRemove',{name:item.fileName})}
                   >
@@ -204,6 +234,7 @@ export function SceneEditorModal({
                     className="mt-3 min-h-11 w-full rounded-control border border-border-subtle bg-surface-canvas px-3 text-body-support text-fg-primary placeholder:text-fg-tertiary focus-visible:outline-2 focus-visible:outline-focus"
                     value={item.altText}
                     maxLength={80}
+                    disabled={unavailable}
                     onChange={(event) => {
                       const altText = event.currentTarget.value;
                       setMedia((current) => current.map((candidate) => (
@@ -218,18 +249,28 @@ export function SceneEditorModal({
             </div>
           )}
 
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="mt-5 flex flex-wrap items-center gap-3">
             <button
               type="button"
-              className="inline-flex min-h-11 items-center gap-2 rounded-control border border-border-strong bg-surface-panel px-4 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
+              className="inline-flex min-h-11 items-center gap-2 rounded-control border border-border-strong bg-surface-panel px-4 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45"
               onClick={() => fileInputRef.current?.click()}
-              disabled={processing || media.length >= MAX_IMAGES}
+              disabled={unavailable || media.length >= MAX_SCENE_IMAGES}
             >
               <svg className={iconClass} aria-hidden="true"><use href="#i-gearpic" /></svg>
-              {processing ? cardText('sceneProcessing') : cardText('sceneAddImage')}
+              {sceneImages.processing ? cardText('sceneProcessing') : cardText('sceneAddImage')}
             </button>
-            <span className="text-metadata text-fg-tertiary">{body.length}/1000 · {cardText('sceneCount',{count:media.length,max:MAX_IMAGES})}</span>
+            <button
+              type="button"
+              className="inline-flex min-h-11 items-center gap-2 rounded-control border border-border-strong bg-surface-panel px-4 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45"
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={unavailable || media.length >= MAX_SCENE_IMAGES}
+            >
+              <Camera size={18} aria-hidden="true" />
+              {cardText('sceneCamera')}
+            </button>
+            <span className="ml-auto text-metadata text-fg-tertiary">{body.length}/1000 · {cardText('sceneCount',{count:media.length,max:MAX_SCENE_IMAGES})}</span>
           </div>
+          {imageError && <p className="mt-3 text-body-support text-feedback-danger" role="alert">{imageError}</p>}
         </div>
 
         <input
@@ -238,7 +279,23 @@ export function SceneEditorModal({
           accept="image/*"
           multiple
           hidden
-          onChange={handleImageInput}
+          disabled={unavailable || media.length >= MAX_SCENE_IMAGES}
+          onChange={(event) => {
+            void sceneImages.addFiles(Array.from(event.currentTarget.files ?? []));
+            event.currentTarget.value = '';
+          }}
+        />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          hidden
+          disabled={unavailable || media.length >= MAX_SCENE_IMAGES}
+          onChange={(event) => {
+            void sceneImages.addFiles(Array.from(event.currentTarget.files ?? []));
+            event.currentTarget.value = '';
+          }}
         />
 
         <p className="border-t border-border-subtle px-6 py-4 text-center text-metadata leading-5 text-fg-tertiary">

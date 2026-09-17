@@ -48,7 +48,17 @@ import {
   newSemanticAgentSession,
   saveSemanticAgentSession,
 } from '../personalMeaningJourney/semanticAgentSession';
-import { getMedia, storeImageFile } from '../personalMeaningJourney/mediaStore';
+import {
+  getMedia,
+  MediaStoreFullError,
+  removeMedia,
+  storeImageFile,
+} from '../personalMeaningJourney/mediaStore';
+import {Camera, ImagePlus} from 'lucide-react';
+import {
+  MAX_SCENE_IMAGES,
+  useSceneImageInput,
+} from './useSceneImageInput';
 import type {
   AgentExpressionCandidate,
   AgentFocusCandidate,
@@ -352,6 +362,7 @@ const PreviewPersonalMeaningDetailScreen = ({
   const screenRef = useRef<HTMLElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const openedThread = useRef<string | null>(null);
   /** Deltas received but not yet typed out, plus the pacer that drips them. */
   const pendingRef = useRef('');
@@ -366,6 +377,7 @@ const PreviewPersonalMeaningDetailScreen = ({
   /** The assistant reply as it streams in; blank again once the turn lands. */
   const [streamingText, setStreamingText] = useState('');
   const [error, setError] = useState('');
+  const [imageError, setImageError] = useState('');
   const [materialOpen, setMaterialOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -382,6 +394,7 @@ const PreviewPersonalMeaningDetailScreen = ({
     setReviewOpen(false);
     setEditingTrack(null);
     setError('');
+    setImageError('');
   }, [personalMeaningId]);
 
   const commit = useCallback((next: SemanticAgentSession) => {
@@ -557,30 +570,55 @@ const PreviewPersonalMeaningDetailScreen = ({
     });
   };
 
-  const addImage = async (file: File | undefined) => {
-    if (!file || (!detail && !clarificationDraft)) return;
-    setError('');
-    try {
+  const materialImageCount = (detail?.materialBlocks ?? clarificationDraft?.materialBlocks ?? [])
+    .filter((block) => block.kind === 'image').length;
+
+  const addImageFiles = useCallback(async (files: File[]) => {
+    if (!detail && !clarificationDraft) return;
+    let added = 0;
+    let failure: unknown = null;
+    for (const file of files) {
       const mediaId = newUuid();
-      await storeImageFile(mediaId, file, new Date().toISOString());
-      if (detail) {
-        await gateway.addMaterialBlock({
-          operationId: newUuid(),
-          personalMeaningId: detail.personalMeaningId,
-          block: { kind: 'image', personalMediaObjectId: mediaId },
-        });
-      } else {
-        await gateway.addClarificationMaterial(
-          newUuid(),
-          clarificationDraft!.intakeId,
-          { kind: 'image', personalMediaObjectId: mediaId },
-        );
+      try {
+        await storeImageFile(mediaId, file, new Date().toISOString());
+        if (detail) {
+          await gateway.addMaterialBlock({
+            operationId: newUuid(),
+            personalMeaningId: detail.personalMeaningId,
+            block: { kind: 'image', personalMediaObjectId: mediaId },
+          });
+        } else {
+          await gateway.addClarificationMaterial(
+            newUuid(),
+            clarificationDraft!.intakeId,
+            { kind: 'image', personalMediaObjectId: mediaId },
+          );
+        }
+        added += 1;
+      } catch (cause) {
+        removeMedia(mediaId);
+        failure = cause;
+        break;
       }
-      toast(uiText('materialAddedForTheNextTurn'));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : uiText('unableToAddThisImage'));
     }
-  };
+    if (added > 0) toast(uiText('materialAddedForTheNextTurn'));
+    if (failure) throw failure;
+  }, [clarificationDraft, detail, gateway, toast]);
+
+  const sceneImages = useSceneImageInput({
+    disabled: busy,
+    imageCount: materialImageCount,
+    onAddFiles: addImageFiles,
+    onStart: () => setImageError(''),
+    onRejected: () => setImageError(localFlowText('sceneImageRequirements')),
+    onFailed: (cause) => setImageError(
+      cause instanceof MediaStoreFullError
+        ? localFlowText('sceneStorageFull')
+        : uiText('unableToAddThisImage'),
+    ),
+  });
+
+  const imageInputUnavailable = busy || sceneImages.processing;
 
   /** One atomic confirmation; Focus is included only when disambiguation needed it. */
   const confirm = async () => {
@@ -782,7 +820,26 @@ const PreviewPersonalMeaningDetailScreen = ({
   ) : (
     <>
       {materialOpen && (
-        <section className={classNames("pmw-material")} aria-label={uiText('contextForThisConversation')}>
+        <section
+          className={classNames("pmw-material data-[dragging=true]:ring-2 data-[dragging=true]:ring-focus")}
+          aria-label={uiText('contextForThisConversation')}
+          aria-busy={sceneImages.processing || undefined}
+          data-dragging={sceneImages.dragging}
+          onDragOver={sceneImages.onDragOver}
+          onDragLeave={sceneImages.onDragLeave}
+          onDrop={sceneImages.onDrop}
+        >
+          <p
+            role="status"
+            aria-live="polite"
+            className={sceneImages.dragging
+              ? "pointer-events-none rounded-control border border-dashed border-border-strong bg-accent-soft p-4 text-center text-body-support text-fg-secondary"
+              : "sr-only"}
+          >
+            {sceneImages.dragging
+              ? localFlowText('dropImages')
+              : sceneImages.processing ? localFlowText('readingImages') : ''}
+          </p>
           {(detail?.materialBlocks ?? clarificationDraft!.materialBlocks.map((block, index) => ({
             anchorId: block.personalMediaObjectId ?? `draft-text-${index}`,
             kind: block.kind,
@@ -810,17 +867,52 @@ const PreviewPersonalMeaningDetailScreen = ({
               <small>{uiText('chineseExpression')}</small>{anchor.surfaceForm}
             </p>
           ))}
-          <button type="button" onClick={() => fileRef.current?.click()}>{uiText('addAnImage')}</button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={imageInputUnavailable || materialImageCount >= MAX_SCENE_IMAGES}
+              onClick={() => fileRef.current?.click()}
+            >
+              <ImagePlus size={17} aria-hidden="true" />
+              {uiText('addAnImage')}
+            </button>
+            <button
+              type="button"
+              disabled={imageInputUnavailable || materialImageCount >= MAX_SCENE_IMAGES}
+              onClick={() => cameraRef.current?.click()}
+            >
+              <Camera size={17} aria-hidden="true" />
+              {localFlowText('takePhoto')}
+            </button>
+            <span className="text-metadata text-fg-tertiary">
+              {localFlowText('sceneImageCount',{count:materialImageCount,max:MAX_SCENE_IMAGES})}
+            </span>
+          </div>
           <input
             ref={fileRef}
             type="file"
             accept="image/*"
+            multiple
             hidden
+            disabled={imageInputUnavailable || materialImageCount >= MAX_SCENE_IMAGES}
             onChange={(event) => {
-              void addImage(event.target.files?.[0]);
+              void sceneImages.addFiles(Array.from(event.target.files ?? []));
               event.target.value = '';
             }}
           />
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            disabled={imageInputUnavailable || materialImageCount >= MAX_SCENE_IMAGES}
+            onChange={(event) => {
+              void sceneImages.addFiles(Array.from(event.target.files ?? []));
+              event.target.value = '';
+            }}
+          />
+          {imageError && <p className="text-body-support text-feedback-danger" role="alert">{imageError}</p>}
         </section>
       )}
 
@@ -933,6 +1025,7 @@ const PreviewPersonalMeaningDetailScreen = ({
       <form className={classNames("pmw-composer")} onSubmit={submit}>
         <textarea
           value={draft}
+          onPaste={sceneImages.onPaste}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
@@ -942,9 +1035,9 @@ const PreviewPersonalMeaningDetailScreen = ({
           }}
           placeholder={uiText('shareYourUnderstandingExamplesOrQuestions')}
           rows={2}
-          disabled={busy}
+          disabled={imageInputUnavailable}
         />
-        <button type="submit" disabled={busy || !draft.trim()} aria-label={uiText('send')}>
+        <button type="submit" disabled={imageInputUnavailable || !draft.trim()} aria-label={uiText('send')}>
           <span aria-hidden="true">↑</span>
         </button>
       </form>

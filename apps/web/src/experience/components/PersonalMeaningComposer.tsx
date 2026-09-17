@@ -1,7 +1,7 @@
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import { previewStorage } from "../services/previewStorage";
 import { useTranslation } from "react-i18next";
-import { Plus, ImagePlus, X } from "lucide-react";
+import { Camera, Plus, ImagePlus, X } from "lucide-react";
 /**
  * The stable material editor.
  *
@@ -16,7 +16,7 @@ import { Plus, ImagePlus, X } from "lucide-react";
  * atomically materialize the complete Personal Meaning.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { newUuid } from "../personalMeaningJourney/ids";
 import { useJourneyGateway } from "../personalMeaningJourney";
 import type { MaterialBlockInput } from "../personalMeaningJourney";
@@ -24,9 +24,14 @@ import { type ClarificationStartingPoint } from "../personalMeaningJourney/seman
 import { SensaOverlayLayout } from "../ui/SensaComponents";
 import {
   getMedia,
+  MediaStoreFullError,
   removeMedia,
   storeImageFile,
 } from "../personalMeaningJourney/mediaStore";
+import {
+  MAX_SCENE_IMAGES,
+  useSceneImageInput,
+} from "./useSceneImageInput";
 
 export interface MaterialComposerPort {
   save: (input: {texts:string[]; familiarExpression:string; startingPoint:ClarificationStartingPoint|null}) => Promise<string>;
@@ -65,6 +70,7 @@ export const PersonalMeaningComposer = ({
   const { t } = useTranslation();
   const gateway = useJourneyGateway();
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const [savedDraft] = useState(() => {
     if(persistence)return null;
     try {
@@ -148,6 +154,7 @@ export const PersonalMeaningComposer = ({
     block.kind === "text" ? block.bodyText.trim() : block.mediaId,
   );
   const canSave = filled.length > 0 || Boolean(familiarExpression.trim());
+  const imageCount = blocks.filter((block) => block.kind === "image" && block.mediaId).length;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -164,11 +171,6 @@ export const PersonalMeaningComposer = ({
     setStartingPoint(null);
     setError("");
     setBusy(false);
-  };
-
-  const handleClose = () => {
-    if(persistence&&canSave&&!window.confirm(localFlowText('unsavedSource')))return;
-    if (!busy) onClose(); // Keep the in-progress material when the panel closes.
   };
 
   const updateBlock = (localId: string, bodyText: string) => {
@@ -188,34 +190,53 @@ export const PersonalMeaningComposer = ({
     });
   };
 
-  const pickImage = async (file: File | undefined) => {
-    if (!file || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      const mediaId = newUuid();
-      const stored = await storeImageFile(
-        mediaId,
-        file,
-        new Date().toISOString(),
-      );
-      setBlocks((current) => [
-        ...current,
-        {
+  const addImageFiles = useCallback(async (files: File[]) => {
+    const additions: DraftBlock[] = [];
+    let failure: unknown = null;
+    for (const file of files) {
+      try {
+        const mediaId = newUuid();
+        const stored = await storeImageFile(
+          mediaId,
+          file,
+          new Date().toISOString(),
+        );
+        additions.push({
           localId: newUuid(),
           kind: "image",
           bodyText: "",
           mediaId,
           previewUrl: stored.dataUrl,
-        },
-      ]);
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : t("composer.imageError"),
-      );
-    } finally {
-      setBusy(false);
+        });
+      } catch (cause) {
+        failure = cause;
+        break;
+      }
     }
+    if (additions.length > 0) {
+      setBlocks((current) => [...current, ...additions]);
+    }
+    if (failure) throw failure;
+  }, []);
+
+  const sceneImages = useSceneImageInput({
+    disabled: busy || Boolean(persistence),
+    imageCount,
+    onAddFiles: addImageFiles,
+    onStart: () => setError(""),
+    onRejected: () => setError("localFlow.sceneImageRequirements"),
+    onFailed: (cause) => setError(
+      cause instanceof MediaStoreFullError
+        ? "localFlow.sceneStorageFull"
+        : t("composer.imageError"),
+    ),
+  });
+
+  const unavailable = busy || sceneImages.processing;
+
+  const handleClose = () => {
+    if(persistence&&canSave&&!window.confirm(localFlowText('unsavedSource')))return;
+    if (!unavailable) onClose(); // Keep the in-progress material when the panel closes.
   };
 
   const save = async (): Promise<string | null> => {
@@ -281,14 +302,32 @@ export const PersonalMeaningComposer = ({
           </h2>
           <button
             className={action}
-            disabled={busy}
+            disabled={unavailable}
             onClick={handleClose}
             aria-label={t("content.close")}
           >
             <X size={20} />
           </button>
         </div>,
-        primary: <div>
+        primary: <div
+          onDragOver={sceneImages.onDragOver}
+          onDragLeave={sceneImages.onDragLeave}
+          onDrop={sceneImages.onDrop}
+          data-dragging={sceneImages.dragging}
+          aria-busy={sceneImages.processing || undefined}
+          className="rounded-card data-[dragging=true]:ring-2 data-[dragging=true]:ring-focus"
+        >
+          <p
+            role="status"
+            aria-live="polite"
+            className={sceneImages.dragging
+              ? "pointer-events-none mb-4 rounded-control border border-dashed border-border-strong bg-accent-soft p-4 text-center text-sm text-fg-secondary"
+              : "sr-only"}
+          >
+            {sceneImages.dragging
+              ? localFlowText('dropImages')
+              : sceneImages.processing ? localFlowText('readingImages') : ''}
+          </p>
           <div className="space-y-4">
             {blocks.map((block, index) => (
               <div
@@ -300,13 +339,14 @@ export const PersonalMeaningComposer = ({
                     autoFocus={index === 0}
                     aria-label={t("composer.placeholder")}
                     value={block.bodyText}
+                    onPaste={sceneImages.onPaste}
                     onChange={(event) =>
                       updateBlock(block.localId, event.target.value)
                     }
                     placeholder={t("composer.placeholder")}
                     rows={index === 0 ? 8 : 3}
                     className="w-full resize-y bg-transparent pr-10 text-base leading-8 outline-none focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-50"
-                    disabled={busy}
+                    disabled={unavailable}
                   />
                 ) : (
                   <img
@@ -318,7 +358,7 @@ export const PersonalMeaningComposer = ({
                 {blocks.length > 1 && (
                   <button
                     className="absolute top-2 right-2 grid size-11 place-items-center rounded-control text-fg-tertiary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus"
-                    disabled={busy}
+                    disabled={unavailable}
                     onClick={() => removeBlock(block.localId)}
                     aria-label={t("composer.remove")}
                   >
@@ -328,10 +368,10 @@ export const PersonalMeaningComposer = ({
               </div>
             ))}
           </div>
-          <div className="mt-3 flex gap-2 text-fg-secondary">
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-fg-secondary">
             <button
               className={action}
-              disabled={busy}
+              disabled={unavailable}
               onClick={() => setBlocks((current) => [...current, textBlock()])}
             >
               <Plus size={16} />
@@ -339,7 +379,7 @@ export const PersonalMeaningComposer = ({
             </button>
             <button
               className={action}
-              disabled={busy||!!persistence}
+              disabled={unavailable||!!persistence||imageCount >= MAX_SCENE_IMAGES}
               onClick={() => fileRef.current?.click()}
               title={persistence?localFlowText('imagesUnavailable'):""}
             >
@@ -350,12 +390,38 @@ export const PersonalMeaningComposer = ({
               ref={fileRef}
               type="file"
               accept="image/*"
+              multiple
               hidden
+              disabled={unavailable||!!persistence||imageCount >= MAX_SCENE_IMAGES}
               onChange={(event) => {
-                void pickImage(event.target.files?.[0]);
+                void sceneImages.addFiles(Array.from(event.target.files ?? []));
                 event.target.value = "";
               }}
             />
+            <button
+              className={action}
+              disabled={unavailable||!!persistence||imageCount >= MAX_SCENE_IMAGES}
+              onClick={() => cameraRef.current?.click()}
+              title={persistence?localFlowText('imagesUnavailable'):""}
+            >
+              <Camera size={17} aria-hidden="true" />
+              {t("composer.camera")}
+            </button>
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              hidden
+              disabled={unavailable||!!persistence||imageCount >= MAX_SCENE_IMAGES}
+              onChange={(event) => {
+                void sceneImages.addFiles(Array.from(event.target.files ?? []));
+                event.target.value = "";
+              }}
+            />
+            <span className="ml-auto text-xs text-fg-tertiary">
+              {localFlowText('sceneImageCount',{count:imageCount,max:MAX_SCENE_IMAGES})}
+            </span>
           </div>
           <details className="mt-7 border-t border-border-subtle pt-5">
             <summary className="cursor-pointer text-sm text-fg-tertiary">
@@ -365,7 +431,7 @@ export const PersonalMeaningComposer = ({
               <span>{t("composer.familiar")}</span>
               <input
                 value={familiarExpression}
-                disabled={busy}
+                disabled={unavailable}
                 onChange={(event) => setFamiliarExpression(event.target.value)}
                 placeholder={t("composer.familiarHint")}
                 maxLength={100}
@@ -383,7 +449,7 @@ export const PersonalMeaningComposer = ({
                 >
                   <input
                     type="checkbox"
-                    disabled={busy}
+                    disabled={unavailable}
                     checked={startingPoint === value}
                     onChange={() =>
                       setStartingPoint(startingPoint === value ? null : value)
@@ -404,14 +470,14 @@ export const PersonalMeaningComposer = ({
         controls: <div className="flex gap-3">
           <button
             className={`${action} flex-1 bg-action-primary text-action-on-primary hover:bg-action-primary-hover`}
-            disabled={!canSave || busy}
+            disabled={!canSave || unavailable}
             onClick={() => void saveAndClarify()}
           >
             {t(busy ? "composer.saving" : "composer.clarify")}
           </button>
           <button
             className={`${action} text-fg-secondary hover:bg-surface-selected`}
-            disabled={!canSave || busy}
+            disabled={!canSave || unavailable}
             onClick={() => void saveOnly()}
           >
             {t("composer.save")}

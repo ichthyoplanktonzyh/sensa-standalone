@@ -115,7 +115,11 @@
   object-fit: contain;
 }
 
-.pmw-material > button {
+.pmw-material button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   min-height: 2.75rem;
   padding: 0.5rem 0.875rem;
   border: 1px solid var(--sensa-border-strong);
@@ -123,6 +127,11 @@
   background: var(--sensa-surface-panel);
   color: var(--sensa-fg-primary);
   cursor: pointer;
+}
+
+.pmw-material button:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .pmw-material-familiar {
