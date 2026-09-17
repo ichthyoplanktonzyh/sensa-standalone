@@ -30,6 +30,8 @@ assert(screen.includes('ContextCard'));
 assert(screen.includes('ConfirmedExpressionDetail'));
 assert(screen.includes('gateway.reviseContext'));
 assert(screen.includes('if (allConfirmed) return;'));
+assert(screen.includes('const textSegment = context.summary.trim()'));
+assert(!screen.includes('const conversationText = messages'));
 assert(world.includes('confirmedExpressionFor(item)'));
 assert(screen.includes('maxImages={MAX_SCENE_IMAGES}'));
 assert(app.includes('onStartConversation={startSensaConversation}'));

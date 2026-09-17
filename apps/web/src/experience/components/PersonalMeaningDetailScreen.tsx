@@ -15,9 +15,10 @@ import './PersonalMeaningDetailScreen.css';
  * — it is a basket, not a progress bar, and it never shows "已确认" while the
  * thread is still open.
  *
- * Every learner turn runs a bounded ReAct loop. The agent may inspect existing
- * meanings, ask for a real distinction, and update Context–Sense–Expression
- * candidates before replying naturally. There is no separate extraction mode.
+ * Every learner turn runs the same bounded teacher loop. The agent replies
+ * naturally, judges Context–Sense–Expression clarity in its structured final
+ * output, and may inspect existing meanings when reuse genuinely matters.
+ * There is no separate extraction mode.
  *
  * A Focus is only proposed when the Context needs an explicit aspect boundary.
  * The learner's confirmation always writes Sense confirmation and Alignment,
@@ -167,19 +168,13 @@ const materialForDraft = (draft: ClarificationDraftView): SemanticAgentMaterial 
 
 const completedContextForDraft = (
   draft: ClarificationDraftView,
-  messages: SemanticAgentMessage[],
+  context: AgentContextCandidate,
   supportLanguageTag: string,
 ): SensaIntakeContext | null => {
-  const conversationText = messages
-    .filter((message) => message.role === 'learner')
-    .map((message) => message.body.trim())
-    .filter(Boolean)
-    .join('\n\n');
-  const capturedText = draft.context?.textSegment?.trim() ?? '';
-  const textSegment = [capturedText, conversationText]
-    .filter(Boolean)
-    .filter((value, index, values) => values.indexOf(value) === index)
-    .join('\n\n');
+  // The accepted Context is the clarified real-world situation, not the raw
+  // language-learning request or the learner's follow-up chat. Source material
+  // and conversation remain available as provenance/construction evidence.
+  const textSegment = context.summary.trim();
   const mediaReferenceIds = draft.materialBlocks
     .filter((block) => block.kind === 'image' && block.personalMediaObjectId)
     .map((block) => block.personalMediaObjectId!);
@@ -1017,15 +1012,15 @@ const PreviewPersonalMeaningDetailScreen = ({
   /** One atomic confirmation; Focus is included only when disambiguation needed it. */
   const confirm = async () => {
     if ((!detail && !clarificationDraft) || !session || busy) return;
-    const { focus, sense, expression } = session.workingSet;
-    if (!sense || (draftMode && (!expression || !includeExpression))) return;
+    const { context, focus, sense, expression } = session.workingSet;
+    if (!context || !sense || (draftMode && (!expression || !includeExpression))) return;
     setBusy(true);
     setError('');
     try {
       const languageContext = session.languageContext
         ?? (await languageRoutesSnapshot()).context;
       const completedContext = clarificationDraft
-        ? completedContextForDraft(clarificationDraft, session.messages, languageContext.supportLanguageTag)
+        ? completedContextForDraft(clarificationDraft, context, languageContext.supportLanguageTag)
         : null;
       if (draftMode && !completedContext) {
         throw new Error(uiText('addContext'));
