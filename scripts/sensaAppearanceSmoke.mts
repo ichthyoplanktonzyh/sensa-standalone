@@ -615,7 +615,7 @@ for (const role of skinAssetRoleCatalog) {
 }
 assert(!webShell.includes("from 'lucide-react'"), "WebShell selects concrete Skin glyphs directly");
 for (const path of [
-  "App.tsx",
+  "library/PackageLearningRuntime.tsx",
   "components/ContentWorkspace.tsx",
   "components/DictDetailModal.tsx",
   "components/IntakeInboxDrawer.tsx",
@@ -645,7 +645,8 @@ for (const path of [
   assert(!screen.includes("duration-300"), `${path} still hard-codes screen duration`);
 }
 const appShellSource = await readFile(new URL("App.tsx", experienceRoot), "utf8");
-assert(appShellSource.includes('variant="popover"'), "App transient menus do not consume the overlay Skin seam");
+const runtimeMenuSource = await readFile(new URL("library/PackageLearningRuntime.tsx", experienceRoot), "utf8");
+assert(runtimeMenuSource.includes('variant="popover"'), "Runtime transient menus do not consume the overlay Skin seam");
 assert(!appShellSource.includes('id="mask"'), "App retains a parallel page-owned overlay backdrop");
 for (const path of [
   "components/PersonalMeaningDetailScreen.css",

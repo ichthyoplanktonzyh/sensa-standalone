@@ -1,4 +1,4 @@
-import {localRunPolicy,localTargetPolicy} from '../learning/runtime/localRuntimeBindings';
+import {localTargetPolicy} from '../learning/runtime/localRuntimeBindings';
 import {localFlowText} from '../i18n/localFlowText';
 import {usePersonalLearning} from './library/usePersonalLearning';
 import {useLanguageRoutes} from './library/useLanguageRoutes';
@@ -14,20 +14,15 @@ import {usePackageLearning} from './library/usePackageLearning';
 import {
   PackageEntry,
   PackageTarget,
-  localTargetView,
 } from './library/PackageLearningViews';
-import type {AssuranceSupportHost} from './library/AssuranceLearningViews';
+import {localTargetView} from './library/localTargetView';
 import {LearningPreferencesPanel} from './components/learning/LearningPreferencesPanel';
 import {useTranslation} from 'react-i18next';
-import {iconClass} from './ui/primitives';
 import {lazy,Suspense,useState,useCallback,useMemo} from 'react';
-import {contentAnnotations} from '../data/library/contentAnnotations';
-import {lookupDictionaryEntry} from './services/quickDict';
 import {IconSprite} from './components/IconSprite';
 import {HomeScreen} from './components/HomeScreen';
 import {DictionaryPresentationProvider} from './components/DictionaryPresentationContext';
 import {WebShell} from './ui/WebShell';
-import {SensaOverlayLayout} from './ui/SensaComponents';
 import type {PracticeSenseItem} from './practiceData';
 import {usePracticeScope} from './usePracticeScope';
 import {createPracticeScopeSnapshot,type PracticeScopeSnapshot} from './practiceScope';
@@ -68,12 +63,6 @@ const PackageRuntime=lazy(()=>import('./library/PackageLearningRuntime').then(mo
 
 export default function App() {
   const { t } = useTranslation();
-  const [learningPreferencesOpen,setLearningPreferencesOpen]=useState(false);
-  const closeLearningPreferences=useCallback(()=>{
-    setLearningPreferencesOpen(false);
-    requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.screen.active [data-learning-more]')?.focus());
-  },[]);
-
   /* ---------- 顶层视图模式与 Sheet 栈：真相源是 URL ---------- */
   const {
     viewMode,
@@ -214,17 +203,6 @@ export default function App() {
   const toastMsg = useOverlayStore((state) => state.toastMsg);
   const toast = useOverlayStore((state) => state.toast);
 
-  const menuMoreOpen = useOverlayStore((state) => state.menuMoreOpen);
-  const menuBookOpen = useOverlayStore((state) => state.menuBookOpen);
-  const menuPersonalContent = useOverlayStore((state) => state.menuPersonalContent);
-  const setMenuMoreOpen = useOverlayStore((state) => state.setMenuMoreOpen);
-  const setMenuPersonalContent = useOverlayStore((state) => state.setMenuPersonalContent);
-  const closeMenus = useOverlayStore((state) => state.closeMenus);
-
-  const menuPersonalAnchors = menuPersonalContent
-    ? contentAnnotations.getSemanticAnchors(menuPersonalContent.senseKey)
-    : [];
-
   /* ---------- Learning Runtime composition ---------- */
   const [studyTab, setStudyTab] = useState<'a' | 'b'>('a');
   const dailyNewCount = packageLearning.dailyLimit ?? 20;
@@ -255,29 +233,6 @@ export default function App() {
     if(await packageLearning.start(targetId,dailyNewCount))setViewMode('lightweight');
   };
 
-  const packageRuntimeHost=useMemo<AssuranceSupportHost>(()=>({
-    toast,
-    openDict:openDictModal,
-    openNoteEditor,
-    openSceneEditor:(content,anchorId,learningTarget)=>{
-      setSceneEditorTarget({content,anchorId,learningTarget});
-    },
-    lookupDictionary:lookupDictionaryEntry,
-    onOpenMenuMore:(event,content)=>{
-      event.stopPropagation();
-      closeMenus();
-      setMenuPersonalContent(content);
-      setMenuMoreOpen(true);
-    },
-  }),[
-    toast,
-    openDictModal,
-    openNoteEditor,
-    setSceneEditorTarget,
-    closeMenus,
-    setMenuPersonalContent,
-    setMenuMoreOpen,
-  ]);
   const currentScreen=mainStack[mainStack.length-1]??'s-home';
 
   return (
@@ -491,7 +446,13 @@ export default function App() {
           {quantityTarget&&quantityTargetRecord&&(
             <LearningPreferencesPanel fixedPolicy defaultPolicy={localTargetPolicy(quantityTargetRecord)} dailyNewCount={quantityChoice} onPolicyChange={()=>{}} onDailyNewCountChange={setQuantityChoice} busy={packageLearning.busy} status={packageLearning.notice&&<p role="status">{packageLearning.notice}</p>} onClose={()=>setQuantityTarget(null)} closeLabel={localFlowText('confirmAndStart')} onConfirm={()=>void packageLearning.confirmQuantity(quantityChoice).then(async ok=>{if(!ok)return;const target=quantityTarget;setQuantityTarget(null);if(await packageLearning.start(target,quantityChoice))setViewMode('lightweight');})}/>
           )}
-          {viewMode === 'lightweight' && <PackageRuntime host={packageRuntimeHost} active c={packageLearning} onExit={returnHome} onFinish={()=>void (async()=>{const next=packageLearning.nextTarget;if(next){await packageLearning.continueWith(next.id,dailyNewCount);return;}if(await packageLearning.finish())returnHome();})()}/>}
+          {viewMode === 'lightweight' && <PackageRuntime
+            active
+            c={packageLearning}
+            onExit={returnHome}
+            onViewLearningLibrary={()=>setMainStack(['s-study','s-learning-library'])}
+            onFinish={()=>void (async()=>{const next=packageLearning.nextTarget;if(next){await packageLearning.continueWith(next.id,dailyNewCount);return;}if(await packageLearning.finish())returnHome();})()}
+          />}
 
 
           {/* 8. Lexical Reference；原始词义面板保留为 baseline */}
@@ -539,84 +500,6 @@ export default function App() {
             onClose={closeSceneEditor}
             toast={toast}
           />}
-
-          {/* 学习页右上角菜单 */}
-          {menuMoreOpen && <SensaOverlayLayout variant="popover" measure="compact" className="z-[80]" id="menu-more" label={t('assurance.preferences')} onDismiss={closeMenus} dismissOnBackdrop regions={{primary:
-          <div className="p-2 [&>button]:flex [&>button]:min-h-12 [&>button]:w-full [&>button]:items-center [&>button]:gap-3 [&>button]:rounded-control [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:text-left [&>button]:text-control-label [&>button]:hover:bg-surface-subtle [&>button]:focus-visible:outline-2 [&>button]:focus-visible:outline-focus">
-            {menuPersonalContent && (
-              <>
-                <div className="mb-2 rounded-control bg-accent-soft p-3">
-                  <span className="block text-metadata text-fg-tertiary">{t('assurance.currentMeaning')}</span>
-                  <strong className="mt-1 block font-language text-lg text-action-primary">{menuPersonalContent.lemma}</strong>
-                  <small>{menuPersonalContent.guideLabelL1}</small>
-                </div>
-                <button
-                  onClick={() => {
-                    const content = menuPersonalContent;
-                    closeMenus();
-                    openNoteEditor(content.lemma, content.senseKey, content.guideLabelL1);
-                  }}
-                >
-                  <svg className={iconClass} aria-hidden="true"><use href="#i-pen" /></svg>{t('assurance.note')}
-                </button>
-                <button
-                  onClick={() => {
-                    const content = menuPersonalContent;
-                    const anchorId = menuPersonalAnchors[0]?.anchorId;
-                    closeMenus();
-                    setSceneEditorTarget({ content, anchorId });
-                  }}
-                >
-                  <svg className={iconClass} aria-hidden="true"><use href="#i-bulb" /></svg>
-                  {t('assurance.personalScene')}
-                </button>
-                {menuPersonalAnchors.length > 0 && (
-                  <button
-                    onClick={() => {
-                      const content = menuPersonalContent;
-                      closeMenus();
-                      setSceneEditorTarget({ content });
-                    }}
-                  >
-                    <svg className={iconClass} aria-hidden="true"><use href="#i-penplus" /></svg>{t('assurance.addScene')}
-                  </button>
-                )}
-                <button onClick={()=>{const content=menuPersonalContent;closeMenus();openDictModal(content.lemma);}}><svg className={iconClass} aria-hidden="true"><use href="#i-search" /></svg>{t('originalCards.dictionary')}</button>
-                <div className="my-2 border-t border-border-subtle" />
-              </>
-            )}
-            <button
-              onClick={() => {
-                closeMenus();
-                setLearningPreferencesOpen(true);
-              }}
-            >
-              <svg className={iconClass} aria-hidden="true"><use href="#i-sliders" /></svg>{t('assurance.preferences')}
-            </button>
-          </div>}} />}
-
-          {learningPreferencesOpen && viewMode==='lightweight' && <LearningPreferencesPanel
-            fixedPolicy busy={packageLearning.busy}
-            defaultPolicy={packageLearning.run?localRunPolicy(packageLearning.run):'lightweight'} dailyNewCount={dailyNewCount}
-            onPolicyChange={()=>{}}
-            onDailyNewCountChange={updateLocalQuantity}
-            onClose={closeLearningPreferences}
-          />}
-
-          {/* 词书设置菜单 */}
-          {menuBookOpen && <SensaOverlayLayout variant="popover" measure="compact" className="z-[80]" id="menu-book" label={localFlowText('chooseRange')} onDismiss={closeMenus} dismissOnBackdrop regions={{primary:
-          <div className="p-2 [&>button]:flex [&>button]:min-h-12 [&>button]:w-full [&>button]:items-center [&>button]:gap-3 [&>button]:rounded-control [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:text-left [&>button]:text-control-label [&>button]:hover:bg-surface-subtle [&>button]:focus-visible:outline-2 [&>button]:focus-visible:outline-focus">
-            <button onClick={() => { closeMenus(); toast(localFlowText('chooseRangeHint')); }}>
-              <svg className={iconClass} aria-hidden="true"><use href="#i-filter" /></svg>{localFlowText('chooseRange')}</button>
-            <button onClick={() => { closeMenus(); setMainStack(['s-study', 's-learning-library']); }}>
-              <svg className={iconClass} aria-hidden="true"><use href="#i-list" /></svg>{localFlowText('viewContent')}</button>
-            <button onClick={() => { closeMenus(); toast(localFlowText('downloadingWords')); }}>
-              <svg className={iconClass} aria-hidden="true"><use href="#i-dl" /></svg>{localFlowText('downloadWords')}</button>
-            <button onClick={() => { closeMenus(); toast(localFlowText('resetBookWarning')); }}>
-              <svg className={iconClass} aria-hidden="true"><use href="#i-relearn" /></svg>{localFlowText('relearnBook')}</button>
-            <button disabled>
-              <svg className={iconClass} aria-hidden="true"><use href="#i-refresh" /></svg>{localFlowText('updateBook')}</button>
-          </div>}} />}
 
           {/* 全局 Toast 提示 */}
           <div className={`sensa-motion-popover fixed bottom-6 left-1/2 z-[150] max-w-[calc(100%-3rem)] -translate-x-1/2 rounded-control bg-fg-primary px-5 py-3 text-center text-control-label text-surface-canvas shadow-overlay ${toastMsg ? 'visible translate-y-0 opacity-100' : 'invisible translate-y-2 opacity-0'}`} id="toast" role="status" aria-live="polite">

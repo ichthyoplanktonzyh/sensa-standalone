@@ -9,7 +9,7 @@ import {LightweightRuntimeStartScreen} from '../components/learning/LightweightR
 import {InterleavedFourStageQueue,InterleavedFourStageReviewQueue} from '../../learning/runtime/interleavedFourStageProtocol';
 import {fourStageQueue,fourStageContent,type FourStageAction} from '../../learning/protocols/fourStage';
 import {localAssuranceState} from '../../learning/protocols/assurance';
-import {localRunBinding} from '../../learning/runtime/localRuntimeBindings';
+import {localRunBinding,localRunPolicy} from '../../learning/runtime/localRuntimeBindings';
 import {learningRuntimeCoordinator,localExecutionForRun} from '../../learning/runtime/runtimeCoordinator';
 import {localLightweightPhase,localLightweightStep} from '../../learning/runtime/lightweightInitialProtocol';
 import {localProtocolActiveTargetId,localProtocolStepId,type LocalExecutableLearningTarget,type LocalLearningAction} from '../../learning/runtime/localProtocol';
@@ -22,7 +22,12 @@ import {useJourneyGateway} from '../personalMeaningJourney';
 import type {AssuranceSupportHost} from './AssuranceLearningViews';
 import {AssuranceRuntime} from './AssuranceLearningViews';
 import type {usePackageLearning} from './usePackageLearning';
-import {localTargetView} from './PackageLearningViews';
+import {localTargetView} from './localTargetView';
+import {lookupDictionaryEntry} from '../services/quickDict';
+import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
+import {SensaOverlayLayout} from '../ui/SensaComponents';
+import {iconClass} from '../ui/primitives';
+import {useOverlayStore} from '../stores/overlayStore';
 import {composeLocalLearningRuntime} from '../learningRuntime/runtimeComposition';
 import {
  LocalRuntimePresentationRegistry,
@@ -36,7 +41,7 @@ import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import i18n from '../../i18n';
 
 type Controller=ReturnType<typeof usePackageLearning>;
-type PackageRuntimeProps={active:boolean;c:Controller;host:AssuranceSupportHost;onExit:()=>void;onFinish:()=>void};
+type PackageRuntimeProps={active:boolean;c:Controller;onExit:()=>void;onFinish:()=>void;onViewLearningLibrary:()=>void};
 type RuntimePresentationProps={
  active:boolean;
  run:LocalLearningRun;
@@ -52,7 +57,79 @@ type RuntimePresentationProps={
  onFinish:()=>void;
 };
 
+function useRuntimeHost():AssuranceSupportHost{
+ const toast=useOverlayStore(state=>state.toast);
+ const openDict=useOverlayStore(state=>state.openDictModal);
+ const openNoteEditor=useOverlayStore(state=>state.openNoteEditor);
+ const openSceneEditor=useOverlayStore(state=>state.openSceneEditor);
+ const setMenuMoreOpen=useOverlayStore(state=>state.setMenuMoreOpen);
+ const setMenuPersonalContent=useOverlayStore(state=>state.setMenuPersonalContent);
+ const closeMenus=useOverlayStore(state=>state.closeMenus);
+ return useMemo(()=>({
+  toast,
+  openDict,
+  openNoteEditor,
+  openSceneEditor:(content,anchorId,learningTarget)=>openSceneEditor({content,anchorId,learningTarget}),
+  lookupDictionary:lookupDictionaryEntry,
+  onOpenMenuMore:(event,content)=>{
+   event.stopPropagation();
+   closeMenus();
+   setMenuPersonalContent(content);
+   setMenuMoreOpen(true);
+  },
+ }),[toast,openDict,openNoteEditor,openSceneEditor,closeMenus,setMenuPersonalContent,setMenuMoreOpen]);
+}
+
+function RuntimeOverlays({c,run,onViewLearningLibrary}:{c:Controller;run:LocalLearningRun;onViewLearningLibrary:()=>void}){
+ const {t}=useTranslation();
+ const [learningPreferencesOpen,setLearningPreferencesOpen]=useState(false);
+ const [,setAnnotationRevision]=useState(0);
+ const menuMoreOpen=useOverlayStore(state=>state.menuMoreOpen);
+ const menuBookOpen=useOverlayStore(state=>state.menuBookOpen);
+ const menuPersonalContent=useOverlayStore(state=>state.menuPersonalContent);
+ const closeMenus=useOverlayStore(state=>state.closeMenus);
+ const openDict=useOverlayStore(state=>state.openDictModal);
+ const openNoteEditor=useOverlayStore(state=>state.openNoteEditor);
+ const openSceneEditor=useOverlayStore(state=>state.openSceneEditor);
+ const toast=useOverlayStore(state=>state.toast);
+ useEffect(()=>contentAnnotations.subscribe(()=>setAnnotationRevision(value=>value+1)),[]);
+ useEffect(()=>()=>closeMenus(),[closeMenus]);
+ const anchors=menuPersonalContent?contentAnnotations.getSemanticAnchors(menuPersonalContent.senseKey):[];
+ const closeLearningPreferences=()=>{
+  setLearningPreferencesOpen(false);
+  requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.screen.active [data-learning-more]')?.focus());
+ };
+ return <>
+  {menuMoreOpen&&<SensaOverlayLayout variant="popover" measure="compact" className="z-[80]" id="menu-more" label={t('assurance.preferences')} onDismiss={closeMenus} dismissOnBackdrop regions={{primary:
+   <div className="p-2 [&>button]:flex [&>button]:min-h-12 [&>button]:w-full [&>button]:items-center [&>button]:gap-3 [&>button]:rounded-control [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:text-left [&>button]:text-control-label [&>button]:hover:bg-surface-subtle [&>button]:focus-visible:outline-2 [&>button]:focus-visible:outline-focus">
+    {menuPersonalContent&&<>
+     <div className="mb-2 rounded-control bg-accent-soft p-3">
+      <span className="block text-metadata text-fg-tertiary">{t('assurance.currentMeaning')}</span>
+      <strong className="mt-1 block font-language text-lg text-action-primary">{menuPersonalContent.lemma}</strong>
+      <small>{menuPersonalContent.guideLabelL1}</small>
+     </div>
+     <button onClick={()=>{const content=menuPersonalContent;closeMenus();openNoteEditor(content.lemma,content.senseKey,content.guideLabelL1);}}><svg className={iconClass} aria-hidden="true"><use href="#i-pen"/></svg>{t('assurance.note')}</button>
+     <button onClick={()=>{const content=menuPersonalContent;closeMenus();openSceneEditor({content,anchorId:anchors[0]?.anchorId});}}><svg className={iconClass} aria-hidden="true"><use href="#i-bulb"/></svg>{t('assurance.personalScene')}</button>
+     {anchors.length>0&&<button onClick={()=>{const content=menuPersonalContent;closeMenus();openSceneEditor({content});}}><svg className={iconClass} aria-hidden="true"><use href="#i-penplus"/></svg>{t('assurance.addScene')}</button>}
+     <button onClick={()=>{const content=menuPersonalContent;closeMenus();openDict(content.lemma);}}><svg className={iconClass} aria-hidden="true"><use href="#i-search"/></svg>{t('originalCards.dictionary')}</button>
+     <div className="my-2 border-t border-border-subtle"/>
+    </>}
+    <button onClick={()=>{closeMenus();setLearningPreferencesOpen(true);}}><svg className={iconClass} aria-hidden="true"><use href="#i-sliders"/></svg>{t('assurance.preferences')}</button>
+   </div>}}/>}
+  {learningPreferencesOpen&&<LearningPreferencesPanel fixedPolicy busy={c.busy} defaultPolicy={localRunPolicy(run)} dailyNewCount={c.dailyLimit??20} onPolicyChange={()=>{}} onDailyNewCountChange={value=>void c.confirmQuantity(value)} onClose={closeLearningPreferences}/>}
+  {menuBookOpen&&<SensaOverlayLayout variant="popover" measure="compact" className="z-[80]" id="menu-book" label={localFlowText('chooseRange')} onDismiss={closeMenus} dismissOnBackdrop regions={{primary:
+   <div className="p-2 [&>button]:flex [&>button]:min-h-12 [&>button]:w-full [&>button]:items-center [&>button]:gap-3 [&>button]:rounded-control [&>button]:border-0 [&>button]:bg-transparent [&>button]:px-3 [&>button]:text-left [&>button]:text-control-label [&>button]:hover:bg-surface-subtle [&>button]:focus-visible:outline-2 [&>button]:focus-visible:outline-focus">
+    <button onClick={()=>{closeMenus();toast(localFlowText('chooseRangeHint'));}}><svg className={iconClass} aria-hidden="true"><use href="#i-filter"/></svg>{localFlowText('chooseRange')}</button>
+    <button onClick={()=>{closeMenus();onViewLearningLibrary();}}><svg className={iconClass} aria-hidden="true"><use href="#i-list"/></svg>{localFlowText('viewContent')}</button>
+    <button onClick={()=>{closeMenus();toast(localFlowText('downloadingWords'));}}><svg className={iconClass} aria-hidden="true"><use href="#i-dl"/></svg>{localFlowText('downloadWords')}</button>
+    <button onClick={()=>{closeMenus();toast(localFlowText('resetBookWarning'));}}><svg className={iconClass} aria-hidden="true"><use href="#i-relearn"/></svg>{localFlowText('relearnBook')}</button>
+    <button disabled><svg className={iconClass} aria-hidden="true"><use href="#i-refresh"/></svg>{localFlowText('updateBook')}</button>
+   </div>}}/>}
+ </>;
+}
+
 export function PackageRuntime(props:PackageRuntimeProps){
+ const runtimeHost=useRuntimeHost();
  const run=props.c.run;
  const snapshot=useMemo(()=>{
   if(!run)return immutablePresentationSnapshot({run:run!,targets:[],packages:[]});
@@ -71,16 +148,16 @@ export function PackageRuntime(props:PackageRuntimeProps){
  const Surface=plugin.render;
  const capabilities=new Set(plugin.manifest.capabilities);
  const host:Partial<AssuranceSupportHost>={
-  ...(capabilities.has('toast')?{toast:props.host.toast}:{}),
-  ...(capabilities.has('dictionary')?{openDict:props.host.openDict,lookupDictionary:props.host.lookupDictionary}:{}),
-  ...(capabilities.has('notes')?{openNoteEditor:props.host.openNoteEditor}:{}),
-  ...(capabilities.has('personal_scenes')?{openSceneEditor:props.host.openSceneEditor}:{}),
-  ...(capabilities.has('personal_content_menu')?{onOpenMenuMore:props.host.onOpenMenuMore}:{}),
+  ...(capabilities.has('toast')?{toast:runtimeHost.toast}:{}),
+  ...(capabilities.has('dictionary')?{openDict:runtimeHost.openDict,lookupDictionary:runtimeHost.lookupDictionary}:{}),
+  ...(capabilities.has('notes')?{openNoteEditor:runtimeHost.openNoteEditor}:{}),
+  ...(capabilities.has('personal_scenes')?{openSceneEditor:runtimeHost.openSceneEditor}:{}),
+  ...(capabilities.has('personal_content_menu')?{onOpenMenuMore:runtimeHost.onOpenMenuMore}:{}),
  };
  const declareMastery=capabilities.has('declared_mastery')
   ?(targetId:string,active=true)=>props.c.declareKnown(targetId,active)
   :async()=>{throw new Error('Presentation plugin did not declare declared_mastery.');};
- return <Surface active={props.active} {...snapshot} busy={props.c.busy} notice={props.c.notice} hasNextTarget={!!props.c.nextTarget} host={host} dispatch={action=>{if(!props.c.busy)void props.c.act(action);}} declareMastery={declareMastery} onExit={props.onExit} onFinish={props.onFinish}/>;
+ return <><Surface active={props.active} {...snapshot} busy={props.c.busy} notice={props.c.notice} hasNextTarget={!!props.c.nextTarget} host={host} dispatch={action=>{if(!props.c.busy)void props.c.act(action);}} declareMastery={declareMastery} onExit={props.onExit} onFinish={props.onFinish}/><RuntimeOverlays c={props.c} run={run} onViewLearningLibrary={props.onViewLearningLibrary}/></>;
 }
 
 function requireHost(host:Partial<AssuranceSupportHost>,capability:string):AssuranceSupportHost{

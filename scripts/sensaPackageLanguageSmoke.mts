@@ -20,7 +20,7 @@ import {pathToFileURL} from 'node:url';
 const compiled=await build({
   stdin:{
     contents:[
-      `export {localTargetView} from './apps/web/src/experience/library/PackageLearningViews';`,
+      `export {localTargetView} from './apps/web/src/experience/library/localTargetView';`,
       `export {pendingPersonalTargetView} from './apps/web/src/experience/library/PersonalLearningControls';`,
       `export {provisionLightweightInitialContent} from './apps/web/src/learning/runtime/lightweightInitialContent';`,
     ].join('\n'),

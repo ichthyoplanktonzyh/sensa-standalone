@@ -5,7 +5,7 @@ import {assuranceContent} from '../../learning/protocols/assurance';
 import {cardText} from '../../i18n/originalCards';
 import {localTargetPolicy} from '../../learning/runtime/localRuntimeBindings';
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
-import {StudyResources} from './AssuranceLearningViews';
+import {StudyResources} from '../components/learning/StudyResources';
 import {LearningResourceDetails} from '../components/learning/LearningResourceDetails';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
@@ -16,12 +16,10 @@ import {learningBundleBookId,learningBundleVersionNumber,learningBundleTitle,lea
 import {LearningTargetDetailScreen} from '../components/learning/LearningTargetDetailScreen';
 import {packageKey} from '../../data/library/packages';
 import type {LocalLearningTarget} from '../../data/library/learning';
-import type {LocalCurriculumMembership} from '../../learning/runtime/localProtocol';
-import {localCurriculumMeaning} from '../../learning/runtime/localCurriculum';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
+import {localTargetView} from './localTargetView';
 type Controller=ReturnType<typeof usePackageLearning>;
-export const localTargetView=(t:LocalLearningTarget,membership:LocalCurriculumMembership,readiness:'ready'|'blocked'='ready')=>({targetId:t.id,expression:t.expression,meaning:localCurriculumMeaning(membership),targetLanguageTag:t.targetLanguageTag,supportLanguageTag:membership.languageContext.supportLanguageTag,example:String(membership.material.content.resources.find(r=>r.materialRoleKey==='usage_guidance')?.contentPayload.example??''),partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:membership.packageKey?'book' as const:'personal_semantic_world' as const,sourceLabel:membership.packageKey?localFlowText('downloadedPackages'):localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:localTargetPolicy(t),lightweightReadiness:{status:readiness,label:readiness==='ready'?localFlowText('downloaded'):localFlowText('prepareResources'),detail:readiness==='ready'?localFlowText('resourcesLocal'):localFlowText('resourceInvalid')}});
 export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boolean;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void}){
  useTranslation();
  const [selected,setSelected]=useState<string|null>(null),[query,setQuery]=useState(''),[downloadKey,setDownloadKey]=useState<string|null>(null);

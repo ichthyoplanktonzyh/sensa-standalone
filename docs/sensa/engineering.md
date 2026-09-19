@@ -21,8 +21,9 @@
 
 Web Shell 只挂载首页、当前 URL sheet 栈和已打开的覆盖层；退出栈的页面必须卸载其 effect。非首页页面、
 账号云同步、远程 Intake 与扩展接收器按需加载，不能重新并入同步启动图。`WebShell` 只观察 viewport
-直属 screen root 的增删和 active 变化，不观察整棵页面子树。生产构建后的同步启动 JavaScript gzip 上限
-由 `scripts/sensaWebBundleBudgetSmoke.mts` 固定，并纳入 `test:fast`。正式 Learning Runtime 的呈现和
+直属 screen root 的增删和 active 变化，不观察整棵页面子树。生产构建后的 JavaScript gzip 上限
+由 `scripts/sensaWebBundleBudgetSmoke.mts` 按静态 ESM 依赖闭包固定，并纳入 `test:fast`；它分别约束入口、
+认证后 App 闭包和 Learning Runtime 的增量闭包，不能只统计入口与命名 chunk 而漏掉同步共享依赖。正式 Learning Runtime 的呈现和
 composition validation 在进入 Run 时按需加载；首页学习队列与内容准备只在真实表变化、到期时间点或页面
 恢复焦点时刷新，不使用固定频率轮询。
 

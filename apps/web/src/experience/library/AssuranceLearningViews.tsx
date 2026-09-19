@@ -14,15 +14,6 @@ import type {LocalLearningRun} from '../../data/library/learning';
 import type {LocalExecutableLearningTarget} from '../../learning/runtime/localProtocol';
 import type {InstalledPackage} from '../../data/library/packages';
 import {AssuranceSummary} from '../components/learning/AssuranceSummary';
-import type {RuntimeLearningContent} from '../../learning/content/learningCatalog';
-export function StudyResources({content}:{content:RuntimeLearningContent}){
- return <div className="space-y-6">
-  <div><h2 className="text-3xl font-medium">{content.lemma}</h2><p className="mt-3 text-lg">{content.guideLabelL1}</p><p className="mt-3 text-sm leading-7 text-fg-secondary">{content.definitionL2}</p></div>
-  <section className="space-y-3"><h3 className="font-medium">{localFlowText('assurancePronunciation')}</h3>{content.pronunciations.map(p=><div key={p.accentLocale} className="rounded-xl border border-border-subtle p-4"><p className="mb-3 text-sm">{p.accentLocale} · {p.ipa}</p>{p.audioUrl&&<audio controls preload="none" src={p.audioUrl} aria-label={localFlowText('assuranceAudio',{label:p.accentLocale})} className="w-full max-w-full"/>}</div>)}</section>
-  <section className="space-y-4"><h3 className="font-medium">{localFlowText('assuranceExamples')}</h3>{content.learningExamples.map(e=><div key={e.exampleKey} className="space-y-3 rounded-xl border border-border-subtle p-4"><p className="text-lg leading-8">{e.textL2}</p><p className="text-sm leading-6 text-fg-secondary">{e.textL1}</p>{e.audioUrl&&<audio controls preload="none" src={e.audioUrl} aria-label={localFlowText('assuranceAudio',{label:e.textL2})} className="w-full max-w-full"/>}</div>)}</section>
-  {content.supportTabs.flatMap(t=>t.patterns).map(p=><p key={p.canonicalPattern} className="text-sm leading-7">{p.canonicalPattern}</p>)}
- </div>;
-}
 export type AssuranceSupportHost = Pick<StepRendererHost, 'toast' | 'openDict' | 'openNoteEditor' | 'openSceneEditor' | 'lookupDictionary'> & Pick<RuntimeToolsProps, 'onOpenMenuMore'>;
 export function AssuranceRuntime(props:{active:boolean;run:LocalLearningRun;target:LocalExecutableLearningTarget;pack:InstalledPackage;busy:boolean;notice:string;host:AssuranceSupportHost;onMarkKnown:()=>void;onAction:(action:AssuranceAction)=>void;onExit:()=>void;onFinish:()=>void}){
  useTranslation();
