@@ -15,7 +15,7 @@ export async function clearLocalLibrary(preview:LocalClearPreview){
   if(preview.libraryId!==current.id||preview.incarnation!==incarnation||(await tx.all('operations')).length!==preview.operations)throw new Error('localFlow.clearChanged');
   const owner=await tx.get('meta','service-owner'),installation=await tx.get('meta','service-installation');
   for(const table of libraryTables)tx.clear(table);
-  const identity:LibraryIdentity={id:crypto.randomUUID(),learnerId:crypto.randomUUID(),deviceId:crypto.randomUUID(),createdAt:new Date().toISOString(),schemaVersion:1};
+  const identity:LibraryIdentity={id:crypto.randomUUID(),learnerId:crypto.randomUUID(),deviceId:crypto.randomUUID(),createdAt:new Date().toISOString(),schemaVersion:2};
   tx.put('meta','identity',identity);tx.put('meta','service-owner',owner);
   if(installation)tx.put('meta','service-installation',installation);
   tx.put('meta','local-incarnation',crypto.randomUUID());

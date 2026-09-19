@@ -7,10 +7,11 @@ import assert from 'node:assert/strict';
 import {
   sensaIntakePayloadSchema,type SensaIntakePayload,type SensaPinnedLanguageContext,
 } from '@sensa/contracts/sensa';
-import {emptyJourneyState,JOURNEY_STORE_KEY} from '../apps/web/src/experience/personalMeaningJourney/store.ts';
+import {emptyJourneyState} from '../apps/web/src/experience/personalMeaningJourney/store.ts';
 import {executeFastTrack} from '../apps/web/src/experience/personalMeaningJourney/intakeEngine.ts';
 import {createJourneyGateway} from '../apps/web/src/experience/personalMeaningJourney/gateway.ts';
-import {MemoryStoragePort,createSeededClock} from '../apps/web/src/experience/personalMeaningJourney/ports.ts';
+import {createSeededClock} from '../apps/web/src/experience/personalMeaningJourney/ports.ts';
+import {MemoryJourneyRepository} from '../apps/web/src/experience/personalMeaningJourney/repository.ts';
 import type {CommandLanguages} from '../apps/web/src/experience/personalMeaningJourney/ports.ts';
 
 const localAuthority={verify:(request:any)=>request.mode==='learner_direct'?{mode:'learner_direct',actorId:'sensa-local-learner'}:{mode:'delegated_agent',actorId:request.actorId,basis:request.basis,authorizationReference:request.authorizationReference}};
@@ -65,16 +66,18 @@ assert.equal(inflectedRun.record.personalSemanticAnchorRevisions[0]!.structuredP
 // Web creation remains an Inbox clarification draft. Only one final confirmation
 // atomically creates a complete, learnable Personal Meaning.
 let context:SensaPinnedLanguageContext={supportLanguageTag:'ko',targetLanguageTag:'it'};
-const storage=new MemoryStoragePort();
-const gateway=createJourneyGateway({storage,clock:createSeededClock(),languages:{read:async()=>context}});
+const repository=new MemoryJourneyRepository();
+const gateway=createJourneyGateway({repository,clock:createSeededClock(),languages:{read:async()=>context}});
 const draft=await gateway.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'雨后的巷子'}],familiarExpression:{surfaceForm:'欲言又止'},startingPoint:'from_expression'});
-let stored=JSON.parse((await storage.read(JOURNEY_STORE_KEY))!) as any;
-const saved=async()=>JSON.parse((await storage.read(JOURNEY_STORE_KEY))!) as any;
+assert.equal(repository.writes,4,'a new clarification writes normalized state, Inbox, draft and receipt rows');
+let stored=await repository.load() as any;
+const saved=async()=>repository.load() as Promise<any>;
 assert.equal(stored.meanings.length,0,'saving material does not create a partial Personal Meaning');
 assert.equal(stored.inboxItems.length,1);assert.equal(gateway.getWorldItems().length,0);
 assert.equal(gateway.getClarificationDraft(draft.intakeId)?.startingPoint,'from_expression');
 context={supportLanguageTag:'zh-CN',targetLanguageTag:'es'};
 await gateway.addClarificationMaterial(crypto.randomUUID(),draft.intakeId,{kind:'text',bodyText:'雨停了'});
+assert.equal(repository.writes,2,'editing one draft rewrites only its Inbox row and command receipt');
 assert.equal((await saved()).meanings.length,0,'editing the slow-track draft still does not leak it into the world');
 const clarifiedContext=gateway.getClarificationDraft(draft.intakeId)!.context!;
 const completed=await gateway.completeClarificationDraft({operationId:crypto.randomUUID(),intakeId:draft.intakeId,context:clarifiedContext,languageContext:{supportLanguageTag:'ko',targetLanguageTag:'it'},focus:null,sense:{proposedSenseKey:'hesitate-to-speak',coreMeaningFocus:'想说某件事却因为犹豫而停住',prototypeScenes:[{summary:'一个人准备开口，犹豫后停住。',participantRoles:['说话者'],states:['准备开口','犹豫'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[],unresolvedQuestions:[]},expression:{surfaceForm:'esitare a parlare',expressionType:'phrase',languageTag:'it',relation:'realizes',semanticCoverage:'exact'},expressionCandidates:[{surfaceForm:'esitare a parlare',expressionType:'phrase',languageTag:'it',relation:'realizes',semanticCoverage:'exact'}],confirmExpression:true,transcript:[{messageId:crypto.randomUUID(),role:'learner',body:'就是想说但停住的感觉。',occurredAt:'2026-09-01T00:00:01.000Z'}],provenance:{provider:'fixture',model:'fixture',promptVersion:'v1'},semanticPolicyVersion:'fixture-v1'});
@@ -99,8 +102,8 @@ await assert.rejects(gateway.reviseContext({operationId:crypto.randomUUID(),pers
 // serialized so neither aggregate write drops the other.
 const slowContext:SensaPinnedLanguageContext={supportLanguageTag:'zh-CN',targetLanguageTag:'en'};
 const slowLanguages={read:async()=>{await new Promise(resolve=>setTimeout(resolve,1));return slowContext;}};
-const raceStorage=new MemoryStoragePort();
-const raceGateway=createJourneyGateway({storage:raceStorage,clock:createSeededClock(),languages:slowLanguages});
+const raceRepository=new MemoryJourneyRepository();
+const raceGateway=createJourneyGateway({repository:raceRepository,clock:createSeededClock(),languages:slowLanguages});
 const captures=[
   fastTrackPayload('She took her time.','took','en'),
   fastTrackPayload('He broke the ice.','broke','en'),
@@ -113,7 +116,7 @@ await assert.rejects(
   /operationId/,
   'one operation id cannot silently replay a different Intake payload',
 );
-const raced=JSON.parse((await raceStorage.read(JOURNEY_STORE_KEY))!) as any;
+const raced=await raceRepository.load() as any;
 assert.equal(raced.meanings.length,2,'two captures that overlap while the active context is read both survive');
 assert.equal(raced.meanings.filter((meaning:any)=>meaning.personalMeaning.status==='active').length,2);
 
@@ -129,7 +132,7 @@ if(acceptanceQueued.route!=='inbox')throw new Error('fixture must enter Inbox');
 const acceptedLater=await raceGateway.resolveInboxItem(crypto.randomUUID(),acceptanceQueued.intakeId,{sense:pendingAcceptance.sense!});
 assert.equal(acceptedLater.route,'fast_track');
 if(acceptedLater.route!=='fast_track')throw new Error('fixture must commit');
-const acceptedRecord=(JSON.parse((await raceStorage.read(JOURNEY_STORE_KEY))!) as any).meanings.find((meaning:any)=>meaning.personalMeaning.personalMeaningId===acceptedLater.personalMeaningId);
+const acceptedRecord=(await raceRepository.load() as any).meanings.find((meaning:any)=>meaning.personalMeaning.personalMeaningId===acceptedLater.personalMeaningId);
 assert.equal(acceptedRecord.semanticAcceptances[0].resolutionProvenance.provider,'fixture','later learner Acceptance must not rewrite the original Sense resolver');
 assert.equal(acceptedRecord.semanticAcceptances[0].authority.mode,'learner_direct','Acceptance authority remains a separate fact');
 const undetermined=fastTrackPayload('She took her time.','took',null);
@@ -137,9 +140,9 @@ assert.equal((await raceGateway.ingest(undetermined.operationId,undetermined)).r
 const withoutContext={...fastTrackPayload('She backed out.','backed out','en','back out'),operationId:crypto.randomUUID(),context:null,expression:null};
 const noContextQueued=await raceGateway.ingest(withoutContext.operationId,withoutContext);
 assert.equal(noContextQueued.route,'inbox');
-const waiting=(JSON.parse((await raceStorage.read(JOURNEY_STORE_KEY))!) as any).inboxItems;
+const waiting=(await raceRepository.load() as any).inboxItems;
 assert.deepEqual(waiting.map((item:any)=>item.status),['pending_expression','pending_context']);
-assert.equal((JSON.parse((await raceStorage.read(JOURNEY_STORE_KEY))!) as any).meanings.find((meaning:any)=>meaning.personalExpressionAnchorRevisions[0]?.surfaceForm==='back out'),undefined,'a missing Context cannot leak into the semantic world');
+assert.equal((await raceRepository.load() as any).meanings.find((meaning:any)=>meaning.personalExpressionAnchorRevisions[0]?.surfaceForm==='back out'),undefined,'a missing Context cannot leak into the semantic world');
 if(noContextQueued.route!=='inbox')throw new Error('fixture must enter Inbox');
 const suppliedContext={modality:'text' as const,textSegment:'I planned to attend, but then changed my mind.',mediaReferenceIds:[],languageTag:'en',source:{client:'sensa-web',url:null,title:'Inbox clarification',sourceReferenceId:noContextQueued.intakeId,domSelector:null,paragraphContext:null}};
 const supplied=await raceGateway.completeClarificationDraft({operationId:crypto.randomUUID(),intakeId:noContextQueued.intakeId,context:suppliedContext,languageContext:slowContext,focus:null,sense:{proposedSenseKey:'back-out',coreMeaningFocus:'原本准备做某事，后来决定退出或取消',prototypeScenes:[{summary:'一个人原先准备参与，之后改变决定。',participantRoles:['行动者'],states:['原计划参与','决定退出'],directionOrCausality:'决定变化导致退出'}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[],unresolvedQuestions:[]},expression:{surfaceForm:'back out',expressionType:'phrase',languageTag:'en',relation:'realizes',semanticCoverage:'exact'},expressionCandidates:[{surfaceForm:'back out',expressionType:'phrase',languageTag:'en',relation:'realizes',semanticCoverage:'exact'}],confirmExpression:true,transcript:[{messageId:crypto.randomUUID(),role:'learner',body:suppliedContext.textSegment,occurredAt:'2026-09-01T00:00:02.000Z'}],provenance:{provider:'fixture',model:'fixture',promptVersion:'v1'},semanticPolicyVersion:'fixture-v1'});

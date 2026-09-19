@@ -5,7 +5,7 @@ Object.assign(globalThis, { window: new EventTarget(), BroadcastChannel: undefin
 
 const store = await import('../apps/web/src/data/library/store.ts');
 const identity = await store.openLibrary();
-assert.equal(identity.schemaVersion, 1);
+assert.equal(identity.schemaVersion, 2);
 
 const operationId = crypto.randomUUID();
 const result = await store.command(
@@ -50,7 +50,7 @@ assert.equal(await store.readLibrary((tx) => tx.get('drafts', 'rolled-back')), u
 const diagnostics = await store.readLibraryStorageDiagnostics();
 assert.deepEqual(
   { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
-  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 1 },
+  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 2 },
 );
 
 const [{ default: sqlite3InitModule }, { SqliteRecordDatabase }] = await Promise.all([
@@ -67,10 +67,18 @@ database.initialize();
 database.commit({
   clears: [],
   deletes: [],
-  puts: [{ table: 'semanticWorld', key: 'journey', encodedValue: '{"version":1}' }],
+  puts: [
+    { table: 'semanticState', key: 'root', encodedValue: '{"version":"sensa-personal-meaning-journey-store-v4"}' },
+    { table: 'media', key: crypto.randomUUID(), encodedValue: '{"mediaKind":"image"}' },
+  ],
 });
-assert.equal(database.get('semanticWorld', 'journey'), '{"version":1}');
+assert.equal(database.get('semanticState', 'root'), '{"version":"sensa-personal-meaning-journey-store-v4"}');
+assert.throws(() => database.commit({
+  clears: [],
+  deletes: [],
+  puts: [{ table: 'semanticWorld', key: 'journey', encodedValue: '{}' }],
+} as any), /CHECK constraint failed|constraint failed/iu);
 assert.match(database.diagnostics().sqliteVersion, /^3\./u);
 database.close();
 
-console.log('PASS: the library adapter preserves typed values, commits atomically, replays exact operations and rejects conflicts; the SQLite WASM kernel validates and stores the semantic-world row. Browser OPFS is checked separately.');
+console.log('PASS: Library v2 preserves typed values, commits atomically, replays exact operations and rejects conflicts; SQLite accepts normalized semantic/media rows and rejects the removed semanticWorld table. Browser OPFS is checked separately.');

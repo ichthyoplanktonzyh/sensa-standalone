@@ -23,8 +23,8 @@ export function WebShell({ children, current, focused, onNavigate, availableSect
   const viewport = useRef<HTMLDivElement>(null);
   const shell = useRef<HTMLDivElement>(null);
   useModalFocus(shell);
-  // Keep the reference's mounted screen stack and scroll positions, while only
-  // the foreground surface participates in keyboard navigation and accessibility.
+  // Only URL-stack screens are mounted. Keep those retained screens and their
+  // scroll positions, while only the foreground surface participates in input.
   useLayoutEffect(() => {
     const node = viewport.current;
     if (!node) return;
@@ -41,7 +41,9 @@ export function WebShell({ children, current, focused, onNavigate, availableSect
     };
     update();
     const observer = new MutationObserver(update);
-    observer.observe(node, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    // Every relevant screen is a direct viewport child. Do not observe class
+    // churn inside whole pages: only stack membership and root activity matter.
+    observer.observe(node, { childList: true, attributes: true, attributeFilter: ['class'] });
     return () => { observer.disconnect(); original.forEach((style, screen) => { screen.style.cssText = style; }); };
   }, [current, focused]);
   const selectedSection = current.startsWith('s-learning') || current === 's-stats' ? 's-study'

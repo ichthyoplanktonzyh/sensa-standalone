@@ -1,6 +1,5 @@
 import "./schemaRuntime";
 import "./i18n";
-import "./browserSmokeBridge";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
@@ -10,6 +9,7 @@ import "./theme.css";
 import './experience/components/examples/learningExample.css';
 
 initializeAppearance();
+if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') void import('./browserSmokeBridge');
 const root = createRoot(document.getElementById("root")!);
 const skinLabRequested = import.meta.env.DEV && new URLSearchParams(window.location.search).get("skin-lab") === "1";
 

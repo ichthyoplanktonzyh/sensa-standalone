@@ -6,13 +6,13 @@
  */
 import assert from 'node:assert/strict';
 import {createJourneyGateway} from '../apps/web/src/experience/personalMeaningJourney/gateway.ts';
-import {MemoryStoragePort,createSeededClock} from '../apps/web/src/experience/personalMeaningJourney/ports.ts';
-import {JOURNEY_STORE_KEY} from '../apps/web/src/experience/personalMeaningJourney/store.ts';
+import {createSeededClock} from '../apps/web/src/experience/personalMeaningJourney/ports.ts';
+import {MemoryJourneyRepository} from '../apps/web/src/experience/personalMeaningJourney/repository.ts';
 import type {PublishedLearningSceneAcceptanceInput} from '../apps/web/src/experience/personalMeaningJourney/types.ts';
 
 const id=()=>crypto.randomUUID();
-const storage=new MemoryStoragePort();
-const gateway=createJourneyGateway({storage,clock:createSeededClock('2026-09-14T08:00:00.000Z')});
+const repository=new MemoryJourneyRepository();
+const gateway=createJourneyGateway({repository,clock:createSeededClock('2026-09-14T08:00:00.000Z')});
 const target={learningTargetId:id(),curriculumMembershipId:id(),senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),expression:'plate',targetLanguageTag:'en'};
 const semantic={
  senseKey:'plate-flat-dish',senseVersionNumber:3,semanticPolicyVersion:'editorial-v1',
@@ -33,7 +33,7 @@ const replayed=await gateway.acceptPublishedLearningScene(first);
 assert.equal(replayed.replayed,true,'an exact delivery retry replays the durable acceptance receipt');
 assert.equal(replayed.personalMeaningId,accepted.personalMeaningId);
 
-const read=async()=>JSON.parse((await storage.read(JOURNEY_STORE_KEY))!) as any;
+const read=async()=>repository.load() as Promise<any>;
 let state=await read(),record=state.meanings[0];
 assert.equal(state.meanings.length,1);
 assert.equal(record.personalMeaning.status,'active');

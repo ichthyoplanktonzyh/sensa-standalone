@@ -1,8 +1,8 @@
 /** Internal protocol between the local-library module and its SQLite Worker. */
 
-export const sqliteLibraryFile = "/sensa-local-library-v1.sqlite3";
-export const sqlitePoolDirectory = "/sensa-local-library-v1";
-export const sqliteLibrarySchemaVersion = 1;
+export const sqliteLibraryFile = "/sensa-local-library-v2.sqlite3";
+export const sqlitePoolDirectory = "/sensa-local-library-v2";
+export const sqliteLibrarySchemaVersion = 2;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -20,7 +20,13 @@ export const sqliteLibraryTables = [
   "personalLearning",
   "contentAttempts",
   "annotations",
-  "semanticWorld",
+  "semanticState",
+  "semanticMeanings",
+  "semanticRegistry",
+  "semanticInbox",
+  "semanticDrafts",
+  "semanticReceipts",
+  "media",
 ] as const;
 
 export type SqliteLibraryTable = (typeof sqliteLibraryTables)[number];

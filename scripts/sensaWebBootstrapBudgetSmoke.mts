@@ -61,7 +61,7 @@ const cloudFor=(account:string):Cloud=>{const existing=clouds.get(account);if(ex
 const repackCloud=(cloud:Cloud,chars:number)=>{
  if(!cloud.manifest)throw Error('nothing to repack');
  const manifest=JSON.parse(cloud.blocks.get(cloud.manifest[0]!)!) as {version:number;rows:{table:string;key:string;blocks:string[]}[]};
- if(manifest.version!==2||manifest.rows.some(row=>row.table==='operations'))throw Error('current Checkpoint carried the device operation ledger');
+ if(manifest.version!==3||manifest.rows.some(row=>row.table==='operations'))throw Error('current Checkpoint carried the device operation ledger');
  const added=new Map<string,string>(),rows:{table:string;key:string;blocks:string[]}[]=[];
  for(const [rowIndex,row] of manifest.rows.entries()){
   const text=row.blocks.map(hash=>cloud.blocks.get(hash)!).join(''),refs:string[]=[];
@@ -266,6 +266,13 @@ try{
  try{await expect(a.page.getByRole('navigation').first()).toBeVisible({timeout:SHELL_BUDGET_MS});}
  catch(error){log('   phase A startup calls: '+JSON.stringify(served));log('   phase A startup rejected: '+JSON.stringify(rejected));log('   phase A startup console: '+JSON.stringify(a.errors));throw error;}
  await assertApplicationShell(a.page);
+ assert.equal(await a.page.locator('.screen').count(),1,'unrelated product screens mounted behind Home');
+ await a.page.locator('[data-sensa-shell-utility-action]').click();
+ await expect(a.page.locator('#s-profile')).toBeVisible({timeout:SHELL_BUDGET_MS});
+ assert.equal(await a.page.locator('.screen').count(),2,'the URL stack should retain only Home and the lazy Profile sheet');
+ await a.page.locator('[data-sensa-shell-brand-action]').click();
+ await expect(a.page.locator('#s-profile')).toHaveCount(0);
+ assert.equal(await a.page.locator('.screen').count(),1,'leaving a sheet should unmount its effects');
  const cloud=cloudFor(ACCOUNT);
  // Uploaded blocks are not a published library: wait for the committed manifest,
  // otherwise the next browser legitimately restores an empty account.

@@ -8,9 +8,10 @@ import App from '../../application/Root';
 import { parseShellParams, parseViewMode, type ShellFlow, type ShellParams } from './shellLocation';
 
 /**
- * App renders the whole shell -- every screen stays mounted and is shown or
- * hidden by an `active` prop, because sheets animate in and out via CSS
- * transform and must keep their scroll position and local state.
+ * App renders the shell plus only the screens present in the current URL stack.
+ * Those retained sheets stay mounted and are shown or hidden by an `active`
+ * prop, so back navigation keeps their scroll position and local state without
+ * running every unrelated product screen in the background.
  *
  * So the route tree exists to own the URL, not to swap components: App is the
  * root route's component, and the child routes below only declare which

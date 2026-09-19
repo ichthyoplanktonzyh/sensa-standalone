@@ -19,19 +19,26 @@
 
 `apps/sensa_native` 和 `crates` 只保留现有代码，不参与当前产品开发、验收或发布规划。除非 owner 明确恢复该范围，不在这些目录继续迁移或新增能力。
 
+Web Shell 只挂载首页、当前 URL sheet 栈和已打开的覆盖层；退出栈的页面必须卸载其 effect。非首页页面、
+账号云同步、远程 Intake 与扩展接收器按需加载，不能重新并入同步启动图。`WebShell` 只观察 viewport
+直属 screen root 的增删和 active 变化，不观察整棵页面子树。生产构建后的同步启动 JavaScript gzip 上限
+由 `scripts/sensaWebBundleBudgetSmoke.mts` 固定，并纳入 `test:fast`。
+
 ## 数据与同步
 
-生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v1.sqlite3`，持久化在浏览器
+生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v2.sqlite3`，持久化在浏览器
 Origin Private File System。SQLite 在专用 Worker 中运行，使用不要求页面启用跨源隔离的
 `opfs-sahpool` VFS；应用用页面生命周期 Web Lock 保证同一时间只有一个数据库 owner，因此第二个
 Sensa 标签页会提示先关闭旧页面，而不是打开竞争连接。UI 只通过本机 `LibraryTransaction` 修改它，
 不直接执行 SQL，也不写派生学习结果。Node 测试使用相同事务接口的内存 Adapter；浏览器交付必须
 另验真实 OPFS。当前版本不读取或迁移旧 IndexedDB 数据。
 
-旧 Web 应用层的逻辑表与新版 Personal Semantic World Journey 共用这一物理事务 authority；Journey
-聚合保存在 `semanticWorld` 逻辑表中，不再写预览 `localStorage`。Journey 自己拥有领域事实、
-快慢轨和 operation receipt，SQLite Adapter 只拥有原子读写。账号副本、界面偏好和其他
-`localStorage` 状态不能充当个人学习库的第二权威。
+Web 应用层的逻辑表与 Personal Semantic World Journey 共用这一物理事务 authority。Journey 的
+意义聚合、注册表事实、Inbox、澄清草稿和 operation receipt 分别保存在 `semanticMeanings`、
+`semanticRegistry`、`semanticInbox`、`semanticDrafts` 与 `semanticReceipts` 等规范化逻辑表；媒体字节
+单独保存在 `media` 表。一次领域保存仍由同一个 `LibraryTransaction` 原子提交，但普通语义修改不再
+重写整个世界或图片载荷。当前没有生产用户数据，因此 v2 直接使用新数据库与 Checkpoint v3，不读取、
+迁移或兼容 v1 单聚合格式。账号副本、界面偏好和其他 `localStorage` 状态不能充当个人学习库的第二权威。
 
 学习运行时只在 Web 本机执行：目标选择、Protocol/Policy、步骤、评价、Completion、Memory Outcome 与
 FSRS 都由本地领域事务结算。Hono/Edge 不创建或推进学习 Run，也不重新计算从云同步取回的学习事实。

@@ -5,13 +5,6 @@ import type { SensaPinnedLanguageContext } from '@sensa/contracts/sensa';
  * gateway, and the gateway talks to these injectable ports.
  */
 
-/** A namespaced asynchronous string store. */
-export interface StoragePort {
-  read(key: string): Promise<string | null>;
-  write(key: string, value: string): Promise<void>;
-  remove(key: string): Promise<void>;
-}
-
 /** A monotonic ISO-8601 clock (with offset) so facts carry stable timestamps. */
 export interface ClockPort {
   nowIso(): string;
@@ -20,23 +13,6 @@ export interface ClockPort {
 export const systemClock: ClockPort = {
   nowIso: () => new Date().toISOString(),
 };
-
-/** An in-memory store for the deterministic smoke and non-browser contexts. */
-export class MemoryStoragePort implements StoragePort {
-  private readonly map = new Map<string, string>();
-
-  async read(key: string): Promise<string | null> {
-    return this.map.has(key) ? (this.map.get(key) as string) : null;
-  }
-
-  async write(key: string, value: string): Promise<void> {
-    this.map.set(key, value);
-  }
-
-  async remove(key: string): Promise<void> {
-    this.map.delete(key);
-  }
-}
 
 export class StorageUnavailableError extends Error {
   constructor(message: string) {

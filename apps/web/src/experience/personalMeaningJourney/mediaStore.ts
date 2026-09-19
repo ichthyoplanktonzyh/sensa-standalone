@@ -1,4 +1,12 @@
-import { previewStorage } from '../services/previewStorage';
+import { useSyncExternalStore } from 'react';
+import {
+  assertCurrentLibrary,
+  observeLibrary,
+  readLibrary,
+  restoreLibraryTransaction,
+} from '../../data/library/store';
+import {maxStoredMediaBytes,parseStoredMedia,type StoredMedia} from '../../data/library/media';
+export {parseStoredMedia,type StoredMedia} from '../../data/library/media';
 /**
  * Local media store for multimodal material blocks.
  *
@@ -7,28 +15,15 @@ import { previewStorage } from '../services/previewStorage';
  * command slower as material grows. The fact store keeps only the
  * `personalMediaObjectId`; the bytes live here, keyed by that same id.
  *
- * Prototype scope: images are downscaled and stored as `data:` URLs in
- * localStorage. That is a real quota, so writes report an honest, recoverable
- * error instead of silently dropping a block the learner just added.
+ * Images are downscaled before their records enter the local Library. The
+ * journey facts keep only `personalMediaObjectId`; media bytes are separate
+ * rows so ordinary semantic mutations do not clone or rewrite image payloads.
  */
-
-const KEY = 'sensa_personal_media_v1';
 
 /** Longest edge, in pixels, an uploaded image is downscaled to before storing. */
 const MAX_EDGE = 1280;
 const JPEG_QUALITY = 0.82;
-/** Refuse anything that would obviously blow the localStorage budget. */
-const MAX_STORED_BYTES = 1_500_000;
-
-export interface StoredMedia {
-  mediaId: string;
-  mediaKind: 'image';
-  mimeType: string;
-  dataUrl: string;
-  sizeBytes: number;
-  createdAt: string;
-}
-
+/** Keep a single image bounded for backup, sync and memory-cache costs. */
 export class MediaStoreFullError extends Error {
   constructor() {
     super('本机存储放不下更多材料了。可以先删掉一些图片，或改用文字描述。');
@@ -36,47 +31,87 @@ export class MediaStoreFullError extends Error {
   }
 }
 
-type MediaMap = Record<string, StoredMedia>;
+let mediaCache = new Map<string, StoredMedia>();
+let mediaReady = false;
+let mediaLoad: Promise<void> | null = null;
+let observing = false;
+let mediaRevision = 0;
+const mediaListeners = new Set<() => void>();
 
-const readAll = (): MediaMap => {
-  if (typeof window === 'undefined') return {};
-  const raw = previewStorage.getItem(KEY);
-  if (!raw) return {};
-  try {
-    const value = JSON.parse(raw) as unknown;
-    return value && typeof value === 'object' && !Array.isArray(value)
-      ? (value as MediaMap)
-      : {};
-  } catch {
-    return {};
+const announceMedia = (): void => {
+  mediaRevision += 1;
+  for (const listener of mediaListeners) listener();
+};
+
+const refreshMedia = async (): Promise<void> => {
+  const rows = await readLibrary((tx) => tx.entries('media'));
+  const next = new Map<string, StoredMedia>();
+  for (const row of rows) {
+    const media = parseStoredMedia(row.value);
+    if (row.key !== media.mediaId) throw new Error('libraryBackup.errors.inconsistent');
+    next.set(row.key, media);
   }
+  mediaCache = next;
+  mediaReady = true;
+  announceMedia();
 };
 
-const writeAll = (media: MediaMap): void => {
-  try {
-    previewStorage.setItem(KEY, JSON.stringify(media));
-  } catch {
-    throw new MediaStoreFullError();
+/** Load the render cache once and keep it aligned after restore or cloud sync. */
+export const preloadMedia = (): Promise<void> => {
+  if (!observing && typeof window !== 'undefined') {
+    observing = true;
+    observeLibrary(() => {
+      mediaLoad = refreshMedia().finally(() => { mediaLoad = null; });
+      void mediaLoad.catch(() => undefined);
+    }, ['media']);
   }
+  if (mediaLoad) return mediaLoad;
+  if (mediaReady) return Promise.resolve();
+  mediaLoad ??= refreshMedia().finally(() => { mediaLoad = null; });
+  return mediaLoad;
 };
 
-export const getMedia = (mediaId: string): StoredMedia | null =>
-  readAll()[mediaId] ?? null;
+/** Synchronous render-cache lookup. Call `preloadMedia` before mounting the product. */
+export const getMedia = (mediaId: string): StoredMedia | null => mediaCache.get(mediaId) ?? null;
 
-export const putMedia = (media: StoredMedia): void => {
-  if (typeof window === 'undefined') return;
-  if (media.sizeBytes > MAX_STORED_BYTES) throw new MediaStoreFullError();
-  const all = readAll();
-  all[media.mediaId] = media;
-  writeAll(all);
+/** Async lookup for effects and non-render consumers that cannot assume preload. */
+export const readMedia = async (mediaId: string): Promise<StoredMedia | null> => {
+  await preloadMedia();
+  return getMedia(mediaId);
 };
 
-export const removeMedia = (mediaId: string): void => {
-  if (typeof window === 'undefined') return;
-  const all = readAll();
-  if (!(mediaId in all)) return;
-  delete all[mediaId];
-  writeAll(all);
+export const useMediaStoreVersion = (): number => useSyncExternalStore(
+  (listener) => { mediaListeners.add(listener); return () => mediaListeners.delete(listener); },
+  () => mediaRevision,
+  () => mediaRevision,
+);
+
+export const putMedia = async (input: StoredMedia): Promise<void> => {
+  if (input.sizeBytes > maxStoredMediaBytes) throw new MediaStoreFullError();
+  const media = parseStoredMedia(input);
+  await preloadMedia();
+  await restoreLibraryTransaction(async (tx) => {
+    await assertCurrentLibrary(tx);
+    tx.put('media', media.mediaId, media);
+  });
+  mediaCache.set(media.mediaId, structuredClone(media));
+  announceMedia();
+};
+
+export const removeMedia = async (mediaId: string): Promise<void> => {
+  await preloadMedia();
+  let removed = false;
+  await restoreLibraryTransaction(async (tx) => {
+    await assertCurrentLibrary(tx);
+    if (await tx.get('media', mediaId)) {
+      tx.delete('media', mediaId);
+      removed = true;
+    }
+  });
+  if (removed) {
+    mediaCache.delete(mediaId);
+    announceMedia();
+  }
 };
 
 const readAsDataUrl = (file: Blob): Promise<string> =>
@@ -131,6 +166,6 @@ export const storeImageFile = async (
     sizeBytes: Math.round((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75),
     createdAt: nowIso,
   };
-  putMedia(stored);
+  await putMedia(stored);
   return stored;
 };

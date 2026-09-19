@@ -6,6 +6,7 @@ import type {
   SqliteWorkerRequest,
   SqliteWorkerResult,
 } from "./sqliteProtocol";
+import {sqliteLibrarySchemaVersion} from './sqliteProtocol';
 
 export interface SqliteRecordAdapter {
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
@@ -101,7 +102,7 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
       engine: "memory-adapter",
       persistence: "memory",
       sqliteVersion: "not-applicable",
-      schemaVersion: 1,
+      schemaVersion: sqliteLibrarySchemaVersion,
     };
   }
 }

@@ -10,7 +10,7 @@ import {
   type SqliteStorageDiagnostics,
 } from "./sqliteProtocol";
 
-export const libraryDatabaseName = "sensa-local-library-v1.sqlite3";
+export const libraryDatabaseName = "sensa-local-library-v2.sqlite3";
 export const libraryTables = sqliteLibraryTables;
 export type Table = SqliteLibraryTable;
 export const localLibraryRevisionKey = "local-content-revision";
@@ -156,10 +156,15 @@ async function transaction<T>(
       await storageCall(() => adapter.commit(mutation));
       if (kind === "state") window.dispatchEvent(new Event("sensa-sync-state-changed"));
       else {
-        window.dispatchEvent(new Event("sensa-library-changed"));
+        const tables = [...new Set([
+          ...mutation.clears,
+          ...mutation.deletes.map((row) => row.table),
+          ...mutation.puts.map((row) => row.table),
+        ])];
+        window.dispatchEvent(new CustomEvent("sensa-library-changed", { detail: { tables } }));
         if (typeof BroadcastChannel !== "undefined") {
           const channel = new BroadcastChannel("sensa-local-library");
-          channel.postMessage("changed");
+          channel.postMessage({ tables });
           channel.close();
         }
       }
@@ -222,7 +227,7 @@ export type LibraryIdentity = {
   learnerId: string;
   deviceId: string;
   createdAt: string;
-  schemaVersion: 1;
+  schemaVersion: 2;
 };
 
 export async function openLibrary(): Promise<LibraryIdentity> {
@@ -236,21 +241,30 @@ export async function openLibrary(): Promise<LibraryIdentity> {
       learnerId: crypto.randomUUID(),
       deviceId: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
-      schemaVersion: 1,
+      schemaVersion: 2,
     };
     tx.put("meta", "identity", identity);
     return identity;
   });
 }
 
-export function observeLibrary(listener: () => void): () => void {
-  window.addEventListener("sensa-library-changed", listener);
+export function observeLibrary(listener: () => void, tables?: readonly Table[]): () => void {
+  const filter = tables ? new Set<Table>(tables) : null;
+  const relevant = (changed: unknown): boolean => !filter
+    || !Array.isArray(changed)
+    || changed.some((table) => filter.has(table as Table));
+  const local = (event: Event) => {
+    if (relevant((event as CustomEvent<{ tables?: unknown }>).detail?.tables)) listener();
+  };
+  window.addEventListener("sensa-library-changed", local);
   const channel = typeof BroadcastChannel === "undefined"
     ? null
     : new BroadcastChannel("sensa-local-library");
-  if (channel) channel.onmessage = listener;
+  if (channel) channel.onmessage = (event) => {
+    if (relevant(event.data?.tables)) listener();
+  };
   return () => {
-    window.removeEventListener("sensa-library-changed", listener);
+    window.removeEventListener("sensa-library-changed", local);
     channel?.close();
   };
 }

@@ -11,10 +11,10 @@ Object.assign(globalThis,{chrome:{storage:{local:{get:async(key:string)=>structu
 const {queueWeb,pendingWeb,acknowledgeWeb,webStatus,webOperationStatus,discardPendingWeb}=await import('../apps/browser-extension/src/webDestination.ts');
 const {browserCaptureToIntake}=await import('../apps/browser-extension/src/semanticIntakeAdapter.ts');
 const {createJourneyGateway}=await import('../apps/web/src/experience/personalMeaningJourney/gateway.ts');
-const {MemoryStoragePort,createSeededClock}=await import('../apps/web/src/experience/personalMeaningJourney/ports.ts');
-const {JOURNEY_STORE_KEY}=await import('../apps/web/src/experience/personalMeaningJourney/store.ts');
-const library={id:crypto.randomUUID()},accountId=crypto.randomUUID(),other=crypto.randomUUID(),journeyStorage=new MemoryStoragePort();
-const gateway=createJourneyGateway({storage:journeyStorage,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
+const {createSeededClock}=await import('../apps/web/src/experience/personalMeaningJourney/ports.ts');
+const {MemoryJourneyRepository}=await import('../apps/web/src/experience/personalMeaningJourney/repository.ts');
+const library={id:crypto.randomUUID()},accountId=crypto.randomUUID(),other=crypto.randomUUID(),journeyRepository=new MemoryJourneyRepository();
+const gateway=createJourneyGateway({repository:journeyRepository,clock:createSeededClock(),languages:{read:async()=>({targetLanguageTag:'en',supportLanguageTag:'zh-CN'})}});
 let signedOut=false;
 const receiveWebIntake=async(account:string,raw:unknown)=>{
  const request=sensaBrowserIntakeDeliverySchema.parse(raw);
@@ -23,7 +23,7 @@ const receiveWebIntake=async(account:string,raw:unknown)=>{
  const {replayed:_replayed,...result}=await gateway.ingest(request.intake.operationId,request.intake);
  return sensaBrowserIntakeReceiptSchema.parse({contractVersion:'sensa-browser-intake-delivery-v1',libraryId:request.libraryId,clientId:request.clientId,operationId:request.intake.operationId,requestDigest:createHash('sha256').update(canonicalConsumerJson(request)).digest('hex'),result,appliedAt:new Date().toISOString()});
 };
-const journeyState=async()=>JSON.parse((await journeyStorage.read(JOURNEY_STORE_KEY))!);
+const journeyState=async()=>journeyRepository.load();
 const snapshot={sentence:'She took her time.',language:'en',languageSource:'detector',languageConfidence:.9,source:{url:'https://example.org/article',title:'An article',capturedAt:new Date().toISOString()},expression:{text:'took',start:4,end:8}};
 const proposal={explanation:'这里表示花时间。',expression:{surface:'took',type:'word',language:'en'},semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'花费时间',prototypeScenes:[{summary:'一个人从容完成一件事。',participantRoles:['行动者'],states:['时间充足'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]}};
 const clientId=crypto.randomUUID();

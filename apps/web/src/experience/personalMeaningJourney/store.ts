@@ -1,11 +1,9 @@
 /**
- * Versioned local fact store for the Personal Meaning journey.
+ * In-memory fact state for the Personal Meaning journey.
  *
- * The v3 key is intentionally independent from earlier prototype keys. There
- * is no migration or fallback: an older blob is not a second identity source
- * and must never be interpreted as a current Personal Meaning. Every authoritative
- * Personal Meaning, revision, Anchor, Focus, Construction, Proposal,
- * confirmation and Alignment is owned by this aggregate.
+ * Persistence is normalized by the repository module. This shape remains the
+ * gateway's private working model so domain commands can preserve their atomic
+ * invariants without making React or transport callers understand storage rows.
  */
 
 import type {
@@ -35,11 +33,9 @@ import type {
   SensaIntakeItem,
   SensaSemanticAcceptanceFact,
 } from '@sensa/contracts/sensa';
-import { StorageUnavailableError, type StoragePort } from './ports';
 import type { ClarificationStartingPoint } from './semanticAgent';
 
-export const JOURNEY_STORE_KEY = 'sensa_personal_meaning_journey_v3';
-export const JOURNEY_STORE_VERSION = 'sensa-personal-meaning-journey-store-v3';
+export const JOURNEY_STORE_VERSION = 'sensa-personal-meaning-journey-store-v4';
 
 /** Recoverable adapter state; none of these values are domain facts. */
 export interface JourneyMockState {
@@ -144,11 +140,11 @@ const requireArray = (record: Record<string, unknown>, key: string): void => {
 };
 
 /**
- * Structural guard for the v2 blob. Contract schemas validate individual
- * facts at the smoke boundary; this guard prevents partial/legacy blobs from
- * being silently treated as an empty store.
+ * Structural guard for repository reconstruction. Contract schemas validate
+ * individual facts at the smoke boundary; this guard prevents partial rows
+ * from being silently treated as an empty store.
  */
-const asJourneyState = (parsed: unknown): JourneyState => {
+export const parseJourneyState = (parsed: unknown): JourneyState => {
   if (!isRecord(parsed)) {
     throw new StoreCorruptedError('本机的个人意义数据不是有效对象。');
   }
@@ -175,34 +171,4 @@ const asJourneyState = (parsed: unknown): JourneyState => {
     requireArray(parsed.registry, key);
   }
   return parsed as unknown as JourneyState;
-};
-
-export const loadJourneyState = async (storage: StoragePort): Promise<JourneyState> => {
-  let raw: string | null;
-  try {
-    raw = await storage.read(JOURNEY_STORE_KEY);
-  } catch (cause) {
-    if (cause instanceof StorageUnavailableError) throw cause;
-    throw new StoreCorruptedError('无法读取本机的个人意义数据。', cause);
-  }
-  if (raw === null) return emptyJourneyState();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (cause) {
-    throw new StoreCorruptedError('本机的个人意义数据无法解析（可能已损坏）。', cause);
-  }
-  return asJourneyState(parsed);
-};
-
-export const saveJourneyState = async (
-  storage: StoragePort,
-  state: JourneyState,
-): Promise<void> => {
-  try {
-    await storage.write(JOURNEY_STORE_KEY, JSON.stringify(state));
-  } catch (cause) {
-    if (cause instanceof StorageUnavailableError) throw cause;
-    throw new StoreCorruptedError('无法保存本机的个人意义数据。', cause);
-  }
 };

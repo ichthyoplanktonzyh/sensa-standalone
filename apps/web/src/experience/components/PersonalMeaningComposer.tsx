@@ -23,10 +23,11 @@ import type { MaterialBlockInput } from "../personalMeaningJourney";
 import { type ClarificationStartingPoint } from "../personalMeaningJourney/semanticAgent";
 import { SensaOverlayLayout } from "../ui/SensaComponents";
 import {
-  getMedia,
   MediaStoreFullError,
+  readMedia,
   removeMedia,
   storeImageFile,
+  useMediaStoreVersion,
 } from "../personalMeaningJourney/mediaStore";
 import {
   MAX_SCENE_IMAGES,
@@ -68,6 +69,7 @@ export const PersonalMeaningComposer = ({
   persistence,
 }: PersonalMeaningComposerProps) => {
   const { t } = useTranslation();
+  useMediaStoreVersion();
   const gateway = useJourneyGateway();
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -132,7 +134,7 @@ export const PersonalMeaningComposer = ({
       (savedDraft?.blocks ?? [])
         .filter((b) => b.mediaId)
         .map(async (b) => {
-          const media = await getMedia(b.mediaId!);
+          const media = await readMedia(b.mediaId!);
           if (!cancelled && media)
             setBlocks((current) =>
               current.map((block) =>
@@ -182,9 +184,9 @@ export const PersonalMeaningComposer = ({
   };
 
   const removeBlock = (localId: string) => {
+    const target = blocks.find((block) => block.localId === localId);
+    if (target?.mediaId) void removeMedia(target.mediaId).catch(() => setError(t("composer.imageError")));
     setBlocks((current) => {
-      const target = current.find((block) => block.localId === localId);
-      if (target?.mediaId) removeMedia(target.mediaId);
       const next = current.filter((block) => block.localId !== localId);
       return next.length > 0 ? next : [textBlock()];
     });

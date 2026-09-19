@@ -58,18 +58,15 @@ import {
   type ClockPort,
   type CommandLanguages,
   type LearnerLanguagePort,
-  type StoragePort,
 } from './ports';
-import { LibraryJourneyStoragePort } from './libraryStorage';
 import { languageRoutesSnapshot } from '../../data/library/language';
 import {
   StoreCorruptedError,
-  loadJourneyState,
-  saveJourneyState,
   type CommandReceipt,
   type JourneyState,
   type MeaningJourneyRecord,
 } from './store';
+import {LibraryJourneyRepository,type JourneyRepository} from './repository';
 import {
   buildDetailView,
   buildListItemView,
@@ -202,7 +199,7 @@ export interface PersonalMeaningJourneyGateway {
 }
 
 export interface JourneyGatewayDeps {
-  storage: StoragePort;
+  repository: JourneyRepository;
   clock: ClockPort;
   ids: RandomIdPort;
   semanticAcceptanceAuthority: SemanticAcceptanceAuthorityPort;
@@ -280,7 +277,6 @@ const errorStatus = (cause: unknown): JourneyGatewayStatus => {
 
 class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   private state: JourneyState | null = null;
-  private lastPersistedState: JourneyState | null = null;
   private readonly usedIds = new Set<string>();
   private status: JourneyGatewayStatus = { ok: true, error: null, errorKind: null };
   private readonly listeners = new Set<() => void>();
@@ -293,14 +289,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
 
   private async load(): Promise<void> {
     try {
-      const state = await loadJourneyState(this.deps.storage);
+      const state = await this.deps.repository.load();
       this.rememberIds(state);
       this.state = state;
       this.status = { ok: true, error: null, errorKind: null };
-      this.lastPersistedState = cloneJourneyState(state);
     } catch (cause) {
       this.state = null;
-      this.lastPersistedState = null;
       this.status = errorStatus(cause);
     }
   }
@@ -369,13 +363,11 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   private async persist(): Promise<void> {
     const state = this.requireState();
     try {
-      await saveJourneyState(this.deps.storage, state);
-      this.lastPersistedState = cloneJourneyState(state);
+      await this.deps.repository.save(state);
       this.status = { ok: true, error: null, errorKind: null };
     } catch (cause) {
-      if (this.lastPersistedState) {
-        this.state = cloneJourneyState(this.lastPersistedState);
-      }
+      try{this.state=await this.deps.repository.load();}
+      catch{this.state=null;}
       this.status = errorStatus(cause);
       this.notify();
       throw cause;
@@ -2427,7 +2419,7 @@ export const createJourneyGateway = (
   deps: Partial<JourneyGatewayDeps> = {},
 ): PersonalMeaningJourneyGateway =>
   new JourneyGatewayImpl({
-    storage: deps.storage ?? new LibraryJourneyStoragePort(),
+    repository: deps.repository ?? new LibraryJourneyRepository(),
     clock: deps.clock ?? systemClock,
     ids: deps.ids ?? cryptoRandomIdPort,
     semanticAcceptanceAuthority:

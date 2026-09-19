@@ -67,8 +67,8 @@ export function ProviderPanel(){
  const account=useAccountExperience();
  const [service,setService]=useState<ServiceStatus|null>(null),[serviceError,setServiceError]=useState('');
  const statusGeneration=useRef(0);const [refreshing,setRefreshing]=useState(false),[refreshed,setRefreshed]=useState(false);
- /** The shell keeps every screen mounted, so mounting is not "the user opened this".
-  * The rolling service counters are read on demand, when the panel is on screen. */
+ /** A profile sheet can remain mounted behind a pushed sheet. Rolling service
+  * counters are read on demand only while this panel is actually visible. */
  const panel=useRef<HTMLDivElement>(null);const [visible,setVisible]=useState(false);
  useEffect(()=>{const node=panel.current;if(!node)return;const observer=new IntersectionObserver(entries=>setVisible(entries.some(entry=>entry.isIntersecting)));observer.observe(node);return()=>observer.disconnect();},[]);
  const refreshService=async()=>{const gen=++statusGeneration.current;setRefreshing(true);setRefreshed(false);setServiceError('');try{const next=await readServiceStatus();if(gen===statusGeneration.current){setService(next);setRefreshed(true);}}catch(e){if(gen===statusGeneration.current)setServiceError(localFlowErrorKey(e,'modelService.statusFailed'));}finally{if(gen===statusGeneration.current)setRefreshing(false);}};
@@ -92,8 +92,8 @@ export function ProviderPanel(){
   const snapshot=await providerSnapshot();setProviders(snapshot.providers);setSettings(snapshot.settings);
   await readAccount();
  };
- /** Mounting is not "the user opened this": the shell keeps every screen mounted, so the
-  * local store is read here and account connections only once the panel is on screen. */
+ /** Local configuration loads with the Profile route; account connections wait
+  * until this panel is actually visible. */
  useEffect(()=>{void providerSnapshot().then(snapshot=>{setProviders(snapshot.providers);setSettings(snapshot.settings);}).catch(()=>setNotice('modelService.readFailed'));},[]);
  useEffect(()=>{
   if(account.onlineService&&visible)void readAccount();

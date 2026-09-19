@@ -16,9 +16,11 @@ import {localLearningPurpose,localProtocolActiveTargetId,localProtocolOutcomePer
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
 import {personalLearningSceneRowId,type ContentAnnotation} from './contentAnnotations';
 import {localExecutableTargetForParticipant} from '../../learning/runtime/localCurriculum';
+import {journeyStateFromRows,semanticJourneyTables} from '../../experience/personalMeaningJourney/repository';
+import {parseStoredMedia} from './media';
 export type BackupRows=Record<Table,{key:string;value:any}[]>;
 const uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
-const identitySchema=z.object({id:uuid,learnerId:uuid,deviceId:uuid,createdAt:timestamp,schemaVersion:z.literal(1)}).strict();
+const identitySchema=z.object({id:uuid,learnerId:uuid,deviceId:uuid,createdAt:timestamp,schemaVersion:z.literal(2)}).strict();
 export const backupOwnerSchema=z.object({subject:uuid,accountId:uuid,email:z.string().max(500).optional()}).strict();
 const fail=():never=>{throw new Error('libraryBackup.errors.inconsistent');};
 export function validateBackupRows(rows:BackupRows){
@@ -29,20 +31,24 @@ export function validateBackupRows(rows:BackupRows){
  const validateLanguageContext=(value:unknown)=>{const context=sensaFormalPinnedLanguageContextSchema.parse(value);const route=routes.get(context.languageRouteId);if(!route||route.targetLanguageTag!==context.targetLanguageTag||context.languageRouteRevision>route.revision)fail();return context;};
  const glossary=maps.settings.get('reading-glossary');if(glossary!==undefined)sensaReadingGlossarySchema.parse(glossary);
  const identity=identitySchema.parse(requireRow('meta','identity'));
- const semanticWorldValue=maps.semanticWorld.get('sensa_personal_meaning_journey_v3');
- const semanticWorld=semanticWorldValue===undefined?null:JSON.parse(z.string().parse(semanticWorldValue));
+ const semanticWorld=maps.semanticState.has('root')?journeyStateFromRows(Object.fromEntries(semanticJourneyTables.map(table=>[table,rows[table]])) as Parameters<typeof journeyStateFromRows>[0]):null;
+ for(const {key,value} of rows.media){const media=parseStoredMedia(value);if(media.mediaId!==key)fail();uuid.parse(key);}
+ if(semanticWorld){
+  for(const meaning of semanticWorld.meanings)for(const revision of meaning.personalSemanticAnchorRevisions)if(revision.personalMediaObjectId&&!maps.media.has(revision.personalMediaObjectId))fail();
+  for(const item of semanticWorld.inboxItems)for(const mediaId of item.payload.context?.mediaReferenceIds??[])if(!maps.media.has(mediaId))fail();
+ }
  const requirePersonalSource=(source:any)=>{
-  if(!semanticWorld||semanticWorld.version!=='sensa-personal-meaning-journey-store-v3')fail();
+  const semantic=semanticWorld??fail();if(semantic.version!=='sensa-personal-meaning-journey-store-v4')fail();
   for(const field of ['personalMeaningId','personalMeaningRevisionId','personalMeaningAlignmentId','alignmentBasisReferenceId','senseId','senseVersionId','bindingId','bindingVersionId'])uuid.parse(source[field]);
   z.number().int().positive().parse(source.alignmentRevision);if(source.meaningFocusId!==null)uuid.parse(source.meaningFocusId);
-  const record=semanticWorld.meanings?.find((candidate:any)=>candidate.personalMeaning?.personalMeaningId===source.personalMeaningId&&candidate.personalMeaning?.status==='active')??fail();
+  const record=semantic.meanings?.find((candidate:any)=>candidate.personalMeaning?.personalMeaningId===source.personalMeaningId&&candidate.personalMeaning?.status==='active')??fail();
   if(!record.personalMeaningRevisions.some((candidate:any)=>candidate.personalMeaningRevisionId===source.personalMeaningRevisionId))fail();
   const alignment=record.alignments.find((candidate:any)=>candidate.personalMeaningAlignmentId===source.personalMeaningAlignmentId&&candidate.status==='active')??fail();
   if(alignment.personalMeaningRevisionId!==source.personalMeaningRevisionId||alignment.revision!==source.alignmentRevision||alignment.senseId!==source.senseId||alignment.senseVersionId!==source.senseVersionId)fail();
   const basisReferenceId=alignment.basis.kind==='contextual_resolution'?alignment.basis.semanticAcceptanceId:alignment.basis.senseProposalConfirmationId;
   if(basisReferenceId!==source.alignmentBasisReferenceId||(alignment.basis.kind==='sense_construction'?alignment.basis.meaningFocusId:null)!==source.meaningFocusId)fail();
-  const bindingVersion=semanticWorld.registry?.bindingVersions?.find((candidate:any)=>candidate.bindingVersionId===source.bindingVersionId)??fail();
-  const binding=semanticWorld.registry?.bindings?.find((candidate:any)=>candidate.senseExpressionBindingId===source.bindingId)??fail();
+  const bindingVersion=semantic.registry?.bindingVersions?.find((candidate:any)=>candidate.bindingVersionId===source.bindingVersionId)??fail();
+  const binding=semantic.registry?.bindings?.find((candidate:any)=>candidate.senseExpressionBindingId===source.bindingId)??fail();
   if(binding.currentBindingVersionId!==source.bindingVersionId||binding.senseId!==source.senseId||bindingVersion.senseExpressionBindingId!==source.bindingId||bindingVersion.senseVersionId!==source.senseVersionId)fail();
   return {record,alignment};
  };

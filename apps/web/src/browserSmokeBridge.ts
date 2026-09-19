@@ -1,8 +1,8 @@
 /** Narrow test bridge compiled only for the real-browser delivery smoke. */
 import { listDrafts, saveDraft } from './data/library/drafts';
 import { readCloudSync } from './data/library/cloudSync';
-import { openLibrary, readLibrary, readLibraryStorageDiagnostics } from './data/library/store';
-import { JOURNEY_STORE_KEY, type JourneyState } from './experience/personalMeaningJourney/store';
+import { openLibrary, readLibraryStorageDiagnostics } from './data/library/store';
+import {loadJourneyStateFromLibrary} from './experience/personalMeaningJourney/repository';
 
 type BrowserSmokeBridge = {
   seedDrafts(drafts: number, images: number): Promise<number>;
@@ -60,18 +60,14 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       return (await readCloudSync())?.status ?? 'none';
     },
     async semanticWorldContainsExpression(surfaceForm) {
-      const raw = await readLibrary((tx) => tx.get<string>('semanticWorld', JOURNEY_STORE_KEY));
-      if (!raw) return false;
-      const state = JSON.parse(raw) as JourneyState;
+      const state=await loadJourneyStateFromLibrary();
       return state.meanings.some((meaning) =>
         meaning.personalExpressionAnchorRevisions.some(
           (revision) => revision.surfaceForm === surfaceForm,
         ));
     },
     async intakeInboxCount() {
-      const raw = await readLibrary((tx) => tx.get<string>('semanticWorld', JOURNEY_STORE_KEY));
-      if (!raw) return 0;
-      return (JSON.parse(raw) as JourneyState).inboxItems.length;
+      return (await loadJourneyStateFromLibrary()).inboxItems.length;
     },
     storageDiagnostics: readLibraryStorageDiagnostics,
   };

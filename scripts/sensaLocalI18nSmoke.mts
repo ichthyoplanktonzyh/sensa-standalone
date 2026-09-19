@@ -10,7 +10,7 @@ import {accountZh,accountEn} from '../apps/web/src/i18n/account.ts';
 import {languagesZh,languagesEn} from '../apps/web/src/i18n/languages.ts';
 import {appearanceZh,appearanceEn} from '../apps/web/src/i18n/appearance.ts';
 import i18n from '../apps/web/src/i18n/index.ts';
-import {localFlowNotice} from '../apps/web/src/i18n/localFlowText.ts';
+import {localFlowErrorKey,localFlowNotice} from '../apps/web/src/i18n/localFlowText.ts';
 function parity(a:any,b:any,path=''){
  assert.deepEqual(Object.keys(a).sort(),Object.keys(b).sort(),path);
  for(const key of Object.keys(a)){
@@ -39,6 +39,8 @@ for(const file of files){
  visit(ast);
 }
 await i18n.changeLanguage('en');assert.equal(localFlowNotice('localFlow.preparationStopped'),localFlowEn.preparationStopped);assert.equal(localFlowNotice(localFlowZh.preparationStopped),localFlowEn.preparationStopped);
+assert.equal(localFlowErrorKey(new Error('localFlow.closeOldTabs'),'localFlow.networkRetry'),'localFlow.closeOldTabs');
+assert.equal(localFlowErrorKey(new Error('transport exploded'),'localFlow.networkRetry'),'localFlow.networkRetry');
 const reason='原文和模型理由保持原样';assert.equal(localFlowNotice(localFlowZh.reviewRejected+reason),localFlowEn.reviewRejected+reason);
 assert.equal(localFlowNotice('libraryBackup.errors.occupied'),libraryBackupEn.errors.occupied);
 await i18n.changeLanguage('zh-CN');assert.equal(localFlowNotice(localFlowEn.preparationStopped),localFlowZh.preparationStopped);

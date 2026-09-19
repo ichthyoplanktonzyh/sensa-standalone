@@ -60,8 +60,8 @@ export function registerLibrarySync(app:Hono,access:Access){
   if(head.manifest){const old=await manifest(db,a.accountId,head.manifest);if(old.libraryId!==next.libraryId||old.learnerId!==next.learnerId)throw conflict('library_sync_identity');
    const byKey=new Map(next.rows.map(r=>[JSON.stringify([r.table,r.key]),r]));
    // Learning Events are durable Personal Library Facts and therefore append-only.
-   // A version 1 head may also contain the retired device operation ledger; its
-   // absence from a version 2 replacement is an intentional one-way migration.
+   // Checkpoint v3 contains no device operation ledger, so only learner facts
+   // participate in history protection and convergence.
    const protectedRows=old.rows.filter(row=>row.table==='learningEvents').map(row=>{const replacement=byKey.get(JSON.stringify([row.table,row.key]));if(!replacement)throw conflict('library_sync_history');return {row,replacement};});
    const changedProtected=protectedRows.filter(({row,replacement})=>JSON.stringify(row.blocks)!==JSON.stringify(replacement.blocks));
    const historyRefs=[...new Set(changedProtected.flatMap(({row,replacement})=>[...row.blocks,...replacement.blocks]))],historyBlocks=new Map<string,string>();

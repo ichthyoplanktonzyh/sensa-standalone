@@ -15,7 +15,6 @@ const hash=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest
 /** A restore holds block text in memory before assembling rows; keep that bounded. */
 const TRANSFER_CAP=96*1024*1024;
 const allowed=(table:Entry['table'],key:string)=>(table!=='meta'||['identity','learning-active','package-catalog'].includes(key))&&(table!=='settings'||key!=='providers');
-const checkpointEntries=(entries:readonly {table:string;key:string;value:unknown}[]):Entry[]=>entries.filter((row):row is Entry=>librarySyncTables.includes(row.table as Entry['table']));
 function normalized(table:Entry['table'],key:string,raw:any,identity:LibraryIdentity){
  const value=structuredClone(raw);
  // Library identity is shared; a browser installation keeps its own device identity.
@@ -137,12 +136,12 @@ class Blocks{
    librarySyncBlockStore.parse({blocks});await this.request('/blocks/store',{blocks});
   }
  }
- async manifest(entries:Entry[]){const identity=decodeBackupValue(entries.find(r=>r.table==='meta'&&r.key==='identity')!.value);const rows:Extract<LibrarySyncManifest,{version:2}>['rows']=[];let size=0;for(const r of entries){const text=JSON.stringify(r.value);size+=text.length;if(size>64*1024*1024)throw new Error('library_sync_capacity');rows.push({table:r.table,key:r.key,blocks:await this.pack(text)});}return this.pack(JSON.stringify(librarySyncManifest.parse({version:2,libraryId:identity.id,learnerId:identity.learnerId,rows})));}
+ async manifest(entries:Entry[]){const identity=decodeBackupValue(entries.find(r=>r.table==='meta'&&r.key==='identity')!.value);const rows:LibrarySyncManifest['rows']=[];let size=0;for(const r of entries){const text=JSON.stringify(r.value);size+=text.length;if(size>64*1024*1024)throw new Error('library_sync_capacity');rows.push({table:r.table,key:r.key,blocks:await this.pack(text)});}return this.pack(JSON.stringify(librarySyncManifest.parse({version:3,libraryId:identity.id,learnerId:identity.learnerId,rows})));}
  async download(head:LibrarySyncHead){
   if(!head.manifest)return [];
   await this.fetch(head.manifest);
   const manifest=librarySyncManifest.parse(JSON.parse(await this.text(head.manifest)));
-  const checkpointRows=manifest.rows.filter(row=>row.table!=='operations');
+  const checkpointRows=manifest.rows;
   // Fetch every referenced block once, in pages, before assembling any row.
   await this.fetch(checkpointRows.flatMap(row=>row.blocks));
   const entries:Entry[]=[];let size=0;
@@ -166,11 +165,6 @@ export async function synchronizeLibrary(request:SyncRequest){
   await saveState(expected,old=>({...old??defaults,status:'syncing',syncStartedAt:new Date().toISOString(),error:undefined}));
   // Pending publication survives a lost HTTP acknowledgement and is retried verbatim.
   let state=await readCloudSync()??defaults;
-  // A pending version 1 publication may still contain the retired device ledger.
-  // It is safe to abandon the retry: if its commit reached the service, /head below
-  // observes it; otherwise the canonical version 2 checkpoint replaces it.
-  if(state.pending&&checkpointEntries(state.pending.entries).length!==state.pending.entries.length){await saveState(expected,old=>({...old!,base:checkpointEntries(old!.base),pending:undefined}));state=await readCloudSync()??defaults;}
-  else if(checkpointEntries(state.base).length!==state.base.length)state={...state,base:checkpointEntries(state.base)};
   if(state.pending){
    const p=state.pending;await blocks.manifest(p.entries);await blocks.upload();
    try{const head=librarySyncHead.parse(await request('/commit',{operationId:p.operationId,baseRevision:p.baseRevision,manifest:p.manifest}));await saveState(expected,old=>({...old!,base:p.baseEntries??p.entries,revision:head.revision,pending:undefined}));}
@@ -191,10 +185,9 @@ export async function synchronizeLibrary(request:SyncRequest){
   try{rowsFor(localEntries);rowsFor(uploadEntries);}catch(error){
    if(merged.conflicts.length){await saveState(expected,old=>({...old!,status:'conflict',conflicts:merged.conflicts,error:'library_sync_conflict'}));return;}throw error;
   }
-  // Content equality is not enough here: an older client may have published the
-  // same rows in many smaller blocks. Publish our canonical layout once so later
-  // focus/reload syncs can reuse the locally packed hashes instead of downloading
-  // the legacy layout again.
+  // Content equality is not enough: the same rows may have been repacked into a
+  // different block layout after a lost publication attempt. Canonicalize it once
+  // so later focus/reload syncs can reuse the locally packed hashes.
   const manifest=await blocks.manifest(uploadEntries);
   const publicationRequired=!equal(uploadEntries,remote)||!equal(manifest,head.manifest);
   await applyEntries(initial,localEntries,{...state,base:nextBase(remote),revision:head.revision,status:'pending',conflicts:merged.conflicts,pending:undefined});

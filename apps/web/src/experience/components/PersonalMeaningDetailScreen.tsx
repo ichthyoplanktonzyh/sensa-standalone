@@ -57,6 +57,7 @@ import {
   putMedia,
   removeMedia,
   storeImageFile,
+  useMediaStoreVersion,
 } from '../personalMeaningJourney/mediaStore';
 import {Camera, ImagePlus} from 'lucide-react';
 import {
@@ -387,18 +388,21 @@ const ExpressionsCard = ({
 
 // -- screen -----------------------------------------------------------------
 
-export const PersonalMeaningDetailScreen=(props:PersonalMeaningDetailScreenProps)=>props.conversation
- ? <ConnectedMeaningConversation {...props} conversation={props.conversation}/>
- : !props.personalMeaningId && props.onConversationCreated
-   ? <NewMeaningConversationScreen {...props} onConversationCreated={props.onConversationCreated}/>
-   : <PreviewPersonalMeaningDetailScreen {...props}/>;
+export const PersonalMeaningDetailScreen=(props:PersonalMeaningDetailScreenProps)=>{
+ useMediaStoreVersion();
+ return props.conversation
+  ? <ConnectedMeaningConversation {...props} conversation={props.conversation}/>
+  : !props.personalMeaningId && props.onConversationCreated
+    ? <NewMeaningConversationScreen {...props} onConversationCreated={props.onConversationCreated}/>
+    : <PreviewPersonalMeaningDetailScreen {...props}/>;
+};
 
-const persistPreparedImages = (images: ConversationImage[]): string[] => {
+const persistPreparedImages = async (images: ConversationImage[]): Promise<string[]> => {
   const stored: string[] = [];
   try {
     for (const image of images) {
       const payload = image.dataUrl.slice(image.dataUrl.indexOf(',') + 1);
-      putMedia({
+      await putMedia({
         mediaId: image.id,
         mediaKind: 'image',
         mimeType: 'image/jpeg',
@@ -410,7 +414,7 @@ const persistPreparedImages = (images: ConversationImage[]): string[] => {
     }
     return stored;
   } catch (cause) {
-    stored.forEach(removeMedia);
+    await Promise.allSettled(stored.map(removeMedia));
     throw cause;
   }
 };
@@ -541,7 +545,7 @@ const NewMeaningConversationScreen = ({
     let mediaIds: string[] = [];
     let draftCreated = false;
     try {
-      mediaIds = persistPreparedImages(images);
+      mediaIds = await persistPreparedImages(images);
       const result = await gateway.createClarificationDraft({
         operationId: newUuid(),
         blocks: [
@@ -559,7 +563,7 @@ const NewMeaningConversationScreen = ({
       saveSemanticAgentSession(session);
       onConversationCreated(result.intakeId);
     } catch (cause) {
-      if (!draftCreated) mediaIds.forEach(removeMedia);
+      if (!draftCreated) await Promise.allSettled(mediaIds.map(removeMedia));
       setError(cause instanceof Error ? cause.message : uiText('unableToContinueThisConversationPleaseRetry'));
       throw cause;
     } finally {
@@ -863,7 +867,7 @@ const PreviewPersonalMeaningDetailScreen = ({
     }
     setBusy(true);
     setError('');
-    const mediaIds = persistPreparedImages(images);
+    const mediaIds = await persistPreparedImages(images);
     const attached = new Set<string>();
     try {
       for (const mediaId of mediaIds) {
@@ -896,7 +900,7 @@ const PreviewPersonalMeaningDetailScreen = ({
         { ...clarificationMaterial, blocks: [...clarificationMaterial.blocks, ...extraBlocks] },
       );
     } catch (cause) {
-      mediaIds.filter((id) => !attached.has(id)).forEach(removeMedia);
+      await Promise.allSettled(mediaIds.filter((id) => !attached.has(id)).map(removeMedia));
       setError(cause instanceof Error ? cause.message : uiText('unableToContinueThisConversationPleaseRetry'));
       throw cause;
     } finally {
@@ -913,7 +917,7 @@ const PreviewPersonalMeaningDetailScreen = ({
     );
     let mediaIds: string[] = [];
     try {
-      mediaIds = persistPreparedImages(images);
+      mediaIds = await persistPreparedImages(images);
       await gateway.reviseContext({
         operationId: newUuid(),
         personalMeaningId: detail.personalMeaningId,
@@ -940,7 +944,7 @@ const PreviewPersonalMeaningDetailScreen = ({
       });
       toast(localFlowText('savedLocally'));
     } catch (cause) {
-      mediaIds.filter((id) => !alreadyStored.has(id)).forEach(removeMedia);
+      await Promise.allSettled(mediaIds.filter((id) => !alreadyStored.has(id)).map(removeMedia));
       setError(cause instanceof Error ? cause.message : uiText('unableToContinueThisConversationPleaseRetry'));
       throw cause;
     } finally {
@@ -985,7 +989,7 @@ const PreviewPersonalMeaningDetailScreen = ({
         }
         added += 1;
       } catch (cause) {
-        removeMedia(mediaId);
+        await removeMedia(mediaId).catch(() => undefined);
         failure = cause;
         break;
       }
