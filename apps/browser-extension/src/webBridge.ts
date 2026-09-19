@@ -10,7 +10,7 @@ import {webUrl} from './config';
  * features, and reading it from the contracts at build time is what keeps this
  * list from becoming a second, drifting copy of the protocol.
  */
-declare const SENSA_BRIDGE:{request:string;response:string;maxIdLength:number;kinds:readonly string[]};
+declare const SENSA_BRIDGE:{request:string;response:string;notification:string;notificationKind:string;maxIdLength:number;kinds:readonly string[]};
 // Only the configured Sensa origin gets this isolated-world bridge. Never forward tokens.
 if(location.origin===new URL(webUrl).origin){
  window.addEventListener('message',event=>{
@@ -28,5 +28,11 @@ if(location.origin===new URL(webUrl).origin){
     result=>answer(result&&typeof result==='object'?result as Record<string,unknown>:{error:'extension_unavailable'}),
     ()=>answer({error:'extension_unavailable'}));
   }catch{answer({error:'extension_unavailable'});}
+ });
+ // The background announces only that work exists. Learner content remains on
+ // the typed pull/ack wire above and never appears in an unsolicited message.
+ chrome.runtime.onMessage.addListener((message,sender)=>{
+  if(sender.id!==chrome.runtime.id||message?.kind!==SENSA_BRIDGE.notificationKind||typeof message.accountId!=='string')return;
+  window.postMessage({channel:SENSA_BRIDGE.notification,kind:SENSA_BRIDGE.notificationKind,accountId:message.accountId},location.origin);
  });
 }

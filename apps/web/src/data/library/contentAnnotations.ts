@@ -107,7 +107,7 @@ async function reload() {
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
   if (listeners.size === 1) {
-    stopObserving = observeLibrary(reloadQuietly);
+    stopObserving = observeLibrary(reloadQuietly, ['annotations']);
     reloadQuietly();
   }
   return () => {

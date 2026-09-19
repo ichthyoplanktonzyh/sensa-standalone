@@ -65,6 +65,15 @@ export const sensaExtensionCredentialSchema=z.object({
  * never parses as a request. */
 export const sensaBridgeRequestChannel='sensa-web-intake-request';
 export const sensaBridgeResponseChannel='sensa-web-intake-response';
+export const sensaBridgeNotificationChannel='sensa-web-intake-notification';
+export const sensaBridgeNotificationKind='intake-ready' as const;
+/** A durable capture was queued in the extension. It carries no learner data;
+ * the page still pulls and validates the full delivery through the request wire. */
+export const sensaBridgeNotificationSchema=z.object({
+  channel:z.literal(sensaBridgeNotificationChannel),
+  kind:z.literal(sensaBridgeNotificationKind),
+  accountId:z.string().uuid(),
+}).strict();
 /** The page's own request id, echoed back so several requests can be in flight
  * at once. Bounded because it is attacker-adjacent input: any page that loads
  * this bundle may post on this channel, and the extension must not be made to

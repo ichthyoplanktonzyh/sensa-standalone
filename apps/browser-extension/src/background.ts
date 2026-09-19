@@ -1,7 +1,7 @@
 import {queueWeb,pendingWeb,acknowledgeWeb,webStatus,discardPendingWeb,webOperationStatus} from './webDestination';
 import {browserCaptureToIntake} from './semanticIntakeAdapter';
 import {z} from 'zod';
-import {captureSnapshotSchema,sensaLanguageForDeclaredTag,sensaLanguageForIso6393,sensaReadingGlossaryForPair,sensaBridgeRequestChannel,sensaBridgeRequestSchema,sensaExtensionCredentialSchema,type SensaBridgeRequest,type SensaBridgeRequestOf,type SensaExtensionAuthorization,type SensaExtensionExchange} from '@sensa/contracts/sensa';
+import {captureSnapshotSchema,sensaLanguageForDeclaredTag,sensaLanguageForIso6393,sensaReadingGlossaryForPair,sensaBridgeNotificationKind,sensaBridgeRequestChannel,sensaBridgeRequestSchema,sensaExtensionCredentialSchema,type SensaBridgeRequest,type SensaBridgeRequestOf,type SensaExtensionAuthorization,type SensaExtensionExchange} from '@sensa/contracts/sensa';
 import {webUrl,apiUrl} from './config';
 import {detectIso6393} from './languageDetector';
 import {maxDetectableCharacters,minSkimmableCharacters} from './language';
@@ -218,6 +218,11 @@ async function serveWebBridge(request:SensaBridgeRequest,sender:chrome.runtime.M
   }
  }
 }
+async function notifyWebIntake(accountId:string){
+ const origin=new URL(webUrl).origin;
+ const tabs=await chrome.tabs.query({url:origin+'/*'});
+ await Promise.all(tabs.flatMap(tab=>tab.id===undefined?[]:[chrome.tabs.sendMessage(tab.id,{kind:sensaBridgeNotificationKind,accountId}).catch(()=>undefined)]));
+}
 async function status(){
  const store=await load(),a=store.active?store.accounts[store.active]:null;
  const [tab]=await chrome.tabs.query({active:true,currentWindow:true}),site=readingSiteOf(tab?.url);
@@ -316,6 +321,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
    snapshot=captureSnapshotSchema.parse(snapshot);if(snapshot.source.url!==pageUrl)throw new Error('source_mismatch');
    const intake=browserCaptureToIntake(message.operationId,snapshot,proposal,resolutionProvenance);
    const queued=await queueWeb(a.accountId,{contractVersion:'sensa-browser-intake-delivery-v1',libraryId:a.webLibraryId,clientId:a.installationId,intake});
+   await notifyWebIntake(a.accountId);
    return queued;
   });
  }

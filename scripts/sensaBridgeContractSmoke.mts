@@ -16,6 +16,7 @@ import {build} from 'esbuild';
 import vm from 'node:vm';
 import {
   canonicalConsumerJson,sensaBrowserIntakeDeliverySchema,sensaBridgeKinds,sensaBridgeMaxRequestIdLength,
+  sensaBridgeNotificationChannel,sensaBridgeNotificationKind,sensaBridgeNotificationSchema,
   sensaBridgeRequestChannel,sensaBridgeRequestSchema,sensaBridgeResponseChannel,sensaBridgeResponseSchemas,sensaBridgeValue,
   type SensaBridgeKind,type SensaBridgePayload,
 } from '@sensa/contracts/sensa';
@@ -32,10 +33,12 @@ const route={id:routeContext.languageRouteId,revision:routeContext.languageRoute
 const routeCollection={revision:3,routes:[route]};
 /** Injected exactly as `build.mjs` injects it: the page-scoped script carries no
  * schema, so the list it enforces comes from the contract at build time. */
-const bridgeDefine=(kinds:readonly string[])=>JSON.stringify({request:sensaBridgeRequestChannel,response:sensaBridgeResponseChannel,maxIdLength:sensaBridgeMaxRequestIdLength,kinds});
+const bridgeDefine=(kinds:readonly string[])=>JSON.stringify({request:sensaBridgeRequestChannel,response:sensaBridgeResponseChannel,notification:sensaBridgeNotificationChannel,notificationKind:sensaBridgeNotificationKind,maxIdLength:sensaBridgeMaxRequestIdLength,kinds});
 
 // ── the page, the extension's storage, and one chrome on each side ───────────
 let backgroundListener:((message:unknown,sender:unknown,respond:(value:unknown)=>void)=>unknown)|null=null;
+let contentListener:((message:unknown,sender:{id?:string})=>unknown)|null=null;
+let runtimeListenerCount=0;
 // The account is connected but its credential is nearly out of date, which is
 // the state that asks for a new authorization rather than answering that the
 // connection is already good enough.
@@ -57,7 +60,7 @@ const chromeMock:any={
     local:{get:async(key:string)=>structuredClone({[key]:storage[key]}),set:async(value:unknown)=>{Object.assign(storage,structuredClone(value));},setAccessLevel:async()=>{}},
     session:{get:async(key:string)=>structuredClone({[key]:session[key]}),set:async(value:unknown)=>{Object.assign(session,structuredClone(value));}},
   },
-  runtime:{id:extensionId,getURL:(path:string)=>'chrome-extension://'+extensionId+'/'+path,onMessage:{addListener:(fn:any)=>{backgroundListener=fn;}},onConnect:{addListener:()=>{}},
+  runtime:{id:extensionId,getURL:(path:string)=>'chrome-extension://'+extensionId+'/'+path,onMessage:{addListener:(fn:any)=>{if(runtimeListenerCount++===0)contentListener=fn;else backgroundListener=fn;}},onConnect:{addListener:()=>{}},
     sendMessage:(message:unknown)=>new Promise((resolve,reject)=>{
       // What the real boundary does when the worker is not there, and when the
       // page's object cannot cross it at all.
@@ -85,10 +88,15 @@ const backgroundBundle=await bundle('apps/browser-extension/src/background.ts',{
 vm.runInContext(forwarderBundle.outputFiles[0]!.text,context);
 vm.runInContext(backgroundBundle.outputFiles[0]!.text,context);
 assert.ok(backgroundListener,'the background bundle registers a listener');
+assert.ok(contentListener,'the page forwarder registers a notification listener');
 // The window the page's script sees is the contextified one, which is not the
 // object handed to `vm.createContext` as seen from here: a dispatched event has
 // to carry that exact one, because the bridge checks where a message came from.
 const pageWindow=vm.runInContext('window',context) as unknown;
+contentListener!({kind:sensaBridgeNotificationKind,accountId},{id:extensionId});
+const notification=answers.at(-1);
+assert.ok(sensaBridgeNotificationSchema.safeParse(notification).success,'the extension notification crosses into the page on its declared channel');
+assert.equal(notification.channel,sensaBridgeNotificationChannel);
 
 /** A turn on the bridge as the Web application builds one: the envelope, this
  * kind's payload, and nothing else. */

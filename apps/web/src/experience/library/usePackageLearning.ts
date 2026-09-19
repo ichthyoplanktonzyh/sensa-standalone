@@ -1,13 +1,13 @@
 import {useTranslation} from 'react-i18next';
 import {useLanguageRoutes} from './useLanguageRoutes';
-import {resolveLearningQueue} from './learningQueue';
+import {nextLearningQueueChangeAt,resolveLearningQueue} from './learningQueue';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useRef,useState} from 'react';
 import {learningPackageCatalogSchema,type LearningPackageDescriptor} from '@sensa/contracts/sensa';
 import {auth} from '../../data/account/auth';
 import {openLibrary,observeLibrary,readLibrary,writeLibraryState} from '../../data/library/store';
-import {installedPackages,downloadPackage,installPackage,type InstalledPackage} from '../../data/library/packages';
-import {localRunTargetIds,selectLocalLearningPolicy,setLocalDeclaredMastery,readLearning,enrollPackage,startLearning,actLearning,finishLearning,continueLearning,confirmLearningQuantity,type LocalLearningTarget,type LocalLearningRun} from '../../data/library/learning';
+import {downloadPackage,installPackage,type InstalledPackage} from '../../data/library/packages';
+import {localRunTargetIds,selectLocalLearningPolicy,setLocalDeclaredMastery,readLearningOverview,enrollPackage,startLearning,actLearning,finishLearning,continueLearning,confirmLearningQuantity,type LocalLearningTarget,type LocalLearningRun} from '../../data/library/learning';
 import type {LearningRecordView} from '../learningJourney/learningHistory';
 import {inspectLocalTargetReadiness} from '../../learning/runtime/runtimeCoordinator';
 import {localCurriculumMembershipForContext,localLastPresentedMaterial} from '../../learning/runtime/localCurriculum';
@@ -17,11 +17,11 @@ export function usePackageLearning(entryOpen:boolean){
  const [notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[progress,setProgress]=useState<number|null>(null),[loaded,setLoaded]=useState(false),[catalogBusy,setCatalogBusy]=useState(false);
  const [dailyLimit,setDailyLimit]=useState<number|undefined>();
  const [clock,setClock]=useState(Date.now());
- useEffect(()=>{const tick=()=>setClock(Date.now());const timer=setInterval(tick,30000);window.addEventListener('focus',tick);return()=>{clearInterval(timer);window.removeEventListener('focus',tick);};},[]);
+ useEffect(()=>{const tick=()=>setClock(Date.now());window.addEventListener('focus',tick);return()=>window.removeEventListener('focus',tick);},[]);
  const transfer=useRef<AbortController|null>(null),generation=useRef(0);
  const {activeRoute,context:languageContext}=useLanguageRoutes();
- const refresh=async()=>{const [p,l]=await Promise.all([installedPackages(),readLearning()]);setPackages(p);setTargets(l.targets);setRuns(l.runs);setActiveId(l.active);setDailyLimit(l.studyPlans[languageContext.languageRouteId]?.dailyNewSenseLimit);setLoaded(true);};
- useEffect(()=>{void openLibrary().then(refresh).catch(()=>setNotice(localFlowText('learningReadFailed')));const stop=observeLibrary(()=>void refresh().catch(()=>setNotice(localFlowText('progressReadFailed'))));return()=>{generation.current++;stop();transfer.current?.abort();};},[languageContext.languageRouteId,languageContext.languageRouteRevision]);
+ const refresh=async()=>{const snapshot=await readLearningOverview();setPackages(snapshot.packages);setTargets(snapshot.targets);setRuns(snapshot.runs);setActiveId(snapshot.active);setDailyLimit(snapshot.studyPlans[languageContext.languageRouteId]?.dailyNewSenseLimit);setLoaded(true);};
+ useEffect(()=>{void openLibrary().then(refresh).catch(()=>setNotice(localFlowText('learningReadFailed')));const stop=observeLibrary(()=>void refresh().catch(()=>setNotice(localFlowText('progressReadFailed'))),['packages','learningTargets','learningRuns','learningEvents','settings','meta']);return()=>{generation.current++;stop();transfer.current?.abort();};},[languageContext.languageRouteId,languageContext.languageRouteRevision]);
  const perform=async<T,>(work:()=>Promise<T>)=>{setBusy(true);setNotice('');try{const result=await work();await refresh();return result;}catch(e){setNotice(e instanceof Error&&e.message.startsWith('localFlow.')?e.message:localFlowText('retryOperation'));return null;}finally{setBusy(false);setProgress(null);}};
  const reloadCatalog=async(notify=false)=>{
   const gen=++generation.current;
@@ -42,6 +42,12 @@ export function usePackageLearning(entryOpen:boolean){
  const membershipByTarget=Object.fromEntries(targets.flatMap(target=>{const membership=localCurriculumMembershipForContext(target,languageContext);return membership?[[target.id,membership]]:[];}));
  const readinessByTarget=Object.fromEntries(targets.map(target=>{const membership=membershipByTarget[target.id];return [target.id,inspectLocalTargetReadiness(target,membership,membership?.packageKey?packages.find(pack=>pack.key===membership.packageKey):undefined).status];})) as Readonly<Record<string,'ready'|'blocked'>>;
  const {activeTargets,due,initialReady}=resolveLearningQueue({targets,languageRouteId:activeRoute.id,readiness:readinessByTarget,clock,dailyLimit});
+ const nextQueueChangeAt=nextLearningQueueChangeAt({targets,languageRouteId:activeRoute.id,readiness:readinessByTarget,clock,dailyLimit});
+ useEffect(()=>{
+  if(nextQueueChangeAt===null)return;
+  const timer=window.setTimeout(()=>setClock(Date.now()),Math.min(2_147_483_647,Math.max(20,nextQueueChangeAt-Date.now()+20)));
+  return()=>window.clearTimeout(timer);
+ },[nextQueueChangeAt]);
  const nextTarget=[...due,...initialReady].find(t=>!run||!localRunTargetIds(run).includes(t.id));
  return {nextTarget,initialReady,readinessByTarget,membershipByTarget,languageContext,packages,catalog,targets,activeTargets,runs,run,records,due,notice:localFlowNotice(notice),busy,progress,loaded,catalogBusy,reloadCatalog,refresh,dailyLimit,confirmQuantity:(n:number)=>perform(()=>confirmLearningQuantity(crypto.randomUUID(),languageContext,n)),
   download:(d:LearningPackageDescriptor)=>perform(async()=>{const c=new AbortController();transfer.current=c;try{setProgress(0);return await downloadPackage(d,AbortSignal.any([c.signal,AbortSignal.timeout(120000)]),n=>setProgress(Math.round(100*n/d.byteLength)));}finally{if(transfer.current===c)transfer.current=null;}}),

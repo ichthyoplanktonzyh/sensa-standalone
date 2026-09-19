@@ -2,7 +2,7 @@ import {authorizeExtensionConnection} from './extensionConnection';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useState} from 'react';
-import {canonicalConsumerJson,sensaBridgeRequestChannel,sensaBridgeResponseChannel,sensaBridgeValue,type SensaBridgeKind,type SensaBridgePayload,type SensaBridgeValue} from '@sensa/contracts/sensa';
+import {canonicalConsumerJson,sensaBridgeNotificationSchema,sensaBridgeRequestChannel,sensaBridgeResponseChannel,sensaBridgeValue,type SensaBridgeKind,type SensaBridgePayload,type SensaBridgeValue} from '@sensa/contracts/sensa';
 import {languageRoutesSnapshot} from '../../data/library/language';
 import {readingGlossarySnapshot} from '../../data/library/glossary';
 import {openLibrary,observeLibrary} from '../../data/library/store';
@@ -86,7 +86,16 @@ export function ExtensionIntake({accountId,onlineService=false}:{accountId:strin
    }catch(e){if(!controller.signal.aborted){const code=e instanceof Error?e.message:'';const mismatch=['account_mismatch','library_mismatch'].includes(code);if(mismatch){setReconnectNeeded(true);setError(code==='library_mismatch'?localFlowText('extensionLibraryMismatch'):localFlowText('extensionAccountMismatch'));}}}
    finally{running=false;}
   };
-  void receive();const stop=observeLibrary(()=>void receive());const timer=setInterval(()=>void receive(),5000);return()=>{controller.abort();clearInterval(timer);stop();};
+  const notification=(event:MessageEvent)=>{if(event.source!==window||event.origin!==location.origin)return;const parsed=sensaBridgeNotificationSchema.safeParse(event.data);if(parsed.success&&parsed.data.accountId===accountId)void receive();};
+  const resume=()=>void receive();
+  const visible=()=>{if(document.visibilityState==='visible')void receive();};
+  void receive();
+  const stop=observeLibrary(()=>void receive(),['settings']);
+  window.addEventListener('message',notification);
+  window.addEventListener('focus',resume);
+  window.addEventListener('online',resume);
+  document.addEventListener('visibilitychange',visible);
+  return()=>{controller.abort();stop();window.removeEventListener('message',notification);window.removeEventListener('focus',resume);window.removeEventListener('online',resume);document.removeEventListener('visibilitychange',visible);};
  },[accountId,onlineService,attempt,gateway]);
  return error?<div role="status" className="fixed bottom-20 left-4 right-4 z-50 rounded-xl border border-feedback-warning bg-accent-soft p-3 text-sm"><p>{localFlowNotice(error)}</p>{reconnectNeeded&&onlineService&&<><button type="button" disabled={connecting} onClick={()=>void reconnect()} className="mt-2 rounded-lg border border-border-strong bg-surface-panel px-4 py-2 font-medium text-fg-primary disabled:opacity-50">{localFlowText(connecting?'extensionConnecting':'extensionReconnect')}</button><button type="button" hidden={error===localFlowText('extensionLibraryMismatch')} disabled={connecting} onClick={()=>void reconnect(true)} className="ml-2 mt-2 rounded-lg border border-feedback-danger bg-surface-panel px-4 py-2 font-medium text-feedback-danger disabled:opacity-50">{localFlowText('extensionDiscardReconnect')}</button></>}</div>:null;
 }

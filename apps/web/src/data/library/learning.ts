@@ -150,6 +150,19 @@ export async function enrollPackage(operationId:string,key:string,languageContex
  }
  return ids;
 });}
+const learningOverviewFrom=async(tx:LibraryTransaction)=>({
+ targets:await tx.all<LocalLearningTarget>('learningTargets'),
+ runs:await tx.all<LocalLearningRun>('learningRuns'),
+ active:await tx.get<string>('meta','learning-active'),
+ studyPlans:await readStudyPlans(tx),
+});
+/** One coherent read for the always-visible queue and learning screens. */
+export const readLearningOverview=()=>readLibrary(async tx=>({
+ ...await learningOverviewFrom(tx),
+ packages:await tx.all<InstalledPackage>('packages'),
+}));
+/** Small projection for callers that only need Target facts. */
+export const learningTargetsSnapshot=()=>readLibrary(tx=>tx.all<LocalLearningTarget>('learningTargets'));
 export const readLearning=()=>readLibrary(async tx=>({targets:await tx.all<LocalLearningTarget>('learningTargets'),runs:await tx.all<LocalLearningRun>('learningRuns'),events:await tx.all<LearningEvent>('learningEvents'),active:await tx.get<string>('meta','learning-active'),studyPlans:await readStudyPlans(tx)}));
 export async function confirmLearningQuantity(operationId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number){return command({id:operationId,kind:'learning.quantity',input:{languageContext,dailyLimit}},async tx=>{await learningOwner(tx);const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100)throw new Error('localFlow.quantityRange');const plans=await readStudyPlans(tx),previous=plans[context.languageRouteId];plans[context.languageRouteId]={languageRouteId:context.languageRouteId,routeRevision:context.languageRouteRevision,revision:(previous?.revision??0)+1,dailyNewSenseLimit:dailyLimit,updatedAt:new Date().toISOString()};tx.put('settings',STUDY_PLANS_KEY,plans);return true;});}
 const day=(date:Date)=>`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;

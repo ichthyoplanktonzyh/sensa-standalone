@@ -45,7 +45,7 @@ export function useLanguageRoutes(){
     mounted.current=true;
     const read=()=>void refresh().catch(()=>setNotice(localFlowText('languageReadFailed')));
     read();
-    const stop=observeLibrary(read);
+    const stop=observeLibrary(read,['settings','meta']);
     return()=>{mounted.current=false;stop();};
   },[]);
   const perform=async<T,>(work:()=>Promise<T>)=>{

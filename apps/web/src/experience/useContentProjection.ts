@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { contentAnnotations } from '../data/library/contentAnnotations';
-import { readLearning } from '../data/library/learning';
+import { learningTargetsSnapshot } from '../data/library/learning';
 import { observeLibrary } from '../data/library/store';
 import { buildContentProjection } from './contentProjection';
 import { journeyGateway } from './personalMeaningJourney/gateway';
@@ -30,9 +30,9 @@ const projectionStore = (() => {
   const loadLibrary = async () => {
     const revision = ++loadRevision;
     try {
-      const learning = await readLearning();
+      const nextTargets = await learningTargetsSnapshot();
       if (revision !== loadRevision) return;
-      targets = learning.targets;
+      targets = nextTargets;
       publish();
     } catch {
       // Account/bootstrap surfaces can mount before the local SQLite library is available.
@@ -44,7 +44,7 @@ const projectionStore = (() => {
     listeners.add(listener);
     if (listeners.size === 1) {
       stopSources = subscribeAll([
-        (onChange) => observeLibrary(() => { void loadLibrary(); }),
+        (onChange) => observeLibrary(() => { void loadLibrary(); }, ['learningTargets']),
         (onChange) => contentAnnotations.subscribe(onChange),
         (onChange) => journeyGateway.subscribe(onChange),
       ])(() => publish());

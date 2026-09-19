@@ -64,7 +64,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
         return provider ? provider.name + ' · ' + provider.model : t('modelService.default');
       }))]);
     }).catch(() => { if (live) setModelNames([t('modelService.readFailed')]); });
-    refresh(); const stop = observeLibrary(refresh);
+    refresh(); const stop = observeLibrary(refresh,['providers','settings']);
     return () => {live = false; stop();};
   }, [props.active, props.localLibrary, i18n.language]);
   const [preferencesOpen, setPreferencesOpen] = useState(false);

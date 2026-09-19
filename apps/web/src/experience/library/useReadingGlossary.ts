@@ -23,7 +23,7 @@ export function useReadingGlossary(){
   mounted.current=true;
   const read=()=>void refresh().catch(()=>setNotice(localFlowText('glossaryReadFailed')));
   read();
-  const stop=observeLibrary(read);
+  const stop=observeLibrary(read,['settings']);
   return()=>{mounted.current=false;stop();};
  },[]);
  /** A write refreshes from storage rather than trusting what it returned: two

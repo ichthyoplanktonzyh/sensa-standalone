@@ -1,5 +1,4 @@
 import {localRunPolicy,localTargetPolicy} from '../learning/runtime/localRuntimeBindings';
-import {composeLocalLearningRuntime} from './learningRuntime/runtimeComposition';
 import {localFlowText} from '../i18n/localFlowText';
 import {usePersonalLearning} from './library/usePersonalLearning';
 import {useLanguageRoutes} from './library/useLanguageRoutes';
@@ -15,9 +14,7 @@ import {usePackageLearning} from './library/usePackageLearning';
 import {
   PackageEntry,
   PackageTarget,
-  PackageRuntime,
   localTargetView,
-  localRuntimePresentationRegistry,
 } from './library/PackageLearningViews';
 import type {AssuranceSupportHost} from './library/AssuranceLearningViews';
 import {LearningPreferencesPanel} from './components/learning/LearningPreferencesPanel';
@@ -45,8 +42,6 @@ import {useShellNavigation} from './router/useShellNavigation';
 import {usePresentationStore} from './stores/presentationStore';
 import {useOverlayStore} from './stores/overlayStore';
 
-const localLearningRuntimeComposition=composeLocalLearningRuntime(localRuntimePresentationRegistry);
-
 const AcademyScreen=lazy(()=>import('./components/AcademyScreen').then(module=>({default:module.AcademyScreen})));
 const PracticeScopeScreen=lazy(()=>import('./components/PracticeScopeScreen').then(module=>({default:module.PracticeScopeScreen})));
 const YouGlishListeningScreen=lazy(()=>import('./components/YouGlishListeningScreen').then(module=>({default:module.YouGlishListeningScreen})));
@@ -69,9 +64,9 @@ const SceneEditorModal=lazy(()=>import('./components/SceneEditorModal').then(mod
 const StatsScreen=lazy(()=>import('./components/StatsScreen').then(module=>({default:module.StatsScreen})));
 const BatchPersonalLearning=lazy(()=>import('./library/BatchPersonalLearning').then(module=>({default:module.BatchPersonalLearning})));
 const ProviderPanel=lazy(()=>import('./components/ProviderPanel').then(module=>({default:module.ProviderPanel})));
+const PackageRuntime=lazy(()=>import('./library/PackageLearningRuntime').then(module=>({default:module.PackageRuntime})));
 
 export default function App() {
-  void localLearningRuntimeComposition;
   const { t } = useTranslation();
   const [learningPreferencesOpen,setLearningPreferencesOpen]=useState(false);
   const closeLearningPreferences=useCallback(()=>{

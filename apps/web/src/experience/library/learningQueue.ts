@@ -63,3 +63,21 @@ export function resolveLearningQueue({
   ];
   return { activeTargets, due, initialReady, startedToday, remaining };
 }
+
+/**
+ * The queue changes only when a due/relearning instant arrives or today's
+ * introduction budget rolls into a new local day. Callers can sleep until that
+ * boundary instead of waking the whole application on a fixed interval.
+ */
+export function nextLearningQueueChangeAt(input: LearningQueueInput): number | null {
+  const queue = resolveLearningQueue(input);
+  const futureDue = queue.activeTargets
+    .filter((target) => !hasDeclaredMasteryOverride(target) && input.readiness[target.id] === 'ready')
+    .map((target) => needsReviewAt(target, input.clock))
+    .filter((value): value is number => value !== null && value > input.clock);
+  const nextDay = queue.startedToday > 0
+    ? new Date(new Date(input.clock).setHours(24, 0, 0, 0)).getTime()
+    : null;
+  const candidates = nextDay === null ? futureDue : [...futureDue, nextDay];
+  return candidates.length ? Math.min(...candidates) : null;
+}

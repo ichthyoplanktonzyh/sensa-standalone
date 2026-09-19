@@ -1,12 +1,12 @@
 import {build} from 'esbuild';
 import {mkdir,writeFile,copyFile} from 'node:fs/promises';
-import {sensaBridgeKinds,sensaBridgeMaxRequestIdLength,sensaBridgeRequestChannel,sensaBridgeResponseChannel} from '@sensa/contracts/sensa';
+import {sensaBridgeKinds,sensaBridgeMaxRequestIdLength,sensaBridgeNotificationChannel,sensaBridgeNotificationKind,sensaBridgeRequestChannel,sensaBridgeResponseChannel} from '@sensa/contracts/sensa';
 import {extensionBuildConfig} from './buildConfig.mjs';
 // The page-scoped bridge script carries no schema, so the protocol it speaks is
 // injected here instead of imported there: the kinds it may forward, the channels
 // it answers on, and the id bound all come from the one declaration in the
 // contracts, and the forwarder holds no copy that could drift from it.
-const bridge=JSON.stringify({request:sensaBridgeRequestChannel,response:sensaBridgeResponseChannel,maxIdLength:sensaBridgeMaxRequestIdLength,kinds:sensaBridgeKinds});
+const bridge=JSON.stringify({request:sensaBridgeRequestChannel,response:sensaBridgeResponseChannel,notification:sensaBridgeNotificationChannel,notificationKind:sensaBridgeNotificationKind,maxIdLength:sensaBridgeMaxRequestIdLength,kinds:sensaBridgeKinds});
 // A targetless repository build is only a compile check. Keep it away from dist:
 // Chrome may have dist loaded as the production extension, and a routine npm run
 // check must never silently retarget that installed extension to a loopback server.

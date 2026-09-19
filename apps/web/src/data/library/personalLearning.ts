@@ -17,6 +17,20 @@ import {requireLanguageRouteContext} from './language';
 export type PersonalLearning={replacing?:boolean;id:string;source:PersonalMeaningLearningReference;targetId:string;curriculumMembershipId:string;languageContext:SensaFormalPinnedLanguageContext;planRevision:string;useContext:boolean;status:'waiting'|'generating'|'reviewing'|'failed'|'rejected'|'stopped'|'ready';attemptId:string|null;leaseUntil:number;notice:string;createdAt:string};
 export type ContentAttempt={generationSteps?:ContentGenerationStep[];id:string;taskId:string;createdAt:string;contentProvider:Provider;reviewProvider:Provider|null;request:SensaContentGenerationRequest|null;bundle:SensaMaterialCandidateBundle|null;review:Awaited<ReturnType<ContentReviewer>>|null;validation:Awaited<ReturnType<typeof validateBundle>>|null;status:string;resumedFrom:string|null;grant:{id:string;contextDigest:string;recipients:string[]}|null};
 export const personalLearningSnapshot=()=>readLibrary(tx=>tx.all<PersonalLearning>('personalLearning'));
+/** The UI controller consumes one transactionally coherent preparation view. */
+export const personalLearningControlSnapshot=()=>readLibrary(async tx=>{
+ const tasks=await tx.all<PersonalLearning>('personalLearning');
+ const targets=await tx.all<LocalLearningTarget>('learningTargets');
+ const settings=await tx.get<ProviderSettings>('settings','providers')??{revision:0,assignments:{}};
+ const providers=[defaultSensaProvider,...await tx.all<Provider>('providers')];
+ const selected=(purpose:'content'|'review')=>{
+  const id=settings.assignments[purpose]??defaultSensaProvider.id;
+  const provider=providers.find(candidate=>candidate.id===id);
+  if(!provider)throw new Error('localFlow.selectProvider');
+  return provider;
+ };
+ return {tasks,targets,providers:{content:selected('content'),review:settings.modelReviewEnabled===true?selected('review'):null}};
+});
 const currentSource=(task:PersonalLearning,source:PersonalMeaningLearningSource)=>{
  if(canonicalConsumerJson(task.source)!==canonicalConsumerJson(source.reference))throw new Error('localFlow.meaningChanged');
 };

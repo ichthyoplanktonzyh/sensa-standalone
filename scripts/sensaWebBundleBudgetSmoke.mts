@@ -9,8 +9,9 @@ import {resolve} from 'node:path';
  */
 const budgets={
   indexGzip:310*1024,
-  appGzip:290*1024,
-  combinedGzip:590*1024,
+  appGzip:280*1024,
+  combinedGzip:580*1024,
+  runtimeGzip:15*1024,
 } as const;
 
 const assets=resolve('apps/web/dist/assets');
@@ -23,9 +24,11 @@ const findOne=(pattern:RegExp,label:string)=>{
 const gzipBytes=async(file:string)=>gzipSync(await readFile(resolve(assets,file))).byteLength;
 const indexFile=findOne(/^index-[^.]+\.js$/u,'entry');
 const appFile=findOne(/^App-[^.]+\.js$/u,'App');
-const indexGzip=await gzipBytes(indexFile),appGzip=await gzipBytes(appFile);
+const runtimeFile=findOne(/^PackageLearningRuntime-[^.]+\.js$/u,'learning Runtime');
+const indexGzip=await gzipBytes(indexFile),appGzip=await gzipBytes(appFile),runtimeGzip=await gzipBytes(runtimeFile);
 
 assert(indexGzip<=budgets.indexGzip,`${indexFile} gzip ${indexGzip} exceeds ${budgets.indexGzip}`);
 assert(appGzip<=budgets.appGzip,`${appFile} gzip ${appGzip} exceeds ${budgets.appGzip}`);
 assert(indexGzip+appGzip<=budgets.combinedGzip,`startup JS gzip ${indexGzip+appGzip} exceeds ${budgets.combinedGzip}`);
-console.log(`PASS: Web bundle regression ceilings (entry ${indexGzip}B gzip, App ${appGzip}B gzip, combined ${indexGzip+appGzip}B).`);
+assert(runtimeGzip<=budgets.runtimeGzip,`${runtimeFile} gzip ${runtimeGzip} exceeds ${budgets.runtimeGzip}`);
+console.log(`PASS: Web bundle regression ceilings (entry ${indexGzip}B gzip, App ${appGzip}B gzip, combined ${indexGzip+appGzip}B; deferred Runtime ${runtimeGzip}B).`);
