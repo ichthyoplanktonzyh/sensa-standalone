@@ -72,5 +72,6 @@ jobs:
             packages/learning-kernel/dist/
             packages/content-validator/dist/
             packages/model-runtime/dist/
+            packages/mcp-server/dist/
             release-candidate/manifest.json
             release-candidate/catalog.json

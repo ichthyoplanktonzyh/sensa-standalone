@@ -161,7 +161,6 @@ function localWebEnvironment(webOrigin) {
     VITE_SUPABASE_PUBLISHABLE_KEY: 'sensa-local-public-key',
     VITE_SENSA_API_URL: serviceOrigin,
     VITE_SENSA_UNLIMITED_PREPARATION: 'true',
-    VITE_SENSA_LOCAL_AGENT_LABEL: mode === 'preview' ? 'Codex · Local preview' : 'Codex · Local development',
     VITE_SENSA_BROWSER_SMOKE: smoke ? 'true' : 'false',
     VITE_WEB_PORT: new URL(webOrigin).port,
     ...(process.env.SENSA_LOCAL_MEDIA_ROOT ? { SENSA_WEB_MEDIA_ROOT: resolve(process.env.SENSA_LOCAL_MEDIA_ROOT) } : {}),

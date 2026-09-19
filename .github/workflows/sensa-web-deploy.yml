@@ -88,6 +88,7 @@ jobs:
           npm run build -w @sensa/contracts
           npm run build -w @sensa/content-validator
           npm run build -w @sensa/model-runtime
+          npm run build -w @sensa/mcp-server
           npm run build -w @sensa/api
           npm run build -w @sensa/web
           npm run build -w @sensa/browser-extension
@@ -114,6 +115,7 @@ jobs:
             packages/learning-kernel/dist/
             packages/content-validator/dist/
             packages/model-runtime/dist/
+            packages/mcp-server/dist/
             release-candidate/manifest.json
             release-candidate/catalog.json
 

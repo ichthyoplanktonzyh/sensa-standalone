@@ -67,42 +67,30 @@ Intake 的语义 payload 只声明一次：`packages/contracts/src/sensa/intake.
 例如可以保存 `back out` 并定位原文中的 `backed out`。当前 Web 本地 authority 在
 `apps/web/src/experience/personalMeaningJourney/gateway.ts` 中幂等提交，相同 operation id 若改变载荷则报冲突。
 
-本机 Agent 投递由 `integrations/codex/sensa-intake/sensa-intake.mjs` 提供。安装时它固定一个
-`libraryId` 与 Agent client identity；每次提交只把 v3 Intake 幂等写入独立的 transport queue
-SQLite，不读取或直写 Web 的 OPFS 数据库。Sensa Web 打开、恢复可见或获得焦点时，
-`apps/web/src/experience/account/LocalAgentIntake.tsx` 经浏览器扩展 Native Messaging 拉取队列，交给同一个
-Journey gateway 提交；只有本机事务成功后才写回 `applied` receipt。CLI 返回 `queued` 仅表示本机队列已
-持久化，不能显示成已进入语义世界。本机投递不要求账号，队列 envelope 与 receipt 由
-`packages/contracts/src/sensa/localAgentIntake.ts` 定义；扩展需要 `nativeMessaging` 权限并安装
-`app.sensa.intake` host manifest。
+外部 Agent 使用账号范围、可撤销且仅允许 Intake 的连接。连接合同在
+`packages/contracts/src/sensa/agentConnection.ts`。Web 只接收约十分钟有效、一次性消费的 setup code；
+长期 token 由本机安装器直接兑换并写入 `0600` 私有配置，既不进入 Web 状态，也不进入复制命令或进程参数；
+服务端只保存 token digest。替换 setup 在成功兑换时才原子撤销前一连接。
+`packages/mcp-server` 同时提供 stdio MCP 和 stdin CLI adapter，`integrations/codex/sensa-intake/SKILL.md`
+只说明 Sensa 需要的 Context–Expression–Sense 格式、来源和 queued/applied 语义。Skill 不负责在运行时判定
+事实完整性，也不把 Web 澄清实现搬进外部 Agent。安装资产由 Web release 的 `/integrations/` 提供；安装器
+支持 Codex、Cursor、Claude Desktop、Windsurf 与通用 CLI：Codex 安装 managed skill 并通过
+`codex mcp add` 登记，其他桌面客户端保留现有 JSON 配置并只管理 `mcpServers.sensa`。MCP 还暴露
+`sensa_intake` prompt，使没有 Codex Skill 机制的客户端也能获得相同领域说明。安装可重试；卸载只移除
+与当前 Sensa executable/config 精确匹配的登记和 managed 文件，不覆盖同名用户配置。
 
-设置页的“本机 Agent”通过 `web-native-intake-status` 读取扩展 id 和 host 的 library binding，UI 只显示
-连接状态与必要动作。它按当前浏览器生成一条命令，自动选择 macOS 或 Linux 上 Chrome/Edge/Chromium
-的 Native Messaging 注册位置，从同一 Web release 的 `/integrations/` 下载 CLI、skill 和 wire example，
-并将带有确定 executable/config 路径的 managed `sensa-intake` skill 安装到 Codex。集成资产不进入离线
-App Shell，使用 `no-cache` 保证安装内容与当前发布对齐；已有非 Sensa-managed 同名 skill 不会被覆盖。
-重复运行相同命令保留原 client identity 与 transport queue。
-
-开发者仍可绕过图形入口直接运行：
-
-```sh
-node integrations/codex/sensa-intake/sensa-intake.mjs --setup \
-  --library-id <CURRENT_LIBRARY_UUID> --label Codex \
-  --directory <NEW_PRIVATE_CONNECTION_DIRECTORY> \
-  --extension <CHROMIUM_EXTENSION_ID> \
-  --manifest-dir <BROWSER_NATIVE_MESSAGING_HOST_DIRECTORY>
-```
-
-生成的 `connection.json` 是 Agent 选择目的库的连接文件；请求不能逐条改投其他库。
-
-远程投递的 transport envelope 由 `packages/contracts/src/sensa/intakeDelivery.ts` 定义。
-`apps/api/src/sensa/library/intakeDelivery.ts` 使用受认证账号和该账号唯一启用的 library channel
-决定目的地，不允许 Agent 从 payload 选择 library。它只持久 mailbox item 并返回 `queued`；
+Agent 提交合同在 `packages/contracts/src/sensa/agentIntake.ts`，有意不接受调用方提供的 `acceptance`、
+`client identity` 或 `libraryId`。`apps/api/src/sensa/access/agent.ts` 从已认证连接派生 client identity；
+`apps/api/src/sensa/library/intakeDelivery.ts` 把一次 save 调用记录为 one-shot delegated acceptance，并使用
+该账号唯一启用的 library channel 决定目的地。浏览器扩展不参与 Agent 安装、鉴权或交付，也不需要
+`nativeMessaging` 权限。adapter 只持久提交 mailbox item 并返回 `queued`；
 `apps/web/src/experience/account/RemoteIntakeDelivery.tsx` 在账号恢复完成后登记当前库，在初始加载、
 恢复联网或窗口获得焦点时拉取，由本地 gateway 提交后回传 `applied` 及具体快轨/Inbox
-结果。空闲页面不轮询。Codex skill 已使用同一 v3 payload；未来 OAuth 或 MCP 只能是相同合同上的适配器，
-不可另建一套 Intake 语义。数据库的账号/库隔离、唯一启用 channel 和 mailbox 存储由
-`db/migrations/0028_sensa_encrypted_intake.sql` 与 `db/migrations/0032_sensa_intake_delivery.sql` 提供。
+结果。空闲页面不轮询；Web 未打开时只能如实保持 queued。数据库的账号/库隔离、唯一启用 channel、
+mailbox 和 Agent credential 存储由 `db/migrations/0028_sensa_encrypted_intake.sql`、
+`db/migrations/0032_sensa_intake_delivery.sql`、`db/migrations/0035_sensa_agent_connections.sql` 与
+`db/migrations/0036_sensa_agent_connection_setup.sql` 提供。连接列表保留状态、到期和 last-used；独立事件表只
+审计 setup、激活、替换与撤销，不记录 CES 内容。每个连接默认每小时允许 120 个新 operation，幂等重试不计重。
 
 云端备份当前只有 `packages/contracts/src/sensa/accountBackup.ts` 的架构端口。它固定 immutable Recovery
 Point manifest、摘要、大小、library/learner/schema identity 与 `account_assisted | zero_knowledge`
@@ -186,9 +174,8 @@ npm run reset:sensa
 ```
 
 该命令只重建固定名称的本地测试数据库并删除 `.sensa-local` 下的开发、预览浏览器资料。
-它不访问生产环境。浏览器扩展和本机 Agent 会把 localhost 资料库视为独立连接；在设置里的
-“本机 Agent”重新运行连接命令后，Codex Skill 的连接标签会明确显示 `Local development` 或
-`Local preview`。回到线上资料库时，重新运行线上页面的连接命令即可切回。
+它不访问生产环境。localhost 与线上环境使用不同的 Agent 连接；本地验收需要在本地设置页创建测试连接，
+回到线上时使用线上设置页签发的一次性安装命令。连接 token 不得跨环境复制。
 
 无界面的完整本地链路检查为：
 

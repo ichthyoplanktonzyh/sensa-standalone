@@ -9,6 +9,7 @@ type BrowserSmokeBridge = {
   draftCount(): Promise<number>;
   syncStatus(): Promise<string>;
   semanticWorldContainsExpression(surfaceForm: string): Promise<boolean>;
+  intakeInboxCount(): Promise<number>;
   storageDiagnostics(): ReturnType<typeof readLibraryStorageDiagnostics>;
 };
 
@@ -66,6 +67,11 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
         meaning.personalExpressionAnchorRevisions.some(
           (revision) => revision.surfaceForm === surfaceForm,
         ));
+    },
+    async intakeInboxCount() {
+      const raw = await readLibrary((tx) => tx.get<string>('semanticWorld', JOURNEY_STORE_KEY));
+      if (!raw) return 0;
+      return (JSON.parse(raw) as JourneyState).inboxItems.length;
     },
     storageDiagnostics: readLibraryStorageDiagnostics,
   };

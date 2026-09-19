@@ -308,9 +308,9 @@ Agent 整理 Context
     ↓
 解析或构造 teaching-sufficient Sense
     ↓
-附带 delegated Semantic Acceptance provenance
+用户明确调用保存；连接派生 delegated Semantic Acceptance
     ↓
-提交统一 Semantic Intake payload
+提交统一 Semantic Intake facts
     ↓
 本地 Personal Semantic World authority 应用
     ↓
@@ -318,7 +318,8 @@ Personal Meaning
 ```
 
 当前 Agent 会话中的一次明确请求可以构成 one-shot delegated acceptance basis，不要求额外 grant id，
-也不要求用户回到第一方界面二次确认。系统必须保存 actor、basis 和 provenance。
+也不要求用户回到第一方界面二次确认。Agent 不自行填写 acceptance 身份；Sensa 从可撤销连接派生并保存
+actor 与 basis，Sense resolver provenance 仍记录真正完成解析的一方。
 
 ### 8.3 信息不完整：进入共同 Inbox
 
@@ -328,8 +329,7 @@ Agent 提交部分事实
 接收端按字段存在性机械分流
     ├─ 缺 Context ───────▶ pending_context
     ├─ 缺完整 Expression ▶ pending_expression
-    ├─ 缺 Sense ─────────▶ pending_sense
-    └─ 缺 Acceptance ────▶ pending_acceptance
+    └─ 缺 Sense ─────────▶ pending_sense
                                ↓
                          Intake Inbox
                                ↓
@@ -341,27 +341,16 @@ Agent 提交部分事实
 接收端只校验字段、类型、定位关系和大小限制，不重新判断 Agent 给出的 Context 是否“足够好”，也不
 为了直接写入再次调用模型。
 
-### 8.4 本机 Agent 交付
+### 8.4 Agent 连接与交付
 
 ```text
-Codex skill / local CLI
+用户选择 Agent 客户端并创建一次性 setup code
     ↓
-本机持久队列
+安装器直接兑换长期凭据并安装/配置 MCP/CLI adapter
     ↓
-Sensa Web 打开或重新获得焦点
+Codex Skill 或 MCP prompt/tool 提供领域命令说明
     ↓
-拉取并由本地 authority 提交
-    ↓ 成功后
-ACK applied
-```
-
-CLI/skill 只负责提交和持久排队，不能直接写入 Personal Semantic World。只有本机库事务提交成功后才
-可回执 applied。
-
-### 8.5 远程 Agent 交付
-
-```text
-远程 Agent
+Agent 调用 save（Sensa 派生连接身份与 acceptance）
     ↓
 账号范围 Remote Intake Delivery mailbox
     ↓
@@ -374,10 +363,13 @@ Web 拉取同一 canonical payload
 applied + 真实结果
 ```
 
-云端邮箱不是云端语义库，也不是备份。`queued` 只说明云端持久接收；`applied` 才说明本地库已创建
-Personal Meaning 或 Intake Inbox Item。
+浏览器扩展不在这条链路中。Skill 类似领域斜杠命令：告诉 Agent Sensa 需要的数据格式和如何解释回执，
+但不是事实完整性检查器。云端邮箱不是云端语义库，也不是备份；`queued` 只说明云端持久接收；
+`applied` 才说明本地库已创建 Personal Meaning 或 Intake Inbox Item。复制命令只带约十分钟有效的一次性
+setup code，不带长期 token。连接可在设置中查看 last-used 和生命周期审计、原子更新或立即撤销；安装器
+可以安全重试并只卸载自己管理的本机配置。默认每个连接每小时最多产生 120 个新 operation。
 
-### 8.6 加入学习
+### 8.5 加入学习
 
 Agent 的 semantic-world commit 权限不包含 Add-to-Learning。Agent 创建的 Personal Meaning 与 Web、
 浏览器创建的 Personal Meaning 具有同等地位；之后必须由 learner 明确加入学习，或由拥有独立
@@ -495,8 +487,7 @@ Retention Review
 
 - Web 内创建、澄清、治理、加入学习和学习运行时；
 - 浏览器扩展的网页/字幕捕获、解释、确认和待处理保存；
-- 本机 Agent 的 skill/CLI + durable queue；
-- 远程 Agent 的账号范围 mailbox delivery；
+- 外部 Agent 的 skill + MCP/CLI adapter + 账号范围 mailbox delivery；
 - 已发布学习包的发现、下载、加入、更新与运行；
 - 学习包运行时中的 Personal Learning Scene bridge。
 

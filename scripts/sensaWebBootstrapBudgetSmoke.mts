@@ -38,8 +38,8 @@ const MINIMUM_LEGACY_BYTES=4*1024*1024;
 const SUBJECT='8b1f4c1e-9d5a-4c34-9c3a-9f1d0d1a1c11';
 const ACCOUNT='4f2a7b60-1c6e-4a52-8f0b-6d3c2a9e5b21';
 const REMOTE_OPERATION='45466b13-66db-4d57-a393-bc2946873152';
+const REMOTE_INCOMPLETE_OPERATION='c9e23ca7-d84d-4d7c-bd7a-2327b80f7860';
 const REMOTE_QUEUED_AT='2026-09-13T08:00:00.000Z';
-const LOCAL_OPERATION='b1b6b232-80e0-4afd-8e73-c0c8ee76d148';
 const storageKeySuffix='-auth-token';
 const failures:string[]=[];
 const log=(message:string)=>console.log(message);
@@ -51,10 +51,10 @@ const digest=(text:string)=>createHash('sha256').update(text).digest('hex');
 type Cloud={blocks:Map<string,string>;revision:number;manifest:string[]|null;commits:Map<string,string>;published:number;publishedBytes:number};
 const clouds=new Map<string,Cloud>();
 let intakeLibraryId:string|null=null;
-let remoteDeliveryAvailable=false,remoteAcknowledgement:any=null;
+let remoteDeliveryAvailable=false,remoteIncompleteAvailable=false,remoteAcknowledgement:any=null,remoteIncompleteAcknowledgement:any=null;
 let extensionAuthorization:any=null;
 const remoteSubmission={contractVersion:'sensa-intake-delivery-v1',client:{clientId:'19ba48d1-03af-489e-a352-a16f05a03d5c',kind:'agent',label:'Codex'},intake:{contractVersion:'sensa-intake-v3',operationId:REMOTE_OPERATION,capturedAt:REMOTE_QUEUED_AT,context:{modality:'text',textSegment:'I backed out.',mediaReferenceIds:[],languageTag:'en',source:{client:'codex',url:null,title:'GPT Live conversation',sourceReferenceId:'conversation-1',domSelector:null,paragraphContext:null}},expression:{surfaceForm:'back out',languageTag:'en',occurrence:{surfaceForm:'backed out',locator:{kind:'text_span',start:2,end:12}},expressionTypeHint:'phrase'},sense:{senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'原本准备做某事，后来决定退出或取消',prototypeScenes:[{summary:'I backed out.',participantRoles:[],states:[],directionOrCausality:null}],includedCases:['I backed out.'],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'llm_suggested',resolutionProvenance:{resolverKind:'language_model',provider:'codex',model:'fixture',policyVersion:'sensa-agent-intake-v1',sourceReferenceIds:['conversation-1']}},acceptance:{mode:'delegated_agent',actorId:'codex',basis:'explicit_user_request',authorizationReference:null}}};
-const localIntake={contractVersion:'sensa-intake-v3',operationId:LOCAL_OPERATION,capturedAt:'2026-09-14T08:00:00.000Z',context:{modality:'text',textSegment:'Take your time.',mediaReferenceIds:[],languageTag:'en',source:{client:'codex',url:null,title:'GPT Live conversation',sourceReferenceId:'conversation-2',domSelector:null,paragraphContext:null}},expression:{surfaceForm:'take your time',languageTag:'en',occurrence:{surfaceForm:'Take your time',locator:{kind:'text_span',start:0,end:14}},expressionTypeHint:'phrase'},sense:{senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'不必着急，可以从容完成某事',prototypeScenes:[{summary:'Take your time.',participantRoles:[],states:[],directionOrCausality:null}],includedCases:['Take your time.'],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'llm_suggested',resolutionProvenance:{resolverKind:'language_model',provider:'codex',model:'fixture',policyVersion:'sensa-agent-intake-v1',sourceReferenceIds:['conversation-2']}},acceptance:{mode:'delegated_agent',actorId:'codex',basis:'explicit_user_request',authorizationReference:null}};
+const remoteIncompleteSubmission={...remoteSubmission,intake:{...remoteSubmission.intake,operationId:REMOTE_INCOMPLETE_OPERATION,sense:null}};
 const cloudFor=(account:string):Cloud=>{const existing=clouds.get(account);if(existing)return existing;const created:Cloud={blocks:new Map(),revision:0,manifest:null,commits:new Map(),published:0,publishedBytes:0};clouds.set(account,created);return created;};
 /** Repack a published library into smaller blocks, the way the previous client stored it.
  *  Restoring it must still cost a byte-bounded number of round trips. */
@@ -118,13 +118,16 @@ const server=createServer(async(request,response)=>{
   if(url.pathname==='/sensa/intake/deliveries/pull'){
    const input=await body() as {libraryId:string};
    if(input.libraryId!==intakeLibraryId){json({code:'library_mismatch'},409);return;}
-   json({deliveries:remoteDeliveryAvailable&&!remoteAcknowledgement?[{deliveryId:REMOTE_OPERATION,libraryId:input.libraryId,queuedAt:REMOTE_QUEUED_AT,submission:remoteSubmission}]:[]});return;
+   const deliveries=[];
+   if(remoteDeliveryAvailable&&!remoteAcknowledgement)deliveries.push({deliveryId:REMOTE_OPERATION,libraryId:input.libraryId,queuedAt:REMOTE_QUEUED_AT,submission:remoteSubmission});
+   if(remoteIncompleteAvailable&&!remoteIncompleteAcknowledgement)deliveries.push({deliveryId:REMOTE_INCOMPLETE_OPERATION,libraryId:input.libraryId,queuedAt:REMOTE_QUEUED_AT,submission:remoteIncompleteSubmission});
+   json({deliveries});return;
   }
   if(url.pathname==='/sensa/intake/deliveries/ack'){
    const input=await body() as any;
-   if(input.libraryId!==intakeLibraryId||input.deliveryId!==REMOTE_OPERATION){json({code:'library_mismatch'},409);return;}
-   remoteAcknowledgement=input;
-   json({contractVersion:'sensa-intake-delivery-v1',deliveryId:REMOTE_OPERATION,operationId:REMOTE_OPERATION,deliveryState:'applied',queuedAt:REMOTE_QUEUED_AT,appliedAt:input.appliedAt,result:input.result});return;
+   if(input.libraryId!==intakeLibraryId||![REMOTE_OPERATION,REMOTE_INCOMPLETE_OPERATION].includes(input.deliveryId)){json({code:'library_mismatch'},409);return;}
+   if(input.deliveryId===REMOTE_OPERATION)remoteAcknowledgement=input;else remoteIncompleteAcknowledgement=input;
+   json({contractVersion:'sensa-intake-delivery-v1',deliveryId:input.deliveryId,operationId:input.deliveryId,deliveryState:'applied',queuedAt:REMOTE_QUEUED_AT,appliedAt:input.appliedAt,result:input.result});return;
   }
   if(url.pathname==='/sensa/library-sync'||url.pathname.startsWith('/sensa/library-sync/')){
    await delay(SERVICE_LATENCY_MS);
@@ -239,13 +242,14 @@ try{
  await mkdir(dist,{recursive:true});
  log('1/4 building the real Web bundle against the fixture origin');
  execFileSync('npm',['run','build','-w','@sensa/web','--','--outDir',dist,'--emptyOutDir'],{cwd:root,env:{...process.env,VITE_SENSA_MODE:'production',VITE_SENSA_BROWSER_SMOKE:'true',VITE_SUPABASE_URL:origin,VITE_SUPABASE_PUBLISHABLE_KEY:'fixture-publishable-key',VITE_SENSA_API_URL:origin},stdio:'inherit'});
- for(const name of ['sensa-intake.mjs','SKILL.md','request-example.json']){
+ for(const name of ['SKILL.md','request-example.json']){
   assert.deepEqual(
    await readFile(join(dist,'integrations',name)),
    await readFile(join(root,'integrations/codex/sensa-intake',name)),
-   `the Web release drifted from the reviewed local Agent ${name}`,
+   `the Web release drifted from the reviewed Agent integration ${name}`,
   );
  }
+ assert.match(await readFile(join(dist,'integrations','sensa-mcp.mjs'),'utf8'),/^#!\/usr\/bin\/env node/u,'the Web release does not contain the executable MCP adapter');
 
  log('2/4 creating a durable account library through the local library commands');
  const a=await pageContext(false);
@@ -300,7 +304,10 @@ try{
  log(`   legacy-shaped library: ${legacyPublished} blocks / ${Math.round(legacyPublishedBytes/1024)}KiB, revision ${legacyRevision}`);
 
  log('3/4 measuring the first restore on a new browser');
- remoteDeliveryAvailable=false;
+ // The complete Agent save exists before any Sensa Web page is open. It must
+ // remain queued until this new page restores the local authority and applies it.
+ remoteDeliveryAvailable=true;
+ assert.equal(remoteAcknowledgement,null,'a closed Web application cannot claim an Agent delivery was applied');
  const b=await pageContext();
  served.length=0;
  const started=Date.now();
@@ -316,12 +323,14 @@ try{
  const normalizedRevision=cloud.revision,normalizedPublished=cloud.published,normalizedPhysicalBytes=[...cloud.blocks.values()].reduce((total,data)=>total+Buffer.byteLength(data),0);
  await finishCheckpoint(b.page,'post-restore local facts never reached a Checkpoint');
  const restoreSettledRevision=cloud.revision;
- // Deliver only after restore has reached a stable baseline. This verifies that
- // the Agent write creates a new local revision, rather than racing the restore.
- remoteDeliveryAvailable=true;
  await b.page.evaluate(()=>window.dispatchEvent(new Event('focus')));
  await expect.poll(()=>remoteAcknowledgement?.result?.route,{timeout:30000,message:'remote Intake was not applied and acknowledged'}).toBe('fast_track');
  await finishCheckpoint(b.page,'Agent Intake was not published after its local commit');
+ remoteIncompleteAvailable=true;
+ await b.page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await expect.poll(()=>remoteIncompleteAcknowledgement?.result?.route,{timeout:30000,message:'incomplete remote Intake was not routed to the Inbox'}).toBe('inbox');
+ assert.equal(remoteIncompleteAcknowledgement.result.status,'pending_sense');
+ await finishCheckpoint(b.page,'incomplete Agent Intake was not published after its Inbox commit');
  /** Wait until the application stops talking to the account service on its own. */
  const settle=async():Promise<boolean>=>{
   const limit=Date.now()+30000;
@@ -335,32 +344,6 @@ try{
  };
  const settled=await settle();
  const remotePublishedRevision=cloud.revision;
-
- // Exercise the real page consumer and gateway against SQLite/OPFS. The real
- // extension/native-host halves are covered by their protocol smoke; this
- // page listener supplies their declared answers inside Chromium.
- await b.page.evaluate(({intake})=>{
-  let pending=true;
-  (window as any).__localAgentAcknowledgement=null;
-  window.addEventListener('message',event=>{
-   if(event.source!==window||event.origin!==location.origin||event.data?.channel!=='sensa-web-intake-request')return;
-   if(event.data.kind==='web-native-intake-status'){
-    window.postMessage({channel:'sensa-web-intake-response',id:event.data.id,value:{extensionId:'a'.repeat(32),state:'connected',clientLabel:'Codex'}},location.origin);
-   }
-   if(event.data.kind==='web-native-intake-pull'){
-    window.postMessage({channel:'sensa-web-intake-response',id:event.data.id,value:pending?[{contractVersion:'sensa-local-agent-intake-v1',libraryId:event.data.libraryId,client:{clientId:'96666baa-76db-42c1-a718-028727ca49f9',kind:'agent',label:'Codex'},intake,requestDigest:'b'.repeat(64)}]:[]},location.origin);
-   }
-   if(event.data.kind==='web-native-intake-ack'){
-    pending=false;(window as any).__localAgentAcknowledgement=event.data.receipt;
-    window.postMessage({channel:'sensa-web-intake-response',id:event.data.id,value:{acknowledged:true}},location.origin);
-   }
-  });
- },{intake:localIntake});
- await b.page.evaluate(()=>window.dispatchEvent(new Event('focus')));
- await expect.poll(()=>b.page.evaluate(()=>(window as any).__localAgentAcknowledgement?.result?.route),{timeout:30000,message:'local Agent Intake was not applied and acknowledged'}).toBe('fast_track');
- await finishCheckpoint(b.page,'local Agent Intake was not published after its local commit');
- assert(cloud.revision>remotePublishedRevision,'local Agent Intake did not publish a new account Checkpoint');
- const localSettled=await settle();
  const bootRequests=[...served];
  // A later focus may check the independent Intake mailbox, but a fresh account
  // Checkpoint must not read the entire cloud library again.
@@ -382,12 +365,7 @@ try{
  const remoteMeaning=await b.page.evaluate(
   ()=>window.__sensaBrowserSmoke!.semanticWorldContainsExpression('back out'),
  );
- const localMeaning=await b.page.evaluate(
-  ()=>window.__sensaBrowserSmoke!.semanticWorldContainsExpression('take your time'),
- );
- await b.page.getByRole('button',{name:'账号与设置'}).first().click();
- await b.page.getByRole('button',{name:'本机 Agent'}).click();
- await expect(b.page.getByText('已连接 · Codex')).toBeVisible();
+ const remoteInboxCount=await b.page.evaluate(()=>window.__sensaBrowserSmoke!.intakeInboxCount());
  const storageDiagnostics=await b.page.evaluate(
   ()=>window.__sensaBrowserSmoke!.storageDiagnostics(),
  );
@@ -400,8 +378,7 @@ try{
  log(`   next focus: ${repeatRequests.length} account requests / ${repeatFetches.length} library block fetches`);
  log(`   restored drafts ${restored}/${DRAFTS}`);
  log(`   local storage ${storageDiagnostics.engine}/${storageDiagnostics.persistence} SQLite ${storageDiagnostics.sqliteVersion}`);
- log(`   remote Intake ${remoteAcknowledgement?.result?.route??'missing'} / ${remoteMeaning?'stored':'missing'}`);
- log(`   local CLI Intake ${localMeaning?'fast_track / stored':'missing'}`);
+ log(`   remote Intake ${remoteAcknowledgement?.result?.route??'missing'} / ${remoteMeaning?'stored':'missing'}; incomplete ${remoteIncompleteAcknowledgement?.result?.route??'missing'} / Inbox ${remoteInboxCount}`);
  log(`   boot service calls: ${JSON.stringify([...new Set(bootRequests.map(entry=>entry.path))])}`);
  log(`   idle ${IDLE_WINDOW_MS}ms service calls: ${idleRequests.length}`);
  const fail=(message:string)=>failures.push(message);
@@ -416,15 +393,13 @@ try{
  if(normalizedPublished>=legacyPublished)fail(`legacy ${legacyPublished}-block layout was not replaced by the canonical layout (${normalizedPublished} blocks)`);
  if(normalizedPhysicalBytes>=legacyPublishedBytes/4)fail(`retired legacy blocks still occupy ${normalizedPhysicalBytes} bytes after canonicalization`);
  if(remotePublishedRevision<=restoreSettledRevision)fail(`remote Agent Intake was not published: revision ${restoreSettledRevision} -> ${remotePublishedRevision}`);
- if(cloud.revision<=remotePublishedRevision)fail(`local Agent Intake was not published: revision ${remotePublishedRevision} -> ${cloud.revision}`);
  if(!repeatSettled)fail('the focus-triggered verification sync never settled');
- if(!localSettled)fail('the local Agent Intake sync never settled');
  if(repeatFetches.length)fail(`a later focus re-fetched canonicalized account blocks ${repeatFetches.length} time(s)`);
  if(repeatRequests.some(entry=>entry.path.startsWith('/sensa/library-sync/')))fail('a fresh foreground return started an unnecessary whole-library sync');
  if(restored!==DRAFTS)fail(`account restore lost content: ${restored}/${DRAFTS} drafts`);
  if(storageDiagnostics.engine!=='sqlite-wasm'||storageDiagnostics.persistence!=='opfs')fail(`production browser did not use SQLite OPFS: ${JSON.stringify(storageDiagnostics)}`);
  if(!remoteMeaning)fail('the remote Agent Intake was acknowledged without a local Personal Meaning');
- if(!localMeaning)fail('the local Agent Intake was acknowledged without a local Personal Meaning');
+ if(remoteIncompleteAcknowledgement?.result?.route!=='inbox'||remoteInboxCount<1)fail('an incomplete Agent Intake did not remain in the local Inbox');
  if(bootRequests.some(entry=>entry.path==='/sensa/service/status'))fail('rolling service counters are read on boot instead of on demand');
  if(!settled)fail('an untouched account never stopped syncing: sync bookkeeping keeps scheduling another pass');
  if(idleRequests.length)fail(`an untouched tab made ${idleRequests.length} service calls: ${[...new Set(idleRequests.map(entry=>entry.path))].join(', ')}`);

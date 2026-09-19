@@ -96,8 +96,8 @@ Skin、`light | dark | system` color mode 与文字大小等阅读偏好是相�
 调用方已经给出 Context 时，接收端不再判断它“够不够好”，也不因当前学习路线不包含该语言
 而拒绝采集。
 
-模型和工具只能提出或修订候选。即使候选已经完整，仍必须由用户在独立的确认动作中接受后，应用的
-本机 authority 才能写入 Personal Meaning；澄清 Agent 无权自动保存、自动加入学习或制造学习结果。
+Sensa Web 内的模型和工具只能提出或修订候选。即使候选已经完整，仍必须由用户在独立的确认动作中接受后，
+应用的本机 authority 才能写入 Personal Meaning；Web 澄清 Agent 无权自动保存、自动加入学习或制造学习结果。
 
 已确认内容在“我的语义世界”中以确认后的 Expression 作为主标题；点击后进入表达详情，而不是重新进入
 澄清 Agent。详情可以查看来源、Sense、Context、图片、笔记和学习资源，并可修订 Context；修订创建新版本，
@@ -105,17 +105,22 @@ Skin、`light | dark | system` color mode 与文字大小等阅读偏好是相�
 “我的语义世界”点击“加入学习”时，系统把当时 Web 的当前路线固定到这次课程成员关系中；之后切换路线
 不会把它悄悄搬到另一条路线。
 
-用户也可以在已连接的 Agent 对话里说“把这几个表达存到我的语义世界”。Agent 为每条内容
-提交同一份 Intake 合同：Context、定位后的 Expression、已解析 Sense 和这次明确请求都完整时
-走快轨，否则进收件箱。Agent 的当前会话已经得到用户明确要求时，Sensa 不再要求用户
-对同一条内容二次确认。
+用户也可以在已连接的 Agent 对话里完成澄清和整理，并说“把这几个表达存到我的语义世界”。外部 Agent
+不复用或遥控 Sensa Web 的澄清界面；它在自己的会话中形成 Context、定位后的 Expression 与已解析 Sense，
+再通过同一 Intake 边界提交。Agent 的当前会话已经得到用户明确保存请求时，连接调用本身构成 one-shot
+delegated acceptance，Sensa 不再要求用户对同一条内容二次确认。三项事实完整时走快轨，确有缺失时进收件箱。
 
-用户在“账号与设置 → 本机 Agent”完成本机连接。页面自动识别当前资料库、Sensa 扩展和受支持的
-macOS/Linux Chrome/Edge/Chromium 环境；未连接时只提供连接状态、复制连接命令和重新检查。用户在终端运行一次复制的命令，
-系统自动安装 Native Messaging host 与 Codex skill；返回页面后自动重新检查。普通界面不展示
-library id、extension id、manifest 路径或 Intake 协议说明。已连接时只显示连接状态与 Agent 名称。
+用户在“账号与设置 → Agent 连接”选择 Codex、Cursor、Claude Desktop、Windsurf 或 CLI，并创建
+约十分钟有效、只能消费一次的安装码。复制的安装命令不含长期凭据；安装器直接向 API 兑换后，把凭据写入
+本机私有配置并登记 MCP adapter。Codex 同时安装 managed Skill；其他 MCP 客户端可通过同一 MCP prompt/
+tool 说明获得 Context–Expression–Sense 格式、来源与回执语义。Skill/prompt 类似领域命令说明，不是用来替
+Sensa 检查事实是否完整的运行时验证器。
 
-远程 Agent 先获得“已排队”回执，这只代表 Sensa 云端已经持久接收。用户的 Web 在登录且
+浏览器扩展不参与 Agent 连接、鉴权或交付。设置页显示连接的有效/过期/撤销状态、到期时间、最近使用时间、
+近期生命周期审计，并提供原子更新、撤销和本机卸载命令。更新安装只有在新安装码成功兑换后才撤销旧连接；
+每个连接默认每小时最多提交 120 个新的 operation，完全相同的幂等重试不重复计数。页面不展示内部 library id。
+
+Agent 先获得“已排队”回执，这只代表 Sensa 云端已经持久接收。用户的 Web 在登录且
 联网时取回队列，本机库实际提交后才变成“已存入”，并带回“已进语义世界”或“已进收件箱”。
 断网、Web 未打开或本机确认丢失时保留同一 operation 幂等重试，不把“已排队”说成“已存入”。
 

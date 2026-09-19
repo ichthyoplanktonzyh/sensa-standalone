@@ -49,9 +49,6 @@ const pageSender=(url=web+'/content',tab:unknown={id:7})=>({id:extensionId,url,t
 let senderOverride:unknown=null;
 const noopEvent={addListener:()=>{}};
 let asleep=false,sendFailures=0,sendThrows=0;
-let nativeAvailable=true,nativeDeliveries:unknown[]=[];
-let nativeAcknowledgement:unknown=null;
-let nativeLibraryId=libraryId;
 const answers:any[]=[];
 let wake:()=>void=()=>{};
 const chromeMock:any={
@@ -61,18 +58,6 @@ const chromeMock:any={
     session:{get:async(key:string)=>structuredClone({[key]:session[key]}),set:async(value:unknown)=>{Object.assign(session,structuredClone(value));}},
   },
   runtime:{id:extensionId,getURL:(path:string)=>'chrome-extension://'+extensionId+'/'+path,onMessage:{addListener:(fn:any)=>{backgroundListener=fn;}},onConnect:{addListener:()=>{}},
-    sendNativeMessage:async(host:string,message:any)=>{
-      assert.equal(host,'app.sensa.intake','the extension reaches only the declared Sensa native host');
-      if(!nativeAvailable)throw new Error('Specified native messaging host not found.');
-      if(message?.kind==='hello')return {value:{intakeContractVersion:'sensa-intake-v3',deliveryContractVersion:'sensa-local-agent-intake-v1',libraryId:nativeLibraryId,clientId:installationId,label:'Codex'}};
-      if(message?.kind==='pull')return {value:structuredClone(nativeDeliveries)};
-      if(message?.kind==='ack'){
-        nativeAcknowledgement=structuredClone(message.receipt);
-        nativeDeliveries=[];
-        return {value:{acknowledged:true}};
-      }
-      return {error:'invalid_request'};
-    },
     sendMessage:(message:unknown)=>new Promise((resolve,reject)=>{
       // What the real boundary does when the worker is not there, and when the
       // page's object cannot cross it at all.
@@ -107,10 +92,9 @@ const pageWindow=vm.runInContext('window',context) as unknown;
 
 /** A turn on the bridge as the Web application builds one: the envelope, this
  * kind's payload, and nothing else. */
-const localKinds=new Set(['web-native-intake-status','web-native-intake-pull','web-native-intake-ack']);
 const request=(kind:string,body:Record<string,unknown>={},id=crypto.randomUUID())=>({
   channel:sensaBridgeRequestChannel,id,kind,
-  ...(!localKinds.has(kind)?{accountId}:{}),
+  accountId,
   ...(kind!=='web-session-ended'?{libraryId}:{}),
   ...body,
 });
@@ -178,24 +162,6 @@ const queued=sensaBrowserIntakeDeliverySchema.parse({contractVersion:'sensa-brow
 await queueWeb(accountId,queued);
 const digest=createHash('sha256').update(canonicalConsumerJson(queued)).digest('hex');
 const receipt={contractVersion:'sensa-browser-intake-delivery-v1' as const,libraryId,clientId:installationId,operationId:queued.intake.operationId,requestDigest:digest,result:{route:'inbox' as const,intakeId:crypto.randomUUID(),status:'pending_sense' as const},appliedAt:new Date().toISOString()};
-const nativeIntake={contractVersion:'sensa-intake-v3' as const,operationId:crypto.randomUUID(),capturedAt:new Date().toISOString(),context:{modality:'text' as const,textSegment:'I backed out.',mediaReferenceIds:[],languageTag:'en' as const,source:{client:'codex',url:null,title:'GPT Live conversation',sourceReferenceId:'conversation-1',domSelector:null,paragraphContext:null}},expression:{surfaceForm:'back out',languageTag:'en' as const,occurrence:{surfaceForm:'backed out',locator:{kind:'text_span' as const,start:2,end:12}},expressionTypeHint:'phrase' as const},sense:{senseKey:null,semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1' as const,coreMeaningFocus:'原本准备做某事，后来决定退出或取消',prototypeScenes:[{summary:'I backed out.',participantRoles:[],states:[],directionOrCausality:null}],includedCases:['I backed out.'],excludedCases:[],neighborContrasts:[],openQuestions:[]},wordingSource:'llm_suggested' as const,resolutionProvenance:{resolverKind:'language_model' as const,provider:'codex',model:'fixture',policyVersion:'sensa-agent-intake-v1',sourceReferenceIds:['conversation-1']}},acceptance:{mode:'delegated_agent' as const,actorId:'codex',basis:'explicit_user_request' as const,authorizationReference:null}};
-const nativeDelivery={contractVersion:'sensa-local-agent-intake-v1' as const,libraryId,client:{clientId:installationId,kind:'agent' as const,label:'Codex'},intake:nativeIntake,requestDigest:'a'.repeat(64)};
-const nativeReceipt={contractVersion:'sensa-local-agent-intake-v1' as const,libraryId,clientId:installationId,operationId:nativeIntake.operationId,requestDigest:nativeDelivery.requestDigest,result:{route:'fast_track' as const,personalMeaningId:crypto.randomUUID()},appliedAt:new Date().toISOString()};
-nativeDeliveries=[nativeDelivery];
-
-assert.deepEqual(sensaBridgeValue('web-native-intake-status',await fromPage(request('web-native-intake-status'))),{extensionId,state:'connected',clientLabel:'Codex'},'the settings page sees a matching local Agent connection');
-nativeLibraryId=crypto.randomUUID();
-assert.equal(sensaBridgeValue('web-native-intake-status',await fromPage(request('web-native-intake-status'))).state,'different_library','the settings page can offer a rebind for another library');
-nativeLibraryId=libraryId;
-assert.deepEqual(sensaBridgeValue('web-native-intake-pull',await fromPage(request('web-native-intake-pull'))),[nativeDelivery],'a local Agent delivery reaches the selected library without an account connection');
-assert.equal((await fromPage(request('web-native-intake-ack',{receipt:{...nativeReceipt,libraryId:crypto.randomUUID()}}))).error,'library_mismatch','the extension refuses a native receipt for another library');
-assert.equal(sensaBridgeValue('web-native-intake-ack',await fromPage(request('web-native-intake-ack',{receipt:nativeReceipt}))).acknowledged,true,'the native queue is acknowledged only with a library-bound receipt');
-assert.deepEqual(nativeAcknowledgement,nativeReceipt,'the host receives the exact committed gateway receipt');
-assert.deepEqual(sensaBridgeValue('web-native-intake-pull',await fromPage(request('web-native-intake-pull'))),[],'an acknowledged local Agent delivery is no longer pending');
-nativeAvailable=false;
-assert.equal((await fromPage(request('web-native-intake-pull'))).error,'native_host_unavailable','an optional native host that is not installed has its own no-op error');
-assert.equal(sensaBridgeValue('web-native-intake-status',await fromPage(request('web-native-intake-status'))).state,'setup_required','the settings page can configure a missing native host');
-nativeAvailable=true;
 
 const published=await fromPage(request('web-language-routes',{routes:routeCollection}));
 assert.deepEqual(sensaBridgeValue('web-language-routes',published),routeContext,'publishing the Route collection answers the extension’s selected context');
@@ -229,9 +195,6 @@ console.log('PASS: every declared kind is served through the real forwarder and 
 /** What a caller may send for each kind, checked by the compiler against the
  * declaration: a kind without a payload, or with the wrong one, fails to build. */
 const payloads:{[K in SensaBridgeKind]:SensaBridgePayload<K>}={
-  'web-native-intake-status':{},
-  'web-native-intake-pull':{},
-  'web-native-intake-ack':{receipt:nativeReceipt},
   'web-intake-pull':{},
   'web-intake-ack':{receipt},
   'web-connect-prepare':{},
@@ -243,9 +206,9 @@ const payloads:{[K in SensaBridgeKind]:SensaBridgePayload<K>}={
 };
 assert.deepEqual(Object.keys(payloads).sort(),[...sensaBridgeKinds].sort(),'every kind has exactly one payload shape, and no kind is missing one');
 assert.deepEqual(Object.keys(sensaBridgeResponseSchemas).sort(),[...sensaBridgeKinds].sort(),'every kind has exactly one declared answer');
-assert.equal(sensaBridgeKinds.length,11);
+assert.equal(sensaBridgeKinds.length,8);
 for(const kind of sensaBridgeKinds){
-  const built:Record<string,unknown>={channel:sensaBridgeRequestChannel,id:crypto.randomUUID(),kind,...(!localKinds.has(kind)?{accountId}:{}),...payloads[kind] as Record<string,unknown>};
+  const built:Record<string,unknown>={channel:sensaBridgeRequestChannel,id:crypto.randomUUID(),kind,accountId,...payloads[kind] as Record<string,unknown>};
   if(kind!=='web-session-ended')built.libraryId=libraryId;
   assert.ok(sensaBridgeRequestSchema.safeParse(built).success,'the declaration accepts what a caller builds for '+kind);
 }

@@ -26,6 +26,9 @@
     },
     {
       "path": "./packages/model-runtime"
+    },
+    {
+      "path": "./packages/mcp-server"
     }
   ]
 }

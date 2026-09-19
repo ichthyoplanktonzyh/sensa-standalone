@@ -55,9 +55,10 @@ React Web 保持既有平台定位和迁移验证价值；不能把阶段性的 
 Owner 明确将面向 Agent 的端口纳入完整采集蓝图。Agent 可以在用户授权范围内提交固定上下文、
 Expression、来源及 Sense，经过同一快慢轨和库交接合同；用户在当前 Agent 会话中
 明确要求保存可构成 delegated Semantic Acceptance，无需独立 grant id 或第二次 Sensa 确认。
-采集本身不隐含加入学习。端口无关 payload、远程投递邮箱与 Web 本地消费器已建立；Codex skill 与
-本机 CLI 已通过 Native Messaging 接入当前 Web 库，设置页提供按当前库与浏览器生成的一次性安装命令；
-具体 Agent 产品的 OAuth 与 MCP 仍是后续接入面。
+采集本身不隐含加入学习。端口无关 payload、账号范围投递邮箱与 Web 本地消费器已建立；设置页只签发
+短时一次性 setup code，本机安装器兑换并保管可撤销的 intake-only Agent credential。Codex Skill 与
+跨客户端 MCP prompt/tool 只提供领域格式与操作说明，不承担事实完整性判断；浏览器扩展不参与 Agent
+连接或交付。Codex、Cursor、Claude Desktop、Windsurf 与 CLI 共用同一 adapter 和服务端 authority。
 
 未确认 Sense 的材料保存在 Intake Inbox；完整 Personal Meaning 才进入语义世界的稳定意义集合。
 Focus 可选；快慢轨都不降低 Context–Sense–Expression 的完整性要求。
@@ -566,11 +567,13 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 - Agent 在当前会话收到 learner 的明确保存请求，或持有持续授权时，调用正式 commit
   operation 可直接产生 delegated acceptance，无需第二次第一方确认；actor、basis、可选的
   authorization reference、resolver 与提交内容必须可审计。一次性明确请求不强制 grant id；
-- Local Agent Intake 把固定 `libraryId` 的 CLI transport queue 经浏览器扩展 Native Messaging
-  交给 Web；CLI 不直接访问 OPFS。只有 Web 的正式 commit 成功才回写 applied receipt，queued 不等于
-  已进入 Personal Semantic World，并且该本机路径不要求账号；
-- Remote Intake Delivery 使用账号范围和已登记本地 library 解析目的地，Agent 不在 payload
-  中指定 library。云端只对合同、幂等与投递负责，不执行语义完整性判断或 Personal Meaning 写入；
+- Agent Intake 使用可撤销、intake-only 的账号连接和已登记本地 library 解析目的地，Agent 不在 payload
+  中指定 library、client identity 或 acceptance actor。save 操作把当前明确请求记录为 delegated
+  acceptance；云端只对合同、身份、幂等与投递负责，不执行语义完整性判断或 Personal Meaning 写入。
+  只有 Web 的正式 commit 成功才回写 applied receipt，queued 不等于已进入 Personal Semantic World；
+- Agent setup code 约十分钟有效且只能兑换一次；长期 token 不经过 Web、复制命令或进程参数，服务端只保存
+  digest。连接更新在新 credential 激活后原子撤销旧 credential；生命周期事件、last-used、每连接新 operation
+  限额和精确匹配卸载构成运维边界，但审计不保存 CES 内容；
 - Saved Sense 指向稳定 Sense identity 并保留保存时 Sense Version provenance；Saved Example 指向
   exact immutable Example，不能在内容更新后静默替换；
 - 每个 learner × Sense 最多存在一份 current Sense Note；Note 具有独立 revision，与 Saved Sense

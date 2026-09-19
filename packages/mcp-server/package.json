@@ -1,0 +1,21 @@
+{
+  "name": "@sensa/mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "sensa-mcp": "dist/sensa-mcp.mjs"
+  },
+  "scripts": {
+    "prebuild": "node -e \"const fs=require('node:fs');fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('tsconfig.tsbuildinfo',{force:true})\"",
+    "build": "tsc -p tsconfig.json && esbuild src/index.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/sensa-mcp.mjs && chmod 700 dist/sensa-mcp.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "@sensa/contracts": "file:../contracts",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

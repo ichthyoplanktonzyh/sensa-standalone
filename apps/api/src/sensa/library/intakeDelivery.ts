@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { Hono } from "hono";
 import {
   canonicalConsumerJson,
+  sensaAgentIntakeSubmissionSchema,
   sensaIntakeDeliveryAcknowledgementSchema,
   sensaIntakeDeliveryChannelRequestSchema,
   sensaIntakeDeliveryContractVersion,
@@ -18,13 +19,24 @@ type Access = <T>(
   request: Request,
   work: (
     db: DatabaseExecutor,
-    account: { accountId: string; installationId?: string; now?: Date },
+    account: {
+      accountId: string;
+      installationId?: string;
+      agentConnectionId?: string;
+      agentLabel?: string;
+      now?: Date;
+    },
   ) => Promise<T>,
 ) => Promise<T>;
 
 const digest = (value: unknown): string => createHash("sha256")
   .update(canonicalConsumerJson(value))
   .digest("hex");
+
+const agentHourlyLimit = (): number => {
+  const configured = Number(process.env.SENSA_AGENT_INTAKE_HOURLY_LIMIT);
+  return Number.isInteger(configured) && configured > 0 ? configured : 120;
+};
 
 const instant = (value: unknown): string => {
   const parsed = value instanceof Date ? value : new Date(String(value));
@@ -75,20 +87,74 @@ async function enabledChannel(db: DatabaseExecutor, accountId: string): Promise<
   return String(rows[0]!.library_id);
 }
 
+async function queueSubmission(
+  db: DatabaseExecutor,
+  account: { accountId: string; now?: Date },
+  submission: ReturnType<typeof sensaIntakeDeliverySubmissionSchema.parse>,
+): Promise<SensaIntakeDeliveryReceipt> {
+  const libraryId = await enabledChannel(db, account.accountId);
+  const connection = (await db.query(
+    `SELECT connection_id FROM sensa_consumer.agent_connections
+      WHERE account_id=$1 AND connection_id=$2 FOR UPDATE`,
+    [account.accountId, submission.client.clientId],
+  )).rows[0];
+  if (!connection) throw new ConsumerError(401, "access_revoked");
+  const requestDigest = digest(submission);
+  const existing = (await db.query<DeliveryRow>(
+    `SELECT library_id,operation_id,envelope,envelope_digest,receipt,created_at
+       FROM sensa_consumer.intake_envelopes
+      WHERE account_id=$1 AND library_id=$2 AND operation_id=$3 FOR UPDATE`,
+    [account.accountId, libraryId, submission.intake.operationId],
+  )).rows[0];
+  if (existing) {
+    if (existing.envelope_digest !== requestDigest) {
+      throw new ConsumerError(409, "operation_conflict");
+    }
+    return deliveryReceipt(existing);
+  }
+  const now = account.now ?? new Date();
+  const recent = Number((await db.query(
+    `SELECT count(*)::int AS n FROM sensa_consumer.intake_envelopes
+      WHERE account_id=$1 AND client_id=$2 AND created_at>$3`,
+    [account.accountId, submission.client.clientId, new Date(now.getTime() - 60 * 60 * 1000)],
+  )).rows[0]!.n);
+  if (recent >= agentHourlyLimit()) throw new ConsumerError(429, "agent_intake_rate_limit");
+  const row = (await db.query<DeliveryRow>(
+    `INSERT INTO sensa_consumer.intake_envelopes
+      (account_id,library_id,operation_id,client_id,envelope,envelope_digest,created_at)
+     VALUES($1,$2,$3,$4,$5::jsonb,$6,$7)
+     RETURNING library_id,operation_id,envelope,envelope_digest,receipt,created_at`,
+    [
+      account.accountId,
+      libraryId,
+      submission.intake.operationId,
+      submission.client.clientId,
+      JSON.stringify(submission),
+      requestDigest,
+      now,
+    ],
+  )).rows[0]!;
+  return deliveryReceipt(row);
+}
+
 /**
  * Remote delivery is a durable mailbox, not a cloud semantic writer. It never
  * evaluates Context adequacy or materializes a Personal Meaning; a trusted
  * local library does that and acknowledges the resulting fast/inbox route.
  */
-export function registerIntakeDelivery(app: Hono, access: Access): void {
+export function registerIntakeDelivery(app: Hono, webAccess: Access, agentAccess: Access): void {
   app.use("/sensa/intake/*", async (context, next) => {
+    context.header("Cache-Control", "no-store");
+    await next();
+  });
+  app.use("/sensa/agent/intakes*", async (context, next) => {
     context.header("Cache-Control", "no-store");
     await next();
   });
 
   app.post("/sensa/intake/channel", async (context) => {
     const input = sensaIntakeDeliveryChannelRequestSchema.parse(await context.req.json());
-    return context.json(await access(context.req.raw, async (db, account) => {
+    return context.json(await webAccess(context.req.raw, async (db, account) => {
       if (account.installationId) throw new ConsumerError(403, "web_authorization_required");
       const other = (await db.query(
         "SELECT library_id FROM sensa_consumer.intake_channels WHERE account_id=$1 AND enabled=true AND library_id<>$2 FOR UPDATE",
@@ -105,46 +171,37 @@ export function registerIntakeDelivery(app: Hono, access: Access): void {
     }));
   });
 
-  app.post("/sensa/intake/deliveries", async (context) => {
-    const submission = sensaIntakeDeliverySubmissionSchema.parse(await context.req.json());
-    return context.json(await access(context.req.raw, async (db, account) => {
-      const libraryId = await enabledChannel(db, account.accountId);
-      const requestDigest = digest(submission);
-      const existing = (await db.query<DeliveryRow>(
-        `SELECT library_id,operation_id,envelope,envelope_digest,receipt,created_at
-         FROM sensa_consumer.intake_envelopes
-         WHERE account_id=$1 AND library_id=$2 AND operation_id=$3 FOR UPDATE`,
-        [account.accountId, libraryId, submission.intake.operationId],
-      )).rows[0];
-      if (existing) {
-        if (existing.envelope_digest !== requestDigest) {
-          throw new ConsumerError(409, "operation_conflict");
-        }
-        return deliveryReceipt(existing);
+  app.post("/sensa/agent/intakes", async (context) => {
+    context.header("Cache-Control", "no-store");
+    const input = sensaAgentIntakeSubmissionSchema.parse(await context.req.json());
+    return context.json(await agentAccess(context.req.raw, async (db, account) => {
+      if (!account.agentConnectionId || !account.agentLabel) {
+        throw new ConsumerError(403, "agent_authorization_required");
       }
-      const now = account.now ?? new Date();
-      const row = (await db.query<DeliveryRow>(
-        `INSERT INTO sensa_consumer.intake_envelopes
-          (account_id,library_id,operation_id,client_id,envelope,envelope_digest,created_at)
-         VALUES($1,$2,$3,$4,$5::jsonb,$6,$7)
-         RETURNING library_id,operation_id,envelope,envelope_digest,receipt,created_at`,
-        [
-          account.accountId,
-          libraryId,
-          submission.intake.operationId,
-          submission.client.clientId,
-          JSON.stringify(submission),
-          requestDigest,
-          now,
-        ],
-      )).rows[0]!;
-      return deliveryReceipt(row);
+      const submission = sensaIntakeDeliverySubmissionSchema.parse({
+        contractVersion: sensaIntakeDeliveryContractVersion,
+        client: {
+          clientId: account.agentConnectionId,
+          kind: "agent",
+          label: account.agentLabel,
+        },
+        intake: {
+          ...input.intake,
+          acceptance: {
+            mode: "delegated_agent",
+            actorId: `agent:${account.agentConnectionId}`,
+            basis: "explicit_user_request",
+            authorizationReference: null,
+          },
+        },
+      });
+      return queueSubmission(db, account, submission);
     }));
   });
 
   app.post("/sensa/intake/deliveries/pull", async (context) => {
     const input = sensaIntakeDeliveryPullRequestSchema.parse(await context.req.json());
-    return context.json(await access(context.req.raw, async (db, account) => {
+    return context.json(await webAccess(context.req.raw, async (db, account) => {
       if (account.installationId) throw new ConsumerError(403, "web_authorization_required");
       const selected = await enabledChannel(db, account.accountId);
       if (selected !== input.libraryId) throw new ConsumerError(409, "library_mismatch");
@@ -168,7 +225,7 @@ export function registerIntakeDelivery(app: Hono, access: Access): void {
 
   app.post("/sensa/intake/deliveries/ack", async (context) => {
     const acknowledgement = sensaIntakeDeliveryAcknowledgementSchema.parse(await context.req.json());
-    return context.json(await access(context.req.raw, async (db, account) => {
+    return context.json(await webAccess(context.req.raw, async (db, account) => {
       if (account.installationId) throw new ConsumerError(403, "web_authorization_required");
       const selected = await enabledChannel(db, account.accountId);
       if (selected !== acknowledgement.libraryId) throw new ConsumerError(409, "library_mismatch");
@@ -198,15 +255,19 @@ export function registerIntakeDelivery(app: Hono, access: Access): void {
     }));
   });
 
-  app.get("/sensa/intake/deliveries/:deliveryId", async (context) => {
+  app.get("/sensa/agent/intakes/:deliveryId", async (context) => {
+    context.header("Cache-Control", "no-store");
     const deliveryId = zUuid(context.req.param("deliveryId"));
-    return context.json(await access(context.req.raw, async (db, account) => {
+    return context.json(await agentAccess(context.req.raw, async (db, account) => {
+      if (!account.agentConnectionId) {
+        throw new ConsumerError(403, "agent_authorization_required");
+      }
       const libraryId = await enabledChannel(db, account.accountId);
       const row = (await db.query<DeliveryRow>(
         `SELECT library_id,operation_id,envelope,envelope_digest,receipt,created_at
          FROM sensa_consumer.intake_envelopes
-         WHERE account_id=$1 AND library_id=$2 AND operation_id=$3`,
-        [account.accountId, libraryId, deliveryId],
+         WHERE account_id=$1 AND library_id=$2 AND operation_id=$3 AND client_id=$4`,
+        [account.accountId, libraryId, deliveryId, account.agentConnectionId],
       )).rows[0];
       if (!row) throw new ConsumerError(404, "intake_delivery_not_found");
       return deliveryReceipt(row);

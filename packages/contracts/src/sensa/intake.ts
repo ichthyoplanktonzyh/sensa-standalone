@@ -144,50 +144,68 @@ export const sensaIntakeSenseSchema = z
   })
   .strict();
 
-export const sensaIntakePayloadSchema = z
-  .object({
-    contractVersion: z.literal(sensaIntakeContractVersion),
-    operationId: uuid,
-    capturedAt: timestamp,
-    context: sensaIntakeContextSchema.nullable(),
-    expression: sensaIntakeExpressionSchema.nullable(),
-    sense: sensaIntakeSenseSchema.nullable(),
-    acceptance: sensaIntakeAcceptanceSchema.nullable(),
-  })
-  .strict()
-  .superRefine((value, context) => {
-    const occurrence = value.expression?.occurrence;
-    if (!occurrence) return;
-    if (!value.context) {
+const validateOccurrence = (
+  value: {
+    context: z.infer<typeof sensaIntakeContextSchema> | null;
+    expression: z.infer<typeof sensaIntakeExpressionSchema> | null;
+  },
+  context: z.RefinementCtx,
+) => {
+  const occurrence = value.expression?.occurrence;
+  if (!occurrence) return;
+  if (!value.context) {
+    context.addIssue({
+      code: "custom",
+      message: "an expression occurrence requires a context",
+      path: ["expression", "occurrence"],
+    });
+    return;
+  }
+  const locator = occurrence.locator;
+  if (locator.kind === "media_region") {
+    if (!value.context.mediaReferenceIds.includes(locator.mediaReferenceId)) {
       context.addIssue({
         code: "custom",
-        message: "an expression occurrence requires a context",
-        path: ["expression", "occurrence"],
-      });
-      return;
-    }
-    const locator = occurrence.locator;
-    if (locator.kind === "media_region") {
-      if (!value.context.mediaReferenceIds.includes(locator.mediaReferenceId)) {
-        context.addIssue({
-          code: "custom",
-          message: "the expression occurrence references absent media",
-          path: ["expression", "occurrence", "locator"],
-        });
-      }
-      return;
-    }
-    if (locator.kind === "learning_target") return;
-    const text = value.context.textSegment;
-    if (!text || locator.end > text.length
-      || text.slice(locator.start, locator.end) !== occurrence.surfaceForm) {
-      context.addIssue({
-        code: "custom",
-        message: "the expression occurrence does not match the context",
+        message: "the expression occurrence references absent media",
         path: ["expression", "occurrence", "locator"],
       });
     }
-  });
+    return;
+  }
+  if (locator.kind === "learning_target") return;
+  const text = value.context.textSegment;
+  if (!text || locator.end > text.length
+    || text.slice(locator.start, locator.end) !== occurrence.surfaceForm) {
+    context.addIssue({
+      code: "custom",
+      message: "the expression occurrence does not match the context",
+      path: ["expression", "occurrence", "locator"],
+    });
+  }
+};
+
+const sensaIntakeFactsShape = {
+  contractVersion: z.literal(sensaIntakeContractVersion),
+  operationId: uuid,
+  capturedAt: timestamp,
+  context: sensaIntakeContextSchema.nullable(),
+  expression: sensaIntakeExpressionSchema.nullable(),
+  sense: sensaIntakeSenseSchema.nullable(),
+};
+
+/** Context–Expression–Sense facts before a trusted surface records acceptance. */
+export const sensaIntakeFactsSchema = z
+  .object(sensaIntakeFactsShape)
+  .strict()
+  .superRefine(validateOccurrence);
+
+export const sensaIntakePayloadSchema = z
+  .object({
+    ...sensaIntakeFactsShape,
+    acceptance: sensaIntakeAcceptanceSchema.nullable(),
+  })
+  .strict()
+  .superRefine(validateOccurrence);
 
 export const sensaIntakeItemSchema = z
   .object({

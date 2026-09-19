@@ -1,4 +1,12 @@
-import {librarySyncBlockStoreChars,semanticLookupInputSchema} from '@sensa/contracts/sensa';
+import {
+  librarySyncBlockStoreChars,
+  semanticLookupInputSchema,
+  sensaAgentConnectionEventListSchema,
+  sensaAgentConnectionExchangeSchema,
+  sensaAgentConnectionListSchema,
+  sensaAgentConnectionRevokeSchema,
+  sensaAgentConnectionSetupCreateSchema,
+} from '@sensa/contracts/sensa';
 import {Hono} from 'hono';
 import {bodyLimit} from 'hono/body-limit';
 import {stream} from 'hono/streaming';
@@ -15,6 +23,7 @@ import {ensureAdmission} from './admission.js';
 import {ConsumerError,verifyConsumer,type ConsumerPrincipal,type ConsumerVerifier} from './auth.js';
 import {assertDeletionConfigured,finishAccountDeletion,requestAccountDeletion,type DeleteIdentity} from './deletion.js';
 import {authorizeExtension,exchangeExtension,extensionVerifier} from './extension.js';
+import {agentVerifier,createAgentConnectionSetup,exchangeAgentConnectionSetup,listAgentConnectionEvents,listAgentConnections,revokeAgentConnection} from './agent.js';
 import {sensaExtensionAuthorizationSchema,sensaExtensionExchangeSchema} from '@sensa/contracts/sensa';
 import {serviceTelemetry,type ServiceRequestRecord} from './telemetry.js';
 import {readLearningContentRegistry} from './learningContentRegistry.js';
@@ -71,6 +80,7 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
   const app=new Hono();
   const transaction=options.transaction??unsafeTransaction;
   const verify=extensionVerifier(options.verify??verifyConsumer,transaction,clock);
+  const verifyAgent=agentVerifier(verify,transaction,clock);
 
   app.use('*',serviceTelemetry(options.telemetry));
   app.use('*',(context,next)=>bodyLimit({
@@ -95,6 +105,13 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
     return transaction(async db=>{
       const current=await account(db,identity,false,false,clock());
       return work(db,{accountId:current.account_id,installationId:identity.installationId,now:current.now});
+    });
+  },async(request,work)=>{
+    const identity=await verifyAgent(request);
+    if(!identity.agentConnectionId||!identity.agentLabel)throw new ConsumerError(403,'agent_authorization_required');
+    return transaction(async db=>{
+      const current=await account(db,identity,false,false,clock());
+      return work(db,{accountId:current.account_id,agentConnectionId:identity.agentConnectionId,agentLabel:identity.agentLabel,now:current.now});
     });
   });
   registerReadingRoutes(app,async(request,work)=>{
@@ -147,6 +164,45 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
   app.post('/sensa/extension/exchange',async context=>{
     const input=sensaExtensionExchangeSchema.parse(await context.req.json());
     return context.json(await transaction(db=>exchangeExtension(db,input,clock())));
+  });
+
+  app.post('/sensa/agent/connection-setups',async context=>{
+    context.header('Cache-Control','no-store');
+    const identity=await verify(context.req.raw);
+    if(identity.installationId)throw new ConsumerError(403,'web_authorization_required');
+    const input=sensaAgentConnectionSetupCreateSchema.parse(await context.req.json());
+    return context.json(await transaction(async db=>createAgentConnectionSetup(db,await account(db,identity,false,false,clock()),input)));
+  });
+  app.post('/sensa/agent/connection-setups/exchange',async context=>{
+    context.header('Cache-Control','no-store');
+    const input=sensaAgentConnectionExchangeSchema.parse(await context.req.json());
+    return context.json(await transaction(db=>exchangeAgentConnectionSetup(db,input,clock())));
+  });
+  app.get('/sensa/agent/connections',async context=>{
+    context.header('Cache-Control','no-store');
+    const identity=await verify(context.req.raw);
+    if(identity.installationId)throw new ConsumerError(403,'web_authorization_required');
+    return context.json(await transaction(async db=>{
+      const current=await account(db,identity,false,false,clock());
+      return sensaAgentConnectionListSchema.parse({connections:await listAgentConnections(db,current.account_id,current.now)});
+    }));
+  });
+  app.post('/sensa/agent/connections/revoke',async context=>{
+    context.header('Cache-Control','no-store');
+    const identity=await verify(context.req.raw);
+    if(identity.installationId)throw new ConsumerError(403,'web_authorization_required');
+    const input=sensaAgentConnectionRevokeSchema.parse(await context.req.json());
+    await transaction(async db=>revokeAgentConnection(db,await account(db,identity,false,false,clock()),input.connectionId));
+    return context.json({revoked:true as const,connectionId:input.connectionId});
+  });
+  app.get('/sensa/agent/connection-events',async context=>{
+    context.header('Cache-Control','no-store');
+    const identity=await verify(context.req.raw);
+    if(identity.installationId)throw new ConsumerError(403,'web_authorization_required');
+    return context.json(await transaction(async db=>{
+      const current=await account(db,identity,false,false,clock());
+      return sensaAgentConnectionEventListSchema.parse({events:await listAgentConnectionEvents(db,current.account_id)});
+    }));
   });
 
   app.get('/sensa/service/status',async context=>{

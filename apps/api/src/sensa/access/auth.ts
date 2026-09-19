@@ -2,9 +2,18 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { JWTVerifyGetKey } from 'jose';
 
 export class ConsumerError extends Error {
-  constructor(public readonly status: 400|401|403|404|409|413|503, public readonly code: string) { super(code); }
+  constructor(public readonly status: 400|401|403|404|409|410|413|429|503, public readonly code: string) { super(code); }
 }
-export type ConsumerPrincipal = { authenticatedAt?:number; installationId?:string; issuer: string; subject: string; sessionId: string; email: string | null };
+export type ConsumerPrincipal = {
+  authenticatedAt?: number;
+  installationId?: string;
+  agentConnectionId?: string;
+  agentLabel?: string;
+  issuer: string;
+  subject: string;
+  sessionId: string;
+  email: string | null;
+};
 export type ConsumerVerifier = (request: Request) => Promise<ConsumerPrincipal>;
 /** The injected key seam is for deterministic signature tests, never request-controlled. */
 export function createConsumerVerifier(issuer: string, key: JWTVerifyGetKey): ConsumerVerifier {

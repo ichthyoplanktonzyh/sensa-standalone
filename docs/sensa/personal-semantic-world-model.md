@@ -207,8 +207,13 @@ direct acceptance；获授权 Agent 调用正式 commit operation 可以构成 d
 提交到 Personal Semantic World 与提交 Add-to-Learning 是两种独立权限；Agent 获得前者不自动获得
 后者。
 
-远程 Agent 不能访问用户设备时，使用同一 Semantic Intake payload 经账号范围内的
-Remote Intake Delivery 投递。提交不携带由 Agent 指定的 library id；受认证账号与用户已
+Agent transport credential 的安装与 Semantic Acceptance 仍是两件事。Web 只签发短时、一次性的 setup code；
+长期 intake-only credential 由本机安装器直接兑换，服务端只保留 digest。连接激活、替换、last-used 与撤销
+可以审计，但不能因此记录或暴露 CES 内容。替换必须先激活新连接再撤销旧连接；限额按新 operation 计算，
+同一 operation 的相同幂等重试不应被当作新的语义写入。
+
+外部 Agent 使用同一 Semantic Intake facts 经账号范围内的 Remote Intake Delivery 投递。提交不携带
+由 Agent 指定的 library id、client identity 或 acceptance actor；受认证的 intake-only 连接与用户已
 登记的本地 library 共同决定目的地。云端只保存幂等邮箱项，本地 authority 取回后用
 同一 operation id 执行快/慢轨，再回传实际结果。`queued` 只代表云端已收到；只有
 `applied` 才代表本地库已经创建 Personal Meaning 或 Intake Inbox Item。这条邮箱链路不是

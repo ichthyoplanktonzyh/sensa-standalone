@@ -578,7 +578,9 @@ not re-judge whether a producer-supplied Context is semantically sufficient. An 
 does not become Personal Semantic World membership by itself. Context acquisition
 provenance, Sense-resolution provenance and Semantic Acceptance authority are three
 orthogonal facts: an entry surface may carry all three, but its client kind is never a
-routing rule or a Personal Meaning identity component.
+routing rule or a Personal Meaning identity component. Clarification and resolution may
+happen in Sensa's own conversation or in an authorized external Agent conversation; the
+Personal Semantic World receives the resulting facts through the same Intake authority.
 
 **Intake Inbox Item**:
 A learner-owned unresolved Semantic Intake awaiting Context, an Expression selection,
@@ -915,6 +917,18 @@ An account-scoped durable mailbox that carries one canonical Semantic Intake fro
 remote authenticated caller to the learner's registered local library. The online
 service validates the contract and queues the request but does not resolve Sense,
 judge Context sufficiency or write Personal Semantic World facts.
+
+**Agent Connection Setup**:
+A short-lived, one-time exchange that lets a reviewed local installer activate an
+account-scoped, revocable and intake-only Agent Connection. The copied setup command
+does not contain the long-lived credential; consuming a replacement setup activates
+the new connection before revoking its predecessor.
+
+**Agent Connection**:
+An account-scoped credential that may submit Semantic Intake facts and read receipts
+created by that same connection, but cannot read the Personal Semantic World or choose
+its destination library. Its activation, replacement, last use and revocation are
+auditable independently from the submitted semantic content.
 
 **Intake Delivery Receipt**:
 The idempotent transport result for one Remote Intake Delivery. `queued` means the

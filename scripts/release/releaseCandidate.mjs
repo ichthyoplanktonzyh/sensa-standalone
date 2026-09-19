@@ -13,6 +13,7 @@ export const candidateRoots=[
  'packages/learning-kernel/dist',
  'packages/content-validator/dist',
  'packages/model-runtime/dist',
+ 'packages/mcp-server/dist',
 ];
 export function validateReleaseEnvironment(env){
  const errors=[];
@@ -52,7 +53,6 @@ export async function prepareCandidate(env,root=process.cwd()){
  await readFile(resolve(dist,'index.html'));await readFile(resolve(dist,'sw.js'));
  const manifest=JSON.parse(await readFile(resolve(extension,'manifest.json'),'utf8'));
  if(!manifest.host_permissions.includes(new URL(config.apiUrl).origin+'/*')||!manifest.content_scripts.some(s=>s.matches.includes(config.webOrigin+'/*')))throw new Error('Extension does not target release services');
- if(!manifest.permissions?.includes('nativeMessaging'))throw new Error('Extension lacks the local Agent intake permission');
  await writeFile(resolve(dist,'_headers'),`/*\n  Content-Security-Policy: ${candidateCsp}\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: DENY\n  Permissions-Policy: camera=(), geolocation=()\n/sw.js\n  Cache-Control: no-cache\n/index.html\n  Cache-Control: no-cache\n/integrations/*\n  Cache-Control: no-cache\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n`);
  const browserFiles=(await files(resolve(dist,'assets'))).filter(p=>p.endsWith('.js'));
  const browserCode=(await Promise.all(browserFiles.map(p=>readFile(p,'utf8')))).join('\n');

@@ -1,64 +1,55 @@
 {
-  "kind": "submit",
-  "intake": {
-    "contractVersion": "sensa-intake-v3",
-    "operationId": "00000000-0000-4000-8000-000000000003",
-    "capturedAt": "2026-09-14T08:00:00.000Z",
-    "context": {
-      "modality": "text",
-      "textSegment": "I backed out.",
-      "mediaReferenceIds": [],
-      "languageTag": "en",
-      "source": {
-        "client": "codex",
-        "url": null,
-        "title": "GPT Live conversation",
-        "sourceReferenceId": "conversation-1",
-        "domSelector": null,
-        "paragraphContext": null
-      }
+  "contractVersion": "sensa-intake-v3",
+  "operationId": "00000000-0000-4000-8000-000000000003",
+  "capturedAt": "2026-09-19T08:00:00.000Z",
+  "context": {
+    "modality": "text",
+    "textSegment": "I backed out.",
+    "mediaReferenceIds": [],
+    "languageTag": "en",
+    "source": {
+      "client": "codex",
+      "url": null,
+      "title": "GPT Live conversation",
+      "sourceReferenceId": "conversation-1",
+      "domSelector": null,
+      "paragraphContext": null
+    }
+  },
+  "expression": {
+    "surfaceForm": "back out",
+    "languageTag": "en",
+    "occurrence": {
+      "surfaceForm": "backed out",
+      "locator": { "kind": "text_span", "start": 2, "end": 12 }
     },
-    "expression": {
-      "surfaceForm": "back out",
-      "languageTag": "en",
-      "occurrence": {
-        "surfaceForm": "backed out",
-        "locator": { "kind": "text_span", "start": 2, "end": 12 }
-      },
-      "expressionTypeHint": "phrase"
+    "expressionTypeHint": "phrase"
+  },
+  "sense": {
+    "senseKey": null,
+    "semanticSpec": {
+      "schemaVersion": "sensa-sense-semantic-spec-v1",
+      "coreMeaningFocus": "原本准备做某事，后来决定退出或取消",
+      "prototypeScenes": [
+        {
+          "summary": "I backed out.",
+          "participantRoles": [],
+          "states": [],
+          "directionOrCausality": null
+        }
+      ],
+      "includedCases": ["I backed out."],
+      "excludedCases": [],
+      "neighborContrasts": [],
+      "openQuestions": []
     },
-    "sense": {
-      "senseKey": null,
-      "semanticSpec": {
-        "schemaVersion": "sensa-sense-semantic-spec-v1",
-        "coreMeaningFocus": "原本准备做某事，后来决定退出或取消",
-        "prototypeScenes": [
-          {
-            "summary": "I backed out.",
-            "participantRoles": [],
-            "states": [],
-            "directionOrCausality": null
-          }
-        ],
-        "includedCases": ["I backed out."],
-        "excludedCases": [],
-        "neighborContrasts": [],
-        "openQuestions": []
-      },
-      "wordingSource": "llm_suggested",
-      "resolutionProvenance": {
-        "resolverKind": "language_model",
-        "provider": "codex",
-        "model": "gpt-5",
-        "policyVersion": "sensa-agent-intake-v1",
-        "sourceReferenceIds": ["conversation-1"]
-      }
-    },
-    "acceptance": {
-      "mode": "delegated_agent",
-      "actorId": "codex",
-      "basis": "explicit_user_request",
-      "authorizationReference": null
+    "wordingSource": "llm_suggested",
+    "resolutionProvenance": {
+      "resolverKind": "language_model",
+      "provider": "codex",
+      "model": "gpt-5",
+      "policyVersion": "sensa-agent-intake-v1",
+      "sourceReferenceIds": ["conversation-1"]
     }
   }
 }

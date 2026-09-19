@@ -36,7 +36,7 @@ try{
  for(const artifactRoot of candidateRoots.filter(path=>!['apps/web/dist','apps/browser-extension/dist'].includes(path))){const directory=join(root,artifactRoot);await mkdir(directory,{recursive:true});await writeFile(join(directory,'index.js'),'export {};\n//# sourceMappingURL=index.js.map\n');await writeFile(join(directory,'index.js.map'),'{}\n');await writeFile(join(directory,'index.d.ts'),'export {};\n//# sourceMappingURL=index.d.ts.map\n');await writeFile(join(directory,'index.d.ts.map'),'{}\n');}
  await writeFile(join(web,'index.html'),'<html></html>');await writeFile(join(web,'sw.js'),'// fixture');
  await writeFile(join(web,'assets/app.js'),JSON.stringify([env.VITE_SUPABASE_URL,env.VITE_SENSA_API_URL,env.VITE_SUPABASE_PUBLISHABLE_KEY]));
- await writeFile(join(extension,'manifest.json'),JSON.stringify({permissions:['nativeMessaging'],host_permissions:['https://fixture.supabase.co/*'],content_scripts:[{matches:[env.SENSA_WEB_ORIGIN+'/*']}]}));
+ await writeFile(join(extension,'manifest.json'),JSON.stringify({permissions:['activeTab'],host_permissions:['https://fixture.supabase.co/*'],content_scripts:[{matches:[env.SENSA_WEB_ORIGIN+'/*']}]}));
  await mkdir(join(root,'release-candidate'),{recursive:true});await writeFile(join(root,'release-candidate/catalog.json'),JSON.stringify({items:[]}));
  const releaseEnv={...env,SENSA_RELEASE_SHA:sha};const candidate=await prepareCandidate(releaseEnv,root);
  assert.match(await readFile(join(web,'_headers'),'utf8'),/\/integrations\/\*\n  Cache-Control: no-cache/);
