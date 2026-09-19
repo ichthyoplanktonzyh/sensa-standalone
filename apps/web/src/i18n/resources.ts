@@ -18,6 +18,7 @@ import { languagesZh, languagesEn } from "./languages";
 import { glossaryZh, glossaryEn } from "./glossary";
 import { appearanceZh, appearanceEn } from "./appearance";
 import { landingZh, landingEn } from "./landing";
+import { reliabilityZh, reliabilityEn } from "./reliability";
 export const resources = {
   "zh-CN": {
     translation: {
@@ -26,6 +27,7 @@ export const resources = {
       glossary: glossaryZh,
       appearance: appearanceZh,
       landing: landingZh,
+      reliability: reliabilityZh,
       content: contentZh,
       statistics: statisticsZh,
       referenceExample: referenceExampleZh,
@@ -82,6 +84,7 @@ export const resources = {
       glossary: glossaryEn,
       appearance: appearanceEn,
       landing: landingEn,
+      reliability: reliabilityEn,
       content: contentEn,
       statistics: statisticsEn,
       referenceExample: referenceExampleEn,

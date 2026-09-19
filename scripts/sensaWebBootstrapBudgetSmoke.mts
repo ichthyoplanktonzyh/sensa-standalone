@@ -251,6 +251,13 @@ try{
  }
  assert.match(await readFile(join(dist,'integrations','sensa-mcp.mjs'),'utf8'),/^#!\/usr\/bin\/env node/u,'the Web release does not contain the executable MCP adapter');
 
+ const missing=await pageContext(false);
+ await missing.page.goto(origin+'/not-a-screen',{waitUntil:'domcontentloaded'});
+ await expect(missing.page.locator('[data-sensa-product-recovery="not_found"]')).toBeVisible({timeout:SHELL_BUDGET_MS});
+ await expect(missing.page.getByLabel('邮箱',{exact:true})).toHaveCount(0);
+ assert.deepEqual(missing.errors,[],'the product not-found route emitted a browser error');
+ await missing.context.close();
+
  log('2/4 creating a durable account library through the local library commands');
  const a=await pageContext(false);
  const created=await a.page.goto(origin,{waitUntil:'domcontentloaded'});

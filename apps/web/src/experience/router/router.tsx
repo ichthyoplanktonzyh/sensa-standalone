@@ -2,10 +2,13 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  type ErrorComponentProps,
   type SearchSchemaInput,
+  useRouterState,
 } from '@tanstack/react-router';
 import App from '../../application/Root';
-import { parseShellParams, parseViewMode, type ShellFlow, type ShellParams } from './shellLocation';
+import { ProductRecovery } from '../../application/ProductRecovery';
+import { isKnownShellPath, parseShellParams, parseViewMode, type ShellFlow, type ShellParams } from './shellLocation';
 
 /**
  * App renders the shell plus only the screens present in the current URL stack.
@@ -23,8 +26,17 @@ interface ShellSearch extends ShellParams {
   readonly candidate?: string;
 }
 
+function SensaRootRoute() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  return pathname === '/' || isKnownShellPath(pathname)
+    ? <App />
+    : <ProductRecovery kind="not_found" />;
+}
+
 const rootRoute = createRootRoute({
-  component: App,
+  component: SensaRootRoute,
+  errorComponent: ({ reset }: ErrorComponentProps) => <ProductRecovery kind="error" onRetry={reset} />,
+  notFoundComponent: () => <ProductRecovery kind="not_found" />,
   validateSearch: (search: Record<string, unknown> & SearchSchemaInput): ShellSearch => {
     const candidate=typeof search.candidate==='string'&&/^[0-9a-f-]{36}$/i.test(search.candidate)?search.candidate:undefined;
     const params = {...parseShellParams(search),...(candidate?{candidate}:{})};

@@ -27,6 +27,7 @@ const defaultAllowedOrigins = [
 ];
 
 const sensaRoutes = [
+  "POST /sensa/browser-events",
   "GET /sensa/books",
   "GET /sensa/book-versions/:bookVersionId/manifest",
   "GET /sensa/content-releases/:contentReleaseId/items",

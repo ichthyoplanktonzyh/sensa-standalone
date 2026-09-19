@@ -10,6 +10,7 @@ export * from "./intakeDelivery.js";
 export * from "./agentIntake.js";
 export * from "./agentConnection.js";
 export * from "./browserIntake.js";
+export * from "./browserTelemetry.js";
 export * from "./accountBackup.js";
 export * from "./learningConnection.js";
 export * from "./learningContent.js";

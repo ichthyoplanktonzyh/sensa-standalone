@@ -26,6 +26,7 @@ import {authorizeExtension,exchangeExtension,extensionVerifier} from './extensio
 import {agentVerifier,createAgentConnectionSetup,exchangeAgentConnectionSetup,listAgentConnectionEvents,listAgentConnections,revokeAgentConnection} from './agent.js';
 import {sensaExtensionAuthorizationSchema,sensaExtensionExchangeSchema} from '@sensa/contracts/sensa';
 import {serviceTelemetry,type ServiceRequestRecord} from './telemetry.js';
+import {registerBrowserTelemetry,type BrowserTelemetrySink} from './browserTelemetry.js';
 import {readLearningContentRegistry} from './learningContentRegistry.js';
 
 const modelDailyLimit=30;
@@ -67,6 +68,7 @@ async function account(db:DatabaseExecutor,identity:ConsumerPrincipal,create=fal
 export type ConsumerRoutesOptions={
   deleteIdentity?:DeleteIdentity;
   telemetry?:(record:ServiceRequestRecord)=>void;
+  browserTelemetry?:BrowserTelemetrySink;
   verify?:ConsumerVerifier;
   transaction?:Transaction;
   clock?:()=>Date;
@@ -92,6 +94,8 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
     if(error instanceof z.ZodError||error instanceof SyntaxError)return context.json({code:'invalid_request'},400);
     return context.json({code:'temporarily_unavailable'},503);
   });
+
+  registerBrowserTelemetry(app,options.browserTelemetry);
 
   registerLibrarySync(app,async(request,work)=>{
     const identity=await verify(request);

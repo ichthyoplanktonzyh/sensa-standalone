@@ -97,8 +97,9 @@ const isFlow = (value: unknown): value is ShellFlow =>
  * `//` and `/academy/` all behave; unknown segments are dropped so a bad URL
  * degrades to the deepest stack it does describe rather than to an error.
  */
-export const parseMainStack = (pathname: string): string[] => {
+const parseMainStackResult = (pathname: string): { readonly stack: string[]; readonly known: boolean } => {
   const stack: string[] = [];
+  let known = true;
   for (const segment of pathname.split('/')) {
     if (segment.length === 0) continue;
     // Retired word-book lists now resolve to the single learning-content list.
@@ -112,10 +113,21 @@ export const parseMainStack = (pathname: string): string[] => {
       continue;
     }
     const sheetId = toSheetId(segment, stack[stack.length - 1]);
-    if (sheetId === undefined || stack.includes(sheetId)) continue;
+    if (sheetId === undefined || stack.includes(sheetId)) {
+      known = false;
+      continue;
+    }
     stack.push(sheetId);
   }
-  return stack;
+  return { stack, known };
+};
+
+export const parseMainStack = (pathname: string): string[] => parseMainStackResult(pathname).stack;
+
+/** Whether every non-empty segment describes a real or explicitly retired shell route. */
+export const isKnownShellPath = (pathname: string): boolean => {
+  const result = parseMainStackResult(pathname);
+  return result.known && result.stack.length > 0;
 };
 
 /** A flow search param that is absent or unrecognised means the main shell. */

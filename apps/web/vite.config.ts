@@ -8,6 +8,9 @@ export default defineConfig(({ mode }) => {
   const localAcceptance = mode === 'sensa-local';
   const envDirectory = localAcceptance ? '../../.sensa-local/env' : '.';
   const env = loadEnv(mode, envDirectory, "VITE_");
+  const release = /^(?:development|[0-9a-f]{7,40})$/u.test(process.env.SENSA_RELEASE_SHA ?? '')
+    ? process.env.SENSA_RELEASE_SHA
+    : 'development';
   if (localAcceptance) {
     for (const key of ['VITE_SUPABASE_URL', 'VITE_SENSA_API_URL'] as const) {
       const value = process.env[key] ?? env[key];
@@ -19,6 +22,7 @@ export default defineConfig(({ mode }) => {
     }
   }
   return {
+    define: { __SENSA_RELEASE__: JSON.stringify(release) },
     envDir: envDirectory,
     publicDir: "public",
     plugins: [react(), tailwindcss(),localAgentAssets(),offlineShell()],
