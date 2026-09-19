@@ -185,18 +185,8 @@ export interface SemanticAgentTurnInput {
   languages: SensaPinnedLanguageContext;
 }
 
-/**
- * Receives streaming text deltas of the assistant's reply as they arrive.
- * Purely presentational: the final `SemanticAgentTurnResult` is always the
- * authoritative turn, and a transport without streaming simply never calls it.
- */
-export type SemanticAgentDeltaHandler = (delta: string) => void;
-
 export interface SemanticAgentPort {
-  turn(
-    input: SemanticAgentTurnInput,
-    onDelta?: SemanticAgentDeltaHandler,
-  ): Promise<SemanticAgentTurnResult>;
+  turn(input: SemanticAgentTurnInput): Promise<SemanticAgentTurnResult>;
 }
 
 /** What one finished clarification thread left behind, for the done state. */

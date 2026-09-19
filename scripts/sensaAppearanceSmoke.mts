@@ -368,18 +368,14 @@ const migratedSurfaces = [
   "apps/web/src/experience/components/ContentSenseDetailScreen.tsx",
   "apps/web/src/experience/components/ConfirmedSenseDetailScreen.tsx",
   "apps/web/src/experience/components/ClickableSentence.tsx",
-  "apps/web/src/experience/components/DictDetailModal.tsx",
   "apps/web/src/experience/components/ExpressionBindingScreen.tsx",
   "apps/web/src/experience/components/IntakeInboxDrawer.tsx",
-  "apps/web/src/experience/components/IntakeSimulatorModal.tsx",
   "apps/web/src/experience/components/LearnScreen.tsx",
   "apps/web/src/experience/components/PersonalConnectionActions.tsx",
   "apps/web/src/experience/components/PersonalMeaningDetailScreen.tsx",
   "apps/web/src/experience/components/QuickDictPopup.tsx",
   "apps/web/src/experience/components/ReferenceDictionaryScreen.tsx",
   "apps/web/src/experience/components/SceneEditorModal.tsx",
-  "apps/web/src/experience/components/SemanticWorldScreen.tsx",
-  "apps/web/src/experience/components/SensaSemanticWorldScreen.tsx",
   "apps/web/src/experience/components/SensaFreePracticeScreen.tsx",
   "apps/web/src/experience/components/PracticeScopeScreen.tsx",
   "apps/web/src/experience/components/language/LanguagePanel.tsx",
@@ -433,9 +429,7 @@ for (const path of migratedSurfaces) {
 
 const migratedStyleSources = [
   "apps/web/src/experience/ui/primitives.ts",
-  "apps/web/src/experience/components/DictDetailModal.css",
   "apps/web/src/experience/components/PersonalMeaningDetailScreen.css",
-  "apps/web/src/experience/components/SensaSemanticWorldScreen.css",
   "apps/web/src/experience/components/examples/learningExample.css",
 ] as const;
 for (const path of migratedStyleSources) {
@@ -500,9 +494,7 @@ for (const path of await presentationSources(experienceRoot)) {
 }
 
 for (const [componentPath, stylesheetPath, ownedSelector] of [
-  ["components/DictDetailModal.tsx", "components/DictDetailModal.css", /^(?:dict-|collins-|c-|feature-|promo-|exam-|note-|m-)/u],
   ["components/PersonalMeaningDetailScreen.tsx", "components/PersonalMeaningDetailScreen.css", /^pmw-/u],
-  ["components/SensaSemanticWorldScreen.tsx", "components/SensaSemanticWorldScreen.css", /^personal-world-v2/u],
 ] as const) {
   const component = await readFile(new URL(componentPath, experienceRoot), "utf8");
   const stylesheet = await readFile(new URL(stylesheetPath, experienceRoot), "utf8");
@@ -617,9 +609,7 @@ assert(!webShell.includes("from 'lucide-react'"), "WebShell selects concrete Ski
 for (const path of [
   "library/PackageLearningRuntime.tsx",
   "components/ContentWorkspace.tsx",
-  "components/DictDetailModal.tsx",
   "components/IntakeInboxDrawer.tsx",
-  "components/IntakeSimulatorModal.tsx",
   "components/PersonalMeaningComposer.tsx",
   "components/NoteEditorModal.tsx",
   "components/PersonalMeaningDetailScreen.tsx",
@@ -645,13 +635,16 @@ for (const path of [
   assert(!screen.includes("duration-300"), `${path} still hard-codes screen duration`);
 }
 const appShellSource = await readFile(new URL("App.tsx", experienceRoot), "utf8");
+const quickDictionarySource = await readFile(new URL("components/QuickDictPopup.tsx", experienceRoot), "utf8");
 const runtimeMenuSource = await readFile(new URL("library/PackageLearningRuntime.tsx", experienceRoot), "utf8");
+assert(!appShellSource.includes("presentationStore"), "App restores a runtime presentation comparison switch");
+assert(!appShellSource.includes("DictDetailModal"), "App restores the retired dictionary implementation");
+assert(!quickDictionarySource.includes("BaselineQuickDictPopup"), "Quick lookup restores the retired dictionary implementation");
+assert(!quickDictionarySource.includes("../data"), "Reference lookup depends on the retired UI word fixture");
+assert(!quickDictionarySource.includes("lookupWord"), "Quick lookup restores the permissive legacy adapter");
 assert(runtimeMenuSource.includes('variant="popover"'), "Runtime transient menus do not consume the overlay Skin seam");
 assert(!appShellSource.includes('id="mask"'), "App retains a parallel page-owned overlay backdrop");
-for (const path of [
-  "components/PersonalMeaningDetailScreen.css",
-  "components/SensaSemanticWorldScreen.css",
-] as const) {
+for (const path of ["components/PersonalMeaningDetailScreen.css"] as const) {
   const style = await readFile(new URL(path, experienceRoot), "utf8");
   assert(!/\b(?:180|220|280|300)ms\b/u.test(style), `${path} hard-codes a migrated motion duration`);
 }

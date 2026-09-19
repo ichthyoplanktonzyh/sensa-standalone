@@ -52,13 +52,6 @@ export interface PersonalLearningScene {
 export type ContentAnnotation =
   | Readonly<{
       id: string;
-      kind: 'word_note';
-      word: string;
-      body: string;
-      updatedAt: number;
-    }>
-  | Readonly<{
-      id: string;
       kind: 'sense_note';
       senseId: string;
       body: string;
@@ -79,7 +72,6 @@ export type ContentAnnotation =
   | PersonalSemanticAnchor
   | PersonalLearningScene;
 
-const wordKey = (word: string) => word.trim().toLocaleLowerCase();
 const rowId = (kind: ContentAnnotation['kind'], subject: string) =>
   `${kind}:${encodeURIComponent(subject)}`;
 export const personalLearningSceneRowId = (learningTargetId: string, languageRouteId: string) =>
@@ -124,15 +116,14 @@ const find = <K extends ContentAnnotation['kind']>(kind: K, id: string) =>
     row.kind === kind && row.id === id
   ));
 
-async function setNote(scope: 'word' | 'sense', subject: string, content: string) {
-  const normalized = scope === 'word' ? wordKey(subject) : subject.trim();
+async function setSenseNote(senseId: string, content: string) {
+  const normalized = senseId.trim();
   if (!normalized) return;
-  const kind = scope === 'word' ? 'word_note' : 'sense_note';
-  const id = rowId(kind, normalized);
+  const id = rowId('sense_note', normalized);
   const body = content.trim();
   await command({
     id: crypto.randomUUID(),
-    kind: `annotation.${kind}`,
+    kind: 'annotation.sense_note',
     input: {
       subject: normalized,
       clear: !body,
@@ -140,11 +131,7 @@ async function setNote(scope: 'word' | 'sense', subject: string, content: string
     },
   }, async (tx) => {
     if (!body) tx.delete('annotations', id);
-    else if (kind === 'word_note') {
-      tx.put('annotations', id, { id, kind, word: normalized, body, updatedAt: Date.now() });
-    } else {
-      tx.put('annotations', id, { id, kind, senseId: normalized, body, updatedAt: Date.now() });
-    }
+    else tx.put('annotations', id, { id, kind: 'sense_note', senseId: normalized, body, updatedAt: Date.now() });
   });
   await reload();
 }
@@ -318,20 +305,13 @@ async function markLearningSceneAccepted(input: Readonly<{
 
 export const contentAnnotations = {
   subscribe,
-  getNote(word: string) {
-    return find('word_note', rowId('word_note', wordKey(word)))?.body ?? '';
-  },
   getSenseNote(senseId: string) {
     return find('sense_note', rowId('sense_note', senseId.trim()))?.body ?? '';
-  },
-  getAllNotes() {
-    return Object.fromEntries(rows.flatMap((row) => row.kind === 'word_note' ? [[row.word, row.body]] : []));
   },
   getAllSenseNotes() {
     return Object.fromEntries(rows.flatMap((row) => row.kind === 'sense_note' ? [[row.senseId, row.body]] : []));
   },
-  setNote: (word: string, content: string) => setNote('word', word, content),
-  setSenseNote: (senseId: string, content: string) => setNote('sense', senseId, content),
+  setSenseNote,
   isSenseSaved(senseId: string) {
     return !!find('saved_sense', rowId('saved_sense', senseId.trim()));
   },

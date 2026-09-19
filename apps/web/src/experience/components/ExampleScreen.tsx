@@ -10,7 +10,7 @@ export interface ExampleScreenProps {
   /** Only an Action-authorized ordered sequence may enable Example pagination. */
   sentenceSequence?: number[];
   onClose: () => void;
-  onOpenDict?: (word: Word | QuickDictEntry | string, tab?: string) => void;
+  onOpenDict?: (word: Word | QuickDictEntry | string) => void;
   onNextWord: () => void;
   nextLabel?: string;
   toast: (msg: string) => void;

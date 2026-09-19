@@ -4,15 +4,13 @@ import { uiText } from '../../i18n/uiText';
 import { useState, useEffect, useRef } from 'react';
 import { contentAnnotations } from '../../data/library/contentAnnotations';
 import type { Word, QuickDictEntry } from '../types';
-import { WORDS } from '../data';
-import { lookupWord } from '../services/quickDict';
 import { SensaOverlayLayout } from '../ui/SensaComponents';
 
 interface NoteEditorModalProps {
   active: boolean;
-  wordData: Word | QuickDictEntry | string | null;
-  senseId?: string;
-  senseMeaning?: string;
+  wordData: Word | QuickDictEntry | string;
+  senseId: string;
+  senseMeaning: string;
   onClose: () => void;
   onSave?: (savedContent: string) => void;
   toast: (msg: string) => void;
@@ -43,29 +41,10 @@ export const NoteEditorModal = ({
     }
   }
 
-  // 获取完整释义摘要
-  const fullWord: Word | undefined = WORDS.find(
-    (w) => w.w.toLowerCase() === wordStr.toLowerCase()
-  );
-  const quickEntry = wordStr ? lookupWord(wordStr) : null;
-
-  let briefDef = '';
-  if (senseMeaning) {
-    briefDef = senseMeaning;
-  } else if (fullWord) {
-    briefDef = fullWord.senses
-      .map((s) => `${s.pos} ${s.items.join('；')}`)
-      .join('  ');
-  } else if (quickEntry) {
-    briefDef = quickEntry.senses
-      .map((s) => `${s.pos} ${s.text}`)
-      .join('  ');
-  }
-
   // 每次打开或单词变化时加载当前笔记内容
   useEffect(() => {
     if (active && wordStr) {
-      const existing = senseId ? contentAnnotations.getSenseNote(senseId) : contentAnnotations.getNote(wordStr);
+      const existing = contentAnnotations.getSenseNote(senseId);
       setNoteText(existing);
       const focusTimer = window.setTimeout(() => {
         if (textareaRef.current) {
@@ -78,12 +57,11 @@ export const NoteEditorModal = ({
     }
   }, [active, senseId, wordStr]);
 
-  if (!active || !wordData) return null;
+  if (!active) return null;
 
   const handleSave = async () => {
     try {
-      if (senseId) await contentAnnotations.setSenseNote(senseId, noteText);
-      else await contentAnnotations.setNote(wordStr, noteText);
+      await contentAnnotations.setSenseNote(senseId, noteText);
       toast(uiText('noteSaved'));
       if (onSave) onSave(noteText);
       onClose();
@@ -108,7 +86,7 @@ export const NoteEditorModal = ({
       primary: <div className="flex min-h-full flex-col">
         <div className="mb-5 flex max-w-full items-baseline self-center gap-2 border-y border-border-subtle py-6">
           <strong className="font-language text-page-title font-semibold text-fg-primary">{wordStr}</strong>
-          {briefDef && <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-body-support text-fg-tertiary">{briefDef}</span>}
+          {senseMeaning && <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-body-support text-fg-tertiary">{senseMeaning}</span>}
         </div>
 
         <main className="flex min-h-[385px] flex-1 flex-col rounded-card border border-border-subtle bg-surface-panel p-5">

@@ -615,14 +615,8 @@ const PreviewPersonalMeaningDetailScreen = ({
   const cameraRef = useRef<HTMLInputElement>(null);
   const openedThread = useRef<string | null>(null);
   const turnAbortRef = useRef<AbortController | null>(null);
-  /** Deltas received but not yet typed out, plus the pacer that drips them. */
-  const pendingRef = useRef('');
-  const pacerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const drainRef = useRef<(() => void) | null>(null);
   const [session, setSession] = useState<SemanticAgentSession | null>(null);
   const [busy, setBusy] = useState(false);
-  /** The assistant reply as it streams in; blank again once the turn lands. */
-  const [streamingText, setStreamingText] = useState('');
   const [error, setError] = useState('');
   const [imageError, setImageError] = useState('');
   const [materialOpen, setMaterialOpen] = useState(false);
@@ -649,53 +643,10 @@ const PreviewPersonalMeaningDetailScreen = ({
     setSession(next);
   }, []);
 
-  /** Stop the typewriter and drop whatever had not been typed out yet. */
-  const stopPacer = useCallback(() => {
-    const done = drainRef.current;
-    if (pacerRef.current) clearInterval(pacerRef.current);
-    pacerRef.current = null;
-    drainRef.current = null;
-    pendingRef.current = '';
-    done?.();
-  }, []);
-
-  /**
-   * The upstream typically generates the whole reply first and then hands it
-   * over in one late burst, so raw deltas would pop the text in almost at
-   * once. The pacer types it back out at a readable pace; a large backlog
-   * speeds up modestly so the bubble never trails far behind. Once the final
-   * result is in (drainRef set), the remaining tail finishes fast.
-   */
-  const pump = useCallback(() => {
-    const pending = pendingRef.current;
-    if (!pending) {
-      const done = drainRef.current;
-      if (pacerRef.current) clearInterval(pacerRef.current);
-      pacerRef.current = null;
-      drainRef.current = null;
-      done?.();
-      return;
-    }
-    const chars = Array.from(pending);
-    const take = drainRef.current
-      ? Math.max(2, Math.ceil(chars.length / 8))
-      : Math.min(5, Math.max(1, Math.round(chars.length / 100)));
-    pendingRef.current = chars.slice(take).join('');
-    setStreamingText((text) => text + chars.slice(0, take).join(''));
-  }, []);
-
-  const startPacer = useCallback(() => {
-    if (!pacerRef.current) pacerRef.current = setInterval(pump, 30);
-  }, [pump]);
-
-  // A turn still typing when the screen goes away must not leave a live timer.
+  // A pending structured turn must stop when its screen goes away.
   useEffect(() => () => {
     turnAbortRef.current?.abort();
     turnAbortRef.current = null;
-    if (pacerRef.current) clearInterval(pacerRef.current);
-    pacerRef.current = null;
-    drainRef.current?.();
-    drainRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -703,13 +654,11 @@ const PreviewPersonalMeaningDetailScreen = ({
   }, [active, personalMeaningId]);
 
   useEffect(() => {
-    // While the reply streams in, follow it without smooth-scroll fighting
-    // every delta; finished messages still glide into place.
     transcriptRef.current?.scrollTo({
       top: transcriptRef.current.scrollHeight,
       behavior: busy ? 'auto' : session?.messages.length ? 'smooth' : 'auto',
     });
-  }, [busy, session?.messages.length, streamingText]);
+  }, [busy, session?.messages.length]);
 
   /** The optional Focus this thread confirmed, if it needed one. */
   const sessionFocus: JourneyFocusView | null = useMemo(() => {
@@ -787,41 +736,24 @@ const PreviewPersonalMeaningDetailScreen = ({
     commit(waiting);
     setBusy(true);
     setError('');
-    stopPacer();
-    setStreamingText('');
     turnAbortRef.current?.abort();
     const controller = new AbortController();
     turnAbortRef.current = controller;
     try {
-      const result = await semanticAgent.turn(
-        {
-          material: materialOverride ?? clarificationMaterial,
-          messages,
-          workingSet: baseSession.workingSet,
-          readyToConfirm: baseSession.readyToConfirm,
-          learnerEditedTracks: baseSession.learnerEditedTracks,
-          focusLocked: baseSession.focusLocked,
-          knownMeanings,
-          languages:languageContext,
-          signal: controller.signal,
-        },
-        (delta) => {
-          pendingRef.current += delta;
-          startPacer();
-        },
-      );
-      if (pendingRef.current) {
-        // The result is in; let the bubble finish typing before the final
-        // message takes its place, so the tail never snaps in.
-        await new Promise<void>((resolve) => {
-          drainRef.current = resolve;
-          startPacer();
-        });
-      }
+      const result = await semanticAgent.turn({
+        material: materialOverride ?? clarificationMaterial,
+        messages,
+        workingSet: baseSession.workingSet,
+        readyToConfirm: baseSession.readyToConfirm,
+        learnerEditedTracks: baseSession.learnerEditedTracks,
+        focusLocked: baseSession.focusLocked,
+        knownMeanings,
+        languages:languageContext,
+        signal: controller.signal,
+      });
       if (controller.signal.aborted) {
         throw controller.signal.reason ?? new DOMException('Aborted', 'AbortError');
       }
-      setStreamingText('');
       commit({
         ...waiting,
         messages: [...messages, message('assistant', result.assistantMessage)],
@@ -831,8 +763,6 @@ const PreviewPersonalMeaningDetailScreen = ({
         steps: [...waiting.steps, ...result.steps].slice(-40),
       });
     } catch (cause) {
-      stopPacer();
-      setStreamingText('');
       setError(controller.signal.aborted
         ? localFlowText('requestStopped')
         : cause instanceof Error ? cause.message : uiText('unableToContinueThisConversationPleaseRetry'));
@@ -846,8 +776,7 @@ const PreviewPersonalMeaningDetailScreen = ({
 
   const stopTurn = useCallback(() => {
     turnAbortRef.current?.abort();
-    stopPacer();
-  }, [stopPacer]);
+  }, []);
 
   // Captured material opens in the same agent as an ordinary user message.
   // The agent decides whether to propose immediately or ask a natural question.
@@ -1297,17 +1226,9 @@ const PreviewPersonalMeaningDetailScreen = ({
           </div>
         ))}
         {busy && (
-          <div
-            className={classNames(`pmw-message is-assistant${streamingText ? ' is-streaming' : ' is-thinking'}`)}
-          >
+          <div className={classNames('pmw-message is-assistant is-thinking')}>
             <span className={classNames("pmw-avatar")} aria-hidden="true">✦</span>
-            <div>
-              {streamingText ? (
-                <p>{streamingText}<i className={classNames("pmw-caret")} aria-hidden="true" /></p>
-              ) : (
-                <p><i /><i /><i /></p>
-              )}
-            </div>
+            <div><p><i /><i /><i /></p></div>
           </div>
         )}
       </div>

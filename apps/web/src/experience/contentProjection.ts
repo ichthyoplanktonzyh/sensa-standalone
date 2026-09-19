@@ -84,9 +84,7 @@ export interface ContentNoteItem {
   noteId: string;
   word: string;
   body: string;
-  sense?: PracticeSenseItem;
-  candidateCount: number;
-  isLegacy: boolean;
+  sense: PracticeSenseItem;
 }
 
 export interface SavedExampleItem {
@@ -110,7 +108,6 @@ export interface ContentProjectionSnapshot {
 export const exampleIdForSense = (item: PracticeSenseItem): string => item.example.exampleId;
 
 const sensesByWordId = new Map<string, PracticeSenseItem[]>();
-const sensesByWord = new Map<string, PracticeSenseItem[]>();
 const sensesById = new Map<string, PracticeSenseItem>();
 
 PRACTICE_SENSES.forEach((item) => {
@@ -118,11 +115,6 @@ PRACTICE_SENSES.forEach((item) => {
   const byId = sensesByWordId.get(item.wordId) || [];
   byId.push(item);
   sensesByWordId.set(item.wordId, byId);
-
-  const key = item.word.toLowerCase();
-  const byWord = sensesByWord.get(key) || [];
-  byWord.push(item);
-  sensesByWord.set(key, byWord);
 });
 
 const unambiguousSense = (id: string): PracticeSenseItem | undefined => {
@@ -272,23 +264,7 @@ export const buildContentProjection = (
         word: sense.word,
         body,
         sense,
-        candidateCount: 1,
-        isLegacy: false,
       }];
-    });
-
-  const legacyNotes = Object.entries(contentAnnotations.getAllNotes())
-    .filter(([, body]) => body.trim().length > 0)
-    .map(([word, body]) => {
-      const candidates = sensesByWord.get(word.toLowerCase()) || [];
-      return {
-        noteId: `legacy-note:${word.toLowerCase()}`,
-        word,
-        body,
-        sense: candidates.length === 1 ? candidates[0] : undefined,
-        candidateCount: candidates.length,
-        isLegacy: true,
-      };
     });
 
   return {
@@ -297,7 +273,7 @@ export const buildContentProjection = (
     known,
     savedSenses,
     savedExamples,
-    notes: [...senseNotes, ...legacyNotes],
+    notes: senseNotes,
     semanticSenses,
     personalSemanticRegions,
     personalMeanings: personalMeaningItems,
@@ -310,7 +286,7 @@ export const contentSectionMeta: Record<ContentSectionId, { title: string; descr
   known: { title: '已会的意思', description: '你明确标记为已会的意思，可以回看，不代表整词已掌握。' },
   'saved-senses': { title: '收藏的意思', description: '稍后想再看的具体意思；收藏不会自动加入学习。' },
   'saved-examples': { title: '收藏的例句', description: '你保存的学习例句，与其对应的具体意思保持关联。' },
-  notes: { title: '我的笔记', description: '自己的理解和提醒；旧笔记未唯一对应意思时会明确提示。' },
+  notes: { title: '我的笔记', description: '自己的理解和提醒，每条笔记都对应一个具体意思。' },
 };
 
 export const semanticStatusLabel: Record<SemanticStatus, string> = {

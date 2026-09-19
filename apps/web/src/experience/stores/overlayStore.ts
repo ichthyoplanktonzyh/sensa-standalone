@@ -43,18 +43,17 @@ export interface LearningSceneEditorTarget {
 }
 
 export interface OverlayState {
-  /** Lexical Reference 详情；原始柯林斯式实现保留为 baseline。 */
+  /** Lexical Reference detail. */
   readonly dictModalWord: DictSubject | null;
-  readonly dictModalTab: string;
   readonly referenceExampleDeck: ReferenceExampleDeck | null;
-  openDictModal: (word: DictSubject, tab?: string) => void;
+  openDictModal: (word: DictSubject) => void;
   closeDictModal: () => void;
   setReferenceExampleDeck: (deck: ReferenceExampleDeck | null) => void;
 
   /** 独立笔记编辑全屏弹窗。 */
   readonly noteModalWord: DictSubject | null;
   readonly noteModalSense: { readonly senseId: string; readonly meaning: string } | null;
-  openNoteEditor: (word?: DictSubject, senseId?: string, meaning?: string) => void;
+  openNoteEditor: (word: DictSubject, senseId: string, meaning: string) => void;
   closeNoteEditor: () => void;
 
   /** 我的场景独立富媒体编辑。 */
@@ -95,19 +94,17 @@ let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 export const useOverlayStore = create<OverlayState>((set) => ({
   dictModalWord: null,
-  dictModalTab: '柯林斯',
   referenceExampleDeck: null,
-  openDictModal: (word, tab = '柯林斯') => set({ dictModalWord: word, dictModalTab: tab }),
+  openDictModal: (word) => set({ dictModalWord: word }),
   closeDictModal: () => set({ referenceExampleDeck: null, dictModalWord: null }),
   setReferenceExampleDeck: (referenceExampleDeck) => set({ referenceExampleDeck }),
 
   noteModalWord: null,
   noteModalSense: null,
   openNoteEditor: (word, senseId, meaning) => {
-    if (!word) return;
     set({
       noteModalWord: word,
-      noteModalSense: senseId ? { senseId, meaning: meaning ?? '' } : null,
+      noteModalSense: { senseId, meaning },
     });
   },
   closeNoteEditor: () => set({ noteModalWord: null, noteModalSense: null }),

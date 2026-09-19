@@ -208,22 +208,13 @@
   color: var(--sensa-action-on-primary);
 }
 
-.pmw-message.is-thinking p > i:not(.pmw-caret) {
+.pmw-message.is-thinking p > i {
   display: inline-block;
   width: 0.35rem;
   height: 0.35rem;
   margin-right: 0.25rem;
   border-radius: 999px;
   background: var(--sensa-progress);
-}
-
-.pmw-caret {
-  display: inline-block;
-  width: 0.125rem;
-  height: 1em;
-  margin-left: 0.15rem;
-  vertical-align: -0.1em;
-  background: var(--sensa-action-primary);
 }
 
 .pmw-inline-error,

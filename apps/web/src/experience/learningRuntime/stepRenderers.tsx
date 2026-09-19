@@ -67,11 +67,11 @@ import type {
 export interface StepRendererHost {
   readonly toast: (message: string) => void;
   readonly openExample: (senseIdx: number, sentenceIdx?: number) => void;
-  readonly openDict: (word: Word | QuickDictEntry | string, tab?: string) => void;
+  readonly openDict: (word: Word | QuickDictEntry | string) => void;
   readonly openNoteEditor: (
     word: Word | QuickDictEntry | string,
-    senseId?: string,
-    meaning?: string,
+    senseId: string,
+    meaning: string,
   ) => void;
   readonly openSceneEditor: (
     content: RuntimePersonalContent,

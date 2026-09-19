@@ -240,7 +240,6 @@ const parseArguments = (raw: string): unknown => {
 
 const executeTurn = async (
   input: SemanticAgentTurnInput,
-  onDelta?: (delta: string) => void,
 ): Promise<SemanticAgentTurnResult> => {
   const provider = await selectedProvider('teacher');
   const messages: ModelMessage[] = [
@@ -298,7 +297,6 @@ const executeTurn = async (
         && workingSet.context.unresolvedDetails.length === 0
         && workingSet.sense.unresolvedQuestions.length === 0;
       const assistantMessage = turn.reply;
-      onDelta?.(assistantMessage);
       return {
         assistantMessage,
         workingSet,
@@ -353,7 +351,6 @@ const executeTurn = async (
   }
 
   const assistantMessage = '我已经整理出一部分理解，但这一轮还没有稳定下来。请再告诉我，你在这个场景里最想表达的那一点是什么？';
-  onDelta?.(assistantMessage);
   return {
     assistantMessage,
     workingSet,

@@ -172,18 +172,9 @@ export const ContentLibraryScreen = ({
                 </span>
                 <span className={copyClass}>
                   <span className={titleClass}>
-                    {item.word}{item.sense && !item.isLegacy && <em>{item.sense.pos}</em>}
+                    {item.word}<em>{item.sense.pos}</em>
                   </span>
                   <span className="line-clamp-2 text-body-support text-fg-secondary">{item.body}</span>
-                  {item.isLegacy && (
-                    <span className="w-max max-w-full rounded-control bg-accent-soft px-2 py-1 text-metadata text-feedback-warning">
-                      {item.candidateCount > 1
-                        ? uiText('legacyChoices', { count: item.candidateCount })
-                        : item.candidateCount === 1
-                          ? uiText('legacyNoteReadyToLinkToThis')
-                          : uiText('legacyNoteChooseASpecificMeaning')}
-                    </span>
-                  )}
                 </span>
                 <svg className="size-4 shrink-0 text-fg-tertiary" aria-hidden="true"><use href="#i-chev-r" /></svg>
               </button>

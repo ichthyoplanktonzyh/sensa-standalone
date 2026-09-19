@@ -33,9 +33,8 @@ try {
   await api.openLibrary();
 
   const annotation = api.contentAnnotations;
-  await annotation.setNote('River', 'cross the river');
+  assert.equal(annotation.setNote, undefined, 'word-level note compatibility must not return');
   await annotation.setSenseNote('sense:river', 'movement across water');
-  assert.equal(annotation.getNote('river'), 'cross the river');
   assert.equal(annotation.getSenseNote('sense:river'), 'movement across water');
 
   assert.equal(await annotation.toggleSense('sense:river'), true);
@@ -86,9 +85,9 @@ try {
   assert.equal(annotation.getLearningScene(target.learningTargetId,target.languageRouteId)?.acceptedRevisionId,secondScene.revisions[1].revisionId);
 
   const rows = await api.readLibrary((tx: any) => tx.all('annotations'));
-  assert.equal(rows.length, 5);
+  assert.equal(rows.length, 4);
   assert(rows.every((row: any) => row.kind !== 'saved_sense'));
-  console.log('PASS: notes, saved content and personal scenes share the authoritative local Library.');
+  console.log('PASS: Sense notes, saved content and personal scenes share the authoritative local Library.');
 } finally {
   await rm(root, { recursive: true, force: true });
 }
