@@ -1,8 +1,9 @@
+import '../../i18n/contentResources';
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
 import { useEffect, useMemo, useState } from 'react';
 import { contentAnnotations } from '../../data/library/contentAnnotations';
-import { semanticStatusLabel, type SemanticStatus } from '../contentProjection';
+import {contentSenseForId,semanticStatusLabel,type SemanticStatus} from '../contentProjection';
 import { PRACTICE_SENSES, type PracticeSenseItem } from '../practiceData';
 import { audioService } from '../services/audioService';
 import {
@@ -16,7 +17,7 @@ import { SensaDetailWorkspaceLayout } from '../ui/SensaPageLayouts';
 
 interface ContentSenseDetailScreenProps {
   active: boolean;
-  item: PracticeSenseItem | null;
+  senseId:string|null;
   onBack: () => void;
   onOpenExample: (item: PracticeSenseItem) => void;
   onOpenSense: (item: PracticeSenseItem) => void;
@@ -27,7 +28,7 @@ interface ContentSenseDetailScreenProps {
 
 export const ContentSenseDetailScreen = ({
   active,
-  item,
+  senseId,
   onBack,
   onOpenExample,
   onOpenSense,
@@ -36,6 +37,7 @@ export const ContentSenseDetailScreen = ({
   toast,
 }: ContentSenseDetailScreenProps) => {
   useTranslation();
+  const item=useMemo(()=>senseId?contentSenseForId(senseId):null,[senseId]);
   const projection = useContentProjection();
   const [saved, setSaved] = useState(false);
   const [note, setNote] = useState('');

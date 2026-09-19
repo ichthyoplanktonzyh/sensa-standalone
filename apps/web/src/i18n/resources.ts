@@ -1,38 +1,10 @@
-import {cloudSyncZh,cloudSyncEn} from './cloudSync';
-import {fourStageZh,fourStageEn} from './fourStage';
-import {originalCardsZh,originalCardsEn} from './originalCardCopy';
-import {localFlowZh,localFlowEn} from './localFlow';
-import {libraryBackupZh,libraryBackupEn,modelServiceZh,modelServiceEn} from './localLibrary';
-import { practiceZh, practiceEn } from './practice';
-import { referenceExampleZh, referenceExampleEn } from './referenceExample';
-import { learningSetupZh, learningSetupEn } from './learningSetup';
-import { statisticsZh, statisticsEn } from './statistics';
-import { accountZh, accountEn } from './account';
-import { studyZh, studyEn } from './study';
-import { learningPreferencesZh, learningPreferencesEn } from './learningPreferences';
-import { assuranceZh, assuranceEn } from './assurance';
-import { runtimeZh, runtimeEn } from './runtime';
-import { contentUiZh, contentUiEn } from "./contentUi";
-import { contentZh, contentEn, composerZh, composerEn } from "./content";
-import { languagesZh, languagesEn } from "./languages";
-import { glossaryZh, glossaryEn } from "./glossary";
-import { appearanceZh, appearanceEn } from "./appearance";
 import { landingZh, landingEn } from "./landing";
 import { reliabilityZh, reliabilityEn } from "./reliability";
 export const resources = {
   "zh-CN": {
     translation: {
-      fourStage:fourStageZh, originalCards: originalCardsZh, cloudSync:cloudSyncZh,localFlow: localFlowZh, libraryBackup: libraryBackupZh, modelService: modelServiceZh, learningSetup: learningSetupZh, practice: practiceZh, account: accountZh, study: studyZh, learningPreferences: learningPreferencesZh, runtime: runtimeZh, assurance: assuranceZh,
-      languages: languagesZh,
-      glossary: glossaryZh,
-      appearance: appearanceZh,
       landing: landingZh,
       reliability: reliabilityZh,
-      content: contentZh,
-      statistics: statisticsZh,
-      referenceExample: referenceExampleZh,
-      composer: composerZh,
-      contentUi: contentUiZh,
       brand: "Sensa",
       nav: {
         home: "今日",
@@ -79,17 +51,8 @@ export const resources = {
   },
   en: {
     translation: {
-      fourStage:fourStageEn, originalCards: originalCardsEn, cloudSync:cloudSyncEn,localFlow: localFlowEn, libraryBackup: libraryBackupEn, modelService: modelServiceEn, learningSetup: learningSetupEn, practice: practiceEn, account: accountEn, study: studyEn, learningPreferences: learningPreferencesEn, runtime: runtimeEn, assurance: assuranceEn,
-      languages: languagesEn,
-      glossary: glossaryEn,
-      appearance: appearanceEn,
       landing: landingEn,
       reliability: reliabilityEn,
-      content: contentEn,
-      statistics: statisticsEn,
-      referenceExample: referenceExampleEn,
-      composer: composerEn,
-      contentUi: contentUiEn,
       brand: "Sensa",
       nav: {
         home: "Today",

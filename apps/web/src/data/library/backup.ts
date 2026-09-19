@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import {libraryTables,readLibrary,restoreLibraryTransaction,assertCurrentLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
-import {learningOwner} from './packages';
+import {learningOwner} from './libraryOwnership';
 import {encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {validateBackupRows,backupOwnerSchema,type BackupRows} from './backupValidation';
 import {clearAllCredentials} from './providers';

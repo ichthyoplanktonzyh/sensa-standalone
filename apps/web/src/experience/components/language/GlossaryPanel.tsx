@@ -1,3 +1,4 @@
+import '../../../i18n/profileResources';
 import {useEffect,useState} from 'react';
 import {X,Plus,Trash2} from 'lucide-react';
 import {useTranslation} from 'react-i18next';

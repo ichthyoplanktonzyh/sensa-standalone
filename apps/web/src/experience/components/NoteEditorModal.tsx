@@ -1,3 +1,4 @@
+import '../../i18n/contentResources';
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
 import { useState, useEffect, useRef } from 'react';

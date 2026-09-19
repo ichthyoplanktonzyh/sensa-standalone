@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
-    "./sensa": "./dist/sensa/index.js"
+    "./sensa": "./dist/sensa/index.js",
+    "./sensa/canonical-json": "./dist/sensa/canonicalJson.js",
+    "./sensa/language": "./dist/sensa/language.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {

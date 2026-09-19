@@ -34,7 +34,7 @@ const workspace=await readFile('apps/web/src/experience/library/LearningWorkspac
 const shell=await readFile('apps/web/src/experience/ui/WebShell.tsx','utf8');
 const screenHost=await readFile('apps/web/src/experience/ui/ScreenHost.tsx','utf8');
 assert(/lazy\(\(\)=>import\('\.\/library\/HomeLearningController'\)/u.test(app),'the lightweight Home controller must remain outside the shell chunk');
-assert(/lazy\(\(\)=>import\('\.\/library\/LearningWorkspace'\)/u.test(app),'full learning controllers must remain outside the Home shell');
+assert(/const LearningWorkspace=lazy\(async\(\)=>\{/u.test(app)&&app.includes("import('./library/LearningWorkspace')"),'full learning controllers must remain outside the Home shell');
 assert(!app.includes('usePackageLearning')&&!app.includes('usePersonalLearning'),'App must not eagerly initialize full learning controllers');
 assert(!home.includes('usePackageLearning')&&!home.includes('usePersonalLearning'),'Home must use its small read projection instead of full learning controllers');
 assert(/lazy\(\(\)=>import\('\.\/PackageLearningRuntime'\)/u.test(workspace),'formal learning Runtime must remain outside the learning workspace graph');

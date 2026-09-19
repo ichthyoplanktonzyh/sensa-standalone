@@ -1,3 +1,4 @@
+import '../../i18n/contentResources';
 import {ExpressionChatInput} from './ExpressionChatInput';
 import type {ConversationImage} from '../../data/library/conversationImages';
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';

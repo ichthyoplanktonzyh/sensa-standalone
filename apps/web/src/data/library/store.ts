@@ -1,5 +1,5 @@
 /** Production local-library storage: SQLite WASM in an OPFS Worker. */
-import { canonicalConsumerJson } from "@sensa/contracts/sensa";
+import {canonicalConsumerJson} from '@sensa/contracts/sensa/canonical-json';
 
 import { decodeBackupValue, encodeBackupValue } from "./backupCodec";
 import { sqliteRecordAdapter } from "./sqliteAdapter";

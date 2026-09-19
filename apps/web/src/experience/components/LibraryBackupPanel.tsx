@@ -1,3 +1,4 @@
+import '../../i18n/profileResources';
 import {useRef,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {LoaderCircle,CheckCircle2,AlertCircle,Download,Upload} from 'lucide-react';

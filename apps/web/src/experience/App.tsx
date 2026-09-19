@@ -1,24 +1,25 @@
 import {lazy,Suspense,useCallback,useMemo} from 'react';
-import {localFlowText} from '../i18n/localFlowText';
+import {useTranslation} from 'react-i18next';
 import {IconSprite} from './components/IconSprite';
 import {DictionaryPresentationProvider} from './components/DictionaryPresentationContext';
 import {WebShell} from './ui/WebShell';
 import {ScreenHost,ScreenMemoryProvider} from './ui/ScreenHost';
 import type {PracticeSenseItem} from './practiceData';
-import {
-  contentSenseForId,
-  isContentSectionId,
-  type ContentNoteItem,
-  type ContentSectionId,
-  type SavedExampleItem,
-} from './contentProjection';
+import {isContentSectionId,type ContentSectionId} from './contentRoute';
+import type {ContentNoteItem,SavedExampleItem} from './contentProjection';
 import {useShellNavigation} from './router/useShellNavigation';
 import {screenInstanceKey} from './router/shellLocation';
 import {usePresentationStore} from './stores/presentationStore';
 import {useOverlayStore} from './stores/overlayStore';
 
 const HomeLearningController=lazy(()=>import('./library/HomeLearningController').then(module=>({default:module.HomeLearningController})));
-const LearningWorkspace=lazy(()=>import('./library/LearningWorkspace').then(module=>({default:module.LearningWorkspace})));
+const LearningWorkspace=lazy(async()=>{
+ const [module]=await Promise.all([
+  import('./library/LearningWorkspace'),
+  import('../i18n/workspaceResources'),
+ ]);
+ return {default:module.LearningWorkspace};
+});
 const PersonalMeaningDetailScreen=lazy(()=>import('./components/PersonalMeaningDetailScreen').then(module=>({default:module.PersonalMeaningDetailScreen})));
 const ExpressionBindingScreen=lazy(()=>import('./components/ExpressionBindingScreen').then(module=>({default:module.ExpressionBindingScreen})));
 const ContentLibraryScreen=lazy(()=>import('./components/ContentLibraryScreen').then(module=>({default:module.ContentLibraryScreen})));
@@ -38,14 +39,13 @@ const LEARNING_WORKSPACE_SCREENS=new Set([
 ]);
 
 export default function App(){
+ const {t}=useTranslation();
  const {viewMode,mainStack,params,goMain,backMain,setMainStack}=useShellNavigation();
  const dictionaryPresentation=usePresentationStore(state=>state.dictionary);
  const contentSection:ContentSectionId=isContentSectionId(params.section)?params.section:'recent';
  const contentComingKind:'scenes'|'collections'=params.coming==='collections'?'collections':'scenes';
  const personalMeaningId=params.meaningId??null;
  const meaningFocusId=params.focusId??null;
- const selectedContentSense=useMemo(()=>params.senseId?contentSenseForId(params.senseId):null,[params.senseId]);
- const selectedContentExample=useMemo(()=>params.exampleId?contentSenseForId(params.exampleId):null,[params.exampleId]);
  const openContentSense=useCallback((item:PracticeSenseItem)=>goMain('s-content-sense',{senseId:item.senseId}),[goMain]);
  const openPersonalMeaning=useCallback((meaningId:string,focusId?:string)=>goMain('s-personal-meaning',{meaningId,focusId}),[goMain]);
  const openConfirmedSense=useCallback((meaningId:string,focusId:string)=>goMain('s-confirmed-sense',{meaningId,focusId}),[goMain]);
@@ -90,12 +90,12 @@ export default function App(){
      else openNoteEditor(entry.word);
     }}/>;
    case 's-content-sense': return <ContentSenseDetailScreen
-    active={active} item={selectedContentSense} onBack={backMain} onOpenExample={openContentExample}
+    active={active} senseId={params.senseId??null} onBack={backMain} onOpenExample={openContentExample}
     onOpenSense={item=>goMain('s-content-sense',{senseId:item.senseId})}
     onOpenDictionary={item=>openDictModal(item.sourceWord)}
     onEditNote={item=>openNoteEditor(item.sourceWord,item.senseId,item.meaning)} toast={toast}/>;
    case 's-content-example': return <ContentExampleDetailScreen
-    active={active} item={selectedContentExample} onBack={backMain}
+    active={active} exampleId={params.exampleId??null} onBack={backMain}
     onOpenSense={item=>{
      const nextStack=mainStack.includes('s-content-sense')?mainStack.slice(0,-1):[...mainStack.slice(0,-1),'s-content-sense'];
      setMainStack(nextStack,{senseId:item.senseId});
@@ -104,7 +104,7 @@ export default function App(){
    default: return null;
   }
  };
- const fallback=<section id={currentScreen} className="screen active absolute inset-0 grid place-content-center bg-surface-canvas text-fg-primary" role="status">{localFlowText('loadingSensa')}</section>;
+ const fallback=<section id={currentScreen} className="screen active absolute inset-0 grid place-content-center bg-surface-canvas text-fg-primary" role="status">{t('reliability.loading')}</section>;
  return <ScreenMemoryProvider><DictionaryPresentationProvider presentation={dictionaryPresentation}>
   <IconSprite/>
   <WebShell current={viewMode==='lightweight'?'s-lightweight-runtime':currentScreen} focused={viewMode!=='main'} onNavigate={id=>setMainStack(id==='s-home'?[]:[id])}>

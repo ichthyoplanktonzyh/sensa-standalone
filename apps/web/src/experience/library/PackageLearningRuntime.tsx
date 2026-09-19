@@ -16,7 +16,7 @@ import {localProtocolActiveTargetId,localProtocolStepId,type LocalExecutableLear
 import {localExecutableTargetForParticipant,localLastPresentedMaterial,localPresentedMaterial} from '../../learning/runtime/localCurriculum';
 import type {LocalLearningRun} from '../../data/library/learning';
 import {localRunTargetIds} from '../../data/library/learning';
-import type {InstalledPackage} from '../../data/library/packages';
+import type {InstalledPackage} from '../../data/library/packageRecords';
 import {contentAnnotations} from '../../data/library/contentAnnotations';
 import {useJourneyGateway} from '../personalMeaningJourney';
 import type {AssuranceSupportHost} from './AssuranceLearningViews';

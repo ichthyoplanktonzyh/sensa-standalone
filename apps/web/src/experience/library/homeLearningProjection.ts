@@ -1,5 +1,5 @@
 import type {LocalLearningRun,LocalLearningTarget} from '../../data/library/learning';
-import type {InstalledPackage} from '../../data/library/packages';
+import type {InstalledPackage} from '../../data/library/packageRecords';
 import {readLibrary} from '../../data/library/store';
 import {readStudyPlans} from '../../data/library/studyPlans';
 

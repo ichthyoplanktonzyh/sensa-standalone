@@ -1,3 +1,4 @@
+import '../../i18n/referenceResources';
 import {useTranslation} from 'react-i18next';
 import {cardText} from '../../i18n/originalCards';
 import i18n from '../../i18n';

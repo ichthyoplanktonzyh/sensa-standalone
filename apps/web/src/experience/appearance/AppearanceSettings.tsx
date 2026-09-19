@@ -1,3 +1,4 @@
+import '../../i18n/profileResources';
 import { Check, Palette } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {

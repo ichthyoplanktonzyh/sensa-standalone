@@ -1,3 +1,4 @@
+import '../../i18n/profileResources';
 import type {
   SensaAgentClientKind,
   SensaAgentConnectionEvent,
@@ -14,7 +15,7 @@ import {
   listAgentConnections,
   revokeAgentConnection,
 } from '../../data/library/agentConnection';
-import { useAccountExperience } from '../account/AccountExperience';
+import { useAccountExperience } from '../account/AccountContext';
 import { agentSetupCommand, agentUninstallCommand } from '../account/localAgentSetup';
 
 const clients: { kind: SensaAgentClientKind; label: string }[] = [

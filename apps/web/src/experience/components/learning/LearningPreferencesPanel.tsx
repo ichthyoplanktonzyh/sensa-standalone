@@ -1,4 +1,5 @@
 import {localFlowText} from '../../../i18n/localFlowText';
+import '../../../i18n/learningResources';
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';

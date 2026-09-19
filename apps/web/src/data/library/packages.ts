@@ -1,14 +1,11 @@
 import {validateRuntimeLearningRelease} from '@sensa/content-validator/runtime';
 import {learningPackageSchema,learningPackageDescriptorSchema,learningBundleBookId,learningBundleBookVersionId,learningBundleVersionLabel,learningBundleTitle,learningDescriptorBookId,learningDescriptorBookVersionId,learningDescriptorVersionLabel,learningDescriptorTitle,type LearningPackageBundle,type LearningPackageDescriptor,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {canonicalJsonDigest,sha256 as syncSha256} from '@sensa/learning-kernel';
-import {command,readLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
-export type InstalledPackage={key:string;digest:string;bundle:LearningPackageBundle;installedAt:string};
-export const packageKey=(value:LearningPackageBundle|LearningPackageDescriptor)=>{
- const bookVersionId='entries' in value?learningBundleBookVersionId(value):learningDescriptorBookVersionId(value);
- if(bookVersionId&&'targetLanguage' in value&&'supportLanguage' in value)return JSON.stringify(['book-version',bookVersionId,value.targetLanguage,value.supportLanguage]);
- return JSON.stringify(['entries' in value?learningBundleBookId(value):learningDescriptorBookId(value),'entries' in value?learningBundleVersionLabel(value):learningDescriptorVersionLabel(value)]);
-};
-export async function learningOwner(tx:LibraryTransaction){const identity=await tx.get<LibraryIdentity>('meta','identity');if(!identity||!await tx.get('meta','service-owner')||await tx.get('meta','signed-out'))throw new Error('localFlow.originalAccount');return identity;}
+import {command} from './store';
+import {learningOwner} from './libraryOwnership';
+import {packageKey,type InstalledPackage} from './packageRecords';
+export {installedPackages,packageKey,type InstalledPackage} from './packageRecords';
+export {learningOwner} from './libraryOwnership';
 export const sha256=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes as BufferSource)),b=>b.toString(16).padStart(2,'0')).join('');
 export function validatePackage(raw:unknown){
  const bundle=learningPackageSchema.parse(raw);
@@ -41,7 +38,6 @@ export async function installPackage(bytes:Uint8Array,descriptor?:LearningPackag
   const installed={key,digest,bundle,installedAt:new Date().toISOString()};tx.put('packages',key,installed);return installed;
  });
 }
-export const installedPackages=()=>readLibrary(tx=>tx.all<InstalledPackage>('packages'));
 export async function downloadPackage(descriptor:LearningPackageDescriptor,signal:AbortSignal,progress:(bytes:number)=>void){
  const d=learningPackageDescriptorSchema.parse(descriptor);
  const response=await fetch(d.url,{signal,redirect:'error',credentials:'omit'});

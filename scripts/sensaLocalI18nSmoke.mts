@@ -10,6 +10,7 @@ import {accountZh,accountEn} from '../apps/web/src/i18n/account.ts';
 import {languagesZh,languagesEn} from '../apps/web/src/i18n/languages.ts';
 import {appearanceZh,appearanceEn} from '../apps/web/src/i18n/appearance.ts';
 import i18n from '../apps/web/src/i18n/index.ts';
+import '../apps/web/src/i18n/profileResources.ts';
 import {localFlowErrorKey,localFlowNotice} from '../apps/web/src/i18n/localFlowText.ts';
 function parity(a:any,b:any,path=''){
  assert.deepEqual(Object.keys(a).sort(),Object.keys(b).sort(),path);

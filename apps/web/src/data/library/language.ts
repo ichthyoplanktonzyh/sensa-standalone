@@ -8,7 +8,7 @@ import {
   type SensaLanguageRouteCollection,
   type SensaLanguageRouteStatus,
   type SensaFormalPinnedLanguageContext,
-} from '@sensa/contracts/sensa';
+} from '@sensa/contracts/sensa/language';
 import {command,readLibrary,type LibraryTransaction} from './store';
 
 /** Routes are learner-owned and sync with the library. The active choice is a

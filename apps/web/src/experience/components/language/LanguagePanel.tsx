@@ -1,3 +1,4 @@
+import '../../../i18n/profileResources';
 import {useEffect,useState} from 'react';
 import {Archive,Check,Pause,Play,Plus,RotateCcw,X} from 'lucide-react';
 import {useTranslation} from 'react-i18next';

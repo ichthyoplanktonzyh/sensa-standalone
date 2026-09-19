@@ -1,5 +1,8 @@
 import i18n from './index';
 import {localFlowZh,localFlowEn} from './localFlow';
+import {registerTranslationSections} from './registerResources';
+
+registerTranslationSections({localFlow:localFlowZh},{localFlow:localFlowEn});
 export const localFlowText=(key:keyof typeof localFlowZh,values?:Record<string,unknown>):string=>i18n.t(`localFlow.${key}`,values);
 /** Translate presentation notices, including earlier persisted UI copy. Never translate learner content. */
 export function localFlowNotice(value:string|null|undefined):string {

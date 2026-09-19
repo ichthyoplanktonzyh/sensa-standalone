@@ -3,7 +3,7 @@ import {z} from 'zod';
 import {stableUuid} from '@sensa/learning-kernel';
 import {makeRequest,validateBundle,modelFacts,independentReviewSystem,requestLanguages,SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,canonicalConsumerJson,sensaFormalPinnedLanguageContextSchema,type SensaContentGenerationRequest,type SensaMaterialCandidateBundle,type ContentReviewer,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {command,readLibrary,type LibraryTransaction} from './store';
-import {learningOwner} from './packages';
+import {learningOwner} from './libraryOwnership';
 import {commitPersonalMaterial,type LocalLearningTarget} from './learning';
 import {
  personalLearningSourceKey,

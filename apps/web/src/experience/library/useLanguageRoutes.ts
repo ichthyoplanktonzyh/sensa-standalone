@@ -8,7 +8,7 @@ import {
   type SensaLanguageRouteCollection,
   type SensaLanguageRouteStatus,
   type SensaFormalPinnedLanguageContext,
-} from '@sensa/contracts/sensa';
+} from '@sensa/contracts/sensa/language';
 import {observeLibrary} from '../../data/library/store';
 import {
   addLanguageRoute,

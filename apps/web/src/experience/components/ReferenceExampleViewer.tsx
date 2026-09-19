@@ -1,3 +1,4 @@
+import '../../i18n/referenceResources';
 import { ArrowLeft, BookOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { setupButton, setupPrimary } from './learning/LearningSetupFrame';

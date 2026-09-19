@@ -12,7 +12,7 @@ import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {assuranceContent,assuranceView,localAssuranceState,type AssuranceAction} from '../../learning/protocols/assurance';
 import type {LocalLearningRun} from '../../data/library/learning';
 import type {LocalExecutableLearningTarget} from '../../learning/runtime/localProtocol';
-import type {InstalledPackage} from '../../data/library/packages';
+import type {InstalledPackage} from '../../data/library/packageRecords';
 import {AssuranceSummary} from '../components/learning/AssuranceSummary';
 export type AssuranceSupportHost = Pick<StepRendererHost, 'toast' | 'openDict' | 'openNoteEditor' | 'openSceneEditor' | 'lookupDictionary'> & Pick<RuntimeToolsProps, 'onOpenMenuMore'>;
 export function AssuranceRuntime(props:{active:boolean;run:LocalLearningRun;target:LocalExecutableLearningTarget;pack:InstalledPackage;busy:boolean;notice:string;host:AssuranceSupportHost;onMarkKnown:()=>void;onAction:(action:AssuranceAction)=>void;onExit:()=>void;onFinish:()=>void}){

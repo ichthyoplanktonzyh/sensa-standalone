@@ -1,9 +1,10 @@
+import '../../i18n/accountResources';
 import {useEffect,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {readCloudSync} from '../../data/library/cloudSync';
 import {syncAccountLibrary} from '../../data/library/cloudSyncService';
 import {observeCloudSync} from '../../data/library/store';
-import {useAccountExperience} from '../account/AccountExperience';
+import {useAccountExperience} from '../account/AccountContext';
 import {setupButton} from './learning/LearningSetupFrame';
 export function CloudSyncPanel(){
  const {t,i18n}=useTranslation(),account=useAccountExperience();

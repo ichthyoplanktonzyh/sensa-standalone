@@ -4,7 +4,8 @@ import {learningPolicyProfileRegistry,type LearningPolicyId} from '../../learnin
 import {stableUuid,canonicalJsonDigest} from '@sensa/learning-kernel';
 import {sensaFormalPinnedLanguageContextSchema,sensaLearningMaterializationSnapshotSchema,sensaLearningConnectionContractVersion,LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION,learningBundleBookId,learningBundleBookVersionId,learningBundleVersionLabel,learningBundleContentReleaseId,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {command,readLibrary,requestCloudCheckpoint,type LibraryTransaction,type LibraryIdentity} from './store';
-import {learningOwner,type InstalledPackage} from './packages';
+import {learningOwner} from './libraryOwnership';
+import type {InstalledPackage} from './packageRecords';
 import {validateLightweightInitialMaterialization,type LightweightInitialLearningMaterialization} from '../../learning/runtime/lightweightInitialContent';
 import {
   createLocalProtocolState,

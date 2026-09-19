@@ -1,3 +1,4 @@
+import '../../i18n/contentResources';
 import {
   contentNavigationBackClass,
   contentNavigationClass,

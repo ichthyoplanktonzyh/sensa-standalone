@@ -1,8 +1,9 @@
+import '../../i18n/contentResources';
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
 import { useEffect, useState } from 'react';
 import { contentAnnotations } from '../../data/library/contentAnnotations';
-import { exampleIdForSense } from '../contentProjection';
+import {contentSenseForId,exampleIdForSense} from '../contentProjection';
 import type { PracticeSenseItem } from '../practiceData';
 import { audioService } from '../services/audioService';
 import {
@@ -15,7 +16,7 @@ import { SensaDetailWorkspaceLayout } from '../ui/SensaPageLayouts';
 
 interface ContentExampleDetailScreenProps {
   active: boolean;
-  item: PracticeSenseItem | null;
+  exampleId:string|null;
   onBack: () => void;
   onOpenSense: (item: PracticeSenseItem) => void;
   toast: (message: string) => void;
@@ -23,12 +24,13 @@ interface ContentExampleDetailScreenProps {
 
 export const ContentExampleDetailScreen = ({
   active,
-  item,
+  exampleId:selectedExampleId,
   onBack,
   onOpenSense,
   toast,
 }: ContentExampleDetailScreenProps) => {
   useTranslation();
+  const item=selectedExampleId?contentSenseForId(selectedExampleId):null;
   const [saved, setSaved] = useState(false);
   const [showTranslation, setShowTranslation] = useState(true);
 

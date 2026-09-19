@@ -1,3 +1,4 @@
+import '../../i18n/contentResources';
 import {useTranslation} from 'react-i18next';
 import {Camera} from 'lucide-react';
 import {cardText} from '../../i18n/originalCards';

@@ -1,10 +1,11 @@
+import '../../i18n/profileResources';
 import {CloudSyncPanel} from './CloudSyncPanel';
 import {providerSnapshot} from '../../data/library/providers';
 import {observeLibrary} from '../../data/library/store';
 import {LocalDataControlPanel} from './LocalDataControlPanel';
 import {LibraryBackupPanel} from './LibraryBackupPanel';
 import {LocalAgentPanel} from './LocalAgentPanel';
-import {useAccountExperience} from '../account/AccountExperience';
+import {useAccountExperience} from '../account/AccountContext';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ArrowRight, ArrowLeft, BookOpen, SlidersHorizontal, UserRound, RefreshCw, Database, Cpu, Info, Languages, NotebookPen, Bot } from 'lucide-react';
 import { useTranslation } from 'react-i18next';

@@ -1,19 +1,20 @@
-import {useEffect,useMemo,useState} from 'react';
+import {lazy,Suspense,useEffect,useMemo,useState} from 'react';
+import '../../i18n/accountResources';
 import {useTranslation} from 'react-i18next';
 import {HomeScreen} from '../components/HomeScreen';
-import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
 import {openLibrary,observeLibrary} from '../../data/library/store';
-import type {InstalledPackage} from '../../data/library/packages';
+import type {InstalledPackage} from '../../data/library/packageRecords';
 import type {LocalLearningRun,LocalLearningTarget} from '../../data/library/learning';
 import {localCurriculumMembershipForContext} from '../../learning/runtime/localCurriculum';
-import {inspectLocalTargetReadiness} from '../../learning/runtime/runtimeCoordinator';
-import {localTargetPolicy} from '../../learning/runtime/localRuntimeBindings';
 import {nextLearningQueueChangeAt,resolveLearningQueue} from './learningQueue';
 import {useLanguageRoutes} from './useLanguageRoutes';
 import {readHomeLearningProjection} from './homeLearningProjection';
+import {homeTargetPolicy,homeTargetReadiness} from './homeTargetReadiness';
 import {useShellNavigation} from '../router/useShellNavigation';
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
-import {useAccountExperience} from '../account/AccountExperience';
+import {useAccountExperience} from '../account/AccountContext';
+
+const LearningPreferencesPanel=lazy(()=>import('../components/learning/LearningPreferencesPanel').then(module=>({default:module.LearningPreferencesPanel})));
 
 export function HomeLearningController({active=true}:{active?:boolean}){
  const {t}=useTranslation();
@@ -57,7 +58,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
  const readinessByTarget=useMemo(()=>Object.fromEntries(targets.map(target=>{
   const membership=membershipByTarget[target.id];
   const pack=membership?.packageKey?packages.find(candidate=>candidate.key===membership.packageKey):undefined;
-  return [target.id,inspectLocalTargetReadiness(target,membership,pack).status];
+  return [target.id,homeTargetReadiness(target,membership,pack)];
  })) as Readonly<Record<string,'ready'|'blocked'>>,[targets,membershipByTarget,packages]);
  const queue=useMemo(()=>resolveLearningQueue({targets,languageRouteId:activeRoute.id,readiness:readinessByTarget,clock,dailyLimit}),[targets,activeRoute.id,readinessByTarget,clock,dailyLimit]);
  const nextQueueChangeAt=useMemo(()=>nextLearningQueueChangeAt({targets,languageRouteId:activeRoute.id,readiness:readinessByTarget,clock,dailyLimit}),[targets,activeRoute.id,readinessByTarget,clock,dailyLimit]);
@@ -100,12 +101,12 @@ export function HomeLearningController({active=true}:{active?:boolean}){
    reviewDueN={queue.due.length} newAvailable={queue.initialReady.length}
    onRecordContext={()=>goMain('s-semantic-world',{worldAction:'create'})}
    mixedReadyN={queue.initialReady.length+queue.due.length}/>
-  {quantityTarget&&quantityTargetRecord&&<LearningPreferencesPanel fixedPolicy defaultPolicy={localTargetPolicy(quantityTargetRecord)} dailyNewCount={quantityChoice} onPolicyChange={()=>{}} onDailyNewCountChange={setQuantityChoice} busy={busy} status={notice&&<p role="status">{localFlowNotice(notice)}</p>} onClose={()=>setQuantityTarget(null)} closeLabel={localFlowText('confirmAndStart')} onConfirm={()=>void (async()=>{
+  {quantityTarget&&quantityTargetRecord&&<Suspense fallback={null}><LearningPreferencesPanel fixedPolicy defaultPolicy={homeTargetPolicy(quantityTargetRecord)} dailyNewCount={quantityChoice} onPolicyChange={()=>{}} onDailyNewCountChange={setQuantityChoice} busy={busy} status={notice&&<p role="status">{localFlowNotice(notice)}</p>} onClose={()=>setQuantityTarget(null)} closeLabel={localFlowText('confirmAndStart')} onConfirm={()=>void (async()=>{
    const learning=await import('../../data/library/learning');
    const confirmed=await perform(()=>learning.confirmLearningQuantity(crypto.randomUUID(),languageContext,quantityChoice));
    if(!confirmed)return;
    const targetId=quantityTarget;setQuantityTarget(null);await begin(targetId,quantityChoice);
   })()}
-  />}
+  /></Suspense>}
  </>;
 }

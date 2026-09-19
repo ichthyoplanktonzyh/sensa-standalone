@@ -9,13 +9,13 @@ import {basename,resolve} from 'node:path';
  * named chunks alone misses shared chunks imported synchronously by App.
  */
 const budgets={
-  indexGzip:310*1024,
-  appChunkGzip:70*1024,
-  appClosureGzip:400*1024,
+  indexGzip:200*1024,
+  appChunkGzip:24*1024,
+  appClosureGzip:155*1024,
   homeChunkGzip:8*1024,
-  homeClosureGzip:430*1024,
+  homeClosureGzip:200*1024,
   workspaceChunkGzip:25*1024,
-  workspaceIncrementalGzip:40*1024,
+  workspaceIncrementalGzip:300*1024,
   runtimeChunkGzip:40*1024,
   runtimeIncrementalGzip:200*1024,
 } as const;
@@ -74,11 +74,22 @@ const indexFile=findOne(/^index-[^.]+\.js$/u,'entry');
 const appFile=findOne(/^App-[^.]+\.js$/u,'App');
 const homeFile=findOne(/^HomeLearningController-[^.]+\.js$/u,'Home controller');
 const workspaceFile=findOne(/^LearningWorkspace-[^.]+\.js$/u,'learning workspace');
+const workspaceResourcesFile=findOne(/^workspaceResources-[^.]+\.js$/u,'workspace translations');
 const runtimeFile=findOne(/^PackageLearningRuntime-[^.]+\.js$/u,'learning Runtime');
+const accountFile=findOne(/^AccountExperience-[^.]+\.js$/u,'account experience');
+const storeFile=findOne(/^store-[^.]+\.js$/u,'local library store');
+const packagesFile=findOne(/^packages-[^.]+\.js$/u,'package installer');
+const lemmaFile=findOne(/^resolveClickedLemma-[^.]+\.js$/u,'clicked-lemma resolver');
+const deferredResourceFiles=[
+ findOne(/^contentResources-[^.]+\.js$/u,'content translations'),
+ findOne(/^learningResources-[^.]+\.js$/u,'learning translations'),
+ findOne(/^profileResources-[^.]+\.js$/u,'profile translations'),
+ findOne(/^referenceResources-[^.]+\.js$/u,'reference translations'),
+];
 const indexClosure=await staticClosure(indexFile);
 const appClosure=await staticClosure(appFile);
 const homeClosure=await staticClosure(homeFile);
-const workspaceClosure=await staticClosure(workspaceFile);
+const workspaceClosure=union(await staticClosure(workspaceFile),await staticClosure(workspaceResourcesFile));
 const runtimeClosure=await staticClosure(runtimeFile);
 const homeInteractiveClosure=union(appClosure,homeClosure);
 const workspaceLoadedClosure=union(homeInteractiveClosure,workspaceClosure);
@@ -94,6 +105,8 @@ const workspaceIncrementalGzip=await closureGzip(workspaceIncremental);
 const runtimeChunkGzip=await gzipBytes(runtimeFile);
 const runtimeIncrementalGzip=await closureGzip(runtimeIncremental);
 
+const summary=`entry ${indexGzip}B; App ${appChunkGzip}B/${appClosureGzip}B closure; Home ${homeChunkGzip}B/${homeClosureGzip}B interactive closure; workspace +${workspaceIncrementalGzip}B; Runtime ${runtimeChunkGzip}B/+${runtimeIncrementalGzip}B`;
+
 assert(indexGzip<=budgets.indexGzip,`${indexFile} gzip ${indexGzip} exceeds ${budgets.indexGzip}`);
 assert(appChunkGzip<=budgets.appChunkGzip,`${appFile} gzip ${appChunkGzip} exceeds ${budgets.appChunkGzip}`);
 assert(appClosureGzip<=budgets.appClosureGzip,`authenticated App static closure gzip ${appClosureGzip} exceeds ${budgets.appClosureGzip}`);
@@ -105,6 +118,11 @@ assert(!appClosure.has(homeFile)&&!appClosure.has(workspaceFile),`Home and full 
 assert(!homeInteractiveClosure.has(workspaceFile),`${workspaceFile} must not enter the interactive Home static closure`);
 assert(!appClosure.has(runtimeFile),`${runtimeFile} must not enter the authenticated App static closure`);
 assert(!workspaceLoadedClosure.has(runtimeFile),`${runtimeFile} must not enter the full workspace static closure`);
+assert(!indexClosure.has(accountFile),`${accountFile} must remain behind the explicit account boundary`);
+assert(!indexClosure.has(storeFile),`${storeFile} must not initialize SQLite for the signed-out Landing`);
+assert(!indexClosure.has(packagesFile)&&!appClosure.has(packagesFile)&&!homeInteractiveClosure.has(packagesFile)&&!workspaceLoadedClosure.has(packagesFile),`${packagesFile} and its validator must load only for package installation`);
+assert(!indexClosure.has(lemmaFile)&&!appClosure.has(lemmaFile)&&!homeInteractiveClosure.has(lemmaFile)&&!workspaceLoadedClosure.has(lemmaFile),`${lemmaFile} and compromise must load only after a dictionary interaction`);
+for(const resourceFile of deferredResourceFiles)assert(!indexClosure.has(resourceFile)&&!appClosure.has(resourceFile)&&!homeInteractiveClosure.has(resourceFile),`${resourceFile} must stay paired with its lazy feature surface`);
 assert(runtimeChunkGzip<=budgets.runtimeChunkGzip,`${runtimeFile} gzip ${runtimeChunkGzip} exceeds ${budgets.runtimeChunkGzip}`);
 assert(runtimeIncrementalGzip<=budgets.runtimeIncrementalGzip,`deferred Runtime incremental static closure gzip ${runtimeIncrementalGzip} exceeds ${budgets.runtimeIncrementalGzip}`);
-console.log(`PASS: Web bundle regression ceilings (entry ${indexGzip}B; App ${appChunkGzip}B/${appClosureGzip}B closure; Home ${homeChunkGzip}B/${homeClosureGzip}B interactive closure; workspace +${workspaceIncrementalGzip}B; Runtime ${runtimeChunkGzip}B/+${runtimeIncrementalGzip}B).`);
+console.log(`PASS: Web bundle regression ceilings (${summary}).`);

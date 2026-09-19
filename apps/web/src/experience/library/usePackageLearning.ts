@@ -6,7 +6,7 @@ import {useEffect,useRef,useState} from 'react';
 import {learningPackageCatalogSchema,type LearningPackageDescriptor} from '@sensa/contracts/sensa';
 import {auth} from '../../data/account/auth';
 import {openLibrary,observeLibrary,readLibrary,writeLibraryState} from '../../data/library/store';
-import {downloadPackage,installPackage,type InstalledPackage} from '../../data/library/packages';
+import type {InstalledPackage} from '../../data/library/packageRecords';
 import {localRunTargetIds,selectLocalLearningPolicy,setLocalDeclaredMastery,readLearningOverview,enrollPackage,startLearning,actLearning,finishLearning,continueLearning,confirmLearningQuantity,type LocalLearningTarget,type LocalLearningRun} from '../../data/library/learning';
 import type {LearningRecordView} from '../learningJourney/learningHistory';
 import {inspectLocalTargetReadiness} from '../../learning/runtime/runtimeCoordinator';
@@ -50,8 +50,8 @@ export function usePackageLearning(entryOpen:boolean){
  },[nextQueueChangeAt]);
  const nextTarget=[...due,...initialReady].find(t=>!run||!localRunTargetIds(run).includes(t.id));
  return {nextTarget,initialReady,readinessByTarget,membershipByTarget,languageContext,packages,catalog,targets,activeTargets,runs,run,records,due,notice:localFlowNotice(notice),busy,progress,loaded,catalogBusy,reloadCatalog,refresh,dailyLimit,confirmQuantity:(n:number)=>perform(()=>confirmLearningQuantity(crypto.randomUUID(),languageContext,n)),
-  download:(d:LearningPackageDescriptor)=>perform(async()=>{const c=new AbortController();transfer.current=c;try{setProgress(0);return await downloadPackage(d,AbortSignal.any([c.signal,AbortSignal.timeout(120000)]),n=>setProgress(Math.round(100*n/d.byteLength)));}finally{if(transfer.current===c)transfer.current=null;}}),
-  cancelDownload:()=>transfer.current?.abort(),importFile:(file:File)=>perform(async()=>{if(file.size>64*1024*1024)throw new Error('localFlow.packageTooLarge');return installPackage(new Uint8Array(await file.arrayBuffer()));}),
+  download:(d:LearningPackageDescriptor)=>perform(async()=>{const c=new AbortController();transfer.current=c;try{setProgress(0);const {downloadPackage}=await import('../../data/library/packages');return await downloadPackage(d,AbortSignal.any([c.signal,AbortSignal.timeout(120000)]),n=>setProgress(Math.round(100*n/d.byteLength)));}finally{if(transfer.current===c)transfer.current=null;}}),
+  cancelDownload:()=>transfer.current?.abort(),importFile:(file:File)=>perform(async()=>{if(file.size>64*1024*1024)throw new Error('localFlow.packageTooLarge');const {installPackage}=await import('../../data/library/packages');return installPackage(new Uint8Array(await file.arrayBuffer()));}),
   selectPolicy:(targetId:string,profileId:Parameters<typeof selectLocalLearningPolicy>[3])=>perform(()=>selectLocalLearningPolicy(crypto.randomUUID(),targetId,languageContext,profileId)),
   enroll:(key:string)=>perform(()=>enrollPackage(crypto.randomUUID(),key,languageContext)),
   start:(id:string,limit:number)=>perform(()=>startLearning(crypto.randomUUID(),id,languageContext,limit)),

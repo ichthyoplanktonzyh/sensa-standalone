@@ -8,21 +8,8 @@ import { journeyGateway } from './personalMeaningJourney/gateway';
 import type { PersonalMeaningJourneyPhase } from './personalMeaningJourney/types';
 import type { LocalLearningTarget } from '../learning/runtime/localProtocol';
 import {hasDeclaredMasteryOverride} from '../learning/runtime/targetPlanningOverrides';
-
-export const CONTENT_SECTION_IDS = [
-  'recent',
-  'learned',
-  'known',
-  'saved-senses',
-  'saved-examples',
-  'notes',
-] as const;
-
-export type ContentSectionId = (typeof CONTENT_SECTION_IDS)[number];
-
-/** Narrows a section id arriving from outside the app, such as the URL. */
-export const isContentSectionId = (value: unknown): value is ContentSectionId =>
-  typeof value === 'string' && (CONTENT_SECTION_IDS as readonly string[]).includes(value);
+import type {ContentSectionId} from './contentRoute';
+export {CONTENT_SECTION_IDS,isContentSectionId,type ContentSectionId} from './contentRoute';
 
 export type SemanticStatus = 'forming' | 'established' | 'reinforce';
 

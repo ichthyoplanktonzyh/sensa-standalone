@@ -1,6 +1,6 @@
 import {canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {libraryTables,readLibrary,restoreLibraryTransaction,assertCurrentLibrary,type LibraryIdentity} from './store';
-import {learningOwner} from './packages';
+import {learningOwner} from './libraryOwnership';
 import {clearAllCredentials} from './providers';
 export type LocalClearPreview={libraryId:string;incarnation:string;operations:number;drafts:number;meanings:number;packages:number;targets:number;events:number;pending:number};
 export const inspectLocalClear=()=>readLibrary(async tx=>{
