@@ -32,6 +32,7 @@ export class MediaStoreFullError extends Error {
 }
 
 let mediaCache = new Map<string, StoredMedia>();
+let preparedMedia = new Map<string, StoredMedia>();
 let mediaReady = false;
 let mediaLoad: Promise<void> | null = null;
 let observing = false;
@@ -51,6 +52,7 @@ const refreshMedia = async (): Promise<void> => {
     if (row.key !== media.mediaId) throw new Error('libraryBackup.errors.inconsistent');
     next.set(row.key, media);
   }
+  for(const [mediaId,media] of preparedMedia)next.set(mediaId,media);
   mediaCache = next;
   mediaReady = true;
   announceMedia();
@@ -86,23 +88,41 @@ export const useMediaStoreVersion = (): number => useSyncExternalStore(
   () => mediaRevision,
 );
 
-export const putMedia = async (input: StoredMedia): Promise<void> => {
+/** Prepare bytes for preview; the journey repository admits them atomically
+ * with the first semantic row that references the id. */
+export const stageMedia = (input: StoredMedia): StoredMedia => {
   if (input.sizeBytes > maxStoredMediaBytes) throw new MediaStoreFullError();
   const media = parseStoredMedia(input);
-  await preloadMedia();
-  await restoreLibraryTransaction(async (tx) => {
-    await assertCurrentLibrary(tx);
-    tx.put('media', media.mediaId, media);
-  });
+  preparedMedia.set(media.mediaId, structuredClone(media));
   mediaCache.set(media.mediaId, structuredClone(media));
   announceMedia();
+  return media;
+};
+
+export const preparedMediaSnapshot = (): StoredMedia[] =>
+  [...preparedMedia.values()];
+
+export const markPreparedMediaCommitted = (mediaIds: readonly string[]): void => {
+  for (const mediaId of mediaIds) preparedMedia.delete(mediaId);
 };
 
 export const removeMedia = async (mediaId: string): Promise<void> => {
+  if(preparedMedia.delete(mediaId)){
+    mediaCache.delete(mediaId);
+    announceMedia();
+    return;
+  }
   await preloadMedia();
   let removed = false;
   await restoreLibraryTransaction(async (tx) => {
     await assertCurrentLibrary(tx);
+    const meanings=await tx.entries('semanticMeanings');
+    const inbox=await tx.entries('semanticInbox');
+    const referenced=meanings.some(row=>(row.value as {personalSemanticAnchorRevisions?:Array<{personalMediaObjectId?:string|null}>})
+      .personalSemanticAnchorRevisions?.some(revision=>revision.personalMediaObjectId===mediaId))
+      || inbox.some(row=>(row.value as {payload?:{context?:{mediaReferenceIds?:string[]}|null}})
+        .payload?.context?.mediaReferenceIds?.includes(mediaId));
+    if(referenced)throw new Error('图片仍被个人意义引用，不能删除。');
     if (await tx.get('media', mediaId)) {
       tx.delete('media', mediaId);
       removed = true;
@@ -148,7 +168,7 @@ const downscale = async (dataUrl: string): Promise<{ dataUrl: string; mimeType: 
   return { dataUrl: canvas.toDataURL('image/jpeg', JPEG_QUALITY), mimeType: 'image/jpeg' };
 };
 
-/** Read, downscale and store one picked image; returns the stored record. */
+/** Read and downscale one picked image. Persistence waits for its semantic command. */
 export const storeImageFile = async (
   mediaId: string,
   file: File,
@@ -166,6 +186,5 @@ export const storeImageFile = async (
     sizeBytes: Math.round((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75),
     createdAt: nowIso,
   };
-  await putMedia(stored);
-  return stored;
+  return stageMedia(stored);
 };

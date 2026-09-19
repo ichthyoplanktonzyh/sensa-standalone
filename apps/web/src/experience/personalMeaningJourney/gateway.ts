@@ -67,6 +67,7 @@ import {
   type MeaningJourneyRecord,
 } from './store';
 import {LibraryJourneyRepository,type JourneyRepository} from './repository';
+import {markPreparedMediaCommitted,preparedMediaSnapshot} from './mediaStore';
 import {
   buildDetailView,
   buildListItemView,
@@ -231,8 +232,21 @@ const localSemanticAcceptanceAuthority: SemanticAcceptanceAuthorityPort = {
 
 const last = <T>(items: T[]): T | undefined => items[items.length - 1];
 
-const cloneJourneyState = (state: JourneyState): JourneyState =>
-  JSON.parse(JSON.stringify(state)) as JourneyState;
+const createJourneyDraft = (state: JourneyState): JourneyState => ({
+  ...state,
+  meanings: [...state.meanings],
+  registry: {
+    senses: [...state.registry.senses],
+    senseVersions: [...state.registry.senseVersions],
+    expressions: [...state.registry.expressions],
+    expressionVersions: [...state.registry.expressionVersions],
+    bindings: [...state.registry.bindings],
+    bindingVersions: [...state.registry.bindingVersions],
+  },
+  inboxItems: [...state.inboxItems],
+  clarificationDrafts: [...state.clarificationDrafts],
+  commandReceipts: [...state.commandReceipts],
+});
 
 const normalizedForm = (surfaceForm: string): string =>
   surfaceForm.trim().toLocaleLowerCase();
@@ -281,6 +295,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   private status: JourneyGatewayStatus = { ok: true, error: null, errorKind: null };
   private readonly listeners = new Set<() => void>();
   private ready: Promise<void>;
+  private transaction: {before:JourneyState;settled:boolean}|null=null;
 
   constructor(private readonly deps: JourneyGatewayDeps) {
     this.ready = this.load();
@@ -331,7 +346,21 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   private exclusive<T>(work: () => Promise<T>): Promise<T> {
     const run = this.gate.then(async () => {
       await this.ready;
-      return work();
+      const before=this.requireState();
+      const transaction={before,settled:false};
+      this.transaction=transaction;
+      this.state=createJourneyDraft(before);
+      try{
+        const result=await work();
+        if(!transaction.settled)this.state=before;
+        return result;
+      }
+      catch(cause){
+        if(!transaction.settled)this.state=before;
+        throw cause;
+      }finally{
+        if(this.transaction===transaction)this.transaction=null;
+      }
     });
     this.gate = run.then(
       () => undefined,
@@ -343,14 +372,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   /** Stage compound cross-aggregate commands so validation failures cannot
    * leave unpublished registry facts visible in memory. */
   private async withStateTransaction<T>(work: () => Promise<T>): Promise<T> {
-    const before = this.requireState();
-    this.state = cloneJourneyState(before);
-    try {
-      return await work();
-    } catch (cause) {
-      this.state = before;
-      throw cause;
-    }
+    return work();
   }
 
   private requireState(): JourneyState {
@@ -362,10 +384,19 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
 
   private async persist(): Promise<void> {
     const state = this.requireState();
+    const transaction=this.transaction;
+    if(!transaction)throw new Error('个人意义写入必须在命令事务内执行。');
     try {
-      await this.deps.repository.save(state);
+      const result=await this.deps.repository.commit({
+        before:transaction.before,
+        after:state,
+        preparedMedia:preparedMediaSnapshot(),
+      });
+      markPreparedMediaCommitted(result.committedMediaIds);
+      transaction.settled=true;
       this.status = { ok: true, error: null, errorKind: null };
     } catch (cause) {
+      transaction.settled=true;
       try{this.state=await this.deps.repository.load();}
       catch{this.state=null;}
       this.status = errorStatus(cause);
@@ -452,8 +483,20 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   }
 
   private requireRecord(personalMeaningId: string): MeaningJourneyRecord {
-    const record = this.findRecord(personalMeaningId);
+    const state=this.requireState();
+    const index=state.meanings.findIndex(
+      record=>record.personalMeaning.personalMeaningId===personalMeaningId,
+    );
+    const record=index<0?null:state.meanings[index]!;
     if (!record) throw new Error('找不到这条个人意义。');
+    const original=this.transaction?.before.meanings.find(
+      candidate=>candidate.personalMeaning.personalMeaningId===personalMeaningId,
+    );
+    if(original&&record===original){
+      const draft=structuredClone(record);
+      state.meanings[index]=draft;
+      return draft;
+    }
     return record;
   }
 
@@ -1658,8 +1701,13 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       if (!bindingVersion) {
         const nextVersion = binding.currentVersionNumber + 1;
         const nextBindingVersionId = this.id();
-        binding.currentVersionNumber = nextVersion;
-        binding.currentBindingVersionId = nextBindingVersionId;
+        const updatedBinding={
+          ...binding,
+          currentVersionNumber:nextVersion,
+          currentBindingVersionId:nextBindingVersionId,
+        };
+        state.registry.bindings[state.registry.bindings.indexOf(binding)]=updatedBinding;
+        binding=updatedBinding;
         bindingVersion = {
           contractVersion: REG,
           bindingVersionId: nextBindingVersionId,
@@ -1866,6 +1914,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   async confirmExpressionBinding(
     input: ConfirmExpressionBindingInput,
   ): Promise<ConfirmExpressionBindingResult> {
+    return this.exclusive(()=>this.writeExpressionBinding(input));
+  }
+
+  private async writeExpressionBinding(
+    input: ConfirmExpressionBindingInput,
+  ): Promise<ConfirmExpressionBindingResult> {
     const replay = this.replay<ConfirmExpressionBindingResult>(
       input.operationId,
       'ConfirmExpressionBinding',
@@ -1996,8 +2050,11 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     if (existingSense) {
       if (existingSense.senseKey !== semantic.senseKey) throw new Error('学习包 Sense identity 冲突。');
       if (semantic.senseVersionNumber > existingSense.currentVersionNumber) {
-        existingSense.currentVersionNumber = semantic.senseVersionNumber;
-        existingSense.currentSenseVersionId = target.senseVersionId;
+        state.registry.senses[state.registry.senses.indexOf(existingSense)]={
+          ...existingSense,
+          currentVersionNumber:semantic.senseVersionNumber,
+          currentSenseVersionId:target.senseVersionId,
+        };
       }
     } else {
       state.registry.senses.push({
@@ -2020,8 +2077,11 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       if (existingExpression.expressionType !== semantic.expressionType
         || existingExpression.languageTag !== target.targetLanguageTag) throw new Error('学习包 Expression identity 冲突。');
       if (semantic.expressionVersionNumber > existingExpression.currentVersionNumber) {
-        existingExpression.currentVersionNumber = semantic.expressionVersionNumber;
-        existingExpression.currentExpressionVersionId = semantic.expressionVersionId;
+        state.registry.expressions[state.registry.expressions.indexOf(existingExpression)]={
+          ...existingExpression,
+          currentVersionNumber:semantic.expressionVersionNumber,
+          currentExpressionVersionId:semantic.expressionVersionId,
+        };
       }
     } else {
       state.registry.expressions.push({
@@ -2047,8 +2107,11 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
         || existingBinding.expressionId !== semantic.expressionId
         || existingBinding.relation !== semantic.relation) throw new Error('学习包 Binding identity 冲突。');
       if (semantic.bindingVersionNumber > existingBinding.currentVersionNumber) {
-        existingBinding.currentVersionNumber = semantic.bindingVersionNumber;
-        existingBinding.currentBindingVersionId = target.bindingVersionId;
+        state.registry.bindings[state.registry.bindings.indexOf(existingBinding)]={
+          ...existingBinding,
+          currentVersionNumber:semantic.bindingVersionNumber,
+          currentBindingVersionId:target.bindingVersionId,
+        };
       }
     } else {
       state.registry.bindings.push({
@@ -2125,15 +2188,19 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       return this.withStateTransaction(async () => {
         this.installPublishedLearningFacts(input);
 
-      const recordForScene = input.existingPersonalMeaningId
-        ? this.requireRecord(input.existingPersonalMeaningId)
+      const matchedRecord = input.existingPersonalMeaningId
+        ? this.findRecord(input.existingPersonalMeaningId)
         : this.requireState().meanings.find((candidate) => (
             candidate.personalMeaning.status === 'active'
             && candidate.personalSemanticAnchorRevisions.some((revision) => (
               (revision.structuredPayload.learningScene as {sceneId?:string}|undefined)?.sceneId
-                === input.scene.sceneId
+              === input.scene.sceneId
             ))
           ));
+      if(input.existingPersonalMeaningId&&!matchedRecord)throw new Error('找不到这条个人意义。');
+      const recordForScene=matchedRecord
+        ? this.requireRecord(matchedRecord.personalMeaning.personalMeaningId)
+        : null;
       if (recordForScene) {
         const record = recordForScene;
         if (record.personalMeaning.status !== 'active') throw new Error('个人意义已不可更新。');

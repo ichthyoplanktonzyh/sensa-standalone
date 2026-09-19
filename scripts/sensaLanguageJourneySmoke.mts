@@ -70,6 +70,7 @@ const repository=new MemoryJourneyRepository();
 const gateway=createJourneyGateway({repository,clock:createSeededClock(),languages:{read:async()=>context}});
 const draft=await gateway.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'雨后的巷子'}],familiarExpression:{surfaceForm:'欲言又止'},startingPoint:'from_expression'});
 assert.equal(repository.writes,4,'a new clarification writes normalized state, Inbox, draft and receipt rows');
+assert.equal(repository.reads,4,'the command reads only the version row and its three changed records');
 let stored=await repository.load() as any;
 const saved=async()=>repository.load() as Promise<any>;
 assert.equal(stored.meanings.length,0,'saving material does not create a partial Personal Meaning');
@@ -78,6 +79,7 @@ assert.equal(gateway.getClarificationDraft(draft.intakeId)?.startingPoint,'from_
 context={supportLanguageTag:'zh-CN',targetLanguageTag:'es'};
 await gateway.addClarificationMaterial(crypto.randomUUID(),draft.intakeId,{kind:'text',bodyText:'雨停了'});
 assert.equal(repository.writes,2,'editing one draft rewrites only its Inbox row and command receipt');
+assert.equal(repository.reads,3,'editing a draft does not scan unrelated meanings or registry facts');
 assert.equal((await saved()).meanings.length,0,'editing the slow-track draft still does not leak it into the world');
 const clarifiedContext=gateway.getClarificationDraft(draft.intakeId)!.context!;
 const completed=await gateway.completeClarificationDraft({operationId:crypto.randomUUID(),intakeId:draft.intakeId,context:clarifiedContext,languageContext:{supportLanguageTag:'ko',targetLanguageTag:'it'},focus:null,sense:{proposedSenseKey:'hesitate-to-speak',coreMeaningFocus:'想说某件事却因为犹豫而停住',prototypeScenes:[{summary:'一个人准备开口，犹豫后停住。',participantRoles:['说话者'],states:['准备开口','犹豫'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[],unresolvedQuestions:[]},expression:{surfaceForm:'esitare a parlare',expressionType:'phrase',languageTag:'it',relation:'realizes',semanticCoverage:'exact'},expressionCandidates:[{surfaceForm:'esitare a parlare',expressionType:'phrase',languageTag:'it',relation:'realizes',semanticCoverage:'exact'}],confirmExpression:true,transcript:[{messageId:crypto.randomUUID(),role:'learner',body:'就是想说但停住的感觉。',occurredAt:'2026-09-01T00:00:01.000Z'}],provenance:{provider:'fixture',model:'fixture',promptVersion:'v1'},semanticPolicyVersion:'fixture-v1'});
@@ -119,6 +121,17 @@ await assert.rejects(
 const raced=await raceRepository.load() as any;
 assert.equal(raced.meanings.length,2,'two captures that overlap while the active context is read both survive');
 assert.equal(raced.meanings.filter((meaning:any)=>meaning.personalMeaning.status==='active').length,2);
+
+// Separate tabs may start from the same snapshot. Record-scoped commits must
+// preserve unrelated rows instead of replacing the second tab's whole world.
+const sharedRepository=new MemoryJourneyRepository();
+const tabA=createJourneyGateway({repository:sharedRepository,clock:createSeededClock(),languages:{read:async()=>slowContext}});
+const tabB=createJourneyGateway({repository:sharedRepository,clock:createSeededClock(),languages:{read:async()=>slowContext}});
+await Promise.all([
+  tabA.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'tab A context'}]}),
+  tabB.createClarificationDraft({operationId:crypto.randomUUID(),blocks:[{kind:'text',bodyText:'tab B context'}]}),
+]);
+assert.equal((await sharedRepository.load()).inboxItems.length,2,'independent tabs commit distinct Inbox records without a lost update');
 
 // A third language is still a valid absolute language fact and goes straight
 // through; the current learning Route is irrelevant. Missing a language makes

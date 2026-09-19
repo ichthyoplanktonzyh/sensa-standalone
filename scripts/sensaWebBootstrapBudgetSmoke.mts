@@ -324,8 +324,12 @@ try{
  const shellMs=Date.now()-started;
  await expect(b.page.getByText('正在同步你的学习数据…')).toHaveCount(0);
  await expect(b.page.getByText('远程投递暂未送达本机。内容仍保留在投递队列中；联网后重新聚焦应用即可重试。')).toHaveCount(0);
+ await expect(b.page.getByText('正在恢复账号资料…')).toBeVisible();
+ assert.deepEqual(await b.page.locator('.sensa-today-counts strong').allTextContents(),['—','—'],'a new device must not present local zeroes as account truth while restore is pending');
+ await expect(b.page.locator('.sensa-today-empty')).toHaveCount(0);
  try{await expect.poll(async()=>({drafts:await b.page.evaluate(()=>window.__sensaBrowserSmoke!.draftCount()),normalized:cloud.revision>legacyRevision}),{timeout:RESTORE_BUDGET_MS,message:'account restore never finished'}).toEqual({drafts:DRAFTS,normalized:true});}
  catch(error){log('   restore calls before timeout: '+JSON.stringify(served));log('   restore rejected: '+JSON.stringify(rejected));log('   phase B console: '+JSON.stringify(b.errors.slice(0,12)));throw error;}
+ await expect(b.page.getByText('正在恢复账号资料…')).toHaveCount(0);
  const restoreMs=Date.now()-started;
  const normalizedRevision=cloud.revision,normalizedPublished=cloud.published,normalizedPhysicalBytes=[...cloud.blocks.values()].reduce((total,data)=>total+Buffer.byteLength(data),0);
  await finishCheckpoint(b.page,'post-restore local facts never reached a Checkpoint');

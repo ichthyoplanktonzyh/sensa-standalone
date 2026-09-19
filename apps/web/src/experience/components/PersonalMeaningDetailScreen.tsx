@@ -54,8 +54,8 @@ import {
 import {
   getMedia,
   MediaStoreFullError,
-  putMedia,
   removeMedia,
+  stageMedia,
   storeImageFile,
   useMediaStoreVersion,
 } from '../personalMeaningJourney/mediaStore';
@@ -402,7 +402,7 @@ const persistPreparedImages = async (images: ConversationImage[]): Promise<strin
   try {
     for (const image of images) {
       const payload = image.dataUrl.slice(image.dataUrl.indexOf(',') + 1);
-      await putMedia({
+      stageMedia({
         mediaId: image.id,
         mediaKind: 'image',
         mimeType: 'image/jpeg',

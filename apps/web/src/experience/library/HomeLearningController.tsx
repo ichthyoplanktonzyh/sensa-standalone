@@ -13,9 +13,11 @@ import {useLanguageRoutes} from './useLanguageRoutes';
 import {readHomeLearningProjection} from './homeLearningProjection';
 import {useShellNavigation} from '../router/useShellNavigation';
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
+import {useAccountExperience} from '../account/AccountExperience';
 
 export function HomeLearningController(){
- useTranslation();
+ const {t}=useTranslation();
+ const {libraryAvailability}=useAccountExperience();
  const {goMain,setViewMode}=useShellNavigation();
  const {activeRoute,context:languageContext}=useLanguageRoutes();
  const [targets,setTargets]=useState<readonly LocalLearningTarget[]>([]);
@@ -82,9 +84,17 @@ export function HomeLearningController(){
   await begin(targetId,dailyLimit);
  };
  const quantityTargetRecord=quantityTarget?targets.find(target=>target.id===quantityTarget):undefined;
+ const authoritativeSummary=summaryReady&&libraryAvailability==='authoritative';
+ const status=notice
+  ? <p role="status">{localFlowNotice(notice)}</p>
+  : libraryAvailability==='failed'
+    ? <p role="alert">{t('cloudSync.openFailed')}</p>
+    : libraryAvailability==='restoring'
+      ? <p role="status">{t('cloudSync.opening')}</p>
+      : null;
  return <>
   <HomeScreen active onGo={goMain}
-   busy={busy} summaryReady={summaryReady} status={notice&&<p role="status">{localFlowNotice(notice)}</p>}
+   busy={busy} summaryReady={authoritativeSummary} status={status}
    onResume={activeRun?()=>setViewMode('lightweight'):undefined}
    onStartMixed={()=>void start()} onStartReview={()=>void start(true)}
    reviewDueN={queue.due.length} newAvailable={queue.initialReady.length}
