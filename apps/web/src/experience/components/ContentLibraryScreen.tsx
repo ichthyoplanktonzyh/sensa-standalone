@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   type ContentNoteItem,
   type ContentSectionId,
@@ -9,6 +9,7 @@ import {
 import type { PracticeSenseItem } from '../practiceData';
 import { useContentProjection } from '../useContentProjection';
 import { SensaCollectionBrowserLayout } from '../ui/SensaPageLayouts';
+import { useScreenState } from '../ui/ScreenHost';
 
 interface ContentLibraryScreenProps {
   active: boolean;
@@ -70,10 +71,8 @@ export const ContentLibraryScreen = ({
 }: ContentLibraryScreenProps) => {
   useTranslation();
   const projection = useContentProjection();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useScreenState(`content-library:${section}:query`, '');
   const meta = { title: uiText(section), description: '' };
-
-  useEffect(() => setQuery(''), [section]);
 
   const senseItems = section === 'recent'
     ? projection.recent

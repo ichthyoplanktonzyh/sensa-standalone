@@ -27,6 +27,7 @@ import {
 import { PersonalMeaningComposer } from "./PersonalMeaningComposer";
 import { IntakeInboxDrawer } from "./IntakeInboxDrawer";
 import { SensaCollectionBrowserLayout } from "../ui/SensaPageLayouts";
+import { useScreenState } from "../ui/ScreenHost";
 
 export interface ContentScreenSource {
   items: JourneyWorldItemView[];
@@ -110,10 +111,10 @@ function ContentScreenView({
 }: Omit<ContentScreenProps,"source"> & {source:Omit<ContentScreenSource,"composer"> & {composer?:ContentScreenSource["composer"]}}) {
   const { t, i18n } = useTranslation();
   const {items,status,inbox,projection}=source;
-  const [category, setCategory] = useState<Category>("personal");
-  const [view, setView] = useState<"list" | "world">("list");
-  const [filter, setFilter] = useState<Filter>("all");
-  const [query, setQuery] = useState("");
+  const [category, setCategory] = useScreenState<Category>(`${screenId}:category`, "personal");
+  const [view, setView] = useScreenState<"list" | "world">(`${screenId}:view`, "list");
+  const [filter, setFilter] = useScreenState<Filter>(`${screenId}:filter`, "all");
+  const [query, setQuery] = useScreenState(`${screenId}:query`, "");
   const [adding, setAdding] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);

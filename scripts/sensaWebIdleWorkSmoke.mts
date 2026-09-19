@@ -31,10 +31,15 @@ for(const [path,source] of sources)assert(!source.includes('setInterval('),`${pa
 const app=await readFile('apps/web/src/experience/App.tsx','utf8');
 const home=await readFile('apps/web/src/experience/library/HomeLearningController.tsx','utf8');
 const workspace=await readFile('apps/web/src/experience/library/LearningWorkspace.tsx','utf8');
+const shell=await readFile('apps/web/src/experience/ui/WebShell.tsx','utf8');
+const screenHost=await readFile('apps/web/src/experience/ui/ScreenHost.tsx','utf8');
 assert(/lazy\(\(\)=>import\('\.\/library\/HomeLearningController'\)/u.test(app),'the lightweight Home controller must remain outside the shell chunk');
 assert(/lazy\(\(\)=>import\('\.\/library\/LearningWorkspace'\)/u.test(app),'full learning controllers must remain outside the Home shell');
 assert(!app.includes('usePackageLearning')&&!app.includes('usePersonalLearning'),'App must not eagerly initialize full learning controllers');
 assert(!home.includes('usePackageLearning')&&!home.includes('usePersonalLearning'),'Home must use its small read projection instead of full learning controllers');
 assert(/lazy\(\(\)=>import\('\.\/PackageLearningRuntime'\)/u.test(workspace),'formal learning Runtime must remain outside the learning workspace graph');
+assert(app.includes('<ScreenHost')&&workspace.includes('<ScreenHost'),'both shell levels must delegate screen ownership to ScreenHost');
+assert(!shell.includes('MutationObserver'),'WebShell must not infer route ownership by observing DOM mutations');
+assert(screenHost.includes('outgoing: ScreenEntry | null'),'ScreenHost must bound retained DOM to current plus one outgoing screen');
 
-console.log('PASS: queue and preparation wake at exact fact boundaries, extension intake has no fixed poll, Home is lightweight, and the full workspace and formal Runtime remain deferred.');
+console.log('PASS: idle work is event-driven, Home is lightweight, heavy Runtime stays deferred, and ScreenHost owns a bounded route lifecycle without DOM observation.');

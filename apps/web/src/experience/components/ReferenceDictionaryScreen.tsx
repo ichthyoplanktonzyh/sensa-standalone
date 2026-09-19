@@ -245,6 +245,7 @@ export function ReferenceDictionaryScreen({
       data-screen-layer="1"
       data-anim="slide"
       aria-hidden={!active}
+      inert={!active}
     >
       <header className="grid min-h-20 shrink-0 grid-cols-[2.75rem_1fr_2.75rem] items-center gap-3 border-b border-border-subtle bg-surface-canvas/95 px-6 py-4">
         <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" type="button" onClick={onClose} aria-label={cardText('dictBack')}>

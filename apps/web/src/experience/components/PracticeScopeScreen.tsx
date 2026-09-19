@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CURRENT_STUDY_SCOPE_ID, PERSONAL_SEMANTIC_WORLD_SCOPE_ID, type PracticeScopeCatalog, type PracticeScopeSelection, type PracticeScopeTarget } from '../practiceScope';
 import { practiceBody, practiceButton, practiceSurface } from './SensaFreePracticeScreen';
+import { useScreenState } from '../ui/ScreenHost';
 export interface PracticeScopeScreenProps {
  active:boolean; catalog:PracticeScopeCatalog; onBack:()=>void; onSelectScope:(selection:PracticeScopeSelection)=>void;
 }
@@ -11,10 +11,9 @@ function TargetCopy({target}:{target:PracticeScopeTarget}) {
 }
 export const PracticeScopeScreen=({active,catalog,onBack,onSelectScope}:PracticeScopeScreenProps)=>{
  const {t}=useTranslation();
- const [view,setView]=useState<'targets'|'sources'|'personal'>('targets');
- const [draft,setDraft]=useState<readonly string[]>([]);
+ const [view,setView]=useScreenState<'targets'|'sources'|'personal'>('practice-scope:view','targets');
+ const [draft,setDraft]=useScreenState<readonly string[]>('practice-scope:draft',()=>catalog.selection.sourceId===PERSONAL_SEMANTIC_WORLD_SCOPE_ID?catalog.selection.targetIds:[]);
  const personal=catalog.sources.find(source=>source.sourceId===PERSONAL_SEMANTIC_WORLD_SCOPE_ID);
- useEffect(()=>{if(active){setView('targets');setDraft(catalog.selection.sourceId===PERSONAL_SEMANTIC_WORLD_SCOPE_ID?catalog.selection.targetIds:[]);}},[active,catalog.selection]);
  const validDraft=draft.filter(id=>personal?.targets.some(target=>target.targetId===id));
  const back=()=>view==='personal'?setView('sources'):view==='sources'?setView('targets'):onBack();
  return <section id="s-practice-scope" className={practiceSurface(active)}><main className={practiceBody}>

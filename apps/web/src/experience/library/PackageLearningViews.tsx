@@ -19,10 +19,11 @@ import type {LocalLearningTarget} from '../../data/library/learning';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 import {localTargetView} from './localTargetView';
+import {useScreenState} from '../ui/ScreenHost';
 type Controller=ReturnType<typeof usePackageLearning>;
 export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boolean;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void}){
  useTranslation();
- const [selected,setSelected]=useState<string|null>(null),[query,setQuery]=useState(''),[downloadKey,setDownloadKey]=useState<string|null>(null);
+ const [selected,setSelected]=useState<string|null>(null),[query,setQuery]=useScreenState('learning-entry:query',''),[downloadKey,setDownloadKey]=useState<string|null>(null);
  const importInput=useRef<HTMLInputElement>(null),heading=useRef<HTMLHeadingElement>(null);
  useEffect(()=>{if(!active)setSelected(null);},[active]);
  useEffect(()=>{if(active)heading.current?.focus({preventScroll:true});},[selected,active]);

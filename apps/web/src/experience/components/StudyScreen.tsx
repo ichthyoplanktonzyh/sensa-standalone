@@ -1,11 +1,12 @@
 import { StudyCalendar } from './StudyCalendar';
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { ArrowRight, BookOpen, Plus, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { LearningRecordKind, LearningRecordView } from '../learningJourney/learningHistory';
 import type { LearningPolicyId } from '../../learning/runtime/policyProfiles';
 import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
 import { SensaWorkspacePageLayout } from '../ui/SensaPageLayouts';
+import { useScreenState } from '../ui/ScreenHost';
 
 interface StudyScreenProps {
   policySummary?: string;
@@ -35,8 +36,8 @@ interface StudyScreenProps {
 export const studyButton = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-control px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
 export const StudyScreen = (props: StudyScreenProps) => {
   const {t,i18n}=useTranslation();
-  const [filter,setFilter]=useState<'all'|LearningRecordKind>('all');
-  const [limit,setLimit]=useState(10);
+  const [filter,setFilter]=useScreenState<'all'|LearningRecordKind>('study:history-filter','all');
+  const [limit,setLimit]=useScreenState('study:history-limit',10);
   const records=props.learningRecords.filter(record=>filter==='all'||record.kind===filter);
   const closePreferences=()=>{
     props.onTabChange('a');

@@ -1,9 +1,6 @@
-import { presentScreen, foregroundScreen } from './screenInteraction';
 import type { CSSProperties, ReactNode } from 'react';
-import { useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitch } from '../../i18n/LanguageSwitch';
-import { useModalFocus } from './useModalFocus';
 import { SensaApplicationShellLayout } from './SensaPageLayouts';
 import { SensaSkinIcon } from '../appearance/SensaSkinAssets';
 import { SensaLogo } from '../brand/SensaLogo';
@@ -20,32 +17,6 @@ export function WebShell({ children, current, focused, onNavigate, availableSect
 }) {
   const { t } = useTranslation();
   const visibleSections = sections.filter(section => !availableSections || availableSections.includes(section.id));
-  const viewport = useRef<HTMLDivElement>(null);
-  const shell = useRef<HTMLDivElement>(null);
-  useModalFocus(shell);
-  // Only URL-stack screens are mounted. Keep those retained screens and their
-  // scroll positions, while only the foreground surface participates in input.
-  useLayoutEffect(() => {
-    const node = viewport.current;
-    if (!node) return;
-    const original = new Map<HTMLElement, string>();
-    const update = () => {
-      const screens = [...node.querySelectorAll<HTMLElement>(':scope > .screen')];
-      for (const s of screens) {
-        if (!original.has(s)) original.set(s, s.style.cssText);
-      }
-      const front = foregroundScreen(screens,current,focused,s=>Number(getComputedStyle(s).zIndex));
-      for (const s of screens) {
-        presentScreen(s, s === front, focused);
-      }
-    };
-    update();
-    const observer = new MutationObserver(update);
-    // Every relevant screen is a direct viewport child. Do not observe class
-    // churn inside whole pages: only stack membership and root activity matter.
-    observer.observe(node, { childList: true, attributes: true, attributeFilter: ['class'] });
-    return () => { observer.disconnect(); original.forEach((style, screen) => { screen.style.cssText = style; }); };
-  }, [current, focused]);
   const selectedSection = current.startsWith('s-learning') || current === 's-stats' ? 's-study'
     : ['s-semantic-world','s-personal-meaning','s-confirmed-sense','s-expression-binding'].includes(current) ? 's-content'
     : current.startsWith('s-content') ? 's-content' : current;
@@ -93,11 +64,10 @@ export function WebShell({ children, current, focused, onNavigate, availableSect
   );
   return (
     <SensaApplicationShellLayout
-      ref={shell}
       className="font-product text-fg-primary antialiased selection:bg-selection"
       regions={{
         chrome: focused ? undefined : { brand, navigation, utilities },
-        viewport: <div ref={viewport} className="absolute inset-0 isolate transform-gpu overflow-hidden">{children}</div>,
+        viewport: <div className="absolute inset-0 isolate transform-gpu overflow-hidden">{children}</div>,
       }}
     />
   );

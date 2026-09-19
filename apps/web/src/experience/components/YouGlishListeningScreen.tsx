@@ -6,6 +6,7 @@ import { useYouglishWidget } from '../useYouglishWidget';
 import { useLanguageRoutes } from '../library/useLanguageRoutes';
 import { clipAccentsFor, clipLanguageFor, speechLocaleFor } from '../services/speechLanguage';
 import { practiceButton, practiceSurface } from './SensaFreePracticeScreen';
+import { useScreenState } from '../ui/ScreenHost';
 export interface YouGlishListeningScreenProps {
  active:boolean;targets:readonly PracticeScopeTarget[];onBack:()=>void;toast:(message:string)=>void;
 }
@@ -22,10 +23,10 @@ function ListeningPlayer({targets,onBack,retry}:YouGlishListeningScreenProps&{re
  const accents=clipAccentsFor(languageTag);
  const listableLocale=speechLocaleFor(languageTag);
  const listenable=useMemo(()=>{const seen=new Set<string>();return targets.filter(target=>{const form=target.expression.surfaceForm.trim().toLocaleLowerCase(listableLocale);if(!form||seen.has(form))return false;seen.add(form);return true;});},[targets,listableLocale]);
- const [targetId,setTargetId]=useState(listenable[0]?.targetId??'');
+ const [targetId,setTargetId]=useScreenState('real-world-listening:target',listenable[0]?.targetId??'');
  const current=listenable.find(target=>target.targetId===targetId)??listenable[0];
- const [accent,setAccent]=useState('all');
- const [rate,setRate]=useState(1);
+ const [accent,setAccent]=useScreenState('real-world-listening:accent','all');
+ const [rate,setRate]=useScreenState('real-world-listening:rate',1);
  // A filter the target language does not offer is never sent to the provider.
  const activeAccent=accents.includes(accent)?accent:'all';
  const mountRef=useRef<HTMLDivElement>(null);

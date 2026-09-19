@@ -274,12 +274,29 @@ try{
  catch(error){log('   phase A startup calls: '+JSON.stringify(served));log('   phase A startup rejected: '+JSON.stringify(rejected));log('   phase A startup console: '+JSON.stringify(a.errors));throw error;}
  await assertApplicationShell(a.page);
  assert.equal(await a.page.locator('.screen').count(),1,'unrelated product screens mounted behind Home');
+ await a.page.setViewportSize({width:1280,height:480});
+ const homeScroll=await a.page.locator('#s-home').evaluate(element=>{
+  element.scrollTop=Math.min(160,element.scrollHeight-element.clientHeight);
+  return element.scrollTop;
+ });
+ assert(homeScroll>0,'Home fixture must be scrollable to exercise explicit restoration');
  await a.page.locator('[data-sensa-shell-utility-action]').click();
  await expect(a.page.locator('#s-profile')).toBeVisible({timeout:SHELL_BUDGET_MS});
- assert.equal(await a.page.locator('.screen').count(),2,'the URL stack should retain only Home and the lazy Profile sheet');
+ assert((await a.page.locator('.screen').count())<=2,'ScreenHost mounted more than current plus outgoing');
+ await expect.poll(()=>a.page.locator('.screen').count(),{timeout:SHELL_BUDGET_MS,message:'the outgoing Home screen did not unmount'}).toBe(1);
  await a.page.locator('[data-sensa-shell-brand-action]').click();
  await expect(a.page.locator('#s-profile')).toHaveCount(0);
+ await expect(a.page.locator('#s-home')).toBeVisible({timeout:SHELL_BUDGET_MS});
  assert.equal(await a.page.locator('.screen').count(),1,'leaving a sheet should unmount its effects');
+ const restoredHomeScroll=await a.page.locator('#s-home').evaluate(element=>({
+  actual:element.scrollTop,
+  maximum:element.scrollHeight-element.clientHeight,
+ }));
+ const expectedHomeScroll=Math.min(homeScroll,restoredHomeScroll.maximum);
+ // A live sync-status row may settle during the round trip and move the clamp
+ // by one text line; the restored page must still remain at the same region.
+ assert(restoredHomeScroll.actual>0&&expectedHomeScroll-restoredHomeScroll.actual<=32,'back navigation did not restore the Home scroll position');
+ await a.page.setViewportSize({width:1280,height:900});
  const cloud=cloudFor(ACCOUNT);
  // Uploaded blocks are not a published library: wait for the committed manifest,
  // otherwise the next browser legitimately restores an empty account.

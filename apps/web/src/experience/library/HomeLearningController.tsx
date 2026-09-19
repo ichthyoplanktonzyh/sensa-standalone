@@ -15,7 +15,7 @@ import {useShellNavigation} from '../router/useShellNavigation';
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
 import {useAccountExperience} from '../account/AccountExperience';
 
-export function HomeLearningController(){
+export function HomeLearningController({active=true}:{active?:boolean}){
  const {t}=useTranslation();
  const {libraryAvailability}=useAccountExperience();
  const {goMain,setViewMode}=useShellNavigation();
@@ -93,7 +93,7 @@ export function HomeLearningController(){
       ? <p role="status">{t('cloudSync.opening')}</p>
       : null;
  return <>
-  <HomeScreen active onGo={goMain}
+  <HomeScreen active={active} onGo={goMain}
    busy={busy} summaryReady={authoritativeSummary} status={status}
    onResume={activeRun?()=>setViewMode('lightweight'):undefined}
    onStartMixed={()=>void start()} onStartReview={()=>void start(true)}

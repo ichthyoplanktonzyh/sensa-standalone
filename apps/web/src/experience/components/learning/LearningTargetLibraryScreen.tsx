@@ -1,9 +1,9 @@
-import { useState } from 'react';
 import { ArrowLeft, ArrowRight, Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { studyButton } from '../StudyScreen';
 import type {LearningPolicyId,LearningReadiness} from '../../../learning/runtime/policyProfiles';
 import { SensaCollectionBrowserLayout } from '../../ui/SensaPageLayouts';
+import { useScreenState } from '../../ui/ScreenHost';
 
 interface LearningTargetLibraryScreenProps {
   active: boolean;
@@ -29,8 +29,8 @@ interface LearningTargetLibraryScreenProps {
 type Filter = 'all' | 'new' | 'active' | 'review' | 'complete';
 export const LearningTargetLibraryScreen = (props: LearningTargetLibraryScreenProps) => {
   const { t } = useTranslation();
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useScreenState('learning-library:query', '');
+  const [filter, setFilter] = useScreenState<Filter>('learning-library:filter', 'all');
   const items = props.targetIds.map(id => {
     const state = props.declaredMasteryTargetIds.has(id) ? 'declared'
       : props.relearningRetestTargetIds.has(id) ? 'relearning-retest'

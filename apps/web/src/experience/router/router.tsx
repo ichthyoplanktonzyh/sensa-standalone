@@ -11,10 +11,9 @@ import { ProductRecovery } from '../../application/ProductRecovery';
 import { isKnownShellPath, parseShellParams, parseViewMode, type ShellFlow, type ShellParams } from './shellLocation';
 
 /**
- * App renders the shell plus only the screens present in the current URL stack.
- * Those retained sheets stay mounted and are shown or hidden by an `active`
- * prop, so back navigation keeps their scroll position and local state without
- * running every unrelated product screen in the background.
+ * App renders the shell plus a bounded screen host. The URL still records the
+ * navigation stack, while only the current and briefly outgoing screens mount.
+ * Scroll and selected non-authoritative UI state are restored explicitly.
  *
  * So the route tree exists to own the URL, not to swap components: App is the
  * root route's component, and the child routes below only declare which

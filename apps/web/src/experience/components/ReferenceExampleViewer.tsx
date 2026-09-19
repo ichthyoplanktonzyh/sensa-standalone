@@ -146,7 +146,7 @@ export function ReferenceExampleViewer({ active, deck, onClose }: ReferenceExamp
 
   return <section
     className={`screen absolute inset-0 z-[40] flex flex-col overflow-hidden bg-surface-canvas font-product text-fg-primary ${active ? 'active' : 'invisible pointer-events-none'}`}
-    id="s-reference-example" data-screen-layer="2" data-anim="slide" aria-hidden={!active}
+    id="s-reference-example" data-screen-layer="2" data-anim="slide" aria-hidden={!active} inert={!active}
   >
     <header className="flex shrink-0 items-center gap-4 border-b border-border-subtle px-6 py-4 sm:px-10">
       <button ref={closeButtonRef} type="button" onClick={onClose} aria-label={t('referenceExample.back')} className={setupButton + ' size-11 shrink-0 px-0 text-action-primary hover:bg-surface-selected'}><ArrowLeft size={20}/></button>

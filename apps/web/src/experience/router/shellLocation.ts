@@ -3,9 +3,9 @@
  *
  * Two independent dimensions had been two `useState`s in App:
  *
- *   - `mainStack` -- the sheet stack of the main page shell. Sheets stay
- *     mounted and are moved off-screen by CSS transform, so the stack is a
- *     set of simultaneously-active screens, not a single current page.
+ *   - `mainStack` -- the navigation history of the main page shell. A bounded
+ *     ScreenHost mounts only its current and outgoing entries; history remains
+ *     in the URL instead of remaining alive as hidden DOM.
  *   - `viewMode`  -- whether a full-screen learning flow covers the shell.
  *     Entering a flow must NOT discard the sheet stack: leaving it returns
  *     the learner to exactly the sheets they came from.
@@ -218,3 +218,19 @@ export const buildPathname = (stack: readonly string[]): string => {
 /** The search object for a view mode -- 'main' clears the param entirely. */
 export const buildSearch = (viewMode: ViewMode): { flow?: ShellFlow } =>
   viewMode === 'main' ? {} : { flow: viewMode };
+
+/** Stable identity for scroll/UI memory without retaining a screen DOM tree. */
+export const screenInstanceKey = (screenId: string, params: ShellParams): string => {
+  switch (screenId) {
+    case 's-content-library': return `${screenId}:${params.section ?? 'recent'}`;
+    case 's-content-sense': return `${screenId}:${params.senseId ?? 'missing'}`;
+    case 's-content-example': return `${screenId}:${params.exampleId ?? 'missing'}`;
+    case 's-content-coming': return `${screenId}:${params.coming ?? 'scenes'}`;
+    case 's-personal-meaning': return `${screenId}:${params.meaningId ?? 'new'}`;
+    case 's-confirmed-sense':
+    case 's-expression-binding':
+      return `${screenId}:${params.meaningId ?? 'missing'}:${params.focusId ?? 'missing'}`;
+    case 's-learning-target': return `${screenId}:${params.targetId ?? 'missing'}`;
+    default: return screenId;
+  }
+};

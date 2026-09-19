@@ -3,6 +3,7 @@ import {localFlowText} from '../i18n/localFlowText';
 import {IconSprite} from './components/IconSprite';
 import {DictionaryPresentationProvider} from './components/DictionaryPresentationContext';
 import {WebShell} from './ui/WebShell';
+import {ScreenHost,ScreenMemoryProvider} from './ui/ScreenHost';
 import type {PracticeSenseItem} from './practiceData';
 import {
   contentSenseForId,
@@ -12,6 +13,7 @@ import {
   type SavedExampleItem,
 } from './contentProjection';
 import {useShellNavigation} from './router/useShellNavigation';
+import {screenInstanceKey} from './router/shellLocation';
 import {usePresentationStore} from './stores/presentationStore';
 import {useOverlayStore} from './stores/overlayStore';
 
@@ -65,49 +67,59 @@ export default function App(){
  const toast=useOverlayStore(state=>state.toast);
 
  const currentScreen=mainStack.at(-1)??'s-home';
- const homeActive=viewMode==='main'&&mainStack.length===0;
- const learningWorkspaceActive=viewMode==='lightweight'||mainStack.some(screen=>LEARNING_WORKSPACE_SCREENS.has(screen));
- return <DictionaryPresentationProvider presentation={dictionaryPresentation}>
+ const learningWorkspaceActive=viewMode==='lightweight'||LEARNING_WORKSPACE_SCREENS.has(currentScreen);
+ const hostedScreenKey=learningWorkspaceActive?'learning-workspace':screenInstanceKey(currentScreen,params);
+ const overlayOpen=!!dictModalWord||!!referenceExampleDeck||!!noteModalWord||!!sceneEditorTarget;
+ const baseActive=!overlayOpen;
+ const renderScreen=(active:boolean)=>{
+  if(learningWorkspaceActive)return <LearningWorkspace active={active}/>;
+  switch(currentScreen){
+   case 's-home': return <HomeLearningController active={active}/>;
+   case 's-personal-meaning': return <PersonalMeaningDetailScreen
+    key={personalMeaningId} active={active} personalMeaningId={personalMeaningId}
+    onConversationCreated={openPersonalMeaning} onBack={backMain}
+    onOpenConfirmedSense={openConfirmedSense} toast={toast}/>;
+   case 's-expression-binding': return <ExpressionBindingScreen
+    active={active} personalMeaningId={personalMeaningId} meaningFocusId={meaningFocusId}
+    onBack={backMain} toast={toast}/>;
+   case 's-content-library': return <ContentLibraryScreen
+    active={active} section={contentSection} onBack={backMain} onOpenSense={openContentSense}
+    onOpenExample={(entry:SavedExampleItem)=>openContentExample(entry.sense)}
+    onEditNote={(entry:ContentNoteItem)=>{
+     if(entry.sense&&!entry.isLegacy)openNoteEditor(entry.sense.sourceWord,entry.sense.senseId,entry.sense.meaning);
+     else openNoteEditor(entry.word);
+    }}/>;
+   case 's-content-sense': return <ContentSenseDetailScreen
+    active={active} item={selectedContentSense} onBack={backMain} onOpenExample={openContentExample}
+    onOpenSense={item=>goMain('s-content-sense',{senseId:item.senseId})}
+    onOpenDictionary={item=>openDictModal(item.sourceWord)}
+    onEditNote={item=>openNoteEditor(item.sourceWord,item.senseId,item.meaning)} toast={toast}/>;
+   case 's-content-example': return <ContentExampleDetailScreen
+    active={active} item={selectedContentExample} onBack={backMain}
+    onOpenSense={item=>{
+     const nextStack=mainStack.includes('s-content-sense')?mainStack.slice(0,-1):[...mainStack.slice(0,-1),'s-content-sense'];
+     setMainStack(nextStack,{senseId:item.senseId});
+    }} toast={toast}/>;
+   case 's-content-coming': return <ContentComingSoonScreen active={active} kind={contentComingKind} onBack={backMain}/>;
+   default: return null;
+  }
+ };
+ const fallback=<section id={currentScreen} className="screen active absolute inset-0 grid place-content-center bg-surface-canvas text-fg-primary" role="status">{localFlowText('loadingSensa')}</section>;
+ return <ScreenMemoryProvider><DictionaryPresentationProvider presentation={dictionaryPresentation}>
   <IconSprite/>
-  <WebShell current={currentScreen} focused={viewMode!=='main'} onNavigate={id=>setMainStack(id==='s-home'?[]:[id])}>
-   <Suspense fallback={<section id={currentScreen} className="screen active absolute inset-0 grid place-content-center bg-surface-canvas text-fg-primary" role="status">{localFlowText('loadingSensa')}</section>}>
-    {homeActive&&<HomeLearningController/>}
-    {learningWorkspaceActive&&<LearningWorkspace/>}
-    {viewMode==='main'&&mainStack.includes('s-personal-meaning')&&<PersonalMeaningDetailScreen
-     key={personalMeaningId} active personalMeaningId={personalMeaningId}
-     onConversationCreated={openPersonalMeaning} onBack={backMain}
-     onOpenConfirmedSense={openConfirmedSense} toast={toast}/>}
-    {viewMode==='main'&&mainStack.includes('s-expression-binding')&&<ExpressionBindingScreen
-     active personalMeaningId={personalMeaningId} meaningFocusId={meaningFocusId}
-     onBack={backMain} toast={toast}/>}
-    {viewMode==='main'&&mainStack.includes('s-content-library')&&<ContentLibraryScreen
-     active section={contentSection} onBack={backMain} onOpenSense={openContentSense}
-     onOpenExample={(entry:SavedExampleItem)=>openContentExample(entry.sense)}
-     onEditNote={(entry:ContentNoteItem)=>{
-      if(entry.sense&&!entry.isLegacy)openNoteEditor(entry.sense.sourceWord,entry.sense.senseId,entry.sense.meaning);
-      else openNoteEditor(entry.word);
-     }}
-    />}
-    {viewMode==='main'&&mainStack.includes('s-content-sense')&&<ContentSenseDetailScreen
-     active item={selectedContentSense} onBack={backMain} onOpenExample={openContentExample}
-     onOpenSense={item=>goMain('s-content-sense',{senseId:item.senseId})}
-     onOpenDictionary={item=>openDictModal(item.sourceWord)}
-     onEditNote={item=>openNoteEditor(item.sourceWord,item.senseId,item.meaning)} toast={toast}/>}
-    {viewMode==='main'&&mainStack.includes('s-content-example')&&<ContentExampleDetailScreen
-     active item={selectedContentExample} onBack={backMain}
-     onOpenSense={item=>{
-      const nextStack=mainStack.includes('s-content-sense')?mainStack.slice(0,-1):[...mainStack.slice(0,-1),'s-content-sense'];
-      setMainStack(nextStack,{senseId:item.senseId});
-     }} toast={toast}/>}
-    {viewMode==='main'&&mainStack.includes('s-content-coming')&&<ContentComingSoonScreen active kind={contentComingKind} onBack={backMain}/>}
+  <WebShell current={viewMode==='lightweight'?'s-lightweight-runtime':currentScreen} focused={viewMode!=='main'} onNavigate={id=>setMainStack(id==='s-home'?[]:[id])}>
+    <ScreenHost screenKey={hostedScreenKey} memoryKey={hostedScreenKey} preserveScroll={!learningWorkspaceActive} active={baseActive} fallback={fallback}>
+     {renderScreen}
+    </ScreenHost>
+    <Suspense fallback={null}>
     {dictModalWord&&(dictionaryPresentation==='baseline'
      ?<DictDetailModal active wordData={dictModalWord} initialTab={dictModalTab} onClose={closeDictModal} toast={toast}/>
-     :<ReferenceDictionaryScreen active wordData={dictModalWord} onClose={closeDictModal} onOpenExamples={setReferenceExampleDeck}/>)}
+     :<ReferenceDictionaryScreen active={!referenceExampleDeck} wordData={dictModalWord} onClose={closeDictModal} onOpenExamples={setReferenceExampleDeck}/>)}
     {referenceExampleDeck&&<ReferenceExampleViewer active={dictionaryPresentation==='sensa'} deck={referenceExampleDeck} onClose={()=>setReferenceExampleDeck(null)}/>}
     {noteModalWord&&<NoteEditorModal active wordData={noteModalWord} senseId={noteModalSense?.senseId} senseMeaning={noteModalSense?.meaning} onClose={closeNoteEditor} toast={toast}/>}
     {sceneEditorTarget&&<SceneEditorModal active senseId={sceneEditorTarget.content.senseKey} word={sceneEditorTarget.content.lemma} senseMeaning={sceneEditorTarget.content.guideLabelL1} anchorId={sceneEditorTarget.anchorId} learningTarget={sceneEditorTarget.learningTarget} onClose={closeSceneEditor} toast={toast}/>}
-    <div className={`sensa-motion-popover fixed bottom-6 left-1/2 z-[150] max-w-[calc(100%-3rem)] -translate-x-1/2 rounded-control bg-fg-primary px-5 py-3 text-center text-control-label text-surface-canvas shadow-overlay ${toastMsg?'visible translate-y-0 opacity-100':'invisible translate-y-2 opacity-0'}`} id="toast" role="status" aria-live="polite">{toastMsg}</div>
-   </Suspense>
+    </Suspense>
+    {toastMsg&&<div className="sensa-motion-popover fixed bottom-6 left-1/2 z-[150] max-w-[calc(100%-3rem)] -translate-x-1/2 rounded-control bg-fg-primary px-5 py-3 text-center text-control-label text-surface-canvas shadow-overlay" id="toast" role="status" aria-live="polite">{toastMsg}</div>}
   </WebShell>
- </DictionaryPresentationProvider>;
+ </DictionaryPresentationProvider></ScreenMemoryProvider>;
 }

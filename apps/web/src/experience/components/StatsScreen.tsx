@@ -8,6 +8,7 @@ import i18n from '../../i18n';
 import { useLanguageRoutes } from '../library/useLanguageRoutes';
 import { inLanguageScope, languagesPresent, resolveLanguageScope } from '../library/languageScope';
 import { LearningSetupFrame, setupButton } from './learning/LearningSetupFrame';
+import { useScreenState } from '../ui/ScreenHost';
 
 interface StatsScreenProps {
   active: boolean;
@@ -19,15 +20,15 @@ const kinds = ['initial_learning','retention_review','relearning'] as const;
 export const StatsScreen = ({active,records,onBack,onOpenTarget}:StatsScreenProps) => {
   const {t,i18n}=useTranslation();
   const [now,setNow]=useState(()=>new Date());
-  const [range,setRange]=useState<StatisticsRange>('week');
-  const [start,setStart]=useState(()=>localRecordDate(new Date()));
-  const [end,setEnd]=useState(()=>localRecordDate(new Date()));
-  const [kind,setKind]=useState<'all'|LearningRecordKind>('all');
-  const [limit,setLimit]=useState(20);
+  const [range,setRange]=useScreenState<StatisticsRange>('stats:range','week');
+  const [start,setStart]=useScreenState('stats:start',()=>localRecordDate(new Date()));
+  const [end,setEnd]=useScreenState('stats:end',()=>localRecordDate(new Date()));
+  const [kind,setKind]=useScreenState<'all'|LearningRecordKind>('stats:kind','all');
+  const [limit,setLimit]=useScreenState('stats:limit',20);
   const {activeRoute}=useLanguageRoutes();
   /** The exact languages the saved records are actually in. */
   const languages=useMemo(()=>languagesPresent(records.map(record=>record.languageTag)),[records]);
-  const [languageChoice,setLanguageChoice]=useState<string|null>(null);
+  const [languageChoice,setLanguageChoice]=useScreenState<string|null>('stats:language',null);
   const languageScope=resolveLanguageScope(languageChoice,languages,activeRoute.targetLanguageTag);
   /** Records in two languages are never added together: the sum describes the
    * learning of neither language. A scope of one language counts that language,

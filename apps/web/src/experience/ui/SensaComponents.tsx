@@ -1,4 +1,4 @@
-import { createElement, useId, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type Ref } from "react";
+import { createElement, useCallback, useId, useRef, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type Ref } from "react";
 import {
   componentAttributes,
   componentSlot,
@@ -12,6 +12,12 @@ import {
   type OverlayLayoutMode,
 } from "../appearance/overlayLayoutContract";
 import { classNames } from "./primitives";
+import { useDialogFocus } from "./useDialogFocus";
+
+function assignRef<Value>(ref: Ref<Value> | undefined, value: Value | null): void {
+  if (typeof ref === "function") ref(value);
+  else if (ref) ref.current = value;
+}
 
 export interface SensaActionProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly variant?: ComponentVariant<"action">;
@@ -185,6 +191,13 @@ export function SensaOverlayLayout({
 }: SensaOverlayLayoutProps) {
   const generatedTitleId = useId();
   const titleId = regions.header ? (labelledBy ?? generatedTitleId) : labelledBy;
+  const modal = mode === "viewport" && variant !== "popover";
+  const internalPanelRef = useRef<HTMLElement>(null);
+  const setPanelRef = useCallback((node: HTMLElement | null) => {
+    internalPanelRef.current = node;
+    assignRef(panelRef, node);
+  }, [panelRef]);
+  useDialogFocus(internalPanelRef, modal);
 
   return (
     <div
@@ -201,10 +214,11 @@ export function SensaOverlayLayout({
         }}
       >
         <section
-          ref={panelRef}
+          ref={setPanelRef}
           {...componentSlot<"overlay">("panel")}
           role="dialog"
-          aria-modal={mode === "viewport" && variant !== "popover" ? true : undefined}
+          aria-modal={modal ? true : undefined}
+          tabIndex={modal ? -1 : undefined}
           aria-label={titleId ? undefined : label}
           aria-labelledby={titleId}
         >
