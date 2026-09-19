@@ -15,6 +15,7 @@ import {hasDeclaredMasteryOverride} from '../apps/web/src/learning/runtime/targe
 import {localCurriculumMeaning,localCurriculumMembershipForContext,localExecutableTarget} from '../apps/web/src/learning/runtime/localCurriculum.ts';
 import {addLanguageRoute,setActiveLanguageRoute} from '../apps/web/src/data/library/language.ts';
 import {contentAnnotations} from '../apps/web/src/data/library/contentAnnotations.ts';
+import {readHomeLearningProjection} from '../apps/web/src/experience/library/homeLearningProjection.ts';
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
 const identity=await openLibrary();await command({id:crypto.randomUUID(),kind:'fixture.owner',input:{}},async tx=>{tx.put('meta','service-owner',{subject:crypto.randomUUID()});});
 const id=()=>crypto.randomUUID();
@@ -38,6 +39,8 @@ try{
  const [targetId]=await enrollPackage(id(),pack.key,languageContext);await enrollPackage(id(),pack.key,languageContext);
  assert.equal((await readLearning()).targets.length,1);
  const target=(await readLearning()).targets[0]!;
+ const homeBeforeStart=await readHomeLearningProjection(languageContext.languageRouteId);
+ assert.equal(homeBeforeStart.targets.length,1);assert.equal(homeBeforeStart.packages.length,1);assert.equal(homeBeforeStart.activeRun,null);assert.equal(homeBeforeStart.dailyLimit,undefined);
  // A new Profile reuses the registered execution engine and Surface without a new page or branch.
  const base=learningPolicyProfileRegistry.get('lightweight');
  const variant={...structuredClone(base),profileId:'fixture-reused-profile'};
@@ -88,6 +91,7 @@ try{
  }
  globalThis.fetch=async()=>{throw Error('Offline');};
  const at='2026-09-10T08:00:00.000Z';await assert.rejects(startLearning(id(),targetId!,languageContext,20,at));await confirmLearningQuantity(id(),languageContext,20);let run=await startLearning(id(),targetId!,languageContext,20,at);
+ const homeRunning=await readHomeLearningProjection(languageContext.languageRouteId);assert.equal(homeRunning.dailyLimit,20);assert.equal(homeRunning.activeRun?.id,run.id);
  const committedTarget=(await readLearning()).targets.find(item=>item.id===targetId)!;
  assert(committedTarget.committedPolicy);assert.equal(committedTarget.committedPolicy.assignmentId,committedTarget.policyAssignment.assignmentId);
  assert.equal(run.participants[targetId!].policyCommitment.commitmentId,committedTarget.committedPolicy.commitmentId);

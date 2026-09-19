@@ -33,14 +33,12 @@ import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningO
 import {applyLocalProtocolTransition,type LocalLearningTransitionRecord} from './learningSettlement';
 import {requireLanguageRouteContext} from './language';
 import {personalLearningSceneRowId,type PersonalLearningScene} from './contentAnnotations';
+import {readStudyPlans,writeStudyPlans} from './studyPlans';
 
 export {localRunTargetIds};
 export type {LocalLearningRun,LocalLearningTarget};
+export type {LocalStudyPlan} from './studyPlans';
 export type LearningEvent={id:string;runId:string;targetId:string;kind:string;at:string;detail:{stepId:string;materializationId:string;personalLearningScene:{sceneId:string;revisionId:string;revision:number}|null;action:LocalLearningAction;formalEvaluation:LocalProtocolEvaluationFacts|null;transition:LocalLearningTransitionRecord}};
-export type LocalStudyPlan={languageRouteId:string;routeRevision:number;revision:number;dailyNewSenseLimit:number;updatedAt:string};
-
-const STUDY_PLANS_KEY='language-route-study-plans';
-const readStudyPlans=async(tx:LibraryTransaction):Promise<Record<string,LocalStudyPlan>>=>await tx.get('settings',STUDY_PLANS_KEY)??{};
 
 const createPolicyAssignment=(input:{operationId:string;targetId:string;profileId:LearningPolicyId;scope:LocalLearningPolicyAssignment['scope'];at:string;provenance:Readonly<Record<string,unknown>>}):LocalLearningPolicyAssignment=>({
  assignmentId:stableUuid(`local-policy-assignment:${input.targetId}`),revision:1,scope:input.scope,profileId:input.profileId,
@@ -164,7 +162,7 @@ export const readLearningOverview=()=>readLibrary(async tx=>({
 /** Small projection for callers that only need Target facts. */
 export const learningTargetsSnapshot=()=>readLibrary(tx=>tx.all<LocalLearningTarget>('learningTargets'));
 export const readLearning=()=>readLibrary(async tx=>({targets:await tx.all<LocalLearningTarget>('learningTargets'),runs:await tx.all<LocalLearningRun>('learningRuns'),events:await tx.all<LearningEvent>('learningEvents'),active:await tx.get<string>('meta','learning-active'),studyPlans:await readStudyPlans(tx)}));
-export async function confirmLearningQuantity(operationId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number){return command({id:operationId,kind:'learning.quantity',input:{languageContext,dailyLimit}},async tx=>{await learningOwner(tx);const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100)throw new Error('localFlow.quantityRange');const plans=await readStudyPlans(tx),previous=plans[context.languageRouteId];plans[context.languageRouteId]={languageRouteId:context.languageRouteId,routeRevision:context.languageRouteRevision,revision:(previous?.revision??0)+1,dailyNewSenseLimit:dailyLimit,updatedAt:new Date().toISOString()};tx.put('settings',STUDY_PLANS_KEY,plans);return true;});}
+export async function confirmLearningQuantity(operationId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number){return command({id:operationId,kind:'learning.quantity',input:{languageContext,dailyLimit}},async tx=>{await learningOwner(tx);const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100)throw new Error('localFlow.quantityRange');const plans=await readStudyPlans(tx),previous=plans[context.languageRouteId];plans[context.languageRouteId]={languageRouteId:context.languageRouteId,routeRevision:context.languageRouteRevision,revision:(previous?.revision??0)+1,dailyNewSenseLimit:dailyLimit,updatedAt:new Date().toISOString()};writeStudyPlans(tx,plans);return true;});}
 const day=(date:Date)=>`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 async function startLearningInTransaction(tx:LibraryTransaction,operationId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at:string):Promise<LocalLearningRun>{
  const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100||!Number.isFinite(Date.parse(at)))throw new Error('localFlow.confirmQuantity');

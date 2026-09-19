@@ -1,31 +1,9 @@
-import {localTargetPolicy} from '../learning/runtime/localRuntimeBindings';
+import {lazy,Suspense,useCallback,useMemo} from 'react';
 import {localFlowText} from '../i18n/localFlowText';
-import {usePersonalLearning} from './library/usePersonalLearning';
-import {useLanguageRoutes} from './library/useLanguageRoutes';
-import {sensaLanguageDisplayName} from '@sensa/contracts/sensa';
-import i18n from '../i18n';
-import {
-  JourneyAlignmentLearningControls,
-  PersonalPreparationTarget,
-  pendingPersonalTargetView,
-} from './library/PersonalLearningControls';
-import {LearningSetupFrame} from './components/learning/LearningSetupFrame';
-import {usePackageLearning} from './library/usePackageLearning';
-import {
-  PackageEntry,
-  PackageTarget,
-} from './library/PackageLearningViews';
-import {localTargetView} from './library/localTargetView';
-import {LearningPreferencesPanel} from './components/learning/LearningPreferencesPanel';
-import {useTranslation} from 'react-i18next';
-import {lazy,Suspense,useState,useCallback,useMemo} from 'react';
 import {IconSprite} from './components/IconSprite';
-import {HomeScreen} from './components/HomeScreen';
 import {DictionaryPresentationProvider} from './components/DictionaryPresentationContext';
 import {WebShell} from './ui/WebShell';
 import type {PracticeSenseItem} from './practiceData';
-import {usePracticeScope} from './usePracticeScope';
-import {createPracticeScopeSnapshot,type PracticeScopeSnapshot} from './practiceScope';
 import {
   contentSenseForId,
   isContentSectionId,
@@ -37,476 +15,99 @@ import {useShellNavigation} from './router/useShellNavigation';
 import {usePresentationStore} from './stores/presentationStore';
 import {useOverlayStore} from './stores/overlayStore';
 
-const AcademyScreen=lazy(()=>import('./components/AcademyScreen').then(module=>({default:module.AcademyScreen})));
-const PracticeScopeScreen=lazy(()=>import('./components/PracticeScopeScreen').then(module=>({default:module.PracticeScopeScreen})));
-const YouGlishListeningScreen=lazy(()=>import('./components/YouGlishListeningScreen').then(module=>({default:module.YouGlishListeningScreen})));
-const ContentScreen=lazy(()=>import('./components/ContentScreen').then(module=>({default:module.ContentScreen})));
-const ContentLibraryScreen=lazy(()=>import('./components/ContentLibraryScreen').then(module=>({default:module.ContentLibraryScreen})));
+const HomeLearningController=lazy(()=>import('./library/HomeLearningController').then(module=>({default:module.HomeLearningController})));
+const LearningWorkspace=lazy(()=>import('./library/LearningWorkspace').then(module=>({default:module.LearningWorkspace})));
 const PersonalMeaningDetailScreen=lazy(()=>import('./components/PersonalMeaningDetailScreen').then(module=>({default:module.PersonalMeaningDetailScreen})));
-const ConfirmedSenseDetailScreen=lazy(()=>import('./components/ConfirmedSenseDetailScreen').then(module=>({default:module.ConfirmedSenseDetailScreen})));
 const ExpressionBindingScreen=lazy(()=>import('./components/ExpressionBindingScreen').then(module=>({default:module.ExpressionBindingScreen})));
+const ContentLibraryScreen=lazy(()=>import('./components/ContentLibraryScreen').then(module=>({default:module.ContentLibraryScreen})));
 const ContentSenseDetailScreen=lazy(()=>import('./components/ContentSenseDetailScreen').then(module=>({default:module.ContentSenseDetailScreen})));
 const ContentExampleDetailScreen=lazy(()=>import('./components/ContentExampleDetailScreen').then(module=>({default:module.ContentExampleDetailScreen})));
 const ContentComingSoonScreen=lazy(()=>import('./components/ContentComingSoonScreen').then(module=>({default:module.ContentComingSoonScreen})));
-const StudyScreen=lazy(()=>import('./components/StudyScreen').then(module=>({default:module.StudyScreen})));
-const LearningTargetLibraryScreen=lazy(()=>import('./components/learning/LearningTargetLibraryScreen').then(module=>({default:module.LearningTargetLibraryScreen})));
-const ProfileScreen=lazy(()=>import('./components/ProfileScreen').then(module=>({default:module.ProfileScreen})));
 const DictDetailModal=lazy(()=>import('./components/DictDetailModal').then(module=>({default:module.DictDetailModal})));
 const ReferenceDictionaryScreen=lazy(()=>import('./components/ReferenceDictionaryScreen').then(module=>({default:module.ReferenceDictionaryScreen})));
 const ReferenceExampleViewer=lazy(()=>import('./components/ReferenceExampleViewer').then(module=>({default:module.ReferenceExampleViewer})));
 const NoteEditorModal=lazy(()=>import('./components/NoteEditorModal').then(module=>({default:module.NoteEditorModal})));
 const SceneEditorModal=lazy(()=>import('./components/SceneEditorModal').then(module=>({default:module.SceneEditorModal})));
-const StatsScreen=lazy(()=>import('./components/StatsScreen').then(module=>({default:module.StatsScreen})));
-const BatchPersonalLearning=lazy(()=>import('./library/BatchPersonalLearning').then(module=>({default:module.BatchPersonalLearning})));
-const ProviderPanel=lazy(()=>import('./components/ProviderPanel').then(module=>({default:module.ProviderPanel})));
-const PackageRuntime=lazy(()=>import('./library/PackageLearningRuntime').then(module=>({default:module.PackageRuntime})));
 
-export default function App() {
-  const { t } = useTranslation();
-  /* ---------- 顶层视图模式与 Sheet 栈：真相源是 URL ---------- */
-  const {
-    viewMode,
-    mainStack,
-    params,
-    setViewMode,
-    goMain,
-    backMain,
-    resetMain,
-    returnHome,
-    setMainStack,
-  } = useShellNavigation();
+const LEARNING_WORKSPACE_SCREENS=new Set([
+ 's-academy','s-practice-scope','s-real-world-listening',
+ 's-content','s-semantic-world','s-confirmed-sense',
+ 's-study','s-learning-library','s-learning-entry','s-learning-target','s-stats','s-profile',
+]);
 
-  const packageLearning=usePackageLearning(viewMode==='main'&&mainStack.includes('s-learning-entry'));
-  const personalLearning=usePersonalLearning();
-  const {activeRoute}=useLanguageRoutes();
-  const pendingPersonal=personalLearning.tasks.filter(task=>!packageLearning.targets.some(target=>target.id===task.targetId&&target.curriculumMemberships.some(membership=>membership.id===task.curriculumMembershipId)));
-  /** What the learner is learning now: the queue, today's new items and the
-   * counts beside them. The lists that browse everything keep every language. */
-  const activePendingPersonal=pendingPersonal.filter(task=>task.languageContext.languageRouteId===activeRoute.id);
-  const selectedPersonalTask=activePendingPersonal.find(t=>t.targetId===params.targetId);
-  const localSelectedTarget=packageLearning.activeTargets.find(t=>t.id===params.targetId);
-  const localSelectedMembership=localSelectedTarget?packageLearning.membershipByTarget[localSelectedTarget.id]:undefined;
-  const openLocalTarget=(id:string)=>goMain('s-learning-target',{targetId:id});
-  /* ---------- 自由练习范围：typed sources → learner selection → resolved scope ---------- */
-  const practiceStudyTargets = useMemo(() => packageLearning.activeTargets.flatMap((target) => {
-    const membership = packageLearning.membershipByTarget[target.id];
-    return membership ? [{ target, membership }] : [];
-  }), [packageLearning.activeTargets, packageLearning.membershipByTarget]);
-  const { catalog: practiceScopeCatalog, selectScope } = usePracticeScope({
-    studyTargets: practiceStudyTargets,
-    activeLanguageTag: activeRoute.targetLanguageTag,
-  });
-  const [activePracticeScope, setActivePracticeScope] = useState<PracticeScopeSnapshot | null>(null);
-  const openRealWorldListening = useCallback(() => {
-    const current = practiceScopeCatalog.currentScope;
-    setActivePracticeScope(createPracticeScopeSnapshot(
-      current,
-      crypto.randomUUID(),
-      new Date().toISOString(),
-    ));
-    goMain('s-real-world-listening');
-  }, [goMain, practiceScopeCatalog.currentScope]);
+export default function App(){
+ const {viewMode,mainStack,params,goMain,backMain,setMainStack}=useShellNavigation();
+ const dictionaryPresentation=usePresentationStore(state=>state.dictionary);
+ const contentSection:ContentSectionId=isContentSectionId(params.section)?params.section:'recent';
+ const contentComingKind:'scenes'|'collections'=params.coming==='collections'?'collections':'scenes';
+ const personalMeaningId=params.meaningId??null;
+ const meaningFocusId=params.focusId??null;
+ const selectedContentSense=useMemo(()=>params.senseId?contentSenseForId(params.senseId):null,[params.senseId]);
+ const selectedContentExample=useMemo(()=>params.exampleId?contentSenseForId(params.exampleId):null,[params.exampleId]);
+ const openContentSense=useCallback((item:PracticeSenseItem)=>goMain('s-content-sense',{senseId:item.senseId}),[goMain]);
+ const openPersonalMeaning=useCallback((meaningId:string,focusId?:string)=>goMain('s-personal-meaning',{meaningId,focusId}),[goMain]);
+ const openConfirmedSense=useCallback((meaningId:string,focusId:string)=>goMain('s-confirmed-sense',{meaningId,focusId}),[goMain]);
+ const openContentExample=useCallback((item:PracticeSenseItem)=>goMain('s-content-example',{exampleId:item.senseId}),[goMain]);
 
-  // 剩余展示版本对照开关由 presentationStore 持有：写在侧栏、读在各屏。
-  const dictionaryPresentation = usePresentationStore((state) => state.dictionary);
+ const dictModalWord=useOverlayStore(state=>state.dictModalWord);
+ const dictModalTab=useOverlayStore(state=>state.dictModalTab);
+ const referenceExampleDeck=useOverlayStore(state=>state.referenceExampleDeck);
+ const openDictModal=useOverlayStore(state=>state.openDictModal);
+ const closeDictModal=useOverlayStore(state=>state.closeDictModal);
+ const setReferenceExampleDeck=useOverlayStore(state=>state.setReferenceExampleDeck);
+ const noteModalWord=useOverlayStore(state=>state.noteModalWord);
+ const noteModalSense=useOverlayStore(state=>state.noteModalSense);
+ const openNoteEditor=useOverlayStore(state=>state.openNoteEditor);
+ const closeNoteEditor=useOverlayStore(state=>state.closeNoteEditor);
+ const sceneEditorTarget=useOverlayStore(state=>state.sceneEditorTarget);
+ const closeSceneEditor=useOverlayStore(state=>state.closeSceneEditor);
+ const toastMsg=useOverlayStore(state=>state.toastMsg);
+ const toast=useOverlayStore(state=>state.toast);
 
-  /* ---------- 我的语义世界读取投影与下钻目标 ---------- */
-  /**
-   * 下钻目标由 URL 描述，而不是 useState 持有的对象。此前
-   * selectedContentSense 存的是整个 PracticeSenseItem，深链接因此只能打开
-   * sheet、打不开内容——刷新后对象就没了。URL 里只放 id，条目由 id 查回。
-   */
-  const contentSection: ContentSectionId = isContentSectionId(params.section)
-    ? params.section
-    : 'recent';
-  const contentComingKind: 'scenes' | 'collections' =
-    params.coming === 'collections' ? 'collections' : 'scenes';
-  const personalMeaningId = params.meaningId ?? null;
-  const meaningFocusId = params.focusId ?? null;
-  const selectedContentSense = useMemo(
-    () => (params.senseId ? contentSenseForId(params.senseId) : null),
-    [params.senseId],
-  );
-  const selectedContentExample = useMemo(
-    () => (params.exampleId ? contentSenseForId(params.exampleId) : null),
-    [params.exampleId],
-  );
-
-  const openContentSection = useCallback((section: ContentSectionId) => {
-    goMain('s-content-library', { section });
-  }, [goMain]);
-
-  const openContentSense = useCallback((item: PracticeSenseItem) => {
-    goMain('s-content-sense', { senseId: item.senseId });
-  }, [goMain]);
-
-  const openSemanticWorldSense = useCallback((senseId: string) => {
-    const item = contentSenseForId(senseId);
-    if (item) openContentSense(item);
-  }, [openContentSense]);
-
-  const openPersonalMeaning = useCallback((
-    nextPersonalMeaningId: string,
-    nextMeaningFocusId?: string,
-  ) => {
-    goMain('s-personal-meaning', {
-      meaningId: nextPersonalMeaningId,
-      focusId: nextMeaningFocusId,
-    });
-  }, [goMain]);
-
-  const startSensaConversation = useCallback(() => {
-    goMain('s-personal-meaning', { meaningId: undefined, focusId: undefined });
-  }, [goMain]);
-
-  const openConfirmedSense = useCallback((nextPersonalMeaningId: string, nextMeaningFocusId: string) => {
-    goMain('s-confirmed-sense', {
-      meaningId: nextPersonalMeaningId,
-      focusId: nextMeaningFocusId,
-    });
-  }, [goMain]);
-
-  const openPersonalLearningSource = useCallback((task:typeof personalLearning.tasks[number]) => {
-    goMain('s-confirmed-sense', {
-      meaningId: task.source.personalMeaningId,
-      focusId: task.source.meaningFocusId ?? task.source.personalMeaningAlignmentId,
-    });
-  }, [goMain]);
-
-  const openExpressionBinding = useCallback(() => {
-    goMain('s-expression-binding');
-  }, [goMain]);
-
-  const openContentExample = useCallback((item: PracticeSenseItem) => {
-    goMain('s-content-example', { exampleId: item.senseId });
-  }, [goMain]);
-
-  /* ---------- 覆盖层：词典、笔记、场景、拼写、菜单、Toast ---------- */
-  // 这些原本是十六个 useState，其唯一职责是让深层屏幕唤起一个浮层，
-  // 因而每个 opener 都要作为 prop 一路传下去。改由 overlayStore 持有。
-  const dictModalWord = useOverlayStore((state) => state.dictModalWord);
-  const dictModalTab = useOverlayStore((state) => state.dictModalTab);
-  const referenceExampleDeck = useOverlayStore((state) => state.referenceExampleDeck);
-  const openDictModal = useOverlayStore((state) => state.openDictModal);
-  const closeDictModal = useOverlayStore((state) => state.closeDictModal);
-  const setReferenceExampleDeck = useOverlayStore((state) => state.setReferenceExampleDeck);
-
-  const noteModalWord = useOverlayStore((state) => state.noteModalWord);
-  const noteModalSense = useOverlayStore((state) => state.noteModalSense);
-  const openNoteEditor = useOverlayStore((state) => state.openNoteEditor);
-  const closeNoteEditor = useOverlayStore((state) => state.closeNoteEditor);
-
-  const sceneEditorTarget = useOverlayStore((state) => state.sceneEditorTarget);
-  const setSceneEditorTarget = useOverlayStore((state) => state.openSceneEditor);
-  const closeSceneEditor = useOverlayStore((state) => state.closeSceneEditor);
-
-  const toastMsg = useOverlayStore((state) => state.toastMsg);
-  const toast = useOverlayStore((state) => state.toast);
-
-  /* ---------- Learning Runtime composition ---------- */
-  const [studyTab, setStudyTab] = useState<'a' | 'b'>('a');
-  const dailyNewCount = packageLearning.dailyLimit ?? 20;
-  const [quantityTarget,setQuantityTarget]=useState<string|null>(null);
-  const [quantityChoice,setQuantityChoice]=useState(20);
-  const quantityTargetRecord=quantityTarget
-    ? packageLearning.targets.find(target=>target.id===quantityTarget)
-    : undefined;
-
-  const updateLocalQuantity=(value:number)=>{
-    void packageLearning.confirmQuantity(value);
-  };
-
-  const startLocalLearning=async(id?:string,reviewOnly=false)=>{
-    const targetId=id
-      ?? packageLearning.run?.targetId
-      ?? packageLearning.due[0]?.id
-      ?? (!reviewOnly ? packageLearning.initialReady[0]?.id : undefined);
-    if(!targetId){
-      goMain('s-learning-entry');
-      return;
-    }
-    if(packageLearning.dailyLimit===undefined){
-      setQuantityChoice(dailyNewCount);
-      setQuantityTarget(targetId);
-      return;
-    }
-    if(await packageLearning.start(targetId,dailyNewCount))setViewMode('lightweight');
-  };
-
-  const currentScreen=mainStack[mainStack.length-1]??'s-home';
-
-  return (
-    <DictionaryPresentationProvider presentation={dictionaryPresentation}>
-      <IconSprite />
-
-      <WebShell
-        current={currentScreen}
-        focused={viewMode !== 'main'}
-        onNavigate={(id) => setMainStack(id === 's-home' ? [] : [id])}
-      >
-          {/* ================= 主页面体系 (Main Shell) ================= */}
-          {/* 1. 首页 */}
-          <HomeScreen active={viewMode==='main'} onGo={goMain}
-            busy={packageLearning.busy} status={packageLearning.notice&&<p role="status">{packageLearning.notice}</p>}
-            onResume={packageLearning.run?()=>setViewMode('lightweight'):undefined}
-            onStartMixed={()=>void startLocalLearning()} onStartReview={()=>void startLocalLearning(undefined,true)}
-            reviewDueN={packageLearning.due.length} newAvailable={packageLearning.initialReady.length}
-            onRecordContext={()=>goMain('s-semantic-world',{worldAction:'create'})}
-            mixedReadyN={packageLearning.initialReady.length+packageLearning.due.length}/>
-
-          <Suspense fallback={<section id={currentScreen} className="screen active absolute inset-0 grid place-content-center bg-surface-canvas text-fg-primary" role="status">{localFlowText('loadingSensa')}</section>}>
-
-          {/* 2. 自由练习 */}
-          {viewMode === 'main' && mainStack.includes('s-academy') && <AcademyScreen
-            active={viewMode === 'main' && mainStack.includes('s-academy')}
-            onBack={backMain}
-            onOpenPracticeScope={() => goMain('s-practice-scope')}
-            onOpenRealWorldListening={openRealWorldListening}
-            practiceScope={practiceScopeCatalog.currentScope}
-          />}
-
-          {/* 2.1 自由练习范围：来源选择与 Personal Meaning target 选择 */}
-          {viewMode === 'main' && mainStack.includes('s-practice-scope') && <PracticeScopeScreen
-            active={viewMode === 'main' && mainStack.includes('s-practice-scope')}
-            catalog={practiceScopeCatalog}
-            onBack={backMain}
-            onSelectScope={selectScope}
-          />}
-
-          {/* 3. 我的语义世界 */}
-          {viewMode === 'main' && (mainStack.includes('s-content') || mainStack.includes('s-semantic-world')) && <ContentScreen
-            bulkLearning={(items,list)=><BatchPersonalLearning items={items} c={personalLearning}>{list}</BatchPersonalLearning>}
-            active={viewMode === 'main' && (mainStack.includes('s-content') || mainStack.includes('s-semantic-world'))}
-            screenId={mainStack.includes('s-semantic-world') ? 's-semantic-world' : 's-content'}
-            initialAction={params.worldAction === 'create' || params.worldAction === 'inbox' ? params.worldAction : undefined}
-            onStartConversation={startSensaConversation}
-            onBrowseExisting={() => goMain('s-learning-entry')}
-            onOpenPersonalMeaning={openPersonalMeaning}
-            onOpenConfirmedSense={openConfirmedSense}
-            onOpenSense={openSemanticWorldSense}
-            onOpenSection={openContentSection}
-            toast={toast}
-          />}
-
-          {/* 3.1.1 AI 澄清：各入口共用一段自然对话，收敛 Context / Sense / Expression */}
-          {viewMode === 'main' && mainStack.includes('s-personal-meaning') && <PersonalMeaningDetailScreen
-            key={personalMeaningId}
-            active={viewMode === 'main' && mainStack.includes('s-personal-meaning')}
-            personalMeaningId={personalMeaningId}
-            onConversationCreated={openPersonalMeaning}
-            onBack={backMain}
-            onOpenConfirmedSense={openConfirmedSense}
-            toast={toast}
-          />}
-
-          {/* 3.1.2 已确认 Sense：Meaning Formation 终点与 Binding 入口 */}
-          {viewMode === 'main' && mainStack.includes('s-confirmed-sense') && <ConfirmedSenseDetailScreen
-            active={viewMode === 'main' && mainStack.includes('s-confirmed-sense')}
-            personalMeaningId={personalMeaningId}
-            meaningFocusId={meaningFocusId}
-            onBack={backMain}
-            onOpenBinding={openExpressionBinding}
-            learningControls={(detail,alignment)=><JourneyAlignmentLearningControls detail={detail} alignment={alignment} c={personalLearning} onStart={id=>void startLocalLearning(id)}/>}
-          />}
-
-          {/* 3.1.3 独立 Expression Binding：本轮停止在此，不进入学习链 */}
-          {viewMode === 'main' && mainStack.includes('s-expression-binding') && <ExpressionBindingScreen
-            active={viewMode === 'main' && mainStack.includes('s-expression-binding')}
-            personalMeaningId={personalMeaningId}
-            meaningFocusId={meaningFocusId}
-            onBack={backMain}
-            toast={toast}
-          />}
-
-          {/* 3.2 我的语义世界清单：学习、收藏与笔记读取投影 */}
-          {viewMode === 'main' && mainStack.includes('s-content-library') && <ContentLibraryScreen
-            active={viewMode === 'main' && mainStack.includes('s-content-library')}
-            section={contentSection}
-            onBack={backMain}
-            onOpenSense={openContentSense}
-            onOpenExample={(entry: SavedExampleItem) => openContentExample(entry.sense)}
-            onEditNote={(entry: ContentNoteItem) => {
-              if (entry.sense && !entry.isLegacy) {
-                openNoteEditor(entry.sense.sourceWord, entry.sense.senseId, entry.sense.meaning);
-              } else {
-                openNoteEditor(entry.word);
-              }
-            }}
-          />}
-
-          {/* 3.3 具体意思只读详情 */}
-          {viewMode === 'main' && mainStack.includes('s-content-sense') && <ContentSenseDetailScreen
-            active={viewMode === 'main' && mainStack.includes('s-content-sense')}
-            item={selectedContentSense}
-            onBack={backMain}
-            onOpenExample={openContentExample}
-            onOpenSense={(item) => goMain('s-content-sense', { senseId: item.senseId })}
-            onOpenDictionary={(item) => openDictModal(item.sourceWord)}
-            onEditNote={(item) => openNoteEditor(item.sourceWord, item.senseId, item.meaning)}
-            toast={toast}
-          />}
-
-          {/* 3.4 收藏例句与学习例句详情 */}
-          {viewMode === 'main' && mainStack.includes('s-content-example') && <ContentExampleDetailScreen
-            active={viewMode === 'main' && mainStack.includes('s-content-example')}
-            item={selectedContentExample}
-            onBack={backMain}
-            onOpenSense={(item) => {
-              // 例句详情跳义项详情：替换栈顶，义项已在栈中时退回到它。
-              const nextStack = mainStack.includes('s-content-sense')
-                ? mainStack.slice(0, -1)
-                : [...mainStack.slice(0, -1), 's-content-sense'];
-              setMainStack(nextStack, { senseId: item.senseId });
-            }}
-            toast={toast}
-          />}
-
-          {/* 3.5 Later 能力的说明性占位页 */}
-          {viewMode === 'main' && mainStack.includes('s-content-coming') && <ContentComingSoonScreen
-            active={viewMode === 'main' && mainStack.includes('s-content-coming')}
-            kind={contentComingKind}
-            onBack={backMain}
-          />}
-
-          {/* 3.8 自由练习 / 真实语流泛化（YouGlish，按 Expression form 检索） */}
-          {viewMode === 'main' && mainStack.includes('s-real-world-listening') && <YouGlishListeningScreen
-            active={viewMode === 'main' && mainStack.includes('s-real-world-listening')}
-            targets={(activePracticeScope ?? practiceScopeCatalog.currentScope).targets}
-            onBack={backMain}
-            toast={toast}
-          />}
-
-          {/* 4. 我的学习 / 学习偏好 */}
-          {viewMode === 'main' && mainStack.includes('s-study') && <StudyScreen policySummary={[...new Set(packageLearning.targets.map(localTargetPolicy))].map(policy=>t('learningPreferences.policies.'+policy)).join(' · ')||undefined}
-            active={viewMode === 'main' && mainStack.includes('s-study')}
-            tab={studyTab}
-            onTabChange={setStudyTab}
-            onAddLearning={() => goMain('s-learning-entry')}
-            onOpenTargetLibrary={() => goMain('s-learning-library')}
-            onOpenTarget={openLocalTarget}
-            onPolicyChange={()=>{}}
-            defaultPolicy="lightweight" fixedPolicy
-            learningTargetCount={packageLearning.activeTargets.length+activePendingPersonal.length}
-            languageLabel={sensaLanguageDisplayName(activeRoute.targetLanguageTag,i18n.language==='en'?'en':'zh-CN')}
-            readyInitialCount={packageLearning.initialReady.length}
-            reviewCount={packageLearning.due.length}
-            dailyNewCount={dailyNewCount}
-            learningRecords={packageLearning.records}
-            onOpenStats={() => goMain('s-stats')}
-            onDailyNewCountChange={updateLocalQuantity}
-          />}
-
-          {/* 4.1 Target 库：主页只保留入口，具体内容在此展开 */}
-          {viewMode === 'main' && mainStack.includes('s-learning-library') && <LearningTargetLibraryScreen active
-            targets={Object.fromEntries([...packageLearning.activeTargets.map(t=>[t.id,localTargetView(t,packageLearning.membershipByTarget[t.id]!,packageLearning.readinessByTarget[t.id]??'blocked')]),...activePendingPersonal.map(t=>[t.targetId,pendingPersonalTargetView(t,personalLearning.sourceForTask(t))])])}
-            targetIds={[...packageLearning.activeTargets.map(t=>t.id),...activePendingPersonal.map(t=>t.targetId)]}
-            policyByTarget={Object.fromEntries([...packageLearning.activeTargets.map(t=>[t.id,localTargetPolicy(t)]),...activePendingPersonal.map(t=>[t.targetId,'lightweight' as const])])}
-            preparationByTarget={Object.fromEntries([...packageLearning.activeTargets.map(t=>[t.id,packageLearning.readinessByTarget[t.id]??'blocked']),...activePendingPersonal.map(t=>[t.targetId,t.status==='failed'||t.status==='rejected'?'blocked' as const:'preparing' as const])])}
-            committedTargetIds={new Set(packageLearning.activeTargets.filter(t=>t.startedAt).map(t=>t.id))}
-            completedTargetIds={new Set(packageLearning.activeTargets.filter(t=>t.completedAt).map(t=>t.id))}
-            reviewDueTargetIds={new Set(packageLearning.due.map(t=>t.id))}
-            relearningTargetIds={new Set(packageLearning.activeTargets.filter(t=>t.relearnAt).map(t=>t.id))}
-            reviewingTargetIds={new Set()} relearningRepairTargetIds={new Set()} relearningRetestTargetIds={new Set()} declaredMasteryTargetIds={new Set()}
-            onBack={backMain} onAddLearning={()=>goMain('s-learning-entry')} onOpenTarget={openLocalTarget}/>}
-
-
-          {/* 4.2 学习包：列表选择、详情下载与显式加入学习 */}
-          {viewMode === 'main' && mainStack.includes('s-learning-entry') && <PackageEntry active c={packageLearning} onBack={backMain} onLearning={()=>setMainStack(['s-study'])} onTarget={openLocalTarget}/>}
-
-
-          {/* 4.3 学习目标详情：来源、方式和准备状态分开表达 */}
-          {localSelectedTarget&&localSelectedMembership&&<PackageTarget active={viewMode==='main'&&mainStack.includes('s-learning-target')} target={localSelectedTarget} c={packageLearning} onSource={()=>{const provenance=localSelectedMembership.material.snapshot.provenance;if('personalMeaningId' in provenance&&typeof provenance.personalMeaningId==='string')openPersonalMeaning(provenance.personalMeaningId);else backMain();}} onBack={backMain} onHome={resetMain} onStart={()=>void startLocalLearning(localSelectedTarget.id)}/>}
-          {selectedPersonalTask&&<PersonalPreparationTarget task={selectedPersonalTask} c={personalLearning} onSource={()=>openPersonalLearningSource(selectedPersonalTask)} active={viewMode==='main'&&mainStack.includes('s-learning-target')} onBack={backMain} onHome={resetMain} onStart={id=>void startLocalLearning(id)}/>}
-          {!localSelectedTarget&&!selectedPersonalTask&&viewMode==='main'&&mainStack.includes('s-learning-target')&&<LearningSetupFrame id="s-learning-target" active title={localFlowText('learningTarget')} onBack={backMain}><p role="status">{packageLearning.loaded?localFlowText('targetMissing'):localFlowText('targetLoading')}</p></LearningSetupFrame>}
-
-          {/* 4.5 学习统计概览 (Overview / Stats Screen, 对应图1、图2) */}
-          {viewMode === 'main' && mainStack.includes('s-stats') && <StatsScreen
-            active={viewMode === 'main' && mainStack.includes('s-stats')}
-            onBack={backMain}
-            records={packageLearning.records}
-            onOpenTarget={openLocalTarget}
-          />}
-
-          {/* 5. 个人中心 */}
-          {viewMode === 'main' && mainStack.includes('s-profile') && <ProfileScreen
-            localLibrary fixedLearningPolicy
-            modelSettings={<ProviderPanel/>}
-            active={viewMode === 'main' && mainStack.includes('s-profile')}
-            onGoStudyPlan={() => {
-              setStudyTab('a');
-              goMain('s-study');
-            }}
-            defaultPolicy="lightweight"
-            dailyNewCount={dailyNewCount}
-            onPolicyChange={()=>{}}
-            onDailyNewCountChange={updateLocalQuantity}
-          />}
-
-          {/* 5.1 轻量首次运行入口：创建运行即提交并锁定 Learning Policy。 */}
-          {quantityTarget&&quantityTargetRecord&&(
-            <LearningPreferencesPanel fixedPolicy defaultPolicy={localTargetPolicy(quantityTargetRecord)} dailyNewCount={quantityChoice} onPolicyChange={()=>{}} onDailyNewCountChange={setQuantityChoice} busy={packageLearning.busy} status={packageLearning.notice&&<p role="status">{packageLearning.notice}</p>} onClose={()=>setQuantityTarget(null)} closeLabel={localFlowText('confirmAndStart')} onConfirm={()=>void packageLearning.confirmQuantity(quantityChoice).then(async ok=>{if(!ok)return;const target=quantityTarget;setQuantityTarget(null);if(await packageLearning.start(target,quantityChoice))setViewMode('lightweight');})}/>
-          )}
-          {viewMode === 'lightweight' && <PackageRuntime
-            active
-            c={packageLearning}
-            onExit={returnHome}
-            onViewLearningLibrary={()=>setMainStack(['s-study','s-learning-library'])}
-            onFinish={()=>void (async()=>{const next=packageLearning.nextTarget;if(next){await packageLearning.continueWith(next.id,dailyNewCount);return;}if(await packageLearning.finish())returnHome();})()}
-          />}
-
-
-          {/* 8. Lexical Reference；原始词义面板保留为 baseline */}
-          {dictModalWord && (dictionaryPresentation === 'baseline' ? (
-            <DictDetailModal
-              active={!!dictModalWord}
-              wordData={dictModalWord}
-              initialTab={dictModalTab}
-              onClose={closeDictModal}
-              toast={toast}
-            />
-          ) : (
-            <ReferenceDictionaryScreen
-              active={!!dictModalWord}
-              wordData={dictModalWord}
-              onClose={closeDictModal}
-              onOpenExamples={setReferenceExampleDeck}
-            />
-          ))}
-
-          {referenceExampleDeck && <ReferenceExampleViewer
-            active={dictionaryPresentation === 'sensa' && !!referenceExampleDeck}
-            deck={referenceExampleDeck}
-            onClose={() => setReferenceExampleDeck(null)}
-          />}
-
-          {/* 9. 独立笔记编辑全屏弹窗 (Note Editor Modal) */}
-          {noteModalWord && <NoteEditorModal
-            active={!!noteModalWord}
-            wordData={noteModalWord}
-            senseId={noteModalSense?.senseId}
-            senseMeaning={noteModalSense?.meaning}
-            onClose={closeNoteEditor}
-            toast={toast}
-          />}
-
-          {/* 9.1 我的场景富媒体编辑 */}
-          {sceneEditorTarget && <SceneEditorModal
-            active={!!sceneEditorTarget}
-            senseId={sceneEditorTarget?.content.senseKey ?? null}
-            word={sceneEditorTarget?.content.lemma ?? ''}
-            senseMeaning={sceneEditorTarget?.content.guideLabelL1 ?? ''}
-            anchorId={sceneEditorTarget?.anchorId}
-            learningTarget={sceneEditorTarget?.learningTarget}
-            onClose={closeSceneEditor}
-            toast={toast}
-          />}
-
-          {/* 全局 Toast 提示 */}
-          <div className={`sensa-motion-popover fixed bottom-6 left-1/2 z-[150] max-w-[calc(100%-3rem)] -translate-x-1/2 rounded-control bg-fg-primary px-5 py-3 text-center text-control-label text-surface-canvas shadow-overlay ${toastMsg ? 'visible translate-y-0 opacity-100' : 'invisible translate-y-2 opacity-0'}`} id="toast" role="status" aria-live="polite">
-            {toastMsg}
-          </div>
-          </Suspense>
-      </WebShell>
-    </DictionaryPresentationProvider>
-  );
+ const currentScreen=mainStack.at(-1)??'s-home';
+ const homeActive=viewMode==='main'&&mainStack.length===0;
+ const learningWorkspaceActive=viewMode==='lightweight'||mainStack.some(screen=>LEARNING_WORKSPACE_SCREENS.has(screen));
+ return <DictionaryPresentationProvider presentation={dictionaryPresentation}>
+  <IconSprite/>
+  <WebShell current={currentScreen} focused={viewMode!=='main'} onNavigate={id=>setMainStack(id==='s-home'?[]:[id])}>
+   <Suspense fallback={<section id={currentScreen} className="screen active absolute inset-0 grid place-content-center bg-surface-canvas text-fg-primary" role="status">{localFlowText('loadingSensa')}</section>}>
+    {homeActive&&<HomeLearningController/>}
+    {learningWorkspaceActive&&<LearningWorkspace/>}
+    {viewMode==='main'&&mainStack.includes('s-personal-meaning')&&<PersonalMeaningDetailScreen
+     key={personalMeaningId} active personalMeaningId={personalMeaningId}
+     onConversationCreated={openPersonalMeaning} onBack={backMain}
+     onOpenConfirmedSense={openConfirmedSense} toast={toast}/>}
+    {viewMode==='main'&&mainStack.includes('s-expression-binding')&&<ExpressionBindingScreen
+     active personalMeaningId={personalMeaningId} meaningFocusId={meaningFocusId}
+     onBack={backMain} toast={toast}/>}
+    {viewMode==='main'&&mainStack.includes('s-content-library')&&<ContentLibraryScreen
+     active section={contentSection} onBack={backMain} onOpenSense={openContentSense}
+     onOpenExample={(entry:SavedExampleItem)=>openContentExample(entry.sense)}
+     onEditNote={(entry:ContentNoteItem)=>{
+      if(entry.sense&&!entry.isLegacy)openNoteEditor(entry.sense.sourceWord,entry.sense.senseId,entry.sense.meaning);
+      else openNoteEditor(entry.word);
+     }}
+    />}
+    {viewMode==='main'&&mainStack.includes('s-content-sense')&&<ContentSenseDetailScreen
+     active item={selectedContentSense} onBack={backMain} onOpenExample={openContentExample}
+     onOpenSense={item=>goMain('s-content-sense',{senseId:item.senseId})}
+     onOpenDictionary={item=>openDictModal(item.sourceWord)}
+     onEditNote={item=>openNoteEditor(item.sourceWord,item.senseId,item.meaning)} toast={toast}/>}
+    {viewMode==='main'&&mainStack.includes('s-content-example')&&<ContentExampleDetailScreen
+     active item={selectedContentExample} onBack={backMain}
+     onOpenSense={item=>{
+      const nextStack=mainStack.includes('s-content-sense')?mainStack.slice(0,-1):[...mainStack.slice(0,-1),'s-content-sense'];
+      setMainStack(nextStack,{senseId:item.senseId});
+     }} toast={toast}/>}
+    {viewMode==='main'&&mainStack.includes('s-content-coming')&&<ContentComingSoonScreen active kind={contentComingKind} onBack={backMain}/>}
+    {dictModalWord&&(dictionaryPresentation==='baseline'
+     ?<DictDetailModal active wordData={dictModalWord} initialTab={dictModalTab} onClose={closeDictModal} toast={toast}/>
+     :<ReferenceDictionaryScreen active wordData={dictModalWord} onClose={closeDictModal} onOpenExamples={setReferenceExampleDeck}/>)}
+    {referenceExampleDeck&&<ReferenceExampleViewer active={dictionaryPresentation==='sensa'} deck={referenceExampleDeck} onClose={()=>setReferenceExampleDeck(null)}/>}
+    {noteModalWord&&<NoteEditorModal active wordData={noteModalWord} senseId={noteModalSense?.senseId} senseMeaning={noteModalSense?.meaning} onClose={closeNoteEditor} toast={toast}/>}
+    {sceneEditorTarget&&<SceneEditorModal active senseId={sceneEditorTarget.content.senseKey} word={sceneEditorTarget.content.lemma} senseMeaning={sceneEditorTarget.content.guideLabelL1} anchorId={sceneEditorTarget.anchorId} learningTarget={sceneEditorTarget.learningTarget} onClose={closeSceneEditor} toast={toast}/>}
+    <div className={`sensa-motion-popover fixed bottom-6 left-1/2 z-[150] max-w-[calc(100%-3rem)] -translate-x-1/2 rounded-control bg-fg-primary px-5 py-3 text-center text-control-label text-surface-canvas shadow-overlay ${toastMsg?'visible translate-y-0 opacity-100':'invisible translate-y-2 opacity-0'}`} id="toast" role="status" aria-live="polite">{toastMsg}</div>
+   </Suspense>
+  </WebShell>
+ </DictionaryPresentationProvider>;
 }

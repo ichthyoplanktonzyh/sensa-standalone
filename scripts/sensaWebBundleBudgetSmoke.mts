@@ -10,8 +10,12 @@ import {basename,resolve} from 'node:path';
  */
 const budgets={
   indexGzip:310*1024,
-  appChunkGzip:100*1024,
-  appClosureGzip:450*1024,
+  appChunkGzip:70*1024,
+  appClosureGzip:400*1024,
+  homeChunkGzip:8*1024,
+  homeClosureGzip:430*1024,
+  workspaceChunkGzip:25*1024,
+  workspaceIncrementalGzip:40*1024,
   runtimeChunkGzip:40*1024,
   runtimeIncrementalGzip:200*1024,
 } as const;
@@ -64,23 +68,43 @@ const closureGzip=async(closure:ReadonlySet<string>)=>{
  for(const file of closure)bytes+=await gzipBytes(file);
  return bytes;
 };
+const union=(...closures:ReadonlySet<string>[])=>new Set(closures.flatMap(closure=>[...closure]));
+const difference=(closure:ReadonlySet<string>,loaded:ReadonlySet<string>)=>new Set([...closure].filter(file=>!loaded.has(file)));
 const indexFile=findOne(/^index-[^.]+\.js$/u,'entry');
 const appFile=findOne(/^App-[^.]+\.js$/u,'App');
+const homeFile=findOne(/^HomeLearningController-[^.]+\.js$/u,'Home controller');
+const workspaceFile=findOne(/^LearningWorkspace-[^.]+\.js$/u,'learning workspace');
 const runtimeFile=findOne(/^PackageLearningRuntime-[^.]+\.js$/u,'learning Runtime');
 const indexClosure=await staticClosure(indexFile);
 const appClosure=await staticClosure(appFile);
+const homeClosure=await staticClosure(homeFile);
+const workspaceClosure=await staticClosure(workspaceFile);
 const runtimeClosure=await staticClosure(runtimeFile);
-const runtimeIncremental=new Set([...runtimeClosure].filter(file=>!appClosure.has(file)));
+const homeInteractiveClosure=union(appClosure,homeClosure);
+const workspaceLoadedClosure=union(homeInteractiveClosure,workspaceClosure);
+const workspaceIncremental=difference(workspaceLoadedClosure,homeInteractiveClosure);
+const runtimeIncremental=difference(union(workspaceLoadedClosure,runtimeClosure),workspaceLoadedClosure);
 const indexGzip=await closureGzip(indexClosure);
 const appChunkGzip=await gzipBytes(appFile);
 const appClosureGzip=await closureGzip(appClosure);
+const homeChunkGzip=await gzipBytes(homeFile);
+const homeClosureGzip=await closureGzip(homeInteractiveClosure);
+const workspaceChunkGzip=await gzipBytes(workspaceFile);
+const workspaceIncrementalGzip=await closureGzip(workspaceIncremental);
 const runtimeChunkGzip=await gzipBytes(runtimeFile);
 const runtimeIncrementalGzip=await closureGzip(runtimeIncremental);
 
 assert(indexGzip<=budgets.indexGzip,`${indexFile} gzip ${indexGzip} exceeds ${budgets.indexGzip}`);
 assert(appChunkGzip<=budgets.appChunkGzip,`${appFile} gzip ${appChunkGzip} exceeds ${budgets.appChunkGzip}`);
 assert(appClosureGzip<=budgets.appClosureGzip,`authenticated App static closure gzip ${appClosureGzip} exceeds ${budgets.appClosureGzip}`);
+assert(homeChunkGzip<=budgets.homeChunkGzip,`${homeFile} gzip ${homeChunkGzip} exceeds ${budgets.homeChunkGzip}`);
+assert(homeClosureGzip<=budgets.homeClosureGzip,`interactive Home static closure gzip ${homeClosureGzip} exceeds ${budgets.homeClosureGzip}`);
+assert(workspaceChunkGzip<=budgets.workspaceChunkGzip,`${workspaceFile} gzip ${workspaceChunkGzip} exceeds ${budgets.workspaceChunkGzip}`);
+assert(workspaceIncrementalGzip<=budgets.workspaceIncrementalGzip,`full workspace incremental static closure gzip ${workspaceIncrementalGzip} exceeds ${budgets.workspaceIncrementalGzip}`);
+assert(!appClosure.has(homeFile)&&!appClosure.has(workspaceFile),`Home and full workspace controllers must not enter the App static closure`);
+assert(!homeInteractiveClosure.has(workspaceFile),`${workspaceFile} must not enter the interactive Home static closure`);
 assert(!appClosure.has(runtimeFile),`${runtimeFile} must not enter the authenticated App static closure`);
+assert(!workspaceLoadedClosure.has(runtimeFile),`${runtimeFile} must not enter the full workspace static closure`);
 assert(runtimeChunkGzip<=budgets.runtimeChunkGzip,`${runtimeFile} gzip ${runtimeChunkGzip} exceeds ${budgets.runtimeChunkGzip}`);
 assert(runtimeIncrementalGzip<=budgets.runtimeIncrementalGzip,`deferred Runtime incremental static closure gzip ${runtimeIncrementalGzip} exceeds ${budgets.runtimeIncrementalGzip}`);
-console.log(`PASS: Web bundle regression ceilings (entry closure ${indexGzip}B gzip; App chunk ${appChunkGzip}B, authenticated closure ${appClosureGzip}B; deferred Runtime chunk ${runtimeChunkGzip}B, incremental closure ${runtimeIncrementalGzip}B).`);
+console.log(`PASS: Web bundle regression ceilings (entry ${indexGzip}B; App ${appChunkGzip}B/${appClosureGzip}B closure; Home ${homeChunkGzip}B/${homeClosureGzip}B interactive closure; workspace +${workspaceIncrementalGzip}B; Runtime ${runtimeChunkGzip}B/+${runtimeIncrementalGzip}B).`);

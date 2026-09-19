@@ -3,11 +3,13 @@ import { ArrowRight, ArrowUpRight, BookOpen, RotateCcw, MessageSquareText } from
 import { useTranslation } from 'react-i18next';
 import { SensaWorkspacePageLayout } from '../ui/SensaPageLayouts';
 import { SensaAction } from '../ui/SensaComponents';
+import { localFlowText } from '../../i18n/localFlowText';
 import './HomeScreen.css';
 
 interface HomeScreenProps {
   active: boolean;
   busy?: boolean;
+  summaryReady?: boolean;
   status?: ReactNode;
   newAvailable?: number;
   accountDate?: string;
@@ -20,7 +22,7 @@ interface HomeScreenProps {
   reviewDueN?: number;
 }
 
-export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview, onRecordContext, mixedReadyN, reviewDueN = 0, newAvailable, busy, status, accountDate }: HomeScreenProps) {
+export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview, onRecordContext, mixedReadyN, reviewDueN = 0, newAvailable, busy, summaryReady = true, status, accountDate }: HomeScreenProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? 'zh-CN';
   const number = new Intl.NumberFormat(locale);
@@ -28,7 +30,7 @@ export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview
   const hasWork = mixedReadyN > 0;
   const date = accountDate ? new Date(accountDate+'T12:00:00') : new Date();
   const dateLabel = new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric', weekday: 'long' }).format(date);
-  const heading = onResume ? 'runtime.resume' : !hasWork ? 'home.beginTitle' : newCount ? 'home.readyTitle' : 'home.reviewTitle';
+  const heading = !summaryReady ? 'home.title' : onResume ? 'runtime.resume' : !hasWork ? 'home.beginTitle' : newCount ? 'home.readyTitle' : 'home.reviewTitle';
 
   return <SensaWorkspacePageLayout
     id="s-home"
@@ -44,26 +46,26 @@ export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview
       <section aria-labelledby="today-learning-title" className="sensa-today-learning">
         <div className="sensa-today-invitation">
           <h2 id="today-learning-title">{t(heading)}</h2>
-          <p className="sensa-today-hint">{t(onResume ? 'runtime.resumeHint' : !hasWork ? 'home.emptyHint' : reviewDueN && newCount ? 'home.reviewFirst' : reviewDueN ? 'home.reviewOnlyHint' : 'home.newOnly')}</p>
+          <p className="sensa-today-hint">{summaryReady ? t(onResume ? 'runtime.resumeHint' : !hasWork ? 'home.emptyHint' : reviewDueN && newCount ? 'home.reviewFirst' : reviewDueN ? 'home.reviewOnlyHint' : 'home.newOnly') : localFlowText('loadingSensa')}</p>
           <div className="sensa-today-actions">
-            <SensaAction type="button" loading={busy} onClick={onResume ?? (hasWork ? onStartMixed : () => onGo('s-learning-entry'))}
+            <SensaAction type="button" loading={busy || !summaryReady} onClick={onResume ?? (hasWork ? onStartMixed : () => onGo('s-learning-entry'))}
               className="sensa-today-start" trailing={<ArrowRight aria-hidden="true" size={18} strokeWidth={1.6}/> }>
               {t(onResume ? 'runtime.resume' : hasWork ? 'home.start' : 'home.emptyAction')}
             </SensaAction>
-            <SensaAction type="button" variant="quiet" onClick={onStartReview} disabled={busy || !reviewDueN || !onStartReview}
+            <SensaAction type="button" variant="quiet" onClick={onStartReview} disabled={busy || !summaryReady || !reviewDueN || !onStartReview}
               aria-label={reviewDueN ? t('home.reviewCount',{count:reviewDueN}) : t('home.noReview')}
               leading={<RotateCcw aria-hidden="true" size={16} strokeWidth={1.6}/> }>
               {t(reviewDueN ? 'home.reviewOnly' : 'home.noReview')}
             </SensaAction>
           </div>
-          {!hasWork && !onResume && <p className="sensa-today-empty" role="status">{t('home.empty')}</p>}
+          {summaryReady && !hasWork && !onResume && <p className="sensa-today-empty" role="status">{t('home.empty')}</p>}
         </div>
         <div className="sensa-today-plan">
           <h3>{t('home.plan')}</h3>
           <dl aria-label={t('home.summary')} className="sensa-today-counts">
             {[{label:t('home.new'),count:newCount},{label:t('home.review'),count:reviewDueN}].map(({label,count}) => <div key={label}>
               <dt>{label}</dt>
-              <dd><strong>{number.format(count)}</strong><span>{t('home.unit')}</span></dd>
+              <dd><strong>{summaryReady ? number.format(count) : '—'}</strong>{summaryReady && <span>{t('home.unit')}</span>}</dd>
             </div>)}
           </dl>
           <SensaAction type="button" variant="quiet" onClick={() => onGo('s-study')} trailing={<ArrowUpRight aria-hidden="true" size={16}/> }>{t('home.manage')}</SensaAction>

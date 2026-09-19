@@ -7,6 +7,7 @@ const contract=await readFile('apps/web/src/experience/personalMeaningJourney/se
 const screen=await readFile('apps/web/src/experience/components/PersonalMeaningDetailScreen.tsx','utf8');
 const world=await readFile('apps/web/src/experience/components/ContentScreen.tsx','utf8');
 const app=await readFile('apps/web/src/experience/App.tsx','utf8');
+const learningWorkspace=await readFile('apps/web/src/experience/library/LearningWorkspace.tsx','utf8');
 const route=await readFile('apps/api/src/sensa/models/turn.ts','utf8');
 const modelProtocol=await readFile('packages/contracts/src/sensa/modelProtocol.ts','utf8');
 
@@ -34,7 +35,7 @@ assert(screen.includes('const textSegment = context.summary.trim()'));
 assert(!screen.includes('const conversationText = messages'));
 assert(world.includes('confirmedExpressionFor(item)'));
 assert(screen.includes('maxImages={MAX_SCENE_IMAGES}'));
-assert(app.includes('onStartConversation={startSensaConversation}'));
+assert(learningWorkspace.includes('onStartConversation={startSensaConversation}'));
 assert(app.includes('onConversationCreated={openPersonalMeaning}'));
 
 console.log('PASS: native Sensa entry and Inbox clarification share one natural teacher loop whose structured clarity assessment is final output; only semantic-world lookup is a tool, with no consolidate mode or model/paid calls.');

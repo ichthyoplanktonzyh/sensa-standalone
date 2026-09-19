@@ -29,6 +29,12 @@ const sources=await Promise.all([
 ].map(async path=>[path,await readFile(path,'utf8')] as const));
 for(const [path,source] of sources)assert(!source.includes('setInterval('),`${path} must not restore fixed idle polling`);
 const app=await readFile('apps/web/src/experience/App.tsx','utf8');
-assert(/lazy\(\(\)=>import\('\.\/library\/PackageLearningRuntime'\)/u.test(app),'formal learning Runtime must remain outside the startup graph');
+const home=await readFile('apps/web/src/experience/library/HomeLearningController.tsx','utf8');
+const workspace=await readFile('apps/web/src/experience/library/LearningWorkspace.tsx','utf8');
+assert(/lazy\(\(\)=>import\('\.\/library\/HomeLearningController'\)/u.test(app),'the lightweight Home controller must remain outside the shell chunk');
+assert(/lazy\(\(\)=>import\('\.\/library\/LearningWorkspace'\)/u.test(app),'full learning controllers must remain outside the Home shell');
+assert(!app.includes('usePackageLearning')&&!app.includes('usePersonalLearning'),'App must not eagerly initialize full learning controllers');
+assert(!home.includes('usePackageLearning')&&!home.includes('usePersonalLearning'),'Home must use its small read projection instead of full learning controllers');
+assert(/lazy\(\(\)=>import\('\.\/PackageLearningRuntime'\)/u.test(workspace),'formal learning Runtime must remain outside the learning workspace graph');
 
-console.log('PASS: queue and preparation wake at exact fact boundaries, extension intake has no fixed poll, and the formal Runtime remains deferred.');
+console.log('PASS: queue and preparation wake at exact fact boundaries, extension intake has no fixed poll, Home is lightweight, and the full workspace and formal Runtime remain deferred.');
