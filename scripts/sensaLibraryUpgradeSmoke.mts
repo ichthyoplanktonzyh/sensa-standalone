@@ -80,7 +80,7 @@ await store.readLibrary(async (tx) => {
 const diagnostics = await store.readLibraryStorageDiagnostics();
 assert.deepEqual(
   { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
-  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 5 },
+  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 6 },
 );
 
 const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearningTargetsQuery }, { encodeBackupValue }, { sqliteLibrarySchema }] = await Promise.all([
@@ -136,6 +136,8 @@ const target = (id: string, route: string, packageKey: string) => ({
       targetLanguageTag: 'en',
       supportLanguageTag: 'zh',
     },
+    sourceKind: 'sense_learning_package',
+    provenance: { bookId: 'book-a', bookVersionId: packageKey },
     packageKey,
     material: { snapshot: { validationStatus: 'validated' } },
   }],
@@ -196,6 +198,8 @@ database.commit({
     { table: 'contentAttempts', key: 'attempt-old', encodedValue: encoded({ id: 'attempt-old', taskId: 'task-a', createdAt: '2026-09-13T12:00:00.000Z', status: 'failed' }) },
     { table: 'contentAttempts', key: 'attempt-recent', encodedValue: encoded({ id: 'attempt-recent', taskId: 'task-a', createdAt: '2026-09-14T12:00:00.000Z', status: 'ready' }) },
     { table: 'contentAttempts', key: 'attempt-other', encodedValue: encoded({ id: 'attempt-other', taskId: 'task-b', createdAt: '2026-09-14T12:00:00.000Z', status: 'ready' }) },
+    { table: 'semanticMeanings', key: 'meaning-media', encodedValue: encoded({ personalSemanticAnchorRevisions: [{ personalMediaObjectId: 'media-a' }, { personalMediaObjectId: 'media-a' }] }) },
+    { table: 'semanticInbox', key: 'inbox-media', encodedValue: encoded({ payload: { context: { mediaReferenceIds: ['media-b'] } } }) },
   ],
 });
 assert.deepEqual(database.learningRunIdsForTarget('target-a', false), ['run-complete', 'run-open']);
@@ -205,6 +209,10 @@ assert.deepEqual(database.openLearningRunTargets(), [
   { runId: 'run-open', targetId: 'target-b' },
 ]);
 assert.equal(database.countContentAttemptsSince('task-a', '2026-09-14T00:00:00.000Z'), 1);
+assert.deepEqual(database.learningTargetIdsForBookUpgrade('route-a', 'en', 'zh', 'book-a', 'package-next'), ['target-a']);
+assert.equal(database.isMediaReferenced('media-a'), true);
+assert.equal(database.isMediaReferenced('media-b'), true);
+assert.equal(database.isMediaReferenced('media-free'), false);
 const indexedQueryPlans = [
   {
     sql: `EXPLAIN QUERY PLAN SELECT run_key FROM sensa_learning_run_targets
@@ -223,6 +231,19 @@ const indexedQueryPlans = [
           WHERE introduced_language_route_id=? AND started_at>=? AND started_at<?`,
     bind: ['route-a', '2026-09-14T00:00:00.000Z', '2026-09-15T00:00:00.000Z'],
     expected: 'sensa_learning_targets_introduced',
+  },
+  {
+    sql: `EXPLAIN QUERY PLAN SELECT DISTINCT target_key FROM sensa_learning_route_targets
+          WHERE language_route_id=? AND source_kind='sense_learning_package'
+            AND target_language_tag=? AND support_language_tag=?
+            AND book_id=? AND book_version_id<>? ORDER BY target_key`,
+    bind: ['route-a', 'en', 'zh', 'book-a', 'package-next'],
+    expected: 'SEARCH sensa_learning_route_targets USING',
+  },
+  {
+    sql: 'EXPLAIN QUERY PLAN SELECT EXISTS(SELECT 1 FROM sensa_media_references WHERE media_id=?)',
+    bind: ['media-a'],
+    expected: 'SEARCH sensa_media_references USING PRIMARY KEY',
   },
 ];
 for (const plan of indexedQueryPlans) {
@@ -250,6 +271,13 @@ assert.deepEqual(database.learningRunIdsForTarget('target-a', false), ['run-open
 assert.deepEqual(database.openLearningRunTargets(), []);
 database.commit({
   clears: [],
+  deletes: [{ table: 'semanticInbox', key: 'inbox-media' }],
+  puts: [{ table: 'semanticMeanings', key: 'meaning-media', encodedValue: encoded({ personalSemanticAnchorRevisions: [] }) }],
+});
+assert.equal(database.isMediaReferenced('media-a'), false);
+assert.equal(database.isMediaReferenced('media-b'), false);
+database.commit({
+  clears: [],
   deletes: [{ table: 'learningTargets', key: 'target-b' }],
   puts: [{
     table: 'learningTargets',
@@ -268,4 +296,4 @@ assert.deepEqual(database.homeLearningProjection('route-a').targets, []);
 assert.match(database.diagnostics().sqliteVersion, /^3\./u);
 database.close();
 
-console.log('PASS: Library records preserve typed values and atomic replay; SQLite schema v5 maintains planner statistics, indexed learning projections, native counts and logical-table constraints. Browser OPFS is checked separately.');
+console.log('PASS: Library records preserve typed values and atomic replay; SQLite schema v6 maintains planner statistics, indexed learning and media-reference projections, native counts and logical-table constraints. Browser OPFS is checked separately.');

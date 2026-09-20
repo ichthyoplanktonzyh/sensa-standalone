@@ -116,13 +116,7 @@ export const removeMedia = async (mediaId: string): Promise<void> => {
   let removed = false;
   await restoreLibraryTransaction(async (tx) => {
     await assertCurrentLibrary(tx);
-    const meanings=await tx.entries('semanticMeanings');
-    const inbox=await tx.entries('semanticInbox');
-    const referenced=meanings.some(row=>(row.value as {personalSemanticAnchorRevisions?:Array<{personalMediaObjectId?:string|null}>})
-      .personalSemanticAnchorRevisions?.some(revision=>revision.personalMediaObjectId===mediaId))
-      || inbox.some(row=>(row.value as {payload?:{context?:{mediaReferenceIds?:string[]}|null}})
-        .payload?.context?.mediaReferenceIds?.includes(mediaId));
-    if(referenced)throw new Error('图片仍被个人意义引用，不能删除。');
+    if(await tx.isMediaReferenced(mediaId))throw new Error('图片仍被个人意义引用，不能删除。');
     if (await tx.get('media', mediaId)) {
       tx.delete('media', mediaId);
       removed = true;

@@ -23,6 +23,8 @@ export interface CoordinatedSqliteBackend {
   learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]>;
   openLearningRunTargets(): Promise<Array<{ runId: string; targetId: string }>>;
   countContentAttemptsSince(taskId: string, createdAfter: string): Promise<number>;
+  learningTargetIdsForBookUpgrade(languageRouteId: string, targetLanguageTag: string, supportLanguageTag: string, bookId: string, nextBookVersionId: string): Promise<string[]>;
+  isMediaReferenced(mediaId: string): Promise<boolean>;
   commit(mutation: SqliteMutation): Promise<void>;
   diagnostics(): Promise<SqliteStorageDiagnostics>;
 }
@@ -100,6 +102,27 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
 
   countContentAttemptsSince(taskId: string, createdAfter: string): Promise<number> {
     return this.call({ kind: 'countContentAttemptsSince', taskId, createdAfter }) as Promise<number>;
+  }
+
+  learningTargetIdsForBookUpgrade(
+    languageRouteId: string,
+    targetLanguageTag: string,
+    supportLanguageTag: string,
+    bookId: string,
+    nextBookVersionId: string,
+  ): Promise<string[]> {
+    return this.call({
+      kind: 'learningTargetIdsForBookUpgrade',
+      languageRouteId,
+      targetLanguageTag,
+      supportLanguageTag,
+      bookId,
+      nextBookVersionId,
+    }) as Promise<string[]>;
+  }
+
+  isMediaReferenced(mediaId: string): Promise<boolean> {
+    return this.call({ kind: 'isMediaReferenced', mediaId }) as Promise<boolean>;
   }
 
   async commit(mutation: SqliteMutation): Promise<void> {
@@ -255,6 +278,14 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'learningRunIdsForTarget': return backend.learningRunIdsForTarget(input.targetId, input.openOnly);
       case 'openLearningRunTargets': return backend.openLearningRunTargets();
       case 'countContentAttemptsSince': return backend.countContentAttemptsSince(input.taskId, input.createdAfter);
+      case 'learningTargetIdsForBookUpgrade': return backend.learningTargetIdsForBookUpgrade(
+        input.languageRouteId,
+        input.targetLanguageTag,
+        input.supportLanguageTag,
+        input.bookId,
+        input.nextBookVersionId,
+      );
+      case 'isMediaReferenced': return backend.isMediaReferenced(input.mediaId);
       case 'commit': return backend.commit(input.mutation);
       case 'diagnostics': return backend.diagnostics();
     }

@@ -51,6 +51,14 @@ const message = async (request: SqliteWorkerRequest): Promise<unknown> => {
     case "learningRunIdsForTarget": return db.learningRunIdsForTarget(request.targetId, request.openOnly);
     case "openLearningRunTargets": return db.openLearningRunTargets();
     case "countContentAttemptsSince": return db.countContentAttemptsSince(request.taskId, request.createdAfter);
+    case "learningTargetIdsForBookUpgrade": return db.learningTargetIdsForBookUpgrade(
+      request.languageRouteId,
+      request.targetLanguageTag,
+      request.supportLanguageTag,
+      request.bookId,
+      request.nextBookVersionId,
+    );
+    case "isMediaReferenced": return db.isMediaReferenced(request.mediaId);
     case "commit": db.commit(request.mutation); return null;
     case "diagnostics": return db.diagnostics();
   }

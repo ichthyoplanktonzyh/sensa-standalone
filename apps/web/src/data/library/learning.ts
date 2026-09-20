@@ -120,7 +120,9 @@ export async function enrollPackage(operationId:string,key:string,languageContex
  if(pack.bundle.supportLanguage!==context.supportLanguageTag)throw new Error('localFlow.routeSupportMismatch');
  const bookId=learningBundleBookId(pack.bundle),bookVersionId=learningBundleBookVersionId(pack.bundle),packageVersion=learningBundleVersionLabel(pack.bundle),contentReleaseId=learningBundleContentReleaseId(pack.bundle),now=new Date().toISOString();
  if(bookVersionId){
-  for(const target of await tx.all<LocalLearningTarget>('learningTargets')){
+  const supersededTargetIds=await tx.learningTargetIdsForBookUpgrade(context.languageRouteId,context.targetLanguageTag,context.supportLanguageTag,bookId,bookVersionId);
+  for(const targetId of supersededTargetIds){
+   const target=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!target)continue;
    let changed=false;
    const curriculumMemberships=target.curriculumMemberships.map(membership=>{
     if(membership.status==='superseded'||membership.sourceKind!=='sense_learning_package'||membership.languageContext.languageRouteId!==context.languageRouteId||membership.languageContext.targetLanguageTag!==context.targetLanguageTag||membership.languageContext.supportLanguageTag!==context.supportLanguageTag||membership.provenance.bookId!==bookId||membership.provenance.bookVersionId===bookVersionId)return membership;

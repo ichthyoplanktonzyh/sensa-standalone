@@ -20,6 +20,12 @@ type ContentAttemptProjectionSource = {
   taskId: string;
   createdAt: string;
 };
+type SemanticMeaningMediaSource = {
+  personalSemanticAnchorRevisions?: Array<{ personalMediaObjectId?: string | null }>;
+};
+type SemanticInboxMediaSource = {
+  payload?: { context?: { mediaReferenceIds?: string[] } | null };
+};
 
 const sqliteOptimizeIntervalMs = 24 * 60 * 60 * 1000;
 
@@ -198,6 +204,37 @@ export class SqliteRecordDatabase {
     return Number(rows[0] ?? 0);
   }
 
+  learningTargetIdsForBookUpgrade(
+    languageRouteId: string,
+    targetLanguageTag: string,
+    supportLanguageTag: string,
+    bookId: string,
+    nextBookVersionId: string,
+  ): string[] {
+    const rows = this.database.exec({
+      sql: `SELECT DISTINCT target_key FROM sensa_learning_route_targets
+            WHERE language_route_id=?
+              AND source_kind='sense_learning_package'
+              AND target_language_tag=? AND support_language_tag=?
+              AND book_id=? AND book_version_id<>?
+            ORDER BY target_key`,
+      bind: [languageRouteId, targetLanguageTag, supportLanguageTag, bookId, nextBookVersionId],
+      rowMode: 0,
+      returnValue: 'resultRows',
+    }) as unknown[];
+    return rows.map(String);
+  }
+
+  isMediaReferenced(mediaId: string): boolean {
+    const rows = this.database.exec({
+      sql: 'SELECT EXISTS(SELECT 1 FROM sensa_media_references WHERE media_id=?)',
+      bind: [mediaId],
+      rowMode: 0,
+      returnValue: 'resultRows',
+    }) as unknown[];
+    return Number(rows[0] ?? 0) === 1;
+  }
+
   commit(mutation: SqliteMutation): void {
     if (!mutation.clears.length && !mutation.deletes.length && !mutation.puts.length) return;
     if (Date.now() >= this.nextOptimizeAt) {
@@ -211,6 +248,12 @@ export class SqliteRecordDatabase {
         if (table === 'learningTargets') this.database.exec('DELETE FROM sensa_learning_targets');
         if (table === 'learningRuns') this.database.exec('DELETE FROM sensa_learning_runs');
         if (table === 'contentAttempts') this.database.exec('DELETE FROM sensa_content_attempts');
+        if (table === 'semanticMeanings' || table === 'semanticInbox') {
+          this.database.exec({
+            sql: 'DELETE FROM sensa_media_references WHERE owner_table=?',
+            bind: [table],
+          });
+        }
       }
       for (const item of mutation.deletes) {
         this.database.exec({
@@ -235,6 +278,12 @@ export class SqliteRecordDatabase {
             bind: [item.key],
           });
         }
+        if (item.table === 'semanticMeanings' || item.table === 'semanticInbox') {
+          this.database.exec({
+            sql: 'DELETE FROM sensa_media_references WHERE owner_table=? AND owner_key=?',
+            bind: [item.table, item.key],
+          });
+        }
       }
       for (const item of mutation.puts) {
         this.database.exec({
@@ -250,6 +299,9 @@ export class SqliteRecordDatabase {
         }
         if (item.table === 'contentAttempts') {
           this.upsertContentAttemptProjection(item.key, item.encodedValue);
+        }
+        if (item.table === 'semanticMeanings' || item.table === 'semanticInbox') {
+          this.replaceMediaReferences(item.table, item.key, item.encodedValue);
         }
       }
       this.database.exec("COMMIT");
@@ -327,15 +379,24 @@ export class SqliteRecordDatabase {
     });
     for (const membership of target.curriculumMemberships) {
       if (membership.status === 'superseded') continue;
+      const provenance = membership.provenance;
+      const bookId = typeof provenance.bookId === 'string' ? provenance.bookId : null;
+      const bookVersionId = typeof provenance.bookVersionId === 'string' ? provenance.bookVersionId : null;
       this.database.exec({
         sql: `INSERT INTO sensa_learning_route_targets(
-                language_route_id,target_key,membership_id,package_key
-              ) VALUES(?,?,?,?)`,
+                language_route_id,target_key,membership_id,package_key,source_kind,
+                target_language_tag,support_language_tag,book_id,book_version_id
+              ) VALUES(?,?,?,?,?,?,?,?,?)`,
         bind: [
           membership.languageContext.languageRouteId,
           key,
           membership.id,
           membership.packageKey,
+          membership.sourceKind,
+          membership.languageContext.targetLanguageTag,
+          membership.languageContext.supportLanguageTag,
+          bookId,
+          bookVersionId,
         ],
       });
     }
@@ -371,5 +432,28 @@ export class SqliteRecordDatabase {
               created_at=excluded.created_at`,
       bind: [key, attempt.taskId, attempt.createdAt],
     });
+  }
+
+  private replaceMediaReferences(
+    table: 'semanticMeanings' | 'semanticInbox',
+    key: string,
+    encodedValue: string,
+  ): void {
+    const mediaIds = table === 'semanticMeanings'
+      ? (this.decode<SemanticMeaningMediaSource>(encodedValue).personalSemanticAnchorRevisions ?? [])
+        .map((revision) => revision.personalMediaObjectId)
+      : (this.decode<SemanticInboxMediaSource>(encodedValue).payload?.context?.mediaReferenceIds ?? []);
+    this.database.exec({
+      sql: 'DELETE FROM sensa_media_references WHERE owner_table=? AND owner_key=?',
+      bind: [table, key],
+    });
+    for (const mediaId of new Set(mediaIds)) {
+      if (!mediaId) continue;
+      this.database.exec({
+        sql: `INSERT INTO sensa_media_references(media_id,owner_table,owner_key)
+              VALUES(?,?,?)`,
+        bind: [mediaId, table, key],
+      });
+    }
   }
 }

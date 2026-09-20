@@ -22,6 +22,8 @@ export interface SqliteRecordAdapter {
   learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]>;
   openLearningRunTargets(): Promise<Array<{ runId: string; targetId: string }>>;
   countContentAttemptsSince(taskId: string, createdAfter: string): Promise<number>;
+  learningTargetIdsForBookUpgrade(languageRouteId: string, targetLanguageTag: string, supportLanguageTag: string, bookId: string, nextBookVersionId: string): Promise<string[]>;
+  isMediaReferenced(mediaId: string): Promise<boolean>;
   commit(mutation: SqliteMutation): Promise<void>;
   diagnostics(): Promise<SqliteStorageDiagnostics>;
 }
@@ -88,6 +90,27 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
 
   countContentAttemptsSince(taskId: string, createdAfter: string): Promise<number> {
     return this.send({ kind: 'countContentAttemptsSince', taskId, createdAfter }) as Promise<number>;
+  }
+
+  learningTargetIdsForBookUpgrade(
+    languageRouteId: string,
+    targetLanguageTag: string,
+    supportLanguageTag: string,
+    bookId: string,
+    nextBookVersionId: string,
+  ): Promise<string[]> {
+    return this.send({
+      kind: 'learningTargetIdsForBookUpgrade',
+      languageRouteId,
+      targetLanguageTag,
+      supportLanguageTag,
+      bookId,
+      nextBookVersionId,
+    }) as Promise<string[]>;
+  }
+
+  isMediaReferenced(mediaId: string): Promise<boolean> {
+    return this.send({ kind: 'isMediaReferenced', mediaId }) as Promise<boolean>;
   }
 
   async commit(mutation: SqliteMutation): Promise<void> {
@@ -184,6 +207,43 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
       .map((row) => decodeBackupValue(JSON.parse(row.encodedValue)) as { taskId: string; createdAt: string })
       .filter((attempt) => attempt.taskId === taskId && attempt.createdAt > createdAfter)
       .length;
+  }
+
+  async learningTargetIdsForBookUpgrade(
+    languageRouteId: string,
+    targetLanguageTag: string,
+    supportLanguageTag: string,
+    bookId: string,
+    nextBookVersionId: string,
+  ): Promise<string[]> {
+    return (await this.entries('learningTargets'))
+      .map((row) => ({ key: row.key, target: decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget }))
+      .filter(({ target }) => target.curriculumMemberships.some((membership) => (
+        membership.status !== 'superseded'
+        && membership.sourceKind === 'sense_learning_package'
+        && membership.languageContext.languageRouteId === languageRouteId
+        && membership.languageContext.targetLanguageTag === targetLanguageTag
+        && membership.languageContext.supportLanguageTag === supportLanguageTag
+        && membership.provenance.bookId === bookId
+        && membership.provenance.bookVersionId !== nextBookVersionId
+      )))
+      .map(({ key }) => key)
+      .sort();
+  }
+
+  async isMediaReferenced(mediaId: string): Promise<boolean> {
+    const meanings = await this.entries('semanticMeanings');
+    if (meanings.some((row) => (
+      decodeBackupValue(JSON.parse(row.encodedValue)) as {
+        personalSemanticAnchorRevisions?: Array<{ personalMediaObjectId?: string | null }>;
+      }
+    ).personalSemanticAnchorRevisions?.some((revision) => revision.personalMediaObjectId === mediaId))) return true;
+    const inbox = await this.entries('semanticInbox');
+    return inbox.some((row) => (
+      decodeBackupValue(JSON.parse(row.encodedValue)) as {
+        payload?: { context?: { mediaReferenceIds?: string[] } | null };
+      }
+    ).payload?.context?.mediaReferenceIds?.includes(mediaId));
   }
 
   async commit(mutation: SqliteMutation): Promise<void> {

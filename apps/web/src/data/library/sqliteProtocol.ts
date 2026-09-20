@@ -2,9 +2,9 @@
 
 import type {HomeLearningStorageProjection} from './homeLearningRecords';
 
-export const sqliteLibraryFile = "/sensa-local-library-v5.sqlite3";
-export const sqlitePoolDirectory = "/sensa-local-library-v5";
-export const sqliteLibrarySchemaVersion = 5;
+export const sqliteLibraryFile = "/sensa-local-library-v6.sqlite3";
+export const sqlitePoolDirectory = "/sensa-local-library-v6";
+export const sqliteLibrarySchemaVersion = 6;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -49,6 +49,8 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "learningRunIdsForTarget"; targetId: string; openOnly: boolean }
   | { id: number; kind: "openLearningRunTargets" }
   | { id: number; kind: "countContentAttemptsSince"; taskId: string; createdAfter: string }
+  | { id: number; kind: "learningTargetIdsForBookUpgrade"; languageRouteId: string; targetLanguageTag: string; supportLanguageTag: string; bookId: string; nextBookVersionId: string }
+  | { id: number; kind: "isMediaReferenced"; mediaId: string }
   | { id: number; kind: "commit"; mutation: SqliteMutation }
   | { id: number; kind: "diagnostics" };
 
@@ -104,11 +106,21 @@ CREATE TABLE IF NOT EXISTS sensa_learning_route_targets(
   target_key TEXT NOT NULL,
   membership_id TEXT NOT NULL,
   package_key TEXT,
+  source_kind TEXT NOT NULL,
+  target_language_tag TEXT NOT NULL,
+  support_language_tag TEXT NOT NULL,
+  book_id TEXT,
+  book_version_id TEXT,
   PRIMARY KEY(language_route_id,target_key,membership_id),
   FOREIGN KEY(target_key) REFERENCES sensa_learning_targets(record_key) ON DELETE CASCADE
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS sensa_learning_route_targets_target
   ON sensa_learning_route_targets(target_key);
+CREATE INDEX IF NOT EXISTS sensa_learning_route_targets_book
+  ON sensa_learning_route_targets(
+    language_route_id,book_id,target_language_tag,support_language_tag,book_version_id,target_key
+  )
+  WHERE source_kind='sense_learning_package' AND book_id IS NOT NULL AND book_version_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS sensa_learning_targets_introduced
   ON sensa_learning_targets(introduced_language_route_id,started_at)
   WHERE introduced_language_route_id IS NOT NULL AND started_at IS NOT NULL;
@@ -135,5 +147,13 @@ CREATE TABLE IF NOT EXISTS sensa_content_attempts(
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS sensa_content_attempts_task_created
   ON sensa_content_attempts(task_id,created_at);
+CREATE TABLE IF NOT EXISTS sensa_media_references(
+  media_id TEXT NOT NULL,
+  owner_table TEXT NOT NULL CHECK(owner_table IN ('semanticMeanings','semanticInbox')),
+  owner_key TEXT NOT NULL,
+  PRIMARY KEY(media_id,owner_table,owner_key)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS sensa_media_references_owner
+  ON sensa_media_references(owner_table,owner_key);
 PRAGMA user_version=${sqliteLibrarySchemaVersion};
 `;

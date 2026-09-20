@@ -159,6 +159,62 @@ export class LibraryTransaction {
     return storageCall(() => this.adapter.countContentAttemptsSince(taskId, createdAfter));
   }
 
+  async learningTargetIdsForBookUpgrade(
+    languageRouteId: string,
+    targetLanguageTag: string,
+    supportLanguageTag: string,
+    bookId: string,
+    nextBookVersionId: string,
+  ): Promise<string[]> {
+    if (this.hasPendingChanges('learningTargets')) {
+      return (await this.entries('learningTargets'))
+        .filter(({ value }) => (value as {
+          curriculumMemberships: Array<{
+            status?: 'active' | 'superseded';
+            sourceKind: string;
+            languageContext: {
+              languageRouteId: string;
+              targetLanguageTag: string;
+              supportLanguageTag: string;
+            };
+            provenance: Record<string, unknown>;
+          }>;
+        }).curriculumMemberships.some((membership) => (
+          membership.status !== 'superseded'
+          && membership.sourceKind === 'sense_learning_package'
+          && membership.languageContext.languageRouteId === languageRouteId
+          && membership.languageContext.targetLanguageTag === targetLanguageTag
+          && membership.languageContext.supportLanguageTag === supportLanguageTag
+          && membership.provenance.bookId === bookId
+          && membership.provenance.bookVersionId !== nextBookVersionId
+        )))
+        .map(({ key }) => key);
+    }
+    return storageCall(() => this.adapter.learningTargetIdsForBookUpgrade(
+      languageRouteId,
+      targetLanguageTag,
+      supportLanguageTag,
+      bookId,
+      nextBookVersionId,
+    ));
+  }
+
+  async isMediaReferenced(inputMediaId: string): Promise<boolean> {
+    const mediaId = recordKey(inputMediaId);
+    if (!this.hasPendingChanges('semanticMeanings') && !this.hasPendingChanges('semanticInbox')) {
+      return storageCall(() => this.adapter.isMediaReferenced(mediaId));
+    }
+    const meanings = await this.all<{
+      personalSemanticAnchorRevisions?: Array<{ personalMediaObjectId?: string | null }>;
+    }>('semanticMeanings');
+    if (meanings.some((meaning) => meaning.personalSemanticAnchorRevisions
+      ?.some((revision) => revision.personalMediaObjectId === mediaId))) return true;
+    const inbox = await this.all<{
+      payload?: { context?: { mediaReferenceIds?: string[] } | null };
+    }>('semanticInbox');
+    return inbox.some((item) => item.payload?.context?.mediaReferenceIds?.includes(mediaId));
+  }
+
   put(table: Table, inputKey: string, value: unknown): void {
     this.assertWritable();
     const key = recordKey(inputKey);
