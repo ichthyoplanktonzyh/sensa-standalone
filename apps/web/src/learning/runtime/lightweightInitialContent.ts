@@ -236,10 +236,10 @@ const freezeContext = (input: LightweightInitialContentInput): FrozenContext => 
     senseExpressionBindingId: input.senseExpressionBindingId,
     resolvedLearningPlanRevisionId: input.resolvedLearningPlanRevisionId,
     profileId: 'lightweight',
-    profileVersion: 'lightweight-profile-v2',
+    profileVersion: 'lightweight-profile-v3',
     protocolPurpose: 'initial_learning',
     protocolId: 'lightweight-study',
-    protocolVersion: 'v2',
+    protocolVersion: 'v3',
     provisioningPath: 'on_demand',
     demandReference: {
       contentDemandKey: LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_KEY,
@@ -420,6 +420,8 @@ const pedagogicalProducer: CandidateProducer = {
             expressionKind: expression.expressionKind,
             expressionTypeLabel: fact.expressionTypeLabel,
             partOfSpeech: fact.partOfSpeech,
+            usagePattern: fact.usagePattern ?? null,
+            contrastNote: fact.contrastNote ?? null,
           },
           sourceArtifactIds: [context.senseArtifact.artifactId, structureArtifact.artifactId],
           productionMethod: 'deterministic_transform',
@@ -429,15 +431,19 @@ const pedagogicalProducer: CandidateProducer = {
         });
       }
     }
-    const usageArtifact = context.referenceArtifacts.find((candidate) =>
+    const usageArtifacts = context.referenceArtifacts.filter((candidate) =>
       candidate.payload.factKind === 'usage_example');
-    if (usageArtifact) {
+    usageArtifacts.forEach((usageArtifact, ordinal) => {
       const fact = sensaLightweightReferenceFactSchema.parse(usageArtifact.payload);
       if (fact.factKind === 'usage_example') {
         candidates.push({
           materialRoleKey: 'usage_guidance',
-          ordinal: 0,
-          contentPayload: { example: fact.example },
+          ordinal,
+          contentPayload: {
+            example: fact.example,
+            translation: fact.translation ?? null,
+            audioUrl: fact.audioUrl ?? null,
+          },
           sourceArtifactIds: [context.senseArtifact.artifactId, usageArtifact.artifactId],
           productionMethod: 'deterministic_transform',
           producerProvider: 'sensa-prototype-deterministic',
@@ -445,12 +451,12 @@ const pedagogicalProducer: CandidateProducer = {
           producerPolicyId: 'lightweight.pedagogical-provisioning',
         });
       }
-    }
-    if (experience) {
+    });
+    if (experience?.sceneBridge) {
       candidates.push({
         materialRoleKey: 'scene_bridge',
         ordinal: 0,
-        contentPayload: { text: '回到刚才的场景，比较表达前后的意图与感受。' },
+        contentPayload: { text: experience.sceneBridge },
         sourceArtifactIds: [context.senseArtifact.artifactId, context.experienceArtifact!.artifactId],
         productionMethod: 'deterministic_transform',
         producerProvider: 'sensa-prototype-deterministic',

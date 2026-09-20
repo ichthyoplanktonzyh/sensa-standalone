@@ -212,7 +212,7 @@ export const LEARNING_POLICY_PROFILES = [
       initial_learning: {
         protocolId: 'lightweight-study',
         localProtocolVersion: 'sensa-lightweight-initial-v1',
-        protocolVersion: 'v2',
+        protocolVersion: 'v3',
         runtimeAdapterId: 'lightweight',
         orchestrationId: 'lightweight_study',
         evaluationPolicyId: 'lightweight-practice-observation-v1',

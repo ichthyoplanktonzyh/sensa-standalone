@@ -9,7 +9,6 @@ import {
 } from 'react';
 import type {
   DictionaryLookupRequest,
-  SyncedExampleMediaRender,
 } from '../types';
 import { audioService } from '../services/audioService';
 import { lookupDictionaryEntry } from '../services/quickDict';
@@ -18,40 +17,9 @@ import type { ExampleScreenProps } from './ExampleScreen';
 import { LearningExampleLookup } from './examples/LearningExampleLookup';
 import { useImmediateDictionaryLookup } from './useImmediateDictionaryLookup';
 import { ExampleCardCarousel } from './examples/ExampleCardCarousel';
+import { LearningExampleCard } from './examples/LearningExampleCard';
 
 const stripMarkup = (value: string): string => value.replace(/<[^>]*>/g, '').trim();
-
-function SyncedMediaSurface({ render }: { render: SyncedExampleMediaRender }) {
-  return (
-    <section className="sensa-example-media" aria-label={cardText('originalAudio',{provider:render.providerLabel})}>
-      {render.kind === 'video' ? (
-        <video
-          controls
-          preload="metadata"
-          poster={render.posterUrl}
-          src={render.playbackUrl}
-          onPlay={() => audioService.stop()}
-        >{cardText('thisBrowserCannotPlayThisReviewedMedia')}</video>
-      ) : (
-        <iframe
-          src={render.embedUrl}
-          title={cardText('originalAudio',{provider:render.providerLabel})}
-          allow="autoplay; encrypted-media; picture-in-picture"
-          allowFullScreen
-          loading="lazy"
-          referrerPolicy="strict-origin-when-cross-origin"
-        />
-      )}
-      <footer>
-        <span>{render.providerLabel}</span>
-        {render.rightsLabel && <small>{render.rightsLabel}</small>}
-        {render.sourceUrl && (
-          <a href={render.sourceUrl} target="_blank" rel="noreferrer">{cardText('viewSource')}</a>
-        )}
-      </footer>
-    </section>
-  );
-}
 
 export function SensaExampleScreen({
   active,
@@ -238,35 +206,22 @@ export function SensaExampleScreen({
           itemKeys={sentences.map((entry, index) => entry.exampleId ?? String(index))}
         >
           {sentence ? (
-            <article className="sensa-example-viewer">
-            <div className="sensa-example-source">
-              <div>
-                <span>{sentence.sourceKind === 'attested_usage' ? cardText('reviewedAuthenticUsage') : cardText('reviewedLearningExample')}</span>
-                <strong>{sentence.src}</strong>
-              </div>
-              <small>
-                {sentence.syncedMedia?.providerLabel
-                  ?? (sentence.audioUrl ? cardText('textRecordedAudio') : cardText('text'))}
-              </small>
-            </div>
-
-            {active && sentence.syncedMedia && <SyncedMediaSurface render={sentence.syncedMedia} />}
-
-            <section className="sensa-example-sentence" aria-label={cardText('currentExample')}>
-              <p className="example-lookup-hint">{cardText('tapAWordForItsDefinition')}</p>
-              <button
-                type="button"
-                className={`sensa-example-play${isPlaying ? ' is-playing' : ''}`}
-                onClick={playSentence}
-                aria-label={isPlaying ? cardText('stopExampleAudio') : cardText('playExampleAudio')}
-              >
-                {isPlaying ? (
-                  <span aria-hidden="true">Ⅱ</span>
-                ) : (
-                  <svg className="size-[1.375rem] shrink-0" aria-hidden="true"><use href="#i-vol" /></svg>
-                )}
-              </button>
-              <div className="sensa-example-l2">
+            <LearningExampleCard
+              sentence={sentence}
+              active={active}
+              lookupEnabled
+              isPlaying={isPlaying}
+              onPlay={playSentence}
+              showTranslation={showTranslation}
+              onToggleTranslation={() => setShowTranslation((visible) => !visible)}
+              sense={{
+                expression: curWord.w,
+                label: [sense?.pos, sense?.text].filter(Boolean).join(' '),
+                definition: sense?.def ? stripMarkup(sense.def) : undefined,
+              }}
+              showContext={showContext}
+              onToggleContext={() => setShowContext((visible) => !visible)}
+              sentenceContent={(
                 <ClickableSentence
                   sentenceHtml={sentence.en}
                   activeTokenIdx={activeLookup?.tokenIdx ?? null}
@@ -290,44 +245,8 @@ export function SensaExampleScreen({
                     });
                   }}
                 />
-              </div>
-              {showTranslation && <p className="sensa-example-l1">{sentence.zh}</p>}
-              <button
-                type="button"
-                className="sensa-example-translation"
-                aria-expanded={showTranslation}
-                onClick={() => setShowTranslation((visible) => !visible)}
-              >
-                {showTranslation ? cardText('hideTranslation') : cardText('showTranslation')}
-              </button>
-            </section>
-
-            <section className="sensa-example-sense-anchor">
-              <span>{cardText('expressionInThisSentence')}{curWord.w}</span>
-              <strong>{sense?.pos} {sense?.text}</strong>
-              {sense?.def && (
-                <details>
-                  <summary>{cardText('viewMeaningBoundaries')}</summary>
-                  <p>{stripMarkup(sense.def)}</p>
-                </details>
               )}
-            </section>
-
-            {(sentence.contextL2 || sentence.contextL1) && (
-              <section className={`sensa-example-context${showContext ? ' is-open' : ''}`}>
-                <button type="button" aria-expanded={showContext} onClick={() => setShowContext((visible) => !visible)}>
-                  <span>{cardText('fullContext')}</span>
-                  <b aria-hidden="true">{showContext ? '−' : '+'}</b>
-                </button>
-                {showContext && (
-                  <div>
-                    {sentence.contextL2 && <p>{sentence.contextL2}</p>}
-                    {sentence.contextL1 && <small>{sentence.contextL1}</small>}
-                  </div>
-                )}
-              </section>
-            )}
-            </article>
+            />
           ) : (
             <div className="sensa-example-unavailable" role="status">
               <strong>{cardText('thisLearningResourceIsUnavailable')}</strong>

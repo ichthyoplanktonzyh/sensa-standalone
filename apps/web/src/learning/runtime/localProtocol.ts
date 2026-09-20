@@ -247,6 +247,11 @@ export type LocalProtocolSettlementIntent =
   | Readonly<{
       kind: 'initial_learning_completion';
       completion: InitialCompletionContract;
+      /** A completed first encounter may still request an immediate repair pass. */
+      relearning?: Readonly<{
+        nextEligibleAt: string;
+        state: unknown | null;
+      }> | null;
     }>
   | Readonly<{
       kind: 'memory_outcome';
@@ -616,7 +621,12 @@ export function executeLocalProtocolTransition(input:Readonly<{
  if(!participant||!run.targetIds.includes(input.target.id))throw new Error('localFlow.stepChanged');
  const settlement=transition.settlement;
  if(settlement){
-  if((settlement.kind==='relearning_progress'||settlement.kind==='memory_outcome'&&settlement.relearning)&&!isJsonValue(settlement.kind==='relearning_progress'?settlement.state:settlement.relearning?.state))throw new Error('Relearning state must be canonical JSON.');
+  const relearning=settlement.kind==='relearning_progress'
+   ?{nextEligibleAt:settlement.nextEligibleAt,state:settlement.state}
+   :(settlement.kind==='memory_outcome'||settlement.kind==='initial_learning_completion')
+    ?settlement.relearning
+    :null;
+  if(relearning&&(!Number.isFinite(Date.parse(relearning.nextEligibleAt))||!isJsonValue(relearning.state)))throw new Error('Relearning state must be canonical JSON.');
   if(!settlementAllowed(participant.outcomePermissions,settlement))throw new Error('localFlow.stepChanged');
   if(input.run.targetCompletions[input.target.id])throw new Error('A Protocol Run may settle only once.');
  }

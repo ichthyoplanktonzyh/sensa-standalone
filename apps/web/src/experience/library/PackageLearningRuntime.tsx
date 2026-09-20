@@ -141,7 +141,7 @@ export function PackageRuntime(props:PackageRuntimeProps){
   });
   return immutablePresentationSnapshot({run,targets,packages:props.c.packages.filter(pack=>targets.some(target=>target.packageKey===pack.key))});
  },[run,props.c.targets,props.c.packages]);
- if(!run)return <LightweightRuntimeStartScreen active={props.active} target={null} materialization={null} step={null} completed={false} hasNextTarget={false} onExit={props.onExit} onReveal={()=>{}} onRate={()=>{}} onFinish={props.onFinish}/>;
+ if(!run)return <LightweightRuntimeStartScreen active={props.active} busy={props.c.busy} target={null} materialization={null} step={null} completed={false} hasNextTarget={false} onExit={props.onExit} onReveal={()=>{}} onRate={()=>{}} onFinish={props.onFinish} onOpenDictionary={runtimeHost.openDict} lookupDictionary={runtimeHost.lookupDictionary} toast={runtimeHost.toast}/>;
  const surface=learningRuntimeCoordinator.adapterForBinding(localRunBinding(run)).surfaceFor(run.purpose);
  const request=localRuntimePresentationRequest(run,surface);
  const plugin=localRuntimePresentationRegistry.resolve(request);
@@ -183,8 +183,8 @@ function LightweightPackageRuntime({active,run,targets,packages,busy,notice,hasN
  const phase=localLightweightPhase(run);
  const step=localLightweightStep(run,target,material);
  const content={senseKey:String(material.snapshot.provenance.senseId),lemma:target.expression,guideLabelL1:target.meaning};
- const lightweightHost=host as Pick<AssuranceSupportHost,'onOpenMenuMore'|'openSceneEditor'|'toast'>;
- if(!lightweightHost.onOpenMenuMore||!lightweightHost.openSceneEditor||!lightweightHost.toast)throw new Error('Presentation capability lightweight_support is unavailable.');
+ const lightweightHost=host as Pick<AssuranceSupportHost,'onOpenMenuMore'|'openSceneEditor'|'openDict'|'lookupDictionary'|'toast'>;
+ if(!lightweightHost.onOpenMenuMore||!lightweightHost.openSceneEditor||!lightweightHost.openDict||!lightweightHost.lookupDictionary||!lightweightHost.toast)throw new Error('Presentation capability lightweight_support is unavailable.');
  const scene=contentAnnotations.getLearningScene(target.id,target.curriculumMembership.languageContext.languageRouteId),sceneRevision=scene?contentAnnotations.getLearningSceneRevision(scene):null;
  const pack=target.packageKey?packages.find(candidate=>candidate.key===target.packageKey):undefined;
  const bookBundle=pack?.bundle.format==='sensa-book-release-bundle-v1'?pack.bundle:null;
@@ -203,7 +203,7 @@ function LightweightPackageRuntime({active,run,targets,packages,busy,notice,hasN
    lightweightHost.toast(i18n.t('runtime.semanticWorldSaved'));
   }catch{lightweightHost.toast(i18n.t('runtime.semanticWorldSaveFailed'));}finally{setSavingWorld(false);}
  };
- return <><LightweightRuntimeStartScreen tools={!run.completedAt&&<RuntimeTools content={content} personalContent={phase==='reveal'?content:null} showSave={phase==='reveal'} onMarkKnown={()=>void declareMastery(target.id).then(ok=>{if(ok)onExit();})} onOpenMenuMore={lightweightHost.onOpenMenuMore} toast={lightweightHost.toast} busy={busy||savingWorld}/>} active={active} target={localTargetView(target,target.curriculumMembership)} materialization={material} step={run.completedAt?null:step} completed={!!run.completedAt} hasNextTarget={hasNextTarget} onExit={onExit} onReveal={()=>dispatch({kind:'reveal'})} onRate={rating=>dispatch({kind:'rate',rating})} onFinish={onFinish} personalScene={sceneRevision} onOpenPersonalScene={run.purpose==='initial_learning'?openPersonalScene:undefined} semanticWorldState={phase==='reveal'?worldState:null} onSaveToSemanticWorld={acceptPersonalScene} purpose={run.purpose} completionDetail={target.relearnAt?localFlowText('nextRelearning',{date:new Date(target.relearnAt).toLocaleString(i18n.language)}):target.memory?localFlowText('nextReview',{date:target.memory.dueAt.toLocaleString(i18n.language)}):localFlowText('progressSaved')} completionLabel={run.purpose==='initial_learning'?localFlowText('initialCompleted'):run.purpose==='retention_review'?localFlowText('reviewCompleted'):localFlowText('relearningCompleted')}/>{active&&notice&&<p role="status" className="fixed bottom-4 left-4 right-4 z-[100] rounded-xl bg-accent-soft p-3">{localFlowNotice(notice)}</p>}</>;
+ return <><LightweightRuntimeStartScreen tools={!run.completedAt&&<RuntimeTools content={content} personalContent={phase==='reveal'?content:null} showSave={phase==='reveal'} onMarkKnown={()=>void declareMastery(target.id).then(ok=>{if(ok)onExit();})} onOpenMenuMore={lightweightHost.onOpenMenuMore} toast={lightweightHost.toast} busy={busy||savingWorld}/>} active={active} busy={busy||savingWorld} completionKey={run.completedAt?`${run.id}:${run.revision}`:null} target={localTargetView(target,target.curriculumMembership)} materialization={material} step={run.completedAt?null:step} completed={!!run.completedAt} hasNextTarget={hasNextTarget} onExit={onExit} onReveal={()=>dispatch({kind:'reveal'})} onRate={rating=>dispatch({kind:'rate',rating})} onFinish={onFinish} personalScene={sceneRevision} onOpenPersonalScene={run.purpose==='initial_learning'?openPersonalScene:undefined} semanticWorldState={phase==='reveal'?worldState:null} onSaveToSemanticWorld={acceptPersonalScene} onOpenDictionary={lightweightHost.openDict} lookupDictionary={lightweightHost.lookupDictionary} toast={lightweightHost.toast} purpose={run.purpose}/>{active&&notice&&<p role="status" className="fixed bottom-4 left-4 right-4 z-[100] rounded-xl bg-accent-soft p-3">{localFlowNotice(notice)}</p>}</>;
 }
 
 function fourStagePresentation(props:RuntimePresentationProps){
@@ -232,7 +232,7 @@ function FourStageReviewPackageRuntime(props:RuntimePresentationProps){
 }
 
 const LIGHTWEIGHT_PRESENTATION_BINDINGS=Object.freeze([
- {surface:'lightweight_initial',runtimeAdapterId:'lightweight',purpose:'initial_learning',protocolId:'lightweight-study',protocolVersion:'v2',localProtocolVersion:'sensa-lightweight-initial-v1'},
+ {surface:'lightweight_initial',runtimeAdapterId:'lightweight',purpose:'initial_learning',protocolId:'lightweight-study',protocolVersion:'v3',localProtocolVersion:'sensa-lightweight-initial-v1'},
  {surface:'lightweight_retention',runtimeAdapterId:'lightweight',purpose:'retention_review',protocolId:'learner-rated-retention-review',protocolVersion:'v1',localProtocolVersion:'sensa-lightweight-review-v1'},
  {surface:'lightweight_retention',runtimeAdapterId:'lightweight',purpose:'relearning',protocolId:'lightweight-rebinding',protocolVersion:'v1',localProtocolVersion:'sensa-lightweight-relearning-v1'},
 ] as const satisfies readonly LocalRuntimePresentationBinding[]);
@@ -250,7 +250,7 @@ const FOUR_STAGE_PRESENTATION_BINDINGS=Object.freeze([
 ] as const satisfies readonly LocalRuntimePresentationBinding[]);
 
 const localRuntimePresentationRegistry=new LocalRuntimePresentationRegistry<RuntimePresentationProps>([
- {manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.lightweight',pluginVersion:'v1',displayName:'Sensa Lightweight Runtime',capabilities:['toast','personal_scenes','personal_content_menu','declared_mastery'],bindings:[...LIGHTWEIGHT_PRESENTATION_BINDINGS]},render:LightweightPackageRuntime},
+ {manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.lightweight',pluginVersion:'v1',displayName:'Sensa Lightweight Runtime',capabilities:['toast','dictionary','personal_scenes','personal_content_menu','declared_mastery'],bindings:[...LIGHTWEIGHT_PRESENTATION_BINDINGS]},render:LightweightPackageRuntime},
  {manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.structured',pluginVersion:'v1',displayName:'Sensa Structured Runtime',capabilities:['toast','dictionary','notes','personal_scenes','personal_content_menu','declared_mastery'],bindings:[...STRUCTURED_PRESENTATION_BINDINGS]},render:StructuredPackageRuntime},
  {manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'sensa.web.interleaved-four-stage',pluginVersion:'v1',displayName:'Sensa Interleaved Four-stage Runtime',capabilities:[],bindings:[...FOUR_STAGE_PRESENTATION_BINDINGS]},render:props=>props.run.purpose==='initial_learning'?<FourStageInitialPackageRuntime {...props}/>:<FourStageReviewPackageRuntime {...props}/>},
 ] satisfies readonly LocalRuntimePresentationPlugin<RuntimePresentationProps>[]);

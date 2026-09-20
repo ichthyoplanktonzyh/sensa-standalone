@@ -41,7 +41,10 @@ export const runtimeZh = {
   reveal: "显示表达",
   compare: "核对刚才的回想",
   audio: "播放表达发音",
-  audioError: "音频暂时无法播放，可以继续学习。",
+  stopAudio: "停止播放发音",
+  audioError: "音频暂时无法播放。",
+  usagePattern: "常用结构",
+  contrastNote: "使用边界",
   rating: "评价刚才的回想",
   ratings: {
     again: "没想起",
@@ -49,7 +52,7 @@ export const runtimeZh = {
     good: "顺利想起",
   },
   initialRating: {
-    again: "再回想一次",
+    again: "稍后穿插再练",
     hard: "完成本次学习",
     good: "完成本次学习",
   },
@@ -127,7 +130,10 @@ export const runtimeEn = {
   reveal: "Show expression",
   compare: "Check your recall",
   audio: "Play pronunciation",
-  audioError: "Audio is unavailable. You can continue learning.",
+  stopAudio: "Stop pronunciation",
+  audioError: "Audio is unavailable.",
+  usagePattern: "Common pattern",
+  contrastNote: "Usage boundary",
   rating: "Rate your recall",
   ratings: {
     again: "Not recalled",
@@ -135,7 +141,7 @@ export const runtimeEn = {
     good: "Recalled easily",
   },
   initialRating: {
-    again: "Try recalling again",
+    again: "Retry after a short interval",
     hard: "Complete this learning",
     good: "Complete this learning",
   },

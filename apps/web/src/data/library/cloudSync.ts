@@ -14,7 +14,10 @@ const equal=backupEqual;
 const hash=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),b=>b.toString(16).padStart(2,'0')).join('');
 /** A restore holds block text in memory before assembling rows; keep that bounded. */
 const TRANSFER_CAP=96*1024*1024;
-const allowed=(table:Entry['table'],key:string)=>(table!=='meta'||['identity','learning-active','package-catalog'].includes(key))&&(table!=='settings'||key!=='providers');
+// The package catalog is a short-lived service cache. Synchronizing it lets a
+// stale descriptor from another browser replace the catalog this device just
+// fetched, so keep it local in the same way as provider credentials.
+const allowed=(table:Entry['table'],key:string)=>(table!=='meta'||['identity','learning-active'].includes(key))&&(table!=='settings'||key!=='providers');
 function normalized(table:Entry['table'],key:string,raw:any,identity:LibraryIdentity){
  const value=structuredClone(raw);
  // Library identity is shared; a browser installation keeps its own device identity.
@@ -44,7 +47,7 @@ function rowsFor(entries:Entry[]):BackupRows{
  validateBackupRows(rows);return rows;
 }
 function sameOwner(a:Owner,b:Owner){return a.subject===b.subject&&a.accountId===b.accountId;}
-function empty(entries:Entry[]){return entries.every(r=>r.table==='meta'&&['identity','package-catalog'].includes(r.key));}
+function empty(entries:Entry[]){return entries.every(r=>r.table==='meta'&&r.key==='identity');}
 /** Three-way record merge. Conflicting records stay local; no time-based winner. */
 export function mergeLibraryEntries(base:Entry[],local:Entry[],remote:Entry[]){
  const b=new Map(base.map(r=>[entryId(r),r])),l=new Map(local.map(r=>[entryId(r),r])),r=new Map(remote.map(r=>[entryId(r),r]));const conflicts:string[]=[],entries:Entry[]=[];
@@ -173,7 +176,7 @@ export async function synchronizeLibrary(request:SyncRequest){
   initial=await readLibrary(capture);state=initial.state??defaults;
   // Populate cache with local and last-confirmed data: unchanged resources are not downloaded again.
   await blocks.manifest(initial.entries);if(state.base.length)await blocks.manifest(state.base);
-  const head=librarySyncHead.parse(await request('/head')),remote=await blocks.download(head);
+  const head=librarySyncHead.parse(await request('/head')),remote=(await blocks.download(head)).filter(row=>allowed(row.table,row.key));
   let merged:ReturnType<typeof mergeLibraryEntries>;
   const remoteIdentity=remote.find(r=>r.table==='meta'&&r.key==='identity');
   if(remoteIdentity&&decodeBackupValue(remoteIdentity.value).id!==initial.identity.id){if(!empty(initial.entries))throw new Error('library_sync_identity');merged={entries:remote,conflicts:[]};}

@@ -209,6 +209,7 @@ async function buildLocalAssets(webOrigin) {
       ...environment,
       SENSA_WEB_ORIGIN: webOrigin,
       SENSA_PACKAGE_OUTPUT: join(root, 'apps/web/public/learning-packages'),
+      SENSA_BOOK_RELEASE_SOURCES: join(root, 'content/preview/lightweight-ui-v2.json'),
     },
   });
   checked(process.execPath, ['build.mjs'], {
@@ -249,7 +250,7 @@ async function launchBrowser(webOrigin, profile, session) {
   }
   const authKey = `sb-${new URL(serviceOrigin).hostname.split('.')[0]}-auth-token`;
   await browserContext.addInitScript(({ origin, authKey: key, session: value }) => {
-    if (location.origin !== origin || localStorage.getItem('sensa:local-bootstrap:v1')) return;
+    if (location.origin !== origin) return;
     localStorage.setItem(key, JSON.stringify(value));
     localStorage.setItem('sensa:local-bootstrap:v1', 'complete');
   }, { origin: webOrigin, authKey, session });

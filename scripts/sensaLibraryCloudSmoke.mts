@@ -44,6 +44,12 @@ try{
  await a.evaluate(()=>(window as any).sync());assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0].revision,1,'lost ACK is idempotent');
  await b.evaluate(()=>(window as any).sync());assert.deepEqual(await b.evaluate(()=>(window as any).core.listDrafts()),[draft]);
  const identities=await Promise.all([a,b].map(p=>p.evaluate(()=>(window as any).core.openLibrary())));assert.equal(identities[0].id,identities[1].id);assert.notEqual(identities[0].deviceId,identities[1].deviceId);
+ // Service package descriptors are device-local caches and must never replace
+ // one browser's fresh catalog with another browser's stale copy.
+ await a.evaluate(async()=>{const c=(window as any).core;await c.writeLibraryState((tx:any)=>tx.put('meta','package-catalog',{format:'sensa-local-registry-cache-v1',revision:'catalog-a',checkedAt:'2026-09-20T00:00:00.000Z',items:[]}));});
+ await b.evaluate(async()=>{const c=(window as any).core;await c.writeLibraryState((tx:any)=>tx.put('meta','package-catalog',{format:'sensa-local-registry-cache-v1',revision:'catalog-b',checkedAt:'2026-09-20T00:00:01.000Z',items:[]}));});
+ await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
+ assert.equal(await b.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.get('meta','package-catalog')).then((catalog:any)=>catalog.revision)),'catalog-b','package catalog cache stays device-local');
  calls=[];await b.evaluate(()=>(window as any).sync());assert.equal(calls.filter(c=>c.path.endsWith('/blocks/fetch')).length,0,'unchanged content is reused locally without a batch fetch');
  await other.evaluate(()=>(window as any).sync());assert.deepEqual(await other.evaluate(()=>(window as any).core.listDrafts()),[]);
  const hash=(await pool.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 LIMIT 1',[accountId])).rows[0].hash;
@@ -144,6 +150,7 @@ try{
  const repacked=await publish(JSON.parse(JSON.stringify(head.manifest)),priorRevision,8192);assert.equal(repacked.status,200,'repacking published history must be accepted');
  head=await readHead();assert.equal(head.revision,priorRevision+1);await refresh();
  assert.equal(head.manifest.version,3);assert.equal(head.manifest.rows.some((row:any)=>row.table==='operations'),false,'new Checkpoints must not contain the device ledger');
+ assert.equal(head.manifest.rows.some((row:any)=>row.table==='meta'&&row.key==='package-catalog'),false,'package catalog cache must not enter account checkpoints');
  assert(head.manifest.rows.some((row:any)=>row.table==='semanticState'),'normalized semantic state was not synchronized');
  // Server rejects a new snapshot that rewrites an already published learning fact.
  const manifest=JSON.parse(JSON.stringify(head.manifest));

@@ -2,7 +2,7 @@ import {localFlowText} from '../../../i18n/localFlowText';
 import { useTranslation } from "react-i18next";
 import { Check, ArrowRight } from "lucide-react";
 import { RuntimeFrame, runtimePrimary } from "./RuntimeFrame";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type {LearningTargetPresentation} from '../../library/learningPresentation';
 import { assembleLightweightInitialPresentation } from "../../learningRuntime/lightweightInitialPresentation";
 import type { LightweightInitialLearningMaterialization } from "../../../learning/runtime/lightweightInitialContent";
@@ -16,13 +16,14 @@ import {
   type LightweightInitialStepRendererProps,
 } from "../../learningRuntime/stepRenderers";
 import type { PersonalLearningSceneRevision } from '../../../data/library/contentAnnotations';
+import type {DictionaryLookup,QuickDictEntry} from '../../types';
 
 interface LightweightRuntimeStartScreenProps {
   readonly tools?: import('react').ReactNode;
   readonly purpose?: 'initial_learning'|'retention_review'|'relearning';
-  readonly completionLabel?: string;
-  readonly completionDetail?: string;
   readonly active: boolean;
+  readonly busy?: boolean;
+  readonly completionKey?: string | null;
   readonly target:LearningTargetPresentation|null;
   readonly materialization: LightweightInitialLearningMaterialization | null;
   readonly step: LightweightProtocolStepInstance | null;
@@ -36,6 +37,9 @@ interface LightweightRuntimeStartScreenProps {
   readonly onOpenPersonalScene?: () => void;
   readonly semanticWorldState?: 'available' | 'update' | 'saved' | 'saving' | null;
   readonly onSaveToSemanticWorld?: () => void;
+  readonly onOpenDictionary: (word: string | QuickDictEntry) => void;
+  readonly lookupDictionary: DictionaryLookup;
+  readonly toast: (message: string) => void;
 }
 /**
  * Lightweight Initial Runtime shell.
@@ -46,9 +50,9 @@ interface LightweightRuntimeStartScreenProps {
 export const LightweightRuntimeStartScreen = ({
   tools,
   purpose='initial_learning',
-  completionLabel,
-  completionDetail,
   active,
+  busy = false,
+  completionKey = null,
   target,
   materialization,
   step,
@@ -62,8 +66,12 @@ export const LightweightRuntimeStartScreen = ({
   onOpenPersonalScene,
   semanticWorldState,
   onSaveToSemanticWorld,
+  onOpenDictionary,
+  lookupDictionary,
+  toast,
 }: LightweightRuntimeStartScreenProps) => {
   const { t } = useTranslation();
+  const advancedCompletion = useRef<string | null>(null);
   const presentation = useMemo(
     () =>
       step && materialization
@@ -77,11 +85,15 @@ export const LightweightRuntimeStartScreen = ({
           step.definition.stepKind,
         )({
           step,
+          active,
           presentation,
           personalScene,
           onOpenPersonalScene,
           semanticWorldState,
           onSaveToSemanticWorld,
+          onOpenDictionary,
+          lookupDictionary,
+          toast,
           onReveal,
           onRate,
         })
@@ -91,6 +103,38 @@ export const LightweightRuntimeStartScreen = ({
     : step?.definition.stepKind === LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND
       ? 0
       : 1;
+
+  useEffect(() => {
+    if (!active || busy || !completed || !hasNextTarget || !completionKey) return;
+    if (advancedCompletion.current === completionKey) return;
+    advancedCompletion.current = completionKey;
+    onFinish();
+  }, [active, busy, completed, completionKey, hasNextTarget, onFinish]);
+
+  useEffect(() => {
+    if (!active) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (document.querySelector(`[role="${'dialog'}"]`)) return;
+      const element = event.target instanceof HTMLElement ? event.target : null;
+      const interactive = !!element?.closest('button, a, input, textarea, select, summary, [contenteditable="true"]');
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onExit();
+        return;
+      }
+      if (event.key !== 'Enter' || interactive || busy) return;
+      if (!completed && step?.definition.stepKind === LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND) {
+        event.preventDefault();
+        onReveal();
+      } else if (completed && !hasNextTarget) {
+        event.preventDefault();
+        onFinish();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [active, busy, completed, hasNextTarget, onExit, onFinish, onReveal, step?.definition.stepKind]);
 
   return (
     <RuntimeFrame
@@ -107,6 +151,7 @@ export const LightweightRuntimeStartScreen = ({
       progress={progressStep * 50}
       tools={tools}
       onExit={onExit}
+      pauseShortcut="Esc"
     >
       {!completed && renderedStep}
       {!completed && !renderedStep && (
@@ -123,27 +168,20 @@ export const LightweightRuntimeStartScreen = ({
           </button>
         </div>
       )}
-      {completed && target && (
-        <section aria-live="polite" className="py-8 text-center">
+      {completed && hasNextTarget && <div className="min-h-[24rem]" aria-hidden="true" />}
+      {completed && !hasNextTarget && target && (
+        <section aria-live="polite" className="sensa-runtime-summary py-8 text-center">
           <span className="mx-auto mb-7 grid size-14 place-items-center rounded-full bg-accent-soft text-action-primary">
             <Check size={25} strokeWidth={1.4} />
           </span>
-          <p className="text-sm text-fg-secondary">{completionLabel??t("runtime.initialDone")}</p>
-          <h1 className="mt-6 break-words font-language text-4xl font-medium tracking-tight sm:text-5xl">
-            {target.expression}
-          </h1>
-          <p className="mt-5 text-body text-fg-secondary">
-            {target.meaning}
-          </p>
-          <p className="mt-8 text-sm text-fg-tertiary">
-            {completionDetail??t("runtime.scheduled")}
-          </p>
+          <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">{t("runtime.done")}</h1>
           <button
             className={`${runtimePrimary} mt-9 w-full sm:w-auto`}
             onClick={onFinish}
           >
-            {t(hasNextTarget ? "runtime.next" : "runtime.home")}
+            {t("runtime.home")}
             <ArrowRight size={17} />
+            <kbd className="sensa-shortcut-hint" aria-hidden="true">↵</kbd>
           </button>
         </section>
       )}

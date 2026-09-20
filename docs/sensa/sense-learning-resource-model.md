@@ -67,10 +67,10 @@ Candidate。Candidate 只有通过该 role 全部 required validators，并且�
 场景是必须带 use grant 的 Personal Anchor artifact；TTS 是从已接受文本或发音事实产生媒体
 Candidate 的 Content Derivation。这三类输入/操作不能被压成一段不可审计的模型 prompt。
 
-首版 Lightweight Initial 使用一个具体的 `lightweight-initial-content@v1` Demand。它把
+当前 Lightweight Initial 使用 `lightweight-initial-content@v2` Demand。它把
 `experience_recall_cue`、`target_expression`、`sense_confirmation` 声明为 required roles，把
 `recall_support`、`pronunciation`、`language_structure`、`usage_guidance`、`scene_bridge` 声明为
-bounded optional roles。请求必须携带 expression snapshot 与 Sense snapshot；原始经历和词典、语料、
+bounded optional roles，其中 `usage_guidance` 允许最多四条例句，并可携带审核过的译文与音频。请求必须携带 expression snapshot 与 Sense snapshot；原始经历和词典、语料、
 发音等 reference facts 是可选 context。Personal Anchor 仍必须携带 use grant。
 
 该 Demand 明确把来源责任分开：expression/Sense 只做 authoritative passthrough；教学性内容只先成为

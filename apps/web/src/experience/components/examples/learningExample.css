@@ -49,3 +49,12 @@
 :is(#s-example, #s-package-example) .sensa-example-unavailable p { margin-top:12px; color:var(--sensa-fg-secondary); }
 @media (min-width:640px) { :is(#s-example, #s-package-example) .sensa-example-scroll { padding:40px; } :is(#s-example, #s-package-example) .sensa-example-sentence { padding:32px; } }
 @media (prefers-reduced-motion:reduce) { :is(#s-example, #s-package-example) .example-card-carousel { transition:none !important; } }
+
+/* The compact variant is shared by lightweight learning. Optional example
+   chrome is omitted by React when the material does not provide it. */
+.sensa-learning-example-card[data-compact="true"] { overflow:hidden; border:1px solid var(--sensa-border-subtle); border-inline-start:3px solid var(--sensa-border-strong); border-radius:var(--sensa-radius-card); background:var(--sensa-surface-panel); }
+.sensa-learning-example-card[data-compact="true"] .sensa-example-sentence { padding:clamp(20px,4vw,28px); }
+.sensa-learning-example-card[data-compact="true"] .sensa-example-l2 { font-size:clamp(20px,3vw,26px); line-height:1.75; overflow-wrap:anywhere; }
+.sensa-learning-example-card[data-compact="true"] .sensa-example-l2 .tok-target { color:var(--sensa-action-primary); font-weight:600; }
+
+@media (prefers-reduced-motion:reduce) { .sensa-expression-reveal .example-card-carousel { transition:none !important; } }

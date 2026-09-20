@@ -120,6 +120,7 @@ export interface StepRendererProps {
 
 export interface LightweightInitialStepRendererProps {
   readonly step: LightweightProtocolStepInstance;
+  readonly active: boolean;
   readonly presentation: LightweightInitialCardPresentation;
   readonly onReveal: () => void;
   readonly onRate: (rating: LightweightInitialRating) => void;
@@ -127,6 +128,9 @@ export interface LightweightInitialStepRendererProps {
   readonly onOpenPersonalScene?: () => void;
   readonly semanticWorldState?: 'available' | 'update' | 'saved' | 'saving' | null;
   readonly onSaveToSemanticWorld?: () => void;
+  readonly onOpenDictionary: (word: string | QuickDictEntry) => void;
+  readonly lookupDictionary: DictionaryLookup;
+  readonly toast: (message: string) => void;
 }
 
 export type StepRenderer<TProps = StepRendererProps> = (props: TProps) => ReactNode;
@@ -363,10 +367,14 @@ const renderLightweightExpressionReveal = (
     <ExpressionRevealCard
       key={props.step.protocolStepInstanceId}
       presentation={props.presentation}
+      active={props.active}
       personalScene={props.personalScene}
       onOpenPersonalScene={props.onOpenPersonalScene}
       semanticWorldState={props.semanticWorldState}
       onSaveToSemanticWorld={props.onSaveToSemanticWorld}
+      onOpenDictionary={props.onOpenDictionary}
+      lookupDictionary={props.lookupDictionary}
+      toast={props.toast}
       onRate={props.onRate}
     />
   );

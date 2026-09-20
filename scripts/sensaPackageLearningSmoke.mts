@@ -16,6 +16,7 @@ import {localCurriculumMeaning,localCurriculumMembershipForContext,localExecutab
 import {addLanguageRoute,setActiveLanguageRoute} from '../apps/web/src/data/library/language.ts';
 import {contentAnnotations} from '../apps/web/src/data/library/contentAnnotations.ts';
 import {readHomeLearningProjection} from '../apps/web/src/experience/library/homeLearningProjection.ts';
+import {applyLocalProtocolTransition} from '../apps/web/src/data/library/learningSettlement.ts';
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
 const identity=await openLibrary();await command({id:crypto.randomUUID(),kind:'fixture.owner',input:{}},async tx=>{tx.put('meta','service-owner',{subject:crypto.randomUUID()});});
 const id=()=>crypto.randomUUID();
@@ -80,6 +81,13 @@ try{
  assert.equal(localLearningPurpose(copiedTarget),'initial_learning');
  assert.throws(()=>executeLocalProtocolTransition({execution:engine,target:copiedTarget,run:copiedRun,resource:pack,action:{kind:'reveal',extra:true} as any,at:copiedRun.startedAt}));
  copiedRun=executeLocalProtocolTransition({execution:engine,target:copiedTarget,run:copiedRun,resource:pack,action:{kind:'reveal'},at:copiedRun.startedAt}).run;
+ const deferredRetry=reduceLocalProtocolAction({operationId:id(),stepKey:'fixture-initial-again',at:copiedRun.startedAt,execution:engine,target:copiedTarget,run:structuredClone(copiedRun),resource:pack,action:{kind:'rate',rating:'again'}});
+ assert(deferredRetry.run.completedAt,'not recalled completes the encounter so the queue can interleave another target');
+ assert.equal(deferredRetry.transition.settlement?.kind,'initial_learning_completion');
+ if(deferredRetry.transition.settlement?.kind!=='initial_learning_completion')throw Error('missing deferred initial completion');
+ assert.equal(deferredRetry.transition.settlement.relearning?.nextEligibleAt,copiedRun.startedAt);
+ const deferredTarget=applyLocalProtocolTransition({operationId:id(),stepId:'fixture-initial-again',at:copiedRun.startedAt,target:copiedTarget,run:deferredRetry.run,transition:deferredRetry.transition}).target;
+ assert.equal(deferredTarget.relearnAt,copiedRun.startedAt,'not recalled enters the immediately eligible interleaved retry queue');
  const copiedResult=executeLocalProtocolTransition({execution:engine,target:copiedTarget,run:copiedRun,resource:pack,action:{kind:'rate',rating:'good'},at:copiedRun.startedAt});
  copiedRun=copiedResult.run;const copiedCompletion=copiedResult.transition;
  assert(copiedRun.protocolState.value.initial.progress.completed);
@@ -139,7 +147,7 @@ try{
  sensaMemoryOutcomeSnapshotSchema.parse(reviewRetention.outcome);sensaSchedulingDecisionSchema.parse(reviewRetention.schedulingDecision);
  assert.equal(reviewRetention.schedulingDecision.memoryOutcomeId,reviewRetention.outcome.memoryOutcomeId);
  assert.equal(reviewRetention.outcome.evaluationId,reviewEvent.detail.formalEvaluation?.evaluation.evaluationId,'the kernel owns the Evaluation identity consumed by Memory Outcome');
- await assert.rejects(startLearning(id(),targetId!,languageContext,20,due));
+ assert.equal(t.relearnAt,due,'a missed lightweight review is immediately eligible for interleaving');
  run=await startLearning(id(),targetId!,languageContext,20,t.relearnAt!);assert.equal(run.purpose,'relearning');
  run=await actLearning(id(),run.id,run.revision,{kind:'reveal'},t.relearnAt!);const relearningRating=id();run=await actLearning(relearningRating,run.id,run.revision,{kind:'rate',rating:'good'},t.relearnAt!);
  assert.equal((await readLearning()).targets[0]!.memoryRevision,2);assert.equal((await readLearning()).targets[0]!.relearnAt,null);

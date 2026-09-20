@@ -35,7 +35,7 @@ import {
 import { protocolPolicyRegistry } from './protocolPolicies';
 
 export const LIGHTWEIGHT_STUDY_PROTOCOL_ID = 'lightweight-study' as const;
-export const LIGHTWEIGHT_STUDY_PROTOCOL_VERSION = 'v2' as const;
+export const LIGHTWEIGHT_STUDY_PROTOCOL_VERSION = 'v3' as const;
 
 export const LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_ID =
   'lightweight-study.experience-recall' as const;
@@ -67,7 +67,7 @@ export const LIGHTWEIGHT_EXPERIENCE_RECALL_STEP = parseStep({
   ],
   presentation: {
     presentationKey: 'lightweight-experience-recall-card',
-    presentationVersion: 'v1',
+    presentationVersion: 'v2',
   },
   interactionContractId: 'request-expression-reveal',
   interactionContractVersion: 'v1',
@@ -103,7 +103,7 @@ export const LIGHTWEIGHT_EXPRESSION_REVEAL_STEP = parseStep({
   ],
   presentation: {
     presentationKey: 'lightweight-expression-reveal-card',
-    presentationVersion: 'v1',
+    presentationVersion: 'v2',
   },
   interactionContractId: 'lightweight-initial-rating',
   interactionContractVersion: 'v1',
@@ -116,9 +116,9 @@ export const LIGHTWEIGHT_EXPRESSION_REVEAL_STEP = parseStep({
   transitions: [
     {
       outcomeKey: 'again',
-      observationKind: 'practice_completed',
-      effect: 'repeat',
-      nextProtocolStepDefinitionId: LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_ID,
+      observationKind: 'protocol_completed',
+      effect: 'complete',
+      nextProtocolStepDefinitionId: null,
     },
     {
       outcomeKey: 'hard',
@@ -179,7 +179,7 @@ export interface LightweightInitialProtocolRunState {
   readonly currentStepOrdinal: number;
   readonly eventOrdinal: number;
   readonly retryCount: number;
-  readonly completionRating: Exclude<LightweightInitialRating, 'again'> | null;
+  readonly completionRating: LightweightInitialRating | null;
   readonly progress: ProtocolProgressState;
   readonly completedSteps: readonly LightweightCompletedStep[];
 }
@@ -346,7 +346,7 @@ export const transitionLightweightInitialProtocol = (
     observation,
     transitionDecision: transitionResult.decision,
   });
-  const completionRating = outcomeKey === 'hard' || outcomeKey === 'good'
+  const completionRating = outcomeKey === 'again' || outcomeKey === 'hard' || outcomeKey === 'good'
     ? outcomeKey
     : state.completionRating;
   const nextState: LightweightInitialProtocolRunState = Object.freeze({
@@ -354,7 +354,7 @@ export const transitionLightweightInitialProtocol = (
     currentStepDefinitionId: transition.nextProtocolStepDefinitionId,
     currentStepOrdinal: state.currentStepOrdinal + 1,
     eventOrdinal,
-    retryCount: transition.effect === 'repeat' ? state.retryCount + 1 : state.retryCount,
+    retryCount: outcomeKey === 'again' ? state.retryCount + 1 : state.retryCount,
     completionRating,
     progress: transitionResult.state,
     completedSteps: Object.freeze([...state.completedSteps, completedStep]),
@@ -390,12 +390,12 @@ export const lightweightLocalExecution: LocalProtocolExecution = {
   if(action.kind==='rate'){
    if(run.purpose==='initial_learning'&&next==='completed'){
     const completion=initialCompletionContractOf(orchestrationRegistry.get(localRunBinding(run).orchestrationId));
-    settlement={kind:'initial_learning_completion',completion};
+    settlement={kind:'initial_learning_completion',completion,relearning:action.rating==='again'?{nextEligibleAt:at,state:null}:null};
    }else if(run.purpose==='retention_review'){
-    const nextEligibleAt=action.rating==='again'?new Date(new Date(at).getTime()+10*60*1000).toISOString():null;
+    const nextEligibleAt=action.rating==='again'?at:null;
     settlement={kind:'memory_outcome',schedulerEligibility:'due_review',outcome:{basis:'learner_rated',grade:action.rating,evidenceLevel:'self_report'},relearning:nextEligibleAt?{nextEligibleAt,state:null}:null};
    }else if(next==='waiting'){
-    settlement={kind:'relearning_progress',nextEligibleAt:new Date(new Date(at).getTime()+10*60*1000).toISOString(),state:null};
+    settlement={kind:'relearning_progress',nextEligibleAt:at,state:null};
    }else{
     settlement={kind:'relearning_completion',protocolOutcome:'lightweight_rebinding_completed',evidenceLevel:'non_evidentiary'};
    }

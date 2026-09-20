@@ -14,6 +14,7 @@ export function RuntimeFrame({
   onExit,
   children,
   tools,
+  pauseShortcut,
 }: {
   id: string;
   active: boolean;
@@ -23,6 +24,7 @@ export function RuntimeFrame({
   onExit: () => void;
   children: ReactNode;
   tools?: ReactNode;
+  pauseShortcut?: string;
 }) {
   const { t } = useTranslation();
   return (
@@ -34,9 +36,9 @@ export function RuntimeFrame({
       regions={{
         header: (
           <>
-            <span className="text-sm font-medium">{title}</span>
+            <span className="sensa-runtime-title text-sm font-medium">{title}</span>
             <span className="hidden h-4 w-px bg-border-subtle sm:block" />
-            <span className="hidden text-xs text-fg-tertiary sm:block">
+            <span className="sensa-runtime-stage hidden text-xs text-fg-tertiary sm:block">
               {stepLabel}
             </span>
           </>
@@ -48,15 +50,17 @@ export function RuntimeFrame({
               type="button"
               onClick={onExit}
               aria-label={t("runtime.pause")}
-              className="flex min-h-11 items-center gap-2 rounded-control px-3 text-sm text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
+              className="sensa-runtime-pause flex min-h-11 items-center gap-2 rounded-control px-3 text-sm text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
             >
               <Pause size={16} />
               {t("runtime.pause")}
+              {pauseShortcut && <kbd className="sensa-shortcut-hint" aria-hidden="true">{pauseShortcut}</kbd>}
             </button>
           </>
         ),
         progress: (
           <div
+            className="sensa-runtime-progress"
             role="progressbar"
             aria-label={t("runtime.progress")}
             aria-valuemin={0}
@@ -79,7 +83,7 @@ export function RuntimeFrame({
         ),
         primary: (
           <>
-            <p className="mb-7 text-xs tracking-wide text-fg-tertiary sm:hidden">
+            <p className="sensa-runtime-mobile-stage mb-7 text-xs tracking-wide text-fg-tertiary sm:hidden">
               {stepLabel}
             </p>
             {children}

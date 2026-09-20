@@ -776,9 +776,9 @@ Language Learning Route (`target=en`, `support=zh-Hans`)
 × FSRS Scheduling
 ```
 
-该轻量 Profile 的 `lightweight-initial-content@v1` Content Demand 要求三类材料：Experience Recall
+该轻量 Profile 的 `lightweight-initial-content@v2` Content Demand 要求三类材料：Experience Recall
 的 `experience_recall_cue`、Expression Reveal 的 `target_expression` 与 `sense_confirmation`。
-`recall_support`、`pronunciation`、`language_structure`、`usage_guidance` 与 `scene_bridge` 均为有上限的
+`recall_support`、`pronunciation`、`language_structure`、最多四条 `usage_guidance` 与 `scene_bridge` 均为有上限的
 可选 role；缺失时对应 Presentation Slot 折叠，不阻塞运行。该集合对 word、phrase、construction 与
 utterance 使用同一个合同，具体可选资源由表达类型与已取得的合法材料决定，而不是把词法字段假定为
 所有 Expression 的必填属性。

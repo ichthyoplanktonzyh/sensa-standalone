@@ -43,6 +43,41 @@ export interface LearningQueue<Target extends LearningQueueTarget=LocalLearningT
   readonly remaining: number;
 }
 
+export interface InterleavedLearningRetry {
+  readonly id: string;
+  /** Number of other completed targets before this retry is ready to re-enter. */
+  readonly remaining: number;
+}
+
+export function advanceInterleavedLearningRetries(
+  retries: readonly InterleavedLearningRetry[],
+  completedTargetId: string,
+  retry: boolean,
+  spacing = 2,
+): InterleavedLearningRetry[] {
+  const advanced = retries
+    .filter((candidate) => candidate.id !== completedTargetId)
+    .map((candidate) => ({...candidate,remaining:Math.max(0,candidate.remaining - 1)}));
+  return retry ? [...advanced,{id:completedTargetId,remaining:Math.max(0,spacing)}] : advanced;
+}
+
+export function selectInterleavedLearningTarget<Target extends {readonly id:string}>(input:Readonly<{
+  due:readonly Target[];
+  initialReady:readonly Target[];
+  currentRunTargetIds:readonly string[];
+  retries:readonly InterleavedLearningRetry[];
+}>):Target|undefined {
+  const retryIds=new Set(input.retries.map(retry=>retry.id));
+  const currentIds=new Set(input.currentRunTargetIds);
+  const retryTarget=(onlyReady:boolean)=>input.retries
+    .filter(retry=>!onlyReady||retry.remaining<=0)
+    .map(retry=>input.due.find(target=>target.id===retry.id))
+    .find((target):target is Target=>!!target);
+  return retryTarget(true)
+    ??[...input.due,...input.initialReady].find(target=>!currentIds.has(target.id)&&!retryIds.has(target.id))
+    ??retryTarget(false);
+}
+
 const needsReviewAt = (target: LearningQueueTarget, clock: number): number | null => {
   if (target.relearnAt) {
     const relearnAt = Date.parse(target.relearnAt);

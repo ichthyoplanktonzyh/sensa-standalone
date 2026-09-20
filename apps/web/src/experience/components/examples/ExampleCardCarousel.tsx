@@ -39,7 +39,7 @@ export function ExampleCardCarousel({
   }, [currentIndex, itemCount]);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (itemCount < 2 || (event.target as HTMLElement).closest('button, a, input, textarea, summary, video, iframe, .tok-word')) return;
+    if (itemCount < 2 || (event.target as HTMLElement).closest('button, a, input, textarea, summary, video, iframe, button.tok-word')) return;
     pointerStartX.current = event.clientX;
     dragOffsetRef.current = 0;
     setDragOffset(0);

@@ -4,7 +4,7 @@
  * learning and Retention progress still belong to the shared Target.
  */
 import assert from 'node:assert/strict';
-import {resolveLearningQueue} from '../apps/web/src/experience/library/learningQueue.ts';
+import {advanceInterleavedLearningRetries,resolveLearningQueue,selectInterleavedLearningTarget} from '../apps/web/src/experience/library/learningQueue.ts';
 import {resolvePracticeScopeCatalog, CURRENT_STUDY_SCOPE_ID, PERSONAL_SEMANTIC_WORLD_SCOPE_ID,type PracticeStudyTarget} from '../apps/web/src/experience/practiceScope.ts';
 import type { LocalLearningTarget } from '../apps/web/src/data/library/learning.ts';
 import type {PersonalMeaningLearningSource} from '../apps/web/src/data/library/personalLearningSource.ts';
@@ -61,6 +61,18 @@ assert.deepEqual(filtered.due.map(t=>t.id),[],'a target whose material is not re
 assert.deepEqual(filtered.initialReady.map(t=>t.id),['es-new-2']);
 const declared=resolveLearningQueue({targets:targets.map(t=>t.id==='es-new-2'?{...t,planningOverrides:[{kind:'declared_mastery',source:'learner',operationId:'fixture',createdAt:at(9)}]}:t),languageRouteId:routes.es,readiness:ready,clock,dailyLimit:20});
 assert.deepEqual(declared.initialReady.map(t=>t.id),['es-new-1'],'a meaning the learner says they already know is not queued');
+
+// Missed meanings return after other work instead of forming a retry block at the end.
+const queueTarget=(id:string)=>({id});
+const retryA=queueTarget('retry-a'),retryB=queueTarget('retry-b'),newC=queueTarget('new-c'),newD=queueTarget('new-d');
+let retries=advanceInterleavedLearningRetries([],'retry-a',true);
+assert.equal(selectInterleavedLearningTarget({due:[retryA],initialReady:[newC,newD],currentRunTargetIds:['retry-a'],retries})?.id,'new-c');
+retries=advanceInterleavedLearningRetries(retries,'retry-b',true);
+assert.equal(selectInterleavedLearningTarget({due:[retryA,retryB],initialReady:[newC,newD],currentRunTargetIds:['retry-b'],retries})?.id,'new-c');
+retries=advanceInterleavedLearningRetries(retries,'new-c',false);
+assert.equal(selectInterleavedLearningTarget({due:[retryA,retryB],initialReady:[newD],currentRunTargetIds:['new-c'],retries})?.id,'retry-a','the first miss returns after two intervening completions');
+retries=advanceInterleavedLearningRetries(retries,'retry-a',false);
+assert.equal(selectInterleavedLearningTarget({due:[retryB],initialReady:[newD],currentRunTargetIds:['retry-a'],retries})?.id,'retry-b','multiple misses interleave instead of collecting at the tail');
 
 // Free Practice offers the expressions of the language being learned now.
 const meaning=(id:string,languageTag:string):PersonalMeaningLearningSource=>({

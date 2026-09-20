@@ -39,6 +39,7 @@ export const sensaLightweightOriginExperienceSchema = z
     scene: z.string().trim(),
     senseFocus: nonEmpty,
     featureLabels: z.array(nonEmpty).max(4),
+    sceneBridge: nonEmpty.optional(),
     images: sensaContextImagesSchema.optional(),
   })
   .strict();
@@ -62,18 +63,27 @@ export const sensaLightweightReferenceFactSchema = z.discriminatedUnion("factKin
     factKind: z.literal("language_structure"),
     expressionTypeLabel: nullableNonEmpty,
     partOfSpeech: nullableNonEmpty,
+    usagePattern: nullableNonEmpty.optional(),
+    contrastNote: nullableNonEmpty.optional(),
   }).strict().superRefine((fact, context) => {
-    if (fact.expressionTypeLabel === null && fact.partOfSpeech === null) {
+    if (
+      fact.expressionTypeLabel === null
+      && fact.partOfSpeech === null
+      && !fact.usagePattern
+      && !fact.contrastNote
+    ) {
       context.addIssue({
         code: "custom",
         path: ["expressionTypeLabel"],
-        message: "A language-structure fact requires at least one label.",
+        message: "A language-structure fact requires at least one useful field.",
       });
     }
   }),
   z.object({
     factKind: z.literal("usage_example"),
     example: nonEmpty,
+    translation: nullableNonEmpty.optional(),
+    audioUrl: nullableNonEmpty.optional(),
   }).strict(),
 ]);
 
@@ -110,10 +120,16 @@ export const sensaLightweightLanguageStructureMaterialSchema = z
     expressionKind: sensaLightweightExpressionKindSchema,
     expressionTypeLabel: nullableNonEmpty,
     partOfSpeech: nullableNonEmpty,
+    usagePattern: nullableNonEmpty.optional(),
+    contrastNote: nullableNonEmpty.optional(),
   })
   .strict();
 export const sensaLightweightUsageGuidanceMaterialSchema = z
-  .object({ example: nonEmpty })
+  .object({
+    example: nonEmpty,
+    translation: nullableNonEmpty.optional(),
+    audioUrl: nullableNonEmpty.optional(),
+  })
   .strict();
 export const sensaLightweightSceneBridgeMaterialSchema = z
   .object({ text: nonEmpty })
@@ -135,9 +151,9 @@ export type SensaLightweightInitialMaterialRole =
 
 export const LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_KEY =
   "lightweight-initial-content" as const;
-export const LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_VERSION = "v1" as const;
+export const LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_VERSION = "v2" as const;
 export const LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION =
-  "lightweight-initial-materialization-v1" as const;
+  "lightweight-initial-materialization-v2" as const;
 
 const SCHEMA_VALIDATOR = Object.freeze({
   validatorPolicyId: "lightweight.schema",
@@ -301,7 +317,7 @@ export const SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND =
       materialRole("usage_guidance", {
         required: false,
         minItems: 0,
-        maxItems: 1,
+        maxItems: 4,
         contentSchemaId: "lightweight.usage-guidance",
         eligibleStepIntents: ["instruction"],
         provisioningPolicyId: "lightweight.pedagogical-provisioning",
@@ -361,7 +377,7 @@ export const sensaLightweightInitialMaterializationContentSchema =
       context.addIssue({
         code: "custom",
         path: ["contentDemandKey"],
-        message: "Materialization content is not pinned to Lightweight Initial Content Demand v1.",
+        message: "Materialization content is not pinned to Lightweight Initial Content Demand v2.",
       });
     }
     const demandRoles = new Map(SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND.materialRoles.map(

@@ -41,7 +41,7 @@ const parsePresentation = (definition: unknown): SensaCardPresentationDefinition
 export const LIGHTWEIGHT_EXPERIENCE_RECALL_PRESENTATION = parsePresentation({
   contractVersion: sensaLearningConnectionContractVersion,
   presentationKey: 'lightweight-experience-recall-card',
-  presentationVersion: 'v1',
+  presentationVersion: 'v2',
   stepKinds: [LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND],
   slots: [
     {
@@ -76,7 +76,7 @@ export const LIGHTWEIGHT_EXPERIENCE_RECALL_PRESENTATION = parsePresentation({
 export const LIGHTWEIGHT_EXPRESSION_REVEAL_PRESENTATION = parsePresentation({
   contractVersion: sensaLearningConnectionContractVersion,
   presentationKey: 'lightweight-expression-reveal-card',
-  presentationVersion: 'v1',
+  presentationVersion: 'v2',
   stepKinds: [LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND],
   slots: [
     {
@@ -139,7 +139,7 @@ export const LIGHTWEIGHT_EXPRESSION_REVEAL_PRESENTATION = parsePresentation({
         'usage_guidance' satisfies LightweightInitialMaterialRole,
       ],
       minItems: 0,
-      maxItems: 1,
+      maxItems: 4,
       disclosurePhase: 'post_reveal',
       missingBehavior: 'collapse_slot',
       overflowBehavior: 'reject',
@@ -234,7 +234,7 @@ validateLightweightInitialPresentationContracts();
 export interface ExperienceRecallCardPresentation {
   readonly kind: 'experience_recall';
   readonly presentationKey: 'lightweight-experience-recall-card';
-  readonly presentationVersion: 'v1';
+  readonly presentationVersion: 'v2';
   readonly slots: {
     readonly experienceSketch: {
       readonly images?: readonly import('@sensa/contracts/sensa').SensaContextImage[];
@@ -249,7 +249,7 @@ export interface ExperienceRecallCardPresentation {
 export interface ExpressionRevealCardPresentation {
   readonly kind: 'expression_reveal';
   readonly presentationKey: 'lightweight-expression-reveal-card';
-  readonly presentationVersion: 'v1';
+  readonly presentationVersion: 'v2';
   readonly slots: {
     readonly expressionPrimary: { readonly surface: string };
     readonly senseConfirmation: { readonly meaning: string };
@@ -261,8 +261,15 @@ export interface ExpressionRevealCardPresentation {
     readonly languageStructure: {
       readonly expressionTypeLabel: string | null;
       readonly partOfSpeech: string | null;
+      readonly usagePattern: string | null;
+      readonly contrastNote: string | null;
     } | null;
-    readonly usageGuidance: { readonly example: string } | null;
+    readonly usageExamples: readonly {
+      readonly resourceKey: string;
+      readonly example: string;
+      readonly translation: string | null;
+      readonly audioUrl: string | null;
+    }[];
     readonly sceneBridge: { readonly text: string } | null;
   };
 }
@@ -348,7 +355,7 @@ export const assembleLightweightInitialPresentation = (
     return Object.freeze({
       kind: 'experience_recall',
       presentationKey: 'lightweight-experience-recall-card',
-      presentationVersion: 'v1',
+      presentationVersion: 'v2',
       slots: Object.freeze({
         experienceSketch: Object.freeze({
           scene: cue.scene,
@@ -379,11 +386,11 @@ export const assembleLightweightInitialPresentation = (
       materialization,
       'language_structure',
     )[0] ?? null;
-    const usageResource = boundResourcesForRole(
+    const usageResources = boundResourcesForRole(
       step,
       materialization,
       'usage_guidance',
-    )[0] ?? null;
+    );
     const sceneBridgeResource = boundResourcesForRole(
       step,
       materialization,
@@ -395,16 +402,17 @@ export const assembleLightweightInitialPresentation = (
     const structure = structureResource
       ? sensaLightweightLanguageStructureMaterialSchema.parse(structureResource.contentPayload)
       : null;
-    const usage = usageResource
-      ? sensaLightweightUsageGuidanceMaterialSchema.parse(usageResource.contentPayload)
-      : null;
+    const usageExamples = usageResources.map((resource) => ({
+      resourceKey: resource.resourceKey,
+      ...sensaLightweightUsageGuidanceMaterialSchema.parse(resource.contentPayload),
+    }));
     const sceneBridge = sceneBridgeResource
       ? sensaLightweightSceneBridgeMaterialSchema.parse(sceneBridgeResource.contentPayload)
       : null;
     return Object.freeze({
       kind: 'expression_reveal',
       presentationKey: 'lightweight-expression-reveal-card',
-      presentationVersion: 'v1',
+      presentationVersion: 'v2',
       slots: Object.freeze({
         expressionPrimary: Object.freeze({ surface: expression.surface }),
         senseConfirmation: Object.freeze({ meaning: sense.meaning }),
@@ -415,11 +423,16 @@ export const assembleLightweightInitialPresentation = (
           ? Object.freeze({
               expressionTypeLabel: structure.expressionTypeLabel,
               partOfSpeech: structure.partOfSpeech,
+              usagePattern: structure.usagePattern ?? null,
+              contrastNote: structure.contrastNote ?? null,
             })
           : null,
-        usageGuidance: usage
-          ? Object.freeze({ example: usage.example })
-          : null,
+        usageExamples: Object.freeze(usageExamples.map((usage) => Object.freeze({
+          resourceKey: usage.resourceKey,
+          example: usage.example,
+          translation: usage.translation ?? null,
+          audioUrl: usage.audioUrl ?? null,
+        }))),
         sceneBridge: sceneBridge
           ? Object.freeze({ text: sceneBridge.text })
           : null,

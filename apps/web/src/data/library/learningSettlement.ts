@@ -172,11 +172,12 @@ export function applyLocalProtocolTransition(input: Readonly<{
         run.schedulingPolicy,
         at,
       );
+      if(intent.relearning&&requireDate(intent.relearning.nextEligibleAt)<at)throw new Error('localFlow.clockChanged');
       target.completedAt = input.at;
       target.memory = scheduled.schedule;
       target.memoryRevision = scheduled.resultingMemoryRevision;
-      target.relearnAt = null;
-      target.relearningState = null;
+      target.relearnAt = intent.relearning?.nextEligibleAt ?? null;
+      target.relearningState = intent.relearning?.state ?? null;
       retention = {
         kind: 'initial_learning_completion',
         completion,

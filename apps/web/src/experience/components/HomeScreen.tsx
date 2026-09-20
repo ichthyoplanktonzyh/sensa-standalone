@@ -30,7 +30,7 @@ export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview
   const hasWork = mixedReadyN > 0;
   const date = accountDate ? new Date(accountDate+'T12:00:00') : new Date();
   const dateLabel = new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric', weekday: 'long' }).format(date);
-  const heading = !summaryReady ? 'home.title' : onResume ? 'runtime.resume' : !hasWork ? 'home.beginTitle' : newCount ? 'home.readyTitle' : 'home.reviewTitle';
+  const heading = !summaryReady ? 'home.title' : onResume ? 'home.resume' : !hasWork ? 'home.beginTitle' : newCount ? 'home.readyTitle' : 'home.reviewTitle';
 
   return <SensaWorkspacePageLayout
     id="s-home"
@@ -46,11 +46,11 @@ export function HomeScreen({ active, onGo, onStartMixed, onResume, onStartReview
       <section aria-labelledby="today-learning-title" className="sensa-today-learning">
         <div className="sensa-today-invitation">
           <h2 id="today-learning-title">{t(heading)}</h2>
-          <p className="sensa-today-hint">{summaryReady ? t(onResume ? 'runtime.resumeHint' : !hasWork ? 'home.emptyHint' : reviewDueN && newCount ? 'home.reviewFirst' : reviewDueN ? 'home.reviewOnlyHint' : 'home.newOnly') : localFlowText('loadingSensa')}</p>
+          <p className="sensa-today-hint">{summaryReady ? t(onResume ? 'home.resumeHint' : !hasWork ? 'home.emptyHint' : reviewDueN && newCount ? 'home.reviewFirst' : reviewDueN ? 'home.reviewOnlyHint' : 'home.newOnly') : localFlowText('loadingSensa')}</p>
           <div className="sensa-today-actions">
             <SensaAction type="button" loading={busy || !summaryReady} onClick={onResume ?? (hasWork ? onStartMixed : () => onGo('s-learning-entry'))}
               className="sensa-today-start" trailing={<ArrowRight aria-hidden="true" size={18} strokeWidth={1.6}/> }>
-              {t(onResume ? 'runtime.resume' : hasWork ? 'home.start' : 'home.emptyAction')}
+              {t(onResume ? 'home.resume' : hasWork ? 'home.start' : 'home.emptyAction')}
             </SensaAction>
             <SensaAction type="button" variant="quiet" onClick={onStartReview} disabled={busy || !summaryReady || !reviewDueN || !onStartReview}
               aria-label={reviewDueN ? t('home.reviewCount',{count:reviewDueN}) : t('home.noReview')}
