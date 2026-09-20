@@ -9,26 +9,30 @@ import type {
 
 const samePair=(left:SensaFormalPinnedLanguageContext,right:SensaFormalPinnedLanguageContext)=>
   left.targetLanguageTag===right.targetLanguageTag&&left.supportLanguageTag===right.supportLanguageTag;
-const active=(membership:LocalCurriculumMembership)=>membership.status!=='superseded';
+type MembershipRouteFacts = Pick<LocalCurriculumMembership,'status'|'languageContext'>;
+const active=(membership:MembershipRouteFacts)=>membership.status!=='superseded';
 
 /** Membership survives later Route revisions, while material remains usable
  * only when its pinned pair still matches the current Route. */
-export function localCurriculumMembershipForContext(
-  target:LocalLearningTarget,
+export function localCurriculumMembershipForContext<Membership extends MembershipRouteFacts>(
+  target:Readonly<{curriculumMemberships:readonly Membership[]}>,
   context:SensaFormalPinnedLanguageContext,
-):LocalCurriculumMembership|undefined {
+):Membership|undefined {
   return [...target.curriculumMemberships].reverse().find(membership=>
     active(membership)&&membership.languageContext.languageRouteId===context.languageRouteId&&samePair(membership.languageContext,context));
 }
 
-export function localCurriculumMembershipForRoute(
-  target:LocalLearningTarget,
+export function localCurriculumMembershipForRoute<Membership extends MembershipRouteFacts>(
+  target:Readonly<{curriculumMemberships:readonly Membership[]}>,
   languageRouteId:string,
-):LocalCurriculumMembership|undefined {
+):Membership|undefined {
   return [...target.curriculumMemberships].reverse().find(membership=>active(membership)&&membership.languageContext.languageRouteId===languageRouteId);
 }
 
-export function localTargetInRoute(target:LocalLearningTarget,languageRouteId:string):boolean {
+export function localTargetInRoute(
+  target:Readonly<{curriculumMemberships:readonly MembershipRouteFacts[]}>,
+  languageRouteId:string,
+):boolean {
   return target.curriculumMemberships.some(membership=>active(membership)&&membership.languageContext.languageRouteId===languageRouteId);
 }
 

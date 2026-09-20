@@ -615,8 +615,11 @@ const PreviewPersonalMeaningDetailScreen = ({
   const cameraRef = useRef<HTMLInputElement>(null);
   const openedThread = useRef<string | null>(null);
   const turnAbortRef = useRef<AbortController | null>(null);
+  const streamFrameRef = useRef<number | null>(null);
+  const streamTextRef = useRef('');
   const [session, setSession] = useState<SemanticAgentSession | null>(null);
   const [busy, setBusy] = useState(false);
+  const [streamingAssistant, setStreamingAssistant] = useState('');
   const [error, setError] = useState('');
   const [imageError, setImageError] = useState('');
   const [materialOpen, setMaterialOpen] = useState(false);
@@ -636,6 +639,7 @@ const PreviewPersonalMeaningDetailScreen = ({
     setEditingTrack(null);
     setError('');
     setImageError('');
+    setStreamingAssistant('');
   }, [personalMeaningId]);
 
   const commit = useCallback((next: SemanticAgentSession) => {
@@ -647,6 +651,8 @@ const PreviewPersonalMeaningDetailScreen = ({
   useEffect(() => () => {
     turnAbortRef.current?.abort();
     turnAbortRef.current = null;
+    if (streamFrameRef.current !== null) cancelAnimationFrame(streamFrameRef.current);
+    streamFrameRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -658,7 +664,7 @@ const PreviewPersonalMeaningDetailScreen = ({
       top: transcriptRef.current.scrollHeight,
       behavior: busy ? 'auto' : session?.messages.length ? 'smooth' : 'auto',
     });
-  }, [busy, session?.messages.length]);
+  }, [busy, session?.messages.length, streamingAssistant]);
 
   /** The optional Focus this thread confirmed, if it needed one. */
   const sessionFocus: JourneyFocusView | null = useMemo(() => {
@@ -736,6 +742,8 @@ const PreviewPersonalMeaningDetailScreen = ({
     commit(waiting);
     setBusy(true);
     setError('');
+    streamTextRef.current = '';
+    setStreamingAssistant('');
     turnAbortRef.current?.abort();
     const controller = new AbortController();
     turnAbortRef.current = controller;
@@ -750,6 +758,17 @@ const PreviewPersonalMeaningDetailScreen = ({
         knownMeanings,
         languages:languageContext,
         signal: controller.signal,
+        onAssistantText: (text) => {
+          if (controller.signal.aborted || turnAbortRef.current !== controller) return;
+          streamTextRef.current = text;
+          if (streamFrameRef.current !== null) return;
+          streamFrameRef.current = requestAnimationFrame(() => {
+            streamFrameRef.current = null;
+            if (!controller.signal.aborted && turnAbortRef.current === controller) {
+              setStreamingAssistant(streamTextRef.current);
+            }
+          });
+        },
       });
       if (controller.signal.aborted) {
         throw controller.signal.reason ?? new DOMException('Aborted', 'AbortError');
@@ -769,6 +788,10 @@ const PreviewPersonalMeaningDetailScreen = ({
     } finally {
       if (turnAbortRef.current === controller) {
         turnAbortRef.current = null;
+        if (streamFrameRef.current !== null) cancelAnimationFrame(streamFrameRef.current);
+        streamFrameRef.current = null;
+        streamTextRef.current = '';
+        setStreamingAssistant('');
         setBusy(false);
       }
     }
@@ -1226,9 +1249,9 @@ const PreviewPersonalMeaningDetailScreen = ({
           </div>
         ))}
         {busy && (
-          <div className={classNames('pmw-message is-assistant is-thinking')}>
+          <div className={classNames(`pmw-message is-assistant${streamingAssistant ? '' : ' is-thinking'}`)}>
             <span className={classNames("pmw-avatar")} aria-hidden="true">✦</span>
-            <div><p><i /><i /><i /></p></div>
+            <div>{streamingAssistant ? <p>{streamingAssistant}</p> : <p><i /><i /><i /></p>}</div>
           </div>
         )}
       </div>

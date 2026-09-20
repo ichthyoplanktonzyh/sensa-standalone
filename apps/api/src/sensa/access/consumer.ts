@@ -86,7 +86,7 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
 
   app.use('*',serviceTelemetry(options.telemetry));
   app.use('*',(context,next)=>bodyLimit({
-    maxSize:context.req.path.endsWith('/sensa/model/turn')?12*1024*1024:context.req.path.endsWith('/sensa/library-sync/blocks/store')?librarySyncBlockStoreChars+1024*1024:256*1024,
+    maxSize:['/sensa/model/turn','/sensa/model/turn/stream'].includes(context.req.path)?12*1024*1024:context.req.path.endsWith('/sensa/library-sync/blocks/store')?librarySyncBlockStoreChars+1024*1024:256*1024,
     onError:c=>c.json({code:'body_too_large'},413),
   })(context,next));
   app.onError((error,context)=>{

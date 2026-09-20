@@ -16,6 +16,7 @@ import {
 } from '../../data/library/transport';
 import { selectedProvider } from '../../data/library/providers';
 import type { ConversationImage } from '../../data/library/conversationImages';
+import { partialJsonStringField } from '../../data/library/modelStreaming';
 import type {
   AgentContextCandidate,
   AgentExpressionCandidate,
@@ -129,6 +130,7 @@ When you are not calling a tool, return only one JSON object with this shape:
   "clarity": { "context": "clear|unclear", "sense": "clear|unclear", "expression": "clear|unclear" },
   "proposal": null
 }
+Always emit reply as the first property of that object so the learner can read it while the private assessment is still being produced.
 When and only when all clarity values are "clear", proposal must instead contain:
 {
   "context": { "summary": "...", "salientDetails": ["..."], "unresolvedDetails": [], "rationale": "..." },
@@ -254,6 +256,9 @@ const executeTurn = async (
   let responseModel = provider.model;
 
   for (let round = 0; round < MAX_MODEL_TURNS; round += 1) {
+    input.onAssistantText?.('');
+    let streamed = '';
+    let visibleReply = '';
     const modelSignal = input.signal
       ? AbortSignal.any([input.signal, AbortSignal.timeout(45_000)])
       : AbortSignal.timeout(45_000);
@@ -264,7 +269,17 @@ const executeTurn = async (
       messages,
       tools,
       modelSignal,
-      'json_object',
+      {
+        responseFormat: 'json_object',
+        onText: input.onAssistantText ? (delta) => {
+          streamed += delta;
+          const reply = partialJsonStringField(streamed, 'reply');
+          if (reply !== null && reply !== visibleReply) {
+            visibleReply = reply;
+            input.onAssistantText?.(reply);
+          }
+        } : undefined,
+      },
     );
     responseModel = response.model;
     const modelMessage = response.choices[0]!.message;
@@ -297,6 +312,7 @@ const executeTurn = async (
         && workingSet.context.unresolvedDetails.length === 0
         && workingSet.sense.unresolvedQuestions.length === 0;
       const assistantMessage = turn.reply;
+      input.onAssistantText?.(assistantMessage);
       return {
         assistantMessage,
         workingSet,
@@ -351,6 +367,7 @@ const executeTurn = async (
   }
 
   const assistantMessage = '我已经整理出一部分理解，但这一轮还没有稳定下来。请再告诉我，你在这个场景里最想表达的那一点是什么？';
+  input.onAssistantText?.(assistantMessage);
   return {
     assistantMessage,
     workingSet,

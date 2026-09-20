@@ -61,7 +61,8 @@ try {
     page.on("pageerror", (error) => runtimeErrors.push(`pageerror: ${error.message}`));
     page.on("console", (message) => {
       if (message.type() === "error" && !message.text().includes("favicon.ico")) {
-        runtimeErrors.push(`console: ${message.text()}`);
+        const location=message.location();
+        runtimeErrors.push(`console: ${message.text()}${location.url?` (${location.url}:${location.lineNumber})`:''}`);
       }
     });
     const response = await page.goto(`${origin}/?skin-lab=1`, { waitUntil: "networkidle" });

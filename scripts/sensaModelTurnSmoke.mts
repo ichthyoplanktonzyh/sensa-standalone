@@ -11,10 +11,11 @@ const app=createModelTurnRoutes({
   // The route authenticates first and resolves its connection only once the purpose is known.
   authorize:async()=>{authorizations++;return {select:(purpose:keyof typeof connections)=>{selected.push(purpose);return connections[purpose]??connections.teacher;}};},
   reserve:async()=>{reservations++;},
-  complete:async(connection,_body,_signal,meta)=>{completions++;return {model:'fixture',purpose:meta.purpose,connection:connection.name};},
+  complete:async(connection,_body,_signal,meta,onText)=>{completions++;if(onText){await onText('{"reply":"流');await onText('式回复"}');}return {model:'fixture',purpose:meta.purpose,connection:connection.name};},
 });
 const message=[{role:'system' as const,content:'fixture'},{role:'user' as const,content:'fixture'}];
-const send=(turn:Record<string,unknown>)=>app.request('/turn',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...turn,inputDigest:createHash('sha256').update(canonicalConsumerJson(turn)).digest('hex')})});
+const sendTo=(path:string,turn:Record<string,unknown>)=>app.request(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...turn,inputDigest:createHash('sha256').update(canonicalConsumerJson(turn)).digest('hex')})});
+const send=(turn:Record<string,unknown>)=>sendTo('/turn',turn);
 
 const teacher={id:crypto.randomUUID(),purpose:'teacher',body:{model:'sensa-managed',messages:message,max_tokens:100,stream:false}};
 const accepted=await send(teacher);
@@ -41,4 +42,12 @@ const denied=await send(withTool);assert.equal(denied.status,400);assert.deepEqu
 
 const mismatch=await app.request('/turn',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...teacher,inputDigest:'0'.repeat(64)})});
 assert.equal(mismatch.status,400);assert.deepEqual(await mismatch.json(),{code:'input_digest_mismatch'});assert.equal(reservations,3);assert.equal(completions,3);
-console.log('PASS: Web model turn validates its digest, resolves a connection per purpose, permits only semantic-world lookup for clarification, refuses proposal pseudo-tools and unapproved tools, reserves once, reauthorizes after completion, and returns no-store. Synthetic provider; no database/network.');
+
+const streamed={...teacher,id:crypto.randomUUID()};
+const streamedResponse=await sendTo('/turn/stream',streamed);
+assert.equal(streamedResponse.status,200);assert.match(streamedResponse.headers.get('content-type')??'',/application\/x-ndjson/u);assert.equal(streamedResponse.headers.get('cache-control'),'no-store');assert.equal(streamedResponse.headers.get('x-accel-buffering'),'no');
+const events=(await streamedResponse.text()).trim().split('\n').map(line=>JSON.parse(line));
+assert.deepEqual(events.slice(0,2),[{type:'delta',text:'{"reply":"流'},{type:'delta',text:'式回复"}'}]);
+assert.deepEqual(events[2],{type:'result',value:{id:streamed.id,inputDigest:createHash('sha256').update(canonicalConsumerJson(streamed)).digest('hex'),response:{model:'fixture',purpose:'teacher',connection:'Teacher'}}});
+assert.equal(reservations,4);assert.equal(completions,4);assert.equal(authorizations,11);assert.deepEqual(selected,['teacher','teacher','reference','teacher']);
+console.log('PASS: Web model turn validates its digest, resolves a connection per purpose, permits only semantic-world lookup for clarification, refuses proposal pseudo-tools and unapproved tools, reserves once, reauthorizes after completion, and exposes a no-store NDJSON stream. Synthetic provider; no database/network.');

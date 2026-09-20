@@ -1,4 +1,6 @@
 import type { LocalLearningTarget } from '../../data/library/learning';
+import type {LocalCurriculumMembership} from '../../learning/runtime/localProtocol';
+import type {TargetPlanningOverride} from '../../learning/runtime/targetPlanningOverrides';
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
 import {localTargetInRoute} from '../../learning/runtime/localCurriculum';
 
@@ -10,27 +12,38 @@ import {localTargetInRoute} from '../../learning/runtime/localCurriculum';
  * route decides whether that Target belongs in this curriculum today.
  */
 
-export interface LearningQueueInput {
-  readonly targets: readonly LocalLearningTarget[];
+export interface LearningQueueTarget {
+  readonly id:string;
+  readonly curriculumMemberships:readonly Pick<LocalCurriculumMembership,'status'|'languageContext'>[];
+  readonly planningOverrides:readonly Pick<TargetPlanningOverride,'kind'>[];
+  readonly introducedLanguageRouteId:string|null;
+  readonly startedAt:string|null;
+  readonly completedAt:string|null;
+  readonly memory:{readonly dueAt:Date}|null;
+  readonly relearnAt:string|null;
+}
+
+export interface LearningQueueInput<Target extends LearningQueueTarget=LocalLearningTarget> {
+  readonly targets: readonly Target[];
   readonly languageRouteId: string;
   readonly readiness: Readonly<Record<string, 'ready' | 'blocked'>>;
   readonly clock: number;
   readonly dailyLimit: number | undefined;
 }
 
-export interface LearningQueue {
+export interface LearningQueue<Target extends LearningQueueTarget=LocalLearningTarget> {
   /** The targets of the language being learned now. */
-  readonly activeTargets: readonly LocalLearningTarget[];
+  readonly activeTargets: readonly Target[];
   /** The review queue, in the language being learned. */
-  readonly due: readonly LocalLearningTarget[];
+  readonly due: readonly Target[];
   /** Today's new items within this Route's Study Plan allowance. */
-  readonly initialReady: readonly LocalLearningTarget[];
+  readonly initialReady: readonly Target[];
   /** Counted only when this Route introduced the Target. */
   readonly startedToday: number;
   readonly remaining: number;
 }
 
-const needsReviewAt = (target: LocalLearningTarget, clock: number): number | null => {
+const needsReviewAt = (target: LearningQueueTarget, clock: number): number | null => {
   if (target.relearnAt) {
     const relearnAt = Date.parse(target.relearnAt);
     return Number.isFinite(relearnAt) ? relearnAt : null;
@@ -38,13 +51,13 @@ const needsReviewAt = (target: LocalLearningTarget, clock: number): number | nul
   return target.memory ? target.memory.dueAt.getTime() : null;
 };
 
-export function resolveLearningQueue({
+export function resolveLearningQueue<Target extends LearningQueueTarget>({
   targets,
   languageRouteId,
   readiness,
   clock,
   dailyLimit,
-}: LearningQueueInput): LearningQueue {
+}: LearningQueueInput<Target>): LearningQueue<Target> {
   const activeTargets = targets.filter((target) => localTargetInRoute(target,languageRouteId));
   const due = activeTargets
     .filter((target) => !hasDeclaredMasteryOverride(target) && readiness[target.id] === 'ready')
@@ -69,7 +82,7 @@ export function resolveLearningQueue({
  * introduction budget rolls into a new local day. Callers can sleep until that
  * boundary instead of waking the whole application on a fixed interval.
  */
-export function nextLearningQueueChangeAt(input: LearningQueueInput): number | null {
+export function nextLearningQueueChangeAt<Target extends LearningQueueTarget>(input: LearningQueueInput<Target>): number | null {
   const queue = resolveLearningQueue(input);
   const futureDue = queue.activeTargets
     .filter((target) => !hasDeclaredMasteryOverride(target) && input.readiness[target.id] === 'ready')

@@ -34,6 +34,7 @@ const RESTORE_BUDGET_MS=90000;
 /** The fixture library only has to be heavy enough that per-block requests are fatal. */
 const MINIMUM_PUBLISHED_BLOCKS=8;
 const DRAFTS=14,IMAGES_PER_DRAFT=2;
+const TOTAL_DRAFTS=DRAFTS+1;
 const MINIMUM_LEGACY_BYTES=4*1024*1024;
 const SUBJECT='8b1f4c1e-9d5a-4c34-9c3a-9f1d0d1a1c11';
 const ACCOUNT='4f2a7b60-1c6e-4a52-8f0b-6d3c2a9e5b21';
@@ -306,11 +307,14 @@ try{
  await competing.addInitScript(()=>{(window as any).__name=(fn:unknown)=>fn;});
  await competing.goto(origin,{waitUntil:'domcontentloaded'});
  await expect.poll(()=>competing.evaluate(()=>!!window.__sensaBrowserSmoke),{timeout:SHELL_BUDGET_MS}).toBe(true);
- const competingError=await competing.evaluate(async()=>{
-  try{await window.__sensaBrowserSmoke!.draftCount();return null;}
-  catch(error){return error instanceof Error?error.message:String(error);}
- });
- assert.equal(competingError,'localFlow.closeOldTabs','a second tab must not open a competing OPFS connection');
+ assert.equal(await competing.evaluate(()=>window.__sensaBrowserSmoke!.draftCount()),DRAFTS,'a follower tab did not read through the OPFS owner');
+ const crossTabBaseRevision=cloud.revision;
+ assert.equal(await competing.evaluate(()=>window.__sensaBrowserSmoke!.seedDrafts(1,0)),TOTAL_DRAFTS,'a follower tab did not commit through the OPFS owner');
+ await expect.poll(()=>a.page.evaluate(()=>window.__sensaBrowserSmoke!.draftCount()),{timeout:SHELL_BUDGET_MS,message:'the owner tab did not observe the follower commit'}).toBe(TOTAL_DRAFTS);
+ await expect.poll(()=>cloud.revision,{timeout:30000,message:'the cross-tab commit was not checkpointed'}).toBeGreaterThan(crossTabBaseRevision);
+ await expect.poll(()=>restoreStatus(a.page),{timeout:30000,message:'the cross-tab commit never converged'}).toBe('synced');
+ await a.page.close();
+ assert.equal(await competing.evaluate(()=>window.__sensaBrowserSmoke!.draftCount()),TOTAL_DRAFTS,'the follower did not take ownership after the leader closed');
  await competing.close();
  log(`   durable account library: ${cloud.published} published blocks / ${Math.round(cloud.publishedBytes/1024)}KiB, revision ${cloud.revision}`);
  await a.context.close();
@@ -351,7 +355,7 @@ try{
  await expect(b.page.getByText('正在恢复账号资料…')).toBeVisible();
  assert.deepEqual(await b.page.locator('.sensa-today-counts strong').allTextContents(),['—','—'],'a new device must not present local zeroes as account truth while restore is pending');
  await expect(b.page.locator('.sensa-today-empty')).toHaveCount(0);
- try{await expect.poll(async()=>({drafts:await b.page.evaluate(()=>window.__sensaBrowserSmoke!.draftCount()),normalized:cloud.revision>legacyRevision}),{timeout:RESTORE_BUDGET_MS,message:'account restore never finished'}).toEqual({drafts:DRAFTS,normalized:true});}
+ try{await expect.poll(async()=>({drafts:await b.page.evaluate(()=>window.__sensaBrowserSmoke!.draftCount()),normalized:cloud.revision>legacyRevision}),{timeout:RESTORE_BUDGET_MS,message:'account restore never finished'}).toEqual({drafts:TOTAL_DRAFTS,normalized:true});}
  catch(error){log('   restore calls before timeout: '+JSON.stringify(served));log('   restore rejected: '+JSON.stringify(rejected));log('   phase B console: '+JSON.stringify(b.errors.slice(0,12)));throw error;}
  await expect(b.page.getByText('正在恢复账号资料…')).toHaveCount(0);
  const restoreMs=Date.now()-started;
@@ -411,7 +415,7 @@ try{
  log(`   account restore ${restoreMs}ms over ${requests.length} library requests / ${fetchRequests.length} block fetches (fetch budget ${fetchRequestBudget})`);
  log(`   canonicalized library: ${cloud.published} blocks / ${Math.round(normalizedPhysicalBytes/1024)}KiB physical, revision ${cloud.revision}`);
  log(`   next focus: ${repeatRequests.length} account requests / ${repeatFetches.length} library block fetches`);
- log(`   restored drafts ${restored}/${DRAFTS}`);
+ log(`   restored drafts ${restored}/${TOTAL_DRAFTS}`);
  log(`   local storage ${storageDiagnostics.engine}/${storageDiagnostics.persistence} SQLite ${storageDiagnostics.sqliteVersion}`);
  log(`   remote Intake ${remoteAcknowledgement?.result?.route??'missing'} / ${remoteMeaning?'stored':'missing'}; incomplete ${remoteIncompleteAcknowledgement?.result?.route??'missing'} / Inbox ${remoteInboxCount}`);
  log(`   boot service calls: ${JSON.stringify([...new Set(bootRequests.map(entry=>entry.path))])}`);
@@ -431,7 +435,7 @@ try{
  if(!repeatSettled)fail('the focus-triggered verification sync never settled');
  if(repeatFetches.length)fail(`a later focus re-fetched canonicalized account blocks ${repeatFetches.length} time(s)`);
  if(repeatRequests.some(entry=>entry.path.startsWith('/sensa/library-sync/')))fail('a fresh foreground return started an unnecessary whole-library sync');
- if(restored!==DRAFTS)fail(`account restore lost content: ${restored}/${DRAFTS} drafts`);
+ if(restored!==TOTAL_DRAFTS)fail(`account restore lost content: ${restored}/${TOTAL_DRAFTS} drafts`);
  if(storageDiagnostics.engine!=='sqlite-wasm'||storageDiagnostics.persistence!=='opfs')fail(`production browser did not use SQLite OPFS: ${JSON.stringify(storageDiagnostics)}`);
  if(!remoteMeaning)fail('the remote Agent Intake was acknowledged without a local Personal Meaning');
  if(remoteIncompleteAcknowledgement?.result?.route!=='inbox'||remoteInboxCount<1)fail('an incomplete Agent Intake did not remain in the local Inbox');

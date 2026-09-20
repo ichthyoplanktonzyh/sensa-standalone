@@ -40,7 +40,8 @@ try{
  assert.equal((await readLearning()).targets.length,1);
  const target=(await readLearning()).targets[0]!;
  const homeBeforeStart=await readHomeLearningProjection(languageContext.languageRouteId);
- assert.equal(homeBeforeStart.targets.length,1);assert.equal(homeBeforeStart.packages.length,1);assert.equal(homeBeforeStart.activeRun,null);assert.equal(homeBeforeStart.dailyLimit,undefined);
+    assert.equal(homeBeforeStart.targets.length,1);assert.equal(homeBeforeStart.availablePackageKeys.size,1);assert.equal(homeBeforeStart.activeRun,null);assert.equal(homeBeforeStart.dailyLimit,undefined);
+    assert(!('content' in homeBeforeStart.targets[0]!.curriculumMemberships[0]!.material),'the home projection must not transfer learning material');
  // A new Profile reuses the registered execution engine and Surface without a new page or branch.
  const base=learningPolicyProfileRegistry.get('lightweight');
  const variant={...structuredClone(base),profileId:'fixture-reused-profile'};

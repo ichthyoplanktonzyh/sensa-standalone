@@ -1,5 +1,11 @@
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 
+import {decodeBackupValue} from './backupCodec';
+import {
+  createHomeLearningStorageProjection,
+  type HomeLearningStorageProjection,
+} from './homeLearningRecords';
+import type {LocalLearningRun,LocalLearningTarget} from '../../learning/runtime/localProtocol';
 import {
   sqliteLibrarySchema,
   sqliteLibrarySchemaVersion,
@@ -56,6 +62,25 @@ export class SqliteRecordDatabase {
     }));
   }
 
+  homeLearningProjection(languageRouteId: string): HomeLearningStorageProjection {
+    const targetRows = this.entries('learningTargets');
+    const packageRows = this.database.exec({
+      sql: "SELECT record_key FROM sensa_records WHERE table_name='packages' ORDER BY record_key",
+      rowMode: 0,
+      returnValue: 'resultRows',
+    }) as unknown[];
+    const activeId = this.decoded<string>('meta', 'learning-active');
+    return createHomeLearningStorageProjection({
+      targets: targetRows.map((row) => this.decode<LocalLearningTarget>(row.encodedValue)),
+      availablePackageKeys: packageRows.map(String),
+      activeRun: activeId
+        ? this.decoded<LocalLearningRun>('learningRuns', activeId) ?? null
+        : null,
+      studyPlans: this.decoded('settings', 'language-route-study-plans') ?? {},
+      languageRouteId,
+    });
+  }
+
   commit(mutation: SqliteMutation): void {
     if (!mutation.clears.length && !mutation.deletes.length && !mutation.puts.length) return;
     this.database.exec("BEGIN IMMEDIATE");
@@ -103,5 +128,14 @@ export class SqliteRecordDatabase {
       returnValue: "resultRows",
     }) as unknown[];
     return Number(rows[0] ?? 0);
+  }
+
+  private decoded<T>(table: SqliteLibraryTable, key: string): T | undefined {
+    const encoded = this.get(table, key);
+    return encoded === null ? undefined : this.decode<T>(encoded);
+  }
+
+  private decode<T>(encoded: string): T {
+    return decodeBackupValue(JSON.parse(encoded)) as T;
   }
 }

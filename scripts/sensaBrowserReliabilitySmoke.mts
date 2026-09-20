@@ -6,7 +6,13 @@ import {
 } from "../packages/contracts/src/sensa/browserTelemetry.ts";
 import { createConsumerRoutes } from "../apps/api/src/sensa/access/consumer.ts";
 import { createBrowserReliability } from "../apps/web/src/observability/browserReliability.ts";
-import { isKnownShellPath } from "../apps/web/src/experience/router/shellLocation.ts";
+import {
+  KNOWN_SHEET_IDS,
+  buildPathname,
+  isKnownShellPath,
+  parseMainStack,
+  retainParamsForStack,
+} from "../apps/web/src/experience/router/shellLocation.ts";
 
 const privateText = "learner-text-and-secret-must-never-leave-the-browser";
 const window = new Window({ url: "https://sensa.test/study/learning-library?meaningId=private" });
@@ -67,4 +73,23 @@ assert.equal((await brokenSink.request("/sensa/browser-events", {
 assert(isKnownShellPath("/study/learning-library"));
 assert(!isKnownShellPath("/study/not-a-screen"));
 assert(!isKnownShellPath("/not-a-screen"));
-console.log("PASS: browser errors are deduplicated and redacted, the API contract is strict/non-fatal, and unknown shell routes are rejected.");
+for (const sheetId of KNOWN_SHEET_IDS) {
+  const path = buildPathname([sheetId]);
+  assert.deepEqual(parseMainStack(path), [sheetId], `single-sheet route did not round-trip: ${path}`);
+  assert(isKnownShellPath(path), `known sheet was rejected: ${path}`);
+}
+for (const stack of [
+  ['s-study', 's-learning-library'],
+  ['s-content', 's-content-library'],
+  ['s-content', 's-content-sense'],
+  ['s-semantic-world', 's-personal-meaning'],
+] as const) {
+  const path = buildPathname(stack);
+  assert.deepEqual(parseMainStack(path), [...stack], `sheet stack did not round-trip: ${path}`);
+}
+assert.deepEqual(
+  retainParamsForStack({senseId:'sense',meaningId:'meaning',targetId:'target'},['s-content','s-content-sense']),
+  {senseId:'sense'},
+  'navigation params must leave history with their owning sheet',
+);
+console.log("PASS: browser errors are deduplicated and redacted, the API contract is strict/non-fatal, and shell routes round-trip while unknown paths are rejected.");

@@ -19,11 +19,10 @@ export interface TargetPlanningOverride {
 }
 
 export const hasTargetPlanningOverride = (
-  overrides: readonly TargetPlanningOverride[],
+  overrides: readonly Pick<TargetPlanningOverride, 'kind'>[],
   kind: TargetPlanningOverrideKind,
 ): boolean => overrides.some((override) => override.kind === kind);
 
 export const hasDeclaredMasteryOverride = (
-  target: Readonly<{ planningOverrides: readonly TargetPlanningOverride[] }>,
+  target: Readonly<{ planningOverrides: readonly Pick<TargetPlanningOverride, 'kind'>[] }>,
 ): boolean => hasTargetPlanningOverride(target.planningOverrides, 'declared_mastery');
-

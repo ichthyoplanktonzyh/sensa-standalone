@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "Sensa",
+  "short_name": "Sensa",
+  "description": "从真实场景与意义出发，建立长期可保持的语言连接。",
+  "lang": "zh-Hans",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F6F4ED",
+  "theme_color": "#F6F4ED",
+  "icons": [
+    {
+      "src": "/brand/sensa/v1/icons/favicon-color.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/sensa/v1/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

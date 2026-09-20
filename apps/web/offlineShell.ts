@@ -22,7 +22,7 @@ function entryAssets(indexHtml:string):string[]{
 export function offlineShell():Plugin{let output='dist';return {configResolved(config){output=resolve(config.root,config.build.outDir);},name:'sensa-offline-shell',apply:'build',async writeBundle(){
  const assets=(await readdir(resolve(output,'assets'))).filter(n=>!n.endsWith('.map')).map(n=>'/assets/'+n);
  const html=await readFile(resolve(output,'index.html'),'utf8');
- const coreFiles=['/index.html',...entryAssets(html)];
+ const coreFiles=['/index.html','/manifest.webmanifest',...entryAssets(html)];
  const coreSet=new Set(coreFiles);
  const optionalFiles=[...assets.filter(path=>!coreSet.has(path)),...offlineBrandFiles];
  const paths=[...coreFiles,...optionalFiles];const hash=createHash('sha256');for(const path of paths)hash.update(await readFile(resolve(output,'.'+path)));

@@ -46,3 +46,22 @@ export const modelTurnInputSchema = z.object({
 }).strict();
 export type ModelTurnInput=z.infer<typeof modelTurnInputSchema>;
 export type ModelTurnBody=ModelTurnInput['body'];
+
+/**
+ * Server-to-browser events for a managed model turn. Provider text remains an
+ * opaque delta here: the feature that owns the response schema decides which
+ * part, if any, is safe to present before final validation.
+ */
+export const modelTurnStreamEventSchema=z.discriminatedUnion('type',[
+  z.object({type:z.literal('delta'),text:z.string().max(32000)}).strict(),
+  z.object({
+    type:z.literal('result'),
+    value:z.object({
+      id:z.string().uuid(),
+      inputDigest:z.string().regex(/^[a-f0-9]{64}$/u),
+      response:z.unknown(),
+    }).strict(),
+  }).strict(),
+  z.object({type:z.literal('error'),code:z.string().min(1).max(100)}).strict(),
+]);
+export type ModelTurnStreamEvent=z.infer<typeof modelTurnStreamEventSchema>;

@@ -1,5 +1,7 @@
 /** Internal protocol between the local-library module and its SQLite Worker. */
 
+import type {HomeLearningStorageProjection} from './homeLearningRecords';
+
 export const sqliteLibraryFile = "/sensa-local-library-v2.sqlite3";
 export const sqlitePoolDirectory = "/sensa-local-library-v2";
 export const sqliteLibrarySchemaVersion = 2;
@@ -41,6 +43,7 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "initialize" }
   | { id: number; kind: "get"; table: SqliteLibraryTable; key: string }
   | { id: number; kind: "entries"; table: SqliteLibraryTable }
+  | { id: number; kind: "homeLearningProjection"; languageRouteId: string }
   | { id: number; kind: "commit"; mutation: SqliteMutation }
   | { id: number; kind: "diagnostics" };
 
@@ -53,6 +56,8 @@ export type SqliteWorkerInput = SqliteWorkerRequest extends infer Request
 export type SqliteWorkerResult =
   | { id: number; ok: true; value: unknown }
   | { id: number; ok: false; error: string };
+
+export type {HomeLearningStorageProjection};
 
 export type SqliteStorageDiagnostics = {
   engine: "sqlite-wasm" | "memory-adapter";

@@ -32,10 +32,11 @@ composition validation 在进入 Run 时按需加载；首页学习队列与内�
 
 生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v2.sqlite3`，持久化在浏览器
 Origin Private File System。SQLite 在专用 Worker 中运行，使用不要求页面启用跨源隔离的
-`opfs-sahpool` VFS；应用用页面生命周期 Web Lock 保证同一时间只有一个数据库 owner，因此第二个
-Sensa 标签页会提示先关闭旧页面，而不是打开竞争连接。UI 只通过本机 `LibraryTransaction` 修改它，
-不直接执行 SQL，也不写派生学习结果。Node 测试使用相同事务接口的内存 Adapter；浏览器交付必须
-另验真实 OPFS。当前版本不读取或迁移旧 IndexedDB 数据。
+`opfs-sahpool` VFS。Web Lock 选出唯一数据库 owner；其他同源 Sensa 标签页通过 BroadcastChannel
+复用 owner 的记录接口，owner 关闭后由剩余页面重新选举，绝不打开竞争连接。跨页共享/排他事务锁覆盖
+完整 `LibraryTransaction`，因此多次读取到一次 commit 的 read/modify/write 序列不会在标签页之间交错。
+UI 只通过本机事务修改数据，不直接执行 SQL，也不写派生学习结果。Node 测试使用相同事务接口的内存
+Adapter；浏览器交付必须另验真实 OPFS 以及 follower 标签页的读写。当前版本不读取或迁移旧 IndexedDB 数据。
 
 Web 应用层的逻辑表与 Personal Semantic World Journey 共用这一物理事务 authority。Journey 的
 意义聚合、注册表事实、Inbox、澄清草稿和 operation receipt 分别保存在 `semanticMeanings`、
@@ -120,10 +121,13 @@ Sensa 原生澄清由 `apps/web/src/experience/personalMeaningJourney/realSemant
 purpose 唯一允许的工具是读取本机已有意义，用于必要的复用判断；澄清不调用在线词汇参考。loop 只保存
 真实工具活动摘要和候选，不保存隐藏推理，也不能调用 Personal Meaning commit 或学习事务。Sensa
 托管连接的每次模型执行仍由服务侧 Genkit flow 完成；用户设备连接仍按既有规则在本页直接执行。
+教师回复通过同一模型执行边界流式返回：托管连接使用 `/sensa/model/turn/stream` 的有界 NDJSON，
+设备连接读取 OpenAI-compatible SSE。传输层只交付原始文本增量；澄清模块只从顶层 `reply` JSON 字符串
+释放可见前缀，完整响应仍必须通过最终 schema 校验才会写入会话。工具参数、清晰度和候选不会作为流式 UI 暴露。
 
 提供方只有两种：Sensa 服务与用户自填的连接。用户连接按保存位置决定执行位置。存在本机库 `providers` 表的连接在本页执行，密钥只保留在页面内存，不进个人库同步，请求由这台设备直接发出。存在账号侧的连接由部署密钥加密保管、在服务端执行；账号级连接登记处是 `db/migrations/0021_sensa_browser_reading.sql` 的 `reading_settings` 表，扩展与 Web 共用同一份，因此一个密钥只需配置一次。两种位置只差两点：本机连接可使用任意 HTTPS 地址与本机 HTTP 服务，但需要对方允许跨域，且不计入服务端用量；账号连接受部署白名单限制（`SENSA_READING_ALLOWED_ORIGINS`），并计入服务端用量。用途指派每次只属于一个登记处，切换用途即清除另一处。阅读的用途内部再按功能指派（划词、网页、字幕、阅读动作、句中意义、输入翻译）：每个功能一个指派键，`scripts/sensaReadingLanguageSmoke.mts` 在快速测试里保证功能清单与指派表、与阅读路由接受的请求枚举三者一致。
 
-`reference` 用途默认由 Sensa 服务承担，并带独立预算池：`sensa_consumer.reference_usage`，上限 `SENSA_REFERENCE_DAILY_LIMIT`（默认 300）。`teacher` 使用 `sensa_consumer.native_semantic_usage`，`content`/`review` 使用 `sensa_consumer.native_content_usage`；后三者的默认上限均由 `modelDailyLimit=30` 控制。参考词典数据源（`api.wiktapi.dev`、`api.dictionaryapi.dev`）与浏览器语音、`dict.youdao.com` 音频不是模型提供方，不在本边界内。
+`reference` 用途默认由 Sensa 服务承担，并带独立预算池：`sensa_consumer.reference_usage`，上限 `SENSA_REFERENCE_DAILY_LIMIT`（默认 300）。`teacher` 使用 `sensa_consumer.native_semantic_usage`，`content`/`review` 使用 `sensa_consumer.native_content_usage`；后三者的默认上限均由 `modelDailyLimit=30` 控制。参考词典数据源（`api.wiktapi.dev`、`api.dictionaryapi.dev`）与浏览器设备语音不是模型提供方，不在本边界内。
 
 模型输出只是候选。语义接受、学习资源校验、加入学习和运行时结算仍由对应应用与领域模块完成。常规测试使用替身，不调用付费模型或 TTS。
 

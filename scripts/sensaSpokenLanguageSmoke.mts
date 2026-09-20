@@ -115,9 +115,13 @@ try{
   assert.equal(spoken.at(-1)!.lang,'en-GB');
   assert.equal(spoken.at(-1)!.voice,'Daniel');
 
-  // The English dictionary voice endpoint is only reachable for English.
+  // Missing approved media stays on-device; reference playback never reaches an
+  // unlicensed dictionary voice endpoint.
+  const playedBeforeEnglishWord=played.length;
   await api.audioService.playWord('hello','us');
-  assert.ok(played.some(url=>url.startsWith('https://dict.youdao.com/dictvoice')),'an English word still uses the dictionary voice');
+  assert.equal(played.length,playedBeforeEnglishWord,'an English word without Package media must not make a network audio request');
+  assert.equal(spoken.at(-1)!.lang,'en-US');
+  assert.equal(spoken.at(-1)!.text,'hello');
 
   // Choosing Spanish changes what every later playback speaks, with no call site
   // passing a language.
@@ -147,7 +151,7 @@ try{
   await api.audioService.playSpeechSynthesis('hello','us');
   assert.equal(spoken.at(-1)!.lang,'en-US','the next playback belongs to the newly chosen language');
 
-  console.log('PASS: device speech and clip lookup follow the learner\u2019s active target language \u2014 locale, voice, corpus and accent filters \u2014 while an English learner keeps the two English accents and the dictionary voice.');
+  console.log('PASS: device speech and clip lookup follow the learner\u2019s active target language \u2014 locale, voice, corpus and accent filters \u2014 without an unlicensed dictionary audio request.');
 }finally{
   await rm(temp,{recursive:true,force:true});
 }

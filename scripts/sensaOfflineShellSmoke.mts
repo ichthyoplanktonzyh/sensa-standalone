@@ -5,6 +5,7 @@ import {offlineBrandFiles} from '../apps/web/offlineShell.ts';
 const listeners=new Map<string,(event:any)=>void>();
 const stores=new Map<string,Map<string,Response>>(),deleted:string[]=[];
 const source=await readFile(new URL('../apps/web/dist/sw.js',import.meta.url),'utf8');
+const manifest=JSON.parse(await readFile(new URL('../apps/web/dist/manifest.webmanifest',import.meta.url),'utf8')) as {display?:string;start_url?:string;icons?:unknown[]};
 let online=true;
 const failedOptional=offlineBrandFiles[0],failedRequests=new Set<string>();
 const cacheFor=(name:string)=>{
@@ -17,6 +18,10 @@ for(const name of ['install','activate']){let work:Promise<unknown>|undefined;li
 const cacheEntries=[...stores.values()];
 const stored=(path:string)=>[...stores.values()].some(cache=>cache.has(path));
 assert(stored('/index.html'));
+assert(stored('/manifest.webmanifest'));
+assert.equal(manifest.display,'standalone');
+assert.equal(manifest.start_url,'/');
+assert((manifest.icons?.length??0)>=2);
 for(const path of offlineBrandFiles)assert(!stored(path),`optional resource ${path} should be cached on demand`);
 assert.equal([...stores.keys()].filter(name=>name.startsWith('sensa-shell-core-')).length,1);
 assert.equal([...stores.keys()].filter(name=>name.startsWith('sensa-shell-optional-')).length,0);

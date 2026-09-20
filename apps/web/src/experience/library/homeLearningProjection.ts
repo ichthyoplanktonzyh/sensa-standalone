@@ -1,12 +1,13 @@
-import type {LocalLearningRun,LocalLearningTarget} from '../../data/library/learning';
-import type {InstalledPackage} from '../../data/library/packageRecords';
-import {readLibrary} from '../../data/library/store';
-import {readStudyPlans} from '../../data/library/studyPlans';
+import type {
+ HomeLearningStorageProjection,
+ HomeLearningTargetRecord,
+} from '../../data/library/homeLearningRecords';
+import {readHomeLearningRecords} from '../../data/library/store';
 
 export interface HomeLearningProjection{
- readonly targets:readonly LocalLearningTarget[];
- readonly packages:readonly InstalledPackage[];
- readonly activeRun:LocalLearningRun|null;
+ readonly targets:readonly HomeLearningTargetRecord[];
+ readonly availablePackageKeys:ReadonlySet<string>;
+ readonly activeRun:HomeLearningStorageProjection['activeRun'];
  readonly dailyLimit:number|undefined;
 }
 
@@ -15,13 +16,12 @@ export interface HomeLearningProjection{
  * catalogs, history, personal preparation and learning events stay behind the
  * full workspace controller until the learner opens one of those surfaces.
  */
-export const readHomeLearningProjection=(languageRouteId:string):Promise<HomeLearningProjection>=>readLibrary(async tx=>{
- const activeId=await tx.get<string>('meta','learning-active');
- const studyPlans=await readStudyPlans(tx);
+export const readHomeLearningProjection=async(languageRouteId:string):Promise<HomeLearningProjection>=>{
+ const stored=await readHomeLearningRecords(languageRouteId);
  return {
-  targets:await tx.all<LocalLearningTarget>('learningTargets'),
-  packages:await tx.all<InstalledPackage>('packages'),
-  activeRun:activeId?await tx.get<LocalLearningRun>('learningRuns',activeId)??null:null,
-  dailyLimit:studyPlans[languageRouteId]?.dailyNewSenseLimit,
+  targets:stored.targets,
+  availablePackageKeys:new Set(stored.availablePackageKeys),
+  activeRun:stored.activeRun,
+  dailyLimit:stored.dailyLimit,
  };
-});
+};

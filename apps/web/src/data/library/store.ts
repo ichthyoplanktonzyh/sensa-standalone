@@ -4,6 +4,7 @@ import {canonicalConsumerJson} from '@sensa/contracts/sensa/canonical-json';
 import { decodeBackupValue, encodeBackupValue } from "./backupCodec";
 import { sqliteRecordAdapter } from "./sqliteAdapter";
 import {
+  type HomeLearningStorageProjection,
   sqliteLibraryTables,
   type SqliteLibraryTable,
   type SqliteMutation,
@@ -36,8 +37,11 @@ const storageCall = async <T>(work: () => Promise<T>): Promise<T> => {
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "";
     if (/full|quota/iu.test(message)) throw new Error("localFlow.storageFull", { cause });
-    if (/lock|busy|AbortError|TimeoutError|timed out/iu.test(message)) {
-      throw new Error("localFlow.closeOldTabs", { cause });
+    if (message === 'sqlite_owner_incompatible') {
+      throw new Error('localFlow.closeOldTabs', { cause });
+    }
+    if (/coordination|lock|busy|AbortError|TimeoutError|timed out/iu.test(message)) {
+      throw new Error("localFlow.storageBusy", { cause });
     }
     if (message.startsWith("localFlow.")) throw cause;
     throw new Error("localFlow.storageWrite", { cause });
@@ -137,13 +141,35 @@ const runSerially = <T>(work: () => Promise<T>): Promise<T> => {
   return next;
 };
 
+async function runAcrossPages<T>(
+  mode: "readonly" | "readwrite",
+  work: () => Promise<T>,
+): Promise<T> {
+  if (typeof navigator === "undefined" || !navigator.locks) return work();
+  try {
+    return await navigator.locks.request(
+      "sensa-library-transaction-v1",
+      {
+        mode: mode === "readonly" ? "shared" : "exclusive",
+        signal: AbortSignal.timeout(45_000),
+      },
+      work,
+    );
+  } catch (cause) {
+    if (cause instanceof DOMException && ['AbortError', 'TimeoutError'].includes(cause.name)) {
+      throw new Error('localFlow.storageBusy', { cause });
+    }
+    throw cause;
+  }
+}
+
 /** Only local SQLite requests belong in work; network and hashing finish before entry. */
 async function transaction<T>(
   mode: "readonly" | "readwrite",
   work: (tx: LibraryTransaction) => Promise<T>,
   kind: "content" | "state" = "content",
 ): Promise<T> {
-  return runSerially(async () => {
+  return runSerially(() => runAcrossPages(mode, async () => {
     const adapter = await storageCall(sqliteRecordAdapter);
     const library = new LibraryTransaction(mode, adapter);
     const value = await work(library);
@@ -170,7 +196,7 @@ async function transaction<T>(
       }
     }
     return value;
-  });
+  }));
 }
 
 /** Reserved for validated full-library restore; it remains one SQLite transaction. */
@@ -181,6 +207,17 @@ export const writeLibraryState = <T>(work: (tx: LibraryTransaction) => Promise<T
   transaction("readwrite", work, "state");
 export const readLibrary = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>
   transaction("readonly", work);
+
+/**
+ * A Worker-owned, single-snapshot read for the home queue. It intentionally
+ * bypasses the page transaction chain: the Worker returns one immutable compact
+ * result, so it cannot observe a partial SQLite commit or staged page writes.
+ */
+export const readHomeLearningRecords = async (
+  languageRouteId: string,
+): Promise<HomeLearningStorageProjection> => storageCall(async () => (
+  await sqliteRecordAdapter()
+).homeLearningProjection(languageRouteId));
 
 export const readLocalLibraryRevision = (tx: LibraryTransaction): Promise<number> =>
   tx.get<number>("meta", localLibraryRevisionKey).then((value) => value ?? 0);

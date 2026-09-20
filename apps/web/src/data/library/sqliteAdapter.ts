@@ -1,4 +1,5 @@
 import type {
+  HomeLearningStorageProjection,
   SqliteLibraryTable,
   SqliteMutation,
   SqliteStorageDiagnostics,
@@ -7,15 +8,20 @@ import type {
   SqliteWorkerResult,
 } from "./sqliteProtocol";
 import {sqliteLibrarySchemaVersion} from './sqliteProtocol';
+import {decodeBackupValue} from './backupCodec';
+import {createHomeLearningStorageProjection} from './homeLearningRecords';
+import type {LocalLearningRun,LocalLearningTarget} from '../../learning/runtime/localProtocol';
+import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from './sqliteCoordinator';
 
 export interface SqliteRecordAdapter {
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
+  homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection>;
   commit(mutation: SqliteMutation): Promise<void>;
   diagnostics(): Promise<SqliteStorageDiagnostics>;
 }
 
-class WorkerSqliteAdapter implements SqliteRecordAdapter {
+class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBackend {
   private readonly worker = new Worker(new URL("./sqliteWorker.ts", import.meta.url), {
     type: "module",
     name: "sensa-sqlite",
@@ -53,6 +59,10 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter {
     return this.send({ kind: "entries", table }) as Promise<Array<{ key: string; encodedValue: string }>>;
   }
 
+  homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {
+    return this.send({ kind: "homeLearningProjection", languageRouteId }) as Promise<HomeLearningStorageProjection>;
+  }
+
   async commit(mutation: SqliteMutation): Promise<void> {
     await this.send({ kind: "commit", mutation });
   }
@@ -86,6 +96,25 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
       .sort((left, right) => left.key.localeCompare(right.key));
   }
 
+  async homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {
+    const decode = <T>(encoded: string | undefined): T | undefined => encoded === undefined
+      ? undefined
+      : decodeBackupValue(JSON.parse(encoded)) as T;
+    const targets = (await this.entries('learningTargets'))
+      .map((row) => decode<LocalLearningTarget>(row.encodedValue)!);
+    const availablePackageKeys = (await this.entries('packages')).map((row) => row.key);
+    const activeId = decode<string>(this.records.get('meta\u0000learning-active'));
+    return createHomeLearningStorageProjection({
+      targets,
+      availablePackageKeys,
+      activeRun: activeId
+        ? decode<LocalLearningRun>(this.records.get(`learningRuns\u0000${activeId}`)) ?? null
+        : null,
+      studyPlans: decode(this.records.get('settings\u0000language-route-study-plans')) ?? {},
+      languageRouteId,
+    });
+  }
+
   async commit(mutation: SqliteMutation): Promise<void> {
     const next = new Map(this.records);
     for (const table of mutation.clears) {
@@ -115,31 +144,12 @@ const browserSqliteAvailable = (): boolean =>
 
 let adapter: Promise<SqliteRecordAdapter> | undefined;
 
-/**
- * OPFS SAH pools intentionally have one owner. The lifetime Web Lock makes the
- * database Worker that owner; another tab receives an honest error instead of
- * opening a competing SQLite connection. A reload gets a short grace period
- * for the previous document to release its lock.
- */
 async function browserAdapter(): Promise<SqliteRecordAdapter> {
   if (!navigator.locks) throw new Error("sqlite_web_locks_unavailable");
-  return new Promise((resolve, reject) => {
-    const signal = AbortSignal.timeout(2500);
-    void navigator.locks.request(
-      "sensa-sqlite-owner-v1",
-      { mode: "exclusive", signal },
-      async () => {
-        try {
-          const driver = new WorkerSqliteAdapter();
-          await driver.initialize();
-          resolve(driver);
-          await new Promise<void>(() => { /* Hold the OPFS ownership lock for this page. */ });
-        } catch (error) {
-          reject(error);
-        }
-      },
-    ).catch((error) => reject(error));
-  });
+  if (typeof BroadcastChannel === "undefined") throw new Error("sqlite_broadcast_channel_unavailable");
+  const coordinated = new CoordinatedSqliteAdapter(() => new WorkerSqliteAdapter());
+  await coordinated.initialize();
+  return coordinated;
 }
 
 export function sqliteRecordAdapter(): Promise<SqliteRecordAdapter> {

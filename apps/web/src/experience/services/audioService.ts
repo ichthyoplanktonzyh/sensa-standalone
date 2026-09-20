@@ -92,11 +92,9 @@ class AudioService {
    * @param word 目标语言单词
    * @param type 'us' 美式发音 (默认) | 'uk' 英式发音；仅英语有意义
    *
-   * The language is the learner's active target language, read per playback. For
-   * English nothing changes. Another language has no packaged media and no
-   * English dictionary voice that could pronounce it, so it goes straight to the
-   * device synthesizer with its own locale instead of a URL that would answer
-   * with an English reading of a foreign word.
+   * The language is the learner's active target language, read per playback.
+   * Approved Package media wins; otherwise every language uses the device voice.
+   * Reference playback must not depend on an unlicensed dictionary endpoint.
    */
   public async playWord(
     word: string,
@@ -114,13 +112,8 @@ class AudioService {
     if (packagedUrl) {
       return this.playAudioAsset(packagedUrl, cleanWord, type, false, options);
     }
-    // Another language has no packaged media and no English resource that could
-    // pronounce it, so it speaks with its own locale instead of a URL that would
-    // answer with an English reading of a foreign word.
-    if (!english) return this.playSpeechSynthesis(cleanWord, type, options);
-    const typeCode = type === 'uk' ? 1 : 2;
-    const audioUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(cleanWord)}&type=${typeCode}`;
-    return this.playAudioUrl(audioUrl, cleanWord, type, options);
+    this.stop();
+    return this.startSpeechSynthesis(cleanWord, type, options, speechLocale);
   }
 
   /** Play a legacy audio URL, falling back to local speech synthesis. */

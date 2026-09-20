@@ -177,6 +177,11 @@ export interface SemanticAgentTurnInput {
   /** Cancels the whole bounded loop, including local reference lookups. */
   signal?: AbortSignal;
   /**
+   * Ephemeral display text for the in-flight assistant reply. It is never
+   * persisted; the validated turn result remains the only conversation fact.
+   */
+  onAssistantText?: (text: string) => void;
+  /**
    * The languages this turn is about. The agent proposes an expression in the
    * Target Language and explains the sense in the Support Language, so the
    * caller pins the active Route context once per turn and hands it over.

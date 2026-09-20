@@ -3,8 +3,7 @@ import '../../i18n/accountResources';
 import {useTranslation} from 'react-i18next';
 import {HomeScreen} from '../components/HomeScreen';
 import {openLibrary,observeLibrary} from '../../data/library/store';
-import type {InstalledPackage} from '../../data/library/packageRecords';
-import type {LocalLearningRun,LocalLearningTarget} from '../../data/library/learning';
+import type {HomeLearningStorageProjection,HomeLearningTargetRecord} from '../../data/library/homeLearningRecords';
 import {localCurriculumMembershipForContext} from '../../learning/runtime/localCurriculum';
 import {nextLearningQueueChangeAt,resolveLearningQueue} from './learningQueue';
 import {useLanguageRoutes} from './useLanguageRoutes';
@@ -21,9 +20,9 @@ export function HomeLearningController({active=true}:{active?:boolean}){
  const {libraryAvailability}=useAccountExperience();
  const {goMain,setViewMode}=useShellNavigation();
  const {activeRoute,context:languageContext}=useLanguageRoutes();
- const [targets,setTargets]=useState<readonly LocalLearningTarget[]>([]);
- const [packages,setPackages]=useState<readonly InstalledPackage[]>([]);
- const [activeRun,setActiveRun]=useState<LocalLearningRun|null>(null);
+ const [targets,setTargets]=useState<readonly HomeLearningTargetRecord[]>([]);
+ const [availablePackageKeys,setAvailablePackageKeys]=useState<ReadonlySet<string>>(new Set());
+ const [activeRun,setActiveRun]=useState<HomeLearningStorageProjection['activeRun']>(null);
  const [dailyLimit,setDailyLimit]=useState<number|undefined>();
  const [clock,setClock]=useState(Date.now());
  const [summaryReady,setSummaryReady]=useState(false);
@@ -34,7 +33,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
  const refresh=async()=>{
   const projection=await readHomeLearningProjection(languageContext.languageRouteId);
   setTargets(projection.targets);
-  setPackages(projection.packages);
+  setAvailablePackageKeys(projection.availablePackageKeys);
   setActiveRun(projection.activeRun);
   setDailyLimit(projection.dailyLimit);
   setClock(Date.now());
@@ -57,9 +56,11 @@ export function HomeLearningController({active=true}:{active?:boolean}){
  })),[targets,languageContext]);
  const readinessByTarget=useMemo(()=>Object.fromEntries(targets.map(target=>{
   const membership=membershipByTarget[target.id];
-  const pack=membership?.packageKey?packages.find(candidate=>candidate.key===membership.packageKey):undefined;
+  const pack=membership?.packageKey&&availablePackageKeys.has(membership.packageKey)
+   ?{key:membership.packageKey}
+   :undefined;
   return [target.id,homeTargetReadiness(target,membership,pack)];
- })) as Readonly<Record<string,'ready'|'blocked'>>,[targets,membershipByTarget,packages]);
+ })) as Readonly<Record<string,'ready'|'blocked'>>,[targets,membershipByTarget,availablePackageKeys]);
  const queue=useMemo(()=>resolveLearningQueue({targets,languageRouteId:activeRoute.id,readiness:readinessByTarget,clock,dailyLimit}),[targets,activeRoute.id,readinessByTarget,clock,dailyLimit]);
  const nextQueueChangeAt=useMemo(()=>nextLearningQueueChangeAt({targets,languageRouteId:activeRoute.id,readiness:readinessByTarget,clock,dailyLimit}),[targets,activeRoute.id,readinessByTarget,clock,dailyLimit]);
  useEffect(()=>{
