@@ -50,12 +50,13 @@ assert.equal(await store.readLibrary((tx) => tx.get('drafts', 'rolled-back')), u
 const diagnostics = await store.readLibraryStorageDiagnostics();
 assert.deepEqual(
   { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
-  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 2 },
+  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 3 },
 );
 
-const [{ default: sqlite3InitModule }, { SqliteRecordDatabase }] = await Promise.all([
+const [{ default: sqlite3InitModule }, { SqliteRecordDatabase }, { encodeBackupValue }] = await Promise.all([
   import('@sqlite.org/sqlite-wasm'),
   import('../apps/web/src/data/library/sqliteDatabase.ts'),
+  import('../apps/web/src/data/library/backupCodec.ts'),
 ]);
 const sqlite3 = await sqlite3InitModule();
 const database = new SqliteRecordDatabase(
@@ -78,7 +79,63 @@ assert.throws(() => database.commit({
   deletes: [],
   puts: [{ table: 'semanticWorld', key: 'journey', encodedValue: '{}' }],
 } as any), /CHECK constraint failed|constraint failed/iu);
+
+const encoded = (value: unknown) => JSON.stringify(encodeBackupValue(value));
+const target = (id: string, route: string, packageKey: string) => ({
+  id,
+  curriculumMemberships: [{
+    id: `${id}-membership`,
+    languageContext: {
+      languageRouteId: route,
+      languageRouteRevision: 1,
+      targetLanguageTag: 'en',
+      supportLanguageTag: 'zh',
+    },
+    packageKey,
+    material: { snapshot: { validationStatus: 'validated' } },
+  }],
+  policyAssignment: { profileId: 'lightweight' },
+  committedPolicy: null,
+  planningOverrides: [],
+  introducedLanguageRouteId: null,
+  startedAt: null,
+  completedAt: null,
+  memory: { dueAt: new Date('2026-09-14T00:00:00.000Z') },
+  relearnAt: null,
+});
+database.commit({
+  clears: [],
+  deletes: [],
+  puts: [
+    { table: 'packages', key: 'package-a', encodedValue: encoded({ key: 'package-a' }) },
+    { table: 'packages', key: 'package-b', encodedValue: encoded({ key: 'package-b' }) },
+    { table: 'learningTargets', key: 'target-a', encodedValue: encoded(target('target-a', 'route-a', 'package-a')) },
+    { table: 'learningTargets', key: 'target-b', encodedValue: encoded(target('target-b', 'route-b', 'package-b')) },
+  ],
+});
+assert.equal(database.count('learningTargets'), 2);
+const routeA = database.homeLearningProjection('route-a');
+assert.deepEqual(routeA.targets.map((entry) => entry.id), ['target-a']);
+assert.deepEqual(routeA.availablePackageKeys, ['package-a']);
+assert(routeA.targets[0]?.memory?.dueAt instanceof Date);
+database.commit({
+  clears: [],
+  deletes: [{ table: 'learningTargets', key: 'target-b' }],
+  puts: [{
+    table: 'learningTargets',
+    key: 'target-a',
+    encodedValue: encoded({
+      ...target('target-a', 'route-a', 'package-a'),
+      curriculumMemberships: [{
+        ...target('target-a', 'route-a', 'package-a').curriculumMemberships[0],
+        status: 'superseded',
+      }],
+    }),
+  }],
+});
+assert.equal(database.count('learningTargets'), 1);
+assert.deepEqual(database.homeLearningProjection('route-a').targets, []);
 assert.match(database.diagnostics().sqliteVersion, /^3\./u);
 database.close();
 
-console.log('PASS: Library v2 preserves typed values, commits atomically, replays exact operations and rejects conflicts; SQLite accepts normalized semantic/media rows and rejects the removed semanticWorld table. Browser OPFS is checked separately.');
+console.log('PASS: Library records preserve typed values and atomic replay; SQLite schema v3 maintains route-indexed learning projections, native counts and logical-table constraints. Browser OPFS is checked separately.');

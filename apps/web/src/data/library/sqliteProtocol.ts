@@ -2,9 +2,9 @@
 
 import type {HomeLearningStorageProjection} from './homeLearningRecords';
 
-export const sqliteLibraryFile = "/sensa-local-library-v2.sqlite3";
-export const sqlitePoolDirectory = "/sensa-local-library-v2";
-export const sqliteLibrarySchemaVersion = 2;
+export const sqliteLibraryFile = "/sensa-local-library-v3.sqlite3";
+export const sqlitePoolDirectory = "/sensa-local-library-v3";
+export const sqliteLibrarySchemaVersion = 3;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -43,6 +43,7 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "initialize" }
   | { id: number; kind: "get"; table: SqliteLibraryTable; key: string }
   | { id: number; kind: "entries"; table: SqliteLibraryTable }
+  | { id: number; kind: "count"; table: SqliteLibraryTable }
   | { id: number; kind: "homeLearningProjection"; languageRouteId: string }
   | { id: number; kind: "commit"; mutation: SqliteMutation }
   | { id: number; kind: "diagnostics" };
@@ -85,5 +86,24 @@ CREATE TABLE IF NOT EXISTS sensa_records(
   value_json TEXT NOT NULL CHECK(json_valid(value_json)),
   PRIMARY KEY(table_name,record_key)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sensa_learning_targets(
+  record_key TEXT NOT NULL PRIMARY KEY,
+  projection_value_json TEXT NOT NULL CHECK(json_valid(projection_value_json)),
+  introduced_language_route_id TEXT,
+  started_at TEXT
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sensa_learning_route_targets(
+  language_route_id TEXT NOT NULL,
+  target_key TEXT NOT NULL,
+  membership_id TEXT NOT NULL,
+  package_key TEXT,
+  PRIMARY KEY(language_route_id,target_key,membership_id),
+  FOREIGN KEY(target_key) REFERENCES sensa_learning_targets(record_key) ON DELETE CASCADE
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS sensa_learning_route_targets_target
+  ON sensa_learning_route_targets(target_key);
+CREATE INDEX IF NOT EXISTS sensa_learning_targets_introduced
+  ON sensa_learning_targets(introduced_language_route_id,started_at)
+  WHERE introduced_language_route_id IS NOT NULL AND started_at IS NOT NULL;
 PRAGMA user_version=${sqliteLibrarySchemaVersion};
 `;

@@ -17,6 +17,7 @@ export interface CoordinatedSqliteBackend {
   initialize(): Promise<SqliteStorageDiagnostics>;
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
+  count(table: SqliteLibraryTable): Promise<number>;
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection>;
   commit(mutation: SqliteMutation): Promise<void>;
   diagnostics(): Promise<SqliteStorageDiagnostics>;
@@ -69,6 +70,10 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
 
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>> {
     return this.call({ kind: 'entries', table }) as Promise<Array<{ key: string; encodedValue: string }>>;
+  }
+
+  count(table: SqliteLibraryTable): Promise<number> {
+    return this.call({ kind: 'count', table }) as Promise<number>;
   }
 
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {
@@ -218,6 +223,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'initialize': return backend.initialize();
       case 'get': return backend.get(input.table, input.key);
       case 'entries': return backend.entries(input.table);
+      case 'count': return backend.count(input.table);
       case 'homeLearningProjection': return backend.homeLearningProjection(input.languageRouteId);
       case 'commit': return backend.commit(input.mutation);
       case 'diagnostics': return backend.diagnostics();

@@ -30,13 +30,17 @@ composition validation 在进入 Run 时按需加载；首页学习队列与内�
 
 ## 数据与同步
 
-生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v2.sqlite3`，持久化在浏览器
+生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v3.sqlite3`，持久化在浏览器
 Origin Private File System。SQLite 在专用 Worker 中运行，使用不要求页面启用跨源隔离的
 `opfs-sahpool` VFS。Web Lock 选出唯一数据库 owner；其他同源 Sensa 标签页通过 BroadcastChannel
 复用 owner 的记录接口，owner 关闭后由剩余页面重新选举，绝不打开竞争连接。跨页共享/排他事务锁覆盖
 完整 `LibraryTransaction`，因此多次读取到一次 commit 的 read/modify/write 序列不会在标签页之间交错。
 UI 只通过本机事务修改数据，不直接执行 SQL，也不写派生学习结果。Node 测试使用相同事务接口的内存
 Adapter；浏览器交付必须另验真实 OPFS 以及 follower 标签页的读写。当前版本不读取或迁移旧 IndexedDB 数据。
+学习事实仍以逻辑 record 为写入 authority；SQLite 在同一事务内维护可重建的 Target 查询投影和
+Route–Target 关系索引。首页只读取当前 Route 的 Target、该 Route 今日已占用的新词额度以及实际引用的
+Package key，不遍历或解析其他 Route 的 Target。只需要数量的恢复/清理查询使用 SQLite `COUNT(*)`，不把
+整表 JSON 传回页面。物理 schema v3 使用新的 OPFS 文件；因当前无用户库数据，不迁移或读取 v2 文件。
 
 Web 应用层的逻辑表与 Personal Semantic World Journey 共用这一物理事务 authority。Journey 的
 意义聚合、注册表事实、Inbox、澄清草稿和 operation receipt 分别保存在 `semanticMeanings`、

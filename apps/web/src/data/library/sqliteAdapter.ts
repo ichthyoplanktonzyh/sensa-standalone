@@ -16,6 +16,7 @@ import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from './sqliteCo
 export interface SqliteRecordAdapter {
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
+  count(table: SqliteLibraryTable): Promise<number>;
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection>;
   commit(mutation: SqliteMutation): Promise<void>;
   diagnostics(): Promise<SqliteStorageDiagnostics>;
@@ -59,6 +60,10 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
     return this.send({ kind: "entries", table }) as Promise<Array<{ key: string; encodedValue: string }>>;
   }
 
+  count(table: SqliteLibraryTable): Promise<number> {
+    return this.send({ kind: "count", table }) as Promise<number>;
+  }
+
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {
     return this.send({ kind: "homeLearningProjection", languageRouteId }) as Promise<HomeLearningStorageProjection>;
   }
@@ -94,6 +99,13 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
       .filter(([key]) => key.startsWith(prefix))
       .map(([key, encodedValue]) => ({ key: key.slice(prefix.length), encodedValue }))
       .sort((left, right) => left.key.localeCompare(right.key));
+  }
+
+  async count(table: SqliteLibraryTable): Promise<number> {
+    const prefix = `${table}\u0000`;
+    let count = 0;
+    for (const key of this.records.keys()) if (key.startsWith(prefix)) count++;
+    return count;
   }
 
   async homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {

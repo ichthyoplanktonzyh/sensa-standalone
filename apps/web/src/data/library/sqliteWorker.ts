@@ -41,6 +41,7 @@ const message = async (request: SqliteWorkerRequest): Promise<unknown> => {
     case "initialize": return db.initialize();
     case "get": return db.get(request.table, request.key);
     case "entries": return db.entries(request.table);
+    case "count": return db.count(request.table);
     case "homeLearningProjection": return db.homeLearningProjection(request.languageRouteId);
     case "commit": db.commit(request.mutation); return null;
     case "diagnostics": return db.diagnostics();

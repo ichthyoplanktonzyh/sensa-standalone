@@ -11,7 +11,7 @@ import {
   type SqliteStorageDiagnostics,
 } from "./sqliteProtocol";
 
-export const libraryDatabaseName = "sensa-local-library-v2.sqlite3";
+export const libraryDatabaseName = "sensa-local-library-v3.sqlite3";
 export const libraryTables = sqliteLibraryTables;
 export type Table = SqliteLibraryTable;
 export const localLibraryRevisionKey = "local-content-revision";
@@ -88,6 +88,13 @@ export class LibraryTransaction {
 
   async all<T>(table: Table): Promise<T[]> {
     return (await this.entries(table)).map((entry) => entry.value as T);
+  }
+
+  async count(table: Table): Promise<number> {
+    if (this.clears.has(table) || this.deletes.has(table) || this.puts.has(table)) {
+      return (await this.entries(table)).length;
+    }
+    return storageCall(() => this.adapter.count(table));
   }
 
   put(table: Table, inputKey: string, value: unknown): void {

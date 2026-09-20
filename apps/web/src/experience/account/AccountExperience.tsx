@@ -46,7 +46,7 @@ export default function AccountExperience({children,onReturnToLanding}:{children
    if(gen!==generation.current)return;
    const cachedSubject=cachedAuthSubject();
    if(!session&&cachedSubject===null){setWebSession('absent');setOnlineService(false);setLibraryAvailability('restoring');setLocal(false);setReady(true);return;}
-   const stored=await readLibrary(async tx=>{const checkpoint=await tx.get<{status?:string}>('meta','cloud-sync');return {owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out'),usable:checkpoint?.status==='synced'||!!(await tx.get('semanticState','root'))||(await tx.all('drafts')).length>0||(await tx.all('packages')).length>0||(await tx.all('learningTargets')).length>0};});
+   const stored=await readLibrary(async tx=>{const checkpoint=await tx.get<{status?:string}>('meta','cloud-sync');return {owner:await tx.get<Owner>('meta','service-owner'),identity:await tx.get('meta','identity'),signedOut:await tx.get<boolean>('meta','signed-out'),usable:checkpoint?.status==='synced'||!!(await tx.get('semanticState','root'))||await tx.count('drafts')>0||await tx.count('packages')>0||await tx.count('learningTargets')>0};});
    if(gen!==generation.current)return;
    if(stored.identity&&!stored.signedOut)await preloadMedia();
    if(gen!==generation.current)return;

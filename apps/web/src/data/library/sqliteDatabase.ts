@@ -1,7 +1,8 @@
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 
-import {decodeBackupValue} from './backupCodec';
+import {decodeBackupValue,encodeBackupValue} from './backupCodec';
 import {
+  createHomeLearningTargetRecord,
   createHomeLearningStorageProjection,
   type HomeLearningStorageProjection,
 } from './homeLearningRecords';
@@ -62,16 +63,51 @@ export class SqliteRecordDatabase {
     }));
   }
 
+  count(table: SqliteLibraryTable): number {
+    const rows = this.database.exec({
+      sql: "SELECT COUNT(*) FROM sensa_records WHERE table_name=?",
+      bind: [table],
+      rowMode: 0,
+      returnValue: "resultRows",
+    }) as unknown[];
+    return Number(rows[0] ?? 0);
+  }
+
   homeLearningProjection(languageRouteId: string): HomeLearningStorageProjection {
-    const targetRows = this.entries('learningTargets');
+    const now = new Date();
+    const dayStart = new Date(now);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    const targetRows = this.database.exec({
+      sql: `SELECT projection_value_json
+            FROM sensa_learning_targets AS target
+            WHERE EXISTS(
+              SELECT 1 FROM sensa_learning_route_targets AS route
+              WHERE route.target_key=target.record_key AND route.language_route_id=?
+            ) OR (
+              target.introduced_language_route_id=?
+              AND target.started_at>=? AND target.started_at<?
+            )
+            ORDER BY record_key`,
+      bind: [languageRouteId, languageRouteId, dayStart.toISOString(), dayEnd.toISOString()],
+      rowMode: 0,
+      returnValue: 'resultRows',
+    }) as unknown[];
     const packageRows = this.database.exec({
-      sql: "SELECT record_key FROM sensa_records WHERE table_name='packages' ORDER BY record_key",
+      sql: `SELECT DISTINCT package.record_key
+            FROM sensa_learning_route_targets AS route
+            JOIN sensa_records AS package
+              ON package.table_name='packages' AND package.record_key=route.package_key
+            WHERE route.language_route_id=?
+            ORDER BY package.record_key`,
+      bind: [languageRouteId],
       rowMode: 0,
       returnValue: 'resultRows',
     }) as unknown[];
     const activeId = this.decoded<string>('meta', 'learning-active');
     return createHomeLearningStorageProjection({
-      targets: targetRows.map((row) => this.decode<LocalLearningTarget>(row.encodedValue)),
+      targets: targetRows.map((row) => this.decode<LocalLearningTarget>(String(row))),
       availablePackageKeys: packageRows.map(String),
       activeRun: activeId
         ? this.decoded<LocalLearningRun>('learningRuns', activeId) ?? null
@@ -87,12 +123,19 @@ export class SqliteRecordDatabase {
     try {
       for (const table of mutation.clears) {
         this.database.exec({ sql: "DELETE FROM sensa_records WHERE table_name=?", bind: [table] });
+        if (table === 'learningTargets') this.database.exec('DELETE FROM sensa_learning_targets');
       }
       for (const item of mutation.deletes) {
         this.database.exec({
           sql: "DELETE FROM sensa_records WHERE table_name=? AND record_key=?",
           bind: [item.table, item.key],
         });
+        if (item.table === 'learningTargets') {
+          this.database.exec({
+            sql: 'DELETE FROM sensa_learning_targets WHERE record_key=?',
+            bind: [item.key],
+          });
+        }
       }
       for (const item of mutation.puts) {
         this.database.exec({
@@ -100,6 +143,9 @@ export class SqliteRecordDatabase {
                 ON CONFLICT(table_name,record_key) DO UPDATE SET value_json=excluded.value_json`,
           bind: [item.table, item.key, item.encodedValue],
         });
+        if (item.table === 'learningTargets') {
+          this.upsertLearningTargetProjection(item.key, item.encodedValue);
+        }
       }
       this.database.exec("COMMIT");
     } catch (error) {
@@ -137,5 +183,43 @@ export class SqliteRecordDatabase {
 
   private decode<T>(encoded: string): T {
     return decodeBackupValue(JSON.parse(encoded)) as T;
+  }
+
+  private upsertLearningTargetProjection(key: string, encodedValue: string): void {
+    const target = this.decode<LocalLearningTarget>(encodedValue);
+    const projection = createHomeLearningTargetRecord(target);
+    this.database.exec({
+      sql: `INSERT INTO sensa_learning_targets(
+              record_key,projection_value_json,introduced_language_route_id,started_at
+            ) VALUES(?,?,?,?)
+            ON CONFLICT(record_key) DO UPDATE SET
+              projection_value_json=excluded.projection_value_json,
+              introduced_language_route_id=excluded.introduced_language_route_id,
+              started_at=excluded.started_at`,
+      bind: [
+        key,
+        JSON.stringify(encodeBackupValue(projection)),
+        target.introducedLanguageRouteId,
+        target.startedAt,
+      ],
+    });
+    this.database.exec({
+      sql: 'DELETE FROM sensa_learning_route_targets WHERE target_key=?',
+      bind: [key],
+    });
+    for (const membership of target.curriculumMemberships) {
+      if (membership.status === 'superseded') continue;
+      this.database.exec({
+        sql: `INSERT INTO sensa_learning_route_targets(
+                language_route_id,target_key,membership_id,package_key
+              ) VALUES(?,?,?,?)`,
+        bind: [
+          membership.languageContext.languageRouteId,
+          key,
+          membership.id,
+          membership.packageKey,
+        ],
+      });
+    }
   }
 }
