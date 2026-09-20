@@ -1,4 +1,5 @@
 import {
+  LEARNING_RESOURCE_DEFINITIONS,
   LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_KEY,
   LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_VERSION,
   LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION,
@@ -340,9 +341,7 @@ const authoritativeProducer: CandidateProducer = {
       materialRoleKey: 'target_expression',
       ordinal: 0,
       contentPayload: {
-        surface: sensaLightweightExpressionSnapshotSchema.parse(
-          context.expressionArtifact.payload,
-        ).surface,
+        ...sensaLightweightExpressionSnapshotSchema.parse(context.expressionArtifact.payload),
       },
       sourceArtifactIds: [context.expressionArtifact.artifactId],
       productionMethod: 'deterministic_transform',
@@ -464,36 +463,24 @@ const pedagogicalProducer: CandidateProducer = {
         producerPolicyId: 'lightweight.pedagogical-provisioning',
       });
     }
+    if (experience?.sceneRealization) candidates.push({
+      materialRoleKey:'scene_realization', ordinal:0,
+      contentPayload:{...experience.sceneRealization,experienceResourceKey:'experience_recall_cue:0'},
+      sourceArtifactIds, productionMethod:'deterministic_transform',producerProvider:'sensa-published-resource',producerModel:null,producerPolicyId:'lightweight.pedagogical-provisioning',
+    });
     return candidates;
   },
 };
 
 /** No TTS is performed here. Only an already sourced pronunciation fact may pass this adapter. */
 const objectiveResourceProducer: CandidateProducer = {
-  produce: (context, acceptedCandidates) => {
-    const pronunciationArtifact = context.referenceArtifacts.find((candidate) =>
-      candidate.payload.factKind === 'pronunciation');
-    const expressionCandidate = acceptedCandidates.find((candidate) =>
-      candidate.materialRoleKey === 'target_expression');
-    if (!pronunciationArtifact || !expressionCandidate) return [];
-    const fact = sensaLightweightReferenceFactSchema.parse(pronunciationArtifact.payload);
-    if (fact.factKind !== 'pronunciation') return [];
-    return [{
-      materialRoleKey: 'pronunciation',
-      ordinal: 0,
-      contentPayload: {
-        audioUrl: fact.audioUrl,
-        phoneticNotation: fact.phoneticNotation,
-        accentLabel: fact.accentLabel,
-      },
-      sourceArtifactIds: [pronunciationArtifact.artifactId],
-      sourceMaterialCandidateIds: [expressionCandidate.materialCandidateId],
-      productionMethod: 'external_tool',
-      producerProvider: 'sensa-reference-fact-adapter',
-      producerModel: null,
-      producerPolicyId: 'lightweight.objective-derivation',
-    }];
-  },
+  produce: (context, acceptedCandidates) => context.referenceArtifacts.flatMap(reference => {
+    const fact = sensaLightweightReferenceFactSchema.parse(reference.payload);
+    const key = fact.factKind as SensaLightweightInitialMaterialRole;
+    if (!Object.hasOwn(LEARNING_RESOURCE_DEFINITIONS,key) || LEARNING_RESOURCE_DEFINITIONS[key].generation !== 'source') return [];
+    const {factKind,...payload}=fact;
+    return [{materialRoleKey:key,ordinal:0,contentPayload:payload,sourceArtifactIds:[reference.artifactId],sourceMaterialCandidateIds:acceptedCandidates.filter(c=>c.materialRoleKey==='target_expression').map(c=>c.materialCandidateId),productionMethod:'external_tool' as const,producerProvider:'sensa-reference-fact-adapter',producerModel:null,producerPolicyId:'lightweight.objective-derivation'}];
+  }),
 };
 
 const materialRoleDefinition = (role: SensaLightweightInitialMaterialRole) => {
@@ -565,7 +552,7 @@ const authoritativeBindingPasses = (
     );
     return candidate.sourceArtifactIds.length === 1
       && candidate.sourceArtifactIds[0] === context.expressionArtifact.artifactId
-      && candidate.contentPayload.surface === source.surface;
+      && canonicalJsonDigest(candidate.contentPayload) === canonicalJsonDigest(source);
   }
   if (candidate.materialRoleKey === 'sense_confirmation') {
     const source = sensaLightweightSenseSnapshotSchema.parse(context.senseArtifact.payload);
@@ -577,26 +564,13 @@ const authoritativeBindingPasses = (
 };
 
 const objectiveDerivationBindingPasses = (
-  context: FrozenContext,
-  candidate: SensaMaterialCandidate,
-  candidates: readonly SensaMaterialCandidate[],
+  context: FrozenContext, candidate: SensaMaterialCandidate, candidates: readonly SensaMaterialCandidate[],
 ): boolean => {
-  if (candidate.materialRoleKey !== 'pronunciation') return false;
-  const hasExpressionInput = candidate.sourceMaterialCandidateIds.some((candidateId) =>
-    candidates.some((sourceCandidate) =>
-      sourceCandidate.materialCandidateId === candidateId
-      && sourceCandidate.materialRoleKey === 'target_expression'));
-  if (!hasExpressionInput || candidate.productionMethod !== 'external_tool') return false;
-  if (candidate.sourceArtifactIds.length === 0) return true;
-  return context.referenceArtifacts.some((reference) => {
-    const fact = sensaLightweightReferenceFactSchema.parse(reference.payload);
-    return fact.factKind === 'pronunciation'
-      && candidate.sourceArtifactIds.includes(reference.artifactId)
-      && canonicalJsonDigest(candidate.contentPayload) === canonicalJsonDigest({
-        audioUrl: fact.audioUrl,
-        phoneticNotation: fact.phoneticNotation,
-        accentLabel: fact.accentLabel,
-      });
+  if (candidate.productionMethod === 'model_generation') return false;
+  return context.referenceArtifacts.some(reference => {
+    const {factKind,...payload}=reference.payload;
+    return factKind === candidate.materialRoleKey && candidate.sourceArtifactIds.includes(reference.artifactId)
+      && canonicalJsonDigest(candidate.contentPayload) === canonicalJsonDigest(payload);
   });
 };
 

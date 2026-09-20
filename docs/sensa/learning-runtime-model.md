@@ -853,7 +853,8 @@ Card Presentation 可以进一步声明稳定 Slot。每个 Slot 固定允许的
 disclosure 与缺失/溢出处理；Assembly Policy 把 Materialization 中已验证的资源放入 Slot，renderer
 只按结果显示。生成模型不能输出布局指令，缺少可选资源时 Slot 折叠，缺少必要资源时 Step 不可执行。
 Experience Recall 的任何 Slot 都不得包含 target expression；Expression Reveal 则始终具有 expression
-主区与 Sense 确认区，其余发音、语言结构、用法和场景回扣区域均可选。
+主区与 Sense 确认区，并覆盖主要声音、经验绑定与同场景表达；使用框架、补充例句、词源按真实
+材料与适用性披露。可选资源展开不构成学习 Evidence，也不改变完成条件。
 
 Card 与页面 renderer 通过 Semantic Design Contract 暴露稳定的呈现角色，再由当前 Sensa Skin 提供
 具体视觉实现。Skin 可以改变 typography、surface、shape、elevation、icon、illustration、component

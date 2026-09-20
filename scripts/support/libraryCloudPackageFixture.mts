@@ -1,3 +1,4 @@
+import {withBindingFixture} from './lightweightMaterialFixture.mts';
 /** Synthetic package for cloud-sync tests; no generated files, media downloads or provider calls. */
 import {readFile} from 'node:fs/promises';
 import {stableUuid,canonicalJsonDigest} from '@sensa/learning-kernel';
@@ -22,7 +23,7 @@ const version='1',owner=stableUuid('sensa:publisher'),packageId=stableUuid('sens
 const entries=release.packages.map((p:any)=>{
  const key=p.identity.packageKey,senseId=stableUuid('sensa:assurance:sense:'+key),senseVersionId=stableUuid('sensa:assurance:sense:'+key+':'+version),bindingId=stableUuid('sensa:assurance:binding:'+key),bindingVersionId=stableUuid('sensa:assurance:binding:'+key+':'+version),lexeme=release.lexemes.find((l:any)=>l.lexemeKey===p.identity.lexemeKey);
  const scene=p.experience.recap.bodyL1;
- const result=provisionLightweightInitialContent({learnerUserId:owner,learningTargetId:stableUuid('sensa:assurance:summary:'+key),senseId,senseVersionId,senseExpressionBindingId:bindingId,resolvedLearningPlanRevisionId:'assurance-summary-v1',expressionSourceVersion:version,senseSourceVersion:version,expression:{surface:lexeme.lemma,languageTag:'en',expressionKind:'word'},sense:{meaning:p.sense.guideLabelL1,supportLanguageTag:'zh-CN'},originExperience:{source:'other_authoritative_source',sourceVersion:version,personalAnchorUseGrantId:null,experience:{scene,senseFocus:p.sense.guideLabelL1,featureLabels:[]}},referenceFacts:[],requestedAt:'2026-09-11T00:00:00Z'});
+ const result=provisionLightweightInitialContent(withBindingFixture({learnerUserId:owner,learningTargetId:stableUuid('sensa:assurance:summary:'+key),senseId,senseVersionId,senseExpressionBindingId:bindingId,resolvedLearningPlanRevisionId:'assurance-summary-v1',expressionSourceVersion:version,senseSourceVersion:version,expression:{surface:lexeme.lemma,languageTag:'en',expressionKind:'word'},sense:{meaning:p.sense.guideLabelL1,supportLanguageTag:'zh-CN'},originExperience:{source:'other_authoritative_source',sourceVersion:version,personalAnchorUseGrantId:null,experience:{scene,senseFocus:p.sense.guideLabelL1,featureLabels:[]}},referenceFacts:[],requestedAt:'2026-09-11T00:00:00Z'}));
  if(result.status!=='ready')throw Error('Invalid overview');return {senseId,senseVersionId,bindingId,bindingVersionId,assurancePackageKey:key,expression:lexeme.lemma,meaning:p.sense.guideLabelL1,content:result.materialization.content};
 });
 const pack=validatePackage({format:'sensa-learning-package-v1',id:packageId,version,title:'Borrow & lend · 高保证学习',targetLanguage:'en',supportLanguage:'zh-CN',entries,assurance:{release,audio}});

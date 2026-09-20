@@ -1,0 +1,52 @@
+/** Real card and detail renderers; loopback page and synthetic resources only. */
+import assert from 'node:assert/strict';
+import {createServer} from 'node:http';
+import {build} from 'esbuild';
+import {chromium,expect} from '@playwright/test';
+const compiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import i18n from './apps/web/src/i18n';
+import './apps/web/src/i18n/learningResources';
+import {LearningResourceDetails} from './apps/web/src/experience/components/learning/LearningResourceDetails';
+import {ExpressionRevealCard} from './apps/web/src/experience/components/cards/lightweight/ExpressionRevealCard';
+import {assembleLightweightInitialPresentation} from './apps/web/src/experience/learningRuntime/lightweightInitialPresentation';
+import {LIGHTWEIGHT_EXPRESSION_REVEAL_STEP,LIGHTWEIGHT_EXPERIENCE_RECALL_STEP} from './apps/web/src/learning/runtime/lightweightInitialProtocol';
+import {provisionLightweightInitialContent} from './apps/web/src/learning/runtime/lightweightInitialContent';
+import {withBindingFixture} from './scripts/support/lightweightMaterialFixture.mts';
+const id=()=>crypto.randomUUID();
+const input=withBindingFixture({learnerUserId:id(),learningTargetId:id(),senseId:id(),senseVersionId:id(),senseExpressionBindingId:id(),resolvedLearningPlanRevisionId:'fixture',expressionSourceVersion:'fixture',senseSourceVersion:'fixture',expression:{surface:'borrow',languageTag:'en',expressionKind:'word'},sense:{meaning:'临时使用并归还',supportLanguageTag:'zh-CN'},originExperience:{source:'other_authoritative_source',sourceVersion:'fixture',personalAnchorUseGrantId:null,experience:{scene:'向朋友借伞，稍后归还。',senseFocus:'临时使用并归还',featureLabels:[],sceneRealization:{example:'May asked to borrow an umbrella.',targetStart:13,targetEnd:19}}},referenceFacts:[{source:'dictionary',sourceVersion:'fixture',fact:{factKind:'language_structure',expressionTypeLabel:'动词',partOfSpeech:'verb',usagePattern:'borrow something from someone',contrastNote:'Compare the receiver and the giver.'}},{source:'dictionary',sourceVersion:'fixture',fact:{factKind:'etymology',explanation:'Sourced optional explanation fixture',source:'Fixture dictionary',sourceUrl:'https://fixture.invalid/entry'}}],requestedAt:new Date().toISOString()});
+const result=provisionLightweightInitialContent(input);
+if(result.status!=='ready')throw Error('fixture not ready');
+const material=result.materialization;
+const step=(definition)=>({protocolStepInstanceId:id(),protocolRunId:id(),retentionTargetId:id(),ordinal:1,definition,materialBindings:material.content.resources.filter(r=>definition.materialRequirements.some(q=>q.materialRoleKey===r.materialRoleKey)).map(r=>({materialRoleKey:r.materialRoleKey,resourceKey:r.resourceKey,learningMaterializationId:material.snapshot.learningMaterializationId}))});
+const reveal=assembleLightweightInitialPresentation(step(LIGHTWEIGHT_EXPRESSION_REVEAL_STEP),material);
+const recall=assembleLightweightInitialPresentation(step(LIGHTWEIGHT_EXPERIENCE_RECALL_STEP),material);
+if(JSON.stringify(recall).includes('Sourced optional'))throw Error('pre-reveal resource leakage');
+await i18n.changeLanguage('en');
+createRoot(document.getElementById('root')!).render(<><ExpressionRevealCard active presentation={reveal} onRate={()=>{}} onOpenDictionary={()=>{}} lookupDictionary={async()=>null} toast={()=>{}}/><div id="resource-details"><LearningResourceDetails material={material}/></div></>);
+`},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':'{}'}});
+const code=compiled.outputFiles[0]!.text;
+const server=createServer((req,res)=>{res.setHeader('content-type',req.url==='/bundle.js'?'text/javascript':'text/html');res.end(req.url==='/bundle.js'?code:'<!doctype html><html><body><div id="root"></div><script type="module" src="/bundle.js"></script></body></html>');});
+await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+const address=server.address() as {port:number};
+const browser=await chromium.launch({headless:true,executablePath:process.env.SENSA_CHROMIUM_PATH});
+try{
+ const page=await browser.newPage();const errors:string[]=[];
+ page.on('pageerror',error=>errors.push(error.message));
+ await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+ await page.goto(`http://127.0.0.1:${address.port}`);
+ const card=page.locator('.sensa-expression-reveal');
+ await expect(card.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
+ await expect(card.getByText('May asked to borrow an umbrella.',{exact:true})).toBeVisible();
+ await expect(card.getByText('Sourced optional explanation fixture')).not.toBeVisible();
+ await card.getByText('Further understanding',{exact:true}).click();
+ await expect(card.getByText('Sourced optional explanation fixture')).toBeVisible();
+ await expect(card.getByRole('link',{name:'https://fixture.invalid/entry'})).toHaveAttribute('href','https://fixture.invalid/entry');
+ const details=page.locator('#resource-details');await details.locator('summary').click();
+ await expect(details.getByText('borrow something from someone',{exact:true})).toBeVisible();
+ await expect(details.getByText('Compare the receiver and the giver.',{exact:true})).toBeVisible();
+ await expect(details.getByText('Sourced optional explanation fixture')).toBeVisible();
+ assert.deepEqual(errors,[]);
+ console.log('PASS: real reveal card shows same-scene expression, optional etymology stays collapsed, details share complete fields/source rendering, recall excludes supplementary facts. Chromium, no external calls.');
+}finally{await browser.close();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}

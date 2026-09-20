@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {prepareSpeech,type SpeechProvider} from '../apps/api/src/sensa/speech/service.ts';
+const input={surface:'put up with',languageTag:'en'};
+const provider:SpeechProvider=async value=>({...value,audioUrl:'data:audio/mpeg;base64,UklGRg==',source:'synthetic fixture',method:'tts',phoneticNotation:null,accentLabel:'en-US'});
+const signal=new AbortController().signal;
+assert.equal((await prepareSpeech(input,provider,signal)).surface,input.surface);
+await assert.rejects(prepareSpeech(input,undefined,signal));
+await assert.rejects(prepareSpeech({...input,surface:' '},provider,signal));
+await assert.rejects(prepareSpeech({...input,surface:'x'.repeat(501)},provider,signal));
+await assert.rejects(prepareSpeech(input,async(v,s)=>({...await provider(v,s),surface:'put'}),signal));
+await assert.rejects(prepareSpeech(input,async(v,s)=>({...await provider(v,s),languageTag:'ja'}),signal));
+await assert.rejects(prepareSpeech(input,async(v,s)=>({...await provider(v,s),audioUrl:'https://untrusted.invalid/audio.mp3'}),signal));
+console.log('PASS: replaceable speech provider, saved audio and exact expression/language admission; no external calls.');

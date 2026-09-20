@@ -18,6 +18,7 @@ import {localRunBinding} from './localRuntimeBindings';
  * decide whether the run repeats or completes.
  */
 import {
+  lightweightStepRequirements,
   sensaLearningConnectionContractVersion,
   sensaProtocolStepDefinitionSchema,
   type SensaProtocolStepMaterialBinding,
@@ -61,10 +62,7 @@ export const LIGHTWEIGHT_EXPERIENCE_RECALL_STEP = parseStep({
   purpose: 'initial_learning',
   intent: 'practice',
   stepKind: LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
-  materialRequirements: [
-    { materialRoleKey: 'experience_recall_cue', use: 'prompt', required: true },
-    { materialRoleKey: 'recall_support', use: 'support', required: false },
-  ],
+  materialRequirements: lightweightStepRequirements('pre_reveal'),
   presentation: {
     presentationKey: 'lightweight-experience-recall-card',
     presentationVersion: 'v2',
@@ -93,14 +91,7 @@ export const LIGHTWEIGHT_EXPRESSION_REVEAL_STEP = parseStep({
   purpose: 'initial_learning',
   intent: 'instruction',
   stepKind: LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND,
-  materialRequirements: [
-    { materialRoleKey: 'target_expression', use: 'reveal', required: true },
-    { materialRoleKey: 'sense_confirmation', use: 'feedback', required: true },
-    { materialRoleKey: 'pronunciation', use: 'support', required: false },
-    { materialRoleKey: 'language_structure', use: 'support', required: false },
-    { materialRoleKey: 'usage_guidance', use: 'support', required: false },
-    { materialRoleKey: 'scene_bridge', use: 'support', required: false },
-  ],
+  materialRequirements: lightweightStepRequirements('post_reveal'),
   presentation: {
     presentationKey: 'lightweight-expression-reveal-card',
     presentationVersion: 'v2',

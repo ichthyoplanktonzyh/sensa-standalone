@@ -1,0 +1,237 @@
+{
+  "title": "日常经验：从场景绑定表达",
+  "description": "三个用于本地验收的轻量学习包。第一张卡建立经验，第二张卡依次完成意义、声音、形式、场景回指和用法迁移。",
+  "bookKey": "daily-exchanges",
+  "versionNumber": 6,
+  "publishedAt": "2026-09-20T12:00:00.000Z",
+  "changeSummary": "按独立学习资源合同提供固定声音、经验绑定与精确定位的同场景表达。",
+  "targetLanguage": "en",
+  "supportLanguage": "zh-CN",
+  "entries": [
+    {
+      "key": "fragile-physical-object",
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expression": "fragile",
+      "meaning": "物品或材料经不起很小的外力，容易破裂或损坏。",
+      "scene": "搬家时，你拿起一只薄玻璃花瓶。它看起来完好，但轻轻一碰就可能裂开，所以你先用毛巾把它包好，再单独放进盒子。",
+      "featureLabels": [
+        "不大的外力",
+        "容易受损",
+        "需要小心处理"
+      ],
+      "sceneBridge": "花瓶现在虽然完好，却经不起轻微碰撞；fragile 说的正是物品本身这种容易受损的特性。",
+      "languageStructure": {
+        "expressionTypeLabel": "形容词",
+        "partOfSpeech": "adj.",
+        "usagePattern": "fragile + 名词 · be / feel / look fragile",
+        "contrastNote": "fragile 聚焦容易受损；delicate 还可以强调精细或需要小心，不一定表示会破裂。"
+      },
+      "sceneExample": {
+        "example": "She wrapped the fragile vase in a towel before moving it.",
+        "translation": "搬动花瓶前，她先用毛巾把这只易碎的花瓶包好。",
+        "audioUrl": "/golden-audio/ce6af4677466753da166f4c6312d8283b511f73357587e40e4a2532b1918eb85.mp3",
+        "targetStart": 16,
+        "targetEnd": 23
+      },
+      "usageExamples": [
+        {
+          "example": "The <b>fragile</b> glass was kept away from the edge of the shelf.",
+          "translation": "这件易碎的玻璃制品被放在远离架子边缘的地方。",
+          "audioUrl": "/golden-audio/17919b7b372afa3bc3ae43a0607633633d9cdcd71f8307777e2c4d1a4d15adf1.mp3"
+        },
+        {
+          "example": "This <b>fragile</b> material can crack under very little pressure.",
+          "translation": "这种易碎材料受到很小的压力就可能开裂。",
+          "audioUrl": "/golden-audio/984c3acf1b56f67521dbf13f2b1b2d29babefd70c4a011516f211bc8e2446731.mp3"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "描述物品或材料因缺乏坚固性而容易被较小外力损坏。",
+        "prototypeScenes": [
+          {
+            "summary": "搬动薄玻璃花瓶前先包裹保护。",
+            "participantRoles": [
+              "物品处理者",
+              "容易受损的物品"
+            ],
+            "states": [
+              "物品当前完好",
+              "较小外力即可造成损坏",
+              "需要降低碰撞风险"
+            ],
+            "directionOrCausality": "物品缺乏坚固性，因此较小外力也可能造成破裂或损坏。"
+          }
+        ],
+        "includedCases": [
+          "玻璃制品容易摔碎",
+          "薄材料受到轻微压力就开裂"
+        ],
+        "excludedCases": [
+          "人感情上容易受伤",
+          "局势或关系不稳定"
+        ],
+        "neighborContrasts": [
+          {
+            "label": "delicate",
+            "distinction": "delicate 可以强调精细或需要小心；这里聚焦物理上容易损坏。"
+          }
+        ],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "sustain-process-continuation",
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expression": "sustain",
+      "meaning": "持续提供所需的资源或条件，使一个活动、状态或过程维持下去。",
+      "scene": "社区厨房整个冬天都在给附近居民提供热饭。食材和租金不断消耗，如果没有每月稳定的捐款，厨房就会停下来；这些捐款让它继续运转。",
+      "featureLabels": [
+        "过程已经开始",
+        "持续获得支持",
+        "因此没有中断"
+      ],
+      "sceneBridge": "捐款不是让厨房开始，而是在资源不断消耗时让它不中断；sustain 突出的是这种跨时间的持续支撑。",
+      "languageStructure": {
+        "expressionTypeLabel": "及物动词",
+        "partOfSpeech": "v.",
+        "usagePattern": "资源 / 行动 + sustain + 活动 / 状态 / 过程",
+        "contrastNote": "maintain 更常强调保持现状；sustain 更突出持续提供支持，使可能减弱或停止的过程延续。"
+      },
+      "sceneExample": {
+        "example": "Regular donations sustain the community kitchen through the winter.",
+        "translation": "定期捐款让社区厨房得以维持到冬天。",
+        "audioUrl": "/golden-audio/907939357434619c483e0dd719e6ddeef7d60fc6c9bb4a4ac9f0def2ff8ce726.mp3",
+        "targetStart": 18,
+        "targetEnd": 25
+      },
+      "usageExamples": [
+        {
+          "example": "Weekly feedback <b>sustained</b> the apprentice's interest in the craft.",
+          "translation": "每周的反馈维持了学徒对这门手艺的兴趣。",
+          "audioUrl": "/golden-audio/c7529b9b1363f4c24f4848825121a65346811bfce0a290f76d9d7861ef66e6f9.mp3"
+        },
+        {
+          "example": "Fresh water <b>sustains</b> the seedlings during the dry season.",
+          "translation": "新鲜的水分让幼苗得以度过旱季。",
+          "audioUrl": "/golden-audio/905d79e66b65da1b7b51e9523b999b359309ce6d240ef9fda3627fcb2a23aa50.mp3"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "为已经开始但可能减弱或停止的过程持续提供支持，使其跨过时间继续。",
+        "prototypeScenes": [
+          {
+            "summary": "定期捐款让社区厨房在冬天继续运转。",
+            "participantRoles": [
+              "提供支持的一方",
+              "被维持的活动或状态"
+            ],
+            "states": [
+              "过程已经开始",
+              "没有支持可能减弱或停止",
+              "资源持续进入并维持过程"
+            ],
+            "directionOrCausality": "持续的资源或条件使活动、状态或过程没有中断。"
+          }
+        ],
+        "includedCases": [
+          "资金维持机构运行",
+          "水分让植物继续生长",
+          "反馈让兴趣保持"
+        ],
+        "excludedCases": [
+          "只启动一个尚未开始的活动",
+          "短暂发生但没有跨时间延续"
+        ],
+        "neighborContrasts": [
+          {
+            "label": "maintain",
+            "distinction": "maintain 常强调保持某个状态；sustain 更突出持续支持使过程得以延续。"
+          }
+        ],
+        "openQuestions": []
+      }
+    },
+    {
+      "key": "borrow-receiver-perspective",
+      "senseVersion": 1,
+      "bindingVersion": 1,
+      "expression": "borrow",
+      "meaning": "从别人那里暂时取得并使用某件东西，之后需要归还。",
+      "scene": "开会时你的电脑快没电了。你向 Nina 拿来一个备用充电器，先用到会议结束，并约好离开前还给她。",
+      "featureLabels": [
+        "从别人那里取得",
+        "暂时使用",
+        "之后归还"
+      ],
+      "sceneBridge": "充电器从 Nina 那里暂时到了你手里，之后仍要归还；borrow 从接收物品的一方表达这次转移。",
+      "languageStructure": {
+        "expressionTypeLabel": "及物动词",
+        "partOfSpeech": "v.",
+        "usagePattern": "borrow + 物品 + from + 提供者",
+        "contrastNote": "borrow 从接收者视角表示借入；lend 从提供者视角表示借出。"
+      },
+      "sceneExample": {
+        "example": "I borrowed a charger from Nina during the meeting.",
+        "translation": "开会时，我向 Nina 借了一个充电器。",
+        "audioUrl": "/golden-audio/30c824be70640c1b3c8ef01ce4f843228911fa4ff71ca7ff664c589604b69fa5.mp3",
+        "targetStart": 2,
+        "targetEnd": 10
+      },
+      "usageExamples": [
+        {
+          "example": "Could I <b>borrow</b> your umbrella until the rain stops?",
+          "translation": "雨停以前，我可以借用你的雨伞吗？",
+          "audioUrl": "/golden-audio/dcaf7ae937ae766e3802e14308b0556b83112bd3758641fcd7855b5513a3ab87.mp3"
+        },
+        {
+          "example": "The museum <b>borrowed</b> two paintings from a private collection.",
+          "translation": "博物馆向私人收藏借用了两幅画。",
+          "audioUrl": "/golden-audio/039adddf273efcc143e26efb54abe10446bc58b8e2608af5864d8e75c2a4e89f.mp3"
+        }
+      ],
+      "semanticSpec": {
+        "schemaVersion": "sensa-sense-semantic-spec-v1",
+        "coreMeaningFocus": "从接收者视角描述暂时取得并使用他人的物品，同时存在归还预期。",
+        "prototypeScenes": [
+          {
+            "summary": "会议中向同事借用充电器并约好归还。",
+            "participantRoles": [
+              "暂时取得物品的人",
+              "物品提供者"
+            ],
+            "states": [
+              "物品原本属于或由他人控制",
+              "接收者暂时使用物品",
+              "所有权不变且需要归还"
+            ],
+            "directionOrCausality": "物品从提供者暂时转到接收者手中，使用后应当返还。"
+          }
+        ],
+        "includedCases": [
+          "向朋友借书",
+          "机构暂借展品",
+          "临时借用工具"
+        ],
+        "excludedCases": [
+          "把自己的东西借给别人",
+          "永久取得赠品",
+          "租用需要付费的物品"
+        ],
+        "neighborContrasts": [
+          {
+            "label": "lend",
+            "distinction": "lend 从提供物品的一方描述同一次临时转移。"
+          }
+        ],
+        "openQuestions": []
+      },
+      "acceptedForms": [
+        "borrowed"
+      ]
+    }
+  ]
+}

@@ -6,6 +6,8 @@
  */
 import {
   LIGHTWEIGHT_INITIAL_MATERIAL_ROLES,
+  LIGHTWEIGHT_RESOURCE_PROFILE,
+  sensaSceneRealizationSchema,
   sensaCardPresentationDefinitionSchema,
   sensaLearningConnectionContractVersion,
   sensaLightweightExperienceRecallCueSchema,
@@ -38,126 +40,15 @@ export type LightweightInitialMaterialRole = SensaLightweightInitialMaterialRole
 const parsePresentation = (definition: unknown): SensaCardPresentationDefinition =>
   Object.freeze(sensaCardPresentationDefinitionSchema.parse(definition));
 
-export const LIGHTWEIGHT_EXPERIENCE_RECALL_PRESENTATION = parsePresentation({
-  contractVersion: sensaLearningConnectionContractVersion,
-  presentationKey: 'lightweight-experience-recall-card',
-  presentationVersion: 'v2',
-  stepKinds: [LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND],
-  slots: [
-    {
-      slotId: 'experience_sketch',
-      displayOrder: 0,
-      required: true,
-      acceptedMaterialRoleKeys: [
-        'experience_recall_cue' satisfies LightweightInitialMaterialRole,
-      ],
-      minItems: 1,
-      maxItems: 1,
-      disclosurePhase: 'pre_reveal',
-      missingBehavior: 'block_step',
-      overflowBehavior: 'reject',
-    },
-    {
-      slotId: 'auxiliary_cues',
-      displayOrder: 1,
-      required: false,
-      acceptedMaterialRoleKeys: [
-        'recall_support' satisfies LightweightInitialMaterialRole,
-      ],
-      minItems: 0,
-      maxItems: 4,
-      disclosurePhase: 'pre_reveal',
-      missingBehavior: 'collapse_slot',
-      overflowBehavior: 'truncate',
-    },
-  ],
+const slotsFor = (phase:'pre_reveal'|'post_reveal') => LIGHTWEIGHT_INITIAL_MATERIAL_ROLES.filter(key=>LIGHTWEIGHT_RESOURCE_PROFILE[key].phase===phase).map((key,displayOrder)=>{
+ const profile=LIGHTWEIGHT_RESOURCE_PROFILE[key];
+ return {slotId:key,displayOrder,required:profile.required,acceptedMaterialRoleKeys:[key],minItems:profile.required?1:0,maxItems:profile.maxItems,disclosurePhase:phase,missingBehavior:profile.required?'block_step':'collapse_slot',overflowBehavior:'reject'};
 });
-
+export const LIGHTWEIGHT_EXPERIENCE_RECALL_PRESENTATION = parsePresentation({
+ contractVersion:sensaLearningConnectionContractVersion,presentationKey:'lightweight-experience-recall-card',presentationVersion:'v2',stepKinds:[LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND],slots:slotsFor('pre_reveal'),
+});
 export const LIGHTWEIGHT_EXPRESSION_REVEAL_PRESENTATION = parsePresentation({
-  contractVersion: sensaLearningConnectionContractVersion,
-  presentationKey: 'lightweight-expression-reveal-card',
-  presentationVersion: 'v2',
-  stepKinds: [LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND],
-  slots: [
-    {
-      slotId: 'expression_primary',
-      displayOrder: 0,
-      required: true,
-      acceptedMaterialRoleKeys: [
-        'target_expression' satisfies LightweightInitialMaterialRole,
-      ],
-      minItems: 1,
-      maxItems: 1,
-      disclosurePhase: 'post_reveal',
-      missingBehavior: 'block_step',
-      overflowBehavior: 'reject',
-    },
-    {
-      slotId: 'sense_confirmation',
-      displayOrder: 1,
-      required: true,
-      acceptedMaterialRoleKeys: [
-        'sense_confirmation' satisfies LightweightInitialMaterialRole,
-      ],
-      minItems: 1,
-      maxItems: 1,
-      disclosurePhase: 'post_reveal',
-      missingBehavior: 'block_step',
-      overflowBehavior: 'reject',
-    },
-    {
-      slotId: 'pronunciation',
-      displayOrder: 2,
-      required: false,
-      acceptedMaterialRoleKeys: [
-        'pronunciation' satisfies LightweightInitialMaterialRole,
-      ],
-      minItems: 0,
-      maxItems: 1,
-      disclosurePhase: 'post_reveal',
-      missingBehavior: 'collapse_slot',
-      overflowBehavior: 'reject',
-    },
-    {
-      slotId: 'language_structure',
-      displayOrder: 3,
-      required: false,
-      acceptedMaterialRoleKeys: [
-        'language_structure' satisfies LightweightInitialMaterialRole,
-      ],
-      minItems: 0,
-      maxItems: 1,
-      disclosurePhase: 'post_reveal',
-      missingBehavior: 'collapse_slot',
-      overflowBehavior: 'reject',
-    },
-    {
-      slotId: 'usage_guidance',
-      displayOrder: 4,
-      required: false,
-      acceptedMaterialRoleKeys: [
-        'usage_guidance' satisfies LightweightInitialMaterialRole,
-      ],
-      minItems: 0,
-      maxItems: 4,
-      disclosurePhase: 'post_reveal',
-      missingBehavior: 'collapse_slot',
-      overflowBehavior: 'reject',
-    },
-    {
-      slotId: 'scene_bridge',
-      displayOrder: 5,
-      required: false,
-      acceptedMaterialRoleKeys: [
-        'scene_bridge' satisfies LightweightInitialMaterialRole,
-      ],
-      minItems: 0,
-      maxItems: 1,
-      disclosurePhase: 'post_reveal',
-      missingBehavior: 'collapse_slot',
-      overflowBehavior: 'reject',
-    },
-  ],
+ contractVersion:sensaLearningConnectionContractVersion,presentationKey:'lightweight-expression-reveal-card',presentationVersion:'v2',stepKinds:[LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND],slots:slotsFor('post_reveal'),
 });
 
 export const LIGHTWEIGHT_INITIAL_PRESENTATION_CONTRACTS = Object.freeze([
@@ -251,6 +142,7 @@ export interface ExpressionRevealCardPresentation {
   readonly presentationKey: 'lightweight-expression-reveal-card';
   readonly presentationVersion: 'v2';
   readonly slots: {
+    readonly supplementaryResources: readonly SensaMaterializedResource[];
     readonly expressionPrimary: { readonly surface: string };
     readonly senseConfirmation: { readonly meaning: string };
     readonly pronunciation: {
@@ -391,6 +283,8 @@ export const assembleLightweightInitialPresentation = (
       materialization,
       'usage_guidance',
     );
+    const sceneResource = requiredResourceForRole(step, materialization, 'scene_realization');
+    const scene = sensaSceneRealizationSchema.parse(sceneResource.contentPayload);
     const sceneBridgeResource = boundResourcesForRole(
       step,
       materialization,
@@ -402,10 +296,10 @@ export const assembleLightweightInitialPresentation = (
     const structure = structureResource
       ? sensaLightweightLanguageStructureMaterialSchema.parse(structureResource.contentPayload)
       : null;
-    const usageExamples = usageResources.map((resource) => ({
+    const usageExamples = [{resourceKey:sceneResource.resourceKey,...scene},...usageResources.map((resource) => ({
       resourceKey: resource.resourceKey,
       ...sensaLightweightUsageGuidanceMaterialSchema.parse(resource.contentPayload),
-    }));
+    }))];
     const sceneBridge = sceneBridgeResource
       ? sensaLightweightSceneBridgeMaterialSchema.parse(sceneBridgeResource.contentPayload)
       : null;
@@ -414,6 +308,7 @@ export const assembleLightweightInitialPresentation = (
       presentationKey: 'lightweight-expression-reveal-card',
       presentationVersion: 'v2',
       slots: Object.freeze({
+        supplementaryResources: Object.freeze(LIGHTWEIGHT_INITIAL_MATERIAL_ROLES.filter(key=>!['experience_recall_cue','recall_support','target_expression','sense_confirmation','pronunciation','language_structure','usage_guidance','scene_bridge','scene_realization'].includes(key) && LIGHTWEIGHT_RESOURCE_PROFILE[key].phase==='post_reveal').flatMap(key=>boundResourcesForRole(step,materialization,key))),
         expressionPrimary: Object.freeze({ surface: expression.surface }),
         senseConfirmation: Object.freeze({ meaning: sense.meaning }),
         pronunciation: pronunciation

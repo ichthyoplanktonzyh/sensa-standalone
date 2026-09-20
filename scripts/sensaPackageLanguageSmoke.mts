@@ -1,3 +1,4 @@
+import {withBindingFixture} from './support/lightweightMaterialFixture.mts';
 /** The languages a Curriculum membership carries into provisioning.
  *
  * A learning package, a route membership and a prepared personal meaning each
@@ -42,14 +43,14 @@ const id=()=>crypto.randomUUID();
 try{
   // Real material for a Spanish target, so the package under test is a package
   // the product could actually produce.
-  const material=api.provisionLightweightInitialContent({
+  const material=api.provisionLightweightInitialContent(withBindingFixture({
     learnerUserId:id(),learningTargetId:id(),senseId:id(),senseVersionId:id(),senseExpressionBindingId:id(),
     resolvedLearningPlanRevisionId:'fixture-es-v1',expressionSourceVersion:'fixture-es-v1',senseSourceVersion:'fixture-es-v1',
     expression:{surface:'tomarse su tiempo',languageTag:'es',expressionKind:'phrase'},
     sense:{meaning:'从容地花时间做一件事。',supportLanguageTag:'zh-CN'},
     originExperience:{source:'other_authoritative_source',sourceVersion:'fixture-es-v1',personalAnchorUseGrantId:null,experience:{scene:'朋友催你快点，你说这件事需要慢慢来。',senseFocus:'从容地花时间',featureLabels:[]}},
     referenceFacts:[],requestedAt:'2026-09-01T00:00:00.000Z',
-  });
+  }));
   assert.equal(material.status,'ready');
   const entry={senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),expression:'tomarse su tiempo',meaning:'从容地花时间做一件事。',content:material.materialization.content};
   const pack=(over:Record<string,unknown>={})=>({format:'sensa-learning-package-v1',id:id(),version:'1',title:'合成西语验证包',targetLanguage:'es',supportLanguage:'zh-CN',entries:[entry],...over});

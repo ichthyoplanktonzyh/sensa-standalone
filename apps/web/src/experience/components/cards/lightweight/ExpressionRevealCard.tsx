@@ -1,3 +1,4 @@
+import {LearningResource} from '../../learning/LearningResource';
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BookHeart, Check, Pause, SquarePen, Volume2 } from "lucide-react";
@@ -54,6 +55,7 @@ export function ExpressionRevealCard({
   const [additionalExampleIndex, setAdditionalExampleIndex] = useState(0);
   const { activeLookup, openLookup, clearLookup } = useImmediateDictionaryLookup();
   const {
+    supplementaryResources,
     expressionPrimary,
     senseConfirmation,
     pronunciation,
@@ -276,7 +278,7 @@ export function ExpressionRevealCard({
         )}
       </div>
 
-      {sceneExample && (
+      {sceneExample && sceneExample.en.trim() !== expressionPrimary.surface.trim() && (
         <div className="sensa-expression-scene-example pb-5" aria-label={t("runtime.sceneExample")}>
           {renderExample(sceneExample)}
         </div>
@@ -345,6 +347,7 @@ export function ExpressionRevealCard({
         </div>
       )}
 
+      {supplementaryResources?.map(resource=><details key={resource.resourceKey} className="sensa-expression-disclosure"><summary>{t('runtime.furtherUnderstanding')}</summary><LearningResource resource={resource}/></details>)}
       <RuntimeRating initial={initial} showDescriptions={false} onRate={onRate} />
       {activeLookup && (
         <LearningExampleLookup

@@ -1,3 +1,4 @@
+import {prepareSpeech,type SpeechProvider} from '../speech/service.js';
 import {
   librarySyncBlockStoreChars,
   semanticLookupInputSchema,
@@ -75,6 +76,7 @@ export type ConsumerRoutesOptions={
   semanticResolver?:SemanticResolver;
   readingCompletion?:ReadingCompletion;
   modelTurnCompletion?:ModelTurnCompletion;
+  speechProvider?:SpeechProvider;
 };
 
 export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
@@ -93,6 +95,14 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
     if(error instanceof ConsumerError)return context.json({code:error.code},error.status);
     if(error instanceof z.ZodError||error instanceof SyntaxError)return context.json({code:'invalid_request'},400);
     return context.json({code:'temporarily_unavailable'},503);
+  });
+
+  app.post('/sensa/speech',async context=>{
+    const identity=await verify(context.req.raw);
+    await transaction(async db=>{await account(db,identity,false,false,clock());});
+    const result=await prepareSpeech(await context.req.json(),options.speechProvider,
+      AbortSignal.any([context.req.raw.signal,AbortSignal.timeout(45000)]));
+    return context.json(result);
   });
 
   registerBrowserTelemetry(app,options.browserTelemetry);

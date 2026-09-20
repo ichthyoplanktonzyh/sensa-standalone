@@ -18,7 +18,7 @@ import {pathToFileURL} from 'node:url';
 const compiled=await build({stdin:{contents:[
   ...['store','providers','personalLearning','learning','packages','language'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
   `export * from './apps/web/src/experience/personalMeaningJourney/gateway';`,
-].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':'{}'}});
+].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':JSON.stringify({VITE_SENSA_API_URL:'https://speech.fixture.invalid'})},plugins:[{name:'fixture-auth',setup(build){build.onLoad({filter:/[/\\]account[/\\]auth\.ts$/},()=>({contents:"export const auth={getSession:async()=>({data:{session:{access_token:'fixture',user:{id:'fixture'}}}})}; export {authStorageKey,cachedAuthSubject} from './authSessionHint';",loader:'ts'}));}}]});
 Object.assign(globalThis,{indexedDB,window:new EventTarget(),location:{origin:'http://127.0.0.1:9998'},BroadcastChannel:undefined});
 const temp=await mkdtemp(join(tmpdir(),'sensa-personal-'));
 await writeFile(join(temp,'core.mjs'),compiled.outputFiles[0]!.text);
@@ -49,12 +49,14 @@ const calls:any[]=[];
 let mode:'good'|'reject'|'review-fail'|'hold'|'leak'='good';
 const realFetch=globalThis.fetch;
 globalThis.fetch=async(_url,input)=>{
+  if(String(_url).includes('/sensa/speech'))return new Response(JSON.stringify({surface:'borrow',languageTag:'en',audioUrl:'data:audio/mpeg;base64,UklGRg==',phoneticNotation:null,accentLabel:'en-US',source:'synthetic test fixture',method:'tts'}),{headers:{'content-type':'application/json'}});
+  if(!input?.body)return new Response('[]',{headers:{'content-type':'application/json'}});
   const body=JSON.parse(String(input?.body));calls.push(body);
   const review=String(body.messages?.[0]?.content).includes('independent Sensa');
   if(review&&mode==='review-fail')throw Error('Offline');
   const result=review
     ?{accepted:mode!=='reject',reason:mode==='reject'?'场景改变了原意':'符合固定含义与来源'}
-    :{scene:mode==='leak'?'一个人想要 borrow 一把雨伞。':'一个人向同伴临时借用一把雨伞，约好之后归还。',senseFocus:'临时使用并预期归还'};
+    :{resources:[{role:'experience_recall_cue',payload:{scene:mode==='leak'?'一个人想要 borrow 一把雨伞。':'一个人向同伴临时借用一把雨伞，约好之后归还。',senseFocus:'临时使用并预期归还'}},{role:'scene_bridge',payload:{text:'从取得者的视角表达临时使用并准备归还。'}},{role:'scene_realization',payload:{example:'May asked to borrow an umbrella.',targetStart:13,targetEnd:19,experienceResourceKey:'experience_recall_cue:0'}}]};
   return new Response(JSON.stringify({model:'fixture',choices:[{finish_reason:'stop',message:{content:JSON.stringify(result)}}]}),{headers:{'content-type':'application/json'}});
 };
 
@@ -111,7 +113,7 @@ try{
   const spanish={supportLanguageTag:'zh-CN',targetLanguageTag:'es'};
   const request=await makeRequest({id:id(),learner_user_id:accountId,learning_target_id:id(),fixed_input:{targetLanguageTag:'es',supportLanguageTag:'zh-CN',senseId:id(),senseVersionId:id(),bindingId:id(),bindingVersionId:id(),planRevision:'fixture:1',expression:'tomar prestado',expressionKind:'phrase',meaning:semanticSpec.coreMeaningFocus,prototype:'一个人向同伴借用物品。',demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND}},id(),new Date());
   assert.deepEqual(requestLanguages(request),spanish);
-  assert(generationSystem(true,spanish).includes('绝不出现西班牙语目标表达'));
+  assert(generationSystem(true,spanish).includes('Spanish target-expression'));
   assert(generationSystem(false,spanish).includes('Chinese (Simplified) recall cue'));
   assert(independentReviewSystem(spanish).includes('Spanish target-expression leakage'));
 

@@ -67,17 +67,47 @@ Candidate。Candidate 只有通过该 role 全部 required validators，并且�
 场景是必须带 use grant 的 Personal Anchor artifact；TTS 是从已接受文本或发音事实产生媒体
 Candidate 的 Content Derivation。这三类输入/操作不能被压成一段不可审计的模型 prompt。
 
-当前 Lightweight Initial 使用 `lightweight-initial-content@v2` Demand。它把
-`experience_recall_cue`、`target_expression`、`sense_confirmation` 声明为 required roles，把
-`recall_support`、`pronunciation`、`language_structure`、`usage_guidance`、`scene_bridge` 声明为
-bounded optional roles，其中 `usage_guidance` 允许最多四条例句，并可携带审核过的译文与音频。请求必须携带 expression snapshot 与 Sense snapshot；原始经历和词典、语料、
-发音等 reference facts 是可选 context。Personal Anchor 仍必须携带 use grant。
+当前 Lightweight Initial 使用 `lightweight-initial-content@v3` Demand。第一张卡建立或唤起经验，
+第二张卡把同一个经验与目标表达的音、形、义及实际使用连接起来。Required roles 为
+`experience_recall_cue`、`target_expression`、`sense_confirmation`、`pronunciation`、
+`scene_bridge`（经验绑定说明）与 `scene_realization`（同场景语言实现）。
+`recall_support`、`language_structure`（最小使用框架）、最多四条 `usage_guidance`（补充例句）和
+`etymology` 为 bounded optional roles；不适用或没有可靠来源时省略，不阻塞核心学习。
 
-该 Demand 明确把来源责任分开：expression/Sense 只做 authoritative passthrough；教学性内容只先成为
-Candidate，并通过 schema、Sense alignment 与适用的 pre-reveal non-disclosure；pronunciation 只接受
-source-bound objective derivation。任一 required role 缺失时 materialization 仍是 incomplete；任一
-Candidate 的 schema、绑定、policy/version 或 validator/version 不匹配时整体 invalid，Runtime 不得读取。
-word、phrase、construction、utterance 共用这一组 role identity，缺少不适用的可选资源不会改变 Protocol。
+声音必须是已经保存的真实音频，固定准确表达、Language Tag、变体、来源与 recording/TTS 方法。
+音标、可变 URL 或设备临时朗读不能独立满足声音要求。经验绑定说明解释“为什么这个表达适合这里”，
+同场景语言实现展示“在这里怎么说”；两者必须引用同一不可变经验，后者保留准确 target span。
+完整目标话语可以复用为同场景语言实现，不要求生成另一句近义话语。使用框架依表达类型与实际难点
+提供，不能为固定回应机械制造语法模板。
+
+资源定义、需求组合与展示规则分别负责“什么内容合法”“本次需要什么”和“何时如何显示”。资源
+定义固定 schema/version、适用输入、生成指导、来源与验证责任；协议组合决定 required/cardinality；
+Presentation 决定披露与组织。模型不维护另一套资源目录，也不选择布局。表达与 Sense 由权威快照
+透传；教学材料先成为 Candidate；声音与词源只接受绑定来源的事实，词源不得由 Agent 自行猜测。
+新增可选资源不改变学习目标、完成条件、Evidence 或调度。每个执行版本接受确定的已注册资源集合，
+未知类型不能绕过验证；没有用户数据时直接更新合同，不增加旧格式读取或隐式迁移。
+
+### 1.1.1 可扩展资源目录
+
+目录描述已知教学职责，不要求为每个目标预先生产全部内容，也不把它当作永远封闭的全集：
+
+| 资源组 | 已知资源职责 |
+| --- | --- |
+| 经验 | 经验建立／回想、回想提示 |
+| 表达 | 目标形式、主要声音、音形对应 |
+| 意义连接 | 义项确认、经验绑定说明、同场景语言实现 |
+| 使用 | 最小使用框架、补充例句、Sense-specific 搭配、语体／语用 |
+| 形式变化 | 屈折／变位、句法行为、书写与发音变体 |
+| 辨析 | 相邻意义边界、易错用法 |
+| 理解与助记 | 现代构词、历史词源、字形／拼写线索、编辑性记忆提示 |
+
+现代构词、历史词源、编辑性记忆提示是不同事实类别，不能混成无约束的解释字段。文字、图片、音频、
+互动则是资源的呈现形式，不是所有情况下独立的教学职责。当前可执行类型以版本化 Demand 为准，
+上述目录不构成所有类型均已实现的交付承诺。
+
+系统支持、目标已有、阶段允许展示是三个不同判断。已有合格资源可以展开；缺少资源时必须经过
+准备与验证；不适用或来源不足时保留诚实状态。偏好影响未来内容选择与默认展示，不修改学习完成
+条件；补充准备创建新 Materialization，不能原地修改已使用快照。
 
 ### 1.2 Agentic material production
 
@@ -819,8 +849,8 @@ version。缺失资源必须如实报告，不能以运行时 fallback、自由�
 或其组合构成；首次学习允许通过互动建立经验。资源可由学习包预先提供，也可
 根据已确认的个人内容生成，两种来源遵守同一资源需求与运行时准入规则。
 
-必需资源仍为经验回想内容、目标表达、含义确认。回想提示、发音、语言结构、
-用法例句及场景连接为可选。图片和 HTML 是经验内容的呈现形式，不是新增的
+当前必需资源为经验回想内容、目标表达、含义确认、主要声音、经验绑定说明与同场景语言实现。
+回想提示、最小使用框架、补充例句与有来源的词源为可选。图片和 HTML 是经验内容的呈现形式，不是新增的
 必需角色；没有图片或互动的既有文字资源仍合法。
 
 资源详情应展示实际保存和使用的完整材料，查看不是学习前置确认。用户提供的

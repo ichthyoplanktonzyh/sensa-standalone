@@ -1,7 +1,8 @@
+import {syntheticSound} from './support/lightweightMaterialFixture.mts';
 /** Immutable Book release and Registry build/read smoke. No network or publication. */
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
@@ -13,7 +14,11 @@ const root=await mkdtemp(join(tmpdir(),'sensa-learning-registry-'));
 const releases=join(root,'releases'),catalogPath=join(root,'catalog.json'),base='https://content.example.test/releases/';
 const realFetch=globalThis.fetch;
 try{
- const build=spawnSync(process.execPath,['--import','tsx',resolve('scripts/release/buildStarterPackage.mts')],{cwd:resolve('.'),encoding:'utf8',env:{...process.env,SENSA_PACKAGE_OUTPUT:releases,SENSA_PACKAGE_CATALOG_OUTPUT:catalogPath,SENSA_PACKAGE_BASE_URL:base,SENSA_WEB_ORIGIN:'https://app.example.test'}});
+ const source=JSON.parse(await readFile('content/authored/web-starter.json','utf8'));
+ const sourcePath=join(root,'synthetic-source.json');
+ for(const entry of source.entries){entry.pronunciation=syntheticSound(entry.expression,source.targetLanguage);entry.sceneBridge='Synthetic binding for release validation';entry.sceneExample={example:entry.expression,targetStart:0,targetEnd:entry.expression.length};}
+ await writeFile(sourcePath,JSON.stringify(source));
+ const build=spawnSync(process.execPath,['--import','tsx',resolve('scripts/release/buildStarterPackage.mts')],{cwd:resolve('.'),encoding:'utf8',env:{...process.env,SENSA_BOOK_RELEASE_SOURCES:sourcePath,SENSA_PACKAGE_OUTPUT:releases,SENSA_PACKAGE_CATALOG_OUTPUT:catalogPath,SENSA_PACKAGE_BASE_URL:base,SENSA_WEB_ORIGIN:'https://app.example.test'}});
  assert.equal(build.status,0,build.stderr||build.stdout);
  const catalogBytes=await readFile(catalogPath),registry=learningContentRegistrySchema.parse(JSON.parse(catalogBytes.toString('utf8')));
  assert.equal(registry.items.length,1);
@@ -23,7 +28,7 @@ try{
  assert.equal(bookReleaseDescriptorSchema.parse({...descriptor,byteLength:maxPublishedBookReleaseBytes}).byteLength,maxPublishedBookReleaseBytes);
  assert.throws(()=>bookReleaseDescriptorSchema.parse({...descriptor,byteLength:maxPublishedBookReleaseBytes+1}),/Too big/);
  const repeatCatalog=join(root,'catalog-repeat.json'),repeatReleases=join(root,'repeat');
- const repeat=spawnSync(process.execPath,['--import','tsx',resolve('scripts/release/buildStarterPackage.mts')],{cwd:resolve('.'),encoding:'utf8',env:{...process.env,SENSA_PACKAGE_OUTPUT:repeatReleases,SENSA_PACKAGE_CATALOG_OUTPUT:repeatCatalog,SENSA_PACKAGE_BASE_URL:base,SENSA_WEB_ORIGIN:'https://app.example.test'}});
+ const repeat=spawnSync(process.execPath,['--import','tsx',resolve('scripts/release/buildStarterPackage.mts')],{cwd:resolve('.'),encoding:'utf8',env:{...process.env,SENSA_BOOK_RELEASE_SOURCES:sourcePath,SENSA_PACKAGE_OUTPUT:repeatReleases,SENSA_PACKAGE_CATALOG_OUTPUT:repeatCatalog,SENSA_PACKAGE_BASE_URL:base,SENSA_WEB_ORIGIN:'https://app.example.test'}});
  assert.equal(repeat.status,0,repeat.stderr||repeat.stdout);assert.equal((await readFile(repeatCatalog)).toString('utf8'),catalogBytes.toString('utf8'),'the same authored release must rebuild byte-for-byte');
  assert.throws(()=>learningContentRegistrySchema.parse({...registry,items:[descriptor,descriptor]}),/Duplicate public Book version/);
 

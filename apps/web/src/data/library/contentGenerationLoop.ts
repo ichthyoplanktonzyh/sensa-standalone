@@ -1,4 +1,4 @@
-import {makeBundle,validateBundle,modelFacts,generationSystem,requestLanguages,sensaLanguageDisplayName,type SensaContentGenerationRequest,type SensaMaterialCandidateBundle} from '@sensa/contracts/sensa';
+import {makeBundle,validateBundle,modelFacts,generationSystem,requestLanguages,type SensaContentGenerationRequest,type SensaMaterialCandidateBundle} from '@sensa/contracts/sensa';
 import {complete,type ModelMessage} from './transport';
 import type {Provider} from './providers';
 export type ContentGenerationStep={round:number;accepted:boolean;issues:string[]};
@@ -9,8 +9,7 @@ export async function generateLearningCandidate(request:SensaContentGenerationRe
  // switch mid-preparation must not change the language of material for a sense
  // that was accepted in another one.
  const languages=requestLanguages(request);
- const cue=sensaLanguageDisplayName(languages.supportLanguageTag,'en');
- const richInstructions=' You may reference supplied images with imageIds (array of supplied IDs); never invent or reproduce image bytes. You may add html for a useful offline interaction. HTML is declarative only: no scripts, event handlers, links, forms, external media or stylesheets. Use inline style, button data-action=toggle data-target=ID with an element id=ID to show/hide it; data-action=increment with data-target=ID to increment its text; draggable=true elements and data-dropzone containers for drag and drop. Do not include the target expression in visible text. Use only the supplied context as personal evidence. scene may be empty when images or HTML carry the experience. Output JSON {scene,senseFocus,imageIds?,html?}.';
+ const richInstructions=' HTML must be offline and declarative: no scripts, event handlers, links, forms, external media or stylesheets. Use button data-action=toggle data-target=ID, data-action=increment data-target=ID, draggable=true and data-dropzone. Reference supplied images only by imageIds.';
  const messages:ModelMessage[]=[{role:'system',content:generationSystem(personal,languages)+richInstructions},{role:'user',content:JSON.stringify(modelFacts(request)),...(images.length?{images}:{})}];
  const bounded=AbortSignal.any([signal,AbortSignal.timeout(request.attemptBudget.timeoutMs)]);
  for(let round=1;round<=request.attemptBudget.maxModelTurns;round++){
@@ -24,11 +23,11 @@ export async function generateLearningCandidate(request:SensaContentGenerationRe
    bundle=await makeBundle(request,{cue:JSON.parse(message.content??'null'),provider:provider.id,model:result.model},new Date());
    bundle.usage.modelTurns=round;
    accepted=!!(await validateBundle(request,bundle,null,new Date())).content;
-  }catch(error){if(!(error instanceof SyntaxError)&&!(error instanceof Error&&(error.name==='ZodError'||error.message==='unknown_context_image')))throw error;correction=error instanceof SyntaxError?'Return valid JSON without markdown fences.':error.message.slice(0,4000);}
-  await onStep({round,accepted,issues:accepted?[]:['invalid_recall_cue']});
+  }catch(error){if(!(error instanceof SyntaxError)&&!(error instanceof Error&&(error.name==='ZodError'||['unknown_context_image','undeclared_generated_resource'].includes(error.message))))throw error;correction=error instanceof SyntaxError?'Return valid JSON without markdown fences.':error.message.slice(0,4000);}
+  await onStep({round,accepted,issues:accepted?[]:['invalid_learning_resources']});
   if(accepted)return bundle!;
   if(round===request.attemptBudget.maxModelTurns){if(bundle)return bundle;throw new Error('localFlow.validationRejected');}
-  messages.push({role:'assistant',content:message.content??''},{role:'user',content:correction+` Validation failed. Return only JSON {scene,senseFocus,imageIds?,html?} using the declared offline HTML interactions and only supplied image IDs. scene must be a concrete ${cue} recall cue of 10–1800 characters; senseFocus must be 2–500 characters. Neither field may contain the target expression. Preserve the fixed sense and authorized context. Correct the candidate; do not change the learning target. Do not add undeclared keys such as type.`});
+  messages.push({role:'assistant',content:message.content??''},{role:'user',content:correction+' Return only JSON {resources:[{role,payload}]} satisfying the supplied resourceContracts. Include all required model roles. Preserve the same experience across cue, binding and scene realization; never change the learning target.'});
  }
  throw new Error('localFlow.validationRejected');
 }

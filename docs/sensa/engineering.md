@@ -155,6 +155,13 @@ purpose 唯一允许的工具是读取本机已有意义，用于必要的复用
 
 `reference` 用途默认由 Sensa 服务承担，并带独立预算池：`sensa_consumer.reference_usage`，上限 `SENSA_REFERENCE_DAILY_LIMIT`（默认 300）。`teacher` 使用 `sensa_consumer.native_semantic_usage`，`content`/`review` 使用 `sensa_consumer.native_content_usage`；后三者的默认上限均由 `modelDailyLimit=30` 控制。参考词典数据源（`api.wiktapi.dev`、`api.dictionaryapi.dev`）与浏览器设备语音不是模型提供方，不在本边界内。
 
+资源 schema、生成指导和基础展示字段集中在 `packages/contracts/src/sensa/learningResourceDefinitions.ts`；
+轻量 Demand 与两阶段用途组合由 `lightweightLearningContent.ts` 声明。生成循环消费请求中的资源合同，
+只生成允许的 model roles；权威表达、意义与来源事实由系统装配。词源和录音不能由模型生成 URL 或
+自称来源。`spokenResource.ts` 在个人准备期间调用已认证的 `/sensa/speech`，冻结与表达、语言严格一致的 TTS 音频，缺失时在模型调用前失败。发布构建器只
+接收已经制作好的核心资源，不补造音频或场景绑定；纯文字 source 不再满足当前轻量合同。
+新增可选资源应局限在资源定义、需求配置及必要的资料获取／专用展示能力，不修改协议状态机。
+
 模型输出只是候选。语义接受、学习资源校验、加入学习和运行时结算仍由对应应用与领域模块完成。常规测试使用替身，不调用付费模型或 TTS。
 
 阅读请求由扩展的 background 在一个地方补齐学习者状态（语对与术语表），流式端口与普通消息共用这一步；模型连接测试与模型列表只带各自的问题。服务端的阅读、测试与列表三个入口只接受合同里声明的那三种请求体，`scripts/sensaReadingGlossarySmoke.mts` 在快速测试里逐个核对扩展实际发出的 body。
@@ -340,3 +347,31 @@ gh workflow run sensa-learning-content-publish.yml \
 - 本地和 CI 测试使用合成身份、隔离数据库和受控网络依赖。
 - 任何会产生费用的真实 Provider 调用，以及任何生产 push/deploy，都需要当次明确授权。
 - 长期文档不记录 SHA、Workflow run ID、一次性机器路径、某轮通过数量或临时故障过程。
+
+
+### 固定声音制作与本地验收
+
+`apps/api/src/sensa/speech/service.ts` 定义固定文本、语言到已保存声音的 provider 接口；
+consumer 路由沿用账号与 session 准入。Python `content/tools/spoken_resource.py` 的 Edge adapter
+复用现有 edge-tts 合成器，保存 provider/model/voice/locale/rate、原文、摘要与时长。
+缓存按全部合成参数隔离，读取时检查媒体摘要，provider 更换不会重写既有学习材料。
+语言支持由 adapter 显式列出；未支持的语言不可静默改用英语。
+当前 Node 本地服务通过 `scripts/local/speechProvider.mts` 注入 Edge adapter（两路并发、45 秒上限）；
+生产 Edge 服务尚未配置 Python 执行宿主，未注入 provider 时声音请求真实失败，不回退到设备朗读。
+旧内容管线保持独立，本轮未重构。
+
+本地包源为 `content/preview/lightweight-binding-v6.json`。首次执行
+`npm run content:prepare-local -- --allow-tts` 明确允许生成媒体；随后
+`npm run content:prepare-local` 仅复用经过校验的缓存。生成文件位于被 Git 忽略的
+`.sensa-local/` 和 `content/data/media/audio/speech-cache/`。
+普通 `dev:sensa` 启动只构建已准备好的包，不产生外部 TTS 调用。
+`npm run dev:sensa -- --no-browser --tts --models` 启动供人工验收的本地服务：
+`--no-browser` 禁止自动打开或操控浏览器，`--tts` 允许用户主动准备新目标时合成声音，
+`--models` 允许用户操作调用已配置模型。登录使用本地验证码 `123456`。
+省略 `--tts` 时只可获取缓存声音；省略 `--models` 时托管模型暂停。
+可通过 `SENSA_TTS_PYTHON` 指定装有 `content/requirements.txt` 依赖的 Python。
+
+`python3 content/tools/smoke_spoken_resource.py` 验证 provider 替换、缓存隔离、损坏检测与外部调用门控；
+`scripts/sensaSpeechProviderSmoke.mts` 验证服务合同；以上不调用真实服务。
+完成本地构建后，`node --import tsx scripts/sensaLocalBookSmoke.mts` 在隔离内存库中验证实际包的
+安装、学习结算与复习，完全禁用网络。真实浏览器存储、交互、声音听感由人工验收。

@@ -1,4 +1,3 @@
-import {sensaContextImagesSchema,sensaInteractiveHtmlSchema} from './richExperience.js';
 import { z } from "zod";
 
 import {
@@ -8,152 +7,31 @@ import {
   type SensaLearningMaterializationContent,
 } from "./learningContent.js";
 
-const nonEmpty = z.string().trim().min(1);
-const nullableNonEmpty = nonEmpty.nullable();
-
-export const sensaLightweightExpressionKindSchema = z.enum([
-  "word",
-  "phrase",
-  "construction",
-  "utterance",
-  "unspecified",
-]);
-
-export const sensaLightweightExpressionSnapshotSchema = z
-  .object({
-    surface: nonEmpty,
-    languageTag: nonEmpty,
-    expressionKind: sensaLightweightExpressionKindSchema,
-  })
-  .strict();
-
-export const sensaLightweightSenseSnapshotSchema = z
-  .object({
-    meaning: nonEmpty,
-    supportLanguageTag: nonEmpty,
-  })
-  .strict();
-
-export const sensaLightweightOriginExperienceSchema = z
-  .object({
-    scene: z.string().trim(),
-    senseFocus: nonEmpty,
-    featureLabels: z.array(nonEmpty).max(4),
-    sceneBridge: nonEmpty.optional(),
-    images: sensaContextImagesSchema.optional(),
-  })
-  .strict();
-
-export const sensaLightweightReferenceFactSchema = z.discriminatedUnion("factKind", [
-  z.object({
-    factKind: z.literal("pronunciation"),
-    audioUrl: nullableNonEmpty,
-    phoneticNotation: nullableNonEmpty,
-    accentLabel: nullableNonEmpty,
-  }).strict().superRefine((fact, context) => {
-    if (fact.audioUrl === null && fact.phoneticNotation === null) {
-      context.addIssue({
-        code: "custom",
-        path: ["phoneticNotation"],
-        message: "A pronunciation fact requires audio or phonetic notation.",
-      });
-    }
-  }),
-  z.object({
-    factKind: z.literal("language_structure"),
-    expressionTypeLabel: nullableNonEmpty,
-    partOfSpeech: nullableNonEmpty,
-    usagePattern: nullableNonEmpty.optional(),
-    contrastNote: nullableNonEmpty.optional(),
-  }).strict().superRefine((fact, context) => {
-    if (
-      fact.expressionTypeLabel === null
-      && fact.partOfSpeech === null
-      && !fact.usagePattern
-      && !fact.contrastNote
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["expressionTypeLabel"],
-        message: "A language-structure fact requires at least one useful field.",
-      });
-    }
-  }),
-  z.object({
-    factKind: z.literal("usage_example"),
-    example: nonEmpty,
-    translation: nullableNonEmpty.optional(),
-    audioUrl: nullableNonEmpty.optional(),
-  }).strict(),
-]);
-
-export const sensaLightweightExperienceRecallCueSchema = z
-  .object({ scene: z.string().trim(), senseFocus: nonEmpty, images:sensaContextImagesSchema.optional(), html:sensaInteractiveHtmlSchema.optional() })
-  .strict().refine(c=>!!c.scene||!!c.images?.length||!!c.html,"Experience content is required");
-export const sensaLightweightRecallSupportSchema = z
-  .object({ text: nonEmpty })
-  .strict();
-export const sensaLightweightTargetExpressionMaterialSchema = z
-  .object({ surface: nonEmpty })
-  .strict();
-export const sensaLightweightSenseConfirmationMaterialSchema = z
-  .object({ meaning: nonEmpty })
-  .strict();
-export const sensaLightweightPronunciationMaterialSchema = z
-  .object({
-    audioUrl: nullableNonEmpty,
-    phoneticNotation: nullableNonEmpty,
-    accentLabel: nullableNonEmpty,
-  })
-  .strict()
-  .superRefine((material, context) => {
-    if (material.audioUrl === null && material.phoneticNotation === null) {
-      context.addIssue({
-        code: "custom",
-        path: ["phoneticNotation"],
-        message: "Pronunciation material requires audio or phonetic notation.",
-      });
-    }
-  });
-export const sensaLightweightLanguageStructureMaterialSchema = z
-  .object({
-    expressionKind: sensaLightweightExpressionKindSchema,
-    expressionTypeLabel: nullableNonEmpty,
-    partOfSpeech: nullableNonEmpty,
-    usagePattern: nullableNonEmpty.optional(),
-    contrastNote: nullableNonEmpty.optional(),
-  })
-  .strict();
-export const sensaLightweightUsageGuidanceMaterialSchema = z
-  .object({
-    example: nonEmpty,
-    translation: nullableNonEmpty.optional(),
-    audioUrl: nullableNonEmpty.optional(),
-  })
-  .strict();
-export const sensaLightweightSceneBridgeMaterialSchema = z
-  .object({ text: nonEmpty })
-  .strict();
-
-export const LIGHTWEIGHT_INITIAL_MATERIAL_ROLES = Object.freeze([
-  "experience_recall_cue",
-  "recall_support",
-  "target_expression",
-  "sense_confirmation",
-  "pronunciation",
-  "language_structure",
-  "usage_guidance",
-  "scene_bridge",
-] as const);
-
-export type SensaLightweightInitialMaterialRole =
-  typeof LIGHTWEIGHT_INITIAL_MATERIAL_ROLES[number];
+export * from "./learningResourceDefinitions.js";
+import {sensaLightweightExpressionKindSchema,sensaLightweightExpressionSnapshotSchema,sensaLightweightSenseSnapshotSchema,sensaLightweightOriginExperienceSchema,sensaLightweightReferenceFactSchema,sensaLightweightTargetExpressionMaterialSchema,sensaLightweightExperienceRecallCueSchema,sensaLightweightRecallSupportSchema,LEARNING_RESOURCE_DEFINITIONS} from "./learningResourceDefinitions.js";
+export type SensaLightweightInitialMaterialRole = keyof typeof LIGHTWEIGHT_RESOURCE_PROFILE;
 
 export const LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_KEY =
   "lightweight-initial-content" as const;
-export const LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_VERSION = "v2" as const;
+export const LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_VERSION = "v3" as const;
 export const LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION =
-  "lightweight-initial-materialization-v2" as const;
+  "lightweight-initial-materialization-v3" as const;
+
+/** The two-stage lightweight composition; adding a resource does not change the state machine. */
+export const LIGHTWEIGHT_RESOURCE_PROFILE = {
+  experience_recall_cue: {required:true,maxItems:1,phase:'pre_reveal',use:'prompt'},
+  recall_support: {required:false,maxItems:4,phase:'pre_reveal',use:'support'},
+  target_expression: {required:true,maxItems:1,phase:'post_reveal',use:'reveal'},
+  sense_confirmation: {required:true,maxItems:1,phase:'post_reveal',use:'feedback'},
+  pronunciation: {required:true,maxItems:1,phase:'post_reveal',use:'support'},
+  language_structure: {required:false,maxItems:1,phase:'post_reveal',use:'support'},
+  usage_guidance: {required:false,maxItems:4,phase:'post_reveal',use:'support'},
+  scene_bridge: {required:true,maxItems:1,phase:'post_reveal',use:'support'},
+  scene_realization: {required:true,maxItems:1,phase:'post_reveal',use:'support'},
+  etymology: {required:false,maxItems:1,phase:'post_reveal',use:'support'},
+} as const satisfies Partial<Record<keyof typeof LEARNING_RESOURCE_DEFINITIONS,{required:boolean;maxItems:number;phase:'pre_reveal'|'post_reveal';use:'prompt'|'support'|'reveal'|'feedback'}>>;
+export const LIGHTWEIGHT_INITIAL_MATERIAL_ROLES = Object.freeze(Object.keys(LIGHTWEIGHT_RESOURCE_PROFILE) as SensaLightweightInitialMaterialRole[]);
+export const lightweightStepRequirements = (phase:'pre_reveal'|'post_reveal') => LIGHTWEIGHT_INITIAL_MATERIAL_ROLES.filter(key => LIGHTWEIGHT_RESOURCE_PROFILE[key].phase === phase).map(key => ({materialRoleKey:key,use:LIGHTWEIGHT_RESOURCE_PROFILE[key].use,required:LIGHTWEIGHT_RESOURCE_PROFILE[key].required}));
 
 const SCHEMA_VALIDATOR = Object.freeze({
   validatorPolicyId: "lightweight.schema",
@@ -196,7 +74,7 @@ const materialRole = (
   minItems: input.minItems,
   maxItems: input.maxItems,
   contentSchemaId: input.contentSchemaId,
-  contentSchemaVersion: "v1",
+  contentSchemaVersion: LEARNING_RESOURCE_DEFINITIONS[materialRoleKey].schemaVersion,
   eligibleStepIntents: input.eligibleStepIntents,
   evidenceEligibility: "none" as const,
   provisioningPolicyId: input.provisioningPolicyId,
@@ -204,7 +82,7 @@ const materialRole = (
   validatorPolicies: input.validatorPolicies,
 });
 
-/** Exact, machine-readable resource contract for Lightweight Initial v2. */
+/** Exact, machine-readable resource contract for Lightweight Initial v3. */
 export const SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND =
   sensaContentDemandDefinitionSchema.parse({
     contractVersion: sensaLearningContentContractVersion,
@@ -255,84 +133,17 @@ export const SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND =
         ],
       },
     ],
-    materialRoles: [
-      materialRole("experience_recall_cue", {
-        required: true,
-        minItems: 1,
-        maxItems: 1,
-        contentSchemaId: "lightweight.experience-recall-cue",
-        eligibleStepIntents: ["practice"],
-        provisioningPolicyId: "lightweight.pedagogical-provisioning",
-        validatorPolicies: [
-          SCHEMA_VALIDATOR,
-          SENSE_ALIGNMENT_VALIDATOR,
-          PRE_REVEAL_NON_DISCLOSURE_VALIDATOR,
-        ],
-      }),
-      materialRole("recall_support", {
-        required: false,
-        minItems: 0,
-        maxItems: 4,
-        contentSchemaId: "lightweight.recall-support",
-        eligibleStepIntents: ["practice"],
-        provisioningPolicyId: "lightweight.pedagogical-provisioning",
-        validatorPolicies: [SCHEMA_VALIDATOR, PRE_REVEAL_NON_DISCLOSURE_VALIDATOR],
-      }),
-      materialRole("target_expression", {
-        required: true,
-        minItems: 1,
-        maxItems: 1,
-        contentSchemaId: "lightweight.target-expression",
-        eligibleStepIntents: ["instruction"],
-        provisioningPolicyId: "lightweight.authoritative-passthrough",
-        validatorPolicies: [SCHEMA_VALIDATOR, AUTHORITATIVE_BINDING_VALIDATOR],
-      }),
-      materialRole("sense_confirmation", {
-        required: true,
-        minItems: 1,
-        maxItems: 1,
-        contentSchemaId: "lightweight.sense-confirmation",
-        eligibleStepIntents: ["instruction"],
-        provisioningPolicyId: "lightweight.authoritative-passthrough",
-        validatorPolicies: [SCHEMA_VALIDATOR, AUTHORITATIVE_BINDING_VALIDATOR],
-      }),
-      materialRole("pronunciation", {
-        required: false,
-        minItems: 0,
-        maxItems: 1,
-        contentSchemaId: "lightweight.pronunciation",
-        eligibleStepIntents: ["instruction"],
-        provisioningPolicyId: "lightweight.objective-derivation",
-        validatorPolicies: [SCHEMA_VALIDATOR, OBJECTIVE_BINDING_VALIDATOR],
-      }),
-      materialRole("language_structure", {
-        required: false,
-        minItems: 0,
-        maxItems: 1,
-        contentSchemaId: "lightweight.language-structure",
-        eligibleStepIntents: ["instruction"],
-        provisioningPolicyId: "lightweight.pedagogical-provisioning",
-        validatorPolicies: [SCHEMA_VALIDATOR, SENSE_ALIGNMENT_VALIDATOR],
-      }),
-      materialRole("usage_guidance", {
-        required: false,
-        minItems: 0,
-        maxItems: 4,
-        contentSchemaId: "lightweight.usage-guidance",
-        eligibleStepIntents: ["instruction"],
-        provisioningPolicyId: "lightweight.pedagogical-provisioning",
-        validatorPolicies: [SCHEMA_VALIDATOR, SENSE_ALIGNMENT_VALIDATOR],
-      }),
-      materialRole("scene_bridge", {
-        required: false,
-        minItems: 0,
-        maxItems: 1,
-        contentSchemaId: "lightweight.scene-bridge",
-        eligibleStepIntents: ["instruction"],
-        provisioningPolicyId: "lightweight.pedagogical-provisioning",
-        validatorPolicies: [SCHEMA_VALIDATOR, SENSE_ALIGNMENT_VALIDATOR],
-      }),
-    ],
+    materialRoles: LIGHTWEIGHT_INITIAL_MATERIAL_ROLES.map(key => {
+      const definition = LEARNING_RESOURCE_DEFINITIONS[key];
+      const profile = LIGHTWEIGHT_RESOURCE_PROFILE[key];
+      return materialRole(key, {
+        required: profile.required, minItems: profile.required ? 1 : 0, maxItems: profile.maxItems,
+        contentSchemaId: `resource.${key}`,
+        eligibleStepIntents: [profile.phase === 'pre_reveal' ? 'practice' : 'instruction'],
+        provisioningPolicyId: definition.generation === 'authority' ? 'lightweight.authoritative-passthrough' : definition.generation === 'source' ? 'lightweight.objective-derivation' : 'lightweight.pedagogical-provisioning',
+        validatorPolicies: [SCHEMA_VALIDATOR, ...(definition.generation === 'authority' ? [AUTHORITATIVE_BINDING_VALIDATOR] : definition.generation === 'source' ? [OBJECTIVE_BINDING_VALIDATOR] : [SENSE_ALIGNMENT_VALIDATOR]), ...(profile.phase === 'pre_reveal' ? [PRE_REVEAL_NON_DISCLOSURE_VALIDATOR] : [])],
+      });
+    }),
     derivations: [{
       derivationKey: "lightweight.pronunciation-from-expression",
       derivationKind: "external_pronunciation_lookup_or_tts",
@@ -340,26 +151,13 @@ export const SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND =
       outputMaterialRoleKey: "pronunciation",
       producerPolicyId: "lightweight.objective-derivation",
       producerPolicyVersion: "v1",
-      required: false,
+      required: true,
     }],
     assemblyPolicyId: "lightweight.role-indexed-materialization",
     assemblyPolicyVersion: "v1",
   });
 
-const rolePayloadSchemas: Readonly<Record<SensaLightweightInitialMaterialRole, z.ZodType>> = {
-  experience_recall_cue: sensaLightweightExperienceRecallCueSchema,
-  recall_support: sensaLightweightRecallSupportSchema,
-  target_expression: sensaLightweightTargetExpressionMaterialSchema,
-  sense_confirmation: sensaLightweightSenseConfirmationMaterialSchema,
-  pronunciation: sensaLightweightPronunciationMaterialSchema,
-  language_structure: sensaLightweightLanguageStructureMaterialSchema,
-  usage_guidance: sensaLightweightUsageGuidanceMaterialSchema,
-  scene_bridge: sensaLightweightSceneBridgeMaterialSchema,
-};
-
-export const lightweightInitialRolePayloadSchema = (
-  role: SensaLightweightInitialMaterialRole,
-): z.ZodType => rolePayloadSchemas[role];
+export const lightweightInitialRolePayloadSchema = (role: SensaLightweightInitialMaterialRole): z.ZodType => LEARNING_RESOURCE_DEFINITIONS[role].schema;
 
 const normalizeDisclosureText = (value: string): string => value
   .normalize("NFKC")
@@ -377,7 +175,7 @@ export const sensaLightweightInitialMaterializationContentSchema =
       context.addIssue({
         code: "custom",
         path: ["contentDemandKey"],
-        message: "Materialization content is not pinned to Lightweight Initial Content Demand v2.",
+        message: "Materialization content is not pinned to Lightweight Initial Content Demand v3.",
       });
     }
     const demandRoles = new Map(SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND.materialRoles.map(
@@ -422,9 +220,7 @@ export const sensaLightweightInitialMaterializationContentSchema =
           message: `Materialized resource policy does not match role ${resource.materialRoleKey}.`,
         });
       }
-      const payloadSchema = rolePayloadSchemas[
-        resource.materialRoleKey as SensaLightweightInitialMaterialRole
-      ];
+      const payloadSchema = lightweightInitialRolePayloadSchema(resource.materialRoleKey as SensaLightweightInitialMaterialRole);
       const parsedPayload = payloadSchema.safeParse(resource.contentPayload);
       if (!parsedPayload.success) {
         context.addIssue({
@@ -453,13 +249,21 @@ export const sensaLightweightInitialMaterializationContentSchema =
       )
       : null;
     if (targetExpression?.success) {
+      for (const resource of content.resources) {
+        const payload = resource.contentPayload;
+        if (resource.materialRoleKey === 'pronunciation' && (payload.surface !== targetExpression.data.surface || payload.languageTag !== targetExpression.data.languageTag)) context.addIssue({code:'custom',path:['resources'],message:'Spoken realization must match the exact expression and language.'});
+        if (resource.materialRoleKey === 'scene_realization') {
+          const start = payload.targetStart as number, end = payload.targetEnd as number;
+          if (typeof payload.example !== 'string' || start >= end || end > payload.example.length || ![targetExpression.data.surface,...(targetExpression.data.acceptedForms??[])].some(form=>normalizeDisclosureText(form)===normalizeDisclosureText((payload.example as string).slice(start,end))) || payload.experienceResourceKey !== 'experience_recall_cue:0') context.addIssue({code:'custom',path:['resources'],message:'Scene realization requires an exact target span and experience binding.'});
+        }
+      }
       const normalizedExpression = normalizeDisclosureText(targetExpression.data.surface);
       const preRevealTexts = content.resources.flatMap((resource) => {
         if (resource.materialRoleKey === "experience_recall_cue") {
           const payload = sensaLightweightExperienceRecallCueSchema.safeParse(
             resource.contentPayload,
           );
-          return payload.success ? [payload.data.scene, payload.data.senseFocus] : [];
+          return payload.success ? [payload.data.scene, payload.data.senseFocus, payload.data.html ?? ''] : [];
         }
         if (resource.materialRoleKey === "recall_support") {
           const payload = sensaLightweightRecallSupportSchema.safeParse(resource.contentPayload);

@@ -1,3 +1,4 @@
+import {edgeSpeechProvider} from './speechProvider.mts';
 /** Loopback-only Auth and consumer API for local owner acceptance. */
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
@@ -171,6 +172,7 @@ app.get('/auth/v1/user', async context => {
 app.post('/auth/v1/logout', context => context.body(null, 204));
 app.route('/', createConsumerRoutes({
   verify,
+  speechProvider: edgeSpeechProvider(process.env.SENSA_LOCAL_ENABLE_TTS === '1'),
   transaction,
   telemetry: () => {},
   deleteIdentity: async () => {},

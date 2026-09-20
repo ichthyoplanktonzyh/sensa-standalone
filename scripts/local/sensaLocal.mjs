@@ -23,10 +23,12 @@ let browserContext;
 let stopping = false;
 
 const mode = process.argv[2];
+const noBrowser = process.argv.includes('--no-browser');
+const ttsEnabled = process.argv.includes('--tts');
 const smoke = process.argv.includes('--smoke');
 const modelsEnabled = process.argv.includes('--models') || process.env.SENSA_LOCAL_ENABLE_MODELS === '1';
 if (!['dev', 'preview', 'reset'].includes(mode)) {
-  console.error('Usage: node scripts/local/sensaLocal.mjs dev|preview|reset [--smoke] [--models]');
+  console.error('Usage: node scripts/local/sensaLocal.mjs dev|preview|reset [--smoke] [--models] [--tts] [--no-browser]');
   process.exit(2);
 }
 if (!['darwin', 'linux'].includes(process.platform)) {
@@ -209,7 +211,7 @@ async function buildLocalAssets(webOrigin) {
       ...environment,
       SENSA_WEB_ORIGIN: webOrigin,
       SENSA_PACKAGE_OUTPUT: join(root, 'apps/web/public/learning-packages'),
-      SENSA_BOOK_RELEASE_SOURCES: join(root, 'content/preview/lightweight-binding-v5.json'),
+      SENSA_BOOK_RELEASE_SOURCES: join(root, '.sensa-local/lightweight-binding-v6.json'),
     },
   });
   checked(process.execPath, ['build.mjs'], {
@@ -277,6 +279,7 @@ async function runSmoke(page, webOrigin) {
 
 async function runLocal() {
   requireIdle();
+  if (!existsSync(join(root, '.sensa-local/lightweight-binding-v6.json'))) throw Error('Prepare the local Book first: npm run content:prepare-local -- --allow-tts');
   writeFileSync(lockPath, `${JSON.stringify({ pid: process.pid, mode, startedAt: new Date().toISOString() })}\n`, { mode: 0o600 });
   const webOrigin = mode === 'preview' ? 'http://127.0.0.1:4173' : 'http://127.0.0.1:3000';
   await ensureDatabaseContainer();
@@ -289,6 +292,8 @@ async function runLocal() {
       ...safeEnvironment(),
       DATABASE_URL: databaseUrl,
       SENSA_LOCAL_SERVICE_PORT: '4319',
+      SENSA_LOCAL_ENABLE_TTS: ttsEnabled ? '1' : '0',
+      ...(process.env.SENSA_TTS_PYTHON ? {SENSA_TTS_PYTHON:process.env.SENSA_TTS_PYTHON} : {}),
       SENSA_LOCAL_WEB_ORIGINS: 'http://127.0.0.1:3000,http://127.0.0.1:4173',
       SENSA_REGISTRATION_POLICY: 'registered',
       ...modelEnvironment,
@@ -315,6 +320,11 @@ async function runLocal() {
   const session = await sessionResponse.json();
   if (modelsEnabled) {
     console.warn('Local model opt-in is enabled. Requests use the configured real provider and may incur cost.');
+  }
+  if (noBrowser) {
+    console.log(`Local development ready: ${webOrigin}; browser launch disabled. Login code: 123456.`);
+    await new Promise((_, reject) => { for (const child of children) child.on('exit', code => { if (!stopping) reject(Error(`Local service exited: ${code}`)); }); });
+    return;
   }
   const profileName = smoke ? 'browser-smoke' : mode === 'preview' ? 'browser-preview' : 'browser-dev';
   const page = await launchBrowser(webOrigin, join(runtimeRoot, profileName), session);

@@ -602,8 +602,8 @@ Expression Reveal（instruction，显示 expression + Sense binding）
 
 Experience Recall 同时承担 grounding 与内部回想：必要呈现是经验速写与 Sense 线索，可选辅助资源
 只能进入声明过的 Presentation Slot，并且在 Reveal 前不得以任何形式泄露 target expression。
-Expression Reveal 的必要呈现是 expression surface 与确切 Sense binding；发音、音标、词法信息、
-多词结构、语调、用法、示例或场景回扣均是按实际已验证资源填充的可选 Slot。协议和 renderer
+Expression Reveal 必须覆盖目标形式、可感知声音、确切 Sense、经验连接与同场景表达；
+音标、使用框架、补充例句与词源按适用性和真实资源提供。协议和 renderer
 都不得假定 Expression 必然是单词。rating 是 Reveal 上的交互，不是第三个 Step；完成页是 Run
 结果，也不是 Card 或 Step。
 
@@ -776,12 +776,11 @@ Language Learning Route (`target=en`, `support=zh-Hans`)
 × FSRS Scheduling
 ```
 
-该轻量 Profile 的 `lightweight-initial-content@v2` Content Demand 要求三类材料：Experience Recall
-的 `experience_recall_cue`、Expression Reveal 的 `target_expression` 与 `sense_confirmation`。
-`recall_support`、`pronunciation`、`language_structure`、最多四条 `usage_guidance` 与 `scene_bridge` 均为有上限的
-可选 role；缺失时对应 Presentation Slot 折叠，不阻塞运行。该集合对 word、phrase、construction 与
-utterance 使用同一个合同，具体可选资源由表达类型与已取得的合法材料决定，而不是把词法字段假定为
-所有 Expression 的必填属性。
+该轻量 Profile 的 `lightweight-initial-content@v3` 要求经验 cue、目标表达、义项确认、主要声音、
+经验绑定说明和同场景语言实现。回想提示、最小使用框架、补充例句和有来源的词源为可选。
+word、phrase、construction 与 utterance 共用需求组合，但不会把词性或语法模板假定为所有表达的
+必填属性。完整目标话语可同时承担场景语言实现；职责不同不要求 UI 重复同一内容。
+声音缺失不能以音标、设备朗读或假音频满足 readiness。新增可选资源不改变学习完成或调度。
 
 其中 target expression 与 confirmed Sense 是权威直通材料，生成模型不得改写；经验 cue、回想支持、
 结构说明、用法提示与场景回扣可以由教学内容供给方提出 Candidate；发音/TTS 只能由有来源的发音事实

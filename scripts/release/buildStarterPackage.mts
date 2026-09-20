@@ -12,11 +12,11 @@ type Source={
  bookKey:string;title:string;description:string;versionNumber:number;publishedAt:string;changeSummary:string;
  targetLanguage:string;supportLanguage:string;
  entries:{
-  key:string;senseVersion:number;bindingVersion:number;expression:string;meaning:string;scene:string;
+  key:string;acceptedForms?:string[];senseVersion:number;bindingVersion:number;expression:string;meaning:string;scene:string;
   featureLabels?:string[];sceneBridge?:string;
-  pronunciation?:{audioUrl:string|null;phoneticNotation:string|null;accentLabel:string|null};
+  pronunciation?:{audioUrl:string;phoneticNotation:string|null;accentLabel:string|null;source:string;method:"recording"|"tts"};
   languageStructure?:{expressionTypeLabel:string|null;partOfSpeech:string|null;usagePattern?:string|null;contrastNote?:string|null};
-  sceneExample?:{example:string;translation?:string|null;audioUrl?:string|null};
+  sceneExample?:{targetStart:number;targetEnd:number;example:string;translation?:string|null;audioUrl?:string|null};
   usageExamples?:{example:string;translation?:string|null;audioUrl?:string|null}[];
   semanticSpec:SensaSenseSemanticSpec;
  }[];
@@ -54,15 +54,15 @@ for(const path of sourcePaths.sort()){
  const entries=await Promise.all(source.entries.map(async entry=>{
   if(!Number.isInteger(entry.senseVersion)||entry.senseVersion<1||!Number.isInteger(entry.bindingVersion)||entry.bindingVersion<1)throw Error(`Entry versions must be positive: ${entry.key}`);
   const semanticSpec=sensaSenseSemanticSpecSchema.parse(entry.semanticSpec),senseId=stableUuid('sensa:starter:sense:'+entry.key),senseVersionId=stableUuid(`sensa:starter:sense:${entry.key}:version:${entry.senseVersion}`),expressionKey=`${source.targetLanguage}:${entry.expression.trim().toLocaleLowerCase()}`,expressionId=stableUuid('sensa:starter:expression:'+expressionKey),expressionVersionId=stableUuid(`sensa:starter:expression:${expressionKey}:version:${entry.bindingVersion}`),bindingId=stableUuid('sensa:starter:binding:'+entry.key),bindingVersionId=stableUuid(`sensa:starter:binding:${entry.key}:version:${entry.bindingVersion}`);
-  const pronunciation=entry.pronunciation?{...entry.pronunciation,audioUrl:await packagedAudioUrl(entry.pronunciation.audioUrl,`${entry.key}:pronunciation`)}:undefined;
-  const authoredExamples=[...(entry.sceneExample?[entry.sceneExample]:[]),...(entry.usageExamples??[])];
+  const pronunciation=entry.pronunciation?{...entry.pronunciation,surface:entry.expression,languageTag:source.targetLanguage,audioUrl:(await packagedAudioUrl(entry.pronunciation.audioUrl,`${entry.key}:pronunciation`))!}:undefined;
+  const authoredExamples=entry.usageExamples??[];
   const usageExamples=await Promise.all(authoredExamples.map(async(example,index)=>({...example,audioUrl:await packagedAudioUrl(example.audioUrl,`${entry.key}:example:${index}`)})));
   const referenceFacts=[
    ...(pronunciation?[{source:'pronunciation_lexicon' as const,sourceVersion:`authored:${source.bookKey}:${source.versionNumber}:${entry.key}:pronunciation`,fact:{factKind:'pronunciation' as const,...pronunciation}}]:[]),
    ...(entry.languageStructure?[{source:'dictionary' as const,sourceVersion:`authored:${source.bookKey}:${source.versionNumber}:${entry.key}:structure`,fact:{factKind:'language_structure' as const,...entry.languageStructure}}]:[]),
    ...usageExamples.map((example,index)=>({source:'other_authoritative_source' as const,sourceVersion:`authored:${source.bookKey}:${source.versionNumber}:${entry.key}:example:${index}`,fact:{factKind:'usage_example' as const,example:example.example,translation:example.translation??null,audioUrl:example.audioUrl}})),
   ];
-  const result=provisionLightweightInitialContent({learnerUserId:owner,learningTargetId:stableUuid('sensa:starter:target:'+entry.key),senseId,senseVersionId,senseExpressionBindingId:bindingId,resolvedLearningPlanRevisionId:`authored:${source.bookKey}:${source.versionNumber}`,expressionSourceVersion:String(entry.bindingVersion),senseSourceVersion:String(entry.senseVersion),expression:{surface:entry.expression,languageTag:source.targetLanguage,expressionKind:entry.expression.includes(' ')?'phrase':'word'},sense:{meaning:entry.meaning,supportLanguageTag:source.supportLanguage},originExperience:{source:'other_authoritative_source',sourceVersion:String(source.versionNumber),personalAnchorUseGrantId:null,experience:{scene:entry.scene,senseFocus:entry.meaning,featureLabels:entry.featureLabels??[],...(entry.sceneBridge?{sceneBridge:entry.sceneBridge}:{})}},referenceFacts,requestedAt:source.publishedAt});
+  const result=provisionLightweightInitialContent({learnerUserId:owner,learningTargetId:stableUuid('sensa:starter:target:'+entry.key),senseId,senseVersionId,senseExpressionBindingId:bindingId,resolvedLearningPlanRevisionId:`authored:${source.bookKey}:${source.versionNumber}`,expressionSourceVersion:String(entry.bindingVersion),senseSourceVersion:String(entry.senseVersion),expression:{surface:entry.expression,languageTag:source.targetLanguage,...(entry.acceptedForms?{acceptedForms:entry.acceptedForms}:{}),expressionKind:entry.expression.includes(' ')?'phrase':'word'},sense:{meaning:entry.meaning,supportLanguageTag:source.supportLanguage},originExperience:{source:'other_authoritative_source',sourceVersion:String(source.versionNumber),personalAnchorUseGrantId:null,experience:{scene:entry.scene,senseFocus:entry.meaning,featureLabels:entry.featureLabels??[],...(entry.sceneExample?{sceneRealization:{example:entry.sceneExample.example,targetStart:entry.sceneExample.targetStart,targetEnd:entry.sceneExample.targetEnd,translation:entry.sceneExample.translation??null,audioUrl:await packagedAudioUrl(entry.sceneExample.audioUrl,`${entry.key}:scene`)}}:{}),...(entry.sceneBridge?{sceneBridge:entry.sceneBridge}:{})}},referenceFacts,requestedAt:source.publishedAt});
   if(result.status!=='ready')throw Error('Authored resource failed material validation: '+entry.key);
   return {senseId,senseVersionId,bindingId,bindingVersionId,expression:entry.expression,meaning:entry.meaning,content:result.materialization.content,semantic:{senseKey:entry.key,senseVersionNumber:entry.senseVersion,semanticPolicyVersion:'sensa-editorial-starter-v1',semanticSpec,expressionId,expressionVersionId,expressionType:entry.expression.includes(' ')?'phrase' as const:'word' as const,expressionVersionNumber:entry.bindingVersion,expressionStructure:{},bindingVersionNumber:entry.bindingVersion,relation:'realizes' as const,semanticCoverage:'exact' as const,registerLabel:null,usageConstraints:[]}};
  }));
