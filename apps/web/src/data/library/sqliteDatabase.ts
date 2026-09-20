@@ -16,6 +16,12 @@ import {
 } from "./sqliteProtocol";
 
 type StoredEntry = { key: string; encodedValue: string };
+type ContentAttemptProjectionSource = {
+  taskId: string;
+  createdAt: string;
+};
+
+const sqliteOptimizeIntervalMs = 24 * 60 * 60 * 1000;
 
 /** Kept beside the storage kernel so diagnostics exercise the exact shipped query. */
 export const sqliteHomeLearningTargetsQuery = `SELECT
@@ -36,6 +42,8 @@ export const sqliteHomeLearningTargetsQuery = `SELECT
 
 /** Internal SQLite record kernel owned by the OPFS Worker. */
 export class SqliteRecordDatabase {
+  private nextOptimizeAt = 0;
+
   constructor(
     private readonly sqlite3: Sqlite3Static,
     private readonly database: Database,
@@ -57,6 +65,7 @@ export class SqliteRecordDatabase {
     // This OPFS connection normally lives for the owning tab's lifetime. Let
     // SQLite refresh planner statistics after schema changes and on every open.
     this.database.exec("PRAGMA optimize=0x10002");
+    this.nextOptimizeAt = Date.now() + sqliteOptimizeIntervalMs;
     const integrity = this.database.exec({
       sql: "PRAGMA quick_check(1)",
       rowMode: 0,
@@ -140,13 +149,68 @@ export class SqliteRecordDatabase {
     });
   }
 
+  learningRunIdsForTarget(targetId: string, openOnly: boolean): string[] {
+    const rows = this.database.exec({
+      sql: `SELECT run_key FROM sensa_learning_run_targets
+            WHERE target_key=?${openOnly ? ' AND completed_at IS NULL' : ''}
+            ORDER BY run_key`,
+      bind: [targetId],
+      rowMode: 0,
+      returnValue: 'resultRows',
+    }) as unknown[];
+    return rows.map(String);
+  }
+
+  countIntroducedLearningTargets(
+    languageRouteId: string,
+    startedAfter: string,
+    startedBefore: string,
+  ): number {
+    const rows = this.database.exec({
+      sql: `SELECT COUNT(*) FROM sensa_learning_targets
+            WHERE introduced_language_route_id=?
+              AND started_at>=? AND started_at<?`,
+      bind: [languageRouteId, startedAfter, startedBefore],
+      rowMode: 0,
+      returnValue: 'resultRows',
+    }) as unknown[];
+    return Number(rows[0] ?? 0);
+  }
+
+  openLearningRunTargets(): Array<{ runId: string; targetId: string }> {
+    const rows = this.database.exec({
+      sql: `SELECT run_key,target_key FROM sensa_learning_run_targets
+            WHERE completed_at IS NULL ORDER BY target_key,run_key`,
+      rowMode: 'object',
+      returnValue: 'resultRows',
+    }) as Array<Record<string, unknown>>;
+    return rows.map((row) => ({ runId: String(row.run_key), targetId: String(row.target_key) }));
+  }
+
+  countContentAttemptsSince(taskId: string, createdAfter: string): number {
+    const rows = this.database.exec({
+      sql: `SELECT COUNT(*) FROM sensa_content_attempts
+            WHERE task_id=? AND created_at>?`,
+      bind: [taskId, createdAfter],
+      rowMode: 0,
+      returnValue: 'resultRows',
+    }) as unknown[];
+    return Number(rows[0] ?? 0);
+  }
+
   commit(mutation: SqliteMutation): void {
     if (!mutation.clears.length && !mutation.deletes.length && !mutation.puts.length) return;
+    if (Date.now() >= this.nextOptimizeAt) {
+      this.database.exec("PRAGMA optimize");
+      this.nextOptimizeAt = Date.now() + sqliteOptimizeIntervalMs;
+    }
     this.database.exec("BEGIN IMMEDIATE");
     try {
       for (const table of mutation.clears) {
         this.database.exec({ sql: "DELETE FROM sensa_records WHERE table_name=?", bind: [table] });
         if (table === 'learningTargets') this.database.exec('DELETE FROM sensa_learning_targets');
+        if (table === 'learningRuns') this.database.exec('DELETE FROM sensa_learning_runs');
+        if (table === 'contentAttempts') this.database.exec('DELETE FROM sensa_content_attempts');
       }
       for (const item of mutation.deletes) {
         this.database.exec({
@@ -159,6 +223,18 @@ export class SqliteRecordDatabase {
             bind: [item.key],
           });
         }
+        if (item.table === 'learningRuns') {
+          this.database.exec({
+            sql: 'DELETE FROM sensa_learning_runs WHERE record_key=?',
+            bind: [item.key],
+          });
+        }
+        if (item.table === 'contentAttempts') {
+          this.database.exec({
+            sql: 'DELETE FROM sensa_content_attempts WHERE record_key=?',
+            bind: [item.key],
+          });
+        }
       }
       for (const item of mutation.puts) {
         this.database.exec({
@@ -168,6 +244,12 @@ export class SqliteRecordDatabase {
         });
         if (item.table === 'learningTargets') {
           this.upsertLearningTargetProjection(item.key, item.encodedValue);
+        }
+        if (item.table === 'learningRuns') {
+          this.upsertLearningRunProjection(item.key, item.encodedValue);
+        }
+        if (item.table === 'contentAttempts') {
+          this.upsertContentAttemptProjection(item.key, item.encodedValue);
         }
       }
       this.database.exec("COMMIT");
@@ -257,5 +339,37 @@ export class SqliteRecordDatabase {
         ],
       });
     }
+  }
+
+  private upsertLearningRunProjection(key: string, encodedValue: string): void {
+    const run = this.decode<LocalLearningRun>(encodedValue);
+    this.database.exec({
+      sql: `INSERT INTO sensa_learning_runs(record_key,completed_at) VALUES(?,?)
+            ON CONFLICT(record_key) DO UPDATE SET completed_at=excluded.completed_at`,
+      bind: [key, run.completedAt],
+    });
+    this.database.exec({
+      sql: 'DELETE FROM sensa_learning_run_targets WHERE run_key=?',
+      bind: [key],
+    });
+    for (const targetId of run.targetIds) {
+      this.database.exec({
+        sql: `INSERT INTO sensa_learning_run_targets(target_key,run_key,completed_at)
+              VALUES(?,?,?)`,
+        bind: [targetId, key, run.completedAt],
+      });
+    }
+  }
+
+  private upsertContentAttemptProjection(key: string, encodedValue: string): void {
+    const attempt = this.decode<ContentAttemptProjectionSource>(encodedValue);
+    this.database.exec({
+      sql: `INSERT INTO sensa_content_attempts(record_key,task_id,created_at)
+            VALUES(?,?,?)
+            ON CONFLICT(record_key) DO UPDATE SET
+              task_id=excluded.task_id,
+              created_at=excluded.created_at`,
+      bind: [key, attempt.taskId, attempt.createdAt],
+    });
   }
 }

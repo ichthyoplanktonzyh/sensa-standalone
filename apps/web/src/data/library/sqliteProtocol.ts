@@ -2,9 +2,9 @@
 
 import type {HomeLearningStorageProjection} from './homeLearningRecords';
 
-export const sqliteLibraryFile = "/sensa-local-library-v4.sqlite3";
-export const sqlitePoolDirectory = "/sensa-local-library-v4";
-export const sqliteLibrarySchemaVersion = 4;
+export const sqliteLibraryFile = "/sensa-local-library-v5.sqlite3";
+export const sqlitePoolDirectory = "/sensa-local-library-v5";
+export const sqliteLibrarySchemaVersion = 5;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -45,6 +45,10 @@ export type SqliteWorkerRequest =
   | { id: number; kind: "entries"; table: SqliteLibraryTable }
   | { id: number; kind: "count"; table: SqliteLibraryTable }
   | { id: number; kind: "homeLearningProjection"; languageRouteId: string }
+  | { id: number; kind: "countIntroducedLearningTargets"; languageRouteId: string; startedAfter: string; startedBefore: string }
+  | { id: number; kind: "learningRunIdsForTarget"; targetId: string; openOnly: boolean }
+  | { id: number; kind: "openLearningRunTargets" }
+  | { id: number; kind: "countContentAttemptsSince"; taskId: string; createdAfter: string }
   | { id: number; kind: "commit"; mutation: SqliteMutation }
   | { id: number; kind: "diagnostics" };
 
@@ -108,5 +112,28 @@ CREATE INDEX IF NOT EXISTS sensa_learning_route_targets_target
 CREATE INDEX IF NOT EXISTS sensa_learning_targets_introduced
   ON sensa_learning_targets(introduced_language_route_id,started_at)
   WHERE introduced_language_route_id IS NOT NULL AND started_at IS NOT NULL;
+CREATE TABLE IF NOT EXISTS sensa_learning_runs(
+  record_key TEXT NOT NULL PRIMARY KEY,
+  completed_at TEXT
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sensa_learning_run_targets(
+  target_key TEXT NOT NULL,
+  run_key TEXT NOT NULL,
+  completed_at TEXT,
+  PRIMARY KEY(target_key,run_key),
+  FOREIGN KEY(run_key) REFERENCES sensa_learning_runs(record_key) ON DELETE CASCADE
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS sensa_learning_run_targets_run
+  ON sensa_learning_run_targets(run_key);
+CREATE INDEX IF NOT EXISTS sensa_learning_run_targets_open
+  ON sensa_learning_run_targets(target_key,run_key)
+  WHERE completed_at IS NULL;
+CREATE TABLE IF NOT EXISTS sensa_content_attempts(
+  record_key TEXT NOT NULL PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  created_at TEXT NOT NULL
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS sensa_content_attempts_task_created
+  ON sensa_content_attempts(task_id,created_at);
 PRAGMA user_version=${sqliteLibrarySchemaVersion};
 `;

@@ -98,6 +98,67 @@ export class LibraryTransaction {
     return storageCall(() => this.adapter.count(table));
   }
 
+  async learningRunIdsForTarget(
+    inputTargetId: string,
+    options: Readonly<{ openOnly?: boolean }> = {},
+  ): Promise<string[]> {
+    const targetId = recordKey(inputTargetId);
+    const openOnly = options.openOnly ?? false;
+    if (this.hasPendingChanges('learningRuns')) {
+      return (await this.entries('learningRuns'))
+        .filter(({ value }) => {
+          const run = value as { targetIds: string[]; completedAt: string | null };
+          return run.targetIds.includes(targetId) && (!openOnly || !run.completedAt);
+        })
+        .map(({ key }) => key);
+    }
+    return storageCall(() => this.adapter.learningRunIdsForTarget(targetId, openOnly));
+  }
+
+  async countIntroducedLearningTargets(
+    languageRouteId: string,
+    startedAfter: string,
+    startedBefore: string,
+  ): Promise<number> {
+    if (this.hasPendingChanges('learningTargets')) {
+      return (await this.all<{
+        introducedLanguageRouteId: string | null;
+        startedAt: string | null;
+      }>('learningTargets'))
+        .filter((target) => target.introducedLanguageRouteId === languageRouteId
+          && target.startedAt !== null
+          && target.startedAt >= startedAfter
+          && target.startedAt < startedBefore)
+        .length;
+    }
+    return storageCall(() => this.adapter.countIntroducedLearningTargets(
+      languageRouteId,
+      startedAfter,
+      startedBefore,
+    ));
+  }
+
+  async openLearningTargetIds(): Promise<string[]> {
+    if (this.hasPendingChanges('learningRuns')) {
+      const targetIds = (await this.all<{ targetIds: string[]; completedAt: string | null }>('learningRuns'))
+        .filter((run) => !run.completedAt)
+        .flatMap((run) => run.targetIds);
+      return [...new Set(targetIds)].sort();
+    }
+    const links = await storageCall(() => this.adapter.openLearningRunTargets());
+    return [...new Set(links.map((link) => link.targetId))].sort();
+  }
+
+  async countContentAttemptsSince(inputTaskId: string, createdAfter: string): Promise<number> {
+    const taskId = recordKey(inputTaskId);
+    if (this.hasPendingChanges('contentAttempts')) {
+      return (await this.all<{ taskId: string; createdAt: string }>('contentAttempts'))
+        .filter((attempt) => attempt.taskId === taskId && attempt.createdAt > createdAfter)
+        .length;
+    }
+    return storageCall(() => this.adapter.countContentAttemptsSince(taskId, createdAfter));
+  }
+
   put(table: Table, inputKey: string, value: unknown): void {
     this.assertWritable();
     const key = recordKey(inputKey);
@@ -136,6 +197,10 @@ export class LibraryTransaction {
       puts: [...this.puts].flatMap(([table, values]) =>
         [...values].map(([key, value]) => ({ table, key, encodedValue: encode(value) }))),
     };
+  }
+
+  private hasPendingChanges(table: Table): boolean {
+    return this.clears.has(table) || this.deletes.has(table) || this.puts.has(table);
   }
 
   private assertWritable(): void {

@@ -43,7 +43,7 @@ compositor transform，支持中断和 reduced-motion；所有页面仍保留显
 
 ## 数据与同步
 
-生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v4.sqlite3`，持久化在浏览器
+生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v5.sqlite3`，持久化在浏览器
 Origin Private File System。SQLite 在专用 Worker 中运行，使用不要求页面启用跨源隔离的
 `opfs-sahpool` VFS。Web Lock 选出唯一数据库 owner；其他同源 Sensa 标签页通过 BroadcastChannel
 复用 owner 的记录接口，owner 关闭后由剩余页面重新选举，绝不打开竞争连接。跨页共享/排他事务锁覆盖
@@ -57,10 +57,11 @@ SAH Pool 由 leader Worker 独占，所以数据库打开后的第一条 SQLite 
 无 shared-memory 环境的 WAL 前置条件，并保留 FULL 的提交同步；不得为了基准数字降为 NORMAL。
 真实 Chromium 对照可用 `npm run benchmark:sqlite-opfs` 复测，`test:browser` 同时验证 Worker 重启后的
 记录数、`quick_check` 和生产运行时实际采用的 WAL/FULL/EXCLUSIVE profile。
-学习事实仍以逻辑 record 为写入 authority；SQLite 在同一事务内维护可重建的 Target 查询投影和
-Route–Target 关系索引。首页只读取当前 Route 的 Target、该 Route 今日已占用的新词额度以及实际引用的
-Package key，不遍历或解析其他 Route 的 Target。只需要数量的恢复/清理查询使用 SQLite `COUNT(*)`，不把
-整表 JSON 传回页面。物理 schema v4 使用新的 OPFS 文件；因当前无用户库数据，不迁移或读取 v3 文件。
+学习事实仍以逻辑 record 为写入 authority；SQLite 在同一事务内维护可重建的 Target、Run–Target 和
+Content Attempt 查询投影。首页只读取当前 Route 的 Target、该 Route 今日已占用的新词额度以及实际引用的
+Package key；运行恢复、策略锁定和生成频控通过领域索引查询，不遍历或解析无关 JSON。数据库打开及有写入
+的长连接周期内使用 `PRAGMA optimize` 维护查询规划统计。物理 schema v5 使用新的 OPFS 文件；因当前无用户库数据，不迁移
+或读取 v4 文件。
 
 Web 应用层的逻辑表与 Personal Semantic World Journey 共用这一物理事务 authority。Journey 的
 意义聚合、注册表事实、Inbox、澄清草稿和 operation receipt 分别保存在 `semanticMeanings`、

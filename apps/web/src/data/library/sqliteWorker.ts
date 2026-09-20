@@ -43,6 +43,14 @@ const message = async (request: SqliteWorkerRequest): Promise<unknown> => {
     case "entries": return db.entries(request.table);
     case "count": return db.count(request.table);
     case "homeLearningProjection": return db.homeLearningProjection(request.languageRouteId);
+    case "countIntroducedLearningTargets": return db.countIntroducedLearningTargets(
+      request.languageRouteId,
+      request.startedAfter,
+      request.startedBefore,
+    );
+    case "learningRunIdsForTarget": return db.learningRunIdsForTarget(request.targetId, request.openOnly);
+    case "openLearningRunTargets": return db.openLearningRunTargets();
+    case "countContentAttemptsSince": return db.countContentAttemptsSince(request.taskId, request.createdAfter);
     case "commit": db.commit(request.mutation); return null;
     case "diagnostics": return db.diagnostics();
   }

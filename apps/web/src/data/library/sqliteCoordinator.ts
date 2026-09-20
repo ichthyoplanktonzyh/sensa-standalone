@@ -19,6 +19,10 @@ export interface CoordinatedSqliteBackend {
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
   count(table: SqliteLibraryTable): Promise<number>;
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection>;
+  countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number>;
+  learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]>;
+  openLearningRunTargets(): Promise<Array<{ runId: string; targetId: string }>>;
+  countContentAttemptsSince(taskId: string, createdAfter: string): Promise<number>;
   commit(mutation: SqliteMutation): Promise<void>;
   diagnostics(): Promise<SqliteStorageDiagnostics>;
 }
@@ -78,6 +82,24 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
 
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {
     return this.call({ kind: 'homeLearningProjection', languageRouteId }) as Promise<HomeLearningStorageProjection>;
+  }
+
+  countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number> {
+    return this.call({
+      kind: 'countIntroducedLearningTargets', languageRouteId, startedAfter, startedBefore,
+    }) as Promise<number>;
+  }
+
+  learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]> {
+    return this.call({ kind: 'learningRunIdsForTarget', targetId, openOnly }) as Promise<string[]>;
+  }
+
+  openLearningRunTargets(): Promise<Array<{ runId: string; targetId: string }>> {
+    return this.call({ kind: 'openLearningRunTargets' }) as Promise<Array<{ runId: string; targetId: string }>>;
+  }
+
+  countContentAttemptsSince(taskId: string, createdAfter: string): Promise<number> {
+    return this.call({ kind: 'countContentAttemptsSince', taskId, createdAfter }) as Promise<number>;
   }
 
   async commit(mutation: SqliteMutation): Promise<void> {
@@ -225,6 +247,14 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'entries': return backend.entries(input.table);
       case 'count': return backend.count(input.table);
       case 'homeLearningProjection': return backend.homeLearningProjection(input.languageRouteId);
+      case 'countIntroducedLearningTargets': return backend.countIntroducedLearningTargets(
+        input.languageRouteId,
+        input.startedAfter,
+        input.startedBefore,
+      );
+      case 'learningRunIdsForTarget': return backend.learningRunIdsForTarget(input.targetId, input.openOnly);
+      case 'openLearningRunTargets': return backend.openLearningRunTargets();
+      case 'countContentAttemptsSince': return backend.countContentAttemptsSince(input.taskId, input.createdAfter);
       case 'commit': return backend.commit(input.mutation);
       case 'diagnostics': return backend.diagnostics();
     }

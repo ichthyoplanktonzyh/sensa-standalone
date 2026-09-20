@@ -47,10 +47,40 @@ await assert.rejects(
 );
 assert.equal(await store.readLibrary((tx) => tx.get('drafts', 'rolled-back')), undefined);
 
+await store.restoreLibraryTransaction(async (tx) => {
+  tx.put('learningTargets', 'indexed-target', {
+    introducedLanguageRouteId: 'indexed-route',
+    startedAt: '2026-09-14T08:00:00.000Z',
+  });
+  tx.put('learningRuns', 'indexed-run', {
+    id: 'indexed-run',
+    targetIds: ['indexed-target'],
+    completedAt: null,
+  });
+  tx.put('contentAttempts', 'indexed-attempt', {
+    id: 'indexed-attempt',
+    taskId: 'indexed-task',
+    createdAt: '2026-09-14T09:00:00.000Z',
+  });
+  assert.deepEqual(await tx.learningRunIdsForTarget('indexed-target', { openOnly: true }), ['indexed-run']);
+  assert.deepEqual(await tx.openLearningTargetIds(), ['indexed-target']);
+  assert.equal(await tx.countIntroducedLearningTargets(
+    'indexed-route',
+    '2026-09-14T00:00:00.000Z',
+    '2026-09-15T00:00:00.000Z',
+  ), 1);
+  assert.equal(await tx.countContentAttemptsSince('indexed-task', '2026-09-14T00:00:00.000Z'), 1);
+});
+await store.readLibrary(async (tx) => {
+  assert.deepEqual(await tx.learningRunIdsForTarget('indexed-target', { openOnly: true }), ['indexed-run']);
+  assert.deepEqual(await tx.openLearningTargetIds(), ['indexed-target']);
+  assert.equal(await tx.countContentAttemptsSince('indexed-task', '2026-09-14T00:00:00.000Z'), 1);
+});
+
 const diagnostics = await store.readLibraryStorageDiagnostics();
 assert.deepEqual(
   { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
-  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 4 },
+  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 5 },
 );
 
 const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearningTargetsQuery }, { encodeBackupValue }, { sqliteLibrarySchema }] = await Promise.all([
@@ -152,6 +182,72 @@ const routeA = database.homeLearningProjection('route-a');
 assert.deepEqual(routeA.targets.map((entry) => entry.id), ['target-a']);
 assert.deepEqual(routeA.availablePackageKeys, ['package-a']);
 assert(routeA.targets[0]?.memory?.dueAt instanceof Date);
+assert.equal(database.countIntroducedLearningTargets(
+  'route-a',
+  '2026-09-14T00:00:00.000Z',
+  '2026-09-15T00:00:00.000Z',
+), 0);
+database.commit({
+  clears: [],
+  deletes: [],
+  puts: [
+    { table: 'learningRuns', key: 'run-complete', encodedValue: encoded({ id: 'run-complete', targetIds: ['target-a'], completedAt: '2026-09-13T12:00:00.000Z' }) },
+    { table: 'learningRuns', key: 'run-open', encodedValue: encoded({ id: 'run-open', targetIds: ['target-a', 'target-b'], completedAt: null }) },
+    { table: 'contentAttempts', key: 'attempt-old', encodedValue: encoded({ id: 'attempt-old', taskId: 'task-a', createdAt: '2026-09-13T12:00:00.000Z', status: 'failed' }) },
+    { table: 'contentAttempts', key: 'attempt-recent', encodedValue: encoded({ id: 'attempt-recent', taskId: 'task-a', createdAt: '2026-09-14T12:00:00.000Z', status: 'ready' }) },
+    { table: 'contentAttempts', key: 'attempt-other', encodedValue: encoded({ id: 'attempt-other', taskId: 'task-b', createdAt: '2026-09-14T12:00:00.000Z', status: 'ready' }) },
+  ],
+});
+assert.deepEqual(database.learningRunIdsForTarget('target-a', false), ['run-complete', 'run-open']);
+assert.deepEqual(database.learningRunIdsForTarget('target-a', true), ['run-open']);
+assert.deepEqual(database.openLearningRunTargets(), [
+  { runId: 'run-open', targetId: 'target-a' },
+  { runId: 'run-open', targetId: 'target-b' },
+]);
+assert.equal(database.countContentAttemptsSince('task-a', '2026-09-14T00:00:00.000Z'), 1);
+const indexedQueryPlans = [
+  {
+    sql: `EXPLAIN QUERY PLAN SELECT run_key FROM sensa_learning_run_targets
+          WHERE target_key=? AND completed_at IS NULL ORDER BY run_key`,
+    bind: ['target-a'],
+    expected: 'SEARCH sensa_learning_run_targets USING',
+  },
+  {
+    sql: `EXPLAIN QUERY PLAN SELECT COUNT(*) FROM sensa_content_attempts
+          WHERE task_id=? AND created_at>?`,
+    bind: ['task-a', '2026-09-14T00:00:00.000Z'],
+    expected: 'sensa_content_attempts_task_created',
+  },
+  {
+    sql: `EXPLAIN QUERY PLAN SELECT COUNT(*) FROM sensa_learning_targets
+          WHERE introduced_language_route_id=? AND started_at>=? AND started_at<?`,
+    bind: ['route-a', '2026-09-14T00:00:00.000Z', '2026-09-15T00:00:00.000Z'],
+    expected: 'sensa_learning_targets_introduced',
+  },
+];
+for (const plan of indexedQueryPlans) {
+  const details = (rawDatabase.exec({
+    sql: plan.sql,
+    bind: plan.bind,
+    rowMode: 'object',
+    returnValue: 'resultRows',
+  }) as Array<Record<string, unknown>>).map((row) => String(row.detail));
+  assert(
+    details.some((detail) => detail.includes(plan.expected)),
+    `${plan.expected} must serve its domain query: ${details.join(' | ')}`,
+  );
+}
+database.commit({
+  clears: [],
+  deletes: [{ table: 'learningRuns', key: 'run-complete' }],
+  puts: [{
+    table: 'learningRuns',
+    key: 'run-open',
+    encodedValue: encoded({ id: 'run-open', targetIds: ['target-a', 'target-b'], completedAt: '2026-09-14T13:00:00.000Z' }),
+  }],
+});
+assert.deepEqual(database.learningRunIdsForTarget('target-a', false), ['run-open']);
+assert.deepEqual(database.openLearningRunTargets(), []);
 database.commit({
   clears: [],
   deletes: [{ table: 'learningTargets', key: 'target-b' }],
@@ -172,4 +268,4 @@ assert.deepEqual(database.homeLearningProjection('route-a').targets, []);
 assert.match(database.diagnostics().sqliteVersion, /^3\./u);
 database.close();
 
-console.log('PASS: Library records preserve typed values and atomic replay; SQLite schema v4 maintains planner statistics, indexed learning projections, native counts and logical-table constraints. Browser OPFS is checked separately.');
+console.log('PASS: Library records preserve typed values and atomic replay; SQLite schema v5 maintains planner statistics, indexed learning projections, native counts and logical-table constraints. Browser OPFS is checked separately.');

@@ -18,6 +18,10 @@ export interface SqliteRecordAdapter {
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
   count(table: SqliteLibraryTable): Promise<number>;
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection>;
+  countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number>;
+  learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]>;
+  openLearningRunTargets(): Promise<Array<{ runId: string; targetId: string }>>;
+  countContentAttemptsSince(taskId: string, createdAfter: string): Promise<number>;
   commit(mutation: SqliteMutation): Promise<void>;
   diagnostics(): Promise<SqliteStorageDiagnostics>;
 }
@@ -66,6 +70,24 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
 
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection> {
     return this.send({ kind: "homeLearningProjection", languageRouteId }) as Promise<HomeLearningStorageProjection>;
+  }
+
+  countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number> {
+    return this.send({
+      kind: 'countIntroducedLearningTargets', languageRouteId, startedAfter, startedBefore,
+    }) as Promise<number>;
+  }
+
+  learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]> {
+    return this.send({ kind: 'learningRunIdsForTarget', targetId, openOnly }) as Promise<string[]>;
+  }
+
+  openLearningRunTargets(): Promise<Array<{ runId: string; targetId: string }>> {
+    return this.send({ kind: 'openLearningRunTargets' }) as Promise<Array<{ runId: string; targetId: string }>>;
+  }
+
+  countContentAttemptsSince(taskId: string, createdAfter: string): Promise<number> {
+    return this.send({ kind: 'countContentAttemptsSince', taskId, createdAfter }) as Promise<number>;
   }
 
   async commit(mutation: SqliteMutation): Promise<void> {
@@ -125,6 +147,43 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
       studyPlans: decode(this.records.get('settings\u0000language-route-study-plans')) ?? {},
       languageRouteId,
     });
+  }
+
+  async learningRunIdsForTarget(targetId: string, openOnly: boolean): Promise<string[]> {
+    return (await this.entries('learningRuns'))
+      .map((row) => ({ key: row.key, run: decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningRun }))
+      .filter(({ run }) => run.targetIds.includes(targetId) && (!openOnly || !run.completedAt))
+      .map(({ key }) => key)
+      .sort();
+  }
+
+  async countIntroducedLearningTargets(
+    languageRouteId: string,
+    startedAfter: string,
+    startedBefore: string,
+  ): Promise<number> {
+    return (await this.entries('learningTargets'))
+      .map((row) => decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningTarget)
+      .filter((target) => target.introducedLanguageRouteId === languageRouteId
+        && target.startedAt !== null
+        && target.startedAt >= startedAfter
+        && target.startedAt < startedBefore)
+      .length;
+  }
+
+  async openLearningRunTargets(): Promise<Array<{ runId: string; targetId: string }>> {
+    return (await this.entries('learningRuns'))
+      .map((row) => ({ key: row.key, run: decodeBackupValue(JSON.parse(row.encodedValue)) as LocalLearningRun }))
+      .filter(({ run }) => !run.completedAt)
+      .flatMap(({ key, run }) => run.targetIds.map((targetId) => ({ runId: key, targetId })))
+      .sort((left, right) => left.targetId.localeCompare(right.targetId) || left.runId.localeCompare(right.runId));
+  }
+
+  async countContentAttemptsSince(taskId: string, createdAfter: string): Promise<number> {
+    return (await this.entries('contentAttempts'))
+      .map((row) => decodeBackupValue(JSON.parse(row.encodedValue)) as { taskId: string; createdAt: string })
+      .filter((attempt) => attempt.taskId === taskId && attempt.createdAt > createdAfter)
+      .length;
   }
 
   async commit(mutation: SqliteMutation): Promise<void> {

@@ -93,8 +93,8 @@ async function bindCurrentStepMaterial(tx:LibraryTransaction,run:LocalLearningRu
 }
 
 async function refreshCurrentStepsForMaterial(tx:LibraryTransaction,targetId:string,at:string,operationId:string):Promise<void>{
- for(const run of await tx.all<LocalLearningRun>('learningRuns')){
-  if(run.completedAt||!localRunTargetIds(run).includes(targetId))continue;
+ for(const runId of await tx.learningRunIdsForTarget(targetId,{openOnly:true})){
+  const run=await tx.get<LocalLearningRun>('learningRuns',runId);if(!run)continue;
   const execution=localExecutionForRun(run);
   if(localProtocolActiveTargetId(execution,run)!==targetId)continue;
   if(await bindCurrentStepMaterial(tx,run,at,true,operationId)){run.revision++;tx.put('learningRuns',run.id,run);}
@@ -164,15 +164,14 @@ export const readLearningOverview=()=>readLibrary(async tx=>({
 export const learningTargetsSnapshot=()=>readLibrary(tx=>tx.all<LocalLearningTarget>('learningTargets'));
 export const readLearning=()=>readLibrary(async tx=>({targets:await tx.all<LocalLearningTarget>('learningTargets'),runs:await tx.all<LocalLearningRun>('learningRuns'),events:await tx.all<LearningEvent>('learningEvents'),active:await tx.get<string>('meta','learning-active'),studyPlans:await readStudyPlans(tx)}));
 export async function confirmLearningQuantity(operationId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number){return command({id:operationId,kind:'learning.quantity',input:{languageContext,dailyLimit}},async tx=>{await learningOwner(tx);const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100)throw new Error('localFlow.quantityRange');const plans=await readStudyPlans(tx),previous=plans[context.languageRouteId];plans[context.languageRouteId]={languageRouteId:context.languageRouteId,routeRevision:context.languageRouteRevision,revision:(previous?.revision??0)+1,dailyNewSenseLimit:dailyLimit,updatedAt:new Date().toISOString()};writeStudyPlans(tx,plans);return true;});}
-const day=(date:Date)=>`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 async function startLearningInTransaction(tx:LibraryTransaction,operationId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at:string):Promise<LocalLearningRun>{
  const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);if(!Number.isInteger(dailyLimit)||dailyLimit<1||dailyLimit>100||!Number.isFinite(Date.parse(at)))throw new Error('localFlow.confirmQuantity');
  const plan=(await readStudyPlans(tx))[context.languageRouteId];if(plan?.dailyNewSenseLimit!==dailyLimit)throw new Error('localFlow.confirmNewQuantity');
  const active=await tx.get<string>('meta','learning-active');if(active){const run=await tx.get<LocalLearningRun>('learningRuns',active);if(run)return run;}
  const t=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!t)throw new Error('localFlow.enrollFirst');if(hasDeclaredMasteryOverride(t))throw new Error('localFlow.stepChanged');
  const selectedMembership=localCurriculumMembershipForContext(t,context);if(!selectedMembership)throw new Error('localFlow.routeMembershipMissing');
- const allRuns=await tx.all<LocalLearningRun>('learningRuns');
- const unfinished=allRuns.find(r=>localRunTargetIds(r).includes(targetId)&&!r.completedAt);if(unfinished){
+ const unfinishedId=(await tx.learningRunIdsForTarget(targetId,{openOnly:true}))[0];
+ const unfinished=unfinishedId?await tx.get<LocalLearningRun>('learningRuns',unfinishedId):undefined;if(unfinished){
   for(const id of localRunTargetIds(unfinished)){const member=await tx.get<LocalLearningTarget>('learningTargets',id);if(member&&hasDeclaredMasteryOverride(member))throw new Error('localFlow.stepChanged');}
   const interruption=localRunOpenPlanningInterruption(unfinished);
   if(!interruption)throw new Error('localFlow.stepChanged');
@@ -181,17 +180,19 @@ async function startLearningInTransaction(tx:LibraryTransaction,operationId:stri
   tx.put('meta','learning-active',unfinished.id);return unfinished;
  }
  const now=new Date(at),purpose=localLearningPurpose(t);
+ const dayStart=new Date(now);dayStart.setHours(0,0,0,0);const dayEnd=new Date(dayStart);dayEnd.setDate(dayEnd.getDate()+1);
+ const introducedToday=await tx.countIntroducedLearningTargets(context.languageRouteId,dayStart.toISOString(),dayEnd.toISOString());
  const pack=selectedMembership.packageKey?await tx.get<InstalledPackage>('packages',selectedMembership.packageKey):undefined;
  const readiness=requireLocalTargetReadiness(t,selectedMembership,pack,purpose);
  const profileId=readiness.profileId,profile=learningPolicyProfileRegistry.get(profileId,readiness.profileVersion),runner=learningRuntimeCoordinator.localExecutionForBinding(readiness.binding,purpose);
  if(t.relearnAt&&now<new Date(t.relearnAt)||purpose==='retention_review'&&(!t.memory||now<t.memory.dueAt))throw new Error('localFlow.notDue');
- if(purpose==='initial_learning'&&!t.startedAt&&(await tx.all<LocalLearningTarget>('learningTargets')).filter(v=>v.introducedLanguageRouteId===context.languageRouteId&&v.startedAt&&day(new Date(v.startedAt))===day(now)).length>=dailyLimit)throw new Error('localFlow.dailyLimit');
+ if(purpose==='initial_learning'&&!t.startedAt&&introducedToday>=dailyLimit)throw new Error('localFlow.dailyLimit');
  const binding=profile.protocols[purpose],schedulingPolicy=profile.lifecycle.schedulingPolicy;if(!binding.localProtocolVersion||!schedulingPolicy)throw new Error('localFlow.resourceInvalid');
  let participants=[t];
  if(runner.cohort){
   const targets=await tx.all<LocalLearningTarget>('learningTargets');
-  const remaining=Math.max(0,dailyLimit-targets.filter(v=>v.introducedLanguageRouteId===context.languageRouteId&&v.startedAt&&day(new Date(v.startedAt))===day(now)).length);
-  const broadlyCompatible=[t,...targets.filter(v=>v.id!==t.id)].filter(v=>!hasDeclaredMasteryOverride(v)&&!!localCurriculumMembershipForContext(v,context)&&localTargetPolicy(v)===profileId&&localLearningPurpose(v)===purpose&&!allRuns.some(r=>!r.completedAt&&localRunTargetIds(r).includes(v.id))&&(purpose==='initial_learning'||(v.relearnAt?now>=new Date(v.relearnAt):!!v.memory&&now>=v.memory.dueAt)));
+  const remaining=Math.max(0,dailyLimit-introducedToday),openTargetIds=new Set(await tx.openLearningTargetIds());
+  const broadlyCompatible=[t,...targets.filter(v=>v.id!==t.id)].filter(v=>!hasDeclaredMasteryOverride(v)&&!!localCurriculumMembershipForContext(v,context)&&localTargetPolicy(v)===profileId&&localLearningPurpose(v)===purpose&&!openTargetIds.has(v.id)&&(purpose==='initial_learning'||(v.relearnAt?now>=new Date(v.relearnAt):!!v.memory&&now>=v.memory.dueAt)));
   const compatible:LocalLearningTarget[]=[];
   for(const candidate of broadlyCompatible){
    const candidateMembership=localCurriculumMembershipForContext(candidate,context)!;
@@ -317,7 +318,7 @@ export async function setLocalDeclaredMastery(operationId:string,targetId:string
 export async function selectLocalLearningPolicy(operationId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,profileId:LearningPolicyId){
  return command({id:operationId,kind:'learning.policy',input:{targetId,languageContext,profileId}},async tx=>{
   await learningOwner(tx);const target=await tx.get<LocalLearningTarget>('learningTargets',targetId);
-  if(!target||target.startedAt||(await tx.all<LocalLearningRun>('learningRuns')).some(r=>localRunTargetIds(r).includes(targetId)))throw new Error('localFlow.stepChanged');
+  if(!target||target.startedAt||(await tx.learningRunIdsForTarget(targetId)).length)throw new Error('localFlow.stepChanged');
   const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);
   const membership=localCurriculumMembershipForContext(target,context);if(!membership)throw new Error('localFlow.routeMembershipMissing');
   const profile=learningPolicyProfileRegistry.get(profileId);

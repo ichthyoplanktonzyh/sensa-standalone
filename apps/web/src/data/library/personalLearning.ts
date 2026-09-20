@@ -64,7 +64,7 @@ export async function preparePersonal(id:string,source:PersonalMeaningLearningSo
   const target=await tx.get<LocalLearningTarget>('learningTargets',task.targetId);
   if(!task.replacing&&target?.curriculumMemberships.some(membership=>membership.id===task.curriculumMembershipId)){task.status='ready';task.leaseUntil=0;tx.put('personalLearning',id,task);return null;}
   if(['generating','reviewing'].includes(task.status)&&task.leaseUntil>Date.now())throw new Error('localFlow.preparationBusy');
-  const attempts=(await tx.all<ContentAttempt>('contentAttempts')).filter(a=>a.taskId===id&&Date.parse(a.createdAt)>Date.now()-86400000);if(import.meta.env.VITE_SENSA_UNLIMITED_PREPARATION!=='true'&&attempts.length>=6)throw new Error('localFlow.preparationLimit');
+  const recentAttemptCount=await tx.countContentAttemptsSince(id,new Date(Date.now()-86400000).toISOString());if(import.meta.env.VITE_SENSA_UNLIMITED_PREPARATION!=='true'&&recentAttemptCount>=6)throw new Error('localFlow.preparationLimit');
   const prior=task.attemptId?await tx.get<ContentAttempt>('contentAttempts',task.attemptId):undefined;
   // Continue a saved candidate after transport interruption without repeating generation.
   const reuse=prior?.bundle&&prior.request&&task.status!=='rejected'&&canonicalConsumerJson(prior.contentProvider)===canonicalConsumerJson(contentProvider)&&(reviewProvider===null||canonicalConsumerJson(prior.reviewProvider)===canonicalConsumerJson(reviewProvider))?prior:null;
