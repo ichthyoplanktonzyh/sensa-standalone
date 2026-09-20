@@ -209,7 +209,7 @@ async function buildLocalAssets(webOrigin) {
       ...environment,
       SENSA_WEB_ORIGIN: webOrigin,
       SENSA_PACKAGE_OUTPUT: join(root, 'apps/web/public/learning-packages'),
-      SENSA_BOOK_RELEASE_SOURCES: join(root, 'content/preview/lightweight-ui-v2.json'),
+      SENSA_BOOK_RELEASE_SOURCES: join(root, 'content/preview/lightweight-binding-v5.json'),
     },
   });
   checked(process.execPath, ['build.mjs'], {

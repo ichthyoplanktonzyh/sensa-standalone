@@ -144,11 +144,15 @@ export const LightweightRuntimeStartScreen = ({
       stepLabel={t(
         completed
           ? "runtime.done"
-          : progressStep === 0
+          : purpose === 'initial_learning' && progressStep === 0
+            ? "runtime.experienceStep"
+            : purpose === 'initial_learning'
+              ? "runtime.bindingStep"
+              : progressStep === 0
             ? "runtime.recallStep"
             : "runtime.revealStep",
       )}
-      progress={progressStep * 50}
+      progress={completed ? 100 : (progressStep + 1) * 50}
       tools={tools}
       onExit={onExit}
       pauseShortcut="Esc"

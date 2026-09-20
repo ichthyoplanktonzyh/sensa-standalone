@@ -16,6 +16,7 @@ type Source={
   featureLabels?:string[];sceneBridge?:string;
   pronunciation?:{audioUrl:string|null;phoneticNotation:string|null;accentLabel:string|null};
   languageStructure?:{expressionTypeLabel:string|null;partOfSpeech:string|null;usagePattern?:string|null;contrastNote?:string|null};
+  sceneExample?:{example:string;translation?:string|null;audioUrl?:string|null};
   usageExamples?:{example:string;translation?:string|null;audioUrl?:string|null}[];
   semanticSpec:SensaSenseSemanticSpec;
  }[];
@@ -54,7 +55,8 @@ for(const path of sourcePaths.sort()){
   if(!Number.isInteger(entry.senseVersion)||entry.senseVersion<1||!Number.isInteger(entry.bindingVersion)||entry.bindingVersion<1)throw Error(`Entry versions must be positive: ${entry.key}`);
   const semanticSpec=sensaSenseSemanticSpecSchema.parse(entry.semanticSpec),senseId=stableUuid('sensa:starter:sense:'+entry.key),senseVersionId=stableUuid(`sensa:starter:sense:${entry.key}:version:${entry.senseVersion}`),expressionKey=`${source.targetLanguage}:${entry.expression.trim().toLocaleLowerCase()}`,expressionId=stableUuid('sensa:starter:expression:'+expressionKey),expressionVersionId=stableUuid(`sensa:starter:expression:${expressionKey}:version:${entry.bindingVersion}`),bindingId=stableUuid('sensa:starter:binding:'+entry.key),bindingVersionId=stableUuid(`sensa:starter:binding:${entry.key}:version:${entry.bindingVersion}`);
   const pronunciation=entry.pronunciation?{...entry.pronunciation,audioUrl:await packagedAudioUrl(entry.pronunciation.audioUrl,`${entry.key}:pronunciation`)}:undefined;
-  const usageExamples=await Promise.all((entry.usageExamples??[]).map(async(example,index)=>({...example,audioUrl:await packagedAudioUrl(example.audioUrl,`${entry.key}:example:${index}`)})));
+  const authoredExamples=[...(entry.sceneExample?[entry.sceneExample]:[]),...(entry.usageExamples??[])];
+  const usageExamples=await Promise.all(authoredExamples.map(async(example,index)=>({...example,audioUrl:await packagedAudioUrl(example.audioUrl,`${entry.key}:example:${index}`)})));
   const referenceFacts=[
    ...(pronunciation?[{source:'pronunciation_lexicon' as const,sourceVersion:`authored:${source.bookKey}:${source.versionNumber}:${entry.key}:pronunciation`,fact:{factKind:'pronunciation' as const,...pronunciation}}]:[]),
    ...(entry.languageStructure?[{source:'dictionary' as const,sourceVersion:`authored:${source.bookKey}:${source.versionNumber}:${entry.key}:structure`,fact:{factKind:'language_structure' as const,...entry.languageStructure}}]:[]),

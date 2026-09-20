@@ -1,20 +1,7 @@
-/* Lightweight learning is an editorial reading surface: one calm focal card,
-   a compact chrome, and a clear progression from experience to expression. */
+/* Lightweight learning keeps one reading path visible at a time. The runtime
+   chrome stays quiet; spacing, not nested panels, carries the hierarchy. */
 html:root[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] {
   --sensa-layout-runtime-primary-max-width: 56rem;
-}
-
-html:root[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="header"] {
-  flex-wrap: wrap;
-  row-gap: 0.25rem;
-  padding-block: 0.75rem;
-  overflow-wrap: anywhere;
-}
-
-html:root[data-sensa-skin="quiet"] [data-sensa-page-layout="learning-runtime"] > [data-sensa-page-region="tools"] {
-  flex-wrap: wrap;
-  max-width: 100%;
-  padding-block: 0.5rem;
 }
 
 html[data-sensa-skin="quiet"] :is(.sensa-experience-recall, .sensa-expression-reveal, [data-assessment-task-key]) {
@@ -22,29 +9,29 @@ html[data-sensa-skin="quiet"] :is(.sensa-experience-recall, .sensa-expression-re
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime {
-  --sensa-layout-runtime-primary-max-width: 62rem;
-  background:
-    radial-gradient(circle at 50% -18%, color-mix(in srgb, var(--sensa-accent-soft) 76%, transparent) 0, transparent 38rem),
-    var(--sensa-layout-runtime-canvas);
+  --sensa-layout-runtime-primary-max-width: 48rem;
+  background: var(--sensa-layout-runtime-canvas);
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime > :is([data-sensa-page-region="header"], [data-sensa-page-region="tools"]) {
+  min-height: 3.75rem;
+  padding-block: .45rem;
   border-bottom-color: color-mix(in srgb, var(--sensa-border-subtle) 72%, transparent);
-  background: color-mix(in srgb, var(--sensa-layout-runtime-header-background) 90%, transparent);
-  backdrop-filter: blur(18px);
+  background: color-mix(in srgb, var(--sensa-layout-runtime-header-background) 94%, transparent);
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-title {
   color: var(--sensa-fg-primary);
-  letter-spacing: -0.01em;
+  letter-spacing: -.01em;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-stage {
-  letter-spacing: 0.04em;
+  letter-spacing: .03em;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-pause {
   border: 1px solid transparent;
+  border-radius: 999px;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-pause:hover {
@@ -53,91 +40,130 @@ html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-pause:hover 
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime > [data-sensa-page-region="progress"] {
-  width: min(100%, 62rem);
+  width: min(100%, 48rem);
   justify-self: center;
-  background: color-mix(in srgb, var(--sensa-progress) 42%, transparent);
+  background: color-mix(in srgb, var(--sensa-progress) 32%, transparent);
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-progress rect {
-  transition: width 320ms cubic-bezier(.2,.8,.2,1);
+  transition: width 280ms cubic-bezier(.2,.8,.2,1);
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime > [data-sensa-page-region="primary"] {
-  padding-block: clamp(1.5rem, 5vh, 3.75rem) clamp(2.5rem, 8vh, 5rem);
-  padding-inline: clamp(1rem, 4vw, 3rem);
+  padding-block: clamp(2rem, 6vh, 4.5rem) clamp(3rem, 8vh, 5.5rem);
+  padding-inline: clamp(1.25rem, 5vw, 3rem);
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-lightweight-card {
   width: 100%;
-  max-width: 52rem;
+  max-width: 43rem;
   margin-inline: auto;
 }
 
+/* Experience / concept */
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-experience-recall {
-  padding: clamp(1.4rem, 4vw, 3rem);
-  border: 1px solid color-mix(in srgb, var(--sensa-border-strong) 74%, transparent);
-  border-radius: clamp(1.25rem, 3vw, 2rem);
-  background: color-mix(in srgb, var(--sensa-surface-panel) 96%, var(--sensa-accent-soft));
-  box-shadow: 0 1px 0 rgba(255,255,255,.55) inset, 0 24px 70px rgba(48,55,39,.07);
+  display: flex;
+  flex-direction: column;
+  padding-block: clamp(.75rem, 2vw, 1.5rem);
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-experience-scene {
-  position: relative;
-  padding: clamp(1.1rem, 3vw, 2rem);
-  border-radius: 1.25rem;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--sensa-accent-soft) 68%, transparent), transparent 74%);
+  max-width: 42rem;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-experience-body {
-  max-width: 38rem;
-  letter-spacing: -0.015em;
+  max-width: 39rem;
+  letter-spacing: -.018em;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-experience-focus {
-  max-width: 42rem;
-  margin-top: 1.75rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid color-mix(in srgb, var(--sensa-border-subtle) 72%, transparent);
+  max-width: 39rem;
+  margin-top: clamp(2rem, 5vw, 3rem);
+  padding-inline-start: 1.25rem;
+  border-inline-start: .1875rem solid color-mix(in srgb, var(--sensa-action-primary) 72%, transparent);
+  color: var(--sensa-fg-secondary);
+  font-size: 1rem;
+  line-height: 1.8;
 }
 
-html[data-sensa-skin="quiet"] #s-lightweight-runtime :is(.sensa-experience-personal-action, .sensa-experience-package-scene, .sensa-experience-cues) {
-  margin-top: 1rem;
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-experience-cues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem 1.25rem;
+  margin-top: 1.5rem;
+  padding: 0;
+  color: var(--sensa-fg-tertiary);
+  font-size: .78rem;
+  list-style: none;
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-experience-cues li {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-experience-cues li::before {
+  width: .25rem;
+  height: .25rem;
+  border-radius: 999px;
+  background: var(--sensa-action-primary);
+  content: "";
+  opacity: .55;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-experience-action {
-  margin-top: 2rem;
+  margin-top: clamp(2.5rem, 7vw, 4rem);
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-experience-package-scene {
+  width: 100%;
+  margin-top: 1.25rem;
+  border-block: 1px solid var(--sensa-border-subtle);
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-experience-personal-action {
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-experience-personal-action:hover {
+  border-color: var(--sensa-border-strong);
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-experience-action button {
-  min-height: 3.75rem;
+  min-width: 10rem;
+  min-height: 3.5rem;
   border-radius: 999px;
-  box-shadow: 0 10px 26px color-mix(in srgb, var(--sensa-action-primary) 18%, transparent);
+  box-shadow: 0 .5rem 1.5rem color-mix(in srgb, var(--sensa-action-primary) 14%, transparent);
 }
 
+/* Expression binding */
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-reveal {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: clamp(1.5rem, 4vw, 2.25rem);
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-hero {
-  padding: clamp(1.5rem, 4vw, 3rem);
-  border: 1px solid color-mix(in srgb, var(--sensa-border-strong) 72%, transparent);
-  border-radius: clamp(1.25rem, 3vw, 2rem);
-  background: color-mix(in srgb, var(--sensa-surface-panel) 96%, var(--sensa-accent-soft));
-  box-shadow: 0 1px 0 rgba(255,255,255,.55) inset, 0 24px 70px rgba(48,55,39,.07);
+  padding-block-start: .25rem;
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-heading,
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-scene-bridge,
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-structure {
+  max-width: 41rem;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-hero h1 {
-  max-width: 42rem;
+  max-width: 35rem;
   line-height: .96;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-audio {
-  width: 3.5rem;
-  height: 3.5rem;
+  width: 3.25rem;
+  height: 3.25rem;
   border-radius: 999px;
-  transition: transform 160ms ease, background-color 160ms ease;
+  transition: transform 150ms ease, background-color 150ms ease;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-audio:hover {
@@ -145,89 +171,65 @@ html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-audio:hov
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-metadata {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .5rem;
-  margin-top: 1rem;
-}
-
-html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-metadata span {
-  padding: .4rem .7rem;
-  border: 1px solid var(--sensa-border-subtle);
-  border-radius: 999px;
-  color: var(--sensa-fg-secondary);
-  background: color-mix(in srgb, var(--sensa-surface-subtle) 76%, transparent);
-  font-size: .75rem;
-  line-height: 1;
+  margin-top: .6rem;
+  color: var(--sensa-fg-tertiary);
+  font-family: var(--sensa-font-language);
+  font-size: .8rem;
+  line-height: 1.5;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-meaning {
-  max-width: 44rem;
-  margin-top: 1.75rem;
+  max-width: 40rem;
+  margin-top: 1.25rem;
   color: var(--sensa-fg-primary);
-  font-size: clamp(1.1rem, 2vw, 1.35rem);
+  font-size: clamp(1.05rem, 2vw, 1.25rem);
   line-height: 1.75;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-scene-bridge {
-  max-width: 44rem;
-  margin-top: 1.25rem;
-  padding: 1rem 1.15rem;
-  border-radius: .9rem;
+  margin-top: 1.75rem;
+  padding-inline-start: 1.1rem;
+  border-inline-start-color: color-mix(in srgb, var(--sensa-action-primary) 72%, transparent);
   color: var(--sensa-fg-secondary);
-  background: color-mix(in srgb, var(--sensa-accent-soft) 62%, transparent);
   font-size: .925rem;
-  line-height: 1.7;
+  line-height: 1.75;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-structure {
   display: grid;
-  grid-template-columns: minmax(5rem, auto) minmax(0, 1fr);
+  grid-template-columns: 4.25rem minmax(0, 1fr);
   gap: 1rem;
   align-items: baseline;
-  max-width: 44rem;
-  margin-top: 1.5rem;
+  margin-top: 1.75rem;
   padding-top: 1.25rem;
-  border-top: 1px solid var(--sensa-border-subtle);
+  border-top-color: color-mix(in srgb, var(--sensa-border-subtle) 76%, transparent);
 }
 
-html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-structure span,
-html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-contrast span {
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-structure h2,
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-boundary h2 {
   color: var(--sensa-fg-tertiary);
-  font-size: .75rem;
-  font-weight: 500;
-  letter-spacing: .04em;
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .055em;
 }
 
-html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-structure strong {
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-structure p {
   color: var(--sensa-action-primary);
   font-family: var(--sensa-font-language);
-  font-size: 1rem;
+  font-size: .975rem;
   font-weight: 600;
   line-height: 1.65;
 }
 
-html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-contrast {
-  display: grid;
-  grid-template-columns: minmax(5rem, auto) minmax(0, 1fr);
-  gap: 1rem;
-  max-width: 44rem;
-  margin-top: .85rem;
-  color: var(--sensa-fg-secondary);
-  font-size: .875rem;
-  line-height: 1.65;
-}
-
-html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-examples {
-  padding: clamp(1.1rem, 3vw, 1.5rem);
-  border: 1px solid var(--sensa-border-subtle);
-  border-radius: clamp(1rem, 2vw, 1.5rem);
-  background: color-mix(in srgb, var(--sensa-surface-panel) 90%, transparent);
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-scene-example {
+  padding: clamp(.85rem, 2.5vw, 1.25rem);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--sensa-surface-subtle) 72%, transparent);
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-learning-example-card[data-compact="true"] {
   border: 0;
-  border-radius: 1rem;
+  border-radius: 0;
   background: transparent;
 }
 
@@ -235,21 +237,15 @@ html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-learning-example-car
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: 1rem;
-  padding: .5rem;
-}
-
-html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-learning-example-card[data-compact="true"] .example-lookup-hint {
-  grid-column: 1 / -1;
-  margin-bottom: .5rem;
-  color: var(--sensa-fg-tertiary);
+  padding: .25rem;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-learning-example-card[data-compact="true"] .sensa-example-play {
   grid-column: 1;
-  grid-row: 2 / span 2;
+  grid-row: 1 / span 2;
   width: 2.75rem;
   height: 2.75rem;
-  margin: .1rem 0 0;
+  margin-top: .1rem;
   border-radius: 999px;
 }
 
@@ -259,16 +255,16 @@ html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-learning-example-car
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-learning-example-card[data-compact="true"] .sensa-example-l1 {
-  margin-top: .75rem;
-  padding-left: 0;
-  border-left: 0;
+  margin-top: .65rem;
+  padding-inline-start: 0;
+  border-inline-start: 0;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-learning-example-card[data-compact="true"] .tok-word {
   min-height: 2.2rem;
   border-radius: .4rem;
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, currentColor 24%, transparent);
+  text-decoration-color: color-mix(in srgb, currentColor 22%, transparent);
   text-decoration-thickness: 1px;
   text-underline-offset: .18em;
 }
@@ -283,30 +279,105 @@ html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-example-pagination {
   margin-top: .75rem;
 }
 
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-disclosures {
+  border-block-color: color-mix(in srgb, var(--sensa-border-subtle) 78%, transparent);
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-disclosure summary {
+  display: flex;
+  min-height: 3.5rem;
+  align-items: center;
+  padding-inline: .25rem;
+  color: var(--sensa-fg-secondary);
+  cursor: pointer;
+  font-size: .875rem;
+  font-weight: 600;
+  list-style: none;
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-disclosure summary::after {
+  margin-inline-start: auto;
+  color: var(--sensa-action-primary);
+  content: "+";
+  font-size: 1.2rem;
+  font-weight: 400;
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-disclosure[open] summary::after {
+  content: "−";
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-disclosure summary:hover {
+  color: var(--sensa-action-primary);
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-more {
+  padding-block: .25rem 1.25rem;
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-additional-examples {
+  padding-inline: .25rem;
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-boundary {
+  max-width: 41rem;
+  margin-top: 1.5rem;
+  padding: 1.25rem .25rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--sensa-border-subtle) 72%, transparent);
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-contrast {
+  margin-top: .55rem;
+  color: var(--sensa-fg-secondary);
+  font-size: .9rem;
+  line-height: 1.75;
+}
+
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-personal-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: .5rem 1.25rem;
-  padding-inline: .25rem;
+  gap: .75rem;
+  padding-block: .25rem;
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-personal-action {
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-personal-action-scene {
+  border-color: var(--sensa-border-subtle);
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-personal-action-scene:hover {
+  border-color: var(--sensa-border-strong);
+}
+
+html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-personal-action-semantic {
+  border-color: color-mix(in srgb, var(--sensa-action-primary) 32%, var(--sensa-border-strong));
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-rating {
   margin-top: .25rem;
-  padding: .75rem;
-  border: 1px solid var(--sensa-border-subtle);
-  border-radius: 1.25rem;
-  background: color-mix(in srgb, var(--sensa-surface-panel) 82%, transparent);
+  padding-top: 1.5rem;
+  border-top: 1px solid color-mix(in srgb, var(--sensa-border-subtle) 78%, transparent);
+  background: transparent;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-rating button {
   min-width: 0;
-  border-color: transparent;
-  border-radius: .9rem;
+  border-color: var(--sensa-border-subtle);
+  border-radius: .8rem;
+  background: transparent;
   box-shadow: none;
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-rating button:hover {
-  background: var(--sensa-surface-selected);
+  border-color: var(--sensa-border-strong);
+  background: var(--sensa-surface-subtle);
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-shortcut-hint {
@@ -328,17 +399,14 @@ html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-shortcut-hint {
 }
 
 html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-summary {
-  width: min(100%, 36rem);
-  margin-inline: auto;
-  padding: clamp(2.5rem, 8vw, 5rem) clamp(1.5rem, 5vw, 3rem);
-  border: 1px solid var(--sensa-border-subtle);
-  border-radius: 2rem;
-  background: color-mix(in srgb, var(--sensa-surface-panel) 94%, var(--sensa-accent-soft));
-  box-shadow: 0 24px 70px rgba(48,55,39,.07);
+  width: min(100%, 32rem);
+  margin: auto;
+  padding-block: clamp(2.5rem, 8vw, 5rem);
+  text-align: center;
 }
 
 html[data-sensa-skin="quiet"] .sensa-runtime-rating button span span {
-  font-size: 0.8125rem;
+  font-size: .8125rem;
   line-height: 1.6;
 }
 
@@ -354,12 +422,11 @@ html[data-sensa-skin="quiet"] .sensa-runtime-rating button span span {
     padding-inline: var(--sensa-layout-runtime-primary-inline-inset);
   }
 
-  html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-mobile-stage {
-    margin-bottom: 1rem;
+  html[data-sensa-skin="quiet"] #s-lightweight-runtime > [data-sensa-page-region="primary"] {
+    padding-block-start: 1.75rem;
   }
 
-  html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-structure,
-  html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-contrast {
+  html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-expression-structure {
     grid-template-columns: 1fr;
     gap: .35rem;
   }
@@ -379,8 +446,13 @@ html[data-sensa-skin="quiet"] .sensa-runtime-rating button span span {
     margin-bottom: .5rem;
   }
 
-  html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-shortcut-hint {
-    display: none;
+  html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-rating {
+    gap: .5rem;
+  }
+
+  html[data-sensa-skin="quiet"] #s-lightweight-runtime .sensa-runtime-rating button {
+    flex-direction: column;
+    padding-inline: .5rem;
   }
 }
 

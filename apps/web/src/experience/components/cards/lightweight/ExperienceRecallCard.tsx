@@ -1,5 +1,5 @@
 import {RichExperience} from '../../learning/RichExperience';
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, SquarePen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ExperienceRecallCardPresentation } from "../../../learningRuntime/lightweightInitialPresentation";
 import { runtimePrimary } from "../../learning/RuntimeFrame";
@@ -30,28 +30,36 @@ export function ExperienceRecallCard({
           {experienceSketch.senseFocus}
         </p>
       </div>
-      {onOpenPersonalScene && <button type="button" className="sensa-experience-personal-action min-h-11 px-1 text-sm text-action-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-focus" onClick={onOpenPersonalScene}>{t(personalScene ? "runtime.editMyScene" : "runtime.addMyScene")}</button>}
-      {personalScene && <details className="sensa-experience-package-scene rounded-card border border-border-subtle bg-surface-panel px-5 py-3 text-sm text-fg-secondary"><summary className="min-h-11 cursor-pointer py-3">{t("runtime.packageScene")}</summary><div className="pb-3"><RichExperience scene={experienceSketch.scene} images={experienceSketch.images} html={experienceSketch.html}/></div></details>}
       {auxiliaryCues.length > 0 && (
-        <details className="sensa-experience-cues text-sm text-fg-secondary">
-          <summary className="min-h-11 cursor-pointer py-3 text-action-primary">{t("runtime.cues")}</summary>
-          <div className="flex flex-wrap gap-2 pb-2">
+        <ul className="sensa-experience-cues" aria-label={t("runtime.cues")}>
             {auxiliaryCues.map((c) => (
-              <span
-                key={c}
-                className="rounded-pill bg-surface-subtle px-3 py-2 text-xs text-fg-secondary"
-              >
-                {c}
-              </span>
+              <li key={c}>{c}</li>
             ))}
+        </ul>
+      )}
+      {onOpenPersonalScene && personalScene && (
+        <details className="sensa-experience-package-scene text-sm text-fg-secondary">
+          <summary className="min-h-11 cursor-pointer py-3">{t("runtime.packageScene")}</summary>
+          <div className="pb-3">
+            <RichExperience scene={experienceSketch.scene} images={experienceSketch.images} html={experienceSketch.html}/>
           </div>
         </details>
       )}
-      <div className="sensa-experience-action flex justify-center">
+      <div className="sensa-experience-action flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+        {onOpenPersonalScene && (
+          <button
+            type="button"
+            className="sensa-experience-personal-action inline-flex min-h-11 items-center justify-center gap-2 rounded-control border border-border-subtle bg-surface-panel px-4 text-sm font-medium text-fg-secondary hover:bg-surface-subtle hover:text-action-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            onClick={onOpenPersonalScene}
+          >
+            <SquarePen size={16} strokeWidth={1.75} aria-hidden="true" />
+            {t(personalScene ? "runtime.editMyScene" : "runtime.addMyScene")}
+          </button>
+        )}
         <button
           type="button"
           onClick={onReveal}
-          className={`${runtimePrimary} w-full sm:max-w-sm`}
+          className={`${runtimePrimary} w-full sm:w-auto`}
         >
           {t("runtime.reveal")}
           <ArrowRight size={17} />

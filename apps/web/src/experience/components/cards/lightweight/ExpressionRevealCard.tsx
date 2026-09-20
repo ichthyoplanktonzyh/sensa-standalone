@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Pause, Volume2 } from "lucide-react";
+import { BookHeart, Check, Pause, SquarePen, Volume2 } from "lucide-react";
 import type { ExpressionRevealCardPresentation } from "../../../learningRuntime/lightweightInitialPresentation";
 import type { LightweightInitialRating } from "../../../../learning/runtime/lightweightInitialProtocol";
 import type { PersonalLearningSceneRevision } from "../../../../data/library/contentAnnotations";
@@ -44,12 +44,14 @@ export function ExpressionRevealCard({
   toast,
 }: ExpressionRevealCardProps) {
   const { t } = useTranslation();
+  const cardId = useId();
+  const usagePatternLabelId = `${cardId}-usage-pattern`;
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const examplePlaybackToken = useRef(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingExampleId, setPlayingExampleId] = useState<string | null>(null);
   const [audioFailed, setAudioFailed] = useState(false);
-  const [exampleIndex, setExampleIndex] = useState(0);
+  const [additionalExampleIndex, setAdditionalExampleIndex] = useState(0);
   const { activeLookup, openLookup, clearLookup } = useImmediateDictionaryLookup();
   const {
     expressionPrimary,
@@ -68,17 +70,18 @@ export function ExpressionRevealCard({
     audioUrl: usage.audioUrl ?? undefined,
     sourceKind: 'learning_example',
   })), [usageExamples]);
-  const currentExample = exampleSentences[exampleIndex] ?? exampleSentences[0] ?? null;
-  const expressionMetadata = [
-    pronunciation?.accentLabel,
+  const sceneExample = exampleSentences[0] ?? null;
+  const additionalExamples = exampleSentences.slice(1);
+  const currentAdditionalExample = additionalExamples[additionalExampleIndex] ?? additionalExamples[0] ?? null;
+  const hasPersonalScene = Boolean(personalScene);
+  const expressionMetadata = Array.from(new Set([
     pronunciation?.phoneticNotation,
-    languageStructure?.expressionTypeLabel,
-    languageStructure?.partOfSpeech,
-  ].filter((item): item is string => Boolean(item));
+    languageStructure?.expressionTypeLabel ?? languageStructure?.partOfSpeech,
+  ].filter((item): item is string => Boolean(item))));
 
   useEffect(() => {
-    setExampleIndex((index) => Math.min(index, Math.max(0, exampleSentences.length - 1)));
-  }, [exampleSentences.length]);
+    setAdditionalExampleIndex((index) => Math.min(index, Math.max(0, additionalExamples.length - 1)));
+  }, [additionalExamples.length]);
 
   useEffect(() => {
     setIsPlaying(false);
@@ -143,10 +146,10 @@ export function ExpressionRevealCard({
     });
   };
 
-  const selectExample = (index: number) => {
-    if (index !== exampleIndex) stopExamplePlayback();
+  const selectAdditionalExample = (index: number) => {
+    if (index !== additionalExampleIndex) stopExamplePlayback();
     clearLookup();
-    setExampleIndex(index);
+    setAdditionalExampleIndex(index);
   };
 
   useEffect(() => {
@@ -156,22 +159,12 @@ export function ExpressionRevealCard({
       if (activeLookup || document.querySelector(`[role="${'dialog'}"]`)) return;
       const element = event.target instanceof HTMLElement ? event.target : null;
       if (element?.closest('button, a, input, textarea, select, summary, [contenteditable="true"]')) return;
-      if (event.key === 'ArrowLeft' && exampleIndex > 0) {
-        event.preventDefault();
-        selectExample(exampleIndex - 1);
-        return;
-      }
-      if (event.key === 'ArrowRight' && exampleIndex < exampleSentences.length - 1) {
-        event.preventDefault();
-        selectExample(exampleIndex + 1);
-        return;
-      }
       if (event.key === ' ') {
-        if (!pronunciation?.audioUrl && !currentExample?.audioUrl) return;
+        if (!pronunciation?.audioUrl && !sceneExample?.audioUrl) return;
         event.preventDefault();
         if (playingExampleId) stopExamplePlayback();
         else if (pronunciation?.audioUrl) togglePronunciation();
-        else if (currentExample) toggleExamplePlayback(currentExample);
+        else if (sceneExample) toggleExamplePlayback(sceneExample);
         return;
       }
       const rating = event.key === '1' ? 'again' : event.key === '2' ? 'hard' : event.key === '3' ? 'good' : null;
@@ -182,124 +175,188 @@ export function ExpressionRevealCard({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [active, activeLookup, currentExample, exampleIndex, exampleSentences.length, onRate, playingExampleId, pronunciation?.audioUrl]);
+  }, [active, activeLookup, onRate, playingExampleId, pronunciation?.audioUrl, sceneExample]);
+
+  const renderExample = (sentence: Sentence) => (
+    <LearningExampleCard
+      sentence={sentence}
+      compact
+      isPlaying={playingExampleId === sentence.exampleId}
+      onPlay={sentence.audioUrl
+        ? () => toggleExamplePlayback(sentence)
+        : undefined}
+      sentenceContent={(
+        <ClickableSentence
+          sentenceHtml={sentence.en}
+          activeTokenIdx={activeLookup?.tokenIdx ?? null}
+          onWordClick={(token, tokenIdx) => {
+            const request: DictionaryLookupRequest = {
+              rawClickedForm: token.text,
+              exampleId: sentence.exampleId!,
+              textL2: stripMarkup(sentence.en),
+              clickedStart: token.charStart,
+              clickedEnd: token.charEnd,
+              clickedSurface: token.text,
+            };
+            openLookup({
+              tokenIdx,
+              displayWord: token.cleanWord,
+              load: async (signal) => {
+                const entry = await lookupDictionary(request, { signal });
+                if (!entry) toast(cardText('thisWordIsNotInTheDictionary'));
+                return entry;
+              },
+            });
+          }}
+        />
+      )}
+    />
+  );
 
   return (
     <section
-      className="sensa-expression-reveal sensa-lightweight-card"
+      className="sensa-expression-reveal sensa-lightweight-card flex w-full flex-col gap-5"
       aria-live="polite"
       aria-label={t("runtime.revealStep")}
     >
       <div className="sensa-expression-hero">
-        <div className="flex items-start gap-4">
-          <h1 className="min-w-0 flex-1 break-words font-language text-learning-expression font-medium tracking-tight text-action-primary sm:text-6xl">
-            {expressionPrimary.surface}
-          </h1>
-        {pronunciation?.audioUrl && (
-          <>
-            <audio
-              ref={audioRef}
-              hidden
-              preload="none"
-              src={pronunciation.audioUrl}
-              onEnded={() => setIsPlaying(false)}
-              onError={() => {
-                setIsPlaying(false);
-                setAudioFailed(true);
-              }}
-            />
-            <div className="flex shrink-0 flex-col items-center gap-1.5">
-              <button
-                type="button"
-                onClick={togglePronunciation}
-                className={`sensa-expression-audio grid size-12 place-items-center rounded-card text-action-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${isPlaying ? "is-playing bg-action-primary text-action-on-primary" : "bg-accent-soft hover:bg-surface-selected"}`}
-                aria-label={t(isPlaying ? "runtime.stopAudio" : "runtime.audio")}
-              >
-                {isPlaying ? <Pause size={20} /> : <Volume2 size={20} />}
-              </button>
-              <kbd className="sensa-shortcut-hint" aria-hidden="true">Space</kbd>
-            </div>
-          </>
-        )}
-        </div>
-
-        {expressionMetadata.length > 0 && (
-          <div className="sensa-expression-metadata" aria-label={expressionMetadata.join(" · ")}>
-            {expressionMetadata.map((item) => <span key={item}>{item}</span>)}
+        <header className="sensa-expression-heading">
+          <div className="flex items-start gap-4">
+            <h1 className="min-w-0 flex-1 break-words font-language text-learning-expression font-medium tracking-tight text-action-primary sm:text-6xl">
+              {expressionPrimary.surface}
+            </h1>
+            {pronunciation?.audioUrl && (
+              <>
+                <audio
+                  ref={audioRef}
+                  hidden
+                  preload="none"
+                  src={pronunciation.audioUrl}
+                  onEnded={() => setIsPlaying(false)}
+                  onError={() => {
+                    setIsPlaying(false);
+                    setAudioFailed(true);
+                  }}
+                />
+                <div className="flex shrink-0 flex-col items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={togglePronunciation}
+                    className={`sensa-expression-audio grid size-12 place-items-center rounded-card text-action-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${isPlaying ? "is-playing bg-action-primary text-action-on-primary" : "bg-accent-soft hover:bg-surface-selected"}`}
+                    aria-label={t(isPlaying ? "runtime.stopAudio" : "runtime.audio")}
+                  >
+                    {isPlaying ? <Pause size={20} /> : <Volume2 size={20} />}
+                  </button>
+                  <kbd className="sensa-shortcut-hint" aria-hidden="true">Space</kbd>
+                </div>
+              </>
+            )}
           </div>
+
+          {expressionMetadata.length > 0 && (
+            <p className="sensa-expression-metadata" aria-label={expressionMetadata.join(" · ")}>
+              {expressionMetadata.join(" · ")}
+            </p>
+          )}
+          {audioFailed && <p className="mt-3 text-sm text-fg-secondary" role="status">{t("runtime.audioError")}</p>}
+          <p className="sensa-expression-meaning">{senseConfirmation.meaning}</p>
+        </header>
+
+        {sceneBridge && (
+          <p className="sensa-expression-scene-bridge mt-7 border-l-2 border-action-primary pl-4 text-base leading-7 text-fg-secondary">
+            {sceneBridge.text}
+          </p>
         )}
-        {audioFailed && <p className="mt-3 text-sm text-fg-secondary" role="status">{t("runtime.audioError")}</p>}
-
-        <p className="sensa-expression-meaning">{senseConfirmation.meaning}</p>
-
-        {sceneBridge && <p className="sensa-expression-scene-bridge">{sceneBridge.text}</p>}
 
         {languageStructure?.usagePattern && (
-          <div className="sensa-expression-structure">
-            <span>{t("runtime.usagePattern")}</span>
-            <strong>{languageStructure.usagePattern}</strong>
-          </div>
-        )}
-        {languageStructure?.contrastNote && (
-          <p className="sensa-expression-contrast"><span>{t("runtime.contrastNote")}</span>{languageStructure.contrastNote}</p>
+          <section className="sensa-expression-structure mt-6 grid gap-2 border-t border-border-subtle pt-5" aria-labelledby={usagePatternLabelId}>
+            <h2 id={usagePatternLabelId} className="text-xs font-medium uppercase tracking-wide text-fg-tertiary">{t("runtime.usagePattern")}</h2>
+            <p className="font-language text-base font-semibold leading-7 text-action-primary">{languageStructure.usagePattern}</p>
+          </section>
         )}
       </div>
 
-      {currentExample && (
-        <div className="sensa-expression-examples">
-          <ExampleCardCarousel
-            itemCount={exampleSentences.length}
-            currentIndex={exampleIndex}
-            onIndexChange={selectExample}
-            itemKeys={usageExamples.map((usage) => usage.resourceKey)}
-            className="sensa-lightweight-examples"
-          >
-            <LearningExampleCard
-              sentence={currentExample}
-              compact
-              lookupEnabled
-              isPlaying={playingExampleId === currentExample.exampleId}
-              onPlay={currentExample.audioUrl
-                ? () => toggleExamplePlayback(currentExample)
-                : undefined}
-              sentenceContent={(
-                <ClickableSentence sentenceHtml={currentExample.en} activeTokenIdx={activeLookup?.tokenIdx ?? null} onWordClick={(token,tokenIdx)=>{
-                  const request:DictionaryLookupRequest={rawClickedForm:token.text,exampleId:currentExample.exampleId!,textL2:stripMarkup(currentExample.en),clickedStart:token.charStart,clickedEnd:token.charEnd,clickedSurface:token.text};
-                  openLookup({tokenIdx,displayWord:token.cleanWord,load:async(signal)=>{const entry=await lookupDictionary(request,{signal});if(!entry)toast(cardText('thisWordIsNotInTheDictionary'));return entry;}});
-                }}/>
-              )}
-            />
-          </ExampleCardCarousel>
+      {sceneExample && (
+        <div className="sensa-expression-scene-example pb-5" aria-label={t("runtime.sceneExample")}>
+          {renderExample(sceneExample)}
         </div>
       )}
 
-      {(onOpenPersonalScene || semanticWorldState && onSaveToSemanticWorld) && (
+      {(additionalExamples.length > 0 || languageStructure?.contrastNote) && (
+        <div className="sensa-expression-disclosures border-y border-border-subtle">
+          <details className="sensa-expression-disclosure">
+            <summary>{t("runtime.moreExamples")}</summary>
+            <div className="sensa-expression-more">
+              {additionalExamples.length > 0 && currentAdditionalExample && (
+              <div className="sensa-expression-additional-examples">
+                <ExampleCardCarousel
+                  itemCount={additionalExamples.length}
+                  currentIndex={additionalExampleIndex}
+                  onIndexChange={selectAdditionalExample}
+                  itemKeys={usageExamples.slice(1).map((usage) => usage.resourceKey)}
+                  className="sensa-lightweight-examples"
+                >
+                  {renderExample(currentAdditionalExample)}
+                </ExampleCardCarousel>
+              </div>
+              )}
+              {languageStructure?.contrastNote && (
+                <div className="sensa-expression-boundary">
+                  <h2>{t("runtime.contrastNote")}</h2>
+                  <p className="sensa-expression-contrast text-sm leading-7 text-fg-secondary">{languageStructure.contrastNote}</p>
+                </div>
+              )}
+            </div>
+          </details>
+        </div>
+      )}
+
+      {(onOpenPersonalScene || hasPersonalScene && semanticWorldState && onSaveToSemanticWorld) && (
         <div className="sensa-expression-personal-actions">
           {onOpenPersonalScene && (
             <button
               type="button"
               onClick={onOpenPersonalScene}
-              className="min-h-11 px-1 text-sm text-action-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-focus"
+              className="sensa-personal-action sensa-personal-action-scene inline-flex min-h-11 items-center justify-center gap-2 rounded-control border border-border-subtle bg-surface-panel px-4 text-sm font-medium text-fg-secondary hover:bg-surface-subtle hover:text-action-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             >
+              <SquarePen size={16} strokeWidth={1.75} aria-hidden="true" />
               {t(personalScene ? "runtime.editMyScene" : "runtime.addMyScene")}
             </button>
           )}
-          {semanticWorldState && onSaveToSemanticWorld && (
+          {hasPersonalScene && semanticWorldState && onSaveToSemanticWorld && (
             <button
               type="button"
               disabled={semanticWorldState === 'saved' || semanticWorldState === 'saving'}
               onClick={onSaveToSemanticWorld}
-              className="inline-flex min-h-11 items-center gap-2 px-1 text-sm text-action-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-focus disabled:cursor-default disabled:no-underline disabled:opacity-70"
+              className="sensa-personal-action sensa-personal-action-semantic inline-flex min-h-11 items-center justify-center gap-2 rounded-control border border-border-strong bg-accent-soft px-4 text-sm font-medium text-action-primary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-default disabled:opacity-70"
             >
-              {semanticWorldState === 'saved' && <Check size={17}/>}
-              {t(semanticWorldState === 'saved' ? "runtime.savedToSemanticWorld" : semanticWorldState === 'saving' ? "runtime.savingToSemanticWorld" : semanticWorldState === 'update' ? "runtime.updateSemanticWorld" : "runtime.saveToSemanticWorld")}
+              {semanticWorldState === 'saved'
+                ? <Check size={16} strokeWidth={1.75} aria-hidden="true" />
+                : <BookHeart size={16} strokeWidth={1.75} aria-hidden="true" />}
+              {t(semanticWorldState === 'saved'
+                ? "runtime.savedToSemanticWorld"
+                : semanticWorldState === 'saving'
+                  ? "runtime.savingToSemanticWorld"
+                  : semanticWorldState === 'update'
+                    ? "runtime.updateSemanticWorld"
+                    : "runtime.saveToSemanticWorld")}
             </button>
           )}
         </div>
       )}
 
       <RuntimeRating initial={initial} showDescriptions={false} onRate={onRate} />
-      {activeLookup && <LearningExampleLookup entry={activeLookup.entry} onClose={clearLookup} toast={toast} onViewDetail={(entry)=>{clearLookup();onOpenDictionary(entry);}}/>}
+      {activeLookup && (
+        <LearningExampleLookup
+          entry={activeLookup.entry}
+          onClose={clearLookup}
+          toast={toast}
+          onViewDetail={(entry) => {
+            clearLookup();
+            onOpenDictionary(entry);
+          }}
+        />
+      )}
     </section>
   );
 }

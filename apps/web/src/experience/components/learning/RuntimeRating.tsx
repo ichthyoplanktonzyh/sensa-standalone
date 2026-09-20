@@ -12,9 +12,9 @@ export function RuntimeRating({
   const { t } = useTranslation();
   return (
     <div
-      className="sensa-runtime-rating mt-9 grid grid-cols-1 gap-3 sm:grid-cols-3"
+      className="sensa-runtime-rating mt-9 grid grid-cols-3 gap-3"
       role="group"
-      aria-label={t("runtime.rating")}
+      aria-label={t(initial ? "runtime.initialRatingLabel" : "runtime.rating")}
     >
       {(
         [
@@ -27,12 +27,12 @@ export function RuntimeRating({
           type="button"
           key={id}
           onClick={() => onRate(id)}
-          className={`flex min-h-16 items-center gap-4 rounded-card border px-5 py-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${showDescriptions ? "sm:min-h-28 sm:flex-col sm:items-start sm:gap-3" : "sm:min-h-20 sm:justify-center"} ${id === "good" ? "border-border-strong bg-surface-selected text-action-primary" : "border-border-subtle bg-surface-panel text-fg-secondary hover:bg-surface-subtle"}`}
+          className={`flex min-h-16 items-center justify-center gap-2 rounded-control border border-border-subtle bg-surface-panel px-3 py-3 text-center text-fg-secondary transition-colors hover:border-border-strong hover:bg-surface-subtle hover:text-action-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${showDescriptions ? "sm:min-h-28 sm:flex-col sm:gap-3" : "sm:min-h-16"}`}
         >
           <Icon size={17} strokeWidth={1.5} />
           <span>
             <strong className="block text-sm font-medium">
-              {t(`runtime.ratings.${id}`)}
+              {t(`runtime.${initial ? "initialRatings" : "ratings"}.${id}`)}
             </strong>
             {showDescriptions && (
               <span className="mt-1.5 block text-xs text-fg-tertiary">
