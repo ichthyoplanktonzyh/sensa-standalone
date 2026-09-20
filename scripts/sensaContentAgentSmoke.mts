@@ -40,7 +40,7 @@ try{
  }else{
   for(const interrupted of [false,true]){
    let turn=0,speechCalls=0,referenceCalls=0,inflight=0,peak=0,checkpoint:any;
-   const responses=[[tool('prepare_pronunciation'),tool('lookup_references')],[tool('submit_resources',{resources:[cue,bridge,{...scene,payload:{...scene.payload,targetEnd:4}}]})],[tool('validate_resources')],[tool('submit_resources',{resources:[scene]})],[tool('validate_resources')]];
+   const responses=[[tool('prepare_pronunciation'),tool('lookup_references')],[tool('submit_resources',{resources:[cue,bridge,{...scene,payload:{...scene.payload,example:'I borroweded an umbrella.'}}]})],[tool('validate_resources')],[tool('submit_resources',{resources:[scene]})],[tool('validate_resources')]];
    globalThis.fetch=async(url,options)=>{
     if(String(url).endsWith('/sensa/speech')||String(url).endsWith('/sensa/resource-facts')){
      inflight++;peak=Math.max(peak,inflight);await new Promise(r=>setTimeout(r,5));inflight--;
@@ -53,12 +53,12 @@ try{
     return new Response(JSON.stringify({model:'fixture',choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:responses[index]}}]}));
    };
    const request=await createRequest();const run=()=>api.generateLearningCandidate(request,provider,true,new AbortController().signal,async()=>{},checkpoint,async(c:any)=>{checkpoint=c;});
-   if(interrupted){await assert.rejects(run(),/simulated offline/);assert.equal(checkpoint.resources.length,3);}
+   if(interrupted){await assert.rejects(run(),/simulated offline/);assert.equal(checkpoint.resources.length,2);}
    const bundle=await run(),result=await validateBundle(request,bundle,null,new Date());assert(result.content);
    assert.equal(speechCalls,1);assert.equal(referenceCalls,1);assert.equal(peak,2);
    assert.deepEqual(bundle.candidates.find((c:any)=>c.materialRoleKey==='experience_recall_cue').contentPayload.images,[image]);
    assert.equal(bundle.candidates.find((c:any)=>c.materialRoleKey==='scene_realization').contentPayload.targetEnd,8);
-   assert(bundle.toolCalls.length>=6);assert(checkpoint.history.some((m:any)=>m.role==='tool'&&m.content.includes('target span')));
+   assert(bundle.toolCalls.length>=6);assert(checkpoint.history.some((m:any)=>m.role==='tool'&&m.content.includes('target text not found')));
   }
   const queue=new api.BackgroundPreparationQueue(2);let active=0,max=0;const released:(()=>void)[]=[];
   const work=()=>new Promise<void>(resolve=>{active++;max=Math.max(max,active);released.push(()=>{active--;resolve();});});

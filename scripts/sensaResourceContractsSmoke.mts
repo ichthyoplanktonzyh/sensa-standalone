@@ -15,6 +15,46 @@ const generated={resources:[
 ]};
 const produce=(output:unknown,req=request)=>makeBundle(req,{cue:output,provider:'fixture',model:'fixture'},now);
 const bundle=await produce(generated);
+// Model output omits bookkeeping; incorrect legacy offsets cannot influence it.
+const minimal=structuredClone(generated);delete (minimal.resources[2]!.payload as any).targetStart;delete (minimal.resources[2]!.payload as any).targetEnd;delete (minimal.resources[2]!.payload as any).experienceResourceKey;
+const scenePayload=(b:any)=>b.candidates.find((c:any)=>c.materialRoleKey==='scene_realization').contentPayload;
+assert.deepEqual(scenePayload(await produce(minimal)),scenePayload(bundle));
+const contract=generationResourceContracts(request).find(r=>r.role==='scene_realization')!.schema as any;
+assert(!contract.properties.targetStart&&!contract.properties.experienceResourceKey);
+assert(!(generationResourceContracts(request).find(r=>r.role==='experience_recall_cue')!.schema as any).properties.imageIds);
+const locate=async(example:string,extra:any={})=>scenePayload(await produce({resources:[{role:'scene_realization',payload:{example,...extra}}]}));
+assert.equal((await locate('😀 I BORROW an umbrella.')).targetStart,5);
+assert.equal((await locate('I borrow an umbrella.',{targetStart:0,targetEnd:1,experienceResourceKey:'wrong'})).targetStart,2);
+assert.equal((await locate('I borrowed an umbrella.',{targetText:'borrowed'})).targetEnd,10);
+await assert.rejects(locate('I borroweded an umbrella.'),/target text not found/);
+await assert.rejects(locate('borrow then borrow'),/multiple matches/);
+assert.equal((await locate('borrow then borrow',{targetText:'borrow',targetOccurrence:2})).targetStart,12);
+await assert.rejects(locate('borrow',{targetOccurrence:2}),/exceeds/);
+assert.equal((await locate('borrowed',{targetText:'borrowed'})).targetEnd,8);
+await assert.rejects(locate('borrowed',{targetText:'missing'}),/target text not found/);
+const past=structuredClone(generated);past.resources[2]!.payload.example='Yesterday I borrowed an umbrella.';(past.resources[2]!.payload as any).targetText='borrowed';
+const pastBundle=await produce(past);assert((await validateBundle(request,pastBundle,null,now)).content);
+assert.equal(pastBundle.candidates.find(c=>c.materialRoleKey==='target_expression')!.contentPayload.surface,'borrow');
+assert.equal(pastBundle.candidates.find(c=>c.materialRoleKey==='pronunciation')!.contentPayload.surface,'borrow');
+for(const [surface,example,start,end] of [
+ ['on the left','The circle is on the left.',14,25],
+ ['Would you mind if I opened the window?','Would you mind if I opened the window?',0,38],
+ ['借','我借一把伞。',1,2],
+] as const){
+ const req=await makeRequest({id:id(),learner_user_id:id(),learning_target_id:id(),fixed_input:{...fixed,expression:surface}},id(),now);
+ const payload=scenePayload(await produce({resources:[{role:'scene_realization',payload:{example}}]},req));
+ assert.equal(payload.targetStart,start);assert.equal(payload.targetEnd,end);
+}
+// Unlisted irregular forms use explicit occurrence text, without a vocabulary table.
+const goRequest=await makeRequest({id:id(),learner_user_id:id(),learning_target_id:id(),fixed_input:{...fixed,expression:'go'}},id(),now);
+const went=scenePayload(await produce({resources:[{role:'scene_realization',payload:{example:'I went home.',targetText:'went'}}]},goRequest));
+assert.equal(went.targetStart,2);assert.equal(went.targetEnd,6);
+// Tampering after assembly still fails persisted admission.
+for(const fields of [{targetStart:0,targetEnd:999},{experienceResourceKey:'another:0'}]){
+ const tampered=structuredClone(bundle),candidate=tampered.candidates.find(c=>c.materialRoleKey==='scene_realization')!;
+ Object.assign(candidate.contentPayload,fields);candidate.contentDigest=canonicalJsonDigest(candidate.contentPayload);
+ assert.equal((await validateBundle(request,tampered,null,now)).content,null);
+}
 const accepted=await validateBundle(request,bundle,null,now);
 assert(accepted.content,'core binding resources admit through the real shared seam');
 assert.equal(accepted.content.resources.find(r=>r.materialRoleKey==='target_expression')?.contentPayload.expressionKind,'word');
@@ -29,8 +69,6 @@ for(const role of ['pronunciation','scene_bridge','scene_realization']){
 }
 for(const mutate of [
  (x:any)=>{x.resources[0].payload.scene='borrow';},
- (x:any)=>{x.resources[2].payload.targetStart=0;x.resources[2].payload.targetEnd=3;},
- (x:any)=>{x.resources[2].payload.experienceResourceKey='another:0';},
  (x:any)=>{x.resources[3].payload.audioUrl='https://invented.invalid/audio.mp3';},
 ]){
  const bad=structuredClone(generated);mutate(bad);
