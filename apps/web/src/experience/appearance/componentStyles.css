@@ -39,8 +39,10 @@
   color: var(--sensa-component-action-primary-foreground);
 }
 
-[data-sensa-component="action"][data-sensa-variant="primary"]:hover:not(:disabled) {
-  background: var(--sensa-component-action-primary-hover-background);
+@media (hover: hover) and (pointer: fine) {
+  [data-sensa-component="action"][data-sensa-variant="primary"]:hover:not(:disabled) {
+    background: var(--sensa-component-action-primary-hover-background);
+  }
 }
 
 [data-sensa-component="action"][data-sensa-variant="secondary"] {
@@ -49,8 +51,10 @@
   color: var(--sensa-component-action-secondary-foreground);
 }
 
-[data-sensa-component="action"][data-sensa-variant="secondary"]:hover:not(:disabled) {
-  background: var(--sensa-component-action-secondary-hover-background);
+@media (hover: hover) and (pointer: fine) {
+  [data-sensa-component="action"][data-sensa-variant="secondary"]:hover:not(:disabled) {
+    background: var(--sensa-component-action-secondary-hover-background);
+  }
 }
 
 [data-sensa-component="action"][data-sensa-variant="quiet"] {
@@ -59,8 +63,10 @@
   color: var(--sensa-component-action-quiet-foreground);
 }
 
-[data-sensa-component="action"][data-sensa-variant="quiet"]:hover:not(:disabled) {
-  background: var(--sensa-component-action-quiet-hover-background);
+@media (hover: hover) and (pointer: fine) {
+  [data-sensa-component="action"][data-sensa-variant="quiet"]:hover:not(:disabled) {
+    background: var(--sensa-component-action-quiet-hover-background);
+  }
 }
 
 [data-sensa-component="action"][data-sensa-variant="danger"] {
@@ -69,8 +75,10 @@
   color: var(--sensa-component-action-danger-foreground);
 }
 
-[data-sensa-component="action"][data-sensa-variant="danger"]:hover:not(:disabled) {
-  background: var(--sensa-component-action-danger-hover-background);
+@media (hover: hover) and (pointer: fine) {
+  [data-sensa-component="action"][data-sensa-variant="danger"]:hover:not(:disabled) {
+    background: var(--sensa-component-action-danger-hover-background);
+  }
 }
 
 [data-sensa-component="action"][data-sensa-state~="loading"] {
@@ -104,8 +112,10 @@
   color: var(--sensa-component-field-placeholder);
 }
 
-[data-sensa-component="field"] [data-sensa-slot="control"]:hover:not(:disabled) {
-  border-color: var(--sensa-component-field-hover-border);
+@media (hover: hover) and (pointer: fine) {
+  [data-sensa-component="field"] [data-sensa-slot="control"]:hover:not(:disabled) {
+    border-color: var(--sensa-component-field-hover-border);
+  }
 }
 
 [data-sensa-component="field"] [data-sensa-slot="control"]:focus-visible {

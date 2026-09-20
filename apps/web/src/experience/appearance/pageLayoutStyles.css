@@ -67,7 +67,7 @@
   outline-offset: 2px;
 }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   [data-sensa-shell-navigation-item]:hover,
   [data-sensa-shell-utility-action]:hover {
     background: var(--sensa-surface-selected);

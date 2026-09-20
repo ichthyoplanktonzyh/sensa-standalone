@@ -90,11 +90,6 @@
   text-underline-offset: 0.35rem;
 }
 
-.sensa-landing__text-link:hover {
-  color: var(--sensa-brand-forest-800);
-  text-decoration-line: underline;
-}
-
 .sensa-landing__header-action,
 .sensa-landing__primary-action,
 .sensa-landing__closing-action,
@@ -120,11 +115,6 @@
 .sensa-landing__primary-action {
   background: var(--sensa-brand-forest-800);
   color: var(--sensa-brand-paper-100);
-}
-
-.sensa-landing__header-action:hover,
-.sensa-landing__primary-action:hover {
-  background: var(--sensa-brand-forest-900);
 }
 
 .sensa-landing__header-action:active,
@@ -188,10 +178,6 @@
   border-color: var(--sensa-brand-stone-500);
   background: transparent;
   color: var(--sensa-brand-forest-800);
-}
-
-.sensa-landing__secondary-action:hover {
-  background: var(--sensa-brand-sage-100);
 }
 
 .sensa-landing__specimen {
@@ -457,11 +443,6 @@
   color: var(--sensa-brand-forest-800);
 }
 
-.sensa-landing__closing-action:hover {
-  border-color: var(--sensa-brand-sage-300);
-  background: var(--sensa-brand-sage-300);
-}
-
 .sensa-landing__footer {
   display: flex;
   max-width: 90rem;
@@ -622,6 +603,27 @@
   .sensa-landing__footer {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sensa-landing__text-link:hover {
+    color: var(--sensa-brand-forest-800);
+    text-decoration-line: underline;
+  }
+
+  .sensa-landing__header-action:hover,
+  .sensa-landing__primary-action:hover {
+    background: var(--sensa-brand-forest-900);
+  }
+
+  .sensa-landing__secondary-action:hover {
+    background: var(--sensa-brand-sage-100);
+  }
+
+  .sensa-landing__closing-action:hover {
+    border-color: var(--sensa-brand-sage-300);
+    background: var(--sensa-brand-sage-300);
   }
 }
 

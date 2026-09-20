@@ -34,6 +34,13 @@ host、URL 参数归属和 screen-memory identity 只在 `experience/router/scre
 参数裁剪与 App/Learning Workspace 的声明式 renderer map 都受这份 registry 的类型约束，不再维护并行 switch
 和 allowlist。pathname 与 search 是导航唯一权威，刷新、分享链接及浏览器前进/后退不得依赖丢失的组件状态。
 
+安装态 PWA 在 coarse pointer 设备上为非空 Sheet Stack 提供左边缘滑动返回：10px 后才锁定横向意图，
+释放时结合距离与速度投影决定返回，并在设备支持 Web Vibration 时只于越过提交阈值轻触一次。普通浏览器
+保留系统返回手势；学习 Runtime、弹层和首页不接管边缘滑动，学习评分也绝不绑定 swipe。手势视觉只修改
+compositor transform，支持中断和 reduced-motion；所有页面仍保留显式返回控件。viewport 允许软键盘调整
+布局，粗指针输入控件不得小于 16px 字号，hover 样式只对可悬停的精细指针生效。触感、safe area 与软键盘
+最终手感必须在真实 iOS/Android 安装态验证，桌面设备模拟不构成交付结论。
+
 ## 数据与同步
 
 生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v3.sqlite3`，持久化在浏览器

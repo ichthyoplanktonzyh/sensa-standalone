@@ -3,6 +3,7 @@ import {useTranslation} from 'react-i18next';
 import {IconSprite} from './components/IconSprite';
 import {WebShell} from './ui/WebShell';
 import {ScreenHost,ScreenMemoryProvider} from './ui/ScreenHost';
+import {EdgeSwipeBack} from './ui/EdgeSwipeBack';
 import type {PracticeSenseItem} from './practiceData';
 import {isContentSectionId,type ContentSectionId} from './contentRoute';
 import type {ContentNoteItem,SavedExampleItem} from './contentProjection';
@@ -100,6 +101,7 @@ export default function App(){
     <ScreenHost screenKey={hostedScreenKey} memoryKey={hostedScreenKey} preserveScroll={!learningWorkspaceActive} active={baseActive} fallback={fallback}>
      {renderScreen}
     </ScreenHost>
+    <EdgeSwipeBack enabled={viewMode==='main'&&mainStack.length>0&&!overlayOpen} onBack={backMain}/>
     <Suspense fallback={null}>
     {dictModalWord&&<ReferenceDictionaryScreen active={!referenceExampleDeck} wordData={dictModalWord} onClose={closeDictModal} onOpenExamples={setReferenceExampleDeck}/>}
     {referenceExampleDeck&&<ReferenceExampleViewer active deck={referenceExampleDeck} onClose={()=>setReferenceExampleDeck(null)}/>}

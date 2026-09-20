@@ -32,6 +32,44 @@
     transform var(--sensa-motion-duration-overlay) var(--sensa-motion-easing-enter);
 }
 
+[data-sensa-edge-swipe-zone] {
+  position: fixed;
+  z-index: 120;
+  inset: env(safe-area-inset-top, 0px) auto env(safe-area-inset-bottom, 0px) 0;
+  width: max(1.25rem, env(safe-area-inset-left, 0px));
+  touch-action: pan-y;
+}
+
+[data-sensa-edge-swipe-indicator] {
+  --sensa-edge-swipe-indicator-x: 0px;
+  --sensa-edge-swipe-progress: 0;
+  position: fixed;
+  top: 50%;
+  left: max(0.5rem, env(safe-area-inset-left, 0px));
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border: 1px solid var(--sensa-border-strong);
+  border-radius: 9999px;
+  background: var(--sensa-surface-raised);
+  color: var(--sensa-fg-primary);
+  box-shadow: var(--sensa-shadow-raised);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(calc(-100% + var(--sensa-edge-swipe-indicator-x)), -50%, 0) scale(calc(0.86 + var(--sensa-edge-swipe-progress) * 0.14));
+  will-change: transform, opacity;
+}
+
+[data-sensa-edge-swipe-indicator][data-active] {
+  opacity: var(--sensa-edge-swipe-progress);
+}
+
+[data-sensa-edge-swipe-indicator][data-ready] {
+  border-color: var(--sensa-action-primary);
+  color: var(--sensa-action-primary);
+}
+
 @starting-style {
   [data-sensa-overlay-layout]:not([data-sensa-overlay-mode="specimen"]) > [data-sensa-slot="backdrop"] {
     opacity: 0;
@@ -55,5 +93,11 @@
   [data-sensa-overlay-layout] [data-sensa-slot="panel"] {
     animation: none !important;
     transition-duration: 0.01ms !important;
+  }
+  [data-sensa-edge-swipe-screen] {
+    transform: none !important;
+  }
+  [data-sensa-edge-swipe-indicator] {
+    transform: translate3d(0, -50%, 0);
   }
 }

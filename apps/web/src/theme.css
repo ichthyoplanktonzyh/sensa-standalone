@@ -10,6 +10,28 @@
 @import "./experience/appearance/motionStyles.css";
 @source "./experience";
 
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: max(1rem, 16px);
+  }
+}
+
 @theme inline {
   --font-product: var(--sensa-font-product);
   --font-language: var(--sensa-font-language);

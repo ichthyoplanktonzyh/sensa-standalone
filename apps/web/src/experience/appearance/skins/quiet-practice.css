@@ -26,8 +26,10 @@ html[data-sensa-skin="quiet"] .sensa-practice-activities > button {
   overflow-wrap: anywhere;
 }
 
-html[data-sensa-skin="quiet"] .sensa-practice-activities > button:not(:disabled):hover {
-  background: var(--sensa-surface-subtle);
+@media (hover: hover) and (pointer: fine) {
+  html[data-sensa-skin="quiet"] .sensa-practice-activities > button:not(:disabled):hover {
+    background: var(--sensa-surface-subtle);
+  }
 }
 
 html[data-sensa-skin="quiet"] #s-practice-scope li {

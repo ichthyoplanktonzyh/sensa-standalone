@@ -25,8 +25,10 @@ html[data-sensa-skin="quiet"] #s-profile button[id^="settings-"] {
   padding-block: 1.5rem;
 }
 
-html[data-sensa-skin="quiet"] #s-profile button[id^="settings-"]:hover {
-  background: var(--sensa-surface-subtle);
+@media (hover: hover) and (pointer: fine) {
+  html[data-sensa-skin="quiet"] #s-profile button[id^="settings-"]:hover {
+    background: var(--sensa-surface-subtle);
+  }
 }
 
 html[data-sensa-skin="quiet"] #s-profile :is(section, form, [role="status"], [role="alert"]) {
