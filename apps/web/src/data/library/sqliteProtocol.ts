@@ -2,9 +2,9 @@
 
 import type {HomeLearningStorageProjection} from './homeLearningRecords';
 
-export const sqliteLibraryFile = "/sensa-local-library-v6.sqlite3";
-export const sqlitePoolDirectory = "/sensa-local-library-v6";
-export const sqliteLibrarySchemaVersion = 6;
+export const sqliteLibraryFile = "/sensa-local-library-v7.sqlite3";
+export const sqlitePoolDirectory = "/sensa-local-library-v7";
+export const sqliteLibrarySchemaVersion = 7;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -94,13 +94,13 @@ CREATE TABLE IF NOT EXISTS sensa_records(
   record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
   value_json TEXT NOT NULL CHECK(json_valid(value_json)),
   PRIMARY KEY(table_name,record_key)
-) WITHOUT ROWID;
+);
 CREATE TABLE IF NOT EXISTS sensa_learning_targets(
   record_key TEXT NOT NULL PRIMARY KEY,
   projection_value_json TEXT NOT NULL CHECK(json_valid(projection_value_json)),
   introduced_language_route_id TEXT,
   started_at TEXT
-) WITHOUT ROWID;
+);
 CREATE TABLE IF NOT EXISTS sensa_learning_route_targets(
   language_route_id TEXT NOT NULL,
   target_key TEXT NOT NULL,

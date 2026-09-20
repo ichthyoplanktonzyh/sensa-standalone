@@ -80,7 +80,7 @@ await store.readLibrary(async (tx) => {
 const diagnostics = await store.readLibraryStorageDiagnostics();
 assert.deepEqual(
   { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
-  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 6 },
+  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 7 },
 );
 
 const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearningTargetsQuery }, { encodeBackupValue }, { sqliteLibrarySchema }] = await Promise.all([
@@ -110,6 +110,16 @@ const database = new SqliteRecordDatabase(
   'memory',
 );
 database.initialize();
+const tableLayouts = rawDatabase.exec({
+  sql: `SELECT name,wr FROM pragma_table_list
+        WHERE name IN ('sensa_records','sensa_learning_targets','sensa_learning_run_targets')`,
+  rowMode: 'object',
+  returnValue: 'resultRows',
+}) as Array<Record<string, unknown>>;
+const withoutRowId = new Map(tableLayouts.map((row) => [String(row.name), Number(row.wr)]));
+assert.equal(withoutRowId.get('sensa_records'), 0, 'large logical JSON records belong in a rowid table');
+assert.equal(withoutRowId.get('sensa_learning_targets'), 0, 'large Target projections belong in a rowid table');
+assert.equal(withoutRowId.get('sensa_learning_run_targets'), 1, 'small relationship rows retain clustered composite keys');
 database.commit({
   clears: [],
   deletes: [],
@@ -296,4 +306,4 @@ assert.deepEqual(database.homeLearningProjection('route-a').targets, []);
 assert.match(database.diagnostics().sqliteVersion, /^3\./u);
 database.close();
 
-console.log('PASS: Library records preserve typed values and atomic replay; SQLite schema v6 maintains planner statistics, indexed learning and media-reference projections, native counts and logical-table constraints. Browser OPFS is checked separately.');
+console.log('PASS: Library records preserve typed values and atomic replay; SQLite schema v7 uses rowid for large JSON plus compact indexed relationship projections, planner statistics, native counts and logical-table constraints. Browser OPFS is checked separately.');

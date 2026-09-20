@@ -43,7 +43,7 @@ compositor transform，支持中断和 reduced-motion；所有页面仍保留显
 
 ## 数据与同步
 
-生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v6.sqlite3`，持久化在浏览器
+生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v7.sqlite3`，持久化在浏览器
 Origin Private File System。SQLite 在专用 Worker 中运行，使用不要求页面启用跨源隔离的
 `opfs-sahpool` VFS。Web Lock 选出唯一数据库 owner；其他同源 Sensa 标签页通过 BroadcastChannel
 复用 owner 的记录接口，owner 关闭后由剩余页面重新选举，绝不打开竞争连接。跨页共享/排他事务锁覆盖
@@ -61,7 +61,8 @@ SAH Pool 由 leader Worker 独占，所以数据库打开后的第一条 SQLite 
 Content Attempt 查询投影。首页只读取当前 Route 的 Target、该 Route 今日已占用的新词额度以及实际引用的
 Package key；运行恢复、策略锁定和生成频控通过领域索引查询，不遍历或解析无关 JSON。数据库打开及有写入
 的长连接周期内使用 `PRAGMA optimize` 维护查询规划统计。Book 版本替换和媒体引用完整性检查同样通过事务内
-关系投影完成。物理 schema v6 使用新的 OPFS 文件；因当前无用户库数据，不迁移或读取 v5 文件。
+关系投影完成。承载大 JSON 的逻辑 record 与 Target 投影使用普通 rowid 表，紧凑关系投影使用
+`WITHOUT ROWID`；物理 schema v7 使用新的 OPFS 文件，因当前无用户库数据，不迁移或读取 v6 文件。
 
 Web 应用层的逻辑表与 Personal Semantic World Journey 共用这一物理事务 authority。Journey 的
 意义聚合、注册表事实、Inbox、澄清草稿和 operation receipt 分别保存在 `semanticMeanings`、
