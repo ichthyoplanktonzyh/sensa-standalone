@@ -1,7 +1,12 @@
 /** Narrow test bridge compiled only for the real-browser delivery smoke. */
 import { listDrafts, saveDraft } from './data/library/drafts';
 import { readCloudSync } from './data/library/cloudSync';
-import { openLibrary, readLibraryStorageDiagnostics } from './data/library/store';
+import {
+  openLibrary,
+  readLibrary,
+  readLibraryStorageDiagnostics,
+  restoreLibraryTransaction,
+} from './data/library/store';
 import {loadJourneyStateFromLibrary} from './experience/personalMeaningJourney/repository';
 
 type BrowserSmokeBridge = {
@@ -11,6 +16,7 @@ type BrowserSmokeBridge = {
   semanticWorldContainsExpression(surfaceForm: string): Promise<boolean>;
   intakeInboxCount(): Promise<number>;
   storageDiagnostics(): ReturnType<typeof readLibraryStorageDiagnostics>;
+  transactionConcurrency(): Promise<{readersOverlap:boolean;writerWaited:boolean}>;
 };
 
 declare global {
@@ -70,5 +76,31 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
       return (await loadJourneyStateFromLibrary()).inboxItems.length;
     },
     storageDiagnostics: readLibraryStorageDiagnostics,
+    async transactionConcurrency() {
+      let announceReader!:()=>void;
+      let releaseReader!:()=>void;
+      const readerStarted=new Promise<void>(resolve=>{announceReader=resolve;});
+      const readerGate=new Promise<void>(resolve=>{releaseReader=resolve;});
+      const first=readLibrary(async(tx)=>{
+        await tx.get('meta','identity');
+        announceReader();
+        await readerGate;
+      });
+      await readerStarted;
+      const readersOverlap=await Promise.race([
+        readLibrary((tx)=>tx.get('meta','identity')).then(()=>true),
+        new Promise<false>(resolve=>setTimeout(()=>resolve(false),1_000)),
+      ]);
+      let writerEntered=false;
+      const writer=restoreLibraryTransaction(async(tx)=>{
+        writerEntered=true;
+        await tx.get('meta','identity');
+      });
+      await new Promise(resolve=>setTimeout(resolve,50));
+      const writerWaited=!writerEntered;
+      releaseReader();
+      await Promise.all([first,writer]);
+      return {readersOverlap,writerWaited};
+    },
   };
 }

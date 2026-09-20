@@ -177,7 +177,7 @@ async function transaction<T>(
   work: (tx: LibraryTransaction) => Promise<T>,
   kind: "content" | "state" = "content",
 ): Promise<T> {
-  return runSerially(() => runAcrossPages(mode, async () => {
+  const execute = async () => {
     const adapter = await storageCall(sqliteRecordAdapter);
     const library = new LibraryTransaction(mode, adapter);
     const value = await work(library);
@@ -204,7 +204,14 @@ async function transaction<T>(
       }
     }
     return value;
-  }));
+  };
+  // Web Locks already coordinate this entire logical transaction within and
+  // across pages. Shared reads may overlap; an exclusive writer still fences
+  // every read/modify/write sequence. Non-browser adapters retain the serial
+  // fallback so their in-memory snapshots cannot interleave.
+  return typeof navigator !== "undefined" && navigator.locks
+    ? runAcrossPages(mode, execute)
+    : runSerially(execute);
 }
 
 /** Reserved for validated full-library restore; it remains one SQLite transaction. */

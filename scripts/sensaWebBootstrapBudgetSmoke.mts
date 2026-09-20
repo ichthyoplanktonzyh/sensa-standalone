@@ -270,6 +270,11 @@ try{
  const created=await a.page.goto(origin,{waitUntil:'domcontentloaded'});
  assert(created?.ok(),'Web bundle did not serve');
  await expect.poll(()=>a.page.evaluate(()=>!!window.__sensaBrowserSmoke),{timeout:SHELL_BUDGET_MS}).toBe(true);
+ assert.deepEqual(
+  await a.page.evaluate(()=>window.__sensaBrowserSmoke!.transactionConcurrency()),
+  {readersOverlap:true,writerWaited:true},
+  'local read transactions did not share the Web Lock or a writer crossed an active reader',
+ );
  const written=await a.page.evaluate(
   ({drafts,images})=>window.__sensaBrowserSmoke!.seedDrafts(drafts,images),
   {drafts:DRAFTS,images:IMAGES_PER_DRAFT},

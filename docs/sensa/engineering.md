@@ -48,6 +48,8 @@ Origin Private File System。SQLite 在专用 Worker 中运行，使用不要求
 `opfs-sahpool` VFS。Web Lock 选出唯一数据库 owner；其他同源 Sensa 标签页通过 BroadcastChannel
 复用 owner 的记录接口，owner 关闭后由剩余页面重新选举，绝不打开竞争连接。跨页共享/排他事务锁覆盖
 完整 `LibraryTransaction`，因此多次读取到一次 commit 的 read/modify/write 序列不会在标签页之间交错。
+浏览器内不再叠加全局 Promise 队列：只读事务持有 shared Web Lock 并可并发，写事务持有 exclusive Web Lock；
+无 Web Locks 的测试 Adapter 才使用串行 fallback。
 UI 只通过本机事务修改数据，不直接执行 SQL，也不写派生学习结果。Node 测试使用相同事务接口的内存
 Adapter；浏览器交付必须另验真实 OPFS 以及 follower 标签页的读写。当前版本不读取或迁移旧 IndexedDB 数据。
 SAH Pool 由 leader Worker 独占，所以数据库打开后的第一条 SQLite 指令固定为
