@@ -42,6 +42,10 @@ assert(!screen.includes('const conversationText = messages'));
 assert(world.includes('confirmedExpressionFor(item)'));
 assert(screen.includes('maxImages={MAX_SCENE_IMAGES}'));
 assert(learningWorkspace.includes('onStartConversation={startSensaConversation}'));
+assert(
+ learningWorkspace.includes('worldAction:undefined'),
+ 'opening clarification must consume the one-shot create action so Back cannot immediately reopen it',
+);
 assert(app.includes('onConversationCreated={openPersonalMeaning}'));
 
 console.log('PASS: native Sensa entry and Inbox clarification share one natural teacher loop whose structured clarity assessment is final output; only semantic-world lookup is a tool, with no consolidate mode or model/paid calls.');

@@ -66,7 +66,13 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
  const openSemanticWorldSense=useCallback((senseId:string)=>{const item=contentSenseForId(senseId);if(item)openContentSense(item);},[openContentSense]);
  const openPersonalMeaning=useCallback((meaningId:string,focusId?:string)=>goMain('s-personal-meaning',{meaningId,focusId}),[goMain]);
  const openConfirmedSense=useCallback((meaningId:string,focusId:string)=>goMain('s-confirmed-sense',{meaningId,focusId}),[goMain]);
- const startSensaConversation=useCallback(()=>goMain('s-personal-meaning',{meaningId:undefined,focusId:undefined}),[goMain]);
+ const startSensaConversation=useCallback(()=>goMain('s-personal-meaning',{
+  meaningId:undefined,
+  focusId:undefined,
+  // `worldAction=create` is a one-shot entry command. Leaving it in the URL
+  // reopens this screen as soon as the learner backs out to the semantic world.
+  worldAction:undefined,
+ }),[goMain]);
  const openPersonalLearningSource=useCallback((task:typeof personalLearning.tasks[number])=>goMain('s-confirmed-sense',{meaningId:task.source.personalMeaningId,focusId:task.source.meaningFocusId??task.source.personalMeaningAlignmentId}),[goMain]);
  const [studyTab,setStudyTab]=useState<'a'|'b'>('a');
  const dailyNewCount=packageLearning.dailyLimit??20;
