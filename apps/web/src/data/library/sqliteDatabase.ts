@@ -17,6 +17,23 @@ import {
 
 type StoredEntry = { key: string; encodedValue: string };
 
+/** Kept beside the storage kernel so diagnostics exercise the exact shipped query. */
+export const sqliteHomeLearningTargetsQuery = `SELECT
+        target.record_key AS record_key,
+        target.projection_value_json AS projection_value_json
+      FROM sensa_learning_targets AS target
+      JOIN sensa_learning_route_targets AS route
+        ON route.target_key=target.record_key
+      WHERE route.language_route_id=?
+      UNION
+      SELECT
+        target.record_key AS record_key,
+        target.projection_value_json AS projection_value_json
+      FROM sensa_learning_targets AS target
+      WHERE target.introduced_language_route_id=?
+        AND target.started_at>=? AND target.started_at<?
+      ORDER BY record_key`;
+
 /** Internal SQLite record kernel owned by the OPFS Worker. */
 export class SqliteRecordDatabase {
   constructor(
@@ -37,6 +54,9 @@ export class SqliteRecordDatabase {
       throw new Error(`sqlite_schema_mismatch:${before}`);
     }
     this.database.exec(sqliteLibrarySchema);
+    // This OPFS connection normally lives for the owning tab's lifetime. Let
+    // SQLite refresh planner statistics after schema changes and on every open.
+    this.database.exec("PRAGMA optimize=0x10002");
     const integrity = this.database.exec({
       sql: "PRAGMA quick_check(1)",
       rowMode: 0,
@@ -92,20 +112,11 @@ export class SqliteRecordDatabase {
     const dayEnd = new Date(dayStart);
     dayEnd.setDate(dayEnd.getDate() + 1);
     const targetRows = this.database.exec({
-      sql: `SELECT projection_value_json
-            FROM sensa_learning_targets AS target
-            WHERE EXISTS(
-              SELECT 1 FROM sensa_learning_route_targets AS route
-              WHERE route.target_key=target.record_key AND route.language_route_id=?
-            ) OR (
-              target.introduced_language_route_id=?
-              AND target.started_at>=? AND target.started_at<?
-            )
-            ORDER BY record_key`,
+      sql: sqliteHomeLearningTargetsQuery,
       bind: [languageRouteId, languageRouteId, dayStart.toISOString(), dayEnd.toISOString()],
-      rowMode: 0,
+      rowMode: 'object',
       returnValue: 'resultRows',
-    }) as unknown[];
+    }) as Array<Record<string, unknown>>;
     const packageRows = this.database.exec({
       sql: `SELECT DISTINCT package.record_key
             FROM sensa_learning_route_targets AS route
@@ -119,7 +130,7 @@ export class SqliteRecordDatabase {
     }) as unknown[];
     const activeId = this.decoded<string>('meta', 'learning-active');
     return createHomeLearningStorageProjection({
-      targets: targetRows.map((row) => this.decode<LocalLearningTarget>(String(row))),
+      targets: targetRows.map((row) => this.decode<LocalLearningTarget>(String(row.projection_value_json))),
       availablePackageKeys: packageRows.map(String),
       activeRun: activeId
         ? this.decoded<LocalLearningRun>('learningRuns', activeId) ?? null
@@ -179,6 +190,7 @@ export class SqliteRecordDatabase {
   }
 
   close(): void {
+    this.database.exec("PRAGMA optimize");
     this.database.close();
   }
 
