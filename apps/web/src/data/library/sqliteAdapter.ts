@@ -144,6 +144,9 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
       persistence: "memory",
       sqliteVersion: "not-applicable",
       schemaVersion: sqliteLibrarySchemaVersion,
+      journalMode: "not-applicable",
+      synchronous: null,
+      lockingMode: "not-applicable",
     };
   }
 }

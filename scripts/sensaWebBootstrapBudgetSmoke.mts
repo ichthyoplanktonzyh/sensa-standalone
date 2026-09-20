@@ -443,6 +443,7 @@ try{
  if(repeatRequests.some(entry=>entry.path.startsWith('/sensa/library-sync/')))fail('a fresh foreground return started an unnecessary whole-library sync');
  if(restored!==TOTAL_DRAFTS)fail(`account restore lost content: ${restored}/${TOTAL_DRAFTS} drafts`);
  if(storageDiagnostics.engine!=='sqlite-wasm'||storageDiagnostics.persistence!=='opfs')fail(`production browser did not use SQLite OPFS: ${JSON.stringify(storageDiagnostics)}`);
+ if(storageDiagnostics.journalMode!=='wal'||storageDiagnostics.synchronous!==2||storageDiagnostics.lockingMode!=='exclusive')fail(`production browser did not use the reviewed WAL/FULL/EXCLUSIVE profile: ${JSON.stringify(storageDiagnostics)}`);
  if(!remoteMeaning)fail('the remote Agent Intake was acknowledged without a local Personal Meaning');
  if(remoteIncompleteAcknowledgement?.result?.route!=='inbox'||remoteInboxCount<1)fail('an incomplete Agent Intake did not remain in the local Inbox');
  if(bootRequests.some(entry=>entry.path==='/sensa/service/status'))fail('rolling service counters are read on boot instead of on demand');

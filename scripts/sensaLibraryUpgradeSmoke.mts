@@ -50,7 +50,7 @@ assert.equal(await store.readLibrary((tx) => tx.get('drafts', 'rolled-back')), u
 const diagnostics = await store.readLibraryStorageDiagnostics();
 assert.deepEqual(
   { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
-  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 3 },
+  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 4 },
 );
 
 const [{ default: sqlite3InitModule }, { SqliteRecordDatabase }, { encodeBackupValue }] = await Promise.all([
@@ -138,4 +138,4 @@ assert.deepEqual(database.homeLearningProjection('route-a').targets, []);
 assert.match(database.diagnostics().sqliteVersion, /^3\./u);
 database.close();
 
-console.log('PASS: Library records preserve typed values and atomic replay; SQLite schema v3 maintains route-indexed learning projections, native counts and logical-table constraints. Browser OPFS is checked separately.');
+console.log('PASS: Library records preserve typed values and atomic replay; SQLite schema v4 maintains route-indexed learning projections, native counts and logical-table constraints. Browser OPFS is checked separately.');

@@ -26,6 +26,12 @@ export class SqliteRecordDatabase {
   ) {}
 
   initialize(): SqliteStorageDiagnostics {
+    // SQLite Wasm has no shared-memory API. Its documented WAL contract
+    // requires exclusive locking to be the first operation after open.
+    const lockingMode = this.scalarText("PRAGMA locking_mode=EXCLUSIVE");
+    if (this.persistence === "opfs" && lockingMode !== "exclusive") {
+      throw new Error(`sqlite_locking_mode_failed:${lockingMode}`);
+    }
     const before = this.scalarNumber("PRAGMA user_version");
     if (before !== 0 && before !== sqliteLibrarySchemaVersion) {
       throw new Error(`sqlite_schema_mismatch:${before}`);
@@ -37,6 +43,12 @@ export class SqliteRecordDatabase {
       returnValue: "resultRows",
     }) as unknown[];
     if (integrity[0] !== "ok") throw new Error("sqlite_integrity_failed");
+    if (this.persistence === "opfs") {
+      const journalMode = this.scalarText("PRAGMA journal_mode");
+      const synchronous = this.scalarNumber("PRAGMA synchronous");
+      if (journalMode !== "wal") throw new Error(`sqlite_journal_mode_failed:${journalMode}`);
+      if (synchronous !== 2) throw new Error(`sqlite_synchronous_failed:${synchronous}`);
+    }
     return this.diagnostics();
   }
 
@@ -160,6 +172,9 @@ export class SqliteRecordDatabase {
       persistence: this.persistence,
       sqliteVersion: this.sqlite3.version.libVersion,
       schemaVersion: this.scalarNumber("PRAGMA user_version"),
+      journalMode: this.scalarText("PRAGMA journal_mode"),
+      synchronous: this.scalarNumber("PRAGMA synchronous"),
+      lockingMode: this.scalarText("PRAGMA locking_mode"),
     };
   }
 
@@ -174,6 +189,15 @@ export class SqliteRecordDatabase {
       returnValue: "resultRows",
     }) as unknown[];
     return Number(rows[0] ?? 0);
+  }
+
+  private scalarText(sql: string): string {
+    const rows = this.database.exec({
+      sql,
+      rowMode: 0,
+      returnValue: "resultRows",
+    }) as unknown[];
+    return String(rows[0] ?? "").toLowerCase();
   }
 
   private decoded<T>(table: SqliteLibraryTable, key: string): T | undefined {

@@ -2,9 +2,9 @@
 
 import type {HomeLearningStorageProjection} from './homeLearningRecords';
 
-export const sqliteLibraryFile = "/sensa-local-library-v3.sqlite3";
-export const sqlitePoolDirectory = "/sensa-local-library-v3";
-export const sqliteLibrarySchemaVersion = 3;
+export const sqliteLibraryFile = "/sensa-local-library-v4.sqlite3";
+export const sqlitePoolDirectory = "/sensa-local-library-v4";
+export const sqliteLibrarySchemaVersion = 4;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -65,6 +65,9 @@ export type SqliteStorageDiagnostics = {
   persistence: "opfs" | "memory";
   sqliteVersion: string;
   schemaVersion: number;
+  journalMode: string;
+  synchronous: number | null;
+  lockingMode: string;
 };
 
 const quotedTables = sqliteLibraryTables.map((value) => `'${value}'`).join(",");
@@ -77,7 +80,7 @@ const quotedTables = sqliteLibraryTables.map((value) => `'${value}'`).join(",");
  */
 export const sqliteLibrarySchema = `
 PRAGMA foreign_keys=ON;
-PRAGMA journal_mode=DELETE;
+PRAGMA journal_mode=WAL;
 PRAGMA synchronous=FULL;
 PRAGMA temp_store=MEMORY;
 CREATE TABLE IF NOT EXISTS sensa_records(

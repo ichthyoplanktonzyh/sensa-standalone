@@ -5,13 +5,14 @@ import { decodeBackupValue, encodeBackupValue } from "./backupCodec";
 import { sqliteRecordAdapter } from "./sqliteAdapter";
 import {
   type HomeLearningStorageProjection,
+  sqliteLibraryFile,
   sqliteLibraryTables,
   type SqliteLibraryTable,
   type SqliteMutation,
   type SqliteStorageDiagnostics,
 } from "./sqliteProtocol";
 
-export const libraryDatabaseName = "sensa-local-library-v3.sqlite3";
+export const libraryDatabaseName = sqliteLibraryFile.slice(1);
 export const libraryTables = sqliteLibraryTables;
 export type Table = SqliteLibraryTable;
 export const localLibraryRevisionKey = "local-content-revision";
