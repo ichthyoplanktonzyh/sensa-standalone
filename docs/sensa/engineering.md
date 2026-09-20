@@ -28,6 +28,12 @@ App Shell、轻量首页、完整学习工作区和 Learning Runtime 的增量�
 composition validation 在进入 Run 时按需加载；首页学习队列与内容准备只在真实表变化、到期时间点或页面
 恢复焦点时刷新，不使用固定频率轮询。
 
+TanStack Router 拥有合法路径、search 校验、公开 `/welcome` 和 not-found 恢复；动态 Sheet Stack 仍以一个
+受校验的 splat route 表达，因为相同 sheet 可以从多个父页面压栈并必须返回原父页面。所有 sheet 的渲染
+host、URL 参数归属和 screen-memory identity 只在 `experience/router/screenRegistry.ts` 声明一次；路径解析、
+参数裁剪与 App/Learning Workspace 的声明式 renderer map 都受这份 registry 的类型约束，不再维护并行 switch
+和 allowlist。pathname 与 search 是导航唯一权威，刷新、分享链接及浏览器前进/后退不得依赖丢失的组件状态。
+
 ## 数据与同步
 
 生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v3.sqlite3`，持久化在浏览器

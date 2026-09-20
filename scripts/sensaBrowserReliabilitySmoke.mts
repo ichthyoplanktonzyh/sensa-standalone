@@ -13,6 +13,11 @@ import {
   parseMainStack,
   retainParamsForStack,
 } from "../apps/web/src/experience/router/shellLocation.ts";
+import {
+  SHELL_SCREEN_DEFINITIONS,
+  screenInstanceKey,
+  shellScreenHost,
+} from "../apps/web/src/experience/router/screenRegistry.ts";
 
 const privateText = "learner-text-and-secret-must-never-leave-the-browser";
 const window = new Window({ url: "https://sensa.test/study/learning-library?meaningId=private" });
@@ -73,10 +78,12 @@ assert.equal((await brokenSink.request("/sensa/browser-events", {
 assert(isKnownShellPath("/study/learning-library"));
 assert(!isKnownShellPath("/study/not-a-screen"));
 assert(!isKnownShellPath("/not-a-screen"));
+assert.equal(new Set(SHELL_SCREEN_DEFINITIONS.map(({id})=>id)).size,KNOWN_SHEET_IDS.length);
 for (const sheetId of KNOWN_SHEET_IDS) {
   const path = buildPathname([sheetId]);
   assert.deepEqual(parseMainStack(path), [sheetId], `single-sheet route did not round-trip: ${path}`);
   assert(isKnownShellPath(path), `known sheet was rejected: ${path}`);
+  assert(shellScreenHost(sheetId), `known sheet has no rendering host: ${sheetId}`);
 }
 for (const stack of [
   ['s-study', 's-learning-library'],
@@ -92,4 +99,6 @@ assert.deepEqual(
   {senseId:'sense'},
   'navigation params must leave history with their owning sheet',
 );
+assert.equal(screenInstanceKey('s-personal-meaning',{}),'s-personal-meaning:new');
+assert.equal(screenInstanceKey('s-content-sense',{senseId:'sense'}),'s-content-sense:sense');
 console.log("PASS: browser errors are deduplicated and redacted, the API contract is strict/non-fatal, and shell routes round-trip while unknown paths are rejected.");

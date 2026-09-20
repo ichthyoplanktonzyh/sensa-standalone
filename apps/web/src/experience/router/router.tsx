@@ -27,9 +27,8 @@ interface ShellSearch extends ShellParams {
 
 function SensaRootRoute() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  return pathname === '/' || isKnownShellPath(pathname)
-    ? <App />
-    : <ProductRecovery kind="not_found" />;
+  const known = pathname === '/' || pathname === '/welcome' || isKnownShellPath(pathname);
+  return known ? <App /> : <ProductRecovery kind="not_found" />;
 }
 
 const rootRoute = createRootRoute({
@@ -48,7 +47,12 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: () => null,
+});
+
+/** Explicit public landing preview; Root decides whether to show the landing page. */
+const welcomeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'welcome',
 });
 
 /**
@@ -62,10 +66,9 @@ const indexRoute = createRoute({
 const stackRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '$',
-  component: () => null,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, stackRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, welcomeRoute, stackRoute]);
 
 export const router = createRouter({ routeTree });
 

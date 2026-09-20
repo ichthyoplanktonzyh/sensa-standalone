@@ -252,6 +252,12 @@ try{
  }
  assert.match(await readFile(join(dist,'integrations','sensa-mcp.mjs'),'utf8'),/^#!\/usr\/bin\/env node/u,'the Web release does not contain the executable MCP adapter');
 
+ const landing=await pageContext(false);
+ await landing.page.goto(origin+'/welcome',{waitUntil:'domcontentloaded'});
+ await expect(landing.page.locator('#landing-title')).toBeVisible({timeout:SHELL_BUDGET_MS});
+ assert.deepEqual(landing.errors,[],'the explicit welcome route emitted a browser error');
+ await landing.context.close();
+
  const missing=await pageContext(false);
  await missing.page.goto(origin+'/not-a-screen',{waitUntil:'domcontentloaded'});
  await expect(missing.page.locator('[data-sensa-product-recovery="not_found"]')).toBeVisible({timeout:SHELL_BUDGET_MS});

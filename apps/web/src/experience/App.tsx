@@ -1,4 +1,4 @@
-import {lazy,Suspense,useCallback,useMemo} from 'react';
+import {lazy,Suspense,useCallback,type ReactNode} from 'react';
 import {useTranslation} from 'react-i18next';
 import {IconSprite} from './components/IconSprite';
 import {WebShell} from './ui/WebShell';
@@ -8,6 +8,7 @@ import {isContentSectionId,type ContentSectionId} from './contentRoute';
 import type {ContentNoteItem,SavedExampleItem} from './contentProjection';
 import {useShellNavigation} from './router/useShellNavigation';
 import {screenInstanceKey} from './router/shellLocation';
+import {shellScreenHost,type AppShellScreenId} from './router/screenRegistry';
 import {useOverlayStore} from './stores/overlayStore';
 
 const HomeLearningController=lazy(()=>import('./library/HomeLearningController').then(module=>({default:module.HomeLearningController})));
@@ -29,11 +30,7 @@ const ReferenceExampleViewer=lazy(()=>import('./components/ReferenceExampleViewe
 const NoteEditorModal=lazy(()=>import('./components/NoteEditorModal').then(module=>({default:module.NoteEditorModal})));
 const SceneEditorModal=lazy(()=>import('./components/SceneEditorModal').then(module=>({default:module.SceneEditorModal})));
 
-const LEARNING_WORKSPACE_SCREENS=new Set([
- 's-academy','s-practice-scope','s-real-world-listening',
- 's-content','s-semantic-world','s-confirmed-sense',
- 's-study','s-learning-library','s-learning-entry','s-learning-target','s-stats','s-profile',
-]);
+type AppScreenId=AppShellScreenId|'s-home';
 
 export default function App(){
  const {t}=useTranslation();
@@ -62,39 +59,39 @@ export default function App(){
  const toast=useOverlayStore(state=>state.toast);
 
  const currentScreen=mainStack.at(-1)??'s-home';
- const learningWorkspaceActive=viewMode==='lightweight'||LEARNING_WORKSPACE_SCREENS.has(currentScreen);
+ const learningWorkspaceActive=viewMode==='lightweight'||shellScreenHost(currentScreen)==='learning';
  const hostedScreenKey=learningWorkspaceActive?'learning-workspace':screenInstanceKey(currentScreen,params);
  const overlayOpen=!!dictModalWord||!!referenceExampleDeck||!!noteModalWord||!!sceneEditorTarget;
  const baseActive=!overlayOpen;
- const renderScreen=(active:boolean)=>{
-  if(learningWorkspaceActive)return <LearningWorkspace active={active}/>;
-  switch(currentScreen){
-   case 's-home': return <HomeLearningController active={active}/>;
-   case 's-personal-meaning': return <PersonalMeaningDetailScreen
+ const appScreenRenderers:Record<AppScreenId,(active:boolean)=>ReactNode>={
+  's-home':active=><HomeLearningController active={active}/>,
+  's-personal-meaning':active=><PersonalMeaningDetailScreen
     key={personalMeaningId} active={active} personalMeaningId={personalMeaningId}
     onConversationCreated={openPersonalMeaning} onBack={backMain}
-    onOpenConfirmedSense={openConfirmedSense} toast={toast}/>;
-   case 's-expression-binding': return <ExpressionBindingScreen
+    onOpenConfirmedSense={openConfirmedSense} toast={toast}/>,
+  's-expression-binding':active=><ExpressionBindingScreen
     active={active} personalMeaningId={personalMeaningId} meaningFocusId={meaningFocusId}
-    onBack={backMain} toast={toast}/>;
-   case 's-content-library': return <ContentLibraryScreen
+    onBack={backMain} toast={toast}/>,
+  's-content-library':active=><ContentLibraryScreen
     active={active} section={contentSection} onBack={backMain} onOpenSense={openContentSense}
     onOpenExample={(entry:SavedExampleItem)=>openContentExample(entry.sense)}
-    onEditNote={(entry:ContentNoteItem)=>openNoteEditor(entry.sense.sourceWord,entry.sense.senseId,entry.sense.meaning)}/>;
-   case 's-content-sense': return <ContentSenseDetailScreen
+    onEditNote={(entry:ContentNoteItem)=>openNoteEditor(entry.sense.sourceWord,entry.sense.senseId,entry.sense.meaning)}/>,
+  's-content-sense':active=><ContentSenseDetailScreen
     active={active} senseId={params.senseId??null} onBack={backMain} onOpenExample={openContentExample}
     onOpenSense={item=>goMain('s-content-sense',{senseId:item.senseId})}
     onOpenDictionary={item=>openDictModal(item.sourceWord)}
-    onEditNote={item=>openNoteEditor(item.sourceWord,item.senseId,item.meaning)} toast={toast}/>;
-   case 's-content-example': return <ContentExampleDetailScreen
+    onEditNote={item=>openNoteEditor(item.sourceWord,item.senseId,item.meaning)} toast={toast}/>,
+  's-content-example':active=><ContentExampleDetailScreen
     active={active} exampleId={params.exampleId??null} onBack={backMain}
     onOpenSense={item=>{
      const nextStack=mainStack.includes('s-content-sense')?mainStack.slice(0,-1):[...mainStack.slice(0,-1),'s-content-sense'];
      setMainStack(nextStack,{senseId:item.senseId});
-    }} toast={toast}/>;
-   case 's-content-coming': return <ContentComingSoonScreen active={active} kind={contentComingKind} onBack={backMain}/>;
-   default: return null;
-  }
+    }} toast={toast}/>,
+  's-content-coming':active=><ContentComingSoonScreen active={active} kind={contentComingKind} onBack={backMain}/>,
+ };
+ const renderScreen=(active:boolean)=>{
+  if(learningWorkspaceActive)return <LearningWorkspace active={active}/>;
+  return appScreenRenderers[currentScreen as AppScreenId]?.(active)??null;
  };
  const fallback=<section id={currentScreen} className="screen active absolute inset-0 grid place-content-center bg-surface-canvas text-fg-primary" role="status">{t('reliability.loading')}</section>;
  return <ScreenMemoryProvider>

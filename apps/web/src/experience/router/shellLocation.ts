@@ -21,6 +21,18 @@
  * it, so a path segment is the bare sheet name.
  */
 
+import {
+  KNOWN_SHEET_IDS,
+  KNOWN_SHEET_ID_SET,
+  SHELL_PARAM_KEYS,
+  screenInstanceKey,
+  shellScreenParams,
+  type ShellParams,
+} from './screenRegistry';
+
+export {KNOWN_SHEET_IDS,SHELL_PARAM_KEYS,screenInstanceKey};
+export type {ShellParams};
+
 export type ShellFlow = 'lightweight';
 
 /** `viewMode` as App has always spelled it: 'main' plus the four flows. */
@@ -33,29 +45,6 @@ export const SHEET_ID_PREFIX = 's-';
  * hand-typed or stale URL cannot push a phantom entry that renders nothing but
  * still costs the learner a back press.
  */
-export const KNOWN_SHEET_IDS = [
-  's-academy',
-  's-confirmed-sense',
-  's-content',
-  's-content-coming',
-  's-content-example',
-  's-content-library',
-  's-content-sense',
-  's-expression-binding',
-  's-learning-entry',
-  's-learning-library',
-  's-learning-target',
-  's-personal-meaning',
-  's-practice-scope',
-  's-profile',
-  's-real-world-listening',
-  's-semantic-world',
-  's-stats',
-  's-study',
-] as const;
-
-const KNOWN_SHEET_ID_SET: ReadonlySet<string> = new Set(KNOWN_SHEET_IDS);
-
 const bare = (sheetId: string): string =>
   sheetId.startsWith(SHEET_ID_PREFIX) ? sheetId.slice(SHEET_ID_PREFIX.length) : sheetId;
 
@@ -134,53 +123,10 @@ export const isKnownShellPath = (pathname: string): boolean => {
 export const parseViewMode = (rawFlow: unknown): ViewMode => (isFlow(rawFlow) ? rawFlow : 'main');
 
 /**
- * Which screen a sheet is showing -- the drill-down target, not the data.
- *
- * These were `useState` holding whole objects (`selectedContentSense` kept an
- * entire `PracticeSenseItem`), which is why a deep link could open the sheet
- * but never its content: the object was gone on reload. Only the id belongs in
- * the URL; the item is looked up from it.
- */
-export interface ShellParams {
-  readonly senseId?: string;
-  readonly exampleId?: string;
-  readonly section?: string;
-  readonly coming?: string;
-  readonly meaningId?: string;
-  readonly focusId?: string;
-  readonly targetId?: string;
-  readonly worldAction?: string;
-}
-
-export const SHELL_PARAM_KEYS = [
-  'senseId',
-  'exampleId',
-  'section',
-  'coming',
-  'meaningId',
-  'focusId',
-  'targetId',
-  'worldAction',
-] as const satisfies readonly (keyof ShellParams)[];
-
-/**
  * Each param belongs to the sheet that reads it. When that sheet leaves the
  * stack the param is dropped, so the URL stays a description of what is on
  * screen rather than accumulating every id the learner ever visited.
  */
-const SHEET_PARAM_OWNERS: Readonly<Record<string, readonly (keyof ShellParams)[]>> = {
-  's-content': ['worldAction'],
-  's-content-library': ['section'],
-  's-content-sense': ['senseId'],
-  's-content-example': ['exampleId'],
-  's-content-coming': ['coming'],
-  's-personal-meaning': ['meaningId', 'focusId'],
-  's-confirmed-sense': ['meaningId', 'focusId'],
-  's-expression-binding': ['meaningId', 'focusId'],
-  's-learning-target': ['targetId'],
-  's-semantic-world': ['worldAction'],
-};
-
 /** Read the navigation params a search object carries, ignoring anything else. */
 export const parseShellParams = (search: Record<string, unknown>): ShellParams => {
   const params: Record<string, string> = {};
@@ -198,7 +144,7 @@ export const retainParamsForStack = (
 ): ShellParams => {
   const live = new Set<string>();
   for (const sheetId of stack) {
-    for (const key of SHEET_PARAM_OWNERS[sheetId] ?? []) live.add(key);
+    for (const key of shellScreenParams(sheetId)) live.add(key);
   }
   const kept: Record<string, string> = {};
   for (const key of SHELL_PARAM_KEYS) {
@@ -218,19 +164,3 @@ export const buildPathname = (stack: readonly string[]): string => {
 /** The search object for a view mode -- 'main' clears the param entirely. */
 export const buildSearch = (viewMode: ViewMode): { flow?: ShellFlow } =>
   viewMode === 'main' ? {} : { flow: viewMode };
-
-/** Stable identity for scroll/UI memory without retaining a screen DOM tree. */
-export const screenInstanceKey = (screenId: string, params: ShellParams): string => {
-  switch (screenId) {
-    case 's-content-library': return `${screenId}:${params.section ?? 'recent'}`;
-    case 's-content-sense': return `${screenId}:${params.senseId ?? 'missing'}`;
-    case 's-content-example': return `${screenId}:${params.exampleId ?? 'missing'}`;
-    case 's-content-coming': return `${screenId}:${params.coming ?? 'scenes'}`;
-    case 's-personal-meaning': return `${screenId}:${params.meaningId ?? 'new'}`;
-    case 's-confirmed-sense':
-    case 's-expression-binding':
-      return `${screenId}:${params.meaningId ?? 'missing'}:${params.focusId ?? 'missing'}`;
-    case 's-learning-target': return `${screenId}:${params.targetId ?? 'missing'}`;
-    default: return screenId;
-  }
-};
