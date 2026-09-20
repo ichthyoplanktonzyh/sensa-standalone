@@ -51,3 +51,8 @@ assert.deepEqual(events.slice(0,2),[{type:'delta',text:'{"reply":"流'},{type:'d
 assert.deepEqual(events[2],{type:'result',value:{id:streamed.id,inputDigest:createHash('sha256').update(canonicalConsumerJson(streamed)).digest('hex'),response:{model:'fixture',purpose:'teacher',connection:'Teacher'}}});
 assert.equal(reservations,4);assert.equal(completions,4);assert.equal(authorizations,11);assert.deepEqual(selected,['teacher','teacher','reference','teacher']);
 console.log('PASS: Web model turn validates its digest, resolves a connection per purpose, permits only semantic-world lookup for clarification, refuses proposal pseudo-tools and unapproved tools, reserves once, reauthorizes after completion, and exposes a no-store NDJSON stream. Synthetic provider; no database/network.');
+
+// Resource tools follow the same managed Genkit transport allowlist.
+for(const name of ['prepare_pronunciation','lookup_references','submit_resources','validate_resources']){
+ const response=await send({...teacher,id:crypto.randomUUID(),purpose:'content',body:{...teacher.body,tools:[{type:'function',function:{name,description:name,parameters:{type:'object'}}}]}});assert.equal(response.status,200);
+}

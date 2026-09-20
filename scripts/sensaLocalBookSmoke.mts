@@ -21,6 +21,11 @@ try{
   assert.equal(createHash('sha256').update(bytes).digest('hex'),descriptor.sha256);
   const bundle=bookReleaseBundleSchema.parse(JSON.parse(bytes.toString()));
   assert.equal(bundle.entries.length,3);
+  for(const entry of bundle.entries){
+   assert.equal(entry.content.resourcePlan?.categories.length,8);
+   assert.equal(entry.content.resourcePlan?.categories.find(c=>c.category==='etymology')?.preparation,'ready');
+   assert(entry.content.resources.some(r=>r.materialRoleKey==='etymology'));
+  }
   const pack=await installPackage(bytes,descriptor);
   const targetIds=await enrollPackage(id(),pack.key,context);
   for(const target of targetIds){

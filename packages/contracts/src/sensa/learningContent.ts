@@ -1,3 +1,4 @@
+import {revealResourcePlanSchema} from './revealResources.js';
 import { z } from "zod";
 
 import {
@@ -1245,6 +1246,7 @@ export const sensaLearningMaterializationContentSchema = z
     definitionVersion: nonEmpty,
     contentGenerationRequestId: uuid,
     resources: z.array(sensaMaterializedResourceSchema).min(1),
+    resourcePlan: revealResourcePlanSchema.optional(),
   })
   .strict()
   .superRefine((content, context) => {

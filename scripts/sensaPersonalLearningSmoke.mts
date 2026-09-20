@@ -49,6 +49,7 @@ const calls:any[]=[];
 let mode:'good'|'reject'|'review-fail'|'hold'|'leak'='good';
 const realFetch=globalThis.fetch;
 globalThis.fetch=async(_url,input)=>{
+  if(String(_url).endsWith('/sensa/resource-facts'))return new Response(JSON.stringify({input:JSON.parse(String(input?.body)),references:[]}),{status:200});
   if(String(_url).includes('/sensa/speech'))return new Response(JSON.stringify({surface:'borrow',languageTag:'en',audioUrl:'data:audio/mpeg;base64,UklGRg==',phoneticNotation:null,accentLabel:'en-US',source:'synthetic test fixture',method:'tts'}),{headers:{'content-type':'application/json'}});
   if(!input?.body)return new Response('[]',{headers:{'content-type':'application/json'}});
   const body=JSON.parse(String(input?.body));calls.push(body);

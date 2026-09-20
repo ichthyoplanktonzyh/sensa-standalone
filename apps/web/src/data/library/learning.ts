@@ -1,3 +1,4 @@
+import {materialForNextStep} from '../../learning/runtime/resourceSupplement';
 import {inspectLocalTargetReadiness,localExecutionForRun,learningRuntimeCoordinator,requireLocalTargetReadiness,type LocalLearningAction} from '../../learning/runtime/runtimeCoordinator';
 import {localTargetPolicy} from '../../learning/runtime/localRuntimeBindings';
 import {learningPolicyProfileRegistry,type LearningPolicyId} from '../../learning/runtime/policyProfiles';
@@ -80,7 +81,7 @@ async function bindCurrentStepMaterial(tx:LibraryTransaction,run:LocalLearningRu
  if(!replace&&previous)return false;
  const target=await tx.get<LocalLearningTarget>('learningTargets',targetId);if(!target)throw new Error('localFlow.enrollFirst');
  const membership=target.curriculumMemberships.find(candidate=>candidate.id===participant.curriculumMembershipId&&sameRunLanguagePair(candidate.languageContext,participant.languageContext));
- const material=membership?materialForProtocolRun(membership.material,run.purpose,participant.protocolRunId,at):structuredClone(participant.material);
+ const material=membership?materialForProtocolRun(replace?membership.material:materialForNextStep(participant.material,membership.material),run.purpose,participant.protocolRunId,at):structuredClone(participant.material);
  assertLocalTargetMaterialIdentity(target,material);validateLightweightInitialMaterialization(material);
  const executable=localExecutableTargetForParticipant(target,participant,material),pack=executable.packageKey?await tx.get<InstalledPackage>('packages',executable.packageKey):undefined;
  validateLocalProtocolResources(execution,executable,pack);

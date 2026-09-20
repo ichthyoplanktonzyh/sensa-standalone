@@ -1,3 +1,4 @@
+import {declareKnownAndContinue} from './declareKnownAndContinue';
 import {useTranslation} from 'react-i18next';
 import {useLanguageRoutes} from './useLanguageRoutes';
 import {advanceInterleavedLearningRetries,nextLearningQueueChangeAt,resolveLearningQueue,selectInterleavedLearningTarget,type InterleavedLearningRetry} from './learningQueue';
@@ -70,6 +71,16 @@ export function usePackageLearning(entryOpen:boolean){
     if(!result&&action.kind==='rate')setInterleavedRetries(previousInterleavedRetries);
     return result;
    }finally{actInFlight.current=false;}
+  },
+  declareKnownAndContinue:async(id:string)=>{
+   if(actInFlight.current)return null;
+   actInFlight.current=true;
+   try{return await perform(async()=>{
+    const result=await declareKnownAndContinue(id,languageContext,dailyLimit,interleavedRetries);
+    setInterleavedRetries(result.remainingRetries);
+    if(!result.nextRun)setNotice('localFlow.runtimeKnownSaved');
+    return true;
+   });}finally{actInFlight.current=false;}
   },
   declareKnown:(id:string,active=true)=>perform(()=>setLocalDeclaredMastery(crypto.randomUUID(),id,active)),
   continueWith:(id:string,limit:number)=>run?perform(()=>continueLearning(crypto.randomUUID(),run.id,id,languageContext,limit)):Promise.resolve(null),

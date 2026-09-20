@@ -1,3 +1,5 @@
+import {resolveRevealResourcePlan,roleAllowedByResourcePlan} from './revealResources.js';
+import {canonicalConsumerJson} from './canonicalJson.js';
 import { z } from "zod";
 
 import {
@@ -28,6 +30,9 @@ export const LIGHTWEIGHT_RESOURCE_PROFILE = {
   usage_guidance: {required:false,maxItems:4,phase:'post_reveal',use:'support'},
   scene_bridge: {required:true,maxItems:1,phase:'post_reveal',use:'support'},
   scene_realization: {required:true,maxItems:1,phase:'post_reveal',use:'support'},
+  boundary_contrast: {required:false,maxItems:1,phase:'post_reveal',use:'support'},
+  word_formation: {required:false,maxItems:1,phase:'post_reveal',use:'support'},
+  mnemonic: {required:false,maxItems:1,phase:'post_reveal',use:'support'},
   etymology: {required:false,maxItems:1,phase:'post_reveal',use:'support'},
 } as const satisfies Partial<Record<keyof typeof LEARNING_RESOURCE_DEFINITIONS,{required:boolean;maxItems:number;phase:'pre_reveal'|'post_reveal';use:'prompt'|'support'|'reveal'|'feedback'}>>;
 export const LIGHTWEIGHT_INITIAL_MATERIAL_ROLES = Object.freeze(Object.keys(LIGHTWEIGHT_RESOURCE_PROFILE) as SensaLightweightInitialMaterialRole[]);
@@ -249,12 +254,18 @@ export const sensaLightweightInitialMaterializationContentSchema =
       )
       : null;
     if (targetExpression?.success) {
+      if(content.resourcePlan){
+        if(content.resources.some(r=>r.materialRoleKey==='language_structure'&&r.contentPayload.contrastNote)&&content.resourcePlan.categories.find(c=>c.category==='contrast')?.applicability!=='applicable')context.addIssue({code:'custom',path:['resourcePlan'],message:'Contrast requires an established applicability condition.'});
+        const expected=resolveRevealResourcePlan(targetExpression.data,content.resourcePlan.assessments,content.resources,true);
+        if(canonicalConsumerJson(expected)!==canonicalConsumerJson(content.resourcePlan)||content.resources.some(r=>!roleAllowedByResourcePlan(expected,r.materialRoleKey)))context.addIssue({code:'custom',path:['resourcePlan'],message:'Resource plan must match expression, applicability and admitted resources.'});
+      }
+      if(targetExpression.data.expressionKind==='construction'&&(!targetExpression.data.spokenForm||/[…]|\.\.\.|\[[^\]]+\]/u.test(targetExpression.data.spokenForm)))context.addIssue({code:'custom',path:['resources'],message:'Construction requires an explicit complete spoken realization.'});
       for (const resource of content.resources) {
         const payload = resource.contentPayload;
-        if (resource.materialRoleKey === 'pronunciation' && (payload.surface !== targetExpression.data.surface || payload.languageTag !== targetExpression.data.languageTag)) context.addIssue({code:'custom',path:['resources'],message:'Spoken realization must match the exact expression and language.'});
+        if (resource.materialRoleKey === 'pronunciation' && (payload.surface !== (targetExpression.data.spokenForm??targetExpression.data.surface) || payload.languageTag !== targetExpression.data.languageTag)) context.addIssue({code:'custom',path:['resources'],message:'Spoken realization must match the exact expression and language.'});
         if (resource.materialRoleKey === 'scene_realization') {
           const start = payload.targetStart as number, end = payload.targetEnd as number;
-          if (typeof payload.example !== 'string' || start >= end || end > payload.example.length || ![targetExpression.data.surface,...(targetExpression.data.acceptedForms??[])].some(form=>normalizeDisclosureText(form)===normalizeDisclosureText((payload.example as string).slice(start,end))) || payload.experienceResourceKey !== 'experience_recall_cue:0') context.addIssue({code:'custom',path:['resources'],message:'Scene realization requires an exact target span and experience binding.'});
+          if (typeof payload.example !== 'string' || start >= end || end > payload.example.length || ![targetExpression.data.surface,...(targetExpression.data.spokenForm?[targetExpression.data.spokenForm]:[]),...(targetExpression.data.acceptedForms??[])].some(form=>normalizeDisclosureText(form)===normalizeDisclosureText((payload.example as string).slice(start,end))) || payload.experienceResourceKey !== 'experience_recall_cue:0') context.addIssue({code:'custom',path:['resources'],message:`Scene realization requires an exact target span and experience binding. Selected ${JSON.stringify(typeof payload.example==='string'?payload.example.slice(start,end):null)} at [${start},${end}). Allowed forms: ${JSON.stringify([targetExpression.data.surface,...(targetExpression.data.spokenForm?[targetExpression.data.spokenForm]:[]),...(targetExpression.data.acceptedForms??[])])}. experienceResourceKey must be experience_recall_cue:0. Rewrite the sentence to use an allowed form; do not assume inflections are authorized.`});
         }
       }
       const normalizedExpression = normalizeDisclosureText(targetExpression.data.surface);

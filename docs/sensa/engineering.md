@@ -158,7 +158,7 @@ purpose 唯一允许的工具是读取本机已有意义，用于必要的复用
 资源 schema、生成指导和基础展示字段集中在 `packages/contracts/src/sensa/learningResourceDefinitions.ts`；
 轻量 Demand 与两阶段用途组合由 `lightweightLearningContent.ts` 声明。生成循环消费请求中的资源合同，
 只生成允许的 model roles；权威表达、意义与来源事实由系统装配。词源和录音不能由模型生成 URL 或
-自称来源。`spokenResource.ts` 在个人准备期间调用已认证的 `/sensa/speech`，冻结与表达、语言严格一致的 TTS 音频，缺失时在模型调用前失败。发布构建器只
+自称来源。`spokenResource.ts` 在个人准备期间调用已认证的 `/sensa/speech`，冻结与表达、语言严格一致的 TTS 音频，缺失时阻止材料发布。发布构建器只
 接收已经制作好的核心资源，不补造音频或场景绑定；纯文字 source 不再满足当前轻量合同。
 新增可选资源应局限在资源定义、需求配置及必要的资料获取／专用展示能力，不修改协议状态机。
 
@@ -360,7 +360,7 @@ consumer 路由沿用账号与 session 准入。Python `content/tools/spoken_res
 生产 Edge 服务尚未配置 Python 执行宿主，未注入 provider 时声音请求真实失败，不回退到设备朗读。
 旧内容管线保持独立，本轮未重构。
 
-本地包源为 `content/preview/lightweight-binding-v6.json`。首次执行
+本地包源为 `content/preview/lightweight-resources-v7.json`。首次执行
 `npm run content:prepare-local -- --allow-tts` 明确允许生成媒体；随后
 `npm run content:prepare-local` 仅复用经过校验的缓存。生成文件位于被 Git 忽略的
 `.sensa-local/` 和 `content/data/media/audio/speech-cache/`。
@@ -375,3 +375,56 @@ consumer 路由沿用账号与 session 准入。Python `content/tools/spoken_res
 `scripts/sensaSpeechProviderSmoke.mts` 验证服务合同；以上不调用真实服务。
 完成本地构建后，`node --import tsx scripts/sensaLocalBookSmoke.mts` 在隔离内存库中验证实际包的
 安装、学习结算与复习，完全禁用网络。真实浏览器存储、交互、声音听感由人工验收。
+
+
+### 揭示资源目录与准备链路
+
+产品定义以[揭示资源目录与适用矩阵](sense-learning-resource-model.md#111-揭示资源目录-v1)为准。
+`packages/contracts/src/sensa/revealResources.ts` 是八类目录和类型矩阵的执行入口。
+已固定的表达类型与来源事实解析适用范围；模型不能通过提交额外资源自行扩大范围。
+新材料保存可重算校验的 `resourcePlan`，区分适用性、准备状态与已接纳资源。
+没有资料不等于不适用，类型未确定也不默认当作单词。
+
+学习包与个人目标共用准备、资源合同和准入校验。作者明确声明 expressionKind；
+构式还要提供完整 spokenForm，声音对应完整实例，模板与槽位继续保存为表达结构。
+个人来源从已确认的 Expression Version 读取结构；没有完整实例时明确阻止声音准备。
+已认证的 `/sensa/resource-facts` 由准备工具取得来源事实。
+当前 editorial adapter 覆盖 en → zh-CN/zh-Hans/en 的 fragile、sustain、borrow 词源，
+根据所附 Merriam-Webster Word History 撰写；尚未接通通用词典或自动网页采集。
+可选来源不可用时省略该资源；必需声音、场景绑定等仍受学习就绪校验约束。
+
+第二张卡只展示材料中已通过校验的适用资源；缺少、失败、未准备与不适用区域不显示，
+不显示空标题、占位或申请补充按钮。AI 学习问答仍是后续独立能力，本轮没有接入。
+历史资源追加的 provenance 读取和备份校验保留，已有材料及学习记录不被重写。
+新资源由新材料／学习包版本交付，本地 v7 包通过用户主动应用更新进入已有学习目标。
+
+`sensaRevealResourcesSmoke.mts` 验证类型矩阵、来源准备、范围约束和材料计划校验；
+`sensaRevealRenderSmoke.mts` 在 Node 中渲染真实卡片，验证有资料才显示对应区域；
+`sensaKnownContinuationSmoke.mts` 验证备份与声明已会后继续队列。它们不操控浏览器、
+不调用模型或 TTS。实际声音与浏览器交互仍由人工验收。
+
+### Web 学习资源 Agent 与后台任务
+
+`contentGenerationLoop.ts` 复用澄清 Agent 的设备侧 `complete()`、多模态消息和统一并发队列。
+托管连接继续通过服务侧 Genkit；BYOK 连接继续由浏览器直连，不引入另一套 SDK 或密钥存储。
+`contentAgent.ts` 的工具名称同时约束 Web、模型传输合同和服务端白名单。
+工具提供固定表达的声音准备、参考资料查询、按角色提交草稿及整体校验。
+独立来源请求可以并发；草稿写入和校验按顺序执行。范围由固定表达及可靠来源解析，
+Agent 不得更换 Expression/Sense、制造来源或调用学习结算事务。
+
+输入冻结完整已确认 Sense semanticSpec 和表达形式。只有用户勾选自己的场景，才带入原始图文；
+第一张卡保留全部输入图片，不允许 Agent 挑选替换、遮挡或重绘。文字可忠实改写以避免泄露表达，
+不得虚构细节；第二张卡的绑定说明和例句围绕同一经验。未授权的个人 Context 不进入请求。
+
+`backgroundPreparation.ts` 承载显式发起的应用级任务，最多两个目标同时准备，同一目标合并执行，
+页面卸载不取消任务。模型请求仍经过全局／provider 限流，澄清等交互用途保持队列优先级。
+明确停止任务或清除登录凭据会取消对应工作；关闭 Web 不承诺继续执行。
+准备请求、已取得的来源、分角色草稿、工具记录和校验反馈保存在 Content Attempt。
+显式重试复用这些已保存结果，重建紧凑模型上下文并给予新 Attempt 预算，不自动产生模型费用。
+过期执行仍受 task lease、账号、模型配置及来源版本校验约束，旧结果不能发布到新任务。
+最终统一校验并发布材料快照，不把草稿或可选资源缺失写成学习成果。
+
+`sensaContentAgentSmoke.mts` 默认只使用假模型／工具，覆盖并发、修复、恢复和原图保留，纳入 `npm run check`。
+人工授权后可显式执行 `node --import tsx scripts/sensaContentAgentSmoke.mts --live-deepseek`，
+通过本地托管服务调用配置模型。该模式使用测试场景和既有缓存声音，不改用户学习数据；
+结果写入被 Git 忽略的 `.sensa-local/agent-live-smoke.json`。真实模式不进入常规验证。

@@ -1,3 +1,4 @@
+import {SENSA_CONTENT_AGENT_TOOLS} from './contentAgent.js';
 import {z} from 'zod';
 const part = z.union([z.object({
   type: z.literal('text'),
@@ -24,7 +25,7 @@ const message = z.object({
 const tool = z.object({
   type: z.literal('function'),
   function: z.object({
-    name: z.enum(['lookup_meanings', 'read_demand', 'lookup_reference_facts', 'submit_candidate']),
+    name: z.enum(['lookup_meanings', ...SENSA_CONTENT_AGENT_TOOLS]),
     description: z.string().max(1000),
     parameters: z.record(z.string(), z.unknown())
   }).strict()
@@ -36,7 +37,7 @@ export const modelTurnInputSchema = z.object({
   body: z.object({
     model: z.string().max(100),
     messages: z.array(message).min(2).max(100),
-    tools: z.array(tool).max(3).optional(),
+    tools: z.array(tool).max(4).optional(),
     max_tokens: z.number().int().min(1).max(3000),
     stream: z.literal(false),
     response_format: z.object({

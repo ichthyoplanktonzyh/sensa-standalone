@@ -40,7 +40,7 @@ try{
  await expect(card.getByRole('heading',{name:'borrow',exact:true})).toBeVisible();
  await expect(card.getByText('May asked to borrow an umbrella.',{exact:true})).toBeVisible();
  await expect(card.getByText('Sourced optional explanation fixture')).not.toBeVisible();
- await card.getByText('Further understanding',{exact:true}).click();
+ await card.locator('summary').filter({hasText:'Etymology'}).click();
  await expect(card.getByText('Sourced optional explanation fixture')).toBeVisible();
  await expect(card.getByRole('link',{name:'https://fixture.invalid/entry'})).toHaveAttribute('href','https://fixture.invalid/entry');
  const details=page.locator('#resource-details');await details.locator('summary').click();

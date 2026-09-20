@@ -170,6 +170,8 @@ export const buildPersonalMeaningLearningSources = (
         },
         expression: {
           surfaceForm: expressionVersion.surfaceForm,
+          ...(typeof expressionVersion.structure.spokenForm==='string'?{spokenForm:expressionVersion.structure.spokenForm}:{}),
+          ...(Array.isArray(expressionVersion.structure.formParts)?{formParts:expressionVersion.structure.formParts as {kind:'fixed'|'slot';text:string;constraint?:string}[]}:{}),
           expressionType: expression.expressionType,
           languageTag: expression.languageTag,
         },

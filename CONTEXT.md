@@ -1,7 +1,7 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-09-15
+> Updated: 2026-09-20
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
@@ -726,6 +726,20 @@ expression, then invites the learner to retrieve that expression before requesti
 The instructional Step in Lightweight Study that discloses the target expression,
 confirms its Sense binding and records a learner rating without creating behavioral
 Evidence.
+
+**Reveal Resource Catalogue（揭示资源目录）**:
+The versioned, finite set of common resource categories supported for an accepted
+Expression–Sense connection. It classifies learning content, not media formats or UI sections.
+
+**Expression Resource Scope（表达资源范围）**:
+The applicable resource categories resolved from the Reveal Resource Catalogue for
+one fixed expression, Sense and language context. Applicability is distinct from content
+availability, Protocol admission requirements and presentation preferences.
+
+**Learning Q&A（学习问答）**:
+An optional learner-initiated dialogue grounded in the current Expression–Sense connection,
+experience and admitted resources. Answers are conversational guidance, not accepted resource
+revisions, Semantic Acceptance or Learning Evidence.
 
 **Learning Action Intent**:
 The semantic purpose of one Protocol Action: instruction, practice, assessment,

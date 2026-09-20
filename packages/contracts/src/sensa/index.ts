@@ -30,3 +30,8 @@ export * from "./modelExecution.js";
 export * from './modelProtocol.js';
 export * from './librarySync.js';
 export * from "./language.js";
+export * from './resourceSupplement.js';
+export * from './revealResources.js';
+export * from './resourcePreparation.js';
+
+export * from './contentAgent.js';

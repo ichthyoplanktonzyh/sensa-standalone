@@ -1,3 +1,4 @@
+import {baseContentBeforeSupplement} from '../../learning/runtime/resourceSupplement';
 import {localExecutionForRun} from '../../learning/runtime/runtimeCoordinator';
 import {localRunBinding,localRunPolicy,localTargetPolicy} from '../../learning/runtime/localRuntimeBindings';
 import {learningPolicyProfileRegistry} from '../../learning/runtime/policyProfiles';
@@ -103,11 +104,11 @@ export function validateBackupRows(rows:BackupRows){
    if(membership.sourceKind==='sense_learning_package'){
     if(!membership.packageKey||membership.id!==stableUuid(`local-curriculum-membership:${t.id}:${context.languageRouteId}:sense_learning_package:${membership.packageKey}`))fail();
     const pack=requireRow('packages',membership.packageKey),entry=pack.bundle.entries.find((e:any)=>e.senseVersionId===p.senseVersionId&&e.bindingVersionId===p.bindingVersionId);
-    if(!entry||pack.bundle.targetLanguage!==context.targetLanguageTag||pack.bundle.supportLanguage!==context.supportLanguageTag||!backupEqual(entry.content,membership.material.content)||entry.assurancePackageKey!==membership.assurancePackageKey)fail();
+    if(!entry||pack.bundle.targetLanguage!==context.targetLanguageTag||pack.bundle.supportLanguage!==context.supportLanguageTag||!backupEqual(entry.content,baseContentBeforeSupplement(membership.material,context.supportLanguageTag))||entry.assurancePackageKey!==membership.assurancePackageKey)fail();
    }else if(membership.sourceKind==='personal_meaning_alignment'){
     const provenance=membership.provenance as any,task=rows.personalLearning.find(({value:candidate})=>candidate.targetId===t.id&&candidate.curriculumMembershipId===membership.id)?.value;if(membership.packageKey!==null||membership.assurancePackageKey!==undefined||!task||provenance?.personalMeaningId!==task.source.personalMeaningId||provenance?.alignmentId!==task.source.personalMeaningAlignmentId||provenance?.personalMeaningRevisionId!==task.source.personalMeaningRevisionId||provenance?.alignmentBasisReferenceId!==task.source.alignmentBasisReferenceId||membership.id!==stableUuid(`local-curriculum-membership:${t.id}:${context.languageRouteId}:personal_meaning_alignment:${provenance.alignmentId}`))fail();
     requirePersonalSource(task.source);const attempt=requireRow('contentAttempts',p.attemptId);
-    if(attempt.taskId!==task.id||attempt.status!=='ready'||!(attempt.review?.accepted||(attempt.reviewProvider===null&&attempt.review===null&&attempt.validation?.review===null&&attempt.validation?.validations?.length>0&&attempt.validation.validations.every((v:any)=>v.status==='accepted')))||!backupEqual(attempt.validation?.content,membership.material.content))fail();
+    if(attempt.taskId!==task.id||attempt.status!=='ready'||!(attempt.review?.accepted||(attempt.reviewProvider===null&&attempt.review===null&&attempt.validation?.review===null&&attempt.validation?.validations?.length>0&&attempt.validation.validations.every((v:any)=>v.status==='accepted')))||!backupEqual(attempt.validation?.content,baseContentBeforeSupplement(membership.material,context.supportLanguageTag)))fail();
    }else fail();
   }
   if(t.introducedLanguageRouteId!==null&&!t.curriculumMemberships.some((membership:any)=>membership.languageContext.languageRouteId===t.introducedLanguageRouteId))fail();
@@ -153,9 +154,9 @@ export function validateBackupRows(rows:BackupRows){
     if(material.snapshot.learningTargetId!==id||material.snapshot.learnerUserId!==identity.learnerId||material.snapshot.protocolPurpose!==saved.purpose||materialProvenance.senseId!==target.identity.senseId||materialProvenance.senseVersionId!==target.identity.senseVersionId||materialProvenance.bindingId!==target.identity.senseExpressionBindingId||materialProvenance.bindingVersionId!==target.identity.bindingVersionId)fail();
     if(membership.sourceKind==='sense_learning_package'){
      const membershipPackageKey=z.string().min(1).parse(membership.packageKey),pack=requireRow('packages',membershipPackageKey),entry=pack.bundle.entries.find((candidate:any)=>candidate.senseVersionId===materialProvenance.senseVersionId&&candidate.bindingVersionId===materialProvenance.bindingVersionId);
-     if(!entry||!backupEqual(entry.content,material.content))fail();
+     if(!entry||!backupEqual(entry.content,baseContentBeforeSupplement(material,participant.languageContext.supportLanguageTag)))fail();
     }else{
-     const attempt=requireRow('contentAttempts',materialProvenance.attemptId);if(attempt.status!=='ready'||!backupEqual(attempt.validation?.content,material.content))fail();
+     const attempt=requireRow('contentAttempts',materialProvenance.attemptId);if(attempt.status!=='ready'||!backupEqual(attempt.validation?.content,baseContentBeforeSupplement(material,participant.languageContext.supportLanguageTag)))fail();
     }
    };
    validateRunMaterial(participant.material);if(!participant.presentedMaterials||typeof participant.presentedMaterials!=='object'||Array.isArray(participant.presentedMaterials))fail();for(const [stepId,material] of Object.entries(participant.presentedMaterials)){if(!stepId.trim())fail();validateRunMaterial(material);}

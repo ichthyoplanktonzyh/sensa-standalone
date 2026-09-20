@@ -37,6 +37,8 @@ export interface PersonalMeaningLearningSource {
     personalSemanticAnchorRevisionIds: string[];
   };
   expression: {
+    spokenForm?: string;
+    formParts?: {kind:"fixed"|"slot";text:string;constraint?:string}[];
     surfaceForm: string;
     expressionType: SensaExpressionType;
     languageTag: string;

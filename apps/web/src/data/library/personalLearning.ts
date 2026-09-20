@@ -1,5 +1,4 @@
-import {prepareSpokenResource} from './spokenResource';
-import {generateLearningCandidate,type ContentGenerationStep} from './contentGenerationLoop';
+import {generateLearningCandidate,contentAgentTools,type ContentAgentCheckpoint,type ContentGenerationStep} from './contentGenerationLoop';
 import {z} from 'zod';
 import {stableUuid} from '@sensa/learning-kernel';
 import {learningResourceDefinition,makeRequest,validateBundle,modelFacts,independentReviewSystem,requestLanguages,SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,canonicalConsumerJson,sensaFormalPinnedLanguageContextSchema,type SensaContentGenerationRequest,type SensaMaterialCandidateBundle,type ContentReviewer,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
@@ -16,7 +15,7 @@ import {defaultSensaProvider,type Provider,type ProviderSettings} from './provid
 import {complete,digest} from './transport';
 import {requireLanguageRouteContext} from './language';
 export type PersonalLearning={replacing?:boolean;id:string;source:PersonalMeaningLearningReference;targetId:string;curriculumMembershipId:string;languageContext:SensaFormalPinnedLanguageContext;planRevision:string;useContext:boolean;status:'waiting'|'generating'|'reviewing'|'failed'|'rejected'|'stopped'|'ready';attemptId:string|null;leaseUntil:number;notice:string;createdAt:string};
-export type ContentAttempt={generationSteps?:ContentGenerationStep[];id:string;taskId:string;createdAt:string;contentProvider:Provider;reviewProvider:Provider|null;request:SensaContentGenerationRequest|null;bundle:SensaMaterialCandidateBundle|null;review:Awaited<ReturnType<ContentReviewer>>|null;validation:Awaited<ReturnType<typeof validateBundle>>|null;status:string;resumedFrom:string|null;grant:{id:string;contextDigest:string;recipients:string[]}|null};
+export type ContentAttempt={generationCheckpoint?:ContentAgentCheckpoint;generationSteps?:ContentGenerationStep[];id:string;taskId:string;createdAt:string;contentProvider:Provider;reviewProvider:Provider|null;request:SensaContentGenerationRequest|null;bundle:SensaMaterialCandidateBundle|null;review:Awaited<ReturnType<ContentReviewer>>|null;validation:Awaited<ReturnType<typeof validateBundle>>|null;status:string;resumedFrom:string|null;grant:{id:string;contextDigest:string;recipients:string[]}|null};
 export const personalLearningSnapshot=()=>readLibrary(tx=>tx.all<PersonalLearning>('personalLearning'));
 /** The UI controller consumes one transactionally coherent preparation view. */
 export const personalLearningControlSnapshot=()=>readLibrary(async tx=>{
@@ -68,21 +67,23 @@ export async function preparePersonal(id:string,source:PersonalMeaningLearningSo
   const recentAttemptCount=await tx.countContentAttemptsSince(id,new Date(Date.now()-86400000).toISOString());if(import.meta.env.VITE_SENSA_UNLIMITED_PREPARATION!=='true'&&recentAttemptCount>=6)throw new Error('localFlow.preparationLimit');
   const prior=task.attemptId?await tx.get<ContentAttempt>('contentAttempts',task.attemptId):undefined;
   // Continue a saved candidate after transport interruption without repeating generation.
-  const reuse=prior?.bundle&&prior.request&&task.status!=='rejected'&&canonicalConsumerJson(prior.contentProvider)===canonicalConsumerJson(contentProvider)&&(reviewProvider===null||canonicalConsumerJson(prior.reviewProvider)===canonicalConsumerJson(reviewProvider))?prior:null;
-  const attempt:ContentAttempt={id:attemptId,taskId:id,createdAt:new Date().toISOString(),contentProvider,reviewProvider,request:reuse?.request??null,bundle:reuse?.bundle??null,review:null,validation:null,status:reuse?'reviewing':'generating',resumedFrom:reuse?.id??null,grant:reuse?.grant??null};
-  task.attemptId=attemptId;task.status=reuse?'reviewing':'generating';task.leaseUntil=Date.now()+120000;task.notice='';tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);return {task,attempt,owner};
+  const reuse=(prior?.bundle||prior?.generationCheckpoint)&&prior.request&&task.status!=='rejected'&&canonicalConsumerJson(prior.contentProvider)===canonicalConsumerJson(contentProvider)&&(reviewProvider===null||canonicalConsumerJson(prior.reviewProvider)===canonicalConsumerJson(reviewProvider))?prior:null;
+  const attempt:ContentAttempt={id:attemptId,taskId:id,createdAt:new Date().toISOString(),contentProvider,reviewProvider,request:reuse?.request??null,bundle:reuse?.bundle??null,review:null,validation:null,generationCheckpoint:reuse?.generationCheckpoint?{...structuredClone(reuse.generationCheckpoint),modelTurns:0,toolCalls:0,history:[],records:[]}:undefined,status:reuse?.bundle?'reviewing':'generating',resumedFrom:reuse?.id??null,grant:reuse?.grant??null};
+  task.attemptId=attemptId;task.status=reuse?.bundle?'reviewing':'generating';task.leaseUntil=Date.now()+300000;task.notice='';tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);return {task,attempt,owner};
  });if(!begun)return;onSaved();
- const runSignal=AbortSignal.any([signal,AbortSignal.timeout(100000)]);
+ const runSignal=AbortSignal.any([signal,AbortSignal.timeout(280000)]);
  const save=async(work:(tx:LibraryTransaction,task:PersonalLearning,attempt:ContentAttempt)=>Promise<void>)=>command({id:crypto.randomUUID(),kind:'personal.progress',input:{id,attemptId,nonce:crypto.randomUUID()}},async tx=>{const {task}=await active(tx,id,attemptId,source,contentProvider,reviewProvider);if(runSignal.aborted)throw new Error('localFlow.requestStopped');const attempt=(await tx.get<ContentAttempt>('contentAttempts',attemptId))!;await work(tx,task,attempt);tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);});
  try{
   let {request,bundle,grant}=begun.attempt;const m=source;
   if(!request||!bundle){
-   grant=begun.task.useContext?{id:crypto.randomUUID(),contextDigest:await digest(m.context),recipients:[...new Set([contentProvider.endpoint,...(reviewProvider?[reviewProvider.endpoint]:[])])]}:null;
-   const pronunciation=await prepareSpokenResource(m.expression.surfaceForm,begun.task.languageContext,runSignal);
-   request=await makeRequest({id,learner_user_id:begun.owner.learnerId,learning_target_id:begun.task.targetId,fixed_input:{pronunciation,targetLanguageTag:begun.task.languageContext.targetLanguageTag,supportLanguageTag:begun.task.languageContext.supportLanguageTag,senseId:m.reference.senseId,senseVersionId:m.reference.senseVersionId,bindingId:m.reference.bindingId,bindingVersionId:m.reference.bindingVersionId,planRevision:begun.task.planRevision,expression:m.expression.surfaceForm,expressionKind:['sentence','utterance_strategy'].includes(m.expression.expressionType)?'utterance':m.expression.expressionType,meaning:m.semanticSpec.coreMeaningFocus,prototype:m.semanticSpec.prototypeScenes[0].summary,...(grant?{anchor:{sentence:m.context.text,images:m.context.images,contextVersion:grant.contextDigest,grantId:grant.id}}:{}),demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND}},attemptId,new Date());
-   request={...request,attemptBudget:{...request.attemptBudget,maxModelTurns:3}};
+   grant=grant??(begun.task.useContext?{id:crypto.randomUUID(),contextDigest:await digest(m.context),recipients:[...new Set([contentProvider.endpoint,...(reviewProvider?[reviewProvider.endpoint]:[])])]}:null);
+   const expressionKind=m.expression.expressionType==='utterance_strategy'?'utterance':m.expression.expressionType;
+   const spokenForm=m.expression.spokenForm;
+   if(expressionKind==='construction'&&!spokenForm)throw Error('localFlow.constructionInstanceRequired');
+   request??=await makeRequest({id,learner_user_id:begun.owner.learnerId,learning_target_id:begun.task.targetId,fixed_input:{spokenForm,formParts:m.expression.formParts,targetLanguageTag:begun.task.languageContext.targetLanguageTag,supportLanguageTag:begun.task.languageContext.supportLanguageTag,senseId:m.reference.senseId,senseVersionId:m.reference.senseVersionId,bindingId:m.reference.bindingId,bindingVersionId:m.reference.bindingVersionId,planRevision:begun.task.planRevision,expression:m.expression.surfaceForm,expressionKind,semanticSpec:m.semanticSpec,meaning:m.semanticSpec.coreMeaningFocus,prototype:m.semanticSpec.prototypeScenes[0].summary,...(grant?{anchor:{sentence:m.context.text,images:m.context.images,contextVersion:grant.contextDigest,grantId:grant.id}}:{}),demand:SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND}},attemptId,new Date());
+   request={...request,attemptBudget:{maxModelTurns:8,maxToolCalls:24,timeoutMs:240000},approvedTools:contentAgentTools.map(tool=>({toolKey:tool.function.name,toolVersion:'v1',description:tool.function.description,inputSchemaId:'lightweight.agent.'+tool.function.name,inputSchemaVersion:'v1',inputJsonSchema:tool.function.parameters,outputContextKinds:tool.function.name==='submit_resources'?[]:['reference_fact'],outputMaterialRoleKeys:tool.function.name==='submit_resources'?request!.demand.materialRoles.filter(r=>learningResourceDefinition(r.materialRoleKey)?.generation==='model').map(r=>r.materialRoleKey):[],maxCalls:24}))};
    await save(async(_tx,_task,a)=>{a.request=request;a.grant=grant;});
-   bundle=await generateLearningCandidate(request,contentProvider,!!grant,runSignal,async step=>{await save(async(_tx,_task,a)=>{a.generationSteps=[...(a.generationSteps??[]),step];});});
+   bundle=await generateLearningCandidate(request,contentProvider,!!grant,runSignal,async step=>{await save(async(_tx,_task,a)=>{a.generationSteps=[...(a.generationSteps??[]),step];});},begun.attempt.generationCheckpoint,async checkpoint=>{await save(async(_tx,_task,a)=>{a.request=request;a.generationCheckpoint=checkpoint;});});
    await save(async(_tx,task,a)=>{a.bundle=bundle;task.status='reviewing';a.status='reviewing';});onSaved();
   }
   let review:ContentAttempt['review']=null;

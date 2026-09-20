@@ -9,7 +9,7 @@ export function LearningResource({resource}:{resource:SensaMaterializedResource}
  const definition=learningResourceDefinition(resource.materialRoleKey);
  if(!definition)throw new Error(`Unsupported learning resource: ${resource.materialRoleKey}`);
  const payload=definition.schema.parse(resource.contentPayload) as Record<string,unknown>;
- const kindLabels={word:'resourceWord',phrase:'resourcePhrase',construction:'resourceConstruction',utterance:'resourceUtterance'} as const;
+ const kindLabels={word:'resourceWord',phrase:'resourcePhrase',construction:'resourceConstruction',utterance:'resourceUtterance',sentence:'resourceSentence'} as const;
  const label=definition.label[i18n.resolvedLanguage?.startsWith('zh')?'zh-CN':'en'];
  return <section aria-label={label} className="space-y-2"><h4 className="text-sm font-medium text-fg-secondary">{label}</h4>
   {resource.materialRoleKey==='experience_recall_cue'?<RichExperience {...sensaLightweightExperienceRecallCueSchema.parse(payload)}/>:null}

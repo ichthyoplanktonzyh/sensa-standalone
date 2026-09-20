@@ -1,3 +1,4 @@
+import {backgroundPreparation} from './backgroundPreparation';
 import {localModelQueue} from './modelExecution';
 import {z} from 'zod';
 import {command,readLibrary} from './store';
@@ -34,7 +35,7 @@ export async function setCredential(provider:Provider,key:string){
  credentials.set(provider.id,{revision:provider.revision,key:key.trim()});
 }
 export function hasCredential(provider:Provider){return credentials.get(provider.id)?.revision===provider.revision;}
-export function clearAllCredentials(){credentials.clear();localModelQueue.clear();}
+export function clearAllCredentials(){backgroundPreparation.cancelAll();credentials.clear();localModelQueue.clear();}
 export function clearCredential(id:string){credentials.delete(id);}
 export async function deleteProvider(operationId:string,provider:Provider){
  await command({id:operationId,kind:'provider.delete',input:{id:provider.id,revision:provider.revision}},async tx=>{

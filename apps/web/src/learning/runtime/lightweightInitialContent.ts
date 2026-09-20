@@ -1,3 +1,4 @@
+import {resourcePlanFromArtifacts,roleAllowedByResourcePlan,completedRevealResourcePlan} from '@sensa/contracts/sensa';
 import {
   LEARNING_RESOURCE_DEFINITIONS,
   LIGHTWEIGHT_INITIAL_CONTENT_DEMAND_KEY,
@@ -468,6 +469,8 @@ const pedagogicalProducer: CandidateProducer = {
       contentPayload:{...experience.sceneRealization,experienceResourceKey:'experience_recall_cue:0'},
       sourceArtifactIds, productionMethod:'deterministic_transform',producerProvider:'sensa-published-resource',producerModel:null,producerPolicyId:'lightweight.pedagogical-provisioning',
     });
+    const mnemonic=context.referenceArtifacts.find(a=>a.payload.factKind==='mnemonic');
+    if(mnemonic){const {factKind,...payload}=mnemonic.payload;candidates.push({materialRoleKey:'mnemonic',ordinal:0,contentPayload:payload,sourceArtifactIds:[context.senseArtifact.artifactId,mnemonic.artifactId],productionMethod:'published_reuse',producerProvider:'sensa-editorial',producerModel:null,producerPolicyId:'lightweight.pedagogical-provisioning'});}
     return candidates;
   },
 };
@@ -648,7 +651,7 @@ const produceCandidates = (context: FrozenContext): readonly SensaMaterialCandid
     pedagogicalProducer,
     objectiveResourceProducer,
   ]) {
-    const drafts = producer.produce(context, accepted);
+    const drafts = producer.produce(context, accepted).filter(draft=>roleAllowedByResourcePlan(resourcePlanFromArtifacts(context.request.contextArtifacts),draft.materialRoleKey));
     accepted.push(...drafts.map((draft) => candidateFromDraft(context, draft)));
   }
   return Object.freeze(accepted);
@@ -676,7 +679,7 @@ const materializeLightweightInitialCandidates = (
     });
   }
   const content = deepFreeze(
-    sensaLightweightInitialMaterializationContentSchema.parse(assembly.content),
+    sensaLightweightInitialMaterializationContentSchema.parse({...assembly.content,resourcePlan:completedRevealResourcePlan(resourcePlanFromArtifacts(context.request.contextArtifacts),assembly.content.resources)}),
   );
   const materializationIdentitySeed = canonicalJsonDigest({
     learningTargetId: context.request.learningTargetId,

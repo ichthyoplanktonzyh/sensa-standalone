@@ -1,3 +1,4 @@
+import {roleAllowedByResourcePlan} from '@sensa/contracts/sensa';
 /**
  * Delivery contract for the two Lightweight Initial card presentations.
  *
@@ -142,8 +143,8 @@ export interface ExpressionRevealCardPresentation {
   readonly presentationKey: 'lightweight-expression-reveal-card';
   readonly presentationVersion: 'v2';
   readonly slots: {
-    readonly supplementaryResources: readonly SensaMaterializedResource[];
-    readonly expressionPrimary: { readonly surface: string };
+    readonly categoryResources: readonly SensaMaterializedResource[];
+    readonly expressionPrimary: { readonly surface: string; readonly spokenForm?:string };
     readonly senseConfirmation: { readonly meaning: string };
     readonly pronunciation: {
       readonly audioUrl: string | null;
@@ -308,8 +309,8 @@ export const assembleLightweightInitialPresentation = (
       presentationKey: 'lightweight-expression-reveal-card',
       presentationVersion: 'v2',
       slots: Object.freeze({
-        supplementaryResources: Object.freeze(LIGHTWEIGHT_INITIAL_MATERIAL_ROLES.filter(key=>!['experience_recall_cue','recall_support','target_expression','sense_confirmation','pronunciation','language_structure','usage_guidance','scene_bridge','scene_realization'].includes(key) && LIGHTWEIGHT_RESOURCE_PROFILE[key].phase==='post_reveal').flatMap(key=>boundResourcesForRole(step,materialization,key))),
-        expressionPrimary: Object.freeze({ surface: expression.surface }),
+        categoryResources: Object.freeze(LIGHTWEIGHT_INITIAL_MATERIAL_ROLES.filter(key=>!['experience_recall_cue','recall_support','target_expression','sense_confirmation','pronunciation','language_structure','usage_guidance','scene_bridge','scene_realization'].includes(key) && LIGHTWEIGHT_RESOURCE_PROFILE[key].phase==='post_reveal').flatMap(key=>boundResourcesForRole(step,materialization,key)).filter(resource=>!materialization.content.resourcePlan||roleAllowedByResourcePlan(materialization.content.resourcePlan,resource.materialRoleKey))),
+        expressionPrimary: Object.freeze({ surface: expression.surface,spokenForm:expression.spokenForm }),
         senseConfirmation: Object.freeze({ meaning: sense.meaning }),
         pronunciation: pronunciation
           ? Object.freeze(pronunciation)

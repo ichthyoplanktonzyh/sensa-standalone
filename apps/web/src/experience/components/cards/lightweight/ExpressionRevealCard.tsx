@@ -1,3 +1,4 @@
+import {learningResourceDefinition} from '@sensa/contracts/sensa';
 import {LearningResource} from '../../learning/LearningResource';
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -44,7 +45,7 @@ export function ExpressionRevealCard({
   lookupDictionary,
   toast,
 }: ExpressionRevealCardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const cardId = useId();
   const usagePatternLabelId = `${cardId}-usage-pattern`;
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -55,7 +56,7 @@ export function ExpressionRevealCard({
   const [additionalExampleIndex, setAdditionalExampleIndex] = useState(0);
   const { activeLookup, openLookup, clearLookup } = useImmediateDictionaryLookup();
   const {
-    supplementaryResources,
+    categoryResources,
     expressionPrimary,
     senseConfirmation,
     pronunciation,
@@ -255,6 +256,7 @@ export function ExpressionRevealCard({
             )}
           </div>
 
+          {expressionPrimary.spokenForm && expressionPrimary.spokenForm!==expressionPrimary.surface && <p className="mt-3 font-language text-base text-fg-secondary">{expressionPrimary.spokenForm}</p>}
           {expressionMetadata.length > 0 && (
             <p className="sensa-expression-metadata" aria-label={expressionMetadata.join(" · ")}>
               {expressionMetadata.join(" · ")}
@@ -284,7 +286,7 @@ export function ExpressionRevealCard({
         </div>
       )}
 
-      {(additionalExamples.length > 0 || languageStructure?.contrastNote) && (
+      {additionalExamples.length > 0 && (
         <div className="sensa-expression-disclosures border-y border-border-subtle">
           <details className="sensa-expression-disclosure">
             <summary>{t("runtime.moreExamples")}</summary>
@@ -302,16 +304,13 @@ export function ExpressionRevealCard({
                 </ExampleCardCarousel>
               </div>
               )}
-              {languageStructure?.contrastNote && (
-                <div className="sensa-expression-boundary">
-                  <h2>{t("runtime.contrastNote")}</h2>
-                  <p className="sensa-expression-contrast text-sm leading-7 text-fg-secondary">{languageStructure.contrastNote}</p>
-                </div>
-              )}
+
             </div>
           </details>
         </div>
       )}
+
+      {languageStructure?.contrastNote && <details className="sensa-expression-disclosure"><summary>{t('runtime.contrastNote')}</summary><p className="text-sm leading-7 text-fg-secondary">{languageStructure.contrastNote}</p></details>}
 
       {(onOpenPersonalScene || hasPersonalScene && semanticWorldState && onSaveToSemanticWorld) && (
         <div className="sensa-expression-personal-actions">
@@ -347,7 +346,7 @@ export function ExpressionRevealCard({
         </div>
       )}
 
-      {supplementaryResources?.map(resource=><details key={resource.resourceKey} className="sensa-expression-disclosure"><summary>{t('runtime.furtherUnderstanding')}</summary><LearningResource resource={resource}/></details>)}
+      {categoryResources?.map(resource=><details key={resource.resourceKey} className="sensa-expression-disclosure"><summary>{learningResourceDefinition(resource.materialRoleKey)!.label[i18n.resolvedLanguage?.startsWith('zh')?'zh-CN':'en']}</summary><LearningResource resource={resource}/></details>)}
       <RuntimeRating initial={initial} showDescriptions={false} onRate={onRate} />
       {activeLookup && (
         <LearningExampleLookup

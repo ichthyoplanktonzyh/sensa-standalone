@@ -1,3 +1,4 @@
+import {sensaSenseSemanticSpecSchema} from './semanticRegistry.js';
 import {z} from "zod";
 import {sensaContextImagesSchema,sensaInteractiveHtmlSchema} from "./richExperience.js";
 const nonEmpty = z.string().trim().min(1);
@@ -8,6 +9,7 @@ export const sensaLightweightExpressionKindSchema = z.enum([
   "phrase",
   "construction",
   "utterance",
+  "sentence",
   "unspecified",
 ]);
 
@@ -16,6 +18,7 @@ export const sensaLightweightExpressionSnapshotSchema = z
     surface: nonEmpty,
     languageTag: nonEmpty,
     expressionKind: sensaLightweightExpressionKindSchema,
+    spokenForm: nonEmpty.optional(),
     acceptedForms: z.array(nonEmpty).max(50).optional(),
     formParts: z.array(z.object({kind:z.enum(['fixed','slot']),text:nonEmpty,constraint:nonEmpty.optional()}).strict()).max(30).optional(),
   })
@@ -24,6 +27,7 @@ export const sensaLightweightExpressionSnapshotSchema = z
 export const sensaLightweightSenseSnapshotSchema = z
   .object({
     meaning: nonEmpty,
+    semanticSpec: sensaSenseSemanticSpecSchema.optional(),
     supportLanguageTag: nonEmpty,
   })
   .strict();
@@ -45,6 +49,9 @@ export const sensaEtymologySchema = z.object({
   sourceUrl: z.url().refine(value => /^https?:/.test(value), 'HTTP source required'),
 }).strict();
 
+export const sensaSourcedExplanationSchema=z.object({explanation:nonEmpty,source:nonEmpty,sourceUrl:z.url().refine(v=>/^https?:/.test(v))}).strict();
+export const sensaMnemonicSchema=z.object({text:nonEmpty,kind:z.literal('teaching_aid')}).strict();
+
 export const sensaLightweightPronunciationMaterialSchema = z.object({
   audioUrl: z.string().regex(/^data:audio\/(?:mpeg|mp3|wav|ogg);base64,[A-Za-z0-9+/]+={0,2}$/u, 'Saved audio bytes are required'),
   surface: nonEmpty,
@@ -56,6 +63,10 @@ export const sensaLightweightPronunciationMaterialSchema = z.object({
 }).strict();
 
 export const sensaLightweightReferenceFactSchema = z.discriminatedUnion("factKind", [
+  sensaSourcedExplanationSchema.extend({factKind:z.literal('boundary_contrast')}),
+  sensaSourcedExplanationSchema.extend({factKind:z.literal('word_formation')}),
+  sensaMnemonicSchema.extend({factKind:z.literal('mnemonic')}),
+  z.object({factKind:z.literal('resource_scope'),assessments:z.record(z.string(),z.object({applicable:z.boolean(),reason:nonEmpty,source:nonEmpty}).strict())}).strict(),
   sensaEtymologySchema.extend({factKind:z.literal("etymology")}),
   sensaLightweightPronunciationMaterialSchema.extend({factKind:z.literal("pronunciation")}),
   z.object({
@@ -138,10 +149,13 @@ export const LEARNING_RESOURCE_DEFINITIONS = Object.freeze({
   target_expression: definition(sensaLightweightTargetExpressionMaterialSchema,{label:{'zh-CN':'目标表达',en:'Target expression'},generation:'authority',instruction:'Copy the exact accepted expression snapshot; never replace the binding.',fields:['surface','formParts','acceptedForms','expressionKind','languageTag']}),
   sense_confirmation: definition(sensaLightweightSenseConfirmationMaterialSchema,{label:{'zh-CN':'义项确认',en:'Meaning'},generation:'authority',instruction:'Copy the fixed confirmed meaning.',fields:['meaning']}),
   pronunciation: definition(sensaLightweightPronunciationMaterialSchema,{label:{'zh-CN':'主要声音',en:'Spoken realization'},generation:'source',instruction:'Requires a sourced, playable recording or fixed TTS output for the exact expression and language. IPA alone does not satisfy this role.',fields:['surface','phoneticNotation','accentLabel','languageTag','source']}),
-  language_structure: definition(sensaLightweightLanguageStructureMaterialSchema,{label:{'zh-CN':'最小使用框架',en:'Usage frame'},generation:'model',instruction:'Provide only when it helps use this expression. Match its expressionKind; explain fixed parts and replaceable slots using usagePattern. Never invent grammatical facts or force a template on a fixed utterance.',fields:['expressionTypeLabel','partOfSpeech','usagePattern','contrastNote']}),
+  language_structure: definition(sensaLightweightLanguageStructureMaterialSchema,{label:{'zh-CN':'最小使用框架',en:'Usage frame'},generation:'model',instruction:'Provide only when it helps use this expression. Match its expressionKind; explain fixed parts and replaceable slots using usagePattern. Never invent grammatical facts or force a template on a fixed utterance. Omit contrastNote unless the resolved contrast category is applicable.',fields:['expressionTypeLabel','partOfSpeech','usagePattern','contrastNote']}),
   usage_guidance: definition(sensaLightweightUsageGuidanceMaterialSchema,{label:{'zh-CN':'补充例句',en:'Additional example'},generation:'model',instruction:'An optional natural target-language example of this exact sense. Translation is in the support language. Do not invent an audio URL. This is not necessarily the original scene.',fields:['example','translation']}),
   scene_bridge: definition(sensaLightweightSceneBridgeMaterialSchema,{label:{'zh-CN':'经验与表达的连接',en:'Experience binding'},generation:'model',instruction:'Explain briefly in the support language why the target expression fits the experience_recall_cue in this bundle. Align perspective, roles or intent; do not merely repeat the gloss or invent personal facts.',fields:['text']}),
-  scene_realization: definition(sensaSceneRealizationSchema,{label:{'zh-CN':'这个场景怎么说',en:'Express this experience'},generation:'model',instruction:'Express the SAME recall experience naturally in the target language. Supply exact UTF-16 targetStart/targetEnd offsets selecting an exact target occurrence from the accepted surface or acceptedForms and experienceResourceKey experience_recall_cue:0. A target utterance may itself be the example. Translation optional; never invent personal details or audio URLs.',fields:['example','translation']}),
+  scene_realization: definition(sensaSceneRealizationSchema,{label:{'zh-CN':'这个场景怎么说',en:'Express this experience'},generation:'model',instruction:'Express the SAME recall experience naturally in the target language. Supply exact UTF-16 targetStart/targetEnd offsets selecting an exact target occurrence from the accepted surface, spokenForm or acceptedForms and experienceResourceKey experience_recall_cue:0. A target utterance may itself be the example. Translation optional; never invent personal details or audio URLs.',fields:['example','translation']}),
+  boundary_contrast: definition(sensaSourcedExplanationSchema,{label:{'zh-CN':'辨析',en:'Contrast'},generation:'source',instruction:'Use a verified contrast for this exact sense; never fabricate a distinction.',fields:['explanation','source','sourceUrl']}),
+  word_formation: definition(sensaSourcedExplanationSchema,{label:{'zh-CN':'构词',en:'Word formation'},generation:'source',instruction:'Use verified modern word formation, not historical etymology or arbitrary spelling splits.',fields:['explanation','source','sourceUrl']}),
+  mnemonic: definition(sensaMnemonicSchema,{label:{'zh-CN':'助记',en:'Memory aid'},generation:'model',instruction:'Provide a useful memory cue grounded in the supplied experience. Mark kind as teaching_aid. Do not claim it is a linguistic fact, historical origin or personal event.',fields:['text']}),
   etymology: definition(sensaEtymologySchema,{label:{'zh-CN':'词源',en:'Etymology'},generation:'source',instruction:'Only pass through a pinned source-backed etymology fact. Historical etymology is distinct from modern morphology and editorial mnemonics. Omit when no verified source is supplied.',fields:['explanation','source','sourceUrl']}),
 });
 export type LearningResourceKind = keyof typeof LEARNING_RESOURCE_DEFINITIONS;

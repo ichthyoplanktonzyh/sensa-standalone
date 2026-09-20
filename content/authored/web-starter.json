@@ -9,42 +9,42 @@
   "supportLanguage": "zh-CN",
   "entries": [
     {
-      "key": "borrow-temporarily", "senseVersion": 1, "bindingVersion": 1, "expression": "borrow",
+      "key": "borrow-temporarily", "senseVersion": 1, "bindingVersion": 1, "expressionKind": "word", "expression": "borrow",
       "meaning": "暂时使用属于别人的东西，并打算归还。", "scene": "下雨时你没有带伞，向同事要了一把，约好明天还给他。",
       "semanticSpec": {"schemaVersion":"sensa-sense-semantic-spec-v1","coreMeaningFocus":"暂时取得并使用属于别人的东西，同时预期归还。","prototypeScenes":[{"summary":"下雨时向同事借伞并约好次日归还。","participantRoles":["临时取得物品的人","物品所有者"],"states":["物品暂时转由借用者使用","所有权不变","存在归还预期"],"directionOrCausality":"物品从所有者暂时转给借用者，之后应归还。"}],"includedCases":["向朋友借书并在读完后归还"],"excludedCases":["永久获得别人赠送的物品","把自己的物品暂时交给别人"],"neighborContrasts":[{"label":"lend","distinction":"lend 从提供物品的一方描述同一次临时转移。"}],"openQuestions":[]}
     },
     {
-      "key": "lend-temporarily", "senseVersion": 1, "bindingVersion": 1, "expression": "lend",
+      "key": "lend-temporarily", "senseVersion": 1, "bindingVersion": 1, "expressionKind": "word", "expression": "lend",
       "meaning": "把自己的东西暂时交给别人使用，并期待对方归还。", "scene": "同事没有带伞，你把自己的备用伞给他用，约好明天拿回来。",
       "semanticSpec": {"schemaVersion":"sensa-sense-semantic-spec-v1","coreMeaningFocus":"把自己拥有或控制的东西暂时交给别人使用，同时预期取回。","prototypeScenes":[{"summary":"把备用伞给同事使用并约好次日拿回。","participantRoles":["物品提供者","临时使用者"],"states":["物品暂由他人使用","所有权不变","存在返还预期"],"directionOrCausality":"物品从提供者暂时转给使用者，之后应返还。"}],"includedCases":["把书借给朋友一周"],"excludedCases":["把物品永久送给别人","从别人那里暂时取得物品"],"neighborContrasts":[{"label":"borrow","distinction":"borrow 从取得物品的一方描述同一次临时转移。"}],"openQuestions":[]}
     },
     {
-      "key": "remind-person", "senseVersion": 1, "bindingVersion": 1, "expression": "remind",
+      "key": "remind-person", "senseVersion": 1, "bindingVersion": 1, "expressionKind": "word", "expression": "remind",
       "meaning": "让某人重新想起可能忘记的事情。", "scene": "朋友明早要赶火车，担心忘记带证件，请你在出门前再说一声。",
       "semanticSpec": {"schemaVersion":"sensa-sense-semantic-spec-v1","coreMeaningFocus":"通过提示让某人重新意识到一件其可能忘记的事情。","prototypeScenes":[{"summary":"出门前提示朋友带证件。","participantRoles":["提示者","可能忘记的人"],"states":["相关事情此前已知","当下可能未被想起","提示使其重新进入注意"],"directionOrCausality":"提示导致已有事项被重新想起。"}],"includedCases":["提醒同事参加已经安排的会议"],"excludedCases":["第一次告知对方一条新消息","强迫对方完成任务"],"neighborContrasts":[],"openQuestions":[]}
     },
     {
-      "key": "postpone-event", "senseVersion": 1, "bindingVersion": 1, "expression": "postpone",
+      "key": "postpone-event", "senseVersion": 1, "bindingVersion": 1, "expressionKind": "word", "expression": "postpone",
       "meaning": "把原定的活动或事情改到更晚的时间。", "scene": "原定周六的野餐遇到大雨，大家决定改到下周再去。",
       "semanticSpec": {"schemaVersion":"sensa-sense-semantic-spec-v1","coreMeaningFocus":"保留一件原定事项，但把它的发生时间改到更晚。","prototypeScenes":[{"summary":"因大雨把周六的野餐改到下周。","participantRoles":["安排变更者","原定事项"],"states":["事项已有原定时间","事项未被取消","新时间晚于原时间"],"directionOrCausality":"某个原因促使原定事项延后。"}],"includedCases":["把会议从上午改到下午"],"excludedCases":["彻底取消活动","提前举行活动"],"neighborContrasts":[{"label":"cancel","distinction":"cancel 结束计划，postpone 保留计划但延后时间。"}],"openQuestions":[]}
     },
     {
-      "key": "confirm-arrangement", "senseVersion": 1, "bindingVersion": 1, "expression": "confirm",
+      "key": "confirm-arrangement", "senseVersion": 1, "bindingVersion": 1, "expressionKind": "word", "expression": "confirm",
       "meaning": "核实或明确表示一项安排或信息是确定的。", "scene": "你记得会议是下午三点，但想再向组织者核实一次，避免记错时间。",
       "semanticSpec": {"schemaVersion":"sensa-sense-semantic-spec-v1","coreMeaningFocus":"核实或明确表示某项信息或安排确实成立。","prototypeScenes":[{"summary":"向组织者核实会议是否确定在下午三点。","participantRoles":["核实者","可确认信息的一方"],"states":["信息此前存在但仍需确定","确认后不确定性降低"],"directionOrCausality":"一次核实或明确表态使安排成为确定信息。"}],"includedCases":["确认预约的日期和时间"],"excludedCases":["提出一个尚未决定的新建议","仅重复未经核实的传闻"],"neighborContrasts":[],"openQuestions":[]}
     },
     {
-      "key": "recommend-option", "senseVersion": 1, "bindingVersion": 1, "expression": "recommend",
+      "key": "recommend-option", "senseVersion": 1, "bindingVersion": 1, "expressionKind": "word", "expression": "recommend",
       "meaning": "因为认为某个选择合适或有用，建议别人采用。", "scene": "朋友第一次来这座城市，请你介绍一家你吃过、觉得很好的餐厅。",
       "semanticSpec": {"schemaVersion":"sensa-sense-semantic-spec-v1","coreMeaningFocus":"基于认为某个选择合适或有用而建议别人采用它。","prototypeScenes":[{"summary":"向初次来访的朋友建议一家自己认可的餐厅。","participantRoles":["建议者","接收建议的人","被建议的选择"],"states":["存在多个可能选择","建议者对某个选择有正面判断"],"directionOrCausality":"正面判断促使建议者把该选择提供给他人考虑。"}],"includedCases":["建议同事使用一款合适的工具"],"excludedCases":["命令他人必须选择某项","只是列出所有可选项而不表达偏好"],"neighborContrasts":[],"openQuestions":[]}
     },
     {
-      "key": "available-free", "senseVersion": 1, "bindingVersion": 1, "expression": "available",
+      "key": "available-free", "senseVersion": 1, "bindingVersion": 1, "expressionKind": "word", "expression": "available",
       "meaning": "在某个时间没有其他安排，可以参与或提供帮助。", "scene": "你想约同事明天下午讨论项目，需要先问他那个时间有没有空。",
       "semanticSpec": {"schemaVersion":"sensa-sense-semantic-spec-v1","coreMeaningFocus":"某人在指定时间没有冲突，因而可以参与或提供帮助。","prototypeScenes":[{"summary":"询问同事明天下午是否有空讨论项目。","participantRoles":["被询问日程的人","计划中的活动"],"states":["关注一个具体时间段","该时段可能有或没有安排"],"directionOrCausality":"没有时间冲突使参与成为可能。"}],"includedCases":["今晚有空接电话"],"excludedCases":["某件商品可以买到","某人能力上胜任但时间冲突"],"neighborContrasts":[],"openQuestions":[]}
     },
     {
-      "key": "run-out-supply", "senseVersion": 1, "bindingVersion": 1, "expression": "run out of",
+      "key": "run-out-supply", "senseVersion": 1, "bindingVersion": 1, "expressionKind": "phrase", "expression": "run out of",
       "meaning": "把某种原有的东西用完，以至于没有剩余。", "scene": "你正准备打印最后一页，打印机里的纸却一张也没有了，需要去补充。",
       "semanticSpec": {"schemaVersion":"sensa-sense-semantic-spec-v1","coreMeaningFocus":"持续消耗某种原有资源，直到没有剩余。","prototypeScenes":[{"summary":"打印过程中把打印纸用到一张不剩。","participantRoles":["资源使用者","被消耗的资源"],"states":["起初有一定存量","使用使存量下降","最终存量为零"],"directionOrCausality":"持续消耗导致资源耗尽。"}],"includedCases":["做饭时把牛奶用完"],"excludedCases":["资源仍有剩余但暂时找不到","主动丢弃尚未用完的资源"],"neighborContrasts":[],"openQuestions":[]}
     }
