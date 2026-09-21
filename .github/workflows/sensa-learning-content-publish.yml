@@ -1,10 +1,18 @@
 name: Publish Sensa learning content
-run-name: Publish learning content from ${{ inputs.release_sha }}
+run-name: Publish learning content from ${{ inputs.release_sha }} with ${{ inputs.media_release_tag }}
 on:
   workflow_dispatch:
     inputs:
       release_sha:
         description: Full green main commit SHA containing the authored release
+        required: true
+        type: string
+      media_release_tag:
+        description: GitHub Release tag containing authored-media-pack.json
+        required: true
+        type: string
+      media_pack_sha256:
+        description: Full SHA-256 of authored-media-pack.json
         required: true
         type: string
       owner_accepted:
@@ -26,6 +34,9 @@ jobs:
     environment: learning-content-production
     env:
       SENSA_RELEASE_SHA: ${{ inputs.release_sha }}
+      SENSA_MEDIA_RELEASE_TAG: ${{ inputs.media_release_tag }}
+      SENSA_MEDIA_PACK_SHA256: ${{ inputs.media_pack_sha256 }}
+      SENSA_AUTHORED_MEDIA_PACK: .tmp/authored-media-pack.json
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
@@ -51,6 +62,23 @@ jobs:
           const runs=await fetch(runsUrl,{headers:{authorization:`Bearer ${env.GH_TOKEN}`,accept:'application/vnd.github+json','x-github-api-version':'2026-03-10'}});
           const run=(await runs.json()).workflow_runs?.find(candidate=>candidate.head_sha===sha&&candidate.head_branch==='main'&&candidate.event==='push');
           if(!runs.ok||run?.conclusion!=='success')throw Error('Learning content publication requires a successful main CI run for the exact revision');
+          JS
+      - name: Fetch and verify the sealed authored media input
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'JS'
+          const env=process.env;
+          const tag=(env.SENSA_MEDIA_RELEASE_TAG??'').match(/^sensa-learning-media-([a-f0-9]{12,64})$/),digest=env.SENSA_MEDIA_PACK_SHA256??'';
+          if(!tag)throw Error('Immutable learning media release tag required');
+          if(!/^[a-f0-9]{64}$/.test(digest)||!digest.startsWith(tag[1]))throw Error('Full learning media pack digest must match its release tag');
+          JS
+          mkdir -p .tmp
+          gh release download "$SENSA_MEDIA_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern authored-media-pack.json --dir .tmp
+          node --input-type=module <<'JS'
+          import {createHash} from 'node:crypto';import {readFile} from 'node:fs/promises';
+          const bytes=await readFile(process.env.SENSA_AUTHORED_MEDIA_PACK),digest=createHash('sha256').update(bytes).digest('hex');
+          if(digest!==process.env.SENSA_MEDIA_PACK_SHA256)throw Error('Sealed authored media pack digest mismatch');
           JS
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:

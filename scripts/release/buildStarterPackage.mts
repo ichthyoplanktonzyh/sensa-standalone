@@ -7,6 +7,7 @@ import {createHash} from 'node:crypto';
 import {stableUuid} from '@sensa/learning-kernel';
 import {bookReleaseBundleSchema,bookReleaseDescriptorSchema,learningContentRegistrySchema,sensaSenseSemanticSpecSchema,type SensaSenseSemanticSpec,sensaLightweightExpressionSnapshotSchema,learningReferenceInputSchema} from '@sensa/contracts/sensa';
 import {provisionLightweightInitialContent} from '../../apps/web/src/learning/runtime/lightweightInitialContent.ts';
+import {createAuthoredMediaPackager,type AuthoredMediaInput,type AuthoredMediaReference} from './authoredMedia.mts';
 
 type Source={
  bookKey:string;title:string;description:string;versionNumber:number;publishedAt:string;changeSummary:string;
@@ -15,10 +16,11 @@ type Source={
   expressionKind?:"word"|"phrase"|"construction"|"utterance"|"sentence";spokenForm?:string;formParts?:{kind:"fixed"|"slot";text:string;constraint?:string}[];referenceFacts?:unknown[];
   key:string;acceptedForms?:string[];senseVersion:number;bindingVersion:number;expression:string;meaning:string;scene:string;
   featureLabels?:string[];sceneBridge?:string;
-  pronunciation?:{audioUrl:string;phoneticNotation:string|null;accentLabel:string|null;source:string;method:"recording"|"tts"};
+  pronunciation?:{audio?:AuthoredMediaInput;audioUrl?:string;phoneticNotation:string|null;accentLabel:string|null;source:string;method:"recording"|"tts"};
   languageStructure?:{expressionTypeLabel:string|null;partOfSpeech:string|null;usagePattern?:string|null;contrastNote?:string|null};
-  sceneExample?:{targetStart:number;targetEnd:number;example:string;translation?:string|null;audioUrl?:string|null};
-  usageExamples?:{example:string;translation?:string|null;audioUrl?:string|null}[];
+  sceneExample?:{targetStart:number;targetEnd:number;example:string;translation?:string|null;audio?:AuthoredMediaInput|null;audioUrl?:string|null};
+  usageExamples?:{example:string;translation?:string|null;audio?:AuthoredMediaInput|null;audioUrl?:string|null}[];
+  images?:{name:string;media:AuthoredMediaReference}[];
   semanticSpec:SensaSenseSemanticSpec;
  }[];
 };
@@ -26,16 +28,10 @@ type Source={
 const configuredSources=process.env.SENSA_BOOK_RELEASE_SOURCES?.trim();
 const sourcePaths=configuredSources?configuredSources.split(',').map(value=>value.trim()).filter(Boolean):(await readdir('content/authored',{withFileTypes:true})).filter(entry=>entry.isFile()&&entry.name.endsWith('.json')).map(entry=>'content/authored/'+entry.name);
 if(!sourcePaths.length||new Set(sourcePaths).size!==sourcePaths.length)throw Error('Explicit unique authored Book release sources required');
-const mediaRoot=resolve(process.env.SENSA_WEB_MEDIA_ROOT??'content/data/media/audio');
-const packagedAudioUrl=async(audioUrl:string|null|undefined,label:string)=>{
- if(audioUrl==null)return null;
- if(/^data:audio\/(?:mpeg|mp3|wav|ogg);base64,[A-Za-z0-9+/]+={0,2}$/u.test(audioUrl))return audioUrl;
- const match=audioUrl.match(/^\/golden-audio\/([a-f0-9]{64})\.mp3$/u);
- if(!match)throw Error(`Authored audio must be a packaged data URL or approved golden audio reference: ${label}`);
- const bytes=await readFile(resolve(mediaRoot,match[1]+'.mp3')).catch(()=>{throw Error(`Missing approved audio for ${label}: ${match[1]}`);});
- const digest=createHash('sha256').update(bytes).digest('hex');
- if(digest!==match[1])throw Error(`Approved audio digest mismatch for ${label}`);
- return `data:audio/mpeg;base64,${bytes.toString('base64')}`;
+const media=await createAuthoredMediaPackager({mediaRoot:resolve(process.env.SENSA_AUTHORED_MEDIA_ROOT??'content/data/media'),...(process.env.SENSA_AUTHORED_MEDIA_PACK?.trim()?{mediaPackPath:resolve(process.env.SENSA_AUTHORED_MEDIA_PACK)}:{})});
+const mediaInput=(audio:AuthoredMediaInput|null|undefined,audioUrl:string|null|undefined,label:string)=>{
+ if(audio!=null&&audioUrl!=null)throw Error(`Authored media has two competing references: ${label}`);
+ return audio??audioUrl;
 };
 const origin=new URL(process.env.SENSA_WEB_ORIGIN??'https://candidate.invalid');
 if(origin.protocol!=='https:'&&!(origin.protocol==='http:'&&['127.0.0.1','localhost'].includes(origin.hostname)))throw Error('HTTPS origin required');
@@ -57,16 +53,17 @@ for(const path of sourcePaths.sort()){
   const semanticSpec=sensaSenseSemanticSpecSchema.parse(entry.semanticSpec),senseId=stableUuid('sensa:starter:sense:'+entry.key),senseVersionId=stableUuid(`sensa:starter:sense:${entry.key}:version:${entry.senseVersion}`),expressionKey=`${source.targetLanguage}:${entry.expression.trim().toLocaleLowerCase()}`,expressionId=stableUuid('sensa:starter:expression:'+expressionKey),expressionVersionId=stableUuid(`sensa:starter:expression:${expressionKey}:version:${entry.bindingVersion}`),bindingId=stableUuid('sensa:starter:binding:'+entry.key),bindingVersionId=stableUuid(`sensa:starter:binding:${entry.key}:version:${entry.bindingVersion}`);
   const expression=sensaLightweightExpressionSnapshotSchema.parse({surface:entry.expression,languageTag:source.targetLanguage,expressionKind:entry.expressionKind??'unspecified',...(entry.spokenForm?{spokenForm:entry.spokenForm}:{}),...(entry.formParts?{formParts:entry.formParts}:{}),...(entry.acceptedForms?{acceptedForms:entry.acceptedForms}:{})});
   if(expression.expressionKind==='unspecified')throw Error(`Authored expressionKind required: ${entry.key}`);
-  const pronunciation=entry.pronunciation?{...entry.pronunciation,surface:entry.spokenForm??entry.expression,languageTag:source.targetLanguage,audioUrl:(await packagedAudioUrl(entry.pronunciation.audioUrl,`${entry.key}:pronunciation`))!}:undefined;
+  const pronunciation=entry.pronunciation?await(async()=>{const {audio,audioUrl,...authored}=entry.pronunciation!;const packaged=await media.embed(mediaInput(audio,audioUrl,`${entry.key}:pronunciation`),`${entry.key}:pronunciation`);if(!packaged)throw Error(`Authored pronunciation audio required: ${entry.key}`);return {...authored,surface:entry.spokenForm??entry.expression,languageTag:source.targetLanguage,audioUrl:packaged};})():undefined;
   const authoredExamples=entry.usageExamples??[];
-  const usageExamples=await Promise.all(authoredExamples.map(async(example,index)=>({...example,audioUrl:await packagedAudioUrl(example.audioUrl,`${entry.key}:example:${index}`)})));
+  const usageExamples=await Promise.all(authoredExamples.map(async(example,index)=>{const {audio,audioUrl,...authored}=example;return {...authored,audioUrl:await media.embed(mediaInput(audio,audioUrl,`${entry.key}:example:${index}`),`${entry.key}:example:${index}`)};}));
+  const images=await Promise.all((entry.images??[]).map(async(image,index)=>({id:stableUuid(`sensa:authored-image:${entry.key}:${image.media.sha256}:${index}`),name:image.name,dataUrl:(await media.embed(image.media,`${entry.key}:image:${index}`))!})));
   const referenceFacts=[
    ...(entry.referenceFacts??[]).map(fact=>learningReferenceInputSchema.parse(fact)),
    ...(pronunciation?[{source:'pronunciation_lexicon' as const,sourceVersion:`authored:${source.bookKey}:${source.versionNumber}:${entry.key}:pronunciation`,fact:{factKind:'pronunciation' as const,...pronunciation}}]:[]),
    ...(entry.languageStructure?[{source:'dictionary' as const,sourceVersion:`authored:${source.bookKey}:${source.versionNumber}:${entry.key}:structure`,fact:{factKind:'language_structure' as const,...entry.languageStructure}}]:[]),
    ...usageExamples.map((example,index)=>({source:'other_authoritative_source' as const,sourceVersion:`authored:${source.bookKey}:${source.versionNumber}:${entry.key}:example:${index}`,fact:{factKind:'usage_example' as const,example:example.example,translation:example.translation??null,audioUrl:example.audioUrl}})),
   ];
-  const result=provisionLightweightInitialContent({learnerUserId:owner,learningTargetId:stableUuid('sensa:starter:target:'+entry.key),senseId,senseVersionId,senseExpressionBindingId:bindingId,resolvedLearningPlanRevisionId:`authored:${source.bookKey}:${source.versionNumber}`,expressionSourceVersion:String(entry.bindingVersion),senseSourceVersion:String(entry.senseVersion),expression,sense:{meaning:entry.meaning,supportLanguageTag:source.supportLanguage},originExperience:{source:'other_authoritative_source',sourceVersion:String(source.versionNumber),personalAnchorUseGrantId:null,experience:{scene:entry.scene,senseFocus:entry.meaning,featureLabels:entry.featureLabels??[],...(entry.sceneExample?{sceneRealization:{example:entry.sceneExample.example,targetStart:entry.sceneExample.targetStart,targetEnd:entry.sceneExample.targetEnd,translation:entry.sceneExample.translation??null,audioUrl:await packagedAudioUrl(entry.sceneExample.audioUrl,`${entry.key}:scene`)}}:{}),...(entry.sceneBridge?{sceneBridge:entry.sceneBridge}:{})}},referenceFacts,requestedAt:source.publishedAt});
+  const result=provisionLightweightInitialContent({learnerUserId:owner,learningTargetId:stableUuid('sensa:starter:target:'+entry.key),senseId,senseVersionId,senseExpressionBindingId:bindingId,resolvedLearningPlanRevisionId:`authored:${source.bookKey}:${source.versionNumber}`,expressionSourceVersion:String(entry.bindingVersion),senseSourceVersion:String(entry.senseVersion),expression,sense:{meaning:entry.meaning,supportLanguageTag:source.supportLanguage},originExperience:{source:'other_authoritative_source',sourceVersion:String(source.versionNumber),personalAnchorUseGrantId:null,experience:{scene:entry.scene,senseFocus:entry.meaning,featureLabels:entry.featureLabels??[],...(images.length?{images}:{}),...(entry.sceneExample?{sceneRealization:{example:entry.sceneExample.example,targetStart:entry.sceneExample.targetStart,targetEnd:entry.sceneExample.targetEnd,translation:entry.sceneExample.translation??null,audioUrl:await media.embed(mediaInput(entry.sceneExample.audio,entry.sceneExample.audioUrl,`${entry.key}:scene`),`${entry.key}:scene`)}}:{}),...(entry.sceneBridge?{sceneBridge:entry.sceneBridge}:{})}},referenceFacts,requestedAt:source.publishedAt});
   if(result.status!=='ready')throw Error(`Authored resource failed material validation: ${entry.key} (${JSON.stringify(result.issues)})`);
   return {senseId,senseVersionId,bindingId,bindingVersionId,expression:entry.expression,meaning:entry.meaning,content:result.materialization.content,semantic:{senseKey:entry.key,senseVersionNumber:entry.senseVersion,semanticPolicyVersion:'sensa-editorial-starter-v1',semanticSpec,expressionId,expressionVersionId,expressionType:expression.expressionKind==='utterance'?'utterance_strategy' as const:expression.expressionKind,expressionVersionNumber:entry.bindingVersion,expressionStructure:{...(entry.spokenForm?{spokenForm:entry.spokenForm}:{}),...(entry.formParts?{formParts:entry.formParts}:{})},bindingVersionNumber:entry.bindingVersion,relation:'realizes' as const,semanticCoverage:'exact' as const,registerLabel:null,usageConstraints:[]}};
  }));
@@ -76,6 +73,8 @@ for(const path of sourcePaths.sort()){
  descriptors.push(bookReleaseDescriptorSchema.parse({format:'sensa-book-release-descriptor-v1',book:bundle.book,contentRelease:bundle.contentRelease,targetLanguage:bundle.targetLanguage,supportLanguage:bundle.supportLanguage,publishedAt:bundle.publishedAt,changeSummary:bundle.changeSummary,entryCount:entries.length,byteLength:bytes.length,sha256,url:new URL(name,base).href}));
  totalEntries+=entries.length;
 }
+
+media.assertSealedPackFullyConsumed();
 
 const publishedAt=descriptors.map(item=>item.publishedAt).sort().at(-1)!,registryWithoutRevision={format:'sensa-learning-content-registry-v1' as const,publishedAt,items:descriptors},revision=createHash('sha256').update(JSON.stringify(registryWithoutRevision)).digest('hex'),registry=learningContentRegistrySchema.parse({...registryWithoutRevision,revision});
 await mkdir(dirname(catalogOutput),{recursive:true});await writeFile(catalogOutput,JSON.stringify(registry,null,2)+'\n');

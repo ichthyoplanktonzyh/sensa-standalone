@@ -84,6 +84,31 @@ remain ignored build artifacts. By default it includes every JSON source in
 language pair, while Git history retains prior authored versions. A bounded custom build may
 override the list with comma-separated `SENSA_BOOK_RELEASE_SOURCES` paths.
 
+Authored audio and images use the same content-addressed release seam. A source
+stores only `{ "sha256": "…", "mimeType": "audio/mpeg" }` or
+`{ "sha256": "…", "mimeType": "image/jpeg" }`; approved bytes live outside Git
+under `content/data/media/audio/<sha256>.mp3` and
+`content/data/media/images/<sha256>.jpg`. Set `SENSA_AUTHORED_MEDIA_ROOT` to an
+equivalent sealed media directory when building elsewhere. The release builder
+verifies the digest, MIME signature and size before embedding the bytes as a
+Data URL in the immutable Book Bundle. It never fetches arbitrary media or calls
+a generation provider. Missing or changed media fails the build. Scene images
+are capped by the saved-image contract and remain attached to the materialized
+experience recall cue.
+
+For protected CI publication, seal the exact referenced objects into one ignored
+release input and record the printed SHA-256:
+
+```sh
+node --import tsx scripts/release/buildAuthoredMediaPack.mts
+```
+
+The resulting `release-candidate/authored-media-pack.json` is uploaded as a
+GitHub Release asset, not committed. The publication workflow downloads the
+owner-selected release asset, verifies its whole-file digest, then sets
+`SENSA_AUTHORED_MEDIA_PACK`; the builder also verifies every inner object and
+rejects missing or unused bytes.
+
 Production publication is only through the protected
 `sensa-learning-content-publish.yml` workflow: it uploads and verifies every Bundle,
 publishes the Registry last, and then promotes the API's public Registry URL. It makes no

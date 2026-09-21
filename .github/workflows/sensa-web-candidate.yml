@@ -51,10 +51,6 @@ jobs:
           node scripts/sensaReleaseCandidateSmoke.mjs
           node --import tsx scripts/sensaTelemetrySmoke.mts
           node --import tsx scripts/sensaModelBudgetSmoke.mts
-      - name: Build authored starter learning package
-        env:
-          SENSA_PACKAGE_OUTPUT: apps/web/dist/learning-packages
-        run: node --import tsx scripts/release/buildStarterPackage.mts
       - name: Prepare fixed release candidate
         run: node scripts/release/releaseCandidate.mjs
       - name: Validate Cloudflare bundle without deployment
@@ -74,4 +70,3 @@ jobs:
             packages/model-runtime/dist/
             packages/mcp-server/dist/
             release-candidate/manifest.json
-            release-candidate/catalog.json

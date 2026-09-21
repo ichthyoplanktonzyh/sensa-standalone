@@ -383,7 +383,11 @@ const pedagogicalProducer: CandidateProducer = {
       materialRoleKey: 'experience_recall_cue',
       ordinal: 0,
       contentPayload: experience
-        ? { scene: experience.scene, senseFocus: experience.senseFocus }
+        ? {
+            scene: experience.scene,
+            senseFocus: experience.senseFocus,
+            ...(experience.images?.length ? { images: experience.images } : {}),
+          }
         : {
             scene: `想象一个与你有关的具体时刻：${sense.meaning}`,
             senseFocus: sense.meaning,

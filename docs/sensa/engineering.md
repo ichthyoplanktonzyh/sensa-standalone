@@ -319,11 +319,17 @@ gh workflow run sensa-web-deploy.yml \
 构建不可变 Book Release Bundle，执行无网络 Registry smoke，把 Bundle 上传到 Supabase Storage 的
 content-addressed 路径并逐一校验公网 bytes，最后上传 immutable Registry Revision。只有以上步骤全部
 成功后，工作流才把 API 的 `SENSA_PACKAGE_REGISTRY_URL` 提升到新 Revision。它不重新部署 Web、
-不覆盖既有对象，也不把下载解释为 learner 已应用更新。
+不覆盖既有对象，也不把下载解释为 learner 已应用更新。音频与图片不进入 Git：operator 先用
+`scripts/release/buildAuthoredMediaPack.mts` 生成精确媒体包并以
+`sensa-learning-media-<digest-prefix>` 的唯一 tag 上传为 GitHub Release asset；owner 在发布时同时固定
+tag 与完整 SHA-256。工作流先校验整个媒体包，构建器再校验并消费其中每个对象，遗漏、多余、MIME
+不符或摘要不符都会终止发布。
 
 ```sh
 gh workflow run sensa-learning-content-publish.yml \
   -f release_sha=<FULL_MAIN_SHA> \
+  -f media_release_tag=sensa-learning-media-<DIGEST_PREFIX> \
+  -f media_pack_sha256=<FULL_MEDIA_PACK_SHA256> \
   -f owner_accepted=true
 ```
 
