@@ -37,7 +37,6 @@ try{
  await writeFile(join(web,'index.html'),'<html></html>');await writeFile(join(web,'sw.js'),'// fixture');
  await writeFile(join(web,'assets/app.js'),JSON.stringify([env.VITE_SUPABASE_URL,env.VITE_SENSA_API_URL,env.VITE_SUPABASE_PUBLISHABLE_KEY]));
  await writeFile(join(extension,'manifest.json'),JSON.stringify({permissions:['activeTab'],host_permissions:['https://fixture.supabase.co/*'],content_scripts:[{matches:[env.SENSA_WEB_ORIGIN+'/*']}]}));
- await mkdir(join(root,'release-candidate'),{recursive:true});await writeFile(join(root,'release-candidate/catalog.json'),JSON.stringify({items:[]}));
  const releaseEnv={...env,SENSA_RELEASE_SHA:sha};const candidate=await prepareCandidate(releaseEnv,root);
  assert.match(await readFile(join(web,'_headers'),'utf8'),/\/integrations\/\*\n  Cache-Control: no-cache/);
  const verify=()=>execFileSync(process.execPath,[resolve('scripts/release/verifyCandidate.mjs')],{cwd:root,env:{...process.env,...releaseEnv},stdio:'pipe'});verify();
@@ -47,6 +46,7 @@ try{
  assert(!candidate.files.some(f=>f.path.endsWith('.map')));
  assert(!String(await readFile(join(root,'apps/api/dist/index.js'))).includes('sourceMappingURL'));
  assert(!String(await readFile(join(root,'apps/api/dist/index.d.ts'))).includes('sourceMappingURL'));
+ assert.equal('catalogSha256' in candidate,false,'application releases must not capture a learning-content Registry');
  assert(!(await readFile(join(root,'release-candidate/manifest.json'),'utf8')).includes(env.VITE_SUPABASE_PUBLISHABLE_KEY));
  await assert.rejects(prepareCandidate(env,root),/HEAD/);
  await writeFile(join(web,'assets/app.js'),'// stale local build');await assert.rejects(prepareCandidate(releaseEnv,root),/rebuild/);

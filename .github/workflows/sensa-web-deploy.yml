@@ -92,10 +92,6 @@ jobs:
           npm run build -w @sensa/api
           npm run build -w @sensa/web
           npm run build -w @sensa/browser-extension
-      - name: Build authored starter learning package
-        env:
-          SENSA_PACKAGE_OUTPUT: apps/web/dist/learning-packages
-        run: node --import tsx scripts/release/buildStarterPackage.mts
       - name: Prepare and verify the fixed delivery artifact
         run: |
           node scripts/release/releaseCandidate.mjs
@@ -117,7 +113,6 @@ jobs:
             packages/model-runtime/dist/
             packages/mcp-server/dist/
             release-candidate/manifest.json
-            release-candidate/catalog.json
 
   deploy:
     needs: [gate, build]

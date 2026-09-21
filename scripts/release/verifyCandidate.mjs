@@ -4,7 +4,6 @@ import {resolve} from 'node:path';
 import {candidateRoots} from './releaseCandidate.mjs';
 const report=JSON.parse(await readFile('release-candidate/manifest.json','utf8'));
 if(report.format!=='sensa-release-candidate-v2'||report.commit!==process.env.SENSA_RELEASE_SHA||report.webOrigin!==process.env.SENSA_WEB_ORIGIN||report.apiUrl!==process.env.VITE_SENSA_API_URL)throw Error('Candidate identity or target mismatch');
-if(!report.catalogSha256||createHash('sha256').update(await readFile('release-candidate/catalog.json')).digest('hex')!==report.catalogSha256)throw Error('Missing or altered release catalog');
 for(const file of report.files){
  if(typeof file.path!=='string'||!candidateRoots.some(root=>file.path.startsWith(root+'/'))||file.path.includes('..'))throw Error('Invalid artifact path');
  const bytes=await readFile(resolve(file.path));if(bytes.length!==file.bytes||createHash('sha256').update(bytes).digest('hex')!==file.sha256)throw Error('Candidate integrity check failed');
