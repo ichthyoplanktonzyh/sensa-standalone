@@ -423,6 +423,9 @@ Intake/Construction draft 可以长期保持未确认 Sense 或没有自然的�
 - Personal Meaning、Sense 与 Expression 保持不同 identity；
 - Personal Semantic World 的稳定 identity 以 revisioned tombstone 表达删除；同一 revision 槽分叉、
   删除与同一对象的并发编辑必须停止为冲突，独立子对象的不可变事实追加才可自动合并；
+- 本地 command、Repository commit、跨设备同步和备份恢复必须经过同一个领域 authority；合法 JSON
+  结构本身不足以获得写入资格，immutable fact 改写、断裂引用、revision 跳号、物理删除与 tombstone
+  复活都必须在事务提交前被拒绝；
 - Meaning Focus 是可选解析桥梁，不是 Personal Meaning、Alignment 或快轨的必要字段；不得从 Sense
   definition 合成伪 Focus，也不得为快轨伪造零轮 Sense Construction/Proposal 链；
 - LLM 提议本身不是 learner 意图；受授权 Agent 的 commit operation 可以表达 delegated learner

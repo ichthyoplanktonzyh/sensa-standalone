@@ -9,4 +9,6 @@ fact id 合并；同一 parent + revision 槽出现不同事实时停止为冲�
 删除由带单调 lifecycle revision、operation identity 与时间的 Personal Semantic Tombstone 表达，稳定记录
 不得用缺行表示删除。tombstone 对未修改旧副本生效，删除与同一对象的并发编辑则必须显式解决，不能按
 客户端时间戳猜测。Semantic Registry 的 version 行保持不可变，同一版本槽分叉为冲突，current pointer
-只可前进到唯一且可验证的版本。
+只可前进到唯一且可验证的版本。同一领域 authority 在 Journey Repository 提交前校验完整状态与
+before→after transition，并由同步和备份重建复用；因此这些规则不是只在多设备冲突发生后补救，非法
+本地写入也不能先进入 SQLite。

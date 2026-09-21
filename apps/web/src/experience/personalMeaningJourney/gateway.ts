@@ -1,7 +1,7 @@
 /**
  * Deep gateway for the Personal Meaning → confirmed Sense journey.
  *
- * The gateway is the sole local v2 fact owner for Personal Meaning identity,
+ * The gateway is the local v3 command interface for Personal Meaning identity,
  * material blocks, Anchors, and the learner confirmation facts that connect
  * them to the semantic registry. The AI clarification agent only proposes; it
  * never writes. Every mutation is an explicit learner intent — saving
@@ -11,7 +11,8 @@
  * required it, and an optional Binding as independent facts in one
  * all-or-nothing step. UI callers see a small
  * intent/query interface; they never read storage, the agent session state,
- * or registry internals directly.
+ * or registry internals directly. The Repository admits its proposed state
+ * through the Personal Semantic World authority before any fact is committed.
  */
 
 import type {

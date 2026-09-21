@@ -6,6 +6,7 @@ import {
   type Table,
 } from '../../data/library/store';
 import {parseStoredMedia,type StoredMedia} from '../../data/library/media';
+import {assertPersonalSemanticWorldState,assertPersonalSemanticWorldTransition} from './authority';
 import {StorageUnavailableError} from './ports';
 import {
   emptyJourneyState,
@@ -93,7 +94,7 @@ const indexState=(state:JourneyState):IndexedRecords=>{
 };
 
 const recordChanges=(before:JourneyState,after:JourneyState):SemanticRecordChange[]=>{
-  parseJourneyState(before);parseJourneyState(after);
+  assertPersonalSemanticWorldTransition(before,after);
   const previous=indexState(before),next=indexState(after),changes:SemanticRecordChange[]=[];
   for(const table of Object.keys(previous) as Array<keyof IndexedRecords>){
     const keys=new Set([...previous[table].keys(),...next[table].keys()]);
@@ -147,7 +148,7 @@ const stateFromRecords=(records:Records):JourneyState=>{
   for(const kind of Object.keys(registryIds) as RegistryKind[]){
     (registry[kind] as unknown[]).push(...registryRows.filter(row=>row.kind===kind).sort((a,b)=>a.ordinal-b.ordinal).map(row=>row.value));
   }
-  return parseJourneyState({
+  const state=parseJourneyState({
     version:JOURNEY_STORE_VERSION,
     meanings:[...records.semanticMeanings.values()] as MeaningJourneyRecord[],
     registry,
@@ -155,6 +156,10 @@ const stateFromRecords=(records:Records):JourneyState=>{
     clarificationDrafts:[...records.semanticDrafts.values()],
     commandReceipts:[...records.semanticReceipts.values()] as CommandReceipt[],
   });
+  try{assertPersonalSemanticWorldState(state);}catch(cause){
+    throw new StoreCorruptedError('本机的个人意义数据违反领域不变量。',cause);
+  }
+  return state;
 };
 
 export interface JourneyCommit{

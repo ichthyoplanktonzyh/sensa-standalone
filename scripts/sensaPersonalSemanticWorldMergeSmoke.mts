@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 
 import {decodeBackupValue,encodeBackupValue} from '../apps/web/src/data/library/backupCodec.ts';
 import {mergeLibraryReplicas,planLibraryReplicaApply,replicaEntryId} from '../apps/web/src/data/library/replication/libraryReplica.ts';
+import {assertPersonalSemanticWorldState,assertPersonalSemanticWorldTransition,PersonalSemanticWorldInvariantError} from '../apps/web/src/experience/personalMeaningJourney/authority.ts';
+import {emptyJourneyState} from '../apps/web/src/experience/personalMeaningJourney/store.ts';
+import {MemoryJourneyRepository} from '../apps/web/src/experience/personalMeaningJourney/repository.ts';
 
 type Entry={table:any;key:string;value:unknown};
 const PSW='sensa-personal-semantic-world-v3';
@@ -21,6 +24,10 @@ const baseMeaning={
  mockState:{focusAspectLabels:{},startingPoint:null},
 };
 const baseRow=entry('semanticMeanings',meaningId,baseMeaning);
+const baseState={...emptyJourneyState(),meanings:[baseMeaning]} as any;
+assert.doesNotThrow(()=>assertPersonalSemanticWorldState(baseState));
+const repository=new MemoryJourneyRepository(),empty=await repository.load();
+await repository.commit({before:empty,after:baseState});
 
 const focusId=id(),focusRevisionId=id(),focusOperation=id();
 const localAddition=structuredClone(baseMeaning);
@@ -36,6 +43,8 @@ const independent=merge([baseRow],[entry('semanticMeanings',meaningId,localAddit
 assert.deepEqual(independent.conflicts,[],'independent facts inside one Personal Meaning must converge');
 const independentMeaning=decodeBackupValue(independent.entries[0]!.value) as any;
 assert.equal(independentMeaning.focuses.length,1);assert.equal(independentMeaning.personalExpressionAnchors.length,1);assert.equal(independentMeaning.mockState.focusAspectLabels[focusId],'weather');
+const localState={...baseState,meanings:[localAddition]};
+assert.doesNotThrow(()=>assertPersonalSemanticWorldTransition(baseState,localState),'the local authority must admit an independent append');
 
 const localRevision=structuredClone(baseMeaning),remoteRevision=structuredClone(baseMeaning);
 for(const [branch,revisionId,label,second] of [[localRevision,id(),'local',3],[remoteRevision,id(),'remote',4]] as const){
@@ -65,6 +74,12 @@ assert.deepEqual(merge([entry('semanticMeanings',meaningId,deleted)],[entry('sem
 const malformedDelete=structuredClone(baseMeaning);Object.assign(malformedDelete.personalSemanticAnchors[0],{status:'deleted',updatedAt:at(8),deletedAt:at(8),deletedByOperationId:id()});
 assert.deepEqual(merge([baseRow],[entry('semanticMeanings',meaningId,malformedDelete)],[baseRow]).conflicts,[replicaEntryId(baseRow as any)],'a tombstone must advance its lifecycle revision');
 
+const rewrittenMeaning=structuredClone(baseMeaning);rewrittenMeaning.personalMeaningRevisions[0].displayLabel='rewritten history';
+assert.throws(()=>assertPersonalSemanticWorldTransition(baseState,{...baseState,meanings:[rewrittenMeaning]} as any),PersonalSemanticWorldInvariantError,'local commits cannot rewrite an immutable revision');
+await assert.rejects(repository.commit({before:baseState,after:{...baseState,meanings:[rewrittenMeaning]} as any}),PersonalSemanticWorldInvariantError,'the repository must enforce the authority seam');
+assert.equal((await repository.load()).meanings[0]!.personalMeaningRevisions[0]!.displayLabel,'raincoat','a rejected transition must leave storage untouched');
+assert.throws(()=>assertPersonalSemanticWorldTransition({...baseState,meanings:[deleted]} as any,baseState),PersonalSemanticWorldInvariantError,'local commits cannot resurrect a tombstone');
+
 const physicalDelete=merge([baseRow],[],[baseRow]);
 assert.deepEqual(physicalDelete.conflicts,[replicaEntryId(baseRow as any)],'a missing durable row is not a Personal Semantic World deletion');
 assert.throws(()=>planLibraryReplicaApply([baseRow] as any,[]),/library_sync_tombstone_required/u);
@@ -84,4 +99,4 @@ assert(registryFork.conflicts.includes(replicaEntryId(localV2 as any))&&registry
 const rewrittenV1=registry('senseVersions',senseVersionOne,{contractVersion:'sensa-semantic-registry-v1',senseVersionId:senseVersionOne,senseId,versionNumber:1,definition:'rewritten'});
 assert.deepEqual(merge([senseHead,senseV1],[senseHead,rewrittenV1],[senseHead,senseV1]).conflicts,[replicaEntryId(senseV1 as any)],'an existing Registry version is immutable');
 
-console.log('PASS: Personal Semantic World merges independent immutable facts, preserves revision forks, converges valid tombstones, blocks resurrection and rejects Registry mutations or revision collisions.');
+console.log('PASS: one Personal Semantic World authority validates local commits and replicas, preserves immutable revisions, converges valid tombstones, blocks resurrection and rejects Registry mutations or revision collisions.');

@@ -110,7 +110,11 @@ Replica Module 显式声明的记录依赖；learner prose 和其他任意字符
 扩大冲突范围。Personal Semantic World 使用专用三方 merge：不可变 facts 按稳定 identity 合并，
 同一 revision 槽分叉和 delete-vs-edit 停为冲突；其 v3 facts / v5 Journey store 用单调 lifecycle revision、
 删除 operation 与时间保存 tombstone，稳定语义记录不允许以缺行表达删除。手动备份恢复也通过同一
-Replica Module 的 normalize/restore seam，不另写领域状态修复分支。具体规则见
+Replica Module 的 normalize/restore seam，不另写领域状态修复分支。本地 Journey Repository 在计算
+任何逻辑行变更前，通过同一个 Personal Semantic World authority 校验发生变化的 facts、内部引用以及
+before→after transition；未变化聚合按对象 identity 跳过，加载、同步和备份重建才执行完整状态校验。
+因此 Gateway 提议的非法 revision 改写、tombstone 复活或物理删除不会进入 SQLite，也不会让普通命令
+退化成随整个语义世界增长的全库扫描。具体规则见
 [ADR 0007](../adr/0007-personal-semantic-world-revision-merge.md)。
 新 Checkpoint 成功提交后，服务端只回收旧清单曾引用且新清单不再引用的块；另一设备尚未提交的上传
 不在这次回收范围内。

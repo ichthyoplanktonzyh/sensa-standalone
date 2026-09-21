@@ -140,9 +140,9 @@ const requireArray = (record: Record<string, unknown>, key: string): void => {
 };
 
 /**
- * Structural guard for repository reconstruction. Contract schemas validate
- * individual facts at the smoke boundary; this guard prevents partial rows
- * from being silently treated as an empty store.
+ * Structural guard for repository reconstruction. The Personal Semantic World
+ * authority validates every fact, reference and transition at the Repository
+ * seam; this guard prevents partial rows from being treated as an empty store.
  */
 export const parseJourneyState = (parsed: unknown): JourneyState => {
   if (!isRecord(parsed)) {
