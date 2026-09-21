@@ -90,6 +90,19 @@ const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearnin
   import('../apps/web/src/data/library/sqliteProtocol.ts'),
 ]);
 const sqlite3 = await sqlite3InitModule();
+for (const version of [6, 8]) {
+  const incompatibleRaw = new sqlite3.oo1.DB(':memory:', 'c');
+  incompatibleRaw.exec(`CREATE TABLE owner_fixture(value TEXT); INSERT INTO owner_fixture VALUES('preserve-me'); PRAGMA user_version=${version}`);
+  const incompatibleDatabase = new SqliteRecordDatabase(sqlite3, incompatibleRaw, 'memory');
+  assert.throws(
+    () => incompatibleDatabase.initialize(),
+    version < 7 ? /sqlite_schema_legacy:6/u : /sqlite_schema_future:8/u,
+    'unsupported physical schemas must stop instead of opening an empty replacement',
+  );
+  const preserved = incompatibleRaw.exec({ sql: 'SELECT value FROM owner_fixture', rowMode: 0, returnValue: 'resultRows' }) as unknown[];
+  assert.deepEqual(preserved, ['preserve-me'], 'a failed version check must leave the original database intact');
+  incompatibleDatabase.close();
+}
 const optimizerRawDatabase = new sqlite3.oo1.DB(':memory:', 'c');
 optimizerRawDatabase.exec(sqliteLibrarySchema);
 optimizerRawDatabase.exec("INSERT INTO sensa_records(table_name,record_key,value_json) VALUES('drafts','optimizer-fixture','{}')");

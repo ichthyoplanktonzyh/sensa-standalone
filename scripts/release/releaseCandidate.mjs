@@ -19,7 +19,9 @@ export const candidateRoots=[
 export function validateReleaseEnvironment(env){
  const errors=[];
  const https=name=>{try{const u=new URL(env[name]);if(u.protocol!=='https:'||u.username||u.password||u.search||u.hash||u.hostname==='localhost'||u.hostname.endsWith('.localhost')||u.hostname.endsWith('.invalid')||/^[\d.]+$/.test(u.hostname)||u.hostname.includes(':'))throw Error();return u;}catch{errors.push(`${name}: public HTTPS URL required`);return null;}};
+ const support=()=>{try{const u=new URL(env.VITE_SENSA_SUPPORT_URL);if(u.protocol==='mailto:'&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(decodeURIComponent(u.pathname)))return u;if(u.protocol==='https:'&&!u.username&&!u.password&&!u.hash&&u.hostname!=='localhost'&&!u.hostname.endsWith('.localhost')&&!u.hostname.endsWith('.invalid')&&!/^[\d.]+$/u.test(u.hostname)&&!u.hostname.includes(':'))return u;throw Error();}catch{errors.push('VITE_SENSA_SUPPORT_URL: public HTTPS support form or mailto mailbox required');return null;}};
  const web=https('SENSA_WEB_ORIGIN'),browserWeb=https('VITE_SENSA_WEB_ORIGIN'),player=https('VITE_SENSA_YOUGLISH_ORIGIN'),auth=https('VITE_SUPABASE_URL'),api=https('VITE_SENSA_API_URL');
+ const supportUrl=support();
  if(web&&web.pathname!=='/')errors.push('SENSA_WEB_ORIGIN: root origin required');
  if(browserWeb&&(browserWeb.pathname!=='/'||browserWeb.origin!==web?.origin))errors.push('VITE_SENSA_WEB_ORIGIN: must match the Web root origin');
  if(player&&(player.pathname!=='/'||[web?.origin,auth?.origin,api?.origin].includes(player.origin)))errors.push('VITE_SENSA_YOUGLISH_ORIGIN: dedicated root origin required');
@@ -30,13 +32,13 @@ export function validateReleaseEnvironment(env){
  let publicKey=/^sb_publishable_[A-Za-z0-9_-]{20,}$/.test(key);
  if(!publicKey)try{const payload=JSON.parse(Buffer.from(key.split('.')[1],'base64url').toString());publicKey=payload.role==='anon'&&typeof payload.exp==='number'&&payload.exp>Date.now()/1000;}catch{}
  if(!publicKey)errors.push('VITE_SUPABASE_PUBLISHABLE_KEY: publishable/anon key required; never use a secret/service-role key');
- const allowed=new Set(['VITE_SUPABASE_URL','VITE_SUPABASE_PUBLISHABLE_KEY','VITE_SENSA_API_URL','VITE_SENSA_MODE','VITE_SENSA_WEB_ORIGIN','VITE_SENSA_YOUGLISH_ORIGIN']);
+ const allowed=new Set(['VITE_SUPABASE_URL','VITE_SUPABASE_PUBLISHABLE_KEY','VITE_SENSA_API_URL','VITE_SENSA_MODE','VITE_SENSA_WEB_ORIGIN','VITE_SENSA_YOUGLISH_ORIGIN','VITE_SENSA_SUPPORT_URL']);
  for(const name of Object.keys(env))if(name.startsWith('VITE_')&&!allowed.has(name))errors.push(`${name}: unexpected browser-exposed variable`);
  if(env.SENSA_EXTENSION_WEB_URL!==web?.origin)errors.push('SENSA_EXTENSION_WEB_URL: must match Web origin');
  if(env.SENSA_EXTENSION_API_URL!==env.VITE_SENSA_API_URL)errors.push('SENSA_EXTENSION_API_URL: must match API URL');
  if(!/^[a-f0-9]{40}$/.test(env.SENSA_RELEASE_SHA??''))errors.push('SENSA_RELEASE_SHA: full Git commit required');
  if(errors.length)throw new Error(errors.join('\n'));
- return {webOrigin:web.origin,playerOrigin:player.origin,supabaseOrigin:auth.origin,apiUrl:api.href,commit:env.SENSA_RELEASE_SHA};
+ return {webOrigin:web.origin,playerOrigin:player.origin,supabaseOrigin:auth.origin,apiUrl:api.href,supportUrl:supportUrl.href,commit:env.SENSA_RELEASE_SHA};
 }
 async function files(dir){const entries=await readdir(dir,{withFileTypes:true});return (await Promise.all(entries.map(e=>e.isDirectory()?files(resolve(dir,e.name)):[resolve(dir,e.name)]))).flat();}
 async function removeSourceMaps(dir){
@@ -59,7 +61,7 @@ export async function prepareCandidate(env,root=process.cwd()){
  await writeFile(resolve(dist,'_headers'),`/*\n  Content-Security-Policy: ${candidateCsp(config.playerOrigin)}\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: DENY\n  Permissions-Policy: camera=(), geolocation=()\n/sw.js\n  Cache-Control: no-cache\n/index.html\n  Cache-Control: no-cache\n/integrations/*\n  Cache-Control: no-cache\n/youglish-player.html\n  Cache-Control: no-store\n  ! X-Frame-Options\n  Content-Security-Policy: ${youglishPlayerCsp(config.webOrigin)}\n  Cross-Origin-Resource-Policy: cross-origin\n  Referrer-Policy: no-referrer\n  Permissions-Policy: camera=(), geolocation=(), microphone=()\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n`);
  const browserFiles=(await files(resolve(dist,'assets'))).filter(p=>p.endsWith('.js'));
  const browserCode=(await Promise.all(browserFiles.map(p=>readFile(p,'utf8')))).join('\n');
- for(const value of [env.VITE_SUPABASE_URL,env.VITE_SENSA_API_URL,env.VITE_SUPABASE_PUBLISHABLE_KEY,env.VITE_SENSA_WEB_ORIGIN,env.VITE_SENSA_YOUGLISH_ORIGIN])if(!browserCode.includes(value))throw new Error('Web bundle does not contain the release configuration; rebuild with the release environment');
+ for(const value of [env.VITE_SUPABASE_URL,env.VITE_SENSA_API_URL,env.VITE_SUPABASE_PUBLISHABLE_KEY,env.VITE_SENSA_WEB_ORIGIN,env.VITE_SENSA_YOUGLISH_ORIGIN,env.VITE_SENSA_SUPPORT_URL])if(!browserCode.includes(value))throw new Error('Web bundle does not contain the release configuration; rebuild with the release environment');
  const entries=[];
  for(const rootPath of candidateRoots){
   await removeSourceMaps(resolve(root,rootPath));

@@ -7,7 +7,7 @@ import {LibraryBackupPanel} from './LibraryBackupPanel';
 import {LocalAgentPanel} from './LocalAgentPanel';
 import {useAccountExperience} from '../account/AccountContext';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowRight, ArrowLeft, BookOpen, SlidersHorizontal, UserRound, RefreshCw, Database, Cpu, Info, Languages, NotebookPen, Bot } from 'lucide-react';
+import { ArrowRight, ArrowLeft, BookOpen, SlidersHorizontal, UserRound, RefreshCw, Database, Cpu, Info, Languages, NotebookPen, Bot, FileDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitch } from '../../i18n/LanguageSwitch';
 import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
@@ -18,6 +18,8 @@ import { useLanguageRoutes } from '../library/useLanguageRoutes';
 import type { LearningPolicyId } from '../../learning/runtime/policyProfiles';
 import { AppearanceSettings } from '../appearance/AppearanceSettings';
 import { SensaWorkspacePageLayout } from '../ui/SensaPageLayouts';
+import { configuredSupportUrl } from '../../support/supportUrl';
+import { downloadSupportDiagnostics } from '../../support/supportDiagnostics';
 
 interface ProfileScreenProps {
   fixedLearningPolicy?: boolean;
@@ -78,6 +80,8 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
   const [offlineShell,setOfflineShell]=useState(document.documentElement.dataset.offlineShell??'development');
   useEffect(()=>{const update=()=>setOfflineShell(document.documentElement.dataset.offlineShell??'development');window.addEventListener('sensa-offline-shell',update);return()=>window.removeEventListener('sensa-offline-shell',update);},[]);
   const [bytes, setBytes] = useState<number | null>(null);
+  const [diagnostics, setDiagnostics] = useState<'idle'|'working'|'ready'|'failed'>('idle');
+  const supportUrl = configuredSupportUrl();
   const refreshStorage = () => {
     try { setBytes(localPreviewBytes(window.localStorage)); }
     catch { setBytes(null); }
@@ -195,10 +199,22 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
       <section aria-labelledby="account-support" className="mt-10">
         <h2 id="account-support" className="mb-4 text-lg font-medium">{t('account.support')}</h2>
         <div className="divide-y divide-border-subtle border-y border-border-subtle">
-          {(['about', 'privacy', 'feedback'] as const).map(key => <details key={key} className="group py-1">
-            <summary className="cursor-pointer py-5 text-sm font-medium marker:text-fg-tertiary">{t('account.' + key)}</summary>
-            <p className="max-w-2xl pb-5 text-sm leading-7 text-fg-secondary">{props.account && key === 'privacy' ? t('account.localWeb.privacy') : props.localLibrary&&key==='privacy'?t('account.localWeb.localNote'):t('account.' + key + 'Text')}</p>
+          {(['about', 'privacy', 'providers', 'retention', 'feedback'] as const).map(key => <details key={key} className="group py-1">
+            <summary className="cursor-pointer py-5 text-sm font-medium marker:text-fg-tertiary">{t('support.' + key,{ns:'profile'})}</summary>
+            <p className="max-w-2xl pb-5 text-sm leading-7 text-fg-secondary">{t('support.' + key + 'Text',{ns:'profile'})}</p>
+            {key === 'feedback' && supportUrl && <a className={button+' mb-5'} href={supportUrl} target={supportUrl.startsWith('https:')?'_blank':undefined} rel={supportUrl.startsWith('https:')?'noreferrer':undefined}>{t('support.contact',{ns:'profile'})}</a>}
+            {key === 'feedback' && !supportUrl && <p role="status" className="pb-5 text-sm text-feedback-danger">{t('support.unavailable',{ns:'profile'})}</p>}
           </details>)}
+        </div>
+        <div className="mt-6 rounded-card border border-border-subtle bg-surface-panel p-5">
+          <h3 className="text-sm font-medium">{t('support.diagnostics',{ns:'profile'})}</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-secondary">{t('support.diagnosticsText',{ns:'profile'})}</p>
+          <button className={button+' mt-4'} disabled={diagnostics==='working'} onClick={()=>{
+            setDiagnostics('working');
+            void downloadSupportDiagnostics().then(()=>setDiagnostics('ready')).catch(()=>setDiagnostics('failed'));
+          }}><FileDown size={17}/>{t(diagnostics==='working'?'support.diagnosticsWorking':'support.diagnosticsDownload',{ns:'profile'})}</button>
+          {diagnostics==='ready'&&<p role="status" className="mt-3 text-sm text-fg-secondary">{t('support.diagnosticsReady',{ns:'profile'})}</p>}
+          {diagnostics==='failed'&&<p role="status" className="mt-3 text-sm text-feedback-danger">{t('support.diagnosticsFailed',{ns:'profile'})}</p>}
         </div>
       </section>
       </div>

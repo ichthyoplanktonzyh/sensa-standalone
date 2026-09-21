@@ -27,8 +27,8 @@ import {assertDeletionConfigured,finishAccountDeletion,requestAccountDeletion,ty
 import {authorizeExtension,exchangeExtension,extensionVerifier} from './extension.js';
 import {agentVerifier,createAgentConnectionSetup,exchangeAgentConnectionSetup,listAgentConnectionEvents,listAgentConnections,revokeAgentConnection} from './agent.js';
 import {sensaExtensionAuthorizationSchema,sensaExtensionExchangeSchema} from '@sensa/contracts/sensa';
-import {serviceTelemetry,type ServiceRequestRecord} from './telemetry.js';
-import {registerBrowserTelemetry,type BrowserTelemetrySink} from './browserTelemetry.js';
+import {serviceTelemetry,setTelemetryError,type ServiceRequestRecord} from './telemetry.js';
+import {registerBrowserTelemetry,type BrowserTelemetrySink,type BrowserTelemetryRateLimiter} from './browserTelemetry.js';
 import {readLearningContentRegistry} from './learningContentRegistry.js';
 
 const modelDailyLimit=30;
@@ -71,6 +71,8 @@ export type ConsumerRoutesOptions={
   deleteIdentity?:DeleteIdentity;
   telemetry?:(record:ServiceRequestRecord)=>void;
   browserTelemetry?:BrowserTelemetrySink;
+  browserTelemetryOrigins?:readonly string[];
+  browserTelemetryRateLimiter?:BrowserTelemetryRateLimiter;
   verify?:ConsumerVerifier;
   transaction?:Transaction;
   clock?:()=>Date;
@@ -89,11 +91,12 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
   app.use('*',serviceTelemetry(options.telemetry));
   app.use('*',(context,next)=>bodyLimit({
     maxSize:['/sensa/model/turn','/sensa/model/turn/stream'].includes(context.req.path)?12*1024*1024:context.req.path.endsWith('/sensa/library-sync/blocks/store')?librarySyncBlockStoreChars+1024*1024:256*1024,
-    onError:c=>c.json({code:'body_too_large'},413),
+    onError:c=>{setTelemetryError(c,'body_too_large');return c.json({code:'body_too_large'},413);},
   })(context,next));
   app.onError((error,context)=>{
-    if(error instanceof ConsumerError)return context.json({code:error.code},error.status);
-    if(error instanceof z.ZodError||error instanceof SyntaxError)return context.json({code:'invalid_request'},400);
+    if(error instanceof ConsumerError){setTelemetryError(context,error.code);return context.json({code:error.code},error.status);}
+    if(error instanceof z.ZodError||error instanceof SyntaxError){setTelemetryError(context,'invalid_request');return context.json({code:'invalid_request'},400);}
+    setTelemetryError(context,'temporarily_unavailable');
     return context.json({code:'temporarily_unavailable'},503);
   });
 
@@ -103,7 +106,7 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
     return context.json(await prepareLearningResourceFacts(await context.req.json()));
   });
 
-  registerBrowserTelemetry(app,options.browserTelemetry);
+  registerBrowserTelemetry(app,options.browserTelemetry,{allowedOrigins:options.browserTelemetryOrigins,limiter:options.browserTelemetryRateLimiter});
 
   registerLibrarySync(app,async(request,work)=>{
     const identity=await verify(request);

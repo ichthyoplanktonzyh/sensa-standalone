@@ -1,6 +1,6 @@
 import "./schemaRuntime";
 import "./i18n";
-import { StrictMode } from "react";
+import { lazy, StrictMode, Suspense, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
 import { router } from "./experience/router/router";
@@ -25,16 +25,25 @@ const root = createRoot(document.getElementById("root")!, {
   onRecoverableError: (error, info) => reliability.reportReactError("react_recoverable", error, info.componentStack),
 });
 const skinLabRequested = import.meta.env.DEV && new URLSearchParams(window.location.search).get("skin-lab") === "1";
+const ApplicationVersionGuard = lazy(() => import('./application/ApplicationVersionGuard').then(module => ({ default: module.ApplicationVersionGuard })));
+const productRoot = (content: ReactNode) => (
+  <StrictMode>
+    <RootRecoveryBoundary>
+      {content}
+      <Suspense fallback={null}><ApplicationVersionGuard /></Suspense>
+    </RootRecoveryBoundary>
+  </StrictMode>
+);
 
 if (skinLabRequested) {
   void import("./experience/appearance/SkinSurfaceGallery").then(({ SkinSurfaceGallery }) => {
-    root.render(<StrictMode><RootRecoveryBoundary><SkinSurfaceGallery /></RootRecoveryBoundary></StrictMode>);
+    root.render(productRoot(<SkinSurfaceGallery />));
   });
 } else {
-  root.render(<StrictMode><RootRecoveryBoundary><RouterProvider router={router} /></RootRecoveryBoundary></StrictMode>);
+  root.render(productRoot(<RouterProvider router={router} />));
 }
 if(import.meta.env.PROD&&'serviceWorker' in navigator){
- const status=(value:string)=>{document.documentElement.dataset.offlineShell=value;window.dispatchEvent(new Event('sensa-offline-shell'));};
- status('preparing');
- void navigator.serviceWorker.register('/sw.js').then(()=>navigator.serviceWorker.ready).then(()=>status('ready')).catch(()=>status('failed'));
+ void import('./application/offlineShellClient')
+  .then(module=>module.startOfflineShellClient().catch(module.failOfflineShellClient))
+  .catch(()=>{document.documentElement.dataset.offlineShell='failed';window.dispatchEvent(new Event('sensa-offline-shell'));});
 }

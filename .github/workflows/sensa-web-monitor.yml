@@ -1,10 +1,17 @@
 name: Web operational checks
 on:
   workflow_dispatch:
+    inputs:
+      alert_drill:
+        description: Create a controlled incident without user data
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: '17 * * * *'
 permissions:
   contents: read
+  issues: write
 concurrency:
   group: sensa-web-monitor
   cancel-in-progress: true
@@ -15,43 +22,68 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
           cache: npm
       - run: npm ci
       - name: Erase expired semantic lookup snapshots
+        id: semantic-retention
         env:
           SENSA_MAINTENANCE_DATABASE_URL: ${{ secrets.SENSA_MAINTENANCE_DATABASE_URL }}
         run: node --import tsx scripts/release/semanticLookupRetention.mts
       - name: Erase expired unreferenced sync blocks
+        id: sync-retention
         env:
           SENSA_MAINTENANCE_DATABASE_URL: ${{ secrets.SENSA_MAINTENANCE_DATABASE_URL }}
         run: node --import tsx scripts/release/libraryCloudRetention.mts
       - name: Erase expired model request receipts
+        id: model-retention
         env:
           SENSA_MAINTENANCE_DATABASE_URL: ${{ secrets.SENSA_MAINTENANCE_DATABASE_URL }}
         run: node --import tsx scripts/release/modelRequestRetention.mts
+      - name: Deliver retention incident or recovery
+        if: always() && steps.checkout.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SENSA_INCIDENT_CHECK: Retention maintenance
+          SENSA_INCIDENT_ASSIGNEE: ${{ vars.SENSA_INCIDENT_ASSIGNEE }}
+          SENSA_CHECK_STATUS: ${{ (steps.semantic-retention.outcome == 'success' && steps.sync-retention.outcome == 'success' && steps.model-retention.outcome == 'success') && 'success' || 'failure' }}
+        run: node scripts/release/reportOperationalIncident.mjs
   monitor:
-    if: vars.SENSA_MONITOR_ENABLED == 'true'
+    if: vars.SENSA_MONITOR_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.alert_drill)
     environment: web-monitor
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
           cache: npm
       - run: npm ci
       - name: Check public surfaces
+        id: public-surfaces
         env:
           SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
           VITE_SENSA_API_URL: ${{ vars.VITE_SENSA_API_URL }}
         run: node scripts/release/hostedSmoke.mjs
       - name: Check aggregate service thresholds
+        id: service-thresholds
         env:
           MONITOR_DATABASE_URL: ${{ secrets.MONITOR_DATABASE_URL }}
           SENSA_ALERT_MODEL_CALLS_24H: ${{ vars.SENSA_ALERT_MODEL_CALLS_24H || '500' }}
+          SENSA_ALERT_MODEL_FAILURES_1H: ${{ vars.SENSA_ALERT_MODEL_FAILURES_1H || '10' }}
+          SENSA_ALERT_DRILL: ${{ inputs.alert_drill || 'false' }}
         run: node scripts/release/operationalCheck.mjs
+      - name: Deliver monitor incident or recovery
+        if: always() && steps.checkout.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SENSA_INCIDENT_CHECK: Web operational monitor
+          SENSA_INCIDENT_ASSIGNEE: ${{ vars.SENSA_INCIDENT_ASSIGNEE }}
+          SENSA_CHECK_STATUS: ${{ (steps.public-surfaces.outcome == 'success' && steps.service-thresholds.outcome == 'success') && 'success' || 'failure' }}
+        run: node scripts/release/reportOperationalIncident.mjs

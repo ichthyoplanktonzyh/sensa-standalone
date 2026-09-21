@@ -1,6 +1,7 @@
 # Sensa Web 工程说明
 
 本文是当前 Web 工程、验证和发布的唯一长期说明。产品行为见 [Web 产品说明](product-requirements-v1.md)，领域规则见[领域文档索引](README.md)。代码、迁移和 CI 配置始终是实现细节的最终来源。
+生产支持与数据恢复按[支持与恢复手册](support-recovery.md)执行；其中没有把未经验证的基础设施备份写成已有能力。
 
 ## 活跃代码边界
 
@@ -63,6 +64,10 @@ Package key；运行恢复、策略锁定和生成频控通过领域索引查询
 的长连接周期内使用 `PRAGMA optimize` 维护查询规划统计。Book 版本替换和媒体引用完整性检查同样通过事务内
 关系投影完成。承载大 JSON 的逻辑 record 与 Target 投影使用普通 rowid 表，紧凑关系投影使用
 `WITHOUT ROWID`；物理 schema v7 使用新的 OPFS 文件，因当前无用户库数据，不迁移或读取 v6 文件。
+v7 同时是首个真实用户基线：打开版本低于 v7 或高于当前版本的文件会停止并保留原库，不创建空库冒充
+首次访问；后续 schema 只能按顺序增加事务迁移与固定旧版夹具。跨标签页协调协议独立版本化，版本不一致
+时旧/新页面不交换记录，并要求用户关闭其他标签页。Service Worker 安装新 shell 后等待用户确认再接管，
+接管时保留上一发布版本的静态资源窗口，使仍在运行的旧页面能够完成或安全退出。
 
 Web 应用层的逻辑表与 Personal Semantic World Journey 共用这一物理事务 authority。Journey 的
 意义聚合、注册表事实、Inbox、澄清草稿和 operation receipt 分别保存在 `semanticMeanings`、

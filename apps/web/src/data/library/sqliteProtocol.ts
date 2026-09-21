@@ -4,7 +4,11 @@ import type {HomeLearningStorageProjection} from './homeLearningRecords';
 
 export const sqliteLibraryFile = "/sensa-local-library-v7.sqlite3";
 export const sqlitePoolDirectory = "/sensa-local-library-v7";
+/** First supported production-user baseline; prototype formats stay unsupported. */
+export const sqliteLibraryBaselineVersion = 7;
 export const sqliteLibrarySchemaVersion = 7;
+/** Cross-tab RPC changes must bump this before adding or changing messages. */
+export const sqliteCoordinatorProtocolVersion = 2;
 
 export const sqliteLibraryTables = [
   "meta",

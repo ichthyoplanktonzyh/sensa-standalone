@@ -1,5 +1,10 @@
 import type {MiddlewareHandler} from 'hono';
-export type ServiceRequestRecord={event:'sensa.request';requestId:string;method:string;surface:'account'|'model'|'reading'|'packages'|'sync'|'intake'|'other';status:number;durationMs:number};
+export type ServiceSurface='account'|'model'|'reading'|'packages'|'sync'|'intake'|'telemetry'|'other';
+export type ServiceRequestRecord={event:'sensa.request';requestId:string;method:string;surface:ServiceSurface;component:string;release:string;errorCode:string|null;status:number;durationMs:number};
+
+const release=()=>/^[a-f0-9]{40}$/u.test(process.env.SENSA_RELEASE_SHA??'')?process.env.SENSA_RELEASE_SHA!:'development';
+const safeErrorCode=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-z0-9_.-]{0,63}$/u.test(value)?value:null;
+export const setTelemetryError=(context:{set:(key:string,value:string)=>void},code:string):void=>context.set('telemetryErrorCode',safeErrorCode(code)??'unclassified');
 /** Only bounded operational metadata; never bodies, URLs, tokens, email or model output. */
 export function serviceTelemetry(emit:(record:ServiceRequestRecord)=>void=record=>console.info(JSON.stringify(record))):MiddlewareHandler{
  return async(c,next)=>{
@@ -7,8 +12,9 @@ export function serviceTelemetry(emit:(record:ServiceRequestRecord)=>void=record
   c.header('X-Request-ID',requestId);c.header('Cache-Control','no-store');
   await next();
   const path=c.req.path;
-  const surface=path.startsWith('/sensa/account')||path.includes('/access/session')?'account':path.startsWith('/sensa/model/')?'model':path.startsWith('/sensa/reading')?'reading':path.startsWith('/sensa/packages')?'packages':path.startsWith('/sensa/library-sync')?'sync':path.startsWith('/sensa/intake')?'intake':'other';
+  const surface:ServiceSurface=path.startsWith('/sensa/account')||path.includes('/access/session')?'account':path.startsWith('/sensa/model/')?'model':path.startsWith('/sensa/reading')?'reading':path.startsWith('/sensa/packages')?'packages':path.startsWith('/sensa/library-sync')?'sync':path.startsWith('/sensa/intake')?'intake':path==='/sensa/browser-events'?'telemetry':'other';
   const method=['GET','POST','OPTIONS','HEAD'].includes(c.req.method)?c.req.method:'OTHER';
-  try{emit({event:'sensa.request',requestId,method,surface,status:c.res.status,durationMs:Math.max(0,Math.round(performance.now()-started))});}catch{/* Logging must never roll back an accepted operation. */}
+  const errorCode=safeErrorCode(c.get('telemetryErrorCode'))??(c.res.status>=500?'unclassified':null);
+  try{emit({event:'sensa.request',requestId,method,surface,component:`consumer.${surface}`,release:release(),errorCode,status:c.res.status,durationMs:Math.max(0,Math.round(performance.now()-started))});}catch{/* Logging must never roll back an accepted operation. */}
  };
 }

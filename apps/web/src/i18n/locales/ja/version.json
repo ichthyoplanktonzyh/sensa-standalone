@@ -1,0 +1,7 @@
+{
+  "conflictTitle": "別の Sensa タブで異なるバージョンが実行されています",
+  "conflictDescription": "ほかの Sensa タブを閉じてから、このページを再読み込みしてください。データ保護のため、ローカルライブラリへのアクセスを停止しました。",
+  "updateTitle": "Sensa の更新を適用できます",
+  "updateDescription": "このページ、オフラインファイル、ローカルライブラリを同じバージョンに更新します。",
+  "updateNow": "今すぐ更新"
+}

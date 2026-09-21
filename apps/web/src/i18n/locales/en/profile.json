@@ -191,5 +191,25 @@
     "purposeContent": "Learning material generation",
     "purposeReview": "Independent review",
     "purposeReference": "Word-sense decision"
+  },
+  "support": {
+    "about": "About Sensa",
+    "aboutText": "Start with a specific meaning, connect it with an expression, and build familiarity through learning and review.",
+    "privacy": "Privacy & data",
+    "privacyText": "Content and learning progress are stored in this browser first. When you sign in, supported records are synchronized as the current account checkpoint; sync is not a versioned backup. Clearing website data removes local and unsynced records. Account deletion removes the server-side account copy, but offline copies in other browsers must be cleared on those devices.",
+    "providers": "External services",
+    "providersText": "A configured model provider receives the text or images required for the model request. The default client speech provider receives the text, language and selected voice needed to synthesize audio. Dictionary and YouGlish requests send the lookup query and ordinary network metadata to those services. Custom providers apply their own terms and retention policies.",
+    "retention": "Storage and retention",
+    "retentionText": "Short-lived semantic lookup payloads expire after 24 hours. Successful managed-model responses are retained for up to 6 hours and request metadata for up to 26 hours. The current cloud-sync checkpoint and account content remain until replaced or deleted. Encrypted backup files remain wherever you save them.",
+    "feedback": "Feedback & corrections",
+    "feedbackText": "Contact support for product feedback, content corrections, account recovery, or deletion questions. Attach the diagnostic file only when it helps; it contains runtime state and counts, not learning content, email addresses, record identifiers, URLs, tokens, or stacks.",
+    "contact": "Contact support",
+    "unavailable": "Support contact is not configured for this build. Do not release this build to users.",
+    "diagnostics": "Sanitized diagnostics",
+    "diagnosticsText": "Download a local JSON report with release, browser capability, storage, and sync state. Review it before attaching it to a support request.",
+    "diagnosticsDownload": "Download diagnostics",
+    "diagnosticsWorking": "Preparing diagnostics…",
+    "diagnosticsReady": "Diagnostic file downloaded.",
+    "diagnosticsFailed": "Diagnostics could not be prepared. Contact support without an attachment."
   }
 }

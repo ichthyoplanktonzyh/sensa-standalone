@@ -27,11 +27,18 @@ export function offlineShell():Plugin{let output='dist';return {configResolved(c
  const optionalFiles=[...assets.filter(path=>!coreSet.has(path)),...offlineBrandFiles];
  const paths=[...coreFiles,...optionalFiles];const hash=createHash('sha256');for(const path of paths)hash.update(await readFile(resolve(output,'.'+path)));
  const version=hash.digest('hex').slice(0,20),coreCache='sensa-shell-core-'+version,optionalCache='sensa-shell-optional-'+version;
- await writeFile(resolve(output,'sw.js'),`const CORE_CACHE=${JSON.stringify(coreCache)},OPTIONAL_CACHE=${JSON.stringify(optionalCache)},CORE_FILES=${JSON.stringify(coreFiles)},OPTIONAL_FILES=${JSON.stringify(optionalFiles)};
+ await writeFile(resolve(output,'sw.js'),`const VERSION=${JSON.stringify(version)},CORE_CACHE=${JSON.stringify(coreCache)},OPTIONAL_CACHE=${JSON.stringify(optionalCache)},CORE_FILES=${JSON.stringify(coreFiles)},OPTIONAL_FILES=${JSON.stringify(optionalFiles)};
 self.addEventListener('install',event=>event.waitUntil((async()=>{
  const core=await caches.open(CORE_CACHE);await core.addAll(CORE_FILES);
 })()));
-self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('sensa-shell-')&&key!==CORE_CACHE&&key!==OPTIONAL_CACHE).map(key=>caches.delete(key))))));
+self.addEventListener('message',event=>{if(event.data?.type==='SKIP_WAITING')void self.skipWaiting();});
+self.addEventListener('activate',event=>event.waitUntil((async()=>{
+ const keys=await caches.keys(),shellKeys=keys.filter(key=>key.startsWith('sensa-shell-'));
+ const versions=[VERSION,...shellKeys.slice().reverse().map(key=>key.slice(key.lastIndexOf('-')+1)).filter(value=>value!==VERSION)];
+ const retained=new Set(versions.slice(0,2));
+ await Promise.all(shellKeys.filter(key=>!retained.has(key.slice(key.lastIndexOf('-')+1))).map(key=>caches.delete(key)));
+ await self.clients.claim();
+})()));
 self.addEventListener('fetch',event=>{
  const request=event.request,url=new URL(request.url);
  if(request.method!=='GET'||url.origin!==self.location.origin)return;
@@ -41,5 +48,6 @@ self.addEventListener('fetch',event=>{
   const cached=await cache.match(url.pathname);if(cached)return cached;
   const response=await fetch(request);if(response.ok)await cache.put(url.pathname,response.clone());return response;
  }));
+ else if(url.pathname.startsWith('/assets/'))event.respondWith(caches.match(request).then(cached=>cached??fetch(request)));
 });`);
 }};}

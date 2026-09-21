@@ -30,6 +30,7 @@
 - [`product-requirements-v1.md`](product-requirements-v1.md)：当前 Web 产品范围、页面职责、主要旅程和用户可见状态。
 - [`user-journeys.md`](user-journeys.md)：跨 Web、浏览器扩展、Agent、学习包与学习运行时的端到端用户旅程。
 - [`engineering.md`](engineering.md)：当前代码边界、本地开发、数据同步、验证与生产发布方式。
+- [`support-recovery.md`](support-recovery.md)：已发布 Web 的支持受理、数据保护、恢复顺序与事故演练操作。
 
 这些文档只维护当前有效内容，不追加施工日志。完成记录由 Git 和 CI 保存，待办由 issue tracking 保存。
 

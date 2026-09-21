@@ -1,0 +1,7 @@
+{
+  "conflictTitle": "Another Sensa tab is running a different version",
+  "conflictDescription": "Close the other Sensa tabs, then reload this page. Local library access is paused to protect your data.",
+  "updateTitle": "A Sensa update is ready",
+  "updateDescription": "Update now to keep this page, offline files, and the local library on one version.",
+  "updateNow": "Update now"
+}

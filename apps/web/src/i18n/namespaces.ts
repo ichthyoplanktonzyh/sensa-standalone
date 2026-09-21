@@ -7,6 +7,7 @@ export const translationNamespaces=[
   'reference',
   'localFlow',
   'originalCards',
+  'version',
 ] as const;
 
 export type TranslationNamespace=typeof translationNamespaces[number];

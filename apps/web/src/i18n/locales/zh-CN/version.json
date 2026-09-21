@@ -1,0 +1,7 @@
+{
+  "conflictTitle": "另一个 Sensa 标签页正在运行不同版本",
+  "conflictDescription": "请先关闭其他 Sensa 标签页，再重新加载此页面。为保护你的数据，本地资料库访问已暂停。",
+  "updateTitle": "Sensa 更新已准备好",
+  "updateDescription": "现在更新，使当前页面、离线文件和本地资料库保持同一版本。",
+  "updateNow": "立即更新"
+}

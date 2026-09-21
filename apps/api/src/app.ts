@@ -134,7 +134,7 @@ export function createApp(): Hono<AppEnv> {
   app.get("/me", me);
   app.get("/v1/me", me);
 
-  app.route("", createConsumerRoutes());
+  app.route("", createConsumerRoutes({ browserTelemetryOrigins: corsOrigins }));
   app.route("", createSensaRouteGroup(corsOrigins));
   app.route("/v1", createSensaRouteGroup(corsOrigins));
 
@@ -158,12 +158,12 @@ export function createApp(): Hono<AppEnv> {
       });
     }
     console.error(JSON.stringify({
-      domain: "sensa-api",
-      action: "request_failed",
+      event: "sensa.error",
+      component: "legacy-api",
+      errorCode: "internal_error",
+      release: /^[a-f0-9]{40}$/u.test(process.env.SENSA_RELEASE_SHA ?? "") ? process.env.SENSA_RELEASE_SHA : "development",
       requestId,
-      path: context.req.path,
-      method: context.req.method,
-      message: error instanceof Error ? error.message : String(error),
+      method: ["GET", "POST", "OPTIONS", "HEAD"].includes(context.req.method) ? context.req.method : "OTHER",
     }));
     context.status(500);
     return context.json({

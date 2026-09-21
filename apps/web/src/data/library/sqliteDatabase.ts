@@ -9,6 +9,7 @@ import {
 import type {LocalLearningRun,LocalLearningTarget} from '../../learning/runtime/localProtocol';
 import {
   sqliteLibrarySchema,
+  sqliteLibraryBaselineVersion,
   sqliteLibrarySchemaVersion,
   type SqliteLibraryTable,
   type SqliteMutation,
@@ -64,10 +65,19 @@ export class SqliteRecordDatabase {
       throw new Error(`sqlite_locking_mode_failed:${lockingMode}`);
     }
     const before = this.scalarNumber("PRAGMA user_version");
-    if (before !== 0 && before !== sqliteLibrarySchemaVersion) {
-      throw new Error(`sqlite_schema_mismatch:${before}`);
+    if (before !== 0 && before < sqliteLibraryBaselineVersion) {
+      throw new Error(`sqlite_schema_legacy:${before}`);
     }
-    this.database.exec(sqliteLibrarySchema);
+    if (before > sqliteLibrarySchemaVersion) {
+      throw new Error(`sqlite_schema_future:${before}`);
+    }
+    // New databases are created at the supported baseline. Future forward
+    // migrations belong here as ordered, transactional version steps; older
+    // prototype formats are intentionally not imported.
+    if (before === 0) this.database.exec(sqliteLibrarySchema);
+    else if (before !== sqliteLibrarySchemaVersion) {
+      throw new Error(`sqlite_schema_migration_missing:${before}`);
+    } else this.database.exec(sqliteLibrarySchema);
     // This OPFS connection normally lives for the owning tab's lifetime. Let
     // SQLite refresh planner statistics after schema changes and on every open.
     this.database.exec("PRAGMA optimize=0x10002");

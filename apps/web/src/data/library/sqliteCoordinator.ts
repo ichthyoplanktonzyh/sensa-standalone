@@ -5,6 +5,7 @@ import type {
   SqliteStorageDiagnostics,
   SqliteWorkerInput,
 } from './sqliteProtocol';
+import { sqliteCoordinatorProtocolVersion, sqliteLibrarySchemaVersion } from './sqliteProtocol';
 
 // Keep the original ownership name so a page from the previous release cannot
 // open a second OPFS connection while a newly deployed page is active.
@@ -29,12 +30,14 @@ export interface CoordinatedSqliteBackend {
   diagnostics(): Promise<SqliteStorageDiagnostics>;
 }
 
-type CoordinatorMessage =
+type CoordinatorEnvelope = { protocol: number; schemaVersion: number };
+type CoordinatorPayload =
   | { kind: 'leader'; sender: string }
   | { kind: 'probe'; sender: string }
   | { kind: 'request'; sender: string; requestId: string; input: SqliteWorkerInput }
   | { kind: 'response'; recipient: string; requestId: string; ok: true; value: unknown }
   | { kind: 'response'; recipient: string; requestId: string; ok: false; error: string };
+type CoordinatorMessage = CoordinatorEnvelope & CoordinatorPayload;
 
 const errorMessage = (cause: unknown): string => cause instanceof Error
   ? cause.message
@@ -54,11 +57,15 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     reject: (error: Error) => void;
     timer: ReturnType<typeof setTimeout>;
   }>();
-  private readonly leaderWaiters = new Set<() => void>();
+  private readonly leaderWaiters = new Set<{
+    resolve: () => void;
+    reject: (error: Error) => void;
+  }>();
   private backend: CoordinatedSqliteBackend | null = null;
   private connection: Promise<void> | null = null;
   private election: Promise<boolean> | null = null;
   private lastLeaderAt = 0;
+  private incompatible = false;
 
   constructor(private readonly createBackend: () => CoordinatedSqliteBackend) {
     this.channel.addEventListener('message', (event: MessageEvent<CoordinatorMessage>) => {
@@ -134,7 +141,9 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   }
 
   private async call(input: SqliteWorkerInput): Promise<unknown> {
+    if (this.incompatible) throw new Error('sqlite_owner_incompatible');
     await this.connect();
+    if (this.incompatible) throw new Error('sqlite_owner_incompatible');
     if (this.backend) return this.dispatch(this.backend, input);
 
     // A stale announcement is harmless: the lock decides whether this tab may
@@ -165,6 +174,7 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   }
 
   private tryBecomeLeader(): Promise<boolean> {
+    if (this.incompatible) return Promise.reject(new Error('sqlite_owner_incompatible'));
     if (this.backend) return Promise.resolve(true);
     if (this.election) return this.election;
     const attempt = new Promise<boolean>((resolve, reject) => {
@@ -197,19 +207,27 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
   }
 
   private waitForLeader(): Promise<void> {
+    if (this.incompatible) return Promise.reject(new Error('sqlite_owner_incompatible'));
     if (this.lastLeaderAt) return Promise.resolve();
     return new Promise((resolve, reject) => {
-      const ready = () => {
-        clearTimeout(timer);
-        this.leaderWaiters.delete(ready);
-        resolve();
+      const waiter = {
+        resolve: () => {
+          clearTimeout(timer);
+          this.leaderWaiters.delete(waiter);
+          resolve();
+        },
+        reject: (error: Error) => {
+          clearTimeout(timer);
+          this.leaderWaiters.delete(waiter);
+          reject(error);
+        },
       };
       const timer = setTimeout(() => {
-        this.leaderWaiters.delete(ready);
-        reject(new Error('sqlite_owner_incompatible'));
+        this.leaderWaiters.delete(waiter);
+        reject(new Error('sqlite_coordination_timeout'));
       }, leaderWaitMs);
-      this.leaderWaiters.add(ready);
-      this.channel.postMessage({ kind: 'probe', sender: this.id } satisfies CoordinatorMessage);
+      this.leaderWaiters.add(waiter);
+      this.post({ kind: 'probe', sender: this.id });
     });
   }
 
@@ -221,15 +239,25 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
         reject(new Error('sqlite_coordination_timeout'));
       }, remoteTimeoutMs);
       this.pending.set(requestId, { resolve, reject, timer });
-      this.channel.postMessage({ kind: 'request', sender: this.id, requestId, input } satisfies CoordinatorMessage);
+      this.post({ kind: 'request', sender: this.id, requestId, input });
     });
   }
 
   private receive(message: CoordinatorMessage): void {
     if (!message || typeof message !== 'object') return;
+    const sender = 'sender' in message ? message.sender : undefined;
+    const incompatible = message.protocol !== sqliteCoordinatorProtocolVersion
+      || message.schemaVersion !== sqliteLibrarySchemaVersion;
+    if (sender !== this.id && incompatible) {
+      // A current owner ignores stale callers. A current caller, however, must
+      // stop before sending records to an older owner with a different schema.
+      if (this.backend && (message.kind === 'probe' || message.kind === 'request')) return;
+      this.failIncompatible();
+      return;
+    }
     if (message.kind === 'leader') {
       this.lastLeaderAt = Date.now();
-      for (const ready of this.leaderWaiters) ready();
+      for (const waiter of this.leaderWaiters) waiter.resolve();
       return;
     }
     if (message.kind === 'probe') {
@@ -248,19 +276,49 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
     }
     if (!this.backend || message.sender === this.id) return;
     void this.dispatch(this.backend, message.input).then(
-      (value) => this.channel.postMessage({
-        kind: 'response', recipient: message.sender, requestId: message.requestId, ok: true, value,
-      } satisfies CoordinatorMessage),
-      (cause) => this.channel.postMessage({
-        kind: 'response', recipient: message.sender, requestId: message.requestId, ok: false, error: errorMessage(cause),
-      } satisfies CoordinatorMessage),
+      (value) => this.post({ kind: 'response', recipient: message.sender, requestId: message.requestId, ok: true, value }),
+      (cause) => this.post({
+        kind: 'response',
+        recipient: message.sender,
+        requestId: message.requestId,
+        ok: false,
+        error: errorMessage(cause),
+      }),
     );
+  }
+
+  private failIncompatible(): void {
+    if (this.incompatible) return;
+    this.incompatible = true;
+    this.lastLeaderAt = 0;
+    const error = new Error('sqlite_owner_incompatible');
+    for (const waiter of [...this.leaderWaiters]) waiter.reject(error);
+    for (const [requestId, waiting] of this.pending) {
+      clearTimeout(waiting.timer);
+      waiting.reject(error);
+      this.pending.delete(requestId);
+    }
+    window.dispatchEvent(new CustomEvent('sensa-library-version-incompatible', {
+      detail: {
+        expectedProtocol: sqliteCoordinatorProtocolVersion,
+        expectedSchemaVersion: sqliteLibrarySchemaVersion,
+      },
+    }));
+    document.documentElement.dataset.libraryVersion = 'incompatible';
   }
 
   private markLeader(): void {
     this.lastLeaderAt = Date.now();
-    this.channel.postMessage({ kind: 'leader', sender: this.id } satisfies CoordinatorMessage);
-    for (const ready of this.leaderWaiters) ready();
+    this.post({ kind: 'leader', sender: this.id });
+    for (const waiter of this.leaderWaiters) waiter.resolve();
+  }
+
+  private post(message: CoordinatorPayload): void {
+    this.channel.postMessage({
+      ...message,
+      protocol: sqliteCoordinatorProtocolVersion,
+      schemaVersion: sqliteLibrarySchemaVersion,
+    } satisfies CoordinatorMessage);
   }
 
   private dispatch(backend: CoordinatedSqliteBackend, input: SqliteWorkerInput): Promise<unknown> {
