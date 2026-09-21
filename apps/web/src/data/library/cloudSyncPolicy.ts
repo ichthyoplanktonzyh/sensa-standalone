@@ -21,5 +21,11 @@ export function automaticCloudSyncRetryAt(state:{status:string;failureKind?:Clou
 }
 
 export function blocksAutomaticCloudSync(state:{status:string;failureKind?:CloudSyncFailureKind;retryAt?:string}|undefined){
- return state?.status==='conflict'||(state?.status==='failed'&&automaticCloudSyncRetryAt(state)===null);
+ if(state?.status==='conflict')return true;
+ if(state?.status!=='failed')return false;
+ // Releases before failureKind existed persisted every failure as `failed`.
+ // Let that unclassified state make one migration attempt; synchronizeLibrary
+ // will either clear it or persist a classified failure that stops/retries safely.
+ if(state.failureKind===undefined)return false;
+ return automaticCloudSyncRetryAt(state)===null;
 }

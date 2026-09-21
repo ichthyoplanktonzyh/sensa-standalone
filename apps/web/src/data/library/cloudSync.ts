@@ -180,6 +180,14 @@ export async function synchronizeLibrary(request:SyncRequest){
   // Populate cache with local and last-confirmed data: unchanged resources are not downloaded again.
   await blocks.manifest(initial.entries);if(state.base.length)await blocks.manifest(state.base);
   const head=librarySyncHead.parse(await request('/head')),remote=(await blocks.download(head)).filter(row=>allowed(row.table,row.key));
+  // An identity-only browser and a null remote head are the authoritative empty
+  // account. Confirm that state without publishing device bootstrap metadata.
+  // The first learner-content write will still become pending and publish v3.
+  if(head.manifest===null&&empty(initial.entries)){
+   const completedAt=new Date().toISOString();
+   await saveState(expected,old=>({...old!,base:[],revision:head.revision,status:'synced',syncedLocalRevision:initial.localRevision,pending:undefined,conflicts:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}));
+   return;
+  }
   let merged:ReturnType<typeof mergeLibraryEntries>;
   const remoteIdentity=remote.find(r=>r.table==='meta'&&r.key==='identity');
   if(remoteIdentity&&decodeBackupValue(remoteIdentity.value).id!==initial.identity.id){if(!empty(initial.entries))throw new Error('library_sync_identity');merged={entries:remote,conflicts:[]};}

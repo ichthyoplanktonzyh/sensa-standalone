@@ -53,7 +53,12 @@ try{
  await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());
  assert.equal(await b.evaluate(()=>(window as any).core.readLibrary((tx:any)=>tx.get('meta','package-catalog')).then((catalog:any)=>catalog.revision)),'catalog-b','package catalog cache stays device-local');
  calls=[];await b.evaluate(()=>(window as any).sync());assert.equal(calls.filter(c=>c.path.endsWith('/blocks/fetch')).length,0,'unchanged content is reused locally without a batch fetch');
- await other.evaluate(()=>(window as any).sync());assert.deepEqual(await other.evaluate(()=>(window as any).core.listDrafts()),[]);
+ await other.evaluate(async()=>{const c=(window as any).core,state=await c.readLibrary(async(tx:any)=>({owner:await tx.get('meta','service-owner'),incarnation:await c.assertCurrentLibrary(tx)}));await c.writeLibraryState((tx:any)=>tx.put('meta','cloud-sync',{...state,base:[],revision:0,status:'failed',error:'legacy_unclassified_failure'}));});
+ calls=[];await other.evaluate(()=>(window as any).sync());assert.deepEqual(await other.evaluate(()=>(window as any).core.listDrafts()),[]);
+ const emptyState=await other.evaluate(()=>(window as any).core.readCloudSync());assert.equal(emptyState.status,'synced');assert.equal(emptyState.error,undefined);
+ const emptyHead=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[otherId])).rows[0];assert.equal(emptyHead.revision,0);assert.equal(emptyHead.manifest,null);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[otherId])).rows[0].n,0,'an authoritative empty account must not upload bootstrap identity blocks');
+ assert.deepEqual(calls.map(call=>call.path),['/sensa/library-sync/head'],'legacy failure migration only confirms the empty remote head');
  const hash=(await pool.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 LIMIT 1',[accountId])).rows[0].hash;
  assert.equal((await fetch(origin+'/sensa/library-sync/blocks/'+hash,{headers:{authorization:'Bearer second'}})).status,404,'blocks are account isolated');
  // A legacy Checkpoint is terminal: fetch only its small manifest, preserve the
