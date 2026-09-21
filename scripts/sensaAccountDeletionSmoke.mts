@@ -26,6 +26,7 @@ try{
  assert.equal((await request('/sensa/account/deletion',await token([{method:'token_refresh',timestamp:now}]),body)).status,403);
  await pool.query('INSERT INTO sensa_consumer.intake_channels(account_id,library_id,config) VALUES($1,$2,$3)',[accountId,crypto.randomUUID(),JSON.stringify({fixture:true})]);
  await pool.query("INSERT INTO sensa_consumer.reading_settings(account_id,encrypted_settings) VALUES($1,'synthetic private settings')",[accountId]);
+ await pool.query("INSERT INTO sensa_consumer.model_requests(account_id,request_id,input_digest,purpose,budget_kind,state,response,created_at,reserved_at,execution_started_at,completed_at,response_expires_at,expires_at) VALUES($1,$2,$3,'teacher','semantic','succeeded',$4::jsonb,now(),now(),now(),now(),now()+interval '6 hours',now()+interval '26 hours')",[accountId,crypto.randomUUID(),'a'.repeat(64),JSON.stringify({private:'model response fixture'})]);
  const expiredLookup=crypto.randomUUID(),activeLookup=crypto.randomUUID();
  for(const [id,expiresAt] of [[expiredLookup,new Date(Date.now()-60_000)],[activeLookup,new Date(Date.now()+86_400_000)]] as const){
   await pool.query("INSERT INTO sensa_consumer.semantic_lookups(id,learner_user_id,input_digest,snapshot,status,created_at,expires_at) VALUES($1,$2,$3,$4::jsonb,'ready',now()-interval '1 minute',$5)",[id,accountId,'private-digest-'+id,JSON.stringify({expression:{text:'private lookup fixture'}}),expiresAt]);
@@ -60,6 +61,7 @@ assert.equal(pending.status,200,JSON.stringify(pending.body));assert.equal(pendi
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.agent_connection_setups WHERE account_id=$1',[accountId])).rows[0].n,0);
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.agent_connection_events WHERE account_id=$1',[accountId])).rows[0].n,0);
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.agent_connections WHERE account_id=$1',[accountId])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.model_requests WHERE account_id=$1',[accountId])).rows[0].n,0,'account deletion erases model receipts and cached responses');
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.semantic_lookups WHERE learner_user_id=$1',[accountId])).rows[0].n,0,'account deletion erases semantic lookup snapshots');
  assert.equal((await pool.query('SELECT email FROM core.accounts WHERE account_id=$1',[accountId])).rows[0].email,null);
  assert.equal((await request('/sensa/account/deletion',fresh,{...body,operationId:crypto.randomUUID()})).status,409);

@@ -13,6 +13,7 @@ export {
   unsafeRepeatableReadTransaction,
   unsafeRepeatableReadReadOnlyTransaction,
   unsafeTransaction,
+  closeDatabasePool,
 } from "./core.js";
 export type {
   DatabaseExecutor,

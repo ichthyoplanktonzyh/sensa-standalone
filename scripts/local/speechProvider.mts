@@ -1,9 +1,11 @@
 /** Node host adapter; the consumer API and browser never import Python details. */
 import {spawn} from 'node:child_process';
 import {sensaLightweightPronunciationMaterialSchema} from '@sensa/contracts/sensa';
-import type {SpeechProvider} from '../../apps/api/src/sensa/speech/service.ts';
+import type {z} from 'zod';
 
-export function edgeSpeechProvider(allowExternal:boolean):SpeechProvider {
+type LocalBookSpeechProvider=(input:{surface:string;languageTag:string},signal:AbortSignal)=>Promise<z.infer<typeof sensaLightweightPronunciationMaterialSchema>>;
+
+export function edgeSpeechProvider(allowExternal:boolean):LocalBookSpeechProvider {
  let running=0;
  return async(input,signal)=>{
   if(running>=2)throw Error('speech_busy');

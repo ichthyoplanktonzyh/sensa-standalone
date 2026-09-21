@@ -24,11 +24,10 @@ let stopping = false;
 
 const mode = process.argv[2];
 const noBrowser = process.argv.includes('--no-browser');
-const ttsEnabled = process.argv.includes('--tts');
 const smoke = process.argv.includes('--smoke');
 const modelsEnabled = process.argv.includes('--models') || process.env.SENSA_LOCAL_ENABLE_MODELS === '1';
 if (!['dev', 'preview', 'reset'].includes(mode)) {
-  console.error('Usage: node scripts/local/sensaLocal.mjs dev|preview|reset [--smoke] [--models] [--tts] [--no-browser]');
+  console.error('Usage: node scripts/local/sensaLocal.mjs dev|preview|reset [--smoke] [--models] [--no-browser]');
   process.exit(2);
 }
 if (!['darwin', 'linux'].includes(process.platform)) {
@@ -292,7 +291,6 @@ async function runLocal() {
       ...safeEnvironment(),
       DATABASE_URL: databaseUrl,
       SENSA_LOCAL_SERVICE_PORT: '4319',
-      SENSA_LOCAL_ENABLE_TTS: ttsEnabled ? '1' : '0',
       ...(process.env.SENSA_TTS_PYTHON ? {SENSA_TTS_PYTHON:process.env.SENSA_TTS_PYTHON} : {}),
       SENSA_LOCAL_WEB_ORIGINS: 'http://127.0.0.1:3000,http://127.0.0.1:4173',
       SENSA_REGISTRATION_POLICY: 'registered',

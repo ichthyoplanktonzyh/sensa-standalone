@@ -1,5 +1,4 @@
 import {prepareLearningResourceFacts} from '../resources/supplements.js';
-import {prepareSpeech,type SpeechProvider} from '../speech/service.js';
 import {
   librarySyncBlockStoreChars,
   semanticLookupInputSchema,
@@ -15,7 +14,8 @@ import {stream} from 'hono/streaming';
 import {z} from 'zod';
 import type {DatabaseExecutor} from '../../database/index.js';
 import {unsafeTransaction} from '../../database/index.js';
-import {createModelTurnRoutes,type ModelTurnCompletion} from '../models/turn.js';
+import {createModelTurnRoutes,type ModelTurnCompletion,type ModelTurnReservation} from '../models/turn.js';
+import {failModelRequestAfterExecution,failModelRequestBeforeExecution,markModelRequestRunning,reserveModelRequest,succeedModelRequest,type ModelBudgetKind} from '../models/requests.js';
 import {beginLookup,finishLookup,readLookup} from '../personal/semantic.js';
 import {semanticResolverFor,type SemanticResolver} from '../personal/semanticResolver.js';
 import {activeMeaningConnection,connectionSelector,readingDailyLimit,registerReadingRoutes,type ReadingCompletion} from '../reading/service.js';
@@ -77,7 +77,6 @@ export type ConsumerRoutesOptions={
   semanticResolver?:SemanticResolver;
   readingCompletion?:ReadingCompletion;
   modelTurnCompletion?:ModelTurnCompletion;
-  speechProvider?:SpeechProvider;
 };
 
 export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
@@ -102,14 +101,6 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
     const identity=await verify(context.req.raw);
     await transaction(async db=>{await account(db,identity,false,false,clock());});
     return context.json(await prepareLearningResourceFacts(await context.req.json()));
-  });
-
-  app.post('/sensa/speech',async context=>{
-    const identity=await verify(context.req.raw);
-    await transaction(async db=>{await account(db,identity,false,false,clock());});
-    const result=await prepareSpeech(await context.req.json(),options.speechProvider,
-      AbortSignal.any([context.req.raw.signal,AbortSignal.timeout(45000)]));
-    return context.json(result);
   });
 
   registerBrowserTelemetry(app,options.browserTelemetry);
@@ -145,20 +136,26 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
       const identity=await verify(request);
       return transaction(async db=>({select:await connectionSelector(db,await account(db,identity,false,false,clock()))}));
     },
-    reserve:async(request,input)=>{
+    reserve:async(request,input,select):Promise<ModelTurnReservation>=>{
       const identity=await verify(request);
-      await transaction(async db=>{
+      let selected:ReturnType<typeof select>|undefined;
+      const admitted=await transaction(async db=>{
         const current=await account(db,identity,false,false,clock());
-        const reference=input.purpose==='reference';
-        const content=input.purpose==='content'||input.purpose==='review';
-        const table=reference?'sensa_consumer.reference_usage':content?'sensa_consumer.native_content_usage':'sensa_consumer.native_semantic_usage';
-        const limit=reference?referenceDailyLimit():modelDailyLimit;
-        const old=(await db.query(`SELECT input_digest FROM ${table} WHERE account_id=$1 AND request_id=$2`,[current.account_id,input.id])).rows[0];
-        if(old)throw new ConsumerError(409,'model_request_consumed');
-        const count=(await db.query(`SELECT count(*)::int AS n FROM ${table} WHERE account_id=$1 AND created_at>$2`,[current.account_id,new Date(current.now.getTime()-86400000)])).rows[0]!.n;
-        if(process.env.SENSA_UNLIMITED_MODEL_USAGE!=='true'&&count>=limit)throw new ConsumerError(409,'model_daily_budget');
-        await db.query(`INSERT INTO ${table} VALUES($1,$2,$3,$4)`,[current.account_id,input.id,input.inputDigest,current.now]);
+        const budgetKind:ModelBudgetKind=input.purpose==='reference'?'reference':input.purpose==='content'||input.purpose==='review'?'content':'semantic';
+        const limit=budgetKind==='reference'?referenceDailyLimit():modelDailyLimit;
+        const reservation=await reserveModelRequest(db,current.account_id,{...input,budgetKind},current.now,limit,()=>{selected=select();});
+        return {reservation,accountId:current.account_id};
       });
+      if(admitted.reservation.kind==='replay')return admitted.reservation;
+      if(!selected)throw new ConsumerError(503,'model_connection_unavailable');
+      const run=(work:(db:DatabaseExecutor)=>Promise<void>)=>transaction(work);
+      return {
+       kind:'execute',connection:selected,
+       markRunning:()=>run(db=>markModelRequestRunning(db,admitted.accountId,input.id,input.inputDigest,clock())),
+       succeed:response=>run(db=>succeedModelRequest(db,admitted.accountId,input.id,input.inputDigest,response,clock())),
+       failBeforeExecution:code=>run(db=>failModelRequestBeforeExecution(db,admitted.accountId,input.id,input.inputDigest,code,clock())),
+       failAfterExecution:(code,unknown)=>run(db=>failModelRequestAfterExecution(db,admitted.accountId,input.id,input.inputDigest,code,unknown,clock())),
+      };
     },
     complete:options.modelTurnCompletion,
   }));
@@ -232,9 +229,10 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
       const current=await account(db,identity,false,false,clock());
       const since=new Date(current.now.getTime()-86400000);
       const reading=Number((await db.query('SELECT count(*)::int AS n FROM sensa_consumer.reading_requests WHERE account_id=$1 AND created_at>$2',[current.account_id,since])).rows[0]!.n);
-      const reference=Number((await db.query('SELECT count(*)::int AS n FROM sensa_consumer.reference_usage WHERE account_id=$1 AND created_at>$2',[current.account_id,since])).rows[0]!.n);
-      const teacher=Number((await db.query('SELECT ((SELECT count(*) FROM sensa_consumer.semantic_lookups WHERE learner_user_id=$1 AND created_at>$3)+(SELECT count(*) FROM sensa_consumer.native_semantic_usage WHERE account_id=$2 AND created_at>$3))::int AS n',[current.learner_user_id,current.account_id,since])).rows[0]!.n);
-      const content=Number((await db.query('SELECT count(*)::int AS n FROM sensa_consumer.native_content_usage WHERE account_id=$1 AND created_at>$2',[current.account_id,since])).rows[0]!.n);
+      const executed=`((state='reserved' AND reserved_at>$2) OR (state IN ('running','succeeded','failed_after_execution','execution_unknown') AND execution_started_at>$2))`;
+      const reference=Number((await db.query(`SELECT count(*)::int AS n FROM sensa_consumer.model_requests WHERE account_id=$1 AND budget_kind='reference' AND ${executed}`,[current.account_id,since])).rows[0]!.n);
+      const teacher=Number((await db.query(`SELECT ((SELECT count(*) FROM sensa_consumer.semantic_lookups WHERE learner_user_id=$1 AND created_at>$3)+(SELECT count(*) FROM sensa_consumer.model_requests WHERE account_id=$2 AND budget_kind='semantic' AND ((state='reserved' AND reserved_at>$3) OR (state IN ('running','succeeded','failed_after_execution','execution_unknown') AND execution_started_at>$3))))::int AS n`,[current.learner_user_id,current.account_id,since])).rows[0]!.n);
+      const content=Number((await db.query(`SELECT count(*)::int AS n FROM sensa_consumer.model_requests WHERE account_id=$1 AND budget_kind='content' AND ${executed}`,[current.account_id,since])).rows[0]!.n);
       let explanationAvailable=false;
       try{await activeMeaningConnection(db,current);explanationAvailable=true;}catch(error){if(!(error instanceof ConsumerError))throw error;}
       return {authorized:true,explanationAvailable,checkedAt:current.now.toISOString(),windowHours:24,usage:[

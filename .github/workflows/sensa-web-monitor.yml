@@ -29,6 +29,10 @@ jobs:
         env:
           SENSA_MAINTENANCE_DATABASE_URL: ${{ secrets.SENSA_MAINTENANCE_DATABASE_URL }}
         run: node --import tsx scripts/release/libraryCloudRetention.mts
+      - name: Erase expired model request receipts
+        env:
+          SENSA_MAINTENANCE_DATABASE_URL: ${{ secrets.SENSA_MAINTENANCE_DATABASE_URL }}
+        run: node --import tsx scripts/release/modelRequestRetention.mts
   monitor:
     if: vars.SENSA_MONITOR_ENABLED == 'true'
     environment: web-monitor

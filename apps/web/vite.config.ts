@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import {offlineShell} from './offlineShell';
 import {localAgentAssets} from './localAgentAssets';
+import {resolve} from 'node:path';
 
 export default defineConfig(({ mode }) => {
   const localAcceptance = mode === 'sensa-local';
@@ -26,6 +27,7 @@ export default defineConfig(({ mode }) => {
     envDir: envDirectory,
     publicDir: "public",
     plugins: [react(), tailwindcss(),localAgentAssets(),offlineShell()],
+    build:{rollupOptions:{input:{index:resolve(__dirname,'index.html'),youglishPlayer:resolve(__dirname,'youglish-player.html')}}},
     server: {
       host: "127.0.0.1",
       port: Number(env.VITE_WEB_PORT ?? 3000),

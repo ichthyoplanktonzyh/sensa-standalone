@@ -16,13 +16,14 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 const compiled=await build({stdin:{contents:[
-  ...['store','providers','personalLearning','learning','packages','language'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
+  ...['store','providers','personalLearning','learning','packages','language','speech/defaultProvider'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
   `export * from './apps/web/src/experience/personalMeaningJourney/gateway';`,
 ].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':JSON.stringify({VITE_SENSA_API_URL:'https://speech.fixture.invalid'})},plugins:[{name:'fixture-auth',setup(build){build.onLoad({filter:/[/\\]account[/\\]auth\.ts$/},()=>({contents:"export const auth={getSession:async()=>({data:{session:{access_token:'fixture',user:{id:'fixture'}}}})}; export {authStorageKey,cachedAuthSubject} from './authSessionHint';",loader:'ts'}));}}]});
 Object.assign(globalThis,{indexedDB,window:new EventTarget(),location:{origin:'http://127.0.0.1:9998'},BroadcastChannel:undefined});
 const temp=await mkdtemp(join(tmpdir(),'sensa-personal-'));
 await writeFile(join(temp,'core.mjs'),compiled.outputFiles[0]!.text);
 const api=await import(pathToFileURL(join(temp,'core.mjs')).href);
+const restoreSpeech=api.replaceClientSpeechProvider({id:'fixture',revision:1,displayName:'Fixture',synthesize:async(input:any)=>({...input,audioUrl:'data:audio/mpeg;base64,UklGRg==',phoneticNotation:null,accentLabel:'en-US',source:'synthetic test fixture',method:'tts'})});
 const id=()=>crypto.randomUUID();
 const library=await api.openLibrary(),accountId=id();
 await api.command({id:id(),kind:'fixture.owner',input:{}},async(tx:any)=>tx.put('meta','service-owner',{subject:accountId,accountId}));
@@ -50,7 +51,6 @@ let mode:'good'|'reject'|'review-fail'|'hold'|'leak'='good';
 const realFetch=globalThis.fetch;
 globalThis.fetch=async(_url,input)=>{
   if(String(_url).endsWith('/sensa/resource-facts'))return new Response(JSON.stringify({input:JSON.parse(String(input?.body)),references:[]}),{status:200});
-  if(String(_url).includes('/sensa/speech'))return new Response(JSON.stringify({surface:'borrow',languageTag:'en',audioUrl:'data:audio/mpeg;base64,UklGRg==',phoneticNotation:null,accentLabel:'en-US',source:'synthetic test fixture',method:'tts'}),{headers:{'content-type':'application/json'}});
   if(!input?.body)return new Response('[]',{headers:{'content-type':'application/json'}});
   const body=JSON.parse(String(input?.body));calls.push(body);
   const review=String(body.messages?.[0]?.content).includes('independent Sensa');
@@ -123,6 +123,7 @@ try{
   console.log('PASS: incomplete canonical Intake → one Inbox → clarified Personal Meaning; complete Intake → direct Personal Meaning; both expose the same explicit Add-to-Learning path and authoritative Alignment references.');
   console.log('PASS: canonical Personal Meaning → generated material → learning runtime, with pinned language roles and no transport-specific or legacy Meaning copy. Fake IDB/HTTP; no paid models.');
 }finally{
+  restoreSpeech();
   globalThis.fetch=realFetch;
   await rm(temp,{recursive:true,force:true});
 }

@@ -40,6 +40,12 @@ function getPool(): pg.Pool {
     pool = new pg.Pool({
       connectionString: databaseUrl(),
       max: environment.DATABASE_POOL_MAX,
+      connectionTimeoutMillis: environment.DATABASE_POOL_ACQUIRE_TIMEOUT_MS,
+      idleTimeoutMillis: environment.DATABASE_POOL_IDLE_TIMEOUT_MS,
+      maxLifetimeSeconds: environment.DATABASE_POOL_MAX_LIFETIME_SECONDS,
+      statement_timeout: environment.DATABASE_STATEMENT_TIMEOUT_MS,
+      query_timeout: environment.DATABASE_STATEMENT_TIMEOUT_MS+1_000,
+      application_name: 'sensa-api',
     });
     pool.on("error", (error: Error) => {
       console.error(JSON.stringify({
@@ -50,6 +56,18 @@ function getPool(): pg.Pool {
     });
   }
   return pool;
+}
+
+async function acquirePoolClient():Promise<pg.PoolClient>{
+  const current=getPool(),started=performance.now(),queued=current.waitingCount;
+  try{
+    const client=await current.connect();
+    console.info(JSON.stringify({event:'sensa.database_pool_acquire',waitMs:Math.round(performance.now()-started),queuedBefore:queued,total:current.totalCount,idle:current.idleCount,waiting:current.waitingCount}));
+    return client;
+  }catch(error){
+    console.error(JSON.stringify({event:'sensa.database_pool_acquire_failed',waitMs:Math.round(performance.now()-started),queuedBefore:queued,total:current.totalCount,idle:current.idleCount,waiting:current.waitingCount,message:error instanceof Error?error.message:String(error)}));
+    throw error;
+  }
 }
 
 async function runQuery<Row extends pg.QueryResultRow>(
@@ -64,7 +82,9 @@ async function withTransaction<Result>(
   beginStatement: string,
   callback: (executor: DatabaseExecutor) => Promise<Result>,
 ): Promise<Result> {
-  const client = await getPool().connect();
+  const client = await acquirePoolClient();
+  const environment=readSensaApiEnvironment();
+  let destroy=false;
   const executor: DatabaseExecutor = {
     query: <Row extends pg.QueryResultRow>(
       text: string,
@@ -74,6 +94,9 @@ async function withTransaction<Result>(
 
   try {
     await client.query(beginStatement);
+    await client.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$2,true),set_config('idle_in_transaction_session_timeout',$3,true)",[
+      `${environment.DATABASE_STATEMENT_TIMEOUT_MS}ms`,`${environment.DATABASE_LOCK_TIMEOUT_MS}ms`,`${environment.DATABASE_IDLE_TRANSACTION_TIMEOUT_MS}ms`,
+    ]);
     const result = await callback(executor);
     await client.query("COMMIT");
     return result;
@@ -81,6 +104,7 @@ async function withTransaction<Result>(
     try {
       await client.query("ROLLBACK");
     } catch (rollbackError) {
+      destroy=true;
       console.error(JSON.stringify({
         domain: "sensa-api",
         action: "database_rollback_failed",
@@ -89,8 +113,13 @@ async function withTransaction<Result>(
     }
     throw error;
   } finally {
-    client.release();
+    client.release(destroy);
   }
+}
+
+/** Graceful host shutdown and isolated-test cleanup. */
+export async function closeDatabasePool():Promise<void>{
+ const current=pool;pool=undefined;if(current)await current.end();
 }
 
 async function applyScope(

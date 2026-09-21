@@ -12,7 +12,7 @@ const live=process.argv.includes('--live-deepseek'),base=live?'http://127.0.0.1:
 const originalFetch=globalThis.fetch;
 const session=live?await originalFetch(base+'/__sensa_local/session').then(r=>r.json()):{access_token:'fixture',user:{id:'fixture'}};
 Object.assign(globalThis,{indexedDB,window:new EventTarget(),location:{origin:'http://127.0.0.1:9998'},BroadcastChannel:undefined,__agentSession:session});
-const compiled=await build({stdin:{resolveDir:process.cwd(),contents:['store','providers','contentGenerationLoop','backgroundPreparation'].map(name=>`export * from './apps/web/src/data/library/${name}';`).join('\n')},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':JSON.stringify({VITE_SENSA_API_URL:base})},plugins:[{name:'auth',setup(b){b.onLoad({filter:/[/\\]account[/\\]auth\.ts$/},()=>({contents:'export const auth={getSession:async()=>({data:{session:globalThis.__agentSession}})};',loader:'ts'}));}}]});
+const compiled=await build({stdin:{resolveDir:process.cwd(),contents:['store','providers','contentGenerationLoop','backgroundPreparation','speech/defaultProvider'].map(name=>`export * from './apps/web/src/data/library/${name}';`).join('\n')},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':JSON.stringify({VITE_SENSA_API_URL:base})},plugins:[{name:'auth',setup(b){b.onLoad({filter:/[/\\]account[/\\]auth\.ts$/},()=>({contents:'export const auth={getSession:async()=>({data:{session:globalThis.__agentSession}})};',loader:'ts'}));}}]});
 const temp=await mkdtemp(join(tmpdir(),'sensa-agent-'));await writeFile(join(temp,'core.mjs'),compiled.outputFiles[0].text);
 const api=await import(pathToFileURL(join(temp,'core.mjs')).href),id=()=>crypto.randomUUID();
 await api.openLibrary();
@@ -40,11 +40,11 @@ try{
  }else{
   for(const interrupted of [false,true]){
    let turn=0,speechCalls=0,referenceCalls=0,inflight=0,peak=0,checkpoint:any;
+   const restoreSpeech=api.replaceClientSpeechProvider({id:`fixture-${interrupted}`,revision:1,displayName:'Fixture',synthesize:async(input:any)=>{speechCalls++;inflight++;peak=Math.max(peak,inflight);await new Promise(r=>setTimeout(r,5));inflight--;return {...syntheticSound(input.surface,input.languageTag),method:'tts'};}});
    const responses=[[tool('prepare_pronunciation'),tool('lookup_references')],[tool('submit_resources',{resources:[cue,bridge,{...scene,payload:{...scene.payload,example:'I borroweded an umbrella.'}}]})],[tool('validate_resources')],[tool('submit_resources',{resources:[scene]})],[tool('validate_resources')]];
    globalThis.fetch=async(url,options)=>{
-    if(String(url).endsWith('/sensa/speech')||String(url).endsWith('/sensa/resource-facts')){
+    if(String(url).endsWith('/sensa/resource-facts')){
      inflight++;peak=Math.max(peak,inflight);await new Promise(r=>setTimeout(r,5));inflight--;
-     if(String(url).endsWith('/sensa/speech')){speechCalls++;return new Response(JSON.stringify({...syntheticSound('borrow','en'),method:'tts'}));}
      referenceCalls++;return new Response(JSON.stringify({input:JSON.parse(String(options?.body)),references:[]}));
     }
     const body=JSON.parse(String(options?.body));assert(body.tools.length===4);assert(body.messages[1].content.some((p:any)=>p.type==='image_url'&&p.image_url.url===image.dataUrl));
@@ -59,6 +59,7 @@ try{
    assert.deepEqual(bundle.candidates.find((c:any)=>c.materialRoleKey==='experience_recall_cue').contentPayload.images,[image]);
    assert.equal(bundle.candidates.find((c:any)=>c.materialRoleKey==='scene_realization').contentPayload.targetEnd,8);
    assert(bundle.toolCalls.length>=6);assert(checkpoint.history.some((m:any)=>m.role==='tool'&&m.content.includes('target text not found')));
+   restoreSpeech();
   }
   const queue=new api.BackgroundPreparationQueue(2);let active=0,max=0;const released:(()=>void)[]=[];
   const work=()=>new Promise<void>(resolve=>{active++;max=Math.max(max,active);released.push(()=>{active--;resolve();});});

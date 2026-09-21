@@ -44,10 +44,11 @@ const flow=ai.defineFlow('sensa-model-execution',async(meta:{id:string;purpose:M
   return {...meta,finishReason:w.result.finishReason,inputTokens:w.record.inputTokens??0,outputTokens:w.record.outputTokens??0};
  }catch(e){if(e instanceof ModelExecutionError)throw e;const status=apiStatus(e);throw new ModelExecutionError(w.signal.aborted?'model_cancelled':status===401||status===403?'model_auth_failed':status===429?'model_rate_limited':status===400?'model_request_rejected':e instanceof SyntaxError?'model_invalid_response':'model_provider_failed');}
 });
-export async function executeModel(connection:Connection,body:ModelTurnBody,options:{id?:string;purpose:ModelPurpose;signal?:AbortSignal;onText?:(text:string)=>Promise<void>}){
+export async function executeModel(connection:Connection,body:ModelTurnBody,options:{id?:string;purpose:ModelPurpose;signal?:AbortSignal;onText?:(text:string)=>Promise<void>;onExecutionStart?:()=>Promise<void>}){
  const base=new URL(connection.baseUrl);if(base.protocol!=='https:'||base.username||base.password||base.search||base.hash)throw new ModelExecutionError('model_provider_failed');
  const id=options.id??crypto.randomUUID(),provider=base.origin;
  try{return await modelQueue.run({id,provider,model:connection.model,purpose:options.purpose,execution:'service'},options.signal??AbortSignal.timeout(45000),async(signal,record)=>{
+  await options.onExecutionStart?.();
   const work:Work={connection,body,signal,onText:options.onText,record};
   const traced=await context.run(work,()=>flow.run({id,purpose:options.purpose,provider,model:connection.model},{abortSignal:signal}));record.traceId=traced.telemetry.traceId;
   const result=work.result!,parts=result.message!.content;const calls=parts.flatMap(p=>p.toolRequest?[{id:p.toolRequest.ref??crypto.randomUUID(),type:'function' as const,function:{name:p.toolRequest.name,arguments:JSON.stringify(p.toolRequest.input)}}]:[]);

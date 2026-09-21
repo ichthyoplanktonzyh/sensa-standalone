@@ -7,6 +7,7 @@ export * from '../../apps/web/src/data/library/drafts';
 export * from '../../apps/web/src/data/library/packages';
 export * from '../../apps/web/src/data/library/learning';
 export * from '../../apps/web/src/data/library/language';
+export * from '../../apps/web/src/data/library/speech/defaultProvider';
 export * from '../../apps/web/src/data/library/backup';
 export * from '../../apps/web/src/data/library/backupValidation';
 export * from '../../apps/web/src/data/library/backupCodec';

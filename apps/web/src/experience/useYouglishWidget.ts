@@ -1,342 +1,108 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
+
+const channel='sensa.youglish.v1' as const;
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+type BridgeEvent=
+ |{channel:typeof channel;type:'ready'}
+ |{channel:typeof channel;type:'fetched';requestId:string;totalResults:number}
+ |{channel:typeof channel;type:'caption';requestId:string;caption:string|null}
+ |{channel:typeof channel;type:'playing';requestId:string;playing:boolean}
+ |{channel:typeof channel;type:'error';requestId?:string;code:'provider_unavailable'|'invalid_command'};
+const record=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==='object'&&!Array.isArray(value);
+const fields=(value:Record<string,unknown>,count:number)=>Object.keys(value).length===count;
+export function parseYouglishBridgeEvent(value:unknown):BridgeEvent|null{
+ if(!record(value)||value.channel!==channel||typeof value.type!=='string')return null;
+ if(value.type==='ready'&&fields(value,2))return value as BridgeEvent;
+ if(value.type==='error'&&(value.code==='provider_unavailable'||value.code==='invalid_command')&&(value.requestId===undefined?fields(value,3):fields(value,4)&&typeof value.requestId==='string'&&uuid.test(value.requestId)))return value as BridgeEvent;
+ const requestId=value.requestId;if(typeof requestId!=='string'||!uuid.test(requestId))return null;
+ if(value.type==='fetched'&&fields(value,4)&&Number.isInteger(value.totalResults)&&Number(value.totalResults)>=0&&Number(value.totalResults)<=100000)return value as BridgeEvent;
+ if(value.type==='caption'&&fields(value,4)&&(value.caption===null||typeof value.caption==='string'&&value.caption.length<=4000))return value as BridgeEvent;
+ if(value.type==='playing'&&fields(value,4)&&typeof value.playing==='boolean')return value as BridgeEvent;
+ return null;
+}
+
+export type YouglishStatus='idle'|'loading'|'ready'|'empty'|'error';
+export interface YouglishWidgetHandle {
+ status:YouglishStatus;totalResults:number;caption:string|null;isPlaying:boolean;
+ toggle():void;move(seconds:number):void;replay():void;next():void;previous():void;setSpeed(rate:number):void;
+}
+interface UseYouglishWidgetOptions {
+ mountRef:React.RefObject<HTMLDivElement|null>;query:string|undefined;lang:string;accent?:string;components?:number;active:boolean;
+}
+
+function integrationEndpoint(){
+ const configured=import.meta.env.VITE_SENSA_YOUGLISH_ORIGIN as string|undefined;
+ if(!configured)return null;
+ try{
+  const endpoint=new URL(configured,location.origin);
+  if(endpoint.origin===location.origin)return null;
+  endpoint.pathname='/youglish-player.html';
+  endpoint.search='';endpoint.hash='';
+  return endpoint;
+ }catch{return null;}
+}
 
 /**
- * Drives one embedded YouGlish widget.
- *
- * YouGlish owns the player. We hand it a single word and it streams real spoken
- * occurrences of that word from across YouTube, one track after another. Unlike
- * the Sensa variant we do not own the media window, the timeline or the caption
- * layout — the widget is a black box that we create, point at a word, and step
- * through with its own API.
- *
- * The widget searches by surface string, so it is sense-agnostic by nature.
- * That is exactly why it is kept as the YouGlish baseline: it shows what raw
- * YouGlish gives for a word, against which the sense-filtered Sensa variant is
- * judged. This hook never claims a Sense assignment for what it plays.
+ * Controls a dedicated-origin player iframe. YouGlish code never executes in the
+ * Sensa document; this hook accepts messages only from that exact iframe and
+ * exact origin, then validates the complete protocol before updating UI state.
  */
+export const useYouglishWidget=({mountRef,query,lang,accent,components=8,active}:UseYouglishWidgetOptions):YouglishWidgetHandle=>{
+ const endpoint=useMemo(integrationEndpoint,[]);
+ const iframeRef=useRef<HTMLIFrameElement|null>(null);
+ const requestRef=useRef<string|null>(null);
+ const playingRef=useRef(false);
+ const [bridgeReady,setBridgeReady]=useState(false);
+ const [status,setStatus]=useState<YouglishStatus>('idle');
+ const [totalResults,setTotalResults]=useState(0);
+ const [caption,setCaption]=useState<string|null>(null);
+ const [isPlaying,setIsPlaying]=useState(false);
 
-type YouglishWidget = {
-  fetch(query: string, lang: string, accent?: string): void;
-  play(): void;
-  pause(): void;
-  replay(): void;
-  /** Move the playhead by a signed number of seconds within the video. */
-  move(seconds: number): void;
-  next(): void;
-  previous(): void;
-  setSpeed(rate: number): void;
-  close(): void;
-};
+ const post=useCallback((message:Record<string,unknown>)=>{
+  const frame=iframeRef.current;if(!frame||!endpoint)return;
+  frame.contentWindow?.postMessage({channel,...message},endpoint.origin);
+ },[endpoint]);
 
-/** YouGlish player states, from the onPlayerStateChange event. */
-const PLAYER_STATE_PLAYING = 1;
+ useEffect(()=>{
+  if(!active)return;
+  const host=mountRef.current;
+  if(!host||!endpoint){setStatus('error');return;}
+  const frame=document.createElement('iframe');
+  frame.src=endpoint.href;
+  frame.title='YouGlish isolated player';
+  frame.referrerPolicy='no-referrer';
+  frame.setAttribute('sandbox','allow-scripts allow-same-origin allow-presentation');
+  frame.setAttribute('allow','autoplay; fullscreen');
+  host.appendChild(frame);iframeRef.current=frame;setStatus('loading');
+  const onMessage=(event:MessageEvent)=>{
+   if(event.source!==frame.contentWindow||event.origin!==endpoint.origin)return;
+   const message=parseYouglishBridgeEvent(event.data);if(!message)return;
+   if(message.type==='ready'){setBridgeReady(true);return;}
+   if(message.requestId&&message.requestId!==requestRef.current)return;
+   if(message.type==='fetched'){setTotalResults(message.totalResults);setStatus(message.totalResults?'ready':'empty');}
+   else if(message.type==='caption')setCaption(message.caption);
+   else if(message.type==='playing'){playingRef.current=message.playing;setIsPlaying(message.playing);}
+   else if(message.type==='error')setStatus('error');
+  };
+  window.addEventListener('message',onMessage);
+  const timer=window.setTimeout(()=>setStatus(value=>value==='loading'?'error':value),10000);
+  return ()=>{window.clearTimeout(timer);window.removeEventListener('message',onMessage);iframeRef.current=null;frame.remove();requestRef.current=null;setBridgeReady(false);};
+ },[active,endpoint,mountRef]);
 
-interface WidgetEvent {
-  totalResult?: number;
-  video?: string;
-  trackNumber?: number;
-  caption?: string;
-  state?: number;
-  code?: number;
-}
+ useEffect(()=>{
+  if(!active||!bridgeReady||!query)return;
+  const id=crypto.randomUUID();requestRef.current=id;setStatus('loading');setCaption(null);setTotalResults(0);playingRef.current=false;setIsPlaying(false);
+  post({type:'configure',requestId:id,query,lang,...(accent?{accent}:{}),components});
+  const timer=window.setTimeout(()=>setStatus(value=>value==='loading'?'error':value),15000);
+  return ()=>window.clearTimeout(timer);
+ },[active,bridgeReady,query,lang,accent,components,post]);
 
-declare global {
-  interface Window {
-    YG?: {
-      Widget: new (element: HTMLElement | string, options: unknown) => YouglishWidget;
-    };
-    onYouglishAPIReady?: () => void;
-  }
-}
-
-const API_SRC = 'https://youglish.com/public/emb/widget.js';
-const API_TIMEOUT_MS = 8000;
-
-let apiPromise: Promise<NonNullable<Window['YG']>> | null = null;
-
-/** Load the widget API once per document, and give up rather than hang. */
-const loadYouglishApi = (): Promise<NonNullable<Window['YG']>> => {
-  if (apiPromise) return apiPromise;
-
-  apiPromise = new Promise((resolve, reject) => {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      reject(new Error('No document'));
-      return;
-    }
-    if (window.YG?.Widget) {
-      resolve(window.YG);
-      return;
-    }
-
-    const timer = window.setTimeout(
-      () => reject(new Error('YouGlish widget API timed out')),
-      API_TIMEOUT_MS,
-    );
-    // The API announces itself through a single global callback. Chain any
-    // existing one so a second consumer on the page is not silently dropped.
-    const previous = window.onYouglishAPIReady;
-    window.onYouglishAPIReady = () => {
-      window.clearTimeout(timer);
-      previous?.();
-      if (window.YG?.Widget) resolve(window.YG);
-      else reject(new Error('YouGlish API loaded without a Widget'));
-    };
-
-    if (!document.querySelector(`script[src="${API_SRC}"]`)) {
-      const script = document.createElement('script');
-      script.src = API_SRC;
-      script.async = true;
-      script.onerror = () => {
-        window.clearTimeout(timer);
-        reject(new Error('YouGlish widget API failed to load'));
-      };
-      document.head.appendChild(script);
-    }
-  });
-
-  apiPromise = apiPromise.catch(error => {
-    apiPromise = null;
-    document.querySelector(`script[src="${API_SRC}"]`)?.remove();
-    throw error;
-  });
-  return apiPromise;
-};
-
-export type YouglishStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
-
-export interface YouglishWidgetHandle {
-  status: YouglishStatus;
-  /** Total tracks the current word returned. */
-  totalResults: number;
-  /** Caption of the line now voiced, decoded; target terms in `[[[ ]]]`. */
-  caption: string | null;
-  /** Whether the player is currently playing, for the play/pause control. */
-  isPlaying: boolean;
-  /** Play or pause the current track. */
-  toggle(): void;
-  /** Nudge the playhead by a signed number of seconds (e.g. -5, +5). */
-  move(seconds: number): void;
-  /** Restart the current occurrence from the top. */
-  replay(): void;
-  /** Step to the next / previous occurrence (track). */
-  next(): void;
-  previous(): void;
-  setSpeed(rate: number): void;
-}
-
-interface UseYouglishWidgetOptions {
-  /** Container the widget mounts into. */
-  mountRef: React.RefObject<HTMLDivElement | null>;
-  /** The word to search. Sense-agnostic: only the surface form is used. */
-  query: string | undefined;
-  /** The language the clips must be in, named the way the provider names it.
-   * Required: the provider defaults to English, which is the one answer that is
-   * wrong for every learner who is not studying English. */
-  lang: string;
-  accent?: string;
-  /**
-   * YouGlish component bitmask. Bit 0 (1) is their search box, bit 3 (8) is the
-   * caption. We default to 8 — player + caption only — so their search box and
-   * promo chrome give way to our own picker and controls.
-   */
-  components?: number;
-  /** Create/keep the widget only while the screen is visible. */
-  active: boolean;
-}
-
-export const useYouglishWidget = ({
-  mountRef,
-  query,
-  lang,
-  accent,
-  components = 8,
-  active,
-}: UseYouglishWidgetOptions): YouglishWidgetHandle => {
-  const [status, setStatus] = useState<YouglishStatus>('idle');
-  const [totalResults, setTotalResults] = useState(0);
-  const [caption, setCaption] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [ready, setReady] = useState(false);
-
-  const widgetRef = useRef<YouglishWidget | null>(null);
-  // Mirror of isPlaying so the play/pause toggle reads the latest value without
-  // being re-created — and re-bound to the button — on every state change.
-  const isPlayingRef = useRef(false);
-  // The widget outlives every effect re-run; its event handlers must keep
-  // firing across word and accent changes. Gate them on real unmount only,
-  // never on an effect's own cleanup, or a re-render would deafen the widget.
-  const mountedRef = useRef(true);
-
-  // Re-arm on every mount so a StrictMode unmount/remount (or any remount) does
-  // not leave the flag stuck false and permanently deafen a fresh widget.
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  // Create the widget once, the first time the screen is active with a slot to
-  // mount into. Media only loads for learners who open the YouGlish variant.
-  // `query` is deliberately not a dependency: switching words must re-fetch on
-  // the existing widget, not tear this effect down and silence its handlers.
-  useEffect(() => {
-    if (!active || widgetRef.current) return;
-    const host = mountRef.current;
-    if (!host) return;
-
-    let disposed = false;
-    setStatus('loading');
-
-    loadYouglishApi()
-      .then((YG) => {
-        if (disposed || !mountedRef.current || widgetRef.current || !host) return;
-        // The API replaces the element it is handed. Mount into a node React
-        // does not own so unmounting will not race the swap. The widget (v4.3)
-        // resolves its host by id, so the inner node must carry one.
-        const inner = document.createElement('div');
-        inner.id = `yg-widget-${Math.random().toString(36).slice(2)}`;
-        host.appendChild(inner);
-        // The widget takes a fixed pixel width; match the phone-sized card so
-        // it neither overflows nor leaves a gutter.
-        const width = Math.round(host.clientWidth) || 360;
-        widgetRef.current = new YG.Widget(inner.id, {
-          width,
-          // Widget 4.3 replaces numeric 0 with its default mask (255).
-          // A string zero survives that truthiness check and emits e_comp=0.
-          components: components === 0 ? '0' : components,
-          events: {
-            onFetchDone: (event: WidgetEvent) => {
-              if (!mountedRef.current) return;
-              const total = event.totalResult ?? 0;
-              setTotalResults(total);
-              setStatus(total > 0 ? 'ready' : 'empty');
-            },
-            onCaptionChange: (event: WidgetEvent) => {
-              if (!mountedRef.current) return;
-              // The caption arrives URL-encoded (spaces as %20, the [[[ ]]]
-              // markers as %5B/%5D); decode before it is rendered.
-              let text = event.caption ?? null;
-              if (text) {
-                try {
-                  text = decodeURIComponent(text);
-                } catch {
-                  // Leave a malformed caption as-is rather than dropping it.
-                }
-              }
-              setCaption(text);
-            },
-            onPlayerStateChange: (event: WidgetEvent) => {
-              if (!mountedRef.current) return;
-              const playing = event.state === PLAYER_STATE_PLAYING;
-              isPlayingRef.current = playing;
-              setIsPlaying(playing);
-            },
-            onError: () => {
-              if (mountedRef.current) setStatus('error');
-            },
-          },
-        });
-        if (mountedRef.current) setReady(true);
-      })
-      .catch(() => {
-        if (!disposed && mountedRef.current) setStatus('error');
-      });
-
-    return () => {
-      disposed = true;
-    };
-  }, [active, components, mountRef]);
-
-  // Point the widget at the current word whenever it (or the accent) changes.
-  useEffect(() => {
-    if (!ready || !query || !widgetRef.current) return;
-    setStatus('loading');
-    setCaption(null);
-    setTotalResults(0);
-    try {
-      widgetRef.current.fetch(query, lang, accent);
-    } catch {
-      setStatus('error');
-    }
-  }, [ready, query, lang, accent]);
-
-  // Provider fetches can stall even after the API script has loaded.
-  useEffect(() => {
-    if (status !== 'loading') return;
-    const timer = window.setTimeout(() => setStatus(current => current === 'loading' ? 'error' : current), 15000);
-    return () => window.clearTimeout(timer);
-  }, [status, query, accent]);
-
-  // Stop audio when the screen is not visible; keep the widget for re-entry.
-  useEffect(() => {
-    if (!active) {
-      try {
-        widgetRef.current?.pause();
-      } catch {
-        // Nothing to pause if the widget never came up.
-      }
-    }
-  }, [active]);
-
-  // Tear the widget down on unmount so the iframe does not linger.
-  useEffect(() => () => {
-    try {
-      widgetRef.current?.close();
-    } catch {
-      // Ignore teardown races; the node is being removed anyway.
-    }
-    widgetRef.current = null;
-  }, []);
-
-  const next = useCallback(() => {
-    try {
-      widgetRef.current?.next();
-    } catch {
-      // The widget may not be ready yet; the button is a no-op until it is.
-    }
-  }, []);
-
-  const previous = useCallback(() => {
-    try {
-      widgetRef.current?.previous();
-    } catch {
-      // Same.
-    }
-  }, []);
-
-  const replay = useCallback(() => {
-    try {
-      widgetRef.current?.replay();
-    } catch {
-      // Same.
-    }
-  }, []);
-
-  const toggle = useCallback(() => {
-    try {
-      if (isPlayingRef.current) widgetRef.current?.pause();
-      else widgetRef.current?.play();
-    } catch {
-      // Same.
-    }
-  }, []);
-
-  const move = useCallback((seconds: number) => {
-    try {
-      widgetRef.current?.move(seconds);
-    } catch {
-      // Same.
-    }
-  }, []);
-
-  const setSpeed = useCallback((rate: number) => {
-    try {
-      widgetRef.current?.setSpeed(rate);
-    } catch {
-      // Same.
-    }
-  }, []);
-
-  return { status, totalResults, caption, isPlaying, toggle, move, replay, next, previous, setSpeed };
+ const command=useCallback((name:string,value?:number)=>{const id=requestRef.current;if(id)post({type:'command',requestId:id,command:name,...(value===undefined?{}:{value})});},[post]);
+ const next=useCallback(()=>command('next'),[command]);
+ const previous=useCallback(()=>command('previous'),[command]);
+ const replay=useCallback(()=>command('replay'),[command]);
+ const move=useCallback((seconds:number)=>command('move',seconds),[command]);
+ const setSpeed=useCallback((rate:number)=>command('setSpeed',rate),[command]);
+ const toggle=useCallback(()=>command(playingRef.current?'pause':'play'),[command]);
+ return {status,totalResults,caption,isPlaying,toggle,move,replay,next,previous,setSpeed};
 };

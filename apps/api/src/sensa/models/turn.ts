@@ -11,7 +11,15 @@ import {executeModel} from './executor.js';
 type Input=z.infer<typeof modelTurnInputSchema>;
 type Connection=Parameters<ReadingCompletion>[0];
 type TextDelta=(text:string)=>Promise<void>;
-export type ModelTurnCompletion=(connection:Connection,body:Input['body'],signal:AbortSignal,meta:{id:string;purpose:Input['purpose']},onText?:TextDelta)=>Promise<unknown>;
+type ModelTurnExecutionLease=Readonly<{
+ kind:'execute';connection:Connection;
+ markRunning:()=>Promise<void>;
+ succeed:(response:unknown)=>Promise<void>;
+ failBeforeExecution:(code:string)=>Promise<void>;
+ failAfterExecution:(code:string,unknown:boolean)=>Promise<void>;
+}>;
+export type ModelTurnReservation=ModelTurnExecutionLease|Readonly<{kind:'replay';response:unknown}>;
+export type ModelTurnCompletion=(connection:Connection,body:Input['body'],signal:AbortSignal,meta:{id:string;purpose:Input['purpose'];onExecutionStart:()=>Promise<void>},onText?:TextDelta)=>Promise<unknown>;
 
 async function digest(value:unknown){
   const bytes=new TextEncoder().encode(canonicalConsumerJson(value));
@@ -25,7 +33,7 @@ export const completeModelTurn:ModelTurnCompletion=(connection,body,signal,meta,
       :meta.purpose==='reference'?process.env.SENSA_REFERENCE_MODEL??process.env.SENSA_SEMANTIC_MODEL
       :process.env.SENSA_SEMANTIC_MODEL)
     :undefined;
-  return executeModel({...connection,model:model??connection.model},body,{signal,id:meta.id,purpose:meta.purpose,onText});
+  return executeModel({...connection,model:model??connection.model},body,{signal,id:meta.id,purpose:meta.purpose,onText,onExecutionStart:meta.onExecutionStart});
 };
 
 /** Tool exposure per purpose. A purpose absent here is a bug, not a permissive default. */
@@ -38,7 +46,7 @@ const purposeTools:Record<Input['purpose'],string[]>={
 
 export function createModelTurnRoutes(options:{
   authorize:(request:Request)=>Promise<{select:(purpose:Input['purpose'])=>Connection}>;
-  reserve:(request:Request,input:{id:string;inputDigest:string;purpose:Input['purpose']})=>Promise<void>;
+  reserve:(request:Request,input:{id:string;inputDigest:string;purpose:Input['purpose']},select:()=>Connection)=>Promise<ModelTurnReservation>;
   complete?:ModelTurnCompletion;
 }){
   const app=new Hono();
@@ -57,24 +65,37 @@ export function createModelTurnRoutes(options:{
     const names=input.body.tools?.map(tool=>tool.function.name)??[];
     const allowed=purposeTools[input.purpose];
     if(names.some(name=>!allowed.includes(name))||new Set(names).size!==names.length)throw new ConsumerError(400,'unapproved_tool');
-    await options.reserve(request,input);
-    return {input,scope};
+    const reservation=await options.reserve(request,input,()=>scope.select(input.purpose));
+    return {input,reservation};
   };
 
   const run=async(request:Request,prepared:Awaited<ReturnType<typeof prepare>>,onText?:TextDelta)=>{
-    const {input,scope}=prepared;
-    const connection=scope.select(input.purpose);
+    const {input,reservation}=prepared;
+    if(reservation.kind==='replay')return {id:input.id,inputDigest:input.inputDigest,response:reservation.response};
     const controller=new AbortController();
     const abort=()=>controller.abort();
     request.signal.addEventListener('abort',abort);
     if(request.signal.aborted)abort();
     const timer=setTimeout(abort,45000);
+    let started=false,finalized=false;
+    const failureCode=(error:unknown)=>error instanceof ConsumerError?error.code:error instanceof Error&&/^(?:model|provider)_[a-z_]+$/u.test(error.message)?error.message:'provider_unavailable';
     try{
       if(controller.signal.aborted)throw new ConsumerError(503,'provider_timeout');
-      const response=await (options.complete??completeModelTurn)(connection,input.body,controller.signal,{id:input.id,purpose:input.purpose},onText);
+      const response=await (options.complete??completeModelTurn)(reservation.connection,input.body,controller.signal,{id:input.id,purpose:input.purpose,onExecutionStart:async()=>{await reservation.markRunning();started=true;}},onText);
+      if(!started)throw new ConsumerError(503,'model_execution_not_started');
       if(controller.signal.aborted)throw new ConsumerError(503,'provider_timeout');
+      await reservation.succeed(response);finalized=true;
       await options.authorize(request);
       return {id:input.id,inputDigest:input.inputDigest,response};
+    }catch(error){
+      if(!finalized){
+       const code=failureCode(error);
+       try{
+        if(started)await reservation.failAfterExecution(code,!['model_auth_failed','model_rate_limited','model_request_rejected','model_invalid_response'].includes(code));
+        else await reservation.failBeforeExecution(code);
+       }catch(stateError){console.error(JSON.stringify({event:'sensa.model_request_state_failed',message:stateError instanceof Error?stateError.message:String(stateError)}));}
+      }
+      throw error;
     }finally{
       clearTimeout(timer);
       request.signal.removeEventListener('abort',abort);

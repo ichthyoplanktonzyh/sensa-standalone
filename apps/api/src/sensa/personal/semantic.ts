@@ -20,7 +20,9 @@ export async function beginLookup(db:DatabaseExecutor,a:Scope,input:SemanticLook
   focus={id:crypto.randomUUID(),constructionId:previous.focus?.constructionId??crypto.randomUUID(),previousLookupId:previous.id,text:input.clarification.text};
  }
 
- const count=(await db.query('SELECT ((SELECT count(*) FROM sensa_consumer.semantic_lookups WHERE learner_user_id=$1 AND created_at>$3)+(SELECT count(*) FROM sensa_consumer.native_semantic_usage WHERE account_id=$2 AND created_at>$3))::int AS n',[a.learner_user_id,a.account_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
+ const count=(await db.query(`SELECT ((SELECT count(*) FROM sensa_consumer.semantic_lookups WHERE learner_user_id=$1 AND created_at>$3)+
+   (SELECT count(*) FROM sensa_consumer.model_requests WHERE account_id=$2 AND budget_kind='semantic' AND
+    ((state='reserved' AND reserved_at>$3) OR (state IN ('running','succeeded','failed_after_execution','execution_unknown') AND execution_started_at>$3))))::int AS n`,[a.learner_user_id,a.account_id,new Date(a.now.getTime()-86400000)])).rows[0]!.n;
  if(process.env.SENSA_UNLIMITED_MODEL_USAGE!=='true'&&count>=30)throw new ConsumerError(409,'semantic_daily_budget');
  const row=(await db.query("INSERT INTO sensa_consumer.semantic_lookups(id,learner_user_id,input_digest,snapshot,status,created_at,expires_at,meaning_focus) VALUES($1,$2,$3,$4::jsonb,'running',$5,$6,$7::jsonb) RETURNING *",[input.id,a.learner_user_id,digest,JSON.stringify(input.snapshot),a.now,new Date(a.now.getTime()+86400000),focus?JSON.stringify(focus):null])).rows[0]!;
  if(focus)await db.query("UPDATE sensa_consumer.semantic_lookups SET status='failed',reason='superseded' WHERE learner_user_id=$1 AND id=$2",[a.learner_user_id,focus.previousLookupId]);
