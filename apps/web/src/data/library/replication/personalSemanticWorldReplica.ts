@@ -1,4 +1,5 @@
 import type {DomainReplicaModule,ReplicaRecordReference} from './domainReplica';
+import {mergePersonalSemanticWorldReplica,requiresPersonalSemanticWorldTombstone} from './personalSemanticWorldMerge';
 
 const tables=new Set([
  'drafts','sessions','meanings','identities',
@@ -52,10 +53,14 @@ export const personalSemanticWorldReplica:DomainReplicaModule={
  owns:(table)=>tables.has(table),
  normalize(entry){
   if(entry.table!=='sessions')return entry;
-  const value=structuredClone(entry.value) as {status?:string;lease?:unknown};
-  if(value.status==='inflight'){value.status='stopped';value.lease=null;}
+  const value=structuredClone(entry.value) as {status?:string;lease?:unknown;revision?:number};
+  if(value.status==='inflight'){
+   value.status='stopped';value.lease=null;
+   if(Number.isSafeInteger(value.revision))value.revision=(value.revision??0)+1;
+  }
   return {...entry,value};
  },
+ merge(input,ordinary){return mergePersonalSemanticWorldReplica(input,ordinary);},
  conflictDependencies(entry,value){
   const fact=record(value);
   if(entry.table==='sessions')return [
@@ -91,5 +96,8 @@ export const personalSemanticWorldReplica:DomainReplicaModule={
   if(entry.table==='semanticMeanings')return meaningDependencies(value);
   if(entry.table==='semanticRegistry')return registryDependencies(value);
   return [];
+ },
+ assertDelete(entry){
+  if(requiresPersonalSemanticWorldTombstone(entry))throw new Error('library_sync_tombstone_required');
  },
 };

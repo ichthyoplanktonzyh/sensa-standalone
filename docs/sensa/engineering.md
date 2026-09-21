@@ -107,7 +107,11 @@ Semantic World、Learning System、Content Supply、Learner Artifact 和 Prefere
 中央同步器不再按领域表名实施策略。Learning Replica 对 Run/Event/Reconciliation history 只追加并拒绝
 通用物理删除；同步和手动备份通过同一领域验证入口核对历史与派生投影。冲突闭包同样只采用各领域
 Replica Module 显式声明的记录依赖；learner prose 和其他任意字符串保持 opaque，不能通过 UUID 猜测
-扩大冲突范围。
+扩大冲突范围。Personal Semantic World 使用专用三方 merge：不可变 facts 按稳定 identity 合并，
+同一 revision 槽分叉和 delete-vs-edit 停为冲突；其 v3 facts / v5 Journey store 用单调 lifecycle revision、
+删除 operation 与时间保存 tombstone，稳定语义记录不允许以缺行表达删除。手动备份恢复也通过同一
+Replica Module 的 normalize/restore seam，不另写领域状态修复分支。具体规则见
+[ADR 0007](../adr/0007-personal-semantic-world-revision-merge.md)。
 新 Checkpoint 成功提交后，服务端只回收旧清单曾引用且新清单不再引用的块；另一设备尚未提交的上传
 不在这次回收范围内。
 

@@ -35,7 +35,7 @@ import type {
 } from '@sensa/contracts/sensa';
 import type { ClarificationStartingPoint } from './semanticAgent';
 
-export const JOURNEY_STORE_VERSION = 'sensa-personal-meaning-journey-store-v4';
+export const JOURNEY_STORE_VERSION = 'sensa-personal-meaning-journey-store-v5';
 
 /** Recoverable adapter state; none of these values are domain facts. */
 export interface JourneyMockState {

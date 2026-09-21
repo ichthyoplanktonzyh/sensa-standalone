@@ -137,11 +137,11 @@ database.commit({
   clears: [],
   deletes: [],
   puts: [
-    { table: 'semanticState', key: 'root', encodedValue: '{"version":"sensa-personal-meaning-journey-store-v4"}' },
+    { table: 'semanticState', key: 'root', encodedValue: '{"version":"sensa-personal-meaning-journey-store-v5"}' },
     { table: 'media', key: crypto.randomUUID(), encodedValue: '{"mediaKind":"image"}' },
   ],
 });
-assert.equal(database.get('semanticState', 'root'), '{"version":"sensa-personal-meaning-journey-store-v4"}');
+assert.equal(database.get('semanticState', 'root'), '{"version":"sensa-personal-meaning-journey-store-v5"}');
 database.commit({
   contentRevision: 1,
   clears: [],

@@ -100,7 +100,7 @@ import type {
   ReviseContextResult,
 } from './types';
 
-const PSW = 'sensa-personal-semantic-world-v2' as const;
+const PSW = 'sensa-personal-semantic-world-v3' as const;
 const REG = 'sensa-semantic-registry-v1' as const;
 const SPEC_SCHEMA = 'sensa-sense-semantic-spec-v1' as const;
 const LEARNER_USER_ID = 'sensa-local-learner';
@@ -699,10 +699,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       personalSemanticAnchorId: anchorId,
       personalMeaningId: record.personalMeaning.personalMeaningId,
       currentRevision: 1,
+      lifecycleRevision: 1,
       status: 'active',
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
+      deletedByOperationId: null,
     });
     record.personalSemanticAnchorRevisions.push({
       contractVersion: PSW,
@@ -891,10 +893,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
         personalMeaningId,
         learnerUserId: LEARNER_USER_ID,
         currentRevision: 1,
+        lifecycleRevision: 1,
         status: 'active',
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
+        deletedByOperationId: null,
       },
       personalMeaningRevisions: [],
       personalSemanticAnchors: [],
@@ -925,10 +929,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
         personalExpressionAnchorId: familiarExpressionAnchorId,
         personalMeaningId,
         currentRevision: 1,
+        lifecycleRevision: 1,
         status: 'active',
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
+        deletedByOperationId: null,
       });
       record.personalExpressionAnchorRevisions.push({
         contractVersion: PSW,
@@ -987,10 +993,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
         personalExpressionAnchorId: anchorId,
         personalMeaningId,
         currentRevision: 1,
+        lifecycleRevision: 1,
         status: 'active',
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
+        deletedByOperationId: null,
       });
       record.personalExpressionAnchorRevisions.push({
         contractVersion: PSW,
@@ -1098,8 +1106,10 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
         .filter((anchor) => anchor.status === 'active')
         .forEach((anchor) => {
           anchor.status = 'deleted';
+          anchor.lifecycleRevision += 1;
           anchor.updatedAt = now;
           anchor.deletedAt = now;
+          anchor.deletedByOperationId = input.operationId;
         });
       const anchorIds = input.blocks.map((block) => this.appendMaterialAnchor(
         record,
@@ -1207,10 +1217,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
         splitFromMeaningFocusId: null,
         currentRevision: 1,
         acceptedRevision: 1,
+        lifecycleRevision: 1,
         status: 'active',
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
+        deletedByOperationId: null,
       });
       record.focusRevisions.push({
         contractVersion: PSW,
@@ -1853,10 +1865,12 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
         personalExpressionAnchorId: anchorId,
         personalMeaningId: record.personalMeaning.personalMeaningId,
         currentRevision: 1,
+        lifecycleRevision: 1,
         status: 'active',
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
+        deletedByOperationId: null,
       };
       anchorRevision = {
         contractVersion: PSW,

@@ -73,7 +73,9 @@ Personal Meaning 是稳定的 learner-owned identity，表示 learner 直接或�
 闭合并被有效接受后才创建正式 membership。入口不决定是否进入正式学习。
 
 删除或修改锚点不能悄悄替换 Personal Meaning identity。Sense 对齐、学习开始或内容更新也不能覆盖
-它的原始个人来源。
+它的原始个人来源。删除稳定 identity 必须保留 Personal Semantic Tombstone、已有 revisions 与
+provenance，不能通过物理移除记录表达。离线旧副本不得让 tombstone 对象复活；删除与同一对象的并发
+编辑必须成为显式冲突，而不是依赖设备时间戳选择一端。
 
 ### Meaning Focus
 
@@ -419,6 +421,8 @@ Intake/Construction draft 可以长期保持未确认 Sense 或没有自然的�
 - 远程投递的 `queued` 与本地提交的 `applied` 是两个事实；不得把邮箱入队、设备间 Sync
   收敛或尚未验证的上传宣称为本地已保存或可恢复备份；
 - Personal Meaning、Sense 与 Expression 保持不同 identity；
+- Personal Semantic World 的稳定 identity 以 revisioned tombstone 表达删除；同一 revision 槽分叉、
+  删除与同一对象的并发编辑必须停止为冲突，独立子对象的不可变事实追加才可自动合并；
 - Meaning Focus 是可选解析桥梁，不是 Personal Meaning、Alignment 或快轨的必要字段；不得从 Sense
   definition 合成伪 Focus，也不得为快轨伪造零轮 Sense Construction/Proposal 链；
 - LLM 提议本身不是 learner 意图；受授权 Agent 的 commit operation 可以表达 delegated learner

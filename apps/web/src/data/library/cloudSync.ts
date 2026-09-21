@@ -241,7 +241,7 @@ export async function synchronizeLibrary(request:SyncRequest){
  }catch(error){const message=error instanceof Error?error.message:'library_sync_failed';
   await saveState(expected,old=>{const state=old??defaults;
    if(message==='library_sync_local_changed')return {...state,status:'pending',syncStartedAt:undefined,error:message,failureKind:undefined,retryCount:undefined,retryAt:undefined};
-   if(['library_sync_conflict','library_sync_identity','library_sync_history','libraryBackup.errors.inconsistent'].includes(message))return {...state,status:'conflict',syncStartedAt:undefined,error:message,failureKind:undefined,retryCount:undefined,retryAt:undefined};
+   if(['library_sync_conflict','library_sync_identity','library_sync_history','library_sync_tombstone_required','libraryBackup.errors.inconsistent'].includes(message))return {...state,status:'conflict',syncStartedAt:undefined,error:message,failureKind:undefined,retryCount:undefined,retryAt:undefined};
    return {...state,...cloudSyncFailurePolicy(message,navigator.onLine,state.retryCount),syncStartedAt:undefined,error:message};
   }).catch(()=>{});
   throw error;

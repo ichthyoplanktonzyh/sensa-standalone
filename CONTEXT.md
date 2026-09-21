@@ -636,6 +636,12 @@ Expression and its stable Sense relationship; an optional Meaning Focus may expl
 how an ambiguous Context was resolved. It can explicitly bridge a confirmed target
 into Curriculum, but is neither a learning prerequisite nor a progress owner.
 
+**Personal Semantic Tombstone**:
+A durable lifecycle fact marking a Personal Semantic World identity as deleted while
+retaining its revisions and provenance. It prevents an offline older replica from
+resurrecting the identity and does not cascade into Learning or published content.
+_Avoid_: Physical deletion, last-write-wins deletion
+
 **Personal Content**:  
 The learner-owned references, annotations and organization they intentionally
 create. It excludes inferred progress, activity history and semantic projections.

@@ -6,7 +6,7 @@ import {
 import {sensaPinnedLanguageContextSchema} from './language.js';
 
 export const sensaPersonalSemanticWorldContractVersion =
-  "sensa-personal-semantic-world-v2" as const;
+  "sensa-personal-semantic-world-v3" as const;
 
 const uuid = z.string().uuid();
 const nonEmpty = z.string().trim().min(1);
@@ -17,6 +17,30 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const jsonObject = z.record(z.string(), z.unknown());
 
 export const sensaPersonalRecordStatusSchema = z.enum(["active", "deleted"]);
+
+const personalLifecycleShape = {
+  lifecycleRevision: positiveInteger,
+  status: sensaPersonalRecordStatusSchema,
+  deletedAt: timestamp.nullable(),
+  deletedByOperationId: uuid.nullable(),
+};
+
+const validatePersonalLifecycle = (
+  value: {
+    status: "active" | "deleted";
+    deletedAt: string | null;
+    deletedByOperationId: string | null;
+  },
+  context: z.RefinementCtx,
+) => {
+  const deleted = value.status === "deleted";
+  if (deleted !== (value.deletedAt !== null) || deleted !== (value.deletedByOperationId !== null)) {
+    context.addIssue({
+      code: "custom",
+      message: "personal lifecycle tombstone fields must agree with status",
+    });
+  }
+};
 
 export const sensaPersonalProvenanceKindSchema = z.enum([
   "learner_authored",
@@ -156,12 +180,12 @@ export const sensaPersonalMeaningSnapshotSchema = z
     personalMeaningId: uuid,
     learnerUserId: nonEmpty,
     currentRevision: positiveInteger,
-    status: sensaPersonalRecordStatusSchema,
+    ...personalLifecycleShape,
     createdAt: timestamp,
     updatedAt: timestamp,
-    deletedAt: timestamp.nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine(validatePersonalLifecycle);
 
 export const sensaPersonalMeaningRevisionSnapshotSchema = z
   .object({
@@ -184,12 +208,12 @@ export const sensaMeaningFocusSnapshotSchema = z
     splitFromMeaningFocusId: uuid.nullable(),
     currentRevision: positiveInteger,
     acceptedRevision: positiveInteger.nullable(),
-    status: sensaPersonalRecordStatusSchema,
+    ...personalLifecycleShape,
     createdAt: timestamp,
     updatedAt: timestamp,
-    deletedAt: timestamp.nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine(validatePersonalLifecycle);
 
 export const sensaMeaningFocusRevisionSnapshotSchema = z
   .object({
@@ -224,11 +248,11 @@ export const sensaPersonalMediaObjectSnapshotSchema = z
     mimeType: nonEmpty,
     sizeBytes: nonNegativeInteger,
     sha256: digest,
-    status: sensaPersonalRecordStatusSchema,
+    ...personalLifecycleShape,
     createdAt: timestamp,
-    deletedAt: timestamp.nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine(validatePersonalLifecycle);
 
 export const sensaPersonalSemanticAnchorSnapshotSchema = z
   .object({
@@ -236,12 +260,12 @@ export const sensaPersonalSemanticAnchorSnapshotSchema = z
     personalSemanticAnchorId: uuid,
     personalMeaningId: uuid,
     currentRevision: positiveInteger,
-    status: sensaPersonalRecordStatusSchema,
+    ...personalLifecycleShape,
     createdAt: timestamp,
     updatedAt: timestamp,
-    deletedAt: timestamp.nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine(validatePersonalLifecycle);
 
 export const sensaPersonalSemanticAnchorRevisionSnapshotSchema = z
   .object({
@@ -266,12 +290,12 @@ export const sensaMeaningFocusSemanticAnchorLinkSnapshotSchema = z
     meaningFocusId: uuid,
     personalSemanticAnchorId: uuid,
     currentRevision: positiveInteger,
-    status: sensaPersonalRecordStatusSchema,
+    ...personalLifecycleShape,
     createdAt: timestamp,
     updatedAt: timestamp,
-    deletedAt: timestamp.nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine(validatePersonalLifecycle);
 
 export const sensaMeaningFocusSemanticAnchorLinkRevisionSnapshotSchema = z
   .object({
@@ -291,12 +315,12 @@ export const sensaPersonalExpressionAnchorSnapshotSchema = z
     personalExpressionAnchorId: uuid,
     personalMeaningId: uuid,
     currentRevision: positiveInteger,
-    status: sensaPersonalRecordStatusSchema,
+    ...personalLifecycleShape,
     createdAt: timestamp,
     updatedAt: timestamp,
-    deletedAt: timestamp.nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine(validatePersonalLifecycle);
 
 export const sensaPersonalExpressionAnchorRevisionSnapshotSchema = z
   .object({
@@ -332,12 +356,12 @@ export const sensaMeaningFocusExpressionAnchorLinkSnapshotSchema = z
     meaningFocusId: uuid,
     personalExpressionAnchorId: uuid,
     currentRevision: positiveInteger,
-    status: sensaPersonalRecordStatusSchema,
+    ...personalLifecycleShape,
     createdAt: timestamp,
     updatedAt: timestamp,
-    deletedAt: timestamp.nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine(validatePersonalLifecycle);
 
 export const sensaMeaningFocusExpressionAnchorLinkRevisionSnapshotSchema = z
   .object({

@@ -32,7 +32,7 @@ import type { JourneyState, MeaningJourneyRecord } from './store';
 
 export const LOCAL_SEMANTIC_POLICY_VERSION = 'sensa-semantic-policy-local-v1';
 
-const PSW = 'sensa-personal-semantic-world-v2' as const;
+const PSW = 'sensa-personal-semantic-world-v3' as const;
 const REG = 'sensa-semantic-registry-v1' as const;
 const LEARNER_USER_ID = 'sensa-local-learner';
 
@@ -342,10 +342,12 @@ export const executeFastTrack = (
       personalMeaningId,
       learnerUserId: LEARNER_USER_ID,
       currentRevision: 1,
+      lifecycleRevision: 1,
       status: 'active',
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
+      deletedByOperationId: null,
     },
     personalMeaningRevisions: [
       {
@@ -371,10 +373,12 @@ export const executeFastTrack = (
         personalSemanticAnchorId: semanticAnchorId,
         personalMeaningId,
         currentRevision: 1,
+        lifecycleRevision: 1,
         status: 'active',
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
+        deletedByOperationId: null,
       },
     ],
     personalSemanticAnchorRevisions: [
@@ -402,10 +406,12 @@ export const executeFastTrack = (
         personalExpressionAnchorId: expressionAnchorId,
         personalMeaningId,
         currentRevision: 1,
+        lifecycleRevision: 1,
         status: 'active',
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
+        deletedByOperationId: null,
       },
     ],
     personalExpressionAnchorRevisions: [expressionAnchorRevision],

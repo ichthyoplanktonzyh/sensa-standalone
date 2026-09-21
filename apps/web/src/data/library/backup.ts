@@ -6,6 +6,7 @@ import {validateBackupRows,backupOwnerSchema,type BackupRows} from './backupVali
 import {clearAllCredentials} from './providers';
 import {rehydratePackageInstallations} from './packages';
 import {libraryBackupTables} from './backupPolicy';
+import {isReplicatedLibraryEntry,normalizeLibraryReplicaEntry,restoreLibraryReplicaValue,type LibraryReplicaEntry} from './replication/libraryReplica';
 const MAX_PLAIN=64*1024*1024,MAX_FILE=90*1024*1024;
 const AAD=new TextEncoder().encode('sensa-web-library-backup-v1:PBKDF2-SHA256:600000:AES-256-GCM');
 const localMeta=new Set(['cloud-sync','delivery-private','delivery-join','service-owner','service-installation','signed-out','backup-restored','local-incarnation','local-content-revision']);
@@ -52,6 +53,12 @@ async function emptyDestination(tx:LibraryTransaction){
  for(const table of libraryTables){const entries=await tx.entries(table);if(table==='packageCache')continue;if(table==='meta'){if(entries.some(r=>!localMeta.has(String(r.key))&&!['identity','package-catalog'].includes(String(r.key))))return false;}else if(table==='operations'){if(entries.some(r=>!serviceOperation(r.value)&&!['library.create','package.catalog'].includes(JSON.parse(r.value.input).kind)))return false;}else if(entries.length)return false;}
  return true;
 }
+function restoredDomainValue(table:string,key:string,value:unknown,identity:LibraryIdentity){
+ if(!isReplicatedLibraryEntry(table,key))return value;
+ const entry={table:table as LibraryReplicaEntry['table'],key,value};
+ const normalized=normalizeLibraryReplicaEntry(entry,identity);
+ return restoreLibraryReplicaValue(normalized,normalized.value,identity);
+}
 export async function restoreLibraryBackup(file:Uint8Array,password:string){
  const checked=await decode(file,password);
  const result=await restoreLibraryTransaction(async tx=>{
@@ -63,11 +70,8 @@ export async function restoreLibraryBackup(file:Uint8Array,password:string){
   const rows=checked.rows,source=rows.meta.find(r=>r.key==='identity')!.value as LibraryIdentity;
   const identity={...source,deviceId:destination.deviceId===source.deviceId?crypto.randomUUID():destination.deviceId};
   tx.clear('packageCache');
-  for(const table of libraryBackupTables){if(table==='meta'||table==='operations')continue;for(const row of rows[table]){const v=row.value;
-    if(table==='sessions'&&v.status==='inflight'){v.status='stopped';v.lease=null;v.revision++;}
-    if(table==='personalLearning'&&['generating','reviewing'].includes(v.status)){v.status='failed';v.leaseUntil=0;v.notice='localFlow.restoredPreparation';}
-    if(table==='contentAttempts'&&['generating','reviewing'].includes(v.status))v.status='failed';
-    tx.put(table,row.key,v);
+  for(const table of libraryBackupTables){if(table==='meta'||table==='operations')continue;for(const row of rows[table]){
+    tx.put(table,row.key,restoredDomainValue(table,row.key,row.value,identity));
   }}
   for(const row of rows.meta)tx.put('meta',row.key,row.key==='identity'?identity:row.value);
   for(const row of rows.operations){if(row.key==='00000000-0000-4000-8000-000000000001')row.value.result=identity;tx.put('operations',row.key,row.value);}
