@@ -1,13 +1,18 @@
 # Sensa Learning Runtime Model
 
 > 状态：Canonical runtime domain model  
-> 更新日期：2026-09-15
+> 更新日期：2026-09-21
 
 本文定义 Content Provisioning、Learning Protocol Run、Protocol Step Instance、Unified Planning、Session、
 Encounter、Card Presentation、Observation/Evidence/Transition、Scheduling Handoff、FSRS、Lexical Reference、Preferences 与 Account/Data Control 的运行
 关系。Structured Acquisition Cycle 是其中一种高保证协议，不是所有学习的唯一运行方式。具体
 Gate 阈值、Action/Practice Activity Definition 或 Turn payload、context resolver 阈值、cooldown、HTTP、SQL 和 Sync wire
 format 属于后续版本化实现合同。
+
+在 [ADR 0006](../adr/0006-three-product-systems.md) 的顶层架构中，**Learning System** 比 Learning
+Runtime 更宽：它还包含 Curriculum、Policy、Planning、Content Provisioning handoff、Learner Progress
+与 Scheduling。本文裁决该系统的运行关系与事实/投影边界；“Runtime”不能被用来吞并 Curriculum
+所有权，也不能让 Product Shell 或 Content Package 直接写入学习结果。
 
 ## 1. 运行链
 
@@ -1156,10 +1161,21 @@ Device Operation Ledger 中的命令输入和返回值都不是学习事实，�
 压缩或改写它，也不得要求原始 operation input 才能验证或恢复。跨设备 Intake 重试从已保存的 Intake
 领域事实重建结果，并由独立 Remote Intake Delivery Receipt 保证邮箱投递幂等。
 
+“Event is truth, State is projection”只是本系统的速记。准确规则是：已经结算的 Run、Action、Observation、
+Evidence、Transition、Completion、Memory Outcome、Scheduling Decision 与 Learning Reconciliation
+Decision 是不可改写事实；当前 progress、Memory/due 读取模型及其他运行投影由这些事实与当时固定的
+Policy、Protocol、Materialization 和算法版本验证或重建。一个缺少这些固定合同的裸事件流不具备权威性。
+
+同一已确认基线之后，两个设备若为同一 Target 分别完成互不重叠的 Learning Run，两端 Run 与 Event
+都保留；它们不能进入普通“本机/云端”内容选择。版本化 Learning Reconciliation Decision 以最后完成
+Run 的 `(completedAt, runId)` 全序确定负责当前 Memory/Schedule 投影的分支，另一分支只作为 history-only
+事实保留，不再次贡献 Scheduling Decision。未完成、共享 Run 或结构/策略边界不一致的分支不自动裁决。
+
 Curriculum、Personal Content、正式 Learning Runtime 与 Free Practice 使用各自的 identity、revision、
 tombstone 和幂等规则。界面、模型输出、导入器与同步适配器只能提交各模块允许的 command/fact，不能
 直接制造 Effective Learning Policy、Plan readiness、Evidence、Completion、Memory State、掌握百分比
-或 `synced=true`。并发冲突必须产生可解释的 revision/merge 结果，不能静默 last-write-wins。
+或 `synced=true`。并发冲突必须产生可解释的 revision/merge 结果，不能静默 last-write-wins。学习历史的
+具体规则见 [ADR 0005](../adr/0005-concurrent-learning-history-reconciliation.md)。
 
 Learner Preference 作为版本化本地事实参与账号同步；Device Preference 留在当前设备。Account
 lifecycle 与 Data Control Request 仍需在线重新授权，不能借学习库同步绕过。Account Deletion 删除

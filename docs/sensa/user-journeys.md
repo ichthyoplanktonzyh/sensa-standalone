@@ -15,20 +15,28 @@
 
 ## 2. 整体产品图景
 
-Sensa 由三个相互连接但职责独立的产品空间组成：
+Sensa 由 Personal Semantic World、Learning System 与 Content Supply System 三个产品系统组成；它们
+共享 Semantic Foundation，learner-facing state 与运行位于 Local-first Platform。Intake Layer 把真实
+场景中的材料交给 Personal Semantic World，但不是第四个事实系统：Surface/adapter 负责捕获和运输，
+Semantic Intake 负责统一分流，稳定 Personal Meaning 仍由 Personal Semantic World 拥有。
 
 ```text
 真实世界入口
 Web 创建 / 浏览器捕获 / Agent 委托 / 未来更多入口
                          │
                          ▼
-个人语义世界
-Intake Inbox / Context–Expression–Sense / Personal Meaning
+Intake Layer
+port-neutral payload / Semantic Intake / optional Remote Delivery
                          │
-                         │ explicit Add-to-Learning
                          ▼
-学习运行时
-内容准备 / 初次学习 / 保持复习 / 必要时重学
+Personal Semantic World
+Intake Inbox / Personal Meaning / Anchors / Alignment
+                         │ explicit Add-to-Learning
+                         ├────────────────────────────────────────┐
+                         │                                        ▼
+Book / Catalog / direct stable Sense ───────────────────────▶ Learning System
+                                                                  ▲
+Content Supply System ── Published / On-demand / Hybrid ──────────┘
 ```
 
 学习包是独立的正式学习入口。它可以不经过个人语义世界，直接建立学习目标；学习中形成的“我的场景”

@@ -2,6 +2,13 @@
 
 本索引区分领域、品牌与设计、产品和工程事实。项目进度、阶段总结、部署记录和临时问题不属于长期文档。
 
+Sensa 的顶层产品架构由 **Personal Semantic World、Learning System 与 Content Supply System** 组成；
+三者共享 **Semantic Foundation**，learner-facing state 与运行位于 **Local-first Platform** 上。该产品领域轴与 Product Shell、
+Learning Kernel、Production Base 的软件职责轴正交，详见
+[`production-architecture.md`](production-architecture.md) 与
+[`ADR 0006`](../adr/0006-three-product-systems.md)。Web、浏览器扩展、Agent 与其他入口通过同一
+**Intake Layer** 把现场事实交给 Personal Semantic World；Intake 是入口层，不是第四个事实系统。
+
 ## 领域模型
 
 以下七份文档共同定义 Sensa 的领域语言、对象、边界和不变量，产品与工程文档不能覆盖它们：
@@ -9,12 +16,12 @@
 | 文档 | 职责 |
 | --- | --- |
 | [`../../CONTEXT.md`](../../CONTEXT.md) | 统一语言与产品边界 |
-| [`production-architecture.md`](production-architecture.md) | 领域总图、聚合、多语言上下文与全局边界 |
+| [`production-architecture.md`](production-architecture.md) | 三个产品系统、共享语义基础、软件职责轴、聚合与全局边界 |
 | [`personal-semantic-world-model.md`](personal-semantic-world-model.md) | Context–Expression–Sense、Personal Meaning 与多语言 Expression Anchor |
 | [`learning-connection-model.md`](learning-connection-model.md) | Language Learning Route、学习入口、目标、策略、内容来源与调度交接 |
 | [`semantic-acquisition-model.md`](semantic-acquisition-model.md) | Structured Acquisition 与能力诊断 |
-| [`sense-learning-resource-model.md`](sense-learning-resource-model.md) | 学习资源、Materialization 与发布语义 |
-| [`learning-runtime-model.md`](learning-runtime-model.md) | 学习运行、Pinned Language Context、证据、进度、账号与数据控制 |
+| [`sense-learning-resource-model.md`](sense-learning-resource-model.md) | Content Supply、学习资源、Materialization 与发布语义 |
+| [`learning-runtime-model.md`](learning-runtime-model.md) | Learning System 的运行、证据、进度、调度及离线边界 |
 
 发生冲突时先以 `CONTEXT.md` 确认术语，再由职责最接近的领域文档裁决。实现结构、页面顺序、测试命令和发布配置不进入领域文档。
 

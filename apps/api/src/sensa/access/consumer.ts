@@ -30,6 +30,7 @@ import {sensaExtensionAuthorizationSchema,sensaExtensionExchangeSchema} from '@s
 import {serviceTelemetry,setTelemetryError,type ServiceRequestRecord} from './telemetry.js';
 import {registerBrowserTelemetry,type BrowserTelemetrySink,type BrowserTelemetryRateLimiter} from './browserTelemetry.js';
 import {readLearningContentRegistry} from './learningContentRegistry.js';
+import {createStreamAuthorizationGate} from './streamAuthorization.js';
 
 const modelDailyLimit=30;
 const uuid=z.string().uuid();
@@ -65,6 +66,18 @@ async function account(db:DatabaseExecutor,identity:ConsumerPrincipal,create=fal
   if(!session&&create)session=(await db.query('INSERT INTO sensa_consumer.sessions(account_id,provider_session_id) VALUES($1,$2) RETURNING *',[row.account_id,identity.sessionId])).rows[0];
   if(!session||(session.revoked&&!allowRevokedSession))throw new ConsumerError(401,'access_revoked');
   return {...row,session_id:session.id,now} as Account;
+}
+
+/** Mid-stream revocation probe. It deliberately avoids account row locks; the
+ * opening and final state transitions still use account() inside transactions. */
+async function assertStreamAuthorization(db:DatabaseExecutor,identity:ConsumerPrincipal):Promise<void>{
+  const row=(await db.query(`SELECT a.lifecycle,s.revoked
+    FROM sensa_consumer.accounts a
+    JOIN sensa_consumer.sessions s ON s.account_id=a.account_id
+    WHERE a.issuer=$1 AND a.subject=$2 AND s.provider_session_id=$3`,[
+      identity.issuer,identity.subject,identity.sessionId,
+    ])).rows[0];
+  if(!row||row.lifecycle&&row.lifecycle!=='active'||row.revoked)throw new ConsumerError(401,'access_revoked');
 }
 
 export type ConsumerRoutesOptions={
@@ -132,6 +145,9 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
   registerReadingRoutes(app,async(request,work)=>{
     const identity=await verify(request);
     return transaction(async db=>work(db,await account(db,identity,false,false,clock())));
+  },async request=>{
+    const identity=await verify(request);
+    await transaction(db=>assertStreamAuthorization(db,identity));
   },options.readingCompletion);
 
   app.route('/sensa/model',createModelTurnRoutes({
@@ -294,12 +310,13 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
     context.header('X-Accel-Buffering','no');
     return stream(context,async output=>{
       let last=0;
+      const revalidate=createStreamAuthorizationGate(()=>transaction(db=>assertStreamAuthorization(db,identity)));
       try{
         const result=await resolve(async text=>{
           if(output.aborted)throw new ConsumerError(503,'reading_interrupted');
           if(Date.now()-last<100)return;
           last=Date.now();
-          await transaction(async db=>account(db,identity,false,false,clock()));
+          await revalidate();
           await output.write(JSON.stringify({type:'partial',text})+'\n');
         });
         await output.write(JSON.stringify({type:'result',value:result})+'\n');

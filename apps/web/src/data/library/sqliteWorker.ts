@@ -41,6 +41,8 @@ const message = async (request: SqliteWorkerRequest): Promise<unknown> => {
     case "initialize": return db.initialize();
     case "get": return db.get(request.table, request.key);
     case "entries": return db.entries(request.table);
+    case "changesSince": return db.changesSince(request.contentRevision, request.tables);
+    case "syncBaseEntries": return db.syncBaseEntries(request.keys);
     case "count": return db.count(request.table);
     case "homeLearningProjection": return db.homeLearningProjection(request.languageRouteId);
     case "countIntroducedLearningTargets": return db.countIntroducedLearningTargets(

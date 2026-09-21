@@ -79,10 +79,14 @@ function partOfSpeechGroups(senses: readonly ReferenceSense[]): Array<{
 function SenseRow({
   sense,
   isContextual,
+  targetLanguage,
+  learnerLanguage,
   onOpenExamples,
 }: {
   sense: ReferenceSense;
   isContextual: boolean;
+  targetLanguage: string;
+  learnerLanguage: string;
   onOpenExamples: (sense: ReferenceSense) => void;
 }) {
   const examples = sense.examples ?? [];
@@ -90,10 +94,10 @@ function SenseRow({
     <article className={`grid gap-4 rounded-card border p-5 sm:grid-cols-[1fr_auto] ${isContextual ? 'border-border-strong bg-surface-selected' : 'border-border-subtle bg-surface-panel'}`}>
       <div className="min-w-0">
         {isContextual && <span className="mb-3 inline-flex rounded-pill bg-accent-soft px-3 py-1 text-metadata font-semibold text-action-primary">{cardText('dictCurrent')}</span>}
-        <p className="text-body leading-7" lang={sense.glossL1 ? undefined : 'en'}>
+        <p className="text-body leading-7" lang={sense.glossL1 ? learnerLanguage : targetLanguage}>
           {sense.glossL1 ?? sense.definitionL2 ?? cardText('dictDefinitionMissing')}
         </p>
-        {sense.glossL1 && sense.definitionL2 && <small className="mt-2 block text-body-support leading-6 text-fg-secondary" lang="en">{sense.definitionL2}</small>}
+        {sense.glossL1 && sense.definitionL2 && <small className="mt-2 block text-body-support leading-6 text-fg-secondary" lang={targetLanguage}>{sense.definitionL2}</small>}
         {sense.labels && sense.labels.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {sense.labels.map((label) => <span className="rounded-pill bg-surface-subtle px-2 py-1 text-metadata text-fg-secondary" key={label}>{label}</span>)}
@@ -204,10 +208,13 @@ export function ReferenceDictionaryScreen({
     : displaySenses;
   const senseGroups = useMemo(() => partOfSpeechGroups(remainingSenses), [remainingSenses]);
   const clickedSurface = result?.request?.clickedSurface;
+  const targetLanguage = result?.release.targetLanguage ?? 'und';
+  const learnerLanguage = result?.release.learnerLocale ?? 'und';
+  const caseLocale = result?.release.targetLanguage ?? 'und';
   const showLemmaRelation = Boolean(
     clickedSurface
     && entry
-    && clickedSurface.toLocaleLowerCase('en-US') !== entry.headword.toLocaleLowerCase('en-US'),
+    && clickedSurface.toLocaleLowerCase(caseLocale) !== entry.headword.toLocaleLowerCase(caseLocale),
   );
 
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -287,12 +294,12 @@ export function ReferenceDictionaryScreen({
         ) : (
           <>
             <section className="border-b border-border-subtle pb-7" aria-label={cardText('dictIdentity')}>
-              <h2 className="font-language text-5xl font-semibold">{entry.headword}</h2>
+              <h2 className="font-language text-5xl font-semibold" lang={targetLanguage}>{entry.headword}</h2>
               {showLemmaRelation && (
                 <p className="mt-4 flex items-center gap-2 text-body-support text-fg-secondary">
-                  <span>{clickedSurface}</span>
+                  <span lang={targetLanguage}>{clickedSurface}</span>
                   <svg className={iconClass} aria-hidden="true"><use href="#i-chev-r" /></svg>
-                  <strong>{entry.headword}</strong>
+                  <strong lang={targetLanguage}>{entry.headword}</strong>
                 </p>
               )}
               {entry.pronunciations.length > 0 && (
@@ -307,12 +314,12 @@ export function ReferenceDictionaryScreen({
                       >
                         <span>{accentLabel(pronunciation.accent)}</span>
                         <svg className={iconClass} aria-hidden="true"><use href="#i-vol-fill" /></svg>
-                        {pronunciation.ipa && <i className="font-language not-italic">{pronunciation.ipa}</i>}
+                        {pronunciation.ipa && <i className="font-language not-italic" lang={targetLanguage}>{pronunciation.ipa}</i>}
                       </button>
                     ) : (
                       <div className="inline-flex min-h-11 items-center gap-2 rounded-control bg-surface-subtle px-4 text-body-support text-fg-secondary" key={pronunciation.pronunciationId}>
                         <span>{accentLabel(pronunciation.accent)}</span>
-                        {pronunciation.ipa && <i className="font-language not-italic">{pronunciation.ipa}</i>}
+                        {pronunciation.ipa && <i className="font-language not-italic" lang={targetLanguage}>{pronunciation.ipa}</i>}
                       </div>
                     )
                   ))}
@@ -326,7 +333,7 @@ export function ReferenceDictionaryScreen({
                 <div className="mb-3 mt-5 flex items-center justify-between text-metadata font-bold uppercase tracking-wide text-fg-tertiary">
                   <span>{contextualSense.partOfSpeech}</span>
                 </div>
-                <SenseRow sense={contextualSense} isContextual onOpenExamples={openExamples} />
+                <SenseRow sense={contextualSense} isContextual targetLanguage={targetLanguage} learnerLanguage={learnerLanguage} onOpenExamples={openExamples} />
               </section>
             )}
 
@@ -344,6 +351,8 @@ export function ReferenceDictionaryScreen({
                         key={sense.referenceSenseId}
                         sense={sense}
                         isContextual={false}
+                        targetLanguage={targetLanguage}
+                        learnerLanguage={learnerLanguage}
                         onOpenExamples={openExamples}
                       />
                     ))}
@@ -355,7 +364,7 @@ export function ReferenceDictionaryScreen({
             {entry.forms && entry.forms.length > 1 && (
               <section className="mt-8 border-t border-border-subtle pt-7">
                 <h2 className="text-section-title font-semibold">{cardText('dictForms')}</h2>
-                <div className="mt-4 flex flex-wrap gap-2">{entry.forms.map((form) => <span className="rounded-pill bg-accent-soft px-3 py-1 text-body-support text-fg-secondary" key={form}>{form}</span>)}</div>
+                <div className="mt-4 flex flex-wrap gap-2">{entry.forms.map((form) => <span className="rounded-pill bg-accent-soft px-3 py-1 text-body-support text-fg-secondary" lang={targetLanguage} key={form}>{form}</span>)}</div>
               </section>
             )}
 
@@ -368,7 +377,7 @@ export function ReferenceDictionaryScreen({
                   .map((note) => (
                     <details className="mt-3 rounded-control border border-border-subtle bg-surface-panel px-4" key={note.noteId}>
                       <summary className="flex min-h-12 cursor-pointer items-center font-semibold">{note.title}</summary>
-                      <p className="pb-3 text-body-support leading-6 text-fg-secondary">{note.bodyL1}</p>
+                      <p className="pb-3 text-body-support leading-6 text-fg-secondary" lang={learnerLanguage}>{note.bodyL1}</p>
                       <small className="block pb-4 text-metadata text-fg-tertiary">{note.sourceLabel}</small>
                     </details>
                   ))}

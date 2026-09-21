@@ -1,7 +1,7 @@
 # Sense Learning Resource Model
 
 > 状态：Canonical resource model  
-> 更新日期：2026-09-20
+> 更新日期：2026-09-21
 
 本文定义 Sensa 如何通过 Published、On-demand 或 Hybrid 路径为一个固定 Learning Target 提供学习
 资源，以及这些资源如何在一次 Learning Protocol Run 前冻结为 Learning Materialization。它同时
@@ -9,6 +9,11 @@
 审核内容。资源不等于卡片：Protocol Step 按 material role 引用不可变内容并定义交互与结果资格，
 Card Presentation 只把当前 Step 阶段渲染给 learner。正式 Action 与 Practice Activity Definition 由版本化
 Learning Policy Profile、purpose-specific Protocol 与其他适用 Policy/Profile 从不可变资源中物化。
+
+在 [ADR 0006](../adr/0006-three-product-systems.md) 的顶层架构中，本文裁决 **Content Supply System**：
+它包含内容生产、独立验证、发布、发现、分发、安装和 Materialization，而不只包含 Package 下载。
+Learning Policy、Protocol execution、Curriculum membership、learner progress 与 FSRS 始终属于
+Learning System；Package 可以声明内容能力和适用范围，但不能携带这些对象的所有权或执行权限。
 
 ## 1. Learning content sources 与 materialization
 

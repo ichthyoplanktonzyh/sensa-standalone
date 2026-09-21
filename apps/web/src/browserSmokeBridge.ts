@@ -15,6 +15,10 @@ type BrowserSmokeBridge = {
   syncStatus(): Promise<string>;
   semanticWorldContainsExpression(surfaceForm: string): Promise<boolean>;
   intakeInboxCount(): Promise<number>;
+  firstMeaningId(): Promise<string | null>;
+  navigate(path: string): Promise<void>;
+  openReferenceFixture(): Promise<void>;
+  closeReferenceFixture(): Promise<void>;
   storageDiagnostics(): ReturnType<typeof readLibraryStorageDiagnostics>;
   transactionConcurrency(): Promise<{readersOverlap:boolean;writerWaited:boolean}>;
 };
@@ -74,6 +78,31 @@ if (import.meta.env.VITE_SENSA_BROWSER_SMOKE === 'true') {
     },
     async intakeInboxCount() {
       return (await loadJourneyStateFromLibrary()).inboxItems.length;
+    },
+    async firstMeaningId() {
+      return (await loadJourneyStateFromLibrary()).meanings[0]?.personalMeaning.personalMeaningId ?? null;
+    },
+    async navigate(path) {
+      const {router}=await import('./experience/router/router');
+      router.history.push(path);
+    },
+    async openReferenceFixture() {
+      const {useOverlayStore}=await import('./experience/stores/overlayStore');
+      const sense={
+        referenceSenseId:'fixture-sense',order:1,partOfSpeech:'interjection',
+        glossL1:'打招呼用语',definitionL2:'hello or hi',examples:[],
+      };
+      useOverlayStore.getState().openDictModal({
+        word:'hola',phonetic:'/ˈola/',senses:[],
+        referenceLookup:{
+          release:{releaseId:'fixture-release',provider:'Fixture',edition:'2026',targetLanguage:'es',learnerLocale:'zh-CN',rightsLabel:'Fixture only',status:'prototype'},
+          entry:{referenceLexicalUnitId:'fixture-entry',releaseId:'fixture-release',headword:'hola',visibility:'reference_visible',pronunciations:[],forms:['hola'],senses:[sense],attribution:'Fixture'},
+        },
+      });
+    },
+    async closeReferenceFixture() {
+      const {useOverlayStore}=await import('./experience/stores/overlayStore');
+      useOverlayStore.getState().closeDictModal();
     },
     storageDiagnostics: readLibraryStorageDiagnostics,
     async transactionConcurrency() {

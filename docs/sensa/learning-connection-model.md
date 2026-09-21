@@ -1,7 +1,7 @@
 # Sensa 学习连接模型
 
 > 状态：Canonical domain model
-> 更新日期：2026-09-13
+> 更新日期：2026-09-21
 
 本文定义一个 confirmed Sense 与目标语言表达的连接如何取得内容、选择学习方式、形成不同强度的
 结果并交给长期调度。个人意义与 Sense 确认由
@@ -9,6 +9,11 @@
 的理论细节由 [`semantic-acquisition-model.md`](semantic-acquisition-model.md) 裁决；资源和运行行为
 分别由 [`sense-learning-resource-model.md`](sense-learning-resource-model.md) 与
 [`learning-runtime-model.md`](learning-runtime-model.md) 裁决。
+
+本文是 [ADR 0006](../adr/0006-three-product-systems.md) 所定义 **Learning System** 的主连接模型：
+Curriculum 接纳来自 Book、direct stable-Sense 或 Personal Semantic World bridge 的学习意图，再把固定
+Target、Policy/Plan、Content Supply handoff、Runtime outcome 与 Scheduling 串成一条可审计链。
+Learning Runtime 是这条链的执行部分，不拥有入口或 Curriculum lifecycle。
 
 ## 1. 领域定位
 
@@ -126,8 +131,9 @@ Learning/Retention Target；只改变 Support Language 不会宣称建立了新�
 
 ### 独立入口与 Personal Semantic World bridge
 
-Learning Runtime 只依赖 Curriculum 中已经解析的 Learning Target、Retention Target、Effective Learning
-Policy 与 ready plan，不读取 Personal Semantic World membership 来决定能否学习。入口边界必须满足：
+Learning Runtime 只依赖 Learning System 已在 Curriculum 中解析的 Learning Target、Retention Target、
+Effective Learning Policy 与 ready plan，不读取 Personal Semantic World membership 来决定能否学习。
+入口边界必须满足：
 
 - Book/Catalog/direct stable-Sense entry 不创建 Personal Meaning、Meaning Focus、Alignment 或 Personal Anchor；
 - personal-first entry 只消费已经由 direct 或 delegated Semantic Acceptance 提交的完整 Personal Meaning；

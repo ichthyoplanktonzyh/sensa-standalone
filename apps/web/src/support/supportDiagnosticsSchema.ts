@@ -20,7 +20,7 @@ export type SupportDiagnosticsInput = {
     error?: string;
     failureKind?: 'transient' | 'terminal';
     retryCount?: number;
-    pending?: { entries: unknown[] };
+    pending?: { operationId: string };
     conflict?: { records: unknown[]; affectedRecordIds: unknown[] };
     lastSyncedAt?: string;
     lastCheckedAt?: string;
@@ -68,7 +68,7 @@ export function buildSupportDiagnostics(input: SupportDiagnosticsInput) {
       errorCode: diagnosticCode(sync?.error ?? input.syncError),
       failureKind: sync?.failureKind ?? null,
       retryCount: sync?.retryCount ?? 0,
-      pendingRecordCount: sync?.pending?.entries.length ?? 0,
+      pendingRecordCount: sync?.pending ? 1 : 0,
       conflictRecordCount: sync?.conflict?.records.length ?? 0,
       affectedRecordCount: sync?.conflict?.affectedRecordIds.length ?? 0,
       lastSyncedAt: sync?.lastSyncedAt ?? null,

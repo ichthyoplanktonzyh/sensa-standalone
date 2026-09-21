@@ -2,6 +2,8 @@ import type {
   HomeLearningStorageProjection,
   SqliteLibraryTable,
   SqliteMutation,
+  SqliteRecordChange,
+  SqliteSyncBaseEntry,
   SqliteStorageDiagnostics,
   SqliteWorkerInput,
 } from './sqliteProtocol';
@@ -18,6 +20,8 @@ export interface CoordinatedSqliteBackend {
   initialize(): Promise<SqliteStorageDiagnostics>;
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
+  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
+  syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
   count(table: SqliteLibraryTable): Promise<number>;
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection>;
   countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number>;
@@ -83,6 +87,17 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
 
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>> {
     return this.call({ kind: 'entries', table }) as Promise<Array<{ key: string; encodedValue: string }>>;
+  }
+
+  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
+    return this.call({ kind: 'changesSince', contentRevision, tables: [...tables] }) as Promise<SqliteRecordChange[]>;
+  }
+
+  syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]> {
+    const input: SqliteWorkerInput = keys
+      ? { kind: 'syncBaseEntries', keys: [...keys] }
+      : { kind: 'syncBaseEntries' };
+    return this.call(input) as Promise<SqliteSyncBaseEntry[]>;
   }
 
   count(table: SqliteLibraryTable): Promise<number> {
@@ -326,6 +341,8 @@ export class CoordinatedSqliteAdapter implements CoordinatedSqliteBackend {
       case 'initialize': return backend.initialize();
       case 'get': return backend.get(input.table, input.key);
       case 'entries': return backend.entries(input.table);
+      case 'changesSince': return backend.changesSince(input.contentRevision, input.tables);
+      case 'syncBaseEntries': return backend.syncBaseEntries(input.keys);
       case 'count': return backend.count(input.table);
       case 'homeLearningProjection': return backend.homeLearningProjection(input.languageRouteId);
       case 'countIntroducedLearningTargets': return backend.countIntroducedLearningTargets(

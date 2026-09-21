@@ -18,6 +18,13 @@
 | `db/migrations` | 生产数据库的前向迁移 |
 | `content` | 内容 schema、prompt、制作与校验工具 |
 
+[ADR 0006](../adr/0006-three-product-systems.md) 的 Personal Semantic World、Learning System 与 Content
+Supply System 是产品领域划分，不与上述目录一一对应。当前 Web 的 Product Shell 位于 `experience`，
+学习规则分布在 `apps/web/src/learning`、`experience/learningRuntime` 与 `packages/learning-kernel`，本地
+持久化和同步 adapter 位于 `apps/web/src/data/library`，公共内容合同、校验与制作分别位于
+`packages/contracts`、`packages/content-validator` 与 `content`。目录位置不转移领域事实所有权；页面、
+SQLite record、HTTP route 与 Sync row 都不能成为第二 authority。
+
 `apps/sensa_native` 和 `crates` 只保留现有代码，不参与当前产品开发、验收或发布规划。除非 owner 明确恢复该范围，不在这些目录继续迁移或新增能力。
 
 Web Shell 只挂载首页、当前 URL sheet 栈和已打开的覆盖层；退出栈的页面必须卸载其 effect。非首页页面、
@@ -28,6 +35,7 @@ App Shell、轻量首页、完整学习工作区和 Learning Runtime 的增量�
 首页只读取队列所需的 Target、Run、Study Plan 和 Package 事实；Package/Personal 完整控制器在相关 URL sheet 打开后加载。正式 Learning Runtime 的呈现和
 composition validation 在进入 Run 时按需加载；首页学习队列与内容准备只在真实表变化、到期时间点或页面
 恢复焦点时刷新，不使用固定频率轮询。
+`test:browser` 使用生产构建和真实 Chromium 记录匿名 Landing、已登录 App Shell/首次本机库打开，并在 4x CPU throttle 下记录 Personal Meaning、学习入口和 Reference 覆盖层的 cold/warm 交互时间；静态闭包测试同时保证这些重模块不回流到匿名入口或首页。这里的 CI 时长是回归预算，不冒充真实设备的 LCP、INP 或 CLS。
 
 TanStack Router 拥有合法路径、search 校验、公开 `/welcome` 和 not-found 恢复；动态 Sheet Stack 仍以一个
 受校验的 splat route 表达，因为相同 sheet 可以从多个父页面压栈并必须返回原父页面。所有 sheet 的渲染
@@ -44,7 +52,7 @@ compositor transform，支持中断和 reduced-motion；所有页面仍保留显
 
 ## 数据与同步
 
-生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v7.sqlite3`，持久化在浏览器
+生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v9.sqlite3`，持久化在浏览器
 Origin Private File System。SQLite 在专用 Worker 中运行，使用不要求页面启用跨源隔离的
 `opfs-sahpool` VFS。Web Lock 选出唯一数据库 owner；其他同源 Sensa 标签页通过 BroadcastChannel
 复用 owner 的记录接口，owner 关闭后由剩余页面重新选举，绝不打开竞争连接。跨页共享/排他事务锁覆盖
@@ -63,8 +71,8 @@ Content Attempt 查询投影。首页只读取当前 Route 的 Target、该 Rout
 Package key；运行恢复、策略锁定和生成频控通过领域索引查询，不遍历或解析无关 JSON。数据库打开及有写入
 的长连接周期内使用 `PRAGMA optimize` 维护查询规划统计。Book 版本替换和媒体引用完整性检查同样通过事务内
 关系投影完成。承载大 JSON 的逻辑 record 与 Target 投影使用普通 rowid 表，紧凑关系投影使用
-`WITHOUT ROWID`；物理 schema v7 使用新的 OPFS 文件，因当前无用户库数据，不迁移或读取 v6 文件。
-v7 同时是首个真实用户基线：打开版本低于 v7 或高于当前版本的文件会停止并保留原库，不创建空库冒充
+`WITHOUT ROWID`；物理 schema v9 使用新的 OPFS 文件，并在内容事务中维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 在真实 Chromium OPFS 上执行 1k/10k 完整同步路径，并固定单记录变化只上传记录块与受影响的 manifest 分片。因当前无用户库数据，不迁移或读取 v8 文件。
+v9 同时是首个真实用户基线：打开版本低于 v9 或高于当前版本的文件会停止并保留原库，不创建空库冒充
 首次访问；后续 schema 只能按顺序增加事务迁移与固定旧版夹具。跨标签页协调协议独立版本化，版本不一致
 时旧/新页面不交换记录，并要求用户关闭其他标签页。Service Worker 安装新 shell 后等待用户确认再接管，
 接管时保留上一发布版本的静态资源窗口，使仍在运行的旧页面能够完成或安全退出。
@@ -73,8 +81,13 @@ Web 应用层的逻辑表与 Personal Semantic World Journey 共用这一物理�
 意义聚合、注册表事实、Inbox、澄清草稿和 operation receipt 分别保存在 `semanticMeanings`、
 `semanticRegistry`、`semanticInbox`、`semanticDrafts` 与 `semanticReceipts` 等规范化逻辑表；媒体字节
 单独保存在 `media` 表。一次领域保存仍由同一个 `LibraryTransaction` 原子提交，但普通语义修改不再
-重写整个世界或图片载荷。当前没有生产用户数据，因此 v2 直接使用新数据库与 Checkpoint v3，不读取、
-迁移或兼容 v1 单聚合格式。账号副本、界面偏好和其他 `localStorage` 状态不能充当个人学习库的第二权威。
+重写整个世界或图片载荷。当前没有生产用户数据，因此规范化语义格式直接使用新数据库与 Checkpoint v4，
+不读取、迁移或兼容 v1 单聚合格式。账号副本、界面偏好和其他 `localStorage`
+状态不能充当个人学习库的第二权威。
+
+学习历史不进入普通记录冲突选择器：两个设备从同一基线为同一 Target 完成互不重叠的 Run 时，
+`learningReconciliations` 保存 ADR 0005 的确定性裁决，原始 Run/Event 均保留，只有选中分支参与当前
+Target/Memory/Schedule 投影重放。API 对 Learning Event 与裁决记录都执行 append-only 保护。
 
 学习运行时只在 Web 本机执行：目标选择、Protocol/Policy、步骤、评价、Completion、Memory Outcome 与
 FSRS 都由本地领域事务结算。Hono/Edge 不创建或推进学习 Run，也不重新计算从云同步取回的学习事实。
@@ -109,6 +122,13 @@ Intake 的语义 payload 只声明一次：`packages/contracts/src/sensa/intake.
 调用方已经提供的 Context 是否充足。表达的 canonical form 与 Context 中的 exact occurrence 分开，
 例如可以保存 `back out` 并定位原文中的 `backed out`。当前 Web 本地 authority 在
 `apps/web/src/experience/personalMeaningJourney/gateway.ts` 中幂等提交，相同 operation id 若改变载荷则报冲突。
+
+架构中的 Intake Layer 不对应一个部署目录。所有本机 Surface/adapter 最终调用同一 gateway `ingest`
+interface；`intakeEngine.ts` 是 fast-track/Inbox 完整性排序的唯一实现，依次返回
+`pending_context | pending_expression | pending_sense | pending_acceptance`，或在四项事实完整时原子提交
+`fast_track`。合同没有 `deferred` 或模型拒绝状态：主动延后通过尚未 acceptance 表达，格式/引用矛盾是
+错误而不是 Inbox route。Remote Intake Delivery 只是调用同一 interface 的异步 mailbox adapter，不能
+复制分流规则或直接写 `semanticMeanings`/`semanticInbox`。
 
 外部 Agent 使用账号范围、可撤销且仅允许 Intake 的连接。连接合同在
 `packages/contracts/src/sensa/agentConnection.ts`。Web 只接收约十分钟有效、一次性消费的 setup code；
@@ -152,9 +172,11 @@ Sensa 原生澄清由 `apps/web/src/experience/personalMeaningJourney/realSemant
 purpose 唯一允许的工具是读取本机已有意义，用于必要的复用判断；澄清不调用在线词汇参考。loop 只保存
 真实工具活动摘要和候选，不保存隐藏推理，也不能调用 Personal Meaning commit 或学习事务。Sensa
 托管连接的每次模型执行仍由服务侧 Genkit flow 完成；用户设备连接仍按既有规则在本页直接执行。
+服务侧队列的 provider 并发 lane 按连接身份隔离：Sensa 托管连接共享固定 lane，账号 BYOK 连接使用不对外记录的账号 + 连接 id；同一 origin 上互不相关的账号 key 不再互相占用单 provider 槽。总并发和队列上限仍是单实例保护，不能当作跨 Edge 实例的全局容量。
 教师回复通过同一模型执行边界流式返回：托管连接使用 `/sensa/model/turn/stream` 的有界 NDJSON，
 设备连接读取 OpenAI-compatible SSE。传输层只交付原始文本增量；澄清模块只从顶层 `reply` JSON 字符串
 释放可见前缀，完整响应仍必须通过最终 schema 校验才会写入会话。工具参数、清晰度和候选不会作为流式 UI 暴露。
+阅读与语义流在开始和最终提交时仍执行完整账号事务；流中撤权探测使用无账号行锁的轻量查询，并以两秒门控合并高频文本增量，避免每约 100 ms 对账号行执行 `FOR UPDATE`。撤销会终止后续输出，门控间隔由无网络 smoke 固定。
 
 提供方只有两种：Sensa 服务与用户自填的连接。用户连接按保存位置决定执行位置。存在本机库 `providers` 表的连接在本页执行，密钥只保留在页面内存，不进个人库同步，请求由这台设备直接发出。存在账号侧的连接由部署密钥加密保管、在服务端执行；账号级连接登记处是 `db/migrations/0021_sensa_browser_reading.sql` 的 `reading_settings` 表，扩展与 Web 共用同一份，因此一个密钥只需配置一次。两种位置只差两点：本机连接可使用任意 HTTPS 地址与本机 HTTP 服务，但需要对方允许跨域，且不计入服务端用量；账号连接受部署白名单限制（`SENSA_READING_ALLOWED_ORIGINS`），并计入服务端用量。用途指派每次只属于一个登记处，切换用途即清除另一处。阅读的用途内部再按功能指派（划词、网页、字幕、阅读动作、句中意义、输入翻译）：每个功能一个指派键，`scripts/sensaReadingLanguageSmoke.mts` 在快速测试里保证功能清单与指派表、与阅读路由接受的请求枚举三者一致。
 

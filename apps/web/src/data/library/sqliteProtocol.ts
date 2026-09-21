@@ -2,13 +2,13 @@
 
 import type {HomeLearningStorageProjection} from './homeLearningRecords';
 
-export const sqliteLibraryFile = "/sensa-local-library-v7.sqlite3";
-export const sqlitePoolDirectory = "/sensa-local-library-v7";
+export const sqliteLibraryFile = "/sensa-local-library-v9.sqlite3";
+export const sqlitePoolDirectory = "/sensa-local-library-v9";
 /** First supported production-user baseline; prototype formats stay unsupported. */
-export const sqliteLibraryBaselineVersion = 7;
-export const sqliteLibrarySchemaVersion = 7;
+export const sqliteLibraryBaselineVersion = 9;
+export const sqliteLibrarySchemaVersion = 9;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 2;
+export const sqliteCoordinatorProtocolVersion = 4;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -23,6 +23,7 @@ export const sqliteLibraryTables = [
   "learningTargets",
   "learningRuns",
   "learningEvents",
+  "learningReconciliations",
   "personalLearning",
   "contentAttempts",
   "annotations",
@@ -38,15 +39,36 @@ export const sqliteLibraryTables = [
 export type SqliteLibraryTable = (typeof sqliteLibraryTables)[number];
 
 export type SqliteMutation = {
+  /** Present only for learner-content transactions. State/probe writes do not
+   * enter the incremental synchronization journal. */
+  contentRevision?: number;
   clears: SqliteLibraryTable[];
   deletes: Array<{ table: SqliteLibraryTable; key: string }>;
   puts: Array<{ table: SqliteLibraryTable; key: string; encodedValue: string }>;
+  /** Atomic replacement of the last server-confirmed checkpoint baseline. */
+  syncBaseReplacement?: SqliteSyncBaseEntry[];
+};
+
+export type SqliteRecordChange = {
+  table: SqliteLibraryTable;
+  key: string;
+  encodedValue: string | null;
+  contentRevision: number;
+};
+
+export type SqliteSyncBaseEntry = {
+  table: SqliteLibraryTable;
+  key: string;
+  valueJson: string;
+  blockRefs: string[];
 };
 
 export type SqliteWorkerRequest =
   | { id: number; kind: "initialize" }
   | { id: number; kind: "get"; table: SqliteLibraryTable; key: string }
   | { id: number; kind: "entries"; table: SqliteLibraryTable }
+  | { id: number; kind: "changesSince"; contentRevision: number; tables: SqliteLibraryTable[] }
+  | { id: number; kind: "syncBaseEntries"; keys?: Array<{ table: SqliteLibraryTable; key: string }> }
   | { id: number; kind: "count"; table: SqliteLibraryTable }
   | { id: number; kind: "homeLearningProjection"; languageRouteId: string }
   | { id: number; kind: "countIntroducedLearningTargets"; languageRouteId: string; startedAfter: string; startedBefore: string }
@@ -97,8 +119,26 @@ CREATE TABLE IF NOT EXISTS sensa_records(
   table_name TEXT NOT NULL CHECK(table_name IN (${quotedTables})),
   record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
   value_json TEXT NOT NULL CHECK(json_valid(value_json)),
+  content_revision INTEGER NOT NULL DEFAULT 0 CHECK(content_revision>=0),
   PRIMARY KEY(table_name,record_key)
 );
+CREATE INDEX IF NOT EXISTS sensa_records_content_revision
+  ON sensa_records(content_revision,table_name,record_key);
+CREATE TABLE IF NOT EXISTS sensa_record_tombstones(
+  table_name TEXT NOT NULL CHECK(table_name IN (${quotedTables})),
+  record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
+  content_revision INTEGER NOT NULL CHECK(content_revision>0),
+  PRIMARY KEY(table_name,record_key)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS sensa_record_tombstones_revision
+  ON sensa_record_tombstones(content_revision,table_name,record_key);
+CREATE TABLE IF NOT EXISTS sensa_sync_base(
+  table_name TEXT NOT NULL CHECK(table_name IN (${quotedTables})),
+  record_key TEXT NOT NULL CHECK(length(record_key) BETWEEN 1 AND 2000),
+  value_json TEXT NOT NULL CHECK(json_valid(value_json)),
+  block_refs_json TEXT NOT NULL CHECK(json_valid(block_refs_json)),
+  PRIMARY KEY(table_name,record_key)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS sensa_learning_targets(
   record_key TEXT NOT NULL PRIMARY KEY,
   projection_value_json TEXT NOT NULL CHECK(json_valid(projection_value_json)),

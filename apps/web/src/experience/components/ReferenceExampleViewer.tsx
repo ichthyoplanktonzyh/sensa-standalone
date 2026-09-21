@@ -103,6 +103,8 @@ export function ReferenceExampleViewer({ active, deck, onClose }: ReferenceExamp
         deck.forms,
         sensaLanguage(deck.release.targetLanguage),
       ) : '', [deck, example]);
+  const targetLanguage = deck?.release.targetLanguage;
+  const learnerLanguage = deck?.release.learnerLocale;
 
   useEffect(() => {
     if (!identity || identity === lastIdentity.current) return;
@@ -153,7 +155,7 @@ export function ReferenceExampleViewer({ active, deck, onClose }: ReferenceExamp
       <button ref={closeButtonRef} type="button" onClick={onClose} aria-label={t('referenceExample.back')} className={setupButton + ' size-11 shrink-0 px-0 text-action-primary hover:bg-surface-selected'}><ArrowLeft size={20}/></button>
       <div className="min-w-0">
         <p className="text-xs text-fg-secondary">{t('referenceExample.title')}</p>
-        <h1 className="mt-1 break-words text-xl font-medium">{deck?.headword || t('referenceExample.unavailable')}</h1>
+        <h1 className="mt-1 break-words text-xl font-medium" lang={targetLanguage}>{deck?.headword || t('referenceExample.unavailable')}</h1>
       </div>
     </header>
 
@@ -168,15 +170,15 @@ export function ReferenceExampleViewer({ active, deck, onClose }: ReferenceExamp
             </div>
             <section className="p-6 sm:p-8" aria-label={t('referenceExample.current')}>
               {/* emphasizeReferenceExample escapes every source-text segment; only its own b tags remain. */}
-              <p lang="en" className="whitespace-pre-wrap break-words text-2xl leading-relaxed sm:text-3xl [&_b]:font-medium [&_b]:text-action-primary" dangerouslySetInnerHTML={{ __html: sentenceHtml }}/>
-              {showTranslation && example.textL1 && <p className="mt-6 border-l-2 border-border-strong pl-4 text-base leading-7 text-fg-secondary">{example.textL1}</p>}
+              <p lang={targetLanguage} className="whitespace-pre-wrap break-words text-2xl leading-relaxed sm:text-3xl [&_b]:font-medium [&_b]:text-action-primary" dangerouslySetInnerHTML={{ __html: sentenceHtml }}/>
+              {showTranslation && example.textL1 && <p lang={learnerLanguage} className="mt-6 border-l-2 border-border-strong pl-4 text-base leading-7 text-fg-secondary">{example.textL1}</p>}
               {example.textL1 ? <button type="button" aria-expanded={showTranslation} className={setupButton + ' mt-3 px-0 text-action-primary'} onClick={() => setShowTranslation(visible => !visible)}>
                 {t(showTranslation ? 'referenceExample.hideTranslation' : 'referenceExample.showTranslation')}
               </button> : <p className="mt-6 text-xs text-fg-secondary">{t('referenceExample.noTranslation')}</p>}
             </section>
             <section className="mx-6 mb-6 rounded-card bg-accent-soft p-6 text-action-primary">
               <h2 className="text-xs">{t('referenceExample.sense')}</h2>
-              <p className="mt-3 text-base leading-7" lang={deck.sense.glossL1 ? undefined : 'en'}><span className="mr-2 text-sm text-fg-secondary">{deck.sense.partOfSpeech}</span>{definition}</p>
+              <p className="mt-3 text-base leading-7" lang={deck.sense.glossL1 ? learnerLanguage : targetLanguage}><span className="mr-2 text-sm text-fg-secondary">{deck.sense.partOfSpeech}</span>{definition}</p>
             </section>
           </article>
         </ExampleCardCarousel> : <section role="status" className="rounded-overlay border border-dashed border-border-strong bg-surface-panel p-8 text-center">

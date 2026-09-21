@@ -1,7 +1,7 @@
 # Sensa 个人语义世界模型
 
 > 状态：Canonical domain model
-> 更新日期：2026-09-13
+> 更新日期：2026-09-21
 
 本文定义泛在语义摄取、个人意义、Context 与表达锚点、按需 Sense 解析/构造、直接或委托确认以及
 确认后的学习边界。
@@ -10,6 +10,12 @@
 [`learning-connection-model.md`](learning-connection-model.md)、
 [`sense-learning-resource-model.md`](sense-learning-resource-model.md) 与
 [`learning-runtime-model.md`](learning-runtime-model.md) 裁决。
+
+在 [ADR 0006](../adr/0006-three-product-systems.md) 的顶层架构中，Personal Semantic World 是三个
+产品系统之一。它拥有 learner 接受的个人语义事实，并引用 Semantic Foundation 中的 stable Sense、
+Sense Version 与 Sense Expression Binding；引用不转移这些共享语义身份的所有权。它可以发出显式
+Add-to-Learning bridge，但 Curriculum 和 Learning System 不以 Personal Semantic World membership
+作为前置条件。
 
 ## 1. 核心命题
 
@@ -153,6 +159,11 @@ LLM 只给出一个 target-language 单词不构成 Sense Proposal。词是 Sens
 
 ## 4. 泛在 Semantic Intake 与快慢轨
 
+顶层架构中的 Intake Layer 由 Intake Surfaces/adapters、Semantic Intake Module 与可选 Remote Intake
+Delivery 组成，但本文件只裁决 Semantic Intake、Inbox 与 Personal Semantic World commit 的领域语义。
+Surface 不因捕获材料而取得语义所有权，Remote Delivery 不因持久排队而取得 acceptance authority，
+Personal Semantic World 也不拥有 transport credential 或 mailbox lifecycle。
+
 Semantic Intake 是浏览器插件、移动端分享、桌面助手、拍照/语音入口或 learner-authorized Agent
 共同使用的端口无关边界。Intake 可以携带 Context、Expression、Sense 和
 Semantic Acceptance 中当前已经拥有的任意事实；缺失的部分进入 Inbox 后再澄清。
@@ -177,7 +188,8 @@ membership。
       │                              ▼ fast track
       │                     complete Personal Meaning
       │
-      └── 缺 Context / Expression / Sense / acceptance / 主动延后
+      └── 缺 Context / Expression / Sense / acceptance
+                    （主动延后表现为尚未 acceptance）
                                      │
                                      ▼ slow track
                                Intake Inbox Item

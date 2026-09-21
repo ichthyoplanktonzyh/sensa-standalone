@@ -62,7 +62,7 @@ const cloudFor=(account:string):Cloud=>{const existing=clouds.get(account);if(ex
 const repackCloud=(cloud:Cloud,chars:number)=>{
  if(!cloud.manifest)throw Error('nothing to repack');
  const manifest=JSON.parse(cloud.blocks.get(cloud.manifest[0]!)!) as {version:number;rows:{table:string;key:string;blocks:string[]}[]};
- if(manifest.version!==3||manifest.rows.some(row=>row.table==='operations'))throw Error('current Checkpoint carried the device operation ledger');
+ if(manifest.version!==4||manifest.rows.some(row=>row.table==='operations'))throw Error('current Checkpoint carried the device operation ledger');
  const added=new Map<string,string>(),rows:{table:string;key:string;blocks:string[]}[]=[];
  for(const [rowIndex,row] of manifest.rows.entries()){
   const text=row.blocks.map(hash=>cloud.blocks.get(hash)!).join(''),refs:string[]=[];
@@ -253,8 +253,10 @@ try{
  assert.match(await readFile(join(dist,'integrations','sensa-mcp.mjs'),'utf8'),/^#!\/usr\/bin\/env node/u,'the Web release does not contain the executable MCP adapter');
 
  const landing=await pageContext(false);
+ const landingStarted=Date.now();
  await landing.page.goto(origin+'/welcome',{waitUntil:'domcontentloaded'});
  await expect(landing.page.locator('#landing-title')).toBeVisible({timeout:SHELL_BUDGET_MS});
+ const landingMs=Date.now()-landingStarted;
  assert.deepEqual(landing.errors,[],'the explicit welcome route emitted a browser error');
  await landing.context.close();
 
@@ -366,11 +368,12 @@ try{
  await expect(b.page.getByText('正在恢复账号资料…')).toBeVisible();
  assert.deepEqual(await b.page.locator('.sensa-today-counts strong').allTextContents(),['—','—'],'a new device must not present local zeroes as account truth while restore is pending');
  await expect(b.page.locator('.sensa-today-empty')).toHaveCount(0);
- try{await expect.poll(async()=>({drafts:await b.page.evaluate(()=>window.__sensaBrowserSmoke!.draftCount()),normalized:cloud.revision>legacyRevision}),{timeout:RESTORE_BUDGET_MS,message:'account restore never finished'}).toEqual({drafts:TOTAL_DRAFTS,normalized:true});}
+ try{await expect.poll(async()=>await b.page.evaluate(()=>window.__sensaBrowserSmoke!.draftCount()),{timeout:RESTORE_BUDGET_MS,message:'account restore never finished'}).toBe(TOTAL_DRAFTS);}
  catch(error){log('   restore calls before timeout: '+JSON.stringify(served));log('   restore rejected: '+JSON.stringify(rejected));log('   phase B console: '+JSON.stringify(b.errors.slice(0,12)));throw error;}
  await expect(b.page.getByText('正在恢复账号资料…')).toHaveCount(0);
  const restoreMs=Date.now()-started;
- const normalizedRevision=cloud.revision,normalizedPublished=cloud.published,normalizedPhysicalBytes=[...cloud.blocks.values()].reduce((total,data)=>total+Buffer.byteLength(data),0);
+ const confirmedRevision=cloud.revision,confirmedPublished=cloud.published,confirmedPublishedBytes=cloud.publishedBytes;
+ const restoreRequests=[...served].filter(entry=>entry.path.startsWith('/sensa/library-sync/'));
  await finishCheckpoint(b.page,'post-restore local facts never reached a Checkpoint');
  const restoreSettledRevision=cloud.revision;
  await b.page.evaluate(()=>window.dispatchEvent(new Event('focus')));
@@ -407,8 +410,43 @@ try{
  served.length=0;
  await b.page.waitForTimeout(IDLE_WINDOW_MS);
  const idleRequests=[...served];
+ const performanceSession=await b.context.newCDPSession(b.page);
+ await performanceSession.send('Emulation.setCPUThrottlingRate',{rate:4});
+ const meaningId=await b.page.evaluate(()=>window.__sensaBrowserSmoke!.firstMeaningId());
+ assert(meaningId,'the restored Personal Meaning fixture is missing');
+ const measureSurface=async(path:string,selector:string)=>{
+  const started=Date.now();
+  await b.page.evaluate(next=>window.__sensaBrowserSmoke!.navigate(next),path);
+  await expect(b.page.locator(selector).last()).toBeVisible({timeout:SHELL_BUDGET_MS});
+  return Date.now()-started;
+ };
+ const returnHome=async()=>{
+  await b.page.evaluate(()=>window.__sensaBrowserSmoke!.navigate('/'));
+  await expect(b.page.locator('#s-home[data-sensa-page-layout]')).toBeVisible({timeout:SHELL_BUDGET_MS});
+ };
+ const meaningColdMs=await measureSurface(`/personal-meaning?meaningId=${encodeURIComponent(meaningId)}`,'#s-personal-meaning');
+ await returnHome();
+ const meaningWarmMs=await measureSurface(`/personal-meaning?meaningId=${encodeURIComponent(meaningId)}`,'#s-personal-meaning');
+ await returnHome();
+ const learningColdMs=await measureSurface('/learning-entry','#s-learning-entry');
+ await returnHome();
+ const learningWarmMs=await measureSurface('/learning-entry','#s-learning-entry');
+ await returnHome();
+ const referenceStarted=Date.now();
+ await b.page.evaluate(()=>window.__sensaBrowserSmoke!.openReferenceFixture());
+ await expect(b.page.locator('#s-reference-dictionary').getByRole('heading',{name:'hola'})).toBeVisible({timeout:SHELL_BUDGET_MS});
+ const referenceColdMs=Date.now()-referenceStarted;
+ await b.page.evaluate(()=>window.__sensaBrowserSmoke!.closeReferenceFixture());
+ await expect(b.page.locator('#s-reference-dictionary')).toHaveCount(0);
+ const referenceWarmStarted=Date.now();
+ await b.page.evaluate(()=>window.__sensaBrowserSmoke!.openReferenceFixture());
+ await expect(b.page.locator('#s-reference-dictionary').getByRole('heading',{name:'hola'})).toBeVisible({timeout:SHELL_BUDGET_MS});
+ const referenceWarmMs=Date.now()-referenceWarmStarted;
+ await b.page.evaluate(()=>window.__sensaBrowserSmoke!.closeReferenceFixture());
+ const surfaceTimings={meaningColdMs,meaningWarmMs,learningColdMs,learningWarmMs,referenceColdMs,referenceWarmMs};
+ await performanceSession.send('Emulation.setCPUThrottlingRate',{rate:1});
  const requests=bootRequests.filter(entry=>entry.path.startsWith('/sensa/library-sync/'));
- const fetchRequests=requests.filter(entry=>entry.path==='/sensa/library-sync/blocks/fetch');
+ const fetchRequests=restoreRequests.filter(entry=>entry.path==='/sensa/library-sync/blocks/fetch');
  /** Restore fetch round trips follow legacy bytes, not how many blocks hold them. */
  const fetchRequestBudget=Math.ceil(legacyPublishedBytes/librarySyncBlockFetchBytes)+2;
  const restored=await b.page.evaluate(()=>window.__sensaBrowserSmoke!.draftCount());
@@ -423,8 +461,10 @@ try{
  await b.context.close();
 
  log(`   App Shell interactive ${shellMs}ms (budget ${SHELL_BUDGET_MS}ms)`);
+ log(`   anonymous Landing interactive ${landingMs}ms (budget ${SHELL_BUDGET_MS}ms)`);
+ log(`   local surfaces cold/warm ms at 4x CPU throttle: ${JSON.stringify(surfaceTimings)}`);
  log(`   account restore ${restoreMs}ms over ${requests.length} library requests / ${fetchRequests.length} block fetches (fetch budget ${fetchRequestBudget})`);
- log(`   canonicalized library: ${cloud.published} blocks / ${Math.round(normalizedPhysicalBytes/1024)}KiB physical, revision ${cloud.revision}`);
+ log(`   confirmed remote layout: ${confirmedPublished} blocks / ${Math.round(confirmedPublishedBytes/1024)}KiB published, revision ${confirmedRevision}`);
  log(`   next focus: ${repeatRequests.length} account requests / ${repeatFetches.length} library block fetches`);
  log(`   restored drafts ${restored}/${TOTAL_DRAFTS}`);
  log(`   local storage ${storageDiagnostics.engine}/${storageDiagnostics.persistence} SQLite ${storageDiagnostics.sqliteVersion}`);
@@ -437,14 +477,16 @@ try{
  if(b.errors.length)log('   phase B console: '+JSON.stringify(b.errors.slice(0,5)));
  if(violations.length)log('   CSP: '+JSON.stringify(violations.slice(0,4)));
  if(shellMs>SHELL_BUDGET_MS)fail(`App Shell waited for the account restore: ${shellMs}ms > ${SHELL_BUDGET_MS}ms`);
+ if(landingMs>SHELL_BUDGET_MS)fail(`anonymous Landing exceeded its budget: ${landingMs}ms > ${SHELL_BUDGET_MS}ms`);
+ for(const [surface,milliseconds] of Object.entries(surfaceTimings))if(milliseconds>SHELL_BUDGET_MS)fail(`${surface} exceeded its interaction budget: ${milliseconds}ms > ${SHELL_BUDGET_MS}ms`);
  if(restoreMs>RESTORE_BUDGET_MS)fail(`account restore exceeded its budget: ${restoreMs}ms > ${RESTORE_BUDGET_MS}ms`);
  if(fetchRequests.length>fetchRequestBudget)fail(`account restore used ${fetchRequests.length} block fetches, budget ${fetchRequestBudget} for ${legacyPublished} legacy blocks (${[...new Set(requests.map(entry=>entry.path))].join(', ')})`);
- if(normalizedRevision!==legacyRevision+1)fail(`legacy layout was not normalized exactly once: revision ${legacyRevision} -> ${normalizedRevision}`);
- if(normalizedPublished>=legacyPublished)fail(`legacy ${legacyPublished}-block layout was not replaced by the canonical layout (${normalizedPublished} blocks)`);
- if(normalizedPhysicalBytes>=legacyPublishedBytes/4)fail(`retired legacy blocks still occupy ${normalizedPhysicalBytes} bytes after canonicalization`);
+ if(confirmedRevision!==legacyRevision)fail(`restore republished unchanged content: revision ${legacyRevision} -> ${confirmedRevision}`);
+ if(confirmedPublished!==legacyPublished)fail(`restore rewrote the confirmed ${legacyPublished}-block layout (${confirmedPublished} blocks)`);
+ if(confirmedPublishedBytes!==legacyPublishedBytes)fail(`restore changed confirmed published bytes: ${legacyPublishedBytes} -> ${confirmedPublishedBytes}`);
  if(remotePublishedRevision<=restoreSettledRevision)fail(`remote Agent Intake was not published: revision ${restoreSettledRevision} -> ${remotePublishedRevision}`);
  if(!repeatSettled)fail('the focus-triggered verification sync never settled');
- if(repeatFetches.length)fail(`a later focus re-fetched canonicalized account blocks ${repeatFetches.length} time(s)`);
+ if(repeatFetches.length)fail(`a later focus re-fetched confirmed account blocks ${repeatFetches.length} time(s)`);
  if(repeatRequests.some(entry=>entry.path.startsWith('/sensa/library-sync/')))fail('a fresh foreground return started an unnecessary whole-library sync');
  if(restored!==TOTAL_DRAFTS)fail(`account restore lost content: ${restored}/${TOTAL_DRAFTS} drafts`);
  if(storageDiagnostics.engine!=='sqlite-wasm'||storageDiagnostics.persistence!=='opfs')fail(`production browser did not use SQLite OPFS: ${JSON.stringify(storageDiagnostics)}`);

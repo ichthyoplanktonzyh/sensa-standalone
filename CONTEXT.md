@@ -1,13 +1,45 @@
 # Sensa product context
 
 > Status: canonical ubiquitous language  
-> Updated: 2026-09-20
+> Updated: 2026-09-21
 > Domain document index: [`docs/sensa/README.md`](docs/sensa/README.md)
 
 Sensa is a sense-first language-learning product. Its durable learning identity
 is one learner-specific Sense–target-expression connection. A versioned,
 learner-selectable Learning Policy coordinates purpose-specific Learning Protocols
 that establish, check, strengthen or restore that connection across long-term retention.
+
+## Product system language
+
+**Semantic Foundation（语义基础）**:
+The shared, versioned semantic identities used across Sensa, including Sense, Sense
+Version, Sense Expression Binding, Lexeme and Language identity. Product systems
+reference these identities without taking ownership of them.
+
+**Learning System（学习系统）**:
+The product system that turns an explicit learning intent into Curriculum membership,
+a fixed Learning Target, policy and plan resolution, Protocol execution, settled history,
+progress and scheduling; Learning Runtime is its execution part and Personal Semantic
+World is an optional source.
+_Avoid_: Learning Runtime when referring to the whole system
+
+**Content Supply System（内容供给系统）**:
+The product system for producing, validating, publishing, discovering, installing and
+materializing learning and reference content through Published, On-demand or Hybrid
+paths. It does not own Curriculum, Learning Policy, Protocol execution or progress.
+_Avoid_: Content Distribution when referring to the whole system
+
+**Local-first Platform（本地优先平台）**:
+The supporting capability on which learner-owned systems commit and operate locally
+before optional account synchronization. It supplies persistence, recovery, sync,
+identity, media and online adapters without owning semantic or learning decisions.
+
+**Intake Layer（摄取入口层）**:
+The ingress path formed by Intake Surfaces and adapters, the Semantic Intake Module
+and optional Remote Intake Delivery. It coordinates capture-to-handoff; only the Semantic
+Intake Module owns unresolved Inbox facts, and the layer owns no stable Personal Meaning,
+Curriculum membership or learning result.
+_Avoid_: treating every Intake Surface as a separate domain flow
 
 ## Product access and surfaces
 
@@ -900,9 +932,11 @@ history and scheduling state, usable locally independently of optional online se
 It contains more than Personal Semantic World and does not replace its domain identities.
 
 **Personal Library Fact（个人学习库事实）**:
-A durable, provenance-bearing record of accepted content, a learner decision or a
-learning event and its pinned interpretation. Reconciliation preserves its history;
-it is distinct from a pending command and the current projection of the library.
+A durable, provenance-bearing record of learner-owned accepted content, a learner
+decision or a learning event and its pinned interpretation. A fact may pin an exact
+Published Content identity/digest, but re-downloadable public Bundle or media bytes are
+an installation cache rather than a learner fact. Reconciliation preserves fact history;
+a fact is distinct from a pending command and the current projection of the library.
 
 **Device Operation Ledger（设备操作账本）**:
 A device-local record used to make command retries idempotent and return the original

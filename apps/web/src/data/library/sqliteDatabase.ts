@@ -13,6 +13,8 @@ import {
   sqliteLibrarySchemaVersion,
   type SqliteLibraryTable,
   type SqliteMutation,
+  type SqliteRecordChange,
+  type SqliteSyncBaseEntry,
   type SqliteStorageDiagnostics,
 } from "./sqliteProtocol";
 
@@ -117,6 +119,67 @@ export class SqliteRecordDatabase {
     return rows.map((row) => ({
       key: String(row.record_key),
       encodedValue: String(row.value_json),
+    }));
+  }
+
+  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): SqliteRecordChange[] {
+    if (!Number.isSafeInteger(contentRevision) || contentRevision < 0 || tables.length === 0) return [];
+    const selected = [...new Set(tables)];
+    const placeholders = selected.map(() => '?').join(',');
+    const rows = this.database.exec({
+      sql: `SELECT table_name,record_key,value_json,content_revision
+            FROM sensa_records
+            WHERE content_revision>? AND table_name IN (${placeholders})
+            UNION ALL
+            SELECT table_name,record_key,NULL AS value_json,content_revision
+            FROM sensa_record_tombstones
+            WHERE content_revision>? AND table_name IN (${placeholders})
+            ORDER BY content_revision,table_name,record_key`,
+      bind: [contentRevision, ...selected, contentRevision, ...selected],
+      rowMode: 'object',
+      returnValue: 'resultRows',
+    }) as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      table: String(row.table_name) as SqliteLibraryTable,
+      key: String(row.record_key),
+      encodedValue: row.value_json === null ? null : String(row.value_json),
+      contentRevision: Number(row.content_revision),
+    }));
+  }
+
+  syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): SqliteSyncBaseEntry[] {
+    if (keys?.length === 0) return [];
+    if (keys) {
+      const entries: SqliteSyncBaseEntry[] = [];
+      for (const key of keys) {
+        const rows = this.database.exec({
+          sql: 'SELECT value_json,block_refs_json FROM sensa_sync_base WHERE table_name=? AND record_key=?',
+          bind: [key.table, key.key],
+          rowMode: 'object',
+          returnValue: 'resultRows',
+        }) as unknown[];
+        if (rows.length) {
+          const row = rows[0] as Record<string, unknown>;
+          entries.push({
+            table: key.table,
+            key: key.key,
+            valueJson: String(row.value_json),
+            blockRefs: JSON.parse(String(row.block_refs_json)) as string[],
+          });
+        }
+      }
+      return entries;
+    }
+    const rows = this.database.exec({
+      sql: 'SELECT table_name,record_key,value_json,block_refs_json FROM sensa_sync_base ORDER BY table_name,record_key',
+      rowMode: 'object',
+      returnValue: 'resultRows',
+    }) as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      table: String(row.table_name) as SqliteLibraryTable,
+      key: String(row.record_key),
+      valueJson: String(row.value_json),
+      blockRefs: JSON.parse(String(row.block_refs_json)) as string[],
     }));
   }
 
@@ -246,14 +309,40 @@ export class SqliteRecordDatabase {
   }
 
   commit(mutation: SqliteMutation): void {
-    if (!mutation.clears.length && !mutation.deletes.length && !mutation.puts.length) return;
+    if (
+      !mutation.clears.length
+      && !mutation.deletes.length
+      && !mutation.puts.length
+      && mutation.syncBaseReplacement === undefined
+    ) return;
     if (Date.now() >= this.nextOptimizeAt) {
       this.database.exec("PRAGMA optimize");
       this.nextOptimizeAt = Date.now() + sqliteOptimizeIntervalMs;
     }
     this.database.exec("BEGIN IMMEDIATE");
     try {
+      const contentRevision = mutation.contentRevision;
+      if (contentRevision !== undefined && (!Number.isSafeInteger(contentRevision) || contentRevision <= 0)) {
+        throw new Error('sqlite_content_revision_invalid');
+      }
+      if (mutation.syncBaseReplacement) {
+        this.database.exec('DELETE FROM sensa_sync_base');
+        for (const entry of mutation.syncBaseReplacement) {
+          this.database.exec({
+            sql: 'INSERT INTO sensa_sync_base(table_name,record_key,value_json,block_refs_json) VALUES(?,?,?,?)',
+            bind: [entry.table, entry.key, entry.valueJson, JSON.stringify(entry.blockRefs)],
+          });
+        }
+      }
       for (const table of mutation.clears) {
+        if (contentRevision !== undefined) {
+          this.database.exec({
+            sql: `INSERT INTO sensa_record_tombstones(table_name,record_key,content_revision)
+                  SELECT table_name,record_key,? FROM sensa_records WHERE table_name=?
+                  ON CONFLICT(table_name,record_key) DO UPDATE SET content_revision=excluded.content_revision`,
+            bind: [contentRevision, table],
+          });
+        }
         this.database.exec({ sql: "DELETE FROM sensa_records WHERE table_name=?", bind: [table] });
         if (table === 'learningTargets') this.database.exec('DELETE FROM sensa_learning_targets');
         if (table === 'learningRuns') this.database.exec('DELETE FROM sensa_learning_runs');
@@ -266,6 +355,14 @@ export class SqliteRecordDatabase {
         }
       }
       for (const item of mutation.deletes) {
+        if (contentRevision !== undefined) {
+          this.database.exec({
+            sql: `INSERT INTO sensa_record_tombstones(table_name,record_key,content_revision)
+                  VALUES(?,?,?)
+                  ON CONFLICT(table_name,record_key) DO UPDATE SET content_revision=excluded.content_revision`,
+            bind: [item.table, item.key, contentRevision],
+          });
+        }
         this.database.exec({
           sql: "DELETE FROM sensa_records WHERE table_name=? AND record_key=?",
           bind: [item.table, item.key],
@@ -296,11 +393,25 @@ export class SqliteRecordDatabase {
         }
       }
       for (const item of mutation.puts) {
-        this.database.exec({
-          sql: `INSERT INTO sensa_records(table_name,record_key,value_json) VALUES(?,?,?)
-                ON CONFLICT(table_name,record_key) DO UPDATE SET value_json=excluded.value_json`,
-          bind: [item.table, item.key, item.encodedValue],
-        });
+        if (contentRevision === undefined) {
+          this.database.exec({
+            sql: `INSERT INTO sensa_records(table_name,record_key,value_json,content_revision) VALUES(?,?,?,0)
+                  ON CONFLICT(table_name,record_key) DO UPDATE SET value_json=excluded.value_json`,
+            bind: [item.table, item.key, item.encodedValue],
+          });
+        } else {
+          this.database.exec({
+            sql: `INSERT INTO sensa_records(table_name,record_key,value_json,content_revision) VALUES(?,?,?,?)
+                  ON CONFLICT(table_name,record_key) DO UPDATE SET
+                    value_json=excluded.value_json,
+                    content_revision=excluded.content_revision`,
+            bind: [item.table, item.key, item.encodedValue, contentRevision],
+          });
+          this.database.exec({
+            sql: 'DELETE FROM sensa_record_tombstones WHERE table_name=? AND record_key=?',
+            bind: [item.table, item.key],
+          });
+        }
         if (item.table === 'learningTargets') {
           this.upsertLearningTargetProjection(item.key, item.encodedValue);
         }

@@ -13,7 +13,7 @@ const recoveryPoint={
     previousBackupId:null,
     libraryId:'5fe997d5-d731-4745-aeb8-0f99140a6b8c',
     learnerId:'738d2600-f25d-4562-822c-96b20d1dd833',
-    librarySchemaVersion:4,
+    librarySchemaVersion:5,
     checkpoint:'library-revision:42',
     createdAt:'2026-09-13T08:00:00.000Z',
     recoveryMode:'account_assisted' as const,

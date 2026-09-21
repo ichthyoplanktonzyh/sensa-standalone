@@ -9,6 +9,7 @@ import {
   sqliteLibraryTables,
   type SqliteLibraryTable,
   type SqliteMutation,
+  type SqliteRecordChange,
   type SqliteStorageDiagnostics,
 } from "./sqliteProtocol";
 
@@ -68,6 +69,7 @@ export class LibraryTransaction {
   private readonly clears = new Set<Table>();
   private readonly deletes = new Map<Table, Set<string>>();
   private readonly puts = new Map<Table, Map<string, unknown>>();
+  private syncBaseReplacement: Array<{ table: Table; key: string; valueJson: string; blockRefs: string[] }> | undefined;
 
   constructor(
     private readonly mode: "readonly" | "readwrite",
@@ -94,6 +96,58 @@ export class LibraryTransaction {
     return [...values.entries()]
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([key, value]) => ({ key, value: clone(value) }));
+  }
+
+  async changesSince<Tables extends readonly Table[]>(contentRevision: number, tables: Tables): Promise<Array<{
+    table: Tables[number];
+    key: string;
+    value: unknown | null;
+    contentRevision: number;
+  }>> {
+    if (this.wrote) throw new Error('library_changes_require_snapshot');
+    const changes: SqliteRecordChange[] = await storageCall(
+      () => this.adapter.changesSince(contentRevision, tables),
+    );
+    return changes.map((change) => ({
+      table: change.table as Tables[number],
+      key: change.key,
+      value: change.encodedValue === null ? null : clone(decode(change.encodedValue)),
+      contentRevision: change.contentRevision,
+    }));
+  }
+
+  async syncBaseEntries<Tables extends readonly Table[]>(keys?: readonly {
+    table: Tables[number];
+    key: string;
+  }[]): Promise<Array<{ table: Tables[number]; key: string; value: unknown; blocks: string[] }>> {
+    if (this.wrote) throw new Error('library_sync_base_requires_snapshot');
+    const normalizedKeys = keys?.map(({ table, key }) => ({ table, key: recordKey(key) }));
+    const entries = await storageCall(() => this.adapter.syncBaseEntries(normalizedKeys));
+    return entries.map((entry) => ({
+      table: entry.table as Tables[number],
+      key: entry.key,
+      value: clone(JSON.parse(entry.valueJson)),
+      blocks: [...entry.blockRefs],
+    }));
+  }
+
+  replaceSyncBase(entries: readonly { table: Table; key: string; value: unknown; blocks?: readonly string[] }[]): void {
+    this.assertWritable();
+    const unique = new Map<string, { table: Table; key: string; valueJson: string; blockRefs: string[] }>();
+    for (const entry of entries) {
+      const key = recordKey(entry.key);
+      const blockRefs = [...(entry.blocks ?? [])];
+      if (blockRefs.some((ref) => !/^[a-f0-9]{64}$/u.test(ref))) throw new Error('library_sync_format');
+      unique.set(`${entry.table}\u0000${key}`, {
+        table: entry.table,
+        key,
+        valueJson: JSON.stringify(entry.value),
+        blockRefs,
+      });
+    }
+    this.syncBaseReplacement = [...unique.values()]
+      .sort((left, right) => left.table.localeCompare(right.table) || left.key.localeCompare(right.key));
+    this.wrote = true;
   }
 
   async all<T>(table: Table): Promise<T[]> {
@@ -261,6 +315,9 @@ export class LibraryTransaction {
         [...keys].map((key) => ({ table, key }))),
       puts: [...this.puts].flatMap(([table, values]) =>
         [...values].map(([key, value]) => ({ table, key, encodedValue: encode(value) }))),
+      ...(this.syncBaseReplacement === undefined
+        ? {}
+        : { syncBaseReplacement: this.syncBaseReplacement }),
     };
   }
 
@@ -312,11 +369,14 @@ async function transaction<T>(
     const library = new LibraryTransaction(mode, adapter);
     const value = await work(library);
     if (mode === "readwrite" && library.wrote) {
+      let contentRevision: number | undefined;
       if (kind === "content") {
         const revision = await library.get<number>("meta", localLibraryRevisionKey) ?? 0;
-        library.put("meta", localLibraryRevisionKey, revision + 1);
+        contentRevision = revision + 1;
+        library.put("meta", localLibraryRevisionKey, contentRevision);
       }
       const mutation = library.mutation();
+      mutation.contentRevision = contentRevision;
       await storageCall(() => adapter.commit(mutation));
       if (kind === "state") window.dispatchEvent(new Event("sensa-sync-state-changed"));
       else {

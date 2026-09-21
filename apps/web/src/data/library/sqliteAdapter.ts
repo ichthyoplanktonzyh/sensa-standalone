@@ -2,6 +2,8 @@ import type {
   HomeLearningStorageProjection,
   SqliteLibraryTable,
   SqliteMutation,
+  SqliteRecordChange,
+  SqliteSyncBaseEntry,
   SqliteStorageDiagnostics,
   SqliteWorkerInput,
   SqliteWorkerRequest,
@@ -16,6 +18,8 @@ import {CoordinatedSqliteAdapter,type CoordinatedSqliteBackend} from './sqliteCo
 export interface SqliteRecordAdapter {
   get(table: SqliteLibraryTable, key: string): Promise<string | null>;
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>>;
+  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]>;
+  syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]>;
   count(table: SqliteLibraryTable): Promise<number>;
   homeLearningProjection(languageRouteId: string): Promise<HomeLearningStorageProjection>;
   countIntroducedLearningTargets(languageRouteId: string, startedAfter: string, startedBefore: string): Promise<number>;
@@ -64,6 +68,17 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
 
   entries(table: SqliteLibraryTable): Promise<Array<{ key: string; encodedValue: string }>> {
     return this.send({ kind: "entries", table }) as Promise<Array<{ key: string; encodedValue: string }>>;
+  }
+
+  changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
+    return this.send({ kind: "changesSince", contentRevision, tables: [...tables] }) as Promise<SqliteRecordChange[]>;
+  }
+
+  syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]> {
+    const input: SqliteWorkerInput = keys
+      ? { kind: "syncBaseEntries", keys: [...keys] }
+      : { kind: "syncBaseEntries" };
+    return this.send(input) as Promise<SqliteSyncBaseEntry[]>;
   }
 
   count(table: SqliteLibraryTable): Promise<number> {
@@ -133,6 +148,8 @@ class WorkerSqliteAdapter implements SqliteRecordAdapter,CoordinatedSqliteBacken
 /** Test/non-browser Adapter. Production never selects this path. */
 class MemoryRecordAdapter implements SqliteRecordAdapter {
   private records = new Map<string, string>();
+  private changes = new Map<string, SqliteRecordChange>();
+  private syncBase = new Map<string, SqliteSyncBaseEntry>();
 
   async get(table: SqliteLibraryTable, key: string): Promise<string | null> {
     return this.records.get(`${table}\u0000${key}`) ?? null;
@@ -144,6 +161,24 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
       .filter(([key]) => key.startsWith(prefix))
       .map(([key, encodedValue]) => ({ key: key.slice(prefix.length), encodedValue }))
       .sort((left, right) => left.key.localeCompare(right.key));
+  }
+
+  async changesSince(contentRevision: number, tables: readonly SqliteLibraryTable[]): Promise<SqliteRecordChange[]> {
+    const selected = new Set(tables);
+    return [...this.changes.values()]
+      .filter((change) => change.contentRevision > contentRevision && selected.has(change.table))
+      .sort((left, right) => left.contentRevision - right.contentRevision
+        || left.table.localeCompare(right.table)
+        || left.key.localeCompare(right.key))
+      .map((change) => ({ ...change }));
+  }
+
+  async syncBaseEntries(keys?: readonly { table: SqliteLibraryTable; key: string }[]): Promise<SqliteSyncBaseEntry[]> {
+    const selected = keys ? new Set(keys.map(({ table, key }) => `${table}\u0000${key}`)) : undefined;
+    return [...this.syncBase]
+      .filter(([id]) => !selected || selected.has(id))
+      .map(([, entry]) => ({ ...entry, blockRefs: [...entry.blockRefs] }))
+      .sort((left, right) => left.table.localeCompare(right.table) || left.key.localeCompare(right.key));
   }
 
   async count(table: SqliteLibraryTable): Promise<number> {
@@ -248,13 +283,40 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
 
   async commit(mutation: SqliteMutation): Promise<void> {
     const next = new Map(this.records);
+    const nextChanges = new Map(this.changes);
+    const nextSyncBase = mutation.syncBaseReplacement === undefined
+      ? new Map(this.syncBase)
+      : new Map(mutation.syncBaseReplacement.map((entry) => [
+        `${entry.table}\u0000${entry.key}`,
+        { ...entry, blockRefs: [...entry.blockRefs] },
+      ]));
+    const remember = (table: SqliteLibraryTable, key: string, encodedValue: string | null) => {
+      if (mutation.contentRevision === undefined) return;
+      nextChanges.set(`${table}\u0000${key}`, {
+        table,
+        key,
+        encodedValue,
+        contentRevision: mutation.contentRevision,
+      });
+    };
     for (const table of mutation.clears) {
       const prefix = `${table}\u0000`;
-      for (const key of next.keys()) if (key.startsWith(prefix)) next.delete(key);
+      for (const key of [...next.keys()]) if (key.startsWith(prefix)) {
+        next.delete(key);
+        remember(table, key.slice(prefix.length), null);
+      }
     }
-    for (const item of mutation.deletes) next.delete(`${item.table}\u0000${item.key}`);
-    for (const item of mutation.puts) next.set(`${item.table}\u0000${item.key}`, item.encodedValue);
+    for (const item of mutation.deletes) {
+      next.delete(`${item.table}\u0000${item.key}`);
+      remember(item.table, item.key, null);
+    }
+    for (const item of mutation.puts) {
+      next.set(`${item.table}\u0000${item.key}`, item.encodedValue);
+      remember(item.table, item.key, item.encodedValue);
+    }
     this.records = next;
+    this.changes = nextChanges;
+    this.syncBase = nextSyncBase;
   }
 
   async diagnostics(): Promise<SqliteStorageDiagnostics> {

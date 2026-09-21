@@ -20,6 +20,7 @@ import {personalLearningSceneRowId,type ContentAnnotation} from './contentAnnota
 import {localExecutableTargetForParticipant} from '../../learning/runtime/localCurriculum';
 import {journeyStateFromRows,semanticJourneyTables} from '../../experience/personalMeaningJourney/repository';
 import {parseStoredMedia} from './media';
+import {validateLearningReconciliationRows} from './learningReconciliation';
 export type BackupRows=Record<Table,{key:string;value:any}[]>;
 const uuid=z.string().uuid(),timestamp=z.string().datetime({offset:true});
 const identitySchema=z.object({id:uuid,learnerId:uuid,deviceId:uuid,createdAt:timestamp,schemaVersion:z.literal(2)}).strict();
@@ -54,7 +55,7 @@ export function validateBackupRows(rows:BackupRows){
   if(binding.currentBindingVersionId!==source.bindingVersionId||binding.senseId!==source.senseId||bindingVersion.senseExpressionBindingId!==source.bindingId||bindingVersion.senseVersionId!==source.senseVersionId)fail();
   return {record,alignment};
  };
- for(const table of ['drafts','sessions','meanings','learningTargets','learningRuns','learningEvents','personalLearning','contentAttempts','providers'] as Table[])for(const {key,value:v} of rows[table]){if(!v||key!==v.id)fail();uuid.parse(key);}
+ for(const table of ['drafts','sessions','meanings','learningTargets','learningRuns','learningEvents','learningReconciliations','personalLearning','contentAttempts','providers'] as Table[])for(const {key,value:v} of rows[table]){if(!v||key!==v.id)fail();uuid.parse(key);}
  for(const {value:d} of rows.drafts){uuid.parse(d.id);z.number().int().positive().parse(d.revision);z.string().max(16000).parse(d.text);if(d.images)conversationImagesSchema.parse(d.images);timestamp.parse(d.createdAt);timestamp.parse(d.updatedAt);}
  for(const {value:s} of rows.sessions){const d=requireRow('drafts',s.draftId);if(s.draftRevision>d.revision)fail();if(s.candidate)semanticProposalSchema.parse(s.candidate);if(s.inputImages)conversationImagesSchema.parse(s.inputImages);if(s.contextSummary!==undefined)z.string().min(1).max(16000).parse(s.contextSummary);if(Array.isArray(s.messages))conversationImagesSchema.parse([...(s.inputImages??[]),...s.messages.flatMap((m:any)=>m.images??[])]);if(!Array.isArray(s.messages)||!Number.isInteger(s.revision)||s.revision<1)fail();if(!['idle','waiting','proposal','inflight','failed','stopped','accepted'].includes(s.status))fail();if(s.status==='accepted'&&requireRow('meanings',s.meaningId).sessionId!==s.id)fail();}
  for(const {key,value:v} of rows.identities){z.string().regex(/^[a-f0-9]{64}$/u).parse(key);for(const field of ['senseId','senseVersionId','bindingId','bindingVersionId'])uuid.parse(v[field]);}
@@ -113,12 +114,15 @@ export function validateBackupRows(rows:BackupRows){
   }
   if(t.introducedLanguageRouteId!==null&&!t.curriculumMemberships.some((membership:any)=>membership.languageContext.languageRouteId===t.introducedLanguageRouteId))fail();
  }
+ let historyOnlyRunIds=new Set<string>();
+ try{({historyOnlyRunIds}=validateLearningReconciliationRows(rows));}catch{fail();}
  // Replay each run once, including every participating Target in a shared cohort.
  const targets=new Map<string,LocalLearningTarget>(rows.learningTargets.map(({value:t})=>[t.id,{...t,memory:null,memoryRevision:0,completedAt:null,relearnAt:null,relearningState:null,startedAt:null}]));
  const unfinished=new Set<string>();
  const runs:LocalLearningRun[]=rows.learningRuns.map(r=>r.value).sort((a,b)=>a.startedAt.localeCompare(b.startedAt));
  const knownProtocolRunIds=new Set<string>();
  for(const saved of runs){
+  if(historyOnlyRunIds.has(saved.id))continue;
   const runLanguageContext=validateLanguageContext(saved.languageContext);
   const ids=localRunTargetIds(saved);
   if(!Array.isArray(saved.lifecycleEvents))fail();

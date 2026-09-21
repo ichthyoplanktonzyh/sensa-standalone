@@ -5,7 +5,7 @@
 [ADR 0003](../adr/0003-three-client-local-facts.md) 确认主应用均在本地执行学习，共享领域事实、版本与合并规则。事实与当前投影分离，保留固定评价/结算历史；学习历史保持可追溯；普通账号同步允许服务端读取业务数据，但服务端不重新执行学习协议或结算学习结果。
 
 > 状态：Canonical domain model  
-> 更新日期：2026-09-15
+> 更新日期：2026-09-21
 
 本文是 Sensa 领域对象、聚合边界和全局不变量的主入口。术语定义以
 [`../../CONTEXT.md`](../../CONTEXT.md) 为准；资源细节和运行行为分别由
@@ -29,6 +29,132 @@ Intake 负责现场获取/处理，Web、桌面和移动主应用负责整理/�
 2026-09-08 目标架构修订已确认：[本地优先与普通账号云同步](../adr/0001-local-library-optional-encrypted-sync.md)。
 个人事实归属完整本地学习库，领域逻辑在本地执行；同步服务器保存账号隔离的持久副本，允许读取业务数据。公共资源分发、账号与按需在线服务分别保留。Web 已接入本地学习库与 TypeScript Learning Runtime；领域身份、校验、接受与学习分离、Outcome/FSRS 幂等等业务不变量由本地领域事务执行。
 
+### 顶层产品系统
+
+[ADR 0006](../adr/0006-three-product-systems.md) 将 Sensa 的产品领域组织为三个职责不同的系统：
+
+1. **Personal Semantic World**：拥有 learner 经有效 Semantic Acceptance 保留的 Personal Meaning、
+   Personal Anchors、Alignments、Notes、Collections 与其他 learner-scoped semantic facts，回答“什么对我
+   有意义、我选择保留什么”；
+2. **Learning System**：拥有 Curriculum、Learning Target、Policy、Planning、正式 Runtime、Progress、
+   Evidence、Outcome 与 Scheduling，回答“我选择学什么、已经发生了什么学习、下一步做什么”；
+3. **Content Supply System**：通过 Published、On-demand 或 Hybrid 路径生产、验证、发布、发现、安装并
+   物化学习与参考内容，回答“哪些合格内容可供本次学习使用”。
+
+三个系统共同引用 **Semantic Foundation** 中的 Sense、Sense Version、Sense Expression Binding、Lexeme
+与 Language identity，但不因此取得这些共享语义身份的所有权。三个系统的 learner-facing state 与运行
+位于 **Local-first Platform** 上；authoring、publication、registry 与在线 provider 可以位于服务侧，
+但本地事务、同步、备份、账号、媒体与在线适配器都不裁决 Personal Meaning、Learning Outcome 或
+Content admission。
+
+```text
+Intake Surfaces / adapters ──▶ Intake Layer ──▶ Personal Semantic World ── explicit bridge ──┐
+                                                                                              │
+Book / Catalog / direct stable Sense ─────────────────────────────────────────────────────────┼─▶ Learning System
+                                                                                              │   Curriculum → Target
+Published / On-demand / Hybrid ──▶ Content Supply System ─────────────────────────────────────┘   → Policy / Plan
+                                                                                                  → Runtime / Progress / FSRS
+
+                   all reference the Semantic Foundation
+                   learner-facing state executes on the Local-first Platform
+```
+
+Personal Semantic World 不是 stable Sense 数据库，也不是正式学习的待办箱。正式学习不要求先创建
+Personal Meaning；Book、direct stable-Sense 与 personal-first entry 在 Curriculum 接纳后汇入同一
+Learning System。Content Supply 不等于文件下载：distribution 只是 Published 路径的一部分，按需生产、
+独立校验与 Learning Materialization 同样属于内容供给。Learning Policy、Protocol execution、learner
+progress 与 FSRS 不能由 Package 或内容提供方拥有。
+
+三个系统的数据权威语义分别是：
+
+| 产品系统 | 权威事实 | 可重建或可替换部分 | 主要变化机制 |
+| --- | --- | --- | --- |
+| Personal Semantic World | accepted、versioned personal semantic facts | 页面读取模型、跨域 Projection | object revision、tombstone、领域合并 |
+| Learning System | settled Run/Action/Observation/Evidence/Transition/Outcome 与 Reconciliation Decision | 当前 progress、Memory、due 与其他投影/checkpoint | append-only history、确定性结算与投影 |
+| Content Supply System | immutable release/version/digest、provenance 与 admission result | discovery cache、下载缓存、可重新取得的 published bytes | publish、validate、install、pin、materialize |
+
+“Object is truth / Event is truth / Package version is truth”只能作为速记，不能替代上述精确定义。学习
+系统不是只保存一个裸事件流；可重放还需要固定的 Policy、Protocol、Materialization、Evaluation、
+Transition 与跨设备合并裁决。
+
+跨设备同步和恢复进一步按事实类别决定，而不是按“都在 SQLite”决定：
+
+| 数据类别 | 领域 owner | Cloud Checkpoint | Account Backup | 冲突/恢复语义 |
+| --- | --- | --- | --- | --- |
+| Personal Meaning、Anchor、Alignment、Note、Collection | Personal Semantic World | 是 | 是 | version/revision、tombstone、领域三方合并 |
+| Curriculum intent、Enrollment、Policy Assignment | Learning System / Curriculum | 是 | 是 | versioned command/fact 与确定性 precedence |
+| Run、Action、Observation、Evidence、Outcome、Decision | Learning System | 是 | 是 | append-only、完整性验证、learning reconciliation |
+| 当前 progress、Memory、due projection/checkpoint | Learning System | 可随事实传输但必须验证 | 可随恢复点保存 | 不得覆盖历史；可从固定事实与算法版本重建/核对 |
+| learner-private / On-demand Materialization | Content Supply System | 是 | 是 | immutable digest、admission 与 source/derivation provenance |
+| Personal Anchor media、Practice Artifact 与其他 learner-owned media | 对应 learner-owned Module / Media | 是 | 是 | content-addressed bytes、引用完整性与明确删除语义 |
+| Published Bundle 与公共媒体字节 | Content Supply System | 否，只同步精确安装/应用 identity | 记录可恢复引用，不为每个账号复制公共字节 | 从保留的 immutable artifact 重新取得并校验 digest |
+| Learner Preference | Preference Module | 是 | 是 | typed version 与显式 precedence |
+| Device Preference、Device Operation Ledger、纯读取缓存 | device/platform | 否 | 否 | 本机重建或丢弃 |
+
+Cloud Checkpoint 可以在一个 manifest 中承载多类 learner facts，但必须把各类 validate/merge/replay/delete
+策略交还给对应领域 Module。统一传输格式不意味着统一冲突算法；Sync Module 只拥有内容寻址、清单、
+幂等提交、重试和收敛，不应通过不断增加 table-specific 分支取得领域所有权。
+
+### Intake Layer（入口层，不是第四个事实系统）
+
+Intake Layer 解决“用户在现场遇到、想到或委托整理的材料，如何以同一种语义进入 Sensa”。它横跨
+外部 Surface/adapter、Semantic family 与可选的 Platform delivery，但没有独立的稳定终态聚合：完整
+结果由 Personal Semantic World 拥有，未闭合事实由 Intake Inbox 暂存，远程邮箱只拥有传输状态。
+
+| Intake 部分 | 职责 | 明确不拥有 |
+| --- | --- | --- |
+| Intake Surface / adapter | 获取当前可得的 Context、Expression、Language Observation、Sense、acceptance 与 source provenance，转换为 port-neutral payload | Personal Meaning、快慢轨规则、Curriculum、进度 |
+| Semantic Intake Module | 校验结构/大小/occurrence 关系，执行 operation-id 幂等，判定下一项缺失事实，并原子路由到 fast track 或 Inbox | Context 质量评分、模型自由判断、Learning Target、Evidence |
+| Sense Resolution / Sense Construction | 在 `pending_sense` 时解析已有 stable Sense，或产生供后续 Semantic Acceptance 的 Sense Proposal | 自动 Semantic Acceptance、Personal Meaning membership |
+| Remote Intake Delivery | 以账号和已登记 library 解析目的地，持久保存 canonical mailbox item，返回并推进 `queued | applied` receipt | 语义完整性、快慢轨裁决、本地 commit、设备间 Sync |
+| Personal Semantic World authority | 接收完整且获有效授权的 Context–Expression–Sense tuple，原子创建 Personal Meaning、Anchors 与 Alignment | Intake transport、Add-to-Learning、Learning Outcome |
+
+所有 Intake Surface 共用同一条领域路由：
+
+```text
+Web / Extension / Agent / other Intake Surface
+                         │
+                         ▼
+               port-neutral Intake Payload
+                         │
+                         ▼
+                  Semantic Intake
+       structure + occurrence + idempotency validation
+                         │
+          ┌──────────────┴────────────────┐
+          │ malformed / contradictory     │ valid
+          ▼                              ▼
+ error; no domain result          evaluate next missing fact
+                                  │
+                  ┌───────────────┼───────────────────────────┐
+                  ▼               ▼                           ▼
+          pending_context  pending_expression  pending_sense / pending_acceptance
+                  └───────────────┴───────────────┬───────────┘
+                                                  ▼
+                                          Intake Inbox Item
+                                                  │ resolve / accept
+                                                  └──────────────┐
+                                                                 ▼
+all Context + located Expression + teaching-sufficient Sense + valid Semantic Acceptance
+                                                                 │
+                                                                 ▼ fast_track
+                                                    Personal Semantic World commit
+```
+
+`pending_*` 只命名下一项缺失领域事实，不是入口类型或四套工作流。Semantic routing 没有“内容被模型
+拒绝”的结果：合同错误直接失败；合法但未闭合的材料进入 Inbox；learner 可以显式 dismiss。所谓主动
+延后必须表现为尚未完成 acceptance，从而得到 `pending_acceptance`，不能另造未注册的 `deferred` 状态。
+
+Intake 的 deep Module interface 必须对所有 caller 保持一致：提交一个 payload，返回 `fast_track` 的
+Personal Meaning identity，或返回 `inbox` 的 Intake identity 与下一缺失状态。Surface、Agent、Remote
+Delivery 和页面不能复制完整性排序、直接写语义逻辑表，或绕过同一 commit authority。Sense resolution、
+clarification UI、模型和 transport 是该 Module 使用或连接的 adapter/协作者，不扩大它的外部 interface。
+
+跨域交接必须继续显式：Semantic Acceptance 允许 Personal Semantic World commit，但不包含
+Add-to-Learning；后者由 Curriculum 接纳后才进入 Learning System。反向地，Learning Runtime 形成的
+Personal Learning Scene 只有经过新的显式 Semantic Acceptance 才能经 Intake/commit 进入 Personal
+Semantic World，不能由学习历史自动推断。
+
 ### 完整产品形态（不以首发范围裁剪）
 
 2026-09-08 Owner 再次确认：Sensa 的 PC/移动主应用是 Flutter 编写的本地软件，承载完整个人学习库、
@@ -41,15 +167,20 @@ React Web 保持既有平台定位和迁移验证价值；不能把阶段性的 
                        ↓ 固定上下文与表达
             快轨原位确认 / 慢轨保存后澄清
                        ↓ 合法 Semantic Acceptance
-             我的语义世界：Context–Sense–Expression
-                       ↓ 显式加入学习
-      Learning Target + 用户选择的 Learning Policy
-                       ↓ 按需生成 / 复用 / 混合供给
-              校验并冻结 Learning Materialization
-                       ↓
-          本地初学 → 本地复习/重学 → 本地记录与调度
-
-不可变 Registry → Book Release Bundle → 下载到本地 → 显式加入/应用更新 ──┘
+   Personal Semantic World：Personal Meaning + Anchors + Alignment
+                       │ 显式 Add-to-Learning bridge
+                       ├──────────────────────────────────────────┐
+                       │                                          ▼
+不可变 Registry → Book Release Bundle → 下载/安装 → 显式加入/应用更新 → Curriculum
+direct stable Sense + target binding ─────────────────────────────┘
+                                                                  ↓
+                                           Learning Target + Learning Policy
+                                                                  ↓
+                                      Published / On-demand / Hybrid 供给
+                                                                  ↓
+                                            校验并冻结 Learning Materialization
+                                                                  ↓
+                                      本地初学 → 复习/重学 → 历史、投影与调度
 ```
 
 Owner 明确将面向 Agent 的端口纳入完整采集蓝图。Agent 可以在用户授权范围内提交固定上下文、
@@ -95,22 +226,29 @@ Sync 的产品单位是 Cloud Checkpoint：所有操作先提交本机事实，�
 幂等和原结果返回，不是 Personal Library Fact，也不进入 Cloud Checkpoint。跨设备 Intake 防重由已保存
 的 Intake 领域事实和 Remote Intake Delivery Receipt 共同完成；Learning Event 自身保存不可改写的
 动作、解释与结算事实，不依赖原始 operation input 才能恢复。相同媒体内容复用同一组摘要块。
+同一 Target 的并发已完成 Learning Run 按 [ADR 0005](../adr/0005-concurrent-learning-history-reconciliation.md)
+保存两端原始历史并写入可审计裁决；普通内容的本机/云端选择器不得覆盖学习历史或让同一次到期 Review
+重复贡献排程。
 
-### 领域层职责
+### 软件职责层次（与产品系统正交）
 
-Sensa 由三个职责独立的层组成：
+Product Shell、Learning Kernel 与 Production Base 描述软件职责如何分层，不是另一组产品领域，也不
+分别对应上述三个产品系统。一个产品系统可以跨越三个软件层；同一个软件层也可以承载多个产品系统
+的 interface 或 adapter。
 
-- **Product Shell**：用户看到的信息架构、Curriculum lifecycle、Session intent、Lexical Reference、
-  Settings Surface、作为读取/治理/交接控制面的 Personal Semantic World Surface、个人语义投影、
-  自由练习、学习节奏和反馈；
-- **Learning Kernel**：Learning Target/Capability Objective、内容物化、Learning Protocol Purpose、
+- **Product Shell**：呈现信息架构、Session intent、Lexical Reference、Settings Surface、作为读取/
+  治理/交接控制面的 Personal Semantic World Surface、个人语义投影、自由练习、学习节奏和反馈，并
+  向领域 Module 提交显式 command；它不拥有 Curriculum lifecycle 或其他领域事实；
+- **Learning Kernel**：实现 Learning Target/Capability Objective、内容物化约束、Learning Protocol Purpose、
   Protocol Step/Checkpoint、Attempt→Observation→Evidence→Transition、协议特定进度、Initial Learning
   Completion、graded Memory Outcome、Scheduling Decision 与 Scheduling Handoff；
 - **Production Base**：本地库持久化与恢复、设备/可选账号身份、Sensa Sync、公共资源交付和在线服务适配。
   浏览器存储与宿主约束按迁移用例验收。Postgres 只保留账号、云同步、资源目录与按需在线服务数据。
 
-Product Shell 不定义学习证据或毕业条件。Learning Kernel 不拥有账号、网络同步或媒体字节。
-Production Base 不决定一个 Sense 应当如何被理解或当前应当使用哪种学习干预。
+Curriculum Module，而不是 Product Shell，拥有 Enrollment、Policy Assignment 与 Study Scope lifecycle。
+Content Supply 是产品领域，不因部分发布、存储与下载能力落在 Production Base 就退化为基础设施。
+Product Shell 不定义学习证据或毕业条件；Learning Kernel 不拥有账号、网络同步或媒体字节；Production
+Base 不决定一个 Sense 应当如何被理解、哪些内容通过 admission 或当前应当使用哪种学习干预。
 
 ### Semantic Design Contract 与 Sensa Skin
 
@@ -313,7 +451,7 @@ Browser / Mobile / Desktop / authorized Agent Intake Ports
                               ▼
                        Semantic Intake
                               │
-          ┌── missing facts / unresolved / deferred ──▶ Intake Inbox
+          ┌── missing facts / unresolved / pending acceptance ──▶ Intake Inbox
           │                                           │ resolve
           └── complete Context + Expression + Sense ◀─┘
                               │
@@ -772,6 +910,23 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 
 ## 5. 模块边界
 
+以下 Module 保留各自聚合与 interface，但不再作为 26 个没有上级关系的平级盒子理解。它们按产品系统
+和共享支撑职责组成四个 bounded-context family：
+
+- **Semantic family**：Lexical Reference、Semantic Intake、Personal Semantic World、Sense Construction、
+  Learner Semantic Projection；它们引用 Language Context/Support 与公共 Semantic Foundation；
+- **Learning family**：Curriculum、Free Practice、Learning Policy & Protocol、Executable Learning
+  Capability Resolver、Learner Progress、Unified Planning、Semantic Policy、Encounter、Evaluation &
+  Evidence、FsrsAdapter；Free Practice 明确与正式学习结算隔离；
+- **Content Supply family**：Catalog、Content Provisioning 以及仓库外侧的 authoring/validation/publishing
+  pipeline；Published distribution 与 On-demand production 在 Materialization 前汇合；
+- **Platform family**：Account & Access、Preference、Data Control、Sensa Sync、Media、Remote Intake
+  Delivery、Account Backup，以及为前三个 family 提供的持久化和在线 adapter。
+
+这些分组决定所有权和允许的依赖方向，不要求数据库按 family 拆成多个文件或服务。物理共用
+SQLite/Postgres、Cloud Checkpoint 或媒体存储不构成领域耦合；跨 family 只能通过明确的 identity、fact、
+command 或 deep Module interface 协作，不能让页面状态、传输记录或数据库表成为第二领域 authority。
+
 1. **Account & Access Module**：拥有 Account、Account Session、identity-provider binding 与 Account
    lifecycle；它授权 LearnerScope，但不拥有学习事实；
 2. **Preference Module**：拥有 versioned Learner Preference；各客户端独立拥有包含 Interface Locale 与
@@ -899,6 +1054,11 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 - Registry 更新发现、Book Release 下载与 Book Version 应用必须分离；后台检查不改变 Curriculum，
   下载不等于加入学习，只有 learner 显式应用才产生新的 Study Scope。未改变 Sense/Binding identity
   的成员保留 Retention state，删除成员只退出未来 Planning，旧 Session 和历史继续引用旧 release；
+- 可按 immutable version/digest 从 Content Supply 重新取得的 Published Bundle 与公共媒体字节是安装缓存，
+  不是 Personal Library Fact，不应通过日常账号 Cloud Checkpoint 为每个 learner 重复复制。账号同步只
+  保存安装/应用状态、精确内容 identity/digest 和 learner-owned facts；私有或按需 Materialization 仍按
+  其 learner ownership 进入同步与备份。运行历史引用的旧 Published artifact 必须由 Content Supply
+  保持可寻址，不能依赖某台设备偶然留存的缓存；
 - Semantic Field 是有限、版本化的内容邻域，不是 Book、学习路径或通用人类 ontology；
 - Personal Semantic World 只接纳具备真实 Context、located Expression、teaching-sufficient stable Sense/
   Binding 与有效 Semantic Acceptance 的完整 Personal Meaning；未闭合 Intake 留在 Inbox；

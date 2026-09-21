@@ -7,11 +7,13 @@ import {z} from 'zod';
 import {ConsumerError} from '../access/auth.js';
 import {contentHash} from '../shared/contentHash.js';
 import {stream} from 'hono/streaming';
+import {createStreamAuthorizationGate} from '../access/streamAuthorization.js';
 
-type Connection=ReadingProvider & {apiKey:string};
+type Connection=ReadingProvider & {apiKey:string;schedulingKey?:string};
 type Settings={providers:Connection[];assignments:ReadingAssignments};
 type Scope={account_id:string;now:Date};
 type WithScope=<T>(request:Request,work:(db:DatabaseExecutor,a:Scope)=>Promise<T>)=>Promise<T>;
+type RevalidateScope=(request:Request)=>Promise<void>;
 export type ReadingCompletion=(connection:Connection,messages:{role:'system'|'user';content:string}[],json?:boolean,onText?:(text:string)=>Promise<void>)=>Promise<string>;
 export const readingDailyLimit=300;
 
@@ -91,13 +93,13 @@ function view(revision:number,settings:Settings):ReadingSettingsView {
 }
 /** Resolves the account connection for any assigned purpose — reading features and
  * Web model purposes share one registry, so a configured key serves both. */
-export function selectConnection(settings:Settings,feature:keyof ReadingAssignments):Connection {
+export function selectConnection(settings:Settings,feature:keyof ReadingAssignments,accountId?:string):Connection {
   const id=settings.assignments[feature];
-  if(id){const found=settings.providers.find(p=>p.id===id&&p.enabled);if(!found)throw new ConsumerError(409,'provider_unavailable');allowed(found.baseUrl);return found;}
+  if(id){const found=settings.providers.find(p=>p.id===id&&p.enabled);if(!found)throw new ConsumerError(409,'provider_unavailable');allowed(found.baseUrl);return accountId?{...found,schedulingKey:`account:${accountId}:${found.id}`} : found;}
   if(process.env.SENSA_MANAGED_MODELS_PAUSED==='1')throw new ConsumerError(503,'managed_models_paused');
   if(process.env.SENSA_SEMANTIC_PROVIDER==='deepseek'&&process.env.DEEPSEEK_API_KEY)return {
     id:'00000000-0000-4000-8000-000000000001',name:'Sensa 默认',enabled:true,
-    baseUrl:'https://api.deepseek.com',model:process.env.SENSA_SEMANTIC_MODEL??'deepseek-flash',apiKey:process.env.DEEPSEEK_API_KEY,
+    baseUrl:'https://api.deepseek.com',model:process.env.SENSA_SEMANTIC_MODEL??'deepseek-flash',apiKey:process.env.DEEPSEEK_API_KEY,schedulingKey:'managed:deepseek',
   };
   throw new ConsumerError(409,'provider_not_configured');
 }
@@ -105,12 +107,12 @@ export function selectConnection(settings:Settings,feature:keyof ReadingAssignme
  * turn route resolves its connection only once it knows the requested purpose. */
 export async function connectionSelector(db:DatabaseExecutor,a:Scope):Promise<(feature:keyof ReadingAssignments)=>Connection>{
   const {settings}=await readSettings(db,a);
-  return feature=>selectConnection(settings,feature);
+  return feature=>selectConnection(settings,feature,a.account_id);
 }
-export async function activeMeaningConnection(db:DatabaseExecutor,a:Scope){return selectConnection((await readSettings(db,a)).settings,'meaning');}
+export async function activeMeaningConnection(db:DatabaseExecutor,a:Scope){return selectConnection((await readSettings(db,a)).settings,'meaning',a.account_id);}
 export async function configuredMeaningConnection(db:DatabaseExecutor,a:Scope):Promise<Connection|null>{
   const {settings}=await readSettings(db,a);
-  return settings.assignments.meaning?selectConnection(settings,'meaning'):null;
+  return settings.assignments.meaning?selectConnection(settings,'meaning',a.account_id):null;
 }
 async function responseText(response:Response,max:number){
   if(!response.body)throw new ConsumerError(503,'provider_invalid_response');
@@ -129,7 +131,7 @@ export const completeReading:ReadingCompletion=async(connection,messages,json=fa
   return text;
 };
 
-export function registerReadingRoutes(app:Hono,withScope:WithScope,completion:ReadingCompletion=completeReading){
+export function registerReadingRoutes(app:Hono,withScope:WithScope,revalidateScope:RevalidateScope,completion:ReadingCompletion=completeReading){
   app.get('/sensa/reading/settings',async c=>c.json(await withScope(c.req.raw,async(db,a)=>{const {revision,settings}=await readSettings(db,a);return view(revision,settings);} )));
   app.post('/sensa/reading/settings',async c=>{
     const input=readingSettingsInputSchema.parse(await c.req.json());
@@ -174,19 +176,21 @@ export function registerReadingRoutes(app:Hono,withScope:WithScope,completion:Re
       const active=(await db.query("SELECT count(*)::int AS n FROM sensa_consumer.reading_requests WHERE account_id=$1 AND status='running' AND created_at>$2",[a.account_id,new Date(a.now.getTime()-45000)])).rows[0]!.n;
       if(active>=3)throw new ConsumerError(409,'reading_busy');
       const {settings}=await readSettings(db,a);
-      const connection='providerId' in input?settings.providers.find(p=>p.id===input.providerId&&p.enabled):selectConnection(settings,input.feature);
+      const selected='providerId' in input?settings.providers.find(p=>p.id===input.providerId&&p.enabled):selectConnection(settings,input.feature,a.account_id);
+      const connection=selected&&'providerId' in input?{...selected,schedulingKey:`account:${a.account_id}:${selected.id}`} : selected;
       if(!connection)throw new ConsumerError(404,'provider_not_found');allowed(connection.baseUrl);
       await db.query("INSERT INTO sensa_consumer.reading_requests(account_id,id,input_digest,status,created_at) VALUES($1,$2,$3,'running',$4)",[a.account_id,input.id,digest,a.now]);
       return {existing:null,connection};
     });
     if(started.existing)return started.existing;
     let text:string|null=null,error:string|null=null,lastPartial=0;
+    const revalidate=createStreamAuthorizationGate(()=>revalidateScope(request));
     try{
       const test='providerId' in input;
       text=await completion(started.connection!,[
         {role:'system',content:test?'Reply with OK.':readingSystemPrompt(input)},
         {role:'user',content:test?'Connection test':JSON.stringify(input.feature==='action'?{text:input.text,context:input.context,learnerInstruction:input.instruction}:{text:input.text,context:input.context})},
-      ],false,onText?async partial=>{if(Date.now()-lastPartial<100)return;lastPartial=Date.now();await withScope(request,async()=>undefined);await onText(partial);}:undefined);
+      ],false,onText?async partial=>{if(Date.now()-lastPartial<100)return;lastPartial=Date.now();await revalidate();await onText(partial);}:undefined);
       if(typeof text!=='string'||!text.trim()||text.length>24000)throw new ConsumerError(503,'provider_invalid_response');
     }catch(e){error=e instanceof ConsumerError?e.code:'provider_unavailable';text=null;}
     return withScope(request,async(db,a)=>{

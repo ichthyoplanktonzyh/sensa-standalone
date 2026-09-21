@@ -5,7 +5,7 @@ import {openAIModelRunner} from '@genkit-ai/compat-oai';
 import OpenAI from 'openai';
 import {ModelExecutionQueue,ModelExecutionError,type ModelPurpose,type ModelTurnBody,type ModelExecutionRecord} from '@sensa/contracts/sensa';
 
-type Connection={baseUrl:string;apiKey:string;model:string;temperature?:number};
+type Connection={id?:string;schedulingKey?:string;baseUrl:string;apiKey:string;model:string;temperature?:number};
 type Work={connection:Connection;body:ModelTurnBody;signal:AbortSignal;onText?:(text:string)=>Promise<void>;result?:GenerateResponseData;record:ModelExecutionRecord};
 const context=new AsyncLocalStorage<Work>();
 const apiStatus=(e:unknown)=>{if(!e||typeof e!=='object')return undefined;const status='status' in e&&typeof e.status==='number'?e.status:'code' in e&&typeof e.code==='number'?e.code:undefined;return status&&status>=400&&status<=599?status:undefined;};
@@ -47,7 +47,7 @@ const flow=ai.defineFlow('sensa-model-execution',async(meta:{id:string;purpose:M
 export async function executeModel(connection:Connection,body:ModelTurnBody,options:{id?:string;purpose:ModelPurpose;signal?:AbortSignal;onText?:(text:string)=>Promise<void>;onExecutionStart?:()=>Promise<void>}){
  const base=new URL(connection.baseUrl);if(base.protocol!=='https:'||base.username||base.password||base.search||base.hash)throw new ModelExecutionError('model_provider_failed');
  const id=options.id??crypto.randomUUID(),provider=base.origin;
- try{return await modelQueue.run({id,provider,model:connection.model,purpose:options.purpose,execution:'service'},options.signal??AbortSignal.timeout(45000),async(signal,record)=>{
+ try{return await modelQueue.run({id,provider,model:connection.model,purpose:options.purpose,execution:'service',schedulingKey:connection.schedulingKey??connection.id??provider},options.signal??AbortSignal.timeout(45000),async(signal,record)=>{
   await options.onExecutionStart?.();
   const work:Work={connection,body,signal,onText:options.onText,record};
   const traced=await context.run(work,()=>flow.run({id,purpose:options.purpose,provider,model:connection.model},{abortSignal:signal}));record.traceId=traced.telemetry.traceId;

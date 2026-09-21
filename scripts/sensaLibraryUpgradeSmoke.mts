@@ -80,7 +80,7 @@ await store.readLibrary(async (tx) => {
 const diagnostics = await store.readLibraryStorageDiagnostics();
 assert.deepEqual(
   { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
-  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 7 },
+  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 9 },
 );
 
 const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearningTargetsQuery }, { encodeBackupValue }, { sqliteLibrarySchema }] = await Promise.all([
@@ -90,13 +90,13 @@ const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearnin
   import('../apps/web/src/data/library/sqliteProtocol.ts'),
 ]);
 const sqlite3 = await sqlite3InitModule();
-for (const version of [6, 8]) {
+for (const version of [8, 10]) {
   const incompatibleRaw = new sqlite3.oo1.DB(':memory:', 'c');
   incompatibleRaw.exec(`CREATE TABLE owner_fixture(value TEXT); INSERT INTO owner_fixture VALUES('preserve-me'); PRAGMA user_version=${version}`);
   const incompatibleDatabase = new SqliteRecordDatabase(sqlite3, incompatibleRaw, 'memory');
   assert.throws(
     () => incompatibleDatabase.initialize(),
-    version < 7 ? /sqlite_schema_legacy:6/u : /sqlite_schema_future:8/u,
+    version < 9 ? /sqlite_schema_legacy:8/u : /sqlite_schema_future:10/u,
     'unsupported physical schemas must stop instead of opening an empty replacement',
   );
   const preserved = incompatibleRaw.exec({ sql: 'SELECT value FROM owner_fixture', rowMode: 0, returnValue: 'resultRows' }) as unknown[];
@@ -142,6 +142,48 @@ database.commit({
   ],
 });
 assert.equal(database.get('semanticState', 'root'), '{"version":"sensa-personal-meaning-journey-store-v4"}');
+database.commit({
+  contentRevision: 1,
+  clears: [],
+  deletes: [],
+  puts: [
+    { table: 'drafts', key: 'changed-a', encodedValue: '{"revision":1}' },
+    { table: 'drafts', key: 'changed-b', encodedValue: '{"revision":1}' },
+  ],
+});
+database.commit({
+  contentRevision: 2,
+  clears: [],
+  deletes: [{ table: 'drafts', key: 'changed-a' }],
+  puts: [
+    { table: 'drafts', key: 'changed-b', encodedValue: '{"revision":2}' },
+    { table: 'drafts', key: 'changed-c', encodedValue: '{"revision":1}' },
+  ],
+});
+assert.deepEqual(database.changesSince(1, ['drafts']), [
+  { table: 'drafts', key: 'changed-a', encodedValue: null, contentRevision: 2 },
+  { table: 'drafts', key: 'changed-b', encodedValue: '{"revision":2}', contentRevision: 2 },
+  { table: 'drafts', key: 'changed-c', encodedValue: '{"revision":1}', contentRevision: 2 },
+]);
+assert.deepEqual(database.changesSince(2, ['drafts']), []);
+database.commit({
+  clears: [],
+  deletes: [],
+  puts: [],
+  syncBaseReplacement: [
+    { table: 'drafts', key: 'changed-b', valueJson: '{"revision":2}', blockRefs: ['a'.repeat(64)] },
+    { table: 'meta', key: 'identity', valueJson: '{"id":"fixture"}', blockRefs: ['b'.repeat(64)] },
+  ],
+});
+assert.deepEqual(database.syncBaseEntries(), [
+  { table: 'drafts', key: 'changed-b', valueJson: '{"revision":2}', blockRefs: ['a'.repeat(64)] },
+  { table: 'meta', key: 'identity', valueJson: '{"id":"fixture"}', blockRefs: ['b'.repeat(64)] },
+]);
+assert.deepEqual(database.syncBaseEntries([{ table: 'drafts', key: 'changed-b' }]), [
+  { table: 'drafts', key: 'changed-b', valueJson: '{"revision":2}', blockRefs: ['a'.repeat(64)] },
+]);
+database.commit({ clears: [], deletes: [], puts: [], syncBaseReplacement: [] });
+assert.deepEqual(database.syncBaseEntries(), []);
 assert.throws(() => database.commit({
   clears: [],
   deletes: [],
@@ -319,4 +361,4 @@ assert.deepEqual(database.homeLearningProjection('route-a').targets, []);
 assert.match(database.diagnostics().sqliteVersion, /^3\./u);
 database.close();
 
-console.log('PASS: Library records preserve typed values and atomic replay; SQLite schema v7 uses rowid for large JSON plus compact indexed relationship projections, planner statistics, native counts and logical-table constraints. Browser OPFS is checked separately.');
+console.log('PASS: Library records preserve typed values and atomic replay; SQLite schema v9 journals record-level changes and confirmed block references for incremental sync while retaining compact indexed projections, planner statistics, native counts and logical-table constraints. Browser OPFS is checked separately.');

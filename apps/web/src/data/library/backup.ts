@@ -13,7 +13,7 @@ const unb64=(value:string)=>{if(!/^[A-Za-z0-9+/]*={0,2}$/u.test(value))throw new
 const passSchema=z.string().min(12).max(1024);
 async function keyFor(password:string,salt:Uint8Array){const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(passSchema.parse(password)),{name:'PBKDF2'},false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt:salt as BufferSource,iterations:600000},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
 const rowSchema=z.object({key:z.string().min(1).max(2000),value:z.unknown()}).strict();
-const payloadSchema=z.object({format:z.literal('sensa-web-library-snapshot-v1'),librarySchema:z.literal(4),createdAt:z.string().datetime({offset:true}),owner:backupOwnerSchema,tables:z.record(z.string(),z.array(rowSchema))}).strict();
+const payloadSchema=z.object({format:z.literal('sensa-web-library-snapshot-v1'),librarySchema:z.literal(5),createdAt:z.string().datetime({offset:true}),owner:backupOwnerSchema,tables:z.record(z.string(),z.array(rowSchema))}).strict();
 const envelopeSchema=z.object({format:z.literal('sensa-web-library-backup-v1'),kdf:z.literal('PBKDF2-SHA256'),iterations:z.literal(600000),cipher:z.literal('AES-256-GCM'),salt:z.string().max(24),iv:z.string().max(16),data:z.string().max(MAX_FILE)}).strict();
 export type BackupSummary={createdAt:string;account:string;libraryId:string;drafts:number;meanings:number;packages:number;targets:number;runs:number;events:number;preparations:number;interrupted:number};
 export type BackupSizeEstimate={usedBytes:number;capacityBytes:number};
@@ -33,7 +33,7 @@ async function encodeCurrentLibrary(){
  if(libraryTables.reduce((count,table)=>count+snapshot.rows[table].length,0)>200000)throw new Error('libraryBackup.errors.rowLimit');
  validateBackupRows(snapshot.rows);
  const tables=Object.fromEntries(libraryTables.map(t=>[t,snapshot.rows[t].map(r=>({key:r.key,value:encodeBackupValue(r.value)}))]));
- const payload=payloadSchema.parse({format:'sensa-web-library-snapshot-v1',librarySchema:4,createdAt:new Date().toISOString(),owner:snapshot.owner,tables});
+ const payload=payloadSchema.parse({format:'sensa-web-library-snapshot-v1',librarySchema:5,createdAt:new Date().toISOString(),owner:snapshot.owner,tables});
  const plaintext=new TextEncoder().encode(JSON.stringify(payload));if(plaintext.length>MAX_PLAIN)throw new Error('libraryBackup.errors.sizeLimit');
  return {payload,rows:snapshot.rows,plaintext};
 }
