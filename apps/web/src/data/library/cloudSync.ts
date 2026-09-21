@@ -1,11 +1,20 @@
-import {canonicalConsumerJson,librarySyncManifest,librarySyncHead,librarySyncTables,librarySyncBlockChars,librarySyncBlockFetchHashes,librarySyncBlockFetchResult,librarySyncBlockMissingResult,librarySyncBlockStore,librarySyncBlockStoreBatch,librarySyncBlockStoreChars,type LibrarySyncManifest,type LibrarySyncHead} from '@sensa/contracts/sensa';
-import {libraryTables,readLibrary,readLocalLibraryRevision,restoreLibraryTransaction,writeLibraryState,assertCurrentLibrary,type LibraryTransaction,type Table,type LibraryIdentity} from './store';
+import {librarySyncManifest,librarySyncHead,librarySyncTables,librarySyncBlockChars,librarySyncBlockFetchHashes,librarySyncBlockFetchResult,librarySyncBlockMissingResult,librarySyncBlockStore,librarySyncBlockStoreBatch,librarySyncBlockStoreChars,type LibrarySyncManifest,type LibrarySyncHead} from '@sensa/contracts/sensa';
+import {readLibrary,readLocalLibraryRevision,restoreLibraryTransaction,writeLibraryState,assertCurrentLibrary,type LibraryTransaction,type LibraryIdentity} from './store';
 import {backupEqual,encodeBackupValue,decodeBackupValue} from './backupCodec';
-import {validateBackupRows,type BackupRows} from './backupValidation';
 import {cloudSyncFailurePolicy,type CloudSyncFailureKind} from './cloudSyncPolicy';
-import {reconcileConcurrentLearningEntries} from './learningReconciliation';
+import {
+ isReplicatedLibraryEntry,
+ mergeLibraryReplicas,
+ normalizeLibraryReplicaEntry,
+ partitionLibraryReplicaConflicts,
+ replicaEntriesEqual,
+ replicaEntryId,
+ type LibraryReplicaEntry,
+} from './replication/libraryReplica';
+import {applyLibraryReplicaMutation} from './replication/libraryReplicaApplication';
+import {validateLibraryReplica} from './replication/libraryReplicaValidation';
 export type SyncRequest=(path:string,body?:unknown)=>Promise<any>;
-export type CloudSyncEntry={table:typeof librarySyncTables[number];key:string;value:unknown;blocks?:string[]};
+export type CloudSyncEntry=LibraryReplicaEntry;
 type Entry=CloudSyncEntry;
 type Owner={subject:string;accountId:string};
 export type CloudSyncConflictChoice='local'|'remote';
@@ -13,28 +22,12 @@ export type CloudSyncConflict={detectedAt:string;remoteRevision:number;remoteMan
 export type CloudSyncState={owner:Owner;incarnation:string;revision:number;storage?:LibrarySyncHead['storage'];syncedLocalRevision?:number;pending?:{operationId:string;baseRevision:number;manifest:string[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];conflict?:CloudSyncConflict;resolution?:{choice:CloudSyncConflictChoice;expectedRemoteRevision:number};lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
 type State=CloudSyncState;
 const STATE='cloud-sync';
-const LIBRARY_CREATE_OPERATION='00000000-0000-4000-8000-000000000001';
-const entryId=(r:Pick<Entry,'table'|'key'>)=>JSON.stringify([r.table,r.key]);
 const equal=backupEqual;
-const entryEqual=(left:Entry|undefined,right:Entry|undefined)=>left===undefined||right===undefined?left===right:left.table===right.table&&left.key===right.key&&equal(left.value,right.value);
-const entriesEqual=(left:Entry[],right:Entry[])=>left.length===right.length&&left.every((entry,index)=>entryEqual(entry,right[index]));
+const entryId=replicaEntryId;
+const entriesEqual=replicaEntriesEqual;
 const hash=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),b=>b.toString(16).padStart(2,'0')).join('');
 /** A restore holds block text in memory before assembling rows; keep that bounded. */
 const TRANSFER_CAP=96*1024*1024;
-// The package catalog is a short-lived service cache. Synchronizing it lets a
-// stale descriptor from another browser replace the catalog this device just
-// fetched, so keep it local in the same way as provider credentials.
-const allowed=(table:Entry['table'],key:string)=>(table!=='meta'||['identity','learning-active'].includes(key))&&(table!=='settings'||key!=='providers');
-function normalized(table:Entry['table'],key:string,raw:any,identity:LibraryIdentity){
- const value=structuredClone(raw);
- // Library identity is shared; a browser installation keeps its own device identity.
- if(table==='meta'&&key==='identity')value.deviceId=identity.id;
- // Process leases cannot be resumed in another browser. Do not transport live ownership.
- if(table==='sessions'&&value.status==='inflight'){value.status='stopped';value.lease=null;}
- if(table==='personalLearning'&&['generating','reviewing'].includes(value.status)){value.status='failed';value.leaseUntil=0;value.notice='localFlow.restoredPreparation';}
- if(table==='contentAttempts'&&['generating','reviewing'].includes(value.status))value.status='failed';
- return value;
-}
 async function capture(tx:LibraryTransaction){
  const incarnation=await assertCurrentLibrary(tx),owner=await tx.get<Owner>('meta','service-owner'),identity=await tx.get<LibraryIdentity>('meta','identity');
  if(!owner?.accountId||!identity||await tx.get('meta','signed-out'))throw new Error('authentication_required');
@@ -46,8 +39,9 @@ async function capture(tx:LibraryTransaction){
   const current=new Map(base.map(row=>[entryId(row),row]));
   for(const change of await tx.changesSince(state.syncedLocalRevision,librarySyncTables)){
    const id=entryId(change);
-   if(change.value===null||!allowed(change.table,change.key)){current.delete(id);continue;}
-   current.set(id,{table:change.table,key:change.key,value:encodeBackupValue(normalized(change.table,change.key,change.value,identity))});
+   if(change.value===null||!isReplicatedLibraryEntry(change.table,change.key)){current.delete(id);continue;}
+   const normalized=normalizeLibraryReplicaEntry({table:change.table,key:change.key,value:change.value},identity);
+   current.set(id,{...normalized,table:change.table,value:encodeBackupValue(normalized.value)});
   }
   entries.push(...current.values());
  }else{
@@ -55,46 +49,17 @@ async function capture(tx:LibraryTransaction){
   // changed since the last converged local revision, never the device ledger.
   for(const table of librarySyncTables)for(const row of await tx.entries(table)){
    if(typeof row.key!=='string')throw new Error('library_sync_format');
-   if(allowed(table,row.key))entries.push({table,key:row.key,value:encodeBackupValue(normalized(table,row.key,row.value,identity))});
+   if(isReplicatedLibraryEntry(table,row.key)){
+    const normalized=normalizeLibraryReplicaEntry({table,key:row.key,value:row.value},identity);
+    entries.push({...normalized,table,value:encodeBackupValue(normalized.value)});
+   }
   }
  }
  entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));
  return {owner,incarnation,identity,entries,base,localRevision,state,packageCache};
 }
-function rowsFor(entries:Entry[],packageCache:BackupRows['packageCache']=[]):BackupRows{
- const rows=Object.fromEntries(libraryTables.map(t=>[t,[]])) as unknown as BackupRows;
- for(const row of entries)rows[row.table].push({key:row.key,value:decodeBackupValue(row.value)});
- const installationKeys=new Set(rows.packageInstallations.map(row=>row.key));
- rows.packageCache=packageCache.filter(row=>installationKeys.has(row.key)).map(row=>({key:row.key,value:row.value}));
- validateBackupRows(rows);return rows;
-}
 function sameOwner(a:Owner,b:Owner){return a.subject===b.subject&&a.accountId===b.accountId;}
 function empty(entries:Entry[]){return entries.every(r=>r.table==='meta'&&r.key==='identity');}
-/** Three-way record merge. Conflicting records stay local; no time-based winner. */
-export function mergeLibraryEntries(base:Entry[],local:Entry[],remote:Entry[]){
- const b=new Map(base.map(r=>[entryId(r),r])),l=new Map(local.map(r=>[entryId(r),r])),r=new Map(remote.map(r=>[entryId(r),r]));const conflicts:string[]=[],entries:Entry[]=[];
- for(const key of new Set([...b.keys(),...l.keys(),...r.keys()])){
-  const prior=b.get(key),ours=l.get(key),theirs=r.get(key);let chosen=ours;
-  if(entryEqual(ours,prior))chosen=theirs;
-  else if(!entryEqual(theirs,prior)&&!entryEqual(ours,theirs))conflicts.push(key);
-  if(chosen)entries.push(chosen);
- }
- entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));
- return reconcileConcurrentLearningEntries({base,local,remote,merged:entries,conflicts}) as {entries:Entry[];conflicts:string[]};
-}
-/** Keep a conflict and every referencing record together; independent components may still sync. */
-function partitionConflicts(base:Entry[],local:Entry[],remote:Entry[],merged:Entry[],conflicts:string[]){
- const all=[...base,...local,...remote],idsByKey=new Map<string,Set<string>>(),edges=new Map<string,Set<string>>();
- for(const row of all){const id=entryId(row);const ids=idsByKey.get(row.key)??new Set<string>();ids.add(id);idsByKey.set(row.key,ids);edges.set(id,edges.get(id)??new Set());}
- const connect=(a:string,b:string)=>{if(a===b)return;edges.get(a)!.add(b);edges.get(b)!.add(a);};
- for(const row of all){const id=entryId(row);const visit=(value:any,depth=0):void=>{if(depth>80)return;
-  if(typeof value==='string'){for(const other of idsByKey.get(value)??[])connect(id,other);if(value.startsWith('{')){try{visit(JSON.parse(value),depth+1);}catch{/* Ordinary text. */}}}
-  else if(Array.isArray(value))value.forEach(v=>visit(v,depth+1));else if(value&&typeof value==='object')Object.values(value).forEach(v=>visit(v,depth+1));
- };visit(decodeBackupValue(row.value));}
- const blocked=new Set(conflicts),queue=[...blocked];for(let at=0;at<queue.length;at++)for(const next of edges.get(queue[at])??[])if(!blocked.has(next)){blocked.add(next);queue.push(next);}
- const select=(unblocked:Entry[],held:Entry[])=>[...unblocked.filter(r=>!blocked.has(entryId(r))),...held.filter(r=>blocked.has(entryId(r)))].sort((a,b)=>entryId(a).localeCompare(entryId(b)));
- return {local:select(merged,local),upload:select(merged,remote),base:(published:Entry[])=>select(published,base),affectedRecordIds:[...blocked].sort()};
-}
 function conflictSnapshot(base:Entry[],local:Entry[],remote:Entry[],conflicts:string[],affectedRecordIds:string[],head:LibrarySyncHead):CloudSyncConflict{
  const byId=(entries:Entry[])=>new Map(entries.map(entry=>[entryId(entry),entry]));const b=byId(base),l=byId(local),r=byId(remote);
  return {detectedAt:new Date().toISOString(),remoteRevision:head.revision,remoteManifest:head.manifest,records:conflicts.map(id=>({id,base:b.get(id)??null,local:l.get(id)??null,remote:r.get(id)??null})),affectedRecordIds};
@@ -102,12 +67,12 @@ function conflictSnapshot(base:Entry[],local:Entry[],remote:Entry[],conflicts:st
 async function localDiffersFromBase(tx:LibraryTransaction,state:State,identity:LibraryIdentity){
  if(state.syncedLocalRevision===undefined)return true;
  const changes=(await tx.changesSince(state.syncedLocalRevision,librarySyncTables))
-  .filter(change=>allowed(change.table,change.key));
+  .filter(change=>isReplicatedLibraryEntry(change.table,change.key));
  if(!changes.length)return false;
  const base=new Map((await tx.syncBaseEntries<typeof librarySyncTables>(changes.map(({table,key})=>({table,key}))))
   .map(row=>[entryId(row),row.value]));
  return changes.some(change=>{
-  const current=change.value===null?undefined:encodeBackupValue(normalized(change.table,change.key,change.value,identity));
+  const current=change.value===null?undefined:encodeBackupValue(normalizeLibraryReplicaEntry({table:change.table,key:change.key,value:change.value},identity).value);
   return !equal(current,base.get(entryId(change)));
  });
 }
@@ -119,24 +84,11 @@ async function saveState(expected:{owner:Owner;incarnation:string},work:(old:Sta
  await writeLibraryState(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');tx.put('meta',STATE,work(await tx.get<State>('meta',STATE)));if(base!==undefined)tx.replaceSyncBase(base);});
 }
 async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries:Entry[],state:State,base:Entry[]){
- const rows=rowsFor(entries,expected.packageCache);
- const decoded=new Map<string,any>();
- for(const table of librarySyncTables)for(const row of rows[table])decoded.set(entryId({table,key:row.key}),row.value);
+ const rows=validateLibraryReplica(entries,expected.packageCache);
  await restoreLibraryTransaction(async tx=>{
   const current=await capture(tx);if(!sameOwner(current.owner,expected.owner)||current.incarnation!==expected.incarnation)throw new Error('account_changed');
   if(!entriesEqual(current.entries,expected.entries))throw new Error('library_sync_local_changed');
-  const next=new Map(entries.map(r=>[entryId(r),r]));
-  for(const row of current.entries)if(!next.has(entryId(row)))tx.delete(row.table,row.key);
-  const before=new Map(current.entries.map(r=>[entryId(r),r]));
-  let restoredIdentity:LibraryIdentity|undefined;
-  for(const row of entries){if(entryEqual(before.get(entryId(row)),row))continue;let value=decoded.get(entryId(row));
-   if(row.table==='meta'&&row.key==='identity'){value={...value,deviceId:current.identity.deviceId};restoredIdentity=value;}
-   tx.put(row.table,row.key,value);
-  }
-  // openLibrary uses one device-local idempotency record. When an empty device
-  // adopts an account library identity, keep that local record aligned without
-  // transporting the source device's ledger.
-  if(restoredIdentity)tx.put('operations',LIBRARY_CREATE_OPERATION,{input:canonicalConsumerJson({kind:'library.create',input:{}}),result:restoredIdentity,committedAt:restoredIdentity.createdAt});
+  applyLibraryReplicaMutation({tx,current:current.entries,desired:entries,rows,identity:current.identity});
  });
  // The baseline and progress are sync bookkeeping, not learner content. Writing them in
  // a content transaction would announce a local edit and schedule another sync pass.
@@ -198,11 +150,15 @@ class Blocks{
   await this.fetch(checkpointRows.filter(row=>!reusable(row)).flatMap(row=>row.blocks));
   const entries:Entry[]=[];let size=0;
   for(const row of checkpointRows){const existing=reusable(row);if(existing){entries.push({...existing,blocks:[...row.blocks]});continue;}const text=await this.text(row.blocks);size+=text.length;if(size>64*1024*1024)throw new Error('library_sync_capacity');entries.push({table:row.table as Entry['table'],key:row.key,value:JSON.parse(text),blocks:[...row.blocks]});}
-  entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));const rows=rowsFor(entries),identity=rows.meta.find(r=>r.key==='identity')!.value;if(identity.id!==manifest.libraryId||identity.learnerId!==manifest.learnerId)throw new Error('library_sync_identity');return entries;
+  entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));const rows=validateLibraryReplica(entries),identity=rows.meta.find(r=>r.key==='identity')!.value;if(identity.id!==manifest.libraryId||identity.learnerId!==manifest.learnerId)throw new Error('library_sync_identity');return entries;
  }
 }
-async function downloadStableHead(blocks:Blocks,request:SyncRequest,base:Entry[]){
+async function downloadStableHead(blocks:Blocks,request:SyncRequest,base:Entry[],confirmedRevision?:number){
  let head=librarySyncHead.parse(await request('/head'));
+ // A confirmed baseline is already the complete body of this remote revision.
+ // Reuse it without fetching even the manifest; conflicts deliberately keep a
+ // mixed baseline and therefore never provide a confirmed revision here.
+ if(confirmedRevision===head.revision)return {head,remote:base};
  for(let attempt=0;attempt<3;attempt++){
   try{return {head,remote:await blocks.download(head,base)};}
   catch(error){
@@ -237,7 +193,8 @@ export async function synchronizeLibrary(request:SyncRequest){
    catch(e){if(!(e instanceof Error)||!['library_sync_conflict','library_sync_missing_block'].includes(e.message))throw e;await saveState(expected,old=>({...old!,pending:undefined}));}
   }
   initial=await readLibrary(capture);state=initial.state??defaults;
-  const stable=await downloadStableHead(blocks,request,initial.base),head=stable.head,remote=stable.remote.filter(row=>allowed(row.table,row.key));
+  const confirmedRevision=initial.state&&!initial.state.conflicts?.length?initial.state.revision:undefined;
+  const stable=await downloadStableHead(blocks,request,initial.base,confirmedRevision),head=stable.head,remote=stable.remote.filter(row=>isReplicatedLibraryEntry(row.table,row.key));
   // An identity-only browser and a null remote head are the authoritative empty
   // account. Confirm that state without publishing device bootstrap metadata.
   // The first learner-content write will still become pending and publish v5.
@@ -246,21 +203,21 @@ export async function synchronizeLibrary(request:SyncRequest){
    await saveState(expected,old=>({...old!,revision:head.revision,storage:head.storage,status:'synced',syncedLocalRevision:initial.localRevision,pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}),[]);
    return;
   }
-  let merged:ReturnType<typeof mergeLibraryEntries>;
+  let merged:ReturnType<typeof mergeLibraryReplicas>;
   const remoteIdentity=remote.find(r=>r.table==='meta'&&r.key==='identity');
   if(remoteIdentity&&decodeBackupValue(remoteIdentity.value).id!==initial.identity.id){if(!empty(initial.entries))throw new Error('library_sync_identity');merged={entries:remote,conflicts:[]};}
-  else merged=mergeLibraryEntries(initial.base,initial.entries,remote);
+  else merged=mergeLibraryReplicas({base:initial.base,local:initial.entries,remote});
   let localEntries=merged.entries,uploadEntries=merged.entries,activeConflicts=merged.conflicts;
   let nextBase=(published:Entry[])=>published;
   let conflict:CloudSyncConflict|undefined;
   if(merged.conflicts.length){
-   const partition=partitionConflicts(initial.base,initial.entries,remote,merged.entries,merged.conflicts);
+   const partition=partitionLibraryReplicaConflicts({base:initial.base,local:initial.entries,remote,merged:merged.entries,conflicts:merged.conflicts});
    conflict=conflictSnapshot(initial.base,initial.entries,remote,merged.conflicts,partition.affectedRecordIds,head);
    if(state.resolution?.expectedRemoteRevision===head.revision){localEntries=uploadEntries=state.resolution.choice==='local'?partition.local:partition.upload;activeConflicts=[];conflict=undefined;}
    else{localEntries=partition.local;uploadEntries=partition.upload;nextBase=partition.base;}
   }
   // Validate both dependency graphs, including original runtime replay, before publishing or applying.
-  try{rowsFor(localEntries,initial.packageCache);rowsFor(uploadEntries,initial.packageCache);}catch(error){
+  try{validateLibraryReplica(localEntries,initial.packageCache);validateLibraryReplica(uploadEntries,initial.packageCache);}catch(error){
    if(activeConflicts.length){await saveState(expected,old=>({...old!,status:'conflict',conflicts:activeConflicts,conflict,resolution:undefined,error:'library_sync_conflict'}));return;}throw error;
   }
   // Rebuild the small row index deterministically, while reusing every confirmed

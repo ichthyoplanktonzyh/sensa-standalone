@@ -101,6 +101,11 @@ Intake 重建本地结果，不需要同步完整命令输入或返回值。同�
 Published Bundle 与公共媒体字节不属于 Personal Library Fact：Checkpoint v5 和加密手动快照 v6 只记录
 `packageInstallations` 的精确可恢复引用，不承载 `packageCache`。learner-private / On-demand Materialization、
 Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入同步和备份，不能被误判为公共缓存。
+Checkpoint 的 block/manifest 传输、CAS commit、重试和 baseline 由 Cloud Sync Coordinator 负责；记录的
+跨设备归一化、三方收敛、完整性验证、历史 replay 与删除许可由领域 Replica Module 负责。Personal
+Semantic World、Learning System、Content Supply、Learner Artifact 和 Preference 各声明唯一记录所有权，
+中央同步器不再按领域表名实施策略。Learning Replica 对 Run/Event/Reconciliation history 只追加并拒绝
+通用物理删除；同步和手动备份通过同一领域验证入口核对历史与派生投影。
 新 Checkpoint 成功提交后，服务端只回收旧清单曾引用且新清单不再引用的块；另一设备尚未提交的上传
 不在这次回收范围内。
 

@@ -5,6 +5,12 @@ import {
   reconcileConcurrentLearningEntries,
   validateLearningReconciliationRows,
 } from '../apps/web/src/data/library/learningReconciliation.ts';
+import {
+  isReplicatedLibraryEntry,
+  mergeLibraryReplicas,
+  normalizeLibraryReplicaEntry,
+  planLibraryReplicaApply,
+} from '../apps/web/src/data/library/replication/libraryReplica.ts';
 
 type Entry={table:string;key:string;value:unknown};
 const ids={
@@ -43,6 +49,24 @@ assert.deepEqual(decision.historyOnlyEventIds,[ids.localEvent]);
 assert.deepEqual(decision.historyOnlyRunIds,[ids.localRun]);
 assert.equal(decision.selectedRunId,ids.remoteRun);
 
+const domainResult=mergeLibraryReplicas({base:base as any,local:local as any,remote:remote as any});
+assert.deepEqual(domainResult.conflicts,[],'the Learning domain Module must own concurrent-history reconciliation');
+assert.deepEqual(
+ decodeBackupValue(domainResult.entries.find(row=>row.table==='learningTargets'&&row.key===ids.target)!.value),
+ remoteTarget,
+);
+assert.throws(()=>mergeLibraryReplicas({base:local as any,local:local.filter(row=>row.key!==ids.localEvent) as any,remote:local as any}),/library_sync_history/u,'a local tombstone cannot erase confirmed Learning history');
+assert.throws(()=>planLibraryReplicaApply(local as any,[local[0]!,local[1]!] as any),/library_sync_history/u,'immutable Learning history cannot use generic physical deletion');
+assert.doesNotThrow(()=>planLibraryReplicaApply([entry('packageInstallations','artifact',{})] as any,[]),'Content Supply owns installation removal semantics');
+assert.equal(isReplicatedLibraryEntry('meta','package-catalog'),false,'Content Supply discovery cache stays device-local');
+assert.equal(isReplicatedLibraryEntry('settings','providers'),false,'provider credentials stay device-local');
+assert.equal(isReplicatedLibraryEntry('packageInstallations','artifact'),true);
+const identity={id:crypto.randomUUID(),learnerId:crypto.randomUUID(),deviceId:crypto.randomUUID(),createdAt:new Date().toISOString(),schemaVersion:2 as const};
+const restoredSession=normalizeLibraryReplicaEntry({table:'sessions',key:crypto.randomUUID(),value:{status:'inflight',lease:{device:'other'}}},identity);
+assert.deepEqual(restoredSession.value,{status:'stopped',lease:null},'Personal Semantic World owns cross-device Session normalization');
+const restoredTask=normalizeLibraryReplicaEntry({table:'personalLearning',key:crypto.randomUUID(),value:{status:'generating',leaseUntil:42}},identity);
+assert.deepEqual(restoredTask.value,{status:'failed',leaseUntil:0,notice:'localFlow.restoredPreparation'},'Content Supply owns interrupted preparation recovery');
+
 const rows={
   learningTargets:[{key:ids.target,value:remoteTarget}],
   learningRuns:[{key:ids.localRun,value:localRun},{key:ids.remoteRun,value:remoteRun}],
@@ -54,4 +78,4 @@ assert.deepEqual([...validated.historyOnlyRunIds],[ids.localRun]);
 assert.deepEqual([...validated.historyOnlyEventIds],[ids.localEvent]);
 assert.throws(()=>validateLearningReconciliationRows({...rows,learningReconciliations:[{key:decisionRow.key,value:{...decision,selectedEventId:ids.localEvent}}]}),/libraryBackup\.errors\.inconsistent/u);
 
-console.log('PASS: concurrent completed learning histories retain both branches, persist an auditable decision, and deterministically materialize only the latest branch.');
+console.log('PASS: domain Replica Modules own normalization and deletion policy; concurrent Learning histories retain both branches, persist an auditable decision, and deterministically materialize only the latest branch.');
