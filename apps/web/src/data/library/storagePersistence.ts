@@ -3,6 +3,7 @@ export type LocalStoragePersistence =
   | 'best-effort'
   | 'unsupported'
   | 'unavailable';
+export type LocalStorageBudget={usageBytes:number;quotaBytes:number};
 
 const storageManager = (): StorageManager | null =>
   typeof navigator === 'undefined' ? null : navigator.storage ?? null;
@@ -28,4 +29,11 @@ export async function requestLocalStoragePersistence(): Promise<LocalStoragePers
   } catch {
     return 'unavailable';
   }
+}
+
+/** Browser-provided origin estimate; values are advisory and may include app assets. */
+export async function readLocalStorageBudget():Promise<LocalStorageBudget|null>{
+ const storage=storageManager();
+ if(!storage||typeof storage.estimate!=='function')return null;
+ try{const estimate=await storage.estimate(),usage=estimate.usage,quota=estimate.quota;if(!Number.isFinite(usage)||!Number.isFinite(quota)||usage===undefined||quota===undefined||usage<0||quota<=0)return null;return {usageBytes:usage,quotaBytes:quota};}catch{return null;}
 }

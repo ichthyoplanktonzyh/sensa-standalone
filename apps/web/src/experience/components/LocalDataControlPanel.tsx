@@ -1,7 +1,7 @@
 import {useEffect,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {inspectLocalClear,clearLocalLibrary,type LocalClearPreview} from '../../data/library/dataControl';
-import {readLocalStoragePersistence,requestLocalStoragePersistence,type LocalStoragePersistence} from '../../data/library/storagePersistence';
+import {readLocalStorageBudget,readLocalStoragePersistence,requestLocalStoragePersistence,type LocalStorageBudget,type LocalStoragePersistence} from '../../data/library/storagePersistence';
 import {localFlowErrorKey} from '../../i18n/localFlowText';
 import {setupButton} from './learning/LearningSetupFrame';
 const persistenceMessage:Record<LocalStoragePersistence|'checking',string>={
@@ -14,13 +14,15 @@ const persistenceMessage:Record<LocalStoragePersistence|'checking',string>={
 export function LocalDataControlPanel(){
  const {t}=useTranslation();const [preview,setPreview]=useState<LocalClearPreview|null>(null),[confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[done,setDone]=useState(false),[error,setError]=useState('');
  const [persistence,setPersistence]=useState<LocalStoragePersistence|'checking'>('checking'),[persistenceBusy,setPersistenceBusy]=useState(false);
- useEffect(()=>{let active=true;void readLocalStoragePersistence().then(value=>{if(active)setPersistence(value);});return()=>{active=false;};},[]);
+ const [storageBudget,setStorageBudget]=useState<LocalStorageBudget|null>(null);
+ useEffect(()=>{let active=true;void readLocalStoragePersistence().then(value=>{if(active)setPersistence(value);});void readLocalStorageBudget().then(value=>{if(active)setStorageBudget(value);});return()=>{active=false;};},[]);
  const run=async(work:()=>Promise<void>)=>{setBusy(true);setError('');try{await work();}catch(e){setError(localFlowErrorKey(e,'localFlow.retryOperation'));setPreview(null);setConfirmed(false);}finally{setBusy(false);}};
  return <div className="space-y-6">
  <section className="mt-8 rounded-card border border-border-subtle bg-surface-panel p-6" aria-labelledby="local-storage-persistence-heading">
   <h2 id="local-storage-persistence-heading" className="text-lg font-medium">{t('localFlow.persistenceTitle')}</h2>
   <p className="mt-3 text-sm leading-6 text-fg-secondary">{t('localFlow.persistenceIntro')}</p>
   <p role="status" className="mt-4 text-sm font-medium">{t(persistenceMessage[persistence])}</p>
+  {storageBudget&&<p className={'mt-3 text-sm '+(storageBudget.usageBytes/storageBudget.quotaBytes>=.8?'text-feedback-danger':'text-fg-secondary')}>{t(storageBudget.usageBytes/storageBudget.quotaBytes>=.8?'localFlow.storageBudgetWarning':'localFlow.storageBudget',{used:(storageBudget.usageBytes/1024/1024).toFixed(1),quota:(storageBudget.quotaBytes/1024/1024).toFixed(0)})}</p>}
   {persistence==='best-effort'&&<button className={setupButton+' mt-4 border'} disabled={persistenceBusy} onClick={()=>{setPersistenceBusy(true);void requestLocalStoragePersistence().then(setPersistence).finally(()=>setPersistenceBusy(false));}}>{t(persistenceBusy?'localFlow.processing':'localFlow.persistenceRequest')}</button>}
  </section>
  <section className="rounded-card border border-border-subtle bg-surface-panel p-6" aria-labelledby="local-clear-heading">

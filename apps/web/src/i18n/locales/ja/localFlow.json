@@ -212,6 +212,8 @@
     "persistence_unsupported": "このブラウザーでは追加のストレージ保護を申請できません。",
     "persistence_unavailable": "ストレージ保護の状態を一時的に確認できません。",
     "persistenceRequest": "より強い保護を申請",
+    "storageBudget": "このサイトのブラウザー推定値：{{used}} MiB / {{quota}} MiB 使用。アプリファイルを含む場合があります。",
+    "storageBudgetWarning": "このサイトはブラウザー推定容量の80%を超えています：{{used}} MiB / {{quota}} MiB。早めにバックアップをエクスポートし、端末の空き容量を増やしてください。",
     "operationInvalid": "操作IDが無効です。",
     "operationConflict": "この操作IDは別のコンテンツに使用されました。もう一度お試しください。",
     "operationAlreadyApplied": "この操作は別のデバイスですでに完了しています。更新して続行してください。",

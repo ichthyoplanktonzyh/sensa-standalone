@@ -212,6 +212,8 @@
     "persistence_unsupported": "当前浏览器不提供额外的存储保护申请。",
     "persistence_unavailable": "暂时无法读取存储保护状态。",
     "persistenceRequest": "申请更强保护",
+    "storageBudget": "浏览器为本站估算：已使用 {{used}} MiB / {{quota}} MiB。该数值也可能包含应用文件。",
+    "storageBudgetWarning": "浏览器为本站提供的空间已使用超过 80%：{{used}} MiB / {{quota}} MiB。请尽快导出备份并释放设备空间。",
     "operationInvalid": "无效的操作标识。",
     "operationConflict": "此操作标识已用于不同内容，请重新操作。",
     "operationAlreadyApplied": "此操作已在另一台设备完成，请刷新后继续。",

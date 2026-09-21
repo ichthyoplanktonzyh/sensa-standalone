@@ -100,7 +100,7 @@
     "syncing": "Syncing…",
     "synced": "Synced to your account",
     "offline": "Saved offline. Sync will resume when connected.",
-    "conflict": "Some changes conflict. Both versions are preserved. Export a backup and contact support to resolve them.",
+    "conflict": "Some changes conflict. The device version, cloud version, and common base remain preserved until you choose.",
     "failed": "Sync did not finish. Your local data is still saved. Check the connection and retry.",
     "attention": "Automatic retries have stopped. Your local data is still saved. Retry manually or contact support if the problem continues.",
     "incompatible": "The cloud data uses an incompatible legacy sync format. Automatic retries have stopped and local data is unchanged. Contact support to reset the cloud copy.",
@@ -111,6 +111,13 @@
     "openFailed": "Could not restore account data. Check the connection and retry.",
     "retryOpen": "Retry restore",
     "details": "View conflicting records",
+    "conflictPrompt": "{{count}} record conflicts, affecting {{affected}} related records. Choose the device or cloud version for this conflict group.",
+    "conflictDecision": "The latest cloud version is checked again before applying your choice. If it changed, the new conflict is preserved for another confirmation. Unrelated data continues to sync.",
+    "keepLocal": "Keep device version",
+    "useCloud": "Use cloud version",
+    "resolving": "Checking and resolving…",
+    "storage": "Cloud sync storage: {{used}} MiB of {{capacity}} MiB used",
+    "storageWarning": "Cloud sync storage is near its limit: {{used}} MiB of {{capacity}} MiB. Export a backup and reduce large media before adding more data.",
     "identity": "This browser and the cloud contain different libraries. Both are preserved. Export a backup and contact support."
   }
 }

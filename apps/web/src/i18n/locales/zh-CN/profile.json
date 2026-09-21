@@ -76,6 +76,8 @@
   "libraryBackup": {
     "title": "本机库备份与恢复",
     "intro": "保存一份本机资料与学习进度，换浏览器时可恢复。",
+    "size": "当前备份原始数据约 {{used}} MiB / {{capacity}} MiB 上限。加密文件会因编码而更大。",
+    "sizeWarning": "当前备份原始数据已接近上限：{{used}} MiB / {{capacity}} MiB。请立即导出备份，并减少大型媒体后再继续添加资料。",
     "details": "备份包含什么？",
     "detailText": "包含材料、对话、意思、学习资源和记录。登录凭据与 API Key 不包含在内，恢复后需重新连接自定义服务。",
     "password": "备份密码",

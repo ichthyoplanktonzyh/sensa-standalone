@@ -27,7 +27,8 @@ const refineManifest=(v:{rows:readonly {table:string;key:string}[]},c:z.Refineme
  const ids=new Set<string>();for(const row of v.rows){const id=JSON.stringify([row.table,row.key]);if(ids.has(id))c.addIssue({code:'custom',message:'duplicate row'});ids.add(id);if(row.table==='meta'&&!['identity','learning-active','package-catalog'].includes(row.key))c.addIssue({code:'custom',message:'private metadata'});}
 };
 export const librarySyncManifest=z.object({version:z.literal(3),libraryId:z.string().uuid(),learnerId:z.string().uuid(),rows:z.array(librarySyncRow).max(200000)}).strict().superRefine(refineManifest);
-export const librarySyncHead=z.object({revision:z.number().int().nonnegative(),manifest:librarySyncRefs.nullable()}).strict();
+export const librarySyncStorage=z.object({usedBytes:z.number().int().nonnegative(),capacityBytes:z.number().int().positive()}).strict();
+export const librarySyncHead=z.object({revision:z.number().int().nonnegative(),manifest:librarySyncRefs.nullable(),storage:librarySyncStorage.optional()}).strict();
 export const librarySyncCommit=z.object({operationId:z.string().uuid(),baseRevision:z.number().int().nonnegative(),manifest:librarySyncRefs}).strict();
 export type LibrarySyncManifest=z.infer<typeof librarySyncManifest>;
 export type LibrarySyncHead=z.infer<typeof librarySyncHead>;

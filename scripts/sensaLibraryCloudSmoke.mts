@@ -9,6 +9,8 @@ import {chromium,expect} from '@playwright/test';
 import pg from 'pg';
 import {build as viteBuild} from 'vite';
 import {createConsumerRoutes} from '../apps/api/src/sensa/access/consumer.ts';
+import {purgeExpiredLibraryCloudBlocks} from '../apps/api/src/sensa/library/retention.ts';
+import {encodeBackupValue} from '../apps/web/src/data/library/backupCodec.ts';
 import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../packages/contracts/src/sensa/librarySync.ts';
 const url=process.env.SENSA_ADMIN_TEST_DATABASE_URL??process.env.SENSA_TEST_DATABASE_URL;
 if(!url||new URL(url).hostname!=='127.0.0.1'||!new URL(url).pathname.startsWith('/sensa_m1a_'))throw Error('Disposable loopback database required');
@@ -113,9 +115,17 @@ try{
  // Conflicting edits remain in each browser; cloud still retains its published version.
  for(const [page,text]of [[a,'A edit'],[b,'B edit']] as const)await page.evaluate(async({draft,text})=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:draft.id,expectedRevision:1,text});},{draft,text});
  await b.evaluate(async()=>{const c=(window as any).core;await c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'Independent while conflicted'});});
- await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());assert.equal((await b.evaluate(()=>(window as any).core.readCloudSync())).status,'conflict');assert.equal((await b.evaluate(()=>(window as any).core.listDrafts())).find((d:any)=>d.id===draft.id).text,'B edit');
+ await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());const firstConflict=await b.evaluate(()=>(window as any).core.readCloudSync());assert.equal(firstConflict.status,'conflict');assert.equal(firstConflict.conflict.records.length,1);assert(firstConflict.conflict.records[0].base&&firstConflict.conflict.records[0].local&&firstConflict.conflict.records[0].remote,'persistent conflict keeps base/local/remote');assert.equal((await b.evaluate(()=>(window as any).core.listDrafts())).find((d:any)=>d.id===draft.id).text,'B edit');
  await fresh.evaluate(()=>(window as any).sync());assert.equal((await fresh.evaluate(()=>(window as any).core.listDrafts())).find((d:any)=>d.id===draft.id).text,'A edit');
  assert((await fresh.evaluate(()=>(window as any).core.listDrafts())).some((d:any)=>d.text==='Independent while conflicted'),'independent records sync while conflicting component is held');
+ // A resolution is conditional on the exact remote head the user inspected.
+ await b.evaluate(()=>(window as any).core.resolveCloudSyncConflicts('local'));
+ await a.evaluate(async draftId=>{const c=(window as any).core,current=(await c.listDrafts()).find((d:any)=>d.id===draftId);await c.saveDraft(crypto.randomUUID(),{id:draftId,expectedRevision:current.revision,text:'A newer edit'});},draft.id);
+ await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());const revalidated=await b.evaluate(()=>(window as any).core.readCloudSync());assert.equal(revalidated.status,'conflict');assert(revalidated.conflict.remoteRevision>firstConflict.conflict.remoteRevision,'a changed head requires a new user confirmation');assert.equal((await b.evaluate(()=>(window as any).core.listDrafts())).find((d:any)=>d.id===draft.id).text,'B edit');
+ await b.evaluate(()=>(window as any).core.resolveCloudSyncConflicts('local'));await b.evaluate(()=>(window as any).sync());await fresh.evaluate(()=>(window as any).sync());assert.equal((await fresh.evaluate(()=>(window as any).core.listDrafts())).find((d:any)=>d.id===draft.id).text,'B edit');assert.equal((await b.evaluate(()=>(window as any).core.readCloudSync())).status,'synced','an explicit conflict decision restores synchronization');
+ await a.evaluate(()=>(window as any).sync());
+ for(const [page,text] of [[a,'A final'],[b,'B final']] as const)await page.evaluate(async({draftId,text})=>{const c=(window as any).core,current=(await c.listDrafts()).find((d:any)=>d.id===draftId);await c.saveDraft(crypto.randomUUID(),{id:draftId,expectedRevision:current.revision,text});},{draftId:draft.id,text});
+ await a.evaluate(()=>(window as any).sync());await b.evaluate(()=>(window as any).sync());assert.equal((await b.evaluate(()=>(window as any).core.readCloudSync())).status,'conflict');await b.evaluate(()=>(window as any).core.resolveCloudSyncConflicts('remote'));await b.evaluate(()=>(window as any).sync());assert.equal((await b.evaluate(()=>(window as any).core.listDrafts())).find((d:any)=>d.id===draft.id).text,'A final');assert.equal((await b.evaluate(()=>(window as any).core.readCloudSync())).status,'synced','choosing the cloud side applies it locally and restores synchronization');
  // Signout fences synchronization and cloud metadata never enters exported backups.
  await b.evaluate(async()=>{const c=(window as any).core;await c.command({id:crypto.randomUUID(),kind:'service.signout',input:{}},async(tx:any)=>tx.put('meta','signed-out',true));});await assert.rejects(b.evaluate(()=>(window as any).sync()),/authentication_required/);
  // Optional formal UI integration, with real Supabase SDK and synthetic Auth HTTP only.
@@ -165,7 +175,30 @@ try{
   const blocks=[...rewritten].map(([hash,data])=>({hash,data}));
   for(let at=0;at<blocks.length;at+=librarySyncBlockStoreBatch)assert.equal((await post('library-sync/blocks/store',{blocks:blocks.slice(at,at+librarySyncBlockStoreBatch)})).status,200);
   return post('library-sync/commit',{operationId:crypto.randomUUID(),baseRevision,manifest:refs});};
+ // A client that observes a missing old-head block rereads head and completes
+ // from the advanced revision instead of persisting a terminal failure.
  let head=await readHead();
+ const oldHeadRow=(await pool.query('SELECT manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0],oldManifestRefs=oldHeadRow.manifest as string[];
+ const racedDraftId=crypto.randomUUID(),racedAt=new Date().toISOString(),racedRowText=JSON.stringify(encodeBackupValue({id:racedDraftId,revision:1,text:'Committed between head and block fetch',createdAt:racedAt,updatedAt:racedAt})),racedRowRefs:string[]=[],replacementBlocks:{hash:string;data:string}[]=[];
+ for(let at=0;at<racedRowText.length;at+=librarySyncBlockChars){const data=racedRowText.slice(at,at+librarySyncBlockChars),hash=createHash('sha256').update(data).digest('hex');replacementBlocks.push({hash,data});racedRowRefs.push(hash);}
+ const replacementManifest=JSON.parse(JSON.stringify(head.manifest));replacementManifest.rows.push({table:'drafts',key:racedDraftId,blocks:racedRowRefs});replacementManifest.rows.sort((a:any,b:any)=>JSON.stringify([a.table,a.key]).localeCompare(JSON.stringify([b.table,b.key])));
+ const replacementText=JSON.stringify(replacementManifest),replacementManifestRefs:string[]=[];
+ for(let at=0;at<replacementText.length;at+=librarySyncBlockChars){const data=replacementText.slice(at,at+librarySyncBlockChars),hash=createHash('sha256').update(data).digest('hex');replacementBlocks.push({hash,data});replacementManifestRefs.push(hash);}
+ for(let at=0;at<replacementBlocks.length;at+=librarySyncBlockStoreBatch)assert.equal((await post('library-sync/blocks/store',{blocks:replacementBlocks.slice(at,at+librarySyncBlockStoreBatch)})).status,200);
+ const racing=await client(accountId);await racing.evaluate(({baseRevision,manifest})=>{const w=window as any,original=w.request;w.headReads=0;let raced=false;w.request=async(path:string,body?:any)=>{if(path==='/head')w.headReads++;if(path==='/blocks/fetch'&&!raced){raced=true;await original('/commit',{operationId:crypto.randomUUID(),baseRevision,manifest});return {blocks:[],missing:body.hashes,deferred:[]};}return original(path,body);};},{baseRevision:head.revision,manifest:replacementManifestRefs});
+ await racing.evaluate(()=>(window as any).sync());assert.equal(await racing.evaluate(()=>(window as any).headReads),2,'a changed head is reread once after the old block disappears');const racingState=await racing.evaluate(()=>(window as any).core.readCloudSync());assert.equal(racingState.status,'synced');assert.equal(racingState.storage.capacityBytes,256*1024*1024);assert(racingState.storage.usedBytes>0,'the account UI receives byte-based cloud capacity usage');await racing.context().close();
+ const racedHeadRow=(await pool.query('SELECT revision,manifest FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0],currentManifestRefs=racedHeadRow.manifest as string[];
+ await pool.query("UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at=now()-interval '1 minute' WHERE account_id=$1 AND hash=ANY($2::text[])",[accountId,oldManifestRefs]);
+ await purgeExpiredLibraryCloudBlocks(pool,new Date(),100,accountId);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[accountId,oldManifestRefs])).rows[0].n,oldManifestRefs.length,'a valid old-head read lease protects retired blocks');
+ await pool.query("UPDATE sensa_consumer.library_cloud_block_refs SET expires_at=now()-interval '1 minute' WHERE account_id=$1 AND reference_kind='retired'",[accountId]);
+ await pool.query("UPDATE sensa_consumer.library_cloud_snapshot_leases SET expires_at=now()-interval '1 minute' WHERE account_id=$1",[accountId]);
+ await purgeExpiredLibraryCloudBlocks(pool,new Date(),100,accountId);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[accountId,oldManifestRefs])).rows[0].n,0,'expired retired snapshot blocks are reclaimed');
+ const orphanData='interrupted upload '+crypto.randomUUID(),orphanHash=createHash('sha256').update(orphanData).digest('hex');assert.equal((await post('library-sync/blocks/store',{blocks:[{hash:orphanHash,data:orphanData}]})).status,200);
+ await pool.query("UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at=now()-interval '1 minute' WHERE account_id=$1 AND hash=$2",[accountId,orphanHash]);await purgeExpiredLibraryCloudBlocks(pool,new Date(),100,accountId);assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=$2',[accountId,orphanHash])).rows[0].n,0,'an expired interrupted upload is reclaimed');
+ await pool.query("UPDATE sensa_consumer.library_cloud_blocks SET upload_lease_expires_at=now()-interval '1 minute' WHERE account_id=$1 AND hash=ANY($2::text[])",[accountId,currentManifestRefs]);await purgeExpiredLibraryCloudBlocks(pool,new Date(),100,accountId);assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 AND hash=ANY($2::text[])',[accountId,currentManifestRefs])).rows[0].n,currentManifestRefs.length,'current head blocks remain protected after their upload lease expires');
+ head=await readHead();await refresh();
  const priorRevision=head.revision;
  const repacked=await publish(JSON.parse(JSON.stringify(head.manifest)),priorRevision,8192);assert.equal(repacked.status,200,'repacking published history must be accepted');
  head=await readHead();assert.equal(head.revision,priorRevision+1);await refresh();
@@ -178,7 +211,7 @@ try{
  const rejected=await publish(manifest,head.revision,librarySyncBlockChars);assert.equal(rejected.status,409);assert.equal((await rejected.json() as any).code,'library_sync_history');
  assert.equal((await pool.query('SELECT revision FROM sensa_consumer.library_cloud WHERE account_id=$1',[accountId])).rows[0].revision,head.revision);
  const deletion=await post('account/deletion',{operationId:crypto.randomUUID(),confirmation:'delete-account'});assert.equal(deletion.status,200);
- for(const table of ['library_cloud','library_cloud_blocks','library_cloud_commits'])assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.'+table+' WHERE account_id=$1',[accountId])).rows[0].n,0);
+ for(const table of ['library_cloud','library_cloud_blocks','library_cloud_commits','library_cloud_snapshot_leases','library_cloud_block_refs'])assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.'+table+' WHERE account_id=$1',[accountId])).rows[0].n,0);
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.library_cloud WHERE account_id=$1',[otherId])).rows[0].n,1);
  console.log('PASS: version 3 synchronizes normalized semantic/media facts, preserves immutable learning history, and account deletion removes cloud state without affecting another account');
  console.log('PASS: real browser + Postgres sync, lost ACK, offline merge, conflict preservation, image/audio and full learning restore, account isolation, backup, signout');

@@ -1,13 +1,15 @@
 import '../../i18n/profileResources';
-import {useRef,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {LoaderCircle,CheckCircle2,AlertCircle,Download,Upload} from 'lucide-react';
-import {exportLibraryBackup,inspectLibraryBackup,restoreLibraryBackup,type BackupSummary} from '../../data/library/backup';
+import {estimateLibraryBackupSize,exportLibraryBackup,inspectLibraryBackup,restoreLibraryBackup,type BackupSizeEstimate,type BackupSummary} from '../../data/library/backup';
 
-export function LibraryBackupPanel(){
+export function LibraryBackupPanel({active=true}:{active?:boolean}){
  const {t,i18n}=useTranslation();
  const [password,setPassword]=useState(''),[file,setFile]=useState<File|null>(null),[preview,setPreview]=useState<BackupSummary|null>(null),[busy,setBusy]=useState<'export'|'check'|'restore'|null>(null),[notice,setNotice]=useState(''),[error,setError]=useState(false),[restored,setRestored]=useState(false);
+ const [size,setSize]=useState<BackupSizeEstimate|null>(null);
  const fileInput=useRef<HTMLInputElement>(null),passwordInput=useRef<HTMLInputElement>(null),locked=useRef(false);
+ useEffect(()=>{if(!active)return;let mounted=true;void estimateLibraryBackupSize().then(value=>{if(mounted)setSize(value);}).catch(()=>{});return()=>{mounted=false;};},[active]);
  const run=async(action:NonNullable<typeof busy>,work:()=>Promise<void>)=>{if(locked.current)return;locked.current=true;setBusy(action);setNotice('');setError(false);try{await work();}catch(e){setError(true);setNotice(e instanceof Error&&e.message.startsWith('libraryBackup.')?e.message:'libraryBackup.failed');}finally{setBusy(null);locked.current=false;}};
  const bytes=async()=>{if(!file)throw Error('libraryBackup.fileRequired');if(file.size>90*1024*1024)throw Error('libraryBackup.tooLarge');return new Uint8Array(await file.arrayBuffer());};
  const ready=()=>{if(password.length<12){setError(true);setNotice('libraryBackup.passwordHint');passwordInput.current?.focus();return false;}return true;};
@@ -17,6 +19,7 @@ export function LibraryBackupPanel(){
  return <section aria-labelledby="library-backup-title" aria-busy={busy!==null} className="mt-10 rounded-card border border-border-subtle bg-surface-panel p-6">
   <h2 id="library-backup-title" className="text-lg font-medium">{t('libraryBackup.title')}</h2>
   <p className="mt-3 text-sm leading-6 text-fg-secondary">{t('libraryBackup.intro')}</p>
+  {size&&<p className={'mt-3 text-sm '+(size.usedBytes/size.capacityBytes>=.8?'text-feedback-danger':'text-fg-secondary')}>{t(size.usedBytes/size.capacityBytes>=.8?'libraryBackup.sizeWarning':'libraryBackup.size',{used:(size.usedBytes/1024/1024).toFixed(1),capacity:(size.capacityBytes/1024/1024).toFixed(0)})}</p>}
   <fieldset disabled={!!busy||restored} className="mt-5 space-y-4">
    <label className="block text-sm">{t('libraryBackup.password')}<input ref={passwordInput} aria-label={t('libraryBackup.password')} aria-describedby="backup-password-hint" type="password" autoComplete="off" maxLength={1024} value={password} onChange={e=>{setPassword(e.target.value);setPreview(null);setNotice('');}} className="mt-2 block min-h-11 w-full max-w-lg rounded-control border border-border-strong bg-surface-panel px-3 focus-visible:outline-2 focus-visible:outline-focus"/></label>
    <p id="backup-password-hint" className="text-xs leading-6 text-fg-secondary">{t('libraryBackup.passwordHint')}{password.length>0&&password.length<12&&' '+t('libraryBackup.short',{count:12-password.length})}</p>

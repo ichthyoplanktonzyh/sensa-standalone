@@ -16,6 +16,7 @@ const rowSchema=z.object({key:z.string().min(1).max(2000),value:z.unknown()}).st
 const payloadSchema=z.object({format:z.literal('sensa-web-library-snapshot-v1'),librarySchema:z.literal(4),createdAt:z.string().datetime({offset:true}),owner:backupOwnerSchema,tables:z.record(z.string(),z.array(rowSchema))}).strict();
 const envelopeSchema=z.object({format:z.literal('sensa-web-library-backup-v1'),kdf:z.literal('PBKDF2-SHA256'),iterations:z.literal(600000),cipher:z.literal('AES-256-GCM'),salt:z.string().max(24),iv:z.string().max(16),data:z.string().max(MAX_FILE)}).strict();
 export type BackupSummary={createdAt:string;account:string;libraryId:string;drafts:number;meanings:number;packages:number;targets:number;runs:number;events:number;preparations:number;interrupted:number};
+export type BackupSizeEstimate={usedBytes:number;capacityBytes:number};
 function summary(payload:z.infer<typeof payloadSchema>,rows:BackupRows):BackupSummary{const identity=rows.meta.find(r=>r.key==='identity')!.value;return {createdAt:payload.createdAt,account:payload.owner.email??payload.owner.subject,libraryId:identity.id,drafts:rows.drafts.length,meanings:rows.meanings.length,packages:rows.packages.length,targets:rows.learningTargets.length,runs:rows.learningRuns.length,events:rows.learningEvents.length,preparations:rows.personalLearning.length,interrupted:rows.sessions.filter(r=>r.value.status==='inflight').length+rows.personalLearning.filter(r=>['generating','reviewing'].includes(r.value.status)).length};}
 async function decode(file:Uint8Array,password:string){
  if(file.byteLength>MAX_FILE)throw new Error('libraryBackup.errors.fileTooLarge');
@@ -27,17 +28,22 @@ async function decode(file:Uint8Array,password:string){
  if(rows.meta.some(r=>localMeta.has(r.key))||rows.operations.some(r=>serviceOperation(r.value)))throw new Error('libraryBackup.errors.authorization');
  validateBackupRows(rows);return {payload,rows,summary:summary(payload,rows)};
 }
-export async function exportLibraryBackup(password:string){
- passSchema.parse(password);
+async function encodeCurrentLibrary(){
  const snapshot=await readLibrary(async tx=>{await learningOwner(tx);const owner=backupOwnerSchema.parse(await tx.get('meta','service-owner'));const rows={} as BackupRows;for(const table of libraryTables){rows[table]=(await tx.entries(table)).map(r=>{if(typeof r.key!=='string')throw new Error('libraryBackup.errors.recordKey');return {key:r.key,value:r.value};});}rows.meta=rows.meta.filter(r=>!localMeta.has(r.key));rows.operations=rows.operations.filter(r=>!serviceOperation(r.value));return {owner,rows};});
  if(libraryTables.reduce((count,table)=>count+snapshot.rows[table].length,0)>200000)throw new Error('libraryBackup.errors.rowLimit');
  validateBackupRows(snapshot.rows);
  const tables=Object.fromEntries(libraryTables.map(t=>[t,snapshot.rows[t].map(r=>({key:r.key,value:encodeBackupValue(r.value)}))]));
  const payload=payloadSchema.parse({format:'sensa-web-library-snapshot-v1',librarySchema:4,createdAt:new Date().toISOString(),owner:snapshot.owner,tables});
  const plaintext=new TextEncoder().encode(JSON.stringify(payload));if(plaintext.length>MAX_PLAIN)throw new Error('libraryBackup.errors.sizeLimit');
+ return {payload,rows:snapshot.rows,plaintext};
+}
+export async function estimateLibraryBackupSize():Promise<BackupSizeEstimate>{const {plaintext}=await encodeCurrentLibrary();return {usedBytes:plaintext.byteLength,capacityBytes:MAX_PLAIN};}
+export async function exportLibraryBackup(password:string){
+ passSchema.parse(password);
+ const {payload,rows,plaintext}=await encodeCurrentLibrary();
  const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));const key=await keyFor(password,salt);const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:AAD},key,plaintext);
  const file=new TextEncoder().encode(JSON.stringify({format:'sensa-web-library-backup-v1',kdf:'PBKDF2-SHA256',iterations:600000,cipher:'AES-256-GCM',salt:b64(salt),iv:b64(iv),data:b64(new Uint8Array(ciphertext))}));
- return {file,summary:summary(payload,snapshot.rows)};
+ return {file,summary:summary(payload,rows)};
 }
 export async function inspectLibraryBackup(file:Uint8Array,password:string){return (await decode(file,password)).summary;}
 async function emptyDestination(tx:LibraryTransaction){

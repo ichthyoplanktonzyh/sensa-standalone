@@ -25,6 +25,10 @@ jobs:
         env:
           SENSA_MAINTENANCE_DATABASE_URL: ${{ secrets.SENSA_MAINTENANCE_DATABASE_URL }}
         run: node --import tsx scripts/release/semanticLookupRetention.mts
+      - name: Erase expired unreferenced sync blocks
+        env:
+          SENSA_MAINTENANCE_DATABASE_URL: ${{ secrets.SENSA_MAINTENANCE_DATABASE_URL }}
+        run: node --import tsx scripts/release/libraryCloudRetention.mts
   monitor:
     if: vars.SENSA_MONITOR_ENABLED == 'true'
     environment: web-monitor

@@ -188,7 +188,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
           {row('storage','account.storageActions',t('account.storageSummary'),<Database size={20}/>)}
         </div>}
       </div>
-      {props.localLibrary&&<><div hidden={page!=='backup'}><LibraryBackupPanel/></div><div hidden={page!=='storage'}><LocalDataControlPanel/></div></>}
+      {props.localLibrary&&<><div hidden={page!=='backup'}><LibraryBackupPanel active={page==='backup'}/></div><div hidden={page!=='storage'}><LocalDataControlPanel/></div></>}
       <section hidden={page!=='models'} aria-label={t('modelService.title')}>{props.modelSettings}</section>
       {props.localLibrary&&page==='agent'&&<LocalAgentPanel/>}
       <div hidden={page!=='support'}>

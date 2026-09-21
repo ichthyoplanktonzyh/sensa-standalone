@@ -6,6 +6,7 @@ const transientErrors=new Set([
  'library_sync_network',
  'library_sync_rate_limited',
  'library_sync_server_error',
+ 'library_sync_head_changed',
 ]);
 
 export function cloudSyncFailurePolicy(message:string,online:boolean,priorFailures=0,now=Date.now()){

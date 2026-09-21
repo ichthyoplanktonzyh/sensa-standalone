@@ -77,6 +77,8 @@
   "libraryBackup": {
     "title": "Backup & restore",
     "intro": "Save your local content and learning progress to restore in another browser.",
+    "size": "Current raw backup data: about {{used}} MiB of the {{capacity}} MiB limit. Encoding makes the encrypted file larger.",
+    "sizeWarning": "Raw backup data is near its limit: {{used}} MiB of {{capacity}} MiB. Export a backup now and reduce large media before adding more data.",
     "details": "What is included?",
     "detailText": "Includes source material, conversations, meanings, learning resources and history. Sign-in credentials and API keys are excluded; reconnect custom services after restoring.",
     "password": "Backup password",

@@ -29,6 +29,9 @@ failure=cloudSyncFailurePolicy('library_sync_network',true,cloudSyncRetryDelaysM
 assert.equal(automaticCloudSyncRetryAt(failure),null,'transient failures stop after the bounded retry budget');
 const incompatible=cloudSyncFailurePolicy('library_sync_incompatible_checkpoint',true,0,now);
 assert.equal(incompatible.failureKind,'terminal');assert.equal(blocksAutomaticCloudSync(incompatible),true,'legacy Checkpoints must never enter the automatic retry loop');
+const advancedHead=cloudSyncFailurePolicy('library_sync_head_changed',true,0,now);
+assert.equal(advancedHead.failureKind,'transient');assert.equal(automaticCloudSyncRetryAt(advancedHead),now+cloudSyncRetryDelaysMs[0],'normal head advancement is retried instead of becoming a permanent failure');
+assert.equal(cloudSyncFailurePolicy('library_sync_missing_block',true,0,now).failureKind,'terminal','a block missing from an unchanged head remains an integrity failure');
 assert.equal(blocksAutomaticCloudSync({status:'failed'}),false,'an unclassified failure from an older release receives one migration attempt');
 assert.equal(cloudSyncFailurePolicy('library_sync_network',false,0,now).status,'offline','offline waits for the browser online event instead of a timer');
 

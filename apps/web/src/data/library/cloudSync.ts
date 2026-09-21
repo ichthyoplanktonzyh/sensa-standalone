@@ -4,9 +4,12 @@ import {backupEqual,encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {validateBackupRows,type BackupRows} from './backupValidation';
 import {cloudSyncFailurePolicy,type CloudSyncFailureKind} from './cloudSyncPolicy';
 export type SyncRequest=(path:string,body?:unknown)=>Promise<any>;
-type Entry={table:typeof librarySyncTables[number];key:string;value:unknown};
+export type CloudSyncEntry={table:typeof librarySyncTables[number];key:string;value:unknown};
+type Entry=CloudSyncEntry;
 type Owner={subject:string;accountId:string};
-export type CloudSyncState={owner:Owner;incarnation:string;base:Entry[];revision:number;syncedLocalRevision?:number;pending?:{operationId:string;baseRevision:number;manifest:string[];entries:Entry[];baseEntries?:Entry[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
+export type CloudSyncConflictChoice='local'|'remote';
+export type CloudSyncConflict={detectedAt:string;remoteRevision:number;remoteManifest:string[]|null;records:{id:string;base:Entry|null;local:Entry|null;remote:Entry|null}[];affectedRecordIds:string[]};
+export type CloudSyncState={owner:Owner;incarnation:string;base:Entry[];revision:number;storage?:LibrarySyncHead['storage'];syncedLocalRevision?:number;pending?:{operationId:string;baseRevision:number;manifest:string[];entries:Entry[];baseEntries?:Entry[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];conflict?:CloudSyncConflict;resolution?:{choice:CloudSyncConflictChoice;expectedRemoteRevision:number};lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
 type State=CloudSyncState;
 const STATE='cloud-sync';
 const LIBRARY_CREATE_OPERATION='00000000-0000-4000-8000-000000000001';
@@ -71,9 +74,16 @@ function partitionConflicts(base:Entry[],local:Entry[],remote:Entry[],merged:Ent
  };visit(decodeBackupValue(row.value));}
  const blocked=new Set(conflicts),queue=[...blocked];for(let at=0;at<queue.length;at++)for(const next of edges.get(queue[at])??[])if(!blocked.has(next)){blocked.add(next);queue.push(next);}
  const select=(unblocked:Entry[],held:Entry[])=>[...unblocked.filter(r=>!blocked.has(entryId(r))),...held.filter(r=>blocked.has(entryId(r)))].sort((a,b)=>entryId(a).localeCompare(entryId(b)));
- return {local:select(merged,local),upload:select(merged,remote),base:(published:Entry[])=>select(published,base)};
+ return {local:select(merged,local),upload:select(merged,remote),base:(published:Entry[])=>select(published,base),affectedRecordIds:[...blocked].sort()};
+}
+function conflictSnapshot(base:Entry[],local:Entry[],remote:Entry[],conflicts:string[],affectedRecordIds:string[],head:LibrarySyncHead):CloudSyncConflict{
+ const byId=(entries:Entry[])=>new Map(entries.map(entry=>[entryId(entry),entry]));const b=byId(base),l=byId(local),r=byId(remote);
+ return {detectedAt:new Date().toISOString(),remoteRevision:head.revision,remoteManifest:head.manifest,records:conflicts.map(id=>({id,base:b.get(id)??null,local:l.get(id)??null,remote:r.get(id)??null})),affectedRecordIds};
 }
 export const readCloudSync=()=>readLibrary(async tx=>{const state=await tx.get<State>('meta',STATE);if(state?.status==='syncing'&&(!state.syncStartedAt||Date.now()-Date.parse(state.syncStartedAt)>120000))return {...state,status:'pending' as const,syncStartedAt:undefined};if(state?.status==='synced'&&!await tx.get('meta','signed-out')){const localRevision=await readLocalLibraryRevision(tx);if(localRevision!==state.syncedLocalRevision){const current=await capture(tx);if(!equal(current.entries,state.base))return {...state,status:'pending' as const};}}return state;});
+export async function resolveCloudSyncConflicts(choice:CloudSyncConflictChoice){
+ await writeLibraryState(async tx=>{await assertCurrentLibrary(tx);if(await tx.get('meta','signed-out'))throw new Error('authentication_required');const state=await tx.get<State>('meta',STATE);if(state?.status!=='conflict'||!state.conflict)throw new Error('library_sync_no_conflict');tx.put('meta',STATE,{...state,status:'pending',resolution:{choice,expectedRemoteRevision:state.conflict.remoteRevision},error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined});});
+}
 async function saveState(expected:{owner:Owner;incarnation:string},work:(old:State|undefined)=>State){
  await writeLibraryState(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');tx.put('meta',STATE,work(await tx.get<State>('meta',STATE)));});
 }
@@ -155,6 +165,20 @@ class Blocks{
   entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));const rows=rowsFor(entries),identity=rows.meta.find(r=>r.key==='identity')!.value;if(identity.id!==manifest.libraryId||identity.learnerId!==manifest.learnerId)throw new Error('library_sync_identity');return entries;
  }
 }
+async function downloadStableHead(blocks:Blocks,request:SyncRequest){
+ let head=librarySyncHead.parse(await request('/head'));
+ for(let attempt=0;attempt<3;attempt++){
+  try{return {head,remote:await blocks.download(head)};}
+  catch(error){
+   if(!(error instanceof Error)||error.message!=='library_sync_missing_block')throw error;
+   const latest=librarySyncHead.parse(await request('/head'));
+   if(latest.revision===head.revision&&equal(latest.manifest,head.manifest))throw error;
+   if(attempt===2)throw new Error('library_sync_head_changed');
+   head=latest;
+  }
+ }
+ throw new Error('library_sync_head_changed');
+}
 /** Injected transport permits offline/idempotency/restore tests without real accounts. */
 export async function synchronizeLibrary(request:SyncRequest){
  let initial=await readLibrary(capture);const expected={owner:initial.owner,incarnation:initial.incarnation};
@@ -173,48 +197,56 @@ export async function synchronizeLibrary(request:SyncRequest){
   let state=await readCloudSync()??defaults;
   if(state.pending){
    const p=state.pending;await blocks.manifest(p.entries);await blocks.upload();
-   try{const head=librarySyncHead.parse(await request('/commit',{operationId:p.operationId,baseRevision:p.baseRevision,manifest:p.manifest}));await saveState(expected,old=>({...old!,base:p.baseEntries??p.entries,revision:head.revision,pending:undefined}));}
+   try{const head=librarySyncHead.parse(await request('/commit',{operationId:p.operationId,baseRevision:p.baseRevision,manifest:p.manifest}));await saveState(expected,old=>({...old!,base:p.baseEntries??p.entries,revision:head.revision,storage:head.storage??old!.storage,pending:undefined}));}
    catch(e){if(!(e instanceof Error)||e.message!=='library_sync_conflict')throw e;await saveState(expected,old=>({...old!,pending:undefined}));}
   }
   initial=await readLibrary(capture);state=initial.state??defaults;
   // Populate cache with local and last-confirmed data: unchanged resources are not downloaded again.
   await blocks.manifest(initial.entries);if(state.base.length)await blocks.manifest(state.base);
-  const head=librarySyncHead.parse(await request('/head')),remote=(await blocks.download(head)).filter(row=>allowed(row.table,row.key));
+  const stable=await downloadStableHead(blocks,request),head=stable.head,remote=stable.remote.filter(row=>allowed(row.table,row.key));
   // An identity-only browser and a null remote head are the authoritative empty
   // account. Confirm that state without publishing device bootstrap metadata.
   // The first learner-content write will still become pending and publish v3.
   if(head.manifest===null&&empty(initial.entries)){
    const completedAt=new Date().toISOString();
-   await saveState(expected,old=>({...old!,base:[],revision:head.revision,status:'synced',syncedLocalRevision:initial.localRevision,pending:undefined,conflicts:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}));
+   await saveState(expected,old=>({...old!,base:[],revision:head.revision,storage:head.storage,status:'synced',syncedLocalRevision:initial.localRevision,pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}));
    return;
   }
   let merged:ReturnType<typeof mergeLibraryEntries>;
   const remoteIdentity=remote.find(r=>r.table==='meta'&&r.key==='identity');
   if(remoteIdentity&&decodeBackupValue(remoteIdentity.value).id!==initial.identity.id){if(!empty(initial.entries))throw new Error('library_sync_identity');merged={entries:remote,conflicts:[]};}
   else merged=mergeLibraryEntries(state.base,initial.entries,remote);
-  let localEntries=merged.entries,uploadEntries=merged.entries;
+  let localEntries=merged.entries,uploadEntries=merged.entries,activeConflicts=merged.conflicts;
   let nextBase=(published:Entry[])=>published;
-  if(merged.conflicts.length){const partition=partitionConflicts(state.base,initial.entries,remote,merged.entries,merged.conflicts);localEntries=partition.local;uploadEntries=partition.upload;nextBase=partition.base;}
+  let conflict:CloudSyncConflict|undefined;
+  if(merged.conflicts.length){
+   const partition=partitionConflicts(state.base,initial.entries,remote,merged.entries,merged.conflicts);
+   conflict=conflictSnapshot(state.base,initial.entries,remote,merged.conflicts,partition.affectedRecordIds,head);
+   if(state.resolution?.expectedRemoteRevision===head.revision){localEntries=uploadEntries=state.resolution.choice==='local'?partition.local:partition.upload;activeConflicts=[];conflict=undefined;}
+   else{localEntries=partition.local;uploadEntries=partition.upload;nextBase=partition.base;}
+  }
   // Validate both dependency graphs, including original runtime replay, before publishing or applying.
   try{rowsFor(localEntries);rowsFor(uploadEntries);}catch(error){
-   if(merged.conflicts.length){await saveState(expected,old=>({...old!,status:'conflict',conflicts:merged.conflicts,error:'library_sync_conflict'}));return;}throw error;
+   if(activeConflicts.length){await saveState(expected,old=>({...old!,status:'conflict',conflicts:activeConflicts,conflict,resolution:undefined,error:'library_sync_conflict'}));return;}throw error;
   }
   // Content equality is not enough: the same rows may have been repacked into a
   // different block layout after a lost publication attempt. Canonicalize it once
   // so later focus/reload syncs can reuse the locally packed hashes.
   const manifest=await blocks.manifest(uploadEntries);
   const publicationRequired=!equal(uploadEntries,remote)||!equal(manifest,head.manifest);
-  await applyEntries(initial,localEntries,{...state,base:nextBase(remote),revision:head.revision,status:'pending',conflicts:merged.conflicts,pending:undefined});
+  await applyEntries(initial,localEntries,{...state,base:nextBase(remote),revision:head.revision,storage:head.storage,status:'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict,resolution:activeConflicts.length?undefined:state.resolution,pending:undefined});
   if(publicationRequired){
    const pending={operationId:crypto.randomUUID(),baseRevision:head.revision,manifest,entries:uploadEntries,baseEntries:nextBase(uploadEntries)};
    // Persist the complete immutable publication before any upload/commit.
    await saveState(expected,old=>({...old!,pending}));await blocks.upload();
-   const published=librarySyncHead.parse(await request('/commit',{operationId:pending.operationId,baseRevision:pending.baseRevision,manifest}));
-   await saveState(expected,old=>({...old!,base:nextBase(uploadEntries),revision:published.revision,pending:undefined,lastSyncedAt:new Date().toISOString()}));
+   let published:LibrarySyncHead;
+   try{published=librarySyncHead.parse(await request('/commit',{operationId:pending.operationId,baseRevision:pending.baseRevision,manifest}));}
+   catch(error){if(error instanceof Error&&error.message==='library_sync_conflict'){await saveState(expected,old=>({...old!,pending:undefined}));throw new Error('library_sync_head_changed');}throw error;}
+   await saveState(expected,old=>({...old!,base:nextBase(uploadEntries),revision:published.revision,storage:published.storage??old!.storage,pending:undefined,lastSyncedAt:new Date().toISOString()}));
   }
   const current=await readLibrary(capture);
   const completedAt=new Date().toISOString(),converged=equal(current.entries,current.state!.base);
-  await saveState(expected,old=>({...old!,status:merged.conflicts.length?'conflict':converged?'synced':'pending',syncedLocalRevision:converged?current.localRevision:old!.syncedLocalRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}));
+  await saveState(expected,old=>({...old!,status:activeConflicts.length?'conflict':converged?'synced':'pending',conflicts:activeConflicts.length?activeConflicts:undefined,conflict:activeConflicts.length?conflict:undefined,resolution:undefined,syncedLocalRevision:converged?current.localRevision:old!.syncedLocalRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}));
  }catch(error){const message=error instanceof Error?error.message:'library_sync_failed';
   await saveState(expected,old=>{const state=old??defaults;
    if(message==='library_sync_local_changed')return {...state,status:'pending',syncStartedAt:undefined,error:message,failureKind:undefined,retryCount:undefined,retryAt:undefined};
