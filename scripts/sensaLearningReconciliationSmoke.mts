@@ -9,7 +9,9 @@ import {
   isReplicatedLibraryEntry,
   mergeLibraryReplicas,
   normalizeLibraryReplicaEntry,
+  partitionLibraryReplicaConflicts,
   planLibraryReplicaApply,
+  replicaEntryId,
 } from '../apps/web/src/data/library/replication/libraryReplica.ts';
 
 type Entry={table:string;key:string;value:unknown};
@@ -67,6 +69,40 @@ assert.deepEqual(restoredSession.value,{status:'stopped',lease:null},'Personal S
 const restoredTask=normalizeLibraryReplicaEntry({table:'personalLearning',key:crypto.randomUUID(),value:{status:'generating',leaseUntil:42}},identity);
 assert.deepEqual(restoredTask.value,{status:'failed',leaseUntil:0,notice:'localFlow.restoredPreparation'},'Content Supply owns interrupted preparation recovery');
 
+const dependencies={
+ package:'package-fixture',task:crypto.randomUUID(),attempt:crypto.randomUUID(),meaning:crypto.randomUUID(),media:crypto.randomUUID(),
+ registrySenseVersion:crypto.randomUUID(),unrelatedRegistrySenseVersion:crypto.randomUUID(),annotation:'learning-scene:fixture',draft:crypto.randomUUID(),reconciliation:crypto.randomUUID(),
+};
+const dependencyRows=[
+ entry('packageInstallations',dependencies.package,{key:dependencies.package}),
+ entry('learningTargets',ids.target,{id:ids.target,curriculumMemberships:[{packageKey:dependencies.package,provenance:{}}]}),
+ entry('personalLearning',dependencies.task,{id:dependencies.task,targetId:ids.target,attemptId:dependencies.attempt,source:{personalMeaningId:dependencies.meaning}}),
+ entry('contentAttempts',dependencies.attempt,{id:dependencies.attempt,taskId:dependencies.task,resumedFrom:null}),
+ entry('semanticMeanings',dependencies.meaning,{personalMeaning:{personalMeaningId:dependencies.meaning},alignments:[{senseVersionId:dependencies.registrySenseVersion}],personalSemanticAnchorRevisions:[{personalMediaObjectId:dependencies.media,structuredPayload:{senseVersionId:dependencies.unrelatedRegistrySenseVersion}}]}),
+ entry('semanticRegistry',`senseVersions:${dependencies.registrySenseVersion}`,{kind:'senseVersions',value:{senseVersionId:dependencies.registrySenseVersion}}),
+ entry('semanticRegistry',`senseVersions:${dependencies.unrelatedRegistrySenseVersion}`,{kind:'senseVersions',value:{senseVersionId:dependencies.unrelatedRegistrySenseVersion}}),
+ entry('media',dependencies.media,{mediaId:dependencies.media}),
+ entry('learningRuns',ids.localRun,{id:ids.localRun,targetId:ids.target,targetIds:[ids.target],participants:{[ids.target]:{presentedMaterials:{}}}}),
+ entry('learningEvents',ids.localEvent,{id:ids.localEvent,runId:ids.localRun,targetId:ids.target}),
+ entry('learningReconciliations',dependencies.reconciliation,{id:dependencies.reconciliation,targetId:ids.target,candidateEventIds:[ids.localEvent],appliedEventIds:[ids.localEvent],historyOnlyEventIds:[],appliedRunIds:[ids.localRun],historyOnlyRunIds:[],selectedRunId:ids.localRun,selectedEventId:ids.localEvent}),
+ entry('annotations',dependencies.annotation,{id:dependencies.annotation,kind:'learning_scene',learningTargetId:ids.target}),
+ entry('drafts',dependencies.draft,{id:dependencies.draft,text:JSON.stringify({targetId:ids.target})}),
+];
+const targetConflict=replicaEntryId({table:'learningTargets',key:ids.target} as any);
+const dependencyPartition=partitionLibraryReplicaConflicts({
+ base:dependencyRows as any,
+ local:dependencyRows.map(row=>row.key===ids.target?entry(row.table,row.key,{id:ids.target,curriculumMemberships:[{packageKey:dependencies.package,provenance:{}}],side:'local'}):row) as any,
+ remote:dependencyRows.map(row=>row.key===ids.target?entry(row.table,row.key,{id:ids.target,curriculumMemberships:[{packageKey:dependencies.package,provenance:{}}],side:'remote'}):row) as any,
+ merged:dependencyRows as any,
+ conflicts:[targetConflict],
+});
+const affected=new Set(dependencyPartition.affectedRecordIds);
+const unrelatedRegistryId=replicaEntryId({table:'semanticRegistry',key:`senseVersions:${dependencies.unrelatedRegistrySenseVersion}`} as any);
+const draftId=replicaEntryId({table:'drafts',key:dependencies.draft} as any);
+for(const row of dependencyRows.filter(row=>![unrelatedRegistryId,draftId].includes(replicaEntryId(row as any))))assert(affected.has(replicaEntryId(row as any)),`${row.table}/${row.key} must follow its declared conflict dependency`);
+assert(!affected.has(unrelatedRegistryId),'undeclared IDs inside structured payloads must remain opaque');
+assert(!affected.has(draftId),'learner prose containing serialized record IDs must remain opaque');
+
 const rows={
   learningTargets:[{key:ids.target,value:remoteTarget}],
   learningRuns:[{key:ids.localRun,value:localRun},{key:ids.remoteRun,value:remoteRun}],
@@ -78,4 +114,4 @@ assert.deepEqual([...validated.historyOnlyRunIds],[ids.localRun]);
 assert.deepEqual([...validated.historyOnlyEventIds],[ids.localEvent]);
 assert.throws(()=>validateLearningReconciliationRows({...rows,learningReconciliations:[{key:decisionRow.key,value:{...decision,selectedEventId:ids.localEvent}}]}),/libraryBackup\.errors\.inconsistent/u);
 
-console.log('PASS: domain Replica Modules own normalization and deletion policy; concurrent Learning histories retain both branches, persist an auditable decision, and deterministically materialize only the latest branch.');
+console.log('PASS: domain Replica Modules own normalization, deletion and explicit conflict dependencies; learner prose stays opaque while concurrent Learning histories reconcile deterministically.');

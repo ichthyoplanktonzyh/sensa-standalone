@@ -105,7 +105,9 @@ Checkpoint 的 block/manifest 传输、CAS commit、重试和 baseline 由 Cloud
 跨设备归一化、三方收敛、完整性验证、历史 replay 与删除许可由领域 Replica Module 负责。Personal
 Semantic World、Learning System、Content Supply、Learner Artifact 和 Preference 各声明唯一记录所有权，
 中央同步器不再按领域表名实施策略。Learning Replica 对 Run/Event/Reconciliation history 只追加并拒绝
-通用物理删除；同步和手动备份通过同一领域验证入口核对历史与派生投影。
+通用物理删除；同步和手动备份通过同一领域验证入口核对历史与派生投影。冲突闭包同样只采用各领域
+Replica Module 显式声明的记录依赖；learner prose 和其他任意字符串保持 opaque，不能通过 UUID 猜测
+扩大冲突范围。
 新 Checkpoint 成功提交后，服务端只回收旧清单曾引用且新清单不再引用的块；另一设备尚未提交的上传
 不在这次回收范围内。
 

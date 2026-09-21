@@ -8,6 +8,7 @@ export type ReplicaMergeInput={
  remote:ReplicaEntry[];
 };
 export type ReplicaMergeResult={entries:ReplicaEntry[];conflicts:string[]};
+export type ReplicaRecordReference=Pick<ReplicaEntry,'table'|'key'>;
 
 /**
  * Internal seam used by Personal Library replication. A domain owns every
@@ -20,5 +21,7 @@ export type DomainReplicaModule={
  normalize?(entry:ReplicaEntry,identity:LibraryIdentity):ReplicaEntry;
  restore?(entry:ReplicaEntry,value:unknown,identity:LibraryIdentity):unknown;
  merge?(input:ReplicaMergeInput,ordinary:(input:ReplicaMergeInput)=>ReplicaMergeResult):ReplicaMergeResult;
+ /** Records that must remain on the same side when this record conflicts. */
+ conflictDependencies?(entry:ReplicaEntry,decodedValue:unknown):readonly ReplicaRecordReference[];
  assertDelete?(entry:ReplicaEntry):void;
 };

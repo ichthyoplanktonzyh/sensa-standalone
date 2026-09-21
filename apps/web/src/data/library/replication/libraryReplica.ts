@@ -74,21 +74,20 @@ export function mergeLibraryReplicas(input:ReplicaMergeInput):ReplicaMergeResult
  return {entries:entries.sort((a,b)=>replicaEntryId(a).localeCompare(replicaEntryId(b))),conflicts:[...new Set(conflicts)].sort()};
 }
 
-/**
- * Hold a conflicting fact together with records that reference it. The
- * traversal remains an internal compatibility implementation; domain Modules
- * can replace it with explicit reference declarations without changing the
- * coordinator interface.
- */
+/** Hold a conflicting fact together with the explicit record dependencies
+ * declared by its owning domain Module. */
 export function partitionLibraryReplicaConflicts(input:ReplicaMergeInput&{merged:ReplicaEntry[];conflicts:string[]}){
- const all=[...input.base,...input.local,...input.remote],idsByKey=new Map<string,Set<string>>(),edges=new Map<string,Set<string>>();
- for(const row of all){const id=replicaEntryId(row),ids=idsByKey.get(row.key)??new Set<string>();ids.add(id);idsByKey.set(row.key,ids);edges.set(id,edges.get(id)??new Set());}
+ const all=[...input.base,...input.local,...input.remote],edges=new Map<string,Set<string>>();
+ for(const row of all)edges.set(replicaEntryId(row),edges.get(replicaEntryId(row))??new Set());
  const connect=(left:string,right:string)=>{if(left===right)return;edges.get(left)!.add(right);edges.get(right)!.add(left);};
- for(const row of all){const id=replicaEntryId(row);const visit=(value:unknown,depth=0):void=>{if(depth>80)return;
-  if(typeof value==='string'){for(const other of idsByKey.get(value)??[])connect(id,other);if(value.startsWith('{')){try{visit(JSON.parse(value),depth+1);}catch{/* ordinary text */}}}
-  else if(Array.isArray(value))value.forEach(item=>visit(item,depth+1));
-  else if(value&&typeof value==='object')Object.values(value).forEach(item=>visit(item,depth+1));
- };visit(decodeBackupValue(row.value));}
+ for(const row of all){
+  const id=replicaEntryId(row),module=moduleFor(row.table,row.key);
+  if(!module)throw new Error('library_sync_format');
+  for(const dependency of module.conflictDependencies?.(row,decodeBackupValue(row.value))??[]){
+   const dependencyId=replicaEntryId(dependency);
+   if(edges.has(dependencyId))connect(id,dependencyId);
+  }
+ }
  const blocked=new Set(input.conflicts),queue=[...blocked];
  for(let at=0;at<queue.length;at++)for(const next of edges.get(queue[at])??[])if(!blocked.has(next)){blocked.add(next);queue.push(next);}
  const select=(unblocked:ReplicaEntry[],held:ReplicaEntry[])=>[
