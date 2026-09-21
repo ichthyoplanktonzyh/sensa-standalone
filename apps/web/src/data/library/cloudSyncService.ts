@@ -1,6 +1,7 @@
 import {auth} from '../account/auth';
 import {readLibrary} from './store';
 import {synchronizeLibrary} from './cloudSync';
+import {rehydratePackageInstallations} from './packages';
 let running:Promise<void>|undefined;
 export const accountLibrarySyncFinishedEvent='sensa-account-library-sync-finished';
 export function syncAccountLibrary(){
@@ -20,6 +21,10 @@ export function syncAccountLibrary(){
    let value:any;try{value=await response.json();}catch{throw new Error('library_sync_format');}
    if(!response.ok)throw new Error(value.code??'library_sync_unavailable');return value;
   });
+  // Checkpoint convergence is independent from public artifact delivery. Try
+  // the device catalog after sync, but leave unavailable artifacts honestly
+  // blocked instead of turning a healthy learner-data sync into a failure.
+  await rehydratePackageInstallations(undefined,passSignal).catch(()=>undefined);
  };
  running=(navigator.locks?navigator.locks.request('sensa-account-library-sync',work):work()).finally(()=>{running=undefined;window.dispatchEvent(new Event(accountLibrarySyncFinishedEvent));});return running;
 }

@@ -45,7 +45,7 @@ export function HomeLearningController({active=true}:{active?:boolean}){
   setNotice('');
   const read=()=>void refresh().catch(()=>{if(current)setNotice(localFlowText('learningReadFailed'));});
   void openLibrary().then(read).catch(()=>{if(current)setNotice(localFlowText('learningReadFailed'));});
-  const stop=observeLibrary(read,['packages','learningTargets','learningRuns','settings','meta']);
+  const stop=observeLibrary(read,['packageCache','packageInstallations','learningTargets','learningRuns','settings','meta']);
   const focus=()=>setClock(Date.now());
   window.addEventListener('focus',focus);
   return()=>{current=false;stop();window.removeEventListener('focus',focus);};

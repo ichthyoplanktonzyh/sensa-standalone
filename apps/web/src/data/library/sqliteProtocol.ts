@@ -2,13 +2,13 @@
 
 import type {HomeLearningStorageProjection} from './homeLearningRecords';
 
-export const sqliteLibraryFile = "/sensa-local-library-v9.sqlite3";
-export const sqlitePoolDirectory = "/sensa-local-library-v9";
+export const sqliteLibraryFile = "/sensa-local-library-v10.sqlite3";
+export const sqlitePoolDirectory = "/sensa-local-library-v10";
 /** First supported production-user baseline; prototype formats stay unsupported. */
-export const sqliteLibraryBaselineVersion = 9;
-export const sqliteLibrarySchemaVersion = 9;
+export const sqliteLibraryBaselineVersion = 10;
+export const sqliteLibrarySchemaVersion = 10;
 /** Cross-tab RPC changes must bump this before adding or changing messages. */
-export const sqliteCoordinatorProtocolVersion = 4;
+export const sqliteCoordinatorProtocolVersion = 5;
 
 export const sqliteLibraryTables = [
   "meta",
@@ -19,7 +19,8 @@ export const sqliteLibraryTables = [
   "sessions",
   "meanings",
   "identities",
-  "packages",
+  "packageCache",
+  "packageInstallations",
   "learningTargets",
   "learningRuns",
   "learningEvents",

@@ -52,7 +52,7 @@ compositor transform，支持中断和 reduced-motion；所有页面仍保留显
 
 ## 数据与同步
 
-生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v9.sqlite3`，持久化在浏览器
+生产 Web 的个人学习库是 SQLite WASM 数据库 `sensa-local-library-v10.sqlite3`，持久化在浏览器
 Origin Private File System。SQLite 在专用 Worker 中运行，使用不要求页面启用跨源隔离的
 `opfs-sahpool` VFS。Web Lock 选出唯一数据库 owner；其他同源 Sensa 标签页通过 BroadcastChannel
 复用 owner 的记录接口，owner 关闭后由剩余页面重新选举，绝不打开竞争连接。跨页共享/排他事务锁覆盖
@@ -71,8 +71,8 @@ Content Attempt 查询投影。首页只读取当前 Route 的 Target、该 Rout
 Package key；运行恢复、策略锁定和生成频控通过领域索引查询，不遍历或解析无关 JSON。数据库打开及有写入
 的长连接周期内使用 `PRAGMA optimize` 维护查询规划统计。Book 版本替换和媒体引用完整性检查同样通过事务内
 关系投影完成。承载大 JSON 的逻辑 record 与 Target 投影使用普通 rowid 表，紧凑关系投影使用
-`WITHOUT ROWID`；物理 schema v9 使用新的 OPFS 文件，并在内容事务中维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 在真实 Chromium OPFS 上执行 1k/10k 完整同步路径，并固定单记录变化只上传记录块与受影响的 manifest 分片。因当前无用户库数据，不迁移或读取 v8 文件。
-v9 同时是首个真实用户基线：打开版本低于 v9 或高于当前版本的文件会停止并保留原库，不创建空库冒充
+`WITHOUT ROWID`；物理 schema v10 使用新的 OPFS 文件，并在内容事务中维护记录级 revision 与删除 tombstone，供账号同步只读取上次收敛后变化的记录。云端确认的逐记录基线和 block refs 保存在内部 `sensa_sync_base` 表；未变化记录不再重新编码、分块或下载。`packageInstallations` 保存可跨设备复制的精确 artifact identity、语言方向、长度和 digest；完整 Published Bundle 与内嵌公共媒体只进入设备本地 `packageCache`，缓存写入不增加个人内容 revision。恢复后由 Content Supply 使用本机目录解析并校验精确 digest；解析或下载失败时 Learning Target 保留但 readiness 为 blocked。状态只保存小型幂等 commit receipt，不重复保存整库或待发布记录。`npm run benchmark:cloud-sync` 在真实 Chromium OPFS 上执行 1k/10k 完整同步路径，并固定单记录变化只上传记录块与受影响的 manifest 分片。因当前无用户库数据，不迁移或读取 v9 文件。
+v10 同时是首个真实用户基线：打开版本低于 v10 或高于当前版本的文件会停止并保留原库，不创建空库冒充
 首次访问；后续 schema 只能按顺序增加事务迁移与固定旧版夹具。跨标签页协调协议独立版本化，版本不一致
 时旧/新页面不交换记录，并要求用户关闭其他标签页。Service Worker 安装新 shell 后等待用户确认再接管，
 接管时保留上一发布版本的静态资源窗口，使仍在运行的旧页面能够完成或安全退出。
@@ -81,7 +81,7 @@ Web 应用层的逻辑表与 Personal Semantic World Journey 共用这一物理�
 意义聚合、注册表事实、Inbox、澄清草稿和 operation receipt 分别保存在 `semanticMeanings`、
 `semanticRegistry`、`semanticInbox`、`semanticDrafts` 与 `semanticReceipts` 等规范化逻辑表；媒体字节
 单独保存在 `media` 表。一次领域保存仍由同一个 `LibraryTransaction` 原子提交，但普通语义修改不再
-重写整个世界或图片载荷。当前没有生产用户数据，因此规范化语义格式直接使用新数据库与 Checkpoint v4，
+重写整个世界或图片载荷。当前没有生产用户数据，因此规范化语义格式与内容供给边界直接使用新数据库与 Checkpoint v5，
 不读取、迁移或兼容 v1 单聚合格式。账号副本、界面偏好和其他 `localStorage`
 状态不能充当个人学习库的第二权威。
 
@@ -98,6 +98,9 @@ FSRS 都由本地领域事务结算。Hono/Edge 不创建或推进学习 Run，�
 Evaluation 与 Transition 数据完成不可改写验证和重放。Remote Intake 重投可从 Draft 保存的 canonical
 Intake 重建本地结果，不需要同步完整命令输入或返回值。同一份 base64 媒体按内容边界切块，使重复引用
 复用摘要块。
+Published Bundle 与公共媒体字节不属于 Personal Library Fact：Checkpoint v5 和加密手动快照 v6 只记录
+`packageInstallations` 的精确可恢复引用，不承载 `packageCache`。learner-private / On-demand Materialization、
+Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入同步和备份，不能被误判为公共缓存。
 新 Checkpoint 成功提交后，服务端只回收旧清单曾引用且新清单不再引用的块；另一设备尚未提交的上传
 不在这次回收范围内。
 

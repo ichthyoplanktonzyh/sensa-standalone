@@ -194,7 +194,7 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
       : decodeBackupValue(JSON.parse(encoded)) as T;
     const targets = (await this.entries('learningTargets'))
       .map((row) => decode<LocalLearningTarget>(row.encodedValue)!);
-    const availablePackageKeys = (await this.entries('packages')).map((row) => row.key);
+    const availablePackageKeys = (await this.entries('packageCache')).map((row) => row.key);
     const activeId = decode<string>(this.records.get('meta\u0000learning-active'));
     return createHomeLearningStorageProjection({
       targets,

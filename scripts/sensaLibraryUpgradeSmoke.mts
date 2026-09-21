@@ -80,7 +80,7 @@ await store.readLibrary(async (tx) => {
 const diagnostics = await store.readLibraryStorageDiagnostics();
 assert.deepEqual(
   { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
-  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 9 },
+  { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 10 },
 );
 
 const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearningTargetsQuery }, { encodeBackupValue }, { sqliteLibrarySchema }] = await Promise.all([
@@ -90,13 +90,13 @@ const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearnin
   import('../apps/web/src/data/library/sqliteProtocol.ts'),
 ]);
 const sqlite3 = await sqlite3InitModule();
-for (const version of [8, 10]) {
+for (const version of [9, 11]) {
   const incompatibleRaw = new sqlite3.oo1.DB(':memory:', 'c');
   incompatibleRaw.exec(`CREATE TABLE owner_fixture(value TEXT); INSERT INTO owner_fixture VALUES('preserve-me'); PRAGMA user_version=${version}`);
   const incompatibleDatabase = new SqliteRecordDatabase(sqlite3, incompatibleRaw, 'memory');
   assert.throws(
     () => incompatibleDatabase.initialize(),
-    version < 9 ? /sqlite_schema_legacy:8/u : /sqlite_schema_future:10/u,
+    version < 10 ? /sqlite_schema_legacy:9/u : /sqlite_schema_future:11/u,
     'unsupported physical schemas must stop instead of opening an empty replacement',
   );
   const preserved = incompatibleRaw.exec({ sql: 'SELECT value FROM owner_fixture', rowMode: 0, returnValue: 'resultRows' }) as unknown[];
@@ -219,8 +219,8 @@ database.commit({
   clears: [],
   deletes: [],
   puts: [
-    { table: 'packages', key: 'package-a', encodedValue: encoded({ key: 'package-a' }) },
-    { table: 'packages', key: 'package-b', encodedValue: encoded({ key: 'package-b' }) },
+    { table: 'packageCache', key: 'package-a', encodedValue: encoded({ key: 'package-a' }) },
+    { table: 'packageCache', key: 'package-b', encodedValue: encoded({ key: 'package-b' }) },
     { table: 'learningTargets', key: 'target-a', encodedValue: encoded(target('target-a', 'route-a', 'package-a')) },
     { table: 'learningTargets', key: 'target-b', encodedValue: encoded(target('target-b', 'route-b', 'package-b')) },
   ],
@@ -361,4 +361,4 @@ assert.deepEqual(database.homeLearningProjection('route-a').targets, []);
 assert.match(database.diagnostics().sqliteVersion, /^3\./u);
 database.close();
 
-console.log('PASS: Library records preserve typed values and atomic replay; SQLite schema v9 journals record-level changes and confirmed block references for incremental sync while retaining compact indexed projections, planner statistics, native counts and logical-table constraints. Browser OPFS is checked separately.');
+console.log('PASS: Library records preserve typed values and atomic replay; SQLite schema v10 separates synchronized package installation facts from device-local artifact caches while retaining record journals, compact indexed projections, planner statistics, native counts and logical-table constraints. Browser OPFS is checked separately.');

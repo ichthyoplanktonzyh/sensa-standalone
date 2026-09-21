@@ -362,7 +362,7 @@ async function runAcrossPages<T>(
 async function transaction<T>(
   mode: "readonly" | "readwrite",
   work: (tx: LibraryTransaction) => Promise<T>,
-  kind: "content" | "state" = "content",
+  kind: "content" | "state" | "cache" = "content",
 ): Promise<T> {
   const execute = async () => {
     const adapter = await storageCall(sqliteRecordAdapter, 'localFlow.storageOpen');
@@ -410,6 +410,10 @@ export const restoreLibraryTransaction = <T>(work: (tx: LibraryTransaction) => P
 /** Sync progress and baselines do not announce learner-content changes. */
 export const writeLibraryState = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>
   transaction("readwrite", work, "state");
+/** Device-local, reproducible caches announce UI changes without entering the
+ * learner-content revision journal or scheduling a Cloud Checkpoint. */
+export const writeLibraryCache = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>
+  transaction("readwrite", work, "cache");
 export const readLibrary = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>
   transaction("readonly", work);
 

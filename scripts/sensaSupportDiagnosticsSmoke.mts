@@ -9,7 +9,7 @@ const report = buildSupportDiagnostics({
   online: true,
   offlineShell: 'ready',
   capabilities: { opfs: true, webLocks: true, broadcastChannel: true, worker: true, serviceWorker: true },
-  library: { engine: 'sqlite-wasm', persistence: 'opfs', schemaVersion: 9, journalMode: 'wal', synchronous: 2, lockingMode: 'exclusive' },
+  library: { engine: 'sqlite-wasm', persistence: 'opfs', schemaVersion: 10, journalMode: 'wal', synchronous: 2, lockingMode: 'exclusive' },
   libraryError: new Error(privateValues[2]),
   persistence: 'persistent',
   budget: { usageBytes: 15_900_000, quotaBytes: 200_100_000 },

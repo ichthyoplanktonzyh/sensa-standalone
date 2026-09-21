@@ -83,7 +83,7 @@ async function bindCurrentStepMaterial(tx:LibraryTransaction,run:LocalLearningRu
  const membership=target.curriculumMemberships.find(candidate=>candidate.id===participant.curriculumMembershipId&&sameRunLanguagePair(candidate.languageContext,participant.languageContext));
  const material=membership?materialForProtocolRun(replace?membership.material:materialForNextStep(participant.material,membership.material),run.purpose,participant.protocolRunId,at):structuredClone(participant.material);
  assertLocalTargetMaterialIdentity(target,material);validateLightweightInitialMaterialization(material);
- const executable=localExecutableTargetForParticipant(target,participant,material),pack=executable.packageKey?await tx.get<InstalledPackage>('packages',executable.packageKey):undefined;
+ const executable=localExecutableTargetForParticipant(target,participant,material),pack=executable.packageKey?await tx.get<InstalledPackage>('packageCache',executable.packageKey):undefined;
  validateLocalProtocolResources(execution,executable,pack);
  participant.presentedMaterials[stepId]=material;
  if(replace){
@@ -116,7 +116,7 @@ const resolveRunPlan=(target:LocalLearningTarget,commitment:LocalCommittedLearni
 
 export async function enrollPackage(operationId:string,key:string,languageContext:SensaFormalPinnedLanguageContext){return command({id:operationId,kind:'learning.enroll',input:{key,languageContext}},async tx=>{
  const owner=await learningOwner(tx),context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);
- const pack=await tx.get<InstalledPackage>('packages',key);if(!pack)throw new Error('localFlow.downloadFirst');
+ const pack=await tx.get<InstalledPackage>('packageCache',key);if(!pack)throw new Error('localFlow.downloadFirst');
  if(pack.bundle.targetLanguage!==context.targetLanguageTag)throw new Error('localFlow.routeLanguageMismatch');
  if(pack.bundle.supportLanguage!==context.supportLanguageTag)throw new Error('localFlow.routeSupportMismatch');
  const bookId=learningBundleBookId(pack.bundle),bookVersionId=learningBundleBookVersionId(pack.bundle),packageVersion=learningBundleVersionLabel(pack.bundle),contentReleaseId=learningBundleContentReleaseId(pack.bundle),now=new Date().toISOString();
@@ -161,7 +161,7 @@ const learningOverviewFrom=async(tx:LibraryTransaction)=>({
 /** One coherent read for the always-visible queue and learning screens. */
 export const readLearningOverview=()=>readLibrary(async tx=>({
  ...await learningOverviewFrom(tx),
- packages:await tx.all<InstalledPackage>('packages'),
+ packages:await tx.all<InstalledPackage>('packageCache'),
 }));
 /** Small projection for callers that only need Target facts. */
 export const learningTargetsSnapshot=()=>readLibrary(tx=>tx.all<LocalLearningTarget>('learningTargets'));
@@ -185,7 +185,7 @@ async function startLearningInTransaction(tx:LibraryTransaction,operationId:stri
  const now=new Date(at),purpose=localLearningPurpose(t);
  const dayStart=new Date(now);dayStart.setHours(0,0,0,0);const dayEnd=new Date(dayStart);dayEnd.setDate(dayEnd.getDate()+1);
  const introducedToday=await tx.countIntroducedLearningTargets(context.languageRouteId,dayStart.toISOString(),dayEnd.toISOString());
- const pack=selectedMembership.packageKey?await tx.get<InstalledPackage>('packages',selectedMembership.packageKey):undefined;
+ const pack=selectedMembership.packageKey?await tx.get<InstalledPackage>('packageCache',selectedMembership.packageKey):undefined;
  const readiness=requireLocalTargetReadiness(t,selectedMembership,pack,purpose);
  const profileId=readiness.profileId,profile=learningPolicyProfileRegistry.get(profileId,readiness.profileVersion),runner=learningRuntimeCoordinator.localExecutionForBinding(readiness.binding,purpose);
  if(t.relearnAt&&now<new Date(t.relearnAt)||purpose==='retention_review'&&(!t.memory||now<t.memory.dueAt))throw new Error('localFlow.notDue');
@@ -199,7 +199,7 @@ async function startLearningInTransaction(tx:LibraryTransaction,operationId:stri
   const compatible:LocalLearningTarget[]=[];
   for(const candidate of broadlyCompatible){
    const candidateMembership=localCurriculumMembershipForContext(candidate,context)!;
-   const candidateResource=candidateMembership.packageKey?await tx.get<InstalledPackage>('packages',candidateMembership.packageKey):undefined;
+   const candidateResource=candidateMembership.packageKey?await tx.get<InstalledPackage>('packageCache',candidateMembership.packageKey):undefined;
    if(inspectLocalTargetReadiness(candidate,candidateMembership,candidateResource,purpose).status==='ready')compatible.push(candidate);
   }
   const selected=new Set(compatible.filter(v=>!v.startedAt).slice(0,remaining).map(v=>v.id));
@@ -233,7 +233,7 @@ async function startLearningInTransaction(tx:LibraryTransaction,operationId:stri
  };
  for(const participant of participants){
   const membership=localCurriculumMembershipForContext(participant,context)!;
-  const resources=membership.packageKey?await tx.get<InstalledPackage>('packages',membership.packageKey):undefined;
+  const resources=membership.packageKey?await tx.get<InstalledPackage>('packageCache',membership.packageKey):undefined;
   requireLocalTargetReadiness(participant,membership,resources,purpose);
  }
  run.protocolState=initializeLocalProtocolState({execution:runner,target:localExecutableTarget(t,selectedMembership),resource:pack,purpose,run});
@@ -257,7 +257,7 @@ export async function actLearning(operationId:string,runId:string,revision:numbe
  const personalLearningScene=scene&&sceneRevision?{sceneId:scene.sceneId,revisionId:sceneRevision.revisionId,revision:sceneRevision.revision}:null;
  if(hasDeclaredMasteryOverride(t)||localRunOpenPlanningInterruption(run))throw new Error('localFlow.stepChanged');
  if(!Number.isFinite(Date.parse(at))||Date.parse(at)<Date.parse(run.startedAt))throw new Error('localFlow.clockChanged');
- const pack=executable.packageKey?await tx.get<InstalledPackage>('packages',executable.packageKey):undefined;validateLocalProtocolResources(execution,executable,pack);
+ const pack=executable.packageKey?await tx.get<InstalledPackage>('packageCache',executable.packageKey):undefined;validateLocalProtocolResources(execution,executable,pack);
  const executed=reduceLocalProtocolAction({operationId,stepKey:stepId,execution,target:executable,run,resource:pack,action,at});
  const nextRun=executed.run;
  const applied=applyLocalProtocolTransition({operationId,stepId,at,target:t,run:nextRun,transition:executed.transition});
@@ -326,7 +326,7 @@ export async function selectLocalLearningPolicy(operationId:string,targetId:stri
   const membership=localCurriculumMembershipForContext(target,context);if(!membership)throw new Error('localFlow.routeMembershipMissing');
   const profile=learningPolicyProfileRegistry.get(profileId);
   if(!profile.localSelectable||!membership.assurancePackageKey)throw new Error('localFlow.resourceInvalid');
-  const pack=membership.packageKey?await tx.get<InstalledPackage>('packages',membership.packageKey):undefined;
+  const pack=membership.packageKey?await tx.get<InstalledPackage>('packageCache',membership.packageKey):undefined;
   validateLocalProtocolResources(learningRuntimeCoordinator.localExecutionFor(profileId,'initial_learning'),localExecutableTarget(target,membership),pack);
   target.policyAssignment={assignmentId:target.policyAssignment.assignmentId,revision:target.policyAssignment.revision+1,scope:'target_override',profileId,assignedByOperationId:operationId,assignedAt:new Date().toISOString(),provenance:{kind:'learner_target_override'}};tx.put('learningTargets',target.id,target);return target;
  });

@@ -39,6 +39,7 @@ async function capture(tx:LibraryTransaction){
  const incarnation=await assertCurrentLibrary(tx),owner=await tx.get<Owner>('meta','service-owner'),identity=await tx.get<LibraryIdentity>('meta','identity');
  if(!owner?.accountId||!identity||await tx.get('meta','signed-out'))throw new Error('authentication_required');
  const state=await tx.get<State>('meta',STATE),localRevision=await readLocalLibraryRevision(tx),entries:Entry[]=[];
+ const packageCache=await tx.entries('packageCache');
  const base:Entry[]=(await tx.syncBaseEntries<typeof librarySyncTables>()).map(row=>({table:row.table,key:row.key,value:row.value,blocks:row.blocks}));
  base.sort((a,b)=>entryId(a).localeCompare(entryId(b)));
  if(state?.syncedLocalRevision!==undefined&&state.syncedLocalRevision<=localRevision){
@@ -58,11 +59,13 @@ async function capture(tx:LibraryTransaction){
   }
  }
  entries.sort((a,b)=>entryId(a).localeCompare(entryId(b)));
- return {owner,incarnation,identity,entries,base,localRevision,state};
+ return {owner,incarnation,identity,entries,base,localRevision,state,packageCache};
 }
-function rowsFor(entries:Entry[]):BackupRows{
+function rowsFor(entries:Entry[],packageCache:BackupRows['packageCache']=[]):BackupRows{
  const rows=Object.fromEntries(libraryTables.map(t=>[t,[]])) as unknown as BackupRows;
  for(const row of entries)rows[row.table].push({key:row.key,value:decodeBackupValue(row.value)});
+ const installationKeys=new Set(rows.packageInstallations.map(row=>row.key));
+ rows.packageCache=packageCache.filter(row=>installationKeys.has(row.key)).map(row=>({key:row.key,value:row.value}));
  validateBackupRows(rows);return rows;
 }
 function sameOwner(a:Owner,b:Owner){return a.subject===b.subject&&a.accountId===b.accountId;}
@@ -116,7 +119,7 @@ async function saveState(expected:{owner:Owner;incarnation:string},work:(old:Sta
  await writeLibraryState(async tx=>{const owner=await tx.get<Owner>('meta','service-owner');if(!owner||!sameOwner(owner,expected.owner)||await tx.get('meta','signed-out')||(await assertCurrentLibrary(tx))!==expected.incarnation)throw new Error('account_changed');tx.put('meta',STATE,work(await tx.get<State>('meta',STATE)));if(base!==undefined)tx.replaceSyncBase(base);});
 }
 async function applyEntries(expected:Awaited<ReturnType<typeof capture>>,entries:Entry[],state:State,base:Entry[]){
- const rows=rowsFor(entries);
+ const rows=rowsFor(entries,expected.packageCache);
  const decoded=new Map<string,any>();
  for(const table of librarySyncTables)for(const row of rows[table])decoded.set(entryId({table,key:row.key}),row.value);
  await restoreLibraryTransaction(async tx=>{
@@ -180,12 +183,12 @@ class Blocks{
    librarySyncBlockStore.parse({blocks});await this.request('/blocks/store',{blocks});
   }
  }
- async manifest(entries:Entry[]){const identity=decodeBackupValue(entries.find(r=>r.table==='meta'&&r.key==='identity')!.value);const rows:LibrarySyncManifest['rows']=[];const prepared:Entry[]=[];let changedSize=0;for(const r of entries){let refs=r.blocks;if(!refs?.length){const text=JSON.stringify(r.value);changedSize+=text.length;if(changedSize>64*1024*1024)throw new Error('library_sync_capacity');refs=await this.pack(text);}rows.push({table:r.table,key:r.key,blocks:refs});prepared.push({...r,blocks:[...refs]});}const manifest=await this.pack(JSON.stringify(librarySyncManifest.parse({version:4,libraryId:identity.id,learnerId:identity.learnerId,rows})));return {manifest,entries:prepared};}
+ async manifest(entries:Entry[]){const identity=decodeBackupValue(entries.find(r=>r.table==='meta'&&r.key==='identity')!.value);const rows:LibrarySyncManifest['rows']=[];const prepared:Entry[]=[];let changedSize=0;for(const r of entries){let refs=r.blocks;if(!refs?.length){const text=JSON.stringify(r.value);changedSize+=text.length;if(changedSize>64*1024*1024)throw new Error('library_sync_capacity');refs=await this.pack(text);}rows.push({table:r.table,key:r.key,blocks:refs});prepared.push({...r,blocks:[...refs]});}const manifest=await this.pack(JSON.stringify(librarySyncManifest.parse({version:5,libraryId:identity.id,learnerId:identity.learnerId,rows})));return {manifest,entries:prepared};}
  async download(head:LibrarySyncHead,base:Entry[]=[]){
   if(!head.manifest)return [];
   await this.fetch(head.manifest);
   let raw:unknown;try{raw=JSON.parse(await this.text(head.manifest));}catch{throw new Error('library_sync_format');}
-  if(!raw||typeof raw!=='object'||!('version' in raw)||(raw as {version?:unknown}).version!==4)throw new Error('library_sync_incompatible_checkpoint');
+  if(!raw||typeof raw!=='object'||!('version' in raw)||(raw as {version?:unknown}).version!==5)throw new Error('library_sync_incompatible_checkpoint');
   const parsed=librarySyncManifest.safeParse(raw);if(!parsed.success)throw new Error('library_sync_format');const manifest=parsed.data;
   const checkpointRows=manifest.rows;
   const prior=new Map(base.map(entry=>[entryId(entry),entry]));
@@ -237,7 +240,7 @@ export async function synchronizeLibrary(request:SyncRequest){
   const stable=await downloadStableHead(blocks,request,initial.base),head=stable.head,remote=stable.remote.filter(row=>allowed(row.table,row.key));
   // An identity-only browser and a null remote head are the authoritative empty
   // account. Confirm that state without publishing device bootstrap metadata.
-  // The first learner-content write will still become pending and publish v4.
+  // The first learner-content write will still become pending and publish v5.
   if(head.manifest===null&&empty(initial.entries)){
    const completedAt=new Date().toISOString();
    await saveState(expected,old=>({...old!,revision:head.revision,storage:head.storage,status:'synced',syncedLocalRevision:initial.localRevision,pending:undefined,conflicts:undefined,conflict:undefined,resolution:undefined,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}),[]);
@@ -257,7 +260,7 @@ export async function synchronizeLibrary(request:SyncRequest){
    else{localEntries=partition.local;uploadEntries=partition.upload;nextBase=partition.base;}
   }
   // Validate both dependency graphs, including original runtime replay, before publishing or applying.
-  try{rowsFor(localEntries);rowsFor(uploadEntries);}catch(error){
+  try{rowsFor(localEntries,initial.packageCache);rowsFor(uploadEntries,initial.packageCache);}catch(error){
    if(activeConflicts.length){await saveState(expected,old=>({...old!,status:'conflict',conflicts:activeConflicts,conflict,resolution:undefined,error:'library_sync_conflict'}));return;}throw error;
   }
   // Rebuild the small row index deterministically, while reusing every confirmed

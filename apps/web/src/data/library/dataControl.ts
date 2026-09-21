@@ -6,7 +6,7 @@ export type LocalClearPreview={libraryId:string;incarnation:string;operations:nu
 export const inspectLocalClear=()=>readLibrary(async tx=>{
  const owner=await learningOwner(tx),incarnation=await assertCurrentLibrary(tx);
  const [operations,drafts,meanings,packages,targets,events,sessions,tasks]=await Promise.all([
-  tx.count('operations'),tx.count('drafts'),tx.count('meanings'),tx.count('packages'),
+  tx.count('operations'),tx.count('drafts'),tx.count('meanings'),tx.count('packageInstallations'),
   tx.count('learningTargets'),tx.count('learningEvents'),
   tx.all<any>('sessions'),tx.all<any>('personalLearning'),
  ]);

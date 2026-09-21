@@ -209,7 +209,7 @@ export class SqliteRecordDatabase {
       sql: `SELECT DISTINCT package.record_key
             FROM sensa_learning_route_targets AS route
             JOIN sensa_records AS package
-              ON package.table_name='packages' AND package.record_key=route.package_key
+              ON package.table_name='packageCache' AND package.record_key=route.package_key
             WHERE route.language_route_id=?
             ORDER BY package.record_key`,
       bind: [languageRouteId],

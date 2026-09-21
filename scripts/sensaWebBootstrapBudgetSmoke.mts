@@ -62,7 +62,7 @@ const cloudFor=(account:string):Cloud=>{const existing=clouds.get(account);if(ex
 const repackCloud=(cloud:Cloud,chars:number)=>{
  if(!cloud.manifest)throw Error('nothing to repack');
  const manifest=JSON.parse(cloud.blocks.get(cloud.manifest[0]!)!) as {version:number;rows:{table:string;key:string;blocks:string[]}[]};
- if(manifest.version!==4||manifest.rows.some(row=>row.table==='operations'))throw Error('current Checkpoint carried the device operation ledger');
+ if(manifest.version!==5||manifest.rows.some(row=>row.table==='operations'||row.table==='packageCache'))throw Error('current Checkpoint carried device-local state');
  const added=new Map<string,string>(),rows:{table:string;key:string;blocks:string[]}[]=[];
  for(const [rowIndex,row] of manifest.rows.entries()){
   const text=row.blocks.map(hash=>cloud.blocks.get(hash)!).join(''),refs:string[]=[];

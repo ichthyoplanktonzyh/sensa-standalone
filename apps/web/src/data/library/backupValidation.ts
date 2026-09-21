@@ -8,7 +8,7 @@ import {defaultSensaLanguageRouteCollection,sensaFormalPinnedLanguageContextSche
 import {stableUuid} from '@sensa/learning-kernel';
 import {libraryTables,type Table} from './store';
 import {validatePackage} from './packages';
-import {packageKey} from './packageRecords';
+import {packageInstallationSchema,packageKey} from './packageRecords';
 import {validateLightweightInitialMaterialization} from '../../learning/runtime/lightweightInitialContent';
 import {providerInputSchema} from './providers';
 import {conversationImagesSchema} from './conversationImages';
@@ -60,7 +60,8 @@ export function validateBackupRows(rows:BackupRows){
  for(const {value:s} of rows.sessions){const d=requireRow('drafts',s.draftId);if(s.draftRevision>d.revision)fail();if(s.candidate)semanticProposalSchema.parse(s.candidate);if(s.inputImages)conversationImagesSchema.parse(s.inputImages);if(s.contextSummary!==undefined)z.string().min(1).max(16000).parse(s.contextSummary);if(Array.isArray(s.messages))conversationImagesSchema.parse([...(s.inputImages??[]),...s.messages.flatMap((m:any)=>m.images??[])]);if(!Array.isArray(s.messages)||!Number.isInteger(s.revision)||s.revision<1)fail();if(!['idle','waiting','proposal','inflight','failed','stopped','accepted'].includes(s.status))fail();if(s.status==='accepted'&&requireRow('meanings',s.meaningId).sessionId!==s.id)fail();}
  for(const {key,value:v} of rows.identities){z.string().regex(/^[a-f0-9]{64}$/u).parse(key);for(const field of ['senseId','senseVersionId','bindingId','bindingVersionId'])uuid.parse(v[field]);}
  for(const {value:m} of rows.meanings){z.string().max(16000).parse(m.context);const revision=z.number().int().positive().parse(m.contextRevision??1);if((m.contextHistory?.length??0)!==revision-1)fail();if(m.contextImages)conversationImagesSchema.parse(m.contextImages);if(m.contextHistory)for(const [index,h] of m.contextHistory.entries()){if(h.revision!==index+1)fail();z.string().max(16000).parse(h.text);conversationImagesSchema.parse(h.images);}semanticProposalSchema.parse(m.proposal);for(const key of ['id','senseId','senseVersionId','bindingId','bindingVersionId','contextAnchorId','expressionAnchorId','alignmentId','acceptanceId'])uuid.parse(m[key]);const d=requireRow('drafts',m.draftId),s=requireRow('sessions',m.sessionId);if(m.draftRevision>d.revision||s.meaningId!==m.id||s.status!=='accepted'||!backupEqual(m.proposal,s.candidate)||(m.contextHistory?.[0]?.text??m.context)!==(s.contextSummary??s.input)||!rows.identities.some(({value:v})=>['senseId','senseVersionId','bindingId','bindingVersionId'].every(k=>v[k]===m[k])))fail();}
- for(const {key,value:p} of rows.packages){validatePackage(p.bundle);if(key!==p.key||key!==packageKey(p.bundle))fail();z.string().regex(/^[a-f0-9]{64}$/u).parse(p.digest);}
+ for(const {key,value:i} of rows.packageInstallations){const installation=packageInstallationSchema.parse(i);if(key!==installation.key)fail();}
+ for(const {key,value:p} of rows.packageCache){validatePackage(p.bundle);if(key!==p.key||key!==packageKey(p.bundle))fail();z.string().regex(/^[a-f0-9]{64}$/u).parse(p.digest);const installation=packageInstallationSchema.parse(requireRow('packageInstallations',key));if(installation.artifact.digest!==p.digest)fail();}
  for(const {value:p} of rows.providers){const {revision,...fields}=p;providerInputSchema.parse({...fields,expectedRevision:revision-1});}
  for(const {key,value:op} of rows.operations){uuid.parse(key);if(typeof op?.input!=='string')fail();const input=JSON.parse(op.input);if(canonicalConsumerJson(input)!==op.input||typeof input.kind!=='string'||input.kind.startsWith('service.'))fail();timestamp.parse(op.committedAt);if(op.cloudReceipt!==undefined&&(op.cloudReceipt!==true||op.result!==null||['library.create','intake.receive'].includes(input.kind)))fail();}
  const operationInput=(id:string)=>{const operation=maps.operations.get(id);return operation?JSON.parse(operation.input):undefined;};
@@ -104,8 +105,10 @@ export function validateBackupRows(rows:BackupRows){
    if(t.expression!==membership.material.content.resources.find((r:any)=>r.materialRoleKey==='target_expression')?.contentPayload.surface)fail();
    if(membership.sourceKind==='sense_learning_package'){
     if(!membership.packageKey||membership.id!==stableUuid(`local-curriculum-membership:${t.id}:${context.languageRouteId}:sense_learning_package:${membership.packageKey}`))fail();
-    const pack=requireRow('packages',membership.packageKey),entry=pack.bundle.entries.find((e:any)=>e.senseVersionId===p.senseVersionId&&e.bindingVersionId===p.bindingVersionId);
-    if(!entry||pack.bundle.targetLanguage!==context.targetLanguageTag||pack.bundle.supportLanguage!==context.supportLanguageTag||!backupEqual(entry.content,baseContentBeforeSupplement(membership.material,context.supportLanguageTag))||entry.assurancePackageKey!==membership.assurancePackageKey)fail();
+    const installation=packageInstallationSchema.parse(requireRow('packageInstallations',membership.packageKey));if(installation.artifact.targetLanguage!==context.targetLanguageTag||installation.artifact.supportLanguage!==context.supportLanguageTag)fail();
+    if(installation.artifact.kind==='book_release'&&(membership.provenance?.bookId!==installation.artifact.bookId||membership.provenance?.bookVersionId!==installation.artifact.bookVersionId))fail();
+    const pack=maps.packageCache.get(membership.packageKey),entry=pack?.bundle.entries.find((e:any)=>e.senseVersionId===p.senseVersionId&&e.bindingVersionId===p.bindingVersionId);
+    if(pack&&(!entry||pack.bundle.targetLanguage!==context.targetLanguageTag||pack.bundle.supportLanguage!==context.supportLanguageTag||!backupEqual(entry.content,baseContentBeforeSupplement(membership.material,context.supportLanguageTag))||entry.assurancePackageKey!==membership.assurancePackageKey))fail();
    }else if(membership.sourceKind==='personal_meaning_alignment'){
     const provenance=membership.provenance as any,task=rows.personalLearning.find(({value:candidate})=>candidate.targetId===t.id&&candidate.curriculumMembershipId===membership.id)?.value;if(membership.packageKey!==null||membership.assurancePackageKey!==undefined||!task||provenance?.personalMeaningId!==task.source.personalMeaningId||provenance?.alignmentId!==task.source.personalMeaningAlignmentId||provenance?.personalMeaningRevisionId!==task.source.personalMeaningRevisionId||provenance?.alignmentBasisReferenceId!==task.source.alignmentBasisReferenceId||membership.id!==stableUuid(`local-curriculum-membership:${t.id}:${context.languageRouteId}:personal_meaning_alignment:${provenance.alignmentId}`))fail();
     requirePersonalSource(task.source);const attempt=requireRow('contentAttempts',p.attemptId);
@@ -114,6 +117,7 @@ export function validateBackupRows(rows:BackupRows){
   }
   if(t.introducedLanguageRouteId!==null&&!t.curriculumMemberships.some((membership:any)=>membership.languageContext.languageRouteId===t.introducedLanguageRouteId))fail();
  }
+ const packageCacheComplete=rows.learningTargets.every(({value:t})=>t.curriculumMemberships.every((membership:any)=>membership.sourceKind!=='sense_learning_package'||maps.packageCache.has(membership.packageKey)));
  let historyOnlyRunIds=new Set<string>();
  try{({historyOnlyRunIds}=validateLearningReconciliationRows(rows));}catch{fail();}
  // Replay each run once, including every participating Target in a shared cohort.
@@ -123,6 +127,17 @@ export function validateBackupRows(rows:BackupRows){
  const knownProtocolRunIds=new Set<string>();
  for(const saved of runs){
   if(historyOnlyRunIds.has(saved.id))continue;
+  if(!packageCacheComplete){
+   const context=validateLanguageContext(saved.languageContext),ids=localRunTargetIds(saved);
+   if(!ids.length||new Set(ids).size!==ids.length||!ids.includes(saved.targetId)||!backupEqual(Object.keys(saved.participants).sort(),[...ids].sort()))fail();
+   for(const [id,participant] of Object.entries(saved.participants)){
+    const target=requireRow('learningTargets',id),membership=target.curriculumMemberships.find((candidate:any)=>candidate.id===(participant as any).curriculumMembershipId)??fail();
+    uuid.parse((participant as any).protocolRunId);if(knownProtocolRunIds.has((participant as any).protocolRunId))fail();knownProtocolRunIds.add((participant as any).protocolRunId);
+    if(!backupEqual((participant as any).languageContext,context)||membership.languageContext.languageRouteId!==context.languageRouteId)fail();
+    validateLightweightInitialMaterialization((participant as any).material);
+   }
+   continue;
+  }
   const runLanguageContext=validateLanguageContext(saved.languageContext);
   const ids=localRunTargetIds(saved);
   if(!Array.isArray(saved.lifecycleEvents))fail();
@@ -157,7 +172,7 @@ export function validateBackupRows(rows:BackupRows){
     validateLightweightInitialMaterialization(material);const materialProvenance=material.snapshot.provenance as any;
     if(material.snapshot.learningTargetId!==id||material.snapshot.learnerUserId!==identity.learnerId||material.snapshot.protocolPurpose!==saved.purpose||materialProvenance.senseId!==target.identity.senseId||materialProvenance.senseVersionId!==target.identity.senseVersionId||materialProvenance.bindingId!==target.identity.senseExpressionBindingId||materialProvenance.bindingVersionId!==target.identity.bindingVersionId)fail();
     if(membership.sourceKind==='sense_learning_package'){
-     const membershipPackageKey=z.string().min(1).parse(membership.packageKey),pack=requireRow('packages',membershipPackageKey),entry=pack.bundle.entries.find((candidate:any)=>candidate.senseVersionId===materialProvenance.senseVersionId&&candidate.bindingVersionId===materialProvenance.bindingVersionId);
+     const membershipPackageKey=z.string().min(1).parse(membership.packageKey),pack=requireRow('packageCache',membershipPackageKey),entry=pack.bundle.entries.find((candidate:any)=>candidate.senseVersionId===materialProvenance.senseVersionId&&candidate.bindingVersionId===materialProvenance.bindingVersionId);
      if(!entry||!backupEqual(entry.content,baseContentBeforeSupplement(material,participant.languageContext.supportLanguageTag)))fail();
     }else{
      const attempt=requireRow('contentAttempts',materialProvenance.attemptId);if(attempt.status!=='ready'||!backupEqual(attempt.validation?.content,baseContentBeforeSupplement(material,participant.languageContext.supportLanguageTag)))fail();
@@ -181,12 +196,12 @@ export function validateBackupRows(rows:BackupRows){
    if(unfinished.has(id)||localLearningPurpose(target)!==saved.purpose||trigger.memoryRevision!==target.memoryRevision||trigger.dueAt!==(target.memory?.dueAt.toISOString()??null))fail();
    if(saved.purpose==='retention_review'&&(!target.memory||Date.parse(saved.startedAt)<target.memory.dueAt.getTime())||target.relearnAt&&Date.parse(saved.startedAt)<Date.parse(target.relearnAt))fail();
    target.startedAt??=saved.startedAt;
-   const executable=localExecutableTargetForParticipant(target,trigger),pack=executable.packageKey?requireRow('packages',executable.packageKey):undefined;
+   const executable=localExecutableTargetForParticipant(target,trigger),pack=executable.packageKey?requireRow('packageCache',executable.packageKey):undefined;
    validateLocalProtocolResources(execution,executable,pack);
   }
   const primary=targets.get(saved.targetId)??fail();
   const primaryExecutable=localExecutableTargetForParticipant(primary,saved.participants[saved.targetId]??fail());
-  let run=replayLocalProtocolRun({execution,target:primaryExecutable,resource:primaryExecutable.packageKey?requireRow('packages',primaryExecutable.packageKey):undefined,saved});
+  let run=replayLocalProtocolRun({execution,target:primaryExecutable,resource:primaryExecutable.packageKey?requireRow('packageCache',primaryExecutable.packageKey):undefined,saved});
   if(!Object.hasOwn(saved,'completionKind'))delete run.completionKind;
   const events:LearningEvent[]=rows.learningEvents.map(r=>r.value).filter(e=>e.runId===saved.id);
   const byStep=new Map(events.map(e=>[(e.detail as any)?.stepId,e]));if(byStep.size!==events.length)fail();
@@ -203,14 +218,14 @@ export function validateBackupRows(rows:BackupRows){
     if(!sceneRevision||sceneRevision.revision!==pinned.revision||sceneRevision.createdAt>Date.parse(event.at))fail();
    }
    const executable=localExecutableTargetForParticipant(target,participant,presented);
-   const executed=reduceLocalProtocolAction({operationId:event.id,stepKey:detail.stepId,execution,target:executable,run,resource:executable.packageKey?requireRow('packages',executable.packageKey):undefined,action:detail.action,at:event.at});
+   const executed=reduceLocalProtocolAction({operationId:event.id,stepKey:detail.stepId,execution,target:executable,run,resource:executable.packageKey?requireRow('packageCache',executable.packageKey):undefined,action:detail.action,at:event.at});
    const applied=applyLocalProtocolTransition({operationId:event.id,stepId:detail.stepId,at:event.at,target,run:executed.run,transition:executed.transition});
    if(!backupEqual(executed.facts,detail.formalEvaluation)||!backupEqual(applied.record,detail.transition)||executed.facts&&!backupEqual(executed.facts.step.learningMaterializationIds,[detail.materializationId]))fail();targets.set(targetId,applied.target);run=executed.run;run.ordinal++;run.revision++;
   }
   if(!backupEqual(run,saved))fail();if(!run.completedAt)ids.forEach(id=>unfinished.add(id));
  }
  for(const {value:t} of rows.learningTargets)if(t.committedPolicy&&!knownProtocolRunIds.has(t.committedPolicy.committedByProtocolRunId))fail();
- for(const {value:t} of rows.learningTargets)for(const key of ['memory','memoryRevision','startedAt','completedAt','relearnAt','relearningState'] as const)if(!backupEqual(targets.get(t.id)![key],t[key]))fail();
+ if(packageCacheComplete)for(const {value:t} of rows.learningTargets)for(const key of ['memory','memoryRevision','startedAt','completedAt','relearnAt','relearningState'] as const)if(!backupEqual(targets.get(t.id)![key],t[key]))fail();
  for(const {value:r} of rows.learningRuns){const context=validateLanguageContext(r.languageContext);requireRow('learningTargets',r.targetId);for(const [id,participant] of Object.entries(r.participants as LocalLearningRun['participants'])){const target=requireRow('learningTargets',id);validateLightweightInitialMaterialization(participant.material);if(participant.material.snapshot.learningTargetId!==id||participant.material.snapshot.learnerUserId!==identity.learnerId||!backupEqual(participant.languageContext,context)||!target.curriculumMemberships.some((membership:any)=>membership.id===participant.curriculumMembershipId&&membership.languageContext.languageRouteId===context.languageRouteId&&membership.languageContext.targetLanguageTag===context.targetLanguageTag&&membership.languageContext.supportLanguageTag===context.supportLanguageTag))fail();}}
  for(const {key,value:e} of rows.learningEvents){
   const eventRun=requireRow('learningRuns',e.runId),op=operationInput(key),presented=eventRun.participants[e.targetId]?.presentedMaterials?.[e.detail.stepId];if(!presented||e.detail.materializationId!==presented.snapshot.learningMaterializationId||op&&(op.kind!=='learning.act'||op.input.runId!==e.runId||op.input.at!==e.at||!backupEqual(op.input.action,e.detail.action)))fail();
