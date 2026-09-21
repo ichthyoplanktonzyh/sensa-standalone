@@ -27,7 +27,7 @@ interface ShellSearch extends ShellParams {
 
 function SensaRootRoute() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const known = pathname === '/' || pathname === '/welcome' || isKnownShellPath(pathname);
+  const known = pathname === '/' || pathname === '/welcome' || pathname === '/how-it-works' || isKnownShellPath(pathname);
   return known ? <App /> : <ProductRecovery kind="not_found" />;
 }
 
@@ -55,6 +55,11 @@ const welcomeRoute = createRoute({
   path: 'welcome',
 });
 
+const howItWorksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'how-it-works',
+});
+
 /**
  * Every non-empty sheet stack. A splat rather than a nested tree because the
  * stack is genuinely dynamic: the same screen opens from several parents (a
@@ -68,7 +73,7 @@ const stackRoute = createRoute({
   path: '$',
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, welcomeRoute, stackRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, welcomeRoute, howItWorksRoute, stackRoute]);
 
 export const router = createRouter({ routeTree });
 

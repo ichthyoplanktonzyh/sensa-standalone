@@ -12,10 +12,10 @@ interface LandingPageProps {
 
 export function LandingPage({ signedIn = false, onEnter }: LandingPageProps) {
   const { t, i18n } = useTranslation();
-  const steps = t("landing.use.steps", { returnObjects: true }) as Array<{ label: string; title: string; body: string }>;
+  const moments = t("landing.belief.moments", { returnObjects: true }) as Array<{ label: string; title: string; body: string }>;
 
   useEffect(() => {
-    document.title = `${t("brand")} · ${t("landing.hero.title")}`;
+    document.title = `${t("brand")} · ${t("landing.hero.title").replace(/\s+/g, " ")}`;
     const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
     const previous = description?.content;
     if (description) description.content = t("landing.meta");
@@ -34,7 +34,7 @@ export function LandingPage({ signedIn = false, onEnter }: LandingPageProps) {
           <SensaLogo />
         </a>
         <nav className="sensa-landing__navigation" aria-label={t("landing.navigation")}>
-          <a className="sensa-landing__text-link" href="#how">{t("landing.how")}</a>
+          <a className="sensa-landing__text-link" href="/how-it-works">{t("landing.how")}</a>
           <LanguageSwitch />
           <button className="sensa-landing__header-action" type="button" onClick={onEnter}>
             {t(signedIn ? "landing.enter" : "landing.signIn")}
@@ -45,6 +45,7 @@ export function LandingPage({ signedIn = false, onEnter }: LandingPageProps) {
       <div id="landing-main">
         <section className="sensa-landing__hero" aria-labelledby="landing-title">
           <div className="sensa-landing__hero-copy">
+            <span className="sensa-landing__eyebrow">{t("landing.hero.eyebrow")}</span>
             <h1 id="landing-title">{t("landing.hero.title")}</h1>
             <p>{t("landing.hero.body")}</p>
             <div className="sensa-landing__hero-actions">
@@ -52,7 +53,7 @@ export function LandingPage({ signedIn = false, onEnter }: LandingPageProps) {
                 <span>{t("landing.hero.primary")}</span>
                 <ArrowRight size={18} aria-hidden="true" />
               </button>
-              <a className="sensa-landing__secondary-action" href="#how">
+              <a className="sensa-landing__secondary-action" href="#story">
                 <span>{t("landing.hero.secondary")}</span>
                 <ArrowDown size={17} aria-hidden="true" />
               </a>
@@ -78,7 +79,7 @@ export function LandingPage({ signedIn = false, onEnter }: LandingPageProps) {
           </figure>
         </section>
 
-        <section className="sensa-landing__belief" aria-labelledby="landing-belief-title">
+        <section className="sensa-landing__belief" id="story" aria-labelledby="landing-belief-title">
           <div className="sensa-landing__belief-heading">
             <h2 id="landing-belief-title">{t("landing.belief.title")}</h2>
           </div>
@@ -86,27 +87,17 @@ export function LandingPage({ signedIn = false, onEnter }: LandingPageProps) {
             <p>{t("landing.belief.first")}</p>
             <p>{t("landing.belief.second")}</p>
           </div>
-          <blockquote>{t("landing.belief.statement")}</blockquote>
-        </section>
-
-        <section className="sensa-landing__use" id="how" aria-labelledby="landing-use-title">
-          <div className="sensa-landing__use-intro">
-            <h2 id="landing-use-title">{t("landing.use.title")}</h2>
-            <p>{t("landing.use.intro")}</p>
-          </div>
-          <ol className="sensa-landing__steps">
-            {steps.map((step, index) => (
-              <li key={step.title}>
-                <span className="sensa-landing__step-number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
-                <div className="sensa-landing__step-heading">
-                  <span className="sensa-landing__step-label">{step.label}</span>
-                  <h3>{step.title}</h3>
-                </div>
-                <p>{step.body}</p>
-              </li>
+          <div className="sensa-landing__moments">
+            {moments.map((moment) => (
+              <article key={moment.label}>
+                <span className="sensa-landing__step-label">{moment.label}</span>
+                <h3>{moment.title}</h3>
+                <p>{moment.body}</p>
+              </article>
             ))}
-          </ol>
-          <p className="sensa-landing__return">{t("landing.use.return")}</p>
+          </div>
+          <blockquote>{t("landing.belief.statement")}</blockquote>
+          <p className="sensa-landing__coda">{t("landing.belief.coda")}</p>
         </section>
 
         <section className="sensa-landing__closing" aria-labelledby="landing-closing-title">
