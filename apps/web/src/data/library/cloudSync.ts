@@ -2,10 +2,11 @@ import {canonicalConsumerJson,librarySyncManifest,librarySyncHead,librarySyncTab
 import {libraryTables,readLibrary,readLocalLibraryRevision,restoreLibraryTransaction,writeLibraryState,assertCurrentLibrary,type LibraryTransaction,type Table,type LibraryIdentity} from './store';
 import {backupEqual,encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {validateBackupRows,type BackupRows} from './backupValidation';
+import {cloudSyncFailurePolicy,type CloudSyncFailureKind} from './cloudSyncPolicy';
 export type SyncRequest=(path:string,body?:unknown)=>Promise<any>;
 type Entry={table:typeof librarySyncTables[number];key:string;value:unknown};
 type Owner={subject:string;accountId:string};
-export type CloudSyncState={owner:Owner;incarnation:string;base:Entry[];revision:number;syncedLocalRevision?:number;pending?:{operationId:string;baseRevision:number;manifest:string[];entries:Entry[];baseEntries?:Entry[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string};
+export type CloudSyncState={owner:Owner;incarnation:string;base:Entry[];revision:number;syncedLocalRevision?:number;pending?:{operationId:string;baseRevision:number;manifest:string[];entries:Entry[];baseEntries?:Entry[]};status:'pending'|'syncing'|'synced'|'offline'|'conflict'|'failed';conflicts?:string[];lastSyncedAt?:string;lastCheckedAt?:string;syncStartedAt?:string;error?:string;failureKind?:CloudSyncFailureKind;retryCount?:number;retryAt?:string};
 type State=CloudSyncState;
 const STATE='cloud-sync';
 const LIBRARY_CREATE_OPERATION='00000000-0000-4000-8000-000000000001';
@@ -143,7 +144,9 @@ class Blocks{
  async download(head:LibrarySyncHead){
   if(!head.manifest)return [];
   await this.fetch(head.manifest);
-  const manifest=librarySyncManifest.parse(JSON.parse(await this.text(head.manifest)));
+  let raw:unknown;try{raw=JSON.parse(await this.text(head.manifest));}catch{throw new Error('library_sync_format');}
+  if(!raw||typeof raw!=='object'||!('version' in raw)||(raw as {version?:unknown}).version!==3)throw new Error('library_sync_incompatible_checkpoint');
+  const parsed=librarySyncManifest.safeParse(raw);if(!parsed.success)throw new Error('library_sync_format');const manifest=parsed.data;
   const checkpointRows=manifest.rows;
   // Fetch every referenced block once, in pages, before assembling any row.
   await this.fetch(checkpointRows.flatMap(row=>row.blocks));
@@ -203,9 +206,13 @@ export async function synchronizeLibrary(request:SyncRequest){
   }
   const current=await readLibrary(capture);
   const completedAt=new Date().toISOString(),converged=equal(current.entries,current.state!.base);
-  await saveState(expected,old=>({...old!,status:merged.conflicts.length?'conflict':converged?'synced':'pending',syncedLocalRevision:converged?current.localRevision:old!.syncedLocalRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined}));
+  await saveState(expected,old=>({...old!,status:merged.conflicts.length?'conflict':converged?'synced':'pending',syncedLocalRevision:converged?current.localRevision:old!.syncedLocalRevision,lastSyncedAt:completedAt,lastCheckedAt:completedAt,syncStartedAt:undefined,error:undefined,failureKind:undefined,retryCount:undefined,retryAt:undefined}));
  }catch(error){const message=error instanceof Error?error.message:'library_sync_failed';
-  await saveState(expected,old=>({...old??defaults,status:message==='library_sync_local_changed'?'pending':['library_sync_conflict','library_sync_identity','library_sync_history','libraryBackup.errors.inconsistent'].includes(message)?'conflict':navigator.onLine?'failed':'offline',syncStartedAt:undefined,error:message})).catch(()=>{});
+  await saveState(expected,old=>{const state=old??defaults;
+   if(message==='library_sync_local_changed')return {...state,status:'pending',syncStartedAt:undefined,error:message,failureKind:undefined,retryCount:undefined,retryAt:undefined};
+   if(['library_sync_conflict','library_sync_identity','library_sync_history','libraryBackup.errors.inconsistent'].includes(message))return {...state,status:'conflict',syncStartedAt:undefined,error:message,failureKind:undefined,retryCount:undefined,retryAt:undefined};
+   return {...state,...cloudSyncFailurePolicy(message,navigator.onLine,state.retryCount),syncStartedAt:undefined,error:message};
+  }).catch(()=>{});
   throw error;
  }
 }

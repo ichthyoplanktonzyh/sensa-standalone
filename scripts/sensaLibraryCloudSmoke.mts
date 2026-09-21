@@ -17,6 +17,8 @@ process.env.SENSA_REGISTRATION_POLICY='registered';
 const app=createConsumerRoutes({deleteIdentity:async()=>{},telemetry:()=>{},verify:async r=>{const index=r.headers.get('authorization')==='Bearer second'?1:0;return {issuer:'https://fixture.supabase.co/auth/v1',subject:subjects[index],sessionId:sessions[index],email:'sync@sensa.invalid',authenticatedAt:Math.floor(Date.now()/1000)};},transaction:async work=>{const db=await pool.connect();await db.query('BEGIN');try{await db.query('SET LOCAL ROLE backend_app');const value=await work(db);await db.query('COMMIT');return value;}catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}}});
 const built=await viteBuild({
  configFile:false,root:process.cwd(),logLevel:'silent',base:'/',
+ define:{'import.meta.env.VITE_SENSA_API_URL':JSON.stringify('https://service.fixture.invalid')},
+ plugins:[{name:'fixture-auth',enforce:'pre',load(id){if(id.endsWith('/apps/web/src/data/account/auth.ts'))return "export const auth={getSession:async()=>({data:{session:{access_token:'fixture',user:{id:'fixture'}}}})}; export {authStorageKey,cachedAuthSubject} from './authSessionHint';";}}],
  build:{write:false,target:'es2022',rollupOptions:{preserveEntrySignatures:'strict',input:resolve('scripts/support/libraryCloudBrowserEntry.ts'),output:{entryFileNames:'core.js',chunkFileNames:'assets/[name]-[hash].js',assetFileNames:'assets/[name]-[hash][extname]'}}},
 });
 if(Array.isArray(built))throw Error('Expected one browser integration bundle');
@@ -54,6 +56,19 @@ try{
  await other.evaluate(()=>(window as any).sync());assert.deepEqual(await other.evaluate(()=>(window as any).core.listDrafts()),[]);
  const hash=(await pool.query('SELECT hash FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1 LIMIT 1',[accountId])).rows[0].hash;
  assert.equal((await fetch(origin+'/sensa/library-sync/blocks/'+hash,{headers:{authorization:'Bearer second'}})).status,404,'blocks are account isolated');
+ // A legacy Checkpoint is terminal: fetch only its small manifest, preserve the
+ // local library, and leave retry scheduling to explicit recovery.
+ const legacyRow=JSON.stringify({kind:'legacy-operation',payload:'x'.repeat(32_768)}),legacyRowHash=createHash('sha256').update(legacyRow).digest('hex');
+ const legacyManifest=JSON.stringify({version:1,libraryId:crypto.randomUUID(),learnerId:crypto.randomUUID(),rows:[{table:'operations',key:crypto.randomUUID(),blocks:[legacyRowHash]}]}),legacyManifestHash=createHash('sha256').update(legacyManifest).digest('hex');
+ await pool.query('INSERT INTO sensa_consumer.library_cloud_blocks(account_id,hash,data) VALUES($1,$2,$3),($1,$4,$5) ON CONFLICT(account_id,hash) DO UPDATE SET data=EXCLUDED.data',[otherId,legacyRowHash,legacyRow,legacyManifestHash,legacyManifest]);
+ await pool.query('UPDATE sensa_consumer.library_cloud SET revision=revision+1,manifest=$2::jsonb,updated_at=now() WHERE account_id=$1',[otherId,JSON.stringify([legacyManifestHash])]);
+ const legacy=await client(otherId,subjects[1],'second'),localIdentity=await legacy.evaluate(()=>(window as any).core.openLibrary());calls=[];
+ await assert.rejects(legacy.evaluate(()=>(window as any).sync()),/library_sync_incompatible_checkpoint/);
+ const legacyState=await legacy.evaluate(()=>(window as any).core.readCloudSync());
+ assert.equal(legacyState.status,'failed');assert.equal(legacyState.error,'library_sync_incompatible_checkpoint');assert.equal(legacyState.failureKind,'terminal');assert.equal(legacyState.retryAt,undefined);
+ assert.equal(calls.filter(c=>c.path.endsWith('/blocks/fetch')).length,1,'legacy row blocks must not be downloaded');
+ assert.deepEqual(await legacy.evaluate(()=>(window as any).core.openLibrary()),localIdentity,'legacy cloud data must not modify the local library');
+ await legacy.context().close();
  // Independent offline additions merge; no records are lost.
  for(const [page,text]of [[a,'A offline'],[b,'B offline']] as const)await page.evaluate(async text=>{const w=window as any;w.offline=true;await w.core.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text});},text);
  await assert.rejects(a.evaluate(()=>(window as any).sync()),/offline/);await a.evaluate(()=>{(window as any).offline=false;});await b.evaluate(()=>{(window as any).offline=false;});
@@ -71,7 +86,7 @@ try{
   const source=gateway.getLearningSources(accepted.personalMeaningId)[0];if(!source)throw Error('canonical learning source missing');
   const provider=await c.saveProvider(id(),{id:id(),expectedRevision:0,name:'Test model',kind:'compatible',endpoint:'https://sync-model.invalid/v1',model:'synthetic'},'fixture-device-secret');
   const settings=(await c.providerSnapshot()).settings;await c.assignProvider(id(),'content',provider.id,settings.revision);
-  const original=window.fetch;window.fetch=async(url:any,init:any)=>{if(String(url).startsWith(provider.endpoint))return new Response(JSON.stringify({model:'synthetic',choices:[{finish_reason:'stop',message:{content:JSON.stringify({scene:'下雨时一个人穿了自己的防水外衣，挡住雨水。',senseFocus:'防雨时穿在身上的衣服'})}}]}),{headers:{'content-type':'application/json'}});return original(url,init);};
+  const original=window.fetch;window.fetch=async(url:any,init:any)=>{const address=String(url);if(address.endsWith('/sensa/speech'))return new Response(JSON.stringify({surface:'raincoat',languageTag:'en',audioUrl:'data:audio/mpeg;base64,UklGRg==',phoneticNotation:null,accentLabel:'en-US',source:'synthetic test fixture',method:'tts'}),{headers:{'content-type':'application/json'}});if(address.endsWith('/sensa/resource-facts'))return new Response(JSON.stringify({input:JSON.parse(String(init?.body)),references:[]}),{headers:{'content-type':'application/json'}});if(address.startsWith(provider.endpoint))return new Response(JSON.stringify({model:'synthetic',choices:[{finish_reason:'stop',message:{content:JSON.stringify({resources:[{role:'experience_recall_cue',payload:{scene:'下雨时一个人穿了自己的防水外衣，挡住雨水。',senseFocus:'防雨时穿在身上的衣服'}},{role:'scene_bridge',payload:{text:'回想雨中穿着防水外衣的体验。'}},{role:'scene_realization',payload:{example:'I wore my raincoat in the rain.',targetStart:10,targetEnd:18,experienceResourceKey:'experience_recall_cue:0'}}]})}}]}),{headers:{'content-type':'application/json'}});return original(url,init);};
   try{const languageContext=(await c.languageRoutesSnapshot()).context,task=await c.enrollPersonal(id(),source,languageContext,true);await c.preparePersonal(task.id,source,provider,null,new AbortController().signal,()=>{});}finally{window.fetch=original;}
   if((await c.personalLearningSnapshot())[0].status!=='ready')throw Error('personal resources not ready');
  });

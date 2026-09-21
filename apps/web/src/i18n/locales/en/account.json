@@ -102,6 +102,8 @@
     "offline": "Saved offline. Sync will resume when connected.",
     "conflict": "Some changes conflict. Both versions are preserved. Export a backup and contact support to resolve them.",
     "failed": "Sync did not finish. Your local data is still saved. Check the connection and retry.",
+    "attention": "Automatic retries have stopped. Your local data is still saved. Retry manually or contact support if the problem continues.",
+    "incompatible": "The cloud data uses an incompatible legacy sync format. Automatic retries have stopped and local data is unchanged. Contact support to reset the cloud copy.",
     "retry": "Sync now",
     "last": "Last synced",
     "unavailable": "Sign in to sync",

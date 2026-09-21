@@ -10,6 +10,6 @@ export function CloudSyncPanel(){
  const {t,i18n}=useTranslation(),account=useAccountExperience();
  const [state,setState]=useState<Awaited<ReturnType<typeof readCloudSync>>>();
  useEffect(()=>{const refresh=()=>{void readCloudSync().then(setState).catch(()=>{});};refresh();return observeCloudSync(refresh);},[]);
- const status=state?.error==='library_sync_identity'?'identity':state?.status??'pending';
+ const status=state?.error==='library_sync_identity'?'identity':state?.error==='library_sync_incompatible_checkpoint'?'incompatible':state?.failureKind==='terminal'?'attention':state?.status??'pending';
  return <section className="rounded-card border border-border-strong bg-surface-panel p-5"><h3 className="text-lg font-semibold">{t('cloudSync.title')}</h3><p role="status" className="mt-3 text-sm">{t('cloudSync.'+status)}</p>{state?.lastSyncedAt&&<p className="mt-2 text-sm text-fg-secondary">{t('cloudSync.last')} <time dateTime={state.lastSyncedAt}>{new Date(state.lastSyncedAt).toLocaleString(i18n.resolvedLanguage??i18n.language)}</time></p>}<button className={setupButton+' mt-4'} disabled={!account.onlineService||state?.status==='syncing'} onClick={()=>void syncAccountLibrary().catch(()=>{})}>{t('cloudSync.retry')}</button></section>;
 }
