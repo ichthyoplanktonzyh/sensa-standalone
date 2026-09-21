@@ -32,12 +32,21 @@ const decode = (encoded: string): unknown => decodeBackupValue(JSON.parse(encode
 const encode = (value: unknown): string => JSON.stringify(encodeBackupValue(value));
 const clone = <T>(value: T): T => structuredClone(value);
 
-const storageCall = async <T>(work: () => Promise<T>): Promise<T> => {
+const storageCall = async <T>(
+  work: () => Promise<T>,
+  fallback: 'localFlow.storageOpen' | 'localFlow.storageWrite' = 'localFlow.storageWrite',
+): Promise<T> => {
   try {
     return await work();
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "";
     if (/full|quota/iu.test(message)) throw new Error("localFlow.storageFull", { cause });
+    if (/^sqlite_(?:browser_environment|worker|opfs|web_locks|broadcast_channel)_unavailable$/u.test(message)) {
+      throw new Error('localFlow.storageUnsupported', { cause });
+    }
+    if (message === 'sqlite_storage_probe_failed') {
+      throw new Error('localFlow.storageOpen', { cause });
+    }
     if (message === 'sqlite_owner_incompatible') {
       throw new Error('localFlow.closeOldTabs', { cause });
     }
@@ -45,7 +54,7 @@ const storageCall = async <T>(work: () => Promise<T>): Promise<T> => {
       throw new Error("localFlow.storageBusy", { cause });
     }
     if (message.startsWith("localFlow.")) throw cause;
-    throw new Error("localFlow.storageWrite", { cause });
+    throw new Error(fallback, { cause });
   }
 };
 
@@ -299,7 +308,7 @@ async function transaction<T>(
   kind: "content" | "state" = "content",
 ): Promise<T> {
   const execute = async () => {
-    const adapter = await storageCall(sqliteRecordAdapter);
+    const adapter = await storageCall(sqliteRecordAdapter, 'localFlow.storageOpen');
     const library = new LibraryTransaction(mode, adapter);
     const value = await work(library);
     if (mode === "readwrite" && library.wrote) {
@@ -351,9 +360,10 @@ export const readLibrary = <T>(work: (tx: LibraryTransaction) => Promise<T>) =>
  */
 export const readHomeLearningRecords = async (
   languageRouteId: string,
-): Promise<HomeLearningStorageProjection> => storageCall(async () => (
-  await sqliteRecordAdapter()
-).homeLearningProjection(languageRouteId));
+): Promise<HomeLearningStorageProjection> => {
+  const adapter = await storageCall(sqliteRecordAdapter, 'localFlow.storageOpen');
+  return storageCall(() => adapter.homeLearningProjection(languageRouteId));
+};
 
 export const readLocalLibraryRevision = (tx: LibraryTransaction): Promise<number> =>
   tx.get<number>("meta", localLibraryRevisionKey).then((value) => value ?? 0);
@@ -457,5 +467,6 @@ export function observeCloudSyncState(listener: () => void): () => void {
 }
 
 export async function readLibraryStorageDiagnostics(): Promise<SqliteStorageDiagnostics> {
-  return (await sqliteRecordAdapter()).diagnostics();
+  const adapter = await storageCall(sqliteRecordAdapter, 'localFlow.storageOpen');
+  return storageCall(() => adapter.diagnostics());
 }

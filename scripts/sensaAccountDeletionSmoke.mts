@@ -5,6 +5,7 @@ import {createHash} from 'node:crypto';
 import {generateKeyPair,exportJWK,createLocalJWKSet,SignJWT} from 'jose';
 import {createConsumerRoutes} from '../apps/api/src/sensa/access/consumer.ts';
 import {createConsumerVerifier} from '../apps/api/src/sensa/access/auth.ts';
+import {purgeExpiredSemanticLookups} from '../apps/api/src/sensa/personal/retention.ts';
 const url=process.env.SENSA_ADMIN_TEST_DATABASE_URL??process.env.SENSA_TEST_DATABASE_URL;
 if(!url||new URL(url).hostname!=='127.0.0.1'||!new URL(url).pathname.startsWith('/sensa_m1a_'))throw Error('Disposable loopback database required');
 const pool=new pg.Pool({connectionString:url,max:4}),keys=await generateKeyPair('ES256'),jwk=await exportJWK(keys.publicKey);jwk.kid='fixture';
@@ -25,6 +26,14 @@ try{
  assert.equal((await request('/sensa/account/deletion',await token([{method:'token_refresh',timestamp:now}]),body)).status,403);
  await pool.query('INSERT INTO sensa_consumer.intake_channels(account_id,library_id,config) VALUES($1,$2,$3)',[accountId,crypto.randomUUID(),JSON.stringify({fixture:true})]);
  await pool.query("INSERT INTO sensa_consumer.reading_settings(account_id,encrypted_settings) VALUES($1,'synthetic private settings')",[accountId]);
+ const expiredLookup=crypto.randomUUID(),activeLookup=crypto.randomUUID();
+ for(const [id,expiresAt] of [[expiredLookup,new Date(Date.now()-60_000)],[activeLookup,new Date(Date.now()+86_400_000)]] as const){
+  await pool.query("INSERT INTO sensa_consumer.semantic_lookups(id,learner_user_id,input_digest,snapshot,status,created_at,expires_at) VALUES($1,$2,$3,$4::jsonb,'ready',now()-interval '1 minute',$5)",[id,accountId,'private-digest-'+id,JSON.stringify({expression:{text:'private lookup fixture'}}),expiresAt]);
+ }
+ const retention=await pool.connect();
+ try{await retention.query('BEGIN');await retention.query('SET LOCAL ROLE backend_app');assert.equal(await purgeExpiredSemanticLookups(retention,new Date(),100),1);await retention.query('COMMIT');}catch(error){await retention.query('ROLLBACK');throw error;}finally{retention.release();}
+ assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.semantic_lookups WHERE learner_user_id=$1 AND id=$2',[accountId,expiredLookup])).rows[0].n,0,'scheduled retention removes expired private snapshots without a user revisit');
+ assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.semantic_lookups WHERE learner_user_id=$1 AND id=$2',[accountId,activeLookup])).rows[0].n,1,'scheduled retention leaves unexpired work intact');
  const setup=await request('/sensa/agent/connection-setups',original,{contractVersion:'sensa-agent-connection-v1',setupId:crypto.randomUUID(),connectionId:crypto.randomUUID(),clientKind:'codex',label:'Codex',replacesConnectionId:null});assert.equal(setup.status,200);
  const agent=await request('/sensa/agent/connection-setups/exchange',original,{contractVersion:'sensa-agent-connection-v1',setupId:setup.body.setupId,setupCode:setup.body.setupCode});assert.equal(agent.status,200);
  assert.equal((await request('/sensa/agent/connections',original)).body.connections.length,1);
@@ -36,6 +45,7 @@ try{
  await pool.query('CREATE TRIGGER fixture_delete_failure BEFORE DELETE ON sensa_consumer.reading_settings FOR EACH ROW EXECUTE FUNCTION sensa_consumer.fixture_delete_failure()');
  assert.equal((await request('/sensa/account/deletion',fresh,body)).status,503);
  assert.equal((await pool.query('SELECT lifecycle FROM sensa_consumer.accounts WHERE account_id=$1',[accountId])).rows[0].lifecycle,'active');
+ assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.semantic_lookups WHERE learner_user_id=$1',[accountId])).rows[0].n,1,'a rolled-back deletion preserves the complete account state');
  assert.equal((await request('/sensa/web/access/session',extensionToken,{installationId})).status,200);
  assert.equal((await request('/sensa/agent/intakes/'+crypto.randomUUID(),agent.body.token)).status,404,'a rolled-back deletion keeps the Agent connection');
  await pool.query('DROP TRIGGER fixture_delete_failure ON sensa_consumer.reading_settings');await pool.query('DROP FUNCTION sensa_consumer.fixture_delete_failure()');
@@ -50,6 +60,7 @@ assert.equal(pending.status,200,JSON.stringify(pending.body));assert.equal(pendi
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.agent_connection_setups WHERE account_id=$1',[accountId])).rows[0].n,0);
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.agent_connection_events WHERE account_id=$1',[accountId])).rows[0].n,0);
  assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.agent_connections WHERE account_id=$1',[accountId])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.semantic_lookups WHERE learner_user_id=$1',[accountId])).rows[0].n,0,'account deletion erases semantic lookup snapshots');
  assert.equal((await pool.query('SELECT email FROM core.accounts WHERE account_id=$1',[accountId])).rows[0].email,null);
  assert.equal((await request('/sensa/account/deletion',fresh,{...body,operationId:crypto.randomUUID()})).status,409);
  const completed=await request('/sensa/account/deletion/status','invalid-expired-token',{operationId:body.operationId});assert.equal(completed.body.state,'deleted');

@@ -270,27 +270,63 @@ class MemoryRecordAdapter implements SqliteRecordAdapter {
   }
 }
 
-const browserSqliteAvailable = (): boolean =>
-  typeof window !== "undefined"
-  && typeof Worker !== "undefined"
-  && typeof navigator !== "undefined"
-  && typeof navigator.storage?.getDirectory === "function";
+const testMemoryAdapterRequested = (): boolean =>
+  typeof document === 'undefined'
+  && (globalThis as typeof globalThis & {
+    process?: { env?: Record<string, string | undefined> };
+  }).process?.env?.SENSA_TEST_MEMORY_LIBRARY === 'true';
+
+function assertBrowserSqliteAvailable(): void {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    throw new Error('sqlite_browser_environment_unavailable');
+  }
+  if (typeof Worker === 'undefined') throw new Error('sqlite_worker_unavailable');
+  if (typeof navigator.storage?.getDirectory !== 'function') throw new Error('sqlite_opfs_unavailable');
+  if (!navigator.locks) throw new Error('sqlite_web_locks_unavailable');
+  if (typeof BroadcastChannel === 'undefined') throw new Error('sqlite_broadcast_channel_unavailable');
+}
 
 let adapter: Promise<SqliteRecordAdapter> | undefined;
 
 async function browserAdapter(): Promise<SqliteRecordAdapter> {
-  if (!navigator.locks) throw new Error("sqlite_web_locks_unavailable");
-  if (typeof BroadcastChannel === "undefined") throw new Error("sqlite_broadcast_channel_unavailable");
+  assertBrowserSqliteAvailable();
   const coordinated = new CoordinatedSqliteAdapter(() => new WorkerSqliteAdapter());
   await coordinated.initialize();
+  // Capability checks alone cannot prove that this origin can durably write.
+  // Exercise the initialized database before any product operation may report
+  // success, then remove the private probe row immediately.
+  const probeKey = `storage-probe:${crypto.randomUUID()}`;
+  const probeValue = JSON.stringify({ value: probeKey });
+  let wroteProbe = false;
+  try {
+    await coordinated.commit({
+      clears: [],
+      deletes: [],
+      puts: [{ table: 'meta', key: probeKey, encodedValue: probeValue }],
+    });
+    wroteProbe = true;
+    if (await coordinated.get('meta', probeKey) !== probeValue) {
+      throw new Error('sqlite_storage_probe_failed');
+    }
+  } finally {
+    if (wroteProbe) {
+      await coordinated.commit({
+        clears: [],
+        deletes: [{ table: 'meta', key: probeKey }],
+        puts: [],
+      });
+    }
+  }
   return coordinated;
 }
 
 export function sqliteRecordAdapter(): Promise<SqliteRecordAdapter> {
   if (!adapter) {
-    adapter = browserSqliteAvailable()
-      ? browserAdapter()
-      : Promise.resolve(new MemoryRecordAdapter());
+    // Node smoke tests must opt in explicitly. A production browser never
+    // accepts volatile storage as a successful local-library implementation.
+    adapter = testMemoryAdapterRequested()
+      ? Promise.resolve(new MemoryRecordAdapter())
+      : browserAdapter();
     adapter.catch(() => { adapter = undefined; });
   }
   return adapter;
