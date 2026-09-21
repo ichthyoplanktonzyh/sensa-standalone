@@ -3,12 +3,14 @@ import {useEffect,useState} from 'react';
 import {Archive,Check,Pause,Play,Plus,RotateCcw,X} from 'lucide-react';
 import {useTranslation} from 'react-i18next';
 import {
-  sensaLanguageDisplayName,
   sensaLanguageForRole,
   sensaLanguageForDeclaredTag,
   type SensaLanguageLearningRoute,
   type SensaLanguageRouteCollection,
 } from '@sensa/contracts/sensa';
+import i18n from '../../../i18n';
+import {interfaceLanguageDisplayName} from '../../../i18n/languageDisplayName';
+import {resolveInterfaceLocale} from '../../../i18n/localeRegistry';
 import {useLanguageRoutes} from '../../library/useLanguageRoutes';
 import {SensaOverlayLayout} from '../../ui/SensaComponents';
 import {runtimePrimary} from '../learning/RuntimeFrame';
@@ -16,15 +18,15 @@ import {runtimePrimary} from '../learning/RuntimeFrame';
 function languageNames(tag:string,interfaceLocale:string){
   const language=sensaLanguageForDeclaredTag(tag);
   if(!language)return {endonym:tag,name:tag};
-  return {endonym:language.endonym,name:sensaLanguageDisplayName(tag,interfaceLocale==='en'?'en':'zh-CN')};
+  return {endonym:language.endonym,name:interfaceLanguageDisplayName(tag,resolveInterfaceLocale(interfaceLocale))};
 }
 
 export function languageSummary(collection:SensaLanguageRouteCollection,activeRoute:SensaLanguageLearningRoute,interfaceLocale:string):string{
-  const locale=interfaceLocale==='en'?'en':'zh-CN';
+  const locale=resolveInterfaceLocale(interfaceLocale);
   const target=languageNames(activeRoute.targetLanguageTag,locale).name;
   const support=languageNames(activeRoute.defaultSupportLanguageTag,locale).name;
   const count=collection.routes.filter(route=>route.status!=='archived').length;
-  return locale==='en'?`${target} · support: ${support} · ${count} route${count===1?'':'s'}`:`${target} · ${support}辅助 · ${count} 条路线`;
+  return i18n.getFixedT(locale)('languages.summary',{target,support,count});
 }
 
 interface Props {
@@ -46,7 +48,7 @@ export function LanguagePanel({collection,activeRoute,busy,notice,onAdd,onUpdate
   const {t,i18n}=useTranslation();
   const [pendingTarget,setPendingTarget]=useState('');
   const [pendingSupport,setPendingSupport]=useState(activeRoute.defaultSupportLanguageTag);
-  const locale=i18n.language==='en'?'en':'zh-CN';
+  const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
   const targetLanguages=sensaLanguageForRole('target');
   const supportLanguages=sensaLanguageForRole('support');
   const visible=collection.routes.filter(route=>route.status!=='archived');
@@ -85,7 +87,7 @@ export function LanguagePanel({collection,activeRoute,busy,notice,onAdd,onUpdate
                 <label className="mt-3 block text-xs text-fg-tertiary">
                   <span>{t('languages.support')}</span>
                   <select disabled={busy} value={route.defaultSupportLanguageTag} onChange={event=>onUpdateSupport(route.id,event.target.value)} className="mt-2 min-h-11 w-full rounded-control border border-border-strong bg-surface-panel px-3 text-sm text-fg-secondary focus-visible:outline-2 focus-visible:outline-focus">
-                    {supportLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {sensaLanguageDisplayName(language.tag,locale)}</option>)}
+                    {supportLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {interfaceLanguageDisplayName(language.tag,locale)}</option>)}
                   </select>
                 </label>
               </article>;
@@ -97,10 +99,10 @@ export function LanguagePanel({collection,activeRoute,busy,notice,onAdd,onUpdate
           <div className="mt-4 space-y-3">
             <select aria-label={t('languages.targetLabel')} disabled={busy} value={pendingTarget} onChange={event=>setPendingTarget(event.target.value)} className="min-h-12 w-full rounded-control border border-border-strong bg-surface-panel px-4 text-sm text-fg-secondary focus-visible:outline-2 focus-visible:outline-focus">
               <option value="">{t('languages.targetLabel')}</option>
-              {targetLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {sensaLanguageDisplayName(language.tag,locale)}</option>)}
+              {targetLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {interfaceLanguageDisplayName(language.tag,locale)}</option>)}
             </select>
             <select aria-label={t('languages.supportLabel')} disabled={busy} value={pendingSupport} onChange={event=>setPendingSupport(event.target.value)} className="min-h-12 w-full rounded-control border border-border-strong bg-surface-panel px-4 text-sm text-fg-secondary focus-visible:outline-2 focus-visible:outline-focus">
-              {supportLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {sensaLanguageDisplayName(language.tag,locale)}</option>)}
+              {supportLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {interfaceLanguageDisplayName(language.tag,locale)}</option>)}
             </select>
             <button type="button" disabled={busy||!pendingTarget||!pendingSupport} onClick={()=>{onAdd(pendingTarget,pendingSupport);setPendingTarget('');}} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control border border-border-strong bg-surface-panel px-4 text-sm text-action-primary hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-40"><Plus size={16}/>{t('languages.addAction')}</button>
           </div>

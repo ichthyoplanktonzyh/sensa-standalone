@@ -2,7 +2,9 @@ import '../../../i18n/profileResources';
 import {useEffect,useState} from 'react';
 import {X,Plus,Trash2} from 'lucide-react';
 import {useTranslation} from 'react-i18next';
-import {sensaLanguageDisplayName,sensaLanguages,sensaReadingGlossaryForPair,sensaReadingGlossaryLimits,type SensaReadingGlossary} from '@sensa/contracts/sensa';
+import {sensaLanguages,sensaReadingGlossaryForPair,sensaReadingGlossaryLimits,type SensaReadingGlossary} from '@sensa/contracts/sensa';
+import {interfaceLanguageDisplayName} from '../../../i18n/languageDisplayName';
+import {resolveInterfaceLocale} from '../../../i18n/localeRegistry';
 import {useReadingGlossary} from '../../library/useReadingGlossary';
 import {useLanguageRoutes} from '../../library/useLanguageRoutes';
 import {SensaOverlayLayout} from '../../ui/SensaComponents';
@@ -31,7 +33,7 @@ export function GlossaryPanel({glossary,busy,notice,initialInputLanguageTag,init
   const totalFull=glossary.length>=sensaReadingGlossaryLimits.totalEntries;
   const full=pairFull||totalFull;
   const addable=!busy&&!full&&term.trim().length>0&&rendering.trim().length>0;
-  const locale=i18n.language==='en'?'en':'zh-CN';
+  const locale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
   useEffect(()=>{
     const escape=(event:KeyboardEvent)=>{
       if(event.key==='Escape'){event.preventDefault();event.stopPropagation();onClose();}
@@ -49,12 +51,12 @@ export function GlossaryPanel({glossary,busy,notice,initialInputLanguageTag,init
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-xs text-fg-tertiary">{t('glossary.inputLanguage')}
             <select value={inputLanguageTag} disabled={busy} onChange={event=>setInputLanguageTag(event.target.value)} className="mt-2 min-h-12 w-full rounded-control border border-border-strong bg-surface-panel px-4 text-sm text-action-primary focus-visible:outline-2 focus-visible:outline-focus">
-              {sensaLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {sensaLanguageDisplayName(language.tag,locale)}</option>)}
+              {sensaLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {interfaceLanguageDisplayName(language.tag,locale)}</option>)}
             </select>
           </label>
           <label className="text-xs text-fg-tertiary">{t('glossary.outputLanguage')}
             <select value={outputLanguageTag} disabled={busy} onChange={event=>setOutputLanguageTag(event.target.value)} className="mt-2 min-h-12 w-full rounded-control border border-border-strong bg-surface-panel px-4 text-sm text-action-primary focus-visible:outline-2 focus-visible:outline-focus">
-              {sensaLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {sensaLanguageDisplayName(language.tag,locale)}</option>)}
+              {sensaLanguages.map(language=><option key={language.tag} value={language.tag}>{language.endonym} · {interfaceLanguageDisplayName(language.tag,locale)}</option>)}
             </select>
           </label>
         </div>

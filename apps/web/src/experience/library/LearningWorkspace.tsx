@@ -1,7 +1,8 @@
 import {lazy,useCallback,useMemo,useState,type ReactNode} from 'react';
 import {useTranslation} from 'react-i18next';
-import {sensaLanguageDisplayName} from '@sensa/contracts/sensa';
 import i18n from '../../i18n';
+import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
+import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
 import {localFlowText} from '../../i18n/localFlowText';
 import {localTargetPolicy} from '../../learning/runtime/localRuntimeBindings';
 import {useShellNavigation} from '../router/useShellNavigation';
@@ -114,7 +115,7 @@ export function LearningWorkspace({active=true}:{active?:boolean}){
     onOpenTargetLibrary={()=>goMain('s-learning-library')} onOpenTarget={openLocalTarget}
     onPolicyChange={()=>{}} defaultPolicy="lightweight" fixedPolicy
     learningTargetCount={packageLearning.activeTargets.length+activePendingPersonal.length}
-    languageLabel={sensaLanguageDisplayName(activeRoute.targetLanguageTag,i18n.language==='en'?'en':'zh-CN')}
+    languageLabel={interfaceLanguageDisplayName(activeRoute.targetLanguageTag,resolveInterfaceLocale(i18n.language))}
     readyInitialCount={packageLearning.initialReady.length} reviewCount={packageLearning.due.length}
     dailyNewCount={dailyNewCount} learningRecords={packageLearning.records}
     onOpenStats={()=>goMain('s-stats')} onDailyNewCountChange={updateLocalQuantity}/>,

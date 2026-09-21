@@ -1,5 +1,7 @@
 import { Languages, ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import {defaultInterfaceLocale,interfaceLocaleRegistry,interfaceLocales,resolveInterfaceLocale} from './localeRegistry';
+import {changeInterfaceLanguage} from './index';
 
 export function LanguageSwitch() {
   const { t, i18n } = useTranslation();
@@ -8,12 +10,11 @@ export function LanguageSwitch() {
       <Languages size={17} aria-hidden="true" />
       <select
         aria-label={t("language.label")}
-        value={i18n.resolvedLanguage ?? "zh-CN"}
-        onChange={(event) => void i18n.changeLanguage(event.target.value)}
+        value={resolveInterfaceLocale(i18n.resolvedLanguage ?? defaultInterfaceLocale)}
+        onChange={(event) => void changeInterfaceLanguage(event.target.value)}
         className="min-h-11 cursor-pointer appearance-none bg-transparent pr-5 text-xs outline-offset-4 focus-visible:outline-2 focus-visible:outline-focus"
       >
-        <option value="zh-CN">{t("language.zh")}</option>
-        <option value="en">{t("language.en")}</option>
+        {interfaceLocales.map(locale=><option key={locale} value={locale}>{interfaceLocaleRegistry[locale].nativeName}</option>)}
       </select>
       <ChevronDown
         size={12}

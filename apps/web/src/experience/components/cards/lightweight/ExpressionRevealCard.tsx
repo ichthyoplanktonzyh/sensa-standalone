@@ -1,4 +1,5 @@
 import {learningResourceDefinition} from '@sensa/contracts/sensa';
+import {learningResourceLabel} from '../../../../i18n/resourceLabel';
 import {LearningResource} from '../../learning/LearningResource';
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -45,7 +46,7 @@ export function ExpressionRevealCard({
   lookupDictionary,
   toast,
 }: ExpressionRevealCardProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const cardId = useId();
   const usagePatternLabelId = `${cardId}-usage-pattern`;
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -346,7 +347,7 @@ export function ExpressionRevealCard({
         </div>
       )}
 
-      {categoryResources?.map(resource=><details key={resource.resourceKey} className="sensa-expression-disclosure"><summary>{learningResourceDefinition(resource.materialRoleKey)!.label[i18n.resolvedLanguage?.startsWith('zh')?'zh-CN':'en']}</summary><LearningResource resource={resource}/></details>)}
+      {categoryResources?.map(resource=><details key={resource.resourceKey} className="sensa-expression-disclosure"><summary>{learningResourceLabel(resource.materialRoleKey)}</summary><LearningResource resource={resource}/></details>)}
       <RuntimeRating initial={initial} showDescriptions={false} onRate={onRate} />
       {activeLookup && (
         <LearningExampleLookup

@@ -1,0 +1,173 @@
+{
+  "landing": {
+    "navigation": "Home navigation",
+    "skip": "Skip to main content",
+    "how": "How it works",
+    "story": "Our story",
+    "guide": {
+      "title": "Connect life with learning.",
+      "body": "Begin with your own experience or a learning pack. Choose the path that fits this moment.",
+      "meta": "Explore Sensa Web, the browser extension, Agent connections, and learning packs. Learn how to save expressions, choose what to learn, and return for review."
+    },
+    "enter": "Enter Sensa",
+    "signIn": "Sign in / Start",
+    "back": "Back to the brand home",
+    "hero": {
+      "eyebrow": "Sensa · Begin with meaning",
+      "title": "You already have\na world.",
+      "body": "Before learning another language, you know the smell of rain, the feeling of waiting for someone, and what it is to have more to say than words can hold. A new language meets a world already shaped by living.",
+      "primary": "Enter Sensa",
+      "secondary": "Read the Sensa story"
+    },
+    "specimen": {
+      "label": "A small encounter in everyday life · English",
+      "contextTitle": "Return to the moment",
+      "context": "A friend texts before you meet: they are not ready and are rushing to leave. You are in no hurry and want to put them at ease.",
+      "senseTitle": "Recognize what you mean",
+      "sense": "Letting someone know there is no need to hurry; they can go at their own pace.",
+      "expressionTitle": "Then meet the expression",
+      "expression": "Take your time.",
+      "caption": "Here, you are reassuring your friend, not urging them on. The moment makes the meaning clear."
+    },
+    "belief": {
+      "title": "First we live.\nThen we find meaning.",
+      "first": "Rain. A river near home. Something left unsaid. Before learning another language, we already know the world through living, and have learned to recognize, remember, and express it in familiar words.",
+      "second": "Sensa believes that a new language meets a person with a life behind them. Those experiences, relationships, wishes, and memories are places where new expressions can take root.",
+      "moments": [
+        {
+          "label": "Connection",
+          "title": "Sometimes, you only need the expression.",
+          "body": "You know how waiting can reassure someone, or how a refusal can leave room for kindness. You want to discover how another language expresses that care."
+        },
+        {
+          "label": "Taking shape",
+          "title": "Sometimes, meaning comes before words.",
+          "body": "Even a familiar language cannot quite capture it. You have a scene, a feeling, and the certainty of “this is what I mean.” We start there and help it become clear."
+        },
+        {
+          "label": "Discovery",
+          "title": "Sometimes, an expression opens a new view.",
+          "body": "Another language can reveal a different way to understand familiar experience. A distinction you once overlooked finds a place in your world."
+        }
+      ],
+      "statement": "Let another language into your world. See your world anew through it.",
+      "coda": "This is where Sensa begins: return to the moment, recognize and clarify its meaning, then meet the expression. Nurture that connection through learning and review, and bring it back to reading, listening, conversation, and life."
+    },
+    "use": {
+      "title": "Bring it from life. Take it back into life.",
+      "intro": "Keep an experience before you have the words for it. Take time to make the meaning clear. Choose the expressions worth learning, with a reason to return to each one.",
+      "steps": [
+        {
+          "label": "Capture",
+          "title": "Keep a moment worth returning to",
+          "body": "Write about an experience, bring an image, or keep a sentence from your reading. It need not be clear yet. Unfinished material can wait in a draft or your inbox."
+        },
+        {
+          "label": "Clarify and save",
+          "title": "Find “yes, that’s what I mean”",
+          "body": "Explore the context, meaning, and expression with Sensa. Once you confirm them, they enter My Semantic World with their source, so you can return to what the expression meant in that moment."
+        },
+        {
+          "label": "Learn and review",
+          "title": "Grow familiar with what you want to keep",
+          "body": "Choose Add to Learning and begin when the material is ready. Connect the scene with the expression’s sound, written form, and use. After initial learning, return for due reviews. Saving and choosing to learn are separate decisions you make."
+        },
+        {
+          "label": "Return to life",
+          "title": "Try it at the next encounter",
+          "body": "Read it again, hear it again, or try saying it in a conversation. A new context may reveal a different meaning and give you a new question to bring back."
+        }
+      ],
+      "return": "Keep the expression, and what makes it meaningful to you."
+    },
+    "entries": {
+      "title": "Begin wherever you are.",
+      "intro": "Explore in Sensa. Bring things back from reading and conversation.",
+      "items": [
+        {
+          "label": "Sensa Web",
+          "title": "Something you want to put into words",
+          "body": "Open a conversation with text or an image. Start with an experience, a known expression, or a feeling you have not quite named."
+        },
+        {
+          "label": "Browser extension",
+          "title": "A sentence you want to keep",
+          "body": "Select something on a web page or in subtitles. Understand it in context and confirm what to save, or save it for later clarification."
+        },
+        {
+          "label": "Agent connection",
+          "title": "A conversation worth remembering",
+          "body": "Connect an Agent such as Codex, then ask it to send the relevant context, meaning, and expression to Sensa. Open the Web app to receive it and continue organizing or learning."
+        }
+      ],
+      "bookLabel": "Or start with a learning pack",
+      "bookTitle": "No moment in mind? Meet a new one.",
+      "bookBody": "Choose a published learning pack for your current language route, download it, and add it to learning. Begin with its scenes and expressions. As you learn, add My Scene to connect an expression with your own experience."
+    },
+    "close": {
+      "title": "Let another language become a way to express you.",
+      "body": "Begin with something you have lived, felt, or always wanted to put into words.",
+      "action": "Enter Sensa"
+    },
+    "footer": "Life first. Expression follows.",
+    "meta": "You already have a world. Sensa starts with lived experience and meaning, letting another language into your world and helping you see it anew."
+  },
+  "reliability": {
+    "loading": "Loading Sensa…",
+    "errorTitle": "This part of Sensa did not open",
+    "errorDescription": "Your learning data was not changed. Try again or return home.",
+    "notFoundTitle": "Page not found",
+    "notFoundDescription": "This link may no longer be available. Return to Sensa home to continue.",
+    "retry": "Try again",
+    "reload": "Reload",
+    "home": "Return home"
+  },
+  "brand": "Sensa",
+  "nav": {
+    "home": "Today",
+    "learning": "My learning",
+    "content": "My semantic world",
+    "world": "Semantic world",
+    "practice": "Practice",
+    "settings": "Account & settings",
+    "label": "Main navigation",
+    "mobile": "Mobile navigation",
+    "homeLabel": "Sensa home",
+    "preview": "Local preview"
+  },
+  "language": {
+    "label": "Interface language",
+    "zh": "简体中文",
+    "en": "English"
+  },
+  "home": {
+    "title": "Today",
+    "readyTitle": "Begin with a meaning.",
+    "beginTitle": "What would you like to express?",
+    "reviewTitle": "Return to meanings you’ve met.",
+    "plan": "Your learning",
+    "new": "New",
+    "review": "To review",
+    "unit": "meanings",
+    "summary": "Today’s learning summary",
+    "start": "Start learning",
+    "empty": "Nothing ready to study",
+    "emptyHint": "Add a meaning or check the preparation status of your targets.",
+    "reviewFirst": "Review first, then explore new meanings.",
+    "newOnly": "Start with a scene. Recall the expression.",
+    "reviewOnlyHint": "Reconnect with these meanings today.",
+    "reviewOnly": "Review only",
+    "noReview": "No reviews due",
+    "reviewCount": "Review {{count}} meanings only",
+    "manage": "View learning plan",
+    "add": "Add something to learn",
+    "existing": "Explore existing content",
+    "existingHint": "Choose a book or a specific meaning",
+    "personal": "Capture your own context",
+    "personalHint": "Save an experience and clarify its meaning",
+    "open": "Open",
+    "emptyAction": "Add content",
+    "resume": "Continue learning",
+    "resumeHint": "You have an unfinished session to continue."
+  }
+}

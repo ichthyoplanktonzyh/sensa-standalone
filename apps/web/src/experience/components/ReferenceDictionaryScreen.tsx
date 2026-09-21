@@ -2,7 +2,8 @@ import '../../i18n/referenceResources';
 import {useTranslation} from 'react-i18next';
 import {cardText} from '../../i18n/originalCards';
 import i18n from '../../i18n';
-import { sensaLanguageDisplayName } from '@sensa/contracts/sensa';
+import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
+import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
 import { iconClass, slideScreenClass } from '../ui/primitives';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { QuickDictEntry, Word } from '../types';
@@ -59,7 +60,7 @@ function selectedSenseId(result: ReferenceLookupResult | null): string | undefin
 function accentLabel(accent: ReferencePronunciation['accent']): string {
   if (accent === 'en-GB') return cardText('british');
   if (accent === 'en-US') return cardText('american');
-  return sensaLanguageDisplayName(accent, i18n.language === 'en' ? 'en' : 'zh-CN');
+  return interfaceLanguageDisplayName(accent, resolveInterfaceLocale(i18n.language));
 }
 
 function partOfSpeechGroups(senses: readonly ReferenceSense[]): Array<{

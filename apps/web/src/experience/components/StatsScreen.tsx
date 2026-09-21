@@ -3,8 +3,9 @@ import { ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { LearningRecordKind, LearningRecordView } from '../learningJourney/learningHistory';
 import { localRecordDate, projectLearningStatistics, type StatisticsRange } from '../learningJourney/learningStatistics';
-import { sensaLanguageDisplayName } from '@sensa/contracts/sensa';
 import i18n from '../../i18n';
+import {interfaceLanguageDisplayName} from '../../i18n/languageDisplayName';
+import {resolveInterfaceLocale} from '../../i18n/localeRegistry';
 import { useLanguageRoutes } from '../library/useLanguageRoutes';
 import { inLanguageScope, languagesPresent, resolveLanguageScope } from '../library/languageScope';
 import { LearningSetupFrame, setupButton } from './learning/LearningSetupFrame';
@@ -19,6 +20,7 @@ interface StatsScreenProps {
 const kinds = ['initial_learning','retention_review','relearning'] as const;
 export const StatsScreen = ({active,records,onBack,onOpenTarget}:StatsScreenProps) => {
   const {t,i18n}=useTranslation();
+  const interfaceLocale=resolveInterfaceLocale(i18n.resolvedLanguage??i18n.language);
   const [now,setNow]=useState(()=>new Date());
   const [range,setRange]=useScreenState<StatisticsRange>('stats:range','week');
   const [start,setStart]=useScreenState('stats:start',()=>localRecordDate(new Date()));
@@ -57,7 +59,7 @@ export const StatsScreen = ({active,records,onBack,onOpenTarget}:StatsScreenProp
       {(['today','week','month','all','custom'] as const).map(value=><button type="button" key={value} aria-pressed={range===value} onClick={()=>{setRange(value);setLimit(20);}} className={setupButton+(range===value?' bg-surface-selected text-action-primary':' text-fg-secondary hover:bg-surface-subtle')}>{t('statistics.'+value)}</button>)}
     </div>
     {languages.length>1&&<div className="mt-3 flex flex-wrap items-center gap-2" role="group" aria-label={t('statistics.languageScope')}>
-      {languages.map(tag=><button type="button" key={tag} aria-pressed={languageScope===tag} onClick={()=>{setLanguageChoice(tag);setLimit(20);}} className={setupButton+(languageScope===tag?' bg-surface-selected text-action-primary':' text-fg-secondary hover:bg-surface-subtle')}>{sensaLanguageDisplayName(tag,i18n.language==='en'?'en':'zh-CN')}</button>)}
+      {languages.map(tag=><button type="button" key={tag} aria-pressed={languageScope===tag} onClick={()=>{setLanguageChoice(tag);setLimit(20);}} className={setupButton+(languageScope===tag?' bg-surface-selected text-action-primary':' text-fg-secondary hover:bg-surface-subtle')}>{interfaceLanguageDisplayName(tag,interfaceLocale)}</button>)}
       <button type="button" aria-pressed={languageChoice==='all'} onClick={()=>{setLanguageChoice('all');setLimit(20);}} className={setupButton+(languageChoice==='all'?' bg-surface-selected text-action-primary':' text-fg-secondary hover:bg-surface-subtle')}>{t('statistics.allLanguages')}</button>
     </div>}
     <div className="mt-4 flex flex-wrap items-end gap-4">
@@ -76,7 +78,7 @@ export const StatsScreen = ({active,records,onBack,onOpenTarget}:StatsScreenProp
           <table className="w-full text-left text-sm">
             <caption className="sr-only">{t('statistics.language')}</caption>
             <thead className="border-b border-border-subtle text-xs text-fg-tertiary"><tr><th scope="col" className="py-4 pr-4 font-medium">{t('statistics.language')}</th>{kinds.map(value=><th scope="col" key={value} className="px-3 py-4 text-right font-medium">{t('study.'+value)}</th>)}</tr></thead>
-            <tbody className="divide-y divide-border-subtle">{breakdown.map(row=><tr key={row.tag}><th scope="row" className="whitespace-nowrap py-4 pr-4 font-normal">{sensaLanguageDisplayName(row.tag,i18n.language==='en'?'en':'zh-CN')}</th>{kinds.map(value=><td key={value} className="px-3 py-4 text-right tabular-nums">{row.projection.counts[value].toLocaleString(i18n.language)}</td>)}</tr>)}</tbody>
+            <tbody className="divide-y divide-border-subtle">{breakdown.map(row=><tr key={row.tag}><th scope="row" className="whitespace-nowrap py-4 pr-4 font-normal">{interfaceLanguageDisplayName(row.tag,interfaceLocale)}</th>{kinds.map(value=><td key={value} className="px-3 py-4 text-right tabular-nums">{row.projection.counts[value].toLocaleString(i18n.language)}</td>)}</tr>)}</tbody>
           </table>
         </div>
       </>:<dl className="mt-7 grid gap-4 sm:grid-cols-3">

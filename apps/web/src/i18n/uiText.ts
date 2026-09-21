@@ -1,12 +1,12 @@
 import i18n from "./index";
-import {contentUiZh,contentUiEn} from "./contentUi";
-import {registerTranslationSections} from './registerResources';
+import en from './locales/en/content.json';
+import './contentResources';
 
-registerTranslationSections({contentUi:contentUiZh},{contentUi:contentUiEn});
+type ContentUiKey=keyof typeof en.contentUi;
 
 /** Shared copy for content detail surfaces and their state labels. */
 export function uiText(
-  key: keyof typeof contentUiZh,
+  key: ContentUiKey,
   values?: Record<string, unknown>,
 ): string {
   return i18n.t(`contentUi.${key}`, values);

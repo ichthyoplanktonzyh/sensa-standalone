@@ -1,8 +1,6 @@
-import {contentZh,contentEn,composerZh,composerEn} from './content';
-import {contentUiZh,contentUiEn} from './contentUi';
-import {registerTranslationSections} from './registerResources';
+import zhCN from './locales/zh-CN/content.json';
+import en from './locales/en/content.json';
+import ja from './locales/ja/content.json';
+import {registerTranslationNamespace} from './registerResources';
 
-registerTranslationSections(
- {content:contentZh,composer:composerZh,contentUi:contentUiZh},
- {content:contentEn,composer:composerEn,contentUi:contentUiEn},
-);
+registerTranslationNamespace('content',{'zh-CN':zhCN,en,ja});

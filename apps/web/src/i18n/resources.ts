@@ -1,105 +1,17 @@
-import { landingZh, landingEn } from "./landing";
-import { reliabilityZh, reliabilityEn } from "./reliability";
-export const resources = {
-  "zh-CN": {
-    translation: {
-      landing: landingZh,
-      reliability: reliabilityZh,
-      brand: "Sensa",
-      nav: {
-        home: "今日",
-        learning: "我的学习",
-        content: "我的语义世界",
-        world: "语义世界",
-        practice: "练习",
-        settings: "账号与设置",
-        label: "主要导航",
-        mobile: "手机主要导航",
-        homeLabel: "Sensa 首页",
-        preview: "本机预览",
-      },
-      language: { label: "界面语言", zh: "简体中文", en: "English" },
-      home: {
-        title: "今天",
-        readyTitle: "从一个意思开始。",
-        beginTitle: "你想表达什么？",
-        reviewTitle: "再遇见学过的意思。",
-        plan: "今日学习",
-        new: "待新学",
-        review: "待复习",
-        unit: "个意思",
-        summary: "今日学习摘要",
-        start: "开始学习",
-        empty: "暂无可开始的学习",
-        emptyHint: "添加一个意思，或查看已有目标的准备状态。",
-        reviewFirst: "先复习，再开始新的意思。",
-        newOnly: "从场景出发，回想对应的表达。",
-        reviewOnlyHint: "今天先巩固这些意思。",
-        reviewOnly: "只复习",
-        noReview: "暂无到期复习",
-        reviewCount: "只复习 {{count}} 个意思",
-        manage: "查看学习计划",
-        add: "添加学习内容",
-        existing: "从已有内容开始",
-        existingHint: "选择词书或一个具体意思",
-        personal: "记录自己的场景",
-        personalHint: "保存经历，澄清想表达的意思",
-        open: "打开",
-        emptyAction: "添加内容",
-        resume: "继续学习",
-        resumeHint: "有一段尚未结束的学习，可以接着完成。",
-      },
-    },
-  },
-  en: {
-    translation: {
-      landing: landingEn,
-      reliability: reliabilityEn,
-      brand: "Sensa",
-      nav: {
-        home: "Today",
-        learning: "My learning",
-        content: "My semantic world",
-        world: "Semantic world",
-        practice: "Practice",
-        settings: "Account & settings",
-        label: "Main navigation",
-        mobile: "Mobile navigation",
-        homeLabel: "Sensa home",
-        preview: "Local preview",
-      },
-      language: { label: "Interface language", zh: "简体中文", en: "English" },
-      home: {
-        title: "Today",
-        readyTitle: "Begin with a meaning.",
-        beginTitle: "What would you like to express?",
-        reviewTitle: "Return to meanings you’ve met.",
-        plan: "Your learning",
-        new: "New",
-        review: "To review",
-        unit: "meanings",
-        summary: "Today’s learning summary",
-        start: "Start learning",
-        empty: "Nothing ready to study",
-        emptyHint:
-          "Add a meaning or check the preparation status of your targets.",
-        reviewFirst: "Review first, then explore new meanings.",
-        newOnly: "Start with a scene. Recall the expression.",
-        reviewOnlyHint: "Reconnect with these meanings today.",
-        reviewOnly: "Review only",
-        noReview: "No reviews due",
-        reviewCount: "Review {{count}} meanings only",
-        manage: "View learning plan",
-        add: "Add something to learn",
-        existing: "Explore existing content",
-        existingHint: "Choose a book or a specific meaning",
-        personal: "Capture your own context",
-        personalHint: "Save an experience and clarify its meaning",
-        open: "Open",
-        emptyAction: "Add content",
-        resume: "Continue learning",
-        resumeHint: "You have an unfinished session to continue.",
-      },
-    },
-  },
-};
+import zhCN from './locales/zh-CN/common.json';
+import en from './locales/en/common.json';
+import type {InterfaceLocale} from './localeRegistry';
+
+/** The common namespace is part of the initial shell. Feature namespaces are
+ * registered by their existing lazy entry modules. */
+export const resources={
+  'zh-CN':{common:zhCN},
+  en:{common:en},
+} as const;
+
+/** Locales added after the original shell stay out of its static closure. */
+export async function loadCommonMessages(locale:InterfaceLocale):Promise<Record<string,unknown>>{
+  if(locale==='zh-CN')return zhCN;
+  if(locale==='en')return en;
+  return (await import('./locales/ja/common.json')).default;
+}

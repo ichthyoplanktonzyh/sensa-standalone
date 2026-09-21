@@ -1,18 +1,24 @@
 import i18n from './index';
-import {localFlowZh,localFlowEn} from './localFlow';
-import {registerTranslationSections} from './registerResources';
+import zhCN from './locales/zh-CN/localFlow.json';
+import en from './locales/en/localFlow.json';
+import ja from './locales/ja/localFlow.json';
+import {interfaceLocales} from './localeRegistry';
+import {registerTranslationNamespace} from './registerResources';
 
-registerTranslationSections({localFlow:localFlowZh},{localFlow:localFlowEn});
+registerTranslationNamespace('localFlow',{'zh-CN':zhCN,en,ja});
+const localFlowZh=zhCN.localFlow;
 export const localFlowText=(key:keyof typeof localFlowZh,values?:Record<string,unknown>):string=>i18n.t(`localFlow.${key}`,values);
 /** Translate presentation notices, including earlier persisted UI copy. Never translate learner content. */
 export function localFlowNotice(value:string|null|undefined):string {
  if(!value)return '';
  if(value.startsWith('libraryBackup.'))return i18n.t(value);
  for(const key of Object.keys(localFlowZh) as (keyof typeof localFlowZh)[]){
-  if(value===`localFlow.${key}`||value===localFlowZh[key]||value===localFlowEn[key])return localFlowText(key);
+  const priorCopy=interfaceLocales.some(locale=>value===i18n.getResource(locale,'localFlow',`localFlow.${key}`));
+  if(value===`localFlow.${key}`||priorCopy)return localFlowText(key);
  }
  // Reviewer reasons are content; only translate the product label around them.
- for(const prefix of ['localFlow.reviewRejected',localFlowZh.reviewRejected,localFlowEn.reviewRejected])if(value.startsWith(prefix))return localFlowText('reviewRejected')+value.slice(prefix.length);
+ const reviewPrefixes=['localFlow.reviewRejected',...interfaceLocales.map(locale=>i18n.getResource(locale,'localFlow','localFlow.reviewRejected')).filter((prefix):prefix is string=>typeof prefix==='string')];
+ for(const prefix of reviewPrefixes)if(value.startsWith(prefix))return localFlowText('reviewRejected')+value.slice(prefix.length);
  return value;
 }
 

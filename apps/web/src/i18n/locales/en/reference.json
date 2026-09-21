@@ -1,0 +1,18 @@
+{
+  "referenceExample": {
+    "title": "Dictionary examples",
+    "back": "Back to dictionary",
+    "current": "Current dictionary example",
+    "sense": "Related meaning",
+    "hideTranslation": "Hide translation",
+    "showTranslation": "Show translation",
+    "noTranslation": "This source does not provide a translation.",
+    "noSource": "Source information unavailable",
+    "noDefinition": "No definition is available for this meaning.",
+    "unavailable": "Example unavailable",
+    "empty": "No examples for this meaning",
+    "emptyHint": "Return to the dictionary to read the definition. Examples from other meanings will not be substituted.",
+    "position": "Example {{current}} of {{total}}",
+    "boundary": "Dictionary examples are not necessarily reviewed learning examples. Viewing does not change learning progress."
+  }
+}

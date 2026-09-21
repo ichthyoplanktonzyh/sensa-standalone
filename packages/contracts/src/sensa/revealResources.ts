@@ -7,15 +7,15 @@ const category=z.enum(REVEAL_RESOURCE_CATEGORIES);
 export const revealScopeAssessmentSchema=z.object({applicable:z.boolean(),reason:z.string().min(1),source:z.string().min(1)}).strict();
 export const revealScopeAssessmentsSchema=z.partialRecord(category,revealScopeAssessmentSchema);
 export const REVEAL_RESOURCE_CATALOGUE={
- pronunciation:{label:{'zh-CN':'发音',en:'Pronunciation'},roles:['pronunciation']},
- meaning:{label:{'zh-CN':'释义',en:'Meaning'},roles:['sense_confirmation','scene_bridge']},
- usage:{label:{'zh-CN':'用法',en:'Usage'},roles:['language_structure']},
- examples:{label:{'zh-CN':'例句',en:'Examples'},roles:['scene_realization','usage_guidance']},
- contrast:{label:{'zh-CN':'辨析',en:'Contrast'},roles:['boundary_contrast']},
- word_formation:{label:{'zh-CN':'构词',en:'Word formation'},roles:['word_formation']},
- etymology:{label:{'zh-CN':'词源',en:'Etymology'},roles:['etymology']},
- mnemonic:{label:{'zh-CN':'助记',en:'Memory aid'},roles:['mnemonic']},
-} as const satisfies Record<RevealResourceCategory,{label:{'zh-CN':string;en:string};roles:readonly LearningResourceKind[]}>;
+ pronunciation:{roles:['pronunciation']},
+ meaning:{roles:['sense_confirmation','scene_bridge']},
+ usage:{roles:['language_structure']},
+ examples:{roles:['scene_realization','usage_guidance']},
+ contrast:{roles:['boundary_contrast']},
+ word_formation:{roles:['word_formation']},
+ etymology:{roles:['etymology']},
+ mnemonic:{roles:['mnemonic']},
+} as const satisfies Record<RevealResourceCategory,{roles:readonly LearningResourceKind[]}>;
 export const REVEAL_APPLICABILITY_MATRIX={
  word:['default','default','default','default','conditional','conditional','conditional','conditional'],
  phrase:['default','default','default','default','conditional','excluded','conditional','conditional'],

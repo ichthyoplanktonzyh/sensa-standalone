@@ -1,8 +1,6 @@
-import {accountZh,accountEn} from './account';
-import {cloudSyncZh,cloudSyncEn} from './cloudSync';
-import {registerTranslationSections} from './registerResources';
+import zhCN from './locales/zh-CN/account.json';
+import en from './locales/en/account.json';
+import ja from './locales/ja/account.json';
+import {registerTranslationNamespace} from './registerResources';
 
-registerTranslationSections(
- {account:accountZh,cloudSync:cloudSyncZh},
- {account:accountEn,cloudSync:cloudSyncEn},
-);
+registerTranslationNamespace('account',{'zh-CN':zhCN,en,ja});

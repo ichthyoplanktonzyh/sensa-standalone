@@ -1,0 +1,18 @@
+{
+  "referenceExample": {
+    "title": "辞書の例文",
+    "back": "辞書に戻る",
+    "current": "現在の辞書例文",
+    "sense": "関連する意味",
+    "hideTranslation": "翻訳を隠す",
+    "showTranslation": "翻訳を表示",
+    "noTranslation": "このソースには翻訳がありません。",
+    "noSource": "ソース情報を利用できません",
+    "noDefinition": "この意味の定義はありません。",
+    "unavailable": "例文を利用できません",
+    "empty": "この意味の例文はありません",
+    "emptyHint": "辞書に戻って定義を読んでください。別の意味の例文で置き換えることはありません。",
+    "position": "{{current}} / {{total}}件の例文",
+    "boundary": "辞書の例文は、必ずしもレビュー済みの学習例文ではありません。表示しても学習の進捗は変わりません。"
+  }
+}
