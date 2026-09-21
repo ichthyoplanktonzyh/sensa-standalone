@@ -13,6 +13,7 @@ import { createSensaCatalogRoutes } from "./routes/sensaCatalog.js";
 import { createSensaPinnedContentRoutes } from "./routes/sensaPinnedContent.js";
 import { readSensaApiEnvironment } from "./server/environment.js";
 import { loadRequestContextFromRequest } from "./server/requestContext.js";
+import { sensaCorsOptions } from "./sensa/access/cors.js";
 
 export const sensaApiIdentity: SensaApiIdentity = Object.freeze({
   name: "sensa-standalone",
@@ -92,13 +93,7 @@ export function createApp(): Hono<AppEnv> {
     context.header("X-Request-Id", requestId);
     await next();
   });
-  app.use("*", cors({
-    origin: corsOrigins,
-    allowMethods: ["GET", "POST", "OPTIONS"],
-    allowHeaders: ["content-type", "authorization", "x-client-platform", "x-client-version", "x-installation-id"],
-    exposeHeaders: ["x-request-id"],
-    credentials: true,
-  }));
+  app.use("*", cors(sensaCorsOptions(corsOrigins,true)));
 
   app.get("/health", (context) => context.json({
     ok: true,

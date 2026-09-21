@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import {createConsumerRoutes} from '../apps/api/src/sensa/access/consumer.ts';
 import {ConsumerError} from '../apps/api/src/sensa/access/auth.ts';
 import type {ServiceRequestRecord} from '../apps/api/src/sensa/access/telemetry.ts';
+import {sensaCorsOptions} from '../apps/api/src/sensa/access/cors.ts';
+import {Hono} from 'hono';
+import {cors} from 'hono/cors';
 const records:ServiceRequestRecord[]=[];
 const privateText='private-email-and-key-do-not-log';
 const app=createConsumerRoutes({telemetry:r=>records.push(r),verify:async()=>{throw new ConsumerError(401,'authentication_required');}});
@@ -13,4 +16,7 @@ assert.equal((await failure.request('/sensa/packages')).status,503);assert.equal
 assert(!JSON.stringify(records).includes(privateText));
 const brokenSink=createConsumerRoutes({telemetry:()=>{throw Error('sink unavailable');},verify:async()=>{throw new ConsumerError(401,'authentication_required');}});
 assert.equal((await brokenSink.request('/sensa/packages')).status,401);
-console.log('PASS: correlated response/request metadata, no token/query/error payload logging, 401/503 attribution and non-fatal telemetry sink.');
+const corsApp=new Hono();corsApp.use('*',cors(sensaCorsOptions(['https://sensa.example'])));
+const preflight=await corsApp.request('/sensa/packages',{method:'OPTIONS',headers:{origin:'https://sensa.example','access-control-request-method':'GET','access-control-request-headers':'authorization,if-none-match'}});
+assert.equal(preflight.status,204);assert.match(preflight.headers.get('access-control-allow-headers')??'',/(?:^|,)if-none-match(?:,|$)/u);
+console.log('PASS: correlated response/request metadata, no token/query/error payload logging, 401/503 attribution, non-fatal telemetry sink and conditional package refresh CORS.');
