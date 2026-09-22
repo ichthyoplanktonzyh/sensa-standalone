@@ -604,6 +604,9 @@ Personal Content 保存 learner 直接或通过明确授权委托创建的事实
 - Saved Example 在 learner × exact immutable Example 上唯一、可逆，不能随 release 更新换成另一条；
 - 每个 learner × Sense 最多有一份 current Sense Note；更新与删除使用 revision，离线冲突不能
   静默覆盖另一设备已经提交的正文；
+- Sense Context Note 是直接附着 stable Sense 的私有 text/media annotation；它可以进入 Personal Content
+  projection，但不是 Personal Meaning、Personal Semantic Anchor 或 runtime Evidence。若 learner 要把它
+  变成 Personal Semantic World 成员，必须另行提交 Semantic Intake 并完成有效 Semantic Acceptance；
 - 每个 Personal Semantic Anchor 有独立 identity 与 revision；同一 Personal Meaning 至少一个且可以有多个
   Anchor，learner 可分别修改、删除或撤销其 scaffold eligibility；
 - Personal Collection 有独立 identity、name、description、ordering 与 revision；Collection

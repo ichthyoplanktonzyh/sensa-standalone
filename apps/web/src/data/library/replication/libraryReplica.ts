@@ -5,7 +5,7 @@ import {librarySyncTables} from '@sensa/contracts/sensa';
 import {contentSupplyReplica} from './contentSupplyReplica';
 import type {DomainReplicaModule,ReplicaEntry,ReplicaMergeInput,ReplicaMergeResult} from './domainReplica';
 import {learningReplica} from './learningReplica';
-import {learnerArtifactReplica} from './learnerArtifactReplica';
+import {personalContentReplica} from './personalContentReplica';
 import {personalSemanticWorldReplica} from './personalSemanticWorldReplica';
 import {preferenceReplica} from './preferenceReplica';
 
@@ -16,7 +16,7 @@ const modules:readonly DomainReplicaModule[]=[
  personalSemanticWorldReplica,
  contentSupplyReplica,
  learningReplica,
- learnerArtifactReplica,
+ personalContentReplica,
 ];
 
 export const replicaEntryId=(entry:Pick<ReplicaEntry,'table'|'key'>)=>JSON.stringify([entry.table,entry.key]);

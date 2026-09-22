@@ -34,8 +34,8 @@ Intake 负责现场获取/处理，Web、桌面和移动主应用负责整理/�
 [ADR 0006](../adr/0006-three-product-systems.md) 将 Sensa 的产品领域组织为三个职责不同的系统：
 
 1. **Personal Semantic World**：拥有 learner 经有效 Semantic Acceptance 保留的 Personal Meaning、
-   Personal Anchors、Alignments、Notes、Collections 与其他 learner-scoped semantic facts，回答“什么对我
-   有意义、我选择保留什么”；
+   Personal Anchors 与 Alignments，并容纳生命周期独立的 Saved references、Notes、Collections、
+   Personal Learning Scenes 等 Personal Content，回答“什么对我有意义、我选择保留什么”；
 2. **Learning System**：拥有 Curriculum、Learning Target、Policy、Planning、正式 Runtime、Progress、
    Evidence、Outcome 与 Scheduling，回答“我选择学什么、已经发生了什么学习、下一步做什么”；
 3. **Content Supply System**：通过 Published、On-demand 或 Hybrid 路径生产、验证、发布、发现、安装并
@@ -81,7 +81,8 @@ Transition 与跨设备合并裁决。
 
 | 数据类别 | 领域 owner | Cloud Checkpoint | Account Backup | 冲突/恢复语义 |
 | --- | --- | --- | --- | --- |
-| Personal Meaning、Anchor、Alignment、Note、Collection | Personal Semantic World | 是 | 是 | version/revision、tombstone、领域三方合并 |
+| Personal Meaning、Personal Semantic Anchor、Alignment | Personal Semantic World Module | 是 | 是 | version/revision、tombstone、领域三方合并 |
+| Saved Sense/Example、Sense Note、Sense Context Note、Collection、Personal Learning Scene | Personal Content Module | 是 | 是 | typed identity、revision 与领域合并；不升级为 Personal Meaning |
 | Curriculum intent、Enrollment、Policy Assignment | Learning System / Curriculum | 是 | 是 | versioned command/fact 与确定性 precedence |
 | Run、Action、Observation、Evidence、Outcome、Decision | Learning System | 是 | 是 | append-only、完整性验证、learning reconciliation |
 | 当前 progress、Memory、due projection/checkpoint | Learning System | 可随事实传输但必须验证 | 可随恢复点保存 | 不得覆盖历史；可从固定事实与算法版本重建/核对 |
@@ -716,11 +717,14 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
   exact immutable Example，不能在内容更新后静默替换；
 - 每个 learner × Sense 最多存在一份 current Sense Note；Note 具有独立 revision，与 Saved Sense
   生命周期解耦；
+- Sense Context Note 可以把 learner-authored text/media 直接附着到 stable Sense，供私下回忆、组织和
+  Projection 展示；它不是 Personal Semantic Anchor，不创建 Personal Meaning，也不能绕过独立 Semantic
+  Intake + Semantic Acceptance 进入 Personal Semantic World；
 - 一个 Personal Meaning 必须拥有至少一个 Personal Semantic Anchor；confirmed Alignment 允许这些
   Anchor 在 learner 明确授权时作为目标 Sense 的 optional scaffold 使用；
 - Personal Collection 是 learner 命名、排序的组织对象；typed Membership 直接引用 stable Sense 或
   exact Example，不依赖 Saved record、不复制目标内容，也不创造语义关系；
-- 收藏、写笔记、创建 Anchor、加入/移出 Collection、开始 Free Practice 与提交 Add-to-Learning
+- 收藏、写笔记、创建 Sense Context Note、创建 Personal Semantic Anchor、加入/移出 Collection、开始 Free Practice 与提交 Add-to-Learning
   Intent 是不同意图，任何一个都不能暗中触发另一个；
 - unsave 不删除 Note/Anchor/Collection Membership；删除 Note/Anchor 不 unsave；删除 Collection
   只删除 Membership；从 Collection 移除也不 unsave；
@@ -910,11 +914,11 @@ Protocol Step 与 Card Presentation 的边界适用于以上三种 purpose：Ste
 
 ## 5. 模块边界
 
-以下 Module 保留各自聚合与 interface，但不再作为 26 个没有上级关系的平级盒子理解。它们按产品系统
+以下 Module 保留各自聚合与 interface，但不再作为 27 个没有上级关系的平级盒子理解。它们按产品系统
 和共享支撑职责组成四个 bounded-context family：
 
-- **Semantic family**：Lexical Reference、Semantic Intake、Personal Semantic World、Sense Construction、
-  Learner Semantic Projection；它们引用 Language Context/Support 与公共 Semantic Foundation；
+- **Semantic family**：Lexical Reference、Semantic Intake、Personal Semantic World、Personal Content、
+  Sense Construction、Learner Semantic Projection；它们引用 Language Context/Support 与公共 Semantic Foundation；
 - **Learning family**：Curriculum、Free Practice、Learning Policy & Protocol、Executable Learning
   Capability Resolver、Learner Progress、Unified Planning、Semantic Policy、Encounter、Evaluation &
   Evidence、FsrsAdapter；Free Practice 明确与正式学习结算隔离；
@@ -952,59 +956,63 @@ command 或 deep Module interface 协作，不能让页面状态、传输记录�
    不判断调用方给出的 Context 是否语义充足，不创建 Curriculum Membership、Learning Target 或 learner
    progress，也不依赖任何主应用页面状态；
 8. **Personal Semantic World Module**：拥有 Personal Meaning、optional Meaning Focus、Personal Semantic
-   Anchor、Personal Expression Anchor、Personal Meaning Alignment，以及 Saved Sense/Example、Sense
-   Note、Personal Collection 与 typed Membership 的 learner-scoped 事实及同步生命周期；它可以提交
+   Anchor、Personal Expression Anchor 与 Personal Meaning Alignment 的 learner-scoped 事实及同步生命周期；它可以提交
    bridge Intent，但不是 Curriculum/Learning Runtime 的依赖；同名 Product Surface 只能通过本模块与
    Semantic Intake 的正式 operations 读写，不能另存一份页面 state；
-9. **Sense Construction Module**：只在普通 Contextual Sense Resolution 不足时编排 learner–LLM 语义
+9. **Personal Content Module**：拥有 Saved Sense/Example、Sense Note、Sense Context Note、Personal
+   Collection/typed Membership 与 Personal Learning Scene。它通过显式 commands 保存 learner references、
+   annotations 与 runtime scaffold，保留独立 revision/sync 生命周期；它不能把任一记录升级为 Personal
+   Meaning、Personal Semantic Anchor、Learning Evidence 或正式 progress；
+10. **Sense Construction Module**：只在普通 Contextual Sense Resolution 不足时编排 learner–LLM 语义
    访谈、optional Meaning Focus、Sense Proposal 与 Semantic Acceptance；它可以按需
    请求创建 stable Sense/Version，但不能创建 Learning Evidence、Curriculum Membership 或绕过
    后续内容物化与协议选择；
-10. **Learner Semantic Projection Module**：组合 Personal Semantic World、已发布 Field、learner
-   progress 与 personal content，只生成可重建读取模型；
-11. **Free Practice Module**：解析 Practice Brief、Scope、primary Area 与 Activity Definition，保存
+11. **Learner Semantic Projection Module**：通过各领域 deep Module interface 组合 Personal Semantic
+   World、已发布 Field、learner progress、Personal Content 与 Practice history，只生成可重建读取模型；
+   它没有 command 接口，也不直接读取其他领域的存储表；
+12. **Free Practice Module**：解析 Practice Brief、Scope、primary Area 与 Activity Definition，保存
    Practice Turn、Observation、Feedback 与 optional Artifact；它可以读取 Learning Target、Personal
    Semantic World 与获准资源，但不调用正式 Learning Kernel 的证据、结算或调度接口；
-12. **Content Provisioning Module**：按 Resolved Learning Plan 将固定 Learning Target 与 Pinned Language
+13. **Content Provisioning Module**：按 Resolved Learning Plan 将固定 Learning Target 与 Pinned Language
    Context 通过 published、
    on-demand 或 hybrid 路径解析为 capability/readiness result 和通过合同校验的不可变 Learning
    Materialization；它拥有 Provisioning Batch、Content Provisioning Task、Content Agent Attempt、
    Material Candidate Bundle、独立 validation/admission 与 assembly。Learning Content LLM 及其获准工具
    只在单 Task Attempt 内生产未受信候选，不能改写 Sense、Learning Policy、Protocol 或 learner progress，
    也不能批准自身输出；
-13. **Learning Policy & Protocol Module**：拥有 versioned Learning Policy Profiles，结合 Curriculum
+14. **Learning Policy & Protocol Module**：拥有 versioned Learning Policy Profiles，结合 Curriculum
    Assignment 解析 Effective Learning Policy 与 Resolved Learning Plan，选择并执行 purpose-specific
    versioned Protocol，定义 Step/Checkpoint、material role binding、Evaluation/Progression/Completion
    Policy 与合法 Transition effects，创建 Protocol Run/Step Instance，接纳与 purpose 兼容的合法结果，
    并在成功 Initial Learning Completion 的同一权威边界创建必需的 Scheduling Handoff；
-14. **Executable Learning Capability Resolver**：为 Structured Acquisition 求 Package、Required
+15. **Executable Learning Capability Resolver**：为 Structured Acquisition 求 Package、Required
    Capability Set、approved resources 与 Runtime 能力的版本化交集，不读取 learner state；
-15. **Learner Progress Module**：拥有 Retention Target、其 Learning Phase、active protocol run、
+16. **Learner Progress Module**：拥有 Retention Target、其 Learning Phase、active protocol run、
    protocol-specific Checkpoint credit/progress epoch、Memory State 以及 Sense-level roll-up，并记录
    Initial Learning Completion、Study Completion、Acquisition Graduation 与 Relearning Completion；
-16. **Unified Planning Module**：只从 purpose-ready Resolved Learning Plans 中，在 Study Plan、Session
+17. **Unified Planning Module**：只从 purpose-ready Resolved Learning Plans 中，在 Study Plan、Session
    intent、Declared Mastery、cooldown、protocol readiness、Relearning readiness 与 due state 之间选择候选；
-17. **Semantic Policy Module**：在 Structured Acquisition 内从 Step purpose、capability inventory、Gate progress、
+18. **Semantic Policy Module**：在 Structured Acquisition 内从 Step purpose、capability inventory、Gate progress、
    Evidence、5D 与历史中选择最小干预；
-18. **Encounter Module**：按 Protocol Step Instance 固定 Materialization/Action，物化瞬时 Card Presentation，
+19. **Encounter Module**：按 Protocol Step Instance 固定 Materialization/Action，物化瞬时 Card Presentation，
    接受 Attempt，并用 pinned interaction/grader contract 形成 Observation；
-19. **Evaluation & Evidence Module**：从 Observation 按固定 Evidence Rule 派生追加 Evidence，应用
+20. **Evaluation & Evidence Module**：从 Observation 按固定 Evidence Rule 派生追加 Evidence，应用
    versioned Progression/Completion Policy 产生原子、幂等 Transition Decision，并重建 Checkpoint、Gate
    与 5D 投影；
-20. **FsrsAdapter**：按 Retention Target 消费有效 Scheduling Handoff 与来自 Review 或合法
+21. **FsrsAdapter**：按 Retention Target 消费有效 Scheduling Handoff 与来自 Review 或合法
    Relearning evaluation 的 graded Memory Outcome，产生 Scheduling Decision，是 FSRS Memory State
    与 next due 初始化和更新的唯一接口；
-21. **Sensa Sync Module**：传输本地已提交的版本化记录与内容寻址数据块，维护幂等、清单和收敛状态，但不解释或重新结算学习事实；
-22. **Media Module**：验证不可变媒体引用并提供授权下载。
-23. **Language Context Module**：从显式 operation roles、正式学习 Route 或当前 surface 的 Active Route
+22. **Sensa Sync Module**：传输本地已提交的版本化记录与内容寻址数据块，维护幂等、清单和收敛状态，但不解释或重新结算学习事实；
+23. **Media Module**：验证不可变媒体引用并提供授权下载。
+24. **Language Context Module**：从显式 operation roles、正式学习 Route 或当前 surface 的 Active Route
     Selection 解析并冻结 Pinned Language Context；pre-route semantic work 不因此创建 Curriculum Route，
     本模块也不从 Route 推断捕获内容语言或把 target/support role 写回 Expression；
-24. **Language Support Resolver**：按 exact Language Tag 与 speech、reference、translation、content
+25. **Language Support Resolver**：按 exact Language Tag 与 speech、reference、translation、content
     或 renderer capability 返回 exact support、显式 fallback 或 unavailable；它不改写任何语言事实。
-25. **Remote Intake Delivery Module**：以认证账号解析唯一已登记的本地 library，持久保存 canonical Intake
+26. **Remote Intake Delivery Module**：以认证账号解析唯一已登记的本地 library，持久保存 canonical Intake
     mailbox item，拥有 `queued | applied` 回执、拉取/确认和 operation-id 幂等；它不读取或裁决语义内容，
     也不把入队伪装成本地提交。
-26. **Account Backup Port**：定义 immutable Recovery Point manifest、完整性摘要、library/learner/schema
+27. **Account Backup Port**：定义 immutable Recovery Point manifest、完整性摘要、library/learner/schema
     identity 与 `account_assisted | zero_knowledge` 恢复模式。当前只有端口和合同，没有生产 route、store、
     scheduler 或 restore workflow；未来实现不能复用 Sync cursor 冒充 Recovery Point。
 

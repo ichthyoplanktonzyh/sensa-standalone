@@ -15,7 +15,7 @@ import {
   stepRendererRegistry,
   type LightweightInitialStepRendererProps,
 } from "../../learningRuntime/stepRenderers";
-import type { PersonalLearningSceneRevision } from '../../../data/library/contentAnnotations';
+import type { PersonalLearningSceneRevision } from '../../../personalContent/system';
 import type {DictionaryLookup,QuickDictEntry} from '../../types';
 
 interface LightweightRuntimeStartScreenProps {

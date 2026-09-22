@@ -660,6 +660,12 @@ Example. Saving changes neither formal eligibility nor the target's learning sta
 The learner's single current free-form note for one Sense. It persists independently
 of saving and is neither published linguistic truth nor Learning Evidence.
 
+**Sense Context Note**:
+A learner-authored text or media annotation attached directly to a stable Sense for
+private recall or organization. It is Personal Content, not a Personal Meaning or
+Personal Semantic Anchor, and cannot enter the Personal Semantic World without a
+separate Semantic Intake and valid Semantic Acceptance.
+
 **Personal Semantic Anchor**:  
 A provenance-bearing text, image, audio, scene or other real Context intentionally
 committed for a Personal Meaning by the learner or an authorized delegate. It may

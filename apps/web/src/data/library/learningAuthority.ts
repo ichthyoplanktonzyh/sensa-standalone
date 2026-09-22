@@ -15,9 +15,9 @@ import {baseContentBeforeSupplement} from '../../contentSupply/provisioning/hybr
 import {localExecutionForRun} from '../../learning/runtime/runtimeCoordinator';
 import {validateLightweightInitialMaterialization} from '../../contentSupply/provisioning/lightweightInitialContent';
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
+import {personalLearningSceneRowId} from '../../personalContent/system/personalContentSystem';
 import {backupEqual} from './backupCodec';
 import type {BackupRows} from './backupValidation';
-import {personalLearningSceneRowId} from './contentAnnotations';
 import type {LearningEvent} from './learning';
 import {validateLearningReconciliationRows} from './learningReconciliation';
 import {applyLocalProtocolTransition} from './learningSettlement';

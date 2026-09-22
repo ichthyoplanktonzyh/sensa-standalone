@@ -29,7 +29,7 @@ export interface ExampleSheet {
 
 export interface SceneEditorTarget {
   readonly content: RuntimePersonalContent;
-  readonly anchorId?: string;
+  readonly contextId?: string;
   readonly learningTarget?: LearningSceneEditorTarget;
 }
 

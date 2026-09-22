@@ -16,7 +16,7 @@ import {localProtocolActiveTargetId,localProtocolStepId,type LocalExecutableLear
 import {localExecutableTargetForParticipant,localLastPresentedMaterial,localPresentedMaterial} from '../../learning/runtime/localCurriculum';
 import {learningRunTargetIds as localRunTargetIds,learningSceneSemanticOperationIds,type LearningRunView as LocalLearningRun} from '../../learning/system';
 import type {ContentSupplyPackage as InstalledPackage} from '../../contentSupply/system';
-import {contentAnnotations} from '../../data/library/contentAnnotations';
+import {currentPersonalLearningSceneRevision,personalContentSystem} from '../../personalContent/system';
 import {useJourneyGateway} from '../personalMeaningJourney';
 import type {AssuranceSupportHost} from './AssuranceLearningViews';
 import {AssuranceRuntime} from './AssuranceLearningViews';
@@ -72,7 +72,7 @@ function useRuntimeHost():AssuranceSupportHost{
   toast,
   openDict,
   openNoteEditor,
-  openSceneEditor:(content,anchorId,learningTarget)=>openSceneEditor({content,anchorId,learningTarget}),
+  openSceneEditor:(content,contextId,learningTarget)=>openSceneEditor({content,contextId,learningTarget}),
   lookupDictionary:lookupRuntimeDictionary,
   onOpenMenuMore:(event,content)=>{
    event.stopPropagation();
@@ -95,9 +95,9 @@ function RuntimeOverlays({c,run,onViewLearningLibrary}:{c:Controller;run:LocalLe
  const openNoteEditor=useOverlayStore(state=>state.openNoteEditor);
  const openSceneEditor=useOverlayStore(state=>state.openSceneEditor);
  const toast=useOverlayStore(state=>state.toast);
- useEffect(()=>contentAnnotations.subscribe(()=>setAnnotationRevision(value=>value+1)),[]);
+ useEffect(()=>personalContentSystem.subscribe({kind:'snapshot'},()=>setAnnotationRevision(value=>value+1)),[]);
  useEffect(()=>()=>closeMenus(),[closeMenus]);
- const anchors=menuPersonalContent?contentAnnotations.getSemanticAnchors(menuPersonalContent.senseKey):[];
+ const contexts=menuPersonalContent?personalContentSystem.read({kind:'sense',senseId:menuPersonalContent.senseKey}).contexts:[];
  const closeLearningPreferences=()=>{
   setLearningPreferencesOpen(false);
   requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.screen.active [data-learning-more]')?.focus());
@@ -112,8 +112,8 @@ function RuntimeOverlays({c,run,onViewLearningLibrary}:{c:Controller;run:LocalLe
       <small>{menuPersonalContent.guideLabelL1}</small>
      </div>
      <button onClick={()=>{const content=menuPersonalContent;closeMenus();openNoteEditor(content.lemma,content.senseKey,content.guideLabelL1);}}><svg className={iconClass} aria-hidden="true"><use href="#i-pen"/></svg>{t('assurance.note')}</button>
-     <button onClick={()=>{const content=menuPersonalContent;closeMenus();openSceneEditor({content,anchorId:anchors[0]?.anchorId});}}><svg className={iconClass} aria-hidden="true"><use href="#i-bulb"/></svg>{t('assurance.personalScene')}</button>
-     {anchors.length>0&&<button onClick={()=>{const content=menuPersonalContent;closeMenus();openSceneEditor({content});}}><svg className={iconClass} aria-hidden="true"><use href="#i-penplus"/></svg>{t('assurance.addScene')}</button>}
+     <button onClick={()=>{const content=menuPersonalContent;closeMenus();openSceneEditor({content,contextId:contexts[0]?.contextId});}}><svg className={iconClass} aria-hidden="true"><use href="#i-bulb"/></svg>{t('assurance.personalScene')}</button>
+     {contexts.length>0&&<button onClick={()=>{const content=menuPersonalContent;closeMenus();openSceneEditor({content});}}><svg className={iconClass} aria-hidden="true"><use href="#i-penplus"/></svg>{t('assurance.addScene')}</button>}
      <button onClick={()=>{const content=menuPersonalContent;closeMenus();openDict(content.lemma);}}><svg className={iconClass} aria-hidden="true"><use href="#i-search"/></svg>{t('originalCards.dictionary')}</button>
      <div className="my-2 border-t border-border-subtle"/>
     </>}
@@ -179,7 +179,7 @@ function LightweightPackageRuntime({active,run,targets,packages,busy,notice,hasN
  useTranslation();
  const journeyGateway=useJourneyGateway();
  const [,setAnnotationRevision]=useState(0),[savingWorld,setSavingWorld]=useState(false);
- useEffect(()=>contentAnnotations.subscribe(()=>setAnnotationRevision(value=>value+1)),[]);
+ useEffect(()=>personalContentSystem.subscribe({kind:'snapshot'},()=>setAnnotationRevision(value=>value+1)),[]);
  const target=targets.find(t=>t.id===run.targetId);
  if(!target)throw new Error('Missing lightweight runtime target');
  const material=target.material;
@@ -188,7 +188,7 @@ function LightweightPackageRuntime({active,run,targets,packages,busy,notice,hasN
  const content={senseKey:String(material.snapshot.provenance.senseId),lemma:target.expression,guideLabelL1:target.meaning};
  const lightweightHost=host as Pick<AssuranceSupportHost,'onOpenMenuMore'|'openSceneEditor'|'openDict'|'lookupDictionary'|'toast'>;
  if(!lightweightHost.onOpenMenuMore||!lightweightHost.openSceneEditor||!lightweightHost.openDict||!lightweightHost.lookupDictionary||!lightweightHost.toast)throw new Error('Presentation capability lightweight_support is unavailable.');
- const scene=contentAnnotations.getLearningScene(target.id,target.curriculumMembership.languageContext.languageRouteId),sceneRevision=scene?contentAnnotations.getLearningSceneRevision(scene):null;
+ const scene=personalContentSystem.read({kind:'learning_scene',learningTargetId:target.id,languageRouteId:target.curriculumMembership.languageContext.languageRouteId}),sceneRevision=scene?currentPersonalLearningSceneRevision(scene):null;
  const pack=target.packageKey?packages.find(candidate=>candidate.key===target.packageKey):undefined;
  const bookBundle=pack?.bundle.format==='sensa-book-release-bundle-v1'?pack.bundle:null;
  const entry=bookBundle?.entries.find(candidate=>candidate.senseVersionId===target.identity.senseVersionId&&candidate.bindingVersionId===target.identity.bindingVersionId);
@@ -202,7 +202,7 @@ function LightweightPackageRuntime({active,run,targets,packages,busy,notice,hasN
   setSavingWorld(true);
   try{
    const operationIds=learningSceneSemanticOperationIds(sceneRevision.revisionId),operationId=operationIds.accept,result=await journeyGateway.acceptPublishedLearningScene({operationId,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,source:{packageKey:pack.key,bookId:learningBundleBookId(bookBundle),bookVersionId,contentReleaseId,publishedAt:bookBundle.publishedAt,title:learningBundleTitle(bookBundle)},target:{learningTargetId:target.id,curriculumMembershipId:target.curriculumMembership.id,senseId:target.identity.senseId,senseVersionId:target.identity.senseVersionId,bindingId:target.identity.senseExpressionBindingId,bindingVersionId:target.identity.bindingVersionId,expression:target.expression,targetLanguageTag:target.targetLanguageTag},semantic:entry.semantic,scene:{...sceneRevision,sceneId:scene.sceneId}});
-   await contentAnnotations.markLearningSceneAccepted({operationId:operationIds.link,sceneId:scene.sceneId,revisionId:sceneRevision.revisionId,personalMeaningId:result.personalMeaningId});
+   await personalContentSystem.execute({kind:'mark_learning_scene_accepted',operationId:operationIds.link,sceneId:scene.sceneId,revisionId:sceneRevision.revisionId,personalMeaningId:result.personalMeaningId});
    lightweightHost.toast(i18n.t('runtime.semanticWorldSaved'));
   }catch{lightweightHost.toast(i18n.t('runtime.semanticWorldSaveFailed'));}finally{setSavingWorld(false);}
  };

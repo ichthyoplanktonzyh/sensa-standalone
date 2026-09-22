@@ -42,7 +42,10 @@ try {
     [`${root}/node_modules/vite/bin/vite.js`, "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
     {
       cwd: `${root}/apps/web`,
-      env: { ...process.env },
+      // Skin Lab is a self-contained presentation matrix. Do not inherit a
+      // developer's local API endpoint and accidentally emit telemetry while
+      // validating browser-only surfaces.
+      env: { ...process.env, VITE_SENSA_API_URL: "" },
       stdio: ["ignore", "pipe", "pipe"],
     },
   );

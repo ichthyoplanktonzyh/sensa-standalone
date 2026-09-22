@@ -2,8 +2,8 @@ import '../../i18n/contentResources';
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
 import { useEffect, useState } from 'react';
-import { contentAnnotations } from '../../data/library/contentAnnotations';
-import {contentSenseForId,exampleIdForSense} from '../contentProjection';
+import { personalContentSystem } from '../../personalContent/system';
+import {contentSenseForId,exampleIdForSense} from '../../learnerSemanticProjection/system';
 import type { PracticeSenseItem } from '../practiceData';
 import { audioService } from '../services/audioService';
 import {
@@ -38,9 +38,9 @@ export const ContentExampleDetailScreen = ({
     if (!item) return;
     setShowTranslation(true);
     const exampleId = exampleIdForSense(item);
-    const refresh = () => setSaved(contentAnnotations.isExampleSaved(exampleId));
+    const refresh = () => setSaved(personalContentSystem.read({ kind: 'example', exampleId }));
     refresh();
-    return contentAnnotations.subscribe(refresh);
+    return personalContentSystem.subscribe({ kind: 'example', exampleId }, refresh);
   }, [item]);
 
   if (!item) return null;
@@ -48,7 +48,12 @@ export const ContentExampleDetailScreen = ({
 
   const toggleSaved = async () => {
     try {
-      const next = await contentAnnotations.toggleExample(exampleId);
+      const next = await personalContentSystem.execute({
+        kind: 'set_saved_example',
+        operationId: crypto.randomUUID(),
+        exampleId,
+        saved: !saved,
+      });
       setSaved(next);
       toast(next ? uiText('exampleSaved') : uiText('exampleRemovedFromSaved'));
     } catch {

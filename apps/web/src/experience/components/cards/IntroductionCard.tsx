@@ -26,7 +26,7 @@ interface IntroductionCardProps {
   onOpenExample: (sentenceIndex?: number) => void;
   onOpenDictionary: (word?: string | QuickDictEntry) => void;
   onOpenNote: () => void;
-  onOpenScene: (anchorId?: string) => void;
+  onOpenScene: (contextId?: string) => void;
   lookupDictionary: DictionaryLookup;
   toast: (message: string) => void;
 }

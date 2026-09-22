@@ -724,6 +724,8 @@ Personal Content 不进入 Content Release，也不成为 Sense Learning Package
 - Sense Note 绑定 stable Sense；Personal Semantic Anchor 绑定 Personal Meaning，并通过 confirmed
   Personal Meaning Alignment 进入 Sense 语境。内容版本升级不删除 learner-authored text；每个
   learner/Sense 只有一份 current Note，但一个 Personal Meaning 可以有多个独立 Anchors；
+- Sense Context Note 也绑定 stable Sense，但只是一条私有 text/media annotation。它既不冒充 Personal
+  Semantic Anchor，也不成为 Package resource、runtime answer、grading key 或 Learning Evidence；
 - Personal Collection 只保存指向 stable Sense 或 exact Example 的 typed references 与 learner
   ordering，不依赖 Saved record，也不复制 Package、Example 或 Semantic Field 内容。
 
@@ -734,10 +736,10 @@ Step 不跟随 current pointer 变化。把 current revision 存入 Personal Sem
 它复用 Package 交付的完整 Sense/Expression/Binding semantic snapshots，并建立或更新 learner-owned
 Personal Meaning；Package 本身及其 Content Release 保持不变。
 
-Anchor 只有在 learner 明确允许、Personal Meaning Alignment 已确认、目标 Sense 一致且
+Personal Semantic Anchor 只有在 learner 明确允许、Personal Meaning Alignment 已确认、目标 Sense 一致且
 Practice/Action contract 接受 personal scaffold 时才可以被引用。它不能满足 Required Asset
 Manifest、替代 reviewed Experience、成为 grading key、构成 novel assessment 或产生 Learning
-Evidence。Note 默认只供 learner 阅读，不能被 Runtime 当作语言学事实解析。
+Evidence。Sense Note 与 Sense Context Note 默认只供 learner 阅读，不能被 Runtime 当作语言学事实解析。
 
 ## 9. 生产与治理对象
 

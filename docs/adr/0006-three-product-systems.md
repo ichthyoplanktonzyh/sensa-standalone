@@ -10,8 +10,10 @@ Platform** 上。这个划分按事实
 归属与变化语义组织产品，而不是按页面、客户端、数据库或在线服务组织。Product Shell、Learning
 Kernel 与 Production Base 仍可描述软件职责层次，但它们与三个产品系统正交，不能替代领域划分。
 
-Personal Semantic World 只拥有 learner 接受的 Personal Meaning、Anchors、Alignments、Notes 与
-Collections，并引用而不拥有 stable Sense/Expression identities。Learning System 包含 Curriculum、
+Personal Semantic World 产品系统拥有 learner 接受的 Personal Meaning、Anchors、Alignments，以及与
+之相邻但保持独立生命周期的 Personal Content。其内部 Personal Semantic World Module 只接纳完整、
+已接受的语义事实；Personal Content Module 单独拥有 Saved references、Sense Note、Sense Context Note、
+Collection 与 Personal Learning Scene，并引用而不拥有 stable Sense/Expression identities。Learning System 包含 Curriculum、
 Policy、Planning、Provisioning handoff、Runtime、Progress 与 Scheduling；正式学习可以从 Book、direct
 stable-Sense 或 personal-first bridge 进入。Content Supply System 包含 Published、On-demand 与 Hybrid
 内容的生产、验证、发布、分发、安装和 Materialization，但不拥有 Learning Policy、Protocol、learner

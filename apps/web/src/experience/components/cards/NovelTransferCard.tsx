@@ -28,7 +28,7 @@ export interface NovelTransferCardProps {
   onOpenDictionary: (word: string | QuickDictEntry) => void;
   onOpenExample: () => void;
   onOpenNote: () => void;
-  onOpenScene: (anchorId?: string) => void;
+  onOpenScene: (contextId?: string) => void;
   lookupDictionary: DictionaryLookup;
   onViewChange: () => void;
   toast: (message: string) => void;

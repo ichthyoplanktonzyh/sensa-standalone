@@ -33,6 +33,13 @@ provider capability projection；`apps/web/src/contentSupply/provisioning` 统�
 Content Supply 和 Learning 两个 authority，不能把候选内容直接写成 ready Learning state。Learning 保留
 显式 Add-to-Learning / enrollment intent，只接收 provisioning receipt 或已准入 materialization；Learning
 Overview 不夹带 Content Supply projection，恢复与 Cloud Sync 也只调用 Content Supply interface。
+Saved references、Sense Note、Sense Context Note 与 Personal Learning Scene 统一通过
+`apps/web/src/personalContent/system/personalContentSystem.ts` 的 command/query/subscribe interface；页面不再
+读取 `annotations` 表或维护另一份 annotation service。Personal Content 写入在同一 Library transaction
+提交前经过增量 authority admission，其 Replica Module 单独拥有 `annotations`；`media` 由 Personal
+Semantic World/Media 边界拥有。`apps/web/src/learnerSemanticProjection/system` 只有 read/subscribe，
+通过 Personal Content、Personal Semantic World、Learning 和 published-content 接口生成可重建读取模型，
+没有 command，也不直接取得其他领域存储表的所有权。
 `packages/learning-kernel` 只显式导出可复用的确定性纯规则和值类型，不导出 Web 持久化、Curriculum、
 协议 registry 或 UI composition。公共内容合同、校验与制作分别位于 `packages/contracts`、
 `packages/content-validator` 与 `content`。目录位置不转移领域事实所有权；页面、SQLite record、HTTP route
@@ -116,7 +123,7 @@ Published Bundle 与公共媒体字节不属于 Personal Library Fact：Checkpoi
 Personal Anchor media 与 Practice Artifact 仍按各自 learner-owned 表进入同步和备份，不能被误判为公共缓存。
 Checkpoint 的 block/manifest 传输、CAS commit、重试和 baseline 由 Cloud Sync Coordinator 负责；记录的
 跨设备归一化、三方收敛、完整性验证、历史 replay 与删除许可由领域 Replica Module 负责。Personal
-Semantic World、Learning System、Content Supply、Learner Artifact 和 Preference 各声明唯一记录所有权，
+Semantic World、Personal Content、Learning System、Content Supply 和 Preference 各声明唯一记录所有权，
 中央同步器不再按领域表名实施策略。Learning Replica 对 Run/Event/Reconciliation history 只追加并拒绝
 通用物理删除；同步和手动备份通过同一领域验证入口核对历史与派生投影。冲突闭包同样只采用各领域
 Replica Module 显式声明的记录依赖；learner prose 和其他任意字符串保持 opaque，不能通过 UUID 猜测

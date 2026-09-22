@@ -2,7 +2,7 @@ import '../../i18n/contentResources';
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
 import { useState, useEffect, useRef } from 'react';
-import { contentAnnotations } from '../../data/library/contentAnnotations';
+import { personalContentSystem } from '../../personalContent/system';
 import type { Word, QuickDictEntry } from '../types';
 import { SensaOverlayLayout } from '../ui/SensaComponents';
 
@@ -44,7 +44,7 @@ export const NoteEditorModal = ({
   // 每次打开或单词变化时加载当前笔记内容
   useEffect(() => {
     if (active && wordStr) {
-      const existing = contentAnnotations.getSenseNote(senseId);
+      const existing = personalContentSystem.read({ kind: 'sense', senseId }).note;
       setNoteText(existing);
       const focusTimer = window.setTimeout(() => {
         if (textareaRef.current) {
@@ -61,7 +61,12 @@ export const NoteEditorModal = ({
 
   const handleSave = async () => {
     try {
-      await contentAnnotations.setSenseNote(senseId, noteText);
+      await personalContentSystem.execute({
+        kind: 'set_sense_note',
+        operationId: crypto.randomUUID(),
+        senseId,
+        body: noteText,
+      });
       toast(uiText('noteSaved'));
       if (onSave) onSave(noteText);
       onClose();

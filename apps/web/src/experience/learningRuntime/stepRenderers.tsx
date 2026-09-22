@@ -47,7 +47,7 @@ import { ExpressionRevealCard } from '../components/cards/lightweight/Expression
 import type {
   LightweightInitialCardPresentation,
 } from './lightweightInitialPresentation';
-import type { PersonalLearningSceneRevision } from '../../data/library/contentAnnotations';
+import type { PersonalLearningSceneRevision } from '../../personalContent/system';
 import type {
   LightweightInitialRating,
   LightweightProtocolStepInstance,
@@ -75,7 +75,7 @@ export interface StepRendererHost {
   ) => void;
   readonly openSceneEditor: (
     content: RuntimePersonalContent,
-    anchorId?: string,
+    contextId?: string,
     learningTarget?: LearningSceneEditorTarget,
   ) => void;
   readonly lookupDictionary: DictionaryLookup;
@@ -162,7 +162,7 @@ const renderIntroduction = (props: StepRendererProps): ReactNode => {
         content.senseKey,
         content.guideLabelL1,
       )}
-      onOpenScene={(anchorId) => host.openSceneEditor(content, anchorId)}
+      onOpenScene={(contextId) => host.openSceneEditor(content, contextId)}
       lookupDictionary={host.lookupDictionary}
       toast={host.toast}
     />
@@ -189,7 +189,7 @@ const renderReviewRepair = (props: StepRendererProps): ReactNode => {
         repairContent.senseKey,
         repairContent.guideLabelL1,
       )}
-      onOpenScene={(anchorId) => host.openSceneEditor(repairContent, anchorId)}
+      onOpenScene={(contextId) => host.openSceneEditor(repairContent, contextId)}
       lookupDictionary={host.lookupDictionary}
       toast={host.toast}
     />
@@ -216,7 +216,7 @@ const renderRecognition = (props: StepRendererProps): ReactNode => {
         content.senseKey,
         content.guideLabelL1,
       )}
-      onOpenScene={(anchorId) => host.openSceneEditor(content, anchorId)}
+      onOpenScene={(contextId) => host.openSceneEditor(content, contextId)}
       lookupDictionary={host.lookupDictionary}
       onViewChange={props.onCardViewChange}
       toast={host.toast}
@@ -245,7 +245,7 @@ const renderRecall = (props: StepRendererProps): ReactNode => {
         content.senseKey,
         content.guideLabelL1,
       )}
-      onOpenScene={(anchorId) => host.openSceneEditor(content, anchorId)}
+      onOpenScene={(contextId) => host.openSceneEditor(content, contextId)}
       onViewChange={props.onCardViewChange}
       toast={host.toast}
     />
@@ -273,7 +273,7 @@ const renderTransfer = (props: StepRendererProps): ReactNode => {
         content.senseKey,
         content.guideLabelL1,
       )}
-      onOpenScene={(anchorId) => host.openSceneEditor(content, anchorId)}
+      onOpenScene={(contextId) => host.openSceneEditor(content, contextId)}
       lookupDictionary={host.lookupDictionary}
       onViewChange={props.onCardViewChange}
       toast={host.toast}
@@ -304,7 +304,7 @@ const renderReviewAssessment = (props: StepRendererProps): ReactNode => {
         content.senseKey,
         content.guideLabelL1,
       )}
-      onOpenScene={(anchorId) => host.openSceneEditor(content, anchorId)}
+      onOpenScene={(contextId) => host.openSceneEditor(content, contextId)}
       lookupDictionary={host.lookupDictionary}
       onViewChange={props.onCardViewChange}
       toast={host.toast}
@@ -333,7 +333,7 @@ const renderReviewFeedback = (props: StepRendererProps): ReactNode => {
         content.senseKey,
         content.guideLabelL1,
       )}
-      onOpenScene={(anchorId) => host.openSceneEditor(content, anchorId)}
+      onOpenScene={(contextId) => host.openSceneEditor(content, contextId)}
       onViewChange={props.onCardViewChange}
       toast={host.toast}
     />

@@ -3,20 +3,20 @@ import { uiText } from '../../i18n/uiText';
 import { iconClass } from '../ui/primitives';
 import { useEffect, useState } from 'react';
 import {
-  contentAnnotations,
-  type PersonalSemanticAnchor,
-} from '../../data/library/contentAnnotations';
+  personalContentSystem,
+  type SenseContextNote,
+} from '../../personalContent/system';
 
 interface PersonalConnectionActionsProps {
   senseId: string;
   onOpenNote: () => void;
-  onOpenScene: (anchorId?: string) => void;
+  onOpenScene: (contextId?: string) => void;
   variant?: 'reveal' | 'feedback' | 'compact';
 }
 
 interface PersonalConnectionState {
   note: string;
-  anchors: PersonalSemanticAnchor[];
+  contexts: readonly SenseContextNote[];
 }
 
 export function PersonalConnectionActions({
@@ -26,23 +26,21 @@ export function PersonalConnectionActions({
   variant = 'feedback',
 }: PersonalConnectionActionsProps) {
   useTranslation();
-  const [state, setState] = useState<PersonalConnectionState>({ note: '', anchors: [] });
+  const [state, setState] = useState<PersonalConnectionState>({ note: '', contexts: [] });
 
   useEffect(() => {
     const refresh = () => {
-      setState({
-        note: contentAnnotations.getSenseNote(senseId),
-        anchors: contentAnnotations.getSemanticAnchors(senseId),
-      });
+      const personal = personalContentSystem.read({ kind: 'sense', senseId });
+      setState({ note: personal.note, contexts: personal.contexts });
     };
     refresh();
-    return contentAnnotations.subscribe(refresh);
+    return personalContentSystem.subscribe({ kind: 'sense', senseId }, refresh);
   }, [senseId]);
 
   const hasNote = state.note.trim().length > 0;
-  const anchorCount = state.anchors.length;
-  const latestAnchorId = state.anchors[0]?.anchorId;
-  const hasPersonalConnection = hasNote || anchorCount > 0;
+  const contextCount = state.contexts.length;
+  const latestContextId = state.contexts[0]?.contextId;
+  const hasPersonalConnection = hasNote || contextCount > 0;
 
   if (variant === 'compact') {
     return (
@@ -63,12 +61,12 @@ export function PersonalConnectionActions({
         <button
           className="relative flex min-h-12 items-center justify-center gap-2 border-0 border-l border-border-subtle bg-transparent px-3 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus"
           type="button"
-          onClick={() => onOpenScene(latestAnchorId)}
-          aria-label={anchorCount > 0 ? uiText('viewContextCount', { count: anchorCount }) : uiText('addAPersonalContextForThisMeaning')}
+          onClick={() => onOpenScene(latestContextId)}
+          aria-label={contextCount > 0 ? uiText('viewContextCount', { count: contextCount }) : uiText('addAPersonalContextForThisMeaning')}
         >
           <svg className={iconClass} aria-hidden="true"><use href="#i-bulb" /></svg>
           <span>{uiText('myContext')}</span>
-          {anchorCount > 0 && <b className="grid min-w-5 place-items-center rounded-pill bg-accent-soft px-1 text-metadata text-action-primary" aria-hidden="true">{anchorCount}</b>}
+          {contextCount > 0 && <b className="grid min-w-5 place-items-center rounded-pill bg-accent-soft px-1 text-metadata text-action-primary" aria-hidden="true">{contextCount}</b>}
         </button>
       </div>
     );
@@ -85,7 +83,7 @@ export function PersonalConnectionActions({
         </div>
         {hasPersonalConnection && (
           <small className="text-right text-metadata leading-5 text-fg-tertiary">
-            {hasNote ? uiText('hasNotes') : uiText('noNotesYet2')} · {anchorCount > 0 ? uiText('contextCount', { count: anchorCount }) : uiText('noContextsYet')}
+            {hasNote ? uiText('hasNotes') : uiText('noNotesYet2')} · {contextCount > 0 ? uiText('contextCount', { count: contextCount }) : uiText('noContextsYet')}
           </small>
         )}
       </header>
@@ -109,20 +107,20 @@ export function PersonalConnectionActions({
         <button
           className="grid min-h-16 min-w-0 grid-cols-[2.5rem_1fr_auto] items-center gap-3 rounded-control border border-border-subtle bg-surface-panel p-3 text-left text-fg-primary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"
           type="button"
-          onClick={() => onOpenScene(latestAnchorId)}
+          onClick={() => onOpenScene(latestContextId)}
         >
           <span className="grid size-10 place-items-center rounded-control bg-accent-soft text-action-primary" aria-hidden="true">
             <svg className={iconClass}><use href="#i-bulb" /></svg>
           </span>
           <span className="flex min-w-0 flex-col gap-1">
-            <b className="text-control-label">{anchorCount > 0 ? uiText('viewMyContexts') : uiText('addMyContext')}</b>
-            <small className="text-metadata text-fg-secondary">{anchorCount > 0 ? uiText('editTheLatestConnection') : uiText('connectToARealExperience')}</small>
+            <b className="text-control-label">{contextCount > 0 ? uiText('viewMyContexts') : uiText('addMyContext')}</b>
+            <small className="text-metadata text-fg-secondary">{contextCount > 0 ? uiText('editTheLatestConnection') : uiText('connectToARealExperience')}</small>
           </span>
           <svg className="size-4 text-fg-tertiary" aria-hidden="true"><use href="#i-chev-r" /></svg>
         </button>
       </div>
 
-      {anchorCount > 0 && (
+      {contextCount > 0 && (
         <button
           type="button"
           className="ml-auto mt-3 flex min-h-11 items-center gap-2 rounded-control px-3 text-control-label font-semibold text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus"

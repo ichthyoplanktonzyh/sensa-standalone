@@ -3,7 +3,7 @@ import { ArrowRight, SquarePen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ExperienceRecallCardPresentation } from "../../../learningRuntime/lightweightInitialPresentation";
 import { runtimePrimary } from "../../learning/RuntimeFrame";
-import type { PersonalLearningSceneRevision } from "../../../../data/library/contentAnnotations";
+import type { PersonalLearningSceneRevision } from "../../../../personalContent/system";
 interface ExperienceRecallCardProps {
   readonly presentation: ExperienceRecallCardPresentation;
   readonly personalScene?: PersonalLearningSceneRevision | null;

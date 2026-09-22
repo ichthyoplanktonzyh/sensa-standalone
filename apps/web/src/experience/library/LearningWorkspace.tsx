@@ -12,7 +12,7 @@ import {usePersonalLearning} from './usePersonalLearning';
 import {useLanguageRoutes} from './useLanguageRoutes';
 import {usePracticeScope} from '../usePracticeScope';
 import {createPracticeScopeSnapshot,type PracticeScopeSnapshot} from '../practiceScope';
-import {contentSenseForId,type ContentSectionId} from '../contentProjection';
+import {contentSenseForId,type ContentSectionId} from '../../learnerSemanticProjection/system';
 import type {PracticeSenseItem} from '../practiceData';
 import {JourneyAlignmentLearningControls,PersonalPreparationTarget,pendingPersonalTargetView} from './PersonalLearningControls';
 import {LearningSetupFrame} from '../components/learning/LearningSetupFrame';

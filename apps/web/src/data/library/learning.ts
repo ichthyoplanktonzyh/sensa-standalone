@@ -38,9 +38,12 @@ import {
 } from '../../learning/runtime/localProtocol';
 import {localCurriculumMembershipForContext,localExecutableTarget,localExecutableTargetForParticipant,upsertLocalCurriculumMembership} from '../../learning/runtime/localCurriculum';
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
+import {
+  readPersonalLearningSceneForAction,
+  type PersonalLearningScene,
+} from '../../personalContent/system/personalContentSystem';
 import {applyLocalProtocolTransition,type LocalLearningTransitionRecord} from './learningSettlement';
 import {requireLanguageRouteContext} from './language';
-import {personalLearningSceneRowId,type PersonalLearningScene} from './contentAnnotations';
 import {readStudyPlans,writeStudyPlans} from './studyPlans';
 
 export {localRunTargetIds};
@@ -255,7 +258,7 @@ export async function actLearning(operationId:string,runId:string,revision:numbe
  const stepId=localProtocolStepId(execution,run),participant=run.participants[activeTargetId]!,presentedMaterial=participant.presentedMaterials[stepId];
  if(!presentedMaterial)throw new Error('localFlow.resourceInvalid');
  const executable=localExecutableTargetForParticipant(t,participant,presentedMaterial);
- const scene=await tx.get<PersonalLearningScene>('annotations',personalLearningSceneRowId(t.id,participant.languageContext.languageRouteId));
+ const scene:PersonalLearningScene|undefined=await readPersonalLearningSceneForAction(tx,t.id,participant.languageContext.languageRouteId);
  const sceneRevision=scene?.revisions.find(candidate=>candidate.revision===scene.currentRevision);
  const personalLearningScene=scene&&sceneRevision?{sceneId:scene.sceneId,revisionId:sceneRevision.revisionId,revision:sceneRevision.revision}:null;
  if(hasDeclaredMasteryOverride(t)||localRunOpenPlanningInterruption(run))throw new Error('localFlow.stepChanged');

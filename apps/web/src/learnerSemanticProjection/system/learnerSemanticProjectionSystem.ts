@@ -1,13 +1,18 @@
-import { contentAnnotations } from '../data/library/contentAnnotations';
+import { personalContentSystem } from '../../personalContent/system';
 import type { SensaExpressionType } from '@sensa/contracts/sensa';
-import type { RuntimeLearningContent } from '../learning/content/learningCatalog';
-import { BUNDLED_PACKAGE_BY_SENSE } from '../learning/content/bundledLearningContent';
-import { PRACTICE_SENSES, type PracticeSenseItem } from './practiceData';
-import { journeyGateway } from './personalMeaningJourney/gateway';
-import type { PersonalMeaningJourneyPhase } from './personalMeaningJourney/types';
-import {learningTargetHasDeclaredMastery as hasDeclaredMasteryOverride,type LearningTargetView as LocalLearningTarget} from '../learning/system';
-import type {ContentSectionId} from './contentRoute';
-export {CONTENT_SECTION_IDS,isContentSectionId,type ContentSectionId} from './contentRoute';
+import type { RuntimeLearningContent } from '../../learning/content/learningCatalog';
+import { BUNDLED_PACKAGE_BY_SENSE } from '../../learning/content/bundledLearningContent';
+import { PRACTICE_SENSES, type PracticeSenseItem } from '../../experience/practiceData';
+import { journeyGateway } from '../../experience/personalMeaningJourney/gateway';
+import type { PersonalMeaningJourneyPhase } from '../../experience/personalMeaningJourney/types';
+import { subscribeAll } from '../../experience/services/createSnapshotStore';
+import {
+  learningSystem,
+  learningTargetHasDeclaredMastery as hasDeclaredMasteryOverride,
+  type LearningTargetView as LocalLearningTarget,
+} from '../../learning/system';
+import type {ContentSectionId} from '../../experience/contentRoute';
+export {CONTENT_SECTION_IDS,isContentSectionId,type ContentSectionId} from '../../experience/contentRoute';
 
 type ReviewSchedule = NonNullable<LocalLearningTarget['memory']>;
 
@@ -27,16 +32,16 @@ export interface SemanticWordExpressionProjection {
   ipa: string;
 }
 
-export interface SemanticPersonalAnchorPreview {
-  anchorId: string;
+export interface SemanticPersonalContextPreview {
+  contextId: string;
   body: string;
   imageDataUrl: string | null;
   imageAltText: string;
 }
 
 export interface SemanticPersonalProjection {
-  anchorCount: number;
-  latestAnchor: SemanticPersonalAnchorPreview | null;
+  contextCount: number;
+  latestContext: SemanticPersonalContextPreview | null;
   notePreview: string | null;
 }
 
@@ -92,7 +97,7 @@ export interface SavedExampleItem {
   sense: PracticeSenseItem;
 }
 
-export interface ContentProjectionSnapshot {
+export interface LearnerSemanticProjectionSnapshot {
   recent: PracticeSenseItem[];
   learned: PracticeSenseItem[];
   known: PracticeSenseItem[];
@@ -149,10 +154,10 @@ const projectSemanticSense = (
   schedule: ReviewSchedule,
   now: number,
 ): SemanticSenseItem => {
-  const anchors = contentAnnotations.getSemanticAnchors(content.senseKey);
-  const latestAnchor = anchors[0] ?? null;
-  const latestMedia = latestAnchor?.media[0] ?? null;
-  const note = contentAnnotations.getSenseNote(content.senseKey).trim();
+  const personal = personalContentSystem.read({ kind: 'sense', senseId: content.senseKey });
+  const latestContext = personal.contexts[0] ?? null;
+  const latestMedia = latestContext?.media[0] ?? null;
+  const note = personal.note.trim();
 
   return {
     senseId: content.senseKey,
@@ -171,11 +176,11 @@ const projectSemanticSense = (
       ipa: content.ipa,
     },
     personal: {
-      anchorCount: anchors.length,
-      latestAnchor: latestAnchor
+      contextCount: personal.contexts.length,
+      latestContext: latestContext
         ? {
-            anchorId: latestAnchor.anchorId,
-            body: latestAnchor.body,
+            contextId: latestContext.contextId,
+            body: latestContext.body,
             imageDataUrl: latestMedia?.dataUrl ?? null,
             imageAltText: latestMedia?.altText || latestMedia?.fileName || '我的场景图片',
           }
@@ -190,9 +195,9 @@ const projectSemanticSense = (
  * Only committed Memory State and explicit declared-mastery facts can create
  * learned/known projections. Browsing the bundled practice catalog never does.
  */
-export const buildContentProjection = (
+export const buildLearnerSemanticProjection = (
   targets: readonly LocalLearningTarget[] = [],
-): ContentProjectionSnapshot => {
+): LearnerSemanticProjectionSnapshot => {
   const now = Date.now();
 
   const learnedWithState = targets
@@ -248,14 +253,15 @@ export const buildContentProjection = (
   );
   const known = PRACTICE_SENSES.filter((item) => declaredMasterySenseIds.has(item.senseId));
 
-  const savedSenseIds = contentAnnotations.getSavedSenseIds();
-  const savedExampleIds = contentAnnotations.getSavedExampleIds();
+  const personalContent = personalContentSystem.read({ kind: 'snapshot' });
+  const savedSenseIds = personalContent.savedSenseIds;
+  const savedExampleIds = personalContent.savedExampleIds;
   const savedSenses = PRACTICE_SENSES.filter((item) => savedSenseIds.has(item.senseId));
   const savedExamples = PRACTICE_SENSES
     .map((sense) => ({ exampleId: exampleIdForSense(sense), sense }))
     .filter((item) => savedExampleIds.has(item.exampleId));
 
-  const senseNotes: ContentNoteItem[] = Object.entries(contentAnnotations.getAllSenseNotes())
+  const senseNotes: ContentNoteItem[] = Object.entries(personalContent.senseNotes)
     .flatMap(([senseId, body]) => {
       const sense = sensesById.get(senseId);
       if (!sense || !body.trim()) return [];
@@ -294,3 +300,61 @@ export const semanticStatusLabel: Record<SemanticStatus, string> = {
   established: '已经建立',
   reinforce: '需要巩固',
 };
+
+export interface LearnerSemanticProjectionSystem {
+  /** A stable, derived snapshot. It never accepts commands or owns source facts. */
+  read(): LearnerSemanticProjectionSnapshot;
+  subscribe(listener: () => void): () => void;
+}
+
+const projectionStore = (() => {
+  let targets: readonly LocalLearningTarget[] = [];
+  let snapshot = buildLearnerSemanticProjection(targets);
+  let stopSources: (() => void) | null = null;
+  let loadRevision = 0;
+  const listeners = new Set<() => void>();
+
+  const publish = () => {
+    snapshot = buildLearnerSemanticProjection(targets);
+    for (const listener of listeners) listener();
+  };
+
+  const loadLearningTargets = async () => {
+    const revision = ++loadRevision;
+    try {
+      const nextTargets = await learningSystem.read({ kind: 'targets' });
+      if (revision !== loadRevision) return;
+      targets = nextTargets;
+      publish();
+    } catch {
+      // Bootstrap surfaces may mount before SQLite is ready. Keep the last
+      // coherent projection; a later Library notification retries the read.
+    }
+  };
+
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    if (listeners.size === 1) {
+      stopSources = subscribeAll([
+        (onChange) => learningSystem.subscribe(
+          { kind: 'targets' },
+          () => { void loadLearningTargets(); },
+        ),
+        (onChange) => personalContentSystem.subscribe({ kind: 'snapshot' }, onChange),
+        (onChange) => journeyGateway.subscribe(onChange),
+      ])(publish);
+      void loadLearningTargets();
+    }
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) {
+        stopSources?.();
+        stopSources = null;
+      }
+    };
+  };
+
+  return { read: () => snapshot, subscribe };
+})();
+
+export const learnerSemanticProjectionSystem: LearnerSemanticProjectionSystem = projectionStore;

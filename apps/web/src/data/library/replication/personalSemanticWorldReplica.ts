@@ -4,7 +4,7 @@ import {mergePersonalSemanticWorldReplica,requiresPersonalSemanticWorldTombstone
 const tables=new Set([
  'drafts','sessions','meanings','identities',
  'semanticState','semanticMeanings','semanticRegistry','semanticInbox',
- 'semanticDrafts','semanticReceipts',
+ 'semanticDrafts','semanticReceipts','media',
 ]);
 
 const record=(value:unknown):Record<string,any>|undefined=>value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,any>:undefined;

@@ -231,8 +231,10 @@ Learning Materialization，并达到 `ready` 后，Unified Planner 才能把它�
 Language Learning Route 与 Pinned Language Context；任何交付版本对语言组合的限制都不能成为
 长期领域模型中的一对一翻译约束。
 
-Saved Sense、Saved Example、Sense Note 与 Personal Collection 只表达关注、创作与组织行为；它们
+Saved Sense、Saved Example、Sense Note、Sense Context Note 与 Personal Collection 只表达关注、创作与组织行为；它们
 既不证明 learner 已获得目标意义，也不证明目标仍然陌生。Add-to-Learning 必须是另一个显式意图。
+Sense Context Note 直接引用 stable Sense，只是 Personal Content annotation；它不能使用 Personal Semantic
+Anchor 名称，也不能绕过独立 Intake/Acceptance 获得 Personal Meaning membership。
 
 5D 描述一个 Sense 内部的诊断结构；Learner Semantic Projection 描述多个 Senses 之间的已审核
 关系及 learner 对这些有限区域的覆盖。两者职责正交。

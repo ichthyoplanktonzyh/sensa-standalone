@@ -2,8 +2,8 @@ import '../../i18n/contentResources';
 import { useTranslation } from 'react-i18next';
 import { uiText } from '../../i18n/uiText';
 import { useEffect, useMemo, useState } from 'react';
-import { contentAnnotations } from '../../data/library/contentAnnotations';
-import {contentSenseForId,semanticStatusLabel,type SemanticStatus} from '../contentProjection';
+import { personalContentSystem } from '../../personalContent/system';
+import {contentSenseForId,semanticStatusLabel,type SemanticStatus} from '../../learnerSemanticProjection/system';
 import { PRACTICE_SENSES, type PracticeSenseItem } from '../practiceData';
 import { audioService } from '../services/audioService';
 import {
@@ -12,7 +12,7 @@ import {
   iconClass,
   slideScreenClass,
 } from '../ui/primitives';
-import { useContentProjection } from '../useContentProjection';
+import { useLearnerSemanticProjection } from '../../learnerSemanticProjection/useLearnerSemanticProjection';
 import { SensaDetailWorkspaceLayout } from '../ui/SensaPageLayouts';
 
 interface ContentSenseDetailScreenProps {
@@ -38,18 +38,19 @@ export const ContentSenseDetailScreen = ({
 }: ContentSenseDetailScreenProps) => {
   useTranslation();
   const item=useMemo(()=>senseId?contentSenseForId(senseId):null,[senseId]);
-  const projection = useContentProjection();
+  const projection = useLearnerSemanticProjection();
   const [saved, setSaved] = useState(false);
   const [note, setNote] = useState('');
 
   useEffect(() => {
     if (!item) return;
     const refresh = () => {
-      setSaved(contentAnnotations.isSenseSaved(item.senseId));
-      setNote(contentAnnotations.getSenseNote(item.senseId));
+      const personal = personalContentSystem.read({ kind: 'sense', senseId: item.senseId });
+      setSaved(personal.saved);
+      setNote(personal.note);
     };
     refresh();
-    return contentAnnotations.subscribe(refresh);
+    return personalContentSystem.subscribe({ kind: 'sense', senseId: item.senseId }, refresh);
   }, [item]);
 
   const siblings = useMemo(() => item
@@ -63,7 +64,12 @@ export const ContentSenseDetailScreen = ({
 
   const toggleSaved = async () => {
     try {
-      const next = await contentAnnotations.toggleSense(item.senseId);
+      const next = await personalContentSystem.execute({
+        kind: 'set_saved_sense',
+        operationId: crypto.randomUUID(),
+        senseId: item.senseId,
+        saved: !saved,
+      });
       setSaved(next);
       toast(next ? uiText('meaningSaved') : uiText('meaningRemovedFromSaved'));
     } catch {

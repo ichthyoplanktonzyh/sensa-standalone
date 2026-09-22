@@ -1,5 +1,5 @@
 import {cardText} from '../../i18n/originalCards';
-import { contentAnnotations } from '../../data/library/contentAnnotations';
+import { personalContentSystem } from '../../personalContent/system';
 import {
   useCallback,
   useEffect,
@@ -68,7 +68,7 @@ export function SensaExampleScreen({
   const sentence = sentences[sentenceIndex] ?? sentences[0] ?? null;
   const exampleId = sentence?.exampleId
     ?? `${curWord.id ?? curWord.w}:example:${senseIndex}:${sentence ? availableSentences.indexOf(sentence) : initialSentenceIdx}`;
-  const isSaved = contentAnnotations.isExampleSaved(exampleId);
+  const isSaved = personalContentSystem.read({ kind: 'example', exampleId });
   const hasPrevious = sentenceIndex > 0;
   const hasNext = sentenceIndex < sentences.length - 1;
 
@@ -102,10 +102,10 @@ export function SensaExampleScreen({
   }, [active, clearLookup, initialSenseIdx, initialSentenceIdx, senseDetails.length, sequenceIdentity, stopPlayback, wordIdentity]);
 
   useEffect(
-    () => contentAnnotations.subscribe(() => {
+    () => personalContentSystem.subscribe({ kind: 'example', exampleId }, () => {
       setPersonalContentRevision((revision) => revision + 1);
     }),
-    [],
+    [exampleId],
   );
 
   useEffect(() => {
@@ -185,7 +185,12 @@ export function SensaExampleScreen({
           aria-pressed={isSaved}
           onClick={() => { void (async () => {
             try {
-              const saved = await contentAnnotations.toggleExample(exampleId);
+              const saved = await personalContentSystem.execute({
+                kind: 'set_saved_example',
+                operationId: crypto.randomUUID(),
+                exampleId,
+                saved: !isSaved,
+              });
               toast(saved ? cardText('exampleSaved') : cardText('exampleRemovedFromSavedItems'));
             } catch {
               toast(cardText('couldNotSaveThisExampleTryAgain'));

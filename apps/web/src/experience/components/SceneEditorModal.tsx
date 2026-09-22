@@ -4,9 +4,10 @@ import {Camera} from 'lucide-react';
 import {cardText} from '../../i18n/originalCards';
 import {localFlowText} from '../../i18n/localFlowText';
 import {
-  contentAnnotations,
-  type PersonalSemanticAnchorMedia,
-} from '../../data/library/contentAnnotations';
+  currentPersonalLearningSceneRevision,
+  personalContentSystem,
+  type PersonalContentImage,
+} from '../../personalContent/system';
 import { iconClass } from '../ui/primitives';
 import { SensaOverlayLayout } from '../ui/SensaComponents';
 import type { LearningSceneEditorTarget } from '../stores/overlayStore';
@@ -21,7 +22,7 @@ interface SceneEditorModalProps {
   senseId: string | null;
   word: string;
   senseMeaning: string;
-  anchorId?: string;
+  contextId?: string;
   learningTarget?: LearningSceneEditorTarget;
   onClose: () => void;
   toast: (message: string) => void;
@@ -40,7 +41,7 @@ const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve,
   reader.readAsDataURL(file);
 });
 
-async function compressSceneImage(file: File): Promise<PersonalSemanticAnchorMedia> {
+async function compressSceneImage(file: File): Promise<PersonalContentImage> {
   const sourceDataUrl = await readFileAsDataUrl(file);
   const image = new Image();
   await new Promise<void>((resolve, reject) => {
@@ -75,14 +76,14 @@ export function SceneEditorModal({
   senseId,
   word,
   senseMeaning,
-  anchorId,
+  contextId,
   learningTarget,
   onClose,
   toast,
 }: SceneEditorModalProps) {
   useTranslation();
   const [body, setBody] = useState('');
-  const [media, setMedia] = useState<PersonalSemanticAnchorMedia[]>([]);
+  const [media, setMedia] = useState<PersonalContentImage[]>([]);
   const [saving, setSaving] = useState(false);
   const [imageError, setImageError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -92,26 +93,27 @@ export function SceneEditorModal({
   useEffect(() => {
     if (!active || !senseId) return;
     const learningScene = learningTarget
-      ? contentAnnotations.getLearningScene(
-          learningTarget.learningTargetId,
-          learningTarget.languageRouteId,
-        )
+      ? personalContentSystem.read({
+          kind: 'learning_scene',
+          learningTargetId: learningTarget.learningTargetId,
+          languageRouteId: learningTarget.languageRouteId,
+        })
       : null;
     const learningRevision = learningScene
-      ? contentAnnotations.getLearningSceneRevision(learningScene)
+      ? currentPersonalLearningSceneRevision(learningScene)
       : null;
-    const existing = !learningTarget && anchorId
-      ? contentAnnotations.getSemanticAnchor(anchorId)
+    const existing = !learningTarget && contextId
+      ? personalContentSystem.read({ kind: 'sense_context', contextId })
       : null;
     setBody(learningRevision?.body ?? existing?.body ?? '');
     setMedia(learningRevision?.media ?? existing?.media ?? []);
     setImageError('');
     const focusTimer = window.setTimeout(() => textareaRef.current?.focus(), 180);
     return () => window.clearTimeout(focusTimer);
-  }, [active, anchorId, learningTarget, senseId]);
+  }, [active, contextId, learningTarget, senseId]);
 
   const addImageFiles = useCallback(async (files: File[]) => {
-    const additions: PersonalSemanticAnchorMedia[] = [];
+    const additions: PersonalContentImage[] = [];
     let failed = false;
     for (const file of files) {
       try {
@@ -148,14 +150,22 @@ export function SceneEditorModal({
     setSaving(true);
     try {
       if (learningTarget) {
-        await contentAnnotations.saveLearningScene({
+        await personalContentSystem.execute({
+          kind: 'save_learning_scene',
           operationId: crypto.randomUUID(),
           ...learningTarget,
           body,
           media,
         });
       } else {
-        await contentAnnotations.saveSemanticAnchor({ senseId, anchorId, body, media });
+        await personalContentSystem.execute({
+          kind: 'save_sense_context',
+          operationId: crypto.randomUUID(),
+          senseId,
+          contextId,
+          body,
+          media,
+        });
       }
       toast(cardText('sceneSaved'));
       onClose();

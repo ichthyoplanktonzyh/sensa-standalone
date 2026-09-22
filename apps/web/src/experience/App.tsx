@@ -6,7 +6,7 @@ import {ScreenHost,ScreenMemoryProvider} from './ui/ScreenHost';
 import {EdgeSwipeBack} from './ui/EdgeSwipeBack';
 import type {PracticeSenseItem} from './practiceData';
 import {isContentSectionId,type ContentSectionId} from './contentRoute';
-import type {ContentNoteItem,SavedExampleItem} from './contentProjection';
+import type {ContentNoteItem,SavedExampleItem} from '../learnerSemanticProjection/system';
 import {useShellNavigation} from './router/useShellNavigation';
 import {screenInstanceKey} from './router/shellLocation';
 import {shellScreenHost,type AppShellScreenId} from './router/screenRegistry';
@@ -106,7 +106,16 @@ export default function App(){
     {dictModalWord&&<ReferenceDictionaryScreen active={!referenceExampleDeck} wordData={dictModalWord} onClose={closeDictModal} onOpenExamples={setReferenceExampleDeck}/>}
     {referenceExampleDeck&&<ReferenceExampleViewer active deck={referenceExampleDeck} onClose={()=>setReferenceExampleDeck(null)}/>}
     {noteModalWord&&noteModalSense&&<NoteEditorModal active wordData={noteModalWord} senseId={noteModalSense.senseId} senseMeaning={noteModalSense.meaning} onClose={closeNoteEditor} toast={toast}/>}
-    {sceneEditorTarget&&<SceneEditorModal active senseId={sceneEditorTarget.content.senseKey} word={sceneEditorTarget.content.lemma} senseMeaning={sceneEditorTarget.content.guideLabelL1} anchorId={sceneEditorTarget.anchorId} learningTarget={sceneEditorTarget.learningTarget} onClose={closeSceneEditor} toast={toast}/>}
+    {sceneEditorTarget&&<SceneEditorModal
+      active
+      senseId={sceneEditorTarget.content.senseKey}
+      word={sceneEditorTarget.content.lemma}
+      senseMeaning={sceneEditorTarget.content.guideLabelL1}
+      contextId={sceneEditorTarget.contextId}
+      learningTarget={sceneEditorTarget.learningTarget}
+      onClose={closeSceneEditor}
+      toast={toast}
+    />}
     </Suspense>
     {toastMsg&&<div className="sensa-motion-popover fixed bottom-6 left-1/2 z-[150] max-w-[calc(100%-3rem)] -translate-x-1/2 rounded-control bg-fg-primary px-5 py-3 text-center text-control-label text-surface-canvas shadow-overlay" id="toast" role="status" aria-live="polite">{toastMsg}</div>}
   </WebShell>

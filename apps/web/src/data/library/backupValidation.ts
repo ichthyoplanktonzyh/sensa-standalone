@@ -4,7 +4,7 @@ import {z} from 'zod';
 import {backupEqual} from './backupCodec';
 import {providerInputSchema} from './providers';
 import {validateContentSupplyReplica} from './replication/contentSupplyValidation';
-import {validateLearnerArtifactReplica} from './replication/learnerArtifactValidation';
+import {validatePersonalContentReplica} from './replication/personalContentValidation';
 import {validateLearningReplica} from './replication/learningValidation';
 import {validatePersonalSemanticWorldReplica} from './replication/personalSemanticWorldValidation';
 import {libraryTables,type Table} from './store';
@@ -46,7 +46,7 @@ export function validateBackupRows(rows:BackupRows){
  }
 
  validateContentSupplyReplica({rows,identity,requireRow,requirePersonalSource,validateLanguageContext,fail});
- validateLearnerArtifactReplica({rows,requireRow,fail});
+ validatePersonalContentReplica({rows,requireRow,fail});
  validateLearningReplica({rows,maps,identity,routes,requireRow,requirePersonalSource,validateLanguageContext,operationInput,fail});
  return identity;
 }

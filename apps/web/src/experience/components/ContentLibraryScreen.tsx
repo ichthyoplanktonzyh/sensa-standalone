@@ -6,9 +6,9 @@ import {
   type ContentNoteItem,
   type ContentSectionId,
   type SavedExampleItem,
-} from '../contentProjection';
+} from '../../learnerSemanticProjection/system';
 import type { PracticeSenseItem } from '../practiceData';
-import { useContentProjection } from '../useContentProjection';
+import { useLearnerSemanticProjection } from '../../learnerSemanticProjection/useLearnerSemanticProjection';
 import { SensaCollectionBrowserLayout } from '../ui/SensaPageLayouts';
 import { useScreenState } from '../ui/ScreenHost';
 
@@ -71,7 +71,7 @@ export const ContentLibraryScreen = ({
   onEditNote,
 }: ContentLibraryScreenProps) => {
   useTranslation();
-  const projection = useContentProjection();
+  const projection = useLearnerSemanticProjection();
   const [query, setQuery] = useScreenState(`content-library:${section}:query`, '');
   const meta = { title: uiText(section), description: '' };
 

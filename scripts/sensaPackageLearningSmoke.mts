@@ -16,7 +16,7 @@ import {createLocalProtocolProgress,executeLocalProtocolTransition,reduceLocalPr
 import {hasDeclaredMasteryOverride} from '../apps/web/src/learning/runtime/targetPlanningOverrides.ts';
 import {localCurriculumMeaning,localCurriculumMembershipForContext,localExecutableTarget} from '../apps/web/src/learning/runtime/localCurriculum.ts';
 import {addLanguageRoute,setActiveLanguageRoute} from '../apps/web/src/data/library/language.ts';
-import {contentAnnotations} from '../apps/web/src/data/library/contentAnnotations.ts';
+import {personalContentSystem} from '../apps/web/src/personalContent/system/index.ts';
 import {applyLocalProtocolTransition} from '../apps/web/src/data/library/learningSettlement.ts';
 import {libraryBackupTables} from '../apps/web/src/data/library/backupPolicy.ts';
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
@@ -141,7 +141,7 @@ try{
  assert.equal(run.participants[targetId!].resolvedPlan.protocolBinding.protocolVersion,run.protocolBinding.protocolVersion);
  assert.equal((await startLearning(id(),targetId!,languageContext,20,at)).id,run.id);
  const realDateNow=Date.now;Date.now=()=>Date.parse(at);
- const learningScene=await contentAnnotations.saveLearningScene({operationId:id(),learningTargetId:target.id,languageRouteId:languageContext.languageRouteId,curriculumMembershipId:target.curriculumMemberships[0]!.id,senseId:target.identity.senseId,senseVersionId:target.identity.senseVersionId,bindingVersionId:target.identity.bindingVersionId,body:'我在雨天向同事借了这把伞。',media:[]});
+ const learningScene=await personalContentSystem.execute({kind:'save_learning_scene',operationId:id(),learningTargetId:target.id,languageRouteId:languageContext.languageRouteId,curriculumMembershipId:target.curriculumMemberships[0]!.id,senseId:target.identity.senseId,senseVersionId:target.identity.senseVersionId,bindingVersionId:target.identity.bindingVersionId,body:'我在雨天向同事借了这把伞。',media:[]});
  Date.now=realDateNow;
  const declaration=id();await setLocalDeclaredMastery(declaration,targetId!,true,at);
  let paused=await readLearning();const pausedTarget=paused.targets.find(item=>item.id===targetId!)!,pausedRun=paused.runs.find(item=>item.id===run.id)!;

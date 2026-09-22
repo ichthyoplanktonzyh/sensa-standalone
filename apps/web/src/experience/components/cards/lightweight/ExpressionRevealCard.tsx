@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { BookHeart, Check, Pause, SquarePen, Volume2 } from "lucide-react";
 import type { ExpressionRevealCardPresentation } from "../../../learningRuntime/lightweightInitialPresentation";
 import type { LightweightInitialRating } from "../../../../learning/runtime/lightweightInitialProtocol";
-import type { PersonalLearningSceneRevision } from "../../../../data/library/contentAnnotations";
+import type { PersonalLearningSceneRevision } from "../../../../personalContent/system";
 import type { DictionaryLookup, DictionaryLookupRequest, QuickDictEntry, Sentence } from "../../../types";
 import { audioService } from "../../../services/audioService";
 import { RuntimeRating } from "../../learning/RuntimeRating";

@@ -16,8 +16,8 @@ import {
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { ContentSectionId } from "../contentProjection";
-import { useContentProjection } from "../useContentProjection";
+import type { ContentSectionId, LearnerSemanticProjectionSnapshot } from "../../learnerSemanticProjection/system";
+import { useLearnerSemanticProjection } from "../../learnerSemanticProjection/useLearnerSemanticProjection";
 import {
   useJourneyGateway,
   useJourneyWorld,
@@ -33,7 +33,7 @@ export interface ContentScreenSource {
   items: JourneyWorldItemView[];
   status: import("../personalMeaningJourney/gateway").JourneyGatewayStatus;
   inbox: import("@sensa/contracts/sensa").SensaIntakeItem[];
-  projection: import("../contentProjection").ContentProjectionSnapshot;
+  projection: LearnerSemanticProjectionSnapshot;
   reload:()=>void;
   composer: import("./PersonalMeaningComposer").MaterialComposerPort;
 }
@@ -95,7 +95,7 @@ export function ContentScreen(props:ContentScreenProps){
  return props.source?<ContentScreenView {...props} source={props.source}/>:<ConnectedContentScreen {...props}/>;
 }
 function ConnectedContentScreen(props:ContentScreenProps){
- const {items,status}=useJourneyWorld();const gateway=useJourneyGateway();const inbox=useIntakeInbox();const projection=useContentProjection();
+ const {items,status}=useJourneyWorld();const gateway=useJourneyGateway();const inbox=useIntakeInbox();const projection=useLearnerSemanticProjection();
  return <ContentScreenView {...props} source={{items,status,inbox,projection,reload:()=>gateway.reload()}}/>;
 }
 function ContentScreenView({

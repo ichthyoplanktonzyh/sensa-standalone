@@ -18,7 +18,7 @@ export interface RecognitionCardProps {
   onComplete: (correct: boolean, responseId?: string | null) => void;
   onOpenDictionary: (word: string | QuickDictEntry) => void;
   onOpenNote: () => void;
-  onOpenScene: (anchorId?: string) => void;
+  onOpenScene: (contextId?: string) => void;
   lookupDictionary: DictionaryLookup;
   onViewChange: () => void;
   toast: (message: string) => void;

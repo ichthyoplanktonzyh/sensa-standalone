@@ -41,7 +41,7 @@ interface SensaReviewFeedbackCardProps {
   lookupDictionary: DictionaryLookup;
   onOpenExample: () => void;
   onOpenNote: () => void;
-  onOpenScene: (anchorId?: string) => void;
+  onOpenScene: (contextId?: string) => void;
   onViewChange: () => void;
   toast: (message: string) => void;
 }
