@@ -12,7 +12,8 @@ import { uiText } from '../../i18n/uiText';
 import { useEffect, useState } from 'react';
 import type { SensaIntakeItem, SensaIntakeSense } from '@sensa/contracts/sensa';
 import { newUuid } from '../personalMeaningJourney/ids';
-import { type JourneyWorldItemView, useJourneyGateway } from '../personalMeaningJourney';
+import { type JourneyWorldItemView } from '../personalMeaningJourney';
+import { useSemanticIntake } from '../intake';
 import { SensaOverlayLayout } from '../ui/SensaComponents';
 
 interface IntakeInboxDrawerProps {
@@ -63,7 +64,7 @@ export const IntakeInboxDrawer = ({
   toast,
 }: IntakeInboxDrawerProps) => {
   useTranslation();
-  const gateway = useJourneyGateway();
+  const intake = useSemanticIntake();
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -87,7 +88,11 @@ export const IntakeInboxDrawer = ({
         // semantic resolution. Preserve the actual resolver unchanged.
         resolutionProvenance: structuredClone(proposedSense.resolutionProvenance),
       };
-      const result = await gateway.resolveInboxItem(newUuid(), item.intakeId, { sense });
+      const result = await intake.resolve({
+        operationId: newUuid(),
+        intakeId: item.intakeId,
+        sense,
+      });
       toast(result.route === 'fast_track'
         ? uiText('meaningConfirmedAndSaved')
         : uiText('thisMaterialStillNeedsClarificationTryAnother'));
@@ -105,7 +110,7 @@ export const IntakeInboxDrawer = ({
   const discard = async (item: SensaIntakeItem) => {
     setBusyId(item.intakeId);
     try {
-      await gateway.dismissInboxItem(newUuid(), item.intakeId);
+      await intake.dismiss({ operationId: newUuid(), intakeId: item.intakeId });
       toast(uiText('materialDiscarded'));
     } catch (cause) {
       toast(cause instanceof Error ? cause.message : uiText('unableToDiscardThisMaterial'));

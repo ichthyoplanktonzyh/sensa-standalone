@@ -62,14 +62,16 @@ globalThis.fetch=async(_url,input)=>{
 };
 
 try{
-  const gateway=api.createJourneyGateway();
+  const modules=api.createJourneyModules();
+  const gateway=modules.personalMeaningJourney;
+  const intake=modules.semanticIntake;
 
   // Incomplete data enters one Inbox. Clarification closes it into the same
   // Personal Meaning shape used by direct intake, preserving captured context.
-  const slow=canonicalIntake(false),queued=await gateway.ingest(slow.operationId,slow);
+  const slow=canonicalIntake(false),queued=await intake.submit(slow);
   assert.equal(queued.route,'inbox');
   const completed=await gateway.completeClarificationDraft({operationId:id(),intakeId:queued.intakeId,context:slow.context!,languageContext:{supportLanguageTag:'zh-CN',targetLanguageTag:'en'},focus:null,sense:{proposedSenseKey:'borrow-temporarily',coreMeaningFocus:semanticSpec.coreMeaningFocus,prototypeScenes:semanticSpec.prototypeScenes,includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[],unresolvedQuestions:[]},expression:{surfaceForm:'borrow',expressionType:'word',languageTag:'en',relation:'realizes',semanticCoverage:'exact'},expressionCandidates:[{surfaceForm:'borrow',expressionType:'word',languageTag:'en',relation:'realizes',semanticCoverage:'exact'}],confirmExpression:true,transcript:[{messageId:id(),role:'learner',body:'这里强调临时使用并归还。',occurredAt:'2026-09-16T01:01:00.000Z'}],provenance:{provider:'fixture',model:'fixture',promptVersion:'v1'},semanticPolicyVersion:'fixture-v1'});
-  assert.equal(gateway.getInboxItems().length,0);
+  assert.equal(intake.snapshot().length,0);
   const slowSource=gateway.getLearningSources(completed.personalMeaningId)[0];
   assert(slowSource);assert.equal(slowSource.context.text,slow.context!.textSegment);assert.equal(slowSource.expression.surfaceForm,'borrow');
   const detail=gateway.getDetail(completed.personalMeaningId)!;
@@ -103,7 +105,7 @@ try{
 
   // A complete payload from any entry bypasses Inbox mechanically and yields
   // the same learning-source shape; provenance remains data on that record.
-  const fast=canonicalIntake(true),accepted=await gateway.ingest(fast.operationId,fast);
+  const fast=canonicalIntake(true),accepted=await intake.submit(fast);
   assert.equal(accepted.route,'fast_track');
   const fastSource=gateway.getLearningSources(accepted.personalMeaningId)[0];
   assert(fastSource);assert.equal(fastSource.sourceKind,'personal_meaning_alignment');

@@ -7,7 +7,6 @@
  */
 
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
-import type { SensaIntakeItem } from '@sensa/contracts/sensa';
 import { createVersionStore } from '../services/createSnapshotStore';
 import {
   journeyGateway,
@@ -46,13 +45,6 @@ export const useJourneyStatus = (): JourneyGatewayStatus =>
 
 export const useJourneyList = (): JourneyListItemView[] =>
   useGatewaySnapshot(useCallback(() => journeyGateway.getListItems(), []));
-
-/**
- * The intake Inbox shares the gateway's change count, so any ingest/resolve/
- * dismiss command re-renders subscribers alongside the world view.
- */
-export const useJourneyInbox = (): SensaIntakeItem[] =>
-  useGatewaySnapshot(useCallback(() => journeyGateway.getInboxItems(), []));
 
 export interface JourneyWorldResult {
   items: JourneyWorldItemView[];

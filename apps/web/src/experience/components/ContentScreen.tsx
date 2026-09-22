@@ -20,10 +20,10 @@ import type { ContentSectionId } from "../contentProjection";
 import { useContentProjection } from "../useContentProjection";
 import {
   useJourneyGateway,
-  useJourneyInbox,
   useJourneyWorld,
   type JourneyWorldItemView,
 } from "../personalMeaningJourney";
+import { useIntakeInbox } from "../intake";
 import { PersonalMeaningComposer } from "./PersonalMeaningComposer";
 import { IntakeInboxDrawer } from "./IntakeInboxDrawer";
 import { SensaCollectionBrowserLayout } from "../ui/SensaPageLayouts";
@@ -95,7 +95,7 @@ export function ContentScreen(props:ContentScreenProps){
  return props.source?<ContentScreenView {...props} source={props.source}/>:<ConnectedContentScreen {...props}/>;
 }
 function ConnectedContentScreen(props:ContentScreenProps){
- const {items,status}=useJourneyWorld();const gateway=useJourneyGateway();const inbox=useJourneyInbox();const projection=useContentProjection();
+ const {items,status}=useJourneyWorld();const gateway=useJourneyGateway();const inbox=useIntakeInbox();const projection=useContentProjection();
  return <ContentScreenView {...props} source={{items,status,inbox,projection,reload:()=>gateway.reload()}}/>;
 }
 function ContentScreenView({

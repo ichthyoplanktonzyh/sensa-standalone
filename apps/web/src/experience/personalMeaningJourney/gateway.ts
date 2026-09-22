@@ -43,6 +43,12 @@ import type {
   SensaSenseVersionSnapshot,
 } from '@sensa/contracts/sensa';
 import { publishedLearningSemanticFactsSchema, sensaIntakeContextSchema, sensaIntakePayloadSchema, sensaIntakeSenseSchema, sensaPinnedLanguageContextSchema } from '@sensa/contracts/sensa';
+import type {
+  DismissSemanticIntakeCommand,
+  ResolveSemanticIntakeCommand,
+  SemanticIntakeModule,
+  SemanticIntakeResult,
+} from '../intake/semanticIntakeModule';
 import {
   createInboxItem,
   dismissInboxItem,
@@ -89,8 +95,6 @@ import type {
   CreateClarificationDraftResult,
   CreatePersonalMeaningInput,
   CreatePersonalMeaningResult,
-  IngestCommandResult,
-  InboxResolutionInput,
   JourneyDetailView,
   JourneyListItemView,
   JourneyWorldItemView,
@@ -175,29 +179,11 @@ export interface PersonalMeaningJourneyGateway {
     input: ConfirmExpressionBindingInput,
   ): Promise<ConfirmExpressionBindingResult>;
 
-  /** Ubiquitous intake: route one structurally valid payload onto the fast track or Inbox. */
-  ingest(
-    operationId: string,
-    payload: SensaIntakePayload,
-  ): Promise<IngestCommandResult>;
-
   /** Direct acceptance of a learner scene against semantic facts pinned by a published target. */
   acceptPublishedLearningScene(
     input: PublishedLearningSceneAcceptanceInput,
   ): Promise<PublishedLearningSceneAcceptanceResult>;
 
-  /** Slow-track draft materials waiting for learner confirmation. */
-  getInboxItems(): SensaIntakeItem[];
-
-  /** Promote one Inbox draft by confirming its sense (same materialization as the fast track). */
-  resolveInboxItem(
-    operationId: string,
-    intakeId: string,
-    resolution: InboxResolutionInput,
-  ): Promise<IngestCommandResult>;
-
-  /** Drop one Inbox draft. */
-  dismissInboxItem(operationId: string, intakeId: string): Promise<void>;
 }
 
 export interface JourneyGatewayDeps {
@@ -290,7 +276,7 @@ const errorStatus = (cause: unknown): JourneyGatewayStatus => {
   };
 };
 
-class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
+class JourneyGatewayImpl implements PersonalMeaningJourneyGateway, SemanticIntakeModule {
   private state: JourneyState | null = null;
   private readonly usedIds = new Set<string>();
   private status: JourneyGatewayStatus = { ok: true, error: null, errorKind: null };
@@ -2368,22 +2354,19 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     return { newId: () => this.id(), nowIso: () => this.now() };
   }
 
-  getInboxItems(): SensaIntakeItem[] {
+  snapshot(): SensaIntakeItem[] {
     if (!this.state) return [];
-    return [...this.state.inboxItems];
+    return structuredClone(this.state.inboxItems);
   }
 
-  async ingest(
-    operationId: string,
-    payload: SensaIntakePayload,
-  ): Promise<IngestCommandResult> {
-    return this.exclusive(() => this.runIngest(operationId, payload));
+  async submit(payload: SensaIntakePayload): Promise<SemanticIntakeResult> {
+    return this.exclusive(() => this.runIngest(payload.operationId, payload));
   }
 
   private async runIngest(
     operationId: string,
     payload: SensaIntakePayload,
-  ): Promise<IngestCommandResult> {
+  ): Promise<SemanticIntakeResult> {
     // Boundary validation: the capture payload must satisfy the intake
     // contract before the engine sees it, and the transport idempotency key
     // must be the command's receipt key.
@@ -2392,7 +2375,7 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
       throw new Error('ingest 的 operationId 必须与载荷的 operationId 一致。');
     }
     const requestDigest = digestOf(parsed);
-    const replay = this.replay<IngestCommandResult>(operationId, 'Ingest', requestDigest);
+    const replay = this.replay<SemanticIntakeResult>(operationId, 'Ingest', requestDigest);
     if (replay) return replay;
     const state = this.requireState();
     const decision = evaluateIntakeRoute(parsed);
@@ -2432,25 +2415,25 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     return { ...result, replayed: false };
   }
 
-  async resolveInboxItem(
-    operationId: string,
-    intakeId: string,
-    resolution: InboxResolutionInput,
-  ): Promise<IngestCommandResult> {
-    return this.exclusive(() => this.runInboxResolution(operationId, intakeId, resolution));
+  async resolve(command: ResolveSemanticIntakeCommand): Promise<SemanticIntakeResult> {
+    return this.exclusive(() => this.runInboxResolution(
+      command.operationId,
+      command.intakeId,
+      command.sense,
+    ));
   }
 
   private async runInboxResolution(
     operationId: string,
     intakeId: string,
-    resolution: InboxResolutionInput,
-  ): Promise<IngestCommandResult> {
+    resolution: ResolveSemanticIntakeCommand['sense'],
+  ): Promise<SemanticIntakeResult> {
 
-    const replay = this.replay<IngestCommandResult>(operationId, 'ResolveInboxItem');
+    const replay = this.replay<SemanticIntakeResult>(operationId, 'ResolveInboxItem');
     if (replay) return replay;
     const state = this.requireState();
     // Boundary validation for the learner-confirmed sense before any write.
-    const sense = sensaIntakeSenseSchema.parse(resolution.sense);
+    const sense = sensaIntakeSenseSchema.parse(resolution);
     const authority = this.deps.semanticAcceptanceAuthority.verify({
       mode: 'learner_direct',
     });
@@ -2479,8 +2462,11 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
     return { ...result, replayed: false };
   }
 
-  async dismissInboxItem(operationId: string, intakeId: string): Promise<void> {
-    return this.exclusive(() => this.writeInboxDismissal(operationId, intakeId));
+  async dismiss(command: DismissSemanticIntakeCommand): Promise<void> {
+    return this.exclusive(() => this.writeInboxDismissal(
+      command.operationId,
+      command.intakeId,
+    ));
   }
 
   private async writeInboxDismissal(operationId: string, intakeId: string): Promise<void> {
@@ -2497,9 +2483,9 @@ class JourneyGatewayImpl implements PersonalMeaningJourneyGateway {
   }
 }
 
-export const createJourneyGateway = (
+const createJourneyImplementation = (
   deps: Partial<JourneyGatewayDeps> = {},
-): PersonalMeaningJourneyGateway =>
+): JourneyGatewayImpl =>
   new JourneyGatewayImpl({
     repository: deps.repository ?? new LibraryJourneyRepository(),
     clock: deps.clock ?? systemClock,
@@ -2509,5 +2495,27 @@ export const createJourneyGateway = (
     languages: deps.languages ?? localLearnerLanguages,
   });
 
-/** Shared browser gateway singleton. */
-export const journeyGateway: PersonalMeaningJourneyGateway = createJourneyGateway();
+export interface JourneyModules {
+  personalMeaningJourney: PersonalMeaningJourneyGateway;
+  semanticIntake: SemanticIntakeModule;
+}
+
+/** Create the two domain interfaces over one atomic local implementation. */
+export const createJourneyModules = (
+  deps: Partial<JourneyGatewayDeps> = {},
+): JourneyModules => {
+  const implementation = createJourneyImplementation(deps);
+  return {
+    personalMeaningJourney: implementation,
+    semanticIntake: implementation,
+  };
+};
+
+export const createJourneyGateway = (
+  deps: Partial<JourneyGatewayDeps> = {},
+): PersonalMeaningJourneyGateway => createJourneyModules(deps).personalMeaningJourney;
+
+/** Shared browser modules use the same implementation and transaction queue. */
+const browserJourneyModules = createJourneyModules();
+export const journeyGateway = browserJourneyModules.personalMeaningJourney;
+export const semanticIntakeModule = browserJourneyModules.semanticIntake;

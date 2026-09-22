@@ -9,7 +9,7 @@ import {
 } from '@sensa/contracts/sensa';
 import {emptyJourneyState} from '../apps/web/src/experience/personalMeaningJourney/store.ts';
 import {executeFastTrack} from '../apps/web/src/experience/personalMeaningJourney/intakeEngine.ts';
-import {createJourneyGateway} from '../apps/web/src/experience/personalMeaningJourney/gateway.ts';
+import {createJourneyGateway,createJourneyModules} from '../apps/web/src/experience/personalMeaningJourney/gateway.ts';
 import {createSeededClock} from '../apps/web/src/experience/personalMeaningJourney/ports.ts';
 import {MemoryJourneyRepository} from '../apps/web/src/experience/personalMeaningJourney/repository.ts';
 import type {CommandLanguages} from '../apps/web/src/experience/personalMeaningJourney/ports.ts';
@@ -105,16 +105,18 @@ await assert.rejects(gateway.reviseContext({operationId:crypto.randomUUID(),pers
 const slowContext:SensaPinnedLanguageContext={supportLanguageTag:'zh-CN',targetLanguageTag:'en'};
 const slowLanguages={read:async()=>{await new Promise(resolve=>setTimeout(resolve,1));return slowContext;}};
 const raceRepository=new MemoryJourneyRepository();
-const raceGateway=createJourneyGateway({repository:raceRepository,clock:createSeededClock(),languages:slowLanguages});
+const raceModules=createJourneyModules({repository:raceRepository,clock:createSeededClock(),languages:slowLanguages});
+const raceGateway=raceModules.personalMeaningJourney;
+const raceIntake=raceModules.semanticIntake;
 const captures=[
   fastTrackPayload('She took her time.','took','en'),
   fastTrackPayload('He broke the ice.','broke','en'),
 ];
-const receipts=await Promise.all(captures.map(payload=>raceGateway.ingest(payload.operationId,payload)));
+const receipts=await Promise.all(captures.map(payload=>raceIntake.submit(payload)));
 assert.deepEqual(receipts.map(receipt=>receipt.route),['fast_track','fast_track']);
-assert.equal((await raceGateway.ingest(captures[0]!.operationId,captures[0]!)).replayed,true,'an exact retry replays its durable local receipt');
+assert.equal((await raceIntake.submit(captures[0]!)).replayed,true,'an exact retry replays its durable local receipt');
 await assert.rejects(
-  raceGateway.ingest(captures[0]!.operationId,{...captures[0]!,capturedAt:'2026-09-01T00:01:00.000Z'}),
+  raceIntake.submit({...captures[0]!,capturedAt:'2026-09-01T00:01:00.000Z'}),
   /operationId/,
   'one operation id cannot silently replay a different Intake payload',
 );
@@ -137,21 +139,21 @@ assert.equal((await sharedRepository.load()).inboxItems.length,2,'independent ta
 // through; the current learning Route is irrelevant. Missing a language makes
 // the Expression incomplete, while a missing Context has its own slow-track state.
 const third=fastTrackPayload('Il a pris son temps.','a pris','fr');
-assert.equal((await raceGateway.ingest(third.operationId,third)).route,'fast_track');
+assert.equal((await raceIntake.submit(third)).route,'fast_track');
 const pendingAcceptance={...fastTrackPayload('They broke the ice.','broke','en'),operationId:crypto.randomUUID(),acceptance:null};
-const acceptanceQueued=await raceGateway.ingest(pendingAcceptance.operationId,pendingAcceptance);
+const acceptanceQueued=await raceIntake.submit(pendingAcceptance);
 assert.equal(acceptanceQueued.route,'inbox');
 if(acceptanceQueued.route!=='inbox')throw new Error('fixture must enter Inbox');
-const acceptedLater=await raceGateway.resolveInboxItem(crypto.randomUUID(),acceptanceQueued.intakeId,{sense:pendingAcceptance.sense!});
+const acceptedLater=await raceIntake.resolve({operationId:crypto.randomUUID(),intakeId:acceptanceQueued.intakeId,sense:pendingAcceptance.sense!});
 assert.equal(acceptedLater.route,'fast_track');
 if(acceptedLater.route!=='fast_track')throw new Error('fixture must commit');
 const acceptedRecord=(await raceRepository.load() as any).meanings.find((meaning:any)=>meaning.personalMeaning.personalMeaningId===acceptedLater.personalMeaningId);
 assert.equal(acceptedRecord.semanticAcceptances[0].resolutionProvenance.provider,'fixture','later learner Acceptance must not rewrite the original Sense resolver');
 assert.equal(acceptedRecord.semanticAcceptances[0].authority.mode,'learner_direct','Acceptance authority remains a separate fact');
 const undetermined=fastTrackPayload('She took her time.','took',null);
-assert.equal((await raceGateway.ingest(undetermined.operationId,undetermined)).route,'inbox');
+assert.equal((await raceIntake.submit(undetermined)).route,'inbox');
 const withoutContext={...fastTrackPayload('She backed out.','backed out','en','back out'),operationId:crypto.randomUUID(),context:null,expression:null};
-const noContextQueued=await raceGateway.ingest(withoutContext.operationId,withoutContext);
+const noContextQueued=await raceIntake.submit(withoutContext);
 assert.equal(noContextQueued.route,'inbox');
 const waiting=(await raceRepository.load() as any).inboxItems;
 assert.deepEqual(waiting.map((item:any)=>item.status),['pending_expression','pending_context']);

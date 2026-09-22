@@ -4,7 +4,7 @@ export type {
   PersonalMeaningJourneyGateway,
   JourneyGatewayStatus,
 } from './gateway';
-export { createJourneyGateway, journeyGateway } from './gateway';
+export { createJourneyGateway, createJourneyModules, journeyGateway } from './gateway';
 export type {
   PersonalMeaningLearningReference,
   PersonalMeaningLearningSource,
@@ -16,7 +16,6 @@ export {
   useJourneyWorld,
   useJourneyDetail,
   useJourneyClarificationDraft,
-  useJourneyInbox,
 } from './usePersonalMeaningJourney';
 export type { JourneyWorldResult } from './usePersonalMeaningJourney';
 export { PHASE_LABELS } from './projection';

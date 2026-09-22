@@ -8,7 +8,7 @@ import {
 } from "../../data/library/intakeDelivery";
 import { readCloudSync } from "../../data/library/cloudSync";
 import { observeCloudSyncState, openLibrary } from "../../data/library/store";
-import { useJourneyGateway } from "../personalMeaningJourney";
+import { useSemanticIntake } from "../intake";
 
 let activeRun: Promise<void> | undefined;
 
@@ -18,7 +18,7 @@ let activeRun: Promise<void> | undefined;
  * the local gateway replay the same operation id.
  */
 export function RemoteIntakeDelivery({ online }: { online: boolean }) {
-  const gateway = useJourneyGateway();
+  const intake = useSemanticIntake();
 
   useEffect(() => {
     if (!online) return;
@@ -38,7 +38,7 @@ export function RemoteIntakeDelivery({ online }: { online: boolean }) {
           for (const delivery of deliveries) {
             if (!active) return;
             const payload = delivery.submission.intake;
-            const { replayed: _replayed, ...result } = await gateway.ingest(payload.operationId, payload);
+            const { replayed: _replayed, ...result } = await intake.submit(payload);
             await acknowledgeIntakeDelivery({
               contractVersion: sensaIntakeDeliveryContractVersion,
               libraryId,
@@ -67,7 +67,7 @@ export function RemoteIntakeDelivery({ online }: { online: boolean }) {
       window.removeEventListener("focus", attempt);
       document.removeEventListener("visibilitychange", visible);
     };
-  }, [gateway, online]);
+  }, [intake, online]);
 
   return null;
 }

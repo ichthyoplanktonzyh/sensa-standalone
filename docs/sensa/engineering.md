@@ -147,8 +147,11 @@ Intake 的语义 payload 只声明一次：`packages/contracts/src/sensa/intake.
 例如可以保存 `back out` 并定位原文中的 `backed out`。当前 Web 本地 authority 在
 `apps/web/src/experience/personalMeaningJourney/gateway.ts` 中幂等提交，相同 operation id 若改变载荷则报冲突。
 
-架构中的 Intake Layer 不对应一个部署目录。所有本机 Surface/adapter 最终调用同一 gateway `ingest`
-interface；`intakeEngine.ts` 是 fast-track/Inbox 完整性排序的唯一实现，依次返回
+架构中的 Intake Layer 不对应一个部署目录。所有本机 Surface/adapter 最终调用
+`apps/web/src/experience/intake/semanticIntakeModule.ts` 声明的同一 deep Module interface；`submit`
+接收唯一 payload，`resolve`/`dismiss` 管理该 Module 拥有的 Inbox 生命周期。它与 Personal Meaning
+Journey interface 共用同一原子本地实现，但 caller 不再获得后者的语义编辑能力。`intakeEngine.ts` 是
+fast-track/Inbox 完整性排序的唯一实现，依次返回
 `pending_context | pending_expression | pending_sense | pending_acceptance`，或在四项事实完整时原子提交
 `fast_track`。合同没有 `deferred` 或模型拒绝状态：主动延后通过尚未 acceptance 表达，格式/引用矛盾是
 错误而不是 Inbox route。Remote Intake Delivery 只是调用同一 interface 的异步 mailbox adapter，不能
