@@ -51,8 +51,7 @@ function ListeningPlayer({targets,onBack,retry}:YouGlishListeningScreenProps&{re
      <div className="flex flex-wrap gap-1" role="group" aria-label={t('practice.accent')}>{accents.map(code=><button key={code} aria-pressed={activeAccent===code} onClick={()=>setAccent(code)} className={`min-h-10 rounded-control px-3 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-focus ${activeAccent===code?'bg-surface-selected font-medium text-action-primary':'text-fg-tertiary hover:bg-surface-subtle'}`}>{t('practice.accents.'+code)}</button>)}</div></>}
     </div>
     <div className="relative aspect-video overflow-hidden bg-surface-media">
-     {/* The provider executes in the dedicated-origin iframe; only validated playback
-         events cross this mount through a strict postMessage protocol. */}
+     {/* The official provider widget mounts here only while this screen is active. */}
      <div ref={mountRef} className="absolute inset-0 overflow-hidden [&_iframe]:absolute [&_iframe]:left-0 [&_iframe]:top-0 [&_iframe]:h-full! [&_iframe]:w-full! [&_iframe]:border-0"/>
      {!ready&&<div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-surface-media p-6 text-center text-sm text-fg-on-media" role="status"><p>{t(widget.status==='error'?'practice.error':widget.status==='empty'?'practice.noClips':'practice.loading')}</p>{widget.status==='error'&&<button className={`${practiceButton} border border-fg-on-media/25 text-fg-on-media hover:bg-fg-on-media/10`} onClick={retry}>{t('practice.retry')}</button>}</div>}
     </div>

@@ -64,8 +64,6 @@ jobs:
       SENSA_RELEASE_SHA: ${{ needs.gate.outputs.release_sha }}
       VITE_SENSA_MODE: production
       SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
-      VITE_SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
-      VITE_SENSA_YOUGLISH_ORIGIN: ${{ vars.SENSA_YOUGLISH_ORIGIN }}
       VITE_SENSA_SUPPORT_URL: ${{ vars.SENSA_SUPPORT_URL }}
       VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
@@ -127,7 +125,6 @@ jobs:
     env:
       SENSA_RELEASE_SHA: ${{ needs.gate.outputs.release_sha }}
       SENSA_WEB_ORIGIN: ${{ vars.SENSA_WEB_ORIGIN }}
-      VITE_SENSA_YOUGLISH_ORIGIN: ${{ vars.SENSA_YOUGLISH_ORIGIN }}
       VITE_SENSA_SUPPORT_URL: ${{ vars.SENSA_SUPPORT_URL }}
       VITE_SENSA_API_URL: ${{ vars.VITE_SENSA_API_URL }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
@@ -152,10 +149,9 @@ jobs:
           node --input-type=module <<'JS'
           const env=process.env,project=env.SUPABASE_PROJECT_REF??'';
           if(env.CLOUDFLARE_WORKER_NAME!=='sensa-standalone')throw Error('Cloudflare Worker target mismatch');
-          let api,player;try{api=new URL(env.VITE_SENSA_API_URL);player=new URL(env.VITE_SENSA_YOUGLISH_ORIGIN);}catch{throw Error('Production API and player URLs required');}
+          let api;try{api=new URL(env.VITE_SENSA_API_URL);}catch{throw Error('Production API URL required');}
           if(!/^[a-z0-9]{20}$/.test(project)||api.hostname!==`${project}.supabase.co`||api.pathname.replace(/\/$/,'')!=='/functions/v1/sensa-api')throw Error('Supabase target mismatch');
-          if(player.protocol!=='https:'||player.pathname!=='/'||player.origin===env.SENSA_WEB_ORIGIN)throw Error('Dedicated YouGlish origin mismatch');
-          console.log('Verified production Supabase and Cloudflare targets, including the isolated player origin.');
+          console.log('Verified production Supabase and Cloudflare targets.');
           JS
       - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
         with:

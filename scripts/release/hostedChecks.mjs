@@ -55,14 +55,3 @@ export async function verifyHostedApi(web,endpoint){
  );
  if((await invalidSetup.json()).code!=='agent_setup_invalid')throw Error('Agent setup exchange boundary failed');
 }
-
-export async function verifyHostedYouglishPlayer(web,origin){
- const player=new URL(origin);
- if(player.protocol!=='https:'||player.pathname!=='/'||player.origin===web.origin)throw Error('Dedicated YouGlish HTTPS origin required');
- const response=await fetchEventually(new URL('/youglish-player.html',player),{redirect:'error'},value=>value.ok,'YouGlish player shell unavailable');
- const body=await response.text(),csp=response.headers.get('content-security-policy')??'';
- if(!body.includes('Sensa YouGlish Player'))throw Error('Unexpected YouGlish player shell');
- if(!csp.includes('script-src')||!csp.includes('https://youglish.com')||!csp.includes(`frame-ancestors ${web.origin}`))throw Error('YouGlish player isolation policy missing');
- if((response.headers.get('x-frame-options')??'').toUpperCase()==='DENY')throw Error('YouGlish player inherited the parent frame denial');
- if(!/no-store/.test(response.headers.get('cache-control')??''))throw Error('YouGlish player cache policy missing');
-}

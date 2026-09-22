@@ -241,10 +241,9 @@ purpose 唯一允许的工具是读取本机已有意义，用于必要的复用
 每账号最多 1024 条、响应缓存最多 8 MiB；账号删除和每小时 retention 都会覆盖。参考词典数据源
 （`api.wiktapi.dev`、`api.dictionaryapi.dev`）与浏览器设备语音不是模型提供方，不在本边界内。
 
-YouGlish 只在 `VITE_SENSA_YOUGLISH_ORIGIN` 指定的独立播放器 origin 运行。生产构建单独产出
-`youglish-player.html`，播放器 CSP 只允许精确的 Web origin 嵌入；父页 CSP 只允许精确的播放器 origin。
-双方同时核对 `window`、origin 和严格消息 schema，仅传递查询词、语言与播放控制。主业务页面不加载
-YouGlish 脚本，播放器失败不会阻止个人库保存或学习。
+YouGlish 使用官方 Widget 直接嵌入真实语境聆听页面；提供方脚本只在用户明确打开该页面时按需加载，
+不进入 App Shell 启动路径，也不需要独立播放器站点。Widget 按目标表达和目标语言检索公开片段，结果
+不构成 Sense 判定或学习事实；提供方不可用时只影响该练习页面，不阻止个人库保存或其他学习流程。
 
 资源 schema、生成指导和基础展示字段集中在 `packages/contracts/src/sensa/learningResourceDefinitions.ts`；
 轻量 Demand 与两阶段用途组合由 `lightweightLearningContent.ts` 声明。生成循环消费请求中的资源合同，
