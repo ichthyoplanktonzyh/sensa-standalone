@@ -1,7 +1,7 @@
 import type { SensaContextImage } from '@sensa/contracts/sensa';
 import type {
   PersonalMeaningLearningSource,
-} from '../../data/library/personalLearningSource';
+} from '../../contentSupply/system';
 import type { MeaningJourneyRecord, SenseRegistryState } from './store';
 
 const bindingBelongsToConstructionAlignment = (

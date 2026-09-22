@@ -1,6 +1,13 @@
-import type { LearningPackageDescriptor } from '@sensa/contracts/sensa';
+import type {
+  LearningPackageDescriptor,
+  SensaFormalPinnedLanguageContext,
+} from '@sensa/contracts/sensa';
 
 import type { InstalledPackage } from '../../data/library/packageRecords';
+import type {
+  ContentProvisioningTask,
+  PersonalMeaningLearningSource,
+} from '../provisioning/contracts';
 import { packageKey } from '../../data/library/packageRecords';
 import { observeLibrary, type Table } from '../../data/library/store';
 
@@ -22,6 +29,11 @@ export interface ContentSupplyCatalogRefresh {
   readonly status: 'cached' | 'current' | 'updated';
 }
 
+export interface ContentProvisioningControl {
+  readonly tasks: readonly ContentProvisioningTask[];
+  readonly preparationAvailable: boolean;
+}
+
 export type ContentSupplyCommand =
   | Readonly<{ kind: 'rehydrate'; signal?: AbortSignal }>
   | Readonly<{ kind: 'refresh_catalog'; force?: boolean; signal?: AbortSignal }>
@@ -31,16 +43,43 @@ export type ContentSupplyCommand =
       signal: AbortSignal;
       onProgress?: (fraction: number) => void;
     }>
-  | Readonly<{ kind: 'import_package'; bytes: Uint8Array; signal?: AbortSignal }>;
+  | Readonly<{ kind: 'import_package'; bytes: Uint8Array; signal?: AbortSignal }>
+  | Readonly<{
+      kind: 'prepare_materialization';
+      taskId: string;
+      source: PersonalMeaningLearningSource;
+      signal: AbortSignal;
+    }>
+  | Readonly<{
+      kind: 'stop_provisioning';
+      operationId: string;
+      taskId: string;
+    }>
+  | Readonly<{
+      kind: 'revise_provisioning';
+      operationId: string;
+      taskId: string;
+      source: PersonalMeaningLearningSource;
+      languageContext: SensaFormalPinnedLanguageContext;
+      useContext: boolean;
+    }>;
 
 export type ContentSupplyCommandResult<Command extends ContentSupplyCommand> =
   Command['kind'] extends 'rehydrate' ? ContentSupplyRehydration
     : Command['kind'] extends 'refresh_catalog' ? ContentSupplyCatalogRefresh
-      : InstalledPackage;
+      : Command['kind'] extends 'prepare_materialization' ? void
+        : Command['kind'] extends 'stop_provisioning' ? boolean
+          : Command['kind'] extends 'revise_provisioning' ? ContentProvisioningTask
+            : InstalledPackage;
 
-export type ContentSupplyQuery = Readonly<{ kind: 'workspace' }>;
+export type ContentSupplyQuery =
+  | Readonly<{ kind: 'workspace' }>
+  | Readonly<{ kind: 'provisioning_control' }>
+  | Readonly<{ kind: 'provisioning_tasks' }>;
 export type ContentSupplyQueryResult<Query extends ContentSupplyQuery> =
-  Query['kind'] extends 'workspace' ? ContentSupplyWorkspace : never;
+  Query['kind'] extends 'workspace' ? ContentSupplyWorkspace
+    : Query['kind'] extends 'provisioning_control' ? ContentProvisioningControl
+      : readonly ContentProvisioningTask[];
 
 /**
  * Stable Content Supply System deep Module interface.
@@ -61,6 +100,8 @@ export interface ContentSupplySystem {
 
 const queryTables = {
   workspace: ['packageCache', 'packageInstallations', 'meta'],
+  provisioning_control: ['personalLearning', 'providers', 'settings'],
+  provisioning_tasks: ['personalLearning'],
 } as const satisfies Record<ContentSupplyQuery['kind'], readonly Table[]>;
 
 export const contentSupplyArtifactKey = packageKey;

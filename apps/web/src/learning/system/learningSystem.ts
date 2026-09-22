@@ -1,8 +1,7 @@
 import type { SensaFormalPinnedLanguageContext } from '@sensa/contracts/sensa';
 
 import type { LearningEvent } from '../../data/library/learning';
-import type { PersonalLearning } from '../../data/library/personalLearning';
-import type { PersonalMeaningLearningSource } from '../../data/library/personalLearningSource';
+import type { PersonalMeaningLearningSource } from '../../contentSupply/provisioning/contracts';
 import { observeLibrary, type Table } from '../../data/library/store';
 import type { HomeLearningStorageProjection, HomeLearningTargetRecord } from '../../data/library/homeLearningRecords';
 import type { LocalLearningAction, LocalLearningRun, LocalLearningTarget } from '../runtime/localProtocol';
@@ -13,7 +12,10 @@ export type LearningTargetView = LocalLearningTarget;
 export type LearningRunView = LocalLearningRun;
 export type LearningAction = LocalLearningAction;
 export type LearningPolicy = LearningPolicyId;
-export type PersonalLearningView = PersonalLearning;
+export interface PersonalLearningEnrollment {
+  readonly provisioningTaskId: string;
+  readonly provisioningStatus: 'waiting' | 'ready';
+}
 
 export interface LearningOverview {
   targets: LocalLearningTarget[];
@@ -35,12 +37,6 @@ export interface HomeLearningProjection {
   readonly availablePackageKeys: ReadonlySet<string>;
   readonly activeRun: HomeLearningStorageProjection['activeRun'];
   readonly dailyLimit: number | undefined;
-}
-
-export interface PersonalLearningControl {
-  readonly tasks: PersonalLearning[];
-  readonly targets: LocalLearningTarget[];
-  readonly preparationAvailable: boolean;
 }
 
 export type LearningCommand =
@@ -106,50 +102,26 @@ export type LearningCommand =
       source: PersonalMeaningLearningSource;
       languageContext: SensaFormalPinnedLanguageContext;
       useContext: boolean;
-    }>
-  | Readonly<{
-      kind: 'stop_personal_preparation';
-      operationId: string;
-      taskId: string;
-    }>
-  | Readonly<{
-      kind: 'prepare_personal';
-      taskId: string;
-      source: PersonalMeaningLearningSource;
-      signal: AbortSignal;
-    }>
-  | Readonly<{
-      kind: 'update_personal_resources';
-      operationId: string;
-      taskId: string;
-      source: PersonalMeaningLearningSource;
-      languageContext: SensaFormalPinnedLanguageContext;
-      useContext: boolean;
     }>;
 
 export type LearningCommandResult<Command extends LearningCommand> =
   Command['kind'] extends 'enroll_package' ? string[]
     : Command['kind'] extends 'start' | 'act' | 'continue' ? LocalLearningRun
       : Command['kind'] extends 'select_policy' ? LocalLearningTarget
-        : Command['kind'] extends 'enroll_personal' | 'update_personal_resources' ? PersonalLearning
-          : Command['kind'] extends 'prepare_personal' ? void
-            : boolean;
+        : Command['kind'] extends 'enroll_personal' ? PersonalLearningEnrollment
+          : boolean;
 
 export type LearningQuery =
   | Readonly<{ kind: 'overview' }>
   | Readonly<{ kind: 'state' }>
   | Readonly<{ kind: 'targets' }>
-  | Readonly<{ kind: 'home'; languageRouteId: string }>
-  | Readonly<{ kind: 'personal_tasks' }>
-  | Readonly<{ kind: 'personal_control' }>;
+  | Readonly<{ kind: 'home'; languageRouteId: string }>;
 
 export type LearningQueryResult<Query extends LearningQuery> =
   Query['kind'] extends 'overview' ? LearningOverview
     : Query['kind'] extends 'state' ? LearningState
       : Query['kind'] extends 'targets' ? LocalLearningTarget[]
-        : Query['kind'] extends 'home' ? HomeLearningProjection
-        : Query['kind'] extends 'personal_tasks' ? PersonalLearning[]
-          : PersonalLearningControl;
+        : HomeLearningProjection;
 
 /**
  * Stable Learning System deep Module interface.
@@ -177,8 +149,6 @@ const queryTables = {
   state: ['learningTargets', 'learningRuns', 'learningEvents', 'settings', 'meta'],
   targets: ['learningTargets'],
   home: ['packageCache', 'packageInstallations', 'learningTargets', 'learningRuns', 'settings', 'meta'],
-  personal_tasks: ['personalLearning'],
-  personal_control: ['learningTargets', 'personalLearning', 'providers', 'settings'],
 } as const satisfies Record<LearningQuery['kind'], readonly Table[]>;
 
 export const learningSystem: LearningSystem = {

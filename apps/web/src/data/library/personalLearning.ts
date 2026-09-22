@@ -4,24 +4,26 @@ import {stableUuid} from '@sensa/learning-kernel';
 import {learningResourceDefinition,makeRequest,validateBundle,modelFacts,independentReviewSystem,requestLanguages,SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,canonicalConsumerJson,sensaFormalPinnedLanguageContextSchema,type SensaContentGenerationRequest,type SensaMaterialCandidateBundle,type ContentReviewer,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {command,readLibrary,type LibraryTransaction} from './store';
 import {learningOwner} from './libraryOwnership';
-import {learningCommand} from './learningAdmission';
+import {admitLearningSystemTransaction} from './learningAdmission';
+import {admitContentSupplyTransaction,contentSupplyCommand} from './contentSupplyAdmission';
 import {commitPersonalMaterial,type LocalLearningTarget} from './learning';
 import {
  personalLearningSourceKey,
  personalLearningSourceRevision,
+ type ContentProvisioningTask,
  type PersonalMeaningLearningReference,
  type PersonalMeaningLearningSource,
-} from './personalLearningSource';
+} from '../../contentSupply/provisioning/contracts';
 import {defaultSensaProvider,type Provider,type ProviderSettings} from './providers';
 import {complete,digest} from './transport';
 import {requireLanguageRouteContext} from './language';
-export type PersonalLearning={replacing?:boolean;id:string;source:PersonalMeaningLearningReference;targetId:string;curriculumMembershipId:string;languageContext:SensaFormalPinnedLanguageContext;planRevision:string;useContext:boolean;status:'waiting'|'generating'|'reviewing'|'failed'|'rejected'|'stopped'|'ready';attemptId:string|null;leaseUntil:number;notice:string;createdAt:string};
+export type PersonalLearning=ContentProvisioningTask;
 export type ContentAttempt={generationCheckpoint?:ContentAgentCheckpoint;generationSteps?:ContentGenerationStep[];id:string;taskId:string;createdAt:string;contentProvider:Provider;reviewProvider:Provider|null;request:SensaContentGenerationRequest|null;bundle:SensaMaterialCandidateBundle|null;review:Awaited<ReturnType<ContentReviewer>>|null;validation:Awaited<ReturnType<typeof validateBundle>>|null;status:string;resumedFrom:string|null;grant:{id:string;contextDigest:string;recipients:string[]}|null};
+const contentSupplyLearningCommand=<T>(operation:Parameters<typeof command>[0],work:(tx:LibraryTransaction)=>Promise<T>)=>command(operation,async tx=>{const result=await work(tx);await admitContentSupplyTransaction(tx,operation);await admitLearningSystemTransaction(tx,operation);return result;});
 export const personalLearningSnapshot=()=>readLibrary(tx=>tx.all<PersonalLearning>('personalLearning'));
 /** The UI controller consumes one transactionally coherent preparation view. */
 export const personalLearningControlSnapshot=()=>readLibrary(async tx=>{
  const tasks=await tx.all<PersonalLearning>('personalLearning');
- const targets=await tx.all<LocalLearningTarget>('learningTargets');
  const settings=await tx.get<ProviderSettings>('settings','providers')??{revision:0,assignments:{}};
  const providers=[defaultSensaProvider,...await tx.all<Provider>('providers')];
  const selected=(purpose:'content'|'review')=>{
@@ -30,12 +32,12 @@ export const personalLearningControlSnapshot=()=>readLibrary(async tx=>{
   if(!provider)throw new Error('localFlow.selectProvider');
   return provider;
  };
- return {tasks,targets,providers:{content:selected('content'),review:settings.modelReviewEnabled===true?selected('review'):null}};
+ return {tasks,providers:{content:selected('content'),review:settings.modelReviewEnabled===true?selected('review'):null}};
 });
 const currentSource=(task:PersonalLearning,source:PersonalMeaningLearningSource)=>{
  if(canonicalConsumerJson(task.source)!==canonicalConsumerJson(source.reference))throw new Error('localFlow.meaningChanged');
 };
-export async function enrollPersonal(operationId:string,source:PersonalMeaningLearningSource,languageContext:SensaFormalPinnedLanguageContext,useContext:boolean){return command({id:operationId,kind:'personal.enroll',input:{source:source.reference,languageContext,useContext}},async tx=>{
+export async function enrollPersonal(operationId:string,source:PersonalMeaningLearningSource,languageContext:SensaFormalPinnedLanguageContext,useContext:boolean){return contentSupplyCommand({id:operationId,kind:'personal.enroll',input:{source:source.reference,languageContext,useContext}},async tx=>{
  const owner=await learningOwner(tx),context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);
  if(source.targetLanguageTag!==context.targetLanguageTag)throw new Error('localFlow.routeLanguageMismatch');
  const sourceKey=personalLearningSourceKey(source.reference),taskId=stableUuid(`sensa-personal-learning:${sourceKey}:${context.languageRouteId}`),existing=await tx.get<PersonalLearning>('personalLearning',taskId);if(existing){currentSource(existing,source);return existing;}
@@ -54,11 +56,11 @@ async function active(tx:LibraryTransaction,id:string,attemptId:string,source:Pe
  if(!task||task.attemptId!==attemptId||!['generating','reviewing'].includes(task.status)||task.leaseUntil<Date.now())throw new Error('localFlow.preparationExpired');
  currentSource(task,source);await checkReviewPolicy(tx,review);await checkProvider(tx,'content',content);if(review)await checkProvider(tx,'review',review);return {owner,task};
 }
-export async function stopPersonalPreparation(operationId:string,id:string){return command({id:operationId,kind:'personal.stop',input:{id}},async tx=>{await learningOwner(tx);const task=await tx.get<PersonalLearning>('personalLearning',id);if(task&&task.status!=='ready'){task.status='stopped';task.leaseUntil=0;task.notice='localFlow.preparationStopped';tx.put('personalLearning',id,task);if(task.attemptId){const attempt=await tx.get<ContentAttempt>('contentAttempts',task.attemptId);if(attempt){attempt.status='stopped';tx.put('contentAttempts',attempt.id,attempt);}}}return true;});}
+export async function stopPersonalPreparation(operationId:string,id:string){return contentSupplyCommand({id:operationId,kind:'personal.stop',input:{id}},async tx=>{await learningOwner(tx);const task=await tx.get<PersonalLearning>('personalLearning',id);if(task&&task.status!=='ready'){task.status='stopped';task.leaseUntil=0;task.notice='localFlow.preparationStopped';tx.put('personalLearning',id,task);if(task.attemptId){const attempt=await tx.get<ContentAttempt>('contentAttempts',task.attemptId);if(attempt){attempt.status='stopped';tx.put('contentAttempts',attempt.id,attempt);}}}return true;});}
 /** Explicit invocation only. Reloading reads saved states and never starts a model request. */
 export async function preparePersonal(id:string,source:PersonalMeaningLearningSource,contentProvider:Provider,reviewProvider:Provider|null,signal:AbortSignal,onSaved:()=>void){
  const attemptId=crypto.randomUUID();
- const begun=await command({id:attemptId,kind:'personal.prepare',input:{id,contentProvider,reviewProvider}},async tx=>{
+ const begun=await contentSupplyCommand({id:attemptId,kind:'personal.prepare',input:{id,contentProvider,reviewProvider}},async tx=>{
   const owner=await learningOwner(tx),task=await tx.get<PersonalLearning>('personalLearning',id);if(!task)throw new Error('localFlow.enrollFirst');currentSource(task,source);
   await checkReviewPolicy(tx,reviewProvider);await checkProvider(tx,'content',contentProvider);if(reviewProvider)await checkProvider(tx,'review',reviewProvider);
   if(task.status==='ready')return null;
@@ -73,7 +75,7 @@ export async function preparePersonal(id:string,source:PersonalMeaningLearningSo
   task.attemptId=attemptId;task.status=reuse?.bundle?'reviewing':'generating';task.leaseUntil=Date.now()+300000;task.notice='';tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);return {task,attempt,owner};
  });if(!begun)return;onSaved();
  const runSignal=AbortSignal.any([signal,AbortSignal.timeout(280000)]);
- const save=async(work:(tx:LibraryTransaction,task:PersonalLearning,attempt:ContentAttempt)=>Promise<void>)=>learningCommand({id:crypto.randomUUID(),kind:'personal.progress',input:{id,attemptId,nonce:crypto.randomUUID()}},async tx=>{const {task}=await active(tx,id,attemptId,source,contentProvider,reviewProvider);if(runSignal.aborted)throw new Error('localFlow.requestStopped');const attempt=(await tx.get<ContentAttempt>('contentAttempts',attemptId))!;await work(tx,task,attempt);tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);});
+ const save=async(work:(tx:LibraryTransaction,task:PersonalLearning,attempt:ContentAttempt)=>Promise<void>)=>contentSupplyLearningCommand({id:crypto.randomUUID(),kind:'personal.progress',input:{id,attemptId,nonce:crypto.randomUUID()}},async tx=>{const {task}=await active(tx,id,attemptId,source,contentProvider,reviewProvider);if(runSignal.aborted)throw new Error('localFlow.requestStopped');const attempt=(await tx.get<ContentAttempt>('contentAttempts',attemptId))!;await work(tx,task,attempt);tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);});
  try{
   let {request,bundle,grant}=begun.attempt;const m=source;
   if(!request||!bundle){
@@ -97,11 +99,11 @@ export async function preparePersonal(id:string,source:PersonalMeaningLearningSo
   const checked=await validateBundle(request,bundle,review,new Date());
   await save(async(tx,task,a)=>{a.review=review;a.validation=checked;task.leaseUntil=0;if(checked.content){await commitPersonalMaterial(tx,begun.owner,source,task.languageContext,checked.content,attemptId,grant?.id??null,task.replacing);task.replacing=false;task.status='ready';a.status='ready';task.notice='localFlow.materialReady';}else{task.status='rejected';a.status='rejected';task.notice=review?'localFlow.reviewRejected'+review.reason:'localFlow.validationRejected';}});onSaved();
  }catch(error){
-  await command({id:crypto.randomUUID(),kind:'personal.fail',input:{id,attemptId}},async tx=>{const task=await tx.get<PersonalLearning>('personalLearning',id);if(task?.attemptId===attemptId&&['generating','reviewing'].includes(task.status)){task.status='failed';task.leaseUntil=0;task.notice=signal.aborted?'localFlow.preparationInterrupted':error instanceof Error&&error.message.startsWith('localFlow.')?error.message:'localFlow.preparationFailed';tx.put('personalLearning',id,task);const a=await tx.get<ContentAttempt>('contentAttempts',attemptId);if(a){a.status='failed';tx.put('contentAttempts',attemptId,a);}}return null;});onSaved();throw error;
+  await contentSupplyCommand({id:crypto.randomUUID(),kind:'personal.fail',input:{id,attemptId}},async tx=>{const task=await tx.get<PersonalLearning>('personalLearning',id);if(task?.attemptId===attemptId&&['generating','reviewing'].includes(task.status)){task.status='failed';task.leaseUntil=0;task.notice=signal.aborted?'localFlow.preparationInterrupted':error instanceof Error&&error.message.startsWith('localFlow.')?error.message:'localFlow.preparationFailed';tx.put('personalLearning',id,task);const a=await tx.get<ContentAttempt>('contentAttempts',attemptId);if(a){a.status='failed';tx.put('contentAttempts',attemptId,a);}}return null;});onSaved();throw error;
  }
 }
 
-export async function requestPersonalResourceUpdate(operationId:string,taskId:string,source:PersonalMeaningLearningSource,languageContext:SensaFormalPinnedLanguageContext,useContext:boolean){return command({id:operationId,kind:'personal.update-resources',input:{taskId,source:source.reference,languageContext,useContext}},async tx=>{
+export async function requestPersonalResourceUpdate(operationId:string,taskId:string,source:PersonalMeaningLearningSource,languageContext:SensaFormalPinnedLanguageContext,useContext:boolean){return contentSupplyCommand({id:operationId,kind:'personal.update-resources',input:{taskId,source:source.reference,languageContext,useContext}},async tx=>{
  await learningOwner(tx);const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext);await requireLanguageRouteContext(tx,context);
  const task=await tx.get<PersonalLearning>('personalLearning',taskId);if(!task)throw Error('localFlow.enrollFirst');
  if(['generating','reviewing'].includes(task.status)&&task.leaseUntil>Date.now())throw Error('localFlow.preparationBusy');

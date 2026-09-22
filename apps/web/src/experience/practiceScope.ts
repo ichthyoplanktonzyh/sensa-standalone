@@ -1,5 +1,5 @@
 import type { SensaExpressionType } from '@sensa/contracts/sensa';
-import type { PersonalMeaningLearningSource } from '../data/library/personalLearningSource';
+import type { PersonalMeaningLearningSource } from '../contentSupply/system';
 import type { LocalLearningTarget } from '../learning/runtime/localProtocol';
 
 export const PRACTICE_SCOPE_RESOLVER_VERSION = 'practice-scope-resolver-v2';

@@ -6,7 +6,7 @@ import {dirname,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {stableUuid} from '@sensa/learning-kernel';
 import {bookReleaseBundleSchema,bookReleaseDescriptorSchema,learningContentRegistrySchema,sensaSenseSemanticSpecSchema,type SensaSenseSemanticSpec,sensaLightweightExpressionSnapshotSchema,learningReferenceInputSchema} from '@sensa/contracts/sensa';
-import {provisionLightweightInitialContent} from '../../apps/web/src/learning/runtime/lightweightInitialContent.ts';
+import {provisionLightweightInitialContent} from '../../apps/web/src/contentSupply/provisioning/lightweightInitialContent.ts';
 import {createAuthoredMediaPackager,type AuthoredMediaInput,type AuthoredMediaReference} from './authoredMedia.mts';
 
 type Source={

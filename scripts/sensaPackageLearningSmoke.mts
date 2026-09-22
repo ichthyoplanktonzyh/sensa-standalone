@@ -7,7 +7,7 @@ import {LIGHTWEIGHT_EXPERIENCE_RECALL_STEP,LIGHTWEIGHT_EXPRESSION_REVEAL_STEP,lo
 import assert from 'node:assert/strict';
 import {canonicalJsonDigest,stableUuid} from '@sensa/learning-kernel';
 import {defaultSensaLanguageRoute,librarySyncTables,sensaPinnedLanguageContext,sensaInitialLearningCompletionSchema,sensaSchedulingHandoffSchema,sensaMemoryOutcomeSnapshotSchema,sensaSchedulingDecisionSchema,sensaRelearningCompletionSchema,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
-import {provisionLightweightInitialContent} from '../apps/web/src/learning/runtime/lightweightInitialContent.ts';
+import {provisionLightweightInitialContent} from '../apps/web/src/contentSupply/provisioning/lightweightInitialContent.ts';
 import {openLibrary,command,readLibrary,readLocalLibraryRevision,writeLibraryCache,observeLibrary,LibraryTransaction} from '../apps/web/src/data/library/store.ts';
 import {sha256} from '../apps/web/src/data/library/packages.ts';
 import {contentSupplySystem} from '../apps/web/src/contentSupply/system/index.ts';

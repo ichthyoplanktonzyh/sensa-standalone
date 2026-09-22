@@ -23,7 +23,7 @@ const compiled=await build({
     contents:[
       `export {localTargetView} from './apps/web/src/experience/library/localTargetView';`,
       `export {pendingPersonalTargetView} from './apps/web/src/experience/library/PersonalLearningControls';`,
-      `export {provisionLightweightInitialContent} from './apps/web/src/learning/runtime/lightweightInitialContent';`,
+      `export {provisionLightweightInitialContent} from './apps/web/src/contentSupply/provisioning/lightweightInitialContent';`,
     ].join('\n'),
     resolveDir:process.cwd(),
   },

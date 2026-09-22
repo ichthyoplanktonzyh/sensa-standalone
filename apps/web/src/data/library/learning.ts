@@ -1,14 +1,19 @@
-import {materialForNextStep} from '../../learning/runtime/resourceSupplement';
+import {materialForNextStep} from '../../contentSupply/provisioning/hybridMaterialization';
+import {
+  materializeOnDemandContent,
+  materializePublishedEntry,
+} from '../../contentSupply/provisioning/materialization';
+import type {PersonalMeaningLearningSource} from '../../contentSupply/provisioning/contracts';
 import {inspectLocalTargetReadiness,localExecutionForRun,learningRuntimeCoordinator,requireLocalTargetReadiness,type LocalLearningAction} from '../../learning/runtime/runtimeCoordinator';
 import {localTargetPolicy} from '../../learning/runtime/localRuntimeBindings';
 import {learningPolicyProfileRegistry,type LearningPolicyId} from '../../learning/runtime/policyProfiles';
-import {stableUuid,canonicalJsonDigest} from '@sensa/learning-kernel';
-import {sensaFormalPinnedLanguageContextSchema,sensaLearningMaterializationSnapshotSchema,sensaLearningConnectionContractVersion,LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION,learningBundleBookId,learningBundleBookVersionId,learningBundleVersionLabel,learningBundleContentReleaseId,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
+import {stableUuid} from '@sensa/learning-kernel';
+import {sensaFormalPinnedLanguageContextSchema,learningBundleBookId,learningBundleBookVersionId,learningBundleVersionLabel,learningBundleContentReleaseId,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {readLibrary,requestCloudCheckpoint,type LibraryTransaction,type LibraryIdentity} from './store';
 import {learningCommand} from './learningAdmission';
 import {learningOwner} from './libraryOwnership';
 import type {InstalledPackage} from './packageRecords';
-import {validateLightweightInitialMaterialization,type LightweightInitialLearningMaterialization} from '../../learning/runtime/lightweightInitialContent';
+import {validateLightweightInitialMaterialization,type LightweightInitialLearningMaterialization} from '../../contentSupply/provisioning/lightweightInitialContent';
 import {
   createLocalProtocolState,
   createLocalProtocolProgress,
@@ -137,10 +142,10 @@ export async function enrollPackage(operationId:string,key:string,languageContex
  const ids:string[]=[];
  for(const e of pack.bundle.entries){
   const id=stableUuid(`sensa-learning-target:${owner.learnerId}:${e.senseVersionId}:${e.bindingVersionId}`);ids.push(id);
-  const snapshot=sensaLearningMaterializationSnapshotSchema.parse({contractVersion:sensaLearningConnectionContractVersion,learningMaterializationId:stableUuid(`sensa-material:${owner.learnerId}:${key}:${id}`),learnerUserId:owner.learnerId,learningTargetId:id,protocolPurpose:'initial_learning',provisioningPath:'published',contentSchemaVersion:LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION,contentPayload:e.content,contentDigest:canonicalJsonDigest(e.content),validationStatus:'validated',validatorVersion:'sensa-web-package-v1',provenance:{bookId,bookVersionId,contentReleaseId,packageVersion,packageDigest:pack.digest,senseId:e.senseId,senseVersionId:e.senseVersionId,bindingId:e.bindingId,bindingVersionId:e.bindingVersionId},personalAnchorUseGrantIds:[],createdAt:now});
+  const material=materializePublishedEntry({learnerUserId:owner.learnerId,learningTargetId:id,packageKey:key,installedPackage:pack,entry:e,createdAt:now});
+  const snapshot=material.snapshot;
   const profileId=e.assurancePackageKey?'high_assurance':'lightweight';
   const source={kind:'sense_learning_package',bookId,bookVersionId,contentReleaseId,packageVersion,packageDigest:pack.digest};
-  const material={snapshot,content:e.content};
   const existing=await tx.get<LocalLearningTarget>('learningTargets',id);
   if(existing&&(existing.identity.learnerUserId!==owner.learnerId||existing.identity.senseVersionId!==e.senseVersionId||existing.identity.bindingVersionId!==e.bindingVersionId||existing.targetLanguageTag!==pack.bundle.targetLanguage||existing.expression!==e.expression))throw new Error('localFlow.invalidTarget');
   const membership=curriculumMembership({operationId,targetId:id,sourceKey:key,languageContext:context,sourceKind:'sense_learning_package',provenance:source,packageKey:key,assurancePackageKey:e.assurancePackageKey,material,at:snapshot.createdAt});
@@ -277,14 +282,13 @@ export async function continueLearning(operationId:string,runId:string,targetId:
 }
 
 /** The same runtime target is committed only after independent material validation. */
-export async function commitPersonalMaterial(tx:LibraryTransaction,owner:LibraryIdentity,source:import('./personalLearningSource').PersonalMeaningLearningSource,languageContext:SensaFormalPinnedLanguageContext,content:LightweightInitialLearningMaterialization['content'],attemptId:string,grantId:string|null,replace=false){
+export async function commitPersonalMaterial(tx:LibraryTransaction,owner:LibraryIdentity,source:PersonalMeaningLearningSource,languageContext:SensaFormalPinnedLanguageContext,content:LightweightInitialLearningMaterialization['content'],attemptId:string,grantId:string|null,replace=false){
  const {reference}=source,id=stableUuid(`sensa-learning-target:${owner.learnerId}:${reference.senseVersionId}:${reference.bindingVersionId}`);
  const existing=await tx.get<LocalLearningTarget>('learningTargets',id);
  const now=new Date().toISOString();
- const snapshot=sensaLearningMaterializationSnapshotSchema.parse({contractVersion:sensaLearningConnectionContractVersion,learningMaterializationId:stableUuid(`sensa-personal-material:${attemptId}`),learnerUserId:owner.learnerId,learningTargetId:id,protocolPurpose:'initial_learning',provisioningPath:'on_demand',contentSchemaVersion:LIGHTWEIGHT_INITIAL_MATERIALIZATION_SCHEMA_VERSION,contentPayload:content,contentDigest:canonicalJsonDigest(content),validationStatus:'validated',validatorVersion:'sensa-web-content-v1',provenance:{personalMeaningId:reference.personalMeaningId,personalMeaningRevisionId:reference.personalMeaningRevisionId,alignmentBasisReferenceId:reference.alignmentBasisReferenceId,senseId:reference.senseId,senseVersionId:reference.senseVersionId,bindingId:reference.bindingId,bindingVersionId:reference.bindingVersionId,attemptId},personalAnchorUseGrantIds:grantId?[grantId]:[],createdAt:now});
  const context=sensaFormalPinnedLanguageContextSchema.parse(languageContext),targetLanguageTag=source.targetLanguageTag;
  if(targetLanguageTag!==context.targetLanguageTag)throw new Error('localFlow.routeLanguageMismatch');
- const material={snapshot,content};validateLightweightInitialMaterialization(material);
+ const material=materializeOnDemandContent({learnerUserId:owner.learnerId,learningTargetId:id,source,content,attemptId,personalAnchorUseGrantId:grantId,createdAt:now});
  const membershipId=stableUuid(`local-curriculum-membership:${id}:${context.languageRouteId}:personal_meaning_alignment:${reference.personalMeaningAlignmentId}`);
  const previous=existing?.curriculumMemberships.find(candidate=>candidate.id===membershipId);
  if(existing&&previous&&!replace)return existing;

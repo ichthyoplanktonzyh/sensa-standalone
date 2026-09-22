@@ -120,6 +120,35 @@ export const executeContentSupplyCommand = async (command: ContentSupplyCommand)
       const { installPackage } = await import('../../data/library/packages');
       return installPackage(command.bytes, undefined, command.signal);
     }
+    case 'prepare_materialization': {
+      const {
+        personalLearningControlSnapshot,
+        preparePersonal,
+      } = await import('../../data/library/personalLearning');
+      const { providers } = await personalLearningControlSnapshot();
+      return preparePersonal(
+        command.taskId,
+        command.source,
+        providers.content,
+        providers.review,
+        command.signal,
+        () => {},
+      );
+    }
+    case 'stop_provisioning': {
+      const { stopPersonalPreparation } = await import('../../data/library/personalLearning');
+      return stopPersonalPreparation(command.operationId, command.taskId);
+    }
+    case 'revise_provisioning': {
+      const { requestPersonalResourceUpdate } = await import('../../data/library/personalLearning');
+      return requestPersonalResourceUpdate(
+        command.operationId,
+        command.taskId,
+        command.source,
+        command.languageContext,
+        command.useContext,
+      );
+    }
   }
 };
 
@@ -127,5 +156,14 @@ export const readContentSupplyQuery = async (query: ContentSupplyQuery): Promise
   switch (query.kind) {
     case 'workspace':
       return readWorkspace();
+    case 'provisioning_tasks': {
+      const { personalLearningSnapshot } = await import('../../data/library/personalLearning');
+      return personalLearningSnapshot();
+    }
+    case 'provisioning_control': {
+      const { personalLearningControlSnapshot } = await import('../../data/library/personalLearning');
+      const snapshot = await personalLearningControlSnapshot();
+      return { tasks: snapshot.tasks, preparationAvailable: true };
+    }
   }
 };

@@ -26,8 +26,13 @@ Supply System 是产品领域划分，不与上述目录一一对应。当前 We
 呈现 adapter，`apps/web/src/data/library/learning*.ts` 是本机事务与 authority 实现，不是页面 API。
 内容发现、导入、下载、digest admission、安装与公共缓存恢复统一通过
 `apps/web/src/contentSupply/system/contentSupplySystem.ts`；页面不直接处理目录 HTTP、账号 session、ETag、
-目录缓存或 Package 存储。该 interface 单独返回 Catalog 与本机可用 Package，Learning Overview 不再夹带
-Content Supply projection；Learning 只在 enrollment/readiness 等显式交接点按 immutable Package key 使用内容。
+目录缓存或 Package 存储。该 interface 同时拥有 learner-private provisioning task 的准备、停止、修订和
+provider capability projection；`apps/web/src/contentSupply/provisioning` 统一组装并校验 Published、On-demand
+与 Hybrid 的 immutable Learning Materialization。Content Supply 的 task、attempt 与 installation 写入在本机
+事务提交前通过独立 authority admission；最终 materialization 与 Curriculum membership 的交接同时通过
+Content Supply 和 Learning 两个 authority，不能把候选内容直接写成 ready Learning state。Learning 保留
+显式 Add-to-Learning / enrollment intent，只接收 provisioning receipt 或已准入 materialization；Learning
+Overview 不夹带 Content Supply projection，恢复与 Cloud Sync 也只调用 Content Supply interface。
 `packages/learning-kernel` 只显式导出可复用的确定性纯规则和值类型，不导出 Web 持久化、Curriculum、
 协议 registry 或 UI composition。公共内容合同、校验与制作分别位于 `packages/contracts`、
 `packages/content-validator` 与 `content`。目录位置不转移领域事实所有权；页面、SQLite record、HTTP route

@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 const sourceRoot = 'apps/web/src';
 const contentSupplySystemDirectory = join(sourceRoot, 'contentSupply/system/');
 const sourceExtensions = /\.(?:ts|tsx)$/u;
-const rawContentSupplyImport = /['"][^'"]*\/data\/library\/(?:packages|packageRecords)(?:\.ts)?['"]/u;
+const rawContentSupplyImport = /['"][^'"]*\/data\/library\/(?:packages|packageRecords|personalLearning|personalLearningSource)(?:\.ts)?['"]/u;
 
 const sourceFiles = async (directory: string): Promise<string[]> => {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -36,5 +36,55 @@ assert(
   !/interface LearningOverview[\s\S]*?packages:/u.test(learningInterface),
   'Learning overview must not own the Content Supply installed-package projection',
 );
+for (const leakedIntent of [
+  'prepare_personal',
+  'stop_personal_preparation',
+  'update_personal_resources',
+  'personal_tasks',
+  'personal_control',
+]) {
+  assert(
+    !learningInterface.includes(leakedIntent),
+    `${leakedIntent} belongs to Content Supply, not the Learning System interface`,
+  );
+}
+const learningImplementation = await readFile(
+  'apps/web/src/learning/system/learningSystemImplementation.ts',
+  'utf8',
+);
+assert(
+  !learningImplementation.includes("data/library/personalLearning"),
+  'Learning must request provisioning through the Content Supply handoff port',
+);
 
-console.log('PASS: Content Supply exposes one deep application interface and keeps catalog, transfer and cache details behind it.');
+const supplyInterface = await readFile(
+  join(contentSupplySystemDirectory, 'contentSupplySystem.ts'),
+  'utf8',
+);
+for (const ownedCapability of [
+  'prepare_materialization',
+  'stop_provisioning',
+  'revise_provisioning',
+  'provisioning_control',
+]) {
+  assert(supplyInterface.includes(ownedCapability), `Content Supply must own ${ownedCapability}`);
+}
+
+const learningStore = await readFile('apps/web/src/data/library/learning.ts', 'utf8');
+assert(
+  !learningStore.includes('sensaLearningMaterializationSnapshotSchema'),
+  'Learning must consume admitted materializations instead of assembling Content Supply snapshots',
+);
+
+for (const recoveryFile of [
+  'apps/web/src/data/library/backup.ts',
+  'apps/web/src/data/library/cloudSyncService.ts',
+]) {
+  const source = await readFile(recoveryFile, 'utf8');
+  assert(
+    !source.includes("from './packages'"),
+    `${recoveryFile} must repair public artifacts through Content Supply`,
+  );
+}
+
+console.log('PASS: Content Supply owns Published, On-demand and Hybrid provisioning behind one deep interface.');

@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 const sourceRoot = 'apps/web/src';
 const learningSystemDirectory = join(sourceRoot, 'learning/system/');
 const sourceExtensions = /\.(?:ts|tsx)$/u;
-const rawLearningStoreImport = /['"][^'"]*\/data\/library\/(?:learning|personalLearning)(?:\.ts)?['"]/u;
+const rawLearningStoreImport = /['"][^'"]*\/data\/library\/learning(?:\.ts)?['"]/u;
 const kernelImport = /['"]@sensa\/learning-kernel(?:\/[^'"]*)?['"]/u;
 
 const sourceFiles = async (directory: string): Promise<string[]> => {

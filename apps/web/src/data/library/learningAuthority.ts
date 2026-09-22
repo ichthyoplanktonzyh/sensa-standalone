@@ -11,9 +11,9 @@ import {localExecutableTargetForParticipant} from '../../learning/runtime/localC
 import {assertLocalTargetMaterialIdentity,localLearningPurpose,localProtocolActiveTargetId,localProtocolOutcomePermissions,localProtocolStepId,localRunOpenPlanningInterruption,localRunTargetIds,reduceLocalProtocolAction,replayLocalProtocolRun,validateLocalProtocolResources,type LocalLearningRun,type LocalLearningTarget} from '../../learning/runtime/localProtocol';
 import {localRunBinding,localRunPolicy,localTargetPolicy} from '../../learning/runtime/localRuntimeBindings';
 import {learningPolicyProfileRegistry} from '../../learning/runtime/policyProfiles';
-import {baseContentBeforeSupplement} from '../../learning/runtime/resourceSupplement';
+import {baseContentBeforeSupplement} from '../../contentSupply/provisioning/hybridMaterialization';
 import {localExecutionForRun} from '../../learning/runtime/runtimeCoordinator';
-import {validateLightweightInitialMaterialization} from '../../learning/runtime/lightweightInitialContent';
+import {validateLightweightInitialMaterialization} from '../../contentSupply/provisioning/lightweightInitialContent';
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
 import {backupEqual} from './backupCodec';
 import type {BackupRows} from './backupValidation';

@@ -1,14 +1,11 @@
 import type {
   SensaContextImage,
   SensaExpressionType,
+  SensaFormalPinnedLanguageContext,
   SensaSenseSemanticSpec,
 } from '@sensa/contracts/sensa';
 
-/**
- * Immutable identity pinned when a Personal Meaning Alignment is explicitly
- * added to learning. It references the Personal Semantic World; it is not a
- * second Meaning record.
- */
+/** Immutable Personal Semantic World reference pinned for one provisioning task. */
 export interface PersonalMeaningLearningReference {
   personalMeaningId: string;
   personalMeaningRevisionId: string;
@@ -22,11 +19,7 @@ export interface PersonalMeaningLearningReference {
   bindingVersionId: string;
 }
 
-/**
- * Read-only, fully resolved generation input projected from authoritative
- * Personal Semantic World facts. Callers may use it for one command, but only
- * the compact `reference` is persisted on a learning task.
- */
+/** Resolved, read-only handoff from Personal Semantic World to Content Supply. */
 export interface PersonalMeaningLearningSource {
   sourceKind: 'personal_meaning_alignment';
   reference: PersonalMeaningLearningReference;
@@ -38,12 +31,38 @@ export interface PersonalMeaningLearningSource {
   };
   expression: {
     spokenForm?: string;
-    formParts?: {kind:"fixed"|"slot";text:string;constraint?:string}[];
+    formParts?: { kind: 'fixed' | 'slot'; text: string; constraint?: string }[];
     surfaceForm: string;
     expressionType: SensaExpressionType;
     languageTag: string;
   };
   semanticSpec: SensaSenseSemanticSpec;
+}
+
+export type ContentProvisioningStatus =
+  | 'waiting'
+  | 'generating'
+  | 'reviewing'
+  | 'failed'
+  | 'rejected'
+  | 'stopped'
+  | 'ready';
+
+/** Learner-private Content Supply task. It is not a Curriculum or progress record. */
+export interface ContentProvisioningTask {
+  replacing?: boolean;
+  id: string;
+  source: PersonalMeaningLearningReference;
+  targetId: string;
+  curriculumMembershipId: string;
+  languageContext: SensaFormalPinnedLanguageContext;
+  planRevision: string;
+  useContext: boolean;
+  status: ContentProvisioningStatus;
+  attemptId: string | null;
+  leaseUntil: number;
+  notice: string;
+  createdAt: string;
 }
 
 export const personalLearningSourceKey = (

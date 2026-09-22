@@ -19,7 +19,7 @@ import type {
   JourneyListItemView,
   JourneyWorldItemView,
 } from './types';
-import type { PersonalMeaningLearningSource } from '../../data/library/personalLearningSource';
+import type { PersonalMeaningLearningSource } from '../../contentSupply/system';
 
 export const useJourneyGateway = (): PersonalMeaningJourneyGateway => journeyGateway;
 

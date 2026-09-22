@@ -8,7 +8,7 @@ export { createJourneyGateway, createJourneyModules, journeyGateway } from './ga
 export type {
   PersonalMeaningLearningReference,
   PersonalMeaningLearningSource,
-} from '../../data/library/personalLearningSource';
+} from '../../contentSupply/system';
 export {
   useJourneyGateway,
   useJourneyStatus,

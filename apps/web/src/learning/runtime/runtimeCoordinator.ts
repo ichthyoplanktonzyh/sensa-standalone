@@ -15,7 +15,7 @@ import type {
 import {assertLocalTargetMaterialIdentity,localLearningPurpose,localProtocolPluginContractVersion,validateLocalProtocolResources} from './localProtocol';
 import {localExecutableTarget} from './localCurriculum';
 import {canonicalJsonDigest} from '@sensa/learning-kernel';
-import {validateLightweightInitialMaterialization} from './lightweightInitialContent';
+import {validateLightweightInitialMaterialization} from '../../contentSupply/provisioning/lightweightInitialContent';
 export type {
   LocalLearningAction,
   LocalLearningRun,

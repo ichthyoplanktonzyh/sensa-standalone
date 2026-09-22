@@ -27,7 +27,7 @@ import {
   lightweightMaterializedResourcesForRole,
   validateLightweightInitialMaterialization,
   type LightweightInitialLearningMaterialization,
-} from '../../learning/runtime/lightweightInitialContent';
+} from '../../contentSupply/provisioning/lightweightInitialContent';
 import {
   LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
   LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND,

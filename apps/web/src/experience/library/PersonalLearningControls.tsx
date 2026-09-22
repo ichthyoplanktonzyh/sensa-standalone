@@ -2,11 +2,11 @@ import {LearningResourceDetails} from '../components/learning/LearningResourceDe
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useState} from 'react';
-import type {PersonalLearningView} from '../../learning/system';
 import {
  personalLearningSourceKey,
+ type ContentProvisioningTask,
  type PersonalMeaningLearningSource,
-} from '../../data/library/personalLearningSource';
+} from '../../contentSupply/system';
 import type {usePersonalLearning} from './usePersonalLearning';
 import {setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 import {LearningTargetDetailScreen} from '../components/learning/LearningTargetDetailScreen';
@@ -35,9 +35,9 @@ export function JourneyAlignmentLearningControls({detail,alignment,c,onStart}:{d
  return <>{sources.map(source=><PersonalLearningControls key={personalLearningSourceKey(source.reference)} source={source} c={c} onStart={onStart}/>)}</>;
 }
 
-export const pendingPersonalTargetView=(task:PersonalLearningView,source:PersonalMeaningLearningSource|null)=>({targetId:task.targetId,expression:source?.expression.surfaceForm??localFlowText('expression'),targetLanguageTag:task.languageContext.targetLanguageTag,supportLanguageTag:task.languageContext.supportLanguageTag,meaning:source?.semanticSpec.coreMeaningFocus??localFlowText('semanticWorld'),example:'',partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:'personal_semantic_world' as const,sourceLabel:localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:'lightweight' as const,lightweightReadiness:{status:'preparing' as const,label:localFlowText('prepareResources'),detail:localFlowNotice(source?task.notice:'localFlow.meaningChanged')}});
+export const pendingPersonalTargetView=(task:ContentProvisioningTask,source:PersonalMeaningLearningSource|null)=>({targetId:task.targetId,expression:source?.expression.surfaceForm??localFlowText('expression'),targetLanguageTag:task.languageContext.targetLanguageTag,supportLanguageTag:task.languageContext.supportLanguageTag,meaning:source?.semanticSpec.coreMeaningFocus??localFlowText('semanticWorld'),example:'',partOfSpeech:'',expressionTypeLabel:localFlowText('expression'),sourceKind:'personal_semantic_world' as const,sourceLabel:localFlowText('semanticWorld'),runtimeSenseId:null,personalExperienceGrounding:null,policy:'lightweight' as const,lightweightReadiness:{status:'preparing' as const,label:localFlowText('prepareResources'),detail:localFlowNotice(source?task.notice:'localFlow.meaningChanged')}});
 
-export function PersonalPreparationTarget({task,c,active,onBack,onHome,onStart,onSource}:{task:PersonalLearningView;c:Controller;active:boolean;onBack:()=>void;onHome:()=>void;onStart:(id:string)=>void;onSource:()=>void}){
+export function PersonalPreparationTarget({task,c,active,onBack,onHome,onStart,onSource}:{task:ContentProvisioningTask;c:Controller;active:boolean;onBack:()=>void;onHome:()=>void;onStart:(id:string)=>void;onSource:()=>void}){
  useTranslation();
  const source=c.sourceForTask(task);
  return <LearningTargetDetailScreen active={active} target={pendingPersonalTargetView(task,source)} selectedPolicy="lightweight" fixedPolicy preparation={task.status==='rejected'||task.status==='failed'||!source?'blocked':'preparing'} committedPolicy={null} initialCompletionKind={null} reviewDue={false} relearning={false} retentionRuntimeState={null} nextReviewLabel={null} declaredMastery={false} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>{}} onOpenSource={onSource} onRefreshPreparation={()=>{}} onGoHome={onHome} onStartReview={()=>{}} onContinueRetentionRuntime={()=>{}} onContinueRuntime={()=>{}} onRevokeDeclaredMastery={()=>{}} actions={source?<PersonalLearningControls source={source} c={c} onStart={onStart}/>:<p role="alert">{localFlowText('meaningChanged')}</p>}/>;

@@ -10,7 +10,7 @@ export type {
   LearningCommandResult,
   HomeLearningProjection,
   LearningOverview,
-  PersonalLearningControl,
+  PersonalLearningEnrollment,
   LearningPolicy,
   LearningQuery,
   LearningQueryResult,
@@ -18,5 +18,4 @@ export type {
   LearningState,
   LearningSystem,
   LearningTargetView,
-  PersonalLearningView,
 } from './learningSystem';

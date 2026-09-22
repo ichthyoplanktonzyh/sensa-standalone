@@ -4,7 +4,6 @@ import {learningOwner} from './libraryOwnership';
 import {encodeBackupValue,decodeBackupValue} from './backupCodec';
 import {validateBackupRows,backupOwnerSchema,type BackupRows} from './backupValidation';
 import {clearAllCredentials} from './providers';
-import {rehydratePackageInstallations} from './packages';
 import {libraryBackupTables} from './backupPolicy';
 import {isReplicatedLibraryEntry,normalizeLibraryReplicaEntry,restoreLibraryReplicaValue,type LibraryReplicaEntry} from './replication/libraryReplica';
 const MAX_PLAIN=64*1024*1024,MAX_FILE=90*1024*1024;
@@ -79,5 +78,5 @@ export async function restoreLibraryBackup(file:Uint8Array,password:string){
   tx.put('meta','local-incarnation',crypto.randomUUID());
   tx.put('meta','backup-restored',{at:new Date().toISOString(),sourceCreatedAt:checked.payload.createdAt,libraryId:source.id});
   return checked.summary;
- });clearAllCredentials();await rehydratePackageInstallations().catch(()=>undefined);return result;
+ });clearAllCredentials();const {contentSupplySystem}=await import('../../contentSupply/system/contentSupplySystem');await contentSupplySystem.execute({kind:'rehydrate'}).catch(()=>undefined);return result;
 }

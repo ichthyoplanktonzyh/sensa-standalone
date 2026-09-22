@@ -1,7 +1,7 @@
 /** Scope -> production -> admission -> presentation, without browser/provider calls. */
 import assert from 'node:assert/strict';
 import {resolveRevealResourcePlan,REVEAL_RESOURCE_CATEGORIES,sensaLightweightInitialMaterializationContentSchema,generationResourceContracts,makeRequest,makeBundle,SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND} from '@sensa/contracts/sensa';
-import {provisionLightweightInitialContent} from '../apps/web/src/learning/runtime/lightweightInitialContent.ts';
+import {provisionLightweightInitialContent} from '../apps/web/src/contentSupply/provisioning/lightweightInitialContent.ts';
 import {syntheticSound,withBindingFixture} from './support/lightweightMaterialFixture.mts';
 import {prepareLearningResourceFacts} from '../apps/api/src/sensa/resources/supplements.ts';
 const id=()=>crypto.randomUUID(),now=new Date();

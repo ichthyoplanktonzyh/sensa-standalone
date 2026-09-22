@@ -81,7 +81,7 @@ import {
   buildWorldItemView,
 } from './projection';
 import { buildPersonalMeaningLearningSources } from './learningSource';
-import type { PersonalMeaningLearningSource } from '../../data/library/personalLearningSource';
+import type { PersonalMeaningLearningSource } from '../../contentSupply/system';
 import type {
   AddMaterialBlockInput,
   AddMaterialBlockResult,

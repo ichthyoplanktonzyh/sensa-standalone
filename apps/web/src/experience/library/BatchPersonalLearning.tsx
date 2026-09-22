@@ -1,7 +1,7 @@
 import {useMemo,useState,type ReactNode} from 'react';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
-import {personalLearningSourceKey} from '../../data/library/personalLearningSource';
+import {personalLearningSourceKey} from '../../contentSupply/system';
 import {journeyGateway,type JourneyWorldItemView} from '../personalMeaningJourney';
 import type {usePersonalLearning} from './usePersonalLearning';
 import {setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';

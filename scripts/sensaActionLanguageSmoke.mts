@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {advanceInterleavedLearningRetries,resolveLearningQueue,selectInterleavedLearningTarget} from '../apps/web/src/experience/library/learningQueue.ts';
 import {resolvePracticeScopeCatalog, CURRENT_STUDY_SCOPE_ID, PERSONAL_SEMANTIC_WORLD_SCOPE_ID,type PracticeStudyTarget} from '../apps/web/src/experience/practiceScope.ts';
 import type { LocalLearningTarget } from '../apps/web/src/data/library/learning.ts';
-import type {PersonalMeaningLearningSource} from '../apps/web/src/data/library/personalLearningSource.ts';
+import type {PersonalMeaningLearningSource} from '../apps/web/src/contentSupply/provisioning/contracts.ts';
 
 const at=(hours:number)=>new Date(2026,8,20,hours).toISOString();
 const clock=new Date(2026,8,20,21).getTime();

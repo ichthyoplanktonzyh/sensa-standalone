@@ -1,7 +1,7 @@
 /** Free Practice source resolution: real Learning Targets, complete Personal
  * Meanings, capability-aware Activities, and detached Session snapshots. */
 import assert from 'node:assert/strict';
-import type { PersonalMeaningLearningSource } from '../apps/web/src/data/library/personalLearningSource.ts';
+import type { PersonalMeaningLearningSource } from '../apps/web/src/contentSupply/provisioning/contracts.ts';
 import {
   createPracticeScopeSnapshot,
   CURRENT_STUDY_SCOPE_ID,

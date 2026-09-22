@@ -3,7 +3,6 @@ import type {
   HomeLearningProjection,
   LearningCommand,
   LearningQuery,
-  PersonalLearningControl,
 } from './learningSystem';
 
 export const executeLearningCommand = async (command: LearningCommand): Promise<unknown> => {
@@ -70,42 +69,10 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
       );
     }
     case 'enroll_personal': {
-      const { enrollPersonal } = await import('../../data/library/personalLearning');
-      return enrollPersonal(
-        command.operationId,
-        command.source,
-        command.languageContext,
-        command.useContext,
+      const { requestPersonalContentProvisioning } = await import(
+        '../../contentSupply/provisioning/requestProvisioning'
       );
-    }
-    case 'stop_personal_preparation': {
-      const { stopPersonalPreparation } = await import('../../data/library/personalLearning');
-      return stopPersonalPreparation(command.operationId, command.taskId);
-    }
-    case 'prepare_personal': {
-      const {
-        personalLearningControlSnapshot,
-        preparePersonal,
-      } = await import('../../data/library/personalLearning');
-      const { providers } = await personalLearningControlSnapshot();
-      return preparePersonal(
-        command.taskId,
-        command.source,
-        providers.content,
-        providers.review,
-        command.signal,
-        () => {},
-      );
-    }
-    case 'update_personal_resources': {
-      const { requestPersonalResourceUpdate } = await import('../../data/library/personalLearning');
-      return requestPersonalResourceUpdate(
-        command.operationId,
-        command.taskId,
-        command.source,
-        command.languageContext,
-        command.useContext,
-      );
+      return requestPersonalContentProvisioning(command);
     }
   }
 };
@@ -132,19 +99,6 @@ export const readLearningQuery = async (query: LearningQuery): Promise<unknown> 
         activeRun: stored.activeRun,
         dailyLimit: stored.dailyLimit,
       } satisfies HomeLearningProjection;
-    }
-    case 'personal_tasks': {
-      const { personalLearningSnapshot } = await import('../../data/library/personalLearning');
-      return personalLearningSnapshot();
-    }
-    case 'personal_control': {
-      const { personalLearningControlSnapshot } = await import('../../data/library/personalLearning');
-      const snapshot = await personalLearningControlSnapshot();
-      return {
-        tasks: snapshot.tasks,
-        targets: snapshot.targets,
-        preparationAvailable: true,
-      } satisfies PersonalLearningControl;
     }
   }
 };

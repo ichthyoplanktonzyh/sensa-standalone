@@ -5,7 +5,7 @@ import { RuntimeFrame, runtimePrimary } from "./RuntimeFrame";
 import { useEffect, useMemo, useRef } from "react";
 import type {LearningTargetPresentation} from '../../library/learningPresentation';
 import { assembleLightweightInitialPresentation } from "../../learningRuntime/lightweightInitialPresentation";
-import type { LightweightInitialLearningMaterialization } from "../../../learning/runtime/lightweightInitialContent";
+import type { LightweightInitialLearningMaterialization } from "../../../contentSupply/provisioning/lightweightInitialContent";
 import {
   LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
   type LightweightInitialRating,

@@ -1,4 +1,4 @@
-import type {LightweightInitialContentInput} from '../../apps/web/src/learning/runtime/lightweightInitialContent.ts';
+import type {LightweightInitialContentInput} from '../../apps/web/src/contentSupply/provisioning/lightweightInitialContent.ts';
 /** Synthetic material for storage/runtime tests only; these bytes do not claim pronunciation quality. */
 export const syntheticSound=(surface:string,languageTag:string)=>({audioUrl:'data:audio/wav;base64,UklGRg==',surface,languageTag,source:'synthetic-test-fixture',method:'recording' as const,phoneticNotation:null,accentLabel:null});
 export function withBindingFixture(input:LightweightInitialContentInput):LightweightInitialContentInput {

@@ -6,12 +6,12 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {indexedDB} from 'fake-indexeddb';
 import {defaultSensaLanguageRoute,sensaPinnedLanguageContext} from '@sensa/contracts/sensa';
-import {provisionLightweightInitialContent} from '../apps/web/src/learning/runtime/lightweightInitialContent.ts';
+import {provisionLightweightInitialContent} from '../apps/web/src/contentSupply/provisioning/lightweightInitialContent.ts';
 import {withBindingFixture} from './support/lightweightMaterialFixture.mts';
 const compiled=await build({stdin:{contents:[
  ...['store','learning','packages','backupValidation'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
  "export * from './apps/web/src/experience/library/declareKnownAndContinue';",
- "export * from './apps/web/src/learning/runtime/resourceSupplement';",
+ "export * from './apps/web/src/contentSupply/provisioning/hybridMaterialization';",
 ].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':'{}'}});
 Object.assign(globalThis,{indexedDB,window:new EventTarget(),location:{origin:'http://127.0.0.1:9998'},BroadcastChannel:undefined});
 const temp=await mkdtemp(join(tmpdir(),'sensa-supplement-'));

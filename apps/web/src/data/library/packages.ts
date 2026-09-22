@@ -1,7 +1,8 @@
 import {validateRuntimeLearningRelease} from '@sensa/content-validator/runtime';
 import {learningPackageSchema,learningPackageDescriptorSchema,learningBundleBookId,learningBundleBookVersionId,learningBundleVersionLabel,learningBundleTitle,learningDescriptorBookId,learningDescriptorBookVersionId,learningDescriptorVersionLabel,learningDescriptorTitle,type LearningPackageBundle,type LearningPackageDescriptor,canonicalConsumerJson} from '@sensa/contracts/sensa';
 import {canonicalJsonDigest,sha256 as syncSha256} from '@sensa/learning-kernel';
-import {command,readLibrary,writeLibraryCache} from './store';
+import {readLibrary,writeLibraryCache} from './store';
+import {contentSupplyCommand} from './contentSupplyAdmission';
 import {learningOwner} from './libraryOwnership';
 import {descriptorMatchesInstallation,packageInstallationFor,packageInstallationSchema,packageKey,type InstalledPackage,type PackageInstallation} from './packageRecords';
 export {installedPackages,packageInstallations,packageKey,type InstalledPackage,type PackageInstallation} from './packageRecords';
@@ -37,7 +38,7 @@ async function readPackageBytes(bytes:Uint8Array,descriptor?:LearningPackageDesc
 export async function installPackage(bytes:Uint8Array,descriptor?:LearningPackageDescriptor,signal?:AbortSignal){
  const {digest,bundle,installation}=await readPackageBytes(bytes,descriptor);
  let installed:InstalledPackage|undefined;
- await command({id:crypto.randomUUID(),kind:'package.install',input:{key:packageKey(bundle),digest}},async tx=>{
+ await contentSupplyCommand({id:crypto.randomUUID(),kind:'package.install',input:{key:packageKey(bundle),digest}},async tx=>{
   await learningOwner(tx);if(signal?.aborted)throw new Error('localFlow.downloadCancelled');const key=packageKey(bundle),old=await tx.get<InstalledPackage>('packageCache',key),prior=await tx.get<PackageInstallation>('packageInstallations',key);
   if(prior&&canonicalConsumerJson(packageInstallationSchema.parse(prior))!==canonicalConsumerJson(installation))throw new Error('localFlow.packageVersionChanged');
   if(old&&(old.digest!==digest||canonicalConsumerJson(old.bundle)!==canonicalConsumerJson(bundle)))throw new Error('localFlow.packageVersionChanged');
