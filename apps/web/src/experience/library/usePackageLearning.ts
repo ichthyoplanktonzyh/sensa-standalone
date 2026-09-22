@@ -6,15 +6,15 @@ import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useRef,useState} from 'react';
 import {learningPackageCatalogSchema,type LearningPackageDescriptor} from '@sensa/contracts/sensa';
 import {auth} from '../../data/account/auth';
-import {openLibrary,observeLibrary,readLibrary,writeLibraryState} from '../../data/library/store';
+import {openLibrary,readLibrary,writeLibraryState} from '../../data/library/store';
 import type {InstalledPackage} from '../../data/library/packageRecords';
-import {localRunTargetIds,selectLocalLearningPolicy,setLocalDeclaredMastery,readLearningOverview,enrollPackage,startLearning,actLearning,finishLearning,continueLearning,confirmLearningQuantity,type LocalLearningTarget,type LocalLearningRun} from '../../data/library/learning';
+import {learningRunTargetIds,learningSystem,type LearningAction,type LearningPolicy,type LearningRunView,type LearningTargetView} from '../../learning/system';
 import type {LearningRecordView} from '../learningJourney/learningHistory';
 import {inspectLocalTargetReadiness} from '../../learning/runtime/runtimeCoordinator';
 import {localCurriculumMembershipForContext,localLastPresentedMaterial} from '../../learning/runtime/localCurriculum';
 export function usePackageLearning(entryOpen:boolean){
  useTranslation();
- const [packages,setPackages]=useState<InstalledPackage[]>([]),[catalog,setCatalog]=useState<LearningPackageDescriptor[]>([]),[targets,setTargets]=useState<LocalLearningTarget[]>([]),[runs,setRuns]=useState<LocalLearningRun[]>([]),[activeId,setActiveId]=useState<string|undefined>();
+ const [packages,setPackages]=useState<InstalledPackage[]>([]),[catalog,setCatalog]=useState<LearningPackageDescriptor[]>([]),[targets,setTargets]=useState<LearningTargetView[]>([]),[runs,setRuns]=useState<LearningRunView[]>([]),[activeId,setActiveId]=useState<string|undefined>();
  const [notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[progress,setProgress]=useState<number|null>(null),[loaded,setLoaded]=useState(false),[catalogBusy,setCatalogBusy]=useState(false);
  const [dailyLimit,setDailyLimit]=useState<number|undefined>();
  const [clock,setClock]=useState(Date.now());
@@ -22,8 +22,8 @@ export function usePackageLearning(entryOpen:boolean){
  const transfer=useRef<AbortController|null>(null),generation=useRef(0),actInFlight=useRef(false);
  const [interleavedRetries,setInterleavedRetries]=useState<InterleavedLearningRetry[]>([]);
  const {activeRoute,context:languageContext}=useLanguageRoutes();
- const refresh=async()=>{const snapshot=await readLearningOverview();setPackages(snapshot.packages);setTargets(snapshot.targets);setRuns(snapshot.runs);setActiveId(snapshot.active);setDailyLimit(snapshot.studyPlans[languageContext.languageRouteId]?.dailyNewSenseLimit);setLoaded(true);};
- useEffect(()=>{void openLibrary().then(async()=>{const {rehydratePackageInstallations}=await import('../../data/library/packages');await rehydratePackageInstallations();return refresh();}).catch(()=>setNotice(localFlowText('learningReadFailed')));const stop=observeLibrary(()=>void refresh().catch(()=>setNotice(localFlowText('progressReadFailed'))),['packageCache','packageInstallations','learningTargets','learningRuns','learningEvents','settings','meta']);return()=>{generation.current++;stop();transfer.current?.abort();};},[languageContext.languageRouteId,languageContext.languageRouteRevision]);
+ const refresh=async()=>{const snapshot=await learningSystem.read({kind:'overview'});setPackages(snapshot.packages);setTargets(snapshot.targets);setRuns(snapshot.runs);setActiveId(snapshot.active);setDailyLimit(snapshot.studyPlans[languageContext.languageRouteId]?.dailyNewSenseLimit);setLoaded(true);};
+ useEffect(()=>{void openLibrary().then(async()=>{const {rehydratePackageInstallations}=await import('../../data/library/packages');await rehydratePackageInstallations();return refresh();}).catch(()=>setNotice(localFlowText('learningReadFailed')));const stop=learningSystem.subscribe({kind:'overview'},()=>void refresh().catch(()=>setNotice(localFlowText('progressReadFailed'))));return()=>{generation.current++;stop();transfer.current?.abort();};},[languageContext.languageRouteId,languageContext.languageRouteRevision]);
  const perform=async<T,>(work:()=>Promise<T>)=>{setBusy(true);setNotice('');try{const result=await work();await refresh();return result;}catch(e){setNotice(e instanceof Error&&e.message.startsWith('localFlow.')?e.message:localFlowText('retryOperation'));return null;}finally{setBusy(false);setProgress(null);}};
  const reloadCatalog=async(notify=false)=>{
   const gen=++generation.current;
@@ -41,7 +41,7 @@ export function usePackageLearning(entryOpen:boolean){
  };
  useEffect(()=>{if(entryOpen)void reloadCatalog();},[entryOpen]);
  const run=runs.find(r=>r.id===activeId)??null;
- const records:LearningRecordView[]=runs.filter(r=>r.completedAt&&r.completionKind!=='wait_relearning').flatMap(r=>localRunTargetIds(r).map(targetId=>{const target=targets.find(t=>t.id===targetId),participant=r.participants[targetId],material=participant?localLastPresentedMaterial(participant):undefined,meaning=material?.content.resources.find(resource=>resource.materialRoleKey==='sense_confirmation')?.contentPayload.meaning;return {recordId:r.id+':'+targetId,targetId,expression:target?.expression??'',languageTag:target?.targetLanguageTag??'',meaning:typeof meaning==='string'?meaning:undefined,occurredAt:r.targetCompletions?.[targetId]?.at??r.completedAt!,kind:r.purpose,label:r.purpose==='initial_learning'?localFlowText('initialRecord'):r.purpose==='retention_review'?localFlowText('reviewRecord'):localFlowText('relearningRecord'),detail:localFlowText('localRecord')}})).sort((a,b)=>b.occurredAt.localeCompare(a.occurredAt));
+ const records:LearningRecordView[]=runs.filter(r=>r.completedAt&&r.completionKind!=='wait_relearning').flatMap(r=>learningRunTargetIds(r).map(targetId=>{const target=targets.find(t=>t.id===targetId),participant=r.participants[targetId],material=participant?localLastPresentedMaterial(participant):undefined,meaning=material?.content.resources.find(resource=>resource.materialRoleKey==='sense_confirmation')?.contentPayload.meaning;return {recordId:r.id+':'+targetId,targetId,expression:target?.expression??'',languageTag:target?.targetLanguageTag??'',meaning:typeof meaning==='string'?meaning:undefined,occurredAt:r.targetCompletions?.[targetId]?.at??r.completedAt!,kind:r.purpose,label:r.purpose==='initial_learning'?localFlowText('initialRecord'):r.purpose==='retention_review'?localFlowText('reviewRecord'):localFlowText('relearningRecord'),detail:localFlowText('localRecord')}})).sort((a,b)=>b.occurredAt.localeCompare(a.occurredAt));
  const membershipByTarget=Object.fromEntries(targets.flatMap(target=>{const membership=localCurriculumMembershipForContext(target,languageContext);return membership?[[target.id,membership]]:[];}));
  const readinessByTarget=Object.fromEntries(targets.map(target=>{const membership=membershipByTarget[target.id];return [target.id,inspectLocalTargetReadiness(target,membership,membership?.packageKey?packages.find(pack=>pack.key===membership.packageKey):undefined).status];})) as Readonly<Record<string,'ready'|'blocked'>>;
  const {activeTargets,due,initialReady}=resolveLearningQueue({targets,languageRouteId:activeRoute.id,readiness:readinessByTarget,clock,dailyLimit});
@@ -51,14 +51,14 @@ export function usePackageLearning(entryOpen:boolean){
   const timer=window.setTimeout(()=>setClock(Date.now()),Math.min(2_147_483_647,Math.max(20,nextQueueChangeAt-Date.now()+20)));
   return()=>window.clearTimeout(timer);
  },[nextQueueChangeAt]);
- const nextTarget=selectInterleavedLearningTarget({due,initialReady,currentRunTargetIds:run?localRunTargetIds(run):[],retries:interleavedRetries});
- return {nextTarget,initialReady,readinessByTarget,membershipByTarget,languageContext,packages,catalog,targets,activeTargets,runs,run,records,due,notice:localFlowNotice(notice),busy,progress,loaded,catalogBusy,reloadCatalog,refresh,dailyLimit,confirmQuantity:(n:number)=>perform(()=>confirmLearningQuantity(crypto.randomUUID(),languageContext,n)),
+ const nextTarget=selectInterleavedLearningTarget({due,initialReady,currentRunTargetIds:run?learningRunTargetIds(run):[],retries:interleavedRetries});
+ return {nextTarget,initialReady,readinessByTarget,membershipByTarget,languageContext,packages,catalog,targets,activeTargets,runs,run,records,due,notice:localFlowNotice(notice),busy,progress,loaded,catalogBusy,reloadCatalog,refresh,dailyLimit,confirmQuantity:(n:number)=>perform(()=>learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:n})),
   download:(d:LearningPackageDescriptor)=>perform(async()=>{const c=new AbortController();transfer.current=c;try{setProgress(0);const {downloadPackage}=await import('../../data/library/packages');return await downloadPackage(d,AbortSignal.any([c.signal,AbortSignal.timeout(120000)]),n=>setProgress(Math.round(100*n/d.byteLength)));}finally{if(transfer.current===c)transfer.current=null;}}),
   cancelDownload:()=>transfer.current?.abort(),importFile:(file:File)=>perform(async()=>{if(file.size>64*1024*1024)throw new Error('localFlow.packageTooLarge');const {installPackage}=await import('../../data/library/packages');return installPackage(new Uint8Array(await file.arrayBuffer()));}),
-  selectPolicy:(targetId:string,profileId:Parameters<typeof selectLocalLearningPolicy>[3])=>perform(()=>selectLocalLearningPolicy(crypto.randomUUID(),targetId,languageContext,profileId)),
-  enroll:(key:string)=>perform(()=>enrollPackage(crypto.randomUUID(),key,languageContext)),
-  start:(id:string,limit:number)=>perform(()=>startLearning(crypto.randomUUID(),id,languageContext,limit)),
-  act:async(action:Parameters<typeof actLearning>[3])=>{
+  selectPolicy:(targetId:string,profileId:LearningPolicy)=>perform(()=>learningSystem.execute({kind:'select_policy',operationId:crypto.randomUUID(),targetId,languageContext,profileId})),
+  enroll:(packageKey:string)=>perform(()=>learningSystem.execute({kind:'enroll_package',operationId:crypto.randomUUID(),packageKey,languageContext})),
+  start:(targetId:string,dailyLimit:number)=>perform(()=>learningSystem.execute({kind:'start',operationId:crypto.randomUUID(),targetId,languageContext,dailyLimit})),
+  act:async(action:LearningAction)=>{
    if(!run||actInFlight.current)return null;
    actInFlight.current=true;
    const previousInterleavedRetries=interleavedRetries;
@@ -67,7 +67,7 @@ export function usePackageLearning(entryOpen:boolean){
     setInterleavedRetries(retries=>advanceInterleavedLearningRetries(retries,targetId,action.rating==='again'));
    }
    try{
-    const result=await perform(()=>actLearning(crypto.randomUUID(),run.id,run.revision,action));
+    const result=await perform(()=>learningSystem.execute({kind:'act',operationId:crypto.randomUUID(),runId:run.id,expectedRevision:run.revision,action}));
     if(!result&&action.kind==='rate')setInterleavedRetries(previousInterleavedRetries);
     return result;
    }finally{actInFlight.current=false;}
@@ -82,8 +82,8 @@ export function usePackageLearning(entryOpen:boolean){
     return true;
    });}finally{actInFlight.current=false;}
   },
-  declareKnown:(id:string,active=true)=>perform(()=>setLocalDeclaredMastery(crypto.randomUUID(),id,active)),
-  continueWith:(id:string,limit:number)=>run?perform(()=>continueLearning(crypto.randomUUID(),run.id,id,languageContext,limit)):Promise.resolve(null),
-  finish:()=>run?perform(()=>finishLearning(crypto.randomUUID(),run.id)):Promise.resolve(null),
+  declareKnown:(targetId:string,active=true)=>perform(()=>learningSystem.execute({kind:'set_declared_mastery',operationId:crypto.randomUUID(),targetId,active})),
+  continueWith:(targetId:string,dailyLimit:number)=>run?perform(()=>learningSystem.execute({kind:'continue',operationId:crypto.randomUUID(),runId:run.id,targetId,languageContext,dailyLimit})):Promise.resolve(null),
+  finish:()=>run?perform(()=>learningSystem.execute({kind:'finish',operationId:crypto.randomUUID(),runId:run.id})):Promise.resolve(null),
  };
 }

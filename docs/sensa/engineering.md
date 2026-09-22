@@ -19,11 +19,15 @@
 | `content` | 内容 schema、prompt、制作与校验工具 |
 
 [ADR 0006](../adr/0006-three-product-systems.md) 的 Personal Semantic World、Learning System 与 Content
-Supply System 是产品领域划分，不与上述目录一一对应。当前 Web 的 Product Shell 位于 `experience`，
-学习规则分布在 `apps/web/src/learning`、`experience/learningRuntime` 与 `packages/learning-kernel`，本地
-持久化和同步 adapter 位于 `apps/web/src/data/library`，公共内容合同、校验与制作分别位于
-`packages/contracts`、`packages/content-validator` 与 `content`。目录位置不转移领域事实所有权；页面、
-SQLite record、HTTP route 与 Sync row 都不能成为第二 authority。
+Supply System 是产品领域划分，不与上述目录一一对应。当前 Web 的 Product Shell 位于 `experience`。
+学习应用层只通过 `apps/web/src/learning/system/learningSystem.ts` 的 deep Module interface 提交 command、
+读取 projection 并订阅对应查询失效；页面不知道 Learning 的逻辑表、事务准入、重放或调度原语。
+`apps/web/src/learning/runtime`、`engine`、`review` 与 `experience/learningRuntime` 是该系统内部的协议、评价和
+呈现 adapter，`apps/web/src/data/library/learning*.ts` 是本机事务与 authority 实现，不是页面 API。
+`packages/learning-kernel` 只显式导出可复用的确定性纯规则和值类型，不导出 Web 持久化、Curriculum、
+协议 registry 或 UI composition。公共内容合同、校验与制作分别位于 `packages/contracts`、
+`packages/content-validator` 与 `content`。目录位置不转移领域事实所有权；页面、SQLite record、HTTP route
+与 Sync row 都不能成为第二 authority。
 
 `apps/sensa_native` 和 `crates` 只保留现有代码，不参与当前产品开发、验收或发布规划。除非 owner 明确恢复该范围，不在这些目录继续迁移或新增能力。
 

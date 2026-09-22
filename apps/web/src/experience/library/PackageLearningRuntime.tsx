@@ -1,7 +1,6 @@
 import {RuntimeFrame,runtimePrimary} from '../components/learning/RuntimeFrame';
 import {useEffect,useMemo,useState} from 'react';
 import {useTranslation} from 'react-i18next';
-import {stableUuid} from '@sensa/learning-kernel';
 import {learningBundleBookId,learningBundleBookVersionId,learningBundleContentReleaseId,learningBundleTitle} from '@sensa/contracts/sensa';
 import {InterleavedFourStageRuntimeScreen} from '../components/learning/InterleavedFourStageRuntimeScreen';
 import {InterleavedFourStageReviewScreen} from '../components/learning/InterleavedFourStageReviewScreen';
@@ -15,8 +14,7 @@ import {learningRuntimeCoordinator,localExecutionForRun} from '../../learning/ru
 import {localLightweightPhase,localLightweightStep} from '../../learning/runtime/lightweightInitialProtocol';
 import {localProtocolActiveTargetId,localProtocolStepId,type LocalExecutableLearningTarget,type LocalLearningAction} from '../../learning/runtime/localProtocol';
 import {localExecutableTargetForParticipant,localLastPresentedMaterial,localPresentedMaterial} from '../../learning/runtime/localCurriculum';
-import type {LocalLearningRun} from '../../data/library/learning';
-import {localRunTargetIds} from '../../data/library/learning';
+import {learningRunTargetIds as localRunTargetIds,learningSceneSemanticOperationIds,type LearningRunView as LocalLearningRun} from '../../learning/system';
 import type {InstalledPackage} from '../../data/library/packageRecords';
 import {contentAnnotations} from '../../data/library/contentAnnotations';
 import {useJourneyGateway} from '../personalMeaningJourney';
@@ -199,8 +197,8 @@ function LightweightPackageRuntime({active,run,targets,packages,busy,notice,hasN
   if(!bookVersionId||!contentReleaseId)return;
   setSavingWorld(true);
   try{
-   const operationId=stableUuid(`learning-scene-semantic-acceptance:${sceneRevision.revisionId}`),result=await journeyGateway.acceptPublishedLearningScene({operationId,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,source:{packageKey:pack.key,bookId:learningBundleBookId(bookBundle),bookVersionId,contentReleaseId,publishedAt:bookBundle.publishedAt,title:learningBundleTitle(bookBundle)},target:{learningTargetId:target.id,curriculumMembershipId:target.curriculumMembership.id,senseId:target.identity.senseId,senseVersionId:target.identity.senseVersionId,bindingId:target.identity.senseExpressionBindingId,bindingVersionId:target.identity.bindingVersionId,expression:target.expression,targetLanguageTag:target.targetLanguageTag},semantic:entry.semantic,scene:{...sceneRevision,sceneId:scene.sceneId}});
-   await contentAnnotations.markLearningSceneAccepted({operationId:stableUuid(`learning-scene-semantic-link:${sceneRevision.revisionId}`),sceneId:scene.sceneId,revisionId:sceneRevision.revisionId,personalMeaningId:result.personalMeaningId});
+   const operationIds=learningSceneSemanticOperationIds(sceneRevision.revisionId),operationId=operationIds.accept,result=await journeyGateway.acceptPublishedLearningScene({operationId,existingPersonalMeaningId:scene.acceptedPersonalMeaningId,source:{packageKey:pack.key,bookId:learningBundleBookId(bookBundle),bookVersionId,contentReleaseId,publishedAt:bookBundle.publishedAt,title:learningBundleTitle(bookBundle)},target:{learningTargetId:target.id,curriculumMembershipId:target.curriculumMembership.id,senseId:target.identity.senseId,senseVersionId:target.identity.senseVersionId,bindingId:target.identity.senseExpressionBindingId,bindingVersionId:target.identity.bindingVersionId,expression:target.expression,targetLanguageTag:target.targetLanguageTag},semantic:entry.semantic,scene:{...sceneRevision,sceneId:scene.sceneId}});
+   await contentAnnotations.markLearningSceneAccepted({operationId:operationIds.link,sceneId:scene.sceneId,revisionId:sceneRevision.revisionId,personalMeaningId:result.personalMeaningId});
    lightweightHost.toast(i18n.t('runtime.semanticWorldSaved'));
   }catch{lightweightHost.toast(i18n.t('runtime.semanticWorldSaveFailed'));}finally{setSavingWorld(false);}
  };

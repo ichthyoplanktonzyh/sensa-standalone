@@ -1,4 +1,4 @@
-import type { LocalLearningTarget } from '../../data/library/learning';
+import type { LearningTargetView as LocalLearningTarget } from '../../learning/system';
 import type {LocalCurriculumMembership} from '../../learning/runtime/localProtocol';
 import type {TargetPlanningOverride} from '../../learning/runtime/targetPlanningOverrides';
 import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';

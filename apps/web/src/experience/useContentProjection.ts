@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { contentAnnotations } from '../data/library/contentAnnotations';
-import { learningTargetsSnapshot } from '../data/library/learning';
-import { observeLibrary } from '../data/library/store';
+import { learningSystem } from '../learning/system';
 import { buildContentProjection } from './contentProjection';
 import { journeyGateway } from './personalMeaningJourney/gateway';
 import { subscribeAll } from './services/createSnapshotStore';
@@ -30,7 +29,7 @@ const projectionStore = (() => {
   const loadLibrary = async () => {
     const revision = ++loadRevision;
     try {
-      const nextTargets = await learningTargetsSnapshot();
+      const nextTargets = await learningSystem.read({ kind: 'targets' });
       if (revision !== loadRevision) return;
       targets = nextTargets;
       publish();
@@ -44,7 +43,7 @@ const projectionStore = (() => {
     listeners.add(listener);
     if (listeners.size === 1) {
       stopSources = subscribeAll([
-        (onChange) => observeLibrary(() => { void loadLibrary(); }, ['learningTargets']),
+        (onChange) => learningSystem.subscribe({ kind: 'targets' }, () => { void loadLibrary(); }),
         (onChange) => contentAnnotations.subscribe(onChange),
         (onChange) => journeyGateway.subscribe(onChange),
       ])(() => publish());

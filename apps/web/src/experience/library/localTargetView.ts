@@ -1,7 +1,7 @@
 import {localCurriculumMeaning} from '../../learning/runtime/localCurriculum';
 import {localTargetPolicy} from '../../learning/runtime/localRuntimeBindings';
 import type {LocalCurriculumMembership} from '../../learning/runtime/localProtocol';
-import type {LocalLearningTarget} from '../../data/library/learning';
+import type {LearningTargetView as LocalLearningTarget} from '../../learning/system';
 import {localFlowText} from '../../i18n/localFlowText';
 
 export const localTargetView=(

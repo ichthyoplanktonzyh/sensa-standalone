@@ -32,7 +32,7 @@ export function BatchPersonalLearning({items,c,children}:{items:JourneyWorldItem
    <p>{localFlowText('fixedLightweight')}</p>
    <label className="flex items-start gap-2"><input type="checkbox" checked={useContext} onChange={event=>setUseContext(event.target.checked)}/>{localFlowText('batchContext')}</label>
    <p className="text-sm text-fg-secondary">{localFlowText('batchSavedSettings')}</p>
-   <div className="flex flex-wrap gap-3"><button className={setupPrimary} disabled={c.busy||!chosen.length||!c.providers} onClick={()=>void run(chosen)}>{localFlowText('batchConfirm')}</button><button className={setupButton} onClick={()=>setConfirming(false)}>{localFlowText('cancelEdit')}</button></div>
+   <div className="flex flex-wrap gap-3"><button className={setupPrimary} disabled={c.busy||!chosen.length||!c.preparationAvailable} onClick={()=>void run(chosen)}>{localFlowText('batchConfirm')}</button><button className={setupButton} onClick={()=>setConfirming(false)}>{localFlowText('cancelEdit')}</button></div>
   </section>}
   {!!c.batch.length&&<section aria-label={localFlowText('batchProgress')} className="mb-5 rounded-2xl border border-border-strong bg-surface-subtle p-5">
    <p role="status">{localFlowText('batchSummary',{done:c.batch.filter(row=>row.status==='ready').length,total:c.batch.length,failed:failed.length})}</p>

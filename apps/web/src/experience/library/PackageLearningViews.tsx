@@ -1,6 +1,6 @@
 import {learningPolicyProfileRegistry} from '../../learning/runtime/policyProfiles';
 import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
-import {localRunTargetIds} from '../../data/library/learning';
+import {learningRunTargetIds as localRunTargetIds} from '../../learning/system';
 import {assuranceContent} from '../../learning/protocols/assurance';
 import {cardText} from '../../i18n/originalCards';
 import {localTargetPolicy} from '../../learning/runtime/localRuntimeBindings';
@@ -15,7 +15,7 @@ import {ArrowRight,BookOpen,Search,RefreshCw,Upload,Check,Download} from 'lucide
 import {learningBundleBookId,learningBundleVersionNumber,learningBundleTitle,learningBundleDescription,learningDescriptorBookId,learningDescriptorVersionNumber,learningDescriptorTitle,learningDescriptorDescription} from '@sensa/contracts/sensa';
 import {LearningTargetDetailScreen} from '../components/learning/LearningTargetDetailScreen';
 import {packageKey} from '../../data/library/packageRecords';
-import type {LocalLearningTarget} from '../../data/library/learning';
+import type {LearningTargetView as LocalLearningTarget} from '../../learning/system';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
 import {localTargetView} from './localTargetView';

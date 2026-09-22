@@ -1,4 +1,3 @@
-import type { ReviewSchedule } from '@sensa/learning-kernel';
 import { contentAnnotations } from '../data/library/contentAnnotations';
 import type { SensaExpressionType } from '@sensa/contracts/sensa';
 import type { RuntimeLearningContent } from '../learning/content/learningCatalog';
@@ -6,10 +5,11 @@ import { BUNDLED_PACKAGE_BY_SENSE } from '../learning/content/bundledLearningCon
 import { PRACTICE_SENSES, type PracticeSenseItem } from './practiceData';
 import { journeyGateway } from './personalMeaningJourney/gateway';
 import type { PersonalMeaningJourneyPhase } from './personalMeaningJourney/types';
-import type { LocalLearningTarget } from '../learning/runtime/localProtocol';
-import {hasDeclaredMasteryOverride} from '../learning/runtime/targetPlanningOverrides';
+import {learningTargetHasDeclaredMastery as hasDeclaredMasteryOverride,type LearningTargetView as LocalLearningTarget} from '../learning/system';
 import type {ContentSectionId} from './contentRoute';
 export {CONTENT_SECTION_IDS,isContentSectionId,type ContentSectionId} from './contentRoute';
+
+type ReviewSchedule = NonNullable<LocalLearningTarget['memory']>;
 
 export type SemanticStatus = 'forming' | 'established' | 'reinforce';
 

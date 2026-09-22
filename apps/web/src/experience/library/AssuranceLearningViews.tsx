@@ -10,7 +10,7 @@ import {useEffect,useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {assuranceContent,assuranceView,localAssuranceState,type AssuranceAction} from '../../learning/protocols/assurance';
-import type {LocalLearningRun} from '../../data/library/learning';
+import type {LearningRunView as LocalLearningRun} from '../../learning/system';
 import type {LocalExecutableLearningTarget} from '../../learning/runtime/localProtocol';
 import type {InstalledPackage} from '../../data/library/packageRecords';
 import {AssuranceSummary} from '../components/learning/AssuranceSummary';

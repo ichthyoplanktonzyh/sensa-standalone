@@ -1191,10 +1191,12 @@ Sync record、manifest、block canonicalization、容量限制与冲突响应由
 
 ## 18. 当前实现边界
 
-当前生产 Web 的学习权威位于本机：`apps/web/src/experience/learningRuntime` 负责 Protocol/Policy/评价
-与运行协调，`packages/learning-kernel` 提供可复用的纯规则，`apps/web/src/data/library` 在 SQLite WASM
-事务中保存并恢复个人事实、运行、结果与 FSRS 状态。Card/页面只是 renderer，不能直接写入成功、
-证据或调度状态。
+当前生产 Web 的学习权威位于本机。应用层的稳定入口是
+`apps/web/src/learning/system/learningSystem.ts`：页面只提交 learner intent command、读取 projection，
+并订阅该查询的失效通知。Protocol/Policy、评价、运行协调与 presentation composition 是 Module 内部实现；
+`packages/learning-kernel` 只提供显式公开的可复用确定性纯规则，`apps/web/src/data/library` 在 SQLite WASM
+事务中执行准入并保存、恢复和重放个人事实、运行、结果与 FSRS 状态。Card/页面只是 renderer，不能直接
+调用存储命令或 Kernel 原语写入成功、证据或调度状态。
 
 Hono/Edge 不是 Learning Runtime。它只提供账号和扩展授权、学习包目录/下载、普通账号 Library Cloud
 Sync、在线模型、阅读/语义查询及账号删除等可选在线能力；这些能力可以提供候选内容或运输已提交
