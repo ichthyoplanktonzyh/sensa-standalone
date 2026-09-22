@@ -1151,6 +1151,11 @@ operation；它不能复用 Local Data Clearance 或 Account Deletion 语义。
 Memory Outcome、Scheduling Decision 及相应投影。断网不会降低这些规则，也不会阻止已有内容的学习、
 复习、重学、恢复或 FSRS 调度。
 
+上述原子提交必须先通过 Learning System authority。普通命令使用事务的 changed-record transition 做
+增量准入，并以同一份固定 Protocol/Policy/Materialization 独立重放新 Event；只有重放得到的 Run、
+Target 与 Memory/Schedule 投影和待提交值完全一致时才可落库。完整 Sync/restore 使用该 authority 的
+全历史入口，而不是信任随快照传来的 projection。
+
 普通账号同步以本地已经提交的版本化记录为输入，传输清单和内容寻址数据块。服务端可以保存并返回
 账号副本，但不得重新运行 Protocol、重新评分、重算 FSRS，或把同步成功本身变成学习事实。下载记录
 必须先通过摘要、引用与可重放性校验，再由本地库在提交时合并；同步记账不得触发第二次业务结算。

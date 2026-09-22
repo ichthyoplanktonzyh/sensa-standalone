@@ -116,6 +116,12 @@ before→after transition；未变化聚合按对象 identity 跳过，加载、
 因此 Gateway 提议的非法 revision 改写、tombstone 复活或物理删除不会进入 SQLite，也不会让普通命令
 退化成随整个语义世界增长的全库扫描。具体规则见
 [ADR 0007](../adr/0007-personal-semantic-world-revision-merge.md)。
+Learning System 使用相同的单一准入模式：逻辑事务在 SQLite commit 前把已暂存记录的 `before/after`
+交给 Learning authority；authority 只读取改变的 Target、Run、Event、active Run / Study Plan 及直接依赖，
+重放新 Event 并核对 Target、Run、Evidence、Completion 与 Memory/Schedule 投影。Run/Event history 的
+物理删除、旧 Event 改写、无 Event 的派生进度以及本地伪造 Reconciliation 都在提交前拒绝。Cloud Sync
+与手动备份继续通过同一个 authority 的完整状态入口 replay 全部历史；日常学习动作不扫描所有 Run 或
+Event。具体规则见 [ADR 0005](../adr/0005-concurrent-learning-history-reconciliation.md)。
 新 Checkpoint 成功提交后，服务端只回收旧清单曾引用且新清单不再引用的块；另一设备尚未提交的上传
 不在这次回收范围内。
 

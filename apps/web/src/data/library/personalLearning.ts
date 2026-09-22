@@ -4,6 +4,7 @@ import {stableUuid} from '@sensa/learning-kernel';
 import {learningResourceDefinition,makeRequest,validateBundle,modelFacts,independentReviewSystem,requestLanguages,SENSA_LIGHTWEIGHT_INITIAL_CONTENT_DEMAND,canonicalConsumerJson,sensaFormalPinnedLanguageContextSchema,type SensaContentGenerationRequest,type SensaMaterialCandidateBundle,type ContentReviewer,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {command,readLibrary,type LibraryTransaction} from './store';
 import {learningOwner} from './libraryOwnership';
+import {learningCommand} from './learningAdmission';
 import {commitPersonalMaterial,type LocalLearningTarget} from './learning';
 import {
  personalLearningSourceKey,
@@ -72,7 +73,7 @@ export async function preparePersonal(id:string,source:PersonalMeaningLearningSo
   task.attemptId=attemptId;task.status=reuse?.bundle?'reviewing':'generating';task.leaseUntil=Date.now()+300000;task.notice='';tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);return {task,attempt,owner};
  });if(!begun)return;onSaved();
  const runSignal=AbortSignal.any([signal,AbortSignal.timeout(280000)]);
- const save=async(work:(tx:LibraryTransaction,task:PersonalLearning,attempt:ContentAttempt)=>Promise<void>)=>command({id:crypto.randomUUID(),kind:'personal.progress',input:{id,attemptId,nonce:crypto.randomUUID()}},async tx=>{const {task}=await active(tx,id,attemptId,source,contentProvider,reviewProvider);if(runSignal.aborted)throw new Error('localFlow.requestStopped');const attempt=(await tx.get<ContentAttempt>('contentAttempts',attemptId))!;await work(tx,task,attempt);tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);});
+ const save=async(work:(tx:LibraryTransaction,task:PersonalLearning,attempt:ContentAttempt)=>Promise<void>)=>learningCommand({id:crypto.randomUUID(),kind:'personal.progress',input:{id,attemptId,nonce:crypto.randomUUID()}},async tx=>{const {task}=await active(tx,id,attemptId,source,contentProvider,reviewProvider);if(runSignal.aborted)throw new Error('localFlow.requestStopped');const attempt=(await tx.get<ContentAttempt>('contentAttempts',attemptId))!;await work(tx,task,attempt);tx.put('personalLearning',id,task);tx.put('contentAttempts',attemptId,attempt);});
  try{
   let {request,bundle,grant}=begun.attempt;const m=source;
   if(!request||!bundle){

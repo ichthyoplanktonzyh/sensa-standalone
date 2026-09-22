@@ -16,6 +16,12 @@ import {
 export const libraryDatabaseName = sqliteLibraryFile.slice(1);
 export const libraryTables = sqliteLibraryTables;
 export type Table = SqliteLibraryTable;
+export type LibraryRecordTransition<Tables extends readonly Table[]=readonly Table[]>={
+  table:Tables[number];
+  key:string;
+  before:unknown|null;
+  after:unknown|null;
+};
 export const localLibraryRevisionKey = "local-content-revision";
 export const cloudCheckpointRequestEvent = "sensa-cloud-checkpoint-requested";
 
@@ -306,6 +312,49 @@ export class LibraryTransaction {
       this.deletes.set(table, tableDeletes);
     }
     this.wrote = true;
+  }
+
+  /**
+   * Returns the persisted and proposed values for only the records staged by
+   * this transaction. Domain authorities use this seam before SQLite commit;
+   * ordinary commands never need to scan an entire logical table.
+   */
+  async proposedChanges<Tables extends readonly Table[]>(
+    tables: Tables,
+  ): Promise<Array<LibraryRecordTransition<Tables>>> {
+    const selected = new Set<Table>(tables);
+    const keys = new Map<Table, Set<string>>();
+    const add = (table: Table, key: string) => {
+      if (!selected.has(table)) return;
+      const tableKeys = keys.get(table) ?? new Set<string>();
+      tableKeys.add(key);
+      keys.set(table, tableKeys);
+    };
+    for (const table of this.clears) {
+      if (!selected.has(table)) continue;
+      for (const row of await storageCall(() => this.adapter.entries(table))) add(table, row.key);
+    }
+    for (const [table, deleted] of this.deletes) for (const key of deleted) add(table, key);
+    for (const [table, values] of this.puts) for (const key of values.keys()) add(table, key);
+
+    const changes: Array<LibraryRecordTransition<Tables>> = [];
+    for (const [table, tableKeys] of keys) {
+      for (const key of tableKeys) {
+        const beforeEncoded = await storageCall(() => this.adapter.get(table, key));
+        const after = await this.get(table, key);
+        const afterEncoded = after === undefined ? null : encode(after);
+        if (beforeEncoded === afterEncoded) continue;
+        changes.push({
+          table: table as Tables[number],
+          key,
+          before: beforeEncoded === null ? null : clone(decode(beforeEncoded)),
+          after: after === undefined ? null : clone(after),
+        });
+      }
+    }
+    return changes.sort((left, right) => (
+      left.table.localeCompare(right.table) || left.key.localeCompare(right.key)
+    ));
   }
 
   mutation(): SqliteMutation {
