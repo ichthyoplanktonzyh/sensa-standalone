@@ -15,14 +15,13 @@ import {localLightweightPhase,localLightweightStep} from '../../learning/runtime
 import {localProtocolActiveTargetId,localProtocolStepId,type LocalExecutableLearningTarget,type LocalLearningAction} from '../../learning/runtime/localProtocol';
 import {localExecutableTargetForParticipant,localLastPresentedMaterial,localPresentedMaterial} from '../../learning/runtime/localCurriculum';
 import {learningRunTargetIds as localRunTargetIds,learningSceneSemanticOperationIds,type LearningRunView as LocalLearningRun} from '../../learning/system';
-import type {InstalledPackage} from '../../data/library/packageRecords';
+import type {ContentSupplyPackage as InstalledPackage} from '../../contentSupply/system';
 import {contentAnnotations} from '../../data/library/contentAnnotations';
 import {useJourneyGateway} from '../personalMeaningJourney';
 import type {AssuranceSupportHost} from './AssuranceLearningViews';
 import {AssuranceRuntime} from './AssuranceLearningViews';
 import type {usePackageLearning} from './usePackageLearning';
 import {localTargetView} from './localTargetView';
-import {lookupDictionaryEntry} from '../services/quickDict';
 import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
 import {SensaOverlayLayout} from '../ui/SensaComponents';
 import {iconClass} from '../ui/primitives';
@@ -56,6 +55,11 @@ type RuntimePresentationProps={
  onFinish:()=>void;
 };
 
+const lookupRuntimeDictionary:AssuranceSupportHost['lookupDictionary']=async(input,options)=>{
+ const {lookupDictionaryEntry}=await import('../services/quickDict');
+ return lookupDictionaryEntry(input,options);
+};
+
 function useRuntimeHost():AssuranceSupportHost{
  const toast=useOverlayStore(state=>state.toast);
  const openDict=useOverlayStore(state=>state.openDictModal);
@@ -69,7 +73,7 @@ function useRuntimeHost():AssuranceSupportHost{
   openDict,
   openNoteEditor,
   openSceneEditor:(content,anchorId,learningTarget)=>openSceneEditor({content,anchorId,learningTarget}),
-  lookupDictionary:lookupDictionaryEntry,
+  lookupDictionary:lookupRuntimeDictionary,
   onOpenMenuMore:(event,content)=>{
    event.stopPropagation();
    closeMenus();

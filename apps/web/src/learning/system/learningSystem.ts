@@ -4,7 +4,6 @@ import type { LearningEvent } from '../../data/library/learning';
 import type { PersonalLearning } from '../../data/library/personalLearning';
 import type { PersonalMeaningLearningSource } from '../../data/library/personalLearningSource';
 import { observeLibrary, type Table } from '../../data/library/store';
-import type { InstalledPackage } from '../../data/library/packageRecords';
 import type { HomeLearningStorageProjection, HomeLearningTargetRecord } from '../../data/library/homeLearningRecords';
 import type { LocalLearningAction, LocalLearningRun, LocalLearningTarget } from '../runtime/localProtocol';
 import type { LearningPolicyId } from '../runtime/policyProfiles';
@@ -21,7 +20,6 @@ export interface LearningOverview {
   runs: LocalLearningRun[];
   active: string | undefined;
   studyPlans: Record<string, LocalStudyPlan>;
-  packages: InstalledPackage[];
 }
 
 export interface LearningState {
@@ -170,8 +168,6 @@ export interface LearningSystem {
 
 const queryTables = {
   overview: [
-    'packageCache',
-    'packageInstallations',
     'learningTargets',
     'learningRuns',
     'learningEvents',

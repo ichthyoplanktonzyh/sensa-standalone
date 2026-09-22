@@ -14,7 +14,7 @@ import {useState,useRef,useEffect} from 'react';
 import {ArrowRight,BookOpen,Search,RefreshCw,Upload,Check,Download} from 'lucide-react';
 import {learningBundleBookId,learningBundleVersionNumber,learningBundleTitle,learningBundleDescription,learningDescriptorBookId,learningDescriptorVersionNumber,learningDescriptorTitle,learningDescriptorDescription} from '@sensa/contracts/sensa';
 import {LearningTargetDetailScreen} from '../components/learning/LearningTargetDetailScreen';
-import {packageKey} from '../../data/library/packageRecords';
+import {contentSupplyArtifactKey} from '../../contentSupply/system';
 import type {LearningTargetView as LocalLearningTarget} from '../../learning/system';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
@@ -34,7 +34,7 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
  const items=[...bookIds].map(bookId=>{
   const descriptor=c.catalog.filter(candidate=>routeDescriptor(candidate)&&learningDescriptorBookId(candidate)===bookId).sort((left,right)=>learningDescriptorVersionNumber(right)-learningDescriptorVersionNumber(left))[0];
   const releases=c.packages.filter(pack=>routePackage(pack)&&learningBundleBookId(pack.bundle)===bookId).sort((left,right)=>learningBundleVersionNumber(right.bundle)-learningBundleVersionNumber(left.bundle));
-  const exact=descriptor?releases.find(pack=>pack.key===packageKey(descriptor)):undefined,latestInstalled=releases[0],activeRelease=releases.find(pack=>enrolledFor(pack).every(Boolean));
+  const exact=descriptor?releases.find(pack=>pack.key===contentSupplyArtifactKey(descriptor)):undefined,latestInstalled=releases[0],activeRelease=releases.find(pack=>enrolledFor(pack).every(Boolean));
   const installed=exact??latestInstalled,baseline=activeRelease??latestInstalled,updateAvailable=!!descriptor&&!!baseline&&learningDescriptorVersionNumber(descriptor)>learningBundleVersionNumber(baseline.bundle),updateDownloaded=updateAvailable&&!!exact;
   const enrolled=!!activeRelease&&(!descriptor||learningBundleVersionNumber(activeRelease.bundle)>=learningDescriptorVersionNumber(descriptor));
   return {key:bookId,title:descriptor?learningDescriptorTitle(descriptor):learningBundleTitle(installed!.bundle),description:descriptor?learningDescriptorDescription(descriptor):learningBundleDescription(installed!.bundle),count:descriptor?.entryCount??installed!.bundle.entries.length,descriptor,installed,activeRelease,updateAvailable,updateDownloaded,enrolled};

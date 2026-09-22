@@ -160,10 +160,7 @@ const learningOverviewFrom=async(tx:LibraryTransaction)=>({
  studyPlans:await readStudyPlans(tx),
 });
 /** One coherent read for the always-visible queue and learning screens. */
-export const readLearningOverview=()=>readLibrary(async tx=>({
- ...await learningOverviewFrom(tx),
- packages:await tx.all<InstalledPackage>('packageCache'),
-}));
+export const readLearningOverview=()=>readLibrary(learningOverviewFrom);
 /** Small projection for callers that only need Target facts. */
 export const learningTargetsSnapshot=()=>readLibrary(tx=>tx.all<LocalLearningTarget>('learningTargets'));
 export const readLearning=()=>readLibrary(async tx=>({targets:await tx.all<LocalLearningTarget>('learningTargets'),runs:await tx.all<LocalLearningRun>('learningRuns'),events:await tx.all<LearningEvent>('learningEvents'),active:await tx.get<string>('meta','learning-active'),studyPlans:await readStudyPlans(tx)}));

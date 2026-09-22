@@ -11,7 +11,6 @@ import type {
   DictionaryLookupRequest,
 } from '../types';
 import { audioService } from '../services/audioService';
-import { lookupDictionaryEntry } from '../services/quickDict';
 import { ClickableSentence } from './ClickableSentence';
 import type { ExampleScreenProps } from './ExampleScreen';
 import { LearningExampleLookup } from './examples/LearningExampleLookup';
@@ -238,6 +237,7 @@ export function SensaExampleScreen({
                       tokenIdx,
                       displayWord: token.cleanWord,
                       load: async (signal) => {
+                        const { lookupDictionaryEntry } = await import('../services/quickDict');
                         const entry = await lookupDictionaryEntry(request, { signal });
                         if (!entry) toast(cardText('thisWordIsNotInTheDictionary'));
                         return entry;

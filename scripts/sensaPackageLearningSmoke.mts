@@ -9,7 +9,8 @@ import {canonicalJsonDigest,stableUuid} from '@sensa/learning-kernel';
 import {defaultSensaLanguageRoute,librarySyncTables,sensaPinnedLanguageContext,sensaInitialLearningCompletionSchema,sensaSchedulingHandoffSchema,sensaMemoryOutcomeSnapshotSchema,sensaSchedulingDecisionSchema,sensaRelearningCompletionSchema,type SensaFormalPinnedLanguageContext} from '@sensa/contracts/sensa';
 import {provisionLightweightInitialContent} from '../apps/web/src/learning/runtime/lightweightInitialContent.ts';
 import {openLibrary,command,readLibrary,readLocalLibraryRevision,writeLibraryCache,observeLibrary,LibraryTransaction} from '../apps/web/src/data/library/store.ts';
-import {installPackage,downloadPackage,rehydratePackageInstallations,sha256} from '../apps/web/src/data/library/packages.ts';
+import {sha256} from '../apps/web/src/data/library/packages.ts';
+import {contentSupplySystem} from '../apps/web/src/contentSupply/system/index.ts';
 import {learningSystem,type LearningAction} from '../apps/web/src/learning/system/index.ts';
 import {createLocalProtocolProgress,executeLocalProtocolTransition,reduceLocalProtocolAction,localLearningPurpose,localProtocolOutcomePermissions,localRunOpenPlanningInterruption} from '../apps/web/src/learning/runtime/localProtocol.ts';
 import {hasDeclaredMasteryOverride} from '../apps/web/src/learning/runtime/targetPlanningOverrides.ts';
@@ -24,6 +25,19 @@ assert(libraryBackupTables.includes('packageInstallations'));assert.equal((libra
 const identity=await openLibrary();await command({id:crypto.randomUUID(),kind:'fixture.owner',input:{}},async tx=>{tx.put('meta','service-owner',{subject:crypto.randomUUID(),accountId:crypto.randomUUID()});});
 const id=()=>crypto.randomUUID();
 const readLearning=()=>learningSystem.read({kind:'state'});
+const installPackage=(bytes:Uint8Array,descriptor?:any,signal?:AbortSignal)=>descriptor
+ ?contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal:signal??new AbortController().signal})
+ :contentSupplySystem.execute({kind:'import_package',bytes,signal});
+const downloadPackage=(descriptor:any,signal:AbortSignal,progress:(bytes:number)=>void)=>contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal,onProgress:fraction=>progress(Math.round(fraction*descriptor.byteLength))});
+const rehydratePackageInstallations=(descriptors?:readonly any[])=>descriptors
+ ?contentSupplySystem.execute({kind:'rehydrate'}).then(async result=>{
+   if(result.blocked.length){
+    await writeLibraryCache(async tx=>tx.put('meta','package-catalog',{format:'sensa-local-registry-cache-v1',items:descriptors,revision:null,checkedAt:null}));
+    return contentSupplySystem.execute({kind:'rehydrate'});
+   }
+   return result;
+  })
+ :contentSupplySystem.execute({kind:'rehydrate'});
 const readHomeLearningProjection=(languageRouteId:string)=>learningSystem.read({kind:'home',languageRouteId});
 const enrollPackage=(operationId:string,packageKey:string,languageContext:SensaFormalPinnedLanguageContext)=>learningSystem.execute({kind:'enroll_package',operationId,packageKey,languageContext});
 const confirmLearningQuantity=(operationId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number)=>learningSystem.execute({kind:'confirm_quantity',operationId,languageContext,dailyLimit});
@@ -48,6 +62,8 @@ try{
  assert.equal((await readLibrary(tx=>tx.all('packageInstallations'))).length,0);
  const pack=await downloadPackage(descriptor,new AbortController().signal,()=>{});
  assert.equal((await readLearning()).targets.length,0);
+ assert.equal((await contentSupplySystem.read({kind:'workspace'})).packages.length,1);
+ assert.equal('packages' in await learningSystem.read({kind:'overview'}),false,'Learning overview must not own installed Content Supply artifacts');
  await installPackage(bytes,descriptor);assert.equal((await readLibrary(tx=>tx.all('packageCache'))).length,1);assert.equal((await readLibrary(tx=>tx.all('packageInstallations'))).length,1);
  const installation=await readLibrary(tx=>tx.all<any>('packageInstallations').then(rows=>rows[0]));assert.equal('bundle' in installation,false,'synchronized installation facts must not carry published Bundle bytes');
  const installReceipts=await readLibrary(tx=>tx.all<any>('operations').then(rows=>rows.filter(row=>JSON.parse(row.input).kind==='package.install')));assert(installReceipts.length>0);assert(installReceipts.every(row=>!('bundle' in row.result)),'device operation receipts must not smuggle published Bundle bytes into backups');
