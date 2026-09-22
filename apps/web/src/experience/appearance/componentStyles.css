@@ -246,6 +246,10 @@
 
 [data-sensa-component="navigation"] {
   display: flex;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   min-height: var(--sensa-component-control-target-size);
   align-items: center;
   justify-content: space-between;
@@ -255,6 +259,27 @@
   border-radius: var(--sensa-component-surface-card-radius);
   background: var(--sensa-component-navigation-background);
   color: var(--sensa-component-navigation-foreground);
+}
+
+[data-sensa-component="navigation"] > * {
+  min-width: 0;
+}
+
+[data-sensa-component="navigation"][data-sensa-variant="bar"] {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+[data-sensa-component="navigation"][data-sensa-variant="bar"] > [data-sensa-slot="title"] {
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-sensa-component="navigation"][data-sensa-variant="tabs"] {
+  flex-wrap: wrap;
+  justify-content: flex-start;
 }
 
 [data-sensa-component="learning"] {
