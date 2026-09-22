@@ -227,6 +227,12 @@ try {
             await page.locator(
               `html[data-sensa-skin="${expectedSkin}"][data-sensa-color-mode="${mode}"][data-sensa-text-size="${textSize}"]`,
             ).waitFor();
+            await page.evaluate(async () => {
+              await document.fonts.ready;
+              await new Promise<void>((resolve) => {
+                requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+              });
+            });
             const result = await page.evaluate(({ componentTokens, layoutTokens, overlayTokens, motionTokens, layoutOrders, overlayOrders }) => {
               const rootStyle = getComputedStyle(document.documentElement);
               const action = document.querySelector<HTMLElement>('[data-sensa-component="action"]')!;
@@ -251,6 +257,20 @@ try {
                   backgroundImage: brandStyle.backgroundImage,
                 },
                 horizontalOverflow: bodyWidth,
+                overflowingElements: [...document.body.querySelectorAll<HTMLElement>("*")]
+                  .map((element) => {
+                    const rect = element.getBoundingClientRect();
+                    return {
+                      element: element.id
+                        ? `#${element.id}`
+                        : `${element.tagName.toLowerCase()}${element.className ? `.${String(element.className).trim().replace(/\s+/gu, ".")}` : ""}`,
+                      left: Math.round(rect.left),
+                      right: Math.round(rect.right),
+                      width: Math.round(rect.width),
+                    };
+                  })
+                  .filter(({ left, right }) => left < -1 || right > document.documentElement.clientWidth + 1)
+                  .slice(0, 12),
                 layouts: Object.entries(layoutOrders).map(([family, logicalOrder]) => {
                   const layout = document.querySelector<HTMLElement>(`[data-sensa-page-layout="${family}"][data-sensa-contract-specimen="full"]`)!;
                   const renderedRegions = [...layout.querySelectorAll<HTMLElement>(":scope > [data-sensa-page-region]")];
@@ -307,7 +327,10 @@ try {
               ? `sensa-mark-${mode === "dark" ? "reverse" : "ink"}.svg`
               : `sensa-lockup-horizontal-${mode === "dark" ? "reverse" : "color"}.svg`;
             assert(result.brand.backgroundImage.includes(expectedBrandAsset), `${skin}/${mode}/${textSize} resolves the wrong fixed brand tone`);
-            assert(result.horizontalOverflow <= 1, `${skin}/${mode}/${textSize} overflows at ${viewport.width}px`);
+            assert(
+              result.horizontalOverflow <= 1,
+              `${skin}/${mode}/${textSize} overflows by ${result.horizontalOverflow}px at ${viewport.width}px: ${JSON.stringify(result.overflowingElements)}`,
+            );
             if (skin === "Quiet" && viewport.width < 640) {
               assert(result.runtimeToolsBelowHeader, `Quiet/${mode}/${textSize} tools collide with the mobile runtime header`);
             }
