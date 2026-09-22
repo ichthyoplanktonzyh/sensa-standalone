@@ -5,7 +5,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BookHeart, Check, Pause, SquarePen, Volume2 } from "lucide-react";
 import type { ExpressionRevealCardPresentation } from "../../../learningRuntime/lightweightInitialPresentation";
-import type { LightweightInitialRating } from "../../../../learning/runtime/lightweightInitialProtocol";
+import type { LearningLightweightRating } from "../../../../learning/system";
 import type { PersonalLearningSceneRevision } from "../../../../personalContent/system";
 import type { DictionaryLookup, DictionaryLookupRequest, QuickDictEntry, Sentence } from "../../../types";
 import { audioService } from "../../../services/audioService";
@@ -23,7 +23,7 @@ interface ExpressionRevealCardProps {
   readonly initial?: boolean;
   readonly active: boolean;
   readonly presentation: ExpressionRevealCardPresentation;
-  readonly onRate: (rating: LightweightInitialRating) => void;
+  readonly onRate: (rating: LearningLightweightRating) => void;
   readonly semanticWorldState?: 'available' | 'update' | 'saved' | 'saving' | null;
   readonly onSaveToSemanticWorld?: () => void;
   readonly personalScene?: PersonalLearningSceneRevision | null;

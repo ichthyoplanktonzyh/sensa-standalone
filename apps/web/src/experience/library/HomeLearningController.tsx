@@ -1,13 +1,10 @@
-import {lazy,Suspense,useEffect,useMemo,useState} from 'react';
+import {lazy,Suspense,useEffect,useState} from 'react';
 import '../../i18n/accountResources';
 import {useTranslation} from 'react-i18next';
 import {HomeScreen} from '../components/HomeScreen';
 import {openLibrary} from '../../data/library/store';
-import type {HomeLearningProjection} from '../../learning/system';
-import {localCurriculumMembershipForContext} from '../../learning/runtime/localCurriculum';
-import {nextLearningQueueChangeAt,resolveLearningQueue} from './learningQueue';
+import type {LearningHomeProjection} from '../../learning/system';
 import {useLanguageRoutes} from './useLanguageRoutes';
-import {homeTargetPolicy,homeTargetReadiness} from './homeTargetReadiness';
 import {useShellNavigation} from '../router/useShellNavigation';
 import {localFlowNotice,localFlowText} from '../../i18n/localFlowText';
 import {useAccountExperience} from '../account/AccountContext';
@@ -19,12 +16,8 @@ export function HomeLearningController({active=true}:{active?:boolean}){
  const {t}=useTranslation();
  const {libraryAvailability}=useAccountExperience();
  const {goMain,setViewMode}=useShellNavigation();
- const {activeRoute,context:languageContext}=useLanguageRoutes();
- const [targets,setTargets]=useState<HomeLearningProjection['targets']>([]);
- const [availablePackageKeys,setAvailablePackageKeys]=useState<ReadonlySet<string>>(new Set());
- const [activeRun,setActiveRun]=useState<HomeLearningProjection['activeRun']>(null);
- const [dailyLimit,setDailyLimit]=useState<number|undefined>();
- const [clock,setClock]=useState(Date.now());
+ const {context:languageContext}=useLanguageRoutes();
+ const [projection,setProjection]=useState<LearningHomeProjection|null>(null);
  const [summaryReady,setSummaryReady]=useState(false);
  const [busy,setBusy]=useState(false);
  const [notice,setNotice]=useState('');
@@ -32,12 +25,8 @@ export function HomeLearningController({active=true}:{active?:boolean}){
  const [quantityChoice,setQuantityChoice]=useState(20);
  const refresh=async()=>{
   const learningSystem=await loadLearningSystem();
-  const projection=await learningSystem.read({kind:'home',languageRouteId:languageContext.languageRouteId});
-  setTargets(projection.targets);
-  setAvailablePackageKeys(projection.availablePackageKeys);
-  setActiveRun(projection.activeRun);
-  setDailyLimit(projection.dailyLimit);
-  setClock(Date.now());
+  const next=await learningSystem.read({kind:'home',languageRouteId:languageContext.languageRouteId,clock:Date.now()});
+  setProjection(next);
   setSummaryReady(true);
  };
  useEffect(()=>{
@@ -51,28 +40,15 @@ export function HomeLearningController({active=true}:{active?:boolean}){
    stop=system.subscribe({kind:'home',languageRouteId:languageContext.languageRouteId},read);
    return openLibrary().then(read);
   }).catch(()=>{if(current)setNotice(localFlowText('learningReadFailed'));});
-  const focus=()=>setClock(Date.now());
+  const focus=()=>void refresh();
   window.addEventListener('focus',focus);
   return()=>{current=false;stop();window.removeEventListener('focus',focus);};
  },[languageContext.languageRouteId,languageContext.languageRouteRevision]);
- const membershipByTarget=useMemo(()=>Object.fromEntries(targets.flatMap(target=>{
-  const membership=localCurriculumMembershipForContext(target,languageContext);
-  return membership?[[target.id,membership]]:[];
- })),[targets,languageContext]);
- const readinessByTarget=useMemo(()=>Object.fromEntries(targets.map(target=>{
-  const membership=membershipByTarget[target.id];
-  const pack=membership?.packageKey&&availablePackageKeys.has(membership.packageKey)
-   ?{key:membership.packageKey}
-   :undefined;
-  return [target.id,homeTargetReadiness(target,membership,pack)];
- })) as Readonly<Record<string,'ready'|'blocked'>>,[targets,membershipByTarget,availablePackageKeys]);
- const queue=useMemo(()=>resolveLearningQueue({targets,languageRouteId:activeRoute.id,readiness:readinessByTarget,clock,dailyLimit}),[targets,activeRoute.id,readinessByTarget,clock,dailyLimit]);
- const nextQueueChangeAt=useMemo(()=>nextLearningQueueChangeAt({targets,languageRouteId:activeRoute.id,readiness:readinessByTarget,clock,dailyLimit}),[targets,activeRoute.id,readinessByTarget,clock,dailyLimit]);
  useEffect(()=>{
-  if(nextQueueChangeAt===null)return;
-  const timer=window.setTimeout(()=>setClock(Date.now()),Math.min(2_147_483_647,Math.max(20,nextQueueChangeAt-Date.now()+20)));
+  if(projection?.nextChangeAt==null)return;
+  const timer=window.setTimeout(()=>void refresh(),Math.min(2_147_483_647,Math.max(20,projection.nextChangeAt-Date.now()+20)));
   return()=>window.clearTimeout(timer);
- },[nextQueueChangeAt]);
+ },[projection?.nextChangeAt]);
  const perform=async(work:()=>Promise<unknown>)=>{
   setBusy(true);setNotice('');
   try{await work();await refresh();return true;}
@@ -85,12 +61,11 @@ export function HomeLearningController({active=true}:{active?:boolean}){
   if(ok)setViewMode('lightweight');
  };
  const start=async(reviewOnly=false)=>{
-  const targetId=activeRun?.targetId??queue.due[0]?.id??(!reviewOnly?queue.initialReady[0]?.id:undefined);
+  const targetId=reviewOnly?projection?.nextReviewTargetId:projection?.nextTargetId;
   if(!targetId){goMain('s-learning-entry');return;}
-  if(dailyLimit===undefined){setQuantityChoice(20);setQuantityTarget(targetId);return;}
-  await begin(targetId,dailyLimit);
+  if(projection?.dailyLimit==null){setQuantityChoice(20);setQuantityTarget(targetId);return;}
+  await begin(targetId,projection.dailyLimit);
  };
- const quantityTargetRecord=quantityTarget?targets.find(target=>target.id===quantityTarget):undefined;
  const authoritativeSummary=summaryReady&&libraryAvailability==='authoritative';
  const status=notice
   ? <p role="status">{localFlowNotice(notice)}</p>
@@ -102,12 +77,12 @@ export function HomeLearningController({active=true}:{active?:boolean}){
  return <>
   <HomeScreen active={active} onGo={goMain}
    busy={busy} summaryReady={authoritativeSummary} status={status}
-   onResume={activeRun?()=>setViewMode('lightweight'):undefined}
+   onResume={projection?.activeRunId?()=>setViewMode('lightweight'):undefined}
    onStartMixed={()=>void start()} onStartReview={()=>void start(true)}
-   reviewDueN={queue.due.length} newAvailable={queue.initialReady.length}
+   reviewDueN={projection?.reviewDueCount??0} newAvailable={projection?.readyInitialCount??0}
    onRecordContext={()=>goMain('s-semantic-world',{worldAction:'create'})}
-   mixedReadyN={queue.initialReady.length+queue.due.length}/>
-  {quantityTarget&&quantityTargetRecord&&<Suspense fallback={null}><LearningPreferencesPanel fixedPolicy defaultPolicy={homeTargetPolicy(quantityTargetRecord)} dailyNewCount={quantityChoice} onPolicyChange={()=>{}} onDailyNewCountChange={setQuantityChoice} busy={busy} status={notice&&<p role="status">{localFlowNotice(notice)}</p>} onClose={()=>setQuantityTarget(null)} closeLabel={localFlowText('confirmAndStart')} onConfirm={()=>void (async()=>{
+   mixedReadyN={projection?.mixedReadyCount??0}/>
+  {quantityTarget&&projection?.nextTargetPolicy&&<Suspense fallback={null}><LearningPreferencesPanel policyOptions={projection.policyOptions} fixedPolicy defaultPolicy={projection.nextTargetPolicy} dailyNewCount={quantityChoice} onPolicyChange={()=>{}} onDailyNewCountChange={setQuantityChoice} busy={busy} status={notice&&<p role="status">{localFlowNotice(notice)}</p>} onClose={()=>setQuantityTarget(null)} closeLabel={localFlowText('confirmAndStart')} onConfirm={()=>void (async()=>{
    const learningSystem=await loadLearningSystem();
    const confirmed=await perform(()=>learningSystem.execute({kind:'confirm_quantity',operationId:crypto.randomUUID(),languageContext,dailyLimit:quantityChoice}));
    if(!confirmed)return;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {nextLearningQueueChangeAt} from '../apps/web/src/experience/library/learningQueue.ts';
+import {nextLearningQueueChangeAt} from '../apps/web/src/learning/system/learningPlanning.ts';
 import {nextPersonalLearningLeaseExpiry} from '../apps/web/src/experience/library/preparationSchedule.ts';
 import {automaticCloudSyncRetryAt,blocksAutomaticCloudSync,cloudSyncFailurePolicy,cloudSyncRetryDelaysMs} from '../apps/web/src/data/library/cloudSyncPolicy.ts';
 

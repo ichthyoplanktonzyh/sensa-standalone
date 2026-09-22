@@ -10,7 +10,7 @@ import {provisionLightweightInitialContent} from '../apps/web/src/contentSupply/
 import {withBindingFixture} from './support/lightweightMaterialFixture.mts';
 const compiled=await build({stdin:{contents:[
  ...['store','learning','packages','backupValidation'].map(name=>`export * from './apps/web/src/data/library/${name}';`),
- "export * from './apps/web/src/experience/library/declareKnownAndContinue';",
+ "export {learningSystem} from './apps/web/src/learning/system';",
  "export * from './apps/web/src/contentSupply/provisioning/hybridMaterialization';",
 ].join('\n'),resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':'{}'}});
 Object.assign(globalThis,{indexedDB,window:new EventTarget(),location:{origin:'http://127.0.0.1:9998'},BroadcastChannel:undefined});
@@ -37,11 +37,12 @@ try{
  // Declaration continues directly to the next eligible target and does not forge learning outcomes.
  const nextId=ids[1];await api.startLearning(id(),nextId,context,20);
  const eventCount=(await api.readLearning()).events.length;
- const next=await api.declareKnownAndContinue(nextId,context,20,[]);
- assert.equal(next.nextRun.targetId,ids[2]);
+ const continued=await api.learningSystem.execute({kind:'declare_mastery_and_continue',operationId:id(),targetId:nextId,languageContext:context,dailyLimit:20});
+ assert.equal(continued,true);
  let state=await api.readLearning(),declared=state.targets.find((t:any)=>t.id===nextId);
+ assert.equal(state.runs.find((run:any)=>run.id===state.active)?.targetId,ids[2]);
  assert.equal(declared.completedAt,null);assert.equal(declared.memory,null);assert.equal(state.events.length,eventCount);
- assert.equal((await api.declareKnownAndContinue(ids[2],context,20,[])).nextRun,null);
+ assert.equal(await api.learningSystem.execute({kind:'declare_mastery_and_continue',operationId:id(),targetId:ids[2],languageContext:context,dailyLimit:20}),false);
  state=await api.readLearning();assert.equal(state.active,undefined);assert.equal(state.events.length,eventCount);
  const finalRows=await api.readLibrary(async(tx:any)=>Object.fromEntries(await Promise.all(api.libraryTables.map(async(table:string)=>[table,await tx.entries(table)]))));
  api.validateBackupRows(finalRows);

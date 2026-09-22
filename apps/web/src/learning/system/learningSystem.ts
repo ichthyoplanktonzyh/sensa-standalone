@@ -1,42 +1,53 @@
 import type { SensaFormalPinnedLanguageContext } from '@sensa/contracts/sensa';
 
-import type { LearningEvent } from '../../data/library/learning';
 import type { PersonalMeaningLearningSource } from '../../contentSupply/provisioning/contracts';
 import { observeLibrary, type Table } from '../../data/library/store';
-import type { HomeLearningStorageProjection, HomeLearningTargetRecord } from '../../data/library/homeLearningRecords';
-import type { LocalLearningAction, LocalLearningRun, LocalLearningTarget } from '../runtime/localProtocol';
-import type { LearningPolicyId } from '../runtime/policyProfiles';
-import type { LocalStudyPlan } from '../../data/library/studyPlans';
+import type {
+  LearningAction,
+  LearningHomeProjection,
+  LearningPersonalEnrollmentIndex,
+  LearningPolicy,
+  LearningSemanticMemoryProjection,
+  LearningWorkspaceProjection,
+} from './learningReadModels';
+export {
+  LEARNING_LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
+  LEARNING_LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND,
+} from './learningReadModels';
+export type {
+  FourStageInitialSessionProjection,
+  FourStageReviewAnswer,
+  FourStageReviewSessionProjection,
+  FourStageTargetPresentation,
+  LearningAction,
+  LearningFourStageInitialRuntimeProjection,
+  LearningFourStageReviewRuntimeProjection,
+  LearningHomeProjection,
+  LearningLightweightRuntimeProjection,
+  LearningLightweightRating,
+  LearningLightweightStepProjection,
+  LearningPersonalEnrollmentIndex,
+  LearningPolicy,
+  LearningPolicyOption,
+  LearningPurpose,
+  LearningQueueProjection,
+  LearningReadiness,
+  LearningRecordKind,
+  LearningRecordProjection,
+  LearningRuntimeCapability,
+  LearningRuntimeProjection,
+  LearningSemanticMemoryProjection,
+  LearningSourceKind,
+  LearningStructuredRuntimeProjection,
+  LearningTargetPresentation,
+  LearningTargetProjection,
+  LearningTargetState,
+  LearningWorkspaceProjection,
+} from './learningReadModels';
 
-export type LearningTargetView = LocalLearningTarget;
-export type LearningRunView = LocalLearningRun;
-export type LearningAction = LocalLearningAction;
-export type LearningPolicy = LearningPolicyId;
 export interface PersonalLearningEnrollment {
   readonly provisioningTaskId: string;
   readonly provisioningStatus: 'waiting' | 'ready';
-}
-
-export interface LearningOverview {
-  targets: LocalLearningTarget[];
-  runs: LocalLearningRun[];
-  active: string | undefined;
-  studyPlans: Record<string, LocalStudyPlan>;
-}
-
-export interface LearningState {
-  targets: LocalLearningTarget[];
-  runs: LocalLearningRun[];
-  events: LearningEvent[];
-  active: string | undefined;
-  studyPlans: Record<string, LocalStudyPlan>;
-}
-
-export interface HomeLearningProjection {
-  readonly targets: readonly HomeLearningTargetRecord[];
-  readonly availablePackageKeys: ReadonlySet<string>;
-  readonly activeRun: HomeLearningStorageProjection['activeRun'];
-  readonly dailyLimit: number | undefined;
 }
 
 export type LearningCommand =
@@ -65,7 +76,7 @@ export type LearningCommand =
       operationId: string;
       runId: string;
       expectedRevision: number;
-      action: LocalLearningAction;
+      action: LearningAction;
       at?: string;
     }>
   | Readonly<{
@@ -94,7 +105,7 @@ export type LearningCommand =
       operationId: string;
       targetId: string;
       languageContext: SensaFormalPinnedLanguageContext;
-      profileId: LearningPolicyId;
+      profileId: LearningPolicy;
     }>
   | Readonly<{
       kind: 'enroll_personal';
@@ -102,26 +113,44 @@ export type LearningCommand =
       source: PersonalMeaningLearningSource;
       languageContext: SensaFormalPinnedLanguageContext;
       useContext: boolean;
+    }>
+  | Readonly<{
+      kind: 'declare_mastery_and_continue';
+      operationId: string;
+      targetId: string;
+      languageContext: SensaFormalPinnedLanguageContext;
+      dailyLimit: number | null;
+      at?: string;
+    }>
+  | Readonly<{
+      kind: 'advance';
+      operationId: string;
+      runId: string;
+      languageContext: SensaFormalPinnedLanguageContext;
+      dailyLimit: number;
+      at?: string;
     }>;
 
 export type LearningCommandResult<Command extends LearningCommand> =
   Command['kind'] extends 'enroll_package' ? string[]
-    : Command['kind'] extends 'start' | 'act' | 'continue' ? LocalLearningRun
-      : Command['kind'] extends 'select_policy' ? LocalLearningTarget
-        : Command['kind'] extends 'enroll_personal' ? PersonalLearningEnrollment
-          : boolean;
+    : Command['kind'] extends 'enroll_personal' ? PersonalLearningEnrollment
+      : boolean;
 
 export type LearningQuery =
-  | Readonly<{ kind: 'overview' }>
-  | Readonly<{ kind: 'state' }>
-  | Readonly<{ kind: 'targets' }>
-  | Readonly<{ kind: 'home'; languageRouteId: string }>;
+  | Readonly<{ kind: 'home'; languageRouteId: string; clock?: number }>
+  | Readonly<{
+      kind: 'workspace';
+      languageContext: SensaFormalPinnedLanguageContext;
+      clock?: number;
+    }>
+  | Readonly<{ kind: 'personal_enrollment_index' }>
+  | Readonly<{ kind: 'semantic_memory' }>;
 
 export type LearningQueryResult<Query extends LearningQuery> =
-  Query['kind'] extends 'overview' ? LearningOverview
-    : Query['kind'] extends 'state' ? LearningState
-      : Query['kind'] extends 'targets' ? LocalLearningTarget[]
-        : HomeLearningProjection;
+  Query['kind'] extends 'home' ? LearningHomeProjection
+          : Query['kind'] extends 'workspace' ? LearningWorkspaceProjection
+            : Query['kind'] extends 'personal_enrollment_index' ? LearningPersonalEnrollmentIndex
+              : LearningSemanticMemoryProjection;
 
 /**
  * Stable Learning System deep Module interface.
@@ -139,16 +168,10 @@ export interface LearningSystem {
 }
 
 const queryTables = {
-  overview: [
-    'learningTargets',
-    'learningRuns',
-    'learningEvents',
-    'settings',
-    'meta',
-  ],
-  state: ['learningTargets', 'learningRuns', 'learningEvents', 'settings', 'meta'],
-  targets: ['learningTargets'],
   home: ['packageCache', 'packageInstallations', 'learningTargets', 'learningRuns', 'settings', 'meta'],
+  workspace: ['packageCache', 'packageInstallations', 'learningTargets', 'learningRuns', 'learningEvents', 'settings', 'meta'],
+  personal_enrollment_index: ['learningTargets'],
+  semantic_memory: ['learningTargets'],
 } as const satisfies Record<LearningQuery['kind'], readonly Table[]>;
 
 export const learningSystem: LearningSystem = {

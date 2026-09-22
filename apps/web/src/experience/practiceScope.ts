@@ -1,6 +1,6 @@
 import type { SensaExpressionType } from '@sensa/contracts/sensa';
 import type { PersonalMeaningLearningSource } from '../contentSupply/system';
-import type { LocalLearningTarget } from '../learning/runtime/localProtocol';
+import type { LearningTargetProjection } from '../learning/system';
 
 export const PRACTICE_SCOPE_RESOLVER_VERSION = 'practice-scope-resolver-v2';
 export const PRACTICE_SCOPE_SNAPSHOT_VERSION = 'practice-scope-snapshot-v1';
@@ -121,30 +121,7 @@ export interface PracticeScopeCatalog {
 }
 
 export interface PracticeStudyTarget {
-  readonly target: Readonly<{
-    id: LocalLearningTarget['id'];
-    identity: Pick<
-      LocalLearningTarget['identity'],
-      'senseId' | 'senseVersionId' | 'senseExpressionBindingId' | 'bindingVersionId'
-    >;
-    expression: LocalLearningTarget['expression'];
-    targetLanguageTag: LocalLearningTarget['targetLanguageTag'];
-  }>;
-  readonly membership: Readonly<{
-    id: string;
-    material: Readonly<{
-      snapshot: Readonly<{
-        learningMaterializationId: string;
-        validationStatus: string;
-      }>;
-      content: Readonly<{
-        resources: readonly Readonly<{
-          materialRoleKey: string;
-          contentPayload: unknown;
-        }>[];
-      }>;
-    }>;
-  }>;
+  readonly target: LearningTargetProjection;
 }
 
 export interface PracticeScopeInput {
@@ -163,10 +140,10 @@ export const DEFAULT_PRACTICE_SCOPE_SELECTION: PracticeScopeSelection = {
 const compact = (value: string): string => value.replace(/\s+/g, ' ').trim();
 
 const payloadFor = (
-  membership: PracticeStudyTarget['membership'],
+  target: LearningTargetProjection,
   role: string,
 ): Readonly<Record<string, unknown>> | null => {
-  const payload = membership.material.content.resources.find(
+  const payload = target.material.content.resources.find(
     (resource) => resource.materialRoleKey === role,
   )?.contentPayload;
   return payload && typeof payload === 'object'
@@ -183,9 +160,9 @@ const payloadString = (
 };
 
 const expressionTypeFrom = (
-  membership: PracticeStudyTarget['membership'],
+  target: LearningTargetProjection,
 ): SensaExpressionType | null => {
-  const kind = payloadString(payloadFor(membership, 'language_structure'), 'expressionKind');
+  const kind = payloadString(payloadFor(target, 'language_structure'), 'expressionKind');
   if (kind === 'word' || kind === 'phrase' || kind === 'construction') return kind;
   if (kind === 'utterance') return 'sentence';
   return null;
@@ -193,12 +170,12 @@ const expressionTypeFrom = (
 
 const targetsFromStudyScope = (
   inputs: readonly PracticeStudyTarget[],
-): readonly PracticeScopeTarget[] => inputs.map(({ target, membership }) => {
-  const expressionPayload = payloadFor(membership, 'target_expression');
-  const sensePayload = payloadFor(membership, 'sense_confirmation');
-  const pronunciationPayload = payloadFor(membership, 'pronunciation');
-  const contextPayload = payloadFor(membership, 'experience_recall_cue');
-  const expression = payloadString(expressionPayload, 'surface') ?? target.expression;
+): readonly PracticeScopeTarget[] => inputs.map(({ target }) => {
+  const expressionPayload = payloadFor(target, 'target_expression');
+  const sensePayload = payloadFor(target, 'sense_confirmation');
+  const pronunciationPayload = payloadFor(target, 'pronunciation');
+  const contextPayload = payloadFor(target, 'experience_recall_cue');
+  const expression = payloadString(expressionPayload, 'surface') ?? target.presentation.expression;
   const meaning = payloadString(sensePayload, 'meaning') ?? target.identity.senseId;
   const contextPreview = compact(
     payloadString(contextPayload, 'scene')
@@ -209,24 +186,24 @@ const targetsFromStudyScope = (
   const accentLabel = payloadString(pronunciationPayload, 'accentLabel');
   const audioUrl = payloadString(pronunciationPayload, 'audioUrl');
   const hasPronunciation = Boolean(phoneticNotation || audioUrl);
-  const validatedLearningMaterial = membership.material.snapshot.validationStatus === 'validated';
+  const validatedLearningMaterial = target.material.snapshot.validationStatus === 'validated';
 
   return {
-    targetId: `learning:${target.id}:${membership.id}`,
+    targetId: `learning:${target.targetId}:${target.curriculumMembershipId}`,
     identity: {
       kind: 'learning_target',
-      learningTargetId: target.id,
-      curriculumMembershipId: membership.id,
+      learningTargetId: target.targetId,
+      curriculumMembershipId: target.curriculumMembershipId,
       senseId: target.identity.senseId,
       senseVersionId: target.identity.senseVersionId,
-      bindingId: target.identity.senseExpressionBindingId,
+      bindingId: target.identity.bindingId,
       bindingVersionId: target.identity.bindingVersionId,
-      learningMaterializationId: membership.material.snapshot.learningMaterializationId,
+      learningMaterializationId: target.material.snapshot.learningMaterializationId,
     },
     expression: {
       surfaceForm: expression,
-      expressionType: expressionTypeFrom(membership),
-      languageTag: target.targetLanguageTag,
+      expressionType: expressionTypeFrom(target),
+      languageTag: target.presentation.targetLanguageTag,
       pronunciationVariant: hasPronunciation
         ? { accentLabel, phoneticNotation, audioUrl }
         : null,

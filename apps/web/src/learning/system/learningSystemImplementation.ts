@@ -1,9 +1,28 @@
-import { readHomeLearningRecords } from '../../data/library/store';
-import type {
-  HomeLearningProjection,
-  LearningCommand,
-  LearningQuery,
-} from './learningSystem';
+import { stableUuid } from '@sensa/learning-kernel';
+
+import {
+  advanceInterleavedLearningRetries,
+  type InterleavedLearningRetry,
+} from './learningPlanning';
+import {
+  readLearningHomeProjection,
+  readLearningPersonalEnrollmentIndex,
+  readLearningSemanticMemoryProjection,
+  readLearningWorkspaceProjection,
+  removeRetryTarget,
+} from './learningProjection';
+import type { LearningCommand, LearningQuery } from './learningSystem';
+
+const retriesByLanguageRoute = new Map<string, readonly InterleavedLearningRetry[]>();
+
+const retriesFor = (languageRouteId: string) => (
+  retriesByLanguageRoute.get(languageRouteId) ?? []
+);
+
+const setRetries = (languageRouteId: string, retries: readonly InterleavedLearningRetry[]) => {
+  if (retries.length) retriesByLanguageRoute.set(languageRouteId, retries);
+  else retriesByLanguageRoute.delete(languageRouteId);
+};
 
 export const executeLearningCommand = async (command: LearningCommand): Promise<unknown> => {
   switch (command.kind) {
@@ -13,35 +32,47 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
     }
     case 'confirm_quantity': {
       const { confirmLearningQuantity } = await import('../../data/library/learning');
-      return confirmLearningQuantity(command.operationId, command.languageContext, command.dailyLimit);
+      await confirmLearningQuantity(command.operationId, command.languageContext, command.dailyLimit);
+      return true;
     }
     case 'start': {
       const { startLearning } = await import('../../data/library/learning');
-      return startLearning(
+      await startLearning(
         command.operationId,
         command.targetId,
         command.languageContext,
         command.dailyLimit,
         command.at,
       );
+      return true;
     }
     case 'act': {
       const { actLearning } = await import('../../data/library/learning');
-      return actLearning(
+      const run = await actLearning(
         command.operationId,
         command.runId,
         command.expectedRevision,
         command.action,
         command.at,
       );
+      if (command.action.kind === 'rate') {
+        const routeId = run.languageContext.languageRouteId;
+        setRetries(routeId, advanceInterleavedLearningRetries(
+          retriesFor(routeId),
+          run.targetId,
+          command.action.rating === 'again',
+        ));
+      }
+      return true;
     }
     case 'finish': {
       const { finishLearning } = await import('../../data/library/learning');
-      return finishLearning(command.operationId, command.runId);
+      await finishLearning(command.operationId, command.runId);
+      return true;
     }
     case 'continue': {
       const { continueLearning } = await import('../../data/library/learning');
-      return continueLearning(
+      await continueLearning(
         command.operationId,
         command.runId,
         command.targetId,
@@ -49,24 +80,27 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
         command.dailyLimit,
         command.at,
       );
+      return true;
     }
     case 'set_declared_mastery': {
       const { setLocalDeclaredMastery } = await import('../../data/library/learning');
-      return setLocalDeclaredMastery(
+      await setLocalDeclaredMastery(
         command.operationId,
         command.targetId,
         command.active,
         command.at,
       );
+      return true;
     }
     case 'select_policy': {
       const { selectLocalLearningPolicy } = await import('../../data/library/learning');
-      return selectLocalLearningPolicy(
+      await selectLocalLearningPolicy(
         command.operationId,
         command.targetId,
         command.languageContext,
         command.profileId,
       );
+      return true;
     }
     case 'enroll_personal': {
       const { requestPersonalContentProvisioning } = await import(
@@ -74,31 +108,81 @@ export const executeLearningCommand = async (command: LearningCommand): Promise<
       );
       return requestPersonalContentProvisioning(command);
     }
+    case 'declare_mastery_and_continue': {
+      const { setLocalDeclaredMastery, startLearning } = await import('../../data/library/learning');
+      const at = command.at ?? new Date().toISOString();
+      await setLocalDeclaredMastery(
+        stableUuid(`${command.operationId}:declare-mastery`),
+        command.targetId,
+        true,
+        at,
+      );
+      const routeId = command.languageContext.languageRouteId;
+      setRetries(routeId, removeRetryTarget(retriesFor(routeId), command.targetId));
+      if (command.dailyLimit === null) return false;
+      const workspace = await readLearningWorkspaceProjection({
+        languageContext: command.languageContext,
+        clock: Date.parse(at),
+        retries: retriesFor(routeId),
+      });
+      const nextTargetId = workspace.queue.nextTargetId;
+      if (!nextTargetId) return false;
+      await startLearning(
+        stableUuid(`${command.operationId}:start-next`),
+        nextTargetId,
+        command.languageContext,
+        command.dailyLimit,
+        at,
+      );
+      return true;
+    }
+    case 'advance': {
+      const { continueLearning, finishLearning } = await import('../../data/library/learning');
+      const at = command.at ?? new Date().toISOString();
+      const routeId = command.languageContext.languageRouteId;
+      const workspace = await readLearningWorkspaceProjection({
+        languageContext: command.languageContext,
+        clock: Date.parse(at),
+        retries: retriesFor(routeId),
+      });
+      const nextTargetId = workspace.queue.nextTargetId;
+      if (nextTargetId) {
+        await continueLearning(
+          stableUuid(`${command.operationId}:continue-next`),
+          command.runId,
+          nextTargetId,
+          command.languageContext,
+          command.dailyLimit,
+          at,
+        );
+        return true;
+      }
+      await finishLearning(stableUuid(`${command.operationId}:finish`), command.runId);
+      return false;
+    }
   }
 };
 
 export const readLearningQuery = async (query: LearningQuery): Promise<unknown> => {
   switch (query.kind) {
-    case 'overview': {
-      const { readLearningOverview } = await import('../../data/library/learning');
-      return readLearningOverview();
-    }
-    case 'state': {
-      const { readLearning } = await import('../../data/library/learning');
-      return readLearning();
-    }
-    case 'targets': {
-      const { learningTargetsSnapshot } = await import('../../data/library/learning');
-      return learningTargetsSnapshot();
-    }
     case 'home': {
-      const stored = await readHomeLearningRecords(query.languageRouteId);
-      return {
-        targets: stored.targets,
-        availablePackageKeys: new Set(stored.availablePackageKeys),
-        activeRun: stored.activeRun,
-        dailyLimit: stored.dailyLimit,
-      } satisfies HomeLearningProjection;
+      return readLearningHomeProjection({
+        languageRouteId: query.languageRouteId,
+        clock: query.clock ?? Date.now(),
+      });
+    }
+    case 'workspace': {
+      return readLearningWorkspaceProjection({
+        languageContext: query.languageContext,
+        clock: query.clock ?? Date.now(),
+        retries: retriesFor(query.languageContext.languageRouteId),
+      });
+    }
+    case 'personal_enrollment_index': {
+      return readLearningPersonalEnrollmentIndex();
+    }
+    case 'semantic_memory': {
+      return readLearningSemanticMemoryProjection();
     }
   }
 };

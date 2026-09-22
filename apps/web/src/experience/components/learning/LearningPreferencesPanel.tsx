@@ -4,26 +4,26 @@ import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitch } from '../../../i18n/LanguageSwitch';
-import { learningPolicyProfileRegistry } from '../../../learning/runtime/policyProfiles';
-import type { LearningPolicyId } from '../../../learning/runtime/policyProfiles';
+import type { LearningPolicy, LearningPolicyOption } from '../../../learning/system';
 import { SensaOverlayLayout } from '../../ui/SensaComponents';
 import { runtimePrimary } from './RuntimeFrame';
 
 interface Props {
-  allowedPolicies?:readonly LearningPolicyId[];
+  allowedPolicies?:readonly LearningPolicy[];
+  policyOptions?:readonly LearningPolicyOption[];
   showDailyQuantity?:boolean;
   onConfirm?:()=>void;
   closeLabel?: string;
   fixedPolicy?: boolean;
   busy?: boolean;
   status?: import('react').ReactNode;
-  defaultPolicy: LearningPolicyId;
+  defaultPolicy: LearningPolicy;
   dailyNewCount: number;
-  onPolicyChange: (policy:LearningPolicyId)=>void;
+  onPolicyChange: (policy:LearningPolicy)=>void;
   onDailyNewCountChange: (count:number)=>void;
   onClose: ()=>void;
 }
-export function LearningPreferencesPanel({allowedPolicies,showDailyQuantity=true,onConfirm,closeLabel,fixedPolicy,busy,status,defaultPolicy,dailyNewCount,onPolicyChange,onDailyNewCountChange,onClose}:Props) {
+export function LearningPreferencesPanel({allowedPolicies,policyOptions=[{id:'lightweight',localSelectable:true},{id:'high_assurance',localSelectable:true},{id:'interleaved_four_stage',localSelectable:true}],showDailyQuantity=true,onConfirm,closeLabel,fixedPolicy,busy,status,defaultPolicy,dailyNewCount,onPolicyChange,onDailyNewCountChange,onClose}:Props) {
   const {t}=useTranslation();
   const [error,setError]=useState(false);
   useEffect(()=>{
@@ -50,10 +50,10 @@ export function LearningPreferencesPanel({allowedPolicies,showDailyQuantity=true
         <div className="border-t border-border-subtle pt-6">
           <h3 className="text-sm font-medium">{t(showDailyQuantity?'learningPreferences.defaultPolicy':'learningSetup.method')}</h3>
           <div className="mt-4 grid gap-2" role="radiogroup" aria-label={t(showDailyQuantity?'learningPreferences.defaultPolicy':'learningSetup.method')}>
-            {learningPolicyProfileRegistry.list().filter(profile=>(!allowedPolicies||allowedPolicies.includes(profile.profileId))&&(!fixedPolicy||profile.profileId===defaultPolicy)).map(profile=><button key={profile.profileId} disabled={fixedPolicy||busy} type="button" role="radio" aria-checked={profile.profileId===defaultPolicy}
-              onClick={()=>change(()=>onPolicyChange(profile.profileId))}
-              className={`min-h-12 rounded-control border px-4 text-left text-sm focus-visible:outline-2 focus-visible:outline-focus ${profile.profileId===defaultPolicy?'border-border-strong bg-surface-selected text-action-primary':'border-border-subtle bg-surface-panel text-fg-secondary hover:bg-surface-subtle'}`}>
-              {t('learningPreferences.policies.'+profile.profileId)}
+            {policyOptions.filter(option=>(!allowedPolicies||allowedPolicies.includes(option.id))&&(!fixedPolicy||option.id===defaultPolicy)).map(option=><button key={option.id} disabled={fixedPolicy||busy} type="button" role="radio" aria-checked={option.id===defaultPolicy}
+              onClick={()=>change(()=>onPolicyChange(option.id))}
+              className={`min-h-12 rounded-control border px-4 text-left text-sm focus-visible:outline-2 focus-visible:outline-focus ${option.id===defaultPolicy?'border-border-strong bg-surface-selected text-action-primary':'border-border-subtle bg-surface-panel text-fg-secondary hover:bg-surface-subtle'}`}>
+              {t('learningPreferences.policies.'+option.id)}
             </button>)}
           </div>
         </div>

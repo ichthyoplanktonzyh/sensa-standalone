@@ -657,6 +657,15 @@ Account 回答“谁可以访问以及账号是否存在”；Learner 回答“�
 
 ### Learning Runtime
 
+Product Shell 不读取 Runtime Coordinator、Policy registry、Curriculum aggregate 或 Protocol state 来决定
+显示什么。Learning System 对外提供按用例收敛的读取模型：Home projection 只含计数、下一目标和下一次
+失效时间；Workspace projection 统一返回 Target presentation、readiness、有效 Policy、queue、history 与
+当前 Runtime presentation union；Learner Semantic Projection 只读取最小 Memory/Declared Mastery
+projection。Runtime union 已完成 Protocol surface、active Target、Step、材料与 assessment/review 展示数据的
+解析，Renderer 只负责布局、本地交互态和提交 learner intent。Content Supply catalog 仍由 Content Supply
+拥有；Learning 只在自身边界内消费安装/材料事实来形成 readiness 和执行投影，不把 Bundle 或目录所有权
+转移给 Learning 或页面。
+
 - Learning Session 是一次有边界的活动容器，并固定 `mixed | review_only` intent；
 - Protocol Step 定义材料角色、交互/判分、结果资格与 transition；Step Instance 保存一次可重放执行；
 - Learning Action Intent 以 `instruction | practice | assessment | feedback | repair` 区分当前实施目的，

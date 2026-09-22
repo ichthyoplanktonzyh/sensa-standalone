@@ -49,9 +49,9 @@ import type {
 } from './lightweightInitialPresentation';
 import type { PersonalLearningSceneRevision } from '../../personalContent/system';
 import type {
-  LightweightInitialRating,
-  LightweightProtocolStepInstance,
-} from '../../learning/runtime/lightweightInitialProtocol';
+  LearningLightweightRating,
+  LearningLightweightStepProjection,
+} from '../../learning/system';
 import type {
   ReviewAssessmentResult,
   ReviewAssessmentSpec,
@@ -119,11 +119,11 @@ export interface StepRendererProps {
 }
 
 export interface LightweightInitialStepRendererProps {
-  readonly step: LightweightProtocolStepInstance;
+  readonly step: LearningLightweightStepProjection;
   readonly active: boolean;
   readonly presentation: LightweightInitialCardPresentation;
   readonly onReveal: () => void;
-  readonly onRate: (rating: LightweightInitialRating) => void;
+  readonly onRate: (rating: LearningLightweightRating) => void;
   readonly personalScene?: PersonalLearningSceneRevision | null;
   readonly onOpenPersonalScene?: () => void;
   readonly semanticWorldState?: 'available' | 'update' | 'saved' | 'saving' | null;

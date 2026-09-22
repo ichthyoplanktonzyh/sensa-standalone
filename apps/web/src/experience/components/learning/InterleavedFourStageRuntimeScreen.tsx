@@ -2,17 +2,15 @@ import type {RuntimeLearningContent} from '../../../learning/content/learningCat
 import {useTranslation} from 'react-i18next';
 import { SensaPageLayout } from '../../ui/SensaPageLayouts';
 import {useEffect,useRef} from 'react';
-import {
-  type FourStageQueueProjection,
-  type FourStageSession,
-} from '../../../learning/runtime/interleavedFourStageProtocol';
+import type {FourStageInitialSessionProjection,FourStageTargetPresentation} from '../../../learning/system';
 
-export interface FourStageTargetPresentation {expression:string;meaning:string;example:string;partOfSpeech:string}
 export interface FourStageInitialExecution {
-  session:FourStageSession<string>|null;
-  projection:FourStageQueueProjection<string>;
+  session:FourStageInitialSessionProjection|null;
   target:FourStageTargetPresentation|null;
   content:RuntimeLearningContent|null;
+  targetCount:number;
+  completedTargetCount:number;
+  currentTargetCheckpointCredits:number;
   busy:boolean;
   notice?:import('react').ReactNode;
   onChoice:(id:string)=>void;
@@ -41,16 +39,10 @@ export function InterleavedFourStageRuntimeScreen({
 }: InterleavedFourStageRuntimeScreenProps) {
   const {t}=useTranslation();
   const session=execution.session;
-  const projection=execution.projection;
   const target=execution.target;
   const runtimeContent=execution.content;
   const recognitionOptions = runtimeContent?.recognitionAssessment.options ?? [];
-  const completedCredits = session && projection
-    ? Object.values(
-      projection.targets.find((candidate) => candidate.targetId === session.targetId)
-        ?.progress.checkpointCredits ?? {},
-    ).filter((credit) => credit.status === 'credited').length
-    : 0;
+  const completedCredits = execution.currentTargetCheckpointCredits;
 
   const settle = (satisfied: boolean) => {
     execution.onSelfReport(satisfied);
@@ -72,10 +64,9 @@ export function InterleavedFourStageRuntimeScreen({
     void audio.play().catch(() => undefined);
   };
 
-  if (!projection) return null;
-  const progressValue = projection.targetCount > 0
+  const progressValue = execution.targetCount > 0
     ? Math.round(
-        (Math.min(projection.graduatedTargetIds.length, projection.targetCount) / projection.targetCount) * 100,
+        (Math.min(execution.completedTargetCount, execution.targetCount) / execution.targetCount) * 100,
       )
     : 0;
 
@@ -90,7 +81,7 @@ export function InterleavedFourStageRuntimeScreen({
         header: (
           <>
             <span className="text-control-label font-semibold">{session ? t('fourStage.'+presentationLabel[session.presentation]) : t('fourStage.completed')}</span>
-            <em className="text-metadata not-italic text-fg-secondary">{projection.graduatedTargetIds.length} / {t('fourStage.targetCount',{count:projection.targetCount})}</em>
+            <em className="text-metadata not-italic text-fg-secondary">{execution.completedTargetCount} / {t('fourStage.targetCount',{count:execution.targetCount})}</em>
           </>
         ),
         tools: <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-xl text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" disabled={execution.busy} type="button" onClick={onExit} aria-label={t('fourStage.exitLearning')}>×</button>,
@@ -183,11 +174,11 @@ export function InterleavedFourStageRuntimeScreen({
           </section>
         )}
 
-        {!session && projection.targetCount > 0 && (
+        {!session && execution.targetCount > 0 && (
           <section className="flex min-h-full flex-1 flex-col items-center justify-center text-center" aria-live="polite">
             <span className="mb-5 grid size-15 place-items-center rounded-card bg-accent-soft text-2xl font-bold text-feedback-success" aria-hidden="true">✓</span>
             <small>{t('fourStage.learningComplete')}</small>
-            <h1 className="mt-3 text-page-title font-semibold">{t('fourStage.completeCount',{count:projection.targetCount})}</h1>
+            <h1 className="mt-3 text-page-title font-semibold">{t('fourStage.completeCount',{count:execution.targetCount})}</h1>
             <p className="mt-3 text-body-support text-fg-secondary">{t('fourStage.scheduled')}</p>
             <button className="mt-8 min-h-12 w-full rounded-control bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus" disabled={execution.busy} type="button" onClick={onFinish}>{t('fourStage.finish')}</button>
           </section>

@@ -4,7 +4,7 @@
  * learning and Retention progress still belong to the shared Target.
  */
 import assert from 'node:assert/strict';
-import {advanceInterleavedLearningRetries,resolveLearningQueue,selectInterleavedLearningTarget} from '../apps/web/src/experience/library/learningQueue.ts';
+import {advanceInterleavedLearningRetries,resolveLearningQueue,selectInterleavedLearningTarget} from '../apps/web/src/learning/system/learningPlanning.ts';
 import {resolvePracticeScopeCatalog, CURRENT_STUDY_SCOPE_ID, PERSONAL_SEMANTIC_WORLD_SCOPE_ID,type PracticeStudyTarget} from '../apps/web/src/experience/practiceScope.ts';
 import type { LocalLearningTarget } from '../apps/web/src/data/library/learning.ts';
 import type {PersonalMeaningLearningSource} from '../apps/web/src/contentSupply/provisioning/contracts.ts';
@@ -92,7 +92,7 @@ const englishScope=resolvePracticeScopeCatalog({selection:personalOnly,personalM
 assert.deepEqual(englishScope.currentScope.targets.map(t=>t.expression.languageTag),['en']);
 // The formal Learning Target projection follows the same active Route filter;
 // it never falls back to a shipped catalogue.
-const practiceStudyTarget:PracticeStudyTarget={target:{id:'learning-en',identity:{senseId:'sense-en',senseVersionId:'sense-version-en',senseExpressionBindingId:'binding-en',bindingVersionId:'binding-version-en'},expression:'borrow',targetLanguageTag:'en'},membership:{id:'membership-en',material:{snapshot:{learningMaterializationId:'material-en',validationStatus:'validated'},content:{resources:[]}}}};
+const practiceStudyTarget:PracticeStudyTarget={target:{targetId:'learning-en',curriculumMembershipId:'membership-en',identity:{senseId:'sense-en',senseVersionId:'sense-version-en',bindingId:'binding-en',bindingVersionId:'binding-version-en'},presentation:{expression:'borrow',targetLanguageTag:'en'},material:{snapshot:{learningMaterializationId:'material-en',validationStatus:'validated'},content:{resources:[]}}}} as never;
 const studyFor=(tag:string)=>resolvePracticeScopeCatalog({selection:{sourceId:CURRENT_STUDY_SCOPE_ID},personalMeaningSources:[],activeLanguageTag:tag,studyTargets:[practiceStudyTarget],studyTitle:'Current learning'});
 assert.equal(studyFor('en').currentScope.targets.length,1,'an English learner keeps the real English Learning Target');
 assert.equal(studyFor('es').currentScope.targets.length,0,'another language is not offered that English Learning Target');

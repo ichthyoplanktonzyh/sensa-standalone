@@ -2,7 +2,7 @@ import {backgroundPreparation} from '../../data/library/backgroundPreparation';
 import {useTranslation} from 'react-i18next';
 import {localFlowText,localFlowNotice} from '../../i18n/localFlowText';
 import {useEffect,useRef,useState} from 'react';
-import {learningSystem,type LearningTargetView} from '../../learning/system';
+import {learningSystem,type LearningTargetProjection} from '../../learning/system';
 import {
  contentSupplySystem,
  personalLearningSourceKey,
@@ -15,13 +15,13 @@ import {nextPersonalLearningLeaseExpiry} from './preparationSchedule';
 export function usePersonalLearning(){
  useTranslation();
  const [tasks,setTasks]=useState<ContentProvisioningTask[]>([]),[preparationAvailable,setPreparationAvailable]=useState(false),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[clock,setClock]=useState(Date.now());
- const [targets,setTargets]=useState<LearningTargetView[]>([]);
+ const [targets,setTargets]=useState<readonly LearningTargetProjection[]>([]);
  const batchTaskIds=useRef<string[]>([]);
  const {context:languageContext}=useLanguageRoutes();
  const batchLock=useRef(false),batchStop=useRef(false);
  const [batch,setBatch]=useState<{id:string;status:'waiting'|'working'|'ready'|'failed';notice:string}[]>([]);
- const refresh=async()=>{const [supply,learningTargets]=await Promise.all([contentSupplySystem.read({kind:'provisioning_control'}),learningSystem.read({kind:'targets'})]);setTargets(learningTargets);setTasks([...supply.tasks]);setPreparationAvailable(supply.preparationAvailable);setClock(Date.now());};
- useEffect(()=>{const read=()=>void refresh().catch(()=>setNotice(localFlowText('preparationReadFailed')));read();const stopSupply=contentSupplySystem.subscribe({kind:'provisioning_control'},read);const stopLearning=learningSystem.subscribe({kind:'targets'},read);const stopJourney=journeyGateway.subscribe(read);const focus=()=>setClock(Date.now());window.addEventListener('focus',focus);return()=>{stopSupply();stopLearning();stopJourney();window.removeEventListener('focus',focus);};},[]);
+ const refresh=async()=>{const [supply,learning]=await Promise.all([contentSupplySystem.read({kind:'provisioning_control'}),learningSystem.read({kind:'workspace',languageContext,clock:Date.now()})]);setTargets(learning.targets);setTasks([...supply.tasks]);setPreparationAvailable(supply.preparationAvailable);setClock(Date.now());};
+ useEffect(()=>{const read=()=>void refresh().catch(()=>setNotice(localFlowText('preparationReadFailed')));read();const stopSupply=contentSupplySystem.subscribe({kind:'provisioning_control'},read);const stopLearning=learningSystem.subscribe({kind:'workspace',languageContext},read);const stopJourney=journeyGateway.subscribe(read);const focus=()=>setClock(Date.now());window.addEventListener('focus',focus);return()=>{stopSupply();stopLearning();stopJourney();window.removeEventListener('focus',focus);};},[languageContext.languageRouteId,languageContext.languageRouteRevision]);
  const nextLeaseExpiry=nextPersonalLearningLeaseExpiry(tasks,clock);
  useEffect(()=>{
   if(nextLeaseExpiry===null)return;

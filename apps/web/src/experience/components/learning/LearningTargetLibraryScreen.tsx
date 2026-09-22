@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { studyButton } from '../StudyScreen';
-import type {LearningPolicyId,LearningReadiness} from '../../../learning/runtime/policyProfiles';
+import type {LearningPolicy,LearningReadiness} from '../../../learning/system';
 import { SensaCollectionBrowserLayout } from '../../ui/SensaPageLayouts';
 import { useScreenState } from '../../ui/ScreenHost';
 
@@ -10,7 +10,7 @@ interface LearningTargetLibraryScreenProps {
   targets: Readonly<Record<string, {expression: string; meaning: string; sourceKind: string}>>;
   targetIds: readonly string[];
   /** Effective policy and readiness are projected from the persisted local Target. */
-  policyByTarget: Readonly<Record<string, LearningPolicyId>>;
+  policyByTarget: Readonly<Record<string, LearningPolicy>>;
   preparationByTarget: Readonly<Record<string, LearningReadiness>>;
   committedTargetIds: ReadonlySet<string>;
   completedTargetIds: ReadonlySet<string>;

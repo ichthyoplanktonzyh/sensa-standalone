@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, Clock3, LockKeyhole, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { LearningPolicyId, LearningReadiness } from '../../../learning/runtime/policyProfiles';
-import type {LearningTargetPresentation} from '../../library/learningPresentation';
+import type { LearningPolicy, LearningReadiness, LearningTargetPresentation } from '../../../learning/system';
 import type { RetentionRuntimeTargetStatus } from '../../../learning/engine/ReviewQueue';
-import type { InitialLearningCompletionKind } from '../../../learning/runtime/orchestrations';
 import { LearningSetupFrame, setupButton, setupPrimary } from './LearningSetupFrame';
 
 interface LearningTargetDetailScreenProps {
@@ -14,10 +12,10 @@ interface LearningTargetDetailScreenProps {
   actions?: import('react').ReactNode;
   notice?: import('react').ReactNode;
   fixedPolicy?: boolean;
-  selectedPolicy: LearningPolicyId;
+  selectedPolicy: LearningPolicy;
   preparation: LearningReadiness;
-  committedPolicy: LearningPolicyId | null;
-  initialCompletionKind: InitialLearningCompletionKind | null;
+  committedPolicy: LearningPolicy | null;
+  initialCompletionKind: 'study_completion' | 'acquisition_graduation' | 'imported_completion' | null;
   reviewDue: boolean;
   relearning: boolean;
   retentionRuntimeState: RetentionRuntimeTargetStatus | null;

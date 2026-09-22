@@ -3,7 +3,7 @@ import { type ReactNode } from 'react';
 import { ArrowRight, BookOpen, Plus, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { LearningRecordKind, LearningRecordView } from '../learningJourney/learningHistory';
-import type { LearningPolicyId } from '../../learning/runtime/policyProfiles';
+import type { LearningPolicy, LearningPolicyOption } from '../../learning/system';
 import { LearningPreferencesPanel } from './learning/LearningPreferencesPanel';
 import { SensaWorkspacePageLayout } from '../ui/SensaPageLayouts';
 import { useScreenState } from '../ui/ScreenHost';
@@ -21,8 +21,9 @@ interface StudyScreenProps {
   onOpenTargetLibrary: () => void;
   onOpenStats: () => void;
   onOpenTarget: (id: string) => void;
-  onPolicyChange: (policy: LearningPolicyId) => void;
-  defaultPolicy: LearningPolicyId;
+  onPolicyChange: (policy: LearningPolicy) => void;
+  defaultPolicy: LearningPolicy;
+  policyOptions?: readonly LearningPolicyOption[];
   learningTargetCount: number;
   /** The language the counts and the queue act on. The daily limit is the
    * account's, so it is named separately from the language counts. */
@@ -98,6 +99,6 @@ export const StudyScreen = (props: StudyScreenProps) => {
         </>,
       }}
     />
-    {props.active&&props.tab==='b'&&<LearningPreferencesPanel fixedPolicy={props.fixedPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('study.done')}/>}
+    {props.active&&props.tab==='b'&&<LearningPreferencesPanel policyOptions={props.policyOptions} fixedPolicy={props.fixedPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('study.done')}/>}
   </>;
 };

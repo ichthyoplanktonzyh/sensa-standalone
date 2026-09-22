@@ -7,6 +7,7 @@ const learningSystemDirectory = join(sourceRoot, 'learning/system/');
 const sourceExtensions = /\.(?:ts|tsx)$/u;
 const rawLearningStoreImport = /['"][^'"]*\/data\/library\/learning(?:\.ts)?['"]/u;
 const kernelImport = /['"]@sensa\/learning-kernel(?:\/[^'"]*)?['"]/u;
+const learningImplementationImport = /['"][^'"]*\/learning\/(?:runtime|protocols)\//u;
 
 const sourceFiles = async (directory: string): Promise<string[]> => {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -31,14 +32,36 @@ assert.deepEqual(
 
 const experienceFiles = files.filter((file) => file.startsWith(join(sourceRoot, 'experience/')));
 const kernelConsumers: string[] = [];
+const implementationConsumers: string[] = [];
 for (const file of experienceFiles) {
-  if (kernelImport.test(await readFile(file, 'utf8'))) kernelConsumers.push(relative('.', file));
+  const source = await readFile(file, 'utf8');
+  if (kernelImport.test(source)) kernelConsumers.push(relative('.', file));
+  if (learningImplementationImport.test(source)) implementationConsumers.push(relative('.', file));
 }
 assert.deepEqual(
   kernelConsumers,
   [],
   'experience code must not couple directly to the pure Learning Kernel',
 );
+assert.deepEqual(
+  implementationConsumers,
+  [],
+  'experience code must render Learning projections instead of resolving Runtime or Protocol internals',
+);
+
+const learningInterface = await readFile('apps/web/src/learning/system/learningSystem.ts', 'utf8');
+for (const leakedQuery of ['overview', 'state', 'targets']) {
+  assert(
+    !new RegExp(`kind:\\s*['"]${leakedQuery}['"]`, 'u').test(learningInterface),
+    `${leakedQuery} is an aggregate leak, not a public Learning query`,
+  );
+}
+for (const projectionQuery of ['home', 'workspace', 'personal_enrollment_index', 'semantic_memory']) {
+  assert(
+    new RegExp(`kind:\\s*['"]${projectionQuery}['"]`, 'u').test(learningInterface),
+    `${projectionQuery} must remain an explicit Learning projection`,
+  );
+}
 
 const publicKernel = await readFile('packages/learning-kernel/src/index.ts', 'utf8');
 assert(!/export\s+\*/u.test(publicKernel), 'the Learning Kernel must keep an explicit public interface');

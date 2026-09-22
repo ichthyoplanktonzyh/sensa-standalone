@@ -8,13 +8,13 @@ import type { PersonalMeaningJourneyPhase } from '../../experience/personalMeani
 import { subscribeAll } from '../../experience/services/createSnapshotStore';
 import {
   learningSystem,
-  learningTargetHasDeclaredMastery as hasDeclaredMasteryOverride,
-  type LearningTargetView as LocalLearningTarget,
+  type LearningSemanticMemoryProjection,
 } from '../../learning/system';
 import type {ContentSectionId} from '../../experience/contentRoute';
 export {CONTENT_SECTION_IDS,isContentSectionId,type ContentSectionId} from '../../experience/contentRoute';
 
-type ReviewSchedule = NonNullable<LocalLearningTarget['memory']>;
+type SemanticMemoryTarget = LearningSemanticMemoryProjection['targets'][number];
+type ReviewSchedule = NonNullable<SemanticMemoryTarget['memory']>;
 
 export type SemanticStatus = 'forming' | 'established' | 'reinforce';
 
@@ -196,14 +196,14 @@ const projectSemanticSense = (
  * learned/known projections. Browsing the bundled practice catalog never does.
  */
 export const buildLearnerSemanticProjection = (
-  targets: readonly LocalLearningTarget[] = [],
+  targets: readonly SemanticMemoryTarget[] = [],
 ): LearnerSemanticProjectionSnapshot => {
   const now = Date.now();
 
   const learnedWithState = targets
     .flatMap((target) => {
       if (!target.memory) return [];
-      const item = unambiguousSense(target.identity.senseId);
+      const item = unambiguousSense(target.senseId);
       return item ? [{ item, target, schedule: target.memory }] : [];
     })
     .sort((left, right) => (
@@ -217,7 +217,7 @@ export const buildLearnerSemanticProjection = (
   const learned = learnedWithState.map((entry) => entry.item);
   const semanticSenses = learnedWithState
     .flatMap(({ target, schedule }) => {
-      const pkg = BUNDLED_PACKAGE_BY_SENSE.get(target.identity.senseId);
+      const pkg = BUNDLED_PACKAGE_BY_SENSE.get(target.senseId);
       return pkg ? [projectSemanticSense(pkg.content, schedule, now)] : [];
     })
     .sort((left, right) => right.lastReview - left.lastReview);
@@ -249,7 +249,7 @@ export const buildLearnerSemanticProjection = (
     updatedAt: Date.parse(item.updatedAt),
   }));
   const declaredMasterySenseIds = new Set(
-    targets.filter(hasDeclaredMasteryOverride).map((target) => target.identity.senseId),
+    targets.filter((target) => target.declaredMastery).map((target) => target.senseId),
   );
   const known = PRACTICE_SENSES.filter((item) => declaredMasterySenseIds.has(item.senseId));
 
@@ -308,7 +308,7 @@ export interface LearnerSemanticProjectionSystem {
 }
 
 const projectionStore = (() => {
-  let targets: readonly LocalLearningTarget[] = [];
+  let targets: readonly SemanticMemoryTarget[] = [];
   let snapshot = buildLearnerSemanticProjection(targets);
   let stopSources: (() => void) | null = null;
   let loadRevision = 0;
@@ -322,9 +322,9 @@ const projectionStore = (() => {
   const loadLearningTargets = async () => {
     const revision = ++loadRevision;
     try {
-      const nextTargets = await learningSystem.read({ kind: 'targets' });
+      const nextTargets = await learningSystem.read({ kind: 'semantic_memory' });
       if (revision !== loadRevision) return;
-      targets = nextTargets;
+      targets = nextTargets.targets;
       publish();
     } catch {
       // Bootstrap surfaces may mount before SQLite is ready. Keep the last
@@ -337,7 +337,7 @@ const projectionStore = (() => {
     if (listeners.size === 1) {
       stopSources = subscribeAll([
         (onChange) => learningSystem.subscribe(
-          { kind: 'targets' },
+          { kind: 'semantic_memory' },
           () => { void loadLearningTargets(); },
         ),
         (onChange) => personalContentSystem.subscribe({ kind: 'snapshot' }, onChange),

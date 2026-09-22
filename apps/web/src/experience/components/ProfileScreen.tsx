@@ -15,7 +15,7 @@ import { LanguagePanelHost, languageSummary } from './language/LanguagePanel';
 import { GlossaryPanelHost } from './language/GlossaryPanel';
 import { useReadingGlossary } from '../library/useReadingGlossary';
 import { useLanguageRoutes } from '../library/useLanguageRoutes';
-import type { LearningPolicyId } from '../../learning/runtime/policyProfiles';
+import type { LearningPolicy, LearningPolicyOption } from '../../learning/system';
 import { AppearanceSettings } from '../appearance/AppearanceSettings';
 import { SensaWorkspacePageLayout } from '../ui/SensaPageLayouts';
 import { configuredSupportUrl } from '../../support/supportUrl';
@@ -30,9 +30,10 @@ interface ProfileScreenProps {
   localLibrary?: boolean;
   onOpenPreferences?: () => void;
   onGoStudyPlan: () => void;
-  defaultPolicy: LearningPolicyId;
+  defaultPolicy: LearningPolicy;
+  policyOptions?: readonly LearningPolicyOption[];
   dailyNewCount: number;
-  onPolicyChange: (policy: LearningPolicyId) => void;
+  onPolicyChange: (policy: LearningPolicy) => void;
   onDailyNewCountChange: (count: number) => void;
 }
 
@@ -221,7 +222,7 @@ export const ProfileScreen = (props: ProfileScreenProps) => {
         </>,
       }}
     />
-    {props.active && preferencesOpen && <LearningPreferencesPanel fixedPolicy={props.fixedLearningPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('account.done')}/>}
+    {props.active && preferencesOpen && <LearningPreferencesPanel policyOptions={props.policyOptions} fixedPolicy={props.fixedLearningPolicy} defaultPolicy={props.defaultPolicy} dailyNewCount={props.dailyNewCount} onPolicyChange={props.onPolicyChange} onDailyNewCountChange={props.onDailyNewCountChange} onClose={closePreferences} closeLabel={t('account.done')}/>}
     {props.active && languagesOpen && <LanguagePanelHost onClose={() => setLanguagesOpen(false)}/>}
     {props.active && glossaryOpen && <GlossaryPanelHost onClose={() => setGlossaryOpen(false)}/>}
   </>;

@@ -1,10 +1,5 @@
-import {learningPolicyProfileRegistry} from '../../learning/runtime/policyProfiles';
 import {LearningPreferencesPanel} from '../components/learning/LearningPreferencesPanel';
-import {learningRunTargetIds as localRunTargetIds} from '../../learning/system';
-import {assuranceContent} from '../../learning/protocols/assurance';
 import {cardText} from '../../i18n/originalCards';
-import {localTargetPolicy} from '../../learning/runtime/localRuntimeBindings';
-import {hasDeclaredMasteryOverride} from '../../learning/runtime/targetPlanningOverrides';
 import {StudyResources} from '../components/learning/StudyResources';
 import {LearningResourceDetails} from '../components/learning/LearningResourceDetails';
 import {useTranslation} from 'react-i18next';
@@ -15,10 +10,9 @@ import {ArrowRight,BookOpen,Search,RefreshCw,Upload,Check,Download} from 'lucide
 import {learningBundleBookId,learningBundleVersionNumber,learningBundleTitle,learningBundleDescription,learningDescriptorBookId,learningDescriptorVersionNumber,learningDescriptorTitle,learningDescriptorDescription} from '@sensa/contracts/sensa';
 import {LearningTargetDetailScreen} from '../components/learning/LearningTargetDetailScreen';
 import {contentSupplyArtifactKey} from '../../contentSupply/system';
-import type {LearningTargetView as LocalLearningTarget} from '../../learning/system';
+import type {LearningTargetProjection} from '../../learning/system';
 import type {usePackageLearning} from './usePackageLearning';
 import {LearningSetupFrame,setupButton,setupPrimary} from '../components/learning/LearningSetupFrame';
-import {localTargetView} from './localTargetView';
 import {useScreenState} from '../ui/ScreenHost';
 type Controller=ReturnType<typeof usePackageLearning>;
 export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boolean;c:Controller;onBack:()=>void;onLearning:()=>void;onTarget:(id:string)=>void}){
@@ -27,7 +21,7 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
  const importInput=useRef<HTMLInputElement>(null),heading=useRef<HTMLHeadingElement>(null);
  useEffect(()=>{if(!active)setSelected(null);},[active]);
  useEffect(()=>{if(active)heading.current?.focus({preventScroll:true});},[selected,active]);
- const enrolledFor=(p:Controller['packages'][number])=>p.bundle.entries.map(e=>c.targets.find(t=>e.senseVersionId===t.identity.senseVersionId&&e.bindingVersionId===t.identity.bindingVersionId&&c.membershipByTarget[t.id]?.packageKey===p.key));
+ const enrolledFor=(p:Controller['packages'][number])=>p.bundle.entries.map(e=>c.targets.find(t=>e.senseVersionId===t.identity.senseVersionId&&e.bindingVersionId===t.identity.bindingVersionId&&t.packageKey===p.key));
  const routeDescriptor=(descriptor:Controller['catalog'][number])=>!('format' in descriptor)||descriptor.targetLanguage===c.languageContext.targetLanguageTag&&descriptor.supportLanguage===c.languageContext.supportLanguageTag;
  const routePackage=(pack:Controller['packages'][number])=>pack.bundle.targetLanguage===c.languageContext.targetLanguageTag&&pack.bundle.supportLanguage===c.languageContext.supportLanguageTag;
  const bookIds=new Set([...c.catalog.filter(routeDescriptor).map(learningDescriptorBookId),...c.packages.filter(routePackage).map(pack=>learningBundleBookId(pack.bundle))]);
@@ -71,7 +65,7 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
     <h3 className="mb-4 text-lg font-medium">{localFlowText('packageContents')}</h3>
     {installed?<ul className="divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface-panel">{installed.bundle.entries.map((e,index)=><li key={e.bindingVersionId} className="flex flex-wrap items-center justify-between gap-4 p-5">
      <div className="min-w-0 flex-1"><p className="break-words text-xl font-medium">{e.expression}</p><p className="mt-2 text-sm leading-6 text-fg-secondary">{e.meaning}</p></div>
-     {enrolled[index]&&<button className={setupButton+' shrink-0'} aria-label={localFlowText('packageViewExpression',{expression:e.expression})} onClick={()=>onTarget(enrolled[index]!.id)}>{localFlowText('packageViewDetails')}<ArrowRight size={16}/></button>}
+     {enrolled[index]&&<button className={setupButton+' shrink-0'} aria-label={localFlowText('packageViewExpression',{expression:e.expression})} onClick={()=>onTarget(enrolled[index]!.targetId)}>{localFlowText('packageViewDetails')}<ArrowRight size={16}/></button>}
     </li>)}</ul>:<p className="rounded-2xl border border-dashed border-border-strong p-6 text-sm leading-6 text-fg-secondary">{localFlowText('packageContentsAfterDownload')}</p>}
    </section>
   </>:<>
@@ -98,16 +92,10 @@ export function PackageEntry({active,c,onBack,onLearning,onTarget}:{active:boole
   <input ref={importInput} hidden tabIndex={-1} aria-label={localFlowText('importPackage')} type="file" accept="application/json,.json" disabled={c.busy} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void c.importFile(file).then(p=>{if(p)setSelected(learningBundleBookId(p.bundle));});}}/>
  </LearningSetupFrame>;
 }
-export function PackageTarget({active,target,c,onBack,onHome,onStart,onSource}:{active:boolean;target:LocalLearningTarget;c:Controller;onBack:()=>void;onHome:()=>void;onStart:()=>void;onSource?:()=>void}){
+export function PackageTarget({active,target,c,onBack,onHome,onStart,onSource}:{active:boolean;target:LearningTargetProjection;c:Controller;onBack:()=>void;onHome:()=>void;onStart:()=>void;onSource?:()=>void}){
  useTranslation();
- const membership=c.membershipByTarget[target.id];
- if(!membership)throw new Error('localFlow.routeMembershipMissing');
- const pack=c.packages.find(p=>p.key===membership.packageKey);
- const policy=localTargetPolicy(target);
  const [editingPolicy,setEditingPolicy]=useState(false);
- const readiness=c.readinessByTarget[target.id]??'blocked';
- const canSelectPolicy=!!membership.assurancePackageKey&&!target.startedAt;
- const content=pack&&membership.assurancePackageKey?assuranceContent(pack,membership.assurancePackageKey).template.content:null;
- const declaredMastery=hasDeclaredMasteryOverride(target);
- return <><LearningTargetDetailScreen active={active} target={localTargetView(target,membership,readiness)} selectedPolicy={policy} fixedPolicy={!canSelectPolicy} preparation={readiness} committedPolicy={target.committedPolicy?policy:null} initialCompletionKind={target.completedAt?'study_completion':null} reviewDue={c.due.includes(target)} relearning={!!target.relearnAt} retentionRuntimeState={null} nextReviewLabel={target.memory?.dueAt.toLocaleString(i18n.language)??null} declaredMastery={declaredMastery} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>setEditingPolicy(true)} onOpenSource={onSource??onBack} onRefreshPreparation={()=>void c.refresh()} onGoHome={onHome} onStartReview={onStart} onContinueRetentionRuntime={onStart} onContinueRuntime={onStart} onRevokeDeclaredMastery={()=>void c.declareKnown(target.id,false)} notice={c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>} actions={<><LearningResourceDetails material={membership.material}/>{content&&<StudyResources content={content}/>}{declaredMastery?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.declareKnown(target.id,false)}>{cardText('revokeKnown')}</button>:<button className={setupPrimary} disabled={c.busy||readiness!=='ready'||!!target.completedAt&&!c.due.includes(target)&&(!c.run||!localRunTargetIds(c.run).includes(target.id))} onClick={onStart}>{target.completedAt?localFlowText('startReview'):localFlowText('startLearning')}</button>}</>}/>{editingPolicy&&canSelectPolicy&&<LearningPreferencesPanel closeLabel={i18n.t('learningPreferences.finishSelection')} allowedPolicies={learningPolicyProfileRegistry.list().filter(p=>p.localSelectable).map(p=>p.profileId)} showDailyQuantity={false} defaultPolicy={policy} dailyNewCount={c.dailyLimit??20} onDailyNewCountChange={()=>{}} onPolicyChange={value=>{void c.selectPolicy(target.id,value);}} busy={c.busy} status={c.notice&&<p role="status">{c.notice}</p>} onClose={()=>setEditingPolicy(false)}/>}</>;
+ const canSelectPolicy=target.allowedPolicies.length>1&&!target.started;
+ const inActiveRun=!!c.runtime?.targetIds.includes(target.targetId);
+ return <><LearningTargetDetailScreen active={active} target={target.presentation} selectedPolicy={target.policy} fixedPolicy={!canSelectPolicy} preparation={target.preparation} committedPolicy={target.committedPolicy} initialCompletionKind={target.completed?'study_completion':null} reviewDue={target.reviewDue} relearning={target.relearning} retentionRuntimeState={null} nextReviewLabel={target.nextReviewAt?new Date(target.nextReviewAt).toLocaleString(i18n.language):null} declaredMastery={target.declaredMastery} isAdded onBack={onBack} onAdd={()=>{}} onOpenPolicy={()=>setEditingPolicy(true)} onOpenSource={onSource??onBack} onRefreshPreparation={()=>void c.refresh()} onGoHome={onHome} onStartReview={onStart} onContinueRetentionRuntime={onStart} onContinueRuntime={onStart} onRevokeDeclaredMastery={()=>void c.declareKnown(target.targetId,false)} notice={c.notice&&<p role="status">{localFlowNotice(c.notice)}</p>} actions={<><LearningResourceDetails material={target.material}/>{target.studyContent&&<StudyResources content={target.studyContent}/>}{target.declaredMastery?<button className={setupPrimary} disabled={c.busy} onClick={()=>void c.declareKnown(target.targetId,false)}>{cardText('revokeKnown')}</button>:<button className={setupPrimary} disabled={c.busy||target.preparation!=='ready'||target.completed&&!target.reviewDue&&!inActiveRun} onClick={onStart}>{target.completed?localFlowText('startReview'):localFlowText('startLearning')}</button>}</>}/>{editingPolicy&&canSelectPolicy&&<LearningPreferencesPanel policyOptions={c.policyOptions} closeLabel={i18n.t('learningPreferences.finishSelection')} allowedPolicies={target.allowedPolicies} showDailyQuantity={false} defaultPolicy={target.policy} dailyNewCount={c.dailyLimit??20} onDailyNewCountChange={()=>{}} onPolicyChange={value=>{void c.selectPolicy(target.targetId,value);}} busy={c.busy} status={c.notice&&<p role="status">{c.notice}</p>} onClose={()=>setEditingPolicy(false)}/>}</>;
 }

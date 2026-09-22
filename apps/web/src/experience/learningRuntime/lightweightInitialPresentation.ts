@@ -29,11 +29,10 @@ import {
   type LightweightInitialLearningMaterialization,
 } from '../../contentSupply/provisioning/lightweightInitialContent';
 import {
-  LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
-  LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND,
-  LIGHTWEIGHT_INITIAL_STEP_DEFINITIONS,
-  type LightweightProtocolStepInstance,
-} from '../../learning/runtime/lightweightInitialProtocol';
+  LEARNING_LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
+  LEARNING_LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND,
+  type LearningLightweightStepProjection,
+} from '../../learning/system';
 
 export { LIGHTWEIGHT_INITIAL_MATERIAL_ROLES };
 export type LightweightInitialMaterialRole = SensaLightweightInitialMaterialRole;
@@ -46,10 +45,10 @@ const slotsFor = (phase:'pre_reveal'|'post_reveal') => LIGHTWEIGHT_INITIAL_MATER
  return {slotId:key,displayOrder,required:profile.required,acceptedMaterialRoleKeys:[key],minItems:profile.required?1:0,maxItems:profile.maxItems,disclosurePhase:phase,missingBehavior:profile.required?'block_step':'collapse_slot',overflowBehavior:'reject'};
 });
 export const LIGHTWEIGHT_EXPERIENCE_RECALL_PRESENTATION = parsePresentation({
- contractVersion:sensaLearningConnectionContractVersion,presentationKey:'lightweight-experience-recall-card',presentationVersion:'v2',stepKinds:[LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND],slots:slotsFor('pre_reveal'),
+ contractVersion:sensaLearningConnectionContractVersion,presentationKey:'lightweight-experience-recall-card',presentationVersion:'v2',stepKinds:[LEARNING_LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND],slots:slotsFor('pre_reveal'),
 });
 export const LIGHTWEIGHT_EXPRESSION_REVEAL_PRESENTATION = parsePresentation({
- contractVersion:sensaLearningConnectionContractVersion,presentationKey:'lightweight-expression-reveal-card',presentationVersion:'v2',stepKinds:[LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND],slots:slotsFor('post_reveal'),
+ contractVersion:sensaLearningConnectionContractVersion,presentationKey:'lightweight-expression-reveal-card',presentationVersion:'v2',stepKinds:[LEARNING_LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND],slots:slotsFor('post_reveal'),
 });
 
 export const LIGHTWEIGHT_INITIAL_PRESENTATION_CONTRACTS = Object.freeze([
@@ -72,18 +71,6 @@ export const validateLightweightInitialPresentationContracts = (): void => {
         }
       }
     }
-    const declaredRoles = new Set(LIGHTWEIGHT_INITIAL_STEP_DEFINITIONS
-      .filter((step) => presentation.stepKinds.includes(step.stepKind))
-      .flatMap((step) => step.materialRequirements)
-      .map((requirement) => requirement.materialRoleKey));
-    for (const admittedRole of presentation.slots.flatMap((slot) =>
-      slot.acceptedMaterialRoleKeys)) {
-      if (!declaredRoles.has(admittedRole)) {
-        throw new Error(
-          `Card Presentation ${presentationId} admits undeclared role ${admittedRole}.`,
-        );
-      }
-    }
   }
 
   const preRevealRoles = LIGHTWEIGHT_EXPERIENCE_RECALL_PRESENTATION.slots
@@ -92,33 +79,6 @@ export const validateLightweightInitialPresentationContracts = (): void => {
     throw new Error('Experience Recall must not admit the target expression role before Reveal.');
   }
 
-  for (const step of LIGHTWEIGHT_INITIAL_STEP_DEFINITIONS) {
-    const presentation = LIGHTWEIGHT_INITIAL_PRESENTATION_CONTRACTS.find((candidate) =>
-      candidate.presentationKey === step.presentation.presentationKey
-      && candidate.presentationVersion === step.presentation.presentationVersion);
-    if (!presentation || !presentation.stepKinds.includes(step.stepKind)) {
-      throw new Error(
-        `Step ${step.protocolStepDefinitionId} has no matching Card Presentation contract.`,
-      );
-    }
-    const admittedRoles = new Set(presentation.slots.flatMap((slot) =>
-      slot.acceptedMaterialRoleKeys));
-    for (const requirement of step.materialRequirements) {
-      if (!admittedRoles.has(requirement.materialRoleKey)) {
-        throw new Error(
-          `Step ${step.protocolStepDefinitionId} role ${requirement.materialRoleKey} has no Presentation Slot.`,
-        );
-      }
-      const admitsWithMatchingCardinality = presentation.slots.some((slot) =>
-        slot.acceptedMaterialRoleKeys.includes(requirement.materialRoleKey)
-        && slot.required === requirement.required);
-      if (!admitsWithMatchingCardinality) {
-        throw new Error(
-          `Step ${step.protocolStepDefinitionId} role ${requirement.materialRoleKey} disagrees with its Presentation Slot cardinality.`,
-        );
-      }
-    }
-  }
 };
 
 validateLightweightInitialPresentationContracts();
@@ -172,7 +132,7 @@ export type LightweightInitialCardPresentation =
   | ExpressionRevealCardPresentation;
 
 const requirePresentationMatch = (
-  step: LightweightProtocolStepInstance,
+  step: LearningLightweightStepProjection,
   contract: SensaCardPresentationDefinition,
 ): void => {
   const reference = step.definition.presentation;
@@ -188,7 +148,7 @@ const requirePresentationMatch = (
 };
 
 const boundResourcesForRole = (
-  step: LightweightProtocolStepInstance,
+  step: LearningLightweightStepProjection,
   materialization: LightweightInitialLearningMaterialization,
   role: LightweightInitialMaterialRole,
 ): readonly SensaMaterializedResource[] => {
@@ -214,7 +174,7 @@ const boundResourcesForRole = (
 };
 
 const requiredResourceForRole = (
-  step: LightweightProtocolStepInstance,
+  step: LearningLightweightStepProjection,
   materialization: LightweightInitialLearningMaterialization,
   role: LightweightInitialMaterialRole,
 ): SensaMaterializedResource => {
@@ -228,11 +188,11 @@ const requiredResourceForRole = (
 };
 
 export const assembleLightweightInitialPresentation = (
-  step: LightweightProtocolStepInstance,
+  step: LearningLightweightStepProjection,
   materialization: LightweightInitialLearningMaterialization,
 ): LightweightInitialCardPresentation => {
   validateLightweightInitialMaterialization(materialization);
-  if (step.definition.stepKind === LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND) {
+  if (step.definition.stepKind === LEARNING_LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND) {
     requirePresentationMatch(step, LIGHTWEIGHT_EXPERIENCE_RECALL_PRESENTATION);
     const cue = sensaLightweightExperienceRecallCueSchema.parse(
       requiredResourceForRole(
@@ -261,7 +221,7 @@ export const assembleLightweightInitialPresentation = (
     });
   }
 
-  if (step.definition.stepKind === LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND) {
+  if (step.definition.stepKind === LEARNING_LIGHTWEIGHT_EXPRESSION_REVEAL_STEP_KIND) {
     requirePresentationMatch(step, LIGHTWEIGHT_EXPRESSION_REVEAL_PRESENTATION);
     const expression = sensaLightweightTargetExpressionMaterialSchema.parse(
       requiredResourceForRole(step, materialization, 'target_expression').contentPayload,

@@ -13,18 +13,18 @@ import { resolvePracticeActivities } from '../apps/web/src/experience/practiceIn
 
 const studyTarget: PracticeStudyTarget = {
   target: {
-    id: 'learning-target-1',
+    targetId: 'learning-target-1',
+    curriculumMembershipId: 'membership-1',
     identity: {
       senseId: 'sense-1',
       senseVersionId: 'sense-version-1',
-      senseExpressionBindingId: 'binding-1',
+      bindingId: 'binding-1',
       bindingVersionId: 'binding-version-1',
     },
-    expression: 'borrow',
-    targetLanguageTag: 'en',
-  },
-  membership: {
-    id: 'membership-1',
+    presentation: {
+      expression: 'borrow',
+      targetLanguageTag: 'en',
+    },
     material: {
       snapshot: {
         learningMaterializationId: 'materialization-1',
@@ -41,7 +41,7 @@ const studyTarget: PracticeStudyTarget = {
       },
     },
   },
-};
+} as never;
 
 const personalSource: PersonalMeaningLearningSource = {
   sourceKind: 'personal_meaning_alignment',

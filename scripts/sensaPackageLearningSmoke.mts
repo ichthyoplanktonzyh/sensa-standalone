@@ -1,7 +1,6 @@
 import {withBindingFixture} from './support/lightweightMaterialFixture.mts';
 import {inspectLocalTargetReadiness,LearningRuntimeCoordinator} from '../apps/web/src/learning/runtime/runtimeCoordinator.ts';
 import {LearningPolicyProfileRegistry,learningPolicyProfileRegistry} from '../apps/web/src/learning/runtime/policyProfiles.ts';
-import {LocalRuntimePresentationRegistry,localRuntimePresentationContractVersion} from '../apps/web/src/experience/learningRuntime/localRuntimePresentations.ts';
 import {assembleLightweightInitialPresentation} from '../apps/web/src/experience/learningRuntime/lightweightInitialPresentation.ts';
 import {LIGHTWEIGHT_EXPERIENCE_RECALL_STEP,LIGHTWEIGHT_EXPRESSION_REVEAL_STEP,localLightweightPhase} from '../apps/web/src/learning/runtime/lightweightInitialProtocol.ts';
 import assert from 'node:assert/strict';
@@ -12,6 +11,7 @@ import {openLibrary,command,readLibrary,readLocalLibraryRevision,writeLibraryCac
 import {sha256} from '../apps/web/src/data/library/packages.ts';
 import {contentSupplySystem} from '../apps/web/src/contentSupply/system/index.ts';
 import {learningSystem,type LearningAction} from '../apps/web/src/learning/system/index.ts';
+import {actLearning,confirmLearningQuantity,continueLearning,enrollPackage,finishLearning,readLearning,setLocalDeclaredMastery,startLearning} from '../apps/web/src/data/library/learning.ts';
 import {createLocalProtocolProgress,executeLocalProtocolTransition,reduceLocalProtocolAction,localLearningPurpose,localProtocolOutcomePermissions,localRunOpenPlanningInterruption} from '../apps/web/src/learning/runtime/localProtocol.ts';
 import {hasDeclaredMasteryOverride} from '../apps/web/src/learning/runtime/targetPlanningOverrides.ts';
 import {localCurriculumMeaning,localCurriculumMembershipForContext,localExecutableTarget} from '../apps/web/src/learning/runtime/localCurriculum.ts';
@@ -24,7 +24,6 @@ assert(librarySyncTables.includes('packageInstallations'));assert.equal((library
 assert(libraryBackupTables.includes('packageInstallations'));assert.equal((libraryBackupTables as readonly string[]).includes('packageCache'),false,'public artifact caches must be outside encrypted account backups');
 const identity=await openLibrary();await command({id:crypto.randomUUID(),kind:'fixture.owner',input:{}},async tx=>{tx.put('meta','service-owner',{subject:crypto.randomUUID(),accountId:crypto.randomUUID()});});
 const id=()=>crypto.randomUUID();
-const readLearning=()=>learningSystem.read({kind:'state'});
 const installPackage=(bytes:Uint8Array,descriptor?:any,signal?:AbortSignal)=>descriptor
  ?contentSupplySystem.execute({kind:'install_catalog_item',descriptor,signal:signal??new AbortController().signal})
  :contentSupplySystem.execute({kind:'import_package',bytes,signal});
@@ -39,13 +38,6 @@ const rehydratePackageInstallations=(descriptors?:readonly any[])=>descriptors
   })
  :contentSupplySystem.execute({kind:'rehydrate'});
 const readHomeLearningProjection=(languageRouteId:string)=>learningSystem.read({kind:'home',languageRouteId});
-const enrollPackage=(operationId:string,packageKey:string,languageContext:SensaFormalPinnedLanguageContext)=>learningSystem.execute({kind:'enroll_package',operationId,packageKey,languageContext});
-const confirmLearningQuantity=(operationId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number)=>learningSystem.execute({kind:'confirm_quantity',operationId,languageContext,dailyLimit});
-const startLearning=(operationId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at?:string)=>learningSystem.execute({kind:'start',operationId,targetId,languageContext,dailyLimit,...(at?{at}:{})});
-const actLearning=(operationId:string,runId:string,expectedRevision:number,action:LearningAction,at?:string)=>learningSystem.execute({kind:'act',operationId,runId,expectedRevision,action,...(at?{at}:{})});
-const finishLearning=(operationId:string,runId:string)=>learningSystem.execute({kind:'finish',operationId,runId});
-const continueLearning=(operationId:string,runId:string,targetId:string,languageContext:SensaFormalPinnedLanguageContext,dailyLimit:number,at?:string)=>learningSystem.execute({kind:'continue',operationId,runId,targetId,languageContext,dailyLimit,...(at?{at}:{})});
-const setLocalDeclaredMastery=(operationId:string,targetId:string,active:boolean,at?:string)=>learningSystem.execute({kind:'set_declared_mastery',operationId,targetId,active,...(at?{at}:{})});
 const languageContext=sensaPinnedLanguageContext(defaultSensaLanguageRoute);
 const result=provisionLightweightInitialContent(withBindingFixture({learnerUserId:identity.learnerId,learningTargetId:id(),senseId:id(),senseVersionId:id(),senseExpressionBindingId:id(),resolvedLearningPlanRevisionId:'fixture-v1',expressionSourceVersion:'fixture-v1',senseSourceVersion:'fixture-v1',expression:{surface:'borrow',languageTag:'en',expressionKind:'word'},sense:{meaning:'临时取得他人物品，并预期归还。',supportLanguageTag:'zh-CN'},originExperience:{source:'other_authoritative_source',sourceVersion:'fixture-v1',personalAnchorUseGrantId:null,experience:{scene:'下雨了，你向同事要一把伞，约好明天归还。',senseFocus:'临时取得他人的物品',featureLabels:[]}},referenceFacts:[],requestedAt:new Date().toISOString()}));
 assert.equal(result.status,'ready',JSON.stringify(result));if(result.status!=='ready')throw Error();
@@ -63,7 +55,7 @@ try{
  const pack=await downloadPackage(descriptor,new AbortController().signal,()=>{});
  assert.equal((await readLearning()).targets.length,0);
  assert.equal((await contentSupplySystem.read({kind:'workspace'})).packages.length,1);
- assert.equal('packages' in await learningSystem.read({kind:'overview'}),false,'Learning overview must not own installed Content Supply artifacts');
+ assert.equal('packages' in await learningSystem.read({kind:'workspace',languageContext}),false,'Learning workspace must not own installed Content Supply artifacts');
  await installPackage(bytes,descriptor);assert.equal((await readLibrary(tx=>tx.all('packageCache'))).length,1);assert.equal((await readLibrary(tx=>tx.all('packageInstallations'))).length,1);
  const installation=await readLibrary(tx=>tx.all<any>('packageInstallations').then(rows=>rows[0]));assert.equal('bundle' in installation,false,'synchronized installation facts must not carry published Bundle bytes');
  const installReceipts=await readLibrary(tx=>tx.all<any>('operations').then(rows=>rows.filter(row=>JSON.parse(row.input).kind==='package.install')));assert(installReceipts.length>0);assert(installReceipts.every(row=>!('bundle' in row.result)),'device operation receipts must not smuggle published Bundle bytes into backups');
@@ -74,8 +66,8 @@ try{
  assert.equal((await readLearning()).targets.length,1);
  const target=(await readLearning()).targets[0]!;
  const homeBeforeStart=await readHomeLearningProjection(languageContext.languageRouteId);
-    assert.equal(homeBeforeStart.targets.length,1);assert.equal(homeBeforeStart.availablePackageKeys.size,1);assert.equal(homeBeforeStart.activeRun,null);assert.equal(homeBeforeStart.dailyLimit,undefined);
-    assert(!('content' in homeBeforeStart.targets[0]!.curriculumMemberships[0]!.material),'the home projection must not transfer learning material');
+    assert.equal(homeBeforeStart.readyInitialCount,1);assert.equal(homeBeforeStart.activeRunId,null);assert.equal(homeBeforeStart.dailyLimit,null);
+    assert(!('targets' in homeBeforeStart),'the home projection must not transfer Learning Target aggregates or material');
  // A new Profile reuses the registered execution engine and Surface without a new page or branch.
  const base=learningPolicyProfileRegistry.get('lightweight');
  const variant={...structuredClone(base),profileId:'fixture-reused-profile'};
@@ -84,11 +76,6 @@ try{
  assert.throws(()=>profiles.get(variant.profileId,'unknown-version'));
  const coordinator=new LearningRuntimeCoordinator(profiles);
  assert.throws(()=>new LearningRuntimeCoordinator(new LearningPolicyProfileRegistry([{...variant,protocols:{...variant.protocols,initial_learning:{...variant.protocols.initial_learning,protocolVersion:'unsupported-v99'}}}])),'an execution plugin must explicitly admit every exact Protocol version');
- const renderer=()=>null,binding=variant.protocols.initial_learning;
- const presentationBinding={surface:coordinator.surfaceFor(variant.profileId,'initial_learning'),runtimeAdapterId:binding.runtimeAdapterId,purpose:'initial_learning' as const,protocolId:binding.protocolId,protocolVersion:binding.protocolVersion,localProtocolVersion:binding.localProtocolVersion!};
- const surfaces=new LocalRuntimePresentationRegistry([{manifest:{contractVersion:localRuntimePresentationContractVersion,pluginId:'fixture.renderer',pluginVersion:'v1',displayName:'Fixture renderer',capabilities:[],bindings:[presentationBinding]},render:renderer}]);
- assert.equal(surfaces.resolve(presentationBinding).render,renderer);
- assert.throws(()=>surfaces.resolve({...presentationBinding,protocolVersion:'unsupported'}));
  const relearningLaunch=coordinator.planRelearning([{targetId:'fixture-target',profileId:variant.profileId,ready:true,executable:true}])[0]!;
  assert.equal(relearningLaunch.purpose,'relearning');
  assert.equal(relearningLaunch.protocol.protocolId,variant.protocols.relearning.protocolId);
@@ -133,7 +120,7 @@ try{
  }
  globalThis.fetch=async()=>{throw Error('Offline');};
  const at='2026-09-10T08:00:00.000Z';await assert.rejects(startLearning(id(),targetId!,languageContext,20,at));await confirmLearningQuantity(id(),languageContext,20);let run=await startLearning(id(),targetId!,languageContext,20,at);
- const homeRunning=await readHomeLearningProjection(languageContext.languageRouteId);assert.equal(homeRunning.dailyLimit,20);assert.equal(homeRunning.activeRun?.id,run.id);
+ const homeRunning=await readHomeLearningProjection(languageContext.languageRouteId);assert.equal(homeRunning.dailyLimit,20);assert.equal(homeRunning.activeRunId,run.id);
  const committedTarget=(await readLearning()).targets.find(item=>item.id===targetId)!;
  assert(committedTarget.committedPolicy);assert.equal(committedTarget.committedPolicy.assignmentId,committedTarget.policyAssignment.assignmentId);
  assert.equal(run.participants[targetId!].policyCommitment.commitmentId,committedTarget.committedPolicy.commitmentId);

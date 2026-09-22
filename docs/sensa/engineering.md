@@ -21,9 +21,13 @@
 [ADR 0006](../adr/0006-three-product-systems.md) 的 Personal Semantic World、Learning System 与 Content
 Supply System 是产品领域划分，不与上述目录一一对应。当前 Web 的 Product Shell 位于 `experience`。
 学习应用层只通过 `apps/web/src/learning/system/learningSystem.ts` 的 deep Module interface 提交 command、
-读取 projection 并订阅对应查询失效；页面不知道 Learning 的逻辑表、事务准入、重放或调度原语。
-`apps/web/src/learning/runtime`、`engine`、`review` 与 `experience/learningRuntime` 是该系统内部的协议、评价和
-呈现 adapter，`apps/web/src/data/library/learning*.ts` 是本机事务与 authority 实现，不是页面 API。
+读取 `home | workspace | personal_enrollment_index | semantic_memory` projection 并订阅对应查询失效；页面
+不知道 Learning 的逻辑表、事务准入、Curriculum membership、Policy registry、协议选择、重放、readiness
+或队列/调度原语。`workspace` 一次返回 Target presentation、状态集合、下一候选、历史和一个可辨识的
+Runtime presentation union；Renderer 只展示该 union 并回交 learner action。`apps/web/src/learning/runtime`、
+`engine` 与 `review` 是该系统内部的协议、评价和执行实现，`experience/learningRuntime` 只保留对公开
+presentation type 的纯呈现装配，`apps/web/src/data/library/learning*.ts` 是本机事务与 authority 实现，
+都不是页面 API。
 内容发现、导入、下载、digest admission、安装与公共缓存恢复统一通过
 `apps/web/src/contentSupply/system/contentSupplySystem.ts`；页面不直接处理目录 HTTP、账号 session、ETag、
 目录缓存或 Package 存储。该 interface 同时拥有 learner-private provisioning task 的准备、停止、修订和
@@ -32,7 +36,8 @@ provider capability projection；`apps/web/src/contentSupply/provisioning` 统�
 事务提交前通过独立 authority admission；最终 materialization 与 Curriculum membership 的交接同时通过
 Content Supply 和 Learning 两个 authority，不能把候选内容直接写成 ready Learning state。Learning 保留
 显式 Add-to-Learning / enrollment intent，只接收 provisioning receipt 或已准入 materialization；Learning
-Overview 不夹带 Content Supply projection，恢复与 Cloud Sync 也只调用 Content Supply interface。
+Learning projection 不夹带 Content Supply catalog、安装缓存或 Bundle 字节；需要跨域展示或显式交接时只携带
+已解析的稳定 presentation 与 typed identity。恢复与 Cloud Sync 也只调用 Content Supply interface。
 Saved references、Sense Note、Sense Context Note 与 Personal Learning Scene 统一通过
 `apps/web/src/personalContent/system/personalContentSystem.ts` 的 command/query/subscribe interface；页面不再
 读取 `annotations` 表或维护另一份 annotation service。Personal Content 写入在同一 Library transaction
@@ -52,8 +57,9 @@ Web Shell 只挂载首页、当前 URL sheet 栈和已打开的覆盖层；退�
 直属 screen root 的增删和 active 变化，不观察整棵页面子树。生产构建后的 JavaScript gzip 上限
 由 `scripts/sensaWebBundleBudgetSmoke.mts` 按静态 ESM 依赖闭包固定，并纳入 `test:fast`；它分别约束入口、
 App Shell、轻量首页、完整学习工作区和 Learning Runtime 的增量闭包，不能只统计入口与命名 chunk 而漏掉同步共享依赖。
-首页只读取队列所需的 Target、Run、Study Plan 和 Package 事实；Package/Personal 完整控制器在相关 URL sheet 打开后加载。正式 Learning Runtime 的呈现和
-composition validation 在进入 Run 时按需加载；首页学习队列与内容准备只在真实表变化、到期时间点或页面
+首页只读取 Learning System 已解析的 compact Home projection，不取得 Target、Run、Curriculum 或 Package
+事实；Package/Personal 完整控制器在相关 URL sheet 打开后加载。正式 Learning Runtime renderer 在进入 Run
+时按需加载，Runtime/Protocol/Policy 选择已经由 Learning System 封装在 presentation union 中；首页学习队列与内容准备只在真实表变化、到期时间点或页面
 恢复焦点时刷新，不使用固定频率轮询。
 `test:browser` 使用生产构建和真实 Chromium 记录匿名 Landing、已登录 App Shell/首次本机库打开，并在 4x CPU throttle 下记录 Personal Meaning、学习入口和 Reference 覆盖层的 cold/warm 交互时间；静态闭包测试同时保证这些重模块不回流到匿名入口或首页。这里的 CI 时长是回归预算，不冒充真实设备的 LCP、INP 或 CLS。
 

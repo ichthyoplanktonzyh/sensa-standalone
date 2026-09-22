@@ -1,13 +1,9 @@
-import type {FourStageTargetPresentation} from './InterleavedFourStageRuntimeScreen';
+import type {FourStageReviewAnswer,FourStageReviewSessionProjection,FourStageTargetPresentation} from '../../../learning/system';
 import {useTranslation} from 'react-i18next';
 import { SensaPageLayout } from '../../ui/SensaPageLayouts';
-import {
-  type FourStageReviewAnswer,
-  type FourStageReviewSession,
-} from '../../../learning/runtime/interleavedFourStageProtocol';
 
 export interface FourStageReviewExecution {
- session:FourStageReviewSession<string>|null;target:FourStageTargetPresentation|null;
+ session:FourStageReviewSessionProjection|null;target:FourStageTargetPresentation|null;
  done:boolean;targetCount:number;busy:boolean;notice?:import('react').ReactNode;
  onAnswer:(answer:FourStageReviewAnswer)=>void;onContinue:()=>void;
 }

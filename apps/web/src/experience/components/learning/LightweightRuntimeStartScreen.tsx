@@ -3,14 +3,10 @@ import { useTranslation } from "react-i18next";
 import { Check, ArrowRight } from "lucide-react";
 import { RuntimeFrame, runtimePrimary } from "./RuntimeFrame";
 import { useEffect, useMemo, useRef } from "react";
-import type {LearningTargetPresentation} from '../../library/learningPresentation';
+import type {LearningLightweightRating,LearningLightweightStepProjection,LearningTargetPresentation} from '../../../learning/system';
+import {LEARNING_LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND} from '../../../learning/system';
 import { assembleLightweightInitialPresentation } from "../../learningRuntime/lightweightInitialPresentation";
 import type { LightweightInitialLearningMaterialization } from "../../../contentSupply/provisioning/lightweightInitialContent";
-import {
-  LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND,
-  type LightweightInitialRating,
-  type LightweightProtocolStepInstance,
-} from "../../../learning/runtime/lightweightInitialProtocol";
 import {
   stepRendererRegistry,
   type LightweightInitialStepRendererProps,
@@ -26,12 +22,12 @@ interface LightweightRuntimeStartScreenProps {
   readonly completionKey?: string | null;
   readonly target:LearningTargetPresentation|null;
   readonly materialization: LightweightInitialLearningMaterialization | null;
-  readonly step: LightweightProtocolStepInstance | null;
+  readonly step: LearningLightweightStepProjection | null;
   readonly completed: boolean;
   readonly hasNextTarget: boolean;
   readonly onExit: () => void;
   readonly onReveal: () => void;
-  readonly onRate: (rating: LightweightInitialRating) => void;
+  readonly onRate: (rating: LearningLightweightRating) => void;
   readonly onFinish: () => void;
   readonly personalScene?: PersonalLearningSceneRevision | null;
   readonly onOpenPersonalScene?: () => void;
@@ -100,7 +96,7 @@ export const LightweightRuntimeStartScreen = ({
       : null;
   const progressStep = completed
     ? 2
-    : step?.definition.stepKind === LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND
+    : step?.definition.stepKind === LEARNING_LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND
       ? 0
       : 1;
 
@@ -124,7 +120,7 @@ export const LightweightRuntimeStartScreen = ({
         return;
       }
       if (event.key !== 'Enter' || interactive || busy) return;
-      if (!completed && step?.definition.stepKind === LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND) {
+      if (!completed && step?.definition.stepKind === LEARNING_LIGHTWEIGHT_EXPERIENCE_RECALL_STEP_KIND) {
         event.preventDefault();
         onReveal();
       } else if (completed && !hasNextTarget) {
