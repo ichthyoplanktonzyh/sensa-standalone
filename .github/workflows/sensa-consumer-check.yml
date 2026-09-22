@@ -50,6 +50,11 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Build browser test workspace dependencies
+        run: |
+          npm run build -w @sensa/learning-kernel
+          npm run build -w @sensa/contracts
+          npm run build -w @sensa/content-validator
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Browser integration and OPFS durability
