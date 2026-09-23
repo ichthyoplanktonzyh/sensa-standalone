@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { after, before, test } from 'node:test';
+import { test } from '@playwright/test';
 
 import {
   createLibraryCloudBrowserFixture,
@@ -8,12 +8,19 @@ import {
 import { createRealLibraryConvergenceWorld } from '../support/realLibraryConvergenceWorld.mts';
 
 let fixture: LibraryCloudBrowserFixture;
+const worlds = new Set<Awaited<ReturnType<typeof createRealLibraryConvergenceWorld>>>();
+test.setTimeout(180_000);
 
-before(async () => {
-  fixture = await createLibraryCloudBrowserFixture();
+test.beforeAll(async ({browser}) => {
+  fixture = await createLibraryCloudBrowserFixture(browser);
 });
 
-after(async () => {
+test.afterEach(async () => {
+  await Promise.all([...worlds].map((world) => world.close()));
+  worlds.clear();
+});
+
+test.afterAll(async () => {
   await fixture?.close();
 });
 
@@ -21,9 +28,9 @@ const draftTexts = (drafts: readonly Readonly<{ text: string }>[]): string[] => 
   drafts.map(({ text }) => text).sort((left, right) => left.localeCompare(right))
 );
 
-test('[integration][durability][convergence] real cloud retry after a lost acknowledgement is idempotent', async (context) => {
+test('[integration][durability][convergence] real cloud retry after a lost acknowledgement is idempotent', async () => {
   const world = await createRealLibraryConvergenceWorld(fixture, ['device-a', 'device-b']);
-  context.after(() => world.close());
+  worlds.add(world);
 
   const draft = await world.add('device-a', 'My raincoat');
   await assert.rejects(world.sync('device-a', { fault: 'lost-ack' }), /lost_ack/u);
@@ -42,9 +49,9 @@ test('[integration][durability][convergence] real cloud retry after a lost ackno
   assert.notEqual(deviceA.identity.deviceId, deviceB.identity.deviceId, 'each browser keeps its own device identity');
 });
 
-test('[integration][durability][convergence] real offline independent writes eventually converge', async (context) => {
+test('[integration][durability][convergence] real offline independent writes eventually converge', async () => {
   const world = await createRealLibraryConvergenceWorld(fixture, ['device-a', 'device-b']);
-  context.after(() => world.close());
+  worlds.add(world);
 
   await world.add('device-a', 'shared base');
   await world.sync('device-a');
@@ -66,9 +73,9 @@ test('[integration][durability][convergence] real offline independent writes eve
   assert.equal(deviceB.sync.status, 'synced');
 });
 
-test('[integration][local-correctness][convergence] real conflicts preserve both branches until an explicit decision', async (context) => {
+test('[integration][local-correctness][convergence] real conflicts preserve both branches until an explicit decision', async () => {
   const world = await createRealLibraryConvergenceWorld(fixture, ['device-a', 'device-b', 'observer']);
-  context.after(() => world.close());
+  worlds.add(world);
 
   const shared = await world.add('device-a', 'base');
   await world.sync('device-a');

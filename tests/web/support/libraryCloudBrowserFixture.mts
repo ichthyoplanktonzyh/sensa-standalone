@@ -47,7 +47,7 @@ const disposableDatabaseUrl = (): string => {
 };
 
 /** Real Chromium, Hono and PostgreSQL fixture shared by database-bound Web tests. */
-export async function createLibraryCloudBrowserFixture(): Promise<LibraryCloudBrowserFixture> {
+export async function createLibraryCloudBrowserFixture(providedBrowser?: Browser): Promise<LibraryCloudBrowserFixture> {
   const previousRegistrationPolicy = process.env.SENSA_REGISTRATION_POLICY;
   process.env.SENSA_REGISTRATION_POLICY = 'registered';
 
@@ -179,7 +179,7 @@ export async function createLibraryCloudBrowserFixture(): Promise<LibraryCloudBr
 
   let browser: Browser;
   try {
-    browser = await chromium.launch({
+    browser = providedBrowser ?? await chromium.launch({
       headless: true,
       executablePath: process.env.SENSA_CHROMIUM_PATH,
     });
@@ -192,6 +192,7 @@ export async function createLibraryCloudBrowserFixture(): Promise<LibraryCloudBr
   }
 
   let closed = false;
+  const contexts = new Set<Awaited<ReturnType<Browser['newContext']>>>();
   return {
     browser,
     origin,
@@ -214,6 +215,7 @@ export async function createLibraryCloudBrowserFixture(): Promise<LibraryCloudBr
 
     async createClient(account) {
       const context = await browser.newContext();
+      contexts.add(context);
       await context.addInitScript('window.__name = fn => fn;');
       const page = await context.newPage();
       await page.goto(origin);
@@ -259,7 +261,8 @@ export async function createLibraryCloudBrowserFixture(): Promise<LibraryCloudBr
     async close() {
       if (closed) return;
       closed = true;
-      await browser.close();
+      await Promise.all([...contexts].map((context) => context.close()));
+      if (!providedBrowser) await browser.close();
       await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
       await pool.end();
       if (previousRegistrationPolicy === undefined) delete process.env.SENSA_REGISTRATION_POLICY;

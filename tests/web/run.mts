@@ -107,7 +107,7 @@ const parseFilters = (arguments_: readonly string[]): Filters => {
 const selectedTests = (filters: Filters): readonly WebTestCatalogEntry[] => {
   return catalog.filter((entry) => (
     (filters.kind === undefined || entry.kind === filters.kind)
-    && (filters.runner === undefined || (entry.runner ?? 'node') === filters.runner)
+    && (filters.runner === undefined || entry.runner === filters.runner)
     && (filters.risk === undefined || entry.risks.includes(filters.risk))
     && (filters.id === undefined || entry.id === filters.id)
     && (
@@ -129,7 +129,7 @@ const formatEntry = (entry: WebTestCatalogEntry): string => [
   `risks=${entry.risks.join(',')}`,
   `environment=${entry.environment}`,
   `suite=${entry.suite}`,
-  `runner=${entry.runner ?? 'node'}`,
+  `runner=${entry.runner}`,
   `file=${entry.file}`,
 ].join(' | ');
 
@@ -150,10 +150,9 @@ for (const field of ['id', 'file'] as const) {
 }
 const cataloguedFiles = new Set(catalog.map((entry) => entry.file));
 const wrongRunner = catalog.filter((entry) => {
-  const runner = entry.runner ?? 'node';
+  const runner = entry.runner;
   if (runner === 'vitest') return !/\.test\.(?:ts|tsx|mts|mjs)$/u.test(entry.file) || !['node', 'built-web-artifact', 'postgres'].includes(entry.environment);
-  if (runner === 'playwright') return !entry.file.endsWith('.spec.ts') || entry.environment !== 'chromium';
-  return !/\.test\.(?:mts|mjs)$/u.test(entry.file);
+  return !entry.file.endsWith('.spec.ts') || !['chromium', 'browser-postgres'].includes(entry.environment);
 });
 if (wrongRunner.length !== 0) {
   throw new Error(`Tests assigned to an incompatible runner: ${wrongRunner.map((entry) => entry.id).join(', ')}`);
@@ -193,17 +192,15 @@ if (filters.list) {
 } else {
   for (const entry of selected) {
     console.log(`\n[${entry.suite}] ${entry.id}`);
-    const runner = entry.runner ?? 'node';
-    const args = runner === 'vitest'
+    const args = entry.runner === 'vitest'
       ? [resolve(repositoryRoot, 'node_modules/vitest/vitest.mjs'), 'run', '--config', 'vitest.config.ts', entry.file]
-      : runner === 'playwright'
-        ? [resolve(repositoryRoot, 'node_modules/@playwright/test/cli.js'), 'test', '--config', 'playwright.config.ts', entry.file]
-        : ['--import', 'tsx', '--test', '--test-reporter=spec', entry.file];
+      : [resolve(repositoryRoot, 'node_modules/@playwright/test/cli.js'), 'test', '--config', 'playwright.config.ts', entry.file];
     const result = spawnSync(process.execPath, args, {
       cwd: repositoryRoot,
       env: {
         ...process.env,
         ...(entry.memoryLibrary ? {SENSA_TEST_MEMORY_LIBRARY: 'true'} : {}),
+        ...(entry.runner === 'playwright' ? {SENSA_PLAYWRIGHT_OUTPUT_DIR: `.tmp/playwright-results/${entry.id}`} : {}),
         ...entry.env,
       },
       stdio: 'inherit',

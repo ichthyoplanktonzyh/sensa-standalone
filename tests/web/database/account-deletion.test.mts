@@ -6,6 +6,9 @@ import {generateKeyPair,exportJWK,createLocalJWKSet,SignJWT} from 'jose';
 import {createConsumerRoutes} from '../../../apps/api/src/sensa/access/consumer.ts';
 import {createConsumerVerifier} from '../../../apps/api/src/sensa/access/auth.ts';
 import {purgeExpiredSemanticLookups} from '../../../apps/api/src/sensa/personal/retention.ts';
+import {test} from 'vitest';
+
+test('account deletion is atomic, idempotent and permanently revokes access',async()=>{
 const url=process.env.SENSA_ADMIN_TEST_DATABASE_URL??process.env.SENSA_TEST_DATABASE_URL;
 if(!url||new URL(url).hostname!=='127.0.0.1'||!new URL(url).pathname.startsWith('/sensa_m1a_'))throw Error('Disposable loopback database required');
 const pool=new pg.Pool({connectionString:url,max:4}),keys=await generateKeyPair('ES256'),jwk=await exportJWK(keys.publicKey);jwk.kid='fixture';
@@ -72,3 +75,4 @@ assert.equal(pending.status,200,JSON.stringify(pending.body));assert.equal(pendi
  assert.equal((await request('/sensa/service/status',another)).status,200);
  console.log('PASS: fresh signed OTP proof, atomic erasure and permanent access barrier, provider failure/retry/idempotence, old/new session refusal and other-account isolation.');
 }finally{if(saved===undefined)delete process.env.SENSA_REGISTRATION_POLICY;else process.env.SENSA_REGISTRATION_POLICY=saved;await pool.end();}
+});

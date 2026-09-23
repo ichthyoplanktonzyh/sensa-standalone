@@ -1,21 +1,21 @@
 /** Real Chromium local library + Hono + disposable Postgres. No model calls or real accounts. */
 import assert from 'node:assert/strict';
-import test from 'node:test';
 import {createHash} from 'node:crypto';
 import {libraryCloudPackageFixture} from '../../../scripts/support/libraryCloudPackageFixture.mts';
-import {expect} from '@playwright/test';
+import {expect,test} from '@playwright/test';
 import {purgeExpiredLibraryCloudBlocks} from '../../../apps/api/src/sensa/library/retention.ts';
 import {encodeBackupValue} from '../../../apps/web/src/data/library/backupCodec.ts';
 import {librarySyncBlockChars,librarySyncBlockStoreBatch} from '../../../packages/contracts/src/sensa/librarySync.ts';
 import {createLibraryCloudBrowserFixture} from '../../../tests/web/support/libraryCloudBrowserFixture.mts';
-test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres', async(t)=>{
- const fixture=await createLibraryCloudBrowserFixture();
- const {browser,origin,pool}=fixture;
+test.setTimeout(300_000);
+test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres', async({browser})=>{
+ const fixture=await createLibraryCloudBrowserFixture(browser);
+ const {origin,pool}=fixture;
  try{
  const primary=await fixture.createAccount('first'),secondary=await fixture.createAccount('second');
  const accountId=primary.accountId,otherId=secondary.accountId;
  const a=await fixture.createClient(primary);const b=await fixture.createClient(primary);const other=await fixture.createClient(secondary);
- await t.test('account isolation, local caches, legacy heads and mid-sync writes',async()=>{
+ await test.step('account isolation, local caches, legacy heads and mid-sync writes',async()=>{
  const draft=await a.evaluate(async()=>{const c=(window as any).core;return c.saveDraft(crypto.randomUUID(),{id:crypto.randomUUID(),expectedRevision:0,text:'My raincoat',images:[{id:crypto.randomUUID(),name:'raincoat.jpg',dataUrl:document.createElement('canvas').toDataURL('image/jpeg')}]});});
  await a.evaluate(()=>(window as any).sync());
  await b.evaluate(()=>(window as any).sync());assert.deepEqual(await b.evaluate(()=>(window as any).core.listDrafts()),[draft]);
@@ -53,7 +53,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  });
  const {bytes,descriptor}=await libraryCloudPackageFixture();
  let progress='';
- await t.test('canonical Intake and exact package installation facts restore without artifact bytes',async()=>{
+ await test.step('canonical Intake and exact package installation facts restore without artifact bytes',async()=>{
  // Canonical v3 Intake -> Personal Semantic World -> generated resources.
  await a.evaluate(async()=>{
   const c=(window as any).core,id=()=>crypto.randomUUID(),library=await c.openLibrary();
@@ -78,7 +78,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  assert.deepEqual(JSON.parse(await b.evaluate(async()=>{const learning=await (window as any).core.readLearning();return JSON.stringify({...learning,packages:[]});})),JSON.parse(progress));
  });
  let reconciledProgress='';
- await t.test('concurrent Reviews retain both Runs and converge on one projection',async()=>{
+ await test.step('concurrent Reviews retain both Runs and converge on one projection',async()=>{
  // Both browsers now complete a due Review for the same synchronized Target
  // without seeing the other branch. The later branch owns the projection, while
  // both Runs and all Events remain durable history.
@@ -90,7 +90,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  reconciledProgress=await a.evaluate(async()=>JSON.stringify(await (window as any).core.readLearning()));
  assert.equal(reconciledProgress,await b.evaluate(async()=>JSON.stringify(await (window as any).core.readLearning())),'reconciled learning projections must converge');
  });
- await t.test('fresh restore, backup, private bytes and signout preserve their contracts',async()=>{
+ await test.step('fresh restore, backup, private bytes and signout preserve their contracts',async()=>{
  // New context (fresh local DB) obtains a complete usable library and media.
  const fresh=await fixture.createClient(primary);
  // A new Web bundle may briefly meet the previous API during a rolling release.
@@ -112,7 +112,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
  // Optional formal UI integration, with real Supabase SDK and synthetic Auth HTTP only.
  const localWebOrigin=process.env.SENSA_LOCAL_WEB_URL;
  if(localWebOrigin){
-  await t.test('formal account UI stays mounted across same-session auth events',async()=>{
+  await test.step('formal account UI stays mounted across same-session auth events',async()=>{
   const webOrigin=localWebOrigin;if(new URL(webOrigin).hostname!=='127.0.0.1')throw Error('Use isolated loopback Web');
   const ctx=await browser.newContext(),ui=await ctx.newPage();let accountInitializations=0;const errors:string[]=[];ui.on('pageerror',e=>errors.push(e.message));
   const token=[{}, {sub:primary.subject,exp:Math.floor(Date.now()/1000)+3600},'fixture'].map(x=>Buffer.from(JSON.stringify(x)).toString('base64url')).join('.');
@@ -142,7 +142,7 @@ test('Cloud Checkpoint preserves learner facts across real Chromium and Postgres
   console.log('PASS: formal AccountExperience login restores cloud library and original Profile shows sync status');await ctx.close();
   });
  }
- await t.test('block leases, immutable history and account deletion survive repacking',async()=>{
+ await test.step('block leases, immutable history and account deletion survive repacking',async()=>{
  // Repacking published history into different block sizes is a transport detail, not a rewrite.
  const stored=new Map<string,string>();
  const refresh=async()=>{const rows=(await pool.query('SELECT hash,data FROM sensa_consumer.library_cloud_blocks WHERE account_id=$1',[accountId])).rows;stored.clear();for(const row of rows)stored.set(row.hash,row.data);};

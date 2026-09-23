@@ -1,7 +1,9 @@
 /** Pool acquisition, statement and lock budgets over disposable Postgres. */
 import assert from 'node:assert/strict';
 import pg from 'pg';
+import {test} from 'vitest';
 
+test('pool acquisition, statement and lock budgets release healthy connections',async()=>{
 const url=process.env.SENSA_ADMIN_TEST_DATABASE_URL??process.env.SENSA_TEST_DATABASE_URL;
 if(!url||new URL(url).hostname!=='127.0.0.1'||!new URL(url).pathname.startsWith('/sensa_m1a_'))throw Error('Disposable loopback database required');
 Object.assign(process.env,{
@@ -39,3 +41,4 @@ try{
  await admin.query('DELETE FROM core.accounts WHERE account_id=$1',[fixture]).catch(()=>undefined);
  await admin.end();await closeDatabasePool();
 }
+});

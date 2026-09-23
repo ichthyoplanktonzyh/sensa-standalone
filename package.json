@@ -27,7 +27,7 @@
     "test:coverage": "vitest run --config vitest.config.ts --coverage tests/web/unit/home-readiness.test.ts",
     "test:edge": "deno check --config supabase/functions/sensa-api/deno.json supabase/functions/sensa-api/index.ts",
     "test:browser": "node --import tsx tests/web/run.mts --suite=browser",
-    "test:playwright": "playwright test --config playwright.config.ts",
+    "test:playwright": "node --import tsx tests/web/run.mts --suite=browser --runner=playwright",
     "benchmark:sqlite-opfs": "node --import tsx tests/web/run.mts --suite=browser --id=sqlite-opfs-benchmark",
     "benchmark:cloud-sync": "node --import tsx scripts/benchmarkCloudSyncScale.mts",
     "test:skin": "node --import tsx tests/web/run.mts --suite=browser --id=skin-surface",

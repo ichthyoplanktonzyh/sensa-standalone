@@ -1,13 +1,15 @@
-import {chromium,expect} from '@playwright/test';
+import {test,expect,type Page} from '@playwright/test';
 import {resolve} from 'node:path';
 import {readFile} from 'node:fs/promises';
 import {readYoutubePlayer} from '../../../apps/browser-extension/src/youtubePlayer.ts';
 import {captureSnapshotSchema} from '@sensa/contracts/sensa';
-const browser=await chromium.launch({executablePath:process.env.SENSA_CHROMIUM_PATH});
 const cues={events:[{tStartMs:12500,dDurationMs:1000,segs:[{utf8:'She took'}]},{tStartMs:13500,dDurationMs:2000,segs:[{utf8:'her time.'}]},{tStartMs:18000,dDurationMs:4000,segs:[{utf8:'They looked up at the sky.'}]}]};
 let captionRequest:URL|null=null,emptyCaptions=false;
-try{
+test.setTimeout(180_000);
+test('extension reading and settings surfaces preserve real browser behavior',async({browser})=>{
  const page=await browser.newPage({viewport:{width:1200,height:850}});
+ let settingsPage:Page|undefined;
+try{
  await page.route('**/*',async route=>{
    const url=new URL(route.request().url());
    if(url.pathname==='/api/timedtext'){captionRequest=url;return emptyCaptions?route.fulfill({body:''}):route.fulfill({json:cues});}
@@ -223,7 +225,7 @@ try{
  await page.evaluate(()=>{history.pushState({},'', '/watch?v=lmnopqrstuv');document.dispatchEvent(new Event('yt-navigate-start'));});
  await expect(page.getByLabel('当前原字幕',{exact:true})).toHaveCount(0);
  await page.evaluate(()=>(window as any).fixture.receive({kind:'reading',enabled:false}));await expect(page.locator('[data-sensa-ui]')).toHaveCount(0);
- const settingsPage=await browser.newPage();const settingsHtml=(await readFile('apps/browser-extension/options.html','utf8')).replace('<script src="options.js"></script>','');
+ settingsPage=await browser.newPage();const settingsHtml=(await readFile('apps/browser-extension/options.html','utf8')).replace('<script src="options.js"></script>','');
  await settingsPage.route('**/*',route=>route.request().url()==='https://example.com/settings'?route.fulfill({contentType:'text/html',body:settingsHtml}):route.abort());await settingsPage.goto('https://example.com/settings');
  await settingsPage.evaluate('window.__name=value=>value');
  await settingsPage.evaluate(()=>{
@@ -261,6 +263,5 @@ try{
  await expect(settingsPage.locator('#feedback')).toContainText('本机偏好已保存');
  expect(await settingsPage.evaluate(()=>(window as any).settingsFixture.local.readingPreferences)).toMatchObject({speechVoice:'Ting-Ting',speechRate:1.25});
  await settingsPage.screenshot({path:'/tmp/sensa-browser-settings.png',fullPage:true});
- console.log('PASS: real page DOM translation/restore and preserved host handlers, editable exclusion, late-result isolation, a paragraph the learner already reads left alone and translated on request, every translation asked for with what its text sits in and never with a translation the panel wrote itself, main-world caption reader, subtitle selection with timestamped save, a subtitle track in the learner\'s own language skipped until asked for, a cue spoken in the language of its track, seek, SPA cleanup, a site rule written from the page and reading shut down by it, a sentence the learner is writing translated the other way and inserted only when they ask, the page read aloud block by block in each block\'s own language, a quick answer that is never announced as work in progress, and a slow one that is. Network fixtures only.');
- console.log('PASS: actual settings UI save/reload, feature assignment, explicit test/model fetch, cleared password field, no secret in browser storage, conflict feedback, and a reading voice chosen from this device\'s own voices.');
-}finally{await browser.close();}
+}finally{await settingsPage?.close();await page.close();}
+});

@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import pg from 'pg';
 import {ConsumerError} from '../../../apps/api/src/sensa/access/auth.ts';
 import {failModelRequestAfterExecution,failModelRequestBeforeExecution,markModelRequestRunning,purgeExpiredModelRequests,reserveModelRequest,succeedModelRequest} from '../../../apps/api/src/sensa/models/requests.ts';
+import {test} from 'vitest';
 
+test('model request receipts and budgets preserve execution lifecycle',async()=>{
 const url=process.env.SENSA_ADMIN_TEST_DATABASE_URL??process.env.SENSA_TEST_DATABASE_URL;
 if(!url||new URL(url).hostname!=='127.0.0.1'||!new URL(url).pathname.startsWith('/sensa_m1a_'))throw Error('Disposable loopback database required');
 const pool=new pg.Pool({connectionString:url,max:3});
@@ -53,3 +55,4 @@ try{
  assert.equal(await tx(db=>purgeExpiredModelRequests(db,now,100)),1);assert.equal((await pool.query('SELECT count(*)::int n FROM sensa_consumer.model_requests WHERE account_id=$1 AND request_id=$2',[accountId,id])).rows[0].n,0);
  console.log('PASS: model receipts replay results, reject digest reuse, release only pre-execution failures, retain executed/unknown usage, expire cached results, and purge bounded metadata. Disposable database; no model calls.');
 }finally{await pool.end();}
+});

@@ -1,9 +1,16 @@
 /** Reference language semantics in the real React surfaces. No external calls. */
 import assert from 'node:assert/strict';
-import {createServer} from 'node:http';
+import {createServer, type Server} from 'node:http';
 import {build} from 'esbuild';
-import {chromium,expect} from '@playwright/test';
+import {expect,test} from '@playwright/test';
 
+let server:Server;
+let port:number;
+
+test.setTimeout(60_000);
+test.use({viewport:{width:360,height:740},locale:'zh-CN'});
+
+test.beforeAll(async()=>{
 const compiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
 import React from 'react';
 import {createRoot} from 'react-dom/client';
@@ -20,18 +27,22 @@ createRoot(document.getElementById('root')!).render(<>
 </>);
 `},bundle:true,write:false,format:'esm',platform:'browser',define:{'import.meta.env':'{}'}});
 const code=compiled.outputFiles[0]!.text;
-const server=createServer((request,response)=>{
+server=createServer((request,response)=>{
   response.setHeader('content-type',request.url==='/bundle.js'?'text/javascript':'text/html');
   response.end(request.url==='/bundle.js'?code:'<!doctype html><html lang="zh-CN"><body><div id="root"></div><script type="module" src="/bundle.js"></script></body></html>');
 });
 await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
-const address=server.address() as {port:number};
-const browser=await chromium.launch({headless:true,executablePath:process.env.SENSA_CHROMIUM_PATH});
-try{
-  const page=await browser.newPage({viewport:{width:360,height:740},locale:'zh-CN'});
+port=(server.address() as {port:number}).port;
+});
+
+test.afterAll(async()=>{
+  if(server)await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
+});
+
+test('dictionary and examples expose source and learner languages with accessible focus',async({page})=>{
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
-  await page.goto(`http://127.0.0.1:${address.port}`);
+  await page.goto(`http://127.0.0.1:${port}`);
   const dictionary=page.locator('#s-reference-dictionary');
   await expect(dictionary.getByRole('heading',{name:'hola'})).toHaveAttribute('lang','es');
   await expect(dictionary.getByText('打招呼用语',{exact:true})).toHaveAttribute('lang','zh-CN');
@@ -45,8 +56,4 @@ try{
   await expect(viewer.locator('p[lang="zh-CN"]').filter({hasText:'打招呼用语'})).toHaveAttribute('lang','zh-CN');
   assert.equal(await viewer.locator('button').first().evaluate(element=>element===document.activeElement),true,'the active detail screen moves focus to its close control');
   assert.deepEqual(errors,[]);
-  console.log('PASS: real dictionary and example surfaces expose Spanish source text and Chinese learner text to assistive technology, including focus on the active detail screen. Chromium, no external calls.');
-}finally{
-  await browser.close();
-  await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
-}
+});

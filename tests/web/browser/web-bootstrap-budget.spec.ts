@@ -11,14 +11,13 @@
  *   console / CSP          -> no runtime error and no blocked dynamic code
  */
 import assert from 'node:assert/strict';
-import test from 'node:test';
 import {createHash,randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {execFileSync} from 'node:child_process';
 import {mkdir,readFile,rm} from 'node:fs/promises';
 import {extname,join,resolve} from 'node:path';
-import {chromium,expect} from '@playwright/test';
+import {test,expect,type Browser} from '@playwright/test';
 import {librarySyncBlockFetchBytes,librarySyncBlockStoreChars} from '../../../packages/contracts/src/sensa/librarySync.ts';
 import {pageLayoutFamilyContract} from '../../../apps/web/src/experience/appearance/pageLayoutContract.ts';
 import type {} from '../../../apps/web/src/browserSmokeBridge.ts';
@@ -86,13 +85,14 @@ const repackCloud=(cloud:Cloud,chars:number)=>{
 };
 
 /** The production security policy, so a blocked dynamic-code path fails here. */
-const productionCsp=await (async()=>{
+const loadProductionCsp=async()=>{
  const headers=await readFile(join(root,'apps/web/public/_headers'),'utf8');
  const section=headers.split(/\n\s*\n/u).find(part=>part.trimStart().startsWith('/*'));
  const line=section?.split('\n').find(candidate=>candidate.trimStart().toLowerCase().startsWith('content-security-policy:'));
  assert(line,'Production CSP header not found in apps/web/public/_headers');
  return line.slice(line.indexOf(':')+1).trim();
-})();
+};
+let productionCsp='';
 
 const types:Record<string,string>={'.js':'text/javascript','.mjs':'text/javascript','.wasm':'application/wasm','.css':'text/css','.html':'text/html','.json':'application/json','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.svg':'image/svg+xml','.mp3':'audio/mpeg','.woff2':'font/woff2','.ico':'image/x-icon'};
 
@@ -192,11 +192,20 @@ const server=createServer(async(request,response)=>{
   }
  }catch(error){json({code:'fixture_error',message:error instanceof Error?error.message:'unknown'},500);}
 });
-server.listen(0,'127.0.0.1');await once(server,'listening');
-origin=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
-const storageKey=`sb-${new URL(origin).hostname.split('.')[0]}${storageKeySuffix}`;
+let storageKey='';
 
-const browser=await chromium.launch({headless:true,executablePath:process.env.SENSA_CHROMIUM_PATH});
+test.beforeAll(async()=>{
+ productionCsp=await loadProductionCsp();
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ origin=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
+ storageKey=`sb-${new URL(origin).hostname.split('.')[0]}${storageKeySuffix}`;
+});
+
+test.afterAll(async()=>{
+ if(server.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));
+});
+
+let browser:Browser;
 /** Seed the Supabase session exactly where the production client reads it. */
 const session=()=>({access_token:jwt(3600),token_type:'bearer',expires_in:3600,expires_at:Math.floor(Date.now()/1000)+3600,refresh_token:'fixture-refresh-token',user:{id:SUBJECT,aud:'authenticated',role:'authenticated',email:'fixture@sensa.invalid',app_metadata:{},user_metadata:{},identities:[],created_at:new Date().toISOString()}});
 async function instrument(page:import('@playwright/test').Page,authenticated:boolean){
@@ -239,7 +248,9 @@ const finishCheckpoint=async(page:import('@playwright/test').Page,message:string
  assert.equal(await restoreStatus(page),'synced',message);
 };
 
-await test('production Web boot keeps the local shell responsive through cloud restore',async(t)=>{
+test.setTimeout(300_000);
+test('production Web boot keeps the local shell responsive through cloud restore',async({browser:fixtureBrowser})=>{
+browser=fixtureBrowser;
 try{
  await rm(output,{recursive:true,force:true});
  await mkdir(dist,{recursive:true});
@@ -477,12 +488,12 @@ try{
  if(a.errors.length)log('   phase A console: '+JSON.stringify(a.errors.slice(0,5)));
  if(b.errors.length)log('   phase B console: '+JSON.stringify(b.errors.slice(0,5)));
  if(violations.length)log('   CSP: '+JSON.stringify(violations.slice(0,4)));
- await t.test('anonymous Landing, App Shell and lazy surfaces stay within interaction budgets',()=>{
+ await test.step('anonymous Landing, App Shell and lazy surfaces stay within interaction budgets',()=>{
   assert(shellMs<=SHELL_BUDGET_MS,`App Shell waited for account restore: ${shellMs}ms > ${SHELL_BUDGET_MS}ms`);
   assert(landingMs<=SHELL_BUDGET_MS,`anonymous Landing exceeded budget: ${landingMs}ms > ${SHELL_BUDGET_MS}ms`);
   for(const [surface,milliseconds] of Object.entries(surfaceTimings))assert(milliseconds<=SHELL_BUDGET_MS,`${surface} exceeded budget: ${milliseconds}ms > ${SHELL_BUDGET_MS}ms`);
  });
- await t.test('legacy-block restore is byte-bounded and does not rewrite confirmed content',()=>{
+ await test.step('legacy-block restore is byte-bounded and does not rewrite confirmed content',()=>{
   assert(restoreMs<=RESTORE_BUDGET_MS,`account restore exceeded budget: ${restoreMs}ms > ${RESTORE_BUDGET_MS}ms`);
   assert(fetchRequests.length<=fetchRequestBudget,`restore used ${fetchRequests.length} block fetches, budget ${fetchRequestBudget} for ${legacyPublished} legacy blocks`);
   assert.equal(confirmedRevision,legacyRevision,'restore republished unchanged content');
@@ -490,7 +501,7 @@ try{
   assert.equal(confirmedPublishedBytes,legacyPublishedBytes,'restore changed confirmed published bytes');
   assert.equal(restored,TOTAL_DRAFTS,'account restore lost drafts');
  });
- await t.test('restored local OPFS and remote Intake retain actual learner facts',()=>{
+ await test.step('restored local OPFS and remote Intake retain actual learner facts',()=>{
   assert.equal(storageDiagnostics.engine,'sqlite-wasm');
   assert.equal(storageDiagnostics.persistence,'opfs');
   assert.equal(storageDiagnostics.journalMode,'wal');
@@ -501,7 +512,7 @@ try{
   assert.equal(remoteIncompleteAcknowledgement?.result?.route,'inbox');
   assert(remoteInboxCount>=1,'incomplete Intake did not remain in the local Inbox');
  });
- await t.test('foreground return and idle tab do not refetch or poll the account',()=>{
+ await test.step('foreground return and idle tab do not refetch or poll the account',()=>{
   assert(repeatSettled,'focus-triggered verification sync never settled');
   assert.equal(repeatFetches.length,0,'later focus re-fetched confirmed account blocks');
   assert(!repeatRequests.some(entry=>entry.path.startsWith('/sensa/library-sync/')),'foreground return started a whole-library sync');
@@ -509,13 +520,11 @@ try{
   assert(settled,'untouched account never stopped syncing');
   assert.deepEqual(idleRequests,[],'untouched tab made service calls');
  });
- await t.test('production browser emits no console errors, fixture rejects or CSP violations',()=>{
+ await test.step('production browser emits no console errors, fixture rejects or CSP violations',()=>{
   assert.deepEqual(rejected,[]);
   assert.deepEqual([...a.errors,...b.errors],[]);
   assert.deepEqual(violations,[]);
  });
 }finally{
- await browser.close();
- await new Promise<void>(resolve=>server.close(()=>resolve()));
 }
 });

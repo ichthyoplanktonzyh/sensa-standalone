@@ -1,7 +1,7 @@
 export const webTestKinds = ['unit', 'contract', 'integration', 'quality'] as const;
 export type WebTestKind = (typeof webTestKinds)[number];
 
-export const webTestRunners = ['node', 'vitest', 'playwright'] as const;
+export const webTestRunners = ['vitest', 'playwright'] as const;
 export type WebTestRunner = (typeof webTestRunners)[number];
 
 export const webTestRisks = [
@@ -27,7 +27,7 @@ export type WebTestCatalogEntry = Readonly<{
   risks: readonly WebTestRisk[];
   environment: WebTestEnvironment;
   suite: WebTestSuite;
-  runner?: WebTestRunner;
+  runner: WebTestRunner;
   memoryLibrary?: boolean;
   env?: Readonly<Record<string, string>>;
 }>;
@@ -76,11 +76,12 @@ const foundationTests = [
   },
   {
     id: 'library-cloud-convergence',
-    file: 'tests/web/integration/library-cloud-convergence.test.mts',
+    file: 'tests/web/integration/library-cloud-convergence.spec.ts',
     kind: 'integration',
     risks: ['local-correctness', 'durability', 'convergence'],
     environment: 'browser-postgres',
     suite: 'database',
+    runner: 'playwright',
   },
   {
     id: 'personal-semantic-world-merge',
@@ -193,6 +194,12 @@ const manualTests = [
   'browser/browser-port', 'browser/extension-popup', 'integration/local-book',
 ] as const;
 
+const playwrightPaths = new Set<string>([
+  'browser/skin-surface', 'browser/reference-presentation',
+  'browser/sqlite-opfs-benchmark', 'browser/web-bootstrap-budget',
+  'browser/browser-port', 'browser/extension-popup', 'database/library-cloud',
+]);
+
 const durabilityTests = new Set<string>([
   'database/account-deletion', 'database/intake-delivery', 'database/library-cloud',
   'database/model-request-state', 'browser/sqlite-opfs-benchmark',
@@ -242,7 +249,9 @@ for (const [risk, paths] of [
 
 const migratedEntry = ({path, suite, memoryLibrary, env}: MigratedTest): WebTestCatalogEntry => {
   const kind = path.startsWith('contracts/') ? 'contract' : path.startsWith('quality/') ? 'quality' : 'integration';
-  const environment = suite === 'browser' || path.startsWith('browser/') ? 'chromium' : suite === 'database' ? 'postgres' : 'node';
+  const environment = path === 'database/library-cloud' ? 'browser-postgres'
+    : suite === 'browser' || path.startsWith('browser/') ? 'chromium'
+      : suite === 'database' ? 'postgres' : 'node';
   const extension = path.startsWith('release/') ? 'mjs' : 'mts';
   const risks: WebTestRisk[] = ['local-correctness'];
   if (durabilityTests.has(path)) risks.push('durability');
@@ -250,12 +259,12 @@ const migratedEntry = ({path, suite, memoryLibrary, env}: MigratedTest): WebTest
   if (scaleTests.has(path)) risks.push('scale');
   return {
     id: path.split('/').at(-1)!,
-    file: `tests/web/${path}.test.${extension}`,
+    file: playwrightPaths.has(path) ? `tests/web/${path}.spec.ts` : `tests/web/${path}.test.${extension}`,
     kind,
     risks,
     environment,
     suite,
-    ...(suite === 'fast' ? {runner: 'vitest' as const} : {}),
+    runner: playwrightPaths.has(path) ? 'playwright' : 'vitest',
     ...(memoryLibrary ? {memoryLibrary} : {}),
     ...(env ? {env} : {}),
   };

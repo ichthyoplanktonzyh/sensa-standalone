@@ -2,12 +2,12 @@ import {defineConfig, devices} from '@playwright/test';
 
 export default defineConfig({
   // CI uploads failed traces; specs here must use synthetic, non-sensitive data.
-  testDir: 'tests/web/browser',
+  testDir: 'tests/web',
   testMatch: '**/*.spec.ts',
   retries: 0,
   workers: 1,
   reporter: 'list',
-  outputDir: '.tmp/playwright-results',
+  outputDir: process.env.SENSA_PLAYWRIGHT_OUTPUT_DIR ?? '.tmp/playwright-results',
   use: {
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',

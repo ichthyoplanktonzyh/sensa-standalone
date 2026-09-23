@@ -17,4 +17,6 @@ Preserve established Web behavior and data boundaries. Do not silently migrate, 
 
 Use focused checks for the changed behavior, then run `npm run check` before handoff when the change can affect the shipped application. Use `npm run test:edge`, `npm run test:browser` or `npm run test:db` only when their boundary is affected. Python content changes must compile and pass a no-cost validator smoke. Routine validation must not call paid model or TTS services.
 
+Web tests use Vitest when no real browser is required and Playwright Test for real Chromium, OPFS, lifecycle, and browser-plus-database scenarios. Register every Web test in `tests/web/catalog.mts` with its risk and CI boundary. Do not add `node:test` or a third general-purpose runner; standalone performance/load generators remain specialized tools.
+
 Keep secrets, populated environment files, generated content and runtime media out of Git. Production changes run through the repository CI/CD workflows; push or deploy only when the owner explicitly requests it.

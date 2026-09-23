@@ -6,6 +6,9 @@ import {learningContentRegistrySchema,defaultSensaLanguageRoute,sensaPinnedLangu
 import {openLibrary,command} from '../../../apps/web/src/data/library/store.ts';
 import {installPackage} from '../../../apps/web/src/data/library/packages.ts';
 import {confirmLearningQuantity,enrollPackage,startLearning,actLearning,finishLearning,readLearning} from '../../../apps/web/src/data/library/learning.ts';
+import {test} from 'vitest';
+
+test('prepared Book installs and completes offline through due review',async()=>{
 Object.assign(globalThis,{window:new EventTarget(),BroadcastChannel:undefined});
 const id=()=>crypto.randomUUID();
 await openLibrary();
@@ -45,3 +48,4 @@ try{
  }
  console.log('PASS: actual prepared 3-entry Book → digest/schema → install → enroll → reveal → completion → due review, with all network disabled. In-memory library; browser/OPFS and audible playback remain owner acceptance.');
 }finally{globalThis.fetch=fetchBefore;}
+});

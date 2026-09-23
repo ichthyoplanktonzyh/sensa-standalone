@@ -11,7 +11,9 @@ import {
   sensaIntakeDeliveryContractVersion,
   sensaIntakeDeliveryReceiptSchema,
 } from '../../../packages/contracts/src/sensa/index.ts';
+import {test} from 'vitest';
 
+test('agent intake delivery is durable, isolated and idempotent',async()=>{
 const url=process.env.SENSA_ADMIN_TEST_DATABASE_URL??process.env.SENSA_TEST_DATABASE_URL;
 if(!url||new URL(url).hostname!=='127.0.0.1'||!new URL(url).pathname.startsWith('/sensa_m1a_'))throw Error('Disposable loopback database required');
 const pool=new pg.Pool({connectionString:url,max:4});
@@ -72,3 +74,4 @@ try{
  assert.equal((await request('/sensa/agent/intakes/'+operationId,replacement.token)).status,401,'revocation immediately removes Agent intake access');
  console.log('PASS: one-time Agent setup, atomic replacement, derived acceptance, durable/idempotent/rate-limited intake, isolation, last-use audit, truthful apply status, and revocation all hold.');
 }finally{if(saved===undefined)delete process.env.SENSA_REGISTRATION_POLICY;else process.env.SENSA_REGISTRATION_POLICY=saved;await pool.end();}
+});

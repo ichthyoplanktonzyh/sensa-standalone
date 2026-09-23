@@ -24,18 +24,22 @@
     "contracts/content-supply-authority.test.mts",
     "contracts/learner-projection-boundary.test.mts",
     "contracts/learning-system-boundary.test.mts",
-    "integration/library-cloud-convergence.test.mts",
+    "integration/library-cloud-convergence.spec.ts",
     "integration/learning-authority.test.mts",
     "unit/home-readiness.test.ts",
     "integration/package-learning.test.mts",
-    "database/library-cloud.test.mts",
+    "database/library-cloud.spec.ts",
     "integration/library-transaction-and-replay.test.mts",
     "quality/appearance.test.mts",
     "integration/content-agent.test.mts",
     "integration/web-intake.test.mts",
     "integration/local-learning-runtime.test.mts",
-    "browser/web-bootstrap-budget.test.mts",
-    "browser/skin-surface.test.mts",
-    "browser/resource-presentation.spec.ts"
+    "browser/web-bootstrap-budget.spec.ts",
+    "browser/resource-presentation.spec.ts",
+    "browser/reference-presentation.spec.ts",
+    "browser/sqlite-opfs-benchmark.spec.ts",
+    "browser/skin-surface.spec.ts",
+    "browser/browser-port.spec.ts",
+    "browser/extension-popup.spec.ts"
   ]
 }

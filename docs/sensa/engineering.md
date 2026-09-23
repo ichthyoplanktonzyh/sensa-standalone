@@ -376,14 +376,13 @@ SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 `tests/web/catalog.mts` 是唯一的 Web 测试执行目录：`fast`、`browser`、`database`、`manual` 和
 `foundation` 各按所需环境独立运行，单项可用 `--suite=... --id=...` 选择。旧的 `scripts/sensa*Smoke.*`
 入口和导入包装层已删除；原有断言现在直接属于 `tests/web` 下对应边界。较长的高风险检查已拆成具名场景，后续新增场景仍应维持既有验证语义。
-目录中的 `runner` 决定由 Node 原生测试、Vitest 或 Playwright Test 执行；尚未迁移的检查继续保持 Node 运行方式。
-首批 Vitest 用例是 `home-readiness`（`npm run test:vitest`），首批 Playwright Test 用例是合成资源的
-`resource-presentation`（`npm run test:playwright`）。`npm run test:coverage` 只生成当前 Vitest 用例所触及
-Web 学习投影的覆盖率报告，不设置全局覆盖率门槛；Playwright Test 失败时保留 trace 和截图在被 Git 忽略的
-`.tmp/playwright-results` 中，CI 失败时上传这些诊断产物，不重试。Playwright Test 用例必须只使用合成、非敏感数据。
+目录中的 `runner` 只有两种正式平台：不需要真实浏览器的测试用 Vitest，需要真实 Chromium、OPFS 或浏览器生命周期的测试用 Playwright Test；浏览器加数据库场景也用 Playwright Test。不得新增 `node:test` 或第三套通用测试运行器。`npm run test:vitest` 运行快速层，`npm run test:playwright` 运行浏览器层；单项和风险筛选仍通过目录入口执行。独立负载生成器和性能脚本仍是专项工具，不作为通用运行器。
+`npm run test:coverage` 只生成当前 Vitest 用例所触及
+Web 学习投影的覆盖率报告，不设置全局覆盖率门槛；Playwright Test 失败时按测试项隔离保留 trace 和截图在被 Git 忽略的
+`.tmp/playwright-results/<test-id>` 中，CI 失败时上传这些诊断产物，不重试。Playwright Test 用例必须只使用合成、非敏感数据。
 平台用例仍通过目录进入既有 CI 分层，不额外执行一遍。
-风险标签是筛选维度，不是独立的 CI job：`foundation`/`fast` 的 Node、Vitest 和构建产物检查进入主 CI 的 `npm test`；
-Chromium 的 Node/Playwright Test 检查进入 `npm run test:browser`；PostgreSQL 及 Chromium+PostgreSQL 检查进入 `npm run test:db`。
+风险标签是筛选维度，不是独立的 CI job：`foundation`/`fast` 的 Vitest 与构建产物检查进入主 CI 的 `npm test`；
+Chromium 的 Playwright Test 检查进入 `npm run test:browser`；PostgreSQL 的 Vitest 和 Chromium+PostgreSQL 的 Playwright Test 检查进入 `npm run test:db`。
 运行器会拒绝把自动化测试登记到错误的 CI 环境边界。`manual` 的实际 Book 检查依赖另行生成的
 `release-candidate/catalog.json`，不在普通 CI 中；普通 CI 的 `package-learning` 等测试覆盖同一安装、结算和复习代码路径，但不替代实际发布包验收。
 
@@ -518,7 +517,7 @@ Python `content/tools/spoken_resource.py` 只属于离线 Book 制作管线。�
 `python3 content/tools/smoke_spoken_resource.py` 验证 provider 替换、缓存隔离、损坏检测与外部调用门控；
 `tests/web/integration/speech-provider.test.mts` 验证 provider 替换、默认 Edge wire adapter、输入身份和已保存音频
 合同；以上不调用真实服务。
-完成本地构建后，`node --import tsx tests/web/integration/local-book.test.mts` 在隔离内存库中验证实际包的
+完成本地构建后，`node --import tsx tests/web/run.mts --suite=manual --id=local-book` 在隔离内存库中验证实际包的
 安装、学习结算与复习，完全禁用网络。真实浏览器存储、交互、声音听感由人工验收。
 
 

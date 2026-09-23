@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {resolve} from 'node:path';
-import {chromium} from '@playwright/test';
+import {test} from '@playwright/test';
 import {build as viteBuild} from 'vite';
 
+test.setTimeout(180_000);
+
+test('durable OPFS profiles survive abrupt Worker termination with intact rows',async({page})=>{
 const built=await viteBuild({
   configFile:false,
   root:process.cwd(),
@@ -25,7 +28,7 @@ const built=await viteBuild({
     },
   },
 });
-if(Array.isArray(built))throw new Error('Expected one browser benchmark bundle');
+if(Array.isArray(built)||!('output' in built))throw new Error('Expected one browser benchmark bundle');
 const files=new Map(built.output.map(file=>[
   file.fileName,
   file.type==='chunk'?file.code:file.source,
@@ -44,12 +47,11 @@ const server=createServer((request,response)=>{
 server.listen(0,'127.0.0.1');
 await once(server,'listening');
 const origin=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
-const browser=await chromium.launch({headless:true,executablePath:process.env.SENSA_CHROMIUM_PATH});
 try{
-  const page=await browser.newPage();
   await page.goto(origin);
   const result=await page.evaluate(async()=>{
-    const module=await import(/* @vite-ignore */ '/core.js');
+    const modulePath='/core.js';
+    const module=await import(/* @vite-ignore */ modulePath);
     return module.benchmarkSqliteOpfs();
   }) as {
     transactions:number;
@@ -71,8 +73,7 @@ try{
     p50Ms:Number(p50Ms.toFixed(2)),
     p95Ms:Number(p95Ms.toFixed(2)),
   })));
-  console.log('PASS: durable OPFS profiles survive abrupt Worker termination with intact rows and quick_check=ok.');
 }finally{
-  await browser.close();
   await new Promise<void>(resolve=>server.close(()=>resolve()));
 }
+});

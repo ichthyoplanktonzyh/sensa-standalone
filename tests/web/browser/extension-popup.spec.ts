@@ -1,10 +1,10 @@
-import {chromium,expect} from '@playwright/test';
+import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 
-const browser=await chromium.launch({executablePath:process.env.SENSA_CHROMIUM_PATH});
-try {
- const page=await browser.newPage({locale:"zh-CN"});
+test.setTimeout(60_000);
+test.use({locale:'zh-CN'});
+test('extension popup actions and reading-site controls report their state',async({page})=>{
  await page.route('**/*',route=>route.abort());
  await page.setContent((await readFile('apps/browser-extension/dist/popup.html','utf8')).replace('<script src="popup.js"></script>',''));
  await page.addScriptTag({content:'window.__name = (value) => value;'});
@@ -91,5 +91,4 @@ try {
  await expect(page.locator('#site')).toBeEnabled();
  await page.locator('#site').click();
  expect((await page.evaluate(()=>(window as any).fixture.calls.at(-1))).enabled).toBe(true);
- console.log('PASS: all popup actions show pending/success/error feedback, prevent duplicate clicks and restore controls, and the site switch states the rule in force while applying the other one; no network calls.');
-} finally {await browser.close();}
+});

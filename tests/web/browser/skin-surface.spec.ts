@@ -1,8 +1,7 @@
 /** Browser matrix for the development-only Skin Lab. No account or provider calls. */
 import assert from "node:assert/strict";
-import test from "node:test";
 import { spawn, type ChildProcess } from "node:child_process";
-import { chromium, expect } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import {
   componentFamilyContract,
   componentTokenCatalog,
@@ -37,7 +36,8 @@ async function waitForServer(): Promise<void> {
   throw new Error("Skin Lab Vite server did not become ready");
 }
 
-await test("Skin Lab preserves contracted layouts and state across the browser matrix",async(t)=>{
+test.setTimeout(180_000);
+test("Skin Lab preserves contracted layouts and state across the browser matrix",async({browser})=>{
 try {
   server = spawn(
     process.execPath,
@@ -58,9 +58,8 @@ try {
     throw new Error(`${error instanceof Error ? error.message : String(error)}\n${serverOutput}`);
   });
 
-  const browser = await chromium.launch({ headless: true, executablePath: process.env.SENSA_CHROMIUM_PATH });
+  const context = await browser.newContext();
   try {
-    const context = await browser.newContext();
     const page = await context.newPage();
     const runtimeErrors: string[] = [];
     page.on("pageerror", (error) => runtimeErrors.push(`pageerror: ${error.message}`));
@@ -84,7 +83,7 @@ try {
       Object.entries(overlayLayoutFamilyContract).map(([family, contract]) => [family, [...contract.logicalOrder]]),
     );
 
-    await t.test("Skin Lab renders every contracted component, asset and semantic region",async()=>{
+    await test.step("Skin Lab renders every contracted component, asset and semantic region",async()=>{
     for (const family of Object.keys(componentFamilyContract)) {
       assert(
         await page.locator(`[data-sensa-component="${family}"]`).count() > 0,
@@ -136,7 +135,7 @@ try {
     const brandProbe = page.locator("[data-sensa-brand-logo]").first();
     const skinAssetProbe = page.locator("[data-sensa-skin-asset]").first();
     const motionProbe = page.locator("[data-sensa-motion-probe]");
-    await t.test("Skin switching changes adapters without remounting or losing input",async()=>{
+    await test.step("Skin switching changes adapters without remounting or losing input",async()=>{
     const quietRadius = await page.locator('[data-sensa-component="action"]').first().evaluate(
       (element) => getComputedStyle(element).borderRadius,
     );
@@ -222,7 +221,7 @@ try {
       { width: 844, height: 390 },
       { width: 1280, height: 900 },
     ]) {
-      await t.test(`${viewport.width}px viewport resolves every Skin, color and text-size contract`,async()=>{
+      await test.step(`${viewport.width}px viewport resolves every Skin, color and text-size contract`,async()=>{
       await page.setViewportSize(viewport);
       for (const skin of ["Quiet", "Clear"] as const) {
         await appearanceControls.getByRole("button", { name: skin, exact: true }).click();
@@ -358,7 +357,7 @@ try {
       });
     }
 
-    await t.test("keyboard focus, runtime state and reduced motion survive the matrix",async()=>{
+    await test.step("keyboard focus, runtime state and reduced motion survive the matrix",async()=>{
     await page.evaluate(() => {
       document.body.tabIndex = -1;
       document.body.focus();
@@ -378,9 +377,8 @@ try {
     assert(reducedMotionDuration.every((duration) => duration <= 0.01), "reduced-motion preference did not collapse Skin motion");
     assert.deepEqual(runtimeErrors, [], "Skin Lab emitted browser errors");
     });
-    await context.close();
   } finally {
-    await browser.close();
+    await context.close();
   }
 } finally {
   if (server && server.exitCode === null) {
