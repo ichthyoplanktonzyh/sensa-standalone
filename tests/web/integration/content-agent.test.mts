@@ -1,5 +1,6 @@
 /** Web tool-loop integration. Live DeepSeek is an explicit opt-in, never CI. */
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import {build} from 'esbuild';
 import {mkdtemp,writeFile,readFile,rm,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -31,14 +32,16 @@ const scene={role:'scene_realization',payload:{example:'I borrow an umbrella.',t
 const tool=(name:string,args:unknown={})=>({id:id(),type:'function',function:{name,arguments:JSON.stringify(args)}});
 try{
  if(live){
+  await test('opt-in live model tool loop admits a validated candidate',async()=>{
   const request=await createRequest(),steps:any[]=[];let liveCheckpoint:any;
   const bundle=await api.generateLearningCandidate(request,provider,true,new AbortController().signal,async(s:any)=>{steps.push(s);console.log(`Live round ${s.round}: ${s.tool??'candidate'} ${s.accepted?'accepted':'repair'}`);},undefined,async(checkpoint:any)=>{liveCheckpoint=checkpoint;await mkdir('.sensa-local',{recursive:true});await writeFile('.sensa-local/agent-live-checkpoint.json',JSON.stringify(checkpoint,null,2));});
   assert.match(bundle.model,/deepseek/i);const checked=await validateBundle(request,bundle,null,new Date());if(!checked.content)console.log(JSON.stringify({issues:checked.issues,contentIssues:checked.contentIssues,draft:liveCheckpoint?.resources}));assert(checked.content);
   assert(bundle.toolCalls.length>0,'real model used the tool loop');
   await mkdir('.sensa-local',{recursive:true});await writeFile('.sensa-local/agent-live-smoke.json',JSON.stringify({model:bundle.model,steps,resources:bundle.candidates.map((c:any)=>({role:c.materialRoleKey,payload:c.contentPayload})),usage:bundle.usage},null,2));
-  console.log('PASS: real configured DeepSeek via managed Genkit; Web tool loop and final admission. Synthetic example, no user data changed; cached existing sound, no TTS call.');
+  });
  }else{
   for(const interrupted of [false,true]){
+   await test(interrupted?'checkpoint resume preserves partial resources after an offline interruption':'tool-loop repairs a partial candidate while retaining the original image',async()=>{
    let turn=0,speechCalls=0,referenceCalls=0,inflight=0,peak=0,checkpoint:any;
    const restoreSpeech=api.replaceClientSpeechProvider({id:`fixture-${interrupted}`,revision:1,displayName:'Fixture',synthesize:async(input:any)=>{speechCalls++;inflight++;peak=Math.max(peak,inflight);await new Promise(r=>setTimeout(r,5));inflight--;return {...syntheticSound(input.surface,input.languageTag),method:'tts'};}});
    const responses=[[tool('prepare_pronunciation'),tool('lookup_references')],[tool('submit_resources',{resources:[cue,bridge,{...scene,payload:{...scene.payload,example:'I borroweded an umbrella.'}}]})],[tool('validate_resources')],[tool('submit_resources',{resources:[scene]})],[tool('validate_resources')]];
@@ -60,12 +63,14 @@ try{
    assert.equal(bundle.candidates.find((c:any)=>c.materialRoleKey==='scene_realization').contentPayload.targetEnd,8);
    assert(bundle.toolCalls.length>=6);assert(checkpoint.history.some((m:any)=>m.role==='tool'&&m.content.includes('target text not found')));
    restoreSpeech();
+   });
   }
+  await test('background queue bounds concurrency, deduplicates and cancels pending work',async()=>{
   const queue=new api.BackgroundPreparationQueue(2);let active=0,max=0;const released:(()=>void)[]=[];
   const work=()=>new Promise<void>(resolve=>{active++;max=Math.max(max,active);released.push(()=>{active--;resolve();});});
   const first=queue.run('one',work),same=queue.run('one',work),second=queue.run('two',work),third=queue.run('three',work);assert.equal(first,same);
   await Promise.resolve();assert.equal(max,2);released.shift()!();await first;await Promise.resolve();released.shift()!();released.shift()!();await Promise.all([second,third]);assert.equal(max,2);
   let ran=false;const cancelled=queue.run('cancel',async(signal:AbortSignal)=>{signal.throwIfAborted();ran=true;});queue.cancel('cancel');await assert.rejects(cancelled);assert.equal(ran,false);
-  console.log('PASS: real Web tool loop, parallel cached sources, partial repair, checkpoint resume, original image retention, bounded background concurrency, deduplication and cancellation. No browser or paid calls.');
+  });
  }
 }finally{globalThis.fetch=originalFetch;await rm(temp,{recursive:true,force:true});}

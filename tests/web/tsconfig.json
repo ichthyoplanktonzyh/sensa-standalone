@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,
@@ -8,7 +9,7 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client", "chrome"]
   },
   "files": [
     "catalog.mts",
@@ -24,6 +25,13 @@
     "integration/library-cloud-convergence.test.mts",
     "integration/learning-authority.test.mts",
     "integration/package-learning.test.mts",
-    "database/library-cloud.test.mts"
+    "database/library-cloud.test.mts",
+    "integration/library-transaction-and-replay.test.mts",
+    "quality/appearance.test.mts",
+    "integration/content-agent.test.mts",
+    "integration/web-intake.test.mts",
+    "integration/local-learning-runtime.test.mts",
+    "browser/web-bootstrap-budget.test.mts",
+    "browser/skin-surface.test.mts"
   ]
 }

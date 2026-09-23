@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import test from "node:test";
 import { createHash } from "node:crypto";
 import { access, readFile, readdir } from "node:fs/promises";
 import {
@@ -38,6 +39,7 @@ import {
   motionTokenCatalog,
 } from "../../../apps/web/src/experience/appearance/motionContract.ts";
 
+test("Skin manifests and preferences match the reviewed appearance contract", () => {
 assert.deepEqual(skinCatalog.map(({ id }) => id), ["quiet", "clear"]);
 assert.equal(new Set(skinCatalog.map(({ id }) => id)).size, skinCatalog.length);
 for (const skin of skinCatalog) {
@@ -94,6 +96,7 @@ assert.equal(
   resolveAppearance({ ...defaultAppearancePreference, colorMode: "light" }, true).resolvedColorMode,
   "light",
 );
+});
 
 const theme = await readFile(new URL("../../../apps/web/src/theme.css", import.meta.url), "utf8");
 const brandPaletteStyles = await readFile(
@@ -106,6 +109,7 @@ const approvedBrandUiColors = {
   "stone-500": "#c9c3a7",
   "paper-100": "#f6f4ed",
 } as const;
+test("approved brand palette loads before semantic Skin adapters", () => {
 assert(theme.includes("./experience/brand/palette.css"), "approved brand UI palette is not imported");
 assert(
   theme.indexOf("./experience/brand/palette.css") < theme.indexOf("./experience/appearance/skins/quiet.css"),
@@ -117,6 +121,7 @@ for (const [token, value] of Object.entries(approvedBrandUiColors)) {
     `approved brand UI color ${token} drifted`,
   );
 }
+});
 const skinStyles = new Map(
   await Promise.all(skinCatalog.map(async (skin) => [
     skin.id,
@@ -158,6 +163,7 @@ function contrast(foreground: string, background: string): number {
   return (values[0] + 0.05) / (values[1] + 0.05);
 }
 
+test("each Skin implements semantic, component and layout tokens with AA contrast", () => {
 for (const skin of skinCatalog) {
   const style = skinStyles.get(skin.id)!;
   const lightSelector = `html[data-sensa-skin="${skin.id}"]`;
@@ -219,6 +225,7 @@ for (const skin of skinCatalog) {
 for (const role of semanticColorRoleCatalog) {
   assert(theme.includes(`--color-${role}: var(--sensa-${role});`), `Tailwind does not expose ${role}`);
 }
+});
 
 const componentStyles = await readFile(
   new URL("../../../apps/web/src/experience/appearance/componentStyles.css", import.meta.url),
@@ -226,6 +233,7 @@ const componentStyles = await readFile(
 );
 const declaredSemanticRoles = new Set<string>(semanticFoundationRoleCatalog);
 for (const token of motionTokenCatalog) declaredSemanticRoles.add(`motion-${token}`);
+test("component, page and overlay styles consume only declared contract tokens", async () => {
 assert(theme.includes("./experience/appearance/componentStyles.css"), "component contract styles are not imported");
 const declaredComponentTokens = new Set<string>(componentTokenCatalog);
 for (const [, token] of componentStyles.matchAll(/var\(--sensa-component-([a-z0-9-]+)\)/gu)) {
@@ -273,6 +281,7 @@ for (const token of overlayLayoutTokenCatalog) {
 for (const family of Object.keys(overlayLayoutFamilyContract)) {
   assert(overlayLayoutStyles.includes(`data-sensa-overlay-layout="${family}"`), `overlay layout family ${family} has no shared implementation`);
 }
+});
 
 const assetStyles = await readFile(
   new URL("../../../apps/web/src/experience/appearance/assetStyles.css", import.meta.url),
@@ -294,6 +303,7 @@ const brandSource = await readFile(
   new URL("../../../apps/web/src/experience/brand/SensaLogo.tsx", import.meta.url),
   "utf8",
 );
+test("motion and asset roles have consumers and fixed brand art remains immutable", async () => {
 assert(theme.includes("./experience/appearance/assetStyles.css"), "asset contract styles are not imported");
 assert(theme.includes("./experience/brand/brand.css"), "fixed brand styles are not imported");
 assert(theme.includes("./experience/appearance/motionStyles.css"), "motion contract styles are not imported");
@@ -350,6 +360,7 @@ const webIndex = await readFile(new URL("../../../apps/web/index.html", import.m
 for (const path of brandAssetPaths.filter((path) => path.includes("/icons/"))) {
   assert(webIndex.includes(path), `${path} is not declared as a Web entry asset`);
 }
+});
 
 const migratedSurfaces = [
   "apps/web/src/experience/App.tsx",
@@ -417,6 +428,7 @@ const migratedSurfaces = [
   "apps/web/src/experience/components/cards/lightweight/ExperienceRecallCard.tsx",
   "apps/web/src/experience/components/cards/lightweight/ExpressionRevealCard.tsx",
 ] as const;
+test("migrated surfaces use semantic colors and never branch on a Skin", async () => {
 for (const path of migratedSurfaces) {
   const source = await readFile(new URL(`../../../${path}`, import.meta.url), "utf8");
   assert(!/(?<!&)#[0-9a-f]{3,8}\b/iu.test(source), `${path} bypasses the semantic color contract`);
@@ -453,6 +465,7 @@ for (const path of [
 ] as const) {
   await assert.rejects(access(new URL(`../../../${path}`, import.meta.url)), `${path} must remain retired`);
 }
+});
 
 async function presentationSources(directory: URL, prefix = ""): Promise<string[]> {
   const paths: string[] = [];
@@ -468,6 +481,7 @@ async function presentationSources(directory: URL, prefix = ""): Promise<string[
 }
 
 const experienceRoot = new URL("../../../apps/web/src/experience/", import.meta.url);
+test("all presentation sources respect palette and overlay ownership", async () => {
 for (const path of await presentationSources(experienceRoot)) {
   const source = await readFile(new URL(path, experienceRoot), "utf8");
   const isSkinAdapter = path.startsWith("appearance/skins/") && path.endsWith(".css");
@@ -508,7 +522,9 @@ for (const [componentPath, stylesheetPath, ownedSelector] of [
     assert(stylesheet.includes(`.${selector}`), `${componentPath} selector ${selector} is missing from its scoped stylesheet`);
   }
 }
+});
 
+test("Skin Lab and product screens consume shared page, overlay and motion seams", async () => {
 const entry = await readFile(new URL("../../../apps/web/src/main.tsx", import.meta.url), "utf8");
 assert(entry.indexOf("initializeAppearance();") < entry.indexOf("createRoot("));
 assert(entry.includes("import.meta.env.DEV"));
@@ -649,7 +665,4 @@ for (const path of ["components/PersonalMeaningDetailScreen.css"] as const) {
   assert(!/\b(?:180|220|280|300)ms\b/u.test(style), `${path} hard-codes a migrated motion duration`);
 }
 assert(!theme.includes("--home-"), "retired Home compatibility variables remain in the theme");
-
-console.log(
-  "PASS: curated semantic, component, page/overlay layout, asset and motion contracts; complete adapters, AA core contrast, state-safe Skin Lab coverage, production adoption, early bootstrap and hardened semantic-only Web presentation sources.",
-);
+});

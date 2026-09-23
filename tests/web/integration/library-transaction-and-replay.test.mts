@@ -1,8 +1,11 @@
 /** SQLite storage kernel: typed values, transactions and operation replay. */
 import assert from 'node:assert/strict';
+import test from 'node:test';
 
+test('Library transaction and replay preserve typed state and indexed SQLite projections', async (t) => {
 Object.assign(globalThis, { window: new EventTarget(), BroadcastChannel: undefined });
 
+await t.test('memory adapter preserves typed values, idempotent operations and rollback', async () => {
 const store = await import('../../../apps/web/src/data/library/store.ts');
 const identity = await store.openLibrary();
 assert.equal(identity.schemaVersion, 2);
@@ -82,6 +85,7 @@ assert.deepEqual(
   { engine: diagnostics.engine, persistence: diagnostics.persistence, schemaVersion: diagnostics.schemaVersion },
   { engine: 'memory-adapter', persistence: 'memory', schemaVersion: 10 },
 );
+});
 
 const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearningTargetsQuery }, { encodeBackupValue }, { sqliteLibrarySchema }] = await Promise.all([
   import('@sqlite.org/sqlite-wasm'),
@@ -90,6 +94,7 @@ const [{ default: sqlite3InitModule }, { SqliteRecordDatabase, sqliteHomeLearnin
   import('../../../apps/web/src/data/library/sqliteProtocol.ts'),
 ]);
 const sqlite3 = await sqlite3InitModule();
+await t.test('unsupported physical schemas preserve owner data', () => {
 for (const version of [9, 11]) {
   const incompatibleRaw = new sqlite3.oo1.DB(':memory:', 'c');
   incompatibleRaw.exec(`CREATE TABLE owner_fixture(value TEXT); INSERT INTO owner_fixture VALUES('preserve-me'); PRAGMA user_version=${version}`);
@@ -103,6 +108,8 @@ for (const version of [9, 11]) {
   assert.deepEqual(preserved, ['preserve-me'], 'a failed version check must leave the original database intact');
   incompatibleDatabase.close();
 }
+});
+await t.test('SQLite initialization maintains query planner statistics', () => {
 const optimizerRawDatabase = new sqlite3.oo1.DB(':memory:', 'c');
 optimizerRawDatabase.exec(sqliteLibrarySchema);
 optimizerRawDatabase.exec("INSERT INTO sensa_records(table_name,record_key,value_json) VALUES('drafts','optimizer-fixture','{}')");
@@ -115,6 +122,7 @@ const plannerStatistics = optimizerRawDatabase.exec({
 }) as unknown[];
 assert(Number(plannerStatistics[0] ?? 0) > 0, 'initialize must maintain SQLite planner statistics');
 optimizerDatabase.close();
+});
 
 const rawDatabase = new sqlite3.oo1.DB(':memory:', 'c');
 const database = new SqliteRecordDatabase(
@@ -123,6 +131,7 @@ const database = new SqliteRecordDatabase(
   'memory',
 );
 database.initialize();
+await t.test('record journals, sync base replacement and logical table constraints', () => {
 const tableLayouts = rawDatabase.exec({
   sql: `SELECT name,wr FROM pragma_table_list
         WHERE name IN ('sensa_records','sensa_learning_targets','sensa_learning_run_targets')`,
@@ -189,6 +198,7 @@ assert.throws(() => database.commit({
   deletes: [],
   puts: [{ table: 'semanticWorld', key: 'journey', encodedValue: '{}' }],
 } as any), /CHECK constraint failed|constraint failed/iu);
+});
 
 const encoded = (value: unknown) => JSON.stringify(encodeBackupValue(value));
 const target = (id: string, route: string, packageKey: string) => ({
@@ -215,6 +225,7 @@ const target = (id: string, route: string, packageKey: string) => ({
   memory: { dueAt: new Date('2026-09-14T00:00:00.000Z') },
   relearnAt: null,
 });
+await t.test('home projection uses route and date indexes without scanning targets', () => {
 database.commit({
   clears: [],
   deletes: [],
@@ -254,6 +265,8 @@ assert.equal(database.countIntroducedLearningTargets(
   '2026-09-14T00:00:00.000Z',
   '2026-09-15T00:00:00.000Z',
 ), 0);
+});
+await t.test('learning, content and media indexes update with commits and deletes', () => {
 database.commit({
   clears: [],
   deletes: [],
@@ -359,6 +372,7 @@ database.commit({
 assert.equal(database.count('learningTargets'), 1);
 assert.deepEqual(database.homeLearningProjection('route-a').targets, []);
 assert.match(database.diagnostics().sqliteVersion, /^3\./u);
+});
 database.close();
 
-console.log('PASS: Library records preserve typed values and atomic replay; SQLite schema v10 separates synchronized package installation facts from device-local artifact caches while retaining record journals, compact indexed projections, planner statistics, native counts and logical-table constraints. Browser OPFS is checked separately.');
+});

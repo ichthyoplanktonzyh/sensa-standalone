@@ -1,5 +1,6 @@
 /** Real queue and receiver code, in-memory storage adapter. No browser/network/model. */
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import {indexedDB} from 'fake-indexeddb';
 import {canonicalConsumerJson,sensaBridgeRequestChannel,sensaBrowserIntakeDeliverySchema,sensaBrowserIntakeReceiptSchema} from '@sensa/contracts/sensa';
 import {createHash} from 'node:crypto';
@@ -24,12 +25,13 @@ const receiveWebIntake=async(account:string,raw:unknown)=>{
  return sensaBrowserIntakeReceiptSchema.parse({contractVersion:'sensa-browser-intake-delivery-v1',libraryId:request.libraryId,clientId:request.clientId,operationId:request.intake.operationId,requestDigest:createHash('sha256').update(canonicalConsumerJson(request)).digest('hex'),result,appliedAt:new Date().toISOString()});
 };
 const journeyState=async()=>journeyRepository.load();
-const snapshot={sentence:'She took her time.',language:'en',languageSource:'detector',languageConfidence:.9,source:{url:'https://example.org/article',title:'An article',capturedAt:new Date().toISOString()},expression:{text:'took',start:4,end:8}};
-const proposal={explanation:'这里表示花时间。',expression:{surface:'took',type:'word',language:'en'},semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1',coreMeaningFocus:'花费时间',prototypeScenes:[{summary:'一个人从容完成一件事。',participantRoles:['行动者'],states:['时间充足'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]}};
+const snapshot={sentence:'She took her time.',language:'en',languageSource:'detector' as const,languageConfidence:.9,source:{url:'https://example.org/article',title:'An article',capturedAt:new Date().toISOString()},expression:{text:'took',start:4,end:8}};
+const proposal={explanation:'这里表示花时间。',expression:{surface:'took',type:'word' as const,language:'en'},semanticSpec:{schemaVersion:'sensa-sense-semantic-spec-v1' as const,coreMeaningFocus:'花费时间',prototypeScenes:[{summary:'一个人从容完成一件事。',participantRoles:['行动者'],states:['时间充足'],directionOrCausality:null}],includedCases:[],excludedCases:[],neighborContrasts:[],openQuestions:[]}};
 const clientId=crypto.randomUUID();
 const browserResolution={resolverKind:'language_model' as const,provider:'fixture',model:'fixture',policyVersion:'fixture-v1',sourceReferenceIds:['browser-lookup-fixture']};
 const delivery=(operationId:string,proposalValue:typeof proposal|null,snapshotValue=snapshot)=>sensaBrowserIntakeDeliverySchema.parse({contractVersion:'sensa-browser-intake-delivery-v1',libraryId:library.id,clientId,intake:browserCaptureToIntake(operationId,snapshotValue,proposalValue,proposalValue?browserResolution:null)});
 const request=delivery(crypto.randomUUID(),null);
+await test('Intake queue deduplicates, isolates accounts and acknowledges only matching receipts',async()=>{
 await queueWeb(accountId,request);await queueWeb(accountId,request);
 assert.equal((await webStatus(accountId)).pending,1);
 assert.equal((await webOperationStatus(accountId,request.intake.operationId)).committed,false);
@@ -63,6 +65,7 @@ assert.equal((await receiveWebIntake(accountId,fast)).result.route,'fast_track')
 const acceptedButIncomplete={...fast,intake:{...fast.intake,operationId:crypto.randomUUID(),sense:null}};
 assert.equal((await receiveWebIntake(accountId,acceptedButIncomplete)).result.route,'inbox','acceptance does not bypass a missing semantic fact');
 assert.throws(()=>browserCaptureToIntake(crypto.randomUUID(),{...snapshot,expression:{text:'wrong',start:4,end:8}},proposal,browserResolution));
+});
 // Run the actual background boundary with Chrome API substitutes, not a browser.
 let listener:any;
 storage.sensa={version:1,active:accountId,accounts:{[accountId]:{accountId,installationId:request.clientId,webLibraryId:library.id,token:'fixture-extension-token',queue:[],recent:[],savedOperations:{}}}};
@@ -81,10 +84,11 @@ const message=(input:any,sender:unknown)=>new Promise<any>(resolve=>listener(typ
 // same-origin SPA may since have changed route; the live Tab URL is authoritative.
 const source={id:'fixture',url:'https://example.org/previous-route',tab:{id:1}};
 const another=crypto.randomUUID();
+const appSender={id:'fixture',url:'http://127.0.0.1:3000/content',tab:{id:2}};
+await test('extension background accepts only scoped Web delivery messages',async()=>{
 assert.equal((await message({kind:'save',accountId,operationId:another,snapshot:{...snapshot,source:{...snapshot.source,url:'https://evil.invalid'}}},source)).error,'source_mismatch');
 assert.equal((await message({kind:'save',accountId,operationId:another,snapshot},source)).value.destination,'web');
 assert.equal((await message({kind:'web-intake-pull',accountId,libraryId:library.id},source)).error,'unsupported_message');
-const appSender={id:'fixture',url:'http://127.0.0.1:3000/content',tab:{id:2}};
 assert.equal((await message({kind:'web-intake-pull',accountId:other,libraryId:library.id},appSender)).error,'account_mismatch');
 assert.equal((await message({kind:'web-intake-pull',accountId,libraryId:library.id},{...appSender,url:'http://127.0.0.1:3001/content'})).error,'unsupported_message');
 const pulled=(await message({kind:'web-intake-pull',accountId,libraryId:library.id},appSender)).value;
@@ -97,9 +101,10 @@ assert.equal(opened[0],'http://127.0.0.1:3000/content?worldAction=inbox');
 assert.deepEqual(activated,[20],'opening the semantic world reuses its existing Web tab');
 assert.equal((await message({kind:'save-status',accountId:other,operationId:another},source)).error,'account_mismatch');
 assert.equal((await webStatus(accountId)).pending,0);
-console.log('PASS: browser adapter → extension delivery queue → unified journey gateway → receipt; completeness routing, replay, acknowledgement failure and ownership isolation. No browser/network/model calls.');
+});
 
 const connect={kind:'web-connect-prepare',accountId,libraryId:library.id};
+await test('automatic Web connection binds PKCE to the requesting tab and rejects replay',async()=>{
 assert.equal((await message(connect,source)).error,'unsupported_message');
 assert.equal((await message({...connect,accountId:other},appSender)).error,'account_mismatch');
 assert.equal((await message({...connect,libraryId:other},appSender)).error,'library_mismatch');
@@ -118,8 +123,9 @@ assert.equal((await message(finish,appSender)).error,'authorization_expired');
 assert.equal((await message(connect,appSender)).value.connected,true);assert.equal(exchangeCalls,1);
 assert.ok((await webStatus(accountId)).recent.length>0);
 storage.sensaAutoConnectPaused=true;assert.equal((await message(connect,appSender)).value.paused,true);
-console.log('PASS: automatic Web account authorization uses tab-bound PKCE, preserves queues, rejects wrong origin/account/library/tab/state and replay, reuses valid credentials and respects disconnect. Synthetic exchange only.');
+});
 // Explicit reconnect may replace the active account but never reassign its saved queue.
+await test('reconnect replaces the active account without reassigning saved captures',async()=>{
 const storeBeforeReconnect=structuredClone(storage.sensa) as any;
 (storage.sensa as any).accounts[other]={...(storage.sensa as any).accounts[accountId],accountId:other};
 (storage.sensa as any).active=other;
@@ -131,8 +137,9 @@ assert.ok((storage.sensa as any).accounts[other]);
 assert.deepEqual(storage.sensaWebIntake,queueBeforeReconnect);
 assert.ok((await message(connect,appSender)).value.authorization);
 storage.sensa=storeBeforeReconnect;session.sensaWebConnect=null;
-console.log('PASS: explicit reconnect recovers a different active account without clearing or reassigning queued captures.');
+});
 // A production login can explicitly replace an old development-library binding.
+await test('explicit login changes library binding while preserving old queues and receipts',async()=>{
 const oldQueue=structuredClone(storage.sensaWebIntake),oldStore=structuredClone(storage.sensa);
 await queueWeb(accountId,{...request,intake:{...request.intake,operationId:crypto.randomUUID()}});
 const preservedQueue=structuredClone(storage.sensaWebIntake),newLibrary=crypto.randomUUID();
@@ -171,14 +178,16 @@ await message({kind:'web-connect-reset',accountId,libraryId:library.id,receipt:{
 assert.equal((await message(connect,loginTab)).error,'library_mismatch');
 assert.ok((await message(connect,appSender)).value.authorization);
 storage.sensa=oldStore;storage.sensaWebIntake=oldQueue;session.sensaWebConnect=null;session.sensaExplicitReconnect=null;
-console.log('PASS: explicit login uses the ordinary Web session and Web reconnect recovers changed libraries with tab/expiry guards; original queues and receipts remain isolated.');
+});
 
+await test('Web sign-out disconnects plugin credentials but retains receipts',async()=>{
 assert.equal((await message({kind:'web-session-ended',accountId:other},appSender)).value.disconnected,false);
 assert.equal((await message({kind:'web-session-ended',accountId},appSender)).value.disconnected,true);
 assert.equal((storage.sensa as any).active,null);assert.equal((storage.sensa as any).accounts[accountId].token,'disconnected');
 assert((await webStatus(accountId)).recent.length>0);
-console.log('PASS: public-key binding rejects foreign pages/accounts; Web sign-out drops plugin credentials and reading state while retaining saved captures.');
+});
 
+await test('explicit pending deletion leaves delivered receipts and other accounts intact',async()=>{
 const removable={...request,intake:{...request.intake,operationId:crypto.randomUUID()}};
 await queueWeb(accountId,removable);
 await queueWeb(other,{...removable,intake:{...removable.intake,operationId:crypto.randomUUID()}});
@@ -186,4 +195,4 @@ assert.equal(await discardPendingWeb(accountId),1);
 assert.equal((await pendingWeb(accountId,library.id)).length,0);
 assert.equal((await pendingWeb(other,library.id)).length,1);
 assert.ok((await webStatus(accountId)).recent.length>0);
-console.log('PASS: explicit pending deletion preserves delivered receipts and other accounts.');
+});

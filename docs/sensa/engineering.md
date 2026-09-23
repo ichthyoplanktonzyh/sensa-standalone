@@ -375,7 +375,11 @@ SENSA_TEST_DATABASE_URL=postgresql://... npm run test:web:db
 
 `tests/web/catalog.mts` 是唯一的 Web 测试执行目录：`fast`、`browser`、`database`、`manual` 和
 `foundation` 各按所需环境独立运行，单项可用 `--suite=... --id=...` 选择。旧的 `scripts/sensa*Smoke.*`
-入口和导入包装层已删除；原有断言现在直接属于 `tests/web` 下对应边界。后续按行为拆细时应维持既有验证语义。
+入口和导入包装层已删除；原有断言现在直接属于 `tests/web` 下对应边界。较长的高风险检查已拆成具名场景，后续新增场景仍应维持既有验证语义。
+风险标签是筛选维度，不是独立的 CI job：`foundation`/`fast` 的 Node 和构建产物检查进入主 CI 的 `npm test`；
+Chromium 检查进入 `npm run test:browser`；PostgreSQL 及 Chromium+PostgreSQL 检查进入 `npm run test:db`。
+运行器会拒绝把自动化测试登记到错误的 CI 环境边界。`manual` 的实际 Book 检查依赖另行生成的
+`release-candidate/catalog.json`，不在普通 CI 中；普通 CI 的 `package-learning` 等测试覆盖同一安装、结算和复习代码路径，但不替代实际发布包验收。
 
 `tests/web/support/libraryConvergenceWorld.mts` 通过一个小型测试 Interface 封装每台设备的 confirmed base、当前
 本地快照、云端发布、领域 Replica Module 合并与冲突分区。场景只提交领域有效快照、指定同步顺序，并可在确定时点

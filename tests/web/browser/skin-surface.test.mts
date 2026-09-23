@@ -1,5 +1,6 @@
 /** Browser matrix for the development-only Skin Lab. No account or provider calls. */
 import assert from "node:assert/strict";
+import test from "node:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { chromium, expect } from "@playwright/test";
 import {
@@ -36,6 +37,7 @@ async function waitForServer(): Promise<void> {
   throw new Error("Skin Lab Vite server did not become ready");
 }
 
+await test("Skin Lab preserves contracted layouts and state across the browser matrix",async(t)=>{
 try {
   server = spawn(
     process.execPath,
@@ -82,6 +84,7 @@ try {
       Object.entries(overlayLayoutFamilyContract).map(([family, contract]) => [family, [...contract.logicalOrder]]),
     );
 
+    await t.test("Skin Lab renders every contracted component, asset and semantic region",async()=>{
     for (const family of Object.keys(componentFamilyContract)) {
       assert(
         await page.locator(`[data-sensa-component="${family}"]`).count() > 0,
@@ -125,16 +128,18 @@ try {
         && focusedGeometry.viewport.height >= focusedGeometry.shell.height - 2,
       "focused application shell collapsed its only viewport region",
     );
+    });
 
-    const quietRadius = await page.locator('[data-sensa-component="action"]').first().evaluate(
-      (element) => getComputedStyle(element).borderRadius,
-    );
     const runtimeProbe = page.locator("#skin-layout-state-probe");
     const shellProbe = page.locator("#skin-shell-state-probe");
     const overlayProbe = page.locator("#skin-overlay-state-probe");
     const brandProbe = page.locator("[data-sensa-brand-logo]").first();
     const skinAssetProbe = page.locator("[data-sensa-skin-asset]").first();
     const motionProbe = page.locator("[data-sensa-motion-probe]");
+    await t.test("Skin switching changes adapters without remounting or losing input",async()=>{
+    const quietRadius = await page.locator('[data-sensa-component="action"]').first().evaluate(
+      (element) => getComputedStyle(element).borderRadius,
+    );
     await runtimeProbe.fill("Preserved across runtime layout adapters");
     await shellProbe.fill("Preserved across shell layout adapters");
     await overlayProbe.fill("Preserved across overlay layout adapters");
@@ -209,6 +214,7 @@ try {
     assert(await overlayProbeHandle.evaluate((element) => element.isConnected), "Skin switch remounted the overlay region tree");
     assert(await brandProbeHandle.evaluate((element) => element.isConnected), "Skin switch remounted the brand seam");
     assert(await skinAssetProbeHandle.evaluate((element) => element.isConnected), "Skin switch remounted the asset seam");
+    });
 
     for (const viewport of [
       { width: 320, height: 568 },
@@ -216,6 +222,7 @@ try {
       { width: 844, height: 390 },
       { width: 1280, height: 900 },
     ]) {
+      await t.test(`${viewport.width}px viewport resolves every Skin, color and text-size contract`,async()=>{
       await page.setViewportSize(viewport);
       for (const skin of ["Quiet", "Clear"] as const) {
         await appearanceControls.getByRole("button", { name: skin, exact: true }).click();
@@ -348,8 +355,10 @@ try {
           }
         }
       }
+      });
     }
 
+    await t.test("keyboard focus, runtime state and reduced motion survive the matrix",async()=>{
     await page.evaluate(() => {
       document.body.tabIndex = -1;
       document.body.focus();
@@ -368,6 +377,7 @@ try {
     ));
     assert(reducedMotionDuration.every((duration) => duration <= 0.01), "reduced-motion preference did not collapse Skin motion");
     assert.deepEqual(runtimeErrors, [], "Skin Lab emitted browser errors");
+    });
     await context.close();
   } finally {
     await browser.close();
@@ -381,5 +391,4 @@ try {
     });
   }
 }
-
-console.log("PASS: Skin Lab preserves fixed brand identity plus contracted regions and state while Skin layout, asset and motion adapters vary across color-mode, text-size, responsive and reduced-motion matrices.");
+});

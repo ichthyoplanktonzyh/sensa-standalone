@@ -11,6 +11,7 @@
  *   console / CSP          -> no runtime error and no blocked dynamic code
  */
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import {createHash,randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
@@ -20,6 +21,7 @@ import {extname,join,resolve} from 'node:path';
 import {chromium,expect} from '@playwright/test';
 import {librarySyncBlockFetchBytes,librarySyncBlockStoreChars} from '../../../packages/contracts/src/sensa/librarySync.ts';
 import {pageLayoutFamilyContract} from '../../../apps/web/src/experience/appearance/pageLayoutContract.ts';
+import type {} from '../../../apps/web/src/browserSmokeBridge.ts';
 
 const root=process.cwd();
 const output=resolve(root,'.tmp/web-bootstrap-budget');
@@ -42,7 +44,6 @@ const REMOTE_OPERATION='45466b13-66db-4d57-a393-bc2946873152';
 const REMOTE_INCOMPLETE_OPERATION='c9e23ca7-d84d-4d7c-bd7a-2327b80f7860';
 const REMOTE_QUEUED_AT='2026-09-13T08:00:00.000Z';
 const storageKeySuffix='-auth-token';
-const failures:string[]=[];
 const log=(message:string)=>console.log(message);
 
 function jwt(expSeconds:number){const encode=(value:unknown)=>Buffer.from(JSON.stringify(value)).toString('base64url');return [encode({alg:'HS256',typ:'JWT'}),encode({sub:SUBJECT,aud:'authenticated',email:'fixture@sensa.invalid',session_id:randomUUID(),exp:Math.floor(Date.now()/1000)+expSeconds,amr:[{method:'otp',timestamp:Math.floor(Date.now()/1000)}]}),'fixture-signature'].join('.');}
@@ -238,6 +239,7 @@ const finishCheckpoint=async(page:import('@playwright/test').Page,message:string
  assert.equal(await restoreStatus(page),'synced',message);
 };
 
+await test('production Web boot keeps the local shell responsive through cloud restore',async(t)=>{
 try{
  await rm(output,{recursive:true,force:true});
  await mkdir(dist,{recursive:true});
@@ -468,41 +470,52 @@ try{
  log(`   next focus: ${repeatRequests.length} account requests / ${repeatFetches.length} library block fetches`);
  log(`   restored drafts ${restored}/${TOTAL_DRAFTS}`);
  log(`   local storage ${storageDiagnostics.engine}/${storageDiagnostics.persistence} SQLite ${storageDiagnostics.sqliteVersion}`);
- log(`   remote Intake ${remoteAcknowledgement?.result?.route??'missing'} / ${remoteMeaning?'stored':'missing'}; incomplete ${remoteIncompleteAcknowledgement?.result?.route??'missing'} / Inbox ${remoteInboxCount}`);
+ log(`   remote Intake ${(remoteAcknowledgement as {result?:{route?:string}}|null)?.result?.route??'missing'} / ${remoteMeaning?'stored':'missing'}; incomplete ${(remoteIncompleteAcknowledgement as {result?:{route?:string}}|null)?.result?.route??'missing'} / Inbox ${remoteInboxCount}`);
  log(`   boot service calls: ${JSON.stringify([...new Set(bootRequests.map(entry=>entry.path))])}`);
  log(`   idle ${IDLE_WINDOW_MS}ms service calls: ${idleRequests.length}`);
- const fail=(message:string)=>failures.push(message);
  if(rejected.length)log('   fixture rejected: '+JSON.stringify(rejected.slice(0,8)));
  if(a.errors.length)log('   phase A console: '+JSON.stringify(a.errors.slice(0,5)));
  if(b.errors.length)log('   phase B console: '+JSON.stringify(b.errors.slice(0,5)));
  if(violations.length)log('   CSP: '+JSON.stringify(violations.slice(0,4)));
- if(shellMs>SHELL_BUDGET_MS)fail(`App Shell waited for the account restore: ${shellMs}ms > ${SHELL_BUDGET_MS}ms`);
- if(landingMs>SHELL_BUDGET_MS)fail(`anonymous Landing exceeded its budget: ${landingMs}ms > ${SHELL_BUDGET_MS}ms`);
- for(const [surface,milliseconds] of Object.entries(surfaceTimings))if(milliseconds>SHELL_BUDGET_MS)fail(`${surface} exceeded its interaction budget: ${milliseconds}ms > ${SHELL_BUDGET_MS}ms`);
- if(restoreMs>RESTORE_BUDGET_MS)fail(`account restore exceeded its budget: ${restoreMs}ms > ${RESTORE_BUDGET_MS}ms`);
- if(fetchRequests.length>fetchRequestBudget)fail(`account restore used ${fetchRequests.length} block fetches, budget ${fetchRequestBudget} for ${legacyPublished} legacy blocks (${[...new Set(requests.map(entry=>entry.path))].join(', ')})`);
- if(confirmedRevision!==legacyRevision)fail(`restore republished unchanged content: revision ${legacyRevision} -> ${confirmedRevision}`);
- if(confirmedPublished!==legacyPublished)fail(`restore rewrote the confirmed ${legacyPublished}-block layout (${confirmedPublished} blocks)`);
- if(confirmedPublishedBytes!==legacyPublishedBytes)fail(`restore changed confirmed published bytes: ${legacyPublishedBytes} -> ${confirmedPublishedBytes}`);
- if(remotePublishedRevision<=restoreSettledRevision)fail(`remote Agent Intake was not published: revision ${restoreSettledRevision} -> ${remotePublishedRevision}`);
- if(!repeatSettled)fail('the focus-triggered verification sync never settled');
- if(repeatFetches.length)fail(`a later focus re-fetched confirmed account blocks ${repeatFetches.length} time(s)`);
- if(repeatRequests.some(entry=>entry.path.startsWith('/sensa/library-sync/')))fail('a fresh foreground return started an unnecessary whole-library sync');
- if(restored!==TOTAL_DRAFTS)fail(`account restore lost content: ${restored}/${TOTAL_DRAFTS} drafts`);
- if(storageDiagnostics.engine!=='sqlite-wasm'||storageDiagnostics.persistence!=='opfs')fail(`production browser did not use SQLite OPFS: ${JSON.stringify(storageDiagnostics)}`);
- if(storageDiagnostics.journalMode!=='wal'||storageDiagnostics.synchronous!==2||storageDiagnostics.lockingMode!=='exclusive')fail(`production browser did not use the reviewed WAL/FULL/EXCLUSIVE profile: ${JSON.stringify(storageDiagnostics)}`);
- if(!remoteMeaning)fail('the remote Agent Intake was acknowledged without a local Personal Meaning');
- if(remoteIncompleteAcknowledgement?.result?.route!=='inbox'||remoteInboxCount<1)fail('an incomplete Agent Intake did not remain in the local Inbox');
- if(bootRequests.some(entry=>entry.path==='/sensa/service/status'))fail('rolling service counters are read on boot instead of on demand');
- if(!settled)fail('an untouched account never stopped syncing: sync bookkeeping keeps scheduling another pass');
- if(idleRequests.length)fail(`an untouched tab made ${idleRequests.length} service calls: ${[...new Set(idleRequests.map(entry=>entry.path))].join(', ')}`);
- for(const error of [...a.errors,...b.errors])fail(error);
- for(const violation of violations)fail('CSP violation: '+violation);
-
- log('4/4 result');
- assert.deepEqual(failures,[],'boot budget violations:\n'+failures.join('\n'));
- console.log(`PASS: App Shell stays local-first (${shellMs}ms) while a ${legacyPublished}-block legacy account restores in ${restoreMs}ms; the next focus performs ${repeatFetches.length} block fetches`);
+ await t.test('anonymous Landing, App Shell and lazy surfaces stay within interaction budgets',()=>{
+  assert(shellMs<=SHELL_BUDGET_MS,`App Shell waited for account restore: ${shellMs}ms > ${SHELL_BUDGET_MS}ms`);
+  assert(landingMs<=SHELL_BUDGET_MS,`anonymous Landing exceeded budget: ${landingMs}ms > ${SHELL_BUDGET_MS}ms`);
+  for(const [surface,milliseconds] of Object.entries(surfaceTimings))assert(milliseconds<=SHELL_BUDGET_MS,`${surface} exceeded budget: ${milliseconds}ms > ${SHELL_BUDGET_MS}ms`);
+ });
+ await t.test('legacy-block restore is byte-bounded and does not rewrite confirmed content',()=>{
+  assert(restoreMs<=RESTORE_BUDGET_MS,`account restore exceeded budget: ${restoreMs}ms > ${RESTORE_BUDGET_MS}ms`);
+  assert(fetchRequests.length<=fetchRequestBudget,`restore used ${fetchRequests.length} block fetches, budget ${fetchRequestBudget} for ${legacyPublished} legacy blocks`);
+  assert.equal(confirmedRevision,legacyRevision,'restore republished unchanged content');
+  assert.equal(confirmedPublished,legacyPublished,'restore rewrote the confirmed block layout');
+  assert.equal(confirmedPublishedBytes,legacyPublishedBytes,'restore changed confirmed published bytes');
+  assert.equal(restored,TOTAL_DRAFTS,'account restore lost drafts');
+ });
+ await t.test('restored local OPFS and remote Intake retain actual learner facts',()=>{
+  assert.equal(storageDiagnostics.engine,'sqlite-wasm');
+  assert.equal(storageDiagnostics.persistence,'opfs');
+  assert.equal(storageDiagnostics.journalMode,'wal');
+  assert.equal(storageDiagnostics.synchronous,2);
+  assert.equal(storageDiagnostics.lockingMode,'exclusive');
+  assert(remotePublishedRevision>restoreSettledRevision,'remote Agent Intake was not published');
+  assert(remoteMeaning,'remote Intake was acknowledged without a local Personal Meaning');
+  assert.equal(remoteIncompleteAcknowledgement?.result?.route,'inbox');
+  assert(remoteInboxCount>=1,'incomplete Intake did not remain in the local Inbox');
+ });
+ await t.test('foreground return and idle tab do not refetch or poll the account',()=>{
+  assert(repeatSettled,'focus-triggered verification sync never settled');
+  assert.equal(repeatFetches.length,0,'later focus re-fetched confirmed account blocks');
+  assert(!repeatRequests.some(entry=>entry.path.startsWith('/sensa/library-sync/')),'foreground return started a whole-library sync');
+  assert(!bootRequests.some(entry=>entry.path==='/sensa/service/status'),'service counters loaded on boot');
+  assert(settled,'untouched account never stopped syncing');
+  assert.deepEqual(idleRequests,[],'untouched tab made service calls');
+ });
+ await t.test('production browser emits no console errors, fixture rejects or CSP violations',()=>{
+  assert.deepEqual(rejected,[]);
+  assert.deepEqual([...a.errors,...b.errors],[]);
+  assert.deepEqual(violations,[]);
+ });
 }finally{
  await browser.close();
  await new Promise<void>(resolve=>server.close(()=>resolve()));
 }
+});

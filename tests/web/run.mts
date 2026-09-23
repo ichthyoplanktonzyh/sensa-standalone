@@ -139,6 +139,24 @@ for (const field of ['id', 'file'] as const) {
 const cataloguedFiles = new Set(catalog.map((entry) => entry.file));
 const unclassified = catalog.filter((entry) => entry.risks.length === 0);
 if (unclassified.length !== 0) throw new Error(`Tests missing risk tags: ${unclassified.map((entry) => entry.id).join(', ')}`);
+const wrongCiBoundary = catalog.filter((entry) => {
+  if (entry.suite === 'manual') return false;
+  if (entry.environment === 'node' || entry.environment === 'built-web-artifact') {
+    return entry.suite !== 'foundation' && entry.suite !== 'fast';
+  }
+  if (entry.environment === 'chromium') return entry.suite !== 'browser';
+  return entry.suite !== 'database';
+});
+if (wrongCiBoundary.length !== 0) {
+  throw new Error(`Tests assigned outside their CI execution boundary: ${wrongCiBoundary.map((entry) => entry.id).join(', ')}`);
+}
+const manualRiskExceptions = new Set(['local-book']); // Requires a separately generated release-candidate catalog.
+const unreviewedManualRisk = catalog.filter((entry) => entry.suite === 'manual'
+  && entry.risks.some((risk) => risk !== 'local-correctness')
+  && !manualRiskExceptions.has(entry.id));
+if (unreviewedManualRisk.length !== 0) {
+  throw new Error(`High-risk tests outside CI need an explicit exception: ${unreviewedManualRisk.map((entry) => entry.id).join(', ')}`);
+}
 const uncataloguedFiles = testFiles(resolve(repositoryRoot, 'tests/web')).filter((file) => !cataloguedFiles.has(file));
 if (uncataloguedFiles.length !== 0) throw new Error(`Uncatalogued Web tests: ${uncataloguedFiles.join(', ')}`);
 if (selected.length === 0) {
