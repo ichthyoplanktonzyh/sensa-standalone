@@ -45,6 +45,7 @@ const foundationTests = [
     risks: ['local-correctness'],
     environment: 'node',
     suite: 'foundation',
+    runner: 'vitest',
   },
   {
     id: 'content-supply-authority',
@@ -53,6 +54,7 @@ const foundationTests = [
     risks: ['local-correctness'],
     environment: 'node',
     suite: 'foundation',
+    runner: 'vitest',
   },
   {
     id: 'learner-projection-boundary',
@@ -61,6 +63,7 @@ const foundationTests = [
     risks: ['local-correctness'],
     environment: 'node',
     suite: 'foundation',
+    runner: 'vitest',
   },
   {
     id: 'library-convergence-world',
@@ -69,6 +72,7 @@ const foundationTests = [
     risks: ['local-correctness', 'durability', 'convergence'],
     environment: 'node',
     suite: 'foundation',
+    runner: 'vitest',
   },
   {
     id: 'library-cloud-convergence',
@@ -210,7 +214,6 @@ const legacyFastNodeTests = new Set<string>([
   'integration/package-learning',
   'integration/local-learning-runtime',
   'integration/web-intake',
-  'quality/appearance',
 ]);
 
 const migrated: readonly MigratedTest[] = [

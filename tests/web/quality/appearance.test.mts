@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import {test} from 'vitest';
 import { createHash } from "node:crypto";
 import { access, readFile, readdir } from "node:fs/promises";
 import {
