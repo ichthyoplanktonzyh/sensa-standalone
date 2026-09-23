@@ -9,7 +9,7 @@ import {
   sensaLanguagePromptName,
 } from '@sensa/contracts/sensa';
 import {semanticResolutionPrompt} from '../../../apps/api/src/sensa/personal/semanticResolver.ts';
-import {defaultClientSpeechConfiguredFor} from '../../../apps/web/src/data/library/speech/edgeVoiceCatalog.ts';
+import {defaultClientSpeechConfiguredFor,edgeVoiceByLanguage} from '../../../apps/web/src/data/library/speech/edgeVoiceCatalog.ts';
 import {createFirstCharacterMask} from '../../../apps/web/src/experience/components/cards/SensaRecallCard.tsx';
 import {findTokenIndexByCharOffset, tokenizeSentence} from '../../../apps/web/src/experience/utils/sentenceTokenizer.ts';
 
@@ -129,9 +129,12 @@ test('learning-language-matrix', async () => {
     }
   }
 
-  assert.equal(defaultClientSpeechConfiguredFor('en'), true, 'Edge TTS has an English voice configured');
-  assert.equal(defaultClientSpeechConfiguredFor('ja'), true, 'Edge TTS has a Japanese voice configured');
-  assert.equal(defaultClientSpeechConfiguredFor('es'), false, 'Spanish remains explicitly unavailable in Edge TTS');
+  for (const target of targets) {
+    assert.equal(defaultClientSpeechConfiguredFor(target.tag), true,
+      `Edge TTS has a voice configured for target language ${target.tag}`);
+    assert.equal(edgeVoiceByLanguage.get(target.tag)?.locale,target.speechLocale,
+      `Edge TTS uses the curated speech locale for ${target.tag}`);
+  }
   assert.equal(sensaLanguageForDeclaredTag('zh-TW'), undefined, 'Traditional Chinese cannot be relabelled as Simplified Chinese');
   assert.equal(sensaLanguageForDeclaredTag('zh-Hant'), undefined, 'Traditional Chinese script cannot be relabelled as Simplified Chinese');
   assert.equal(sensaLanguageForDeclaredTag('zh-Hans')?.tag, 'zh-CN', 'Simplified Chinese script maps to the curated target');

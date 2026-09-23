@@ -19,6 +19,8 @@ export function QuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDic
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const isLoading = entry.lookupState === 'loading';
   const hasError = entry.lookupState === 'error';
+  const targetLanguage = entry.referenceLookup?.release.targetLanguage;
+  const learnerLanguage = entry.referenceLookup?.release.learnerLocale;
   const resolution = entry.referenceLookup?.contextualResolution;
   const selectedSenseId = resolution && (
     resolution.status === 'authored_target'
@@ -64,7 +66,7 @@ export function QuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDic
   return (
     <SensaOverlayLayout variant="dialog" measure="compact" className="z-[100]" labelledBy="sensa-reference-quick-title" onDismiss={onClose} dismissOnBackdrop aria-busy={isLoading} regions={{
       header: <div className="flex min-h-12 items-center justify-between gap-4">
-          <h2 className="font-language text-2xl font-semibold" id="sensa-reference-quick-title">{entry.word}</h2>
+          <h2 className="font-language text-2xl font-semibold" id="sensa-reference-quick-title" lang={targetLanguage} dir="auto">{entry.word}</h2>
           <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" ref={closeButtonRef} type="button" onClick={onClose} aria-label={t('quickDict.close')}>
             <svg className={iconClass} aria-hidden="true"><use href="#i-close" /></svg>
           </button>
@@ -98,7 +100,11 @@ export function QuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDic
               className={`grid grid-cols-[3rem_1fr] gap-3 border-border-subtle px-3 py-4 [&+div]:border-t ${isSelected ? 'rounded-control border-transparent bg-surface-selected' : ''}`}
             >
               <span className="text-metadata font-semibold text-fg-tertiary">{sense.pos || '—'}</span>
-              <p className="text-body-support leading-6">
+              <p
+                className="text-body-support leading-6"
+                lang={entry.referenceLookup?.entry.senses.find((source) => source.referenceSenseId === sense.referenceSenseId)?.glossL1 ? learnerLanguage : targetLanguage}
+                dir="auto"
+              >
                 {sense.text}
               </p>
             </div>

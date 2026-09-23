@@ -94,10 +94,10 @@ function SenseRow({
     <article className={`grid gap-4 rounded-card border p-5 sm:grid-cols-[1fr_auto] ${isContextual ? 'border-border-strong bg-surface-selected' : 'border-border-subtle bg-surface-panel'}`}>
       <div className="min-w-0">
         {isContextual && <span className="mb-3 inline-flex rounded-pill bg-accent-soft px-3 py-1 text-metadata font-semibold text-action-primary">{cardText('dictCurrent')}</span>}
-        <p className="text-body leading-7" lang={sense.glossL1 ? learnerLanguage : targetLanguage}>
+        <p className="text-body leading-7" lang={sense.glossL1 ? learnerLanguage : targetLanguage} dir="auto">
           {sense.glossL1 ?? sense.definitionL2 ?? cardText('dictDefinitionMissing')}
         </p>
-        {sense.glossL1 && sense.definitionL2 && <small className="mt-2 block text-body-support leading-6 text-fg-secondary" lang={targetLanguage}>{sense.definitionL2}</small>}
+        {sense.glossL1 && sense.definitionL2 && <small className="mt-2 block text-body-support leading-6 text-fg-secondary" lang={targetLanguage} dir="auto">{sense.definitionL2}</small>}
         {sense.labels && sense.labels.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {sense.labels.map((label) => <span className="rounded-pill bg-surface-subtle px-2 py-1 text-metadata text-fg-secondary" key={label}>{label}</span>)}
@@ -294,12 +294,12 @@ export function ReferenceDictionaryScreen({
         ) : (
           <>
             <section className="border-b border-border-subtle pb-7" aria-label={cardText('dictIdentity')}>
-              <h2 className="font-language text-5xl font-semibold" lang={targetLanguage}>{entry.headword}</h2>
+              <h2 className="font-language text-5xl font-semibold" lang={targetLanguage} dir="auto">{entry.headword}</h2>
               {showLemmaRelation && (
                 <p className="mt-4 flex items-center gap-2 text-body-support text-fg-secondary">
-                  <span lang={targetLanguage}>{clickedSurface}</span>
+                  <span lang={targetLanguage} dir="auto">{clickedSurface}</span>
                   <svg className={iconClass} aria-hidden="true"><use href="#i-chev-r" /></svg>
-                  <strong lang={targetLanguage}>{entry.headword}</strong>
+                  <strong lang={targetLanguage} dir="auto">{entry.headword}</strong>
                 </p>
               )}
               {entry.pronunciations.length > 0 && (
@@ -314,12 +314,12 @@ export function ReferenceDictionaryScreen({
                       >
                         <span>{accentLabel(pronunciation.accent)}</span>
                         <svg className={iconClass} aria-hidden="true"><use href="#i-vol-fill" /></svg>
-                        {pronunciation.ipa && <i className="font-language not-italic" lang={targetLanguage}>{pronunciation.ipa}</i>}
+                        {pronunciation.ipa && <i className="font-language not-italic" lang={targetLanguage} dir="auto">{pronunciation.ipa}</i>}
                       </button>
                     ) : (
                       <div className="inline-flex min-h-11 items-center gap-2 rounded-control bg-surface-subtle px-4 text-body-support text-fg-secondary" key={pronunciation.pronunciationId}>
                         <span>{accentLabel(pronunciation.accent)}</span>
-                        {pronunciation.ipa && <i className="font-language not-italic" lang={targetLanguage}>{pronunciation.ipa}</i>}
+                        {pronunciation.ipa && <i className="font-language not-italic" lang={targetLanguage} dir="auto">{pronunciation.ipa}</i>}
                       </div>
                     )
                   ))}
@@ -364,7 +364,7 @@ export function ReferenceDictionaryScreen({
             {entry.forms && entry.forms.length > 1 && (
               <section className="mt-8 border-t border-border-subtle pt-7">
                 <h2 className="text-section-title font-semibold">{cardText('dictForms')}</h2>
-                <div className="mt-4 flex flex-wrap gap-2">{entry.forms.map((form) => <span className="rounded-pill bg-accent-soft px-3 py-1 text-body-support text-fg-secondary" lang={targetLanguage} key={form}>{form}</span>)}</div>
+                <div className="mt-4 flex flex-wrap gap-2">{entry.forms.map((form) => <span className="rounded-pill bg-accent-soft px-3 py-1 text-body-support text-fg-secondary" lang={targetLanguage} dir="auto" key={form}>{form}</span>)}</div>
               </section>
             )}
 

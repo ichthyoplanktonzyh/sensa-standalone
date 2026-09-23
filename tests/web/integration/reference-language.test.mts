@@ -9,7 +9,7 @@ import {test} from 'vitest';
  * learner-language rendering belongs to. Nothing here calls a live provider.
  */
 import assert from 'node:assert/strict';
-import {sensaLanguage} from '@sensa/contracts/sensa';
+import {sensaLanguage,sensaLanguages} from '@sensa/contracts/sensa';
 import {indexedDB} from 'fake-indexeddb';
 import {build} from 'esbuild';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
@@ -23,6 +23,7 @@ const compiled=await build({
   stdin:{
     contents:[
       `export {lookupReference} from './apps/web/src/experience/reference/referenceLookup';`,
+      `export {ReferenceLookupUnavailableError} from './apps/web/src/experience/reference/referenceLookup';`,
       `export {resolveLookupLemma} from './apps/web/src/experience/reference/resolveClickedLemma';`,
       ...['store','providers','language'].map(n=>`export * from './apps/web/src/data/library/${n}';`),
     ].join('\n'),
@@ -48,6 +49,7 @@ const groups:Record<string,{pos:string;glosses:string[];examples?:string[];ipa?:
 /** Canned payloads for the official endpoint, keyed by word. */
 const restPayloads:Record<string,Record<string,{partOfSpeech:string;language:string;definitions:{definition:string}[]}[]>>={};
 const requested:string[]=[];
+const unavailableRestWords=new Set<string>();
 const modelPrompts:{system:string;user:any}[]=[];
 /** The rendering the fixture model returns with its decision. */
 let modelGloss:string|undefined='打招呼用语';
@@ -86,6 +88,7 @@ globalThis.fetch=async(url:string|URL|Request,init?:RequestInit)=>{
   }
   if(href.startsWith(REST)){
     const word=decodeURIComponent(href.slice(REST.length));
+    if(unavailableRestWords.has(word))return json({},503);
     const payload=restPayloads[word];
     return payload?json(payload):json({},404);
   }
@@ -105,6 +108,7 @@ try{
   groups['fr:hola']={pos:'intj',glosses:['bonjour']};
 
   const spanishResult=await api.lookupReference('hola',{languages:spanish});
+  const spanishRequestsEnd=requested.length;
   assert.ok(spanishResult,'a Spanish lookup answers');
   assert.equal(spanishResult.release.targetLanguage,'es','the release belongs to the target language, not to English');
   assert.equal(spanishResult.release.learnerLocale,'zh-CN','the release locale follows the Support Language');
@@ -113,9 +117,28 @@ try{
   assert.equal(spanishResult.entry.pronunciations[0]?.accent,'es','a non-English recording is never relabelled as an English accent');
   assert.equal(spanishResult.entry.pronunciations[0]?.ipa,'/ˈola/','pronunciation evidence the provider returned is kept');
 
+  // The exact configured 17 targets each select their own Wiktionary group;
+  // no target is inferred from the English fallback provider.
+  const targets=sensaLanguages.filter(language=>language.asTarget);
+  assert.equal(targets.length,17);
+  const supportLanguages=sensaLanguages;
+  assert.equal(supportLanguages.length,18);
+  for(const [index,language] of targets.entries()){
+    const word=`qzxmatrix${String.fromCharCode(97+index)}`;
+    groups[`${language.wiktionaryCode}:${word}`]={pos:'noun',glosses:[`fixture for ${language.tag}`]};
+    for(const support of supportLanguages){
+      const result=await api.lookupReference(word,{languages:{targetLanguageTag:language.tag,supportLanguageTag:support.tag}});
+      assert.ok(result,`${language.tag} → ${support.tag} returns its canned target-language group`);
+      assert.equal(result?.release.targetLanguage,language.tag,`${language.tag} release identifies the requested target`);
+      assert.equal(result?.release.learnerLocale,support.tag,`${support.tag} remains the declared Support Language`);
+      assert.equal(result?.entry.senses[0]?.definitionL2,`fixture for ${language.tag}`,`${language.tag} keeps its own Wiktionary group`);
+      assert.ok(requested.some(href=>href.includes(`lang=${encodeURIComponent(language.wiktionaryCode)}`)),`${language.tag} requests its Wiktionary code`);
+    }
+  }
+
   // Every dictionary request was scoped to the target language, and a provider
   // that indexes English only was never asked.
-  const dictionaryRequests=requested.filter(href=>href!==MODEL);
+  const dictionaryRequests=requested.slice(0,spanishRequestsEnd).filter(href=>href!==MODEL);
   assert.ok(dictionaryRequests.length>0,'the lookup reached a dictionary provider');
   assert.ok(dictionaryRequests.every(href=>!href.startsWith(FREE)),'the English-only aggregator is not asked about a Spanish word');
   assert.ok(dictionaryRequests.every(href=>href.includes('lang=es')),'every Wiktionary request selects the Spanish group');
@@ -161,6 +184,18 @@ try{
   assert.ok(requested.slice(beforeCache).some(href=>href.includes('lang=fr')),'a second language is fetched instead of answered from the first language cache');
   assert.equal(frenchResult?.release.targetLanguage,'fr','the cached Spanish entry never answers a French lookup');
   assert.equal(frenchResult?.entry.senses[0]?.definitionL2,'bonjour');
+
+  // A real miss is empty; a miss from one source plus an unavailable eligible
+  // source is reported as unavailable because absence cannot be established.
+  assert.equal(await api.lookupReference('definitelymissing',{languages:spanish}),null);
+  unavailableRestWords.add('partiallyunavailable');
+  delete groups['es:partiallyunavailable'];
+  await assert.rejects(
+    api.lookupReference('partiallyunavailable',{languages:spanish}),
+    api.ReferenceLookupUnavailableError,
+    'one provider outage is not turned into a false missing-word result',
+  );
+  unavailableRestWords.delete('partiallyunavailable');
 
   // Letters outside the Latin range survive normalization.
   groups['es:niño']={pos:'noun',glosses:['child, boy']};

@@ -598,10 +598,11 @@ const providers: readonly ReferenceDictionaryProvider[] = [
 
 const entryCache = new Map<string, ReferenceLookupResult>();
 
-/** Cache identity is the language plus the word. A Spanish `actual` and an
- * English `actual` are different entries, and one must never answer the other. */
-function entryCacheKey(word: string, language: SensaLanguage): string {
-  return `${language.wiktionaryCode}:${word}`;
+/** Cache identity includes both declared languages because the release carries
+ * both. A Spanish `actual` and an English `actual` are different entries, and
+ * a support-language switch must not reuse stale release metadata. */
+function entryCacheKey(word: string, context: ReferenceLookupContext): string {
+  return `${context.language.wiktionaryCode}:${context.supportLanguageTag}:${word}`;
 }
 
 async function lookupBaseEntry(
@@ -611,7 +612,7 @@ async function lookupBaseEntry(
 ): Promise<ReferenceLookupResult | null> {
   const normalized = normalizeLookupWord(rawWord, context.language);
   if (!normalized) return null;
-  const cacheKey = entryCacheKey(normalized, context.language);
+  const cacheKey = entryCacheKey(normalized, context);
   const cached = entryCache.get(cacheKey);
   if (cached) return cached;
 
@@ -631,7 +632,9 @@ async function lookupBaseEntry(
     }
   }
 
-  if (serving.length > 0 && unavailableProviders.length === serving.length) {
+  // A successful miss from one provider cannot prove absence while another
+  // eligible provider is unavailable: it may have the requested entry.
+  if (unavailableProviders.length > 0) {
     throw new ReferenceLookupUnavailableError(unavailableProviders);
   }
   return null;
@@ -854,7 +857,9 @@ export async function lookupReference(
   const languages = options.languages
     ?? (await languageRoutesSnapshot()).context;
   const language = sensaLanguageForDeclaredTag(languages.targetLanguageTag);
-  if (!language?.asTarget) return null;  const context: ReferenceLookupContext = {
+  const supportLanguage = sensaLanguageForDeclaredTag(languages.supportLanguageTag);
+  if (!language?.asTarget || !supportLanguage) return null;
+  const context: ReferenceLookupContext = {
     language,
     supportLanguageTag: languages.supportLanguageTag,
   };

@@ -56,7 +56,15 @@ try{
  assert.equal(sent.length,2);assert.match(sent[0]!,/Path:speech\.config/u);assert.match(sent[1]!,/Path:ssml/u);
  assert.match(sent[0]!,/X-Timestamp:Mon Sep 21 2026 00:01:00 GMT\+0000 \(Coordinated Universal Time\)/u);
  assert.match(sent[1]!,/put &lt;up&gt; &amp; with/u);assert.doesNotMatch(sent[1]!,/put <up>/u);
- await assert.rejects(()=>edge.synthesize({surface:'hola',languageTag:'es'},signal),/speech_language_unavailable/);
+ sent.splice(0);
+ const spanish=await edge.synthesize({surface:'hola',languageTag:'es'},signal);
+ assert.equal(spanish.languageTag,'es');
+ assert.match(sent[1]!,/xml:lang='es-ES'/u);
+ assert.match(sent[1]!,/name='es-ES-ElviraNeural'/u);
+ assert.match(spanish.source,/es-ES-ElviraNeural/u);
+ openedUrl='';
+ await assert.rejects(()=>edge.synthesize({surface:'你好',languageTag:'zh-TW'},signal),/speech_language_unavailable/);
+ assert.equal(openedUrl,'','an unsupported script must fail before opening a speech socket');
  await assert.rejects(async()=>edge.synthesize({surface:' ',languageTag:'en'},signal));
 
  let genericCalls=0;
