@@ -1,0 +1,7 @@
+{
+  "conflictTitle": "Un'altra scheda Sensa sta usando una versione diversa",
+  "conflictDescription": "Chiudi le altre schede di Sensa e ricarica questa pagina. L'accesso alla libreria locale è sospeso per proteggere i tuoi dati.",
+  "updateTitle": "È disponibile un aggiornamento di Sensa",
+  "updateDescription": "Aggiorna ora per mantenere questa pagina, i file offline e la libreria locale sulla stessa versione.",
+  "updateNow": "Aggiorna ora"
+}

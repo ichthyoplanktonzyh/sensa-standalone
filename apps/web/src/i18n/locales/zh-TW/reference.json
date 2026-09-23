@@ -1,0 +1,18 @@
+{
+  "referenceExample": {
+    "title": "詞典參考例句",
+    "back": "返回詞典",
+    "current": "目前詞典例句",
+    "sense": "對應義項",
+    "hideTranslation": "隱藏譯文",
+    "showTranslation": "顯示譯文",
+    "noTranslation": "目前來源未提供譯文。",
+    "noSource": "來源資訊暫缺",
+    "noDefinition": "目前義項暫無釋義。",
+    "unavailable": "例句暫不可用",
+    "empty": "這個義項暫無參考例句",
+    "emptyHint": "可以返回詞典繼續檢視釋義；這裡不會用其他義項的例句替代。",
+    "position": "第 {{current}} / {{total}} 條",
+    "boundary": "詞典參考例句不等同於已稽核學習例句；檢視不會改變學習進度。"
+  }
+}

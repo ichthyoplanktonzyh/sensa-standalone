@@ -80,7 +80,7 @@ export const ContentExampleDetailScreen = ({
 
         primary: <div>
         <article className="rounded-overlay bg-surface-media px-7 py-9 text-fg-on-media shadow-raised sm:px-10 sm:py-12">
-          <span className="inline-flex rounded-pill border border-fg-on-media/20 px-3 py-1 text-metadata tracking-wide text-fg-on-media/75">{item.example.sourceLabel}</span>
+          <span className="inline-flex rounded-pill border border-fg-on-media/20 px-3 py-1 text-metadata tracking-wide text-fg-on-media/75">{uiText('learningExample')}</span>
           <blockquote className="mt-8 font-language text-learning-expression leading-relaxed">{item.example.text}</blockquote>
           {showTranslation && item.example.translation && <p className="mt-5 text-body-support leading-7 text-fg-on-media/75">{item.example.translation}</p>}
           <button className="mt-8 inline-flex min-h-12 items-center gap-2 rounded-control border border-fg-on-media/20 bg-transparent px-4 text-control-label font-semibold text-fg-on-media hover:bg-fg-on-media/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" onClick={() => void audioService.playSentence(item.example.text, 'us')}>

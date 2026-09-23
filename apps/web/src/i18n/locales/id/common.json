@@ -1,0 +1,173 @@
+{
+  "landing": {
+    "navigation": "Navigasi beranda",
+    "skip": "Lompat ke konten utama",
+    "how": "Cara kerja",
+    "story": "Kisah kami",
+    "guide": {
+      "title": "Hubungkan kehidupan dengan pembelajaran.",
+      "body": "Mulailah dari pengalaman Anda sendiri atau paket belajar. Pilih jalur yang sesuai dengan momen ini.",
+      "meta": "Jelajahi Sensa Web, ekstensi browser, koneksi Agent, dan paket belajar. Pelajari cara menyimpan ekspresi, memilih yang ingin dipelajari, dan kembali untuk mengulanginya."
+    },
+    "enter": "Masuk ke Sensa",
+    "signIn": "Masuk / Mulai",
+    "back": "Kembali ke beranda merek",
+    "hero": {
+      "eyebrow": "Sensa · Mulai dari makna",
+      "title": "Anda sudah punya dunia sendiri.",
+      "body": "Sebelum mempelajari bahasa lain, Anda sudah mengenal aroma hujan, rasa menunggu seseorang, dan perasaan memiliki lebih banyak hal untuk disampaikan daripada yang dapat ditampung kata-kata. Bahasa baru bertemu dengan dunia yang telah dibentuk oleh kehidupan.",
+      "primary": "Masuk ke Sensa",
+      "secondary": "Baca kisah Sensa"
+    },
+    "specimen": {
+      "label": "Pertemuan kecil dalam keseharian · Bahasa Inggris",
+      "contextTitle": "Kembali ke momen itu",
+      "context": "Seorang teman mengirim pesan sebelum kalian bertemu: dia belum siap dan sedang terburu-buru untuk pergi. Anda tidak terburu-buru dan ingin membuatnya tenang.",
+      "senseTitle": "Kenali maksud Anda",
+      "sense": "Memberi tahu seseorang bahwa ia tidak perlu terburu-buru dan boleh melakukan sesuatu dengan kecepatannya sendiri.",
+      "expressionTitle": "Lalu temukan ekspresinya",
+      "expression": "Take your time.",
+      "caption": "Di sini, Anda menenangkan teman, bukan mendesaknya. Momen itu memperjelas maknanya."
+    },
+    "belief": {
+      "title": "Kita hidup lebih dulu.\nLalu menemukan makna.",
+      "first": "Hujan. Sungai di dekat rumah. Sesuatu yang tak sempat terucap. Sebelum belajar bahasa lain, kita sudah mengenal dunia melalui kehidupan dan belajar mengenali, mengingat, serta mengungkapkannya dengan kata-kata yang akrab.",
+      "second": "Sensa percaya bahwa bahasa baru hadir bagi seseorang yang telah menjalani kehidupan. Pengalaman, hubungan, harapan, dan kenangan menjadi tempat bagi ekspresi baru untuk berakar.",
+      "moments": [
+        {
+          "label": "Koneksi",
+          "title": "Terkadang, Anda hanya membutuhkan ekspresinya.",
+          "body": "Anda tahu bahwa menunggu dapat menenangkan seseorang, atau penolakan dapat tetap memberi ruang bagi kebaikan. Anda ingin mengetahui bagaimana bahasa lain mengungkapkan kepedulian itu."
+        },
+        {
+          "label": "Mulai terbentuk",
+          "title": "Terkadang, makna hadir sebelum kata-kata.",
+          "body": "Bahkan bahasa yang akrab pun belum tentu dapat mengungkapkannya dengan tepat. Ada adegan, perasaan, dan keyakinan bahwa “inilah maksud saya.” Kita mulai dari sana dan membantu memperjelasnya."
+        },
+        {
+          "label": "Penemuan",
+          "title": "Terkadang, sebuah ekspresi membuka sudut pandang baru.",
+          "body": "Bahasa lain dapat memperlihatkan cara berbeda untuk memahami pengalaman yang akrab. Perbedaan yang sebelumnya luput kini menemukan tempat di dunia Anda."
+        }
+      ],
+      "statement": "Biarkan bahasa lain masuk ke dunia Anda. Lihat kembali dunia Anda melaluinya.",
+      "coda": "Di sinilah Sensa bermula: kembali ke momen itu, kenali dan perjelas maknanya, lalu temukan ekspresinya. Rawat hubungan itu melalui belajar dan mengulang, lalu bawa kembali ke kegiatan membaca, mendengarkan, berbincang, dan menjalani hidup."
+    },
+    "use": {
+      "title": "Bawa dari kehidupan. Bawa kembali ke kehidupan.",
+      "intro": "Simpan pengalaman meski Anda belum menemukan kata-katanya. Luangkan waktu untuk memperjelas maknanya. Pilih ekspresi yang ingin dipelajari dan alasan untuk kembali ke masing-masing ekspresi.",
+      "steps": [
+        {
+          "label": "Tangkap",
+          "title": "Simpan momen yang ingin Anda kunjungi kembali",
+          "body": "Tuliskan pengalaman, tambahkan gambar, atau simpan kalimat dari bacaan Anda. Tidak harus jelas sekarang. Materi yang belum selesai dapat menunggu sebagai draf atau di kotak masuk."
+        },
+        {
+          "label": "Perjelas dan simpan",
+          "title": "Temukan “ya, memang itu maksud saya”",
+          "body": "Jelajahi konteks, makna, dan ekspresi bersama Sensa. Setelah Anda mengonfirmasinya, semuanya masuk ke Dunia Semantik Saya bersama sumbernya agar Anda dapat mengingat makna ekspresi itu pada momen tersebut."
+        },
+        {
+          "label": "Belajar dan mengulang",
+          "title": "Kenali hal yang ingin Anda pertahankan",
+          "body": "Pilih Tambahkan ke Pembelajaran dan mulai saat materinya siap. Hubungkan adegan dengan bunyi, bentuk tulisan, dan penggunaan ekspresi. Setelah pembelajaran awal, kembali untuk pengulangan yang jatuh tempo. Menyimpan dan memilih untuk belajar adalah dua keputusan terpisah yang Anda ambil."
+        },
+        {
+          "label": "Kembali ke kehidupan",
+          "title": "Coba di pertemuan berikutnya",
+          "body": "Baca lagi, dengarkan lagi, atau coba ucapkan dalam percakapan. Konteks baru dapat menyingkap makna lain dan memberi Anda pertanyaan baru untuk dibawa kembali."
+        }
+      ],
+      "return": "Simpan ekspresinya dan hal yang membuatnya bermakna bagi Anda."
+    },
+    "entries": {
+      "title": "Mulai dari posisi Anda sekarang.",
+      "intro": "Jelajahi di Sensa. Bawa kembali hal-hal dari bacaan dan percakapan.",
+      "items": [
+        {
+          "label": "Sensa Web",
+          "title": "Sesuatu yang ingin Anda ungkapkan",
+          "body": "Buka percakapan dengan teks atau gambar. Mulailah dari pengalaman, ekspresi yang sudah dikenal, atau perasaan yang belum sepenuhnya Anda namai."
+        },
+        {
+          "label": "Ekstensi browser",
+          "title": "Kalimat yang ingin Anda simpan",
+          "body": "Pilih teks di halaman web atau subtitel. Pahami dalam konteksnya dan konfirmasikan yang ingin disimpan, atau simpan untuk diperjelas nanti."
+        },
+        {
+          "label": "Koneksi Agent",
+          "title": "Percakapan yang layak diingat",
+          "body": "Hubungkan Agent seperti Codex, lalu minta untuk mengirim konteks, makna, dan ekspresi yang relevan ke Sensa. Buka aplikasi Web untuk menerimanya dan lanjutkan mengatur atau mempelajarinya."
+        }
+      ],
+      "bookLabel": "Atau mulai dengan paket belajar",
+      "bookTitle": "Tidak ada momen yang terpikir? Temukan momen baru.",
+      "bookBody": "Pilih paket belajar terbitan untuk rute bahasa Anda saat ini, unduh, lalu tambahkan ke pembelajaran. Mulailah dari adegan dan ekspresinya. Saat belajar, tambahkan Adegan Saya untuk menghubungkan ekspresi dengan pengalaman Anda."
+    },
+    "close": {
+      "title": "Jadikan bahasa lain sebagai cara untuk mengungkapkan diri.",
+      "body": "Mulailah dari sesuatu yang pernah Anda alami, rasakan, atau selalu ingin Anda ungkapkan.",
+      "action": "Masuk ke Sensa"
+    },
+    "footer": "Hidup lebih dulu. Ekspresi menyusul.",
+    "meta": "Anda sudah memiliki dunia sendiri. Sensa dimulai dari pengalaman dan makna, mengundang bahasa lain ke dunia Anda, dan membantu Anda melihatnya kembali."
+  },
+  "reliability": {
+    "loading": "Memuat Sensa…",
+    "errorTitle": "Bagian Sensa ini tidak dapat dibuka",
+    "errorDescription": "Data belajar Anda tidak berubah. Coba lagi atau kembali ke beranda.",
+    "notFoundTitle": "Halaman tidak ditemukan",
+    "notFoundDescription": "Tautan ini mungkin sudah tidak tersedia. Kembali ke beranda Sensa untuk melanjutkan.",
+    "retry": "Coba lagi",
+    "reload": "Muat ulang",
+    "home": "Kembali ke beranda"
+  },
+  "brand": "Sensa",
+  "nav": {
+    "home": "Hari ini",
+    "learning": "Pembelajaran Saya",
+    "content": "Dunia Semantik Saya",
+    "world": "Dunia Semantik",
+    "practice": "Latihan",
+    "settings": "Akun & pengaturan",
+    "label": "Navigasi utama",
+    "mobile": "Navigasi seluler",
+    "homeLabel": "Beranda Sensa",
+    "preview": "Pratinjau lokal"
+  },
+  "language": {
+    "label": "Bahasa antarmuka",
+    "zh": "简体中文",
+    "en": "English"
+  },
+  "home": {
+    "title": "Hari ini",
+    "readyTitle": "Mulai dari sebuah makna.",
+    "beginTitle": "Apa yang ingin Anda ungkapkan?",
+    "reviewTitle": "Kembali ke makna yang pernah Anda temui.",
+    "plan": "Pembelajaran Anda",
+    "new": "Baru",
+    "review": "Perlu diulang",
+    "unit": "makna",
+    "summary": "Ringkasan belajar hari ini",
+    "start": "Mulai belajar",
+    "empty": "Belum ada yang siap dipelajari",
+    "emptyHint": "Tambahkan makna atau periksa status persiapan bahasa target Anda.",
+    "reviewFirst": "Ulangi terlebih dahulu, lalu jelajahi makna baru.",
+    "newOnly": "Mulai dari adegan. Ingat ekspresinya.",
+    "reviewOnlyHint": "Hubungkan kembali dengan makna ini hari ini.",
+    "reviewOnly": "Hanya mengulang",
+    "noReview": "Tidak ada pengulangan yang jatuh tempo",
+    "reviewCount": "Ulangi hanya {{count}} makna",
+    "manage": "Lihat rencana belajar",
+    "add": "Tambahkan sesuatu untuk dipelajari",
+    "existing": "Jelajahi konten yang ada",
+    "existingHint": "Pilih buku atau makna tertentu",
+    "personal": "Catat konteks Anda sendiri",
+    "personalHint": "Simpan pengalaman dan perjelas maknanya",
+    "open": "Buka",
+    "emptyAction": "Tambahkan konten",
+    "resume": "Lanjutkan belajar",
+    "resumeHint": "Ada sesi yang belum selesai untuk dilanjutkan."
+  }
+}

@@ -221,7 +221,8 @@ async function instrument(page:import('@playwright/test').Page,authenticated:boo
  return errors;
 }
 async function pageContext(authenticated=true){
- const context=await browser.newContext({viewport:{width:1280,height:900}});
+ // This fixture asserts Chinese status copy; the product now follows the browser locale.
+ const context=await browser.newContext({viewport:{width:1280,height:900},locale:'zh-CN'});
  const page=await context.newPage();
  const errors=await instrument(page,authenticated);
  return {context,page,errors};

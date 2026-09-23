@@ -1,6 +1,7 @@
 import {runReading,readingError} from './readingClient';
 import {declaredCaptureLanguage,detectCaptureLanguage,readerLanguage} from './language';
 import {speakText,speechFailureText} from './speech';
+import {t,extensionLanguage} from './i18n';
 import {defaultPreferences,type ReadingPreferences} from './preferences';
 const blocks='p,li,blockquote,td,th,dt,dd,h1,h2,h3,h4,h5,h6,figcaption,div';
 const excluded='input,textarea,select,button,nav,pre,code,script,style,[contenteditable]:not([contenteditable="false"]),[translate="no"],[data-sensa-ui]';
@@ -43,9 +44,14 @@ export function surroundingText(element:HTMLElement){
  * they change, so reading a whole page aloud speaks at the rate the learner set
  * without asking storage again for each paragraph. */
 export function createPageReading(accountId:string,isAuthorized:()=>boolean,preferences:ReadingPreferences=defaultPreferences){
-  const host=document.createElement('div');host.dataset.sensaUi='page';
+  const host=document.createElement('div');host.dataset.sensaUi='page';host.lang=extensionLanguage();
   host.style.cssText='position:fixed;right:16px;bottom:16px;z-index:2147483646';
-  const root=host.attachShadow({mode:'open'});root.innerHTML=`<style>:host{font:13px/1.5 system-ui;color:#242a38}section{max-width:320px;padding:10px;background:#fbfbfa;border:1px solid #bbc5da;border-radius:12px;box-shadow:0 4px 20px #0002}button{font:inherit;min-height:36px;background:white;color:#303f76;border:1px solid #bcc7df;border-radius:7px;padding:5px 9px;margin:3px;cursor:pointer}p{margin:6px;overflow-wrap:anywhere}button:focus-visible{outline:3px solid #5268a9}</style><section aria-label="Sensa 网页阅读"><strong>Sensa 阅读</strong><div><button data-action="translate">翻译页面</button><button data-action="mode">仅译文</button><button data-action="restore">恢复原文</button><button data-action="retry" hidden>重试失败段落</button><button data-action="site">本站不再开启阅读</button><button data-action="speak">朗读本页</button></div><p role="status">Alt + T 翻译鼠标所在段落 · 在输入框里则翻译你写的内容</p><p role="status" data-sensa-speech hidden></p></section>`;
+  const root=host.attachShadow({mode:'open'});root.innerHTML=`<style>:host{font:13px/1.5 system-ui;color:#242a38}section{max-width:320px;padding:10px;background:#fbfbfa;border:1px solid #bbc5da;border-radius:12px;box-shadow:0 4px 20px #0002}button{font:inherit;min-height:36px;background:white;color:#303f76;border:1px solid #bcc7df;border-radius:7px;padding:5px 9px;margin:3px;cursor:pointer}p{margin:6px;overflow-wrap:anywhere}button:focus-visible{outline:3px solid #5268a9}</style><section><strong></strong><div><button data-action="translate"></button><button data-action="mode"></button><button data-action="restore"></button><button data-action="retry" hidden></button><button data-action="site"></button><button data-action="speak"></button></div><p role="status"></p><p role="status" data-sensa-speech hidden></p></section>`;
+  root.querySelector('section')!.setAttribute('aria-label',t('pageLabel'));
+  root.querySelector('strong')!.textContent=t('pageHeading');
+  for(const [action,key] of [['translate','pageTranslate'],['mode','pageOnlyTranslation'],['restore','pageRestore'],['retry','pageRetry'],['site','siteDisable'],['speak','pageSpeak']] as const)
+    root.querySelector(`[data-action="${action}"]`)!.textContent=t(key);
+  root.querySelector('p')!.textContent=t('pageShortcut');
   document.documentElement.append(host);
   const marker=crypto.randomUUID(),hideStyle=document.createElement('style');hideStyle.dataset.sensaUi='translation-style';hideStyle.textContent=`[data-sensa-hidden="${marker}"]{display:none!important}[data-sensa-speaking]{outline:2px solid #5268a9;outline-offset:3px;border-radius:4px}`;document.documentElement.append(hideStyle);
   const status=root.querySelector('p')!;
@@ -101,7 +107,7 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
     const values=[...items.values()];
     const ready=values.filter(i=>i.state==='ready').length,skipped=values.filter(i=>i.state==='skipped').length,failed=values.filter(i=>i.state==='failed');
     retry.hidden=failed.length===0;
-    status.textContent=`已翻译 ${ready} 段${skipped?` · 跳过 ${skipped} 段你已能读的文字（Alt + T 仍可翻译）`:''}${running?' · 正在翻译…':''}${failed.length?` · ${failed.length} 段失败，可重试`:active?'；滚动时继续。':''}`;
+    status.textContent=[t('pageTranslated',{count:ready}),skipped?t('pageSkipped',{count:skipped}):'',running?t('pageTranslating'):'',failed.length?t('pageFailed',{count:failed.length}):active?t('pageContinue'):''].filter(Boolean).join(' · ');
   }
   function setMode(item:Item){if(item.state!=='ready')return;if(only&&!item.hidden){item.source.dataset.sensaHidden=marker;item.hidden=true;}else if(!only&&item.hidden)reveal(item);}
   function drain(){
@@ -151,7 +157,7 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
         if(reader?.alreadyReadable){item.state='skipped';return;}
       }
       if(supportLanguage)item.translation.setAttribute('lang',supportLanguage);
-      placeholder=setTimeout(()=>{if(item.state==='running'&&!item.translation.textContent){item.translation.textContent='正在翻译…';item.translation.setAttribute('aria-busy','true');}},200);
+      placeholder=setTimeout(()=>{if(item.state==='running'&&!item.translation.textContent){item.translation.textContent=t('pageTranslating');item.translation.setAttribute('aria-busy','true');}},200);
       item.source.after(item.translation);feedback();
       const translated=await translationFor(item.text,item.context);
       if(!valid()||run!==generation||items.get(item.source)!==item||!item.source.isConnected||item.source.textContent!==item.text){item.translation.remove();return;}
@@ -165,9 +171,9 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
       if(valid()){if(items.size)feedback();drain();}
     }
   }
-  function restore(){generation++;active=false;for(const item of items.values())restoreItem(item);items.clear();retry.hidden=true;status.textContent='已恢复原文。Alt + T 翻译鼠标所在段落。';}
+  function restore(){generation++;active=false;for(const item of items.values())restoreItem(item);items.clear();retry.hidden=true;status.textContent=t('pageRestored');}
   root.querySelector('[data-action="translate"]')!.addEventListener('click',()=>{active=true;scan();});
-  root.querySelector('[data-action="mode"]')!.addEventListener('click',()=>{only=!only;root.querySelector('[data-action="mode"]')!.textContent=only?'双语显示':'仅译文';for(const item of items.values())setMode(item);});
+  root.querySelector('[data-action="mode"]')!.addEventListener('click',()=>{only=!only;root.querySelector('[data-action="mode"]')!.textContent=t(only?'pageBilingual':'pageOnlyTranslation');for(const item of items.values())setMode(item);});
   root.querySelector('[data-action="restore"]')!.addEventListener('click',restore);
   retry.addEventListener('click',()=>{for(const item of items.values())if(item.state==='failed'&&nearby(item.source))item.state='waiting';drain();});
   /**
@@ -210,9 +216,9 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
   }
   async function readAloud(){
     const queue=spokenBlocks();
-    if(!queue.length){speechStatus.hidden=false;speechStatus.textContent='这一页没有可朗读的文字。';return;}
+    if(!queue.length){speechStatus.hidden=false;speechStatus.textContent=t('pageNoReadableText');return;}
     const run=++speechRun;
-    reading=true;speak.textContent='停止朗读';speechStatus.hidden=false;
+    reading=true;speak.textContent=t('pageStopSpeaking');speechStatus.hidden=false;
     for(let index=0;index<queue.length;index++){
       if(run!==speechRun)return;
       const element=queue[index]!,text=(element.textContent??'').trim();
@@ -220,7 +226,7 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
       if(run!==speechRun)return;
       if(!language)continue;
       element.setAttribute('data-sensa-speaking','');element.scrollIntoView({block:'center'});
-      speechStatus.textContent=`正在朗读第 ${index+1}/${queue.length} 段：${text.slice(0,40)}${text.length>40?'…':''}`;
+      speechStatus.textContent=t('pageSpeakingParagraph',{index:index+1,total:queue.length,preview:text.slice(0,40)+(text.length>40?'…':'')});
       const attempt=await speakText(text,language,{rate:preferences.speechRate,voice:preferences.speechVoice,onEnd:()=>finish?.()});
       if(run!==speechRun)return;
       if(!attempt.ok){speechStatus.textContent=speechFailureText(attempt);stopReadingAloud();return;}
@@ -229,14 +235,14 @@ export function createPageReading(accountId:string,isAuthorized:()=>boolean,pref
       speaking=null;finish=null;
       element.removeAttribute('data-sensa-speaking');
     }
-    if(run===speechRun)stopReadingAloud('本页朗读完毕。');
+    if(run===speechRun)stopReadingAloud(t('pageSpeechDone'));
   }
   /** Stopping clears the highlight with the speech: a page left with one paragraph
    * outlined looks like something is still happening. */
   function stopReadingAloud(message=''){
     speechRun++;reading=false;speaking?.stop();speaking=null;finish=null;
     for(const element of document.querySelectorAll('[data-sensa-speaking]'))element.removeAttribute('data-sensa-speaking');
-    speak.textContent='朗读本页';
+    speak.textContent=t('pageSpeak');
     speechStatus.hidden=message==='';speechStatus.textContent=message;
   }
   speak.addEventListener('click',()=>{if(reading)stopReadingAloud();else void readAloud();});

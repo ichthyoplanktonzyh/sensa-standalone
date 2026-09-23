@@ -1,0 +1,7 @@
+{
+  "conflictTitle": "Başka bir Sensa sekmesinde farklı bir sürüm çalışıyor",
+  "conflictDescription": "Diğer Sensa sekmelerini kapatıp bu sayfayı yenileyin. Verilerinizi korumak için yerel kitaplığa erişim duraklatıldı.",
+  "updateTitle": "Sensa güncellemesi hazır",
+  "updateDescription": "Bu sayfanın, çevrimdışı dosyaların ve yerel kitaplığın aynı sürümde kalması için şimdi güncelleyin.",
+  "updateNow": "Şimdi güncelle"
+}

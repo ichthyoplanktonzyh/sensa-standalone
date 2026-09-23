@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import type { QuickDictEntry } from '../types';
 import { audioService } from '../services/audioService';
 import { SensaOverlayLayout } from '../ui/SensaComponents';
+import {useTranslation} from 'react-i18next';
 
 interface QuickDictPopupProps {
   entry: QuickDictEntry;
@@ -13,6 +14,7 @@ interface QuickDictPopupProps {
 }
 
 export function QuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDictPopupProps) {
+  const {t}=useTranslation('learning');
   const [isPlaying, setIsPlaying] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const isLoading = entry.lookupState === 'loading';
@@ -56,14 +58,14 @@ export function QuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDic
       onViewDetail(entry.word, entry);
       return;
     }
-    toast(`"${entry.word}" 的完整 Reference 条目暂不可用`);
+    toast(t('quickDict.detailUnavailable',{word:entry.word}));
   };
 
   return (
     <SensaOverlayLayout variant="dialog" measure="compact" className="z-[100]" labelledBy="sensa-reference-quick-title" onDismiss={onClose} dismissOnBackdrop aria-busy={isLoading} regions={{
       header: <div className="flex min-h-12 items-center justify-between gap-4">
           <h2 className="font-language text-2xl font-semibold" id="sensa-reference-quick-title">{entry.word}</h2>
-          <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" ref={closeButtonRef} type="button" onClick={onClose} aria-label="关闭快速查词">
+          <button className="grid size-11 place-items-center rounded-control border-0 bg-transparent text-fg-secondary hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" ref={closeButtonRef} type="button" onClick={onClose} aria-label={t('quickDict.close')}>
             <svg className={iconClass} aria-hidden="true"><use href="#i-close" /></svg>
           </button>
         </div>,
@@ -74,18 +76,18 @@ export function QuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDic
             className={`inline-flex min-h-11 items-center gap-2 rounded-control border-0 px-4 text-control-label font-semibold focus-visible:outline-2 focus-visible:outline-focus ${isPlaying ? 'bg-action-primary text-action-on-primary' : 'bg-accent-soft text-action-primary hover:bg-surface-selected'}`}
             onClick={handlePlayAudio}
             disabled={isLoading || hasError}
-            aria-label={`播放 ${entry.word} 的美式发音`}
+            aria-label={t('quickDict.playUs',{word:entry.word})}
           >
             <svg className={iconClass} aria-hidden="true"><use href="#i-vol-fill" /></svg>
-            <span>美 {entry.phonetic}</span>
+            <span>{t('quickDict.us')} {entry.phonetic}</span>
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5" aria-label="简明义项">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5" aria-label={t('quickDict.briefMeanings')}>
           {(isLoading || hasError) && (
             <div className={`mb-4 flex items-center gap-3 rounded-control p-3 text-body-support ${hasError ? 'bg-surface-subtle text-feedback-danger' : 'bg-accent-soft text-fg-secondary'}`} role="status">
               {isLoading && <i className="size-3 animate-pulse rounded-full bg-progress motion-reduce:animate-none" aria-hidden="true" />}
-              <p>{entry.lookupMessage}</p>
+              <p>{t(isLoading?'quickDict.loading':'quickDict.error')}</p>
             </div>
           )}
           {entry.senses.map((sense, index) => {
@@ -104,14 +106,14 @@ export function QuickDictPopup({ entry, onClose, onViewDetail, toast }: QuickDic
           })}
           {entry.senses.length === 0 && !isLoading && !hasError && (
             <p className="rounded-control border border-dashed border-border-strong p-5 text-body-support leading-6 text-fg-secondary">
-              当前没有可展示的 Reference 简明义项，请查看完整词条。
+              {t('quickDict.noBriefMeanings')}
             </p>
           )}
         </div>
       </div>,
       controls:
           <button className="flex min-h-12 w-full items-center justify-center gap-2 rounded-control border-0 bg-action-primary px-5 text-control-label font-semibold text-action-on-primary hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-45" type="button" onClick={handleDetailClick} disabled={isLoading || hasError}>
-            {isLoading ? '正在查询…' : hasError ? '暂不可用' : '查看详细释义'}
+            {t(isLoading?'quickDict.querying':hasError?'quickDict.unavailable':'quickDict.viewDetails')}
             <svg className={iconClass} aria-hidden="true"><use href="#i-chev-r" /></svg>
           </button>
     }} />

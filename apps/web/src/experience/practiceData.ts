@@ -91,7 +91,7 @@ export const RUNTIME_PRACTICE_SENSES: PracticeSenseItem[] = BUNDLED_LEARNING_PAC
       sourceLabel: '学习例句' as const,
       audioUrl: example.audioUrl,
     },
-    sourceWord: toWordPresentation(pkg.content),
+    get sourceWord(){return toWordPresentation(pkg.content);},
   }];
 });
 

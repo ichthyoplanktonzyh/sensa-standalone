@@ -1,3 +1,16 @@
+import ja from './locales/ja.json';
+import zhTw from './locales/zh-TW.json';
+import ko from './locales/ko.json';
+import es from './locales/es.json';
+import fr from './locales/fr.json';
+import de from './locales/de.json';
+import ptBr from './locales/pt-BR.json';
+import it from './locales/it.json';
+import ru from './locales/ru.json';
+import id from './locales/id.json';
+import vi from './locales/vi.json';
+import pl from './locales/pl.json';
+import tr from './locales/tr.json';
 const messages={
  openInbox:['打开 Sensa 收件箱','Open Sensa inbox'],
  deliveryHint:['保存后打开同一浏览器中的 Sensa，内容会自动进入收件箱。','After saving, open Sensa in this browser. Your capture will appear in the inbox automatically.'],
@@ -11,7 +24,7 @@ const messages={
  managed_models_paused:['Sensa 模型服务已暂停，原文仍可保存。','Sensa model service is paused. You can still save the source.'],
  provider_not_configured:['Sensa 模型服务尚未配置。','Sensa model service is not configured.'],
  semantic_daily_budget:['今日解释额度已用完，原文仍可保存。','The explanation limit has been reached. You can still save the source.'],
- reading_daily_budget:['今日阅读额度已用完，原文仍可保存。','The reading limit has been reached. You can still save the source.'],
+ reading_daily_budget:['最近 24 小时阅读请求已达上限，原文仍可保存。','The reading limit for the past 24 hours has been reached. You can still save the source.'],
  lookup_timeout:['解释请求超时，请重新解释。','The explanation timed out. Retry the explanation.'],
  invalid_proposal:['解释结果未通过校验，请重新解释。','The explanation did not pass validation. Retry the explanation.'],
 
@@ -44,8 +57,178 @@ const messages={
  speechNoVoice:['当前浏览器没有可用的{language}本机语音。解释和保存仍可使用。','No installed {language} voice is available in this browser. Explanation and saving still work.'],
  speechUnavailable:['当前浏览器不支持语音合成。解释和保存仍可使用。','This browser has no speech synthesis. Explanation and saving still work.'],
  speechFailed:['朗读未完成，请重试。','Reading aloud did not finish. Try again.'],
+ panelLabel:['Sensa 阅读','Sensa reading'],
+ panelDrag:['拖动阅读浮层','Move the reading panel'],
+ panelDragHint:['拖动位置；聚焦后可用方向键移动','Drag to move; use arrow keys when focused'],
+ panelCollapse:['收起','Collapse'],
+ panelSelectedActions:['选中文字的操作','Selected text actions'],
+ panelExplain:['句中解释','Explain in context'],
+ panelSavePreview:['保存…','Save…'],
+ panelTranslate:['翻译','Translate'],
+ panelClose:['关闭','Close'],
+ panelCurrentPage:['当前网页','Current page'],
+ panelExplainHint:['点击「句中解释」了解这个表达；也可以先保存原句。','Select “Explain in context” to understand this expression, or save the sentence first.'],
+ panelCrossSentence:['本次选区跨越句子，可先保存待处理。','This selection crosses sentence boundaries. You can save it for clarification.'],
+ panelDetailedMeaning:['详细意思','Detailed meaning'],
+ panelExpandContext:['扩展上下文','Expand context'],
+ panelOriginalContext:['使用原上下文','Use original context'],
+ panelContextAdjusted:['上下文已调整，点击「句中解释」重新解释。','The context changed. Explain the expression again.'],
+ panelPageChanged:['页面已变化，请在当前页面重新划选。','The page changed. Select the text again.'],
+ pageLabel:['Sensa 网页阅读','Sensa page reading'],
+ pageHeading:['Sensa 阅读','Sensa reading'],
+ pageTranslate:['翻译页面','Translate page'],
+ pageOnlyTranslation:['仅译文','Translation only'],
+ pageRestore:['恢复原文','Restore original'],
+ pageRetry:['重试失败段落','Retry failed paragraphs'],
+ pageSpeak:['朗读本页','Read this page aloud'],
+ pageShortcut:['Alt + T 翻译鼠标所在段落 · 在输入框里则翻译你写的内容','Alt + T translates the paragraph under your pointer, or what you wrote in a text field'],
+ pageTranslated:['已翻译 {count} 段','Translated {count} paragraphs'],
+ pageSkipped:['跳过 {count} 段你已能读的文字（Alt + T 仍可翻译）','Skipped {count} paragraphs you can already read (Alt + T still translates them)'],
+ pageTranslating:['正在翻译…','Translating…'],
+ pageFailed:['{count} 段失败，可重试','{count} paragraphs failed; retry available'],
+ pageContinue:['滚动时继续。','Continue scrolling to translate more.'],
+ pageRestored:['已恢复原文。Alt + T 翻译鼠标所在段落。','Original text restored. Alt + T translates the paragraph under your pointer.'],
+ pageBilingual:['双语显示','Bilingual display'],
+ pageNoReadableText:['这一页没有可朗读的文字。','There is no readable text on this page.'],
+ pageStopSpeaking:['停止朗读','Stop reading aloud'],
+ pageSpeakingParagraph:['正在朗读第 {index}/{total} 段：{preview}','Reading paragraph {index} of {total}: {preview}'],
+ pageSpeechDone:['本页朗读完毕。','Finished reading this page aloud.'],
+ provider_vault_unavailable:['服务端尚未启用安全凭据存储，请联系服务维护者。','Secure credential storage is unavailable on the server. Contact the service maintainer.'],
+ provider_origin_not_allowed:['此服务地址尚未获服务端支持，请使用设置中列出的服务。','This service address is not supported by the server. Use a service listed in settings.'],
+ provider_key_required:['请输入该连接的 API Key。','Enter the API key for this connection.'],
+ settings_conflict:['设置已在另一处更新，请重新加载后再保存。','Settings changed elsewhere. Reload before saving.'],
+ provider_auth_failed:['模型连接认证失败，请检查密钥。','Model authentication failed. Check the API key.'],
+ provider_rate_limited:['模型服务正在限流，请稍后重试。','The model service is rate limiting requests. Try again later.'],
+ reading_busy:['还有阅读请求正在处理，请稍后重试。','Another reading request is still running. Try again shortly.'],
+ reading_timeout:['请求超时，请重试。','The request timed out. Try again.'],
+ reading_interrupted:['连接已中断，内容尚未完成，请重试。','The connection was interrupted before the result was ready. Try again.'],
+ writingLabel:['Sensa 输入框翻译','Sensa writing translation'],
+ writingReplace:['替换输入框内容','Replace text in the field'],
+ writingEmpty:['输入框里还没有内容。','The text field is empty.'],
+ writingTooLong:['这段文字太长（{count} 字符），请分段翻译。','This text is too long ({count} characters). Translate it in smaller parts.'],
+ writingTranslating:['正在翻译…','Translating…'],
+ videoLabel:['Sensa 视频阅读','Sensa video reading'],
+ videoHeading:['YouTube · Sensa 阅读','YouTube · Sensa reading'],
+ videoLoad:['加载字幕','Load captions'],
+ videoPause:['暂停 / 固定字幕','Pause / pin captions'],
+ videoPlay:['继续播放','Resume playback'],
+ videoPrevious:['上一句','Previous caption'],
+ videoReplay:['重听本句','Replay caption'],
+ videoSpeak:['朗读本句','Read caption aloud'],
+ videoNext:['下一句','Next caption'],
+ videoOriginalLabel:['当前原字幕','Current original caption'],
+ videoTranslationLabel:['当前字幕译文','Current caption translation'],
+ videoTranslate:['翻译本句','Translate caption'],
+ videoDisplay:['字幕显示','Caption display'],
+ videoOriginal:['原文','Original'],
+ videoBilingual:['双语（自动翻译）','Bilingual (automatic translation)'],
+ videoTranslation:['仅译文（自动翻译）','Translation only (automatic)'],
+ videoHint:['加载字幕后，选择表达即可解释与保存；选择时暂停视频。','Load captions, then select an expression to explain or save it. Selection pauses the video.'],
+ videoOwnFile:['使用自己的字幕文件','Use your own subtitle file'],
+ videoFileHint:['没有可读取字幕时，可加载当前视频的 VTT / SRT 字幕文件。云端 AI 转录尚未接入。','If no captions are available, load a VTT or SRT file for this video. Cloud AI transcription is not available yet.'],
+ videoLoadFile:['加载字幕文件','Load subtitle file'],
+ videoRetry:['重试翻译','Retry translation'],
+ videoAd:['广告播放中，暂停字幕采集。','Ad playing. Caption collection is paused.'],
+ videoPinned:['已固定字幕，继续播放后恢复跟随。','Caption pinned. Following resumes when playback continues.'],
+ videoLoading:['正在读取当前视频的字幕…','Loading captions for this video…'],
+ videoUnknownLanguage:['语言未定','Unknown language'],
+ videoLoadedReadable:['已加载 {count} 段字幕（{language}）。这就是你已能读的语言，自动翻译已跳过；仍可按「翻译本句」。','Loaded {count} captions ({language}). You can already read this language, so automatic translation was skipped. You can still select “Translate caption”.'],
+ videoLoaded:['已加载 {count} 段字幕（{language}）。选择文字即可解释与保存。','Loaded {count} captions ({language}). Select text to explain or save it.'],
+ videoLiveUnsupported:['当前直播字幕尚不支持。','Live captions are not supported yet.'],
+ videoNoCaptions:['未找到可读取的字幕。可检查视频字幕设置，或加载自己的字幕文件。','No readable captions found. Check the video caption settings or load your own subtitle file.'],
+ videoLoadFailed:['字幕读取失败，请重试或加载自己的字幕文件。','Could not load captions. Retry or load your own subtitle file.'],
+ videoPlayerPlay:['请使用视频播放器的播放按钮继续。','Use the video player’s play button to continue.'],
+ videoExpand:['展开','Expand'],
+ videoFileTooLarge:['字幕文件超过 2 MB，请选择较小的文件。','The subtitle file exceeds 2 MB. Choose a smaller file.'],
+ videoFileLoaded:['已加载 {count} 段字幕，请确认它们对应当前视频。{suffix}','Loaded {count} captions. Check that they match this video. {suffix}'],
+ videoReadableSuffix:['这就是你已能读的语言，自动翻译已跳过；仍可按「翻译本句」。','You can already read this language, so automatic translation was skipped. You can still select “Translate caption”.'],
+ videoInvalidFile:['无法读取字幕，请使用有效的 VTT / SRT 文件。','Could not read captions. Use a valid VTT or SRT file.'],
+ videoFollowing:['已恢复字幕跟随。','Caption following resumed.'],
+ videoSeeked:['已定位到新位置，播放后恢复字幕跟随。','Moved to a new position. Caption following resumes on playback.'],
+ optionsTitle:['Sensa 阅读设置','Sensa reading settings'],
+ optionsHeading:['阅读设置','Reading settings'],
+ optionsIntro:['登录 Sensa 后即可使用网页、划词和视频阅读服务，无需填写模型密钥。保存内容后可在主应用继续处理。','Sign in to Sensa to use page, selection, and video reading without entering a model key. Continue working with saved content in the main app.'],
+ optionsReading:['正在读取设置…','Loading settings…'],
+ optionsService:['Sensa 服务','Sensa service'],
+ optionsChecking:['正在检查账号与服务…','Checking account and service…'],
+ optionsAccount:['打开 Sensa 账号与服务','Open Sensa account and service'],
+ optionsRefresh:['刷新服务状态','Refresh service status'],
+ optionsAdvanced:['高级设置 · 自定义模型服务','Advanced settings · Custom model service'],
+ optionsConnections:['模型连接','Model connections'],
+ optionsKeyNotice:['密钥保存到 Sensa 服务端，读取设置时不会返回。连接测试会发送一次实际请求，可能产生费用。','Keys are stored on the Sensa server and are not returned when settings load. A connection test sends a real request and may incur a charge.'],
+ optionsAdd:['添加连接','Add connection'],
+ optionsAssignments:['各项功能使用的模型','Models used by each feature'],
+ optionsDefaultHint:['选择“Sensa 默认”使用服务端提供的默认模型。句中解释需要模型支持结构化输出。','Choose “Sensa default” to use the server’s default model. Context explanations require structured output support.'],
+ optionsSaveModel:['保存模型设置','Save model settings'],
+ optionsReloadAdvanced:['重新加载高级设置','Reload advanced settings'],
+ optionsLocalPrefs:['本机阅读偏好','Local reading preferences'],
+ optionsActionName:['自定义阅读动作名称','Custom reading action name'],
+ optionsActionPrompt:['阅读指令','Reading instruction'],
+ optionsDisabledSites:['暂停阅读工具的网站（每行一个完整域名）','Sites where reading tools are off (one full domain per line)'],
+ optionsSpeechRate:['朗读语速','Speech rate'],
+ optionsSpeechVoice:['朗读音色','Speech voice'],
+ optionsAutomaticVoice:['自动选择（按文字语言）','Automatic (based on text language)'],
+ optionsShortcuts:['快捷键','Shortcuts'],
+ optionsShortcutHint:['Alt + T 翻译鼠标所在段落（焦点在输入框里时翻译你写的内容）；松开 Shift 翻译选中的文字；Esc 关闭阅读浮层。朗读使用浏览器本机语音，按文字自己的语言选择，不联网；页面面板里的“朗读本页”按文档顺序整页朗读。站点偏好只影响本机，也可以在页面上用“本站不再开启阅读”直接写入。','Alt + T translates the paragraph under your pointer (or your writing when a text field has focus); releasing Shift translates selected text; Esc closes the reading panel. Speech uses your browser’s local voice for the text’s language. “Read this page aloud” follows document order. Site preferences apply only to this device and can also be changed from the page.'],
+ optionsSavePrefs:['保存本机偏好','Save local preferences'],
+ optionsSelection:['划词翻译','Selection translation'],
+ optionsPage:['网页翻译','Page translation'],
+ optionsSubtitles:['视频字幕','Video captions'],
+ optionsAction:['自定义阅读动作','Custom reading action'],
+ optionsMeaning:['句中意义解释','Explain meaning in context'],
+ optionsWriting:['输入框翻译','Writing translation'],
+ optionsNewConnection:['新连接','New connection'],
+ optionsName:['名称','Name'],
+ optionsBaseUrl:['兼容 API 基础地址','Compatible API base URL'],
+ optionsModelId:['模型标识','Model identifier'],
+ optionsFetchModels:['获取已保存连接的模型列表','Get models for saved connection'],
+ optionsModelsFetched:['已获取 {count} 个模型，点击模型输入框选择或继续手填。','Found {count} models. Select one from the model field or enter one manually.'],
+ optionsParameters:['高级参数','Advanced parameters'],
+ optionsTemperature:['Temperature（不确定时保持 0）','Temperature (keep at 0 if unsure)'],
+ optionsKeyConfigured:['API Key（已配置，留空保留）','API key (configured; leave blank to keep)'],
+ optionsEnabled:['启用此连接','Enable this connection'],
+ optionsRemove:['移除此连接','Remove this connection'],
+ optionsTest:['测试已保存连接','Test saved connection'],
+ optionsTesting:['正在测试已保存的连接…','Testing saved connection…'],
+ optionsTestSuccess:['连接成功。结构化解释能力仍需在实际功能中验证。','Connection succeeded. Structured explanations still need verification in the actual feature.'],
+ optionsDefault:['Sensa 默认','Sensa default'],
+ optionsOrigins:['支持的服务地址：{origins}','Supported service addresses: {origins}'],
+ optionsLoaded:['模型设置已加载。','Model settings loaded.'],
+ optionsVaultUnavailable:['当前服务尚未启用安全凭据存储；可以使用已配置的 Sensa 默认服务。','Secure credential storage is not enabled on this service. You can use the configured Sensa default service.'],
+ optionsModelSaved:['模型设置已保存。密钥已从表单清除。','Model settings saved. Keys were cleared from the form.'],
+ optionsPrefsSaved:['本机偏好已保存，重新开启页面阅读后生效。','Local preferences saved. Restart page reading for them to take effect.'],
+ optionsAccountConnected:['账号已连接。','Account connected.'],
+ optionsExplanationReady:['解释服务可用。','Explanation service available.'],
+ optionsExplanationUnavailable:['解释服务暂不可用。','Explanation service is temporarily unavailable.'],
+ optionsLastDay:['最近 24 小时：','Past 24 hours: '],
+ optionsUsageReading:['网页阅读','Web reading'],
+ optionsUsageTeacher:['澄清与解析','Clarification and analysis'],
+ optionsUsageContent:['材料准备','Material preparation'],
+ optionsSignIn:['请从插件弹窗登录 Sensa。','Sign in to Sensa from the extension popup.'],
+ optionsMissingVoice:['{name}（本机没有这个音色）','{name} (this voice is unavailable on this device)'],
+ optionsPrefsLoaded:['阅读偏好已加载。自定义模型服务可在高级设置中调整。','Reading preferences loaded. Custom model services can be adjusted in advanced settings.'],
+ backgroundContinue:['继续','Resume'],
+ backgroundContinueHint:['点一次 Sensa 图标，继续当前网站的阅读模式','Click the Sensa icon to resume reading on this site'],
 } as const;
 export type MessageKey=keyof typeof messages;
-export const extensionLanguage=()=>navigator.language.toLowerCase().startsWith('zh')?'zh-CN':'en';
-export function t(key:MessageKey,values:Record<string,string|number>={}){let value:string=messages[key][extensionLanguage()==='zh-CN'?0:1];for(const [name,item] of Object.entries(values))value=value.replaceAll('{'+name+'}',String(item));return value;}
+export const extensionLocales=['zh-CN','en','ja','zh-TW','ko','es','fr','de','pt-BR','it','ru','id','vi','pl','tr'] as const;
+export type ExtensionLocale=typeof extensionLocales[number];
+const additional:Partial<Record<ExtensionLocale,Record<string,string>>>={ja, 'zh-TW':zhTw,ko,es,fr,de,'pt-BR':ptBr,it,ru,id,vi,pl,tr};
+export function extensionLanguage():ExtensionLocale{
+ const raw=navigator.language;
+ let canonical:string;
+ try{canonical=Intl.getCanonicalLocales(raw)[0]??'';}catch{canonical='';}
+ const exact=extensionLocales.find(locale=>locale.toLowerCase()===canonical.toLowerCase());
+ if(exact)return exact;
+ const primary=canonical.split('-')[0]!.toLowerCase();
+ if(primary==='zh')return /(?:tw|hk|mo|hant)/iu.test(canonical)?'zh-TW':'zh-CN';
+ if(primary==='pt')return 'en';
+ return extensionLocales.find(locale=>locale.split('-')[0]!.toLowerCase()===primary)??'en';
+}
+export function t(key:MessageKey,values:Record<string,string|number>={}){
+ const locale=extensionLanguage();
+ let value:string=additional[locale]?.[key]??messages[key][locale==='zh-CN'?0:1];
+ for(const [name,item] of Object.entries(values))value=value.replaceAll('{'+name+'}',String(item));
+ return value;
+}
 export function errorText(error:unknown){const code=error instanceof Error?error.message:String(error);return code in messages?t(code as MessageKey):/Extension context invalidated|Receiving end does not exist/iu.test(code)?t('extension_reload_required'):t(code==='Failed to fetch'||code==='network_failed'?'networkFailed':code==='model_cancelled'||code==='TimeoutError'?'timeout':code==='provider_invalid_response'?'model_invalid_response':'failed');}

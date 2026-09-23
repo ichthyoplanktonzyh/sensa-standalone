@@ -1,5 +1,6 @@
 import {runReading,readingError} from './readingClient';
 import {surroundingText} from './pageReading';
+import {t,extensionLanguage} from './i18n';
 
 /**
  * What the learner is writing, translated into the language they are learning.
@@ -59,10 +60,11 @@ export function replaceFieldText(field:HTMLElement,text:string){
  * translation can never be inserted into some other field the learner has since
  * clicked into. */
 export function createInputTranslation(accountId:string,isAuthorized:()=>boolean){
- const host=document.createElement('div');host.dataset.sensaUi='writing';
+ const host=document.createElement('div');host.dataset.sensaUi='writing';host.lang=extensionLanguage();
  const root=host.attachShadow({mode:'open'});
- root.innerHTML=`<style>:host{all:initial}section{position:fixed;max-width:340px;padding:10px;background:#fbfbfa;border:1px solid #bbc5da;border-radius:12px;box-shadow:0 4px 20px #0002;font:13px/1.5 system-ui;color:#242a38}div{max-height:180px;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:white;border:1px solid #e0e5ee;border-radius:8px;padding:8px;margin-bottom:6px}button{font:inherit;min-height:34px;background:white;color:#303f76;border:1px solid #bcc7df;border-radius:7px;padding:5px 9px;margin:2px;cursor:pointer}button:focus-visible{outline:3px solid #5268a9}p{margin:6px 2px;overflow-wrap:anywhere}</style><section aria-label="Sensa 输入框翻译"><div role="status" aria-live="polite"></div><button data-action="replace" hidden>替换输入框内容</button><button data-action="close">关闭</button><p hidden></p></section>`;
+ root.innerHTML=`<style>:host{all:initial}section{position:fixed;max-width:340px;padding:10px;background:#fbfbfa;border:1px solid #bbc5da;border-radius:12px;box-shadow:0 4px 20px #0002;font:13px/1.5 system-ui;color:#242a38}div{max-height:180px;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:white;border:1px solid #e0e5ee;border-radius:8px;padding:8px;margin-bottom:6px}button{font:inherit;min-height:34px;background:white;color:#303f76;border:1px solid #bcc7df;border-radius:7px;padding:5px 9px;margin:2px;cursor:pointer}button:focus-visible{outline:3px solid #5268a9}p{margin:6px 2px;overflow-wrap:anywhere}</style><section><div role="status" aria-live="polite"></div><button data-action="replace" hidden></button><button data-action="close"></button><p hidden></p></section>`;
  const panel=root.querySelector<HTMLElement>('section')!,answer=root.querySelector<HTMLDivElement>('div')!,replace=root.querySelector<HTMLButtonElement>('[data-action="replace"]')!,close=root.querySelector<HTMLButtonElement>('[data-action="close"]')!,note=root.querySelector<HTMLParagraphElement>('p')!;
+ panel.setAttribute('aria-label',t('writingLabel'));replace.textContent=t('writingReplace');close.textContent=t('panelClose');
  let field:HTMLElement|null=null,generation=0,controller:AbortController|null=null,translated='';
  function hide(){
   generation++;controller?.abort();controller=null;field=null;translated='';
@@ -82,10 +84,10 @@ export function createInputTranslation(accountId:string,isAuthorized:()=>boolean
   hide();
   if(!isAuthorized())return;
   field=target;document.documentElement.append(host);place();
-  if(!text)return say('输入框里还没有内容。');
-  if(text.length>maxWritableCharacters)return say(`这段文字太长（${text.length} 字符），请分段翻译。`);
+  if(!text)return say(t('writingEmpty'));
+  if(text.length>maxWritableCharacters)return say(t('writingTooLong',{count:text.length}));
   const run=++generation;controller=new AbortController();
-  answer.setAttribute('aria-busy','true');answer.textContent='正在翻译…';
+  answer.setAttribute('aria-busy','true');answer.textContent=t('writingTranslating');
   try{
    // The field's surroundings are what the learner is replying to, so the topic and
    // the tone travel with their sentence. Nothing is skipped here: this is the

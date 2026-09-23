@@ -13,5 +13,7 @@ export const resources={
 export async function loadCommonMessages(locale:InterfaceLocale):Promise<Record<string,unknown>>{
   if(locale==='zh-CN')return zhCN;
   if(locale==='en')return en;
-  return (await import('./locales/ja/common.json')).default;
+  if(locale==='ja')return (await import('./locales/ja/common.json')).default;
+  const {loadAdditionalMessages}=await import('./additionalMessages');
+  return loadAdditionalMessages(locale,'common');
 }

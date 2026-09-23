@@ -1,0 +1,18 @@
+{
+  "referenceExample": {
+    "title": "사전 예문",
+    "back": "사전으로 돌아가기",
+    "current": "현재 사전 예문",
+    "sense": "관련 의미",
+    "hideTranslation": "번역 숨기기",
+    "showTranslation": "번역 보기",
+    "noTranslation": "이 출처에는 번역이 없습니다.",
+    "noSource": "출처 정보를 사용할 수 없습니다",
+    "noDefinition": "이 의미의 정의를 사용할 수 없습니다.",
+    "unavailable": "예문을 사용할 수 없습니다",
+    "empty": "이 의미에 해당하는 예문이 없습니다",
+    "emptyHint": "정의를 읽으려면 사전으로 돌아가세요. 다른 의미의 예문으로 대체하지 않습니다.",
+    "position": "{{total}}개 중 {{current}}번째 예문",
+    "boundary": "사전 예문은 검토된 학습 예문이 아닐 수 있습니다. 열람해도 학습 진도는 바뀌지 않습니다."
+  }
+}

@@ -46,9 +46,9 @@ export function StudyCalendar({account}: {account?: AccountCalendarState} = {}) 
   return <section className="mt-8 rounded-overlay border border-border-subtle bg-surface-panel p-6 sm:p-8" aria-labelledby="study-checkin-title">
     <div className="grid gap-8 lg:grid-cols-[1fr_1.2fr]">
       <div><h2 id="study-checkin-title" className="text-xl font-medium">{t('study.calendar.title')}</h2><p className="mt-3 text-sm leading-6 text-fg-tertiary">{t('study.calendar.note')}</p>
-        <button disabled={signed||pending||account?.busy} className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-control bg-action-primary px-5 text-sm text-action-on-primary transition-colors hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:bg-surface-subtle disabled:text-fg-secondary" onClick={()=>{if(account){account.onCheckIn();return;}try{setDates(recordCheckin(new Date()));setToday(new Date());setError(false);}catch{setError(true);}}}>{signed&&<Check size={16}/ >}{pending ? '签到待同步' : t(signed?'study.calendar.signed':'study.calendar.sign')}</button>
-        {account?.uncertain&&<p role="status" className="mt-3 text-sm text-feedback-warning">有签到时间需要核对。原记录已保留，请联网校准后重新确认今天的签到。</p>}
-        {account&&<p className="mt-3 text-xs text-fg-tertiary">虚线为待同步，按账号时区 {account.timeZone} 记录。</p>}
+        <button disabled={signed||pending||account?.busy} className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-control bg-action-primary px-5 text-sm text-action-on-primary transition-colors hover:bg-action-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:bg-surface-subtle disabled:text-fg-secondary" onClick={()=>{if(account){account.onCheckIn();return;}try{setDates(recordCheckin(new Date()));setToday(new Date());setError(false);}catch{setError(true);}}}>{signed&&<Check size={16}/ >}{t(pending?'study.calendar.pending':signed?'study.calendar.signed':'study.calendar.sign')}</button>
+        {account?.uncertain&&<p role="status" className="mt-3 text-sm text-feedback-warning">{t('study.calendar.uncertain')}</p>}
+        {account&&<p className="mt-3 text-xs text-fg-tertiary">{t('study.calendar.timeZone',{timeZone:account.timeZone})}</p>}
         {error&&<p role="alert" className="mt-3 text-sm text-feedback-danger">{t('study.calendar.error')}</p>}
       </div>
       <div>
@@ -57,13 +57,13 @@ export function StudyCalendar({account}: {account?: AccountCalendarState} = {}) 
           {!currentMonth&&<button className="min-h-10 px-2 text-xs text-fg-secondary focus-visible:outline-2 focus-visible:outline-focus" onClick={()=>setMonth(new Date(today.getFullYear(),today.getMonth(),1))}>{t('study.calendar.current')}</button>}
           <button disabled={currentMonth} className="grid size-10 place-items-center rounded-control hover:bg-surface-selected focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-25" onClick={()=>move(1)} aria-label={t('study.calendar.next')}><ChevronRight size={18}/></button>
         </div></div>
-        <div role="grid" aria-label="签到日历" className="grid grid-cols-7 gap-y-2 text-center text-sm">
+        <div role="grid" aria-label={t('study.calendar.title')} className="grid grid-cols-7 gap-y-2 text-center text-sm">
           {Array.from({length:7},(_,index)=><span key={'week'+index} className="pb-2 text-xs text-fg-tertiary">{new Intl.DateTimeFormat(i18n.language,{weekday:'short'}).format(new Date(2026,8,7+index))}</span>)}
           {Array.from({length:offset},(_,index)=><span aria-hidden="true" key={'blank'+index}/>)}
           {Array.from({length:dayCount},(_,index)=>{
             const date=new Date(month.getFullYear(),month.getMonth(),index+1);
             const key=checkinDateKey(date), recorded=visibleDates.includes(key), isToday=key===todayKey,waiting=account?.pending.includes(key);
-            return <span role="gridcell" key={key} aria-current={isToday?'date':undefined} aria-label={`${key} ${recorded?'已签到':waiting?'待同步':'未签到'}`} className={`relative mx-auto grid size-9 place-items-center rounded-pill tabular-nums ${recorded?'bg-surface-selected text-action-primary':key>todayKey?'text-fg-tertiary opacity-45':'text-fg-secondary'} ${waiting?'border border-dashed border-focus':''} ${isToday?'ring-1 ring-focus ring-offset-2 ring-offset-surface-panel':''}`}>{index+1}{recorded&&<span aria-hidden="true" className="absolute bottom-0.5 size-1 rounded-pill bg-action-primary"/>}</span>;
+            return <span role="gridcell" key={key} aria-current={isToday?'date':undefined} aria-label={`${key} ${t(recorded?'study.calendar.recorded':waiting?'study.calendar.pending':'study.calendar.notRecorded')}`} className={`relative mx-auto grid size-9 place-items-center rounded-pill tabular-nums ${recorded?'bg-surface-selected text-action-primary':key>todayKey?'text-fg-tertiary opacity-45':'text-fg-secondary'} ${waiting?'border border-dashed border-focus':''} ${isToday?'ring-1 ring-focus ring-offset-2 ring-offset-surface-panel':''}`}>{index+1}{recorded&&<span aria-hidden="true" className="absolute bottom-0.5 size-1 rounded-pill bg-action-primary"/>}</span>;
           })}
         </div>
       </div>

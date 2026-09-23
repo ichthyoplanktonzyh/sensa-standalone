@@ -1,0 +1,18 @@
+{
+  "referenceExample": {
+    "title": "Exemplos do dicionário",
+    "back": "Voltar ao dicionário",
+    "current": "Exemplo atual do dicionário",
+    "sense": "Sentido relacionado",
+    "hideTranslation": "Ocultar tradução",
+    "showTranslation": "Mostrar tradução",
+    "noTranslation": "Esta fonte não fornece uma tradução.",
+    "noSource": "Informações da fonte indisponíveis",
+    "noDefinition": "Não há definição disponível para este sentido.",
+    "unavailable": "Exemplo indisponível",
+    "empty": "Não há exemplos para este sentido",
+    "emptyHint": "Volte ao dicionário para ler a definição. Exemplos de outros sentidos não serão usados como substitutos.",
+    "position": "Exemplo {{current}} de {{total}}",
+    "boundary": "Os exemplos do dicionário não são necessariamente exemplos de aprendizagem revisados. Visualizá-los não altera o progresso de aprendizagem."
+  }
+}

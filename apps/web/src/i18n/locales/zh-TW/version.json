@@ -1,0 +1,7 @@
+{
+  "conflictTitle": "另一個 Sensa 標籤頁正在執行不同版本",
+  "conflictDescription": "請先關閉其他 Sensa 分頁，再重新載入此頁面。為保護你的資料，本機資料庫存取已暫停。",
+  "updateTitle": "Sensa 更新已準備好",
+  "updateDescription": "現在更新，使目前頁面、離線檔案和本地資料庫保持同一版本。",
+  "updateNow": "立即更新"
+}

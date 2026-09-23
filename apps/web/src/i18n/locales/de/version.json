@@ -1,0 +1,7 @@
+{
+  "conflictTitle": "Ein anderer Sensa-Tab verwendet eine andere Version",
+  "conflictDescription": "Schließen Sie die anderen Sensa-Tabs und laden Sie diese Seite neu. Der Zugriff auf die lokale Bibliothek ist zum Schutz Ihrer Daten pausiert.",
+  "updateTitle": "Ein Sensa-Update ist verfügbar",
+  "updateDescription": "Aktualisieren Sie jetzt, damit diese Seite, Offline-Dateien und die lokale Bibliothek dieselbe Version verwenden.",
+  "updateNow": "Jetzt aktualisieren"
+}

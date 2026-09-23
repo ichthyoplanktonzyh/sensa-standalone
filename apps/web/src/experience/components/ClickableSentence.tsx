@@ -1,6 +1,7 @@
 import { useMemo, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import type { SentenceToken } from '../types';
 import { tokenizeSentence } from '../utils/sentenceTokenizer';
+import {useTranslation} from 'react-i18next';
 
 interface ClickableSentenceProps {
   sentenceHtml: string;
@@ -17,6 +18,7 @@ export const ClickableSentence = ({
   onWordClick,
   className = '',
 }: ClickableSentenceProps) => {
+  const {t}=useTranslation('learning');
   const { tokens } = useMemo(() => tokenizeSentence(sentenceHtml), [sentenceHtml]);
 
   return (
@@ -59,8 +61,8 @@ export const ClickableSentence = ({
               e.stopPropagation();
               onWordClick(token, idx);
             }}
-            aria-label={`查词：${token.text}`}
-            title="点击查词"
+            aria-label={t('quickDict.lookupWord',{word:token.text})}
+            title={t('quickDict.clickToLookup')}
           >
             {token.text}
           </button>

@@ -1,0 +1,18 @@
+{
+  "referenceExample": {
+    "title": "Wörterbuchbeispiele",
+    "back": "Zurück zum Wörterbuch",
+    "current": "Aktuelles Wörterbuchbeispiel",
+    "sense": "Verwandte Bedeutung",
+    "hideTranslation": "Übersetzung ausblenden",
+    "showTranslation": "Übersetzung anzeigen",
+    "noTranslation": "Diese Quelle enthält keine Übersetzung.",
+    "noSource": "Quellenangaben nicht verfügbar",
+    "noDefinition": "Für diese Bedeutung ist keine Definition verfügbar.",
+    "unavailable": "Beispiel nicht verfügbar",
+    "empty": "Keine Beispiele für diese Bedeutung",
+    "emptyHint": "Kehren Sie zum Wörterbuch zurück, um die Definition zu lesen. Beispiele zu anderen Bedeutungen werden nicht ersatzweise angezeigt.",
+    "position": "Beispiel {{current}} von {{total}}",
+    "boundary": "Wörterbuchbeispiele wurden möglicherweise nicht als Lernbeispiele geprüft. Das Anzeigen verändert den Lernfortschritt nicht."
+  }
+}

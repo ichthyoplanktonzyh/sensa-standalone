@@ -1,13 +1,6 @@
 import type {ReadingRequest,CaptureSnapshot,SemanticLookupView} from '@sensa/contracts/sensa';
-export const readingError=(error:unknown)=>({
-  provider_not_configured:'Sensa 服务暂不可用，请稍后重试或查看账号与服务。',provider_vault_unavailable:'服务端尚未启用安全凭据存储，请联系服务维护者。',
-  provider_origin_not_allowed:'此服务地址尚未获服务端支持，请使用设置中列出的服务。',provider_key_required:'请输入该连接的 API Key。',
-  settings_conflict:'设置已在另一处更新，请重新加载后再保存。',provider_auth_failed:'模型连接认证失败，请检查密钥。',
-  provider_rate_limited:'模型服务正在限流，请稍后重试。',reading_daily_budget:'最近 24 小时阅读请求已达上限，保存原文仍可使用。',
-  reading_busy:'还有阅读请求正在处理，请稍后重试。',reading_timeout:'请求超时，请重试。',authentication_required:'请先连接 Sensa 账号。',
-  account_mismatch:'账号已变化，请重新打开阅读模式。',provider_invalid_response:'模型返回的内容不完整，请重试。',
-  reading_interrupted:'连接已中断，内容尚未完成，请重试。',
-}[error instanceof Error?error.message:String(error)]??'暂时无法完成，请检查连接后重试。');
+import {errorText} from './i18n';
+export const readingError=errorText;
 function portRequest<T>(name:string,payload:unknown,progress:(text:string)=>void,signal?:AbortSignal):Promise<T>{
   return new Promise<T>((resolve,reject)=>{
     const port=chrome.runtime.connect({name});let settled=false;

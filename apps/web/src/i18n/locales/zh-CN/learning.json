@@ -435,7 +435,11 @@
       "previous": "上个月",
       "next": "下个月",
       "current": "本月",
-      "error": "签到记录暂时无法保存或读取，请重试。"
+      "error": "签到记录暂时无法保存或读取，请重试。",
+      "pending": "签到待同步",
+      "uncertain": "有签到时间需要核对。原记录已保留，请联网校准后重新确认今天的签到。",
+      "timeZone": "虚线为待同步，按账号时区 {{timeZone}} 记录。",
+      "notRecorded": "未签到"
     },
     "title": "我的学习",
     "back": "返回",
@@ -492,5 +496,20 @@
       "review": "复习与巩固",
       "complete": "已完成首次学习 / 已会"
     }
+  },
+  "quickDict": {
+    "detailUnavailable": "“{{word}}” 的完整 Reference 条目暂不可用",
+    "close": "关闭快速查词",
+    "playUs": "播放 {{word}} 的美式发音",
+    "us": "美",
+    "briefMeanings": "简明义项",
+    "noBriefMeanings": "当前没有可展示的 Reference 简明义项，请查看完整词条。",
+    "querying": "正在查询…",
+    "unavailable": "暂不可用",
+    "viewDetails": "查看详细释义",
+    "lookupWord": "查词：{{word}}",
+    "clickToLookup": "点击查词",
+    "loading": "正在查询词典…",
+    "error": "暂时没有取得这个词的词典结果，请稍后重试。"
   }
 }

@@ -1,0 +1,7 @@
+{
+  "conflictTitle": "Inna karta Sensa działa w innej wersji",
+  "conflictDescription": "Zamknij pozostałe karty Sensa, a następnie odśwież tę stronę. Dostęp do lokalnej biblioteki jest wstrzymany w celu ochrony danych.",
+  "updateTitle": "Aktualizacja Sensa jest gotowa",
+  "updateDescription": "Zaktualizuj teraz, aby ta strona, pliki offline i lokalna biblioteka korzystały z tej samej wersji.",
+  "updateNow": "Aktualizuj teraz"
+}

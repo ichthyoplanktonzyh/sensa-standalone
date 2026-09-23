@@ -1,0 +1,7 @@
+{
+  "conflictTitle": "Un autre onglet Sensa utilise une version différente",
+  "conflictDescription": "Fermez les autres onglets Sensa, puis rechargez cette page. L’accès à la bibliothèque locale est suspendu pour protéger vos données.",
+  "updateTitle": "Une mise à jour de Sensa est prête",
+  "updateDescription": "Mettez à jour maintenant pour garder cette page, les fichiers hors ligne et la bibliothèque locale sur la même version.",
+  "updateNow": "Mettre à jour maintenant"
+}

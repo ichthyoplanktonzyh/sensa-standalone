@@ -1,6 +1,6 @@
 import {webUrl} from './config';
 import {t,errorText,extensionLanguage,type MessageKey} from './i18n';
-import {sensaLanguageDisplayName} from '@sensa/contracts/sensa';
+import {interfaceLanguageName} from './interfaceLanguageName';
 const status=document.querySelector<HTMLParagraphElement>('#status')!;
 const buttons=Array.from(document.querySelectorAll<HTMLButtonElement>('button'));
 const routeSelect=document.querySelector<HTMLSelectElement>('#language-route')!;
@@ -18,7 +18,7 @@ async function act(kind:string){
   routeSelect.replaceChildren();
   for(const route of v.language.collection.routes.filter((item:{status:string})=>item.status==='active')){
    const option=document.createElement('option');option.value=route.id;
-   option.textContent=t('routeOption',{target:sensaLanguageDisplayName(route.targetLanguageTag,extensionLanguage()),support:sensaLanguageDisplayName(route.defaultSupportLanguageTag,extensionLanguage())});
+   option.textContent=t('routeOption',{target:interfaceLanguageName(route.targetLanguageTag),support:interfaceLanguageName(route.defaultSupportLanguageTag)});
    option.selected=route.id===v.language.context.languageRouteId;routeSelect.append(option);
   }
   document.getElementById('login')!.textContent=t(v.accountId?'account':'login');

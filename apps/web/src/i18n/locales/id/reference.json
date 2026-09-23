@@ -1,0 +1,18 @@
+{
+  "referenceExample": {
+    "title": "Contoh kamus",
+    "back": "Kembali ke kamus",
+    "current": "Contoh kamus saat ini",
+    "sense": "Makna terkait",
+    "hideTranslation": "Sembunyikan terjemahan",
+    "showTranslation": "Tampilkan terjemahan",
+    "noTranslation": "Sumber ini tidak menyediakan terjemahan.",
+    "noSource": "Informasi sumber tidak tersedia",
+    "noDefinition": "Definisi untuk makna ini tidak tersedia.",
+    "unavailable": "Contoh tidak tersedia",
+    "empty": "Tidak ada contoh untuk makna ini",
+    "emptyHint": "Kembali ke kamus untuk membaca definisi. Contoh dari makna lain tidak akan ditampilkan sebagai pengganti.",
+    "position": "Contoh {{current}} dari {{total}}",
+    "boundary": "Contoh kamus belum tentu merupakan contoh belajar yang telah ditinjau. Melihatnya tidak mengubah progres belajar."
+  }
+}

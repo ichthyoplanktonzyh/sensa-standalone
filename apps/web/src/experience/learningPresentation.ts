@@ -1,13 +1,18 @@
 import type { RuntimeLearningContent, LearningExample } from '../learning/content/learningCatalog';
 import type { Word } from './types';
+import i18n from '../i18n';
 
 /** Presentation-only bridge required by the existing detail and learning cards. */
 export function toWordPresentation(content: RuntimeLearningContent): Word {
+  const label=(learningKey:string,contentKey:string)=>i18n.hasResourceBundle(i18n.language,'learning')
+    ? i18n.t(learningKey,{ns:'learning'})
+    : i18n.t(contentKey,{ns:'content'});
+  const currentMeaning=label('assurance.currentMeaning','content.meaning3');
   const emphasize = (example: LearningExample): string =>
     `${example.textL2.slice(0, example.targetStart)}<b>${example.targetSurface}</b>${example.textL2.slice(example.targetEnd)}`;
   const sentences = content.learningExamples.map((example) => ({
     exampleId: example.exampleKey,
-    src: 'Sensa 学习例句',
+    src: `Sensa ${i18n.t('content.learningExample')}`,
     theme: 'forest',
     en: emphasize(example),
     zh: example.textL1,
@@ -19,7 +24,7 @@ export function toWordPresentation(content: RuntimeLearningContent): Word {
     w: content.lemma,
     syl: content.syllables ?? content.lemma,
     ph: content.ipa,
-    tags: ['Sensa', '核心义项'],
+    tags: ['Sensa', currentMeaning],
     total: content.learningExamples.length,
     def: `<b>${content.partOfSpeech}</b> ${content.definitionL2} ${content.guideLabelL1}`,
     senses: [{ pos: content.partOfSpeech, items: [content.guideLabelL1] }],
@@ -28,7 +33,7 @@ export function toWordPresentation(content: RuntimeLearningContent): Word {
       pos: content.partOfSpeech,
       text: content.guideLabelL1,
       def: content.definitionL2,
-      tag: '当前学习义项',
+      tag: currentMeaning,
       sentences,
     }],
     options: content.recognitionAssessment.options.map((option) => ({
@@ -43,8 +48,8 @@ export function toWordPresentation(content: RuntimeLearningContent): Word {
     })),
     sentences,
     mnemo: {
-      '义项边界': [['当前学习义项', content.guideLabelL1]],
-      '经验速写': content.experienceSketch.labelsL1.map((label) => [label, '']),
+      [label('assurance.boundary','content.scenesAndBoundaries')]: [[currentMeaning, content.guideLabelL1]],
+      [label('assurance.experienceTitle','content.typicalScene')]: content.experienceSketch.labelsL1.map((item) => [item, '']),
     },
   };
 }

@@ -1,5 +1,6 @@
-import {sensaLanguage,sensaLanguageDisplayName} from '@sensa/contracts/sensa';
-import {extensionLanguage,t} from './i18n';
+import {sensaLanguage} from '@sensa/contracts/sensa';
+import {t} from './i18n';
+import {interfaceLanguageName} from './interfaceLanguageName';
 
 /**
  * Reading text aloud in the language it is written in.
@@ -150,6 +151,6 @@ export async function speakText(text: string, languageTag: string | null, option
  * missing. */
 export function speechFailureText(attempt: Extract<SpeechAttempt, {ok: false}>): string {
   if (attempt.reason === 'no_language') return t('speechNoLanguage');
-  if (attempt.reason === 'no_voice') return t('speechNoVoice', {language: attempt.languageTag ? sensaLanguageDisplayName(attempt.languageTag, extensionLanguage()) : ''});
+  if (attempt.reason === 'no_voice') return t('speechNoVoice', {language: attempt.languageTag ? interfaceLanguageName(attempt.languageTag) : ''});
   return t('speechUnavailable');
 }

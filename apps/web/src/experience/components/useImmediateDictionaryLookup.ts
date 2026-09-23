@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { QuickDictEntry } from '../types';
+import i18n from '../../i18n';
+import '../../i18n/learningResources';
 
 export interface ActiveQuickDictionaryLookup {
   tokenIdx: number;
@@ -22,7 +24,7 @@ function pendingEntry(displayWord: string): QuickDictEntry {
     hasFullDetail: false,
     isStarred: false,
     lookupState: 'loading',
-    lookupMessage: '正在查询词典…',
+    lookupMessage: i18n.t('quickDict.loading',{ns:'learning'}),
   };
 }
 
@@ -36,7 +38,7 @@ function failedEntry(displayWord: string): QuickDictEntry {
     hasFullDetail: false,
     isStarred: false,
     lookupState: 'error',
-    lookupMessage: '暂时没有取得这个词的词典结果，请稍后重试。',
+    lookupMessage: i18n.t('quickDict.error',{ns:'learning'}),
   };
 }
 

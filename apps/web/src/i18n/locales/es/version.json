@@ -1,0 +1,7 @@
+{
+  "conflictTitle": "Otra pestaña de Sensa está ejecutando una versión distinta",
+  "conflictDescription": "Cierra las demás pestañas de Sensa y vuelve a cargar esta página. El acceso a la biblioteca local está en pausa para proteger tus datos.",
+  "updateTitle": "Hay una actualización de Sensa disponible",
+  "updateDescription": "Actualiza ahora para mantener esta página, los archivos sin conexión y la biblioteca local en la misma versión.",
+  "updateNow": "Actualizar ahora"
+}

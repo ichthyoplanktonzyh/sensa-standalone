@@ -1,0 +1,18 @@
+{
+  "referenceExample": {
+    "title": "Sözlük örnekleri",
+    "back": "Sözlüğe dön",
+    "current": "Geçerli sözlük örneği",
+    "sense": "İlgili anlam",
+    "hideTranslation": "Çeviriyi gizle",
+    "showTranslation": "Çeviriyi göster",
+    "noTranslation": "Bu kaynak çeviri sağlamıyor.",
+    "noSource": "Kaynak bilgisi kullanılamıyor",
+    "noDefinition": "Bu anlam için tanım bulunmuyor.",
+    "unavailable": "Örnek kullanılamıyor",
+    "empty": "Bu anlam için örnek yok",
+    "emptyHint": "Tanımı okumak için sözlüğe dönün. Başka anlamlara ait örnekler yerine kullanılmaz.",
+    "position": "{{total}} örnek içinden {{current}}.",
+    "boundary": "Sözlük örnekleri incelenmiş öğrenme örnekleri olmayabilir. Görüntülemek öğrenme ilerlemesini değiştirmez."
+  }
+}

@@ -1,0 +1,173 @@
+{
+  "landing": {
+    "navigation": "Navigazione principale",
+    "skip": "Vai al contenuto principale",
+    "how": "Come funziona",
+    "story": "La nostra storia",
+    "guide": {
+      "title": "Unire la vita all'apprendimento.",
+      "body": "Parti da una tua esperienza o da un pacchetto didattico. Scegli il percorso più adatto a questo momento.",
+      "meta": "Scopri Sensa Web, l'estensione del browser, le connessioni agli agenti e i pacchetti didattici. Scopri come salvare le espressioni, scegliere cosa imparare e tornare a ripassare."
+    },
+    "enter": "Entra in Sensa",
+    "signIn": "Accedi / Inizia",
+    "back": "Torna alla pagina iniziale del marchio",
+    "hero": {
+      "eyebrow": "Sensa · Parti dal significato",
+      "title": "Hai già un\nmondo.",
+      "body": "Prima di imparare un'altra lingua, conosci già l'odore della pioggia, la sensazione di aspettare qualcuno e il desiderio di dire più di quanto le parole riescano a contenere. Una nuova lingua incontra un mondo già plasmato dalla vita.",
+      "primary": "Entra in Sensa",
+      "secondary": "Leggi la storia di Sensa"
+    },
+    "specimen": {
+      "label": "Un piccolo incontro nella vita di tutti i giorni · Inglese",
+      "contextTitle": "Torna al momento",
+      "context": "Prima di vedervi, un amico ti scrive: non è ancora pronto e sta uscendo di fretta. Tu non hai fretta e vuoi tranquillizzarlo.",
+      "senseTitle": "Riconosci ciò che intendi",
+      "sense": "Far sapere a qualcuno che non c'è bisogno di affrettarsi e che può fare con i propri tempi.",
+      "expressionTitle": "Poi incontra l'espressione",
+      "expression": "Take your time.",
+      "caption": "Qui stai rassicurando il tuo amico, non lo stai sollecitando. Il momento chiarisce il significato."
+    },
+    "belief": {
+      "title": "Prima viviamo.\nPoi troviamo il significato.",
+      "first": "La pioggia. Un fiume vicino a casa. Qualcosa rimasto non detto. Prima di imparare un'altra lingua, conosciamo già il mondo attraverso la vita e abbiamo imparato a riconoscerlo, ricordarlo ed esprimerlo con parole familiari.",
+      "second": "Sensa crede che una nuova lingua incontri una persona con una vita alle spalle. Quelle esperienze, relazioni, aspirazioni e ricordi sono luoghi in cui nuove espressioni possono mettere radici.",
+      "moments": [
+        {
+          "label": "Connessione",
+          "title": "A volte ti basta trovare l'espressione.",
+          "body": "Sai che aspettare può rassicurare qualcuno e che un rifiuto può lasciare spazio alla gentilezza. Vuoi scoprire come un'altra lingua esprime questa attenzione."
+        },
+        {
+          "label": "Prendere forma",
+          "title": "A volte il significato viene prima delle parole.",
+          "body": "Nemmeno una lingua familiare riesce a esprimerlo del tutto. Hai una scena, una sensazione e la certezza che “è proprio questo che intendo”. Partiamo da lì e ti aiutiamo a chiarirlo."
+        },
+        {
+          "label": "Scoperta",
+          "title": "A volte un'espressione apre una nuova prospettiva.",
+          "body": "Un'altra lingua può rivelare un modo diverso di capire esperienze familiari. Una distinzione che prima ti sfuggiva trova posto nel tuo mondo."
+        }
+      ],
+      "statement": "Lascia entrare un'altra lingua nel tuo mondo. Guardalo con occhi nuovi attraverso di essa.",
+      "coda": "È qui che comincia Sensa: torna al momento, riconosci e chiarisci il significato, poi incontra l'espressione. Coltiva quel legame con l'apprendimento e il ripasso, e riportalo nella lettura, nell'ascolto, nelle conversazioni e nella vita."
+    },
+    "use": {
+      "title": "Portalo dalla vita. Riportalo nella vita.",
+      "intro": "Conserva un'esperienza anche prima di trovare le parole. Prenditi il tempo per chiarirne il significato. Scegli le espressioni che vale la pena imparare, sapendo perché tornare a ciascuna.",
+      "steps": [
+        {
+          "label": "Raccogli",
+          "title": "Conserva un momento a cui vorrai tornare",
+          "body": "Scrivi un'esperienza, aggiungi un'immagine o conserva una frase che hai letto. Non deve essere già tutto chiaro. Il materiale incompleto può aspettare in una bozza o nella posta in arrivo."
+        },
+        {
+          "label": "Chiarisci e salva",
+          "title": "Trova le parole per dire “sì, intendo proprio questo”",
+          "body": "Esplora con Sensa il contesto, il significato e l'espressione. Quando li confermi, entrano nel Mio mondo semantico insieme alla fonte, così potrai ricordare cosa significava quell'espressione in quel momento."
+        },
+        {
+          "label": "Impara e ripassa",
+          "title": "Fai tua ciò che vuoi conservare",
+          "body": "Scegli Aggiungi all'apprendimento e inizia quando il materiale è pronto. Collega la scena al suono, alla forma scritta e all'uso dell'espressione. Dopo il primo apprendimento, torna per i ripassi in programma. Salvare e scegliere di imparare sono decisioni distinte."
+        },
+        {
+          "label": "Torna alla vita",
+          "title": "Provala al prossimo incontro",
+          "body": "Rileggila, riascoltala o prova a usarla in una conversazione. Un nuovo contesto può rivelare un significato diverso e suggerirti una nuova domanda da approfondire."
+        }
+      ],
+      "return": "Conserva l'espressione e ciò che le dà significato per te."
+    },
+    "entries": {
+      "title": "Inizia da dove ti trovi.",
+      "intro": "Esplora con Sensa. Riporta ciò che incontri leggendo e conversando.",
+      "items": [
+        {
+          "label": "Sensa Web",
+          "title": "Qualcosa che vuoi esprimere a parole",
+          "body": "Apri una conversazione con un testo o un'immagine. Parti da un'esperienza, da un'espressione che conosci o da una sensazione che non hai ancora saputo nominare."
+        },
+        {
+          "label": "Estensione del browser",
+          "title": "Una frase che vuoi conservare",
+          "body": "Seleziona qualcosa in una pagina web o nei sottotitoli. Comprendila nel suo contesto e conferma cosa salvare, oppure conservala per chiarirla in seguito."
+        },
+        {
+          "label": "Connessione ad agente",
+          "title": "Una conversazione da ricordare",
+          "body": "Collega un agente come Codex e chiedigli di inviare a Sensa il contesto, il significato e l'espressione pertinenti. Apri l'app Web per riceverli e continuare a organizzarli o impararli."
+        }
+      ],
+      "bookLabel": "Oppure inizia con un pacchetto didattico",
+      "bookTitle": "Non ti viene in mente un momento? Scoprine uno nuovo.",
+      "bookBody": "Scegli un pacchetto didattico pubblicato per il tuo percorso linguistico attuale, scaricalo e aggiungilo all'apprendimento. Parti dalle scene e dalle espressioni che contiene. Mentre impari, aggiungi La mia scena per collegare un'espressione a una tua esperienza."
+    },
+    "close": {
+      "title": "Lascia che un'altra lingua diventi un modo per esprimerti.",
+      "body": "Parti da qualcosa che hai vissuto, provato o che hai sempre voluto esprimere a parole.",
+      "action": "Entra in Sensa"
+    },
+    "footer": "Prima la vita. Poi l'espressione.",
+    "meta": "Hai già un mondo. Sensa parte dalle esperienze vissute e dai loro significati, lascia entrare un'altra lingua nel tuo mondo e ti aiuta a guardarlo con occhi nuovi."
+  },
+  "reliability": {
+    "loading": "Sensa si sta caricando…",
+    "errorTitle": "Questa sezione di Sensa non si è aperta",
+    "errorDescription": "I tuoi dati di apprendimento non sono stati modificati. Riprova o torna alla pagina iniziale.",
+    "notFoundTitle": "Pagina non trovata",
+    "notFoundDescription": "Questo link potrebbe non essere più disponibile. Torna alla pagina iniziale di Sensa per continuare.",
+    "retry": "Riprova",
+    "reload": "Ricarica",
+    "home": "Torna alla pagina iniziale"
+  },
+  "brand": "Sensa",
+  "nav": {
+    "home": "Oggi",
+    "learning": "Il mio apprendimento",
+    "content": "Il mio mondo semantico",
+    "world": "Mondo semantico",
+    "practice": "Esercizi",
+    "settings": "Account e impostazioni",
+    "label": "Navigazione principale",
+    "mobile": "Navigazione mobile",
+    "homeLabel": "Home di Sensa",
+    "preview": "Anteprima locale"
+  },
+  "language": {
+    "label": "Lingua dell'interfaccia",
+    "zh": "Cinese semplificato",
+    "en": "Inglese"
+  },
+  "home": {
+    "title": "Oggi",
+    "readyTitle": "Comincia da un significato.",
+    "beginTitle": "Che cosa vorresti esprimere?",
+    "reviewTitle": "Torna ai significati che hai già incontrato.",
+    "plan": "Il tuo apprendimento",
+    "new": "Nuovi",
+    "review": "Da ripassare",
+    "unit": "significati",
+    "summary": "Riepilogo dell'apprendimento di oggi",
+    "start": "Inizia a imparare",
+    "empty": "Non c'è nulla di pronto da studiare",
+    "emptyHint": "Aggiungi un significato o controlla lo stato di preparazione dei tuoi obiettivi.",
+    "reviewFirst": "Prima ripassa, poi esplora nuovi significati.",
+    "newOnly": "Parti da una scena. Richiama alla mente l'espressione.",
+    "reviewOnlyHint": "Ricollegati oggi a questi significati.",
+    "reviewOnly": "Solo ripasso",
+    "noReview": "Nessun ripasso in programma",
+    "reviewCount": "Ripassa solo {{count}} significati",
+    "manage": "Visualizza il piano di apprendimento",
+    "add": "Aggiungi qualcosa da imparare",
+    "existing": "Esplora i contenuti esistenti",
+    "existingHint": "Scegli un libro o un significato specifico",
+    "personal": "Raccogli un tuo contesto",
+    "personalHint": "Salva un'esperienza e chiariscine il significato",
+    "open": "Apri",
+    "emptyAction": "Aggiungi contenuto",
+    "resume": "Continua a imparare",
+    "resumeHint": "Hai una sessione incompleta da continuare."
+  }
+}

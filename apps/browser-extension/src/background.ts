@@ -7,6 +7,7 @@ import {detectIso6393} from './languageDetector';
 import {maxDetectableCharacters,minSkimmableCharacters} from './language';
 import {readYoutubePlayer} from './youtubePlayer';
 import {readingLanguageContext,readingLanguageRouteSnapshot,selectReadingLanguageRoute,readingPreferences,saveReadingPreferences,readingSiteOf,publishReadingLanguageRoutes,readingGlossary,publishReadingGlossary} from './preferences';
+import {t} from './i18n';
 type Mode={accountId:string};
 const accountSchema=z.object({expiresAt:z.string().datetime().optional(),webLibraryId:z.string().uuid().optional(),accountId:z.string().uuid(),installationId:z.string().uuid(),token:z.string().min(1),queue:z.array(z.unknown()).default([]),recent:z.array(z.unknown()).default([]),savedOperations:z.record(z.string(),z.unknown()).default({})}).passthrough();
 const storeSchema=z.object({version:z.literal(1).default(1),active:z.string().uuid().nullable(),accounts:z.record(z.string(),accountSchema)}).strict();
@@ -360,7 +361,7 @@ chrome.tabs.onUpdated.addListener((id,change)=>{if(change.status!=='complete')re
  // A site the learner turned reading off for is not injected into at all: the
  // content script would refuse to start, and reaching it every page load is work
  // for an answer that never changes.
- const rule=readingSiteOf(change.url??'');if(rule&&(await readingPreferences()).disabledSites.includes(rule))return;try{await chrome.scripting.executeScript({target:{tabId:id},files:['content.js']});await chrome.tabs.sendMessage(id,{kind:'reading',enabled:true,accountId:readingModes[id].accountId,preferences:await readingPreferences()});await chrome.action.setBadgeText({tabId:id,text:''});}catch{await chrome.action.setBadgeText({tabId:id,text:'继续'});await chrome.action.setTitle({tabId:id,title:'点一次 Sensa 图标，继续当前网站的阅读模式'});}})().catch(()=>undefined);});
+ const rule=readingSiteOf(change.url??'');if(rule&&(await readingPreferences()).disabledSites.includes(rule))return;try{await chrome.scripting.executeScript({target:{tabId:id},files:['content.js']});await chrome.tabs.sendMessage(id,{kind:'reading',enabled:true,accountId:readingModes[id].accountId,preferences:await readingPreferences()});await chrome.action.setBadgeText({tabId:id,text:''});}catch{await chrome.action.setBadgeText({tabId:id,text:t('backgroundContinue')});await chrome.action.setTitle({tabId:id,title:t('backgroundContinueHint')});}})().catch(()=>undefined);});
 chrome.tabs.onRemoved.addListener(id=>{void locked(async()=>{const readingModes=await modes();delete readingModes[id];await chrome.storage.session.set({modes:readingModes});}).catch(()=>undefined);});
 void chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
 

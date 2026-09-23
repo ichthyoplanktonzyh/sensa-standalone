@@ -1,0 +1,18 @@
+{
+  "referenceExample": {
+    "title": "Przykłady słownikowe",
+    "back": "Wróć do słownika",
+    "current": "Bieżący przykład ze słownika",
+    "sense": "Powiązane znaczenie",
+    "hideTranslation": "Ukryj tłumaczenie",
+    "showTranslation": "Pokaż tłumaczenie",
+    "noTranslation": "To źródło nie zawiera tłumaczenia.",
+    "noSource": "Informacje o źródle są niedostępne",
+    "noDefinition": "Brak definicji tego znaczenia.",
+    "unavailable": "Przykład jest niedostępny",
+    "empty": "Brak przykładów dla tego znaczenia",
+    "emptyHint": "Wróć do słownika, aby przeczytać definicję. Nie zostaną wyświetlone przykłady innych znaczeń.",
+    "position": "Przykład {{current}} z {{total}}",
+    "boundary": "Przykłady słownikowe nie zawsze są zweryfikowanymi przykładami do nauki. Ich wyświetlanie nie zmienia postępów w nauce."
+  }
+}

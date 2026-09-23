@@ -1,0 +1,7 @@
+{
+  "conflictTitle": "Outra aba do Sensa está executando uma versão diferente",
+  "conflictDescription": "Feche as outras abas do Sensa e recarregue esta página. O acesso à biblioteca local está pausado para proteger seus dados.",
+  "updateTitle": "Há uma atualização do Sensa disponível",
+  "updateDescription": "Atualize agora para manter esta página, os arquivos offline e a biblioteca local na mesma versão.",
+  "updateNow": "Atualizar agora"
+}

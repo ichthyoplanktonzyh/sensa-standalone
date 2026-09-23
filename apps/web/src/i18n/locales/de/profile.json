@@ -1,0 +1,84 @@
+{
+  "appearance": {
+    "title": "Erscheinungsbild",
+    "deviceNote": "Design, Farbmodus und Textgröße werden nur auf diesem Gerät gespeichert.",
+    "skin": "Design",
+    "colorMode": "Farbmodus",
+    "textSize": "Textgröße",
+    "immediate": "Änderungen werden sofort übernommen, ohne diese Seite oder Ihren Lernfortschritt zu unterbrechen.",
+    "skins": {
+      "quiet": { "name": "Sensa Quiet", "description": "Sanftes Papier, olivgrüne Akzente und viel Raum zum Lesen." },
+      "clear": { "name": "Sensa Clear", "description": "Kühle, zurückhaltende Farben mit klarerer Abgrenzung." }
+    },
+    "modes": { "system": "System", "light": "Hell", "dark": "Dunkel" },
+    "textSizes": { "standard": "Standard", "large": "Groß" }
+  },
+  "glossary": {
+    "row": "Mein Glossar", "rowNote": "Legen Sie fest, wie bestimmte Wörter wiedergegeben werden sollen", "rowSummary": "{{count}} Einträge", "rowEmpty": "Noch keine Begriffe",
+    "title": "Mein Glossar", "close": "Schließen", "done": "Fertig",
+    "intro": "Notieren Sie die Formulierungen, die Sie lesen möchten. Wenn diese Wörter in Ihren Texten vorkommen, bevorzugt Sensa Ihre Formulierung.",
+    "inputLanguage": "Sprache des Textes", "outputLanguage": "Sprache der Wiedergabe", "term": "Wort im Text", "rendering": "Gewünschte Wiedergabe",
+    "add": "Eintrag hinzufügen", "addAction": "Hinzufügen", "remove": "Löschen", "removeLabel": "„{{term}}“ löschen",
+    "empty": "Das Glossar ist leer. Ohne Einträge verwendet die Übersetzung die Formulierungen des Modells.",
+    "limit": "Bis zu {{count}} Einträge pro Sprachrichtung. Löschen Sie einige, bevor Sie weitere hinzufügen.",
+    "totalLimit": "Das Glossar kann insgesamt bis zu {{count}} Einträge enthalten. Löschen Sie einige, bevor Sie weitere hinzufügen.",
+    "hint": "Das Glossar beeinflusst nur die Wortwahl: Es kann die Bedeutung nicht ändern und nicht garantieren, dass das Modell ihm folgt. Bereits übersetzte Texte werden nicht automatisch erneut übersetzt.",
+    "saved": "Glossar gespeichert.", "failed": "Dieser Eintrag konnte nicht gespeichert werden. Versuchen Sie es erneut.", "summary": "{{term}} → {{rendering}}"
+  },
+  "languages": {
+    "title": "Sprachrouten", "close": "Schließen", "done": "Fertig", "routes": "Lernrouten",
+    "routesNote": "Die aktive Route gilt nur für zukünftiges Lernen, Lesen und semantisches Arbeiten. Bereits laufende Sitzungen behalten ihren ursprünglichen Sprachkontext.",
+    "summary_one": "{{target}} · Unterstützung: {{support}} · {{count}} Route",
+    "summary_other": "{{target}} · Unterstützung: {{support}} · {{count}} Routen",
+    "activeBadge": "Aktiv", "pausedBadge": "Pausiert", "support": "Standardsprache für Unterstützung", "add": "Lernroute hinzufügen",
+    "targetLabel": "Zielsprache auswählen", "supportLabel": "Unterstützungssprache auswählen", "addAction": "Route hinzufügen",
+    "sameLanguageNote": "Ziel- und Unterstützungssprache dürfen identisch sein, zum Beispiel bei einer Immersionsroute.",
+    "archiveLabel": "Route für {{language}} archivieren", "pauseLabel": "Route für {{language}} pausieren", "resumeLabel": "Route für {{language}} fortsetzen",
+    "archived": "Archivierte Routen", "restore": "Wiederherstellen", "saved": "Sprachrouten gespeichert."
+  },
+  "libraryBackup": {
+    "title": "Sicherung & Wiederherstellung", "intro": "Sichern Sie Ihre lokalen Inhalte und Ihren Lernfortschritt, um sie in einem anderen Browser wiederherzustellen.",
+    "size": "Aktuelle Rohdaten der Sicherung: etwa {{used}} MiB bei einem Limit von {{capacity}} MiB. Durch die Verschlüsselung wird die Datei größer.",
+    "sizeWarning": "Die Rohdaten der Sicherung nähern sich dem Limit: {{used}} MiB von {{capacity}} MiB. Exportieren Sie jetzt eine Sicherung und reduzieren Sie große Medien, bevor Sie weitere Daten hinzufügen.",
+    "details": "Was ist enthalten?", "detailText": "Enthalten sind Quellen, Gespräche, Bedeutungen, Lernmaterialien und Verlauf. Anmeldedaten und API-Schlüssel sind ausgeschlossen; verbinden Sie eigene Dienste nach der Wiederherstellung erneut.",
+    "password": "Sicherungspasswort", "passwordHint": "Verwenden Sie mindestens 12 Zeichen. Bewahren Sie das Passwort auf: Es kann nicht wiederhergestellt werden.",
+    "short": "Geben Sie noch {{count}} Zeichen ein.", "export": "Verschlüsselte Sicherung exportieren", "exporting": "Sicherung wird erstellt…", "check": "Sicherung prüfen", "checking": "Wird geprüft…",
+    "restore": "In dieser leeren Bibliothek wiederherstellen", "restoring": "Wird wiederhergestellt…", "file": "Sicherungsdatei auswählen", "noFile": "Keine Datei ausgewählt",
+    "restoreHint": "Melden Sie sich zur Wiederherstellung in einer leeren Browserbibliothek beim ursprünglichen Konto an.",
+    "exported": "Sicherung erstellt. Prüfen Sie, ob die heruntergeladene Datei gespeichert wurde.", "restored": "Bibliothek wiederhergestellt. Öffnen Sie die App erneut, um weiterzulernen.", "reopen": "App erneut öffnen",
+    "account": "Konto: {{account}}", "date": "Erstellt: {{date}}",
+    "summary": "Quellen: {{drafts}} · Bedeutungen: {{meanings}} · Pakete: {{packages}} · Lerneinträge: {{targets}} · Durchläufe: {{runs}} · Ereignisse: {{events}}",
+    "interrupted": "{{count}} laufende Anfragen werden beendet. Wiederholen Sie sie nach der Wiederherstellung manuell.",
+    "failed": "Der Vorgang ist fehlgeschlagen. Ihre vorhandenen Inhalte sind unverändert. Versuchen Sie es erneut.", "fileRequired": "Wählen Sie zuerst eine Sicherungsdatei aus.", "tooLarge": "Sicherungsdateien müssen kleiner als 90 MiB sein.",
+    "errors": {
+      "encoding": "Ungültige Kodierung der Sicherung.", "fileTooLarge": "Sicherungsdateien müssen kleiner als 90 MiB sein.",
+      "invalidFile": "Falsches Passwort, beschädigte Datei oder nicht unterstützte Sicherungsversion. Ihre vorhandenen Inhalte sind unverändert.",
+      "tables": "In der Sicherung fehlen Tabellen oder sie sind nicht kompatibel.", "records": "Die Sicherung enthält zu viele Datensätze oder doppelte Kennungen.",
+      "authorization": "Anmelde- und Geräteberechtigungen können nicht aus einer Sicherung wiederhergestellt werden.", "recordKey": "Diese Bibliothek enthält nicht unterstützte Datensatzkennungen.",
+      "rowLimit": "Diese Bibliothek überschreitet das Sicherungslimit von 200.000 Datensätzen. Behalten Sie Ihre vorhandenen Daten.",
+      "sizeLimit": "Diese Bibliothek überschreitet das Sicherungslimit von 64 MiB. Behalten Sie Ihre vorhandenen Daten.",
+      "accountMismatch": "Diese Sicherung gehört zu einem anderen Konto. Melden Sie sich in einer leeren Browserbibliothek beim ursprünglichen Konto an.",
+      "occupied": "Diese Bibliothek enthält bereits Daten. Verwenden Sie ein neues Browserprofil und melden Sie sich beim ursprünglichen Konto an, um die Sicherung wiederherzustellen.",
+      "depth": "Die Sicherungsdaten sind zu tief verschachtelt.", "valueType": "Die Sicherung enthält einen nicht unterstützten Datentyp.", "format": "Das Format der Sicherungsdaten ist ungültig.",
+      "fields": "Die Sicherung enthält doppelte oder ungültige Felder.", "inconsistent": "Sicherungsdatensätze sind unvollständig oder widersprüchlich. Es wurde nichts wiederhergestellt."
+    }
+  },
+  "modelService": {
+    "title": "Modelldienste", "connected": "Konto verbunden.", "disconnected": "Online-Dienste sind nicht verbunden.", "login": "Bei Sensa anmelden", "available": "Sensa-Dienste sind verfügbar", "unavailable": "Sensa-Dienste sind nicht verfügbar", "refresh": "Status aktualisieren", "refreshing": "Wird aktualisiert…", "refreshed": "Status aktualisiert.",
+    "providers": "Wer diese Anfragen beantwortet", "purposeTeacherHint": "Wird verwendet, wenn Sie in einem Gespräch Fragen stellen und Erklärungen erhalten.", "purposeContentHint": "Wird verwendet, um Lernmaterial vorzubereiten und Vorschläge zu erstellen.", "purposeReviewHint": "Wenn aktiviert, wird erstelltes Material zusätzlich unabhängig geprüft.", "purposeReferenceHint": "Wird bei einer Wortsuche verwendet, um zu bestimmen, welche Bedeutung zum Satz passt.",
+    "default": "Sensa-Dienste", "enableReview": "Unabhängige Prüfung aktivieren", "reviewNote": "Die Codeprüfung wird immer ausgeführt. Bei aktivierter Prüfung wird erstelltes Material zusätzlich einmal von einem Modell geprüft und verbraucht ein Kontingent zur Materialvorbereitung.",
+    "usageTitle": "Dienstnutzung", "usageNote": "Die letzten 24 Stunden, gezählt werden nur Anfragen, die über den Sensa-Dienst ausgeführt wurden. Lokale Verbindungen verbrauchen diese Kontingente nicht.", "reading": "Web-Lesen", "reference": "Wortbedeutung", "teacher": "Klärung", "content": "Materialvorbereitung", "limit": "Limit erreicht", "connections": "Meine Modellverbindungen",
+    "localGroup": "Auf diesem Gerät", "localGroupNote": "Der Schlüssel bleibt nur im Speicher dieser Seite und muss nach einem Neuladen erneut eingegeben werden. Anfragen gehen direkt von diesem Gerät aus; Ihr Dienst muss daher Browseranfragen zulassen.",
+    "accountGroup": "In Ihrem Konto", "accountGroupNote": "Der Schlüssel wird verschlüsselt beim Sensa-Dienst gespeichert und bleibt so auch bei einem Browserwechsel verfügbar. Anfragen werden über den Dienst ausgeführt.", "localEmpty": "Auf diesem Gerät ist noch keine Verbindung eingerichtet.", "accountEmpty": "Noch keine Kontoverbindung.", "accountLoginRequired": "Melden Sie sich bei Sensa an, um Kontoverbindungen zu verwalten.",
+    "executionDevice": "Wird auf diesem Gerät ausgeführt", "executionService": "Wird über den Dienst ausgeführt", "accountCredential": "Verwendet Ihr Konto", "keyPresent": "Schlüssel auf dieser Seite verfügbar", "keyAbsent": "Für diese Seite ist kein Schlüssel festgelegt", "keyConfigured": "Schlüssel gespeichert", "changeKey": "Schlüssel festlegen oder ersetzen", "forget": "Seitenschlüssel verwerfen", "remove": "Verbindung entfernen", "pageOnly": "Nur für diese Seite gespeichert", "cancel": "Abbrechen", "addLocal": "Verbindung auf diesem Gerät hinzufügen", "addAccount": "Kontoverbindung hinzufügen",
+    "name": "Name", "endpoint": "Dienst-URL", "model": "Modellname", "key": "API-Schlüssel", "optionalKey": "API-Schlüssel (optional)", "keyNote": "Der Schlüssel bleibt nur im Speicher dieser Seite. Geben Sie ihn nach einem Neuladen erneut ein.", "accountKeyNote": "Der Schlüssel wird mit dem Bereitstellungsschlüssel verschlüsselt auf dem Dienst gespeichert. Fahren Sie nur fort, wenn Sie dieser Bereitstellung vertrauen.", "accountKeyKeep": "Lassen Sie das Feld leer, um den gespeicherten Schlüssel beizubehalten.", "updateAccount": "Schlüssel oder Modell ersetzen", "allowedOrigins": "Der Dienst unterstützt derzeit diese Adressen:", "save": "Verbindung speichern", "saved": "Verbindung gespeichert. Weisen Sie sie oben zu.",
+    "readFailed": "Modelleinstellungen konnten nicht geladen werden. Versuchen Sie es erneut.", "saveFailed": "Einstellungen konnten nicht gespeichert werden. Versuchen Sie es erneut.", "statusFailed": "Der Dienststatus ist nicht verfügbar. Versuchen Sie es erneut.", "updated": "Einstellungen aktualisiert.", "keyLabel": "API-Schlüssel für {{name}}", "modelList": "Verfügbare Modelle auflisten", "diagnostics": "Diagnose", "purposeTeacher": "Klärung und Erklärung", "purposeContent": "Erstellung von Lernmaterial", "purposeReview": "Unabhängige Prüfung", "purposeReference": "Bestimmung der Wortbedeutung"
+  },
+  "support": {
+    "about": "Über Sensa", "aboutText": "Beginnen Sie mit einer bestimmten Bedeutung, verknüpfen Sie sie mit einem Ausdruck und machen Sie sich durch Lernen und Wiederholen damit vertraut.", "privacy": "Datenschutz & Daten",
+    "privacyText": "Inhalte und Lernfortschritt werden zuerst in diesem Browser gespeichert. Wenn Sie sich anmelden, werden unterstützte Datensätze mit dem aktuellen Kontostand synchronisiert; die Synchronisierung ist keine versionierte Sicherung. Beim Löschen der Websitedaten werden lokale und noch nicht synchronisierte Datensätze entfernt. Bei einer Kontolöschung wird die serverseitige Kontokopie gelöscht; Offlinekopien in anderen Browsern müssen auf den jeweiligen Geräten entfernt werden.",
+    "providers": "Externe Dienste", "providersText": "Ein konfigurierter Modellanbieter erhält den Text oder die Bilder, die für die Modellanfrage erforderlich sind. Der standardmäßige Sprachanbieter erhält Text, Sprache und ausgewählte Stimme, die zum Erzeugen der Audiodatei benötigt werden. Wörterbuch- und YouGlish-Anfragen übermitteln die Suchanfrage und übliche Netzwerkmetadaten an diese Dienste. Für eigene Anbieter gelten deren Nutzungs- und Aufbewahrungsbedingungen.",
+    "retention": "Speicherung und Aufbewahrung", "retentionText": "Kurzlebige semantische Suchdaten laufen nach 24 Stunden ab. Erfolgreiche Antworten verwalteter Modelle werden bis zu 6 Stunden und Anfragemetadaten bis zu 26 Stunden gespeichert. Der aktuelle Cloud-Synchronisierungspunkt und Kontoinhalte bleiben erhalten, bis sie ersetzt oder gelöscht werden. Verschlüsselte Sicherungsdateien bleiben dort, wo Sie sie speichern.",
+    "feedback": "Feedback & Korrekturen", "feedbackText": "Wenden Sie sich mit Produktfeedback, Inhaltskorrekturen, Fragen zur Kontowiederherstellung oder Löschung an den Support. Fügen Sie die Diagnosedatei nur bei, wenn sie hilfreich ist. Sie enthält Laufzeitstatus und Zähler, aber keine Lerninhalte, E-Mail-Adressen, Datensatzkennungen, URLs, Tokens oder Stacktraces.", "contact": "Support kontaktieren", "unavailable": "Der Supportkontakt ist für diesen Build nicht eingerichtet. Geben Sie diesen Build nicht an Benutzer weiter.", "diagnostics": "Bereinigte Diagnose", "diagnosticsText": "Laden Sie einen lokalen JSON-Bericht mit Release-, Browserfähigkeits-, Speicher- und Synchronisierungsstatus herunter. Prüfen Sie ihn, bevor Sie ihn einer Supportanfrage beifügen.", "diagnosticsDownload": "Diagnose herunterladen", "diagnosticsWorking": "Diagnose wird vorbereitet…", "diagnosticsReady": "Diagnosedatei heruntergeladen.", "diagnosticsFailed": "Die Diagnose konnte nicht erstellt werden. Kontaktieren Sie den Support ohne Anhang."
+  }
+}

@@ -120,7 +120,7 @@ export const ContentSenseDetailScreen = ({
           </div>
           <div className="grid grid-cols-[1fr_3.5rem] overflow-hidden rounded-card border border-border-subtle bg-surface-panel">
             <button className="min-w-0 border-0 bg-transparent p-5 text-left hover:bg-surface-subtle focus-visible:outline-2 focus-visible:outline-focus" onClick={() => onOpenExample(item)}>
-              <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{item.example.sourceLabel}</span>
+              <span className="text-metadata font-bold uppercase tracking-wide text-fg-tertiary">{uiText('learningExample')}</span>
               <strong className="mt-3 block font-language text-lg leading-7">{item.example.text}</strong>
               {item.example.translation && <small className="mt-2 block text-body-support leading-6 text-fg-secondary">{item.example.translation}</small>}
             </button>

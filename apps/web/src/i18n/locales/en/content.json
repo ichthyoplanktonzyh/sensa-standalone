@@ -340,5 +340,25 @@
     "saved-senses": "Saved meanings",
     "saved-examples": "Saved examples",
     "notes": "My notes"
+  },
+  "coming": {
+    "scenes": {
+      "eyebrow": "PERSONAL SEMANTIC ANCHORS",
+      "title": "My scenes",
+      "description": "Connect a specific meaning to a scene you truly experienced, making that connection your own.",
+      "point1": "Attach it to one specific meaning",
+      "point2": "Record text, images, or other personal cues",
+      "point3": "It is not a standard example or a correct answer"
+    },
+    "collections": {
+      "eyebrow": "PERSONAL COLLECTIONS",
+      "title": "Custom collections",
+      "description": "Organize meanings and examples for your own purposes without changing the wordbook or formal learning plan.",
+      "point1": "A collection can include meanings and examples",
+      "point2": "Deleting a collection does not delete saved items or source content",
+      "point3": "You may later choose it explicitly for free practice"
+    },
+    "unavailable": "Not available yet",
+    "note": "This page currently shows the planned structure only. It does not create personal content or learning records."
   }
 }

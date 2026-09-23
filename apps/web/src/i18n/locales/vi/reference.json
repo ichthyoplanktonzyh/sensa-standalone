@@ -1,0 +1,18 @@
+{
+  "referenceExample": {
+    "title": "Ví dụ từ điển",
+    "back": "Quay lại từ điển",
+    "current": "Ví dụ từ điển hiện tại",
+    "sense": "Nghĩa liên quan",
+    "hideTranslation": "Ẩn bản dịch",
+    "showTranslation": "Hiện bản dịch",
+    "noTranslation": "Nguồn này không cung cấp bản dịch.",
+    "noSource": "Không có thông tin về nguồn",
+    "noDefinition": "Không có định nghĩa cho nghĩa này.",
+    "unavailable": "Ví dụ không khả dụng",
+    "empty": "Không có ví dụ cho nghĩa này",
+    "emptyHint": "Quay lại từ điển để đọc định nghĩa. Không thay thế bằng ví dụ thuộc nghĩa khác.",
+    "position": "Ví dụ {{current}} trên {{total}}",
+    "boundary": "Ví dụ từ điển không nhất thiết là ví dụ học tập đã được kiểm duyệt. Việc xem không làm thay đổi tiến độ học."
+  }
+}

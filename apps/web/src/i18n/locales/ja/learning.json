@@ -435,7 +435,11 @@
       "previous": "前月",
       "next": "翌月",
       "current": "今月",
-      "error": "チェックインを保存または読み取れません。もう一度お試しください。"
+      "error": "チェックインを保存または読み取れません。もう一度お試しください。",
+      "pending": "チェックインの同期待ち",
+      "uncertain": "確認が必要なチェックイン時刻があります。元の記録は保持されています。接続して時刻を調整し、今日のチェックインをもう一度確認してください。",
+      "timeZone": "破線は同期待ちです。アカウントのタイムゾーン {{timeZone}} で記録されます。",
+      "notRecorded": "未チェックイン"
     },
     "title": "私の学習",
     "back": "戻る",
@@ -492,5 +496,20 @@
       "review": "復習と強化",
       "complete": "初回学習完了 / 既知"
     }
+  },
+  "quickDict": {
+    "detailUnavailable": "「{{word}}」の Reference の完全な項目は現在利用できません",
+    "close": "クイック辞書を閉じる",
+    "playUs": "{{word}} の米国英語の発音を再生",
+    "us": "米",
+    "briefMeanings": "意味の概要",
+    "noBriefMeanings": "表示できる Reference の意味の概要がありません。完全な項目をご覧ください。",
+    "querying": "検索中…",
+    "unavailable": "利用できません",
+    "viewDetails": "詳しい意味を見る",
+    "lookupWord": "単語を調べる：{{word}}",
+    "clickToLookup": "クリックして単語を調べる",
+    "loading": "辞書を検索中…",
+    "error": "この単語の辞書結果を取得できませんでした。後でもう一度お試しください。"
   }
 }

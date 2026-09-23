@@ -1,0 +1,173 @@
+{
+  "landing": {
+    "navigation": "Navigation de l’accueil",
+    "skip": "Passer au contenu principal",
+    "how": "Comment ça marche",
+    "story": "Notre histoire",
+    "guide": {
+      "title": "Relier la vie à l’apprentissage.",
+      "body": "Partez de votre propre expérience ou d’un parcours d’apprentissage. Choisissez la voie qui vous convient maintenant.",
+      "meta": "Découvrez Sensa Web, l’extension de navigateur, les connexions d’agents et les parcours d’apprentissage. Apprenez à enregistrer des expressions, à choisir quoi apprendre et à revenir pour les réviser."
+    },
+    "enter": "Entrer dans Sensa",
+    "signIn": "Se connecter / Commencer",
+    "back": "Retour à la page d’accueil de la marque",
+    "hero": {
+      "eyebrow": "Sensa · Partir du sens",
+      "title": "Vous avez déjà\nun monde.",
+      "body": "Avant d’apprendre une autre langue, vous connaissez l’odeur de la pluie, le sentiment d’attendre quelqu’un et ce que c’est que d’avoir plus à dire que les mots ne peuvent en contenir. Une nouvelle langue rencontre un monde déjà façonné par la vie.",
+      "primary": "Entrer dans Sensa",
+      "secondary": "Lire l’histoire de Sensa"
+    },
+    "specimen": {
+      "label": "Un petit moment du quotidien · anglais",
+      "contextTitle": "Revenir à l’instant",
+      "context": "Un ami vous écrit avant votre rendez-vous : il n’est pas prêt et se dépêche de partir. Vous n’êtes pas pressé et voulez le rassurer.",
+      "senseTitle": "Reconnaître ce que vous voulez dire",
+      "sense": "Faire savoir à quelqu’un qu’il n’a pas besoin de se dépêcher et qu’il peut avancer à son propre rythme.",
+      "expressionTitle": "Puis rencontrer l’expression",
+      "expression": "Take your time.",
+      "caption": "Ici, vous rassurez votre ami au lieu de le presser. La situation rend le sens clair."
+    },
+    "belief": {
+      "title": "D’abord, nous vivons.\nPuis, nous trouvons le sens.",
+      "first": "La pluie. Une rivière près de chez soi. Quelque chose resté sans être dit. Avant d’apprendre une autre langue, nous connaissons déjà le monde par la vie ; nous avons appris à le reconnaître, à nous en souvenir et à l’exprimer avec des mots familiers.",
+      "second": "Pour Sensa, une nouvelle langue rencontre une personne qui a déjà vécu. Ces expériences, relations, souhaits et souvenirs sont autant de lieux où de nouvelles expressions peuvent prendre racine.",
+      "moments": [
+        {
+          "label": "Lien",
+          "title": "Parfois, il ne vous manque que l’expression.",
+          "body": "Vous savez comment l’attente peut rassurer quelqu’un, ou comment un refus peut rester bienveillant. Vous voulez découvrir comment une autre langue exprime cette attention."
+        },
+        {
+          "label": "Émergence",
+          "title": "Parfois, le sens précède les mots.",
+          "body": "Même une langue familière ne parvient pas tout à fait à l’exprimer. Vous avez une scène, une émotion et la certitude que « c’est bien ce que je veux dire ». Nous partons de là et vous aidons à y voir clair."
+        },
+        {
+          "label": "Découverte",
+          "title": "Parfois, une expression ouvre un nouvel horizon.",
+          "body": "Une autre langue peut révéler une nouvelle façon de comprendre une expérience familière. Une nuance que vous aviez négligée trouve sa place dans votre monde."
+        }
+      ],
+      "statement": "Accueillez une autre langue dans votre monde. Redécouvrez votre monde à travers elle.",
+      "coda": "C’est ainsi que Sensa commence : revenir à l’instant, reconnaître et clarifier son sens, puis rencontrer l’expression. Faites grandir ce lien en apprenant et en révisant, puis retrouvez-le dans vos lectures, votre écoute, vos conversations et votre vie."
+    },
+    "use": {
+      "title": "Puiser dans la vie. Y retourner.",
+      "intro": "Gardez une expérience même avant d’avoir les mots pour la décrire. Prenez le temps d’en clarifier le sens. Choisissez les expressions qui méritent d’être apprises et auxquelles vous souhaitez revenir.",
+      "steps": [
+        {
+          "label": "Capturer",
+          "title": "Garder un instant auquel revenir",
+          "body": "Racontez une expérience, ajoutez une image ou gardez une phrase de votre lecture. Elle n’a pas besoin d’être claire tout de suite. Un élément inachevé peut attendre dans un brouillon ou votre boîte de réception."
+        },
+        {
+          "label": "Clarifier et enregistrer",
+          "title": "Trouver « oui, c’est bien ce que je veux dire »",
+          "body": "Explorez le contexte, le sens et l’expression avec Sensa. Une fois confirmés, ils rejoignent Mon monde sémantique avec leur source, pour que vous puissiez retrouver le sens de l’expression dans ce moment précis."
+        },
+        {
+          "label": "Apprendre et réviser",
+          "title": "Vous familiariser avec ce que vous voulez garder",
+          "body": "Choisissez Ajouter à l’apprentissage et commencez lorsque le contenu est prêt. Reliez la scène au son, à la forme écrite et à l’usage de l’expression. Après l’apprentissage initial, revenez pour les révisions prévues. Enregistrer et décider d’apprendre sont deux choix distincts qui vous appartiennent."
+        },
+        {
+          "label": "Revenir à la vie",
+          "title": "Essayer lors de la prochaine rencontre",
+          "body": "Relisez, réécoutez ou essayez de le dire dans une conversation. Un nouveau contexte peut révéler un autre sens et faire naître une nouvelle question à rapporter ici."
+        }
+      ],
+      "return": "Gardez l’expression et ce qui la rend importante pour vous."
+    },
+    "entries": {
+      "title": "Commencez où que vous soyez.",
+      "intro": "Explorez dans Sensa. Rapportez-y ce que vous rencontrez dans vos lectures et conversations.",
+      "items": [
+        {
+          "label": "Sensa Web",
+          "title": "Quelque chose que vous voulez exprimer",
+          "body": "Ouvrez une conversation avec du texte ou une image. Partez d’une expérience, d’une expression connue ou d’un sentiment que vous n’avez pas encore réussi à nommer."
+        },
+        {
+          "label": "Extension de navigateur",
+          "title": "Une phrase que vous voulez garder",
+          "body": "Sélectionnez un passage sur une page Web ou dans des sous-titres. Comprenez-le dans son contexte et confirmez ce que vous voulez enregistrer, ou gardez-le pour le clarifier plus tard."
+        },
+        {
+          "label": "Connexion d’agent",
+          "title": "Une conversation qui mérite d’être retenue",
+          "body": "Connectez un agent comme Codex, puis demandez-lui d’envoyer à Sensa le contexte, le sens et l’expression pertinents. Ouvrez l’application Web pour les recevoir et poursuivre l’organisation ou l’apprentissage."
+        }
+      ],
+      "bookLabel": "Ou commencez par un parcours d’apprentissage",
+      "bookTitle": "Aucun moment en tête ? Découvrez-en un nouveau.",
+      "bookBody": "Choisissez un parcours d’apprentissage publié pour votre parcours linguistique actuel, téléchargez-le et ajoutez-le à vos apprentissages. Commencez avec ses scènes et ses expressions. Au fil de l’apprentissage, ajoutez Ma scène pour relier une expression à votre propre expérience."
+    },
+    "close": {
+      "title": "Faites d’une autre langue une façon de vous exprimer.",
+      "body": "Partez de quelque chose que vous avez vécu, ressenti ou toujours voulu exprimer.",
+      "action": "Entrer dans Sensa"
+    },
+    "footer": "La vie d’abord. L’expression ensuite.",
+    "meta": "Vous avez déjà un monde. Sensa part de vos expériences vécues et de leur sens, accueille une autre langue dans votre monde et vous aide à le redécouvrir."
+  },
+  "reliability": {
+    "loading": "Chargement de Sensa…",
+    "errorTitle": "Cette partie de Sensa ne s’est pas ouverte",
+    "errorDescription": "Vos données d’apprentissage n’ont pas été modifiées. Réessayez ou retournez à l’accueil.",
+    "notFoundTitle": "Page introuvable",
+    "notFoundDescription": "Ce lien n’est peut-être plus disponible. Retournez à l’accueil de Sensa pour continuer.",
+    "retry": "Réessayer",
+    "reload": "Recharger",
+    "home": "Retour à l’accueil"
+  },
+  "brand": "Sensa",
+  "nav": {
+    "home": "Aujourd’hui",
+    "learning": "Mes apprentissages",
+    "content": "Mon monde sémantique",
+    "world": "Monde sémantique",
+    "practice": "S’exercer",
+    "settings": "Compte et paramètres",
+    "label": "Navigation principale",
+    "mobile": "Navigation mobile",
+    "homeLabel": "Accueil Sensa",
+    "preview": "Aperçu local"
+  },
+  "language": {
+    "label": "Langue de l’interface",
+    "zh": "Chinois simplifié",
+    "en": "Anglais"
+  },
+  "home": {
+    "title": "Aujourd’hui",
+    "readyTitle": "Partir d’un sens.",
+    "beginTitle": "Qu’aimeriez-vous exprimer ?",
+    "reviewTitle": "Retrouver les sens déjà rencontrés.",
+    "plan": "Vos apprentissages",
+    "new": "Nouveau",
+    "review": "À réviser",
+    "unit": "sens",
+    "summary": "Résumé des apprentissages du jour",
+    "start": "Commencer à apprendre",
+    "empty": "Rien n’est prêt à être étudié",
+    "emptyHint": "Ajoutez un sens ou vérifiez l’état de préparation de vos langues cibles.",
+    "reviewFirst": "Commencez par réviser, puis explorez de nouveaux sens.",
+    "newOnly": "Partez d’une scène. Retrouvez l’expression.",
+    "reviewOnlyHint": "Renouez avec ces sens aujourd’hui.",
+    "reviewOnly": "Révisions uniquement",
+    "noReview": "Aucune révision prévue",
+    "reviewCount": "Réviser uniquement {{count}} sens",
+    "manage": "Voir le plan d’apprentissage",
+    "add": "Ajouter un élément à apprendre",
+    "existing": "Explorer le contenu existant",
+    "existingHint": "Choisir un livre ou un sens précis",
+    "personal": "Capturer votre propre contexte",
+    "personalHint": "Enregistrer une expérience et en clarifier le sens",
+    "open": "Ouvrir",
+    "emptyAction": "Ajouter du contenu",
+    "resume": "Continuer l’apprentissage",
+    "resumeHint": "Vous avez une session inachevée à poursuivre."
+  }
+}

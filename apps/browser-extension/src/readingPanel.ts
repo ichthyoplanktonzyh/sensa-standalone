@@ -1,4 +1,4 @@
-import {t,errorText} from './i18n';
+import {t,errorText,extensionLanguage} from './i18n';
 import type {CaptureSnapshot} from '@sensa/contracts/sensa';
 import {captureSourceLink} from '@sensa/contracts/sensa';
 import {runReading,runLookup,readingError} from './readingClient';
@@ -23,6 +23,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
   const {range, accountId, close} = input;
   let snapshot=input.snapshot;
   const host = document.createElement('div');
+  host.lang=extensionLanguage();
   host.setAttribute('popover', 'manual');
   host.style.cssText = 'all:initial;position:fixed;inset:auto;margin:0;padding:0;border:0;background:transparent;overflow:visible;z-index:2147483647;';
   const shadow = host.attachShadow({mode: 'closed'});
@@ -55,7 +56,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
     [hidden]{display:none!important}
   `;
   const panel = document.createElement('section');
-  panel.setAttribute('aria-label', 'Sensa 阅读');
+  panel.setAttribute('aria-label', t('panelLabel'));
   const header = document.createElement('header');
   header.hidden = true;
   const button = (text: string, action: () => void) => {
@@ -67,22 +68,22 @@ export function showReadingPanel(input: ReadingPanelInput) {
   };
   const drag = button('Sensa ⠿', () => undefined);
   drag.className = 'drag';
-  drag.setAttribute('aria-label', '拖动阅读浮层');
-  drag.title = '拖动位置；聚焦后可用方向键移动';
+  drag.setAttribute('aria-label', t('panelDrag'));
+  drag.title = t('panelDragHint');
   const hint = document.createElement('span');
-  hint.textContent = '阅读助手';
-  const collapse=button('收起',()=>{expanded=false;header.hidden=body.hidden=true;preview.hidden=false;panel.classList.remove('expanded');manuallyMoved=false;layout();});
+  hint.textContent = t('readingAssistant');
+  const collapse=button(t('panelCollapse'),()=>{expanded=false;header.hidden=body.hidden=true;preview.hidden=false;panel.classList.remove('expanded');manuallyMoved=false;layout();});
   header.append(drag, hint, collapse);
   const toolbar = document.createElement('div');
   toolbar.className = 'toolbar';
   toolbar.setAttribute('role', 'group');
-  toolbar.setAttribute('aria-label', '选中文字的操作');
-  const lookup = button('句中解释', () => { expand(); void explain(); });
+  toolbar.setAttribute('aria-label', t('panelSelectedActions'));
+  const lookup = button(t('panelExplain'), () => { expand(); void explain(); });
   const speak = button(t('readAloud'), () => readAloud());
-  const preview = button('保存…', () => expand());
-  const translate = button('翻译', () => void assist('selection'));
+  const preview = button(t('panelSavePreview'), () => expand());
+  const translate = button(t('panelTranslate'), () => void assist('selection'));
   const custom = button(input.preferences?.actionName??defaultPreferences.actionName, () => void assist('action'));
-  const dismiss = button('关闭', close);
+  const dismiss = button(t('panelClose'), close);
   dismiss.className = 'dismiss';
   toolbar.append(lookup, translate, speak, custom, preview, dismiss);
   const body = document.createElement('div');
@@ -93,6 +94,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
   let expression = snapshot.expression;
   function renderOriginal(){
   original.replaceChildren();
+  if(snapshot.language)original.lang=snapshot.language;else original.removeAttribute('lang');
   if (expression) {
     const chars = Array.from(snapshot.sentence);
     const mark = document.createElement('mark');
@@ -103,7 +105,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
   renderOriginal();
   const source = document.createElement('a');
   source.className = 'source';
-  source.textContent = snapshot.source.title || snapshot.source.url || '当前网页';
+  source.textContent = snapshot.source.title || snapshot.source.url || t('panelCurrentPage');
   source.title = snapshot.source.url ?? '';
   if (snapshot.source.url) source.href = snapshot.source.url;
   source.target = '_blank';
@@ -111,11 +113,11 @@ export function showReadingPanel(input: ReadingPanelInput) {
   const explanation = document.createElement('p');
   explanation.className = 'explanation';
   explanation.setAttribute('role', 'status');
-  explanation.textContent = expression ? '点击「句中解释」了解这个表达；也可以先保存原句。' : '本次选区跨越句子，可先保存待处理。';
+  explanation.textContent = expression ? t('panelExplainHint') : t('panelCrossSentence');
   const details = document.createElement('details');
   details.hidden = true;
   const summary = document.createElement('summary');
-  summary.textContent = '详细意思';
+  summary.textContent = t('panelDetailedMeaning');
   const detailText = document.createElement('p');
   details.append(summary, detailText);
   const feedback = document.createElement('p');
@@ -129,7 +131,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
   const save = button(t('savePendingAction'), () => void persist('save'));
   const check = button(t('checkExplanation'), () => void explain());
   check.hidden = true;
-  const contextToggle=button('扩展上下文',()=>changeContext());
+  const contextToggle=button(t('panelExpandContext'),()=>changeContext());
   contextToggle.hidden=!input.contextAlternative||input.contextAlternative.sentence===input.snapshot.sentence;
   const openInbox = button(t('openInbox'), () => void chrome.runtime.sendMessage({kind:'open-inbox',accountId,operationId:savedOperation}).then(response=>{if(response.error)feedback.textContent=errorText(new Error(response.error));}).catch(error=>{feedback.textContent=errorText(error);}));
   openInbox.hidden=true;
@@ -171,7 +173,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
   let waitTimer:ReturnType<typeof setTimeout>|null=null;
   const alive = () => !disposed && host.isConnected && input.isAuthorized();
   async function assist(feature:'selection'|'action'){
-    if(!mayAct())return;expand();const run=++assistanceRun;assistance.hidden=false;assistance.textContent='正在处理…';
+    if(!mayAct())return;expand();const run=++assistanceRun;assistance.hidden=false;assistance.textContent=t('working');
     assistanceController?.abort();assistanceController=new AbortController();
     assistance.setAttribute('aria-busy','true');translate.disabled=custom.disabled=true;
     try{const text=await runReading(accountId,feature,expression?.text??snapshot.sentence,snapshot.sentence,input.preferences?.actionPrompt??defaultPreferences.actionPrompt,crypto.randomUUID(),partial=>{if(alive()&&run===assistanceRun)assistance.textContent=partial;},assistanceController.signal,snapshot.language);if(alive()&&run===assistanceRun)assistance.textContent=text;}
@@ -184,8 +186,8 @@ export function showReadingPanel(input: ReadingPanelInput) {
     if(poll)clearTimeout(poll);if(waitTimer)clearTimeout(waitTimer);
     snapshot=snapshot===input.snapshot?input.contextAlternative:input.snapshot;expression=snapshot.expression;
     lookupId=crypto.randomUUID();saveId=crypto.randomUUID();acceptId=crypto.randomUUID();
-    renderOriginal();hint.textContent=t('readingAssistant');contextToggle.textContent=snapshot===input.snapshot?'扩展上下文':'使用原上下文';
-    explanation.textContent='上下文已调整，点击「句中解释」重新解释。';explanation.removeAttribute('aria-busy');
+    renderOriginal();hint.textContent=t('readingAssistant');contextToggle.textContent=snapshot===input.snapshot?t('panelExpandContext'):t('panelOriginalContext');
+    explanation.textContent=t('panelContextAdjusted');explanation.removeAttribute('aria-busy');
     assistance.hidden=true;assistance.removeAttribute('aria-busy');details.hidden=accept.hidden=check.hidden=true;
     lookup.disabled=!expression;check.disabled=false;translate.disabled=custom.disabled=false;feedback.textContent='';layout();
   }
@@ -193,7 +195,7 @@ export function showReadingPanel(input: ReadingPanelInput) {
     if (!alive()) return false;
     if (location.href !== snapshot.source.url) {
       expand();
-      feedback.textContent = '页面已变化，请在当前页面重新划选。';
+      feedback.textContent = t('panelPageChanged');
       return false;
     }
     return true;

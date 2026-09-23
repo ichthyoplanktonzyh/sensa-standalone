@@ -9,7 +9,8 @@ const LANGUAGE_KEY = "sensa:interface-language:v1";
 function initialLanguage(): InterfaceLanguage {
   if (typeof window === "undefined") return defaultInterfaceLocale;
   try {
-    return resolveInterfaceLocale(localStorage.getItem(LANGUAGE_KEY));
+    const saved=localStorage.getItem(LANGUAGE_KEY);
+    return resolveInterfaceLocale(saved??navigator.language);
   } catch {
     return defaultInterfaceLocale;
   }
@@ -29,9 +30,9 @@ function applyLanguage(language: string) {
   }
 }
 const requestedInitialLanguage=initialLanguage();
-const bundledInitialLanguage=requestedInitialLanguage==='ja'
-  ? interfaceLocaleRegistry.ja.fallback??defaultInterfaceLocale
-  : requestedInitialLanguage;
+const bundledInitialLanguage=requestedInitialLanguage in resources
+  ? requestedInitialLanguage
+  : interfaceLocaleRegistry[requestedInitialLanguage].fallback??defaultInterfaceLocale;
 void i18n.use(initReactI18next).init({
   resources,
   lng: bundledInitialLanguage,
@@ -55,6 +56,8 @@ export async function changeInterfaceLanguage(language:string):Promise<void>{
   if(!i18n.hasResourceBundle(locale,'common')){
     i18n.addResourceBundle(locale,'common',await loadCommonMessages(locale),true,true);
   }
+  const {ensureRegisteredNamespaces}=await import('./registerResources');
+  await ensureRegisteredNamespaces(locale);
   await i18n.changeLanguage(locale);
 }
 

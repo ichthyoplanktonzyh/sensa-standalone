@@ -435,7 +435,11 @@
       "previous": "Previous month",
       "next": "Next month",
       "current": "This month",
-      "error": "Unable to save or read check-ins. Please try again."
+      "error": "Unable to save or read check-ins. Please try again.",
+      "pending": "Check-in pending sync",
+      "uncertain": "Some check-in times need review. Original records are preserved. Connect and confirm today’s check-in again.",
+      "timeZone": "Dashed outline means pending sync. Recorded in your account time zone: {{timeZone}}.",
+      "notRecorded": "Not checked in"
     },
     "title": "My learning",
     "back": "Back",
@@ -492,5 +496,20 @@
       "review": "Review & reinforcement",
       "complete": "Initial learning completed / known"
     }
+  },
+  "quickDict": {
+    "detailUnavailable": "The full Reference entry for “{{word}}” is currently unavailable",
+    "close": "Close quick dictionary",
+    "playUs": "Play US pronunciation of {{word}}",
+    "us": "US",
+    "briefMeanings": "Brief meanings",
+    "noBriefMeanings": "No brief Reference meanings are available. View the full entry.",
+    "querying": "Looking up…",
+    "unavailable": "Unavailable",
+    "viewDetails": "View detailed meanings",
+    "lookupWord": "Look up: {{word}}",
+    "clickToLookup": "Click to look up",
+    "loading": "Looking up the word…",
+    "error": "Could not get a dictionary result for this word. Try again later."
   }
 }
