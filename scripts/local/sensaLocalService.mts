@@ -1,5 +1,6 @@
 /** Loopback-only Auth and consumer API for local owner acceptance. */
 import { serve } from '@hono/node-server';
+import { createHash } from 'node:crypto';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { jwtVerify, SignJWT } from 'jose';
@@ -31,12 +32,29 @@ const localSubject = '10000000-0000-4000-8000-000000000001';
 const localSessionId = '10000000-0000-4000-8000-000000000002';
 const localRefreshToken = 'sensa-local-refresh-token';
 const localOtp = '123456';
+const matrixAcceptance = process.env.SENSA_LOCAL_MATRIX_ACCEPTANCE === '1';
 const signingKey = new TextEncoder().encode('sensa-local-owner-acceptance-only');
 const createdAt = '2026-01-01T00:00:00.000Z';
 let currentEmail = 'local@sensa.invalid';
 
-const user = (email = currentEmail) => ({
-  id: localSubject,
+const matrixIdentity = (caseKey: string) => {
+  if (!matrixAcceptance || !/^[a-zA-Z0-9-]{2,40}--[a-zA-Z0-9-]{2,40}$/u.test(caseKey)) {
+    throw new Error('Invalid language matrix case');
+  }
+  const uuid = (seed: string) => {
+    const hash = createHash('sha256').update(`sensa-language-matrix:${seed}:${caseKey}`).digest('hex');
+    return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+  };
+  return {
+    subject: uuid('subject'),
+    sessionId: uuid('session'),
+    email: `matrix+${caseKey.toLowerCase()}@sensa.invalid`,
+    refreshToken: `sensa-matrix-refresh:${caseKey}`,
+  };
+};
+
+const user = (email = currentEmail, subject = localSubject) => ({
+  id: subject,
   aud: 'authenticated',
   role: 'authenticated',
   email,
@@ -52,29 +70,36 @@ const user = (email = currentEmail) => ({
   is_anonymous: false,
 });
 
-async function localSession(email = currentEmail) {
-  currentEmail = email;
+async function localSession(email = currentEmail, caseKey?: string) {
+  const identity = caseKey ? matrixIdentity(caseKey) : {
+    subject: localSubject,
+    sessionId: localSessionId,
+    email,
+    refreshToken: localRefreshToken,
+  };
+  if (!caseKey) currentEmail = email;
   const now = Math.floor(Date.now() / 1000);
   const accessToken = await new SignJWT({
-    email,
+    email: identity.email,
     role: 'authenticated',
-    session_id: localSessionId,
+    session_id: identity.sessionId,
+    ...(caseKey ? { case_key: caseKey } : {}),
     amr: [{ method: 'otp', timestamp: now }],
   })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setIssuer(issuer)
     .setAudience('authenticated')
-    .setSubject(localSubject)
+    .setSubject(identity.subject)
     .setIssuedAt(now)
     .setExpirationTime(now + 24 * 60 * 60)
     .sign(signingKey);
   return {
     access_token: accessToken,
-    refresh_token: localRefreshToken,
+    refresh_token: identity.refreshToken,
     token_type: 'bearer',
     expires_in: 24 * 60 * 60,
     expires_at: now + 24 * 60 * 60,
-    user: user(email),
+    user: user(identity.email, identity.subject),
   };
 }
 
@@ -87,7 +112,12 @@ const verify = async (request: Request): Promise<ConsumerPrincipal> => {
       audience: 'authenticated',
       algorithms: ['HS256'],
     });
-    if (payload.sub !== localSubject || payload.session_id !== localSessionId || typeof payload.email !== 'string') {
+    const identity = typeof payload.case_key === 'string' ? matrixIdentity(payload.case_key) : {
+      subject: localSubject,
+      sessionId: localSessionId,
+      email: currentEmail,
+    };
+    if (payload.sub !== identity.subject || payload.session_id !== identity.sessionId || typeof payload.email !== 'string') {
       throw new Error('Invalid local identity');
     }
     const authenticatedAt = Array.isArray(payload.amr)
@@ -101,8 +131,8 @@ const verify = async (request: Request): Promise<ConsumerPrincipal> => {
     if (!authenticatedAt) throw new Error('Missing local authentication method');
     return {
       issuer,
-      subject: localSubject,
-      sessionId: localSessionId,
+      subject: identity.subject,
+      sessionId: identity.sessionId,
       email: payload.email,
       authenticatedAt,
     };
@@ -143,7 +173,12 @@ app.use('*', async (context, next) => {
 });
 
 app.get('/health', context => context.json({ ok: true, environment: 'local-owner-acceptance' }));
-app.get('/__sensa_local/session', async context => context.json(await localSession()));
+app.get('/__sensa_local/session', async context => {
+  const caseKey = context.req.query('case');
+  if (!caseKey) return context.json(await localSession());
+  try { return context.json(await localSession(undefined, caseKey)); }
+  catch { return context.json({ code: 'invalid_matrix_case' }, 400); }
+});
 app.post('/auth/v1/otp', async context => {
   const input = await context.req.json().catch(() => ({})) as { email?: unknown };
   if (typeof input.email !== 'string' || !/^\S+@\S+\.\S+$/u.test(input.email) || input.email.length > 254) {
@@ -161,11 +196,16 @@ app.post('/auth/v1/verify', async context => {
 });
 app.post('/auth/v1/token', async context => {
   const input = await context.req.json().catch(() => ({})) as { refresh_token?: unknown };
+  if (typeof input.refresh_token === 'string' && input.refresh_token.startsWith('sensa-matrix-refresh:')) {
+    const caseKey = input.refresh_token.slice('sensa-matrix-refresh:'.length);
+    try { return context.json(await localSession(undefined, caseKey)); }
+    catch { return context.json({ message: 'Invalid refresh token' }, 400); }
+  }
   if (input.refresh_token !== localRefreshToken) return context.json({ message: 'Invalid refresh token' }, 400);
   return context.json(await localSession());
 });
 app.get('/auth/v1/user', async context => {
-  try { return context.json(user((await verify(context.req.raw)).email ?? currentEmail)); }
+  try { const principal = await verify(context.req.raw); return context.json(user(principal.email ?? currentEmail, principal.subject)); }
   catch { return context.json({ message: 'Invalid token' }, 401); }
 });
 app.post('/auth/v1/logout', context => context.body(null, 204));

@@ -1,12 +1,13 @@
 {
   "version": "5",
   "specifiers": {
-    "npm:@genkit-ai/compat-oai@1.42.0": "1.42.0_genkit@1.42.0__@google-cloud+firestore@7.11.6__firebase-admin@14.4.0_@google-cloud+firestore@7.11.6_firebase-admin@14.4.0_zod@4.4.3",
+    "npm:@genkit-ai/compat-oai@1.42.0": "1.42.0_genkit@1.42.0__@google-cloud+firestore@7.11.6__firebase-admin@14.4.0_ws@8.21.3_zod@4.4.3",
     "npm:genkit@1.42.0": "1.42.0_@google-cloud+firestore@7.11.6_firebase-admin@14.4.0",
     "npm:hono@4.13.4": "4.13.4",
     "npm:jose@6.2.12": "6.2.12",
-    "npm:openai@4.104.0": "4.104.0_zod@4.4.3",
+    "npm:openai@4.104.0": "4.104.0_ws@8.21.3_zod@4.4.3",
     "npm:pg@8.23.0": "8.23.0",
+    "npm:ws@8.21.3": "8.21.3",
     "npm:zod@4.4.3": "4.4.3"
   },
   "npm": {
@@ -105,7 +106,7 @@
         "uuid@10.0.0"
       ]
     },
-    "@genkit-ai/compat-oai@1.42.0_genkit@1.42.0__@google-cloud+firestore@7.11.6__firebase-admin@14.4.0_@google-cloud+firestore@7.11.6_firebase-admin@14.4.0_zod@4.4.3": {
+    "@genkit-ai/compat-oai@1.42.0_genkit@1.42.0__@google-cloud+firestore@7.11.6__firebase-admin@14.4.0_ws@8.21.3_zod@4.4.3": {
       "integrity": "sha512-itLh7NMAXMx6Qk2TDNkZV2035SgdLkjCuTCOJyQStmghD5DdLFv3b/5Vd2FOAvPXz+vYFl1NZ2fZUJ3gp9CX7A==",
       "dependencies": [
         "genkit",
@@ -2302,7 +2303,7 @@
         "fn.name"
       ]
     },
-    "openai@4.104.0_zod@4.4.3": {
+    "openai@4.104.0_ws@8.21.3_zod@4.4.3": {
       "integrity": "sha512-p99EFNsA/yX6UhVO93f5kJsDRLAg+CTA2RBqdHK4RtK8u5IJw32Hyb2dTGKbnnFmnuoBv5r7Z2CURI9sGZpSuA==",
       "dependencies": [
         "@types/node@18.19.130",
@@ -2312,9 +2313,11 @@
         "form-data-encoder",
         "formdata-node",
         "node-fetch@2.7.0",
+        "ws",
         "zod@4.4.3"
       ],
       "optionalPeers": [
+        "ws",
         "zod@4.4.3"
       ],
       "bin": true
@@ -2946,6 +2949,7 @@
       "npm:jose@6.2.12",
       "npm:openai@4.104.0",
       "npm:pg@8.23.0",
+      "npm:ws@8.21.3",
       "npm:zod@4.4.3"
     ]
   }

@@ -44,26 +44,26 @@ assert.equal(reservations,1);assert.equal(completions,1);assert.equal(authorizat
 const changed={...teacher,body:{...teacher.body,messages:[...message,{role:'user' as const,content:'different'}]}};
 const conflict=await send(changed);assert.equal(conflict.status,409);assert.deepEqual(await conflict.json(),{code:'model_request_conflict'});
 
-// The native clarification teacher may expose only semantic-world lookup.
+// Reuse lookup is outside the teacher loop, so the teacher cannot call it.
 const teacherTools={...teacher,id:crypto.randomUUID(),body:{...teacher.body,response_format:{type:'json_object' as const},tools:['lookup_meanings'].map(name=>({type:'function' as const,function:{name,description:name,parameters:{type:'object'}}}))}};
-const toolsAccepted=await send(teacherTools);
-assert.equal(toolsAccepted.status,200);assert.equal(reservations,2);assert.equal(completions,2);assert.deepEqual(selected,['teacher','teacher']);
+const toolsDenied=await send(teacherTools);
+assert.equal(toolsDenied.status,400);assert.deepEqual(await toolsDenied.json(),{code:'unapproved_tool'});assert.equal(reservations,1);assert.equal(completions,1);assert.deepEqual(selected,['teacher']);
 
-// A proposal is final model output, not even a recognized executable tool.
+// A legacy proposal tool is not part of the teacher contract.
 const fakeProposalTool={...teacher,id:crypto.randomUUID(),body:{...teacher.body,tools:[{type:'function' as const,function:{name:'propose_meaning',description:'not a capability',parameters:{type:'object'}}}]}};
-const proposalDenied=await send(fakeProposalTool);assert.equal(proposalDenied.status,400);assert.deepEqual(await proposalDenied.json(),{code:'invalid_request'});assert.equal(reservations,2);assert.equal(completions,2);
+const proposalDenied=await send(fakeProposalTool);assert.equal(proposalDenied.status,400);assert.deepEqual(await proposalDenied.json(),{code:'invalid_request'});assert.equal(reservations,1);assert.equal(completions,1);
 
 // Each purpose resolves its own account connection.
 const reference={id:crypto.randomUUID(),purpose:'reference',body:{model:'sensa-managed',messages:message,max_tokens:400,stream:false,response_format:{type:'json_object'}}};
 const resolved=await send(reference);
-assert.equal(resolved.status,200);assert.deepEqual(selected,['teacher','teacher','reference']);assert.equal((await resolved.json() as {response:{connection:string}}).response.connection,'Reference');assert.equal(completions,3);assert.equal(reservations,3);
+assert.equal(resolved.status,200);assert.deepEqual(selected,['teacher','reference']);assert.equal((await resolved.json() as {response:{connection:string}}).response.connection,'Reference');assert.equal(completions,2);assert.equal(reservations,2);
 
 // A purpose that exposes no tools rejects one, and never reserves.
 const withTool={...reference,id:crypto.randomUUID(),body:{...reference.body,tools:[{type:'function',function:{name:'lookup_meanings',description:'lookup',parameters:{}}}]}};
-const denied=await send(withTool);assert.equal(denied.status,400);assert.deepEqual(await denied.json(),{code:'unapproved_tool'});assert.equal(reservations,3);assert.equal(completions,3);
+const denied=await send(withTool);assert.equal(denied.status,400);assert.deepEqual(await denied.json(),{code:'unapproved_tool'});assert.equal(reservations,2);assert.equal(completions,2);
 
 const mismatch=await app.request('/turn',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...teacher,inputDigest:'0'.repeat(64)})});
-assert.equal(mismatch.status,400);assert.deepEqual(await mismatch.json(),{code:'input_digest_mismatch'});assert.equal(reservations,3);assert.equal(completions,3);
+assert.equal(mismatch.status,400);assert.deepEqual(await mismatch.json(),{code:'input_digest_mismatch'});assert.equal(reservations,2);assert.equal(completions,2);
 
 const streamed={...teacher,id:crypto.randomUUID()};
 const streamedResponse=await sendTo('/turn/stream',streamed);
@@ -71,7 +71,7 @@ assert.equal(streamedResponse.status,200);assert.match(streamedResponse.headers.
 const events=(await streamedResponse.text()).trim().split('\n').map(line=>JSON.parse(line));
 assert.deepEqual(events.slice(0,2),[{type:'delta',text:'{"reply":"流'},{type:'delta',text:'式回复"}'}]);
 assert.deepEqual(events[2],{type:'result',value:{id:streamed.id,inputDigest:createHash('sha256').update(canonicalConsumerJson(streamed)).digest('hex'),response:{model:'fixture',purpose:'teacher',connection:'Teacher'}}});
-assert.equal(reservations,4);assert.equal(completions,4);assert.equal(authorizations,13);assert.deepEqual(selected,['teacher','teacher','reference','teacher']);
+assert.equal(reservations,3);assert.equal(completions,3);assert.deepEqual(selected,['teacher','reference','teacher']);
 console.log('PASS: Web model turn validates its digest, resolves a connection before reserving, replays a matching receipt without re-execution, conflicts on changed input, permits only approved tools, marks actual execution, and exposes a no-store NDJSON stream. Synthetic provider; no database/network.');
 
 // Resource tools follow the same managed Genkit transport allowlist.
@@ -104,5 +104,11 @@ const lostTurn={...teacher,id:crypto.randomUUID()},lostBody=JSON.stringify({...l
 assert.equal((await lostApp.request('/turn',{method:'POST',headers:{'content-type':'application/json'},body:lostBody})).status,401);
 const recovered=await lostApp.request('/turn',{method:'POST',headers:{'content-type':'application/json'},body:lostBody});assert.equal(recovered.status,200);assert.equal(lostCompletions,1);assert.equal((await recovered.json() as any).response.answer,'saved-before-response');
 console.log('PASS: pre-execution queue/cancel failures release reservations; upstream rejection consumes a known terminal state; timeout remains unknown; a lost HTTP response replays the saved result without a second model call.');
+
+// The teacher's two scoped tools are accepted through the managed route.
+for (const name of ['organize_answer', 'reply_to_learner']) {
+ const response=await send({...teacher,id:crypto.randomUUID(),body:{...teacher.body,tools:[{type:'function' as const,function:{name,description:name,parameters:{type:'object'}}}]}});
+ assert.equal(response.status,200);
+}
 
 });

@@ -1,5 +1,6 @@
 import {SENSA_CONTENT_AGENT_TOOLS} from './contentAgent.js';
 import {z} from 'zod';
+export const SENSA_TEACHER_AGENT_TOOLS=['organize_answer','reply_to_learner'] as const;
 const part = z.union([z.object({
   type: z.literal('text'),
   text: z.string().max(300000)
@@ -25,7 +26,7 @@ const message = z.object({
 const tool = z.object({
   type: z.literal('function'),
   function: z.object({
-    name: z.enum(['lookup_meanings', ...SENSA_CONTENT_AGENT_TOOLS]),
+    name: z.enum(['lookup_meanings', ...SENSA_TEACHER_AGENT_TOOLS, ...SENSA_CONTENT_AGENT_TOOLS]),
     description: z.string().max(1000),
     parameters: z.record(z.string(), z.unknown())
   }).strict()

@@ -3,12 +3,9 @@
  *
  * One conversation clarifies Context, Sense and target Expression, plus an
  * optional Focus only when the Context needs disambiguation. Every learner
- * turn uses the same bounded teacher loop: the model answers naturally, judges
- * whether Context, Sense and Expression are clear, and may inspect the
- * learner's existing semantic world when reuse genuinely matters. Its hidden
- * structured assessment is final-output state, not a fake tool call. There is
- * no opening-turn exception, extraction mode, or learner-triggered extraction
- * phase.
+ * turn uses one bounded teacher loop. It may ask one useful question or stage
+ * a candidate and then give a natural reply. There is no opening-turn
+ * exception or learner-triggered extraction phase.
  *
  * The agent only ever *proposes*: it can never confirm anything. Confirmation
  * is a separate explicit learner intent handled by the journey gateway.
@@ -137,17 +134,10 @@ export const emptyWorkingSet = (): SemanticAgentWorkingSet => ({
   expressions: [],
 });
 
-/** Read-only semantic-world material available to the lookup tool. */
-export interface SemanticAgentKnownMeaning {
-  personalMeaningId: string;
-  senseVersionId: string;
-  coreMeaningFocus: string;
-  expressions: string[];
-}
-
 export interface SemanticAgentStep {
   stepId: string;
-  tool: 'lookup_meanings' | 'unknown';
+  /** Historical lookup activity may remain in a restored session. */
+  tool: 'lookup_meanings' | 'organize_answer' | 'reply_to_learner' | 'unknown';
   status: 'completed' | 'failed';
   summary: string;
 }
@@ -156,7 +146,7 @@ export interface SemanticAgentTurnResult {
   assistantMessage: string;
   workingSet: SemanticAgentWorkingSet;
   /**
-   * The model's signal that the candidate tuple looks clear enough to confirm.
+   * The validated teacher candidate is ready for review.
    * It only promotes the confirm affordance; it never confirms, and the learner
    * may confirm earlier or keep talking past it.
    */
@@ -173,8 +163,7 @@ export interface SemanticAgentTurnInput {
   readyToConfirm: boolean;
   learnerEditedTracks: WorkingSetTrack[];
   focusLocked: boolean;
-  knownMeanings: SemanticAgentKnownMeaning[];
-  /** Cancels the whole bounded loop, including local reference lookups. */
+  /** Cancels every model step in the teacher loop. */
   signal?: AbortSignal;
   /**
    * Ephemeral display text for the in-flight assistant reply. It is never

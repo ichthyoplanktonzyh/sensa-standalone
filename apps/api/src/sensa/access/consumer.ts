@@ -7,6 +7,7 @@ import {
   sensaAgentConnectionListSchema,
   sensaAgentConnectionRevokeSchema,
   sensaAgentConnectionSetupCreateSchema,
+  sensaLanguageForDeclaredTag,
 } from '@sensa/contracts/sensa';
 import {Hono} from 'hono';
 import {bodyLimit} from 'hono/body-limit';
@@ -30,6 +31,7 @@ import {sensaExtensionAuthorizationSchema,sensaExtensionExchangeSchema} from '@s
 import {serviceTelemetry,setTelemetryError,type ServiceRequestRecord} from './telemetry.js';
 import {registerBrowserTelemetry,type BrowserTelemetrySink,type BrowserTelemetryRateLimiter} from './browserTelemetry.js';
 import {readLearningContentRegistry} from './learningContentRegistry.js';
+import {synthesizeEdgeSpeech} from '../speech/edgeTts.js';
 import {createStreamAuthorizationGate} from './streamAuthorization.js';
 
 const modelDailyLimit=30;
@@ -111,6 +113,25 @@ export function createConsumerRoutes(options:ConsumerRoutesOptions={}){
     if(error instanceof z.ZodError||error instanceof SyntaxError){setTelemetryError(context,'invalid_request');return context.json({code:'invalid_request'},400);}
     setTelemetryError(context,'temporarily_unavailable');
     return context.json({code:'temporarily_unavailable'},503);
+  });
+
+  app.post('/sensa/speech/edge-tts',async context=>{
+    const identity=await verify(context.req.raw);
+    await transaction(db=>account(db,identity,false,false,clock()));
+    const input=z.object({
+      surface:z.string().trim().min(1).max(500),
+      languageTag:z.string().min(2).max(20),
+      voice:z.string().regex(/^[A-Za-z0-9-]{1,80}$/u),
+      locale:z.string().regex(/^[A-Za-z]{2,3}-[A-Za-z0-9-]{2,20}$/u),
+    }).strict().parse(await context.req.json());
+    const language=sensaLanguageForDeclaredTag(input.languageTag);
+    if(!language?.asTarget||language.speechLocale!==input.locale
+      ||!input.voice.startsWith(`${input.locale}-`))throw new ConsumerError(400,'speech_language_unavailable');
+    let audio:Buffer;
+    try{audio=await synthesizeEdgeSpeech(input,AbortSignal.timeout(45_000));}
+    catch{throw new ConsumerError(503,'speech_unavailable');}
+    context.header('Cache-Control','no-store');
+    return context.json({audioBase64:audio.toString('base64')});
   });
 
   app.post('/sensa/resource-facts',async context=>{

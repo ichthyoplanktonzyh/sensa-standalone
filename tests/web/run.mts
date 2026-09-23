@@ -200,7 +200,7 @@ if (filters.list) {
       env: {
         ...process.env,
         ...(entry.memoryLibrary ? {SENSA_TEST_MEMORY_LIBRARY: 'true'} : {}),
-        ...(entry.runner === 'playwright' ? {SENSA_PLAYWRIGHT_OUTPUT_DIR: `.tmp/playwright-results/${entry.id}`} : {}),
+        ...(entry.runner === 'playwright' ? {SENSA_PLAYWRIGHT_OUTPUT_DIR: process.env.SENSA_PLAYWRIGHT_OUTPUT_DIR ?? `.tmp/playwright-results/${entry.id}`} : {}),
         ...entry.env,
       },
       stdio: 'inherit',

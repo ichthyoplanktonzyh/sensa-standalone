@@ -16,10 +16,8 @@ import './PersonalMeaningDetailScreen.css';
  * — it is a basket, not a progress bar, and it never shows "已确认" while the
  * thread is still open.
  *
- * Every learner turn runs the same bounded teacher loop. The agent replies
- * naturally, judges Context–Sense–Expression clarity in its structured final
- * output, and may inspect existing meanings when reuse genuinely matters.
- * There is no separate extraction mode.
+ * Every learner turn runs the same bounded teacher flow. The agent replies
+ * naturally, then privately structures a ready proposal for learner review.
  *
  * A Focus is only proposed when the Context needs an explicit aspect boundary.
  * The learner's confirmation always writes Sense confirmation and Alignment,
@@ -38,7 +36,6 @@ import {
   useJourneyDetail,
   useJourneyClarificationDraft,
   useJourneyGateway,
-  useJourneyWorld,
   type ClarificationDraftView,
   type JourneyAlignmentView,
   type JourneyDetailView,
@@ -46,6 +43,7 @@ import {
 } from '../personalMeaningJourney';
 import { newUuid } from '../personalMeaningJourney/ids';
 import { createRealSemanticAgent } from '../personalMeaningJourney/realSemanticAgent';
+import { beginAgentBusinessTrace } from '../../observability/agentTrace';
 import { languageRoutesSnapshot } from '../../data/library/language';
 import {
   loadSemanticAgentSession,
@@ -602,7 +600,6 @@ const PreviewPersonalMeaningDetailScreen = ({
 }: PersonalMeaningDetailScreenProps) => {
   useTranslation();
   const gateway = useJourneyGateway();
-  const { items: worldItems } = useJourneyWorld();
   const { detail, status } = useJourneyDetail(personalMeaningId);
   const clarificationDraft = useJourneyClarificationDraft(personalMeaningId);
   const clarificationMaterial = detail
@@ -714,16 +711,6 @@ const PreviewPersonalMeaningDetailScreen = ({
     }) ?? []
   ), [detail]);
 
-  const knownMeanings = useMemo(() => worldItems.flatMap((item) => [
-    ...item.detail.focuses.flatMap((focus) => focus.alignment ? [focus.alignment] : []),
-    ...item.detail.directAlignments,
-  ].map((candidate) => ({
-    personalMeaningId: item.personalMeaningId,
-    senseVersionId: candidate.senseVersionId,
-    coreMeaningFocus: candidate.coreMeaningFocus,
-    expressions: candidate.confirmedBindings.map((binding) => binding.surfaceForm),
-  }))), [worldItems]);
-
   const runTurn = useCallback(async (
     baseSession: SemanticAgentSession,
     learnerBody?: string,
@@ -731,6 +718,7 @@ const PreviewPersonalMeaningDetailScreen = ({
     materialOverride?: SemanticAgentMaterial,
   ) => {
     if (!clarificationMaterial) return;
+    if (baseSession.messages.length === 0) beginAgentBusinessTrace();
     const learnerMessage = learnerBody?.trim() || learnerMediaReferenceIds.length
       ? message('learner', learnerBody?.trim() ?? '', learnerMediaReferenceIds)
       : null;
@@ -755,7 +743,6 @@ const PreviewPersonalMeaningDetailScreen = ({
         readyToConfirm: baseSession.readyToConfirm,
         learnerEditedTracks: baseSession.learnerEditedTracks,
         focusLocked: baseSession.focusLocked,
-        knownMeanings,
         languages:languageContext,
         signal: controller.signal,
         onAssistantText: (text) => {
@@ -795,7 +782,7 @@ const PreviewPersonalMeaningDetailScreen = ({
         setBusy(false);
       }
     }
-  }, [clarificationMaterial, commit, knownMeanings]);
+  }, [clarificationMaterial, commit]);
 
   const stopTurn = useCallback(() => {
     turnAbortRef.current?.abort();

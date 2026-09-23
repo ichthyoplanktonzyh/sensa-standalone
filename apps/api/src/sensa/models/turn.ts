@@ -3,7 +3,7 @@ import {Hono} from 'hono';
 import {bodyLimit} from 'hono/body-limit';
 import {stream} from 'hono/streaming';
 import {z} from 'zod';
-import {canonicalConsumerJson,modelTurnInputSchema,SENSA_CONTENT_AGENT_TOOLS} from '@sensa/contracts/sensa';
+import {canonicalConsumerJson,modelTurnInputSchema,SENSA_CONTENT_AGENT_TOOLS,SENSA_TEACHER_AGENT_TOOLS} from '@sensa/contracts/sensa';
 import type {ReadingCompletion} from '../reading/service.js';
 import {ConsumerError} from '../access/auth.js';
 import {executeModel} from './executor.js';
@@ -38,7 +38,7 @@ export const completeModelTurn:ModelTurnCompletion=(connection,body,signal,meta,
 
 /** Tool exposure per purpose. A purpose absent here is a bug, not a permissive default. */
 const purposeTools:Record<Input['purpose'],string[]>={
-  teacher:['lookup_meanings'],
+  teacher:[...SENSA_TEACHER_AGENT_TOOLS],
   content:[...SENSA_CONTENT_AGENT_TOOLS],
   review:[],
   reference:[],

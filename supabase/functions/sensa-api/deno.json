@@ -13,6 +13,7 @@
     "genkit": "npm:genkit@1.42.0",
     "@genkit-ai/compat-oai": "npm:@genkit-ai/compat-oai@1.42.0",
     "openai": "npm:openai@4.104.0",
-    "openai/shims/web": "npm:openai@4.104.0/shims/web"
+    "openai/shims/web": "npm:openai@4.104.0/shims/web",
+    "ws": "npm:ws@8.21.3"
   }
 }

@@ -14,22 +14,23 @@ const learningWorkspace=await readFile('apps/web/src/experience/library/Learning
 const route=await readFile('apps/api/src/sensa/models/turn.ts','utf8');
 const modelProtocol=await readFile('packages/contracts/src/sensa/modelProtocol.ts','utf8');
 
-assert(runner.includes('MAX_MODEL_TURNS = 6'));
-assert(runner.includes('for (let round = 0; round < MAX_MODEL_TURNS; round += 1)'));
+assert(runner.includes('MAX_STEPS = 6'));
+assert(runner.includes("name: 'organize_answer'"));
+assert(runner.includes("name: 'reply_to_learner'"));
+assert(runner.includes("complete(provider, 'teacher', executionId, messages, teacherTools, modelSignal)"));
 assert(!runner.includes('openingReplyPrompt'));
 assert(!runner.includes('isOpeningReply'));
-assert(runner.includes('const teacherTurnSchema'));
-assert(runner.includes("context: z.enum(['clear', 'unclear'])"));
-assert(runner.includes("'json_object'"));
-assert(runner.includes("name: 'lookup_meanings'"));
-assert(route.includes("teacher:['lookup_meanings']"));
+assert(runner.includes('parseOrganizedAnswer'));
+assert(runner.includes('parseLearnerReply'));
+assert(!runner.includes('projectionPrompt'));
+assert(!runner.includes('responseFormat'));
+assert(!runner.includes("name: 'lookup_meanings'"));
+assert(route.includes('teacher:[...SENSA_TEACHER_AGENT_TOOLS]'));
 assert(!runner.includes("name: 'lookup_reference_facts'"));
-assert(!runner.includes("name: 'propose_meaning'"));
-assert(!modelProtocol.includes("'propose_meaning'"));
-assert(!modelProtocol.includes("'ask_learner'"));
+assert(modelProtocol.includes("'organize_answer','reply_to_learner'"));
 assert(!contract.includes("SemanticAgentTurnMode = 'chat' | 'consolidate'"));
 assert(contract.includes('onAssistantText?: (text: string) => void'));
-assert(runner.includes("partialJsonStringField(streamed, 'reply')"));
+assert(runner.includes('input.onAssistantText?.(reply)'));
 assert(screen.includes('streamingAssistant'));
 assert(modelProtocol.includes('stream: z.literal(false)'));
 assert(modelProtocol.includes('modelTurnStreamEventSchema'));
@@ -51,6 +52,6 @@ assert(
 );
 assert(app.includes('onConversationCreated={openPersonalMeaning}'));
 
-console.log('PASS: native Sensa entry and Inbox clarification share one natural teacher loop whose structured clarity assessment is final output; only semantic-world lookup is a tool, with no consolidate mode or model/paid calls.');
+console.log('PASS: native Sensa entry and Inbox clarification use one bounded teacher loop with separate proposal and visible-reply tools; no model/paid calls.');
 
 });

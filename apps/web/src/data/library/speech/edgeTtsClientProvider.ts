@@ -1,5 +1,6 @@
 import {clientSpeechInputSchema,type ClientSpeechInput,type ClientSpeechMaterial,type ClientSpeechProvider} from './provider';
 import {edgeVoiceByLanguage} from './edgeVoiceCatalog';
+import {auth} from '../../account/auth';
 
 const TRUSTED_CLIENT_TOKEN='6A5AA1D4EAFF4E9FB37E23D68491D6F4';
 const EDGE_VERSION='143.0.3650.75';
@@ -98,10 +99,39 @@ async function synthesizeEdge(input:ClientSpeechInput,signal:AbortSignal,depende
  });
 }
 
+async function synthesizeThroughService(input:ClientSpeechInput,signal:AbortSignal):Promise<ClientSpeechMaterial>{
+ const selection=edgeVoiceByLanguage.get(input.languageTag);
+ if(!selection)throw Error('speech_language_unavailable');
+ const base=import.meta.env.VITE_SENSA_API_URL;
+ const session=(await auth?.getSession())?.data.session;
+ if(!base||!session)throw Error('localFlow.authUnavailable');
+ let response:Response;
+ try{
+  response=await fetch(base.replace(/\/+$/u,'')+'/sensa/speech/edge-tts',{
+   method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+session.access_token},
+   body:JSON.stringify({surface:input.surface,languageTag:input.languageTag,voice:selection.voice,locale:selection.locale}),
+   signal:AbortSignal.any([signal,AbortSignal.timeout(50_000)]),credentials:'omit',redirect:'error',cache:'no-store',
+  });
+ }catch{signal.throwIfAborted();throw Error('edge_tts_connection_failed');}
+ if(response.status===401||response.status===403)throw Error('localFlow.authUnavailable');
+ if(!response.ok)throw Error('edge_tts_connection_failed');
+ const result:unknown=await response.json();
+ const audioBase64=(result as {audioBase64?:unknown})?.audioBase64;
+ if(typeof audioBase64!=='string'||audioBase64.length<100||audioBase64.length>2_800_000||!/^[A-Za-z0-9+/]+={0,2}$/u.test(audioBase64))throw Error('edge_tts_invalid_message');
+ if((await auth?.getSession())?.data.session?.user.id!==session.user.id)throw Error('localFlow.authUnavailable');
+ return {surface:input.surface,languageTag:input.languageTag,audioUrl:`data:audio/mpeg;base64,${audioBase64}`,method:'tts',phoneticNotation:null,accentLabel:selection.locale,
+  source:JSON.stringify({provider:'microsoft-edge-read-aloud',providerRevision:1,voice:selection.voice,locale:selection.locale,rate:'+0%',format:'audio-24khz-48kbitrate-mono-mp3'})};
+}
+
 export function createEdgeTtsClientProvider(dependencies:EdgeTtsDependencies={}):ClientSpeechProvider{
  return Object.freeze({
   id:'microsoft-edge-read-aloud',revision:1,displayName:'Microsoft Edge Read Aloud',
-  synthesize:(input,signal)=>synthesizeEdge(clientSpeechInputSchema.parse(input),AbortSignal.any([signal,AbortSignal.timeout(45_000)]),dependencies),
+  synthesize:(input,signal)=>{
+   const parsed=clientSpeechInputSchema.parse(input);
+   return dependencies.socket||!import.meta.env.VITE_SENSA_API_URL
+    ?synthesizeEdge(parsed,AbortSignal.any([signal,AbortSignal.timeout(45_000)]),dependencies)
+    :synthesizeThroughService(parsed,signal);
+  },
  });
 }
 

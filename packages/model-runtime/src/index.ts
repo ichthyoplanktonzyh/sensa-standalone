@@ -25,8 +25,10 @@ function toRequest(body:ModelTurnBody,streaming=false):GenerateRequest{
 const flow=ai.defineFlow('sensa-model-execution',async(meta:{id:string;purpose:ModelPurpose;provider:string;model:string})=>{
  const w=context.getStore();if(!w)throw new ModelExecutionError('model_context_missing');
  try{
+  let providerFetches=0;
   const client=new OpenAI({apiKey:w.connection.apiKey,baseURL:w.connection.baseUrl,maxRetries:0,timeout:45000,fetch:async(url,init)=>{
-   const response=await fetch(url,{...init,redirect:'error'});if(!response.body)return response;let size=0;const limit=w.onText?2*1024*1024:256*1024;const body=response.body.pipeThrough(new TransformStream<Uint8Array,Uint8Array>({transform(chunk,controller){size+=chunk.length;if(size>limit){controller.error(new ModelExecutionError('model_invalid_response'));return;}controller.enqueue(chunk);}}));return new Response(body,{status:response.status,statusText:response.statusText,headers:response.headers});
+   providerFetches++;
+   const response=await fetch(url,{...init,redirect:'error'});if(!response.body)return response;let size=0;const limit=w.onText?2*1024*1024:256*1024;const body=response.body.pipeThrough(new TransformStream<Uint8Array,Uint8Array>({transform(chunk,controller){size+=chunk.length;if(size>limit){console.info(JSON.stringify({event:'sensa.model_result_invalid',id:meta.id,reason:'response_size_limit',bytes:size,limit}));controller.error(new ModelExecutionError('model_invalid_response'));return;}controller.enqueue(chunk);}}));return new Response(body,{status:response.status,statusText:response.statusText,headers:response.headers});
   }});
   const runner=openAIModelRunner(w.connection.model,client as unknown as Parameters<typeof openAIModelRunner>[1],(_req,params)=>{
    // compat-oai parses each JSON-mode stream delta as a complete document. Keep
@@ -35,14 +37,23 @@ const flow=ai.defineFlow('sensa-model-execution',async(meta:{id:string;purpose:M
    if(new URL(w.connection.baseUrl).hostname==='api.deepseek.com')(params as unknown as Record<string,unknown>).thinking={type:'disabled'};if(w.connection.temperature!==undefined)params.temperature=w.connection.temperature;});
   // Network retries are bounded here; content/schema correction belongs to the caller.
   for(let attempt=0;;attempt++){
+   const requestsBefore=providerFetches;
    try{w.result=await runner(toRequest(w.body,!!w.onText),{abortSignal:w.signal,...(w.onText?{streamingRequested:true,sendChunk:async chunk=>{const text=chunk.content?.map(p=>p.text??'').join('');if(text)await w.onText!(text);}}:{})});break;}
-   catch(e){const status=apiStatus(e);if(w.onText||attempt>=1||!status||![429,502,503,504].includes(status)||w.signal.aborted)throw e;await new Promise<void>((resolve,reject)=>{const done=()=>{clearTimeout(timer);w.signal.removeEventListener('abort',abort);resolve();};const abort=()=>{clearTimeout(timer);reject(new ModelExecutionError('model_cancelled'));};const timer=setTimeout(done,500);w.signal.addEventListener('abort',abort,{once:true});if(w.signal.aborted)abort();});}
+   catch(e){const status=apiStatus(e),retryableStatus=!!status&&[429,502,503,504].includes(status),invalidProviderResponse=e instanceof SyntaxError&&providerFetches>requestsBefore;if(w.onText||attempt>=1||(!retryableStatus&&!invalidProviderResponse)||w.signal.aborted)throw e;if(invalidProviderResponse)console.info(JSON.stringify({event:'sensa.model_provider_retry',id:meta.id,reason:'invalid_json_response',attempt:attempt+1}));await new Promise<void>((resolve,reject)=>{const done=()=>{clearTimeout(timer);w.signal.removeEventListener('abort',abort);resolve();};const abort=()=>{clearTimeout(timer);reject(new ModelExecutionError('model_cancelled'));};const timer=setTimeout(done,500);w.signal.addEventListener('abort',abort,{once:true});if(w.signal.aborted)abort();});}
   }
-  if(!w.result.message||!['stop','unknown'].includes(w.result.finishReason??'unknown'))throw new ModelExecutionError('model_invalid_response');
-  if(w.onText&&w.body.response_format&&!w.result.message.content.some(p=>p.toolRequest))JSON.parse(w.result.message.content.map(p=>p.text??'').join(''));
+  if(!w.result.message||!['stop','unknown'].includes(w.result.finishReason??'unknown')){
+   const reason=w.result.message?'finish_reason':'missing_message';
+   const finishReason=['length','content_filter','tool_calls','stop','unknown'].includes(w.result.finishReason??'unknown')?w.result.finishReason:'other';
+   console.info(JSON.stringify({event:'sensa.model_result_invalid',id:meta.id,reason,finishReason}));
+   throw new ModelExecutionError('model_invalid_response');
+  }
+  if(w.onText&&w.body.response_format&&!w.result.message.content.some(p=>p.toolRequest)){
+   try{JSON.parse(w.result.message.content.map(p=>p.text??'').join(''));}
+   catch(error){console.info(JSON.stringify({event:'sensa.model_result_invalid',id:meta.id,reason:'invalid_json'}));throw error;}
+  }
   w.record.inputTokens=w.result.usage?.inputTokens;w.record.outputTokens=w.result.usage?.outputTokens;
   return {...meta,finishReason:w.result.finishReason,inputTokens:w.record.inputTokens??0,outputTokens:w.record.outputTokens??0};
- }catch(e){if(e instanceof ModelExecutionError)throw e;const status=apiStatus(e);throw new ModelExecutionError(w.signal.aborted?'model_cancelled':status===401||status===403?'model_auth_failed':status===429?'model_rate_limited':status===400?'model_request_rejected':e instanceof SyntaxError?'model_invalid_response':'model_provider_failed');}
+ }catch(e){if(e instanceof ModelExecutionError){if(e.code==='model_invalid_response')console.info(JSON.stringify({event:'sensa.model_result_invalid',id:meta.id,reason:'bounded_response'}));throw e;}const status=apiStatus(e);if(e instanceof SyntaxError)console.info(JSON.stringify({event:'sensa.model_result_invalid',id:meta.id,reason:'syntax_error'}));throw new ModelExecutionError(w.signal.aborted?'model_cancelled':status===401||status===403?'model_auth_failed':status===429?'model_rate_limited':status===400?'model_request_rejected':e instanceof SyntaxError?'model_invalid_response':'model_provider_failed');}
 });
 export async function executeModel(connection:Connection,body:ModelTurnBody,options:{id?:string;purpose:ModelPurpose;signal?:AbortSignal;onText?:(text:string)=>Promise<void>;onExecutionStart?:()=>Promise<void>}){
  const base=new URL(connection.baseUrl);if(base.protocol!=='https:'||base.username||base.password||base.search||base.hash)throw new ModelExecutionError('model_provider_failed');

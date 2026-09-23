@@ -40,6 +40,12 @@
     "browser/sqlite-opfs-benchmark.spec.ts",
     "browser/skin-surface.spec.ts",
     "browser/browser-port.spec.ts",
-    "browser/extension-popup.spec.ts"
+    "browser/extension-popup.spec.ts",
+    "live/languageMatrixFixtures.ts",
+    "live/languageTraceEvidence.ts",
+    "live/businessHarness.ts",
+    "live/business-language-matrix.spec.ts",
+    "live/personal-language-matrix.spec.ts",
+    "live/extension-language-matrix.spec.ts"
   ]
 }
